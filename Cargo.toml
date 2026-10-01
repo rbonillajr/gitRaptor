@@ -1,0 +1,25 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "apps/cli", "apps/mcp"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.99"
+license = "UNLICENSED"
+publish = false
+
+[workspace.dependencies]
+gitraptor-api = { path = "crates/api" }
+gitraptor-core = { path = "crates/core" }
+gitraptor-git = { path = "crates/git" }
+gitraptor-policy = { path = "crates/policy" }
+gitraptor-theme = { path = "crates/theme" }
+
+clap = { version = "4", features = ["derive"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }

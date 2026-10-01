@@ -1,0 +1,42 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "gitraptor-api",
+  "projectType": "library",
+  "sourceRoot": "crates/api/src",
+  "tags": [
+    "scope:shared",
+    "type:contract"
+  ],
+  "targets": {
+    "build": {
+      "cache": true,
+      "executor": "@monodon/rust:check",
+      "outputs": [
+        "{options.target-dir}"
+      ],
+      "options": {
+        "target-dir": "dist/target/gitraptor-api"
+      }
+    },
+    "test": {
+      "cache": true,
+      "executor": "@monodon/rust:test",
+      "outputs": [
+        "{options.target-dir}"
+      ],
+      "options": {
+        "target-dir": "dist/target/gitraptor-api"
+      }
+    },
+    "lint": {
+      "cache": true,
+      "executor": "@monodon/rust:lint",
+      "outputs": [
+        "{options.target-dir}"
+      ],
+      "options": {
+        "target-dir": "dist/target/gitraptor-api"
+      }
+    }
+  }
+}

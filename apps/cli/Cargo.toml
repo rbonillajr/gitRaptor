@@ -1,0 +1,20 @@
+[package]
+name = "gitraptor-cli"
+description = "raptor: GitRaptor CLI and TUI"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "raptor"
+path = "src/main.rs"
+
+[dependencies]
+gitraptor-core.workspace = true
+gitraptor-theme.workspace = true
+clap.workspace = true
+
+[lints]
+workspace = true
