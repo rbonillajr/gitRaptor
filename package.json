@@ -1,0 +1,22 @@
+{
+  "name": "gitraptor",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@10.20.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "nx run-many -t build",
+    "test": "nx run-many -t test",
+    "lint": "nx run-many -t lint",
+    "affected": "nx affected -t lint test build",
+    "graph": "nx graph"
+  },
+  "devDependencies": {
+    "@monodon/rust": "3.0.0",
+    "@nx/devkit": "23.2.1",
+    "nx": "23.2.1",
+    "typescript": "~5.9.0"
+  }
+}
