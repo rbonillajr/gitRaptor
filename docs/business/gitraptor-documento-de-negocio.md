@@ -3,13 +3,14 @@ id: BRD-GRP-001
 title: GitRaptor — Documento de Negocio
 type: business-requirements
 status: draft
-version: 0.2
+version: 0.3
 date: 2026-10-01
 author: Rene Bonilla
 tags: [git, ai-agents, worktrees, mcp, tui, cli, agent-cockpit, safety-net, guardrails, azure-devops, brd]
 changelog:
   - 0.1 (2026-10-01): Extensión VS Code/Cursor estilo GitKraken.
   - 0.2 (2026-10-01): Pivote a "Git para la era de los agentes de IA": motor local con CLI/TUI + servidor MCP; la extensión y la app de escritorio pasan a ser capas visuales posteriores.
+  - 0.3 (2026-10-01): Decisiones cerradas: herramienta interna al inicio, Claude Code + Cursor como agentes del MVP, desarrollo por una persona orquestando múltiples agentes de IA (dogfooding desde el día uno).
 ---
 
 # GitRaptor — Documento de Negocio
@@ -257,23 +258,25 @@ Prioridad MoSCoW. Los IDs (`BR-xx`) se descomponen en historias de usuario en la
 | **B. Open-core** (recomendada) | **Gratis:** CLI/TUI, MCP, Time Machine y políticas locales. **De pago (Teams/Enterprise):** políticas centralizadas, auditoría, dashboard, Azure DevOps avanzado y soporte. | La adopción de los devs alimenta la venta a empresa. El comprador (CTO o seguridad) tiene un problema de gobierno real. | Hay que mantener la frontera entre los niveles |
 | **C. Herramienta interna** | Uso corporativo (ASSA) | Control total, ajuste a nuestro stack | Sin tracción externa |
 
-**Recomendación preliminar:** opción **B**. Empezar por **dogfooding interno** (C) con los equipos que ya usan agentes, y publicar el núcleo open source cuando el MVP sea estable.
+**Decisión (v0.3):** opción **C, herramienta interna al inicio**. La arquitectura y la licencia se mantienen compatibles con una futura opción **B (open-core)**, que se reevalúa cuando el MVP esté estable y probado internamente.
 
 ---
 
 ## 9. KPIs y criterios de éxito
 
+Como el producto arranca como **herramienta interna**, los KPIs miden uso y valor real, no adopción pública:
+
 | KPI | Meta a 6 meses desde el MVP |
 |---|---|
-| Instalaciones del CLI (brew, winget, npm) | 3.000 |
-| Instalaciones del MCP en agentes | 1.500 |
-| Usuarios activos semanales | 35% de las instalaciones |
+| Dogfooding: GitRaptor se usa para construir GitRaptor | 100% de las sesiones de desarrollo con agentes |
+| Desarrolladores internos usándolo cada semana | ≥ 5 |
+| Repos internos con GitRaptor y `policy.yaml` | ≥ 5 |
 | Undos ejecutados por usuario activo y mes | ≥ 3 (señal de que la red de seguridad se usa) |
 | Acciones peligrosas bloqueadas por guardrails | Se mide; es el argumento de venta |
 | Conflictos entre agentes detectados antes del merge | ≥ 70% de los que luego ocurren |
 | Incidentes de pérdida de datos causados por GitRaptor | **0** |
-| Estrellas en GitHub (si es open source) | 2.000 |
-| Pilotos empresariales (internos o externos) | 3 equipos |
+| Equipos internos piloto | 2 |
+| Tiempo para integrar el trabajo de un agente (revisar → merge) | −30% frente a la línea base sin GitRaptor |
 
 ---
 
@@ -289,6 +292,8 @@ Prioridad MoSCoW. Los IDs (`BR-xx`) se descomponen en historias de usuario en la
 | La detección de agentes es frágil (cambian procesos y convenciones) | Media | Medio | Registro explícito (BR-02) y adaptadores por agente fáciles de actualizar. |
 | Mercado inestable (cierres de Vibe Kanban y Crystal) | Media | Medio | Un MVP enfocado en el dolor más claro (undo + guardrails) y no en orquestación. |
 | Overhead de rendimiento por los snapshots | Media | Medio | Snapshots incrementales basados en objetos de Git y un spike temprano. |
+| **Una sola persona revisa todo lo que producen varios agentes** (cuello de botella y riesgo de calidad) | Alta | Alto | Historias pequeñas con criterios de aceptación verificables, tests obligatorios, code review automatizado por agente, CI como gate y el propio GitRaptor (guardrails + undo) protegiendo el repo. |
+| Pérdida de contexto entre sesiones de agentes | Media | Medio | Documentación como fuente de verdad (BRD, ADRs, dev specs, historias) y un flujo AADD con artefactos en el repo. |
 
 ---
 
@@ -300,25 +305,35 @@ Prioridad MoSCoW. Los IDs (`BR-xx`) se descomponen en historias de usuario en la
   - Mecanismo de detección de agentes.
   - Modelo de seguridad del MCP.
 - El motor es la única fuente de verdad. La TUI, el MCP y la futura extensión o app son clientes del mismo motor (API local).
-- El equipo tiene acceso a Claude Code, Cursor y Codex para probar las integraciones.
-- Para el dogfooding interno se prioriza Azure DevOps.
+- **Equipo:** una persona (Rene Bonilla, producto + revisión + integración) orquestando **múltiples agentes de IA** (Claude Code y Cursor) que diseñan, implementan, prueban y revisan. No hay equipo humano adicional en el MVP.
+- **Dogfooding desde el día uno:** GitRaptor se construye con agentes en paralelo, exactamente el caso de uso que resuelve. Cada fase se usa para desarrollar la siguiente.
+- **Agentes soportados en el MVP:** **Claude Code y Cursor**. Codex y Copilot pasan a fases posteriores (aplica a BR-02 y BR-15).
+- **Hosting:** el repositorio del producto vive en GitHub (`rbonillajr/gitRaptor`). La integración con Azure DevOps (BR-19) se mantiene para los repos internos donde se use la herramienta.
 
 ---
 
-## 12. Preguntas abiertas
+## 12. Decisiones y preguntas abiertas
 
-1. ¿El destino es un **producto público open-core** (B) o empezamos **solo interno** (C)?
-2. ¿Qué agentes son prioritarios en el MVP? Propuesta: **Claude Code + Cursor** y luego Codex y Copilot.
-3. ¿Qué pesa más en el MVP: **Time Machine + Guardrails** (seguridad) o **Cockpit** (visibilidad)? Propuesta: los tres, en versión mínima.
-4. ¿Nombre comercial y licencia definitivos? ¿Se mantiene "GitRaptor" y el comando `raptor`?
-5. ¿Capacidad del equipo y fecha objetivo del MVP?
-6. ¿Integramos con Entire Checkpoints desde temprano o esperamos a que el estándar madure?
+### 12.1 Decisiones tomadas (v0.3)
+
+| # | Pregunta | Decisión |
+|---|---|---|
+| D1 | ¿Producto público o herramienta interna? | **Herramienta interna al inicio** (opción C), sin cerrar la puerta a open-core (B). |
+| D2 | ¿Qué agentes son prioritarios en el MVP? | **Claude Code y Cursor.** Codex y Copilot, después. |
+| D3 | ¿Capacidad del equipo? | **Sin equipo humano:** una persona orquestando múltiples agentes de IA. La planificación se hace por historias pequeñas y verificables, no por velocity de un equipo. |
+
+### 12.2 Preguntas abiertas
+
+1. ¿Qué pesa más en el MVP: **Time Machine + Guardrails** (seguridad) o **Cockpit** (visibilidad)? Propuesta: los tres, en versión mínima.
+2. ¿Nombre y licencia definitivos? ¿Se mantiene "GitRaptor" y el comando `raptor`?
+3. ¿Hay una fecha objetivo para el MVP?
+4. ¿Integramos con Entire Checkpoints desde temprano o esperamos a que el estándar madure?
 
 ---
 
 ## 13. Próximos pasos
 
-1. **Validar este documento** (PO o sponsor) y responder las preguntas abiertas.
+1. ~~Validar este documento~~ y cerrar las decisiones principales (hecho en v0.3; quedan las preguntas de 12.2).
 2. **Spikes técnicos (1-2 semanas):**
    - (a) Snapshot y undo del working tree con overhead menor a 200 ms.
    - (b) Predicción de conflictos entre N worktrees con `git merge-tree`.
