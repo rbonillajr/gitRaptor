@@ -51,6 +51,7 @@ Principios de rendimiento de la UI:
 - ✅ Un solo lenguaje del motor a la app de escritorio, con instaladores pequeños (~5–15 MB en Tauri) y bajo consumo de RAM.
 - ✅ Memory safety en un componente sensible a la seguridad (el MCP).
 - ⚠️ La curva de aprendizaje de Rust hace más lento el MVP. **Mitigación:** un spike de 1 a 2 semanas antes de comprometer el roadmap.
+- ✅ **Encaja con el desarrollo por agentes (BRD v0.3, D3):** el compilador y el sistema de tipos de Rust funcionan como un guardrail sobre el código que escriben los agentes. Muchos errores se detectan al compilar y no en revisión humana, lo que reduce la carga de la única persona revisora. La curva de aprendizaje humana pesa menos porque la mayor parte del código lo escriben los agentes.
 - ⚠️ Tauri usa el webview de cada sistema operativo; en Linux es WebKitGTK, que es más lento. **Mitigación:** grafo en Canvas/WebGL y una matriz de pruebas en los tres sistemas.
 
 ## Validación (spike)
