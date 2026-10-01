@@ -1,0 +1,42 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "gitraptor-core",
+  "projectType": "library",
+  "sourceRoot": "crates/core/src",
+  "tags": [
+    "scope:shared",
+    "type:engine"
+  ],
+  "targets": {
+    "build": {
+      "cache": true,
+      "executor": "@monodon/rust:check",
+      "outputs": [
+        "{options.target-dir}"
+      ],
+      "options": {
+        "target-dir": "dist/target/gitraptor-core"
+      }
+    },
+    "test": {
+      "cache": true,
+      "executor": "@monodon/rust:test",
+      "outputs": [
+        "{options.target-dir}"
+      ],
+      "options": {
+        "target-dir": "dist/target/gitraptor-core"
+      }
+    },
+    "lint": {
+      "cache": true,
+      "executor": "@monodon/rust:lint",
+      "outputs": [
+        "{options.target-dir}"
+      ],
+      "options": {
+        "target-dir": "dist/target/gitraptor-core"
+      }
+    }
+  }
+}
