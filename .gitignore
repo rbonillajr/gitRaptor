@@ -12,9 +12,13 @@ coverage/
 # Nx
 .nx/cache/
 .nx/workspace-data/
+.nx/migrate-runs/
 
 # Rust
 target/
+
+# Design tokens (Style Dictionary output)
+packages/design-tokens/build/
 
 # Tauri
 apps/desktop/src-tauri/gen/
