@@ -1,0 +1,34 @@
+# Claude Code local session data
+.claude/runs/
+.claude/.cc-writes/
+.claude/settings.local.json
+
+# Node / pnpm
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Nx
+.nx/cache/
+.nx/workspace-data/
+
+# Rust
+target/
+
+# Tauri
+apps/desktop/src-tauri/gen/
+
+# Storybook
+storybook-static/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+
+# Env
+.env
+.env.*
+!.env.example
