@@ -1,0 +1,22 @@
+{
+  "name": "@gitraptor/tokens",
+  "version": "0.0.0",
+  "private": true,
+  "description": "GitRaptor design tokens (DTCG JSON) built with Style Dictionary",
+  "type": "module",
+  "files": ["tokens", "build"],
+  "scripts": {
+    "build": "style-dictionary build --config style-dictionary.config.json"
+  },
+  "nx": {
+    "tags": ["scope:shared", "type:tokens"],
+    "targets": {
+      "build": {
+        "outputs": ["{projectRoot}/build"]
+      }
+    }
+  },
+  "devDependencies": {
+    "style-dictionary": "5.5.5"
+  }
+}
