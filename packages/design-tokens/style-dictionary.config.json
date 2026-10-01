@@ -1,0 +1,10 @@
+{
+  "source": ["tokens/**/*.json"],
+  "platforms": {
+    "json": {
+      "transformGroup": "js",
+      "buildPath": "build/",
+      "files": [{ "destination": "tokens.json", "format": "json/nested" }]
+    }
+  }
+}
