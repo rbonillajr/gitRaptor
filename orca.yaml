@@ -1,0 +1,17 @@
+# Configuración de Orca para los worktrees de este repo.
+scripts:
+  # Al crear un worktree: deja el workspace listo para nx y cargo.
+  setup: |
+    pnpm install --frozen-lockfile
+    cargo fetch
+  # Al cerrar un worktree: bloquea si hay commits sin pushear.
+  archive: |
+    if [ -n "$(git log @{u}.. --oneline 2>/dev/null)" ]; then
+      echo "Hay commits sin pushear en $(git branch --show-current)"
+      exit 1
+    fi
+
+defaultTabs:
+  - title: claude
+    command: claude
+  - title: shell
