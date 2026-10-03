@@ -22,8 +22,8 @@
     -   **Status**: Propuesta
 
 *   **F-001-03**: Time Machine (BR-08, BR-09, BR-10)
-    -   **Contexto**: Pendiente
-    -   **Historias**: Pendiente
+    -   **Contexto**: [context.md](features/time-machine/context.md)
+    -   **Historias**: Pendiente (requerimiento en revisión)
     -   **Status**: Propuesta
 
 *   **F-001-04**: Guardrails (BR-11, BR-12, BR-13)
