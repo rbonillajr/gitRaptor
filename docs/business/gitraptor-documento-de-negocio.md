@@ -3,14 +3,16 @@ id: BRD-GRP-001
 title: GitRaptor — Documento de Negocio
 type: business-requirements
 status: draft
-version: 0.3
-date: 2026-10-01
+version: 0.5
+date: 2026-10-02
 author: Rene Bonilla
 tags: [git, ai-agents, worktrees, mcp, tui, cli, agent-cockpit, safety-net, guardrails, azure-devops, brd]
 changelog:
   - 0.1 (2026-10-01): Extensión VS Code/Cursor estilo GitKraken.
   - 0.2 (2026-10-01): Pivote a "Git para la era de los agentes de IA": motor local con CLI/TUI + servidor MCP; la extensión y la app de escritorio pasan a ser capas visuales posteriores.
   - 0.3 (2026-10-01): Decisiones cerradas: herramienta interna al inicio, Claude Code + Cursor como agentes del MVP, desarrollo por una persona orquestando múltiples agentes de IA (dogfooding desde el día uno).
+  - 0.4 (2026-10-02): BR-11 deja de fijar el archivo `.gitraptor/policy.yaml`; el formato y la estructura de la configuración del repo se deciden en un ADR (propuesta: JSON en tres niveles perfil/repo/local, con secciones `permissions` y `policies`).
+  - 0.5 (2026-10-03): D2 cambia: el MVP da soporte completo solo a Claude Code; después Codex y luego Cursor, uno por uno. Mientras tanto, los demás agentes se aceptan como "otro agente" mediante registro explícito.
 ---
 
 # GitRaptor — Documento de Negocio
@@ -191,7 +193,7 @@ Prioridad MoSCoW. Los IDs (`BR-xx`) se descomponen en historias de usuario en la
 
 | ID | Capacidad | Prioridad |
 |---|---|---|
-| BR-11 | **Políticas por repo** en un archivo versionable (`.gitraptor/policy.yaml`): ramas protegidas, prohibir force-push o `reset --hard`, límite de tamaño de diff, formato de commit, rutas prohibidas. | Must |
+| BR-11 | **Políticas por repo** en la configuración versionable del repo (carpeta `.gitraptor/`; formato y estructura en un ADR de arquitectura): ramas protegidas, prohibir force-push o `reset --hard`, límite de tamaño de diff, formato de commit, rutas prohibidas. | Must |
 | BR-12 | **Aplicación de políticas** en dos capas: (a) en las herramientas MCP, que rechazan antes de ejecutar; (b) en los hooks de Git (pre-commit, pre-push, reference-transaction), para cubrir a los agentes que usan Git crudo. | Must |
 | BR-13 | **Modo "pedir confirmación":** las acciones de riesgo de un agente quedan en cola para que un humano las apruebe en la TUI. | Should |
 
@@ -270,7 +272,7 @@ Como el producto arranca como **herramienta interna**, los KPIs miden uso y valo
 |---|---|
 | Dogfooding: GitRaptor se usa para construir GitRaptor | 100% de las sesiones de desarrollo con agentes |
 | Desarrolladores internos usándolo cada semana | ≥ 5 |
-| Repos internos con GitRaptor y `policy.yaml` | ≥ 5 |
+| Repos internos con GitRaptor y políticas configuradas | ≥ 5 |
 | Undos ejecutados por usuario activo y mes | ≥ 3 (señal de que la red de seguridad se usa) |
 | Acciones peligrosas bloqueadas por guardrails | Se mide; es el argumento de venta |
 | Conflictos entre agentes detectados antes del merge | ≥ 70% de los que luego ocurren |
@@ -307,7 +309,7 @@ Como el producto arranca como **herramienta interna**, los KPIs miden uso y valo
 - El motor es la única fuente de verdad. La TUI, el MCP y la futura extensión o app son clientes del mismo motor (API local).
 - **Equipo:** una persona (Rene Bonilla, producto + revisión + integración) orquestando **múltiples agentes de IA** (Claude Code y Cursor) que diseñan, implementan, prueban y revisan. No hay equipo humano adicional en el MVP.
 - **Dogfooding desde el día uno:** GitRaptor se construye con agentes en paralelo, exactamente el caso de uso que resuelve. Cada fase se usa para desarrollar la siguiente.
-- **Agentes soportados en el MVP:** **Claude Code y Cursor**. Codex y Copilot pasan a fases posteriores (aplica a BR-02 y BR-15).
+- **Agentes soportados en el MVP:** **solo Claude Code**. Después se añaden uno por uno: primero Codex y luego Cursor (Copilot, más adelante). Mientras no tengan soporte completo, se aceptan como "otro agente" mediante registro explícito (aplica a BR-02 y BR-15).
 - **Hosting:** el repositorio del producto vive en GitHub (`rbonillajr/gitRaptor`). La integración con Azure DevOps (BR-19) se mantiene para los repos internos donde se use la herramienta.
 
 ---
@@ -319,7 +321,7 @@ Como el producto arranca como **herramienta interna**, los KPIs miden uso y valo
 | # | Pregunta | Decisión |
 |---|---|---|
 | D1 | ¿Producto público o herramienta interna? | **Herramienta interna al inicio** (opción C), sin cerrar la puerta a open-core (B). |
-| D2 | ¿Qué agentes son prioritarios en el MVP? | **Claude Code y Cursor.** Codex y Copilot, después. |
+| D2 | ¿Qué agentes son prioritarios en el MVP? | **Solo Claude Code** (revisada el 2026-10-03; antes: Claude Code y Cursor). Después, Codex y luego Cursor, uno por uno; Copilot más adelante. |
 | D3 | ¿Capacidad del equipo? | **Sin equipo humano:** una persona orquestando múltiples agentes de IA. La planificación se hace por historias pequeñas y verificables, no por velocity de un equipo. |
 
 ### 12.2 Preguntas abiertas
@@ -337,7 +339,7 @@ Como el producto arranca como **herramienta interna**, los KPIs miden uso y valo
 2. **Spikes técnicos (1-2 semanas):**
    - (a) Snapshot y undo del working tree con overhead menor a 200 ms.
    - (b) Predicción de conflictos entre N worktrees con `git merge-tree`.
-   - (c) Detección de sesiones de Claude Code y Cursor.
+   - (c) Detección de sesiones de Claude Code.
    - (d) Prototipo del MCP con una política que bloquee el force-push.
 3. **Fase de análisis:** `/aadd-specify` con este BRD → `context.md` → historias de usuario por BR.
 4. **Arquitectura:** `/aadd-architect` → overview, ADRs (lenguaje, Git CLI frente a librería, oplog, detección de agentes, modelo de seguridad del MCP) y NFRs técnicos.

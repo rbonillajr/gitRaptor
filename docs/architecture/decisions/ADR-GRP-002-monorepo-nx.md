@@ -4,8 +4,10 @@ title: Monorepo políglota con Nx (package-based), pnpm y Cargo workspaces
 type: adr
 status: accepted
 date: 2026-10-01
+created: 2026-10-01
+updated: 2026-10-01
 deciders: [Rene Bonilla]
-related: [BRD-GRP-001, ADR-GRP-001, ADR-GRP-003]
+related: [ADR-GRP-001, ADR-GRP-003]
 tags: [nx, monorepo, package-based, pnpm, cargo, rust, monodon, tauri, ci]
 ---
 
@@ -85,6 +87,7 @@ gitraptor/
 
 ## Referencias
 
+- [BRD-GRP-001 — Documento de negocio de GitRaptor](../../business/gitraptor-documento-de-negocio.md)
 - [Nx — Add a Rust application to an Nx workspace](https://nx.dev/docs/kb/add-rust-to-nx-workspace)
 - [Nx blog — Polyglot monorepos with Nx, TanStack and Rust](https://nx.dev/blog/polyglot-nx-monorepo-rust-tanstack)
 - [@monodon/rust (npm)](https://www.npmjs.com/package/@monodon/rust)

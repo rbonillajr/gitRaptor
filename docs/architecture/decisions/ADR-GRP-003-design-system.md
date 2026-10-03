@@ -4,8 +4,10 @@ title: Design system de GitRaptor — tokens, UI kit (@gitraptor/ui), patrones, 
 type: adr
 status: accepted
 date: 2026-10-01
+created: 2026-10-01
+updated: 2026-10-01
 deciders: [Rene Bonilla]
-related: [BRD-GRP-001, ADR-GRP-001, ADR-GRP-002, ADR-GRP-004]
+related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-004]
 tags: [design-system, ui-kit, react, radix, tailwind, cva, design-tokens, motion, animations, storybook, vscode-webview]
 ---
 
@@ -120,3 +122,7 @@ Objetivo: que la UI se sienta fluida y profesional sin costo de rendimiento.
 - ✅ Storybook sirve como documentación viva y como punto de entrada para diseño (Figma ↔ tokens).
 - ⚠️ Mantener un design system cuesta. **Mitigación:** un catálogo inicial acotado, que crezca según lo pida cada fase.
 - ⚠️ Los webviews de VS Code tienen una CSP restrictiva. **Mitigación:** el build del UI kit no carga recursos externos y las fuentes van embebidas o usan las del sistema.
+
+## Referencias
+
+- [BRD-GRP-001 — Documento de negocio de GitRaptor](../../business/gitraptor-documento-de-negocio.md)
