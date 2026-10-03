@@ -98,6 +98,7 @@ Fix any BLOCKER before merging. CONCERNS may pass with reviewer approval.
 
 | Feature | Slug |
 |---------|------|
-| _(ninguna todavía — los IDs usan el slug de dominio `GRP`)_ | GRP |
+| motor-local _(usa el slug de dominio)_ | GRP |
 | time-machine | TMC |
+| guardrails | GRD |
 
