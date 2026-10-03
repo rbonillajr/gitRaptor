@@ -24,7 +24,7 @@ Si una tarea contradice estos documentos, **detente y pregunta**; no improvises 
 ## Alcance: qué se construye ahora
 
 - **MVP (Fase 1):** `apps/cli`, `apps/mcp`, `crates/{core,policy,git,api,theme}` y `packages/design-tokens`.
-- **Agentes soportados en el MVP:** Claude Code y Cursor.
+- **Agentes soportados en el MVP:** solo Claude Code. Después, uno por uno: Codex y luego Cursor (D2, revisada el 2026-10-03).
 - **No construir todavía (Fase 3):** app de escritorio (Tauri + React), extensión de VS Code/Cursor, UI kit React, Storybook ni Motion. Esas definiciones están en los ADRs **solo como referencia**.
 
 ## Stack (ADR-GRP-001 / 002)

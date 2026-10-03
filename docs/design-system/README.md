@@ -1,5 +1,5 @@
 ---
-id: DS-GRP-001
+id: DSYS-GRP-001
 title: GitRaptor Design System
 type: design-system
 status: draft

@@ -4,8 +4,10 @@ title: Stack tecnológico — motor en Rust, UI de escritorio con Tauri + React
 type: adr
 status: accepted
 date: 2026-10-01
+created: 2026-10-01
+updated: 2026-10-01
 deciders: [Rene Bonilla]
-related: [BRD-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-004]
+related: [ADR-GRP-002, ADR-GRP-003, ADR-GRP-004]
 tags: [rust, tauri, react, vite, typescript, ratatui, gitoxide, rmcp, stack]
 ---
 

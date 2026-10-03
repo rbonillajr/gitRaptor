@@ -4,8 +4,10 @@ title: Manejo de estado del frontend y patrones de UX (React 19)
 type: adr
 status: accepted
 date: 2026-10-01
+created: 2026-10-01
+updated: 2026-10-01
 deciders: [Rene Bonilla]
-related: [BRD-GRP-001, ADR-GRP-001, ADR-GRP-002, ADR-GRP-003]
+related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-003]
 tags: [react, state-management, tanstack-query, zustand, jotai, xstate, react-hook-form, zod, tanstack-router, ux, optimistic-ui]
 ---
 
@@ -80,3 +82,7 @@ El motor en Rust (`gitraptor-core`) es la **única fuente de verdad** del estado
 - ✅ Los flujos críticos son testeables como máquinas de estado, lo que refuerza NFR-01.
 - ⚠️ Son varias librerías. **Mitigación:** una guía de "qué capa uso" en el README del frontend, ejemplos de referencia y revisión en el code review.
 - ⚠️ Las actualizaciones optimistas pueden mostrar estados que luego se revierten. **Mitigación:** se usan solo en operaciones de alta probabilidad de éxito y siempre con rollback visible.
+
+## Referencias
+
+- [BRD-GRP-001 — Documento de negocio de GitRaptor](../../business/gitraptor-documento-de-negocio.md)
