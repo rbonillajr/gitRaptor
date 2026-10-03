@@ -27,9 +27,9 @@
     -   **Status**: Propuesta
 
 *   **F-001-04**: Guardrails (BR-11, BR-12, BR-13)
-    -   **Contexto**: Pendiente
-    -   **Historias**: Pendiente
-    -   **Status**: Propuesta
+    -   **Contexto**: [context.md](features/guardrails/context.md) (reglas en [business-rules.md](features/guardrails/business-rules.md), 2026-10-03)
+    -   **Historias**: Pendiente (tras la aprobación del requerimiento)
+    -   **Status**: En análisis
 
 *   **F-001-05**: Servidor MCP (BR-14, BR-15, BR-16)
     -   **Contexto**: Pendiente
