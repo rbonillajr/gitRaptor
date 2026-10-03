@@ -1,0 +1,4 @@
+# Documentos previos a AADD: no son artefactos del framework (sin type/id canónico).
+# Se listan como legacy; sus ids (BRD-GRP-001, DSYS-GRP-001) se citan en el cuerpo, no en related.*
+business/gitraptor-documento-de-negocio.md
+design-system/README.md
