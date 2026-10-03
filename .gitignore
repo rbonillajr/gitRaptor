@@ -2,6 +2,7 @@
 .claude/runs/
 .claude/.cc-writes/
 .claude/settings.local.json
+.claude/agent-memory/
 
 # Node / pnpm
 node_modules/
@@ -32,3 +33,5 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+# AADD local memory/caches (generated)
+.aadd/
