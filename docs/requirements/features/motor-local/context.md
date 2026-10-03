@@ -1,0 +1,464 @@
+---
+id: CTX-GRP-001
+title: "Contexto — Motor local"
+type: context
+status: draft
+created: 2026-10-01
+updated: 2026-10-03
+domain: GRP
+epic: E-001
+feature: motor-local
+scope: feature
+stakeholders:
+  - rene-bonilla
+related:
+  rules:
+    - BR-GRP-001
+tags:
+  - motor-local
+  - observacion
+  - deteccion-agentes
+  - worktrees
+  - multiplataforma
+  - solo-observacion
+  - configuracion-tres-niveles
+  - niveles-por-valor
+  - primer-uso
+  - requisitos-entorno
+  - soporte-agentes
+  - mvp
+---
+
+# Contexto del Feature: Motor local
+
+> **Fundamento**: Este documento sigue un enfoque híbrido BRD-PRD adaptado para arquitectura pre-desarrollo. Combina objetivos de negocio (BRD) con requisitos de producto (PRD) para informar decisiones arquitectónicas en el framework AADD.
+>
+> **Origen**: [BRD-GRP-001](../../../business/gitraptor-documento-de-negocio.md) (v0.5) § 6.1, capacidades **BR-01, BR-02 y BR-03**. Épica **E-001**, feature **F-001-01** del [backlog](../../backlog.md). Reglas de negocio en [business-rules.md](./business-rules.md) (BR-GRP-001).
+>
+> **Revisión 2026-10-02 (Q21-Q23)**: el motor se centra en su objetivo principal, **observar**. **Q21** (reemplaza a Q18 y Q19): el motor no escribe nada en el repo observado, ni código fuente, ni rutas operativas, ni una carpeta propia; todos sus datos viven en el **perfil de GitRaptor**, separados por repo. **Q22**: en el MVP el motor no instala hooks ni hace ninguna modificación operativa; los hooks son de Guardrails, y el motor puede aprovechar como señal adicional los que existan, sin depender de ellos. El modelo de permiso explícito (Q11, Q14, Q15) se conserva como principio del producto para capacidades futuras. **Q23**: el motor **lee** su configuración en tres niveles (perfil del usuario, configuración del repo compartida con el equipo y configuración local personal del repo) y nunca la escribe. Historia previa: Q10 y Q11 reemplazaron a Q2; Q13-Q17 cerraron los supuestos S9-S12; Q18-Q20 fijaron un modelo con datos dentro del repo que Q21 deja sin efecto (ver [Decisiones tomadas](#decisiones-tomadas)).
+>
+> **Revisión 2026-10-02 (Q24-Q27)**: **Q24** fija qué niveles de la configuración admite cada valor y, dentro de ellos, gana el más específico: la rama base solo la define la configuración del repo del equipo (`main` por defecto); el umbral de inactividad solo el perfil y la configuración local personal, nunca la del equipo (5 minutos por defecto). **Q25** y **Q26** confirman los supuestos S16 (retirar un repo no borra sus datos) y S17 (perder el perfil no detiene el motor; lo no observado queda "sin atribuir"). **Q27**: el comando para editar la configuración es de Guardrails (F-001-04); el motor solo la lee.
+>
+> **Revisión 2026-10-02 (Q28-Q31)**: primer uso en una computadora nueva, donde GitRaptor puede instalarse antes que el resto de herramientas de desarrollo. **Q28** (cierra P4): si Git del sistema falta o es anterior a 2.38, el motor avisa qué falta y cómo resolverlo, no observa nada y empieza solo cuando Git aparece o se actualiza; nunca instala ni actualiza Git (BR-VAL-003, BR-WF-002). **Q29**: el motor funciona sin agentes instalados y detecta los que se instalen después sin reinstalar ni reconfigurar (BR-EDGE-006). **Q30**: sin repos observados, el motor expone un estado "sin repos" con la guía para añadir el primero (BR-WF-002). **Q31**: en una máquina nueva el perfil empieza vacío y no se trae nada de la anterior; la configuración del equipo sí aplica porque viaja con el repo; exportar e importar el perfil queda fuera del MVP (BR-EDGE-007).
+
+> **Revisión 2026-10-03 (Q32)**: **cambio de alcance sobre un requerimiento ya aprobado**, decidido por Rene Bonilla con el BRD v0.5 (D2 revisada). El MVP da **soporte completo solo a Claude Code**. Después se añaden uno por uno: primero **Codex**, luego **Cursor** y, más adelante, Copilot. Mientras no tengan soporte completo, se aceptan como "otro agente" mediante registro explícito (Q4 y BR-VAL-001 siguen vigentes). **Cursor sigue siendo el editor del humano**: el riesgo deja de ser "detectar a Cursor como agente" y pasa a ser que la actividad del humano en su editor (Cursor u otro) no se atribuya a Claude Code ni a ningún agente (BR-EDGE-004). Refina D2 y Q4 sin reemplazarlas. Las menciones a "Claude Code y Cursor" como agentes soportados se marcan con *(Q32)* donde cambian.
+
+> **Revisión 2026-10-03 (Q33-Q36)**, decisiones de Rene Bonilla tras el Artifact Judge de las historias. **Q33**: corregir una atribución **reemplaza** la detectada; registrar otro agente donde ya hay una sesión **añade** una sesión y el worktree pasa a compartido (BR-CONS-002, BR-CONS-004). **Q34**: el motor nunca emite "humano"; solo emite "agente X" (con su origen) o "sin atribuir", y presentar eso como "tú u otro" es de la Time Machine y el Cockpit (BR-CONS-003). **Q35**: lo no identificado tiene un solo valor, "sin atribuir"; desaparece "no identificada" (BR-EDGE-003). **Q36**: leer la rama base de la configuración del equipo se difiere a una historia propia, bloqueada por Guardrails (F-001-04) y el ADR de formato (P8); mientras tanto la rama base es `main` (BR-CONS-006).
+
+> **Revisión 2026-10-03 (Q37-Q42)**, decisiones de Rene Bonilla tras la segunda pasada del Artifact Judge (RESERVAS). **Q37** (cierra P14): corregir una atribución reatribuye también los eventos de la sesión mal detectada, desde su inicio (BR-CONS-002). **Q38** (cierra P15): no se corrige donde no hay atribución detectada; el motor indica que se use el registro (BR-CONS-002). **Q39**: registrar a un agente que ya se detectaba en ese worktree confirma su sesión, sin duplicarla ni volver compartido el worktree (BR-CONS-004). **Q40** (confirma S7): solo el desarrollador añade o retira repos observados (BR-AUTH-001). **Q41** (confirma S8): una sesión terminada no se reactiva y un agente registrado figura presente hasta que se retira su registro (BR-WF-001). **Q42**: si la rama base no existe, el motor indica que no puede calcular ahead/behind y nunca elige otra rama (BR-CONS-006). S18 y S19 ya estaban aceptados (2026-10-02); se cierra P13.
+
+---
+
+## 1. Visión General (BRD)
+
+El Motor local es la pieza de GitRaptor que **sabe qué está pasando** en los repos del desarrollador. Observa uno o varios repos y mantiene una imagen actualizada de sus worktrees, sus ramas, el estado de cada working tree, qué agentes de IA están trabajando en cada uno y qué eventos de Git van ocurriendo. Funciona igual en Windows, macOS y Linux.
+
+No es una superficie que el usuario vea por sí misma. Es la **base común** sobre la que se apoyan los cuatro pilares del MVP: el Cockpit muestra lo que el motor observa, la Time Machine necesita saber quién hizo qué y cuándo, los Guardrails necesitan saber qué agente está actuando, y el servidor MCP expone ese conocimiento a los propios agentes. Según el BRD (§ 11), el motor es la **única fuente de verdad**: todas las superficies son clientes suyos.
+
+Si el motor observa mal, todo lo demás falla en cascada: el Cockpit muestra datos falsos, un "deshacer lo que hizo el agente X" deshace lo que no debe, y una política se aplica al actor equivocado. Por eso esta feature va primero en la épica.
+
+El motor **solo observa** (Q21). No escribe nada en los repos que observa: ni el código fuente (archivos de trabajo, lo preparado para el próximo commit, la historia, las ramas), ni las rutas operativas (hooks, configuración del repo), ni una carpeta propia (BR-CONS-001, derivada de NFR-01). Todo lo que genera (la lista de repos observados, los eventos, la atribución, las sesiones y el registro de agentes) lo guarda en el **perfil de GitRaptor**, un espacio exclusivo de la herramienta fuera de cualquier repo, separado por repo. Fuera del repo, el perfil es lo único que escribe: no modifica la configuración global de Git, otros repos ni ningún archivo del usuario (Q17). En el MVP no instala hooks ni hace ninguna modificación operativa (Q22); si una capacidad futura lo necesitara, haría falta cambiar este requerimiento y aplicar el permiso explícito del desarrollador (BR-AUTH-002). Su configuración la **lee** en tres niveles, que edita el desarrollador; cada valor admite solo algunos niveles (Q23, Q24, BR-CONS-007). Las escrituras sobre el repo pertenecen a otras features, cada una con su propia garantía de recuperabilidad (NFR-01).
+
+### Problema de Negocio (BRD)
+
+Cuando una persona trabaja con 3 a 10 agentes en paralelo, cada uno en su worktree o rama, no tiene una forma unificada de saber **qué agente está tocando qué, si sigue trabajando o ya terminó** (BRD P1). Hoy lo reconstruye a mano: abre terminales, ejecuta `git status` y `git worktree list` en cada directorio y recuerda de memoria qué agente lanzó en cada sitio. Con varios agentes esto se rompe en minutos.
+
+Las herramientas que ya existen no lo resuelven para este caso (BRD P7): son solo macOS, dependen de tmux (sin Windows nativo) o están atadas a un único agente. Ninguna da una vista transversal de varios agentes a la vez. *(Q32: el MVP empieza con soporte completo de Claude Code y deja que cualquier otro agente se registre; Codex y Cursor se añaden después, uno por uno. Antes decía "de Claude Code **y** Cursor a la vez".)*
+
+Impacto de no resolverlo:
+- Sin observación fiable no hay Cockpit, ni Time Machine por agente, ni Guardrails por actor. El MVP entero queda bloqueado.
+- Si la observación tiene huecos (actividad de agentes que nadie registró), la Time Machine no puede responder "quién hizo qué" y un deshacer por agente puede alcanzar trabajo humano.
+- El caso de dogfooding (D3: una persona construye GitRaptor orquestando agentes) sigue dependiendo de la memoria de esa persona, que es justo el cuello de botella que el BRD identifica como riesgo alto (§ 10).
+
+### Valor Esperado (BRD)
+
+- **ROI estimado**: no se cuantifica en dinero (herramienta interna, D1). El retorno es habilitante: desbloquea las features F-001-02 a F-001-05 y elimina la reconstrucción manual del estado de los agentes. ⚠️ **ASSUMPTION**: hoy esa reconstrucción cuesta varios minutos por cambio de contexto entre agentes; no hay línea base medida `[POR VERIFICAR]`.
+- **KPIs de éxito**: ver § 3. Los principales son el 90% de precisión de la detección automática medida en dogfooding, la frescura de extremo a extremo (< 500 ms, NFR-04), soportar 10 o más worktrees activos (NFR-05), cero escrituras del motor en el repo observado y cero huecos de observación mientras la máquina está encendida.
+- **Beneficiarios**: el desarrollador orquestador (directo), las features Cockpit, Time Machine, Guardrails y MCP (que consumen lo que el motor sabe) y, en fases posteriores, los equipos internos piloto.
+
+---
+
+## 2. Dominio Específico (PRD)
+
+- **Tipo de funcionalidad**: capacidad de observación base (fuente de verdad local que no escribe nada en el repo observado) consumida por otras superficies del producto.
+- **Usuarios principales**: desarrollador orquestador (humano), que edita en su propio editor (Cursor u otro); agente Claude Code (soporte completo en el MVP); cualquier otro agente, incluidos Codex y Cursor, registrado como "otro agente". *(Q32: antes, "agentes Claude Code y Cursor (soporte completo en el MVP)".)*
+- **Casos de uso principales**:
+  - **Elegir qué repos se observan**: el desarrollador indica qué repos quiere que GitRaptor observe y puede retirarlos. Añadir un repo no crea nada en él: el repo queda anotado en el perfil de GitRaptor (Q21).
+  - **Conocer el estado de cada worktree**: rama, si hay cambios sin commitear, commits por delante o por detrás de la rama base y estados especiales de Git (rebase o merge en curso, HEAD separado). El ahead/behind es fiable respecto a lo que el repo ya conoce del remoto: el motor no trae novedades del remoto por su cuenta (Q12).
+  - **Saber qué agente trabaja en cada worktree**: el motor identifica automáticamente las sesiones de Claude Code y dice si están activas, inactivas o terminadas *(Q32: antes, "de Claude Code y Cursor")*. Lo que el desarrollador hace en su editor nunca se atribuye a Claude Code (BR-EDGE-004). Puede aprovechar como señal adicional la información de hooks de Git que ya existan (p. ej. los de Guardrails), pero la detección no depende de ellos (Q22).
+  - **Registrar un agente de forma explícita**: cuando la detección automática no basta, o cuando el agente no es Claude Code (p. ej. Codex o Cursor, Q32), el desarrollador (o el propio agente) declara qué agente trabaja en qué worktree. Si en ese worktree ya hay una sesión, el registro **añade** otra y el worktree pasa a compartido (Q33, BR-CONS-004).
+  - **Corregir una atribución detectada**: cuando la detección se equivoca, el desarrollador corrige la atribución y la **reemplaza**: la detección estaba mal, así que no queda una segunda sesión (Q33, BR-CONS-002). Es una acción distinta de registrar otro agente.
+  - **Seguir los eventos de Git**: commits, cambios de rama, creación o borrado de ramas y worktrees, rebases, merges y pushes, con el momento en que ocurrieron y el actor al que se atribuyen.
+  - **Ajustar el comportamiento del motor**: el desarrollador cambia la configuración (valores por defecto en su perfil, valores de equipo en la configuración del repo, ajustes personales en la configuración local del repo) y el motor aplica, entre los niveles que admite cada valor, el más específico (Q24). El motor lee la configuración; no la escribe (Q23). El comando para editarla lo ofrece Guardrails (Q27).
+  - **Observar sin huecos**: la actividad de los agentes se captura aunque el desarrollador no tenga ninguna superficie de GitRaptor abierta, y lo observado sobrevive a reinicios.
+  - **Funcionar igual en los tres sistemas operativos**: el mismo comportamiento en Windows, macOS y Linux, sin depender de tmux.
+  - **Primer uso en una máquina nueva**: el desarrollador estrena computadora e instala GitRaptor antes que Git, que sus agentes o que cualquier repo. GitRaptor se instala igualmente. Si falta Git o es anterior a 2.38, el motor le dice qué falta, qué versión necesita y cómo resolverlo, y espera sin observar nada; cuando instala o actualiza Git, el motor lo detecta solo (BR-VAL-003, Q28). Sin repos, el motor le explica cómo añadir el primero (BR-WF-002, Q30). Sin agentes, observa los repos igual, y cuando instala Claude Code detecta sus sesiones sin tocar GitRaptor; un agente sin soporte completo instalado después se registra como "otro agente" (BR-EDGE-006, Q29, Q32). Nada de la máquina anterior se trae: el perfil empieza vacío y solo la configuración del equipo, que viaja con el repo, aplica desde el primer momento (BR-EDGE-007, Q31).
+- **Alcance**:
+  - **IN scope**:
+    - Observación de uno o varios repos elegidos por el desarrollador, incluidos todos sus worktrees.
+    - Estado por worktree: rama, cambios sin commitear, ahead/behind respecto a la rama base (calculado con lo que el repo ya conoce del remoto), archivos modificados y estados especiales de Git.
+    - Todos los datos del motor (lista de repos observados, eventos, atribución, sesiones y registro de agentes) en el perfil de GitRaptor, separados por repo (BR-CONS-001, Q21).
+    - Lectura de la configuración en tres niveles, de menor a mayor especificidad: perfil del usuario, configuración del repo compartida con el equipo y configuración local personal del repo. Cada valor declara qué niveles lo admiten y, entre ellos, gana el más específico (BR-CONS-007, Q23, Q24).
+    - Rama base por repo: `main` por defecto, o la que defina la configuración del repo de nivel equipo, el único nivel que la admite (BR-CONS-006, Q24). Un ajuste del perfil o de la configuración local personal no la cambia. El motor lee ese valor; no lo define. **Entrega en dos pasos (Q36)**: primero la rama base es `main` en todos los repos, de forma provisional; leerla de la configuración del equipo llega en una historia diferida, bloqueada hasta que existan Guardrails (F-001-04) y el ADR de formato de la configuración (P8).
+    - Detección automática de sesiones de **Claude Code** por worktree o rama (BR-02, D2 revisada, Q32), sin hooks propios. *(Q32: antes, "de Claude Code y Cursor".)*
+    - La actividad del humano en su editor (Cursor u otro) nunca se atribuye a Claude Code ni a ningún agente; ante la duda, queda "sin atribuir" (BR-EDGE-004, Q32). La información de hooks que ya existan en el repo se puede aprovechar como señal adicional, sin que la detección dependa de ella (Q22).
+    - Registro y retiro explícito de un agente en un worktree (BR-02), incluido cualquier agente distinto de Claude Code (Codex, Cursor, Copilot u otro), que se acepta como "otro agente" (BR-VAL-001, Q32). El motor define la capacidad; su exposición en la CLI y en el MCP se coordina con las features correspondientes (ver Dependencias).
+    - Estado de cada sesión de agente: activo, inactivo o terminado (BR-WF-001), con un umbral de inactividad que solo admiten el perfil (valor personal global) y la configuración local personal del repo (ajuste por repo), nunca la configuración del equipo; si ninguno lo define, 5 minutos (BR-TIME-001, Q20, Q23, Q24).
+    - Retirar un repo y volver a añadirlo conserva sus datos del perfil (BR-AUTH-001, Q25); perder el perfil no detiene el motor y lo no observado queda "sin atribuir" (BR-EDGE-005, Q26).
+    - Worktree compartido: si varios agentes trabajan en el mismo worktree, se reportan todas las sesiones y el worktree se marca como compartido (BR-CONS-004). Registrar otro agente donde ya hay una sesión lo vuelve compartido; corregir una atribución no (Q33).
+    - Atribución con dos valores posibles: "agente X" (con su origen, detectado o registrado) o "sin atribuir". El motor nunca emite "humano": no puede probar que un cambio lo hizo una persona (Q34, Q35, BR-CONS-003).
+    - Registro de eventos de Git con su momento y actor atribuido.
+    - Observación continua: se captura la actividad aunque no haya ninguna superficie de GitRaptor abierta, y la atribución y el historial de eventos sobreviven a reinicios de GitRaptor y de la máquina (BR-CONS-005). Cómo se logra lo decide el Arquitecto.
+    - Reconciliación tras un hueco de observación: el estado actual se recupera y los cambios de ese hueco quedan "sin atribuir" (BR-EDGE-005).
+    - Funcionamiento en Windows, macOS y Linux con un único entregable por plataforma y sin tmux (BR-03, NFR-06).
+    - Git del sistema ausente o anterior a 2.38: el motor avisa qué falta, qué versión necesita y cómo resolverlo, no observa nada y empieza a observar por sí solo cuando Git aparece o se actualiza, sin reinstalar ni reconfigurar GitRaptor (BR-VAL-003, BR-WF-002, Q28).
+    - Estado "sin repos": si no hay ningún repo observado (p. ej. recién instalado), el motor lo expone junto con la guía para añadir el primero, para que el Cockpit y la CLI ofrezcan un estado vacío guiado (BR-WF-002, Q30).
+    - Funcionamiento sin agentes instalados y detección de Claude Code instalado después, sin reinstalar ni reconfigurar GitRaptor (BR-EDGE-006, Q29). *(Q32: antes, "Claude Code o Cursor".)*
+    - Máquina nueva: perfil vacío; la configuración del repo compartida con el equipo aplica desde el primer momento; lo anterior a añadir el repo en esa máquina queda "sin atribuir" (BR-EDGE-007, Q31).
+  - **OUT of scope**:
+    - **Mostrar** el estado en una TUI, el grafo en vivo, la predicción de conflictos y las acciones por agente (aprobar, merge, descartar, crear worktree): son del **Cockpit** (F-001-02, BR-04 a BR-07).
+    - Snapshots, undo/redo y timeline navegable: son de la **Time Machine** (F-001-03, BR-08 a BR-10). El motor solo aporta los eventos y su atribución.
+    - Definir y aplicar políticas (incluido el valor de la rama base), las prohibiciones del equipo que un nivel personal no puede relajar y el modo "pedir confirmación": son de **Guardrails** (F-001-04, BR-11 a BR-13).
+    - Las herramientas MCP, su instalación y su endurecimiento de seguridad: son del **Servidor MCP** (F-001-05, BR-14 a BR-16).
+    - Soporte completo de agentes distintos de Claude Code (detección automática y funciones específicas de Codex, Cursor, Copilot u otros). Se integran uno por uno: primero Codex, luego Cursor y, más adelante, Copilot (BRD v0.5, D2 revisada, Q32). En el MVP solo se aceptan como "otro agente" por registro explícito. *(Q32: antes, "distintos de Claude Code y Cursor; los siguientes son Codex y Copilot".)*
+    - Detectar a Cursor como agente: en el MVP Cursor es el editor del humano; solo se trata como agente si alguien lo registra de forma explícita, y entonces es "otro agente" (Q32).
+    - Lanzar, detener u orquestar agentes. GitRaptor observa y protege; no ejecuta prompts ni gestiona modelos (BRD § 6.4).
+    - Escribir cualquier cosa en el repo observado: ni código fuente, ni rutas operativas, ni una carpeta o archivo propio del motor (BR-CONS-001, Q21).
+    - Instalar hooks de Git o hacer cualquier otra modificación operativa (Q22). Los hooks son de Guardrails (F-001-04, BR-12).
+    - Escribir la configuración en cualquiera de sus tres niveles. La edita el desarrollador, a mano o con un comando que él lanza (Q23, BR-CONS-007).
+    - Ofrecer el comando para editar la configuración (p. ej. `raptor config` o `raptor allow`): pertenece a **Guardrails** (F-001-04, Q27).
+    - Modificar cualquier cosa **del usuario** fuera del repo observado (otros repos, archivos personales, configuración global de Git). Fuera del repo el motor solo escribe sus datos en el perfil (Q17, Q21).
+    - Borrar los datos de un repo al retirarlo de la observación (Q16, Q25): siguen en el perfil y vuelven a estar disponibles si se vuelve a añadir.
+    - Traer novedades del remoto por iniciativa propia del motor (Q12).
+    - Compartir el umbral de inactividad con el equipo a través de la configuración del repo: es una preferencia personal y ese nivel no lo admite (Q20, Q24).
+    - Personalizar la rama base en el perfil o en la configuración local personal: es un valor compartido del equipo (Q24).
+    - Que los datos del motor viajen con el repo a otra máquina o a otro clon: no es objetivo del MVP (Q21).
+    - Exportar o importar el perfil de GitRaptor (historial, atribución, configuración personal) para llevarlo a otra máquina: fase posterior (Q31).
+    - Instalar o actualizar Git del sistema: sería modificar la máquina del usuario; el motor solo dice cómo hacerlo (Q28, Q17).
+    - Observación parcial con un Git anterior a 2.38: con Git insuficiente no se observa nada (Q28).
+    - Conectar el agente a GitRaptor vía MCP (BR-15, `raptor mcp install`): es del **Servidor MCP** (F-001-05, Q29).
+    - **Presentar** el estado "sin repos" o el aviso de Git (textos, diseño del estado vacío): es del Cockpit y de la CLI; el motor expone el estado (Q30).
+    - Atribución de cada archivo a un agente concreto dentro de un worktree compartido (fase posterior, Q7).
+    - Repos dentro de WSL en Windows (Q8).
+    - Gestión de puertos y variables de entorno por worktree (BR-21, Fase 2) e integración con Entire Checkpoints (BR-20, Fase 2).
+    - VCS distintos de Git.
+
+### Dependencias con otras features
+
+| Feature | Relación con el Motor local | Dirección |
+|---------|-----------------------------|-----------|
+| F-001-02 Cockpit | Necesita la lista de worktrees y agentes con rama, estado de la sesión, archivos modificados, ahead/behind y última actividad, actualizada en vivo. Comparte con el motor el presupuesto de frescura de NFR-04 (< 500 ms de extremo a extremo). Presenta los estados "Esperando Git" y "Sin repos" que expone el motor, incluido el estado vacío guiado (BR-WF-002, Q28, Q30); lo mismo la CLI. | Cockpit depende del motor |
+| F-001-03 Time Machine | Necesita los eventos de Git con momento y actor ("agente X" o "sin atribuir"; el motor nunca emite "humano", y presentar "sin atribuir" como "tú u otro" es de la Time Machine, Q34) para responder "qué cambió, cuándo y quién" y para el undo por agente. Es una de las features que sí escriben en el repo, con su propia garantía NFR-01. | Time Machine depende del motor |
+| F-001-04 Guardrails | Necesita la identidad del actor que intenta una operación. **El motor depende de Guardrails** en cuatro puntos: (1) la configuración del repo compartida con el equipo es la de Guardrails (BR-11), y de ella el motor lee la rama base (si no la define, usa `main`); (2) el formato y la estructura de la configuración en tres niveles los define el context de Guardrails junto con un ADR pendiente, y la regla de que un nivel personal no puede relajar una prohibición del equipo es de Guardrails; los niveles que admite cada valor del motor están fijados aquí (Q24, BR-CONS-007) y Guardrails los respeta; (3) los hooks de Git son de Guardrails (BR-12): el motor no instala los suyos y puede leer las señales de los de Guardrails como información adicional, sin depender de ellas; (4) el comando para editar la configuración (p. ej. `raptor config` o `raptor allow`) lo ofrece Guardrails; el motor solo lee la configuración (Q27). Ya no hay hooks ni carpeta que coordinar entre ambas features. | Bidireccional: Guardrails usa la atribución; el motor lee la configuración y, si existen, las señales de hooks de Guardrails |
+| F-001-05 Servidor MCP | Necesita el estado del repo para la herramienta `status`, y ofrece un canal para que el agente se registre de forma explícita. Conectar un agente instalado después (BR-15, `raptor mcp install`) es suyo; la detección automática de sus sesiones no depende de esa conexión (BR-EDGE-006, Q29). | MCP depende del motor; el registro vía MCP depende a su vez del MCP |
+
+---
+
+## 3. Objetivos de Negocio (BRD)
+
+| Objetivo | Métrica de Éxito | Prioridad |
+|----------|------------------|-----------|
+| Saber qué agente trabaja en cada worktree sin preguntarlo ni recordarlo | ≥ 90% de precisión de la detección automática de Claude Code *(Q32: antes, "de Claude Code y Cursor")*, medida en el uso diario del propio desarrollador (dogfooding, D3): detecciones correctas frente al total de sesiones, contando como fallo cada agente que el desarrollador tuvo que registrar o corregir a mano. Se cumple sin hooks propios del motor (Q22) | Alta |
+| Reflejar los cambios casi en tiempo real | Un cambio en cualquier worktree observado se refleja en la TUI en < 500 ms de extremo a extremo (NFR-04). El presupuesto se comparte con el Cockpit (F-001-02); el reparto lo hace el Arquitecto | Alta |
+| Aguantar la escala real del caso de uso | 10 o más worktrees activos y repos de más de 100K commits sin degradarse (NFR-05) | Alta |
+| Observar sin riesgo | 0 escrituras del motor en el repo observado: el código fuente y las rutas operativas son idénticos antes y después de observarlo, y fuera del repo solo cambia el perfil de GitRaptor (BR-CONS-001, BR-AUTH-002, derivadas de NFR-01) | Alta |
+| Observar sin huecos | 0 periodos sin captura de actividad mientras la máquina está encendida y el repo está en observación, tenga o no el desarrollador una superficie de GitRaptor abierta (BR-CONS-005) | Alta |
+| Mismo comportamiento en los tres sistemas operativos | Las mismas capacidades verificadas en Windows, macOS y Linux, x64 y arm64 (BR-03, NFR-06) | Alta |
+| Habilitar el dogfooding | 100% de las sesiones de desarrollo de GitRaptor con agentes observadas por el motor (BRD § 9) | Media |
+
+---
+
+## 4. Stakeholders y Actores (BRD + PRD)
+
+### Stakeholders de Negocio (BRD)
+
+| Stakeholder | Interés | Expectativa |
+|-------------|---------|-------------|
+| Rene Bonilla (producto, revisión e integración) | Es el único humano del proyecto (D3) y el primer usuario (dogfooding). Define la rama base de cada repo en la configuración del repo compartida con el equipo. | Ver de un vistazo qué hace cada agente mientras construye GitRaptor, sin perder trabajo. |
+| Desarrolladores internos y equipos piloto (2 equipos, BRD § 9) | Usuarios futuros de la herramienta interna. | Que funcione en su sistema operativo (incluido Windows) con Claude Code, y con Codex o Cursor como "otro agente" hasta que tengan soporte completo (Q32). `[POR VERIFICAR]` quiénes son y qué SO usan. |
+
+### Actores del Sistema (PRD)
+
+| Actor | Descripción | Permisos/Capacidades |
+|-------|-------------|----------------------|
+| **Desarrollador orquestador** | Persona que lanza y supervisa varios agentes en paralelo. En el MVP, una sola persona (D3). | Añadir y retirar repos observados; consultar el estado; registrar o retirar un agente en un worktree; corregir una atribución automática; editar la configuración en cualquiera de sus tres niveles (p. ej. el umbral de inactividad de un repo en su configuración local personal). Es el único actor que podría conceder un permiso operativo si una capacidad futura lo necesitara (principio de BR-AUTH-002); en el MVP no hay ninguno que conceder. |
+| **Agente Claude Code** | Agente de IA con soporte completo en el MVP: detección automática y registro explícito. | Puede registrarse a sí mismo en su worktree (canal vía MCP, ver Dependencias). No puede añadir ni retirar repos de la observación (Q40) ni corregir una atribución (BR-CONS-002); si se registra donde ya se le detectaba, confirma esa sesión (Q39). Como los datos del motor viven en el perfil y no en el repo, un agente no los altera al trabajar en el working tree (Q21). |
+| ~~**Agente Cursor**~~ | ~~Agente de IA con soporte completo en el MVP. Igual que Claude Code.~~ | **Cambia con Q32**: Cursor ya no tiene soporte completo en el MVP. Como agente, solo existe si se registra de forma explícita y entonces es "otro agente". Como editor del humano, ver la fila siguiente. |
+| **Editor del desarrollador** (Cursor u otro) | Herramienta con la que el humano edita sus archivos. No es un actor propio: lo que se hace en ella es trabajo del desarrollador (Q32). | Su actividad nunca se atribuye a Claude Code ni a ningún agente; ante la duda, queda "sin atribuir" (BR-EDGE-004). |
+| **Otro agente** (Codex, Cursor, Copilot u otro) | Agente sin soporte completo en el MVP. Se acepta al registrarse explícitamente: se observa y se le atribuye su actividad, sin funciones específicas de ese agente ni detección automática (BR-VAL-001). | Igual que Claude Code en lo relativo al registro y a la observación. |
+| **Git del sistema** | Fuente de la verdad sobre el estado de cada repo. | El motor lo consulta para leer y no lo reemplaza. Nunca toca las credenciales ni modifica nada del repo (NFR-07, BR-CONS-001, BR-AUTH-002). Si falta o es anterior a 2.38, el motor avisa y espera; nunca lo instala ni lo actualiza (BR-VAL-003, Q28). |
+
+---
+
+## 5. Restricciones y Limitaciones (BRD + Arquitectura)
+
+### Regulatorias (BRD + Arquitectura)
+- No hay restricciones regulatorias específicas: herramienta interna, 100% local, sin envío de datos fuera de la máquina (NFR-03). Ver [domain-context.md](../../../domain-context.md). `[POR VERIFICAR]` con la política interna de seguridad de la información de ASSA.
+- Secretos presentes en los repos observados (archivos `.env`, credenciales de Git): el motor no muestra ni registra su contenido. `[POR VERIFICAR]` el alcance exacto, pendiente en domain-context.
+
+### Técnicas (Arquitectura)
+- Debe usar el Git del sistema en la versión mínima que fija NFR-07 (2.38 o superior), respetando la configuración, los hooks y las credenciales del usuario. Si Git falta o es anterior, el motor avisa y no observa nada hasta que el requisito se cumpla; no lo instala ni lo actualiza (BR-VAL-003, Q28, cierra P4).
+- Sin requisito de agentes instalados: el motor funciona sin Claude Code ni ningún otro agente y detecta Claude Code si se instala después (BR-EDGE-006, Q29, Q32).
+- Los datos del motor son de cada máquina: en una máquina nueva el perfil empieza vacío (BR-EDGE-007, Q31).
+- Sin APIs privadas de ningún IDE ni agente (NFR-08): la detección no puede apoyarse en interfaces internas de Claude Code ni de ningún otro agente o editor.
+- Sin dependencia de tmux (BR-03).
+- **El motor no escribe nada en el repo observado** (BR-CONS-001, derivada de NFR-01, Q21): ni el código fuente (archivos de trabajo, lo preparado para el próximo commit, la historia, las ramas, el stash), ni las rutas operativas (hooks, configuración del repo, metadatos de worktrees), ni una carpeta propia. Ningún mecanismo que elija el Arquitecto puede saltarse esta garantía.
+- **Sin modificaciones operativas en el MVP** (BR-AUTH-002, Q22): la detección funciona sin hooks propios. Si una capacidad futura necesitara modificar una ruta operativa, requeriría un cambio explícito de este requerimiento y el permiso explícito del desarrollador.
+- **Los datos del motor viven en el perfil de GitRaptor**, separados por repo (Q21). Fuera del repo, el perfil es lo único que el motor escribe; no modifica la configuración global de Git, otros repos ni ningún archivo del usuario (Q17).
+- **La configuración solo se lee** (BR-CONS-007, Q23): el motor no escribe ninguno de sus tres niveles.
+- Los efectos internos y temporales que Git produce por sí mismo al leer no cuentan como modificación, siempre que no cambien el estado observable del repo. La frontera técnica la define el Arquitecto (BR-CONS-001).
+- El stack ya está decidido en ADR-GRP-001. El mecanismo de detección y la forma del motor (proceso en segundo plano, librería u otra) los decide el Arquitecto; este contexto solo fija la necesidad de negocio de observar sin huecos (BR-CONS-005).
+
+### De Negocio (BRD)
+- Una sola persona orquestando agentes, sin equipo humano (D3): las historias deben ser pequeñas y verificables.
+- Soporte completo solo para Claude Code en el MVP (D2 revisada, Q32); los demás agentes se aceptan como "otro agente" y se integran uno por uno: primero Codex, luego Cursor y, más adelante, Copilot. *(Q32: antes, "Claude Code y Cursor; empezando por Codex y Copilot".)*
+- Herramienta interna (D1), compatible con un futuro open-core: licencia sin AGPL en el núcleo (NFR-11).
+- Sin fecha objetivo para el MVP (BRD § 12.2, pregunta 3).
+
+---
+
+## 6. Requisitos No Funcionales Destacados (PRD + Arquitectura)
+
+| RNF | Valor Objetivo | Crítico | Justificación |
+|-----|----------------|---------|---------------|
+| **Frescura** | Un cambio en un worktree se refleja en la TUI en < 500 ms de extremo a extremo (NFR-04). Presupuesto compartido con el Cockpit (F-001-02); el reparto entre ambos lo hace el Arquitecto | Sí | Sin esto el Cockpit no es "en vivo" y las alertas llegan tarde. |
+| **Escalabilidad** | ≥ 10 worktrees activos y repos de > 100K commits sin degradarse (NFR-05) | Sí | Es el caso de uso típico (3-10 agentes). |
+| **Seguridad: cero pérdida de datos** | Repo observado idéntico antes y después de observarlo, tanto el código fuente como las rutas operativas; fuera del repo solo cambia el perfil (BR-CONS-001, BR-AUTH-002, derivadas de NFR-01) | Sí | El trabajo sin commitear no existe en ningún otro sitio, y el desarrollador tiene que poder confiar en que GitRaptor no cambia su repo a sus espaldas. |
+| **Continuidad** | Sin huecos de captura mientras la máquina está encendida, haya o no una superficie abierta; atribución e historial persistentes entre reinicios (BR-CONS-005) | Sí | Un hueco hace que la Time Machine no sepa quién hizo qué. |
+| **Seguridad: privacidad** | 100% local; nada sale de la máquina; telemetría opt-in (NFR-03) | Sí | El código fuente y el historial son confidenciales. |
+| **Portabilidad** | Windows, macOS y Linux, x64 y arm64; instalación por `winget`, `brew`, `npm`/`npx` y script (NFR-06). WSL fuera del MVP | Sí | Hueco de mercado principal (BRD P7). |
+| **Huella en la máquina** | Sin impacto perceptible en el trabajo del desarrollador ni de los agentes ⚠️ **ASSUMPTION**: el BRD no fija CPU ni memoria máximas `[POR VERIFICAR]` | No | Observar 10 worktrees de forma continua no debe frenar a los agentes. |
+| **Robustez** | Que un repo o worktree deje de estar disponible no interrumpe la observación del resto (BR-EDGE-001) | Sí | Los agentes crean y borran worktrees constantemente. |
+| **i18n** | Los mensajes al usuario en inglés y español (NFR-10) | No | Convención del producto. |
+
+---
+
+## 7. Integraciones Externas (PRD + Arquitectura)
+
+| Sistema/API | Propósito | Tipo de Integración | Criticidad |
+|-------------|-----------|---------------------|------------|
+| Git del sistema (versión mínima de NFR-07) | Leer el estado de los repos, sus worktrees, ramas y eventos | Solo lectura: ni código fuente ni rutas operativas se modifican (BR-CONS-001, BR-AUTH-002). Mecanismo: lo define el Arquitecto | Alta |
+| Claude Code | Identificar sus sesiones por worktree o rama | Observación externa, sin APIs privadas (NFR-08) ni hooks propios (Q22). Mecanismo: lo define el Arquitecto (BRD § 11) | Alta |
+| ~~Cursor~~ | ~~Identificar sus sesiones por worktree o rama~~ | **Sin integración en el MVP (Q32)**: Cursor es el editor del humano y, como agente, solo existe por registro explícito ("otro agente"). Su integración llega después de la de Codex | — |
+| Configuración en tres niveles (perfil, repo de equipo de F-001-04 Guardrails, local personal del repo) | Conocer la rama base, el umbral de inactividad y el resto de valores que afectan al motor | Solo lectura; cada valor admite ciertos niveles y, entre ellos, gana el más específico (BR-CONS-007, Q24). Formato y estructura: ADR pendiente y context de Guardrails | Media |
+| Hooks de Git de Guardrails (F-001-04, BR-12) | Señal adicional para atribuir operaciones de Git a un agente | Lectura opcional de la información que dejen; la detección no depende de ellos (Q22). Mecanismo: lo define el Arquitecto | Baja |
+| Sistema operativo (Windows, macOS, Linux) | Identificar sesiones de agente y cambios en los worktrees | Lo define el Arquitecto | Alta |
+
+---
+
+## 8. Características Únicas del Feature (PRD)
+
+- **Agnóstico del agente**: una sola vista para todos los agentes del repo, que ninguna función nativa de un agente da (BRD § 3.4). En el MVP, Claude Code con soporte completo y cualquier otro agente, incluidos Codex y Cursor, como "otro agente" (Q32: antes, "para Claude Code y Cursor a la vez").
+- **Doble vía de identificación**: detección automática más registro explícito como red de seguridad cuando la detección falla (mitigación del riesgo de detección frágil, BRD § 10).
+- **Origen de la atribución visible**: siempre se sabe si un agente fue detectado o registrado (BR-CONS-003), y lo que no se pudo atribuir queda como "sin atribuir", nunca asignado a un agente por defecto.
+- **Sin huecos**: la observación no depende de que el desarrollador tenga GitRaptor abierto.
+- **Windows como ciudadano de primera**: el mismo comportamiento que en macOS y Linux, sin tmux.
+- **Observar sin tocar el repo**: el motor no escribe nada en el repo observado; sus datos viven en el perfil y su configuración solo la lee.
+
+---
+
+## 9. Glosario del Dominio (PRD)
+
+| Término | Definición | Sinónimos/Notas |
+|---------|------------|-----------------|
+| **Repo observado** | Repo que el desarrollador añadió a GitRaptor para que el motor lo siga. Añadirlo no crea nada en el repo: queda anotado en el perfil de GitRaptor. | Sin añadirlo, el motor no lo mira (BR-AUTH-001, Q21). |
+| **Worktree** | Directorio de trabajo de un repo con su propia rama. Patrón típico: un agente por worktree. | Incluye el directorio principal del repo. |
+| **Worktree compartido** | Worktree con más de una sesión de agente presente a la vez. | BR-CONS-004. Sin atribución por archivo en el MVP. |
+| **Sesión de agente** | Periodo en que un agente concreto trabaja sobre un worktree. Tiene estado: activo, inactivo o terminado. | Ver BR-WF-001. |
+| **Otro agente** | Agente que no es Claude Code (p. ej. Codex, Cursor o Copilot), aceptado por registro explícito con su nombre declarado. Se observa y se le atribuye su actividad, sin funciones específicas. | BR-VAL-001. Q32: Cursor pasa a esta categoría (antes, "que no es Claude Code ni Cursor"). |
+| **Editor del desarrollador** | Herramienta con la que el humano edita (Cursor, VS Code u otra). Lo que se hace en ella nunca se atribuye a un agente: el motor lo reporta como "sin atribuir" (Q34). | BR-EDGE-004, Q32. Si Cursor se registra como agente, es "otro agente". |
+| **Atribución** | Asociar un worktree, un cambio o un evento de Git a un agente, con su origen (detectado o registrado). Si no hay agente, el valor es "sin atribuir". "Humano" no es un valor del motor (Q34). | Base de "quién hizo qué" para Time Machine y Guardrails. BR-CONS-003. |
+| **Sin atribuir** | Único valor para lo que el motor no asigna con seguridad a ningún agente: trabajo del desarrollador, de un agente sin registrar que no se detecta (indistinguible del humano), de una sesión que dejó de reconocerse o de un hueco de observación. Nunca se presenta como hecho por un agente. Sustituye a "no identificada" (Q35). | BR-CONS-003, BR-EDGE-003, BR-EDGE-004, BR-EDGE-005. |
+| **Corrección de atribución** | Acción explícita del desarrollador que reemplaza una atribución detectada que estaba mal, también en los eventos de esa sesión desde su inicio (Q37). Solo donde hay una atribución detectada (Q38). No añade una sesión ni vuelve compartido el worktree. | BR-CONS-002, Q33, Q37, Q38. Distinta de registrar otro agente (añade sesión, BR-CONS-004). |
+| **Detección automática** | Atribución que el motor infiere sin que nadie la declare. Solo para Claude Code en el MVP (Q32: antes, "Claude Code y Cursor"). No depende de hooks propios; puede usar como señal adicional los hooks que ya existan. | Origen "detectado". Q22. |
+| **Registro explícito** | Atribución declarada por el desarrollador o por el agente. Si ya hay una sesión de otro agente en el worktree, añade otra (compartido); si el agente registrado es el mismo que ya se detectaba, confirma esa sesión (Q39). | Origen "registrado". BR-VAL-001, BR-CONS-004 (Q33, Q39). Corregir una detección es otra acción (BR-CONS-002). |
+| **Evento de Git** | Operación que cambia el estado del repo: commit, cambio de rama, creación o borrado de rama o worktree, rebase, merge, push. | — |
+| **Rama base** | Rama contra la que se calcula ahead/behind y sobre la que se integra el trabajo. `main` por defecto; configurable por repo solo en la configuración del repo compartida con el equipo. El perfil y la configuración local personal no la cambian. | BR-CONS-006, BR-11 del BRD, Q24. Leer el valor del equipo se difiere (Q36). |
+| **Hueco de observación** | Periodo en que el repo cambió sin que el motor lo estuviera observando (p. ej. la máquina apagada mientras otro proceso toca el repo). | BR-EDGE-005. |
+| **Datos propios del motor** | Lo que el motor genera: lista de repos observados, registro de agentes, atribuciones, historial de eventos y estado de sesiones. Todos viven en el perfil de GitRaptor, separados por repo. | BR-CONS-001 (Q21). La tabla dato a dato está en BR-CONS-001. La configuración no es un dato propio: el motor solo la lee. |
+| **Perfil de GitRaptor** | Espacio exclusivo de la herramienta, fuera de cualquier repo. Contiene los datos propios del motor (que el motor escribe) y la configuración de nivel perfil del usuario (que el motor solo lee). No contiene archivos de trabajo del usuario. Es lo único que el motor escribe. Si se pierde, el motor sigue funcionando y lo no observado queda "sin atribuir". | Q18 (vigente en esto), Q21, Q23, Q26. Su ubicación concreta la decide el Arquitecto (P9). |
+| **Configuración en tres niveles** | Valores que gobiernan el comportamiento del motor, en tres niveles de menor a mayor prioridad: **perfil del usuario** (valores por defecto globales), **configuración del repo** versionada y compartida con el equipo (la de Guardrails, BR-11) y **configuración local personal del repo**, no versionada. Cada valor admite solo algunos niveles (la rama base, solo el del equipo; el umbral de inactividad, solo el perfil y el local personal) y, entre ellos, gana el más específico, salvo las prohibiciones del equipo que un nivel personal no puede relajar (regla de Guardrails). La edita el desarrollador, a mano o con el comando de Guardrails; el motor solo la lee. | BR-CONS-007, Q23, Q24, Q27. Formato y estructura: ADR pendiente (P8) y context de Guardrails (F-001-04). |
+| ~~**Carpeta `.gitraptor/`**~~ | ~~Carpeta propia del motor dentro del repo observado.~~ | **Obsoleto (Q21)**: el motor ya no tiene carpeta propia en el repo. La carpeta de configuración versionada del repo es de Guardrails (BR-11) y el motor solo la lee. |
+| ~~**Datos locales del motor**~~ | ~~Datos del motor guardados dentro del repo, sin versionar.~~ | **Obsoleto (Q21)**: todos los datos del motor viven en el perfil. |
+| **Código fuente** | El trabajo del usuario y de sus agentes en el repo: archivos de trabajo (versionados, no rastreados o ignorados, incluida la configuración local personal del repo), lo preparado para el próximo commit, la historia, las ramas, los tags, el stash, las operaciones en curso, los worktrees como espacio de trabajo, la configuración versionada del repo (BR-11) y las credenciales. El motor nunca lo modifica. | BR-CONS-001 (confirmada, Q13). Incluye lo que Git guarda de ese trabajo dentro de `.git`. Sin excepciones desde Q21. |
+| **Ruta operativa** | Parte del repo observado que hace funcionar a Git sin contener el trabajo del usuario: hooks, configuración de Git del repo, metadatos de worktrees y el resto de internos de `.git`. Solo existe dentro del repo observado. En el MVP el motor no modifica ninguna. | BR-CONS-001, BR-AUTH-002, Q22. La configuración global de Git no lo es (Q17); el perfil de GitRaptor tampoco. |
+| **Modificación operativa** | Cambio en una ruta operativa. En el MVP el motor no hace ninguna. No lo son los efectos internos y temporales de Git al leer. | BR-AUTH-002, Q22. |
+| **Permiso explícito** | Principio del producto: autorización que da el desarrollador (nunca un agente) a una modificación operativa concreta en un repo, tras ver qué, dónde, por qué y cómo se revierte. No se extiende a otros repos ni a otras modificaciones; tras una denegación no se vuelve a pedir hasta que el desarrollador lo active a mano. Sin uso en el motor del MVP. | BR-AUTH-002 (Q11, Q14, Q15, Q22). Referencia para el motor futuro y para otras features. |
+| **Estado especial de Git** | Situación intermedia del repo: rebase o merge en curso, HEAD separado, conflictos sin resolver. | — |
+| **Esperando Git** | Estado del motor cuando Git del sistema falta o es anterior a 2.38. No observa nada, informa qué falta y cómo resolverlo, y empieza a observar solo cuando el requisito se cumple. | BR-VAL-003, BR-WF-002, Q28. |
+| **Sin repos** | Estado del motor cuando Git cumple el requisito pero no hay ningún repo observado. Expone la guía para añadir el primero. | BR-WF-002, Q30. La presentación (estado vacío guiado) es del Cockpit y la CLI. |
+| **Máquina nueva** | Computadora en la que GitRaptor se instala por primera vez. Su perfil empieza vacío; solo la configuración del equipo, versionada con el repo, aplica desde el inicio. | BR-EDGE-007, Q31. |
+
+---
+
+## 10. Estándares Aplicables (Arquitectura)
+
+- **Interoperabilidad**: comportamiento estándar de Git (Git nativo, sin modelo propio de ramas) y MCP estándar para los agentes (NFR-08). El resto: transversal (lo define el Arquitecto).
+- **Codificación y Terminología**: fechas y horas de los eventos en un formato inequívoco con zona horaria ⚠️ **ASSUMPTION** `[POR VERIFICAR]`. Terminología de Git estándar.
+- **Seguridad y Autenticación**: no aplica autenticación de usuarios (herramienta local de un solo usuario). El conjunto de repos observados lo controla el desarrollador (BR-AUTH-001). Detalle: transversal (lo define el Arquitecto).
+- **Compliance**: solo políticas internas (ver § 5).
+
+---
+
+## 11. Referencias (BRD + PRD + Arquitectura)
+
+- [BRD-GRP-001 — Documento de negocio](../../../business/gitraptor-documento-de-negocio.md) (v0.5): § 2 (P1, P7), § 5 (usuarios), § 6.1 (BR-01 a BR-03, BR-11 y BR-12), § 7 (NFRs), § 9 (KPIs), § 10 (riesgos), § 11 (supuestos), § 12 (decisiones D1-D3 y preguntas abiertas).
+- [Backlog](../../backlog.md): E-001 / F-001-01; dependencia con F-001-04.
+- [Reglas de negocio de esta feature](./business-rules.md) (BR-GRP-001).
+- [Contexto del dominio](../../../domain-context.md).
+- [ADR-GRP-001 — Stack tecnológico](../../../architecture/decisions/ADR-GRP-001-stack-tecnologico.md) (solo como restricción ya tomada).
+
+---
+
+## Supuestos
+
+| # | Supuesto | Estado |
+|---|----------|--------|
+| S1 | El motor nunca modifica el código fuente del repo observado y puede modificar rutas operativas solo con permiso explícito del desarrollador. Antes decía "el motor es de solo lectura respecto a todo el repo". | Reemplazado por Q10 y Q11 (2026-10-02); con Q21 y Q22 el motor vuelve a no escribir nada en el repo → BR-CONS-001, BR-AUTH-002 |
+| S2 | El registro explícito de un agente no deja rastro en el repo: no aparece como cambio pendiente ni altera la historia. | Confirmado (Q2, 2026-10-02); con Q21 se guarda en el perfil → BR-CONS-001 |
+| S3 | Un worktree puede tener varias sesiones de agente a la vez y el motor las reporta todas, marcando el worktree como compartido. | Confirmado (Q7, 2026-10-02) → BR-CONS-004 |
+| S4 | Lo ocurrido durante un hueco de observación se reconcilia al volver (se ve el estado actual) y esos cambios quedan "sin atribuir". | Confirmado (Q6, 2026-10-02) → BR-EDGE-005 |
+| S5 | Un agente de un tipo sin soporte completo se acepta como "otro agente" (antes: se rechazaba). | Reemplazado por la decisión Q4 (2026-10-02) → BR-VAL-001 |
+| S6 | El umbral para pasar de "activo" a "inactivo" es de 5 minutos sin actividad. | Confirmado y ampliado: configurable por repo (Q3); es personal (Q20); el valor por defecto vive en el perfil y el ajuste por repo en la configuración local personal del repo (Q23); la configuración del equipo nunca lo define (Q24, 2026-10-02) → BR-TIME-001 |
+| S7 | Un agente no puede ampliar el conjunto de repos observados (coherente con la allowlist de NFR-02). | Confirmado (Q40, 2026-10-03): ni añadir ni retirar → BR-AUTH-001 |
+| S8 | Una sesión "Terminado" no se reactiva: si el agente reaparece, es una sesión nueva. Un agente registrado cuya presencia no se puede comprobar se considera presente hasta retirar el registro. | Confirmado (Q41, 2026-10-03) → BR-WF-001 |
+| S9 | Si el desarrollador deniega un permiso operativo, el motor no lo vuelve a pedir hasta que el desarrollador lo active a mano. | Confirmado (Q14, 2026-10-02); vigente como principio, sin uso en el MVP (Q22) → BR-AUTH-002 |
+| S10 | Un permiso vale para una modificación concreta en un repo concreto. | Confirmado (Q15, 2026-10-02); vigente como principio, sin uso en el MVP (Q22) → BR-AUTH-002 |
+| S11 | Al retirar un repo de la observación, el motor ofrece revertir las modificaciones operativas que hizo en él y el desarrollador decide. | Rechazado (Q16, 2026-10-02); sin objeto desde Q22, porque el motor no hace modificaciones operativas |
+| S12 | La configuración global de Git del usuario se trata como una ruta operativa. | Rechazado (Q17, 2026-10-02): no es ruta operativa y el motor no la modifica → BR-CONS-001 |
+| S13 | Qué guarda el perfil si se deniega la carpeta propia del motor en un repo. | Resuelto y obsoleto (Q19); sin objeto desde Q21 |
+| S14 | Qué pasa con las modificaciones operativas ya hechas si se pierde la carpeta propia del motor. | Obsoleto (Q21, Q22): no hay carpeta propia ni modificaciones operativas |
+| S15 | Si el motor no puede crear su carpeta al añadir un repo, el repo no se añade. | Obsoleto (Q21): añadir un repo no crea nada en él |
+| S16 | Retirar un repo de la observación no borra sus datos del perfil: siguen disponibles si se vuelve a añadir (continuación de Q16). | Confirmado (Q25, 2026-10-02) → BR-AUTH-001 |
+| S17 | Si se pierde o se borra el perfil de GitRaptor, el motor sigue observando los repos que se vuelvan a añadir; lo ocurrido mientras no hubo datos queda "sin atribuir", como en un hueco de observación (BR-EDGE-005). | Confirmado (Q26, 2026-10-02) → BR-CONS-001, BR-EDGE-005; una máquina nueva se comporta igual (Q31) → BR-EDGE-007 |
+| S18 | Mientras el motor está en "Esperando Git" no se pueden añadir repos, porque sin Git no puede comprobar que un directorio es un repo (BR-VAL-002); el aviso de Git tiene prioridad sobre el estado "sin repos". | ✅ Aceptado por Rene Bonilla (2026-10-02) (BR-WF-002) |
+| S19 | Si Git desaparece o pasa a una versión inferior a 2.38 mientras el motor ya observaba, el motor vuelve a "Esperando Git" y lo ocurrido mientras esperaba queda "sin atribuir" como un hueco de observación. | ✅ Aceptado por Rene Bonilla (2026-10-02) (BR-VAL-003, BR-WF-002, BR-EDGE-005) |
+
+## Riesgos
+
+| # | Riesgo | Prob. | Impacto | Mitigación (de negocio) |
+|---|--------|-------|---------|-------------------------|
+| R1 | **Detección frágil**: Claude Code cambia sus procesos o convenciones *(Q32: antes, "Claude Code o Cursor")* y la detección automática deja de funcionar (BRD § 10). | Media | Medio | Registro explícito como respaldo (BR-02). Una sesión que deja de reconocerse queda "sin atribuir", no se asigna a un agente equivocado (BR-EDGE-003; Q35: antes, "no identificada"). La meta de precisión del 90% en dogfooding detecta la degradación. |
+| R2 | **Trabajo del humano atribuido a un agente** *(reformulado con Q32; antes: "atribución errónea humano/agente en Cursor", el caso de detectar a Cursor como agente)*: el desarrollador edita en su editor (Cursor u otro) en un worktree donde trabaja Claude Code, o en uno sin agentes. Si el motor atribuye a Claude Code, o a cualquier agente, un cambio que hizo el humano, un "deshacer lo del agente X" de la Time Machine deshace trabajo humano. | Alta | Alto | Mostrar el origen de cada atribución (BR-CONS-003); en caso de duda, no atribuir a ningún agente (BR-EDGE-004). Cursor solo cuenta como agente si se registra de forma explícita ("otro agente"). Resolver en arquitectura y validar en el spike (c) del BRD. |
+| R3 | Un agente trabaja desde un directorio y modifica otro worktree, de modo que la atribución por ubicación falla. | Media | Medio | Registro explícito; el Arquitecto valida en el spike (c). |
+| R4 | Diferencias entre sistemas operativos (sobre todo Windows) hacen que la detección o la frescura no sean equivalentes. | Media | Alto | Verificar los objetivos de § 3 en los tres SO antes de dar la feature por terminada. |
+| R5 | Con 10 o más worktrees y observación continua, el motor consume demasiado y frena a los agentes. | Media | Medio | Objetivos de NFR-04 y NFR-05; cuantificar la huella máxima en la máquina (RNF "Huella" de § 6). |
+| R6 | La feature crece con trabajo que pertenece al Cockpit, la Time Machine o los Guardrails. | Media | Medio | Alcance OUT explícito y tabla de dependencias (§ 2). |
+| R7 | Sin hooks propios (Q22), la detección no alcanza el 90% de precisión. El BRD (BR-02) menciona los hooks como vía de detección. | Media | Medio | La detección no puede depender de hooks: debe alcanzar la meta con lo observable sin modificar el repo. Si Guardrails ya tiene hooks en el repo, el motor puede aprovechar su información como señal adicional. El spike (c) mide la precisión con y sin esas señales; el registro explícito sigue siendo el respaldo. |
+| R8 | El motor se apoya en las señales de los hooks de Guardrails y esas señales cambian, faltan (repo sin Guardrails) o el usuario las desactiva. Ya no hay conflicto de hooks entre motor y Guardrails, porque el motor no instala ninguno; queda una dependencia. | Media | Bajo | Las señales de hooks son opcionales (Q22): sin ellas, el motor detecta con lo observable. Dependencia explícita F-001-01 / F-001-04 (§ 2) para que el Arquitecto acuerde qué información dejan los hooks de Guardrails. |
+| R9 | ~~Fatiga de permisos: demasiadas peticiones hacen que el desarrollador las acepte sin leerlas o las ignore.~~ | — | — | **No aplica al motor en el MVP (Q22)**: el motor no pide permisos. Vuelve a ser riesgo si una capacidad futura necesitara una modificación operativa (BR-AUTH-002). |
+| R10 | ~~El usuario o un agente borra o commitea la carpeta propia del motor en el repo.~~ | — | — | **Obsoleto (Q21)**: el motor no escribe en el repo, así que un `git add -A` no puede recoger sus datos ni un agente alterarlos al trabajar en el working tree. |
+| R11 | ~~La carpeta del repo es compartida con Guardrails (configuración versionada frente a datos del motor sin versionar).~~ | — | — | **Obsoleto en esa forma (Q21)**: ya no hay carpeta compartida. La dependencia de configuración con Guardrails pasa a R12. |
+| R12 | La configuración en tres niveles no tiene aún formato, estructura ni context propio (ADR pendiente, context de Guardrails sin escribir). Si el motor y Guardrails interpretan distinto la precedencia o los valores que afectan al motor, el motor aplica un valor que el desarrollador no esperaba. | Media | Medio | Una sola definición de la configuración, la de Guardrails con su ADR (P8); el motor solo la lee (BR-CONS-007). La precedencia de negocio está fijada aquí, valor por valor: cada valor declara sus niveles admitidos y, entre ellos, gana el más específico (Q24). |
+| R13 | El perfil de GitRaptor concentra todos los datos del motor de todos los repos: si se pierde, se pierde la atribución y el historial de eventos de todos a la vez. | Baja | Alto | Comportamiento ante la pérdida decidido en Q26: el motor sigue funcionando, los repos se vuelven a añadir y lo perdido queda "sin atribuir" (BR-EDGE-005), nunca atribuido a un agente. Cómo se protege el perfil lo decide el Arquitecto. |
+| R14 | **Primer uso confuso**: en una máquina nueva, el desarrollador instala GitRaptor antes que Git o que sus agentes y cree que la herramienta no funciona; o espera encontrar el historial de su máquina anterior. | Media | Medio | El motor dice siempre qué falta y cómo resolverlo (BR-VAL-003), expone "sin repos" con la guía para empezar (BR-WF-002), funciona sin agentes (BR-EDGE-006) y deja claro que una máquina nueva empieza de cero (BR-EDGE-007). Se verifica con los escenarios de primer uso de BR-WF-002. |
+
+## Decisiones tomadas
+
+| # | Pregunta | Decisión | Fecha | Decidido por | Reglas afectadas |
+|---|----------|----------|-------|--------------|------------------|
+| Q1 | ¿Se tiene que capturar la actividad de los agentes aunque el desarrollador no tenga ninguna superficie de GitRaptor abierta? | Sí. La Time Machine no puede tener huecos. Cómo se logra (proceso en segundo plano u otro) lo decide el Arquitecto. | 2026-10-02 | Rene Bonilla | BR-CONS-005 |
+| Q2 | ¿El motor es estrictamente de solo lectura? ¿Dónde se guarda el registro explícito? | **Reemplazada por Q10 y Q11.** Decía: sí, de solo lectura respecto al repo observado: no escribe en el working tree, el índice, las refs ni la configuración. El registro de agentes y los demás datos propios se guardan fuera del repo, sin dejar cambios pendientes ni alterar la historia. *Q21 recupera ese espíritu: el motor no escribe nada en el repo y sus datos viven fuera, en el perfil.* | 2026-10-02 | Rene Bonilla | BR-CONS-001 |
+| Q3 | ¿Cuál es el umbral de inactividad y es configurable? | 5 minutos por defecto, configurable por repo. Sigue vigente; Q20, Q23 y Q24 fijan dónde vive cada valor. | 2026-10-02 | Rene Bonilla | BR-TIME-001, BR-WF-001 |
+| Q4 | ¿Se aceptan agentes que no son Claude Code ni Cursor? | Sí, como "otro agente": se observa y se le atribuye su actividad, sin funciones específicas. Rechazarlo haría que su trabajo se atribuya al humano y la Time Machine podría deshacer trabajo humano *(Q34: el motor no emite "humano"; ese trabajo quedaría "sin atribuir", indistinguible del del desarrollador)*. Integración progresiva; los siguientes con soporte completo son Codex y Copilot. Sigue vigente; **Q32 la refina**: Cursor también pasa a "otro agente" y el orden de integración es Codex, luego Cursor y, más adelante, Copilot. | 2026-10-02 | Rene Bonilla | BR-VAL-001, BR-AUTH-001 |
+| Q5 | ¿Cómo se determina la rama base de cada repo? | `main` por defecto. El desarrollador la define por repo en la configuración versionable de Guardrails (BR-11, F-001-04). El motor lee el valor; no lo define. Sigue vigente; Q23 la refina: se lee del nivel de equipo de la configuración en tres niveles; Q24 precisa que es el único nivel que la admite. | 2026-10-02 | Rene Bonilla | BR-CONS-006 |
+| Q6 | ¿La atribución y el historial de eventos sobreviven a reinicios? | Sí, a reinicios de GitRaptor y de la máquina. Si aun así hay un hueco, se reconcilia el estado actual y esos cambios quedan "sin atribuir", nunca atribuidos a un agente. | 2026-10-02 | Rene Bonilla | BR-CONS-005, BR-EDGE-005 |
+| Q7 | En un worktree compartido, ¿atribución por archivo o marca de compartido? | En el MVP basta con marcarlo como compartido y mostrar todas las sesiones. La atribución por archivo queda para una fase posterior. | 2026-10-02 | Rene Bonilla | BR-CONS-004 |
+| Q8 | ¿Entran en el MVP los repos dentro de WSL? | No, quedan fuera del MVP. | 2026-10-02 | Rene Bonilla | — (alcance OUT) |
+| Q9 | ¿Qué meta de precisión de la detección automática y cómo se mide? | 90%, medida en el uso diario del propio desarrollador (dogfooding, D3): detecciones correctas frente a agentes que tuvo que registrar o corregir a mano. | 2026-10-02 | Rene Bonilla | — (KPI § 3) |
+| Q10 | ¿El directorio `.git` cuenta como "repo" en la regla de solo lectura? (Artifact Judge) | No. Lo que nunca se modifica es el **código fuente**: el trabajo del usuario (archivos de trabajo, lo preparado, la historia, las ramas, el stash). El directorio `.git`, salvo lo que Q13 define como código fuente, y las demás **rutas operativas** (hooks, configuración del repo, metadatos de worktrees) son otra categoría. Los efectos internos y temporales de Git al leer no son modificación si no cambian el estado observable. Reemplaza a Q2. Sigue vigente la distinción; Q22 la refina: en el MVP el motor tampoco modifica rutas operativas. | 2026-10-02 | Rene Bonilla | BR-CONS-001 |
+| Q11 | ¿El motor puede apoyarse en hooks de Git u otros cambios operativos? (Artifact Judge) | Sí, solo con permiso explícito del desarrollador, pedido en el momento en que se necesita, explicando qué, dónde, por qué y cómo se revierte. Sin permiso o sin respuesta no se modifica nada y nunca se asume el permiso. Un agente no puede concederlo. Toda modificación autorizada es recuperable y queda registrada. La detección no puede depender de que el permiso se conceda. Reemplaza a Q2. Sigue vigente **como principio** del producto; Q22 la refina: en el MVP el motor no hace ninguna modificación operativa, y una capacidad futura que la necesitara requeriría además un cambio explícito del requerimiento. | 2026-10-02 | Rene Bonilla | BR-AUTH-002, BR-AUTH-001, BR-CONS-001 |
+| Q12 | ¿El motor actualiza por su cuenta lo que sabe del remoto? | No. El ahead/behind es fiable respecto a lo que el repo ya conoce del remoto; el motor no trae novedades del remoto por iniciativa propia, salvo que se decida otra cosa más adelante. *Trazabilidad: se anotó primero como decisión de Rene Bonilla, pero salió de una instrucción del orquestador; Rene Bonilla la confirmó el 2026-10-02.* | 2026-10-02 | Rene Bonilla (confirmada) | BR-CONS-001 |
+| Q13 | ¿Se confirma la definición de "código fuente" de BR-CONS-001? | Sí, tal como está: archivos de trabajo, lo preparado para el próximo commit, la historia, las ramas, los tags, el stash, las operaciones en curso, los worktrees como espacio de trabajo, la configuración versionada del repo y las credenciales, aunque Git guarde parte de ello dentro de `.git`. Sigue vigente y, desde Q21, sin la excepción que había añadido Q18. | 2026-10-02 | Rene Bonilla | BR-CONS-001 |
+| Q14 | Tras una denegación, ¿el motor vuelve a pedir el mismo permiso? (S9) | No. No lo vuelve a pedir hasta que el desarrollador lo active a mano. Sigue vigente como principio (Q22). | 2026-10-02 | Rene Bonilla | BR-AUTH-002 |
+| Q15 | ¿Qué alcance tiene cada permiso? (S10) | Una modificación concreta en un repo concreto. No se extiende a otros repos ni a otras modificaciones; cambiar lo ya instalado requiere un permiso nuevo. Sigue vigente como principio (Q22). | 2026-10-02 | Rene Bonilla | BR-AUTH-002 |
+| Q16 | Al retirar un repo, ¿el motor ofrece revertir lo que modificó en él? (S11) | No en el MVP: la reversión y la limpieza ligadas al retiro del repo quedan fuera de alcance. Desde Q21 y Q22 no hay nada que revertir en el repo; queda vigente que retirar un repo no borra datos de forma automática; Q25 lo fija como regla. | 2026-10-02 | Rene Bonilla | BR-AUTH-001 — (alcance OUT) |
+| Q17 | ¿La configuración global de Git es una ruta operativa? (S12) | No. Solo es ruta operativa lo que está dentro del repo observado. El motor no modifica la configuración global de Git ni nada del usuario fuera del repo, ni siquiera con permiso. Sigue vigente con Q21: fuera del repo lo único que el motor escribe es su perfil. | 2026-10-02 | Rene Bonilla | BR-CONS-001, BR-AUTH-002 — (alcance OUT) |
+| Q18 | ¿Dónde viven los datos del motor? | **Reemplazada por Q21.** Decía: modelo híbrido; perfil de GitRaptor para los datos de la herramienta y una carpeta propia del motor dentro de cada repo observado para los datos de ese repo, sin versionarse nunca, como excepción acotada a Q13. | 2026-10-02 | Rene Bonilla | BR-CONS-001, BR-AUTH-002, BR-CONS-005 |
+| Q19 | ¿Crear la carpeta propia del motor en el repo requiere permiso? | **Reemplazada por Q21.** Decía: no; crear la carpeta es parte de añadir el repo, es obligatoria para observarlo, el motor informa de lo que creó y, si la carpeta desaparece, la vuelve a crear e informa de la pérdida. | 2026-10-02 | Rene Bonilla | BR-AUTH-002, BR-CONS-001, BR-AUTH-001, BR-EDGE-005 |
+| Q20 | ¿Dónde vive el umbral de inactividad? | Es una preferencia **personal**, no compartida con el equipo. El valor por defecto global (5 minutos) vive en el perfil. Sigue vigente; Q23 la refina: el ajuste de cada repo vive en la configuración local personal del repo, que edita el desarrollador y el motor solo lee; Q24 precisa que la configuración del equipo nunca lo define. | 2026-10-02 | Rene Bonilla | BR-TIME-001, BR-CONS-001 |
+| Q21 | ¿Dónde escribe el motor? (reemplaza a Q18 y Q19) | **El motor solo observa.** No escribe nada en el repo observado: ni código fuente, ni rutas operativas, ni una carpeta propia. Vuelve la garantía fuerte derivada de NFR-01. Se mantienen la definición de código fuente de Q13 y la excepción de los efectos internos y temporales que Git produce al leer sin cambiar el estado observable. **Todos** los datos del motor (lista de repos observados, eventos, atribución, sesiones, registro de agentes) viven en el **perfil de GitRaptor**, separados por repo. Fuera del repo, el perfil es lo único que el motor escribe (Q17 sigue vigente). **Motivo**: escribir en el working tree obligaba a una excepción a Q13; los agentes podían hacer commit de esos datos por accidente (p. ej. con `git add -A`) o alterar los datos de atribución; con varios worktrees los datos se fragmentaban; y se mezclaban con la configuración versionada. Se pierde que los datos viajen con el repo, que no es objetivo del MVP. | 2026-10-02 | Rene Bonilla | BR-CONS-001, BR-AUTH-001, BR-AUTH-002, BR-CONS-005, BR-EDGE-005 |
+| Q22 | ¿El motor instala hooks o hace modificaciones operativas en el MVP? | **No.** Los hooks de Git son de Guardrails (F-001-04, BR-12). El motor puede aprovechar como señal adicional la información de hooks que existan (p. ej. los de Guardrails), pero la detección no puede depender de ellos. En el MVP el motor no hace ninguna modificación operativa. Si una capacidad futura del motor necesitara modificar una ruta operativa, requeriría un cambio explícito del requerimiento y el modelo de permiso explícito del desarrollador (Q11, Q14, Q15), que se conserva como decisión del producto. | 2026-10-02 | Rene Bonilla | BR-AUTH-002, BR-CONS-001 |
+| Q23 | ¿Cómo se configura el motor? | **Configuración en tres niveles que el motor solo lee**, de menor a mayor prioridad: **perfil del usuario** (valores por defecto globales), **configuración del repo versionada y compartida con el equipo** (la de Guardrails, BR-11) y **configuración local personal del repo**, no versionada. Gana el nivel más específico, salvo las prohibiciones del equipo que un nivel personal no puede relajar (regla de Guardrails). El motor nunca escribe ninguno de los tres niveles: los edita el desarrollador, a mano o con un comando que él lanza. La rama base se lee del nivel de equipo (`main` por defecto). El umbral de inactividad tiene su valor por defecto (5 minutos) en el perfil y el ajuste personal por repo en la configuración local personal. El formato y la estructura los decide un ADR pendiente y los define el context de Guardrails (F-001-04). Refina Q5 y Q20 sin reemplazarlas. *Q24 precisa la precedencia: "gana el más específico" se aplica dentro de los niveles que admite cada valor.* | 2026-10-02 | Rene Bonilla | BR-CONS-007, BR-CONS-006, BR-TIME-001, BR-CONS-001 |
+| Q24 | ¿Qué niveles de la configuración puede definir cada valor? (contradicción de precedencia que detectó el Artifact Judge entre BR-CONS-006, BR-TIME-001 y BR-CONS-007/Q23) | **Cada valor declara sus niveles admitidos y, dentro de ellos, gana el más específico.** Un valor escrito en un nivel que no lo admite no se tiene en cuenta. **Rama base**: solo la configuración del repo del equipo (es compartida y no cambia por persona); si no la define, `main`; un ajuste local o del perfil no la cambia. **Umbral de inactividad**: perfil (valor por defecto personal global) y configuración local personal del repo (ajuste por repo), **nunca** la del equipo; si ninguno lo define, 5 minutos. Precisa Q23 sin reemplazarla. | 2026-10-02 | Rene Bonilla | BR-CONS-007, BR-CONS-006, BR-TIME-001 |
+| Q25 | ¿Retirar un repo de la observación borra sus datos del perfil? (S16, P11) | **No.** Los datos del repo siguen en el perfil y vuelven a estar disponibles si se vuelve a añadir. Lo ocurrido mientras estuvo retirado se trata como un hueco de observación ("sin atribuir"). Confirma el supuesto S16. | 2026-10-02 | Rene Bonilla | BR-AUTH-001, BR-EDGE-005 |
+| Q26 | ¿Qué pasa si se pierde o se borra el perfil de GitRaptor? (S17, P11) | **El motor sigue funcionando.** Los repos se vuelven a añadir y lo ocurrido mientras no hubo datos queda "sin atribuir" (BR-EDGE-005), nunca atribuido a un agente. Confirma el supuesto S17. | 2026-10-02 | Rene Bonilla | BR-CONS-001, BR-EDGE-005 |
+| Q27 | ¿Qué feature ofrece el comando para editar la configuración? (P12) | **Guardrails (F-001-04).** El comando (p. ej. `raptor config` o `raptor allow`) es de Guardrails; motor-local solo lee la configuración. Queda como dependencia del motor con Guardrails. | 2026-10-02 | Rene Bonilla | BR-CONS-007 — (alcance OUT, dependencia F-001-04) |
+| Q28 | ¿Qué pasa si el desarrollador instala GitRaptor antes que Git, o con un Git anterior a 2.38? (P4) | **Avisa y espera.** GitRaptor se instala igualmente. Si Git no está instalado o su versión es inferior a 2.38, el motor informa con claridad qué falta, qué versión se necesita y cómo resolverlo, y **no observa nada** hasta que el requisito se cumpla: no hay observación parcial. Cuando Git aparece o se actualiza, el motor lo detecta por sí solo y empieza a observar, sin reinstalar ni reconfigurar. El motor **nunca instala ni actualiza Git**: sería modificar la máquina del usuario (coherente con Q17 y Q21). Cierra P4. | 2026-10-02 | Rene Bonilla | BR-VAL-003, BR-WF-002 — (alcance OUT: instalar o actualizar Git, observación parcial) |
+| Q29 | ¿Qué pasa si el desarrollador instala Claude Code o Cursor después que GitRaptor? | El motor funciona sin agentes instalados: observa repos y worktrees, sin sesiones de agente. Cuando se instala Claude Code o Cursor más tarde, el motor detecta sus sesiones sin reinstalar ni reconfigurar GitRaptor. Conectar el agente vía MCP (BR-15, `raptor mcp install`) pertenece a F-001-05. Sigue vigente; **Q32 la refina**: la detección automática al instalar después aplica solo a Claude Code; Cursor, Codex u otro agente instalado después se registra como "otro agente". | 2026-10-02 | Rene Bonilla | BR-EDGE-006, BR-WF-002 — (dependencia F-001-05) |
+| Q30 | ¿Qué ofrece el motor en el primer uso, sin ningún repo observado? | Un estado "sin repos" con la guía para añadir el primer repo, que el Cockpit y la CLI presentan como estado vacío guiado. La presentación visual es de esas superficies; el motor expone el estado. | 2026-10-02 | Rene Bonilla | BR-WF-002 |
+| Q31 | ¿Qué pasa con los datos de GitRaptor en una computadora nueva? | **Se empieza de cero.** Coherente con Q21, los datos del motor son de cada máquina: el perfil nuevo está vacío y el historial, la atribución y la configuración personal (perfil y configuración local personal del repo) de la máquina anterior no se traen. La configuración del equipo sí aplica desde el primer momento porque viaja versionada con el repo. Exportar o importar el perfil queda fuera del MVP (fase posterior). Se comporta como la pérdida del perfil (S17, Q26). | 2026-10-02 | Rene Bonilla | BR-EDGE-007, BR-EDGE-005 — (alcance OUT: exportar/importar el perfil) |
+| Q32 | ¿Qué agentes tienen soporte completo en el MVP? (BRD v0.5, D2 revisada) | **Solo Claude Code.** Después se añaden uno por uno: primero **Codex**, luego **Cursor** y, más adelante, Copilot. Mientras no tengan soporte completo, se aceptan como "otro agente" mediante registro explícito (Q4 y BR-VAL-001 siguen vigentes). **Cursor sigue siendo el editor del humano**: lo que el desarrollador hace en él (o en cualquier otro editor) nunca se atribuye a Claude Code ni a ningún agente, y ante la duda queda "sin atribuir" (BR-EDGE-004). Si Cursor se registra de forma explícita como agente, es "otro agente". **Motivo**: la gente usa más Claude Code y Codex; dar soporte uno a uno, empezando por Claude Code. **Modifica el alcance de un requerimiento ya aprobado** (aprobado el 2026-10-03) y **refina D2 y Q4** sin reemplazarlas; también refina Q29. | 2026-10-03 | Rene Bonilla | BR-VAL-001, BR-WF-001, BR-AUTH-001, BR-CONS-002, BR-CONS-004, BR-EDGE-003, BR-EDGE-004, BR-EDGE-006 — (alcance OUT: soporte completo de Cursor y detección de Cursor como agente) |
+| Q33 | ¿Corregir una atribución y registrar otro agente son lo mismo? (Artifact Judge: BR-CONS-002 y BR-CONS-004 se solapaban y US-GRP-010 y US-GRP-011 se contradecían) | **No.** **Corregir** una atribución es una acción explícita del desarrollador que **reemplaza** la atribución detectada, porque la detección estaba mal: no queda una segunda sesión y el worktree no pasa a compartido. **Registrar otro agente** en un worktree donde ya hay una sesión (p. ej. de Claude Code) **añade** una sesión y el worktree pasa a **compartido**. Refina la frase de BR-CONS-002 "corregir equivale a registrar", que deja de valer. | 2026-10-03 | Rene Bonilla | BR-CONS-002, BR-CONS-004, BR-AUTH-001 |
+| Q34 | ¿El motor puede atribuir un cambio al humano? (Artifact Judge: el contexto y las reglas hablaban de tres actores: humano, agente y sin atribuir) | **No. El motor nunca emite "humano".** Solo emite "agente X" (con su origen) o "sin atribuir": no puede probar que un cambio lo hizo una persona. Presentar "sin atribuir" como "tú u otro" es de la Time Machine y el Cockpit. | 2026-10-03 | Rene Bonilla | BR-CONS-003, BR-CONS-001, BR-VAL-001, BR-EDGE-004, BR-EDGE-006 |
+| Q35 | ¿"No identificada" y "sin atribuir" son valores distintos? (Artifact Judge) | **No. Un solo valor: "sin atribuir".** Un agente sin registrar que no se detecta es indistinguible del trabajo humano, y una sesión que deja de reconocerse tampoco tiene agente seguro. Se elimina "no identificada". | 2026-10-03 | Rene Bonilla | BR-EDGE-003, BR-CONS-003 |
+| Q36 | ¿Leer la rama base de la configuración del equipo entra ya en el MVP? (Artifact Judge: US-GRP-001 y US-GRP-012 compartían BR-CONS-006 y la parte del equipo no tenía historia) | **Se difiere a una historia propia.** En el MVP la rama base es `main` provisional en todos los repos (US-GRP-012). Leerla de la configuración del equipo es la historia US-GRP-016, **bloqueada** por Guardrails (F-001-04) y el ADR de formato de la configuración (P8). La regla BR-CONS-006 no cambia: describe el comportamiento final. | 2026-10-03 | Rene Bonilla | BR-CONS-006, BR-CONS-007, BR-EDGE-007 |
+| Q37 | Al corregir una atribución, ¿se corrigen también los eventos ya atribuidos a la sesión mal detectada? (P14) | **Sí, desde el inicio de esa sesión.** Los eventos de otras sesiones del worktree no cambian. **Motivo**: si no, la Time Machine ofrecería deshacer "lo que hizo Claude" con eventos que no eran suyos. Cierra P14. | 2026-10-03 | Rene Bonilla | BR-CONS-002 |
+| Q38 | ¿Se puede corregir una atribución en un worktree sin ninguna atribución detectada? (P15) | **No.** El motor rechaza la corrección e indica que se use el registro explícito. Cierra P15. | 2026-10-03 | Rene Bonilla | BR-CONS-002, BR-VAL-001 |
+| Q39 | ¿Qué pasa si se registra en un worktree un agente que ya se detectaba allí (p. ej. Claude Code vía MCP)? | **Se confirma la misma sesión**: no se duplica y el worktree no pasa a compartido. Registrar a **otro** agente sigue añadiendo una sesión (Q33). | 2026-10-03 | Rene Bonilla | BR-CONS-004 |
+| Q40 | ¿Un agente puede añadir o retirar repos de la observación? (S7) | **No; solo el desarrollador.** Confirma S7. Se exige ya en una historia Must (US-GRP-001), además de US-GRP-006. | 2026-10-03 | Rene Bonilla | BR-AUTH-001 |
+| Q41 | ¿Una sesión terminada se reactiva? ¿Hasta cuándo figura presente un agente registrado? (S8) | **No se reactiva**: si el agente vuelve, es una sesión nueva. Un agente registrado figura presente hasta que se retira su registro. Confirma S8. | 2026-10-03 | Rene Bonilla | BR-WF-001 |
+| Q42 | ¿Qué hace el motor si la rama base no existe en el repo? | **Indica que no puede calcular ahead/behind**; nunca elige otra rama por su cuenta. | 2026-10-03 | Rene Bonilla | BR-CONS-006 |
+
+## Preguntas abiertas
+
+| # | Pregunta | Para quién |
+|---|----------|------------|
+| P1 | ¿La política interna de seguridad de la información de ASSA impone requisitos (aprobación, inventario de herramientas) a una herramienta local como esta? (domain-context) | PO |
+| P2 | ¿Quiénes son los 2 equipos piloto y qué sistemas operativos usan? (domain-context) | PO |
+| P3 | ¿Cuál es el alcance exacto del tratamiento de secretos presentes en los repos observados? (domain-context) | PO |
+| P4 | ~~Con una versión de Git inferior a 2.38, ¿no se observa nada o se observa sin las capacidades que la exigen?~~ **Resuelta** el 2026-10-02 (Q28): no se observa nada; el motor avisa y espera. | — |
+| P5 | ~~Validar los supuestos S9-S12 sobre el permiso operativo.~~ **Resuelta** el 2026-10-02 (Q14-Q17). | — |
+| P6 | ~~Qué guarda el perfil si se deniega la carpeta propia del motor (S13).~~ **Resuelta y obsoleta** (Q19, Q21). | — |
+| P7 | ~~Validar los supuestos S14 y S15 sobre la carpeta propia del motor.~~ **Obsoleta** el 2026-10-02 (Q21): el motor no crea nada en el repo. | — |
+| P8 | Formato y estructura de la configuración en tres niveles (ADR pendiente, coordinado con el context de Guardrails, F-001-04). Hay una propuesta de Rene Bonilla registrada en el changelog del BRD v0.4; la decide el ADR pendiente. | Arquitecto |
+| P9 | Ubicación del perfil de GitRaptor en cada sistema operativo y cómo se separan en él los datos de cada repo. | Arquitecto |
+| P10 | Cómo se garantiza que la configuración local personal del repo no se versione. La crea el usuario, no el motor. | Arquitecto |
+| P11 | ~~Validar los supuestos S16 y S17.~~ **Resuelta** el 2026-10-02 (Q25, Q26). | — |
+| P12 | ~~¿Qué feature ofrece el comando para editar la configuración?~~ **Resuelta** el 2026-10-02 (Q27): Guardrails (F-001-04). | — |
+| P13 | ~~Validar los supuestos S18 y S19.~~ **Resuelta**: aceptados por Rene Bonilla el 2026-10-02. | — |
+| P14 | ~~¿La corrección alcanza los eventos ya atribuidos a la sesión mal detectada?~~ **Resuelta** el 2026-10-03 (Q37): sí, desde el inicio de esa sesión. | — |
+| P15 | ~~¿Se puede corregir sin ninguna atribución detectada?~~ **Resuelta** el 2026-10-03 (Q38): no; se indica que se use el registro. | — |
+| P16 | Cuando un registro confirma una sesión ya detectada (Q39), ¿su origen pasa a "registrado"? Supuesto: sí (BR-CONS-004). Las historias solo exigen que sea la misma sesión y no compartida. | PO (Rene Bonilla) |
+| P17 | Al retirar una corrección, ¿los eventos que reatribuyó (Q37) vuelven a la atribución detectada? Supuesto: sí (BR-CONS-002). Las historias solo exigen que vuelva la atribución de la sesión. | PO (Rene Bonilla) |
+
+---
+
+## ✅ Quality Review (Auto-evaluación del Contexto)
+
+> Revisión re-ejecutada el 2026-10-02 tras incorporar las decisiones Q28 (Git ausente o anterior a 2.38: avisa y espera), Q29 (agente instalado después), Q30 (estado "sin repos") y Q31 (máquina nueva: se empieza de cero) (ver `methodology.md` § 7). Resultado: **7 ✅ · 6 ⚠️ · 0 🔴**. Se añade la sección "Primer uso en una máquina nueva", ⚠️ por los supuestos S18 y S19 (P13). Q28 cierra P4: "Restricciones" sigue ⚠️, ahora solo por la política interna de ASSA y el alcance de secretos (P1, P3), y el Known Risk 2 se acota a esos dos puntos. Las calificaciones de las demás secciones no cambian. Rene Bonilla aceptó los Known Risks 1 a 4 el 2026-10-02 (el 2, antes de acotarlo); el 7 y el 8 siguen pendientes.
+>
+> **Nota 2026-10-03 (Q32)**: el cambio de alcance a solo Claude Code no cambia ninguna calificación. "Usuarios/Actores" añade el editor del desarrollador y pasa Cursor a "otro agente"; "Integraciones" queda con una sola integración de agente (Claude Code), y el riesgo R2 se reformula como "trabajo del humano atribuido a un agente". Los supuestos S18 y S19 figuran como aceptados por Rene Bonilla (2026-10-02), así que la parte de P13 sobre ellos ya no bloquea las historias de primer uso.
+>
+> **Nota 2026-10-03 (Q33-Q36)**: no cambia ninguna calificación. El glosario separa "corrección de atribución" de "registro explícito", deja "sin atribuir" como único valor para lo no identificado y aclara que "humano" no es un valor del motor. El alcance de la rama base se entrega en dos pasos. Quedan abiertas P14 y P15 sobre el alcance de una corrección.
+>
+> **Nota 2026-10-03 (Q37-Q42)**: Q37 y Q38 cierran P14 y P15; Q40 y Q41 confirman S7 y S8; Q42 fija la rama base inexistente; se cierra P13 (S18 y S19 aceptados el 2026-10-02). "Primer uso en una máquina nueva" pasa a ✅ y el Known Risk 8 queda resuelto. Resultado: **8 ✅ · 5 ⚠️ · 0 🔴**. Se abren P16 (origen de una sesión confirmada por registro) y P17 (eventos reatribuidos al retirar una corrección), sin bloquear historias.
+
+| Sección | Resultado | Nota |
+|---------|-----------|------|
+| Problema de Negocio | ✅ | Específico (P1, P7), con impacto en cascada y el impacto de los huecos de observación. |
+| Valor Esperado / ROI | ⚠️ | Sin línea base medida del coste actual; ROI solo habilitante. |
+| KPIs de Éxito | ✅ | Todos cuantificados. "Observar sin riesgo" pasa a "0 escrituras del motor en el repo observado; fuera, solo el perfil". La meta de precisión (90%) y su medición están decididas (Q9) y se exigen sin hooks propios (Q22). |
+| Usuarios/Actores | ✅ | Roles diferenciados, incluido "otro agente". El desarrollador edita la configuración y el motor la lee. Un agente no altera los datos del motor al trabajar en el repo (Q21). Un agente no añade ni retira repos observados ni corrige atribuciones (Q40; S7 confirmado). |
+| Alcance OUT of scope | ✅ | 25 exclusiones, cada una con su feature dueña, su fase o su decisión. Q28-Q31 añaden instalar o actualizar Git, la observación parcial con Git insuficiente, exportar o importar el perfil (fase posterior), conectar el agente vía MCP (F-001-05) y la presentación del estado vacío (Cockpit y CLI). Separa "escribir en el repo" (nunca, Q21), "instalar hooks o hacer modificaciones operativas" (no en el MVP, Q22), "escribir la configuración" (nunca, Q23) y "modificar nada del usuario fuera del repo" (Q17). Añade el comando de edición de la configuración (de Guardrails, Q27) y la rama base personal (no admitida, Q24); "borrar los datos al retirar un repo" pasa de supuesto a decisión (Q25). |
+| Restricciones | ⚠️ | La versión mínima de Git está fijada (2.38) y el comportamiento sin ella está decidido (Q28: avisa y espera, sin observación parcial y sin instalar Git). Siguen pendientes la política interna de ASSA y el alcance de secretos (P1, P3). |
+| RNFs | ⚠️ | Frescura, escala, continuidad y repo intacto cuantificados; huella en la máquina sin valor objetivo. |
+| Integraciones | ⚠️ | Mecanismo de identificación de Claude Code sin definir (Fase 2; Q32: antes, "de Claude Code y Cursor") y ahora sin hooks propios: la meta del 90% depende de lo observable y, opcionalmente, de las señales de hooks de Guardrails (R1-R3, R7, R8). |
+| Glosario | ✅ | Términos definidos, incluidos código fuente, ruta operativa, modificación operativa, permiso explícito (como principio), perfil de GitRaptor y configuración en tres niveles. "Carpeta `.gitraptor/`" y "Datos locales del motor" quedan marcados obsoletos. |
+| Ubicación de los datos del motor (Q21) | ✅ | Todos los datos propios en el perfil, separados por repo (tabla en BR-CONS-001); nada en el repo. La verificación es simple y externa: el repo es idéntico antes y después, y fuera solo cambia el perfil. El retiro de un repo (Q25) y la pérdida del perfil (Q26) están decididos y llevan a "sin atribuir" (BR-EDGE-005). |
+| Reglas de permiso operativo (BR-AUTH-002) | ✅ | Frontera explícita: en el MVP no hay ninguna modificación operativa. El modelo de permiso (qué, dónde, por qué, cómo revertir; solo el humano concede; sin re-preguntar tras una denegación; un permiso por modificación y repo) queda como principio para el motor futuro y referencia para otras features. |
+| Configuración en tres niveles (Q23) | ⚠️ | Precedencia de negocio fijada valor por valor (Q24): la rama base solo del equipo y el umbral solo del perfil y del local personal; dentro de ellos gana el más específico. Regla de solo lectura verificable. Dueño del comando de edición decidido (Guardrails, Q27). Formato, estructura y la regla de prohibiciones del equipo dependen de un ADR pendiente y del context de Guardrails (P8, P10, R12). |
+| Primer uso en una máquina nueva (Q28-Q31) | ✅ | Caso de uso y escenarios de verificación definidos (BR-WF-002): Git ausente, Git instalado después, Git antiguo actualizado, agente instalado después y sin repos. El motor nunca instala Git (BR-VAL-003), funciona sin agentes (BR-EDGE-006) y en una máquina nueva empieza de cero con la configuración del equipo aplicada (BR-EDGE-007). S18 (no se añaden repos mientras falta Git) y S19 (Git que deja de cumplir mientras se observa) están aceptados; P13 cerrada. |
+
+## ⚠️ Known Risks (from Quality Review)
+
+| # | Sección | Riesgo | Impacto | Aceptado por |
+|---|---------|--------|---------|--------------|
+| 1 | Valor Esperado / ROI | No hay línea base del tiempo que hoy cuesta reconstruir el estado de los agentes. | No se podrá demostrar el ahorro; el valor se juzga solo por desbloquear F-001-02 a F-001-05. | Rene Bonilla (2026-10-02) |
+| 2 | Restricciones | Política interna de ASSA y alcance de secretos sin confirmar (P1, P3). La parte de la versión de Git (P4) queda resuelta por Q28. | Una exigencia corporativa puede añadir historias. | Rene Bonilla (2026-10-02) |
+| 3 | RNFs | Huella máxima en la máquina sin valor objetivo. | El Arquitecto no tiene un umbral contra el que validar la observación continua de 10 worktrees; riesgo R5. | Rene Bonilla (2026-10-02) |
+| 4 | Integraciones | Mecanismo de identificación de agentes sin definir y sin hooks propios (Q22); su precisión con lo observable y con las señales opcionales de los hooks de Guardrails es desconocida. | Si el spike (c) no alcanza el 90% de precisión, más carga de registro explícito y posible replanteo de historias de detección; riesgos R1-R3, R7 y R8. | Rene Bonilla (2026-10-02) |
+| 5 | Ubicación de los datos del motor | ~~Sin decidir qué guarda el perfil si se deniega la carpeta propia del motor (P6).~~ | **Resuelto** (Q19) y sin objeto desde Q21. | — |
+| 6 | Reglas de permiso operativo (BR-AUTH-002) | ~~Registro de modificaciones operativas perdido si desaparece la carpeta propia del motor (S14, P7).~~ | **Resuelto** el 2026-10-02 (Q21, Q22): no hay carpeta ni modificaciones operativas en el MVP. | — |
+| 7 | Configuración en tres niveles (Q23) | Formato y estructura sin decidir (ADR pendiente, P8); context de Guardrails sin escribir; cómo se evita versionar la configuración local, sin definir (P10). El comando de edición es de Guardrails (Q27). | Las historias que lean la rama base o el umbral de inactividad no se pueden cerrar hasta que exista el ADR; riesgo R12. | Rene Bonilla (2026-10-02) |
+| 8 | Primer uso en una máquina nueva (Q28-Q31) | ~~Supuestos S18 y S19 sin validar (P13).~~ | **Resuelto** el 2026-10-03: S18 y S19 aceptados por Rene Bonilla (2026-10-02); P13 cerrada. | — |
