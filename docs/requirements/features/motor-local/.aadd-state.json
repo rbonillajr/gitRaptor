@@ -1,0 +1,8 @@
+{
+  "feature": "motor-local",
+  "context": {
+    "approved": true,
+    "approvedAt": "2026-10-03",
+    "approvedVia": "nl-approval-hook"
+  }
+}
