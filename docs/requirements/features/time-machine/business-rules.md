@@ -84,13 +84,13 @@ No aplica.
 
 **Descripción**: `undo` devuelve el ámbito afectado al estado previo a la última operación. `redo` revierte el último undo. Ambos son operaciones de la Time Machine y llevan su propio snapshot previo (BR-TMC-CONS-001), así que nada se pierde al encadenarlos.
 
-**Ámbito por defecto** ⚠️ **ASSUMPTION** (S8; P10, P11, P14): `raptor undo` sin flags deshace la última operación del **worktree desde el que se invoca**. Si esa operación es de un actor distinto del solicitante, aplican BR-TMC-AUTH-001 y la regla de solape (BR-TMC-CONS-005). Nunca actúa sobre otros worktrees sin pedirlo.
+**Ámbito por defecto** (D-TMC-19, D-TMC-20, D-TMC-23): `raptor undo` sin flags deshace la última operación del **worktree desde el que se invoca**. Si esa operación es de un actor distinto del solicitante, aplican BR-TMC-AUTH-001 y la regla de solape (BR-TMC-CONS-005). Nunca actúa sobre otros worktrees sin pedirlo.
 
 **Criticidad**: Alta
 
 **Regla formal**:
 ```
-ámbito = worktree desde el que se invoca                       (S8)
+ámbito = worktree desde el que se invoca                       (D-TMC-19, D-TMC-23)
 IF actor de la última operación ≠ solicitante → BR-TMC-AUTH-001 + BR-TMC-CONS-005
 undo:  snapshot previo → restaurar estado anterior a la última operación del ámbito → registrar el undo
 redo:  disponible si el último evento del ámbito es un undo
@@ -126,7 +126,7 @@ ELSE snapshot previo → deshacer el conjunto → registrar el undo
 **Regla formal**:
 ```
 REQUIRE punto con snapshot completo
-alcance = worktree donde se pide + ramas y worktrees cambiados después del punto   ⚠️ ASSUMPTION (S7, P11)
+alcance = worktree donde se pide + ramas y worktrees cambiados después del punto   (D-TMC-20)
 snapshot previo → restaurar → registrar la restauración
 ```
 
@@ -136,7 +136,7 @@ snapshot previo → restaurar → registrar la restauración
 
 ### BR-TMC-AUTH-001: Quién puede deshacer qué
 
-**Descripción**: ⚠️ **ASSUMPTION** (P8, P14, S9). GitRaptor no puede probar que una petición viene del humano: un agente puede lanzar `raptor undo` desde su propia shell. Por eso el **solicitante** de un undo, redo o restauración se atribuye igual que los eventos: "agente X" o "sin atribuir", nunca "humano" (Q34). Si el solicitante es un agente, solo deshace operaciones con atribución vigente a él. Si es "sin atribuir", deshacer trabajo de otro actor exige una confirmación interactiva del desarrollador en ese momento, que un agente no puede dar. Guardrails puede restringirlo más, nunca ampliarlo. Cómo se identifica al solicitante (CLI frente a MCP) lo decide el Arquitecto.
+**Descripción** (D-TMC-17, D-TMC-23): GitRaptor no puede probar que una petición viene del humano: un agente puede lanzar `raptor undo` desde su propia shell. Por eso el **solicitante** de un undo, redo o restauración se atribuye igual que los eventos: "agente X" o "sin atribuir", nunca "humano" (Q34). Si el solicitante es un agente, solo deshace operaciones con atribución vigente a él. Si es "sin atribuir", deshacer trabajo de otro actor exige una confirmación interactiva del desarrollador en ese momento, que un agente no puede dar. Guardrails puede restringirlo más, nunca ampliarlo. Cómo se identifica al solicitante (CLI frente a MCP) lo decide el Arquitecto.
 
 **Criticidad**: Alta
 
@@ -177,7 +177,7 @@ FOR EACH operación lanzada por GitRaptor que modifica el repo:
 
 ### BR-TMC-CONS-002: Qué contiene un snapshot
 
-**Descripción**: un snapshot incluye el working tree sin commitear, lo preparado para el próximo commit, los archivos nuevos sin seguimiento y el estado de ramas y worktrees. No incluye los archivos ignorados por `.gitignore`. ⚠️ **ASSUMPTION** (P7).
+**Descripción**: un snapshot incluye el working tree sin commitear, lo preparado para el próximo commit, los archivos nuevos sin seguimiento y el estado de ramas y worktrees. No incluye los archivos ignorados por `.gitignore` (D-TMC-16).
 
 **Criticidad**: Alta
 
@@ -185,7 +185,7 @@ FOR EACH operación lanzada por GitRaptor que modifica el repo:
 
 ### BR-TMC-CONS-003: Cobertura declarada en dos niveles
 
-**Descripción**: ⚠️ **ASSUMPTION** (P1). (a) **Garantizada**: snapshot previo antes de toda operación lanzada por GitRaptor y de cada undo o restauración. (b) **Por observación**: el trabajo hecho con Git crudo o en el editor se captura a medida que el motor observa cambios, y con snapshot previo cuando existan los hooks de Guardrails, sin depender de ellos. Cada punto del timeline indica su nivel. La Time Machine no promete un snapshot previo donde no lo hay.
+**Descripción** (D-TMC-9, D-TMC-10; refina BR-08 y NFR-01 del BRD): (a) **Garantizada**: snapshot previo antes de toda operación lanzada por GitRaptor y de cada undo o restauración. (b) **Por observación**: el trabajo hecho con Git crudo o en el editor se captura a medida que el motor observa cambios, y con snapshot previo cuando existan los hooks de Guardrails, sin depender de ellos. Cada punto del timeline indica su nivel. La Time Machine no promete un snapshot previo donde no lo hay.
 
 **Criticidad**: Alta
 
@@ -193,7 +193,7 @@ FOR EACH operación lanzada por GitRaptor que modifica el repo:
 
 ### BR-TMC-CONS-004: Las escrituras de la Time Machine son suyas, explícitas y recuperables
 
-**Descripción**: la Time Machine solo escribe para guardar snapshots y para ejecutar un undo, redo o restauración pedido por un actor. Los snapshots no aparecen como cambios del usuario, no se empujan al remoto por accidente, no los borra un `git gc` y no los altera un agente que trabaja en el working tree (P2). Ninguna escritura se atribuye al Motor local (Q21).
+**Descripción**: la Time Machine solo escribe para guardar snapshots y para ejecutar un undo, redo o restauración pedido por un actor. Los snapshots no aparecen como cambios del usuario, no se empujan al remoto por accidente, no los borra un `git gc` y no los altera un agente que trabaja en el working tree (D-TMC-11). Ninguna escritura se atribuye al Motor local (Q21).
 
 **Criticidad**: Alta
 
@@ -206,7 +206,7 @@ Constraint: push / gc / trabajo de un agente no exponen ni alteran snapshots
 
 ### BR-TMC-CONS-005: Atribución vigente, presentación y solape
 
-**Descripción**: el timeline y el undo por agente usan la atribución vigente (Q37). "Sin atribuir" se presenta como "Tú u otro (sin atribuir)" y nunca como "humano" (Q34, P3). Si deshacer lo de un actor tocaría cambios posteriores de otro actor en los mismos archivos o fragmentos, la Time Machine no sobrescribe: se detiene, muestra el solape y deja decidir al desarrollador (P4). El registro de un undo (el solicitante, atribuido según BR-TMC-AUTH-001, y sobre qué actuó) no se reescribe si después cambia la atribución (P9).
+**Descripción**: el timeline y el undo por agente usan la atribución vigente (Q37). "Sin atribuir" se presenta como "Tú u otro (sin atribuir)" y nunca como "humano" (Q34, D-TMC-12). Si deshacer lo de un actor tocaría cambios posteriores de otro actor en los mismos archivos o fragmentos, la Time Machine no sobrescribe: se detiene, muestra el solape y deja decidir al desarrollador (D-TMC-13). El registro de un undo (el solicitante, atribuido según BR-TMC-AUTH-001, y sobre qué actuó) no se reescribe si después cambia la atribución (D-TMC-18).
 
 **Criticidad**: Alta
 
@@ -225,7 +225,7 @@ registro de undo = inmutable; atribución mostrada = vigente
 
 ### BR-TMC-TIME-001: Retención de snapshots
 
-**Descripción**: ⚠️ **ASSUMPTION** (P6). Los snapshots se conservan un tiempo configurable; por defecto 30 días `[POR VERIFICAR]`. El valor lo admiten el perfil y la configuración local personal, no la del equipo (Q24). Nunca se purga el snapshot previo a la última operación destructiva. Se avisa antes de purgar.
+**Descripción** (D-TMC-15): los snapshots se conservan un tiempo configurable; por defecto 30 días. El valor lo admiten el perfil y la configuración local personal, no la del equipo (Q24). Nunca se purga el snapshot previo a la última operación destructiva. Se avisa antes de purgar.
 
 **Criticidad**: Media
 
@@ -242,7 +242,7 @@ aviso antes de purgar
 
 ### BR-TMC-EDGE-001: Lo deshecho ya está en el remoto
 
-**Descripción**: el undo es solo local. Si lo deshecho ya se empujó, se avisa de que sigue en el remoto. La Time Machine nunca hace push ni force-push por su cuenta (P5).
+**Descripción**: el undo es solo local. Si lo deshecho ya se empujó, se avisa de que sigue en el remoto. La Time Machine nunca hace push ni force-push por su cuenta (D-TMC-14).
 
 **Criticidad**: Alta
 
@@ -295,3 +295,4 @@ Cada regla tendrá al menos un escenario Gherkin, incluido uno negativo, en su h
 |---------|-------|-------|---------|
 | 0.1 | 2026-10-03 | PO (AADD) | Versión inicial en revisión. |
 | 0.2 | 2026-10-03 | PO (AADD) | RESERVAS del Artifact Judge: AUTH-001 reformulada como supuesto con solicitante atribuido (P8, P14); ámbito por defecto del undo en WF-001 (S8); ejemplo de CONS-003 precisado. |
+| 0.3 | 2026-10-03 | PO (AADD) | Rene Bonilla cierra P1-P14 (D-TMC-10 a D-TMC-23): sin marcas de supuesto en AUTH-001, WF-001 (ámbito), WF-003, CONS-002, CONS-003 y TIME-001. Siguen como supuesto S5 (redo con solape, WF-001) y S6 (EDGE-004). |
