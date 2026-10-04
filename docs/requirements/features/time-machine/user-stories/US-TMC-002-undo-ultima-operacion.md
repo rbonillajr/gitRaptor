@@ -15,7 +15,7 @@ related:
   rules:
     - BR-TMC-001
   stories: [US-TMC-001]
-covers: [BR-TMC-WF-001, BR-TMC-VAL-001, BR-TMC-CONS-001, D-TMC-19, D-TMC-23]
+covers: [BR-TMC-WF-001, BR-TMC-VAL-001, BR-TMC-CONS-001, D-TMC-19, D-TMC-23, D-TMC-25]
 blocked_by: []
 tags: [time-machine, undo]
 ---
@@ -32,7 +32,7 @@ tags: [time-machine, undo]
 
 ## Reglas cubiertas
 
-BR-TMC-WF-001 (undo y ámbito por defecto) · BR-TMC-VAL-001 (nada que deshacer) · BR-TMC-CONS-001 (snapshot previo al undo) — ver [business-rules.md](../business-rules.md)
+BR-TMC-WF-001 (undo, ámbito por defecto y pila por worktree, TQ-9) · BR-TMC-VAL-001 (nada que deshacer) · BR-TMC-CONS-001 (snapshot previo al undo) — ver [business-rules.md](../business-rules.md)
 
 ## Criterios de Aceptación
 
@@ -48,6 +48,14 @@ Entonces "feat-login" vuelve al estado previo a la operación con "a.rs" recuper
 Dado una operación deshecha en "feat-login"
 Cuando se consulta el historial de la Time Machine
 Entonces existe un punto recuperable con el estado de "feat-login" justo antes del undo
+
+**Escenario: Undos seguidos retroceden una operación más cada vez**
+
+Dado que en "feat-login" un solicitante "sin atribuir" hizo un commit "A" y después un checkout "B"
+Cuando ese solicitante pide deshacer dos veces seguidas desde "feat-login"
+Entonces el primer undo deshace "B"
+  Y el segundo undo deshace "A"
+  Y "feat-login" queda en el estado previo a "A"
 
 **Escenario: El undo no actúa sobre otros worktrees**
 

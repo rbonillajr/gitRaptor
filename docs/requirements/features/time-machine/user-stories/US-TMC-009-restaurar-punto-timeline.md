@@ -15,7 +15,7 @@ related:
   rules:
     - BR-TMC-001
   stories: [US-TMC-001, US-TMC-002, US-TMC-006, US-TMC-013]
-covers: [BR-TMC-WF-003, BR-TMC-CONS-001, BR-TMC-EDGE-002, BR-TMC-AUTH-001, D-TMC-20, D-TMC-23]
+covers: [BR-TMC-WF-003, BR-TMC-CONS-001, BR-TMC-CONS-002, BR-TMC-EDGE-002, BR-TMC-AUTH-001, D-TMC-16, D-TMC-20, D-TMC-23, D-TMC-25]
 blocked_by: []
 tags: [time-machine, restauracion]
 ---
@@ -32,7 +32,7 @@ tags: [time-machine, restauracion]
 
 ## Reglas cubiertas
 
-BR-TMC-WF-003 (restaurar; alcance D-TMC-20) · BR-TMC-CONS-001 (punto previo a la restauración) · BR-TMC-EDGE-002 (sin puntos en huecos) · BR-TMC-AUTH-001 (trabajo de otro actor, D-TMC-23) — ver [business-rules.md](../business-rules.md)
+BR-TMC-WF-003 (restaurar; alcance D-TMC-20) · BR-TMC-CONS-001 (punto previo a la restauración) · BR-TMC-EDGE-002 (sin puntos en huecos) · BR-TMC-AUTH-001 (trabajo de otro actor, D-TMC-23; sin confirmación en Windows, TQ-14) · BR-TMC-CONS-002 (lo excluido no se toca al restaurar) — ver [business-rules.md](../business-rules.md)
 
 ## Criterios de Aceptación
 
@@ -42,12 +42,14 @@ Dado que "feat-login" tuvo tres operaciones de un solicitante que queda sin atri
 Cuando ese solicitante restaura "feat-login" al punto de las 10:00
 Entonces "feat-login" queda exactamente como estaba a las 10:00, incluido su trabajo sin commitear
 
-**Escenario: La restauración alcanza lo que cambió después del punto**
+**Escenario: La restauración alcanza lo que cambió después del punto y nunca lo excluido**
 
 Dado que después del punto de las 10:00 un solicitante sin atribuir borró la rama "feat-login-v2" creada desde "feat-login"
+  Y "feat-login" contiene "deploy.pem", excluido por credenciales, y el repo anidado "vendor/lib"
 Cuando ese solicitante restaura "feat-login" al punto de las 10:00
 Entonces la rama "feat-login-v2" vuelve a existir
   Y los worktrees que no cambiaron después de ese punto no se modifican
+  Y "deploy.pem" y "vendor/lib" quedan en el disco tal como estaban, sin escribirse ni borrarse
 
 **Escenario: La restauración se puede deshacer**
 
@@ -62,20 +64,27 @@ Cuando un solicitante sin atribuir intenta restaurar a ese punto
 Entonces la restauración se rechaza con el motivo
   Y el repo no cambia
 
-**Escenario: Restaurar sobre trabajo de otro actor exige confirmación**
+**Escenario: En macOS y Linux, restaurar sobre trabajo de otro actor exige confirmación**
 
 Dado que después del punto de las 10:00 "claude-1" hizo un commit en "feat-login"
-  Y el solicitante de la restauración queda sin atribuir
+  Y el solicitante de la restauración queda sin atribuir y pide desde macOS o Linux
 Cuando pide restaurar "feat-login" al punto de las 10:00
   Y lo confirma de forma interactiva
 Entonces "feat-login" queda como estaba a las 10:00, sin el commit de "claude-1"
 
-**Escenario: Otro agente no puede restaurar sobre trabajo ajeno**
+**Esquema del escenario: Restaurar sobre trabajo ajeno se rechaza para otro agente y, en Windows, sin atribuir**
 
 Dado que después del punto de las 10:00 "claude-1" hizo un commit en "feat-login"
-Cuando "claude-2" pide restaurar "feat-login" al punto de las 10:00
-Entonces la restauración se rechaza con el motivo
+Cuando <solicitante> pide restaurar "feat-login" al punto de las 10:00 desde <sistema>
+Entonces la restauración se rechaza con el motivo, sin pedir confirmación
   Y el repo no cambia
+
+Ejemplos:
+
+| solicitante | sistema |
+|-------------|---------|
+| "claude-2" | cualquier sistema |
+| un solicitante sin atribuir | Windows |
 
 ## Requisitos Técnicos
 
@@ -93,4 +102,4 @@ Entonces la restauración se rechaza con el motivo
 
 - **Historias**: US-TMC-001, US-TMC-002, US-TMC-006, US-TMC-013.
 - **Externas**: ninguna.
-- **Transversal**: transversal (lo define el Arquitecto): verificación en repos temporales, nunca en un repo real; mismo comportamiento en Windows, macOS y Linux; mensajes en inglés y español.
+- **Transversal**: transversal (lo define el Arquitecto): verificación en repos temporales, nunca en un repo real; mismo comportamiento en Windows, macOS y Linux salvo la confirmación interactiva, que en el MVP no existe en Windows (D-TMC-23); mensajes en inglés y español.

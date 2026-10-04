@@ -15,7 +15,7 @@ related:
   rules:
     - BR-TMC-001
   stories: [US-TMC-002, US-TMC-012, US-TMC-013]
-covers: [BR-TMC-WF-001, BR-TMC-VAL-001, BR-TMC-CONS-005, BR-TMC-AUTH-001, D-TMC-13, D-TMC-23]
+covers: [BR-TMC-WF-001, BR-TMC-VAL-001, BR-TMC-CONS-005, BR-TMC-AUTH-001, D-TMC-13, D-TMC-23, D-TMC-25]
 blocked_by: []
 tags: [time-machine, redo]
 ---
@@ -32,7 +32,7 @@ tags: [time-machine, redo]
 
 ## Reglas cubiertas
 
-BR-TMC-WF-001 (redo; S5 aceptado: con cambios intermedios aplica el solape) · BR-TMC-VAL-001 · BR-TMC-CONS-005 (solape) · BR-TMC-AUTH-001 (solicitante, D-TMC-23) — ver [business-rules.md](../business-rules.md)
+BR-TMC-WF-001 (redo; S5 aceptado: con cambios intermedios aplica el solape; una operación nueva invalida el redo, TQ-9) · BR-TMC-VAL-001 · BR-TMC-CONS-005 (solape) · BR-TMC-AUTH-001 (solicitante, D-TMC-23) — ver [business-rules.md](../business-rules.md)
 
 ## Criterios de Aceptación
 
@@ -55,6 +55,14 @@ Dado que el último evento de "feat-login" no es un undo
 Cuando un solicitante sin atribuir pide rehacer
 Entonces el repo no cambia
   Y el solicitante recibe el aviso de que no hay nada que rehacer
+
+**Escenario: Una operación nueva invalida el redo**
+
+Dado que en "feat-login" un solicitante sin atribuir deshizo una operación
+  Y después ese solicitante hizo un commit nuevo en "feat-login"
+Cuando pide rehacer desde "feat-login"
+Entonces el repo no cambia
+  Y el solicitante recibe el motivo: una operación posterior invalidó el redo
 
 **Escenario: Otro actor cambió los mismos archivos después del undo**
 

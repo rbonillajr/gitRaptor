@@ -15,7 +15,7 @@ related:
   rules:
     - BR-TMC-001
   stories: [US-TMC-001, US-TMC-002, US-TMC-009]
-covers: [BR-TMC-EDGE-003]
+covers: [BR-TMC-EDGE-003, BR-TMC-CONS-004, D-TMC-25]
 blocked_by: []
 tags: [time-machine, robustez, nfr-12]
 ---
@@ -32,7 +32,7 @@ tags: [time-machine, robustez, nfr-12]
 
 ## Reglas cubiertas
 
-BR-TMC-EDGE-003 (interrupción a mitad de operación) — ver [business-rules.md](../business-rules.md)
+BR-TMC-EDGE-003 (interrupción a mitad de operación; fallo detectado sin rollback automático, TQ-10) · BR-TMC-CONS-004 (excepción: liberar el bloqueo propio al arrancar) · D-TMC-25 — ver [business-rules.md](../business-rules.md)
 
 ## Criterios de Aceptación
 
@@ -43,18 +43,28 @@ Cuando el proceso de GitRaptor muere antes de terminarlo
 Entonces el worktree "feat-login" no cambia
   Y ese snapshot incompleto no figura como punto para restaurar
 
-**Escenario: Interrupción durante un undo**
+**Escenario: Interrupción durante un undo o una restauración**
 
-Dado un undo en curso en "feat-login"
-Cuando el proceso de GitRaptor muere a mitad del undo
-Entonces "feat-login" se puede recuperar al estado previo al undo
+Dado un undo o una restauración en curso en "feat-login"
+Cuando el proceso de GitRaptor muere a mitad de la operación
+Entonces "feat-login" se puede recuperar al estado previo a esa operación
   Y al volver a arrancar, el solicitante recibe el aviso de lo ocurrido
 
-**Escenario: Interrupción durante una restauración**
+**Escenario: Un fallo detectado a mitad de un undo lo deja interrumpido, sin vuelta atrás automática**
 
-Dado una restauración en curso de "feat-login"
-Cuando el proceso de GitRaptor muere a mitad de la restauración
-Entonces "feat-login" se puede recuperar al estado previo a la restauración
+Dado un undo en curso en "feat-login"
+Cuando un archivo de "feat-login" no se puede escribir porque otro programa lo tiene bloqueado
+Entonces el undo se detiene y figura como "interrumpido" en el historial de la Time Machine
+  Y la Time Machine no deshace por su cuenta lo que ya aplicó
+  Y el solicitante recibe el aviso de que un undo devuelve "feat-login" al estado previo
+
+**Escenario: Al arrancar se libera solo el bloqueo de Git propio**
+
+Dado que GitRaptor murió dejando un bloqueo de Git creado por la Time Machine en "feat-login"
+  Y otro programa mantiene su propio bloqueo de Git en "feat-pagos"
+Cuando GitRaptor vuelve a arrancar
+Entonces el bloqueo de "feat-login" se libera sin cambiar ningún archivo
+  Y el bloqueo de "feat-pagos" sigue en su sitio
 
 **Escenario: Tras recuperar una interrupción, el undo funciona con normalidad**
 

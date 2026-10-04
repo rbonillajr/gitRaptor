@@ -15,7 +15,7 @@ related:
   rules:
     - BR-TMC-001
   stories: [US-TMC-006, US-GRP-005]
-covers: [BR-TMC-EDGE-002, D-TMC-7, D-TMC-19]
+covers: [BR-TMC-EDGE-002, BR-TMC-CONS-003, D-TMC-7, D-TMC-19, D-TMC-25]
 blocked_by: []
 tags: [time-machine, timeline, huecos]
 ---
@@ -32,7 +32,7 @@ tags: [time-machine, timeline, huecos]
 
 ## Reglas cubiertas
 
-BR-TMC-EDGE-002 (huecos explícitos) · D-TMC-7, D-TMC-19 (timeline por repo con filtros) — ver [business-rules.md](../business-rules.md)
+BR-TMC-EDGE-002 (huecos explícitos, incluido "sin espacio") · BR-TMC-CONS-003 (cuotas, TQ-5) · D-TMC-7, D-TMC-19 (timeline por repo con filtros) — ver [business-rules.md](../business-rules.md)
 
 ## Criterios de Aceptación
 
@@ -55,6 +55,14 @@ Cuando el desarrollador consulta el timeline
 Entonces el timeline indica el hueco de 12:00 a 13:00
   Y los dos commits figuran como "Tú u otro (sin atribuir)"
   Y el hueco no ofrece ningún punto para restaurar
+
+**Escenario: Un hueco "sin espacio" queda declarado al alcanzar la cuota**
+
+Dado que el almacén de snapshots del repo alcanzó su cuota a las 15:00
+  Y después se modificó "api.rs" en "feat-login" fuera de GitRaptor
+Cuando el desarrollador consulta el timeline
+Entonces el timeline indica un hueco "sin espacio" desde las 15:00
+  Y la modificación de "api.rs" no figura con punto recuperable
 
 **Escenario: Filtro por un agente sin actividad**
 
