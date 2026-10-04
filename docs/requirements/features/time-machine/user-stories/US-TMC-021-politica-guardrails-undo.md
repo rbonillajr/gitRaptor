@@ -16,8 +16,8 @@ related:
     - BR-TMC-001
   stories: [US-TMC-013]
 covers: [BR-TMC-AUTH-001, D-TMC-17]
-blocked_by: ["F-001-04: política de Guardrails sobre el undo, sin definir"]
-tags: [time-machine, permisos, guardrails]
+blocked_by: []
+tags: [time-machine, permisos, guardrails, fuera-del-mvp, fase-2]
 ---
 
 # US-TMC-021: Las políticas del repo pueden restringir quién deshace, nunca ampliarlo
@@ -59,7 +59,7 @@ Entonces el commit se deshace
 ## Requisitos Técnicos
 
 - Punto de evaluación de políticas en `crates/policy` tras la regla base y la confirmación: solo puede devolver permitir o denegar con motivo; el resultado final es la conjunción (ADR-TMC-005 § 4).
-- Bloqueada hasta que Guardrails (F-001-04) defina una política sobre el undo; el formato (`policies`, ADR-GRP-007) ya existe.
+- Fuera del MVP (Fase 2): requiere que Guardrails (F-001-04) defina una política sobre el undo; el formato (`policies`, ADR-GRP-007) ya existe.
 
 ## Diseño y Dev Spec
 
@@ -69,5 +69,5 @@ Entonces el commit se deshace
 ## Dependencias
 
 - **Historias**: US-TMC-013.
-- **Externas**: **bloqueada**: Guardrails no define todavía una política sobre el undo (ni en ADR-GRD-004 ni en sus historias); el formato ya existe (sección `policies` de ADR-GRP-007, aceptado el 2026-10-04). Pregunta abierta para el PO de Guardrails (Rene Bonilla, 2026-10-04): ¿el catálogo de políticas por repo incluye restringir quién puede deshacer (D-TMC-17)? Si sí, hace falta una regla en Guardrails; si no, esta historia sale del MVP.
+- **Externas**: **fuera del MVP (Fase 2)** por decisión de Rene Bonilla, 2026-10-04. Guardrails no define ninguna política sobre el undo (ni en ADR-GRD-004 ni en sus historias), y el riesgo principal, que un agente deshaga trabajo ajeno, ya lo cubre la regla base de US-TMC-013 (D-TMC-17, D-TMC-23). Meterla en el MVP exigiría una regla nueva en el context de Guardrails, al menos una historia de Guardrails y ampliar `policies` (ADR-GRD-004, ADR-GRP-007). D-TMC-17 no cambia: Guardrails *puede* restringir. El formato ya existe (ADR-GRP-007).
 - **Transversal**: transversal (lo define el Arquitecto): verificación en repos temporales, nunca en un repo real; mismo comportamiento en Windows, macOS y Linux; mensajes en inglés y español.
