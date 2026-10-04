@@ -257,6 +257,24 @@ impl RepoReader {
         })
     }
 
+    /// Stat and trailing checksum of the index file, without parsing it: enough to tell whether
+    /// the index changed since it was last read (two writes in one tick differ in the checksum).
+    pub fn index_signature(&self) -> (Option<FileStat>, Option<Oid>) {
+        use std::io::{Read, Seek, SeekFrom};
+        let path = self.repo.index_path();
+        let Ok(meta) = std::fs::symlink_metadata(&path) else {
+            return (None, None);
+        };
+        let stat = FileStat::of(&meta);
+        let checksum = std::fs::File::open(&path).ok().and_then(|mut f| {
+            let mut buf = [0u8; 20];
+            f.seek(SeekFrom::End(-20)).ok()?;
+            f.read_exact(&mut buf).ok()?;
+            Some(Oid(gix::ObjectId::from_bytes_or_panic(&buf)))
+        });
+        (Some(stat), checksum)
+    }
+
     /// Untracked files that are not ignored, plus nested repositories, walked by gix with the
     /// ignore rules of the repository and the user. Tracked paths are never emitted.
     pub fn untracked(&self) -> Result<Vec<Untracked>, ReadError> {
@@ -357,6 +375,40 @@ impl RepoReader {
             out.push(p);
         }
         out
+    }
+
+    /// Local branches and the object each one names, read from the refs alone: no object is
+    /// looked up, so the pack indexes are not loaded (the capture's detection budget is 5 ms,
+    /// ADR-TMC-006 § 2). A symbolic branch is followed.
+    pub fn branch_tips(&self) -> Result<Vec<(String, Oid)>, ReadError> {
+        let refs = self.repo.references().map_err(unavailable("refs"))?;
+        let mut out = Vec::new();
+        for r in refs.local_branches().map_err(unavailable("refs"))? {
+            let mut r = r.map_err(|e| ReadError::Unavailable(format!("refs: {e}")))?;
+            let name = r.name().shorten().to_str_lossy().into_owned();
+            let id = match r.target().try_id() {
+                Some(id) => id.to_owned(),
+                None => r.peel_to_id().map_err(unavailable("refs"))?.detach(),
+            };
+            out.push((name, Oid(id)));
+        }
+        Ok(out)
+    }
+
+    /// Where `HEAD` points, read from the refs alone (no object lookup): branch name, the object
+    /// it names, and whether it is detached.
+    pub fn head_tip(&self) -> Result<(Option<String>, Option<Oid>, bool), ReadError> {
+        use gix::head::Kind;
+        let head = self.repo.head().map_err(unavailable("HEAD"))?;
+        Ok(match &head.kind {
+            Kind::Symbolic(r) => (
+                Some(r.name.shorten().to_str_lossy().into_owned()),
+                r.target.try_id().map(|id| Oid(id.to_owned())),
+                false,
+            ),
+            Kind::Detached { target, .. } => (None, Some(Oid(*target)), true),
+            Kind::Unborn(name) => (Some(name.shorten().to_str_lossy().into_owned()), None, false),
+        })
     }
 
     /// Commit at the tip of `refs/stash`, if any.
