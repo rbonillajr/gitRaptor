@@ -31,7 +31,7 @@ tags:
 
 ## Reglas cubiertas
 
-BR-EDGE-004 (aviso; mínimo seguro más lo legible; un nivel personal ilegible solo pierde sus endurecimientos) — ver [business-rules.md](../business-rules.md)
+BR-EDGE-004 (aviso; mínimo seguro más lo legible; un nivel personal ilegible solo pierde sus endurecimientos; una clave desconocida deja el nivel parcial y fuerza el mínimo, Q-GRD-26) — ver [business-rules.md](../business-rules.md)
 
 ## Dependencias
 
@@ -46,7 +46,7 @@ BR-EDGE-004 (aviso; mínimo seguro más lo legible; un nivel personal ilegible s
 Dado el repo "demo" protegido cuya configuración del equipo permitía force-push
   Y en el worktree "feat-x" se commitea esa configuración con las marcas de conflicto de un merge
 Cuando un proceso hace force-push desde "feat-x"
-Entonces la operación no se ejecuta por el conjunto mínimo por defecto
+Entonces la operación no se ejecuta por el conjunto mínimo por defecto, porque cualquier versión ilegible, también la del worktree de la operación, lo fuerza (Q-GRD-12)
   Y GitRaptor avisa de que la configuración del equipo de "demo" no se puede leer en "feat-x"
 
 **Escenario: Un conflicto sin commitear no cuenta**
@@ -69,6 +69,14 @@ Dado el repo "demo" con push permitido por el equipo y un perfil ilegible que lo
 Cuando un proceso hace push
 Entonces el push se ejecuta
   Y GitRaptor avisa de que el perfil no se puede leer
+
+**Escenario: Una errata en la configuración del equipo nunca relaja**
+
+Dado el repo "demo" cuya configuración del equipo en la rama principal desactiva el conjunto mínimo, con ese cambio confirmado
+  Y esa configuración incluye un permiso con el nombre mal escrito
+Cuando un proceso hace force-push de "feat-x"
+Entonces la operación no se ejecuta por el conjunto mínimo por defecto
+  Y GitRaptor avisa de que la configuración del equipo de "demo" se aplica solo en parte
 
 **Escenario: Al commitear la configuración corregida vuelven sus reglas**
 

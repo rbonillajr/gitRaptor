@@ -32,7 +32,7 @@ tags:
 
 ## Reglas cubiertas
 
-BR-WF-002 (hooks inactivos por otra causa → aviso; repo retirado de la observación, Q-GRD-15) · BR-EDGE-003 (lista publicada de operaciones que la capa de hooks no puede impedir) · BR-EDGE-001 (el mínimo seguro es visible para el desarrollador) — ver [business-rules.md](../business-rules.md)
+BR-WF-002 (hooks inactivos por otra causa → aviso; repo retirado de la observación, Q-GRD-15) · BR-EDGE-003 (lista publicada de operaciones que la capa de hooks no puede impedir) · BR-WF-002 (diagnósticos visibles de lo pendiente de confirmar, Q-GRD-25) · BR-EDGE-001 (el mínimo seguro es visible para el desarrollador; solo lo desactiva la configuración del equipo en la rama principal, con su confirmación, Q-GRD-21) — ver [business-rules.md](../business-rules.md)
 
 ## Dependencias
 
@@ -63,12 +63,13 @@ Cuando el desarrollador retira "demo" de la observación del motor
 Entonces los hooks de Guardrails siguen denegando el force-push en "demo", con actor "sin atribuir"
   Y GitRaptor avisa de que "demo" sigue protegido aunque ya no se observa
 
-**Escenario: El desarrollador ve qué reglas aplican sin configuración**
+**Escenario: El desarrollador ve qué reglas aplican y qué espera su confirmación**
 
 Dado el repo "demo" en estado "Solo hooks" y sin configuración de Guardrails
 Cuando el desarrollador consulta el estado de protección de "demo"
 Entonces obtiene que aplica el conjunto mínimo por defecto: force-push denegado y borrado de la rama base denegado
-  Y que el equipo lo puede desactivar en su configuración
+  Y que solo lo desactiva la configuración del equipo en la rama principal, una vez que el desarrollador confirma ese cambio en su máquina
+  Y obtiene los diagnósticos pendientes de confirmar (relajación pendiente, rama base no confirmada o pendiente), cada uno con la acción para confirmarlo, o que no hay ninguno
 
 **Escenario: El desarrollador consulta qué no se puede impedir**
 
@@ -79,9 +80,17 @@ Entonces obtiene la lista de operaciones del catálogo que la capa de hooks no p
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+- **Gobierno**: ADR-GRD-005 § 1 (la capa está activa solo si se cumplen H1 a H4 contra el diario del perfil), § 3 (estado expuesto), § 4 (detección de pérdida) y § 5 (transición esperada, registro y aviso con rebote); ADR-GRD-002 § 2 y § 3 (lista publicada, versionada con el catálogo y expuesta como códigos; el cliente pone el texto).
+- **Mínimo visible**: en esta historia `minimumSet` es siempre `active`. El valor `disabled-by-team` solo llega con TS-GRD-001 y la confirmación de D7 (Q-GRD-21) y D8 (Q-GRD-22) que aporta US-GRD-007 (ADR-GRD-003 § 2; ADR-GRD-004 § 5; ADR-GRD-007 § 1).
+- **Diagnósticos pendientes de confirmar** (D11 (Q-GRD-25)): `diagnostics[]` expone "relajación pendiente de confirmar" (`floor-relax-pending`) y "rama base no confirmada o pendiente" (`base-unconfirmed` y `base-change-pending`), cada uno con el código de la acción para confirmar, o una lista vacía (ADR-GRD-005 § 1 y § 3). Aquí solo se exponen: los casos de relajación y de cambio pendiente llegan con US-GRD-007 y US-GRD-014, que aportan también la confirmación. "No confirmada" ya puede aparecer tras US-GRD-001 en un repo con configuración del equipo y tras adoptar una huérfana (US-GRD-003).
+- **Instalación huérfana**: esta historia detecta `instalacion-huerfana` (perfil borrado con la clave y el manifiesto aún en el repo) y la muestra con aviso, nunca como "Sin protección"; mientras tanto los hooks aplican el modo degradado con `instance-mismatch`. Adoptarla o retirarla es de US-GRD-003 (ADR-GRD-005 § 1; ADR-GRD-003 § 4).
+- **Repo no observado**: comprobación periódica y aviso `protected-but-unobserved`; los hooks siguen evaluando con actor "sin atribuir" (ADR-GRD-005 § 4 y § 5; ADR-GRD-003 § 4).
+- **Crates**: `crates/core` módulo `guardrails` (comprobación y detección), `crates/policy` (lista publicada), `crates/api` (estado y evento `protection-lost`) y `apps/cli` (consulta del estado).
+- **Enablers**: SPIKE-GRD-001 completo (matriz) **bloquea el cierre de la Dev Spec**. La suite de pérdida externa y de la lista de INF-GRD-001 **bloquea el merge**. TS-GRD-001 no bloquea.
+- **NFR, SEC y verificación**: NFR-GRD-10 y 13; SEC-GRD-01, 02, 05 y 08. ADR-GRD-005 Validación 1 a 7 y 9 a 11; ADR-GRD-002 Validación 9.
+- **Enmiendas en motor-local**: ADR-GRP-010 (vigilar el `config` común, cada `config.worktree` y la carpeta de Guardrails en los repos protegidos) y ADR-GRP-005 § 6 (comandos reservados; adoptar y retirar una huérfana es de US-GRD-003). Depende además de US-GRP-006.
 
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica (presentación del Cockpit y la CLI).
-- **Dev Spec:** pendiente (Arquitecto).
+- **Dev Spec:** pendiente (`/aadd-devspec US-GRD-004`).

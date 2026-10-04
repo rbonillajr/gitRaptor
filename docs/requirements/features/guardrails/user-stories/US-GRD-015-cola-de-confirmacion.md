@@ -39,7 +39,7 @@ BR-WF-001 (pendiente, aprobada, rechazada, caducada; finales; una aprobación va
 ## Dependencias
 
 - **Historias**: US-GRD-007 (permiso "pedir confirmación"; esta historia sustituye el trato como denegar), US-GRD-005 (registro de cada transición).
-- **Externas**: **bloqueada** por el Cockpit F-001-02 (superficie donde el humano decide; Q-GRD-13) y por el ADR de formato P8 (motor-local). Distinguir al humano: transversal (lo define el Arquitecto; R-GRD-3).
+- **Externas**: **bloqueada** por el Cockpit F-001-02 (superficie donde el humano decide; Q-GRD-13) y por el ADR de formato P8 (motor-local). **Gate de Q-GRD-19**: aprobar una petición exige el factor de autenticación del sistema operativo, fuera del canal del agente; esta historia no se empieza sin él. Distinguir al humano: transversal (lo define el Arquitecto; R-GRD-3).
 - **Transversal**: Windows, macOS y Linux. Los escenarios usan push con Git directo, una operación interceptable según la lista de US-GRD-004. La cola por la capa MCP sigue la misma decisión (BR-CONS-002) y se verifica cuando exista F-001-05 (US-GRD-016); por eso esta historia no depende del MCP.
 
 ## Criterios de Aceptación

@@ -33,12 +33,12 @@ tags:
 
 ## Reglas cubiertas
 
-BR-VAL-002 (catálogo de operaciones y sus tres permisos; "pedir confirmación" como denegar mientras no exista la cola, S-GRD-9) · BR-CALC-001 (decisión y motivo con su nivel) · BR-VAL-001 (el permiso se define en el nivel de equipo) · BR-EDGE-001 (el equipo puede desactivar el mínimo seguro) — ver [business-rules.md](../business-rules.md)
+BR-VAL-002 (catálogo de operaciones y sus tres permisos; "pedir confirmación" como denegar mientras no exista la cola, S-GRD-9) · BR-CALC-001 (decisión y motivo con su nivel) · BR-VAL-001 (el permiso se define en el nivel de equipo) · BR-EDGE-001 (el equipo puede desactivar el mínimo seguro desde la rama principal, con la confirmación del desarrollador, Q-GRD-21) · BR-AUTH-001 (confirmar una relajación del equipo está reservado al humano, también la inicial, explícita tras instalar, Q-GRD-22 y Q-GRD-23) · BR-WF-002 (diagnóstico de relajación pendiente, Q-GRD-25) — ver [business-rules.md](../business-rules.md)
 
 ## Dependencias
 
 - **Historias**: US-GRD-001 (contrato de decisión y capa de hooks); US-GRD-004 (lista de operaciones que la capa de hooks puede interceptar); US-GRP-013 (motor-local), dueña de la lectura de la configuración en tres niveles, que esta historia reutiliza.
-- **Externas**: **bloqueada** por el ADR de formato de la configuración, P8 (motor-local), y por US-GRP-013. Por Q-GRD-17, un cambio en la configuración del equipo se aplica al commitearlo en el worktree de la operación, no al editarlo.
+- **Externas**: **bloqueada** por el ADR de formato de la configuración, P8 (motor-local), y por US-GRP-013. Por Q-GRD-17 y Q-GRD-20, un endurecimiento de la configuración del equipo se aplica al commitearlo en el worktree de la operación, no al editarlo; una relajación solo cuenta desde la rama principal y cuando el desarrollador la confirma en su máquina (Q-GRD-21). La confirmación usa el mismo mecanismo que las demás acciones reservadas del MVP y no espera al factor de autenticación del sistema operativo (Q-GRD-22). Distinguir al humano: transversal (lo define el Arquitecto; R-GRD-3).
 - **Transversal**: Windows, macOS y Linux. Las operaciones que la lista de US-GRD-004 declare no interceptables con Git directo (p. ej. `reset --hard`) se verifican por la capa MCP en US-GRD-016.
 
 ## Criterios de Aceptación
@@ -75,13 +75,23 @@ Dado el repo "demo" con borrar rama en "pedir confirmación" y sin el modo de co
 Cuando un proceso borra la rama "feat-x"
 Entonces la operación no se ejecuta y el motivo indica que requiere confirmación humana
 
-**Escenario: El equipo desactiva el mínimo seguro**
+**Escenario: El desarrollador instala la protección y después confirma una configuración del equipo que desactiva el mínimo seguro**
 
-Dado el repo "demo" cuya configuración del equipo desactiva el conjunto mínimo y permite force-push
-Cuando un proceso hace force-push de "feat-x"
-Entonces la operación se ejecuta
+Dado el repo "demo" cuya configuración del equipo en la rama principal desactiva el conjunto mínimo y permite force-push
+Cuando el desarrollador instala la protección y después confirma de forma explícita esa configuración
+Entonces GitRaptor anuncia la relajación y abre una ventana en la que se puede cancelar
+  Y al cerrarse la ventana sin cancelación, un force-push de "feat-x" se ejecuta
 
-**Escenario: Un cambio en la configuración del equipo se aplica al commitearlo, no al editarlo**
+**Escenario: Una relajación del equipo no se aplica hasta que el desarrollador la confirma**
+
+Dado el repo "demo" protegido con force-push denegado en la configuración del equipo confirmada
+Cuando llega a la rama principal un cambio de la configuración del equipo que permite force-push
+Entonces un force-push de "feat-x" sigue sin ejecutarse
+  Y el estado de protección de "demo" muestra la relajación pendiente de confirmar, con la acción para confirmarla
+  Y si un agente intenta confirmarla, se rechaza y el intento queda en el registro
+  Y tras la confirmación del desarrollador, el siguiente force-push de "feat-x" se ejecuta
+
+**Escenario: Un endurecimiento de la configuración del equipo se aplica al commitearlo, no al editarlo**
 
 Dado el repo "demo" con push en "permitir" en la configuración del equipo commiteada
 Cuando el desarrollador cambia push a "denegar" en el worktree "feat-x" sin commitear

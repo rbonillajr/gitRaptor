@@ -87,9 +87,9 @@ blocked:
 
 | ID | Reglas cubiertas | Depende de | Externas | Prioridad | Valor en una línea |
 |----|------------------|------------|----------|-----------|--------------------|
-| US-GRD-001 | BR-AUTH-002, BR-EDGE-001, BR-CALC-001, BR-WF-002 | US-GRP-001, US-GRP-012 | — | Must | La demo del force-push bloqueado funciona desde el primer día |
+| US-GRD-001 | BR-AUTH-002, BR-EDGE-001, BR-CALC-001, BR-WF-002, BR-CONS-003 (`main`), BR-AUTH-001 | US-GRP-001, US-GRP-012 | — | Must | La demo del force-push bloqueado funciona desde el primer día |
 | US-GRD-002 | BR-EDGE-002, BR-CONS-005, BR-AUTH-002 | US-GRD-001 | — | Must | Proteger un repo no rompe lo que ya tenía |
-| US-GRD-003 | BR-CONS-005, BR-WF-002 | US-GRD-001, US-GRD-002 | — | Must | Probar Guardrails es reversible del todo |
+| US-GRD-003 | BR-CONS-005 (incluidas las huérfanas), BR-WF-002, BR-AUTH-001 | US-GRD-001, US-GRD-002, US-GRD-004 | — | Must | Probar Guardrails es reversible del todo |
 | US-GRD-004 | BR-WF-002, BR-EDGE-003, BR-EDGE-001 (visible) | US-GRD-001, US-GRP-006 | — | Should | El estado de protección nunca miente y dice qué reglas aplican |
 | US-GRD-005 | BR-CONS-004, BR-TIME-002 | US-GRD-001, US-GRP-009 | — | Must | El KPI "acciones peligrosas bloqueadas" se mide |
 | US-GRD-006 | BR-AUTH-003, BR-AUTH-001, BR-CONS-004 | US-GRD-001, US-GRD-005, US-GRP-007, US-GRP-009 | Arquitecto: distinguir al humano (R-GRD-3) | Must | Fail-safe sin dejar atrapado al humano |
@@ -108,7 +108,7 @@ blocked:
 ### Orden y paralelismo (DAG)
 
 ```
-US-GRP-001, US-GRP-012 ─► GRD-001 ─┬─► GRD-002 ─► GRD-003
+US-GRP-001, US-GRP-012 ─► GRD-001 ─┬─► GRD-002 ─► GRD-003 (+ 004)
                                    ├─► GRD-004 (+ US-GRP-006)
                                    └─► GRD-005 (+ US-GRP-009) ─► GRD-006 (+ US-GRP-007)
 
@@ -125,11 +125,11 @@ GRD-001, GRD-004, US-GRP-013 ─► GRD-007 ─┬─► GRD-008 ─┬─► GR
 
 - **Esqueleto andante**: US-GRD-001.
 - **Ola 1** (en paralelo): US-GRD-002, US-GRD-004 y US-GRD-005.
-- **Ola 2**: US-GRD-003 (tras 002) y US-GRD-006 (tras 005).
+- **Ola 2**: US-GRD-003 (tras 002 y 004; de US-GRD-004, una Should, solo depende la parte de instalaciones huérfanas: el resto de US-GRD-003 se puede entregar sin ella) y US-GRD-006 (tras 005).
 - **Tras el ADR P8 y US-GRP-013 (motor-local)**: US-GRD-007; luego US-GRD-008 y US-GRD-014 en paralelo; luego US-GRD-009 y US-GRD-010; por último US-GRD-011, US-GRD-012 y US-GRD-013.
 - **Tras otras features**: US-GRD-015 (Cockpit, además de P8), US-GRD-016 (MCP, además de P8) y US-GRD-017 (Time Machine).
 
-> **Secuencias por contrato compartido**: 001 → 002 → 003 (instalación de hooks), 001 → 007 (contrato de decisión), 004 → 007 (lista de operaciones interceptables) y 004 → 016 (estados de protección). Van en serie. En cada caso el contrato lo fija la Dev Spec de la historia que va primero. La lectura de los tres niveles la fija US-GRP-013 (motor-local).
+> **Secuencias por contrato compartido**: 001 → 002 → 003 (instalación de hooks), 004 → 003 (detección de la instalación huérfana), 001 → 007 (contrato de decisión), 004 → 007 (lista de operaciones interceptables) y 004 → 016 (estados de protección). Van en serie. En cada caso el contrato lo fija la Dev Spec de la historia que va primero. La lectura de los tres niveles la fija US-GRP-013 (motor-local).
 >
 > **Ruta crítica ejecutable hoy**: US-GRP-001 → GRD-001 → GRD-005 → GRD-006. **Ruta crítica total**: P8 → US-GRP-013 → GRD-007 → GRD-008 → GRD-010 → GRD-013.
 
@@ -137,7 +137,7 @@ GRD-001, GRD-004, US-GRP-013 ─► GRD-007 ─┬─► GRD-008 ─┬─► GR
 
 US-GRD-014 **no** desbloquea US-GRP-016. Según el contexto aprobado, US-GRP-016 depende solo del valor de rama base del nivel de equipo y de la regla de lectura, que ya define el requerimiento (BR-CONS-003), y del ADR P8 (motor-local). Las dos historias son independientes.
 
-**Prueba de integración posterior** (cuando estén integradas US-GRD-014 y US-GRP-016): con la rama base "develop" en la configuración del equipo de "demo" commiteada en su rama principal, y dos worktrees en commits con versiones distintas de esa configuración, la rama base efectiva que protege Guardrails y la que usa el motor para el ahead/behind son "develop" en los dos worktrees (Q-GRD-18). No es un criterio de ninguna de las dos historias.
+**Prueba de integración posterior** (cuando estén integradas US-GRD-014 y US-GRP-016): con la rama base "develop" en la configuración del equipo de "demo" commiteada en su rama principal, y dos worktrees en commits con versiones distintas de esa configuración, la rama base efectiva que protege Guardrails y la que usa el motor para el ahead/behind son "develop" en los dos worktrees (Q-GRD-18). Además, con un cambio de rama base pendiente de confirmar, los dos usan la misma rama base **confirmada**; la protección adicional de la rama pendiente solo aparece en las decisiones de Guardrails (Q-GRD-21). No es un criterio de ninguna de las dos historias.
 
 ---
 
@@ -153,13 +153,13 @@ US-GRD-014 **no** desbloquea US-GRP-016. Según el contexto aprobado, US-GRP-016
 
 | Regla | Historias | Regla | Historias |
 |-------|-----------|-------|-----------|
-| BR-VAL-001 | US-GRD-007, 010, 013 | BR-CONS-001 | US-GRD-010, 013 |
+| BR-VAL-001 | US-GRD-007, 010, 012, 013 | BR-CONS-001 | US-GRD-010, 013 |
 | BR-VAL-002 | US-GRD-007, 016 | BR-CONS-002 | US-GRD-016 |
-| BR-VAL-003 | US-GRD-008, 009 | BR-CONS-003 | US-GRD-014 |
+| BR-VAL-003 | US-GRD-008, 009 | BR-CONS-003 | US-GRD-001, 014 |
 | BR-CALC-001 | US-GRD-001, 007, 008 | BR-CONS-004 | US-GRD-005, 006 |
 | BR-WF-001 | US-GRD-015 | BR-CONS-005 | US-GRD-002, 003 |
-| BR-WF-002 | US-GRD-001, 003, 004, 016 | BR-CONS-006 | US-GRD-013 |
-| BR-AUTH-001 | US-GRD-006, 012, 013, 015 | BR-TIME-001 | US-GRD-015 |
+| BR-WF-002 | US-GRD-001, 003, 004, 007, 014, 016 | BR-CONS-006 | US-GRD-013 |
+| BR-AUTH-001 | US-GRD-001, 003, 006, 007, 012, 013, 014, 015 | BR-TIME-001 | US-GRD-015 |
 | BR-AUTH-002 | US-GRD-001, 002 | BR-TIME-002 | US-GRD-005 |
 | BR-AUTH-003 | US-GRD-006 | BR-EDGE-001 | US-GRD-001, 004, 007, 014 |
 | BR-AUTH-004 | US-GRD-012, 016 | BR-EDGE-002 | US-GRD-002 |
@@ -179,3 +179,7 @@ US-GRD-014 **no** desbloquea US-GRP-016. Según el contexto aprobado, US-GRP-016
 | 1.1 | 2026-10-04 | PO (AADD) para Rene Bonilla | Artifact Judge (RESERVAS): US-GRD-014 deja de "desbloquear" US-GRP-016 y pierde el escenario de coherencia con el motor, que pasa a prueba de integración posterior; la lectura de los tres niveles tiene un solo dueño, US-GRP-013 (motor-local), del que depende US-GRD-007; catálogo completo de BR-VAL-002 por MCP en US-GRD-016 (incluido `reset --hard`) y por Git directo en US-GRD-007 (operaciones interceptables, con dependencia de US-GRD-004); US-GRD-015 indica la capa en cada escenario (push con Git directo); US-GRD-004 añade la visibilidad del mínimo seguro (BR-EDGE-001); notas sobre el snapshot previo y la posible división de US-GRD-001; nueva pregunta abierta P-GRD-17 con los escenarios afectados marcados en US-GRD-007, 011, 012 y 013 |
 | 1.2 | 2026-10-04 | PO (AADD) para Rene Bonilla | P-GRD-17 resuelta por Q-GRD-17 (rige la última versión commiteada de la configuración del equipo en el worktree de la operación): US-GRD-007 y 013 aplican el cambio al commitearlo; US-GRD-011 reformula los escenarios de conflicto de merge (commiteado frente a sin commitear); US-GRD-012 deja explícito que editar sin commitear no relaja nada. Sin marcas "Depende de P-GRD-17" |
 | 1.3 | 2026-10-04 | PO (AADD) para Rene Bonilla | Q-GRD-18 (la rama base se lee de la configuración del equipo commiteada en la rama principal del repo): US-GRD-014 añade el escenario de dos worktrees con versiones distintas de la configuración que comparten la rama base de la rama principal; la prueba de integración con US-GRP-016 se ajusta a dos worktrees |
+| 1.4 | 2026-10-04 | PO (AADD) para Rene Bonilla | Decisiones Q-GRD-19 a Q-GRD-22 (D5 a D8 de la revisión de arquitectura y seguridad) y KPI verificado, sin historias nuevas. US-GRD-004: el mínimo seguro solo lo desactiva la configuración del equipo en la rama principal, con la confirmación del desarrollador (Q-GRD-21). US-GRD-005: nuevo escenario, las entradas anotadas en modo degradado se muestran aparte y no entran en el recuento por defecto (6 escenarios). US-GRD-007: desactivar el mínimo exige la confirmación del desarrollador y nuevo escenario de relajación pendiente (Q-GRD-21, Q-GRD-22; 6 escenarios); el escenario de Q-GRD-17 pasa a hablar de endurecimiento. US-GRD-012: nuevo escenario, un commit laxo solo en el worktree de un agente no relaja nada (Q-GRD-20; 6 escenarios). US-GRD-014: protección antes de la confirmación inicial, confirmación al añadir el repo y nuevo escenario de cambio de rama base pendiente (Q-GRD-20 a Q-GRD-22; 6 escenarios). US-GRD-013 y US-GRD-015: gate del factor de autenticación del sistema operativo en Dependencias (Q-GRD-19). Prueba de integración con US-GRP-016: misma rama base confirmada con un cambio pendiente |
+| 1.5 | 2026-10-04 | PO (AADD) para Rene Bonilla | Decisiones Q-GRD-23 a Q-GRD-27 (D9 a D12 y KPI), sin historias nuevas. US-GRD-001: al instalar se confirma la rama base "main" (Q-GRD-23). US-GRD-003: nuevo escenario de instalación huérfana, retirarla o adoptarla (6 escenarios). US-GRD-004: el escenario del mínimo muestra también los diagnósticos pendientes de confirmar con su acción (Q-GRD-25); la mención de huérfanas en sus Requisitos Técnicos apunta a US-GRD-003. US-GRD-006: la excepción se anuncia y abre una ventana cancelable, más un escenario de cancelación (Q-GRD-24; 5 escenarios). US-GRD-007: la confirmación inicial de un mínimo desactivado se hace al instalar, con anuncio y ventana (Q-GRD-23); la relajación pendiente se ve como diagnóstico (Q-GRD-25). US-GRD-011: nuevo escenario de errata que fuerza el mínimo (Q-GRD-26; 6 escenarios). US-GRD-014: confirmación al instalar en lugar de al añadir el repo (Q-GRD-23) y diagnóstico de rama base pendiente (Q-GRD-25) |
+| 1.6 | 2026-10-04 | PO (AADD) para Rene Bonilla | Aplicación de decisiones existentes, sin IDs nuevos. US-GRD-011: el escenario de marcas de conflicto en el worktree cita Q-GRD-12 (cualquier versión ilegible fuerza el mínimo). US-GRD-014: el primer escenario pasa a perfil perdido o protección adoptada, con la rama base no confirmada y la unión protegida (Q-GRD-21, Q-GRD-23). US-GRD-001: alcance acotado a repos sin configuración del equipo, sin escenario nuevo |
+| 1.7 | 2026-10-04 | PO (AADD) para Rene Bonilla | Artifact Judge (FAIL). US-GRD-007 y US-GRD-014: instalar no confirma una configuración del equipo existente; se instala y después se confirma de forma explícita (Q-GRD-23). US-GRD-003: el desinstalar se anuncia y abre una ventana cancelable (Q-GRD-19); reglas cubiertas fusionadas y BR-AUTH-001; la huérfana pasa a esquema retirar/adoptar, con la rama base no confirmada al adoptar; depende de US-GRD-004 (detección). US-GRD-001: BR-AUTH-001 en reglas cubiertas y alcance en párrafo propio. Matriz, mapa y DAG actualizados (BR-AUTH-001 con 001 y 003; 004 → 003). US-GRP-016 (motor-local) no depende de US-GRD-001 ni de US-GRD-014: la coherencia se comprueba en la prueba de integración posterior |

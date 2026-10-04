@@ -32,12 +32,12 @@ tags:
 
 ## Reglas cubiertas
 
-BR-AUTH-004 (la configuración de Guardrails es ruta prohibida para agentes por defecto; los cambios del equipo entran por commit revisado) · BR-AUTH-001 (relajar está reservado al humano) — ver [business-rules.md](../business-rules.md)
+BR-AUTH-004 (la configuración de Guardrails es ruta prohibida para agentes por defecto; los cambios del equipo entran por commit revisado) · BR-AUTH-001 (relajar está reservado al humano) · BR-VAL-001 (las relajaciones solo salen de la configuración del equipo en la rama principal; el worktree solo endurece, Q-GRD-20) — ver [business-rules.md](../business-rules.md)
 
 ## Dependencias
 
 - **Historias**: US-GRD-008 (rutas prohibidas), US-GRD-010 (los tres niveles).
-- **Externas**: **bloqueada** por el ADR de formato P8 (motor-local), que fija qué rutas son la configuración. Por Q-GRD-17 rige la última versión commiteada de la configuración del equipo en el worktree de la operación. Distinguir al humano es transversal (lo define el Arquitecto; R-GRD-3). Que un agente escriba en disco la configuración personal, que no se versiona, no lo puede impedir una regla sobre commits: queda como riesgo R-GRD-4 para el Arquitecto, fuera de esta historia.
+- **Externas**: **bloqueada** por el ADR de formato P8 (motor-local), que fija qué rutas son la configuración. Por Q-GRD-17 rige la última versión commiteada de la configuración del equipo en el worktree de la operación, y por Q-GRD-20 esa versión solo endurece: las relajaciones salen solo de la rama principal. Distinguir al humano es transversal (lo define el Arquitecto; R-GRD-3). Que un agente escriba en disco la configuración personal, que no se versiona, no lo puede impedir una regla sobre commits: queda como riesgo R-GRD-4 para el Arquitecto, fuera de esta historia.
 - **Transversal**: Windows, macOS y Linux.
 
 ## Criterios de Aceptación
@@ -55,6 +55,13 @@ Entonces el commit no se ejecuta y el motivo nombra la protección de la configu
 Dado el repo "demo" protegido, cuya configuración del equipo commiteada deniega force-push
 Cuando un agente edita esa configuración en su worktree para permitir force-push, sin commitear, y hace force-push desde ese worktree
 Entonces la operación no se ejecuta, porque rige la última versión commiteada de la configuración del equipo (Q-GRD-17)
+
+**Escenario: Una configuración más laxa commiteada solo en el worktree de un agente no relaja nada**
+
+Dado el repo "demo" protegido, cuya configuración del equipo en la rama principal deniega force-push
+  Y el worktree "feat-x" de un agente está en un commit, creado sin pasar por la protección, cuya configuración del equipo permite force-push
+Cuando un proceso hace force-push desde "feat-x"
+Entonces la operación no se ejecuta, porque una relajación solo puede venir de la configuración del equipo en la rama principal (Q-GRD-20)
 
 **Escenario: Un agente intenta borrar la configuración del equipo**
 

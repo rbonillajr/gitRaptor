@@ -31,7 +31,7 @@ tags:
 
 ## Reglas cubiertas
 
-BR-CONS-004 (qué se anota, con todos sus campos; en el perfil, nunca en el repo; Q-GRD-10) · BR-TIME-002 (retención de 90 días) — ver [business-rules.md](../business-rules.md)
+BR-CONS-004 (qué se anota, con todos sus campos; en el perfil, nunca en el repo; Q-GRD-10; el KPI cuenta solo lo verificado y lo anotado en modo degradado va aparte) · BR-TIME-002 (retención de 90 días) — ver [business-rules.md](../business-rules.md)
 
 ## Dependencias
 
@@ -54,6 +54,14 @@ Dado el repo "demo" con 3 denegaciones esta semana y 1 la semana anterior
 Cuando el desarrollador consulta las acciones bloqueadas de "demo" de esta semana
 Entonces obtiene 3
 
+**Escenario: Las entradas que GitRaptor no pudo verificar se muestran aparte**
+
+Dado el repo "demo" con 3 denegaciones verificadas esta semana y 2 entradas anotadas en modo degradado, que GitRaptor no pudo verificar
+Cuando el desarrollador consulta las acciones bloqueadas de "demo" de esta semana
+Entonces obtiene 3
+  Y las 2 entradas sin verificar aparecen aparte, fuera del recuento
+  Y si el desarrollador pide incluirlas, obtiene 5
+
 **Escenario: Las operaciones permitidas sin regla no se anotan**
 
 Dado el repo "demo" protegido
@@ -74,9 +82,16 @@ Entonces solo aparece la de hace 89 días
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+- **Gobierno**: ADR-GRD-006 § 1 (tabla propia en el almacén por repo del perfil; los permitidos sin regla no se anotan), § 2 (agregación; el KPI suma `count`), § 3 (90 días desde `lastAt`; las consultas filtran por fecha) y § 6 (consulta y KPI).
+- **Campos**: el actor sale del `git` más cercano (ADR-GRD-003 § 4); el repo, de la clave del almacén; la operación va normalizada y nunca con argv; `reasons` lleva regla y nivel, y `layer` la capa (ADR-GRD-006 § 1).
+- **KPI**: cuenta `denial` más las peticiones `rejected` y `expired`. Excluye por defecto `origin = spool-unverified`, que se muestra aparte y se incluye con un filtro explícito; `exception-rejected` también va aparte (ADR-GRD-006 § 6).
+- **Modo degradado**: el cliente del hook escribe en el spool y el daemon lo ingiere marcado como `spool-unverified` (ADR-GRD-006 § 5; ADR-GRD-003 § 4).
+- **Crates**: `crates/core` módulo `guardrails` (escritura, agregación, purga e ingesta del spool), `crates/api` (consulta paginada y KPI) y `apps/cli` (consulta y escritura del spool desde `raptor hook`).
+- **Enablers**: la suite de registro de INF-GRD-001 (huella del repo sin cambios) **bloquea el merge**. SPIKE-GRD-001 y TS-GRD-001 no aplican.
+- **NFR, SEC y verificación**: NFR-GRD-09; SEC-GRD-09, 11 y 12. ADR-GRD-006 Validación 1 a 7, 10 y 11.
+- **Enmiendas en motor-local**: ADR-GRP-006 § 4 (tabla `guardrails_decisions` y excepción de escritura de clientes para el spool) y ADR-GRP-005 § 1 (la misma excepción). El actor "agente X" depende de US-GRP-009.
 
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica.
-- **Dev Spec:** pendiente (Arquitecto).
+- **Dev Spec:** pendiente (`/aadd-devspec US-GRD-005`).
