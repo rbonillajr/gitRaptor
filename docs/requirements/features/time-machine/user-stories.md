@@ -9,6 +9,7 @@ approved: 0
 blocked:
   - US-TMC-011
   - US-TMC-020
+deferred:
   - US-TMC-021
 ---
 
@@ -67,14 +68,14 @@ blocked:
 | [US-TMC-018](./user-stories/US-TMC-018-garantias-snapshots.md) | Los snapshots no se publican, no se pierden con el mantenimiento de Git y ningún agente los altera | Desarrollador quiere las tres garantías de D-TMC-11 verificadas | 001 | — | expanded |
 | [US-TMC-019](./user-stories/US-TMC-019-robustez-interrupcion.md) | El repo sigue recuperable aunque GitRaptor muera a mitad de un snapshot o de un undo | Desarrollador quiere resistir pruebas de caos (NFR-12) | 001, 002, 009 | — | expanded |
 | [US-TMC-020](./user-stories/US-TMC-020-overhead-snapshot.md) | El desarrollador y sus agentes no notan el coste de los snapshots | Desarrollador quiere overhead < 200 ms por snapshot (NFR-04) | 001, 004 | Spike (a): repo mediano (D-TMC-21) | expanded |
-| [US-TMC-021](./user-stories/US-TMC-021-politica-guardrails-undo.md) | Las políticas del repo pueden restringir quién deshace, nunca ampliarlo | Desarrollador quiere que Guardrails endurezca los permisos del undo sin poder relajarlos | 013 | F-001-04: política sobre el undo sin definir (formato ya en ADR-GRP-007) | expanded |
+| [US-TMC-021](./user-stories/US-TMC-021-politica-guardrails-undo.md) | Las políticas del repo pueden restringir quién deshace, nunca ampliarlo | Desarrollador quiere que Guardrails endurezca los permisos del undo sin poder relajarlos | 013 | Fuera del MVP (Fase 2): Guardrails sin política sobre el undo | expanded |
 
 ### Orden de ejecución sugerido (capas del DAG, solo dependencias internas)
 
 1. **Capa 0**: 001
 2. **Capa 1**: 002, 004, 016, 018
 3. **Capa 2**: 006, 013, 014, 005, 017, 020 (bloqueada)
-4. **Capa 3**: 007, 008, 009, 012, 021 (bloqueada)
+4. **Capa 3**: 007, 008, 009, 012, 021 (fuera del MVP)
 5. **Capa 4**: 003, 010, 015, 019, 011 (bloqueada por P17)
 
 ---
@@ -114,3 +115,4 @@ blocked:
 | 1.5 | 2026-10-04 | Agente de documentación para Rene Bonilla | Decisión de Rene Bonilla (2026-10-04): US-TMC-017 se desbloquea. Sus escenarios parten de valores ya escritos en el perfil o en el local y no usan el comando de edición de Guardrails (Q27, US-GRD-013); depende de US-TMC-016 y US-GRP-013. Bloqueadas: 4 (005, 011, 020, 021) |
 | 1.6 | 2026-10-04 | Agente de documentación para Rene Bonilla | Decisión de Rene Bonilla, 2026-10-04: US-TMC-005 se desbloquea. Los hooks de Guardrails existen (ADR-GRD-001 aceptado; los instala US-GRD-001), y el bloqueo cruzado con US-GRD-017 pasa a dependencias: US-TMC-005 depende de US-TMC-004 y US-GRD-001, y US-GRD-017 de US-TMC-005. Bloqueadas: 3 (011, 020, 021) |
 | 1.7 | 2026-10-04 | Agente de documentación para Rene Bonilla | US-TMC-021 sigue bloqueada con el motivo actualizado (Rene Bonilla, 2026-10-04): el formato de `policies` ya existe (ADR-GRP-007), pero Guardrails no define ninguna política sobre el undo. Pregunta abierta para el PO de Guardrails: ¿el catálogo incluye restringir quién deshace (D-TMC-17)? |
+| 1.8 | 2026-10-04 | Agente de documentación para Rene Bonilla | Decisión de Rene Bonilla, 2026-10-04: US-TMC-021 sale del MVP (Fase 2). La regla base de US-TMC-013 ya impide que un agente deshaga trabajo ajeno, y Guardrails no define política sobre el undo. Bloqueadas: 2 (011, 020); fuera del MVP: 1 (021) |
