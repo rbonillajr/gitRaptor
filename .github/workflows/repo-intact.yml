@@ -1,0 +1,90 @@
+# INF-GRP-001: "intact repo" gate (BR-CONS-001, NFR-01, ADR-GRP-009 § Validación).
+#
+# Proposal, not yet run on GitHub (see the INF-GRP-001 Dev Spec). Branch protection should require
+# only the `repo-intact` jobs: every suite registers itself by naming its tests `repo_intact::…`,
+# so a new suite is gated as soon as it lands with its owning story, without touching branch
+# protection, and an earlier story is never blocked by a suite that does not exist yet.
+#
+# Actions are pinned by commit SHA.
+name: repo-intact
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repo-intact-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  lint-and-test:
+    name: lint and test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    # Windows: TS-GRP-002 rejects every Git candidate on Windows (fail-closed until the ACE
+    # check exists), so the crates/git tests cannot pass there yet. Non-blocking until then.
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Toolchain from rust-toolchain.toml
+        run: rustup show
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+
+  repo-intact:
+    name: repo-intact (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux: strace traces the probe's own process tree without root; blocking.
+          - os: ubuntu-latest
+            exec_audit: strace
+          # macOS: the trap gate is blocking; eslogger runs in `deep-exec-audit-macos`.
+          - os: macos-latest
+            exec_audit: auto
+          # Windows: trap gate only; ETW is pending (Dev Spec § 6).
+          - os: windows-latest
+            exec_audit: auto
+    env:
+      GITRAPTOR_EXEC_AUDIT: ${{ matrix.exec_audit }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Install strace
+        if: matrix.exec_audit == 'strace'
+        run: sudo apt-get update && sudo apt-get install -y strace
+      - name: Toolchain from rust-toolchain.toml
+        run: rustup show
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      # Always the whole workspace, never `nx affected`: the gate must run every suite.
+      - name: Core and registered suites
+        run: cargo test --workspace -- repo_intact
+
+  deep-exec-audit-macos:
+    name: deep exec audit (macOS, eslogger)
+    runs-on: macos-latest
+    # Unverified: eslogger needs root (passwordless sudo on hosted runners) and a TCC grant
+    # that the runner may not have. Non-blocking until a first green run proves it.
+    continue-on-error: true
+    env:
+      GITRAPTOR_EXEC_AUDIT: eslogger
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Toolchain from rust-toolchain.toml
+        run: rustup show
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - run: cargo test -p gitraptor-git --test repo_intact_exec -- kernel_tracer
