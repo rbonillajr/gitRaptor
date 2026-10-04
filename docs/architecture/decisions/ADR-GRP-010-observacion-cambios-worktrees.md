@@ -10,7 +10,7 @@ updated: 2026-10-04
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
-related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-007, ADR-GRP-009, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, ADR-GRD-005, SPIKE-GRP-002, INF-GRP-002, CTX-GRP-001, BR-GRP-001]
+related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-007, ADR-GRP-009, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, ADR-GRD-005, ADR-CKP-001, ADR-CKP-002, SPIKE-GRP-002, INF-GRP-002, CTX-GRP-001, BR-GRP-001]
 tags: [watcher, notify, fsevents, inotify, readdirectorychangesw, debounce, reconciliacion, sondeo, worktrees, nfr-04, nfr-05, br-cons-005, br-edge-005, seguridad]
 ---
 
@@ -76,10 +76,10 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
 
 ### 4. Recomputo incremental
 
-- **Eventos del working tree**: solo se recalcula el estado de las rutas tocadas, con una caché de stat en memoria del motor por worktree (nunca en el repo, ADR-GRP-009) que evita volver a leer contenido sin cambios.
+- **Eventos del working tree**: solo se recalcula el estado de las rutas tocadas, con una caché de stat en memoria del motor por worktree (nunca en el repo, ADR-GRP-009) que evita volver a leer contenido sin cambios. (Enmienda 2026-10-04, Cockpit: el conjunto completo de rutas sin commitear se mantiene en memoria para el predictor; ver la sección final.)
 - **`index` del worktree**: recálculo del estado completo de ese worktree (lo preparado puede haber cambiado entero).
 - **Refs, `HEAD` y reflogs**: relectura de las refs afectadas; ahead/behind solo si cambió la punta de la rama o la base, con caché por par de commits.
-- **Operaciones en curso**: relectura de los marcadores para reportar el estado especial (BR-EDGE-002).
+- **Operaciones en curso**: relectura de los marcadores para reportar el estado especial (BR-EDGE-002). (Enmienda 2026-10-04, Cockpit: también el estado en conflicto; ver la sección final.)
 - **Escala de historia (100K commits)**: ahead/behind se calcula con un recorrido acotado desde la base de fusión, usando el `commit-graph` del repo si existe, solo para leerlo (nunca se escribe, ADR-GRP-009).
 - **Ahead/behind fuera del primer evento** (Enmienda 2026-10-04): sin `commit-graph`, una rama a 50K commits de la base cuesta 145 ms p50 (SPIKE-GRP-002, medido con `git rev-list`; el coste con `gix` está sin medir), casi todo el presupuesto de cómputo. Por eso ahead/behind no entra en el presupuesto del primer evento:
   - se publica en la segunda fase, con caché por par de commits;
@@ -203,3 +203,24 @@ Aplicada desde las recomendaciones de [SPIKE-GRP-002-resultados.md](../../requir
 | Cachés de `gix` por repo, compartidas entre sus worktrees; RSS aislado medido en INF-GRP-002 | § 4 | Resultados § 3.4 (memoria); decisión del orquestador (2026-10-04), validada por el Arquitecto |
 | Intervalo adaptativo del modo degradado: lo decide la Dev Spec de US-GRP-002 con la medición de INF-GRP-002 | § 5 | Resultados § 3.5 |
 | Causas de hueco nuevas (recreación del stream, desbordamiento, reconciliación periódica) llevadas al modelo de ADR-GRP-013 | § 6 | ADR-GRP-013, Enmienda (2026-10-04, SPIKE-GRP-002) |
+
+## Enmienda (2026-10-04, Cockpit)
+
+Aplicada desde DEP-CKP-14 y la parte de rutas de DEP-CKP-1 de [CTX-CKP-001](../../requirements/features/cockpit/context.md), con [ADR-CKP-001](./ADR-CKP-001-prediccion-conflictos-merge-en-seco.md) § 3 y § 9 y [ADR-CKP-002](./ADR-CKP-002-catalogo-operaciones-ejecutor.md) § 9 (proposed). **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. No cambia el mecanismo, el debounce, el sondeo ni la reconciliación, y no añade rutas vigiladas. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| Estado en conflicto: con una operación en curso, el recomputo lee también las rutas sin fusionar y los oids de la operación | § 4 | DEP-CKP-14; ADR-CKP-002 § 9; ADR-CKP-001 § 9 |
+| El conjunto completo de rutas sin commitear por worktree se mantiene en memoria y lo consume el predictor, sin persistirlo ni publicarlo | § 4 | DEP-CKP-1; ADR-CKP-001 § 3 |
+
+**Estado en conflicto** (DEP-CKP-14):
+
+- **Cuándo**: con un merge, rebase, cherry-pick o revert en curso en el worktree (marcadores de BR-EDGE-002). Lo disparan los cambios del índice y de los marcadores, que ya se vigilan (§ 2).
+- **Qué se lee**, en solo lectura con `gix` (ADR-GRP-009 § 2, "leer marcadores de operación en curso"): las **rutas sin fusionar** (entradas del índice con etapa mayor que 0) y los oids de la operación: `MERGE_HEAD` en un merge, y `onto` y la rama de origen en un rebase.
+- **Topes**: ⚠️ **ASSUMPTION**: hasta 1.000 rutas por worktree; por encima, "truncado" con el total. Las rutas son texto no confiable (SEC-12).
+- **Publicación**: con el estado especial del worktree, en la primera fase (§ 4), en la instantánea y en el stream. La entrada y la salida del estado en conflicto se ven como cambios del estado del worktree (ADR-GRP-013, Enmienda (2026-10-04, Cockpit)). Lo consumen la TUI (operación detenida, BR-CKP-EDGE-002) y el registro del KPI de ADR-CKP-001 § 9 ("conflicto real").
+- **Forma del contrato**: **pendiente, dueño: worker del canal (TS-GRP-004)**.
+
+**Rutas sin commitear completas** (ADR-CKP-001 § 3): el recomputo ya calcula el conjunto completo de rutas sin commitear de cada worktree. Ese conjunto se mantiene **en memoria** junto a la caché de stat y se entrega al predictor de `crates/core`. No se persiste (el último estado conocido sigue guardando solo la huella, ADR-GRP-013 § 1) y no se publica: el contrato no cambia. ⚠️ **ASSUMPTION** de ADR-CKP-001: con más de 10.000 rutas por worktree, el solape de ese worktree se publica como "parcial"; la cifra la fija SPIKE-CKP-001. El coste en memoria entra en la medición de HUELLA de INF-GRP-002.
+
+**Validación añadida**: un merge que choca en un worktree temporal publica sus rutas sin fusionar y el oid de `MERGE_HEAD`; al abortarlo, el estado en conflicto desaparece; un rebase detenido publica `onto`. El repo queda intacto (INF-GRP-001).

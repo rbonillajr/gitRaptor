@@ -10,7 +10,7 @@ updated: 2026-10-04
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
-related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-007, ADR-GRP-008, ADR-GRP-013, ADR-GRD-001, ADR-GRD-003, ADR-GRD-004, ADR-GRD-006, CTX-GRP-001, BR-GRP-001]
+related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-007, ADR-GRP-008, ADR-GRP-013, ADR-GRD-001, ADR-GRD-003, ADR-GRD-004, ADR-GRD-006, ADR-CKP-001, ADR-CKP-003, CTX-GRP-001, BR-GRP-001]
 tags: [motor-local, perfil, sqlite, rusqlite, directories, almacenamiento, clave-de-repo, p9, privacidad, seguridad, permisos]
 ---
 
@@ -55,7 +55,7 @@ Se usa el crate `directories` para resolver las carpetas estándar del usuario (
 
 ### 2. Organización dentro del perfil
 
-- **Índice global** (un archivo en la carpeta de datos): repos observados con su clave, ruta canónica, estado (observado o retirado), fechas de alta y de retiro, y la pista del commit raíz.
+- **Índice global** (un archivo en la carpeta de datos): repos observados con su clave, ruta canónica, estado (observado o retirado), fechas de alta y de retiro, y la pista del commit raíz. (Enmienda 2026-10-04, Cockpit: también las preferencias de la TUI; ver la sección final.)
 - **Un almacén por repo** (un archivo por clave de repo en la carpeta de datos): worktrees, sesiones, registros de atribución, eventos, huecos y último estado conocido, según el modelo de ADR-GRP-013.
 - **Configuración**: el nivel perfil vive en la carpeta de configuración (formato en ADR-GRP-007). La **configuración local personal de cada repo también vive en el perfil, indexada por la clave de repo** (decisión de Rene Bonilla, 2026-10-03, PQ-3; el detalle es de ADR-GRP-008). El motor solo la lee (Q23).
 
@@ -81,7 +81,7 @@ Se usa el crate `directories` para resolver las carpetas estándar del usuario (
   - **Id de instancia del perfil**: identificador opaco que el daemon **genera al crear el perfil** y **presenta en el handshake** (ADR-GRP-005 § 5). Se escribe como constante en los dispatchers al instalar. Un perfil borrado y recreado tiene otro id, y el hook pasa al modo degradado (`instance-mismatch`) hasta que se adopta la instalación (ADR-GRD-003 § 4, ADR-GRD-005 § 1).
 - **Versión de esquema** en cada archivo, con migraciones incluidas en el binario. Si un archivo tiene un esquema más nuevo que el binario, ese repo no se observa y el motor expone un diagnóstico; no se degrada el archivo.
 - **Integridad**: comprobación rápida al abrir. Un archivo corrupto se aparta dentro del perfil (renombrado con marca de tiempo, sin borrarlo) y ese repo se trata como **perfil perdido** (Q26): almacén nuevo y todo lo anterior "sin atribuir". La corrupción de un repo no afecta a los demás.
-- **Contenido**: solo metadatos (rutas, refs, ids de commit, horas, agentes, señales de atribución). Nunca contenido de archivos del usuario, prompts ni diffs (NFR-03).
+- **Contenido**: solo metadatos (rutas, refs, ids de commit, horas, agentes, señales de atribución). Nunca contenido de archivos del usuario, prompts ni diffs (NFR-03). (Enmienda 2026-10-04, Cockpit: el registro del KPI de la predicción también es solo de metadatos; ver la sección final.)
 - **Licencias** (NFR-11): SQLite es de dominio público; `rusqlite` y `directories` son MIT o MIT/Apache-2.0.
 
 ## Alternativas consideradas
@@ -171,3 +171,31 @@ Decisión del orquestador (2026-10-04), validada por el Arquitecto. No cambia la
 |---|---|---|
 | En Linux se ignoran `XDG_DATA_HOME`, `XDG_CONFIG_HOME` y `XDG_STATE_HOME` heredados y se usan sus valores por defecto bajo la carpeta personal, en una sola función de resolución para todos los procesos | § 1 (tabla y nota) | TS-GRP-003 (entorno hostil, SEC-10); ADR-GRP-005 § 3 |
 | Riesgo residual: `HOME` sigue viniendo del entorno; resolverlo desde la base de usuarios del SO queda propuesto para TS-GRP-004 | § 1 | Revisión del Arquitecto (2026-10-04) |
+
+## Enmienda (2026-10-04, Cockpit)
+
+Aplicada desde DEP-CKP-11 (y la parte de almacén de DEP-CKP-1) de [CTX-CKP-001](../../requirements/features/cockpit/context.md), con [ADR-CKP-001](./ADR-CKP-001-prediccion-conflictos-merge-en-seco.md) § 9 y [ADR-CKP-003](./ADR-CKP-003-arquitectura-tui.md) § 10 (proposed). **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. No cambia la ubicación, la clave de repo, el motor de almacenamiento ni el único escritor. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| Registro del KPI de la predicción en el almacén por repo, solo metadatos, con purga a 90 días | § 4 | DEP-CKP-11; ADR-CKP-001 § 9; Q-CKP-21 |
+| Preferencias de la TUI por usuario: un documento acotado y versionado en el índice global, escrito solo por el daemon | § 2, § 4 | DEP-CKP-11; Q-CKP-17; ADR-CKP-003 § 10 |
+| **Condicionado a SPIKE-CKP-001**: almacén de trabajo de la predicción, solo si se activa la opción (b) | § 1, § 2; nota de la Time Machine | DEP-CKP-1; ADR-CKP-001 § 1 (b) |
+
+**Registro del KPI** (ADR-CKP-001 § 9):
+
+- Una tabla del **almacén por repo**, con migraciones versionadas en el binario, separada de los eventos inmutables de ADR-GRP-013.
+- **Qué guarda**: la primera aparición de cada ⚡ por (par, archivo) y cada conflicto real, con sus horas. El par se identifica por los worktrees y las ramas de ese momento, para sobrevivir al borrado del worktree. Lleva marca si ocurrió en un hueco de observación o llegó del remoto. Rutas y ramas son texto no confiable.
+- **Qué no guarda**: hunks, contenido ni mensajes de commit (NFR-03, regla de § 4).
+- **Retención**: 90 días con purga diaria, con la forma de ADR-GRD-006 § 3. La consulta es local, por el canal.
+
+**Preferencias de la TUI** (Q-CKP-17, BR-CKP-CONS-006):
+
+- **Dónde**: en el **índice global**, no en el almacén por repo, porque incluyen el último repo usado. Tampoco en la carpeta de configuración, que es del usuario y el motor solo lee (ADR-GRP-008).
+- **Forma**: un documento por tipo de cliente (hoy, `tui`), versionado y con rechazo de campos desconocidos. ⚠️ **ASSUMPTION**: tope de 64 KiB. Los repos se referencian por su clave, nunca por ruta. Contenido: repo, panel, filtros y layout.
+- **Escritura**: solo el daemon, a petición de la TUI. Con varias TUIs gana la última escritura. Un fallo al guardar se avisa y no bloquea. Si el perfil se pierde, la TUI arranca con los valores por defecto.
+- **Contrato** de lectura y escritura (necesidad N9 de ADR-CKP-003 § 4): **pendiente, dueño: worker del canal (TS-GRP-004)**.
+
+**Almacén de trabajo de la predicción: condicionado a SPIKE-CKP-001**. Con la opción preferida (a), merge en memoria con `gix`, **no existe** y nada de este párrafo se aplica. Solo si SPIKE-CKP-001 activa la opción (b): un repo *bare* de trabajo por repo en `<datos>/ckp/<id-repo>/`, con `objects/info/alternates` hacia el repo, escrito solo por el daemon. Contiene contenido del usuario, así que, como `tm/`, lleva carpeta 0700 y archivos 0600, queda excluido de las copias de seguridad del SO, se vacía tras cada lote, tiene cuota y aparece en el diagnóstico. La regla de § 4 "solo metadatos" no le aplica.
+
+**Validación añadida**: el almacén de un repo de prueba con contenido marcado no contiene ese contenido en el registro del KPI (ADR-CKP-001, Validación 7); la purga a 90 días borra lo vencido; un documento de preferencias por encima del tope o con un campo desconocido se rechaza sin tocar el guardado.
