@@ -14,12 +14,12 @@ Guardar un punto recuperable antes de toda operación de GitRaptor y capturar a 
 
 | ID | Título | Decisión (1 línea) | Status |
 |----|--------|--------------------|--------|
-| [ADR-TMC-001](../decisions/ADR-TMC-001-almacen-snapshots-perfil.md) | Almacén de snapshots | Repo Git bare privado por repo en el perfil, con objetos propios (siembra por enlace duro o copia, más anclaje incremental), contenido en bruto sin filtros, exclusiones declaradas, almacén tratado como entrada no confiable; nunca en el repo del usuario | accepted |
+| [ADR-TMC-001](../decisions/ADR-TMC-001-almacen-snapshots-perfil.md) | Almacén de snapshots | Repo Git bare privado por repo en el perfil, con objetos propios (siembra por clon con copia en escritura o copia, nunca por enlace duro, más anclaje incremental; escritura con gitoxide), contenido en bruto sin filtros, exclusiones declaradas, almacén tratado como entrada no confiable; nunca en el repo del usuario | accepted |
 | [ADR-TMC-002](../decisions/ADR-TMC-002-escritor-time-machine.md) | Escritor de la Time Machine | Escrituras internas en el componente `timemachine` del daemon, con capa propia en `crates/git` sin hooks, filtros ni red (SEC-TMC-02); aplicación con precondiciones, snapshot previo, `index.lock` propio, refs con valor esperado e intercambio atómico por archivo; las operaciones de usuario las ejecuta el daemon fuera de esa capa | accepted |
 | [ADR-TMC-003](../decisions/ADR-TMC-003-oplog-diario-recuperacion.md) | Oplog, diario y recuperación | SQLite propio por repo, solo por anexión y encadenado por hash; solicitante congelado; al arrancar se descarta, aborta o marca como interrumpido; solo se libera el `index.lock` propio | accepted |
 | [ADR-TMC-004](../decisions/ADR-TMC-004-cobertura-dos-niveles.md) | Cobertura en dos niveles | La operación protegida es el único camino de escritura; captura por observación sobre los eventos del motor, fuera de su presupuesto, con coalescencia y cuotas; previo vía hook como contrato para Guardrails | accepted |
 | [ADR-TMC-005](../decisions/ADR-TMC-005-solicitante-permisos-solape.md) | Solicitante, permisos y solape | Solicitante por ascendencia endurecida en el daemon (agente X o sin atribuir); reto ligado al plan; MCP sin atribuir rechazado de entrada; Guardrails solo deniega; solape por archivo y ref; riesgo residual aceptado | accepted |
-| [ADR-TMC-006](../decisions/ADR-TMC-006-presupuesto-rendimiento-snapshot.md) | Presupuesto del snapshot | p95 < 200 ms del snapshot previo con almacén sembrado, con 1 y con 10 worktrees activos; etapas 180 ms + margen 20 ms; repo mediano fijado por SPIKE-TMC-001; gate en el banco de INF-GRP-002 | accepted |
+| [ADR-TMC-006](../decisions/ADR-TMC-006-presupuesto-rendimiento-snapshot.md) | Presupuesto del snapshot | p95 < 200 ms del snapshot previo con almacén sembrado, con 1 y con 10 worktrees activos; etapas 180 ms + margen 20 ms, con cifras medidas en macOS; repo mediano = perfil `M` (SPIKE-TMC-001); escalones 2 y 3 obligatorios; gate en el banco de INF-GRP-002 | accepted |
 | [ADR-TMC-007](../decisions/ADR-TMC-007-retencion-purga-segura.md) | Retención y purga | `timeMachine.retentionDays` (perfil y local, 30); protección del previo a la última destructiva por worktree; purga en dos fases con aviso; solo se borran refs del almacén; `forget` fuera del diseño (TQ-17) | accepted |
 
 ### Grafo de dependencias
@@ -128,6 +128,16 @@ La arquitectura de motor-local ya está en `main` (PR #8) y los puntos 1 a 5 est
 - **INF-GRP-001**: "Nota de integración (Time Machine, INF-TMC-001): la huella 'repo intacto' y el repo canario se reutilizan desde INF-TMC-001. El canario se amplía con los casos de SEC-TMC-02: `core.fsmonitor`, `core.worktree` hacia fuera del repo, `includeIf` hostil, `filter.*`, `commit.gpgSign` global e `init.templateDir` con hooks."
 - **INF-GRP-002**: "Nota de integración (Time Machine, ADR-TMC-006 y US-TMC-020): el banco añade el escenario 'operación protegida con trabajo sin commitear' sobre el repo de referencia de SPIKE-TMC-001, con 1 y con 10 worktrees activos, con gate de p95 < 200 ms del snapshot previo y aviso por etapa. El gate del motor se ejecuta con la Time Machine activa."
 
+### 7.2 Notas de SPIKE-TMC-001 para motor-local — pendientes de integración
+
+**Estado**: **pendientes**. Salen de las enmiendas de SPIKE-TMC-001 (2026-10-04) a los ADR de la Time Machine. Esta rama solo toca docs de time-machine, así que se aplican en una rama de motor-local. Ninguna cambia una decisión de motor-local salvo la que se indica.
+
+- **ADR-GRP-001**: "Nota de integración (Time Machine, ADR-TMC-006 § 5, enmienda del 2026-10-04): la excepción preaprobada en TQ-4 → a queda **activada**. El almacén de snapshots de la Time Machine se escribe con gitoxide en el proceso, en un submódulo de la capa de escritura de la Time Machine (ADR-TMC-002 § 1). El repo del usuario sigue escribiéndose solo con Git CLI."
+- **ADR-GRP-009 § 4** (E6): resolver el binario de Git en macOS sin el shim `/usr/bin/git` (unos 17 ms extra por proceso) y sin ejecutar `xcrun`, leyendo `/var/db/xcode_select_link`. Afecta al motor, al ejecutor y a la Time Machine, que usan la misma resolución.
+- **ADR-GRP-009 § 3** (E9): valorar `core.untrackedCache=false` en lugar de `keep`. `keep` lee una untracked cache que un agente puede falsificar. Hay que comprobar que gix la ignora en la versión fijada. Es un cambio de opción, no de decisión.
+- **ADR-GRP-010 / TS-GRP-002 / TS-GRP-003** (E2): exponer por worktree "rutas cambiadas desde la marca X", con un indicador de continuidad que se da por roto ante un hueco, el modo degradado, un reinicio, un desbordamiento o un cambio en las reglas de ignore. La Time Machine lo consume para el escalón 2 de ADR-TMC-006 § 5.
+- **INF-GRP-002** (E4): el banco usa el generador determinista de SPIKE-TMC-001 (`spikes/snapshot-overhead/`) con el perfil `M` como repo de referencia y el `L` para el caso fuera de referencia.
+
 **Notas para el PO** (no se edita el requerimiento desde la arquitectura; el PO las aplica en paralelo en `business-rules.md` y `context.md`):
 
 - **BR-TMC-CONS-004**: la recuperación al arrancar borra un `index.lock` creado por la propia Time Machine, sin que nadie lo pida (ADR-TMC-003 § 6.4). Es una excepción explícita: libera un lock propio y no toca contenido. Conviene recogerla en la regla.
@@ -140,5 +150,6 @@ La arquitectura de motor-local ya está en `main` (PR #8) y los puntos 1 a 5 est
 
 - **R2** (aceptado): lo editado entre la última captura y una operación destructiva de Git crudo sin hooks puede perderse (ventana de ADR-TMC-004 § 2).
 - **Evasión del árbol de procesos** (aceptado en ADR-TMC-005): un proceso del mismo usuario que se desacopla (doble fork, `setsid`, `launchctl`, `systemd-run`, `osascript`) puede pasar por "sin atribuir" y confirmar. Mitigado con el snapshot previo de cada operación; la auditoría del oplog es manipulable por el mismo usuario (SEC-TMC-09).
-- **Disco del almacén** (TQ-1, TQ-5): pendiente de la medición de SPIKE-TMC-001.
+- **Disco del almacén** (TQ-1, TQ-5): medido por SPIKE-TMC-001 en macOS y aceptable (un mes de capturas, unos 200 MiB tras consolidar). El riesgo son los archivos grandes de los previos garantizados frente a las cuotas de SEC-TMC-12. Linux y Windows sin medir.
+- **Continuidad del motor** (SPIKE-TMC-001, E2): el p95 de NFR-04 depende de que TS-GRP-002/003 expongan las rutas cambiadas desde una marca (§ 7.2). Sin eso, el previo hace detección completa y no cumple el presupuesto.
 - **P17 de motor-local**: bloquea US-TMC-011 (D-TMC-22).
