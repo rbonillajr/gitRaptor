@@ -16,6 +16,26 @@ use gitraptor_core::profile::{Agent, AgentKind, Origin, Profile, ProfileDirs, Wr
 
 const RAPTOR: &str = env!("CARGO_BIN_EXE_raptor");
 
+/// Executable name of the simulated agent (`GITRAPTOR_AGENT_EXECUTABLES`).
+const FAKE_AGENT: &str = "raptor-fake-agent";
+
+/// `argv` run inside a pseudo-terminal with `script`.
+fn in_pty(argv: &[&str]) -> Command {
+    #[cfg(target_os = "macos")]
+    {
+        let mut cmd = Command::new("/usr/bin/script");
+        cmd.arg("-q").arg("/dev/null").args(argv);
+        cmd
+    }
+    // Pendiente: etapa de validación multiplataforma (util-linux syntax).
+    #[cfg(not(target_os = "macos"))]
+    {
+        let mut cmd = Command::new("script");
+        cmd.args(["-qec", &argv.join(" "), "/dev/null"]);
+        cmd
+    }
+}
+
 struct Fixture {
     tmp: tempfile::TempDir,
 }
@@ -85,12 +105,16 @@ impl Fixture {
             .unwrap();
     }
 
-    /// `raptor <args>` with exactly `env` plus the profile override.
+    /// `raptor <args>` with exactly `env` plus the profile override and the
+    /// agent classifier narrowed to a simulated agent (debug builds only),
+    /// so the Claude Code session that may run these tests is not taken for
+    /// an agent.
     fn command(&self, args: &[&str], env: &[(&str, OsString)]) -> Command {
         let mut cmd = Command::new(RAPTOR);
         cmd.args(args)
             .env_clear()
             .env("GITRAPTOR_PROFILE_DIR", self.profile_root())
+            .env("GITRAPTOR_AGENT_EXECUTABLES", FAKE_AGENT)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         for (k, v) in env {
@@ -103,8 +127,17 @@ impl Fixture {
         self.command(&["daemon"], env).spawn().unwrap()
     }
 
+    /// `raptor daemon stop --yes` as the developer: in a pseudo-terminal, so
+    /// it has a controlling terminal (ADR-GRP-005 § 6), and not under an
+    /// agent. Goes through the channel as a reserved command.
     fn stop(&self) -> Output {
-        self.command(&["daemon", "stop"], &[]).output().unwrap()
+        let mut cmd = in_pty(&[RAPTOR, "daemon", "stop", "--yes"]);
+        cmd.env_clear()
+            .env("GITRAPTOR_PROFILE_DIR", self.profile_root())
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        cmd.output().unwrap()
     }
 
     /// Waits until the log has `n` lines containing `needle`.
@@ -237,11 +270,30 @@ fn daemon_stop_is_orderly() {
     );
     assert!(wait_exit(&mut daemon).success());
 
+    // TS-GRP-004: the stop goes through the channel as a reserved command,
+    // so it is an attributed stop with the client that asked for it.
     let log = fx.log();
     assert!(
-        log.contains("daemon_stopped cause=signal recorded=true signal=TERM"),
+        log.contains("reserved_command op=daemon.stop outcome=accepted"),
         "{log}"
     );
+    assert!(
+        log.contains("daemon_stopped cause=stop-command recorded=true"),
+        "{log}"
+    );
+    let (profile, _) = Profile::open(fx.dirs()).unwrap();
+    match profile.daemon_run().unwrap() {
+        gitraptor_core::profile::DaemonRun::Stopped {
+            cause,
+            requested_by,
+            ..
+        } => {
+            assert_eq!(cause, "stop-command");
+            assert!(requested_by.unwrap().starts_with("client:"));
+        }
+        other => panic!("{other:?}"),
+    }
+    drop(profile);
     assert!(
         observed_until(&fx).is_some(),
         "observed-until not persisted"

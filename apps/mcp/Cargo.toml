@@ -12,8 +12,12 @@ name = "raptor-mcp"
 path = "src/main.rs"
 
 [dependencies]
+gitraptor-api.workspace = true
 gitraptor-core.workspace = true
 gitraptor-policy.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
