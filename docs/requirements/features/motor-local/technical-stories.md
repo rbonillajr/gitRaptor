@@ -2,7 +2,7 @@
 mode: draft
 status: expanded
 generated: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 generator: architect
 domain: GRP
 feature: motor-local
@@ -34,7 +34,7 @@ related:
 | [INF-GRP-001](./technical-stories/INF-GRP-001-arnes-repo-intacto.md) | INF | Arnés de verificación "repo intacto" en los tres SO | Gate de CI: cero diferencias imputables al motor en el repo y fuera del perfil; repo canario y auditoría de `exec` (SEC-09) | ADR-GRP-009, ADR-GRP-006 | Todas, de forma transversal (BR-CONS-001) | TS-GRP-002 (núcleo); suites incrementales con TS-GRP-003, TS-GRP-004, US-GRP-002, US-GRP-004 y US-GRP-007 | Medium | Dev Spec Pending |
 | [INF-GRP-002](./technical-stories/INF-GRP-002-banco-frescura-escala.md) | INF | Banco de medición de frescura y escala | Gate de CI de NFR-04 y NFR-05 que nombra la etapa que se pasó | ADR-GRP-011, ADR-GRP-010 | US-GRP-001, 002, 012 | TS-GRP-004, US-GRP-002 | Medium | Dev Spec Pending |
 | [SPIKE-GRP-001](./technical-stories/SPIKE-GRP-001-precision-deteccion.md) | SPIKE | Precisión de la detección de Claude Code en dogfooding | Medir el 90% sin atribuir trabajo humano; S2a frente a S2b; TTY de la shell de Claude Code | ADR-GRP-012 (valida) | US-GRP-007, 008 | — (prototipo aislado) | Medium | Research Pending |
-| [SPIKE-GRP-002](./technical-stories/SPIKE-GRP-002-viabilidad-observador.md) | SPIKE | Viabilidad del observador de cambios a escala en los tres SO | Medir las cifras de ADR-GRP-011, el debounce de 75 ms, límites, bloqueos en Windows y huecos | ADR-GRP-010, ADR-GRP-011 (valida) | US-GRP-002, 003, 004, 005 | — (prototipo aislado) | Medium | Research Partial: macOS medido ([resultados](./research/SPIKE-GRP-002-resultados.md)); Linux y Windows pendientes |
+| [SPIKE-GRP-002](./technical-stories/SPIKE-GRP-002-viabilidad-observador.md) | SPIKE | Viabilidad del observador de cambios a escala en los tres SO | Medir las cifras de ADR-GRP-011, el debounce de 75 ms, límites, bloqueos en Windows y huecos | ADR-GRP-010, ADR-GRP-011 (valida) | US-GRP-002, 003, 004, 005 | — (prototipo aislado) | Medium | Done en macOS ([resultados](./research/SPIKE-GRP-002-resultados.md); enmiendas aplicadas en ADR-GRP-010 y ADR-GRP-011). ⚠️ Pendiente: Linux y Windows, con el procedimiento del README del prototipo |
 
 **Cambios de complejidad respecto al outline**: TS-GRP-002, TS-GRP-003 y TS-GRP-004 pasan de Medium a High (riesgo de pérdida de datos o superficie de seguridad en tres SO y ruta crítica). TS-GRP-003 añade la dependencia de TS-GRP-002 (resuelve Git al arrancar). El arranque bajo demanda pasa a TS-GRP-004 (biblioteca cliente) para no crear un ciclo entre TS-GRP-003 y TS-GRP-004.
 

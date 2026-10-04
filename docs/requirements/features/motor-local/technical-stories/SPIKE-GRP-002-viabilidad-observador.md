@@ -8,7 +8,7 @@ domain: GRP
 priority: high
 complexity: medium
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 related:
   adrs: [ADR-GRP-010, ADR-GRP-011, ADR-GRP-009, ADR-GRP-006]
   stories: [US-GRP-002, US-GRP-003, US-GRP-004, US-GRP-005]
@@ -23,7 +23,9 @@ tags: [motor-local, spike, watcher, latencia, escala, debounce, windows, inotify
 
 **Valor**: confirmar con mediciones reales el diseño de ADR-GRP-010 y las cifras de ADR-GRP-011 antes de que US-GRP-002 entre en desarrollo.
 
-> Un SPIKE no lleva Dev Spec: su entregable es un Research Brief en `research/SPIKE-GRP-002-viabilidad-observador.md`. Prototipo aislado, sin código del motor. **Depende de**: — (arranca el día uno). **Valida**: ADR-GRP-010 y ADR-GRP-011.
+> Un SPIKE no lleva Dev Spec: su entregable es un Research Brief en [`research/SPIKE-GRP-002-resultados.md`](../research/SPIKE-GRP-002-resultados.md). Prototipo aislado, sin código del motor. **Depende de**: — (arranca el día uno). **Valida**: ADR-GRP-010 y ADR-GRP-011.
+>
+> **Estado (2026-10-04)**: hecho en **macOS**; sus enmiendas están aplicadas en ADR-GRP-010 y ADR-GRP-011. **Linux y Windows siguen pendientes**: el `status` queda en `ready` hasta medirlos con el procedimiento del README del prototipo.
 
 ### Pregunta
 
