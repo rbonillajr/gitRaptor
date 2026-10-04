@@ -6,13 +6,13 @@ updated: 2026-10-04
 generator: architect
 domain: GRP
 feature: motor-local
-total_artifacts: 20
-expanded: 20
-approved: 20
+total_artifacts: 27
+expanded: 27
+approved: 27
 related:
   context: [CTX-GRP-001]
   rules: [BR-GRP-001]
-  adrs: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-004, ADR-GRP-005, ADR-GRP-006, ADR-GRP-007, ADR-GRP-008, ADR-GRP-009, ADR-GRP-010, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, ADR-TMC-001, ADR-TMC-002, ADR-TMC-003, ADR-TMC-004, ADR-TMC-005, ADR-TMC-006, ADR-TMC-007]
+  adrs: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-004, ADR-GRP-005, ADR-GRP-006, ADR-GRP-007, ADR-GRP-008, ADR-GRP-009, ADR-GRP-010, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, ADR-TMC-001, ADR-TMC-002, ADR-TMC-003, ADR-TMC-004, ADR-TMC-005, ADR-TMC-006, ADR-TMC-007, ADR-GRD-001, ADR-GRD-002, ADR-GRD-003, ADR-GRD-004, ADR-GRD-005, ADR-GRD-006, ADR-GRD-007]
   stories: [US-GRP-001, US-GRP-002, US-GRP-003, US-GRP-004, US-GRP-005, US-GRP-006, US-GRP-007, US-GRP-008, US-GRP-009, US-GRP-010, US-GRP-011, US-GRP-012, US-GRP-013, US-GRP-014, US-GRP-015, US-GRP-016]
 ---
 
@@ -66,6 +66,13 @@ El formato "JSON estricto con `$schema`" no es una PQ: es la propuesta base del 
 | [ADR-TMC-005](./ADR-TMC-005-solicitante-permisos-solape.md) | Solicitante, permisos y solape | Solicitante por ascendencia en el daemon (agente X o sin atribuir); reto ligado al plan; Guardrails solo deniega; solape por archivo y ref | accepted |
 | [ADR-TMC-006](./ADR-TMC-006-presupuesto-rendimiento-snapshot.md) | Presupuesto del snapshot (NFR-04) | p95 < 200 ms del snapshot previo con almacén sembrado; repo mediano fijado por SPIKE-TMC-001; gate en el banco de INF-GRP-002 | accepted |
 | [ADR-TMC-007](./ADR-TMC-007-retencion-purga-segura.md) | Retención y purga segura | `timeMachine.retentionDays` (perfil y local, 30); protección del previo a la última destructiva; purga en dos fases con aviso; solo refs del almacén | accepted |
+| [ADR-GRD-001](./ADR-GRD-001-capa-hooks-instalacion.md) | Capa de hooks: instalación, encadenado y worktrees | Dispatchers propios en el directorio Git común activados con `core.hooksPath` absoluto; entorno por allowlist y encadenado del hook previo sin moverlo ni editarlo; instalación transaccional con un único punto de commit, ejecutada por el daemon tras un comando reservado; referencia de integridad en el perfil | accepted |
+| [ADR-GRD-002](./ADR-GRD-002-operaciones-interceptables.md) | Operaciones interceptables y límites de los hooks | Cada operación la gobierna el hook que corre antes de sus efectos, con `reference-transaction` en `prepared` como segunda línea que `--no-verify` no salta; toda ref fuera de la lista de excepciones es gobernada; lecturas sin objetos de reemplazo; lista publicada de lo no impedible versionada en el binario | accepted |
+| [ADR-GRD-003](./ADR-GRD-003-motor-decision-contrato.md) | Motor de decisión, mínimo seguro y contrato | Función pura y determinista en `crates/policy`, alojada por el daemon y expuesta por el canal (`crates/api`); el cliente del hook solo habla con un daemon autenticado por una ruta fijada al instalar; actor e identidad del `git` antecesor más cercano; sin daemon, modo degradado más estricto que no lee el perfil | accepted |
+| [ADR-GRD-004](./ADR-GRD-004-configuracion-efectiva.md) | Configuración efectiva para Guardrails | Cargador único en `crates/policy` que lee el equipo de objetos commiteados sin objetos de reemplazo; la copia de la rama principal es el suelo, única fuente de relajaciones y de la rama base; el `HEAD` del worktree solo endurece; un cambio del suelo que baje la protección espera la confirmación del humano | accepted |
+| [ADR-GRD-005](./ADR-GRD-005-estado-proteccion.md) | Estado de protección y detección de pérdida | Estado derivado, no guardado, de dos capas: hooks verificados por worktree contra la referencia de integridad del diario y repo en la allowlist del MCP (F-001-05); pérdida detectada por el observador del motor o por comprobación periódica; cada transición al registro y aviso con rebote solo si la pérdida no la hizo Guardrails | accepted |
+| [ADR-GRD-006](./ADR-GRD-006-registro-decisiones.md) | Registro de decisiones (90 días) | Tabla propia de Guardrails en el almacén por repo del perfil, separada de los eventos inmutables; la escribe el daemon con agregación y límite de inserciones, se purga a los 90 días y se consulta por el canal; instalaciones, desinstalaciones, adopciones e intentos de comandos reservados también van a la auditoría de ADR-GRP-013 | accepted |
+| [ADR-GRD-007](./ADR-GRD-007-acciones-reservadas-excepcion.md) | Acciones reservadas al humano y excepción consciente | Amplían los comandos reservados de ADR-GRP-005 § 6 con su mismo mecanismo en el daemon; las que relajan añaden anuncio, ventana cancelable y auditoría en el MVP, y factor fuera de banda antes de US-GRD-013 y US-GRD-015; la excepción es un token de un solo uso ligado al `git` hijo directo del `raptor` que lo pidió y a la transición exacta | accepted |
 
 ## Grafo de dependencias entre ADRs nuevos
 
@@ -87,12 +94,23 @@ El formato "JSON estricto con `$schema`" no es una PQ: es la propuesta base del 
 | ADR-TMC-005 | ADR-GRP-005 § 6 (controles del daemon), 007 (políticas), 012 (procesos de agente), 013; TMC-002, 003 | — |
 | ADR-TMC-006 | ADR-GRP-001, 011 (reloj y banco); TMC-001, 004 | — (lo valida SPIKE-TMC-001) |
 | ADR-TMC-007 | ADR-GRP-007 (sección `timeMachine`), 008; TMC-001, 003 | — |
+| ADR-GRD-001 | ADR-GRP-001, 002 (stack), 005, 006, 009, 013; ADR-TMC-002; GRD-002 (§ 4 entrada normalizada), 003 (§ 4 canal y modo degradado), 005 (detección de pérdida), 006 (registro), 007 (comando reservado y token) | GRD-002, 003, 005, 007 |
+| ADR-GRD-002 | ADR-GRP-011 (criterio p95); ADR-TMC-004 § 3 (snapshot previo); GRD-001 (§ 2 constantes del dispatcher), 003 (§ 4 canal autenticado), 004 (forja de la configuración), 005 (pérdida y exposición de la lista) | GRD-001, 003, 005, 006, 007 |
+| ADR-GRD-003 | ADR-GRP-005, 006, 007, 012, 013; ADR-TMC-002, 004, 005; GRD-001 (§ 2 constantes), 002 (§ 4 transiciones, § 5 presupuesto), 004 (configuración efectiva y rama base), 005 (estado y ventana degradada), 006 (spool y registro), 007 (excepción) | GRD-001, 002, 005, 006, 007; ADR-GRP-007 (coautoría) |
+| ADR-GRD-004 | ADR-GRP-006 (§ 4 almacén por repo), 007 (PQ-8, PQ-9), 008, 009, 010; GRD-005 (diagnóstico `base-change-pending`), 007 (confirmación por comando reservado) | GRD-002, 003, 005, 007; ADR-GRP-007 (coautoría) |
+| ADR-GRD-005 | ADR-GRP-005, 006, 010, 013; GRD-001 (diario, § 2 y § 8), 002 (lista publicada), 003 (§ 4 modo degradado), 004 (configuración ilegible y pendientes), 006 (registro), 007 (adopción y confirmación) | GRD-001, 002, 003, 004, 007 |
+| ADR-GRD-006 | ADR-GRP-005, 006, 013 (auditoría permanente); GRD-002 (§ 4 rama normalizada), 003 (§ 3 efectos, § 4 spool, § 6 correlación), 007 (§ 3 excepción cancelada) | GRD-001, 003, 005, 007 |
+| ADR-GRD-007 | ADR-GRP-005 § 6, 009 § 4, 012, 013; GRD-001 (§ 2 encadenado), 002 (§ 4 refs y alias), 003 (§ 3 y § 6), 004 (§ 3 confirmaciones), 005 (§ 1 adopción), 006 (§ 1 registro) | GRD-001, 003, 004, 005, 006 |
 
-Grafo derivado de la sección Referencias de cada ADR. ADR-GRP-005 es el proceso que aloja al resto, así que sus dependencias con 006, 009, 012 y 013 son mutuas: él usa sus rutas, su Git, su ascendencia y sus huecos, y ellos corren dentro del daemon. Las aristas de los ADR-TMC hacia los ADR-GRP se listan solo en las filas TMC; las filas GRP no se modifican.
+Grafo derivado de la sección Referencias de cada ADR. ADR-GRP-005 es el proceso que aloja al resto, así que sus dependencias con 006, 009, 012 y 013 son mutuas: él usa sus rutas, su Git, su ascendencia y sus huecos, y ellos corren dentro del daemon. Las aristas de los ADR-TMC y ADR-GRD hacia los ADR-GRP (y de los ADR-GRD hacia los ADR-TMC) se listan solo en las filas TMC y GRD; las filas GRP y TMC no se modifican. Entre los ADR-GRD, la sección Referencias solo cita otros frentes, así que sus aristas internas salen de las menciones explícitas: "depende de" significa que el ADR cita al otro, y "lo consumen" es la relación inversa. La mayoría son mutuas porque la capa de hooks, el motor de decisión, el estado y el registro se apoyan unos en otros. La arista de ADR-GRP-007 hacia GRD-003 y 004 es la que ya figura en su fila.
 
 ### Feature time-machine
 
 Los ADR-TMC-001 a 007 (aceptados el 2026-10-03) son de la feature `time-machine` (F-001-03). Su resumen, las decisiones TQ-1 a TQ-17 y el mapa de historias están en el [overview de la Time Machine](../time-machine/overview.md).
+
+### Feature guardrails
+
+Los ADR-GRD-001 a 007 (aceptados el 2026-10-04) son de la feature `guardrails` (F-001-04). Su NFR, los riesgos residuales y la tabla de enmiendas en otros frentes están en [non-functional-guardrails.md](../non-functional-guardrails.md). Las decisiones Q-GRD-1 a Q-GRD-27, que incluyen D5 a D12, y el contexto de la feature están en [context.md](../../requirements/features/guardrails/context.md#decisiones-tomadas).
 
 ---
 
