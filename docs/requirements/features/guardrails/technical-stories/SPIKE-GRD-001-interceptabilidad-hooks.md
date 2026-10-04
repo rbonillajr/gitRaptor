@@ -21,6 +21,8 @@ tags: [guardrails, spike, hooks-git, interceptabilidad, reference-transaction, h
 
 ## SPIKE-GRD-001: Interceptabilidad, coexistencia y coste de la capa de hooks en los tres SO
 
+> **Estado (2026-10-04)**: **Done para macOS** (Git 2.38.5, 2.50.1 y 2.56.0, esta también con reftable). Research Brief: [`research/SPIKE-GRD-001-resultados.md`](../research/SPIKE-GRD-001-resultados.md). Las 17 enmiendas recomendadas se aplicaron en ADR-GRD-001 y ADR-GRD-002, con efectos en ADR-GRD-003 y ADR-GRD-005, y las garantías al usuario quedaron en Q-GRD-28 a Q-GRD-31. **Pendientes**: Linux, Windows (incluido el coste, con el dispatcher nativo) y los casos sin verificar del § 11 de los resultados. Siguen bloqueando el merge de US-GRD-001 y el cierre de las Dev Specs de US-GRD-002 y US-GRD-004.
+
 **Valor**: confirmar con mediciones reales la matriz de ADR-GRD-002 y el diseño de instalación de ADR-GRD-001, antes de que la lista publicada de operaciones no impedibles y el encadenado con gestores se conviertan en contrato.
 
 > Un SPIKE no lleva Dev Spec: su entregable es un Research Brief en `research/SPIKE-GRD-001-interceptabilidad-hooks.md`. Es un prototipo aislado: dispatchers de prueba y repos temporales, sin código del daemon. **Depende de**: nada; arranca el día uno, en paralelo con el motor. **Valida**: ADR-GRD-001, ADR-GRD-002, la parte de detección de ADR-GRD-005 y la normalización y el criterio de Windows de ADR-GRD-007. **Bloquea**: el merge de US-GRD-001 (la parte de force-push y borrado de la rama base, y el coste en Windows) y el cierre de las Dev Specs de US-GRD-002 y US-GRD-004.

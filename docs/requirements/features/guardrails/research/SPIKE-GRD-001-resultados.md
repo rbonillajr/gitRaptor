@@ -2,7 +2,7 @@
 id: SPIKE-GRD-001-RES
 title: "Resultados de SPIKE-GRD-001: interceptabilidad, coexistencia y coste de la capa de hooks (macOS)"
 type: research
-status: draft
+status: done
 feature: guardrails
 domain: GRP
 spike: SPIKE-GRD-001
@@ -19,7 +19,7 @@ tags: [guardrails, spike, hooks-git, reference-transaction, pre-push, force-push
 
 > **Alcance de esta entrega**: macOS 26.6.2 (arm64, APFS sin distinción de mayúsculas), con Git **2.38.5** (mínima, NFR-07), **2.50.1** (la de Apple) y **2.56.0** (última estable). La 2.56.0 se probó además con **reftable**. **Linux y Windows quedan sin verificar** (procedimiento al final). El prototipo y la evidencia están en [`spikes/hook-interceptability/`](../../../../../spikes/hook-interceptability/). Cada afirmación remite a un caso de una suite (`01-…` a `06-…`) y a su TSV en `results/<so>-git<versión>/`.
 >
-> **No se aplica ningún cambio a los ADR.** Las enmiendas del § 9 son recomendaciones para el Arquitecto.
+> **Estado (2026-10-04): Done para macOS.** Las 17 enmiendas del § 9 y la decisión sobre reftable se **aplicaron el 2026-10-04** como secciones "Enmienda (2026-10-04, SPIKE-GRD-001)" de ADR-GRD-001 y ADR-GRD-002 (con efectos en ADR-GRD-003 y ADR-GRD-005) y como Q-GRD-28 a Q-GRD-31 en el requerimiento. La resolución de cada una está en el § 13. Linux, Windows y el coste en Windows siguen pendientes y bloquean el merge de US-GRD-001.
 
 ## 1. Veredicto
 
@@ -282,7 +282,7 @@ En los seis primeros escenarios, "procesos de hook" se contó con una sonda en *
 4. **El guard en `sh` no sirve con entradas grandes**: con 1.000 líneas en una sola transacción (`fetch --atomic`, 2.38/2.50), V3 añade +565/+641 ms frente a +17/+42 de V1. Confirma que la evaluación debe estar en el binario y que el `sh` solo debe decidir el estado.
 5. **Windows sin medir**: el `sh` de Git for Windows es más caro que el de macOS. Con estos números, el dispatcher nativo de Windows (pendiente en ADR-GRD-001) deja de ser una optimización y pasa a ser **necesario** si se mantiene el conjunto completo.
 
-## 9. Enmiendas recomendadas (sin aplicar)
+## 9. Enmiendas recomendadas (aplicadas el 2026-10-04; resolución en el § 13)
 
 ### ADR-GRD-002
 
@@ -366,3 +366,30 @@ GIT_BIN_DIR=<git-2.38.5>/bin SKIP_COST=1 ./run-all.sh
 GIT_BIN_DIR=<git-2.56.0>/bin REF_FORMAT=reftable SKIP_COST=1 ./run-all.sh
 BENCH_N=100 bash suites/06-cost.sh                          # en reposo
 ```
+
+## 13. Resolución de las enmiendas (2026-10-04)
+
+Cada fila es una **Decisión del orquestador (2026-10-04), validada por Arquitecto/PO**. Los subagentes Arquitecto y PO hicieron la validación y propusieron los ajustes de la tercera columna.
+
+| Enmienda | Resolución | Ajuste del Arquitecto o el PO | Aplicada en |
+|---|---|---|---|
+| E-02-1 · Matriz | Aceptada. Crear worktree sin rama nueva: A efectiva, publicada como no impedible | Motivo nuevo `no-reconocible` (Arquitecto) | ADR-GRD-002 § 1–3 |
+| E-02-2 · Solo `prepared` | Aceptada | — | ADR-GRD-002 § 4; ADR-GRD-001 § 2 |
+| E-02-3 · Entrada (`ref:`, borrado, `HEAD`) | Aceptada | — | ADR-GRD-002 § 4 |
+| E-02-4 · Reftable | Límite conocido, publicado en la lista del repo y en el permiso; mitigación después del hecho | Detector: no basta Q42, `-M feat main` reescribe la base; el backend se vuelve a comprobar; regresión por versión (Arquitecto). Aviso propio y recuperación guiada, después del MVP (PO) | ADR-GRD-002 (Enmienda); ADR-GRD-005; Q-GRD-28; BR-EDGE-001/003; US-GRD-001/004 |
+| E-02-5 · *Prune* de `pack-refs` | Aceptada | En la vía rápida del binario, no en `sh` (Arquitecto) | ADR-GRD-002 § 4 |
+| E-02-6 · Pseudo-refs | Aceptada | Formas `main-worktree/` y `worktrees/<id>/` (Arquitecto) | ADR-GRD-002 § 4 |
+| E-02-7 · Saltos nuevos | Aceptada: efecto parcial (B) declarado | Motivo `renombrado-sobre-base` con el oid para recuperar (Arquitecto y PO) | ADR-GRD-002 § 2; ADR-GRD-003 § 3; BR-EDGE-003 |
+| E-02-8 · Clon superficial | Falso positivo aceptado | Apartado "lo que se deniega de más", motivo `historia-superficial` (PO, Arquitecto) | ADR-GRD-002 § 1, § 3; Q-GRD-31 |
+| E-02-9 · Presupuesto | Dos ejes y gate de procesos por comando | Se descarta +50 ms (Arquitecto); techo ≤ 150 ms p95 por commit o cambio de rama, ⚠️ por confirmar por Rene (PO) | ADR-GRD-002 § 5; NFR-GRD-04; Q-GRD-30 |
+| E-02-10 · Alias en todas las líneas | Aceptada | — | ADR-GRD-002 § 4 |
+| E-01-1 · `sh` sin binario | Aceptada | — | ADR-GRD-001 § 3 |
+| E-01-2 · Conjunto mínimo | Aceptada | Orden dispatcher→política, regeneración archivo por archivo con lock, ventana de hooks previos declarada; husky ⚠️ (Arquitecto) | ADR-GRD-001 § 2; ADR-GRD-005 |
+| E-01-3 · Salida fuera de `prepared` | Aceptada | — | ADR-GRD-001 § 2 |
+| E-01-4 · lefthook 2 y husky | Aceptada | — | ADR-GRD-001 § 6 |
+| E-01-5 · Huella | (a) criterio semántico | Redacción de BR-CONS-005 y del RNF (PO) | ADR-GRD-001 § 4; NFR-GRD-01; Q-GRD-29; US-GRD-003 |
+| E-01-6 · No se instala | Reftable sí se instala; comprobación con `--show-scope --show-origin` | — | ADR-GRD-001 § 5 |
+| E-01-7 · Binario nativo | Aceptada | Necesario para `reference-transaction` desde Git 2.54 en los tres SO (Arquitecto) | ADR-GRD-001 § 2 |
+| Coste 17–39 s / 1.000 refs | Coste lineal declarado, pendiente ≤ una invocación de la vía mínima por transacción, vía rápida en el binario, dispatcher nativo; sin quitar `reference-transaction` | "Infrecuente" no se asume (Arquitecto); decirlo en la documentación y en el permiso (PO) | ADR-GRD-002 § 5; Q-GRD-30 |
+
+**Pendiente en otros frentes**: ADR-GRP-010 (que el observador vigile `reftable/`) y ADR-TMC-004 § 2 (nivel b con eventos de reftable), en la tabla de [non-functional-guardrails.md](../../../../architecture/non-functional-guardrails.md). **Fuera de alcance**: reportar aguas arriba a Git el renombrado sin hook en reftable.

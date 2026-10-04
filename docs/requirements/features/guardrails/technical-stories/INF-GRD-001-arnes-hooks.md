@@ -37,12 +37,14 @@ tags: [guardrails, ci, arnes, hooks-git, nfr-01, nfr-12, interrupcion, huella, m
 
 - **Crear** fixtures de repos temporales: sin hooks, con hooks propios, con husky, con lefthook, con pre-commit, con varios worktrees, con configuración por worktree y con inclusiones condicionales.
 - **Ampliar** la huella de INF-GRP-001 con una excepción por escenario: tras una instalación explícita solo se admiten la clave local de hooks y la carpeta de Guardrails; tras desinstalar, cero diferencias.
-- **Implementar** la comparación del archivo de configuración del repo con el criterio que fije SPIKE-GRD-001 (byte a byte o semántico).
+- **Implementar** la comparación del archivo de configuración del repo con el criterio **semántico** que fijó SPIKE-GRD-001 (Q-GRD-29; ADR-GRD-001 § 4, Enmienda 2026-10-04): mismo valor efectivo y nivel de la clave y demás entradas sin cambios; el resto de rutas, byte a byte.
 - **Implementar** puntos de corte nombrados en cada paso de la transacción, activables solo en builds de prueba, para matar el proceso antes y después de cada paso.
 - **Implementar** la comprobación de recuperación: tras cada corte, el arranque del daemon deja el repo completo o idéntico al anterior.
 - **Crear** el ejecutor de la matriz de interceptabilidad: lanza cada operación del catálogo con Git crudo y compara el resultado con la lista publicada del binario.
-- **Crear** el medidor de latencia por evaluación gobernada y de la vía rápida, con el p95 como gate.
-- **Crear** los escenarios de pérdida externa: reinstalación de gestores, edición de dispatchers, carpeta borrada, binario movido, repo movido y configuración por worktree.
+- **Crear** el medidor de latencia por evaluación gobernada y de la vía rápida, con el p95 como gate, medido en un runner en reposo.
+- **Crear** el contador de procesos de hook por comando (commit, `switch`, `rebase`, `fetch`, `stash`) y versión de Git, contra una tabla de referencia: gate determinista del coste por comando (ADR-GRD-002 § 5, Enmienda 2026-10-04).
+- **Crear** los casos de SPIKE-GRD-001 como regresión (Enmienda 2026-10-04): *prune* de `pack-refs` y `gc` con y sin binario (D12–D14), borrados a través de `HEAD` en Git 2.38 (D09), alias de mayúsculas en todas las líneas (D08, D21, F11), NFC sin `precomposeUnicode` (D19b), estado `preparing`, valores `ref:`, renombrado sobre la base con el backend de archivos (D11) y renombrado con **reftable** en cada versión de la matriz (D10, D11), para retirar la fila de la lista si Git lo corrige.
+- **Crear** los escenarios de pérdida externa: reinstalación de gestores (incluidos `lefthook install --force` y `--reset-hooks-path`), edición de dispatchers, carpeta borrada, binario movido, repo movido, configuración por worktree, cambio de backend de refs (`git refs migrate`) y hook previo añadido después de instalar (`hook-previo-no-encadenado`).
 - **Crear** los escenarios de integridad: edición a la vez del dispatcher y del manifiesto, binario sin firma o con otra huella, y perfil borrado con la protección instalada (instalación huérfana).
 - **Crear** los escenarios de actualización del binario: nuevo destino del enlace estable y plantilla de dispatchers nueva, con cortes en cada paso del refresco.
 - **Crear** los escenarios hostiles sobre la carpeta de Guardrails: carpeta o temporal sustituidos por enlaces, archivos ajenos añadidos y configuración del repo sustituida tras la escritura.
