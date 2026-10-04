@@ -49,7 +49,7 @@ jobs:
         continue-on-error: ${{ matrix.os == 'windows-latest' }}
       - name: Pending on Windows
         if: steps.test.outcome == 'failure'
-        run: echo "::warning::cargo test failed on Windows. Pendiente: etapa de validación multiplataforma"
+        run: "echo '::warning::cargo test failed on Windows. Pendiente: etapa de validación multiplataforma'"
 
   repo-intact:
     name: repo-intact (${{ matrix.os }})
@@ -85,7 +85,7 @@ jobs:
         continue-on-error: ${{ matrix.os == 'windows-latest' }}
       - name: Pending on Windows
         if: steps.suites.outcome == 'failure'
-        run: echo "::warning::repo_intact suites failed on Windows. Pendiente: etapa de validación multiplataforma"
+        run: "echo '::warning::repo_intact suites failed on Windows. Pendiente: etapa de validación multiplataforma'"
 
   deep-exec-audit-macos:
     name: deep exec audit (macOS, eslogger)
