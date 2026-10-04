@@ -83,6 +83,20 @@ pub enum AddOutcome {
     Reactivated { retired_ms: i64 },
 }
 
+/// One row of the reserved-command audit (ADR-GRP-013 § 1). `client` and
+/// `chain` are JSON documents written by the channel.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuditRow {
+    pub at_ms: i64,
+    pub operation: String,
+    pub repo_id: Option<String>,
+    /// `accepted`, `rejected` or `not-implemented`.
+    pub outcome: String,
+    pub reason: Option<String>,
+    pub client: String,
+    pub chain: String,
+}
+
 pub(crate) struct Index {
     conn: Connection,
     instance_id: String,
@@ -155,6 +169,45 @@ impl Index {
         set_meta(&tx, "daemon_started_ms", &started_ms.to_string())?;
         tx.commit()?;
         Ok(())
+    }
+
+    pub(crate) fn append_audit(&mut self, row: &AuditRow) -> Result<i64> {
+        self.conn.execute(
+            "INSERT INTO reserved_audit (at_ms, operation, repo_id, outcome, reason, client, chain)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                row.at_ms,
+                row.operation,
+                row.repo_id,
+                row.outcome,
+                row.reason,
+                row.client,
+                row.chain
+            ],
+        )?;
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    pub(crate) fn audit(&self, after_id: i64, limit: u32) -> Result<Vec<(i64, AuditRow)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, at_ms, operation, repo_id, outcome, reason, client, chain
+             FROM reserved_audit WHERE id > ?1 ORDER BY id LIMIT ?2",
+        )?;
+        let rows = stmt.query_map(params![after_id, limit], |row| {
+            Ok((
+                row.get(0)?,
+                AuditRow {
+                    at_ms: row.get(1)?,
+                    operation: row.get(2)?,
+                    repo_id: row.get(3)?,
+                    outcome: row.get(4)?,
+                    reason: row.get(5)?,
+                    client: row.get(6)?,
+                    chain: row.get(7)?,
+                },
+            ))
+        })?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
     pub(crate) fn set_daemon_stopped(

@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf};
 pub use dirs::{APP_DIR, PROFILE_DIR_ENV, ProfileDirs};
 pub use error::{ProfileError, Result};
 pub use fsperm::{ProfileWarning, create_private_file, set_restrictive_umask};
-pub use index::{AddOutcome, DaemonRun, RepoEntry, RepoState};
+pub use index::{AddOutcome, AuditRow, DaemonRun, RepoEntry, RepoState};
 pub use repo_key::{NormalizedPath, normalize_common_dir, validate_input_path};
 pub use store::{
     Agent, AgentKind, AttributionRecord, Author, BatchResult, EndCause, Event, Gap, GapCause,
@@ -143,6 +143,17 @@ impl Profile {
     ) -> Result<()> {
         self.index
             .set_daemon_stopped(stopped_ms, cause, requested_by)
+    }
+
+    /// Appends one attempt of a reserved command to the audit. The audit
+    /// cannot be updated or deleted (SEC-03).
+    pub fn append_audit(&mut self, row: &AuditRow) -> Result<i64> {
+        self.index.append_audit(row)
+    }
+
+    /// Audit entries with an id greater than `after_id`, oldest first.
+    pub fn audit(&self, after_id: i64, limit: u32) -> Result<Vec<(i64, AuditRow)>> {
+        self.index.audit(after_id, limit)
     }
 
     /// Every repo of the index, observed or retired.
