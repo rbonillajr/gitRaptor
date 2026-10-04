@@ -34,6 +34,8 @@ tags:
 > **Origen**: [BRD-GRP-001](../../../business/gitraptor-documento-de-negocio.md) (v0.5) § 6.1, capacidades **BR-08, BR-09 y BR-10**. Épica **E-001**, feature **F-001-03** del [backlog](../../backlog.md). Reglas en [business-rules.md](./business-rules.md) (BR-TMC-001). Depende del [Motor local](../motor-local/context.md) (CTX-GRP-001) y respeta sus decisiones Q1, Q6, Q21-Q24, Q27 y Q32-Q37.
 >
 > **Revisión 2026-10-03 (D-TMC-10 a D-TMC-23)**: Rene Bonilla acepta las recomendaciones de P1-P14. Cobertura en dos niveles que refina BR-08 y NFR-01 (D-TMC-9, D-TMC-10); garantías de los snapshots (D-TMC-11); "Tú u otro (sin atribuir)" (D-TMC-12); solape (D-TMC-13); undo solo local (D-TMC-14); retención de 30 días en perfil y local personal (D-TMC-15); sin ignorados (D-TMC-16); solicitante atribuido y confirmación interactiva (D-TMC-17, D-TMC-23); registro del undo inmutable (D-TMC-18); timeline por repo con filtros (D-TMC-19); alcance de la restauración (D-TMC-20). "Repo mediano" se fija en el spike (a) (D-TMC-21) y las historias de undo por agente esperan a P17 de motor-local (D-TMC-22). Se confirman S1-S4 y S7-S9; S5 y S6 siguen como supuestos.
+>
+> **Revisión 2026-10-03 (aceptación de riesgos)**: Rene Bonilla acepta los Known Risks 1, 3 y 5 y los supuestos S5 (redo con solape) y S6 (operación de Git en curso); se retiran sus marcas de supuesto en BR-TMC-WF-001 y BR-TMC-EDGE-004.
 
 ---
 
@@ -235,8 +237,8 @@ Impacto de no resolverlo: una sola pérdida de trabajo rompe la confianza en el 
 | S2 | "Sin atribuir" se presenta como "Tú u otro (sin atribuir)" (P3). | Confirmado (D-TMC-12, 2026-10-03) |
 | S3 | Los archivos ignorados no entran en el snapshot (P7). | Confirmado (D-TMC-16, 2026-10-03) |
 | S4 | Retención por defecto de 30 días, configurable en perfil y local personal (P6). | Confirmado (D-TMC-15, 2026-10-03) |
-| S5 | ⚠️ **ASSUMPTION**: redo revierte el último undo; si después hubo cambios en los mismos archivos, aplica la regla de solape (BR-TMC-WF-001). No depende de P1-P14: la regla de solape quedó decidida (D-TMC-13), su aplicación al redo no. | Pendiente (Rene Bonilla) |
-| S6 | ⚠️ **ASSUMPTION**: con una operación de Git en curso (rebase o merge a medias), el undo y la restauración se detienen y piden terminarla o abortarla antes (BR-TMC-EDGE-004). No depende de P1-P14. | Pendiente (Rene Bonilla) |
+| S5 | redo revierte el último undo; si después hubo cambios en los mismos archivos, aplica la regla de solape (BR-TMC-WF-001). No depende de P1-P14: la regla de solape quedó decidida (D-TMC-13), su aplicación al redo no. | ✅ Aceptado por Rene Bonilla (2026-10-03) |
+| S6 | con una operación de Git en curso (rebase o merge a medias), el undo y la restauración se detienen y piden terminarla o abortarla antes (BR-TMC-EDGE-004). No depende de P1-P14. | ✅ Aceptado por Rene Bonilla (2026-10-03) |
 | S7 | Restaurar un punto afecta al worktree en el que se pide y a las ramas y worktrees que cambiaron después de ese punto; los demás worktrees no se tocan (P11). | Confirmado (D-TMC-20, 2026-10-03) |
 | S8 | `raptor undo` sin flags deshace la última operación del worktree desde el que se invoca; si es de un actor distinto del solicitante, aplican BR-TMC-AUTH-001 y la regla de solape; nunca actúa sobre otros worktrees sin pedirlo (BR-TMC-WF-001; P10, P11, P14). | Confirmado (D-TMC-19, D-TMC-20, D-TMC-23, 2026-10-03) |
 | S9 | El solicitante de un undo se atribuye como los eventos ("agente X" o "sin atribuir"). Atribuido a un agente, solo deshace lo suyo; "sin atribuir", deshacer trabajo de otro actor exige confirmación interactiva del desarrollador en ese momento, que un agente no puede dar (BR-TMC-AUTH-001; P8, P14). | Confirmado (D-TMC-17, D-TMC-23, 2026-10-03) |
@@ -315,6 +317,8 @@ Impacto de no resolverlo: una sola pérdida de trabajo rompe la confianza en el 
 > **Re-ejecución 2026-10-03 (RESERVAS del Artifact Judge)**: el solicitante de un undo deja de suponerse humano (Q34) y pasa a P14; AUTH-001 queda como supuesto; se fija el ámbito por defecto del undo (S8); D-TMC-9 declara que la cobertura en dos niveles refina BR-08 y NFR-01. Se añade la fila "Permisos del undo" (⚠️).
 >
 > **Re-ejecución 2026-10-03 (D-TMC-10 a D-TMC-23)**: Rene Bonilla cierra P1-P14. Cobertura, Integraciones, Permisos del undo, Restauración a un punto y Retención pasan a ✅. Resultado: **10 ✅ · 4 ⚠️ · 0 🔴**. Quedan pendientes los supuestos S5 y S6, que no dependían de P1-P14.
+>
+> **Nota 2026-10-03 (aceptación de riesgos)**: Rene Bonilla acepta los Known Risks 1, 3 y 5 y los supuestos S5 y S6. No cambia ninguna calificación: las cuatro secciones ⚠️ siguen con su riesgo, ahora aceptado. Resultado: **10 ✅ · 4 ⚠️ · 0 🔴**.
 
 | Sección | Resultado | Nota |
 |---------|-----------|------|
@@ -337,11 +341,11 @@ Impacto de no resolverlo: una sola pérdida de trabajo rompe la confianza en el 
 
 | # | Sección | Riesgo | Impacto | Aceptado por |
 |---|---------|--------|---------|--------------|
-| 1 | Valor Esperado / ROI | Sin línea base del tiempo de recuperación manual. | No se podrá demostrar el ahorro; solo el KPI de uso (≥ 3 undos). | Pendiente de revisión (Rene Bonilla) |
+| 1 | Valor Esperado / ROI | Sin línea base del tiempo de recuperación manual. | No se podrá demostrar el ahorro; solo el KPI de uso (≥ 3 undos). | Rene Bonilla (2026-10-03) |
 | 2 | Restricciones | ~~Ubicación de los snapshots sin decidir (P2).~~ | **Resuelto** el 2026-10-03 (D-TMC-11): tres garantías de negocio; el mecanismo lo decide el Arquitecto. | — |
-| 3 | RNFs | "Repo mediano" sin definir; se fija en el spike (a) (D-TMC-21). | NFR-04 no es verificable hasta el spike (a). | Pendiente de revisión (Rene Bonilla) |
+| 3 | RNFs | "Repo mediano" sin definir; se fija en el spike (a) (D-TMC-21). | NFR-04 no es verificable hasta el spike (a). | Rene Bonilla (2026-10-03) |
 | 4 | Integraciones / Cobertura | ~~El Git crudo depende de hooks de Guardrails aún inexistentes (P1).~~ | **Resuelto** el 2026-10-03 (D-TMC-10). El riesgo de producto R2 (lo editado entre la última captura y una operación destructiva de Git crudo) sigue en Riesgos. | — |
-| 5 | Undo por agente | Las historias de undo por agente dependen de P17 de motor-local (D-TMC-22). Solape y ámbito por defecto ya decididos (D-TMC-13, S8). | Esas historias no se pueden generar ni cerrar hasta que se resuelva P17; riesgo R3. | Pendiente de revisión (Rene Bonilla) |
+| 5 | Undo por agente | Las historias de undo por agente dependen de P17 de motor-local (D-TMC-22). Solape y ámbito por defecto ya decididos (D-TMC-13, S8). | Esas historias no se pueden generar ni cerrar hasta que se resuelva P17; riesgo R3. | Rene Bonilla (2026-10-03) |
 | 6 | Restauración a un punto | ~~Alcance supuesto (P11).~~ | **Resuelto** el 2026-10-03 (D-TMC-20). | — |
 | 7 | Retención | ~~Valor por defecto y niveles supuestos (P6).~~ | **Resuelto** el 2026-10-03 (D-TMC-15). | — |
 | 8 | Permisos del undo | ~~Identificación del solicitante y confirmación interactiva sin decidir (P8, P14).~~ | **Resuelto** el 2026-10-03 (D-TMC-17, D-TMC-23); el mecanismo de identificación lo decide el Arquitecto. | — |

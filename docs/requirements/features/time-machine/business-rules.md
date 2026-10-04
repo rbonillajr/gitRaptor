@@ -96,7 +96,7 @@ undo:  snapshot previo → restaurar estado anterior a la última operación del
 redo:  disponible si el último evento del ámbito es un undo
        → snapshot previo → restaurar el estado anterior a ese undo
 IF desde el undo hubo cambios de otro actor en los mismos archivos
-THEN aplica BR-TMC-CONS-005 (solape): se detiene                  ⚠️ ASSUMPTION (S5)
+THEN aplica BR-TMC-CONS-005 (solape): se detiene                  (S5, aceptado 2026-10-03)
 ```
 
 **Ejemplo**: un agente hace `reset --hard` y borra 3 archivos sin commitear → `raptor undo` los recupera → `raptor redo` vuelve al estado tras el reset; el contenido de los 3 archivos sigue recuperable en el timeline.
@@ -260,7 +260,7 @@ aviso antes de purgar
 
 ### BR-TMC-EDGE-004: Operación de Git en curso
 
-**Descripción**: ⚠️ **ASSUMPTION** (S6). Con un rebase o un merge a medias, el undo y la restauración se detienen y piden terminar o abortar esa operación antes; el repo no cambia.
+**Descripción**: (S6, aceptado por Rene Bonilla el 2026-10-03). Con un rebase o un merge a medias, el undo y la restauración se detienen y piden terminar o abortar esa operación antes; el repo no cambia.
 
 **Criticidad**: Media
 
@@ -296,3 +296,4 @@ Cada regla tendrá al menos un escenario Gherkin, incluido uno negativo, en su h
 | 0.1 | 2026-10-03 | PO (AADD) | Versión inicial en revisión. |
 | 0.2 | 2026-10-03 | PO (AADD) | RESERVAS del Artifact Judge: AUTH-001 reformulada como supuesto con solicitante atribuido (P8, P14); ámbito por defecto del undo en WF-001 (S8); ejemplo de CONS-003 precisado. |
 | 0.3 | 2026-10-03 | PO (AADD) | Rene Bonilla cierra P1-P14 (D-TMC-10 a D-TMC-23): sin marcas de supuesto en AUTH-001, WF-001 (ámbito), WF-003, CONS-002, CONS-003 y TIME-001. Siguen como supuesto S5 (redo con solape, WF-001) y S6 (EDGE-004). |
+| 0.4 | 2026-10-03 | PO (AADD) | Rene Bonilla acepta S5 y S6: sin marcas de supuesto en WF-001 (redo) y EDGE-004. |
