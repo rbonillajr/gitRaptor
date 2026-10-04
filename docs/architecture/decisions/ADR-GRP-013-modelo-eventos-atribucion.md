@@ -8,7 +8,7 @@ created: 2026-10-03
 updated: 2026-10-03
 deciders: [Rene Bonilla]
 related: [ADR-GRP-005, ADR-GRP-006, ADR-GRP-010, ADR-GRP-012, CTX-GRP-001, BR-GRP-001]
-tags: [motor-local, eventos, sesiones, atribucion, correccion, huecos, append-only, modelo-de-datos]
+tags: [motor-local, eventos, sesiones, atribucion, correccion, huecos, append-only, modelo-de-datos, auditoria, no-repudio, seguridad]
 ---
 
 # ADR-GRP-013 — Modelo persistido de eventos, sesiones y atribución
@@ -37,11 +37,13 @@ El motor guarda en el perfil (ADR-GRP-006) los eventos de Git, las sesiones de a
 | **Sesión** | Worktree, agente (Claude Code u "otro agente" con su nombre declarado), atribución inicial y su origen (detectada o registrada), clave de detección de ADR-GRP-012 si se detectó, inicio, fin y causa del fin. |
 | **Registro de atribución** | Append-only. Sesión, tipo (confirmación, corrección, retiro de corrección), agente, autor (desarrollador o agente, como exige la tabla de BR-CONS-001), momento y secuencia en la que entra en vigor. |
 | **Evento** | Secuencia por repo, worktree, tipo, metadatos (refs, ids de commit, rutas afectadas), hora de observación en UTC con el desfase de zona horaria local, sesión (opcional), evidencia de atribución (qué señales de ADR-GRP-012 la sustentan) y hueco (opcional). |
-| **Hueco** | Intervalo de inicio y fin y su causa: máquina apagada o suspendida, daemon caído, repo retirado, Git ausente o insuficiente (BR-WF-002), perfil perdido o almacén corrupto. |
+| **Hueco** | Intervalo de inicio y fin y su causa: máquina apagada o suspendida, daemon caído, **daemon caído durante una sesión activa**, daemon parado por un comando, repo retirado, Git ausente o insuficiente (BR-WF-002), perfil perdido o almacén corrupto. Si lo provocó un comando (parada, retiro del repo), guarda **el cliente que lo pidió** (proceso, ejecutable y si pasó los controles de ADR-GRP-005) (SEC-13). |
 | **Último estado conocido** | Por worktree: HEAD, puntas de refs, operación en curso y huella de los cambios sin commitear. Es la base de la reconciliación (ADR-GRP-010). |
 | **Marca "observado hasta"** | Momento hasta el que el repo estuvo observado, persistido con cada lote y de forma periódica. |
 
 Los cambios de estado de las sesiones (inicio, activo, inactivo, terminado) se guardan como eventos del mismo historial, así que su estado sobrevive a reinicios (BR-WF-001).
+
+**Registro de auditoría de comandos reservados (SEC-03)**: fuera de los almacenes por repo, en el índice global del perfil (ADR-GRP-006), porque algunos comandos (parar el daemon, añadir un repo) no pertenecen a un repo. Es **append-only**: cada intento de comando reservado de ADR-GRP-005 § 6 (añadir o retirar repo, corregir o retirar corrección, parar el daemon), aceptado o rechazado, con fecha, operación, repo si aplica, resultado, motivo del rechazo y cliente (ejecutable y si desciende de un agente). Nunca se reescribe ni se borra; los clientes lo pueden consultar.
 
 ### 2. Resolución de la atribución
 
@@ -74,12 +76,14 @@ Los cambios de estado de las sesiones (inicio, activo, inactivo, terminado) se g
 - La reconciliación (ADR-GRP-010) compara el estado actual con el último estado conocido y genera **eventos de reconciliación sin sesión y enlazados al hueco**. Nunca se atribuyen a un agente, aunque hubiera uno registrado antes (BR-EDGE-005).
 - Sin último estado conocido (perfil perdido, almacén corrupto o máquina nueva), el repo expone "observado desde" su fecha de alta y todo lo anterior queda "sin atribuir" (Q26, Q31).
 - Una sesión cuyo proceso desapareció durante un hueco se cierra con causa "terminada durante un hueco" y hora de fin desconocida dentro del intervalo.
+- **No repudio (SEC-13)**: si el daemon se para o cae mientras hay alguna sesión activa, el hueco se marca como tal y los clientes lo muestran de forma destacada. La causa de una parada viene de la parada ordenada (con su comando y cliente) o, si no hubo parada ordenada, se registra como caída. Un agente no puede dejar su trabajo "sin atribuir" sin dejar rastro.
 
 ### 6. Lo que expone el contrato (`crates/api`)
 
 - El actor expuesto solo tiene dos variantes: **agente** (tipo, nombre y origen) o **sin atribuir**. El tipo no tiene variante "humano", así que el motor no puede emitirla.
 - Al aplicar una confirmación, una corrección o un retiro, el stream de eventos publica que la atribución de esa sesión cambió, con el rango de secuencias afectado, para que la Time Machine (F-001-03) y Guardrails (F-001-04) refresquen.
-- Consultas por worktree, por sesión, por rango de secuencia y por actor efectivo.
+- Consultas por worktree, por sesión, por rango de secuencia y por actor efectivo, y consulta del registro de auditoría y de los huecos con su causa.
+- **Texto no confiable (SEC-12)**: el nombre declarado de un agente, las rutas y las refs son texto procedente del repo o de un agente; el contrato lo marca como tal y los clientes lo limpian antes de mostrarlo (ADR-GRP-005 § 5). Las respuestas al MCP no incluyen mensajes de commit ni contenido y se limitan al repo del llamante.
 
 ## Alternativas consideradas
 
@@ -115,7 +119,9 @@ Pruebas con repos y perfiles temporales; las sesiones se simulan con la interfaz
 7. **Persistencia** (US-GRP-004): tras reiniciar el daemon, correcciones, sesiones, estados y eventos siguen iguales.
 8. **Sin "humano"**: el esquema del contrato no contiene esa variante; una prueba de propiedades sobre secuencias aleatorias de registros comprueba que todo actor resuelto es un agente con origen o "sin atribuir".
 9. **Orden**: con la hora del sistema retrasada a mitad de prueba, el orden de los eventos sigue la secuencia.
-10. **Repo intacto**: todo lo anterior pasa por el arnés de INF-GRP-001.
+10. **No repudio (SEC-13)**: un agente simulado que ejecuta `raptor daemon stop` es rechazado y el intento queda en el registro de auditoría; `kill -9` del daemon con una sesión activa deja, al relanzar, un hueco "caída durante sesión activa" visible en los clientes; una parada aceptada guarda el cliente que la pidió.
+11. **Auditoría (SEC-03)**: cada comando reservado, aceptado o rechazado, aparece una sola vez en el registro, y el registro no admite modificación ni borrado por el canal.
+12. **Repo intacto**: todo lo anterior pasa por el arnés de INF-GRP-001.
 
 ## Referencias
 
@@ -125,3 +131,16 @@ Pruebas con repos y perfiles temporales; las sesiones se simulan con la interfaz
 - **ADRs**: ADR-GRP-005 (único escritor, controles del canal), ADR-GRP-006 (almacén por repo), ADR-GRP-010 (reconciliación), ADR-GRP-012 (señales y evidencia).
 - **Enablers**: TS-GRP-001, SPIKE-GRP-001, INF-GRP-001, INF-GRP-002.
 - **Features consumidoras**: F-001-03 Time Machine y F-001-04 Guardrails.
+- **Seguridad**: `docs/architecture/non-functional.md` (SEC-03, SEC-12, SEC-13).
+
+## Revisión de seguridad (2026-10-03)
+
+Enmienda tras la revisión del security-expert. No cambia el modelo de atribución.
+
+| Hallazgo | Cómo se cubre |
+|---|---|
+| M6 · Un agente para o mata el daemon para dejar su trabajo sin atribuir | Apartados 1 y 5: el hueco guarda la causa (incluida "caída durante sesión activa") y el cliente que lo provocó; se muestra en los clientes (SEC-13). La parada es comando reservado en ADR-GRP-005 |
+| SEC-03 · Registro de auditoría | Apartado 1: registro append-only de comandos reservados en el índice global del perfil, consultable por los clientes |
+| M8 / SEC-12 · Texto no confiable en lo que expone el contrato | Apartado 6: nombres declarados, rutas y refs marcados como no confiables; respuestas MCP acotadas |
+
+Validación ampliada: SEC-13 y SEC-03 (puntos 10 y 11).

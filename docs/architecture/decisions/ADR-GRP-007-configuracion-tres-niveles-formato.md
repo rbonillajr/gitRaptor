@@ -8,7 +8,7 @@ created: 2026-10-03
 updated: 2026-10-03
 deciders: [Rene Bonilla]
 related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-004, ADR-GRP-005, ADR-GRP-006, ADR-GRP-008, ADR-GRP-009, ADR-GRP-010, ADR-GRP-011, ADR-GRP-012]
-tags: [configuracion, settings-json, json-schema, schemars, precedencia, niveles, guardrails, motor-local, p8]
+tags: [configuracion, settings-json, json-schema, schemars, precedencia, niveles, guardrails, motor-local, p8, seguridad]
 ---
 
 # ADR-GRP-007 — Configuración en tres niveles: formato y precedencia
@@ -60,7 +60,7 @@ Criterio de niveles de los valores nuevos:
 
 - **`engine.gitPath`, solo perfil**: es una ruta de la máquina, y el motor resuelve un único Git para todos los repos (ADR-GRP-009). Un valor por repo (local) implicaría un Git distinto por repo, que el motor no admite; en el equipo sería una ruta de otra máquina.
 - **Intervalos del watcher, perfil y local, nunca equipo**: son preferencias de coste de la máquina (CPU y disco). El nivel local permite ajustarlos para un repo concreto muy grande. En el equipo impondrían ese coste en las máquinas de todos.
-- **`engine.gitPath` que no sirve** (no existe, no es ejecutable o es anterior a 2.38): no invalida el nivel. El candidato se descarta con diagnóstico y la resolución sigue con el resto de candidatos de ADR-GRP-009. Al cambiar el valor, el motor vuelve a resolver Git.
+- **`engine.gitPath` que no sirve** (no existe, no es ejecutable, es anterior a 2.38 o no supera la validación del ejecutable de ADR-GRP-009 § 4: absoluto, archivo regular, propiedad del usuario o de root y no escribible por grupo ni otros, SEC-10): no invalida el nivel. El candidato se descarta con diagnóstico y la resolución sigue con el resto de candidatos de ADR-GRP-009. Al cambiar el valor, el motor vuelve a resolver Git.
 
 **Parámetros que no son configurables** (internos, fijados por su ADR): la ventana de debounce de 75 ms (forma parte del presupuesto de ADR-GRP-011; cambiarla exige revisar ese ADR), el intervalo de recomprobación de Git en "Esperando Git" (ADR-GRP-009), el intervalo de escaneo de procesos y la ventana Δ de atribución (ADR-GRP-012, los mide SPIKE-GRP-001), los tiempos del handshake y del arranque bajo demanda (ADR-GRP-005) y la persistencia del histograma de frescura (ADR-GRP-011). La variable de entorno de sobreescritura del perfil (ADR-GRP-006) tampoco es una clave de configuración: decide dónde están los archivos de configuración, así que no puede vivir dentro de ellos.
 
@@ -117,10 +117,12 @@ La regla de que un nivel personal no relaja una prohibición del equipo se aplic
 | El documento no valida contra el schema (tipo o rango incorrecto) | Se **ignora el nivel entero**, con diagnóstico y la ruta JSON de la clave (PQ-8). |
 | Clave desconocida | Se ignora la clave y se emite un **diagnóstico, no un error fatal**. El resto del nivel aplica. |
 | Clave en un nivel que no la admite | Se ignora esa clave, con diagnóstico (Q24). El resto del nivel aplica. |
+| El archivo no es un archivo regular, es un enlace que sale del worktree (o de la carpeta de configuración del perfil) o supera el tamaño máximo | Se **ignora el nivel entero**, con diagnóstico **sin contenido** del archivo (SEC-11). |
+| `engine.baseBranch` no es un nombre de rama válido según `check-ref-format` o empieza por `-` | Se ignora la clave, con diagnóstico, y nunca se pasa a Git. Como el equipo sí declaró una rama base, el motor no recurre a `main`: indica que no puede calcular ahead/behind, igual que con una rama inexistente (Q42) (SEC-11). |
 
 **Por qué una clave desconocida no es fatal**: el archivo de equipo viaja con el repo y lo leen binarios de versiones distintas en las máquinas del equipo. Si una clave nueva invalidara el nivel en un binario antiguo, ese binario perdería la rama base y los demás valores del equipo. Además Guardrails y el motor amplían el documento por separado. El diagnóstico detecta las erratas sin romper la compatibilidad hacia adelante. Por eso el schema no declara `additionalProperties: false`, y el cargador compara las claves contra el schema para avisar.
 
-Los diagnósticos se exponen a los clientes por el canal local (ADR-GRP-005) como una lista por repo con tipo, archivo, posición o ruta JSON, y nivel. El texto que ve el usuario lo traduce el cliente (i18n en/es). Un diagnóstico nunca detiene la observación.
+Los diagnósticos se exponen a los clientes por el canal local (ADR-GRP-005) como una lista por repo con tipo, archivo, posición o ruta JSON, y nivel. **Nunca incluyen fragmentos del contenido** del archivo ni valores leídos: `.gitraptor/settings.json` viaja con el repo y lo puede escribir un agente o un PR, y podría apuntar a un secreto (SEC-11). El texto que ve el usuario lo traduce el cliente (i18n en/es). Un diagnóstico nunca detiene la observación.
 
 ### Qué configuración de equipo manda (PQ-9)
 
@@ -160,8 +162,9 @@ Tests de `crates/policy`, siempre con repos y perfiles temporales (variable de e
 5. **Valores nuevos**: `gitPath` en local o equipo → ignorado con diagnóstico; `gitPath` inexistente en el perfil → diagnóstico y resolución automática (ADR-GRP-009); intervalos del watcher en el equipo → ignorados; local gana al perfil; un intervalo fuera de rango invalida el nivel (PQ-8).
 6. **PQ-9**: worktree principal y enlazado con `baseBranch` distintos → manda el principal. Repo bare → diagnóstico y `main`.
 7. **Recarga**: editar un archivo cambia el valor efectivo sin reiniciar el motor.
-8. **Solo lectura**: tras cargar y recargar, los hashes y las fechas de modificación de los tres archivos y el estado observable del repo no cambian (BR-CONS-001).
-9. **Deriva del schema**: el schema generado es igual al versionado y al embebido (CI).
+8. **Archivos hostiles (SEC-11)**: `.gitraptor/settings.json` como symlink a `~/.ssh/id_rsa` → nivel ignorado y diagnóstico sin contenido; FIFO o archivo de tamaño excesivo → ignorado sin bloquear; `baseBranch` `--upload-pack=x` → ignorada; `engine.gitPath` relativa o escribible por otros → descartada (SEC-10).
+9. **Solo lectura**: tras cargar y recargar, los hashes y las fechas de modificación de los tres archivos y el estado observable del repo no cambian (BR-CONS-001).
+10. **Deriva del schema**: el schema generado es igual al versionado y al embebido (CI).
 
 ## Referencias
 
@@ -172,3 +175,13 @@ Tests de `crates/policy`, siempre con repos y perfiles temporales (variable de e
 - ADRs: [ADR-GRP-001](./ADR-GRP-001-stack-tecnologico.md), [ADR-GRP-002](./ADR-GRP-002-monorepo-nx.md), [ADR-GRP-004](./ADR-GRP-004-estado-frontend-ux.md), ADR-GRP-005, ADR-GRP-006, [ADR-GRP-008](./ADR-GRP-008-configuracion-local-no-versionada.md), ADR-GRP-010.
 - Decisiones de Rene Bonilla, 2026-10-03: propuesta base del BRD v0.4, PQ-3, PQ-4, PQ-8, PQ-9.
 - [Claude Code — Settings](https://docs.anthropic.com/en/docs/claude-code/settings) (modelo de referencia), [`schemars`](https://crates.io/crates/schemars).
+
+## Revisión de seguridad (2026-10-03)
+
+Enmienda tras la revisión del security-expert. No cambia formato, niveles ni precedencia.
+
+| Hallazgo | Cómo se cubre |
+|---|---|
+| M10 · `.gitraptor/settings.json` y la ruta explícita de Git sin validar | Validación y diagnósticos: solo archivo regular, sin enlaces que salgan del worktree, tope de tamaño, diagnósticos sin contenido, `baseBranch` validada como ref (SEC-11); `engine.gitPath` validada según ADR-GRP-009 § 4 (SEC-10) |
+
+Validación ampliada: SEC-11 y SEC-10 (punto 8).

@@ -20,6 +20,8 @@ related:
 
 > Documento de navegación: enlaza los artefactos y no duplica su contenido. Rene Bonilla aceptó el 2026-10-03 todas las recomendaciones y las preguntas de producto PQ-1 a PQ-9; los ADR 005 a 013 están expandidos (`status: proposed`).
 >
+> **Revisión de seguridad (2026-10-03)**: aprobada con condiciones por el `security-expert`, sin hallazgos Critical. Tras las enmiendas a ADR-GRP-005, 006, 007, 009, 010, 012 y 013, los cuatro High (H1-H4) quedan cubiertos en texto; ADR-GRP-005 y ADR-GRP-009 pasan a `accepted` cuando INF-GRP-001 tenga el repo canario y la auditoría dinámica de `exec`. Detalle, SEC-01 a SEC-14 y gate en [non-functional.md](./non-functional.md#gate-de-seguridad).
+>
 > **Restricciones activas**: no hay `architecture-constitution.md` en la cascada. Rigen ADR-GRP-001 (stack) y ADR-GRP-002 (monorepo y crates). ⚠️ **ASSUMPTION**: se tratan como constitución hasta que se cree una formal con `/aadd-architect --init-constitution`.
 
 ## 1. Propósito y alcance
@@ -77,7 +79,7 @@ Diagramas: [contexto C4-L1](./diagrams/c4-context.md) y [contenedores C4-L2](./d
 | [INF-GRP-002](../requirements/features/motor-local/technical-stories/INF-GRP-002-banco-frescura-escala.md) | INF | Banco de frescura y escala | requirements/features/motor-local/technical-stories/INF-GRP-002-banco-frescura-escala.md | expanded |
 | [SPIKE-GRP-001](../requirements/features/motor-local/technical-stories/SPIKE-GRP-001-precision-deteccion.md) | SPIKE | Precisión de detección de Claude Code | requirements/features/motor-local/technical-stories/SPIKE-GRP-001-precision-deteccion.md | expanded |
 | [SPIKE-GRP-002](../requirements/features/motor-local/technical-stories/SPIKE-GRP-002-viabilidad-observador.md) | SPIKE | Viabilidad del observador a escala | requirements/features/motor-local/technical-stories/SPIKE-GRP-002-viabilidad-observador.md | expanded |
-| NFR-MOTOR | NFR | Requisitos no funcionales del motor | architecture/non-functional.md | draft |
+| NFR-MOTOR | NFR | Requisitos no funcionales del motor y Security NFRs (SEC-01..14) | architecture/non-functional.md | expanded |
 | [C4-GRP-L1](./diagrams/c4-context.md) | C4-L1 | Contexto del motor local | architecture/diagrams/c4-context.md | expanded |
 | [C4-GRP-L2](./diagrams/c4-containers.md) | C4-L2 | Contenedores del motor local | architecture/diagrams/c4-containers.md | expanded |
 | [SEQ-GRP-CAMBIO](./diagrams/seq-cambio-worktree.md) | Secuencia | Cambio en worktree → Cockpit (US-GRP-002) | architecture/diagrams/seq-cambio-worktree.md | expanded |
@@ -133,7 +135,7 @@ Pendiente. Se generan con `/aadd-devspec <id>`: una por TS e INF y una por cada 
 
 - **Supuestos por confirmar**:
   - "< 500 ms" de NFR-04 como p95 en las máquinas de referencia (ADR-GRP-011; lo mide SPIKE-GRP-002).
-  - La shell de Claude Code no tiene TTY interactiva (PQ-6 en ADR-GRP-005; lo comprueba SPIKE-GRP-001).
+  - La shell de Claude Code no tiene TTY interactiva (PQ-6 en ADR-GRP-005; lo comprueba SPIKE-GRP-001). Tras la revisión de seguridad deja de ser crítico: los comandos reservados se autorizan en el daemon (I4).
   - P16 y P17, abiertas para el PO, con supuesto "sí" en ADR-GRP-013.
 - **Ruta crítica**: TS-GRP-001 y TS-GRP-002 → TS-GRP-003 → TS-GRP-004 → US-GRP-001 → US-GRP-002. INF-GRP-001 bloquea el merge de todas las historias. El Scrum Master debe recalcular las olas.
 - **Riesgo de atribución**: si S2b se desactiva por un cambio de formato, los cambios sin commitear en un worktree con editor abierto quedan casi siempre "sin atribuir". La meta del 90% puede cumplirse para sesiones y no para cambios (R1, R2, R7). Vía de salida: S5 opt-in y registro explícito (ADR-GRP-012).
@@ -156,4 +158,5 @@ Esta rama (`docs/arch-motor-local`) solo toca arquitectura. Lo siguiente queda p
    - Un `.gitraptor/settings.json` de equipo inválido se ignora entero (PQ-8), lo que deja sin efecto sus prohibiciones (fail-open). Guardrails debe decidir su reacción.
    - Un repo bare no tiene configuración de equipo (PQ-9); Guardrails debe decidir si necesita la misma regla.
    - ADR-GRP-007 no pasa a `accepted` sin el context de Guardrails (coautoría de `permissions` y `policies`).
-4. **Código y README** (fuera del alcance de una rama `docs/`): todavía citan `policy.yaml` en `README.md` (tabla de crates), `crates/policy/src/lib.rs` (comentario del crate) y `crates/policy/Cargo.toml` (`description`). Deben pasar a citar la configuración de ADR-GRP-007.
+4. **Seguridad de la salida hacia terminales y agentes (M8, SEC-12)**: ADR-GRP-005 § 5 fija el contrato de salida de `crates/api` (texto no confiable marcado, respuestas MCP acotadas). Falta llevarlo a **ADR-GRP-004** (limpieza de caracteres de control y escapes ANSI/OSC en la CLI/TUI) y a la **spec futura del MCP (F-001-05)** (allowlist de campos, longitudes máximas, sin mensajes de commit ni contenido, limitado al repo del llamante). No se edita ADR-GRP-004 desde esta rama.
+5. **Código y README** (fuera del alcance de una rama `docs/`): todavía citan `policy.yaml` en `README.md` (tabla de crates), `crates/policy/src/lib.rs` (comentario del crate) y `crates/policy/Cargo.toml` (`description`). Deben pasar a citar la configuración de ADR-GRP-007.
