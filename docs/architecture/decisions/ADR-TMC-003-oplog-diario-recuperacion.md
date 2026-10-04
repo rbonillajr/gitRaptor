@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 date: 2026-10-03
 domain: GRP
 feature: time-machine
@@ -112,3 +112,19 @@ Antes de aceptar operaciones de la Time Machine en un repo, el daemon:
 - **Reglas**: BR-TMC-WF-001..003, BR-TMC-CONS-001, BR-TMC-CONS-005, BR-TMC-EDGE-003, BR-TMC-EDGE-004; D-TMC-18, D-TMC-19, D-TMC-22. Q26, Q34, Q37.
 - **ADRs**: ADR-GRP-006, ADR-GRP-013; ADR-TMC-001, ADR-TMC-002, ADR-TMC-004, ADR-TMC-005, ADR-TMC-007.
 - **Enablers**: TS-TMC-002, INF-TMC-001. **NFR**: NFR-01, NFR-12.
+
+## Enmienda (2026-10-04, TS-TMC-002)
+
+Aplicada desde la [Dev Spec de TS-TMC-002](../../requirements/features/time-machine/dev-specs/TS-TMC-002-oplog-diario.md). Precisa el modelo y no cambia ninguna decisión; el `status` sigue en `accepted`. Decisión del orquestador (2026-10-04), validada por el Arquitecto.
+
+| Cambio | Dónde |
+|---|---|
+| Una operación en `lista` también pasa a `abortada` al recuperar: el repo no se tocó | § 6.2 |
+| `rechazada` puede salir también de `snapshot_previo`: el solape se detecta después del snapshot | § 3 |
+| La fila del snapshot `pendiente` se escribe **antes** de crear su ref en el almacén. La recuperación borra solo las refs de snapshots `pendiente` o `descartado`; una ref que el oplog no conoce se informa y se conserva (NFR-01) | § 3, § 6.1 |
+| Sin almacén de snapshots disponible, la recuperación no decide nada que dependa de refs | § 6.1, § 6.6 |
+| La recuperación del oplog no depende del almacén del motor: un repo cuyo almacén del motor no abre recupera igual su oplog (Q26) | § 1, § 6 |
+| Un lock anotado se borra solo si la entrada no está en un hueco de la cadena, la ruta está dentro del directorio Git común, el nombre termina en `.lock` y el archivo es regular, con el mismo inodo y sin hijos vivos. Se borra sin seguir enlaces, con un tope de espera compartido por todo el arranque. También se liberan los de operaciones `interrumpida` en arranques posteriores | § 6.4 |
+| Cadena: versión de codificación por fila, génesis ligado al id del repo y cabeza en `oplog.head`. Se tolera solo la cabeza un lote por detrás; un oplog en cuarentena empieza con un hueco | § 2 |
+| Las operaciones guardan la marca del motor, para intercalarse con el Git crudo sin depender del reloj. Hay una pila de undo y redo por worktree y otra de refs del repo; una operación `interrumpida` de cualquier tipo cuenta como hecha | § 4 |
+

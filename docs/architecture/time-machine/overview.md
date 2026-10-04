@@ -16,7 +16,7 @@ Guardar un punto recuperable antes de toda operación de GitRaptor y capturar a 
 |----|--------|--------------------|--------|
 | [ADR-TMC-001](../decisions/ADR-TMC-001-almacen-snapshots-perfil.md) | Almacén de snapshots | Repo Git bare privado por repo en el perfil, con objetos propios (siembra por clon con copia en escritura o copia, nunca por enlace duro, más anclaje incremental; escritura con gitoxide), contenido en bruto sin filtros, exclusiones declaradas, almacén tratado como entrada no confiable; nunca en el repo del usuario | accepted |
 | [ADR-TMC-002](../decisions/ADR-TMC-002-escritor-time-machine.md) | Escritor de la Time Machine | Escrituras internas en el componente `timemachine` del daemon, con capa propia en `crates/git` sin hooks, filtros ni red (SEC-TMC-02); aplicación con precondiciones, snapshot previo, `index.lock` propio, refs con valor esperado e intercambio atómico por archivo; las operaciones de usuario las ejecuta el daemon fuera de esa capa | accepted |
-| [ADR-TMC-003](../decisions/ADR-TMC-003-oplog-diario-recuperacion.md) | Oplog, diario y recuperación | SQLite propio por repo, solo por anexión y encadenado por hash; solicitante congelado; al arrancar se descarta, aborta o marca como interrumpido; solo se libera el `index.lock` propio | accepted |
+| [ADR-TMC-003](../decisions/ADR-TMC-003-oplog-diario-recuperacion.md) | Oplog, diario y recuperación | SQLite propio por repo, solo por anexión y encadenado por hash; solicitante congelado; al arrancar se descarta, aborta o marca como interrumpido; solo se liberan los locks propios anotados (enmienda 2026-10-04: salvaguardas de TS-TMC-002) | accepted |
 | [ADR-TMC-004](../decisions/ADR-TMC-004-cobertura-dos-niveles.md) | Cobertura en dos niveles | La operación protegida es el único camino de escritura; captura por observación sobre los eventos del motor, fuera de su presupuesto, con coalescencia y cuotas; previo vía hook como contrato para Guardrails | accepted |
 | [ADR-TMC-005](../decisions/ADR-TMC-005-solicitante-permisos-solape.md) | Solicitante, permisos y solape | Solicitante por ascendencia endurecida en el daemon (agente X o sin atribuir); reto ligado al plan; MCP sin atribuir rechazado de entrada; Guardrails solo deniega; solape por archivo y ref; riesgo residual aceptado | accepted |
 | [ADR-TMC-006](../decisions/ADR-TMC-006-presupuesto-rendimiento-snapshot.md) | Presupuesto del snapshot | p95 < 200 ms del snapshot previo con almacén sembrado, con 1 y con 10 worktrees activos; etapas 180 ms + margen 20 ms, con cifras medidas en macOS; repo mediano = perfil `M` (SPIKE-TMC-001); escalones 2 y 3 obligatorios; gate en el banco de INF-GRP-002 | accepted |
@@ -77,7 +77,8 @@ Guardar un punto recuperable antes de toda operación de GitRaptor y capturar a 
 
 ## 6. Dev Specs
 
-Pendientes. Se generan con `/aadd-devspec <id>` para TS-TMC-001..004 e INF-TMC-001, y para las US que producen código. SPIKE-TMC-001 entrega un Research Brief.
+- [TS-TMC-002](../../requirements/features/time-machine/dev-specs/TS-TMC-002-oplog-diario.md): en revisión (2026-10-04), implementada en `crates/core::timemachine::oplog`.
+- Pendientes: TS-TMC-001, 003 y 004 e INF-TMC-001, y las US que producen código. Se generan con `/aadd-devspec <id>`. SPIKE-TMC-001 entrega un Research Brief.
 
 ## Preguntas para Rene — resueltas (2026-10-03)
 

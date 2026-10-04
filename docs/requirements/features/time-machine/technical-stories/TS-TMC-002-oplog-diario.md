@@ -8,11 +8,11 @@ domain: GRP
 priority: critical
 complexity: medium
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 related:
   adrs: [ADR-TMC-003, ADR-TMC-007, ADR-GRP-006, ADR-GRP-013]
   stories: [US-TMC-001, US-TMC-002, US-TMC-003, US-TMC-006, US-TMC-008, US-TMC-009, US-TMC-010, US-TMC-011, US-TMC-016, US-TMC-019, TS-GRP-001, TS-GRP-003]
-  specs: []
+  specs: [DS-TS-TMC-002]
 ado:
   id: null
   url: null
@@ -29,7 +29,7 @@ tags: [time-machine, oplog, journal, inmutabilidad, recuperacion, nfr-12, d-tmc-
 **Quiero** un oplog por repo en el perfil, solo por anexión, con un diario de estados y una recuperación al arrancar
 **Para** que undo, redo, restauración, timeline y purga lean y escriban un único registro que respeta D-TMC-18 y resiste un `kill -9` (NFR-12)
 
-> Dev Spec: `dev-specs/TS-TMC-002-oplog-diario.md` | Pendiente
+> Dev Spec: [`dev-specs/TS-TMC-002-oplog-diario.md`](../dev-specs/TS-TMC-002-oplog-diario.md) | En revisión (2026-10-04): implementada; falta revisar con Rene el modelo de estados frente a US-TMC-019
 >
 > **Depende de**: TS-GRP-001 (carpeta del perfil y convenciones del almacén) y TS-GRP-003 (ciclo de vida del daemon, donde corre la recuperación). **ADRs**: ADR-TMC-003 (modelo, estados, recuperación), ADR-TMC-007 § 4 (purga interrumpida), ADR-GRP-013 (atribución vigente que se consulta, nunca se copia).
 
