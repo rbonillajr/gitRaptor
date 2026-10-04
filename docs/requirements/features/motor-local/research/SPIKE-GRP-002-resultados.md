@@ -15,7 +15,7 @@ tags: [motor-local, spike, watcher, fsevents, latencia, debounce, escala, huecos
 
 # Resultados de SPIKE-GRP-002: viabilidad del observador de cambios a escala
 
-> **Alcance de esta entrega**: medido **solo en macOS**. Linux y Windows están **sin verificar**; el procedimiento para medirlos está en el [README del prototipo](../../../../../spikes/watcher-viability/README.md#reproducir-en-linux-y-windows). Este documento **no modifica** ADR-GRP-010 ni ADR-GRP-011: las enmiendas son recomendaciones (§ 6).
+> **Alcance de esta entrega**: medido **solo en macOS**. Linux y Windows están **sin verificar**; el procedimiento para medirlos está en el [README del prototipo](../../../../../spikes/watcher-viability/README.md#reproducir-en-linux-y-windows). Las recomendaciones del § 6 se **aplicaron el 2026-10-04** como enmiendas de ADR-GRP-010 y ADR-GRP-011.
 
 ## 1. Resumen
 
@@ -265,7 +265,9 @@ En la punta cercana, el coste es casi todo el arranque del proceso, unos 15 ms.
 
 **El SPIKE queda parcialmente cerrado**: la vía de fracaso no se activa en macOS, y para Linux y Windows hay que ejecutar el procedimiento del README.
 
-## 6. Recomendaciones de enmienda (no aplicadas)
+## 6. Recomendaciones de enmienda (aplicadas el 2026-10-04)
+
+En la fila de debounce se eligió la ventana compensada (duración efectiva de 75 ms) en lugar de presupuestar 85 ms, para que las etapas de ADR-GRP-011 § 2 sigan sumando 300 ms. Para el sondeo de respaldo se eligió depender de los disparadores de reconciliación, con la reconciliación tras cada recreación del stream como disparador nuevo. La reconciliación periódica queda como opción si el dogfooding la pide.
 
 ### ADR-GRP-011
 
