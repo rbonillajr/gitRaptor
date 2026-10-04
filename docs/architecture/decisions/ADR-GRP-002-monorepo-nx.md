@@ -5,9 +5,9 @@ type: adr
 status: accepted
 date: 2026-10-01
 created: 2026-10-01
-updated: 2026-10-01
+updated: 2026-10-03
 deciders: [Rene Bonilla]
-related: [ADR-GRP-001, ADR-GRP-003]
+related: [ADR-GRP-001, ADR-GRP-003, ADR-GRP-007]
 tags: [nx, monorepo, package-based, pnpm, cargo, rust, monodon, tauri, ci]
 ---
 
@@ -53,7 +53,7 @@ gitraptor/
 │  └─ vscode-extension/    # TS · cliente liviano del motor (Fase 3)
 ├─ crates/
 │  ├─ core/                # Rust · motor: watcher, oplog/snapshots, conflictos
-│  ├─ policy/              # Rust · motor de guardrails (policy.yaml)
+│  ├─ policy/              # Rust · configuración en tres niveles (.gitraptor/settings.json, ADR-GRP-007) y motor de guardrails
 │  ├─ git/                 # Rust · capa Git (gitoxide para leer + Git CLI para escribir)
 │  ├─ api/                 # Rust · contrato JSON-RPC/eventos; genera tipos TS (ts-rs/specta)
 │  └─ theme/               # Rust · paleta generada desde @gitraptor/tokens para TUI/CLI
