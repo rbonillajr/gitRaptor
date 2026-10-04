@@ -39,7 +39,8 @@ pub struct ProfileDirs {
 pub(crate) enum BaseInputs {
     /// `~/Library/Application Support`.
     MacOs { app_support: PathBuf },
-    /// XDG folders; `runtime` is `None` when `$XDG_RUNTIME_DIR` is unset.
+    /// XDG default folders under the home folder; `runtime` is `None` when
+    /// `$XDG_RUNTIME_DIR` is unset or relative.
     Linux {
         data: PathBuf,
         config: PathBuf,
@@ -193,14 +194,19 @@ fn base_inputs() -> Result<BaseInputs> {
             local_app_data: base.data_local_dir().to_path_buf(),
         })
     } else {
-        let state = base
-            .state_dir()
-            .map_or_else(|| base.home_dir().join(".local/state"), Path::to_path_buf);
+        // `XDG_DATA_HOME`, `XDG_CONFIG_HOME` and `XDG_STATE_HOME` are ignored:
+        // an inherited hostile value would move the profile (SEC-10). Every
+        // process (daemon, CLI, hook dispatcher) resolves through here, so
+        // all of them agree on the same folders (ADR-GRP-006 § 1 amendment).
+        let home = base.home_dir();
         Ok(BaseInputs::Linux {
-            data: base.data_dir().to_path_buf(),
-            config: base.config_dir().to_path_buf(),
-            state,
-            runtime: base.runtime_dir().map(Path::to_path_buf),
+            data: home.join(".local/share"),
+            config: home.join(".config"),
+            state: home.join(".local/state"),
+            runtime: base
+                .runtime_dir()
+                .filter(|dir| dir.is_absolute())
+                .map(Path::to_path_buf),
         })
     }
 }
