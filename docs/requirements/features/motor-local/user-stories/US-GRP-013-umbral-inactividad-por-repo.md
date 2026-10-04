@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: medium
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 feature: motor-local
 related:
   context:
@@ -18,7 +18,6 @@ tags:
   - motor-local
   - configuracion-tres-niveles
   - estados-sesion
-  - bloqueada
 ---
 
 # US-GRP-013: El desarrollador ajusta para un repo cuándo una sesión pasa a inactiva
@@ -36,7 +35,7 @@ BR-TIME-001 (umbral configurado; el valor por defecto de 5 minutos sin configura
 ## Dependencias
 
 - **Historias**: US-GRP-007.
-- **Externas**: **bloqueada por P8** (formato y ubicación de la configuración en tres niveles, ADR pendiente). No se empieza hasta que exista ese ADR.
+- **Externas**: ninguna. Estuvo bloqueada por P8 (formato y ubicación de la configuración en tres niveles) hasta el 2026-10-04, cuando Rene Bonilla aceptó ADR-GRP-007, que la cierra.
 - **Transversal**: todo escenario se cumple igual en Windows, macOS y Linux (BR-03) y sin escribir nada en el repo observado (BR-CONS-001); cómo se verifica lo define el plan técnico.
 
 ## Criterios de Aceptación

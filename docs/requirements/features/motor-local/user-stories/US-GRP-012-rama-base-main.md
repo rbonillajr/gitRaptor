@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: medium
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 feature: motor-local
 related:
   context:
@@ -34,7 +34,7 @@ BR-CONS-006 (rama base `main` provisional; esta historia es la única dueña del
 ## Dependencias
 
 - **Historias**: US-GRP-001.
-- **Externas**: ninguna. Leer la rama base de la configuración del equipo es US-GRP-016, diferida y bloqueada por Guardrails (F-001-04) y el ADR de formato (P8) (Q36). Hasta entonces la rama base es `main` en todos los repos.
+- **Externas**: ninguna. Leer la rama base de la configuración del equipo es US-GRP-016 (desbloqueada el 2026-10-04; depende de US-GRP-013 y TS-GRD-001). Hasta que se integre, la rama base es `main` en todos los repos.
 - **Transversal**: todo escenario se cumple igual en Windows, macOS y Linux (BR-03) y sin escribir nada en el repo observado (BR-CONS-001); cómo se verifica lo define el plan técnico.
 
 ## Criterios de Aceptación

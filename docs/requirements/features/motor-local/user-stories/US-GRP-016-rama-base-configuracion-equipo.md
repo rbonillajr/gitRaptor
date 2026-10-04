@@ -15,11 +15,11 @@ related:
   stories:
     - US-GRP-012
     - US-GRP-013
+    - TS-GRD-001
 tags:
   - motor-local
   - rama-base
   - configuracion-tres-niveles
-  - bloqueada
 ---
 
 # US-GRP-016: La rama base la define la configuración del equipo
@@ -36,8 +36,8 @@ BR-CONS-006 (rama base del equipo, leída de la copia conocida de la rama princi
 
 ## Dependencias
 
-- **Historias**: US-GRP-012 (ahead/behind contra `main`, al que esta historia añade la lectura del valor del equipo); US-GRP-013 (en serie: las dos leen la configuración en tres niveles, bloqueadas por P8; va primero 013, que solo espera al ADR de formato, y su Dev Spec fija la lectura de la configuración que 016 reutiliza).
-- **Externas**: **bloqueada** por Guardrails (F-001-04), dueño de la configuración del repo compartida con el equipo, y por el ADR de formato de la configuración en tres niveles (P8). Historia diferida por Q36: no se empieza hasta que existan los dos. Confirmar la rama base es una acción de Guardrails; esta historia no depende de cómo se confirma: parte de la rama base confirmada como precondición y muestra lo pendiente o no confirmado (decisiones heredadas Q-GRD-20, Q-GRD-21 y Q-GRD-23). La coherencia con Guardrails se comprueba en la prueba de integración posterior del [índice de historias de Guardrails](../../guardrails/user-stories.md#relación-con-us-grp-016-motor-local).
+- **Historias**: US-GRP-012 (ahead/behind contra `main`, al que esta historia añade la lectura del valor del equipo); US-GRP-013 (en serie: las dos leen la configuración en tres niveles; va primero 013 y su Dev Spec fija la lectura de la configuración que 016 reutiliza); TS-GRD-001 (Guardrails: lectura commiteada de la configuración del equipo y de la rama principal, de donde sale la rama base).
+- **Externas**: ninguna bloqueante desde el 2026-10-04. Historia diferida por Q36 hasta que existieran Guardrails (F-001-04), dueño de la configuración del repo compartida con el equipo, y el ADR de formato de la configuración en tres niveles (P8). Los dos existen como ADRs aceptados por Rene Bonilla el 2026-10-04 (ADR-GRD-004 y ADR-GRP-007, que cierra P8), y el coordinador la desbloqueó ese día con dependencia de US-GRP-013 y TS-GRD-001 (pendiente de confirmar por Rene en el PR). Confirmar la rama base es una acción de Guardrails; esta historia no depende de cómo se confirma: parte de la rama base confirmada como precondición y muestra lo pendiente o no confirmado (decisiones heredadas Q-GRD-20, Q-GRD-21 y Q-GRD-23). La coherencia con Guardrails se comprueba en la prueba de integración posterior del [índice de historias de Guardrails](../../guardrails/user-stories.md#relación-con-us-grp-016-motor-local).
 - **Transversal**: todo escenario se cumple igual en Windows, macOS y Linux (BR-03) y sin escribir nada en el repo observado (BR-CONS-001); cómo se verifica lo define el plan técnico.
 
 ## Criterios de Aceptación

@@ -6,9 +6,7 @@ generator: product-owner
 total_artifacts: 16
 expanded: 16
 approved: 0
-blocked:
-  - US-GRP-013
-  - US-GRP-016
+blocked: []
 ---
 
 # User Stories — INDEX: Motor local
@@ -22,7 +20,7 @@ blocked:
 **Feature**: Motor local (F-001-01)
 **Epic**: E-001 — MVP Fase 1: Cockpit + Time Machine + Guardrails (CLI/TUI + MCP)
 **Prioridad**: Alta
-**Estado**: Listo para Desarrollo salvo US-GRP-013 y US-GRP-016, bloqueadas (requerimiento aprobado por Rene Bonilla el 2026-10-03; alcance ajustado por Q32 y Q33-Q36 el mismo día)
+**Estado**: Listo para Desarrollo, sin historias bloqueadas: US-GRP-013 y US-GRP-016 se desbloquearon el 2026-10-04 al aceptarse ADR-GRP-007, que cierra P8 (requerimiento aprobado por Rene Bonilla el 2026-10-03; alcance ajustado por Q32 y Q33-Q36 el mismo día)
 
 **Enlace a contexto completo**: [`context.md`](./context.md) (CTX-GRP-001)
 **Reglas de negocio**: [`business-rules.md`](./business-rules.md) (BR-GRP-001, 22 reglas) · **Diseño**: no aplica (el motor no tiene superficie propia)
@@ -60,10 +58,10 @@ blocked:
 | [US-GRP-010](./user-stories/US-GRP-010-corregir-atribucion.md) | El desarrollador corrige una atribución automática equivocada | Desarrollador quiere que su corrección reemplace una detección errónea, sin dejar una segunda sesión | expanded |
 | [US-GRP-011](./user-stories/US-GRP-011-worktree-compartido.md) | El desarrollador ve todas las sesiones de un worktree compartido | Desarrollador quiere que registrar otro agente añada su sesión y el worktree figure como compartido | expanded |
 | [US-GRP-012](./user-stories/US-GRP-012-rama-base-main.md) | El desarrollador ve el ahead/behind de cada worktree contra la rama base del repo | Desarrollador quiere ahead/behind contra `main` (provisional) al día y sin tocar el remoto | expanded |
-| [US-GRP-013](./user-stories/US-GRP-013-umbral-inactividad-por-repo.md) | El desarrollador ajusta para un repo cuándo una sesión pasa a inactiva | Desarrollador quiere fijar su umbral de inactividad por repo sin imponerlo al equipo (bloqueada por P8) | expanded |
+| [US-GRP-013](./user-stories/US-GRP-013-umbral-inactividad-por-repo.md) | El desarrollador ajusta para un repo cuándo una sesión pasa a inactiva | Desarrollador quiere fijar su umbral de inactividad por repo sin imponerlo al equipo | expanded |
 | [US-GRP-014](./user-stories/US-GRP-014-git-ausente-o-antiguo.md) | El desarrollador sabe qué Git le falta y el motor empieza solo cuando lo instala | Desarrollador quiere que sin Git 2.38 el motor avise, espere y arranque solo al detectarlo | expanded |
 | [US-GRP-015](./user-stories/US-GRP-015-primer-repo-maquina-nueva.md) | El desarrollador recién instalado sabe cómo añadir su primer repo | Desarrollador quiere una guía sin repos y, en máquina nueva, empezar de cero sin historia atribuida | expanded |
-| [US-GRP-016](./user-stories/US-GRP-016-rama-base-configuracion-equipo.md) | La rama base la define la configuración del equipo | Desarrollador quiere el ahead/behind contra la rama base del equipo, sin que un ajuste personal la cambie (bloqueada) | expanded |
+| [US-GRP-016](./user-stories/US-GRP-016-rama-base-configuracion-equipo.md) | La rama base la define la configuración del equipo | Desarrollador quiere el ahead/behind contra la rama base del equipo, sin que un ajuste personal la cambie | expanded |
 
 ---
 
@@ -85,10 +83,10 @@ blocked:
 | US-GRP-010 | BR-CONS-002 (Q33, Q37, Q38), BR-CONS-003, BR-VAL-002, BR-AUTH-001 (el agente no corrige), BR-CONS-005 | US-GRP-004, US-GRP-007, US-GRP-009 | — | Must | Una detección errónea se reemplaza en un paso, también hacia atrás en la sesión (Q33, Q37) |
 | US-GRP-011 | BR-CONS-004, BR-CONS-005 | US-GRP-004, US-GRP-007, US-GRP-009 | — | Should | Registrar otro agente lo suma y ve cuándo dos agentes pisan el mismo worktree (Q33) |
 | US-GRP-012 | BR-CONS-006 (`main` provisional; única dueña del ahead/behind; rama base inexistente, Q42), BR-CONS-001 (Q12) | US-GRP-001 | — | Should | Ahead/behind fiable desde ya |
-| US-GRP-013 | BR-TIME-001 (umbral configurado), BR-CONS-007 | US-GRP-007 | **Bloqueada**: ADR de formato (P8) | Should | El estado de sesión se ajusta a su ritmo en cada repo |
+| US-GRP-013 | BR-TIME-001 (umbral configurado), BR-CONS-007 | US-GRP-007 | — (P8 cerrada por ADR-GRP-007, aceptado el 2026-10-04) | Should | El estado de sesión se ajusta a su ritmo en cada repo |
 | US-GRP-014 | BR-VAL-003, BR-WF-002, BR-EDGE-005 | US-GRP-001, US-GRP-002, US-GRP-005, US-GRP-009, US-GRP-015 | Cockpit F-001-02 y CLI (presentación del aviso) | Must | Una máquina nueva no parece una herramienta rota |
 | US-GRP-015 | BR-WF-002, BR-EDGE-007 | US-GRP-001, US-GRP-002 | Cockpit F-001-02 y CLI (estado vacío guiado) | Should | El primer minuto termina con un repo observado |
-| US-GRP-016 | BR-CONS-006 (equipo), BR-CONS-007, BR-EDGE-007 (rama base del equipo) | US-GRP-012, US-GRP-013 | **Bloqueada**: Guardrails F-001-04 y ADR de formato (P8) (Q36) | Should | Todo el equipo mide contra la misma rama base |
+| US-GRP-016 | BR-CONS-006 (equipo), BR-CONS-007, BR-EDGE-007 (rama base del equipo) | US-GRP-012, US-GRP-013, TS-GRD-001 (Guardrails) | — (Q36 satisfecha: ADR-GRP-007 y ADR-GRD-004 aceptados el 2026-10-04) | Should | Todo el equipo mide contra la misma rama base |
 
 > **Cambios de dependencias (2026-10-03, segunda pasada del Artifact Judge)**: US-GRP-004 añade 007 y 009 (sesiones y registros que sobreviven al reinicio); US-GRP-006 añade 005 (lo ocurrido mientras estuvo retirado es un hueco) y 009 (atribuciones recuperadas), y su dependencia del MCP queda como no bloqueante; US-GRP-009 depende de 007 y US-GRP-014 de 015 para que no corran en paralelo sobre el mismo modelo; US-GRP-005 ya no exige el estado "Sin repos" (solo la lista vacía). US-GRP-001 deja BR-CONS-006: el ahead/behind es solo de US-GRP-012. US-GRP-013 pasa a bloqueada por P8 y el umbral por defecto queda en US-GRP-007. Nueva US-GRP-016, bloqueada (Q36).
 >
@@ -98,11 +96,11 @@ blocked:
 
 - **Esqueleto andante** (en serie, primero): US-GRP-001 → US-GRP-002. Con ambas se observa un repo de punta a punta.
 - **Ola 1** (en paralelo tras el esqueleto): US-GRP-007, US-GRP-012 y US-GRP-015.
-- **Ola 2**: US-GRP-009 (tras 007).
-- **Ola 3**: US-GRP-003, US-GRP-004 y US-GRP-008 (tras 009).
+- **Ola 2**: US-GRP-009 y US-GRP-013 (tras 007).
+- **Ola 3**: US-GRP-003, US-GRP-004 y US-GRP-008 (tras 009) y US-GRP-016 (tras 012, 013 y TS-GRD-001 de Guardrails).
 - **Ola 4**: US-GRP-005, US-GRP-010 y US-GRP-011 (tras 004).
 - **Ola 5**: US-GRP-006 y US-GRP-014 (tras 005).
-- **Bloqueadas** (no se asignan a ningún agente hasta desbloquearse), en este orden: US-GRP-013 (P8) → US-GRP-016 (P8, Guardrails F-001-04 y US-GRP-013).
+- **Desbloqueadas el 2026-10-04** (ADR-GRP-007 aceptado, cierra P8): US-GRP-013 → US-GRP-016, en ese orden; US-GRP-016 espera además a TS-GRD-001 (Guardrails).
 
 > **Secuencias por contrato compartido**: US-GRP-007 → US-GRP-009 (modelo de sesión: estados, origen, presencia), US-GRP-009 → US-GRP-008 (quién hizo un evento: agente con su origen o "sin atribuir"), US-GRP-015 → US-GRP-014 (estados del motor de BR-WF-002) y US-GRP-013 → US-GRP-016 (lectura de la configuración en tres niveles) van en serie, no en paralelo. US-GRP-010 y US-GRP-011 corren en paralelo pero tocan la misma regla de sesiones por worktree (corregir frente a añadir, Q33). En todos los casos el contrato compartido lo fija la Dev Spec de la historia que va primero (007, 009, 015, 013 y, para 010/011, 009).
 >
@@ -115,8 +113,8 @@ blocked:
 | Regla | Historias | Regla | Historias |
 |-------|-----------|-------|-----------|
 | BR-VAL-001 | US-GRP-009 | BR-CONS-005 | US-GRP-004 (+ persistencia en US-GRP-010 y US-GRP-011) |
-| BR-VAL-002 | US-GRP-009, US-GRP-010 | BR-CONS-006 | US-GRP-012 (`main`), US-GRP-016 (equipo, bloqueada) |
-| BR-VAL-003 | US-GRP-014 | BR-CONS-007 | US-GRP-013, US-GRP-016 (las dos bloqueadas) |
+| BR-VAL-002 | US-GRP-009, US-GRP-010 | BR-CONS-006 | US-GRP-012 (`main`), US-GRP-016 (equipo) |
+| BR-VAL-003 | US-GRP-014 | BR-CONS-007 | US-GRP-013, US-GRP-016 |
 | BR-WF-001 | US-GRP-007, US-GRP-009 | BR-TIME-001 | US-GRP-007, US-GRP-013 |
 | BR-WF-002 | US-GRP-014, US-GRP-015 | BR-EDGE-001 | US-GRP-003 |
 | BR-AUTH-001 | US-GRP-001, US-GRP-006, US-GRP-010 | BR-EDGE-002 | US-GRP-003 |
@@ -124,9 +122,9 @@ blocked:
 | BR-CONS-001 | US-GRP-001, US-GRP-012 (+ transversal en todas) | BR-EDGE-004 | US-GRP-008 |
 | BR-CONS-002 | US-GRP-010 | BR-EDGE-005 | US-GRP-005, US-GRP-006, US-GRP-014 |
 | BR-CONS-003 | US-GRP-002, 007, 008, 009, 010 | BR-EDGE-006 | US-GRP-007 |
-| BR-CONS-004 | US-GRP-011, US-GRP-009 (confirmar sesión) | BR-EDGE-007 | US-GRP-015, US-GRP-016 (rama base del equipo, bloqueada) |
+| BR-CONS-004 | US-GRP-011, US-GRP-009 (confirmar sesión) | BR-EDGE-007 | US-GRP-015, US-GRP-016 (rama base del equipo) |
 
-**Resultado**: 22 de 22 reglas cubiertas. **BR-CONS-007 solo la cubren historias bloqueadas** (US-GRP-013 y US-GRP-016, ambas por P8): hasta que exista el ADR de formato, ninguna historia ejecutable la verifica. La parte "configuración del equipo" de BR-CONS-006 y BR-EDGE-007 también espera a US-GRP-016. BR-AUTH-002 es un principio de frontera: en el MVP solo lleva sus dos escenarios exigidos (el motor no modifica hooks, configuración de Git ni metadatos de worktrees, en US-GRP-001; la detección funciona sin hooks propios, en US-GRP-007). Su modelo de permiso explícito no tiene escenarios en el MVP. El rechazo a un agente que cambia los repos observados (Q40) está en una historia Must (US-GRP-001) y se repite con un agente registrado en US-GRP-006. **Codex y Cursor** no tienen historia de soporte completo en el MVP (Q32): quedan cubiertos como "otro agente" por US-GRP-009.
+**Resultado**: 22 de 22 reglas cubiertas. BR-CONS-007 la cubren US-GRP-013 y US-GRP-016, desbloqueadas el 2026-10-04 (ADR-GRP-007 cierra P8). La parte "configuración del equipo" de BR-CONS-006 y BR-EDGE-007 la verifica US-GRP-016. BR-AUTH-002 es un principio de frontera: en el MVP solo lleva sus dos escenarios exigidos (el motor no modifica hooks, configuración de Git ni metadatos de worktrees, en US-GRP-001; la detección funciona sin hooks propios, en US-GRP-007). Su modelo de permiso explícito no tiene escenarios en el MVP. El rechazo a un agente que cambia los repos observados (Q40) está en una historia Must (US-GRP-001) y se repite con un agente registrado en US-GRP-006. **Codex y Cursor** no tienen historia de soporte completo en el MVP (Q32): quedan cubiertos como "otro agente" por US-GRP-009.
 
 ---
 
@@ -141,3 +139,4 @@ blocked:
 | 1.4 | 2026-10-04 | PO (AADD) para Rene Bonilla | Decisiones heredadas de Guardrails Q-GRD-20 y Q-GRD-21, posteriores a la aprobación del requerimiento. US-GRP-016: la rama base se lee de la copia conocida de la rama principal y el ahead/behind se calcula contra la rama base confirmada; el escenario de cambio pasa a "pendiente de confirmar" hasta la confirmación del desarrollador; nuevos escenarios de cambio que no está en la copia conocida y de falta de confirmación inicial ("no confirmada"); la máquina nueva confirma la rama base al añadir el repo (5 escenarios). Sin historias nuevas |
 | 1.5 | 2026-10-04 | PO (AADD) para Rene Bonilla | Decisión heredada de Guardrails Q-GRD-23: US-GRP-016 deja de confirmar la rama base al añadir el repo; en una máquina nueva la rama base del equipo aplica desde la primera consulta, marcada como "no confirmada" hasta que el desarrollador la confirme al proteger el repo o de forma explícita. Sin historias nuevas |
 | 1.6 | 2026-10-04 | PO (AADD) para Rene Bonilla | Artifact Judge (FAIL): US-GRP-016 sigue siendo independiente de Guardrails. Sus escenarios parten de "la rama base confirmada …" como precondición, sin la acción de confirmar; "pendiente de confirmar" y "no confirmada" son lo que muestra el motor. Dependencias sin US-GRD-001 ni US-GRD-014; la coherencia se comprueba en la prueba de integración posterior del índice de Guardrails |
+| 1.7 | 2026-10-04 | Agente de documentación para Rene Bonilla | Aceptación de ADR-GRP-005 a 013 (Rene Bonilla, 2026-10-04). ADR-GRP-007 cierra P8: US-GRP-013 se desbloquea (pasa a la ola 2, tras 007). US-GRP-016 se desbloquea por decisión del coordinador (2026-10-04, pendiente de confirmar por Rene): Q36 pedía que existieran Guardrails como dueño de la configuración del equipo y el ADR de formato, y los dos existen como ADRs aceptados (ADR-GRD-004, ADR-GRP-007); queda en la ola 3 con dependencia de US-GRP-013 y TS-GRD-001. Sin historias bloqueadas |
