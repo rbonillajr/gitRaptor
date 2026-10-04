@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 date: 2026-10-03
 domain: GRP
 feature: time-machine
@@ -69,12 +69,16 @@ Para las operaciones protegidas, el tipo de operación declara si es destructiva
 2. **Gracia** (TQ-11 → a): la purga solo se ejecuta cuando el aviso se mostró al menos una vez en la CLI o la TUI **y** pasaron 24 horas desde que se mostró **por primera vez** (BR-TMC-TIME-001, D-TMC-25). El oplog guarda el momento de esa primera entrega. Sin ningún cliente, no se purga (el disco crece antes que perder un punto sin avisar).
 3. **Ejecución**: se recalcula la elegibilidad (un candidato que pasó a protegido se salta), se anota la intención en el diario, se borran sus refs del almacén en **una sola transacción** y se anota que se purgaron. La fila del snapshot se conserva como "punto purgado" en el timeline.
 4. **Liberación de objetos**: el mantenimiento del almacén (compactar y borrar objetos sin referencias) corre en reposo, con un periodo de gracia para objetos sueltos (⚠️ **ASSUMPTION**: 1 hora, valor de diseño que fija la Dev Spec de TS-TMC-001) que protege las capturas en curso. **El repo del usuario no se toca nunca durante la purga**.
+   - **Consolidación** (Enmienda 2026-10-04, E10): `git repack -d --geometric=2` sobre el almacén, a diario o al pasar un umbral de objetos sueltos (el umbral lo fija la Dev Spec de TS-TMC-001), en reposo y en segundo plano.
+   - Corre **fuera del cerrojo del escritor del almacén**, para no retener a un snapshot previo: tarda unos 16 s.
+   - El `prune` sigue sujeto al periodo de gracia.
+   - Medido por SPIKE-TMC-001 en macOS: una semana de capturas (2.400) deja +280 MiB en objetos sueltos, que bajan a +47 MiB tras consolidar. Sin consolidar, cada captura deja unos 25 árboles sueltos.
 5. **Interrupción** (US-TMC-016, escenario 4): al recuperar, un snapshot con intención de purga y ref presente vuelve a estar disponible; uno con la ref ya borrada pasa a purgado. Como la transacción de refs es atómica, no hay estados intermedios.
 
 ### 5. Borrado inmediato y cuotas
 
 - **`forget` no forma parte de este diseño**: aplazado a una US futura del PO (TQ-17 → a). Tal como se propuso, chocaría con D-TMC-15 y BR-TMC-TIME-001 (borra sin aviso y sin respetar el snapshot protegido), ampliaría BR-TMC-CONS-004, se saltaría el periodo de gracia de § 4.4 y, con una ruta, borraría snapshots enteros (NFR-01). Cuando se especifique, su semántica debe reescribir los snapshots sin esa ruta, conservar el resto, respetar las capturas en curso y salir de una US del PO. Mientras tanto, el contenido sensible lo cubre la lista de exclusión de SEC-TMC-06 (TQ-16 → a).
-- **Cuotas de disco** (SEC-TMC-12, TQ-5 → b; ⚠️ **ASSUMPTION**: cifras que ajusta SPIKE-TMC-001): al alcanzarlas no se purga antes de tiempo; se detiene la captura por observación con un hueco "sin espacio" (ADR-TMC-004 § 2).
+- **Cuotas de disco** (SEC-TMC-12, TQ-5 → b; cifras confirmadas por SPIKE-TMC-001 en macOS, Enmienda 2026-10-04): al alcanzarlas no se purga antes de tiempo; se detiene la captura por observación con un hueco "sin espacio" (ADR-TMC-004 § 2).
 
 ## Alternativas consideradas
 
@@ -108,3 +112,12 @@ Para las operaciones protegidas, el tipo de operación declara si es destructiva
 - **Reglas**: BR-TMC-TIME-001; D-TMC-15. Q24, Q27.
 - **ADRs**: ADR-GRP-007, ADR-GRP-008; ADR-TMC-001, ADR-TMC-003.
 - **Historias**: US-TMC-016 (dueña de la purga), US-TMC-017 (dueña de la configuración). **Seguridad**: SEC-TMC-06, 12.
+
+## Enmienda (2026-10-04, SPIKE-TMC-001)
+
+Aplicada desde § 7 de [SPIKE-TMC-001-resultados.md](../../requirements/features/time-machine/research/SPIKE-TMC-001-resultados.md), medido **solo en macOS**. El `status` sigue en `accepted`. Decisión del orquestador (2026-10-04), validada por el Arquitecto, que pidió ajustes y están incorporados.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| Consolidación del almacén con `repack -d --geometric=2`, diaria o por umbral, fuera del cerrojo del escritor; `prune` con periodo de gracia | § 4 | E10; Resultados § 5.5; revisión del Arquitecto |
+| Cuotas confirmadas en macOS | § 5 | Resultados § 6 |
