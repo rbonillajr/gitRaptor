@@ -259,6 +259,9 @@ pub enum RefusalReason {
     AgentAncestry,
     /// The caller's session leader descends from an agent.
     SessionLeaderAgent,
+    /// The caller descends from the daemon itself (a hook or `git` run by
+    /// its operation executor): a confused deputy (DEP-MCP-3).
+    DaemonDescendant,
     /// The caller has no controlling terminal.
     NoControllingTerminal,
     /// The caller's identity could not be read or changed during the check.
@@ -280,6 +283,8 @@ pub struct ClientIdentity {
     /// Executable path.
     pub exe: Option<Untrusted>,
     pub agent_ancestor: bool,
+    #[serde(default)]
+    pub daemon_descendant: bool,
     pub controlling_terminal: bool,
     /// The ancestry walk stopped at a process of another user or one the
     /// daemon cannot read (`login`, `launchd`).
