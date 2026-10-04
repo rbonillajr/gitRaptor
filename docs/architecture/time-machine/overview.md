@@ -105,18 +105,18 @@ Pendientes. Se generan con `/aadd-devspec <id>` para TS-TMC-001..004 e INF-TMC-0
 
 ## 7. Pendientes de integración y notas para el PO
 
-Al mergear con `docs/arch-motor-local`, sin tocar ahora esos archivos:
+La arquitectura de motor-local ya está en `main` (PR #8). Quedan pendientes de integrar en los catálogos compartidos los puntos 1 a 4:
 
 1. `docs/architecture/decisions/index.md`: añadir ADR-TMC-001..007 al outline y al grafo.
 2. `docs/architecture/architecture-overview.md`: enlazar este overview, los diagramas `*-tmc-*` y los enablers TMC.
 3. `docs/architecture/non-functional.md`: enlazar [non-functional.md](./non-functional.md) y referenciar SEC-TMC-01..15 junto a SEC-01..14.
 4. `docs/architecture/diagrams/c4-containers.md`: anotar que el daemon aloja la Time Machine y el ejecutor de operaciones de usuario, y que el perfil contiene el almacén de snapshots.
-5. Las notas de TQ-12 (aprobadas el 2026-10-03), con su texto exacto en § 7.1.
+5. ~~Las notas de TQ-12~~: **aplicadas** en motor-local (PR #8); ver § 7.1.
 6. `docs/ARTIFACTS.md` lo regenera `/aadd-index` (no se edita a mano).
 
-### 7.1 Notas de TQ-12 para aplicar en `docs/arch-motor-local` (texto exacto)
+### 7.1 Notas de TQ-12 en los artefactos de motor-local — aplicadas (PR #8)
 
-Cada nota se añade tal cual al final de la sección "Consecuencias" del archivo indicado, sin cambiar ninguna decisión de ese ADR ni su status.
+**Estado**: aplicadas en `main` con el PR #8, al final de la sección "Consecuencias" de cada archivo indicado, sin cambiar ninguna decisión de esos ADRs ni su status. El texto se conserva aquí como registro de lo aprobado.
 
 - **ADR-GRP-005**: "Nota de integración (Time Machine, ADR-TMC-002, ADR-TMC-004 y ADR-TMC-005, aceptados el 2026-10-03): el canal expone además la operación protegida de la Time Machine (intención, snapshot previo y registro) y sus comandos de snapshot, undo, redo, restauración y timeline. La confirmación para deshacer trabajo ajeno reutiliza los controles del daemon de § 6 (identificador no reutilizable, ascendencia, terminal de control y líder de sesión), ampliados con la hora de inicio de cada antecesor, la contaminación por multiplexor y un reto de un solo uso ligado al plan (SEC-TMC-03). Un undo no es un comando reservado: un agente puede deshacer su propio trabajo."
 - **ADR-GRP-006**: "Nota de integración (Time Machine, ADR-TMC-001 y ADR-TMC-003, aceptados el 2026-10-03): la carpeta de datos del perfil incluye `tm/<id-repo>/`, con el almacén de snapshots (repo Git bare) y el oplog de la Time Machine (SQLite). A diferencia del almacén del motor, contiene contenido de archivos del usuario: carpeta 0700, archivos 0600, excluida de las copias de seguridad del SO y escrita solo por el daemon (SEC-TMC-01, SEC-TMC-06). La regla de § 4 'solo metadatos' aplica al almacén del motor."
