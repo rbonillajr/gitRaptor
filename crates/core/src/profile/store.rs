@@ -317,6 +317,16 @@ impl RepoStore {
             .optional()?)
     }
 
+    /// Whether any session is still active (no end cause). Used at startup
+    /// to tell a crash during an active session apart (SEC-13).
+    pub fn has_active_sessions(&self) -> Result<bool> {
+        Ok(self.conn.query_row(
+            "SELECT EXISTS (SELECT 1 FROM sessions WHERE end_cause IS NULL)",
+            [],
+            |row| row.get(0),
+        )?)
+    }
+
     /// Sessions of a worktree, oldest first.
     pub fn sessions_for_worktree(&self, worktree: &Path) -> Result<Vec<Session>> {
         self.collect(
