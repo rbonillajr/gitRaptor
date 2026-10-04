@@ -15,7 +15,7 @@ related:
   rules:
     - BR-TMC-001
   stories: [US-TMC-001, US-GRP-002, US-GRP-004]
-covers: [BR-TMC-CONS-003, BR-TMC-CONS-002, D-TMC-9, D-TMC-10, D-TMC-16]
+covers: [BR-TMC-CONS-003, BR-TMC-CONS-002, D-TMC-9, D-TMC-10, D-TMC-16, D-TMC-25]
 blocked_by: []
 tags: [time-machine, captura-continua, git-crudo]
 ---
@@ -32,7 +32,7 @@ tags: [time-machine, captura-continua, git-crudo]
 
 ## Reglas cubiertas
 
-BR-TMC-CONS-003 (cobertura por observación, nivel b) · BR-TMC-CONS-002 · D-TMC-9, D-TMC-10, D-TMC-16 — ver [business-rules.md](../business-rules.md)
+BR-TMC-CONS-003 (cobertura por observación, nivel b; tope por archivo, TQ-5) · BR-TMC-CONS-002 (ignorados y credenciales) · D-TMC-9, D-TMC-10, D-TMC-16, D-TMC-25 — ver [business-rules.md](../business-rules.md)
 
 ## Criterios de Aceptación
 
@@ -50,11 +50,20 @@ Cuando un agente ejecuta un reset destructivo con Git crudo en "feat-login"
 Entonces el último estado capturado antes del reset sigue disponible para restaurar
   Y figura como "capturado por observación", no como "snapshot previo"
 
-**Escenario: Los archivos ignorados no se capturan**
+**Escenario: Los archivos ignorados y las credenciales no se capturan**
 
-Dado que se modifica ".env", ignorado por el repo
+Dado que en "feat-login" se modifica ".env", ignorado por el repo, y se crea "deploy.pem" sin seguimiento y sin ignorar
+  Y un perfil sin opción para incluir credenciales
 Cuando la Time Machine captura los cambios de "feat-login"
-Entonces el punto no contiene ".env"
+Entonces el punto no contiene ".env" ni "deploy.pem"
+  Y el punto declara "deploy.pem" como excluido por credenciales
+
+**Escenario: Un archivo por encima del tope deja la captura parcial**
+
+Dado que en "feat-login" se modifica "api.rs" y se crea "dump.bin" con un tamaño por encima del tope de la captura por observación
+Cuando la Time Machine captura los cambios de "feat-login"
+Entonces el punto contiene "api.rs" y no contiene "dump.bin"
+  Y el punto figura como captura parcial con "dump.bin" en la lista de lo omitido
 
 **Escenario: Una captura que falla no se presenta como protegida**
 

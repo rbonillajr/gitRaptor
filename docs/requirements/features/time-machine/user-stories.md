@@ -86,9 +86,9 @@ blocked:
 | Regla / decisión | Historias |
 |------------------|-----------|
 | BR-TMC-CONS-001 | 001, 002, 009 |
-| BR-TMC-CONS-002 | 001, 004 |
-| BR-TMC-CONS-003 | 004, 005, 006 |
-| BR-TMC-CONS-004 | 018 |
+| BR-TMC-CONS-002 | 001, 004, 009 |
+| BR-TMC-CONS-003 | 004, 005, 006, 007 |
+| BR-TMC-CONS-004 | 018, 019 |
 | BR-TMC-CONS-005 | 003, 006, 008, 012 |
 | BR-TMC-WF-001 | 002, 003, 010 |
 | BR-TMC-WF-002 | 011 |
@@ -100,7 +100,7 @@ blocked:
 | BR-TMC-EDGE-002 | 007, 009, 011 |
 | BR-TMC-EDGE-003 | 019 |
 | BR-TMC-EDGE-004 | 015 |
-| D-TMC-1 a D-TMC-23 | 1: 006 · 2: 008, 011 · 3: 001, 018 · 4: 005 · 5: 017 · 6: 013 · 7: 007 · 8: 014 · 9: 001, 004, 005 · 10: 001, 004, 005 · 11: 018 · 12: 006 · 13: 003, 012 · 14: 014 · 15: 016, 017 · 16: 001, 004 · 17: 013, 021 · 18: 008 · 19: 002, 006, 007, 010 · 20: 009 · 21: 020 · 22: 011 · 23: 002, 003, 009, 010, 011, 013 |
+| D-TMC-1 a D-TMC-25 | 1: 006 · 2: 008, 011 · 3: 001, 018 · 4: 005 · 5: 017 · 6: 013 · 7: 007 · 8: 014 · 9: 001, 004, 005 · 10: 001, 004, 005 · 11: 018 · 12: 006 · 13: 003, 012 · 14: 014 · 15: 016, 017 · 16: 001, 004, 009 · 17: 013, 021 · 18: 008 · 19: 002, 006, 007, 010 · 20: 009 · 21: 020 · 22: 011 · 23: 002, 003, 009, 010, 011, 013 · 24: — (`forget` fuera del MVP) · 25: 002, 003, 004, 007, 009, 016, 019 |
 
 ---
 
@@ -111,3 +111,4 @@ blocked:
 | 1.0 | 2026-10-03 | PO (AADD) | Versión inicial en modo bulk: 20 historias expandidas; 4 bloqueadas (005, 011, 017, 020). |
 | 1.1 | 2026-10-03 | PO (AADD) | RESERVAS del Artifact Judge: solicitante y confirmación interactiva en 003, 009, 010 y 011 (AUTH-001, D-TMC-23); escenario de Guardrails de 013 extraído a US-TMC-021 (bloqueada por F-001-04); cobertura alineada con `covers`; escenarios de validación o borde en 005, 012, 014, 016 y 019. |
 | 1.2 | 2026-10-03 | PO (AADD) | Segunda pasada del judge: 013 como dependencia de 003 y 009; escenario 6 de 009 retitulado; 010 separa confirmación y rechazo; el solicitante de undo, redo y restauración figura como "solicitante sin atribuir", nunca como el desarrollador (Q34). |
+| 1.3 | 2026-10-03 | PO (AADD) | Decisiones TQ aceptadas por Rene Bonilla (D-TMC-16 y D-TMC-23 actualizadas, D-TMC-24, D-TMC-25). 001: credenciales excluidas y declaradas, opción del perfil. 002: undos seguidos (pila). 003: una operación nueva invalida el redo. 004: credenciales y tope por archivo con captura parcial. 007: hueco "sin espacio". 009: lo excluido no se toca al restaurar; confirmación solo en macOS y Linux, rechazo en Windows (fusionado con el de otro agente). 013: Windows y MCP sin atribuir rechazados; "otro agente registrado" fusionado en el rechazo entre agentes. 016: aviso visto + 24 h y la cuota no adelanta la purga. 019: undo y restauración interrumpidos fusionados; fallo a mitad sin rollback; solo se libera el bloqueo propio. Todas con 6 escenarios o menos. |

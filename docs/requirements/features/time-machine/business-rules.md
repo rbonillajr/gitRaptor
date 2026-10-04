@@ -282,7 +282,7 @@ registro de undo = inmutable; atribución mostrada = vigente
 
 ### BR-TMC-TIME-001: Retención de snapshots
 
-**Descripción** (D-TMC-15): los snapshots se conservan un tiempo configurable; por defecto 30 días. El valor lo admiten el perfil y la configuración local personal, no la del equipo (Q24). Nunca se purga el snapshot previo a la última operación destructiva. Se avisa antes de purgar: la purga solo ocurre si el aviso se mostró al menos una vez en la CLI o la TUI **y** pasaron 24 horas desde entonces; si nadie lo vio, no se purga (TQ-11). Alcanzar una cuota de disco no adelanta la purga (TQ-5). Borrar contenido concreto de los snapshots (`raptor tm forget`) queda fuera del MVP (D-TMC-24, TQ-17).
+**Descripción** (D-TMC-15): los snapshots se conservan un tiempo configurable; por defecto 30 días. El valor lo admiten el perfil y la configuración local personal, no la del equipo (Q24). Nunca se purga el snapshot previo a la última operación destructiva. Se avisa antes de purgar: la purga solo ocurre si el aviso se mostró al menos una vez en la CLI o la TUI **y** pasaron 24 horas desde que se mostró por primera vez; si nadie lo vio, no se purga (TQ-11). Alcanzar una cuota de disco no adelanta la purga (TQ-5). Borrar contenido concreto de los snapshots (`raptor tm forget`) queda fuera del MVP (D-TMC-24, TQ-17).
 
 **Criticidad**: Media
 
@@ -290,7 +290,7 @@ registro de undo = inmutable; atribución mostrada = vigente
 ```
 retención = local personal ?? perfil ?? 30 días        (equipo: no admitido)
 purgable = snapshot más antiguo que la retención AND NOT previo a la última operación destructiva
-purga solo si aviso mostrado en CLI/TUI AND ≥ 24 h desde el aviso      (TQ-11)
+purga solo si aviso mostrado en CLI/TUI AND ≥ 24 h desde la primera vez que se mostró   (TQ-11)
 cuota de disco alcanzada → no purga antes de tiempo                   (TQ-5)
 ```
 

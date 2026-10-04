@@ -32,7 +32,7 @@ tags: [time-machine, snapshots, nfr-01]
 
 ## Reglas cubiertas
 
-BR-TMC-CONS-001 (sin snapshot previo no hay operación) · BR-TMC-CONS-002 (qué contiene un snapshot) · D-TMC-9, D-TMC-10 nivel a, D-TMC-16 — ver [business-rules.md](../business-rules.md)
+BR-TMC-CONS-001 (sin snapshot previo no hay operación) · BR-TMC-CONS-002 (qué contiene un snapshot, con la lista cerrada de credenciales excluida por defecto) · D-TMC-9, D-TMC-10 nivel a, D-TMC-16 (actualizada por TQ-16) — ver [business-rules.md](../business-rules.md)
 
 ## Criterios de Aceptación
 
@@ -55,6 +55,23 @@ Dado un worktree con ".env" y "node_modules/" ignorados por el repo
 Cuando un solicitante lanza desde GitRaptor una operación sobre ese worktree
 Entonces el punto previo no contiene ".env" ni "node_modules/"
   Y esos archivos siguen intactos en el worktree
+
+**Escenario: Las credenciales sin seguimiento se excluyen y se declaran**
+
+Dado un worktree con "deploy.pem" y ".env.local" sin seguimiento y sin ignorar, y "nuevo.rs" sin seguimiento
+  Y un perfil sin opción para incluir credenciales
+Cuando un solicitante lanza desde GitRaptor una operación sobre ese worktree
+Entonces el punto previo contiene "nuevo.rs" y no contiene "deploy.pem" ni ".env.local"
+  Y el punto previo declara "deploy.pem" y ".env.local" como excluidos por credenciales
+  Y esos archivos siguen intactos en el worktree
+
+**Escenario: El perfil permite incluir las credenciales**
+
+Dado un worktree con "deploy.pem" sin seguimiento y sin ignorar
+  Y un perfil que incluye las credenciales en los snapshots
+Cuando un solicitante lanza desde GitRaptor una operación sobre ese worktree
+Entonces el punto previo contiene "deploy.pem"
+  Y no lo declara como excluido
 
 **Escenario: Si el punto previo no se puede guardar, la operación no se ejecuta**
 

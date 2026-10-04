@@ -15,7 +15,7 @@ related:
   rules:
     - BR-TMC-001
   stories: [US-TMC-001]
-covers: [BR-TMC-TIME-001, D-TMC-15]
+covers: [BR-TMC-TIME-001, D-TMC-15, D-TMC-25]
 blocked_by: []
 tags: [time-machine, retencion]
 ---
@@ -32,17 +32,32 @@ tags: [time-machine, retencion]
 
 ## Reglas cubiertas
 
-BR-TMC-TIME-001 (retención por defecto, purga segura, aviso) · D-TMC-15 — ver [business-rules.md](../business-rules.md)
+BR-TMC-TIME-001 (retención por defecto, purga segura, aviso visto + 24 h, la cuota no adelanta la purga) · D-TMC-15, D-TMC-25 (TQ-5, TQ-11) — ver [business-rules.md](../business-rules.md)
 
 ## Criterios de Aceptación
 
-**Escenario: Purga de puntos antiguos con aviso**
+**Escenario: Purga de puntos antiguos con aviso visto y 24 horas de gracia**
 
 Dado puntos de hace 40 días y de hace 5 días, sin retención configurada
+  Y el aviso de qué se va a purgar se mostró por primera vez en la CLI hace más de 24 horas
 Cuando corresponde purgar
-Entonces el desarrollador recibe antes el aviso de qué se va a purgar
-  Y se purgan los puntos de hace 40 días
+Entonces se purgan los puntos de hace 40 días
   Y se conservan los de hace 5 días
+
+**Escenario: Sin aviso visto no se purga**
+
+Dado puntos de hace 40 días, sin retención configurada
+  Y el aviso de purga no se mostró en la CLI ni en la TUI, o se mostró por primera vez hace menos de 24 horas
+Cuando corresponde purgar
+Entonces no se purga ningún punto
+  Y los puntos de hace 40 días siguen disponibles para restaurar
+
+**Escenario: Alcanzar la cuota de disco no adelanta la purga**
+
+Dado que el almacén de snapshots del repo alcanzó su cuota
+  Y todos los puntos tienen menos de 30 días
+Cuando corresponde purgar
+Entonces no se purga ningún punto
 
 **Escenario: El punto previo a la última operación destructiva nunca se purga**
 
