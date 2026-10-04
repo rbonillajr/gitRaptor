@@ -38,7 +38,7 @@ BR-CONS-002 (misma decisión y motivo en las dos capas) · BR-WF-002 (estados "S
 ## Dependencias
 
 - **Historias**: US-GRD-001 (decisión y mínimo seguro), US-GRD-004 (estados de protección por la vía de hooks), US-GRD-007 (permisos del equipo, para el catálogo completo).
-- **Externas**: **bloqueada** por el Servidor MCP F-001-05 (herramientas y allowlist, NFR-02) y, por el esquema del catálogo, por el ADR de formato P8 (motor-local).
+- **Externas**: **bloqueada** por el Servidor MCP F-001-05 (herramientas y allowlist, NFR-02). El esquema del catálogo ya no la bloquea: lo fija ADR-GRP-007, que cerró P8 al aceptarse el 2026-10-04.
 - **Transversal**: Windows, macOS y Linux.
 
 ## Criterios de Aceptación

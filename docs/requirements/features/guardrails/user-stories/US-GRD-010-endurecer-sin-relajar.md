@@ -19,7 +19,6 @@ tags:
   - guardrails
   - configuracion-tres-niveles
   - precedencia
-  - bloqueada
 ---
 
 # US-GRD-010: El desarrollador endurece las reglas en su máquina sin poder relajar las del equipo
@@ -37,7 +36,7 @@ BR-CONS-001 (los personales endurecen, nunca relajan; local sobre perfil) · BR-
 ## Dependencias
 
 - **Historias**: US-GRD-007 (permisos del equipo), US-GRD-008 (ramas protegidas como lista).
-- **Externas**: **bloqueada** por el ADR de formato P8 (motor-local).
+- **Externas**: ninguna. Estuvo bloqueada por P8 (formato de la configuración, motor-local) hasta el 2026-10-04, cuando Rene Bonilla aceptó ADR-GRP-007, que la cierra.
 - **Transversal**: Windows, macOS y Linux. El motor no escribe ningún nivel (Q23 de motor-local).
 
 ## Criterios de Aceptación

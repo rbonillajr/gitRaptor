@@ -18,7 +18,6 @@ tags:
   - guardrails
   - fail-safe
   - configuracion-tres-niveles
-  - bloqueada
 ---
 
 # US-GRD-011: Una configuración rota no deja pasar las operaciones peligrosas
@@ -36,7 +35,7 @@ BR-EDGE-004 (aviso; mínimo seguro más lo legible; un nivel personal ilegible s
 ## Dependencias
 
 - **Historias**: US-GRD-010 (lectura de los tres niveles).
-- **Externas**: **bloqueada** por el ADR de formato P8 (motor-local). Por Q-GRD-17 rige la última versión commiteada de la configuración del equipo: un conflicto o una edición sin commitear no la vuelven ilegible.
+- **Externas**: ninguna bloqueante. P8 (formato de la configuración, motor-local) quedó cerrada por ADR-GRP-007, aceptado por Rene Bonilla el 2026-10-04. Por Q-GRD-17 rige la última versión commiteada de la configuración del equipo: un conflicto o una edición sin commitear no la vuelven ilegible.
 - **Transversal**: Windows, macOS y Linux.
 
 ## Criterios de Aceptación

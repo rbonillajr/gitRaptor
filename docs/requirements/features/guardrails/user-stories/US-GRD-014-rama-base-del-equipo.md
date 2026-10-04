@@ -19,7 +19,6 @@ tags:
   - guardrails
   - rama-base
   - configuracion-equipo
-  - bloqueada
 ---
 
 # US-GRD-014: El equipo fija la rama base del repo y Guardrails la protege
@@ -37,7 +36,7 @@ BR-CONS-003 (rama base solo del nivel de equipo; `main` por defecto; se lee de l
 ## Dependencias
 
 - **Historias**: US-GRD-007 (permisos del equipo, que reutilizan la lectura de los tres niveles de US-GRP-013, motor-local). No depende del comando de edición (US-GRD-013): el valor se puede escribir a mano. La coherencia con la rama base que lee el motor (US-GRP-016, motor-local) es una prueba de integración posterior, anotada en el índice.
-- **Externas**: **bloqueada** por el ADR de formato P8 (motor-local). La confirmación de la rama base usa el mismo mecanismo que las demás acciones reservadas del MVP y no espera al factor de autenticación del sistema operativo (Q-GRD-22). Distinguir al humano: transversal (lo define el Arquitecto; R-GRD-3).
+- **Externas**: ninguna bloqueante. P8 (formato de la configuración, motor-local) quedó cerrada por ADR-GRP-007, aceptado por Rene Bonilla el 2026-10-04. La confirmación de la rama base usa el mismo mecanismo que las demás acciones reservadas del MVP y no espera al factor de autenticación del sistema operativo (Q-GRD-22). Distinguir al humano: transversal (lo define el Arquitecto; R-GRD-3).
 - **Transversal**: Windows, macOS y Linux.
 
 ## Criterios de Aceptación

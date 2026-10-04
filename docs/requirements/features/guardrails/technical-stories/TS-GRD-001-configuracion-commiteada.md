@@ -16,7 +16,7 @@ related:
 ado:
   id: null
   url: null
-tags: [guardrails, configuracion, q-grd-17, q-grd-18, rama-base, rama-principal, br-cons-007, br-edge-004, bloqueada-p8]
+tags: [guardrails, configuracion, q-grd-17, q-grd-18, rama-base, rama-principal, br-cons-007, br-edge-004]
 ---
 
 ## TS-GRD-001: Lectura commiteada de la configuración del equipo y de la rama principal
@@ -33,7 +33,7 @@ tags: [guardrails, configuracion, q-grd-17, q-grd-18, rama-base, rama-principal,
 >
 > **Por qué es un enabler y no parte de una historia** (regla del dueño): es una base compartida **entre dos features**, sin una historia dueña única. La usan US-GRP-016 (motor-local, rama base para ahead/behind), US-GRD-007 (permisos con suelo y worktree), US-GRD-014 (rama base protegida) y US-GRD-011 (suelo ilegible). Ninguna de ellas produce por sí sola la lectura que necesitan las demás, y la lectura no tiene un resultado observable propio. Ponerla en la Dev Spec de una sola historia obligaría a la otra feature a esperar a esa historia o a duplicar el cargador, que es justo el riesgo R-GRD-8.
 >
-> **Bloqueada** hasta que ADR-GRP-007 (motor-local) pase a `accepted` con sus enmiendas: PQ-9 (decisión 1 de Rene Bonilla), `permissions`/`policies`, la clave del mínimo, el estado por fuente y la lectura sin objetos de reemplazo (tabla de enmiendas de `docs/architecture/non-functional-guardrails.md`). **Reutiliza** el cargador de tres niveles de US-GRP-013 (motor-local). **ADR**: ADR-GRD-004. **Complejidad alta** por D6: suelo confirmado, rama base confirmada y unión mientras hay un cambio pendiente.
+> **Desbloqueada** el 2026-10-04: Rene Bonilla aceptó ADR-GRP-007 (motor-local) con sus enmiendas, que era su único bloqueo: PQ-9 (decisión 1 de Rene Bonilla), `permissions`/`policies`, la clave del mínimo, el estado por fuente y la lectura sin objetos de reemplazo (tabla de enmiendas de `docs/architecture/non-functional-guardrails.md`). **Reutiliza** el cargador de tres niveles de US-GRP-013 (motor-local). **ADR**: ADR-GRD-004. **Complejidad alta** por D6: suelo confirmado, rama base confirmada y unión mientras hay un cambio pendiente.
 
 ### Alcance Técnico
 

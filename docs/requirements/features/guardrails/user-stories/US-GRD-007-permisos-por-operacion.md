@@ -20,7 +20,6 @@ tags:
   - guardrails
   - permisos
   - configuracion-equipo
-  - bloqueada
 ---
 
 # US-GRD-007: El equipo decide qué operaciones de Git se permiten, se deniegan o piden confirmación
@@ -38,7 +37,7 @@ BR-VAL-002 (catálogo de operaciones y sus tres permisos; "pedir confirmación" 
 ## Dependencias
 
 - **Historias**: US-GRD-001 (contrato de decisión y capa de hooks); US-GRD-004 (lista de operaciones que la capa de hooks puede interceptar); US-GRP-013 (motor-local), dueña de la lectura de la configuración en tres niveles, que esta historia reutiliza.
-- **Externas**: **bloqueada** por el ADR de formato de la configuración, P8 (motor-local), y por US-GRP-013. Por Q-GRD-17 y Q-GRD-20, un endurecimiento de la configuración del equipo se aplica al commitearlo en el worktree de la operación, no al editarlo; una relajación solo cuenta desde la rama principal y cuando el desarrollador la confirma en su máquina (Q-GRD-21). La confirmación usa el mismo mecanismo que las demás acciones reservadas del MVP y no espera al factor de autenticación del sistema operativo (Q-GRD-22). Distinguir al humano: transversal (lo define el Arquitecto; R-GRD-3).
+- **Externas**: ninguna bloqueante. P8 (formato de la configuración, motor-local) quedó cerrada por ADR-GRP-007, aceptado por Rene Bonilla el 2026-10-04; US-GRP-013, también desbloqueada, queda como dependencia de historia. Por Q-GRD-17 y Q-GRD-20, un endurecimiento de la configuración del equipo se aplica al commitearlo en el worktree de la operación, no al editarlo; una relajación solo cuenta desde la rama principal y cuando el desarrollador la confirma en su máquina (Q-GRD-21). La confirmación usa el mismo mecanismo que las demás acciones reservadas del MVP y no espera al factor de autenticación del sistema operativo (Q-GRD-22). Distinguir al humano: transversal (lo define el Arquitecto; R-GRD-3).
 - **Transversal**: Windows, macOS y Linux. Las operaciones que la lista de US-GRD-004 declare no interceptables con Git directo (p. ej. `reset --hard`) se verifican por la capa MCP en US-GRD-016.
 
 ## Criterios de Aceptación
