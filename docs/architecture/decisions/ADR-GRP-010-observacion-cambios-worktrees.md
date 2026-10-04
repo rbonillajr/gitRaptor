@@ -65,7 +65,7 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
 
 - **Ventana fija por worktree, no deslizante**: el primer evento abre una ventana de 75 ms (ADR-GRP-011); al cerrarse, se recomputa con todas las rutas acumuladas. Los eventos que llegan durante el recomputo abren la ventana siguiente. Una ráfaga continua produce una publicación cada ciclo, en lugar de posponerla hasta que la ráfaga acaba: la espera máxima por debounce está acotada.
 - Ventanas independientes por worktree: la ráfaga de un worktree no retrasa a los demás (SPIKE-GRP-002: con una ráfaga de 10K archivos en un worktree, los otros nueve publican en 95 ms p95).
-- **Holgura del temporizador** (Enmienda 2026-10-04): el temporizador del SO se despierta tarde (SPIKE-GRP-002 en macOS: hasta 10 ms; una ventana programada de 75 ms dura 85 ms p95). La ventana se programa con la holgura descontada, medida por SO, para que su duración efectiva sea de 75 ms, y sin espera activa. ADR-GRP-011 § 2 presupuesta la duración efectiva.
+- **Holgura del temporizador** (Enmienda 2026-10-04): el temporizador del SO se despierta tarde (SPIKE-GRP-002 en macOS: hasta 10 ms; una ventana programada de 75 ms dura 85 ms p95). La ventana se programa con la holgura descontada, medida por SO, para que su duración efectiva sea de 75 ms, y sin espera activa. ADR-GRP-011 § 2 presupuesta la duración efectiva. ⚠️ **ASSUMPTION**: la holgura es una constante por SO que calibra el banco (INF-GRP-002). Está sin decidir si basta o si hace falta calibrarla en tiempo de ejecución. En ambos casos, la Validación mide la duración efectiva (`t_recv` → `t_flush`).
 
 ### 4. Recomputo incremental
 
@@ -76,7 +76,7 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
 - **Escala de historia (100K commits)**: ahead/behind se calcula con un recorrido acotado desde la base de fusión, usando el `commit-graph` del repo si existe, solo para leerlo (nunca se escribe, ADR-GRP-009).
 - **Ahead/behind fuera del primer evento** (Enmienda 2026-10-04): sin `commit-graph`, una rama a 50K commits de la base cuesta 145 ms p50 (SPIKE-GRP-002, medido con `git rev-list`; el coste con `gix` está sin medir), casi todo el presupuesto de cómputo. Por eso ahead/behind no entra en el presupuesto del primer evento:
   - se publica en la segunda fase, con caché por par de commits;
-  - se calcula en proceso con `gix`, sin lanzar un proceso de Git por cada cambio de punta.
+  - se calcula en proceso con `gix`, sin lanzar un proceso de Git por cada cambio de punta. ⚠️ **ASSUMPTION**: que `gix` cueste lo mismo o menos que `git rev-list`, que es lo que se midió (ver Validación). Hasta medirlo, `git rev-list --count --left-right` de la allowlist (ADR-GRP-009) se mantiene como alternativa.
 - **Publicación en dos fases**: si un cambio grande (p. ej. un checkout de miles de archivos) no cabe en el presupuesto de cómputo, el motor publica primero lo barato (rama, `HEAD`, operación en curso) y después los recuentos (ADR-GRP-011). Cuando hay que recalcular ahead/behind, este también va en la segunda fase, aunque el cambio sea pequeño (punto anterior).
 
 ### 5. Sondeo de respaldo y modo degradado
@@ -126,6 +126,8 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
 **SPIKE-GRP-002** (prototipo aislado, en los tres SO) confirma o invalida este ADR antes de que US-GRP-002 entre en desarrollo:
 
 - **Latencia**: p95 de detección SO → motor ≤ 50 ms y del ciclo completo del motor ≤ 300 ms (ADR-GRP-011), con un archivo modificado, un `git add`, un commit, un checkout y la creación y el borrado de un worktree.
+- **Debounce**: duración efectiva de la ventana (`t_recv` → `t_flush`) de 75 ms en p95 en cada SO, con la holgura calibrada (apartado 3).
+- **Ahead/behind con `gix`**: coste en proceso en una rama a 50K commits de la base, con y sin `commit-graph`, comparado con `git rev-list --count --left-right`. Hasta tener esta medición, la alternativa de la allowlist se mantiene (apartado 4).
 - **Escala**: 10 worktrees de un repo de 100K commits o más, con ráfaga de 10K archivos en uno de ellos; se miden watches usados, memoria, CPU en reposo y p95 de los otros nueve durante la ráfaga.
 - **Huecos**: suspensión y reanudación, desbordamiento forzado de la cola con búfer reducido, watcher reiniciado, y alta y baja de worktrees con escrituras concurrentes en los demás (recreación del stream, Enmienda 2026-10-04); en todos los casos la reconciliación detecta el 100% de los cambios y los marca "sin atribuir".
 - **Windows**: `git worktree remove`, borrado y renombrado de la raíz y de archivos con el watcher activo, sin fallos atribuibles al motor.
@@ -177,3 +179,5 @@ Aplicada desde las recomendaciones de [SPIKE-GRP-002-resultados.md](../../requir
 | Ahead/behind fuera del presupuesto del primer evento: segunda fase, con caché y en proceso con `gix` | § 4 | Resultados § 3.11 |
 | Alcance del sondeo de respaldo (solo metadatos de Git) y coste medido del modo degradado | § 5, Consecuencias | Resultados § 3.5 y § 3.6 |
 | Revisión de coherencia: la consecuencia "cero huecos silenciosos" se limita a los casos con causa detectable; ahead/behind va en la segunda fase también en cambios pequeños; la cifra de 145 ms se midió con `git rev-list` | Consecuencias, § 4 | Revisión del Arquitecto (2026-10-04) |
+| Ahead/behind en proceso con `gix` marcado como ⚠️ ASSUMPTION; Validación nueva con una rama a 50K commits de la base, con y sin `commit-graph`; `git rev-list` de la allowlist como alternativa hasta medirlo | § 4, Validación | Resultados § 3.11; Artifact Judge (reservas) |
+| Holgura del temporizador: constante por SO calibrada por el banco (INF-GRP-002), como ⚠️ ASSUMPTION; Validación de la duración efectiva de la ventana | § 3, Validación | Resultados § 3.2; Artifact Judge (reservas) |

@@ -55,8 +55,8 @@ El formato "JSON estricto con `$schema`" no es una PQ: es la propuesta base del 
 | [ADR-GRP-007](./ADR-GRP-007-configuracion-tres-niveles-formato.md) | Configuración en tres niveles: formato y precedencia | JSON estricto con `$schema` (propuesta base del BRD v0.4), nombres de archivos y sección `engine` (PQ-4), niveles admitidos por clave, JSON o schema inválido ignora el nivel entero (PQ-8); equipo leído de lo commiteado con suelo en la rama principal y rama base confirmada (decisión 1 de Guardrails, sustituye a PQ-9); `permissions`/`policies` y estado por fuente (enmienda 2026-10-04) | accepted |
 | [ADR-GRP-008](./ADR-GRP-008-configuracion-local-no-versionada.md) | Configuración local personal sin versionar | `settings.local.json` en el perfil, indexado por repo (PQ-3); P10 desaparece | accepted |
 | [ADR-GRP-009](./ADR-GRP-009-frontera-solo-lectura-git.md) | Frontera de solo lectura e invocación del Git del sistema | Frontera estricta: cero escrituras (ni locks transitorios), cero programas del usuario, gitoxide + allowlist del CLI; Git ≥ 2.38 sin depender del PATH | accepted |
-| [ADR-GRP-010](./ADR-GRP-010-observacion-cambios-worktrees.md) | Observación de cambios en worktrees | Watcher nativo (`notify`), debounce fijo de 75 ms, recomputo incremental, sondeo de respaldo, modo degradado y reconciliación | accepted |
-| [ADR-GRP-011](./ADR-GRP-011-presupuesto-frescura.md) | Reparto del presupuesto de frescura | Motor ≤ 300 ms, Cockpit ≤ 100 ms y 100 ms de margen, p95 medido con reloj monótono por etapa | accepted |
+| [ADR-GRP-010](./ADR-GRP-010-observacion-cambios-worktrees.md) | Observación de cambios en worktrees | Watcher nativo (`notify`), debounce fijo de 75 ms, recomputo incremental, sondeo de respaldo, modo degradado y reconciliación; enmienda 2026-10-04 de SPIKE-GRP-002 (validado en macOS; Linux y Windows pendientes) | accepted |
+| [ADR-GRP-011](./ADR-GRP-011-presupuesto-frescura.md) | Reparto del presupuesto de frescura | Motor ≤ 300 ms, Cockpit ≤ 100 ms y 100 ms de margen, p95 medido con reloj monótono por etapa; enmienda 2026-10-04 de SPIKE-GRP-002 (p95 confirmado en macOS; Linux y Windows pendientes) | accepted |
 | [ADR-GRP-012](./ADR-GRP-012-deteccion-sesiones-claude-code.md) | Detección de sesiones de Claude Code | S1 (proceso y cwd) crea la sesión; atribuyen S2b, S3, S4 o el registro explícito de un "otro agente" si es la única sesión presente (confirmar una sesión detectada no activa esa evidencia); la co-ubicación de una sesión detectada nunca basta; transcripts limitados a metadatos (PQ-2) | accepted |
 | [ADR-GRP-013](./ADR-GRP-013-modelo-eventos-atribucion.md) | Modelo persistido de eventos, sesiones y atribución | Los eventos apuntan a una sesión; registros de atribución append-only (incluido el retiro de registro, que termina la sesión); huecos como intervalos; sin variante "humano" | accepted |
 | [ADR-TMC-001](./ADR-TMC-001-almacen-snapshots-perfil.md) | Almacén de snapshots en el perfil | Repo Git bare privado por repo en `tm/<id-repo>/` con objetos propios, contenido en bruto sin filtros y exclusiones declaradas; nunca en el repo del usuario | accepted |
@@ -169,14 +169,16 @@ Los ADR-GRD-001 a 007 (aceptados el 2026-10-04) son de la feature `guardrails` (
 
 - **Pregunta**: ¿cómo se detectan los cambios con frescura (NFR-04), a escala (NFR-05) y sin huecos (BR-CONS-005, BR-EDGE-005)?
 - **Decisión**: un watcher `notify` compartido (FSEvents, inotify, ReadDirectoryChangesW) sobre working trees y las rutas de `.git` que importan (no `objects/`). Debounce de **ventana fija de 75 ms** por worktree. Recomputo incremental con caché de stat en memoria. Publicación en dos fases. Sondeo de respaldo (30 s) y modo degradado por worktree (2 s), configurables en perfil y local. Reconciliación completa al arrancar, al volver de suspensión, ante desbordamiento y al volver a añadir; lo encontrado queda "sin atribuir" con marca de hueco. Nunca cambia límites del sistema.
-- **Decisión de producto**: ninguna; recomendación aceptada por Rene. La valida SPIKE-GRP-002.
+- **Enmienda 2026-10-04 (SPIKE-GRP-002)**: debounce con duración efectiva de 75 ms (holgura del temporizador descontada); reconciliación tras cada recreación del stream de FSEvents; el sondeo de respaldo solo cubre metadatos de Git; ahead/behind en la segunda fase, en proceso con `gix` (⚠️ **ASSUMPTION** sin medir).
+- **Decisión de producto**: ninguna; recomendación aceptada por Rene. La valida SPIKE-GRP-002: validado en macOS; Linux y Windows pendientes.
 - **Impacta**: US-GRP-002, 003, 004, 005, 006, 014. BR-CONS-005, BR-EDGE-001, BR-EDGE-002, BR-EDGE-005. NFR-04, NFR-05.
 
 ### ADR-GRP-011 — Reparto del presupuesto de frescura (NFR-04)
 
 - **Pregunta**: ¿cómo se reparten los 500 ms entre el motor y el Cockpit y cómo se mide?
 - **Decisión**: detección ≤ 50 ms, debounce 75 ms, recomputo y persistencia ≤ 150 ms, publicación ≤ 25 ms → **motor ≤ 300 ms**; Cockpit ≤ 100 ms; margen 100 ms que nadie reclama. Tiempos por etapa en cada evento con reloj monótono común. Gate de CI sobre el p95 del total (INF-GRP-002) y aviso por etapa.
-- **Decisión de producto**: ninguna. ⚠️ **ASSUMPTION** pendiente de confirmar: "< 500 ms" es p95 en las máquinas de referencia; SPIKE-GRP-002 da las primeras cifras.
+- **Enmienda 2026-10-04 (SPIKE-GRP-002)**: el debounce se presupuesta como ventana efectiva de 75 ms; el banco reporta además p99 y máximo; `t0` es el fin del comando en los escenarios de Git.
+- **Decisión de producto**: ninguna. "< 500 ms" es p95 en las máquinas de referencia: **confirmado en macOS** por SPIKE-GRP-002; ⚠️ **ASSUMPTION** pendiente en Linux y Windows.
 - **Impacta**: US-GRP-002. NFR-04, NFR-05. Feature F-001-02.
 
 ### ADR-GRP-012 — Detección de sesiones de Claude Code
