@@ -1,0 +1,6 @@
+# op: git merge -q --no-commit --no-ff feat
+# base: 5ffb676afa	40e818f0c4	d791051389	da39a3ee5e
+0	reference-transaction	prepared	0000000000000000000000000000000000000000 940fbe6677a3ab1cbc190ae5dece1443c067304a ORIG_HEAD|	$SANDBOX/w		5ffb676afa	40e818f0c4	d791051389	da39a3ee5e
+1	reference-transaction	committed	0000000000000000000000000000000000000000 940fbe6677a3ab1cbc190ae5dece1443c067304a ORIG_HEAD|	$SANDBOX/w		5ffb676afa	40e818f0c4	d791051389	da39a3ee5e
+2	post-index-change	0		$SANDBOX/w		5ffb676afa	40e818f0c4	d791051389	da39a3ee5e
+3	post-index-change	1		$SANDBOX/w		5ffb676afa	2536820788	2991499976	da39a3ee5e

@@ -1,0 +1,45 @@
+id	expect	op	exit	local_main	remote_main	guard_log	extra	verdict
+F01-push-f	deny	git push -qf origin main	1	intact	intact	deny force-push (non fast-forward) on refs/heads/main	-	PASS
+F02-push-plus	deny	git push -q origin +main	1	intact	intact	deny force-push (non fast-forward) on refs/heads/main	-	PASS
+F03-force-with-lease	deny	git push -q --force-with-lease origin main	1	intact	intact	deny force-push (non fast-forward) on refs/heads/main	-	PASS
+F04-push-ff	allow	git push -q origin main	0	intact	changed	allow 	-	PASS
+F05-force-own-branch	allow	git push -qf origin feat	0	intact	intact	allow 	-	PASS
+F06-remote-tip-missing	deny	git push -qf origin main	1	intact	intact	deny remote tip b9d2f49189a0b76ef4745d089870c620267119e6 missing locally: treated as force-push on refs/heads/main	-	PASS
+F07-shallow-ff	probe	git push -q origin main	1	intact	intact	deny shallow history: treated as force-push on refs/heads/main	-	observed: exit=1 local=intact remote=intact
+F08-replace-graft	deny	git push -q origin evil:main	1	intact	intact	deny force-push (non fast-forward) on refs/heads/main	-	PASS
+F08b-replace-graft-noguard	probe	git -c core.hooksPath=/dev/null push -q origin evil:main	0	intact	changed	-	-	observed: exit=0 local=intact remote=changed
+F09-no-verify	bypass	git push -qf --no-verify origin main	0	intact	changed	-	-	observed: exit=0 local=intact remote=changed
+F10-from-linked-worktree	deny	git push -qf origin main	1	intact	intact	deny force-push (non fast-forward) on refs/heads/main	-	PASS
+F11-case-alias-Main	deny	git push -qf origin main:refs/heads/Main	1	intact	intact	deny ambiguous alias of the base branch: refs/heads/Main	-	PASS
+F11b-case-alias-noguard	probe	git -c core.hooksPath=/dev/null push -qf origin main:refs/heads/Main	1	intact	intact	-	-	observed: exit=1 local=intact remote=intact
+F12-mirror	deny	git push -q --mirror origin	1	intact	intact	deny force-push (non fast-forward) on refs/heads/main	-	PASS
+F13-wildcard-refspec	deny	git push -q origin '+refs/heads/*:refs/heads/*'	1	intact	intact	deny force-push (non fast-forward) on refs/heads/main	-	PASS
+F14-default-upstream	deny	git branch -q -u origin/main && git push -qf	1	intact	intact	deny force-push (non fast-forward) on refs/heads/main	-	PASS
+F15-send-pack	bypass	git send-pack --force ../r.git main	0	intact	changed	-	-	observed: exit=0 local=intact remote=changed
+F16-hookspath-override	bypass	git -c core.hooksPath=/dev/null push -qf origin main	0	intact	changed	-	-	observed: exit=0 local=intact remote=changed
+F17-git-config-env	bypass	GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null git push -qf origin main	0	intact	changed	-	-	observed: exit=0 local=intact remote=changed
+D01-branch-D	deny	git branch -qD main	128	intact	intact	deny delete of base branch refs/heads/main	-	PASS
+D02-update-ref-d	deny	git update-ref -d refs/heads/main	128	intact	intact	deny delete of base branch refs/heads/main	-	PASS
+D03-push-colon	deny	git push -q origin :main	1	intact	intact	deny delete of base branch refs/heads/main	-	PASS
+D04-push-delete	deny	git push -q origin --delete main	1	intact	intact	deny delete of base branch refs/heads/main	-	PASS
+D05-from-linked-worktree	deny	git branch -qD main	128	intact	intact	deny delete of base branch refs/heads/main	-	PASS
+D06-packed-only	deny	git branch -qD main	128	intact	intact	deny delete of base branch refs/heads/main	-	PASS
+D07-loose-and-packed	deny	git branch -qD main	128	intact	intact	deny delete of base branch refs/heads/main	-	PASS
+D08-case-alias-Main	deny	git branch -qD Main	1	intact	intact	-	-	PASS
+D08b-case-alias-noguard	probe	git -c core.hooksPath=/dev/null branch -qD Main	1	intact	intact	-	-	observed: exit=1 local=intact remote=intact
+D09-update-ref-d-HEAD	deny	git update-ref -d HEAD	128	intact	intact	deny delete of base branch refs/heads/main	-	PASS
+D10-rename-away	deny	git branch -qm main other	0	changed	intact	-	-	FAIL
+D11-rename-onto-base	probe	git commit -q --allow-empty -m f && git branch -qM feat main	0	changed	intact	-	branches: main	observed: exit=0 local=changed remote=intact
+D12-pack-refs	allow	git pack-refs --all	0	intact	intact	-	-	PASS
+D13-gc	allow	git gc -q	0	intact	intact	-	-	PASS
+D14-pack-refs-naive-rule	probe	git pack-refs --all	0	intact	intact	-	-	observed: exit=0 local=intact remote=intact
+D15-hookspath-override	bypass	git -c core.hooksPath=/dev/null branch -qD main	0	changed	intact	-	-	observed: exit=0 local=changed remote=intact
+D16-git-config-env	bypass	GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null git branch -qD main	0	changed	intact	-	-	observed: exit=0 local=changed remote=intact
+D17-relative-hookspath-linked	probe	git branch -qD main	0	changed	intact	-	-	observed: exit=0 local=changed remote=intact
+D17b-relative-hookspath-main	deny	git branch -qD main	128	intact	intact	deny delete of base branch refs/heads/main	-	PASS
+D18-worktreeconfig-override	probe	git branch -qD main	0	changed	intact	-	-	observed: exit=0 local=changed remote=intact
+D19-nfd-alias-of-nfc-base	deny	git branch -qD "$(printf 'cafe\314\201')"	128	intact	-	deny delete of base branch refs/heads/café	-	PASS
+D19b-nfd-alias-no-precompose	probe	git branch -qD "$(printf 'cafe\314\201')"	1	intact	-	-	-	observed: exit=1 local=intact remote=-
+D21-case-alias-overwrite	deny	git commit -q --allow-empty -m f && git branch -f Main feat	128	intact	intact	deny ambiguous alias of the base branch: refs/heads/Main	-	PASS
+D21b-case-alias-overwrite-noguard	probe	git commit -q --allow-empty -m f && git -c core.hooksPath=/dev/null branch -f Main feat	0	intact	intact	-	-	observed: exit=0 local=intact remote=intact
+D20-hand-delete-loose-ref	bypass	rm .git/refs/heads/main	1	intact	intact	-	-	observed: exit=1 local=intact remote=intact

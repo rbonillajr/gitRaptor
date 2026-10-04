@@ -1,0 +1,22 @@
+# op: git worktree add -q -b nb ../wt2
+# base: b9b74afc09	17793d3fa0	97f56cfd4f	da39a3ee5e
+0	reference-transaction	preparing	0000000000000000000000000000000000000000 4bb814a17023da7fefd1ce2f37e1068923e1bb8c refs/heads/nb|	$SANDBOX/w		b9b74afc09	17793d3fa0	97f56cfd4f	da39a3ee5e
+1	reference-transaction	prepared	0000000000000000000000000000000000000000 4bb814a17023da7fefd1ce2f37e1068923e1bb8c refs/heads/nb|	$SANDBOX/w		b9b74afc09	17793d3fa0	97f56cfd4f	da39a3ee5e
+2	reference-transaction	committed	0000000000000000000000000000000000000000 4bb814a17023da7fefd1ce2f37e1068923e1bb8c refs/heads/nb|	$SANDBOX/w		133ca8705c	17793d3fa0	97f56cfd4f	da39a3ee5e
+3	reference-transaction	preparing	0000000000000000000000000000000000000000 ref:refs/heads/nb HEAD|	$SANDBOX/w		a1e8fe1b5a	17793d3fa0	97f56cfd4f	8a5ffe7db5
+4	reference-transaction	prepared	0000000000000000000000000000000000000000 ref:refs/heads/nb HEAD|	$SANDBOX/w		a1e8fe1b5a	17793d3fa0	97f56cfd4f	8a5ffe7db5
+5	reference-transaction	committed	0000000000000000000000000000000000000000 ref:refs/heads/nb HEAD|	$SANDBOX/w		a1e8fe1b5a	17793d3fa0	97f56cfd4f	8a5ffe7db5
+6	post-index-change	1		$SANDBOX/wt2	$SANDBOX/w/.git/worktrees/wt2	a1e8fe1b5a	17793d3fa0	97f56cfd4f	8a5ffe7db5
+7	reference-transaction	preparing	0000000000000000000000000000000000000000 4bb814a17023da7fefd1ce2f37e1068923e1bb8c ORIG_HEAD|	$SANDBOX/wt2	$SANDBOX/w/.git/worktrees/wt2	a1e8fe1b5a	17793d3fa0	97f56cfd4f	8a5ffe7db5
+8	reference-transaction	prepared	0000000000000000000000000000000000000000 4bb814a17023da7fefd1ce2f37e1068923e1bb8c ORIG_HEAD|	$SANDBOX/wt2	$SANDBOX/w/.git/worktrees/wt2	a1e8fe1b5a	17793d3fa0	97f56cfd4f	8a5ffe7db5
+9	reference-transaction	committed	0000000000000000000000000000000000000000 4bb814a17023da7fefd1ce2f37e1068923e1bb8c ORIG_HEAD|	$SANDBOX/wt2	$SANDBOX/w/.git/worktrees/wt2	a1e8fe1b5a	17793d3fa0	97f56cfd4f	8a5ffe7db5
+10	reference-transaction	preparing	4bb814a17023da7fefd1ce2f37e1068923e1bb8c 4bb814a17023da7fefd1ce2f37e1068923e1bb8c HEAD|	$SANDBOX/wt2	$SANDBOX/w/.git/worktrees/wt2	a1e8fe1b5a	17793d3fa0	97f56cfd4f	8a5ffe7db5
+11	reference-transaction	prepared	4bb814a17023da7fefd1ce2f37e1068923e1bb8c 4bb814a17023da7fefd1ce2f37e1068923e1bb8c refs/heads/nb|	$SANDBOX/wt2	$SANDBOX/w/.git/worktrees/wt2	a1e8fe1b5a	17793d3fa0	97f56cfd4f	8a5ffe7db5
+12	reference-transaction	committed	4bb814a17023da7fefd1ce2f37e1068923e1bb8c 4bb814a17023da7fefd1ce2f37e1068923e1bb8c refs/heads/nb|	$SANDBOX/wt2	$SANDBOX/w/.git/worktrees/wt2	a1e8fe1b5a	17793d3fa0	97f56cfd4f	8a5ffe7db5
+13	reference-transaction	preparing	0000000000000000000000000000000000000000 0000000000000000000000000000000000000000 AUTO_MERGE|	$SANDBOX/wt2	$SANDBOX/w/.git/worktrees/wt2	a1e8fe1b5a	17793d3fa0	97f56cfd4f	8a5ffe7db5
+14	reference-transaction	prepared	0000000000000000000000000000000000000000 0000000000000000000000000000000000000000 AUTO_MERGE|	$SANDBOX/wt2	$SANDBOX/w/.git/worktrees/wt2	a1e8fe1b5a	17793d3fa0	97f56cfd4f	8a5ffe7db5
+15	reference-transaction	committed	0000000000000000000000000000000000000000 0000000000000000000000000000000000000000 AUTO_MERGE|	$SANDBOX/wt2	$SANDBOX/w/.git/worktrees/wt2	a1e8fe1b5a	17793d3fa0	97f56cfd4f	8a5ffe7db5
+16	reference-transaction	preparing	0000000000000000000000000000000000000000 0000000000000000000000000000000000000000 AUTO_MERGE|	$SANDBOX/wt2	$SANDBOX/w/.git/worktrees/wt2	a1e8fe1b5a	17793d3fa0	97f56cfd4f	8a5ffe7db5
+17	reference-transaction	prepared	0000000000000000000000000000000000000000 0000000000000000000000000000000000000000 AUTO_MERGE|	$SANDBOX/wt2	$SANDBOX/w/.git/worktrees/wt2	a1e8fe1b5a	17793d3fa0	97f56cfd4f	8a5ffe7db5
+18	reference-transaction	committed	0000000000000000000000000000000000000000 0000000000000000000000000000000000000000 AUTO_MERGE|	$SANDBOX/wt2	$SANDBOX/w/.git/worktrees/wt2	a1e8fe1b5a	17793d3fa0	97f56cfd4f	8a5ffe7db5
+19	post-checkout	0000000000000000000000000000000000000000		$SANDBOX/wt2		a1e8fe1b5a	17793d3fa0	97f56cfd4f	8a5ffe7db5

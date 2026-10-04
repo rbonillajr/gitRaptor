@@ -1,0 +1,21 @@
+id	observation
+H01-push-to-checkout-absent	push exit=0; remote ref moved: yes; remote worktree updated: yes; remote status: 
+H02-push-to-checkout-noop	push exit=0; remote ref moved: yes; remote worktree updated: NO; remote status: D  new.txt
+H03-proc-receive-absent	push to refs/for/main: remote: error: cannot find hook 'proc-receive'          ! [remote rejected] HEAD -> refs/for/main (fail to run proc-receive hook)
+H03-proc-receive-absent-normal-push	push to refs/heads/main: ok
+H04-proc-receive-noop	push to refs/for/main: remote: error: fail to negotiate version with proc-receive hook          ! [remote rejected] HEAD -> refs/for/main (fail to run proc-receive hook)
+H04-proc-receive-noop-normal-push	push to refs/heads/main: ok
+H05-status-clean	exit=0; spawns=1: post-index-change:0x1
+H05-status-after-touch	exit=0; spawns=1: post-index-change:0x1
+H05-diff-after-touch	exit=0; spawns=0: 
+H06-commit	exit=0; spawns=12: commit-msgx1 post-commitx1 post-index-change:0x1 pre-commitx1 prepare-commit-msgx1 reference-transaction:abortedx1 reference-transaction:committedx2 reference-transaction:preparedx2 reference-transaction:preparingx2
+H06-commit-prepared-refs	AUTO_MERGEx1 refs/heads/mainx1
+H06-switch-new-branch	exit=0; spawns=15: post-checkoutx1 reference-transaction:abortedx2 reference-transaction:committedx4 reference-transaction:preparedx4 reference-transaction:preparingx4
+H06-switch-new-branch-prepared-refs	AUTO_MERGEx2 HEADx1 refs/heads/otherx1
+H06-checkout-file	exit=0; spawns=2: post-checkoutx1 post-index-change:0x1
+H06-tag	exit=0; spawns=3: reference-transaction:committedx1 reference-transaction:preparedx1 reference-transaction:preparingx1
+H06-stash-push-pop	exit=0; spawns=33: post-index-change:0x6 post-index-change:1x3 reference-transaction:abortedx3 reference-transaction:committedx7 reference-transaction:preparedx7 reference-transaction:preparingx7
+H06-rebase-3-commits	exit=0; spawns=91: post-checkoutx1 post-commitx3 post-index-change:0x3 post-index-change:1x4 post-rewrite:rebasex1 pre-rebase:mainx1 prepare-commit-msgx3 reference-transaction:abortedx9 reference-transaction:committedx22 reference-transaction:preparedx22 reference-transaction:preparingx22
+H06-rebase-3-commits-prepared-refs	AUTO_MERGEx6 CHERRY_PICK_HEADx6 HEADx5 ORIG_HEADx1 REBASE_HEADx3 refs/heads/rx1
+H06-rebase-i-3-commits	exit=0; spawns=91: post-checkoutx1 post-commitx3 post-index-change:0x3 post-index-change:1x4 post-rewrite:rebasex1 pre-rebase:mainx1 prepare-commit-msgx3 reference-transaction:abortedx9 reference-transaction:committedx22 reference-transaction:preparedx22 reference-transaction:preparingx22
+H06-rebase-i-3-commits-prepared-refs	AUTO_MERGEx6 CHERRY_PICK_HEADx6 HEADx5 ORIG_HEADx1 REBASE_HEADx3 refs/heads/rx1

@@ -1,0 +1,5 @@
+# op: git push -q --no-verify origin main
+# base: 5960f6b6f7	680b8f4b77	49163fbfee	da39a3ee5e
+0	reference-transaction	preparing	0000000000000000000000000000000000000000 7d300bebc667d979629bd3ac063430c96d8e7bc5 refs/remotes/origin/main|	$SANDBOX/w		5960f6b6f7	680b8f4b77	49163fbfee	da39a3ee5e
+1	reference-transaction	prepared	0000000000000000000000000000000000000000 7d300bebc667d979629bd3ac063430c96d8e7bc5 refs/remotes/origin/main|	$SANDBOX/w		5960f6b6f7	680b8f4b77	49163fbfee	da39a3ee5e
+2	reference-transaction	committed	0000000000000000000000000000000000000000 7d300bebc667d979629bd3ac063430c96d8e7bc5 refs/remotes/origin/main|	$SANDBOX/w		5960f6b6f7	680b8f4b77	49163fbfee	da39a3ee5e

@@ -1,0 +1,4 @@
+# op: git update-ref refs/heads/x $(git commit-tree -m x HEAD^{tree})
+# base: eb5ca5f77f	17793d3fa0	97f56cfd4f	da39a3ee5e
+0	reference-transaction	prepared	0000000000000000000000000000000000000000 da2e041005e2193ecd3ed9d487f9fcbc12f918ed refs/heads/x|	$SANDBOX/w		eb5ca5f77f	17793d3fa0	97f56cfd4f	da39a3ee5e
+1	reference-transaction	committed	0000000000000000000000000000000000000000 da2e041005e2193ecd3ed9d487f9fcbc12f918ed refs/heads/x|	$SANDBOX/w		c703ed98c5	17793d3fa0	97f56cfd4f	da39a3ee5e

@@ -1,0 +1,19 @@
+id	observation
+C01-no-previous-value	byte-identical
+C02-previous-local	byte-identical
+C03-previous-handwritten	DIFFERS: < \thookspath=.husky/_   # husky > \thooksPath = .husky/_
+C04-previous-global-only	byte-identical
+C05-second-core-section	byte-identical
+C06-no-trailing-newline	DIFFERS: < \tprecomposeunicode = true > \tprecomposeunicode = true
+W01-worktree-created-after-install	effective=[local file:$SANDBOX/w/.git/config $SANDBOX/w/.git/gitraptor/hooks]; branch -D main from it: denied
+W02-from-subdirectory	exit=128 (non-zero = denied)
+W03-worktreeconfig-linked	main-wt=[local file:.git/config $SANDBOX/w/.git/gitraptor/hooks] linked=[worktree file:$SANDBOX/w/.git/worktrees/wt2/config.worktree /dev/null]; branch -D main from wt2: DELETED
+W04-worktreeconfig-main	main-wt=[worktree file:.git/config.worktree /dev/null] linked=[local file:$SANDBOX/w/.git/config $SANDBOX/w/.git/gitraptor/hooks]; branch -D main from w: DELETED
+W05-include-after-key	main-wt=[local file:.git/extra.inc /dev/null] linked=[local file:$SANDBOX/w/.git/extra.inc /dev/null]; branch -D main from w: DELETED
+W06-includeif-onbranch	main-wt=[local file:.git/extra.inc /dev/null] linked=[local file:$SANDBOX/w/.git/config $SANDBOX/w/.git/gitraptor/hooks]; branch -D main from w: DELETED
+W07-includeif-gitdir-linked	main-wt=[local file:.git/config $SANDBOX/w/.git/gitraptor/hooks] linked=[local file:$SANDBOX/w/.git/extra.inc /dev/null]; branch -D main from wt2: DELETED
+W08-global-key-only	main-wt=[local file:.git/config $SANDBOX/w/.git/gitraptor/hooks] linked=[local file:$SANDBOX/w/.git/config $SANDBOX/w/.git/gitraptor/hooks]; branch -D main from wt2: denied
+W09-relative-key	main-wt=[local file:.git/config .git/gitraptor/hooks] linked=[local file:$SANDBOX/w/.git/config .git/gitraptor/hooks]; branch -D main from wt2: DELETED
+X01-GIT_DIR-to-protected-from-other-cwd	hooks run from: cwd=$SANDBOX/b GIT_DIR=$SANDBOX/a/.git
+X02-GIT_DIR+WORK_TREE-crossed	hooks run from: cwd=$SANDBOX/b GIT_DIR=$SANDBOX/a/.git
+X03-GIT_DIR-to-unprotected-from-protected-cwd	dispatchers of a ran: 0 times (b's config decides)

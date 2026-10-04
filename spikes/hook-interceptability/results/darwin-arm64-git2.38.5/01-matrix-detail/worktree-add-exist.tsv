@@ -1,0 +1,8 @@
+# op: git worktree add -q ../wt2 feat
+# base: 7a2be1fe3a	17793d3fa0	97f56cfd4f	da39a3ee5e
+0	post-index-change	1		$SANDBOX/wt2	$SANDBOX/w/.git/worktrees/wt2	6cf05d56ec	17793d3fa0	97f56cfd4f	2c0b62a670
+1	reference-transaction	prepared	0000000000000000000000000000000000000000 4bb814a17023da7fefd1ce2f37e1068923e1bb8c ORIG_HEAD|	$SANDBOX/wt2	$SANDBOX/w/.git/worktrees/wt2	6cf05d56ec	17793d3fa0	97f56cfd4f	2c0b62a670
+2	reference-transaction	committed	0000000000000000000000000000000000000000 4bb814a17023da7fefd1ce2f37e1068923e1bb8c ORIG_HEAD|	$SANDBOX/wt2	$SANDBOX/w/.git/worktrees/wt2	6cf05d56ec	17793d3fa0	97f56cfd4f	2c0b62a670
+3	reference-transaction	prepared	4bb814a17023da7fefd1ce2f37e1068923e1bb8c 4bb814a17023da7fefd1ce2f37e1068923e1bb8c HEAD|4bb814a17023da7fefd1ce2f37e1068923e1bb8c 4bb814a17023da7fefd1ce2f37e1068923e1bb8c refs/heads/feat|	$SANDBOX/wt2	$SANDBOX/w/.git/worktrees/wt2	6cf05d56ec	17793d3fa0	97f56cfd4f	2c0b62a670
+4	reference-transaction	committed	4bb814a17023da7fefd1ce2f37e1068923e1bb8c 4bb814a17023da7fefd1ce2f37e1068923e1bb8c HEAD|4bb814a17023da7fefd1ce2f37e1068923e1bb8c 4bb814a17023da7fefd1ce2f37e1068923e1bb8c refs/heads/feat|	$SANDBOX/wt2	$SANDBOX/w/.git/worktrees/wt2	6cf05d56ec	17793d3fa0	97f56cfd4f	2c0b62a670
+5	post-checkout	0000000000000000000000000000000000000000		$SANDBOX/wt2		6cf05d56ec	17793d3fa0	97f56cfd4f	2c0b62a670

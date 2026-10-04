@@ -1,0 +1,7 @@
+# op: git reset -q --hard HEAD~1
+# base: 5960f6b6f7	680b8f4b77	7b7d305f4e	da39a3ee5e
+0	post-index-change	1		$SANDBOX/w		5960f6b6f7	17793d3fa0	97f56cfd4f	da39a3ee5e
+1	reference-transaction	prepared	0000000000000000000000000000000000000000 7d300bebc667d979629bd3ac063430c96d8e7bc5 ORIG_HEAD|	$SANDBOX/w		5960f6b6f7	17793d3fa0	97f56cfd4f	da39a3ee5e
+2	reference-transaction	committed	0000000000000000000000000000000000000000 7d300bebc667d979629bd3ac063430c96d8e7bc5 ORIG_HEAD|	$SANDBOX/w		5960f6b6f7	17793d3fa0	97f56cfd4f	da39a3ee5e
+3	reference-transaction	prepared	7d300bebc667d979629bd3ac063430c96d8e7bc5 4bb814a17023da7fefd1ce2f37e1068923e1bb8c HEAD|7d300bebc667d979629bd3ac063430c96d8e7bc5 4bb814a17023da7fefd1ce2f37e1068923e1bb8c refs/heads/main|	$SANDBOX/w		5960f6b6f7	17793d3fa0	97f56cfd4f	da39a3ee5e
+4	reference-transaction	committed	7d300bebc667d979629bd3ac063430c96d8e7bc5 4bb814a17023da7fefd1ce2f37e1068923e1bb8c HEAD|7d300bebc667d979629bd3ac063430c96d8e7bc5 4bb814a17023da7fefd1ce2f37e1068923e1bb8c refs/heads/main|	$SANDBOX/w		eb5ca5f77f	17793d3fa0	97f56cfd4f	da39a3ee5e

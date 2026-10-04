@@ -1,0 +1,13 @@
+# op: git commit -qm two
+# base: 72f9cc7df4	680b8f4b77	49163fbfee	da39a3ee5e
+0	post-index-change	0		$SANDBOX/w		72f9cc7df4	680b8f4b77	49163fbfee	da39a3ee5e
+1	pre-commit			$SANDBOX/w		72f9cc7df4	680b8f4b77	49163fbfee	da39a3ee5e
+2	prepare-commit-msg	.git/COMMIT_EDITMSG		$SANDBOX/w		72f9cc7df4	680b8f4b77	49163fbfee	da39a3ee5e
+3	commit-msg	.git/COMMIT_EDITMSG		$SANDBOX/w		72f9cc7df4	680b8f4b77	49163fbfee	da39a3ee5e
+4	reference-transaction	preparing	4bb814a17023da7fefd1ce2f37e1068923e1bb8c 7d300bebc667d979629bd3ac063430c96d8e7bc5 HEAD|	$SANDBOX/w		72f9cc7df4	680b8f4b77	49163fbfee	da39a3ee5e
+5	reference-transaction	prepared	4bb814a17023da7fefd1ce2f37e1068923e1bb8c 7d300bebc667d979629bd3ac063430c96d8e7bc5 refs/heads/main|	$SANDBOX/w		72f9cc7df4	680b8f4b77	49163fbfee	da39a3ee5e
+6	reference-transaction	committed	4bb814a17023da7fefd1ce2f37e1068923e1bb8c 7d300bebc667d979629bd3ac063430c96d8e7bc5 refs/heads/main|	$SANDBOX/w		70cf13fe27	680b8f4b77	49163fbfee	da39a3ee5e
+7	reference-transaction	preparing	0000000000000000000000000000000000000000 0000000000000000000000000000000000000000 AUTO_MERGE|	$SANDBOX/w		70cf13fe27	680b8f4b77	49163fbfee	da39a3ee5e
+8	reference-transaction	prepared	0000000000000000000000000000000000000000 0000000000000000000000000000000000000000 AUTO_MERGE|	$SANDBOX/w		70cf13fe27	680b8f4b77	49163fbfee	da39a3ee5e
+9	reference-transaction	committed	0000000000000000000000000000000000000000 0000000000000000000000000000000000000000 AUTO_MERGE|	$SANDBOX/w		70cf13fe27	680b8f4b77	49163fbfee	da39a3ee5e
+10	post-commit			$SANDBOX/w		70cf13fe27	680b8f4b77	49163fbfee	da39a3ee5e
