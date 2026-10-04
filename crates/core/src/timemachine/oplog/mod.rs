@@ -343,21 +343,6 @@ impl Oplog {
         })
     }
 
-    /// Like [`Self::begin_snapshot`], but the commit is not flushed to stable storage on its own:
-    /// the next flushed write (`complete_snapshot`) carries it, in order. For the capture path of
-    /// the store (TS-TMC-001), where the `complete` row is the validity point and its flush is
-    /// the one full barrier of the snapshot (ADR-TMC-006 § 2, ref + oplog ≤ 25 ms). After a power
-    /// cut between both, the ref may be left without a row: recovery reports it and keeps it,
-    /// never deletes it (NFR-01), and it is never offered.
-    pub fn begin_snapshot_deferred(&mut self, new: &NewSnapshot, now_ms: i64) -> Result<String> {
-        self.conn.pragma_update(None, "synchronous", "NORMAL")?;
-        let res = self.begin_snapshot(new, now_ms);
-        let restored = self.conn.pragma_update(None, "synchronous", "FULL");
-        let id = res?;
-        restored?;
-        Ok(id)
-    }
-
     /// Marks a snapshot `complete`, after its ref exists in the store.
     pub fn complete_snapshot(
         &mut self,
