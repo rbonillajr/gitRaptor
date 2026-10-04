@@ -2,7 +2,7 @@
 id: TS-GRP-001
 title: "Almacén de datos del motor en el perfil"
 type: ts
-status: In Review
+status: done
 feature: motor-local
 domain: GRP
 priority: high
@@ -29,7 +29,7 @@ tags: [motor-local, perfil, almacenamiento, sqlite, clave-de-repo, seguridad]
 **Quiero** el almacén del perfil con su ubicación por SO, la clave de repo y la persistencia transaccional por repo
 **Para** que el motor guarde repos, sesiones, eventos, atribuciones y huecos sin escribir nunca fuera del perfil (Q17, Q21)
 
-> Dev Spec: [`dev-specs/TS-GRP-001-dev-spec.md`](../dev-specs/TS-GRP-001-dev-spec.md) | Implementada en `crates/core` (módulo `profile`), en revisión. Pendiente: comprobación de la ACL en Windows (SEC-06).
+> Dev Spec: [`dev-specs/TS-GRP-001-dev-spec.md`](../dev-specs/TS-GRP-001-dev-spec.md) | Implementada en `crates/core` (módulo `profile`), PR #16 mergeado. Pendiente: comprobación de la ACL en Windows (SEC-06).
 >
 > **Depende de**: — (arranca el día uno). **ADRs**: ADR-GRP-006 (§ 1 a § 4), ADR-GRP-013 (§ 1, entidades), ADR-GRP-005 (único escritor). **Seguridad**: SEC-06 y SEC-07 de `docs/architecture/non-functional.md`.
 
