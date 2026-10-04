@@ -2,7 +2,7 @@
 mode: draft
 status: expanded
 generated: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 generator: architect
 domain: GRP
 feature: motor-local
@@ -32,11 +32,13 @@ Fuente única de los identificadores PQ que citan los ADR 005 a 013.
 | PQ-6 | **Comandos reservados**: rechazo si el llamante desciende de un agente, más confirmación | ADR-GRP-005 |
 | PQ-7 | Windows siempre en **`%LOCALAPPDATA%`**, también la configuración | ADR-GRP-006 |
 | PQ-8 | Un nivel de configuración con **JSON inválido se ignora entero**, con diagnóstico | ADR-GRP-007 |
-| PQ-9 | Manda la **configuración de equipo del worktree principal** | ADR-GRP-007 |
+| PQ-9 | ~~Manda la **configuración de equipo del worktree principal**~~ — **sustituida por la decisión 1 de Guardrails** (Rene Bonilla, 2026-10-04): el equipo se lee de lo commiteado; la rama base y las relajaciones, solo de la copia de la rama principal; la rama base efectiva es la confirmada por el humano | ADR-GRP-007, ADR-GRD-004 |
 
 El formato "JSON estricto con `$schema`" no es una PQ: es la propuesta base del BRD v0.4, que ADR-GRP-007 adopta.
 
-> Los ADR 001 a 004 están aceptados. Los ADR 005 a 013 de la feature `motor-local` están **expandidos** (frontmatter `status: proposed`): Rene Bonilla aceptó el 2026-10-03 todas las recomendaciones y las preguntas de producto PQ-1 a PQ-9. Este índice solo resume la decisión; el detalle vive en cada archivo.
+> Los ADR 001 a 004 están aceptados. Los ADR 005 a 013 de la feature `motor-local` están **expandidos** (frontmatter `status: proposed`): Rene Bonilla aceptó el 2026-10-03 todas las recomendaciones y las preguntas de producto PQ-1 a PQ-9 (PQ-9 sustituida el 2026-10-04). Este índice solo resume la decisión; el detalle vive en cada archivo.
+>
+> **Enmiendas de Guardrails (2026-10-04)**: ADR-GRP-005, 006, 007, 009, 010 y 013 e INF-GRP-001 incorporan las enmiendas que pedía la arquitectura de Guardrails (ADR-GRD-001 a 007), cada una con su sección "Enmienda (2026-10-04, Guardrails)". Ninguno cambia de `status`. Lista y estado en [non-functional-guardrails.md](../non-functional-guardrails.md#enmiendas-pendientes-en-otros-frentes-j10).
 >
 > **Restricciones activas** (no hay `architecture-constitution.md` en la cascada): ADR-GRP-001 (Rust; gitoxide para leer y Git CLI para escribir; ratatui, clap, rmcp) y ADR-GRP-002 (Nx package-based; `crates/{core,policy,git,api,theme}`, `apps/{cli,mcp}`). ⚠️ **ASSUMPTION**: se tratan como constitución mientras no exista una formal (`/aadd-architect --init-constitution`).
 
@@ -50,7 +52,7 @@ El formato "JSON estricto con `$schema`" no es una PQ: es la propuesta base del 
 | [ADR-GRP-004](./ADR-GRP-004-estado-frontend-ux.md) | Estado del frontend y UX | Estado React de la Fase 3; en el MVP solo los patrones de UX | accepted |
 | [ADR-GRP-005](./ADR-GRP-005-forma-motor-proceso-segundo-plano.md) | Forma del motor: proceso por usuario y canal local | Subcomando `raptor daemon` (PQ-5) con autoarranque registrado solo por instalador o comando del desarrollador (PQ-1), IPC local JSON-RPC y comandos reservados (incluida la parada del daemon) autorizados por el daemon según la ascendencia del llamante (PQ-6); la confirmación en terminal es solo UX | expanded |
 | [ADR-GRP-006](./ADR-GRP-006-perfil-ubicacion-almacenamiento.md) | Perfil: ubicación por SO, clave de repo y almacenamiento | Carpetas estándar por SO (PQ-4), Windows siempre en `%LOCALAPPDATA%` (PQ-7), UUID por directorio Git común y un SQLite por repo | expanded |
-| [ADR-GRP-007](./ADR-GRP-007-configuracion-tres-niveles-formato.md) | Configuración en tres niveles: formato y precedencia | JSON estricto con `$schema` (propuesta base del BRD v0.4), nombres de archivos y sección `engine` (PQ-4), niveles admitidos por clave, JSON o schema inválido ignora el nivel entero (PQ-8), manda el worktree principal (PQ-9) | expanded |
+| [ADR-GRP-007](./ADR-GRP-007-configuracion-tres-niveles-formato.md) | Configuración en tres niveles: formato y precedencia | JSON estricto con `$schema` (propuesta base del BRD v0.4), nombres de archivos y sección `engine` (PQ-4), niveles admitidos por clave, JSON o schema inválido ignora el nivel entero (PQ-8); equipo leído de lo commiteado con suelo en la rama principal y rama base confirmada (decisión 1 de Guardrails, sustituye a PQ-9); `permissions`/`policies` y estado por fuente (enmienda 2026-10-04) | expanded |
 | [ADR-GRP-008](./ADR-GRP-008-configuracion-local-no-versionada.md) | Configuración local personal sin versionar | `settings.local.json` en el perfil, indexado por repo (PQ-3); P10 desaparece | expanded |
 | [ADR-GRP-009](./ADR-GRP-009-frontera-solo-lectura-git.md) | Frontera de solo lectura e invocación del Git del sistema | Frontera estricta: cero escrituras (ni locks transitorios), cero programas del usuario, gitoxide + allowlist del CLI; Git ≥ 2.38 sin depender del PATH | expanded |
 | [ADR-GRP-010](./ADR-GRP-010-observacion-cambios-worktrees.md) | Observación de cambios en worktrees | Watcher nativo (`notify`), debounce fijo de 75 ms, recomputo incremental, sondeo de respaldo, modo degradado y reconciliación | expanded |
@@ -71,7 +73,7 @@ El formato "JSON estricto con `$schema`" no es una PQ: es la propuesta base del 
 |-----|-----------|-------------|
 | ADR-GRP-005 | 006 (socket, bloqueo y logs), 009 (resolución de Git), 012 (procesos de agente, PQ-6), 013 (huecos y auditoría) | 006, 007, 008, 009, 010, 011, 012, 013 |
 | ADR-GRP-006 | 005 (único escritor y canal) | 005, 007, 008, 009, 011, 012, 013 |
-| ADR-GRP-007 | 005, 006 (carpeta de configuración del perfil); context de Guardrails F-001-04 (coautor) | 008, 009 (`gitPath`), 010 (intervalos del watcher), 012 (umbral) |
+| ADR-GRP-007 | 005, 006 (carpeta de configuración del perfil; rama base y suelo confirmados); ADR-GRD-003 y ADR-GRD-004 (coautoría cerrada) | 008, 009 (`gitPath`), 010 (intervalos del watcher), 012 (umbral) |
 | ADR-GRP-008 | 005, 006, 007 | — |
 | ADR-GRP-009 | 005 (proceso y entorno heredado), 006, 007 (`gitPath`) | 005, 010, 011, 012 |
 | ADR-GRP-010 | 005, 007, 009 | 011, 012, 013 (huecos) |
@@ -125,9 +127,10 @@ Los ADR-TMC-001 a 007 (aceptados el 2026-10-03) son de la feature `time-machine`
   - JSON inválido, o tipo o rango incorrecto según el schema: se **ignora el nivel entero**, con diagnóstico (archivo y posición, o ruta JSON); los demás niveles aplican.
   - Clave desconocida o clave en un nivel que no la admite: se ignora **solo esa clave**, con diagnóstico; el resto del nivel aplica.
   - Un diagnóstico nunca detiene la observación.
-- **Equipo (PQ-9)**: manda el `.gitraptor/settings.json` del **worktree principal**; repo bare → el nivel de equipo no aporta valores.
+- **Equipo (PQ-9, sustituida por la decisión 1 de Guardrails, 2026-10-04)**: el nivel de equipo se lee de **objetos commiteados**. El **suelo** (blob de la copia de la rama principal, sin `fetch`) es la única fuente de `baseBranch` y de las relajaciones, incluida la clave del mínimo; el `HEAD` del worktree solo endurece (D6). La rama base efectiva es la **confirmada** por el humano (D7, D8); la resuelta distinta es el diagnóstico `base-change-pending`. Lecturas sin objetos de reemplazo.
+- **Cargador (enmienda 2026-10-04)**: estado por fuente `ausente` / `legible` / `ignorado` / `parcial`, límites del JSON, `permissions` y `policies` con `x-gitraptor-levels`.
 - **Consecuencia ya aplicada**: ADR-GRP-002 (`crates/policy`) y ADR-GRP-004 (formularios) se actualizaron el 2026-10-03 para citar este ADR en lugar de `policy.yaml`.
-- **Coautoría**: `permissions`, `policies` y la regla de prohibiciones son de Guardrails (F-001-04). No pasa a `accepted` sin su context.
+- **Coautoría**: `permissions`, `policies`, la clave del mínimo y la regla de prohibiciones son de Guardrails (F-001-04). Coautoría cerrada con ADR-GRD-003/004.
 - **Impacta**: US-GRP-012, 013, 016. BR-CONS-006, BR-CONS-007, BR-TIME-001. Q23, Q24, Q27, Q36.
 
 ### ADR-GRP-008 — Configuración local personal sin versionar
@@ -179,4 +182,4 @@ Los ADR-TMC-001 a 007 (aceptados el 2026-10-03) son de la feature `time-machine`
 
 ## Pendientes fuera de los ADRs
 
-Ver la sección "Pendientes fuera de esta rama" del [architecture overview](../architecture-overview.md#10-pendientes-fuera-de-esta-rama).
+Ver la sección "Pendientes fuera de la arquitectura" del [architecture overview](../architecture-overview.md#10-pendientes-fuera-de-la-arquitectura).

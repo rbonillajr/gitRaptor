@@ -8,9 +8,9 @@ domain: GRP
 priority: critical
 complexity: medium
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 related:
-  adrs: [ADR-GRP-009, ADR-GRP-006, ADR-GRP-005, ADR-GRP-012, ADR-GRP-010, ADR-GRP-007]
+  adrs: [ADR-GRP-009, ADR-GRP-006, ADR-GRP-005, ADR-GRP-012, ADR-GRP-010, ADR-GRP-007, ADR-GRD-001]
   stories: [US-GRP-001, US-GRP-002, US-GRP-003, US-GRP-004, US-GRP-005, US-GRP-006, US-GRP-007, US-GRP-008, US-GRP-009, US-GRP-010, US-GRP-011, US-GRP-012, US-GRP-013, US-GRP-014, US-GRP-015, US-GRP-016, TS-GRP-002, TS-GRP-003, TS-GRP-004]
   depends_on: [TS-GRP-002]
   suites_with: [TS-GRP-003, TS-GRP-004, US-GRP-002, US-GRP-004, US-GRP-007]
@@ -57,6 +57,7 @@ Para no crear una dependencia circular (el arnés no puede esperar a las histori
 - **Crear** el arnés de huella del directorio Git común, de los worktrees enlazados y de cada working tree: rutas, tipo, tamaño, hash de contenido y mtime de archivos y directorios, sin `atime`.
 - **Crear** la huella fuera del repo: configuración global y de sistema de Git, `~/.gnupg`, `~/.claude`, otros repos de la máquina y configuración del perfil; solo pueden cambiar los datos del motor en el perfil.
 - **Prever** una lista de excepciones por escenario, que la suite de US-GRP-004 usa para permitir los artefactos del autoarranque solo cuando ejecuta `raptor daemon enable` (excepción PQ-1 de ADR-GRP-005).
+- **Admitir** en esa lista la excepción de Guardrails (Enmienda 2026-10-04, ADR-GRD-001 § 7): tras una instalación explícita, solo la clave local de hooks y la carpeta de Guardrails del directorio común; tras desinstalar, cero diferencias. La usa INF-GRD-001.
 - **Implementar** la ejecución de control: cada escenario corre con y sin motor y solo se imputa al motor la diferencia entre ambas huellas.
 - **Implementar** los escenarios mínimos de ADR-GRP-009 (Validación, punto 4) que se pueden ejercitar sobre la capa de lectura, siempre con repos temporales generados y nunca con este repo. Los que necesitan el observador van en la suite de US-GRP-002.
 - **Implementar** la auditoría del registro de argv contra la allowlist y la comprobación estática de que solo el módulo de invocación lanza procesos.
@@ -83,6 +84,7 @@ Las del núcleo se cumplen al cerrar este INF; las marcadas con la suite se cump
 - **Secretos (SEC-05, suites de TS-GRP-003 y TS-GRP-004)**: `.env`, token en la URL del remoto y `http.extraHeader` plantados; 0 hallazgos del escáner.
 - **Rutas no confiables (SEC-11)**: `gitdir` hacia `$HOME` no se vigila; repo de otro uid queda "no disponible"; settings como symlink a `~/.ssh/id_rsa` da diagnóstico sin contenido; ruta UNC sin conexiones SMB (suite de TS-GRP-004).
 - **Autoarranque (suite de US-GRP-004)**: `raptor daemon enable` y `disable` crean y eliminan exactamente los artefactos de la tabla de ADR-GRP-005 § 3, y nada más fuera del perfil.
+- **Excepción de Guardrails (suites de INF-GRD-001)**: tras una instalación explícita, la huella solo difiere en la clave local de hooks y en la carpeta de Guardrails; cualquier otra diferencia falla. Tras desinstalar, cero diferencias. Fuera de esos escenarios, la excepción no aplica.
 - **Guarda**: el arnés se niega a ejecutarse sobre una ruta dentro del repo de GitRaptor.
 - **Gate**: un PR con un efecto imputable al motor queda bloqueado en CI por el núcleo o por la suite de su historia; una historia anterior no queda bloqueada por una suite que todavía no existe.
 

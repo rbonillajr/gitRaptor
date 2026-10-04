@@ -5,11 +5,11 @@ type: adr
 status: proposed
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
-related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-006, ADR-GRP-009, ADR-GRP-010, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, CTX-GRP-001, BR-GRP-001]
+related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-006, ADR-GRP-009, ADR-GRP-010, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, ADR-GRD-003, ADR-GRD-004, ADR-GRD-006, ADR-GRD-007, CTX-GRP-001, BR-GRP-001]
 tags: [motor-local, daemon, ipc, json-rpc, autoarranque, unix-socket, named-pipe, seguridad, continuidad, comandos-reservados, prompt-injection]
 ---
 
@@ -34,6 +34,11 @@ El motor tiene que capturar la actividad de los agentes **aunque no haya ninguna
 - El daemon es el subcomando `raptor daemon` del binario `raptor` (`apps/cli`). No hay una app `raptord` separada y **no se enmienda ADR-GRP-002** (decisión de Rene Bonilla, 2026-10-03, PQ-5).
 - La lógica del motor vive en `crates/core`, la lectura de Git en `crates/git` (ADR-GRP-009) y el contrato del canal en `crates/api`. `apps/cli` solo aporta el punto de entrada del daemon y los clientes.
 - `raptor-mcp` y la CLI/TUI son **clientes** del daemon: ninguno embebe el motor ni abre el almacén del perfil. El daemon es el **único escritor** del perfil (ADR-GRP-006).
+- **Excepción acotada (Enmienda 2026-10-04, Guardrails; ADR-GRD-003 § 4, ADR-GRD-006 § 5)**: el cliente del hook de Guardrails (`raptor hook`), cuando el daemon no es alcanzable o es de otra instancia, hace dos accesos al **directorio de estado** del perfil, cuya ruta es una constante de su dispatcher:
+  - **Escribe** una entrada en el **spool** append-only del modo degradado: un archivo por entrada, creado en exclusiva y sin seguir enlaces, 0600 en una carpeta 0700, con tamaño y número de archivos acotados. El daemon lo ingiere con `origin = spool-unverified` y lo borra.
+  - **Lee** la **instantánea** de solo lectura que el daemon deja para el modo degradado (última rama base confirmada).
+
+  Nada más: el cliente del hook no abre el almacén SQLite ni los archivos de configuración del perfil, y el daemon sigue siendo el único escritor del **almacén**, del índice global y de la instantánea.
 - Corre con los privilegios del usuario, nunca como root ni LocalSystem.
 
 ### 2. Instancia única
@@ -70,7 +75,7 @@ El motor tiene que capturar la actividad de los agentes **aunque no haya ninguna
 - **Windows**: named pipe con nombre derivado del SID del usuario, DACL limitada a ese SID, creación como primera instancia (`FILE_FLAG_FIRST_PIPE_INSTANCE`, evita que otro proceso ocupe el nombre antes) y rechazo de clientes remotos (`PIPE_REJECT_REMOTE_CLIENTS`). El cliente comprueba que el servidor del pipe corre con su mismo SID y conecta con `SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION`, para que un servidor impostor no pueda suplantarlo.
 - **Sin puertos TCP** ni ninguna escucha de red (NFR-03).
 - **Contrato**: JSON-RPC 2.0 con mensajes delimitados y tamaño y profundidad máximos por mensaje, batches desactivados o acotados y timeout de handshake, definido en `crates/api`. Tiene tres partes:
-  - **Handshake** con versión de protocolo y versión del binario.
+  - **Handshake** con versión de protocolo y versión del binario. El daemon presenta además el **id de instancia del perfil** (ADR-GRP-006 § 4), que el cliente del hook de Guardrails compara con la constante de su dispatcher (Enmienda 2026-10-04; ADR-GRD-003 § 4).
   - **Consultas y comandos** (estado del motor, repos, worktrees, sesiones, eventos, registro y corrección).
   - **Stream de eventos por suscripción**, que publica los eventos del motor en orden de secuencia (ADR-GRP-011 mide su latencia).
 - **Validación de entradas (SEC-02)**: tipos estrictos con rechazo de campos desconocidos (`deny_unknown_fields`) en todos los mensajes. Rutas: absolutas; se rechazan UNC, `\\?\`, nombres de dispositivo y ADS **antes de tocar el sistema de archivos** (canonicalizar una ruta UNC abriría una conexión SMB, M9); después se canonicalizan y se comprueba que pertenecen a un worktree observado (BR-VAL-002). Refs: reglas de `check-ref-format` y siempre tras `--`. Ningún parámetro llega a un shell (argv fijo, ADR-GRP-009).
@@ -92,6 +97,27 @@ El motor tiene que capturar la actividad de los agentes **aunque no haya ninguna
    - **Retiro de un registro (Q41, BR-WF-001)**. ⚠️ **ASSUMPTION** pendiente de confirmar por Rene: el desarrollador puede retirar cualquier registro (comando reservado, con los controles 1 a 4); un agente solo el suyo, es decir, el registro que él hizo en el worktree que es el cwd del llamante, tomado igual que al registrarse. Cualquier otro retiro pedido por un agente se rechaza y queda en la auditoría. El retiro termina la sesión registrada (ADR-GRP-013).
 7. **Auditoría (SEC-03)**: cada comando reservado, aceptado o rechazado, queda en un registro append-only del perfil con fecha, operación, resultado y cliente, visible en los clientes (ADR-GRP-013).
 
+**Comandos reservados de Guardrails (Enmienda 2026-10-04; ADR-GRD-007 § 1)**. La lista se amplía con estos comandos, que usan el mismo mecanismo de los puntos 1 a 7 (nombres provisionales):
+
+| Comando | ¿Relaja? | Refuerzo |
+|---|---|---|
+| Instalar la protección (`raptor guard install`) | No | Confirmación UX con qué, dónde, por qué, cómo se revierte y los hooks previos (BR-AUTH-002). Sin ventana |
+| Registrar la denegación del permiso | No | — |
+| Adoptar una instalación huérfana | No | — |
+| Rechazar una petición de la cola (futuro, US-GRD-015) | No | — |
+| Desinstalar la protección (`raptor guard uninstall`) | **Sí** | **D5** |
+| Retirar una instalación huérfana | **Sí** | **D5** |
+| Excepción consciente (`raptor guard exec -- git …`) | **Sí** | **D5**, con la ventana antes de emitir el token de un solo uso (ADR-GRD-007 § 3). Por **D10**, también la aprobación explícita en el Cockpit (Q-GRD-1) |
+| Confirmar la rama base y el suelo **iniciales** al instalar (US-GRD-001) (**D9**) | No: confirma `main` sin leer el suelo | Sin ventana. Con configuración del equipo, deja `base-unconfirmed` |
+| Confirmar la rama base y el suelo **iniciales** con un comando explícito (US-GRD-014) (**D9**) | **Sí**, si el suelo trae relajaciones | **D5** cuando el suelo relaja (p. ej. desactiva el mínimo) |
+| Confirmar un cambio del suelo o de la rama base (D7, D8; ADR-GRD-004 § 3 y § 4) | **Sí** | **D5** (por D8), con el diff de lo que se relaja y la ref y el commit de origen a la vista |
+| Relajar la configuración con el comando de edición (futuro, US-GRD-013) | **Sí** | **D5** + factor fuera de banda del SO obligatorio; sin él, fail-closed |
+| Aprobar una petición de la cola (futuro, US-GRD-015) | **Sí** | **D5** + factor fuera de banda del SO obligatorio; sin él, fail-closed |
+
+- **Refuerzo D5** (Rene Bonilla, 2026-10-04) para los comandos que relajan: **anuncio** `reserved-action-pending` en el stream de todos los clientes; **ventana cancelable** antes de aplicar (⚠️ **ASSUMPTION**: 10 s), en la que cualquier cliente del usuario puede cancelar sin comando reservado; y **auditoría con la cadena completa de ascendencia** (ruta del ejecutable e identificador de cada proceso, terminal de control y líder de sesión) más la **aceptación del riesgo por acción** (ADR-GRP-013 § 1).
+- **Añadir un repo no confirma la rama base ni el suelo** (**D9**, Rene Bonilla, 2026-10-04): la confirmación inicial es un comando de Guardrails (tabla de arriba). Hasta entonces, Guardrails protege la unión de ramas base en las dos fases de ADR-GRD-004 § 3.5 y el motor marca la rama base como "no confirmada" (ADR-GRP-007).
+- El análisis de los vectores que los controles 1 a 3 no detectan (`tmux send-keys`, `osascript`, código plantado) y la aceptación del riesgo por acción están en ADR-GRD-007 § 2.
+
 **Riesgo residual aceptado**: un agente que se desacopla de su árbol de procesos (doble fork con `setsid`, `launchctl submit`, `systemd-run --user`, servicios del SO) puede evadir la ascendencia. Se acepta para el MVP porque el motor no tiene privilegios por encima del usuario y la auditoría deja rastro; se revisa si aparece un mecanismo de atestación del SO más fuerte.
 
 ## Alternativas consideradas
@@ -110,7 +136,8 @@ El motor tiene que capturar la actividad de los agentes **aunque no haya ninguna
 ## Consecuencias
 
 - ✅ Cumple "0 huecos mientras la máquina está encendida": la observación no depende de que haya un cliente abierto.
-- ✅ Un único escritor del perfil: sin escrituras concurrentes desde varios procesos (ADR-GRP-006).
+- ✅ Un único escritor del perfil: sin escrituras concurrentes desde varios procesos (ADR-GRP-006). La única excepción, el spool del modo degradado de Guardrails, está acotada a archivos sueltos del directorio de estado y no toca el almacén (apartado 1).
+- ⚠️ **Un proceso del mismo usuario puede escribir o borrar entradas del spool.** **Mitigación** (ADR-GRD-006 § 5 y § 6): validación, topes, `origin = spool-unverified` visible y excluido del KPI por defecto; ninguna decisión depende del spool.
 - ✅ Un único binario que distribuir; ADR-GRP-002 no cambia.
 - ✅ El canal no es accesible por otros usuarios ni por la red.
 - ⚠️ **El autoarranque escribe fuera del perfil**, en contra de la letra de Q17 y de la verificación 2 de BR-CONS-001 ("fuera del repo, lo único que cambia son los datos del motor en el perfil"). **Mitigación**: solo lo escribe el instalador o un comando del desarrollador, nunca el motor por su cuenta, y se revierte al desinstalar. **Pendiente para el PO**: actualizar Q17 (y la verificación de BR-CONS-001 y el NFR "fuera del repo solo cambia el perfil") con esta excepción. No se edita el requerimiento desde este ADR.
@@ -132,7 +159,7 @@ Las pruebas usan repos y perfiles temporales (variable de sobreescritura del per
 4. **Caída**: matar el daemon a la fuerza; al relanzarlo, el intervalo caído queda registrado como hueco y sus cambios "sin atribuir" (US-GRP-005).
 5. **Canal restringido (SEC-01)**: el socket es 0600 en un directorio 0700; un cliente de otro usuario es rechazado; un directorio pre-creado 0755 o de otro propietario impide arrancar al daemon; en Windows, la DACL del pipe solo contiene el SID del usuario, un pipe ocupado por otro proceso hace que el cliente rechace la conexión y un cliente remoto es rechazado. `lsof -i`/`netstat` no muestran ningún puerto en escucha.
 6. **Entradas (SEC-02)**: `cargo-fuzz` del decodificador de `crates/api`; corpus de rutas maliciosas (traversal, symlink hacia fuera, UNC con captura de red: 0 conexiones SMB); una ref `--upload-pack=x` se rechaza.
-7. **Comandos reservados (SEC-03)**: añadir o retirar un repo, corregir una atribución y parar el daemon enviados por un cliente JSON-RPC directo (sin la CLI) descendiente de un agente simulado se rechazan; ídem con pty (`script`) bajo el agente; un registro con worktree ajeno se rechaza; un agente que retira el registro de otro agente es rechazado y el que retira el suyo es aceptado; cada intento queda en el registro de auditoría; `raptor-mcp` no los ofrece (US-GRP-001, US-GRP-006, US-GRP-010). La evasión por doble fork/`setsid` se documenta como riesgo aceptado.
+7. **Comandos reservados (SEC-03)**: añadir o retirar un repo, corregir una atribución y parar el daemon enviados por un cliente JSON-RPC directo (sin la CLI) descendiente de un agente simulado se rechazan; ídem con pty (`script`) bajo el agente; un registro con worktree ajeno se rechaza; un agente que retira el registro de otro agente es rechazado y el que retira el suyo es aceptado; cada intento queda en el registro de auditoría; `raptor-mcp` no los ofrece (US-GRP-001, US-GRP-006, US-GRP-010). La evasión por doble fork/`setsid` se documenta como riesgo aceptado. Los comandos reservados de Guardrails se validan con ADR-GRD-007 (Validación 1 a 5: rechazo desde un agente, exclusión del MCP, anuncio y ventana, auditoría completa y vectores).
 8. **Robustez (SEC-08)**: un cliente que no lee y 100 conexiones simultáneas; el p95 de los demás clientes sigue dentro del presupuesto de ADR-GRP-011.
 9. **Entorno (SEC-10)**: arranque bajo demanda desde un cliente con `GIT_EXEC_PATH`, `LD_PRELOAD`/`DYLD_INSERT_LIBRARIES`, `PATH=.:…` o `XDG_CONFIG_HOME` hostiles: el daemon no los hereda.
 10. **No repudio (SEC-13)**: un agente simulado que ejecuta `raptor daemon stop` es rechazado; `kill -9` con sesión activa deja un hueco "caída durante sesión activa".
@@ -150,6 +177,7 @@ Las pruebas usan repos y perfiles temporales (variable de sobreescritura del per
 - **ADRs**: ADR-GRP-001, ADR-GRP-002, ADR-GRP-006 (perfil), ADR-GRP-009 (resolución de Git), ADR-GRP-010 (reconciliación), ADR-GRP-011 (latencia del stream), ADR-GRP-012 (procesos de agente), ADR-GRP-013 (huecos).
 - **Enablers**: TS-GRP-003, TS-GRP-004, INF-GRP-001, INF-GRP-002.
 - **Seguridad**: `docs/architecture/non-functional.md` (Security NFRs SEC-01 a SEC-14).
+- **Guardrails** (Enmienda 2026-10-04): ADR-GRD-003 § 4 (modo degradado, id de instancia), ADR-GRD-004 § 3 (confirmación inicial), ADR-GRD-006 § 5 (spool), ADR-GRD-007 § 1 y § 2 (comandos reservados, D5); decisiones D5, D7, D8, D9 y D10 de Rene Bonilla (2026-10-04).
 
 ## Revisión de seguridad (2026-10-03)
 
@@ -167,3 +195,15 @@ Enmienda tras la revisión del security-expert. No cambia la forma del motor; en
 | L1 · Ruta sin comillas en HKCU Run; `enable` desde npx | Apartado 3: endurecimiento del autoarranque (SEC-14) |
 
 Validación ampliada: SEC-01, SEC-02, SEC-03, SEC-08, SEC-10, SEC-12, SEC-13 y SEC-14 (puntos 5 a 12). Condición para pasar a `accepted`: esos puntos en la Validación (cubierto en texto) e INF-GRP-001 con repo canario y auditoría dinámica de `exec`.
+
+## Enmienda (2026-10-04, Guardrails)
+
+Aplicada desde la tabla de enmiendas de [non-functional-guardrails.md](../non-functional-guardrails.md) (J10). No cambia la forma del motor, el canal ni los controles 1 a 7. El `status` sigue en `proposed`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| Excepción acotada a "el daemon es el único escritor del perfil": el cliente del hook escribe el spool y lee la instantánea del modo degradado en el directorio de estado | § 1; Consecuencias | ADR-GRD-003 § 4, ADR-GRD-006 § 5 |
+| El handshake presenta el id de instancia del perfil | § 5 | ADR-GRD-003 § 4; ADR-GRP-006 § 4 |
+| Lista ampliada de comandos reservados de Guardrails, con el refuerzo D5 para los que relajan | § 6; Validación 7 | ADR-GRD-007 § 1 y § 2; D5, D7, D8 |
+| **Ronda de coherencia (2026-10-04)**: la confirmación inicial sale de "añadir un repo" y pasa a instalar (US-GRD-001, sin relajar y sin ventana) o a un comando explícito (US-GRD-014, con D5 si el suelo relaja) (**D9**); toda excepción, también la del Cockpit, con D5 (**D10**) | § 6 | ADR-GRD-004 § 3, ADR-GRD-007 § 1; D9, D10 |
+| **Corrección tras el Judge (2026-10-04)**: la confirmación inicial de US-GRD-001 no relaja y no tiene ventana; D5 solo en la explícita de US-GRD-014; la unión remite a las dos fases de ADR-GRD-004 § 3.5; D9 y D10 en Referencias | § 6; Referencias | ADR-GRD-004 § 3.5, ADR-GRD-007 § 1 |

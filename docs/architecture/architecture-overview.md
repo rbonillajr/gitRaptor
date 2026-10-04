@@ -2,7 +2,7 @@
 mode: draft
 status: expanded
 generated: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 generator: architect
 domain: GRP
 feature: motor-local
@@ -19,6 +19,8 @@ related:
 # Architecture Overview — Motor local (F-001-01)
 
 > Documento de navegación: enlaza los artefactos y no duplica su contenido. Rene Bonilla aceptó el 2026-10-03 todas las recomendaciones y las preguntas de producto PQ-1 a PQ-9; los ADR 005 a 013 están expandidos (`status: proposed`).
+>
+> **Enmiendas de Guardrails (2026-10-04)**: **PQ-9 queda sustituida** por la decisión 1 de Guardrails (configuración de equipo commiteada, suelo en la rama principal y rama base confirmada; ADR-GRP-007). ADR-GRP-005, 006, 009, 010 y 013 e INF-GRP-001 incorporan las demás enmiendas de la tabla de [non-functional-guardrails.md](./non-functional-guardrails.md#enmiendas-pendientes-en-otros-frentes-j10). Ningún ADR cambia de `status`.
 >
 > **Revisión de seguridad (2026-10-03)**: aprobada con condiciones por el `security-expert`, sin hallazgos Critical. Tras las enmiendas a ADR-GRP-005, 006, 007, 009, 010, 012 y 013, los cuatro High (H1-H4) quedan cubiertos en texto; ADR-GRP-005 y ADR-GRP-009 pasan a `accepted` cuando INF-GRP-001 tenga el repo canario y la auditoría dinámica de `exec`. Detalle, SEC-01 a SEC-14 y gate en [non-functional.md](./non-functional.md#gate-de-seguridad).
 >
@@ -148,9 +150,9 @@ Pendiente. Se generan con `/aadd-devspec <id>`: una por TS e INF y una por cada 
 - **Riesgo de atribución**: si S2b se desactiva por un cambio de formato, los cambios sin commitear en un worktree con editor abierto quedan casi siempre "sin atribuir". La meta del 90% puede cumplirse para sesiones y no para cambios (R1, R2, R7). Vía de salida: S5 opt-in y registro explícito (ADR-GRP-012).
 - **Riesgo de Windows**: los handles del watcher podrían impedir borrar o mover worktrees. Lo verifica SPIKE-GRP-002 (R4).
 
-## 10. Pendientes fuera de esta rama
+## 10. Pendientes fuera de la arquitectura
 
-Esta rama (`docs/arch-motor-local`) solo toca arquitectura. Lo siguiente queda para otros dueños:
+Estos documentos solo cubren la arquitectura. Lo siguiente queda para otros dueños:
 
 1. **PO — requerimiento de motor-local** (no se edita desde la arquitectura):
    - **PQ-1 (autoarranque)**: actualizar Q17, la verificación 2 de BR-CONS-001 ("fuera del repo, lo único que cambia son los datos del motor en el perfil") y el NFR "fuera del repo solo cambia el perfil" con la excepción acotada del autoarranque.
@@ -166,9 +168,6 @@ Esta rama (`docs/arch-motor-local`) solo toca arquitectura. Lo siguiente queda p
    - **Q26 / BR-CONS-005**: el daemon **aborta** si los permisos del perfil o del socket están alterados (ADR-GRP-005 § 5, ADR-GRP-006 § 1, SEC-01, SEC-06). Choca con "0 huecos mientras la máquina está encendida"; confirmar con el PO que se acepta ese hueco, que queda señalado.
    - **NFR-07 del BRD**: su literal ("respeta config/hooks") choca con la neutralización de filtros, `textconv` y fsmonitor al leer (ADR-GRP-009). Reformularlo como "respeta la configuración de Git sin ejecutar programas configurados por el usuario".
 2. **Cockpit (F-001-02) — predicción de conflictos**: `git merge-tree --write-tree`, la razón de Git 2.38 en NFR-07, escribe objetos en `.git/objects` y ADR-GRP-009 lo prohíbe al motor. Necesita un ADR propio del Cockpit (por ejemplo, un almacén de objetos alternativo dentro del perfil).
-3. **Guardrails (F-001-04)**:
-   - Un `.gitraptor/settings.json` de equipo inválido se ignora entero (PQ-8), lo que deja sin efecto sus prohibiciones (fail-open). Guardrails debe decidir su reacción.
-   - Un repo bare no tiene configuración de equipo (PQ-9); Guardrails debe decidir si necesita la misma regla.
-   - ADR-GRP-007 no pasa a `accepted` sin el context de Guardrails (coautoría de `permissions` y `policies`).
-4. **Seguridad de la salida hacia terminales y agentes (M8, SEC-12)**: ADR-GRP-005 § 5 fija el contrato de salida de `crates/api` (texto no confiable marcado, respuestas MCP acotadas). Falta llevarlo a **ADR-GRP-004** (limpieza de caracteres de control y escapes ANSI/OSC en la CLI/TUI) y a la **spec futura del MCP (F-001-05)** (allowlist de campos, longitudes máximas, sin mensajes de commit ni contenido, limitado al repo del llamante). La enmienda de ADR-GRP-004 hecha en esta rama se limita a sustituir la referencia a `policy.yaml` por ADR-GRP-007; **M8/SEC-12 sigue pendiente** en ADR-GRP-004.
-5. **Código y README** (fuera del alcance de una rama `docs/`): todavía citan `policy.yaml` en `README.md` (tabla de crates), `crates/policy/src/lib.rs` (comentario del crate) y `crates/policy/Cargo.toml` (`description`). Deben pasar a citar la configuración de ADR-GRP-007.
+3. **Seguridad de la salida hacia terminales y agentes (M8, SEC-12)**: ADR-GRP-005 § 5 fija el contrato de salida de `crates/api` (texto no confiable marcado, respuestas MCP acotadas). Falta llevarlo a **ADR-GRP-004** (limpieza de caracteres de control y escapes ANSI/OSC en la CLI/TUI) y a la **spec futura del MCP (F-001-05)** (allowlist de campos, longitudes máximas, sin mensajes de commit ni contenido, limitado al repo del llamante). La enmienda de ADR-GRP-004 hecha el 2026-10-03 se limita a sustituir la referencia a `policy.yaml` por ADR-GRP-007; **M8/SEC-12 sigue pendiente** en ADR-GRP-004.
+4. **Código y README** (fuera del alcance de la arquitectura): todavía citan `policy.yaml` en `README.md` (tabla de crates), `crates/policy/src/lib.rs` (comentario del crate) y `crates/policy/Cargo.toml` (`description`). Deben pasar a citar la configuración de ADR-GRP-007.
+5. **Motor-local — lanzamiento de procesos fuera de `crates/git`** (anotado en la enmienda de ADR-GRP-009, 2026-10-04): la comprobación estática de la Validación 5 ("`Command::new` solo en los módulos de invocación autorizados de `crates/git`") choca con el arranque del daemon bajo demanda desde la biblioteca cliente y con las peticiones al gestor de servicios (`launchctl kickstart`, `systemctl --user start`) de ADR-GRP-005 § 3. Falta decidir en qué módulo autorizado viven.
