@@ -38,7 +38,7 @@ BR-VAL-002 (catálogo de operaciones y sus tres permisos; "pedir confirmación" 
 ## Dependencias
 
 - **Historias**: US-GRD-001 (contrato de decisión y capa de hooks); US-GRD-004 (lista de operaciones que la capa de hooks puede interceptar); US-GRP-013 (motor-local), dueña de la lectura de la configuración en tres niveles, que esta historia reutiliza.
-- **Externas**: **bloqueada** por el ADR de formato de la configuración, P8 (motor-local), y por US-GRP-013. Un escenario depende además de la pregunta abierta P-GRD-17 (ver índice).
+- **Externas**: **bloqueada** por el ADR de formato de la configuración, P8 (motor-local), y por US-GRP-013. Por Q-GRD-17, un cambio en la configuración del equipo se aplica al commitearlo en el worktree de la operación, no al editarlo.
 - **Transversal**: Windows, macOS y Linux. Las operaciones que la lista de US-GRD-004 declare no interceptables con Git directo (p. ej. `reset --hard`) se verifican por la capa MCP en US-GRD-016.
 
 ## Criterios de Aceptación
@@ -81,11 +81,12 @@ Dado el repo "demo" cuya configuración del equipo desactiva el conjunto mínimo
 Cuando un proceso hace force-push de "feat-x"
 Entonces la operación se ejecuta
 
-**Escenario: Un cambio commiteado en la configuración del equipo aplica sin reinstalar** *(Depende de P-GRD-17)*
+**Escenario: Un cambio en la configuración del equipo se aplica al commitearlo, no al editarlo**
 
-Dado el repo "demo" con push en "permitir"
-Cuando el desarrollador cambia push a "denegar" en la configuración del equipo y lo commitea en el worktree donde se opera
-Entonces el siguiente push desde ese worktree se deniega sin reinstalar la protección
+Dado el repo "demo" con push en "permitir" en la configuración del equipo commiteada
+Cuando el desarrollador cambia push a "denegar" en el worktree "feat-x" sin commitear
+Entonces el siguiente push desde "feat-x" se ejecuta
+  Y tras commitear ese cambio en "feat-x", el siguiente push desde "feat-x" se deniega sin reinstalar la protección
 
 ## Requisitos Técnicos
 

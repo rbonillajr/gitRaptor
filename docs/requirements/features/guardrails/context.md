@@ -339,7 +339,7 @@ US-GRP-013 (umbral de inactividad) solo depende de P8 (motor-local); tampoco nec
 
 ## Decisiones tomadas
 
-Rene Bonilla aceptó el 2026-10-03 las recomendaciones del PO para las 16 preguntas abiertas de esta feature. Cada decisión Q-GRD-n sale de la pregunta P-GRD-n con el mismo número.
+Rene Bonilla aceptó el 2026-10-03 las recomendaciones del PO para las 16 preguntas abiertas de esta feature. Cada decisión Q-GRD-n sale de la pregunta P-GRD-n con el mismo número. Q-GRD-17 es posterior a la aprobación del requerimiento (2026-10-04).
 
 | # | Pregunta de origen | Decisión | Fecha | Decidido por | Reglas afectadas |
 |---|--------------------|----------|-------|--------------|------------------|
@@ -359,6 +359,7 @@ Rene Bonilla aceptó el 2026-10-03 las recomendaciones del PO para las 16 pregun
 | Q-GRD-14 | P-GRD-14: ¿un endurecimiento en el perfil prevalece sobre un "permitir" del equipo? | Sí. Se amplía la excepción de Q23 de motor-local: un nivel personal (perfil o local) puede endurecer cualquier regla del equipo y nunca relajarla. Motivo: cada persona puede ser más estricta con sus agentes en su máquina sin afectar al equipo. **Refina Q23 de motor-local.** | 2026-10-03 | Rene Bonilla | BR-CONS-001, BR-VAL-001 |
 | Q-GRD-15 | P-GRD-15: ¿cuándo entra un repo en el alcance de Guardrails? | Al añadirlo a la observación del motor (BR-AUTH-001 (motor-local)), para que haya actor atribuido. La allowlist del MCP debería ser un subconjunto de los repos observados (a coordinar con F-001-05). Retirar un repo de la observación no desinstala sus hooks: siguen aplicando las reglas con actor "sin atribuir" y Guardrails avisa de ello. | 2026-10-03 | Rene Bonilla | BR-WF-002, BR-AUTH-002 |
 | Q-GRD-16 | P-GRD-16: ¿y si el comando fija una rama base que no existe? | Avisar y pedir confirmación al humano; si confirma, guardarla (puede existir solo en el remoto o crearse después). El motor aplica Q42: indica que no puede calcular ahead/behind y no elige otra rama. | 2026-10-03 | Rene Bonilla | BR-CONS-003, BR-CONS-006 (comando, Guardrails), BR-CONS-006 (motor-local) (rama base inexistente, Q42) |
+| Q-GRD-17 | P-GRD-17 (abierta en el índice de historias, 2026-10-04): ¿qué versión de la configuración del equipo es la efectiva? | La configuración del equipo que rige una operación es la última versión commiteada en el worktree donde ocurre esa operación; las ediciones sin commitear nunca cuentan. Junto con Q-GRD-7, que impide a los agentes commitear cambios en la configuración, un agente no puede relajarla. | 2026-10-04 | Rene Bonilla | BR-VAL-001, BR-AUTH-004, BR-CONS-006, BR-EDGE-004 |
 
 ## Preguntas abiertas
 
@@ -392,6 +393,8 @@ Todas las preguntas de esta feature están resueltas (ver [Decisiones tomadas](#
 > **Revisión 2026-10-03 (Artifact Judge, veredicto RESERVAS)**: (1) la precedencia "el perfil endurece sobre un 'permitir' del equipo" va más allá de Q23 de motor-local: se abre P-GRD-14 como refinamiento de Q23, se anota la diferencia en "Decisiones heredadas" y se marcan las filas afectadas de BR-CONS-001; "Configuración en tres niveles" pasa de ✅ a ⚠️. (2) BR-AUTH-001 deja de atribuir a Q27 una frase que no está en la fuente. (3) Convención de IDs: preguntas, supuestos y riesgos propios pasan a P-GRD-n, S-GRD-n y R-GRD-n; los IDs del Motor local se califican con "(motor-local)". (4) Nueva regla BR-CONS-006: el comando de edición no pisa cambios hechos a mano y escribe de forma recuperable (NFR-01). (5) BR-WF-002 completa estados y transiciones, se alinea con BR-EDGE-001 y abre P-GRD-15 (alcance). (6) US-GRP-016 la desbloquean el valor de equipo, la regla de lectura y el ADR P8 (motor-local); el comando no es prerrequisito; se abre P-GRD-16. (7) El glosario deja de dar nombres de claves. (8) R-GRD-1 justifica su diferencia con el BRD. Resultado: **7 ✅ · 8 ⚠️ · 0 🔴**.
 >
 > **Revisión 2026-10-03 (Q-GRD-1 a Q-GRD-16)**: Rene Bonilla aceptó las recomendaciones de las 16 preguntas P-GRD; se registran como decisiones Q-GRD-1 a Q-GRD-16 (tabla [Decisiones tomadas](#decisiones-tomadas)) y se llevan a las reglas. Q-GRD-14 refina Q23 de motor-local; el roce de Q-GRD-12 con BR-CONS-007 (motor-local) queda como dependencia para el Arquitecto o una revisión de motor-local. S-GRD-1, S-GRD-4 y S-GRD-5 quedan confirmados por Q-GRD-14, Q-GRD-7 y Q-GRD-10; el resto de supuestos sigue sin validar. Pasan a ✅ Usuarios/Actores, Integraciones y Configuración en tres niveles. Known Risks 3, 6 y 8 resueltos; el 7 se reduce a S-GRD-8 y S-GRD-9; los 1, 2, 4, 5 y 7 siguen pendientes de aceptación. Resultado: **10 ✅ · 5 ⚠️ · 0 🔴**.
+>
+> **Revisión 2026-10-04 (Q-GRD-17)**: decisión **posterior a la aprobación del requerimiento**. Sale de la pregunta P-GRD-17, que el Artifact Judge abrió al revisar las historias. Fija que la configuración del equipo que rige una operación es la última versión commiteada en el worktree de esa operación y cierra la vía por la que un agente podía relajarla sin commitear. Se lleva a BR-VAL-001, BR-AUTH-004, BR-CONS-006 y BR-EDGE-004. No cambia ninguna calificación: **10 ✅ · 5 ⚠️ · 0 🔴**.
 
 | Sección | Resultado | Nota |
 |---------|-----------|------|

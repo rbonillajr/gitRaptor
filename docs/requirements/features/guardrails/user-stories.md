@@ -93,13 +93,13 @@ blocked:
 | US-GRD-004 | BR-WF-002, BR-EDGE-003, BR-EDGE-001 (visible) | US-GRD-001, US-GRP-006 | — | Should | El estado de protección nunca miente y dice qué reglas aplican |
 | US-GRD-005 | BR-CONS-004, BR-TIME-002 | US-GRD-001, US-GRP-009 | — | Must | El KPI "acciones peligrosas bloqueadas" se mide |
 | US-GRD-006 | BR-AUTH-003, BR-AUTH-001, BR-CONS-004 | US-GRD-001, US-GRD-005, US-GRP-007, US-GRP-009 | Arquitecto: distinguir al humano (R-GRD-3) | Must | Fail-safe sin dejar atrapado al humano |
-| US-GRD-007 | BR-VAL-002, BR-CALC-001, BR-VAL-001, BR-EDGE-001 | US-GRD-001, US-GRD-004, US-GRP-013 | **Bloqueada**: P8 (motor-local) y US-GRP-013; un escenario depende de P-GRD-17 | Must | Las reglas del repo viajan con él |
+| US-GRD-007 | BR-VAL-002, BR-CALC-001, BR-VAL-001, BR-EDGE-001 | US-GRD-001, US-GRD-004, US-GRP-013 | **Bloqueada**: P8 (motor-local) y US-GRP-013; Q-GRD-17 | Must | Las reglas del repo viajan con él |
 | US-GRD-008 | BR-VAL-003 (ramas protegidas, rutas prohibidas), BR-CALC-001 | US-GRD-007 | **Bloqueada**: P8 | Must | Que nadie rompa main |
 | US-GRD-009 | BR-VAL-003 (tamaño de diff, formato de commit) | US-GRD-008 | **Bloqueada**: P8 | Should | Diffs revisables y un historial legible |
 | US-GRD-010 | BR-CONS-001, BR-VAL-001 | US-GRD-007, US-GRD-008 | **Bloqueada**: P8 | Must | Las reglas del equipo son un suelo |
-| US-GRD-011 | BR-EDGE-004 | US-GRD-010 | **Bloqueada**: P8; dos escenarios dependen de P-GRD-17; alinear con BR-CONS-007 (motor-local), Arquitecto | Must | Nunca "todo permitido" |
-| US-GRD-012 | BR-AUTH-004, BR-AUTH-001 | US-GRD-008, US-GRD-010 | **Bloqueada**: P8; un escenario depende de P-GRD-17; R-GRD-3 | Must | Las reglas no las cambia quien está sujeto a ellas |
-| US-GRD-013 | BR-CONS-006, BR-VAL-001, BR-CONS-001, BR-AUTH-001 | US-GRD-010, US-GRD-014 | **Bloqueada**: P8; un escenario depende de P-GRD-17; R-GRD-3 | Should | Editar la configuración es seguro |
+| US-GRD-011 | BR-EDGE-004 | US-GRD-010 | **Bloqueada**: P8; Q-GRD-17; alinear con BR-CONS-007 (motor-local), Arquitecto | Must | Nunca "todo permitido" |
+| US-GRD-012 | BR-AUTH-004, BR-AUTH-001 | US-GRD-008, US-GRD-010 | **Bloqueada**: P8; Q-GRD-17; R-GRD-3 | Must | Las reglas no las cambia quien está sujeto a ellas |
+| US-GRD-013 | BR-CONS-006, BR-VAL-001, BR-CONS-001, BR-AUTH-001 | US-GRD-010, US-GRD-014 | **Bloqueada**: P8; Q-GRD-17; R-GRD-3 | Should | Editar la configuración es seguro |
 | US-GRD-014 | BR-CONS-003, BR-EDGE-001 | US-GRD-007 | **Bloqueada**: P8 | Should | La rama de integración del equipo queda protegida |
 | US-GRD-015 | BR-WF-001, BR-TIME-001, BR-AUTH-001 | US-GRD-004, US-GRD-005, US-GRD-007 | **Bloqueada**: Cockpit F-001-02 y P8 | Should | El humano tiene la última palabra en lo arriesgado |
 | US-GRD-016 | BR-CONS-002, BR-WF-002, BR-AUTH-004 | US-GRD-001, US-GRD-004, US-GRD-007 | **Bloqueada**: Servidor MCP F-001-05 y P8 | Must | Dos capas, una sola decisión |
@@ -141,11 +141,11 @@ US-GRD-014 **no** desbloquea US-GRP-016. Según el contexto aprobado, US-GRP-016
 
 ---
 
-## Preguntas abiertas
+## Preguntas abiertas (todas resueltas)
 
 | # | Pregunta | Recomendación del PO | Historias afectadas | Estado |
 |---|----------|----------------------|---------------------|--------|
-| P-GRD-17 | Un agente puede relajar sus reglas editando la configuración del equipo en su worktree sin hacer commit, y no está definido qué copia rige si hay varios worktrees. ¿Qué versión de la configuración del equipo es la efectiva? | La configuración del equipo efectiva es la última versión commiteada en el worktree donde ocurre la operación, nunca las ediciones sin commitear. Junto con Q-GRD-7, que impide a los agentes commitear cambios en la configuración, un agente no puede relajarla. | US-GRD-007, US-GRD-011, US-GRD-012, US-GRD-013 (escenarios marcados "Depende de P-GRD-17") | Abierta (Rene Bonilla). Se llevará al requerimiento cuando se decida |
+| P-GRD-17 | Un agente puede relajar sus reglas editando la configuración del equipo en su worktree sin hacer commit, y no está definido qué copia rige si hay varios worktrees. ¿Qué versión de la configuración del equipo es la efectiva? | La configuración del equipo efectiva es la última versión commiteada en el worktree donde ocurre la operación, nunca las ediciones sin commitear. Junto con Q-GRD-7, que impide a los agentes commitear cambios en la configuración, un agente no puede relajarla. | US-GRD-007, US-GRD-011, US-GRD-012, US-GRD-013 | **Resuelta (Q-GRD-17)**, Rene Bonilla, 2026-10-04. Registrada en el requerimiento (context.md y business-rules.md) |
 
 ---
 
@@ -177,3 +177,4 @@ US-GRD-014 **no** desbloquea US-GRP-016. Según el contexto aprobado, US-GRP-016
 |---------|-------|-------|---------|
 | 1.0 | 2026-10-04 | PO (AADD) para Rene Bonilla | Versión inicial en modo Bulk (modelo plano): 17 historias, mapa para la flota, DAG y cobertura de las 23 reglas. 11 historias bloqueadas (P8 de motor-local, Cockpit, MCP y Time Machine) |
 | 1.1 | 2026-10-04 | PO (AADD) para Rene Bonilla | Artifact Judge (RESERVAS): US-GRD-014 deja de "desbloquear" US-GRP-016 y pierde el escenario de coherencia con el motor, que pasa a prueba de integración posterior; la lectura de los tres niveles tiene un solo dueño, US-GRP-013 (motor-local), del que depende US-GRD-007; catálogo completo de BR-VAL-002 por MCP en US-GRD-016 (incluido `reset --hard`) y por Git directo en US-GRD-007 (operaciones interceptables, con dependencia de US-GRD-004); US-GRD-015 indica la capa en cada escenario (push con Git directo); US-GRD-004 añade la visibilidad del mínimo seguro (BR-EDGE-001); notas sobre el snapshot previo y la posible división de US-GRD-001; nueva pregunta abierta P-GRD-17 con los escenarios afectados marcados en US-GRD-007, 011, 012 y 013 |
+| 1.2 | 2026-10-04 | PO (AADD) para Rene Bonilla | P-GRD-17 resuelta por Q-GRD-17 (rige la última versión commiteada de la configuración del equipo en el worktree de la operación): US-GRD-007 y 013 aplican el cambio al commitearlo; US-GRD-011 reformula los escenarios de conflicto de merge (commiteado frente a sin commitear); US-GRD-012 deja explícito que editar sin commitear no relaja nada. Sin marcas "Depende de P-GRD-17" |

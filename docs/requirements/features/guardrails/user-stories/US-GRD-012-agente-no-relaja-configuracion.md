@@ -37,7 +37,7 @@ BR-AUTH-004 (la configuración de Guardrails es ruta prohibida para agentes por 
 ## Dependencias
 
 - **Historias**: US-GRD-008 (rutas prohibidas), US-GRD-010 (los tres niveles).
-- **Externas**: **bloqueada** por el ADR de formato P8 (motor-local), que fija qué rutas son la configuración. Un escenario depende de la pregunta abierta P-GRD-17 (qué copia de la configuración del equipo rige; ver índice). Distinguir al humano es transversal (lo define el Arquitecto; R-GRD-3). Que un agente escriba en disco la configuración personal, que no se versiona, no lo puede impedir una regla sobre commits: queda como riesgo R-GRD-4 para el Arquitecto, fuera de esta historia.
+- **Externas**: **bloqueada** por el ADR de formato P8 (motor-local), que fija qué rutas son la configuración. Por Q-GRD-17 rige la última versión commiteada de la configuración del equipo en el worktree de la operación. Distinguir al humano es transversal (lo define el Arquitecto; R-GRD-3). Que un agente escriba en disco la configuración personal, que no se versiona, no lo puede impedir una regla sobre commits: queda como riesgo R-GRD-4 para el Arquitecto, fuera de esta historia.
 - **Transversal**: Windows, macOS y Linux.
 
 ## Criterios de Aceptación
@@ -50,11 +50,11 @@ Cuando "codex" hace un commit que cambia la configuración del equipo para permi
 Entonces el commit no se ejecuta y el motivo nombra la protección de la configuración
   Y el intento queda en el registro con actor "codex"
 
-**Escenario: Un agente edita la configuración del equipo sin commitear** *(Depende de P-GRD-17)*
+**Escenario: Un agente edita la configuración del equipo sin commitear y no relaja nada**
 
 Dado el repo "demo" protegido, cuya configuración del equipo commiteada deniega force-push
 Cuando un agente edita esa configuración en su worktree para permitir force-push, sin commitear, y hace force-push desde ese worktree
-Entonces la operación no se ejecuta, porque rige la última versión commiteada de la configuración del equipo
+Entonces la operación no se ejecuta, porque rige la última versión commiteada de la configuración del equipo (Q-GRD-17)
 
 **Escenario: Un agente intenta borrar la configuración del equipo**
 
