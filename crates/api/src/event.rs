@@ -1,0 +1,150 @@
+//! The event stream (ADR-GRP-005 § 5, ADR-GRP-011 § 3, ADR-GRP-013 § 6).
+//!
+//! Every event has a daemon-wide sequence number, a versioned kind and an
+//! opaque `data` payload whose shape belongs to the kind's version. Change
+//! events (those a story emits when something in a repo changes) always
+//! carry the stage timings of ADR-GRP-011 § 3. This TS defines the envelope
+//! and the engine's own kinds; the payload of each story's kinds is defined
+//! by that story.
+
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+/// Stage timings of a change event, in nanoseconds of
+/// [`crate::clock::monotonic_ns`]. A client compares them with its own
+/// reading of the same clock.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Timings {
+    /// Groups the events of one debounce window.
+    pub batch_id: u64,
+    pub t_recv: u64,
+    pub t_flush: u64,
+    pub t_computed: u64,
+    pub t_persisted: u64,
+    pub t_published: u64,
+}
+
+/// One event of the stream.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Event {
+    /// Daemon-wide, strictly increasing. Subscribers receive events in this
+    /// order.
+    pub seq: u64,
+    pub kind: String,
+    /// Version of `data` for this kind.
+    pub version: u32,
+    /// Wall-clock time for people (UTC milliseconds).
+    pub wall_ms: i64,
+    /// Present on every change event, absent otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timings: Option<Timings>,
+    pub data: Value,
+}
+
+impl Event {
+    /// Whether the envelope agrees with the kind registry: known kind and
+    /// version, timings exactly on change events.
+    pub fn is_well_formed(&self) -> bool {
+        match kind(&self.kind) {
+            Some(spec) => spec.version == self.version && spec.change == self.timings.is_some(),
+            None => false,
+        }
+    }
+}
+
+/// Static description of an event kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EventKind {
+    pub kind: &'static str,
+    pub version: u32,
+    /// A change event carries [`Timings`].
+    pub change: bool,
+    /// Story that defines `data`, for kinds declared ahead of it.
+    pub defined_by: Option<&'static str>,
+}
+
+/// The engine's availability state changed (BR-WF-002). Data:
+/// [`crate::messages::EngineView`].
+pub const ENGINE_STATE: &str = "engine.state";
+/// The daemon is about to stop. Data: [`crate::messages::StoppingData`].
+pub const DAEMON_STOPPING: &str = "daemon.stopping";
+/// A reserved command was attempted. Data: [`crate::messages::AuditEntry`].
+pub const RESERVED_AUDIT: &str = "reserved.audit";
+
+const fn engine(kind: &'static str) -> EventKind {
+    EventKind {
+        kind,
+        version: 1,
+        change: false,
+        defined_by: None,
+    }
+}
+
+const fn change(kind: &'static str, story: &'static str) -> EventKind {
+    EventKind {
+        kind,
+        version: 1,
+        change: true,
+        defined_by: Some(story),
+    }
+}
+
+/// Every event kind of the contract.
+pub const KINDS: &[EventKind] = &[
+    engine(ENGINE_STATE),
+    engine(DAEMON_STOPPING),
+    engine(RESERVED_AUDIT),
+    change("worktree.state", "US-GRP-001"),
+    change("git.event", "US-GRP-002"),
+    change("gap.recorded", "US-GRP-005"),
+    change("session.state", "US-GRP-007"),
+    change("attribution.changed", "US-GRP-010"),
+];
+
+pub fn kind(name: &str) -> Option<&'static EventKind> {
+    KINDS.iter().find(|k| k.kind == name)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn change_events_must_carry_timings() {
+        let timings = Timings {
+            batch_id: 1,
+            t_recv: 1,
+            t_flush: 2,
+            t_computed: 3,
+            t_persisted: 4,
+            t_published: 5,
+        };
+        let mut event = Event {
+            seq: 1,
+            kind: "git.event".into(),
+            version: 1,
+            wall_ms: 0,
+            timings: None,
+            data: Value::Null,
+        };
+        assert!(!event.is_well_formed());
+        event.timings = Some(timings);
+        assert!(event.is_well_formed());
+        event.kind = ENGINE_STATE.into();
+        assert!(!event.is_well_formed());
+        event.timings = None;
+        assert!(event.is_well_formed());
+        event.version = 2;
+        assert!(!event.is_well_formed());
+    }
+
+    #[test]
+    fn declared_kinds_name_their_story() {
+        for k in KINDS {
+            assert_eq!(k.change, k.defined_by.is_some(), "{}", k.kind);
+        }
+    }
+}

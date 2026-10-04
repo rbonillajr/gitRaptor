@@ -448,6 +448,12 @@ dependencies = [
 [[package]]
 name = "gitraptor-api"
 version = "0.0.0"
+dependencies = [
+ "rustix",
+ "schemars",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "gitraptor-cli"

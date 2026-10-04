@@ -1,7 +1,38 @@
-//! JSON-RPC and event contract shared by the engine, the CLI and the MCP server.
+//! JSON-RPC and event contract shared by the engine, the CLI and the MCP server
+//! (TS-GRP-004, ADR-GRP-005 § 5).
+//!
+//! The contract has three parts: a versioned handshake ([`messages::Hello`]),
+//! queries and commands ([`methods`]) and an event stream by subscription
+//! ([`event`]). Messages are JSON-RPC 2.0, one per line, bounded in size and
+//! depth ([`framing`]); every type rejects unknown fields.
+//!
+//! Text that comes from a repo or an agent travels as [`Untrusted`] and is
+//! sanitized before it reaches a terminal (SEC-12). The exposed actor has no
+//! "human" variant ([`Actor`], ADR-GRP-013 § 6).
 
-/// Version of the engine API contract.
-pub const API_VERSION: &str = "0.0.0";
+pub mod actor;
+pub mod clock;
+pub mod event;
+pub mod framing;
+pub mod messages;
+pub mod methods;
+pub mod rpc;
+pub mod untrusted;
+
+pub use actor::{Actor, AgentKind, AgentOrigin};
+pub use event::{Event, Timings};
+pub use untrusted::Untrusted;
+
+/// Version of the engine API contract (semantic, for humans).
+pub const API_VERSION: &str = "1.0.0";
+
+/// Wire protocol version negotiated in the handshake. Client and daemon are
+/// compatible only when they speak the same version; a newer client replaces
+/// an older daemon (ADR-GRP-005 § 4, SEC-13).
+pub const PROTOCOL_VERSION: u32 = 1;
+
+/// File name of the channel socket inside the profile's runtime folder.
+pub const SOCKET_FILE: &str = "raptor.sock";
 
 #[cfg(test)]
 mod tests {
@@ -10,5 +41,6 @@ mod tests {
     #[test]
     fn api_version_is_set() {
         assert!(!API_VERSION.is_empty());
+        const { assert!(PROTOCOL_VERSION >= 1) };
     }
 }
