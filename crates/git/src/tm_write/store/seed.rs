@@ -14,7 +14,9 @@
 //!
 //! A pack that fails any check is skipped and reported; the store stays valid without it.
 
+#[cfg(unix)]
 use std::io;
+#[cfg(unix)]
 use std::path::{Path, PathBuf};
 
 use super::{Result, StoreError, StoreRepo};
@@ -58,6 +60,7 @@ impl Default for SeedLimits {
     }
 }
 
+#[cfg(unix)]
 enum Copied {
     Cloned,
     Copied,
@@ -140,6 +143,7 @@ impl StoreRepo {
 }
 
 /// `pack-<40 hex>.pack` → the hex.
+#[cfg(unix)]
 fn pack_hash(name: &str) -> Option<String> {
     let hex = name.strip_prefix("pack-")?.strip_suffix(".pack")?;
     (hex.len() == 40 && hex.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')))

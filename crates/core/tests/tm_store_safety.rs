@@ -1,6 +1,10 @@
 //! TS-TMC-001: the four guarantees of D-TMC-11 (ADR-TMC-001), the intact repo with the testkit
 //! harness (INF-GRP-001), seeding without effect on the user's packs and the hostile cases of
 //! SEC-TMC-01, 06 and 09.
+//!
+//! Unix only for now: on Windows the store is not supported yet and `open_or_create` fails
+//! with `Unsupported` (Pendiente: etapa de validación multiplataforma).
+#![cfg(unix)]
 
 mod tm_common;
 
