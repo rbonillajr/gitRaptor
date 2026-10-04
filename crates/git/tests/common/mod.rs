@@ -227,11 +227,24 @@ pub fn assert_unchanged(before: &Fingerprint, after: &Fingerprint, what: &str) {
 }
 
 /// Write an executable script owned by the current user with mode 0755.
+///
+/// A child shell writes it, so this process never holds a writable descriptor on it. On Linux,
+/// a descriptor held here while another test thread forks is inherited by that child until its
+/// `execve` closes it, and executing the script in that window fails with `ETXTBSY`.
 #[cfg(unix)]
 pub fn script(path: &Path, body: &str) {
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::write(path, format!("#!/bin/sh\n{body}\n")).unwrap();
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let status = Command::new("/bin/sh")
+        .args([
+            "-c",
+            r#"printf '%s\n' '#!/bin/sh' "$2" > "$1" && chmod 0755 "$1""#,
+            "sh",
+        ])
+        .arg(path)
+        .arg(body)
+        .env_clear()
+        .status()
+        .expect("run /bin/sh");
+    assert!(status.success(), "writing {} failed", path.display());
 }
 
 /// Assert that `args` (an argv without the program) is a call of the allowlist: the fixed

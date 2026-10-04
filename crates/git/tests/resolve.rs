@@ -132,7 +132,7 @@ fn old_git_reported_insufficient() {
     let mut config = bed.config();
     config.known_locations = vec![old];
     let r = resolve::resolve(&config, &invoker());
-    assert!(matches!(r, Resolution::NotFound { .. }));
+    assert!(matches!(r, Resolution::NotFound { .. }), "{r:?}");
     assert_eq!(
         r.newest_too_old(),
         Some(GitVersion {
