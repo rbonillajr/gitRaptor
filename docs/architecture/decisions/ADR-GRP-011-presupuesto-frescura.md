@@ -10,7 +10,7 @@ updated: 2026-10-04
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
-related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-006, ADR-GRP-010, ADR-GRP-013, INF-GRP-002, SPIKE-GRP-002, TS-GRP-004, CTX-GRP-001, US-GRP-002]
+related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-006, ADR-GRP-009, ADR-GRP-010, ADR-GRP-013, INF-GRP-002, SPIKE-GRP-002, TS-GRP-004, CTX-GRP-001, US-GRP-002]
 tags: [rendimiento, latencia, presupuesto, p95, nfr-04, timestamps, instrumentacion, ci, dogfooding, cockpit]
 ---
 
@@ -62,8 +62,8 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
 **Nombres canónicos de las marcas**, en orden y con el mismo nombre en este ADR, en el contrato (§ 3) y en el informe de INF-GRP-002: `t0`, `t_recv`, `t_flush`, `t_computed`, `t_persisted`, `t_published`, `t_client_recv` y `t_render`.
 
 - **El margen no se reparte**: ninguna feature puede reclamarlo para cumplir su parte.
-- **Publicación en dos fases**: si un cambio grande no cabe en 150 ms de cómputo, el motor publica dentro del presupuesto lo barato (rama, `HEAD`, operación en curso) con una marca de "recomputando", y los recuentos en un segundo evento (ADR-GRP-010). El p95 se mide sobre el primer evento que refleja el cambio; el segundo se mide aparte y se reporta, sin gate en el MVP.
-- **Arranque y reconciliación** (inicio, vuelta de suspensión, desbordamiento) no cuentan para NFR-04: son estados explícitos ("reconciliando") que el Cockpit presenta como tales.
+- **Publicación en dos fases**: si un cambio grande no cabe en 150 ms de cómputo, o si cambió la punta de la rama o la base y hay que recalcular ahead/behind (ADR-GRP-010 § 4, Enmienda 2026-10-04), el motor publica dentro del presupuesto lo barato (rama, `HEAD`, operación en curso) con una marca de "recomputando", y los recuentos en un segundo evento (ADR-GRP-010). El p95 se mide sobre el primer evento que refleja el cambio; el segundo se mide aparte y se reporta, sin gate en el MVP.
+- **Arranque y reconciliación** (inicio, vuelta de suspensión, desbordamiento, recreación del stream del watcher) no cuentan para NFR-04: son estados explícitos ("reconciliando") que el Cockpit presenta como tales. La publicación del alta o la baja del propio worktree sí cuenta: es el escenario "crear y borrar un worktree" del apartado 4.
 - **Modo degradado** (sondeo, ADR-GRP-010) queda fuera de NFR-04 y se expone como tal.
 
 ### 3. Instrumentación en el contrato
@@ -105,7 +105,7 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
 - ✅ El margen de 100 ms protege contra la varianza del SO y de máquinas más lentas que las de referencia.
 - ⚠️ Persistir antes de publicar consume parte de los 150 ms. En macOS, SPIKE-GRP-002 midió una transacción SQLite por lote con `F_FULLFSYNC` en **≤ 11 ms p95** (de 1 a 1.000 filas), y de 9 a 15 ms p95 dentro del motor con 10 worktrees compartiendo la conexión. Las "decenas de milisegundos" supuestas no se observaron. En Windows sigue sin medir. **Mitigación**: ADR-GRP-006 § 4 agrupa las escrituras de un mismo lote de debounce en una sola transacción.
 - ⚠️ El temporizador de macOS se despierta hasta 10 ms tarde (SPIKE-GRP-002: 85 ms p95 con una ventana programada de 75 ms). **Mitigación**: la ventana se programa con la holgura descontada para que su duración efectiva sea de 75 ms (ADR-GRP-010 § 3), y el banco mide la duración efectiva.
-- ⚠️ El p95 y las cifras de cada etapa son supuestos. **Mitigación**: SPIKE-GRP-002 los mide antes del desarrollo de US-GRP-002 e INF-GRP-002 los fija como gate; el cambio de interpretación (p95 frente a máximo) se confirma con Rene.
+- ⚠️ El p95 y las cifras de cada etapa siguen siendo supuestos en Linux y Windows. En macOS, SPIKE-GRP-002 los confirmó con el debounce compensado. **Mitigación**: SPIKE-GRP-002 los mide antes del desarrollo de US-GRP-002 e INF-GRP-002 los fija como gate; el cambio de interpretación (p95 frente a máximo) se confirma con Rene.
 - ⚠️ Los runners compartidos del CI tienen ruido y pueden dar falsos fallos. **Mitigación**: gate sobre totales y aviso por etapa, calentamiento descartado y plan B de runner dedicado (apartado 4).
 - ⚠️ La detección SO → motor no se puede medir fuera del banco, porque el SO no fecha los eventos en las tres plataformas. **Mitigación**: en dogfooding se mide desde `t_recv`; la detección solo se mide en el banco, donde se conoce `t0`.
 - ⚠️ El bloque de tiempos amplía el contrato de `crates/api`. **Mitigación**: campos opcionales y versionados con el handshake de versión del canal (ADR-GRP-005); los clientes que no los usan los ignoran.
@@ -136,3 +136,4 @@ Aplicada desde las recomendaciones de [SPIKE-GRP-002-resultados.md](../../requir
 | La fila de debounce pasa a ventana **efectiva** de 75 ms, con la holgura del temporizador descontada (medida: 85 ms p95 sin compensar). Se elige compensar en lugar de presupuestar 85 ms, para que las etapas sigan sumando 300 ms | § 2 (tabla), Consecuencias | Resultados § 3.2 |
 | El banco toma `t0` al fin del comando en los escenarios de Git, aísla la detección solo en "modificar un archivo" y mide el debounce como duración efectiva | § 4 | Resultados § 2, § 3.1 |
 | Coste medido de la persistencia con `F_FULLFSYNC` en macOS (≤ 11 ms p95); Windows sigue sin medir | Consecuencias | Resultados § 3.11 |
+| Revisión de coherencia con la Enmienda de ADR-GRP-010: ahead/behind recalculado activa la segunda fase; la reconciliación tras recrear el stream no cuenta para NFR-04, pero el alta y la baja del propio worktree sí; las cifras siguen como supuesto solo en Linux y Windows | § 2, Consecuencias | ADR-GRP-010 § 4 y § 6; revisión del Arquitecto (2026-10-04) |

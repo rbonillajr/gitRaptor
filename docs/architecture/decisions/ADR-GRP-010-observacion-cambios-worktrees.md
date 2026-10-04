@@ -10,7 +10,7 @@ updated: 2026-10-04
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
-related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-009, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, ADR-GRD-005, SPIKE-GRP-002, INF-GRP-002, CTX-GRP-001, BR-GRP-001]
+related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-007, ADR-GRP-009, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, ADR-GRD-005, SPIKE-GRP-002, INF-GRP-002, CTX-GRP-001, BR-GRP-001]
 tags: [watcher, notify, fsevents, inotify, readdirectorychangesw, debounce, reconciliacion, sondeo, worktrees, nfr-04, nfr-05, br-cons-005, br-edge-005, seguridad]
 ---
 
@@ -74,10 +74,10 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
 - **Refs, `HEAD` y reflogs**: relectura de las refs afectadas; ahead/behind solo si cambió la punta de la rama o la base, con caché por par de commits.
 - **Operaciones en curso**: relectura de los marcadores para reportar el estado especial (BR-EDGE-002).
 - **Escala de historia (100K commits)**: ahead/behind se calcula con un recorrido acotado desde la base de fusión, usando el `commit-graph` del repo si existe, solo para leerlo (nunca se escribe, ADR-GRP-009).
-- **Ahead/behind fuera del primer evento** (Enmienda 2026-10-04): sin `commit-graph`, una rama a 50K commits de la base cuesta 145 ms p50 (SPIKE-GRP-002), casi todo el presupuesto de cómputo. Por eso ahead/behind no entra en el presupuesto del primer evento:
+- **Ahead/behind fuera del primer evento** (Enmienda 2026-10-04): sin `commit-graph`, una rama a 50K commits de la base cuesta 145 ms p50 (SPIKE-GRP-002, medido con `git rev-list`; el coste con `gix` está sin medir), casi todo el presupuesto de cómputo. Por eso ahead/behind no entra en el presupuesto del primer evento:
   - se publica en la segunda fase, con caché por par de commits;
   - se calcula en proceso con `gix`, sin lanzar un proceso de Git por cada cambio de punta.
-- **Publicación en dos fases**: si un cambio grande (p. ej. un checkout de miles de archivos) no cabe en el presupuesto de cómputo, el motor publica primero lo barato (rama, `HEAD`, operación en curso) y después los recuentos (ADR-GRP-011).
+- **Publicación en dos fases**: si un cambio grande (p. ej. un checkout de miles de archivos) no cabe en el presupuesto de cómputo, el motor publica primero lo barato (rama, `HEAD`, operación en curso) y después los recuentos (ADR-GRP-011). Cuando hay que recalcular ahead/behind, este también va en la segunda fase, aunque el cambio sea pequeño (punto anterior).
 
 ### 5. Sondeo de respaldo y modo degradado
 
@@ -110,7 +110,7 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
 
 - ✅ Frescura dentro de los 300 ms del motor en el caso normal, con espera de debounce acotada aunque haya ráfagas.
 - ✅ CPU casi nula en reposo: sin eventos no hay trabajo, salvo el sondeo de respaldo.
-- ✅ Cero huecos silenciosos: todo lo que se pierde por el SO, la suspensión o un desbordamiento se recupera por reconciliación y queda marcado como hueco.
+- ✅ Cero huecos silenciosos en los casos con causa detectable: lo que se pierde por la suspensión, un desbordamiento o la recreación del stream se recupera por reconciliación y queda marcado como hueco. La pérdida sin marca de un evento del working tree fuera de esos casos queda como riesgo residual (ver el ⚠️ del sondeo de respaldo).
 - ✅ Los worktrees que crean y borran los agentes se incorporan y se retiran solos.
 - ⚠️ En Linux, repos con muchos directorios no ignorados pueden agotar `max_user_watches` (por defecto 8192 en kernels antiguos; proporcional a la RAM desde 5.11). **Mitigación**: estimación previa, modo degradado por worktree y guía para subir el límite; el motor nunca lo cambia (Q17).
 - ⚠️ Un desbordamiento durante una sesión activa produce un micro-hueco cuyos cambios quedan "sin atribuir", lo que reduce la atribución de Claude Code. **Mitigación**: búfer amplio del watcher, filtrado temprano de ignorados y medición de la frecuencia en SPIKE-GRP-002. ADR-GRP-012 puede reatribuir el hueco solo si tiene evidencia independiente del watcher, nunca por suposición.
@@ -127,7 +127,7 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
 
 - **Latencia**: p95 de detección SO → motor ≤ 50 ms y del ciclo completo del motor ≤ 300 ms (ADR-GRP-011), con un archivo modificado, un `git add`, un commit, un checkout y la creación y el borrado de un worktree.
 - **Escala**: 10 worktrees de un repo de 100K commits o más, con ráfaga de 10K archivos en uno de ellos; se miden watches usados, memoria, CPU en reposo y p95 de los otros nueve durante la ráfaga.
-- **Huecos**: suspensión y reanudación, desbordamiento forzado de la cola con búfer reducido y watcher reiniciado; en todos los casos la reconciliación detecta el 100% de los cambios y los marca "sin atribuir".
+- **Huecos**: suspensión y reanudación, desbordamiento forzado de la cola con búfer reducido, watcher reiniciado, y alta y baja de worktrees con escrituras concurrentes en los demás (recreación del stream, Enmienda 2026-10-04); en todos los casos la reconciliación detecta el 100% de los cambios y los marca "sin atribuir".
 - **Windows**: `git worktree remove`, borrado y renombrado de la raíz y de archivos con el watcher activo, sin fallos atribuibles al motor.
 - **Linux**: comportamiento al agotar `max_user_watches` (modo degradado, sin caída del resto).
 - **Seguridad (SEC-11)**: un `gitdir` manipulado hacia `$HOME` o `/`, o sin enlace de vuelta, no se vigila y el worktree queda "no disponible"; un repo que supera el tope de watches pasa a degradado sin afectar a otros; una ruta UNC no abre conexiones SMB. Los tests de seguridad viven en INF-GRP-001.
@@ -167,12 +167,13 @@ Aplicada desde la tabla de enmiendas de [non-functional-guardrails.md](../non-fu
 
 ## Enmienda (2026-10-04, SPIKE-GRP-002)
 
-Aplicada desde las recomendaciones de [SPIKE-GRP-002-resultados.md](../../requirements/features/motor-local/research/SPIKE-GRP-002-resultados.md) (§ 6), que se midieron **solo en macOS**. No cambia el mecanismo elegido. El `status` sigue en `proposed`. Linux y Windows siguen pendientes de la Validación.
+Aplicada desde las recomendaciones de [SPIKE-GRP-002-resultados.md](../../requirements/features/motor-local/research/SPIKE-GRP-002-resultados.md) (§ 6), que se midieron **solo en macOS**. No cambia el mecanismo elegido. El `status` sigue en `proposed`. Linux y Windows siguen pendientes de la Validación. En macOS también quedan sin verificar la suspensión y reanudación reales y el desbordamiento forzado (Resultados § 3.6).
 
 | Cambio | Dónde | Fuente |
 |---|---|---|
-| Recreación del stream de FSEvents con `notify` 8.2: altas y bajas agrupadas y reconciliación tras cada recreación; reanudar desde el último `FSEventStreamEventId` queda como optimización | § 1, § 6, Consecuencias | Resultados § 3.6 |
+| Recreación del stream de FSEvents con `notify` 8.2: altas y bajas agrupadas y reconciliación tras cada recreación; reanudar desde el último `FSEventStreamEventId` queda como optimización | § 1, § 6, Consecuencias, Validación (escenario de huecos) | Resultados § 3.6 |
 | Tope de watches por repo: no aplica en macOS; el valor para Linux sigue pendiente | § 2 | Resultados § 3.4 |
 | Ventana con la holgura del temporizador descontada (duración efectiva de 75 ms) | § 3 | Resultados § 3.2; ADR-GRP-011 § 2 |
 | Ahead/behind fuera del presupuesto del primer evento: segunda fase, con caché y en proceso con `gix` | § 4 | Resultados § 3.11 |
 | Alcance del sondeo de respaldo (solo metadatos de Git) y coste medido del modo degradado | § 5, Consecuencias | Resultados § 3.5 y § 3.6 |
+| Revisión de coherencia: la consecuencia "cero huecos silenciosos" se limita a los casos con causa detectable; ahead/behind va en la segunda fase también en cambios pequeños; la cifra de 145 ms se midió con `git rev-list` | Consecuencias, § 4 | Revisión del Arquitecto (2026-10-04) |
