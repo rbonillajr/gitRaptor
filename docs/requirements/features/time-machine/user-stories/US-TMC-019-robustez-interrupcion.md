@@ -71,7 +71,9 @@ Entonces el solicitante no recibe ningún aviso de recuperación
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+- Recuperación al arrancar del daemon según ADR-TMC-003 § 6 (TS-TMC-002); nunca reanuda ni revierte por su cuenta.
+- Aviso pendiente entregado al siguiente cliente del worktree y visible en el timeline; sin interrupciones no hay aviso.
+- Verificación: muerte forzada en cada transición y paso con INF-TMC-001.
 
 ## Diseño y Dev Spec
 

@@ -59,7 +59,8 @@ Entonces se deshace la última operación de "feat-login"
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+- Precondición del aplicador: marcadores de rebase, merge, cherry-pick, revert, bisect o sequencer en cualquier worktree afectado detienen sin cambios (ADR-TMC-002 § 3).
+- Un lock de Git ajeno presente se reporta como "Git ocupado" y nunca se borra.
 
 ## Diseño y Dev Spec
 

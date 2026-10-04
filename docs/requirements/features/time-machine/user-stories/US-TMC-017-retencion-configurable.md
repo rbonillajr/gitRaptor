@@ -63,7 +63,8 @@ Entonces se aplica la retención por defecto de 30 días
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+- Clave `timeMachine.retentionDays` (entero 1-3650, niveles perfil y local, 30 por defecto) en la sección `timeMachine` de ADR-GRP-007, con tipos en `crates/policy` (ADR-TMC-007 § 1).
+- Nivel de equipo: clave ignorada con diagnóstico; valor inválido: regla de PQ-8 y aviso. Bloqueada por la aceptación de ADR-GRP-007.
 
 ## Diseño y Dev Spec
 

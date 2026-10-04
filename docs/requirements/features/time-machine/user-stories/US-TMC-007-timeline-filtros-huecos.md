@@ -72,7 +72,8 @@ Entonces el filtro se rechaza con el motivo
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+- Filtros por worktree, agente vigente y periodo resueltos en la consulta del oplog; los huecos vienen del motor (ADR-GRP-013 § 5) y se intercalan como intervalos.
+- Dentro de un hueco no se ofrecen puntos de restauración sin snapshot (BR-TMC-EDGE-002).
 
 ## Diseño y Dev Spec
 

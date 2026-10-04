@@ -72,7 +72,9 @@ Entonces la petición se rechaza con el motivo
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+- Redo disponible solo si el último evento del ámbito es un undo; restaura el snapshot previo de ese undo (ADR-TMC-003 § 4).
+- Aplica la detección de solape de US-TMC-012 sobre lo cambiado desde el undo (S5) y los permisos de US-TMC-013.
+- Semántica de undos y redos seguidos: pila por worktree, pendiente de TQ-9.
 
 ## Diseño y Dev Spec
 

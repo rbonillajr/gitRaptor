@@ -62,7 +62,8 @@ Entonces el estado de los worktrees, las ramas visibles y los cambios pendientes
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+- Los cuatro escenarios son los de INF-TMC-001 sobre el almacén de ADR-TMC-001: push con todas las refs, mantenimiento agresivo tras reset, trabajo de un agente y huella del repo.
+- Verificación en los tres SO con repos temporales y remoto bare temporal.
 
 ## Diseño y Dev Spec
 

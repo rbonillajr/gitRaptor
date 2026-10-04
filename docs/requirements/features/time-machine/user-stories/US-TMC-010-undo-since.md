@@ -82,7 +82,9 @@ Entonces la petición se rechaza con el motivo
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+- Conjunto = operaciones del worktree con momento ≥ ahora − duración; el destino es el estado previo a la más antigua (ADR-TMC-003 § 4).
+- Duraciones con formato `20m`, `2h` y acotadas a la retención; inválidas, rechazo sin cambios (SEC-TMC-07, BR-TMC-VAL-001).
+- Permisos de US-TMC-013 sobre cada operación del conjunto y solape de US-TMC-012.
 
 ## Diseño y Dev Spec
 
