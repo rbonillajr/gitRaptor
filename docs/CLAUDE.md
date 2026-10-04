@@ -101,4 +101,5 @@ Fix any BLOCKER before merging. CONCERNS may pass with reviewer approval.
 | motor-local _(usa el slug de dominio)_ | GRP |
 | time-machine | TMC |
 | guardrails | GRD |
+| cockpit | CKP |
 
