@@ -91,6 +91,8 @@ Entonces borrar "main" y borrar "develop" se deniegan mientras el cambio está p
 
 _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
 
+> **Nota de TS-GRD-001 (2026-10-04)**: la lectura ya existe. `TeamLoader::load` (`crates/policy`) da la rama base confirmada (`base_branch()`), el conjunto que protege Guardrails (`guarded_base_branches()`) y los diagnósticos `base-unconfirmed`, `base-change-pending` y `floor-relax-pending`. Esta historia aporta el **escritor** de lo confirmado: el comando reservado de confirmación llama a `RepoStore::set_confirmed_team_baseline` (`crates/core`), que guarda la rama base y el blob del suelo confirmados.
+
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica.

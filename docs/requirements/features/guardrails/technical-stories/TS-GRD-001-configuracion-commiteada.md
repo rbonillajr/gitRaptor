@@ -12,7 +12,7 @@ updated: 2026-10-04
 related:
   adrs: [ADR-GRD-004, ADR-GRD-003, ADR-GRD-005]
   stories: [US-GRD-007, US-GRD-011, US-GRD-014, US-GRP-016, US-GRP-013]
-  specs: []
+  specs: [DS-TS-GRD-001]
 ado:
   id: null
   url: null
@@ -29,11 +29,11 @@ tags: [guardrails, configuracion, q-grd-17, q-grd-18, rama-base, rama-principal,
 **Quiero** que el cargador único de configuración lea el nivel de equipo de objetos commiteados, con la copia de la rama principal como suelo (la única fuente de relajaciones y de la rama base) y el commit del worktree de la operación solo para endurecer, y que devuelva el estado de cada fuente
 **Para** cumplir Q-GRD-17 (refinada por D6), Q-GRD-18 y la decisión 2 con un solo criterio de validez para el motor y Guardrails, que cierra el roce con BR-CONS-007 (motor-local) y el riesgo R-GRD-8
 
-> Dev Spec: `dev-specs/TS-GRD-001-configuracion-commiteada.md` | Pendiente
+> Dev Spec: [`dev-specs/TS-GRD-001-configuracion-commiteada.md`](../dev-specs/TS-GRD-001-configuracion-commiteada.md) | Aprobada (2026-10-04)
 >
 > **Por qué es un enabler y no parte de una historia** (regla del dueño): es una base compartida **entre dos features**, sin una historia dueña única. La usan US-GRP-016 (motor-local, rama base para ahead/behind), US-GRD-007 (permisos con suelo y worktree), US-GRD-014 (rama base protegida) y US-GRD-011 (suelo ilegible). Ninguna de ellas produce por sí sola la lectura que necesitan las demás, y la lectura no tiene un resultado observable propio. Ponerla en la Dev Spec de una sola historia obligaría a la otra feature a esperar a esa historia o a duplicar el cargador, que es justo el riesgo R-GRD-8.
 >
-> **Desbloqueada** el 2026-10-04: Rene Bonilla aceptó ADR-GRP-007 (motor-local) con sus enmiendas, que era su único bloqueo: PQ-9 (decisión 1 de Rene Bonilla), `permissions`/`policies`, la clave del mínimo, el estado por fuente y la lectura sin objetos de reemplazo (tabla de enmiendas de `docs/architecture/non-functional-guardrails.md`). **Reutiliza** el cargador de tres niveles de US-GRP-013 (motor-local). **ADR**: ADR-GRD-004. **Complejidad alta** por D6: suelo confirmado, rama base confirmada y unión mientras hay un cambio pendiente.
+> **Desbloqueada** el 2026-10-04: Rene Bonilla aceptó ADR-GRP-007 (motor-local) con sus enmiendas, que era su único bloqueo: PQ-9 (decisión 1 de Rene Bonilla), `permissions`/`policies`, la clave del mínimo, el estado por fuente y la lectura sin objetos de reemplazo (tabla de enmiendas de `docs/architecture/non-functional-guardrails.md`). **Construye** el cargador común de configuración (`crates/policy`), que **reutiliza** US-GRP-013 (motor-local) para los niveles de perfil y local (enmienda del 2026-10-04: la dependencia iba al revés, porque ese cargador no existía). **ADR**: ADR-GRD-004. **Complejidad alta** por D6: suelo confirmado, rama base confirmada y unión mientras hay un cambio pendiente.
 
 ### Alcance Técnico
 
@@ -46,8 +46,8 @@ tags: [guardrails, configuracion, q-grd-17, q-grd-18, rama-base, rama-principal,
 - **Implementar** una caché acotada de documentos ya leídos, indexada por la identidad del objeto.
 - **Exponer** una única función de rama base, que devuelve la **confirmada**. La consumen el motor (ahead/behind) y Guardrails. Una resuelta distinta solo aparece como diagnóstico de cambio pendiente. Sin confirmación inicial del humano, devuelve la resuelta marcada como no confirmada; nunca se confirma sola.
 - **Exponer** a Guardrails, aparte, el conjunto de ramas base que debe proteger mientras un cambio está pendiente (la confirmada y la resuelta). El motor no lo usa.
-- **Recalcular** el suelo y la rama base ante los cambios de refs que ya publica el observador del motor.
-- **Fuera de alcance**: la semántica de permisos y políticas (US-GRD-007 en adelante); la reacción de Guardrails ante un suelo ilegible (US-GRD-011); los comandos reservados de confirmación (US-GRD-007, US-GRD-014; ADR-GRD-007); el comando de edición (US-GRD-013); las enmiendas de ADR-GRP-007, que hace el frente motor-local.
+- **Recalcular** el suelo y la rama base ante los cambios de refs que ya publica el observador del motor: esta TS expone el predicado de qué cambios afectan a la configuración del equipo y la recarga; **suscribirlo al observador** es de TS-GRP-003 (enmienda del 2026-10-04).
+- **Fuera de alcance**: la semántica de permisos y políticas (US-GRD-007 en adelante; las claves de `policies` llegan con US-GRD-008, US-GRD-009 y US-GRD-015); la lectura de los archivos de perfil y local (US-GRP-013, ADR-GRP-008); la suscripción al observador (TS-GRP-003); la reacción de Guardrails ante un suelo ilegible (US-GRD-011); los comandos reservados de confirmación (US-GRD-007, US-GRD-014; ADR-GRD-007); el comando de edición (US-GRD-013); las enmiendas de ADR-GRP-007, que hace el frente motor-local.
 
 ### Plan de Verificación
 
@@ -68,3 +68,15 @@ tags: [guardrails, configuracion, q-grd-17, q-grd-18, rama-base, rama-principal,
 #### Verificación Manual / Sandbox
 
 - En un repo real con dos worktrees y una rama principal distinta de `main`, comprobar desde la CLI que la rama base mostrada por el motor y la que protege Guardrails coinciden.
+
+### Enmienda (2026-10-04, implementación)
+
+| Cambio | Motivo |
+|---|---|
+| El cargador común se construye aquí y US-GRP-013 lo reutiliza | US-GRP-013 no tenía cargador; la frase original afirmaba algo que no existía. **Decisión del orquestador (2026-10-04), validada por el PO** |
+| La suscripción del recálculo al observador pasa a TS-GRP-003; esta TS expone el predicado y la recarga, probados con un evento sintético | El observador vive en el daemon. **Decisión del orquestador (2026-10-04), validada por el PO y el Arquitecto** |
+| "Guardar por repo" se cumple con un getter y un setter tipados sobre `store_meta`; los escritores son los comandos de confirmación (US-GRD-001, US-GRD-014, US-GRD-007) | Nada se confirma solo. **Decisión del orquestador (2026-10-04), validada por el Arquitecto y el PO** |
+| La clave del mínimo es `permissions.disableSafeMinimum` (booleano, por defecto `false`) | La fija el schema de esta TS (ADR-GRP-007). **Decisión del orquestador (2026-10-04), validada por el Arquitecto** |
+| La verificación manual por CLI pasa a US-GRP-016 / US-GRD-014 | Todavía no hay CLI que muestre la rama base |
+
+Detalle y resto de decisiones en la [Dev Spec](../dev-specs/TS-GRD-001-configuracion-commiteada.md) § 5.
