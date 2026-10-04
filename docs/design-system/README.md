@@ -3,14 +3,16 @@ id: DSYS-GRP-001
 title: GitRaptor Design System
 type: design-system
 status: draft
-version: 0.2
+version: 0.3
 date: 2026-10-01
+updated: 2026-10-04
 owner: Rene Bonilla
-related: [BRD-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-004]
+related: [BRD-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-004, ADR-CKP-003]
 tags: [design-system, design-tokens, tui, cli, ratatui, accessibility, theming, mvp]
 changelog:
   - 0.1 (2026-10-01): Design system completo (tokens, UI kit React, Storybook, Figma, temas web).
   - 0.2 (2026-10-01): Acotado al alcance inicial (MVP = CLI/TUI + MCP). Lo de la UI web/React queda diferido a la Fase 3.
+  - 0.3 (2026-10-04): Enmienda del Cockpit (E7 de ADR-CKP-003): símbolos con anchura, `crates/theme` agnóstico de ratatui, alcance de `--plain`, versiones de la TUI e i18n con catálogo tipado.
 ---
 
 # GitRaptor Design System
@@ -51,7 +53,7 @@ El MVP de GitRaptor (BRD-GRP-001, Fase 1) tiene **tres superficies: CLI, TUI y s
 ## 2. Design tokens (v0)
 
 - **Formato:** [W3C Design Tokens (DTCG)](https://www.designtokens.org/) en JSON, en `packages/design-tokens/tokens/*.json`.
-- **Salida en el MVP:** Style Dictionary genera un módulo Rust (`crates/theme`) con la paleta para ratatui y la CLI. En la Fase 3, los mismos tokens generarán variables CSS.
+- **Salida en el MVP:** Style Dictionary genera un módulo Rust (`crates/theme`) con la paleta para ratatui y la CLI. En la Fase 3, los mismos tokens generarán variables CSS. (Enmienda 2026-10-04, Cockpit: `crates/theme` no depende de ratatui; ver la sección final.)
 - **Dos niveles:** **primitivos** (`color.green.500`) y **semánticos** (`color.status.success`). Los componentes de la TUI solo usan los semánticos.
 
 ### 2.1 Color semántico
@@ -81,7 +83,7 @@ El color nunca va solo: cada estado lleva además un símbolo y, si se puede, te
 | Bloqueado por política | `⛔` | `[blocked]` |
 | Snapshot / undo disponible | `⟲` | `[undo]` |
 
-`--ascii` (o detectar una terminal sin Unicode) activa el fallback.
+`--ascii` (o detectar una terminal sin Unicode) activa el fallback. (Enmienda 2026-10-04, Cockpit: cada símbolo es un token con glifo, fallback ASCII y anchura; ver la sección final.)
 
 ---
 
@@ -122,7 +124,7 @@ Widgets ratatui en `apps/cli`, todos con los tokens de `crates/theme`:
 - **Voz:** directa, técnica y tranquila. Somos un copiloto confiable, no una alarma.
 - **Verbos concretos:** "Restaurar snapshot", "Descartar worktree", no "Aceptar" ni "OK".
 - **Términos de Git** en su forma estándar (commit, rebase, merge, worktree).
-- **i18n:** inglés y español (NFR-10). Los mensajes viven en archivos de recursos y no se concatenan strings.
+- **i18n:** inglés y español (NFR-10). Los mensajes viven en archivos de recursos y no se concatenan strings. (Enmienda 2026-10-04, Cockpit: en el MVP, catálogo tipado en el código; ver la sección final.)
 - **Mensajes para agentes (MCP):** cuando una política bloquea o una herramienta falla, la respuesta al agente es **estructurada y accionable**, con código de error, la regla violada y una alternativa permitida. Ejemplo: `{ "error": "POLICY_BLOCKED", "rule": "no-force-push", "suggestion": "usa safe_push con force_with_lease" }`. Así el agente puede corregirse solo, sin inventar un workaround.
 
 ---
@@ -133,7 +135,7 @@ Widgets ratatui en `apps/cli`, todos con los tokens de `crates/theme`:
 - La información nunca depende solo del color.
 - Hay un **tema de alto contraste** para la TUI (`--theme high-contrast`).
 - Navegación completa con teclado, sin depender del mouse (aunque se soporta).
-- Funciona con lectores de pantalla en el modo CLI y con `--json`. La TUI ofrece un modo `--plain` sin redibujado continuo.
+- Funciona con lectores de pantalla en el modo CLI y con `--json`. La TUI ofrece un modo `--plain` sin redibujado continuo. (Enmienda 2026-10-04, Cockpit: alcance de `--plain` y del ratón en el MVP; ver la sección final.)
 
 ---
 
@@ -142,7 +144,7 @@ Widgets ratatui en `apps/cli`, todos con los tokens de `crates/theme`:
 | Necesidad | Herramienta |
 |---|---|
 | Tokens | DTCG JSON + Style Dictionary → `crates/theme` (Rust) |
-| TUI | ratatui + crossterm |
+| TUI | ratatui + crossterm (Enmienda 2026-10-04, Cockpit: `ratatui` 0.30.x con `crossterm` 0.29) |
 | CLI | clap (ayuda, autocompletado) |
 | Pruebas visuales de la TUI | Snapshot tests de buffers ratatui con `insta` |
 
@@ -167,3 +169,26 @@ Cuando arranque la app de escritorio o la extensión, se amplía este documento 
 - Motion;
 - librería de Figma;
 - gobierno con versionado.
+
+---
+
+## Enmienda (2026-10-04, Cockpit)
+
+Aplicada desde la enmienda E7 de [ADR-CKP-003](../architecture/decisions/ADR-CKP-003-arquitectura-tui.md) (§ 7 y § 10; proposed). **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. No cambia los principios, la paleta, los componentes ni las convenciones de la CLI.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| Cada símbolo es un token con glifo, fallback ASCII y **anchura en columnas** | § 2.2 | ADR-CKP-003 § 7 y § 10 |
+| `crates/theme` es agnóstico de ratatui | § 2 | ADR-CKP-003 § 10 |
+| Alcance de `--plain` en el MVP; ratón desactivado por defecto | § 6 | ADR-CKP-003 § 10 |
+| `ratatui` 0.30.x con el backend `crossterm` 0.29 | § 7 | ADR-CKP-003 § 1 |
+| i18n del MVP con catálogo tipado | § 5 | ADR-CKP-003 § 10 (ajuste de coherencia) |
+
+- **Símbolos como tokens**: cada símbolo de § 2.2 se define en `packages/design-tokens` con su glifo, su fallback ASCII y su **anchura de visualización**, porque `⚡`, `⛔` y `⚠` ocupan dos columnas en muchas terminales y sus fallbacks ASCII ocupan más. El layout toma la anchura del tema activo, no del texto. El fallback ASCII se activa con `--ascii` o con una locale que no sea UTF-8. Es un **requisito previo** de cualquier pantalla: hoy los tokens solo tienen dos primitivos.
+- **`crates/theme` agnóstico de ratatui**: expone por token semántico truecolor, índice de 256 colores y fallback de 16 colores, y por símbolo glifo, fallback y anchura. `apps/cli` lo mapea a los estilos de ratatui. Ningún widget usa colores ni glifos literales.
+- **`--plain` en el MVP**: mismo modelo, otro renderer. Sin pantalla alternativa ni movimiento del cursor: escribe la vista inicial como texto y después solo líneas nuevas con los cambios y las alertas. ⚠️ **ASSUMPTION** a validar por el PO: en el MVP, `--plain` es de **lectura y alertas**; las acciones de BR-07 requieren la TUI completa.
+- **Ratón**: ⚠️ **ASSUMPTION**: la captura del ratón está desactivada por defecto, para no romper la selección de texto de la terminal. La navegación completa con teclado no cambia.
+- **i18n**: en el MVP los mensajes viven en un **catálogo tipado** en el código (una enumeración con un `match` exhaustivo por idioma), no en archivos de recursos: una traducción ausente es un error de compilación. Sigue sin concatenar cadenas. Se revisa si hace falta pluralización compleja.
+- **Pruebas visuales**: snapshots con `insta` en 80×24, 100×30, 120×40 y 79×24, con truecolor, 256 colores, 16 colores, `NO_COLOR` y alto contraste, y con los dos juegos de símbolos (ADR-CKP-003, Validación V1).
+
+Linux y Windows (anchura de símbolos y consola de Windows): **Pendiente: etapa de validación multiplataforma**.
