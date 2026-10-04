@@ -73,7 +73,10 @@ Entonces el undo no se ejecuta
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+- Destino = estado previo a la operación más reciente no deshecha del worktree del cwd: su snapshot previo garantizado o la última captura válida anterior (ADR-TMC-003 § 4). ⚠️ **ASSUMPTION** (TQ-9): undos seguidos retroceden una operación más cada vez.
+- El undo es una operación protegida con su propio snapshot previo y se aplica con el protocolo de ADR-TMC-002 § 3 (TS-TMC-003).
+- El registro guarda el solicitante congelado, el canal y la operación sobre la que actuó (ADR-TMC-003 § 2; TS-TMC-002, TS-TMC-004).
+- Nada que deshacer: `rechazada` con motivo y repo sin cambios (BR-TMC-VAL-001).
 
 ## Diseño y Dev Spec
 

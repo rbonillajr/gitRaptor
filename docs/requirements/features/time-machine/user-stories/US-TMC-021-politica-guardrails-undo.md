@@ -58,7 +58,8 @@ Entonces el commit se deshace
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+- Punto de evaluación de políticas en `crates/policy` tras la regla base y la confirmación: solo puede devolver permitir o denegar con motivo; el resultado final es la conjunción (ADR-TMC-005 § 4).
+- Bloqueada hasta que Guardrails (F-001-04) defina sus políticas.
 
 ## Diseño y Dev Spec
 

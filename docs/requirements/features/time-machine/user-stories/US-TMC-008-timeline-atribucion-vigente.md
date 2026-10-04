@@ -63,7 +63,8 @@ Entonces la atribución de esos eventos es la detectada
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+- El solicitante de undo, redo y restauración es inmutable en el oplog; el actor de los eventos se resuelve con la atribución vigente (ADR-TMC-003 § 5).
+- Al recibir del motor un cambio de atribución de una sesión, se invalidan cachés; no se reescribe nada (ADR-GRP-013 § 6).
 
 ## Diseño y Dev Spec
 

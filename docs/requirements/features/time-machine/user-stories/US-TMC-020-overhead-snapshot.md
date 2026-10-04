@@ -56,7 +56,9 @@ Entonces la operación sigue precedida de su snapshot previo aunque tarde más d
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+- Presupuesto y medición de ADR-TMC-006: p95 < 200 ms del snapshot previo, con almacén sembrado, en el repo de referencia que fija SPIKE-TMC-001.
+- Ampliar el banco de INF-GRP-002 con el escenario de operación protegida con trabajo sin commitear, con 1 y 10 worktrees; gate de CI y aviso por etapa.
+- Bloqueada hasta el cierre de SPIKE-TMC-001 (D-TMC-21).
 
 ## Diseño y Dev Spec
 

@@ -70,7 +70,9 @@ Entonces el desarrollador recibe un timeline vacío con el aviso de que aún no 
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+- Consulta del timeline por repo sobre el oplog (TS-TMC-002) cruzada con los eventos del motor; el actor se resuelve con la atribución vigente en cada consulta (ADR-TMC-003 § 5).
+- Cada punto muestra su nivel (`previo_garantizado`, `previo_hook`, `observacion`) y los eventos sin punto se muestran sin protección (ADR-TMC-004 § 4).
+- El texto "Tú u otro (sin atribuir)" lo pone el cliente; el contrato solo tiene agente o sin atribuir.
 
 ## Diseño y Dev Spec
 

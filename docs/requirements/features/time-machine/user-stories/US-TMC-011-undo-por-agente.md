@@ -81,7 +81,9 @@ Entonces el repo no cambia
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+- Conjunto = operaciones con atribución vigente al agente en el periodo; excluye "sin atribuir", otros agentes y huecos (BR-TMC-WF-002).
+- Destino por ruta y por ref: estado anterior al primer cambio del agente, sin tocar cambios de otros actores; el solape detiene (ADR-TMC-005 § 5).
+- Bloqueada hasta que se cierre P17 de motor-local (D-TMC-22).
 
 ## Diseño y Dev Spec
 

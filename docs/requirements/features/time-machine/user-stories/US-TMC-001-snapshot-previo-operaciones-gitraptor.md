@@ -66,7 +66,12 @@ Entonces la operación no se ejecuta
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+- Toda operación que modifica el repo entra por la operación protegida del canal: intención, snapshot previo, ejecución y registro; sin snapshot no hay operación (ADR-TMC-004 § 1; TS-TMC-004).
+- El snapshot incluye todos los worktrees del ámbito de la operación y el estado de refs del repo; los ignorados nunca entran (ADR-TMC-001 § 1-2; TS-TMC-001).
+- El catálogo de operaciones (descartar cambios, descartar worktree y rama, merge, rebase), con su ámbito y si son destructivas, es un contrato de interfaz de F-001-02 y F-001-05. Las ejecuta el ejecutor del daemon con los hooks del usuario; esta historia solo garantiza el snapshot previo y el registro (ADR-TMC-002 § 5, ADR-TMC-007 § 2).
+- El presupuesto del snapshot previo y el repo de referencia los fija SPIKE-TMC-001 (ADR-TMC-006).
+- Fallo del snapshot (sin espacio, tiempo máximo, almacén no disponible): operación `abortada` con motivo tipado en/es y repo sin cambios (ADR-TMC-003 § 3).
+- Verificación: arnés INF-TMC-001 y test de contrato de `crates/api` sin vías de escritura fuera de la operación protegida.
 
 ## Diseño y Dev Spec
 

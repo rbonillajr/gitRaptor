@@ -67,7 +67,9 @@ Entonces la operación de "claude-1" se deshace
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+- Dueña de la detección de solape por archivo y por ref (ADR-TMC-005 § 5): cambios posteriores de otro actor según diferencias de árbol entre capturas y la atribución vigente de los eventos del intervalo.
+- Atribución mixta en un intervalo cuenta como otro actor; los cambios anteriores no cuentan.
+- Resultado: operación `rechazada` por solape con los cambios en conflicto (actor y momento); granularidad por fragmento pendiente de TQ-6.
 
 ## Diseño y Dev Spec
 

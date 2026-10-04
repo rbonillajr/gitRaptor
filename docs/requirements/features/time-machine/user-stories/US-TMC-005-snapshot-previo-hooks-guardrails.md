@@ -65,7 +65,9 @@ Entonces la Time Machine no guarda ningún punto por esa consulta
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+- Comando de la CLI para hooks de Guardrails: snapshot del worktree con nivel `previo_hook`, tiempo máximo y resultado `completo` o `fallido` (ADR-TMC-004 § 3).
+- Solicitante por ascendencia del proceso que ejecuta el hook (ADR-TMC-005 § 1).
+- Sin recursión: las escrituras de la Time Machine desactivan los hooks (ADR-TMC-002 § 2). La Time Machine no instala ni exige hooks (Q22).
 
 ## Diseño y Dev Spec
 

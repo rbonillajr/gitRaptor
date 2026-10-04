@@ -79,7 +79,10 @@ Entonces la restauración se rechaza con el motivo
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+- Alcance (D-TMC-20): worktree pedido más las refs y los worktrees que cambiaron después del punto, calculados por diferencia entre el snapshot destino y el estado actual.
+- Solo puntos válidos (ref del almacén + fila completa) y fuera de huecos (ADR-TMC-003 § 3).
+- Restaurar un worktree borrado lo recrea sin checkout y escribe sus archivos en bruto (ADR-TMC-002 § 3).
+- Permisos de US-TMC-013 sobre todo lo que la restauración deshace; solape de US-TMC-012.
 
 ## Diseño y Dev Spec
 

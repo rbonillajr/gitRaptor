@@ -65,7 +65,8 @@ Entonces el commit se deshace sin aviso sobre el remoto
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+- Al planificar, comprobar en solo lectura y sin red si cada commit que se quita es alcanzable desde alguna ref remota local; aviso con la ref y la antigüedad del dato (ADR-TMC-002 § 4).
+- La capa de escritura no tiene operaciones de remoto; comprobación estática y captura de red con 0 conexiones (SEC-TMC-05).
 
 ## Diseño y Dev Spec
 
