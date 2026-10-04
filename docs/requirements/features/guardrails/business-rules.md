@@ -139,7 +139,7 @@ permiso(operación) ∈ {permitir, pedir confirmación, denegar}
 orden de restricción: denegar > pedir confirmación > permitir
 ```
 
-> ⚠️ **ASSUMPTION** (S-GRD-9): mientras el modo "pedir confirmación" (BRD BR-13, Should) no esté disponible, una operación con "pedir confirmación" se trata como **denegar** (fail-safe) `[POR VERIFICAR]`.
+> **Supuesto confirmado** (S-GRD-9, Rene Bonilla, 2026-10-04): mientras el modo "pedir confirmación" (BRD BR-13, Should) no esté disponible, una operación con "pedir confirmación" se trata como **denegar** (fail-safe).
 
 **Ejemplos**:
 - Configuración del equipo: force-push = denegar → un agente intenta un force-push → denegado.
@@ -162,7 +162,7 @@ orden de restricción: denegar > pedir confirmación > permitir
 | **Prohibir force-push** | Cualquier force-push. Equivale a fijar "denegar" en el permiso de force-push | Un agente hace force-push sobre su propia rama → denegado |
 | **Prohibir `reset --hard`** | Cualquier `reset --hard`. Equivale a fijar "denegar" en su permiso. Límite de la capa de hooks: BR-EDGE-003 | Un agente pide `reset --hard` por MCP → denegado |
 | **Límite de tamaño de diff** | Un commit cuyo diff supera el límite, en líneas cambiadas (S-GRD-7) | Límite 400; un commit de 1.200 líneas → denegado, con el tamaño y el límite |
-| **Formato de commit** | Un commit cuyo mensaje no cumple el formato fijado. ⚠️ **ASSUMPTION**: el MVP ofrece al menos Conventional Commits `[POR VERIFICAR]` | "arreglos varios" con Conventional Commits exigido → denegado, con un ejemplo válido |
+| **Formato de commit** | Un commit cuyo mensaje no cumple el formato fijado. El MVP ofrece al menos Conventional Commits (confirmado por Rene Bonilla, 2026-10-04) | "arreglos varios" con Conventional Commits exigido → denegado, con un ejemplo válido |
 | **Ruta prohibida** | Un commit que modifica, crea o borra una ruta prohibida | Ruta prohibida `secrets/`; un commit que toca `secrets/api.txt` → denegado |
 
 **Aplicabilidad**: Toda operación gobernada a la que la política se refiere.
@@ -579,7 +579,7 @@ Constraint: el registro no se escribe en el repo ni sale de la máquina (NFR-03)
 - Se puede **desinstalar** dejando las rutas operativas del repo **exactamente** como estaban antes de instalar.
 - Queda registrada: qué, dónde, cuándo y quién la autorizó.
 
-> ⚠️ **ASSUMPTION** (S-GRD-6): instalarla en un repo cubre todos sus worktrees, actuales y futuros `[POR VERIFICAR]` viabilidad con el Arquitecto.
+> **Supuesto confirmado** (S-GRD-6, Rene Bonilla, 2026-10-04): instalarla en un repo cubre todos sus worktrees, actuales y futuros. La viabilidad técnica sigue siendo comprobación del Arquitecto.
 
 **Aplicabilidad**: Al instalar, actualizar o desinstalar la protección de hooks.
 
@@ -843,7 +843,7 @@ Sin historias todavía. Cada regla deberá tener al menos una historia cuando se
 
 ### Reglas → Criterios de Aceptación
 
-Cada regla debe reflejarse en al menos un escenario Gherkin de su historia. Cada regla indica en "Cómo se verifica" los escenarios mínimos. BR-CONS-002 obliga a que los escenarios de BR-VAL-002 y BR-VAL-003 se ejecuten por las dos capas. BR-CONS-005 se verifica con una comparación antes/después de las rutas operativas del repo y una prueba de interrupción. Las decisiones Q-GRD-1 a Q-GRD-16 ya están incorporadas a las reglas. Las partes que siguen marcadas ⚠️ **ASSUMPTION** (S-GRD-6, S-GRD-9 y el formato Conventional Commits) se validan antes de cerrar las historias que las usen.
+Cada regla debe reflejarse en al menos un escenario Gherkin de su historia. Cada regla indica en "Cómo se verifica" los escenarios mínimos. BR-CONS-002 obliga a que los escenarios de BR-VAL-002 y BR-VAL-003 se ejecuten por las dos capas. BR-CONS-005 se verifica con una comparación antes/después de las rutas operativas del repo y una prueba de interrupción. Las decisiones Q-GRD-1 a Q-GRD-16 ya están incorporadas a las reglas. Los supuestos que quedaban (S-GRD-6, S-GRD-9 y el formato Conventional Commits) los confirmó Rene Bonilla el 2026-10-04; de S-GRD-6 queda pendiente solo la comprobación técnica del Arquitecto.
 
 ---
 
@@ -856,3 +856,4 @@ Cada regla debe reflejarse en al menos un escenario Gherkin de su historia. Cada
 | 1.2 | 2026-10-03 | PO (AADD) para Rene Bonilla | Decisiones Q-GRD-1 a Q-GRD-16 de Rene Bonilla (aceptan las recomendaciones de P-GRD-1 a P-GRD-16): los bloques de supuesto pasan a "Decisión"; BR-CONS-001 aplica Q-GRD-14 (un nivel personal endurece cualquier regla del equipo y nunca la relaja; refina Q23 de motor-local) y su tabla deja de tener filas dependientes; BR-TIME-001 fija el plazo en 5 minutos y BR-TIME-002 la retención en 90 días; BR-WF-002 aplica el alcance de Q-GRD-15; BR-EDGE-001 a BR-EDGE-005 aplican Q-GRD-5, 4, 8, 12 y 11; BR-EDGE-004 anota la dependencia con BR-CONS-007 (motor-local) para el Arquitecto o una revisión de motor-local. S-GRD-1, S-GRD-4 y S-GRD-5 confirmados por Q-GRD-14, Q-GRD-7 y Q-GRD-10. Sin reglas nuevas: 23 reglas (18 críticas). |
 | 1.3 | 2026-10-04 | PO (AADD) para Rene Bonilla | Decisión Q-GRD-17 de Rene Bonilla, posterior a la aprobación del requerimiento: la configuración del equipo que rige una operación es la última versión commiteada en el worktree de esa operación; las ediciones sin commitear nunca cuentan. BR-VAL-001 (decisión y ejemplos), BR-AUTH-004 (con Q-GRD-7, un agente no puede relajarla), BR-CONS-006 (el cambio del comando en el nivel de equipo se aplica al commitearlo) y BR-EDGE-004 (un conflicto sin commitear no vuelve ilegible la configuración; ejemplos reformulados). Sin reglas nuevas. |
 | 1.4 | 2026-10-04 | PO (AADD) para Rene Bonilla | Decisión Q-GRD-18 de Rene Bonilla, posterior a la aprobación del requerimiento: la rama base es una excepción a Q-GRD-17 y se lee de la configuración del equipo commiteada en la rama principal del repo (la que marca el remoto, o `main`). BR-CONS-003 (decisión, regla formal y ejemplos con dos worktrees en commits distintos), BR-EDGE-001 (la rama base protegida por el mínimo seguro), BR-VAL-001 (tabla de valores y excepción en el bloque de Q-GRD-17). Sin reglas nuevas. |
+| 1.5 | 2026-10-04 | PO (AADD) para Rene Bonilla | Supuestos confirmados por Rene Bonilla: S-GRD-9 (BR-VAL-002), S-GRD-6 (BR-CONS-005; la viabilidad técnica sigue siendo del Arquitecto) y Conventional Commits como formato mínimo (BR-VAL-003). Sin marcas ASSUMPTION ni [POR VERIFICAR] pendientes de validación de negocio. Sin reglas nuevas. |

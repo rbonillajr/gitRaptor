@@ -65,7 +65,7 @@ Impacto de no resolverlo:
 
 ### Valor Esperado (BRD)
 
-- **ROI estimado**: no se cuantifica en dinero (herramienta interna, D1). El retorno es evitar incidentes de pérdida de trabajo y de rama base rota. ⚠️ **ASSUMPTION**: no hay línea base de cuántos incidentes así ocurren hoy por semana en dogfooding `[POR VERIFICAR]`.
+- **ROI estimado**: no se cuantifica en dinero (herramienta interna, D1). El retorno es evitar incidentes de pérdida de trabajo y de rama base rota. No hay línea base de cuántos incidentes así ocurren hoy por semana en dogfooding; el valor se juzga por los bloqueos medidos (Confirmado por Rene Bonilla (2026-10-04)).
 - **KPIs de éxito**: ver § 3. Los principales son medir las acciones peligrosas bloqueadas (KPI del BRD), cero operaciones prohibidas ejecutadas por la capa MCP, cero hooks del usuario perdidos al instalar o desinstalar y la demo "un agente intenta hacer force-push y queda bloqueado" (BRD § 13).
 - **Beneficiarios**: el desarrollador orquestador (directo); los equipos internos piloto, que comparten las reglas del repo; el Motor local (lee la rama base del equipo); el Servidor MCP (consulta la decisión antes de ejecutar).
 
@@ -150,7 +150,7 @@ US-GRP-013 (umbral de inactividad) solo depende de P8 (motor-local); tampoco nec
 | Instalar la protección sin riesgo | 0 hooks del usuario perdidos o alterados al instalar o desinstalar; tras desinstalar, el repo queda idéntico a su estado anterior (NFR-01) | Alta |
 | Demostrar el valor | La demo del BRD § 13 funciona: un agente intenta un force-push sobre la rama base y queda bloqueado, con la regla explicada | Alta |
 | Adopción interna | ≥ 5 repos internos con políticas configuradas a 6 meses del MVP (BRD § 9) | Media |
-| No estorbar al trabajo legítimo | Se mide cuántas veces por semana el humano usa una excepción consciente o relaja una regla (señal de exceso de bloqueo). ⚠️ **ASSUMPTION**: sin meta hasta tener línea base en dogfooding `[POR VERIFICAR]` | Media |
+| No estorbar al trabajo legítimo | Se mide cuántas veces por semana el humano usa una excepción consciente o relaja una regla (señal de exceso de bloqueo). Sin meta hasta tener línea base en dogfooding (Confirmado por Rene Bonilla (2026-10-04)) | Media |
 
 ---
 
@@ -206,7 +206,7 @@ US-GRP-013 (umbral de inactividad) solo depende de P8 (motor-local); tampoco nec
 |-----|----------------|---------|---------------|
 | **Cero pérdida de datos** | Instalar y desinstalar la protección de hooks no pierde ni altera nada del usuario; desinstalar deja el repo idéntico al estado anterior (NFR-01) | Sí | Un bug aquí destruye hooks que el usuario no puede recuperar. |
 | **Fail-safe** | Ante una duda (configuración ilegible, sin respuesta en la cola, actor desconocido) la operación de riesgo no se ejecuta sin decisión humana (BR-EDGE-004, BR-TIME-001, Q-GRD-1) | Sí | Un fallo de Guardrails no puede dejar pasar lo que debía bloquear. |
-| **Decisión inmediata** | ⚠️ **ASSUMPTION**: evaluar una operación añade < 100 ms a la operación en repos medianos `[POR VERIFICAR]`. El BRD no fija un valor | No | Los agentes hacen muchas operaciones; una espera visible frena el trabajo. |
+| **Decisión inmediata** | Evaluar una operación añade < 100 ms a la operación en repos medianos (Confirmado por Rene Bonilla (2026-10-04); el BRD no fija un valor) | No | Los agentes hacen muchas operaciones; una espera visible frena el trabajo. |
 | **Seguridad del MCP** | Allowlist, sin shell, entradas validadas (NFR-02) | Sí | El MCP es un vector de ataque (BRD § 10). |
 | **Privacidad** | El registro de decisiones vive en la máquina (NFR-03) | Sí | Contiene datos confidenciales del repo. |
 | **Portabilidad** | El mismo comportamiento en Windows, macOS y Linux (BR-03, NFR-06) | Sí | Hueco de mercado principal (BRD P7). |
@@ -273,7 +273,7 @@ US-GRP-013 (umbral de inactividad) solo depende de P8 (motor-local); tampoco nec
 ## 10. Estándares Aplicables (Arquitectura)
 
 - **Interoperabilidad**: Git nativo y sus hooks estándar; MCP estándar (NFR-08). El resto: transversal (lo define el Arquitecto).
-- **Codificación y Terminología**: Conventional Commits como formato de commit que el equipo puede exigir (domain-context). ⚠️ **ASSUMPTION**: el MVP ofrece al menos ese formato `[POR VERIFICAR]`.
+- **Codificación y Terminología**: Conventional Commits como formato de commit que el equipo puede exigir (domain-context). El MVP ofrece al menos ese formato (Confirmado por Rene Bonilla (2026-10-04)).
 - **Seguridad y Autenticación**: sin autenticación de usuarios (herramienta local de un usuario). Distinguir al humano para acciones reservadas: transversal (lo define el Arquitecto).
 - **Compliance**: solo políticas internas (ver § 5).
 
@@ -314,14 +314,14 @@ US-GRP-013 (umbral de inactividad) solo depende de P8 (motor-local); tampoco nec
 | # | Supuesto | Estado |
 |---|----------|--------|
 | S-GRD-1 | Las reglas de permisos y políticas admiten los tres niveles; los personales solo endurecen (BR-VAL-001, BR-CONS-001). | ✅ Confirmado por Q-GRD-14 (2026-10-03) |
-| S-GRD-2 | Si el equipo fija un formato de commit, un nivel personal no puede cambiarlo por otro; solo puede exigirlo donde el equipo no lo exige. | ⚠️ Pendiente de validar |
-| S-GRD-3 | El comando de edición nunca hace commit. Un cambio en la configuración del equipo queda en el working tree y lo commitea el desarrollador. | ⚠️ Pendiente de validar |
+| S-GRD-2 | Si el equipo fija un formato de commit, un nivel personal no puede cambiarlo por otro; solo puede exigirlo donde el equipo no lo exige. | ✅ Confirmado por Rene Bonilla (2026-10-04) |
+| S-GRD-3 | El comando de edición nunca hace commit. Un cambio en la configuración del equipo queda en el working tree y lo commitea el desarrollador. | ✅ Confirmado por Rene Bonilla (2026-10-04) |
 | S-GRD-4 | Los cambios a la configuración del equipo entran por commit revisado, como cualquier cambio del repo (Q-GRD-7). | ✅ Confirmado por Q-GRD-7 (2026-10-03) |
 | S-GRD-5 | El registro de decisiones vive en el perfil de GitRaptor, separado por repo, nunca en el repo (coherente con Q21 de motor-local). | ✅ Confirmado por Q-GRD-10 (2026-10-03) |
-| S-GRD-6 | Instalar la protección de hooks en un repo cubre todos sus worktrees, los actuales y los que se creen después. | ⚠️ Pendiente de validar `[POR VERIFICAR]` viabilidad con el Arquitecto |
-| S-GRD-7 | El límite de tamaño de diff se mide en líneas cambiadas (añadidas más eliminadas) por commit. | ⚠️ Pendiente de validar |
-| S-GRD-8 | Una aprobación vale para la operación concreta pedida, una sola vez. No se convierte en un permiso permanente. | ⚠️ Pendiente de validar |
-| S-GRD-9 | Mientras el modo "pedir confirmación" (BR-13, Should) no esté disponible, una operación con "pedir confirmación" se trata como "denegar" (fail-safe). | ⚠️ Pendiente de validar |
+| S-GRD-6 | Instalar la protección de hooks en un repo cubre todos sus worktrees, los actuales y los que se creen después. | ✅ Confirmado por Rene Bonilla (2026-10-04). La viabilidad técnica sigue siendo comprobación del Arquitecto |
+| S-GRD-7 | El límite de tamaño de diff se mide en líneas cambiadas (añadidas más eliminadas) por commit. | ✅ Confirmado por Rene Bonilla (2026-10-04) |
+| S-GRD-8 | Una aprobación vale para la operación concreta pedida, una sola vez. No se convierte en un permiso permanente. | ✅ Confirmado por Rene Bonilla (2026-10-04) |
+| S-GRD-9 | Mientras el modo "pedir confirmación" (BR-13, Should) no esté disponible, una operación con "pedir confirmación" se trata como "denegar" (fail-safe). | ✅ Confirmado por Rene Bonilla (2026-10-04) |
 
 ## Riesgos
 
@@ -398,6 +398,8 @@ Todas las preguntas de esta feature están resueltas (ver [Decisiones tomadas](#
 > **Revisión 2026-10-04 (Q-GRD-17)**: decisión **posterior a la aprobación del requerimiento**. Sale de la pregunta P-GRD-17, que el Artifact Judge abrió al revisar las historias. Fija que la configuración del equipo que rige una operación es la última versión commiteada en el worktree de esa operación y cierra la vía por la que un agente podía relajarla sin commitear. Se lleva a BR-VAL-001, BR-AUTH-004, BR-CONS-006 y BR-EDGE-004. No cambia ninguna calificación: **10 ✅ · 5 ⚠️ · 0 🔴**.
 >
 > **Revisión 2026-10-04 (Q-GRD-18)**: decisión **posterior a la aprobación del requerimiento**. La rama base es una excepción a Q-GRD-17: se lee de la configuración del equipo commiteada en la rama principal del repo (la que el remoto marca como principal, o `main`). Todos los worktrees comparten la misma rama base, sea cual sea su commit. Se lleva a BR-CONS-003, BR-EDGE-001 y BR-VAL-001, y a "Qué entrega Guardrails al Motor local". No cambia ninguna calificación: **10 ✅ · 5 ⚠️ · 0 🔴**.
+>
+> **Revisión 2026-10-04 (cierre de pendientes)**: Rene Bonilla aceptó los Known Risks 1, 2, 4, 5 y 7 y confirmó los supuestos S-GRD-2, S-GRD-3, S-GRD-6, S-GRD-7, S-GRD-8 y S-GRD-9, además de la latencia de evaluación (< 100 ms), Conventional Commits como formato mínimo y la falta de línea base del ROI y del KPI "no estorbar". Los Known Risks 3, 6 y 8 siguen resueltos. La viabilidad técnica de S-GRD-6 (los hooks cubren todos los worktrees) sigue siendo comprobación del Arquitecto. Pasan a ✅ RNFs y Cola de confirmación; Valor Esperado / ROI y KPIs siguen ⚠️ como riesgos aceptados, y Restricciones sigue ⚠️ por la política de ASSA y el ADR P8 (motor-local). Resultado: **12 ✅ · 3 ⚠️ · 0 🔴**.
 
 | Sección | Resultado | Nota |
 |---------|-----------|------|
@@ -407,25 +409,25 @@ Todas las preguntas de esta feature están resueltas (ver [Decisiones tomadas](#
 | Usuarios/Actores | ✅ | Roles diferenciados y acciones reservadas al humano explícitas. A quién se aplican las reglas con actor "sin atribuir" está decidido (Q-GRD-1). Cómo se distingue al humano es del Arquitecto (riesgo R-GRD-3), no del negocio. |
 | Alcance OUT of scope | ✅ | 13 exclusiones, cada una con su feature dueña, su fase o su decisión. |
 | Restricciones | ⚠️ | NFR-01, NFR-02 y NFR-07 aterrizados; límite de la capa de hooks declarado. Siguen abiertas la política interna de ASSA (heredada) y el formato P8 (motor-local). |
-| RNFs | ⚠️ | Fail-safe, cero pérdida y explicabilidad definidos. La latencia de evaluación es un supuesto sin valor del BRD. |
+| RNFs | ✅ | Fail-safe, cero pérdida y explicabilidad definidos. La latencia de evaluación (< 100 ms) la confirmó Rene Bonilla (2026-10-04). |
 | Integraciones | ✅ | Integraciones internas claras. Convivencia con hooks previos (Q-GRD-4) y snapshot imposible (Q-GRD-11) decididas. Queda la dependencia con BR-CONS-007 (motor-local) para el Arquitecto (Q-GRD-12). |
 | Glosario | ✅ | 23 términos, incluidos permiso, política, decisión, niveles admitidos, endurecer/relajar, excepción consciente y estado de protección. |
 | Stakeholders | ✅ | Rene Bonilla y equipos piloto con expectativas explícitas. |
 | Configuración en tres niveles | ✅ | Valores, niveles admitidos y precedencia fijados (BR-VAL-001, BR-CONS-001). Q-GRD-14 refina Q23 de motor-local y está anotada en Decisiones heredadas. El formato queda en P8 (motor-local), fuera de este documento. S-GRD-2 (formato de commit) sigue como supuesto. El comando de edición tiene garantía NFR-01 (BR-CONS-006 (comando, Guardrails)). |
 | Entrega al Motor local (US-GRP-016) | ✅ | Los tres desbloqueantes (valor de equipo, regla de lectura, ADR P8 (motor-local)) están explícitos; el comando no es prerrequisito. |
 | Estado de protección y alcance | ✅ | Estados y transiciones completos (BR-WF-002), alineados con BR-EDGE-001. Alcance decidido (Q-GRD-15). |
-| Cola de confirmación (BR-13) | ⚠️ | Ciclo de vida, quién decide y plazo de 5 minutos decididos (BR-WF-001, Q-GRD-6). Siguen como supuestos que una aprobación vale una sola vez (S-GRD-8) y que "pedir confirmación" se trata como "denegar" mientras no exista la cola (S-GRD-9). |
+| Cola de confirmación (BR-13) | ✅ | Ciclo de vida, quién decide y plazo de 5 minutos decididos (BR-WF-001, Q-GRD-6). S-GRD-8 (una aprobación vale una vez) y S-GRD-9 ("pedir confirmación" como "denegar" mientras no exista la cola) confirmados por Rene Bonilla (2026-10-04). |
 | Instalación de hooks | ✅ | Recuperabilidad y conservación de hooks previos fijadas (BR-CONS-005). Permiso explícito (Q-GRD-3) y convivencia con otros gestores (Q-GRD-4) decididos. La cobertura de todos los worktrees sigue como supuesto (S-GRD-6) a validar con el Arquitecto. |
 
 ## ⚠️ Known Risks (from Quality Review)
 
 | # | Sección | Riesgo | Impacto | Aceptado por |
 |---|---------|--------|---------|--------------|
-| 1 | Valor Esperado / ROI | Sin línea base de incidentes por acciones destructivas de agentes. | No se podrá demostrar la reducción; el valor se juzga por los bloqueos medidos. | Pendiente (Rene Bonilla) |
-| 2 | KPIs de Éxito | "Acciones peligrosas bloqueadas" y "no estorbar" sin meta. | No hay umbral de éxito ni de exceso de bloqueo hasta tener datos de dogfooding. | Pendiente (Rene Bonilla) |
+| 1 | Valor Esperado / ROI | Sin línea base de incidentes por acciones destructivas de agentes. | No se podrá demostrar la reducción; el valor se juzga por los bloqueos medidos. | Rene Bonilla (2026-10-04) |
+| 2 | KPIs de Éxito | "Acciones peligrosas bloqueadas" y "no estorbar" sin meta. | No hay umbral de éxito ni de exceso de bloqueo hasta tener datos de dogfooding. | Rene Bonilla (2026-10-04) |
 | 3 | Usuarios/Actores | ~~A quién se aplican las reglas con actor "sin atribuir" (P-GRD-1).~~ | **Resuelto** por Q-GRD-1 (2026-10-03). Cómo se distingue al humano sigue como riesgo R-GRD-3, para el Arquitecto. | — |
-| 4 | Restricciones | Formato de la configuración pendiente (ADR P8 (motor-local)). | Las historias que escriben o leen la configuración, y US-GRP-016, no se cierran hasta el ADR (R-GRD-7). | Pendiente (Rene Bonilla) |
-| 5 | RNFs | Latencia de evaluación sin valor del BRD. | El Arquitecto no tiene umbral firme; se usa el supuesto de < 100 ms. | Pendiente (Rene Bonilla) |
+| 4 | Restricciones | Formato de la configuración pendiente (ADR P8 (motor-local)). | Las historias que escriben o leen la configuración, y US-GRP-016, no se cierran hasta el ADR (R-GRD-7). | Rene Bonilla (2026-10-04) |
+| 5 | RNFs | Latencia de evaluación sin valor del BRD. | El Arquitecto no tiene umbral firme; se usa el supuesto de < 100 ms. | Rene Bonilla (2026-10-04) |
 | 6 | Integraciones | ~~Convivencia con hooks previos (P-GRD-4); snapshot imposible (P-GRD-11); forma del permiso de instalación (P-GRD-3).~~ | **Resuelto** por Q-GRD-4, Q-GRD-11 y Q-GRD-3 (2026-10-03). | — |
-| 7 | Cola de confirmación | Plazo y caducidad resueltos por Q-GRD-6 (5 minutos). Siguen sin validar S-GRD-8 (una aprobación vale una sola vez) y S-GRD-9 ("pedir confirmación" como "denegar" mientras no exista la cola). | Los escenarios de BR-WF-001 y BR-VAL-002 sobre esos dos puntos quedan provisionales. | Pendiente (Rene Bonilla) |
+| 7 | Cola de confirmación | Plazo y caducidad resueltos por Q-GRD-6 (5 minutos). Siguen sin validar S-GRD-8 (una aprobación vale una sola vez) y S-GRD-9 ("pedir confirmación" como "denegar" mientras no exista la cola). | Los escenarios de BR-WF-001 y BR-VAL-002 sobre esos dos puntos quedan provisionales. | Rene Bonilla (2026-10-04) |
 | 8 | Configuración en tres niveles / alcance | ~~Precedencia perfil frente a equipo (P-GRD-14) y criterio de alcance (P-GRD-15) sin decidir.~~ | **Resuelto** por Q-GRD-14 y Q-GRD-15 (2026-10-03). | — |
