@@ -10,7 +10,7 @@ updated: 2026-10-04
 deciders: [Rene Bonilla]
 domain: GRP
 feature: guardrails
-related: [ADR-GRD-001, ADR-GRD-003, ADR-GRD-004, ADR-GRD-005, ADR-GRD-006, CTX-GRD-001, BR-GRD-001]
+related: [ADR-GRD-001, ADR-GRD-003, ADR-GRD-004, ADR-GRD-005, ADR-GRD-006, ADR-CKP-002, CTX-GRD-001, BR-GRD-001]
 tags: [guardrails, comandos-reservados, excepcion-consciente, token-un-solo-uso, br-auth-001, br-auth-002, r-grd-3, prompt-injection, ascendencia, d5, factor-fuera-de-banda]
 ---
 
@@ -78,7 +78,7 @@ ADR-GRP-005 § 6 (aceptado el 2026-10-04) define los **comandos reservados**, au
   - **Anuncio**: el daemon publica `reserved-action-pending` en el stream de **todos** los clientes, con la acción, el repo y la cadena de ascendencia resumida.
   - **Ventana**: la acción solo se aplica al cerrarse la ventana. Cualquier cliente del usuario puede cancelarla, y cancelar no es reservado porque solo mantiene la protección.
   - **Registro**: la cancelación y la aplicación quedan en la auditoría.
-- **Interfaz para el Cockpit** (Q-GRD-1): una confirmación del humano en una superficie de GitRaptor que choca con una regla cuenta como excepción. Usa el mismo comando con el token del § 3. Se implementa con F-001-02.
+- **Interfaz para el Cockpit** (Q-GRD-1): una confirmación del humano en una superficie de GitRaptor que choca con una regla cuenta como excepción. Usa el mismo comando con el token del § 3. Se implementa con F-001-02. (Enmienda 2026-10-04, Cockpit: desde el Cockpit no se emite token; ver la sección final.)
 - **Toda excepción pasa por D5** (**D10**, Rene Bonilla, 2026-10-04): la de `raptor guard exec` y también la aprobación explícita en el Cockpit llevan el mismo anuncio, la misma ventana cancelable antes de emitir el token y la misma auditoría con la cadena completa de ascendencia y la aceptación del riesgo por acción. No hay ninguna vía de excepción sin ventana.
 
 ### 2. Análisis de vectores y aceptación del riesgo por acción (H-01)
@@ -226,3 +226,18 @@ Aplicada desde la tabla de enmiendas de [ADR-GRD-008](./ADR-GRD-008-factor-auten
 - § 1: las filas de relajar con el comando y aprobar en la cola citan el factor de ADR-GRD-008; ya no figuran como bloqueadas por falta de ADR.
 - § 2: la columna "Qué lo cierra" ("Factor fuera de banda") se lee como **ADR-GRD-008, en las acciones que lo adoptan**: hoy US-GRD-013, US-GRD-015 y la confirmación de una relajación personal (Q-GRD-32). Desinstalar, la excepción y las confirmaciones de D8 lo adoptan en modo preferente en una historia posterior (OQ-GRD-008-3). El factor cierra también el riesgo A-2 de ADR-GRP-005 (Enmienda TS-GRP-004, punto 9) en esas acciones.
 - Consecuencias: "requiere un ADR propio" pasa a ADR-GRD-008.
+
+## Enmienda (2026-10-04, Cockpit)
+
+Aplicada desde Q-CKP-15 y DEP-CKP-10 de [CTX-CKP-001](../../requirements/features/cockpit/context.md), con [ADR-CKP-002](./ADR-CKP-002-catalogo-operaciones-ejecutor.md) § 4 (proposed). **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. No cambia la lista de comandos reservados, D5, D10, el análisis de vectores ni el token de `raptor guard exec`. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| La excepción consciente desde el Cockpit **no emite un token en el entorno**: la ligadura es el registro del hijo del ejecutor más la huella del plan, con los mismos controles, D5 y D10 | § 1, "Interfaz para el Cockpit" | Q-CKP-15; ADR-CKP-002 § 4 |
+
+- **Por qué sin token**: en `raptor guard exec`, el token liga la excepción al `git` que lanza un `raptor` distinto del daemon. En el Cockpit, quien emite la decisión y quien lanza `git` son el **mismo daemon** (el ejecutor de ADR-CKP-002). La ligadura de un solo uso a la transición exacta la dan el registro del hijo en el mismo paso del lanzamiento y la huella del plan (ADR-GRD-003, Enmienda (2026-10-04, Cockpit)).
+- **Mismos controles**: es un comando reservado sobre el proceso de la TUI (ADR-GRP-005 § 6, puntos 1 a 3). Lleva **D5** (anuncio `reserved-action-pending` en todos los clientes, ventana cancelable y auditoría con la ascendencia completa y la aceptación del riesgo por acción) y **D10**. La ventana va **antes de ejecutar** el plan, en lugar de antes de emitir el token. ⚠️ **ASSUMPTION** heredada: ventana de 10 s (S-CKP-3).
+- **Rechazos**: si el solicitante es un agente, la excepción se rechaza y se anota como `exception-rejected`. El MCP nunca la ofrece (§ 1).
+- **Registro**: `exception`, `exception-cancelled` o `exception-rejected` con `layer = cockpit`, una sola entrada por plan (ADR-GRD-006, Enmienda (2026-10-04, Cockpit)).
+- **Sin cola**: "pedir confirmación" se aplica como denegar sin cola mientras US-GRD-015 y el factor fuera de banda no existan (DEP-CKP-8).
+- **Validación añadida**: una excepción del Cockpit cancelada en la ventana deja `exception-cancelled` y no ejecuta nada; aplicada, una sola `exception`; pedida desde un proceso que desciende de un agente, `exception-rejected`; una transición distinta de la registrada se evalúa de nuevo.

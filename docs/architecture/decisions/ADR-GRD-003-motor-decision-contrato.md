@@ -10,7 +10,7 @@ updated: 2026-10-04
 deciders: [Rene Bonilla]
 domain: GRP
 feature: guardrails
-related: [ADR-GRP-002, ADR-GRD-001, ADR-GRD-002, ADR-GRD-004, ADR-GRD-005, ADR-GRD-006, ADR-GRD-007, CTX-GRD-001, BR-GRD-001]
+related: [ADR-GRP-002, ADR-GRD-001, ADR-GRD-002, ADR-GRD-004, ADR-GRD-005, ADR-GRD-006, ADR-GRD-007, ADR-CKP-002, CTX-GRD-001, BR-GRD-001]
 tags: [guardrails, motor-decision, crates-policy, contrato, mcp, minimo-seguro, actor, fail-safe, br-calc-001, br-cons-002, modo-degradado, canal-autenticado]
 ---
 
@@ -45,7 +45,7 @@ Sin E/S, sin reloj y sin aleatoriedad:
 - **Operación normalizada**: una del catálogo de BR-VAL-002 con sus **transiciones exactas** (ref normalizada, valor viejo y valor nuevo; ADR-GRD-002 § 4), el remoto y, si una política activa lo pide, los hechos de contenido.
   - **Nombre del remoto** (M-06): si es una URL, se guarda sin `userinfo`, o como `<url>` si no se puede limpiar.
   - **Lo que nunca guarda**: argv.
-- **Contexto**: repo (clave de ADR-GRP-006), worktree, rama o ramas base protegidas (ADR-GRD-004 § 3), capa (`hooks` o `mcp`) y actor.
+- **Contexto**: repo (clave de ADR-GRP-006), worktree, rama o ramas base protegidas (ADR-GRD-004 § 3), capa (`hooks` o `mcp`) y actor. (Enmienda 2026-10-04, Cockpit: también `cockpit`; ver la sección final.)
 - **Configuración efectiva**: la de ADR-GRD-004, por fuentes, cada una con su estado: `mínimo`, `suelo` (la rama principal), `worktree` (el `HEAD` de la operación, que solo endurece) y los niveles personales.
 - **Combinación**:
   - Primero, el suelo y el mínimo. Después, lo que endurecen el worktree y los niveles personales (BR-CONS-001, D6).
@@ -107,7 +107,7 @@ Sin E/S, sin reloj y sin aleatoriedad:
     - si no → "sin atribuir".
 
     Es la señal S4 de ADR-GRP-012, opcional para el motor.
-- **Ejecutor del daemon** (Cockpit y MCP, ADR-TMC-002 § 5): si el **padre directo** del `git` más cercano es el ejecutor, con una operación registrada para esa identidad, el daemon devuelve la decisión ya tomada **para cada transición registrada**. Cualquier transición distinta se evalúa de nuevo.
+- **Ejecutor del daemon** (Cockpit y MCP, ADR-TMC-002 § 5): si el **padre directo** del `git` más cercano es el ejecutor, con una operación registrada para esa identidad, el daemon devuelve la decisión ya tomada **para cada transición registrada**. Cualquier transición distinta se evalúa de nuevo. (Enmienda 2026-10-04, Cockpit: registro del hijo con la capa de la petición, sin `previo_hook` y sin esperar al cerrojo del repo; ver la sección final.)
 - **Escrituras internas de la Time Machine**: desactivan los hooks (ADR-TMC-002 § 2) y no pasan por Guardrails. Su autorización es de ADR-TMC-005.
 - **Modo degradado** (daemon no arrancable, o daemon auténtico de otra instancia; H-03; J7). Un servidor que **no** es el binario instalado no entra aquí: da deny en refs gobernadas. El cliente evalúa con el mismo crate con estas reglas, todas más estrictas que el modo normal:
   - **Mínimo forzado**: nadie lo puede desactivar.
@@ -133,6 +133,7 @@ Sin E/S, sin reloj y sin aleatoriedad:
   - No fija el actor ni la capa `hooks`.
   - La decisión de una operación ejecutada por el MCP se registra una sola vez, con la capa `mcp`.
 - **Pendiente para F-001-05**: el catálogo de herramientas y su correspondencia con la operación normalizada; la allowlist.
+- **Capa `cockpit`** (Enmienda 2026-10-04, Cockpit): sigue este mismo contrato; ver la sección final.
 
 ### 6. Una decisión por transición, una entrada por operación (H-02)
 
@@ -227,3 +228,21 @@ Derivada de la Enmienda de ADR-GRD-002 (E-02-7 y E-02-8). **Decisión del orques
 | Cambio | Dónde | Fuente |
 |---|---|---|
 | Códigos `historia-superficial` y `renombrado-sobre-base` (con el oid para recuperar) | § 3 | SPIKE-GRD-001 F07 y D11 |
+
+## Enmienda (2026-10-04, Cockpit)
+
+Aplicada desde DEP-CKP-10 de [CTX-CKP-001](../../requirements/features/cockpit/context.md), con [ADR-CKP-002](./ADR-CKP-002-catalogo-operaciones-ejecutor.md) § 2, § 4 y § 12 (proposed). **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. No cambia la función de evaluación, el mínimo seguro, la forma de la decisión ni el modo degradado. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| Capa del contexto: `hooks` \| `mcp` \| `cockpit` | § 1 | DEP-CKP-10; ADR-CKP-002 § 4 |
+| El ejecutor registra el hijo `git` y sus transiciones **con la capa de la petición**; con un `git` del ejecutor no se pide `previo_hook`; la evaluación de un hook **nunca espera** al cerrojo de escritura del repo | § 4 | ADR-CKP-002 § 4 y § 5 |
+| La capa `cockpit` sigue el contrato del § 5: decidir antes de la operación protegida | § 5 | ADR-CKP-002 § 2 |
+
+- **Capa `cockpit`**: la de las peticiones de la TUI al ejecutor. Igual que el actor, **la capa no cambia la decisión** (§ 1); entra en el registro y en lo que se puede confirmar. "Pedir confirmación" se aplica como denegar mientras no haya cola (S-GRD-9), igual que en `mcp`.
+- **Antes de cualquier efecto**: el daemon evalúa al preparar (vista previa) y **otra vez al ejecutar**, bajo el cerrojo del repo y antes del snapshot previo. La segunda es la que cuenta (BR-CKP-WF-002). Es la única protección para merge y borrar worktree, que los hooks no impiden (ADR-GRD-002).
+- **Ligadura con los hooks** (§ 4): al lanzar `git`, el ejecutor registra **en el mismo paso** la identidad del hijo y las transiciones del plan, con la capa de la petición (`cockpit` o `mcp`). Las transiciones que no se conocen de antemano se registran como en ADR-GRD-007 § 3, paso 4: ref y base en el rebase; ref, valor viejo y oid integrado en el merge. Cuando un hook pregunta y el `git` más cercano es ese hijo, con el daemon como padre directo, recibe la decisión ya tomada; otra transición se evalúa de nuevo (§ 6). Un `git` lanzado por un hook del usuario (nieto del daemon) no hereda la decisión.
+- **Sin `previo_hook`** con un `git` del ejecutor: ya existe el `previo_garantizado` de la operación protegida (ADR-TMC-004).
+- **Sin interbloqueo**: la evaluación de un hook bajo el ejecutor nunca espera al cerrojo de escritura del repo (ADR-TMC-002, Enmienda (2026-10-04, Cockpit)); si esperara, el hook del propio `git` del ejecutor se bloquearía.
+- **Registro**: una entrada como mucho por plan, con `layer = cockpit` (o `mcp`), escrita al cerrarse el plan (ADR-GRD-006, Enmienda (2026-10-04, Cockpit)).
+- **Validación añadida** (ADR-CKP-002, Validación 5 a 7): un merge permitido sin regla no deja entrada; un borrado de rama denegado deja una `denial` con `layer = cockpit`; un `git` nieto no hereda la decisión; un hook bajo el ejecutor recibe su decisión con el cerrojo tomado.
