@@ -8,11 +8,11 @@ domain: GRP
 priority: high
 complexity: high
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 related:
   adrs: [ADR-GRP-005, ADR-GRP-006, ADR-GRP-009, ADR-GRP-013]
   stories: [US-GRP-001, US-GRP-002, US-GRP-004, US-GRP-005, US-GRP-014, US-GRP-015, TS-GRP-001, TS-GRP-002]
-  specs: []
+  specs: [DS-TS-GRP-003]
 ado:
   id: null
   url: null
@@ -29,7 +29,7 @@ tags: [motor-local, daemon, ciclo-de-vida, instancia-unica, continuidad, segurid
 **Quiero** el proceso único del motor por usuario con su ciclo de vida completo
 **Para** observar sin huecos mientras la máquina está encendida (BR-CONS-005, Q1) sin duplicar watchers ni escritores
 
-> Dev Spec: `dev-specs/TS-GRP-003-proceso-motor.md` | Pendiente
+> Dev Spec: [`dev-specs/TS-GRP-003-dev-spec.md`](../dev-specs/TS-GRP-003-dev-spec.md) | Aprobada (2026-10-04)
 >
 > **Depende de**: TS-GRP-001 (perfil y almacén), TS-GRP-002 (resolución de Git al arrancar). **ADRs**: ADR-GRP-005 (§ 1, § 2 y § 4), ADR-GRP-006, ADR-GRP-009 § 4, ADR-GRP-013 § 1 y § 5 (causa de los huecos). **Seguridad**: SEC-05, SEC-06, SEC-10 y SEC-13; la Dev Spec queda bloqueada hasta que se cumplan las condiciones del gate de seguridad de `docs/architecture/non-functional.md`.
 >
