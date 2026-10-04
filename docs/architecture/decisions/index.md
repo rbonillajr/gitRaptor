@@ -6,13 +6,13 @@ updated: 2026-10-04
 generator: architect
 domain: GRP
 feature: motor-local
-total_artifacts: 27
-expanded: 27
+total_artifacts: 28
+expanded: 28
 approved: 27
 related:
   context: [CTX-GRP-001]
   rules: [BR-GRP-001]
-  adrs: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-004, ADR-GRP-005, ADR-GRP-006, ADR-GRP-007, ADR-GRP-008, ADR-GRP-009, ADR-GRP-010, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, ADR-TMC-001, ADR-TMC-002, ADR-TMC-003, ADR-TMC-004, ADR-TMC-005, ADR-TMC-006, ADR-TMC-007, ADR-GRD-001, ADR-GRD-002, ADR-GRD-003, ADR-GRD-004, ADR-GRD-005, ADR-GRD-006, ADR-GRD-007]
+  adrs: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-004, ADR-GRP-005, ADR-GRP-006, ADR-GRP-007, ADR-GRP-008, ADR-GRP-009, ADR-GRP-010, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, ADR-TMC-001, ADR-TMC-002, ADR-TMC-003, ADR-TMC-004, ADR-TMC-005, ADR-TMC-006, ADR-TMC-007, ADR-GRD-001, ADR-GRD-002, ADR-GRD-003, ADR-GRD-004, ADR-GRD-005, ADR-GRD-006, ADR-GRD-007, ADR-GRD-008]
   stories: [US-GRP-001, US-GRP-002, US-GRP-003, US-GRP-004, US-GRP-005, US-GRP-006, US-GRP-007, US-GRP-008, US-GRP-009, US-GRP-010, US-GRP-011, US-GRP-012, US-GRP-013, US-GRP-014, US-GRP-015, US-GRP-016]
 ---
 
@@ -73,6 +73,7 @@ El formato "JSON estricto con `$schema`" no es una PQ: es la propuesta base del 
 | [ADR-GRD-005](./ADR-GRD-005-estado-proteccion.md) | Estado de protección y detección de pérdida | Estado derivado, no guardado, de dos capas: hooks verificados por worktree contra la referencia de integridad del diario y repo en la allowlist del MCP (F-001-05); pérdida detectada por el observador del motor o por comprobación periódica; cada transición al registro y aviso con rebote solo si la pérdida no la hizo Guardrails | accepted |
 | [ADR-GRD-006](./ADR-GRD-006-registro-decisiones.md) | Registro de decisiones (90 días) | Tabla propia de Guardrails en el almacén por repo del perfil, separada de los eventos inmutables; la escribe el daemon con agregación y límite de inserciones, se purga a los 90 días y se consulta por el canal; instalaciones, desinstalaciones, adopciones e intentos de comandos reservados también van a la auditoría de ADR-GRP-013 | accepted |
 | [ADR-GRD-007](./ADR-GRD-007-acciones-reservadas-excepcion.md) | Acciones reservadas al humano y excepción consciente | Amplían los comandos reservados de ADR-GRP-005 § 6 con su mismo mecanismo en el daemon; las que relajan añaden anuncio, ventana cancelable y auditoría en el MVP, y factor fuera de banda antes de US-GRD-013 y US-GRD-015; la excepción es un token de un solo uso ligado al `git` hijo directo del `raptor` que lo pidió y a la transición exacta | accepted |
+| [ADR-GRD-008](./ADR-GRD-008-factor-autenticacion-fuera-de-banda.md) | Factor de autenticación del sistema operativo fuera del canal del agente | El daemon invoca el diálogo del SO (LocalAuthentication, Windows Hello en Windows 11, polkit con agente gráfico), ligado a un reto de un solo uso con el resumen del plan; la prueba nunca cruza el canal; fail-closed si no está disponible; obligatorio para relajar con el comando (US-GRD-013) y aprobar en la cola (US-GRD-015); preguntas abiertas OQ-GRD-008-1 a 9 | proposed |
 
 ## Grafo de dependencias entre ADRs nuevos
 
@@ -101,6 +102,7 @@ El formato "JSON estricto con `$schema`" no es una PQ: es la propuesta base del 
 | ADR-GRD-005 | ADR-GRP-005, 006, 010, 013; GRD-001 (diario, § 2 y § 8), 002 (lista publicada), 003 (§ 4 modo degradado), 004 (configuración ilegible y pendientes), 006 (registro), 007 (adopción y confirmación) | GRD-001, 002, 003, 004, 007 |
 | ADR-GRD-006 | ADR-GRP-005, 006, 013 (auditoría permanente); GRD-002 (§ 4 rama normalizada), 003 (§ 3 efectos, § 4 spool, § 6 correlación), 007 (§ 3 excepción cancelada) | GRD-001, 003, 005, 007 |
 | ADR-GRD-007 | ADR-GRP-005 § 6, 009 § 4, 012, 013; GRD-001 (§ 2 encadenado), 002 (§ 4 refs y alias), 003 (§ 3 y § 6), 004 (§ 3 confirmaciones), 005 (§ 1 adopción), 006 (§ 1 registro) | GRD-001, 003, 004, 005, 006 |
+| ADR-GRD-008 | ADR-GRP-005 § 3 y § 6, 006, 012, 013 § 1; ADR-TMC-005 (SEC-TMC-03); GRD-004 (§ 2 y § 4 niveles y suelo), 006 (§ 1 registro), 007 (§ 1 a § 3, padre) | — (nadie lo cita todavía; GRD-007 y ADR-GRP-005 § 6 lo citarán con sus enmiendas, tras la aceptación) |
 
 Grafo derivado de la sección Referencias de cada ADR. ADR-GRP-005 es el proceso que aloja al resto, así que sus dependencias con 006, 009, 012 y 013 son mutuas: él usa sus rutas, su Git, su ascendencia y sus huecos, y ellos corren dentro del daemon. Las aristas de los ADR-TMC y ADR-GRD hacia los ADR-GRP (y de los ADR-GRD hacia los ADR-TMC) se listan solo en las filas TMC y GRD; las filas GRP y TMC no se modifican. Entre los ADR-GRD, la sección Referencias solo cita otros frentes, así que sus aristas internas salen de las menciones explícitas: "depende de" significa que el ADR cita al otro, y "lo consumen" es la relación inversa. La mayoría son mutuas porque la capa de hooks, el motor de decisión, el estado y el registro se apoyan unos en otros. La arista de ADR-GRP-007 hacia GRD-003 y 004 es la que ya figura en su fila.
 
