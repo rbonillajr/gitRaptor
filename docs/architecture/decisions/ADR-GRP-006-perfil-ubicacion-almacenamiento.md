@@ -8,7 +8,7 @@ created: 2026-10-03
 updated: 2026-10-03
 deciders: [Rene Bonilla]
 related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-007, ADR-GRP-008, ADR-GRP-013, CTX-GRP-001, BR-GRP-001]
-tags: [motor-local, perfil, sqlite, rusqlite, directories, almacenamiento, clave-de-repo, p9, privacidad]
+tags: [motor-local, perfil, sqlite, rusqlite, directories, almacenamiento, clave-de-repo, p9, privacidad, seguridad, permisos]
 ---
 
 # ADR-GRP-006 — Perfil de GitRaptor: ubicación por SO, clave de repo y almacenamiento
@@ -42,8 +42,9 @@ Se usa el crate `directories` para resolver las carpetas estándar del usuario (
 
 - **Windows siempre en `%LOCALAPPDATA%`**, nunca en `%APPDATA%` (roaming), ni para datos ni para configuración (decisión de Rene Bonilla, 2026-10-03, PQ-7). Se usan explícitamente las variantes locales del crate, porque la carpeta de configuración por defecto de Windows es la roaming.
 - `<app>` es un identificador corto y estable (lo fija TS-GRP-001), para no superar el límite de la ruta del socket en macOS (ADR-GRP-005).
-- **Sobreescritura para pruebas**: una variable de entorno (nombre provisional `GITRAPTOR_PROFILE_DIR`) sustituye todas las carpetas por subcarpetas de una sola raíz. Los tests la usan siempre con un directorio temporal.
-- **Permisos**: carpetas 0700 y archivos 0600 en macOS y Linux. En Windows, `%LOCALAPPDATA%` ya está limitado al usuario por su ACL heredada.
+- **Sobreescritura para pruebas**: una variable de entorno (nombre provisional `GITRAPTOR_PROFILE_DIR`) sustituye todas las carpetas por subcarpetas de una sola raíz. Los tests la usan siempre con un directorio temporal. **Solo existe en builds de test**: el binario release la ignora, para que un proceso que controla el entorno no pueda redirigir el perfil (SEC-06, H4).
+- **Permisos (SEC-06)**: carpetas 0700 y archivos 0600 en macOS y Linux, **incluidos `-wal`, `-shm`, logs, lock y archivos en cuarentena**, creados con umask restrictiva (077) para que no exista una ventana con permisos abiertos. Al arrancar, el daemon **verifica propietario y modo** de las carpetas preexistentes y no arranca si no cuadran (no las "arregla"). En Windows, se comprueba que la ACL heredada de `%LOCALAPPDATA%` no tiene ACE para otros usuarios.
+- **Rutas**: las rutas que llegan al perfil (repos, worktrees) se validan antes de tocar el FS; en Windows se rechazan UNC, `\\?\`, dispositivos y ADS (SEC-02, M9). Ningún dato del motor se escribe fuera del perfil.
 
 ### 2. Organización dentro del perfil
 
@@ -61,7 +62,7 @@ Se usa el crate `directories` para resolver las carpetas estándar del usuario (
 
 ### 4. Almacenamiento: SQLite embebido
 
-- **SQLite vía `rusqlite`**, con SQLite compilado dentro del binario (sin depender de la versión del SO), en modo WAL y con sincronización completa. Las escrituras de un mismo lote de debounce van en una sola transacción, para no superar el presupuesto de persistencia de ADR-GRP-011.
+- **SQLite vía `rusqlite`**, con SQLite compilado dentro del binario (sin depender de la versión del SO), en modo WAL y con sincronización completa. **SQL siempre parametrizado** (SEC-06). Como el SQLite embebido no se actualiza con el SO, sus avisos de seguridad se siguen en la cadena de suministro (`cargo-deny`/`cargo-audit`, SEC-07, L3). Las escrituras de un mismo lote de debounce van en una sola transacción, para no superar el presupuesto de persistencia de ADR-GRP-011.
 - **Un único escritor**: el daemon (ADR-GRP-005). Los clientes nunca abren los archivos del perfil; consultan por el canal.
 - **Versión de esquema** en cada archivo, con migraciones incluidas en el binario. Si un archivo tiene un esquema más nuevo que el binario, ese repo no se observa y el motor expone un diagnóstico; no se degrada el archivo.
 - **Integridad**: comprobación rápida al abrir. Un archivo corrupto se aparta dentro del perfil (renombrado con marca de tiempo, sin borrarlo) y ese repo se trata como **perfil perdido** (Q26): almacén nuevo y todo lo anterior "sin atribuir". La corrupción de un repo no afecta a los demás.
@@ -98,13 +99,14 @@ Se usa el crate `directories` para resolver las carpetas estándar del usuario (
 Todas las pruebas usan un perfil temporal (variable de sobreescritura) y repos temporales.
 
 1. **Ubicación**: sin la variable, el perfil se resuelve a las carpetas de la tabla en los tres SO; en Windows nada se escribe bajo `%APPDATA%`.
-2. **Permisos**: carpetas 0700 y archivos 0600 en macOS y Linux.
+2. **Permisos (SEC-06)**: carpetas 0700 y archivos 0600 en macOS y Linux, incluidos `-wal`, `-shm`, logs, lock y cuarentena; una carpeta preexistente 0755 o de otro propietario impide arrancar; en Windows, sin ACE de otros usuarios. Lint de CI contra SQL armado con cadenas. Un build release ignora `GITRAPTOR_PROFILE_DIR`.
 3. **Clave**: dos worktrees del mismo repo dan la misma clave; dos clones del mismo proyecto dan claves distintas; un repo vacío se puede añadir; la misma ruta con otra grafía de mayúsculas en macOS y Windows da la misma clave.
 4. **Retirar y volver a añadir**: los datos anteriores vuelven y el intervalo retirado aparece como hueco (US-GRP-006).
 5. **Pérdida y corrupción**: borrar el perfil o corromper el archivo de un repo no detiene el motor; ese repo empieza de cero, lo anterior queda "sin atribuir" y los demás repos no cambian (US-GRP-005, US-GRP-015).
 6. **Persistencia**: tras matar el daemon y reiniciarlo, los datos confirmados siguen disponibles (US-GRP-004).
 7. **Privacidad**: el almacén de un repo de prueba con contenido marcado no contiene ese contenido.
 8. **Repo intacto**: el arnés de INF-GRP-001 confirma que fuera del repo solo cambian las carpetas del perfil.
+9. **Cadena de suministro (SEC-07)**: `cargo-deny` y `cargo-audit` bloquean en High/Critical, incluidos los avisos del SQLite embebido.
 
 ## Referencias
 
@@ -115,3 +117,16 @@ Todas las pruebas usan un perfil temporal (variable de sobreescritura) y repos t
 - **NFR**: NFR-01, NFR-03, NFR-05, NFR-11.
 - **ADRs**: ADR-GRP-005 (único escritor y canal), ADR-GRP-007 (formato de configuración), ADR-GRP-008 (configuración local en el perfil), ADR-GRP-013 (modelo persistido).
 - **Enablers**: TS-GRP-001, INF-GRP-001.
+
+## Revisión de seguridad (2026-10-03)
+
+Enmienda tras la revisión del security-expert. No cambia ubicación, clave ni almacenamiento.
+
+| Hallazgo | Cómo se cubre |
+|---|---|
+| M5 · Permisos sin cubrir `-wal`/`-shm`/logs/cuarentena y sin verificar propietario | Apartado 1: 0700/0600 con umask 077 en todos los archivos del perfil, verificación de propietario y modo al arrancar, ACL sin ACE de otros usuarios en Windows (SEC-06); el canal, en ADR-GRP-005 (SEC-01) |
+| H4 (parte) · Override del perfil por entorno | Apartado 1: `GITRAPTOR_PROFILE_DIR` solo en builds de test (SEC-06) |
+| M9 · UNC en Windows | Apartado 1: rutas validadas antes de tocar el FS (SEC-02) |
+| L3 · SQLite bundled no se actualiza con el SO | Apartado 4: sus avisos se siguen con `cargo-deny`/`cargo-audit` (SEC-07) |
+
+Validación ampliada: SEC-06 y SEC-07 (puntos 2 y 9).

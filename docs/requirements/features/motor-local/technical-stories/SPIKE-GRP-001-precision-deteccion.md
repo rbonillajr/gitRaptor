@@ -56,7 +56,7 @@ tags: [motor-local, spike, deteccion, atribucion, claude-code, dogfooding, preci
 - **0** cambios humanos atribuidos a Claude Code en la suite guionizada.
 - Respuesta documentada sobre la TTY de la shell de Claude Code.
 - **Vía de fracaso**: precisión < 90%, o cualquier atribución humano → Claude Code que "ante la duda, sin atribuir" no evite. Entonces se replantea ADR-GRP-012 con **S5 (telemetría OpenTelemetry opt-in) como vía preferente y el refuerzo del registro explícito**, y se escala a Rene el posible replanteo de US-GRP-007 y US-GRP-008.
-- Si la shell de Claude Code sí tiene TTY interactiva: se revisa ADR-GRP-005 § 6 antes de implementar los comandos reservados.
+- Si la shell de Claude Code sí tiene TTY interactiva: se anota como dato; tras la revisión de seguridad ADR-GRP-005 § 6 ya no depende de ello (el daemon comprueba terminal de control y líder de sesión, I4).
 
 ### Time-box
 

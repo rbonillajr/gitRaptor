@@ -65,7 +65,7 @@ related:
 - **Decisiones de producto (Rene Bonilla, 2026-10-03)**:
   - **PQ-1**: el autoarranque (LaunchAgent, `systemd --user`, `Run` de HKCU) es una **excepción explícita y acotada a Q17**. Solo lo registra el instalador o `raptor daemon enable`, nunca el motor por su cuenta, y se revierte al desinstalar.
   - **PQ-5**: subcomando `raptor daemon`.
-  - **PQ-6**: añadir o retirar repos y corregir se rechazan si el llamante desciende de un agente detectado, exigen confirmación interactiva en terminal y `raptor-mcp` no los expone. ⚠️ Supone que la shell de Claude Code no tiene TTY interactiva; lo comprueba SPIKE-GRP-001.
+  - **PQ-6**: añadir o retirar repos y corregir se rechazan si el llamante desciende de un agente detectado, exigen confirmación interactiva en terminal y `raptor-mcp` no los expone. Tras la revisión de seguridad (2026-10-03) la autorización se hace solo en el daemon (identificador no reutilizable, terminal de control y líder de sesión) y también cubre parar el daemon; el supuesto de TTY de SPIKE-GRP-001 deja de ser crítico.
 - **Impacta**: US-GRP-001, 002, 004, 005, 014, 015 y el canal de todas. BR-CONS-005, BR-WF-002, BR-AUTH-001.
 
 ### ADR-GRP-006 — Perfil: ubicación por SO, clave de repo y almacenamiento
