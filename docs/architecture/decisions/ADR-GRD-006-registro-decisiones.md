@@ -44,7 +44,7 @@ ADR-GRP-006 (propuesto, en `main`) fija un SQLite por repo en el perfil con un �
 | `worktree`, `branch` | Ruta canónica y rama normalizada (ADR-GRD-002 § 4). Texto no confiable |
 | `actor` | Agente (tipo, nombre y origen) o "sin atribuir" (ADR-GRP-013 § 6) |
 | `operation` | **Operación normalizada** con sus transiciones y el remoto sin `userinfo`. **Nunca argv** (M-06) |
-| `kind` | `denial` \| `request` \| `exception` \| `exception-rejected` \| `protection-state` |
+| `kind` | `denial` \| `request` \| `exception` \| `exception-rejected` \| `exception-cancelled` \| `protection-state` |
 | `effect`, `appliedEffect` | Los de ADR-GRD-003 § 3 |
 | `reasons` | Lista `{rule, level}`, con parámetros acotados, sin mensajes de commit ni contenido |
 | `layer` | `hooks` \| `mcp` \| `guardrails` |
@@ -53,6 +53,7 @@ ADR-GRP-006 (propuesto, en `main`) fija un SQLite por repo en el perfil con un �
 | `origin` | `daemon` \| `spool-unverified` |
 
 - **Qué no se anota**: los permitidos sin regla. Un permitido por excepción sí (`exception`).
+- **`exception-cancelled`**: una excepción consciente (`raptor guard exec` o aprobación en el Cockpit) que el humano cancela dentro de la ventana de D5 / D10 (ADR-GRD-007 § 3). Lleva los campos de BR-CONS-004 y **no cuenta en el KPI** (§ 6).
 
 ### 2. Agregación y límite de inserciones (L-01)
 
@@ -94,13 +95,13 @@ ADR-GRP-006 (propuesto, en `main`) fija un SQLite por repo en el perfil con un �
 - **Entradas descartadas**: dejan un diagnóstico sin contenido.
 - **Ventana degradada** (H-03): el daemon, al volver, registra una entrada `protection-state` con la causa (`daemon-unreachable` o `channel-not-authentic`) y la ventana. Esa ventana la deduce de su propia caída y de las entradas del spool, no solo del spool.
 - **Garantías**: el spool tiene la misma retención que el registro y entra en el escaneo de secretos (M-06). No crea excepciones ni peticiones.
-- **Contradicción a anotar**: el spool es una escritura de un cliente en el perfil, frente a ADR-GRP-005 § 1 y ADR-GRP-006 § 4. El daemon sigue siendo el único escritor del **almacén**. La excepción está en la tabla de enmiendas pendientes.
+- **Contradicción a anotar**: el spool es una escritura de un cliente en el perfil, frente a ADR-GRP-005 § 1 y ADR-GRP-006 § 4. El daemon sigue siendo el único escritor del **almacén**. La excepción está **aplicada (2026-10-04)** en ADR-GRP-005 § 1 y ADR-GRP-006 § 4.
 
 ### 6. Consulta (canal)
 
 - **Por repo y periodo**: lista paginada, filtrable por `kind`, `operation`, `actor` y `layer`.
 - **KPI "acciones bloqueadas"** (J8; BR-CONS-004): **denegadas** (`denial`), más **rechazadas** y **caducadas** (`request` con `requestState` igual a `rejected` o `expired`), sumando `count`. Incluye las ocurrencias agregadas en las filas `rate-limited`.
-  - **Por defecto excluye `origin = spool-unverified`**: un proceso del mismo usuario puede escribir esas entradas, así que no son verificables. Se muestran aparte y se pueden incluir con un filtro explícito. ⚠️ **ASSUMPTION** para el PO: el KPI oficial del BRD es el verificado, y lo del spool es complementario.
+  - **Por defecto excluye `origin = spool-unverified`**: un proceso del mismo usuario puede escribir esas entradas, así que no son verificables. Se muestran aparte y se pueden incluir con un filtro explícito. El KPI oficial es el verificado y lo del spool es complementario (Q-GRD-27).
   - `exception-rejected` se informa **aparte**, como intentos de excepción rechazados: es una métrica de seguridad, no del KPI.
   - El uso de `exception` también se informa aparte, como señal de exceso de bloqueo (contexto § 3).
 - **Qué se devuelve**: códigos y texto no confiable marcado. Por el MCP, solo el repo del llamante y sin parámetros sensibles.
@@ -122,7 +123,7 @@ ADR-GRP-006 (propuesto, en `main`) fija un SQLite por repo en el perfil con un �
 - ✅ El KPI sale de una consulta local, alineado con BR-CONS-004.
 - ✅ La retención y la inmutabilidad conviven.
 - ✅ Ni un bucle de denegaciones ni un spool envenenado degradan el almacén.
-- ⚠️ **Contradicción** con "el daemon es el único escritor del perfil" por el spool, acotada como excepción.
+- ⚠️ **Contradicción** con "el daemon es el único escritor del perfil" por el spool, acotada como excepción y reconocida por motor-local (aplicada, 2026-10-04).
 - ⚠️ **Un agente del mismo usuario puede escribir entradas falsas en el spool o borrarlas.** **Mitigación**: validación, topes y `origin` visible; la decisión real nunca depende del spool. Riesgo residual aceptado (SEC-GRD-09).
 - ⚠️ La agregación pierde el momento exacto de las ocurrencias intermedias. Conserva el conteo, la primera y la última.
 
@@ -156,5 +157,11 @@ ADR-GRP-006 (propuesto, en `main`) fija un SQLite por repo en el perfil con un �
 | L-02 · Spool | § 5: sin seguir enlaces, sin bloquear, solo archivos regulares, tope de archivos, propietario y modo comprobados en cada ingesta; Validación 9 |
 | M-06 · URL y argv | § 1 y § 4: operación normalizada, nunca argv, remoto sin `userinfo`; § 5: el spool con la misma retención y en el escaneo de secretos; Validación 10 |
 | H-03 · Ventana degradada | § 5: el daemon registra la ventana, no solo el spool |
-| Judge ronda 2, hallazgo 5 · KPI | § 6: excluye `spool-unverified` por defecto (⚠️ para el PO); § 2: las ocurrencias por encima del límite cuentan en contadores por `(kind, operation, rule)`; Validación 6 y 7 |
+| Judge ronda 2, hallazgo 5 · KPI | § 6: excluye `spool-unverified` por defecto (Q-GRD-27); § 2: las ocurrencias por encima del límite cuentan en contadores por `(kind, operation, rule)`; Validación 6 y 7 |
 | J13 · Referencias rotas en el frontmatter | `related` solo con IDs existentes |
+
+## Cambios (2026-10-04, coherencia con motor-local)
+
+- § 5 y Consecuencias: la excepción del spool pasa a "aplicada (2026-10-04)" en ADR-GRP-005 § 1 y ADR-GRP-006 § 4; la tabla `guardrails_decisions` y la auditoría de comandos reservados están recogidas en ADR-GRP-006 § 4 y ADR-GRP-013 § 1.
+- § 1: nuevo `kind` `exception-cancelled` para una excepción consciente cancelada dentro de la ventana de D5 / D10; lleva los campos de BR-CONS-004 y no cuenta en el KPI.
+- Corrección tras el Judge: el KPI verificado, sin ⚠️, queda registrado como Q-GRD-27.

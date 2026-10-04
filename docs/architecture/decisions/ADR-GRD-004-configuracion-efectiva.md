@@ -39,8 +39,8 @@ Las decisiones de Guardrails sobre esa configuración son:
 - **D6, "Suelo en principal"**:
   - **De dónde salen las relajaciones**: toda relajación (desactivar el mínimo, un `allow` explícito, cualquier valor que relaje frente al valor por defecto) y la rama base se leen **solo** de la copia de la rama principal.
   - **Qué aporta el worktree**: el `HEAD` del worktree de la operación (Q-GRD-17) **solo puede endurecer**.
-  - **Cambio de rama base**: si la rama base resuelta cambia, la protección no baja hasta que el humano lo confirma con un comando reservado. Mientras tanto se protege la unión {anterior, nueva} y el cambio genera un evento de estado con aviso.
-  - **Para el PO**: D6 se anota como **refinamiento de Q-GRD-17 pendiente para el PO**. No se edita el requerimiento.
+  - **Cambio de rama base**: si la rama base resuelta cambia, la protección no baja hasta que el humano lo confirma con un comando reservado. Mientras tanto se protege la unión {anterior, nueva} y el cambio genera el diagnóstico `base-change-pending` con aviso.
+  - **En el requerimiento**: D6 refina Q-GRD-17; el PO lo registró como Q-GRD-20.
 
 La revisión de seguridad añade dos amenazas sobre la copia de la rama principal:
 
@@ -71,8 +71,9 @@ La revisión de seguridad añade dos amenazas sobre la copia de la rama principa
 - **Cada consumidor decide qué hace con `ignorado`**:
   - **Motor** (ADR-GRP-007): ignora la fuente.
   - **Guardrails** (BR-EDGE-004, Q-GRD-12): aplica el mínimo, que no se puede desactivar mientras el suelo esté `ignorado`, más lo `legible`, y avisa.
-- **Claves desconocidas en `permissions` o `policies`**. ⚠️ **ASSUMPTION** (pendiente de Rene): la fuente queda `parcial`. Aplican las reglas que se entienden y **se fuerza el mínimo**.
-- **Alineación con BR-CONS-007 (motor-local)**: un solo criterio de validez, con reacciones distintas por consumidor. Para cerrarlo hacen falta **varias enmiendas de ADR-GRP-007**, no solo la de PQ-9: las lista la tabla de [non-functional-guardrails.md](../non-functional-guardrails.md) (J10).
+- **Claves desconocidas en `permissions` o `policies`** (**D12**, Rene Bonilla, 2026-10-04): la fuente queda `parcial`. Se aplica lo legible, **se fuerza el mínimo seguro aunque el equipo lo hubiera desactivado** y se avisa.
+- **Clave del mínimo**: está en ADR-GRP-007 y solo rige desde el suelo. Su nombre y su tipo los fija el schema de TS-GRD-001 (decisión del Arquitecto, 2026-10-04).
+- **Alineación con BR-CONS-007 (motor-local)**: un solo criterio de validez, con reacciones distintas por consumidor. Lo cierran **varias enmiendas de ADR-GRP-007**, no solo la de PQ-9, **aplicadas el 2026-10-04** (tabla de [non-functional-guardrails.md](../non-functional-guardrails.md), J10).
 
 ### 2. Suelo y worktree (D6, Q-GRD-17 refinada)
 
@@ -93,7 +94,7 @@ La revisión de seguridad añade dos amenazas sobre la copia de la rama principa
   - Rebase en curso → el `HEAD` del momento de cada evaluación.
 - **Validación de la entrada** (SEC-11): solo un blob regular, nunca un enlace ni un submódulo, con los límites del § 1.
 - **Caché**: LRU acotada de documentos parseados, indexada por el identificador del blob (L-01).
-- **Qué cambia frente a Q-GRD-17 literal** (refinamiento para el PO):
+- **Qué cambia frente a Q-GRD-17 literal** (refinamiento registrado como Q-GRD-20):
   - Una relajación commiteada en la rama de un worktree **nunca** rige hasta que llega a la copia de la rama principal.
   - Un endurecimiento que ya está en la copia principal rige **en todos** los worktrees, aunque no lo hayan integrado.
   - El ejemplo de BR-VAL-001 ("en `feat-y` rige la versión commiteada en `feat-y` hasta que integre ese commit") solo se mantiene para endurecimientos del propio worktree.
@@ -104,19 +105,23 @@ La revisión de seguridad añade dos amenazas sobre la copia de la rama principa
 2. **Rama principal**: el destino de `refs/remotes/<remoto>/HEAD`, si existe. Si no, `main`.
 3. **Copia de la rama principal**, la primera que exista: `refs/remotes/<remoto>/<principal>` (la copia conocida, **sin `fetch`**), `refs/heads/<principal>` o ninguna.
 4. **Rama base resuelta**: `engine.baseBranch` del suelo legible; si no, `main`.
-5. **Rama base confirmada** (D6; Judge ronda 2, hallazgo 6): el daemon la guarda por repo en el perfil. **Es el único valor de rama base del repo**: contra ella calcula el motor el ahead/behind (US-GRP-016) y es la que protege Guardrails.
-   - **Primera confirmación, siempre del humano**: no hay ninguna vía automática. La rama base y el suelo iniciales los confirma el humano con un comando reservado (ADR-GRD-007, D8), mostrando la rama base, el suelo y su origen:
-     - al **añadir el repo a la observación**, que ya es un comando reservado del desarrollador (ADR-GRP-005 § 6);
-     - en un repo **ya observado**, al **instalar la protección** o con una **confirmación explícita**.
-   - **Mientras no hay confirmación inicial**:
-     - **Guardrails** protege la unión {`main`, la rama principal, la rama base resuelta} y aplica el suelo solo para endurecer, como en el modo degradado.
-     - **El motor** muestra la rama base como "pendiente de confirmar" y **calcula el ahead/behind contra la resuelta, marcado como no confirmado**.
+5. **Rama base confirmada** (D6; Judge ronda 2, hallazgo 6): el daemon la guarda en el **almacén por repo** del perfil (ADR-GRP-006 § 4). **Es el único valor de rama base del repo**: contra ella calcula el motor el ahead/behind (US-GRP-016) y es la que protege Guardrails.
+   - **Primera confirmación, siempre del humano**: no hay ninguna vía automática. La rama base y el suelo iniciales los confirma el humano con un comando reservado (ADR-GRD-007, D8), mostrando la rama base, el suelo y su origen, solo en dos momentos (**D9**, Rene Bonilla, 2026-10-04):
+     - al **instalar la protección** (US-GRD-001; Q-GRD-23): la instalación confirma la rama base `main` por defecto **sin leer el suelo**. **No relaja y no tiene ventana.** Si el repo ya tiene configuración del equipo, la instalación no la lee y la rama base queda `base-unconfirmed` (fase 1, abajo);
+     - con un **comando explícito de confirmación** (US-GRD-014), que lee el suelo (TS-GRD-001). **Solo esta confirmación pasa por D5** (anuncio, ventana cancelable y auditoría completa), y solo cuando el suelo trae relajaciones (p. ej. desactiva el mínimo).
+
+     **Añadir el repo a la observación (motor-local) no confirma nada. Adoptar una instalación huérfana (US-GRD-003) tampoco: adoptar no confirma la rama base ni el suelo; quedan `base-unconfirmed` hasta la confirmación explícita (US-GRD-014).**
+   - **Mientras no hay confirmación inicial** (`base-unconfirmed`), en dos fases:
+     - **Fase 1, antes de TS-GRD-001** (sin suelo leído): **Guardrails** protege la unión {`main`, la rama principal}.
+     - **Fase 2, con TS-GRD-001**: **Guardrails** protege la unión {`main`, la rama principal, la rama base resuelta} y aplica el suelo solo para endurecer, como en el modo degradado.
+     - **El motor** muestra la rama base como **"no confirmada"** (`base-unconfirmed`; "pendiente" se reserva para `base-change-pending`) y **calcula el ahead/behind contra la resuelta, marcado como no confirmado**.
      - **Por qué esta opción y no dejar de calcular**: el ahead/behind es información, no protección. Calcularlo contra una rama forjada no baja ninguna protección, y la marca evita que se lea como definitivo. No calcularlo dejaría US-GRP-016 sin datos en cada repo observado antes de esta regla, hasta una confirmación que puede tardar.
    - **Si la rama base resuelta difiere de la confirmada**:
      - El motor y Guardrails **siguen usando la confirmada**.
      - La resuelta aparece **solo como diagnóstico**, `base-change-pending`, con aviso (ADR-GRD-005).
      - **Refuerzo propio de Guardrails**: mientras el cambio está pendiente, el mínimo protege además la resuelta, es decir, la **unión** {confirmada, resuelta}. El motor no usa la unión.
      - Solo el humano confirma el cambio, con un comando reservado (ADR-GRD-007, D8). Entonces la resuelta pasa a confirmada para los dos.
+   - **Si el suelo nuevo trae una `engine.baseBranch` inválida** (decisión del Arquitecto, 2026-10-04): se mantiene la confirmada y se emite el diagnóstico `base-change-pending` marcado como **inválido**. Guardrails protege la unión {confirmada, `main`, rama principal}. El motor sigue calculando contra la confirmada. La regla Q42 de motor-local (no recurrir a `main` y no calcular ahead/behind) solo aplica cuando no hay ninguna rama base confirmada.
 6. **Fail-safe**: si el suelo está `ignorado`, Guardrails protege {`main`, la rama principal, la rama base confirmada}. El motor sigue usando la confirmada.
 
 Con esto:
@@ -127,24 +132,24 @@ Con esto:
 ### 4. Suelo no forjable en silencio (J3 / H-05a; SEC-GRD-17)
 
 - **La amenaza**: un agente puede forjar la copia de la rama principal sin red, con `git update-ref refs/remotes/origin/main <commit>` o moviendo `refs/remotes/origin/HEAD`. También puede llevar a la rama principal una configuración más laxa mediante un push permitido, que luego se trae con un `fetch`. En cualquiera de los dos casos el suelo, la única fuente de relajaciones, cambia.
-- **Suelo confirmado**: el daemon guarda por repo el identificador del blob del suelo **confirmado**. La confirmación inicial la hace siempre el humano, como la de la rama base (§ 3).
+- **Suelo confirmado**: el daemon guarda en el almacén por repo (ADR-GRP-006 § 4) el identificador del blob del suelo **confirmado**. La confirmación inicial la hace siempre el humano, como la de la rama base (§ 3, D9).
 - **Cuando el suelo resuelto cambia**, el daemon lo compara con el confirmado:
   - **Solo endurece o es igual**: rige de inmediato, sin confirmación.
   - **Relaja algo** (desactiva el mínimo, cambia un permiso a menos restrictivo, quita una rama o una ruta, sube un límite):
     - Rige la **combinación más restrictiva** de los dos suelos, como si el nuevo solo pudiera endurecer.
-    - El estado genera el evento `floor-relax-pending` con aviso.
+    - El estado muestra el diagnóstico `floor-relax-pending` con aviso.
     - El humano confirma con un comando reservado (mecanismo MVP de D5, por D8), y entonces el nuevo suelo pasa a confirmado.
 
-  **Decisión D7 de Rene Bonilla (2026-10-04)**: confirma esta ampliación de D6. Toda relajación que llegue por un cambio en la copia de la rama principal espera la confirmación del humano, no solo la rama base. Hasta entonces rige la combinación más restrictiva y se avisa. **Afecta al requerimiento** (pendiente para el PO): BR-EDGE-001 ("el equipo lo puede desactivar") y BR-CONS-003, porque cada relajación del equipo exige una confirmación humana en cada máquina.
+  **Decisión D7 de Rene Bonilla (2026-10-04)**: confirma esta ampliación de D6. Toda relajación que llegue por un cambio en la copia de la rama principal espera la confirmación del humano, no solo la rama base. Hasta entonces rige la combinación más restrictiva y se avisa. En el requerimiento es Q-GRD-21, que refina BR-EDGE-001 y BR-CONS-003: cada relajación del equipo exige una confirmación humana en cada máquina.
 - **Por qué funciona**: es el mismo mecanismo de "no baja hasta confirmar" de D6. No hace falta distinguir un `fetch` de un `update-ref`, cosa que Git no permite saber desde un hook.
 
 ### 5. Dependencias y cuándo entra cada pieza
 
-- **Enmiendas en motor-local**: la de PQ-9 (decisión 1), las secciones `permissions`/`policies` con la clave del mínimo, el estado por fuente del cargador y la lectura sin reemplazo. No se editan desde aquí; están todas en la tabla de enmiendas.
+- **Enmiendas en motor-local**: la de PQ-9 (decisión 1), las secciones `permissions`/`policies` con la clave del mínimo, el estado por fuente del cargador y la lectura sin reemplazo. **Aplicadas (2026-10-04)** en ADR-GRP-007; ver la tabla de enmiendas.
 - **US-GRP-016** (motor) y **US-GRD-014** leen la rama base con la misma función. La prueba de integración que pide el índice de historias pasa por construcción.
-- **US-GRD-001..006 no leen configuración**: aplican el mínimo con la rama base `main` (US-GRP-012).
-- **TS-GRD-001** provee las dos fuentes commiteadas, el suelo y la detección de cambios del suelo y de la rama base. Está bloqueado hasta que ADR-GRP-007 pase a `accepted` con las enmiendas.
-- **Los comandos de confirmación** (rama base y suelo) los aportan US-GRD-014 y US-GRD-007. Son acciones que relajan y usan el mecanismo MVP de D5. **No esperan al factor fuera de banda** (D8; ADR-GRD-007 § 1).
+- **US-GRD-001..006 no leen configuración**: aplican el mínimo con la rama base `main` (US-GRP-012). Por D9 y Q-GRD-23, US-GRD-001 confirma `main` al instalar sin leer el suelo, sin relajar y sin ventana; en un repo con configuración del equipo deja `base-unconfirmed` en la fase 1 del § 3.5 ({`main`, rama principal}) hasta US-GRD-014 y TS-GRD-001.
+- **TS-GRD-001** provee las dos fuentes commiteadas, el suelo y la detección de cambios del suelo y de la rama base. Está bloqueado hasta que ADR-GRP-007, con las enmiendas ya aplicadas (2026-10-04), pase a `accepted`.
+- **Los comandos de confirmación** de un cambio de rama base o de una relajación del suelo los aportan US-GRD-014 y US-GRD-007, con el mecanismo MVP de D5. La confirmación inicial explícita (US-GRD-014) usa D5 solo si el suelo trae relajaciones; la de US-GRD-001 al instalar no lo usa (§ 3.5). **Ninguno espera al factor fuera de banda** (D8; ADR-GRD-007 § 1).
 
 ## Alternativas consideradas
 
@@ -163,10 +168,10 @@ Con esto:
 - ✅ Las ediciones sin commitear, un checkout antiguo, una rama huérfana o un commit laxo en la rama de un agente **no relajan nada**. D6 cierra el riesgo de Q-GRD-17 y el hueco entre US-GRD-007 y US-GRD-012 que señaló la primera ronda.
 - ✅ La rama base es única, sin red y estable. Un cambio de rama base nunca deja ninguna de las dos sin proteger.
 - ✅ Una sola lectura y un solo criterio de validez para el motor y Guardrails.
-- ⚠️ **Refinamiento de Q-GRD-17 (D6) pendiente para el PO.** Cambia el ejemplo de BR-VAL-001 y la decisión anotada en el contexto. No se edita el requerimiento.
-- ⚠️ **Confirmación de relajaciones del suelo** (§ 4, D7): cada relajación que el equipo integre en la rama principal exige una confirmación humana por máquina. Es el coste de un suelo no forjable. Afecta a BR-EDGE-001 y BR-CONS-003 (pendiente para el PO).
-- ⚠️ **Rama base confirmada también para el motor** (§ 3): un cambio de `engine.baseBranch` en la rama principal no cambia el ahead/behind del motor hasta que el humano lo confirma. Afecta a US-GRP-016 (motor-local); está en la tabla de enmiendas.
-- ⚠️ **Contradicción con ADR-GRP-007 PQ-9**, resuelta por la decisión 1. **Dependencia**: las enmiendas de motor-local.
+- ✅ **Refinamiento de Q-GRD-17 (D6)** registrado en el requerimiento como Q-GRD-20, con el ejemplo de BR-VAL-001 actualizado.
+- ⚠️ **Confirmación de relajaciones del suelo** (§ 4, D7): cada relajación que el equipo integre en la rama principal exige una confirmación humana por máquina. Es el coste de un suelo no forjable. Registrado como Q-GRD-21 en BR-EDGE-001 y BR-CONS-003.
+- ⚠️ **Rama base confirmada también para el motor** (§ 3): un cambio de `engine.baseBranch` en la rama principal no cambia el ahead/behind del motor hasta que el humano lo confirma. Registrado en US-GRP-016 y BR-CONS-006 de motor-local (Q-GRD-21).
+- ✅ **Contradicción con ADR-GRP-007 PQ-9**, resuelta por la decisión 1. Las enmiendas de motor-local están **aplicadas (2026-10-04)**.
 
 ## Validación
 
@@ -181,9 +186,11 @@ Con esto:
 7. **Forja** (J3): `git update-ref refs/remotes/origin/main <commit con suelo laxo>` → la relajación no rige, hay aviso `floor-relax-pending` y rige la combinación más restrictiva. Un `update-ref` de `origin/HEAD` hacia otra rama → `base-change-pending` y la unión protegida.
 8. **Reemplazo** (H-05): `git replace <blob del suelo> <blob laxo>` no cambia el documento leído.
 9. **Límites** (L-03): un JSON con profundidad 1.000, un millón de claves o una cadena de 10 MB da `ignorado` y el mínimo activo, sin agotar memoria.
-10. **Sin confirmación inicial** (Judge ronda 4): en un repo observado sin confirmación, Guardrails deniega el borrado de `main`, el de la rama principal y el de la resuelta. El motor muestra el ahead/behind contra la resuelta marcado como no confirmado. Ninguna lectura confirma nada por sí sola, y tras la confirmación explícita los dos usan la confirmada.
+10. **Sin confirmación inicial** (Judge ronda 4): en un repo observado sin confirmación, Guardrails deniega en la fase 1 (antes de TS-GRD-001) el borrado de `main` y el de la rama principal, y en la fase 2 (con TS-GRD-001) además el de la resuelta. El motor muestra el ahead/behind contra la resuelta marcado como no confirmado. Ninguna lectura confirma nada por sí sola, tampoco añadir el repo a la observación (D9). Instalar (US-GRD-001) en un repo con configuración no lee el suelo y deja `base-unconfirmed`; la confirmación explícita (US-GRD-014) de un suelo que desactiva el mínimo se anuncia y espera la ventana (D5). Tras confirmar, los dos usan la confirmada.
 11. **Mismo cargador y mismo valor**: el motor y Guardrails obtienen la misma rama base **confirmada**, también con un cambio pendiente (prueba de integración de US-GRD-014 y US-GRP-016). La unión solo aparece en las decisiones de Guardrails.
 12. **Sin escrituras ni red** (INF-GRP-001).
+13. **`baseBranch` inválida en un suelo nuevo**: con la confirmada `main` y un suelo que trae `baseBranch` `--x`, el motor sigue con `main`, aparece `base-change-pending` marcado como inválido y Guardrails deniega el borrado de `main` y el de la rama principal.
+14. **Clave desconocida** (D12): un suelo que desactiva el mínimo y trae una clave desconocida en `policies` queda `parcial`; el mínimo vuelve a estar activo y hay aviso.
 
 ## Referencias
 
@@ -202,9 +209,20 @@ Con esto:
 | H-05 / D6 · El `HEAD` del worktree relaja | § 2: el suelo en la rama principal es la única fuente de relajaciones y de la rama base, y el worktree solo endurece; Validación 1 a 3 |
 | J3 / H-05a · `refs/remotes` forjable | § 4: suelo confirmado y combinación más restrictiva mientras no se confirma una relajación (D7, Rene Bonilla, 2026-10-04); § 3: rama base confirmada y unión; Validación 6 y 7 |
 | Judge ronda 2, hallazgo 6 · Rama base pendiente | § 3: la confirmada es el valor único para el motor y Guardrails; la pendiente es un diagnóstico; la unión es solo un refuerzo de Guardrails; Validación 6 y 11 |
-| Judge ronda 4 · Confirmación inicial | § 3.5: sin vía automática; la confirmación inicial siempre es del humano (al añadir el repo, al instalar o explícita); mientras falta, Guardrails protege {`main`, principal, resuelta} y el motor calcula contra la resuelta marcada como no confirmada (opción justificada); Validación 10 |
+| Judge ronda 4 · Confirmación inicial | § 3.5: sin vía automática; la confirmación inicial siempre es del humano: al instalar, `main` sin leer el suelo y sin ventana, o explícita, con D5 si el suelo relaja (D9); mientras falta, Guardrails protege {`main`, principal} y, con TS-GRD-001, también la resuelta y el motor calcula contra la resuelta marcada como no confirmada (opción justificada); Validación 10 |
 | H-05 · Objetos de reemplazo y grafts | § 1: lecturas sin reemplazo; Validación 8 |
 | L-03 · Límites del JSON | § 1: tamaño, profundidad, claves y cadenas; Validación 9 |
 | L-01 · Caché | § 2: LRU acotada |
 | J10 · "No hace falta cambiar motor-local salvo PQ-9" | § 1 y § 5: corregido, con remisión a la tabla de enmiendas |
 | J13 · Referencias rotas en el frontmatter | `related` solo con IDs existentes |
+
+## Cambios (2026-10-04, coherencia con motor-local)
+
+- § 1: `parcial` decidido por **D12** (sin ⚠️); la clave del mínimo, con nombre y tipo en el schema de TS-GRD-001.
+- § 3.5: **D9**: la confirmación inicial solo al instalar (US-GRD-001: `main`, sin leer el suelo, sin relajar y sin ventana) o con un comando explícito (US-GRD-014: D5 si el suelo relaja); se quita "al añadir el repo".
+- § 3: `baseBranch` inválida en un suelo nuevo (decisión del Arquitecto); la rama base y el suelo confirmados viven en el almacén por repo (ADR-GRP-006 § 4).
+- § 5 y Consecuencias: las enmiendas de motor-local pasan a "aplicadas (2026-10-04)". Validación 10, 13 y 14.
+- **Secuencia de D9** (Q-GRD-21 y Q-GRD-23, aplicadas por el PO): US-GRD-001 cubre solo repos sin configuración del equipo y confirma `main` sin leer el suelo; con configuración del equipo, la rama base queda `base-unconfirmed` hasta US-GRD-014 y TS-GRD-001 (§ 3.5 y § 5).
+- Cierre (ronda 3): la secuencia de D9 queda resuelta por Q-GRD-21 y Q-GRD-23 (§ 3.5 y § 5); se retira el punto pendiente.
+- Corrección tras el Judge: D5 solo en la confirmación explícita de US-GRD-014; unión de `base-unconfirmed` en dos fases (§ 3.5, § 5, Validación 10); las notas "pendiente para el PO" pasan a Q-GRD-20 y Q-GRD-21; `floor-relax-pending` se llama diagnóstico.
+- Judge de la rama del PO: adoptar una huérfana no confirma la rama base ni el suelo (`base-unconfirmed` hasta la confirmación explícita); sin confirmación inicial el motor muestra "no confirmada", y "pendiente" queda solo para `base-change-pending`.
