@@ -8,7 +8,8 @@
 /// Every row of `snapshots`, `operations`, `journal` and `notices` takes a
 /// global `seq` and is chained in `chain` by hash (SEC-TMC-09). All five
 /// tables are append-only: the triggers reject `UPDATE` and `DELETE`.
-pub(crate) const OPLOG_MIGRATIONS: &[&str] = &[r"
+pub(crate) const OPLOG_MIGRATIONS: &[&str] = &[
+    r"
 CREATE TABLE chain (
     seq       INTEGER PRIMARY KEY,
     kind      TEXT NOT NULL CHECK (kind IN ('snapshot', 'operation', 'journal', 'notice')),
@@ -94,4 +95,10 @@ CREATE TRIGGER notices_no_update BEFORE UPDATE ON notices
     BEGIN SELECT RAISE(ABORT, 'the oplog is append-only'); END;
 CREATE TRIGGER notices_no_delete BEFORE DELETE ON notices
     BEGIN SELECT RAISE(ABORT, 'the oplog is append-only'); END;
-"];
+",
+    r"
+-- Birth time of an annotated lock, in ns since the epoch: with the inode, the
+-- identity of the file (ADR-TMC-003 § 4). Hashed from chain format 2.
+ALTER TABLE journal ADD COLUMN birth_ns INTEGER;
+",
+];

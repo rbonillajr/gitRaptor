@@ -464,11 +464,13 @@ fn a_clean_stop_leaves_nothing_to_recover() {
 
 // ----- Locks --------------------------------------------------------------
 
+#[cfg(unix)]
 struct Repo {
     _tmp: tempfile::TempDir,
     git_dir: PathBuf,
 }
 
+#[cfg(unix)]
 fn repo() -> Repo {
     let tmp = tempfile::tempdir().unwrap();
     let git_dir = tmp.path().join("work").join(".git");
@@ -477,10 +479,12 @@ fn repo() -> Repo {
     Repo { _tmp: tmp, git_dir }
 }
 
-fn take_lock(log: &mut Oplog, op: &str, path: &Path) {
+#[cfg(unix)]
+fn take_lock(log: &mut Oplog, op: &str, path: &Path) -> FileIdentity {
     fs::write(path, b"").unwrap();
-    let inode = file_inode(path).unwrap().unwrap_or(0);
-    log.record_lock_taken(op, path, inode, 5).unwrap();
+    let identity = file_identity(path).unwrap().unwrap();
+    log.record_lock_taken(op, path, identity, 5).unwrap();
+    identity
 }
 
 #[cfg(unix)]
@@ -520,19 +524,74 @@ fn a_lock_replaced_since_it_was_annotated_stays() {
     let (mut log, _) = open(&dirs);
     let op = op_in_state(&mut log, &protected(&[WT], 1), OperationState::Applying, 1);
     let lock = repo.git_dir.join("index.lock");
-    take_lock(&mut log, &op, &lock);
-    // Someone else's Git took the lock after ours went away: new inode.
-    let keep = repo.git_dir.join("keep");
-    fs::write(&keep, b"").unwrap();
-    fs::remove_file(&lock).unwrap();
-    fs::write(&lock, b"theirs").unwrap();
-    fs::remove_file(&keep).unwrap();
+    let ours = take_lock(&mut log, &op, &lock);
+    // Someone else's Git took the lock after ours went away. On ext4 the new
+    // file usually gets our freed inode; its birth time still differs, once
+    // the file system's clock has ticked.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        fs::remove_file(&lock).unwrap();
+        fs::write(&lock, b"theirs").unwrap();
+        if file_identity(&lock).unwrap().unwrap() != ours || Instant::now() >= deadline {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
     let probe = Probe(HashSet::new());
     let report = log
         .recover(&mut AbsentStore, &options(&repo.git_dir, &probe), 10)
         .unwrap();
     assert!(lock.exists());
     assert_eq!(report.kept_locks[0].reason, KeptLockReason::InodeChanged);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_reused_inode_with_another_birth_time_stays() {
+    let (_tmp, dirs) = profile();
+    let repo = repo();
+    let (mut log, _) = open(&dirs);
+    let op = op_in_state(&mut log, &protected(&[WT], 1), OperationState::Applying, 1);
+    let lock = repo.git_dir.join("index.lock");
+    fs::write(&lock, b"theirs").unwrap();
+    let theirs = file_identity(&lock).unwrap().unwrap();
+    // The journal says ours had this inode, but was born at another time.
+    let ours = FileIdentity {
+        inode: theirs.inode,
+        birth_ns: theirs.birth_ns.map(|b| b - 1).or(Some(0)),
+    };
+    log.record_lock_taken(&op, &lock, ours, 5).unwrap();
+    let probe = Probe(HashSet::new());
+    let report = log
+        .recover(&mut AbsentStore, &options(&repo.git_dir, &probe), 10)
+        .unwrap();
+    assert!(lock.exists());
+    assert_eq!(report.kept_locks[0].reason, KeptLockReason::InodeChanged);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_lock_annotated_without_a_birth_time_stays() {
+    let (_tmp, dirs) = profile();
+    let repo = repo();
+    let (mut log, _) = open(&dirs);
+    let op = op_in_state(&mut log, &protected(&[WT], 1), OperationState::Applying, 1);
+    let lock = repo.git_dir.join("index.lock");
+    fs::write(&lock, b"").unwrap();
+    let identity = FileIdentity {
+        birth_ns: None,
+        ..file_identity(&lock).unwrap().unwrap()
+    };
+    log.record_lock_taken(&op, &lock, identity, 5).unwrap();
+    let probe = Probe(HashSet::new());
+    let report = log
+        .recover(&mut AbsentStore, &options(&repo.git_dir, &probe), 10)
+        .unwrap();
+    assert!(
+        lock.exists(),
+        "without a birth time the identity is unknown"
+    );
+    assert_eq!(report.kept_locks[0].reason, KeptLockReason::Unsupported);
 }
 
 #[cfg(unix)]
@@ -587,12 +646,8 @@ fn forged_lock_entries_never_delete_anything_else() {
     fs::write(&target, b"data").unwrap();
     let link = repo.git_dir.join("packed-refs.lock");
     std::os::unix::fs::symlink(&target, &link).unwrap();
-    let inode = fs::symlink_metadata(&link).map(|m| {
-        use std::os::unix::fs::MetadataExt;
-        m.ino()
-    });
-    log.record_lock_taken(&op, &link, inode.unwrap(), 5)
-        .unwrap();
+    let identity = file_identity(&link).unwrap().unwrap();
+    log.record_lock_taken(&op, &link, identity, 5).unwrap();
 
     let probe = Probe(HashSet::new());
     let report = log

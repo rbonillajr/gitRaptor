@@ -270,7 +270,7 @@ fn insecure_state_folder_stops_the_start() {
 fn start_recovers_the_time_machine_oplog() {
     use gitraptor_core::timemachine::oplog::{
         Channel, CompleteInfo, NewOperation, NewSnapshot, OperationKind, OperationState,
-        OperationTransition, Oplog, Requester, Scope, SnapshotLevel, Target, file_inode,
+        OperationTransition, Oplog, Requester, Scope, SnapshotLevel, Target, file_identity,
     };
 
     let tp = TempProfile::new();
@@ -325,7 +325,7 @@ fn start_recovers_the_time_machine_oplog() {
     let lock = entry.canonical_path.join("index.lock");
     std::fs::write(&lock, b"").unwrap();
     oplog
-        .record_lock_taken(&op, &lock, file_inode(&lock).unwrap().unwrap(), 6)
+        .record_lock_taken(&op, &lock, file_identity(&lock).unwrap().unwrap(), 6)
         .unwrap();
     let foreign = entry.canonical_path.join("HEAD.lock");
     std::fs::write(&foreign, b"").unwrap();
