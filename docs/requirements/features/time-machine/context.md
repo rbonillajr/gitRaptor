@@ -40,6 +40,8 @@ tags:
 > **Revisión 2026-10-03 (TQ-1 a TQ-17 del Arquitecto)**: Rene Bonilla acepta las recomendaciones de [overview de arquitectura](../../../architecture/time-machine/overview.md) § 6. Tres cambian decisiones de producto: TQ-16 actualiza D-TMC-16 (lista cerrada de credenciales excluida por defecto), TQ-14 actualiza D-TMC-23 (sin confirmación interactiva en Windows en el MVP) y TQ-17 deja `raptor tm forget` fuera del MVP (D-TMC-24). Las TQ-5, TQ-7, TQ-9, TQ-10, TQ-11 y TQ-15 y la liberación del lock propio al arrancar precisan reglas de forma observable (D-TMC-25).
 >
 > **Revisión 2026-10-04 (formato de configuración)**: Referencia al formato de configuración: ADR-GRP-007, aceptado por Rene Bonilla; cierra P8 de motor-local. El requerimiento no cambia.
+>
+> **Revisión 2026-10-04 (dueño del formato de configuración)**: decisión de Rene Bonilla de corregir una atribución desactualizada. En la relación con F-001-04 Guardrails, el formato de la configuración ya no se atribuye a Guardrails: lo define motor-local (ADR-GRP-007), y Guardrails es dueño de las políticas (`policies`, ADR-GRD-004) y del comando de edición (Q27). El requerimiento no cambia.
 
 ---
 
@@ -107,7 +109,7 @@ Impacto de no resolverlo: una sola pérdida de trabajo rompe la confianza en el 
 |---------|----------|-----------|
 | F-001-01 Motor local | Aporta los eventos de Git con momento y actor ("agente X" con origen, o "sin atribuir"; nunca "humano", Q34), la atribución vigente tras una corrección (Q37), la observación sin huecos (Q1) y los huecos marcados (BR-EDGE-005). P17 de motor-local (qué pasa al retirar una corrección) sigue abierta y afecta al undo por agente. | Time Machine depende del motor |
 | F-001-02 Cockpit | Sus acciones destructivas (descartar worktree y rama, merge, rebase; BR-07) deben quedar cubiertas por un snapshot previo. Presenta el timeline dentro de la TUI. | Cockpit depende de la Time Machine |
-| F-001-04 Guardrails | Sus hooks de Git, cuando existan, permiten un snapshot previo a operaciones de Git crudo; la Time Machine no depende de ellos (D-TMC-10). Sus políticas pueden restringir quién deshace qué (BR-TMC-AUTH-001). Define el formato de la configuración (ADR-GRP-007, aceptado el 2026-10-04; cierra P8 de motor-local). | Bidireccional |
+| F-001-04 Guardrails | Sus hooks de Git, cuando existan, permiten un snapshot previo a operaciones de Git crudo; la Time Machine no depende de ellos (D-TMC-10). Sus políticas pueden restringir quién deshace qué (BR-TMC-AUTH-001). Es dueño de las políticas de la configuración (`policies`, ADR-GRD-004) y del comando para editarla (Q27); el formato de la configuración lo define motor-local (ADR-GRP-007, aceptado el 2026-10-04; cierra P8 de motor-local). | Bidireccional |
 | F-001-05 Servidor MCP | Expone `snapshot` y `undo` a los agentes (BR-14) y sus operaciones seguras quedan cubiertas por un snapshot previo. | MCP depende de la Time Machine |
 
 ---
