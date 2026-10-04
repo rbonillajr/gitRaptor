@@ -35,8 +35,10 @@ use crate::profile::{
     StoreOpen, WriteOp, fsperm,
 };
 use crate::timemachine::oplog::{
-    AbsentStore, ChainBreak, Oplog, OplogStatus, RecoveryOptions, RecoveryReport, SystemProbe,
+    AbsentStore, ChainBreak, Oplog, OplogStatus, RecoveryOptions, RecoveryReport, SnapshotRefs,
+    SystemProbe,
 };
+use crate::timemachine::store::SnapshotStore;
 
 pub use env::DaemonEnv;
 pub use lock::{InstanceLock, LOCK_FILE, running_pid, wait_until_released};
@@ -552,8 +554,15 @@ fn recover_repo(
     deadline: Instant,
 ) -> Result<(Oplog, TmStartup), ProfileError> {
     let (mut oplog, opened) = Oplog::open(dirs, &entry.repo_id, now_ms())?;
+    // The real store when there is one it can trust; otherwise nothing about refs is decided.
+    let mut store = SnapshotStore::open_existing(dirs, &entry.repo_id).ok().flatten();
+    let mut absent = AbsentStore;
+    let refs: &mut dyn SnapshotRefs = match store.as_mut() {
+        Some(store) => store,
+        None => &mut absent,
+    };
     let recovery = oplog.recover(
-        &mut AbsentStore,
+        refs,
         &RecoveryOptions {
             git_dir: &entry.canonical_path,
             deadline,
