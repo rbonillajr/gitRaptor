@@ -12,6 +12,8 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Manual only: the eslogger deep audit (see `deep-exec-audit-macos`).
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -27,9 +29,6 @@ jobs:
   lint-and-test:
     name: lint and test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    # Windows: TS-GRP-002 rejects every Git candidate on Windows (fail-closed until the ACE
-    # check exists), so the crates/git tests cannot pass there yet. Non-blocking until then.
-    continue-on-error: ${{ matrix.os == 'windows-latest' }}
     strategy:
       fail-fast: false
       matrix:
@@ -41,12 +40,20 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
+      # Windows: TS-GRP-002 rejects every Git candidate on Windows (fail-closed until the ACE
+      # check exists) and the canary uses /bin/sh scripts, so the tests cannot pass there yet.
+      # Pendiente: etapa de validación multiplataforma. The step never fails the job on Windows;
+      # fmt and clippy stay blocking everywhere.
+      - id: test
+        run: cargo test --workspace
+        continue-on-error: ${{ matrix.os == 'windows-latest' }}
+      - name: Pending on Windows
+        if: steps.test.outcome == 'failure'
+        run: echo "::warning::cargo test failed on Windows. Pendiente: etapa de validación multiplataforma"
 
   repo-intact:
     name: repo-intact (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.os == 'windows-latest' }}
     strategy:
       fail-fast: false
       matrix:
@@ -71,14 +78,21 @@ jobs:
         run: rustup show
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       # Always the whole workspace, never `nx affected`: the gate must run every suite.
+      # Windows: non-blocking (Pendiente: etapa de validación multiplataforma).
       - name: Core and registered suites
+        id: suites
         run: cargo test --workspace -- repo_intact
+        continue-on-error: ${{ matrix.os == 'windows-latest' }}
+      - name: Pending on Windows
+        if: steps.suites.outcome == 'failure'
+        run: echo "::warning::repo_intact suites failed on Windows. Pendiente: etapa de validación multiplataforma"
 
   deep-exec-audit-macos:
     name: deep exec audit (macOS, eslogger)
     runs-on: macos-latest
-    # Unverified: eslogger needs root (passwordless sudo on hosted runners) and a TCC grant
-    # that the runner may not have. Non-blocking until a first green run proves it.
+    # eslogger needs root and a TCC Full Disk Access grant that hosted runners do not have, so
+    # it runs only on a manual trigger (on a runner that has the grant), never on PRs or pushes.
+    if: github.event_name == 'workflow_dispatch'
     continue-on-error: true
     env:
       GITRAPTOR_EXEC_AUDIT: eslogger
