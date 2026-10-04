@@ -13,7 +13,7 @@
 
 *   **F-001-01**: Motor local (BR-01, BR-02, BR-03)
     -   **Contexto**: [context.md](features/motor-local/context.md)
-    -   **Historias**: [user-stories.md](features/motor-local/user-stories.md) (15 historias expandidas en `features/motor-local/user-stories/`, 2026-10-03)
+    -   **Historias**: [user-stories.md](features/motor-local/user-stories.md) (16 historias expandidas en `features/motor-local/user-stories/`, 2026-10-03; ninguna bloqueada desde el 2026-10-04: US-GRP-013 y US-GRP-016 se desbloquearon al aceptarse ADR-GRP-007, que cierra P8)
     -   **Status**: Priorizada
 
 *   **F-001-02**: Cockpit (BR-04, BR-05, BR-06, BR-07)
@@ -23,12 +23,12 @@
 
 *   **F-001-03**: Time Machine (BR-08, BR-09, BR-10)
     -   **Contexto**: [context.md](features/time-machine/context.md)
-    -   **Historias**: [user-stories.md](features/time-machine/user-stories.md) (21 historias expandidas en `features/time-machine/user-stories/`, 5 bloqueadas, 2026-10-03)
+    -   **Historias**: [user-stories.md](features/time-machine/user-stories.md) (21 historias expandidas en `features/time-machine/user-stories/`, 5 bloqueadas, 2026-10-03; desde el 2026-10-04 US-TMC-017 ya no espera a P8, solo al comando de edición de Guardrails)
     -   **Status**: Propuesta
 
 *   **F-001-04**: Guardrails (BR-11, BR-12, BR-13)
     -   **Contexto**: [context.md](features/guardrails/context.md) (reglas en [business-rules.md](features/guardrails/business-rules.md), 2026-10-03)
-    -   **Historias**: [user-stories.md](features/guardrails/user-stories.md) (17 historias en `features/guardrails/user-stories/`, 2026-10-04; 6 listas y 11 bloqueadas por el ADR P8 de motor-local, Cockpit, MCP o Time Machine)
+    -   **Historias**: [user-stories.md](features/guardrails/user-stories.md) (17 historias en `features/guardrails/user-stories/`, 2026-10-04; 13 listas y 4 bloqueadas: US-GRD-013 y US-GRD-015 por el factor fuera de banda de Q-GRD-19 (015 también por el Cockpit), US-GRD-016 por el MCP y US-GRD-017 por la Time Machine. ADR-GRP-005 a 013 y ADR-GRD-001 a 007 aceptados el 2026-10-04)
     -   **Status**: Priorizada
 
 *   **F-001-05**: Servidor MCP (BR-14, BR-15, BR-16)
