@@ -16,3 +16,8 @@ tempfile.workspace = true
 
 [lints]
 workspace = true
+
+# Test runner, probe, shim and traps of the dynamic exec audit (INF-GRP-001).
+[[test]]
+name = "repo_intact_exec"
+harness = false
