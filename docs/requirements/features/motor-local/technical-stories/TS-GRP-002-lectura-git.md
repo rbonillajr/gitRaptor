@@ -2,17 +2,17 @@
 id: TS-GRP-002
 title: "Capa de lectura de Git sin escrituras"
 type: ts
-status: Dev Spec Pending
+status: In Review
 feature: motor-local
 domain: GRP
 priority: high
 complexity: high
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 related:
   adrs: [ADR-GRP-009, ADR-GRP-007]
   stories: [US-GRP-001, US-GRP-002, US-GRP-003, US-GRP-012, US-GRP-014]
-  specs: []
+  specs: [DS-TS-GRP-002]
 ado:
   id: null
   url: null
@@ -29,7 +29,7 @@ tags: [motor-local, git, gitoxide, solo-lectura, allowlist, resolucion-git, segu
 **Quiero** una capa única de lectura de Git con frontera estricta de solo lectura y resolución del Git del sistema
 **Para** que BR-CONS-001 se verifique con un criterio binario de cero diferencias y el motor nunca compita por un lock con los agentes
 
-> Dev Spec: `dev-specs/TS-GRP-002-lectura-git.md` | Pendiente
+> Dev Spec: [`dev-specs/TS-GRP-002-dev-spec.md`](../dev-specs/TS-GRP-002-dev-spec.md) | Implementada (en revisión)
 >
 > **Depende de**: — (arranca el día uno). **ADRs**: ADR-GRP-009 (§ 1 a § 4; la tabla del § 2 es la frontera que la Dev Spec debe seguir), ADR-GRP-007 (`gitPath`). **Seguridad**: SEC-02, SEC-05, SEC-09, SEC-10 y SEC-11; la Dev Spec queda bloqueada hasta que se cumplan las condiciones del gate de seguridad de `docs/architecture/non-functional.md`.
 >
