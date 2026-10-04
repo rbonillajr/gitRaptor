@@ -8,7 +8,7 @@ domain: GRP
 priority: high
 complexity: medium
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 related:
   adrs: [ADR-GRP-011, ADR-GRP-010, ADR-GRP-005, ADR-GRP-006, ADR-GRP-013]
   stories: [US-GRP-001, US-GRP-002, US-GRP-012, TS-GRP-004]
@@ -42,6 +42,12 @@ tags: [motor-local, ci, rendimiento, latencia, p95, escala, nfr-04, nfr-05]
 - **Configurar** los gates: fallo si el p95 del motor supera 300 ms; fallo si el extremo a extremo llega a 500 ms cuando exista el Cockpit; aviso con la etapa nombrada si una etapa se pasa con el total dentro.
 - **Medir** la huella del daemon (memoria y CPU en reposo), el crecimiento del perfil y el coste de resolver el actor de un evento.
 - **Configurar** el banco en runners de Windows, macOS y Linux.
+- **Incorporar** lo que dejó SPIKE-GRP-002 (Enmienda 2026-10-04 de ADR-GRP-010 y ADR-GRP-011; decisión del orquestador, validada por el Arquitecto):
+  - `t0` al fin del comando en los escenarios de Git; la detección se aísla solo en "modificar un archivo".
+  - Debounce medido como duración efectiva (`t_recv` → `t_flush`) y **calibración de la holgura del temporizador** por SO; con esos datos, la Dev Spec decide entre una constante por SO y la calibración en tiempo de ejecución.
+  - Ahead/behind con la primitiva en proceso de `crates/git` (`gix`) frente a `git rev-list --count --left-right`, en una rama a 50K commits de la base, con y sin `commit-graph`.
+  - **Recreación del stream** (alta y baja de worktrees con escrituras concurrentes en los demás) y **pérdida silenciosa** recuperada por la reconciliación periódica dentro de su intervalo: gate de corrección (100% recuperado y marcado como hueco), sin gate de latencia. En macOS bloquea además cualquier PR que suba `notify`.
+  - Worktrees de más de 5.000 archivos (coste del recomputo y del modo degradado) y RSS aislado del daemon.
 - **Fuera de alcance**: el histograma de dogfooding dentro del daemon (Dev Spec de US-GRP-002); el modo degradado y la reconciliación, que no cuentan para NFR-04; la medición del Cockpit hasta que exista F-001-02.
 
 ### Plan de Verificación
@@ -49,9 +55,10 @@ tags: [motor-local, ci, rendimiento, latencia, p95, escala, nfr-04, nfr-05]
 #### Pruebas Automatizadas
 
 - **Sensibilidad**: un retardo artificial en el recomputo que lleva el p95 del motor por encima de 300 ms hace fallar el gate; uno menor que solo pasa una etapa produce aviso y no fallo.
-- **Informe**: cada ejecución publica p50, p95 y máximo por etapa, escenario y SO.
+- **Informe**: cada ejecución publica p50, p95, p99 y máximo por etapa, escenario y SO.
 - **Reproducibilidad**: dos ejecuciones seguidas sobre el mismo runner dan un p95 total dentro de una tolerancia que fija la Dev Spec.
 - **Escala**: durante la ráfaga, el p95 de los otros nueve worktrees sigue dentro de presupuesto.
+- **Recreación del stream**: con un escritor activo en los demás worktrees, 40 altas y bajas no dejan ningún cambio sin publicar tras la reconciliación; un evento descartado sin marca se recupera en la siguiente reconciliación periódica.
 - **Coherencia**: los nombres de las etapas del informe coinciden con los del bloque de tiempos del contrato y con los nombres canónicos de ADR-GRP-011 § 2: `t0`, `t_recv`, `t_flush`, `t_computed`, `t_persisted`, `t_published`, `t_client_recv` y `t_render`.
 
 #### Verificación Manual / Sandbox
