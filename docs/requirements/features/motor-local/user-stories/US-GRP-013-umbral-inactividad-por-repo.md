@@ -35,6 +35,7 @@ BR-TIME-001 (umbral configurado; el valor por defecto de 5 minutos sin configura
 ## Dependencias
 
 - **Historias**: US-GRP-007.
+- **Enablers**: TS-GRD-001 (Guardrails), que construye el cargador común de configuración en `crates/policy`: tipos y schema del documento, validación por nivel (PQ-8, Q24) y `parse_document(bytes, nivel, fuente)`. Esta historia lo reutiliza para leer los archivos de perfil y local (ADR-GRP-008) y aplicar la precedencia de `engine.idleThresholdMinutes`.
 - **Externas**: ninguna. Estuvo bloqueada por P8 (formato y ubicación de la configuración en tres niveles) hasta el 2026-10-04, cuando Rene Bonilla aceptó ADR-GRP-007, que la cierra.
 - **Transversal**: todo escenario se cumple igual en Windows, macOS y Linux (BR-03) y sin escribir nada en el repo observado (BR-CONS-001); cómo se verifica lo define el plan técnico.
 
