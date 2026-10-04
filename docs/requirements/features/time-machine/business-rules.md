@@ -11,7 +11,28 @@ feature: time-machine
 related:
   context:
     - CTX-TMC-001
-  stories: []
+  stories:
+    - US-TMC-001
+    - US-TMC-002
+    - US-TMC-003
+    - US-TMC-004
+    - US-TMC-005
+    - US-TMC-006
+    - US-TMC-007
+    - US-TMC-008
+    - US-TMC-009
+    - US-TMC-010
+    - US-TMC-011
+    - US-TMC-012
+    - US-TMC-013
+    - US-TMC-014
+    - US-TMC-015
+    - US-TMC-016
+    - US-TMC-017
+    - US-TMC-018
+    - US-TMC-019
+    - US-TMC-020
+    - US-TMC-021
 tags:
   - time-machine
   - snapshots
