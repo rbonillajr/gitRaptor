@@ -280,13 +280,13 @@ IF ⚡ en el par (rama, base) → aviso + confirmación
 
 ### BR-CKP-ELIG-004: Descartar worktree y rama
 
-**Descripción**: borra el worktree y su rama. Se bloquea con cualquier sesión presente, en el worktree principal, en la rama base y en ramas protegidas. Sin trabajo sin integrar y con snapshot completo, no pide confirmación y muestra el toast Deshacer. Con trabajo sin integrar (commits fuera de la base o cambios sin commitear), ConfirmPrompt con default No que dice qué se pierde. Si hay lo que el snapshot no recupera, aplica BR-CKP-EDGE-008. Con HEAD separado solo se borra el worktree.
+**Descripción**: borra el worktree y su rama. Se bloquea con cualquier sesión presente, en el worktree principal, en la rama base, en ramas protegidas y en un worktree bloqueado (`git worktree lock`), que nunca se desbloquea en nombre del usuario. Sin trabajo sin integrar y con snapshot completo, no pide confirmación y muestra el toast Deshacer. Con trabajo sin integrar (commits fuera de la base o cambios sin commitear), ConfirmPrompt con default No que dice qué se pierde. Si hay lo que el snapshot no recupera, aplica BR-CKP-EDGE-008. Con HEAD separado solo se borra el worktree.
 
 **Criticidad**: Alta
 
 **Regla formal**:
 ```
-IF sesión presente OR worktree principal OR rama = base OR rama protegida → bloqueado + motivo
+IF sesión presente OR worktree principal OR rama = base OR rama protegida OR worktree bloqueado → bloqueado + motivo
 IF HEAD separado → solo borrar el worktree
 IF hay lo no recuperable por el snapshot → BR-CKP-EDGE-008
 ELSE IF trabajo sin integrar → ConfirmPrompt (default No) con lo que se pierde
@@ -294,9 +294,11 @@ ELSE sin confirmación
 → BR-CKP-WF-002 (toast Deshacer)
 ```
 
-**Ejemplo**: `feat-old` ya integrado en `main`, sin cambios → se descarta sin preguntar; toast "Descartado feat-old · u Deshacer". `feat-wip` con 2 commits no integrados → "Se perderán 2 commits sin integrar (recuperables con Deshacer). ¿Descartar? [y/N]".
+**Ejemplo**: `feat-old` ya integrado en `main`, sin cambios → se descarta sin preguntar; toast "Descartado feat-old · u Deshacer". `feat-wip` con 2 commits no integrados → "Se perderán 2 commits sin integrar (recuperables con Deshacer). ¿Descartar? [y/N]". `feat-usb` bloqueado con `git worktree lock` → "Descartar" desactivado: "el worktree está bloqueado; desbloquéalo tú si quieres descartarlo".
 
-**Fuentes**: Q-CKP-12; ADR-TMC-001.
+> Decisión del orquestador (2026-10-04), validada por PO: se añade el worktree bloqueado como bloqueo (ADR-CKP-002 § 1).
+
+**Fuentes**: Q-CKP-12; ADR-TMC-001; ADR-CKP-002.
 
 ### BR-CKP-ELIG-005: Crear worktree para un agente nuevo
 
@@ -392,6 +394,27 @@ Constraint: no aborta solo; no resuelve conflictos en la TUI
 **Ejemplo**: el merge de `feat-pagos` choca en `src/api.rs` → "Merge detenido: 1 archivo en conflicto. [a] Abortar · [e] Editor". Tras abortar, "u Deshacer" vuelve a estar disponible.
 
 **Fuentes**: Q-CKP-11; BR-TMC-EDGE-004; ADR-TMC-002 § 3.1; DEP-CKP-14.
+
+### BR-CKP-WF-008: Cancelar una operación de Git en curso
+
+**Descripción**: mientras una operación lanzada por el ejecutor sigue en marcha, el Cockpit muestra el tiempo transcurrido y ofrece Cancelar. No hay corte automático por tiempo. Cancelar equivale a un Ctrl-C del usuario: lo que Git deje se presenta como detenido (BR-CKP-WF-003) o como fallido con cambios, y en ese caso se ofrece Deshacer. Pueden cancelar la conexión que pidió la operación o, si se cerró, cualquier TUI o CLI del usuario. Por MCP nunca se puede cancelar, y Cancelar nunca se aplica a una operación de Git que el ejecutor no lanzó.
+
+**Criticidad**: Media
+
+**Regla formal**:
+```
+operación del ejecutor en curso → mostrar tiempo transcurrido + acción Cancelar
+Cancelar permitido ⇔ solicitante original OR (solicitante desconectado AND cliente TUI/CLI del usuario)
+Cancelar por MCP → rechazo
+resultado tras cancelar ∈ { detenido → BR-CKP-WF-003 ; fallido con cambios → Deshacer ; sin cambios → nada que deshacer }
+Constraint: sin límite de tiempo automático; solo operaciones lanzadas por el ejecutor
+```
+
+**Ejemplo**: el rebase de `feat-pagos` lleva 2 min porque un hook `pre-rebase` tarda → "Rebase en curso · 2:04 · [c] Cancelar". Tras cancelar, Git deja el rebase a medias → "Rebase detenido. [a] Abortar · [e] Editor".
+
+> Decisión del orquestador (2026-10-04), validada por PO: se añade Cancelar como acción sobre operaciones del ejecutor en curso (ADR-CKP-002 § 6).
+
+**Fuentes**: Q-CKP-11, Q-CKP-19; ADR-CKP-002 § 6; BR-CKP-WF-003.
 
 ### BR-CKP-WF-004: Estados del motor y de la conexión
 
@@ -513,9 +536,9 @@ Constraint: una confirmación en la TUI no cambia el solicitante ni autoriza nad
 
 **Fuentes**: Q-CKP-16; ADR-TMC-005 § 1; ADR-GRP-005 § 6.
 
-### BR-CKP-AUTH-003: Merge o descarte sobre trabajo de otro actor
+### BR-CKP-AUTH-003: Merge, rebase o descarte sobre trabajo de otro actor
 
-**Descripción**: si un merge o un descarte afecta trabajo de un actor distinto del solicitante, se extiende la regla de la Time Machine: confirmación interactiva ligada al plan concreto. En Windows, sin esa confirmación, se rechaza.
+**Descripción**: si un merge, un rebase o un descarte afecta trabajo de un actor distinto del solicitante, se extiende la regla de la Time Machine: confirmación interactiva ligada al plan concreto. En Windows, sin esa confirmación, se rechaza.
 
 **Criticidad**: Alta
 
@@ -527,7 +550,9 @@ IF el trabajo afectado es de un actor ≠ solicitante:
   ELSE confirmación interactiva ligada al plan; sin ella, rechazo     (ADR-CKP-002)
 ```
 
-**Ejemplo**: en macOS, "Tú u otro (sin atribuir)" descarta `feat-wip` de claude-2 → se pide confirmar el plan "borrar worktree feat-wip y rama feat-wip". En Windows → "no se puede confirmar trabajo de otro actor en Windows todavía".
+**Ejemplo**: en macOS, "Tú u otro (sin atribuir)" descarta `feat-wip` de claude-2 → se pide confirmar el plan "borrar worktree feat-wip y rama feat-wip". En Windows → "no se puede confirmar trabajo de otro actor en Windows todavía". El rebase reescribe la rama del agente: rebasar `feat-wip` de claude-2 desde "Tú u otro (sin atribuir)" pide la misma confirmación ligada al plan.
+
+> Decisión del orquestador (2026-10-04), validada por PO: se añade el rebase como acción sobre trabajo de otro actor (ADR-CKP-002 § 3).
 
 **Fuentes**: Q-CKP-16; ADR-TMC-005 § 2-3; BR-TMC-AUTH-001; DEP-CKP-7.
 
@@ -627,14 +652,22 @@ acción anunciada (reserved-action-pending) → visible en todas las TUIs
 registrar (par, archivo, hora) en la primera aparición de ⚡
 registrar conflicto real (par, archivo, hora inicio de la operación)      (DEP-CKP-14)
 detectado_antes ⇔ ∃ ⚡(par, archivo) con hora < inicio de la operación
+            OR equivalencia_mismo_par
+equivalencia_mismo_par (conflicto de W2 contra la base en F) ⇔
+  ∃ ⚡(W1, W2, F) con hora < inicio de la operación
+  AND los commits de W1 son alcanzables desde la base al inicio de la operación
+  (simétrica: vale igual con W1 y W2 intercambiados)
+KPI publica por separado: detectados por par literal | detectados por equivalencia
 EXCLUDE conflictos en huecos de observación o en el remoto → listados aparte
 KPI = detectados_antes / conflictos_reales_incluidos ; complementaria = ⚡ que no ocurrieron
 retención 90 días, en el perfil, por repo; consulta local (NFR-03)
 ```
 
-**Ejemplo**: ⚡ claude-1 ↔ claude-2 en `src/api.rs` a las 10:00; el merge de las 11:00 choca en ese archivo → cuenta como detectado antes. Un conflicto en `README.md` que solo tuvo ⚠ → no cuenta.
+**Ejemplo**: ⚡ claude-1 ↔ claude-2 en `src/api.rs` a las 10:00; el merge de las 11:00 choca en ese archivo → cuenta como detectado antes. Un conflicto en `README.md` que solo tuvo ⚠ → no cuenta. Equivalencia: ⚡ claude-1 ↔ claude-2 en `src/api.rs` a las 10:00; claude-1 se integra en `main` a las 10:30; el merge de claude-2 a `main` choca en `src/api.rs` a las 11:00 → cuenta como detectado antes, en el contador "por equivalencia".
 
-**Fuentes**: Q-CKP-21, Q-CKP-25; ADR-GRD-006 (forma); DEP-CKP-11, DEP-CKP-14.
+> Decisión del orquestador (2026-10-04), validada por PO: se añade la equivalencia del "mismo par" con cuatro condiciones: ⚡ anterior al inicio de la operación, commits de W1 alcanzables desde la base, simetría y recuento aparte de las detecciones por equivalencia (ADR-CKP-001 § 9).
+
+**Fuentes**: Q-CKP-21, Q-CKP-25; ADR-GRD-006 (forma); ADR-CKP-001 § 9; DEP-CKP-11, DEP-CKP-14.
 
 ### BR-CKP-CONS-006: Preferencias de la TUI en el perfil, vía daemon
 
@@ -811,20 +844,22 @@ IF la Time Machine publica aviso de purga → mostrarlo + notificar "visto"
 
 ### BR-CKP-EDGE-008: Descarte con lo que el snapshot no recupera
 
-**Descripción**: si el worktree contiene lo que el snapshot no guarda (ignorados como `.env` o `node_modules`, archivos de credenciales, submódulos, archivos excluidos por tamaño), la confirmación es obligatoria y nombra lo que no será recuperable. No se promete un Deshacer total.
+**Descripción**: si el worktree contiene lo que el snapshot no guarda (ignorados como `.env` o `node_modules`, archivos de credenciales, submódulos, repos anidados sin seguimiento), la confirmación es obligatoria y nombra lo que no será recuperable. No se promete un Deshacer total.
 
 **Criticidad**: Alta
 
 **Regla formal**:
 ```
-no_recuperable = ignorados ∪ credenciales excluidas ∪ submódulos ∪ excluidos por tamaño   (ADR-TMC-001)
+no_recuperable = ignorados ∪ credenciales excluidas ∪ submódulos ∪ repos anidados   (ADR-TMC-001)
 IF no_recuperable ≠ ∅ → ConfirmPrompt obligatorio (default No) que lista no_recuperable
 mensaje de Deshacer → "recupera todo salvo lo listado"
 ```
 
 **Ejemplo**: `feat-wip` tiene `.env.local` y `node_modules/` → "No se podrán recuperar: .env.local, node_modules/. ¿Descartar? [y/N]".
 
-**Fuentes**: Q-CKP-12; ADR-TMC-001; BR-TMC-CONS-002.
+> Decisión del orquestador (2026-10-04), validada por PO: se quitan los excluidos por tamaño, porque el snapshot previo garantizado de la operación los guarda siempre (ADR-TMC-001), y se añaden los repos anidados sin seguimiento, que el snapshot excluye (TQ-15).
+
+**Fuentes**: Q-CKP-12; ADR-TMC-001; BR-TMC-CONS-002; ADR-CKP-002 § 8.
 
 ### BR-CKP-EDGE-009: Ningún worktree tiene la base sacada
 
@@ -846,7 +881,7 @@ Alineada con el orden de entrega Q-CKP-24: 1) BR-04 con estados del motor; 2) BR
 |-------|------------|-----------|
 | CONS-001, CONS-003, WF-001, WF-004, CALC-001, TIME-001, VAL-002, EDGE-001, EDGE-003 | Alta/Media | 🔴 P0 (BR-04) |
 | CALC-002, CALC-003, WF-005, WF-007, CONS-005 | Alta/Media | 🔴 P0 (BR-06) |
-| WF-002, CONS-002, CONS-004, AUTH-001, AUTH-002, AUTH-003, ELIG-001 a ELIG-004, WF-003, EDGE-002, EDGE-008, EDGE-009 | Alta | 🟡 P1 (BR-07, escritura) |
+| WF-002, CONS-002, CONS-004, AUTH-001, AUTH-002, AUTH-003, ELIG-001 a ELIG-004, WF-003, WF-008, EDGE-002, EDGE-008, EDGE-009 | Alta/Media | 🟡 P1 (BR-07, escritura) |
 | VAL-001, ELIG-005, ELIG-006, CALC-005, TIME-004, EDGE-004, EDGE-005 | Alta/Media | 🟡 P1 (BR-07, resto) |
 | CALC-004 | Media | 🟢 P2 (BR-05, depende de DEP-CKP-2) |
 | VAL-003, EDGE-007, CONS-006, CONS-007, TIME-002, EDGE-006 | Media/Baja | 🟢 P2 (Should y comodidad) |
@@ -865,7 +900,7 @@ Los IDs omiten el prefijo `BR-CKP-`.
 | BR-04 Lista en vivo | CALC-001, WF-001, WF-004, WF-005, CONS-001, CONS-003, CONS-004, CONS-006, CONS-007, TIME-001, TIME-002, VAL-002, EDGE-001, EDGE-003, EDGE-004, EDGE-005, EDGE-006 |
 | BR-05 Grafo en vivo | CALC-004, EDGE-001, EDGE-005 |
 | BR-06 Predicción de conflictos | CALC-002, CALC-003, WF-005, WF-007, CONS-005, CONS-007 |
-| BR-07 Acciones por agente | VAL-001, VAL-003, CALC-005, ELIG-001 a ELIG-006, WF-002, WF-003, WF-006, AUTH-001 a AUTH-004, CONS-002, CONS-004, TIME-003, TIME-004, EDGE-002, EDGE-007, EDGE-008, EDGE-009 |
+| BR-07 Acciones por agente | VAL-001, VAL-003, CALC-005, ELIG-001 a ELIG-006, WF-002, WF-003, WF-006, WF-008, AUTH-001 a AUTH-004, CONS-002, CONS-004, TIME-003, TIME-004, EDGE-002, EDGE-007, EDGE-008, EDGE-009 |
 
 ### Reglas → User Stories
 

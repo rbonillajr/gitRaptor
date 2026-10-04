@@ -296,7 +296,7 @@ Cada capacidad del BRD queda cubierta por decisiones, reglas y, donde el motor a
 | **BR-04** Lista en vivo: rama, estado, archivos, ahead/behind, última actividad | Q-CKP-1, 2, 3, 17, 18, 19, 22, 23, 28, 29 | CALC-001, WF-001, WF-004, WF-005, CONS-001, CONS-003, CONS-004, CONS-006, TIME-001, TIME-002, EDGE-001, EDGE-003, EDGE-004, EDGE-005, EDGE-006, VAL-002 | DEP-CKP-4, 6, 9, 11 | Sí |
 | **BR-05** Grafo en vivo sobre la rama base | Q-CKP-4, 18, 27 | CALC-004, EDGE-001 | DEP-CKP-2 | Sí, condicionada a DEP-CKP-2 |
 | **BR-06** Predicción de conflictos (archivos y hunks, entre agentes y con la base) y alerta | Q-CKP-5, 6, 7, 21, 25, 27 | CALC-002, CALC-003, WF-007, CONS-005 | DEP-CKP-1, 14 | Sí, condicionada a DEP-CKP-1 |
-| **BR-07** Ver diff, abrir en editor, merge/rebase, descartar, crear worktree | Q-CKP-8 a 16, 19, 20, 26, 27 | VAL-001, VAL-003, CALC-005, ELIG-001 a 006, WF-002, WF-003, WF-006, AUTH-001 a 004, CONS-002, TIME-003, TIME-004, EDGE-002, EDGE-007, EDGE-008, EDGE-009 | DEP-CKP-3, 7, 8, 10, 12, 13 | Sí; cola bloqueada por DEP-CKP-8 |
+| **BR-07** Ver diff, abrir en editor, merge/rebase, descartar, crear worktree | Q-CKP-8 a 16, 19, 20, 26, 27 | VAL-001, VAL-003, CALC-005, ELIG-001 a 006, WF-002, WF-003, WF-006, WF-008, AUTH-001 a 004, CONS-002, TIME-003, TIME-004, EDGE-002, EDGE-007, EDGE-008, EDGE-009 | DEP-CKP-3, 7, 8, 10, 12, 13 | Sí; cola bloqueada por DEP-CKP-8 |
 
 Los IDs de reglas omiten el prefijo `BR-CKP-`.
 
@@ -324,6 +324,8 @@ Estas dependencias se anotan; **no se aplican** en este documento. Las resuelve 
 | DEP-CKP-14 | Estado en conflicto publicado (rutas sin fusionar, MERGE_HEAD/onto) | Enmiendas a ADR-GRP-010 § 4 y ADR-GRP-013 § 1. |
 
 > **Nota sobre NFR-07**: el BRD justifica Git ≥ 2.38 por `merge-tree --write-tree`. Si SPIKE-CKP-001 elige el merge en memoria, esa justificación cambia; el mínimo de versión no cambia. Se anota para ADR-CKP-001.
+>
+> **Pendiente ligado a SPIKE-CKP-001 (dueño: PO)**: reformular la justificación de NFR-07 en el BRD cuando ADR-CKP-001 pase a `accepted` con la opción (a). Si se activa la opción (b), el texto actual sigue valiendo. Decisión del orquestador (2026-10-04), validada por PO.
 
 ---
 
@@ -377,6 +379,7 @@ Estas dependencias se anotan; **no se aplican** en este documento. Las resuelve 
 | R-CKP-7 | Una TUI lanzada por un agente actúa como agente y el humano no se da cuenta. | Media | Medio | La vista declara el solicitante; la excepción se rechaza por ascendencia (BR-CKP-AUTH-002). |
 | R-CKP-8 | Texto no confiable (nombre de rama, mensaje de commit) inyecta secuencias en la terminal. | Baja | Alto | Saneado SEC-12 (BR-CKP-VAL-002, DEP-CKP-9). |
 | R-CKP-9 | Rendimiento con 10 worktrees: 55 pares a recalcular. | Media | Medio | Recalcular solo los pares afectados; antigüedad visible; SPIKE-CKP-001. |
+| R-CKP-10 | En el MVP, `--plain` es solo de lectura y alertas: quien usa un lector de pantalla ve el estado y los ⚡, pero no tiene las acciones de BR-07 (NFR-09 no exige paridad con lector de pantalla). | Baja | Medio | La ayuda `?` y la de `--plain` lo dicen; acciones en `--plain` como candidato post-MVP (ADR-CKP-003 § 10). Decisión del orquestador (2026-10-04), validada por PO. |
 
 ---
 
