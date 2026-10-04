@@ -103,14 +103,14 @@ Pendientes. Se generan con `/aadd-devspec <id>` para TS-TMC-001..004 e INF-TMC-0
 | TQ-16 | ¿Credenciales sin ignorar? **Cambia D-TMC-16 (decisión de producto)** | (a) lista cerrada de credenciales excluida por defecto, con opción en el perfil; (b) mantener D-TMC-16 (se captura todo lo no ignorado) | **(a)**: evita copiar secretos al perfil sin perder código. Requiere que el PO actualice D-TMC-16 | ADR-TMC-001; SEC-TMC-06; D-TMC-16, BR-TMC-CONS-002 | Aceptada (Rene, 2026-10-03) |
 | TQ-17 | ¿Borrar ya contenido capturado (`raptor tm forget`)? **Capacidad nueva de producto, sin US** | (a) aplazarla a una US futura; en el MVP solo la lista de exclusión de TQ-16; (b) incluirla en el MVP reescribiendo los snapshots sin esa ruta (sin perder el resto), respetando las capturas en curso y el snapshot protegido, con una US que pide el PO | **(a)**: tal como se propuso, chocaba con la retención y la protección del último punto y ampliaba lo que la Time Machine puede escribir; (b) es viable pero es trabajo de producto y de diseño propio, no un detalle de seguridad | ADR-TMC-007 § 5, SEC-TMC-06; D-TMC-15, BR-TMC-TIME-001, BR-TMC-CONS-004 | Aceptada (Rene, 2026-10-03) |
 
-## 7. Pendientes de integración y notas para el PO
+## 7. Integración en los catálogos compartidos y notas para el PO
 
-La arquitectura de motor-local ya está en `main` (PR #8). Quedan pendientes de integrar en los catálogos compartidos los puntos 1 a 4:
+La arquitectura de motor-local ya está en `main` (PR #8) y los puntos 1 a 5 están integrados. Solo quedan las notas para el PO.
 
-1. `docs/architecture/decisions/index.md`: añadir ADR-TMC-001..007 al outline y al grafo.
-2. `docs/architecture/architecture-overview.md`: enlazar este overview, los diagramas `*-tmc-*` y los enablers TMC.
-3. `docs/architecture/non-functional.md`: enlazar [non-functional.md](./non-functional.md) y referenciar SEC-TMC-01..15 junto a SEC-01..14.
-4. `docs/architecture/diagrams/c4-containers.md`: anotar que el daemon aloja la Time Machine y el ejecutor de operaciones de usuario, y que el perfil contiene el almacén de snapshots.
+1. ~~`docs/architecture/decisions/index.md`: añadir ADR-TMC-001..007 al outline y al grafo~~: **hecho** ([índice de ADRs](../decisions/index.md), Outline, grafo y subsección "Feature time-machine").
+2. ~~`docs/architecture/architecture-overview.md`: enlazar este overview, los diagramas `*-tmc-*` y los enablers TMC~~: **hecho** ([architecture overview](../architecture-overview.md), §§ 1, 4, 5 y 7).
+3. ~~`docs/architecture/non-functional.md`: enlazar [non-functional.md](./non-functional.md) y referenciar SEC-TMC-01..15 junto a SEC-01..14~~: **hecho** ([NFR del motor](../non-functional.md), nota de cabecera).
+4. ~~`docs/architecture/diagrams/c4-containers.md`: anotar que el daemon aloja la Time Machine y el ejecutor de operaciones de usuario, y que el perfil contiene el almacén de snapshots~~: **hecho** ([C4-L2](../diagrams/c4-containers.md), nota bajo el diagrama).
 5. ~~Las notas de TQ-12~~: **aplicadas** en motor-local (PR #8); ver § 7.1.
 6. `docs/ARTIFACTS.md` lo regenera `/aadd-index` (no se edita a mano).
 

@@ -37,6 +37,8 @@ Garantías que fijan el diseño:
 
 Diagramas: [contexto C4-L1](./diagrams/c4-context.md) y [contenedores C4-L2](./diagrams/c4-containers.md).
 
+**Otras features**: la Time Machine (F-001-03) vive dentro del mismo daemon y tiene su propio [overview](./time-machine/overview.md), con su [vista de componentes C4-L3](./diagrams/c4-tmc-components.md).
+
 ## 2. Vista de componentes (mapeada a ADR-GRP-002)
 
 | Componente del motor | Ubicación en el monorepo | Responsabilidad | ADR |
@@ -91,13 +93,14 @@ Diagramas: [contexto C4-L1](./diagrams/c4-context.md) y [contenedores C4-L2](./d
 
 ## 4. Decisiones clave
 
-Ver [decisions/index.md](./decisions/index.md): decisión de cada ADR, decisión de producto adoptada (PQ-1 a PQ-9) y grafo de dependencias.
+Ver [decisions/index.md](./decisions/index.md): decisión de cada ADR, decisión de producto adoptada (PQ-1 a PQ-9) y grafo de dependencias. El índice incluye también los ADR-TMC-001 a 007 de la Time Machine, resumidos en su [overview](./time-machine/overview.md).
 
 ## 5. Flujos críticos
 
 - [Cambio en un worktree hasta el Cockpit](./diagrams/seq-cambio-worktree.md): etapas y presupuestos de ADR-GRP-011.
 - [Detección de una sesión de Claude Code](./diagrams/seq-deteccion-sesion.md): señales y regla de combinación de ADR-GRP-012.
 - Reconciliación tras un hueco: pendiente (SEQ-GRP-HUECO, opcional).
+- Time Machine: [snapshot previo garantizado](./diagrams/seq-tmc-snapshot-previo.md), [undo con solicitante, confirmación y solape](./diagrams/seq-tmc-undo-solicitante.md) y [recuperación tras un kill -9](./diagrams/seq-tmc-recuperacion.md).
 
 ## 6. Atributos de calidad
 
@@ -110,6 +113,8 @@ Ver [non-functional.md](./non-functional.md). Los tres que más pesan en el dise
 ## 7. Enablers técnicos
 
 Ver [technical-stories.md](../requirements/features/motor-local/technical-stories.md): 4 TS y 2 INF con status `Dev Spec Pending` y 2 SPIKE con status `Research Pending`. TS-GRP-003 solo crea el esqueleto de la máquina de estados de BR-WF-002; la entrada y la exposición de "Esperando Git" y "Sin repos" son de US-GRP-014 y US-GRP-015. INF-GRP-001 se divide en un núcleo (depende de TS-GRP-002) y suites incrementales que entran con su historia dueña.
+
+Enablers de la Time Machine: [technical-stories.md](../requirements/features/time-machine/technical-stories.md) (SPIKE-TMC-001, TS-TMC-001 a 004 e INF-TMC-001), que reutilizan TS-GRP-001 a 004, INF-GRP-001 e INF-GRP-002.
 
 ### Trabajo técnico que vive en la US (no es TS)
 
