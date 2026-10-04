@@ -1,0 +1,8 @@
+{
+  "feature": "time-machine",
+  "context": {
+    "approved": true,
+    "approvedAt": "2026-10-04",
+    "approvedVia": "nl-approval-hook"
+  }
+}
