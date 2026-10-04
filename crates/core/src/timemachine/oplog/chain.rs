@@ -306,9 +306,14 @@ pub(crate) fn write_head(path: &Path, tip: &Tip) -> io::Result<()> {
     file.sync_all()?;
     drop(file);
     fs::rename(&tmp, path)?;
+    // The folder gets a plain fsync, not `sync_all` (`F_FULLFSYNC` on macOS, ~4 ms): the file
+    // above is already durable before the rename, and the rename is persisted by the full flush
+    // of the next batch's SQLite commit, which comes after this fsync. Until then the head can
+    // only be the previous one, one batch behind, which `check_head` tolerates (TS-TMC-001,
+    // ADR-TMC-006 § 2: ref + oplog ≤ 25 ms; validated by the Architect).
     #[cfg(unix)]
     if let Some(dir) = path.parent() {
-        fs::File::open(dir)?.sync_all()?;
+        rustix::fs::fsync(fs::File::open(dir)?)?;
     }
     Ok(())
 }
