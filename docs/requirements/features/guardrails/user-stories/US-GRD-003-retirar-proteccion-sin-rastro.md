@@ -47,7 +47,7 @@ BR-CONS-005 (desinstalar = estado anterior; instalación nunca a medias; solo de
 Dado el repo "demo" con un hook propio de linter, protegido después con permiso
 Cuando el desarrollador retira la protección de "demo"
 Entonces GitRaptor anuncia la retirada y abre una ventana en la que se puede cancelar
-  Y al cerrarse la ventana sin cancelación, las rutas operativas de "demo" son idénticas a las de antes de protegerlo
+  Y al cerrarse la ventana sin cancelación, las rutas operativas de "demo" quedan como antes de protegerlo, con las únicas diferencias de formato que introduce Git, que están declaradas
   Y el hook propio de linter sigue funcionando
   Y el estado de protección de "demo" pasa a "Sin protección"
 
@@ -61,7 +61,7 @@ Entonces Guardrails no evalúa la operación
 
 Dado el repo "demo" sin proteger
 Cuando el proceso de instalación se interrumpe a mitad
-Entonces "demo" queda con la protección completa o exactamente como estaba antes
+Entonces "demo" queda con la protección completa o como estaba antes, con las únicas diferencias de formato que introduce Git, que están declaradas
   Y nunca con una protección parcial
 
 **Escenario: Nada cambia fuera del repo**
@@ -88,6 +88,8 @@ Cuando el desarrollador lo protege y después retira la protección
 Entonces cada cambio queda registrado con qué se hizo, en qué repo, cuándo y quién lo autorizó
 
 ## Requisitos Técnicos
+
+- **Criterio de "como estaba"** (Q-GRD-29; SPIKE-GRD-001 § 5.1; ADR-GRD-001 § 4, Enmienda 2026-10-04): semántico en la entrada de la clave de hooks (mismo valor efectivo y nivel; demás entradas sin cambios); byte a byte en el resto de rutas. Git reescribe una línea escrita a mano y añade el salto de línea final: esas diferencias se declaran. El título de la historia se mantiene porque BR-CONS-005 define qué significa "exacto".
 
 - **Gobierno**: ADR-GRD-001 § 4 (desinstalación en orden inverso, borrado solo de lo que lista el diario y recuperación al arrancar el daemon) y § 7 (solo el módulo `guardrails` alcanza la capa de escritura); ADR-GRD-005 § 1 (instalación huérfana); ADR-GRD-007 § 1 y § 2 (comandos reservados).
 - **Acciones reservadas**: desinstalar y retirar una huérfana relajan y usan D5 (Q-GRD-19), con anuncio, ventana cancelable, auditoría completa y aceptación de riesgo por acción. Adoptar no relaja y no lleva ventana (ADR-GRD-007 § 1 y § 2).

@@ -53,7 +53,7 @@ tags:
 
 **Feature**: Guardrails (F-001-04)
 **Enlace a contexto**: [`context.md`](./context.md) (CTX-GRD-001)
-**Última actualización**: 2026-10-04 (Q-GRD-17 a Q-GRD-27 y sus aplicaciones derivadas: Q-GRD-12 en la versión del worktree, confirmación inicial y configuración antes de confirmar, unión de la rama base por historia; ver Changelog). Antes, 2026-10-03 (versión inicial)
+**Última actualización**: 2026-10-04 (Q-GRD-28 a Q-GRD-31, resultados de SPIKE-GRD-001 en macOS; antes, Q-GRD-17 a Q-GRD-27 y sus aplicaciones derivadas: Q-GRD-12 en la versión del worktree, confirmación inicial y configuración antes de confirmar, unión de la rama base por historia; ver Changelog). Antes, 2026-10-03 (versión inicial)
 
 ---
 
@@ -637,7 +637,7 @@ Constraint: las entradas anotadas en modo degradado se muestran aparte y solo cu
 **Descripción**: La instalación de la protección de hooks:
 - **Conserva** los hooks previos del usuario: siguen funcionando igual (BR-EDGE-002).
 - Se hace **solo dentro del repo**: nunca en la configuración global de Git, en plantillas del usuario ni en otros repos (Q17 de motor-local).
-- Se puede **desinstalar** dejando las rutas operativas del repo **exactamente** como estaban antes de instalar.
+- Se puede **desinstalar** dejando las rutas operativas del repo **como estaban** antes de instalar: la entrada que tocó Guardrails vuelve a su valor efectivo y a su nivel, y las demás entradas no cambian. Las únicas diferencias posibles son de formato y las introduce Git (un comentario en la línea de esa entrada, el salto de línea final); se declaran (Q-GRD-29).
 - Queda registrada: qué, dónde, cuándo y quién la autorizó.
 
 > **Supuesto confirmado** (S-GRD-6, Rene Bonilla, 2026-10-04): instalarla en un repo cubre todos sus worktrees, actuales y futuros. La viabilidad técnica sigue siendo comprobación del Arquitecto.
@@ -649,7 +649,7 @@ Constraint: las entradas anotadas en modo degradado se muestran aparte y solo cu
 **Regla de consistencia**:
 ```
 Constraint: hooks previos del usuario: mismo contenido y mismo efecto tras instalar
-Constraint: estado tras desinstalar = estado antes de instalar
+Constraint: estado tras desinstalar = estado antes de instalar (semántico en la entrada de la clave de hooks: mismo valor efectivo y nivel, demás entradas sin cambios; Q-GRD-29)
 Constraint: nada cambia fuera del repo
 ```
 
@@ -771,6 +771,8 @@ Acción al expirar: se descarta
 
 > **Aplicación de Q-GRD-21 y Q-GRD-23** (Rene Bonilla, 2026-10-04): mientras no hay confirmación inicial, la configuración del equipo solo endurece y el mínimo sigue aplicando aunque esa configuración lo desactive (BR-VAL-001).
 
+> **Excepción** (Q-GRD-28; decisión del orquestador, 2026-10-04, validada por Arquitecto/PO): en un repo que guarda sus ramas en formato reftable, el mínimo no puede impedir con Git directo que se **renombre la rama base** o que se **renombre otra rama sobre ella**. El borrado y el force-push siguen denegados. El límite se declara (BR-EDGE-003).
+
 **Frecuencia esperada**: alta al empezar (todo repo nuevo).
 
 **Criticidad**: Alta
@@ -821,10 +823,14 @@ Acción al expirar: se descarta
 **Ejemplos**:
 - Un agente ejecuta `reset --hard` con Git crudo → la capa de hooks no lo impide; la Time Machine permite recuperar.
 - La misma operación por la herramienta MCP → denegada (BR-CONS-002).
+- Repo reftable: un agente renombra `main` con Git directo → no se impide; la lista de ese repo lo declaraba; los commits siguen en la rama renombrada y la Time Machine permite restaurar `main` (Q-GRD-28).
+- Repo con el formato de refs habitual: un agente renombra otra rama sobre `main` → se deniega, pero Git ya borró la rama de origen; el motivo dice cómo recuperarla (declarado; SPIKE-GRD-001 D11).
 
-**Cómo se verifica**: la lista de operaciones no cubiertas está publicada y coincide con lo que se observa en pruebas con Git crudo.
+> **Lo que se deniega de más** (Q-GRD-31; decisión del orquestador, 2026-10-04, validada por Arquitecto/PO): la lista publicada tiene además un apartado con los falsos positivos aceptados hacia el lado seguro: un push fast-forward desde un clon superficial se deniega como force-push, y en repos reftable una rama que solo difiere de la base en mayúsculas se deniega por ambigüedad. El motivo de la denegación lo explica, sin instrucciones para saltarse la protección.
 
-**Referencias**: BRD BR-12, § 10 (riesgo "los agentes usan Git crudo"); Q-GRD-8; riesgo R-GRD-1.
+**Cómo se verifica**: la lista de operaciones no cubiertas, y la de lo que se deniega de más, está publicada y coincide con lo que se observa en pruebas con Git crudo en cada formato de refs.
+
+**Referencias**: BRD BR-12, § 10 (riesgo "los agentes usan Git crudo"); Q-GRD-8, Q-GRD-28, Q-GRD-31; riesgo R-GRD-1; SPIKE-GRD-001.
 
 ---
 
@@ -917,7 +923,7 @@ Las 23 reglas tienen al menos una historia. La tabla vive en el [índice de hist
 
 ### Reglas → Criterios de Aceptación
 
-Cada regla debe reflejarse en al menos un escenario Gherkin de su historia. Cada regla indica en "Cómo se verifica" los escenarios mínimos. BR-CONS-002 obliga a que los escenarios de BR-VAL-002 y BR-VAL-003 se ejecuten por las dos capas. BR-CONS-005 se verifica con una comparación antes/después de las rutas operativas del repo y una prueba de interrupción. Las decisiones Q-GRD-1 a Q-GRD-27 ya están incorporadas a las reglas, junto con sus aplicaciones derivadas sin ID propio: Q-GRD-12 aplicada a la versión del worktree de la operación (BR-EDGE-004), la configuración del equipo antes de la confirmación inicial (BR-VAL-001, BR-EDGE-001), la rama base tras perder el perfil o adoptar una huérfana y la unión protegida por historia (BR-CONS-003), y el reparto de las huérfanas entre US-GRD-004 y US-GRD-003 (BR-CONS-005). Los supuestos que quedaban (S-GRD-6, S-GRD-9 y el formato Conventional Commits) los confirmó Rene Bonilla el 2026-10-04; de S-GRD-6 queda pendiente solo la comprobación técnica del Arquitecto.
+Cada regla debe reflejarse en al menos un escenario Gherkin de su historia. Cada regla indica en "Cómo se verifica" los escenarios mínimos. BR-CONS-002 obliga a que los escenarios de BR-VAL-002 y BR-VAL-003 se ejecuten por las dos capas. BR-CONS-005 se verifica con una comparación antes/después de las rutas operativas del repo y una prueba de interrupción. Las decisiones Q-GRD-1 a Q-GRD-31 ya están incorporadas a las reglas, junto con sus aplicaciones derivadas sin ID propio: Q-GRD-12 aplicada a la versión del worktree de la operación (BR-EDGE-004), la configuración del equipo antes de la confirmación inicial (BR-VAL-001, BR-EDGE-001), la rama base tras perder el perfil o adoptar una huérfana y la unión protegida por historia (BR-CONS-003), y el reparto de las huérfanas entre US-GRD-004 y US-GRD-003 (BR-CONS-005). Los supuestos que quedaban (S-GRD-6, S-GRD-9 y el formato Conventional Commits) los confirmó Rene Bonilla el 2026-10-04; de S-GRD-6 queda pendiente solo la comprobación técnica del Arquitecto.
 
 ---
 
@@ -935,3 +941,4 @@ Cada regla debe reflejarse en al menos un escenario Gherkin de su historia. Cada
 | 1.7 | 2026-10-04 | PO (AADD) para Rene Bonilla | Decisiones Q-GRD-23 a Q-GRD-27 de Rene Bonilla (D9 a D12 y KPI), posteriores a la aprobación del requerimiento. Q-GRD-23: la confirmación inicial de la rama base y de la configuración del equipo se hace al instalar la protección o de forma explícita, nunca al añadir el repo; si trae relajaciones, pasa por el anuncio y la ventana (BR-AUTH-001, BR-CONS-003; se quita "al añadir el repo"). Q-GRD-24: toda excepción consciente, incluida la aprobación en el Cockpit, pasa por anuncio, ventana y auditoría (BR-AUTH-001, BR-AUTH-003). Q-GRD-25: BR-WF-002 añade los diagnósticos "relajación pendiente de confirmar" y "rama base no confirmada o pendiente", sin estados nuevos. Q-GRD-26: una clave desconocida en permisos o políticas deja el nivel parcial y fuerza el mínimo (BR-VAL-001, BR-EDGE-004). Q-GRD-27: la decisión del KPI verificado de la versión 1.6 recibe ID (BR-CONS-004). BR-CONS-005: instalación huérfana (retirar o adoptar), entregada por US-GRD-003. Sin reglas nuevas: 23 reglas (18 críticas). |
 | 1.8 | 2026-10-04 | PO (AADD) para Rene Bonilla | Aplicación de decisiones existentes, sin IDs nuevos. BR-EDGE-004: por Q-GRD-12, también la versión ilegible commiteada en el worktree de la operación fuerza el mínimo. BR-CONS-003: tras perder el perfil o adoptar una protección huérfana, la rama base queda "no confirmada" con la unión protegida hasta la confirmación (Q-GRD-21, Q-GRD-23). Sin reglas nuevas. |
 | 1.9 | 2026-10-04 | PO (AADD) para Rene Bonilla | Artifact Judge (FAIL). Q-GRD-23 tal cual: instalar no confirma una configuración del equipo existente; el ejemplo de máquina nueva de BR-CONS-003 confirma después de forma explícita. BR-VAL-001 y BR-EDGE-001: sin confirmación inicial la configuración del equipo solo endurece y el mínimo sigue aplicando (aplicación de Q-GRD-21 y Q-GRD-23, con ejemplo). BR-CONS-005: detecta US-GRD-004; adopta o retira US-GRD-003. BR-CONS-003: la rama base leída entra en la unión con US-GRD-014 y TS-GRD-001; antes, US-GRD-001 protege {`main`, rama principal}. Cabeceras y Trazabilidad hasta Q-GRD-27 con las derivadas; se quita "Sin historias todavía". Sin reglas nuevas. |
+| 1.10 | 2026-10-04 | PO (AADD); decisión del orquestador validada por Arquitecto/PO | Resultados de SPIKE-GRD-001 en macOS. Q-GRD-28: BR-EDGE-001 añade la excepción del renombrado de la rama base en repos reftable y BR-EDGE-003 sus ejemplos (también el efecto parcial con el formato habitual). Q-GRD-29: BR-CONS-005 con criterio semántico en la entrada de la clave de hooks. Q-GRD-31: apartado "lo que se deniega de más" en BR-EDGE-003. Q-GRD-30 solo cambia el RNF de context.md. Sin reglas nuevas. |
