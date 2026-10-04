@@ -288,6 +288,7 @@ mod repo_intact {
                 &f.repo,
                 &ReaderOptions {
                     force_reduced_trust: true,
+                    ignore_ambient_config: true,
                 },
             )
             .unwrap_err();
