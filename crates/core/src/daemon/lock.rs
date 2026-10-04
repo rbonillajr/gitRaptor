@@ -206,7 +206,19 @@ mod tests {
             .spawn()
             .unwrap();
         drop(held);
-        let again = InstanceLock::acquire(&state);
+        // On Linux, `spawn` returns once the child's address space is replaced,
+        // a moment before `execve` closes its `O_CLOEXEC` descriptors, so the
+        // lock can look held for an instant. A child that really inherited it
+        // keeps it for the whole sleep, well past this deadline.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        let again = loop {
+            match InstanceLock::acquire(&state) {
+                Err(DaemonError::AlreadyRunning { .. }) if std::time::Instant::now() < deadline => {
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+                other => break other,
+            }
+        };
         child.kill().unwrap();
         child.wait().unwrap();
         assert!(again.is_ok(), "the child kept the lock: {again:?}");
