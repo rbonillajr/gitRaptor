@@ -356,6 +356,9 @@ impl RepoReader {
                 check_dirty: false,
             })
             .index_worktree_rewrites(None)
+            // One thread, as before gix's `parallel` feature was enabled for the Time Machine
+            // store writer (ADR-GRP-009 § 3: the engine's reads stay bounded).
+            .index_worktree_options_mut(|o| o.thread_limit = Some(1))
             .tree_index_track_renames(gix::status::tree_index::TrackRenames::Disabled)
             .into_iter(None)
             .map_err(unavailable("status"))?;
