@@ -63,7 +63,7 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
 
 - **El margen no se reparte**: ninguna feature puede reclamarlo para cumplir su parte.
 - **Publicación en dos fases**: si un cambio grande no cabe en 150 ms de cómputo, o si cambió la punta de la rama o la base y hay que recalcular ahead/behind (ADR-GRP-010 § 4, Enmienda 2026-10-04), el motor publica dentro del presupuesto lo barato (rama, `HEAD`, operación en curso) con una marca de "recomputando", y los recuentos en un segundo evento (ADR-GRP-010). El p95 se mide sobre el primer evento que refleja el cambio; el segundo se mide aparte y se reporta, sin gate en el MVP.
-- **Arranque y reconciliación** (inicio, vuelta de suspensión, desbordamiento, recreación del stream del watcher) no cuentan para NFR-04: son estados explícitos ("reconciliando") que el Cockpit presenta como tales. La publicación del alta o la baja del propio worktree sí cuenta: es el escenario "crear y borrar un worktree" del apartado 4.
+- **Arranque y reconciliación** (inicio, vuelta de suspensión, desbordamiento, recreación del stream del watcher, reconciliación periódica) no cuentan para NFR-04: son estados explícitos ("reconciliando") que el Cockpit presenta como tales. La publicación del alta o la baja del propio worktree sí cuenta: es el escenario "crear y borrar un worktree" del apartado 4.
 - **Modo degradado** (sondeo, ADR-GRP-010) queda fuera de NFR-04 y se expone como tal.
 
 ### 3. Instrumentación en el contrato
@@ -79,6 +79,8 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
 - **Cliente**: el banco escribe en `t0` y un suscriptor sin pantalla registra `t_client_recv`. Cuando exista el Cockpit (F-001-02), su TUI sin pantalla (backend de pruebas de `ratatui`) registra `t_render`. Hasta entonces se mide y se aplica el gate solo al motor.
 - **`t0` en los escenarios de Git** (Enmienda 2026-10-04): `t0` es el fin del comando. Git escribe `index`, refs y `HEAD` antes de terminar, así que el lote suele abrirse antes de `t0` (SPIKE-GRP-002: en 200 de 200 commits y checkouts). La etapa de detección solo se aísla en "modificar un archivo"; en los demás escenarios se reporta el total desde el fin del comando.
 - **Debounce medido como duración efectiva** (`t_recv` → `t_flush`), incluida la holgura del temporizador del SO, no como el valor configurado.
+- **Calibración de la holgura** (Enmienda 2026-10-04): el banco mide la holgura del temporizador por SO y, con esos datos, la Dev Spec de INF-GRP-002 decide entre una constante por SO y la calibración en tiempo de ejecución (ADR-GRP-010 § 3).
+- **Escenarios sin gate de latencia** (Enmienda 2026-10-04): la recreación del stream con escrituras concurrentes y la pérdida silenciosa recuperada por la reconciliación periódica tienen gate de **corrección** (100% recuperado y marcado como hueco), que bloquea el merge, pero no de latencia.
 - **Muestras**: ⚠️ **ASSUMPTION**: al menos 200 por escenario y SO, descartando las 10 primeras de calentamiento.
 - **Gates**:
   - p95 del motor (`t0` → `t_client_recv`) > 300 ms en cualquier escenario y SO: **el CI falla**.
@@ -138,3 +140,5 @@ Aplicada desde las recomendaciones de [SPIKE-GRP-002-resultados.md](../../requir
 | Coste medido de la persistencia con `F_FULLFSYNC` en macOS (≤ 11 ms p95); Windows sigue sin medir | Consecuencias | Resultados § 3.11 |
 | Revisión de coherencia con la Enmienda de ADR-GRP-010: ahead/behind recalculado activa la segunda fase; la reconciliación tras recrear el stream no cuenta para NFR-04, pero el alta y la baja del propio worktree sí; las cifras siguen como supuesto solo en Linux y Windows | § 2, Consecuencias | ADR-GRP-010 § 4 y § 6; revisión del Arquitecto (2026-10-04) |
 | Validación alineada con el alcance parcial: SPIKE-GRP-002 medido solo en macOS; Linux y Windows pendientes con el procedimiento del README del prototipo | Validación | Resultados § 5 y § 7; Artifact Judge (reservas) |
+| La reconciliación periódica de ADR-GRP-010 § 5 tampoco cuenta para NFR-04; el escenario de recreación del stream del banco tiene gate de corrección, no de latencia | § 2 | ADR-GRP-010, Enmienda (2026-10-04, SPIKE-GRP-002); decisión del orquestador, validada por el Arquitecto |
+| El banco calibra la holgura del temporizador por SO y decide con datos entre constante y calibración en ejecución; los escenarios de recreación del stream y de reconciliación periódica llevan gate de corrección | § 4 | Resultados § 3.2 y § 3.6; revisión del Arquitecto (2026-10-04) |
