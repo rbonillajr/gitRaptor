@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: low
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 domain: GRP
 epic: E-001
 feature: time-machine
@@ -16,7 +16,7 @@ related:
     - BR-TMC-001
   stories: [US-TMC-016]
 covers: [BR-TMC-TIME-001, D-TMC-5, D-TMC-15]
-blocked_by: ["ADR de formato de la configuración (P8 de motor-local)", "F-001-04 Guardrails"]
+blocked_by: ["F-001-04 Guardrails: comando de edición de la configuración (US-GRD-013, Q27)"]
 tags: [time-machine, retencion, configuracion]
 ---
 
@@ -64,7 +64,7 @@ Entonces se aplica la retención por defecto de 30 días
 ## Requisitos Técnicos
 
 - Clave `timeMachine.retentionDays` (entero 1-3650, niveles perfil y local, 30 por defecto) en la sección `timeMachine` de ADR-GRP-007, con tipos en `crates/policy` (ADR-TMC-007 § 1).
-- Nivel de equipo: clave ignorada con diagnóstico; valor inválido: regla de PQ-8 y aviso. Bloqueada por la aceptación de ADR-GRP-007.
+- Nivel de equipo: clave ignorada con diagnóstico; valor inválido: regla de PQ-8 y aviso. ADR-GRP-007 aceptado por Rene Bonilla el 2026-10-04.
 
 ## Diseño y Dev Spec
 
@@ -74,5 +74,5 @@ Entonces se aplica la retención por defecto de 30 días
 ## Dependencias
 
 - **Historias**: US-TMC-016.
-- **Externas**: **bloqueada** por el ADR de formato de la configuración en tres niveles (P8 de motor-local) y por el comando de edición de Guardrails (F-001-04, Q27).
+- **Externas**: **bloqueada** por el comando de edición de la configuración de Guardrails (F-001-04, Q27; es US-GRD-013, que a su vez espera al factor fuera de banda de Q-GRD-19). P8 ya no la bloquea: ADR-GRP-007, que fija la sección `timeMachine`, se aceptó el 2026-10-04.
 - **Transversal**: transversal (lo define el Arquitecto): verificación en repos temporales, nunca en un repo real; mismo comportamiento en Windows, macOS y Linux; mensajes en inglés y español.

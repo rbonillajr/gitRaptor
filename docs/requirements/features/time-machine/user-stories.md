@@ -1,7 +1,7 @@
 ---
 mode: bulk
 generated: 2026-10-03T00:00Z
-updated: 2026-10-03
+updated: 2026-10-04
 generator: product-owner
 total_artifacts: 21
 expanded: 21
@@ -65,7 +65,7 @@ blocked:
 | [US-TMC-014](./user-stories/US-TMC-014-undo-ya-empujado.md) | El desarrollador sabe cuándo lo que deshizo sigue en el remoto | Desarrollador quiere undo solo local con aviso si ya se empujó | 002 | — | expanded |
 | [US-TMC-015](./user-stories/US-TMC-015-operacion-git-en-curso.md) | El desarrollador no rompe un rebase o un merge a medias al deshacer o restaurar | Desarrollador quiere que undo y restauración se detengan con una operación de Git en curso | 002, 009, US-GRP-003 | — | expanded |
 | [US-TMC-016](./user-stories/US-TMC-016-retencion-por-defecto.md) | Los snapshots no llenan el disco y nunca se pierde el último punto antes de una operación destructiva | Desarrollador quiere purga a 30 días con aviso y protección del último punto destructivo | 001 | — | expanded |
-| [US-TMC-017](./user-stories/US-TMC-017-retencion-configurable.md) | El desarrollador ajusta para sí cuánto tiempo se conservan los snapshots | Desarrollador quiere retención en perfil y local personal, nunca en el nivel de equipo | 016 | ADR de formato de configuración (P8 motor-local), F-001-04 | expanded |
+| [US-TMC-017](./user-stories/US-TMC-017-retencion-configurable.md) | El desarrollador ajusta para sí cuánto tiempo se conservan los snapshots | Desarrollador quiere retención en perfil y local personal, nunca en el nivel de equipo | 016 | F-001-04: comando de edición de la configuración (US-GRD-013, Q27; P8 cerrada por ADR-GRP-007 el 2026-10-04) | expanded |
 | [US-TMC-018](./user-stories/US-TMC-018-garantias-snapshots.md) | Los snapshots no se publican, no se pierden con el mantenimiento de Git y ningún agente los altera | Desarrollador quiere las tres garantías de D-TMC-11 verificadas | 001 | — | expanded |
 | [US-TMC-019](./user-stories/US-TMC-019-robustez-interrupcion.md) | El repo sigue recuperable aunque GitRaptor muera a mitad de un snapshot o de un undo | Desarrollador quiere resistir pruebas de caos (NFR-12) | 001, 002, 009 | — | expanded |
 | [US-TMC-020](./user-stories/US-TMC-020-overhead-snapshot.md) | El desarrollador y sus agentes no notan el coste de los snapshots | Desarrollador quiere overhead < 200 ms por snapshot (NFR-04) | 001, 004 | Spike (a): repo mediano (D-TMC-21) | expanded |
@@ -112,3 +112,4 @@ blocked:
 | 1.1 | 2026-10-03 | PO (AADD) | RESERVAS del Artifact Judge: solicitante y confirmación interactiva en 003, 009, 010 y 011 (AUTH-001, D-TMC-23); escenario de Guardrails de 013 extraído a US-TMC-021 (bloqueada por F-001-04); cobertura alineada con `covers`; escenarios de validación o borde en 005, 012, 014, 016 y 019. |
 | 1.2 | 2026-10-03 | PO (AADD) | Segunda pasada del judge: 013 como dependencia de 003 y 009; escenario 6 de 009 retitulado; 010 separa confirmación y rechazo; el solicitante de undo, redo y restauración figura como "solicitante sin atribuir", nunca como el desarrollador (Q34). |
 | 1.3 | 2026-10-03 | PO (AADD) | Decisiones TQ aceptadas por Rene Bonilla (D-TMC-16 y D-TMC-23 actualizadas, D-TMC-24, D-TMC-25). 001: credenciales excluidas y declaradas, opción del perfil. 002: undos seguidos (pila). 003: una operación nueva invalida el redo. 004: credenciales y tope por archivo con captura parcial. 007: hueco "sin espacio". 009: lo excluido no se toca al restaurar; confirmación solo en macOS y Linux, rechazo en Windows (fusionado con el de otro agente). 013: Windows y MCP sin atribuir rechazados; "otro agente registrado" fusionado en el rechazo entre agentes. 016: aviso visto + 24 h y la cuota no adelanta la purga. 019: undo y restauración interrumpidos fusionados; fallo a mitad sin rollback; solo se libera el bloqueo propio. Todas con 6 escenarios o menos. |
+| 1.4 | 2026-10-04 | Agente de documentación para Rene Bonilla | Aceptación de ADR-GRP-007 (Rene Bonilla, 2026-10-04), que cierra P8: US-TMC-017 deja de esperar al ADR de formato y sigue bloqueada solo por el comando de edición de Guardrails (US-GRD-013, Q27). Las bloqueadas siguen siendo 5 (005, 011, 017, 020, 021); ninguna otra citaba P8 |
