@@ -293,10 +293,39 @@ impl SnapshotStore {
         let t_all = Instant::now();
         let prior = req.level != SnapshotLevel::Observation;
         let (mut state, _ticket) = self.writer(prior);
-        let mut timings = StageTimings {
+        let timings = StageTimings {
             queue: t_all.elapsed(),
             ..StageTimings::default()
         };
+        let mut works = Vec::with_capacity(req.worktrees.len());
+        let result =
+            self.capture_locked(&mut state, &mut works, oplog, req, prior, t_all, timings);
+        if result.is_err() {
+            // What was read stays true (the stat cache names blobs the store has, the `index`
+            // tree matches its index signature), so it is kept; but the next capture of these
+            // worktrees must look at everything again: their mark is dropped.
+            for w in works.drain(..) {
+                let mut st = w.state;
+                st.mark = None;
+                state.worktrees.insert(w.key, st);
+            }
+        }
+        result
+    }
+
+    /// The capture once the writer is held. Every worktree detected so far is in `works`, so the
+    /// caller can keep its state if this fails or gives way.
+    #[allow(clippy::too_many_arguments)]
+    fn capture_locked(
+        &self,
+        state: &mut State,
+        works: &mut Vec<WtWork>,
+        oplog: &Mutex<Oplog>,
+        req: &CaptureRequest,
+        prior: bool,
+        t_all: Instant,
+        mut timings: StageTimings,
+    ) -> Result<CaptureOutcome, CaptureError> {
         let yield_now = || !prior && self.prior_waiting();
         if yield_now() {
             return Err(CaptureError::Yielded);
@@ -320,7 +349,6 @@ impl SnapshotStore {
             .map(|g| g.as_str().to_owned())
             .collect();
 
-        let mut works = Vec::with_capacity(req.worktrees.len());
         let mut anchor_time = Duration::ZERO;
         for (i, scope) in req.worktrees.iter().enumerate() {
             let prev = state.worktrees.remove(&scope.key);
@@ -332,7 +360,16 @@ impl SnapshotStore {
                 own = RepoReader::open(&scope.path, &ReaderOptions::default())?;
                 &own
             };
-            let work = self.detect(&handle, reader, i, scope, prev, started, &mut anchor_lap)?;
+            let work = self.detect(
+                &handle,
+                reader,
+                i,
+                scope,
+                prev,
+                started,
+                &mut anchor_lap,
+                &yield_now,
+            )?;
             anchor_time += anchor_lap;
             works.push(work);
             if yield_now() {
@@ -343,7 +380,7 @@ impl SnapshotStore {
 
         // ---- anchoring of the commits the snapshot points to --------------------------------
         let mut parents: Vec<String> = Vec::new();
-        for w in &works {
+        for w in works.iter() {
             if let Some(c) = &w.meta.head_commit {
                 parents.push(c.clone());
             }
@@ -410,7 +447,7 @@ impl SnapshotStore {
 
         // ---- trees and commit ------------------------------------------------------------------
         let mut any_tree_changed = false;
-        for w in &mut works {
+        for w in works.iter_mut() {
             let files = if w.changes.is_empty() {
                 w.base
             } else {
@@ -429,7 +466,7 @@ impl SnapshotStore {
             w.state.files_tree = files;
         }
         let mut exclusions = Vec::new();
-        for w in &works {
+        for w in works.iter() {
             for (path, reason) in &w.state.excluded {
                 exclusions.push(Exclusion {
                     path: format!("{}:{}", w.key, path.to_str_lossy()),
@@ -466,7 +503,7 @@ impl SnapshotStore {
             None => {
                 let (meta_id, _) = handle.write_blob(&meta_bytes)?;
                 let mut edit = handle.edit_tree(Oid::empty_tree())?;
-                for w in &works {
+                for w in works.iter() {
                     edit.upsert(
                         format!("wt/{}/files", w.key).as_str().into(),
                         TreeEntryKind::Tree,
@@ -483,7 +520,7 @@ impl SnapshotStore {
             }
         };
         let mut message = format!("tm snapshot ({})\n\n", req.level.as_str());
-        for w in &works {
+        for w in works.iter() {
             message.push_str(&format!("detection {}={}\n", w.key, w.detection.describe()));
         }
         let commit = handle.commit(root, &parent_ids, &message)?;
@@ -493,11 +530,10 @@ impl SnapshotStore {
         if yield_now() {
             return Err(CaptureError::Yielded);
         }
-        // One full barrier per snapshot (ADR-TMC-001 § 4): the flush of the `complete` row. The
-        // oplog runs with `fullfsync` (macOS) and `synchronous=FULL`, and that flush empties the
-        // drive cache, so the objects and the ref synced before it are on stable storage when
-        // the snapshot becomes valid. The `pending` row is written in order before the ref but
-        // flushed with `complete`.
+        // The flush of the `pending` row is the full barrier of ADR-TMC-001 § 4: the oplog runs
+        // with `fullfsync` (macOS) and `synchronous=FULL`, and that flush empties the drive
+        // cache, so every object synced above is on stable storage before the ref exists. No
+        // separate barrier is paid.
         let snapshot_id = record(oplog, &handle, req, commit, unique_bytes, &exclusions)?;
         timings.ref_oplog = laps.lap();
 
@@ -505,7 +541,7 @@ impl SnapshotStore {
             .iter()
             .map(|w| (w.key.clone(), w.detection))
             .collect();
-        for w in works {
+        for w in works.drain(..) {
             let mut st = w.state;
             if let Some(h) = req
                 .worktrees
@@ -546,6 +582,7 @@ impl SnapshotStore {
         prev: Option<WtState>,
         started: (i64, u32),
         anchor_time: &mut Duration,
+        yield_now: &dyn Fn() -> bool,
     ) -> Result<WtWork, CaptureError> {
         let root = reader
             .workdir()
@@ -600,6 +637,9 @@ impl SnapshotStore {
         let mut index_tree_changed = false;
         let mut status_changed: Vec<BString> = Vec::new();
         if index_changed {
+            if yield_now() {
+                return Err(CaptureError::Yielded);
+            }
             let view = reader.index_view()?;
             let t = Instant::now();
             let (map, tracked) = index_maps(&view);
@@ -673,7 +713,7 @@ impl SnapshotStore {
                 None => reader.index_view()?,
             };
             work.base = work.state.index_tree;
-            self.detect_full(reader, &root, wt_index, &mut work, &view, started)?;
+            self.detect_full(reader, &root, wt_index, &mut work, &view, started, yield_now)?;
         }
         Ok(work)
     }
@@ -750,6 +790,7 @@ impl SnapshotStore {
 
     /// Full walk: every tracked file against the stat cache or its index entry, plus the
     /// untracked files gix finds (ignored ones never). Changes are relative to the `index` tree.
+    #[allow(clippy::too_many_arguments)]
     fn detect_full(
         &self,
         reader: &RepoReader,
@@ -758,13 +799,17 @@ impl SnapshotStore {
         work: &mut WtWork,
         index: &IndexView,
         started: (i64, u32),
+        yield_now: &dyn Fn() -> bool,
     ) -> Result<(), CaptureError> {
         let mut conversions = reader.conversions()?;
         let st = &mut work.state;
         let mut cache: HashMap<BString, Cached> = HashMap::with_capacity(st.cache.len());
         let mut excluded = BTreeMap::new();
         let mut seen: HashSet<&BStr> = HashSet::new();
-        for e in &index.entries {
+        for (n, e) in index.entries.iter().enumerate() {
+            if n % 512 == 511 && yield_now() {
+                return Err(CaptureError::Yielded);
+            }
             let path = e.path.as_bstr();
             if !seen.insert(path) {
                 continue;
@@ -811,6 +856,9 @@ impl SnapshotStore {
                     full,
                 });
             }
+        }
+        if yield_now() {
+            return Err(CaptureError::Yielded);
         }
         for u in reader.untracked()? {
             match u.kind {
@@ -1151,7 +1199,7 @@ fn record(
     exclusions: &[Exclusion],
 ) -> Result<String, CaptureError> {
     let mut log = oplog.lock().unwrap_or_else(|p| p.into_inner());
-    let id = log.begin_snapshot_deferred(
+    let id = log.begin_snapshot(
         &NewSnapshot {
             level: req.level,
             worktrees: req.worktrees.iter().map(|w| w.key.clone()).collect(),
