@@ -27,3 +27,8 @@ signal-hook = "0.4.5"
 [dev-dependencies]
 gitraptor-testkit.workspace = true
 tempfile = "3.27.0"
+
+# p95 of the guaranteed prior snapshot against NFR-04 (TS-TMC-001, ADR-TMC-006 § 4).
+[[bench]]
+name = "tm_snapshot"
+harness = false
