@@ -2,6 +2,7 @@
 
 pub mod daemon;
 pub mod profile;
+pub mod timemachine;
 
 pub use gitraptor_api::API_VERSION;
 
