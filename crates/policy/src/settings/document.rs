@@ -1,0 +1,430 @@
+//! One document of one level: strict parsing, then validation against the embedded schema.
+//!
+//! The same criterion of validity for every consumer (ADR-GRP-007, ADR-GRD-004 § 1):
+//! - invalid JSON, a wrong type or range, a limit exceeded → the whole source is `Ignored`
+//!   (PQ-8);
+//! - an unknown key, or a key in a level that does not admit it → only that key is dropped, with
+//!   a diagnostic (Q24);
+//! - an unknown key or operation inside `permissions` or `policies` → the source is `Partial`
+//!   (D12): what is readable applies and the safe minimum is forced.
+
+use std::sync::Arc;
+
+use serde_json::Value;
+
+use super::diagnostic::{Code, Diagnostic, Location, SourceKind, pointer};
+use super::model::{Level, Settings};
+use super::schema::SCHEMA;
+use super::strict;
+
+/// State of one source (ADR-GRP-007, "Estado por fuente del cargador").
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SourceStatus {
+    /// No file, no copy of the main branch, unborn `HEAD`, or no entry at the path.
+    Absent,
+    /// The document is valid. Unknown or out-of-level keys were dropped with a diagnostic.
+    Readable,
+    /// Unknown keys or operations in `permissions` or `policies` (D12).
+    Partial,
+    /// Invalid JSON or schema, limits exceeded or not a regular file (PQ-8).
+    Ignored,
+}
+
+/// A parsed source: its state, its settings (readable or partial) and its diagnostics.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Parsed {
+    pub status: SourceStatus,
+    pub settings: Option<Arc<Settings>>,
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+impl Parsed {
+    /// A source with no document.
+    pub fn absent() -> Self {
+        Self {
+            status: SourceStatus::Absent,
+            settings: None,
+            diagnostics: Vec::new(),
+        }
+    }
+
+    /// A source ignored as a whole, with one diagnostic.
+    pub fn ignored(diagnostic: Diagnostic) -> Self {
+        Self {
+            status: SourceStatus::Ignored,
+            settings: None,
+            diagnostics: vec![diagnostic],
+        }
+    }
+
+    /// The settings that apply: those of a readable or partial source.
+    pub fn applicable(&self) -> Option<&Settings> {
+        self.settings.as_deref()
+    }
+
+    /// The same parse, with its diagnostics attributed to `source`.
+    pub fn for_source(&self, source: SourceKind) -> Self {
+        let mut out = self.clone();
+        for d in &mut out.diagnostics {
+            *d = d.clone().with_source(source);
+        }
+        out
+    }
+}
+
+/// Parse and validate one document of `level`. The entry point for every level: the team
+/// sources here, the profile and local files in US-GRP-013 (ADR-GRP-008).
+pub fn parse_document(bytes: &[u8], level: Level, source: SourceKind) -> Parsed {
+    let mut value = match strict::parse(bytes) {
+        Ok(value) => value,
+        Err((code, location)) => {
+            let mut d = Diagnostic::new(code, source);
+            d.location = location;
+            return Parsed::ignored(d);
+        }
+    };
+    let mut walk = Walk {
+        level,
+        diagnostics: Vec::new(),
+        invalid: None,
+        partial: false,
+    };
+    walk.node(&SCHEMA, &mut value, &mut Vec::new());
+    if let Some((code, path)) = walk.invalid {
+        return Parsed::ignored(
+            Diagnostic::new(code, source).at(Location::Pointer(pointer(&path))),
+        );
+    }
+    let Ok(settings) = serde_json::from_value::<Settings>(value) else {
+        // Unreachable while the schema matches the types (drift test); never fall open.
+        return Parsed::ignored(
+            Diagnostic::new(Code::WrongType, source).at(Location::Pointer(String::new())),
+        );
+    };
+    Parsed {
+        status: if walk.partial {
+            SourceStatus::Partial
+        } else {
+            SourceStatus::Readable
+        },
+        settings: Some(Arc::new(settings)),
+        diagnostics: walk
+            .diagnostics
+            .into_iter()
+            .map(|(code, path)| Diagnostic::new(code, source).at(Location::Pointer(pointer(&path))))
+            .collect(),
+    }
+}
+
+/// Sections where an unknown key makes the source partial (D12).
+const OPEN_SECTIONS: [&str; 2] = ["permissions", "policies"];
+
+struct Walk {
+    level: Level,
+    diagnostics: Vec<(Code, Vec<String>)>,
+    invalid: Option<(Code, Vec<String>)>,
+    partial: bool,
+}
+
+/// What to do with a value after visiting it.
+#[derive(PartialEq)]
+enum Keep {
+    Yes,
+    Drop,
+}
+
+fn resolve(mut schema: &Value) -> &Value {
+    while let Some(Value::String(r)) = schema.get("$ref") {
+        let name = r.strip_prefix("#/$defs/").expect("local $ref");
+        schema = &SCHEMA["$defs"][name];
+    }
+    schema
+}
+
+fn levels(schema: &Value) -> Option<Vec<&str>> {
+    schema
+        .get("x-gitraptor-levels")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(Value::as_str).collect())
+}
+
+impl Walk {
+    fn fail(&mut self, code: Code, path: &[String]) -> Keep {
+        if self.invalid.is_none() {
+            self.invalid = Some((code, path.to_vec()));
+        }
+        Keep::Drop
+    }
+
+    fn note(&mut self, code: Code, path: &[String]) {
+        self.diagnostics.push((code, path.to_vec()));
+    }
+
+    fn open_section(path: &[String]) -> Option<&str> {
+        path.first()
+            .map(String::as_str)
+            .filter(|s| OPEN_SECTIONS.contains(s))
+    }
+
+    fn node(&mut self, declared: &Value, value: &mut Value, path: &mut Vec<String>) -> Keep {
+        if self.invalid.is_some() {
+            return Keep::Drop;
+        }
+        let schema = resolve(declared);
+        for node in [declared, schema] {
+            if let Some(levels) = levels(node)
+                && !levels.contains(&self.level.as_str())
+            {
+                self.note(Code::KeyNotAllowedAtLevel, path);
+                return Keep::Drop;
+            }
+        }
+        let expected = schema.get("type").and_then(Value::as_str).unwrap_or("");
+        match (expected, &mut *value) {
+            ("object", Value::Object(map)) => {
+                let properties = schema.get("properties");
+                let keys: Vec<String> = map.keys().cloned().collect();
+                for key in keys {
+                    path.push(key.clone());
+                    let keep = match properties.and_then(|p| p.get(&key)) {
+                        Some(child) => {
+                            let v = map.get_mut(&key).expect("key exists");
+                            self.node(child, v, path)
+                        }
+                        None => {
+                            match Self::open_section(path) {
+                                Some("policies") => {
+                                    self.partial = true;
+                                    self.note(Code::PolicyNotSupported, path);
+                                }
+                                Some(_) => {
+                                    self.partial = true;
+                                    self.note(Code::UnknownKey, path);
+                                }
+                                None => self.note(Code::UnknownKey, path),
+                            }
+                            Keep::Drop
+                        }
+                    };
+                    path.pop();
+                    if keep == Keep::Drop {
+                        map.remove(&key);
+                    }
+                }
+                Keep::Yes
+            }
+            ("array", Value::Array(items)) => {
+                let item_schema = schema.get("items").cloned().unwrap_or(Value::Null);
+                let mut kept = Vec::with_capacity(items.len());
+                for (i, mut item) in std::mem::take(items).into_iter().enumerate() {
+                    path.push(i.to_string());
+                    if self.node(&item_schema, &mut item, path) == Keep::Yes {
+                        kept.push(item);
+                    }
+                    path.pop();
+                }
+                *items = kept;
+                Keep::Yes
+            }
+            ("string", Value::String(s)) => {
+                let Some(allowed) = schema.get("enum").and_then(Value::as_array) else {
+                    return Keep::Yes;
+                };
+                if allowed.iter().any(|a| a == s.as_str()) {
+                    return Keep::Yes;
+                }
+                if Self::open_section(path).is_some() {
+                    // An operation a newer binary knows: drop it, keep the rest (D12).
+                    self.partial = true;
+                    self.note(Code::UnknownOperation, path);
+                    Keep::Drop
+                } else {
+                    self.fail(Code::WrongType, path)
+                }
+            }
+            ("integer", Value::Number(n)) => {
+                let Some(n) = n.as_i64().map(i128::from).or(n.as_u64().map(i128::from)) else {
+                    return self.fail(Code::WrongType, path);
+                };
+                let bound = |k: &str| schema.get(k).and_then(Value::as_i64).map(i128::from);
+                if bound("minimum").is_some_and(|min| n < min)
+                    || bound("maximum").is_some_and(|max| n > max)
+                {
+                    return self.fail(Code::OutOfRange, path);
+                }
+                Keep::Yes
+            }
+            ("boolean", Value::Bool(_)) => Keep::Yes,
+            _ => self.fail(Code::WrongType, path),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::settings::model::Operation;
+
+    fn team(json: &str) -> Parsed {
+        parse_document(json.as_bytes(), Level::Team, SourceKind::Floor)
+    }
+
+    fn codes(p: &Parsed) -> Vec<&'static str> {
+        p.diagnostics.iter().map(|d| d.code.as_str()).collect()
+    }
+
+    fn at(p: &Parsed) -> Vec<String> {
+        p.diagnostics
+            .iter()
+            .map(|d| match &d.location {
+                Some(Location::Pointer(s)) => s.clone(),
+                other => format!("{other:?}"),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn readable_team_document() {
+        let p = team(
+            r#"{"$schema":"x","engine":{"baseBranch":"develop"},
+               "permissions":{"deny":["push"],"allow":["commit"],"disableSafeMinimum":true}}"#,
+        );
+        assert_eq!(p.status, SourceStatus::Readable, "{:?}", p.diagnostics);
+        let s = p.applicable().unwrap();
+        assert_eq!(
+            s.engine.as_ref().unwrap().base_branch.as_deref(),
+            Some("develop")
+        );
+        let perms = s.permissions.as_ref().unwrap();
+        assert_eq!(perms.deny.as_deref(), Some(&[Operation::Push][..]));
+        assert_eq!(perms.disable_safe_minimum, Some(true));
+        assert!(p.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn invalid_json_ignores_the_whole_level_with_a_position() {
+        let p = team("{\"engine\": {\"baseBranch\": }}");
+        assert_eq!(p.status, SourceStatus::Ignored);
+        assert!(p.settings.is_none());
+        assert!(matches!(
+            p.diagnostics[0].location,
+            Some(Location::Position { line: 1, .. })
+        ));
+    }
+
+    #[test]
+    fn wrong_type_or_range_ignores_the_whole_level_with_a_pointer() {
+        let p = parse_document(
+            br#"{"engine":{"idleThresholdMinutes":0}}"#,
+            Level::Profile,
+            SourceKind::Profile,
+        );
+        assert_eq!(p.status, SourceStatus::Ignored);
+        assert_eq!(codes(&p), ["out-of-range"]);
+        assert_eq!(at(&p), ["/engine/idleThresholdMinutes"]);
+
+        for doc in [
+            r#"{"engine":{"baseBranch":7}}"#,
+            r#"{"engine":{"baseBranch":null}}"#,
+            r#"{"permissions":{"deny":[1]}}"#,
+            r#"{"permissions":{"deny":"push"}}"#,
+            r#"{"permissions":{"disableSafeMinimum":"yes"}}"#,
+            r#"[]"#,
+        ] {
+            let p = team(doc);
+            assert_eq!(p.status, SourceStatus::Ignored, "{doc}");
+            assert_eq!(codes(&p), ["wrong-type"], "{doc}");
+        }
+        let p = parse_document(
+            br#"{"engine":{"idleThresholdMinutes":1.5}}"#,
+            Level::Local,
+            SourceKind::Local,
+        );
+        assert_eq!(codes(&p), ["wrong-type"]);
+    }
+
+    #[test]
+    fn unknown_key_is_dropped_and_the_level_applies() {
+        let p = team(r#"{"engin":{"baseBranch":"x"},"engine":{"baseBranch":"dev","other":1}}"#);
+        assert_eq!(p.status, SourceStatus::Readable);
+        assert_eq!(codes(&p), ["unknown-key", "unknown-key"]);
+        assert_eq!(at(&p), ["/engin", "/engine/other"]);
+        let engine = p.applicable().unwrap().engine.clone().unwrap();
+        assert_eq!(engine.base_branch.as_deref(), Some("dev"));
+    }
+
+    #[test]
+    fn key_out_of_level_is_dropped_with_a_diagnostic() {
+        let p = team(
+            r#"{"engine":{"idleThresholdMinutes":10,"gitPath":"/x","watcher":{"fallbackPollSeconds":30}},
+               "timeMachine":{"retentionDays":3}}"#,
+        );
+        assert_eq!(p.status, SourceStatus::Readable);
+        assert_eq!(
+            codes(&p),
+            [
+                "key-not-allowed-at-level",
+                "key-not-allowed-at-level",
+                "key-not-allowed-at-level",
+                "key-not-allowed-at-level"
+            ]
+        );
+        assert_eq!(
+            p.applicable()
+                .unwrap()
+                .engine
+                .as_ref()
+                .unwrap()
+                .idle_threshold_minutes,
+            None
+        );
+
+        let p = parse_document(
+            br#"{"engine":{"baseBranch":"dev","idleThresholdMinutes":15},"permissions":{"disableSafeMinimum":true}}"#,
+            Level::Local,
+            SourceKind::Local,
+        );
+        assert_eq!(
+            at(&p),
+            ["/engine/baseBranch", "/permissions/disableSafeMinimum"]
+        );
+        let s = p.applicable().unwrap();
+        assert_eq!(s.engine.as_ref().unwrap().idle_threshold_minutes, Some(15));
+        assert_eq!(s.engine.as_ref().unwrap().base_branch, None);
+    }
+
+    #[test]
+    fn unknown_key_or_operation_in_permissions_or_policies_is_partial() {
+        let p = team(r#"{"permissions":{"deny":["push","tag-delete"],"disableSafeMinimum":true}}"#);
+        assert_eq!(p.status, SourceStatus::Partial);
+        assert_eq!(codes(&p), ["unknown-operation"]);
+        assert_eq!(at(&p), ["/permissions/deny/1"]);
+        let perms = p.applicable().unwrap().permissions.clone().unwrap();
+        assert_eq!(perms.deny.as_deref(), Some(&[Operation::Push][..]));
+
+        let p = team(r#"{"permissions":{"denyy":["push"]}}"#);
+        assert_eq!(p.status, SourceStatus::Partial);
+        assert_eq!(codes(&p), ["unknown-key"]);
+
+        let p = team(r#"{"policies":{"protectedBranches":["release"]}}"#);
+        assert_eq!(p.status, SourceStatus::Partial);
+        assert_eq!(codes(&p), ["policy-not-supported"]);
+
+        // An empty `policies` object is fine.
+        assert_eq!(team(r#"{"policies":{}}"#).status, SourceStatus::Readable);
+    }
+
+    #[test]
+    fn diagnostics_never_carry_values() {
+        let secret = "ghp_SECRETVALUE";
+        for doc in [
+            format!(r#"{{"engine":{{"baseBranch":{{"x":"{secret}"}}}}}}"#),
+            format!(r#"{{"engine":{{"idleThresholdMinutes":"{secret}"}}}}"#),
+            format!(r#"{{"permissions":{{"deny":["{secret}"]}}}}"#),
+            format!(r#"{{"x": {secret}}}"#),
+        ] {
+            let p = team(&doc);
+            assert!(!format!("{:?}", p.diagnostics).contains(secret), "{doc}");
+        }
+    }
+}
