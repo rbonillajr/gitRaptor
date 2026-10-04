@@ -81,11 +81,9 @@ impl Request {
     /// Decodes the parameters strictly into `T`. Missing parameters are an
     /// empty object.
     pub fn params<T: DeserializeOwned>(&self) -> Result<T, ErrorObject> {
-        let value = self
-            .params
-            .clone()
-            .unwrap_or_else(|| Value::Object(Default::default()));
-        serde_json::from_value(value).map_err(|err| {
+        // Deserialized from a reference: a large `params` is never copied.
+        let empty = Value::Object(Default::default());
+        T::deserialize(self.params.as_ref().unwrap_or(&empty)).map_err(|err| {
             ErrorObject::new(code::INVALID_PARAMS, &format!("invalid params: {err}"))
         })
     }
