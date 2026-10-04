@@ -7,7 +7,9 @@ date: 2026-10-03
 created: 2026-10-03
 updated: 2026-10-03
 deciders: [Rene Bonilla]
-related: [ADR-GRP-006, ADR-GRP-007]
+domain: GRP
+feature: motor-local
+related: [ADR-GRP-005, ADR-GRP-006, ADR-GRP-007]
 tags: [configuracion, settings-local-json, perfil, no-versionado, solo-lectura, motor-local, p10]
 ---
 
@@ -40,7 +42,7 @@ El nivel local vive **en el perfil de GitRaptor, fuera del repo, indexado por re
 - **Clave**: `<id-repo>` es la clave de repo de ADR-GRP-006, compartida por todos los worktrees. El ajuste vale **por repo**, no por worktree (Q3).
 - **Formato, niveles admitidos y validación**: los de ADR-GRP-007. El archivo es del usuario. El motor solo lo lee (Q23) y no crea ni el archivo ni la carpeta `repos/<id-repo>/`. Los edita el desarrollador a mano o con el comando de Guardrails (Q27).
 - **Encontrar el archivo**: el motor expone por el canal local (ADR-GRP-005), en solo lectura, la ruta esperada del `settings.local.json` de cada repo, exista o no. Los clientes y el comando de Guardrails la usan para que el usuario no tenga que conocer el id.
-- **Carpeta de configuración, no de datos**: el archivo va junto a los demás archivos que edita el usuario y separado de la base que escribe el motor (ADR-GRP-006). Así una corrupción o un borrado de los datos del motor no lo arrastra.
+- **Carpeta de configuración, no de datos**: el archivo va junto a los demás archivos que edita el usuario y separado de la base que escribe el motor: son carpetas distintas en los tres SO, y en macOS las subcarpetas `config/` y `data/` de la carpeta de la app (ADR-GRP-006 § 1). Así una corrupción o un borrado de los datos del motor no lo arrastra.
 - **Retirar un repo** (Q25) no borra su `settings.local.json`, igual que no borra sus datos.
 
 **P10 desaparece**: el archivo no está en ningún working tree, así que no hay forma de versionarlo ni hace falta `.gitignore`, `.git/info/exclude` ni una advertencia.
@@ -49,7 +51,7 @@ El nivel local vive **en el perfil de GitRaptor, fuera del repo, indexado por re
 
 ## Precedencia y niveles admitidos
 
-Sin cambios respecto a ADR-GRP-007. El nivel local sigue siendo el más específico aunque viva en el perfil:
+Sin cambios respecto a ADR-GRP-007, cuya tabla de precedencia y niveles admitidos es la completa y la que manda (incluye `gitPath` y los intervalos del watcher). El nivel local sigue siendo el más específico aunque viva en el perfil. Extracto de las claves que afectan a este ADR:
 
 | Clave | Perfil (`settings.json`) | Equipo (`.gitraptor/settings.json`) | Local (`repos/<id-repo>/settings.local.json`) |
 |---|---|---|---|

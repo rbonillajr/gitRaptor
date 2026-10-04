@@ -7,7 +7,7 @@ date: 2026-10-01
 created: 2026-10-01
 updated: 2026-10-03
 deciders: [Rene Bonilla]
-related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-007]
+related: [BRD-GRP-001, ADR-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-007]
 tags: [react, state-management, tanstack-query, zustand, jotai, xstate, react-hook-form, zod, tanstack-router, ux, optimistic-ui]
 ---
 
@@ -86,3 +86,7 @@ El motor en Rust (`gitraptor-core`) es la **única fuente de verdad** del estado
 ## Referencias
 
 - [BRD-GRP-001 — Documento de negocio de GitRaptor](../../business/gitraptor-documento-de-negocio.md)
+
+---
+
+Enmienda 2026-10-03: referencias a policy.yaml sustituidas por ADR-GRP-007 (configuración en tres niveles).

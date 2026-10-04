@@ -52,7 +52,7 @@ tags: [motor-local, ci, rendimiento, latencia, p95, escala, nfr-04, nfr-05]
 - **Informe**: cada ejecución publica p50, p95 y máximo por etapa, escenario y SO.
 - **Reproducibilidad**: dos ejecuciones seguidas sobre el mismo runner dan un p95 total dentro de una tolerancia que fija la Dev Spec.
 - **Escala**: durante la ráfaga, el p95 de los otros nueve worktrees sigue dentro de presupuesto.
-- **Coherencia**: los nombres de las etapas del informe coinciden con los del bloque de tiempos del contrato.
+- **Coherencia**: los nombres de las etapas del informe coinciden con los del bloque de tiempos del contrato y con los nombres canónicos de ADR-GRP-011 § 2: `t0`, `t_recv`, `t_flush`, `t_computed`, `t_persisted`, `t_published`, `t_client_recv` y `t_render`.
 
 #### Verificación Manual / Sandbox
 

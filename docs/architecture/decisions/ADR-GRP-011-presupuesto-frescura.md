@@ -48,11 +48,13 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
 | Debounce | Motor | ventana fija de 75 ms | `t_recv` → `t_flush` |
 | Recomputo incremental | Motor | ≤ 150 ms (cómputo y persistencia juntos) | `t_flush` → `t_computed` |
 | Persistencia antes de publicar | Motor (ADR-GRP-013) | (incluida arriba) | `t_computed` → `t_persisted` |
-| Publicación por IPC | Motor (ADR-GRP-005) | ≤ 25 ms | `t_persisted` → `t_client_recv` |
+| Publicación por IPC | Motor (ADR-GRP-005) | ≤ 25 ms | `t_persisted` → `t_published` (escrito en el canal) → `t_client_recv` |
 | **Total motor** | **Motor** | **≤ 300 ms** | `t0` → `t_client_recv` |
 | Recepción, aplicación del delta y render | Cockpit (F-001-02) | ≤ 100 ms | `t_client_recv` → `t_render` |
 | Margen | Nadie | 100 ms | Absorbe ruido de la máquina y la varianza del SO |
 | **Total NFR-04** | | **< 500 ms** | `t0` → `t_render` |
+
+**Nombres canónicos de las marcas**, en orden y con el mismo nombre en este ADR, en el contrato (§ 3) y en el informe de INF-GRP-002: `t0`, `t_recv`, `t_flush`, `t_computed`, `t_persisted`, `t_published`, `t_client_recv` y `t_render`.
 
 - **El margen no se reparte**: ninguna feature puede reclamarlo para cumplir su parte.
 - **Publicación en dos fases**: si un cambio grande no cabe en 150 ms de cómputo, el motor publica dentro del presupuesto lo barato (rama, `HEAD`, operación en curso) con una marca de "recomputando", y los recuentos en un segundo evento (ADR-GRP-010). El p95 se mide sobre el primer evento que refleja el cambio; el segundo se mide aparte y se reporta, sin gate en el MVP.
@@ -94,7 +96,7 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
 - ✅ Cada feature tiene un límite propio y verificable: el motor 300 ms y el Cockpit 100 ms.
 - ✅ Un fallo de NFR-04 señala la etapa concreta, con el mismo dato en CI y en dogfooding.
 - ✅ El margen de 100 ms protege contra la varianza del SO y de máquinas más lentas que las de referencia.
-- ⚠️ Persistir antes de publicar consume parte de los 150 ms; un `fsync` en macOS (`F_FULLFSYNC`) o en Windows puede costar decenas de milisegundos. **Mitigación**: ADR-GRP-013 elige un modo de persistencia compatible con este presupuesto (p. ej. escritura agrupada por lote de debounce) y SPIKE-GRP-002 mide el coste real.
+- ⚠️ Persistir antes de publicar consume parte de los 150 ms; un `fsync` en macOS (`F_FULLFSYNC`) o en Windows puede costar decenas de milisegundos. **Mitigación**: ADR-GRP-006 § 4 agrupa las escrituras de un mismo lote de debounce en una sola transacción y SPIKE-GRP-002 mide el coste real.
 - ⚠️ El p95 y las cifras de cada etapa son supuestos. **Mitigación**: SPIKE-GRP-002 los mide antes del desarrollo de US-GRP-002 e INF-GRP-002 los fija como gate; el cambio de interpretación (p95 frente a máximo) se confirma con Rene.
 - ⚠️ Los runners compartidos del CI tienen ruido y pueden dar falsos fallos. **Mitigación**: gate sobre totales y aviso por etapa, calentamiento descartado y plan B de runner dedicado (apartado 4).
 - ⚠️ La detección SO → motor no se puede medir fuera del banco, porque el SO no fecha los eventos en las tres plataformas. **Mitigación**: en dogfooding se mide desde `t_recv`; la detección solo se mide en el banco, donde se conoce `t0`.

@@ -7,6 +7,8 @@ date: 2026-10-03
 created: 2026-10-03
 updated: 2026-10-03
 deciders: [Rene Bonilla]
+domain: GRP
+feature: motor-local
 related: [ADR-GRP-005, ADR-GRP-006, ADR-GRP-010, ADR-GRP-012, CTX-GRP-001, BR-GRP-001]
 tags: [motor-local, eventos, sesiones, atribucion, correccion, huecos, append-only, modelo-de-datos, auditoria, no-repudio, seguridad]
 ---
@@ -19,8 +21,8 @@ El motor guarda en el perfil (ADR-GRP-006) los eventos de Git, las sesiones de a
 
 - El motor solo emite "agente X" con su origen ("detectado" o "registrado") o "sin atribuir". **Nunca "humano"** (Q34) ni "no identificada" (Q35), y ante la duda no atribuye (BR-EDGE-004).
 - **Corregir** reemplaza la atribución detectada de una sesión, no añade sesiones (Q33) y alcanza todos los eventos de esa sesión **desde su inicio**, sin tocar los de otras sesiones (Q37). Solo se corrige donde hay una atribución detectada (Q38). Una detección posterior no deshace una corrección vigente (BR-CONS-002).
-- **Registrar otro agente** añade una sesión y el worktree pasa a compartido; registrar al mismo agente ya detectado **confirma** esa sesión (Q39, BR-CONS-004).
-- Una sesión terminada no se reactiva (Q41).
+- **Registrar otro agente**, si ya hay otra sesión presente, añade una sesión y el worktree pasa a compartido; registrar al mismo agente ya detectado **confirma** esa sesión (Q39, BR-CONS-004).
+- Una sesión terminada no se reactiva, y un agente registrado figura presente hasta que se **retira su registro**, lo que termina su sesión (Q41, BR-WF-001).
 - Lo que el motor no vio ocurrir queda "sin atribuir", aunque hubiera un agente registrado antes del hueco (BR-EDGE-005).
 - Todo sobrevive a reinicios (Q6, BR-CONS-005).
 - Abiertas para el PO: **P16** (¿una sesión confirmada por registro pasa a origen "registrado"?) y **P17** (¿al retirar una corrección, sus eventos vuelven a la atribución detectada?).
@@ -34,8 +36,8 @@ El motor guarda en el perfil (ADR-GRP-006) los eventos de Git, las sesiones de a
 | Entidad | Qué guarda |
 |---------|------------|
 | **Worktree** | Ruta canónica, nombre administrativo en Git, primera vez visto y, si desapareció, cuándo. |
-| **Sesión** | Worktree, agente (Claude Code u "otro agente" con su nombre declarado), atribución inicial y su origen (detectada o registrada), clave de detección de ADR-GRP-012 si se detectó, inicio, fin y causa del fin. |
-| **Registro de atribución** | Append-only. Sesión, tipo (confirmación, corrección, retiro de corrección), agente, autor (desarrollador o agente, como exige la tabla de BR-CONS-001), momento y secuencia en la que entra en vigor. |
+| **Sesión** | Worktree, agente (Claude Code u "otro agente" con su nombre declarado), atribución inicial y su origen (detectada o registrada), clave de detección de ADR-GRP-012 si se detectó, inicio, fin y causa del fin (proceso desaparecido, terminada durante un hueco o **registro retirado**). |
+| **Registro de atribución** | Append-only. Sesión, tipo (registro, confirmación, corrección, retiro de corrección, **retiro de registro**), agente, autor (desarrollador o agente, como exige la tabla de BR-CONS-001), momento y secuencia en la que entra en vigor. |
 | **Evento** | Secuencia por repo, worktree, tipo, metadatos (refs, ids de commit, rutas afectadas), hora de observación en UTC con el desfase de zona horaria local, sesión (opcional), evidencia de atribución (qué señales de ADR-GRP-012 la sustentan) y hueco (opcional). |
 | **Hueco** | Intervalo de inicio y fin y su causa: máquina apagada o suspendida, daemon caído, **daemon caído durante una sesión activa**, daemon parado por un comando, repo retirado, Git ausente o insuficiente (BR-WF-002), perfil perdido o almacén corrupto. Si lo provocó un comando (parada, retiro del repo), guarda **el cliente que lo pidió** (proceso, ejecutable y si pasó los controles de ADR-GRP-005) (SEC-13). |
 | **Último estado conocido** | Por worktree: HEAD, puntas de refs, operación en curso y huella de los cambios sin commitear. Es la base de la reconciliación (ADR-GRP-010). |
@@ -43,7 +45,7 @@ El motor guarda en el perfil (ADR-GRP-006) los eventos de Git, las sesiones de a
 
 Los cambios de estado de las sesiones (inicio, activo, inactivo, terminado) se guardan como eventos del mismo historial, así que su estado sobrevive a reinicios (BR-WF-001).
 
-**Registro de auditoría de comandos reservados (SEC-03)**: fuera de los almacenes por repo, en el índice global del perfil (ADR-GRP-006), porque algunos comandos (parar el daemon, añadir un repo) no pertenecen a un repo. Es **append-only**: cada intento de comando reservado de ADR-GRP-005 § 6 (añadir o retirar repo, corregir o retirar corrección, parar el daemon), aceptado o rechazado, con fecha, operación, repo si aplica, resultado, motivo del rechazo y cliente (ejecutable y si desciende de un agente). Nunca se reescribe ni se borra; los clientes lo pueden consultar.
+**Registro de auditoría de comandos reservados (SEC-03)**: fuera de los almacenes por repo, en el índice global del perfil (ADR-GRP-006), porque algunos comandos (parar el daemon, añadir un repo) no pertenecen a un repo. Es **append-only**: cada intento de comando reservado de ADR-GRP-005 § 6 (añadir o retirar repo, corregir o retirar corrección, retirar el registro de otro agente, parar el daemon), aceptado o rechazado, con fecha, operación, repo si aplica, resultado, motivo del rechazo y cliente (ejecutable y si desciende de un agente). Nunca se reescribe ni se borra; los clientes lo pueden consultar.
 
 ### 2. Resolución de la atribución
 
@@ -51,15 +53,18 @@ Los cambios de estado de las sesiones (inicio, activo, inactivo, terminado) se g
 - **Atribución efectiva de una sesión**: se parte de la atribución inicial y se aplican en orden los registros vigentes:
   - **Confirmación** (registro del mismo agente ya detectado, Q39): misma sesión y mismo agente. ⚠️ **ASSUMPTION** dependiente de **P16** (supuesto: sí): el origen pasa a "registrado".
   - **Corrección**: agente corregido con origen "registrado". Como todos los eventos de la sesión apuntan a ella, la corrección alcanza **desde el inicio de la sesión** (Q37) y no toca los eventos de otras sesiones. No crea sesiones ni marca el worktree como compartido (Q33).
+  - **Retiro de registro** (Q41, BR-WF-001): no cambia la atribución de la sesión; la termina con causa "registro retirado" y deja de ser presente, así que deja de contar para decidir si el worktree es compartido (§ 3). Una sesión terminada no se reabre.
   - **Retiro de corrección**: deja sin efecto la corrección retirada y vuelve la atribución anterior. ⚠️ **ASSUMPTION** dependiente de **P17** (supuesto: sí): los eventos que la corrección había reatribuido vuelven también, porque se resuelven desde la sesión.
 - **Precondiciones de la corrección** (las aplica el daemon): la pide el desarrollador (BR-AUTH-001, controles de ADR-GRP-005) y la sesión tiene atribución inicial detectada; si en el worktree no hay ninguna, se rechaza e indica que se use el registro (Q38).
+- **Autorización del retiro de registro** (la aplica el daemon con los controles de ADR-GRP-005 § 6). ⚠️ **ASSUMPTION** pendiente de confirmar por Rene: el desarrollador puede retirar cualquier registro; un agente solo el suyo, es decir, el de la sesión que él mismo registró en el worktree que es su cwd (la misma regla que para registrarse). Un agente que intenta retirar otro registro recibe un rechazo que queda en el registro de auditoría.
 - **La detección no escribe registros**: actualizar la presencia o la actividad de una sesión detectada no cambia su atribución, así que una detección posterior no deshace una corrección vigente (BR-CONS-002).
 - **Si el PO responde "no" a P16 o P17**, el modelo no cambia de forma: la confirmación deja el origen como está (P16), y el retiro de una corrección solo vale para los eventos con secuencia posterior al retiro, gracias a la secuencia de entrada en vigor de cada registro (P17).
 
 ### 3. Asignación de sesión a un evento
 
-- Un evento solo apunta a una sesión con **evidencia positiva** de ADR-GRP-012 (proceso, ascendencia, contenido de sesión o hooks existentes). La co-ubicación sola no basta. Ante la duda, sin sesión (BR-EDGE-004).
-- En un **worktree compartido** solo se asigna una sesión si la evidencia identifica una sola. En el MVP no hay atribución por archivo dentro de un worktree compartido (Q7, BR-CONS-004).
+- Un evento solo apunta a una sesión con **evidencia positiva** de ADR-GRP-012 (proceso, ascendencia, contenido de sesión o hooks existentes). La co-ubicación de una sesión detectada sola no basta. Ante la duda, sin sesión (BR-EDGE-004).
+- **El registro explícito es evidencia positiva** (BR-VAL-001, ejemplo 3 de BR-EDGE-004, US-GRP-009): mientras una sesión registrada sea **la única sesión presente** en el worktree, los eventos del worktree apuntan a ella, aunque no haya S2b, S3 ni S4. Así un agente sin detección ("otro agente: Codex") recibe sus commits.
+- En un **worktree compartido** (varias sesiones presentes, detectadas o registradas) el registro deja de bastar: solo se asigna una sesión si la evidencia por evento (S2b, S3 o S4) identifica una sola; ante la duda, "sin atribuir". En el MVP no hay atribución por archivo dentro de un worktree compartido (Q7, BR-CONS-004).
 - Que un worktree sea compartido se deriva de cuántas sesiones presentes tiene; no se guarda como dato propio.
 - Una sesión terminada no se reabre: si el agente vuelve, es una sesión nueva (Q41).
 
@@ -114,14 +119,16 @@ Pruebas con repos y perfiles temporales; las sesiones se simulan con la interfaz
 2. **Retiro** (P17): retirar la corrección devuelve `c1` y `c2` a la atribución detectada.
 3. **Rechazos**: corregir en un worktree sin atribución detectada se rechaza (Q38); una corrección pedida por un agente se rechaza (BR-AUTH-001).
 4. **Confirmación** (US-GRP-009): registrar a Claude Code donde ya se detectaba no crea una segunda sesión ni marca compartido; el origen pasa a "registrado" (P16).
-5. **Compartido** (US-GRP-011): registrar otro agente añade una sesión y el worktree se reporta compartido; un cambio de archivo sin evidencia de una sola sesión queda "sin atribuir".
-6. **Huecos** (US-GRP-005): con un agente registrado, matar el daemon, hacer dos commits y relanzarlo; los dos aparecen como eventos de reconciliación "sin atribuir" enlazados a un hueco con su intervalo.
-7. **Persistencia** (US-GRP-004): tras reiniciar el daemon, correcciones, sesiones, estados y eventos siguen iguales.
-8. **Sin "humano"**: el esquema del contrato no contiene esa variante; una prueba de propiedades sobre secuencias aleatorias de registros comprueba que todo actor resuelto es un agente con origen o "sin atribuir".
-9. **Orden**: con la hora del sistema retrasada a mitad de prueba, el orden de los eventos sigue la secuencia.
-10. **No repudio (SEC-13)**: un agente simulado que ejecuta `raptor daemon stop` es rechazado y el intento queda en el registro de auditoría; `kill -9` del daemon con una sesión activa deja, al relanzar, un hueco "caída durante sesión activa" visible en los clientes; una parada aceptada guarda el cliente que la pidió.
-11. **Auditoría (SEC-03)**: cada comando reservado, aceptado o rechazado, aparece una sola vez en el registro, y el registro no admite modificación ni borrado por el canal.
-12. **Repo intacto**: todo lo anterior pasa por el arnés de INF-GRP-001.
+5. **Registro como evidencia** (US-GRP-009, BR-VAL-001): con "otro agente: Codex" registrado como única sesión de `feat-login`, un commit sin S2b, S3 ni S4 tiene como actor "otro agente: Codex" (registrado). Tras registrar un segundo agente en el mismo worktree, un commit sin evidencia por evento queda "sin atribuir". Al retirar el segundo registro, vuelve a atribuirse a Codex.
+6. **Retiro de registro** (US-GRP-009, Q41): retirar el registro de Codex pasa su sesión a "Terminado" con causa "registro retirado" y un commit posterior queda "sin atribuir"; un agente que intenta retirar el registro de otro agente es rechazado y el intento queda en la auditoría (ASSUMPTION).
+7. **Compartido** (US-GRP-011): registrar otro agente añade una sesión y el worktree se reporta compartido; un cambio de archivo sin evidencia de una sola sesión queda "sin atribuir".
+8. **Huecos** (US-GRP-005): con un agente registrado, matar el daemon, hacer dos commits y relanzarlo; los dos aparecen como eventos de reconciliación "sin atribuir" enlazados a un hueco con su intervalo.
+9. **Persistencia** (US-GRP-004): tras reiniciar el daemon, correcciones, sesiones, estados y eventos siguen iguales.
+10. **Sin "humano"**: el esquema del contrato no contiene esa variante; una prueba de propiedades sobre secuencias aleatorias de registros comprueba que todo actor resuelto es un agente con origen o "sin atribuir".
+11. **Orden**: con la hora del sistema retrasada a mitad de prueba, el orden de los eventos sigue la secuencia.
+12. **No repudio (SEC-13)**: un agente simulado que ejecuta `raptor daemon stop` es rechazado y el intento queda en el registro de auditoría; `kill -9` del daemon con una sesión activa deja, al relanzar, un hueco "caída durante sesión activa" visible en los clientes; una parada aceptada guarda el cliente que la pidió.
+13. **Auditoría (SEC-03)**: cada comando reservado, aceptado o rechazado, aparece una sola vez en el registro, y el registro no admite modificación ni borrado por el canal.
+14. **Repo intacto**: todo lo anterior pasa por el arnés de INF-GRP-001.
 
 ## Referencias
 
@@ -143,4 +150,4 @@ Enmienda tras la revisión del security-expert. No cambia el modelo de atribuci�
 | SEC-03 · Registro de auditoría | Apartado 1: registro append-only de comandos reservados en el índice global del perfil, consultable por los clientes |
 | M8 / SEC-12 · Texto no confiable en lo que expone el contrato | Apartado 6: nombres declarados, rutas y refs marcados como no confiables; respuestas MCP acotadas |
 
-Validación ampliada: SEC-13 y SEC-03 (puntos 10 y 11).
+Validación ampliada: SEC-13 y SEC-03 (puntos 12 y 13).

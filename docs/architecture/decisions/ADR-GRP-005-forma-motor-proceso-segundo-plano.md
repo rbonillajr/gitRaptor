@@ -7,6 +7,8 @@ date: 2026-10-03
 created: 2026-10-03
 updated: 2026-10-03
 deciders: [Rene Bonilla]
+domain: GRP
+feature: motor-local
 related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-006, ADR-GRP-009, ADR-GRP-010, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, CTX-GRP-001, BR-GRP-001]
 tags: [motor-local, daemon, ipc, json-rpc, autoarranque, unix-socket, named-pipe, seguridad, continuidad, comandos-reservados, prompt-injection]
 ---
@@ -47,11 +49,11 @@ El motor tiene que capturar la actividad de los agentes **aunque no haya ninguna
   |----|-----------|---------------------------------|
   | macOS | LaunchAgent de launchd con arranque al cargar y relanzamiento si termina con error | Un `.plist` en `~/Library/LaunchAgents` |
   | Linux | Unidad `systemd --user` habilitada en el target de sesión, con reinicio ante fallo | Un `.service` en `~/.config/systemd/user` y su enlace de habilitación |
-  | Windows | Valor en la clave `Run` de HKCU (la tarea programada de inicio de sesión queda como alternativa si hace falta relanzar ante fallo) | Un valor en HKCU |
+  | Windows | Valor en la clave `Run` de HKCU. La tarea programada de inicio de sesión es solo la alternativa, si hace falta relanzar ante fallo | Un valor en HKCU |
 
 - **Endurecimiento del autoarranque (SEC-14)**: el artefacto apunta a la ruta absoluta del binario, entre comillas en HKCU `Run`. `daemon enable` se niega si el binario vive en la caché de npx o en una carpeta temporal. `enable` y `disable` no se pueden invocar desde el MCP, y `disable` elimina exactamente lo que creó `enable`.
 
-- **Arranque bajo demanda**: si un cliente no puede conectar, arranca el daemon y espera el handshake con un tiempo máximo y reintenta. Si dos clientes lo lanzan a la vez, el bloqueo de instancia única resuelve la carrera. **El daemon no hereda el entorno del cliente** (SEC-10), que puede ser `raptor-mcp` lanzado por un agente: si el autoarranque está registrado, el cliente lo pide al gestor de servicios (`launchctl kickstart`, `systemctl --user start`, la tarea programada en Windows); si no, lanza el ejecutable instalado con un **entorno limpio** construido por allowlist (sin `GIT_*`, `LD_PRELOAD`, `DYLD_*`, `XDG_CONFIG_HOME` ni PATH del cliente) y cwd fijo en el perfil.
+- **Arranque bajo demanda**: si un cliente no puede conectar, arranca el daemon y espera el handshake con un tiempo máximo y reintenta. Si dos clientes lo lanzan a la vez, el bloqueo de instancia única resuelve la carrera. **El daemon no hereda el entorno del cliente** (SEC-10), que puede ser `raptor-mcp` lanzado por un agente: si el autoarranque está registrado en macOS o Linux, el cliente lo pide al gestor de servicios (`launchctl kickstart`, `systemctl --user start`). En Windows, HKCU `Run` no es un gestor al que se le pueda pedir el arranque, así que el cliente **siempre** lanza el ejecutable con entorno limpio (la tarea programada solo entra si se adopta la alternativa del apartado 3). Sin autoarranque registrado, en cualquier SO, lanza el ejecutable instalado con un **entorno limpio** construido por allowlist (sin `GIT_*`, `LD_PRELOAD`, `DYLD_*`, `XDG_CONFIG_HOME` ni PATH del cliente) y cwd fijo en el perfil.
 - **Sin autoarranque** (el desarrollador no lo activó, o falta systemd en Linux): el arranque bajo demanda sigue funcionando y el tiempo desde el inicio de sesión hasta el primer cliente se trata como hueco "sin atribuir" (BR-EDGE-005, ADR-GRP-013). Los clientes avisan de que el autoarranque está desactivado, sin activarlo.
 - **Entorno heredado**: launchd y systemd arrancan con un PATH mínimo. El daemon no depende del PATH de la shell para encontrar Git; la resolución y el entorno de los procesos hijo (por allowlist) los define ADR-GRP-009.
 
@@ -77,7 +79,7 @@ El motor tiene que capturar la actividad de los agentes **aunque no haya ninguna
 
 ### 6. Comandos reservados al desarrollador
 
-**Comandos reservados**: añadir o retirar repos, corregir o retirar una corrección de atribución y **parar el daemon** (decisión de Rene Bonilla, 2026-10-03, PQ-6; ampliada por la revisión de seguridad, SEC-03 y SEC-13).
+**Comandos reservados**: añadir o retirar repos, corregir o retirar una corrección de atribución, **retirar el registro de otro agente** y **parar el daemon** (decisión de Rene Bonilla, 2026-10-03, PQ-6; ampliada por la revisión de seguridad, SEC-03 y SEC-13).
 
 **Modelo de amenaza**: un proceso del mismo usuario **no confiable**, en particular un **agente comprometido por prompt injection** (OWASP LLM01, MCP Top 10) que puede ejecutar comandos de shell, hablar JSON-RPC directo con el socket sin pasar por la CLI y abrir una pseudo-terminal. La decisión, por tanto, **se toma solo en el daemon**: el daemon no acepta ninguna marca enviada por el cliente ("confirmado", "tengo TTY") como prueba.
 
@@ -87,6 +89,7 @@ El motor tiene que capturar la actividad de los agentes **aunque no haya ninguna
 4. **Confirmación interactiva (en el cliente)**: la CLI/TUI pide confirmación explícita al desarrollador. Es un paso de UX que evita errores, **no un control de seguridad**: el daemon no confía en él.
 5. **MCP**: `raptor-mcp` no expone estas operaciones (allowlist de NFR-02).
 6. **Registro de un agente (M7)**: el worktree se toma del **cwd del proceso llamante**, leído por el daemon con el identificador del punto 1, nunca de un parámetro; un registro con un worktree distinto se rechaza (BR-AUTH-001). Los nombres declarados se validan (formato, longitud, sin caracteres de control) y se prohíben los reservados (por ejemplo, "Claude Code" o "GitRaptor") para que un proceso no suplante a un agente detectado.
+   - **Retiro de un registro (Q41, BR-WF-001)**. ⚠️ **ASSUMPTION** pendiente de confirmar por Rene: el desarrollador puede retirar cualquier registro (comando reservado, con los controles 1 a 4); un agente solo el suyo, es decir, el registro que él hizo en el worktree que es el cwd del llamante, tomado igual que al registrarse. Cualquier otro retiro pedido por un agente se rechaza y queda en la auditoría. El retiro termina la sesión registrada (ADR-GRP-013).
 7. **Auditoría (SEC-03)**: cada comando reservado, aceptado o rechazado, queda en un registro append-only del perfil con fecha, operación, resultado y cliente, visible en los clientes (ADR-GRP-013).
 
 **Riesgo residual aceptado**: un agente que se desacopla de su árbol de procesos (doble fork con `setsid`, `launchctl submit`, `systemd-run --user`, servicios del SO) puede evadir la ascendencia. Se acepta para el MVP porque el motor no tiene privilegios por encima del usuario y la auditoría deja rastro; se revisa si aparece un mecanismo de atestación del SO más fuerte.
@@ -127,8 +130,8 @@ Las pruebas usan repos y perfiles temporales (variable de sobreescritura del per
 4. **Caída**: matar el daemon a la fuerza; al relanzarlo, el intervalo caído queda registrado como hueco y sus cambios "sin atribuir" (US-GRP-005).
 5. **Canal restringido (SEC-01)**: el socket es 0600 en un directorio 0700; un cliente de otro usuario es rechazado; un directorio pre-creado 0755 o de otro propietario impide arrancar al daemon; en Windows, la DACL del pipe solo contiene el SID del usuario, un pipe ocupado por otro proceso hace que el cliente rechace la conexión y un cliente remoto es rechazado. `lsof -i`/`netstat` no muestran ningún puerto en escucha.
 6. **Entradas (SEC-02)**: `cargo-fuzz` del decodificador de `crates/api`; corpus de rutas maliciosas (traversal, symlink hacia fuera, UNC con captura de red: 0 conexiones SMB); una ref `--upload-pack=x` se rechaza.
-7. **Comandos reservados (SEC-03)**: añadir o retirar un repo, corregir una atribución y parar el daemon enviados por un cliente JSON-RPC directo (sin la CLI) descendiente de un agente simulado se rechazan; ídem con pty (`script`) bajo el agente; un registro con worktree ajeno se rechaza; cada intento queda en el registro de auditoría; `raptor-mcp` no los ofrece (US-GRP-001, US-GRP-006, US-GRP-010). La evasión por doble fork/`setsid` se documenta como riesgo aceptado.
-8. **Robustez (SEC-08)**: un cliente que no lee más 100 conexiones simultáneas; el p95 de los demás clientes sigue dentro del presupuesto de ADR-GRP-011.
+7. **Comandos reservados (SEC-03)**: añadir o retirar un repo, corregir una atribución y parar el daemon enviados por un cliente JSON-RPC directo (sin la CLI) descendiente de un agente simulado se rechazan; ídem con pty (`script`) bajo el agente; un registro con worktree ajeno se rechaza; un agente que retira el registro de otro agente es rechazado y el que retira el suyo es aceptado; cada intento queda en el registro de auditoría; `raptor-mcp` no los ofrece (US-GRP-001, US-GRP-006, US-GRP-010). La evasión por doble fork/`setsid` se documenta como riesgo aceptado.
+8. **Robustez (SEC-08)**: un cliente que no lee y 100 conexiones simultáneas; el p95 de los demás clientes sigue dentro del presupuesto de ADR-GRP-011.
 9. **Entorno (SEC-10)**: arranque bajo demanda desde un cliente con `GIT_EXEC_PATH`, `LD_PRELOAD`/`DYLD_INSERT_LIBRARIES`, `PATH=.:…` o `XDG_CONFIG_HOME` hostiles: el daemon no los hereda.
 10. **No repudio (SEC-13)**: un agente simulado que ejecuta `raptor daemon stop` es rechazado; `kill -9` con sesión activa deja un hueco "caída durante sesión activa".
 11. **Autoarranque (SEC-14)**: `raptor daemon enable` y `disable` crean y eliminan exactamente los artefactos de la tabla del apartado 3, y nada más fuera del perfil, en los tres SO; ruta con espacios en Windows; `enable` desde la caché de npx se rechaza.

@@ -7,6 +7,8 @@ date: 2026-10-03
 created: 2026-10-03
 updated: 2026-10-03
 deciders: [Rene Bonilla]
+domain: GRP
+feature: motor-local
 related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-004, ADR-GRP-005, ADR-GRP-006, ADR-GRP-008, ADR-GRP-009, ADR-GRP-010, ADR-GRP-011, ADR-GRP-012]
 tags: [configuracion, settings-json, json-schema, schemars, precedencia, niveles, guardrails, motor-local, p8, seguridad]
 ---
@@ -28,7 +30,7 @@ Restricciones: Rust (ADR-GRP-001), todo local y sin red (NFR-03), licencias perm
 
 ## Decisión
 
-**JSON estricto con `$schema`, al estilo de Claude Code**, en tres archivos con la misma estructura (decisión de Rene Bonilla, 2026-10-03, propuesta base del BRD v0.4 y PQ-4).
+**JSON estricto con `$schema`, al estilo de Claude Code**, en tres archivos con la misma estructura (propuesta base del BRD v0.4, aceptada por Rene Bonilla el 2026-10-03). Los nombres de los archivos y de la sección `engine` son la decisión PQ-4 (ver la tabla de PQ en el [índice](./index.md)).
 
 ### Archivos
 

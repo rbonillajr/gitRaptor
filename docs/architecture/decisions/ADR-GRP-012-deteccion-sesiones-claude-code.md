@@ -7,8 +7,9 @@ date: 2026-10-03
 created: 2026-10-03
 updated: 2026-10-03
 deciders: [Rene Bonilla]
+domain: GRP
 feature: motor-local
-related: [ADR-GRP-007, ADR-GRP-009, ADR-GRP-010, ADR-GRP-013, SPIKE-GRP-001]
+related: [ADR-GRP-005, ADR-GRP-006, ADR-GRP-007, ADR-GRP-009, ADR-GRP-010, ADR-GRP-013, SPIKE-GRP-001]
 tags: [deteccion, atribucion, claude-code, sesiones, procesos, transcripts, privacidad, nfr-08, seguridad]
 ---
 
@@ -38,7 +39,7 @@ Se adopta la **opción 3 del outline**: detección por proceso y cwd, con atribu
 
 | Señal | Qué observa | Papel | Peso |
 |---|---|---|---|
-| **S1 · Proceso y cwd** | Procesos de Claude Code (por ruta del ejecutable o del script de entrada, nunca por el resto de argv) y su cwd, con `sysinfo` configurado con un `ProcessRefreshKind` que **no carga `cmd` ni `environ`** (SEC-04) | **Existencia y fin de la sesión.** La identidad de la sesión es `(pid, hora de inicio)` para evitar la reutilización de PID | Necesaria. Sin S1 no hay sesión detectada |
+| **S1 · Proceso y cwd** | Procesos de Claude Code y su cwd, con `sysinfo` configurado con un `ProcessRefreshKind` que **no carga `cmd` ni `environ`** (SEC-04). **Identificación**: por la **ruta del ejecutable**. Solo si el ejecutable es un intérprete (`node`), una **lectura acotada de argv[1]** (el script de entrada) con una API por SO que no carga el resto de argv ni `environ`, con tope de bytes, y que se descarta en cuanto se clasifica el proceso. La viabilidad por SO la mide SPIKE-GRP-001 | **Existencia y fin de la sesión.** La identidad de la sesión es `(pid, hora de inicio)` para evitar la reutilización de PID | Necesaria. Sin S1 no hay sesión detectada |
 | **S2a · mtime de transcripts** | mtime de `~/.claude/projects/<cwd-codificado>/*.jsonl` | Correlaciona el proceso con su transcript y desempata dos sesiones del mismo worktree | Auxiliar. **Nunca atribuye un cambio por sí sola** |
 | **S2b · Metadatos de transcripts** | Por registro: herramienta, ruta de archivo, marca de tiempo, id de sesión y cwd | **Atribución por archivo.** Una escritura del worktree cuya ruta coincide con una herramienta de edición de esa sesión dentro de la ventana Δ | Evidencia positiva. Se desactiva sola si no reconoce el formato |
 | **S3 · Ascendencia de procesos** | Árbol de procesos (y la marca de entorno heredada, si el SO deja leerla) de los `git` vivos al detectar un evento de Git | **Atribución de commits y operaciones de Git**. También responde PQ-6: si un llamante del MCP desciende de una sesión detectada | Evidencia positiva. Es una carrera con procesos cortos: si se pierde, no hay evidencia |
@@ -47,13 +48,13 @@ Se adopta la **opción 3 del outline**: detección por proceso y cwd, con atribu
 **Regla de combinación**:
 
 1. **La sesión existe** si S1 encuentra un proceso de Claude Code cuyo cwd está dentro de un worktree observado. Su origen es "detectado".
-2. **Un evento o cambio se atribuye a una sesión** solo con evidencia positiva que apunte a **esa** sesión: S2b, S3 o S4.
-3. **La co-ubicación nunca basta.** Es más estricto que el outline: el SO no permite saber, sin APIs privadas, si un editor o una terminal del desarrollador tienen abierto el worktree.
-4. **Dos sesiones de Claude Code en el mismo worktree**: si la evidencia no distingue entre ellas, el evento queda "sin atribuir", porque cada evento apunta a una sola sesión (ADR-GRP-013).
+2. **Un evento o cambio se atribuye a una sesión** solo con evidencia positiva que apunte a **esa** sesión: S2b, S3, S4 o el **registro explícito** del punto 3.
+3. **La co-ubicación de una sesión detectada nunca basta.** Es más estricto que el outline: el SO no permite saber, sin APIs privadas, si un editor o una terminal del desarrollador tienen abierto el worktree. **Excepción, el registro explícito** (BR-VAL-001, BR-EDGE-004, US-GRP-009): quien registra declara que ese agente trabaja en el worktree, así que el registro es evidencia positiva para los eventos del worktree **mientras su sesión sea la única presente en él**. Si hay varias sesiones presentes (worktree compartido), se vuelve a la evidencia por evento (S2b, S3 o S4) y, ante la duda, "sin atribuir" (punto 4 y ADR-GRP-013 § 3).
+4. **Dos sesiones en el mismo worktree** (detectadas o registradas): si la evidencia no distingue entre ellas, el evento queda "sin atribuir", porque cada evento apunta a una sola sesión (ADR-GRP-013).
 5. **Trabajo en otro directorio** (R3): una escritura con S2b en un worktree distinto del cwd se atribuye a la sesión. La sesión sigue asociada al worktree de su cwd.
 6. **En cualquier otro caso, "sin atribuir"**. Cubre el commit simultáneo del humano y de Claude Code en el mismo worktree cuando S3 pierde la carrera y no hay S4.
 
-**Salida del motor**: `Claude Code (detectado)` o `sin atribuir`. Nunca "humano".
+**Salida del motor**: `Claude Code (detectado)`, el agente registrado con origen "registrado" (incluido "otro agente: <nombre>") o `sin atribuir`. Nunca "humano".
 
 ### Ciclo de vida de la sesión
 
@@ -63,6 +64,7 @@ Se adopta la **opción 3 del outline**: detección por proceso y cwd, con atribu
 - **Suspensión del equipo**: el proceso sigue vivo, así que la sesión no termina. Al reanudar, pasa a inactivo si se superó el umbral.
 - **Reinicio del motor**: una sesión con la misma `(pid, hora de inicio)` continúa. Si el proceso murió mientras el motor estaba parado, la sesión se cierra como terminada al reconciliar (ADR-GRP-010 y ADR-GRP-013).
 - **Registro explícito** de un Claude Code ya detectado: confirma la sesión, sin duplicarla (Q39, US-GRP-009).
+- **Retiro del registro**: una sesión registrada figura presente hasta que se retira su registro (Q41, BR-WF-001). El retiro la pasa a terminado con causa "registro retirado" y no se reactiva. Quién puede retirar lo fija ADR-GRP-013 § 1 (⚠️ ASSUMPTION).
 
 ### Adaptador de transcripts (S2)
 
@@ -114,7 +116,7 @@ La valida **SPIKE-GRP-001** (prototipo aislado, sin código del motor):
 
 | Se lee | Nunca se lee | Se persiste en el perfil |
 |---|---|---|
-| Ruta del ejecutable o del script de Claude Code (como mucho argv[0] y argv[1] si es el script de entrada, descartados al clasificar el proceso), PID, hora de inicio, PPID y cwd | El resto de argv de `claude` (puede llevar el prompt, como en `claude -p "..."`); `sysinfo` no lo carga | La sesión: agente, origen, worktree, `(pid, hora de inicio)`, estados y sus horas |
+| Ruta del ejecutable; solo si es un intérprete (`node`), argv[1] mediante una lectura acotada por SO, descartado al clasificar el proceso. PID, hora de inicio, PPID y cwd | El resto de argv de `claude` (puede llevar el prompt, como en `claude -p "..."`) y `environ`: ni `sysinfo` ni la lectura acotada los cargan | La sesión: agente, origen, worktree, `(pid, hora de inicio)`, estados y sus horas |
 | mtime de los transcripts | — | — |
 | De cada registro del transcript: herramienta, ruta de archivo, marca de tiempo, id de sesión y cwd | Prompts, respuestas, contenido de código, diffs y el comando de las herramientas de shell | La evidencia de cada atribución: tipo de señal y hora. Su forma la fija ADR-GRP-013 |
 | Marca de entorno de Claude Code en los `git` (si el SO lo permite) | Cualquier otra variable de entorno | Nada de los transcripts más allá de lo anterior. **Nunca** prompts, respuestas ni código |
@@ -129,7 +131,7 @@ El motor no escribe en `~/.claude` ni en ningún otro lugar fuera de su perfil (
 - [US-GRP-007](../../requirements/features/motor-local/user-stories/US-GRP-007-sesiones-claude-code.md) y [US-GRP-008](../../requirements/features/motor-local/user-stories/US-GRP-008-editor-humano-sin-atribuir.md).
 - [Historias técnicas](../../requirements/features/motor-local/technical-stories.md): SPIKE-GRP-001.
 - [Documento de negocio](../../business/gitraptor-documento-de-negocio.md): NFR-08, D2.
-- ADR-GRP-007 (umbral), ADR-GRP-009, ADR-GRP-010 (observador y huecos) y ADR-GRP-013 (modelo persistido de atribución).
+- ADR-GRP-005 (comandos reservados y ascendencia), ADR-GRP-006 (perfil), ADR-GRP-007 (umbral), ADR-GRP-009, ADR-GRP-010 (observador y huecos) y ADR-GRP-013 (modelo persistido de atribución).
 
 ## Revisión de seguridad (2026-10-03)
 
@@ -137,7 +139,7 @@ Enmienda tras la revisión del security-expert. No cambia las señales ni la reg
 
 | Hallazgo | Cómo se cubre |
 |---|---|
-| M3 · `sysinfo` carga `cmd`/`environ` completos por defecto | Señal S1 y tabla de Privacidad: `ProcessRefreshKind` sin `cmd` ni `environ`; como mucho argv[0..1], descartados al clasificar (SEC-04) |
+| M3 · `sysinfo` carga `cmd`/`environ` completos por defecto | Señal S1 y tabla de Privacidad: `ProcessRefreshKind` sin `cmd` ni `environ`; identificación por la ruta del ejecutable y, solo con un intérprete, lectura acotada de argv[1] descartada al clasificar (SEC-04) |
 | M4 · Lector de transcripts sin límites | Adaptador de transcripts: `O_NOFOLLOW`, solo archivos regulares, lectura no bloqueante, topes por línea y por escaneo y timeout; rutas extraídas solo se comparan (SEC-04) |
 | I4 · Supuesto "la shell de Claude Code no tiene TTY" | Deja de ser crítico: ADR-GRP-005 ya no se apoya en la terminal del cliente, sino en comprobaciones del daemon (terminal de control y líder de sesión). SPIKE-GRP-001 lo sigue midiendo como dato |
 
