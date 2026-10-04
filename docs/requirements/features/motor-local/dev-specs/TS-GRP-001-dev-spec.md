@@ -132,7 +132,7 @@ pub enum WriteOp { UpsertWorktree, MarkWorktreeGone, StartSession, EndSession,
 - **Único escritor** (ADR-GRP-005): las escrituras exigen `&mut self` y el `Profile` es del daemon. El bloqueo de instancia del proceso es de TS-GRP-003.
 - **Lote**: `write_batch` abre una transacción `IMMEDIATE`; si una operación falla, se revierte el lote entero y no se consume la secuencia.
 - **Integridad al abrir** (índice y almacenes): error de apertura o `PRAGMA quick_check` distinto de `ok` ⇒ se cierra, se mueve el archivo (y `-wal`/`-shm`) a `data/quarantine/<nombre>.corrupt-<unix_ms>` y se crea uno nuevo. El almacén devuelve `StoreOpen::Recovered` para que el motor abra el hueco de "perfil perdido" (Q26). Un repo corrupto no toca los archivos de los demás.
-- **SQL parametrizado**: todas las sentencias son literales con `?N`. Un test recorre las fuentes del módulo y falla si encuentra `format!` en los archivos con SQL (el "lint de CI" de SEC-06, porque `cargo test` corre en CI).
+- **SQL parametrizado**: todas las sentencias son literales con `?N`; el helper de consultas solo acepta `&'static str` y las consultas compuestas se arman con `concat!` en compilación. Un test recorre las fuentes del módulo y falla si encuentra `format!` en los archivos con SQL (el "lint de CI" de SEC-06, porque `cargo test` corre en CI).
 
 ## 8. Plan de tests
 
@@ -140,19 +140,19 @@ Todos con `tempfile` (perfil y repos temporales); ninguno toca el perfil real ni
 
 | Criterio de la TS | Test |
 |---|---|
-| Ubicación por SO; Windows sin roaming | `dirs::tests::layout_matches_adr_table_*` (el del SO actual con `BaseDirs` real, solo resolución sin crear nada), `windows_uses_local_appdata_only` (con `cfg(windows)`) |
-| Override solo en builds de test | `dirs::tests::env_override_honored_in_debug`; `env_override_ignored_in_release` (`cfg(not(debug_assertions))`, se corre con `cargo test --release`) |
+| Ubicación por SO; Windows sin roaming | `dirs::tests::layout_matches_adr_table_{macos,linux,windows}` (función pura con las carpetas base de cada SO), `real_layout_resolves_without_creating_anything`, `windows_uses_local_appdata_only` (con `cfg(windows)`) |
+| Override solo en builds de test | `tests/profile_override.rs::profile_override_only_in_debug_builds` (fija la variable en un proceso hijo; con `cargo test --release` comprueba que se ignora) |
 | Permisos 0700/0600 incl. `-wal`/`-shm` | `tests/profile_permissions.rs::dirs_and_sqlite_files_are_private` |
-| Carpeta 0755 o enlace impide abrir | `profile_permissions::preexisting_0755_dir_is_rejected`, `symlinked_dir_is_rejected` (otro propietario no se puede simular sin root; se cubre con la misma comprobación de `uid`) |
+| Carpeta 0755 o enlace impide abrir | `profile_permissions::preexisting_0755_dir_is_rejected_and_left_alone`, `symlinked_profile_dir_is_rejected`, `quarantined_files_are_private` (otro propietario no se puede simular sin root; lo cubre la misma comprobación de `uid`) |
 | ACL en Windows | **No verificable**: aviso `AclNotVerified` (pendiente) |
 | SQL parametrizado | `profile::tests::sql_is_never_built_with_format` |
 | Clave: worktrees, clones, repo vacío, mayúsculas | `tests/profile_repo_key.rs` |
 | Retirar y volver a añadir | `profile_repo_key::retire_and_readd_recovers_key_and_data` |
-| Corrupción aislada | `tests/profile_store.rs::corrupt_store_is_quarantined_others_untouched`, `corrupt_index_is_quarantined` |
+| Corrupción aislada | `tests/profile_store.rs::corrupt_store_is_quarantined_others_untouched`, `damaged_pages_fail_the_integrity_check`, `corrupt_index_is_quarantined` |
 | Esquema más nuevo | `profile_store::newer_schema_is_rejected_and_file_untouched` |
 | Persistencia tras `kill -9` | `tests/profile_persistence.rs` (re-ejecuta el binario de test como hijo, lo mata y reabre) |
 | Privacidad (NFR-03) | `profile_store::store_never_contains_file_content` |
-| Lote atómico, append-only, secuencia | `profile_store::batch_is_atomic`, `events_and_records_are_append_only`, `seq_is_monotonic_across_reopen` |
+| Lote atómico, append-only, secuencia | `profile_store::batch_round_trips_every_entity`, `batch_is_atomic`, `events_and_records_are_append_only`, `seq_is_monotonic_across_reopen` |
 | Id de instancia | `profile_store::instance_id_stable_across_reopen_and_new_on_recreate` |
 | Validación de rutas Windows (SEC-02) | `repo_key::tests::windows_path_validation` (función pura) |
 
