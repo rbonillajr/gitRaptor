@@ -10,7 +10,7 @@ updated: 2026-10-04
 deciders: [Rene Bonilla]
 domain: GRP
 feature: guardrails
-related: [ADR-GRD-001, ADR-GRD-003, ADR-GRD-005, ADR-GRD-007, CTX-GRD-001, BR-GRD-001]
+related: [ADR-GRD-001, ADR-GRD-003, ADR-GRD-005, ADR-GRD-007, ADR-CKP-002, CTX-GRD-001, BR-GRD-001]
 tags: [guardrails, registro-decisiones, br-cons-004, br-time-002, retencion, kpi, perfil, sqlite, spool, nfr-03]
 ---
 
@@ -50,7 +50,7 @@ ADR-GRP-006 (aceptado el 2026-10-04) fija un SQLite por repo en el perfil con un
 | `kind` | `denial` \| `request` \| `exception` \| `exception-rejected` \| `exception-cancelled` \| `protection-state` |
 | `effect`, `appliedEffect` | Los de ADR-GRD-003 § 3 |
 | `reasons` | Lista `{rule, level}`, con parámetros acotados, sin mensajes de commit ni contenido |
-| `layer` | `hooks` \| `mcp` \| `guardrails` |
+| `layer` | `hooks` \| `mcp` \| `guardrails` \| `cockpit` (Enmienda 2026-10-04, Cockpit) |
 | `requestState` | Para `request`: `pending` → `approved` \| `rejected` \| `expired` (US-GRD-015) |
 | `decisionId` | Correlación (ADR-GRD-003 § 6) |
 | `origin` | `daemon` \| `spool-unverified` |
@@ -102,7 +102,7 @@ ADR-GRP-006 (aceptado el 2026-10-04) fija un SQLite por repo en el perfil con un
 
 ### 6. Consulta (canal)
 
-- **Por repo y periodo**: lista paginada, filtrable por `kind`, `operation`, `actor` y `layer`.
+- **Por repo y periodo**: lista paginada, filtrable por `kind`, `operation`, `actor` y `layer`. (Enmienda 2026-10-04, Cockpit: una entrada como mucho por operación del ejecutor; ver la sección final.)
 - **KPI "acciones bloqueadas"** (J8; BR-CONS-004): **denegadas** (`denial`), más **rechazadas** y **caducadas** (`request` con `requestState` igual a `rejected` o `expired`), sumando `count`. Incluye las ocurrencias agregadas en las filas `rate-limited`.
   - **Por defecto excluye `origin = spool-unverified`**: un proceso del mismo usuario puede escribir esas entradas, así que no son verificables. Se muestran aparte y se pueden incluir con un filtro explícito. El KPI oficial es el verificado y lo del spool es complementario (Q-GRD-27).
   - `exception-rejected` se informa **aparte**, como intentos de excepción rechazados: es una métrica de seguridad, no del KPI.
@@ -168,3 +168,17 @@ ADR-GRP-006 (aceptado el 2026-10-04) fija un SQLite por repo en el perfil con un
 - § 5 y Consecuencias: la excepción del spool pasa a "aplicada (2026-10-04)" en ADR-GRP-005 § 1 y ADR-GRP-006 § 4; la tabla `guardrails_decisions` y la auditoría de comandos reservados están recogidas en ADR-GRP-006 § 4 y ADR-GRP-013 § 1.
 - § 1: nuevo `kind` `exception-cancelled` para una excepción consciente cancelada dentro de la ventana de D5 / D10; lleva los campos de BR-CONS-004 y no cuenta en el KPI.
 - Corrección tras el Judge: el KPI verificado, sin ⚠️, queda registrado como Q-GRD-27.
+
+## Enmienda (2026-10-04, Cockpit)
+
+Aplicada desde DEP-CKP-10 de [CTX-CKP-001](../../requirements/features/cockpit/context.md), con [ADR-CKP-002](./ADR-CKP-002-catalogo-operaciones-ejecutor.md) § 4 (proposed). **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. No cambia la ubicación, el esquema salvo el valor nuevo de `layer`, la retención, la auditoría ni el spool. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| `layer` admite `cockpit` | § 1 | DEP-CKP-10; ADR-GRD-003 (Enmienda, Cockpit) |
+| Una operación del ejecutor deja **como mucho una** entrada, escrita al cerrarse el plan, con el `kind` del desenlace; las evaluaciones de hooks bajo el ejecutor no crean entradas | § 1, § 6 | ADR-CKP-002 § 4 |
+
+- **`kind` según el desenlace del plan**: `denial` si se denegó y el humano no siguió o el plan caducó; `exception`, `exception-rejected` o `exception-cancelled` si siguió por la excepción consciente (ADR-GRD-007, Enmienda (2026-10-04, Cockpit)); ninguna entrada si se permitió sin regla (regla de § 1).
+- **Una sola vez**: la vista previa al preparar y la evaluación al ejecutar son del mismo plan y dejan una sola entrada. Las evaluaciones de los hooks del `git` del ejecutor reutilizan la decisión y no crean entradas (ADR-GRD-003 § 6).
+- **KPI** (§ 6): las entradas con `layer = cockpit` cuentan igual que las de las demás capas; la consulta se puede filtrar por capa.
+- **Validación añadida**: una excepción aplicada desde el Cockpit deja una sola `exception` con `layer = cockpit`, aunque los hooks pregunten varias veces (ADR-CKP-002, Validación 5).
