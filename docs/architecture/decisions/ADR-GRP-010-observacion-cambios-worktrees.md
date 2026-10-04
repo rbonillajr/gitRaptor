@@ -37,6 +37,10 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
 ### 1. Mecanismo
 
 - Crate `notify` sobre las APIs nativas: **FSEvents** en macOS, **inotify** en Linux y **ReadDirectoryChangesW** en Windows. Un único watcher compartido por el proceso (en Linux, una sola instancia de inotify, que respeta `max_user_instances`).
+- **Recreación del stream en macOS** (Enmienda 2026-10-04): con `notify` 8.2, cada `watch()` o `unwatch()` detiene y vuelve a crear el stream de FSEvents "desde ahora", y los eventos de ese intervalo se pierden **sin marca de rescan**. SPIKE-GRP-002 midió de 11 a 17 archivos perdidos en 40 recreaciones, con un archivo nuevo por milisegundo. Por eso:
+  - las altas y bajas de watches se agrupan (`paths_mut()`) para recrear el stream una sola vez por lote;
+  - cada recreación dispara una reconciliación de todos los worktrees del stream (apartado 6).
+  Reanudar el stream desde el último `FSEventStreamEventId`, con una integración propia con FSEvents, queda como optimización, no como requisito.
 - El watcher solo abre handles de lectura o de notificación; nunca escribe ni crea archivos en el repo (ADR-GRP-009). En Windows, los handles de directorio se abren con borrado compartido.
 
 ### 2. Qué se vigila
@@ -53,14 +57,15 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
 
 - **Altas y bajas de worktrees**: un directorio nuevo en `.git/worktrees/` lanza la lectura de su `gitdir` y el alta del watch de su working tree, sin intervención del desarrollador. La desaparición del directorio o de su working tree lanza la baja (ver apartado 6).
 - **Validación del worktree enlazado (SEC-11, M2)**: `.git/worktrees/<nombre>/gitdir` lo puede escribir un agente. Antes de vigilar, el motor exige que el enlace sea **bidireccional** (el `.git` del working tree apunta de vuelta a ese `.git/worktrees/<nombre>`) y que la raíz **no sea `/`, `$HOME`, la raíz de una unidad ni un ancestro del repo**. Si no cumple, el worktree se reporta "no disponible" con el motivo y no se vigila. Las rutas UNC o de red no se vigilan sin acción explícita del desarrollador (M9).
-- **Tope de watches por repo**: además del límite del SO, cada repo tiene un tope de watches (⚠️ **ASSUMPTION**: valor fijado en SPIKE-GRP-002); al superarlo, el worktree pasa a modo degradado (apartado 5) en vez de consumir los watches de los demás repos.
+- **Tope de watches por repo**: además del límite del SO, cada repo tiene un tope de watches (⚠️ **ASSUMPTION**: valor fijado en SPIKE-GRP-002); al superarlo, el worktree pasa a modo degradado (apartado 5) en vez de consumir los watches de los demás repos. En macOS el tope no aplica: FSEvents usa un único stream sin watches por directorio (SPIKE-GRP-002: el proceso pasa de 4 a 9 descriptores con 10 worktrees). El valor para Linux sigue pendiente de la medición de SPIKE-GRP-002 en ese SO.
 - **Filtros**: los eventos de rutas ignoradas por Git se descartan antes del debounce. Las reglas de ignore (`.gitignore`, `.git/info/exclude`, `core.excludesFile`) se leen con `gix` y se recargan cuando cambia cualquiera de esos archivos. Directorios pesados como `target/` o `node_modules/` no tienen trato especial: se excluyen porque y solo si Git los ignora; si no están ignorados, sus cambios son cambios del usuario y se observan.
 - **Linux**: inotify no es recursivo, así que se registra un watch por directorio no ignorado, al recorrer el árbol y al aparecer directorios nuevos. El escaneo de un directorio recién creado se hace de inmediato para no perder archivos creados antes de registrar su watch.
 
 ### 3. Debounce
 
 - **Ventana fija por worktree, no deslizante**: el primer evento abre una ventana de 75 ms (ADR-GRP-011); al cerrarse, se recomputa con todas las rutas acumuladas. Los eventos que llegan durante el recomputo abren la ventana siguiente. Una ráfaga continua produce una publicación cada ciclo, en lugar de posponerla hasta que la ráfaga acaba: la espera máxima por debounce está acotada.
-- Ventanas independientes por worktree: la ráfaga de un worktree no retrasa a los demás.
+- Ventanas independientes por worktree: la ráfaga de un worktree no retrasa a los demás (SPIKE-GRP-002: con una ráfaga de 10K archivos en un worktree, los otros nueve publican en 95 ms p95).
+- **Holgura del temporizador** (Enmienda 2026-10-04): el temporizador del SO se despierta tarde (SPIKE-GRP-002 en macOS: hasta 10 ms; una ventana programada de 75 ms dura 85 ms p95). La ventana se programa con la holgura descontada, medida por SO, para que su duración efectiva sea de 75 ms, y sin espera activa. ADR-GRP-011 § 2 presupuesta la duración efectiva.
 
 ### 4. Recomputo incremental
 
@@ -69,12 +74,16 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
 - **Refs, `HEAD` y reflogs**: relectura de las refs afectadas; ahead/behind solo si cambió la punta de la rama o la base, con caché por par de commits.
 - **Operaciones en curso**: relectura de los marcadores para reportar el estado especial (BR-EDGE-002).
 - **Escala de historia (100K commits)**: ahead/behind se calcula con un recorrido acotado desde la base de fusión, usando el `commit-graph` del repo si existe, solo para leerlo (nunca se escribe, ADR-GRP-009).
+- **Ahead/behind fuera del primer evento** (Enmienda 2026-10-04): sin `commit-graph`, una rama a 50K commits de la base cuesta 145 ms p50 (SPIKE-GRP-002), casi todo el presupuesto de cómputo. Por eso ahead/behind no entra en el presupuesto del primer evento:
+  - se publica en la segunda fase, con caché por par de commits;
+  - se calcula en proceso con `gix`, sin lanzar un proceso de Git por cada cambio de punta.
 - **Publicación en dos fases**: si un cambio grande (p. ej. un checkout de miles de archivos) no cabe en el presupuesto de cómputo, el motor publica primero lo barato (rama, `HEAD`, operación en curso) y después los recuentos (ADR-GRP-011).
 
 ### 5. Sondeo de respaldo y modo degradado
 
-- **Sondeo ligero de respaldo** para cada worktree observado por eventos (⚠️ **ASSUMPTION**: cada 30 s): compara una huella barata (oid de `HEAD`, tamaño y mtime de `index` y `packed-refs`, marcadores de operación) con la última conocida. Si difiere sin que haya llegado un evento, lanza una reconciliación de ese worktree. Cubre eventos perdidos o fusionados por el SO.
-- **Modo degradado por worktree**: cuando no se puede vigilar por eventos, ese worktree pasa a sondeo frecuente (⚠️ **ASSUMPTION**: cada 2 s, con el estado completo por stat) y el motor expone "observación degradada" con el motivo. Ocurre si se agota el límite de watches de inotify, en sistemas de archivos de red o sin notificaciones, o si falla el registro del watch. En modo degradado NFR-04 no se garantiza, pero la observación sigue sin huecos.
+- **Sondeo ligero de respaldo** para cada worktree observado por eventos (⚠️ **ASSUMPTION**: cada 30 s): compara una huella barata (oid de `HEAD`, tamaño y mtime de `index` y `packed-refs`, marcadores de operación) con la última conocida. Si difiere sin que haya llegado un evento, lanza una reconciliación de ese worktree. Cubre eventos perdidos o fusionados por el SO **que tocan metadatos de Git** (commit, checkout, `git add`, ramas).
+  - **Alcance** (Enmienda 2026-10-04): la huella no detecta un cambio del working tree cuyo evento se perdió (SPIKE-GRP-002: 4 de 7 no recuperados por el sondeo). Esos cambios solo se recuperan con los disparadores de reconciliación del apartado 6.
+- **Modo degradado por worktree**: cuando no se puede vigilar por eventos, ese worktree pasa a sondeo frecuente (⚠️ **ASSUMPTION**: cada 2 s, con el estado completo por stat) y el motor expone "observación degradada" con el motivo. Ocurre si se agota el límite de watches de inotify, en sistemas de archivos de red o sin notificaciones, o si falla el registro del watch. En modo degradado NFR-04 no se garantiza, pero la observación sigue sin huecos. Coste medido en macOS (SPIKE-GRP-002): 17,6 ms p50 por ciclo en un worktree de 5.000 archivos, es decir, un 8,8% de un núcleo con 10 worktrees degradados cada 2 s. Crece de forma lineal con los archivos.
 - **Límites de inotify**: el motor estima los watches necesarios (directorios no ignorados) y los compara con `max_user_watches` leído de `/proc`. Nunca cambia `sysctl` ni ningún límite del sistema (Q17); expone el déficit y la guía para subirlo, y el Cockpit y la CLI la presentan.
 
 ### 6. Reconciliación y robustez
@@ -84,6 +93,7 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
   - Al volver de suspensión, detectada por la notificación de energía del SO o por un salto entre el reloj de pared y el monótono.
   - Ante un desbordamiento de la cola del watcher: `IN_Q_OVERFLOW` en inotify, `MustScanSubDirs` o eventos descartados en FSEvents y desbordamiento del búfer en ReadDirectoryChangesW. Se reconcilia el worktree afectado o todos si el SO no indica cuál.
   - Al volver a añadir un repo (Q25), al recuperar Git 2.38 o superior (S19) y al recrear un watch que falló.
+  - Tras cada recreación del stream del watcher, p. ej. por el alta o la baja de un worktree en macOS (apartado 1; Enmienda 2026-10-04): se reconcilian todos los worktrees de ese stream.
 - **Resultado**: las diferencias encontradas se publican como eventos **"sin atribuir"** con una marca de hueco (inicio y fin del periodo no observado) para que la Time Machine sepa que no hay atribución en ese tramo (BR-EDGE-005). Nunca se atribuyen a un agente, aunque hubiera uno registrado antes del hueco.
 - **Worktree o repo que desaparece** (BR-EDGE-001): el evento de borrado de la raíz, de su `gitdir` o un error del watch disparan una comprobación de existencia. Si no existe o no es accesible, se cierran sus watches de inmediato, el worktree pasa a "no disponible" y sus sesiones terminan (BR-WF-001). Cada worktree se procesa en una tarea aislada: el error de uno no detiene a los demás.
 - **Windows**: los handles del watcher no deben impedir borrar ni mover un worktree. Al primer evento de borrado dentro de una raíz vigilada, o si el directorio queda pendiente de borrado, el motor cierra el handle de esa raíz y vuelve a abrirlo solo si el directorio sigue existiendo (lo valida SPIKE-GRP-002).
@@ -104,7 +114,9 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
 - ✅ Los worktrees que crean y borran los agentes se incorporan y se retiran solos.
 - ⚠️ En Linux, repos con muchos directorios no ignorados pueden agotar `max_user_watches` (por defecto 8192 en kernels antiguos; proporcional a la RAM desde 5.11). **Mitigación**: estimación previa, modo degradado por worktree y guía para subir el límite; el motor nunca lo cambia (Q17).
 - ⚠️ Un desbordamiento durante una sesión activa produce un micro-hueco cuyos cambios quedan "sin atribuir", lo que reduce la atribución de Claude Code. **Mitigación**: búfer amplio del watcher, filtrado temprano de ignorados y medición de la frecuencia en SPIKE-GRP-002. ADR-GRP-012 puede reatribuir el hueco solo si tiene evidencia independiente del watcher, nunca por suposición.
-- ⚠️ FSEvents fusiona eventos y su latencia configurable compite con el presupuesto de detección (≤ 50 ms). **Mitigación**: latencia del stream mínima y eventos por archivo; medido en SPIKE-GRP-002.
+- ⚠️ FSEvents fusiona eventos y su latencia configurable compite con el presupuesto de detección (≤ 50 ms). **Mitigación**: latencia del stream mínima (0,0, la que usa `notify`) y eventos por archivo. SPIKE-GRP-002 midió una detección de 12,2 ms p95, y la fusión nunca dejó un estado final incorrecto.
+- ⚠️ En macOS, cada alta o baja de un worktree recrea el stream de FSEvents y abre un micro-hueco silencioso en todos los worktrees (Enmienda 2026-10-04). **Mitigación**: altas y bajas agrupadas y reconciliación tras cada recreación (apartados 1 y 6). Los cambios de ese tramo quedan "sin atribuir".
+- ⚠️ El sondeo de respaldo no ve los cambios del working tree con eventos perdidos sin marca. **Mitigación**: disparadores de reconciliación del apartado 6, incluida la recreación del stream. Si el dogfooding muestra pérdidas fuera de esos casos, se valora una reconciliación completa periódica de baja frecuencia (unos 18 ms por worktree de 5.000 archivos) y un intervalo del modo degradado adaptado al número de archivos.
 - ⚠️ En Windows, un handle abierto sobre la raíz puede hacer fallar `git worktree remove` o un borrado del agente. **Mitigación**: cierre del handle al primer borrado (apartado 6); si SPIKE-GRP-002 muestra que no basta, se vigila desde el directorio padre o se pasa ese worktree a sondeo.
 - ⚠️ El sondeo de respaldo y el modo degradado añaden carga en máquinas con muchos worktrees. **Mitigación**: huella barata y solo por stat; intervalos configurables en los niveles perfil y local, nunca en el de equipo (ADR-GRP-007).
 - ⚠️ El arranque con 10 o más worktrees en repos grandes hace una reconciliación completa costosa. **Mitigación**: reconciliación en paralelo por worktree, con el estado previo del perfil publicado primero como "reconciliando"; el arranque no cuenta para NFR-04.
@@ -152,3 +164,15 @@ Aplicada desde la tabla de enmiendas de [non-functional-guardrails.md](../non-fu
 |---|---|---|
 | Vigilar `<git-common-dir>/config`, el `config.worktree` de cada worktree y `<git-common-dir>/gitraptor/` en los repos protegidos | § 2 (tabla); Validación | ADR-GRD-005 § 4 |
 | Aclaración derivada de la Enmienda de ADR-GRP-007: la fila de configuración cubre los niveles personales; el nivel de equipo se recarga por refs y `HEAD`, que ya se vigilan (sin rutas nuevas) | § 2 (tabla) | ADR-GRP-007, ADR-GRD-004 § 1 |
+
+## Enmienda (2026-10-04, SPIKE-GRP-002)
+
+Aplicada desde las recomendaciones de [SPIKE-GRP-002-resultados.md](../../requirements/features/motor-local/research/SPIKE-GRP-002-resultados.md) (§ 6), que se midieron **solo en macOS**. No cambia el mecanismo elegido. El `status` sigue en `proposed`. Linux y Windows siguen pendientes de la Validación.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| Recreación del stream de FSEvents con `notify` 8.2: altas y bajas agrupadas y reconciliación tras cada recreación; reanudar desde el último `FSEventStreamEventId` queda como optimización | § 1, § 6, Consecuencias | Resultados § 3.6 |
+| Tope de watches por repo: no aplica en macOS; el valor para Linux sigue pendiente | § 2 | Resultados § 3.4 |
+| Ventana con la holgura del temporizador descontada (duración efectiva de 75 ms) | § 3 | Resultados § 3.2; ADR-GRP-011 § 2 |
+| Ahead/behind fuera del presupuesto del primer evento: segunda fase, con caché y en proceso con `gix` | § 4 | Resultados § 3.11 |
+| Alcance del sondeo de respaldo (solo metadatos de Git) y coste medido del modo degradado | § 5, Consecuencias | Resultados § 3.5 y § 3.6 |
