@@ -36,6 +36,8 @@ tags:
 > **Revisión 2026-10-03 (D-TMC-10 a D-TMC-23)**: Rene Bonilla acepta las recomendaciones de P1-P14. Cobertura en dos niveles que refina BR-08 y NFR-01 (D-TMC-9, D-TMC-10); garantías de los snapshots (D-TMC-11); "Tú u otro (sin atribuir)" (D-TMC-12); solape (D-TMC-13); undo solo local (D-TMC-14); retención de 30 días en perfil y local personal (D-TMC-15); sin ignorados (D-TMC-16); solicitante atribuido y confirmación interactiva (D-TMC-17, D-TMC-23); registro del undo inmutable (D-TMC-18); timeline por repo con filtros (D-TMC-19); alcance de la restauración (D-TMC-20). "Repo mediano" se fija en el spike (a) (D-TMC-21) y las historias de undo por agente esperan a P17 de motor-local (D-TMC-22). Se confirman S1-S4 y S7-S9; S5 y S6 siguen como supuestos.
 >
 > **Revisión 2026-10-03 (aceptación de riesgos)**: Rene Bonilla acepta los Known Risks 1, 3 y 5 y los supuestos S5 (redo con solape) y S6 (operación de Git en curso); se retiran sus marcas de supuesto en BR-TMC-WF-001 y BR-TMC-EDGE-004.
+>
+> **Revisión 2026-10-03 (TQ-1 a TQ-17 del Arquitecto)**: Rene Bonilla acepta las recomendaciones de [overview de arquitectura](../../../architecture/time-machine/overview.md) § 6. Tres cambian decisiones de producto: TQ-16 actualiza D-TMC-16 (lista cerrada de credenciales excluida por defecto), TQ-14 actualiza D-TMC-23 (sin confirmación interactiva en Windows en el MVP) y TQ-17 deja `raptor tm forget` fuera del MVP (D-TMC-24). Las TQ-5, TQ-7, TQ-9, TQ-10, TQ-11 y TQ-15 y la liberación del lock propio al arrancar precisan reglas de forma observable (D-TMC-25).
 
 ---
 
@@ -75,7 +77,7 @@ Impacto de no resolverlo: una sola pérdida de trabajo rompe la confianza en el 
 - **Alcance**:
   - **IN scope**:
     - Snapshot automático antes de toda operación lanzada por GitRaptor y antes de cada undo, redo o restauración (BR-TMC-CONS-001).
-    - Contenido del snapshot: working tree sin commitear, archivos sin seguimiento y estado de ramas y worktrees; sin los archivos ignorados (BR-TMC-CONS-002, D-TMC-16).
+    - Contenido del snapshot: working tree sin commitear, archivos sin seguimiento y estado de ramas y worktrees; sin los archivos ignorados, sin la lista cerrada de credenciales sin seguimiento (salvo que el perfil los incluya) y sin repos anidados, todos declarados como exclusión (BR-TMC-CONS-002, D-TMC-16).
     - Captura del trabajo hecho fuera de GitRaptor (Git crudo, ediciones en el editor), con su nivel de cobertura declarado (BR-TMC-CONS-003, D-TMC-10).
     - Undo, redo, undo por agente y por periodo, y restauración a un punto (BR-TMC-WF-001 a BR-TMC-WF-003).
     - Timeline por repo con filtros por worktree, agente y tiempo; atribución vigente; huecos explícitos (BR-TMC-CONS-005, BR-TMC-EDGE-002).
@@ -91,7 +93,8 @@ Impacto de no resolverlo: una sola pérdida de trabajo rompe la confianza en el 
     - Detectar agentes y atribuir eventos: es del **Motor local** (F-001-01); la Time Machine consume esa atribución.
     - Diseño visual del timeline en la TUI: se coordina con el Cockpit y el design system; aquí solo el qué.
     - El comando para editar la configuración: es de Guardrails (Q27).
-    - Snapshot de archivos ignorados por `.gitignore` (dependencias, `.env`) (D-TMC-16).
+    - Snapshot de archivos ignorados por `.gitignore` (dependencias, `.env`), de la lista cerrada de credenciales sin seguimiento si el perfil no los incluye y de repos anidados (D-TMC-16, D-TMC-25).
+    - Borrar contenido ya capturado en snapshots (`raptor tm forget`): aplazado a una US futura; en el MVP solo existe la exclusión por defecto de credenciales (D-TMC-24, TQ-17).
     - App de escritorio y extensión de editor (Fase 3).
     - Integración con Entire Checkpoints (BR-20, Fase 2).
     - Llevar snapshots a otra máquina o compartirlos con el equipo.
@@ -132,7 +135,7 @@ Impacto de no resolverlo: una sola pérdida de trabajo rompe la confianza en el 
 
 | Actor | Descripción | Permisos/Capacidades |
 |-------|-------------|----------------------|
-| **Desarrollador orquestador** | Persona que supervisa los agentes (D3). GitRaptor no puede probar que una petición viene de él (Q34): un agente puede lanzar `raptor undo` desde su propia shell. | Consulta el timeline completo y ajusta la retención en su perfil o en la configuración local personal (D-TMC-15). Deshacer trabajo de otro actor exige su confirmación interactiva en ese momento, que un agente no puede dar (BR-TMC-AUTH-001, D-TMC-17, D-TMC-23). |
+| **Desarrollador orquestador** | Persona que supervisa los agentes (D3). GitRaptor no puede probar que una petición viene de él (Q34): un agente puede lanzar `raptor undo` desde su propia shell. | Consulta el timeline completo y ajusta la retención en su perfil o en la configuración local personal (D-TMC-15). Deshacer trabajo de otro actor exige su confirmación interactiva en ese momento, que un agente no puede dar; en Windows, en el MVP, no se ofrece y la petición se rechaza (BR-TMC-AUTH-001, D-TMC-17, D-TMC-23). |
 | **Agente Claude Code** | Soporte completo en el MVP (Q32). Opera con Git crudo, con la CLI desde su shell o vía MCP. | Pide snapshots; si la petición de undo se le atribuye, solo deshace sus propias operaciones (D-TMC-17, D-TMC-23). Lo que haga con Git crudo queda cubierto según BR-TMC-CONS-003. |
 | **Otro agente** (Codex, Cursor u otro registrado) | Sin soporte completo (Q32). Cursor solo si se registra de forma explícita; lo hecho en el editor del humano queda "sin atribuir" (Q32). | Igual que Claude Code, con su atribución por registro. |
 | **"Sin atribuir"** | No es un actor: es lo que el motor no pudo atribuir a un agente (Q34, Q35). | Se presenta como "Tú u otro (sin atribuir)" (D-TMC-12). Nunca se trata como "humano" ni entra en un undo por agente. Es también el valor del solicitante de un undo que no se puede atribuir (D-TMC-23). |
@@ -147,7 +150,7 @@ Impacto de no resolverlo: una sola pérdida de trabajo rompe la confianza en el 
 - Los snapshots contienen código y trabajo sin commitear: son datos confidenciales y no salen de la máquina (domain-context).
 
 ### Técnicas (Arquitectura)
-- Usa el Git del sistema (≥ 2.38, NFR-07) y respeta su configuración, hooks y credenciales.
+- Usa el Git del sistema (≥ 2.38, NFR-07) y respeta su configuración, hooks y credenciales en las operaciones de usuario; las escrituras internas de la Time Machine (snapshot, undo, redo, restauración) no ejecutan los hooks ni la configuración del usuario (TQ-13; lo detalla el Arquitecto).
 - Sin hooks propios (Q22): la cobertura del Git crudo no puede depender de que existan los de Guardrails (D-TMC-10).
 - Los snapshots no pueden empujarse al remoto por accidente, borrarse con un `git gc` ni alterarse cuando un agente trabaja en el working tree (D-TMC-11). El mecanismo y la ubicación (el BRD propone "refs ocultas y oplog propio") los decide el Arquitecto con esas garantías.
 - Stack decidido en ADR-GRP-001; el diseño del oplog y los snapshots es un ADR pendiente (BRD § 11).
@@ -166,8 +169,8 @@ Impacto de no resolverlo: una sola pérdida de trabajo rompe la confianza en el 
 | **Seguridad: cero pérdida de datos** | Toda operación de GitRaptor que modifica el repo tiene snapshot previo; sin snapshot, no se ejecuta (NFR-01) | Sí | El trabajo sin commitear no existe en otro sitio. |
 | **Performance** | Overhead < 200 ms por snapshot en repos medianos (NFR-04). "Repo mediano" `[POR VERIFICAR]` | Sí | Si el snapshot frena a los agentes, el usuario lo desactiva. |
 | **Robustez** | Matar el proceso a mitad de un snapshot o de un undo deja el repo recuperable (NFR-12) | Sí | Los fallos ocurren justo en las operaciones de riesgo. |
-| **Seguridad: privacidad** | Snapshots 100% locales; sin archivos ignorados (`.env`) (NFR-03, D-TMC-16) | Sí | Evita copiar secretos y dependencias. |
-| **Espacio en disco** | Retención configurable; por defecto 30 días (D-TMC-15) | No | Los snapshots crecen con el uso. |
+| **Seguridad: privacidad** | Snapshots 100% locales; sin archivos ignorados (`.env`) ni la lista cerrada de credenciales sin seguimiento (NFR-03, D-TMC-16) | Sí | Evita copiar secretos y dependencias. |
+| **Espacio en disco** | Retención configurable; por defecto 30 días (D-TMC-15). Tope por archivo en la captura por observación, cuota por repo y espacio libre mínimo; cifras ajustadas por el spike (TQ-5, D-TMC-25) | No | Los snapshots crecen con el uso. |
 | **Escalabilidad** | 10 o más worktrees activos y repos de más de 100K commits (NFR-05) | Sí | Caso de uso típico. |
 | **i18n** | Mensajes en inglés y español (NFR-10) | No | Convención del producto. |
 
@@ -198,11 +201,11 @@ Impacto de no resolverlo: una sola pérdida de trabajo rompe la confianza en el 
 
 | Término | Definición | Notas |
 |---------|------------|-------|
-| **Snapshot** | Punto recuperable del repo: working tree sin commitear, archivos sin seguimiento y estado de ramas y worktrees. | Sin archivos ignorados (D-TMC-16). |
+| **Snapshot** | Punto recuperable del repo: working tree sin commitear, archivos sin seguimiento y estado de ramas y worktrees. | Sin archivos ignorados, sin la lista cerrada de credenciales (salvo opción del perfil) y sin repos anidados (D-TMC-16). |
 | **Operación** | Acción que modifica el estado del repo (commit, checkout, reset, rebase, merge, borrar rama o worktree, undo, restauración). | Leer no es operación. |
 | **Operación lanzada por GitRaptor** | La que se pide desde la CLI, la TUI/Cockpit o el MCP. | Cobertura garantizada (D-TMC-10, nivel a). |
 | **Git crudo** | Operación de Git o edición hecha fuera de GitRaptor (por el humano o por un agente). | Cobertura por observación (D-TMC-10, nivel b). |
-| **Undo / Redo** | Volver al estado previo a la última operación / revertir el último undo. | Ambos crean un snapshot previo. Ámbito por defecto: el worktree desde el que se invoca (S8). |
+| **Undo / Redo** | Volver al estado previo a la última operación / revertir el último undo. | Ambos crean un snapshot previo. Ámbito por defecto: el worktree desde el que se invoca (S8). Undos seguidos retroceden una operación más (pila por worktree, TQ-9). |
 | **Solicitante** | Quien pide un undo, redo o restauración. Se registra como "agente X" o "sin atribuir", nunca como "humano" (Q34). | D-TMC-23. |
 | **Restauración** | Volver a un snapshot concreto del timeline. | |
 | **Timeline** | Lista ordenada de operaciones y snapshots con momento, actor y cobertura. | Muestra los huecos. |
@@ -235,13 +238,13 @@ Impacto de no resolverlo: una sola pérdida de trabajo rompe la confianza en el 
 |---|----------|--------|
 | S1 | La cobertura tiene dos niveles: garantizada para lo lanzado por GitRaptor y por observación para el Git crudo (P1). | Confirmado (D-TMC-10, 2026-10-03) |
 | S2 | "Sin atribuir" se presenta como "Tú u otro (sin atribuir)" (P3). | Confirmado (D-TMC-12, 2026-10-03) |
-| S3 | Los archivos ignorados no entran en el snapshot (P7). | Confirmado (D-TMC-16, 2026-10-03) |
+| S3 | Los archivos ignorados no entran en el snapshot (P7). | Confirmado (D-TMC-16, 2026-10-03); ampliado con la lista cerrada de credenciales (TQ-16) |
 | S4 | Retención por defecto de 30 días, configurable en perfil y local personal (P6). | Confirmado (D-TMC-15, 2026-10-03) |
 | S5 | redo revierte el último undo; si después hubo cambios en los mismos archivos, aplica la regla de solape (BR-TMC-WF-001). No depende de P1-P14: la regla de solape quedó decidida (D-TMC-13), su aplicación al redo no. | ✅ Aceptado por Rene Bonilla (2026-10-03) |
 | S6 | con una operación de Git en curso (rebase o merge a medias), el undo y la restauración se detienen y piden terminarla o abortarla antes (BR-TMC-EDGE-004). No depende de P1-P14. | ✅ Aceptado por Rene Bonilla (2026-10-03) |
 | S7 | Restaurar un punto afecta al worktree en el que se pide y a las ramas y worktrees que cambiaron después de ese punto; los demás worktrees no se tocan (P11). | Confirmado (D-TMC-20, 2026-10-03) |
 | S8 | `raptor undo` sin flags deshace la última operación del worktree desde el que se invoca; si es de un actor distinto del solicitante, aplican BR-TMC-AUTH-001 y la regla de solape; nunca actúa sobre otros worktrees sin pedirlo (BR-TMC-WF-001; P10, P11, P14). | Confirmado (D-TMC-19, D-TMC-20, D-TMC-23, 2026-10-03) |
-| S9 | El solicitante de un undo se atribuye como los eventos ("agente X" o "sin atribuir"). Atribuido a un agente, solo deshace lo suyo; "sin atribuir", deshacer trabajo de otro actor exige confirmación interactiva del desarrollador en ese momento, que un agente no puede dar (BR-TMC-AUTH-001; P8, P14). | Confirmado (D-TMC-17, D-TMC-23, 2026-10-03) |
+| S9 | El solicitante de un undo se atribuye como los eventos ("agente X" o "sin atribuir"). Atribuido a un agente, solo deshace lo suyo; "sin atribuir", deshacer trabajo de otro actor exige confirmación interactiva del desarrollador en ese momento, que un agente no puede dar (BR-TMC-AUTH-001; P8, P14). | Confirmado (D-TMC-17, D-TMC-23, 2026-10-03); en Windows, rechazo sin confirmación en el MVP (TQ-14) |
 
 ---
 
@@ -251,10 +254,10 @@ Impacto de no resolverlo: una sola pérdida de trabajo rompe la confianza en el 
 |---|--------|-------|---------|-------------------------|
 | R1 | Overhead del snapshot por encima de 200 ms en repos grandes (BRD § 10). | Media | Medio | Spike (a) del BRD § 13 antes de las historias de snapshot. |
 | R2 | Operaciones de Git crudo sin snapshot previo (sin hooks propios, Q22): lo editado entre la última captura y una operación destructiva de Git crudo puede perderse. | Alta | Alto | Captura continua del working tree; snapshot previo vía hooks de Guardrails cuando existan; cobertura declarada en el timeline (P1). |
-| R7 | Un agente lanza `raptor undo` desde su shell y deshace trabajo de otro actor. | Media | Crítico | El solicitante se atribuye como un evento; si queda "sin atribuir", deshacer lo de otro exige confirmación interactiva (P14). |
+| R7 | Un agente lanza `raptor undo` desde su shell y deshace trabajo de otro actor. | Media | Crítico | El solicitante se atribuye como un evento; si queda "sin atribuir", deshacer lo de otro exige confirmación interactiva (P14); en Windows se rechaza (TQ-14) y por MCP siempre se rechaza (TQ-7). |
 | R3 | Un undo por agente deshace trabajo de otro actor por una atribución errónea. | Media | Crítico | Atribución vigente (Q37), "sin atribuir" nunca entra en el undo por agente y el solape detiene el undo (P4). |
 | R4 | Los snapshots ocupan demasiado disco. | Media | Medio | Retención configurable con aviso antes de purgar (P6). |
-| R5 | Un secreto en un archivo ignorado se pierde al restaurar, o se copia si se incluyera. | Baja | Medio | No se incluyen ignorados y se avisa en la documentación (P7). |
+| R5 | Un secreto en un archivo ignorado se pierde al restaurar, o se copia si se incluyera. | Baja | Medio | No se incluyen ignorados ni la lista cerrada de credenciales sin seguimiento, y se avisa en la documentación (P7, TQ-16). Un secreto fuera de esa lista sí se captura y, en el MVP, no se puede borrar de los snapshots (TQ-17). |
 | R6 | El usuario cree que el undo también deshace el remoto. | Media | Alto | Aviso explícito cuando lo deshecho ya está en el remoto (P5). |
 
 ---
@@ -278,14 +281,16 @@ Impacto de no resolverlo: una sola pérdida de trabajo rompe la confianza en el 
 | D-TMC-13 | (P4) Un undo nunca sobrescribe trabajo posterior de otro actor en los mismos archivos o fragmentos: se detiene, muestra el solape y deja decidir al desarrollador. | P4 | 2026-10-03 | Rene Bonilla | BR-TMC-CONS-005, BR-TMC-WF-002 |
 | D-TMC-14 | (P5) El undo es solo local; avisa si lo deshecho ya está en el remoto y nunca hace push ni force-push. | P5 | 2026-10-03 | Rene Bonilla | BR-TMC-EDGE-001 |
 | D-TMC-15 | (P6) Retención configurable en perfil y local personal (no en equipo); 30 días por defecto; nunca se purga el snapshot previo a la última operación destructiva; se avisa antes de purgar. | P6 | 2026-10-03 | Rene Bonilla | BR-TMC-TIME-001 |
-| D-TMC-16 | (P7) El snapshot incluye los archivos sin seguimiento y no los ignorados por `.gitignore` (dependencias, `.env`); el riesgo R5 queda documentado. | P7 | 2026-10-03 | Rene Bonilla | BR-TMC-CONS-002 |
+| D-TMC-16 | (P7; **actualizada por TQ-16**) El snapshot incluye los archivos sin seguimiento y no los ignorados por `.gitignore` (dependencias, `.env`). Además excluye por defecto una lista cerrada de archivos de credenciales sin seguimiento: `.env*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa*`, `id_ed25519*`, `.npmrc`, `.pypirc`, `.netrc`, `*.tfstate*`, `credentials*.json`. Se declaran como exclusión; el perfil permite incluirlos; al restaurar no se tocan. El riesgo R5 queda documentado. | P7, TQ-16 | 2026-10-03 | Rene Bonilla | BR-TMC-CONS-002 |
 | D-TMC-17 | (P8) Un solicitante atribuido a un agente solo deshace sus propias operaciones; deshacer trabajo de otro actor exige confirmación interactiva del desarrollador (D-TMC-23). Guardrails puede restringir más. | P8 | 2026-10-03 | Rene Bonilla | BR-TMC-AUTH-001 |
 | D-TMC-18 | (P9) El registro de un undo (solicitante y sobre qué actuó) no se reescribe; el timeline muestra la atribución vigente. | P9 | 2026-10-03 | Rene Bonilla | BR-TMC-CONS-005 |
 | D-TMC-19 | (P10) Timeline por repo, con filtros por worktree, agente y tiempo. | P10 | 2026-10-03 | Rene Bonilla | BR-TMC-CONS-005, BR-TMC-EDGE-002, BR-TMC-WF-001 |
 | D-TMC-20 | (P11) Una restauración alcanza el worktree donde se pide y las ramas y worktrees que cambiaron después del punto; nada más. | P11 | 2026-10-03 | Rene Bonilla | BR-TMC-WF-003, BR-TMC-WF-001 |
 | D-TMC-21 | (P12) La referencia de "repo mediano" para NFR-04 se fija en el spike (a). Sigue siendo una dependencia del Arquitecto. | P12 | 2026-10-03 | Rene Bonilla | — (NFR-04) |
 | D-TMC-22 | (P13) Las historias de undo por agente quedan bloqueadas hasta que se cierre P17 de motor-local. | P13 | 2026-10-03 | Rene Bonilla | BR-TMC-WF-002 |
-| D-TMC-23 | (P14) El solicitante de un undo, redo o restauración se atribuye como un evento ("agente X" o "sin atribuir", nunca "humano"). Atribuido a un agente, solo deshace lo suyo. "Sin atribuir": deshacer trabajo de otro actor exige una confirmación interactiva del desarrollador en ese momento, que un agente no puede dar. El mecanismo de identificación (CLI frente a MCP) lo decide el Arquitecto. | P14 | 2026-10-03 | Rene Bonilla | BR-TMC-AUTH-001, BR-TMC-WF-001 |
+| D-TMC-23 | (P14) El solicitante de un undo, redo o restauración se atribuye como un evento ("agente X" o "sin atribuir", nunca "humano"). Atribuido a un agente, solo deshace lo suyo. "Sin atribuir": deshacer trabajo de otro actor exige una confirmación interactiva del desarrollador en ese momento, que un agente no puede dar. **Actualizada por TQ-14**: en el MVP esa confirmación solo se ofrece en macOS y Linux; en Windows, hasta que exista una forma fiable de probar que no la da un agente, la petición "sin atribuir" que toca trabajo de otro actor se rechaza con su motivo. En la Fase 2 se planea la presencia verificada por el SO (Touch ID, Windows Hello, polkit). Por MCP una petición "sin atribuir" se rechaza siempre (TQ-7). El mecanismo de identificación lo decide el Arquitecto. | P14, TQ-14, TQ-7 | 2026-10-03 | Rene Bonilla | BR-TMC-AUTH-001, BR-TMC-WF-001 |
+| D-TMC-24 | (TQ-17) Borrar contenido ya capturado en snapshots (`raptor tm forget`) queda fuera del MVP y se aplaza a una US futura, que tendrá que conciliarse con D-TMC-15, BR-TMC-TIME-001 y BR-TMC-CONS-004. D-TMC-15 y BR-TMC-TIME-001 no cambian. | TQ-17 | 2026-10-03 | Rene Bonilla | — (pendiente futuro) |
+| D-TMC-25 | Precisiones observables de las TQ aceptadas: (TQ-5) en la captura por observación se omiten los archivos que superan un tope de tamaño (captura parcial con la lista) y, al alcanzar la cuota del repo o el espacio libre mínimo, la captura se detiene con un hueco "sin espacio" declarado; el snapshot previo garantizado no tiene tope y la cuota no adelanta la purga; (TQ-9) undos seguidos forman una pila por worktree y una operación nueva invalida el redo; (TQ-10) un fallo detectado a mitad de un undo o restauración no hace rollback automático: queda "interrumpida" y se ofrece undo; (TQ-11) solo se purga si el aviso se mostró en la CLI o la TUI y pasaron 24 h; (TQ-15) los repos anidados sin seguimiento se excluyen, se declaran y nunca se escriben ni se borran al restaurar; al arrancar, la Time Machine libera su propio lock de Git sin tocar contenido. Cifras de TQ-5 según el spike. | TQ-5, TQ-9, TQ-10, TQ-11, TQ-15, ADR-TMC-003 | 2026-10-03 | Rene Bonilla | BR-TMC-WF-001, BR-TMC-CONS-002, BR-TMC-CONS-003, BR-TMC-CONS-004, BR-TMC-TIME-001, BR-TMC-EDGE-002, BR-TMC-EDGE-003 |
 
 ---
 
