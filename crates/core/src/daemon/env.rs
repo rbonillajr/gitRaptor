@@ -97,6 +97,32 @@ impl DaemonEnv {
     }
 }
 
+/// Debug-build test hook: `GITRAPTOR_AGENT_EXECUTABLES` replaces the agent
+/// classifier with a `:`-separated list of executable names, so tests use a
+/// simulated agent and are not refused because a real Claude Code session
+/// runs them. Release builds do not even read it, like
+/// `GITRAPTOR_PROFILE_DIR` (SEC-06).
+pub const AGENT_EXECUTABLES_ENV: &str = "GITRAPTOR_AGENT_EXECUTABLES";
+
+pub(crate) fn agent_executables_override() -> Option<Vec<String>> {
+    if cfg!(debug_assertions) {
+        parse_agent_override(std::env::var_os(AGENT_EXECUTABLES_ENV).as_deref())
+    } else {
+        None
+    }
+}
+
+fn parse_agent_override(value: Option<&OsStr>) -> Option<Vec<String>> {
+    let names: Vec<String> = value?
+        .to_str()?
+        .split(':')
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+        .map(str::to_owned)
+        .collect();
+    (!names.is_empty()).then_some(names)
+}
+
 /// Environment names are case-insensitive on Windows.
 fn key_is(key: &OsStr, name: &str) -> bool {
     if cfg!(windows) {
@@ -171,6 +197,16 @@ mod tests {
         let shown = format!("{env:?}");
         assert!(!shown.contains("/home/u"));
         assert!(!shown.contains("s3cr3t"));
+    }
+
+    #[test]
+    fn agent_override_parses_names() {
+        assert_eq!(
+            parse_agent_override(Some(OsStr::new("fake-agent: other "))),
+            Some(vec!["fake-agent".to_owned(), "other".to_owned()])
+        );
+        assert_eq!(parse_agent_override(Some(OsStr::new(" : "))), None);
+        assert_eq!(parse_agent_override(None), None);
     }
 
     /// Only `DaemonEnv::capture` reads the process environment (SEC-10).

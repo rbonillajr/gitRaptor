@@ -8,9 +8,10 @@
 //! recorded its stop is a crash; with an active session it is classified as
 //! "crash during an active session" (SEC-13).
 //!
-//! The client channel (TS-GRP-004) plugs into [`ShutdownHandle`] and
-//! [`Daemon::state`]; the gap itself is recorded by US-GRP-005 from
-//! [`StartupReport::repos`].
+//! The client channel (TS-GRP-004, [`crate::channel`]) is bound in
+//! [`Daemon::start`] and served from [`Daemon::run`]; its stop command and
+//! audit reach the loop through [`ShutdownHandle`]. The gap itself is
+//! recorded by US-GRP-005 from [`StartupReport::repos`].
 //!
 //! Before accepting Time Machine operations, the start also opens the
 //! oplog of every observed repo and runs its recovery (TS-TMC-002,
@@ -24,12 +25,20 @@ mod shutdown;
 mod state;
 
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+use gitraptor_api::Untrusted;
+use gitraptor_api::event::{DAEMON_STOPPING, ENGINE_STATE};
+use gitraptor_api::messages::{
+    DaemonView, EngineStateView, EngineView, RepoStateView, RepoView, StoppingData,
+};
 
 use gitraptor_git::SystemGit;
 use gitraptor_git::resolve::{Resolution, ResolveConfig, resolve};
 
+use crate::channel::{ChannelConfig, EngineShared, EventBus};
 use crate::profile::{
     DaemonRun, GapCause, Profile, ProfileDirs, ProfileError, RepoEntry, RepoState, RepoStore,
     StoreOpen, WriteOp, fsperm,
@@ -38,10 +47,11 @@ use crate::timemachine::oplog::{
     AbsentStore, ChainBreak, Oplog, OplogStatus, RecoveryOptions, RecoveryReport, SystemProbe,
 };
 
-pub use env::DaemonEnv;
+pub use env::{AGENT_EXECUTABLES_ENV, DaemonEnv};
 pub use lock::{InstanceLock, LOCK_FILE, running_pid, wait_until_released};
 pub use log::{Field, LOG_FILE, Level, LogLimits, Logger};
-pub use shutdown::{ShutdownHandle, StopCause, install_signal_handlers, signal_running_daemon};
+use shutdown::Control;
+pub use shutdown::{ShutdownHandle, StopCause, install_signal_handlers};
 pub use state::{EngineState, InvalidTransition, Trigger};
 
 /// Exit code of a second `raptor daemon` that found another one running.
@@ -116,12 +126,17 @@ pub struct DaemonConfig {
     /// Past this, a stuck orderly stop exits the process (it is then seen
     /// as a crash). `None` in tests that run the daemon in-process.
     pub stop_deadline: Option<Duration>,
+    pub channel: ChannelConfig,
 }
 
 impl DaemonConfig {
     /// Configuration of the real daemon for the current user.
     pub fn for_current_user() -> Result<Self, DaemonError> {
         let env = DaemonEnv::capture();
+        let mut channel = ChannelConfig::default();
+        if let Some(names) = env::agent_executables_override() {
+            channel.agents = crate::channel::AgentMatcher::only(names);
+        }
         Ok(Self {
             dirs: ProfileDirs::resolve()?,
             git: env.git_resolve_config(None),
@@ -129,6 +144,7 @@ impl DaemonConfig {
             heartbeat: Duration::from_secs(60),
             log: LogLimits::default(),
             stop_deadline: Some(Duration::from_secs(5)),
+            channel,
         })
     }
 }
@@ -210,7 +226,9 @@ pub fn classify_previous_run(
             cause,
             requested_by,
             ..
-        } if cause == "stop-command" => Some((GapCause::DaemonStopped, requested_by.clone())),
+        } if cause == "stop-command" || replaced_by_newer(cause) => {
+            Some((GapCause::DaemonStopped, requested_by.clone()))
+        }
         DaemonRun::Stopped { requested_by, .. } => Some((down, requested_by.clone())),
     }
 }
@@ -226,7 +244,12 @@ pub struct Daemon {
     oplogs: Vec<(String, Oplog)>,
     report: StartupReport,
     handle: ShutdownHandle,
-    stop_rx: Receiver<StopCause>,
+    control_rx: Receiver<Control>,
+    bus: Arc<EventBus>,
+    started_ms: i64,
+    #[cfg(unix)]
+    bound: Option<crate::channel::BoundChannel>,
+    server: Option<crate::channel::Server>,
 }
 
 impl Daemon {
@@ -334,6 +357,56 @@ impl Daemon {
             // Nothing is observed outside "Observing" (BR-WF-002).
             stores.clear();
         }
+
+        // The channel is bound before the daemon creates any thread.
+        #[cfg(unix)]
+        let bound = match config.dirs.runtime.as_deref() {
+            Some(runtime) => {
+                for dir in config.dirs.owned_dirs() {
+                    if runtime.starts_with(dir) {
+                        fsperm::ensure_private_dir(dir)?;
+                    }
+                }
+                match crate::channel::BoundChannel::bind(runtime) {
+                    Ok(bound) => Some(bound),
+                    Err(err) => {
+                        logger.error(
+                            "channel_bind_failed",
+                            &[("kind", profile_error_kind(&err).into())],
+                        );
+                        logger.flush();
+                        return Err(err.into());
+                    }
+                }
+            }
+            None => None,
+        };
+        #[cfg(not(unix))]
+        logger.warn("channel_unsupported", &[]);
+
+        let mut repo_views = Vec::new();
+        for entry in profile.repos()? {
+            let state = if report.unavailable.contains(&entry.repo_id) {
+                RepoStateView::Unavailable
+            } else if entry.state == RepoState::Observed {
+                RepoStateView::Observed
+            } else {
+                continue;
+            };
+            repo_views.push(RepoView {
+                repo_id: entry.repo_id,
+                state,
+                path: Untrusted::from_os(entry.canonical_path.as_os_str()),
+            });
+        }
+        let bus = Arc::new(EventBus::new(
+            run_id(),
+            EngineShared {
+                engine: engine_view(state, git.as_ref()),
+                repos: repo_views,
+            },
+            config.channel.limits.replay,
+        ));
         let mut fields = vec![
             ("state", state.as_str().into()),
             ("repos", report.repos.len().into()),
@@ -346,7 +419,7 @@ impl Daemon {
         }
         logger.info("daemon_started", &fields);
 
-        let (handle, stop_rx) = ShutdownHandle::new();
+        let (handle, control_rx) = ShutdownHandle::new();
         Ok(Self {
             config,
             lock,
@@ -357,7 +430,12 @@ impl Daemon {
             oplogs,
             report,
             handle,
-            stop_rx,
+            control_rx,
+            bus,
+            started_ms: now_ms(),
+            #[cfg(unix)]
+            bound,
+            server: None,
         })
     }
 
@@ -385,18 +463,49 @@ impl Daemon {
             .map(|(_, oplog)| oplog)
     }
 
-    /// Handle for signals and, later, the channel's stop command.
+    /// Handle for signals and the channel's stop command.
     pub fn shutdown_handle(&self) -> ShutdownHandle {
         self.handle.clone()
     }
 
-    /// Runs until a stop request arrives, then stops in order.
+    /// The event bus: stories publish their events here (ADR-GRP-005 § 5).
+    pub fn events(&self) -> Arc<EventBus> {
+        Arc::clone(&self.bus)
+    }
+
+    /// Starts serving the channel, then runs until a stop request arrives
+    /// and stops in order.
     pub fn run(mut self) -> StopReport {
+        self.serve_channel();
+        let mut next_beat = Instant::now() + self.config.heartbeat;
         loop {
-            match self.stop_rx.recv_timeout(self.config.heartbeat) {
-                Ok(cause) => return self.stop(cause),
+            let wait = next_beat.saturating_duration_since(Instant::now());
+            match self.control_rx.recv_timeout(wait) {
+                Ok(Control::Stop(cause)) => return self.stop(cause),
+                Ok(Control::Audit(row, reply)) => {
+                    let id = match self.profile.append_audit(&row) {
+                        Ok(id) => Some(id),
+                        Err(err) => {
+                            self.logger.error(
+                                "audit_write_failed",
+                                &[("kind", profile_error_kind(&err).into())],
+                            );
+                            None
+                        }
+                    };
+                    let _ = reply.send(id);
+                }
+                Ok(Control::AuditList {
+                    after_id,
+                    limit,
+                    reply,
+                }) => {
+                    let _ = reply.send(self.profile.audit(after_id, limit).ok());
+                }
                 Err(RecvTimeoutError::Timeout) => {
                     self.persist_observed_until(now_ms());
+                    self.check_channel();
+                    next_beat = Instant::now() + self.config.heartbeat;
                 }
                 // The daemon holds a sender, so this cannot happen; stop
                 // rather than spin.
@@ -406,6 +515,67 @@ impl Daemon {
             }
         }
     }
+
+    #[cfg(unix)]
+    fn serve_channel(&mut self) {
+        let Some(bound) = self.bound.take() else {
+            return;
+        };
+        let args = crate::channel::ServeArgs {
+            config: self.config.channel.clone(),
+            bus: Arc::clone(&self.bus),
+            control: self.handle.clone(),
+            logger: self.logger.clone(),
+            instance_id: self.profile.instance_id().to_owned(),
+            daemon: DaemonView {
+                pid: std::process::id(),
+                protocol: self.config.channel.protocol,
+                binary_version: crate::version().to_owned(),
+                started_wall_ms: self.started_ms,
+            },
+        };
+        match crate::channel::Server::serve(bound, args) {
+            Ok(server) => {
+                self.server = Some(server);
+                let view = self.bus.snapshot().1.engine;
+                self.bus.publish(ENGINE_STATE, view, None, |_| {});
+                self.logger.info("channel_serving", &[]);
+            }
+            Err(_) => self.logger.error("channel_serve_failed", &[]),
+        }
+    }
+
+    #[cfg(not(unix))]
+    fn serve_channel(&mut self) {}
+
+    /// If another process replaced the socket file, take the channel back:
+    /// close every connection, bind again and serve.
+    #[cfg(unix)]
+    fn check_channel(&mut self) {
+        let Some(server) = self.server.as_mut() else {
+            return;
+        };
+        if server.socket_intact() {
+            return;
+        }
+        self.logger.error("channel_socket_replaced", &[]);
+        let runtime = server.runtime().to_path_buf();
+        server.shutdown();
+        self.server = None;
+        match crate::channel::BoundChannel::bind(&runtime) {
+            Ok(bound) => {
+                self.bound = Some(bound);
+                self.serve_channel();
+            }
+            Err(err) => self.logger.error(
+                "channel_bind_failed",
+                &[("kind", profile_error_kind(&err).into())],
+            ),
+        }
+    }
+
+    #[cfg(not(unix))]
+    fn check_channel(&mut self) {}
 
     /// Orderly stop: persist "observed until", record the stop with its
     /// cause, flush the log and release the lock, in that order.
@@ -421,12 +591,25 @@ impl Daemon {
                     std::process::exit(1);
                 });
         }
+        self.bus.publish(
+            DAEMON_STOPPING,
+            StoppingData {
+                cause: cause.as_str().to_owned(),
+            },
+            None,
+            |_| {},
+        );
+        // Answers already queued (the stop command's included) are written,
+        // then every connection closes.
+        if let Some(mut server) = self.server.take() {
+            server.shutdown();
+        }
         let stopped_ms = now_ms();
         let marks_ok = self.persist_observed_until(stopped_ms);
         let recorded = marks_ok
             && match self.profile.mark_daemon_stopped(
                 stopped_ms,
-                cause.as_str(),
+                &cause.stored(),
                 Some(&cause.requested_by()),
             ) {
                 Ok(()) => true,
@@ -575,6 +758,12 @@ fn recover_repo(
 /// process-wide hooks (redacting panic hook, termination signals), moves the
 /// working folder into the profile and runs until stopped.
 pub fn run_process(config: DaemonConfig) -> Result<StopReport, DaemonError> {
+    // Leave the launcher's session and process group: a client (possibly an
+    // MCP server under an agent) that started it on demand must not take it
+    // down when it exits. Fails harmlessly when run as a group leader in a
+    // terminal.
+    #[cfg(unix)]
+    let _ = rustix::process::setsid();
     let state_dir = config.dirs.state.clone();
     let daemon = Daemon::start(config)?;
     daemon.logger().install_panic_hook();
@@ -583,6 +772,42 @@ pub fn run_process(config: DaemonConfig) -> Result<StopReport, DaemonError> {
     std::env::set_current_dir(&state_dir)?;
     install_signal_handlers(daemon.shutdown_handle())?;
     Ok(daemon.run())
+}
+
+/// A `replace:<protocol>` stop counts as attributed only if this binary
+/// speaks a newer protocol than the one that stepped down. Otherwise the
+/// "upgrade" was not one (a client that lied about its version, or a binary
+/// swapped by another process) and the interval is a plain crash (SEC-13).
+fn replaced_by_newer(cause: &str) -> bool {
+    cause
+        .strip_prefix("replace:")
+        .and_then(|p| p.parse::<u32>().ok())
+        .is_some_and(|old| old < gitraptor_api::PROTOCOL_VERSION)
+}
+
+/// Engine view of the contract for a state and the Git found.
+fn engine_view(state: EngineState, git: Option<&SystemGit>) -> EngineView {
+    EngineView {
+        state: match state {
+            EngineState::WaitingForGit => EngineStateView::WaitingForGit,
+            EngineState::NoRepos => EngineStateView::NoRepos,
+            EngineState::Observing => EngineStateView::Observing,
+        },
+        git_version: git.map(|g| g.version.to_string()),
+    }
+}
+
+/// Random id of this daemon run: sequences start again at every run.
+fn run_id() -> String {
+    use std::hash::{BuildHasher, Hasher};
+    let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
+    hasher.write_u128(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos()),
+    );
+    hasher.write_u32(std::process::id());
+    format!("{:016x}", hasher.finish())
 }
 
 /// Milliseconds since the Unix epoch, UTC.
@@ -654,6 +879,24 @@ mod tests {
         assert_eq!(
             classify_previous_run(&by_command, true),
             Some((GapCause::DaemonStopped, Some("client-7".into())))
+        );
+    }
+
+    #[test]
+    fn a_replacement_only_counts_if_the_new_binary_is_newer() {
+        let replaced = |protocol: u32| DaemonRun::Stopped {
+            stopped_ms: 5,
+            cause: format!("replace:{protocol}"),
+            requested_by: Some("client-9".into()),
+        };
+        let older = gitraptor_api::PROTOCOL_VERSION - 1;
+        assert_eq!(
+            classify_previous_run(&replaced(older), true),
+            Some((GapCause::DaemonStopped, Some("client-9".into())))
+        );
+        assert_eq!(
+            classify_previous_run(&replaced(gitraptor_api::PROTOCOL_VERSION), true),
+            Some((GapCause::DaemonDownDuringSession, Some("client-9".into())))
         );
     }
 }

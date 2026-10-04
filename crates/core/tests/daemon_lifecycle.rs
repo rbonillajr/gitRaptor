@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use common::*;
+use gitraptor_core::channel::ChannelConfig;
 use gitraptor_core::daemon::{
     Daemon, DaemonConfig, DaemonEnv, DaemonError, EngineState, LOG_FILE, LogLimits, StopCause,
     running_pid,
@@ -23,6 +24,7 @@ fn config(dirs: ProfileDirs, git: ResolveConfig) -> DaemonConfig {
         heartbeat: Duration::from_secs(3600),
         log: LogLimits::default(),
         stop_deadline: None,
+        channel: ChannelConfig::default(),
     }
 }
 

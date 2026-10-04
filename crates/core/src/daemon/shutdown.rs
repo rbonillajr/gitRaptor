@@ -1,10 +1,17 @@
-//! Requests to stop the daemon in order (ADR-GRP-005 § 4).
+//! Requests to the daemon loop (ADR-GRP-005 § 4).
 //!
-//! Every stop goes through a [`ShutdownHandle`]: termination signals today,
-//! the authenticated stop command of the channel tomorrow (TS-GRP-004). The
-//! daemon loop owns the receiving end.
+//! Every stop goes through a [`ShutdownHandle`]: termination signals, and
+//! the stop command of the channel once the daemon authorized it as a
+//! reserved command (TS-GRP-004). The channel also asks the loop, which owns
+//! the profile, to append to and read the reserved-command audit.
 
-use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::mpsc::{Receiver, Sender, SyncSender, channel, sync_channel};
+use std::time::Duration;
+
+use crate::profile::AuditRow;
+
+/// How long a channel thread waits for the loop to persist or read the audit.
+const AUDIT_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Why the daemon stops.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -16,6 +23,10 @@ pub enum StopCause {
     /// Stop command authorized by the daemon as a reserved command, with the
     /// client that asked for it (TS-GRP-004).
     StopCommand { requested_by: String },
+    /// A newer installed binary replaces this daemon (SEC-13). Recorded with
+    /// the client and this daemon's protocol: the next start only counts it
+    /// as an attributed stop if it really speaks a newer protocol.
+    Replace { requested_by: String, protocol: u32 },
 }
 
 impl StopCause {
@@ -24,6 +35,16 @@ impl StopCause {
         match self {
             Self::Signal(_) => "signal",
             Self::StopCommand { .. } => "stop-command",
+            Self::Replace { .. } => "replace",
+        }
+    }
+
+    /// Cause text stored in the profile: [`Self::as_str`], plus the old
+    /// protocol for a replacement (`replace:1`).
+    pub fn stored(&self) -> String {
+        match self {
+            Self::Replace { protocol, .. } => format!("replace:{protocol}"),
+            other => other.as_str().to_owned(),
         }
     }
 
@@ -32,26 +53,62 @@ impl StopCause {
     pub fn requested_by(&self) -> String {
         match self {
             Self::Signal(name) => ["signal:", name].concat(),
-            Self::StopCommand { requested_by } => requested_by.clone(),
+            Self::StopCommand { requested_by } | Self::Replace { requested_by, .. } => {
+                requested_by.clone()
+            }
         }
     }
 }
 
-/// Sends stop requests to the running daemon. Cheap to clone.
+/// A request to the daemon loop.
+#[derive(Debug)]
+pub(crate) enum Control {
+    Stop(StopCause),
+    /// Append to the audit; the reply carries the new entry id.
+    Audit(AuditRow, SyncSender<Option<i64>>),
+    /// Read the audit after an id.
+    AuditList {
+        after_id: i64,
+        limit: u32,
+        reply: SyncSender<Option<Vec<(i64, AuditRow)>>>,
+    },
+}
+
+/// Sends requests to the running daemon. Cheap to clone.
 #[derive(Debug, Clone)]
 pub struct ShutdownHandle {
-    tx: Sender<StopCause>,
+    tx: Sender<Control>,
 }
 
 impl ShutdownHandle {
-    pub(crate) fn new() -> (Self, Receiver<StopCause>) {
+    pub(crate) fn new() -> (Self, Receiver<Control>) {
         let (tx, rx) = channel();
         (Self { tx }, rx)
     }
 
     /// Asks the daemon to stop. Returns `false` if it already stopped.
     pub fn request(&self, cause: StopCause) -> bool {
-        self.tx.send(cause).is_ok()
+        self.tx.send(Control::Stop(cause)).is_ok()
+    }
+
+    /// Persists one audit entry through the loop. `None` if it could not be
+    /// written: the caller must then not run the command (fail-closed).
+    pub(crate) fn audit(&self, row: AuditRow) -> Option<i64> {
+        let (reply, rx) = sync_channel(1);
+        self.tx.send(Control::Audit(row, reply)).ok()?;
+        rx.recv_timeout(AUDIT_TIMEOUT).ok().flatten()
+    }
+
+    pub(crate) fn audit_list(&self, after_id: i64, limit: u32) -> Option<Vec<(i64, AuditRow)>> {
+        let (reply, rx) = sync_channel(1);
+        self.tx
+            .send(Control::AuditList {
+                after_id,
+                limit,
+                reply,
+            })
+            .ok()?;
+        rx.recv_timeout(AUDIT_TIMEOUT).ok().flatten()
     }
 }
 
@@ -86,34 +143,6 @@ pub fn install_signal_handlers(_handle: ShutdownHandle) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Sends `SIGTERM` to the daemon holding the lock of `state_dir`. The lock
-/// is checked right before signalling: a PID read from a released lock is
-/// never signalled. Returns the PID signalled, or `None` if no daemon runs.
-#[cfg(unix)]
-pub fn signal_running_daemon(
-    state_dir: &std::path::Path,
-) -> Result<Option<u32>, super::DaemonError> {
-    let Some(pid) = super::lock::running_pid(state_dir)? else {
-        return Ok(None);
-    };
-    let raw = i32::try_from(pid).map_err(|_| std::io::Error::other("PID out of range"))?;
-    let pid_t =
-        rustix::process::Pid::from_raw(raw).ok_or_else(|| std::io::Error::other("invalid PID"))?;
-    rustix::process::kill_process(pid_t, rustix::process::Signal::TERM)
-        .map_err(std::io::Error::from)?;
-    Ok(Some(pid))
-}
-
-/// Not available before the channel exists on Windows (TS-GRP-004).
-#[cfg(not(unix))]
-pub fn signal_running_daemon(
-    _state_dir: &std::path::Path,
-) -> Result<Option<u32>, super::DaemonError> {
-    Err(super::DaemonError::Unsupported(
-        "`raptor daemon stop` needs the local channel on Windows (TS-GRP-004)",
-    ))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -129,8 +158,13 @@ mod tests {
     fn handle_reports_a_stopped_daemon() {
         let (handle, rx) = ShutdownHandle::new();
         assert!(handle.request(StopCause::Signal("INT")));
-        assert_eq!(rx.recv().unwrap(), StopCause::Signal("INT"));
+        assert!(matches!(
+            rx.recv().unwrap(),
+            Control::Stop(StopCause::Signal("INT"))
+        ));
         drop(rx);
         assert!(!handle.request(StopCause::Signal("INT")));
+        // Without a loop, the audit is never reported as written.
+        assert_eq!(handle.audit_list(0, 1), None);
     }
 }
