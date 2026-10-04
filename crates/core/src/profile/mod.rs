@@ -1,0 +1,190 @@
+//! Engine data store in the user's profile (TS-GRP-001, ADR-GRP-006).
+//!
+//! The profile is the only place outside the repo the engine writes to
+//! (Q17). It holds a global index of observed repos and one SQLite store per
+//! repo, so a corrupt store only affects its own repo. The daemon is the
+//! single writer (ADR-GRP-005); clients never open these files.
+
+mod dirs;
+mod error;
+mod fsperm;
+mod index;
+mod repo_key;
+mod schema;
+mod sqlite;
+mod store;
+
+use std::path::{Path, PathBuf};
+
+pub use dirs::{APP_DIR, PROFILE_DIR_ENV, ProfileDirs};
+pub use error::{ProfileError, Result};
+pub use fsperm::{ProfileWarning, create_private_file, set_restrictive_umask};
+pub use index::{AddOutcome, RepoEntry, RepoState};
+pub use repo_key::{NormalizedPath, normalize_common_dir, validate_input_path};
+pub use store::{
+    Agent, AgentKind, AttributionRecord, Author, BatchResult, EndCause, Event, Gap, GapCause,
+    KnownState, NewEvent, Origin, RecordKind, RepoStore, Session, Timestamp, Worktree, WriteOp,
+};
+
+use index::Index;
+
+/// File name of the global index inside the data folder.
+pub const INDEX_FILE: &str = "index.sqlite";
+
+/// What happened while opening the profile.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct OpenReport {
+    /// The profile (global index) was created by this open. A recreated
+    /// profile has a new instance id.
+    pub created: bool,
+    /// The global index was corrupt and was moved here; every repo starts
+    /// as a lost profile (Q26).
+    pub quarantined_index: Option<PathBuf>,
+    /// Issues the caller must surface without failing (e.g. Windows ACL).
+    pub warnings: Vec<ProfileWarning>,
+}
+
+/// Result of opening a per-repo store.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StoreOpen {
+    /// The store existed and passed the integrity check.
+    Existing,
+    /// No store existed yet: first observation of the repo.
+    Created,
+    /// The store was corrupt: it was moved to `quarantined` and a new, empty
+    /// store replaces it. The repo starts as a lost profile (Q26); the
+    /// caller opens the matching gap.
+    Recovered { quarantined: PathBuf },
+}
+
+/// The open profile. Owned by the daemon, the single writer.
+pub struct Profile {
+    dirs: ProfileDirs,
+    index: Index,
+}
+
+impl Profile {
+    /// Creates or verifies the profile folders and opens the global index.
+    ///
+    /// Sets the process umask to 077 first. Fails with
+    /// [`ProfileError::InsecureDir`] if a pre-existing folder is not private
+    /// to the current user, and with [`ProfileError::SchemaTooNew`] if the
+    /// index comes from a newer binary.
+    pub fn open(dirs: ProfileDirs) -> Result<(Self, OpenReport)> {
+        set_restrictive_umask();
+        for dir in dirs.owned_dirs() {
+            fsperm::ensure_private_dir(dir)?;
+        }
+        #[allow(unused_mut)]
+        let mut report = OpenReport::default();
+        #[cfg(windows)]
+        report
+            .warnings
+            .extend(fsperm::verify_windows_acl(dirs.owned_dirs()));
+
+        let opened = sqlite::open_db(
+            &dirs.data.join(INDEX_FILE),
+            schema::INDEX_MIGRATIONS,
+            &dirs.quarantine_dir(),
+        )?;
+        report.created = opened.fresh;
+        report.quarantined_index = opened.quarantined;
+        let index = Index::from_conn(opened.conn)?;
+        Ok((Self { dirs, index }, report))
+    }
+
+    pub fn dirs(&self) -> &ProfileDirs {
+        &self.dirs
+    }
+
+    /// Opaque id generated when the profile is created and presented in the
+    /// channel handshake (ADR-GRP-006 § 4, Guardrails amendment).
+    pub fn instance_id(&self) -> &str {
+        self.index.instance_id()
+    }
+
+    /// Adds the repo whose Git common directory is `common_dir`. All its
+    /// worktrees share that directory and therefore the key. Adding a
+    /// retired repo recovers its key and data (Q25).
+    pub fn add_repo(
+        &mut self,
+        common_dir: &Path,
+        root_commit_hint: Option<&str>,
+        now_ms: i64,
+    ) -> Result<(RepoEntry, AddOutcome)> {
+        let normalized = normalize_common_dir(common_dir)?;
+        self.index.add(&normalized, root_commit_hint, now_ms)
+    }
+
+    /// Stops observing a repo. Its store and data are kept.
+    pub fn retire_repo(&mut self, repo_id: &str, now_ms: i64) -> Result<()> {
+        self.index.retire(repo_id, now_ms)
+    }
+
+    /// Every repo of the index, observed or retired.
+    pub fn repos(&self) -> Result<Vec<RepoEntry>> {
+        self.index.all()
+    }
+
+    pub fn repo(&self, repo_id: &str) -> Result<Option<RepoEntry>> {
+        self.index.get(repo_id)
+    }
+
+    /// Looks a repo up by its Git common directory (any worktree's view).
+    pub fn repo_by_common_dir(&self, common_dir: &Path) -> Result<Option<RepoEntry>> {
+        let normalized = normalize_common_dir(common_dir)?;
+        self.index.by_key(&normalized.key_path)
+    }
+
+    /// Path of the SQLite store of a repo.
+    pub fn store_path(&self, repo_id: &str) -> PathBuf {
+        self.dirs.repos_dir().join([repo_id, ".sqlite"].concat())
+    }
+
+    /// Opens (or creates) the store of a repo, checking its integrity. A
+    /// corrupt store is set aside without touching any other repo; a store
+    /// from a newer binary is left untouched and reported as
+    /// [`ProfileError::SchemaTooNew`].
+    pub fn open_store(&self, repo_id: &str) -> Result<(RepoStore, StoreOpen)> {
+        let entry = self
+            .index
+            .get(repo_id)?
+            .ok_or_else(|| ProfileError::UnknownRepo(repo_id.to_owned()))?;
+        let path = self.store_path(&entry.repo_id);
+        let existed = path.exists();
+        let opened = sqlite::open_db(&path, schema::STORE_MIGRATIONS, &self.dirs.quarantine_dir())?;
+        let status = match opened.quarantined {
+            Some(quarantined) => StoreOpen::Recovered { quarantined },
+            None if !existed => StoreOpen::Created,
+            None => StoreOpen::Existing,
+        };
+        let store = RepoStore::from_conn(opened.conn, &entry.repo_id, &entry.canonical_path)?;
+        Ok((store, status))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// SQL is always parameterized (SEC-06). Query helpers only accept
+    /// `&'static str`, and this check fails if a file with SQL uses
+    /// `format!`, the usual way of splicing values into a statement.
+    #[test]
+    fn sql_is_never_built_with_format() {
+        let sql_files = [
+            ("index.rs", include_str!("index.rs")),
+            ("schema.rs", include_str!("schema.rs")),
+            ("sqlite.rs", include_str!("sqlite.rs")),
+            ("store.rs", include_str!("store.rs")),
+        ];
+        let banned = ["format", "!("].concat();
+        for (name, source) in sql_files {
+            for (n, line) in source.lines().enumerate() {
+                assert!(
+                    !line.contains(&banned),
+                    "{name}:{}: SQL files must not use format!; bind parameters instead",
+                    n + 1
+                );
+            }
+        }
+    }
+}
