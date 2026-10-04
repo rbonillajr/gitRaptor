@@ -2,13 +2,13 @@
 id: SPIKE-TMC-001
 title: "Repo mediano de referencia y viabilidad del snapshot en menos de 200 ms"
 type: spike
-status: ready
+status: done
 feature: time-machine
 domain: GRP
 priority: high
 complexity: medium
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 related:
   adrs: [ADR-TMC-006, ADR-TMC-001, ADR-TMC-004, ADR-GRP-011]
   stories: [US-TMC-001, US-TMC-004, US-TMC-020, INF-GRP-002, SPIKE-GRP-002]
@@ -23,7 +23,7 @@ tags: [time-machine, spike, rendimiento, nfr-04, d-tmc-21, repo-mediano, almacen
 
 **Valor**: fija con números el "repo mediano" de NFR-04 (D-TMC-21) y confirma, o corrige, el almacén de ADR-TMC-001 y el reparto de ADR-TMC-006 antes de que US-TMC-001 entre en desarrollo.
 
-> Un SPIKE no lleva Dev Spec: su entregable es un Research Brief en `research/SPIKE-TMC-001-repo-mediano-overhead.md`. Es el spike (a) del BRD § 13. Prototipo aislado, sin código del daemon. **Depende de**: nada (arranca el día uno). **Valida**: ADR-TMC-001 § 3, ADR-TMC-004 § 2 y ADR-TMC-006. **Se apoya en**: el generador de repos y los runners de INF-GRP-002 y las cifras de SPIKE-GRP-002.
+> Un SPIKE no lleva Dev Spec: su entregable es un Research Brief en [`research/SPIKE-TMC-001-resultados.md`](../research/SPIKE-TMC-001-resultados.md) (E12 de ese brief: antes se nombraba `research/SPIKE-TMC-001-repo-mediano-overhead.md`). Es el spike (a) del BRD § 13. Prototipo aislado, sin código del daemon. **Depende de**: nada (arranca el día uno). **Valida**: ADR-TMC-001 § 3, ADR-TMC-004 § 2 y ADR-TMC-006. **Se apoya en**: el generador de repos y los runners de INF-GRP-002 y las cifras de SPIKE-GRP-002.
 
 ### Pregunta
 
@@ -57,3 +57,13 @@ tags: [time-machine, spike, rendimiento, nfr-04, d-tmc-21, repo-mediano, almacen
 ### Time-box
 
 ⚠️ **ASSUMPTION**: 1 semana, en paralelo con SPIKE-GRP-002.
+
+### Resultado (2026-10-04)
+
+**Done en macOS**; Linux y Windows **sin verificar** (procedimiento en § 8 de los resultados; se cierran en el gate de CI de US-TMC-020). Research Brief: [SPIKE-TMC-001-resultados.md](../research/SPIKE-TMC-001-resultados.md).
+
+- Repo de referencia: perfil `M`, aprobado por Rene Bonilla (D-TMC-21).
+- p95 de 142–146 ms con el delta de referencia, **solo con los escalones 2 y 3 de ADR-TMC-006 § 5**, que pasan a ser obligatorios. Se cumplió la vía de fracaso: el escalón 3 queda activado (TQ-4 → a).
+- La siembra por enlace duro se descarta (rompe la garantía 4 de ADR-TMC-001); se siembra por clon con copia en escritura o por copia.
+- Las enmiendas E1–E12 están aplicadas en ADR-TMC-001, 002, 004, 006 y 007 (secciones "Enmienda (2026-10-04, SPIKE-TMC-001)"), en los NFR de la feature, en TS-TMC-001 y en US-TMC-020.
+- La hipótesis 5 (p95 del motor con la Time Machine activa) queda sin verificar hasta que existan TS-GRP-002/003.
