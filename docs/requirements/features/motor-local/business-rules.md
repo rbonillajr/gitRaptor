@@ -4,7 +4,7 @@ title: "Reglas de Negocio — Motor local"
 type: business-rules
 status: draft
 created: 2026-10-01
-updated: 2026-10-03
+updated: 2026-10-04
 domain: GRP
 epic: E-001
 feature: motor-local
@@ -51,7 +51,7 @@ tags:
 
 **Feature**: Motor local (F-001-01)
 **Enlace a contexto**: [`context.md`](./context.md) (CTX-GRP-001)
-**Última actualización**: 2026-10-03 (Q33-Q36: corregir reemplaza y registrar otro agente añade sesión; el motor nunca emite "humano"; "sin atribuir" es el único valor para lo no identificado; la rama base del equipo se difiere a US-GRP-016). También el 2026-10-03 (Q32: soporte completo solo para Claude Code en el MVP; Codex y Cursor como "otro agente" hasta su integración; el editor del humano nunca se atribuye a un agente). Antes, 2026-10-02 (decisiones Q1-Q31 de Rene Bonilla; Q28-Q31 fijan el primer uso: Git ausente o antiguo, agente instalado después, sin repos y máquina nueva; Q10 y Q11 reemplazan a Q2; Q21 reemplaza a Q18 y Q19; Q22 acota BR-AUTH-002 a un principio de frontera; Q23 añade BR-CONS-007; Q24 fija qué niveles admite cada valor; Q25 y Q26 confirman los supuestos S16 y S17; Q27 asigna a Guardrails el comando de edición de la configuración)
+**Última actualización**: 2026-10-04 (decisiones heredadas de Guardrails Q-GRD-20 y Q-GRD-21: BR-CONS-006 calcula contra la rama base confirmada, leída de la copia conocida de la rama principal; BR-EDGE-007 marca la rama base como "no confirmada" en una máquina nueva hasta que el humano la confirma al instalar la protección de Guardrails o de forma explícita, Q-GRD-23). Antes, 2026-10-03 (Q33-Q36: corregir reemplaza y registrar otro agente añade sesión; el motor nunca emite "humano"; "sin atribuir" es el único valor para lo no identificado; la rama base del equipo se difiere a US-GRP-016). También el 2026-10-03 (Q32: soporte completo solo para Claude Code en el MVP; Codex y Cursor como "otro agente" hasta su integración; el editor del humano nunca se atribuye a un agente). Antes, 2026-10-02 (decisiones Q1-Q31 de Rene Bonilla; Q28-Q31 fijan el primer uso: Git ausente o antiguo, agente instalado después, sin repos y máquina nueva; Q10 y Q11 reemplazan a Q2; Q21 reemplaza a Q18 y Q19; Q22 acota BR-AUTH-002 a un principio de frontera; Q23 añade BR-CONS-007; Q24 fija qué niveles admite cada valor; Q25 y Q26 confirman los supuestos S16 y S17; Q27 asigna a Guardrails el comando de edición de la configuración)
 
 ---
 
@@ -660,23 +660,33 @@ Constraint: atribución + historial de eventos + estado de sesiones antes del re
 
 **Descripción**: La rama base (contra la que se calcula ahead/behind) es `main`, salvo que la configuración del repo compartida con el equipo defina otra (es la configuración de Guardrails, BR-11 del BRD). Es un valor **compartido**: no cambia por persona. Por eso solo lo admite el nivel de equipo (Q24, BR-CONS-007): un valor de rama base en el perfil del usuario o en la configuración local personal del repo **no la cambia**. Quien define ese valor es el desarrollador, a través de Guardrails (F-001-04); el motor solo lo lee.
 
+> **Decisión heredada de Guardrails** (Q-GRD-18, Q-GRD-20 y Q-GRD-21, Rene Bonilla, 2026-10-04; posterior a la aprobación de este requerimiento): la rama base se lee de la configuración del equipo **commiteada en la copia que el repo ya conoce del remoto para la rama principal**, sin consultarlo (Q12); si no hay remoto, de la rama local; si tampoco existe, `main`. Nunca del archivo en disco del worktree principal ni de la versión de otro worktree. El motor calcula el ahead/behind contra la rama base **confirmada** por el humano en esa máquina, el mismo valor que protege Guardrails (BR-CONS-003 de Guardrails). Un cambio de rama base en la rama principal queda como diagnóstico **"pendiente de confirmar"** hasta que el humano lo confirma. Mientras no hay confirmación inicial (que el humano hace al instalar la protección de Guardrails o de forma explícita, nunca al añadir el repo, Q-GRD-23), el motor calcula contra la rama base leída y la marca como **"no confirmada"**.
+
 **Aplicabilidad**: Al calcular ahead/behind de cada worktree.
 
 **Criticidad**: Media
 
 **Regla de consistencia**:
 ```
-IF la configuración del repo (nivel equipo) define la rama base
-THEN rama base = la definida en esa configuración
-ELSE rama base = main
+rama base leída = la que define la configuración del repo (nivel equipo) commiteada en la copia
+                  conocida de la rama principal, ELSE main
+IF no hay rama base confirmada
+THEN ahead/behind contra la rama base leída, marcada como "no confirmada"
+ELSE ahead/behind contra la rama base confirmada
+     IF rama base leída ≠ confirmada THEN la leída se muestra como "pendiente de confirmar"
 Constraint: el perfil y la configuración local personal no intervienen en la rama base
+Constraint: el archivo en disco de cualquier worktree, incluido el principal, no interviene
+Constraint: la rama base del motor es la misma que la de Guardrails
 ```
 
 **Ejemplo**:
 - Repo cuya configuración no define rama base → ahead/behind contra `main`.
-- Repo cuya configuración de equipo define `develop` → ahead/behind contra `develop`.
+- Repo cuya configuración de equipo define `develop`, confirmada por el desarrollador → ahead/behind contra `develop`.
 - Repo cuya configuración de equipo define `develop` y cuya configuración local personal pone `release` → sigue siendo `develop`: el ajuste local no la cambia.
 - Repo sin rama base en la configuración de equipo y con `develop` en el perfil → `main`: el perfil no la cambia.
+- Rama base confirmada `develop`; llega a la copia conocida de la rama principal un cambio a `release` → el ahead/behind sigue contra `develop` y `release` aparece como "pendiente de confirmar"; tras la confirmación, contra `release`.
+- El desarrollador cambia la rama base en el worktree principal, sin que el cambio llegue a la copia conocida del remoto → no cuenta: ni cambia la rama base ni queda nada pendiente.
+- Repo observado sin confirmación inicial, con `develop` en la configuración del equipo → ahead/behind contra `develop`, marcado como "no confirmado".
 
 **Rama base inexistente** (Q42): si la rama base (la definida o `main`) no existe en el repo, el motor indica que no puede calcular ahead/behind; nunca elige otra rama por su cuenta.
 
@@ -685,8 +695,8 @@ Constraint: el perfil y la configuración local personal no intervienen en la ra
 **Referencias**:
 - User Story: US-GRP-012 (`main` provisional), US-GRP-016 (configuración del equipo; bloqueada)
 - BRD: BR-11
-- Contexto: decisiones Q5, Q23, Q24, Q36 y Q42; dependencia con F-001-04
-- Relacionada: BR-CONS-007
+- Contexto: decisiones Q5, Q12, Q23, Q24, Q36 y Q42; decisiones heredadas de Guardrails Q-GRD-18, Q-GRD-20, Q-GRD-21 y Q-GRD-23; dependencia con F-001-04
+- Relacionada: BR-CONS-007; BR-CONS-003 y BR-AUTH-001 de Guardrails
 
 ---
 
@@ -897,7 +907,7 @@ Acción al cumplirse: la sesión pasa a Inactivo
 
 ### BR-EDGE-007: Computadora nueva: el motor empieza de cero
 
-**Descripción**: Los datos del motor son de cada máquina (Q21, Q31): viven en el perfil de GitRaptor de esa máquina y no viajan con el repo. En una computadora nueva el perfil empieza vacío: el historial de eventos, la atribución, el registro de agentes, la lista de repos observados y la configuración personal (configuración de nivel perfil y configuración local personal de cada repo) de la máquina anterior **no se traen**. La **configuración del repo compartida con el equipo sí aplica desde el primer momento**, porque viaja versionada con el repo: al clonarlo y añadirlo, el motor lee de ella la rama base, igual que en la máquina anterior.
+**Descripción**: Los datos del motor son de cada máquina (Q21, Q31): viven en el perfil de GitRaptor de esa máquina y no viajan con el repo. En una computadora nueva el perfil empieza vacío: el historial de eventos, la atribución, el registro de agentes, la lista de repos observados y la configuración personal (configuración de nivel perfil y configuración local personal de cada repo) de la máquina anterior **no se traen**. La **configuración del repo compartida con el equipo sí aplica desde el primer momento**, porque viaja versionada con el repo: al clonarlo y añadirlo, el motor lee de ella la rama base, igual que en la máquina anterior. Mientras el humano no la confirma (al instalar la protección de Guardrails o de forma explícita, nunca al añadir el repo; decisión heredada Q-GRD-23), el motor la marca como "no confirmada".
 
 **Conexión con la pérdida del perfil** (S17, Q26): una máquina nueva se comporta como un perfil perdido. El motor funciona, los repos se añaden de nuevo y lo anterior a añadirlos en esta máquina no tiene datos del motor: el estado actual del repo y su historia de Git se ven, pero los cambios de antes quedan "sin atribuir" (BR-EDGE-005), nunca atribuidos a un agente.
 
@@ -908,12 +918,12 @@ Acción al cumplirse: la sesión pasa a Inactivo
 **Regla**: perfil vacío en máquina nueva; la configuración del equipo sí aplica; la configuración personal y los datos del motor de otra máquina no. Exportar o importar el perfil entre máquinas queda **fuera del MVP** (fase posterior).
 
 **Ejemplo**:
-- El desarrollador estrena portátil, instala GitRaptor y Git, clona `gitRaptor` y lo añade. El motor observa desde ese momento; los commits que ya existían se ven en la historia, sin atribución a ningún agente. La configuración del equipo de `gitRaptor` define `develop` como rama base → el ahead/behind se calcula contra `develop` desde el primer momento.
+- El desarrollador estrena portátil, instala GitRaptor y Git, clona `gitRaptor` y lo añade. El motor observa desde ese momento; los commits que ya existían se ven en la historia, sin atribución a ningún agente. La configuración del equipo de `gitRaptor` define `develop` como rama base → el ahead/behind se calcula contra `develop` desde el primer momento, marcado como "no confirmado" hasta que el desarrollador confirme la rama base.
 - En la máquina anterior tenía el umbral de inactividad de `gitRaptor` en 15 minutos en su configuración local personal; en la nueva no está → vale el del perfil y, como el perfil es nuevo, 5 minutos (BR-TIME-001).
 
 **Referencias**:
 - User Story: US-GRP-015 (perfil vacío, lo anterior "sin atribuir"), US-GRP-016 (la rama base del equipo aplica desde el primer momento; bloqueada)
-- Contexto: decisiones Q21, Q26, Q31 y Q36; supuesto S17
+- Contexto: decisiones Q21, Q26, Q31 y Q36; decisiones heredadas de Guardrails Q-GRD-21 y Q-GRD-23; supuesto S17
 - Relacionada: BR-CONS-001, BR-CONS-006, BR-CONS-007, BR-TIME-001, BR-EDGE-005
 
 ---
@@ -980,3 +990,5 @@ Cada regla debe estar reflejada en al menos un **escenario Gherkin** (criterio d
 | 1.9 | 2026-10-03 | PO (AADD) para Rene Bonilla | Decisión Q32 (BRD v0.5, D2 revisada; cambio de alcance sobre el requerimiento ya aprobado): soporte completo solo para Claude Code; Codex, luego Cursor y más adelante Copilot se integran uno por uno y, mientras tanto, son "otro agente". BR-VAL-001 (regla formal y ejemplo de Cursor registrado), BR-WF-001, BR-AUTH-001, BR-CONS-002 y BR-CONS-004 (ejemplos sin detección de Cursor), BR-EDGE-003 (agente sin registrar: no identificado), BR-EDGE-004 reformulada (la actividad del humano en su editor, Cursor u otro, nunca se atribuye a Claude Code ni a ningún agente; ejemplos nuevos) y BR-EDGE-006 (detección al instalar después, solo Claude Code). Las frases sustituidas quedan marcadas con "Q32: antes, …". Trazabilidad Reglas → User Stories completada (US-GRP-001 a 015). Sin reglas nuevas: conteos (22 / 13) y matriz sin cambios |
 | 1.10 | 2026-10-03 | PO (AADD) para Rene Bonilla | Decisiones Q33-Q36 tras el Artifact Judge de las historias. Q33: BR-CONS-002 pasa a "corregir una atribución reemplaza la detectada" (ya no "equivale a registrar"), con regla formal, ejemplos contrastados y los supuestos P14 (alcance retroactivo) y P15 (corregir sin detección); BR-CONS-004 aclara que registrar otro agente añade sesión y que una corrección no vuelve compartido el worktree; BR-AUTH-001 ajusta la fila "corregir". Q34: BR-CONS-003 fija los dos valores que emite el motor ("agente X" o "sin atribuir"; nunca "humano"); BR-VAL-001, la tabla de datos de BR-CONS-001, BR-EDGE-004 y BR-EDGE-006 dejan de hablar de atribuir al humano. Q35: BR-EDGE-003 reescrita ("sin atribuir" en lugar de "no identificada"). Q36: BR-CONS-006 añade la entrega en dos pasos (`main` provisional en US-GRP-012; configuración del equipo en US-GRP-016, bloqueada) y deja de citar US-GRP-001; BR-CONS-007 y BR-EDGE-007 referencian US-GRP-016. Trazabilidad actualizada. Sin reglas nuevas: conteos (22 / 13) y matriz sin cambios |
 | 1.11 | 2026-10-03 | PO (AADD) para Rene Bonilla | Decisiones Q37-Q42 (segunda pasada del Artifact Judge, RESERVAS). Q37 (cierra P14): BR-CONS-002 reatribuye los eventos de la sesión mal detectada desde su inicio; los de otras sesiones no cambian. Q38 (cierra P15): sin atribución detectada no se corrige; el motor indica que se use el registro. BR-CONS-002 añade que solo corrige el desarrollador y que la corrección persiste al reiniciar el motor, con ejemplos; nuevo supuesto P17 (retirar la corrección y los eventos reatribuidos). Q39: BR-CONS-004 distingue registrar al mismo agente ya detectado (confirma la sesión, no duplica, no comparte) de registrar otro; nuevo supuesto P16 (origen de la sesión confirmada). Q40 (confirma S7): BR-AUTH-001 sin marca de supuesto y con la fila "un agente no corrige". Q41 (confirma S8): BR-WF-001 sin marcas de supuesto. Q42: BR-CONS-006, rama base inexistente sin marca de supuesto. S18 y S19 figuran como aceptados en BR-VAL-003 y BR-WF-002 (cierra P13). Referencias y trazabilidad actualizadas. Sin reglas nuevas: conteos (22 / 13) y matriz sin cambios |
+| 1.12 | 2026-10-04 | PO (AADD) para Rene Bonilla | Decisiones heredadas de Guardrails Q-GRD-18, Q-GRD-20 y Q-GRD-21 (Rene Bonilla, revisión de arquitectura de Guardrails), posteriores a la aprobación del requerimiento. BR-CONS-006: la rama base se lee de la configuración del equipo commiteada en la copia conocida de la rama principal (no del archivo en disco del worktree principal); el ahead/behind se calcula contra la rama base confirmada, la misma que protege Guardrails; un cambio queda "pendiente de confirmar" y, sin confirmación inicial, se calcula contra la leída marcada como "no confirmada". BR-EDGE-007: la confirmación inicial al añadir el repo en una máquina nueva. Sin reglas nuevas. |
+| 1.13 | 2026-10-04 | PO (AADD) para Rene Bonilla | Decisión heredada de Guardrails Q-GRD-23 (Rene Bonilla): la confirmación inicial de la rama base se hace al instalar la protección de Guardrails o de forma explícita, nunca al añadir el repo. BR-EDGE-007 vuelve a su sentido original (la rama base del equipo aplica desde el primer momento) con la marca "no confirmada" hasta la confirmación; BR-CONS-006 quita "al añadir el repo" como vía de confirmación. Sin reglas nuevas. |
