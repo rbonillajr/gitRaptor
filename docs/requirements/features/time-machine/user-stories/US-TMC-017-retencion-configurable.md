@@ -14,9 +14,9 @@ related:
     - CTX-TMC-001
   rules:
     - BR-TMC-001
-  stories: [US-TMC-016]
+  stories: [US-TMC-016, US-GRP-013]
 covers: [BR-TMC-TIME-001, D-TMC-5, D-TMC-15]
-blocked_by: ["F-001-04 Guardrails: comando de edición de la configuración (US-GRD-013, Q27)"]
+blocked_by: []
 tags: [time-machine, retencion, configuracion]
 ---
 
@@ -73,6 +73,6 @@ Entonces se aplica la retención por defecto de 30 días
 
 ## Dependencias
 
-- **Historias**: US-TMC-016.
-- **Externas**: **bloqueada** por el comando de edición de la configuración de Guardrails (F-001-04, Q27; es US-GRD-013, que a su vez espera al factor fuera de banda de Q-GRD-19). P8 ya no la bloquea: ADR-GRP-007, que fija la sección `timeMachine`, se aceptó el 2026-10-04.
+- **Historias**: US-TMC-016; US-GRP-013 (motor-local: lectura de la configuración en tres niveles, que esta historia reutiliza).
+- **Externas**: ninguna. Desbloqueada el 2026-10-04 por decisión de Rene Bonilla: ADR-GRP-007, que fija la sección `timeMachine`, está aceptado y cierra P8, y los escenarios parten de valores ya escritos en el perfil o en el local, así que no dependen del comando de edición de Guardrails (F-001-04, Q27; US-GRD-013). Editar la retención con ese comando llegará con US-GRD-013 y no cambia esta historia.
 - **Transversal**: transversal (lo define el Arquitecto): verificación en repos temporales, nunca en un repo real; mismo comportamiento en Windows, macOS y Linux; mensajes en inglés y español.
