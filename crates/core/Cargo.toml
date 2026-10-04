@@ -33,4 +33,5 @@ signal-hook = "0.4.5"
 libproc = "=0.14.11"
 
 [dev-dependencies]
+gitraptor-testkit.workspace = true
 tempfile = "3.27.0"
