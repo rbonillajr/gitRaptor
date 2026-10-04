@@ -17,6 +17,7 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::exceptions::Exceptions;
@@ -34,9 +35,9 @@ pub fn git_from_path() -> PathBuf {
         .expect("tests need git in PATH")
 }
 
-/// mtime of every file written by [`Fixture::write`] (2026-09-21).
-pub fn fixed_mtime() -> SystemTime {
-    UNIX_EPOCH + Duration::from_secs(1_790_000_000)
+/// mtime of the `n`-th file written by [`Fixture::write`]: 2026-09-21 plus `n` seconds.
+pub fn fixed_mtime(n: u64) -> SystemTime {
+    UNIX_EPOCH + Duration::from_secs(1_790_000_000 + n)
 }
 
 pub struct Fixture {
@@ -50,6 +51,7 @@ pub struct Fixture {
     pub git: PathBuf,
     /// System config file of `git`, if it has one.
     pub system_config: Option<PathBuf>,
+    writes: AtomicU64,
 }
 
 impl Fixture {
@@ -93,6 +95,7 @@ impl Fixture {
             profile,
             git: git.to_owned(),
             system_config: None,
+            writes: AtomicU64::new(0),
         };
         fixture.git(&["init", "-q"]);
         fixture.git_in(&fixture.other_repo, &["init", "-q"]);
@@ -172,9 +175,10 @@ impl Fixture {
         c
     }
 
-    /// Write a file of the repo with a fixed mtime in the past. Two fixtures built by the same
-    /// code are then identical, and Git never sees a "racy" index entry, which would make it
-    /// rehash the file and freshen the mtime of an existing object at random.
+    /// Write a file of the repo with an mtime in the past, one second later on every write. Two
+    /// fixtures built by the same code are then identical; Git never sees a "racy" index entry
+    /// (which makes it rehash the file and freshen an existing object at random); and a rewrite
+    /// with the same size still changes the stat, so `git add` sees it.
     pub fn write(&self, rela: &str, content: &str) {
         let p = self.repo.join(rela);
         if let Some(parent) = p.parent() {
@@ -185,7 +189,7 @@ impl Fixture {
             .write(true)
             .open(&p)
             .unwrap()
-            .set_modified(fixed_mtime())
+            .set_modified(fixed_mtime(self.writes.fetch_add(1, Ordering::Relaxed)))
             .unwrap();
     }
 

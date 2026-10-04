@@ -6,49 +6,10 @@ mod common;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use common::{Fixture, busy_repo, script};
+use common::{ALLOWED, FIXED_PREFIX, Fixture, busy_repo, script};
 use gitraptor_git::cli::{ConfigKey, GitCli, RefNamespace};
 use gitraptor_git::resolve::{self, Rejection, Resolution, ResolveConfig};
 use gitraptor_git::{GitVersion, MemoryArgvLog, ReadError, RefName, SystemGit};
-
-const ALLOWED: &[&str] = &[
-    "version",
-    "rev-parse",
-    "for-each-ref",
-    "worktree",
-    "rev-list",
-    "merge-base",
-    "log",
-    "config",
-];
-
-const FIXED_PREFIX: &[&str] = &[
-    "--no-optional-locks",
-    "-c",
-    "core.fsmonitor=false",
-    "-c",
-    "core.untrackedCache=keep",
-    "-c",
-    "core.splitIndex=false",
-    "-c",
-    "gc.auto=0",
-    "-c",
-    "maintenance.auto=false",
-    "-c",
-    "log.showSignature=false",
-    "-c",
-    "credential.helper=",
-    "-c",
-    "color.ui=false",
-    "-c",
-    "core.pager=cat",
-    "-c",
-    "trace2.normalTarget=",
-    "-c",
-    "trace2.eventTarget=",
-    "-c",
-    "trace2.perfTarget=",
-];
 
 #[test]
 fn argv_log_only_contains_allowlisted_subcommands() {
