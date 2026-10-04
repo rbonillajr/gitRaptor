@@ -169,7 +169,7 @@ Aplicada desde la tabla de enmiendas de [non-functional-guardrails.md](../non-fu
 
 ## Enmienda (2026-10-04, SPIKE-GRP-002)
 
-Aplicada desde las recomendaciones de [SPIKE-GRP-002-resultados.md](../../requirements/features/motor-local/research/SPIKE-GRP-002-resultados.md) (§ 6), que se midieron **solo en macOS**. No cambia el mecanismo elegido. El `status` sigue en `proposed`. Linux y Windows siguen pendientes de la Validación. En macOS también quedan sin verificar la suspensión y reanudación reales y el desbordamiento forzado (Resultados § 3.6).
+Aplicada desde las recomendaciones de [SPIKE-GRP-002-resultados.md](../../requirements/features/motor-local/research/SPIKE-GRP-002-resultados.md) (§ 6), que se midieron **solo en macOS**. No cambia el mecanismo elegido. El `status` sigue en `accepted`: la enmienda no cambia la decisión aceptada por Rene Bonilla. Linux y Windows siguen pendientes de la Validación. En macOS también quedan sin verificar la suspensión y reanudación reales y el desbordamiento forzado (Resultados § 3.6).
 
 | Cambio | Dónde | Fuente |
 |---|---|---|
