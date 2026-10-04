@@ -1,0 +1,249 @@
+//! Temporary machine for one scenario (NFR-01: never this repo, never the real profile):
+//!
+//! ```text
+//! <root>/                      marked as a testkit root (guard)
+//!   home/                      HOME of every Git the fixture or the engine launches
+//!     .gitconfig .config/git/ .gnupg/ .claude/
+//!   repo/                      the observed repository, `.git` included
+//!   other-repo/                another repository of the machine
+//!   profile/{data,config,state}  the engine profile (ADR-GRP-006 § 1)
+//! ```
+//!
+//! Each top-level folder is a fingerprint [`Scope`] with its own name, so two fixtures built by
+//! the same code can be compared in a control run. Linked worktrees created under the root
+//! become scopes too. The system Git config, wherever the resolved Git keeps it, is a read-only
+//! [`Scope::system`].
+
+use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use crate::exceptions::Exceptions;
+use crate::fingerprint::{Scope, Snapshot};
+use crate::guard;
+
+/// The first absolute `git` in `PATH`, for the testkit's own tests. Crates under test resolve
+/// Git with their own code and pass it to [`Fixture::new`].
+pub fn git_from_path() -> PathBuf {
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    std::env::split_paths(&path)
+        .filter(|d| d.is_absolute())
+        .map(|d| d.join(format!("git{}", std::env::consts::EXE_SUFFIX)))
+        .find(|p| p.is_file())
+        .expect("tests need git in PATH")
+}
+
+/// mtime of every file written by [`Fixture::write`] (2026-09-21).
+pub fn fixed_mtime() -> SystemTime {
+    UNIX_EPOCH + Duration::from_secs(1_790_000_000)
+}
+
+pub struct Fixture {
+    _tmp: tempfile::TempDir,
+    pub root: PathBuf,
+    pub home: PathBuf,
+    pub repo: PathBuf,
+    pub other_repo: PathBuf,
+    pub profile: PathBuf,
+    /// Git used to build the fixture (setup and user/agent actions, not the code under test).
+    pub git: PathBuf,
+    /// System config file of `git`, if it has one.
+    pub system_config: Option<PathBuf>,
+}
+
+impl Fixture {
+    /// An empty repository with `main` as initial branch, and the rest of the fake machine.
+    pub fn new(git: &Path) -> Self {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        // Canonical paths: on macOS `/var` is a symlink to `/private/var`.
+        let root = tmp.path().canonicalize().expect("canonical tempdir");
+        guard::mark(&root);
+        let home = root.join("home");
+        let repo = root.join("repo");
+        let other_repo = root.join("other-repo");
+        let profile = root.join("profile");
+        for dir in [
+            home.join(".gnupg"),
+            home.join(".claude"),
+            home.join(".config/git"),
+            repo.clone(),
+            other_repo.clone(),
+            profile.join("data"),
+            profile.join("config"),
+            profile.join("state"),
+        ] {
+            std::fs::create_dir_all(dir).unwrap();
+        }
+        std::fs::write(
+            home.join(".gitconfig"),
+            "[user]\n\tname = Test\n\temail = test@example.com\n[init]\n\tdefaultBranch = main\n",
+        )
+        .unwrap();
+        std::fs::write(home.join(".config/git/ignore"), "*.swp\n").unwrap();
+        std::fs::write(home.join(".gnupg/pubring.kbx"), "keyring").unwrap();
+        std::fs::write(home.join(".claude/settings.json"), "{}\n").unwrap();
+        std::fs::write(profile.join("config/config.toml"), "# profile config\n").unwrap();
+        let fixture = Self {
+            _tmp: tmp,
+            root,
+            home,
+            repo,
+            other_repo,
+            profile,
+            git: git.to_owned(),
+            system_config: None,
+        };
+        fixture.git(&["init", "-q"]);
+        fixture.git_in(&fixture.other_repo, &["init", "-q"]);
+        let system_config = fixture.find_system_config();
+        Self {
+            system_config,
+            ..fixture
+        }
+    }
+
+    /// A repository with one commit holding `a.txt` and `b.txt`.
+    pub fn with_commit(git: &Path) -> Self {
+        let f = Self::new(git);
+        f.write("a.txt", "alpha\n");
+        f.write("b.txt", "beta\n");
+        f.git(&["add", "."]);
+        f.git(&["commit", "-q", "-m", "initial"]);
+        f
+    }
+
+    /// History on two branches, a remote with a token, an ignore rule, staged, unstaged and
+    /// untracked changes, an ignored folder and a file with a dirty stat.
+    pub fn busy(git: &Path) -> Self {
+        let f = Self::with_commit(git);
+        f.git(&["branch", "feature"]);
+        f.write(".gitignore", "target/\n");
+        f.git(&["add", ".gitignore"]);
+        f.git(&["commit", "-q", "-m", "ignore"]);
+        f.git(&["checkout", "-q", "feature"]);
+        f.write("c.txt", "gamma\n");
+        f.git(&["add", "c.txt"]);
+        f.git(&["commit", "-q", "-m", "feature"]);
+        f.git(&["checkout", "-q", "main"]);
+        f.git(&[
+            "remote",
+            "add",
+            "origin",
+            "https://user:token@example.com/o/r.git",
+        ]);
+        f.write("a.txt", "alpha changed\n");
+        f.write("staged.txt", "staged\n");
+        f.git(&["add", "staged.txt"]);
+        f.write("untracked.txt", "u\n");
+        f.write("target/out.bin", "x");
+        f.dirty_stat("b.txt");
+        f
+    }
+
+    /// Run the fixture's Git in the repo; panics on failure.
+    pub fn git(&self, args: &[&str]) -> String {
+        self.git_in(&self.repo, args)
+    }
+
+    pub fn git_in(&self, dir: &Path, args: &[&str]) -> String {
+        let out = self.git_command(dir, args).output().expect("run git");
+        assert!(
+            out.status.success(),
+            "git {args:?} failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    }
+
+    /// A deterministic Git command: fixture home, no system config, fixed dates.
+    pub fn git_command(&self, dir: &Path, args: &[&str]) -> Command {
+        let mut c = Command::new(&self.git);
+        c.args(args).current_dir(dir);
+        if cfg!(unix) {
+            c.env_clear().env("PATH", "/usr/bin:/bin");
+        } else {
+            c.env("USERPROFILE", &self.home);
+        }
+        c.env("HOME", &self.home)
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env("GIT_AUTHOR_DATE", "2026-10-04T10:00:00Z")
+            .env("GIT_COMMITTER_DATE", "2026-10-04T10:00:00Z");
+        c
+    }
+
+    /// Write a file of the repo with a fixed mtime in the past. Two fixtures built by the same
+    /// code are then identical, and Git never sees a "racy" index entry, which would make it
+    /// rehash the file and freshen the mtime of an existing object at random.
+    pub fn write(&self, rela: &str, content: &str) {
+        let p = self.repo.join(rela);
+        if let Some(parent) = p.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&p, content).unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(&p)
+            .unwrap()
+            .set_modified(fixed_mtime())
+            .unwrap();
+    }
+
+    /// Change the mtime of a tracked file without changing its size, so the index stat is dirty.
+    pub fn dirty_stat(&self, rela: &str) {
+        let f = std::fs::File::options()
+            .write(true)
+            .open(self.repo.join(rela))
+            .unwrap();
+        f.set_modified(SystemTime::now() + Duration::from_secs(120))
+            .unwrap();
+    }
+
+    /// A linked worktree at `<root>/wt-<name>` on `branch`; it becomes its own scope.
+    pub fn add_worktree(&self, name: &str, branch: &str) -> PathBuf {
+        let wt = self.root.join(format!("wt-{name}"));
+        self.git(&["worktree", "add", "-q", wt.to_str().unwrap(), branch]);
+        wt
+    }
+
+    /// Every top-level folder of the root, plus the system Git config.
+    pub fn scopes(&self) -> Vec<Scope> {
+        let mut scopes: Vec<Scope> = std::fs::read_dir(&self.root)
+            .unwrap()
+            .flatten()
+            .filter(|e| e.file_name() != guard::MARKER)
+            .map(|e| Scope::new(e.file_name().to_string_lossy(), e.path()))
+            .collect();
+        scopes.sort_by(|a, b| a.label.cmp(&b.label));
+        if let Some(sys) = &self.system_config {
+            scopes.push(Scope::system("system-gitconfig", sys));
+        }
+        scopes
+    }
+
+    /// Snapshot of every scope, keeping what `exceptions` need to compare.
+    pub fn snapshot(&self, exceptions: &Exceptions) -> Snapshot {
+        Snapshot::take(&self.scopes(), &exceptions.keep_content())
+    }
+
+    /// Snapshot with no content kept.
+    pub fn fingerprint(&self) -> Snapshot {
+        Snapshot::take(&self.scopes(), &BTreeSet::new())
+    }
+
+    /// Where the fixture's Git keeps its system config (Homebrew, Command Line Tools, Git for
+    /// Windows and distro packages differ), asked to Git itself.
+    fn find_system_config(&self) -> Option<PathBuf> {
+        let out = Command::new(&self.git)
+            .args(["config", "--system", "--show-origin", "--list"])
+            .current_dir(&self.root)
+            .env("HOME", &self.home)
+            .output()
+            .ok()?;
+        let text = String::from_utf8_lossy(&out.stdout);
+        let first = text.lines().next()?;
+        let path = first.strip_prefix("file:")?.split('\t').next()?;
+        let path = PathBuf::from(path);
+        path.is_file().then_some(path)
+    }
+}

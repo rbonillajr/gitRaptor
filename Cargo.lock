@@ -433,6 +433,7 @@ dependencies = [
 name = "gitraptor-git"
 version = "0.0.0"
 dependencies = [
+ "gitraptor-testkit",
  "gix",
  "tempfile",
 ]
@@ -453,6 +454,14 @@ dependencies = [
  "gitraptor-git",
  "schemars",
  "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "gitraptor-testkit"
+version = "0.0.0"
+dependencies = [
  "serde_json",
  "tempfile",
 ]

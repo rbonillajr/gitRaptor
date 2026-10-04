@@ -14,12 +14,14 @@ gitraptor-api = { path = "crates/api" }
 gitraptor-core = { path = "crates/core" }
 gitraptor-git = { path = "crates/git" }
 gitraptor-policy = { path = "crates/policy" }
+gitraptor-testkit = { path = "crates/testkit" }
 gitraptor-theme = { path = "crates/theme" }
 
 clap = { version = "4", features = ["derive"] }
 # Read path of crates/git (ADR-GRP-001, ADR-GRP-009): no default features, so no network,
 # credentials or worktree mutation; versions are pinned by Cargo.lock.
 gix = { version = "0.88", default-features = false, features = ["sha1", "status", "revision", "excludes", "dirwalk"] }
+serde_json = "1"
 tempfile = "3"
 
 [workspace.lints.rust]

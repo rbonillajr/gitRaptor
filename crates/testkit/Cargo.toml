@@ -1,6 +1,6 @@
 [package]
-name = "gitraptor-git"
-description = "Git layer: gitoxide for reads, system Git CLI behind a closed allowlist"
+name = "gitraptor-testkit"
+description = "Test support only: the 'intact repo' harness (INF-GRP-001). Never a regular dependency"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,10 +8,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-gix.workspace = true
-
-[dev-dependencies]
-gitraptor-testkit.workspace = true
+serde_json.workspace = true
 tempfile.workspace = true
 
 [lints]
