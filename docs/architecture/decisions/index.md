@@ -169,7 +169,7 @@ Los ADR-GRD-001 a 007 (aceptados el 2026-10-04) son de la feature `guardrails` (
 
 - **Pregunta**: ¿cómo se detectan los cambios con frescura (NFR-04), a escala (NFR-05) y sin huecos (BR-CONS-005, BR-EDGE-005)?
 - **Decisión**: un watcher `notify` compartido (FSEvents, inotify, ReadDirectoryChangesW) sobre working trees y las rutas de `.git` que importan (no `objects/`). Debounce de **ventana fija de 75 ms** por worktree. Recomputo incremental con caché de stat en memoria. Publicación en dos fases. Sondeo de respaldo (30 s) y modo degradado por worktree (2 s), configurables en perfil y local. Reconciliación completa al arrancar, al volver de suspensión, ante desbordamiento y al volver a añadir; lo encontrado queda "sin atribuir" con marca de hueco. Nunca cambia límites del sistema.
-- **Enmienda 2026-10-04 (SPIKE-GRP-002)**: debounce con duración efectiva de 75 ms (holgura del temporizador descontada); reconciliación tras cada recreación del stream de FSEvents; el sondeo de respaldo solo cubre metadatos de Git; ahead/behind en la segunda fase, en proceso con `gix` (⚠️ **ASSUMPTION** sin medir).
+- **Enmienda 2026-10-04 (SPIKE-GRP-002)**: debounce con duración efectiva de 75 ms (holgura del temporizador descontada); reconciliación tras cada recreación del stream de FSEvents, con el stream nuevo ya arrancado, y escenario de recreación como gate de CI al subir `notify` (un watcher por worktree en macOS queda como candidata a medir); el sondeo de respaldo solo cubre metadatos de Git, y una reconciliación periódica cada 5 min (⚠️ **ASSUMPTION**) recupera los cambios del working tree perdidos sin marca; ahead/behind en la segunda fase, en proceso con `gix` (⚠️ **ASSUMPTION** sin medir); cachés de `gix` por repo.
 - **Decisión de producto**: ninguna; recomendación aceptada por Rene. La valida SPIKE-GRP-002: validado en macOS; Linux y Windows pendientes.
 - **Impacta**: US-GRP-002, 003, 004, 005, 006, 014. BR-CONS-005, BR-EDGE-001, BR-EDGE-002, BR-EDGE-005. NFR-04, NFR-05.
 
@@ -177,7 +177,7 @@ Los ADR-GRD-001 a 007 (aceptados el 2026-10-04) son de la feature `guardrails` (
 
 - **Pregunta**: ¿cómo se reparten los 500 ms entre el motor y el Cockpit y cómo se mide?
 - **Decisión**: detección ≤ 50 ms, debounce 75 ms, recomputo y persistencia ≤ 150 ms, publicación ≤ 25 ms → **motor ≤ 300 ms**; Cockpit ≤ 100 ms; margen 100 ms que nadie reclama. Tiempos por etapa en cada evento con reloj monótono común. Gate de CI sobre el p95 del total (INF-GRP-002) y aviso por etapa.
-- **Enmienda 2026-10-04 (SPIKE-GRP-002)**: el debounce se presupuesta como ventana efectiva de 75 ms; el banco reporta además p99 y máximo; `t0` es el fin del comando en los escenarios de Git.
+- **Enmienda 2026-10-04 (SPIKE-GRP-002)**: el debounce se presupuesta como ventana efectiva de 75 ms; el banco reporta además p99 y máximo; `t0` es el fin del comando en los escenarios de Git; la reconciliación periódica no cuenta para NFR-04; los escenarios de recreación del stream y de reconciliación periódica llevan gate de corrección.
 - **Decisión de producto**: ninguna. "< 500 ms" es p95 en las máquinas de referencia: **confirmado en macOS** por SPIKE-GRP-002; ⚠️ **ASSUMPTION** pendiente en Linux y Windows.
 - **Impacta**: US-GRP-002. NFR-04, NFR-05. Feature F-001-02.
 
