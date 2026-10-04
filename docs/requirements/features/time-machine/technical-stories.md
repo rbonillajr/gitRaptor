@@ -2,7 +2,7 @@
 mode: bulk
 status: expanded
 generated: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 generator: architect
 domain: GRP
 feature: time-machine
@@ -27,7 +27,7 @@ related:
 
 | ID | Tipo | Título | Valor (1 línea) | ADR | US que habilita | Depende de | Complejidad | Status |
 |----|------|--------|-----------------|-----|-----------------|-----------|-------------|--------|
-| [SPIKE-TMC-001](./technical-stories/SPIKE-TMC-001-repo-mediano-overhead.md) | SPIKE | Repo mediano de referencia y viabilidad del snapshot en menos de 200 ms | Fija "repo mediano" (D-TMC-21) y valida almacén, reparto y cadencia | ADR-TMC-006, ADR-TMC-001, ADR-TMC-004 (valida) | US-TMC-001, 004, 020 | — (prototipo aislado; usa el generador de INF-GRP-002) | Medium | Research Brief Pending |
+| [SPIKE-TMC-001](./technical-stories/SPIKE-TMC-001-repo-mediano-overhead.md) | SPIKE | Repo mediano de referencia y viabilidad del snapshot en menos de 200 ms | Fija "repo mediano" (D-TMC-21) y valida almacén, reparto y cadencia | ADR-TMC-006, ADR-TMC-001, ADR-TMC-004 (valida) | US-TMC-001, 004, 020 | — (prototipo aislado; usa el generador de INF-GRP-002) | Medium | Research Brief Done ([resultados](./research/SPIKE-TMC-001-resultados.md); D-TMC-21 aprobada: perfil `M`) |
 | [TS-TMC-002](./technical-stories/TS-TMC-002-oplog-diario.md) | TS | Oplog de la Time Machine con diario de intención y recuperación | Registro inmutable y estados nombrados; recuperación al arrancar | ADR-TMC-003, ADR-TMC-007 | US-TMC-001, 002, 003, 006, 008, 009, 010, 011, 016, 019 | TS-GRP-001, TS-GRP-003 | Medium | Dev Spec Pending |
 | [TS-TMC-001](./technical-stories/TS-TMC-001-almacen-captura-snapshots.md) | TS | Almacén de snapshots en el perfil y captura de estado | Snapshots fuera del alcance del push, del gc y de los agentes; el repo no cambia al capturar | ADR-TMC-001, ADR-TMC-004, ADR-TMC-006 | US-TMC-001, 004, 005, 009, 016, 018, 020 | TS-GRP-001, TS-GRP-002, TS-TMC-002 (informa SPIKE-TMC-001) | High | Dev Spec Pending |
 | [TS-TMC-003](./technical-stories/TS-TMC-003-escritura-aplicador.md) | TS | Capa de escritura acotada y aplicador de estados | Escrituras internas sin hooks ni filtros, con locks, intercambio atómico y rutas seguras | ADR-TMC-002 | US-TMC-002, 003, 009, 010, 011, 014, 015, 019 | TS-GRP-002, TS-TMC-001, TS-TMC-002 | High | Dev Spec Pending |
