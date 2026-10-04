@@ -41,6 +41,8 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
 
 ⚠️ **ASSUMPTION** (a confirmar con SPIKE-GRP-002 e INF-GRP-002): "< 500 ms" se mide como **p95** de extremo a extremo, desde que termina la escritura en el sistema de archivos hasta que el Cockpit pinta el frame que la refleja, en las máquinas de referencia (apartado 4), con 10 worktrees observados. Una ráfaga se mide dos veces: su primer cambio visible y su estado final, ambos desde la escritura correspondiente (primera y última).
 
+**Confirmado en macOS por SPIKE-GRP-002 (Enmienda 2026-10-04)**: en 1.800 muestras, el máximo del motor fue de 175 ms y el p99 más alto, de 140,7 ms, así que p95, p99 y máximo dan el mismo veredicto. El gate sigue siendo el **p95**, por el ruido de los runners compartidos, y el banco reporta también el **p99 y el máximo**. En Linux y Windows la interpretación sigue como supuesto hasta su medición.
+
 ### 2. Reparto
 
 ⚠️ **ASSUMPTION**: las cifras son una hipótesis de diseño; SPIKE-GRP-002 da las primeras mediciones reales e INF-GRP-002 las convierte en gate. Si cambian, se actualiza esta tabla en este ADR.
@@ -48,7 +50,7 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
 | Etapa | Dueño | Presupuesto p95 | Marca de inicio → fin |
 |---|---|---|---|
 | Detección SO → motor | Motor (ADR-GRP-010) | ≤ 50 ms | `t0` (escritura, solo en el banco) → `t_recv` |
-| Debounce | Motor | ventana fija de 75 ms | `t_recv` → `t_flush` |
+| Debounce | Motor | ventana fija **efectiva** de 75 ms, con la holgura del temporizador descontada (ADR-GRP-010 § 3) | `t_recv` → `t_flush` |
 | Recomputo incremental | Motor | ≤ 150 ms (cómputo y persistencia juntos) | `t_flush` → `t_computed` |
 | Persistencia antes de publicar | Motor (ADR-GRP-013) | (incluida arriba) | `t_computed` → `t_persisted` |
 | Publicación por IPC | Motor (ADR-GRP-005) | ≤ 25 ms | `t_persisted` → `t_published` (escrito en el canal) → `t_client_recv` |
@@ -75,6 +77,8 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
 
 - **Banco**: repos temporales generados (uno de 100K commits o más, creado una vez y cacheado como artefacto de CI) con 10 worktrees. Escenarios: modificar un archivo, `git add`, commit, checkout de rama, crear y borrar un worktree, y una ráfaga de 1.000 archivos en un worktree mientras se mide en otro.
 - **Cliente**: el banco escribe en `t0` y un suscriptor sin pantalla registra `t_client_recv`. Cuando exista el Cockpit (F-001-02), su TUI sin pantalla (backend de pruebas de `ratatui`) registra `t_render`. Hasta entonces se mide y se aplica el gate solo al motor.
+- **`t0` en los escenarios de Git** (Enmienda 2026-10-04): `t0` es el fin del comando. Git escribe `index`, refs y `HEAD` antes de terminar, así que el lote suele abrirse antes de `t0` (SPIKE-GRP-002: en 200 de 200 commits y checkouts). La etapa de detección solo se aísla en "modificar un archivo"; en los demás escenarios se reporta el total desde el fin del comando.
+- **Debounce medido como duración efectiva** (`t_recv` → `t_flush`), incluida la holgura del temporizador del SO, no como el valor configurado.
 - **Muestras**: ⚠️ **ASSUMPTION**: al menos 200 por escenario y SO, descartando las 10 primeras de calentamiento.
 - **Gates**:
   - p95 del motor (`t0` → `t_client_recv`) > 300 ms en cualquier escenario y SO: **el CI falla**.
@@ -99,7 +103,8 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
 - ✅ Cada feature tiene un límite propio y verificable: el motor 300 ms y el Cockpit 100 ms.
 - ✅ Un fallo de NFR-04 señala la etapa concreta, con el mismo dato en CI y en dogfooding.
 - ✅ El margen de 100 ms protege contra la varianza del SO y de máquinas más lentas que las de referencia.
-- ⚠️ Persistir antes de publicar consume parte de los 150 ms; un `fsync` en macOS (`F_FULLFSYNC`) o en Windows puede costar decenas de milisegundos. **Mitigación**: ADR-GRP-006 § 4 agrupa las escrituras de un mismo lote de debounce en una sola transacción y SPIKE-GRP-002 mide el coste real.
+- ⚠️ Persistir antes de publicar consume parte de los 150 ms. En macOS, SPIKE-GRP-002 midió una transacción SQLite por lote con `F_FULLFSYNC` en **≤ 11 ms p95** (de 1 a 1.000 filas), y de 9 a 15 ms p95 dentro del motor con 10 worktrees compartiendo la conexión. Las "decenas de milisegundos" supuestas no se observaron. En Windows sigue sin medir. **Mitigación**: ADR-GRP-006 § 4 agrupa las escrituras de un mismo lote de debounce en una sola transacción.
+- ⚠️ El temporizador de macOS se despierta hasta 10 ms tarde (SPIKE-GRP-002: 85 ms p95 con una ventana programada de 75 ms). **Mitigación**: la ventana se programa con la holgura descontada para que su duración efectiva sea de 75 ms (ADR-GRP-010 § 3), y el banco mide la duración efectiva.
 - ⚠️ El p95 y las cifras de cada etapa son supuestos. **Mitigación**: SPIKE-GRP-002 los mide antes del desarrollo de US-GRP-002 e INF-GRP-002 los fija como gate; el cambio de interpretación (p95 frente a máximo) se confirma con Rene.
 - ⚠️ Los runners compartidos del CI tienen ruido y pueden dar falsos fallos. **Mitigación**: gate sobre totales y aviso por etapa, calentamiento descartado y plan B de runner dedicado (apartado 4).
 - ⚠️ La detección SO → motor no se puede medir fuera del banco, porque el SO no fecha los eventos en las tres plataformas. **Mitigación**: en dogfooding se mide desde `t_recv`; la detección solo se mide en el banco, donde se conoce `t0`.
@@ -120,3 +125,14 @@ Nota de integración (Time Machine, ADR-TMC-004 y ADR-TMC-006, aceptados el 2026
 - BRD: NFR-03, NFR-04, NFR-05.
 - ADRs: ADR-GRP-001 (TUI con `ratatui`, motor con eventos incrementales), ADR-GRP-002 (`crates/api`), ADR-GRP-005 (canal y handshake), ADR-GRP-006 y ADR-GRP-013 (persistencia), ADR-GRP-009 (lectura), ADR-GRP-010 (detección, debounce y recomputo).
 - Historias: US-GRP-002, TS-GRP-004 (canal y contrato), INF-GRP-002 (banco), SPIKE-GRP-002 (valida).
+
+## Enmienda (2026-10-04, SPIKE-GRP-002)
+
+Aplicada desde las recomendaciones de [SPIKE-GRP-002-resultados.md](../../requirements/features/motor-local/research/SPIKE-GRP-002-resultados.md) (§ 6), que se midieron **solo en macOS**. Las cifras del reparto (§ 2) no cambian. El `status` sigue en `proposed`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| Interpretación p95 confirmada en macOS; el banco reporta además p99 y máximo; Linux y Windows siguen como supuesto | § 1 | Resultados § 3.3 |
+| La fila de debounce pasa a ventana **efectiva** de 75 ms, con la holgura del temporizador descontada (medida: 85 ms p95 sin compensar). Se elige compensar en lugar de presupuestar 85 ms, para que las etapas sigan sumando 300 ms | § 2 (tabla), Consecuencias | Resultados § 3.2 |
+| El banco toma `t0` al fin del comando en los escenarios de Git, aísla la detección solo en "modificar un archivo" y mide el debounce como duración efectiva | § 4 | Resultados § 2, § 3.1 |
+| Coste medido de la persistencia con `F_FULLFSYNC` en macOS (≤ 11 ms p95); Windows sigue sin medir | Consecuencias | Resultados § 3.11 |
