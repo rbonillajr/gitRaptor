@@ -30,10 +30,10 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use gitraptor_api::Untrusted;
-use gitraptor_api::event::{DAEMON_STOPPING, ENGINE_STATE};
-use gitraptor_api::messages::{
-    DaemonView, EngineStateView, EngineView, RepoStateView, RepoView, StoppingData,
-};
+use gitraptor_api::event::DAEMON_STOPPING;
+use gitraptor_api::messages::{EngineStateView, EngineView, RepoStateView, RepoView, StoppingData};
+#[cfg(unix)]
+use gitraptor_api::{event::ENGINE_STATE, messages::DaemonView};
 
 use gitraptor_git::SystemGit;
 use gitraptor_git::resolve::{Resolution, ResolveConfig, resolve};
@@ -246,9 +246,11 @@ pub struct Daemon {
     handle: ShutdownHandle,
     control_rx: Receiver<Control>,
     bus: Arc<EventBus>,
+    #[cfg_attr(not(unix), allow(dead_code))]
     started_ms: i64,
     #[cfg(unix)]
     bound: Option<crate::channel::BoundChannel>,
+    #[cfg(unix)]
     server: Option<crate::channel::Server>,
 }
 
@@ -381,6 +383,9 @@ impl Daemon {
             }
             None => None,
         };
+        // Windows: no channel at all rather than one without access control
+        // (`channel::TRANSPORT_UNSUPPORTED`); the engine still observes.
+        // Pendiente: etapa de validación multiplataforma.
         #[cfg(not(unix))]
         logger.warn("channel_unsupported", &[]);
 
@@ -435,6 +440,7 @@ impl Daemon {
             started_ms: now_ms(),
             #[cfg(unix)]
             bound,
+            #[cfg(unix)]
             server: None,
         })
     }
@@ -601,6 +607,7 @@ impl Daemon {
         );
         // Answers already queued (the stop command's included) are written,
         // then every connection closes.
+        #[cfg(unix)]
         if let Some(mut server) = self.server.take() {
             server.shutdown();
         }
