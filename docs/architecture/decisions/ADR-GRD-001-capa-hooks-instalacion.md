@@ -2,7 +2,8 @@
 id: ADR-GRD-001
 title: Capa de hooks — instalación, encadenado, desinstalación recuperable y cobertura de worktrees
 type: adr
-status: proposed
+status: accepted
+accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
 updated: 2026-10-04
@@ -14,6 +15,8 @@ tags: [guardrails, hooks-git, core-hookspath, dispatcher, encadenado, instalacio
 ---
 
 # ADR-GRD-001 — Capa de hooks: instalación, encadenado, desinstalación recuperable y cobertura de worktrees
+
+> **Estado**: aceptado por Rene Bonilla el 2026-10-04.
 
 ## Contexto
 
@@ -28,7 +31,7 @@ Guardrails es la única feature que instala hooks de Git (BRD BR-12; Q22 de moto
 
 Restricciones heredadas:
 
-- El motor es de solo lectura (ADR-GRP-009, propuesto, en `main`) y el daemon es el único escritor del perfil (ADR-GRP-005 y ADR-GRP-006, propuestos).
+- El motor es de solo lectura (ADR-GRP-009, aceptado) y el daemon es el único escritor del perfil (ADR-GRP-005 y ADR-GRP-006, aceptados).
 - La Time Machine ya fijó un precedente: una capa de escritura propia, separada de la de lectura, en `crates/git` (ADR-TMC-002 § 1, rama time-machine, en `main`).
 - Stack (ADR-GRP-001, ADR-GRP-002): Rust, `crates/{core,policy,git,api}`, binarios `raptor` y `raptor-mcp`, y Git ≥ 2.38 (NFR-07).
 

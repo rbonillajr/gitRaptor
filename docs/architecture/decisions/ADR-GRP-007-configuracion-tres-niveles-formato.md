@@ -2,7 +2,8 @@
 id: ADR-GRP-007
 title: Configuración en tres niveles — formato JSON con `$schema`, estructura y precedencia
 type: adr
-status: proposed
+status: accepted
+accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
 updated: 2026-10-04
@@ -14,6 +15,8 @@ tags: [configuracion, settings-json, json-schema, schemars, precedencia, niveles
 ---
 
 # ADR-GRP-007 — Configuración en tres niveles: formato y precedencia
+
+> **Estado**: aceptado por Rene Bonilla el 2026-10-04.
 
 > **Feature:** `motor-local` (F-001-01). Cierra la pregunta **P8** del contexto. **Coautoría:** las secciones `permissions` y `policies`, la clave del mínimo seguro y la regla de que un nivel personal no relaja una prohibición del equipo son de Guardrails (F-001-04). Este ADR fija el contenedor, el formato, los niveles, el cargador y la sección `engine`. Coautoría cerrada con ADR-GRD-003/004.
 >
@@ -249,7 +252,7 @@ Validación ampliada: SEC-11 y SEC-10 (punto 8).
 
 ## Enmienda (2026-10-04, Guardrails)
 
-Aplicada desde la tabla de enmiendas de [non-functional-guardrails.md](../non-functional-guardrails.md) (J10). Fuentes: ADR-GRD-003, ADR-GRD-004, TS-GRD-001 y las decisiones de Rene Bonilla del 2026-10-04. No cambia el formato, los nombres de archivo, la sección `engine` ni PQ-8. El `status` sigue en `proposed`.
+Aplicada desde la tabla de enmiendas de [non-functional-guardrails.md](../non-functional-guardrails.md) (J10). Fuentes: ADR-GRD-003, ADR-GRD-004, TS-GRD-001 y las decisiones de Rene Bonilla del 2026-10-04. No cambia el formato, los nombres de archivo, la sección `engine` ni PQ-8. El `status` siguió en `proposed` hasta su aceptación (Rene Bonilla, 2026-10-04).
 
 | Cambio | Dónde | Fuente |
 |---|---|---|

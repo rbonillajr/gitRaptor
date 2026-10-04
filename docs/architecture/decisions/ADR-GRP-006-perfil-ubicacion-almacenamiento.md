@@ -2,7 +2,8 @@
 id: ADR-GRP-006
 title: Perfil de GitRaptor — ubicación por SO, clave de repo y almacenamiento
 type: adr
-status: proposed
+status: accepted
+accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
 updated: 2026-10-04
@@ -14,6 +15,8 @@ tags: [motor-local, perfil, sqlite, rusqlite, directories, almacenamiento, clave
 ---
 
 # ADR-GRP-006 — Perfil de GitRaptor: ubicación por SO, clave de repo y almacenamiento
+
+> **Estado**: aceptado por Rene Bonilla el 2026-10-04.
 
 ## Contexto
 
@@ -148,7 +151,7 @@ Validación ampliada: SEC-06 y SEC-07 (puntos 2 y 9).
 
 ## Enmienda (2026-10-04, Guardrails)
 
-Aplicada desde la tabla de enmiendas de [non-functional-guardrails.md](../non-functional-guardrails.md) (J10). No cambia la ubicación, la clave de repo ni el motor de almacenamiento. El `status` sigue en `proposed`.
+Aplicada desde la tabla de enmiendas de [non-functional-guardrails.md](../non-functional-guardrails.md) (J10). No cambia la ubicación, la clave de repo ni el motor de almacenamiento. El `status` siguió en `proposed` hasta su aceptación (Rene Bonilla, 2026-10-04).
 
 | Cambio | Dónde | Fuente |
 |---|---|---|

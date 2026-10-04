@@ -2,10 +2,11 @@
 id: ADR-GRP-012
 title: Detección de sesiones de Claude Code sin hooks propios
 type: adr
-status: proposed
+status: accepted
+accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
@@ -14,6 +15,8 @@ tags: [deteccion, atribucion, claude-code, sesiones, procesos, transcripts, priv
 ---
 
 # ADR-GRP-012 — Detección de sesiones de Claude Code sin hooks propios
+
+> **Estado**: aceptado por Rene Bonilla el 2026-10-04.
 
 ## Contexto
 

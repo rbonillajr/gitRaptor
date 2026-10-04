@@ -2,7 +2,8 @@
 id: ADR-GRD-005
 title: Estado de protección y detección de pérdida
 type: adr
-status: proposed
+status: accepted
+accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
 updated: 2026-10-04
@@ -14,6 +15,8 @@ tags: [guardrails, estado-proteccion, br-wf-002, deteccion-perdida, integridad, 
 ---
 
 # ADR-GRD-005 — Estado de protección y detección de pérdida
+
+> **Estado**: aceptado por Rene Bonilla el 2026-10-04.
 
 ## Contexto
 

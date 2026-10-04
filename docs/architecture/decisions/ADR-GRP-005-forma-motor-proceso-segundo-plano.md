@@ -2,7 +2,8 @@
 id: ADR-GRP-005
 title: Forma del motor — proceso en segundo plano por usuario y canal local
 type: adr
-status: proposed
+status: accepted
+accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
 updated: 2026-10-04
@@ -14,6 +15,8 @@ tags: [motor-local, daemon, ipc, json-rpc, autoarranque, unix-socket, named-pipe
 ---
 
 # ADR-GRP-005 — Forma del motor: proceso en segundo plano por usuario y canal local
+
+> **Estado**: aceptado por Rene Bonilla el 2026-10-04.
 
 ## Contexto
 
@@ -198,7 +201,7 @@ Validación ampliada: SEC-01, SEC-02, SEC-03, SEC-08, SEC-10, SEC-12, SEC-13 y S
 
 ## Enmienda (2026-10-04, Guardrails)
 
-Aplicada desde la tabla de enmiendas de [non-functional-guardrails.md](../non-functional-guardrails.md) (J10). No cambia la forma del motor, el canal ni los controles 1 a 7. El `status` sigue en `proposed`.
+Aplicada desde la tabla de enmiendas de [non-functional-guardrails.md](../non-functional-guardrails.md) (J10). No cambia la forma del motor, el canal ni los controles 1 a 7. El `status` siguió en `proposed` hasta su aceptación (Rene Bonilla, 2026-10-04).
 
 | Cambio | Dónde | Fuente |
 |---|---|---|

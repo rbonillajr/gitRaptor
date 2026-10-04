@@ -2,7 +2,8 @@
 id: ADR-GRD-003
 title: Motor de decisión, mínimo seguro y contrato de decisión (hooks hoy, MCP como interfaz)
 type: adr
-status: proposed
+status: accepted
+accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
 updated: 2026-10-04
@@ -15,6 +16,8 @@ tags: [guardrails, motor-decision, crates-policy, contrato, mcp, minimo-seguro, 
 
 # ADR-GRD-003 — Motor de decisión, mínimo seguro y contrato de decisión
 
+> **Estado**: aceptado por Rene Bonilla el 2026-10-04.
+
 ## Contexto
 
 Para cada operación gobernada Guardrails decide permitir, pedir confirmación o denegar. Las reglas que fijan esa decisión son:
@@ -25,7 +28,7 @@ Para cada operación gobernada Guardrails decide permitir, pedir confirmación o
 - **S-GRD-9**: "pedir confirmación" se trata como "denegar" mientras no exista la cola.
 - **BR-EDGE-001, Q-GRD-5**: sin configuración aplica un mínimo seguro (denegar force-push y el borrado de la rama base), visible y desactivable por el equipo. Por D6 (2026-10-04), solo se desactiva desde la rama principal (ADR-GRD-004).
 
-Las herramientas MCP son de F-001-05. Aquí solo se fija la interfaz que consumen (BR-AUTH-004). El actor lo emite el motor (Q34 y Q35 de motor-local; ADR-GRP-013 § 6, propuesto).
+Las herramientas MCP son de F-001-05. Aquí solo se fija la interfaz que consumen (BR-AUTH-004). El actor lo emite el motor (Q34 y Q35 de motor-local; ADR-GRP-013 § 6, aceptado).
 
 La decisión tiene que ser explicable (contexto § 6), i18n en/es (NFR-10), < 100 ms (ADR-GRD-002 § 5) y fail-safe ante cualquier duda. El hook corre en el entorno del agente, así que ni el canal ni el entorno son de fiar (revisión de seguridad, H-03).
 

@@ -2,7 +2,8 @@
 id: ADR-GRD-006
 title: Registro de decisiones en el perfil con retención de 90 días
 type: adr
-status: proposed
+status: accepted
+accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
 updated: 2026-10-04
@@ -15,6 +16,8 @@ tags: [guardrails, registro-decisiones, br-cons-004, br-time-002, retencion, kpi
 
 # ADR-GRD-006 — Registro de decisiones en el perfil con retención de 90 días
 
+> **Estado**: aceptado por Rene Bonilla el 2026-10-04.
+
 ## Contexto
 
 BR-CONS-004 obliga a anotar:
@@ -25,7 +28,7 @@ BR-CONS-004 obliga a anotar:
 
 El registro es la fuente del KPI "acciones peligrosas bloqueadas", que BR-CONS-004 define como la suma de **denegadas, rechazadas y caducadas** (BRD § 9). Q-GRD-10 lo ubica en el **perfil**, separado por repo y nunca en el repo, y BR-TIME-002 lo conserva **90 días**. BR-WF-002 pide anotar las transiciones del estado de protección, y US-GRD-003 que cada instalación quede con qué, dónde, cuándo y quién la autorizó.
 
-ADR-GRP-006 (propuesto, en `main`) fija un SQLite por repo en el perfil con un único escritor, el daemon. ADR-GRP-013 (propuesto) dice que los eventos son inmutables y tiene una auditoría append-only de comandos reservados. Todo este contenido es confidencial y no sale de la máquina (NFR-03).
+ADR-GRP-006 (aceptado el 2026-10-04) fija un SQLite por repo en el perfil con un único escritor, el daemon. ADR-GRP-013 (aceptado) dice que los eventos son inmutables y tiene una auditoría append-only de comandos reservados. Todo este contenido es confidencial y no sale de la máquina (NFR-03).
 
 ## Decisión
 

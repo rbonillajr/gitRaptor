@@ -2,10 +2,11 @@
 id: ADR-GRP-008
 title: Configuración local personal sin versionar — `settings.local.json` en el perfil, indexado por repo
 type: adr
-status: proposed
+status: accepted
+accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
@@ -14,6 +15,8 @@ tags: [configuracion, settings-local-json, perfil, no-versionado, solo-lectura, 
 ---
 
 # ADR-GRP-008 — Configuración local personal sin versionar
+
+> **Estado**: aceptado por Rene Bonilla el 2026-10-04.
 
 > **Feature:** `motor-local` (F-001-01). Cierra la pregunta **P10** del contexto, que **desaparece por diseño**. El formato del archivo lo fija ADR-GRP-007.
 

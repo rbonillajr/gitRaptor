@@ -2,7 +2,8 @@
 id: ADR-GRP-013
 title: Modelo persistido de eventos, sesiones y atribución
 type: adr
-status: proposed
+status: accepted
+accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
 updated: 2026-10-04
@@ -14,6 +15,8 @@ tags: [motor-local, eventos, sesiones, atribucion, correccion, huecos, append-on
 ---
 
 # ADR-GRP-013 — Modelo persistido de eventos, sesiones y atribución
+
+> **Estado**: aceptado por Rene Bonilla el 2026-10-04.
 
 ## Contexto
 
@@ -163,7 +166,7 @@ Validación ampliada: SEC-13 y SEC-03 (puntos 13 y 14).
 
 ## Enmienda (2026-10-04, Guardrails)
 
-Aplicada desde la tabla de enmiendas de [non-functional-guardrails.md](../non-functional-guardrails.md) (J10). No cambia el modelo de eventos, sesiones ni atribución. El `status` sigue en `proposed`.
+Aplicada desde la tabla de enmiendas de [non-functional-guardrails.md](../non-functional-guardrails.md) (J10). No cambia el modelo de eventos, sesiones ni atribución. El `status` siguió en `proposed` hasta su aceptación (Rene Bonilla, 2026-10-04).
 
 | Cambio | Dónde | Fuente |
 |---|---|---|

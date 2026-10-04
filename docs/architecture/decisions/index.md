@@ -1,6 +1,6 @@
 ---
 mode: draft
-status: expanded
+status: accepted
 generated: 2026-10-03
 updated: 2026-10-04
 generator: architect
@@ -8,7 +8,7 @@ domain: GRP
 feature: motor-local
 total_artifacts: 20
 expanded: 20
-approved: 11
+approved: 20
 related:
   context: [CTX-GRP-001]
   rules: [BR-GRP-001]
@@ -36,9 +36,9 @@ Fuente única de los identificadores PQ que citan los ADR 005 a 013.
 
 El formato "JSON estricto con `$schema`" no es una PQ: es la propuesta base del BRD v0.4, que ADR-GRP-007 adopta.
 
-> Los ADR 001 a 004 están aceptados. Los ADR 005 a 013 de la feature `motor-local` están **expandidos** (frontmatter `status: proposed`): Rene Bonilla aceptó el 2026-10-03 todas las recomendaciones y las preguntas de producto PQ-1 a PQ-9 (PQ-9 sustituida el 2026-10-04). Este índice solo resume la decisión; el detalle vive en cada archivo.
+> Los ADR 001 a 004 están aceptados. Los ADR 005 a 013 de la feature `motor-local` están **aceptados** (`status: accepted`, Rene Bonilla, 2026-10-04), igual que los ADR-GRD-001 a 007 de Guardrails. Rene Bonilla ya había aceptado el 2026-10-03 todas las recomendaciones y las preguntas de producto PQ-1 a PQ-9 (PQ-9 sustituida el 2026-10-04). ADR-GRP-007 cierra P8. Este índice solo resume la decisión; el detalle vive en cada archivo.
 >
-> **Enmiendas de Guardrails (2026-10-04)**: ADR-GRP-005, 006, 007, 009, 010 y 013 e INF-GRP-001 incorporan las enmiendas que pedía la arquitectura de Guardrails (ADR-GRD-001 a 007), cada una con su sección "Enmienda (2026-10-04, Guardrails)". Ninguno cambia de `status`. Lista y estado en [non-functional-guardrails.md](../non-functional-guardrails.md#enmiendas-pendientes-en-otros-frentes-j10).
+> **Enmiendas de Guardrails (2026-10-04)**: ADR-GRP-005, 006, 007, 009, 010 y 013 e INF-GRP-001 incorporan las enmiendas que pedía la arquitectura de Guardrails (ADR-GRD-001 a 007), cada una con su sección "Enmienda (2026-10-04, Guardrails)". Todos quedaron aceptados el 2026-10-04 con sus enmiendas. Lista y estado en [non-functional-guardrails.md](../non-functional-guardrails.md#enmiendas-pendientes-en-otros-frentes-j10).
 >
 > **Restricciones activas** (no hay `architecture-constitution.md` en la cascada): ADR-GRP-001 (Rust; gitoxide para leer y Git CLI para escribir; ratatui, clap, rmcp) y ADR-GRP-002 (Nx package-based; `crates/{core,policy,git,api,theme}`, `apps/{cli,mcp}`). ⚠️ **ASSUMPTION**: se tratan como constitución mientras no exista una formal (`/aadd-architect --init-constitution`).
 
@@ -50,15 +50,15 @@ El formato "JSON estricto con `$schema`" no es una PQ: es la propuesta base del 
 | [ADR-GRP-002](./ADR-GRP-002-monorepo-nx.md) | Monorepo Nx package-based | pnpm + Cargo workspaces con `@monodon/rust`, crates y apps por fase | accepted |
 | [ADR-GRP-003](./ADR-GRP-003-design-system.md) | Design system | Tokens, UI kit y patrones; en el MVP solo tokens y tema de TUI | accepted |
 | [ADR-GRP-004](./ADR-GRP-004-estado-frontend-ux.md) | Estado del frontend y UX | Estado React de la Fase 3; en el MVP solo los patrones de UX | accepted |
-| [ADR-GRP-005](./ADR-GRP-005-forma-motor-proceso-segundo-plano.md) | Forma del motor: proceso por usuario y canal local | Subcomando `raptor daemon` (PQ-5) con autoarranque registrado solo por instalador o comando del desarrollador (PQ-1), IPC local JSON-RPC y comandos reservados (incluida la parada del daemon) autorizados por el daemon según la ascendencia del llamante (PQ-6); la confirmación en terminal es solo UX | expanded |
-| [ADR-GRP-006](./ADR-GRP-006-perfil-ubicacion-almacenamiento.md) | Perfil: ubicación por SO, clave de repo y almacenamiento | Carpetas estándar por SO (PQ-4), Windows siempre en `%LOCALAPPDATA%` (PQ-7), UUID por directorio Git común y un SQLite por repo | expanded |
-| [ADR-GRP-007](./ADR-GRP-007-configuracion-tres-niveles-formato.md) | Configuración en tres niveles: formato y precedencia | JSON estricto con `$schema` (propuesta base del BRD v0.4), nombres de archivos y sección `engine` (PQ-4), niveles admitidos por clave, JSON o schema inválido ignora el nivel entero (PQ-8); equipo leído de lo commiteado con suelo en la rama principal y rama base confirmada (decisión 1 de Guardrails, sustituye a PQ-9); `permissions`/`policies` y estado por fuente (enmienda 2026-10-04) | expanded |
-| [ADR-GRP-008](./ADR-GRP-008-configuracion-local-no-versionada.md) | Configuración local personal sin versionar | `settings.local.json` en el perfil, indexado por repo (PQ-3); P10 desaparece | expanded |
-| [ADR-GRP-009](./ADR-GRP-009-frontera-solo-lectura-git.md) | Frontera de solo lectura e invocación del Git del sistema | Frontera estricta: cero escrituras (ni locks transitorios), cero programas del usuario, gitoxide + allowlist del CLI; Git ≥ 2.38 sin depender del PATH | expanded |
-| [ADR-GRP-010](./ADR-GRP-010-observacion-cambios-worktrees.md) | Observación de cambios en worktrees | Watcher nativo (`notify`), debounce fijo de 75 ms, recomputo incremental, sondeo de respaldo, modo degradado y reconciliación | expanded |
-| [ADR-GRP-011](./ADR-GRP-011-presupuesto-frescura.md) | Reparto del presupuesto de frescura | Motor ≤ 300 ms, Cockpit ≤ 100 ms y 100 ms de margen, p95 medido con reloj monótono por etapa | expanded |
-| [ADR-GRP-012](./ADR-GRP-012-deteccion-sesiones-claude-code.md) | Detección de sesiones de Claude Code | S1 (proceso y cwd) crea la sesión; atribuyen S2b, S3, S4 o el registro explícito de un "otro agente" si es la única sesión presente (confirmar una sesión detectada no activa esa evidencia); la co-ubicación de una sesión detectada nunca basta; transcripts limitados a metadatos (PQ-2) | expanded |
-| [ADR-GRP-013](./ADR-GRP-013-modelo-eventos-atribucion.md) | Modelo persistido de eventos, sesiones y atribución | Los eventos apuntan a una sesión; registros de atribución append-only (incluido el retiro de registro, que termina la sesión); huecos como intervalos; sin variante "humano" | expanded |
+| [ADR-GRP-005](./ADR-GRP-005-forma-motor-proceso-segundo-plano.md) | Forma del motor: proceso por usuario y canal local | Subcomando `raptor daemon` (PQ-5) con autoarranque registrado solo por instalador o comando del desarrollador (PQ-1), IPC local JSON-RPC y comandos reservados (incluida la parada del daemon) autorizados por el daemon según la ascendencia del llamante (PQ-6); la confirmación en terminal es solo UX | accepted |
+| [ADR-GRP-006](./ADR-GRP-006-perfil-ubicacion-almacenamiento.md) | Perfil: ubicación por SO, clave de repo y almacenamiento | Carpetas estándar por SO (PQ-4), Windows siempre en `%LOCALAPPDATA%` (PQ-7), UUID por directorio Git común y un SQLite por repo | accepted |
+| [ADR-GRP-007](./ADR-GRP-007-configuracion-tres-niveles-formato.md) | Configuración en tres niveles: formato y precedencia | JSON estricto con `$schema` (propuesta base del BRD v0.4), nombres de archivos y sección `engine` (PQ-4), niveles admitidos por clave, JSON o schema inválido ignora el nivel entero (PQ-8); equipo leído de lo commiteado con suelo en la rama principal y rama base confirmada (decisión 1 de Guardrails, sustituye a PQ-9); `permissions`/`policies` y estado por fuente (enmienda 2026-10-04) | accepted |
+| [ADR-GRP-008](./ADR-GRP-008-configuracion-local-no-versionada.md) | Configuración local personal sin versionar | `settings.local.json` en el perfil, indexado por repo (PQ-3); P10 desaparece | accepted |
+| [ADR-GRP-009](./ADR-GRP-009-frontera-solo-lectura-git.md) | Frontera de solo lectura e invocación del Git del sistema | Frontera estricta: cero escrituras (ni locks transitorios), cero programas del usuario, gitoxide + allowlist del CLI; Git ≥ 2.38 sin depender del PATH | accepted |
+| [ADR-GRP-010](./ADR-GRP-010-observacion-cambios-worktrees.md) | Observación de cambios en worktrees | Watcher nativo (`notify`), debounce fijo de 75 ms, recomputo incremental, sondeo de respaldo, modo degradado y reconciliación | accepted |
+| [ADR-GRP-011](./ADR-GRP-011-presupuesto-frescura.md) | Reparto del presupuesto de frescura | Motor ≤ 300 ms, Cockpit ≤ 100 ms y 100 ms de margen, p95 medido con reloj monótono por etapa | accepted |
+| [ADR-GRP-012](./ADR-GRP-012-deteccion-sesiones-claude-code.md) | Detección de sesiones de Claude Code | S1 (proceso y cwd) crea la sesión; atribuyen S2b, S3, S4 o el registro explícito de un "otro agente" si es la única sesión presente (confirmar una sesión detectada no activa esa evidencia); la co-ubicación de una sesión detectada nunca basta; transcripts limitados a metadatos (PQ-2) | accepted |
+| [ADR-GRP-013](./ADR-GRP-013-modelo-eventos-atribucion.md) | Modelo persistido de eventos, sesiones y atribución | Los eventos apuntan a una sesión; registros de atribución append-only (incluido el retiro de registro, que termina la sesión); huecos como intervalos; sin variante "humano" | accepted |
 | [ADR-TMC-001](./ADR-TMC-001-almacen-snapshots-perfil.md) | Almacén de snapshots en el perfil | Repo Git bare privado por repo en `tm/<id-repo>/` con objetos propios, contenido en bruto sin filtros y exclusiones declaradas; nunca en el repo del usuario | accepted |
 | [ADR-TMC-002](./ADR-TMC-002-escritor-time-machine.md) | Escritor de la Time Machine | Escrituras internas en el módulo `timemachine` del daemon con capa de escritura propia en `crates/git`, sin hooks, filtros, firma ni red; las operaciones de usuario las ejecuta el ejecutor del daemon | accepted |
 | [ADR-TMC-003](./ADR-TMC-003-oplog-diario-recuperacion.md) | Oplog, diario y recuperación | Oplog SQLite propio por repo, solo por anexión y encadenado por hash; solicitante congelado; recuperación sin escrituras propias salvo liberar su `index.lock` | accepted |

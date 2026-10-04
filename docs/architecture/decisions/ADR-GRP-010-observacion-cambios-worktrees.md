@@ -2,7 +2,8 @@
 id: ADR-GRP-010
 title: Observación de cambios en worktrees
 type: adr
-status: proposed
+status: accepted
+accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
 updated: 2026-10-04
@@ -14,6 +15,8 @@ tags: [watcher, notify, fsevents, inotify, readdirectorychangesw, debounce, reco
 ---
 
 # ADR-GRP-010 — Observación de cambios en worktrees
+
+> **Estado**: aceptado por Rene Bonilla el 2026-10-04.
 
 ## Contexto
 
@@ -143,7 +146,7 @@ Validación ampliada: SEC-11 (punto "Seguridad").
 
 ## Enmienda (2026-10-04, Guardrails)
 
-Aplicada desde la tabla de enmiendas de [non-functional-guardrails.md](../non-functional-guardrails.md) (J10). No cambia el mecanismo, el debounce, el sondeo ni la reconciliación. El `status` sigue en `proposed`.
+Aplicada desde la tabla de enmiendas de [non-functional-guardrails.md](../non-functional-guardrails.md) (J10). No cambia el mecanismo, el debounce, el sondeo ni la reconciliación. El `status` siguió en `proposed` hasta su aceptación (Rene Bonilla, 2026-10-04).
 
 | Cambio | Dónde | Fuente |
 |---|---|---|
