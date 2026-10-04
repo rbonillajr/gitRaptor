@@ -119,6 +119,7 @@ Aplicada desde DEP-CKP-7 de [CTX-CKP-001](../../requirements/features/cockpit/co
 | La regla base del § 2 se extiende a las operaciones del catálogo de ADR-CKP-002, con su definición de "trabajo afectado" | § 2 | DEP-CKP-7; Q-CKP-16; ADR-CKP-002 § 3 |
 | La confirmación interactiva del § 3 se reutiliza, ligada a la **huella del plan** de la operación | § 3 | ADR-CKP-002 § 2 y § 3 |
 | Windows rechaza la confirmación de trabajo ajeno también para el catálogo | § 3 | TQ-14; BR-CKP-AUTH-003 |
+| **Descendientes del ejecutor**: un proceso cuya ascendencia pasa por un hijo registrado del ejecutor se resuelve como el solicitante del plan de ese hijo, con su capa, nunca como "sin atribuir" (pasada de endurecimiento, 2026-10-04) | § 1 y § 3 | H-01 (revisión de seguridad de ADR-CKP-002); DEP-MCP-3 (CTX-MCP-001); ADR-CKP-002 § 3 |
 
 - **Trabajo afectado** por operación (ADR-CKP-002 § 3): `merge-into-base`, los commits que entran en la base; `rebase-onto-base`, los commits reescritos; `discard-worktree`, los commits que no están en la base más lo sin commitear (si no hay nada, no afecta a nadie); `abort-in-progress`, lo que dejó la operación detenida. `create-worktree` no afecta trabajo de nadie y `open-in-editor` no escribe.
 - **Atribución conservadora**: el actor de cada parte sale de los eventos del motor (ADR-GRP-013). Sin atribución clara o con atribución mixta, cuenta como otro actor, igual que el solape del § 5.
@@ -127,3 +128,11 @@ Aplicada desde DEP-CKP-7 de [CTX-CKP-001](../../requirements/features/cockpit/co
 - **Guardrails solo puede denegar** (§ 4) también aquí: su decisión con la capa `cockpit` o `mcp` se toma antes de cualquier efecto (ADR-GRD-003, Enmienda (2026-10-04, Cockpit)).
 - **Windows**: sin confirmación de trabajo ajeno; la operación se rechaza con su motivo. Pendiente: etapa de validación multiplataforma.
 - **Validación añadida**: "sin atribuir" en macOS confirma el descarte de un worktree de claude-2 con el reto ligado; el reto reutilizado o el de un plan cambiado se rechazan; claude-1 sobre trabajo de claude-2, rechazo (ADR-CKP-002, Validación 13).
+
+**Descendientes del ejecutor (§ 1; H-01, DEP-MCP-3)**. Decisión del orquestador (2026-10-04), validada por Arquitecto, PO y security-expert.
+
+- **Regla nueva del § 1, antes que las demás**: si al recorrer la ascendencia del cliente aparece un **hijo registrado del ejecutor** del daemon (identidad verificada, ADR-CKP-002 § 4), el solicitante es **el del plan de ese hijo, con su capa**. Nunca "sin atribuir", aunque más arriba solo esté el daemon. Así un hook del usuario que abre el canal durante una operación de claude-1 actúa como claude-1, y la regla base del § 2 se le aplica como a claude-1.
+- **Sin privilegios de humano**: ese proceso no puede pedir comandos reservados, la confirmación interactiva del § 3, la excepción consciente ni Cancelar, aunque el plan sea de un "sin atribuir" y aunque abra una pty. La capa del plan solo le sirve para la atribución y el registro. Por eso el § 3 añade una comprobación a los controles 1 a 3: el cliente no desciende de un hijo del ejecutor.
+- **Canal**: se registra el canal real del proceso (CLI o hook), con una marca de "descendiente del ejecutor" y el id de la operación. El rechazo en el canal es **pendiente, dueño: worker del canal (TS-GRP-004)**.
+- **Residuo**: un descendiente que se desacopla de su árbol (doble fork, `setsid`) deja de pasar por el hijo. Es el riesgo residual ya aceptado en el § 3, compensado por el snapshot previo.
+- **Validación añadida**: un hook bajo el plan de claude-1 que se conecta al canal se resuelve como claude-1; si pide un comando reservado, una confirmación, la excepción o Cancelar, se rechaza, también con una pty abierta con `script` (ADR-CKP-002, Validación 17).
