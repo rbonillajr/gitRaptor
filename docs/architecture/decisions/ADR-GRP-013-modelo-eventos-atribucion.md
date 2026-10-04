@@ -42,7 +42,7 @@ El motor guarda en el perfil (ADR-GRP-006) los eventos de Git, las sesiones de a
 | **Sesión** | Worktree, agente (Claude Code u "otro agente" con su nombre declarado), atribución inicial y su origen (detectada o registrada), clave de detección de ADR-GRP-012 si se detectó, inicio, fin y causa del fin (proceso desaparecido, terminada durante un hueco o **registro retirado**). |
 | **Registro de atribución** | Append-only. Sesión, tipo (registro, confirmación, corrección, retiro de corrección, **retiro de registro**), agente, autor (desarrollador o agente, como exige la tabla de BR-CONS-001), momento y secuencia en la que entra en vigor. |
 | **Evento** | Secuencia por repo, worktree, tipo, metadatos (refs, ids de commit, rutas afectadas), hora de observación en UTC con el desfase de zona horaria local, sesión (opcional), evidencia de atribución (qué señales de ADR-GRP-012 la sustentan) y hueco (opcional). |
-| **Hueco** | Intervalo de inicio y fin y su causa: máquina apagada o suspendida, daemon caído, **daemon caído durante una sesión activa**, daemon parado por un comando, repo retirado, Git ausente o insuficiente (BR-WF-002), perfil perdido o almacén corrupto. Si lo provocó un comando (parada, retiro del repo), guarda **el cliente que lo pidió** (proceso, ejecutable y si pasó los controles de ADR-GRP-005) (SEC-13). |
+| **Hueco** | Intervalo de inicio y fin y su causa: máquina apagada o suspendida, daemon caído, **daemon caído durante una sesión activa**, daemon parado por un comando, repo retirado, Git ausente o insuficiente (BR-WF-002), perfil perdido o almacén corrupto, y las causas de observación de ADR-GRP-010 § 6: desbordamiento de la cola del watcher, recreación del stream del watcher y reconciliación periódica (diferencias sin causa identificada) (Enmienda 2026-10-04, SPIKE-GRP-002). Si lo provocó un comando (parada, retiro del repo), guarda **el cliente que lo pidió** (proceso, ejecutable y si pasó los controles de ADR-GRP-005) (SEC-13). |
 | **Último estado conocido** | Por worktree: HEAD, puntas de refs, operación en curso y huella de los cambios sin commitear. Es la base de la reconciliación (ADR-GRP-010). |
 | **Marca "observado hasta"** | Momento hasta el que el repo estuvo observado, persistido con cada lote y de forma periódica. |
 
@@ -87,6 +87,7 @@ Los cambios de estado de las sesiones (inicio, activo, inactivo, terminado) se g
 ### 5. Huecos y reconciliación
 
 - Al arrancar, al volver de suspensión, al volver a añadir un repo y al salir de "Esperando Git", el motor abre un hueco desde la marca "observado hasta" hasta ese momento, con su causa.
+- **Huecos del observador** (Enmienda 2026-10-04, SPIKE-GRP-002): un desbordamiento o una recreación del stream abren un hueco desde el último evento recibido antes de la causa hasta el fin de la reconciliación que la sigue. La reconciliación periódica (ADR-GRP-010 § 5) solo abre hueco si encuentra diferencias, y su intervalo va desde la reconciliación anterior del worktree hasta ahora. Los tres guardan su causa como los demás.
 - La reconciliación (ADR-GRP-010) compara el estado actual con el último estado conocido y genera **eventos de reconciliación sin sesión y enlazados al hueco**. Nunca se atribuyen a un agente, aunque hubiera uno registrado antes (BR-EDGE-005).
 - Sin último estado conocido (perfil perdido, almacén corrupto o máquina nueva), el repo expone "observado desde" su fecha de alta y todo lo anterior queda "sin atribuir" (Q26, Q31).
 - Una sesión cuyo proceso desapareció durante un hueco se cierra con causa "terminada durante un hueco" y hora de fin desconocida dentro del intervalo.
@@ -171,3 +172,11 @@ Aplicada desde la tabla de enmiendas de [non-functional-guardrails.md](../non-fu
 | Cambio | Dónde | Fuente |
 |---|---|---|
 | La auditoría append-only incluye los comandos reservados de Guardrails, con la cadena completa de ascendencia, la terminal, el líder de sesión y la aceptación de riesgo por acción | § 1 (registro de auditoría); Validación 14 | ADR-GRD-006 § 4, ADR-GRD-007 § 1 y § 2; D5 |
+
+## Enmienda (2026-10-04, SPIKE-GRP-002)
+
+Derivada de la Enmienda de ADR-GRP-010 con los resultados de [SPIKE-GRP-002](../../requirements/features/motor-local/research/SPIKE-GRP-002-resultados.md), medidos solo en macOS. No cambia el modelo de eventos, sesiones ni atribución: amplía la lista cerrada de causas de hueco para que ADR-GRP-010 y este ADR no se contradigan. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| Causas de hueco nuevas: desbordamiento de la cola del watcher, recreación del stream del watcher y reconciliación periódica, con su intervalo | § 1 (Hueco), § 5 | ADR-GRP-010 § 5 y § 6; decisión del orquestador (2026-10-04), validada por el Arquitecto |
