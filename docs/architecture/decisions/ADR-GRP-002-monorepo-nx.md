@@ -5,9 +5,9 @@ type: adr
 status: accepted
 date: 2026-10-01
 created: 2026-10-01
-updated: 2026-10-03
+updated: 2026-10-04
 deciders: [Rene Bonilla]
-related: [BRD-GRP-001, ADR-GRP-001, ADR-GRP-003, ADR-GRP-007]
+related: [BRD-GRP-001, ADR-GRP-001, ADR-GRP-003, ADR-GRP-007, ADR-GRP-009, INF-GRP-001]
 tags: [nx, monorepo, package-based, pnpm, cargo, rust, monodon, tauri, ci]
 ---
 
@@ -56,7 +56,8 @@ gitraptor/
 │  ├─ policy/              # Rust · configuración en tres niveles (.gitraptor/settings.json, ADR-GRP-007) y motor de guardrails
 │  ├─ git/                 # Rust · capa Git (gitoxide para leer + Git CLI para escribir)
 │  ├─ api/                 # Rust · contrato JSON-RPC/eventos; genera tipos TS (ts-rs/specta)
-│  └─ theme/               # Rust · paleta generada desde @gitraptor/tokens para TUI/CLI
+│  ├─ theme/               # Rust · paleta generada desde @gitraptor/tokens para TUI/CLI
+│  └─ testkit/             # Rust · solo pruebas: arnés "repo intacto" (INF-GRP-001); solo dev-dependency
 ├─ packages/
 │  ├─ ui-kit/              # React · @gitraptor/ui (ADR-GRP-003)
 │  ├─ design-tokens/       # @gitraptor/tokens · colores, tipografía, espaciado, temas
@@ -66,7 +67,7 @@ gitraptor/
 ```
 
 **Creación por fase:**
-- **MVP (Fase 1):** `apps/cli`, `apps/mcp`, `crates/{core,policy,git,api,theme}` y `packages/design-tokens`.
+- **MVP (Fase 1):** `apps/cli`, `apps/mcp`, `crates/{core,policy,git,api,theme}`, `packages/design-tokens` y el crate de soporte de pruebas `crates/testkit` (enmienda 2026-10-04).
 - **Fase 3:** `apps/desktop`, `apps/vscode-extension`, `packages/{ui-kit,graph-renderer,core-client}`. No se crean antes para no cargar el monorepo con paquetes vacíos.
 
 ## Alternativas consideradas
@@ -97,3 +98,12 @@ gitraptor/
 ---
 
 Enmienda 2026-10-03: referencias a policy.yaml sustituidas por ADR-GRP-007 (configuración en tres niveles).
+
+## Enmienda (2026-10-04, INF-GRP-001)
+
+Decisión del orquestador (2026-10-04), validada por el Arquitecto:
+- Se añade **`crates/testkit`** (`gitraptor-testkit`, `publish = false`), el arnés "repo intacto" de INF-GRP-001 (huella, ejecución de control, guarda, repo canario y auditoría de `exec`).
+- **No es producto**: ningún paquete puede depender de él salvo como `[dev-dependencies]`. Lo comprueba `crates/testkit/tests/dev_only.rs` sobre `cargo metadata`.
+- **No depende de ningún crate de GitRaptor**, para que los tests de un crate no enlacen dos copias de ese crate.
+- En Nx tiene la etiqueta `type:test-support`.
+- El gate de CI del arnés ejecuta siempre todo el workspace (`cargo test --workspace -- repo_intact`), nunca `nx affected`.
