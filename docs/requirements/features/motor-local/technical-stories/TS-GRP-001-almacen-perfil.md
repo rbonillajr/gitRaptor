@@ -12,7 +12,7 @@ updated: 2026-10-04
 related:
   adrs: [ADR-GRP-006, ADR-GRP-013, ADR-GRP-005]
   stories: [US-GRP-001, US-GRP-004, US-GRP-005, US-GRP-006, US-GRP-007, US-GRP-009, US-GRP-010, US-GRP-011, US-GRP-015]
-  specs: [DEV-TS-GRP-001]
+  specs: [DS-TS-GRP-001]
 ado:
   id: null
   url: null
