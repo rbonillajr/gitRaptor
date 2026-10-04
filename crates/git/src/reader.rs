@@ -21,7 +21,7 @@ pub struct ReaderOptions {
 /// A short-lived, read-only view of one repository or worktree. Open it per recompute and drop
 /// it afterwards, so pack mappings are not held (consequence for Windows in ADR-GRP-009).
 pub struct RepoReader {
-    repo: gix::Repository,
+    pub(crate) repo: gix::Repository,
 }
 
 impl std::fmt::Debug for RepoReader {
@@ -150,6 +150,8 @@ impl RepoReader {
             }
         };
         neutralize_programs(&mut repo)?;
+        // Replacement objects (`refs/replace/*`) never change what is read (SEC-GRD-17, H-05).
+        repo.objects.ignore_replacements = true;
         Ok(Self { repo })
     }
 

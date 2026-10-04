@@ -9,6 +9,7 @@
 //! filter, hook, pager, signing program or credential helper.
 
 pub mod cli;
+mod committed;
 mod invoke;
 pub mod paths;
 mod reader;
@@ -16,6 +17,7 @@ pub mod redact;
 pub mod refname;
 pub mod resolve;
 
+pub use committed::{BlobRead, CommittedFile, NotRegular};
 pub use invoke::{ArgvSink, Invoker, MemoryArgvLog};
 pub use reader::{
     Branch, Change, ChangeKind, Count, Head, InProgress, LinkedWorktree, ReaderOptions, RepoReader,
