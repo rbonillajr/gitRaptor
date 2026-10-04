@@ -1,0 +1,5 @@
+# op: git tag v1
+# base: eb5ca5f77f	17793d3fa0	97f56cfd4f	da39a3ee5e
+0	reference-transaction	preparing	0000000000000000000000000000000000000000 4bb814a17023da7fefd1ce2f37e1068923e1bb8c refs/tags/v1|	$SANDBOX/w		eb5ca5f77f	17793d3fa0	97f56cfd4f	da39a3ee5e
+1	reference-transaction	prepared	0000000000000000000000000000000000000000 4bb814a17023da7fefd1ce2f37e1068923e1bb8c refs/tags/v1|	$SANDBOX/w		eb5ca5f77f	17793d3fa0	97f56cfd4f	da39a3ee5e
+2	reference-transaction	committed	0000000000000000000000000000000000000000 4bb814a17023da7fefd1ce2f37e1068923e1bb8c refs/tags/v1|	$SANDBOX/w		516aed4a45	17793d3fa0	97f56cfd4f	da39a3ee5e

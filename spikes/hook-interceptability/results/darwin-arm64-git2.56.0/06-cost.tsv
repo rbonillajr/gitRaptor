@@ -1,0 +1,37 @@
+scenario	variant	hook_spawns	n	p50_ms	p95_ms	max_ms	failures
+spawn-floor	:	-	100	8.46	10.91	11.42	0
+spawn-floor	/bin/sh -c :	-	100	19.14	30.52	33.59	0
+spawn-floor	'$SANDBOX/raptor-stub' </dev/null	-	100	9.69	14.03	18.62	0
+spawn-floor	/bin/sh -c "exec '$SANDBOX/raptor-stub'" </dev/null	-	100	15.92	23.97	25.41	0
+update-ref-1-tx	V0	3	100	14.23	24.09	39.08	0
+update-ref-1-tx	V1	3	100	38.67	55.18	68.68	0
+update-ref-1-tx	V2	3	100	49.38	55.88	60.09	0
+update-ref-1-tx	V3	3	100	48.42	54.23	65.86	0
+commit-full-set	V0	11	100	22.51	28.24	30.03	0
+commit-full-set	V1	11	100	125.02	140.52	355.40	0
+commit-full-set	V2	11	100	146.21	163.90	358.05	0
+commit-full-set	V3	11	100	139.98	149.29	367.40	0
+status-post-index-change	V0	1	100	17.36	19.75	22.19	0
+status-post-index-change	V1	1	100	28.56	33.13	34.68	0
+status-post-index-change	V2	1	100	30.01	32.63	33.95	0
+status-post-index-change	V3	1	100	28.24	30.51	33.91	0
+push-ff-governed	V0	4	50	69.92	78.58	80.52	0
+push-ff-governed	V1	4	50	102.06	115.66	118.81	0
+push-ff-governed	V2	4	50	116.17	125.32	131.01	0
+push-ff-governed	V3	4	50	148.84	165.97	169.21	0
+fetch-1000-refs	V0	3016	3	1103.17	1211.66	1211.66	0
+fetch-1000-refs	V1	3016	3	28331.38	31557.41	31557.41	0
+fetch-1000-refs	V2	3016	3	33160.81	33231.16	33231.16	0
+fetch-1000-refs	V3	3016	3	37786.62	38659.58	38659.58	0
+fetch-1000-refs-atomic	V0	3016	3	684.73	765.85	765.85	0
+fetch-1000-refs-atomic	V1	3016	3	27779.74	28061.10	28061.10	0
+fetch-1000-refs-atomic	V2	3016	3	39423.43	49862.88	49862.88	0
+fetch-1000-refs-atomic	V3	3016	3	36607.99	39969.35	39969.35	0
+fetch-1000-refs-no-auto-maint	V0	6	3	257.08	266.78	266.78	0
+fetch-1000-refs-no-auto-maint	V1	6	3	301.16	317.70	317.70	0
+fetch-1000-refs-no-auto-maint	V2	6	3	314.45	319.91	319.91	0
+fetch-1000-refs-no-auto-maint	V3	6	3	5080.02	5171.18	5171.18	0
+pack-refs-1000-loose	V0	9009	3	158.83	163.29	163.29	0
+pack-refs-1000-loose	V1	9009	3	39510.72	39562.30	39562.30	0
+pack-refs-1000-loose	V2	9009	3	48080.27	50775.18	50775.18	0
+pack-refs-1000-loose	V3	9009	3	47204.06	49258.28	49258.28	0

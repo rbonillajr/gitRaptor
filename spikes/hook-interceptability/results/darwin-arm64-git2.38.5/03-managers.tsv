@@ -1,0 +1,56 @@
+manager	step	observation
+own	M2-baseline-linked-wt	no guardrails: manager hook ran 1x in linked worktree; hooksPath=[]
+own	M1-commit-main-wt	commit exit=0; manager hook ran 1x
+own	M1-commit-linked-wt	commit exit=0; manager hook ran 1x
+own	M1-guard-branch-D-main	denied
+own	M4-after-uninstall	commit exit=0; manager hook ran 1x; config byte-identical
+husky	M2-baseline-linked-wt	no guardrails: manager hook ran 0x in linked worktree; hooksPath=[local file:.git/config .husky/_]
+husky	M1-commit-main-wt	commit exit=0; manager hook ran 1x
+husky	M1-commit-linked-wt	commit exit=0; manager hook ran 0x
+husky	M1-guard-branch-D-main	denied
+husky	M4-after-uninstall	commit exit=0; manager hook ran 1x; config byte-identical
+husky	M3[husky]-output	exit=0
+husky	M3[husky]-hookspath	CHANGED: [local file:.git/config $SANDBOX/w/.git/gitraptor/hooks] -> [local file:.git/config .husky/_]
+husky	M3[husky]-dispatchers	unchanged
+husky	M3[husky]-commit	commit exit=0; manager hook ran 1x
+husky	M3[husky]-guard-branch-D-main	DELETED
+lefthook	M2-baseline-linked-wt	no guardrails: manager hook ran 1x in linked worktree; hooksPath=[]
+lefthook	M1-commit-main-wt	commit exit=0; manager hook ran 1x
+lefthook	M1-commit-linked-wt	commit exit=0; manager hook ran 1x
+lefthook	M1-guard-branch-D-main	denied
+lefthook	M4-after-uninstall	commit exit=0; manager hook ran 1x; config byte-identical
+lefthook	M3[lefthook]-output	 core.hooksPath is set locally to '$SANDBOX/w/.git/gitraptor/hooks'  Custom hooks paths are not supported by default.  exit=1
+lefthook	M3[lefthook]-hookspath	unchanged
+lefthook	M3[lefthook]-dispatchers	unchanged
+lefthook	M3[lefthook]-commit	commit exit=0; manager hook ran 1x
+lefthook	M3[lefthook]-guard-branch-D-main	denied
+lefthook	M3[lefthook_force]-output	 Installing hooks anyway in '$SANDBOX/w/.git/gitraptor/hooks' Renamed $SANDBOX/w/.git/gitraptor/hooks/pre-commit to $SANDBOX/w/.git/gitraptor/hooks/pre-commit.old sync hooks: ✔️(pre-commit) exit=0
+lefthook	M3[lefthook_force]-hookspath	unchanged
+lefthook	M3[lefthook_force]-dispatchers	CHANGED (hash 23f3d28196 -> 8e9813de76): pre-commit.old
+lefthook	M3[lefthook_force]-commit	commit exit=0; manager hook ran 1x
+lefthook	M3[lefthook_force]-guard-branch-D-main	denied
+lefthook	M3[lefthook_reset]-output	 local core.hooksPath has been unset. sync hooks: ✔️(pre-commit) exit=0
+lefthook	M3[lefthook_reset]-hookspath	CHANGED: [local file:.git/config $SANDBOX/w/.git/gitraptor/hooks] -> []
+lefthook	M3[lefthook_reset]-dispatchers	unchanged
+lefthook	M3[lefthook_reset]-commit	commit exit=0; manager hook ran 1x
+lefthook	M3[lefthook_reset]-guard-branch-D-main	DELETED
+lefthook	M3[lefthook_autosync]-output	commit-exit=0
+lefthook	M3[lefthook_autosync]-hookspath	unchanged
+lefthook	M3[lefthook_autosync]-dispatchers	unchanged
+lefthook	M3[lefthook_autosync]-commit	commit exit=0; manager hook ran 1x
+lefthook	M3[lefthook_autosync]-guard-branch-D-main	denied
+pre-commit	M2-baseline-linked-wt	no guardrails: manager hook ran 1x in linked worktree; hooksPath=[]
+pre-commit	M1-commit-main-wt	commit exit=0; manager hook ran 1x
+pre-commit	M1-commit-linked-wt	commit exit=0; manager hook ran 1x
+pre-commit	M1-guard-branch-D-main	denied
+pre-commit	M4-after-uninstall	commit exit=0; manager hook ran 1x; config byte-identical
+pre-commit	M3[precommit]-output	[ERROR] Cowardly refusing to install hooks with `core.hooksPath` set. hint: `git config --unset-all core.hooksPath` exit=1
+pre-commit	M3[precommit]-hookspath	unchanged
+pre-commit	M3[precommit]-dispatchers	unchanged
+pre-commit	M3[precommit]-commit	commit exit=0; manager hook ran 1x
+pre-commit	M3[precommit]-guard-branch-D-main	denied
+pre-commit	M3[precommit_overwrite]-output	[ERROR] Cowardly refusing to install hooks with `core.hooksPath` set. hint: `git config --unset-all core.hooksPath` exit=1
+pre-commit	M3[precommit_overwrite]-hookspath	unchanged
+pre-commit	M3[precommit_overwrite]-dispatchers	unchanged
+pre-commit	M3[precommit_overwrite]-commit	commit exit=0; manager hook ran 1x
+pre-commit	M3[precommit_overwrite]-guard-branch-D-main	denied

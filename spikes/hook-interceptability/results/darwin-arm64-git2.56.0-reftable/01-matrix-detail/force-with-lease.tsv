@@ -1,0 +1,6 @@
+# op: git push -q --force-with-lease origin main
+# base: a9403b99e5	0ce9255b58	de0634ebdb	da39a3ee5e
+0	pre-push	origin	refs/heads/main 81c5007f9dbdeae885b790118db3d853b6ba992a refs/heads/main 4bb814a17023da7fefd1ce2f37e1068923e1bb8c|	$SANDBOX/w		a9403b99e5	0ce9255b58	de0634ebdb	da39a3ee5e
+1	reference-transaction	preparing	0000000000000000000000000000000000000000 81c5007f9dbdeae885b790118db3d853b6ba992a refs/remotes/origin/main|	$SANDBOX/w		a9403b99e5	0ce9255b58	de0634ebdb	da39a3ee5e
+2	reference-transaction	prepared	0000000000000000000000000000000000000000 81c5007f9dbdeae885b790118db3d853b6ba992a refs/remotes/origin/main|	$SANDBOX/w		a9403b99e5	0ce9255b58	de0634ebdb	da39a3ee5e
+3	reference-transaction	committed	0000000000000000000000000000000000000000 81c5007f9dbdeae885b790118db3d853b6ba992a refs/remotes/origin/main|	$SANDBOX/w		02c03c9593	0ce9255b58	de0634ebdb	da39a3ee5e

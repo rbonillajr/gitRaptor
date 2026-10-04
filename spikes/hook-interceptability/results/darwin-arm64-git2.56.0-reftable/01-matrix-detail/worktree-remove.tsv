@@ -1,0 +1,3 @@
+# op: git worktree remove ../wt2
+# base: f31beaaba7	17793d3fa0	97f56cfd4f	566cad195e
+0	post-index-change	0		$SANDBOX/wt2	$SANDBOX/w/.git/worktrees/wt2	f31beaaba7	17793d3fa0	97f56cfd4f	566cad195e

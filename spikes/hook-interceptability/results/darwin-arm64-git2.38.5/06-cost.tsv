@@ -1,0 +1,37 @@
+scenario	variant	hook_spawns	n	p50_ms	p95_ms	max_ms	failures
+spawn-floor	:	-	100	9.53	11.13	13.30	0
+spawn-floor	/bin/sh -c :	-	100	18.54	22.67	24.69	0
+spawn-floor	'$SANDBOX/raptor-stub' </dev/null	-	100	12.67	16.74	18.38	0
+spawn-floor	/bin/sh -c "exec '$SANDBOX/raptor-stub'" </dev/null	-	100	23.79	27.37	28.86	0
+update-ref-1-tx	V0	2	100	16.05	18.39	19.73	0
+update-ref-1-tx	V1	2	100	34.52	38.77	44.28	0
+update-ref-1-tx	V2	2	100	39.69	44.72	45.88	0
+update-ref-1-tx	V3	2	100	37.24	43.80	55.46	0
+commit-full-set	V0	6	100	22.50	26.66	49.67	0
+commit-full-set	V1	6	100	95.52	136.58	173.60	0
+commit-full-set	V2	6	100	102.11	135.96	169.42	0
+commit-full-set	V3	6	100	96.37	114.72	128.60	0
+status-post-index-change	V0	1	100	16.69	22.85	36.84	0
+status-post-index-change	V1	1	100	26.91	41.88	44.00	0
+status-post-index-change	V2	1	100	28.52	41.99	47.50	0
+status-post-index-change	V3	1	100	28.47	40.47	49.80	0
+push-ff-governed	V0	3	50	98.67	118.30	121.84	0
+push-ff-governed	V1	3	50	136.94	160.21	161.56	0
+push-ff-governed	V2	3	50	144.35	172.01	180.18	0
+push-ff-governed	V3	3	50	196.70	230.62	236.80	0
+fetch-1000-refs	V0	2004	3	989.13	2410.77	2410.77	0
+fetch-1000-refs	V1	2004	3	18885.16	20949.60	20949.60	0
+fetch-1000-refs	V2	2004	3	28404.86	29689.82	29689.82	0
+fetch-1000-refs	V3	2004	3	23740.78	24213.42	24213.42	0
+fetch-1000-refs-atomic	V0	2	3	269.03	269.93	269.93	0
+fetch-1000-refs-atomic	V1	2	3	310.66	457.76	457.76	0
+fetch-1000-refs-atomic	V2	2	3	280.42	302.58	302.58	0
+fetch-1000-refs-atomic	V3	2	3	833.72	839.07	839.07	0
+fetch-1000-refs-no-auto-maint	V0	2002	3	271.88	277.22	277.22	0
+fetch-1000-refs-no-auto-maint	V1	2002	3	24607.87	28068.68	28068.68	0
+fetch-1000-refs-no-auto-maint	V2	2002	3	32252.92	32455.84	32455.84	0
+fetch-1000-refs-no-auto-maint	V3	2002	3	31124.06	31689.60	31689.60	0
+pack-refs-1000-loose	V0	6006	3	159.07	159.62	159.62	0
+pack-refs-1000-loose	V1	6006	3	28232.56	28281.00	28281.00	0
+pack-refs-1000-loose	V2	6006	3	34291.79	35597.98	35597.98	0
+pack-refs-1000-loose	V3	6006	3	36864.94	37489.09	37489.09	0
