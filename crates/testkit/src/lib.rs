@@ -14,6 +14,7 @@
 //! - [`guard`]: the harness only touches roots it created; never the GitRaptor repo.
 //! - [`canary`] (unix): SEC-09 canary repo.
 //! - [`exec_audit`]: trap audit (portable gate) and kernel tracers (strace, eslogger).
+//! - [`repogen`]: deterministic reference repos of SPIKE-TMC-001 (profile `M`, D-TMC-21).
 
 #[cfg(unix)]
 pub mod canary;
@@ -23,6 +24,7 @@ pub mod exec_audit;
 pub mod fingerprint;
 pub mod fixture;
 pub mod guard;
+pub mod repogen;
 
 pub use control::{Mode, Report, Scenario, Step, check};
 pub use exceptions::{Exception, Exceptions};
