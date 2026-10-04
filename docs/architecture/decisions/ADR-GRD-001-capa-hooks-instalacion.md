@@ -47,7 +47,7 @@ Restricciones heredadas:
 | Manifiesto | `<git-common-dir>/gitraptor/manifest.json` | **Solo para la recuperación manual** y como evidencia de respaldo (ADR-GRD-005): versión de plantilla, valor previo de `core.hooksPath` **y su nivel** (worktree, local, global, sistema o ninguno), ruta del binario, lista de hooks previos encadenados, fecha. **No es autoritativo**: un proceso del mismo usuario lo puede editar |
 | Clave de activación | `core.hooksPath` en el `config` del directorio común (nivel local), con la ruta **absoluta** de `gitraptor/hooks` | Es el único cambio en un archivo que ya existía |
 
-- **Referencia de integridad autoritativa** (H-04): vive en el **diario de instalación del perfil**, que solo escribe el daemon. Guarda:
+- **Referencia de integridad autoritativa** (H-04): vive en el **diario de instalación del perfil**, que solo escribe el daemon y que se guarda en el **almacén por repo** (ADR-GRP-006 § 4; decisión del Arquitecto, 2026-10-04). Guarda:
   - el hash de cada dispatcher;
   - la ruta estable del binario, su destino canónico y su firma o huella (§ 8);
   - el identificador del directorio común;
@@ -82,6 +82,7 @@ Restricciones heredadas:
   - **Sin `HOME`**: con todas las rutas como constantes, `raptor hook` no necesita `HOME`, y quitarlo elimina un vector de redirección. Tampoco recibe PATH, `XDG_*`, `GIT_CONFIG_*`, `LD_*` ni `DYLD_*`.
   - **Qué hace**: la evaluación valida y normaliza la entrada (ADR-GRD-002 § 4) y consulta al daemon (ADR-GRD-003).
 - **Encadenado sin shell**: si la evaluación permite, el **binario `raptor`**, no el `sh`, ejecuta el hook previo. Lo hace con los mismos argumentos y la misma entrada estándar, y con el **entorno original de Git menos la variable del token**, como lo habría ejecutado Git (NFR-07). Devuelve el código de salida del hook previo.
+  - **Módulo de invocación** (decisión del Arquitecto, 2026-10-04): `raptor hook` no lanza el hook previo con un `Command::new` propio. Llama al módulo de invocación autorizado de la capa de escritura de Guardrails que **encadena el hook previo** (§ 7), sin shell.
   - **Hook previo**: sale de la constante del valor previo, nunca del diario.
     - Si no había valor: `<git-common-dir>/hooks/<nombre>`, también escrito como constante.
     - Si es absoluto: esa carpeta más el nombre.
@@ -182,9 +183,15 @@ Hipótesis de comportamiento, que verifica SPIKE-GRD-001:
   - Leer el valor efectivo de `core.hooksPath` por worktree.
   - Crear, sustituir y borrar archivos listados, **solo** dentro de `<git-common-dir>/gitraptor/` y con las reglas del § 4.
 
-  Solo la alcanza el módulo `guardrails` (visibilidad de módulo, frontera de Nx y la comprobación estática de CI de ADR-GRP-009 Validación 5). Usa el Git CLI con argv fijo, sin shell, con un entorno por allowlist (ADR-GRP-009 § 3) y sin ejecutar hooks ni filtros.
+  Estas operaciones solo las alcanza el módulo `guardrails` (visibilidad de módulo, frontera de Nx y la comprobación estática de CI de ADR-GRP-009 Validación 5). Usan el Git CLI con argv fijo, sin shell, con un entorno por allowlist (ADR-GRP-009 § 3) y sin ejecutar hooks ni filtros.
+- **Dos módulos de invocación autorizados, nombrados y tipados** en esa capa (decisión del Arquitecto, 2026-10-04):
+  - **Encadenado del hook previo**: ejecuta el hook previo sin shell, con los argumentos, la entrada estándar y el entorno del § 2.
+  - **Ejecución de `git` para `raptor guard exec`**: ejecuta `git` con el argv validado y normalizado según ADR-GRD-007 § 3, por la ruta validada (ADR-GRP-009 § 4) y con los `-c` que neutralizan ejecutables.
+
+  Solo los alcanzan `raptor hook` y `raptor guard exec` (`apps/cli`), que no tienen un `Command::new` propio. El `git` de `raptor guard exec` sí ejecuta los hooks gobernados (así presenta el token) y lo que ADR-GRD-007 § 2 no neutraliza. La comprobación estática de CI de ADR-GRP-009 (Validación 5) lista estos dos módulos junto a los demás autorizados.
+
 - **El motor sigue siendo de solo lectura**: estas escrituras no son del motor y solo ocurren tras una instalación, desinstalación, actualización (§ 8) o adopción explícita.
-- **Lo que necesita INF-GRP-001**: una excepción por escenario, como la de PQ-1. Las enmiendas pendientes están en [non-functional-guardrails.md](../non-functional-guardrails.md).
+- **Lo que necesita INF-GRP-001**: una excepción por escenario, como la de PQ-1. **Aplicada (2026-10-04)** en INF-GRP-001 y en la nota de integración de ADR-GRP-009 (tabla de [non-functional-guardrails.md](../non-functional-guardrails.md)).
 
 ### 8. Actualización y movimiento del binario (J4; H-04)
 
@@ -229,7 +236,7 @@ Hipótesis de comportamiento, que verifica SPIKE-GRD-001:
 - ⚠️ **Coste**: dos procesos (`sh` y `raptor`) en cada hook gobernado. **Mitigación**: la vía rápida y el presupuesto NFR-GRD-04, medidos en SPIKE-GRD-001. En Windows el arranque de `sh` es el riesgo principal.
 - ⚠️ **Fail-closed con el binario ausente** bloquea `push`, `rebase` y el borrado de ramas hasta reinstalar o restaurar a mano. Es la decisión 4 de Rene.
 - ⚠️ **Rutas con caracteres no representables**: no se instala. Lo explica el motivo y lo mide SPIKE-GRD-001.
-- ⚠️ **Enmiendas pendientes en motor-local**: ADR-GRP-009 (segunda capa de escritura) e INF-GRP-001 (excepción por escenario). Ver la tabla de [non-functional-guardrails.md](../non-functional-guardrails.md).
+- ✅ **Enmiendas de motor-local aplicadas (2026-10-04)**: ADR-GRP-009 (segunda capa de escritura y Validación 5) e INF-GRP-001 (excepción por escenario). Ver la tabla de [non-functional-guardrails.md](../non-functional-guardrails.md).
 
 ## Validación
 
@@ -278,10 +285,16 @@ Enmienda tras el Artifact Judge y la revisión del security-expert. No cambia la
 | M-02 · `GIT_DIR`/`GIT_WORK_TREE` cruzados | § 2: el directorio común va fijado en el dispatcher; § 3: una discrepancia es deny en refs gobernadas (SEC-GRD-19) |
 | M-03 · Operaciones de archivo en `.git` | § 4: descriptor de directorio, sin seguir enlaces, borrado solo de lo listado, `dev/inode`, temporal aleatorio y exclusivo, `config` regular; Validación 8 |
 | M-04 · Interpolación en el dispatcher | § 2: solo constantes con un charset seguro, encadenado en Rust sin shell, evaluación con entorno por allowlist; Validación 7 |
-| M-07 · Windows | § 1: DACL; los criterios de humano y agente y del servidor del pipe están en ADR-GRD-007 § 4 y ADR-GRD-003 § 4 |
+| M-07 · Windows | § 1: DACL; los criterios de humano y agente y del servidor del pipe están en ADR-GRD-007 § 1 y Validación 12, y ADR-GRD-003 § 4 |
 | L-01 · `reference-transaction` en `committed`/`aborted` | § 2: salida en la primera línea si no hay hook previo |
 | I-02 · `DYLD_INSERT_LIBRARIES` | § 2: hardened runtime sin `allow-dyld-environment-variables` |
-| J13 · Referencias rotas en el frontmatter | `related` solo con IDs de `main` o de esta rama; los ADRs de otros frentes pasan a Referencias |
+| J13 · Referencias rotas en el frontmatter | `related` solo con IDs existentes; los ADRs de otros frentes pasan a Referencias |
 | Judge ronda 2, hallazgo 1 · Canal e id del directorio común | § 2: constantes del dispatcher; `raptor hook` no lee el diario ni el perfil; sin `HOME` en la allowlist |
 | Judge ronda 2, hallazgo 2 · Fallback `sh` | § 3: código fijo con `read`, hook previo como constante, reenvío explícito de la entrada y valor relativo resuelto contra el directorio actual; Validación 7 |
 | Judge ronda 2, hallazgo 3 · Daemon auténtico con perfil ajeno | § 2: id de instancia del perfil como constante; la comprobación está en ADR-GRD-003 § 4 |
+
+## Cambios (2026-10-04, coherencia con motor-local)
+
+- § 1: el diario de instalación vive en el almacén por repo (ADR-GRP-006 § 4).
+- § 2 y § 7: dos módulos de invocación autorizados en la capa de escritura de Guardrails (encadenado del hook previo y `git` para `raptor guard exec`); `apps/cli` no lanza procesos por su cuenta.
+- Las referencias a enmiendas de motor-local pasan a "aplicada (2026-10-04)".

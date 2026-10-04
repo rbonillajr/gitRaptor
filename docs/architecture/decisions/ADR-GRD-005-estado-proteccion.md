@@ -35,7 +35,7 @@ La revisión pide además cuatro cosas:
 - El encadenado imposible tiene que quedar persistido (J6).
 - El modo degradado tiene que ser visible (H-03).
 
-D6 añade los cambios pendientes de rama base y de suelo.
+D6 añade los cambios pendientes de rama base y de suelo. **D11** (Rene Bonilla, 2026-10-04): el estado mantiene sus cuatro estados y añade diagnósticos visibles para lo que espera confirmación, cada uno con la acción para confirmar.
 
 ## Decisión
 
@@ -52,11 +52,11 @@ La capa está **activa** solo si se cumplen todas estas condiciones:
 | H3 | El hash de cada dispatcher coincide con **la referencia de integridad del diario** (no la del manifiesto), y el `dev/inode` de la carpeta es el guardado | `dispatcher-alterado` o `carpeta-ausente` |
 | H4 | La ruta estable del binario resuelve a un destino con firma válida o con la huella fijada (ADR-GRD-001 § 8) | `binario-ausente` o `binario-no-valido` |
 
-- **Instalación huérfana** (J5): el perfil se borró, pero el repo conserva la clave apuntando a `gitraptor/hooks` y un manifiesto.
+- **Instalación huérfana** (J5): el perfil se borró, pero el repo conserva la clave apuntando a `gitraptor/hooks` y un manifiesto. **La detección y el estado `instalacion-huerfana` son de US-GRD-004; adoptar o retirar, de US-GRD-003.**
   - **Qué hace el estado**: se basa en el manifiesto como **evidencia de respaldo, no autoritativa**. Muestra `instalacion-huerfana` con aviso, nunca "Sin protección" a secas.
   - **Qué hacen los hooks** (Judge ronda 2): los dispatchers siguen ejecutándose y llegan al daemon real por la ruta del canal, que es una constante (ADR-GRD-001 § 2). Pero el perfil recreado tiene **otro id de instancia**, así que el cliente aplica el **modo degradado** con `instance-mismatch` (ADR-GRD-003 § 4). Es más estricto que el normal, y nunca bloquea los commits.
   - **Cómo detecta el daemon la huérfana**: compara el id de instancia escrito en los dispatchers con el suyo.
-  - **Qué se ofrece**, siempre por comando reservado (ADR-GRD-007):
+  - **Qué se ofrece**, siempre por comando reservado (ADR-GRD-007), dentro de **US-GRD-003** (recuperación y desinstalación; decisión del Arquitecto, 2026-10-04):
     - **Adoptar**: el daemon regenera en memoria los dispatchers esperados con las constantes **antiguas** (las del manifiesto y el id de instancia de los dispatchers).
       - **Si coinciden** byte a byte con los del disco: los regenera con las constantes de la instancia actual, con la transacción de ADR-GRD-001 § 4 y como la misma instalación, y vuelve a fijar la referencia de integridad en el diario. Desde ese momento los hooks dejan el modo degradado.
       - **Si no coinciden**: solo se ofrece retirar.
@@ -68,7 +68,10 @@ La capa está **activa** solo si se cumplen todas estas condiciones:
   - `repo-no-observado` (Q-GRD-15).
   - `configuracion-ilegible` (ADR-GRD-004).
   - `daemon-unreachable`, `instance-mismatch` o `channel-not-authentic` (H-03): ventana degradada o de deny, con su inicio y su fin.
-  - `base-change-pending` y `floor-relax-pending` (D6, ADR-GRD-004 § 3 y § 4).
+  - **Pendientes de confirmar** (D6, **D11**; ADR-GRD-004 § 3 y § 4). Visibles en todos los clientes, cada uno con la **acción para confirmar** (el comando reservado de ADR-GRD-007 § 1):
+    - `floor-relax-pending`: "relajación pendiente de confirmar". El suelo nuevo relaja algo frente al confirmado y rige la combinación más restrictiva.
+    - `base-unconfirmed`: "rama base no confirmada". Q-GRD-25 habla de dos textos visibles para el usuario ("relajación pendiente de confirmar" y "rama base no confirmada o pendiente"); aquí son tres códigos. No hay confirmación inicial (D9); Guardrails protege la unión de ADR-GRD-004 § 3.5 (fase 1, antes de TS-GRD-001: {`main`, rama principal}; fase 2, con TS-GRD-001: además la resuelta) y el motor marca la rama base como no confirmada.
+    - `base-change-pending`: "rama base pendiente". La resuelta difiere de la confirmada, o el suelo nuevo trae una `baseBranch` inválida (marcado como inválido).
 
 ### 2. Capa MCP (interfaz con F-001-05)
 
@@ -83,7 +86,7 @@ La capa está **activa** solo si se cumplen todas estas condiciones:
 | `hooks` | `active` \| `inactive` \| `not-installed` \| `orphaned`, con `cause` y el worktree afectado |
 | `minimumSet` | `active` \| `disabled-by-team`, con las reglas, la rama o ramas base protegidas y si hay un cambio pendiente |
 | `notPreventable[]` | La lista publicada de ADR-GRD-002 § 3, con los saltos declarados |
-| `diagnostics[]` | Los del § 1, como códigos |
+| `diagnostics[]` | Los del § 1, como códigos. Los pendientes de confirmar (D11) llevan además la acción para confirmar |
 | `permission` | `never-asked` \| `granted` \| `denied` (BR-AUTH-002) |
 
 El texto lo pone el cliente (NFR-10). Lo presentan la CLI y el Cockpit.
@@ -96,7 +99,7 @@ El texto lo pone el cliente (NFR-10). Lo presentan la CLI y el Cockpit.
 | Protegido y no observado (Q-GRD-15) | Comprobación periódica del § 1 | ⚠️ **ASSUMPTION**: cada 60 s, con jitter |
 | Cualquiera | Al arrancar el daemon; al consultar el estado; al volver de una ventana degradada | Inmediata |
 
-- **Dependencia**: ADR-GRP-010 tiene que vigilar esas rutas en los repos protegidos (tabla de enmiendas).
+- **Dependencia aplicada (2026-10-04)**: ADR-GRP-010 vigila esas rutas en los repos protegidos (tabla de enmiendas).
 
 ### 5. Transiciones, registro y aviso
 
@@ -124,7 +127,7 @@ El texto lo pone el cliente (NFR-10). Lo presentan la CLI y el Cockpit.
 - ✅ El estado no miente, tampoco tras borrar el perfil, y cada causa tiene nombre.
 - ✅ La integridad se ancla en lo que solo escribe el daemon.
 - ✅ El modo degradado y los cambios pendientes del suelo y de la rama base son visibles.
-- ⚠️ **Dependencia**: ADR-GRP-010 tiene que vigilar las rutas del § 4.
+- ✅ **Dependencia aplicada (2026-10-04)**: ADR-GRP-010 vigila las rutas del § 4.
 - ⚠️ Un salto de un solo comando no cambia el estado: lo declara ADR-GRD-002 § 2.
 - ⚠️ Un proceso del mismo usuario puede borrar el perfil **y** la carpeta a la vez. Entonces el repo queda sin protección y la única pista es la clave rota. Se detecta como `carpeta-ausente` con la clave apuntando a Guardrails.
 
@@ -141,6 +144,7 @@ El texto lo pone el cliente (NFR-10). Lo presentan la CLI y el Cockpit.
 9. **Rebote** (L-01): una causa persistente durante una hora da un aviso cada 10 minutos y una sola transición en el registro.
 10. **Mínimo y lista**: sin configuración, `minimumSet = active` y `notPreventable` coincide con la regresión de ADR-GRD-002 (US-GRD-004, escenarios 4 y 5).
 11. **Sin escrituras** en el repo por la comprobación (INF-GRP-001).
+12. **Pendientes de confirmar** (D11): sin confirmación inicial aparece `base-unconfirmed`; con un suelo nuevo que relaja, `floor-relax-pending`; con otra `baseBranch`, `base-change-pending`. Los tres llevan la acción para confirmar, el `state` no cambia y desaparecen tras la confirmación.
 
 ## Referencias
 
@@ -161,3 +165,11 @@ El texto lo pone el cliente (NFR-10). Lo presentan la CLI y el Cockpit.
 | D6 · Cambios pendientes | § 1 y § 3: `base-change-pending` y `floor-relax-pending` visibles |
 | J13 · Referencias rotas en el frontmatter | `related` solo con IDs existentes |
 | Judge ronda 2, hallazgos 1 y 3 · Huérfana con constantes e instancia | § 1: los hooks llegan al daemon real y aplican el modo degradado con `instance-mismatch` hasta la adopción, que regenera las constantes; Validación 4 |
+
+## Cambios (2026-10-04, coherencia con motor-local)
+
+- § 1 y § 3: **D11**: diagnósticos visibles `floor-relax-pending`, `base-unconfirmed` y `base-change-pending` (también el inválido), cada uno con la acción para confirmar; los cuatro estados no cambian. Validación 12.
+- § 1: adoptar o retirar una instalación huérfana se asigna a US-GRD-003.
+- § 4 y Consecuencias: la vigilancia de ADR-GRP-010 pasa a "aplicada (2026-10-04)".
+- Cierre (ronda 3): reparto explícito de la huérfana: US-GRD-004 detecta; US-GRD-003 adopta o retira.
+- Corrección tras el Judge: `base-unconfirmed` remite a las dos fases de la unión de ADR-GRD-004 § 3.5.

@@ -49,10 +49,11 @@ ADR-GRP-005 § 6 (propuesto, en `main`) define los **comandos reservados**, auto
 | Comando (nombres provisionales) | Historia | ¿Relaja? | Controles |
 |---|---|---|---|
 | Instalar la protección (`raptor guard install`) | US-GRD-001, US-GRD-002 | No | ADR-GRP-005 § 6, puntos 1 a 3; confirmación UX con qué, dónde, por qué y cómo se revierte, y los hooks previos (BR-AUTH-002). Sin ventana (D5) |
+| Confirmar la rama base y el suelo **iniciales** (**D9**, Rene Bonilla, 2026-10-04; ADR-GRD-004 § 3.5) | US-GRD-001 (al instalar), US-GRD-014 (comando explícito) | **US-GRD-001: no** (confirma `main` sin leer el suelo; con configuración del equipo deja `base-unconfirmed`). **US-GRD-014: sí**, si el suelo trae relajaciones (p. ej. desactiva el mínimo) | ADR-GRP-005 § 6. US-GRD-001, **sin ventana**. US-GRD-014, con **D5** (anuncio, ventana cancelable y auditoría completa) cuando el suelo relaja. **Nunca** al añadir el repo a la observación (motor-local) |
 | Registrar la denegación del permiso | US-GRD-001 | No | ADR-GRP-005 § 6 |
-| Adoptar una instalación huérfana (ADR-GRD-005 § 1) | US-GRD-004 | No | ADR-GRP-005 § 6 |
+| Adoptar una instalación huérfana (ADR-GRD-005 § 1) | US-GRD-003 | No | ADR-GRP-005 § 6. Adoptar no confirma la rama base ni el suelo; quedan `base-unconfirmed` hasta la confirmación explícita (US-GRD-014; ADR-GRD-004 § 3.5) |
 | Desinstalar la protección (`raptor guard uninstall`) | US-GRD-003 | **Sí** | ADR-GRP-005 § 6 + **D5**: anuncio, ventana cancelable, auditoría completa y aceptación de riesgo por acción |
-| Retirar una instalación huérfana | US-GRD-004 | **Sí** | Igual que desinstalar |
+| Retirar una instalación huérfana | US-GRD-003 | **Sí** | Igual que desinstalar |
 | Excepción consciente (`raptor guard exec -- git …`) | US-GRD-006 | **Sí** | ADR-GRP-005 § 6 + **D5** (la ventana va antes de emitir el token) + el token del § 3 |
 | Confirmar un cambio de rama base o una relajación del suelo (ADR-GRD-004 § 3 y § 4) | US-GRD-014, US-GRD-007 (bloqueadas por P8, no por este ADR) | **Sí** | **D8 (Rene Bonilla, 2026-10-04)**: el mecanismo MVP de D5, igual que desinstalar (anuncio, ventana cancelable, auditoría con la ascendencia completa y aceptación de riesgo por acción). Cuando exista el factor fuera de banda, se aplicará también aquí, pero **no bloquea** US-GRD-007 ni US-GRD-014 |
 | Relajar la configuración con el comando de edición | US-GRD-013 (bloqueada) | **Sí** | ADR-GRP-005 § 6 + **factor fuera de banda obligatorio**; sin él, fail-closed (D5). Endurecer no es reservado |
@@ -75,6 +76,7 @@ ADR-GRP-005 § 6 (propuesto, en `main`) define los **comandos reservados**, auto
   - **Ventana**: la acción solo se aplica al cerrarse la ventana. Cualquier cliente del usuario puede cancelarla, y cancelar no es reservado porque solo mantiene la protección.
   - **Registro**: la cancelación y la aplicación quedan en la auditoría.
 - **Interfaz para el Cockpit** (Q-GRD-1): una confirmación del humano en una superficie de GitRaptor que choca con una regla cuenta como excepción. Usa el mismo comando con el token del § 3. Se implementa con F-001-02.
+- **Toda excepción pasa por D5** (**D10**, Rene Bonilla, 2026-10-04): la de `raptor guard exec` y también la aprobación explícita en el Cockpit llevan el mismo anuncio, la misma ventana cancelable antes de emitir el token y la misma auditoría con la cadena completa de ascendencia y la aceptación del riesgo por acción. No hay ninguna vía de excepción sin ventana.
 
 ### 2. Análisis de vectores y aceptación del riesgo por acción (H-01)
 
@@ -112,7 +114,7 @@ ADR-GRP-005 § 6 (propuesto, en `main`) define los **comandos reservados**, auto
    - **Qué resuelve**: `-C`, push sin refspec según `push.default`, `--all`, `--mirror`, las refs simbólicas y los alias de ADR-GRD-002 § 4.
    - **Si el argv no se puede normalizar** a transiciones concretas (p. ej. `--mirror` con borrados implícitos, o un refspec con comodines ambiguos): se rechaza **antes** de emitir el token, con el motivo. SPIKE-GRD-001 cubre los casos.
 2. **Autorización** en el daemon: ADR-GRP-005 § 6 sobre el proceso `raptor`. Si falla: rechazo y anotación en la auditoría y como `exception-rejected` (US-GRD-006, escenario 4).
-3. **Anuncio y ventana** (D5). Al cerrarse sin cancelación, pasa a la emisión.
+3. **Anuncio y ventana** (D5, D10). Al cerrarse sin cancelación, pasa a la emisión. Si el humano la cancela dentro de la ventana, no se emite token y se registra con `kind = exception-cancelled` (ADR-GRD-006 § 1), que no cuenta en el KPI.
 4. **Emisión**: un token aleatorio de ≥ 128 bits (CSPRNG del SO). El daemon guarda **solo su hash**, ligado a:
    - la **transición exacta** `(ref, viejo, nuevo)` cuando se conoce (push, borrado), tomando como valor viejo esperado la copia de seguimiento conocida;
    - si la transición no se conoce de antemano (rebase), la ref más la base;
@@ -164,7 +166,7 @@ ADR-GRP-005 § 6 (propuesto, en `main`) define los **comandos reservados**, auto
 - ⚠️ **Riesgo residual del MVP** (D5, decisión 3): para desinstalar y para la excepción, los vectores de la tabla del § 2 que dicen "No" siguen abiertos, limitados por el anuncio, la ventana y la auditoría.
 - ⚠️ **La ventana de 10 s añade espera** a desinstalar y a la excepción. Es un coste aceptado por D5.
 - ⚠️ **`rebase -i` no está disponible bajo la excepción** por la neutralización de `sequence.editor`.
-- ⚠️ **Dependencias**: la lista de comandos reservados de ADR-GRP-005 § 6 y SEC-03 de motor-local se amplía con los de este ADR (tabla de enmiendas). El factor fuera de banda requiere un ADR propio antes de US-GRD-013 y US-GRD-015.
+- ⚠️ **Dependencias**: la lista de comandos reservados de ADR-GRP-005 § 6 y SEC-03 de motor-local se amplía con los de este ADR: **aplicada (2026-10-04)** (tabla de enmiendas). El factor fuera de banda requiere un ADR propio antes de US-GRD-013 y US-GRD-015.
 
 ## Validación
 
@@ -180,12 +182,14 @@ ADR-GRP-005 § 6 (propuesto, en `main`) define los **comandos reservados**, auto
 10. **Higiene**: el hook previo no ve el token; los logs y el registro no lo contienen.
 11. **Permiso**: si se deniega o no hay respuesta, no se instala nada; un permiso no alcanza a otro repo (US-GRD-001, escenarios 5 y 6).
 12. **Windows** (M-07): un cliente lanzado desde un proceso de agente simulado, con y sin consola propia, se rechaza.
+13. **Confirmación inicial** (D9): añadir un repo a la observación no confirma nada. Instalar (US-GRD-001) en un repo con configuración del equipo no lee el suelo y deja `base-unconfirmed`, sin ventana. La confirmación explícita (US-GRD-014) de un suelo que desactiva el mínimo se anuncia y espera la ventana; cancelada, no confirma nada.
+14. **Excepción desde el Cockpit** (D10): una aprobación explícita en el Cockpit se anuncia en los demás clientes, es cancelable en la ventana y queda auditada con la ascendencia completa.
 
 ## Referencias
 
 - **Reglas**: BR-AUTH-001, BR-AUTH-002, BR-AUTH-003, BR-AUTH-004, BR-CONS-004; Q-GRD-1, Q-GRD-3, Q-GRD-13, Q-GRD-15; S-GRD-8; R-GRD-2, R-GRD-3.
-- **Decisiones**: decisión 3, D5, D6, D7 y D8 de Rene Bonilla (2026-10-04).
-- **Historias**: US-GRD-001, US-GRD-002, US-GRD-003, US-GRD-004, US-GRD-006; requisito duro para US-GRD-013 y US-GRD-015.
+- **Decisiones**: decisión 3, D5, D6, D7, D8, D9 y D10 de Rene Bonilla (2026-10-04).
+- **Historias**: US-GRD-001, US-GRD-002, US-GRD-003, US-GRD-006, US-GRD-007, US-GRD-014; requisito duro para US-GRD-013 y US-GRD-015.
 - **ADRs de otros frentes**: ADR-GRP-005 § 6, ADR-GRP-009 § 4, ADR-GRP-012, ADR-GRP-013 (motor-local, en `main`).
 - **Seguridad**: SEC-GRD-04, SEC-GRD-05; SEC-03 de motor-local; OWASP LLM01 y LLM06.
 
@@ -201,3 +205,13 @@ ADR-GRP-005 § 6 (propuesto, en `main`) define los **comandos reservados**, auto
 | J13 · Referencias rotas en el frontmatter | `related` solo con IDs existentes |
 | D8 · Confirmar un cambio de suelo | § 1: el mecanismo MVP de D5; el factor fuera de banda se aplica cuando exista, pero no bloquea US-GRD-007 ni US-GRD-014; el gate duro queda solo en US-GRD-013 y US-GRD-015 |
 | Judge ronda 2, hallazgo 4 · Código plantado | § 2: qué neutraliza `guard exec` y qué no (`credential.helper`, `core.sshCommand`, filtros, `gpg.program`, hooks previos); lo restante es un riesgo aceptado por D5 |
+
+## Cambios (2026-10-04, coherencia con motor-local)
+
+- § 1: fila nueva para la confirmación inicial (**D9**): US-GRD-001 al instalar, sin relajar y sin ventana; US-GRD-014 explícita, con D5 si el suelo relaja; nunca al añadir un repo. Validación 13.
+- § 1: **D10**: toda excepción, también la aprobación en el Cockpit, pasa por el anuncio, la ventana y la auditoría de D5. Validación 14.
+- § 1: adoptar o retirar una instalación huérfana pasa a US-GRD-003.
+- Consecuencias: la ampliación de ADR-GRP-005 § 6 y SEC-03 pasa a "aplicada (2026-10-04)".
+- § 3: la ventana cancelable nombra el `kind` `exception-cancelled` (ADR-GRD-006 § 1) para la excepción cancelada.
+- Corrección tras el Judge: la confirmación inicial de US-GRD-001 no relaja y no tiene ventana; D5 solo en la explícita de US-GRD-014 (§ 1, Validación 13). D9 y D10 en Referencias.
+- Judge de la rama del PO: la fila Adoptar dice que adoptar no confirma la rama base ni el suelo (`base-unconfirmed` hasta la confirmación explícita).

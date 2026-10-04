@@ -61,10 +61,10 @@ Sin E/S, sin reloj y sin aleatoriedad:
 | Prohibir force-push | `minimum.force-push` | Denegar | Cualquier rama, cualquier remoto |
 | Proteger la rama base | `minimum.base-branch-delete` | Denegar | Borrar la rama base, local o en cualquier remoto. Si hay un cambio de rama base pendiente de confirmar (D6), aplica a la **unión** {anterior, nueva} |
 
-- **Activo** salvo que el **suelo** (configuración del equipo en la rama principal, D6) lo desactive. La clave es una de las enmiendas pendientes de ADR-GRP-007.
-- **No pueden desactivarlo** ni un nivel personal ni el `HEAD` del worktree, ni el suelo cuando es ilegible o el sistema está en modo degradado.
+- **Activo** salvo que el **suelo** (configuración del equipo en la rama principal, D6) lo desactive. La clave está en ADR-GRP-007 (enmienda aplicada el 2026-10-04). Su nombre y su tipo los fija el schema de TS-GRD-001 (decisión del Arquitecto, 2026-10-04).
+- **No pueden desactivarlo** ni un nivel personal ni el `HEAD` del worktree, ni el suelo cuando es ilegible o `parcial` (D12), ni el sistema en modo degradado.
 - **Visible** en el estado de protección (US-GRD-004, ADR-GRD-005).
-- **Rama base**: hasta TS-GRD-001 es `main`, el valor por defecto de BR-CONS-003 y US-GRP-012.
+- **Rama base**: hasta TS-GRD-001, en repos sin configuración del equipo es `main`, confirmada al instalar (BR-CONS-003, US-GRP-012); con configuración, `base-unconfirmed` y la unión {`main`, rama principal} protegida (ADR-GRD-004 § 3.5, fase 1).
 
 ### 3. Decisión (contrato en `crates/api`)
 
@@ -111,7 +111,7 @@ Sin E/S, sin reloj y sin aleatoriedad:
   - **Sin niveles personales**: no se leen; no se abre el perfil para configuración.
   - **Rama base protegida**: la unión {`main`, la rama principal, la última rama base confirmada, la rama base resuelta del suelo}.
     - **La resuelta** es el `engine.baseBranch` que el cliente lee de la copia de la rama principal. Esa copia ya la lee para el endurecimiento del equipo.
-    - **La última confirmada** sale de la instantánea de solo lectura que el daemon deja en el directorio de estado del perfil, cuya ruta es una constante del dispatcher (⚠️ **ASSUMPTION**; enmienda pendiente). Si falta, la unión se queda sin ella.
+    - **La última confirmada** sale de la instantánea de solo lectura que el daemon deja en el directorio de estado del perfil, cuya ruta es una constante del dispatcher. La excepción para leerla desde un cliente está **aplicada (2026-10-04)** en ADR-GRP-005 § 1 y ADR-GRP-006 § 4. El valor de origen, la rama base confirmada, se guarda en el almacén por repo (ADR-GRP-006 § 4); la instantánea es una copia de solo lectura que el daemon exporta desde allí, y el cliente nunca abre el SQLite (un lector en modo WAL escribiría en el `-shm`). Si la instantánea falta, la unión se queda sin ella.
     - **Así el modo degradado nunca protege menos ramas base que el modo normal**, que protege la confirmada más la resuelta mientras hay un cambio pendiente (ADR-GRD-004 § 3).
   - **Lecturas aisladas**: `gix` aislado del entorno (sin `GIT_*`, sin configuración global ni de sistema) y sin objetos de reemplazo.
   - **Sin excepciones**: no hay excepción posible y el actor es "sin atribuir".
@@ -160,7 +160,7 @@ Sin E/S, sin reloj y sin aleatoriedad:
 - ✅ Una sola implementación para las dos capas, con pruebas de propiedades sobre una función pura.
 - ✅ Ni un canal falso ni un repo cruzado consiguen un `allow`: dan deny en refs gobernadas.
 - ✅ El modo degradado es más estricto que el normal y deja rastro en el daemon.
-- ⚠️ **El modo degradado escribe un spool y lee una instantánea del perfil desde un cliente.** Choca con ADR-GRP-005 § 1 y ADR-GRP-006 § 4. Son excepciones acotadas que tiene que reconocer el frente motor-local (tabla de enmiendas en [non-functional-guardrails.md](../non-functional-guardrails.md)).
+- ⚠️ **El modo degradado escribe un spool y lee una instantánea del perfil desde un cliente.** Choca con ADR-GRP-005 § 1 y ADR-GRP-006 § 4. Son excepciones acotadas, **reconocidas por motor-local el 2026-10-04** (ADR-GRP-005 § 1, ADR-GRP-006 § 4; tabla de [non-functional-guardrails.md](../non-functional-guardrails.md)).
 - ⚠️ **Verificar el servidor** añade la lectura de la imagen del par y una comprobación de firma o de huella por conexión. **Mitigación**: el cliente la cachea por pid y hora de inicio del servidor.
 - ⚠️ **En modo degradado no hay relajaciones del equipo.** Puede bloquear lo que el equipo permitía, mientras dure la ventana.
 
@@ -207,3 +207,11 @@ Sin E/S, sin reloj y sin aleatoriedad:
 | J13 · Referencias rotas en el frontmatter | `related` solo con IDs existentes |
 | Judge ronda 2, hallazgo 1 · Canal y directorio común como constantes | § 4: sin derivación del entorno ni lectura del perfil; Validación 6 con el perfil borrado y `HOME` falso |
 | Judge ronda 2, hallazgo 3 · Daemon auténtico con perfil ajeno | § 4: id de instancia en el handshake, modo degradado con `instance-mismatch`, residuo de la copia completa del perfil declarado; Validación 6 |
+
+## Cambios (2026-10-04, coherencia con motor-local)
+
+- § 2: el nombre y el tipo de la clave del mínimo los fija el schema de TS-GRD-001; una fuente `parcial` tampoco desactiva el mínimo (D12).
+- § 4: la rama base confirmada vive en el almacén por repo; la excepción del spool y de la instantánea está aplicada en ADR-GRP-005 § 1 y ADR-GRP-006 § 4.
+- Consecuencias: la contradicción con "único escritor del perfil" pasa a reconocida (aplicada, 2026-10-04).
+- Cierre (ronda 3): la instantánea es una copia de solo lectura exportada desde el almacén por repo; el cliente nunca abre el SQLite.
+- Corrección tras el Judge (ronda combinada): § 2, la rama base hasta TS-GRD-001 sigue las dos fases de ADR-GRD-004 § 3.5 (D9 / Q-GRD-23).
