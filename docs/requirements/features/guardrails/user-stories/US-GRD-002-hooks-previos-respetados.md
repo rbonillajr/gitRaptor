@@ -71,9 +71,16 @@ Entonces GitRaptor no instala nada y explica el motivo
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+- **Gobierno**: ADR-GRD-001 § 2 (el binario encadena el hook previo sin shell, con los mismos argumentos, la misma entrada y el entorno original menos el token; si la evaluación deniega, no lo ejecuta) y § 6 (hooks propios, husky, lefthook y pre-commit).
+- **Instalación**: las comprobaciones previas de ADR-GRD-001 § 4 (paso 1) y la cobertura de worktrees de § 5 deciden si se puede encadenar. Si no se puede, no se escribe nada y queda el diagnóstico `encadenado-imposible` con su causa (ADR-GRD-005 § 1).
+- **Permiso**: la confirmación de instalar enumera los hooks previos detectados y dice que se conservan (ADR-GRD-007 § 1; BR-AUTH-002).
+- **Crates**: `crates/core` módulo `guardrails` (detección y comprobaciones previas), `crates/git` capa de escritura (valor efectivo de `core.hooksPath` en cada worktree) y `apps/cli` (`raptor hook` y el encadenado).
+- **Enablers**: SPIKE-GRD-001 completo (coexistencia con gestores) **bloquea el cierre de la Dev Spec**. La suite de encadenado de INF-GRD-001 **bloquea el merge**. TS-GRD-001 no aplica.
+- **NFR y SEC**: NFR-GRD-01, 11 y 12; SEC-GRD-03 (encadenado en Rust sin shell) y SEC-GRD-08 (`core.hooksPath` manipulado).
+- **Verificación**: ADR-GRD-001 Validación 1, 2, 4 y 7 (hook previo relativo de husky); ADR-GRD-005 Validación 5.
+- **Enmiendas en motor-local**: INF-GRP-001 (excepción de huella por escenario), además de las que ya hereda de US-GRD-001.
 
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica.
-- **Dev Spec:** pendiente (Arquitecto).
+- **Dev Spec:** pendiente (`/aadd-devspec US-GRD-002`).
