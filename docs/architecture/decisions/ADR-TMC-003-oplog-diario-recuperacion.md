@@ -2,7 +2,8 @@
 id: ADR-TMC-003
 title: "ADR-TMC-003 — Oplog de la Time Machine: operaciones, snapshots, diario de intención y recuperación"
 type: adr
-status: proposed
+status: accepted
+accepted: 2026-10-03
 created: 2026-10-03
 updated: 2026-10-03
 date: 2026-10-03
@@ -21,7 +22,9 @@ published: true
 
 # ADR-TMC-003 — Oplog de la Time Machine: operaciones, snapshots, diario de intención y recuperación
 
-**Status**: Propuesto · **Fecha**: 2026-10-03 · **Decisores**: Rene Bonilla · **Feature**: Time Machine (F-001-03)
+**Status**: Aceptado · **Fecha**: 2026-10-03 · **Decisores**: Rene Bonilla · **Feature**: Time Machine (F-001-03)
+
+**Decisión de Rene Bonilla (2026-10-03)**: TQ-9 → (a) pila de undo y redo por worktree.
 
 ## Contexto
 
@@ -58,7 +61,7 @@ La inmutabilidad se impone en el esquema: los triggers rechazan `UPDATE` y `DELE
 - **Operación del timeline** = evento de Git del motor que cambia el estado del repo (commit, checkout, reset, merge, rebase, borrar rama o worktree, stash) u operación de la Time Machine. Las ediciones de archivos no son operaciones: forman parte del estado entre operaciones (glosario del context).
 - **Estado previo a una operación**: si es de GitRaptor, su snapshot previo garantizado; si es de Git crudo, la última captura válida cuya marca del motor es anterior al evento (o el snapshot previo vía hook, si lo hay).
 - **Operaciones de usuario** (Cockpit, MCP): el oplog registra su intención, su snapshot previo y su resultado; las ejecuta el ejecutor del daemon (ADR-TMC-002 § 5).
-- **`undo`** deshace la operación más reciente del worktree que aún no está deshecha; **`redo`** rehace el último undo si es lo último del ámbito (BR-TMC-WF-001). ⚠️ **ASSUMPTION** (TQ-9): undos seguidos retroceden una operación más cada vez (pila por worktree), y una operación nueva en el ámbito invalida el redo.
+- **`undo`** deshace la operación más reciente del worktree que aún no está deshecha; **`redo`** rehace el último undo si es lo último del ámbito (BR-TMC-WF-001). Undos seguidos retroceden (TQ-9 → a) una operación más cada vez (pila por worktree), y una operación nueva en el ámbito invalida el redo.
 - El undo deja el ámbito como estaba antes de la operación, incluidas las ediciones posteriores del mismo actor; esas ediciones quedan en el snapshot previo del undo y se recuperan con redo. Las de otro actor activan el solape (ADR-TMC-005).
 
 ### 5. Atribución: congelada frente a vigente

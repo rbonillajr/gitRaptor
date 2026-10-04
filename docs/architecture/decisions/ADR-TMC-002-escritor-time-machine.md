@@ -2,7 +2,8 @@
 id: ADR-TMC-002
 title: "ADR-TMC-002 — Escritor de la Time Machine: componente del daemon, capa de escritura acotada y protocolo de aplicación"
 type: adr
-status: proposed
+status: accepted
+accepted: 2026-10-03
 created: 2026-10-03
 updated: 2026-10-03
 date: 2026-10-03
@@ -21,7 +22,9 @@ published: true
 
 # ADR-TMC-002 — Escritor de la Time Machine: componente del daemon, capa de escritura acotada y protocolo de aplicación
 
-**Status**: Propuesto · **Fecha**: 2026-10-03 · **Decisores**: Rene Bonilla · **Feature**: Time Machine (F-001-03)
+**Status**: Aceptado · **Fecha**: 2026-10-03 · **Decisores**: Rene Bonilla · **Feature**: Time Machine (F-001-03)
+
+**Decisión de Rene Bonilla (2026-10-03)**: TQ-2 → (a) sin crate nuevo; TQ-3 → (a) las operaciones de usuario las ejecuta el ejecutor del daemon; TQ-10 → (a) sin rollback automático; TQ-12 → notas a motor-local aprobadas (pendientes de integración); TQ-13 → (a) escrituras internas sin hooks, filtros, firma ni config de sistema/global.
 
 ## Contexto
 
@@ -39,14 +42,14 @@ Hay dos tipos de escritura que no deben confundirse:
 ### 1. Proceso y ubicación del código
 
 - **El daemon (`raptor daemon`, ADR-GRP-005) aloja el motor (solo lectura) y la Time Machine (escritor interno).** Los clientes (CLI/TUI, `raptor-mcp`) nunca escriben en el repo ni en el almacén: piden por el canal.
-- **Código**: módulo `timemachine` en `crates/core` (snapshots, oplog, planificador, aplicador, recuperación, purga). **Sin crate nuevo**: ADR-GRP-002 no cambia (TQ-2).
-- **Capa de escritura de la Time Machine en `crates/git`, separada de la de lectura**, con lista cerrada de operaciones tipadas. Solo la usa `timemachine`; ni el observador del motor ni el ejecutor de operaciones de usuario la alcanzan (visibilidad de módulo, frontera de Nx y comprobación estática en CI equivalente a ADR-GRP-009 § Validación 5). ADR-GRP-009 necesita una nota que lo aclare (TQ-12).
+- **Código**: módulo `timemachine` en `crates/core` (snapshots, oplog, planificador, aplicador, recuperación, purga). **Sin crate nuevo**: ADR-GRP-002 no cambia (TQ-2 → a).
+- **Capa de escritura de la Time Machine en `crates/git`, separada de la de lectura**, con lista cerrada de operaciones tipadas. Solo la usa `timemachine`; ni el observador del motor ni el ejecutor de operaciones de usuario la alcanzan (visibilidad de módulo, frontera de Nx y comprobación estática en CI equivalente a ADR-GRP-009 § Validación 5). La nota que lo aclara en ADR-GRP-009 está aprobada (TQ-12) y pendiente de integración en `docs/arch-motor-local`.
 
 ### 2. Reglas de las escrituras internas
 
 Heredan ADR-GRP-009 § 3 y añaden lo que fijan **SEC-TMC-02** (invocación sin código configurable y allowlist sin porcelana) y **SEC-TMC-14** (separadores de opciones y validación de refs):
 
-- **Sin hooks, filtros, firma ni transportes**, con configuración de sistema y global neutralizadas y `--git-dir`/`--work-tree` explícitos. Motivos: no ejecutar código del usuario, que un hook no altere una restauración y que un hook de Guardrails que pide un snapshot (ADR-TMC-004 § 3) no entre en recursión. **Refina NFR-07 ("respeta los hooks del usuario") para las escrituras internas; pendiente de TQ-13.**
+- **Sin hooks, filtros, firma ni transportes**, con configuración de sistema y global neutralizadas y `--git-dir`/`--work-tree` explícitos. Motivos: no ejecutar código del usuario, que un hook no altere una restauración y que un hook de Guardrails que pide un snapshot (ADR-TMC-004 § 3) no entre en recursión. **Refina NFR-07 ("respeta los hooks del usuario") para las escrituras internas (TQ-13 → a).**
 - **Sin conversiones**: los archivos del working tree los escribe la Time Machine con los bytes guardados (ADR-TMC-001 § 2), nunca con `checkout` ni `smudge`.
 - **Sin red**: ninguna operación de remoto ni credenciales (BR-TMC-EDGE-001, SEC-TMC-05). Los objetos pasan entre almacén y repo como pack, sin transporte.
 - **Raíz del worktree** tomada del estado validado del daemon, nunca de un parámetro ni de `core.worktree`.
@@ -65,7 +68,7 @@ El planificador calcula un **estado destino** por worktree y por ref (ADR-TMC-00
 7. **Índice**: el índice destino se construye en un temporal y se instala escribiéndolo en el `index.lock` propio y renombrándolo, con el protocolo de Git. Esto libera el lock.
 8. **Cierre**: se libera el lock del repo y la operación queda `terminada` con sus avisos.
 
-**Fallo detectado a mitad** (disco lleno, archivo bloqueado en Windows): no hay rollback automático. La operación queda `interrumpida`, igual que tras un `kill -9`, y se informa de que `raptor undo` vuelve al snapshot del paso 2 (ADR-TMC-003; TQ-10). Hay un único camino de recuperación, y es el que prueba el arnés de caos.
+**Fallo detectado a mitad** (disco lleno, archivo bloqueado en Windows): no hay rollback automático. La operación queda `interrumpida`, igual que tras un `kill -9`, y se informa de que `raptor undo` vuelve al snapshot del paso 2 (ADR-TMC-003; TQ-10 → a). Hay un único camino de recuperación, y es el que prueba el arnés de caos.
 
 ### 4. Aviso "ya empujado" (BR-TMC-EDGE-001, US-TMC-014)
 
@@ -74,7 +77,7 @@ Al planificar, por cada commit que la operación quita de una rama local, se com
 ### 5. Operaciones de usuario lanzadas por GitRaptor
 
 - Las operaciones del Cockpit y del MCP pasan por la **operación protegida** de ADR-TMC-004 § 1: la Time Machine aporta la intención, el snapshot previo y el registro, y nada más.
-- Las **ejecuta el ejecutor de operaciones del daemon**, propiedad de F-001-02 y F-001-05, **no la capa de escritura de la Time Machine**. Respetan la configuración y los hooks del usuario (NFR-07) y siguen las reglas de argv fijo y sin shell de NFR-02. Así se cumple BR-TMC-CONS-004: la Time Machine solo escribe snapshot, undo, redo y restauración (TQ-3).
+- Las **ejecuta el ejecutor de operaciones del daemon**, propiedad de F-001-02 y F-001-05, **no la capa de escritura de la Time Machine**. Respetan la configuración y los hooks del usuario (NFR-07) y siguen las reglas de argv fijo y sin shell de NFR-02. Así se cumple BR-TMC-CONS-004: la Time Machine solo escribe snapshot, undo, redo y restauración (TQ-3 → a).
 - El catálogo de operaciones, con sus parámetros y su ámbito, es un **contrato de interfaz de F-001-02 y F-001-05**. Cada operación declara su ámbito y si es destructiva (ADR-TMC-007 § 2).
 
 ## Alternativas consideradas
@@ -82,11 +85,11 @@ Al planificar, por cada commit que la operación quita de una rama local, se com
 | Alternativa | En contra | Veredicto |
 |---|---|---|
 | **Escribe la CLI** (proceso del cliente) | Varios escritores del almacén y del oplog (rompe ADR-GRP-006); el solicitante se resolvería en el cliente, que ADR-GRP-005 § 6 declara no confiable | Descartada |
-| **Crate nuevo `crates/timemachine`** | Separa mejor, pero enmienda ADR-GRP-002 y duplica la capa de invocación de Git que ADR-GRP-009 quiere única | Descartada (TQ-2, alternativa) |
+| **Crate nuevo `crates/timemachine`** | Separa mejor, pero enmienda ADR-GRP-002 y duplica la capa de invocación de Git que ADR-GRP-009 quiere única | Descartada (TQ-2 → a) |
 | **Restaurar con `checkout`/`restore` de Git** | Ejecuta `smudge`, filtros y `post-checkout`; no restaura lo sin seguimiento; la ida y la vuelta no es exacta | Descartada |
 | **Las operaciones de usuario por la capa de la Time Machine** | Sin hooks del usuario (rompe NFR-07) y la Time Machine pasaría a escribir más que sus cuatro casos (BR-TMC-CONS-004) | Descartada |
 | **Restaurar sin locks de Git** | Un `git add` de un agente a mitad de la restauración mezcla índices | Descartada |
-| **Rollback automático ante un fallo detectado** | Otra escritura justo cuando el entorno falla; dos caminos de recuperación que probar | Descartada (TQ-10) |
+| **Rollback automático ante un fallo detectado** | Otra escritura justo cuando el entorno falla; dos caminos de recuperación que probar | Descartada (TQ-10 → a) |
 
 ## Consecuencias
 
@@ -94,7 +97,7 @@ Al planificar, por cada commit que la operación quita de una rama local, se com
 - ✅ Un solo escritor del almacén, del oplog y del perfil (ADR-GRP-006). El solicitante se resuelve donde ADR-GRP-005 lo exige: en el daemon.
 - ✅ Las escrituras internas no ejecutan hooks, filtros ni red: comportamiento determinista y sin superficie para un repo hostil.
 - ✅ El intercambio atómico (SEC-TMC-11) cierra la ventana entre la comparación y el reemplazo. En un sistema de archivos sin intercambio atómico, la ruta se reporta como "no restaurable con garantía".
-- ⚠️ **Las escrituras internas no ejecutan los hooks del usuario** (`reference-transaction`, `post-checkout`). Refina NFR-07 para ese caso y queda pendiente de TQ-13. Las operaciones de usuario sí los ejecutan (§ 5).
+- ⚠️ **Las escrituras internas no ejecutan los hooks del usuario** (`reference-transaction`, `post-checkout`). Refina NFR-07 para ese caso (TQ-13 → a); el PO lo deja escrito en el requerimiento. Las operaciones de usuario sí los ejecutan (§ 5).
 - ⚠️ El índice instalado no lleva información de stat: el primer `git status` tras restaurar rehace la comparación de contenido.
 - ⚠️ En Windows, un archivo abierto por un editor puede impedir el reemplazo: la operación queda interrumpida y se recupera con undo. Se mide en INF-TMC-001.
 

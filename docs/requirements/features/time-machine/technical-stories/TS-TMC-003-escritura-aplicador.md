@@ -47,7 +47,7 @@ tags: [time-machine, escritura, restauracion, locks, seguridad-rutas, nfr-01, nf
 - **Garantizar** con apertura relativa a la raíz que ninguna escritura sale del worktree, y rechazar árboles con rutas hostiles o colisiones de nombre en el sistema de archivos destino (SEC-TMC-04).
 - **Implementar** la instalación del índice destino con el protocolo de lock de Git y la recreación de worktrees sin checkout.
 - **Exponer** los puntos de comprobación previos a aplicar, que completan las precondiciones de US-TMC-015 y el aviso de US-TMC-014.
-- **Fuera de alcance**: elegir el estado destino (US-TMC-002, 003, 009, 010 y 011); decidir permisos y solape (US-TMC-012 y 013); rollback automático ante un fallo (TQ-10); push o force-push (nunca).
+- **Fuera de alcance**: elegir el estado destino (US-TMC-002, 003, 009, 010 y 011); decidir permisos y solape (US-TMC-012 y 013); rollback automático ante un fallo (descartado, ADR-TMC-002 § 3); push o force-push (nunca).
 
 ### Plan de Verificación
 

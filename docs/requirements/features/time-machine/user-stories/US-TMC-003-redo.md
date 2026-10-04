@@ -74,7 +74,7 @@ Entonces la petición se rechaza con el motivo
 
 - Redo disponible solo si el último evento del ámbito es un undo; restaura el snapshot previo de ese undo (ADR-TMC-003 § 4).
 - Aplica la detección de solape de US-TMC-012 sobre lo cambiado desde el undo (S5) y los permisos de US-TMC-013.
-- Semántica de undos y redos seguidos: pila por worktree, pendiente de TQ-9.
+- Semántica de undos y redos seguidos: pila por worktree; una operación nueva en el ámbito invalida el redo (ADR-TMC-003 § 4).
 
 ## Diseño y Dev Spec
 

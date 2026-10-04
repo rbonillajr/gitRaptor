@@ -77,7 +77,7 @@ Entonces la petición se rechaza
 
 - Dueña de la regla base de permisos y de la confirmación (ADR-TMC-005 § 2-3): agente X solo lo suyo; "sin atribuir" necesita confirmación para trabajo de un agente.
 - La confirmación reutiliza los controles del daemon de ADR-GRP-005 § 6 (identificador no reutilizable, ascendencia, terminal y líder de sesión); el MCP nunca la ofrece.
-- "Sin atribuir" por MCP (TQ-7) y agentes registrados por ascendencia (TQ-8) pendientes de decisión.
+- "Sin atribuir" por MCP: rechazo incondicional y previo. Agentes registrados: reconocidos por la identidad de proceso guardada al registrarse; depende de que motor-local aplique la nota a ADR-GRP-012/013 (ADR-TMC-005 § 1).
 - Toda petición, aceptada o rechazada, queda en el oplog con su motivo (SEC-TMC-03).
 
 ## Diseño y Dev Spec
