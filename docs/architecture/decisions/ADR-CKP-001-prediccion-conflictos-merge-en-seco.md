@@ -15,7 +15,7 @@ tags: [cockpit, prediccion-conflictos, merge-en-seco, gitoxide, gix-merge, merge
 
 # ADR-CKP-001 — Predicción de conflictos con merge en seco sin escribir en el repo
 
-> **Estado**: propuesto. Decisión del orquestador (2026-10-04), validada por Arquitecto; el PO valida el alcance después. El mecanismo queda **pendiente de confirmar por SPIKE-CKP-001**. El ADR no pasa a `accepted` sin sus resultados en macOS.
+> **Estado**: propuesto. Decisión del orquestador (2026-10-04), validada por Arquitecto, PO y security-expert (pasada de endurecimiento del 2026-10-04: ver "Revisión de seguridad (2026-10-04)"). El mecanismo queda **pendiente de confirmar por SPIKE-CKP-001**, con los criterios de salida de M-02, M-06 y L-04 (§ 1 y § 5). El ADR no pasa a `accepted` sin sus resultados en macOS.
 
 ## Contexto
 
@@ -37,12 +37,16 @@ Decisión del orquestador (2026-10-04), validada por Arquitecto: **opción prefe
 ### 1. Mecanismo
 
 - **(a) Preferida — merge en memoria con `gix`**. `crates/git` abre el repo en solo lectura y obtiene una instancia con `with_object_memory()` para cada trabajo. Calcula el merge-base (virtual si hay varios) y ejecuta `merge_trees` sin escribir nada en disco. El árbol resultante nunca se escribe y la instancia se descarta al terminar. Condiciones obligatorias:
-  - Lista de **drivers de merge vacía** y sin contexto de invocación: nunca se ejecuta `merge.<driver>.driver`.
+  - Lista de **drivers de merge vacía** y sin contexto de invocación: nunca se ejecuta `merge.<driver>.driver`. Un atributo `merge=<x>` que llegara por cualquier vía se trata como el driver interno de texto, nunca como un programa (L-04).
   - **Sin procesos de filtro** (`filter.<name>.process`, `clean`, `smudge`) en el pipeline de conversión. Los blobs se comparan tal como están en la base de datos de objetos.
-  - **Sin atributos del working tree**: la pila de atributos no lee `.gitattributes` del disco.
-  - `gix` no invoca el binario `git` (M1 de ADR-GRP-009) y no hace descargas perezosas de un *partial clone*: un objeto ausente da "no calculable".
+  - **Pila de atributos vacía** (L-04): no lee `.gitattributes` del disco, ni del índice, ni del árbol.
+  - **Sin objetos de reemplazo ni grafts** (L-04): la instancia de `gix` ignora `refs/replace/*` y `info/grafts`, para que el merge en seco vea los mismos objetos que verá el ejecutor (ADR-CKP-002 § 6, `core.useReplaceRefs=false`).
+  - `gix` no invoca el binario `git` (M1 de ADR-GRP-009) y **no hace descargas** (M-02): en un *partial clone* (`extensions.partialClone` o algún `remote.*.promisor`), un objeto ausente da "no calculable (objeto ausente)", sin red.
+  - **Tamaño antes de leer** (M-06): el tamaño de cada blob se lee de su cabecera antes del merge. Por encima de un tope (⚠️ **ASSUMPTION**: N MB, lo fija el SPIKE), el archivo se trata como binario: entra en el conflicto previsto sin hunks, o el par da "no calculable (límite excedido)".
+  - **Merge interrumpible** (M-06): `merge_trees` se ejecuta con una bandera de interrupción que activa un temporizador de 2 s (el tiempo máximo por par del § 5) y con un `rewrites.limit` **fijo** de GitRaptor, no el de la configuración del repo.
   - Marcadores de conflicto con tamaño ampliado (`marker_size_multiplier`) para que la extracción de hunks no confunda líneas del archivo con marcadores.
-- **(b) Respaldo — `merge-tree --write-tree` sobre un almacén de trabajo en el perfil**. Un repo *bare* de trabajo por repo observado en la carpeta de datos del perfil, con `objects/info/alternates` hacia el directorio de objetos común del repo. `git --git-dir=<almacén de trabajo> merge-tree --write-tree -z --name-only --messages <a> <b>` con commits ya resueltos por `gix`, nunca nombres de ref. El `HEAD` del almacén está sin nacer, así que no hay `.gitattributes` del usuario y no se elige ningún driver. La configuración global y de sistema se aísla. Los objetos escritos van al almacén de trabajo, que se vacía tras cada lote. Solo es viable si SPIKE-CKP-001 demuestra que no cambia el mtime de nada del repo (refresco de objetos) y que no contacta con un remoto *promisor*.
+  - **Criterios de salida de SPIKE-CKP-001** (los añade el orquestador al SPIKE): M-02 (cero descargas y cero conexiones con un *partial clone* con remoto *promisor*), M-06 (cotas de tiempo y memoria demostradas **dentro del proceso**) y L-04 (pila de atributos vacía, sin reemplazos ni grafts, `merge=<x>` sin ejecución). **Si el SPIKE no demuestra las cotas de M-06 en el proceso**, el merge en seco pasa a un **proceso trabajador** con `rlimits` de CPU y memoria. Ese proceso es el propio binario, no `git`, y sería un módulo autorizado nuevo de ADR-GRP-009, Validación 5 (enmienda condicionada; ver la tabla de enmiendas).
+- **(b) Respaldo — `merge-tree --write-tree` sobre un almacén de trabajo en el perfil**. Un repo *bare* de trabajo por repo observado en la carpeta de datos del perfil, con `objects/info/alternates` hacia el directorio de objetos común del repo. `git --git-dir=<almacén de trabajo> merge-tree --write-tree -z --name-only --messages <a> <b>` con commits ya resueltos por `gix`, nunca nombres de ref. El `HEAD` del almacén está sin nacer, así que no hay `.gitattributes` del usuario y no se elige ningún driver. La configuración global y de sistema se aísla. Opciones fijas (M-02, L-04): `-c protocol.allow=never -c credential.helper= -c submodule.recurse=false -c core.useReplaceRefs=false`; sin descargas. Los objetos escritos van al almacén de trabajo, que se vacía tras cada lote. Solo es viable si SPIKE-CKP-001 demuestra que no cambia el mtime de nada del repo (refresco de objetos) y que no contacta con un remoto *promisor*.
 - **(c) Rechazada — `merge-tree --write-tree` contra el repo**. Escribe objetos en `.git/objects` del usuario (ADR-GRP-009 § 2, NFR-01) y ejecuta los drivers de merge que configure el repo.
 
 ### 2. Pares
@@ -77,6 +81,7 @@ Decisión del orquestador (2026-10-04), validada por Arquitecto: **opción prefe
 - **Cola coalescente por par**: un par tiene como mucho un trabajo pendiente y las entradas nuevas sustituyen a las anteriores. Un trabajo en curso cuyas entradas cambiaron se descarta al terminar, sin publicarse como actual.
 - **Prioridad**: (1) los pares contra la base del worktree que acaba de cambiar; (2) sus pares con worktrees que tienen sesión presente; (3) el resto. En el cálculo inicial, primero los pares con sesión presente.
 - **Presupuesto** (⚠️ **ASSUMPTION** hasta SPIKE-CKP-001): hasta 2 trabajos en paralelo (o 1 con 4 núcleos o menos); hilos con prioridad baja del SO (QoS *utility* en macOS; equivalentes en Linux y Windows: **Pendiente: etapa de validación multiplataforma**); tiempo máximo por par de 2 s y memoria máxima por trabajo. Si se excede, el par queda "no calculable (límite excedido)" y no se reintenta hasta que cambien sus entradas.
+- **Cómo se imponen las cotas** (M-06): el tiempo, con la bandera de interrupción de `merge_trees` y su temporizador; la memoria, con el tope de tamaño por blob leído de la cabecera, el `rewrites.limit` fijo y los topes de archivos y hunks del § 3. Si SPIKE-CKP-001 no demuestra que con eso bastan, los trabajos pasan a un proceso trabajador con `rlimits` (§ 1). Es criterio de salida del SPIKE.
 
 ### 6. Estados y antigüedad
 
@@ -96,23 +101,24 @@ La vista los declara siempre (BR-CKP-CALC-002) y el contrato los publica como da
 
 - El solape incluye lo sin commitear; el conflicto previsto solo lo commiteado.
 - **No se aplican** los drivers de merge, los `.gitattributes` (`merge=`, `text`/`eol`, `conflict-marker-size`) ni los filtros (LFS: se fusiona el puntero, no el contenido).
-- Renombrados: detección con el límite y el umbral de la configuración leída del repo (leer configuración no ejecuta nada). Por encima del límite, sin detección, declarado. La paridad con `merge-ort` (renombrados de directorio, merge-base virtual en historias cruzadas) es lo que mide el SPIKE.
+- Renombrados: detección con un **límite fijo de GitRaptor** (M-06; ⚠️ **ASSUMPTION**: lo fija el SPIKE) y el umbral de similitud de la configuración leída del repo (leer configuración no ejecuta nada). Un repo no puede subir el límite. Por encima del límite, sin detección, declarado.
+- No se aplican objetos de reemplazo ni grafts (L-04). Un blob por encima del tope de tamaño se trata como binario (M-06). La paridad con `merge-ort` (renombrados de directorio, merge-base virtual en historias cruzadas) es lo que mide el SPIKE.
 - El par worktree–worktree aproxima "se integra uno y después el otro" e ignora lo que la base reciba entre medias.
 - Solo el repo local; nada del remoto (Q12 de motor-local).
 
 ### 8. Publicación
 
 - El motor publica el resultado por par como **estado del motor** (incluido en la instantánea) y como **evento** de cambio del stream, con la secuencia del motor, de modo que la TUI, `raptor conflicts` y `check_conflicts` del MCP (F-001-05) leen lo mismo (BR-CKP-CONS-001). Un ⚡ nuevo es lo que dispara ConflictAlert y el toast en la TUI (BR-CKP-WF-007); el motor no decide la alerta.
-- Rutas y nombres de rama son texto no confiable (SEC-12, ADR-GRP-005 § 5). Las respuestas del MCP llevan archivos y rangos, nunca contenido.
+- Rutas y nombres de rama son texto no confiable (SEC-12, ADR-GRP-005 § 5). Los clientes los sanean con las categorías de ADR-CKP-003 § 8, ampliadas por L-03: C0, DEL, C1, bidi (incluido U+061C), U+2028 y U+2029, anchura cero (incluidos U+2060 a U+2064) y la tabla de Tags (U+E0000 a U+E007F). Las respuestas del MCP (`check_conflicts`) llevan archivos y rangos, nunca contenido, con el mismo escape y un tope de 100 caracteres en los nombres.
 - **Forma del contrato** (tipos, nombres de campos, consulta bajo demanda, evento de lote): **pendiente, dueño: worker del canal (TS-GRP-004)**. Este ADR no la fija ni edita TS-GRP-004 ni `api-contract-ipc.md`.
 
 ### 9. Registro para el KPI (Q-CKP-21, BR-CKP-CONS-005)
 
-- El **daemon**, único escritor del perfil (ADR-GRP-005), registra en el **almacén por repo** (ADR-GRP-006 § 4) la **primera aparición** de cada ⚡ por (par, archivo) y cada conflicto real, con su hora. Solo metadatos: identificador del par, ramas, ruta y horas. Nunca hunks ni contenido.
+- El **daemon**, único escritor del perfil (ADR-GRP-005), registra en el **almacén por repo** (ADR-GRP-006 § 4) la **primera aparición** de cada ⚡ por (par, archivo) y cada conflicto real, con su hora. Solo metadatos: identificador del par, ramas, ruta, oids de las puntas y horas. Nunca hunks ni contenido.
 - El par se identifica por los worktrees y las ramas en ese momento, para que el registro sobreviva al borrado del worktree.
 - **Conflicto real**: depende de que el motor publique el estado en conflicto, con rutas sin fusionar y `MERGE_HEAD`/`onto` (DEP-CKP-14, enmiendas de ADR-GRP-010 § 4 y ADR-GRP-013 § 1). No se resuelve aquí.
 - Retención de 90 días con purga diaria, con la misma forma que ADR-GRD-006 § 3. Los conflictos en huecos de observación o en el remoto se guardan marcados y quedan fuera del cociente. La consulta es local, por el canal.
-- ⚠️ **ASSUMPTION** a validar por el PO: un ⚡ del par (W1, W2) en el archivo F cuenta como "detectado antes" para un conflicto de W2 contra la base en F si la punta de W1 ya estaba integrada en la base. Sin esta equivalencia, el criterio literal de "mismo par" infravalora el KPI.
+- **"Detectado antes" y equivalencia del mismo par** (BR-CKP-CONS-005; validada por el PO el 2026-10-04): un conflicto real cuenta como detectado antes si había un ⚡ (no solo un ⚠) del mismo par y archivo con hora anterior al **inicio de la operación** que chocó. Para un conflicto de W2 contra la base en F, también cuenta un ⚡ de (W1, W2) en F si se cumplen las **cuatro condiciones** de la regla: (1) el ⚡ es anterior al inicio de la operación; (2) los commits de W1 son alcanzables desde la base al inicio de la operación; (3) es simétrica, y vale igual con W1 y W2 intercambiados; (4) el KPI publica **por separado** los detectados por par literal y los detectados por equivalencia. Para evaluarlo, el registro del ⚡ guarda además la punta de cada lado (un oid: metadato, no contenido), y el del conflicto real, la hora de inicio de la operación y la punta de la base en ese momento. La condición 2 se evalúa con `gix` al registrar el conflicto real: la punta de W1 del ⚡ es alcanzable desde esa punta de la base. Así sirve aunque el worktree de W1 ya no exista.
 - Con esto queda resuelta la parte KPI de **DEP-CKP-11**. Las preferencias de la TUI (Q-CKP-17) siguen abiertas. (Resueltas el 2026-10-04 en ADR-GRP-006, Enmienda (2026-10-04, Cockpit).)
 
 ### 10. Dónde vive el código
@@ -128,7 +134,7 @@ El predictor no importa ninguna capa de escritura (Time Machine, Guardrails ni e
 
 ### 11. Nota sobre NFR-07
 
-El BRD justifica Git ≥ 2.38 con `merge-tree --write-tree`. Con (a), la predicción no usa el Git CLI y esa justificación deja de ser cierta. **El mínimo no cambia** (Q28 de motor-local): lo sostienen la resolución y la allowlist de ADR-GRP-009 y las capas de escritura de la Time Machine, Guardrails y el ejecutor. Reformular el texto de NFR-07 en el BRD queda **pendiente para el PO**; este ADR no lo edita. Con (b), la justificación se mantiene, pero en 2.38 no existen `--merge-base` ni el modo por lotes `--stdin` (⚠️ **ASSUMPTION**: llegaron en 2.40 y 2.42; lo confirma el SPIKE), así que cada par sería un proceso.
+El BRD justifica Git ≥ 2.38 con `merge-tree --write-tree`. Con (a), la predicción no usa el Git CLI y esa justificación deja de ser cierta. **El mínimo no cambia** (Q28 de motor-local): lo sostienen la resolución y la allowlist de ADR-GRP-009 y las capas de escritura de la Time Machine, Guardrails y el ejecutor. Reformular el texto de NFR-07 en el BRD queda **pendiente ligado a SPIKE-CKP-001, dueño: PO** (CTX-CKP-001, nota sobre NFR-07): se reformula cuando este ADR pase a `accepted` con la opción (a); con (b), el texto actual sigue valiendo. Este ADR no lo edita. Con (b), la justificación se mantiene, pero en 2.38 no existen `--merge-base` ni el modo por lotes `--stdin` (⚠️ **ASSUMPTION**: llegaron en 2.40 y 2.42; lo confirma el SPIKE), así que cada par sería un proceso.
 
 ## Alternativas consideradas
 
@@ -152,7 +158,7 @@ Se listan para que el orquestador las aplique tras SPIKE-CKP-001. **Este ADR no 
 | ADR-GRP-009 § 1 | Excepción acotada a "ninguna API de escritura de `gix`": escritura de objetos **solo a la memoria del proceso** (`with_object_memory`) en el módulo de merge en seco; sin drivers, filtros ni atributos del disco | Sin cambio |
 | ADR-GRP-009 § 2 (tabla) | Fila nueva "merge en memoria con `gix`: permitido"; fila nueva "drivers de merge y procesos de filtro de `gix-merge`: prohibido"; `merge-tree --write-tree` sigue prohibido | La fila de `merge-tree` pasa a "permitido solo con `--git-dir` en el almacén de trabajo del perfil"; fila de refresco de objetos en alternates |
 | ADR-GRP-009 § 3 | Sin cambio | Allowlist: `merge-tree` con argv fijo; entorno ampliado con el aislamiento de la configuración global y de sistema |
-| ADR-GRP-009 Validación 5 | Comprobación estática: el módulo de merge en seco usa siempre la instancia en memoria | Nuevo módulo de invocación autorizado en la lista |
+| ADR-GRP-009 Validación 5 | Comprobación estática: el módulo de merge en seco usa siempre la instancia en memoria. **Condicionada a SPIKE-CKP-001 (M-06)**: si las cotas no se demuestran en el proceso, el proceso trabajador del predictor (el propio binario con `rlimits`, nunca `git`) entra como módulo autorizado para lanzar procesos | Nuevo módulo de invocación autorizado en la lista |
 | ADR-GRP-009 Validación 7 | Repo canario ampliado con `merge.*.driver`, `filter.*.process` y `.gitattributes` con `merge=` | Igual, más *partial clone* con remoto *promisor* y captura de red |
 | ADR-GRP-006 § 4 | Tabla del registro KPI en el almacén por repo, con purga a 90 días | Lo mismo, más la carpeta del almacén de trabajo (`<datos>/ckp/<id-repo>/`) con contenido del usuario: 0700/0600, fuera de las copias de seguridad, vaciada tras cada lote, con cuota y en diagnóstico |
 | ADR-GRP-010 § 4 / ADR-GRP-013 § 1 | El conjunto completo de rutas sin commitear por worktree queda en memoria y lo consume el predictor (sin persistir ni cambiar el contrato) | Igual |
@@ -165,28 +171,46 @@ Se listan para que el orquestador las aplique tras SPIKE-CKP-001. **Este ADR no 
 ## Consecuencias
 
 - ✅ Cierra DEP-CKP-1 a falta del SPIKE: un único predictor en el motor alimenta la TUI, la CLI y el MCP.
-- ✅ Con (a), la frontera de ADR-GRP-009 se mantiene con su criterio binario: cero diferencias en el repo y cero procesos hijo.
+- ✅ Con (a), la frontera de ADR-GRP-009 se mantiene con su criterio binario: cero diferencias en el repo y cero procesos `git` (si el SPIKE activa el proceso trabajador de M-06, es el propio binario).
 - ✅ El recálculo por par, con caché por ids de commit y prefiltro, deja el coste en función de lo que cambió y no del número total de pares.
 - ✅ Los hunks como rangos permiten alertar y medir el KPI sin sacar contenido de la máquina.
 - ⚠️ **Fidelidad**: sin drivers, sin atributos y con un motor de merge distinto del de Git hay falsos positivos y negativos. **Mitigación**: límites declarados en la vista, métrica complementaria de "⚡ que no ocurrieron" (Q-CKP-21) y umbral de paridad en el SPIKE.
 - ⚠️ **API reciente de `gix-merge`**: puede cambiar entre versiones. **Mitigación**: versión fijada en el workspace; la paridad la cubre un test con un corpus fijo que se repite al actualizar `gix`.
 - ⚠️ **CPU** con 10 agentes que commitean a la vez. **Mitigación**: cola coalescente, prioridad baja, tope de concurrencia y antigüedad visible. Ningún resultado viejo se presenta como actual.
 - ⚠️ **Repos hostiles** (archivos enormes, miles de conflictos, árboles profundos). **Mitigación**: tiempo, memoria y topes por par, con resultado "no calculable" o "truncado".
-- ⚠️ El criterio "mismo par" del KPI puede infravalorar la detección. **Mitigación**: la equivalencia propuesta en § 9 queda como supuesto para el PO.
+- ⚠️ El criterio "mismo par" del KPI puede infravalorar la detección. **Mitigación**: la equivalencia de BR-CKP-CONS-005 (§ 9), con su recuento aparte.
+- ⚠️ **Repos hostiles para el propio predictor** (blobs enormes, renombrados masivos, historia sustituida). **Mitigación**: tamaño por cabecera, interrupción a 2 s, `rewrites.limit` fijo, sin reemplazos ni grafts, y proceso trabajador con `rlimits` si el SPIKE no demuestra las cotas en el proceso (M-06, L-04).
 - ⚠️ Si se activa (b), el perfil guarda temporalmente contenido del usuario fuera de `tm/`, y el motor gana un proceso hijo por par.
 
 ## Validación
 
 1. **Repo intacto (INF-GRP-001)**: escenario "predicción" con 10 worktrees y los 55 pares calculados, con ejecución de control. Cero diferencias en la huella, incluido el mtime de packs, objetos sueltos y directorios de `.git/objects`. Bloquea el merge de la historia que implemente el predictor.
 2. **Cero ejecución (SEC-09)**: repo canario con `merge.<x>.driver`, `filter.<x>.process`/`clean`, `.gitattributes` con `merge=<x>` y `core.fsmonitor`, todos apuntando a un script que deja un marcador. El marcador nunca aparece. Auditoría dinámica de `exec`: con (a), el predictor no lanza ningún proceso.
-3. **Sin red**: un *partial clone* con objetos ausentes da "no calculable" con 0 conexiones.
+3. **Sin red** (M-02): un *partial clone* con objetos ausentes y un remoto *promisor* local (`file://`) da "no calculable (objeto ausente)" con 0 conexiones y sin leer el remoto. Criterio de salida de SPIKE-CKP-001.
 4. **Fidelidad**: corpus fijo de escenarios y de merges reales reejecutados con `git merge` en clones temporales. Paridad de archivos en conflicto por encima del umbral que fije SPIKE-CKP-001, y 0 falsos negativos en la demo del BRD § 13 (Q-CKP-25).
 5. **Frescura**: escenario de INF-GRP-002, del fin del commit a la predicción publicada, ≤ 5 s p95 con 10 worktrees y 100K commits. Es aviso hasta que el SPIKE confirme la cifra y gate después. El p95 del motor (≤ 300 ms) no empeora durante una ráfaga de predicciones.
 6. **Estados**: tests de `calculando`, `recalculando`, `pendiente` (base no confirmada, operación en curso) y `no calculable` (base inexistente, límite excedido). Un resultado de entradas viejas nunca se publica como `actual`.
-7. **KPI**: registro de la primera aparición por (par, archivo), purga a 90 días y exclusión de huecos. Privacidad: un repo con contenido marcado no deja ese contenido en el almacén.
-8. **Salida (SEC-12)**: una ruta con secuencias de control sale escapada en la TUI y en `raptor conflicts`; el MCP no devuelve contenido.
+7. **KPI**: registro de la primera aparición por (par, archivo), purga a 90 días y exclusión de huecos. Equivalencia de BR-CKP-CONS-005: el ejemplo de la regla (⚡ claude-1 ↔ claude-2 a las 10:00, claude-1 integrado a las 10:30 y luego su worktree borrado, choque de claude-2 a las 11:00) cuenta en el contador "por equivalencia"; un ⚡ posterior al inicio de la operación no cuenta. Privacidad: un repo con contenido marcado no deja ese contenido en el almacén.
+8. **Salida (SEC-12, L-03)**: una ruta con secuencias de control, U+061C, U+2028, U+2062 o un carácter de la tabla de Tags sale escapada en la TUI y en `raptor conflicts`; el MCP no devuelve contenido y escapa igual, con nombres recortados a 100 caracteres.
+9. **Cotas (M-06)**: un blob de más del tope se trata como binario sin leerse entero; un par preparado para tardar (miles de renombrados) se interrumpe a los 2 s con "no calculable (límite excedido)" y la memoria del trabajo queda bajo su tope. Criterio de salida de SPIKE-CKP-001.
+10. **Atributos y reemplazos (L-04)**: con `.gitattributes` con `merge=<x>` en el disco, en el índice y en el árbol, y `merge.<x>.driver` apuntando a un canario, el canario nunca corre. Con un `refs/replace/*` y un `info/grafts` que alteran la historia, el resultado es el de los objetos originales. Criterio de salida de SPIKE-CKP-001.
 
 Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
+
+## Revisión de seguridad (2026-10-04)
+
+**Decisión del orquestador (2026-10-04), validada por Arquitecto, PO y security-expert.** Pasada de endurecimiento con los hallazgos que afectan al predictor y los ajustes del PO. Los que son del ejecutor están en ADR-CKP-002 y los de la TUI, en ADR-CKP-003.
+
+| Hallazgo o ajuste | Dónde quedó resuelto |
+|---|---|
+| M-02 · *Partial clone* sin descargas | § 1 (a) y (b): sin descargas, opciones fijas en (b); Validación 3. Criterio de salida de SPIKE-CKP-001 |
+| M-06 · Cotas del merge en seco | § 1 (tamaño por cabecera, interrupción, `rewrites.limit` fijo, proceso trabajador de respaldo), § 5, § 7; enmienda condicionada a ADR-GRP-009 Validación 5; Validación 9. Criterio de salida de SPIKE-CKP-001 |
+| L-03 · Categorías de saneado | § 8 (categorías ampliadas, escape en el MCP, tope de 100 caracteres); Validación 8 |
+| L-04 · Atributos, reemplazos y grafts | § 1 (pila de atributos vacía, sin `refs/replace` ni grafts, `merge=<x>` como driver interno), § 7; Validación 10. Criterio de salida de SPIKE-CKP-001 |
+| PO · Equivalencia del mismo par | § 9: cita BR-CKP-CONS-005 con sus cuatro condiciones; el supuesto se retira; Validación 7 |
+| PO · NFR-07 | § 11: pendiente ligado a SPIKE-CKP-001, dueño: PO |
+
+Los criterios de salida M-02, M-06 y L-04 se añaden a SPIKE-CKP-001 en su artefacto; este ADR no lo edita.
 
 ## Referencias
 
