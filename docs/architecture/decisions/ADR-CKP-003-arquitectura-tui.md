@@ -250,6 +250,8 @@ Las pruebas usan repos y perfiles temporales y pasan por el arnés de INF-GRP-00
 
 ## Enmiendas que implica (no aplicadas)
 
+**Estado (2026-10-04)**: E1 a E5 y E7 aplicadas como "Enmienda (2026-10-04, Cockpit)" en el documento de destino. E6 sigue pendiente, dueño: worker del canal (TS-GRP-004).
+
 | # | Documento | Qué debe decir | Origen |
 |---|---|---|---|
 | E1 | **ADR-GRP-004** | Nueva sección aplicable al MVP, "Salida segura en CLI/TUI (SEC-12)": (a) todo texto que el contrato marca como no confiable pasa por un único saneador antes de mostrarse. Los C0, DEL, C1, bidi y de anchura cero se hacen visibles, nunca se emiten; recorte por anchura y longitud. (b) El saneado se impone por tipo: la presentación solo acepta texto saneado o del catálogo i18n. (c) La salida para máquinas (`--json`) escapa los mismos caracteres como `\uXXXX`. (d) El mecanismo del MVP es ADR-CKP-003 § 8. En la Fase 3, React nunca inserta texto no confiable como HTML y aplica las mismas categorías. Añadir también que, en el MVP, el modelo de estado de la TUI es el de ADR-CKP-003 (TEA) y que el § 1 y el § 2 siguen siendo de la Fase 3. Cierra M8 en ADR-GRP-004 y el punto 3 del § 10 del overview | DEP-CKP-9 |

@@ -231,9 +231,11 @@ Repos y perfiles temporales; nunca este repo.
 
 ## Enmiendas que implica (no aplicadas)
 
+**Estado (2026-10-04)**: todas las filas aplicadas como "Enmienda (2026-10-04, Cockpit)" en el ADR de destino. El contrato del canal sigue pendiente (ver Pendientes).
+
 | ADR | Sección | Texto propuesto (breve) | Origen |
 |---|---|---|---|
-| ADR-GRP-009 | Validación 5 y nota de integración | Añadir a los módulos autorizados (1) la **invocación de operaciones de usuario** de `crates/git`, que solo importa `crates/core::executor`, y (2) el **lanzador del editor** `tui::editor` de `apps/cli` (ADR-CKP-003 § 9), que solo ejecuta un argv validado por la función pura de `crates/api`. `executor` no importa ninguna capa de escritura ni los módulos de invocación de Guardrails. El autoarranque (overview § 10.5) sigue pendiente de motor-local | DEP-CKP-7, DEP-CKP-12 |
+| ADR-GRP-009 | Validación 5 y nota de integración | Añadir a los módulos autorizados (1) la **invocación de operaciones de usuario** de `crates/git`, que solo importa `crates/core::executor`, y (2) el **lanzador del editor** `tui::editor` de `apps/cli` (ADR-CKP-003 § 9), que solo ejecuta un argv validado por la función pura de `crates/api`. `executor` no importa ninguna capa de escritura ni los módulos de invocación de Guardrails. El autoarranque (overview § 10.5) lo cierra la enmienda E3 de ADR-CKP-003: módulo de arranque de la biblioteca cliente de `crates/api` (ajuste de coherencia, 2026-10-04) | DEP-CKP-7, DEP-CKP-12 |
 | ADR-GRP-009 | § 4 | El ejecutor usa el mismo binario de Git resuelto (une la nota E6 de ADR-TMC-002) | DEP-CKP-7 |
 | ADR-GRD-003 | § 1 | Capa del contexto: `hooks` \| `mcp` \| `cockpit` | DEP-CKP-10 |
 | ADR-GRD-003 | § 4 y § 5 | El ejecutor registra el hijo y sus transiciones con la capa de la petición. Con un `git` del ejecutor no se pide `previo_hook`. La evaluación del hook no espera al cerrojo de escritura del repo. La capa `cockpit` sigue el contrato del § 5: decidir antes de la operación protegida | DEP-CKP-10 |
