@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 date: 2026-10-03
 domain: GRP
 feature: time-machine
@@ -13,7 +13,7 @@ supersedes: []
 superseded_by: null
 deciders: [Rene Bonilla]
 related:
-  adrs: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-006, ADR-GRP-009, ADR-TMC-001, ADR-TMC-003, ADR-TMC-005]
+  adrs: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-006, ADR-GRP-009, ADR-TMC-001, ADR-TMC-003, ADR-TMC-005, ADR-TMC-006]
   stories: [US-TMC-001, US-TMC-002, US-TMC-003, US-TMC-009, US-TMC-010, US-TMC-011, US-TMC-014, US-TMC-015, US-TMC-019]
 description: "Las escrituras internas (almacén y aplicador de undo, redo y restauración) las hace solo el componente Time Machine del daemon, con una capa de escritura separada en crates/git, sin hooks ni filtros; las operaciones de usuario las ejecuta el daemon fuera de esa capa"
 tags: [adr, time-machine, escritura, daemon, crates-git, restauracion, locks, sin-shell, nfr-02, nfr-07]
@@ -44,6 +44,10 @@ Hay dos tipos de escritura que no deben confundirse:
 - **El daemon (`raptor daemon`, ADR-GRP-005) aloja el motor (solo lectura) y la Time Machine (escritor interno).** Los clientes (CLI/TUI, `raptor-mcp`) nunca escriben en el repo ni en el almacén: piden por el canal.
 - **Código**: módulo `timemachine` en `crates/core` (snapshots, oplog, planificador, aplicador, recuperación, purga). **Sin crate nuevo**: ADR-GRP-002 no cambia (TQ-2 → a).
 - **Capa de escritura de la Time Machine en `crates/git`, separada de la de lectura**, con lista cerrada de operaciones tipadas. Solo la usa `timemachine`; ni el observador del motor ni el ejecutor de operaciones de usuario la alcanzan (visibilidad de módulo, frontera de Nx y comprobación estática en CI equivalente a ADR-GRP-009 § Validación 5). La nota que lo aclara en ADR-GRP-009 está aprobada (TQ-12) y pendiente de integración en `docs/arch-motor-local`.
+- **Escritor del almacén con gitoxide** (Enmienda 2026-10-04, SPIKE-TMC-001). Al activarse el escalón 3 de ADR-TMC-006 § 5, la escritura del almacén se hace en el proceso con gitoxide. Vive **dentro de esta capa, como submódulo propio**, sin crate nuevo (TQ-2 → a). Sus reglas:
+  - Recibe un **tipo de acceso que solo puede abrir el almacén validado** (`<datos>/tm/<id-repo>/store.git`, ADR-TMC-001). El tipo de acceso al repo del usuario no ofrece ninguna operación de escritura con gitoxide.
+  - **Comprobación estática en CI**: las funciones de escritura de gitoxide solo aparecen en ese submódulo.
+  - Gitoxide se abre **aislado**: sin la configuración de sistema ni la global, y sin lanzar `git` por su cuenta.
 
 ### 2. Reglas de las escrituras internas
 
@@ -53,7 +57,12 @@ Heredan ADR-GRP-009 § 3 y añaden lo que fijan **SEC-TMC-02** (invocación sin 
 - **Sin conversiones**: los archivos del working tree los escribe la Time Machine con los bytes guardados (ADR-TMC-001 § 2), nunca con `checkout` ni `smudge`.
 - **Sin red**: ninguna operación de remoto ni credenciales (BR-TMC-EDGE-001, SEC-TMC-05). Los objetos pasan entre almacén y repo como pack, sin transporte.
 - **Raíz del worktree** tomada del estado validado del daemon, nunca de un parámetro ni de `core.worktree`.
-- Añadir una operación a la lista exige revisar este ADR; el detalle está en la Dev Spec de TS-TMC-003.
+- **Binario de Git** (Enmienda 2026-10-04, E6). Las invocaciones de Git CLI de esta capa (lo que se lleva al repo del usuario y el mantenimiento del almacén) usan **el mismo binario que ya resuelve el daemon** (ADR-GRP-009 § 4), no una segunda resolución:
+  - Una sola vez, al arrancar, con ruta absoluta, y comprobando ≥ 2.38 sobre ese binario.
+  - En macOS, nunca el *shim* `/usr/bin/git`: cuesta unos 17 ms extra por proceso.
+  - **Tampoco se ejecuta `xcrun`**, que puede abrir el diálogo de instalación de las herramientas, algo que prohíbe ADR-GRP-009 § 4. El directorio del desarrollador se resuelve leyendo el disco (`readlink /var/db/xcode_select_link`) y la ruta real de Git se toma de ahí.
+  - Cambiar esa resolución para el motor y el ejecutor es una nota pendiente para ADR-GRP-009 § 4 y ADR-GRP-001.
+- Añadir una operación a la lista exige revisar este ADR; el detalle está en la Dev Spec de TS-TMC-003. La escritura del almacén con gitoxide (§ 1) y el `repack` y el `prune` del mantenimiento (ADR-TMC-007 § 4) forman parte de la lista desde la Enmienda de 2026-10-04.
 
 ### 3. Protocolo de aplicación (undo, redo, restauración)
 
@@ -103,7 +112,7 @@ Al planificar, por cada commit que la operación quita de una rama local, se com
 
 ## Validación
 
-1. **Frontera**: la comprobación estática de CI falla si el motor o el ejecutor de operaciones de usuario importan la capa de escritura de la Time Machine, o si se añade una operación de remoto o de porcelana.
+1. **Frontera**: la comprobación estática de CI falla si el motor o el ejecutor de operaciones de usuario importan la capa de escritura de la Time Machine, o si se añade una operación de remoto o de porcelana. También falla si una función de escritura de gitoxide aparece fuera del submódulo del almacén (Enmienda).
 2. **Sin código configurable**: repo canario de SEC-TMC-02: 0 marcadores tras snapshot, undo, redo y restauración.
 3. **Precondiciones**: con rebase o merge a medias, o con `index.lock` ajeno, la operación se rechaza, el repo no cambia y el lock ajeno sigue ahí (US-TMC-015).
 4. **Concurrencia**: un agente simulado que mueve una rama durante la aplicación hace fallar la transacción sin cambios; uno que escribe un archivo durante el intercambio provoca que se deshaga el intercambio y esa ruta se reporte como solape (SEC-TMC-11).
@@ -116,3 +125,13 @@ Al planificar, por cada commit que la operación quita de una rama local, se com
 - **Reglas**: BR-TMC-CONS-001, BR-TMC-CONS-004, BR-TMC-WF-001, BR-TMC-WF-003, BR-TMC-EDGE-001, BR-TMC-EDGE-003, BR-TMC-EDGE-004; D-TMC-14, D-TMC-20. Q21, Q22.
 - **ADRs**: ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-006, ADR-GRP-009; ADR-TMC-001, ADR-TMC-003, ADR-TMC-004, ADR-TMC-005.
 - **Seguridad**: SEC-TMC-02, 04, 05, 09, 11, 14. **Enablers**: TS-TMC-003, TS-TMC-004, INF-TMC-001. **NFR**: NFR-01, NFR-02, NFR-07, NFR-12.
+
+## Enmienda (2026-10-04, SPIKE-TMC-001)
+
+Aplicada desde § 7 de [SPIKE-TMC-001-resultados.md](../../requirements/features/time-machine/research/SPIKE-TMC-001-resultados.md), medido **solo en macOS**. El `status` sigue en `accepted`. Decisión del orquestador (2026-10-04), validada por el Arquitecto, que pidió ajustes y están incorporados.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| La escritura del almacén con gitoxide (escalón 3) vive en un submódulo propio de esta capa: tipo de acceso que solo abre el almacén validado, comprobación estática de CI y gix aislado | § 1, § 2, Validación 1 | E1; ADR-TMC-006 § 5; revisión del Arquitecto |
+| Git CLI de esta capa: el binario que ya resuelve el daemon, una vez y con ruta absoluta; en macOS ni el shim `/usr/bin/git` ni `xcrun` (resolución leyendo el disco). Nota pendiente para el motor y el ejecutor | § 2 | E6; Resultados § 2.1 y § 4; revisión del Arquitecto |
+| `repack` y `prune` del almacén en la lista cerrada | § 2 | E10; ADR-TMC-007 § 4 |
