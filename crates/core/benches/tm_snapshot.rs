@@ -322,7 +322,11 @@ fn main() {
         std::fs::read_to_string(&marker).unwrap()
     } else {
         let _ = std::fs::remove_dir_all(&repo);
-        println!("generando el perfil {} en {} …", profile.name, repo.display());
+        println!(
+            "generando el perfil {} en {} …",
+            profile.name,
+            repo.display()
+        );
         let g = repogen::generate(&git_bin(), &profile, &repo, 42).unwrap();
         let desc = format!(
             "{} HEAD={} archivos={} working tree={} MB commits={} ({:.0} s)",
@@ -340,13 +344,26 @@ fn main() {
     for i in 1..o.worktrees {
         let p = root.join(format!("repo-{}-wt{i}", profile.name));
         if !p.exists() {
-            git(&repo, &["worktree", "add", "-q", "-b", &format!("wt{i}"), p.to_str().unwrap()]);
+            git(
+                &repo,
+                &[
+                    "worktree",
+                    "add",
+                    "-q",
+                    "-b",
+                    &format!("wt{i}"),
+                    p.to_str().unwrap(),
+                ],
+            );
         }
         wts.push(p);
     }
 
     let mut r = Report(String::new());
-    r.line(format!("# Banco del snapshot previo (TS-TMC-001) — perfil {}\n", profile.name));
+    r.line(format!(
+        "# Banco del snapshot previo (TS-TMC-001) — perfil {}\n",
+        profile.name
+    ));
     r.line(format!("- Repo: {desc}"));
     r.line(format!(
         "- Máquina: {} {} · {} núcleos · Git {}",
@@ -355,7 +372,10 @@ fn main() {
         std::thread::available_parallelism().map_or(0, |n| n.get()),
         git(&root, &["--version"])
     ));
-    r.line(format!("- Iteraciones por escenario: {} (+3 de calentamiento)\n", o.iters));
+    r.line(format!(
+        "- Iteraciones por escenario: {} (+3 de calentamiento)\n",
+        o.iters
+    ));
 
     let guard_before = git_fingerprint(&repo);
 
@@ -390,7 +410,10 @@ fn main() {
     };
     let t = Instant::now();
     let first = store
-        .capture(&oplog, &w0.request(SnapshotLevel::Observation, &repo, Vec::new()))
+        .capture(
+            &oplog,
+            &w0.request(SnapshotLevel::Observation, &repo, Vec::new()),
+        )
         .unwrap();
     r.line(format!(
         "- Primera captura (detección completa, índice reflejado, caché de stat): {:.0} ms, {} archivos leídos\n",
@@ -409,7 +432,11 @@ fn main() {
         ("delta 1 archivo", 1, None),
         ("delta 10 archivos", 10, None),
         ("delta 100 archivos", 100, None),
-        ("delta de referencia: 100 archivos / ~20 MB", 100, Some(20 << 20)),
+        (
+            "delta de referencia: 100 archivos / ~20 MB",
+            100,
+            Some(20 << 20),
+        ),
         ("delta 1.000 archivos (fuera de referencia)", 1000, None),
     ];
     for (name, n, heavy) in scenarios {
@@ -417,7 +444,11 @@ fn main() {
             Some(b) => ed.pick_heavy(n, b),
             None => ed.pick_text(n, 0),
         };
-        let iters = if n >= 1000 { (o.iters / 4).max(10) } else { o.iters };
+        let iters = if n >= 1000 {
+            (o.iters / 4).max(10)
+        } else {
+            o.iters
+        };
         let mut series = Series::default();
         for i in 0..iters + 3 {
             ed.mutate(&repo, &paths);
@@ -434,7 +465,10 @@ fn main() {
         }
         let restored = ed.restore(&repo);
         store
-            .capture(&oplog, &w0.request(SnapshotLevel::Observation, &repo, restored))
+            .capture(
+                &oplog,
+                &w0.request(SnapshotLevel::Observation, &repo, restored),
+            )
             .unwrap();
     }
 
@@ -467,7 +501,10 @@ fn main() {
                     path: path.clone(),
                     mark: 0,
                 };
-                let _ = store.capture(&oplog, &wt.request(SnapshotLevel::Observation, &repo, Vec::new()));
+                let _ = store.capture(
+                    &oplog,
+                    &wt.request(SnapshotLevel::Observation, &repo, Vec::new()),
+                );
                 let mut k = 0;
                 while !stop.load(Ordering::Acquire) {
                     let paths = ed.pick_text(10, k * 13 % 2000);
@@ -491,7 +528,11 @@ fn main() {
         std::thread::sleep(Duration::from_millis(1500));
         for (name, n, heavy) in [
             ("delta 100 archivos", 100usize, None),
-            ("delta de referencia: 100 archivos / ~20 MB", 100, Some(20u64 << 20)),
+            (
+                "delta de referencia: 100 archivos / ~20 MB",
+                100,
+                Some(20u64 << 20),
+            ),
         ] {
             let paths = match heavy {
                 Some(b) => ed.pick_heavy(n, b),
@@ -519,7 +560,10 @@ fn main() {
             }
             let restored = ed.restore(&repo);
             store
-                .capture(&oplog, &w0.request(SnapshotLevel::Observation, &repo, restored))
+                .capture(
+                    &oplog,
+                    &w0.request(SnapshotLevel::Observation, &repo, restored),
+                )
                 .unwrap();
         }
         stop.store(true, Ordering::Release);

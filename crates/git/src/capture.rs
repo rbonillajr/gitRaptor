@@ -407,7 +407,11 @@ impl RepoReader {
                 false,
             ),
             Kind::Detached { target, .. } => (None, Some(Oid(*target)), true),
-            Kind::Unborn(name) => (Some(name.shorten().to_str_lossy().into_owned()), None, false),
+            Kind::Unborn(name) => (
+                Some(name.shorten().to_str_lossy().into_owned()),
+                None,
+                false,
+            ),
         })
     }
 
@@ -420,7 +424,10 @@ impl RepoReader {
         else {
             return Ok(None);
         };
-        Ok(Some(Oid(r.peel_to_id().map_err(unavailable("refs"))?.detach())))
+        Ok(Some(Oid(r
+            .peel_to_id()
+            .map_err(unavailable("refs"))?
+            .detach())))
     }
 
     /// History the store cannot copy: a shallow or partial clone.

@@ -200,7 +200,11 @@ fn clone_or_copy(src: &Path, dst: &Path) -> io::Result<Copied> {
     rustix::fs::fchmod(&dst_file, Mode::from_raw_mode(0o600))?;
     strip_xattrs(&dst_file)?;
     rustix::fs::fsync(&dst_file)?;
-    Ok(if cloned { Copied::Cloned } else { Copied::Copied })
+    Ok(if cloned {
+        Copied::Cloned
+    } else {
+        Copied::Copied
+    })
 }
 
 /// Removes every extended attribute a clone carried over from the user's file.
@@ -251,8 +255,7 @@ fn index_pack(tmp: &Path, hash: &str, dst_dir: &Path, limits: SeedLimits) -> Res
     file.seek(SeekFrom::Start(0))?;
 
     let kind = gix::hash::Kind::Sha1;
-    let pack =
-        data::File::at(tmp, kind).map_err(|e| StoreError::Corrupt(format!("pack: {e}")))?;
+    let pack = data::File::at(tmp, kind).map_err(|e| StoreError::Corrupt(format!("pack: {e}")))?;
     let mut entries = data::input::BytesToEntriesIter::new_from_header(
         io::BufReader::with_capacity(1 << 16, file),
         data::input::Mode::Verify,
