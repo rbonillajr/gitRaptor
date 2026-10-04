@@ -18,7 +18,7 @@ related:
 
 # Architecture Overview — Motor local (F-001-01)
 
-> Documento de navegación: enlaza los artefactos y no duplica su contenido. Rene Bonilla aceptó el 2026-10-03 todas las recomendaciones y las preguntas de producto PQ-1 a PQ-9; los ADR 005 a 013 están expandidos (`status: proposed`).
+> Documento de navegación: enlaza los artefactos y no duplica su contenido. Rene Bonilla aceptó el 2026-10-03 todas las recomendaciones y las preguntas de producto PQ-1 a PQ-9; los ADR 005 a 013 están aceptados (`status: accepted`, Rene Bonilla, 2026-10-04), igual que los ADR-GRD-001 a 007 de Guardrails.
 >
 > **Enmiendas de Guardrails (2026-10-04)**: **PQ-9 queda sustituida** por la decisión 1 de Guardrails (configuración de equipo commiteada, suelo en la rama principal y rama base confirmada; ADR-GRP-007). ADR-GRP-005, 006, 009, 010 y 013 e INF-GRP-001 incorporan las demás enmiendas de la tabla de [non-functional-guardrails.md](./non-functional-guardrails.md#enmiendas-pendientes-en-otros-frentes-j10). Ningún ADR cambia de `status`.
 >
@@ -164,7 +164,7 @@ Estos documentos solo cubren la arquitectura. Lo siguiente queda para otros due�
    - **`--resume` / `--continue`**: dejar explícito que es una sesión nueva (ADR-GRP-012, Q41).
    - **Retiro de registro (ASSUMPTION)**: confirmar que el desarrollador puede retirar cualquier registro y un agente solo el suyo (worktree = cwd del llamante, igual que al registrarse), y añadir "retirar su registro" a la fila del agente en la tabla de BR-AUTH-001 (ADR-GRP-005 § 6, ADR-GRP-013 § 2).
    - **Registro explícito como evidencia**: dejar explícito en BR-EDGE-004 que el registro atribuye los eventos del worktree mientras sea la única sesión presente, y que en un worktree compartido rige la evidencia por evento (ADR-GRP-012, ADR-GRP-013 § 3).
-   - **Cerrar P8, P9 y P10 en el context**: los resuelven ADR-GRP-007, ADR-GRP-006 y ADR-GRP-008. Con P8 cerrada, **desbloquear US-GRP-013** (umbral por repo); **actualizar el bloqueo de US-GRP-016**, que pasa a depender solo de Guardrails (F-001-04).
+   - ~~**Cerrar P8, P9 y P10 en el context**~~ **Hecho (2026-10-04)**: ADR-GRP-007, ADR-GRP-006 y ADR-GRP-008 están aceptados y las tres preguntas quedan resueltas en el context. US-GRP-013 y US-GRP-016 están desbloqueadas; US-GRP-016 depende de US-GRP-013 y TS-GRD-001 (decisión de Rene Bonilla).
    - **Q26 / BR-CONS-005**: el daemon **aborta** si los permisos del perfil o del socket están alterados (ADR-GRP-005 § 5, ADR-GRP-006 § 1, SEC-01, SEC-06). Choca con "0 huecos mientras la máquina está encendida"; confirmar con el PO que se acepta ese hueco, que queda señalado.
    - **NFR-07 del BRD**: su literal ("respeta config/hooks") choca con la neutralización de filtros, `textconv` y fsmonitor al leer (ADR-GRP-009). Reformularlo como "respeta la configuración de Git sin ejecutar programas configurados por el usuario".
 2. **Cockpit (F-001-02) — predicción de conflictos**: `git merge-tree --write-tree`, la razón de Git 2.38 en NFR-07, escribe objetos en `.git/objects` y ADR-GRP-009 lo prohíbe al motor. Necesita un ADR propio del Cockpit (por ejemplo, un almacén de objetos alternativo dentro del perfil).
