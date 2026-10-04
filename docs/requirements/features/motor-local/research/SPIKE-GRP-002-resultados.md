@@ -1,19 +1,6 @@
----
-id: SPIKE-GRP-002-RES
-title: "Resultados de SPIKE-GRP-002: viabilidad del observador de cambios a escala"
-type: research
-status: partial
-feature: motor-local
-domain: GRP
-created: 2026-10-04
-updated: 2026-10-04
-related:
-  adrs: [ADR-GRP-010, ADR-GRP-011, ADR-GRP-009, ADR-GRP-006]
-  stories: [SPIKE-GRP-002, INF-GRP-002, US-GRP-002, US-GRP-003, US-GRP-004, US-GRP-005]
-tags: [motor-local, spike, watcher, fsevents, latencia, debounce, escala, huecos, resultados]
----
-
 # Resultados de SPIKE-GRP-002: viabilidad del observador de cambios a escala
+
+> **Research Brief** de [SPIKE-GRP-002](../technical-stories/SPIKE-GRP-002-viabilidad-observador.md) · Fecha: 2026-10-04 · Valida: ADR-GRP-010 y ADR-GRP-011 · Relacionado: ADR-GRP-006, ADR-GRP-009, INF-GRP-002, US-GRP-002 a US-GRP-005.
 
 > **Alcance de esta entrega**: medido **solo en macOS**. Linux y Windows están **sin verificar**; el procedimiento para medirlos está en el [README del prototipo](../../../../../spikes/watcher-viability/README.md#reproducir-en-linux-y-windows). Las recomendaciones del § 6 se **aplicaron el 2026-10-04** como enmiendas de ADR-GRP-010 y ADR-GRP-011.
 
