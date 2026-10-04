@@ -51,7 +51,7 @@ Los cambios de estado de las sesiones (inicio, activo, inactivo, terminado) se g
 
 - **Actor de un evento**: si no tiene sesión, "sin atribuir". Si la tiene, la atribución efectiva de esa sesión.
 - **Atribución efectiva de una sesión**: se parte de la atribución inicial y se aplican en orden los registros vigentes:
-  - **Confirmación** (registro del mismo agente ya detectado, Q39): misma sesión y mismo agente. ⚠️ **ASSUMPTION** dependiente de **P16** (supuesto: sí): el origen pasa a "registrado".
+  - **Confirmación** (registro del mismo agente ya detectado, Q39): misma sesión y mismo agente. **No activa la evidencia por registro de § 3**: la sesión sigue atribuyendo solo con S2b, S3 o S4. ⚠️ **ASSUMPTION** dependiente de **P16** (supuesto: sí): el origen pasa a "registrado".
   - **Corrección**: agente corregido con origen "registrado". Como todos los eventos de la sesión apuntan a ella, la corrección alcanza **desde el inicio de la sesión** (Q37) y no toca los eventos de otras sesiones. No crea sesiones ni marca el worktree como compartido (Q33).
   - **Retiro de registro** (Q41, BR-WF-001): no cambia la atribución de la sesión; la termina con causa "registro retirado" y deja de ser presente, así que deja de contar para decidir si el worktree es compartido (§ 3). Una sesión terminada no se reabre.
   - **Retiro de corrección**: deja sin efecto la corrección retirada y vuelve la atribución anterior. ⚠️ **ASSUMPTION** dependiente de **P17** (supuesto: sí): los eventos que la corrección había reatribuido vuelven también, porque se resuelven desde la sesión.
@@ -63,7 +63,7 @@ Los cambios de estado de las sesiones (inicio, activo, inactivo, terminado) se g
 ### 3. Asignación de sesión a un evento
 
 - Un evento solo apunta a una sesión con **evidencia positiva** de ADR-GRP-012 (proceso, ascendencia, contenido de sesión o hooks existentes). La co-ubicación de una sesión detectada sola no basta. Ante la duda, sin sesión (BR-EDGE-004).
-- **El registro explícito es evidencia positiva** (BR-VAL-001, ejemplo 3 de BR-EDGE-004, US-GRP-009): mientras una sesión registrada sea **la única sesión presente** en el worktree, los eventos del worktree apuntan a ella, aunque no haya S2b, S3 ni S4. Así un agente sin detección ("otro agente: Codex") recibe sus commits.
+- **El registro explícito es evidencia positiva** (BR-VAL-001, ejemplo 3 de BR-EDGE-004, US-GRP-009): mientras una sesión registrada sea **la única sesión presente** en el worktree, los eventos del worktree apuntan a ella, aunque no haya S2b, S3 ni S4. Así un agente sin detección ("otro agente: Codex") recibe sus commits. **Solo aplica a sesiones creadas por el registro de un agente sin detección automática** ("otro agente"). Una sesión detectada y luego confirmada (Q39) no gana esta evidencia, aunque con P16 su origen pase a "registrado": sigue con S2b, S3 y S4, y las ediciones del humano en su worktree nunca se atribuyen a Claude Code (US-GRP-008, BR-EDGE-004).
 - En un **worktree compartido** (varias sesiones presentes, detectadas o registradas) el registro deja de bastar: solo se asigna una sesión si la evidencia por evento (S2b, S3 o S4) identifica una sola; ante la duda, "sin atribuir". En el MVP no hay atribución por archivo dentro de un worktree compartido (Q7, BR-CONS-004).
 - Que un worktree sea compartido se deriva de cuántas sesiones presentes tiene; no se guarda como dato propio.
 - Una sesión terminada no se reabre: si el agente vuelve, es una sesión nueva (Q41).
@@ -120,15 +120,16 @@ Pruebas con repos y perfiles temporales; las sesiones se simulan con la interfaz
 3. **Rechazos**: corregir en un worktree sin atribución detectada se rechaza (Q38); una corrección pedida por un agente se rechaza (BR-AUTH-001).
 4. **Confirmación** (US-GRP-009): registrar a Claude Code donde ya se detectaba no crea una segunda sesión ni marca compartido; el origen pasa a "registrado" (P16).
 5. **Registro como evidencia** (US-GRP-009, BR-VAL-001): con "otro agente: Codex" registrado como única sesión de `feat-login`, un commit sin S2b, S3 ni S4 tiene como actor "otro agente: Codex" (registrado). Tras registrar un segundo agente en el mismo worktree, un commit sin evidencia por evento queda "sin atribuir". Al retirar el segundo registro, vuelve a atribuirse a Codex.
-6. **Retiro de registro** (US-GRP-009, Q41): retirar el registro de Codex pasa su sesión a "Terminado" con causa "registro retirado" y un commit posterior queda "sin atribuir"; un agente que intenta retirar el registro de otro agente es rechazado y el intento queda en la auditoría (ASSUMPTION).
-7. **Compartido** (US-GRP-011): registrar otro agente añade una sesión y el worktree se reporta compartido; un cambio de archivo sin evidencia de una sola sesión queda "sin atribuir".
-8. **Huecos** (US-GRP-005): con un agente registrado, matar el daemon, hacer dos commits y relanzarlo; los dos aparecen como eventos de reconciliación "sin atribuir" enlazados a un hueco con su intervalo.
-9. **Persistencia** (US-GRP-004): tras reiniciar el daemon, correcciones, sesiones, estados y eventos siguen iguales.
-10. **Sin "humano"**: el esquema del contrato no contiene esa variante; una prueba de propiedades sobre secuencias aleatorias de registros comprueba que todo actor resuelto es un agente con origen o "sin atribuir".
-11. **Orden**: con la hora del sistema retrasada a mitad de prueba, el orden de los eventos sigue la secuencia.
-12. **No repudio (SEC-13)**: un agente simulado que ejecuta `raptor daemon stop` es rechazado y el intento queda en el registro de auditoría; `kill -9` del daemon con una sesión activa deja, al relanzar, un hueco "caída durante sesión activa" visible en los clientes; una parada aceptada guarda el cliente que la pidió.
-13. **Auditoría (SEC-03)**: cada comando reservado, aceptado o rechazado, aparece una sola vez en el registro, y el registro no admite modificación ni borrado por el canal.
-14. **Repo intacto**: todo lo anterior pasa por el arnés de INF-GRP-001.
+6. **Confirmación sin evidencia por registro** (US-GRP-008, US-GRP-009, BR-EDGE-004): con una sesión de Claude Code detectada y confirmada por registro como única sesión del worktree, una edición del humano sin S2b, S3 ni S4 queda "sin atribuir", también con el origen ya en "registrado" (P16).
+7. **Retiro de registro** (US-GRP-009, Q41): retirar el registro de Codex pasa su sesión a "Terminado" con causa "registro retirado" y un commit posterior queda "sin atribuir"; un agente que intenta retirar el registro de otro agente es rechazado y el intento queda en la auditoría (ASSUMPTION).
+8. **Compartido** (US-GRP-011): registrar otro agente añade una sesión y el worktree se reporta compartido; un cambio de archivo sin evidencia de una sola sesión queda "sin atribuir".
+9. **Huecos** (US-GRP-005): con un agente registrado, matar el daemon, hacer dos commits y relanzarlo; los dos aparecen como eventos de reconciliación "sin atribuir" enlazados a un hueco con su intervalo.
+10. **Persistencia** (US-GRP-004): tras reiniciar el daemon, correcciones, sesiones, estados y eventos siguen iguales.
+11. **Sin "humano"**: el esquema del contrato no contiene esa variante; una prueba de propiedades sobre secuencias aleatorias de registros comprueba que todo actor resuelto es un agente con origen o "sin atribuir".
+12. **Orden**: con la hora del sistema retrasada a mitad de prueba, el orden de los eventos sigue la secuencia.
+13. **No repudio (SEC-13)**: un agente simulado que ejecuta `raptor daemon stop` es rechazado y el intento queda en el registro de auditoría; `kill -9` del daemon con una sesión activa deja, al relanzar, un hueco "caída durante sesión activa" visible en los clientes; una parada aceptada guarda el cliente que la pidió.
+14. **Auditoría (SEC-03)**: cada comando reservado, aceptado o rechazado, aparece una sola vez en el registro, y el registro no admite modificación ni borrado por el canal.
+15. **Repo intacto**: todo lo anterior pasa por el arnés de INF-GRP-001.
 
 ## Referencias
 
@@ -150,4 +151,4 @@ Enmienda tras la revisión del security-expert. No cambia el modelo de atribuci�
 | SEC-03 · Registro de auditoría | Apartado 1: registro append-only de comandos reservados en el índice global del perfil, consultable por los clientes |
 | M8 / SEC-12 · Texto no confiable en lo que expone el contrato | Apartado 6: nombres declarados, rutas y refs marcados como no confiables; respuestas MCP acotadas |
 
-Validación ampliada: SEC-13 y SEC-03 (puntos 12 y 13).
+Validación ampliada: SEC-13 y SEC-03 (puntos 13 y 14).

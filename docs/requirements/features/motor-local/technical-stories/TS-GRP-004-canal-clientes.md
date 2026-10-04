@@ -43,7 +43,7 @@ tags: [motor-local, ipc, json-rpc, socket, named-pipe, contrato, seguridad, coma
 - **Implementar** mensajes delimitados con tamaño y profundidad máximos, campos desconocidos rechazados, batches acotados y timeout de handshake (SEC-02).
 - **Validar** rutas antes de tocar el FS (rechazo de UNC, dispositivos y ADS) y después canonicalizarlas contra los repos observados (BR-VAL-002); refs con `check-ref-format` (SEC-02).
 - **Implementar** colas acotadas por suscriptor con desconexión y evento "resync", límites de conexiones y suscripciones por cliente y rate limit de consultas, sirviendo desde memoria (SEC-08).
-- **Implementar** la autorización de los comandos reservados solo en el daemon, incluido parar el daemon: identificador no reutilizable del llamante (pidfd, audit token o handle), ascendencia, terminal de control y líder de sesión sin agente en su ascendencia (ADR-GRP-005 § 6, SEC-03, SEC-13).
+- **Implementar** la autorización de los comandos reservados solo en el daemon, incluidos retirar el registro de otro agente y parar el daemon: identificador no reutilizable del llamante (pidfd, audit token o handle), ascendencia, terminal de control y líder de sesión sin agente en su ascendencia (ADR-GRP-005 § 6, SEC-03, SEC-13).
 - **Tomar** el worktree del registro de un agente del cwd del llamante, nunca de un parámetro; validar nombres declarados y prohibir los reservados.
 - **Registrar** cada comando reservado, aceptado o rechazado, en el registro de auditoría append-only (ADR-GRP-013 § 1).
 - **Implementar** en la CLI la confirmación explícita de los comandos reservados como paso de UX, sin valor de control para el daemon.
@@ -63,7 +63,7 @@ tags: [motor-local, ipc, json-rpc, socket, named-pipe, contrato, seguridad, coma
 - **Acceso (SEC-01)**: la carpeta del socket y el socket solo son accesibles por el usuario; una carpeta pre-creada 0755 impide arrancar; un cliente de otro usuario es rechazado; en Windows el pipe solo admite el SID del usuario, rechaza clientes remotos y el cliente rechaza un pipe ocupado por otro proceso.
 - **Red**: con el daemon en marcha no hay ningún puerto en escucha abierto por el proceso.
 - **Entradas (SEC-02)**: fuzzing del decodificador; un mensaje por encima del máximo, un campo desconocido, una ruta fuera de los repos observados, una ruta UNC (0 conexiones SMB) o una ref `--upload-pack=x` se rechazan sin detener el daemon.
-- **Comandos reservados (SEC-03)**: añadir o retirar un repo, corregir y parar el daemon, enviados por un cliente JSON-RPC directo descendiente de un agente simulado, se rechazan; ídem con pty bajo el agente; un registro con worktree ajeno se rechaza; cada intento aparece en la auditoría.
+- **Comandos reservados (SEC-03)**: añadir o retirar un repo, corregir y parar el daemon, enviados por un cliente JSON-RPC directo descendiente de un agente simulado, se rechazan; ídem con pty bajo el agente; un registro con worktree ajeno se rechaza; un agente que retira su propio registro es aceptado y uno que intenta retirar el de otro agente es rechazado; cada intento aparece en la auditoría.
 - **Robustez (SEC-08)**: un cliente que no lee y 100 conexiones simultáneas no sacan del presupuesto de ADR-GRP-011 a los demás.
 - **Arranque limpio (SEC-10)**: un cliente con entorno hostil arranca un daemon que no lo hereda.
 - **Salida (SEC-12)**: una rama con escapes OSC sale marcada como no confiable en el contrato; las respuestas para `raptor-mcp` no traen campos fuera de la allowlist.
