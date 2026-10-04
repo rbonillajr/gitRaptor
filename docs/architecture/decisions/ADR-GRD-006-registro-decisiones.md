@@ -25,7 +25,7 @@ BR-CONS-004 obliga a anotar:
 
 El registro es la fuente del KPI "acciones peligrosas bloqueadas", que BR-CONS-004 define como la suma de **denegadas, rechazadas y caducadas** (BRD § 9). Q-GRD-10 lo ubica en el **perfil**, separado por repo y nunca en el repo, y BR-TIME-002 lo conserva **90 días**. BR-WF-002 pide anotar las transiciones del estado de protección, y US-GRD-003 que cada instalación quede con qué, dónde, cuándo y quién la autorizó.
 
-ADR-GRP-006 (propuesto, rama `docs/arch-motor-local`) fija un SQLite por repo en el perfil con un único escritor, el daemon. ADR-GRP-013 (propuesto) dice que los eventos son inmutables y tiene una auditoría append-only de comandos reservados. Todo este contenido es confidencial y no sale de la máquina (NFR-03).
+ADR-GRP-006 (propuesto, en `main`) fija un SQLite por repo en el perfil con un único escritor, el daemon. ADR-GRP-013 (propuesto) dice que los eventos son inmutables y tiene una auditoría append-only de comandos reservados. Todo este contenido es confidencial y no sale de la máquina (NFR-03).
 
 ## Decisión
 
@@ -144,7 +144,7 @@ ADR-GRP-006 (propuesto, rama `docs/arch-motor-local`) fija un SQLite por repo en
 
 - **Reglas**: BR-CONS-004, BR-TIME-002, BR-WF-001, BR-WF-002, BR-CONS-005; Q-GRD-10; NFR-03.
 - **Historias**: US-GRD-003, US-GRD-005, US-GRD-006, US-GRD-015.
-- **ADRs de otros frentes**: ADR-GRP-005, ADR-GRP-006, ADR-GRP-013 (`docs/arch-motor-local`).
+- **ADRs de otros frentes**: ADR-GRP-005, ADR-GRP-006, ADR-GRP-013 (motor-local, en `main`).
 - **Seguridad**: SEC-GRD-09, SEC-GRD-11; SEC-05, SEC-06 y SEC-12 de motor-local.
 
 ## Revisión de seguridad (2026-10-04)

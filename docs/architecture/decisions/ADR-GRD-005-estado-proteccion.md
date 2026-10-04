@@ -146,7 +146,7 @@ El texto lo pone el cliente (NFR-10). Lo presentan la CLI y el Cockpit.
 
 - **Reglas**: BR-WF-002, BR-EDGE-001, BR-EDGE-002, BR-EDGE-003, BR-AUTH-002; Q-GRD-4, Q-GRD-15; D6 (Rene Bonilla, 2026-10-04).
 - **Historias**: US-GRD-001, US-GRD-003, US-GRD-004, US-GRD-016; US-GRP-006.
-- **ADRs de otros frentes**: ADR-GRP-005, ADR-GRP-006, ADR-GRP-010, ADR-GRP-013 (`docs/arch-motor-local`).
+- **ADRs de otros frentes**: ADR-GRP-005, ADR-GRP-006, ADR-GRP-010, ADR-GRP-013 (motor-local, en `main`).
 - **Seguridad**: SEC-GRD-02, SEC-GRD-08, SEC-GRD-16.
 
 ## Revisión de seguridad (2026-10-04)

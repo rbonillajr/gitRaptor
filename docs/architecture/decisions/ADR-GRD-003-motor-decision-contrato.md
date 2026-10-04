@@ -187,7 +187,7 @@ Sin E/S, sin reloj y sin aleatoriedad:
 
 - **Reglas**: BR-CALC-001, BR-CONS-001, BR-CONS-002, BR-AUTH-003, BR-AUTH-004, BR-EDGE-001, BR-EDGE-004, BR-EDGE-005, BR-VAL-002; S-GRD-9; Q-GRD-1, Q-GRD-5, Q-GRD-6; D6 (Rene Bonilla, 2026-10-04).
 - **Historias**: US-GRD-001, US-GRD-005, US-GRD-006; diseñado para US-GRD-007..017.
-- **ADRs de otros frentes**: ADR-GRP-005, ADR-GRP-006, ADR-GRP-007, ADR-GRP-012, ADR-GRP-013 (`docs/arch-motor-local`); ADR-TMC-002, ADR-TMC-004, ADR-TMC-005 (`docs/arch-time-machine`).
+- **ADRs de otros frentes**: ADR-GRP-005, ADR-GRP-006, ADR-GRP-007, ADR-GRP-012, ADR-GRP-013 (motor-local, en `main`); ADR-TMC-002, ADR-TMC-004, ADR-TMC-005 (time-machine, en `main`).
 - **Diagrama**: [seq-guardrails-decision-hook.md](../diagrams/seq-guardrails-decision-hook.md).
 - **Seguridad**: SEC-GRD-03, 06, 11, 16, 19.
 

@@ -17,7 +17,7 @@ tags: [guardrails, configuracion, q-grd-17, q-grd-18, d6, suelo, rama-base, rama
 
 ## Contexto
 
-ADR-GRP-007 (propuesto, rama `docs/arch-motor-local`) fija el contenedor de la configuración:
+ADR-GRP-007 (propuesto, en `main`) fija el contenedor de la configuración:
 
 - **Formato**: JSON estricto con `$schema`.
 - **Archivos**: `.gitraptor/settings.json` (equipo, versionado), `settings.json` (perfil) y `settings.local.json` (local, en el perfil, ADR-GRP-008).
@@ -191,7 +191,7 @@ Con esto:
 - **Decisiones**: decisiones 1 y 2, D6, D7 (suelo confirmado) y D8 (confirmación con el mecanismo MVP de D5), de Rene Bonilla (2026-10-04).
 - **Motor local**: BR-CONS-006 (motor-local), BR-CONS-007 (motor-local); Q12, Q23, Q24 de motor-local; US-GRP-012, US-GRP-016.
 - **Historias**: US-GRD-001, US-GRD-007, US-GRD-011, US-GRD-012, US-GRD-014.
-- **ADRs de otros frentes**: ADR-GRP-007 (PQ-8, PQ-9), ADR-GRP-008, ADR-GRP-009, ADR-GRP-010 (`docs/arch-motor-local`).
+- **ADRs de otros frentes**: ADR-GRP-007 (PQ-8, PQ-9), ADR-GRP-008, ADR-GRP-009, ADR-GRP-010 (motor-local, en `main`).
 - **Enablers**: TS-GRD-001.
 - **Seguridad**: SEC-GRD-13, SEC-GRD-17.
 
