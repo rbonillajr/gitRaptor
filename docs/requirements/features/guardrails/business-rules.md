@@ -81,7 +81,7 @@ tags:
 
 **Descripción**: La configuración tiene tres niveles, de menor a mayor especificidad: **perfil del usuario**, **configuración del equipo** (versionada con el repo, BRD BR-11) y **configuración local personal del repo** (no versionada) (Q23 de motor-local). Cada valor declara en qué niveles se puede definir (Q24 de motor-local). Un valor escrito en un nivel que no lo admite no se tiene en cuenta. El comando de edición (Q27 de motor-local) **rechaza** escribirlo y explica qué niveles lo admiten.
 
-> **Decisión** (Q-GRD-17, Rene Bonilla, 2026-10-04): la configuración del equipo que rige una operación es la **última versión commiteada en el worktree donde ocurre esa operación**; las ediciones sin commitear nunca cuentan. Los niveles personales (perfil y configuración local personal, que no se versionan) no cambian: rige su contenido actual.
+> **Decisión** (Q-GRD-17, Rene Bonilla, 2026-10-04): la configuración del equipo que rige una operación es la **última versión commiteada en el worktree donde ocurre esa operación**; las ediciones sin commitear nunca cuentan. **Excepción**: la rama base se lee de la rama principal del repo (Q-GRD-18, BR-CONS-003). Los niveles personales (perfil y configuración local personal, que no se versionan) no cambian: rige su contenido actual.
 
 **Aplicabilidad**: Al leer la configuración y al editarla con el comando.
 
@@ -97,7 +97,7 @@ tags:
 | Formato de commit | Perfil, equipo, local personal (Q-GRD-14) | Sin formato exigido | Si el equipo lo fija, un personal no lo cambia (S-GRD-2) | Guardrails |
 | Rutas prohibidas | Perfil, equipo, local personal (Q-GRD-14) | Las de la configuración de Guardrails (BR-AUTH-004) | Los personales solo añaden rutas | Guardrails |
 | Plazo de respuesta de la cola | Perfil, equipo, local personal (Q-GRD-14) | 5 minutos (Q-GRD-6) | Los personales solo lo acortan | Guardrails |
-| Rama base | **Solo equipo** | `main` | Sin combinación | Motor local lee; Guardrails define (BR-CONS-003) |
+| Rama base | **Solo equipo** | `main` | Sin combinación; se lee de la versión commiteada en la rama principal del repo (Q-GRD-18) | Motor local lee; Guardrails define (BR-CONS-003) |
 | Umbral de inactividad | **Solo perfil y local personal** | 5 minutos | Gana el más específico | Motor local (BR-TIME-001 (motor-local)) |
 
 Un valor nuevo tiene que declarar sus niveles al incorporarse a esta tabla. Los niveles de la rama base y del umbral los fijó el Motor local (Q24 de motor-local) y Guardrails los respeta.
@@ -514,26 +514,33 @@ Constraint: decisión(operación, repo, configuración, actor) es independiente 
 
 **Descripción**: Guardrails define la **rama base** como valor de la configuración del equipo, el único nivel que la admite, con `main` por defecto (Q24 de motor-local). El Motor local la lee para calcular ahead/behind (BR-CONS-006 (motor-local)). Un valor de rama base en el perfil o en la configuración local personal no se tiene en cuenta y el comando lo rechaza (BR-VAL-001). Con esta regla y el ADR de formato (P8 (motor-local)), US-GRP-016 deja de estar bloqueada (Q36 de motor-local).
 
+> **Decisión** (Q-GRD-18, Rene Bonilla, 2026-10-04): la rama base es una **excepción a Q-GRD-17**. Se lee de la configuración del equipo **commiteada en la rama principal del repo**: la que el remoto marca como principal, o `main` si no hay ninguna. Así hay un solo valor por repo, sin circularidad y coherente con BR-CONS-006 (motor-local) y Q24 de motor-local. Ni la versión commiteada en el worktree de la operación ni las ediciones sin commitear la cambian. De la rama principal se usa solo lo que el repo ya conoce: Guardrails no consulta el remoto por su cuenta (coherente con Q12 de motor-local).
+
 **Aplicabilidad**: Al editar la configuración y cuando el motor lee la rama base.
 
 **Criticidad**: Media
 
 **Regla de consistencia**:
 ```
-rama base = la de la configuración del equipo, si la define
+rama principal = la que el remoto marca como principal, ELSE main
+rama base = la de la configuración del equipo commiteada en la rama principal, si la define
             ELSE main
 Constraint: perfil y configuración local personal no intervienen
+Constraint: la versión de la configuración en cada worktree no interviene (Q-GRD-18)
 ```
 
 **Ejemplos**:
 - La configuración del equipo fija `develop` → el motor calcula ahead/behind contra `develop`.
 - El perfil fija `release` y el equipo no define nada → `main`.
+- Dos worktrees en commits distintos: en `feat-a` la configuración del equipo dice `develop` y en `feat-b` dice `release`; en la rama principal `main` dice `develop` → la rama base es `develop` para los dos worktrees, para Guardrails y para el motor (Q-GRD-18).
+- Un worktree commitea en su rama un cambio de la rama base a `release` → la rama base sigue siendo la de la rama principal hasta que ese cambio se integre en ella.
+- El remoto marca `trunk` como rama principal y la configuración commiteada en `trunk` no define rama base → `main` (valor por defecto del producto).
 - En una máquina nueva, el repo clonado trae `develop` en la configuración del equipo → aplica desde el primer momento (BR-EDGE-007 (motor-local)).
-- El desarrollador fija con el comando la rama base `release`, que no existe en el repo → el comando avisa y pide confirmación; si confirma, se guarda y el motor indica que no puede calcular ahead/behind (Q-GRD-16, Q42 de motor-local).
+- El desarrollador fija con el comando la rama base `release`, que no existe en el repo → el comando avisa y pide confirmación; si confirma, se guarda y el motor indica que no puede calcular ahead/behind (Q-GRD-16, Q42 de motor-local). Ese valor solo aplica cuando el cambio está commiteado en la rama principal del repo (Q-GRD-18).
 
 **Cómo se verifica**: los escenarios de US-GRP-016 (motor-local) pasan con la configuración que define esta feature.
 
-**Referencias**: BRD BR-11; Q5, Q24, Q36 de motor-local; BR-CONS-006 (motor-local) y BR-CONS-007 (motor-local); Q42 de motor-local y Q-GRD-16 (rama base que no existe al fijarla con el comando).
+**Referencias**: BRD BR-11; Q5, Q24, Q36 de motor-local; Q-GRD-18; BR-CONS-006 (motor-local) y BR-CONS-007 (motor-local); Q42 de motor-local y Q-GRD-16 (rama base que no existe al fijarla con el comando).
 
 ---
 
@@ -696,6 +703,8 @@ Acción al expirar: se descarta
 
 > **Decisión** (Q-GRD-5, Rene Bonilla, 2026-10-03): aplica un **conjunto mínimo seguro**: denegar force-push y denegar el borrado de la rama base. Es visible para el desarrollador (BR-WF-002) y el equipo lo puede desactivar en su configuración.
 
+> **Rama base protegida** (Q-GRD-18, 2026-10-04): la rama base que protege el mínimo seguro es la de BR-CONS-003, leída de la configuración del equipo commiteada en la rama principal del repo. Es la misma en todos los worktrees, sea cual sea su commit.
+
 **Frecuencia esperada**: alta al empezar (todo repo nuevo).
 
 **Criticidad**: Alta
@@ -846,3 +855,4 @@ Cada regla debe reflejarse en al menos un escenario Gherkin de su historia. Cada
 | 1.1 | 2026-10-03 | PO (AADD) para Rene Bonilla | Artifact Judge (RESERVAS): convención de IDs (P-GRD-n, S-GRD-n, R-GRD-n; IDs del Motor local calificados con "(motor-local)"); BR-CONS-001 separa lo decidido por Q23 de la ampliación pendiente (P-GRD-14) y marca las filas dependientes; BR-AUTH-001 deja de atribuir a Q27 una frase que no está en la fuente; nueva BR-CONS-006 (el comando no pisa cambios a mano y escribe de forma atómica y recuperable, NFR-01); BR-WF-002 con cuatro estados, todas las transiciones, alcance (P-GRD-15) y alineada con BR-EDGE-001. 23 reglas (18 críticas). |
 | 1.2 | 2026-10-03 | PO (AADD) para Rene Bonilla | Decisiones Q-GRD-1 a Q-GRD-16 de Rene Bonilla (aceptan las recomendaciones de P-GRD-1 a P-GRD-16): los bloques de supuesto pasan a "Decisión"; BR-CONS-001 aplica Q-GRD-14 (un nivel personal endurece cualquier regla del equipo y nunca la relaja; refina Q23 de motor-local) y su tabla deja de tener filas dependientes; BR-TIME-001 fija el plazo en 5 minutos y BR-TIME-002 la retención en 90 días; BR-WF-002 aplica el alcance de Q-GRD-15; BR-EDGE-001 a BR-EDGE-005 aplican Q-GRD-5, 4, 8, 12 y 11; BR-EDGE-004 anota la dependencia con BR-CONS-007 (motor-local) para el Arquitecto o una revisión de motor-local. S-GRD-1, S-GRD-4 y S-GRD-5 confirmados por Q-GRD-14, Q-GRD-7 y Q-GRD-10. Sin reglas nuevas: 23 reglas (18 críticas). |
 | 1.3 | 2026-10-04 | PO (AADD) para Rene Bonilla | Decisión Q-GRD-17 de Rene Bonilla, posterior a la aprobación del requerimiento: la configuración del equipo que rige una operación es la última versión commiteada en el worktree de esa operación; las ediciones sin commitear nunca cuentan. BR-VAL-001 (decisión y ejemplos), BR-AUTH-004 (con Q-GRD-7, un agente no puede relajarla), BR-CONS-006 (el cambio del comando en el nivel de equipo se aplica al commitearlo) y BR-EDGE-004 (un conflicto sin commitear no vuelve ilegible la configuración; ejemplos reformulados). Sin reglas nuevas. |
+| 1.4 | 2026-10-04 | PO (AADD) para Rene Bonilla | Decisión Q-GRD-18 de Rene Bonilla, posterior a la aprobación del requerimiento: la rama base es una excepción a Q-GRD-17 y se lee de la configuración del equipo commiteada en la rama principal del repo (la que marca el remoto, o `main`). BR-CONS-003 (decisión, regla formal y ejemplos con dos worktrees en commits distintos), BR-EDGE-001 (la rama base protegida por el mínimo seguro), BR-VAL-001 (tabla de valores y excepción en el bloque de Q-GRD-17). Sin reglas nuevas. |
