@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: medium
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 domain: GRP
 epic: E-001
 feature: time-machine
@@ -16,7 +16,7 @@ related:
     - BR-TMC-001
   stories: [US-TMC-001, US-TMC-004]
 covers: [D-TMC-21]
-blocked_by: ["spike (a): definición de repo mediano (D-TMC-21)"]
+blocked_by: []
 tags: [time-machine, rendimiento, nfr-04]
 ---
 
@@ -32,7 +32,7 @@ tags: [time-machine, rendimiento, nfr-04]
 
 ## Reglas cubiertas
 
-NFR-04 · D-TMC-21 ("repo mediano" se fija en el spike a) — ver [context.md](../context.md)
+NFR-04 · D-TMC-21 ("repo mediano" = perfil `M`, D-TMC-21, cerrada el 2026-10-04) — ver [context.md](../context.md)
 
 ## Criterios de Aceptación
 
@@ -53,12 +53,15 @@ Entonces el snapshot previo sigue añadiendo menos de 200 ms
 Dado un repo mayor que el de referencia
 Cuando se lanza desde GitRaptor una operación que lo modifica
 Entonces la operación sigue precedida de su snapshot previo aunque tarde más de 200 ms
+Y en la CLI y en la TUI el desarrollador sabe que la operación sigue en curso mientras se guarda el snapshot previo
 
 ## Requisitos Técnicos
 
-- Presupuesto y medición de ADR-TMC-006: p95 < 200 ms del snapshot previo, con almacén sembrado, en el repo de referencia que fija SPIKE-TMC-001.
+- Presupuesto y medición de ADR-TMC-006: p95 < 200 ms del snapshot previo, con almacén sembrado, en el repo de referencia: el **perfil `M`** del generador de SPIKE-TMC-001 (10.001 archivos, 316 MB de working tree, 50.000 commits, 627 MiB de historial; D-TMC-21). El escenario 3 se prueba con el **perfil `L`** (40.000 archivos, 1 GB, 150.000 commits).
+- El diseño base ya incluye los escalones 2 y 3 de ADR-TMC-006 § 5 (detección con el estado del motor y escritura del almacén con gitoxide): sin ellos el gate no se cumple (SPIKE-TMC-001 § 5.1). Reparto por etapa: el de la Enmienda de ADR-TMC-006 § 2.
 - Ampliar el banco de INF-GRP-002 con el escenario de operación protegida con trabajo sin commitear, con 1 y 10 worktrees; gate de CI y aviso por etapa.
-- Bloqueada hasta el cierre de SPIKE-TMC-001 (D-TMC-21).
+- **Progreso** (E11 de SPIKE-TMC-001): si el snapshot previo supera ~1 s (un archivo de 1 GB tarda unos 7 s), la CLI y la TUI muestran progreso. El umbral es un valor de diseño y el aspecto queda pendiente de diseño. El MCP queda fuera: su respuesta llega al terminar.
+- Linux y Windows no se midieron en el spike: el gate de CI de esta historia es el que lo cierra en los tres SO.
 
 ## Diseño y Dev Spec
 
@@ -68,5 +71,4 @@ Entonces la operación sigue precedida de su snapshot previo aunque tarde más d
 ## Dependencias
 
 - **Historias**: US-TMC-001, US-TMC-004.
-- **Externas**: **bloqueada** hasta que el spike (a) fije el "repo mediano" de referencia (D-TMC-21, Arquitecto).
 - **Transversal**: transversal (lo define el Arquitecto): verificación en repos temporales, nunca en un repo real; mismo comportamiento en Windows, macOS y Linux; mensajes en inglés y español.

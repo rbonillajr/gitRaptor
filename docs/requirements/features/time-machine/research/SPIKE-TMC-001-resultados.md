@@ -277,9 +277,9 @@ Lectura:
 
 **Valores medidos para la captura por observación**: `Q` = 1 s y `M` = 5 s se mantienen (unos 23 ms por captura). El límite de **50 MB se mantiene**: con gitoxide, un archivo de 50 MB cuesta unos 0,4 s por captura, y un archivo grande que cambia en cada `M` costaría unos 8 % de un núcleo; subirlo multiplica ese coste. **Cuotas de SEC-TMC-12**: 20 GB por repo y espacio libre máx(5 GB, 5 %) son holgados para el texto. Lo que puede agotarlas son los archivos grandes de los previos garantizados.
 
-## 7. Enmiendas recomendadas (no aplicadas)
+## 7. Enmiendas recomendadas
 
-Ninguna se aplicó: los ADR no se tocan desde el spike. Las enmiendas que dependen de una decisión van marcadas.
+Los ADR no se tocan desde el spike. **Aplicadas el 2026-10-04** en las secciones "Enmienda (2026-10-04, SPIKE-TMC-001)" de ADR-TMC-001, 002, 004, 006 y 007, en los NFR de la feature, en TS-TMC-001 y en US-TMC-020, con ajustes del Arquitecto. Los más relevantes: el reparto final de E3 es detección ≤ 5, árboles + commit ≤ 45 y ref + oplog ≤ 25; E6 no ejecuta `xcrun`; E9 fija `untrackedCache=false`. Lo que toca a motor-local queda como nota pendiente en el overview de la feature, § 7.2.
 
 | # | Documento | Enmienda |
 |---|---|---|
@@ -316,7 +316,7 @@ El gate de CI de US-TMC-020 (ADR-TMC-006 § 4) es el lugar natural para cerrar e
 
 ## 9. Pendiente
 
-- Enmiendas E1–E12 en sus ADR, historias y Dev Specs (fuera del alcance del spike).
+- ~~Enmiendas E1–E12 en sus ADR e historias~~: aplicadas el 2026-10-04 (ver § 7). Quedan las Dev Specs y las notas para motor-local.
 - Medir en Linux y Windows (§ 8) y en los runners de CI.
 - Medir el p95 del motor con la Time Machine activa cuando existan TS-GRP-002/003 (hipótesis 5).
 - Medir la admisión y el canal (10 ms) cuando exista el daemon.
