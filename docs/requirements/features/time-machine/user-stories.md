@@ -7,7 +7,6 @@ total_artifacts: 21
 expanded: 21
 approved: 0
 blocked:
-  - US-TMC-005
   - US-TMC-011
   - US-TMC-020
   - US-TMC-021
@@ -52,7 +51,7 @@ blocked:
 | [US-TMC-002](./user-stories/US-TMC-002-undo-ultima-operacion.md) | El desarrollador deshace con un comando la última operación de su worktree | Desarrollador quiere `raptor undo` en el worktree actual, protegido por su propio punto previo | 001 | — | expanded |
 | [US-TMC-003](./user-stories/US-TMC-003-redo.md) | El desarrollador rehace lo que deshizo por error | Desarrollador quiere `raptor redo` del último undo, deteniéndose ante un solape | 002, 012, 013 | — | expanded |
 | [US-TMC-004](./user-stories/US-TMC-004-captura-continua-git-crudo.md) | El trabajo hecho fuera de GitRaptor queda capturado como punto recuperable | Desarrollador quiere captura continua del Git crudo y del editor, sin ignorados | 001, US-GRP-002, US-GRP-004 | — | expanded |
-| [US-TMC-005](./user-stories/US-TMC-005-snapshot-previo-hooks-guardrails.md) | Las operaciones de Git crudo tienen punto previo cuando el repo usa los hooks de Guardrails | Desarrollador quiere snapshot previo vía hooks de Guardrails sin depender de ellos | 004 | F-001-04 (hooks) | expanded |
+| [US-TMC-005](./user-stories/US-TMC-005-snapshot-previo-hooks-guardrails.md) | Las operaciones de Git crudo tienen punto previo cuando el repo usa los hooks de Guardrails | Desarrollador quiere snapshot previo vía hooks de Guardrails sin depender de ellos | 004, US-GRD-001 | — | expanded |
 | [US-TMC-006](./user-stories/US-TMC-006-timeline-que-cuando-quien.md) | El desarrollador sabe qué cambió en su repo, cuándo y quién lo hizo | Desarrollador quiere el timeline con actor, origen, "Tú u otro (sin atribuir)" y nivel de cobertura | 001, 004, US-GRP-002, US-GRP-007, US-GRP-009 | — | expanded |
 | [US-TMC-007](./user-stories/US-TMC-007-timeline-filtros-huecos.md) | El desarrollador filtra el timeline por worktree, agente o periodo y ve lo que no se observó | Desarrollador quiere filtros y huecos explícitos en el timeline | 006, US-GRP-005 | — | expanded |
 | [US-TMC-008](./user-stories/US-TMC-008-timeline-atribucion-vigente.md) | El timeline refleja las correcciones de atribución sin reescribir quién deshizo qué | Desarrollador quiere la atribución vigente y el registro de cada undo intacto | 002, 006, US-GRP-010 | — | expanded |
@@ -74,7 +73,7 @@ blocked:
 
 1. **Capa 0**: 001
 2. **Capa 1**: 002, 004, 016, 018
-3. **Capa 2**: 006, 013, 014, 005 (bloqueada), 017, 020 (bloqueada)
+3. **Capa 2**: 006, 013, 014, 005, 017, 020 (bloqueada)
 4. **Capa 3**: 007, 008, 009, 012, 021 (bloqueada)
 5. **Capa 4**: 003, 010, 015, 019, 011 (bloqueada por P17)
 
@@ -113,3 +112,4 @@ blocked:
 | 1.3 | 2026-10-03 | PO (AADD) | Decisiones TQ aceptadas por Rene Bonilla (D-TMC-16 y D-TMC-23 actualizadas, D-TMC-24, D-TMC-25). 001: credenciales excluidas y declaradas, opción del perfil. 002: undos seguidos (pila). 003: una operación nueva invalida el redo. 004: credenciales y tope por archivo con captura parcial. 007: hueco "sin espacio". 009: lo excluido no se toca al restaurar; confirmación solo en macOS y Linux, rechazo en Windows (fusionado con el de otro agente). 013: Windows y MCP sin atribuir rechazados; "otro agente registrado" fusionado en el rechazo entre agentes. 016: aviso visto + 24 h y la cuota no adelanta la purga. 019: undo y restauración interrumpidos fusionados; fallo a mitad sin rollback; solo se libera el bloqueo propio. Todas con 6 escenarios o menos. |
 | 1.4 | 2026-10-04 | Agente de documentación para Rene Bonilla | Aceptación de ADR-GRP-007 (Rene Bonilla, 2026-10-04), que cierra P8: US-TMC-017 deja de esperar al ADR de formato y sigue bloqueada solo por el comando de edición de Guardrails (US-GRD-013, Q27). Las bloqueadas siguen siendo 5 (005, 011, 017, 020, 021); ninguna otra citaba P8 |
 | 1.5 | 2026-10-04 | Agente de documentación para Rene Bonilla | Decisión de Rene Bonilla (2026-10-04): US-TMC-017 se desbloquea. Sus escenarios parten de valores ya escritos en el perfil o en el local y no usan el comando de edición de Guardrails (Q27, US-GRD-013); depende de US-TMC-016 y US-GRP-013. Bloqueadas: 4 (005, 011, 020, 021) |
+| 1.6 | 2026-10-04 | Agente de documentación para Rene Bonilla | Decisión de Rene Bonilla, 2026-10-04: US-TMC-005 se desbloquea. Los hooks de Guardrails existen (ADR-GRD-001 aceptado; los instala US-GRD-001), y el bloqueo cruzado con US-GRD-017 pasa a dependencias: US-TMC-005 depende de US-TMC-004 y US-GRD-001, y US-GRD-017 de US-TMC-005. Bloqueadas: 3 (011, 020, 021) |

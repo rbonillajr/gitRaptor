@@ -23,12 +23,12 @@
 
 *   **F-001-03**: Time Machine (BR-08, BR-09, BR-10)
     -   **Contexto**: [context.md](features/time-machine/context.md)
-    -   **Historias**: [user-stories.md](features/time-machine/user-stories.md) (21 historias expandidas en `features/time-machine/user-stories/`, 2026-10-03; 4 bloqueadas desde el 2026-10-04, cuando US-TMC-017 se desbloqueó por decisión de Rene Bonilla)
+    -   **Historias**: [user-stories.md](features/time-machine/user-stories.md) (21 historias expandidas en `features/time-machine/user-stories/`, 2026-10-03; 3 bloqueadas desde el 2026-10-04, cuando US-TMC-017 y US-TMC-005 se desbloquearon por decisión de Rene Bonilla)
     -   **Status**: Propuesta
 
 *   **F-001-04**: Guardrails (BR-11, BR-12, BR-13)
     -   **Contexto**: [context.md](features/guardrails/context.md) (reglas en [business-rules.md](features/guardrails/business-rules.md), 2026-10-03)
-    -   **Historias**: [user-stories.md](features/guardrails/user-stories.md) (17 historias en `features/guardrails/user-stories/`, 2026-10-04; 13 listas y 4 bloqueadas: US-GRD-013 y US-GRD-015 por el factor fuera de banda de Q-GRD-19 (015 también por el Cockpit), US-GRD-016 por el MCP y US-GRD-017 por la Time Machine. ADR-GRP-005 a 013 y ADR-GRD-001 a 007 aceptados el 2026-10-04)
+    -   **Historias**: [user-stories.md](features/guardrails/user-stories.md) (17 historias en `features/guardrails/user-stories/`, 2026-10-04; 14 listas y 3 bloqueadas: US-GRD-013 y US-GRD-015 por el factor fuera de banda de Q-GRD-19 (015 también por el Cockpit) y US-GRD-016 por el MCP. ADR-GRP-005 a 013 y ADR-GRD-001 a 007 aceptados el 2026-10-04)
     -   **Status**: Priorizada
 
 *   **F-001-05**: Servidor MCP (BR-14, BR-15, BR-16)
