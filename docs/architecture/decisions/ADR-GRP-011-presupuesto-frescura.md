@@ -114,7 +114,7 @@ Nota de integración (Time Machine, ADR-TMC-004 y ADR-TMC-006, aceptados el 2026
 
 ## Validación
 
-- **SPIKE-GRP-002**: primera medición de las etapas del motor en los tres SO con 10 worktrees y un repo de 100K commits. Confirma o corrige las cifras del apartado 2 y la interpretación p95.
+- **SPIKE-GRP-002**: primera medición de las etapas del motor con 10 worktrees y un repo de 100K commits. **Medido solo en macOS** ([resultados](../../requirements/features/motor-local/research/SPIKE-GRP-002-resultados.md), § 3.1 a § 3.3): confirma las cifras del apartado 2, con el debounce compensado, y la interpretación p95. **Linux y Windows siguen pendientes**: se miden con el procedimiento del [README del prototipo](../../../spikes/watcher-viability/README.md#reproducir-en-linux-y-windows), que confirma o corrige las cifras en esos SO.
 - **INF-GRP-002**: banco y gates del apartado 4. Pasa a bloquear el merge cuando US-GRP-002 está implementada.
 - **Dogfooding**: percentiles reales del apartado 5 durante el uso diario de Rene; una desviación sostenida por encima del presupuesto abre la revisión de este ADR.
 
@@ -137,3 +137,4 @@ Aplicada desde las recomendaciones de [SPIKE-GRP-002-resultados.md](../../requir
 | El banco toma `t0` al fin del comando en los escenarios de Git, aísla la detección solo en "modificar un archivo" y mide el debounce como duración efectiva | § 4 | Resultados § 2, § 3.1 |
 | Coste medido de la persistencia con `F_FULLFSYNC` en macOS (≤ 11 ms p95); Windows sigue sin medir | Consecuencias | Resultados § 3.11 |
 | Revisión de coherencia con la Enmienda de ADR-GRP-010: ahead/behind recalculado activa la segunda fase; la reconciliación tras recrear el stream no cuenta para NFR-04, pero el alta y la baja del propio worktree sí; las cifras siguen como supuesto solo en Linux y Windows | § 2, Consecuencias | ADR-GRP-010 § 4 y § 6; revisión del Arquitecto (2026-10-04) |
+| Validación alineada con el alcance parcial: SPIKE-GRP-002 medido solo en macOS; Linux y Windows pendientes con el procedimiento del README del prototipo | Validación | Resultados § 5 y § 7; Artifact Judge (reservas) |
