@@ -51,6 +51,26 @@ pub struct RepoEntry {
     pub root_commit_hint: Option<String>,
 }
 
+/// Last recorded run of the daemon, kept in `profile_meta` so a crash can
+/// be told apart from an orderly stop on the next start (ADR-GRP-005 § 4,
+/// SEC-13).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DaemonRun {
+    /// No daemon ever ran on this profile (or the index was recreated).
+    Never,
+    /// A daemon started at `started_ms` and never recorded an orderly stop:
+    /// it crashed or was killed.
+    Running { started_ms: i64 },
+    /// The last daemon stopped in order.
+    Stopped {
+        stopped_ms: i64,
+        /// Stable cause text written by the daemon.
+        cause: String,
+        /// Client that asked for the stop, when a command caused it.
+        requested_by: Option<String>,
+    },
+}
+
 /// What adding a repo did.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AddOutcome {
@@ -93,6 +113,71 @@ impl Index {
 
     pub(crate) fn instance_id(&self) -> &str {
         &self.instance_id
+    }
+
+    pub(crate) fn daemon_run(&self) -> Result<DaemonRun> {
+        let get = |key: &str| -> Result<Option<String>> {
+            Ok(self
+                .conn
+                .query_row(
+                    "SELECT value FROM profile_meta WHERE key = ?1",
+                    params![key],
+                    |row| row.get(0),
+                )
+                .optional()?)
+        };
+        let ms = |key: &str| -> Result<i64> {
+            get(key)?
+                .and_then(|v| v.parse().ok())
+                .ok_or_else(|| ProfileError::InvalidWrite(["missing ", key].concat()))
+        };
+        Ok(match get("daemon_run")?.as_deref() {
+            None => DaemonRun::Never,
+            Some("running") => DaemonRun::Running {
+                started_ms: ms("daemon_started_ms")?,
+            },
+            Some(_) => DaemonRun::Stopped {
+                stopped_ms: ms("daemon_stopped_ms")?,
+                cause: get("daemon_stop_cause")?.unwrap_or_default(),
+                requested_by: get("daemon_stop_requested_by")?,
+            },
+        })
+    }
+
+    pub(crate) fn set_daemon_running(&mut self, started_ms: i64) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        tx.execute(
+            "DELETE FROM profile_meta WHERE key IN ('daemon_stopped_ms', 'daemon_stop_cause',
+                 'daemon_stop_requested_by')",
+            [],
+        )?;
+        set_meta(&tx, "daemon_run", "running")?;
+        set_meta(&tx, "daemon_started_ms", &started_ms.to_string())?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub(crate) fn set_daemon_stopped(
+        &mut self,
+        stopped_ms: i64,
+        cause: &str,
+        requested_by: Option<&str>,
+    ) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        set_meta(&tx, "daemon_run", "stopped")?;
+        set_meta(&tx, "daemon_stopped_ms", &stopped_ms.to_string())?;
+        set_meta(&tx, "daemon_stop_cause", cause)?;
+        match requested_by {
+            Some(client) => set_meta(&tx, "daemon_stop_requested_by", client)?,
+            None => {
+                tx.execute(
+                    "DELETE FROM profile_meta WHERE key = 'daemon_stop_requested_by'",
+                    [],
+                )?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
     }
 
     pub(crate) fn add(
@@ -173,6 +258,15 @@ impl Index {
         let rows = stmt.query_map([], entry_from_row)?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
+}
+
+fn set_meta(conn: &Connection, key: &str, value: &str) -> Result<()> {
+    conn.execute(
+        "INSERT INTO profile_meta (key, value) VALUES (?1, ?2)
+         ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+        params![key, value],
+    )?;
+    Ok(())
 }
 
 fn find_by_key(conn: &Connection, key_path: &str) -> Result<Option<RepoEntry>> {

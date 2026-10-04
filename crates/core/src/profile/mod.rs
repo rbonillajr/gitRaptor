@@ -7,7 +7,7 @@
 
 mod dirs;
 mod error;
-mod fsperm;
+pub(crate) mod fsperm;
 mod index;
 mod repo_key;
 mod schema;
@@ -19,7 +19,7 @@ use std::path::{Path, PathBuf};
 pub use dirs::{APP_DIR, PROFILE_DIR_ENV, ProfileDirs};
 pub use error::{ProfileError, Result};
 pub use fsperm::{ProfileWarning, create_private_file, set_restrictive_umask};
-pub use index::{AddOutcome, RepoEntry, RepoState};
+pub use index::{AddOutcome, DaemonRun, RepoEntry, RepoState};
 pub use repo_key::{NormalizedPath, normalize_common_dir, validate_input_path};
 pub use store::{
     Agent, AgentKind, AttributionRecord, Author, BatchResult, EndCause, Event, Gap, GapCause,
@@ -119,6 +119,29 @@ impl Profile {
     /// Stops observing a repo. Its store and data are kept.
     pub fn retire_repo(&mut self, repo_id: &str, now_ms: i64) -> Result<()> {
         self.index.retire(repo_id, now_ms)
+    }
+
+    /// Last recorded run of the daemon (ADR-GRP-005 § 4, SEC-13).
+    pub fn daemon_run(&self) -> Result<DaemonRun> {
+        self.index.daemon_run()
+    }
+
+    /// Records that a daemon is running. If it dies without
+    /// [`Profile::mark_daemon_stopped`], the next start sees a crash.
+    pub fn mark_daemon_running(&mut self, started_ms: i64) -> Result<()> {
+        self.index.set_daemon_running(started_ms)
+    }
+
+    /// Records an orderly stop with its cause and, when a command caused
+    /// it, the client that asked for it (SEC-13).
+    pub fn mark_daemon_stopped(
+        &mut self,
+        stopped_ms: i64,
+        cause: &str,
+        requested_by: Option<&str>,
+    ) -> Result<()> {
+        self.index
+            .set_daemon_stopped(stopped_ms, cause, requested_by)
     }
 
     /// Every repo of the index, observed or retired.
