@@ -118,7 +118,23 @@ Banco: `cargo bench -p gitraptor-core --bench tm_snapshot [-- --profile M --iter
 4. Compara la huella de `.git` antes y después.
 5. **Falla si el p95 del delta de referencia llega a 200 ms** (con 1 y con 10 worktrees) o si cambia el repo. Avisa por etapa y si la espera del escritor pasa de 10 ms.
 
-Resultados en el PR y en § 10.
+### Resultados (macOS, Apple M5, 10 núcleos, Git 2.50.1; perfil `M`, `HEAD=1a8bd23…`; n = 100)
+
+La máquina **no estaba en reposo**: otros agentes de Orca compilaban en paralelo y la carga media varió entre 6,7 y 8,8 en las pasadas con el código final. Siembra: 2,5 s (clon APFS de un pack de 610 MiB, 642.132 objetos re-hasheados). Huella de `.git` idéntica en todas las pasadas.
+
+| p95 total (ms) | Pasada A (carga 6,8–8,8) | Pasada B (carga 6,7–7,3) | Referencia (spike, `gix-hint`) |
+|---|---|---|---|
+| Camino rápido | 26,9 | 29,2 | 4,1 |
+| 1 archivo / 10 / 100 de texto | 29,9 / 38,0 / 104,5 | 29,7 / 37,2 / 97,0 | 7,8 / 16,2 / 73,5 |
+| **Delta de referencia, 1 worktree** | **120,8 ✅** | **126,8 ✅** | 142–146 |
+| 1.000 archivos (fuera de referencia) | 491,4 | 391,4 | 357–367 |
+| **Delta de referencia, 10 worktrees** | **145,5 ✅** | **217,0 ❌** | — |
+| 100 de texto, 10 worktrees | 205,5 ❌ | 345,8 ❌ | 79,8 |
+
+- **1 worktree**: cumple con margen en todas las pasadas. Detección 1–5 ms, blobs 44–46 ms y árboles 40–45 ms, dentro de presupuesto. **Ref + oplog: 42–43 ms, por encima de sus 25 ms** (solo aviso). Son cuatro `F_FULLFSYNC` por snapshot frente a uno en el spike (§ 7).
+- **10 worktrees**: con esta carga **no cumple de forma estable**. Los árboles se disparan (114–233 ms p95, con máximos de 2 s) y la espera del escritor pasa de 10 ms (23–26 ms).
+- Una pasada anterior con carga 3,7 y la variante de una sola barrera (descartada en § 7) dio 96 / 104 / 122 ms, todo en verde. No es el código final y no se presenta como resultado.
+- **Hipótesis sin verificar**: el coste por captura de las barreras completas del oplog, multiplicado por 9 observaciones por segundo, y la E/S de la máquina compartida. Separarlas y bajar a una barrera por snapshot es el trabajo pendiente de § 9. ADR-GRP-011 § 4 prevé un runner dedicado para este gate.
 
 ## 9. Fuera de este corte (pendiente)
 
@@ -131,7 +147,7 @@ Decisión del orquestador (2026-10-04), validada por el PO y el Arquitecto: la T
 | Disparadores del daemon: anclaje al publicar commits, verificación periódica fuera de la ruta crítica, cadencia de la observación | Daemon + US-TMC-004. `anchor`, `verify` y la detección completa ya existen |
 | Interfaz del motor "rutas cambiadas desde la marca X" | TS-GRP-002/003. La API ya acepta las pistas; sin ellas, detección completa (siempre correcta, fuera del presupuesto) |
 | Opción del perfil para incluir la lista de credenciales | US de configuración del perfil |
-| Una sola barrera por snapshot (en `complete`), unos 10 ms menos de ref + oplog | Ajustar la tolerancia de la cabeza del oplog (TS-TMC-002) con su test de corte, y enmendar ADR-TMC-001 § 4, ADR-TMC-003 y ADR-TMC-006 § 2 (§ 7) |
+| **Gate de 10 worktrees bajo carga** y una sola barrera por snapshot (en `complete`): en el banco final, ref + oplog son 42–58 ms p95 y el gate de 10 worktrees falla con la máquina cargada (§ 8) | Ajustar la tolerancia de la cabeza del oplog (TS-TMC-002) con su test de corte, y enmendar ADR-TMC-001 § 4, ADR-TMC-003 y ADR-TMC-006 § 2 (§ 7) |
 | Escribir los árboles de un snapshot en un pack en lugar de objetos sueltos (con 100 archivos dispersos se reescriben unos 250 árboles) | Optimización si el gate de CI lo pide |
 | Progreso en CLI/TUI para un previo con archivos grandes (US-TMC-020, escenario 3) | US-TMC-020; no es de esta TS |
 | Linux y Windows | **Pendiente: etapa de validación multiplataforma**. Linux compila con `FICLONE`, copia y `fsync`, sin ejecutar aquí. En Windows, `StoreRepo` devuelve `Unsupported` |
