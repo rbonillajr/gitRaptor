@@ -28,7 +28,11 @@ use crate::profile::{Result, create_private_file};
 
 /// Encoding format of the hashed rows. A future change of encoding bumps
 /// it, and rows keep verifying with the format they were written with.
-pub(crate) const FORMAT: i64 = 1;
+/// 1: journal rows without `birth_ns`. 2: journal rows with `birth_ns`.
+pub(crate) const FORMAT: i64 = 2;
+
+/// Format of the head file, independent of the row encoding.
+const HEAD_FORMAT: &str = "1";
 
 pub(crate) type Hash = [u8; 32];
 
@@ -61,9 +65,13 @@ impl RowKind {
         }
     }
 
-    /// The fixed query that reads a row back for hashing.
-    fn select(self) -> &'static str {
-        match self {
+    /// The fixed query that reads a row back for hashing, as encoded by
+    /// `format`; `None` for a format this build does not know.
+    fn select(self, format: i64) -> Option<&'static str> {
+        if !(1..=FORMAT).contains(&format) {
+            return None;
+        }
+        Some(match self {
             Self::Snapshot => {
                 "SELECT snapshot_id, seq, level, worktrees, store_ref, engine_mark,
                         cause_operation, cause_event_seq, recorded_ms
@@ -74,16 +82,21 @@ impl RowKind {
                         channel, confirmed, target, warnings, engine_mark, recorded_ms
                  FROM operations WHERE seq = ?1"
             }
-            Self::Journal => {
+            Self::Journal if format == 1 => {
                 "SELECT seq, entry, subject_id, state, step, related_id, path, inode, pid,
                         detail, recorded_ms
+                 FROM journal WHERE seq = ?1"
+            }
+            Self::Journal => {
+                "SELECT seq, entry, subject_id, state, step, related_id, path, inode, pid,
+                        detail, recorded_ms, birth_ns
                  FROM journal WHERE seq = ?1"
             }
             Self::Notice => {
                 "SELECT notice_id, seq, kind, worktree, operation_id, detail, recorded_ms
                  FROM notices WHERE seq = ?1"
             }
-        }
+        })
     }
 }
 
@@ -95,9 +108,12 @@ pub(crate) fn genesis(repo_id: &str) -> Hash {
     h.finalize().into()
 }
 
-/// Reads the row of `kind` at `seq` with its fixed query.
-fn load_row(conn: &Connection, kind: RowKind, seq: i64) -> Result<Option<Vec<Value>>> {
-    let mut stmt = conn.prepare_cached(kind.select())?;
+/// Reads the row of `kind` at `seq` with the fixed query of `format`.
+fn load_row(conn: &Connection, kind: RowKind, format: i64, seq: i64) -> Result<Option<Vec<Value>>> {
+    let Some(select) = kind.select(format) else {
+        return Ok(None);
+    };
+    let mut stmt = conn.prepare_cached(select)?;
     let columns = stmt.column_count();
     Ok(stmt
         .query_row(params![seq], |row| {
@@ -181,7 +197,7 @@ pub(crate) fn link(
     batch: i64,
     prev: &Hash,
 ) -> Result<Hash> {
-    let row = load_row(conn, kind, seq)?
+    let row = load_row(conn, kind, FORMAT, seq)?
         .ok_or_else(|| crate::profile::ProfileError::InvalidWrite("chained row vanished".into()))?;
     let hash = row_hash(prev, FORMAT, kind, seq, batch, &row);
     conn.execute(
@@ -220,7 +236,7 @@ pub(crate) fn verify(conn: &Connection, repo_id: &str) -> Result<Vec<ChainBreak>
             });
         }
         let intact = match (RowKind::parse(&kind), format) {
-            (Some(kind), FORMAT) => match load_row(conn, kind, seq)? {
+            (Some(kind), format) => match load_row(conn, kind, format, seq)? {
                 Some(row) => {
                     row_hash(&stored_prev, format, kind, seq, batch, &row)[..] == stored_hash[..]
                 }
@@ -276,7 +292,7 @@ pub(crate) fn write_head(path: &Path, tip: &Tip) -> io::Result<()> {
     let line = [
         HEAD_MAGIC,
         " ",
-        &FORMAT.to_string(),
+        HEAD_FORMAT,
         " ",
         &tip.seq.to_string(),
         " ",
@@ -314,7 +330,7 @@ fn read_head(path: &Path) -> io::Result<Head> {
     };
     let parts: Vec<&str> = text.trim_end().split(' ').collect();
     let parsed = match parts.as_slice() {
-        [magic, format, seq, _batch, hash] if *magic == HEAD_MAGIC && *format == "1" => {
+        [magic, format, seq, _batch, hash] if *magic == HEAD_MAGIC && *format == HEAD_FORMAT => {
             seq.parse::<i64>().ok().zip(unhex(hash))
         }
         _ => None,
@@ -428,6 +444,38 @@ mod tests {
         let hash = genesis("repo");
         assert_eq!(unhex(&hex(&hash)), Some(hash));
         assert_eq!(unhex("zz"), None);
+    }
+
+    #[test]
+    fn rows_written_with_format_1_still_verify() {
+        let conn = Connection::open_in_memory().unwrap();
+        for migration in super::super::schema::OPLOG_MIGRATIONS {
+            conn.execute_batch(migration).unwrap();
+        }
+        conn.execute(
+            "INSERT INTO journal (seq, entry, subject_id, path, inode, recorded_ms)
+             VALUES (1, 'lock-taken', 'op', '/r/.git/index.lock', 7, 5)",
+            [],
+        )
+        .unwrap();
+        let prev = genesis("repo");
+        let row = load_row(&conn, RowKind::Journal, 1, 1).unwrap().unwrap();
+        let hash = row_hash(&prev, 1, RowKind::Journal, 1, 1, &row);
+        conn.execute(
+            "INSERT INTO chain (seq, kind, format, batch, prev_hash, hash)
+             VALUES (1, 'journal', 1, 1, ?1, ?2)",
+            params![&prev[..], &hash[..]],
+        )
+        .unwrap();
+        assert!(verify(&conn, "repo").unwrap().is_empty());
+        // The same row hashed as format 2 (with `birth_ns`) is another hash.
+        let row2 = load_row(&conn, RowKind::Journal, 2, 1).unwrap().unwrap();
+        assert_ne!(hash, row_hash(&prev, 2, RowKind::Journal, 1, 1, &row2));
+        assert!(
+            load_row(&conn, RowKind::Journal, FORMAT + 1, 1)
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]

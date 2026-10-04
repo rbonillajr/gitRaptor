@@ -42,8 +42,8 @@ pub use model::{
 };
 pub use query::{CurrentAttribution, OperationFilter, SnapshotFilter};
 pub use recovery::{
-    AbsentStore, KeptLock, KeptLockReason, ProcessProbe, RecoveryOptions, RecoveryReport,
-    SnapshotRefs, SystemProbe, file_inode,
+    AbsentStore, FileIdentity, KeptLock, KeptLockReason, ProcessProbe, RecoveryOptions,
+    RecoveryReport, SnapshotRefs, SystemProbe, file_identity,
 };
 pub use stack::{ExternalEvent, StackItem, StackScope, UndoStack};
 
@@ -450,16 +450,17 @@ impl Oplog {
         self.write(|batch| advance(batch, operation_id, transition, now_ms))
     }
 
-    /// Annotates a Git lock the applier is about to take (ADR-TMC-003 § 2).
+    /// Annotates a Git lock the applier is about to take (ADR-TMC-003 § 2),
+    /// with the identity of the file it took (see [`file_identity`]).
     pub fn record_lock_taken(
         &mut self,
         operation_id: &str,
         path: &Path,
-        inode: u64,
+        identity: FileIdentity,
         now_ms: i64,
     ) -> Result<()> {
         let path = path_text(path)?;
-        let inode = i64::try_from(inode)
+        let inode = i64::try_from(identity.inode)
             .map_err(|_| ProfileError::InvalidWrite("inode out of range".into()))?;
         self.write(|batch| {
             require_operation(&batch.tx, operation_id)?;
@@ -469,6 +470,7 @@ impl Oplog {
                     subject_id: Some(operation_id),
                     path: Some(&path),
                     inode: Some(inode),
+                    birth_ns: identity.birth_ns,
                     ..Entry::default()
                 },
                 now_ms,
@@ -612,6 +614,7 @@ struct Entry<'a> {
     inode: Option<i64>,
     pid: Option<i64>,
     detail: Option<&'a str>,
+    birth_ns: Option<i64>,
 }
 
 impl Batch<'_> {
@@ -631,8 +634,8 @@ impl Batch<'_> {
         self.append(RowKind::Journal, |tx, seq| {
             tx.execute(
                 "INSERT INTO journal (seq, entry, subject_id, state, step, related_id, path,
-                     inode, pid, detail, recorded_ms)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                     inode, pid, detail, recorded_ms, birth_ns)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
                 params![
                     seq,
                     e.entry,
@@ -644,7 +647,8 @@ impl Batch<'_> {
                     e.inode,
                     e.pid,
                     e.detail,
-                    now_ms
+                    now_ms,
+                    e.birth_ns
                 ],
             )
         })

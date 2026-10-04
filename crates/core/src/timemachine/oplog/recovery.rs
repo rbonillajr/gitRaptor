@@ -103,7 +103,8 @@ pub struct RecoveryOptions<'a> {
 pub enum KeptLockReason {
     /// An annotated child is still alive past the deadline.
     ChildAlive,
-    /// The file there now is not the one the operation took.
+    /// The file there now is not the one the operation took: another inode
+    /// or, for a reused inode, another birth time.
     InodeChanged,
     /// Not a regular file named `*.lock`.
     NotALockFile,
@@ -111,7 +112,8 @@ pub enum KeptLockReason {
     OutsideGitDir,
     /// The journal entry is at a break of the chain.
     Tampered,
-    /// This OS cannot check the file's identity yet.
+    /// The file's identity cannot be checked: this OS or file system gives
+    /// no birth time, or the lock was annotated without one.
     Unsupported,
     Io,
 }
@@ -375,8 +377,14 @@ impl Oplog {
                 continue;
             }
 
-            let inode = lock.inode.and_then(|i| u64::try_from(i).ok());
-            match release_own_lock(options.git_dir, &path, inode) {
+            let identity =
+                lock.inode
+                    .and_then(|i| u64::try_from(i).ok())
+                    .map(|inode| FileIdentity {
+                        inode,
+                        birth_ns: lock.birth_ns,
+                    });
+            match release_own_lock(options.git_dir, &path, identity) {
                 Ok(LockOutcome::Released) => {
                     self.record_lock_released(&op, &path, now_ms)?;
                     report.released_locks.push(path);
@@ -396,19 +404,41 @@ impl Oplog {
 /// Result of trying to release an annotated lock.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum LockOutcome {
+    #[cfg_attr(not(unix), allow(dead_code))]
     Released,
     /// No file there any more: nothing to do.
     Gone,
     Kept(KeptLockReason),
 }
 
-/// Identity of a file, to annotate a lock when it is taken. `None` where
-/// the OS gives no stable identity through std (Windows: pending).
-pub fn file_inode(path: &Path) -> io::Result<Option<u64>> {
+/// Identity of a file: its inode and its birth time. The inode alone is not
+/// enough, because file systems such as ext4 hand a freed inode to the next
+/// file created, so a foreign lock taken at the same path can get the inode
+/// of ours (ADR-TMC-003 § 4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FileIdentity {
+    pub inode: u64,
+    /// Nanoseconds since the epoch; `None` where the file system keeps no
+    /// birth time, and then the lock is never released by recovery.
+    pub birth_ns: Option<i64>,
+}
+
+/// Identity of a file, to annotate a lock when it is taken. Never follows a
+/// symbolic link. `None` where the OS gives no stable identity through std
+/// (Windows: pending).
+pub fn file_identity(path: &Path) -> io::Result<Option<FileIdentity>> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
-        Ok(Some(std::fs::symlink_metadata(path)?.ino()))
+        let meta = std::fs::symlink_metadata(path)?;
+        let birth_ns = meta.created().ok().and_then(|t| {
+            let since = t.duration_since(std::time::UNIX_EPOCH).ok()?;
+            i64::try_from(since.as_nanos()).ok()
+        });
+        Ok(Some(FileIdentity {
+            inode: meta.ino(),
+            birth_ns,
+        }))
     }
     #[cfg(not(unix))]
     {
@@ -419,13 +449,13 @@ pub fn file_inode(path: &Path) -> io::Result<Option<u64>> {
 
 /// The only write recovery makes in the user's repo: deletes the lock at
 /// `path` if, and only if, it is a regular file named `*.lock`, inside
-/// `git_dir`, with the inode the journal recorded. The check and the
+/// `git_dir`, with the identity (inode and birth time) the journal recorded. The check and the
 /// deletion go through a descriptor of the parent folder and never follow a
 /// symbolic link (SEC-TMC-04).
 pub(crate) fn release_own_lock(
     git_dir: &Path,
     path: &Path,
-    inode: Option<u64>,
+    identity: Option<FileIdentity>,
 ) -> io::Result<LockOutcome> {
     let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
         return Ok(LockOutcome::Kept(KeptLockReason::NotALockFile));
@@ -442,32 +472,33 @@ pub(crate) fn release_own_lock(
     if !parent.starts_with(&git_dir) {
         return Ok(LockOutcome::Kept(KeptLockReason::OutsideGitDir));
     }
-    let Some(inode) = inode else {
+    let Some(identity) = identity else {
         return Ok(LockOutcome::Kept(KeptLockReason::Unsupported));
     };
-    unlink_if_same(&parent, name, inode)
+    unlink_if_same(&parent, name, identity)
 }
 
 #[cfg(unix)]
-fn unlink_if_same(parent: &Path, name: &str, inode: u64) -> io::Result<LockOutcome> {
+fn unlink_if_same(parent: &Path, name: &str, identity: FileIdentity) -> io::Result<LockOutcome> {
     use rustix::fs::{AtFlags, Mode, OFlags};
     let dir = rustix::fs::open(
         parent,
         OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::RDONLY | OFlags::CLOEXEC,
         Mode::empty(),
     )?;
-    let stat = match rustix::fs::statat(&dir, name, AtFlags::SYMLINK_NOFOLLOW) {
-        Ok(stat) => stat,
-        Err(rustix::io::Errno::NOENT) => return Ok(LockOutcome::Gone),
-        Err(err) => return Err(err.into()),
+    let Some((mode, inode, birth_ns)) = stat_at(&dir, name)? else {
+        return Ok(LockOutcome::Gone);
     };
-    #[allow(clippy::unnecessary_cast)]
-    let mode = stat.st_mode as u32;
     if mode & 0o170000 != 0o100000 {
         return Ok(LockOutcome::Kept(KeptLockReason::NotALockFile));
     }
-    #[allow(clippy::unnecessary_cast)]
-    if stat.st_ino as u64 != inode {
+    if inode != identity.inode {
+        return Ok(LockOutcome::Kept(KeptLockReason::InodeChanged));
+    }
+    let (Some(recorded), Some(current)) = (identity.birth_ns, birth_ns) else {
+        return Ok(LockOutcome::Kept(KeptLockReason::Unsupported));
+    };
+    if recorded != current {
         return Ok(LockOutcome::Kept(KeptLockReason::InodeChanged));
     }
     match rustix::fs::unlinkat(&dir, name, AtFlags::empty()) {
@@ -477,8 +508,64 @@ fn unlink_if_same(parent: &Path, name: &str, inode: u64) -> io::Result<LockOutco
     }
 }
 
+/// Mode, inode and birth time (ns since the epoch) of `name` in `dir`,
+/// without following a symbolic link; `None` if there is no such file.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn stat_at(dir: &impl rustix::fd::AsFd, name: &str) -> io::Result<Option<(u32, u64, Option<i64>)>> {
+    use rustix::fs::{AtFlags, StatxFlags};
+    let stat = match rustix::fs::statx(
+        dir,
+        name,
+        AtFlags::SYMLINK_NOFOLLOW,
+        StatxFlags::TYPE | StatxFlags::INO | StatxFlags::BTIME,
+    ) {
+        Ok(stat) => stat,
+        Err(rustix::io::Errno::NOENT) => return Ok(None),
+        Err(err) => return Err(err.into()),
+    };
+    let birth_ns = (stat.stx_mask & StatxFlags::BTIME.bits() != 0)
+        .then(|| {
+            stat.stx_btime
+                .tv_sec
+                .checked_mul(1_000_000_000)?
+                .checked_add(i64::from(stat.stx_btime.tv_nsec))
+        })
+        .flatten();
+    Ok(Some((u32::from(stat.stx_mode), stat.stx_ino, birth_ns)))
+}
+
+#[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
+fn stat_at(dir: &impl rustix::fd::AsFd, name: &str) -> io::Result<Option<(u32, u64, Option<i64>)>> {
+    let stat = match rustix::fs::statat(dir, name, rustix::fs::AtFlags::SYMLINK_NOFOLLOW) {
+        Ok(stat) => stat,
+        Err(rustix::io::Errno::NOENT) => return Ok(None),
+        Err(err) => return Err(err.into()),
+    };
+    #[cfg(any(
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
+    #[allow(clippy::unnecessary_cast)]
+    let birth_ns = (stat.st_birthtime as i64)
+        .checked_mul(1_000_000_000)
+        .and_then(|s| s.checked_add(stat.st_birthtime_nsec as i64));
+    #[cfg(not(any(
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    )))]
+    let birth_ns = None;
+    #[allow(clippy::unnecessary_cast)]
+    Ok(Some((stat.st_mode as u32, stat.st_ino as u64, birth_ns)))
+}
+
 #[cfg(not(unix))]
-fn unlink_if_same(_parent: &Path, _name: &str, _inode: u64) -> io::Result<LockOutcome> {
+fn unlink_if_same(_parent: &Path, _name: &str, _identity: FileIdentity) -> io::Result<LockOutcome> {
     // Pending: cross-platform validation stage (Windows file identity).
     Ok(LockOutcome::Kept(KeptLockReason::Unsupported))
 }

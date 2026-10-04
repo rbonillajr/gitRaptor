@@ -355,6 +355,8 @@ pub struct JournalEntry {
     pub pid: Option<i64>,
     pub detail: Option<String>,
     pub recorded_ms: i64,
+    /// Birth time of an annotated lock, in ns since the epoch.
+    pub birth_ns: Option<i64>,
 }
 
 #[cfg(test)]

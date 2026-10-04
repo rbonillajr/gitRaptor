@@ -274,7 +274,7 @@ impl Oplog {
     pub fn journal(&self, subject_id: &str) -> Result<Vec<JournalEntry>> {
         let mut stmt = self.conn.prepare_cached(
             "SELECT seq, entry, subject_id, state, step, related_id, path, inode, pid, detail,
-                 recorded_ms
+                 recorded_ms, birth_ns
              FROM journal WHERE subject_id = ?1 ORDER BY seq",
         )?;
         Ok(stmt
@@ -398,6 +398,7 @@ fn journal_row(row: &Row<'_>) -> rusqlite::Result<JournalEntry> {
         pid: row.get(8)?,
         detail: row.get(9)?,
         recorded_ms: row.get(10)?,
+        birth_ns: row.get(11)?,
     })
 }
 
@@ -405,7 +406,7 @@ fn journal_row(row: &Row<'_>) -> rusqlite::Result<JournalEntry> {
 pub(super) fn entries_of(conn: &Connection, entry: &str) -> Result<Vec<JournalEntry>> {
     let mut stmt = conn.prepare_cached(
         "SELECT seq, entry, subject_id, state, step, related_id, path, inode, pid, detail,
-             recorded_ms
+             recorded_ms, birth_ns
          FROM journal WHERE entry = ?1 ORDER BY seq",
     )?;
     Ok(stmt
