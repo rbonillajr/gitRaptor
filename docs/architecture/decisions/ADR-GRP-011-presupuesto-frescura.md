@@ -128,7 +128,7 @@ Nota de integración (Time Machine, ADR-TMC-004 y ADR-TMC-006, aceptados el 2026
 
 ## Enmienda (2026-10-04, SPIKE-GRP-002)
 
-Aplicada desde las recomendaciones de [SPIKE-GRP-002-resultados.md](../../requirements/features/motor-local/research/SPIKE-GRP-002-resultados.md) (§ 6), que se midieron **solo en macOS**. Las cifras del reparto (§ 2) no cambian. El `status` sigue en `proposed`.
+Aplicada desde las recomendaciones de [SPIKE-GRP-002-resultados.md](../../requirements/features/motor-local/research/SPIKE-GRP-002-resultados.md) (§ 6), que se midieron **solo en macOS**. Las cifras del reparto (§ 2) no cambian. El `status` sigue en `accepted`: la enmienda no cambia la decisión aceptada por Rene Bonilla.
 
 | Cambio | Dónde | Fuente |
 |---|---|---|
