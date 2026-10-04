@@ -290,7 +290,7 @@ Impacto de no resolverlo: una sola pérdida de trabajo rompe la confianza en el 
 | D-TMC-18 | (P9) El registro de un undo (solicitante y sobre qué actuó) no se reescribe; el timeline muestra la atribución vigente. | P9 | 2026-10-03 | Rene Bonilla | BR-TMC-CONS-005 |
 | D-TMC-19 | (P10) Timeline por repo, con filtros por worktree, agente y tiempo. | P10 | 2026-10-03 | Rene Bonilla | BR-TMC-CONS-005, BR-TMC-EDGE-002, BR-TMC-WF-001 |
 | D-TMC-20 | (P11) Una restauración alcanza el worktree donde se pide y las ramas y worktrees que cambiaron después del punto; nada más. | P11 | 2026-10-03 | Rene Bonilla | BR-TMC-WF-003, BR-TMC-WF-001 |
-| D-TMC-21 | (P12) La referencia de "repo mediano" para NFR-04 se fija en el spike (a). Sigue siendo una dependencia del Arquitecto. | P12 | 2026-10-03 | Rene Bonilla | — (NFR-04) |
+| D-TMC-21 | (P12; **cerrada por SPIKE-TMC-001 el 2026-10-04**) El "repo mediano" de referencia de NFR-04 es el **perfil `M`** del generador reproducible del spike: 10.000 archivos con seguimiento, ~300 MB de working tree, 50.000 commits, 3 % de binarios y 3.000 archivos ignorados. El perfil `L` (40.000 archivos, 1 GB, 150.000 commits) queda fuera de referencia (US-TMC-020, escenario 3). Ver [resultados](./research/SPIKE-TMC-001-resultados.md). | P12, SPIKE-TMC-001 | 2026-10-04 | Rene Bonilla | — (NFR-04) |
 | D-TMC-22 | (P13) Las historias de undo por agente quedan bloqueadas hasta que se cierre P17 de motor-local. | P13 | 2026-10-03 | Rene Bonilla | BR-TMC-WF-002 |
 | D-TMC-23 | (P14) El solicitante de un undo, redo o restauración se atribuye como un evento ("agente X" o "sin atribuir", nunca "humano"). Atribuido a un agente, solo deshace lo suyo. "Sin atribuir": deshacer trabajo de otro actor exige una confirmación interactiva del desarrollador en ese momento, que un agente no puede dar. **Actualizada por TQ-14**: en el MVP esa confirmación solo se ofrece en macOS y Linux; en Windows, hasta que exista una forma fiable de probar que no la da un agente, la petición "sin atribuir" que toca trabajo de otro actor se rechaza con su motivo. En la Fase 2 se planea la presencia verificada por el SO (Touch ID, Windows Hello, polkit). Por MCP una petición "sin atribuir" se rechaza siempre (TQ-7). El mecanismo de identificación lo decide el Arquitecto. | P14, TQ-14, TQ-7 | 2026-10-03 | Rene Bonilla | BR-TMC-AUTH-001, BR-TMC-WF-001 |
 | D-TMC-24 | (TQ-17) Borrar contenido ya capturado en snapshots (`raptor tm forget`) queda fuera del MVP y se aplaza a una US futura, que tendrá que conciliarse con D-TMC-15, BR-TMC-TIME-001 y BR-TMC-CONS-004. D-TMC-15 y BR-TMC-TIME-001 no cambian. | TQ-17 | 2026-10-03 | Rene Bonilla | — (pendiente futuro) |
@@ -337,7 +337,7 @@ Impacto de no resolverlo: una sola pérdida de trabajo rompe la confianza en el 
 | Usuarios/Actores | ✅ | Roles diferenciados; "sin atribuir" tratado como no actor; el solicitante nunca es "humano" (D-TMC-23). |
 | Alcance OUT of scope | ✅ | 11 exclusiones, cada una con su dueño. |
 | Restricciones | ⚠️ | Las garantías de los snapshots están decididas (D-TMC-11); la política interna de ASSA sigue sin confirmar. |
-| RNFs | ⚠️ | "Repo mediano" se fija en el spike (a) (D-TMC-21): NFR-04 aún no es verificable. Retención decidida (D-TMC-15). |
+| RNFs | ✅ | "Repo mediano" fijado por SPIKE-TMC-001: perfil `M` (D-TMC-21, 2026-10-04); NFR-04 es verificable. Retención decidida (D-TMC-15). |
 | Integraciones | ✅ | Los hooks de Guardrails son opcionales; la cobertura no depende de ellos (D-TMC-10). |
 | Glosario | ✅ | Términos clave definidos, incluidos cobertura, hueco, solape y solicitante. |
 | Cobertura de snapshots | ✅ | Dos niveles decididos y declarados (D-TMC-9, D-TMC-10); el riesgo residual R2 sigue en Riesgos. |
@@ -352,7 +352,7 @@ Impacto de no resolverlo: una sola pérdida de trabajo rompe la confianza en el 
 |---|---------|--------|---------|--------------|
 | 1 | Valor Esperado / ROI | Sin línea base del tiempo de recuperación manual. | No se podrá demostrar el ahorro; solo el KPI de uso (≥ 3 undos). | Rene Bonilla (2026-10-03) |
 | 2 | Restricciones | ~~Ubicación de los snapshots sin decidir (P2).~~ | **Resuelto** el 2026-10-03 (D-TMC-11): tres garantías de negocio; el mecanismo lo decide el Arquitecto. | — |
-| 3 | RNFs | "Repo mediano" sin definir; se fija en el spike (a) (D-TMC-21). | NFR-04 no es verificable hasta el spike (a). | Rene Bonilla (2026-10-03) |
+| 3 | RNFs | ~~"Repo mediano" sin definir; se fija en el spike (a) (D-TMC-21).~~ | **Resuelto** el 2026-10-04 (D-TMC-21): perfil `M` de SPIKE-TMC-001. | — |
 | 4 | Integraciones / Cobertura | ~~El Git crudo depende de hooks de Guardrails aún inexistentes (P1).~~ | **Resuelto** el 2026-10-03 (D-TMC-10). El riesgo de producto R2 (lo editado entre la última captura y una operación destructiva de Git crudo) sigue en Riesgos. | — |
 | 5 | Undo por agente | Las historias de undo por agente dependen de P17 de motor-local (D-TMC-22). Solape y ámbito por defecto ya decididos (D-TMC-13, S8). | Esas historias no se pueden generar ni cerrar hasta que se resuelva P17; riesgo R3. | Rene Bonilla (2026-10-03) |
 | 6 | Restauración a un punto | ~~Alcance supuesto (P11).~~ | **Resuelto** el 2026-10-03 (D-TMC-20). | — |
