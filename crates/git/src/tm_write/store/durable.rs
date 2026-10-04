@@ -57,6 +57,7 @@ pub(super) fn full_barrier(path: &Path) -> io::Result<()> {
 }
 
 /// Nanoseconds of the wall clock, to name temporary folders.
+#[cfg(unix)]
 pub(super) fn nanos() -> u128 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
