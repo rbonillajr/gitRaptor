@@ -154,6 +154,12 @@ impl Oplog {
         let head_path = dir.join(HEAD_FILE);
         let existed = path.exists();
         let opened = sqlite::open_db(&path, schema::OPLOG_MIGRATIONS, &dirs.quarantine_dir())?;
+        // On macOS a plain fsync does not flush the drive cache: a `complete` row could be lost
+        // to a power cut after the protected operation ran (NFR-01). No effect elsewhere.
+        opened.conn.pragma_update(None, "fullfsync", true)?;
+        opened
+            .conn
+            .pragma_update(None, "checkpoint_fullfsync", true)?;
         let status = match opened.quarantined {
             Some(quarantined) => {
                 // The old head belongs to the old file: keep it with it.
