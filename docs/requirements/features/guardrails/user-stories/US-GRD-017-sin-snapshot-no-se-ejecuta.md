@@ -14,12 +14,12 @@ related:
     - BR-GRD-001
   stories:
     - US-GRD-001
+    - US-TMC-005
 tags:
   - guardrails
   - snapshot
   - nfr-01
   - time-machine
-  - bloqueada
 ---
 
 # US-GRD-017: Una operación destructiva permitida no se ejecuta sin un punto de recuperación
@@ -36,8 +36,8 @@ BR-EDGE-005 (sin snapshot previo, se deniega con motivo; el humano puede usar la
 
 ## Dependencias
 
-- **Historias**: US-GRD-001 (decisión).
-- **Externas**: **bloqueada** por la Time Machine F-001-03 (snapshot previo, BR-08). Guardrails no toma el snapshot.
+- **Historias**: US-GRD-001 (decisión); US-TMC-005 (Time Machine: snapshot `previo_hook` pedido desde los hooks, ADR-TMC-004 § 3).
+- **Externas**: ninguna. Desbloqueada el 2026-10-04 por decisión de Rene Bonilla, 2026-10-04: la Time Machine (F-001-03) ya tiene historias y ADRs aceptados, y el contrato con Guardrails está en ADR-GRD-003 (con `allow` y una operación destructiva, el daemon pide el `previo_hook` en la misma llamada). El bloqueo por F-001-03 pasa a ser dependencia de US-TMC-005. Guardrails no toma el snapshot.
 - **Transversal**: Windows, macOS y Linux; pruebas de caos (NFR-12). Los escenarios usan una operación que la capa de hooks puede interceptar; `reset --hard` con Git directo no lo es (BR-EDGE-003) y por MCP se cubre cuando exista F-001-05.
 
 ## Criterios de Aceptación

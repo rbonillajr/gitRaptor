@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: medium
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 domain: GRP
 epic: E-001
 feature: time-machine
@@ -14,9 +14,9 @@ related:
     - CTX-TMC-001
   rules:
     - BR-TMC-001
-  stories: [US-TMC-004]
+  stories: [US-TMC-004, US-GRD-001]
 covers: [BR-TMC-CONS-003, D-TMC-4, D-TMC-9, D-TMC-10]
-blocked_by: ["F-001-04 (hooks de Git de Guardrails)"]
+blocked_by: []
 tags: [time-machine, git-crudo, guardrails]
 ---
 
@@ -76,6 +76,6 @@ Entonces la Time Machine no guarda ningún punto por esa consulta
 
 ## Dependencias
 
-- **Historias**: US-TMC-004.
-- **Externas**: **bloqueada** hasta que existan los hooks de Git de Guardrails (F-001-04, BR-12). La Time Machine no instala hooks (Q22).
+- **Historias**: US-TMC-004; US-GRD-001 (Guardrails: instala los hooks que llaman al snapshot `previo_hook`).
+- **Externas**: ninguna. Desbloqueada el 2026-10-04 por decisión de Rene Bonilla, 2026-10-04: los hooks de Guardrails están definidos en ADR-GRD-001 (aceptado) y los instala US-GRD-001, así que el bloqueo por F-001-04 pasa a ser dependencia de historia. Antes se bloqueaba en cruz con US-GRD-017, que ahora depende de esta historia. La Time Machine no instala hooks (Q22).
 - **Transversal**: transversal (lo define el Arquitecto): verificación en repos temporales, nunca en un repo real; mismo comportamiento en Windows, macOS y Linux; mensajes en inglés y español.
