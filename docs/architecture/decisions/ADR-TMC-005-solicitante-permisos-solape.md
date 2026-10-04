@@ -1,0 +1,107 @@
+---
+id: ADR-TMC-005
+title: "ADR-TMC-005 — Solicitante, permisos y solape de undo, redo y restauración"
+type: adr
+status: proposed
+created: 2026-10-03
+updated: 2026-10-03
+date: 2026-10-03
+domain: GRP
+feature: time-machine
+supersedes: []
+superseded_by: null
+deciders: [Rene Bonilla]
+related:
+  adrs: [ADR-GRP-005, ADR-GRP-007, ADR-GRP-012, ADR-GRP-013, ADR-TMC-002, ADR-TMC-003]
+  stories: [US-TMC-002, US-TMC-003, US-TMC-009, US-TMC-010, US-TMC-011, US-TMC-012, US-TMC-013, US-TMC-021]
+description: "El daemon atribuye al solicitante por la ascendencia del proceso llamante (agente X o sin atribuir), reutiliza la confirmación de los comandos reservados para tocar trabajo ajeno, Guardrails solo puede denegar y el solape se detecta por archivo y por ref"
+tags: [adr, time-machine, permisos, solicitante, confirmacion-interactiva, solape, guardrails, mcp, br-tmc-auth-001, d-tmc-23]
+published: true
+---
+
+# ADR-TMC-005 — Solicitante, permisos y solape de undo, redo y restauración
+
+**Status**: Propuesto · **Fecha**: 2026-10-03 · **Decisores**: Rene Bonilla · **Feature**: Time Machine (F-001-03)
+
+## Contexto
+
+GitRaptor no puede probar que una petición viene del humano: un agente puede lanzar `raptor undo` desde su shell (Q34, R7). Por eso el **solicitante** se atribuye como un evento, "agente X" o "sin atribuir", nunca "humano" (D-TMC-23). Un agente solo deshace su propio trabajo; un solicitante "sin atribuir" necesita una confirmación interactiva, que un agente no pueda dar, para tocar trabajo de otro actor (BR-TMC-AUTH-001). Guardrails puede restringir, nunca ampliar (US-TMC-021). Un undo nunca sobrescribe cambios posteriores de otro actor en los mismos archivos o fragmentos (D-TMC-13, US-TMC-012). Motor-local ya resolvió en el daemon, para los comandos reservados, cómo distinguir un proceso de agente de uno que no lo es: identificador de proceso no reutilizable, ascendencia, terminal de control y líder de sesión (ADR-GRP-005 § 6, PQ-6, ADR-GRP-012 S3).
+
+**Pregunta**: ¿cómo se identifica al solicitante por CLI y por MCP, cuándo se pide confirmación, cómo entra Guardrails y con qué granularidad se detecta el solape?
+
+## Decisión
+
+### 1. Identificación del solicitante (en el daemon, nunca en el cliente)
+
+- El daemon obtiene el identificador no reutilizable del proceso cliente (pidfd, audit token o handle; ADR-GRP-005 § 6.1) y recorre su ascendencia con las reglas de SEC-TMC-03: un antecesor solo cuenta si arrancó antes que su hijo, y un multiplexor de terminal compartido con una sesión de agente convierte al cliente en agente.
+- **Agente X**: si un antecesor es el proceso de una sesión de agente presente (S1 de ADR-GRP-012), el solicitante es el agente con atribución vigente de esa sesión en ese momento, con su origen. Se congela en el oplog (ADR-TMC-003 § 5).
+- **"Sin atribuir"**: en cualquier otro caso. Nunca "humano"; el contrato de `crates/api` no tiene esa variante (ADR-GRP-013 § 6).
+- **Canal**: se registra CLI, TUI, MCP o hook. `raptor-mcp` lo lanza el agente, así que su ascendencia resuelve a ese agente.
+- **Agentes registrados** (Codex u otros, Q32): solo se reconocen como solicitantes si el registro guardó la identidad del proceso que se registró. ⚠️ **ASSUMPTION** (TQ-8): ADR-GRP-012/013 deben guardarla. Hoy, una petición de un agente registrado que no se reconoce queda "sin atribuir".
+- **Por MCP**, el repo y el worktree salen del cwd del llamante y el repo debe estar en la allowlist (NFR-02, SEC-TMC-15). **Solicitante "sin atribuir" por MCP**: ⚠️ **ASSUMPTION** (TQ-7): se rechaza de forma incondicional, antes de calcular el conjunto, porque el MCP es el canal de los agentes y un agente que no se puede identificar no puede probar que el trabajo es suyo.
+
+### 2. Regla base de permisos
+
+| Solicitante | Conjunto a deshacer o restaurar | Resultado |
+|---|---|---|
+| Agente X | Todo con atribución vigente = X | Permitido |
+| Agente X | Incluye trabajo de otro agente o "sin atribuir" | Rechazado con el motivo |
+| "Sin atribuir" (CLI/TUI) | Solo trabajo "sin atribuir" | Permitido |
+| "Sin atribuir" (CLI/TUI) | Incluye trabajo atribuido a un agente | Requiere confirmación interactiva; sin ella, rechazado |
+| "Sin atribuir" (MCP) | Cualquiera | Rechazado (TQ-7) |
+
+- **"Trabajo de otro actor"** para un solicitante sin atribuir = trabajo con atribución vigente a un agente. Lo "sin atribuir" es "Tú u otro" (D-TMC-12) y no exige confirmación, como piden US-TMC-002 y US-TMC-009.
+- Los eventos de un hueco son "sin atribuir" y nunca entran en un undo por agente (BR-TMC-EDGE-002).
+
+### 3. Confirmación interactiva
+
+Se **reutiliza** el mecanismo de los comandos reservados de ADR-GRP-005 § 6, sin duplicarlo: el daemon comprueba por su cuenta que el cliente no desciende de un agente, que tiene terminal de control y que el líder de su sesión no desciende de un agente; la CLI/TUI pide la confirmación, que es UX y no un control. El MCP nunca la ofrece. A diferencia de un comando reservado, un undo no está prohibido a los agentes: solo la parte que toca trabajo ajeno exige la confirmación.
+
+- **Reto ligado al plan** (SEC-TMC-03): el daemon emite un reto de un solo uso ligado a la conexión, al proceso y al hash del plan mostrado, que caduca a los 60 s y se invalida si el plan cambia.
+- **Windows**: ⚠️ **ASSUMPTION** (TQ-14, **cambia D-TMC-23 y BR-TMC-AUTH-001 en Windows: decisión de producto**): sin confirmación de trabajo ajeno hasta tener una prueba de ascendencia y terminal equivalente; en Windows, un "sin atribuir" no puede tocar trabajo de un agente. Es una excepción declarada a NFR-TMC-13 (mismo comportamiento en los tres SO), condicionada a TQ-14.
+- **Inyección en la terminal**: el diagnóstico avisa si el SO permite escribir en la terminal de otro proceso (SEC-TMC-13).
+- **Riesgo residual aceptado de forma explícita**: la confirmación protege frente a agentes confundidos, **no** frente a un proceso del mismo usuario que se desacopla de su árbol (doble fork + `setsid` + `script`, `launchctl`, `systemd-run`, `osascript`). Lo compensa el snapshot previo de cada operación, que permite deshacerla: un agente comprometido ya puede hacer `git reset --hard` sin GitRaptor. La presencia verificada por el SO queda para la Fase 2 (TQ-14).
+
+### 4. Guardrails solo puede denegar
+
+Orden de evaluación: validación (BR-TMC-VAL-001), conjunto, regla base (§ 2), confirmación (§ 3), **política de Guardrails**, solape (§ 5), precondiciones de Git (ADR-TMC-002 § 3). La política la evalúa `crates/policy` (ADR-GRP-007) y devuelve `permitir` o `denegar(motivo)`; el resultado final es la **conjunción**: una política que "permite" algo que la regla base rechaza no tiene efecto (US-TMC-021, escenario 2). Toda petición, aceptada o rechazada, queda en el oplog con su solicitante y su motivo (auditoría, SEC-TMC-03).
+
+### 5. Solape: por archivo y por ref en el MVP
+
+- **Qué es**: deshacer o restaurar cambiaría una ruta o una ref que **después** del cambio a deshacer modificó otro actor. "Otro actor" = cualquier atribución vigente distinta del actor de lo que se deshace; "sin atribuir" cuenta como distinto de un agente.
+- **Cómo se detecta**: por cada ruta del destino, se recorren los cambios de esa ruta entre capturas posteriores al cambio a deshacer (diferencias de árbol en el almacén) y su actor según los eventos del motor de ese intervalo. Por cada ref, sus movimientos posteriores. Si en un intervalo tocaron la ruta actores distintos o la atribución es mixta, cuenta como otro actor (conservador). Los cambios anteriores no cuentan (US-TMC-012, escenario 4).
+- **Granularidad**: **archivo completo** en el MVP. Si otro actor tocó otra función del mismo archivo, también se detiene. Es más estricto que "fragmento" y nunca sobrescribe; la detección por fragmentos con fusión de tres vías queda para después (TQ-6).
+- **Resultado**: el undo se detiene sin cambiar el repo, se muestran los cambios en conflicto con su actor y su momento y la operación queda `rechazada` por solape. Qué opciones se ofrecen después lo decide el design-flow (US-TMC-012). El redo aplica la misma regla (S5).
+
+## Alternativas consideradas
+
+| Alternativa | En contra | Veredicto |
+|---|---|---|
+| **Identificar al solicitante en el cliente** (flag o variable de entorno) | Un agente declara lo que quiera; ADR-GRP-005 § 6 lo descarta | Descartada |
+| **Tratar la terminal como humano** | Q34: nunca "humano"; un agente con pty la tendría | Descartada |
+| **Confirmación por token o contraseña** | Un agente que lee la pantalla o el archivo la obtiene; añade fricción sin cerrar el riesgo | Descartada |
+| **Guardrails con capacidad de ampliar** | Contradice US-TMC-021 | Descartada |
+| **Solape por fragmento en el MVP** | Necesita fusión de tres vías fiable con bytes brutos; un error sobrescribe trabajo ajeno, que es lo que se quiere evitar | Diferida (TQ-6) |
+
+## Consecuencias
+
+- ✅ BR-TMC-AUTH-001 sin variante "humano": las decisiones se toman en el daemon con los mismos controles que los comandos reservados.
+- ✅ Un agente puede deshacer lo suyo por MCP o desde su shell, sin intervención.
+- ✅ El solape nunca sobrescribe: la granularidad elegida solo puede detener de más, nunca de menos.
+- ⚠️ Un agente no detectado ni reconocido que lanza la CLI desde una pty puede pasar por "sin atribuir" y confirmar. **Mitigación**: ascendencia de agentes registrados (TQ-8), reto ligado al plan y snapshot previo de toda operación (se puede deshacer). La auditoría del oplog ayuda, pero el mismo usuario puede manipularla (SEC-TMC-09). Riesgo residual aceptado arriba.
+- ⚠️ En worktrees compartidos casi todo queda "sin atribuir" (Q7, ADR-GRP-013 § 3), así que el solape detendrá muchos undos por agente. Es el comportamiento seguro.
+- ⚠️ Depende de P17 para el undo por agente (D-TMC-22).
+
+## Validación
+
+1. **Por ascendencia**: un cliente lanzado desde el árbol de un Claude Code simulado queda como ese agente; por MCP, igual (US-TMC-013).
+2. **Rechazos**: claude-1 sobre trabajo de claude-2 rechazado por MCP y por CLI; "sin atribuir" por MCP rechazado; repo sin cambios y rechazo en el oplog.
+3. **Confirmación**: los casos de SEC-TMC-03 (cliente JSON-RPC directo, `setsid` sin pty, `tmux new-window` + `send-keys`, reto reutilizado o de otra conexión, plan cambiado) se rechazan; con terminal, fuera del árbol del agente y reto válido, se permite y se registra como "sin atribuir" con confirmación.
+4. **Guardrails**: política que prohíbe, rechazo; política que "permite" lo prohibido, sigue rechazado (US-TMC-021).
+5. **Solape**: los cuatro escenarios de US-TMC-012 con capturas reales; mismo archivo y otra función, también se detiene (granularidad declarada).
+
+## Referencias
+
+- **Reglas**: BR-TMC-AUTH-001, BR-TMC-CONS-005, BR-TMC-VAL-001, BR-TMC-WF-001, BR-TMC-WF-002, BR-TMC-EDGE-002; D-TMC-12, D-TMC-13, D-TMC-17, D-TMC-23. Q7, Q32, Q34, Q35, Q37.
+- **ADRs**: ADR-GRP-005 § 6, ADR-GRP-007, ADR-GRP-012, ADR-GRP-013; ADR-TMC-002, ADR-TMC-003.
+- **Enablers**: TS-TMC-004. **Features**: F-001-04 (políticas), F-001-05 (canal MCP). **Seguridad**: SEC-TMC-03, 07, 13, 15.
