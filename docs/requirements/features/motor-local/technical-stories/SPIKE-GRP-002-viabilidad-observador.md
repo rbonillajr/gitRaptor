@@ -2,7 +2,7 @@
 id: SPIKE-GRP-002
 title: "Viabilidad del observador de cambios a escala en los tres SO"
 type: spike
-status: Research Pending
+status: ready
 feature: motor-local
 domain: GRP
 priority: high
