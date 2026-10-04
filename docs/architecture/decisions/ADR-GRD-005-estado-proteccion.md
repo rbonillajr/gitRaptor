@@ -66,7 +66,7 @@ La capa está **activa** solo si se cumplen todas estas condiciones:
     - **Retirar**: desinstalación con los valores del manifiesto, mostrando antes al humano lo que se va a restaurar.
   - **Reinstalar** sobre una instalación huérfana pasa por adoptar o retirar; no aborta en silencio.
 - **Diagnósticos que no cambian el estado** pero se muestran:
-  - `hook-previo-no-encadenado`.
+  - `hook-previo-no-encadenado`. Incluye, con el conjunto mínimo de dispatchers, el hook previo añadido después de instalar que todavía no tiene dispatcher (ADR-GRD-001 § 2, Enmienda 2026-10-04). Se comprueba en cada comprobación de estado y al arrancar el daemon.
   - `encadenado-imposible` (J6): guardado con el último intento de instalación, su fecha y su causa, hasta un intento nuevo o una instalación con éxito (Q-GRD-4, BR-EDGE-002).
   - `repo-no-observado` (Q-GRD-15).
   - `configuracion-ilegible` (ADR-GRD-004).
@@ -88,13 +88,15 @@ La capa está **activa** solo si se cumplen todas estas condiciones:
 | `state` | `unprotected` \| `mcp-only` \| `hooks-only` \| `full` (BR-WF-002) |
 | `hooks` | `active` \| `inactive` \| `not-installed` \| `orphaned`, con `cause` y el worktree afectado |
 | `minimumSet` | `active` \| `disabled-by-team`, con las reglas, la rama o ramas base protegidas y si hay un cambio pendiente |
-| `notPreventable[]` | La lista publicada de ADR-GRD-002 § 3, con los saltos declarados |
+| `notPreventable[]` | La lista publicada de ADR-GRD-002 § 3, con los saltos declarados y el apartado "se deniega de más". **Depende del backend de refs del repo** (Enmienda 2026-10-04): en un repo reftable incluye renombrar o reescribir la rama base |
 | `diagnostics[]` | Los del § 1, como códigos. Los pendientes de confirmar (D11) llevan además la acción para confirmar |
 | `permission` | `never-asked` \| `granted` \| `denied` (BR-AUTH-002) |
 
 El texto lo pone el cliente (NFR-10). Lo presentan la CLI y el Cockpit.
 
 ### 4. Detección de pérdida
+
+- **Backend de refs** (Enmienda 2026-10-04): cada comprobación de estado vuelve a leer `extensions.refStorage`, porque `git refs migrate` puede cambiarlo después de instalar, y recalcula `notPreventable[]`. La regeneración de dispatchers (ADR-GRD-001 § 2) se serializa con la comprobación H3 mediante un lock por repo.
 
 | Repo | Disparador | Latencia objetivo |
 |---|---|---|
@@ -176,3 +178,14 @@ El texto lo pone el cliente (NFR-10). Lo presentan la CLI y el Cockpit.
 - § 4 y Consecuencias: la vigilancia de ADR-GRP-010 pasa a "aplicada (2026-10-04)".
 - Cierre (ronda 3): reparto explícito de la huérfana: US-GRD-004 detecta; US-GRD-003 adopta o retira.
 - Corrección tras el Judge: `base-unconfirmed` remite a las dos fases de la unión de ADR-GRD-004 § 3.5.
+
+## Enmienda (2026-10-04, SPIKE-GRD-001)
+
+Derivada de las Enmiendas de ADR-GRD-001 (E-01-2) y ADR-GRD-002 (E-02-4). **Decisión del orquestador (2026-10-04), validada por el Arquitecto y el PO.** El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| `notPreventable[]` depende del backend de refs; el backend se vuelve a comprobar en cada comprobación | § 3, § 4 | SPIKE-GRD-001 D10, D11 |
+| `hook-previo-no-encadenado` cubre la ventana del conjunto mínimo de dispatchers | § 1 | ADR-GRD-001 § 2 |
+| La regeneración de dispatchers se serializa con H3 | § 4 | ADR-GRD-001 § 2 |
+| Pendiente en otro frente: que el observador (ADR-GRP-010) vigile las refs en `reftable/` | — | Tabla de [non-functional-guardrails.md](../non-functional-guardrails.md) |

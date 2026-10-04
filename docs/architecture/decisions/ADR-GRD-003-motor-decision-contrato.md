@@ -86,6 +86,7 @@ Sin E/S, sin reloj y sin aleatoriedad:
   - **Saneado**: se neutralizan las categorías Unicode Cc, Cf, Zl y Zp (escapes ANSI/OSC, controles bidi de tipo Trojan Source y separadores de línea). Longitud acotada.
   - **Lo que nunca lleva**: mensajes de commit, contenido, instrucciones para desactivar la protección, ni menciones de `raptor guard exec` u otra vía de excepción.
 - **Versionado** con el protocolo del canal (handshake de ADR-GRP-005 § 5).
+- **Códigos de motivo del hook** (Enmienda 2026-10-04, SPIKE-GRD-001): `historia-superficial` (el push se trata como forzado porque el clon es superficial; la plantilla puede sugerir `git fetch --unshallow`, que no desactiva la protección) y `renombrado-sobre-base` (con el backend de archivos, `branch -M x base` se deniega después de que Git ya borrara `x`; `params` lleva el oid que iba a escribirse para recuperar la rama origen). Recuperar no es una vía de excepción: SEC-GRD-06 lo permite.
 
 ### 4. Dónde se evalúa
 
@@ -218,3 +219,11 @@ Sin E/S, sin reloj y sin aleatoriedad:
 - Consecuencias: la contradicción con "único escritor del perfil" pasa a reconocida (aplicada, 2026-10-04).
 - Cierre (ronda 3): la instantánea es una copia de solo lectura exportada desde el almacén por repo; el cliente nunca abre el SQLite.
 - Corrección tras el Judge (ronda combinada): § 2, la rama base hasta TS-GRD-001 sigue las dos fases de ADR-GRD-004 § 3.5 (D9 / Q-GRD-23).
+
+## Enmienda (2026-10-04, SPIKE-GRD-001)
+
+Derivada de la Enmienda de ADR-GRD-002 (E-02-7 y E-02-8). **Decisión del orquestador (2026-10-04), validada por el Arquitecto y el PO.** El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| Códigos `historia-superficial` y `renombrado-sobre-base` (con el oid para recuperar) | § 3 | SPIKE-GRD-001 F07 y D11 |
