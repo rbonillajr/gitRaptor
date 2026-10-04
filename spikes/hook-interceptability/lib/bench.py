@@ -3,9 +3,10 @@
 
 usage: bench.py <iterations> <cwd> <setup-cmd|-> <cmd>
 Runs <setup-cmd> (untimed, if not '-') and then <cmd> (timed) <iterations>
-times in <cwd> with `sh -c`, after 3 warm-up runs. Prints one TSV line:
+times in <cwd> with `sh -c`, after BENCH_WARMUP (default 3) warm-up runs. Prints one TSV line:
 n  p50_ms  p95_ms  max_ms  failures
 """
+import os
 import subprocess
 import sys
 import time
@@ -18,14 +19,15 @@ def run(cmd, cwd):
 
 def main():
     n, cwd, setup, cmd = int(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4]
+    warmup = int(os.environ.get("BENCH_WARMUP", "3"))
     samples, failures = [], 0
-    for i in range(n + 3):
+    for i in range(n + warmup):
         if setup != "-":
             run(setup, cwd)
         t0 = time.perf_counter()
         rc = run(cmd, cwd)
         dt = (time.perf_counter() - t0) * 1000
-        if i < 3:
+        if i < warmup:
             continue
         failures += rc != 0
         samples.append(dt)

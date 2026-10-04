@@ -10,7 +10,7 @@
 
 OUT="$RESULTS_DIR/04-config-worktrees.tsv"
 tsv id observation > "$OUT"
-rec() { local o; o="$(printf '%s' "$2" | sed "s#$SANDBOX#\$SANDBOX#g" | tr '\n' ' ')"; tsv "$1" "$o" >> "$OUT"; printf '%-34s %s\n' "$1" "$o" >&2; }
+rec() { local o; o="$(printf '%s' "$2" | sed -e "s#$SANDBOX#\$SANDBOX#g" -e 's/\t/\\t/g' | tr '\n' ' ')"; tsv "$1" "$o" >> "$OUT"; printf '%-34s %s\n' "$1" "$o" >&2; }
 g() { git -c core.hooksPath=/dev/null "$@"; }
 effective() { git -C "$1" config --show-scope --show-origin --get core.hooksPath 2>/dev/null | tr '\t' ' ' || echo "<unset>"; }
 del_main() { (cd "$1" && git branch -qD main >/dev/null 2>&1); [ $? -ne 0 ] && echo denied || echo DELETED; }
