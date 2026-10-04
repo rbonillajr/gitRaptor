@@ -5,11 +5,11 @@ type: adr
 status: proposed
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
-related: [ADR-GRP-005, ADR-GRP-006, ADR-GRP-010, ADR-GRP-012, CTX-GRP-001, BR-GRP-001]
+related: [ADR-GRP-005, ADR-GRP-006, ADR-GRP-010, ADR-GRP-012, ADR-GRD-006, ADR-GRD-007, CTX-GRP-001, BR-GRP-001]
 tags: [motor-local, eventos, sesiones, atribucion, correccion, huecos, append-only, modelo-de-datos, auditoria, no-repudio, seguridad]
 ---
 
@@ -46,6 +46,12 @@ El motor guarda en el perfil (ADR-GRP-006) los eventos de Git, las sesiones de a
 Los cambios de estado de las sesiones (inicio, activo, inactivo, terminado) se guardan como eventos del mismo historial, así que su estado sobrevive a reinicios (BR-WF-001).
 
 **Registro de auditoría de comandos reservados (SEC-03)**: fuera de los almacenes por repo, en el índice global del perfil (ADR-GRP-006), porque algunos comandos (parar el daemon, añadir un repo) no pertenecen a un repo. Es **append-only**: cada intento de comando reservado de ADR-GRP-005 § 6 (añadir o retirar repo, corregir o retirar corrección, retirar el registro de otro agente, parar el daemon), aceptado o rechazado, con fecha, operación, repo si aplica, resultado, motivo del rechazo y cliente (ejecutable y si desciende de un agente). Nunca se reescribe ni se borra; los clientes lo pueden consultar.
+
+**Comandos reservados de Guardrails en la auditoría (Enmienda 2026-10-04; ADR-GRD-006 § 4, ADR-GRD-007)**. El mismo registro append-only y sin caducidad incluye:
+
+- **Qué entra**: cada intento de comando reservado de Guardrails (ADR-GRP-005 § 6), aceptado o rechazado; la instalación, la desinstalación, la adopción y el refresco de integridad; cada uso de la excepción consciente y cada rechazo (`exception-rejected`); el anuncio, la cancelación y la aplicación de las acciones con ventana (D5).
+- **Con qué datos**, además de los de arriba: la **cadena completa de ascendencia** (ruta del ejecutable e identificador de cada proceso), la **terminal de control** y el **líder de sesión**; y, en cada acción que relaja, la **aceptación del riesgo por acción**: la referencia a la versión de la tabla de vectores de ADR-GRD-007 § 2 y los vectores no cubiertos en ese momento.
+- **Cómo**: siempre con la operación normalizada, nunca con argv ni con el token de la excepción (M-06; ADR-GRD-007 § 3).
 
 ### 2. Resolución de la atribución
 
@@ -130,7 +136,7 @@ Pruebas con repos y perfiles temporales; las sesiones se simulan con la interfaz
 11. **Sin "humano"**: el esquema del contrato no contiene esa variante; una prueba de propiedades sobre secuencias aleatorias de registros comprueba que todo actor resuelto es un agente con origen o "sin atribuir".
 12. **Orden**: con la hora del sistema retrasada a mitad de prueba, el orden de los eventos sigue la secuencia.
 13. **No repudio (SEC-13)**: un agente simulado que ejecuta `raptor daemon stop` es rechazado y el intento queda en el registro de auditoría; `kill -9` del daemon con una sesión activa deja, al relanzar, un hueco "caída durante sesión activa" visible en los clientes; una parada aceptada guarda el cliente que la pidió.
-14. **Auditoría (SEC-03)**: cada comando reservado, aceptado o rechazado, aparece una sola vez en el registro, y el registro no admite modificación ni borrado por el canal.
+14. **Auditoría (SEC-03)**: cada comando reservado, aceptado o rechazado, aparece una sola vez en el registro, y el registro no admite modificación ni borrado por el canal. Para los comandos reservados de Guardrails, la entrada lleva además la cadena de ascendencia con ruta e identificador de cada proceso, la terminal, el líder de sesión y los vectores no cubiertos (Enmienda 2026-10-04; ADR-GRD-007, Validación 4).
 15. **Repo intacto**: todo lo anterior pasa por el arnés de INF-GRP-001.
 
 ## Referencias
@@ -154,3 +160,11 @@ Enmienda tras la revisión del security-expert. No cambia el modelo de atribuci�
 | M8 / SEC-12 · Texto no confiable en lo que expone el contrato | Apartado 6: nombres declarados, rutas y refs marcados como no confiables; respuestas MCP acotadas |
 
 Validación ampliada: SEC-13 y SEC-03 (puntos 13 y 14).
+
+## Enmienda (2026-10-04, Guardrails)
+
+Aplicada desde la tabla de enmiendas de [non-functional-guardrails.md](../non-functional-guardrails.md) (J10). No cambia el modelo de eventos, sesiones ni atribución. El `status` sigue en `proposed`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| La auditoría append-only incluye los comandos reservados de Guardrails, con la cadena completa de ascendencia, la terminal, el líder de sesión y la aceptación de riesgo por acción | § 1 (registro de auditoría); Validación 14 | ADR-GRD-006 § 4, ADR-GRD-007 § 1 y § 2; D5 |

@@ -5,11 +5,11 @@ type: adr
 status: proposed
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
-related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-009, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, SPIKE-GRP-002, INF-GRP-002, CTX-GRP-001, BR-GRP-001]
+related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-009, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, ADR-GRD-005, SPIKE-GRP-002, INF-GRP-002, CTX-GRP-001, BR-GRP-001]
 tags: [watcher, notify, fsevents, inotify, readdirectorychangesw, debounce, reconciliacion, sondeo, worktrees, nfr-04, nfr-05, br-cons-005, br-edge-005, seguridad]
 ---
 
@@ -45,7 +45,8 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
 | `.git/refs/` y `.git/logs/` | Recursiva | Commits, ramas, tags, stash y ramas remotas conocidas (base de los eventos de Git) |
 | `.git/worktrees/` y cada `.git/worktrees/<nombre>/` | Un nivel más sus marcadores | Alta y baja de worktrees, y `HEAD`, `index` y operaciones en curso de cada worktree enlazado |
 | `.git/objects/` | No se vigila | Ruido sin valor: los commits se detectan por refs y reflogs |
-| Archivos de configuración del motor (ADR-GRP-007) | Archivos concretos | Recarga de configuración (solo lectura) |
+| Archivos de configuración de los niveles personales (ADR-GRP-007) | Archivos concretos | Recarga de configuración (solo lectura). El nivel de equipo se lee de objetos commiteados y se recarga por los cambios de refs y `HEAD` de las filas anteriores (ADR-GRP-007, Enmienda 2026-10-04) |
+| **Solo en repos protegidos por Guardrails**: `<git-common-dir>/config`, el `config.worktree` de cada worktree (`<git-common-dir>/config.worktree` y `<git-common-dir>/worktrees/<nombre>/config.worktree`) y `<git-common-dir>/gitraptor/` | Archivos concretos; `gitraptor/`, recursiva | Detección de pérdida de la protección: `core.hooksPath` reescrito o añadido en un `config.worktree`, dispatchers editados o carpeta borrada (Enmienda 2026-10-04; ADR-GRD-005 § 4). El motor solo notifica; la comprobación es de Guardrails |
 
 - **Altas y bajas de worktrees**: un directorio nuevo en `.git/worktrees/` lanza la lectura de su `gitdir` y el alta del watch de su working tree, sin intervención del desarrollador. La desaparición del directorio o de su working tree lanza la baja (ver apartado 6).
 - **Validación del worktree enlazado (SEC-11, M2)**: `.git/worktrees/<nombre>/gitdir` lo puede escribir un agente. Antes de vigilar, el motor exige que el enlace sea **bidireccional** (el `.git` del working tree apunta de vuelta a ese `.git/worktrees/<nombre>`) y que la raíz **no sea `/`, `$HOME`, la raíz de una unidad ni un ancestro del repo**. Si no cumple, el worktree se reporta "no disponible" con el motivo y no se vigila. Las rutas UNC o de red no se vigilan sin acción explícita del desarrollador (M9).
@@ -118,6 +119,8 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
 
 **Éxito**: todas las cifras dentro de presupuesto en los tres SO. **Fracaso**: si una no se cumple, se revisa este ADR (p. ej. sondeo por defecto en el SO afectado o vigilancia desde el padre en Windows) y, si cambia el reparto, también ADR-GRP-011. Después, INF-GRP-002 convierte estas mediciones en gate de CI e INF-GRP-001 comprueba que el observador no escribe nada en el repo.
 
+**Guardrails (Enmienda 2026-10-04)**: en un repo protegido, reescribir `core.hooksPath` en `<git-common-dir>/config`, añadirlo al `config.worktree` de un worktree, editar un dispatcher o borrar `<git-common-dir>/gitraptor/` llega a Guardrails como notificación dentro de su objetivo (⚠️ **ASSUMPTION** de ADR-GRD-005 § 4: ≤ 5 s); en un repo no protegido esas rutas no se vigilan. No forma parte de SPIKE-GRP-002: lo valida ADR-GRD-005 (Validación 2) con el observador de este ADR.
+
 ## Referencias
 
 - Requerimiento: `docs/requirements/features/motor-local/context.md` (Q1, Q6, Q8, Q17, Q21, Q22, Q25, Q26, Q28; supuestos S4 y S19).
@@ -137,3 +140,12 @@ Enmienda tras la revisión del security-expert. No cambia el mecanismo ni el rep
 | M9 · Rutas UNC en Windows | Apartado 2: no se vigilan sin acción explícita del desarrollador (SEC-11) |
 
 Validación ampliada: SEC-11 (punto "Seguridad").
+
+## Enmienda (2026-10-04, Guardrails)
+
+Aplicada desde la tabla de enmiendas de [non-functional-guardrails.md](../non-functional-guardrails.md) (J10). No cambia el mecanismo, el debounce, el sondeo ni la reconciliación. El `status` sigue en `proposed`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| Vigilar `<git-common-dir>/config`, el `config.worktree` de cada worktree y `<git-common-dir>/gitraptor/` en los repos protegidos | § 2 (tabla); Validación | ADR-GRD-005 § 4 |
+| Aclaración derivada de la Enmienda de ADR-GRP-007: la fila de configuración cubre los niveles personales; el nivel de equipo se recarga por refs y `HEAD`, que ya se vigilan (sin rutas nuevas) | § 2 (tabla) | ADR-GRP-007, ADR-GRD-004 § 1 |

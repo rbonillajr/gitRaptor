@@ -5,11 +5,11 @@ type: adr
 status: proposed
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
-related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-006, ADR-GRP-010, ADR-GRP-012, TS-GRP-002, INF-GRP-001, CTX-GRP-001, BR-GRP-001]
+related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-006, ADR-GRP-010, ADR-GRP-012, ADR-GRD-001, TS-GRP-002, INF-GRP-001, CTX-GRP-001, BR-GRP-001]
 tags: [git, gitoxide, solo-lectura, optional-locks, fsmonitor, untracked-cache, allowlist, argv, resolucion-git, nfr-01, nfr-07, br-cons-001, seguridad, filtros, entorno, secretos]
 ---
 
@@ -113,6 +113,8 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
 
 Nota de integración (Time Machine, ADR-TMC-002, aceptado el 2026-10-03): la frontera de solo lectura de este ADR es la del motor. `crates/git` aloja además una segunda lista cerrada, de escritura, que solo usa el módulo `timemachine` de `crates/core` (SEC-TMC-02, SEC-TMC-14). La comprobación estática de la Validación 5 se amplía: ni el observador del motor ni el ejecutor de operaciones de usuario pueden importar la capa de escritura de la Time Machine.
 
+Nota de integración (Guardrails, ADR-GRD-001 § 7; Enmienda 2026-10-04): `crates/git` aloja una **segunda capa de escritura, separada**, la de Guardrails, análoga a la de la Time Machine. Es una lista cerrada de operaciones tipadas: escribir, restaurar o eliminar `core.hooksPath` en el `config` del directorio común; leer el valor efectivo de `core.hooksPath` por worktree; y crear, sustituir y borrar archivos listados solo dentro de `<git-common-dir>/gitraptor/`. Esas operaciones solo las alcanza el módulo `guardrails` de `crates/core` (visibilidad de módulo y frontera de Nx), con el Git CLI, argv fijo, sin shell, con el entorno por allowlist del § 3 y sin ejecutar hooks ni filtros. La capa tiene además **dos módulos de invocación autorizados, nombrados y tipados** (decisión del Arquitecto, 2026-10-04; ADR-GRD-001 § 7): uno **encadena el hook previo**, sin shell, y otro **ejecuta `git` para `raptor guard exec`**, con el argv validado y normalizado según ADR-GRD-007 § 3. `raptor hook` y `raptor guard exec` (`apps/cli`) los llaman y no tienen un `Command::new` propio. **No es una escritura del motor**: solo ocurre tras una instalación, desinstalación, actualización o adopción explícitas, que son comandos reservados (ADR-GRP-005 § 6). La frontera de solo lectura de este ADR sigue siendo la del motor, y INF-GRP-001 admite esas escrituras solo en sus escenarios de instalación. La comprobación estática de la Validación 5 se amplía también a esta capa.
+
 ## Validación
 
 La valida **INF-GRP-001** (arnés "repo intacto"), que bloquea el merge de cualquier historia del motor:
@@ -130,7 +132,7 @@ La valida **INF-GRP-001** (arnés "repo intacto"), que bloquea el merge de cualq
    - `trace2.eventTarget` configurado.
    - `gc` del usuario concurrente con la observación.
    - Repo rechazado por `safe.directory`.
-5. **Allowlist**: el registro de argv del modo diagnóstico solo contiene subcomandos y opciones de la lista. Además, una comprobación estática en CI exige que `Command::new` aparezca solo en el módulo de invocación de `crates/git`.
+5. **Allowlist**: el registro de argv del modo diagnóstico solo contiene subcomandos y opciones de la lista. Además, una comprobación estática en CI exige que `Command::new` aparezca solo en el módulo de invocación de `crates/git`. **Ampliada** (notas de integración de Time Machine y de Guardrails): el lanzamiento de procesos solo está en los módulos de invocación autorizados de `crates/git`, que la comprobación lista por nombre: lectura del motor, escritura de la Time Machine, escritura de Guardrails y los dos módulos de invocación de Guardrails (encadenado del hook previo y `git` de `raptor guard exec`). `raptor hook` y `raptor guard exec` no tienen un `Command::new` propio. Ni el observador del motor ni el ejecutor de operaciones de usuario pueden importar ninguna de las dos capas de escritura; las operaciones de escritura de Guardrails solo las importa el módulo `guardrails`, y sus dos módulos de invocación solo `raptor hook` y `raptor guard exec`.
 6. **Resolución de Git**: tests con PATH mínimo; en macOS, un runner sin Command Line Tools comprueba que no se ejecuta `/usr/bin/git` (proceso no lanzado) y que el motor queda en "Esperando Git"; cambio de versión en caliente por debajo y por encima de 2.38.
 7. **Cero ejecución de código configurable (SEC-09)**: repo canario con `filter.*.clean`, `diff.*.textconv`, `core.fsmonitor`, hooks y `gpg.program` apuntando a un script que deja un marcador; con archivos de stat sucio y el motor observando, el marcador nunca aparece. **Auditoría dinámica de `exec`** en INF-GRP-001 (eslogger en macOS, ETW en Windows, strace en Linux): todo proceso hijo del motor pertenece a la allowlist y `gix` no lanza `git` (M1).
 8. **Secretos (SEC-05)**: suite con secretos plantados (`.env`, token en la URL del remoto, `http.extraHeader`) y gitleaks/trufflehog sobre perfil, logs y captura del stream IPC: 0 hallazgos.
@@ -164,3 +166,15 @@ Enmienda tras la revisión del security-expert. Mantiene la lectura mixta y el m
 | L2 · `log` con `%G*` invoca `gpg` | Apartado 3: `log` con formato fijo sin `%G*` (SEC-09) |
 
 Validación ampliada: SEC-02, SEC-05, SEC-09, SEC-10 y SEC-11 (puntos 7 a 10). Condición para pasar a `accepted`: esos puntos en la Validación (cubierto en texto) e INF-GRP-001 con repo canario y auditoría dinámica de `exec`.
+
+## Enmienda (2026-10-04, Guardrails)
+
+Aplicada desde la tabla de enmiendas de [non-functional-guardrails.md](../non-functional-guardrails.md) (J10). No cambia la frontera de solo lectura del motor. El `status` sigue en `proposed`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| Nota de una segunda capa de escritura separada, la de Guardrails, como la de la Time Machine (TQ-12) | Nota de integración tras Consecuencias | ADR-GRD-001 § 7 |
+| Comprobación estática de la Validación 5 ampliada a esa capa: lanzamiento de procesos solo desde los módulos de invocación autorizados | Validación 5 | ADR-GRD-001 § 7 |
+| **Ronda de coherencia (2026-10-04)**: dos módulos de invocación autorizados de Guardrails (encadenado del hook previo y `git` de `raptor guard exec`), llamados desde `apps/cli` sin `Command::new` propio y listados en la comprobación estática | Nota de integración; Validación 5 | Decisión del Arquitecto (2026-10-04); ADR-GRD-001 § 7 |
+
+**Pendiente de motor-local** (anotado el 2026-10-04, no se decide en esta enmienda): la regla de la Validación 5 ("`Command::new` solo en los módulos de invocación autorizados de `crates/git`") choca con lanzamientos de procesos que ya existían en ADR-GRP-005 § 3: el arranque del daemon bajo demanda desde la biblioteca cliente y las peticiones al gestor de servicios (`launchctl kickstart`, `systemctl --user start`). Es una tensión previa de motor-local; falta decidir en qué módulo autorizado viven esos lanzamientos.

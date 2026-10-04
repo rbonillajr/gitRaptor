@@ -5,11 +5,11 @@ type: adr
 status: proposed
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
-related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-007, ADR-GRP-008, ADR-GRP-013, CTX-GRP-001, BR-GRP-001]
+related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-007, ADR-GRP-008, ADR-GRP-013, ADR-GRD-001, ADR-GRD-003, ADR-GRD-004, ADR-GRD-006, CTX-GRP-001, BR-GRP-001]
 tags: [motor-local, perfil, sqlite, rusqlite, directories, almacenamiento, clave-de-repo, p9, privacidad, seguridad, permisos]
 ---
 
@@ -67,6 +67,14 @@ Se usa el crate `directories` para resolver las carpetas estándar del usuario (
 
 - **SQLite vía `rusqlite`**, con SQLite compilado dentro del binario (sin depender de la versión del SO), en modo WAL y con sincronización completa. **SQL siempre parametrizado** (SEC-06). Como el SQLite embebido no se actualiza con el SO, sus avisos de seguridad se siguen en la cadena de suministro (`cargo-deny`/`cargo-audit`, SEC-07, L3). Las escrituras de un mismo lote de debounce van en una sola transacción, para no superar el presupuesto de persistencia de ADR-GRP-011.
 - **Un único escritor**: el daemon (ADR-GRP-005). Los clientes nunca abren los archivos del perfil; consultan por el canal.
+  - **Excepción acotada para los clientes (Enmienda 2026-10-04, Guardrails; ADR-GRD-003 § 4, ADR-GRD-006 § 5)**: la misma de ADR-GRP-005 § 1. En el modo degradado, el cliente del hook de Guardrails **escribe** entradas sueltas en el spool del directorio de estado (archivo por entrada, creado en exclusiva, sin seguir enlaces, 0600 en carpeta 0700, con topes) y **lee** la instantánea de solo lectura que deja el daemon. No abre el almacén SQLite, el índice global ni la configuración. El daemon ingiere el spool con `origin = spool-unverified` y comprueba propietario y modo de la carpeta en cada ingesta.
+- **Datos de Guardrails en el perfil** (Enmienda 2026-10-04), todos escritos solo por el daemon:
+  - **Registro de decisiones**: la tabla `guardrails_decisions` en el **almacén por repo**, con migraciones versionadas en el binario, separada de los eventos inmutables de ADR-GRP-013, con agregación, límite de inserciones y purga a los 90 días (ADR-GRD-006 § 1 a § 3).
+  - **Ubicación** (decisión del Arquitecto, 2026-10-04): el diario de instalación, la rama base confirmada y el suelo confirmado van en el **almacén por repo**. Solo los comandos reservados van además a la auditoría del índice global (ADR-GRP-013 § 1).
+  - **Diario de instalación**: referencia de integridad autoritativa de cada instalación de hooks (hashes de los dispatchers, ruta estable del binario con su firma o huella, id del directorio común y `dev/inode` de la carpeta y del `config`) y estado de cada paso de la transacción (ADR-GRD-001 § 1 y § 4).
+  - **Rama base confirmada y suelo confirmado** (identificador del blob del suelo confirmado), en el almacén por repo, que solo cambian con la confirmación del humano (ADR-GRD-004 § 3 y § 4).
+  - **Instantánea del modo degradado** en el directorio de estado, con la última rama base confirmada (ADR-GRD-003 § 4). Es una copia de solo lectura que el daemon exporta desde el almacén por repo, porque el cliente del hook no abre el almacén (excepción de arriba).
+  - **Id de instancia del perfil**: identificador opaco que el daemon **genera al crear el perfil** y **presenta en el handshake** (ADR-GRP-005 § 5). Se escribe como constante en los dispatchers al instalar. Un perfil borrado y recreado tiene otro id, y el hook pasa al modo degradado (`instance-mismatch`) hasta que se adopta la instalación (ADR-GRD-003 § 4, ADR-GRD-005 § 1).
 - **Versión de esquema** en cada archivo, con migraciones incluidas en el binario. Si un archivo tiene un esquema más nuevo que el binario, ese repo no se observa y el motor expone un diagnóstico; no se degrada el archivo.
 - **Integridad**: comprobación rápida al abrir. Un archivo corrupto se aparta dentro del perfil (renombrado con marca de tiempo, sin borrarlo) y ese repo se trata como **perfil perdido** (Q26): almacén nuevo y todo lo anterior "sin atribuir". La corrupción de un repo no afecta a los demás.
 - **Contenido**: solo metadatos (rutas, refs, ids de commit, horas, agentes, señales de atribución). Nunca contenido de archivos del usuario, prompts ni diffs (NFR-03).
@@ -96,6 +104,7 @@ Se usa el crate `directories` para resolver las carpetas estándar del usuario (
 - ⚠️ En Linux, el socket vive en `$XDG_RUNTIME_DIR`, fuera de las carpetas de datos. Se considera parte del perfil porque es una carpeta exclusiva de GitRaptor. **Pendiente para el PO**: confirmar que "perfil" abarca las carpetas exclusivas de la herramienta (datos, configuración, estado y ejecución).
 - ⚠️ El perfil crece sin límite porque los eventos no se borran (ADR-GRP-013). **Mitigación**: solo se guardan metadatos; el tamaño se mide en INF-GRP-002 y una política de retención queda fuera del MVP.
 - ⚠️ Sin copia de seguridad en el MVP (R13 aceptado por Q26).
+- ⚠️ **Perder el perfil también pierde los datos de Guardrails** (Enmienda 2026-10-04): el perfil recreado tiene otro id de instancia, así que los hooks pasan al modo degradado, más estricto, hasta que se adopta la instalación; y la rama base y el suelo vuelven a "no confirmada" (`base-unconfirmed`) hasta una nueva confirmación del humano (ADR-GRD-003 § 4, ADR-GRD-004 § 3).
 
 Nota de integración (Time Machine, ADR-TMC-001 y ADR-TMC-003, aceptados el 2026-10-03): la carpeta de datos del perfil incluye `tm/<id-repo>/`, con el almacén de snapshots (repo Git bare) y el oplog de la Time Machine (SQLite). A diferencia del almacén del motor, contiene contenido de archivos del usuario: carpeta 0700, archivos 0600, excluida de las copias de seguridad del SO y escrita solo por el daemon (SEC-TMC-01, SEC-TMC-06). La regla de § 4 'solo metadatos' aplica al almacén del motor.
 
@@ -112,6 +121,7 @@ Todas las pruebas usan un perfil temporal (variable de sobreescritura) y repos t
 7. **Privacidad**: el almacén de un repo de prueba con contenido marcado no contiene ese contenido.
 8. **Repo intacto**: el arnés de INF-GRP-001 confirma que fuera del repo solo cambian las carpetas del perfil.
 9. **Cadena de suministro (SEC-07)**: `cargo-deny` y `cargo-audit` bloquean en High/Critical, incluidos los avisos del SQLite embebido.
+10. **Guardrails (Enmienda 2026-10-04)**: el id de instancia se mantiene entre reinicios del daemon y cambia al recrear el perfil; el handshake lo presenta. Con el daemon parado, el cliente del hook solo crea archivos en el spool y solo lee la instantánea: el almacén, el índice global y la configuración no cambian. La validación del spool (enlace, FIFO, carpeta 0755 o de otro propietario) es la de ADR-GRD-006, Validación 10.
 
 ## Referencias
 
@@ -135,3 +145,16 @@ Enmienda tras la revisión del security-expert. No cambia ubicación, clave ni a
 | L3 · SQLite bundled no se actualiza con el SO | Apartado 4: sus avisos se siguen con `cargo-deny`/`cargo-audit` (SEC-07) |
 
 Validación ampliada: SEC-06 y SEC-07 (puntos 2 y 9).
+
+## Enmienda (2026-10-04, Guardrails)
+
+Aplicada desde la tabla de enmiendas de [non-functional-guardrails.md](../non-functional-guardrails.md) (J10). No cambia la ubicación, la clave de repo ni el motor de almacenamiento. El `status` sigue en `proposed`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| Excepción acotada a "único escritor" para los clientes: spool y lectura de la instantánea del modo degradado | § 4 | ADR-GRD-003 § 4, ADR-GRD-006 § 5 |
+| Tabla `guardrails_decisions` en el almacén por repo | § 4 | ADR-GRD-006 § 1 |
+| Diario de instalación, rama base confirmada y suelo confirmado en el perfil | § 4 | ADR-GRD-001 § 1, ADR-GRD-004 § 3 y § 4 |
+| Id de instancia del perfil, generado al crearlo y presentado en el handshake | § 4; ADR-GRP-005 § 5 | ADR-GRD-001 § 2, ADR-GRD-003 § 4 (Judge ronda 2, hallazgo 3) |
+| **Ronda de coherencia (2026-10-04)**: el diario, la rama base confirmada y el suelo confirmado van en el almacén por repo; solo los comandos reservados van además a la auditoría del índice global | § 4 | Decisión del Arquitecto (2026-10-04) |
+| **Cierre (ronda 3)**: la instantánea del modo degradado es una copia de solo lectura exportada al directorio de estado desde el almacén por repo; el cliente nunca abre el SQLite | § 4 | Confirmado por el orquestador (2026-10-04) |
