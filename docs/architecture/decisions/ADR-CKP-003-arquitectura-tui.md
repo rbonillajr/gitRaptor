@@ -15,7 +15,7 @@ tags: [cockpit, tui, ratatui, crossterm, tea, elm, estado, bucle-de-eventos, ren
 
 # ADR-CKP-003 — Arquitectura de la TUI y de la CLI de solo lectura del Cockpit
 
-> **Estado**: propuesto (2026-10-04). Las elecciones entre opciones de este ADR son **decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. Pasa a `accepted` cuando el orquestador lo valide.
+> **Estado**: propuesto (2026-10-04). Las elecciones entre opciones de este ADR son **decisión del orquestador (2026-10-04), validada por Arquitecto, PO y security-expert** (pasada de endurecimiento del 2026-10-04: ver "Revisión de seguridad (2026-10-04)"). Pasa a `accepted` cuando el orquestador lo valide.
 >
 > **Constitución**: no hay `architecture-constitution.md` en la cascada. ⚠️ **ASSUMPTION**: rigen como constitución ADR-GRP-001 (Rust; `ratatui`, `clap`) y ADR-GRP-002 (`apps/cli`, `crates/{api,theme}`), más AGENTS.md (NFR-01, NFR-02). Fuente: inline; se formaliza con `/aadd-architect --init-constitution`.
 
@@ -63,6 +63,7 @@ Sin este ADR, cada historia del Cockpit decidiría por su cuenta el estado, el b
 - **Sin UI optimista en escrituras**: una acción muestra al instante su estado pendiente (feedback < 100 ms). El resultado solo se pinta cuando llega el evento del motor o la respuesta del ejecutor. Es lo contrario de `useOptimistic` (ADR-GRP-004 § 2): en el Cockpit la fuente única manda (BR-CKP-CONS-001).
 - **Flujos críticos como máquinas de estado explícitas** (enums de Rust en `Model.ui`): merge, rebase, descartar, crear worktree, excepción consciente con su ventana (ADR-GRD-007) y confirmación de trabajo ajeno (ADR-TMC-005). Ejemplo: `Inactivo → Confirmando → Pedida(id) → Anunciada(cuenta atrás) → Ejecutando → Hecha(deshacer) | Rechazada(motivo) | Detenida(conflicto)`. Es la regla "sin estados imposibles" de ADR-GRP-004 § 1, adaptada a Rust.
 - **Escrituras solo con datos frescos**: con la conexión fuera de "En vivo", las acciones de escritura se desactivan con su motivo. Cada petición lleva el estado esperado para que el ejecutor revalide (BR-CKP-CONS-004, ADR-CKP-002).
+- **Acciones según la capa** (M-03): el daemon fija la capa según el solicitante (ADR-CKP-002 § 4). Si la TUI la abre un agente, su capa es `mcp`: integrar, descartar, Cancelar, la excepción y la salida de Git se desactivan con su motivo, y el rebase usa el modo `atomic`. La TUI lo sabe por el handshake (N5) y nunca lo decide ella.
 
 ### 3. Bucle de eventos y render coalescido
 
@@ -78,6 +79,7 @@ Sin este ADR, cada historia del Cockpit decidiría por su cuenta el estado, el b
 
 La TUI y la CLI usan la biblioteca cliente de `crates/api` (TS-GRP-004). Encima de ella, el módulo `client` de `apps/cli` implementa:
 
+- **Comprobación del par antes del handshake** (L-06): el cliente comprueba que el directorio del socket es del uid y tiene permisos 0700, y que el uid del par es el propio (`getpeereid` en macOS, `SO_PEERCRED` en Linux). Si falla, "Canal rechazado" sin enviar nada. Si la biblioteca cliente de TS-GRP-004 ya lo hace, se reutiliza; dónde vive es **pendiente, dueño: worker del canal (TS-GRP-004)**. Windows: **Pendiente: etapa de validación multiplataforma.**
 - **Arranque coherente por ámbito** (global y repo seleccionado): instantánea con secuencia `N`, suscripción desde `N+1`. Los eventos con secuencia `≤ última aplicada` se descartan (duplicados). El evento `última + 1` se aplica. Uno mayor es un **hueco**: no se aplica nada más y se pide una nueva instantánea ("Resincronizando").
 - **`resync` del daemon** (SEC-08, cliente lento): mismo camino que un hueco. Mientras dura, la vista conserva lo último aplicado, marcado como desactualizado.
 - **Reconexión**: al perder el canal, la réplica se conserva marcada "desconectado desde hh:mm" y nunca se presenta como actual. El cliente reintenta con espera exponencial (⚠️ **ASSUMPTION**: de 250 ms a un máximo de 5 s, sin límite de intentos mientras la TUI esté abierta). Cada reconexión rehace handshake e instantánea; el MVP no reanuda desde una secuencia.
@@ -103,12 +105,12 @@ La TUI y la CLI usan la biblioteca cliente de `crates/api` (TS-GRP-004). Encima 
 | N2 | Secuencia contigua por ámbito en el stream y evento `resync` explícito con su causa | SEC-08, § 4 |
 | N3 | Ámbito global: estado del motor (BR-WF-002), repos observados con un resumen de atención por repo (⚡, ⛔, hueco) para el selector, y si el autoarranque está registrado (aviso de ADR-GRP-005 § 3) | Q-CKP-1, BR-CKP-WF-004 |
 | N4 | Consulta "repo de esta ruta": el daemon canonicaliza y devuelve el id del repo observado, porque la TUI no lee Git | Q-CKP-1, BR-VAL-002 |
-| N5 | Solicitante resuelto de la conexión en el handshake, para que la vista diga "actúas como X" | Q-CKP-16, ADR-TMC-005 § 1 |
+| N5 | Solicitante y capa resueltos de la conexión en el handshake, para que la vista diga "actúas como X" y desactive lo que la capa no permite | Q-CKP-16, ADR-TMC-005 § 1, M-03 |
 | N6 | Texto no confiable con un **tipo propio** en el contrato (envoltorio), con longitud máxima por campo, para imponer el saneado por tipo (§ 8) | SEC-12, ADR-GRP-005 § 5 |
 | N7 | Estados, diagnósticos y motivos como códigos tipados con parámetros, sin cadenas de presentación | NFR-10 |
 | N8 | Consultas bajo demanda (diff, grafo, timeline) con id de petición, cancelación y topes, respondidas fuera del orden del stream sin bloquearlo | DEP-CKP-2, DEP-CKP-3, DEP-CKP-5 |
-| N9 | Lectura y escritura de las preferencias de la TUI, como documento acotado y versionado | DEP-CKP-11 |
-| N10 | Resolución del editor: el daemon devuelve el argv validado de la configuración y valida la ruta destino (§ 9) | Q-CKP-9, DEP-CKP-13 |
+| N9 | Lectura y escritura de las preferencias de la TUI, como documento acotado y versionado. **La escritura solo se acepta de un "sin atribuir" que pasa los controles 1 a 3** de ADR-GRP-005 § 6; el esquema excluye `cockpit.editor`, `cockpit.editorKind` y `cockpit.worktreePathTemplate` | DEP-CKP-11, L-05 |
+| N10 | Resolución del editor: el daemon devuelve el argv validado de la configuración y la ruta destino absoluta y validada (§ 9) | Q-CKP-9, DEP-CKP-13, I-03 |
 | N11 | Peticiones de operación con el estado esperado para revalidar | BR-CKP-CONS-004, ADR-CKP-002 |
 
 ### 5. Arranque del daemon (Q-CKP-22)
@@ -127,7 +129,8 @@ La TUI y la CLI usan la biblioteca cliente de `crates/api` (TS-GRP-004). Encima 
 
 ### 7. Layout 80×24 y prioridades (Q-CKP-18, BR-CKP-EDGE-005)
 
-- Función pura `layout(area, &Model) -> Regiones`: cabecera de una línea (repo, motor, conexión, protección, solicitante), cuerpo y `KeyHints` de una línea.
+- Función pura `layout(area, &Model) -> Regiones`: cabecera de una línea (repo, motor, conexión, protección, solicitante, y el recuento de ⚡ y ⛔), cuerpo y `KeyHints` de una línea.
+- **Los filtros nunca ocultan** el recuento de ⚡ y ⛔ de la cabecera (L-05): una preferencia escrita por otro no puede esconder una alerta.
 - El cuerpo se reparte por prioridad: **lista > alertas (⚡, ⛔) > grafo > detalle**. El grafo colapsa primero. El detalle pasa a vista a pantalla completa bajo demanda. Las cifras por región son de la Dev Spec.
 - Por debajo de 80×24 solo se pinta el mensaje de tamaño mínimo. Superposiciones modales (ConfirmPrompt, PolicyBanner, ayuda `?`) sobre cualquier región.
 - La anchura de cada símbolo se toma del tema activo (§ 10), no del texto, porque `⚡` y `⛔` ocupan dos columnas en muchas terminales y sus fallbacks ASCII ocupan más.
@@ -138,15 +141,19 @@ La TUI y la CLI usan la biblioteca cliente de `crates/api` (TS-GRP-004). Encima 
 - `SafeText` tiene **constructor privado** de ese módulo. Los widgets solo aceptan `SafeText` o texto del catálogo i18n. El modelo nunca guarda texto no confiable en bruto. Las acciones referencian ids, no textos, así que no hace falta devolver el original al daemon.
 - **Reglas del saneado**:
   - C0, DEL y C1 (U+0080 a U+009F, incluido CSI U+009B) se vuelven visibles como escapes (`\x1b`, `\u{9b}`), nunca se emiten ni se borran en silencio. Así una secuencia OSC 52 o un cambio de título se ve y no actúa (BR-CKP-VAL-002).
-  - Los controles bidi (U+202A a U+202E, U+2066 a U+2069) y los de anchura cero (U+200B a U+200F, U+FEFF) también se hacen visibles.
-  - Saltos de línea y tabuladores en campos de una línea se sustituyen.
-  - Recorte por anchura de visualización con elipsis, tope de longitud por campo y de marcas combinantes por grafema.
-- La CLI humana (`raptor status`, `raptor conflicts`) usa la misma ingesta. La salida `--json` **no pinta**: serializa con un escapador propio que emite como `\uXXXX` los C0, C1, DEL y bidi. El dato llega completo y no es ejecutable en una terminal. `serde_json` solo escapa los C0.
+  - Los controles bidi (U+061C, U+202A a U+202E, U+2066 a U+2069), los de anchura cero e invisibles (U+200B a U+200F, U+2060 a U+2064, U+FEFF) y la tabla de Tags (U+E0000 a U+E007F) también se hacen visibles (L-03).
+  - Saltos de línea, tabuladores y los separadores U+2028 y U+2029 en campos de una línea se sustituyen por un escape visible (L-03).
+  - Recorte por anchura de visualización con elipsis, tope de longitud por campo y de marcas combinantes por grafema. Los **nombres** (ramas, worktrees, agentes, etiquetas) llevan un tope de 100 caracteres (L-03).
+- La CLI humana (`raptor status`, `raptor conflicts`) usa la misma ingesta. La salida `--json` **no pinta**: serializa con un escapador propio que emite como `\uXXXX` (o con su par sustituto) los C0, C1, DEL, bidi, anchura cero, U+2028, U+2029 y Tags. El dato llega completo y no es ejecutable en una terminal. `serde_json` solo escapa los C0.
+- **Las mismas categorías rigen las respuestas del MCP** (ADR-CKP-002 § 12, SEC-12). Este ADR no fija el código del MCP, pero la lista de categorías es una sola.
 - **Defensa en profundidad**: el daemon ya marca el texto como no confiable (ADR-GRP-005 § 5). El cliente sanea de todos modos y no confía en el daemon para ello.
 
 ### 9. Editor de terminal y suspensión (Q-CKP-9)
 
 - La TUI pide al daemon la resolución del editor (N10): argv de la configuración del perfil o local personal, validado sin shell. Sin configuración, usa su propio `$VISUAL`/`$EDITOR` con la misma validación: metacaracteres de shell rechazados con motivo (BR-CKP-VAL-003). La función de validación es pura y vive en `crates/api`, compartida con el daemon.
+- **Revalidación** (L-06): la TUI vuelve a pasar el argv que recibe del daemon por la misma función pura antes de lanzarlo. Si no pasa, no lanza nada y muestra el motivo.
+- **Argv visible y aprobado** (L-05): la TUI muestra el argv que va a lanzar. Si cambió respecto del último aprobado, pide confirmación (default No) antes de lanzar. La huella del último argv aprobado se guarda en las preferencias (N9), que solo escribe un "sin atribuir" que pasa los controles 1 a 3; así un agente que reescribe `cockpit.editor` no lanza nada sin que el humano lo vea.
+- **Ruta destino absoluta** (I-03): el editor recibe siempre la ruta absoluta que validó el daemon (N10), nunca una relativa al cwd de la TUI.
 - **La TUI lanza el proceso**, porque es quien tiene la terminal. Lo hace con argv fijo y sin shell, desde el módulo autorizado `tui::editor` (DEP-CKP-12).
 - **Editor de terminal**:
   1. El hilo principal pausa el hilo de entrada y espera su confirmación, para que no robe teclas al editor.
@@ -165,9 +172,9 @@ La TUI y la CLI usan la biblioteca cliente de `crates/api` (TS-GRP-004). Encima 
 - **Resolución del tema**: `--no-color` o `NO_COLOR` no vacío → sin color, solo atributos (negrita, inverso). `--theme high-contrast` → alto contraste. Si no, la profundidad se detecta con `COLORTERM` y `TERM`.
 - **Símbolos**: `--ascii`, o una locale que no sea UTF-8 → fallback ASCII. El color nunca va solo (NFR-09). A partir del noveno agente, los colores `agent.n` se reutilizan y el nombre y el símbolo distinguen (BR-CKP-EDGE-006).
 - **Teclado primero**: `tui::keymap` es la tabla única acción ↔ teclas. Alimenta a la vez la interpretación de la entrada, `KeyHints` y la ayuda `?`, así que no pueden divergir. ⚠️ **ASSUMPTION**: la captura del ratón está desactivada por defecto, para no romper la selección de texto de la terminal.
-- **`--plain`** (DSYS-GRP-001 § 6): mismo `Model` y `update`, otro renderer (`tui::plain`). Sin pantalla alternativa ni movimiento del cursor: escribe la vista inicial como texto y después **solo líneas nuevas** con los cambios y las alertas. ⚠️ **ASSUMPTION** a validar por el PO: en el MVP, `--plain` es de lectura y alertas, y las acciones de BR-07 requieren la TUI completa.
+- **`--plain`** (DSYS-GRP-001 § 6): mismo `Model` y `update`, otro renderer (`tui::plain`). Sin pantalla alternativa ni movimiento del cursor: escribe la vista inicial como texto y después **solo líneas nuevas** con los cambios y las alertas. En el MVP, `--plain` es de lectura y alertas, y las acciones de BR-07 requieren la TUI completa. Lo validó el PO como riesgo **R-CKP-10** de CTX-CKP-001 (decisión del orquestador, 2026-10-04, validada por PO): la ayuda `?` y la de `--plain` lo dicen, y las acciones en `--plain` quedan como candidato post-MVP.
 - **i18n en/es** (NFR-10): **catálogo tipado** en `present::i18n`. Una enumeración de mensajes con un `match` exhaustivo por idioma, así que una traducción ausente es un error de compilación. Los parámetros son `SafeText` o números, sin concatenar cadenas. Idioma: `--lang`, después `LC_ALL`, `LC_MESSAGES`, `LANG`, y por último `en`. Los códigos del motor (N7) se traducen aquí. `--json` nunca se localiza.
-- **Preferencias** (Q-CKP-17, BR-CKP-CONS-006, DEP-CKP-11): repo, panel, filtros y layout. Se cargan al conectar (N9) y se guardan vía daemon con un rebote de 1 s y al salir (⚠️ **ASSUMPTION**). Con varias TUIs, gana la última escritura. Un fallo al guardar se avisa sin bloquear. Al arrancar se usa el repo del directorio actual (N4) o, si no, el último usado (Q-CKP-1). Los flags de la línea de comandos mandan sobre las preferencias.
+- **Preferencias** (Q-CKP-17, BR-CKP-CONS-006, DEP-CKP-11): repo, panel, filtros y layout. Se cargan al conectar (N9) y se guardan vía daemon con un rebote de 1 s y al salir (⚠️ **ASSUMPTION**). **Solo se guardan si el solicitante es un "sin atribuir" que pasa los controles 1 a 3** (L-05); si no, la TUI las mantiene en memoria y lo dice una vez. El esquema no admite las claves del editor ni la plantilla de worktrees. Con varias TUIs, gana la última escritura. Un fallo al guardar se avisa sin bloquear. Al arrancar se usa el repo del directorio actual (N4) o, si no, el último usado (Q-CKP-1). Los flags de la línea de comandos mandan sobre las preferencias.
 
 ### 11. CLI de solo lectura (Q-CKP-20, BR-CKP-CONS-007)
 
@@ -217,7 +224,8 @@ En el daemon, el **publicador de la predicción** (ADR-CKP-001) y el **ejecutor 
 - ⚠️ La anchura de `⚡`, `⛔` y `⚠` varía entre terminales. **Mitigación**: anchura declarada en el tema, `--ascii` y snapshots con ambos juegos de símbolos.
 - ⚠️ Depende de N1 a N11 del canal. **Mitigación**: el orden de entrega de Q-CKP-24 empieza por BR-04, que solo necesita N1 a N7. Lo que falte se presenta como "no disponible" (BR-CKP-CALC-001).
 - ⚠️ `crates/theme` y `packages/design-tokens` hoy solo tienen dos primitivos. Los tokens semánticos, los símbolos con fallback y la anchura son un **requisito previo** de cualquier pantalla.
-- ⚠️ `--plain` sin acciones deja a un usuario de lector de pantalla sin BR-07 en el MVP (supuesto del § 10, a validar por el PO).
+- ⚠️ `--plain` sin acciones deja a un usuario de lector de pantalla sin BR-07 en el MVP. Es el riesgo R-CKP-10, aceptado por el PO (§ 10).
+- ⚠️ Una TUI abierta por un agente funciona con capa `mcp` y sin varias acciones (M-03). Es lo buscado: un agente no gana poder cambiando de cliente.
 - ⚠️ El catálogo tipado obliga a recompilar para corregir un texto. Se acepta: los textos viajan con el binario.
 - ⚠️ La clasificación del editor de terminal por lista conocida puede fallar. **Mitigación**: lo desconocido se suspende (seguro) y hay una clave para forzar la clasificación.
 
@@ -236,17 +244,19 @@ Las pruebas usan repos y perfiles temporales y pasan por el arnés de INF-GRP-00
    - Gate propuesto (enmienda E2): p95 del Cockpit (`t_client_recv` → `t_render`) > 100 ms **falla**.
    - Feedback por tecla (tecla leída → frame) p95 ≥ 100 ms: **aviso**.
    - Microbanco sintético sin daemon en cada PR que toque `apps/cli`: ráfaga de 1.000 archivos, 10 worktrees y 55 pares.
-4. **V4 · Saneado**: fuzzing y propiedades. La salida de `sanitize` y del escapador JSON no contiene C0, C1, DEL ni bidi. El corpus incluye `\x1b]52;…`, `\x1b]0;…`, `\x1b[2J`, U+009B y RLO. Snapshot de una rama maliciosa: secuencia visible y buffer sin ESC (ADR-GRP-005 Validación 12, SEC-12).
+4. **V4 · Saneado**: fuzzing y propiedades. La salida de `sanitize` y del escapador JSON no contiene C0, C1, DEL, bidi (incluido U+061C), anchura cero (incluidos U+2060 a U+2064), U+2028, U+2029 ni caracteres de la tabla de Tags. El corpus incluye `\x1b]52;…`, `\x1b]0;…`, `\x1b[2J`, U+009B, RLO, U+061C, U+2028, U+2063 y U+E0041. Un nombre de 300 caracteres sale recortado a 100 (L-03). Snapshot de una rama maliciosa: secuencia visible y buffer sin ESC (ADR-GRP-005 Validación 12, SEC-12).
 5. **V5 · Fitness estáticas en CI**: `gitraptor_core` solo en el módulo `daemon`. Ni `gitraptor_git` ni `gitraptor_policy` en `apps/cli`. Lanzar procesos solo en `tui::editor` y en la biblioteca cliente de `crates/api` (DEP-CKP-12). Ningún widget recibe `String` del contrato (por tipo).
 6. **V6 · Sin daemon**:
    - Con el daemon parado, la TUI llega a "En vivo".
    - Con el arranque imposible, muestra "Motor no disponible" con instrucciones.
    - Con las carpetas de datos y configuración del perfil sin permisos de lectura (salvo la de ejecución), la TUI funciona igual: no las abre.
+   - **Par del canal** (L-06): con el directorio del socket en 0755 o de otro uid, o un servidor falso de otro uid, la TUI pasa a "Canal rechazado" sin enviar el handshake.
 7. **V7 · Accesibilidad**: `NO_COLOR` → buffer sin colores; `--ascii` → solo ASCII; 79×24 → solo el mensaje de tamaño mínimo; `--plain` → sin secuencias de pantalla alternativa ni de cursor.
 8. **V8 · i18n**: todo código del contrato (N7) tiene mensaje en y es (compila). Snapshots en/es.
-9. **V9 · Editor**: un editor falso de terminal en un directorio temporal. La TUI suspende, no consume teclas mientras tanto y redibuja al volver. `vim; rm -rf ~` se rechaza. Un editor gráfico falso no bloquea. **Pendiente: etapa de validación multiplataforma** (Linux, Windows).
+9. **V9 · Editor**: un editor falso de terminal en un directorio temporal. La TUI suspende, no consume teclas mientras tanto y redibuja al volver. `vim; rm -rf ~` se rechaza, también si llega del daemon (revalidación, L-06). Un editor gráfico falso no bloquea. El editor recibe la ruta absoluta (I-03). Si `cockpit.editor` cambia entre dos aperturas, la segunda muestra el argv nuevo y pide confirmación (L-05). **Pendiente: etapa de validación multiplataforma** (Linux, Windows).
 10. **V10 · CLI**: snapshot del esquema `--json` de `status` y `conflicts`, sin campos fuera de la allowlist. Mismo contenido que la TUI para la misma instantánea. Controles escapados.
 11. **V11 · Varias TUIs**: dos `App` sin pantalla ven el mismo estado, y una acción anunciada aparece en ambas (BR-CKP-CONS-004).
+12. **V12 · Capa y preferencias** (M-03, L-05): una TUI lanzada desde el árbol de un agente simulado muestra "actúas como claude-1", desactiva integrar, descartar y Cancelar con su motivo, y no guarda preferencias. Un filtro activo no oculta el recuento de ⚡ y ⛔ de la cabecera. Una escritura de preferencias con `cockpit.editor` se rechaza por esquema.
 
 ## Enmiendas que implica (no aplicadas)
 
@@ -261,6 +271,19 @@ Las pruebas usan repos y perfiles temporales y pasan por el arnés de INF-GRP-00
 | E5 | **ADR-GRP-006** | Preferencias de la TUI por usuario en el perfil, escritas solo por el daemon, documento acotado | DEP-CKP-11 |
 | E6 | **TS-GRP-004 / api-contract-ipc.md** | N1 a N11 del § 4. **Pendiente, dueño: worker del canal (TS-GRP-004)** | DEP-CKP-6, 11, 13 |
 | E7 | **DSYS-GRP-001** (no es ADR) | Símbolos como tokens con fallback ASCII y anchura. `crates/theme` agnóstico de `ratatui`. Alcance de `--plain` en el MVP. `ratatui` 0.30 en § 7 | § 7, § 10 |
+
+## Revisión de seguridad (2026-10-04)
+
+**Decisión del orquestador (2026-10-04), validada por Arquitecto, PO y security-expert.** Pasada de endurecimiento con los hallazgos que afectan a la TUI y a la CLI y el ajuste del PO sobre `--plain`. Los del ejecutor están en ADR-CKP-002 y los del predictor, en ADR-CKP-001.
+
+| Hallazgo o ajuste | Dónde quedó resuelto |
+|---|---|
+| L-03 · Categorías de saneado | § 8 (U+061C, U+2028/2029, U+2060 a U+2064, Tags; tope de 100 caracteres en nombres; `--json`; mismas categorías en el MCP); SEC-12 de `non-functional.md`; V4 |
+| L-05 · Preferencias, filtros y argv del editor | § 4 (N9), § 7 (cabecera), § 9 (argv visible y aprobado), § 10 (escritura solo de "sin atribuir" con controles 1 a 3; claves excluidas); V9 y V12 |
+| L-06 · Par del canal y revalidación del argv | § 4 (comprobación antes del handshake; dónde vive: pendiente de TS-GRP-004), § 9 (revalidación); V6 y V9 |
+| I-03 · Ruta absoluta al editor | § 4 (N10), § 9; V9 |
+| M-03 · Capa fijada por el daemon (efecto en la TUI) | § 2 (acciones según la capa), § 4 (N5); V12 |
+| PO · `--plain` | § 10 y Consecuencias: cita R-CKP-10 de CTX-CKP-001; el supuesto se retira |
 
 ## Referencias
 
