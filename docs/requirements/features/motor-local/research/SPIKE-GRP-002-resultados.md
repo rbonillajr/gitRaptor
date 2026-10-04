@@ -254,7 +254,22 @@ En la punta cercana, el coste es casi todo el arranque del proceso, unos 15 ms.
 
 ## 6. Recomendaciones de enmienda (aplicadas el 2026-10-04)
 
-En la fila de debounce se eligió la ventana compensada (duración efectiva de 75 ms) en lugar de presupuestar 85 ms, para que las etapas de ADR-GRP-011 § 2 sigan sumando 300 ms. Para el sondeo de respaldo se eligió depender de los disparadores de reconciliación, con la reconciliación tras cada recreación del stream como disparador nuevo. La reconciliación periódica queda como opción si el dogfooding la pide.
+En la fila de debounce se eligió la ventana compensada (duración efectiva de 75 ms) en lugar de presupuestar 85 ms, para que las etapas de ADR-GRP-011 § 2 sigan sumando 300 ms. Para el sondeo de respaldo se eligió depender de los disparadores de reconciliación, con la reconciliación tras cada recreación del stream como disparador nuevo, **más una reconciliación periódica de baja frecuencia** (5 min por worktree, ⚠️ ASSUMPTION), que acota la obsolescencia de un cambio perdido sin marca.
+
+**Resolución de cada recomendación** (decisiones del orquestador del 2026-10-04, validadas por el Arquitecto; detalle en la Enmienda de cada ADR):
+
+| Recomendación | Resolución |
+|---|---|
+| ADR-GRP-011 · 1. Debounce de 85 ms p95 | Aplicada con la variante de compensación: duración efectiva de 75 ms, holgura descontada y calibrada por el banco (INF-GRP-002) |
+| ADR-GRP-011 · 2. p95 como gate | Aplicada: confirmado en macOS; p99 y máximo reportados; Linux y Windows pendientes |
+| ADR-GRP-011 · 3. Banco de INF-GRP-002 | Aplicada: `t0` al fin del comando, debounce efectivo, calibración de la holgura y gates de corrección de recreación y reconciliación periódica |
+| ADR-GRP-011 · 4. Coste de la persistencia | Aplicada: ≤ 11 ms p95 en macOS; Windows pendiente |
+| ADR-GRP-010 · 1. Recreación del stream | Aplicada: altas y bajas agrupadas, reconciliación tras arrancar el stream nuevo y gate de CI en macOS al subir `notify`. Un watcher por worktree en macOS queda como candidata a medir. Descartados el stream sobre un ancestro común (puede ser `$HOME`) y otro backend (Watchman choca con NFR-06; kqueue no escala). Reanudar desde `FSEventStreamEventId` queda como optimización posterior al MVP |
+| ADR-GRP-010 · 2. Alcance del sondeo | Aplicada con las dos opciones: disparadores de reconciliación y reconciliación periódica de baja frecuencia. Las causas de hueco nuevas pasan a ADR-GRP-013 |
+| ADR-GRP-010 · 3. Ahead/behind | Aplicada: segunda fase, con caché y en proceso con la primitiva `ahead_behind` de `crates/git` (TS-GRP-002); su coste con `gix` se mide en INF-GRP-002 |
+| ADR-GRP-010 · 4. Tope de watches por repo | Aplicada: no aplica en macOS; sigue como ⚠️ ASSUMPTION hasta medir en Linux |
+| ADR-GRP-010 · 5. Coste del modo degradado | Aplicada: coste registrado; el intervalo adaptativo lo decide la Dev Spec de US-GRP-002 con la medición de INF-GRP-002 |
+| Fuera de los ADR · Memoria | Reasignada: TS-GRP-002 ya está hecha (PR #20). Las cachés de `gix` pasan a ser por repo (ADR-GRP-010 § 4) y el RSS aislado lo mide INF-GRP-002 (HUELLA en `non-functional.md`) |
 
 ### ADR-GRP-011
 
