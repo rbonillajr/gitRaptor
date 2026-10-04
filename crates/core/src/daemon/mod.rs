@@ -745,7 +745,9 @@ fn recover_repo(
 ) -> Result<(Oplog, TmStartup), ProfileError> {
     let (mut oplog, opened) = Oplog::open(dirs, &entry.repo_id, now_ms())?;
     // The real store when there is one it can trust; otherwise nothing about refs is decided.
-    let mut store = SnapshotStore::open_existing(dirs, &entry.repo_id).ok().flatten();
+    let mut store = SnapshotStore::open_existing(dirs, &entry.repo_id)
+        .ok()
+        .flatten();
     let mut absent = AbsentStore;
     let refs: &mut dyn SnapshotRefs = match store.as_mut() {
         Some(store) => store,

@@ -110,10 +110,9 @@ mod repo_intact_tm {
 
     #[test]
     fn reader_does_not_expose_the_repository() {
-        let reader = std::fs::read_to_string(
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("src/reader.rs"),
-        )
-        .unwrap();
+        let reader =
+            std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/reader.rs"))
+                .unwrap();
         assert!(reader.contains("pub(crate) repo: gix::Repository"));
         assert!(!reader.contains("pub repo:"));
         assert!(!reader.contains("-> &gix::Repository"));

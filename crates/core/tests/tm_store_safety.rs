@@ -100,31 +100,45 @@ fn snapshots_are_never_pushed() {
         .unwrap()
         .2;
     let remote = env.f.root.join("remote.git");
-    env.f
-        .git_in(&env.f.root, &["init", "-q", "--bare", remote.to_str().unwrap()]);
+    env.f.git_in(
+        &env.f.root,
+        &["init", "-q", "--bare", remote.to_str().unwrap()],
+    );
     let url = remote.to_str().unwrap();
     env.f.git(&["push", "-q", "--mirror", url]);
     env.f.git(&["push", "-q", "--all", url]);
     env.f.git(&["push", "-q", "-f", url, "refs/*:refs/*"]);
-    let refs = env
-        .f
-        .git_in(&env.f.root, &["--git-dir", url, "for-each-ref", "--format=%(refname)"]);
+    let refs = env.f.git_in(
+        &env.f.root,
+        &["--git-dir", url, "for-each-ref", "--format=%(refname)"],
+    );
     assert!(!refs.contains("refs/tm/"), "{refs}");
     let has = env
         .f
-        .git_command(&env.f.root, &["--git-dir", url, "cat-file", "-e", &untracked_blob.to_hex()])
+        .git_command(
+            &env.f.root,
+            &["--git-dir", url, "cat-file", "-e", &untracked_blob.to_hex()],
+        )
         .status()
         .unwrap();
-    assert!(!has.success(), "an object only the store has reached the remote");
+    assert!(
+        !has.success(),
+        "an object only the store has reached the remote"
+    );
     // The repo itself has no ref of the store either.
     assert!(!env.f.git(&["for-each-ref"]).contains("refs/tm/"));
-    assert!(!env.f.git(&["log", "--all", "--oneline"]).contains("tm snapshot"));
+    assert!(
+        !env.f
+            .git(&["log", "--all", "--oneline"])
+            .contains("tm snapshot")
+    );
 }
 
 #[test]
 fn aggressive_maintenance_after_a_destructive_reset_keeps_every_snapshot() {
     let env = Env::new(packed_busy());
-    env.f.write("lost.txt", "only in a commit that will be lost\n");
+    env.f
+        .write("lost.txt", "only in a commit that will be lost\n");
     env.f.git(&["add", "lost.txt"]);
     env.f.git(&["commit", "-q", "-m", "about to be lost"]);
     let lost = env.f.git(&["rev-parse", "HEAD"]).trim().to_owned();
@@ -138,7 +152,10 @@ fn aggressive_maintenance_after_a_destructive_reset_keeps_every_snapshot() {
         .git_command(&env.f.repo, &["cat-file", "-e", &lost])
         .status()
         .unwrap();
-    assert!(!gone.success(), "setup: the commit should be gone from the repo");
+    assert!(
+        !gone.success(),
+        "setup: the commit should be gone from the repo"
+    );
     // The store still has the snapshot, its content and the lost commit (a parent).
     env.store.verify(&out.snapshot_id).unwrap();
     assert_eq!(
@@ -153,7 +170,11 @@ fn aggressive_maintenance_after_a_destructive_reset_keeps_every_snapshot() {
 fn agent_work_in_the_worktree_never_alters_a_snapshot() {
     let env = Env::new(packed_busy());
     let out = env.prior();
-    let commit = env.store.snapshot_commit(&out.snapshot_id).unwrap().unwrap();
+    let commit = env
+        .store
+        .snapshot_commit(&out.snapshot_id)
+        .unwrap()
+        .unwrap();
     let files = env.files(&out.snapshot_id, "main");
     env.f.git(&["checkout", "-q", "-b", "agent", "feature"]);
     env.f.git(&["reset", "-q", "--hard", "main"]);
@@ -162,7 +183,10 @@ fn agent_work_in_the_worktree_never_alters_a_snapshot() {
     env.f.git(&["add", "agent.txt"]);
     env.f.git(&["commit", "-q", "-m", "agent"]);
     assert_eq!(
-        env.store.snapshot_commit(&out.snapshot_id).unwrap().unwrap(),
+        env.store
+            .snapshot_commit(&out.snapshot_id)
+            .unwrap()
+            .unwrap(),
         commit
     );
     assert_eq!(env.files(&out.snapshot_id, "main"), files);
@@ -180,7 +204,10 @@ fn seeding_and_writing_known_objects_leave_the_user_packs_untouched() {
             let m = p.metadata().unwrap();
             (m.ino(), m.mtime(), m.mtime_nsec(), m.len(), m.mode())
         };
-        let before: Vec<_> = packs(&git_dir).iter().map(|p| (p.clone(), stat(p))).collect();
+        let before: Vec<_> = packs(&git_dir)
+            .iter()
+            .map(|p| (p.clone(), stat(p)))
+            .collect();
         std::thread::sleep(std::time::Duration::from_millis(1100));
         let report = env.store.seed(&env.f.repo).unwrap();
         assert!(report.cloned + report.copied >= 1, "{report:?}");
@@ -190,7 +217,10 @@ fn seeding_and_writing_known_objects_leave_the_user_packs_untouched() {
         env.prior();
         env.f.write("b.txt", "beta\n"); // back to the committed content
         env.prior();
-        let after: Vec<_> = packs(&git_dir).iter().map(|p| (p.clone(), stat(p))).collect();
+        let after: Vec<_> = packs(&git_dir)
+            .iter()
+            .map(|p| (p.clone(), stat(p)))
+            .collect();
         assert_eq!(before, after);
         // The store's packs are its own files: other inode, 0600, own index.
         for p in packs(&env.store_path()) {
@@ -222,7 +252,13 @@ fn seeded_packs_lose_extended_attributes_and_acls() {
         assert!(st.success(), "{args:?}");
     };
     run(&["chmod", "u+w", pack.to_str().unwrap()]);
-    run(&["xattr", "-w", "com.example.mark", "user", pack.to_str().unwrap()]);
+    run(&[
+        "xattr",
+        "-w",
+        "com.example.mark",
+        "user",
+        pack.to_str().unwrap(),
+    ]);
     run(&["chmod", "+a", "everyone allow read", pack.to_str().unwrap()]);
     let env = Env::new(f);
     env.store.seed(&env.f.repo).unwrap();
@@ -233,7 +269,10 @@ fn seeded_packs_lose_extended_attributes_and_acls() {
             .output()
             .unwrap();
         let attrs = String::from_utf8_lossy(&attrs.stdout);
-        assert!(!attrs.contains("com.example.mark"), "{p:?} kept xattrs: {attrs}");
+        assert!(
+            !attrs.contains("com.example.mark"),
+            "{p:?} kept xattrs: {attrs}"
+        );
         let acl = std::process::Command::new("ls")
             .args(["-le", p.to_str().unwrap()])
             .output()
@@ -294,9 +333,7 @@ fn hostile_seeding_does_not_contaminate_the_store() {
         assert_eq!(report.cloned + report.copied, 1, "{report:?}");
         // The store regenerated its own index and never got the forged one or alternates.
         let store = env.store_path();
-        let own_idx = store
-            .join("objects/pack")
-            .join(idx.file_name().unwrap());
+        let own_idx = store.join("objects/pack").join(idx.file_name().unwrap());
         assert_ne!(std::fs::read(own_idx).unwrap(), forged);
         assert!(!store.join("objects/info/alternates").exists());
         env.store_git(&["verify-pack", real_pack_in(&store).to_str().unwrap()]);
@@ -360,12 +397,21 @@ fn store_folders_are_private_and_an_untrusted_store_is_set_aside() {
 
     // Opened by someone else's mode: not trusted, set aside (never deleted), started again.
     std::fs::set_permissions(env.store_path(), std::fs::Permissions::from_mode(0o755)).unwrap();
-    assert!(SnapshotStore::open_existing(&env.dirs, REPO_ID).unwrap().is_none());
+    assert!(
+        SnapshotStore::open_existing(&env.dirs, REPO_ID)
+            .unwrap()
+            .is_none()
+    );
     let (store, status) = SnapshotStore::open_or_create(&env.dirs, REPO_ID).unwrap();
     let StoreStatus::Replaced { set_aside, .. } = status else {
         panic!("not replaced: {status:?}");
     };
-    assert!(set_aside.join("refs/tm/snap").join(&out.snapshot_id).exists());
+    assert!(
+        set_aside
+            .join("refs/tm/snap")
+            .join(&out.snapshot_id)
+            .exists()
+    );
     assert!(store.snapshot_commit(&out.snapshot_id).unwrap().is_none());
     drop(store);
 
@@ -373,7 +419,11 @@ fn store_folders_are_private_and_an_untrusted_store_is_set_aside() {
     let elsewhere = env.f.root.join("elsewhere.git");
     std::fs::rename(env.store_path(), &elsewhere).unwrap();
     std::os::unix::fs::symlink(&elsewhere, env.store_path()).unwrap();
-    assert!(SnapshotStore::open_existing(&env.dirs, REPO_ID).unwrap().is_none());
+    assert!(
+        SnapshotStore::open_existing(&env.dirs, REPO_ID)
+            .unwrap()
+            .is_none()
+    );
     // A repo key that could escape the folder is refused.
     assert!(SnapshotStore::open_or_create(&env.dirs, "../x").is_err());
 }

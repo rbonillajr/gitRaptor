@@ -28,7 +28,12 @@ mod repo_intact {
         let allowed = core.join("src").join("timemachine");
         let mut files = Vec::new();
         rust_files(&core.join("src"), &mut files);
-        for app in ["apps/cli/src", "apps/mcp/src", "crates/api/src", "crates/policy/src"] {
+        for app in [
+            "apps/cli/src",
+            "apps/mcp/src",
+            "crates/api/src",
+            "crates/policy/src",
+        ] {
             rust_files(&workspace.join(app), &mut files);
         }
         assert!(files.len() > 10);
@@ -38,6 +43,9 @@ mod repo_intact {
             .filter(|f| std::fs::read_to_string(f).unwrap().contains("tm_write"))
             .map(|f| f.display().to_string())
             .collect();
-        assert!(offenders.is_empty(), "write layer used outside the Time Machine: {offenders:?}");
+        assert!(
+            offenders.is_empty(),
+            "write layer used outside the Time Machine: {offenders:?}"
+        );
     }
 }
