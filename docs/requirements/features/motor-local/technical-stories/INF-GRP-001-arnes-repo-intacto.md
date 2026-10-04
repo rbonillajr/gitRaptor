@@ -89,3 +89,7 @@ Las del núcleo se cumplen al cerrar este INF; las marcadas con la suite se cump
 #### Verificación Manual / Sandbox
 
 - Revisar el informe de diferencias de una ejecución fallida provocada a propósito y comprobar que nombra el escenario, la ruta y el tipo de cambio.
+
+### Notas de integración
+
+Nota de integración (Time Machine, INF-TMC-001): la huella 'repo intacto' y el repo canario se reutilizan desde INF-TMC-001. El canario se amplía con los casos de SEC-TMC-02: `core.fsmonitor`, `core.worktree` hacia fuera del repo, `includeIf` hostil, `filter.*`, `commit.gpgSign` global e `init.templateDir` con hooks.

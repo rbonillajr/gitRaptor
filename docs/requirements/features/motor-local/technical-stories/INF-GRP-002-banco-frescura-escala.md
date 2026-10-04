@@ -57,3 +57,7 @@ tags: [motor-local, ci, rendimiento, latencia, p95, escala, nfr-04, nfr-05]
 #### Verificación Manual / Sandbox
 
 - Comparar las cifras del banco con las de SPIKE-GRP-002 y registrar en ADR-GRP-011 cualquier cambio de presupuesto.
+
+### Notas de integración
+
+Nota de integración (Time Machine, ADR-TMC-006 y US-TMC-020): el banco añade el escenario 'operación protegida con trabajo sin commitear' sobre el repo de referencia de SPIKE-TMC-001, con 1 y con 10 worktrees activos, con gate de p95 < 200 ms del snapshot previo y aviso por etapa. El gate del motor se ejecuta con la Time Machine activa.

@@ -102,6 +102,8 @@ NFR-08 prohíbe las APIs privadas de un IDE. Leer archivos locales del usuario, 
 - **Coste de mantenimiento**: el adaptador v1 se revisa con cada cambio de formato de Claude Code.
 - **Lectura de cwd y entorno de otros procesos**: varía por SO (Windows y macOS restringen el entorno). S3 con marca de entorno es "si el SO lo permite" y lee **solo esa variable**, nunca el entorno completo; la ascendencia es la base. ADR-GRP-005 usa la ascendencia con identificadores no reutilizables (pidfd, audit token, handle) para los comandos reservados.
 
+Nota de integración (Time Machine, ADR-TMC-005, TQ-8, aceptado el 2026-10-03): el registro explícito de un agente guarda la identidad no reutilizable del proceso que se registra (pidfd, audit token o handle, con su hora de inicio), para que la ascendencia reconozca a ese agente como solicitante de un undo, un redo o una restauración.
+
 ## Validación
 
 La valida **SPIKE-GRP-001** (prototipo aislado, sin código del motor):

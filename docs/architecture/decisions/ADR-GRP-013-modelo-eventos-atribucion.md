@@ -111,6 +111,8 @@ Los cambios de estado de las sesiones (inicio, activo, inactivo, terminado) se g
 - ⚠️ Resolver el actor exige un cruce entre evento y sesión. **Mitigación**: índices por sesión y por worktree, y la atribución efectiva de cada sesión en memoria del daemon; se mide en INF-GRP-002 dentro del presupuesto de ADR-GRP-011.
 - ⚠️ El historial crece sin límite (los eventos no se borran). La retención queda fuera del MVP (ver ADR-GRP-006).
 
+Nota de integración (Time Machine, ADR-TMC-005, TQ-8, aceptado el 2026-10-03): la entidad Sesión guarda, para las sesiones registradas, la identidad no reutilizable del proceso que se registró y su hora de inicio. La Time Machine consume la atribución vigente y el aviso de cambio de atribución de § 6 sin copiarlos.
+
 ## Validación
 
 Pruebas con repos y perfiles temporales; las sesiones se simulan con la interfaz de detección de ADR-GRP-012.

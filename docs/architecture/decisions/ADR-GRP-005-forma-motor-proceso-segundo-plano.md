@@ -120,6 +120,8 @@ El motor tiene que capturar la actividad de los agentes **aunque no haya ninguna
 - ⚠️ Un proceso residente consume memoria y CPU de forma continua. **Mitigación**: presupuestos de huella medidos en INF-GRP-002 junto con la frescura.
 - ⚠️ En Windows, sin supervisor que relance el daemon tras un fallo. **Mitigación**: el arranque bajo demanda lo relanza en el siguiente uso, y el tiempo caído se reconcilia como hueco.
 
+Nota de integración (Time Machine, ADR-TMC-002, ADR-TMC-004 y ADR-TMC-005, aceptados el 2026-10-03): el canal expone además la operación protegida de la Time Machine (intención, snapshot previo y registro) y sus comandos de snapshot, undo, redo, restauración y timeline. La confirmación para deshacer trabajo ajeno reutiliza los controles del daemon de § 6 (identificador no reutilizable, ascendencia, terminal de control y líder de sesión), ampliados con la hora de inicio de cada antecesor, la contaminación por multiplexor y un reto de un solo uso ligado al plan (SEC-TMC-03). Un undo no es un comando reservado: un agente puede deshacer su propio trabajo.
+
 ## Validación
 
 Las pruebas usan repos y perfiles temporales (variable de sobreescritura del perfil de ADR-GRP-006, solo en builds de test), nunca el repo de GitRaptor.
