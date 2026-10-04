@@ -2,6 +2,8 @@
 
 > Requisitos no funcionales del motor local (F-001-01) con el ADR que los cubre y cómo se verifican. La sección "Security NFRs" incorpora la revisión del `security-expert` del 2026-10-03 y las enmiendas aplicadas a los ADRs.
 
+> **Time Machine (F-001-03)**: sus requisitos están en [time-machine/non-functional.md](./time-machine/non-functional.md). NFR-TMC-01 a 14 y SEC-TMC-01 a 15 complementan los de este documento, incluidos SEC-01 a SEC-14, sin sustituirlos.
+
 ## Metadata
 
 - **Modo**: expandido (desde el outline en modo draft)

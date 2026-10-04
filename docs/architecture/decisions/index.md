@@ -6,13 +6,13 @@ updated: 2026-10-03
 generator: architect
 domain: GRP
 feature: motor-local
-total_artifacts: 13
-expanded: 13
-approved: 4
+total_artifacts: 20
+expanded: 20
+approved: 11
 related:
   context: [CTX-GRP-001]
   rules: [BR-GRP-001]
-  adrs: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-004, ADR-GRP-005, ADR-GRP-006, ADR-GRP-007, ADR-GRP-008, ADR-GRP-009, ADR-GRP-010, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013]
+  adrs: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-004, ADR-GRP-005, ADR-GRP-006, ADR-GRP-007, ADR-GRP-008, ADR-GRP-009, ADR-GRP-010, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, ADR-TMC-001, ADR-TMC-002, ADR-TMC-003, ADR-TMC-004, ADR-TMC-005, ADR-TMC-006, ADR-TMC-007]
   stories: [US-GRP-001, US-GRP-002, US-GRP-003, US-GRP-004, US-GRP-005, US-GRP-006, US-GRP-007, US-GRP-008, US-GRP-009, US-GRP-010, US-GRP-011, US-GRP-012, US-GRP-013, US-GRP-014, US-GRP-015, US-GRP-016]
 ---
 
@@ -57,6 +57,13 @@ El formato "JSON estricto con `$schema`" no es una PQ: es la propuesta base del 
 | [ADR-GRP-011](./ADR-GRP-011-presupuesto-frescura.md) | Reparto del presupuesto de frescura | Motor ≤ 300 ms, Cockpit ≤ 100 ms y 100 ms de margen, p95 medido con reloj monótono por etapa | expanded |
 | [ADR-GRP-012](./ADR-GRP-012-deteccion-sesiones-claude-code.md) | Detección de sesiones de Claude Code | S1 (proceso y cwd) crea la sesión; atribuyen S2b, S3, S4 o el registro explícito de un "otro agente" si es la única sesión presente (confirmar una sesión detectada no activa esa evidencia); la co-ubicación de una sesión detectada nunca basta; transcripts limitados a metadatos (PQ-2) | expanded |
 | [ADR-GRP-013](./ADR-GRP-013-modelo-eventos-atribucion.md) | Modelo persistido de eventos, sesiones y atribución | Los eventos apuntan a una sesión; registros de atribución append-only (incluido el retiro de registro, que termina la sesión); huecos como intervalos; sin variante "humano" | expanded |
+| [ADR-TMC-001](./ADR-TMC-001-almacen-snapshots-perfil.md) | Almacén de snapshots en el perfil | Repo Git bare privado por repo en `tm/<id-repo>/` con objetos propios, contenido en bruto sin filtros y exclusiones declaradas; nunca en el repo del usuario | accepted |
+| [ADR-TMC-002](./ADR-TMC-002-escritor-time-machine.md) | Escritor de la Time Machine | Escrituras internas en el módulo `timemachine` del daemon con capa de escritura propia en `crates/git`, sin hooks, filtros, firma ni red; las operaciones de usuario las ejecuta el ejecutor del daemon | accepted |
+| [ADR-TMC-003](./ADR-TMC-003-oplog-diario-recuperacion.md) | Oplog, diario y recuperación | Oplog SQLite propio por repo, solo por anexión y encadenado por hash; solicitante congelado; recuperación sin escrituras propias salvo liberar su `index.lock` | accepted |
+| [ADR-TMC-004](./ADR-TMC-004-cobertura-dos-niveles.md) | Cobertura en dos niveles | Operación protegida como único camino de escritura; captura por observación sobre eventos publicados del motor; previo vía hook para Guardrails | accepted |
+| [ADR-TMC-005](./ADR-TMC-005-solicitante-permisos-solape.md) | Solicitante, permisos y solape | Solicitante por ascendencia en el daemon (agente X o sin atribuir); reto ligado al plan; Guardrails solo deniega; solape por archivo y ref | accepted |
+| [ADR-TMC-006](./ADR-TMC-006-presupuesto-rendimiento-snapshot.md) | Presupuesto del snapshot (NFR-04) | p95 < 200 ms del snapshot previo con almacén sembrado; repo mediano fijado por SPIKE-TMC-001; gate en el banco de INF-GRP-002 | accepted |
+| [ADR-TMC-007](./ADR-TMC-007-retencion-purga-segura.md) | Retención y purga segura | `timeMachine.retentionDays` (perfil y local, 30); protección del previo a la última destructiva; purga en dos fases con aviso; solo refs del almacén | accepted |
 
 ## Grafo de dependencias entre ADRs nuevos
 
@@ -71,8 +78,19 @@ El formato "JSON estricto con `$schema`" no es una PQ: es la propuesta base del 
 | ADR-GRP-011 | 005, 006, 009, 010, 013 | — (Cockpit F-001-02 lo consume) |
 | ADR-GRP-012 | 005, 006, 007 (umbral), 009, 010 | 005 (ascendencia), 013 — lo valida SPIKE-GRP-001 |
 | ADR-GRP-013 | 005 (único escritor), 006 (almacén), 010 (reconciliación), 012 (señales y evidencia) | 005 (huecos y auditoría), 011 |
+| ADR-TMC-001 | ADR-GRP-006 (perfil), 009 (lectura sin escrituras), 010 (filtros de ignorados y eventos) | TMC-002, 003, 004, 006, 007 |
+| ADR-TMC-002 | ADR-GRP-001, 002, 005 (daemon y canal), 006 (único escritor), 009 (reglas de invocación); TMC-001 | TMC-003, 004, 005 |
+| ADR-TMC-003 | ADR-GRP-006, 013 (atribución vigente); TMC-001, 002 | TMC-004, 005, 007 |
+| ADR-TMC-004 | ADR-GRP-005, 010, 011 (presupuesto del motor), 012, 013; TMC-001, 002, 003 | TMC-006 |
+| ADR-TMC-005 | ADR-GRP-005 § 6 (controles del daemon), 007 (políticas), 012 (procesos de agente), 013; TMC-002, 003 | — |
+| ADR-TMC-006 | ADR-GRP-001, 011 (reloj y banco); TMC-001, 004 | — (lo valida SPIKE-TMC-001) |
+| ADR-TMC-007 | ADR-GRP-007 (sección `timeMachine`), 008; TMC-001, 003 | — |
 
-Grafo derivado de la sección Referencias de cada ADR. ADR-GRP-005 es el proceso que aloja al resto, así que sus dependencias con 006, 009, 012 y 013 son mutuas: él usa sus rutas, su Git, su ascendencia y sus huecos, y ellos corren dentro del daemon.
+Grafo derivado de la sección Referencias de cada ADR. ADR-GRP-005 es el proceso que aloja al resto, así que sus dependencias con 006, 009, 012 y 013 son mutuas: él usa sus rutas, su Git, su ascendencia y sus huecos, y ellos corren dentro del daemon. Las aristas de los ADR-TMC hacia los ADR-GRP se listan solo en las filas TMC; las filas GRP no se modifican.
+
+### Feature time-machine
+
+Los ADR-TMC-001 a 007 (aceptados el 2026-10-03) son de la feature `time-machine` (F-001-03). Su resumen, las decisiones TQ-1 a TQ-17 y el mapa de historias están en el [overview de la Time Machine](../time-machine/overview.md).
 
 ---
 
