@@ -44,7 +44,7 @@ El timeline muestra qué cambió, cuándo, quién y con qué cobertura (US-TMC-0
 |---|---|---|
 | **Snapshot** | Id, worktrees incluidos, **nivel** (`previo_garantizado`, `observacion`, `previo_hook`), ref del almacén, marca del motor que refleja (secuencia de ADR-GRP-013 hasta la que llega el estado leído), operación o evento que lo motivó, exclusiones (ignorados no, pero sí tamaño y submódulos), tamaño único | Fila inmutable; su estado (pendiente, completo, descartado, purga anunciada, purgado) va en el diario |
 | **Operación** | Id, tipo (`protegida` con su subtipo, `undo`, `redo`, `restauracion`), ámbito (worktrees y refs), **solicitante congelado** (variante agente con nombre, origen y sesión, o "sin atribuir"; nunca "humano"), canal (CLI, TUI, MCP, hook), confirmación interactiva (sí/no), destino (operaciones o eventos deshechos, snapshot destino o undo que se rehace), snapshot previo, avisos (ya empujado, exclusiones, rutas en solape) | Fila inmutable: se escribe una vez |
-| **Diario** | Transiciones de estado de cada operación y de cada snapshot, pasos del aplicador (ADR-TMC-002 § 3), locks de Git tomados (ruta, inodo, momento) y procesos hijo en curso | Solo anexión |
+| **Diario** | Transiciones de estado de cada operación y de cada snapshot, pasos del aplicador (ADR-TMC-002 § 3), locks de Git tomados (ruta, identidad del archivo —inodo y fecha de creación—, momento) y procesos hijo en curso | Solo anexión |
 | **Aviso pendiente** | Interrupción o purga anunciada que hay que mostrar a un cliente, con su estado de entrega | Solo anexión |
 
 La inmutabilidad se impone en el esquema: los triggers rechazan `UPDATE` y `DELETE` sobre operaciones, snapshots y diario. La purga (ADR-TMC-007) no borra filas: anota en el diario que el contenido se liberó. Como el mismo usuario puede editar el archivo, cada fila encadena el hash de la anterior y la cabeza se guarda también fuera del oplog; una cadena rota se declara hueco con su causa (SEC-TMC-09).
@@ -77,7 +77,7 @@ Antes de aceptar operaciones de la Time Machine en un repo, el daemon:
 1. **Snapshots `pendiente`**: pasan a `descartado`. Las refs del almacén sin fila `completo` se borran (la operación que debían proteger nunca empezó). Los objetos sueltos los libera el mantenimiento del almacén (ADR-TMC-007).
 2. **Operaciones en `intención` o `snapshot_previo`**: pasan a `abortada`. El repo no se tocó.
 3. **Operaciones en `aplicando`**: pasan a `interrumpida`. **No se reanuda ni se revierte nada por cuenta propia**: la Time Machine solo escribe cuando un actor lo pide (BR-TMC-CONS-004). Su snapshot previo queda protegido de la purga y `raptor undo` devuelve el ámbito a él (US-TMC-019).
-4. **Locks propios** (excepción explícita a "solo escribe cuando un actor lo pide", BR-TMC-CONS-004): un `index.lock` anotado en el diario se borra solo si existe con el mismo inodo y ningún proceso hijo anotado sigue vivo; si sigue vivo, se espera con tiempo máximo. Es la única escritura en el repo que la recuperación hace por su cuenta: **libera un lock propio y no toca contenido**; sin ella, Git quedaría bloqueado para el usuario y sus agentes. **Un lock que no está en el diario nunca se borra.** Nota para el PO en el overview.
+4. **Locks propios** (excepción explícita a "solo escribe cuando un actor lo pide", BR-TMC-CONS-004): un `index.lock` anotado en el diario se borra solo si existe con la misma identidad de archivo (inodo y fecha de creación) y ningún proceso hijo anotado sigue vivo; si sigue vivo, se espera con tiempo máximo. Es la única escritura en el repo que la recuperación hace por su cuenta: **libera un lock propio y no toca contenido**; sin ella, Git quedaría bloqueado para el usuario y sus agentes. **Un lock que no está en el diario nunca se borra.** Nota para el PO en el overview.
 5. **Aviso**: cada interrupción genera un aviso pendiente que reciben el siguiente cliente que se conecta desde ese worktree y el timeline. Sin interrupciones no hay aviso (US-TMC-019, escenario 5).
 6. **Purga a medias**: ver ADR-TMC-007 § 4.
 
@@ -124,7 +124,18 @@ Aplicada desde la [Dev Spec de TS-TMC-002](../../requirements/features/time-mach
 | La fila del snapshot `pendiente` se escribe **antes** de crear su ref en el almacén. La recuperación borra solo las refs de snapshots `pendiente` o `descartado`; una ref que el oplog no conoce se informa y se conserva (NFR-01) | § 3, § 6.1 |
 | Sin almacén de snapshots disponible, la recuperación no decide nada que dependa de refs | § 6.1, § 6.6 |
 | La recuperación del oplog no depende del almacén del motor: un repo cuyo almacén del motor no abre recupera igual su oplog (Q26) | § 1, § 6 |
-| Un lock anotado se borra solo si la entrada no está en un hueco de la cadena, la ruta está dentro del directorio Git común, el nombre termina en `.lock` y el archivo es regular, con el mismo inodo y sin hijos vivos. Se borra sin seguir enlaces, con un tope de espera compartido por todo el arranque. También se liberan los de operaciones `interrumpida` en arranques posteriores | § 6.4 |
+| Un lock anotado se borra solo si la entrada no está en un hueco de la cadena, la ruta está dentro del directorio Git común, el nombre termina en `.lock` y el archivo es regular, con la misma identidad (inodo y fecha de creación; ver la enmienda de fix/ci-repo-intact) y sin hijos vivos. Se borra sin seguir enlaces, con un tope de espera compartido por todo el arranque. También se liberan los de operaciones `interrumpida` en arranques posteriores | § 6.4 |
 | Cadena: versión de codificación por fila, génesis ligado al id del repo y cabeza en `oplog.head`. Se tolera solo la cabeza un lote por detrás; un oplog en cuarentena empieza con un hueco | § 2 |
 | Las operaciones guardan la marca del motor, para intercalarse con el Git crudo sin depender del reloj. Hay una pila de undo y redo por worktree y otra de refs del repo; una operación `interrumpida` de cualquier tipo cuenta como hecha | § 4 |
 
+## Enmienda (2026-10-04, fix/ci-repo-intact)
+
+Decisión del orquestador (2026-10-04), validada por el Arquitecto. Corrige un fallo de § 6.4; el `status` sigue en `accepted`.
+
+| Cambio | Dónde |
+|---|---|
+| La identidad de un lock anotado es **inodo + fecha de creación** (ns desde la época), no solo el inodo. ext4 y otros sistemas de archivos reutilizan al instante el inodo liberado, así que un lock ajeno creado en la misma ruta podía heredar el inodo del nuestro y la recuperación lo habría borrado. APFS no reutiliza inodos, por eso solo fallaba en Linux | § 2, § 6.4 |
+| La fecha de creación se guarda en la columna `birth_ns` del diario (migración 2), que entra en el hash desde el formato de codificación 2. Las filas en formato 1 verifican con su consulta original | § 2 |
+| Si la fecha de creación no está disponible (al anotar o al comprobar), el lock **no se borra** y se informa como `Unsupported`: ante la duda, fail-safe | § 6.4 |
+
+**Riesgo residual:** en Linux la fecha de creación usa un reloj grueso (de 1 a 10 ms). Si alguien borra nuestro lock y otro Git crea uno en la misma ruta dentro del mismo tick y recibe el mismo inodo, ambos son indistinguibles. Pendiente: avisar al usuario con un notice cuando un lock propio se conserva por identidad desconocida.
