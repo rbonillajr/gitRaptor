@@ -8,11 +8,11 @@ domain: GRP
 priority: high
 complexity: high
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 related:
   adrs: [ADR-GRP-005, ADR-GRP-011, ADR-GRP-013, ADR-GRP-012]
   stories: [US-GRP-001, US-GRP-002, US-GRP-003, US-GRP-004, US-GRP-005, US-GRP-006, US-GRP-007, US-GRP-008, US-GRP-009, US-GRP-010, US-GRP-011, US-GRP-012, US-GRP-013, US-GRP-014, US-GRP-015, US-GRP-016, TS-GRP-003]
-  specs: []
+  specs: [DS-TS-GRP-004]
 ado:
   id: null
   url: null
@@ -29,7 +29,7 @@ tags: [motor-local, ipc, json-rpc, socket, named-pipe, contrato, seguridad, coma
 **Quiero** el canal local entre el daemon y sus clientes con su contrato versionado y la biblioteca cliente compartida
 **Para** que todas las historias expongan su estado por un único contrato seguro, sin puertos de red (NFR-03) y sin que un agente use operaciones reservadas al desarrollador (BR-AUTH-001)
 
-> Dev Spec: `dev-specs/TS-GRP-004-canal-clientes.md` | Pendiente
+> Dev Spec: [`dev-specs/TS-GRP-004-dev-spec.md`](../dev-specs/TS-GRP-004-dev-spec.md) | Aprobada (2026-10-04)
 >
 > **Depende de**: TS-GRP-003. **ADRs**: ADR-GRP-005 (§ 3 arranque bajo demanda, § 5 canal, § 6 comandos reservados), ADR-GRP-011 § 3 (tiempos en el evento), ADR-GRP-013 § 6 (actor expuesto), ADR-GRP-012 (procesos de agente para la ascendencia). **Seguridad**: SEC-01, SEC-02, SEC-03, SEC-08, SEC-10, SEC-12, SEC-13 y SEC-14; la Dev Spec queda bloqueada hasta que se cumplan las condiciones del gate de seguridad de `docs/architecture/non-functional.md`.
 >
@@ -74,3 +74,22 @@ tags: [motor-local, ipc, json-rpc, socket, named-pipe, contrato, seguridad, coma
 #### Verificación Manual / Sandbox
 
 - Desde una sesión de Claude Code real, intentar añadir un repo y parar el daemon con la CLI y con un cliente JSON-RPC directo, y comprobar que se rechazan; repetir desde la terminal del desarrollador y comprobar que pide confirmación.
+
+### Enmienda de alcance (2026-10-04, Dev Spec)
+
+**Decisión del orquestador (2026-10-04), validada por el PO y el Arquitecto.**
+
+- **Pasa a US-GRP-009** (se añade allí como criterio, no se pierde):
+  - El registro de un agente con el worktree tomado del cwd del llamante.
+  - Las pruebas "un registro con worktree ajeno se rechaza" y "un agente que retira su propio registro es aceptado y uno que retira el de otro es rechazado".
+  - Motivo: todavía no existen registros. Aquí quedan el validador de nombres declarados y reservados (`channel::validate::declared_agent_name`) y la declaración de `registration.withdraw` como comando reservado.
+  - En macOS falta además un wrapper seguro para leer el cwd de otro proceso.
+- **Métodos declarados por adelantado**: `repo.add` (US-GRP-001), `repo.retire` (US-GRP-006), `attribution.correct` y `attribution.withdraw-correction` (US-GRP-010) y `registration.withdraw` (US-GRP-009) existen en el contrato como comandos reservados. El daemon los valida, los autoriza, los audita y responde "no implementado" con la historia que los implementa.
+- **Verificación manual**: se acota a `raptor daemon stop`, porque la CLI no tiene `repo add` hasta US-GRP-001.
+- **Añadidos**:
+  - `raptor daemon status`: diagnóstico de solo lectura que arranca el motor bajo demanda, sin compromiso de presentación (F-001-02).
+  - `audit.list`: consulta de la auditoría, fuera del MCP.
+  - DEP-CKP-6: instantánea con `run_id` y `seq`, y suscripción desde `seq + 1`.
+  - DEP-MCP-3: rechazo de los descendientes del propio daemon.
+- **Windows y Linux**: las pruebas de pipe, SID y clientes remotos, y todas las de Linux, quedan como "Pendiente: etapa de validación multiplataforma".
+- **Fuzzing**: prueba de propiedades del decodificador en lugar de `cargo-fuzz`, que necesita nightly.
