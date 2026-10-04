@@ -2,3 +2,7 @@
 # Se listan como legacy; sus ids (BRD-GRP-001, DSYS-GRP-001) se citan en el cuerpo, no en related.*
 business/gitraptor-documento-de-negocio.md
 design-system/README.md
+
+# Resultados de spikes (research/*-resultados.md): informes de investigación sin tipo canónico en el
+# esquema AADD (research-brief). Se listan como legacy para no romper la validación del índice.
+requirements/features/*/research/*-resultados.md
