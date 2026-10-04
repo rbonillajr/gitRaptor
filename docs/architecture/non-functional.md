@@ -86,6 +86,7 @@
 - **Veredicto**: **aprobado con condiciones**; no bloquea globalmente. Sin hallazgos Critical.
 - **Estado tras las enmiendas (2026-10-03)**: H1, H2, H3 y H4 **quedan cubiertos en texto** en ADR-GRP-005, ADR-GRP-009 y ADR-GRP-006, sin cambiar decisiones de fondo. Los Medium y Low también tienen su cobertura en los ADRs de la tabla anterior.
 - **Bloqueadas hasta que se cumplan las condiciones**: las Dev Specs de `crates/git` (TS-GRP-002; ADR-GRP-009: H2, H3, H4, M1) y del daemon, el canal y los comandos reservados (TS-GRP-003, TS-GRP-004; ADR-GRP-005: H1, H4, M6).
+  - **Estado (2026-10-04)**: Rene Bonilla aceptó ADR-GRP-005 y ADR-GRP-009 el 2026-10-04 y levantó este bloqueo. Las Dev Specs de TS-GRP-002 y TS-GRP-003 ya están implementadas (PRs #20 y #26). Las condiciones de abajo que siguen abiertas no bloquean el desarrollo y son de INF-GRP-001: el repo canario está hecho; la auditoría dinámica de `exec` cubre la parte portable (trampas y argv) y falta el trazador de kernel (ADR-GRP-009, Validación 7). El resto queda como *Pendiente: etapa de validación multiplataforma*.
 - **Condiciones para pasar ADR-GRP-005 y ADR-GRP-009 a `accepted`**:
   - SEC-01, SEC-02, SEC-03, SEC-09 y SEC-10 en su Validación (cubierto en texto).
   - INF-GRP-001 con el repo canario (SEC-09) y la auditoría dinámica de `exec` (eslogger, ETW, strace) implementados.
