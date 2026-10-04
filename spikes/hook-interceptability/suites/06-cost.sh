@@ -43,21 +43,23 @@ variant_hooks() {
   git -C "$repo" config core.hooksPath "$d"
 }
 
-# spawns <repo> <cmd> [setup]: hook invocations of one run (counting probes)
+# spawns <repo> <cmd> <setup> <names...>: hook invocations of one run, counted
+# with a minimal dispatcher (the fingerprinting probe is O(refs) per call)
 spawns() {
-  local repo="$1" cmd="$2" setup="${3:--}"
-  install_probes "$repo"; export PROBE_WT="$repo" PROBE_GITDIR="$(common_dir "$repo")"
+  local repo="$1" cmd="$2" setup="$3" d h; shift 3
+  d="$(common_dir "$repo")/gitraptor/hooks"; mkdir -p "$d"
+  for h in "$@"; do printf '#!/bin/sh\necho x >> %s\ncat >/dev/null\n' "'$SANDBOX/spawns'" > "$d/$h"; chmod +x "$d/$h"; done
+  git -C "$repo" config core.hooksPath "$d"
   [ "$setup" != - ] && (cd "$repo" && sh -c "$setup") >/dev/null 2>&1
-  : > "$PROBE_LOG"; (cd "$repo" && sh -c "$cmd") >/dev/null 2>&1
-  local n; n=$(wc -l < "$PROBE_LOG" | tr -d ' ')
+  : > "$SANDBOX/spawns"; (cd "$repo" && sh -c "$cmd") >/dev/null 2>&1
   rm -r "$(common_dir "$repo")/gitraptor"; git -C "$repo" config --unset core.hooksPath
-  echo "$n"
+  wc -l < "$SANDBOX/spawns" | tr -d ' '
 }
 
 bench() {
   local scen="$1" repo="$2" setup="$3" cmd="$4" n="$5"; shift 5
   [ -n "${BENCH_ONLY:-}" ] && ! [[ "$scen" =~ $BENCH_ONLY ]] && return
-  local sp; sp="$(spawns "$repo" "$cmd" "$setup")"
+  local sp; sp="$(spawns "$repo" "$cmd" "$setup" "$@")"
   for v in V0 V1 V2 V3; do
     variant_hooks "$repo" "$v" "$@"
     local r; r="$(python3 "$LIB/bench.py" "$n" "$repo" "$setup" "$cmd")"
