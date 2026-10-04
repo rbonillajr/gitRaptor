@@ -19,7 +19,6 @@ tags:
   - guardrails
   - proteccion-configuracion
   - rutas-prohibidas
-  - bloqueada
 ---
 
 # US-GRD-012: Un agente no puede relajar las reglas del equipo cambiando su configuración
@@ -37,7 +36,7 @@ BR-AUTH-004 (la configuración de Guardrails es ruta prohibida para agentes por 
 ## Dependencias
 
 - **Historias**: US-GRD-008 (rutas prohibidas), US-GRD-010 (los tres niveles).
-- **Externas**: **bloqueada** por el ADR de formato P8 (motor-local), que fija qué rutas son la configuración. Por Q-GRD-17 rige la última versión commiteada de la configuración del equipo en el worktree de la operación, y por Q-GRD-20 esa versión solo endurece: las relajaciones salen solo de la rama principal. Distinguir al humano es transversal (lo define el Arquitecto; R-GRD-3). Que un agente escriba en disco la configuración personal, que no se versiona, no lo puede impedir una regla sobre commits: queda como riesgo R-GRD-4 para el Arquitecto, fuera de esta historia.
+- **Externas**: ninguna bloqueante. Las rutas de la configuración las fija ADR-GRP-007, que cerró P8 al aceptarse (Rene Bonilla, 2026-10-04). Por Q-GRD-17 rige la última versión commiteada de la configuración del equipo en el worktree de la operación, y por Q-GRD-20 esa versión solo endurece: las relajaciones salen solo de la rama principal. Distinguir al humano es transversal (lo define el Arquitecto; R-GRD-3). Que un agente escriba en disco la configuración personal, que no se versiona, no lo puede impedir una regla sobre commits: queda como riesgo R-GRD-4 para el Arquitecto, fuera de esta historia.
 - **Transversal**: Windows, macOS y Linux.
 
 ## Criterios de Aceptación

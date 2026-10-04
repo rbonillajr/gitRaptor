@@ -38,7 +38,7 @@ BR-CONS-006 (comando, Guardrails: no pisa cambios a mano, escritura atómica y r
 ## Dependencias
 
 - **Historias**: US-GRD-010 (precedencia), US-GRD-014 (rama base como valor del equipo).
-- **Externas**: **bloqueada** por el ADR de formato P8 (motor-local). **Gate de Q-GRD-19**: relajar con el comando exige el factor de autenticación del sistema operativo, fuera del canal del agente; esta historia no se empieza sin él. Distinguir al humano: transversal (lo define el Arquitecto; R-GRD-3). Por Q-GRD-17 y Q-GRD-20, un endurecimiento del comando en el nivel de equipo se aplica al commitearlo en el worktree; una relajación, solo cuando llega a la rama principal y el desarrollador la confirma en su máquina (Q-GRD-21).
+- **Externas**: **bloqueada** por el gate de Q-GRD-19 (P8 ya no la bloquea: ADR-GRP-007 se aceptó el 2026-10-04). **Gate de Q-GRD-19**: relajar con el comando exige el factor de autenticación del sistema operativo, fuera del canal del agente; esta historia no se empieza sin él. Distinguir al humano: transversal (lo define el Arquitecto; R-GRD-3). Por Q-GRD-17 y Q-GRD-20, un endurecimiento del comando en el nivel de equipo se aplica al commitearlo en el worktree; una relajación, solo cuando llega a la rama principal y el desarrollador la confirma en su máquina (Q-GRD-21).
 - **Transversal**: Windows, macOS y Linux; pruebas de interrupción (NFR-12).
 
 ## Criterios de Aceptación

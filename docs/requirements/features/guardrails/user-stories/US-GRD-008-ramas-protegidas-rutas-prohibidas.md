@@ -19,7 +19,6 @@ tags:
   - politicas
   - ramas-protegidas
   - rutas-prohibidas
-  - bloqueada
 ---
 
 # US-GRD-008: Ningún agente cambia una rama protegida ni toca una ruta prohibida
@@ -37,7 +36,7 @@ BR-VAL-003 (rama protegida y ruta prohibida; force-push y `reset --hard` prohibi
 ## Dependencias
 
 - **Historias**: US-GRD-007 (lectura de la configuración del equipo y decisión).
-- **Externas**: **bloqueada** por el ADR de formato P8 (motor-local).
+- **Externas**: ninguna. Estuvo bloqueada por P8 (formato de la configuración, motor-local) hasta el 2026-10-04, cuando Rene Bonilla aceptó ADR-GRP-007, que la cierra.
 - **Transversal**: Windows, macOS y Linux.
 
 ## Criterios de Aceptación

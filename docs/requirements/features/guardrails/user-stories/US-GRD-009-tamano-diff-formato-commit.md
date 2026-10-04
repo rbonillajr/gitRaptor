@@ -19,7 +19,6 @@ tags:
   - politicas
   - tamano-diff
   - formato-commit
-  - bloqueada
 ---
 
 # US-GRD-009: Los agentes entregan commits pequeños y con el formato que exige el equipo
@@ -37,7 +36,7 @@ BR-VAL-003 (límite de diff en líneas cambiadas por commit, S-GRD-7; formato de
 ## Dependencias
 
 - **Historias**: US-GRD-008 (va después del primer bloque de políticas, Q-GRD-9).
-- **Externas**: **bloqueada** por el ADR de formato P8 (motor-local).
+- **Externas**: ninguna. Estuvo bloqueada por P8 (formato de la configuración, motor-local) hasta el 2026-10-04, cuando Rene Bonilla aceptó ADR-GRP-007, que la cierra.
 - **Transversal**: Windows, macOS y Linux.
 
 ## Criterios de Aceptación
