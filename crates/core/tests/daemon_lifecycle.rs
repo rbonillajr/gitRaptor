@@ -262,3 +262,100 @@ fn insecure_state_folder_stops_the_start() {
     }
     assert!(!dirs.state.join("daemon.lock").exists());
 }
+
+/// TS-TMC-002: the start recovers the oplog of every observed repo before
+/// accepting operations, even when the engine store cannot be opened.
+#[cfg(unix)]
+#[test]
+fn start_recovers_the_time_machine_oplog() {
+    use gitraptor_core::timemachine::oplog::{
+        Channel, CompleteInfo, NewOperation, NewSnapshot, OperationKind, OperationState,
+        OperationTransition, Oplog, Requester, Scope, SnapshotLevel, Target, file_inode,
+    };
+
+    let tp = TempProfile::new();
+    let repo = profile_with_repo(&tp);
+    let entry = reopen(tp.dirs()).repos().unwrap().remove(0);
+    let wt = repo.to_str().unwrap().to_owned();
+
+    // A previous daemon died while applying an operation that held the
+    // index lock of the repo.
+    let (mut oplog, _) = Oplog::open(&tp.dirs(), &entry.repo_id, 1).unwrap();
+    let op = oplog
+        .record_operation(
+            &NewOperation {
+                kind: OperationKind::Protected,
+                subtype: Some("checkout".into()),
+                scope: Scope {
+                    worktrees: vec![wt.clone()],
+                    refs: vec![],
+                },
+                requester: Requester::Unattributed,
+                channel: Channel::Cli,
+                confirmed: true,
+                target: Target::None,
+                warnings: vec![],
+                engine_mark: 0,
+            },
+            2,
+        )
+        .unwrap();
+    let snap = oplog
+        .begin_snapshot(
+            &NewSnapshot {
+                level: SnapshotLevel::GuaranteedPrior,
+                worktrees: vec![wt.clone()],
+                engine_mark: Some(0),
+                cause_operation: Some(op.clone()),
+                cause_event_seq: None,
+            },
+            3,
+        )
+        .unwrap();
+    oplog
+        .complete_snapshot(&snap, &CompleteInfo::default(), 4)
+        .unwrap();
+    for t in [
+        OperationTransition::PriorSnapshot { snapshot_id: &snap },
+        OperationTransition::Ready,
+        OperationTransition::Applying { step: 1 },
+    ] {
+        oplog.advance_operation(&op, t, 5).unwrap();
+    }
+    let lock = entry.canonical_path.join("index.lock");
+    std::fs::write(&lock, b"").unwrap();
+    oplog
+        .record_lock_taken(&op, &lock, file_inode(&lock).unwrap().unwrap(), 6)
+        .unwrap();
+    let foreign = entry.canonical_path.join("HEAD.lock");
+    std::fs::write(&foreign, b"").unwrap();
+    drop(oplog);
+
+    // The engine store comes from a newer binary: the repo is not observed,
+    // but its oplog is still recovered.
+    let store = reopen(tp.dirs()).store_path(&entry.repo_id);
+    rusqlite::Connection::open(&store)
+        .unwrap()
+        .pragma_update(None, "user_version", 999)
+        .unwrap();
+
+    let daemon = Daemon::start(config(tp.dirs(), system_git())).unwrap();
+    assert_eq!(daemon.report().unavailable, vec![entry.repo_id.clone()]);
+    let tm = &daemon.report().time_machine[0];
+    assert_eq!(tm.recovery.interrupted_operations, vec![op.clone()]);
+    assert_eq!(tm.recovery.released_locks, vec![lock.clone()]);
+    assert!(!lock.exists());
+    assert!(foreign.exists(), "a lock not in the journal stays");
+    let oplog = daemon.oplog(&entry.repo_id).unwrap();
+    assert_eq!(
+        oplog.operation(&op).unwrap().unwrap().state,
+        OperationState::Interrupted
+    );
+    assert_eq!(oplog.pending_notices(Some(&wt)).unwrap().len(), 1);
+    daemon.stop(StopCause::Signal("TERM"));
+
+    // An orderly restart finds nothing new to recover.
+    let daemon = Daemon::start(config(tp.dirs(), system_git())).unwrap();
+    assert!(daemon.report().time_machine[0].recovery.is_clean());
+    daemon.stop(StopCause::Signal("TERM"));
+}

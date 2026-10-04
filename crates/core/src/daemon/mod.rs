@@ -11,6 +11,11 @@
 //! The client channel (TS-GRP-004) plugs into [`ShutdownHandle`] and
 //! [`Daemon::state`]; the gap itself is recorded by US-GRP-005 from
 //! [`StartupReport::repos`].
+//!
+//! Before accepting Time Machine operations, the start also opens the
+//! oplog of every observed repo and runs its recovery (TS-TMC-002,
+//! ADR-TMC-003 § 6). It does not depend on the engine store: a repo whose
+//! engine store cannot be opened still recovers its oplog (Q26).
 
 mod env;
 mod lock;
@@ -20,14 +25,17 @@ mod state;
 
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use gitraptor_git::SystemGit;
 use gitraptor_git::resolve::{Resolution, ResolveConfig, resolve};
 
 use crate::profile::{
-    DaemonRun, GapCause, Profile, ProfileDirs, ProfileError, RepoState, RepoStore, StoreOpen,
-    WriteOp, fsperm,
+    DaemonRun, GapCause, Profile, ProfileDirs, ProfileError, RepoEntry, RepoState, RepoStore,
+    StoreOpen, WriteOp, fsperm,
+};
+use crate::timemachine::oplog::{
+    AbsentStore, ChainBreak, Oplog, OplogStatus, RecoveryOptions, RecoveryReport, SystemProbe,
 };
 
 pub use env::DaemonEnv;
@@ -39,6 +47,10 @@ pub use state::{EngineState, InvalidTransition, Trigger};
 /// Exit code of a second `raptor daemon` that found another one running.
 /// Service managers must not treat it as a failure to relaunch (US-GRP-004).
 pub const EXIT_ALREADY_RUNNING: i32 = 3;
+
+/// Longest the start waits, over all repos, for annotated children of an
+/// interrupted operation before keeping their locks (ADR-TMC-003 § 6.4).
+pub const TM_RECOVERY_WAIT: Duration = Duration::from_secs(5);
 
 /// Everything that can stop the daemon from starting or running.
 #[derive(Debug)]
@@ -141,6 +153,16 @@ pub struct RepoStartup {
     pub pending_gap: Option<PendingGap>,
 }
 
+/// The Time Machine oplog of one observed repo at startup.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TmStartup {
+    pub repo_id: String,
+    pub oplog: OplogStatus,
+    /// Breaks of the hash chain declared by this start (SEC-TMC-09).
+    pub new_breaks: Vec<ChainBreak>,
+    pub recovery: RecoveryReport,
+}
+
 /// What the daemon found when it started.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StartupReport {
@@ -151,6 +173,11 @@ pub struct StartupReport {
     /// Observed repos whose store could not be opened (e.g. schema from a
     /// newer binary); they are not observed.
     pub unavailable: Vec<String>,
+    /// Oplog and recovery of every observed repo (TS-TMC-002).
+    pub time_machine: Vec<TmStartup>,
+    /// Observed repos whose oplog could not be opened or recovered: no Time
+    /// Machine operation is accepted on them.
+    pub tm_unavailable: Vec<String>,
 }
 
 /// How the daemon stopped.
@@ -196,6 +223,7 @@ pub struct Daemon {
     profile: Profile,
     state: EngineState,
     stores: Vec<(String, RepoStore)>,
+    oplogs: Vec<(String, Oplog)>,
     report: StartupReport,
     handle: ShutdownHandle,
     stop_rx: Receiver<StopCause>,
@@ -252,6 +280,8 @@ impl Daemon {
             git: git.clone(),
             repos: Vec::new(),
             unavailable: Vec::new(),
+            time_machine: Vec::new(),
+            tm_unavailable: Vec::new(),
         };
         let mut stores = Vec::new();
         for entry in profile.repos()? {
@@ -297,6 +327,8 @@ impl Daemon {
             }
         }
 
+        let oplogs = recover_time_machine(&config.dirs, &profile, &logger, &mut report)?;
+
         let state = EngineState::initial(git.is_some(), stores.len());
         if state != EngineState::Observing {
             // Nothing is observed outside "Observing" (BR-WF-002).
@@ -322,6 +354,7 @@ impl Daemon {
             profile,
             state,
             stores,
+            oplogs,
             report,
             handle,
             stop_rx,
@@ -342,6 +375,14 @@ impl Daemon {
 
     pub fn profile(&self) -> &Profile {
         &self.profile
+    }
+
+    /// The recovered oplog of an observed repo; `None` if it is unavailable.
+    pub fn oplog(&self, repo_id: &str) -> Option<&Oplog> {
+        self.oplogs
+            .iter()
+            .find(|(id, _)| id == repo_id)
+            .map(|(_, oplog)| oplog)
     }
 
     /// Handle for signals and, later, the channel's stop command.
@@ -409,9 +450,11 @@ impl Daemon {
         let Self {
             lock,
             stores,
+            oplogs,
             profile,
             ..
         } = self;
+        drop(oplogs);
         drop(stores);
         drop(profile);
         if lock.release().is_err() {
@@ -442,6 +485,90 @@ impl Daemon {
         }
         ok
     }
+}
+
+/// Opens the oplog of every observed repo and recovers it before any Time
+/// Machine operation is accepted. A repo whose oplog fails is reported and
+/// left without Time Machine; the daemon still starts. The snapshot store
+/// arrives with TS-TMC-001: until then nothing about refs is decided.
+fn recover_time_machine(
+    dirs: &ProfileDirs,
+    profile: &Profile,
+    logger: &Logger,
+    report: &mut StartupReport,
+) -> Result<Vec<(String, Oplog)>, DaemonError> {
+    let deadline = Instant::now() + TM_RECOVERY_WAIT;
+    let mut oplogs = Vec::new();
+    for entry in profile.repos()? {
+        if entry.state != RepoState::Observed {
+            continue;
+        }
+        match recover_repo(dirs, &entry, deadline) {
+            Ok((oplog, startup)) => {
+                if !startup.new_breaks.is_empty() {
+                    logger.warn(
+                        "tm_chain_break",
+                        &[
+                            ("repo", Field::id(&entry.repo_id)),
+                            ("breaks", startup.new_breaks.len().into()),
+                        ],
+                    );
+                }
+                let r = &startup.recovery;
+                if !r.is_clean() {
+                    logger.info(
+                        "tm_recovered",
+                        &[
+                            ("repo", Field::id(&entry.repo_id)),
+                            ("discarded", r.discarded_snapshots.len().into()),
+                            ("aborted", r.aborted_operations.len().into()),
+                            ("interrupted", r.interrupted_operations.len().into()),
+                            ("locks_released", r.released_locks.len().into()),
+                            ("locks_kept", r.kept_locks.len().into()),
+                        ],
+                    );
+                }
+                report.time_machine.push(startup);
+                oplogs.push((entry.repo_id, oplog));
+            }
+            Err(err) => {
+                logger.warn(
+                    "tm_unavailable",
+                    &[
+                        ("repo", Field::id(&entry.repo_id)),
+                        ("kind", profile_error_kind(&err).into()),
+                    ],
+                );
+                report.tm_unavailable.push(entry.repo_id);
+            }
+        }
+    }
+    Ok(oplogs)
+}
+
+fn recover_repo(
+    dirs: &ProfileDirs,
+    entry: &RepoEntry,
+    deadline: Instant,
+) -> Result<(Oplog, TmStartup), ProfileError> {
+    let (mut oplog, opened) = Oplog::open(dirs, &entry.repo_id, now_ms())?;
+    let recovery = oplog.recover(
+        &mut AbsentStore,
+        &RecoveryOptions {
+            git_dir: &entry.canonical_path,
+            deadline,
+            poll: Duration::from_millis(50),
+            probe: &SystemProbe,
+        },
+        now_ms(),
+    )?;
+    let startup = TmStartup {
+        repo_id: entry.repo_id.clone(),
+        oplog: opened.status,
+        new_breaks: opened.new_breaks,
+        recovery,
+    };
+    Ok((oplog, startup))
 }
 
 /// Entry point of `raptor daemon`: starts the daemon, installs the
