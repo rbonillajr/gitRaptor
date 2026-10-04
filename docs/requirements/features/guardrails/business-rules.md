@@ -26,7 +26,7 @@ tags:
 
 > **Propósito**: Documentar las reglas que deciden si una operación de Git de un agente se permite, se deniega o espera la confirmación de un humano; cómo se combinan los tres niveles de la configuración; quién puede cambiar las reglas y decidir en la cola; y cómo se instala la protección de hooks sin perder nada del usuario.
 >
-> **Nota de nomenclatura**: `BR-11`, `BR-12` y `BR-13` del BRD son **capacidades**. Las reglas de este documento usan la forma `BR-<CAT>-NNN` y son internas a esta feature. Cualquier ID del Motor local se califica siempre con "(motor-local)", p. ej. "BR-AUTH-002 (motor-local)" o "P8 (motor-local)"; sin esa marca, un ID `BR-<CAT>-NNN` es de esta feature. Las decisiones heredadas se citan como "Q21 de motor-local". Las preguntas, supuestos y riesgos propios llevan el prefijo de la feature (P-GRD-1 a P-GRD-16, S-GRD-1 a S-GRD-9, R-GRD-1 a R-GRD-9) y están en el [contexto](./context.md).
+> **Nota de nomenclatura**: `BR-11`, `BR-12` y `BR-13` del BRD son **capacidades**. Las reglas de este documento usan la forma `BR-<CAT>-NNN` y son internas a esta feature. Cualquier ID del Motor local se califica siempre con "(motor-local)", p. ej. "BR-AUTH-002 (motor-local)" o "P8 (motor-local)"; sin esa marca, un ID `BR-<CAT>-NNN` es de esta feature. Las decisiones heredadas se citan como "Q21 de motor-local". Las preguntas, decisiones, supuestos y riesgos propios llevan el prefijo de la feature (P-GRD-n, Q-GRD-n, S-GRD-n, R-GRD-n) y están en el [contexto](./context.md). Las 16 preguntas P-GRD-1 a P-GRD-16 están resueltas por las decisiones Q-GRD-1 a Q-GRD-16 (2026-10-03).
 >
 > **Sin historias todavía**: las referencias a historias se añadirán cuando existan.
 
@@ -72,12 +72,12 @@ tags:
 
 | Valor | Niveles que lo admiten | Si nadie lo define | Cómo se combinan | Dueño |
 |-------|------------------------|--------------------|------------------|-------|
-| Permiso de cada operación gobernada (BR-VAL-002) | Perfil, equipo, local personal (S-GRD-1) | Permitir, salvo el conjunto mínimo (BR-EDGE-001) | Los personales solo endurecen (BR-CONS-001; el perfil frente al equipo depende de P-GRD-14) | Guardrails |
-| Ramas protegidas | Perfil, equipo, local personal (S-GRD-1) | Ninguna, salvo el conjunto mínimo | Los personales solo añaden ramas | Guardrails |
-| Límite de tamaño de diff | Perfil, equipo, local personal (S-GRD-1) | Sin límite | Los personales solo lo bajan | Guardrails |
-| Formato de commit | Perfil, equipo, local personal (S-GRD-1) | Sin formato exigido | Si el equipo lo fija, un personal no lo cambia (S-GRD-2) | Guardrails |
-| Rutas prohibidas | Perfil, equipo, local personal (S-GRD-1) | Las de la configuración de Guardrails (BR-AUTH-004) | Los personales solo añaden rutas | Guardrails |
-| Plazo de respuesta de la cola | Perfil, equipo, local personal (S-GRD-1) | 5 minutos `[POR VERIFICAR]` (P-GRD-6) | Los personales solo lo acortan | Guardrails |
+| Permiso de cada operación gobernada (BR-VAL-002) | Perfil, equipo, local personal (Q-GRD-14) | Permitir, salvo el conjunto mínimo (BR-EDGE-001) | Los personales solo endurecen (BR-CONS-001, Q-GRD-14) | Guardrails |
+| Ramas protegidas | Perfil, equipo, local personal (Q-GRD-14) | Ninguna, salvo el conjunto mínimo | Los personales solo añaden ramas | Guardrails |
+| Límite de tamaño de diff | Perfil, equipo, local personal (Q-GRD-14) | Sin límite | Los personales solo lo bajan | Guardrails |
+| Formato de commit | Perfil, equipo, local personal (Q-GRD-14) | Sin formato exigido | Si el equipo lo fija, un personal no lo cambia (S-GRD-2) | Guardrails |
+| Rutas prohibidas | Perfil, equipo, local personal (Q-GRD-14) | Las de la configuración de Guardrails (BR-AUTH-004) | Los personales solo añaden rutas | Guardrails |
+| Plazo de respuesta de la cola | Perfil, equipo, local personal (Q-GRD-14) | 5 minutos (Q-GRD-6) | Los personales solo lo acortan | Guardrails |
 | Rama base | **Solo equipo** | `main` | Sin combinación | Motor local lee; Guardrails define (BR-CONS-003) |
 | Umbral de inactividad | **Solo perfil y local personal** | 5 minutos | Gana el más específico | Motor local (BR-TIME-001 (motor-local)) |
 
@@ -97,7 +97,7 @@ THEN al leer: el valor no se tiene en cuenta
 
 **Cómo se verifica**: por cada valor de la tabla, escribirlo en un nivel no admitido (a mano y con el comando) y comprobar que no cambia el valor efectivo y que el comando lo rechaza con los niveles admitidos.
 
-**Referencias**: BRD BR-11; Q23, Q24, Q27 de motor-local; BR-CONS-007 (motor-local); S-GRD-1, S-GRD-2, P-GRD-6.
+**Referencias**: BRD BR-11; Q23, Q24, Q27 de motor-local; BR-CONS-007 (motor-local); Q-GRD-6, Q-GRD-14; S-GRD-2.
 
 ---
 
@@ -135,7 +135,7 @@ orden de restricción: denegar > pedir confirmación > permitir
 
 | Política | Qué se incumple | Ejemplo |
 |----------|-----------------|---------|
-| **Rama protegida** | Un commit, push, force-push, `reset --hard` o borrado sobre esa rama. La rama solo cambia por una acción consciente del humano (P-GRD-1) | Un agente hace commit directo en `main` protegida → denegado |
+| **Rama protegida** | Un commit, push, force-push, `reset --hard` o borrado sobre esa rama. La rama solo cambia por una acción consciente del humano (Q-GRD-1) | Un agente hace commit directo en `main` protegida → denegado |
 | **Prohibir force-push** | Cualquier force-push. Equivale a fijar "denegar" en el permiso de force-push | Un agente hace force-push sobre su propia rama → denegado |
 | **Prohibir `reset --hard`** | Cualquier `reset --hard`. Equivale a fijar "denegar" en su permiso. Límite de la capa de hooks: BR-EDGE-003 | Un agente pide `reset --hard` por MCP → denegado |
 | **Límite de tamaño de diff** | Un commit cuyo diff supera el límite, en líneas cambiadas (S-GRD-7) | Límite 400; un commit de 1.200 líneas → denegado, con el tamaño y el límite |
@@ -153,11 +153,11 @@ THEN la política aporta su efecto (denegar, o pedir confirmación si así está
      a la decisión efectiva (BR-CALC-001)
 ```
 
-**Prioridad dentro del MVP** (P-GRD-9, recomendación): primero ramas protegidas, force-push, `reset --hard` y rutas prohibidas; después tamaño de diff y formato de commit.
+**Prioridad dentro del MVP** (Q-GRD-9): primero ramas protegidas, force-push, `reset --hard` y rutas prohibidas; después tamaño de diff y formato de commit.
 
 **Cómo se verifica**: para cada política, una operación que la cumple (permitida) y otra que la incumple (denegada, con la política nombrada en el motivo), en las dos capas.
 
-**Referencias**: BRD BR-11, § 4 ("que nadie rompa main"), § 13 (demo de force-push); S-GRD-7, P-GRD-1, P-GRD-9.
+**Referencias**: BRD BR-11, § 4 ("que nadie rompa main"), § 13 (demo de force-push); S-GRD-7, Q-GRD-1, Q-GRD-9.
 
 ---
 
@@ -252,7 +252,7 @@ Pendiente → Caducada
 
 **Cómo se verifica**: una petición por cada transición; un agente que intenta aprobar su propia petición (rechazado); reintento tras rechazo crea una petición nueva.
 
-**Referencias**: BRD BR-13 (Should); S-GRD-8, P-GRD-6, P-GRD-13; dependencia con F-001-02.
+**Referencias**: BRD BR-13 (Should); S-GRD-8, Q-GRD-6, Q-GRD-13; dependencia con F-001-02.
 
 ---
 
@@ -262,7 +262,7 @@ Pendiente → Caducada
 
 **Alcance de Guardrails** (cuándo un repo entra):
 
-> ⚠️ **ASSUMPTION** (P-GRD-15, recomendación): un repo entra en el alcance de Guardrails cuando el desarrollador lo añade a la observación del motor (BR-AUTH-001 (motor-local)), para que cada operación tenga actor atribuido. La allowlist del MCP (NFR-02) es un subconjunto de los repos observados, a coordinar con F-001-05. Instalar la protección de hooks solo se ofrece en un repo observado. Retirar un repo de la observación no desinstala sus hooks: siguen aplicando las reglas con actor "sin atribuir" y Guardrails avisa de ello `[POR VERIFICAR]`.
+> **Decisión** (Q-GRD-15, Rene Bonilla, 2026-10-03): un repo entra en el alcance de Guardrails cuando el desarrollador lo añade a la observación del motor (BR-AUTH-001 (motor-local)), para que cada operación tenga actor atribuido. La allowlist del MCP (NFR-02) es un subconjunto de los repos observados, a coordinar con F-001-05. Instalar la protección de hooks solo se ofrece en un repo observado. Retirar un repo de la observación no desinstala sus hooks: siguen aplicando las reglas con actor "sin atribuir" y Guardrails avisa de ello.
 
 **Las dos vías de un agente**: por MCP y por Git crudo. La vía MCP está **cubierta** si el repo está en la allowlist (las herramientas aplican la decisión) y **cerrada** si no lo está (las herramientas no operan sobre él, NFR-02). La vía Git crudo solo está cubierta si los hooks de Guardrails están activos.
 
@@ -295,11 +295,11 @@ Acción si los hooks dejan de estar activos sin que el desarrollador los desinst
 - Se añade a la allowlist del MCP y no tiene configuración → Solo MCP, con el conjunto mínimo aplicado (BR-EDGE-001).
 - Repo con hooks instalados que no está en la allowlist → Solo hooks: un agente con Git crudo recibe la decisión; las herramientas MCP no operan sobre ese repo.
 - Otro gestor de hooks reemplaza los de Guardrails en un repo Completa → Solo MCP, con aviso.
-- Se retira el repo de la observación con hooks activos → los hooks siguen aplicando las reglas, con actor "sin atribuir", y se avisa (P-GRD-15).
+- Se retira el repo de la observación con hooks activos → los hooks siguen aplicando las reglas, con actor "sin atribuir", y se avisa (Q-GRD-15).
 
 **Cómo se verifica**: un repo en cada uno de los cuatro estados; cada transición de la lista; retirar los hooks por fuera de Guardrails y comprobar el cambio de estado y el aviso; un repo sin configuración en Solo MCP aplica el conjunto mínimo.
 
-**Referencias**: BRD BR-12; NFR-02; BR-AUTH-001 (motor-local); BR-EDGE-001; P-GRD-4, P-GRD-15; dependencia con F-001-02 y F-001-05.
+**Referencias**: BRD BR-12; NFR-02; BR-AUTH-001 (motor-local); BR-EDGE-001; Q-GRD-4, Q-GRD-15; dependencia con F-001-02 y F-001-05.
 
 ---
 
@@ -321,7 +321,7 @@ Acción si los hooks dejan de estar activos sin que el desarrollador los desinst
 | Editar la configuración para relajar | ✅ | ❌ | Confirmación que un agente no pueda dar |
 | Aprobar o rechazar una petición de la cola | ✅ | ❌ | Ni la suya ni la de otro agente |
 | Instalar o desinstalar la protección de hooks | ✅ | ❌ | Con permiso explícito (BR-AUTH-002) |
-| Usar una excepción consciente para saltarse una regla (P-GRD-1) | ✅ | ❌ | Una operación concreta; queda registrada |
+| Usar una excepción consciente para saltarse una regla (Q-GRD-1) | ✅ | ❌ | Una operación concreta; queda registrada |
 | Realizar operaciones gobernadas | ✅ (ver BR-AUTH-003) | ✅ | Sujetas a la decisión (BR-CALC-001) |
 
 **Ejemplos**:
@@ -330,7 +330,7 @@ Acción si los hooks dejan de estar activos sin que el desarrollador los desinst
 
 **Cómo se verifica**: cada acción reservada intentada desde el canal del agente (MCP y terminal del agente) queda rechazada y registrada.
 
-**Referencias**: BRD BR-13 (las acciones de riesgo de un agente quedan para que un humano las apruebe); Q27 de motor-local (el comando de edición es de Guardrails); riesgo R-GRD-3 y pregunta P-GRD-7 de esta feature.
+**Referencias**: BRD BR-13 (las acciones de riesgo de un agente quedan para que un humano las apruebe); Q27 de motor-local (el comando de edición es de Guardrails); riesgo R-GRD-3 y decisión Q-GRD-7 de esta feature.
 
 ---
 
@@ -338,12 +338,12 @@ Acción si los hooks dejan de estar activos sin que el desarrollador los desinst
 
 **Descripción**: Instalar o desinstalar la protección de hooks es una **modificación operativa** del repo. Guardrails es la única feature que la hace (Q22 de motor-local). Sigue el modelo de permiso explícito de BR-AUTH-002 (motor-local):
 
-1. La petición explica en lenguaje claro **qué** se instala, **dónde** (repo), **por qué** (qué cubre) y **cómo se revierte**, y qué pasa si no se autoriza (el repo queda en "Solo MCP").
+1. La petición explica en lenguaje claro **qué** se instala, **dónde** (repo), **por qué** (qué cubre) y **cómo se revierte**, y qué pasa si no se autoriza (el repo sigue sin la capa de hooks (Solo MCP o Sin protección, según la allowlist)).
 2. **Solo el humano concede**. Un agente no puede conceder, pedir en nombre del desarrollador ni dar por concedido. Sin respuesta, no se instala nada.
 3. **Sin repreguntar tras una denegación**, hasta que el desarrollador lo active a mano.
 4. **Un permiso, un repo**: no se extiende a otros repos. Cambiar lo instalado requiere un permiso nuevo.
 
-> ⚠️ **ASSUMPTION** (P-GRD-3, recomendación): la instalación es explícita; nunca automática al observar un repo `[POR VERIFICAR]`.
+> **Decisión** (Q-GRD-3, Rene Bonilla, 2026-10-03): la instalación es explícita; nunca automática al observar un repo.
 
 **Aplicabilidad**: Al instalar, actualizar o desinstalar la protección de hooks en un repo.
 
@@ -351,12 +351,12 @@ Acción si los hooks dejan de estar activos sin que el desarrollador los desinst
 
 **Ejemplos**:
 - El desarrollador pide proteger `gitRaptor` → ve qué, dónde, por qué y cómo se revierte → concede → estado Completa.
-- Deniega → nada cambia, el repo queda en Solo MCP y no se le vuelve a preguntar.
+- Deniega → nada cambia, el repo sigue sin la capa de hooks (Solo MCP o Sin protección, según la allowlist), y no se le vuelve a preguntar.
 - Concede en `gitRaptor` → `otro-repo` sigue sin hooks.
 
 **Cómo se verifica**: instalación concedida, denegada y sin respuesta; tras denegar, ninguna petición nueva; repo vecino intacto.
 
-**Referencias**: BRD BR-12; Q22 de motor-local; BR-AUTH-002 (motor-local) (Q11, Q14, Q15); P-GRD-3.
+**Referencias**: BRD BR-12; Q22 de motor-local; BR-AUTH-002 (motor-local) (Q11, Q14, Q15); Q-GRD-3.
 
 ---
 
@@ -364,9 +364,9 @@ Acción si los hooks dejan de estar activos sin que el desarrollador los desinst
 
 **Descripción**: El motor solo dice "agente X" o "sin atribuir"; nunca "humano" (Q34, Q35 de motor-local). Un agente sin registrar es indistinguible del humano.
 
-> ⚠️ **ASSUMPTION** (P-GRD-1, recomendación): las reglas se aplican a **toda** operación gobernada, sea cual sea el actor (fail-safe). El humano tiene una **excepción consciente** para saltarse una regla en una operación concreta; la excepción queda registrada (BR-CONS-004). Una acción que el humano confirma de forma explícita en una superficie de GitRaptor (p. ej. aprobar un merge a la rama base en el Cockpit) cuenta como esa excepción `[POR VERIFICAR]`.
+> **Decisión** (Q-GRD-1, Rene Bonilla, 2026-10-03): las reglas se aplican a **toda** operación gobernada, sea cual sea el actor (fail-safe). El humano tiene una **excepción consciente** para saltarse una regla en una operación concreta; la excepción queda registrada (BR-CONS-004). Una acción que el humano confirma de forma explícita en una superficie de GitRaptor (p. ej. aprobar un merge a la rama base en el Cockpit) cuenta como esa excepción.
 >
-> ⚠️ **ASSUMPTION** (P-GRD-2, recomendación): en el MVP todos los agentes comparten la misma configuración; permisos por agente en una fase posterior `[POR VERIFICAR]`.
+> **Decisión** (Q-GRD-2, Rene Bonilla, 2026-10-03): en el MVP todos los agentes comparten la misma configuración; permisos por agente en una fase posterior.
 
 **Aplicabilidad**: Cada evaluación de una operación gobernada.
 
@@ -386,7 +386,7 @@ Salvo: excepción consciente del humano, para una operación concreta, registrad
 
 **Cómo se verifica**: la misma operación como "agente X" y como "sin atribuir" recibe la misma decisión; la excepción consciente solo funciona fuera del canal del agente.
 
-**Referencias**: Q34, Q35 de motor-local; P-GRD-1, P-GRD-2; riesgo R-GRD-2.
+**Referencias**: Q34, Q35 de motor-local; Q-GRD-1, Q-GRD-2; riesgo R-GRD-2.
 
 ---
 
@@ -394,7 +394,7 @@ Salvo: excepción consciente del humano, para una operación concreta, registrad
 
 **Descripción**: Un agente podría relajar las reglas editando la configuración en el working tree o en su máquina.
 
-> ⚠️ **ASSUMPTION** (P-GRD-7, recomendación): las rutas de la configuración de Guardrails (los tres niveles) son **rutas prohibidas para los agentes por defecto**. Los cambios a la configuración del equipo entran por **commit revisado** (S-GRD-4). Ninguna herramienta MCP edita la configuración ni decide en la cola `[POR VERIFICAR]`.
+> **Decisión** (Q-GRD-7, Rene Bonilla, 2026-10-03): las rutas de la configuración de Guardrails (los tres niveles) son **rutas prohibidas para los agentes por defecto**. Los cambios a la configuración del equipo entran por **commit revisado** (S-GRD-4). Ninguna herramienta MCP edita la configuración ni decide en la cola.
 
 **Aplicabilidad**: Siempre, en todo repo con Guardrails.
 
@@ -414,7 +414,7 @@ Puede: editarla a mano o con el comando (relajar requiere BR-AUTH-001)
 
 **Cómo se verifica**: commit de un agente sobre la configuración (denegado); ausencia de herramientas MCP que editen la configuración o decidan en la cola.
 
-**Referencias**: Q27 de motor-local; NFR-02; P-GRD-7, S-GRD-4; riesgo R-GRD-4.
+**Referencias**: Q27 de motor-local; NFR-02; Q-GRD-7, S-GRD-4 (confirmado por Q-GRD-7); riesgo R-GRD-4.
 
 ---
 
@@ -422,11 +422,9 @@ Puede: editarla a mano o con el comando (relajar requiere BR-AUTH-001)
 
 ### BR-CONS-001: Un nivel personal puede endurecer una regla del equipo, nunca relajarla
 
-**Descripción**: Para los permisos y las políticas, un nivel personal **nunca relaja** una prohibición del equipo. Es la excepción a "gana el más específico" que fijó Q23 de motor-local, y está decidida.
+**Descripción**: Para los permisos y las políticas, un nivel personal (perfil o configuración local personal) **puede endurecer cualquier regla del equipo y nunca relajarla**. Un endurecimiento del perfil prevalece también sobre un "permitir" del equipo.
 
-**Parte pendiente (P-GRD-14, refinamiento de Q23)**: Q23 deja que el equipo gane al perfil. Esta regla propone además que **un endurecimiento del perfil prevalezca sobre un "permitir" del equipo**. Eso amplía la excepción de Q23 y no se aplica hasta que Rene Bonilla responda P-GRD-14. Si la respuesta es no, el perfil solo cuenta donde el equipo no define la regla, y solo la configuración local personal (más específica que el equipo) puede endurecer.
-
-> ⚠️ **ASSUMPTION** (P-GRD-14, recomendación): un nivel personal, perfil o local, puede endurecer cualquier regla del equipo `[POR VERIFICAR]`. La regla formal de abajo está escrita con esta recomendación.
+> **Decisión** (Q-GRD-14, Rene Bonilla, 2026-10-03; confirma S-GRD-1): **refina Q23 de motor-local**. Q23 dejaba que el equipo ganara al perfil, con la única excepción de que un nivel personal no relaja una prohibición del equipo. Q-GRD-14 amplía esa excepción: cualquier nivel personal endurece y ninguno relaja. Motivo: cada persona puede ser más estricta con sus agentes en su máquina sin afectar al equipo.
 
 **Aplicabilidad**: Permisos por operación, ramas protegidas, límite de diff, formato de commit, rutas prohibidas y plazo de la cola (BR-VAL-001). No aplica a la rama base ni al umbral de inactividad.
 
@@ -447,19 +445,19 @@ Constraint: efectivo nunca es menos restrictivo que el del equipo
 - **Mensaje al usuario** (al editar con el comando): "la configuración del equipo deniega force-push; un nivel personal no puede permitirlo".
 
 **Ejemplos**:
-| Equipo | Perfil | Local personal | Efectivo | Estado |
-|--------|--------|----------------|----------|--------|
-| force-push: denegar | — | permitir | denegar | Decidido (Q23) |
-| force-push: permitir | denegar | — | denegar | **Depende de P-GRD-14**. Con Q23 sin ampliar: permitir |
-| force-push: permitir | denegar | permitir | permitir (gana local sobre perfil; no baja del equipo) | Igual con ambas respuestas |
-| rebase: pedir confirmación | — | permitir | pedir confirmación | Decidido (Q23) |
-| límite de diff 400 | — | 200 | 200 | Decidido (Q23: local es más específico) |
-| límite de diff 400 | — | 1.000 | 400 | Decidido (Q23) |
-| ramas protegidas: `main` | `release` | — | `main` y `release` | **Depende de P-GRD-14**. Con Q23 sin ampliar: solo `main` |
+| Equipo | Perfil | Local personal | Efectivo | Por qué |
+|--------|--------|----------------|----------|---------|
+| force-push: denegar | — | permitir | denegar | Un nivel personal no relaja (Q23) |
+| force-push: permitir | denegar | — | denegar | El perfil endurece sobre el equipo (Q-GRD-14) |
+| force-push: permitir | denegar | permitir | permitir | Entre personales gana el local; no baja del equipo |
+| rebase: pedir confirmación | — | permitir | pedir confirmación | Un nivel personal no relaja (Q23) |
+| límite de diff 400 | — | 200 | 200 | El local endurece (Q-GRD-14) |
+| límite de diff 400 | — | 1.000 | 400 | Un nivel personal no relaja (Q23) |
+| ramas protegidas: `main` | `release` | — | `main` y `release` | El perfil endurece sobre el equipo (Q-GRD-14) |
 
-**Cómo se verifica**: la tabla de ejemplos como esquema de escenarios; el comando rechaza relajar con el mensaje explicado. Las filas que dependen de P-GRD-14 no se convierten en escenarios hasta que se responda.
+**Cómo se verifica**: la tabla de ejemplos como esquema de escenarios; el comando rechaza relajar con el mensaje explicado.
 
-**Referencias**: Q23, Q24 de motor-local; S-GRD-1, S-GRD-2, P-GRD-14.
+**Referencias**: Q23, Q24 de motor-local; Q-GRD-14; S-GRD-1 (confirmado), S-GRD-2.
 
 ---
 
@@ -506,10 +504,11 @@ Constraint: perfil y configuración local personal no intervienen
 - La configuración del equipo fija `develop` → el motor calcula ahead/behind contra `develop`.
 - El perfil fija `release` y el equipo no define nada → `main`.
 - En una máquina nueva, el repo clonado trae `develop` en la configuración del equipo → aplica desde el primer momento (BR-EDGE-007 (motor-local)).
+- El desarrollador fija con el comando la rama base `release`, que no existe en el repo → el comando avisa y pide confirmación; si confirma, se guarda y el motor indica que no puede calcular ahead/behind (Q-GRD-16, Q42 de motor-local).
 
 **Cómo se verifica**: los escenarios de US-GRP-016 (motor-local) pasan con la configuración que define esta feature.
 
-**Referencias**: BRD BR-11; Q5, Q24, Q36 de motor-local; BR-CONS-006 (motor-local) y BR-CONS-007 (motor-local); Q42 de motor-local y P-GRD-16 (rama base que no existe al fijarla con el comando).
+**Referencias**: BRD BR-11; Q5, Q24, Q36 de motor-local; BR-CONS-006 (motor-local) y BR-CONS-007 (motor-local); Q42 de motor-local y Q-GRD-16 (rama base que no existe al fijarla con el comando).
 
 ---
 
@@ -517,7 +516,7 @@ Constraint: perfil y configuración local personal no intervienen
 
 **Descripción**: Guardrails anota cada operación **denegada**, cada **petición** de confirmación con su resultado y cada **excepción consciente**. Cada entrada lleva: cuándo, repo, worktree, rama, actor ("agente X" o "sin atribuir"), operación, decisión, regla y nivel que la causaron, y capa (MCP o hooks). Las operaciones permitidas sin regla de por medio no se anotan una a una. Es la fuente del KPI "acciones peligrosas bloqueadas" (BRD § 9).
 
-> ⚠️ **ASSUMPTION** (S-GRD-5, P-GRD-10): el registro vive en el **perfil de GitRaptor**, separado por repo, nunca en el repo (coherente con Q21 de motor-local) `[POR VERIFICAR]`.
+> **Decisión** (Q-GRD-10, Rene Bonilla, 2026-10-03; confirma S-GRD-5): el registro vive en el **perfil de GitRaptor**, separado por repo, nunca en el repo (coherente con Q21 de motor-local).
 
 **Aplicabilidad**: Cada decisión de denegar o pedir confirmación, y cada excepción consciente.
 
@@ -536,7 +535,7 @@ Constraint: el registro no se escribe en el repo ni sale de la máquina (NFR-03)
 
 **Cómo se verifica**: tras cada escenario de denegación, petición y excepción, existe su entrada con todos los campos; el repo no contiene el registro.
 
-**Referencias**: BRD § 9, BR-24 (exportar: Fase 3); Q21 de motor-local; S-GRD-5, P-GRD-10.
+**Referencias**: BRD § 9, BR-24 (exportar: Fase 3); Q21 de motor-local; Q-GRD-10; S-GRD-5 (confirmado por Q-GRD-10).
 
 ---
 
@@ -562,7 +561,7 @@ Constraint: nada cambia fuera del repo
 ```
 
 **Comportamiento en conflicto**:
-- **Si no se puede instalar sin alterar un hook previo**: no se instala nada, se informa y el repo queda en Solo MCP (BR-EDGE-002).
+- **Si no se puede instalar sin alterar un hook previo**: no se instala nada, se informa y el repo sigue sin la capa de hooks (Solo MCP o Sin protección, según la allowlist) (BR-EDGE-002).
 
 **Ejemplos**:
 - Repo con un hook propio que pasa el linter → instalar → el linter sigue corriendo y Guardrails también evalúa → desinstalar → el hook propio queda idéntico.
@@ -615,7 +614,7 @@ Constraint: la configuración anterior a cada cambio se puede recuperar
 
 **Descripción**: Una petición pendiente espera la decisión del humano hasta un plazo. Al cumplirse sin decisión, pasa a **Caducada** y la operación no se ejecuta (fail-safe).
 
-> ⚠️ **ASSUMPTION** (P-GRD-6, recomendación): en la capa de hooks (Git crudo) la operación **espera** la decisión hasta el plazo, en lugar de rechazarse para reintentarla. Plazo por defecto: **5 minutos** `[POR VERIFICAR]`. Los niveles personales solo pueden acortarlo (BR-CONS-001).
+> **Decisión** (Q-GRD-6, Rene Bonilla, 2026-10-03): en la capa de hooks (Git crudo) la operación **espera** la decisión hasta el plazo, en lugar de rechazarse para reintentarla. Plazo por defecto: **5 minutos**. Los niveles personales solo pueden acortarlo (BR-CONS-001).
 
 **Aplicabilidad**: BR-WF-001.
 
@@ -635,7 +634,7 @@ Acción al vencer: Pendiente → Caducada; la operación no se ejecuta
 
 **Cómo se verifica**: petición sin respuesta que caduca en el plazo; aprobación tardía sin efecto.
 
-**Referencias**: BRD BR-13; P-GRD-6.
+**Referencias**: BRD BR-13; Q-GRD-6.
 
 ---
 
@@ -643,7 +642,7 @@ Acción al vencer: Pendiente → Caducada; la operación no se ejecuta
 
 **Descripción**: Las entradas del registro de decisiones se conservan durante un tiempo y luego se descartan.
 
-> ⚠️ **ASSUMPTION** (P-GRD-10, recomendación): **90 días** por repo `[POR VERIFICAR]`. Retirar un repo de la observación no borra su registro (coherente con Q25 de motor-local).
+> **Decisión** (Q-GRD-10, Rene Bonilla, 2026-10-03): **90 días** por repo. Retirar un repo de la observación no borra su registro (coherente con Q25 de motor-local).
 
 **Aplicabilidad**: BR-CONS-004.
 
@@ -660,7 +659,7 @@ Acción al expirar: se descarta
 
 **Cómo se verifica**: una entrada de más de 90 días ya no aparece; una de 89 días sí.
 
-**Referencias**: BRD § 9, BR-24; Q25 de motor-local; P-GRD-10.
+**Referencias**: BRD § 9, BR-24; Q25 de motor-local; Q-GRD-10.
 
 ---
 
@@ -670,7 +669,7 @@ Acción al expirar: se descarta
 
 **Descripción**: Un repo sin configuración del equipo ni niveles personales no queda sin protección.
 
-> ⚠️ **ASSUMPTION** (P-GRD-5, recomendación): aplica un **conjunto mínimo seguro**: denegar force-push y denegar el borrado de la rama base. Es visible para el desarrollador (BR-WF-002) y el equipo lo puede desactivar en su configuración `[POR VERIFICAR]`.
+> **Decisión** (Q-GRD-5, Rene Bonilla, 2026-10-03): aplica un **conjunto mínimo seguro**: denegar force-push y denegar el borrado de la rama base. Es visible para el desarrollador (BR-WF-002) y el equipo lo puede desactivar en su configuración.
 
 **Frecuencia esperada**: alta al empezar (todo repo nuevo).
 
@@ -682,7 +681,7 @@ Acción al expirar: se descarta
 
 **Cómo se verifica**: repo sin configuración con las dos operaciones del conjunto mínimo (denegadas) y una operación fuera de él (permitida).
 
-**Referencias**: P-GRD-5; riesgo R-GRD-2.
+**Referencias**: Q-GRD-5; riesgo R-GRD-2.
 
 ---
 
@@ -690,7 +689,7 @@ Acción al expirar: se descarta
 
 **Descripción**: Guardrails nunca reemplaza hooks que ya existan.
 
-> ⚠️ **ASSUMPTION** (P-GRD-4, recomendación): Guardrails detecta los hooks previos, informa al desarrollador y los **encadena** solo con su permiso (BR-AUTH-002). Si no se pueden encadenar sin alterarlos, no instala nada, avisa y el repo queda en **Solo MCP** (BR-WF-002) `[POR VERIFICAR]`.
+> **Decisión** (Q-GRD-4, Rene Bonilla, 2026-10-03): Guardrails detecta los hooks previos, informa al desarrollador y los **encadena** solo con su permiso (BR-AUTH-002). Si no se pueden encadenar sin alterarlos, no instala nada, avisa y el repo sigue sin la capa de hooks (Solo MCP o Sin protección, según la allowlist) (BR-WF-002).
 
 **Frecuencia esperada**: media (repos con linters, gestores de hooks del equipo).
 
@@ -698,11 +697,11 @@ Acción al expirar: se descarta
 
 **Ejemplos**:
 - Repo con un gestor de hooks del equipo → Guardrails informa y pide permiso para encadenarse → concedido → Completa, y el gestor sigue funcionando.
-- Encadenar no es posible → Solo MCP, con el motivo explicado.
+- Encadenar no es posible → el repo sigue sin la capa de hooks (Solo MCP o Sin protección, según la allowlist), con el motivo explicado.
 
 **Cómo se verifica**: repo con hooks previos antes y después de instalar: siguen haciendo lo mismo; caso no encadenable deja el repo intacto.
 
-**Referencias**: NFR-01, NFR-07; P-GRD-4; riesgo R-GRD-5.
+**Referencias**: NFR-01, NFR-07; Q-GRD-4; riesgo R-GRD-5.
 
 ---
 
@@ -710,7 +709,7 @@ Acción al expirar: se descarta
 
 **Descripción**: La capa de hooks no cubre todo. Hay operaciones destructivas que Git no deja interceptar (p. ej. `reset --hard` sobre el working tree con Git crudo) y Git permite saltarse los hooks a propósito (p. ej. con `--no-verify`). Guardrails **declara** qué operaciones del catálogo no puede impedir en Git crudo y lo muestra en el estado de protección. La mitigación es la Time Machine (F-001-03); integrar con los permisos nativos del agente queda fuera del MVP.
 
-> ⚠️ **ASSUMPTION** (P-GRD-8, recomendación): se acepta como límite del MVP y se registra como riesgo `[POR VERIFICAR]`.
+> **Decisión** (Q-GRD-8, Rene Bonilla, 2026-10-03): se acepta como límite del MVP y se registra como riesgo.
 
 **Frecuencia esperada**: baja, pero con impacto alto.
 
@@ -722,7 +721,7 @@ Acción al expirar: se descarta
 
 **Cómo se verifica**: la lista de operaciones no cubiertas está publicada y coincide con lo que se observa en pruebas con Git crudo.
 
-**Referencias**: BRD BR-12, § 10 (riesgo "los agentes usan Git crudo"); P-GRD-8; riesgo R-GRD-1.
+**Referencias**: BRD BR-12, § 10 (riesgo "los agentes usan Git crudo"); Q-GRD-8; riesgo R-GRD-1.
 
 ---
 
@@ -730,7 +729,9 @@ Acción al expirar: se descarta
 
 **Descripción**: Si un nivel de la configuración no se puede leer o tiene valores inválidos, Guardrails **avisa** y nunca cae en "todo permitido".
 
-> ⚠️ **ASSUMPTION** (P-GRD-12, recomendación): para permisos y políticas se aplica el conjunto mínimo por defecto (BR-EDGE-001) más lo legible de los demás niveles. Si el nivel ilegible es personal, solo se pierden sus endurecimientos. Hay que alinearlo con el supuesto de BR-CONS-007 (motor-local), que ignora el nivel ilegible para los valores del motor `[POR VERIFICAR]`.
+> **Decisión** (Q-GRD-12, Rene Bonilla, 2026-10-03): para permisos y políticas se aplica el conjunto mínimo por defecto (BR-EDGE-001) más lo legible de los demás niveles. Si el nivel ilegible es personal, solo se pierden sus endurecimientos.
+
+**Dependencia abierta con el Motor local**: BR-CONS-007 (motor-local) tiene como supuesto ignorar un nivel ilegible para los valores del motor (rama base, umbral de inactividad). Para esos valores no hay riesgo de relajar nada, pero la misma configuración se trata distinto según quién la lea. Queda para el Arquitecto, o para una revisión de motor-local, alinear los dos comportamientos. Este requerimiento no cambia motor-local.
 
 **Frecuencia esperada**: baja (edición a mano con errores, conflicto de merge en la configuración del equipo).
 
@@ -741,7 +742,7 @@ Acción al expirar: se descarta
 
 **Cómo se verifica**: cada nivel ilegible por separado: hay aviso y ninguna operación del conjunto mínimo pasa.
 
-**Referencias**: contexto § 6 (fail-safe); BR-CONS-007 (motor-local); P-GRD-12; riesgo R-GRD-8.
+**Referencias**: contexto § 6 (fail-safe); BR-CONS-007 (motor-local); Q-GRD-12; riesgo R-GRD-8.
 
 ---
 
@@ -749,7 +750,7 @@ Acción al expirar: se descarta
 
 **Descripción**: Toda operación destructiva que Guardrails permite o que el humano aprueba debe ir precedida de un snapshot de la Time Machine (NFR-01). Guardrails no toma el snapshot.
 
-> ⚠️ **ASSUMPTION** (P-GRD-11, recomendación): si la Time Machine no puede tomar el snapshot, la operación se **deniega** con el motivo explicado; el humano puede usar una excepción consciente `[POR VERIFICAR]`.
+> **Decisión** (Q-GRD-11, Rene Bonilla, 2026-10-03): si la Time Machine no puede tomar el snapshot, la operación se **deniega** con el motivo explicado; el humano puede usar una excepción consciente.
 
 **Frecuencia esperada**: muy baja.
 
@@ -760,7 +761,7 @@ Acción al expirar: se descarta
 
 **Cómo se verifica**: simular el fallo del snapshot y comprobar que la operación no se ejecuta.
 
-**Referencias**: NFR-01; dependencia con F-001-03; P-GRD-11; riesgo R-GRD-9.
+**Referencias**: NFR-01; dependencia con F-001-03; Q-GRD-11; riesgo R-GRD-9.
 
 ---
 
@@ -769,7 +770,7 @@ Acción al expirar: se descarta
 | Regla | Criticidad | Complejidad | Prioridad de Implementación |
 |-------|------------|-------------|------------------------------|
 | BR-VAL-002 | Alta | Baja | 🔴 P0 |
-| BR-VAL-003 | Alta | Media | 🔴 P0 (P-GRD-9: primero ramas protegidas, force-push, `reset --hard`, rutas prohibidas) |
+| BR-VAL-003 | Alta | Media | 🔴 P0 (Q-GRD-9: primero ramas protegidas, force-push, `reset --hard`, rutas prohibidas) |
 | BR-CALC-001 | Alta | Baja | 🔴 P0 |
 | BR-VAL-001 | Alta | Baja | 🔴 P0 |
 | BR-CONS-001 | Alta | Media | 🔴 P0 |
@@ -807,7 +808,7 @@ Sin historias todavía. Cada regla deberá tener al menos una historia cuando se
 
 ### Reglas → Criterios de Aceptación
 
-Cada regla debe reflejarse en al menos un escenario Gherkin de su historia. Cada regla indica en "Cómo se verifica" los escenarios mínimos. BR-CONS-002 obliga a que los escenarios de BR-VAL-002 y BR-VAL-003 se ejecuten por las dos capas. BR-CONS-005 se verifica con una comparación antes/después de las rutas operativas del repo y una prueba de interrupción. Las reglas con ⚠️ **ASSUMPTION** no se cierran en historias hasta que Rene Bonilla responda su pregunta (P-GRD-1 a P-GRD-16). Las filas de BR-CONS-001 marcadas "Depende de P-GRD-14" tampoco.
+Cada regla debe reflejarse en al menos un escenario Gherkin de su historia. Cada regla indica en "Cómo se verifica" los escenarios mínimos. BR-CONS-002 obliga a que los escenarios de BR-VAL-002 y BR-VAL-003 se ejecuten por las dos capas. BR-CONS-005 se verifica con una comparación antes/después de las rutas operativas del repo y una prueba de interrupción. Las decisiones Q-GRD-1 a Q-GRD-16 ya están incorporadas a las reglas. Las partes que siguen marcadas ⚠️ **ASSUMPTION** (S-GRD-6, S-GRD-9 y el formato Conventional Commits) se validan antes de cerrar las historias que las usen.
 
 ---
 
@@ -817,3 +818,4 @@ Cada regla debe reflejarse en al menos un escenario Gherkin de su historia. Cada
 |---------|-------|-------|---------|
 | 1.0 | 2026-10-03 | PO (AADD) para Rene Bonilla | Versión inicial: 22 reglas (17 críticas). Supuestos S1-S9 y preguntas P1-P13 en el contexto (numeración original). |
 | 1.1 | 2026-10-03 | PO (AADD) para Rene Bonilla | Artifact Judge (RESERVAS): convención de IDs (P-GRD-n, S-GRD-n, R-GRD-n; IDs del Motor local calificados con "(motor-local)"); BR-CONS-001 separa lo decidido por Q23 de la ampliación pendiente (P-GRD-14) y marca las filas dependientes; BR-AUTH-001 deja de atribuir a Q27 una frase que no está en la fuente; nueva BR-CONS-006 (el comando no pisa cambios a mano y escribe de forma atómica y recuperable, NFR-01); BR-WF-002 con cuatro estados, todas las transiciones, alcance (P-GRD-15) y alineada con BR-EDGE-001. 23 reglas (18 críticas). |
+| 1.2 | 2026-10-03 | PO (AADD) para Rene Bonilla | Decisiones Q-GRD-1 a Q-GRD-16 de Rene Bonilla (aceptan las recomendaciones de P-GRD-1 a P-GRD-16): los bloques de supuesto pasan a "Decisión"; BR-CONS-001 aplica Q-GRD-14 (un nivel personal endurece cualquier regla del equipo y nunca la relaja; refina Q23 de motor-local) y su tabla deja de tener filas dependientes; BR-TIME-001 fija el plazo en 5 minutos y BR-TIME-002 la retención en 90 días; BR-WF-002 aplica el alcance de Q-GRD-15; BR-EDGE-001 a BR-EDGE-005 aplican Q-GRD-5, 4, 8, 12 y 11; BR-EDGE-004 anota la dependencia con BR-CONS-007 (motor-local) para el Arquitecto o una revisión de motor-local. S-GRD-1, S-GRD-4 y S-GRD-5 confirmados por Q-GRD-14, Q-GRD-7 y Q-GRD-10. Sin reglas nuevas: 23 reglas (18 críticas). |
