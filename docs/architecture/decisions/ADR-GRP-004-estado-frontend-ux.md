@@ -5,9 +5,9 @@ type: adr
 status: accepted
 date: 2026-10-01
 created: 2026-10-01
-updated: 2026-10-01
+updated: 2026-10-03
 deciders: [Rene Bonilla]
-related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-003]
+related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-007]
 tags: [react, state-management, tanstack-query, zustand, jotai, xstate, react-hook-form, zod, tanstack-router, ux, optimistic-ui]
 ---
 
@@ -35,7 +35,7 @@ El motor en Rust (`gitraptor-core`) es la **única fuente de verdad** del estado
 | **Estado de UI global** | **Zustand** | Estado propio de la interfaz, con selectores finos y persistencia de preferencias. | Panel activo, selección, layout de paneles, densidad, tema, filtros |
 | **Estado de alta frecuencia** | Selectores de Zustand o **Jotai** (átomos por entidad) | Aislar los re-renders: un cambio en el agente N solo repinta su tarjeta. | Actividad en vivo de cada AgentCard, contadores, indicadores de conflicto |
 | **Flujos críticos** | **XState** | Máquinas de estado explícitas, testeables y visualizables, sin estados imposibles. | Asistente de rebase, merge con conflictos, undo/restore, aprobar o descartar un agente, acciones bloqueadas por política |
-| **Formularios** | **React Hook Form + Zod** | Validación tipada. Los esquemas se comparten con los tipos generados del motor. | Editor de `policy.yaml`, configuración, crear worktree |
+| **Formularios** | **React Hook Form + Zod** | Validación tipada. Los esquemas se comparten con los tipos generados del motor. | Editor de la configuración en tres niveles (`.gitraptor/settings.json`, ADR-GRP-007), crear worktree |
 | **Navegación** | **TanStack Router** | Rutas y search params con tipos seguros. El estado de la vista vive en la URL, así una vista se puede restaurar o enlazar. | `/repo/:id/agents?filter=active`, `/repo/:id/timeline` |
 | **Estado local** | `useState` / `useReducer` | Estado efímero de un solo componente. | Hover, un toggle, un input controlado |
 
