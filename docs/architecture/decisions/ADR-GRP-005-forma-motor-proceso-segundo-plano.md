@@ -10,7 +10,7 @@ updated: 2026-10-04
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
-related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-006, ADR-GRP-009, ADR-GRP-010, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, ADR-GRD-003, ADR-GRD-004, ADR-GRD-006, ADR-GRD-007, CTX-GRP-001, BR-GRP-001]
+related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-006, ADR-GRP-009, ADR-GRP-010, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, ADR-GRD-003, ADR-GRD-004, ADR-GRD-006, ADR-GRD-007, ADR-CKP-001, ADR-CKP-002, ADR-CKP-003, CTX-GRP-001, BR-GRP-001]
 tags: [motor-local, daemon, ipc, json-rpc, autoarranque, unix-socket, named-pipe, seguridad, continuidad, comandos-reservados, prompt-injection]
 ---
 
@@ -36,7 +36,7 @@ El motor tiene que capturar la actividad de los agentes **aunque no haya ninguna
 
 - El daemon es el subcomando `raptor daemon` del binario `raptor` (`apps/cli`). No hay una app `raptord` separada y **no se enmienda ADR-GRP-002** (decisión de Rene Bonilla, 2026-10-03, PQ-5).
 - La lógica del motor vive en `crates/core`, la lectura de Git en `crates/git` (ADR-GRP-009) y el contrato del canal en `crates/api`. `apps/cli` solo aporta el punto de entrada del daemon y los clientes.
-- `raptor-mcp` y la CLI/TUI son **clientes** del daemon: ninguno embebe el motor ni abre el almacén del perfil. El daemon es el **único escritor** del perfil (ADR-GRP-006).
+- `raptor-mcp` y la CLI/TUI son **clientes** del daemon: ninguno embebe el motor ni abre el almacén del perfil. El daemon es el **único escritor** del perfil (ADR-GRP-006). (Enmienda 2026-10-04, Cockpit: dentro del binario `raptor`, la frontera es de módulo; ver la sección final.)
 - **Excepción acotada (Enmienda 2026-10-04, Guardrails; ADR-GRD-003 § 4, ADR-GRD-006 § 5)**: el cliente del hook de Guardrails (`raptor hook`), cuando el daemon no es alcanzable o es de otra instancia, hace dos accesos al **directorio de estado** del perfil, cuya ruta es una constante de su dispatcher:
   - **Escribe** una entrada en el **spool** append-only del modo degradado: un archivo por entrada, creado en exclusiva y sin seguir enlaces, 0600 en una carpeta 0700, con tamaño y número de archivos acotados. El daemon lo ingiere con `origin = spool-unverified` y lo borra.
   - **Lee** la **instantánea** de solo lectura que el daemon deja para el modo degradado (última rama base confirmada).
@@ -82,8 +82,8 @@ El motor tiene que capturar la actividad de los agentes **aunque no haya ninguna
   - **Consultas y comandos** (estado del motor, repos, worktrees, sesiones, eventos, registro y corrección).
   - **Stream de eventos por suscripción**, que publica los eventos del motor en orden de secuencia (ADR-GRP-011 mide su latencia).
 - **Validación de entradas (SEC-02)**: tipos estrictos con rechazo de campos desconocidos (`deny_unknown_fields`) en todos los mensajes. Rutas: absolutas; se rechazan UNC, `\\?\`, nombres de dispositivo y ADS **antes de tocar el sistema de archivos** (canonicalizar una ruta UNC abriría una conexión SMB, M9); después se canonicalizan y se comprueba que pertenecen a un worktree observado (BR-VAL-002). Refs: reglas de `check-ref-format` y siempre tras `--`. Ningún parámetro llega a un shell (argv fijo, ADR-GRP-009).
-- **Robustez frente a clientes (SEC-08)**: cola acotada por suscriptor; un cliente lento se desconecta con un evento "resync" y nunca bloquea al productor. Límites de conexiones y suscripciones por cliente y rate limit de consultas. Las consultas se sirven del estado en memoria, sin lanzar `git` por petición.
-- **Contrato de salida (SEC-12)**: `crates/api` marca como no confiable todo texto procedente del repo o de un agente (rutas, ramas, nombres de agente declarados, diagnósticos). Los clientes CLI/TUI lo limpian de caracteres de control y escapes ANSI/OSC (OSC 52, título, hipervínculos) antes de mostrarlo. Las respuestas que el MCP devuelve a un agente son estructuradas, con longitud máxima por campo, sin mensajes de commit ni contenido de archivos y limitadas al repo del llamante (prompt injection indirecta, OWASP LLM01). El detalle de presentación queda pendiente de llevar a ADR-GRP-004 y a la spec del MCP (F-001-05).
+- **Robustez frente a clientes (SEC-08)**: cola acotada por suscriptor; un cliente lento se desconecta con un evento "resync" y nunca bloquea al productor. Límites de conexiones y suscripciones por cliente y rate limit de consultas. Las consultas se sirven del estado en memoria, sin lanzar `git` por petición. (Enmienda 2026-10-04, Cockpit: excepción acotada para las consultas bajo demanda de grafo y de diff; ver la sección final.)
+- **Contrato de salida (SEC-12)**: `crates/api` marca como no confiable todo texto procedente del repo o de un agente (rutas, ramas, nombres de agente declarados, diagnósticos). Los clientes CLI/TUI lo limpian de caracteres de control y escapes ANSI/OSC (OSC 52, título, hipervínculos) antes de mostrarlo. Las respuestas que el MCP devuelve a un agente son estructuradas, con longitud máxima por campo, sin mensajes de commit ni contenido de archivos y limitadas al repo del llamante (prompt injection indirecta, OWASP LLM01). El detalle de presentación queda pendiente de llevar a ADR-GRP-004 y a la spec del MCP (F-001-05). (Enmienda 2026-10-04, Cockpit: llevado a ADR-GRP-004 para CLI/TUI; la spec del MCP sigue pendiente.)
 
 ### 6. Comandos reservados al desarrollador
 
@@ -120,6 +120,8 @@ El motor tiene que capturar la actividad de los agentes **aunque no haya ninguna
 - **Refuerzo D5** (Rene Bonilla, 2026-10-04) para los comandos que relajan: **anuncio** `reserved-action-pending` en el stream de todos los clientes; **ventana cancelable** antes de aplicar (⚠️ **ASSUMPTION**: 10 s), en la que cualquier cliente del usuario puede cancelar sin comando reservado; y **auditoría con la cadena completa de ascendencia** (ruta del ejecutable e identificador de cada proceso, terminal de control y líder de sesión) más la **aceptación del riesgo por acción** (ADR-GRP-013 § 1).
 - **Añadir un repo no confirma la rama base ni el suelo** (**D9**, Rene Bonilla, 2026-10-04): la confirmación inicial es un comando de Guardrails (tabla de arriba). Hasta entonces, Guardrails protege la unión de ramas base en las dos fases de ADR-GRD-004 § 3.5 y el motor marca la rama base como "no confirmada" (ADR-GRP-007).
 - El análisis de los vectores que los controles 1 a 3 no detectan (`tmux send-keys`, `osascript`, código plantado) y la aceptación del riesgo por acción están en ADR-GRD-007 § 2.
+
+- **Operaciones del catálogo del Cockpit** (Enmienda 2026-10-04, Cockpit): la confirmación de trabajo ajeno y la excepción consciente desde el Cockpit reutilizan los controles 1 a 3; ver la sección final.
 
 **Riesgo residual aceptado**: un agente que se desacopla de su árbol de procesos (doble fork con `setsid`, `launchctl submit`, `systemd-run --user`, servicios del SO) puede evadir la ascendencia. Se acepta para el MVP porque el motor no tiene privilegios por encima del usuario y la auditoría deja rastro; se revisa si aparece un mecanismo de atestación del SO más fuerte.
 
@@ -237,3 +239,29 @@ Aplicada desde la tabla de enmiendas de [ADR-GRD-008](./ADR-GRD-008-factor-auten
 | `reserved-action-pending` añade el estado "esperando la autenticación del sistema" | § 6, refuerzo D5 |
 | Validación 7: los casos del factor remiten a la Validación de ADR-GRD-008 | Validación 7 |
 | Enmienda TS-GRP-004, punto 9 (A-2): el factor de ADR-GRD-008, en modo preferente, es el control compensatorio candidato para `repo.retire` y `attribution.correct`; sigue pendiente de decisión de Rene antes de su release | § 6 |
+
+## Enmienda (2026-10-04, Cockpit)
+
+Aplicada desde DEP-CKP-2, 3, 7, 9, 10 y 11 de [CTX-CKP-001](../../requirements/features/cockpit/context.md) y de [ADR-CKP-001](./ADR-CKP-001-prediccion-conflictos-merge-en-seco.md), [ADR-CKP-002](./ADR-CKP-002-catalogo-operaciones-ejecutor.md) y [ADR-CKP-003](./ADR-CKP-003-arquitectura-tui.md) (proposed). **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. No cambia la forma del motor, el canal, la instancia única ni los controles 1 a 7. El `status` sigue en `accepted`. Si un ADR-CKP de origen no pasa a `accepted`, su fila se revisa con él.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| Excepción acotada a "sin lanzar `git` por petición, desde el estado en memoria": consultas bajo demanda de grafo y de diff, leídas con `gix` | § 5 (SEC-08) | DEP-CKP-2, DEP-CKP-3; Q-CKP-4, Q-CKP-8 |
+| "Ningún cliente embebe el motor" es, dentro del binario `raptor`, una frontera de módulo con comprobación estática | § 1 | ADR-CKP-003 § 5 y § 12 |
+| El contrato de salida (SEC-12) de CLI/TUI queda llevado a ADR-GRP-004; la spec del MCP sigue pendiente | § 5 | DEP-CKP-9; ADR-CKP-003 § 8 (E1) |
+| Operaciones del catálogo: confirmación de trabajo ajeno y excepción consciente del Cockpit con los controles 1 a 3; Cancelar no es reservado | § 6 | DEP-CKP-7, DEP-CKP-10; ADR-CKP-002 § 3, § 4 y § 6 |
+| Las escrituras del Cockpit en el perfil (preferencias de la TUI, registro del KPI) las hace el daemon; "único escritor" no gana excepciones | § 1 | DEP-CKP-11; ADR-GRP-006 (Enmienda, Cockpit) |
+
+**Consultas bajo demanda de grafo y de diff** (DEP-CKP-2, DEP-CKP-3):
+
+- **Qué**: el grafo de cada worktree (commits de la rama desde su merge-base con la base confirmada, acotados por carril; ⚠️ **ASSUMPTION** de Q-CKP-4: unos 50 por carril, el resto colapsado) y el diff de un worktree en dos partes: lo que entraría al merge (`merge-base(base confirmada, rama)..rama`) y, aparte, lo sin commitear (BR-CKP-CALC-005).
+- **Cómo**: con `gix` en solo lectura y **sin filtros, `textconv` ni diff externo** (ADR-GRP-009 § 1). No se lanza `git`. Binarios detectados y devueltos sin contenido. Topes por archivo, en total y de tiempo; al superarlos, "truncado".
+- **Dónde**: en un pool de consultas del daemon separado del observador y del predictor de ADR-CKP-001. No consumen el presupuesto del motor de ADR-GRP-011: son respuestas a una petición, no eventos del stream.
+- **SEC-08 se mantiene**: rate limit, tope de consultas en curso por conexión, cancelación al cerrarse la conexión, y respuestas fuera del orden del stream que nunca lo bloquean.
+- **Para quién**: el contenido del diff solo va a la conexión CLI/TUI que lo pide. Nunca va al stream de difusión ni al MCP (Q-CKP-8), y nunca se persiste ni se registra (SEC-05, nota en `non-functional.md`).
+- **Forma del contrato** (métodos, id de petición, cancelación, topes y campos): **pendiente, dueño: worker del canal (TS-GRP-004)** (necesidad N8 de ADR-CKP-003 § 4). No se fija aquí.
+- **Actor por commit en el grafo** (relación commit → evento de ADR-GRP-013): opcional y no se decide aquí; sin ella, el grafo muestra "sin atribuir" (Q-CKP-4).
+
+**Frontera de módulo** (ADR-CKP-003 § 5): el binario `raptor` contiene el motor porque `raptor daemon` es un subcomando (§ 1). Solo el módulo `daemon` de `apps/cli` importa `crates/core`. Los módulos de la TUI y de la CLI no importan `crates/core`, `crates/git` ni `crates/policy`, y una comprobación estática en CI lo hace cumplir (ADR-CKP-003, Validación V5).
+
+**Operaciones del catálogo** (ADR-CKP-002): no son comandos reservados, porque un agente puede actuar sobre su propio trabajo. Lo que toca trabajo de otro actor exige la confirmación de ADR-TMC-005 § 3, con los controles 1 a 3 y un reto ligado a la huella del plan. La excepción consciente desde el Cockpit es un comando reservado sobre el proceso de la TUI, con D5 y D10, y no emite token (ADR-GRD-007, Enmienda (2026-10-04, Cockpit)). **Cancelar** una operación en curso no es reservado: lo puede pedir la conexión solicitante o, si se cerró, cualquier cliente CLI/TUI del usuario, nunca el MCP. En Windows, la confirmación de trabajo ajeno se rechaza (TQ-14). Pendiente: etapa de validación multiplataforma.

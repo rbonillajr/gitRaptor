@@ -10,7 +10,7 @@ updated: 2026-10-04
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
-related: [ADR-GRP-005, ADR-GRP-006, ADR-GRP-007]
+related: [ADR-GRP-005, ADR-GRP-006, ADR-GRP-007, ADR-CKP-002, ADR-CKP-003]
 tags: [configuracion, settings-local-json, perfil, no-versionado, solo-lectura, motor-local, p10]
 ---
 
@@ -61,6 +61,8 @@ Sin cambios respecto a ADR-GRP-007, cuya tabla de precedencia y niveles admitido
 | `engine.baseBranch` | no admitida | **admitida** | no admitida |
 | `engine.idleThresholdMinutes` | admitida | no admitida | **admitida, gana** |
 
+(Enmienda 2026-10-04, Cockpit): las claves `cockpit.editor`, `cockpit.editorKind` y `cockpit.worktreePathTemplate` siguen el mismo criterio que el umbral; ver la sección final.
+
 ## Alternativas consideradas
 
 - **En el repo, con un `.gitraptor/.gitignore` versionado** que crea el usuario o Guardrails: depende de que alguien lo cree y lo mantenga. El motor no puede garantizarlo (Q21), el archivo solo existe en un worktree y obliga a decidir cuál se lee. Descartada.
@@ -97,3 +99,19 @@ Con repos y perfiles temporales (ADR-GRP-006), nunca con este repo:
 - Historia: US-GRP-013.
 - ADRs: ADR-GRP-005, ADR-GRP-006, [ADR-GRP-007](./ADR-GRP-007-configuracion-tres-niveles-formato.md).
 - Decisión de Rene Bonilla, 2026-10-03, PQ-3.
+
+## Enmienda (2026-10-04, Cockpit)
+
+Aplicada desde DEP-CKP-13 de [CTX-CKP-001](../../requirements/features/cockpit/context.md), derivada de la Enmienda (2026-10-04, Cockpit) de [ADR-GRP-007](./ADR-GRP-007-configuracion-tres-niveles-formato.md), con [ADR-CKP-002](./ADR-CKP-002-catalogo-operaciones-ejecutor.md) § 10 y la enmienda E4 de [ADR-CKP-003](./ADR-CKP-003-arquitectura-tui.md) (proposed). **Decisión del orquestador (2026-10-04), validada por Arquitecto**. No cambia la ubicación del nivel local ni que el motor solo lo lea. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| El nivel local personal admite `cockpit.editor`, `cockpit.editorKind` y `cockpit.worktreePathTemplate`, y gana sobre el perfil; el equipo no las admite | Extracto de niveles | DEP-CKP-13; ADR-GRP-007 (Enmienda, Cockpit) |
+
+| Clave | Perfil (`settings.json`) | Equipo (`.gitraptor/settings.json`) | Local (`repos/<id-repo>/settings.local.json`) |
+|---|---|---|---|
+| `cockpit.editor` | admitida | no admitida | **admitida, gana** |
+| `cockpit.editorKind` | admitida | no admitida | **admitida, gana** |
+| `cockpit.worktreePathTemplate` | admitida | no admitida | **admitida, gana** |
+
+El archivo sigue siendo del usuario: el daemon lo lee para resolver el editor y la ruta de un worktree nuevo, y no lo crea ni lo escribe.

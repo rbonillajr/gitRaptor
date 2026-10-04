@@ -10,7 +10,7 @@ updated: 2026-10-04
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
-related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-004, ADR-GRP-005, ADR-GRP-006, ADR-GRP-008, ADR-GRP-009, ADR-GRP-010, ADR-GRP-011, ADR-GRP-012, ADR-GRD-003, ADR-GRD-004, TS-GRD-001]
+related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-004, ADR-GRP-005, ADR-GRP-006, ADR-GRP-008, ADR-GRP-009, ADR-GRP-010, ADR-GRP-011, ADR-GRP-012, ADR-GRD-003, ADR-GRD-004, ADR-CKP-002, ADR-CKP-003, TS-GRD-001]
 tags: [configuracion, settings-json, json-schema, schemars, precedencia, niveles, guardrails, motor-local, p8, seguridad, pq-9-sustituida, suelo, rama-base-confirmada, refs-reemplazo]
 ---
 
@@ -52,6 +52,7 @@ Un solo documento JSON con secciones de primer nivel:
 - `$schema`: URL del schema publicado. Sirve a los editores y el motor no la descarga nunca (NFR-03).
 - `engine`: valores del motor. Los define este ADR.
 - `permissions` (`allow` / `ask` / `deny`) y `policies`: su semántica es de Guardrails (ADR-GRD-003 § 1 y § 2, ADR-GRD-004 § 2). Sus tipos viven en `crates/policy`, llevan `x-gitraptor-levels` como las claves de `engine` y el motor no los interpreta (Enmienda 2026-10-04).
+- `cockpit`: claves del Cockpit (Enmienda 2026-10-04, Cockpit; ver la sección final).
 
 Claves de la sección `engine`:
 
@@ -120,6 +121,8 @@ Valor efectivo de una clave = el del nivel **más específico, entre los que la 
 | `gitPath` | **la usa** | ignorada, con diagnóstico | ignorada, con diagnóstico | perfil, si no resolución automática |
 | `watcher.fallbackPollSeconds` | la usa | ignorada, con diagnóstico | **la usa y gana** | local, si no perfil, si no `30` |
 | `watcher.degradedPollSeconds` | la usa | ignorada, con diagnóstico | **la usa y gana** | local, si no perfil, si no `2` |
+
+Las claves de la sección `cockpit` siguen la misma tabla con perfil y local, y equipo ignorado (Enmienda 2026-10-04, Cockpit; ver la sección final).
 
 La regla de que un nivel personal no relaja una prohibición del equipo se aplica a `permissions` y `policies`. Es de Guardrails y este ADR no la redefine: la combinación (mínimo ∪ suelo, endurecido por el worktree, el perfil y el local) está en ADR-GRD-004 § 2 y la evaluación en ADR-GRD-003 § 1.
 
@@ -273,3 +276,25 @@ Aplicada desde la tabla de enmiendas de [non-functional-guardrails.md](../non-fu
 | El nombre y el tipo de la clave del mínimo los fija el schema de TS-GRD-001 | Tabla de Guardrails | Decisión del Arquitecto (2026-10-04) |
 | La rama base y el suelo confirmados viven en el almacén por repo | "Qué configuración de equipo manda" | Decisión del Arquitecto (2026-10-04); ADR-GRP-006 § 4 |
 | **Corrección tras el Judge (2026-10-04)**: confirmación inicial de US-GRD-001 sin relajar y sin ventana, D5 solo en la explícita de US-GRD-014; los tres diagnósticos de D11 nombrados, siempre como diagnóstico; nota del PO resuelta (Q-GRD-21); D9 y D12 en Referencias | "Qué configuración de equipo manda"; Consecuencias; Referencias | ADR-GRD-004 § 3.5, ADR-GRD-005 § 1 |
+
+## Enmienda (2026-10-04, Cockpit)
+
+Aplicada desde DEP-CKP-13 de [CTX-CKP-001](../../requirements/features/cockpit/context.md), con [ADR-CKP-002](./ADR-CKP-002-catalogo-operaciones-ejecutor.md) § 1 y § 10 y la enmienda E4 de [ADR-CKP-003](./ADR-CKP-003-arquitectura-tui.md) (proposed). **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. No cambia el formato, los nombres de archivo, la precedencia, la sección `engine` ni las de Guardrails. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| Sección nueva `cockpit` con tres claves, admitidas solo en perfil y local; en el equipo se ignoran con diagnóstico | Estructura; Precedencia | DEP-CKP-13; Q24 de motor-local; Q-CKP-9; BR-CKP-VAL-001 |
+
+**Claves de la sección `cockpit`**. Sus tipos viven en `crates/policy` con `x-gitraptor-levels`, como las demás. Las consume el ejecutor de operaciones del daemon (ADR-CKP-002); el motor no las interpreta.
+
+| Clave | Tipo | Niveles admitidos | Por defecto | Regla |
+|---|---|---|---|---|
+| `cockpit.editor` | string: línea del editor, separada en palabras **sin shell** por la función pura de `crates/api`; los metacaracteres de shell se rechazan | Perfil y local | Sin valor: la TUI usa su `$VISUAL` y después su `$EDITOR` | Q-CKP-9, BR-CKP-VAL-003, DEP-CKP-13 |
+| `cockpit.editorKind` | `auto` \| `terminal` \| `gui` | Perfil y local | `auto` (clasificación por lista conocida; lo desconocido, como de terminal) | ADR-CKP-003 § 9 |
+| `cockpit.worktreePathTemplate` | string: plantilla de ruta con marcadores de una lista cerrada | Perfil y local | Sin valor: `<padre>/<repo>-<rama-saneada>` | BR-CKP-VAL-001; ADR-CKP-002 § 1 |
+
+- **Por qué nunca en el equipo**: son preferencias del usuario y de su máquina, igual que el umbral de inactividad (Q24 de motor-local). Además, un editor en la configuración commiteada sería un programa elegido por otro, que la TUI lanzaría en la máquina de cada miembro. En el equipo, la clave se ignora con diagnóstico.
+- **Precedencia**: local, si no perfil, si no el valor por defecto.
+- **Valor que no sirve** (metacaracteres, marcador desconocido, clase fuera de la lista): no invalida el nivel. La clave se descarta con diagnóstico y se usa el valor por defecto. La ruta que produce la plantilla la valida el daemon al preparar `create-worktree`: absoluta, sin UNC y fuera de cualquier worktree (SEC-02).
+- **No son claves de configuración**: las preferencias de la TUI (repo, panel, filtros y layout), que guarda el daemon en el perfil (ADR-GRP-006, Enmienda (2026-10-04, Cockpit)), ni los flags de la línea de comandos (`--theme`, `--lang`, `--ascii`, `--plain`).
+- **Validación añadida**: `cockpit.editor` en la configuración del equipo, ignorada con diagnóstico; un valor con metacaracteres en el perfil, rechazado con diagnóstico y sin ejecutar nada (ADR-CKP-002, Validación 14); el schema generado incluye la sección `cockpit` con sus niveles.

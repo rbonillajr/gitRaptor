@@ -10,7 +10,7 @@ updated: 2026-10-04
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
-related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-006, ADR-GRP-009, ADR-GRP-010, ADR-GRP-013, INF-GRP-002, SPIKE-GRP-002, TS-GRP-004, CTX-GRP-001, US-GRP-002]
+related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-006, ADR-GRP-009, ADR-GRP-010, ADR-GRP-013, ADR-CKP-001, ADR-CKP-003, SPIKE-CKP-001, INF-GRP-002, SPIKE-GRP-002, TS-GRP-004, CTX-GRP-001, US-GRP-002]
 tags: [rendimiento, latencia, presupuesto, p95, nfr-04, timestamps, instrumentacion, ci, dogfooding, cockpit]
 ---
 
@@ -65,12 +65,13 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
 - **Publicación en dos fases**: si un cambio grande no cabe en 150 ms de cómputo, o si cambió la punta de la rama o la base y hay que recalcular ahead/behind (ADR-GRP-010 § 4, Enmienda 2026-10-04), el motor publica dentro del presupuesto lo barato (rama, `HEAD`, operación en curso) con una marca de "recomputando", y los recuentos en un segundo evento (ADR-GRP-010). El p95 se mide sobre el primer evento que refleja el cambio; el segundo se mide aparte y se reporta, sin gate en el MVP.
 - **Arranque y reconciliación** (inicio, vuelta de suspensión, desbordamiento, recreación del stream del watcher, reconciliación periódica) no cuentan para NFR-04: son estados explícitos ("reconciliando") que el Cockpit presenta como tales. La publicación del alta o la baja del propio worktree sí cuenta: es el escenario "crear y borrar un worktree" del apartado 4.
 - **Modo degradado** (sondeo, ADR-GRP-010) queda fuera de NFR-04 y se expone como tal.
+- **Predicción de conflictos y consultas bajo demanda** (Enmienda 2026-10-04, Cockpit): fuera de NFR-04, con objetivo propio; ver la sección final.
 
 ### 3. Instrumentación en el contrato
 
 - Cada evento de cambio del stream de `crates/api` lleva un bloque de **tiempos por etapa**: `t_recv`, `t_flush`, `t_computed`, `t_persisted` y `t_published`, más un identificador de lote que agrupa los eventos de una misma ventana de debounce. Va siempre en el evento (unos pocos enteros) para que dogfooding y CI usen el mismo dato.
 - **Reloj común entre procesos**: los tiempos se toman de un reloj monótono del sistema compartido por todos los procesos de la máquina (`CLOCK_MONOTONIC` en Linux, `mach_continuous_time` en macOS, `QueryPerformanceCounter` en Windows), serializado como nanosegundos. No se usa el reloj de pared, que puede saltar por NTP. Un helper de `crates/api` lo lee igual en el motor y en los clientes. El evento lleva aparte la hora de pared para mostrarla a personas.
-- El Cockpit añade localmente `t_client_recv` y `t_render` (frame en el que el cambio ya es visible) y no los devuelve al motor.
+- El Cockpit añade localmente `t_client_recv` y `t_render` (frame en el que el cambio ya es visible) y no los devuelve al motor. (Enmienda 2026-10-04, Cockpit: definición exacta de las dos marcas en la sección final.)
 - Los tiempos son de diagnóstico: no cambian el comportamiento ni la atribución, y no salen de la máquina (NFR-03).
 
 ### 4. Medición en CI (INF-GRP-002)
@@ -86,6 +87,7 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
   - p95 del motor (`t0` → `t_client_recv`) > 300 ms en cualquier escenario y SO: **el CI falla**.
   - p95 de extremo a extremo (`t0` → `t_render`) ≥ 500 ms, cuando exista el Cockpit: **el CI falla**.
   - p95 de una etapa por encima de su presupuesto con el total dentro: **aviso** con la etapa nombrada, sin fallar, para no volver inestable el CI por el ruido de los runners compartidos.
+  - Gate del Cockpit y escenario de la predicción (Enmienda 2026-10-04, Cockpit): ver la sección final.
 - **Máquinas de referencia**: runners estándar de Windows, macOS y Linux del CI (ADR-GRP-001, base de CI) más la máquina de dogfooding de Rene (macOS). ⚠️ **ASSUMPTION**: si el ruido de los runners compartidos hace inestable el gate, se mueve a un runner dedicado o se pasa a gate sobre la mediana con el p95 como aviso, y se registra en este ADR.
 
 ### 5. Medición en dogfooding
@@ -142,3 +144,38 @@ Aplicada desde las recomendaciones de [SPIKE-GRP-002-resultados.md](../../requir
 | Validación alineada con el alcance parcial: SPIKE-GRP-002 medido solo en macOS; Linux y Windows pendientes con el procedimiento del README del prototipo | Validación | Resultados § 5 y § 7; Artifact Judge (reservas) |
 | La reconciliación periódica de ADR-GRP-010 § 5 tampoco cuenta para NFR-04; el escenario de recreación del stream del banco tiene gate de corrección, no de latencia | § 2 | ADR-GRP-010, Enmienda (2026-10-04, SPIKE-GRP-002); decisión del orquestador, validada por el Arquitecto |
 | El banco calibra la holgura del temporizador por SO y decide con datos entre constante y calibración en ejecución; los escenarios de recreación del stream y de reconciliación periódica llevan gate de corrección | § 4 | Resultados § 3.2 y § 3.6; revisión del Arquitecto (2026-10-04) |
+
+## Enmienda (2026-10-04, Cockpit)
+
+Aplicada desde la enmienda E2 de [ADR-CKP-003](./ADR-CKP-003-arquitectura-tui.md) (§ 6, Validación V3) y desde [ADR-CKP-001](./ADR-CKP-001-prediccion-conflictos-merge-en-seco.md) § 5 y Validación 5, los dos `proposed`, con Q-CKP-6 y S-CKP-1 de [CTX-CKP-001](../../requirements/features/cockpit/context.md). **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. **Las cifras del reparto (§ 2) no cambian**: el Cockpit sigue con ≤ 100 ms p95. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| Definición exacta de `t_client_recv` y `t_render` | § 3 | ADR-CKP-003 § 6 (E2) |
+| Gate nuevo: p95 del Cockpit (`t_client_recv` → `t_render`) > 100 ms, **el CI falla**, simétrico al del motor; aviso de feedback por tecla | § 4 | ADR-CKP-003 § 6, V3 (E2) |
+| El cliente sin pantalla del banco es la `App` de `apps/cli` sobre el backend de pruebas de `ratatui` | § 4 | ADR-CKP-003 § 6 y § 12 |
+| La predicción de conflictos queda fuera de NFR-04, con objetivo propio de ≤ 5 s p95 (supuesto); escenario nuevo en INF-GRP-002 | § 2, § 4 | ADR-CKP-001 § 5; Q-CKP-6; S-CKP-1 |
+| Las consultas bajo demanda (grafo, diff) quedan fuera de NFR-04 | § 2 | DEP-CKP-2, DEP-CKP-3; ADR-GRP-005 (Enmienda, Cockpit) |
+
+**Marcas del Cockpit** (§ 3):
+
+- **`t_client_recv`**: lo toma el hilo del canal de la TUI al terminar de leer del transporte el mensaje completo, **antes** de deserializarlo. Decodificar cuenta en el presupuesto del Cockpit.
+- **`t_render`**: lo toma el hilo principal al volver la llamada de dibujo del **primer frame dibujado después de aplicar** el mensaje, con el buffer ya volcado al backend.
+- Ambas con el helper de reloj monótono de `crates/api`. Nunca vuelven al motor ni salen de la máquina (NFR-03).
+
+**Gates** (§ 4), que se suman a los existentes:
+
+- p95 del Cockpit (`t_client_recv` → `t_render`) > 100 ms en cualquier escenario y SO: **el CI falla**.
+- Feedback por tecla (tecla leída → frame) p95 ≥ 100 ms: **aviso** (patrón de ADR-GRP-004 § 3).
+- El gate de extremo a extremo (`t0` → `t_render` ≥ 500 ms) entra en vigor con la `App` del Cockpit en el banco.
+- El banco no mide el volcado a una terminal real; el histograma local de la TUI lo mide en dogfooding (ADR-CKP-003 § 6). Una variante del banco sobre una pseudo-terminal queda para la Dev Spec de INF-GRP-002.
+
+**Predicción de conflictos** (ADR-CKP-001 § 5):
+
+- **Fuera de NFR-04**: corre en un pool propio del daemon y nunca consume el presupuesto del motor (≤ 300 ms p95). La TUI muestra su antigüedad y su estado (`calculando`, `recalculando`).
+- **Objetivo propio**: ⚠️ **ASSUMPTION** (S-CKP-1): del fin del commit a la predicción publicada, ≤ 5 s p95 con 10 worktrees y un repo de 100K commits. Lo mide SPIKE-CKP-001.
+- **Escenario nuevo en INF-GRP-002**: el objetivo es **aviso** hasta que SPIKE-CKP-001 confirme la cifra, y gate después. Además, el p95 del motor no puede empeorar durante una ráfaga de predicciones; si empeora, falla el gate del motor que ya existe.
+
+**Consultas bajo demanda** (grafo y diff): son respuestas a una petición, no eventos del stream, así que quedan fuera de NFR-04. La TUI muestra su estado pendiente en < 100 ms (feedback por tecla) y su latencia se reporta sin gate en el MVP.
+
+Linux y Windows: **Pendiente: etapa de validación multiplataforma**.

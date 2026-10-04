@@ -5,15 +5,15 @@ type: adr
 status: accepted
 date: 2026-10-01
 created: 2026-10-01
-updated: 2026-10-03
+updated: 2026-10-04
 deciders: [Rene Bonilla]
-related: [BRD-GRP-001, ADR-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-007]
+related: [BRD-GRP-001, ADR-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-005, ADR-GRP-007, ADR-CKP-003]
 tags: [react, state-management, tanstack-query, zustand, jotai, xstate, react-hook-form, zod, tanstack-router, ux, optimistic-ui]
 ---
 
 # ADR-GRP-004 — Estado del frontend y patrones de UX
 
-> **Alcance:** aplica a la **Fase 3** (app de escritorio Tauri + React y webviews de la extensión). En el MVP (CLI/TUI + MCP) solo aplican los **patrones de UX** de la sección 3, adaptados a la TUI (feedback inmediato, undo antes que confirmación, teclado primero, errores accionables).
+> **Alcance:** aplica a la **Fase 3** (app de escritorio Tauri + React y webviews de la extensión). En el MVP (CLI/TUI + MCP) solo aplican los **patrones de UX** de la sección 3, adaptados a la TUI (feedback inmediato, undo antes que confirmación, teclado primero, errores accionables). **(Enmienda 2026-10-04, Cockpit)**: en el MVP aplican además la salida segura en CLI/TUI (SEC-12) y el modelo de estado de la TUI de ADR-CKP-003; ver la sección final.
 
 ## Contexto
 
@@ -90,3 +90,23 @@ El motor en Rust (`gitraptor-core`) es la **única fuente de verdad** del estado
 ---
 
 Enmienda 2026-10-03: referencias a policy.yaml sustituidas por ADR-GRP-007 (configuración en tres niveles).
+
+## Enmienda (2026-10-04, Cockpit)
+
+Aplicada desde DEP-CKP-9 de [CTX-CKP-001](../../requirements/features/cockpit/context.md) y la enmienda E1 de [ADR-CKP-003](./ADR-CKP-003-arquitectura-tui.md) (proposed). **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. No cambia las secciones 1 a 3, que siguen siendo de la Fase 3 salvo los patrones de UX. El `status` sigue en `accepted`. Si ADR-CKP-003 no pasa a `accepted`, esta enmienda se revisa con él. Cierra M8 en este ADR y el punto 3 del § 10 del overview en su parte de CLI/TUI.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| Salida segura en CLI/TUI (SEC-12), aplicable al MVP | Sección nueva, abajo; nota en Alcance | DEP-CKP-9; ADR-CKP-003 § 8 (E1) |
+| En el MVP, el modelo de estado de la TUI es el de ADR-CKP-003 (TEA); las secciones 1 y 2 siguen siendo de la Fase 3 | Nota en Alcance | ADR-CKP-003 § 2 (E1) |
+
+### Salida segura en CLI/TUI (SEC-12) — aplica al MVP
+
+1. **Un único saneador**: todo texto que el contrato de `crates/api` marca como no confiable (ADR-GRP-005 § 5) pasa por un único saneador antes de mostrarse. Los caracteres C0, DEL y C1 (incluido CSI U+009B), los controles bidi y los de anchura cero se hacen **visibles** como escapes, nunca se emiten ni se borran en silencio. Saltos de línea y tabuladores en campos de una línea se sustituyen. Se recorta por anchura de visualización y por longitud por campo.
+2. **Impuesto por tipo**: la presentación solo acepta texto saneado o texto del catálogo i18n. Un texto no confiable en bruto no llega a un widget.
+3. **Salida para máquinas**: `--json` no pinta; escapa como `\uXXXX` los mismos caracteres (C0, C1, DEL y bidi). El dato llega completo y no es ejecutable en una terminal.
+4. **Defensa en profundidad**: el cliente sanea aunque el daemon ya marque el texto; no confía en el daemon para ello.
+5. **Mecanismo del MVP**: [ADR-CKP-003](./ADR-CKP-003-arquitectura-tui.md) § 8 (punto único `present::ingest`, tipo `SafeText` con constructor privado) y § 11 (CLI de solo lectura con la misma ingesta).
+6. **Fase 3 (referencia)**: React nunca inserta texto no confiable como HTML y aplica las mismas categorías de caracteres.
+
+La parte del MCP de SEC-12 (allowlist de campos, longitudes máximas, sin mensajes de commit ni contenido, limitada al repo del llamante) sigue pendiente de la spec de F-001-05.

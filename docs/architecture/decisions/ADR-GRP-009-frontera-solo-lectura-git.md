@@ -10,7 +10,7 @@ updated: 2026-10-04
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
-related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-006, ADR-GRP-010, ADR-GRP-012, ADR-GRD-001, TS-GRP-002, INF-GRP-001, CTX-GRP-001, BR-GRP-001]
+related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-006, ADR-GRP-010, ADR-GRP-012, ADR-GRD-001, ADR-CKP-001, ADR-CKP-002, ADR-CKP-003, SPIKE-CKP-001, TS-GRP-002, INF-GRP-001, CTX-GRP-001, BR-GRP-001]
 tags: [git, gitoxide, solo-lectura, optional-locks, fsmonitor, untracked-cache, allowlist, argv, resolucion-git, nfr-01, nfr-07, br-cons-001, seguridad, filtros, entorno, secretos]
 ---
 
@@ -37,7 +37,7 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
 
 ### 1. Lectura mixta
 
-- **Camino caliente con gitoxide** (`gix`), abierto en solo lectura: refs, HEAD, objetos, índice, estado del working tree, ahead/behind y metadatos de worktrees. No se usa ninguna API de escritura de `gix` (índice, refs, config, objetos, locks). Los archivos se abren con modos que permiten a otros procesos borrarlos y renombrarlos (en Windows, `FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE`).
+- **Camino caliente con gitoxide** (`gix`), abierto en solo lectura: refs, HEAD, objetos, índice, estado del working tree, ahead/behind y metadatos de worktrees. No se usa ninguna API de escritura de `gix` (índice, refs, config, objetos, locks). (Enmienda 2026-10-04, Cockpit: excepción acotada a objetos en la memoria del proceso para el merge en seco; ver la sección final.) Los archivos se abren con modos que permiten a otros procesos borrarlos y renombrarlos (en Windows, `FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE`).
 - **`status` y `diff` se calculan siempre con `gix` sin filtros** (revisión de seguridad, H2). El Git CLI ejecuta filtros `clean` al comparar archivos con stat sucio según `.gitattributes` y la config del repo, que un agente puede escribir: sería ejecución de código fuera del sandbox del agente y con persistencia. Por eso `status` y `diff` salen de la allowlist del CLI.
 - **`gix` configurado para no invocar el binario `git`** (M1): `gix` (vía `gix-path`) puede lanzar `git` por su cuenta para descubrir la config de instalación; se desactiva con sus opciones de apertura y permisos. ⚠️ **Pendiente de comprobación** en la versión fijada del crate: qué opciones lo garantizan y que ninguna ruta de código lo eluda. La auditoría dinámica de `exec` de INF-GRP-001 lo verifica.
 - **Git CLI solo como complemento**, para la versión (`git version`) y para las lecturas que gitoxide no cubra con fidelidad, siempre desde una **lista cerrada de subcomandos de lectura** con argv fijo (ver apartado 3).
@@ -55,7 +55,7 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
 | Arrancar el daemon fsmonitor de Git o ejecutar un hook fsmonitor | Prohibido | `-c core.fsmonitor=false`; `gix` sin fsmonitor |
 | Crear cualquier `*.lock` (`index.lock`, `HEAD.lock`, `config.lock`, refs) | Prohibido | Sin subcomandos que los tomen; locks opcionales desactivados |
 | `fetch`, `pull`, `push`, `gc`, `maintenance`, `repack`, `prune`, `commit-graph write`, `multi-pack-index write`, `rerere`, `worktree prune`/`repair`/`lock`/`unlock` | Prohibido | Fuera de la allowlist; además `-c gc.auto=0` y `-c maintenance.auto=false` como defensa en profundidad |
-| `merge-tree --write-tree` (escribe objetos en `.git/objects`) | Prohibido en el motor | Fuera de la allowlist (ver Consecuencias) |
+| `merge-tree --write-tree` (escribe objetos en `.git/objects`) | Prohibido en el motor | Fuera de la allowlist (ver Consecuencias). Enmienda 2026-10-04, Cockpit: dos filas nuevas para el merge en seco en la sección final |
 | Ejecutar filtros `clean`/`smudge`/`process`, `textconv`, diff externo, `gpg`, pager, editor | Prohibido | `status`/`diff` solo con `gix` sin filtros; en el CLI `--no-ext-diff`, `--no-textconv`, `-c log.showSignature=false`, `GIT_PAGER=cat` y `log` sin placeholders `%G*`; ver nota de filtros |
 | Consultar o escribir credenciales; prompts de terminal | Prohibido | Ningún comando de red; `GIT_TERMINAL_PROMPT=0`, `-c credential.helper=` vacío, `GIT_ASKPASS` y `SSH_ASKPASS` sin definir |
 | Escribir trazas de Git (`trace2.*Target`, `GIT_TRACE*`) | Prohibido | Variables `GIT_TRACE*` y `GIT_TRACE2*` fuera del entorno de los hijos (allowlist) y `-c trace2.normalTarget=` / `eventTarget=` / `perfTarget=` vacíos |
@@ -86,7 +86,7 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
   - Windows: la ruta de instalación de Git for Windows en el registro (solo lectura), `%ProgramFiles%\Git\cmd\git.exe`, `%LOCALAPPDATA%\Programs\Git\cmd\git.exe` y los shims de Scoop.
 - **Shim de macOS**: `/usr/bin/git` (y cualquier candidato que resuelva a él) solo se invoca si existe un toolchain de desarrollador real, comprobado leyendo el sistema de archivos (que exista el `git` de las Command Line Tools o de Xcode) y no ejecutando el shim. Si no existe, el candidato se descarta sin invocarlo y nunca se abre el diálogo de instalación.
 - **Validación del ejecutable (SEC-10, M10)**: antes de invocarlo, todo candidato (también la ruta explícita) debe ser **absoluto, archivo regular, propiedad del usuario o de root y no escribible por grupo ni otros** (en Windows, sin ACE de escritura para otros usuarios). Un candidato que no cumple se descarta sin ejecutarlo y el motivo se reporta.
-- **Selección**: el primer candidato válido que es ejecutable y responde a `git version` con 2.38 o superior. Si ninguno cumple, el motor pasa a "Esperando Git" (BR-WF-002) con el motivo (ausente o versión encontrada) para que la CLI y el Cockpit lo presenten.
+- **Selección**: el primer candidato válido que es ejecutable y responde a `git version` con 2.38 o superior. Si ninguno cumple, el motor pasa a "Esperando Git" (BR-WF-002) con el motivo (ausente o versión encontrada) para que la CLI y el Cockpit lo presenten. (Enmienda 2026-10-04, Cockpit: el ejecutor de operaciones de usuario usa este mismo binario.)
 - **Recomprobación**:
   - En "Esperando Git", de forma periódica (⚠️ **ASSUMPTION**: cada 30 s) y al cambiar los directorios de los candidatos.
   - Mientras observa, cuando cambia la ruta, el tamaño o el mtime del ejecutable elegido. Si deja de cumplir, vuelve a "Esperando Git" y lo ocurrido mientras tanto se reconcilia como hueco "sin atribuir" (supuesto S19, BR-EDGE-005).
@@ -110,7 +110,7 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
 - ⚠️ Sin refresco del índice, `gix` repite la comparación de contenido de los archivos con stat sucio en cada recomputo, y el coste crece hasta que el usuario o un agente refresque el índice. **Mitigación**: caché de stat propia en memoria del motor (nunca en el repo), que ADR-GRP-010 usa para el recomputo incremental; el coste se mide en SPIKE-GRP-002.
 - ⚠️ No ejecutar filtros da falsos positivos de "modificado" en archivos con filtro (p. ej. LFS) cuyo mtime cambió sin cambiar el contenido. **Mitigación**: escenario LFS en INF-GRP-001 para medir la frecuencia; si es alta, se evalúa leer el puntero LFS sin ejecutar el filtro.
 - ⚠️ Forzar `core.fsmonitor=false` y desactivar `textconv` y filtros sobrescribe, solo dentro de las invocaciones del motor, configuración del usuario que NFR-07 pide respetar. **Mitigación**: nada se escribe; la configuración del usuario rige todas sus operaciones y las de sus agentes. Se documenta como interpretación de NFR-07: el motor respeta la configuración que gobierna escrituras y credenciales y neutraliza solo la que ejecuta programas al leer.
-- ⚠️ `merge-tree --write-tree`, la razón de Git 2.38 en NFR-07, escribe objetos en `.git/objects`. Queda prohibido en el motor. **Mitigación**: la predicción de conflictos (Cockpit) tendrá que escribir esos objetos en un almacén alternativo dentro del perfil (`GIT_OBJECT_DIRECTORY` con el repo como alternate) o pedir un ADR propio; no es alcance de motor-local.
+- ⚠️ `merge-tree --write-tree`, la razón de Git 2.38 en NFR-07, escribe objetos en `.git/objects`. Queda prohibido en el motor. **Mitigación**: la predicción de conflictos (Cockpit) tendrá que escribir esos objetos en un almacén alternativo dentro del perfil (`GIT_OBJECT_DIRECTORY` con el repo como alternate) o pedir un ADR propio; no es alcance de motor-local. **Resuelta (Enmienda 2026-10-04, Cockpit)** por ADR-CKP-001: merge en memoria con `gix`, sin escribir objetos, pendiente de SPIKE-CKP-001.
 - ⚠️ En Windows, gitoxide puede mapear packs en memoria y un mapeo abierto impide que el `git gc` del usuario los borre. **Mitigación**: handles de repo de vida corta, liberación al detectar un `gc` o `maintenance` en curso, y escenario de `gc` concurrente en INF-GRP-001.
 - ⚠️ Un repo de otro propietario que Git rechaza por `safe.directory` no se puede observar sin tocar la config global (Q17). **Mitigación**: se reporta "no disponible" con el motivo y cómo resolverlo, sin escribir nada.
 
@@ -122,6 +122,8 @@ Nota de integración (INF-GRP-001, 2026-10-04; decisión del orquestador, valida
 - **Validación 2**: la config de sistema se resuelve preguntando al Git instalado, no con una ruta fija.
 - **Validación 5**: la comprobación estática sigue cubriendo solo `crates/git/src`. El testkit queda fuera porque solo puede ser dev-dependency y no es código del motor.
 - **Validación 7**: el gate portable de los tres SO es una auditoría por trampas sin privilegios (shim de `git` que registra el argv desde el hijo y trampas en el `PATH`). eslogger, strace y ETW quedan como auditoría profunda. A 2026-10-04 solo está verificada la auditoría por trampas en macOS (eslogger, strace y ETW sin verificar; ETW sin implementar), así que la condición de esta Validación sigue **abierta**.
+
+Nota de integración (Cockpit, ADR-CKP-002; Enmienda 2026-10-04): `crates/git` aloja una **tercera capa de escritura**, la invocación de operaciones de usuario del ejecutor del daemon. Detalle en la sección final.
 
 ## Validación
 
@@ -140,10 +142,10 @@ La valida **INF-GRP-001** (arnés "repo intacto"), que bloquea el merge de cualq
    - `trace2.eventTarget` configurado.
    - `gc` del usuario concurrente con la observación.
    - Repo rechazado por `safe.directory`.
-5. **Allowlist**: el registro de argv del modo diagnóstico solo contiene subcomandos y opciones de la lista. Además, una comprobación estática en CI exige que `Command::new` aparezca solo en el módulo de invocación de `crates/git`. **Ampliada** (notas de integración de Time Machine y de Guardrails): el lanzamiento de procesos solo está en los módulos de invocación autorizados de `crates/git`, que la comprobación lista por nombre: lectura del motor, escritura de la Time Machine, escritura de Guardrails y los dos módulos de invocación de Guardrails (encadenado del hook previo y `git` de `raptor guard exec`). `raptor hook` y `raptor guard exec` no tienen un `Command::new` propio. Ni el observador del motor ni el ejecutor de operaciones de usuario pueden importar ninguna de las dos capas de escritura; las operaciones de escritura de Guardrails solo las importa el módulo `guardrails`, y sus dos módulos de invocación solo `raptor hook` y `raptor guard exec`.
+5. **Allowlist**: el registro de argv del modo diagnóstico solo contiene subcomandos y opciones de la lista. Además, una comprobación estática en CI exige que `Command::new` aparezca solo en el módulo de invocación de `crates/git`. **Ampliada** (notas de integración de Time Machine y de Guardrails): el lanzamiento de procesos solo está en los módulos de invocación autorizados de `crates/git`, que la comprobación lista por nombre: lectura del motor, escritura de la Time Machine, escritura de Guardrails y los dos módulos de invocación de Guardrails (encadenado del hook previo y `git` de `raptor guard exec`). `raptor hook` y `raptor guard exec` no tienen un `Command::new` propio. Ni el observador del motor ni el ejecutor de operaciones de usuario pueden importar ninguna de las dos capas de escritura; las operaciones de escritura de Guardrails solo las importa el módulo `guardrails`, y sus dos módulos de invocación solo `raptor hook` y `raptor guard exec`. **Ampliada otra vez** (Enmienda 2026-10-04, Cockpit): invocación de operaciones de usuario, lanzador del editor y arranque del daemon; ver la sección final.
 6. **Resolución de Git**: tests con PATH mínimo; en macOS, un runner sin Command Line Tools comprueba que no se ejecuta `/usr/bin/git` (proceso no lanzado) y que el motor queda en "Esperando Git"; cambio de versión en caliente por debajo y por encima de 2.38.
-7. **Cero ejecución de código configurable (SEC-09)**: repo canario con `filter.*.clean`, `diff.*.textconv`, `core.fsmonitor`, hooks y `gpg.program` apuntando a un script que deja un marcador; con archivos de stat sucio y el motor observando, el marcador nunca aparece. **Auditoría dinámica de `exec`** en INF-GRP-001 (eslogger en macOS, ETW en Windows, strace en Linux): todo proceso hijo del motor pertenece a la allowlist y `gix` no lanza `git` (M1).
-8. **Secretos (SEC-05)**: suite con secretos plantados (`.env`, token en la URL del remoto, `http.extraHeader`) y gitleaks/trufflehog sobre perfil, logs y captura del stream IPC: 0 hallazgos.
+7. **Cero ejecución de código configurable (SEC-09)**: repo canario con `filter.*.clean`, `diff.*.textconv`, `core.fsmonitor`, hooks y `gpg.program` apuntando a un script que deja un marcador; con archivos de stat sucio y el motor observando, el marcador nunca aparece. **Auditoría dinámica de `exec`** en INF-GRP-001 (eslogger en macOS, ETW en Windows, strace en Linux): todo proceso hijo del motor pertenece a la allowlist y `gix` no lanza `git` (M1). (Enmienda 2026-10-04, Cockpit: repo canario ampliado para el merge en seco.)
+8. **Secretos (SEC-05)**: suite con secretos plantados (`.env`, token en la URL del remoto, `http.extraHeader`) y gitleaks/trufflehog sobre perfil, logs y captura del stream IPC: 0 hallazgos. (Enmienda 2026-10-04, Cockpit: alcance del escaneo frente a la consulta de diff; ver la sección final.)
 9. **Entorno y ejecutable (SEC-10)**: motor arrancado con `GIT_EXEC_PATH`, `GIT_SSH_COMMAND`, `LD_PRELOAD`/`DYLD_INSERT_LIBRARIES`, `PATH=.:…` o `XDG_CONFIG_HOME` hostiles: sin efecto en los hijos; un `git` escribible por todos o una `engine.gitPath` relativa se rechazan.
 10. **Repos no confiables (SEC-11, SEC-02)**: repo de otro uid → "no disponible" sin `safe.directory=*`; ruta UNC → 0 conexiones SMB; ref `--upload-pack=x` rechazada.
 
@@ -185,4 +187,68 @@ Aplicada desde la tabla de enmiendas de [non-functional-guardrails.md](../non-fu
 | Comprobación estática de la Validación 5 ampliada a esa capa: lanzamiento de procesos solo desde los módulos de invocación autorizados | Validación 5 | ADR-GRD-001 § 7 |
 | **Ronda de coherencia (2026-10-04)**: dos módulos de invocación autorizados de Guardrails (encadenado del hook previo y `git` de `raptor guard exec`), llamados desde `apps/cli` sin `Command::new` propio y listados en la comprobación estática | Nota de integración; Validación 5 | Decisión del Arquitecto (2026-10-04); ADR-GRD-001 § 7 |
 
-**Pendiente de motor-local** (anotado el 2026-10-04, no se decide en esta enmienda): la regla de la Validación 5 ("`Command::new` solo en los módulos de invocación autorizados de `crates/git`") choca con lanzamientos de procesos que ya existían en ADR-GRP-005 § 3: el arranque del daemon bajo demanda desde la biblioteca cliente y las peticiones al gestor de servicios (`launchctl kickstart`, `systemctl --user start`). Es una tensión previa de motor-local; falta decidir en qué módulo autorizado viven esos lanzamientos.
+**Pendiente de motor-local** (anotado el 2026-10-04, no se decide en esta enmienda): la regla de la Validación 5 ("`Command::new` solo en los módulos de invocación autorizados de `crates/git`") choca con lanzamientos de procesos que ya existían en ADR-GRP-005 § 3: el arranque del daemon bajo demanda desde la biblioteca cliente y las peticiones al gestor de servicios (`launchctl kickstart`, `systemctl --user start`). Es una tensión previa de motor-local; falta decidir en qué módulo autorizado viven esos lanzamientos. **Cerrado por la Enmienda (2026-10-04, Cockpit)**: viven en el módulo de arranque de la biblioteca cliente de `crates/api`.
+
+## Enmienda (2026-10-04, Cockpit)
+
+Aplicada desde DEP-CKP-1, 3, 7 y 12 de [CTX-CKP-001](../../requirements/features/cockpit/context.md), con [ADR-CKP-001](./ADR-CKP-001-prediccion-conflictos-merge-en-seco.md) (opción preferida (a)), [ADR-CKP-002](./ADR-CKP-002-catalogo-operaciones-ejecutor.md) y la enmienda E3 de [ADR-CKP-003](./ADR-CKP-003-arquitectura-tui.md), los tres `proposed`. **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. **No cambia la frontera de solo lectura del motor ni su criterio binario**: cero diferencias en el repo y cero programas configurados por el usuario. El `status` sigue en `accepted`. Lo que depende de la opción (b) de ADR-CKP-001 **no se aplica**: queda condicionado a SPIKE-CKP-001 (abajo).
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| Excepción acotada a "ninguna API de escritura de `gix`": el módulo de merge en seco escribe objetos **solo en la memoria del proceso** | § 1 | DEP-CKP-1; ADR-CKP-001 § 1 (a) |
+| Dos filas nuevas en la tabla: merge en memoria con `gix` (permitido) y drivers de merge o filtros durante el merge en seco (prohibido). `merge-tree --write-tree` sigue prohibido | § 2 | ADR-CKP-001 § 1 (a) |
+| § 3 sin cambios con la opción (a) | § 3 | ADR-CKP-001 |
+| El ejecutor de operaciones de usuario usa el mismo binario resuelto (une la nota E6 de ADR-TMC-002) | § 4 | DEP-CKP-7; ADR-CKP-002 § 6 |
+| Tercera capa de escritura separada: invocación de operaciones de usuario | Nota de integración | DEP-CKP-7; ADR-CKP-002 § 6 y § 11 |
+| Lista de módulos que pueden lanzar procesos, dentro y fuera de `crates/git` (editor y arranque del daemon) | Validación 5 | DEP-CKP-7, DEP-CKP-12; ADR-CKP-002 § 10; ADR-CKP-003 § 5, § 9 (E3) |
+| Repo canario ampliado con drivers de merge, filtros de proceso y `.gitattributes` con `merge=` | Validación 7 | DEP-CKP-1; ADR-CKP-001, Validación 2 y 3 |
+| Alcance del escaneo de secretos frente a la consulta de diff | Validación 8 | DEP-CKP-3; Q-CKP-8 |
+| La consecuencia sobre `merge-tree` queda resuelta por ADR-CKP-001 | Consecuencias | DEP-CKP-1 |
+| Cierra el pendiente de motor-local sobre lanzar procesos fuera de `crates/git` (y el punto 5 del § 10 del overview) | Enmienda (Guardrails) | DEP-CKP-12; ADR-CKP-003 (E3) |
+
+### Merge en seco con `gix` en memoria (opción (a) de ADR-CKP-001)
+
+- **Excepción acotada**: solo el módulo de merge en seco de `crates/git` abre una instancia con objetos en memoria (`Repository::with_object_memory`). Los árboles y blobs que produce el merge se quedan en la memoria del proceso y se descartan al terminar. Nunca llegan a `.git/objects`, ni sueltos ni en packs. El resto de la capa sigue sin ninguna API de escritura de `gix`.
+- **Condiciones obligatorias**: lista de drivers de merge vacía y sin contexto de invocación; sin procesos de filtro (`clean`, `smudge`, `process`); pila de atributos sin `.gitattributes` del disco; sin invocar el binario `git` (M1); sin descargas perezosas de un *partial clone* (un objeto ausente da "no calculable").
+- **Entradas tipadas**: recibe ids de commit ya resueltos, nunca nombres de ref de texto libre.
+
+Filas nuevas de la tabla del § 2:
+
+| Efecto | Clasificación | Cómo se garantiza |
+|---|---|---|
+| Merge de árboles en memoria con `gix` para la predicción de conflictos | Permitido | Instancia con objetos en memoria, solo en el módulo de merge en seco; nada se escribe en disco |
+| Ejecutar drivers de merge (`merge.<driver>.driver`) o procesos de filtro durante el merge en seco | Prohibido | Drivers vacíos y sin contexto de invocación; sin filtros ni atributos del disco (SEC-09) |
+
+**Condicionado a SPIKE-CKP-001 (opción (b), no aplicado)**. Si el SPIKE activa el respaldo (b), `merge-tree --write-tree` sobre un almacén de trabajo en el perfil, se abrirá una enmienda nueva con estos cambios: la fila de `merge-tree` pasa a "permitido solo con `--git-dir` en el almacén de trabajo del perfil", más una fila para el refresco de objetos (mtime) a través de los alternates; § 3 añade `merge-tree` a la allowlist con argv fijo y el entorno aislado de la configuración global y de sistema; la Validación 5 añade su módulo de invocación; la Validación 7 añade un *partial clone* con remoto *promisor* y captura de red. Mientras tanto, nada de esto rige.
+
+### Ejecutor de operaciones de usuario (DEP-CKP-7)
+
+- **Tercera capa de escritura, separada**, como las de la Time Machine y Guardrails: el **módulo de invocación de operaciones de usuario** de `crates/git`, con una lista cerrada y tipada (merge de un oid, abortar merge, rebase sobre un oid, abortar rebase, añadir worktree con rama nueva, quitar worktree, actualizar ref con valor viejo y borrar ref con valor viejo). Solo lo importa el módulo `executor` de `crates/core` (ADR-CKP-002 § 11).
+- **No es una escritura del motor**: solo ocurre cuando un actor la pide, dentro de la operación protegida (ADR-TMC-004 § 1), después de la decisión de Guardrails. La frontera de solo lectura de este ADR sigue siendo la del observador, del predictor y de las consultas. INF-GRP-001 admite esas escrituras solo en los escenarios del ejecutor.
+- **Respeta lo del usuario** (NFR-07, ADR-TMC-002 § 5): hooks, filtros, drivers de merge, `rerere`, identidad y firma. Neutraliza solo los ejecutables de ADR-GRD-007 § 3.5 y los editores, y desactiva `gc.auto` y `maintenance.auto` (ADR-CKP-002 § 6).
+- **Entorno**: la allowlist del § 3, más las variables fijas del ejecutor y la lista cerrada de variables de sesión que el cliente declara y el daemon valida (ADR-CKP-002 § 6).
+- **Binario**: el mismo que resuelve el § 4, una vez y con ruta absoluta.
+
+### Validación 5 ampliada: quién puede lanzar procesos
+
+1. **En `crates/git`**, módulos de invocación autorizados y nombrados: lectura del motor; escritura de la Time Machine; escritura de Guardrails y sus dos módulos de invocación; **invocación de operaciones de usuario**, que solo importa `crates/core::executor`.
+2. **Fuera de `crates/git`** (decisión que cierra el pendiente de motor-local y el punto 5 del § 10 del overview):
+   - el **lanzador del editor** `tui::editor` de `apps/cli`, que solo ejecuta un argv ya validado por la función pura de `crates/api`, con `argv[0]` resuelto a ruta absoluta con un PATH sin entradas relativas ni el cwd, y sin shell. Es el único `Command::new` de la TUI;
+   - el **módulo de arranque de la biblioteca cliente de `crates/api`**, que arranca el daemon bajo demanda con entorno limpio y hace las peticiones al gestor de servicios (`launchctl kickstart`, `systemctl --user start`) de ADR-GRP-005 § 3.
+3. **Importaciones prohibidas**: `executor` no importa ninguna capa de escritura (Time Machine, Guardrails) ni los módulos de invocación de Guardrails; nadie más que `executor` importa la invocación de operaciones de usuario; el predictor de ADR-CKP-001 no importa ninguna capa de escritura; el módulo de merge en seco usa siempre la instancia en memoria.
+
+El "ejecutable de rechazo" que el ejecutor pone en `GIT_EDITOR` (ADR-CKP-002 § 6) lo lanza Git, no GitRaptor, y no añade un lanzamiento.
+
+### Validación 7 ampliada (SEC-09)
+
+Repo canario con `merge.<x>.driver`, `filter.<x>.process` y `filter.<x>.clean`, `.gitattributes` con `merge=<x>` y `core.fsmonitor`, todos apuntando a un script que deja un marcador. Con el predictor calculando todos los pares, el marcador nunca aparece y la auditoría dinámica de `exec` muestra 0 procesos lanzados por el predictor. Un *partial clone* con objetos ausentes da "no calculable" con 0 conexiones (ADR-CKP-001, Validación 2 y 3).
+
+### Validación 8: alcance del escaneo de secretos (DEP-CKP-3)
+
+El escaneo de perfil, logs y captura del stream IPC sigue exigiendo **0 hallazgos**, salvo en las **respuestas a la consulta de diff**, que llevan por diseño contenido del repo que el humano pide desde la TUI (Q-CKP-8). Esas respuestas quedan fuera del escaneo con tres condiciones, que sí se verifican:
+
+1. Solo van a la conexión CLI/TUI que pidió el diff; nunca al stream de difusión ni al MCP.
+2. Nunca se persisten ni se registran: con el diff pedido varias veces sobre un repo con secretos plantados, el perfil y los logs siguen con 0 hallazgos.
+3. La captura del stream de eventos y del resto de respuestas sigue con 0 hallazgos.
+
+El arnés identifica las respuestas de diff por su id de petición para excluirlas. La forma de esa consulta es del contrato del canal: **pendiente, dueño: worker del canal (TS-GRP-004)**.

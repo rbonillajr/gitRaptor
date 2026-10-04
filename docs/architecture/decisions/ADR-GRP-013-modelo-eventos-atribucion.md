@@ -10,7 +10,7 @@ updated: 2026-10-04
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
-related: [ADR-GRP-005, ADR-GRP-006, ADR-GRP-010, ADR-GRP-012, ADR-GRD-006, ADR-GRD-007, CTX-GRP-001, BR-GRP-001]
+related: [ADR-GRP-005, ADR-GRP-006, ADR-GRP-010, ADR-GRP-012, ADR-GRD-006, ADR-GRD-007, ADR-CKP-001, ADR-CKP-002, CTX-GRP-001, BR-GRP-001]
 tags: [motor-local, eventos, sesiones, atribucion, correccion, huecos, append-only, modelo-de-datos, auditoria, no-repudio, seguridad]
 ---
 
@@ -43,7 +43,7 @@ El motor guarda en el perfil (ADR-GRP-006) los eventos de Git, las sesiones de a
 | **Registro de atribución** | Append-only. Sesión, tipo (registro, confirmación, corrección, retiro de corrección, **retiro de registro**), agente, autor (desarrollador o agente, como exige la tabla de BR-CONS-001), momento y secuencia en la que entra en vigor. |
 | **Evento** | Secuencia por repo, worktree, tipo, metadatos (refs, ids de commit, rutas afectadas), hora de observación en UTC con el desfase de zona horaria local, sesión (opcional), evidencia de atribución (qué señales de ADR-GRP-012 la sustentan) y hueco (opcional). |
 | **Hueco** | Intervalo de inicio y fin y su causa: máquina apagada o suspendida, daemon caído, **daemon caído durante una sesión activa**, daemon parado por un comando, repo retirado, Git ausente o insuficiente (BR-WF-002), perfil perdido o almacén corrupto, y las causas de observación de ADR-GRP-010 § 6: desbordamiento de la cola del watcher, recreación del stream del watcher y reconciliación periódica (diferencias sin causa identificada) (Enmienda 2026-10-04, SPIKE-GRP-002). Si lo provocó un comando (parada, retiro del repo), guarda **el cliente que lo pidió** (proceso, ejecutable y si pasó los controles de ADR-GRP-005) (SEC-13). |
-| **Último estado conocido** | Por worktree: HEAD, puntas de refs, operación en curso y huella de los cambios sin commitear. Es la base de la reconciliación (ADR-GRP-010). |
+| **Último estado conocido** | Por worktree: HEAD, puntas de refs, operación en curso y huella de los cambios sin commitear. Es la base de la reconciliación (ADR-GRP-010). (Enmienda 2026-10-04, Cockpit: más el estado en conflicto; ver la sección final.) |
 | **Marca "observado hasta"** | Momento hasta el que el repo estuvo observado, persistido con cada lote y de forma periódica. |
 
 Los cambios de estado de las sesiones (inicio, activo, inactivo, terminado) se guardan como eventos del mismo historial, así que su estado sobrevive a reinicios (BR-WF-001).
@@ -99,6 +99,7 @@ Los cambios de estado de las sesiones (inicio, activo, inactivo, terminado) se g
 - Al aplicar una confirmación, una corrección o un retiro, el stream de eventos publica que la atribución de esa sesión cambió, con el rango de secuencias afectado, para que la Time Machine (F-001-03) y Guardrails (F-001-04) refresquen.
 - Consultas por worktree, por sesión, por rango de secuencia y por actor efectivo, y consulta del registro de auditoría y de los huecos con su causa.
 - **Texto no confiable (SEC-12)**: el nombre declarado de un agente, las rutas y las refs son texto procedente del repo o de un agente; el contrato lo marca como tal y los clientes lo limpian antes de mostrarlo (ADR-GRP-005 § 5). Las respuestas al MCP no incluyen mensajes de commit ni contenido y se limitan al repo del llamante.
+- **Última actividad, última sesión y estado en conflicto por worktree** (Enmienda 2026-10-04, Cockpit): ver la sección final.
 
 ## Alternativas consideradas
 
@@ -188,3 +189,22 @@ Aplicada desde la tabla de enmiendas de [ADR-GRD-008](./ADR-GRD-008-factor-auten
 | Cambio | Dónde | Fuente |
 |---|---|---|
 | La auditoría de los comandos reservados incluye cada intento del factor del SO: acción, resumen del plan, método, resultado (`verified`, `denied`, `cancelled`, `timeout`, `unavailable`, `busy`, `throttled`, `stale`, `precheck-denied`), tipo de autenticación si el SO lo informa y los momentos de petición, resultado, cierre de la ventana y aplicación. Nunca el nonce ni secretos | § 1 (registro de auditoría) | ADR-GRD-008 § 4 |
+
+## Enmienda (2026-10-04, Cockpit)
+
+Aplicada desde DEP-CKP-4 y DEP-CKP-14 (y la parte de rutas de DEP-CKP-1) de [CTX-CKP-001](../../requirements/features/cockpit/context.md), con [ADR-CKP-001](./ADR-CKP-001-prediccion-conflictos-merge-en-seco.md) y [ADR-CKP-002](./ADR-CKP-002-catalogo-operaciones-ejecutor.md) (proposed). **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. No cambia el modelo de eventos, sesiones ni atribución, ni añade tipos de evento: expone datos derivados de lo que ya se guarda. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| **Última actividad** por worktree, derivada de los eventos y publicada con el estado del worktree | § 6 | DEP-CKP-4; BR-04; BR-CKP-CALC-001 |
+| **Última sesión** por worktree, presente o terminada, publicada mientras exista el worktree | § 6 | DEP-CKP-4; Q-CKP-3; BR-CKP-TIME-002 |
+| El último estado conocido incluye el **estado en conflicto**; su entrada y su salida se publican como cambios del estado del worktree | § 1, § 6 | DEP-CKP-14; ADR-GRP-010 (Enmienda, Cockpit) |
+| El conjunto completo de rutas sin commitear **no se persiste**: el último estado conocido sigue guardando la huella | § 1 | DEP-CKP-1; ADR-CKP-001 § 3 |
+
+- **Última actividad**: la hora de observación (UTC con el desfase local, § 4) del **evento más reciente del worktree**, sin contar los cambios de estado de las sesiones (inactivo o terminado no son actividad). Si ese evento es de reconciliación, se publica con la marca de su hueco, porque la hora real cae dentro del hueco (§ 5). Se deriva en memoria de los eventos del almacén del repo; no es una entidad nueva.
+- **Última sesión**: la sesión más reciente del worktree por inicio, presente o terminada, con su agente y origen según la atribución efectiva (§ 2), su inicio, su fin y la causa del fin. Sale de la entidad Sesión (§ 1). La regla de visibilidad de 24 h (BR-CKP-TIME-002) es de la presentación, no del motor.
+- **Estado en conflicto**: tipo de operación en curso, oids de `MERGE_HEAD` u `onto`, y rutas sin fusionar con su tope (ADR-GRP-010, Enmienda (2026-10-04, Cockpit)). Forma parte del último estado conocido para que la reconciliación tras un hueco también lo detecte. Rutas y ramas son texto no confiable (SEC-12).
+- **Relación commit → evento** para el actor por commit en el grafo (DEP-CKP-2, opcional): **no se decide aquí**; sigue pendiente de motor-local. Sin ella, el Cockpit muestra "sin atribuir" (Q-CKP-4).
+- **Forma del contrato** (campos y eventos): **pendiente, dueño: worker del canal (TS-GRP-004)**.
+
+**Validación añadida**: un commit en un worktree actualiza su última actividad; un cambio de sesión a inactivo no la actualiza; tras un hueco, la última actividad lleva la marca del hueco; un worktree cuya sesión terminó publica esa sesión con su fin y su causa mientras existe.
