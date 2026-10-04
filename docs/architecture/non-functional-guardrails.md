@@ -1,0 +1,155 @@
+# Requisitos No Funcionales — Guardrails
+
+> Requisitos no funcionales de Guardrails (F-001-04), con el ADR que los cubre y cómo se verifica cada uno. Este archivo es aparte de `non-functional.md` (motor-local, en vuelo) para evitar conflictos. Reutiliza SEC-01..SEC-14 de motor-local cuando aplican, citándolos como "SEC-NN (motor-local)".
+
+## Metadata
+
+- **Modo**: bulk
+- **Estado**: expanded
+- **Dominio**: GRP · **Feature**: guardrails (F-001-04)
+- **Fecha**: 2026-10-04
+- **Actualizado**: 2026-10-04 (Artifact Judge, revisión del `security-expert`, decisiones D5 a D8 de Rene Bonilla; ronda 2 del Judge)
+- **Autor**: Arquitecto (AADD); Security NFRs revisados por el `security-expert` (hallazgos H-01..I-02)
+- **Relacionados**: CTX-GRD-001, BR-GRD-001, ADR-GRD-001..007, ADR-GRP-005..013 (propuestos, `docs/arch-motor-local`), ADR-TMC-002/004 (`docs/arch-time-machine`), SPIKE-GRD-001, INF-GRD-001, TS-GRD-001, BRD-GRP-001 § 7
+- **Nota de formato**: igual que en `non-functional.md`, no hay tipo canónico `nfr`. Este archivo lleva Metadata y no frontmatter con `id`.
+
+## Atributos de calidad
+
+| ID | Atributo | Requisito verificable | ADR | Verificación | Origen |
+|----|----------|-----------------------|-----|--------------|--------|
+| NFR-GRD-01 | Cero pérdida al instalar | Tras instalar, los hooks previos conservan contenido y efecto. Tras desinstalar, las rutas operativas y `.git` quedan idénticas a las de antes de instalar. ⚠️ **ASSUMPTION**: idénticas byte a byte; si SPIKE-GRD-001 encuentra que Git reformatea `.git/config`, el criterio pasa a semántico (mismas entradas en el mismo orden), con validación de Rene | ADR-GRD-001 | INF-GRD-001 con hooks propios, husky, lefthook y pre-commit, en los tres SO | NFR-01, BR-CONS-005 |
+| NFR-GRD-02 | Instalación atómica y recuperable | Instalar, desinstalar, adoptar o refrescar, interrumpido en cualquier paso, queda completo o idéntico al anterior | ADR-GRD-001 § 4 y § 8 | INF-GRD-001: cortes en cada paso; recuperación al arrancar | NFR-12, BR-CONS-005 |
+| NFR-GRD-03 | Solo dentro del repo | Nada cambia fuera del repo salvo el perfil | ADR-GRD-001 § 1 | Huella de fuera del repo de INF-GRP-001 | Q17 de motor-local |
+| NFR-GRD-04 | Latencia de evaluación | < 100 ms p95 por evaluación gobernada. Vía rápida: ⚠️ **ASSUMPTION**: < 30 ms p95 en macOS y Linux; Windows lo fija SPIKE-GRD-001 | ADR-GRD-002 § 5 | SPIKE-GRD-001; gate de p95 en INF-GRD-001 | Contexto § 6 |
+| NFR-GRD-05 | Fail-safe | El suelo ilegible da mínimo más lo legible; `ask` se aplica como `deny` sin cola; el modo degradado es más estricto que el normal; con el binario ausente o un error interno, fail-closed **solo** en `pre-push`, `pre-rebase` y el **borrado** de `refs/heads/*`, y fail-open con aviso en el resto, incluidos los commits (J2); las señales de ataque (canal no auténtico, directorio común cruzado, tope superado) dan deny en refs gobernadas | ADR-GRD-001 § 3, ADR-GRD-003 § 4, ADR-GRD-004 § 1 | ADR-GRD-001 Validación 5 y 6; ADR-GRD-003 Validación 6, 7 y 9; ADR-GRD-004 Validación 9 | Contexto § 6, BR-EDGE-004, S-GRD-9 |
+| NFR-GRD-06 | Una sola decisión | `evaluar()` es pura y determinista; la misma decisión por cualquier capa; una decisión por transición y una entrada por operación | ADR-GRD-003 | Pruebas de propiedades; US-GRD-016 | BR-CONS-002, BR-CALC-001 |
+| NFR-GRD-07 | Explicabilidad e i18n | Toda denegación lleva las reglas y los niveles en códigos (en/es); el mensaje del hook usa una plantilla fija | ADR-GRD-003 § 3 | Snapshot del contrato y de los mensajes | Contexto § 6, NFR-10 |
+| NFR-GRD-08 | Portabilidad | El mismo comportamiento en los tres SO, con Git 2.38 y la última estable | ADR-GRD-001, 002, 007 | Matriz de CI de INF-GRD-001 | NFR-06, NFR-07 |
+| NFR-GRD-09 | Privacidad y retención | El registro vive en el perfil, 90 días, sin mensajes de commit, contenido ni argv; el spool tiene la misma retención | ADR-GRD-006 | US-GRD-005 (escenarios 4 y 5); escáner de secretos | NFR-03, BR-CONS-004, BR-TIME-002 |
+| NFR-GRD-10 | Estado veraz | La pérdida se refleja con su causa: ⚠️ **ASSUMPTION**: ≤ 5 s en repos observados y ≤ 60 s en no observados. Un perfil borrado da `instalacion-huerfana`. Avisos con rebote (⚠️ 10 min) | ADR-GRD-005 | INF-GRD-001: pérdidas externas, perfil borrado | BR-WF-002, Q-GRD-15 |
+| NFR-GRD-11 | Coexistencia | Con hooks propios, husky, lefthook y pre-commit, o se encadena sin alterar nada o no se instala y queda `encadenado-imposible` | ADR-GRD-001 § 6 | SPIKE-GRD-001; INF-GRD-001 | BR-EDGE-002, Q-GRD-4 |
+| NFR-GRD-12 | Cobertura de worktrees | Worktrees actuales y futuros; si no se puede garantizar, no se instala | ADR-GRD-001 § 5 | INF-GRD-001 | S-GRD-6 |
+| NFR-GRD-13 | Lista publicada fiel | La lista de no impedibles y de saltos declarados coincide con el comportamiento en cada SO y versión de Git | ADR-GRD-002 § 3 | Regresión de INF-GRD-001 | BR-EDGE-003 |
+| NFR-GRD-14 | Actualización sin fricción | Una actualización del binario por el mismo canal de instalación no pide permiso nuevo y deja la protección activa | ADR-GRD-001 § 8 | INF-GRD-001: `brew upgrade` simulado y plantilla nueva | J4 |
+| NFR-GRD-15 | Suelo estable | Ninguna relajación ni cambio de rama base baja la protección sin la confirmación del humano (D6, D7), con el mecanismo MVP de D5 (D8). El motor y Guardrails usan la misma rama base **confirmada** | ADR-GRD-004 § 3 y § 4 | ADR-GRD-004 Validación 6 y 7 | D6 |
+
+## Security NFRs
+
+> **Modelo de amenaza**: el de motor-local (proceso del mismo usuario **no confiable**, incluido un agente comprometido por prompt injection, OWASP LLM01) con tres añadidos:
+> - **Los hooks corren dentro del entorno del agente.**
+> - **El contenido del repo es hostil**: refs, rutas, configuración commiteada y refs remotas forjables.
+> - **El texto de denegación lo lee un LLM.**
+>
+> **Matriz EH**: aplican las filas 15 (credenciales → SEC-GRD-04, SEC-GRD-12), 18 (acceso no autenticado → SEC-GRD-05, SEC-GRD-16) y 19 (dependencias → SEC-GRD-15). El resto no aplica, porque no hay superficie de red.
+>
+> **Límite declarado**: los hooks de Git no son una frontera de seguridad frente a un proceso del mismo usuario (R-GRD-1, aceptado). Los requisitos siguientes hacen que saltarlos exija una acción deliberada, detectable o declarada.
+
+| ID | Requisito verificable | Amenaza (STRIDE) | ADR | Verificación | Severidad |
+|----|----------------------|------------------|-----|--------------|-----------|
+| SEC-GRD-01 | **Binario instalado y verificado.** Los dispatchers invocan la ruta estable del binario instalado, nunca a través del PATH. Su destino debe ser el mismo binario del daemon (regla SEC-14 de motor-local), con firma válida (codesign o Authenticode) o, en Linux, con la huella fijada al instalar o actualizar. Se rechazan la caché de npx y las carpetas temporales. Hardened runtime en macOS sin `allow-dyld-environment-variables` | E, S | 001, 005 | Un `raptor` falso por delante en el PATH no se ejecuta; un binario sin firma o con otra huella da `binario-no-valido`; `DYLD_INSERT_LIBRARIES` no carga en `raptor hook` | Alta |
+| SEC-GRD-02 | **Integridad anclada en el perfil.** La referencia de integridad (hash de cada dispatcher, ruta y firma o huella del binario, `dev/inode`) vive en el diario del perfil, que solo escribe el daemon. El manifiesto del repo no es autoritativo. Carpeta y dispatchers escribibles solo por el usuario (en Windows, sin ACE de escritura para `Everyone`, `Users` ni `Authenticated Users`) | T | 001, 005 | Editar a la vez el dispatcher y el manifiesto da `dispatcher-alterado`; auditoría de la DACL en Windows | Alta |
+| SEC-GRD-03 | **Ejecución en el entorno del agente.** La evaluación corre con un entorno por allowlist; el encadenado corre en Rust sin shell, con el entorno original menos el token. El repo, el worktree, el actor y la configuración los resuelve el daemon; el cliente no los declara. **Modo degradado**: mínimo forzado, el equipo solo endurece, sin niveles personales, rama base = unión {`main`, principal, última confirmada, resuelta del suelo}, de modo que nunca protege menos que el modo normal; `gix` aislado y sin reemplazo. El entorno de la evaluación no incluye `HOME`, `XDG_*` ni PATH: todas las rutas son constantes del dispatcher. **Nunca es menos restrictivo que el mínimo más el suelo legible**; pierde los endurecimientos personales y las excepciones | S, T, E | 001, 003 | ADR-GRD-001 Validación 7; ADR-GRD-003 Validación 9 | Alta |
+| SEC-GRD-04 | **Token de excepción.** De ≥ 128 bits (CSPRNG); el daemon guarda solo el hash y compara en tiempo constante. Ligado a la transición exacta (o a la ref más la base), al `git` hijo directo del `raptor` solicitante (identidad verificada en cada salto y registrada antes de esperar) y a un TTL que rige solo hasta la primera presentación. Reutilizar solo deduplica. `git` lanzado con `-c` que neutralizan los ejecutables configurables. Nunca aparece en logs ni salidas; se quita antes de encadenar | S, E, R | 007, 001 | ADR-GRD-007 Validación 7 a 10 | Alta |
+| SEC-GRD-05 | **Comandos reservados de Guardrails** (D5). Los controles de SEC-03 (motor-local) en el daemon. Las acciones que relajan en el MVP (desinstalar, retirar una huérfana, excepción) añaden anuncio en todos los clientes, una ventana cancelable (⚠️ 10 s), auditoría con la cadena completa de ascendencia, terminal y líder de sesión, y la aceptación del riesgo por acción. Las confirmaciones de D6/D7 (cambio de suelo o de rama base) usan ese mismo mecanismo MVP (D8). **Gate duro**: solo relajar la configuración (US-GRD-013) y aprobar en la cola (US-GRD-015) exigen un factor fuera de banda del SO o fail-closed. Cuando exista, el factor se aplicará también a las confirmaciones de D6, sin bloquear US-GRD-007 ni US-GRD-014. El MCP no expone ninguno | E, R, S | 007 | ADR-GRD-007 Validación 1 a 5; prueba del gate antes de US-GRD-013 y US-GRD-015 | Alta |
+| SEC-GRD-06 | **Texto de denegación que lee el agente** (LLM01). Plantilla fija por código; parámetros como datos delimitados y etiquetados; se neutralizan las categorías Unicode Cc, Cf, Zl y Zp (ANSI/OSC, bidi, Trojan Source, separadores de línea); longitud acotada; sin mensajes de commit ni contenido; sin instrucciones para desactivar la protección ni menciones de `raptor guard exec` u otra vía de excepción | T, I | 003, 001 | ADR-GRD-003 Validación 10 | Media |
+| SEC-GRD-07 | **Entradas del hook.** Parser en streaming de toda la entrada, con tope por línea; formato, identificador de objeto y `check-ref-format` validados; lo malformado o lo que supera el tope se trata como gobernado (nunca por la vía rápida) | T, D | 002, 001 | Fuzzing del parser; ADR-GRD-002 Validación 6 | Media |
+| SEC-GRD-08 | **`core.hooksPath` manipulado.** No se instala si la cobertura de worktrees no se puede garantizar. Un cambio persistente se detecta. Los saltos de un solo comando están en la lista publicada | T, E | 001, 005, 002 | ADR-GRD-001 Validación 4; ADR-GRD-005 Validación 2 | Media |
+| SEC-GRD-09 | **Spool del modo degradado.** Un archivo por entrada, creado en exclusiva sin seguir enlaces, 0600 en una carpeta 0700; tamaño y número de archivos acotados. Ingesta sin seguir enlaces y sin bloquear, solo archivos regulares, propietario y modo comprobados en cada ingesta. Las entradas quedan marcadas `spool-unverified`. Misma retención que el registro y escaneo de secretos | T, D, R | 006 | ADR-GRD-006 Validación 9 | Media |
+| SEC-GRD-10 | **Archivos en `.git`.** Operaciones relativas a un descriptor del directorio común, sin seguir enlaces; temporal aleatorio y exclusivo; borrado solo de lo listado en el diario, sin recursión; `dev/inode` verificados; el `config` es regular tras la escritura; la clave se escribe con `--file` explícito | T, E | 001 | ADR-GRD-001 Validación 8 | Alta |
+| SEC-GRD-11 | **Abuso del canal de evaluación.** Rate limit por cliente; solo se registra una entrada si el `git` más cercano del llamante tiene su cwd en un worktree del directorio común fijado; ocurrencias agregadas y límite de inserciones por repo | D, R | 003, 006 | 1.000 evaluaciones falsas sin `git` en la ascendencia: 0 entradas; ADR-GRD-006 Validación 6 | Media |
+| SEC-GRD-12 | **Manifiesto, diario, registro y auditoría sin secretos.** Solo rutas, hashes, valores de `core.hooksPath`, fechas y operaciones normalizadas. Nunca entorno, argv ni URLs con credenciales | I | 001, 006 | Escáner de secretos con secretos plantados en el entorno y en la URL del remoto: 0 hallazgos | Media |
+| SEC-GRD-13 | **Configuración commiteada hostil.** Se lee como blob, sin objetos de reemplazo; solo blobs regulares; límites de tamaño, profundidad, claves y cadenas; diagnósticos sin contenido. Expresiones y globs evaluados en tiempo lineal | T, I, D | 004, 003 | ADR-GRD-004 Validación 8 y 9; ADR-GRD-003 Validación 12 | Media |
+| SEC-GRD-14 | **Disponibilidad de Git.** Un fallo interno de Guardrails nunca bloquea un commit, un `fetch`, un tag ni la creación de ramas; solo `pre-push`, `pre-rebase` y el borrado de `refs/heads/*` quedan fail-closed | D | 001, 002 | ADR-GRD-001 Validación 6 | Media |
+| SEC-GRD-15 | **Cadena de suministro.** Hereda SEC-07 de motor-local; binarios firmados y notarizados (ver SEC-GRD-01); los dispatchers se generan desde una plantilla versionada en el binario | T, E | 001 | Gate de CI de SEC-07 | Alta |
+| SEC-GRD-16 | **Canal autenticado y ligado a la instancia.** La ruta del canal, el id del directorio común y el id de la instancia del perfil son constantes del dispatcher; el cliente no los deriva del entorno (no recibe `HOME`) ni los lee del diario o del perfil. El cliente verifica que el servidor es el binario instalado (pid del par → ruta del ejecutable → firma o huella; en Windows, la imagen del servidor del named pipe); si no lo es, deny en refs gobernadas con `channel-not-authentic`. Además verifica que el daemon presenta en el handshake el id de instancia de la constante; si no, aplica el modo degradado con `instance-mismatch`. **Residuo declarado**: una copia completa del perfil real pasa la comprobación, pero no da ventaja porque copia también el suelo y la rama base confirmados | S, E | 001, 003, 005 | ADR-GRD-003 Validación 6 (incluye el perfil borrado y `HOME` falso) | Alta |
+| SEC-GRD-17 | **Suelo y ascendencia no forjables en silencio.** Las lecturas para decidir ignoran los objetos de reemplazo y los grafts y no se fían del commit-graph para los padres; un objeto ausente o una historia superficial cuentan como forzado. La copia de la rama principal (el suelo, D6) no relaja sin confirmación: un suelo que relaja, aunque venga de una ref forjada, aplica la combinación más restrictiva hasta que el humano lo confirme (D7, Rene Bonilla, 2026-10-04); con un cambio de rama base pendiente, Guardrails protege además la unión, y la rama base de los dos consumidores sigue siendo la confirmada | T, E | 002, 004 | ADR-GRD-002 Validación 3; ADR-GRD-004 Validación 6 a 8 | Alta |
+| SEC-GRD-18 | **Alias de refs.** Las ramas protegidas y la rama base se comparan en forma NFC y, si el sistema de archivos no distingue mayúsculas, plegadas; ante ambigüedad, deny | S, T | 002 | ADR-GRD-002 Validación 4 | Media |
+| SEC-GRD-19 | **Directorio común fijado.** Cada dispatcher fija el directorio común al que pertenece; el daemon exige que el cwd del `git` más cercano esté en un worktree de ese directorio común; una discrepancia es deny en refs gobernadas y nunca un error que caiga a la vía rápida | S, T | 001, 003 | ADR-GRD-003 Validación 7 | Media |
+
+### Reutilizados de motor-local
+
+| SEC (motor-local) | Uso en Guardrails |
+|---|---|
+| SEC-01 | Canal local solo del usuario (más la autenticación del servidor, SEC-GRD-16) |
+| SEC-02 | Validación de rutas y refs de los mensajes de evaluación |
+| SEC-03 | Mecanismo de los comandos reservados (ampliado en SEC-GRD-05) |
+| SEC-06 | Permisos del perfil: diario, spool, instantánea del modo degradado y registro |
+| SEC-10 | Entorno limpio al arrancar el daemon desde un hook y al lanzar `git` en `raptor guard exec` |
+| SEC-11 | Repos y rutas no confiables; configuración commiteada |
+| SEC-12 | Texto no confiable en el contrato |
+| SEC-13 | Parar el daemon sigue siendo reservado: un agente no puede forzar el modo degradado sin dejar rastro |
+| SEC-14 | Regla "binario instalado" aplicada al binario de los dispatchers |
+
+## Riesgos residuales aceptados
+
+- **Saltos de un solo comando y operaciones no interceptables** (R-GRD-1, Q-GRD-8). La lista publicada (ADR-GRD-002 § 2) también incluye los saltos **cerrados**: canal por entorno, `GIT_DIR`/`GIT_WORK_TREE`, refs de reemplazo y alias de mayúsculas (I-01).
+- **Vectores no detectables** en desinstalar y en la excepción del MVP: `tmux send-keys`, `osascript`, `setsid` + `script` y código plantado que el humano ejecuta. Están aceptados **por acción** (D5) y quedan limitados por el anuncio, la ventana y la auditoría. Se cierran con el factor fuera de banda.
+- **Confirmaciones de D8** (cambio de suelo o de rama base): usan el mecanismo MVP de D5, sin factor fuera de banda hasta que exista, y muestran el diff de lo que se relaja y la ref y el commit de origen. **Cadena aceptada**: forjar `refs/remotes` con un suelo laxo y después conseguir la confirmación con un vector no detectable (`tmux send-keys`, `osascript`, código plantado). La limitan el diff y el origen visibles, el anuncio, la ventana y la auditoría; se cierra cuando el factor fuera de banda se aplique a D8.
+- **Lectura del entorno del `git` durante la ventana del token** (decisión 3). Queda limitada por la ligadura al hijo directo y a la transición.
+- **Entradas falsas en el spool** (SEC-GRD-09). No afectan a ninguna decisión.
+- **Borrado simultáneo del perfil y de la carpeta de Guardrails**. Se detecta como `carpeta-ausente` con la clave apuntando a Guardrails.
+
+## Enmiendas pendientes en otros frentes (J10)
+
+Ninguna se edita desde esta rama. Las tiene que aplicar el frente indicado antes de que el ADR de Guardrails que la necesita pase a `accepted`.
+
+| Frente / artefacto | Enmienda | La necesita |
+|---|---|---|
+| motor-local · ADR-GRP-005 § 1 | Excepción acotada a "el daemon es el único escritor del perfil": el spool de entradas (escritura de un cliente) y la instantánea del modo degradado (lectura de un cliente) | ADR-GRD-003 § 4, ADR-GRD-006 § 5 |
+| motor-local · ADR-GRP-005 § 6 y SEC-03 | Ampliar la lista de comandos reservados (instalar, desinstalar, denegación del permiso, adoptar o retirar una huérfana, excepción, confirmaciones de cambio de suelo y de rama base (D7, D8) y, en el futuro, relajar y decidir en la cola); anuncio, ventana y auditoría completa de D5; confirmación inicial de la rama base y del suelo al añadir un repo | ADR-GRD-007 |
+| motor-local · ADR-GRP-006 § 4 | La misma excepción que en ADR-GRP-005 § 1 para los clientes; la tabla `guardrails_decisions` en el almacén por repo; el diario, la rama base confirmada y el suelo confirmado en el perfil; **id de instancia del perfil** generado al crearlo y presentado por el daemon en el handshake (Judge ronda 2, hallazgo 3) | ADR-GRD-001, 004, 006 |
+| motor-local · ADR-GRP-007 | Enmienda de **PQ-9** (decisión 1); incorporar `permissions` y `policies` con `x-gitraptor-levels` y la clave para desactivar el mínimo (solo en el suelo); el estado por fuente del cargador (`ausente`, `legible`, `ignorado`, `parcial`); los límites del JSON; las lecturas sin objetos de reemplazo | ADR-GRD-004, TS-GRD-001 |
+| motor-local · ADR-GRP-009 | Nota de una segunda capa de escritura separada (la de Guardrails), como la TQ-12 de la Time Machine; ampliar la comprobación estática de la Validación 5 (lanzamiento de procesos solo desde los módulos de invocación autorizados) a esa capa | ADR-GRD-001 § 7 |
+| motor-local · ADR-GRP-010 | Vigilar `<git-common-dir>/config`, el `config.worktree` de cada worktree y `<git-common-dir>/gitraptor/` en los repos protegidos | ADR-GRD-005 § 4 |
+| motor-local · ADR-GRP-013 § 1 | La auditoría append-only incluye los comandos reservados de Guardrails, con la cadena completa de ascendencia y la aceptación de riesgo por acción | ADR-GRD-006 § 4, ADR-GRD-007 |
+| motor-local · INF-GRP-001 | Excepción por escenario: tras una instalación explícita solo se admiten la clave local de hooks y la carpeta de Guardrails; tras desinstalar, cero diferencias | ADR-GRD-001 § 7, INF-GRD-001 |
+| PO · requerimiento de Guardrails | **D6 como refinamiento de Q-GRD-17** (cambian el ejemplo de BR-VAL-001 y la tabla de decisiones). **D7** (Rene Bonilla, 2026-10-04): afecta a **BR-EDGE-001** ("el equipo lo puede desactivar") y a **BR-CONS-003**, porque cada relajación del equipo, incluido desactivar el mínimo o cambiar la rama base, exige una confirmación humana en cada máquina antes de aplicarse. ⚠️ Excluir `spool-unverified` del KPI por defecto (ADR-GRD-006 § 6). J12 del Artifact Judge (no se aplica en esta rama) | ADR-GRD-004, ADR-GRD-006 |
+| PO · requerimiento de motor-local | US-GRP-016 (y BR-CONS-006 de motor-local): el ahead/behind se calcula contra la rama base **confirmada**; un cambio de `engine.baseBranch` en la rama principal queda como diagnóstico hasta la confirmación del humano. La confirmación inicial siempre es del humano (al añadir el repo, al instalar o explícita); hasta entonces el motor calcula contra la resuelta marcada como "no confirmada" (ADR-GRD-004 § 3) | ADR-GRD-004, TS-GRD-001 |
+| Nuevo ADR (Guardrails) | Factor fuera de banda del SO para las acciones que relajan (D5), antes de US-GRD-013 y US-GRD-015 | ADR-GRD-007 |
+
+## Revisión de seguridad (2026-10-04)
+
+Enmienda tras el Artifact Judge, la revisión del `security-expert` y las decisiones D5 y D6 de Rene Bonilla.
+
+| Hallazgo | Severidad | Cómo se cubre | ADR / SEC |
+|---|---|---|---|
+| H-01 · Comandos reservados que no detectan vectores realistas | Alta | D5: anuncio, ventana cancelable, auditoría completa, aceptación por acción y factor fuera de banda como gate duro | ADR-GRD-007 § 1 y § 2; SEC-GRD-05 |
+| H-02 · Ligadura por "cualquier antecesor" | Alta | `git` más cercano con el `raptor` o el ejecutor como padre directo, transición exacta, `-c` que neutralizan ejecutables | ADR-GRD-003 § 4 y § 6, ADR-GRD-007 § 3; SEC-GRD-04 |
+| H-03 · Canal suplantable y modo degradado forzable | Alta | Ruta fijada, servidor verificado, modo degradado más estricto, `daemon-unreachable`; la frase de SEC-GRD-03 corregida | ADR-GRD-003 § 4, ADR-GRD-005; SEC-GRD-03, SEC-GRD-16 |
+| H-04 · Ancla de integridad escribible por el agente | Alta | Diario del perfil autoritativo, binario verificado por firma o huella, DACL de Windows | ADR-GRD-001 § 1 y § 8, ADR-GRD-005; SEC-GRD-01, SEC-GRD-02 |
+| H-05 · `HEAD` del worktree que relaja, `refs/remotes` forjables y grafts | Alta | D6 (suelo en la rama principal), suelo y rama base confirmados, lecturas sin reemplazo | ADR-GRD-002 § 1, ADR-GRD-004; SEC-GRD-17 |
+| H-06 · Alias de mayúsculas y Unicode | Media | NFC más plegado; deny ante ambigüedad | ADR-GRD-002 § 4; SEC-GRD-18 |
+| M-01 · Refs gobernadas y parser | Media | Lista explícita de no gobernadas, streaming, tope superado = gobernada, normalización | ADR-GRD-002 § 4; SEC-GRD-07 |
+| M-02 · `GIT_DIR`/`GIT_WORK_TREE` cruzados | Media | Directorio común fijado y cwd verificado | ADR-GRD-001 § 2, ADR-GRD-003 § 4; SEC-GRD-19 |
+| M-03 · Archivos en `.git` | Media | Descriptor de directorio, sin seguir enlaces, borrado listado, `dev/inode` | ADR-GRD-001 § 4; SEC-GRD-10 |
+| M-04 · Dispatcher con interpolación | Media | Solo constantes, encadenado en Rust, evaluación con allowlist | ADR-GRD-001 § 2; SEC-GRD-03 |
+| M-05 · Mensajes al agente | Media | Datos etiquetados, Cc/Cf/Zl/Zp neutralizadas, sin menciones de la excepción | ADR-GRD-003 § 3; SEC-GRD-06 |
+| M-06 · URL del remoto, argv y spool | Media | Remoto sin `userinfo`, operación normalizada y nunca argv, spool con retención y escaneo | ADR-GRD-003 § 1, ADR-GRD-006; SEC-GRD-12 |
+| M-07 · Windows | Media | DACL, criterio de humano y agente, imagen del servidor del pipe | ADR-GRD-001 § 1, ADR-GRD-003 § 4, ADR-GRD-007 § 2 |
+| L-01 · Coste e inundación | Baja | Agregación, límite de inserciones, rebote de avisos, LRU, salida temprana del dispatcher | ADR-GRD-006 § 2, ADR-GRD-005 § 5, ADR-GRD-004 § 2, ADR-GRD-001 § 2 |
+| L-02 · Spool | Baja | Sin seguir enlaces, sin bloquear, solo archivos regulares, propietario y modo en cada ingesta | ADR-GRD-006 § 5; SEC-GRD-09 |
+| L-03 · Límites del JSON y expresiones | Baja | Límites del documento; motor de tiempo lineal; globs lineales | ADR-GRD-004 § 1, ADR-GRD-003 § 1; SEC-GRD-13 |
+| L-04 · TTL del token | Baja | Rige hasta la primera presentación; después, la vida del `git` | ADR-GRD-007 § 3 |
+| I-01 · Saltos cerrados y declarados | Info | Tabla en la lista publicada y en los riesgos residuales | ADR-GRD-002 § 2 |
+| I-02 · `DYLD_INSERT_LIBRARIES` | Info | Hardened runtime sin `allow-dyld-environment-variables` | ADR-GRD-001 § 2; SEC-GRD-01 |
+| Judge ronda 2 · 1 Canal y directorio común como constantes | Mayor | Constantes del dispatcher, sin `HOME`; el hook llega al daemon real con el perfil borrado o con `HOME` falso | ADR-GRD-001 § 2, ADR-GRD-003 § 4; SEC-GRD-16 |
+| Judge ronda 2 · 2 Fallback `sh` | — | Código fijo con `read`, hook previo como constante, reenvío explícito de la entrada | ADR-GRD-001 § 3 |
+| Judge ronda 2 · 3 Daemon auténtico con perfil ajeno | — | Id de instancia en el handshake; modo degradado con `instance-mismatch`; residuo declarado | ADR-GRD-003 § 4; SEC-GRD-16 |
+| Judge ronda 2 · 4 Código plantado | — | Lista exacta de lo neutralizado y lo no neutralizado; riesgo aceptado por D5 | ADR-GRD-007 § 2 |
+| Judge ronda 2 · 5 KPI | — | Excluye el spool por defecto (⚠️ para el PO); contadores por encima del límite | ADR-GRD-006 § 2 y § 6 |
+| Judge ronda 2 · 6 Rama base pendiente | — | Valor único = confirmada; pendiente como diagnóstico; unión solo en Guardrails | ADR-GRD-004 § 3; TS-GRD-001 |
+| D7 / D8 | — | Suelo confirmado atribuido a D7; confirmaciones con el mecanismo MVP de D5; gate solo en US-GRD-013 y US-GRD-015 | ADR-GRD-004 § 4, ADR-GRD-007 § 1; SEC-GRD-05, SEC-GRD-17 |
+| Judge ronda 4 · 1 Unión del modo degradado | — | Añade la rama base resuelta del suelo | ADR-GRD-003 § 4; SEC-GRD-03 |
+| Judge ronda 4 · 2 Consecuencias de D8 | — | Matiz "salvo las confirmaciones de D8"; diff y origen obligatorios; cadena forja + vector no detectable en los riesgos residuales | ADR-GRD-007 § 1 y Consecuencias |
+| Judge ronda 4 · 3 Fallback `sh` | — | Líneas acumuladas en una variable antes de decidir; aviso sin borrados | ADR-GRD-001 § 3, Validación 7 |
+| Judge ronda 4 · 4 Confirmación inicial | — | Siempre del humano, sin vía automática; unión protegida y ahead/behind marcado como no confirmado mientras falta | ADR-GRD-004 § 3 |
+
+## Gate de seguridad
+
+- **Veredicto**: los hallazgos H-01..I-02 quedan **cubiertos en texto**, sin ningún Critical. H-01 queda como riesgo aceptado por acción (D5) para desinstalar y la excepción.
+- **Condiciones para pasar ADR-GRD-001, ADR-GRD-003, ADR-GRD-004 y ADR-GRD-007 a `accepted`**:
+  - SPIKE-GRD-001 terminado, incluidos los casos de la revisión.
+  - INF-GRD-001 con las suites de interrupción, pérdida externa e integridad.
+  - Las enmiendas de motor-local de la tabla anterior aplicadas.
+  - Ampliaciones de D5 y D6 confirmadas por Rene Bonilla el 2026-10-04 (D7, D8).
+- **Gate duro (D5)**: no se abre la Dev Spec de US-GRD-013 ni la de US-GRD-015 sin el ADR del factor fuera de banda. **Ninguna otra historia queda bloqueada por este gate**: US-GRD-007 y US-GRD-014 usan el mecanismo MVP (D8).
