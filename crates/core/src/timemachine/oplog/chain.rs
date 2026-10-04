@@ -303,28 +303,12 @@ pub(crate) fn write_head(path: &Path, tip: &Tip) -> io::Result<()> {
     ]
     .concat();
     file.write_all(line.as_bytes())?;
-    // A plain fsync, not `sync_all` (`F_FULLFSYNC` on macOS, ~4 ms each, three per snapshot
-    // with the folder): the next oplog commit flushes the drive cache anyway, and a head left
-    // one batch behind by a power cut is brought up to date on open (TS-TMC-001, ADR-TMC-006
-    // § 2: ref + oplog ≤ 25 ms).
-    plain_fsync(&file)?;
+    file.sync_all()?;
     drop(file);
     fs::rename(&tmp, path)?;
     #[cfg(unix)]
     if let Some(dir) = path.parent() {
-        plain_fsync(&fs::File::open(dir)?)?;
-    }
-    Ok(())
-}
-
-fn plain_fsync(file: &fs::File) -> io::Result<()> {
-    #[cfg(unix)]
-    {
-        rustix::fs::fsync(file)?;
-    }
-    #[cfg(not(unix))]
-    {
-        file.sync_all()?;
+        fs::File::open(dir)?.sync_all()?;
     }
     Ok(())
 }
