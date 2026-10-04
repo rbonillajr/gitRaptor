@@ -8,9 +8,9 @@
 - **Estado**: expanded
 - **Dominio**: GRP · **Feature**: guardrails (F-001-04)
 - **Fecha**: 2026-10-04
-- **Actualizado**: 2026-10-04 (Artifact Judge, revisión del `security-expert`, decisiones D5 a D12 de Rene Bonilla; ronda 2 del Judge; enmiendas de motor-local aplicadas)
+- **Actualizado**: 2026-10-04 (Artifact Judge, revisión del `security-expert`, decisiones D5 a D12 de Rene Bonilla; ronda 2 del Judge; enmiendas de motor-local aplicadas; aceptación de los ADRs)
 - **Autor**: Arquitecto (AADD); Security NFRs revisados por el `security-expert` (hallazgos H-01..I-02)
-- **Relacionados**: CTX-GRD-001, BR-GRD-001, ADR-GRD-001..007, ADR-GRP-005..013 (propuestos, motor-local, en `main`), ADR-TMC-002/004 (time-machine, en `main`), SPIKE-GRD-001, INF-GRD-001, TS-GRD-001, BRD-GRP-001 § 7
+- **Relacionados**: CTX-GRD-001, BR-GRD-001, ADR-GRD-001..007 (aceptados, 2026-10-04), ADR-GRP-005..013 (motor-local, aceptados, 2026-10-04), ADR-TMC-002/004 (time-machine, en `main`), SPIKE-GRD-001, INF-GRD-001, TS-GRD-001, BRD-GRP-001 § 7
 - **Nota de formato**: igual que en `non-functional.md`, no hay tipo canónico `nfr`. Este archivo lleva Metadata y no frontmatter con `id`.
 
 ## Atributos de calidad
@@ -91,7 +91,7 @@
 
 ## Enmiendas pendientes en otros frentes (J10)
 
-Las filas de motor-local se aplicaron el 2026-10-04, cada una con su sección o marca en línea "Enmienda (2026-10-04, Guardrails)" en el artefacto. Los ADRs siguen en `proposed`: pasarlos a `accepted` lo decide Rene Bonilla. Las filas del PO se aplicaron el mismo día en el requerimiento, como Q-GRD-19 a Q-GRD-27. Solo queda pendiente el ADR nuevo del factor fuera de banda, antes de US-GRD-013 y US-GRD-015.
+Las filas de motor-local se aplicaron el 2026-10-04, cada una con su sección o marca en línea "Enmienda (2026-10-04, Guardrails)" en el artefacto. Rene Bonilla aceptó el 2026-10-04 los ADRs enmendados (ADR-GRP-005 a 013) y los de Guardrails (ADR-GRD-001 a 007): todos están en `accepted` con sus enmiendas. ADR-GRP-007 cierra P8, así que TS-GRD-001 y las historias que solo esperaban a P8 quedaron desbloqueadas. Las filas del PO se aplicaron el mismo día en el requerimiento, como Q-GRD-19 a Q-GRD-27. Solo queda pendiente el ADR nuevo del factor fuera de banda, antes de US-GRD-013 y US-GRD-015.
 
 | Frente / artefacto | Enmienda | La necesita | Estado |
 |---|---|---|---|
