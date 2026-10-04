@@ -16,6 +16,13 @@ pub struct ReaderOptions {
     /// Open as if the repository were not owned by the current user. Lowers trust only, so it
     /// can never make an untrusted repository readable; used to test the `safe.directory` path.
     pub force_reduced_trust: bool,
+    /// Ignore the system, Git-installation and global (home) config, so only the repository's
+    /// own config is read. Stricter only: it can drop a `safe.directory` allowlist, never add
+    /// trust. Used to test the `safe.directory` path on machines whose ambient config trusts
+    /// every directory (CI runners ship `safe.directory = *`). Never set from configuration or
+    /// the MCP channel.
+    #[doc(hidden)]
+    pub ignore_ambient_config: bool,
 }
 
 /// A short-lived, read-only view of one repository or worktree. Open it per recompute and drop
@@ -131,7 +138,7 @@ impl RepoReader {
     pub fn open(path: &Path, options: &ReaderOptions) -> Result<Self, ReadError> {
         crate::paths::validate(path)?;
         let mut open = gix::open::Options::default()
-            .permissions(permissions())
+            .permissions(permissions(options.ignore_ambient_config))
             .bail_if_untrusted(true);
         if options.force_reduced_trust {
             open = open.with(gix::sec::Trust::Reduced);
@@ -412,7 +419,7 @@ impl RepoReader {
 }
 
 /// Configuration sources gitoxide may read (M1, SEC-10).
-fn permissions() -> gix::open::Permissions {
+fn permissions(ignore_ambient_config: bool) -> gix::open::Permissions {
     let mut p = gix::open::Permissions::default();
     // Never run `git` to discover the installation config or attributes (M1).
     p.config.git_binary = false;
@@ -424,6 +431,14 @@ fn permissions() -> gix::open::Permissions {
     p.config.env = false;
     p.env = gix::open::permissions::Environment::isolated();
     p.env.home = Permission::Allow;
+    if ignore_ambient_config {
+        p.config.system = false;
+        p.config.git = false;
+        p.config.user = false;
+        p.attributes.system = false;
+        p.attributes.git = false;
+        p.env.home = Permission::Deny;
+    }
     p
 }
 
