@@ -40,7 +40,7 @@ related:
 | US-GRD-005 | Suite de registro de INF-GRD-001 (huella sin cambios) | "El registro no está en el repo" se comprueba con la huella |
 | US-GRD-006 | Suite de token de INF-GRD-001 | Higiene del token al encadenar hooks previos |
 | US-GRD-007, 011, 014 | TS-GRD-001 (y US-GRP-013, como ya marca el índice de historias; P8 quedó cerrada por ADR-GRP-007 el 2026-10-04) | Leen el suelo y el commit del worktree, o la rama base desde la rama principal. US-GRD-007 y US-GRD-014 aportan además los comandos de confirmación de D6 (ADR-GRD-007) |
-| US-GRD-013, 015 | ADR del factor fuera de banda del SO (todavía sin crear; gate duro de D5) | Relajar la configuración y aprobar en la cola no salen sin ese factor; si no está disponible, fail-closed |
+| US-GRD-013, 015 | [ADR-GRD-008](../../../architecture/decisions/ADR-GRD-008-factor-autenticacion-fuera-de-banda.md) (`proposed`; gate duro de D5). Las historias siguen bloqueadas hasta su aceptación | Relajar la configuración y aprobar en la cola no salen sin ese factor; si no está disponible, fail-closed |
 | US-GRP-016 (motor-local) | TS-GRD-001 (desbloqueada el 2026-10-04, confirmado por Rene Bonilla) | Lee la rama base confirmada de la copia de la rama principal con el mismo cargador |
 
 **Ruta crítica ejecutable hoy**: SPIKE-GRD-001 en paralelo con US-GRP-001 → núcleo de INF-GRD-001 → US-GRD-001 → US-GRD-005 → US-GRD-006.
