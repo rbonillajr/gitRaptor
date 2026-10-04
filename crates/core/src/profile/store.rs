@@ -234,7 +234,7 @@ pub struct Gap {
 /// An open per-repo store. Writing needs `&mut self`: the daemon is the
 /// only writer (ADR-GRP-005).
 pub struct RepoStore {
-    conn: Connection,
+    pub(super) conn: Connection,
     next_seq: i64,
 }
 

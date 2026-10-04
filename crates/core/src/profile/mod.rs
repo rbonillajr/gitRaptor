@@ -13,6 +13,7 @@ mod repo_key;
 mod schema;
 mod sqlite;
 mod store;
+mod team_baseline;
 
 use std::path::{Path, PathBuf};
 
