@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 date: 2026-10-03
 domain: GRP
 feature: time-machine
@@ -38,19 +38,24 @@ D-TMC-10 y BR-TMC-CONS-003 fijan dos niveles. (a) **Garantizado**: snapshot prev
 
 - Toda operación que modifica el repo y lanza una superficie de GitRaptor entra por un único comando del canal del daemon, la **operación protegida**: (1) intención en el oplog, (2) snapshot previo del ámbito, (3) ejecución, (4) registro (ADR-TMC-002 § 5, ADR-TMC-003 § 3). La ejecución de una operación de usuario la hace el ejecutor del daemon de F-001-02/05, con los hooks del usuario; la Time Machine solo aporta 1, 2 y 4. No existe otra vía de escritura en el contrato de `crates/api`: un cliente no puede ejecutar una operación sin snapshot porque no tiene con qué.
 - Undo, redo y restauración son operaciones protegidas de la propia Time Machine.
-- **Reutilización**: si desde la última captura válida del ámbito no cambió nada (stat del working tree, índice y refs), el snapshot previo reutiliza su árbol y solo añade una fila con nivel `previo_garantizado`. Es el camino rápido de ADR-TMC-006.
+- **Reutilización**: si desde la última captura válida del ámbito no cambió nada, el snapshot previo reutiliza su árbol y solo añade una fila con nivel `previo_garantizado`. Es el camino rápido de ADR-TMC-006 (4 ms en macOS). Para saber que no cambió nada usa las rutas que el motor publicó desde la marca de esa captura y una caché de stat; sin continuidad, hace detección completa (ADR-TMC-006 § 5, escalón 2; Enmienda 2026-10-04).
 - **Fallo**: disco lleno, almacén no disponible, tiempo máximo agotado o daemon caído, entonces la operación se aborta con el motivo y el repo no cambia (US-TMC-001, escenario 4). El snapshot previo tiene una reserva de disco propia que la captura por observación no puede consumir (SEC-TMC-12). Un repo mayor que el de referencia **no** se salta el snapshot: tarda más (US-TMC-020, escenario 3).
 
 ### 2. Nivel (b): captura por observación
 
 - **Fuente**: dentro del daemon, la Time Machine se suscribe a los eventos que el motor **ya publicó** (ADR-GRP-010 § 4). Nunca lee nada en la ruta crítica del motor y nunca lo retrasa: el presupuesto de ADR-GRP-011 no se reparte con la Time Machine.
 - **Disparadores por worktree**:
-  - **Cambios de archivos**: captura cuando el worktree lleva `Q` sin cambios, o como mucho cada `M` durante una actividad continua. ⚠️ **ASSUMPTION**: `Q` = 1 s y `M` = 5 s, valores internos que SPIKE-TMC-001 mide y ajusta.
+  - **Cambios de archivos**: captura cuando el worktree lleva `Q` sin cambios, o como mucho cada `M` durante una actividad continua. `Q` = 1 s y `M` = 5 s, valores internos **confirmados por SPIKE-TMC-001 en macOS** (Enmienda): una captura cuesta una mediana de 23 ms, y 10 worktrees en actividad continua suponen un 5 % de un núcleo. En Linux y Windows siguen como ⚠️ **ASSUMPTION**.
   - **Eventos de Git** (HEAD, ramas, índice, worktrees): captura inmediata del estado resultante y anclaje de los commits implicados en el almacén (ADR-TMC-001 § 3).
-- **Coalescencia y contrapresión**: una captura en curso por worktree y un escritor del almacén por repo; si se acumula trabajo, se conserva solo la petición más reciente por worktree. Captura incremental: solo se leen y guardan las rutas cambiadas desde la captura anterior, más un recorrido de stat que detecta lo que el motor no notificó.
+- **Coalescencia y contrapresión**: una captura en curso por worktree y un escritor del almacén por repo; si se acumula trabajo, se conserva solo la petición más reciente por worktree. Captura incremental: solo se leen y guardan las rutas cambiadas desde la captura anterior, según las rutas del motor con su marca de continuidad. Lo que el motor no notificó lo detecta la verificación periódica completa con gitoxide, fuera de la ruta crítica, o la detección completa cuando no hay continuidad (ADR-TMC-006 § 5; Enmienda).
+- **Prioridad del snapshot previo** (Enmienda 2026-10-04, E8). Con un escritor único por almacén, el previo garantizado esperaba detrás de las capturas por observación: hasta 934 ms en la línea base del spike. Reglas:
+  - Las capturas solo **serializan el tramo de ref + oplog**. Los blobs se escriben fuera del cerrojo: son objetos direccionados por contenido y no tienen conflicto.
+  - Si hay un previo en cola, la captura por observación **aborta el blob en curso** (un archivo de 50 MB tarda unos 0,4 s) y se repite después.
+  - **Espera máxima del previo detrás del escritor: ~10 ms** (valor de diseño que fija la Dev Spec de TS-TMC-001).
+  - El mantenimiento (`repack`) corre fuera del cerrojo (ADR-TMC-007 § 4).
 - **Consistencia**: una captura guarda la marca del motor al empezar. Si durante la lectura llega un evento de Git de ese worktree, la captura se descarta y se repite, para que nunca mezcle el estado de antes y el de después de una operación.
 - **Fallo**: una captura que falla no crea punto; el timeline muestra el cambio sin punto recuperable (US-TMC-004, escenario 4).
-- **Cuotas**: al alcanzar la cuota del repo o el mínimo de espacio libre, la captura por observación se detiene con un hueco "sin espacio" declarado (SEC-TMC-12; TQ-5 → b; ⚠️ **ASSUMPTION**: las cifras las ajusta SPIKE-TMC-001).
+- **Cuotas**: al alcanzar la cuota del repo o el mínimo de espacio libre, la captura por observación se detiene con un hueco "sin espacio" declarado (SEC-TMC-12; TQ-5 → b). Cifras confirmadas por SPIKE-TMC-001 en macOS (Enmienda).
 - **Huecos y modo degradado**: en un hueco no hay capturas (BR-TMC-EDGE-002). En modo degradado (sondeo, ADR-GRP-010 § 5), las capturas siguen al sondeo.
 - **Riesgo residual R2** (aceptado en el context): lo editado entre la última captura y una operación destructiva de Git crudo, a lo sumo `Q`/`M`, puede perderse.
 
@@ -98,9 +103,20 @@ Un evento de Git sin punto propio se muestra con su nivel real; nunca se present
 4. **Consistencia**: un `checkout` en mitad de una captura descarta la captura y la repite; ningún punto mezcla los dos estados.
 5. **Presupuesto del motor**: INF-GRP-002 con la Time Machine activa y una ráfaga de 1.000 archivos: el p95 del motor sigue ≤ 300 ms.
 6. **Hook**: un hook simulado que invoca el comando produce un punto `previo_hook`; si el snapshot falla, el punto no figura como previo (US-TMC-005).
+7. **Prioridad** (Enmienda): con 9 worktrees capturando y un archivo de 50 MB en curso, un previo espera ≤ 10 ms al escritor (p95).
 
 ## Referencias
 
 - **Reglas**: BR-TMC-CONS-001, BR-TMC-CONS-002, BR-TMC-CONS-003, BR-TMC-EDGE-002; D-TMC-9, D-TMC-10. Q22. Riesgo R2.
 - **ADRs**: ADR-GRP-005, ADR-GRP-010, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013; ADR-TMC-001, ADR-TMC-002, ADR-TMC-003, ADR-TMC-006.
 - **Enablers**: TS-TMC-001, TS-TMC-004, SPIKE-TMC-001. **Features**: F-001-02, F-001-04, F-001-05.
+
+## Enmienda (2026-10-04, SPIKE-TMC-001)
+
+Aplicada desde § 7 de [SPIKE-TMC-001-resultados.md](../../requirements/features/time-machine/research/SPIKE-TMC-001-resultados.md), medido **solo en macOS**. El `status` sigue en `accepted`. Decisión del orquestador (2026-10-04), validada por el Arquitecto, que pidió ajustes y están incorporados.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| Reutilización y captura incremental con las rutas del motor y su marca de continuidad (escalón 2 en el diseño base); detección completa con gitoxide sin continuidad; verificación periódica | § 1, § 2 | E2; ADR-TMC-006 § 5 |
+| Prioridad del previo en el escritor único: solo se serializa ref + oplog, la captura aborta el blob en curso y el previo espera ~10 ms como máximo | § 2, Validación 7 | E8; Resultados § 5.3; revisión del Arquitecto |
+| `Q` = 1 s, `M` = 5 s y cuotas confirmados en macOS | § 2 | Resultados § 6 |
