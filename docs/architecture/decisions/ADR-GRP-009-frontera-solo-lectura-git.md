@@ -9,7 +9,7 @@ updated: 2026-10-03
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
-related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-006, ADR-GRP-010, ADR-GRP-012, TS-GRP-002, INF-GRP-001, CTX-GRP-001, BR-CONS-001, BR-AUTH-002, BR-VAL-003, BR-WF-002]
+related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-006, ADR-GRP-010, ADR-GRP-012, TS-GRP-002, INF-GRP-001, CTX-GRP-001, BR-GRP-001]
 tags: [git, gitoxide, solo-lectura, optional-locks, fsmonitor, untracked-cache, allowlist, argv, resolucion-git, nfr-01, nfr-07, br-cons-001, seguridad, filtros, entorno, secretos]
 ---
 

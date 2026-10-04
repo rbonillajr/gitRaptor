@@ -9,7 +9,7 @@ updated: 2026-10-03
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
-related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-009, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, SPIKE-GRP-002, INF-GRP-002, CTX-GRP-001, BR-CONS-005, BR-EDGE-001, BR-EDGE-002, BR-EDGE-005]
+related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-009, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, SPIKE-GRP-002, INF-GRP-002, CTX-GRP-001, BR-GRP-001]
 tags: [watcher, notify, fsevents, inotify, readdirectorychangesw, debounce, reconciliacion, sondeo, worktrees, nfr-04, nfr-05, br-cons-005, br-edge-005, seguridad]
 ---
 
