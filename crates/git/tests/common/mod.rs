@@ -237,9 +237,6 @@ pub fn script(path: &Path, body: &str) {
 /// Assert that `args` (an argv without the program) is a call of the allowlist: the fixed
 /// options, an allowlisted subcommand, no `status`/`diff`, no config listing, no `%G*`.
 pub fn assert_allowlisted(args: &[String]) {
-    if args == ["version"] {
-        return; // Resolution probes the candidate before the fixed options apply.
-    }
     assert!(args.len() > FIXED_PREFIX.len(), "{args:?}");
     assert_eq!(&args[..FIXED_PREFIX.len()], FIXED_PREFIX, "{args:?}");
     let sub = &args[FIXED_PREFIX.len()];
