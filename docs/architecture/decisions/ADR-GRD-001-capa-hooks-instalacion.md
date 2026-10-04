@@ -10,13 +10,13 @@ updated: 2026-10-04
 deciders: [Rene Bonilla]
 domain: GRP
 feature: guardrails
-related: [ADR-GRP-001, ADR-GRP-002, ADR-GRD-002, ADR-GRD-003, ADR-GRD-005, ADR-GRD-006, ADR-GRD-007, CTX-GRD-001, BR-GRD-001]
-tags: [guardrails, hooks-git, core-hookspath, dispatcher, encadenado, instalacion-transaccional, nfr-01, nfr-12, worktrees, husky, lefthook, pre-commit, fail-closed, integridad, actualizacion-binario]
+related: [ADR-GRP-001, ADR-GRP-002, ADR-GRD-002, ADR-GRD-003, ADR-GRD-005, ADR-GRD-006, ADR-GRD-007, CTX-GRD-001, BR-GRD-001, SPIKE-GRD-001]
+tags: [guardrails, hooks-git, core-hookspath, dispatcher, encadenado, instalacion-transaccional, nfr-01, nfr-12, worktrees, husky, lefthook, pre-commit, fail-closed, integridad, actualizacion-binario, spike-grd-001, dispatcher-nativo, reftable]
 ---
 
 # ADR-GRD-001 — Capa de hooks: instalación, encadenado, desinstalación recuperable y cobertura de worktrees
 
-> **Estado**: aceptado por Rene Bonilla el 2026-10-04.
+> **Estado**: aceptado por Rene Bonilla el 2026-10-04. Enmendado el 2026-10-04 con los resultados de SPIKE-GRD-001 en macOS (ver "Enmienda (2026-10-04, SPIKE-GRD-001)"); Linux y Windows siguen pendientes.
 
 ## Contexto
 
@@ -93,10 +93,18 @@ Restricciones heredadas:
   - **Mismo criterio que Git**: solo se encadena un hook previo que exista y sea ejecutable.
   - **Cómo pasa el veredicto**: lo transmite un canal entre los dos procesos que fija el dispatcher. Que el encadenado corra con el entorno original no da ningún poder nuevo: es el mismo entorno con el que Git ejecutaría el hook previo. El mecanismo concreto (p. ej. una tubería con un veredicto enmarcado) lo fija la Dev Spec de US-GRD-001.
 - **Si la evaluación deniega**, el hook previo no se ejecuta, porque la operación no va a ocurrir.
-- **Conjunto de dispatchers**: uno por nombre de hook de githooks(5) en la versión mínima soportada. Estos solo se instalan si el directorio previo ya los tenía, porque cambian el comportamiento de Git por el mero hecho de existir o porque su coste no se justifica: `push-to-checkout`, `proc-receive` y `post-index-change`. SPIKE-GRD-001 confirma la lista.
-- **`reference-transaction`** (L-01):
-  - **Sin hook previo**: su primera línea sale con 0 en los estados `committed` y `aborted`, sin lanzar ningún proceso.
+- **Conjunto de dispatchers** (Enmienda 2026-10-04, SPIKE-GRD-001 § 7 y § 8): **solo los necesarios**, porque cada dispatcher sin función cuesta un proceso en cada operación:
+  - **Obligatorios** (US-GRD-001): `pre-push`, `reference-transaction` y `pre-rebase`.
+  - Los de los hooks que tengan una **política activa** (p. ej. `pre-commit` y `commit-msg` para US-GRD-008 y US-GRD-009).
+  - Los de los **hooks previos** que haya que encadenar. Con un valor previo relativo, la unión de los hooks previos de todos los worktrees. ⚠️ **ASSUMPTION** (por verificar): husky 9 genera en `.husky/_` todos los nombres de hook, así que en un repo con husky el conjunto vuelve a ser el completo; se declara.
+  - `push-to-checkout`, `proc-receive` y `post-index-change` **solo si el directorio previo ya los tenía** (confirmado: el primero deja sin actualizar el working tree del receptor, el segundo rompe los pushes con `receive.procReceiveRefs` y el tercero corre en cada `git status`).
+  - **Regeneración** como la misma instalación, con auditoría (como el § 8): cuando cambia la política efectiva o aparece o desaparece un hook previo. Archivo por archivo dentro de `gitraptor/` (creación, renombrado atómico o borrado), sin tocar `core.hooksPath`, con los permisos del § 1, comprobando el `dev/inode` antes de escribir, con un lock por repo frente a la comprobación H3 de ADR-GRD-005, y cada hash nuevo en el diario. Renombrar la carpeta entera no sirve: el renombrado no es atómico sobre un directorio que no está vacío.
+  - **Orden**: al activar una política, primero el dispatcher y después la política vigente; al desactivarla, al revés. Así no hay ventana sin dispatcher para una política activa.
+  - **Ventana declarada**: un hook previo añadido después de instalar no corre hasta la regeneración (Git no ejecuta un hook sin dispatcher). Se detecta con el diagnóstico `hook-previo-no-encadenado` en la comprobación de estado y al arrancar el daemon (ADR-GRD-005).
+- **`reference-transaction`** (L-01; Enmienda 2026-10-04):
+  - **Sin hook previo**: su primera línea sale con 0 en **cualquier estado distinto de `prepared`** (`preparing` desde Git 2.54, `committed`, `aborted` y cualquier estado futuro), sin lanzar ningún proceso.
   - **Con hook previo**: en esos estados solo encadena. El binario solo evalúa en el estado `prepared`.
+- **Dispatcher nativo** (Enmienda 2026-10-04; SPIKE-GRD-001 § 8): un dispatcher `sh` cuesta en macOS unos 8–11 ms por invocación y un binario nativo, 1–4 ms. Con Git ≥ 2.54 cada transacción lanza tres procesos y un commit lanza 7 solo en `reference-transaction`, así que el dispatcher nativo es **necesario para `reference-transaction` desde Git 2.54 en los tres SO**, y para todo el conjunto en Windows si la medición lo confirma. Conserva la regla de "solo constantes" (M-04), la firma o la huella del § 8 y la comprobación del canal (SEC-GRD-16, SEC-GRD-19), y pasa revisión de seguridad. Su forma concreta (p. ej. un stub con las constantes incrustadas, generado al instalar) y el respaldo cuando falta `raptor` (§ 3) los fija la Dev Spec de US-GRD-001 con el banco de INF-GRD-001. ⚠️ **ASSUMPTION**: ≤ 5 ms p95 por invocación que no evalúa (ADR-GRD-002 § 5).
 - **macOS** (I-02): el binario se firma con hardened runtime y sin el entitlement `allow-dyld-environment-variables`. Así `DYLD_INSERT_LIBRARIES` no afecta a `raptor hook`.
 
 ### 3. Binario ausente o fallo interno (decisión 4; J2)
@@ -111,8 +119,8 @@ Restricciones heredadas:
   1. **Comprobación del binario**: `[ -x '<raptor>' ]`. Si existe, ejecuta el binario (§ 2) y el resto no se aplica.
   2. **`pre-push` y `pre-rebase`**: escribe en la salida de error el mensaje de recuperación (constante) y sale con 1.
   3. **`reference-transaction`**:
-     - En `committed` y `aborted` encadena con la entrada estándar heredada.
-     - En `prepared` lee **toda** la entrada línea a línea con `while IFS=' ' read -r viejo nuevo ref` y **acumula cada línea en una variable** (`lineas`) antes de decidir. Si alguna línea tiene un `nuevo` igual a una de las dos constantes de ceros (SHA-1 o SHA-256) y una `ref` que empieza por `refs/heads/`, sale con 1 y el mensaje, sin encadenar.
+     - En cualquier estado distinto de `prepared` encadena con la entrada estándar heredada (Enmienda 2026-10-04).
+     - En `prepared` lee **toda** la entrada línea a línea con `while IFS=' ' read -r viejo nuevo ref` y **acumula cada línea en una variable** (`lineas`) antes de decidir. Si alguna línea tiene un `nuevo` igual a una de las dos constantes de ceros (SHA-1 o SHA-256) y una `ref` que empieza por `refs/heads/`, sale con 1 y el mensaje, sin encadenar, **salvo que sea el *prune* de `pack-refs`** de ADR-GRD-002 § 4 (Enmienda 2026-10-04): `viejo` distinto de cero, el archivo suelto `<common>/<ref>` contiene `viejo` y `packed-refs` contiene exactamente `viejo ref`. El `sh` lo comprueba leyendo los dos archivos con `read` y redirección, sin lanzar programas. Sin esta excepción, `gc` fallaría mientras falte el binario (SPIKE-GRD-001 D14).
      - Si ninguna línea es un borrado, escribe el aviso "protección inactiva" en la salida de error, **reenvía explícitamente** la variable acumulada al hook previo con `printf '%s'` por una tubería y encadena.
      - Una línea que no se puede partir en tres campos se trata como borrado (fail-closed).
   4. **Resto de hooks**: escribe el aviso "protección inactiva" y hace `exec` del hook previo (constante del § 2) con `"$@"` y la entrada estándar heredada, sin leerla. Si el hook previo no existe o no es ejecutable, sale con 0.
@@ -144,6 +152,7 @@ Las ejecuta el **daemon** (módulo `guardrails` de `crates/core`) tras el comand
 **Desinstalación**, en orden inverso:
 
 1. **Clave**: si el valor local actual es el de Guardrails, se restaura el valor previo **solo si era de nivel local**, o se elimina la clave si no lo era.
+   - **Criterio semántico** (Enmienda 2026-10-04; SPIKE-GRD-001 § 5.1): la restauración con `git config` deja el mismo valor efectivo, el mismo nivel y las demás entradas sin cambios, pero **no garantiza la identidad byte a byte**: Git reescribe una línea escrita a mano (formato y comentario) y añade el salto de línea final que faltaba. Esas diferencias de formato se declaran (NFR-GRD-01, BR-CONS-005). Se descarta guardar y restaurar la línea original a mano: editar el texto del `config` fuera de Git es más arriesgado que la diferencia de formato.
    - Si otro gestor la cambió después, **no se toca**: la protección ya estaba inactiva y se conserva el cambio del tercero.
 2. **Carpeta**: se borran los archivos del diario y después el directorio vacío.
 
@@ -164,17 +173,19 @@ Las ejecuta el **daemon** (módulo `guardrails` de `crates/core`) tras el comand
   - Un `include` o `includeIf` en el nivel local o de worktree que defina `core.hooksPath`.
   - Cualquier `includeIf "onbranch:…"` en el nivel local o de worktree.
 - **Configuración global o de sistema** con `core.hooksPath`: no impide instalar, porque el nivel local gana. Se guarda como valor previo para encadenarlo.
+- **Cómo se comprueba** (Enmienda 2026-10-04; SPIKE-GRD-001 § 5.2): `git config --show-scope --show-origin --get core.hooksPath` en cada worktree, al instalar y en cada comprobación de estado (ADR-GRD-005). Basta para detectar todos los casos anteriores y una clave relativa.
+- **Repos reftable** (Enmienda 2026-10-04): **se instalan**. El renombrado de la rama base no pasa por ningún hook y se declara en la lista del repo (ADR-GRD-002 § 3, Enmienda); la explicación del permiso lo dice.
 - **Después de instalar**, cualquier sobrescritura posterior es una pérdida de protección, y la detecta ADR-GRD-005.
 
 ### 6. Gestores existentes
 
-Hipótesis de comportamiento, que verifica SPIKE-GRD-001:
+Comportamiento verificado en macOS por SPIKE-GRD-001 (husky 9.1.7, lefthook 2.1.16, pre-commit 4.6.2; Enmienda 2026-10-04). Ningún gestor probado obliga a "no se instala" por el encadenado:
 
 | Caso | Al instalar | Si el gestor se reinstala después |
 |---|---|---|
 | Hooks propios en `.git/hooks` | Se encadenan desde `<git-common-dir>/hooks` | — |
-| husky (`core.hooksPath` local relativo, p. ej. `.husky/_`) | Se guarda el valor y su nivel. Se encadena resolviendo la ruta por worktree | Vuelve a escribir la clave: la protección pasa a **inactiva** con aviso (US-GRD-004) |
-| lefthook (escribe en el directorio de hooks efectivo) | Se encadenan sus scripts desde `.git/hooks` | Escribiría en la carpeta de Guardrails: el hash no cuadra con el diario y la protección pasa a **inactiva** con aviso |
+| husky (`core.hooksPath` local relativo, p. ej. `.husky/_`) | Se guarda el valor y su nivel. Se encadena resolviendo la ruta por worktree. **husky no corre en los worktrees enlazados ni sin Guardrails** (`.husky/_` está ignorado y no existe allí): el encadenado relativo lo conserva y no es un fallo de cobertura | Vuelve a escribir la clave en silencio (`npm install` con `prepare`): la protección pasa a **inactiva** con aviso (US-GRD-004) |
+| lefthook 2.x (escribe en `.git/hooks`) | Se encadenan sus scripts desde `.git/hooks` | `lefthook install` **se niega** con `core.hooksPath` definido y la protección sigue intacta (también se salta su resincronización automática). Con `--force` escribe en la carpeta de Guardrails y renombra el dispatcher a `.old`: el hash no cuadra con el diario y la protección pasa a **inactiva** con aviso. Con `--reset-hooks-path` borra la clave: **inactiva** con aviso |
 | pre-commit (framework) en `.git/hooks` | Se encadena | Se niega a instalar con `core.hooksPath` definido: la protección sigue intacta |
 | Un hook previo que no se puede encadenar sin alterarlo | No se instala nada; el intento queda guardado con `encadenado-imposible` (J6) | — |
 
@@ -236,7 +247,7 @@ Hipótesis de comportamiento, que verifica SPIKE-GRD-001:
 - ✅ El agente no controla qué binario se ejecuta ni su entorno de evaluación: constantes, binario firmado o con huella, y allowlist.
 - ✅ Un error interno nunca bloquea los commits ni los `fetch` (J2).
 - ⚠️ **Los hooks no son una frontera de seguridad frente a un proceso del mismo usuario**: `-c core.hooksPath=…`, `GIT_CONFIG_*` o editar `.git/config` los desactivan. La detección persistente es de ADR-GRD-005; lo que ocurre en un solo comando se declara (ADR-GRD-002, R-GRD-1 aceptado).
-- ⚠️ **Coste**: dos procesos (`sh` y `raptor`) en cada hook gobernado. **Mitigación**: la vía rápida y el presupuesto NFR-GRD-04, medidos en SPIKE-GRD-001. En Windows el arranque de `sh` es el riesgo principal.
+- ⚠️ **Coste**: dos procesos (`sh` y `raptor`) en cada hook gobernado. **Mitigación**: la vía rápida y el presupuesto NFR-GRD-04, medidos en SPIKE-GRD-001. En Windows el arranque de `sh` es el riesgo principal. **Enmienda 2026-10-04**: medido en macOS, el coste lo pone el número de procesos por comando; se mitiga con el conjunto mínimo de dispatchers y el dispatcher nativo de `reference-transaction` (§ 2), y las operaciones masivas tienen un coste lineal declarado (ADR-GRD-002 § 5).
 - ⚠️ **Fail-closed con el binario ausente** bloquea `push`, `rebase` y el borrado de ramas hasta reinstalar o restaurar a mano. Es la decisión 4 de Rene.
 - ⚠️ **Rutas con caracteres no representables**: no se instala. Lo explica el motivo y lo mide SPIKE-GRD-001.
 - ✅ **Enmiendas de motor-local aplicadas (2026-10-04)**: ADR-GRP-009 (segunda capa de escritura y Validación 5) e INF-GRP-001 (excepción por escenario). Ver la tabla de [non-functional-guardrails.md](../non-functional-guardrails.md).
@@ -264,6 +275,9 @@ Siempre con repos y perfiles temporales (INF-GRD-001), nunca con este repo.
 11. **Windows** (M-07): la DACL de la carpeta y de los dispatchers no tiene ACE de escritura para `Everyone`, `Users` ni `Authenticated Users`.
 12. **Frontera**: la comprobación estática de CI confirma que solo el módulo `guardrails` alcanza la capa de escritura de Guardrails.
 13. **Tres SO** con Git 2.38 y con la última versión estable.
+14. **Sin binario y `gc`** (Enmienda 2026-10-04): sin `raptor`, `pack-refs --all` y `gc` con la rama base suelta pasan; `branch -D main` sigue saliendo con 1.
+15. **Conjunto mínimo** (Enmienda 2026-10-04): sin políticas ni hooks previos solo existen `pre-push`, `reference-transaction` y `pre-rebase`; activar una política crea su dispatcher antes de aplicarla; un hook previo añadido después de instalar da `hook-previo-no-encadenado` hasta la regeneración; la regeneración interrumpida queda completa o idéntica.
+16. **Gestores** (Enmienda 2026-10-04): `lefthook install` sin `--force` deja la protección activa; con `--force` o `--reset-hooks-path`, inactiva con su causa.
 
 ## Referencias
 
@@ -301,3 +315,19 @@ Enmienda tras el Artifact Judge y la revisión del security-expert. No cambia la
 - § 1: el diario de instalación vive en el almacén por repo (ADR-GRP-006 § 4).
 - § 2 y § 7: dos módulos de invocación autorizados en la capa de escritura de Guardrails (encadenado del hook previo y `git` para `raptor guard exec`); `apps/cli` no lanza procesos por su cuenta.
 - Las referencias a enmiendas de motor-local pasan a "aplicada (2026-10-04)".
+
+## Enmienda (2026-10-04, SPIKE-GRD-001)
+
+Aplicada desde las recomendaciones de [SPIKE-GRD-001-resultados.md](../../requirements/features/guardrails/research/SPIKE-GRD-001-resultados.md) (§ 9), medidas **solo en macOS**. El `status` sigue en `accepted`. Linux, Windows y el coste en Windows siguen pendientes y bloquean el merge de US-GRD-001. Cada resolución es una **decisión del orquestador (2026-10-04), validada por el Arquitecto y el PO**.
+
+| Enmienda | Resolución | Dónde |
+|---|---|---|
+| E-01-1 · Código fijo del `sh` | Aceptada: la regla de borrado incluye la excepción del *prune* de `pack-refs`, leída con `read` sin lanzar programas (respaldo; la vía principal está en el binario) | § 3, Validación 14 |
+| E-01-2 · Conjunto de dispatchers | Aceptada con ajustes del Arquitecto: solo obligatorios + política activa + hook previo; regeneración archivo por archivo, con lock frente a H3 y orden que cierra la ventana de las políticas; la ventana de los hooks previos añadidos después se declara y se detecta con `hook-previo-no-encadenado`; husky probablemente devuelve el conjunto completo (⚠️ ASSUMPTION) | § 2, Validación 15; ADR-GRD-005 (Enmienda) |
+| E-01-3 · `reference-transaction` sin hook previo | Aceptada: sale en cualquier estado distinto de `prepared` | § 2, § 3 |
+| E-01-4 · Gestores | Aceptada: fila de lefthook 2 corregida (se niega; `--force` y `--reset-hooks-path` dejan la protección inactiva) y nota de husky en los worktrees enlazados | § 6, Validación 16 |
+| E-01-5 · Huella | Opción **(a)**, criterio semántico; se descarta (b). El PO ajusta BR-CONS-005 y NFR-GRD-01 (Q-GRD-29) | § 4; NFR-GRD-01 |
+| E-01-6 · No se instala | Reftable **no** entra en "no se instala": se instala y el renombrado de la base se declara (ADR-GRD-002, Enmienda). Comprobación de cobertura con `--show-scope --show-origin` por worktree | § 5 |
+| E-01-7 · Binario nativo | Aceptada con ajuste del Arquitecto: el dispatcher nativo es **necesario para `reference-transaction` desde Git 2.54 en los tres SO** (no solo en Windows); su forma y el respaldo sin `raptor`, en la Dev Spec de US-GRD-001 | § 2, Consecuencias |
+
+**Casos "no se instala"** confirmados por el spike: `extensions.worktreeConfig` con `core.hooksPath` en un `config.worktree` (W03, W04, D18); `include`/`includeIf` locales o de worktree que definan la clave (W05, W07) y cualquier `includeIf "onbranch:…"` (W06). El valor no representable (M-04) sigue sin probar.
