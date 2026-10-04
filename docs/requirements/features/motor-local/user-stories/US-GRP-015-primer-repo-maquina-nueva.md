@@ -36,7 +36,7 @@ BR-WF-002 (estado "Sin repos") · BR-EDGE-007 — ver [business-rules.md](../bus
 
 - **Historias**: US-GRP-001, US-GRP-002.
 - **Secuencia**: fija los estados "Sin repos" y "Observando" de BR-WF-002; US-GRP-014 va después y añade "Esperando Git". No van en paralelo; el contrato compartido lo fija la Dev Spec.
-- **Externas**: el Cockpit (F-001-02) y la CLI presentan el estado vacío guiado. Que la rama base del equipo aplique desde el primer momento en una máquina nueva es de US-GRP-016 (bloqueada, Q36); no bloquea esta historia.
+- **Externas**: el Cockpit (F-001-02) y la CLI presentan el estado vacío guiado. Que la rama base del equipo aplique desde el primer momento en una máquina nueva es de US-GRP-016 (desbloqueada el 2026-10-04); no bloquea esta historia.
 - **Transversal**: todo escenario se cumple igual en Windows, macOS y Linux (BR-03) y sin escribir nada en el repo observado (BR-CONS-001); cómo se verifica lo define el plan técnico.
 
 ## Criterios de Aceptación
