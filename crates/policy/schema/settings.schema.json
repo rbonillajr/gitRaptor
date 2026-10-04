@@ -1,0 +1,204 @@
+{
+  "$defs": {
+    "Engine": {
+      "description": "`engine` section.",
+      "properties": {
+        "baseBranch": {
+          "description": "Base branch of the repository. Only read from the copy of the main branch, and only\neffective once confirmed by the developer (ADR-GRD-004 § 3).",
+          "type": "string",
+          "x-gitraptor-levels": [
+            "team"
+          ]
+        },
+        "gitPath": {
+          "description": "Absolute path to the Git executable.",
+          "type": "string",
+          "x-gitraptor-levels": [
+            "profile"
+          ]
+        },
+        "idleThresholdMinutes": {
+          "description": "Minutes without activity before a session is idle.",
+          "format": "uint32",
+          "maximum": 1440,
+          "minimum": 1,
+          "type": "integer",
+          "x-gitraptor-levels": [
+            "profile",
+            "local"
+          ]
+        },
+        "watcher": {
+          "$ref": "#/$defs/Watcher",
+          "description": "Watcher intervals (ADR-GRP-010 § 5)."
+        }
+      },
+      "type": "object"
+    },
+    "Operation": {
+      "description": "An operation governed by Guardrails (BR-VAL-002).",
+      "enum": [
+        "commit",
+        "push",
+        "force-push",
+        "reset-hard",
+        "branch-delete",
+        "rebase",
+        "merge",
+        "worktree-add",
+        "worktree-remove"
+      ],
+      "type": "string"
+    },
+    "Permissions": {
+      "description": "`permissions` section: a permission for each governed operation.",
+      "properties": {
+        "allow": {
+          "description": "Operations allowed. Only the copy of the main branch can relax.",
+          "items": {
+            "$ref": "#/$defs/Operation"
+          },
+          "type": "array",
+          "x-gitraptor-levels": [
+            "profile",
+            "team",
+            "local"
+          ]
+        },
+        "ask": {
+          "description": "Operations that need the developer's confirmation (denied while there is no queue).",
+          "items": {
+            "$ref": "#/$defs/Operation"
+          },
+          "type": "array",
+          "x-gitraptor-levels": [
+            "profile",
+            "team",
+            "local"
+          ]
+        },
+        "deny": {
+          "description": "Operations denied.",
+          "items": {
+            "$ref": "#/$defs/Operation"
+          },
+          "type": "array",
+          "x-gitraptor-levels": [
+            "profile",
+            "team",
+            "local"
+          ]
+        },
+        "disableSafeMinimum": {
+          "description": "Turn off the safe minimum (deny force-push and the deletion of the base branch).\nOnly effective from the confirmed copy of the main branch (ADR-GRD-003 § 2, D6).",
+          "type": "boolean",
+          "x-gitraptor-levels": [
+            "team"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Policies": {
+      "description": "`policies` section. Open: its keys arrive with their stories.",
+      "type": "object",
+      "x-gitraptor-levels": [
+        "profile",
+        "team",
+        "local"
+      ]
+    },
+    "TimeMachine": {
+      "description": "`timeMachine` section.",
+      "properties": {
+        "includeCredentialFiles": {
+          "description": "Include credential files in snapshots.",
+          "type": "boolean",
+          "x-gitraptor-levels": [
+            "profile"
+          ]
+        },
+        "retentionDays": {
+          "description": "Days snapshots are kept.",
+          "format": "uint32",
+          "maximum": 3650,
+          "minimum": 1,
+          "type": "integer",
+          "x-gitraptor-levels": [
+            "profile",
+            "local"
+          ]
+        },
+        "storeQuotaGB": {
+          "description": "Quota of the snapshot store, in GB.",
+          "format": "uint32",
+          "minimum": 1,
+          "type": "integer",
+          "x-gitraptor-levels": [
+            "profile"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Watcher": {
+      "description": "`engine.watcher` section.",
+      "properties": {
+        "degradedPollSeconds": {
+          "description": "Polling interval in degraded mode, in seconds.",
+          "format": "uint32",
+          "maximum": 60,
+          "minimum": 1,
+          "type": "integer",
+          "x-gitraptor-levels": [
+            "profile",
+            "local"
+          ]
+        },
+        "fallbackPollSeconds": {
+          "description": "Fallback polling interval, in seconds.",
+          "format": "uint32",
+          "maximum": 3600,
+          "minimum": 5,
+          "type": "integer",
+          "x-gitraptor-levels": [
+            "profile",
+            "local"
+          ]
+        }
+      },
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One settings document: `.gitraptor/settings.json` (team), `settings.json` (profile) or\n`settings.local.json` (local). Strict JSON, no comments.",
+  "properties": {
+    "$schema": {
+      "description": "URL of the published schema, for editors. Never downloaded.",
+      "type": "string",
+      "x-gitraptor-levels": [
+        "profile",
+        "team",
+        "local"
+      ]
+    },
+    "engine": {
+      "$ref": "#/$defs/Engine",
+      "description": "Engine values (ADR-GRP-007)."
+    },
+    "permissions": {
+      "$ref": "#/$defs/Permissions",
+      "description": "Permission of each governed operation (ADR-GRD-003, BR-VAL-002)."
+    },
+    "policies": {
+      "$ref": "#/$defs/Policies",
+      "description": "Repository policies (ADR-GRD-003). No key is supported yet: US-GRD-008, US-GRD-009 and\nUS-GRD-015 add them."
+    },
+    "timeMachine": {
+      "$ref": "#/$defs/TimeMachine",
+      "description": "Time Machine values (ADR-TMC-007)."
+    }
+  },
+  "title": "GitRaptor settings",
+  "type": "object"
+}

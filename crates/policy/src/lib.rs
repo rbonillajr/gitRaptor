@@ -1,4 +1,7 @@
-//! Guardrails engine: evaluates repo policies (`policy.yaml`).
+//! Configuration document and Guardrails policy engine.
+
+pub mod settings;
+pub mod team;
 
 /// Outcome of evaluating an operation against the repo policies.
 #[derive(Debug, Clone, PartialEq, Eq)]
