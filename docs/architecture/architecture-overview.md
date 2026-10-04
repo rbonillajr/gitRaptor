@@ -47,7 +47,7 @@ Diagramas: [contexto C4-L1](./diagrams/c4-context.md) y [contenedores C4-L2](./d
 |----------------------|--------------------------|-----------------|-----|
 | Proceso del motor | `apps/cli`: subcomando `raptor daemon` del binario `raptor` (PQ-5; sin app `raptord`) | Ciclo de vida, instancia única, parada ordenada; autoarranque solo con `raptor daemon enable` (PQ-1) | ADR-GRP-005 |
 | Registro de repos y orquestación | `crates/core` | Repos observados y estados del motor ("Esperando Git", "Sin repos", "Observando") | ADR-GRP-005, ADR-GRP-009 |
-| Observador de cambios | `crates/core` | Watcher `notify`, debounce fijo de 75 ms, sondeo de respaldo, modo degradado y reconciliación | ADR-GRP-010 |
+| Observador de cambios | `crates/core` | Watcher `notify`, debounce fijo de 75 ms efectivos, sondeo de respaldo, modo degradado y reconciliación (también tras recrear el stream y periódica) | ADR-GRP-010 |
 | Cálculo de estado por worktree | `crates/core` sobre `crates/git` | Rama, cambios, estados especiales, ahead/behind; caché de stat en memoria | ADR-GRP-009, ADR-GRP-010 |
 | Detección de agentes (adaptador Claude Code) | `crates/core` (módulo de adaptadores por agente) | Sesiones por S1; atribución con S2b, S3, S4 o el registro explícito si es la única sesión presente; transcripts limitados a metadatos (PQ-2) | ADR-GRP-012 |
 | Modelo de eventos, sesiones y atribución | `crates/core` | Eventos inmutables, registros de atribución append-only (incluido el retiro de registro), huecos | ADR-GRP-013 |
