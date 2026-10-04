@@ -47,31 +47,38 @@ Entonces se deshacen las dos operaciones del periodo
 **Escenario: Otros worktrees no cambian**
 
 Dado operaciones en "feat-pagos" en los mismos 20 minutos
-Cuando el desarrollador pide deshacer desde "feat-login" los últimos 20 minutos
+Cuando un solicitante sin atribuir pide deshacer desde "feat-login" los últimos 20 minutos
 Entonces "feat-pagos" no cambia
 
 **Escenario: Periodo no válido**
 
 Dado el worktree "feat-login"
-Cuando el desarrollador pide deshacer con el periodo "veinte"
+Cuando un solicitante sin atribuir pide deshacer con el periodo "veinte"
 Entonces el repo no cambia
-  Y el desarrollador recibe el motivo
+  Y el solicitante recibe el motivo
 
 **Escenario: Nada que deshacer en el periodo**
 
 Dado que "feat-login" no tiene operaciones en los últimos 20 minutos
-Cuando el desarrollador pide deshacer ese periodo
+Cuando un solicitante sin atribuir pide deshacer ese periodo
 Entonces el repo no cambia
-  Y el desarrollador recibe el aviso de que no hay operaciones en ese periodo
+  Y el solicitante recibe el aviso de que no hay operaciones en ese periodo
 
-**Escenario: El periodo incluye trabajo de otro actor**
+**Escenario: Con trabajo de otro actor en el periodo y confirmación, se revierte**
 
 Dado en "feat-login" una operación sin atribuir y un commit de "claude-1" en los últimos 20 minutos
   Y el solicitante del undo queda sin atribuir
 Cuando pide deshacer los últimos 20 minutos
   Y lo confirma de forma interactiva
 Entonces se deshacen las dos operaciones
-  Y sin esa confirmación la petición se rechaza y el repo no cambia
+
+**Escenario: Con trabajo de otro actor en el periodo y sin confirmación, se rechaza**
+
+Dado en "feat-login" una operación sin atribuir y un commit de "claude-1" en los últimos 20 minutos
+  Y el solicitante del undo queda sin atribuir
+Cuando pide deshacer los últimos 20 minutos sin confirmarlo de forma interactiva
+Entonces la petición se rechaza con el motivo
+  Y el repo no cambia
 
 ## Requisitos Técnicos
 

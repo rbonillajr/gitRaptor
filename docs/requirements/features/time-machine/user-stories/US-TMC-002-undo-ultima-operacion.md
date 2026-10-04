@@ -52,24 +52,24 @@ Entonces existe un punto recuperable con el estado de "feat-login" justo antes d
 **Escenario: El undo no actúa sobre otros worktrees**
 
 Dado que la última operación del repo ocurrió en "feat-pagos" y la última de "feat-login" es anterior
-Cuando el desarrollador pide deshacer desde "feat-login"
+Cuando un solicitante sin atribuir pide deshacer desde "feat-login"
 Entonces se deshace la última operación de "feat-login"
   Y "feat-pagos" no cambia
 
 **Escenario: No hay nada que deshacer**
 
 Dado un worktree sin operaciones registradas por la Time Machine
-Cuando el desarrollador pide deshacer desde ese worktree
+Cuando un solicitante sin atribuir pide deshacer desde ese worktree
 Entonces el repo no cambia
-  Y el desarrollador recibe el aviso de que no hay nada que deshacer
+  Y el solicitante recibe el aviso de que no hay nada que deshacer
 
 **Escenario: Si el punto previo al undo falla, el undo no se ejecuta**
 
 Dado que guardar el punto previo al undo falla
-Cuando el desarrollador pide deshacer desde "feat-login"
+Cuando un solicitante sin atribuir pide deshacer desde "feat-login"
 Entonces el undo no se ejecuta
   Y "feat-login" queda como estaba
-  Y el desarrollador recibe el motivo
+  Y el solicitante recibe el motivo
 
 ## Requisitos Técnicos
 
