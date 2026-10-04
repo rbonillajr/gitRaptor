@@ -13,7 +13,7 @@ supersedes: []
 superseded_by: null
 deciders: [Rene Bonilla]
 related:
-  adrs: [ADR-GRP-005, ADR-GRP-006, ADR-GRP-013, ADR-TMC-001, ADR-TMC-002, ADR-TMC-004, ADR-TMC-005, ADR-TMC-007]
+  adrs: [ADR-GRP-005, ADR-GRP-006, ADR-GRP-011, ADR-GRP-013, ADR-TMC-001, ADR-TMC-002, ADR-TMC-004, ADR-TMC-005, ADR-TMC-007, ADR-CKP-002, ADR-CKP-003]
   stories: [US-TMC-002, US-TMC-003, US-TMC-006, US-TMC-007, US-TMC-008, US-TMC-009, US-TMC-010, US-TMC-011, US-TMC-016, US-TMC-019]
 description: "Un oplog SQLite propio por repo en el perfil, solo por anexión: snapshots, operaciones con solicitante inmutable y un diario de estados que hace recuperable cualquier interrupción"
 tags: [adr, time-machine, oplog, journal, recuperacion, caos, inmutabilidad, nfr-12, d-tmc-18]
@@ -55,6 +55,7 @@ La inmutabilidad se impone en el esquema: los triggers rechazan `UPDATE` y `DELE
 
 - **Orden de escritura**: (1) la intención se confirma en el oplog **antes** de tocar nada; (2) el snapshot previo se completa en el almacén y después en el oplog; (3) cada paso del aplicador se anota antes de ejecutarse; (4) `terminada` se anota al final. Un estado nunca se da por hecho sin la anotación previa.
 - **Validez de un snapshot**: cuenta solo si su ref existe en el almacén **y** su fila tiene la transición `completo`. Si falta cualquiera de las dos, no figura en el timeline ni se ofrece para restaurar (US-TMC-019, escenario 1).
+- **Timeline en vivo** (Enmienda 2026-10-04, Cockpit): las transiciones anotadas se publican en el stream; ver la sección final.
 
 ### 4. Undo, redo y "última operación"
 
@@ -139,3 +140,20 @@ Decisión del orquestador (2026-10-04), validada por el Arquitecto. Corrige un f
 | Si la fecha de creación no está disponible (al anotar o al comprobar), el lock **no se borra** y se informa como `Unsupported`: ante la duda, fail-safe | § 6.4 |
 
 **Riesgo residual:** en Linux la fecha de creación usa un reloj grueso (de 1 a 10 ms). Si alguien borra nuestro lock y otro Git crea uno en la misma ruta dentro del mismo tick y recibe el mismo inodo, ambos son indistinguibles. Pendiente: avisar al usuario con un notice cuando un lock propio se conserva por identidad desconocida.
+
+## Enmienda (2026-10-04, Cockpit)
+
+Aplicada desde DEP-CKP-5 de [CTX-CKP-001](../../requirements/features/cockpit/context.md), con [ADR-CKP-002](./ADR-CKP-002-catalogo-operaciones-ejecutor.md) § 2 y [ADR-CKP-003](./ADR-CKP-003-arquitectura-tui.md) § 2 y § 4 (proposed). **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. No cambia el oplog, sus entidades, su inmutabilidad ni la recuperación. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| **Timeline en vivo**: cada transición del diario que cambia lo que muestra el timeline se publica como evento en el stream del repo, después de anotarse | § 3 | DEP-CKP-5; Q-CKP-19 |
+
+- **Qué se publica**: el registro de una operación y su paso a `terminada`, `rechazada`, `abortada` o `interrumpida`; el paso de un snapshot a `completo`, `descartado`, purga anunciada y purgado; y cada aviso pendiente nuevo (§ 6). Los pasos intermedios del aplicador no se publican uno a uno.
+- **Orden**: primero se anota en el oplog y después se publica, como el motor persiste antes de publicar (ADR-GRP-011 § 2). Un cliente nunca ve una transición que no esté en el oplog.
+- **Para todos los clientes** del repo: dos TUIs ven el mismo timeline sin pedirlo otra vez (BR-CKP-CONS-004). El inicio y el fin de cada operación del catálogo llegan por la misma vía (ADR-CKP-002 § 2).
+- **Atribución**: el evento lleva el solicitante congelado; el actor vigente lo sigue resolviendo cada consulta (§ 5). Un cambio de atribución ya se publica por ADR-GRP-013 § 6.
+- **Fuera de NFR-04**: la Time Machine no tiene presupuesto de frescura propio en el MVP; la latencia se reporta sin gate.
+- **Forma del evento** (tipo, campos y secuencia dentro del stream del repo): **pendiente, dueño: worker del canal (TS-GRP-004)**.
+
+**Validación añadida**: con una TUI sin pantalla suscrita, un undo produce el evento de `terminada` después de su fila en el oplog; una muerte forzada antes de anotar no publica nada.

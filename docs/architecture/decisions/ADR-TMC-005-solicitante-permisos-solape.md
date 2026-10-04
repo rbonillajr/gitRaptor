@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 date: 2026-10-03
 domain: GRP
 feature: time-machine
@@ -13,7 +13,7 @@ supersedes: []
 superseded_by: null
 deciders: [Rene Bonilla]
 related:
-  adrs: [ADR-GRP-005, ADR-GRP-007, ADR-GRP-012, ADR-GRP-013, ADR-TMC-002, ADR-TMC-003]
+  adrs: [ADR-GRP-005, ADR-GRP-007, ADR-GRP-012, ADR-GRP-013, ADR-TMC-002, ADR-TMC-003, ADR-CKP-002]
   stories: [US-TMC-002, US-TMC-003, US-TMC-009, US-TMC-010, US-TMC-011, US-TMC-012, US-TMC-013, US-TMC-021]
 description: "El daemon atribuye al solicitante por la ascendencia del proceso llamante (agente X o sin atribuir), reutiliza la confirmación de los comandos reservados para tocar trabajo ajeno, Guardrails solo puede denegar y el solape se detecta por archivo y por ref"
 tags: [adr, time-machine, permisos, solicitante, confirmacion-interactiva, solape, guardrails, mcp, br-tmc-auth-001, d-tmc-23]
@@ -55,6 +55,7 @@ GitRaptor no puede probar que una petición viene del humano: un agente puede la
 
 - **"Trabajo de otro actor"** para un solicitante sin atribuir = trabajo con atribución vigente a un agente. Lo "sin atribuir" es "Tú u otro" (D-TMC-12) y no exige confirmación, como piden US-TMC-002 y US-TMC-009.
 - Los eventos de un hueco son "sin atribuir" y nunca entran en un undo por agente (BR-TMC-EDGE-002).
+- **Operaciones del catálogo del Cockpit** (Enmienda 2026-10-04, Cockpit): la tabla se extiende a ellas; ver la sección final.
 
 ### 3. Confirmación interactiva
 
@@ -108,3 +109,21 @@ Orden de evaluación: validación (BR-TMC-VAL-001), conjunto, regla base (§ 2),
 - **Reglas**: BR-TMC-AUTH-001, BR-TMC-CONS-005, BR-TMC-VAL-001, BR-TMC-WF-001, BR-TMC-WF-002, BR-TMC-EDGE-002; D-TMC-12, D-TMC-13, D-TMC-17, D-TMC-23. Q7, Q32, Q34, Q35, Q37.
 - **ADRs**: ADR-GRP-005 § 6, ADR-GRP-007, ADR-GRP-012, ADR-GRP-013; ADR-TMC-002, ADR-TMC-003.
 - **Enablers**: TS-TMC-004. **Features**: F-001-04 (políticas), F-001-05 (canal MCP). **Seguridad**: SEC-TMC-03, 07, 13, 15.
+
+## Enmienda (2026-10-04, Cockpit)
+
+Aplicada desde DEP-CKP-7 de [CTX-CKP-001](../../requirements/features/cockpit/context.md) (Q-CKP-16, BR-CKP-AUTH-001 a 003), con [ADR-CKP-002](./ADR-CKP-002-catalogo-operaciones-ejecutor.md) § 3 (proposed). **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. No cambia la identificación del solicitante, la regla base para undo, redo y restauración, ni el solape. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| La regla base del § 2 se extiende a las operaciones del catálogo de ADR-CKP-002, con su definición de "trabajo afectado" | § 2 | DEP-CKP-7; Q-CKP-16; ADR-CKP-002 § 3 |
+| La confirmación interactiva del § 3 se reutiliza, ligada a la **huella del plan** de la operación | § 3 | ADR-CKP-002 § 2 y § 3 |
+| Windows rechaza la confirmación de trabajo ajeno también para el catálogo | § 3 | TQ-14; BR-CKP-AUTH-003 |
+
+- **Trabajo afectado** por operación (ADR-CKP-002 § 3): `merge-into-base`, los commits que entran en la base; `rebase-onto-base`, los commits reescritos; `discard-worktree`, los commits que no están en la base más lo sin commitear (si no hay nada, no afecta a nadie); `abort-in-progress`, lo que dejó la operación detenida. `create-worktree` no afecta trabajo de nadie y `open-in-editor` no escribe.
+- **Atribución conservadora**: el actor de cada parte sale de los eventos del motor (ADR-GRP-013). Sin atribución clara o con atribución mixta, cuenta como otro actor, igual que el solape del § 5.
+- **Misma tabla**: un agente X solo actúa sobre trabajo de X; sobre otro, rechazo. Un "sin atribuir" por CLI/TUI actúa sobre trabajo sin atribuir sin control, y sobre trabajo de un agente necesita la confirmación. Un "sin atribuir" por MCP, rechazo (TQ-7).
+- **Reto**: de un solo uso, ligado a la conexión, al proceso y a la huella del plan; se invalida si el plan cambia o caduca. Un mismo ConfirmPrompt reúne todos los motivos del plan (⚡, sesión Activa, trabajo ajeno).
+- **Guardrails solo puede denegar** (§ 4) también aquí: su decisión con la capa `cockpit` o `mcp` se toma antes de cualquier efecto (ADR-GRD-003, Enmienda (2026-10-04, Cockpit)).
+- **Windows**: sin confirmación de trabajo ajeno; la operación se rechaza con su motivo. Pendiente: etapa de validación multiplataforma.
+- **Validación añadida**: "sin atribuir" en macOS confirma el descarte de un worktree de claude-2 con el reto ligado; el reto reutilizado o el de un plan cambiado se rechazan; claude-1 sobre trabajo de claude-2, rechazo (ADR-CKP-002, Validación 13).

@@ -13,7 +13,7 @@ supersedes: []
 superseded_by: null
 deciders: [Rene Bonilla]
 related:
-  adrs: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-006, ADR-GRP-009, ADR-TMC-001, ADR-TMC-003, ADR-TMC-005, ADR-TMC-006]
+  adrs: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-006, ADR-GRP-009, ADR-TMC-001, ADR-TMC-003, ADR-TMC-005, ADR-TMC-006, ADR-CKP-002]
   stories: [US-TMC-001, US-TMC-002, US-TMC-003, US-TMC-009, US-TMC-010, US-TMC-011, US-TMC-014, US-TMC-015, US-TMC-019]
 description: "Las escrituras internas (almacén y aplicador de undo, redo y restauración) las hace solo el componente Time Machine del daemon, con una capa de escritura separada en crates/git, sin hooks ni filtros; las operaciones de usuario las ejecuta el daemon fuera de esa capa"
 tags: [adr, time-machine, escritura, daemon, crates-git, restauracion, locks, sin-shell, nfr-02, nfr-07]
@@ -70,7 +70,7 @@ El planificador calcula un **estado destino** por worktree y por ref (ADR-TMC-00
 
 1. **Precondiciones** (sin cambios si fallan): ninguna operación de Git en curso en un worktree afectado (`rebase-merge/`, `rebase-apply/`, `MERGE_HEAD`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, `BISECT_LOG`, `sequencer/`; BR-TMC-EDGE-004); ningún lock de Git presente (`index.lock`, `HEAD.lock`, locks de refs), que se reporta como "Git ocupado" y **nunca se borra**; repo disponible (`safe.directory`); árbol destino revalidado (SEC-TMC-04, SEC-TMC-09).
 2. **Snapshot previo garantizado** del ámbito (BR-TMC-CONS-001). Si falla, la operación no se ejecuta.
-3. **Locks**: lock por repo de la Time Machine en el daemon (una aplicación a la vez) y `index.lock` de cada worktree afectado, creado en exclusiva y anotado en el diario (ruta e inodo). Mientras dura, los comandos de Git de un agente sobre ese worktree fallan rápido en vez de mezclarse.
+3. **Locks**: lock por repo de la Time Machine en el daemon (una aplicación a la vez; Enmienda 2026-10-04, Cockpit: es el cerrojo de escritura del repo que comparte con el ejecutor de operaciones) y `index.lock` de cada worktree afectado, creado en exclusiva y anotado en el diario (ruta e inodo). Mientras dura, los comandos de Git de un agente sobre ese worktree fallan rápido en vez de mezclarse.
 4. **Objetos**: si el destino apunta a commits que el repo ya no tiene, se copian del almacén al repo (escritura explícita e inocua).
 5. **Refs**: una sola transacción con valor anterior esperado para cada rama y HEAD. Si un agente movió una ref desde la planificación, la transacción falla entera y se detiene sin cambios.
 6. **Archivos**: apertura relativa a la raíz sin escapar de ella (SEC-TMC-04) y reemplazo por **intercambio atómico**: lo desplazado se compara con el snapshot previo; si difiere, se deshace el intercambio y la ruta se reporta como solape; lo desplazado se guarda en el almacén antes de borrarlo (SEC-TMC-11). Las rutas que sobran se borran sin atravesar enlaces; los ignorados y las exclusiones declaradas nunca se escriben ni se borran.
@@ -87,7 +87,7 @@ Al planificar, por cada commit que la operación quita de una rama local, se com
 
 - Las operaciones del Cockpit y del MCP pasan por la **operación protegida** de ADR-TMC-004 § 1: la Time Machine aporta la intención, el snapshot previo y el registro, y nada más.
 - Las **ejecuta el ejecutor de operaciones del daemon**, propiedad de F-001-02 y F-001-05, **no la capa de escritura de la Time Machine**. Respetan la configuración y los hooks del usuario (NFR-07) y siguen las reglas de argv fijo y sin shell de NFR-02. Así se cumple BR-TMC-CONS-004: la Time Machine solo escribe snapshot, undo, redo y restauración (TQ-3 → a).
-- El catálogo de operaciones, con sus parámetros y su ámbito, es un **contrato de interfaz de F-001-02 y F-001-05**. Cada operación declara su ámbito y si es destructiva (ADR-TMC-007 § 2).
+- El catálogo de operaciones, con sus parámetros y su ámbito, es un **contrato de interfaz de F-001-02 y F-001-05**. Cada operación declara su ámbito y si es destructiva (ADR-TMC-007 § 2). (Enmienda 2026-10-04, Cockpit: el catálogo es el de ADR-CKP-002.)
 
 ## Alternativas consideradas
 
@@ -148,3 +148,17 @@ Aplicada desde la implementación de [TS-TMC-003](../../requirements/features/ti
 | **`safe.directory`**: la confianza la decide antes la capa de lectura con la configuración del usuario; la capa de escritura, que neutraliza la global, pasa `-c safe.directory=<ruta validada>` | § 2 | Sin ello, `GIT_CONFIG_GLOBAL` vacío rechazaría repos que el usuario declaró de confianza |
 | **`ready → rechazada`**: una precondición que falla bajo los locks del aplicador, antes de cualquier cambio, termina la operación como `rechazada` | § 3, pasos 1 y 3; ADR-TMC-003 | Distinguir "no se tocó nada" de una interrupción |
 | **Toda escritura sobre el repo del usuario vive en `crates/git/src/tm_write/`** (intercambio, borrado, `HEAD.lock`, `index.lock`, administración de worktrees), con comprobación estática | § 1, Validación 1 | ADR-GRP-002. Excepción conocida: la liberación de locks anotados de la recuperación (TS-TMC-002), pendiente de moverse |
+
+## Enmienda (2026-10-04, Cockpit)
+
+Aplicada desde DEP-CKP-7 de [CTX-CKP-001](../../requirements/features/cockpit/context.md), con [ADR-CKP-002](./ADR-CKP-002-catalogo-operaciones-ejecutor.md) § 1, § 5 y § 6 (proposed) y Q-CKP-19. **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. No cambia la capa de escritura de la Time Machine, el protocolo de aplicación ni que las operaciones de usuario las ejecute el ejecutor del daemon. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| El lock por repo del aplicador es el **cerrojo de escritura del repo**, compartido con el ejecutor de operaciones: un merge y un undo nunca se mezclan | § 3, paso 3 | ADR-CKP-002 § 5; Q-CKP-19 |
+| El catálogo de operaciones de usuario es el de ADR-CKP-002 (versión 1: seis operaciones, con su ámbito y su clase) | § 5 | DEP-CKP-7; ADR-CKP-002 § 1 |
+| Nota E6 cerrada para el ejecutor: usa el mismo binario de Git resuelto, una vez y con ruta absoluta | Enmienda (SPIKE-TMC-001) | ADR-CKP-002 § 6; ADR-GRP-009 (Enmienda, Cockpit) |
+
+- **Cerrojo compartido**: vive en un módulo neutro de `crates/core` que usan el aplicador y el ejecutor; la clave es el directorio común del repo. No se usa un cerrojo por worktree, porque un merge toca dos worktrees y refs del repo. Las peticiones esperan en orden de llegada y se ven como "en cola" en todos los clientes (ADR-CKP-002 § 5).
+- **Sin interbloqueo con los hooks**: la evaluación de un hook de Guardrails nunca espera a este cerrojo (ADR-GRD-003, Enmienda (2026-10-04, Cockpit)). Las escrituras internas de esta capa siguen sin hooks (§ 2).
+- **Validación añadida**: un undo pedido mientras el ejecutor integra en el mismo repo espera en cola y después revalida su plan; nunca se aplican a la vez.
