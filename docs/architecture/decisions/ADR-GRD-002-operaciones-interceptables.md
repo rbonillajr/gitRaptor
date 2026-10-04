@@ -140,7 +140,7 @@ Hay otros tres requisitos:
 
 - **Reglas**: BR-EDGE-003, BR-VAL-002, BR-CONS-002, BR-WF-002; Q-GRD-8; R-GRD-1.
 - **Historias**: US-GRD-001, US-GRD-004, US-GRD-007, US-GRD-016, US-GRD-017.
-- **ADRs de otros frentes**: ADR-GRP-011 (criterio p95, `docs/arch-motor-local`); ADR-TMC-004 § 3 (snapshot `previo_hook`, `docs/arch-time-machine`).
+- **ADRs de otros frentes**: ADR-GRP-011 (criterio p95, motor-local, en `main`); ADR-TMC-004 § 3 (snapshot `previo_hook`, time-machine, en `main`).
 - **Enablers**: SPIKE-GRD-001, INF-GRD-001.
 - **Seguridad**: SEC-GRD-07, 16, 17, 18, 19.
 - **Git**: githooks(5), git-replace(1), gitglossary(7) (pseudo-refs).

@@ -28,8 +28,8 @@ Guardrails es la única feature que instala hooks de Git (BRD BR-12; Q22 de moto
 
 Restricciones heredadas:
 
-- El motor es de solo lectura (ADR-GRP-009, propuesto, rama `docs/arch-motor-local`) y el daemon es el único escritor del perfil (ADR-GRP-005 y ADR-GRP-006, propuestos).
-- La Time Machine ya fijó un precedente: una capa de escritura propia, separada de la de lectura, en `crates/git` (ADR-TMC-002 § 1, rama `docs/arch-time-machine`).
+- El motor es de solo lectura (ADR-GRP-009, propuesto, en `main`) y el daemon es el único escritor del perfil (ADR-GRP-005 y ADR-GRP-006, propuestos).
+- La Time Machine ya fijó un precedente: una capa de escritura propia, separada de la de lectura, en `crates/git` (ADR-TMC-002 § 1, rama time-machine, en `main`).
 - Stack (ADR-GRP-001, ADR-GRP-002): Rust, `crates/{core,policy,git,api}`, binarios `raptor` y `raptor-mcp`, y Git ≥ 2.38 (NFR-07).
 
 > **Constitución**: no hay `architecture-constitution.md` en la cascada del repo. Las restricciones se toman de `AGENTS.md` y de ADR-GRP-001..004 (aceptados). Fuente: inline. Se formaliza con `/aadd-architect --init-constitution`.
@@ -260,7 +260,7 @@ Siempre con repos y perfiles temporales (INF-GRD-001), nunca con este repo.
 - **Reglas**: BR-AUTH-002, BR-CONS-005, BR-EDGE-002, BR-WF-002; NFR-01, NFR-07, NFR-12; S-GRD-6; Q-GRD-3, Q-GRD-4, Q-GRD-15.
 - **Historias**: US-GRD-001, US-GRD-002, US-GRD-003, US-GRD-004.
 - **Decisiones**: Q17 y Q22 de motor-local; decisión 4 de Rene Bonilla (2026-10-04).
-- **ADRs de otros frentes** (propuestos o aceptados en su rama, todavía no en `main`): ADR-GRP-005, ADR-GRP-006, ADR-GRP-009, ADR-GRP-013 (`docs/arch-motor-local`); ADR-TMC-002 (`docs/arch-time-machine`).
+- **ADRs de otros frentes** (ya en `main`): ADR-GRP-005, ADR-GRP-006, ADR-GRP-009, ADR-GRP-013 (motor-local, en `main`); ADR-TMC-002 (time-machine, en `main`).
 - **Enablers**: SPIKE-GRD-001, INF-GRD-001; INF-GRP-001 (motor-local).
 - **Seguridad**: SEC-GRD-01, 02, 06, 08, 10, 12, 16, 19 en [non-functional-guardrails.md](../non-functional-guardrails.md).
 - **Git**: githooks(5), git-config(1).

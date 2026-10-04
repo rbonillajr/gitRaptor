@@ -19,7 +19,7 @@ tags: [guardrails, comandos-reservados, excepcion-consciente, token-un-solo-uso,
 
 BR-AUTH-001 reserva al humano estas acciones: instalar y desinstalar la protección (con permiso explícito, BR-AUTH-002), usar una excepción consciente (Q-GRD-1), relajar la configuración (US-GRD-013) y decidir en la cola (US-GRD-015). Un agente puede usar la terminal, así que esas acciones exigen una confirmación que un agente no pueda dar desde su canal (riesgo R-GRD-3, crítico).
 
-ADR-GRP-005 § 6 (propuesto, rama `docs/arch-motor-local`) define los **comandos reservados**, autorizados solo en el daemon:
+ADR-GRP-005 § 6 (propuesto, en `main`) define los **comandos reservados**, autorizados solo en el daemon:
 
 1. Identificador no reutilizable del llamante.
 2. Ascendencia sin un proceso de agente (ADR-GRP-012).
@@ -186,7 +186,7 @@ ADR-GRP-005 § 6 (propuesto, rama `docs/arch-motor-local`) define los **comandos
 - **Reglas**: BR-AUTH-001, BR-AUTH-002, BR-AUTH-003, BR-AUTH-004, BR-CONS-004; Q-GRD-1, Q-GRD-3, Q-GRD-13, Q-GRD-15; S-GRD-8; R-GRD-2, R-GRD-3.
 - **Decisiones**: decisión 3, D5, D6, D7 y D8 de Rene Bonilla (2026-10-04).
 - **Historias**: US-GRD-001, US-GRD-002, US-GRD-003, US-GRD-004, US-GRD-006; requisito duro para US-GRD-013 y US-GRD-015.
-- **ADRs de otros frentes**: ADR-GRP-005 § 6, ADR-GRP-009 § 4, ADR-GRP-012, ADR-GRP-013 (`docs/arch-motor-local`).
+- **ADRs de otros frentes**: ADR-GRP-005 § 6, ADR-GRP-009 § 4, ADR-GRP-012, ADR-GRP-013 (motor-local, en `main`).
 - **Seguridad**: SEC-GRD-04, SEC-GRD-05; SEC-03 de motor-local; OWASP LLM01 y LLM06.
 
 ## Revisión de seguridad (2026-10-04)
