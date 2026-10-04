@@ -129,6 +129,47 @@ impl Fixture {
     }
 }
 
+/// Subcommands of the CLI allowlist (ADR-GRP-009 § 3).
+pub const ALLOWED: &[&str] = &[
+    "version",
+    "rev-parse",
+    "for-each-ref",
+    "worktree",
+    "rev-list",
+    "merge-base",
+    "log",
+    "config",
+];
+
+/// Fixed options before every subcommand (ADR-GRP-009 § 3).
+pub const FIXED_PREFIX: &[&str] = &[
+    "--no-optional-locks",
+    "-c",
+    "core.fsmonitor=false",
+    "-c",
+    "core.untrackedCache=keep",
+    "-c",
+    "core.splitIndex=false",
+    "-c",
+    "gc.auto=0",
+    "-c",
+    "maintenance.auto=false",
+    "-c",
+    "log.showSignature=false",
+    "-c",
+    "credential.helper=",
+    "-c",
+    "color.ui=false",
+    "-c",
+    "core.pager=cat",
+    "-c",
+    "trace2.normalTarget=",
+    "-c",
+    "trace2.eventTarget=",
+    "-c",
+    "trace2.perfTarget=",
+];
+
 /// Path → (kind, size, content hash, mtime) of every file, directory and symlink.
 pub type Fingerprint = BTreeMap<PathBuf, (char, u64, u64, Option<SystemTime>)>;
 
@@ -193,8 +234,40 @@ pub fn script(path: &Path, body: &str) {
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
 }
 
+/// Assert that `args` (an argv without the program) is a call of the allowlist: the fixed
+/// options, an allowlisted subcommand, no `status`/`diff`, no config listing, no `%G*`.
+pub fn assert_allowlisted(args: &[String]) {
+    if args == ["version"] {
+        return; // Resolution probes the candidate before the fixed options apply.
+    }
+    assert!(args.len() > FIXED_PREFIX.len(), "{args:?}");
+    assert_eq!(&args[..FIXED_PREFIX.len()], FIXED_PREFIX, "{args:?}");
+    let sub = &args[FIXED_PREFIX.len()];
+    assert!(
+        ALLOWED.contains(&sub.as_str()),
+        "{sub} not allowlisted: {args:?}"
+    );
+    for arg in &args[FIXED_PREFIX.len()..] {
+        assert!(
+            !["status", "diff", "--list", "--get-regexp", "-l"].contains(&arg.as_str()),
+            "{arg} in {args:?}"
+        );
+        assert!(!arg.contains("%G"), "{arg}");
+    }
+}
+
+/// An invoker whose children see only `home` and `path_env`.
+pub fn invoker_for(home: &Path, path_env: &std::ffi::OsStr) -> Invoker {
+    Invoker::default().with_parent_env([("HOME", home.as_os_str()), ("PATH", path_env)])
+}
+
 /// Run every read of the layer, gitoxide and CLI, against `path`.
 pub fn read_everything(f: &Fixture, path: &std::path::Path) {
+    read_everything_with(&f.git, &f.invoker(), path);
+}
+
+/// [`read_everything`] for any fixture: the Git and invoker are given.
+pub fn read_everything_with(git: &SystemGit, invoker: &Invoker, path: &Path) {
     let r = RepoReader::open(path, &ReaderOptions::default()).expect("open");
     let main = RefName::new("main").unwrap();
     let feature = RefName::new("feature").unwrap();
@@ -211,8 +284,7 @@ pub fn read_everything(f: &Fixture, path: &std::path::Path) {
     r.ahead_behind(&main, &feature, 1000).unwrap();
     drop(r);
 
-    let invoker = f.invoker();
-    let cli = GitCli::new(&f.git, &invoker, path).unwrap();
+    let cli = GitCli::new(git, invoker, path).unwrap();
     cli.rev_parse_verify(&main).unwrap();
     cli.for_each_ref(RefNamespace::Heads).unwrap();
     cli.worktree_list().unwrap();
