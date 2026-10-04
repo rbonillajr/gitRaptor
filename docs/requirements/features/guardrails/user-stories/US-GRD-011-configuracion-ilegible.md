@@ -36,18 +36,26 @@ BR-EDGE-004 (aviso; mínimo seguro más lo legible; un nivel personal ilegible s
 ## Dependencias
 
 - **Historias**: US-GRD-010 (lectura de los tres niveles).
-- **Externas**: **bloqueada** por el ADR de formato P8 (motor-local). Dos escenarios dependen de la pregunta abierta P-GRD-17: si rige la última versión commiteada, un conflicto sin commitear no vuelve ilegible la configuración del equipo y hay que reformularlos (ver índice). Alinear con BR-CONS-007 (motor-local) es una dependencia para el Arquitecto; esta historia no cambia el comportamiento del motor.
+- **Externas**: **bloqueada** por el ADR de formato P8 (motor-local). Por Q-GRD-17 rige la última versión commiteada de la configuración del equipo: un conflicto o una edición sin commitear no la vuelven ilegible.
 - **Transversal**: Windows, macOS y Linux.
 
 ## Criterios de Aceptación
 
-**Escenario: La configuración del equipo con un conflicto sin resolver** *(Depende de P-GRD-17)*
+**Escenario: Se commitea la configuración del equipo con marcas de conflicto**
 
-Dado el repo "demo" protegido cuya configuración del equipo permite force-push
-  Y esa configuración queda con un conflicto de merge sin resolver
-Cuando un proceso hace force-push
+Dado el repo "demo" protegido cuya configuración del equipo permitía force-push
+  Y en el worktree "feat-x" se commitea esa configuración con las marcas de conflicto de un merge
+Cuando un proceso hace force-push desde "feat-x"
 Entonces la operación no se ejecuta por el conjunto mínimo por defecto
-  Y GitRaptor avisa de que la configuración del equipo de "demo" no se puede leer
+  Y GitRaptor avisa de que la configuración del equipo de "demo" no se puede leer en "feat-x"
+
+**Escenario: Un conflicto sin commitear no cuenta**
+
+Dado el repo "demo" cuya configuración del equipo commiteada deniega push
+  Y un merge deja esa configuración en conflicto en el working tree de "feat-x", sin commitear
+Cuando un proceso hace push desde "feat-x"
+Entonces el push se deniega por la versión commiteada
+  Y no hay aviso de configuración ilegible
 
 **Escenario: Lo legible de otros niveles sigue aplicando**
 
@@ -62,10 +70,10 @@ Cuando un proceso hace push
 Entonces el push se ejecuta
   Y GitRaptor avisa de que el perfil no se puede leer
 
-**Escenario: Al corregir la configuración vuelven sus reglas** *(Depende de P-GRD-17)*
+**Escenario: Al commitear la configuración corregida vuelven sus reglas**
 
-Dado el repo "demo" con la configuración del equipo ilegible
-Cuando el desarrollador resuelve el conflicto
+Dado el repo "demo" con la configuración del equipo commiteada ilegible en "feat-x"
+Cuando el desarrollador commitea en "feat-x" la configuración corregida
 Entonces las reglas del equipo vuelven a aplicar sin reinstalar la protección y el aviso desaparece
 
 ## Requisitos Técnicos

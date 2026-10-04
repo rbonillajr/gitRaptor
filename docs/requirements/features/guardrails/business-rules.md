@@ -81,6 +81,8 @@ tags:
 
 **Descripción**: La configuración tiene tres niveles, de menor a mayor especificidad: **perfil del usuario**, **configuración del equipo** (versionada con el repo, BRD BR-11) y **configuración local personal del repo** (no versionada) (Q23 de motor-local). Cada valor declara en qué niveles se puede definir (Q24 de motor-local). Un valor escrito en un nivel que no lo admite no se tiene en cuenta. El comando de edición (Q27 de motor-local) **rechaza** escribirlo y explica qué niveles lo admiten.
 
+> **Decisión** (Q-GRD-17, Rene Bonilla, 2026-10-04): la configuración del equipo que rige una operación es la **última versión commiteada en el worktree donde ocurre esa operación**; las ediciones sin commitear nunca cuentan. Los niveles personales (perfil y configuración local personal, que no se versionan) no cambian: rige su contenido actual.
+
 **Aplicabilidad**: Al leer la configuración y al editarla con el comando.
 
 **Criticidad**: Alta
@@ -106,6 +108,10 @@ IF un nivel define un valor que ese nivel no admite
 THEN al leer: el valor no se tiene en cuenta
      al editar con el comando: se rechaza e informa de los niveles admitidos
 ```
+
+**Ejemplos de Q-GRD-17**:
+- En el worktree `feat-x` alguien edita la configuración del equipo para permitir force-push y no lo commitea → en `feat-x` rige la versión commiteada, que lo deniega.
+- El desarrollador commitea en `main` un cambio que deniega push; el worktree `feat-y` sigue en un commit anterior → en `feat-y` rige la versión commiteada en `feat-y` hasta que integre ese commit.
 
 **Ejemplos**:
 - El desarrollador intenta fijar la rama base `develop` en su perfil → el comando lo rechaza: "la rama base solo se define en la configuración del equipo".
@@ -411,6 +417,8 @@ Salvo: excepción consciente del humano, para una operación concreta, registrad
 
 **Descripción**: Un agente podría relajar las reglas editando la configuración en el working tree o en su máquina.
 
+> **Decisión** (Q-GRD-17, Rene Bonilla, 2026-10-04): una edición sin commitear de la configuración del equipo nunca cuenta; rige la última versión commiteada en el worktree de la operación. Junto con Q-GRD-7, que impide a los agentes commitear cambios en la configuración, un agente no puede relajar la configuración del equipo. La configuración personal, que no se versiona, sigue siendo el riesgo R-GRD-4.
+
 > **Decisión** (Q-GRD-7, Rene Bonilla, 2026-10-03): las rutas de la configuración de Guardrails (los tres niveles) son **rutas prohibidas para los agentes por defecto**. Los cambios a la configuración del equipo entran por **commit revisado** (S-GRD-4). Ninguna herramienta MCP edita la configuración ni decide en la cola.
 
 **Aplicabilidad**: Siempre, en todo repo con Guardrails.
@@ -596,7 +604,7 @@ Constraint: nada cambia fuera del repo
 - **Nunca pisa cambios hechos a mano** que el usuario no haya commiteado en la configuración. Si el archivo cambió desde la última vez que el comando lo leyó, o tiene cambios sin commitear que el comando no hizo, el comando no escribe: avisa y deja que el desarrollador decida.
 - **La escritura es atómica**: o queda el cambio completo o queda la configuración anterior, nunca a medias. Una escritura interrumpida (proceso cerrado, máquina apagada) no deja la configuración corrupta ni perdida.
 - **Es recuperable**: la configuración anterior se puede recuperar después del cambio.
-- **No hace commit** (S-GRD-3): un cambio en la configuración del equipo queda en el working tree para que el desarrollador lo revise y lo commitee.
+- **No hace commit** (S-GRD-3): un cambio en la configuración del equipo queda en el working tree para que el desarrollador lo revise y lo commitee. Ese cambio **no se aplica hasta que se commitea** en el worktree de la operación (Q-GRD-17); los cambios del comando en los niveles personales se aplican al escribirse.
 
 **Aplicabilidad**: Toda escritura del comando, en cualquiera de los tres niveles.
 
@@ -750,16 +758,17 @@ Acción al expirar: se descarta
 
 **Dependencia abierta con el Motor local**: BR-CONS-007 (motor-local) tiene como supuesto ignorar un nivel ilegible para los valores del motor (rama base, umbral de inactividad). Para esos valores no hay riesgo de relajar nada, pero la misma configuración se trata distinto según quién la lea. Queda para el Arquitecto, o para una revisión de motor-local, alinear los dos comportamientos. Este requerimiento no cambia motor-local.
 
-**Frecuencia esperada**: baja (edición a mano con errores, conflicto de merge en la configuración del equipo).
+**Frecuencia esperada**: baja (un nivel personal mal editado, o una configuración del equipo commiteada con errores o con marcas de conflicto). Por Q-GRD-17, una edición o un conflicto sin commitear en la configuración del equipo no la vuelven ilegible: rige la última versión commiteada.
 
 **Criticidad**: Alta
 
 **Ejemplos**:
-- La configuración del equipo queda con un conflicto de merge sin resolver → aviso; force-push sigue denegado por el conjunto mínimo.
+- Se commitea la configuración del equipo con marcas de conflicto de un merge → aviso; force-push sigue denegado por el conjunto mínimo.
+- Un merge deja la configuración del equipo en conflicto en el working tree, sin commitear → no hay aviso de ilegible: rige la última versión commiteada (Q-GRD-17).
 
 **Cómo se verifica**: cada nivel ilegible por separado: hay aviso y ninguna operación del conjunto mínimo pasa.
 
-**Referencias**: contexto § 6 (fail-safe); BR-CONS-007 (motor-local); Q-GRD-12; riesgo R-GRD-8.
+**Referencias**: contexto § 6 (fail-safe); BR-CONS-007 (motor-local); Q-GRD-12, Q-GRD-17; riesgo R-GRD-8.
 
 ---
 
@@ -836,3 +845,4 @@ Cada regla debe reflejarse en al menos un escenario Gherkin de su historia. Cada
 | 1.0 | 2026-10-03 | PO (AADD) para Rene Bonilla | Versión inicial: 22 reglas (17 críticas). Supuestos S1-S9 y preguntas P1-P13 en el contexto (numeración original). |
 | 1.1 | 2026-10-03 | PO (AADD) para Rene Bonilla | Artifact Judge (RESERVAS): convención de IDs (P-GRD-n, S-GRD-n, R-GRD-n; IDs del Motor local calificados con "(motor-local)"); BR-CONS-001 separa lo decidido por Q23 de la ampliación pendiente (P-GRD-14) y marca las filas dependientes; BR-AUTH-001 deja de atribuir a Q27 una frase que no está en la fuente; nueva BR-CONS-006 (el comando no pisa cambios a mano y escribe de forma atómica y recuperable, NFR-01); BR-WF-002 con cuatro estados, todas las transiciones, alcance (P-GRD-15) y alineada con BR-EDGE-001. 23 reglas (18 críticas). |
 | 1.2 | 2026-10-03 | PO (AADD) para Rene Bonilla | Decisiones Q-GRD-1 a Q-GRD-16 de Rene Bonilla (aceptan las recomendaciones de P-GRD-1 a P-GRD-16): los bloques de supuesto pasan a "Decisión"; BR-CONS-001 aplica Q-GRD-14 (un nivel personal endurece cualquier regla del equipo y nunca la relaja; refina Q23 de motor-local) y su tabla deja de tener filas dependientes; BR-TIME-001 fija el plazo en 5 minutos y BR-TIME-002 la retención en 90 días; BR-WF-002 aplica el alcance de Q-GRD-15; BR-EDGE-001 a BR-EDGE-005 aplican Q-GRD-5, 4, 8, 12 y 11; BR-EDGE-004 anota la dependencia con BR-CONS-007 (motor-local) para el Arquitecto o una revisión de motor-local. S-GRD-1, S-GRD-4 y S-GRD-5 confirmados por Q-GRD-14, Q-GRD-7 y Q-GRD-10. Sin reglas nuevas: 23 reglas (18 críticas). |
+| 1.3 | 2026-10-04 | PO (AADD) para Rene Bonilla | Decisión Q-GRD-17 de Rene Bonilla, posterior a la aprobación del requerimiento: la configuración del equipo que rige una operación es la última versión commiteada en el worktree de esa operación; las ediciones sin commitear nunca cuentan. BR-VAL-001 (decisión y ejemplos), BR-AUTH-004 (con Q-GRD-7, un agente no puede relajarla), BR-CONS-006 (el cambio del comando en el nivel de equipo se aplica al commitearlo) y BR-EDGE-004 (un conflicto sin commitear no vuelve ilegible la configuración; ejemplos reformulados). Sin reglas nuevas. |

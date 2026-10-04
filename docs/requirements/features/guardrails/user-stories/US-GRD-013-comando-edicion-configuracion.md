@@ -38,17 +38,18 @@ BR-CONS-006 (comando, Guardrails: no pisa cambios a mano, escritura atómica y r
 ## Dependencias
 
 - **Historias**: US-GRD-010 (precedencia), US-GRD-014 (rama base como valor del equipo).
-- **Externas**: **bloqueada** por el ADR de formato P8 (motor-local). Distinguir al humano: transversal (lo define el Arquitecto; R-GRD-3). Un escenario depende de la pregunta abierta P-GRD-17 (ver índice).
+- **Externas**: **bloqueada** por el ADR de formato P8 (motor-local). Distinguir al humano: transversal (lo define el Arquitecto; R-GRD-3). Por Q-GRD-17, un cambio del comando en el nivel de equipo se aplica al commitearlo.
 - **Transversal**: Windows, macOS y Linux; pruebas de interrupción (NFR-12).
 
 ## Criterios de Aceptación
 
-**Escenario: El comando cambia un valor y no hace commit** *(Depende de P-GRD-17)*
+**Escenario: El comando cambia un valor, no hace commit y el cambio se aplica al commitearlo**
 
-Dado el repo "demo" con push permitido en la configuración del equipo
-Cuando el desarrollador cambia push a "denegar" en el nivel de equipo con el comando
+Dado el repo "demo" con push permitido en la configuración del equipo commiteada
+Cuando el desarrollador cambia push a "denegar" en el nivel de equipo con el comando, en el worktree "feat-x"
 Entonces el cambio queda en el working tree sin ningún commit nuevo
-  Y el siguiente push se deniega una vez que el desarrollador commitea ese cambio
+  Y el siguiente push desde "feat-x" se sigue ejecutando hasta que el desarrollador commitea el cambio
+  Y después de commitearlo se deniega
 
 **Escenario: El comando rechaza un valor en un nivel que no lo admite**
 
