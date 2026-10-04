@@ -28,8 +28,8 @@
 
 *   **F-001-04**: Guardrails (BR-11, BR-12, BR-13)
     -   **Contexto**: [context.md](features/guardrails/context.md) (reglas en [business-rules.md](features/guardrails/business-rules.md), 2026-10-03)
-    -   **Historias**: Pendiente (tras la aprobación del requerimiento)
-    -   **Status**: En análisis
+    -   **Historias**: [user-stories.md](features/guardrails/user-stories.md) (17 historias en `features/guardrails/user-stories/`, 2026-10-04; 6 listas y 11 bloqueadas por el ADR P8 de motor-local, Cockpit, MCP o Time Machine)
+    -   **Status**: Priorizada
 
 *   **F-001-05**: Servidor MCP (BR-14, BR-15, BR-16)
     -   **Contexto**: Pendiente

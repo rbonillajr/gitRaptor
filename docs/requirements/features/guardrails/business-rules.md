@@ -11,7 +11,24 @@ feature: guardrails
 related:
   context:
     - CTX-GRD-001
-  stories: []
+  stories:
+    - US-GRD-001
+    - US-GRD-002
+    - US-GRD-003
+    - US-GRD-004
+    - US-GRD-005
+    - US-GRD-006
+    - US-GRD-007
+    - US-GRD-008
+    - US-GRD-009
+    - US-GRD-010
+    - US-GRD-011
+    - US-GRD-012
+    - US-GRD-013
+    - US-GRD-014
+    - US-GRD-015
+    - US-GRD-016
+    - US-GRD-017
 tags:
   - guardrails
   - politicas
