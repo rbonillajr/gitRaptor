@@ -307,6 +307,39 @@ impl StoreHandle {
         }
     }
 
+    /// Plain `fsync` of many loose objects, on up to 8 threads.
+    fn sync_objects(&self, ids: &[gix::ObjectId]) -> Result<()> {
+        if ids.len() < 8 {
+            for id in ids {
+                self.sync_object(Oid(*id))?;
+            }
+            return Ok(());
+        }
+        let paths: Vec<PathBuf> = ids.iter().map(|id| self.object_path(Oid(*id))).collect();
+        let chunk = paths.len().div_ceil(8);
+        std::thread::scope(|s| {
+            let jobs: Vec<_> = paths
+                .chunks(chunk)
+                .map(|part| {
+                    s.spawn(move || -> io::Result<()> {
+                        for p in part {
+                            match durable::fsync_file(p) {
+                                Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+                                other => other?,
+                            }
+                        }
+                        Ok(())
+                    })
+                })
+                .collect();
+            for j in jobs {
+                j.join()
+                    .map_err(|_| StoreError::Git("fsync thread panicked".into()))??;
+            }
+            Ok(())
+        })
+    }
+
     /// Writes a blob from memory. Returns its id and whether the store lacked it.
     pub fn write_blob(&self, bytes: &[u8]) -> Result<(Oid, bool)> {
         use gix::objs::Write as _;
@@ -626,9 +659,11 @@ impl TreeEdit<'_> {
         Ok(())
     }
 
-    /// Writes the changed trees, each one synced, and returns the root.
+    /// Writes the changed trees, each one synced, and returns the root. The syncs run on several
+    /// threads: a scattered delta rewrites about one tree per changed file.
     pub fn write(&mut self) -> Result<Oid> {
         let handle = self.handle;
+        let mut written = Vec::new();
         let root = self
             .editor
             .write(|tree| -> Result<gix::ObjectId> {
@@ -637,9 +672,10 @@ impl TreeEdit<'_> {
                     .write_object(tree)
                     .map_err(git_err("tree"))?
                     .detach();
-                handle.sync_object(Oid(id))?;
+                written.push(id);
                 Ok(id)
             })?;
+        handle.sync_objects(&written)?;
         Ok(Oid(root))
     }
 }

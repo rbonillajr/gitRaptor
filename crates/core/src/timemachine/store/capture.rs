@@ -123,12 +123,46 @@ struct WtState {
     index_map: HashMap<BString, (EntryKind, Oid)>,
     /// Every path in the index, any stage.
     tracked: HashSet<BString>,
+    /// Index marks a tree does not keep, for `meta`.
+    marks: Marks,
     files_tree: Oid,
     /// Raw content in `files_tree`, by path: an entry here is in the tree with this blob.
     cache: HashMap<BString, Cached>,
     excluded: BTreeMap<BString, &'static str>,
     mark: Option<i64>,
     ignore_sig: Vec<Option<FileStat>>,
+}
+
+/// Index marks of a worktree, as written to `meta`.
+#[derive(Default)]
+struct Marks {
+    intent_to_add: Vec<String>,
+    skip_worktree: Vec<String>,
+    conflicts: Vec<ConflictEntry>,
+}
+
+impl Marks {
+    fn of(index: &IndexView) -> Self {
+        let mut m = Self::default();
+        for e in &index.entries {
+            let p = e.path.to_str_lossy().into_owned();
+            if e.intent_to_add {
+                m.intent_to_add.push(p.clone());
+            }
+            if e.skip_worktree {
+                m.skip_worktree.push(p.clone());
+            }
+            if e.stage != 0 {
+                m.conflicts.push(ConflictEntry {
+                    path: p,
+                    stage: e.stage,
+                    kind: kind_name(e.kind).into(),
+                    id: e.id.to_hex(),
+                });
+            }
+        }
+        m
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -274,9 +308,9 @@ impl SnapshotStore {
         // ---- detection -------------------------------------------------------------------
         let main = RepoReader::open(&req.repo, &ReaderOptions::default())?;
         let branches: BTreeMap<String, String> = main
-            .local_branches()?
+            .branch_tips()?
             .into_iter()
-            .map(|b| (b.name, b.commit))
+            .map(|(name, id)| (name, id.to_hex()))
             .collect();
         let stash = main.stash()?.map(|s| s.to_hex());
         let registered = registered_worktrees(&main)?;
@@ -285,14 +319,20 @@ impl SnapshotStore {
             .into_iter()
             .map(|g| g.as_str().to_owned())
             .collect();
-        drop(main);
 
         let mut works = Vec::with_capacity(req.worktrees.len());
         let mut anchor_time = Duration::ZERO;
         for (i, scope) in req.worktrees.iter().enumerate() {
             let prev = state.worktrees.remove(&scope.key);
             let mut anchor_lap = Duration::ZERO;
-            let work = self.detect(&handle, i, scope, prev, started, &mut anchor_lap)?;
+            let own;
+            let reader = if scope.path == req.repo {
+                &main
+            } else {
+                own = RepoReader::open(&scope.path, &ReaderOptions::default())?;
+                &own
+            };
+            let work = self.detect(&handle, reader, i, scope, prev, started, &mut anchor_lap)?;
             anchor_time += anchor_lap;
             works.push(work);
             if yield_now() {
@@ -319,9 +359,9 @@ impl SnapshotStore {
             .filter(|p| !handle.has(*p))
             .collect();
         if !missing.is_empty() {
-            let reader = RepoReader::open(&req.repo, &ReaderOptions::default())?;
-            handle.copy_closure(&reader, &missing)?;
+            handle.copy_closure(&main, &missing)?;
         }
+        drop(main);
         timings.anchor = laps.lap() + anchor_time;
 
         // ---- blobs ---------------------------------------------------------------------------
@@ -450,7 +490,14 @@ impl SnapshotStore {
         timings.trees = laps.lap();
 
         // ---- validity point: barrier, pending row, ref, complete row ----------------------------
-        handle.barrier()?;
+        if yield_now() {
+            return Err(CaptureError::Yielded);
+        }
+        // One full barrier per snapshot (ADR-TMC-001 § 4): the flush of the `complete` row. The
+        // oplog runs with `fullfsync` (macOS) and `synchronous=FULL`, and that flush empties the
+        // drive cache, so the objects and the ref synced before it are on stable storage when
+        // the snapshot becomes valid. The `pending` row is written in order before the ref but
+        // flushed with `complete`.
         let snapshot_id = record(oplog, &handle, req, commit, unique_bytes, &exclusions)?;
         timings.ref_oplog = laps.lap();
 
@@ -487,30 +534,30 @@ impl SnapshotStore {
     }
 
     /// Detection of one worktree. Rebuilds its `index` tree when the index changed, anchoring
-    /// staged blobs the store lacks (time reported in `anchor`).
+    /// staged blobs the store lacks (time reported in `anchor`). The index is parsed only when
+    /// its stat or checksum changed, or for a full detection.
+    #[allow(clippy::too_many_arguments)]
     fn detect(
         &self,
         handle: &StoreHandle,
+        reader: &RepoReader,
         wt_index: usize,
         scope: &WorktreeScope,
         prev: Option<WtState>,
         started: (i64, u32),
         anchor_time: &mut Duration,
     ) -> Result<WtWork, CaptureError> {
-        let reader = RepoReader::open(&scope.path, &ReaderOptions::default())?;
         let root = reader
             .workdir()
             .ok_or_else(|| CaptureError::InvalidInput("worktree without a working tree".into()))?;
-        let index = reader.index_view()?;
+        let sig = reader.index_signature();
         let ignore_sig: Vec<Option<FileStat>> = reader
             .ignore_sources()
             .iter()
             .map(|p| lstat(p).ok().flatten())
             .collect();
 
-        let had_prev = prev
-            .as_ref()
-            .is_some_and(|p| p.path == scope.path);
+        let had_prev = prev.as_ref().is_some_and(|p| p.path == scope.path);
         let mut st = match prev {
             Some(p) if p.path == scope.path => p,
             _ => WtState {
@@ -519,6 +566,7 @@ impl SnapshotStore {
                 index_tree: Oid::empty_tree(),
                 index_map: HashMap::new(),
                 tracked: HashSet::new(),
+                marks: Marks::default(),
                 files_tree: Oid::empty_tree(),
                 cache: HashMap::new(),
                 excluded: BTreeMap::new(),
@@ -547,12 +595,14 @@ impl SnapshotStore {
         st.ignore_sig = ignore_sig;
 
         // The `index` tree mirrors the user's index (stage 0, no intent-to-add entries).
-        let sig = (index.file, index.checksum);
+        let index_changed = !had_prev || st.index_sig != sig || sig.0.is_none();
+        let mut index: Option<IndexView> = None;
         let mut index_tree_changed = false;
         let mut status_changed: Vec<BString> = Vec::new();
-        if st.index_sig != sig || !had_prev {
+        if index_changed {
+            let view = reader.index_view()?;
             let t = Instant::now();
-            let (map, tracked) = index_maps(&index);
+            let (map, tracked) = index_maps(&view);
             let staged: Vec<Oid> = map
                 .values()
                 .filter(|(k, _)| *k != EntryKind::Gitlink)
@@ -560,7 +610,7 @@ impl SnapshotStore {
                 .filter(|id| !handle.has(*id))
                 .collect();
             if !staged.is_empty() {
-                handle.copy_closure(&reader, &staged)?;
+                handle.copy_closure(reader, &staged)?;
             }
             *anchor_time += t.elapsed();
             let mut edit = handle.edit_tree(if had_prev {
@@ -588,7 +638,9 @@ impl SnapshotStore {
             st.index_tree = tree;
             st.index_map = map;
             st.tracked = tracked;
+            st.marks = Marks::of(&view);
             st.index_sig = sig;
+            index = Some(view);
         }
 
         let mut work = WtWork {
@@ -597,29 +649,31 @@ impl SnapshotStore {
             base: st.files_tree,
             changes: Vec::new(),
             jobs: Vec::new(),
-            meta: worktree_meta(&reader, &scope.key, &scope.path, &index)?,
+            meta: worktree_meta(reader, &scope.key, &scope.path, &st.marks)?,
             index_tree_changed,
             state: st,
         };
 
         if let (Detection::Engine, Some(h)) = (detection, &scope.hint) {
-            let mut paths: Vec<BString> = h.paths.iter().map(|p| BString::from(p.as_str())).collect();
+            let mut paths: Vec<BString> =
+                h.paths.iter().map(|p| BString::from(p.as_str())).collect();
             paths.extend(status_changed);
             paths.sort();
             paths.dedup();
-            match self.detect_paths(&reader, &root, wt_index, &mut work, &paths)? {
-                true => {}
-                false => {
-                    detection = Detection::Full("folder-in-hint");
-                    work.detection = detection;
-                    work.changes.clear();
-                    work.jobs.clear();
-                }
+            if !self.detect_paths(reader, &root, wt_index, &mut work, &paths)? {
+                detection = Detection::Full("folder-in-hint");
+                work.detection = detection;
+                work.changes.clear();
+                work.jobs.clear();
             }
         }
         if let Detection::Full(_) = detection {
+            let view = match index {
+                Some(v) => v,
+                None => reader.index_view()?,
+            };
             work.base = work.state.index_tree;
-            self.detect_full(&reader, &root, wt_index, &mut work, &index, started)?;
+            self.detect_full(reader, &root, wt_index, &mut work, &view, started)?;
         }
         Ok(work)
     }
@@ -634,7 +688,8 @@ impl SnapshotStore {
         work: &mut WtWork,
         paths: &[BString],
     ) -> Result<bool, CaptureError> {
-        let mut ignores = reader.ignore_check()?;
+        // Built on first need: most hints only name tracked files.
+        let mut ignores = None;
         let st = &mut work.state;
         for path in paths {
             let full = abs(root, path.as_bstr());
@@ -661,7 +716,11 @@ impl SnapshotStore {
                 continue;
             }
             if !st.tracked.contains(path) {
-                if ignores.is_ignored(path.as_bstr(), false)? {
+                let check = match ignores.as_mut() {
+                    Some(c) => c,
+                    None => ignores.insert(reader.ignore_check()?),
+                };
+                if check.is_ignored(path.as_bstr(), false)? {
                     if st.cache.remove(path).is_some() {
                         work.changes.push(Change::Remove(path.clone()));
                     }
@@ -1014,37 +1073,19 @@ fn worktree_meta(
     reader: &RepoReader,
     key: &str,
     path: &Path,
-    index: &IndexView,
+    marks: &Marks,
 ) -> Result<MetaWorktree, CaptureError> {
-    let head = reader.head()?;
-    let mut meta = MetaWorktree {
+    let (head_branch, head_commit, detached) = reader.head_tip()?;
+    Ok(MetaWorktree {
         key: key.to_owned(),
         path: path.to_string_lossy().into_owned(),
-        head_branch: head.branch,
-        head_commit: head.commit,
-        detached: head.detached,
-        intent_to_add: Vec::new(),
-        skip_worktree: Vec::new(),
-        conflicts: Vec::new(),
-    };
-    for e in &index.entries {
-        let p = e.path.to_str_lossy().into_owned();
-        if e.intent_to_add {
-            meta.intent_to_add.push(p.clone());
-        }
-        if e.skip_worktree {
-            meta.skip_worktree.push(p.clone());
-        }
-        if e.stage != 0 {
-            meta.conflicts.push(ConflictEntry {
-                path: p,
-                stage: e.stage,
-                kind: kind_name(e.kind).into(),
-                id: e.id.to_hex(),
-            });
-        }
-    }
-    Ok(meta)
+        head_branch,
+        head_commit: head_commit.map(|c| c.to_hex()),
+        detached,
+        intent_to_add: marks.intent_to_add.clone(),
+        skip_worktree: marks.skip_worktree.clone(),
+        conflicts: marks.conflicts.clone(),
+    })
 }
 
 /// The main worktree and the linked ones, with the branch their `HEAD` file names.
@@ -1110,7 +1151,7 @@ fn record(
     exclusions: &[Exclusion],
 ) -> Result<String, CaptureError> {
     let mut log = oplog.lock().unwrap_or_else(|p| p.into_inner());
-    let id = log.begin_snapshot(
+    let id = log.begin_snapshot_deferred(
         &NewSnapshot {
             level: req.level,
             worktrees: req.worktrees.iter().map(|w| w.key.clone()).collect(),
