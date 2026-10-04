@@ -5,7 +5,8 @@
 //! published one, add a new entry instead.
 
 /// Migrations of the global index (`data/index.sqlite`).
-pub(crate) const INDEX_MIGRATIONS: &[&str] = &[r"
+pub(crate) const INDEX_MIGRATIONS: &[&str] = &[
+    r"
 CREATE TABLE profile_meta (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -20,7 +21,25 @@ CREATE TABLE repos (
     retired_ms       INTEGER,
     root_commit_hint TEXT
 ) STRICT;
-"];
+",
+    r"
+-- TS-GRP-004: append-only audit of reserved commands (ADR-GRP-013 § 1, SEC-03).
+CREATE TABLE reserved_audit (
+    id        INTEGER PRIMARY KEY,
+    at_ms     INTEGER NOT NULL,
+    operation TEXT NOT NULL,
+    repo_id   TEXT,
+    outcome   TEXT NOT NULL CHECK (outcome IN ('accepted', 'rejected', 'not-implemented')),
+    reason    TEXT,
+    client    TEXT NOT NULL,
+    chain     TEXT NOT NULL
+) STRICT;
+CREATE TRIGGER reserved_audit_no_update BEFORE UPDATE ON reserved_audit
+    BEGIN SELECT RAISE(ABORT, 'the audit is append-only'); END;
+CREATE TRIGGER reserved_audit_no_delete BEFORE DELETE ON reserved_audit
+    BEGIN SELECT RAISE(ABORT, 'the audit is append-only'); END;
+",
+];
 
 /// Migrations of each per-repo store (`data/repos/<repo_id>.sqlite`), with
 /// the entities of ADR-GRP-013 § 1.
