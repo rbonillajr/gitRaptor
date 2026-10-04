@@ -40,13 +40,14 @@ Se usa el crate `directories` para resolver las carpetas estándar del usuario (
 
 | Carpeta del perfil | macOS | Linux | Windows |
 |--------------------|-------|-------|---------|
-| Datos (almacén) | `~/Library/Application Support/<app>/data` | `$XDG_DATA_HOME/<app>` | `%LOCALAPPDATA%\<app>\data` |
-| Configuración de nivel perfil (solo lectura para el motor) | `~/Library/Application Support/<app>/config` | `$XDG_CONFIG_HOME/<app>` | `%LOCALAPPDATA%\<app>\config` |
-| Estado (bloqueo de instancia, logs) | `~/Library/Application Support/<app>/state` | `$XDG_STATE_HOME/<app>` | `%LOCALAPPDATA%\<app>\state` |
+| Datos (almacén) | `~/Library/Application Support/<app>/data` | `~/.local/share/<app>` (no `$XDG_DATA_HOME`, ver enmienda) | `%LOCALAPPDATA%\<app>\data` |
+| Configuración de nivel perfil (solo lectura para el motor) | `~/Library/Application Support/<app>/config` | `~/.config/<app>` (no `$XDG_CONFIG_HOME`) | `%LOCALAPPDATA%\<app>\config` |
+| Estado (bloqueo de instancia, logs) | `~/Library/Application Support/<app>/state` | `~/.local/state/<app>` (no `$XDG_STATE_HOME`) | `%LOCALAPPDATA%\<app>\state` |
 | Ejecución (socket del canal) | `~/Library/Application Support/<app>/state` | `$XDG_RUNTIME_DIR/<app>` (si no existe, la de estado) | No aplica (named pipe) |
 
 - **Datos y configuración nunca comparten carpeta**: en macOS, donde el SO ofrece una sola carpeta de la app, se separan en las subcarpetas `data/`, `config/` y `state/`, igual que en Windows. Así un borrado o una cuarentena de los datos del motor no alcanza la configuración del usuario (ADR-GRP-008).
 - **Windows siempre en `%LOCALAPPDATA%`**, nunca en `%APPDATA%` (roaming), ni para datos ni para configuración (decisión de Rene Bonilla, 2026-10-03, PQ-7). Se usan explícitamente las variantes locales del crate, porque la carpeta de configuración por defecto de Windows es la roaming.
+- **Linux sin `XDG_*_HOME` heredados (Enmienda 2026-10-04, TS-GRP-003)**: `XDG_DATA_HOME`, `XDG_CONFIG_HOME` y `XDG_STATE_HOME` se ignoran y se usan sus valores por defecto bajo la carpeta personal (`~/.local/share`, `~/.config`, `~/.local/state`). Así una variable hostil heredada no mueve el perfil (SEC-10). La resolución es una sola función de `crates/core` para el daemon, la CLI y el dispatcher del hook, de modo que todos encuentran las mismas carpetas. `XDG_RUNTIME_DIR` se usa solo si es absoluto; la carpeta del perfil dentro de él se verifica como el resto.
 - `<app>` es un identificador corto y estable (lo fija TS-GRP-001), para no superar el límite de la ruta del socket en macOS (ADR-GRP-005).
 - **Sobreescritura para pruebas**: una variable de entorno (nombre provisional `GITRAPTOR_PROFILE_DIR`) sustituye todas las carpetas por subcarpetas de una sola raíz. Los tests la usan siempre con un directorio temporal. **Solo existe en builds de test**: el binario release la ignora, para que un proceso que controla el entorno no pueda redirigir el perfil (SEC-06, H4).
 - **Permisos (SEC-06)**: carpetas 0700 y archivos 0600 en macOS y Linux, **incluidos `-wal`, `-shm`, logs, lock y archivos en cuarentena**, creados con umask restrictiva (077) para que no exista una ventana con permisos abiertos. Al arrancar, el daemon **verifica propietario y modo** de las carpetas preexistentes y no arranca si no cuadran (no las "arregla"). En Windows, se comprueba que la ACL heredada de `%LOCALAPPDATA%` no tiene ACE para otros usuarios.
@@ -161,3 +162,12 @@ Aplicada desde la tabla de enmiendas de [non-functional-guardrails.md](../non-fu
 | Id de instancia del perfil, generado al crearlo y presentado en el handshake | § 4; ADR-GRP-005 § 5 | ADR-GRD-001 § 2, ADR-GRD-003 § 4 (Judge ronda 2, hallazgo 3) |
 | **Ronda de coherencia (2026-10-04)**: el diario, la rama base confirmada y el suelo confirmado van en el almacén por repo; solo los comandos reservados van además a la auditoría del índice global | § 4 | Decisión del Arquitecto (2026-10-04) |
 | **Cierre (ronda 3)**: la instantánea del modo degradado es una copia de solo lectura exportada al directorio de estado desde el almacén por repo; el cliente nunca abre el SQLite | § 4 | Confirmado por el orquestador (2026-10-04) |
+
+## Enmienda (2026-10-04, TS-GRP-003)
+
+Decisión del orquestador (2026-10-04), validada por el Arquitecto. No cambia la ubicación en macOS ni en Windows, la clave de repo ni el almacenamiento.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| En Linux se ignoran `XDG_DATA_HOME`, `XDG_CONFIG_HOME` y `XDG_STATE_HOME` heredados y se usan sus valores por defecto bajo la carpeta personal, en una sola función de resolución para todos los procesos | § 1 (tabla y nota) | TS-GRP-003 (entorno hostil, SEC-10); ADR-GRP-005 § 3 |
+| Riesgo residual: `HOME` sigue viniendo del entorno; resolverlo desde la base de usuarios del SO queda propuesto para TS-GRP-004 | § 1 | Revisión del Arquitecto (2026-10-04) |
