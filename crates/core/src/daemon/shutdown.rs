@@ -11,6 +11,7 @@ use std::time::Duration;
 use crate::profile::AuditRow;
 
 /// How long a channel thread waits for the loop to persist or read the audit.
+#[cfg_attr(not(unix), allow(dead_code))]
 const AUDIT_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Why the daemon stops.
@@ -62,6 +63,7 @@ impl StopCause {
 
 /// A request to the daemon loop.
 #[derive(Debug)]
+#[cfg_attr(not(unix), allow(dead_code))]
 pub(crate) enum Control {
     Stop(StopCause),
     /// Append to the audit; the reply carries the new entry id.
@@ -93,12 +95,14 @@ impl ShutdownHandle {
 
     /// Persists one audit entry through the loop. `None` if it could not be
     /// written: the caller must then not run the command (fail-closed).
+    #[cfg_attr(not(unix), allow(dead_code))]
     pub(crate) fn audit(&self, row: AuditRow) -> Option<i64> {
         let (reply, rx) = sync_channel(1);
         self.tx.send(Control::Audit(row, reply)).ok()?;
         rx.recv_timeout(AUDIT_TIMEOUT).ok().flatten()
     }
 
+    #[cfg_attr(not(unix), allow(dead_code))]
     pub(crate) fn audit_list(&self, after_id: i64, limit: u32) -> Option<Vec<(i64, AuditRow)>> {
         let (reply, rx) = sync_channel(1);
         self.tx

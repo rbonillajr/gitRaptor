@@ -12,12 +12,13 @@
 //! calls that the workspace cannot make without `unsafe` or a vetted crate.
 //! Pendiente: etapa de validación multiplataforma.
 
-use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+#[cfg(unix)]
+use std::{io, sync::Mutex};
 
 use gitraptor_api::SOCKET_FILE;
 
+#[cfg(unix)]
 use crate::profile::{ProfileError, fsperm};
 
 /// Longest socket path used as is. `sun_path` holds 104 bytes on macOS and
@@ -25,6 +26,7 @@ use crate::profile::{ProfileError, fsperm};
 pub const MAX_SOCKET_PATH: usize = 100;
 
 /// Serializes the working-folder changes of long-path connects and binds.
+#[cfg(unix)]
 static CWD_LOCK: Mutex<()> = Mutex::new(());
 
 /// Full path of the socket in `runtime`.
@@ -34,6 +36,7 @@ pub fn socket_path(runtime: &Path) -> PathBuf {
 
 /// Runs `op` with the working folder in `dir`, restoring it afterwards.
 /// Process-wide: no other thread may rely on relative paths meanwhile.
+#[cfg(unix)]
 fn in_dir<T>(dir: &Path, op: impl FnOnce() -> io::Result<T>) -> io::Result<T> {
     let _guard = CWD_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let previous = std::env::current_dir()?;

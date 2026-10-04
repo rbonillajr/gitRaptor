@@ -9,26 +9,33 @@
 //! registered, belong to US-GRP-004.
 
 use std::collections::VecDeque;
-use std::ffi::OsString;
-use std::io::{self, BufRead, BufReader, Write};
+use std::io;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use gitraptor_api::PROTOCOL_VERSION;
-use gitraptor_api::framing::{FrameError, MAX_MESSAGE_BYTES, read_frame};
-use gitraptor_api::messages::{
-    ClientKind, Hello, HelloResult, IncompatibleData, NoParams, ReplaceParams, StopResult,
-};
-use gitraptor_api::methods;
-use gitraptor_api::rpc::{ErrorObject, Id, Notification, Request, ServerMessage, code};
+use gitraptor_api::messages::{ClientKind, HelloResult, IncompatibleData, StopResult};
+use gitraptor_api::rpc::{ErrorObject, Notification, ServerMessage};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
-use crate::daemon::wait_until_released;
 use crate::profile::ProfileDirs;
 
+#[cfg(unix)]
+use {
+    crate::daemon::wait_until_released,
+    gitraptor_api::framing::{FrameError, MAX_MESSAGE_BYTES, read_frame},
+    gitraptor_api::messages::{Hello, NoParams, ReplaceParams},
+    gitraptor_api::methods,
+    gitraptor_api::rpc::{Id, Request, code},
+    std::ffi::OsString,
+    std::io::{BufRead, BufReader, Write},
+    std::process::{Command, Stdio},
+    std::time::Instant,
+};
+
 /// How long a call waits for its answer.
+#[cfg(unix)]
 const CALL_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Why talking to the daemon failed.
@@ -48,6 +55,9 @@ pub enum ClientError {
     /// The daemon sent something that is not the contract.
     Protocol(&'static str),
     Unsupported(&'static str),
+    /// This platform has no channel transport yet (Windows): there is no
+    /// channel at all rather than one without access control.
+    TransportUnsupported,
 }
 
 impl std::fmt::Display for ClientError {
@@ -69,6 +79,7 @@ impl std::fmt::Display for ClientError {
             Self::Io(err) => write!(f, "I/O error: {err}"),
             Self::Protocol(what) => write!(f, "unexpected message from the daemon: {what}"),
             Self::Unsupported(what) => write!(f, "not supported: {what}"),
+            Self::TransportUnsupported => f.write_str(crate::channel::TRANSPORT_UNSUPPORTED),
         }
     }
 }
@@ -137,7 +148,8 @@ impl ClientOptions {
     }
 }
 
-/// A greeted connection to the daemon.
+/// A greeted connection to the daemon. On Windows it cannot be built.
+#[cfg_attr(not(unix), allow(dead_code))]
 pub struct Client {
     #[cfg(unix)]
     stream: std::os::unix::net::UnixStream,
@@ -149,6 +161,7 @@ pub struct Client {
 }
 
 /// Outcome of a handshake on an open connection.
+#[cfg(unix)]
 enum Greeting {
     Ready(HelloResult),
     Incompatible(IncompatibleData),
@@ -181,9 +194,7 @@ impl Client {
         _kind: ClientKind,
         _protocol: u32,
     ) -> Result<Self, ClientError> {
-        Err(ClientError::Unsupported(
-            "the local channel on Windows (Pendiente: etapa de validación multiplataforma)",
-        ))
+        Err(ClientError::TransportUnsupported)
     }
 
     #[cfg(unix)]
@@ -372,6 +383,45 @@ pub fn ensure_daemon(options: &ClientOptions) -> Result<Client, ClientError> {
             Err(ClientError::NotRunning) => return Err(ClientError::StartTimeout),
             Err(err) => return Err(err),
         }
+    }
+}
+
+/// Windows: no transport yet. Every operation of a [`Client`] (which
+/// cannot be constructed there) fails with [`ClientError::TransportUnsupported`].
+#[cfg(not(unix))]
+impl Client {
+    pub fn call<P: Serialize, R: DeserializeOwned>(
+        &mut self,
+        _method: &str,
+        _params: P,
+    ) -> Result<R, ClientError> {
+        Err(ClientError::TransportUnsupported)
+    }
+
+    pub fn send_raw(&mut self, _line: &[u8]) -> Result<(), ClientError> {
+        Err(ClientError::TransportUnsupported)
+    }
+
+    pub fn read_message(
+        &mut self,
+        _timeout: Option<Duration>,
+    ) -> Result<Option<ServerMessage>, ClientError> {
+        Err(ClientError::TransportUnsupported)
+    }
+
+    pub fn next_notification(
+        &mut self,
+        _timeout: Duration,
+    ) -> Result<Option<Notification>, ClientError> {
+        Err(ClientError::TransportUnsupported)
+    }
+
+    pub fn stop_daemon(&mut self) -> Result<StopResult, ClientError> {
+        Err(ClientError::TransportUnsupported)
+    }
+
+    pub fn wait_closed(&mut self, _timeout: Duration) -> bool {
+        false
     }
 }
 
