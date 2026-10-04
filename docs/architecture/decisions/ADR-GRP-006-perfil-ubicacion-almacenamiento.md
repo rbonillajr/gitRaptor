@@ -7,6 +7,8 @@ date: 2026-10-03
 created: 2026-10-03
 updated: 2026-10-03
 deciders: [Rene Bonilla]
+domain: GRP
+feature: motor-local
 related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-007, ADR-GRP-008, ADR-GRP-013, CTX-GRP-001, BR-GRP-001]
 tags: [motor-local, perfil, sqlite, rusqlite, directories, almacenamiento, clave-de-repo, p9, privacidad, seguridad, permisos]
 ---
@@ -35,11 +37,12 @@ Se usa el crate `directories` para resolver las carpetas estándar del usuario (
 
 | Carpeta del perfil | macOS | Linux | Windows |
 |--------------------|-------|-------|---------|
-| Datos (almacén) | `~/Library/Application Support/<app>` | `$XDG_DATA_HOME/<app>` | `%LOCALAPPDATA%\<app>\data` |
-| Configuración de nivel perfil (solo lectura para el motor) | `~/Library/Application Support/<app>` | `$XDG_CONFIG_HOME/<app>` | `%LOCALAPPDATA%\<app>\config` |
-| Estado (bloqueo de instancia, logs) | `~/Library/Application Support/<app>` | `$XDG_STATE_HOME/<app>` | `%LOCALAPPDATA%\<app>\state` |
-| Ejecución (socket del canal) | `~/Library/Application Support/<app>` | `$XDG_RUNTIME_DIR/<app>` (si no existe, la de estado) | No aplica (named pipe) |
+| Datos (almacén) | `~/Library/Application Support/<app>/data` | `$XDG_DATA_HOME/<app>` | `%LOCALAPPDATA%\<app>\data` |
+| Configuración de nivel perfil (solo lectura para el motor) | `~/Library/Application Support/<app>/config` | `$XDG_CONFIG_HOME/<app>` | `%LOCALAPPDATA%\<app>\config` |
+| Estado (bloqueo de instancia, logs) | `~/Library/Application Support/<app>/state` | `$XDG_STATE_HOME/<app>` | `%LOCALAPPDATA%\<app>\state` |
+| Ejecución (socket del canal) | `~/Library/Application Support/<app>/state` | `$XDG_RUNTIME_DIR/<app>` (si no existe, la de estado) | No aplica (named pipe) |
 
+- **Datos y configuración nunca comparten carpeta**: en macOS, donde el SO ofrece una sola carpeta de la app, se separan en las subcarpetas `data/`, `config/` y `state/`, igual que en Windows. Así un borrado o una cuarentena de los datos del motor no alcanza la configuración del usuario (ADR-GRP-008).
 - **Windows siempre en `%LOCALAPPDATA%`**, nunca en `%APPDATA%` (roaming), ni para datos ni para configuración (decisión de Rene Bonilla, 2026-10-03, PQ-7). Se usan explícitamente las variantes locales del crate, porque la carpeta de configuración por defecto de Windows es la roaming.
 - `<app>` es un identificador corto y estable (lo fija TS-GRP-001), para no superar el límite de la ruta del socket en macOS (ADR-GRP-005).
 - **Sobreescritura para pruebas**: una variable de entorno (nombre provisional `GITRAPTOR_PROFILE_DIR`) sustituye todas las carpetas por subcarpetas de una sola raíz. Los tests la usan siempre con un directorio temporal. **Solo existe en builds de test**: el binario release la ignora, para que un proceso que controla el entorno no pueda redirigir el perfil (SEC-06, H4).

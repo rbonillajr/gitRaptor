@@ -18,6 +18,24 @@ related:
 
 # Índice de ADRs — GitRaptor (GRP)
 
+## Decisiones de producto PQ-1..PQ-9 (Rene Bonilla, 2026-10-03)
+
+Fuente única de los identificadores PQ que citan los ADR 005 a 013.
+
+| ID | Decisión | ADR |
+|----|----------|-----|
+| PQ-1 | El autoarranque es una **excepción acotada a Q17**: solo lo registra el instalador o `raptor daemon enable` | ADR-GRP-005 |
+| PQ-2 | Leer `~/.claude/projects` **limitado a metadatos** (herramienta, ruta de archivo, marca de tiempo, id de sesión y cwd) | ADR-GRP-012 |
+| PQ-3 | La configuración local personal vive **en el perfil**, indexada por repo | ADR-GRP-008 |
+| PQ-4 | **Nombres**: `.gitraptor/settings.json`, `settings.local.json`, sección `engine` y perfil en la carpeta estándar de cada SO (no `~/.gitraptor`) | ADR-GRP-006, ADR-GRP-007 |
+| PQ-5 | El daemon es el **subcomando `raptor daemon`** (sin app `raptord`) | ADR-GRP-005 |
+| PQ-6 | **Comandos reservados**: rechazo si el llamante desciende de un agente, más confirmación | ADR-GRP-005 |
+| PQ-7 | Windows siempre en **`%LOCALAPPDATA%`**, también la configuración | ADR-GRP-006 |
+| PQ-8 | Un nivel de configuración con **JSON inválido se ignora entero**, con diagnóstico | ADR-GRP-007 |
+| PQ-9 | Manda la **configuración de equipo del worktree principal** | ADR-GRP-007 |
+
+El formato "JSON estricto con `$schema`" no es una PQ: es la propuesta base del BRD v0.4, que ADR-GRP-007 adopta.
+
 > Los ADR 001 a 004 están aceptados. Los ADR 005 a 013 de la feature `motor-local` están **expandidos** (frontmatter `status: proposed`): Rene Bonilla aceptó el 2026-10-03 todas las recomendaciones y las preguntas de producto PQ-1 a PQ-9. Este índice solo resume la decisión; el detalle vive en cada archivo.
 >
 > **Restricciones activas** (no hay `architecture-constitution.md` en la cascada): ADR-GRP-001 (Rust; gitoxide para leer y Git CLI para escribir; ratatui, clap, rmcp) y ADR-GRP-002 (Nx package-based; `crates/{core,policy,git,api,theme}`, `apps/{cli,mcp}`). ⚠️ **ASSUMPTION**: se tratan como constitución mientras no exista una formal (`/aadd-architect --init-constitution`).
@@ -30,29 +48,31 @@ related:
 | [ADR-GRP-002](./ADR-GRP-002-monorepo-nx.md) | Monorepo Nx package-based | pnpm + Cargo workspaces con `@monodon/rust`, crates y apps por fase | accepted |
 | [ADR-GRP-003](./ADR-GRP-003-design-system.md) | Design system | Tokens, UI kit y patrones; en el MVP solo tokens y tema de TUI | accepted |
 | [ADR-GRP-004](./ADR-GRP-004-estado-frontend-ux.md) | Estado del frontend y UX | Estado React de la Fase 3; en el MVP solo los patrones de UX | accepted |
-| [ADR-GRP-005](./ADR-GRP-005-forma-motor-proceso-segundo-plano.md) | Forma del motor: proceso por usuario y canal local | Subcomando `raptor daemon` (PQ-5) con autoarranque registrado solo por instalador o comando del desarrollador (PQ-1), IPC local JSON-RPC y comandos reservados por ascendencia + confirmación en terminal (PQ-6) | expanded |
+| [ADR-GRP-005](./ADR-GRP-005-forma-motor-proceso-segundo-plano.md) | Forma del motor: proceso por usuario y canal local | Subcomando `raptor daemon` (PQ-5) con autoarranque registrado solo por instalador o comando del desarrollador (PQ-1), IPC local JSON-RPC y comandos reservados (incluida la parada del daemon) autorizados por el daemon según la ascendencia del llamante (PQ-6); la confirmación en terminal es solo UX | expanded |
 | [ADR-GRP-006](./ADR-GRP-006-perfil-ubicacion-almacenamiento.md) | Perfil: ubicación por SO, clave de repo y almacenamiento | Carpetas estándar por SO (PQ-4), Windows siempre en `%LOCALAPPDATA%` (PQ-7), UUID por directorio Git común y un SQLite por repo | expanded |
-| [ADR-GRP-007](./ADR-GRP-007-configuracion-tres-niveles-formato.md) | Configuración en tres niveles: formato y precedencia | JSON estricto con `$schema` (PQ-4), niveles admitidos por clave, JSON o schema inválido ignora el nivel entero (PQ-8), manda el worktree principal (PQ-9) | expanded |
+| [ADR-GRP-007](./ADR-GRP-007-configuracion-tres-niveles-formato.md) | Configuración en tres niveles: formato y precedencia | JSON estricto con `$schema` (propuesta base del BRD v0.4), nombres de archivos y sección `engine` (PQ-4), niveles admitidos por clave, JSON o schema inválido ignora el nivel entero (PQ-8), manda el worktree principal (PQ-9) | expanded |
 | [ADR-GRP-008](./ADR-GRP-008-configuracion-local-no-versionada.md) | Configuración local personal sin versionar | `settings.local.json` en el perfil, indexado por repo (PQ-3); P10 desaparece | expanded |
 | [ADR-GRP-009](./ADR-GRP-009-frontera-solo-lectura-git.md) | Frontera de solo lectura e invocación del Git del sistema | Frontera estricta: cero escrituras (ni locks transitorios), cero programas del usuario, gitoxide + allowlist del CLI; Git ≥ 2.38 sin depender del PATH | expanded |
 | [ADR-GRP-010](./ADR-GRP-010-observacion-cambios-worktrees.md) | Observación de cambios en worktrees | Watcher nativo (`notify`), debounce fijo de 75 ms, recomputo incremental, sondeo de respaldo, modo degradado y reconciliación | expanded |
 | [ADR-GRP-011](./ADR-GRP-011-presupuesto-frescura.md) | Reparto del presupuesto de frescura | Motor ≤ 300 ms, Cockpit ≤ 100 ms y 100 ms de margen, p95 medido con reloj monótono por etapa | expanded |
-| [ADR-GRP-012](./ADR-GRP-012-deteccion-sesiones-claude-code.md) | Detección de sesiones de Claude Code | S1 (proceso y cwd) crea la sesión; solo S2b, S3 o S4 atribuyen; la co-ubicación nunca basta; transcripts limitados a metadatos (PQ-2) | expanded |
-| [ADR-GRP-013](./ADR-GRP-013-modelo-eventos-atribucion.md) | Modelo persistido de eventos, sesiones y atribución | Los eventos apuntan a una sesión; registros de atribución append-only; huecos como intervalos; sin variante "humano" | expanded |
+| [ADR-GRP-012](./ADR-GRP-012-deteccion-sesiones-claude-code.md) | Detección de sesiones de Claude Code | S1 (proceso y cwd) crea la sesión; atribuyen S2b, S3, S4 o el registro explícito si es la única sesión presente; la co-ubicación de una sesión detectada nunca basta; transcripts limitados a metadatos (PQ-2) | expanded |
+| [ADR-GRP-013](./ADR-GRP-013-modelo-eventos-atribucion.md) | Modelo persistido de eventos, sesiones y atribución | Los eventos apuntan a una sesión; registros de atribución append-only (incluido el retiro de registro, que termina la sesión); huecos como intervalos; sin variante "humano" | expanded |
 
 ## Grafo de dependencias entre ADRs nuevos
 
 | ADR | Depende de | Lo consumen |
 |-----|-----------|-------------|
-| ADR-GRP-005 | 006 (dónde viven socket, bloqueo y logs), 009 (resolución de Git), 012 (procesos de agente, PQ-6) | 010, 011, 012, 013 |
-| ADR-GRP-006 | — | 005, 007, 008, 013 |
-| ADR-GRP-007 | 006 (carpeta de configuración del perfil); context de Guardrails F-001-04 (coautor) | 008, 009 (`gitPath`), 010 (intervalos del watcher), 012 (umbral) |
-| ADR-GRP-008 | 006, 007 | — |
-| ADR-GRP-009 | 007 (`gitPath`) | 005, 010, 012 |
+| ADR-GRP-005 | 006 (socket, bloqueo y logs), 009 (resolución de Git), 012 (procesos de agente, PQ-6), 013 (huecos y auditoría) | 006, 007, 008, 009, 010, 011, 012, 013 |
+| ADR-GRP-006 | 005 (único escritor y canal) | 005, 007, 008, 009, 011, 012, 013 |
+| ADR-GRP-007 | 005, 006 (carpeta de configuración del perfil); context de Guardrails F-001-04 (coautor) | 008, 009 (`gitPath`), 010 (intervalos del watcher), 012 (umbral) |
+| ADR-GRP-008 | 005, 006, 007 | — |
+| ADR-GRP-009 | 005 (proceso y entorno heredado), 006, 007 (`gitPath`) | 005, 010, 011, 012 |
 | ADR-GRP-010 | 005, 007, 009 | 011, 012, 013 (huecos) |
-| ADR-GRP-011 | 005, 010 | — (Cockpit F-001-02 lo consume) |
-| ADR-GRP-012 | 007 (umbral), 009, 010, 013 | 005 (ascendencia) — lo valida SPIKE-GRP-001 |
-| ADR-GRP-013 | 006 | 012 |
+| ADR-GRP-011 | 005, 006, 009, 010, 013 | — (Cockpit F-001-02 lo consume) |
+| ADR-GRP-012 | 005, 006, 007 (umbral), 009, 010 | 005 (ascendencia), 013 — lo valida SPIKE-GRP-001 |
+| ADR-GRP-013 | 005 (único escritor), 006 (almacén), 010 (reconciliación), 012 (señales y evidencia) | 005 (huecos y auditoría), 011 |
+
+Grafo derivado de la sección Referencias de cada ADR. ADR-GRP-005 es el proceso que aloja al resto, así que sus dependencias con 006, 009, 012 y 013 son mutuas: él usa sus rutas, su Git, su ascendencia y sus huecos, y ellos corren dentro del daemon.
 
 ---
 
@@ -65,7 +85,7 @@ related:
 - **Decisiones de producto (Rene Bonilla, 2026-10-03)**:
   - **PQ-1**: el autoarranque (LaunchAgent, `systemd --user`, `Run` de HKCU) es una **excepción explícita y acotada a Q17**. Solo lo registra el instalador o `raptor daemon enable`, nunca el motor por su cuenta, y se revierte al desinstalar.
   - **PQ-5**: subcomando `raptor daemon`.
-  - **PQ-6**: añadir o retirar repos y corregir se rechazan si el llamante desciende de un agente detectado, exigen confirmación interactiva en terminal y `raptor-mcp` no los expone. Tras la revisión de seguridad (2026-10-03) la autorización se hace solo en el daemon (identificador no reutilizable, terminal de control y líder de sesión) y también cubre parar el daemon; el supuesto de TTY de SPIKE-GRP-001 deja de ser crítico.
+  - **PQ-6**: añadir o retirar repos, corregir y parar el daemon se rechazan si el llamante desciende de un agente detectado, y `raptor-mcp` no los expone. La autorización la hace **el daemon** (identificador no reutilizable, terminal de control y líder de sesión); la confirmación interactiva en terminal es solo UX. El supuesto de TTY de SPIKE-GRP-001 deja de ser crítico.
 - **Impacta**: US-GRP-001, 002, 004, 005, 014, 015 y el canal de todas. BR-CONS-005, BR-WF-002, BR-AUTH-001.
 
 ### ADR-GRP-006 — Perfil: ubicación por SO, clave de repo y almacenamiento
@@ -78,7 +98,7 @@ related:
 ### ADR-GRP-007 — Configuración en tres niveles: formato y precedencia
 
 - **Pregunta** (P8): formato, archivos, estructura, precedencia y validación de la configuración que el motor solo lee.
-- **Decisión**: JSON estricto con `$schema`. Archivos `settings.json` (perfil), `.gitraptor/settings.json` (equipo, versionado) y `settings.local.json` (local, en el perfil por ADR-GRP-008). Sección `engine` con niveles admitidos por clave (`x-gitraptor-levels`, generado desde los tipos Rust en `crates/policy`):
+- **Decisión**: JSON estricto con `$schema` (propuesta base del BRD v0.4). Archivos (PQ-4) `settings.json` (perfil), `.gitraptor/settings.json` (equipo, versionado) y `settings.local.json` (local, en el perfil por ADR-GRP-008). Sección `engine` con niveles admitidos por clave (`x-gitraptor-levels`, generado desde los tipos Rust en `crates/policy`):
   - `baseBranch`: solo equipo, `main`.
   - `idleThresholdMinutes`: perfil y local, 5.
   - `gitPath`: solo perfil (ADR-GRP-009).
@@ -125,9 +145,9 @@ related:
 - **Pregunta**: ¿cómo se detectan sesiones y su estado sin hooks (Q22), sin APIs privadas (NFR-08) y sin atribuir trabajo humano a Claude Code (BR-EDGE-004)?
 - **Decisión**:
   - **S1** (proceso y cwd) es necesaria y suficiente para que **exista** la sesión.
-  - Un evento solo se **atribuye** con evidencia positiva que apunte a esa sesión: **S2b** (metadatos del transcript), **S3** (ascendencia de procesos) o **S4** (hooks de Guardrails, opcional).
+  - Un evento solo se **atribuye** con evidencia positiva que apunte a esa sesión: **S2b** (metadatos del transcript), **S3** (ascendencia de procesos), **S4** (hooks de Guardrails, opcional) o el **registro explícito**, mientras esa sesión registrada sea la única presente en el worktree.
   - **S2a** (mtime de transcripts) solo correlaciona y desempata; nunca atribuye por sí sola.
-  - **La co-ubicación nunca basta por sí sola**. Ante la duda, "sin atribuir".
+  - **La co-ubicación de una sesión detectada nunca basta por sí sola**. En un worktree compartido, evidencia por evento; ante la duda, "sin atribuir".
   - `--resume` o `--continue` es un proceso nuevo y, por tanto, una sesión nueva.
 - **Decisión de producto (PQ-2)**: la lectura de `~/.claude/projects` se limita a **metadatos** (herramienta, ruta de archivo, marca de tiempo, id de sesión y cwd). Nunca prompts, respuestas ni código. Adaptador versionado que se desactiva solo si no reconoce el formato. Si SPIKE-GRP-001 fracasa, la vía preferente es **S5** (telemetría OpenTelemetry opt-in) más el refuerzo del registro explícito.
 - **Impacta**: US-GRP-003, 007, 008, 009. BR-WF-001, BR-TIME-001, BR-EDGE-003, BR-EDGE-004, BR-EDGE-006, BR-AUTH-002. NFR-08. R1, R2, R3, R7, R8.
@@ -135,8 +155,8 @@ related:
 ### ADR-GRP-013 — Modelo persistido de eventos, sesiones y atribución
 
 - **Pregunta**: ¿cómo se persisten eventos, sesiones, registros, confirmaciones (Q39) y correcciones que reatribuyen desde el inicio de la sesión (Q33, Q37), sin emitir nunca "humano" (Q34)?
-- **Decisión**: cada evento apunta a una sesión o a ninguna; la atribución efectiva se resuelve desde la sesión con registros append-only (confirmación, corrección, retiro). Secuencia monotónica por repo, eventos inmutables, huecos como intervalos con causa y eventos de reconciliación sin sesión. El contrato no tiene variante "humano".
-- **Decisión de producto**: ninguna como ADR. Supuestos dependientes de **P16** (confirmación → origen "registrado") y **P17** (retirar una corrección devuelve los eventos), abiertas para el PO; el modelo admite ambas respuestas.
+- **Decisión**: cada evento apunta a una sesión o a ninguna; la atribución efectiva se resuelve desde la sesión con registros append-only (registro, confirmación, corrección, retiro de corrección y retiro de registro). El registro explícito atribuye los eventos del worktree mientras sea la única sesión presente. Secuencia monotónica por repo, eventos inmutables, huecos como intervalos con causa y eventos de reconciliación sin sesión. El contrato no tiene variante "humano".
+- **Decisión de producto**: ninguna como ADR. ⚠️ **ASSUMPTION** sobre quién retira un registro (el desarrollador, cualquiera; un agente, solo el suyo). Supuestos dependientes de **P16** (confirmación → origen "registrado") y **P17** (retirar una corrección devuelve los eventos), abiertas para el PO; el modelo admite ambas respuestas.
 - **Impacta**: US-GRP-002, 004 a 011. BR-CONS-002 a 005, BR-EDGE-003, BR-EDGE-005. Q33-Q39, Q41. Contrato de F-001-03 y F-001-04.
 
 ## Pendientes fuera de los ADRs

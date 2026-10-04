@@ -2,7 +2,7 @@
 id: SPIKE-GRP-001
 title: "Precisión de la detección de Claude Code en dogfooding"
 type: spike
-status: Dev Spec Pending
+status: Research Pending
 feature: motor-local
 domain: GRP
 priority: high

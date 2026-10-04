@@ -39,26 +39,26 @@ tags: [motor-local, daemon, ciclo-de-vida, instancia-unica, continuidad, segurid
 
 - **Crear** el subcomando `raptor daemon` en `apps/cli` como punto de entrada del motor de `crates/core`, sin app nueva (ADR-GRP-005 § 1, PQ-5).
 - **Implementar** la instancia única con un bloqueo del SO en la carpeta de estado del perfil; un segundo daemon termina sin observar ni tocar el almacén.
-- **Implementar** el arranque: bloqueo, apertura del perfil, resolución de Git y entrada en el estado de BR-WF-002 que corresponda ("Esperando Git", "Sin repos" u "Observando").
+- **Implementar** el arranque: bloqueo, apertura del perfil, resolución de Git y el **esqueleto de la máquina de estados** de BR-WF-002: los estados y sus transiciones como tipos, con "Observando" como único estado con comportamiento completo. Cuándo se entra y se sale de "Esperando Git" y de "Sin repos", y cómo se exponen a los clientes, es de US-GRP-014 y US-GRP-015.
 - **Implementar** la parada ordenada ante cierre de sesión, `raptor daemon stop` o señal de terminación: vaciar lo pendiente, persistir "observado hasta" con la causa de la parada y liberar el bloqueo (SEC-13).
 - **Marcar** al arrancar si la parada anterior fue una caída con alguna sesión activa, para que el hueco lo refleje (SEC-13).
 - **Implementar** los logs del daemon en la carpeta de estado, con rotación y sin contenido de archivos, valores de config, entorno ni argv de terceros; el panic hook redacta igual (SEC-05).
 - **Garantizar** que el daemon corre con los privilegios del usuario y no depende del PATH de la shell (arranque con entorno mínimo).
 - **Ignorar** en el daemon cualquier variable de entorno hostil heredada (`GIT_*`, `LD_PRELOAD`, `DYLD_*`, `XDG_CONFIG_HOME`, PATH relativo) para todo lo que no sea el arranque del propio proceso (SEC-10).
-- **Fuera de alcance**: el canal, el handshake y el arranque bajo demanda desde los clientes (TS-GRP-004); el registro del autoarranque con `raptor daemon enable` y `disable` y su endurecimiento SEC-14 (US-GRP-004); la autorización de `raptor daemon stop` como comando reservado (TS-GRP-004); la reconciliación y el registro de huecos al arrancar (US-GRP-005); el observador (US-GRP-002).
+- **Fuera de alcance**: el canal, el handshake y el arranque bajo demanda desde los clientes (TS-GRP-004); el registro del autoarranque con `raptor daemon enable` y `disable` y su endurecimiento SEC-14 (US-GRP-004); la autorización de `raptor daemon stop` como comando reservado (TS-GRP-004); la reconciliación y el registro de huecos al arrancar (US-GRP-005); el observador (US-GRP-002); la entrada, la salida y la exposición de "Esperando Git" (US-GRP-014) y de "Sin repos" (US-GRP-015).
 
 ### Plan de Verificación
 
 #### Pruebas Automatizadas
 
 - **Instancia única**: dos `raptor daemon` simultáneos con el mismo perfil temporal; uno termina sin observar y el almacén solo recibe escrituras del otro.
-- **Estados iniciales**: sin repos → "Sin repos"; con resolución de Git simulada como ausente → "Esperando Git"; con repos y Git válido → "Observando".
+- **Esqueleto de estados**: con repos y Git válido, el daemon llega a "Observando"; la máquina de estados admite "Esperando Git" y "Sin repos" como estados declarados (sus escenarios son de US-GRP-014 y US-GRP-015).
 - **Parada ordenada**: tras `raptor daemon stop` o la señal de terminación, la marca "observado hasta" está persistida y el bloqueo liberado.
 - **Caída**: tras matar el daemon a la fuerza, un daemon nuevo obtiene el bloqueo sin intervención manual; con una sesión activa simulada, el hueco queda como "caída durante sesión activa" (SEC-13).
 - **Entorno mínimo**: el daemon arranca con un PATH vacío y llega al estado correcto.
 - **Logs (SEC-05)**: con contenido marcado en los archivos de un repo observado y secretos plantados en el entorno, nada de eso aparece en los logs ni en un volcado de pánico; los logs rotan al superar su límite.
 - **Entorno hostil (SEC-10)**: arrancado con `GIT_EXEC_PATH`, `LD_PRELOAD`/`DYLD_INSERT_LIBRARIES`, `PATH=.:…` o `XDG_CONFIG_HOME` hostiles, el daemon no cambia de comportamiento.
-- **Repo intacto**: todos los escenarios pasan por el arnés de INF-GRP-001.
+- **Repo intacto**: todos los escenarios pasan por el núcleo de INF-GRP-001; esta historia aporta su suite "Proceso" (bloqueo, logs y estado solo en el perfil, SEC-05, SEC-10).
 
 #### Verificación Manual / Sandbox
 

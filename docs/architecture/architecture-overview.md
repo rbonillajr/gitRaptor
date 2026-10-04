@@ -7,7 +7,7 @@ generator: architect
 domain: GRP
 feature: motor-local
 total_artifacts: 26
-expanded: 21
+expanded: 22
 approved: 0
 related:
   context: [CTX-GRP-001]
@@ -45,8 +45,8 @@ Diagramas: [contexto C4-L1](./diagrams/c4-context.md) y [contenedores C4-L2](./d
 | Registro de repos y orquestación | `crates/core` | Repos observados y estados del motor ("Esperando Git", "Sin repos", "Observando") | ADR-GRP-005, ADR-GRP-009 |
 | Observador de cambios | `crates/core` | Watcher `notify`, debounce fijo de 75 ms, sondeo de respaldo, modo degradado y reconciliación | ADR-GRP-010 |
 | Cálculo de estado por worktree | `crates/core` sobre `crates/git` | Rama, cambios, estados especiales, ahead/behind; caché de stat en memoria | ADR-GRP-009, ADR-GRP-010 |
-| Detección de agentes (adaptador Claude Code) | `crates/core` (módulo de adaptadores por agente) | Sesiones por S1; atribución solo con S2b, S3 o S4; transcripts limitados a metadatos (PQ-2) | ADR-GRP-012 |
-| Modelo de eventos, sesiones y atribución | `crates/core` | Eventos inmutables, registros de atribución append-only, huecos | ADR-GRP-013 |
+| Detección de agentes (adaptador Claude Code) | `crates/core` (módulo de adaptadores por agente) | Sesiones por S1; atribución con S2b, S3, S4 o el registro explícito si es la única sesión presente; transcripts limitados a metadatos (PQ-2) | ADR-GRP-012 |
+| Modelo de eventos, sesiones y atribución | `crates/core` | Eventos inmutables, registros de atribución append-only (incluido el retiro de registro), huecos | ADR-GRP-013 |
 | Almacén del perfil | `crates/core` (módulo de almacenamiento) | Carpetas estándar por SO (PQ-4, PQ-7), un SQLite por repo, único escritor: el daemon | ADR-GRP-006 |
 | Capa de lectura de Git | `crates/git` | Único punto que toca repos: gitoxide en solo lectura, allowlist del Git CLI, resolución de Git ≥ 2.38 | ADR-GRP-009 |
 | Configuración en tres niveles | `crates/policy` (compartido con Guardrails) | Documento JSON completo: carga, niveles admitidos, precedencia, diagnósticos; el motor consume `engine` | ADR-GRP-007, ADR-GRP-008 |
@@ -109,7 +109,7 @@ Ver [non-functional.md](./non-functional.md). Los tres que más pesan en el dise
 
 ## 7. Enablers técnicos
 
-Ver [technical-stories.md](../requirements/features/motor-local/technical-stories.md): 4 TS, 2 INF y 2 SPIKE, todos con status `Dev Spec Pending`.
+Ver [technical-stories.md](../requirements/features/motor-local/technical-stories.md): 4 TS y 2 INF con status `Dev Spec Pending` y 2 SPIKE con status `Research Pending`. TS-GRP-003 solo crea el esqueleto de la máquina de estados de BR-WF-002; la entrada y la exposición de "Esperando Git" y "Sin repos" son de US-GRP-014 y US-GRP-015. INF-GRP-001 se divide en un núcleo (depende de TS-GRP-002) y suites incrementales que entran con su historia dueña.
 
 ### Trabajo técnico que vive en la US (no es TS)
 
@@ -125,7 +125,9 @@ Lo que tiene una sola historia dueña va en la Dev Spec de esa historia, según 
 | Contrato de "quién hizo un evento" | US-GRP-009 | ADR-GRP-013 |
 | Ahead/behind frente a la rama base, sin tocar el remoto | US-GRP-012 | ADR-GRP-009 |
 | Lector de configuración en tres niveles y ruta expuesta de `settings.local.json` (coordinado con F-001-04) | US-GRP-013 | ADR-GRP-007, ADR-GRP-008 |
-| Estado "Esperando Git", recomprobación y su exposición (la resolución por candidatos es de TS-GRP-002) | US-GRP-014 | ADR-GRP-009 |
+| Estado "Esperando Git": entrada, salida, recomprobación y su exposición (la resolución por candidatos es de TS-GRP-002 y el esqueleto de estados de TS-GRP-003) | US-GRP-014 | ADR-GRP-009, ADR-GRP-005 |
+| Estado "Sin repos": entrada, salida y su exposición (esqueleto de estados de TS-GRP-003) | US-GRP-015 | ADR-GRP-005, ADR-GRP-006 |
+| Suites incrementales del arnés "repo intacto" (INF-GRP-001): observación, autoarranque y `~/.claude` (las de proceso y canal van en TS-GRP-003 y TS-GRP-004) | US-GRP-002, US-GRP-004, US-GRP-007 | ADR-GRP-009 |
 
 ## 8. Índice de Dev Specs
 
@@ -137,7 +139,7 @@ Pendiente. Se generan con `/aadd-devspec <id>`: una por TS e INF y una por cada 
   - "< 500 ms" de NFR-04 como p95 en las máquinas de referencia (ADR-GRP-011; lo mide SPIKE-GRP-002).
   - La shell de Claude Code no tiene TTY interactiva (PQ-6 en ADR-GRP-005; lo comprueba SPIKE-GRP-001). Tras la revisión de seguridad deja de ser crítico: los comandos reservados se autorizan en el daemon (I4).
   - P16 y P17, abiertas para el PO, con supuesto "sí" en ADR-GRP-013.
-- **Ruta crítica**: TS-GRP-001 y TS-GRP-002 → TS-GRP-003 → TS-GRP-004 → US-GRP-001 → US-GRP-002. INF-GRP-001 bloquea el merge de todas las historias. El Scrum Master debe recalcular las olas.
+- **Ruta crítica**: TS-GRP-001 y TS-GRP-002 → TS-GRP-003 → TS-GRP-004 → US-GRP-001 → US-GRP-002. El núcleo de INF-GRP-001 (tras TS-GRP-002) bloquea el merge de todas las historias; cada suite incremental bloquea solo el de su historia dueña. El Scrum Master debe recalcular las olas.
 - **Riesgo de atribución**: si S2b se desactiva por un cambio de formato, los cambios sin commitear en un worktree con editor abierto quedan casi siempre "sin atribuir". La meta del 90% puede cumplirse para sesiones y no para cambios (R1, R2, R7). Vía de salida: S5 opt-in y registro explícito (ADR-GRP-012).
 - **Riesgo de Windows**: los handles del watcher podrían impedir borrar o mover worktrees. Lo verifica SPIKE-GRP-002 (R4).
 
@@ -153,10 +155,15 @@ Esta rama (`docs/arch-motor-local`) solo toca arquitectura. Lo siguiente queda p
    - **Retirar una corrección con la sesión ya terminada**: BR-CONS-002 no lo cubre; ADR-GRP-013 supone que se resuelve igual que con la sesión presente.
    - **BR-WF-001 (actividad)**: dejar explícito que las ediciones del humano también mantienen activa la sesión y que el mtime de transcripts no cuenta como actividad (ADR-GRP-012).
    - **`--resume` / `--continue`**: dejar explícito que es una sesión nueva (ADR-GRP-012, Q41).
+   - **Retiro de registro (ASSUMPTION)**: confirmar que el desarrollador puede retirar cualquier registro y un agente solo el suyo (worktree = cwd del llamante, igual que al registrarse), y añadir "retirar su registro" a la fila del agente en la tabla de BR-AUTH-001 (ADR-GRP-005 § 6, ADR-GRP-013 § 2).
+   - **Registro explícito como evidencia**: dejar explícito en BR-EDGE-004 que el registro atribuye los eventos del worktree mientras sea la única sesión presente, y que en un worktree compartido rige la evidencia por evento (ADR-GRP-012, ADR-GRP-013 § 3).
+   - **Cerrar P8, P9 y P10 en el context**: los resuelven ADR-GRP-007, ADR-GRP-006 y ADR-GRP-008. Con P8 cerrada, **desbloquear US-GRP-013** (umbral por repo); **actualizar el bloqueo de US-GRP-016**, que pasa a depender solo de Guardrails (F-001-04).
+   - **Q26 / BR-CONS-005**: el daemon **aborta** si los permisos del perfil o del socket están alterados (ADR-GRP-005 § 5, ADR-GRP-006 § 1, SEC-01, SEC-06). Choca con "0 huecos mientras la máquina está encendida"; confirmar con el PO que se acepta ese hueco, que queda señalado.
+   - **NFR-07 del BRD**: su literal ("respeta config/hooks") choca con la neutralización de filtros, `textconv` y fsmonitor al leer (ADR-GRP-009). Reformularlo como "respeta la configuración de Git sin ejecutar programas configurados por el usuario".
 2. **Cockpit (F-001-02) — predicción de conflictos**: `git merge-tree --write-tree`, la razón de Git 2.38 en NFR-07, escribe objetos en `.git/objects` y ADR-GRP-009 lo prohíbe al motor. Necesita un ADR propio del Cockpit (por ejemplo, un almacén de objetos alternativo dentro del perfil).
 3. **Guardrails (F-001-04)**:
    - Un `.gitraptor/settings.json` de equipo inválido se ignora entero (PQ-8), lo que deja sin efecto sus prohibiciones (fail-open). Guardrails debe decidir su reacción.
    - Un repo bare no tiene configuración de equipo (PQ-9); Guardrails debe decidir si necesita la misma regla.
    - ADR-GRP-007 no pasa a `accepted` sin el context de Guardrails (coautoría de `permissions` y `policies`).
-4. **Seguridad de la salida hacia terminales y agentes (M8, SEC-12)**: ADR-GRP-005 § 5 fija el contrato de salida de `crates/api` (texto no confiable marcado, respuestas MCP acotadas). Falta llevarlo a **ADR-GRP-004** (limpieza de caracteres de control y escapes ANSI/OSC en la CLI/TUI) y a la **spec futura del MCP (F-001-05)** (allowlist de campos, longitudes máximas, sin mensajes de commit ni contenido, limitado al repo del llamante). No se edita ADR-GRP-004 desde esta rama.
+4. **Seguridad de la salida hacia terminales y agentes (M8, SEC-12)**: ADR-GRP-005 § 5 fija el contrato de salida de `crates/api` (texto no confiable marcado, respuestas MCP acotadas). Falta llevarlo a **ADR-GRP-004** (limpieza de caracteres de control y escapes ANSI/OSC en la CLI/TUI) y a la **spec futura del MCP (F-001-05)** (allowlist de campos, longitudes máximas, sin mensajes de commit ni contenido, limitado al repo del llamante). La enmienda de ADR-GRP-004 hecha en esta rama se limita a sustituir la referencia a `policy.yaml` por ADR-GRP-007; **M8/SEC-12 sigue pendiente** en ADR-GRP-004.
 5. **Código y README** (fuera del alcance de una rama `docs/`): todavía citan `policy.yaml` en `README.md` (tabla de crates), `crates/policy/src/lib.rs` (comentario del crate) y `crates/policy/Cargo.toml` (`description`). Deben pasar a citar la configuración de ADR-GRP-007.

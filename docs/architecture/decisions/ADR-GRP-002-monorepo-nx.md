@@ -7,7 +7,7 @@ date: 2026-10-01
 created: 2026-10-01
 updated: 2026-10-03
 deciders: [Rene Bonilla]
-related: [ADR-GRP-001, ADR-GRP-003, ADR-GRP-007]
+related: [BRD-GRP-001, ADR-GRP-001, ADR-GRP-003, ADR-GRP-007]
 tags: [nx, monorepo, package-based, pnpm, cargo, rust, monodon, tauri, ci]
 ---
 
@@ -93,3 +93,7 @@ gitraptor/
 - [@monodon/rust (npm)](https://www.npmjs.com/package/@monodon/rust)
 - [Nx Release with Rust](https://nx.dev/docs/guides/nx-release/publish-rust-crates)
 - [Tauri — Monorepo integration discussion #7368](https://github.com/orgs/tauri-apps/discussions/7368)
+
+---
+
+Enmienda 2026-10-03: referencias a policy.yaml sustituidas por ADR-GRP-007 (configuración en tres niveles).

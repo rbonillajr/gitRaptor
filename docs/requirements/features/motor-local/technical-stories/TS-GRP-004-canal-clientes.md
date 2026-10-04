@@ -64,7 +64,7 @@ tags: [motor-local, ipc, json-rpc, socket, named-pipe, contrato, seguridad, coma
 - **Red**: con el daemon en marcha no hay ningún puerto en escucha abierto por el proceso.
 - **Entradas (SEC-02)**: fuzzing del decodificador; un mensaje por encima del máximo, un campo desconocido, una ruta fuera de los repos observados, una ruta UNC (0 conexiones SMB) o una ref `--upload-pack=x` se rechazan sin detener el daemon.
 - **Comandos reservados (SEC-03)**: añadir o retirar un repo, corregir y parar el daemon, enviados por un cliente JSON-RPC directo descendiente de un agente simulado, se rechazan; ídem con pty bajo el agente; un registro con worktree ajeno se rechaza; cada intento aparece en la auditoría.
-- **Robustez (SEC-08)**: un cliente que no lee más 100 conexiones simultáneas no sacan del presupuesto de ADR-GRP-011 a los demás.
+- **Robustez (SEC-08)**: un cliente que no lee y 100 conexiones simultáneas no sacan del presupuesto de ADR-GRP-011 a los demás.
 - **Arranque limpio (SEC-10)**: un cliente con entorno hostil arranca un daemon que no lo hereda.
 - **Salida (SEC-12)**: una rama con escapes OSC sale marcada como no confiable en el contrato; las respuestas para `raptor-mcp` no traen campos fuera de la allowlist.
 - **Stream**: los eventos llegan en orden de secuencia y cada evento de cambio trae el bloque de tiempos, comparable con el reloj del cliente.

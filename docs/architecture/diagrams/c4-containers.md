@@ -21,8 +21,8 @@ C4Container
   System_Ext(claude, "Claude Code")
 
   System_Boundary(bin, "Binario raptor (apps/cli)") {
-    Container(daemon, "raptor daemon", "Rust: crates/core + crates/git + crates/policy", "Proceso único por usuario: observador, detección, modelo de eventos, único escritor del perfil")
-    Container(cli, "raptor (CLI/TUI)", "Rust: clap + ratatui", "Cliente; comandos reservados con confirmación en terminal")
+    Container(daemon, "raptor daemon", "Rust: crates/core + crates/git + crates/policy", "Proceso único por usuario: observador, detección, modelo de eventos, único escritor del perfil; autoriza los comandos reservados, incluida su propia parada")
+    Container(cli, "raptor (CLI/TUI)", "Rust: clap + ratatui", "Cliente; pide confirmación en terminal antes de un comando reservado (solo UX, no es control de seguridad)")
   }
   Container(mcp, "raptor-mcp (apps/mcp)", "Rust: rmcp", "Cliente; sin comandos reservados")
 
@@ -47,3 +47,4 @@ C4Container
 ```
 
 - `crates/api` define el contrato que comparten el daemon y los dos clientes. Los clientes nunca abren el perfil.
+- **Comandos reservados** (añadir o retirar repos, corregir, retirar el registro de otro agente y parar el daemon): la autorización la hace **el daemon** con la ascendencia del llamante (ADR-GRP-005 § 6). La confirmación de la CLI/TUI es solo UX.
