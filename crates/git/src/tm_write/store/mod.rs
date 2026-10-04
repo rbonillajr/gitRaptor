@@ -34,6 +34,7 @@ pub const NOHOOKS_DIR: &str = "nohooks";
 /// Prefix of the snapshot refs (ADR-TMC-001 § 1).
 pub const SNAPSHOT_REF_PREFIX: &str = "refs/tm/snap/";
 /// Configuration key that marks a folder as a GitRaptor store.
+#[cfg(unix)]
 const STORE_MARK: &str = "gitraptor.store";
 
 /// Why the store could not do what was asked. Nothing is ever repaired in place.
