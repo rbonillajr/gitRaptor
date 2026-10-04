@@ -130,8 +130,8 @@ Impacto de no resolverlo:
 
 US-GRP-016 está bloqueada por Guardrails y por el ADR de formato P8 (motor-local) (Q36 de motor-local). **Solo tres cosas la desbloquean**:
 
-1. **La rama base como valor del nivel de equipo**, el único nivel que la admite, con `main` por defecto (BR-CONS-003, Q24 de motor-local). La define este requerimiento.
-2. **La regla de lectura** que aplica el motor: la rama base efectiva sale solo del nivel de equipo; un valor en otro nivel no se tiene en cuenta (BR-CONS-003). La define este requerimiento.
+1. **La rama base como valor del nivel de equipo**, el único nivel que la admite, con `main` por defecto (BR-CONS-003, Q24 de motor-local). Se lee de la configuración del equipo **commiteada en la rama principal del repo** (la que el remoto marca como principal, o `main` si no hay ninguna), no de la versión de cada worktree ni de ediciones sin commitear (Q-GRD-18). La define este requerimiento.
+2. **La regla de lectura** que aplica el motor: la rama base efectiva sale solo del nivel de equipo, en esa versión de la rama principal,; un valor en otro nivel no se tiene en cuenta (BR-CONS-003). La define este requerimiento.
 3. **El ADR de formato P8 (motor-local)**, que fija dónde y cómo se escribe ese valor. Es externo a esta feature.
 
 **El comando de edición no es un prerrequisito** de US-GRP-016: el desarrollador puede escribir la rama base a mano en la configuración del equipo. El comando es una comodidad que Guardrails entrega aparte (BR-VAL-001, BR-CONS-006 (comando, Guardrails)). Qué hace el comando si se fija una rama base que no existe en el repo queda en Q-GRD-16 (relacionada con Q42 de motor-local).
@@ -339,7 +339,7 @@ US-GRP-013 (umbral de inactividad) solo depende de P8 (motor-local); tampoco nec
 
 ## Decisiones tomadas
 
-Rene Bonilla aceptó el 2026-10-03 las recomendaciones del PO para las 16 preguntas abiertas de esta feature. Cada decisión Q-GRD-n sale de la pregunta P-GRD-n con el mismo número. Q-GRD-17 es posterior a la aprobación del requerimiento (2026-10-04).
+Rene Bonilla aceptó el 2026-10-03 las recomendaciones del PO para las 16 preguntas abiertas de esta feature. Cada decisión Q-GRD-n sale de la pregunta P-GRD-n con el mismo número. Q-GRD-17 y Q-GRD-18 son posteriores a la aprobación del requerimiento (2026-10-04).
 
 | # | Pregunta de origen | Decisión | Fecha | Decidido por | Reglas afectadas |
 |---|--------------------|----------|-------|--------------|------------------|
@@ -360,6 +360,7 @@ Rene Bonilla aceptó el 2026-10-03 las recomendaciones del PO para las 16 pregun
 | Q-GRD-15 | P-GRD-15: ¿cuándo entra un repo en el alcance de Guardrails? | Al añadirlo a la observación del motor (BR-AUTH-001 (motor-local)), para que haya actor atribuido. La allowlist del MCP debería ser un subconjunto de los repos observados (a coordinar con F-001-05). Retirar un repo de la observación no desinstala sus hooks: siguen aplicando las reglas con actor "sin atribuir" y Guardrails avisa de ello. | 2026-10-03 | Rene Bonilla | BR-WF-002, BR-AUTH-002 |
 | Q-GRD-16 | P-GRD-16: ¿y si el comando fija una rama base que no existe? | Avisar y pedir confirmación al humano; si confirma, guardarla (puede existir solo en el remoto o crearse después). El motor aplica Q42: indica que no puede calcular ahead/behind y no elige otra rama. | 2026-10-03 | Rene Bonilla | BR-CONS-003, BR-CONS-006 (comando, Guardrails), BR-CONS-006 (motor-local) (rama base inexistente, Q42) |
 | Q-GRD-17 | P-GRD-17 (abierta en el índice de historias, 2026-10-04): ¿qué versión de la configuración del equipo es la efectiva? | La configuración del equipo que rige una operación es la última versión commiteada en el worktree donde ocurre esa operación; las ediciones sin commitear nunca cuentan. Junto con Q-GRD-7, que impide a los agentes commitear cambios en la configuración, un agente no puede relajarla. | 2026-10-04 | Rene Bonilla | BR-VAL-001, BR-AUTH-004, BR-CONS-006, BR-EDGE-004 |
+| Q-GRD-18 | Recomendación del PO tras Q-GRD-17 (2026-10-04): ¿de qué versión de la configuración del equipo se lee la rama base? | La rama base es una excepción a Q-GRD-17. Se lee de la configuración del equipo commiteada en la rama principal del repo, es decir, la que el remoto marca como principal, o `main` si no hay ninguna. Así hay un solo valor por repo, sin circularidad y coherente con BR-CONS-006 (motor-local) y Q24. | 2026-10-04 | Rene Bonilla | BR-CONS-003, BR-EDGE-001, BR-VAL-001 |
 
 ## Preguntas abiertas
 
@@ -395,6 +396,8 @@ Todas las preguntas de esta feature están resueltas (ver [Decisiones tomadas](#
 > **Revisión 2026-10-03 (Q-GRD-1 a Q-GRD-16)**: Rene Bonilla aceptó las recomendaciones de las 16 preguntas P-GRD; se registran como decisiones Q-GRD-1 a Q-GRD-16 (tabla [Decisiones tomadas](#decisiones-tomadas)) y se llevan a las reglas. Q-GRD-14 refina Q23 de motor-local; el roce de Q-GRD-12 con BR-CONS-007 (motor-local) queda como dependencia para el Arquitecto o una revisión de motor-local. S-GRD-1, S-GRD-4 y S-GRD-5 quedan confirmados por Q-GRD-14, Q-GRD-7 y Q-GRD-10; el resto de supuestos sigue sin validar. Pasan a ✅ Usuarios/Actores, Integraciones y Configuración en tres niveles. Known Risks 3, 6 y 8 resueltos; el 7 se reduce a S-GRD-8 y S-GRD-9; los 1, 2, 4, 5 y 7 siguen pendientes de aceptación. Resultado: **10 ✅ · 5 ⚠️ · 0 🔴**.
 >
 > **Revisión 2026-10-04 (Q-GRD-17)**: decisión **posterior a la aprobación del requerimiento**. Sale de la pregunta P-GRD-17, que el Artifact Judge abrió al revisar las historias. Fija que la configuración del equipo que rige una operación es la última versión commiteada en el worktree de esa operación y cierra la vía por la que un agente podía relajarla sin commitear. Se lleva a BR-VAL-001, BR-AUTH-004, BR-CONS-006 y BR-EDGE-004. No cambia ninguna calificación: **10 ✅ · 5 ⚠️ · 0 🔴**.
+>
+> **Revisión 2026-10-04 (Q-GRD-18)**: decisión **posterior a la aprobación del requerimiento**. La rama base es una excepción a Q-GRD-17: se lee de la configuración del equipo commiteada en la rama principal del repo (la que el remoto marca como principal, o `main`). Todos los worktrees comparten la misma rama base, sea cual sea su commit. Se lleva a BR-CONS-003, BR-EDGE-001 y BR-VAL-001, y a "Qué entrega Guardrails al Motor local". No cambia ninguna calificación: **10 ✅ · 5 ⚠️ · 0 🔴**.
 
 | Sección | Resultado | Nota |
 |---------|-----------|------|

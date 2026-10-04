@@ -32,7 +32,7 @@ tags:
 
 ## Reglas cubiertas
 
-BR-CONS-003 (rama base solo del nivel de equipo; `main` por defecto) · BR-EDGE-001 (el mínimo seguro protege la rama base efectiva) — ver [business-rules.md](../business-rules.md)
+BR-CONS-003 (rama base solo del nivel de equipo; `main` por defecto; se lee de la configuración commiteada en la rama principal del repo, Q-GRD-18) · BR-EDGE-001 (el mínimo seguro protege la rama base efectiva) — ver [business-rules.md](../business-rules.md)
 
 ## Dependencias
 
@@ -60,6 +60,15 @@ Dado el repo "demo" con rama base "develop" en la configuración del equipo y "r
 Cuando un proceso intenta borrar la rama "release"
 Entonces la decisión es la de cualquier otra rama no protegida
   Y la rama base efectiva de "demo" sigue siendo "develop"
+
+**Escenario: Todos los worktrees comparten la rama base de la rama principal**
+
+Dado el repo "demo" protegido, cuya rama principal en el remoto es "main"
+  Y la configuración del equipo commiteada en "main" define la rama base "develop"
+  Y el worktree "feat-a" está en un commit cuya configuración del equipo dice "develop" y el worktree "feat-b" en otro cuya configuración dice "release"
+Cuando un proceso intenta borrar la rama "develop" desde "feat-a" y después desde "feat-b"
+Entonces las dos veces la operación no se ejecuta y el motivo nombra la rama base "develop"
+  Y borrar "release" desde "feat-b" recibe la decisión de cualquier otra rama no protegida
 
 **Escenario: En una máquina nueva aplica desde el primer momento**
 
