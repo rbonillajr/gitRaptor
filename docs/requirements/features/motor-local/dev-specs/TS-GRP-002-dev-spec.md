@@ -2,7 +2,7 @@
 id: DS-TS-GRP-002
 title: "Dev Spec — Capa de lectura de Git sin escrituras"
 type: dev-spec
-status: ready
+status: approved
 feature: motor-local
 domain: GRP
 created: 2026-10-04
