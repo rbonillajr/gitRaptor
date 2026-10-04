@@ -55,7 +55,7 @@ El formato "JSON estricto con `$schema`" no es una PQ: es la propuesta base del 
 | [ADR-GRP-009](./ADR-GRP-009-frontera-solo-lectura-git.md) | Frontera de solo lectura e invocación del Git del sistema | Frontera estricta: cero escrituras (ni locks transitorios), cero programas del usuario, gitoxide + allowlist del CLI; Git ≥ 2.38 sin depender del PATH | expanded |
 | [ADR-GRP-010](./ADR-GRP-010-observacion-cambios-worktrees.md) | Observación de cambios en worktrees | Watcher nativo (`notify`), debounce fijo de 75 ms, recomputo incremental, sondeo de respaldo, modo degradado y reconciliación | expanded |
 | [ADR-GRP-011](./ADR-GRP-011-presupuesto-frescura.md) | Reparto del presupuesto de frescura | Motor ≤ 300 ms, Cockpit ≤ 100 ms y 100 ms de margen, p95 medido con reloj monótono por etapa | expanded |
-| [ADR-GRP-012](./ADR-GRP-012-deteccion-sesiones-claude-code.md) | Detección de sesiones de Claude Code | S1 (proceso y cwd) crea la sesión; atribuyen S2b, S3, S4 o el registro explícito si es la única sesión presente; la co-ubicación de una sesión detectada nunca basta; transcripts limitados a metadatos (PQ-2) | expanded |
+| [ADR-GRP-012](./ADR-GRP-012-deteccion-sesiones-claude-code.md) | Detección de sesiones de Claude Code | S1 (proceso y cwd) crea la sesión; atribuyen S2b, S3, S4 o el registro explícito de un "otro agente" si es la única sesión presente (confirmar una sesión detectada no activa esa evidencia); la co-ubicación de una sesión detectada nunca basta; transcripts limitados a metadatos (PQ-2) | expanded |
 | [ADR-GRP-013](./ADR-GRP-013-modelo-eventos-atribucion.md) | Modelo persistido de eventos, sesiones y atribución | Los eventos apuntan a una sesión; registros de atribución append-only (incluido el retiro de registro, que termina la sesión); huecos como intervalos; sin variante "humano" | expanded |
 
 ## Grafo de dependencias entre ADRs nuevos
@@ -145,7 +145,7 @@ Grafo derivado de la sección Referencias de cada ADR. ADR-GRP-005 es el proceso
 - **Pregunta**: ¿cómo se detectan sesiones y su estado sin hooks (Q22), sin APIs privadas (NFR-08) y sin atribuir trabajo humano a Claude Code (BR-EDGE-004)?
 - **Decisión**:
   - **S1** (proceso y cwd) es necesaria y suficiente para que **exista** la sesión.
-  - Un evento solo se **atribuye** con evidencia positiva que apunte a esa sesión: **S2b** (metadatos del transcript), **S3** (ascendencia de procesos), **S4** (hooks de Guardrails, opcional) o el **registro explícito**, mientras esa sesión registrada sea la única presente en el worktree.
+  - Un evento solo se **atribuye** con evidencia positiva que apunte a esa sesión: **S2b** (metadatos del transcript), **S3** (ascendencia de procesos), **S4** (hooks de Guardrails, opcional) o el **registro explícito** de un agente sin detección automática ("otro agente"), mientras esa sesión sea la única presente en el worktree. Confirmar una sesión detectada (Q39) no activa esa evidencia.
   - **S2a** (mtime de transcripts) solo correlaciona y desempata; nunca atribuye por sí sola.
   - **La co-ubicación de una sesión detectada nunca basta por sí sola**. En un worktree compartido, evidencia por evento; ante la duda, "sin atribuir".
   - `--resume` o `--continue` es un proceso nuevo y, por tanto, una sesión nueva.
@@ -155,7 +155,7 @@ Grafo derivado de la sección Referencias de cada ADR. ADR-GRP-005 es el proceso
 ### ADR-GRP-013 — Modelo persistido de eventos, sesiones y atribución
 
 - **Pregunta**: ¿cómo se persisten eventos, sesiones, registros, confirmaciones (Q39) y correcciones que reatribuyen desde el inicio de la sesión (Q33, Q37), sin emitir nunca "humano" (Q34)?
-- **Decisión**: cada evento apunta a una sesión o a ninguna; la atribución efectiva se resuelve desde la sesión con registros append-only (registro, confirmación, corrección, retiro de corrección y retiro de registro). El registro explícito atribuye los eventos del worktree mientras sea la única sesión presente. Secuencia monotónica por repo, eventos inmutables, huecos como intervalos con causa y eventos de reconciliación sin sesión. El contrato no tiene variante "humano".
+- **Decisión**: cada evento apunta a una sesión o a ninguna; la atribución efectiva se resuelve desde la sesión con registros append-only (registro, confirmación, corrección, retiro de corrección y retiro de registro). El registro explícito de un "otro agente" atribuye los eventos del worktree mientras sea la única sesión presente; una confirmación no. Secuencia monotónica por repo, eventos inmutables, huecos como intervalos con causa y eventos de reconciliación sin sesión. El contrato no tiene variante "humano".
 - **Decisión de producto**: ninguna como ADR. ⚠️ **ASSUMPTION** sobre quién retira un registro (el desarrollador, cualquiera; un agente, solo el suyo). Supuestos dependientes de **P16** (confirmación → origen "registrado") y **P17** (retirar una corrección devuelve los eventos), abiertas para el PO; el modelo admite ambas respuestas.
 - **Impacta**: US-GRP-002, 004 a 011. BR-CONS-002 a 005, BR-EDGE-003, BR-EDGE-005. Q33-Q39, Q41. Contrato de F-001-03 y F-001-04.
 
