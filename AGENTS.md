@@ -38,7 +38,8 @@ Si una tarea contradice estos documentos, **detente y pregunta**; no improvises 
 - **Trunk-based:** una rama corta por historia o tarea, **un worktree por rama, un agente por worktree**.
 - **Prefijos de rama:** `spike/`, `docs/`, `feat/<story-id>-<slug>`, `fix/`, `chore/`.
 - **Worktrees:** se crean y cierran con Orca, que los ubica en `~/orca/workspaces/gitRaptor/`. Al crearlos corre el setup de `orca.yaml` (`pnpm install` + `cargo fetch`); al cerrarlos (`orca worktree rm --worktree branch:<rama> --run-hooks`) bloquea si hay commits sin pushear. La rama no se borra.
-- **Nunca hagas commit ni push directo a `main`.** Todo entra por PR y se mergea con **rebase and merge**.
+- **Nombre de rama en worktrees de Orca:** Orca crea la rama como `rbonillajr/<nombre>`. Antes del primer commit, renómbrala a la convención (`git branch -m docs/<slug>`, `feat/<story-id>-<slug>`, etc.).
+- **Nunca hagas commit ni push directo a `main`.** Todo entra por PR y se mergea con **rebase and merge**. Después del merge se borra la rama remota y se cierra el worktree.
 - **Primer push:** `git push -u origin <rama>`. Las ramas se crean sin upstream.
 - **Commits:** Conventional Commits en inglés (`feat:`, `fix:`, `docs:`, `chore:`, `test:`, `refactor:`), pequeños y atómicos.
 - **Mantente dentro del propósito de tu rama.** Si encuentras trabajo fuera de alcance, anótalo en el PR; no lo hagas.
