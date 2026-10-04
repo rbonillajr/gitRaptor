@@ -2,10 +2,11 @@
 id: ADR-GRP-011
 title: Reparto del presupuesto de frescura (NFR-04) entre el motor y el Cockpit
 type: adr
-status: proposed
+status: accepted
+accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
@@ -14,6 +15,8 @@ tags: [rendimiento, latencia, presupuesto, p95, nfr-04, timestamps, instrumentac
 ---
 
 # ADR-GRP-011 — Reparto del presupuesto de frescura (NFR-04)
+
+> **Estado**: aceptado por Rene Bonilla el 2026-10-04.
 
 ## Contexto
 

@@ -2,7 +2,8 @@
 id: ADR-GRD-004
 title: Configuración efectiva para Guardrails — suelo en la rama principal, endurecimiento por worktree y configuración ilegible
 type: adr
-status: proposed
+status: accepted
+accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
 updated: 2026-10-04
@@ -15,9 +16,11 @@ tags: [guardrails, configuracion, q-grd-17, q-grd-18, d6, suelo, rama-base, rama
 
 # ADR-GRD-004 — Configuración efectiva para Guardrails: suelo en la rama principal, endurecimiento por worktree y configuración ilegible
 
+> **Estado**: aceptado por Rene Bonilla el 2026-10-04.
+
 ## Contexto
 
-ADR-GRP-007 (propuesto, en `main`) fija el contenedor de la configuración:
+ADR-GRP-007 (aceptado el 2026-10-04) fija el contenedor de la configuración:
 
 - **Formato**: JSON estricto con `$schema`.
 - **Archivos**: `.gitraptor/settings.json` (equipo, versionado), `settings.json` (perfil) y `settings.local.json` (local, en el perfil, ADR-GRP-008).

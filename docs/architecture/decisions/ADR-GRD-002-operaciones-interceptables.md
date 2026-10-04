@@ -2,7 +2,8 @@
 id: ADR-GRD-002
 title: Operaciones interceptables y límites de la capa de hooks
 type: adr
-status: proposed
+status: accepted
+accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
 updated: 2026-10-04
@@ -14,6 +15,8 @@ tags: [guardrails, hooks-git, reference-transaction, pre-push, pre-rebase, inter
 ---
 
 # ADR-GRD-002 — Operaciones interceptables y límites de la capa de hooks
+
+> **Estado**: aceptado por Rene Bonilla el 2026-10-04.
 
 ## Contexto
 

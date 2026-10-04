@@ -2,7 +2,8 @@
 id: ADR-GRP-009
 title: Frontera de solo lectura e invocación del Git del sistema
 type: adr
-status: proposed
+status: accepted
+accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
 updated: 2026-10-04
@@ -14,6 +15,8 @@ tags: [git, gitoxide, solo-lectura, optional-locks, fsmonitor, untracked-cache, 
 ---
 
 # ADR-GRP-009 — Frontera de solo lectura e invocación del Git del sistema
+
+> **Estado**: aceptado por Rene Bonilla el 2026-10-04.
 
 ## Contexto
 
@@ -169,7 +172,7 @@ Validación ampliada: SEC-02, SEC-05, SEC-09, SEC-10 y SEC-11 (puntos 7 a 10). C
 
 ## Enmienda (2026-10-04, Guardrails)
 
-Aplicada desde la tabla de enmiendas de [non-functional-guardrails.md](../non-functional-guardrails.md) (J10). No cambia la frontera de solo lectura del motor. El `status` sigue en `proposed`.
+Aplicada desde la tabla de enmiendas de [non-functional-guardrails.md](../non-functional-guardrails.md) (J10). No cambia la frontera de solo lectura del motor. El `status` siguió en `proposed` hasta su aceptación (Rene Bonilla, 2026-10-04).
 
 | Cambio | Dónde | Fuente |
 |---|---|---|

@@ -2,7 +2,8 @@
 id: ADR-GRD-007
 title: Acciones reservadas al humano y excepción consciente
 type: adr
-status: proposed
+status: accepted
+accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
 updated: 2026-10-04
@@ -15,11 +16,13 @@ tags: [guardrails, comandos-reservados, excepcion-consciente, token-un-solo-uso,
 
 # ADR-GRD-007 — Acciones reservadas al humano y excepción consciente
 
+> **Estado**: aceptado por Rene Bonilla el 2026-10-04.
+
 ## Contexto
 
 BR-AUTH-001 reserva al humano estas acciones: instalar y desinstalar la protección (con permiso explícito, BR-AUTH-002), usar una excepción consciente (Q-GRD-1), relajar la configuración (US-GRD-013) y decidir en la cola (US-GRD-015). Un agente puede usar la terminal, así que esas acciones exigen una confirmación que un agente no pueda dar desde su canal (riesgo R-GRD-3, crítico).
 
-ADR-GRP-005 § 6 (propuesto, en `main`) define los **comandos reservados**, autorizados solo en el daemon:
+ADR-GRP-005 § 6 (aceptado el 2026-10-04) define los **comandos reservados**, autorizados solo en el daemon:
 
 1. Identificador no reutilizable del llamante.
 2. Ascendencia sin un proceso de agente (ADR-GRP-012).
@@ -55,7 +58,7 @@ ADR-GRP-005 § 6 (propuesto, en `main`) define los **comandos reservados**, auto
 | Desinstalar la protección (`raptor guard uninstall`) | US-GRD-003 | **Sí** | ADR-GRP-005 § 6 + **D5**: anuncio, ventana cancelable, auditoría completa y aceptación de riesgo por acción |
 | Retirar una instalación huérfana | US-GRD-003 | **Sí** | Igual que desinstalar |
 | Excepción consciente (`raptor guard exec -- git …`) | US-GRD-006 | **Sí** | ADR-GRP-005 § 6 + **D5** (la ventana va antes de emitir el token) + el token del § 3 |
-| Confirmar un cambio de rama base o una relajación del suelo (ADR-GRD-004 § 3 y § 4) | US-GRD-014, US-GRD-007 (bloqueadas por P8, no por este ADR) | **Sí** | **D8 (Rene Bonilla, 2026-10-04)**: el mecanismo MVP de D5, igual que desinstalar (anuncio, ventana cancelable, auditoría con la ascendencia completa y aceptación de riesgo por acción). Cuando exista el factor fuera de banda, se aplicará también aquí, pero **no bloquea** US-GRD-007 ni US-GRD-014 |
+| Confirmar un cambio de rama base o una relajación del suelo (ADR-GRD-004 § 3 y § 4) | US-GRD-014, US-GRD-007 (no bloqueadas por este ADR; P8 quedó cerrada por ADR-GRP-007, aceptado el 2026-10-04) | **Sí** | **D8 (Rene Bonilla, 2026-10-04)**: el mecanismo MVP de D5, igual que desinstalar (anuncio, ventana cancelable, auditoría con la ascendencia completa y aceptación de riesgo por acción). Cuando exista el factor fuera de banda, se aplicará también aquí, pero **no bloquea** US-GRD-007 ni US-GRD-014 |
 | Relajar la configuración con el comando de edición | US-GRD-013 (bloqueada) | **Sí** | ADR-GRP-005 § 6 + **factor fuera de banda obligatorio**; sin él, fail-closed (D5). Endurecer no es reservado |
 | Aprobar una petición de la cola | US-GRD-015 (bloqueada) | **Sí** | ADR-GRP-005 § 6 + **factor fuera de banda obligatorio** (D5) |
 | Rechazar una petición de la cola | US-GRD-015 (bloqueada) | No | ADR-GRP-005 § 6 |
