@@ -110,8 +110,8 @@ Si el control queda vacío, todo lo que haya en la ejecución con motor se imput
 | SO | Puerta de trampas | Trazador profundo | Estado en este PR |
 |---|---|---|---|
 | macOS | Sí, bloqueante | eslogger vía `sudo -n` (necesita root y un permiso de TCC) | Trampas **verificadas** en el Mac de desarrollo. eslogger **no verificado**: no hay root aquí. En CI, job no bloqueante hasta su primera ejecución en verde |
-| Linux | Sí, bloqueante | strace `-f` sobre el árbol del probe, sin root, bloqueante | **No verificado** (sin Linux aquí); solo el parser, con una muestra capturada |
-| Windows | Sí: las copias son binarios `.exe` | ETW **pendiente**. Alternativa sin admin: avisos de "proceso nuevo" de un Job Object; choca con `unsafe_code = forbid` | **No verificado**. Además, TS-GRP-002 rechaza todo Git en Windows (*fail-closed*), así que los tests de `crates/git` no pueden pasar ahí todavía |
+| Linux | Sí, bloqueante | strace `-f` sobre el árbol del probe, sin root, bloqueante | **No verificado** (sin Linux aquí); solo el parser, con una muestra capturada. **Pendiente: etapa de validación multiplataforma** |
+| Windows | Sí: las copias son binarios `.exe` | ETW **pendiente**. Alternativa sin admin: avisos de "proceso nuevo" de un Job Object; choca con `unsafe_code = forbid` | **No verificado**. Además, TS-GRP-002 rechaza todo Git en Windows (*fail-closed*), así que los tests de `crates/git` no pueden pasar ahí todavía. **Pendiente: etapa de validación multiplataforma** |
 
 La **comprobación estática** (Validación 5, `static_check.rs`) sigue cubriendo solo `crates/git/src`. El testkit queda fuera porque solo puede ser dev-dependency (D3) y lanza `git` para montar fixtures, no como motor.
 
@@ -126,9 +126,9 @@ Todos los nombres empiezan por `repo_intact::`.
 | Sensibilidad: `touch` y `chmod`; config de sistema en la huella | `sensitivity_touch_and_chmod_are_detected`, `sensitivity_system_config_is_fingerprinted_when_present` | Verde |
 | Pasa con la capa de lectura real | `git/repo_intact::read_layer_leaves_everything_intact` | Verde |
 | Control: `gc --auto` por commit de un agente | `testkit/harness::control_gc_auto_by_agent_commit_is_not_imputed` (comprueba que el pack se crea) | Verde |
-| Control: daemon fsmonitor del usuario arrancado | `git/repo_intact::fsmonitor_daemon_running_is_not_imputed` (macOS y Windows; Git no tiene daemon en Linux) | Verde en macOS |
+| Control: daemon fsmonitor del usuario arrancado | `git/repo_intact::fsmonitor_daemon_running_is_not_imputed` (macOS y Windows; Git no tiene daemon en Linux) | Verde en macOS; Windows: **Pendiente: etapa de validación multiplataforma** |
 | Control: un efecto del motor junto a actividad del usuario se sigue imputando | `control_still_imputes_an_engine_write`, `control_is_strict_without_user_activity` | Verde |
-| Escenarios: worktrees, merge y rebase en curso, HEAD separado, fsmonitor, untracked cache y split index, hooks, LFS, firmas y trace2, `gc` concurrente, `safe.directory` | `git/repo_intact::{linked_worktrees, merge_in_progress, rebase_in_progress_with_detached_head, detached_head, fsmonitor_untracked_cache_and_split_index, hooks_present, lfs_filters, signatures_and_trace2_target, concurrent_user_gc, rejected_by_safe_directory}` | Verde en macOS |
+| Escenarios: worktrees, merge y rebase en curso, HEAD separado, fsmonitor, untracked cache y split index, hooks, LFS, firmas y trace2, `gc` concurrente, `safe.directory` | `git/repo_intact::{linked_worktrees, merge_in_progress, rebase_in_progress_with_detached_head, detached_head, fsmonitor_untracked_cache_and_split_index, hooks_present, lfs_filters, signatures_and_trace2_target, concurrent_user_gc, rejected_by_safe_directory}` | Verde en macOS; Linux y Windows: **Pendiente: etapa de validación multiplataforma** |
 | Repo canario (SEC-09) con stat sucio | `git/canary::repo_intact::*` | Verde (unix) |
 | Allowlist de argv y comprobación estática | `git/repo_intact_exec::trap_gate_on_reads`, `git/static_check::repo_intact::process_spawn_only_in_invoke_module` (más `cli_invoke::argv_log_only_contains_allowlisted_subcommands` de TS-GRP-002) | Verde |
 | Auditoría de `exec`: solo allowlist, `gix` no lanza `git` | `git/repo_intact_exec::{trap_gate_on_reads, detects_launch_by_name, detects_argv_outside_allowlist, kernel_tracer}` | Trampas en verde en macOS; trazadores sin verificar (§ 6) |
@@ -138,7 +138,7 @@ Todos los nombres empiezan por `repo_intact::`.
 | Excepciones de autoarranque y de Guardrails | `autostart_exception_allows_exactly_its_artifacts`, `guardrails_install_allows_only_hookspath_and_its_folder` | Verde (mecanismo); los escenarios reales son de US-GRP-004 e INF-GRD-001 |
 | Guarda | `guard_refuses_the_gitraptor_repo`, `guard_refuses_home_and_root_and_unmarked_dirs`, `snapshot_of_the_gitraptor_repo_panics`, `fixture_roots_pass_the_guard` | Verde |
 | Solo dev-dependency | `testkit/dev_only::testkit_is_only_a_dev_dependency` | Verde |
-| Gate en CI en los tres SO | `.github/workflows/repo-intact.yml` | **No ejecutado** (D11) |
+| Gate en CI en los tres SO | `.github/workflows/repo-intact.yml` | **No ejecutado** (D11). **Pendiente: etapa de validación multiplataforma** |
 
 ## 8. Ganchos para las suites incrementales
 
@@ -175,13 +175,13 @@ En macOS (Darwin 25.6, Apple Git 2.50.1, Rust 1.99), sin root:
 - `cargo test --workspace -- repo_intact` en verde (42 tests).
 - `GITRAPTOR_EXEC_AUDIT=eslogger` falla como se espera ("needs passwordless sudo").
 
-No verificado: Linux, Windows, eslogger, strace y el workflow de GitHub Actions.
+No verificado: Linux, Windows, strace y el workflow de GitHub Actions (**Pendiente: etapa de validación multiplataforma**). Tampoco eslogger, que necesita root en macOS.
 
 ## 11. Fuera de alcance y pendientes
 
-- **Canario en Windows**: los programas marcador son scripts `/bin/sh`. Hace falta una variante `.exe`, que podría reutilizar la técnica de copias del binario.
-- **ETW en Windows**, o Job Object sin admin, que requiere una excepción a `unsafe_code`.
-- **Repo de otro uid real** en CI, con un segundo usuario en el runner Linux.
+- **Canario en Windows**: los programas marcador son scripts `/bin/sh`. Hace falta una variante `.exe`, que podría reutilizar la técnica de copias del binario. **Pendiente: etapa de validación multiplataforma**.
+- **ETW en Windows**, o Job Object sin admin, que requiere una excepción a `unsafe_code`. **Pendiente: etapa de validación multiplataforma**.
+- **Repo de otro uid real** en CI, con un segundo usuario en el runner Linux. **Pendiente: etapa de validación multiplataforma**.
 - **Medir los falsos positivos de LFS**: archivos con filtro y stat sucio (consecuencia de ADR-GRP-009). El escenario `lfs_filters` ya existe; falta la métrica.
 - **Migrar la huella de `crates/git/tests/common`** (la de TS-GRP-002) al testkit. Se dejó intacta para no reescribir los tests de TS-GRP-002 en este PR.
 - **`AGENTS.md`** lista los crates del MVP sin `testkit`. Se anota en el PR; no se toca aquí.
