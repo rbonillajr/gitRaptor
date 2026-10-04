@@ -52,13 +52,13 @@ Entonces la rama "feat-login-v2" vuelve a existir
 **Escenario: La restauración se puede deshacer**
 
 Dado una restauración de "feat-login" al punto de las 10:00
-Cuando el desarrollador pide deshacer desde "feat-login"
+Cuando un solicitante sin atribuir pide deshacer desde "feat-login"
 Entonces "feat-login" vuelve al estado previo a la restauración
 
 **Escenario: Un punto incompleto o dentro de un hueco no se restaura**
 
 Dado un punto que no tiene snapshot completo
-Cuando el desarrollador intenta restaurar a ese punto
+Cuando un solicitante sin atribuir intenta restaurar a ese punto
 Entonces la restauración se rechaza con el motivo
   Y el repo no cambia
 
@@ -70,7 +70,7 @@ Cuando pide restaurar "feat-login" al punto de las 10:00
   Y lo confirma de forma interactiva
 Entonces "feat-login" queda como estaba a las 10:00, sin el commit de "claude-1"
 
-**Escenario: Sin confirmación, o pedida por otro agente, la restauración se rechaza**
+**Escenario: Otro agente no puede restaurar sobre trabajo ajeno**
 
 Dado que después del punto de las 10:00 "claude-1" hizo un commit en "feat-login"
 Cuando "claude-2" pide restaurar "feat-login" al punto de las 10:00
@@ -88,6 +88,6 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 
 ## Dependencias
 
-- **Historias**: US-TMC-001, US-TMC-002, US-TMC-006.
+- **Historias**: US-TMC-001, US-TMC-002, US-TMC-006, US-TMC-013.
 - **Externas**: ninguna.
 - **Transversal**: transversal (lo define el Arquitecto): verificación en repos temporales, nunca en un repo real; mismo comportamiento en Windows, macOS y Linux; mensajes en inglés y español.

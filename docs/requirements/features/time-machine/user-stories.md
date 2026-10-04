@@ -43,19 +43,21 @@ blocked:
 
 ## Índice de Historias
 
+> Columna **Status** = estado de expansión del índice (`draft → expanded`), como en motor-local; el `status` del frontmatter de cada archivo es su ciclo de vida (`draft` hasta que se refine), también como en motor-local.
+>
 > Columna **Depende de** = aristas del DAG de ejecución (requiere terminada). Las dependencias de motor-local (US-GRP-*) y de otras features (F-001-0x) son externas a esta feature. **Bloqueo** = no se puede empezar hasta que se cierre lo indicado.
 
 | ID | Título | Descripción (1 línea) | Depende de | Bloqueo | Status |
 |----|--------|-----------------------|------------|---------|--------|
 | [US-TMC-001](./user-stories/US-TMC-001-snapshot-previo-operaciones-gitraptor.md) | El desarrollador recupera su trabajo sin commitear tras cualquier operación lanzada por GitRaptor | Desarrollador quiere un punto previo garantizado y que la operación no se ejecute si falla | US-GRP-001 | — | expanded |
 | [US-TMC-002](./user-stories/US-TMC-002-undo-ultima-operacion.md) | El desarrollador deshace con un comando la última operación de su worktree | Desarrollador quiere `raptor undo` en el worktree actual, protegido por su propio punto previo | 001 | — | expanded |
-| [US-TMC-003](./user-stories/US-TMC-003-redo.md) | El desarrollador rehace lo que deshizo por error | Desarrollador quiere `raptor redo` del último undo, deteniéndose ante un solape | 002, 012 | — | expanded |
+| [US-TMC-003](./user-stories/US-TMC-003-redo.md) | El desarrollador rehace lo que deshizo por error | Desarrollador quiere `raptor redo` del último undo, deteniéndose ante un solape | 002, 012, 013 | — | expanded |
 | [US-TMC-004](./user-stories/US-TMC-004-captura-continua-git-crudo.md) | El trabajo hecho fuera de GitRaptor queda capturado como punto recuperable | Desarrollador quiere captura continua del Git crudo y del editor, sin ignorados | 001, US-GRP-002, US-GRP-004 | — | expanded |
 | [US-TMC-005](./user-stories/US-TMC-005-snapshot-previo-hooks-guardrails.md) | Las operaciones de Git crudo tienen punto previo cuando el repo usa los hooks de Guardrails | Desarrollador quiere snapshot previo vía hooks de Guardrails sin depender de ellos | 004 | F-001-04 (hooks) | expanded |
 | [US-TMC-006](./user-stories/US-TMC-006-timeline-que-cuando-quien.md) | El desarrollador sabe qué cambió en su repo, cuándo y quién lo hizo | Desarrollador quiere el timeline con actor, origen, "Tú u otro (sin atribuir)" y nivel de cobertura | 001, 004, US-GRP-002, US-GRP-007, US-GRP-009 | — | expanded |
 | [US-TMC-007](./user-stories/US-TMC-007-timeline-filtros-huecos.md) | El desarrollador filtra el timeline por worktree, agente o periodo y ve lo que no se observó | Desarrollador quiere filtros y huecos explícitos en el timeline | 006, US-GRP-005 | — | expanded |
 | [US-TMC-008](./user-stories/US-TMC-008-timeline-atribucion-vigente.md) | El timeline refleja las correcciones de atribución sin reescribir quién deshizo qué | Desarrollador quiere la atribución vigente y el registro de cada undo intacto | 002, 006, US-GRP-010 | — | expanded |
-| [US-TMC-009](./user-stories/US-TMC-009-restaurar-punto-timeline.md) | El desarrollador devuelve su worktree a cualquier punto del timeline | Desarrollador quiere restaurar un punto con el alcance de D-TMC-20, deshaciendo la restauración si quiere | 001, 002, 006 | — | expanded |
+| [US-TMC-009](./user-stories/US-TMC-009-restaurar-punto-timeline.md) | El desarrollador devuelve su worktree a cualquier punto del timeline | Desarrollador quiere restaurar un punto con el alcance de D-TMC-20, deshaciendo la restauración si quiere | 001, 002, 006, 013 | — | expanded |
 | [US-TMC-010](./user-stories/US-TMC-010-undo-since.md) | El desarrollador deshace todo lo ocurrido en su worktree en los últimos minutos | Desarrollador quiere `raptor undo --since` en el worktree actual | 002, 012, 013 | — | expanded |
 | [US-TMC-011](./user-stories/US-TMC-011-undo-por-agente.md) | El desarrollador deshace solo lo que hizo un agente en un periodo | Desarrollador quiere `raptor undo --agent --since` con atribución vigente, sin huecos ni trabajo ajeno | 002, 007, 012, 013, US-GRP-007, US-GRP-009, US-GRP-010 | P17 de motor-local (D-TMC-22) | expanded |
 | [US-TMC-012](./user-stories/US-TMC-012-solape-otro-actor.md) | Un undo nunca sobrescribe trabajo posterior de otro actor | Desarrollador quiere que el undo se detenga y muestre el solape | 002, 006 | — | expanded |
@@ -108,3 +110,4 @@ blocked:
 |---------|-------|-------|---------|
 | 1.0 | 2026-10-03 | PO (AADD) | Versión inicial en modo bulk: 20 historias expandidas; 4 bloqueadas (005, 011, 017, 020). |
 | 1.1 | 2026-10-03 | PO (AADD) | RESERVAS del Artifact Judge: solicitante y confirmación interactiva en 003, 009, 010 y 011 (AUTH-001, D-TMC-23); escenario de Guardrails de 013 extraído a US-TMC-021 (bloqueada por F-001-04); cobertura alineada con `covers`; escenarios de validación o borde en 005, 012, 014, 016 y 019. |
+| 1.2 | 2026-10-03 | PO (AADD) | Segunda pasada del judge: 013 como dependencia de 003 y 009; escenario 6 de 009 retitulado; 010 separa confirmación y rechazo; el solicitante de undo, redo y restauración figura como "solicitante sin atribuir", nunca como el desarrollador (Q34). |

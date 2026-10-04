@@ -56,13 +56,13 @@ Entonces el commit de "claude-2" sigue aplicado
 **Escenario: Se usa la atribución vigente**
 
 Dado una sesión detectada como "claude-1" que el desarrollador corrigió a "codex-1"
-Cuando el desarrollador pide deshacer lo de "claude-1" en el periodo de esa sesión
+Cuando un solicitante sin atribuir pide deshacer lo de "claude-1" en el periodo de esa sesión
 Entonces ninguna operación de esa sesión se deshace
 
 **Escenario: Lo ocurrido en un hueco nunca entra**
 
 Dado que "claude-1" estaba registrado antes de un hueco de observación y en el hueco aparecieron commits
-Cuando el desarrollador pide deshacer lo de "claude-1" en un periodo que incluye el hueco
+Cuando un solicitante sin atribuir pide deshacer lo de "claude-1" en un periodo que incluye el hueco
 Entonces los commits del hueco siguen aplicados
 
 **Escenario: Un agente pide deshacer lo de otro agente**

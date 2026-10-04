@@ -39,21 +39,21 @@ BR-TMC-EDGE-004 (operación de Git en curso) — ver [business-rules.md](../busi
 **Escenario: Undo con un rebase en curso**
 
 Dado un rebase a medias en "feat-login"
-Cuando el desarrollador pide deshacer desde "feat-login"
+Cuando un solicitante sin atribuir pide deshacer desde "feat-login"
 Entonces el undo no se ejecuta
-  Y el desarrollador recibe el aviso de terminar o abortar el rebase antes
+  Y el solicitante recibe el aviso de terminar o abortar el rebase antes
   Y el repo no cambia
 
 **Escenario: Restauración con un merge en curso**
 
 Dado un merge a medias en "feat-login"
-Cuando el desarrollador pide restaurar "feat-login" a un punto anterior
+Cuando un solicitante sin atribuir pide restaurar "feat-login" a un punto anterior
 Entonces la restauración no se ejecuta
   Y el repo no cambia
 
 **Escenario: Tras abortar la operación, el undo funciona**
 
-Dado que el desarrollador abortó el rebase de "feat-login"
+Dado que se abortó el rebase de "feat-login"
 Cuando pide deshacer desde "feat-login"
 Entonces se deshace la última operación de "feat-login"
 

@@ -52,16 +52,16 @@ Entonces existe un punto recuperable con el estado de "feat-login" justo antes d
 **Escenario: No hay undo que rehacer**
 
 Dado que el último evento de "feat-login" no es un undo
-Cuando el desarrollador pide rehacer
+Cuando un solicitante sin atribuir pide rehacer
 Entonces el repo no cambia
-  Y el desarrollador recibe el aviso de que no hay nada que rehacer
+  Y el solicitante recibe el aviso de que no hay nada que rehacer
 
 **Escenario: Otro actor cambió los mismos archivos después del undo**
 
 Dado que tras el undo el agente "claude-1" modificó "b.rs"
-Cuando el desarrollador pide rehacer
+Cuando un solicitante sin atribuir pide rehacer
 Entonces el redo se detiene sin cambiar el repo
-  Y el desarrollador recibe el solape con el cambio de "claude-1"
+  Y el solicitante recibe el solape con el cambio de "claude-1"
 
 **Escenario: Un agente no rehace trabajo de otro actor**
 
@@ -81,6 +81,6 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 
 ## Dependencias
 
-- **Historias**: US-TMC-002, US-TMC-012.
+- **Historias**: US-TMC-002, US-TMC-012, US-TMC-013.
 - **Externas**: ninguna.
 - **Transversal**: transversal (lo define el Arquitecto): verificación en repos temporales, nunca en un repo real; mismo comportamiento en Windows, macOS y Linux; mensajes en inglés y español.

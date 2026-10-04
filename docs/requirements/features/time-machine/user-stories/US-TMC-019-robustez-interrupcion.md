@@ -48,7 +48,7 @@ Entonces el worktree "feat-login" no cambia
 Dado un undo en curso en "feat-login"
 Cuando el proceso de GitRaptor muere a mitad del undo
 Entonces "feat-login" se puede recuperar al estado previo al undo
-  Y al volver a arrancar, el desarrollador recibe el aviso de lo ocurrido
+  Y al volver a arrancar, el solicitante recibe el aviso de lo ocurrido
 
 **Escenario: Interrupción durante una restauración**
 
@@ -59,14 +59,14 @@ Entonces "feat-login" se puede recuperar al estado previo a la restauración
 **Escenario: Tras recuperar una interrupción, el undo funciona con normalidad**
 
 Dado que un undo de "feat-login" se interrumpió y el repo se recuperó al estado previo
-Cuando el desarrollador vuelve a pedir deshacer desde "feat-login"
+Cuando un solicitante sin atribuir vuelve a pedir deshacer desde "feat-login"
 Entonces se deshace la última operación de "feat-login"
 
 **Escenario: Sin interrupciones previas no hay aviso de recuperación**
 
 Dado que GitRaptor se cerró sin ninguna operación a medias
 Cuando vuelve a arrancar
-Entonces el desarrollador no recibe ningún aviso de recuperación
+Entonces el solicitante no recibe ningún aviso de recuperación
   Y el historial de la Time Machine está completo
 
 ## Requisitos Técnicos

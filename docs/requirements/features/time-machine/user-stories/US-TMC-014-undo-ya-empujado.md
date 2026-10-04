@@ -39,15 +39,15 @@ BR-TMC-EDGE-001 (solo local, con aviso) · D-TMC-8, D-TMC-14 — ver [business-r
 **Escenario: Deshacer un commit ya empujado**
 
 Dado un commit de "feat-login" que el repo ya conoce como empujado al remoto
-Cuando el desarrollador lo deshace
+Cuando un solicitante sin atribuir lo deshace
 Entonces el commit se deshace en local
-  Y el desarrollador recibe el aviso de que ese commit sigue en el remoto
+  Y el solicitante recibe el aviso de que ese commit sigue en el remoto
   Y no se envía nada al remoto
 
 **Escenario: Deshacer un commit que no se empujó**
 
 Dado un commit local que el repo no conoce en el remoto
-Cuando el desarrollador lo deshace
+Cuando un solicitante sin atribuir lo deshace
 Entonces el commit se deshace sin aviso sobre el remoto
 
 **Escenario: La Time Machine nunca empuja**
@@ -59,9 +59,9 @@ Entonces el remoto no recibe ningún push ni force-push de la Time Machine
 **Escenario: Rama sin remoto configurado**
 
 Dado un commit en una rama que no tiene remoto configurado
-Cuando el desarrollador lo deshace
+Cuando un solicitante sin atribuir lo deshace
 Entonces el commit se deshace sin aviso sobre el remoto
-  Y el desarrollador no recibe ningún error
+  Y el solicitante no recibe ningún error
 
 ## Requisitos Técnicos
 

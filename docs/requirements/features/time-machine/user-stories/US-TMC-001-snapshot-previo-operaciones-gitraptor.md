@@ -39,7 +39,7 @@ BR-TMC-CONS-001 (sin snapshot previo no hay operación) · BR-TMC-CONS-002 (qué
 **Escenario: Una operación de GitRaptor guarda antes el trabajo sin commitear**
 
 Dado un worktree "feat-login" con "lib.rs" modificado sin commitear y "nuevo.rs" sin seguimiento
-Cuando el desarrollador lanza desde GitRaptor una operación que descarta los cambios de "feat-login"
+Cuando un solicitante lanza desde GitRaptor una operación que descarta los cambios de "feat-login"
 Entonces existe un punto recuperable anterior a la operación con el contenido de "lib.rs" y de "nuevo.rs"
   Y la operación se ejecuta
 
@@ -52,17 +52,17 @@ Entonces el punto previo conserva la rama "feat-pagos", su worktree y su trabajo
 **Escenario: Los archivos ignorados no entran en el punto**
 
 Dado un worktree con ".env" y "node_modules/" ignorados por el repo
-Cuando el desarrollador lanza desde GitRaptor una operación sobre ese worktree
+Cuando un solicitante lanza desde GitRaptor una operación sobre ese worktree
 Entonces el punto previo no contiene ".env" ni "node_modules/"
   Y esos archivos siguen intactos en el worktree
 
 **Escenario: Si el punto previo no se puede guardar, la operación no se ejecuta**
 
 Dado que guardar el punto previo falla porque no hay espacio en disco
-Cuando el desarrollador lanza desde GitRaptor el descarte del worktree "feat-pagos"
+Cuando un solicitante lanza desde GitRaptor el descarte del worktree "feat-pagos"
 Entonces la operación no se ejecuta
   Y el worktree, la rama y su trabajo sin commitear siguen intactos
-  Y el desarrollador recibe el motivo
+  Y el solicitante recibe el motivo
 
 ## Requisitos Técnicos
 
