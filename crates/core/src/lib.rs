@@ -1,5 +1,6 @@
 //! GitRaptor engine: worktree watcher, oplog/snapshots and conflict prediction.
 
+pub mod daemon;
 pub mod profile;
 
 pub use gitraptor_api::API_VERSION;
