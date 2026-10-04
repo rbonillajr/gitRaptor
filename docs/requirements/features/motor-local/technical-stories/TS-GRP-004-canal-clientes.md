@@ -2,7 +2,7 @@
 id: TS-GRP-004
 title: "Canal local de clientes y contrato de mensajes"
 type: ts
-status: Dev Spec Pending
+status: ready
 feature: motor-local
 domain: GRP
 priority: high

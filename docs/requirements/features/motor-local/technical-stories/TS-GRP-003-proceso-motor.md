@@ -2,7 +2,7 @@
 id: TS-GRP-003
 title: "Proceso del motor en segundo plano por usuario"
 type: ts
-status: Dev Spec Pending
+status: ready
 feature: motor-local
 domain: GRP
 priority: high

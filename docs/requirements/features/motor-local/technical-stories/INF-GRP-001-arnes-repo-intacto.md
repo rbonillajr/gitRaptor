@@ -2,7 +2,7 @@
 id: INF-GRP-001
 title: "Arnés de verificación \"repo intacto\" en los tres SO"
 type: inf
-status: Dev Spec Pending
+status: ready
 feature: motor-local
 domain: GRP
 priority: critical

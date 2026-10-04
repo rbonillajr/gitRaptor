@@ -2,7 +2,7 @@
 id: INF-GRP-002
 title: "Banco de medición de frescura y escala"
 type: inf
-status: Dev Spec Pending
+status: ready
 feature: motor-local
 domain: GRP
 priority: high
