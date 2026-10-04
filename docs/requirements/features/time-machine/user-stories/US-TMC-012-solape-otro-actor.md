@@ -69,7 +69,7 @@ Entonces la operación de "claude-1" se deshace
 
 - Dueña de la detección de solape por archivo y por ref (ADR-TMC-005 § 5): cambios posteriores de otro actor según diferencias de árbol entre capturas y la atribución vigente de los eventos del intervalo.
 - Atribución mixta en un intervalo cuenta como otro actor; los cambios anteriores no cuentan.
-- Resultado: operación `rechazada` por solape con los cambios en conflicto (actor y momento); granularidad por fragmento pendiente de TQ-6.
+- Resultado: operación `rechazada` por solape con los cambios en conflicto (actor y momento); granularidad por archivo y por ref en el MVP (por fragmento, más adelante).
 
 ## Diseño y Dev Spec
 

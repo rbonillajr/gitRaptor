@@ -2,7 +2,8 @@
 id: ADR-TMC-006
 title: "ADR-TMC-006 — Presupuesto de rendimiento del snapshot previo (NFR-04)"
 type: adr
-status: proposed
+status: accepted
+accepted: 2026-10-03
 created: 2026-10-03
 updated: 2026-10-03
 date: 2026-10-03
@@ -21,7 +22,9 @@ published: true
 
 # ADR-TMC-006 — Presupuesto de rendimiento del snapshot previo (NFR-04)
 
-**Status**: Propuesto · **Fecha**: 2026-10-03 · **Decisores**: Rene Bonilla · **Feature**: Time Machine (F-001-03)
+**Status**: Aceptado · **Fecha**: 2026-10-03 · **Decisores**: Rene Bonilla · **Feature**: Time Machine (F-001-03)
+
+**Decisión de Rene Bonilla (2026-10-03)**: TQ-4 → (a) el escalón 3 (gitoxide solo en el almacén) queda preaprobado si SPIKE-TMC-001 lo exige.
 
 ## Contexto
 
@@ -70,7 +73,7 @@ Lo fija **SPIKE-TMC-001** con números (archivos con seguimiento, tamaño del wo
 
 1. Procesos de Git persistentes por almacén (un proceso que recibe objetos en flujo), en lugar de uno por paso.
 2. Detección de cambios apoyada en el estado en memoria del motor y la caché de stat, con el recorrido completo solo como verificación periódica.
-3. Escritura en el almacén con gitoxide (solo en el almacén, nunca en el repo del usuario). Contradice la letra de ADR-GRP-001: **no se activa sin la aprobación de Rene** (TQ-4).
+3. Escritura en el almacén con gitoxide (solo en el almacén, nunca en el repo del usuario). Excepción a ADR-GRP-001 **preaprobada por Rene** (TQ-4 → a): se activa solo si los escalones 1 y 2 no bastan, y se anota en este ADR.
 
 ## Alternativas consideradas
 

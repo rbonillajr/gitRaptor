@@ -2,7 +2,8 @@
 id: ADR-TMC-001
 title: "ADR-TMC-001 — Almacén de snapshots: repo Git privado por repo en el perfil"
 type: adr
-status: proposed
+status: accepted
+accepted: 2026-10-03
 created: 2026-10-03
 updated: 2026-10-03
 date: 2026-10-03
@@ -21,7 +22,9 @@ published: true
 
 # ADR-TMC-001 — Almacén de snapshots: repo Git privado por repo en el perfil
 
-**Status**: Propuesto · **Fecha**: 2026-10-03 · **Decisores**: Rene Bonilla · **Feature**: Time Machine (F-001-03)
+**Status**: Aceptado · **Fecha**: 2026-10-03 · **Decisores**: Rene Bonilla · **Feature**: Time Machine (F-001-03)
+
+**Decisión de Rene Bonilla (2026-10-03)**: TQ-1 → (c) almacén autocontenido en el perfil; TQ-4 → (a) gitoxide preaprobado solo en el almacén; TQ-5 → (b) límites de tamaño y cuotas; TQ-15 → (a) repos anidados excluidos; TQ-16 → (a) lista de credenciales excluida; TQ-17 → (a) `forget` aplazado.
 
 > **Restricciones activas**: no hay `architecture-constitution.md` en la cascada. ⚠️ **ASSUMPTION**: rigen como constitución ADR-GRP-001 (gitoxide para leer, Git CLI para escribir) y ADR-GRP-002 (crates), igual que en motor-local. Fuente: inline; formalizar con `/aadd-architect --init-constitution`.
 
@@ -49,25 +52,25 @@ Hechos que acotan la decisión: el motor solo observa (Q21, ADR-GRP-009) y el ar
 - **Working tree**: se guarda el contenido **tal cual está en disco**, sin filtros `clean`, sin conversión de fin de línea ni `ident`. Se reutiliza el blob del índice solo si el archivo está limpio según el stat **y** su ruta no tiene atributos de conversión. Restaurar escribe esos mismos bytes (ADR-TMC-002): la ida y la vuelta son exactas y no se ejecuta nada configurado por el usuario, igual que exige ADR-GRP-009 al motor.
 - **Git LFS y otros filtros**: el snapshot guarda el contenido real del working tree (el archivo ya convertido por `smudge`) y, en `index`, el puntero que tiene el índice. Restaurar devuelve el archivo real sin ejecutar `smudge`. Coste: un archivo LFS grande ocupa su tamaño real en el almacén (ver § 4).
 - **Ignorados**: excluidos con las reglas de ignore de Git, leídas en solo lectura (`.gitignore`, `info/exclude`, `core.excludesFile`), las mismas que usa el motor (ADR-GRP-010). Un archivo con seguimiento que coincide con un patrón de ignore se incluye, como en Git.
-- **Credenciales sin seguimiento ni ignorar**: ⚠️ **ASSUMPTION** (TQ-16, cambia D-TMC-16, decisión de producto): una lista cerrada de nombres de credenciales se trata como ignorada y se declara, con opción en el perfil para incluirla (SEC-TMC-06). Borrar contenido ya capturado (`forget`) no forma parte del diseño: depende de TQ-17.
+- **Credenciales sin seguimiento ni ignorar** (TQ-16 → a; cambia D-TMC-16, que actualiza el PO): una lista cerrada de nombres de credenciales se trata como ignorada y se declara, con opción en el perfil para incluirla (SEC-TMC-06). Borrar contenido ya capturado (`forget`) queda aplazado a una US futura (TQ-17 → a).
 - **Modos y enlaces**: archivo normal, ejecutable y enlace simbólico (el destino se guarda como contenido). No se guardan propietario, permisos fuera del bit de ejecución, atributos extendidos, fechas ni directorios vacíos (modelo de Git). En Windows los enlaces siguen `core.symlinks` del repo.
 - **Submódulos**: se guarda el gitlink (commit del índice y HEAD del submódulo leído en solo lectura). **El contenido del working tree del submódulo no entra**: es otro repo, con su propia Time Machine si se observa. El snapshot lo registra como exclusión "submódulo" y la restauración lo avisa.
-- **Repos anidados sin seguimiento** (un directorio con su propio `.git` dentro del worktree): ⚠️ **ASSUMPTION** (TQ-15): se excluyen y se declaran como "repo anidado"; nunca se escriben ni se borran al restaurar (SEC-TMC-04).
-- **Archivos grandes**: el snapshot previo garantizado los incluye siempre (US-TMC-020, escenario 3). Para la captura por observación, ver TQ-5 en el overview: ⚠️ **ASSUMPTION**: los archivos de más de 50 MB se excluyen de esa captura, que queda marcada como parcial con la lista.
+- **Repos anidados sin seguimiento** (un directorio con su propio `.git` dentro del worktree): se excluyen y se declaran (TQ-15 → a) como "repo anidado"; nunca se escriben ni se borran al restaurar (SEC-TMC-04).
+- **Archivos grandes**: el snapshot previo garantizado los incluye siempre (US-TMC-020, escenario 3). En la captura por observación, los archivos de más de 50 MB se excluyen y la captura queda marcada como parcial con la lista (TQ-5 → b). ⚠️ **ASSUMPTION**: la cifra de 50 MB la ajusta SPIKE-TMC-001.
 
 ### 3. Objetos: autocontenido, siembra y anclaje
 
 - **Siembra**: al activar la Time Machine en un repo, el daemon puebla el almacén en segundo plano con el historial alcanzable desde las ramas locales. Usa enlaces duros a los packs del repo si están en el mismo sistema de archivos y cumplen las condiciones de propiedad y permisos de SEC-TMC-06; si no, copia. Hasta que termina, un snapshot previo garantizado paga la copia de lo que le falta (ADR-TMC-006 lo excluye del p95).
 - **Anclaje incremental**: cuando el motor publica un commit nuevo o un movimiento de ref (ADR-GRP-010, ADR-GRP-013), el daemon copia al almacén los objetos que aún no tiene, fuera de la ruta crítica. Los blobs preparados, que solo alcanza el índice, se copian al capturar. Un snapshot nunca depende de un objeto que solo está en el repo.
 - **Índice temporal propio**: los árboles se construyen con un índice temporal del almacén (`GIT_INDEX_FILE` dentro del perfil), **nunca** con el índice del usuario.
-- **Escritura en el almacén**: con Git CLI y argv fijo, según la capa de escritura de ADR-TMC-002. Si SPIKE-TMC-001 demuestra que no cabe en 200 ms, la alternativa es escribir en el almacén con gitoxide, que contradice la letra de ADR-GRP-001 (TQ-4).
+- **Escritura en el almacén**: con Git CLI y argv fijo, según la capa de escritura de ADR-TMC-002. Si SPIKE-TMC-001 demuestra que no cabe en 200 ms, se escribe en el almacén con gitoxide: excepción a ADR-GRP-001 preaprobada y limitada al almacén, nunca al repo del usuario (TQ-4 → a).
 
 ### 4. Configuración y aislamiento del almacén
 
 - Configuración fijada por la Time Machine: sin remotos, sin hooks (`core.hooksPath` a un directorio vacío del perfil), `gc.auto=0` (mantenimiento propio, ADR-TMC-007) y sin reflogs.
 - Carpeta 0700 y archivos 0600, con propietario comprobado al abrir (ADR-GRP-006 § 1). Contiene **contenido del usuario**, a diferencia del almacén del motor, que solo guarda metadatos (ADR-GRP-006 § 4); ver SEC-TMC-01.
 - **El almacén es entrada no confiable**: el mismo usuario (o un agente) puede manipularlo. Objetos verificados por hash y árbol y `meta` revalidados antes de restaurar (SEC-TMC-09). Un almacén ilegible, corrupto o cambiado fuera del daemon se aparta (renombrado, nunca borrado) y la Time Machine de ese repo empieza de cero con un hueco declarado. No afecta a otros repos.
-- `tm/` queda excluido de las copias de seguridad del SO (SEC-TMC-06) y sujeto a las cuotas de disco de SEC-TMC-12 (⚠️ **ASSUMPTION**, TQ-5).
+- `tm/` queda excluido de las copias de seguridad del SO (SEC-TMC-06) y sujeto a las cuotas de disco de SEC-TMC-12 (TQ-5 → b; ⚠️ **ASSUMPTION**: las cifras las ajusta SPIKE-TMC-001).
 
 ## Alternativas consideradas
 
@@ -86,7 +89,7 @@ Hechos que acotan la decisión: el motor solo observa (Q21, ADR-GRP-009) y el ar
 - ✅ Garantía 2: el `gc` del repo no ve el almacén, y el del almacén lo gobierna solo la Time Machine (ADR-TMC-007).
 - ✅ El arnés de INF-GRP-001 sigue siendo binario con la Time Machine activa: fuera de un undo, una redo o una restauración, el repo no cambia.
 - ✅ Deduplicación entre snapshots y worktrees, porque los objetos se direccionan por contenido.
-- ⚠️ **Disco**: el almacén puede llegar al tamaño del historial del repo más el contenido único capturado. **Mitigación**: enlaces duros en la siembra, retención (ADR-TMC-007) y tamaño expuesto en diagnóstico; SPIKE-TMC-001 lo mide. Aceptación en TQ-1.
+- ⚠️ **Disco**: el almacén puede llegar al tamaño del historial del repo más el contenido único capturado. **Mitigación**: enlaces duros en la siembra, retención (ADR-TMC-007) y tamaño expuesto en diagnóstico; SPIKE-TMC-001 lo mide. Coste aceptado por Rene (TQ-1 → c).
 - ⚠️ **El perfil pasa a contener código del usuario**, incluidos secretos en archivos **no** ignorados. **Mitigación**: permisos (SEC-TMC-01) y documentación del riesgo R5. Impacto en ADR-GRP-006 (pendiente de integración).
 - ⚠️ Repo y perfil en volúmenes distintos: sin enlaces duros, la siembra copia. Se mide.
 - ⚠️ Submódulos y metadatos de archivo (propietario, xattrs, fechas) no se protegen. Se declaran en el snapshot y en la restauración.

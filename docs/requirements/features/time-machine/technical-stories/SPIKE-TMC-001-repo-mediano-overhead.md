@@ -2,7 +2,7 @@
 id: SPIKE-TMC-001
 title: "Repo mediano de referencia y viabilidad del snapshot en menos de 200 ms"
 type: spike
-status: draft
+status: ready
 feature: time-machine
 domain: GRP
 priority: high
@@ -41,10 +41,10 @@ tags: [time-machine, spike, rendimiento, nfr-04, d-tmc-21, repo-mediano, almacen
 
 - **Corpus**: elegir repos públicos en los percentiles 50, 75 y 90 de archivos, working tree y commits; proponer el de referencia y uno mayor fuera de referencia.
 - **Etapas**: medir el p95 de cada etapa de ADR-TMC-006 § 2 con un delta de 1, 10, 100 y 1.000 archivos, en los tres SO y en la máquina de dogfooding.
-- **Coste de procesos**: comparar un proceso de Git por paso frente a procesos persistentes por almacén, y anotar la ganancia de escribir con gitoxide solo como referencia para TQ-4.
+- **Coste de procesos**: comparar un proceso de Git por paso frente a procesos persistentes por almacén, y medir la ganancia de escribir el almacén con gitoxide (escalón 3 de ADR-TMC-006 § 5, preaprobado).
 - **Siembra y disco**: tiempo y espacio con enlace duro y con copia; crecimiento del almacén tras una semana simulada de capturas.
 - **Contenido**: coste de archivos LFS reales y de un archivo de 1 GB sin seguimiento ni ignorado.
-- **Captura continua**: CPU, disco escrito y p95 del motor con 10 worktrees y una ráfaga de 1.000 archivos; ajustar `Q`, `M` y el límite de tamaño de TQ-5.
+- **Captura continua**: CPU, disco escrito y p95 del motor con 10 worktrees y una ráfaga de 1.000 archivos; ajustar `Q`, `M`, el límite de 50 MB y las cuotas de SEC-TMC-12.
 - **Repo intacto**: el prototipo no cambia la huella del repo.
 
 ### Criterios de Éxito
@@ -52,7 +52,7 @@ tags: [time-machine, spike, rendimiento, nfr-04, d-tmc-21, repo-mediano, almacen
 - Rene aprueba el repo de referencia con números concretos, que pasan a ADR-TMC-006 § 3 y al banco de US-TMC-020.
 - p95 total menor de 200 ms en el repo de referencia en los tres SO, con la cifra por etapa registrada en ADR-TMC-006.
 - Valores medidos para `Q`, `M` y el límite de tamaño de la captura por observación.
-- **Vía de fracaso**: si el p95 no se cumple, se aplican en orden los escalones de ADR-TMC-006 § 5 y se vuelve a medir; si solo cumple el tercero, se lleva TQ-4 a Rene. Si el disco del almacén es inaceptable, se reabre TQ-1.
+- **Vía de fracaso**: si el p95 no se cumple, se aplican en orden los escalones de ADR-TMC-006 § 5 y se vuelve a medir; si solo cumple el tercero, se activa ese escalón (preaprobado, TQ-4 → a) y se anota en ADR-TMC-006. Si el disco del almacén es inaceptable, se lleva a Rene para revisar ADR-TMC-001.
 
 ### Time-box
 

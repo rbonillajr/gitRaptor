@@ -2,7 +2,8 @@
 id: ADR-TMC-004
 title: "ADR-TMC-004 — Cobertura en dos niveles: snapshot previo garantizado, captura por observación y previo vía hook"
 type: adr
-status: proposed
+status: accepted
+accepted: 2026-10-03
 created: 2026-10-03
 updated: 2026-10-03
 date: 2026-10-03
@@ -21,7 +22,9 @@ published: true
 
 # ADR-TMC-004 — Cobertura en dos niveles: snapshot previo garantizado, captura por observación y previo vía hook
 
-**Status**: Propuesto · **Fecha**: 2026-10-03 · **Decisores**: Rene Bonilla · **Feature**: Time Machine (F-001-03)
+**Status**: Aceptado · **Fecha**: 2026-10-03 · **Decisores**: Rene Bonilla · **Feature**: Time Machine (F-001-03)
+
+**Decisión de Rene Bonilla (2026-10-03)**: TQ-3 → (a) la operación protegida entrega las operaciones de usuario al ejecutor del daemon; TQ-5 → (b) cuotas con hueco "sin espacio" y reserva del snapshot previo.
 
 ## Contexto
 
@@ -47,7 +50,7 @@ D-TMC-10 y BR-TMC-CONS-003 fijan dos niveles. (a) **Garantizado**: snapshot prev
 - **Coalescencia y contrapresión**: una captura en curso por worktree y un escritor del almacén por repo; si se acumula trabajo, se conserva solo la petición más reciente por worktree. Captura incremental: solo se leen y guardan las rutas cambiadas desde la captura anterior, más un recorrido de stat que detecta lo que el motor no notificó.
 - **Consistencia**: una captura guarda la marca del motor al empezar. Si durante la lectura llega un evento de Git de ese worktree, la captura se descarta y se repite, para que nunca mezcle el estado de antes y el de después de una operación.
 - **Fallo**: una captura que falla no crea punto; el timeline muestra el cambio sin punto recuperable (US-TMC-004, escenario 4).
-- **Cuotas**: al alcanzar la cuota del repo o el mínimo de espacio libre, la captura por observación se detiene con un hueco "sin espacio" declarado (SEC-TMC-12; cifras en TQ-5).
+- **Cuotas**: al alcanzar la cuota del repo o el mínimo de espacio libre, la captura por observación se detiene con un hueco "sin espacio" declarado (SEC-TMC-12; TQ-5 → b; ⚠️ **ASSUMPTION**: las cifras las ajusta SPIKE-TMC-001).
 - **Huecos y modo degradado**: en un hueco no hay capturas (BR-TMC-EDGE-002). En modo degradado (sondeo, ADR-GRP-010 § 5), las capturas siguen al sondeo.
 - **Riesgo residual R2** (aceptado en el context): lo editado entre la última captura y una operación destructiva de Git crudo, a lo sumo `Q`/`M`, puede perderse.
 

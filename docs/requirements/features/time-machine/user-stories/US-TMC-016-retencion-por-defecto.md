@@ -64,7 +64,7 @@ Entonces todo punto que no se purgó por completo sigue disponible para restaura
 
 ## Requisitos Técnicos
 
-- Dueña de la purga en dos fases (ADR-TMC-007 § 3-4): anuncio con aviso pendiente, gracia (TQ-11) y borrado de refs del almacén en una transacción.
+- Dueña de la purga en dos fases (ADR-TMC-007 § 3-4): anuncio con aviso pendiente, gracia de 24 h tras mostrar el aviso en la CLI o la TUI y borrado de refs del almacén en una transacción.
 - Protección del previo a la última operación destructiva por worktree y de los previos de operaciones interrumpidas; clasificación de destructiva de ADR-TMC-007 § 2.
 - Mantenimiento del almacén con periodo de gracia (TS-TMC-001); el repo del usuario no se toca. Purga interrumpida resuelta al arrancar (TS-TMC-002).
 

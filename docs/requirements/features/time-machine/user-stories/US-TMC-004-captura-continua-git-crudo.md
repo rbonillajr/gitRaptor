@@ -68,7 +68,7 @@ Entonces ese cambio figura sin punto recuperable
 - La captura se alimenta de los eventos ya publicados por el motor, fuera de su presupuesto de 300 ms (ADR-TMC-004 § 2; ADR-GRP-011).
 - Disparadores por worktree: quietud de 1 s o cada 5 s con actividad continua, e inmediata tras un evento de Git, con anclaje de commits (⚠️ ASSUMPTION, ajusta SPIKE-TMC-001).
 - Coalescencia (una captura en curso por worktree), captura incremental y descarte si llega un evento de Git durante la lectura.
-- Archivos grandes en esta captura: exclusión declarada según TQ-5; una captura fallida no crea punto (nivel declarado, ADR-TMC-004 § 4).
+- Archivos grandes en esta captura: exclusión declarada de los de más de 50 MB (ADR-TMC-001 § 2) y hueco "sin espacio" al llegar a la cuota (SEC-TMC-12); una captura fallida no crea punto (nivel declarado, ADR-TMC-004 § 4).
 - Verificación: el gate de INF-GRP-002 con la Time Machine activa mantiene el p95 del motor ≤ 300 ms.
 
 ## Diseño y Dev Spec

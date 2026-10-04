@@ -2,7 +2,8 @@
 id: ADR-TMC-007
 title: "ADR-TMC-007 — Retención y purga segura de snapshots"
 type: adr
-status: proposed
+status: accepted
+accepted: 2026-10-03
 created: 2026-10-03
 updated: 2026-10-03
 date: 2026-10-03
@@ -21,7 +22,9 @@ published: true
 
 # ADR-TMC-007 — Retención y purga segura de snapshots
 
-**Status**: Propuesto · **Fecha**: 2026-10-03 · **Decisores**: Rene Bonilla · **Feature**: Time Machine (F-001-03)
+**Status**: Aceptado · **Fecha**: 2026-10-03 · **Decisores**: Rene Bonilla · **Feature**: Time Machine (F-001-03)
+
+**Decisión de Rene Bonilla (2026-10-03)**: TQ-5 → (b) cuotas sin purga anticipada; TQ-11 → (a) aviso mostrado en CLI/TUI + 24 h; TQ-17 → (a) `forget` aplazado a una US futura.
 
 ## Contexto
 
@@ -63,15 +66,15 @@ Para las operaciones protegidas, el tipo de operación declara si es destructiva
 ### 4. Purga en dos fases, solo en el almacén
 
 1. **Anuncio**: el trabajo de purga (al arrancar el daemon y una vez al día) calcula los candidatos: más antiguos que la retención y no protegidos. Si hay alguno, registra un **aviso pendiente** con el número, el periodo y el tamaño, que la CLI y la TUI muestran.
-2. **Gracia**: ⚠️ **ASSUMPTION** (TQ-11): la purga solo se ejecuta cuando el aviso se mostró al menos una vez en la CLI o la TUI **y** pasaron 24 horas desde el anuncio. Sin ningún cliente, no se purga (el disco crece antes que perder un punto sin avisar).
+2. **Gracia** (TQ-11 → a): la purga solo se ejecuta cuando el aviso se mostró al menos una vez en la CLI o la TUI **y** pasaron 24 horas desde el anuncio. Sin ningún cliente, no se purga (el disco crece antes que perder un punto sin avisar).
 3. **Ejecución**: se recalcula la elegibilidad (un candidato que pasó a protegido se salta), se anota la intención en el diario, se borran sus refs del almacén en **una sola transacción** y se anota que se purgaron. La fila del snapshot se conserva como "punto purgado" en el timeline.
-4. **Liberación de objetos**: el mantenimiento del almacén (compactar y borrar objetos sin referencias) corre en reposo, con un periodo de gracia para objetos sueltos (⚠️ **ASSUMPTION**: 1 hora) que protege las capturas en curso. **El repo del usuario no se toca nunca durante la purga**.
+4. **Liberación de objetos**: el mantenimiento del almacén (compactar y borrar objetos sin referencias) corre en reposo, con un periodo de gracia para objetos sueltos (⚠️ **ASSUMPTION**: 1 hora, valor de diseño que fija la Dev Spec de TS-TMC-001) que protege las capturas en curso. **El repo del usuario no se toca nunca durante la purga**.
 5. **Interrupción** (US-TMC-016, escenario 4): al recuperar, un snapshot con intención de purga y ref presente vuelve a estar disponible; uno con la ref ya borrada pasa a purgado. Como la transacción de refs es atómica, no hay estados intermedios.
 
 ### 5. Borrado inmediato y cuotas
 
-- **`forget` no forma parte de este diseño**: queda condicionado a TQ-17 (capacidad nueva de producto, sin US). Tal como se propuso, chocaría con D-TMC-15 y BR-TMC-TIME-001 (borra sin aviso y sin respetar el snapshot protegido), ampliaría BR-TMC-CONS-004, se saltaría el periodo de gracia de § 4.4 y, con una ruta, borraría snapshots enteros (NFR-01). Si Rene la incluye, su semántica debe reescribir los snapshots sin esa ruta, conservar el resto, respetar las capturas en curso y salir de una US del PO. Mientras tanto, el contenido sensible lo cubre la lista de exclusión de SEC-TMC-06 (TQ-16).
-- **Cuotas de disco** (SEC-TMC-12, cifras en TQ-5): al alcanzarlas no se purga antes de tiempo; se detiene la captura por observación con un hueco "sin espacio" (ADR-TMC-004 § 2).
+- **`forget` no forma parte de este diseño**: aplazado a una US futura del PO (TQ-17 → a). Tal como se propuso, chocaría con D-TMC-15 y BR-TMC-TIME-001 (borra sin aviso y sin respetar el snapshot protegido), ampliaría BR-TMC-CONS-004, se saltaría el periodo de gracia de § 4.4 y, con una ruta, borraría snapshots enteros (NFR-01). Cuando se especifique, su semántica debe reescribir los snapshots sin esa ruta, conservar el resto, respetar las capturas en curso y salir de una US del PO. Mientras tanto, el contenido sensible lo cubre la lista de exclusión de SEC-TMC-06 (TQ-16 → a).
+- **Cuotas de disco** (SEC-TMC-12, TQ-5 → b; ⚠️ **ASSUMPTION**: cifras que ajusta SPIKE-TMC-001): al alcanzarlas no se purga antes de tiempo; se detiene la captura por observación con un hueco "sin espacio" (ADR-TMC-004 § 2).
 
 ## Alternativas consideradas
 
@@ -79,7 +82,7 @@ Para las operaciones protegidas, el tipo de operación declara si es destructiva
 |---|---|---|
 | **Retención por tamaño** (cuota de disco) | No es lo que decidió D-TMC-15; podría purgar puntos recientes | Descartada en el MVP |
 | **Proteger solo el previo a la última destructiva del repo** | Con varios worktrees, una operación en otro worktree dejaría sin proteger el último punto de este | Descartada: se protege por worktree |
-| **Purga inmediata con aviso simultáneo** | El aviso llega tarde: no es "antes de purgar" | Descartada (TQ-11) |
+| **Purga inmediata con aviso simultáneo** | El aviso llega tarde: no es "antes de purgar" | Descartada (TQ-11 → a) |
 | **`gc --prune=now` del almacén** | Puede borrar objetos de una captura en curso sin referencia todavía | Descartada: periodo de gracia |
 | **Borrar también las filas del oplog** | El timeline perdería que hubo un punto y cuándo | Descartada |
 
