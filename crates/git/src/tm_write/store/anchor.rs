@@ -41,7 +41,8 @@ impl StoreHandle {
             let kind = data.kind;
             match kind {
                 gix::object::Kind::Commit => {
-                    let mut commit = gix::objs::CommitRefIter::from_bytes(data.data, gix::hash::Kind::Sha1);
+                    let mut commit =
+                        gix::objs::CommitRefIter::from_bytes(data.data, gix::hash::Kind::Sha1);
                     let tree = commit
                         .tree_id()
                         .map_err(|e| StoreError::Corrupt(format!("commit {id}: {e}")))?;
@@ -49,7 +50,9 @@ impl StoreHandle {
                     stack.extend(commit.parent_ids());
                 }
                 gix::object::Kind::Tree => {
-                    for entry in gix::objs::TreeRefIter::from_bytes(data.data, gix::hash::Kind::Sha1) {
+                    for entry in
+                        gix::objs::TreeRefIter::from_bytes(data.data, gix::hash::Kind::Sha1)
+                    {
                         let entry =
                             entry.map_err(|e| StoreError::Corrupt(format!("tree {id}: {e}")))?;
                         // A gitlink names a commit of another repository.
@@ -59,9 +62,10 @@ impl StoreHandle {
                     }
                 }
                 gix::object::Kind::Tag => {
-                    let target = gix::objs::TagRefIter::from_bytes(data.data, gix::hash::Kind::Sha1)
-                        .target_id()
-                        .map_err(|e| StoreError::Corrupt(format!("tag {id}: {e}")))?;
+                    let target =
+                        gix::objs::TagRefIter::from_bytes(data.data, gix::hash::Kind::Sha1)
+                            .target_id()
+                            .map_err(|e| StoreError::Corrupt(format!("tag {id}: {e}")))?;
                     stack.push(target);
                 }
                 gix::object::Kind::Blob => {}

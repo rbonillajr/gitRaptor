@@ -456,7 +456,10 @@ impl StoreHandle {
     pub fn snapshot_refs(&self) -> Result<Vec<(String, Oid)>> {
         let refs = self.repo.references().map_err(git_err("refs"))?;
         let mut out = Vec::new();
-        for r in refs.prefixed(SNAPSHOT_REF_PREFIX).map_err(git_err("refs"))? {
+        for r in refs
+            .prefixed(SNAPSHOT_REF_PREFIX)
+            .map_err(git_err("refs"))?
+        {
             let r = r.map_err(|e| StoreError::Git(format!("refs: {e}")))?;
             let name = r.name().as_bstr().to_str_lossy().into_owned();
             let Some(id) = name.strip_prefix(SNAPSHOT_REF_PREFIX) else {
@@ -500,10 +503,7 @@ impl StoreHandle {
                     expected: PreviousValue::MustExist,
                     log: RefLog::AndReference,
                 },
-                name: name
-                    .as_str()
-                    .try_into()
-                    .map_err(plumbing_err("ref name"))?,
+                name: name.as_str().try_into().map_err(plumbing_err("ref name"))?,
                 deref: false,
             });
         }
@@ -664,17 +664,15 @@ impl TreeEdit<'_> {
     pub fn write(&mut self) -> Result<Oid> {
         let handle = self.handle;
         let mut written = Vec::new();
-        let root = self
-            .editor
-            .write(|tree| -> Result<gix::ObjectId> {
-                let id = handle
-                    .repo
-                    .write_object(tree)
-                    .map_err(git_err("tree"))?
-                    .detach();
-                written.push(id);
-                Ok(id)
-            })?;
+        let root = self.editor.write(|tree| -> Result<gix::ObjectId> {
+            let id = handle
+                .repo
+                .write_object(tree)
+                .map_err(git_err("tree"))?
+                .detach();
+            written.push(id);
+            Ok(id)
+        })?;
         handle.sync_objects(&written)?;
         Ok(Oid(root))
     }
@@ -704,7 +702,9 @@ impl Read for Checked<'_> {
                 return Err(io::Error::other("yielded to a guaranteed prior snapshot"));
             }
         }
-        let max = usize::try_from(self.left).unwrap_or(usize::MAX).min(buf.len());
+        let max = usize::try_from(self.left)
+            .unwrap_or(usize::MAX)
+            .min(buf.len());
         let n = self.inner.read(&mut buf[..max])?;
         if n == 0 {
             return Err(io::Error::new(

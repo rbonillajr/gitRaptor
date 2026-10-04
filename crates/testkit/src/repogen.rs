@@ -199,7 +199,10 @@ pub fn git_command(git: &Path, dir: &Path) -> Command {
     let mut c = Command::new(git);
     c.current_dir(dir)
         .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("GIT_CONFIG_GLOBAL", if cfg!(windows) { "NUL" } else { "/dev/null" })
+        .env(
+            "GIT_CONFIG_GLOBAL",
+            if cfg!(windows) { "NUL" } else { "/dev/null" },
+        )
         .env("GIT_AUTHOR_NAME", "gen")
         .env("GIT_AUTHOR_EMAIL", "gen@example.com")
         .env("GIT_COMMITTER_NAME", "gen")

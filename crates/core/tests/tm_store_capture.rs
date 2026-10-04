@@ -21,7 +21,10 @@ fn level_obs() -> SnapshotLevel {
 fn snapshot_holds_raw_working_tree_index_and_refs() {
     let env = Env::busy();
     let out = env.prior();
-    assert_eq!(out.detection, vec![("main".into(), Detection::Full("first-capture"))]);
+    assert_eq!(
+        out.detection,
+        vec![("main".into(), Detection::Full("first-capture"))]
+    );
     let id = &out.snapshot_id;
     // Modified, staged and untracked content as on disk; ignored never.
     assert_eq!(env.file(id, "a.txt").unwrap(), b"alpha changed\n");
@@ -81,8 +84,11 @@ fn content_round_trips_bit_for_bit() {
     write(&f.repo, "kw.id", b"$Id$\n");
     write(&f.repo, "x.flt", b"filtered?\n");
     write(&f.repo, "run.sh", b"#!/bin/sh\necho hi\n");
-    std::fs::set_permissions(f.repo.join("run.sh"), std::fs::Permissions::from_mode(0o755))
-        .unwrap();
+    std::fs::set_permissions(
+        f.repo.join("run.sh"),
+        std::fs::Permissions::from_mode(0o755),
+    )
+    .unwrap();
     std::os::unix::fs::symlink("a.txt", f.repo.join("link")).unwrap();
     write(&f.repo, "ñandú/日本語 ü.txt", "unicode ✓\n".as_bytes());
     write(&f.repo, "bin.dat", &[0, 159, 146, 150, 13, 10, 255]);
@@ -99,7 +105,11 @@ fn content_round_trips_bit_for_bit() {
             let disk = env.f.repo.join(&path);
             let expected = if disk.symlink_metadata().unwrap().file_type().is_symlink() {
                 use std::os::unix::ffi::OsStrExt;
-                std::fs::read_link(&disk).unwrap().as_os_str().as_bytes().to_vec()
+                std::fs::read_link(&disk)
+                    .unwrap()
+                    .as_os_str()
+                    .as_bytes()
+                    .to_vec()
             } else {
                 std::fs::read(&disk).unwrap()
             };
@@ -117,7 +127,10 @@ fn content_round_trips_bit_for_bit() {
         assert_eq!(kinds["link"], TreeEntryKind::Symlink);
         assert_eq!(kinds["ñandú/日本語 ü.txt"], TreeEntryKind::Blob);
     }
-    assert!(!marker.exists(), "a filter of the user ran during a capture");
+    assert!(
+        !marker.exists(),
+        "a filter of the user ran during a capture"
+    );
 }
 
 #[test]
@@ -162,12 +175,9 @@ fn ignored_credentials_nested_repos_and_submodules_are_left_out_and_declared() {
         assert!(!paths.contains(&absent.to_owned()), "{absent} captured");
     }
     let kinds: Vec<_> = env.store.files(&out.snapshot_id, "main").unwrap();
-    assert!(
-        kinds
-            .iter()
-            .any(|(p, k, _)| p == "sub"
-                && *k == gitraptor_git::tm_write::store::TreeEntryKind::Gitlink)
-    );
+    assert!(kinds.iter().any(
+        |(p, k, _)| p == "sub" && *k == gitraptor_git::tm_write::store::TreeEntryKind::Gitlink
+    ));
     let reasons: Vec<(String, String)> = out
         .exclusions
         .iter()
@@ -187,7 +197,10 @@ fn ignored_credentials_nested_repos_and_submodules_are_left_out_and_declared() {
     // Ignored files are not declared one by one.
     assert!(!reasons.iter().any(|(p, _)| p.contains("node_modules")));
     // The same exclusions are in the meta and in the oplog row.
-    assert_eq!(env.store.meta(&out.snapshot_id).unwrap().exclusions, out.exclusions);
+    assert_eq!(
+        env.store.meta(&out.snapshot_id).unwrap().exclusions,
+        out.exclusions
+    );
     let row = env
         .oplog
         .lock()
@@ -229,7 +242,10 @@ fn incremental_capture_reads_only_the_changed_path_and_reuses_the_rest() {
     let second = env.capture_at(level_obs(), 2, Some(hint(1, 2, &["b.txt"])));
     assert_eq!(second.detection[0].1, Detection::Engine);
     assert_eq!(second.timings.files_read, 1);
-    assert_eq!(env.file(&second.snapshot_id, "b.txt").unwrap(), b"beta changed\n");
+    assert_eq!(
+        env.file(&second.snapshot_id, "b.txt").unwrap(),
+        b"beta changed\n"
+    );
     let before = env.store.files(&first.snapshot_id, "main").unwrap();
     let after = env.store.files(&second.snapshot_id, "main").unwrap();
     for (p, k, id) in &before {
@@ -378,7 +394,11 @@ fn deleted_and_renamed_paths_follow_the_working_tree() {
     let env = Env::busy();
     env.capture_at(level_obs(), 1, None);
     std::fs::remove_file(env.f.repo.join("a.txt")).unwrap();
-    std::fs::rename(env.f.repo.join("untracked.txt"), env.f.repo.join("moved.txt")).unwrap();
+    std::fs::rename(
+        env.f.repo.join("untracked.txt"),
+        env.f.repo.join("moved.txt"),
+    )
+    .unwrap();
     let out = env.capture_at(
         level_obs(),
         2,
@@ -427,14 +447,26 @@ fn only_snapshots_with_ref_and_complete_row_are_offered() {
         )
         .unwrap();
     // A ref without row (written by someone else into the store).
-    let commit = env.store.snapshot_commit(&good.snapshot_id).unwrap().unwrap();
+    let commit = env
+        .store
+        .snapshot_commit(&good.snapshot_id)
+        .unwrap()
+        .unwrap();
     let orphan = "00000000-0000-4000-8000-000000000000";
-    env.store_git(&["update-ref", &format!("refs/tm/snap/{orphan}"), &commit.to_hex()]);
+    env.store_git(&[
+        "update-ref",
+        &format!("refs/tm/snap/{orphan}"),
+        &commit.to_hex(),
+    ]);
     assert_eq!(offered(&env), std::slice::from_ref(&good.snapshot_id));
 
     // A row `pending` with its ref (crash after the ref): not offered, and the recovery
     // discards it and deletes its ref; the ref the oplog does not know is kept.
-    env.store_git(&["update-ref", &format!("refs/tm/snap/{pending}"), &commit.to_hex()]);
+    env.store_git(&[
+        "update-ref",
+        &format!("refs/tm/snap/{pending}"),
+        &commit.to_hex(),
+    ]);
     assert_eq!(offered(&env), std::slice::from_ref(&good.snapshot_id));
     let mut store = SnapshotStore::open_existing(&env.dirs, tm_common::REPO_ID)
         .unwrap()
@@ -478,7 +510,10 @@ fn an_observation_gives_way_to_a_guaranteed_prior() {
     let asked = std::time::Instant::now();
     let prior = env
         .store
-        .capture(&env.oplog, &env.request(SnapshotLevel::GuaranteedPrior, None))
+        .capture(
+            &env.oplog,
+            &env.request(SnapshotLevel::GuaranteedPrior, None),
+        )
         .unwrap();
     let waited = prior.timings.queue;
     let obs = observation.join().unwrap();
@@ -491,7 +526,10 @@ fn an_observation_gives_way_to_a_guaranteed_prior() {
                 "prior waited {waited:?} for a yielding observation"
             );
         }
-        Ok(_) => eprintln!("observation finished before the prior arrived ({:?})", asked.elapsed()),
+        Ok(_) => eprintln!(
+            "observation finished before the prior arrived ({:?})",
+            asked.elapsed()
+        ),
         Err(e) => panic!("observation failed: {e}"),
     }
     // The prior has everything, big files included.
@@ -519,9 +557,10 @@ fn capture_failure_leaves_no_snapshot_and_no_trace_in_the_repo() {
             std::fs::set_permissions(&objects, std::fs::Permissions::from_mode(mode)).unwrap();
         };
         set(0o500);
-        let res = env
-            .store
-            .capture(&env.oplog, &env.request(SnapshotLevel::GuaranteedPrior, None));
+        let res = env.store.capture(
+            &env.oplog,
+            &env.request(SnapshotLevel::GuaranteedPrior, None),
+        );
         set(0o700);
         assert!(res.is_err());
         let rows = env
@@ -562,7 +601,11 @@ fn every_worktree_of_the_scope_is_captured() {
     assert_eq!(meta.scope, ["main", "feature"]);
     assert_eq!(meta.worktrees[1].head_branch.as_deref(), Some("feature"));
     assert_eq!(meta.registered.len(), 2);
-    assert!(meta.registered.iter().any(|w| w.branch.as_deref() == Some("feature")));
+    assert!(
+        meta.registered
+            .iter()
+            .any(|w| w.branch.as_deref() == Some("feature"))
+    );
     let _ = SystemTime::now();
 }
 

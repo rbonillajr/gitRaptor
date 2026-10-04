@@ -29,7 +29,9 @@ use gitraptor_git::{
 
 use super::meta::{ConflictEntry, META_FORMAT, Meta, MetaWorktree, RegisteredWorktree};
 use super::{CaptureError, OBSERVATION_MAX_FILE_BYTES, SnapshotStore, StageTimings, now_ms};
-use crate::timemachine::oplog::{CompleteInfo, Exclusion, NewSnapshot, Oplog, SnapshotLevel, SnapshotState};
+use crate::timemachine::oplog::{
+    CompleteInfo, Exclusion, NewSnapshot, Oplog, SnapshotLevel, SnapshotState,
+};
 
 /// A request for one snapshot.
 #[derive(Debug, Clone)]
@@ -214,7 +216,10 @@ fn wall_now() -> (i64, u32) {
     let d = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or(Duration::ZERO);
-    (i64::try_from(d.as_secs()).unwrap_or(i64::MAX), d.subsec_nanos())
+    (
+        i64::try_from(d.as_secs()).unwrap_or(i64::MAX),
+        d.subsec_nanos(),
+    )
 }
 
 fn lstat(path: &Path) -> std::io::Result<Option<FileStat>> {
@@ -298,8 +303,7 @@ impl SnapshotStore {
             ..StageTimings::default()
         };
         let mut works = Vec::with_capacity(req.worktrees.len());
-        let result =
-            self.capture_locked(&mut state, &mut works, oplog, req, prior, t_all, timings);
+        let result = self.capture_locked(&mut state, &mut works, oplog, req, prior, t_all, timings);
         if result.is_err() {
             // What was read stays true (the stat cache names blobs the store has, the `index`
             // tree matches its index signature), so it is kept; but the next capture of these
@@ -537,10 +541,7 @@ impl SnapshotStore {
         let snapshot_id = record(oplog, &handle, req, commit, unique_bytes, &exclusions)?;
         timings.ref_oplog = laps.lap();
 
-        let detection = works
-            .iter()
-            .map(|w| (w.key.clone(), w.detection))
-            .collect();
+        let detection = works.iter().map(|w| (w.key.clone(), w.detection)).collect();
         for w in works.drain(..) {
             let mut st = w.state;
             if let Some(h) = req
@@ -620,8 +621,7 @@ impl SnapshotStore {
             Some(_) if st.ignore_sig != ignore_sig => Detection::Full("ignore-rules-changed"),
             Some(h) if h.paths.iter().any(|p| !valid_rela(p)) => Detection::Full("invalid-hint"),
             Some(h)
-                if h
-                    .paths
+                if h.paths
                     .iter()
                     .any(|p| p.rsplit('/').next() == Some(".gitignore")) =>
             {
@@ -670,11 +670,7 @@ impl SnapshotStore {
             }
             let tree = edit.write()?;
             index_tree_changed = tree != st.index_tree;
-            status_changed = st
-                .tracked
-                .symmetric_difference(&tracked)
-                .cloned()
-                .collect();
+            status_changed = st.tracked.symmetric_difference(&tracked).cloned().collect();
             st.index_tree = tree;
             st.index_map = map;
             st.tracked = tracked;
@@ -713,7 +709,9 @@ impl SnapshotStore {
                 None => reader.index_view()?,
             };
             work.base = work.state.index_tree;
-            self.detect_full(reader, &root, wt_index, &mut work, &view, started, yield_now)?;
+            self.detect_full(
+                reader, &root, wt_index, &mut work, &view, started, yield_now,
+            )?;
         }
         Ok(work)
     }
@@ -748,7 +746,11 @@ impl SnapshotStore {
             };
             if stat.kind == FileKind::Other {
                 if full.is_dir() {
-                    if st.index_map.get(path).is_some_and(|(k, _)| *k == EntryKind::Gitlink) {
+                    if st
+                        .index_map
+                        .get(path)
+                        .is_some_and(|(k, _)| *k == EntryKind::Gitlink)
+                    {
                         continue;
                     }
                     return Ok(false);
@@ -953,7 +955,11 @@ impl SnapshotStore {
                 .collect();
             handles
                 .into_iter()
-                .map(|h| h.join().unwrap_or_else(|_| Err(CaptureError::InvalidInput("blob writer panicked".into()))))
+                .map(|h| {
+                    h.join().unwrap_or_else(|_| {
+                        Err(CaptureError::InvalidInput("blob writer panicked".into()))
+                    })
+                })
                 .collect()
         });
         let mut out = Vec::with_capacity(jobs.len());
@@ -1035,7 +1041,10 @@ fn write_one(
         });
     }
     let (id, new) = if size > 1 << 20 {
-        (handle.write_blob_stream(&mut file, size, should_yield)?, true)
+        (
+            handle.write_blob_stream(&mut file, size, should_yield)?,
+            true,
+        )
     } else {
         let mut bytes = Vec::with_capacity(usize::try_from(size).unwrap_or(0));
         file.read_to_end(&mut bytes)?;
@@ -1088,7 +1097,11 @@ fn nested_repo(root: &Path, path: &BStr) -> Option<BString> {
     let parts: Vec<&[u8]> = path.split(|b| *b == b'/').collect();
     for n in 1..parts.len() {
         let prefix = BString::from(parts[..n].join(&b'/'));
-        if abs(root, prefix.as_bstr()).join(".git").symlink_metadata().is_ok() {
+        if abs(root, prefix.as_bstr())
+            .join(".git")
+            .symlink_metadata()
+            .is_ok()
+        {
             return Some(prefix);
         }
     }
@@ -1181,7 +1194,9 @@ fn validate(req: &CaptureRequest) -> Result<(), CaptureError> {
             return Err(CaptureError::InvalidInput("duplicate key".into()));
         }
         if !w.path.is_absolute() {
-            return Err(CaptureError::InvalidInput("worktree path must be absolute".into()));
+            return Err(CaptureError::InvalidInput(
+                "worktree path must be absolute".into(),
+            ));
         }
     }
     Ok(())

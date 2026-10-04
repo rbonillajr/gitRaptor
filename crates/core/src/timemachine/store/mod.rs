@@ -15,8 +15,8 @@ mod meta;
 use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use gitraptor_git::tm_write::store::{
@@ -97,7 +97,10 @@ pub enum StoreStatus {
     Existing,
     /// The old store could not be trusted: it was renamed (never deleted) and a new one was
     /// created. The timeline shows a gap with this reason (ADR-TMC-001 § 4).
-    Replaced { set_aside: PathBuf, reason: String },
+    Replaced {
+        set_aside: PathBuf,
+        reason: String,
+    },
 }
 
 /// Time spent per stage of ADR-TMC-006 § 2, with a monotonic clock.
@@ -362,7 +365,13 @@ impl SnapshotStore {
 
     /// Takes the writer: a guaranteed prior announces itself first, so a running observation
     /// capture gives way within one MiB of blob data (ADR-TMC-004 § 2).
-    fn writer(&self, prior: bool) -> (std::sync::MutexGuard<'_, capture::State>, Option<PriorTicket<'_>>) {
+    fn writer(
+        &self,
+        prior: bool,
+    ) -> (
+        std::sync::MutexGuard<'_, capture::State>,
+        Option<PriorTicket<'_>>,
+    ) {
         let ticket = prior.then(|| PriorTicket::new(&self.priors_waiting));
         let guard = self.writer.lock().unwrap_or_else(|p| p.into_inner());
         (guard, ticket)
