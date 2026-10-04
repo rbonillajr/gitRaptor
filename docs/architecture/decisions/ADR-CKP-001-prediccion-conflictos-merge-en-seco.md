@@ -113,7 +113,7 @@ La vista los declara siempre (BR-CKP-CALC-002) y el contrato los publica como da
 - **Conflicto real**: depende de que el motor publique el estado en conflicto, con rutas sin fusionar y `MERGE_HEAD`/`onto` (DEP-CKP-14, enmiendas de ADR-GRP-010 § 4 y ADR-GRP-013 § 1). No se resuelve aquí.
 - Retención de 90 días con purga diaria, con la misma forma que ADR-GRD-006 § 3. Los conflictos en huecos de observación o en el remoto se guardan marcados y quedan fuera del cociente. La consulta es local, por el canal.
 - ⚠️ **ASSUMPTION** a validar por el PO: un ⚡ del par (W1, W2) en el archivo F cuenta como "detectado antes" para un conflicto de W2 contra la base en F si la punta de W1 ya estaba integrada en la base. Sin esta equivalencia, el criterio literal de "mismo par" infravalora el KPI.
-- Con esto queda resuelta la parte KPI de **DEP-CKP-11**. Las preferencias de la TUI (Q-CKP-17) siguen abiertas.
+- Con esto queda resuelta la parte KPI de **DEP-CKP-11**. Las preferencias de la TUI (Q-CKP-17) siguen abiertas. (Resueltas el 2026-10-04 en ADR-GRP-006, Enmienda (2026-10-04, Cockpit).)
 
 ### 10. Dónde vive el código
 
@@ -144,6 +144,8 @@ El BRD justifica Git ≥ 2.38 con `merge-tree --write-tree`. Con (a), la predicc
 ## Enmiendas que implica cada opción (no aplicadas)
 
 Se listan para que el orquestador las aplique tras SPIKE-CKP-001. **Este ADR no edita ningún otro ADR.**
+
+**Estado (2026-10-04)**: aplicadas las de la columna (a) como "Enmienda (2026-10-04, Cockpit)" en ADR-GRP-006, 009, 010, 011 y 013 y en `non-functional.md`, y cerrado el § 10.2 del overview. Las de la columna (b) quedan escritas como condicionadas a SPIKE-CKP-001 en ADR-GRP-006 y ADR-GRP-009, sin aplicar. TS-GRP-004 / `api-contract-ipc.md`: pendiente, dueño: worker del canal. BRD NFR-07: pendiente para el PO.
 
 | ADR / documento | Con (a) | Con (b) |
 |---|---|---|
