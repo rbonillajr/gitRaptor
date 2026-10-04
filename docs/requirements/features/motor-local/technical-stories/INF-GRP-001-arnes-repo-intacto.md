@@ -14,7 +14,7 @@ related:
   stories: [US-GRP-001, US-GRP-002, US-GRP-003, US-GRP-004, US-GRP-005, US-GRP-006, US-GRP-007, US-GRP-008, US-GRP-009, US-GRP-010, US-GRP-011, US-GRP-012, US-GRP-013, US-GRP-014, US-GRP-015, US-GRP-016, TS-GRP-002, TS-GRP-003, TS-GRP-004]
   depends_on: [TS-GRP-002]
   suites_with: [TS-GRP-003, TS-GRP-004, US-GRP-002, US-GRP-004, US-GRP-007]
-  specs: []
+  specs: [DS-INF-GRP-001]
 ado:
   id: null
   url: null
@@ -31,7 +31,7 @@ tags: [motor-local, ci, arnes, repo-intacto, br-cons-001, nfr-01, seguridad, rep
 **Quiero** un arnés que compare la huella del repo y de la máquina antes y después de observar, como gate de CI en Windows, macOS y Linux
 **Para** que BR-CONS-001 y NFR-01 se verifiquen con el criterio binario de la frontera estricta de ADR-GRP-009: cero diferencias imputables al motor
 
-> Dev Spec: `dev-specs/INF-GRP-001-arnes-repo-intacto.md` | Pendiente
+> Dev Spec: [`dev-specs/INF-GRP-001-dev-spec.md`](../dev-specs/INF-GRP-001-dev-spec.md) | Núcleo implementado (rama `feat/INF-GRP-001-intact-repo-harness`). Se cierra con la primera ejecución verde del gate en los tres SO (decisión del orquestador, 2026-10-04, validada por PO)
 >
 > **Depende de**: TS-GRP-002 (solo el núcleo). Las suites incrementales no son dependencias de este INF: cada una entra con su historia dueña (ver "Estructura"). **ADRs**: ADR-GRP-009 (apartado Validación, que la Dev Spec debe seguir punto por punto), ADR-GRP-006 (carpetas del perfil), ADR-GRP-005 (artefactos del autoarranque), ADR-GRP-012 (`~/.claude` intacto). **Seguridad**: SEC-04, SEC-05, SEC-09 y SEC-11 de `docs/architecture/non-functional.md`; el repo canario y la auditoría de `exec` son condición para que ADR-GRP-005 y ADR-GRP-009 pasen a `accepted`.
 
@@ -62,11 +62,11 @@ Para no crear una dependencia circular (el arnés no puede esperar a las histori
 - **Implementar** los escenarios mínimos de ADR-GRP-009 (Validación, punto 4) que se pueden ejercitar sobre la capa de lectura, siempre con repos temporales generados y nunca con este repo. Los que necesitan el observador van en la suite de US-GRP-002.
 - **Implementar** la auditoría del registro de argv contra la allowlist y la comprobación estática de que solo el módulo de invocación lanza procesos.
 - **Crear** el repo canario de SEC-09 (filtros `clean`, `textconv`, `core.fsmonitor`, hooks y `gpg.program` que apuntan a un script que deja un marcador) y ejercitarlo con la capa de lectura.
-- **Implementar** la herramienta de auditoría dinámica de `exec` por SO (eslogger en macOS, ETW en Windows, strace en Linux) sobre la capa de lectura: todo proceso hijo pertenece a la allowlist y `gix` nunca lanza `git`. Las suites la reutilizan.
+- **Implementar** la auditoría dinámica de `exec` sobre la capa de lectura: todo proceso hijo pertenece a la allowlist y `gix` nunca lanza `git`. Las suites la reutilizan. **Enmienda 2026-10-04** (decisión del orquestador, validada por el Arquitecto): el gate portable de los tres SO es una auditoría por trampas, sin privilegios (shim de `git` y trampas en el `PATH`, que son copias del binario de test). eslogger (macOS), strace (Linux) y ETW (Windows, pendiente) quedan como auditoría profunda.
 - **Implementar** los escenarios de SEC-11 que no necesitan el canal: `gitdir` manipulado, repo de otro propietario y `.gitraptor/settings.json` como symlink a un secreto.
 - **Configurar** el núcleo como gate de CI en runners de Windows, macOS y Linux y el mecanismo para que cada suite se registre como gate de su historia dueña.
 - **Fuera del núcleo**: las suites de la tabla "Estructura", que entran con TS-GRP-003, TS-GRP-004, US-GRP-002, US-GRP-004 y US-GRP-007.
-- **Ubicar** el arnés en las pruebas del workspace de Cargo sin crear un crate fuera de ADR-GRP-002; la ruta exacta la fija la Dev Spec.
+- **Ubicar** el arnés en el crate de soporte de pruebas `crates/testkit` (`gitraptor-testkit`), que solo se consume como `[dev-dependencies]` y que ADR-GRP-002 incorpora a su estructura (**enmienda 2026-10-04**: decisión del orquestador, validada por el Arquitecto; sustituye a "sin crear un crate fuera de ADR-GRP-002"). Las suites se registran nombrando sus tests `repo_intact::…`; el detalle está en la Dev Spec.
 - **Fuera de alcance**: el banco de frescura y escala (INF-GRP-002); la base de CI del monorepo, salvo que no exista (⚠️ **ASSUMPTION**: viene del spike del stack; si no, este INF la provisiona).
 
 ### Plan de Verificación
