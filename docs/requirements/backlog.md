@@ -17,8 +17,8 @@
     -   **Status**: Priorizada
 
 *   **F-001-02**: Cockpit (BR-04, BR-05, BR-06, BR-07)
-    -   **Contexto**: Pendiente
-    -   **Historias**: Pendiente
+    -   **Contexto**: [context.md](features/cockpit/context.md) (reglas en [business-rules.md](features/cockpit/business-rules.md), 2026-10-04; decisiones Q-CKP-1 a Q-CKP-30 tomadas por el orquestador y validadas por PO y Arquitecto. Depende de 14 huecos del motor y de otras features, anotados como DEP-CKP-1 a DEP-CKP-14 sin aplicar; entre ellos SPIKE-CKP-001/ADR-CKP-001 (predicción de conflictos) y ADR-CKP-002 (catálogo y ejecutor de operaciones))
+    -   **Historias**: Pendiente (se escriben tras aprobar el requerimiento)
     -   **Status**: Propuesta
 
 *   **F-001-03**: Time Machine (BR-08, BR-09, BR-10)
