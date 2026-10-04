@@ -553,6 +553,7 @@ dependencies = [
  "gitraptor-api",
  "gitraptor-git",
  "gitraptor-policy",
+ "gitraptor-testkit",
  "libproc",
  "nix",
  "rusqlite",
