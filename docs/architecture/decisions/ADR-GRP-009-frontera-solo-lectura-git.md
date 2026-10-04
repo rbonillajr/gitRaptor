@@ -111,6 +111,8 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
 - ⚠️ En Windows, gitoxide puede mapear packs en memoria y un mapeo abierto impide que el `git gc` del usuario los borre. **Mitigación**: handles de repo de vida corta, liberación al detectar un `gc` o `maintenance` en curso, y escenario de `gc` concurrente en INF-GRP-001.
 - ⚠️ Un repo de otro propietario que Git rechaza por `safe.directory` no se puede observar sin tocar la config global (Q17). **Mitigación**: se reporta "no disponible" con el motivo y cómo resolverlo, sin escribir nada.
 
+Nota de integración (Time Machine, ADR-TMC-002, aceptado el 2026-10-03): la frontera de solo lectura de este ADR es la del motor. `crates/git` aloja además una segunda lista cerrada, de escritura, que solo usa el módulo `timemachine` de `crates/core` (SEC-TMC-02, SEC-TMC-14). La comprobación estática de la Validación 5 se amplía: ni el observador del motor ni el ejecutor de operaciones de usuario pueden importar la capa de escritura de la Time Machine.
+
 ## Validación
 
 La valida **INF-GRP-001** (arnés "repo intacto"), que bloquea el merge de cualquier historia del motor:

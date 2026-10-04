@@ -153,6 +153,8 @@ El motor abre los tres archivos **solo para leer**, nunca los crea, y vigila sus
 - ⚠️ Un archivo de equipo cambiado solo en un worktree enlazado no tiene efecto hasta que llega al principal (PQ-9). **Mitigación:** diagnóstico informativo cuando la versión de un worktree enlazado difiere de la del principal.
 - ⚠️ Esta decisión obliga a actualizar ADR-GRP-002 (`crates/policy`) y ADR-GRP-004 (editor de configuración), que citaban `policy.yaml`. Hecho el 2026-10-03.
 
+Nota de integración (Time Machine, ADR-TMC-007 y SEC-TMC-06/12, aceptados el 2026-10-03): nueva sección `timeMachine`, con tipos en `crates/policy`. Claves: `timeMachine.retentionDays` (entero de 1 a 3650; niveles perfil y local; por defecto 30); `timeMachine.storeQuotaGB` (entero ≥ 1; solo perfil; por defecto 20); `timeMachine.includeCredentialFiles` (booleano; solo perfil; por defecto false). En el nivel de equipo, las tres se ignoran con diagnóstico.
+
 ## Validación
 
 Tests de `crates/policy`, siempre con repos y perfiles temporales (variable de entorno de sobreescritura del perfil, ADR-GRP-006), nunca con este repo:

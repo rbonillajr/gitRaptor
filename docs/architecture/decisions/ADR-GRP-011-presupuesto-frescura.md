@@ -102,6 +102,8 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
 - ⚠️ La detección SO → motor no se puede medir fuera del banco, porque el SO no fecha los eventos en las tres plataformas. **Mitigación**: en dogfooding se mide desde `t_recv`; la detección solo se mide en el banco, donde se conoce `t0`.
 - ⚠️ El bloque de tiempos amplía el contrato de `crates/api`. **Mitigación**: campos opcionales y versionados con el handshake de versión del canal (ADR-GRP-005); los clientes que no los usan los ignoran.
 
+Nota de integración (Time Machine, ADR-TMC-004 y ADR-TMC-006, aceptados el 2026-10-03): la captura por observación de la Time Machine consume eventos ya publicados y no forma parte de este presupuesto. El gate del motor (p95 ≤ 300 ms) se ejecuta también con la Time Machine activa.
+
 ## Validación
 
 - **SPIKE-GRP-002**: primera medición de las etapas del motor en los tres SO con 10 worktrees y un repo de 100K commits. Confirma o corrige las cifras del apartado 2 y la interpretación p95.

@@ -97,6 +97,8 @@ Se usa el crate `directories` para resolver las carpetas estándar del usuario (
 - ⚠️ El perfil crece sin límite porque los eventos no se borran (ADR-GRP-013). **Mitigación**: solo se guardan metadatos; el tamaño se mide en INF-GRP-002 y una política de retención queda fuera del MVP.
 - ⚠️ Sin copia de seguridad en el MVP (R13 aceptado por Q26).
 
+Nota de integración (Time Machine, ADR-TMC-001 y ADR-TMC-003, aceptados el 2026-10-03): la carpeta de datos del perfil incluye `tm/<id-repo>/`, con el almacén de snapshots (repo Git bare) y el oplog de la Time Machine (SQLite). A diferencia del almacén del motor, contiene contenido de archivos del usuario: carpeta 0700, archivos 0600, excluida de las copias de seguridad del SO y escrita solo por el daemon (SEC-TMC-01, SEC-TMC-06). La regla de § 4 'solo metadatos' aplica al almacén del motor.
+
 ## Validación
 
 Todas las pruebas usan un perfil temporal (variable de sobreescritura) y repos temporales.
