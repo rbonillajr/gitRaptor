@@ -497,7 +497,8 @@ pub const DAEMON_PATH: &str = "/usr/bin:/bin:/usr/sbin:/sbin";
 /// Environment of an on-demand daemon. `HOME`, `USER` and `LOGNAME` come
 /// from the user database, not from the client: a client with a hostile
 /// `HOME` cannot move the daemon to another profile. Debug builds also pass
-/// the test overrides of the profile and of the agent classifier.
+/// the test overrides of the profile, of the agent classifier and of the
+/// sessions' clock.
 #[cfg(unix)]
 pub fn clean_env() -> Vec<(OsString, OsString)> {
     let mut env = vec![(OsString::from("PATH"), OsString::from(DAEMON_PATH))];
@@ -510,6 +511,7 @@ pub fn clean_env() -> Vec<(OsString, OsString)> {
         for name in [
             crate::profile::PROFILE_DIR_ENV,
             crate::daemon::AGENT_EXECUTABLES_ENV,
+            crate::daemon::CLOCK_SKEW_FILE_ENV,
         ] {
             if let Some(value) = std::env::var_os(name) {
                 env.push((name.into(), value));
