@@ -60,6 +60,11 @@ impl DaemonEnv {
                 let absolute: Vec<PathBuf> = std::env::split_paths(&value)
                     .filter(|p| p.is_absolute())
                     .collect();
+                // Nothing absolute left: no `PATH` at all, so resolution falls back to the
+                // well-known locations instead of reading an empty entry.
+                if absolute.is_empty() {
+                    continue;
+                }
                 if let Ok(joined) = std::env::join_paths(absolute) {
                     kept.push((OsString::from("PATH"), joined));
                 }
@@ -162,6 +167,12 @@ fn key_is(key: &OsStr, name: &str) -> bool {
 mod tests {
     use super::*;
 
+    /// The current dir, a relative entry and one absolute directory, in the OS's own syntax.
+    #[cfg(unix)]
+    const HOSTILE_PATH: &str = ".:relative/bin:/usr/bin";
+    #[cfg(windows)]
+    const HOSTILE_PATH: &str = r".;relative\bin;\rooted\bin;C:\Windows\System32";
+
     fn hostile() -> Vec<(OsString, OsString)> {
         [
             ("GIT_EXEC_PATH", "/tmp/evil"),
@@ -170,7 +181,7 @@ mod tests {
             ("DYLD_INSERT_LIBRARIES", "/tmp/evil.dylib"),
             ("XDG_CONFIG_HOME", "/tmp/evil-config"),
             ("AWS_SECRET_ACCESS_KEY", "s3cr3t"),
-            ("PATH", ".:relative/bin:/usr/bin"),
+            ("PATH", HOSTILE_PATH),
             ("HOME", "/home/u"),
         ]
         .into_iter()
@@ -193,6 +204,15 @@ mod tests {
         }
         #[cfg(unix)]
         assert_eq!(env.get("PATH"), Some(OsStr::new("/usr/bin")));
+        #[cfg(windows)]
+        assert_eq!(env.get("PATH"), Some(OsStr::new(r"C:\Windows\System32")));
+    }
+
+    #[test]
+    fn a_path_without_absolute_entries_is_dropped() {
+        let env = DaemonEnv::from_vars([("PATH".into(), "relative/bin".into())]);
+        assert_eq!(env.get("PATH"), None);
+        assert_eq!(env.git_resolve_config(None).path_env, None);
     }
 
     #[test]
