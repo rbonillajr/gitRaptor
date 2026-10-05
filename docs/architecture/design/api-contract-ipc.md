@@ -9,8 +9,8 @@ created: 2026-10-04
 updated: 2026-10-04
 related:
   adrs: [ADR-GRP-005, ADR-GRP-011, ADR-GRP-013]
-  stories: [TS-GRP-004]
-  specs: [DS-TS-GRP-004]
+  stories: [TS-GRP-004, US-GRP-001]
+  specs: [DS-TS-GRP-004, DS-US-GRP-001]
   deps: [DEP-CKP-6]
 tags: [ipc, json-rpc, contrato, eventos, mcp, seguridad]
 ---
@@ -23,14 +23,14 @@ La fuente de verdad es el código de `crates/api`. Este documento es su resumen 
 
 - Socket Unix `raptor.sock` en la carpeta de ejecución del perfil, con la carpeta en 0700 y el socket en 0600. Solo acepta clientes del mismo uid. El cliente comprueba que el servidor también es de su uid. En Windows, named pipe: pendiente.
 - Un mensaje JSON por línea (`\n`), de 1 MiB como máximo y con una profundidad máxima de 32. No se aceptan batches. Todos los tipos rechazan campos desconocidos.
-- `PROTOCOL_VERSION = 1`. Cliente y daemon son compatibles solo si hablan la misma versión.
+- `PROTOCOL_VERSION = 2` (`API_VERSION` 2.0.0). Cliente y daemon son compatibles solo si hablan la misma versión. La 2 (US-GRP-001) añade el estado de los worktrees a `RepoView`.
 
 ## Handshake
 
 El primer mensaje es `hello`; si no llega en 2 s, el daemon cierra la conexión. La forma de `hello`, `IncompatibleData` y `daemon.replace` **no cambia entre versiones**.
 
 ```json
-{"jsonrpc":"2.0","id":1,"method":"hello","params":{"protocol":1,"client":"cli","client_version":"0.0.0"}}
+{"jsonrpc":"2.0","id":1,"method":"hello","params":{"protocol":2,"client":"cli","client_version":"0.0.0"}}
 ```
 
 El resultado trae `protocol`, `binary_version`, `instance_id` (del perfil, ADR-GRP-006 § 4), `daemon_pid`, `profile` (`full` o `mcp`), `max_message_bytes` y `methods`: los métodos que puede llamar esa conexión. Si la versión no coincide, el daemon responde `-32002` con `{daemon_protocol, binary_version}`. Si el cliente es más nuevo, puede enviar `daemon.replace`.
@@ -40,14 +40,14 @@ El resultado trae `protocol`, `binary_version`, `instance_id` (del perfil, ADR-G
 | Método | Reservado | MCP | Resultado / notas |
 |---|---|---|---|
 | `ping` | No | Sí | `"pong"` |
-| `engine.snapshot` | No | Sí | `Snapshot { run_id, seq, engine, daemon, repos }`; en MCP, `McpSnapshot { run_id, seq, engine_state, caller_repo }` (allowlist de campos) |
+| `engine.snapshot` | No | Sí | `Snapshot { run_id, seq, engine, daemon, repos }`, cada repo con sus `worktrees` (ver más abajo); en MCP, `McpSnapshot { run_id, seq, engine_state, caller_repo }` (allowlist de campos) |
 | `events.subscribe` | No | Sí | `{ from_seq?, run_id? }` → `{ subscription, from_seq }`. Hasta 4 por conexión |
 | `events.unsubscribe` | No | Sí | `{ subscription }` → `bool` |
 | `audit.list` | No | No | `{ after_id?, limit? }` → `{ entries: [AuditEntry] }`. Como máximo 500 por página |
 | `daemon.stop` | **Sí** | No | `{ stopping: true }`; luego el daemon cierra las conexiones |
 | `daemon.replace` | Solo si no viene del binario instalado | Sí | `{ protocol }` (más nuevo que el del daemon) |
-| `repo.add` | **Sí** | No | Declarado. Lo implementa US-GRP-001 |
-| `repo.retire` | **Sí** | No | Declarado. Lo implementa US-GRP-006 |
+| `repo.add` | **Sí** | No | `{ path }` (raíz de un worktree o directorio Git, sin búsqueda hacia arriba) → `{ outcome: new\|already-observed\|reactivated, repo: RepoView }`. Autoriza y audita **antes** de leer la ruta (US-GRP-001) |
+| `repo.retire` | **Sí** | No | `{ repo_id }` → `{ retired }`. Deja de observar y conserva los datos (US-GRP-001; US-GRP-006 añade el historial y el hueco) |
 | `attribution.correct`, `attribution.withdraw-correction` | **Sí** | No | Declarados. Los implementa US-GRP-010 |
 | `registration.withdraw` | **Sí** | No | Declarado. Lo implementa US-GRP-009 |
 
@@ -65,6 +65,7 @@ Un comando reservado lo decide **solo el daemon**, con la identidad del par y si
 | `-32005` | Rate limit (100/s, ráfaga de 200). La conexión sigue abierta |
 | `-32006` | Límite de conexiones o de suscripciones |
 | `-32007` | No se puede continuar la suscripción: hay que tomar una instantánea nueva |
+| `-32008` | Repo rechazado por lo que nombra (no por quién lo pide); `data.reason`: `not-a-repo`, `untrusted`, `unreadable` o `unknown-repo` |
 
 ## Eventos
 
@@ -78,10 +79,25 @@ Notificación `events.event` con `{ subscription, event }`. El evento lleva:
 
 - `seq` es único en el daemon y estrictamente creciente. Vuelve a empezar en cada arranque, y por eso existe `run_id`.
 - Los eventos de cambio llevan siempre `timings`, en nanosegundos del reloj monótono común (`gitraptor_api::clock::monotonic_ns`, ADR-GRP-011 § 3). El cliente añade `t_client_recv` con el mismo reloj.
-- Tipos propios del motor (sin `timings`): `engine.state`, el primer evento de cada ejecución; `daemon.stopping`; y `reserved.audit`.
-- Tipos de cambio declarados, con `data` definido por su historia: `worktree.state` (US-GRP-001), `git.event` (US-GRP-002), `gap.recorded` (US-GRP-005), `session.state` (US-GRP-007) y `attribution.changed` (US-GRP-010).
+- Tipos propios del motor (sin `timings`): `engine.state`, el primer evento de cada ejecución y cada transición de BR-WF-002; `daemon.stopping`; `reserved.audit`; y `repo.observation` `{repo_id, observed, state, path}` al añadir o retirar un repo (US-GRP-001).
+- `worktree.state` (US-GRP-001, de cambio): `{repo_id, worktrees}` con todos los worktrees del repo reconciliado.
+- A `raptor-mcp` solo le llegan `engine.state` y `daemon.stopping` (allowlist, SEC-12); el resto lleva rutas o auditoría.
+- Tipos de cambio declarados, con `data` definido por su historia: `git.event` (US-GRP-002), `gap.recorded` (US-GRP-005), `session.state` (US-GRP-007) y `attribution.changed` (US-GRP-010).
 - **Arranque coherente (DEP-CKP-6)**: `engine.snapshot` devuelve `seq = N`. Después, `events.subscribe { from_seq: N + 1, run_id }` no pierde ni repite eventos: el daemon guarda los últimos 1024. Si el `run_id` ya no es el del daemon o `N + 1` salió del buffer, llega `events.resync` con su `reason` (`daemon-restarted` o `replay-unavailable`).
 - **Cliente lento**: si su cola de 1024 mensajes se llena, recibe `events.resync { reason: slow-consumer }` y se le desconecta. Nunca frena al productor.
+
+## Estado de un worktree (US-GRP-001)
+
+```json
+{"path":{"untrusted":"/w/demo-feat"},"main":false,"admin_name":{"untrusted":"demo-feat"},
+ "status":{"state":"ready","head":{"kind":"branch","name":{"untrusted":"feat-login"}},
+           "counts":{"staged":0,"unstaged":1,"untracked":0},
+           "changes":[{"path":{"untrusted":"login.txt"},"area":"unstaged","kind":"modified"}]}}
+```
+
+- `head`: `branch {name}`, `unborn {name}` (rama sin commits) o `detached`. `status` también puede ser `{"state":"unavailable","reason":"missing"|"untrusted"|"unreadable"}`; la semántica de los estados especiales es de US-GRP-003.
+- Limpio = todos los `counts` a cero. `changes` está ordenado y acotado a 200 rutas y 32 KiB por worktree. Si un mensaje pasa de 768 KiB, se vacían las listas y se conservan los conteos.
+- Lo recalcula una reconciliación completa al añadir el repo y al arrancar el motor. Los cambios en vivo son de US-GRP-002; el ahead/behind, de US-GRP-012.
 
 ## Texto no confiable y actor
 

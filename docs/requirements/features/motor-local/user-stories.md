@@ -46,7 +46,7 @@ blocked: []
 
 | ID | Título | Resumen (1 línea) | Status |
 |----|--------|-------------------|--------|
-| [US-GRP-001](./user-stories/US-GRP-001-estado-worktrees-repo-anadido.md) | El desarrollador ve el estado de cada worktree del repo que añadió | Desarrollador quiere añadir un repo y ver rama, cambios y archivos modificados de sus worktrees sin tocar el repo | expanded |
+| [US-GRP-001](./user-stories/US-GRP-001-estado-worktrees-repo-anadido.md) | El desarrollador ve el estado de cada worktree del repo que añadió | Desarrollador quiere añadir un repo y ver rama, cambios y archivos modificados de sus worktrees sin tocar el repo | in-review ([Dev Spec](./dev-specs/US-GRP-001-dev-spec.md)) |
 | [US-GRP-002](./user-stories/US-GRP-002-cambios-eventos-en-vivo.md) | El desarrollador ve los cambios y eventos de Git de sus worktrees casi al instante | Desarrollador quiere ver en vivo cambios y eventos (commit, rama, rebase, push) con su momento y actor | expanded |
 | [US-GRP-003](./user-stories/US-GRP-003-estados-especiales-no-disponible.md) | El desarrollador sabe qué worktree está en un estado especial o ya no existe | Desarrollador quiere ver estados especiales y worktrees no disponibles sin perder la vista del resto | expanded |
 | [US-GRP-004](./user-stories/US-GRP-004-observacion-continua.md) | El desarrollador encuentra lo ocurrido aunque no tuviera GitRaptor abierto | Desarrollador quiere que la actividad se capture sin superficie abierta y sobreviva a reinicios | expanded |
@@ -104,7 +104,9 @@ blocked: []
 
 > **Secuencias por contrato compartido**: US-GRP-007 → US-GRP-009 (modelo de sesión: estados, origen, presencia), US-GRP-009 → US-GRP-008 (quién hizo un evento: agente con su origen o "sin atribuir"), US-GRP-015 → US-GRP-014 (estados del motor de BR-WF-002) y US-GRP-013 → US-GRP-016 (lectura de la configuración en tres niveles) van en serie, no en paralelo. US-GRP-010 y US-GRP-011 corren en paralelo pero tocan la misma regla de sesiones por worktree (corregir frente a añadir, Q33). En todos los casos el contrato compartido lo fija la Dev Spec de la historia que va primero (007, 009, 015, 013 y, para 010/011, 009).
 >
-> **Ruta crítica**: 001 → 002 → 007 → 009 → 004 → 005 → 006 / 014. Son cinco olas tras el esqueleto; 008 y 014 se movieron de la ola 2 sin alargarla, porque ya cuelgan de 009 y de 005.
+> **Ruta crítica**: 001 → 002 → 007 → 009 → 004 → 005 → 006 / 014.
+>
+> **Reparto tras implementar US-GRP-001** (Decisión del orquestador, 2026-10-04, validada por PO y Arquitecto; ver su [Dev Spec](./dev-specs/US-GRP-001-dev-spec.md)): US-GRP-001 implementa ya un `repo.retire` básico (deja de observar y conserva los datos), que su escenario "Solo se observan los repos añadidos" exige; US-GRP-006 sigue siendo dueña del historial recuperado y del hueco. La reconciliación periódica de ADR-GRP-010 § 5 pasa a US-GRP-002 con el watcher. No cambian dependencias ni olas. Son cinco olas tras el esqueleto; 008 y 014 se movieron de la ola 2 sin alargarla, porque ya cuelgan de 009 y de 005.
 
 ---
 
@@ -140,3 +142,4 @@ blocked: []
 | 1.5 | 2026-10-04 | PO (AADD) para Rene Bonilla | Decisión heredada de Guardrails Q-GRD-23: US-GRP-016 deja de confirmar la rama base al añadir el repo; en una máquina nueva la rama base del equipo aplica desde la primera consulta, marcada como "no confirmada" hasta que el desarrollador la confirme al proteger el repo o de forma explícita. Sin historias nuevas |
 | 1.6 | 2026-10-04 | PO (AADD) para Rene Bonilla | Artifact Judge (FAIL): US-GRP-016 sigue siendo independiente de Guardrails. Sus escenarios parten de "la rama base confirmada …" como precondición, sin la acción de confirmar; "pendiente de confirmar" y "no confirmada" son lo que muestra el motor. Dependencias sin US-GRD-001 ni US-GRD-014; la coherencia se comprueba en la prueba de integración posterior del índice de Guardrails |
 | 1.7 | 2026-10-04 | Agente de documentación para Rene Bonilla | Aceptación de ADR-GRP-005 a 013 (Rene Bonilla, 2026-10-04). ADR-GRP-007 cierra P8: US-GRP-013 se desbloquea (pasa a la ola 2, tras 007). US-GRP-016 se desbloquea por decisión de Rene Bonilla (2026-10-04, a propuesta del coordinador): Q36 pedía que existieran Guardrails como dueño de la configuración del equipo y el ADR de formato, y los dos existen como ADRs aceptados (ADR-GRD-004, ADR-GRP-007); queda en la ola 3 con dependencia de US-GRP-013 y TS-GRD-001. Sin historias bloqueadas |
+| 1.8 | 2026-10-04 | Orquestador para Rene Bonilla | US-GRP-001 implementada (en revisión) con [Dev Spec](./dev-specs/US-GRP-001-dev-spec.md). Alcance confirmado según la historia: sin ahead/behind (US-GRP-012/016) ni estados especiales (US-GRP-003); `repo.retire` básico adelantado de US-GRP-006 y reconciliación periódica movida a US-GRP-002. Decisiones del orquestador validadas por PO y Arquitecto |
