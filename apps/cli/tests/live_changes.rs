@@ -208,7 +208,8 @@ fn text(out: &Output) -> String {
 }
 
 fn canonical(path: &Path) -> PathBuf {
-    path.canonicalize().unwrap()
+    // The engine's own canonical form (the drive form on Windows).
+    gitraptor_core::observe::canonical(path)
 }
 
 /// "demo": `main` with `login.txt`, branch `feat-login` and, if `linked`,

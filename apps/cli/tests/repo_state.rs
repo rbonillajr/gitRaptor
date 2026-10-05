@@ -186,7 +186,11 @@ fn text(out: &Output) -> String {
 }
 
 fn canonical(path: &Path) -> String {
-    path.canonicalize().unwrap().to_str().unwrap().to_owned()
+    // The engine's own canonical form (the drive form on Windows).
+    gitraptor_core::observe::canonical(path)
+        .to_str()
+        .unwrap()
+        .to_owned()
 }
 
 /// The observed repos of a `status --json`, by folder.
