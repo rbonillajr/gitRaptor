@@ -114,6 +114,14 @@ pub(crate) enum Control {
     /// What the observer saw in one window (US-GRP-002): persist, then
     /// publish.
     Observed(Box<ObservedBatch>),
+    /// What the session detector saw (US-GRP-007): persist, then publish.
+    Sessions(Vec<crate::detect::SessionChange>),
+    /// The sessions of the observed repos (US-GRP-007).
+    #[cfg_attr(not(unix), allow(dead_code))]
+    SessionsList {
+        params: gitraptor_api::messages::SessionsListParams,
+        reply: SyncSender<SessionsListReply>,
+    },
     /// One page of a repo's Git events (US-GRP-002).
     #[cfg_attr(not(unix), allow(dead_code))]
     EventHistory {
@@ -121,6 +129,11 @@ pub(crate) enum Control {
         reply: SyncSender<Result<Vec<GitEventView>, RepoCommandError>>,
     },
 }
+
+/// Answer of `sessions.list`: whether detection is available here, and the
+/// sessions.
+pub(crate) type SessionsListReply =
+    Result<(bool, Vec<gitraptor_api::messages::SessionView>), RepoCommandError>;
 
 /// Sends requests to the running daemon. Cheap to clone.
 #[derive(Debug, Clone)]
@@ -197,6 +210,26 @@ impl ShutdownHandle {
     /// Hands an observed batch to the loop. `false` if it already stopped.
     pub(crate) fn observed(&self, batch: ObservedBatch) -> bool {
         self.tx.send(Control::Observed(Box::new(batch))).is_ok()
+    }
+
+    /// Hands session changes to the loop. `false` if it already stopped.
+    pub(crate) fn sessions(&self, changes: Vec<crate::detect::SessionChange>) -> bool {
+        self.tx.send(Control::Sessions(changes)).is_ok()
+    }
+
+    /// Reads the sessions through the loop, which owns the stores
+    /// (US-GRP-007).
+    #[cfg_attr(not(unix), allow(dead_code))]
+    pub(crate) fn sessions_list(
+        &self,
+        params: gitraptor_api::messages::SessionsListParams,
+    ) -> SessionsListReply {
+        let (reply, rx) = sync_channel(1);
+        self.tx
+            .send(Control::SessionsList { params, reply })
+            .map_err(|_| RepoCommandError::Internal)?;
+        rx.recv_timeout(AUDIT_TIMEOUT)
+            .map_err(|_| RepoCommandError::Internal)?
     }
 
     /// Reads one page of a repo's Git events through the loop, which owns
