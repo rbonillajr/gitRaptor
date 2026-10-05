@@ -28,8 +28,8 @@ pub use capture::{
 pub use committed::{BlobRead, CommittedFile, NotRegular};
 pub use invoke::{ArgvSink, Invoker, MemoryArgvLog};
 pub use reader::{
-    Branch, Change, ChangeKind, Count, Head, InProgress, LinkedWorktree, ReaderOptions, RepoReader,
-    Status,
+    Branch, Change, ChangeKind, Count, Head, InProgress, LinkedWorktree, ReaderOptions,
+    ReflogEntry, RepoReader, Status,
 };
 pub use refname::RefName;
 pub use resolve::{GitVersion, SystemGit};
@@ -98,3 +98,8 @@ impl std::fmt::Display for ReadError {
 }
 
 impl std::error::Error for ReadError {}
+
+/// Offset of the local time zone from UTC, in seconds, now. UTC if it cannot be known.
+pub fn local_utc_offset_s() -> i32 {
+    gix::date::Time::now_local_or_utc().offset
+}
