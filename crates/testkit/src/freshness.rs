@@ -189,13 +189,14 @@ pub struct Sample {
 }
 
 impl Sample {
-    /// Milliseconds of `stage`, or `None` when it cannot be isolated: detection when the batch
-    /// opened before `t0` (a Git command writes before it ends, ADR-GRP-011 § 4). The total is
-    /// zero when the event arrived before `t0`.
+    /// Milliseconds of `stage`. Detection and total are zero when the mark came before `t0` (the
+    /// change was already seen when the write or the command ended); [`Scenario::summary`] leaves
+    /// detection out where a Git command writes before it ends (ADR-GRP-011 § 4).
     pub fn stage_ms(&self, stage: Stage) -> Option<f64> {
         let ms = |a: u64, b: u64| b.checked_sub(a).map(|d| d as f64 / 1e6);
         match stage {
-            Stage::Detection => ms(self.t0, self.t_recv),
+            // inotify reports a write before `write` returns: seen at `t0`, so zero.
+            Stage::Detection => Some(self.t_recv.saturating_sub(self.t0) as f64 / 1e6),
             Stage::Debounce => ms(self.t_recv, self.t_flush),
             Stage::Compute => ms(self.t_flush, self.t_computed),
             Stage::Persist => ms(self.t_computed, self.t_persisted),
@@ -466,6 +467,17 @@ mod tests {
             slack_excess_ms: 0.0,
             samples: (0..200).map(|i| sample(i, extra_compute_ms)).collect(),
         }
+    }
+
+    /// Linux: inotify stamps `t_recv` before the write returns. Detection is then zero, never
+    /// missing from the report.
+    #[test]
+    fn a_write_seen_before_it_returns_has_zero_detection() {
+        let mut s = scenario(0);
+        for x in &mut s.samples {
+            x.t_recv = x.t0 - MS;
+        }
+        assert_eq!(s.summary(Stage::Detection).unwrap().p95, 0.0);
     }
 
     #[test]
