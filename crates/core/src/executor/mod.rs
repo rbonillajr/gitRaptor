@@ -810,7 +810,7 @@ impl Executor {
     }
 }
 
-fn oplog_channel(c: RequestChannel) -> Channel {
+pub(crate) fn oplog_channel(c: RequestChannel) -> Channel {
     match c {
         RequestChannel::Cli => Channel::Cli,
         RequestChannel::Tui => Channel::Tui,

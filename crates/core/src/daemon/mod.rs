@@ -59,7 +59,7 @@ use crate::timemachine::oplog::{
     SystemProbe,
 };
 #[cfg(unix)]
-use crate::timemachine::protected::DaemonBackend;
+use crate::timemachine::protected::{DaemonBackend, TimeMachineBackend};
 use crate::timemachine::protected::{OperationsWiring, TmRepos};
 use crate::timemachine::store::SnapshotStore;
 use crate::watch::{ObservedBatch, Observer, WatchConfig};
@@ -157,6 +157,20 @@ pub struct DaemonConfig {
     /// `operation.prepare` answers "not implemented" until the first
     /// operation story wires its catalog (US-MCP-008).
     pub operations: Option<OperationsWiring>,
+    /// Tests only: wraps the snapshotter of the Time Machine's own commands
+    /// (undo) to inject faults. Honored only in debug builds.
+    #[doc(hidden)]
+    pub tm_prior_layer: Option<TmPriorLayer>,
+}
+
+/// A layer over the snapshotter of the Time Machine's own commands (tests).
+#[derive(Clone)]
+pub struct TmPriorLayer(pub crate::timemachine::protected::SnapshotterLayer);
+
+impl std::fmt::Debug for TmPriorLayer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("TmPriorLayer")
+    }
 }
 
 impl DaemonConfig {
@@ -177,6 +191,7 @@ impl DaemonConfig {
             channel,
             protected: None,
             operations: None,
+            tm_prior_layer: None,
         })
     }
 }
@@ -577,6 +592,24 @@ impl Daemon {
         Some(wiring)
     }
 
+    /// The Time Machine's own commands over the daemon's repo layer
+    /// (US-TMC-002), wired whether or not a catalog of operations is.
+    #[cfg(unix)]
+    fn time_machine_wiring(&self) -> crate::channel::TimeMachineWiring {
+        let layer = self
+            .config
+            .tm_prior_layer
+            .clone()
+            .filter(|_| cfg!(debug_assertions))
+            .map(|l| l.0);
+        crate::channel::TimeMachineWiring {
+            backend: Arc::new(TimeMachineBackend::new(Arc::clone(&self.tm), layer)),
+            git: self.report.git.clone(),
+            invoker: self.config.env.invoker(),
+            prior_deadline: crate::timemachine::protected::DEFAULT_PRIOR_DEADLINE,
+        }
+    }
+
     /// Handle for signals and the channel's stop command.
     pub fn shutdown_handle(&self) -> ShutdownHandle {
         self.handle.clone()
@@ -662,6 +695,7 @@ impl Daemon {
                 started_wall_ms: self.started_ms,
             },
             protected: self.protected_wiring(),
+            time_machine: Some(self.time_machine_wiring()),
         };
         match crate::channel::Server::serve(bound, args) {
             Ok(server) => {

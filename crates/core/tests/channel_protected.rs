@@ -498,6 +498,7 @@ fn start_with(setup: Setup) -> Running {
         channel: ChannelConfig::default(),
         protected,
         operations: None,
+        tm_prior_layer: None,
     };
     let daemon = Daemon::start(config).unwrap();
     let handle = daemon.shutdown_handle();
@@ -820,8 +821,10 @@ fn without_an_executor_the_catalog_is_described_but_nothing_runs() {
         json!({ "plan_id": "00000000000000000000000000000000" }),
     ));
     assert_eq!(code, code::NOT_IMPLEMENTED);
+    // Undo is the Time Machine's own (US-TMC-002) and does not need the
+    // executor: here it stops at the scope, `/repos/a` is not observed.
     let (code, _) = rpc_err(c.call(methods::TM_UNDO, json!({ "worktree": "/repos/a" })));
-    assert_eq!(code, code::NOT_IMPLEMENTED);
+    assert_eq!(code, code::SCOPE_REFUSED);
 }
 
 /// DEP-MCP-3 and H-01 (Validación 17): a process the operation started,

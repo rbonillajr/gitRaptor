@@ -9,3 +9,4 @@ pub mod protected;
 /// (ADR-CKP-002 § 5); re-exported for the applier.
 pub use crate::repo_lock;
 pub mod store;
+pub mod undo;
