@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-05
 date: 2026-10-03
 domain: GRP
 feature: time-machine
@@ -13,8 +13,8 @@ supersedes: []
 superseded_by: null
 deciders: [Rene Bonilla]
 related:
-  adrs: [ADR-GRP-007, ADR-GRP-008, ADR-TMC-001, ADR-TMC-003]
-  stories: [US-TMC-016, US-TMC-017]
+  adrs: [ADR-GRP-007, ADR-GRP-008, ADR-TMC-001, ADR-TMC-003, ADR-GRP-015]
+  stories: [US-TMC-016, US-TMC-017, US-TMC-022]
 description: "Retención timeMachine.retentionDays (perfil y local, 30 días), protección del previo a la última operación destructiva por worktree, purga en dos fases con aviso y liberación de objetos solo en el almacén"
 tags: [adr, time-machine, retencion, purga, configuracion, gc, br-tmc-time-001, d-tmc-15]
 published: true
@@ -78,7 +78,7 @@ Para las operaciones protegidas, el tipo de operación declara si es destructiva
 ### 5. Borrado inmediato y cuotas
 
 - **`forget` no forma parte de este diseño**: aplazado a una US futura del PO (TQ-17 → a). Tal como se propuso, chocaría con D-TMC-15 y BR-TMC-TIME-001 (borra sin aviso y sin respetar el snapshot protegido), ampliaría BR-TMC-CONS-004, se saltaría el periodo de gracia de § 4.4 y, con una ruta, borraría snapshots enteros (NFR-01). Cuando se especifique, su semántica debe reescribir los snapshots sin esa ruta, conservar el resto, respetar las capturas en curso y salir de una US del PO. Mientras tanto, el contenido sensible lo cubre la lista de exclusión de SEC-TMC-06 (TQ-16 → a).
-- **Cuotas de disco** (SEC-TMC-12, TQ-5 → b; cifras confirmadas por SPIKE-TMC-001 en macOS, Enmienda 2026-10-04): al alcanzarlas no se purga antes de tiempo; se detiene la captura por observación con un hueco "sin espacio" (ADR-TMC-004 § 2).
+- **Cuotas de disco** (SEC-TMC-12, TQ-5 → b; cifras confirmadas por SPIKE-TMC-001 en macOS, Enmienda 2026-10-04): al alcanzarlas no se purga antes de tiempo; se detiene la captura por observación con un hueco "sin espacio" (ADR-TMC-004 § 2). **Sustituido por la Enmienda (2026-10-05, tope de disco)**: hay un tope total del almacén, y al superarlo se purga lo más antiguo no protegido, con aviso y gracia.
 
 ## Alternativas consideradas
 
@@ -121,3 +121,30 @@ Aplicada desde § 7 de [SPIKE-TMC-001-resultados.md](../../requirements/features
 |---|---|---|
 | Consolidación del almacén con `repack -d --geometric=2`, diaria o por umbral, fuera del cerrojo del escritor; `prune` con periodo de gracia | § 4 | E10; Resultados § 5.5; revisión del Arquitecto |
 | Cuotas confirmadas en macOS | § 5 | Resultados § 6 |
+
+## Enmienda (2026-10-05, tope de disco)
+
+**Decisión de Rene Bonilla (2026-10-05)**: la Time Machine tiene un tope de disco configurable; al alcanzarlo, purga lo más antiguo sin tocar los snapshots protegidos y avisa. Esto cambia TQ-5 → b y amplía D-TMC-15 y BR-TMC-TIME-001: además de la retención por antigüedad, hay purga por tamaño. Los parámetros son **decisión del orquestador (2026-10-05), validada por el Arquitecto y el PO**. El `status` sigue en `accepted`. La historia dueña es US-TMC-022; el PO actualiza D-TMC-15 y BR-TMC-TIME-001 en su feature.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| Clave `timeMachine.maxDiskSizeGiB` (entero de 1 a 1024, **solo en el perfil**, por defecto **10**): tope **total** del almacén de todos los repos. En los niveles local y de equipo se ignora con diagnóstico (ADR-GRP-007) | § 1 | Decisión de Rene; Arquitecto |
+| Cuota por repo de SEC-TMC-12: de 20 GB a **5 GiB**, configurable en el perfil (con 20 GB quedaba inerte frente al tope total). El espacio libre mínimo sigue en máx(5 GB, 5 %) | § 5; SEC-TMC-12 | Arquitecto |
+| Purga por tamaño, en el mismo trabajo de dos fases de § 4 | § 4, § 5 | Decisión de Rene |
+| Contabilidad del tamaño **después** del mantenimiento (consolidación y `prune`); con el tope superado, el mantenimiento corre aunque el modo de ahorro de energía esté activo (ADR-GRP-015 § 2) | § 4.4 | Arquitecto (riesgo de purgar de más) |
+
+**Purga por tamaño**:
+
+1. **Aviso al 80 % del tope**: el trabajo de purga registra un aviso pendiente con el tamaño, el tope y los candidatos. Los candidatos son los puntos más antiguos que **no** están protegidos (§ 3) y que tienen **7 días o más**, hasta bajar al 70 %.
+2. **Gracia**: igual que en § 4.2, la purga se ejecuta cuando el aviso se mostró al menos una vez en la CLI o la TUI y pasaron 24 horas desde la primera entrega (D-TMC-25 se mantiene).
+3. **Al 100 % antes de que acabe la gracia**: se detiene la captura por observación con un hueco "sin espacio" (comportamiento anterior de § 5). El snapshot previo conserva su reserva; si no cabe, la operación se aborta sin cambios.
+4. **Tras la gracia**: se purga de lo más antiguo a lo más reciente hasta bajar al 70 %, con la misma transacción, diario y recuperación de § 4.3 a § 4.5.
+5. **Nunca se purgan** los puntos protegidos de § 3 ni los de menos de 7 días. Si solo quedan esos por encima del tope, se muestra un aviso persistente y la captura sigue detenida. Ningún punto se borra sin aviso previo.
+6. **Sin ningún cliente no se purga** (§ 4.2). Con el tope, el disco ya no crece sin límite: se detiene la captura. Así se cierra la consecuencia ⚠️ "sin clientes abiertos el almacén crece sin límite".
+
+**Validación añadida**:
+
+6. Con tamaños simulados del almacén: aviso al 80 %; al 100 % antes de la gracia se detiene la captura con hueco "sin espacio"; tras la gracia, con un cliente, se purga hasta el 70 %; los puntos protegidos y los de menos de 7 días siguen; solo con protegidos por encima del tope, aviso persistente y ningún borrado.
+7. `timeMachine.maxDiskSizeGiB` en el nivel local o de equipo se ignora con diagnóstico; el valor 0 o uno mayor que 1024 da el valor por defecto con aviso.
+
+Linux y Windows (tamaño en disco, exclusión de copias de seguridad): **Pendiente: etapa de validación multiplataforma**.
