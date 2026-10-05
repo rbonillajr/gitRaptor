@@ -90,7 +90,8 @@ pub enum OperationTransition<'a> {
         step: u32,
     },
     Finished,
-    /// Permissions, overlap or preconditions: the repo was not touched.
+    /// Permissions, overlap or preconditions: the repo was not touched. From
+    /// `ready`, the applier found a precondition failed under its locks.
     Rejected {
         reason: &'a str,
     },
