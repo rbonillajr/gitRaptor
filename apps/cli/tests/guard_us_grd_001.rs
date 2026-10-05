@@ -895,6 +895,42 @@ mod criteria {
         assert!(!status.last_refusal.is_empty());
     }
 
+    // The manual revert the explanation shows (unset the key, remove the folder) leaves the repo
+    // unprotected in the status, and protecting it again works.
+    #[test]
+    fn repo_intact_the_manual_revert_is_seen_and_the_repo_can_be_protected_again() {
+        let m = Machine::protected();
+        let config = common(&m).join("config");
+        m.git_ok(
+            &m.f.repo,
+            &[
+                "config",
+                "--file",
+                config.to_str().unwrap(),
+                "--unset",
+                "core.hooksPath",
+            ],
+        );
+        let folder = common(&m).join("gitraptor");
+        for f in [
+            "hooks/pre-push",
+            "hooks/pre-rebase",
+            "hooks/reference-transaction",
+        ] {
+            std::fs::remove_file(folder.join(f)).unwrap();
+        }
+        std::fs::remove_dir(folder.join("hooks")).unwrap();
+        std::fs::remove_file(folder.join("dispatch.conf")).unwrap();
+        std::fs::remove_file(folder.join("manifest.json")).unwrap();
+        std::fs::remove_dir(&folder).unwrap();
+        assert_eq!(m.status(&m.f.repo).state, ProtectionState::Unprotected);
+        let out = m.protect(&m.f.repo);
+        assert!(out.status.success(), "{}", text(&out));
+        assert_eq!(m.status(&m.f.repo).state, ProtectionState::HooksOnly);
+        let out = m.git(&m.f.repo, &["branch", "-D", "main"]);
+        assert!(!out.status.success(), "{}", text(&out));
+    }
+
     // ADR-GRD-001 Validación 8: a `gitraptor` folder replaced by a link is never written through.
     #[test]
     fn repo_intact_a_linked_folder_is_not_written_through() {
@@ -1017,7 +1053,11 @@ fn latency_report() {
             &["commit", "-q", "--allow-empty", "-m", "x"][..],
             &no_setup as &dyn Fn(&Machine),
         ),
-        ("branch -D (governed evaluation)", &["branch", "-q", "-D", "tmp"], &tmp_branch),
+        (
+            "branch -D (governed evaluation)",
+            &["branch", "-q", "-D", "tmp"],
+            &tmp_branch,
+        ),
         ("tag (fast path)", &["tag", "t"], &tmp_tag),
     ] {
         let (p50, p95) = time(&plain, args, setup);

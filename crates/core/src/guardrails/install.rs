@@ -101,8 +101,12 @@ fn backend(storage: RefStorage) -> RefBackend {
 /// The protection status from the store (ADR-GRD-005 § 3, the part of US-GRD-001).
 pub fn status(repo_id: &str, common: &Path, store: &RepoStore) -> GuardStatus {
     let keys = store.guard_keys().unwrap_or_default();
-    let journal = journal(&keys).filter(|j| j.stage == Stage::Confirmed);
     let reader = evaluate::open(common);
+    // "Hooks only" needs the confirmed install still in place: the key is ours and the folder
+    // is there. Anything else is unprotected here; telling why is US-GRD-004 (ADR-GRD-005).
+    let journal = journal(&keys)
+        .filter(|j| j.stage == Stage::Confirmed)
+        .filter(|j| in_place(j, reader.as_ref(), common));
     let storage = reader
         .as_ref()
         .map_or(RefStorage::Files, |r| r.ref_storage());
@@ -129,6 +133,15 @@ pub fn status(repo_id: &str, common: &Path, store: &RepoStore) -> GuardStatus {
             .and_then(|r| serde_json::from_str(r).ok())
             .unwrap_or_default(),
     }
+}
+
+/// The confirmed install is still where it was: the repo's own `core.hooksPath` is the
+/// journal's and the dispatchers folder exists.
+fn in_place(journal: &Journal, reader: Option<&gitraptor_git::RepoReader>, common: &Path) -> bool {
+    reader
+        .and_then(gitraptor_git::RepoReader::hooks_path)
+        .is_some_and(|v| v == journal.hooks_dir)
+        && common.join(FOLDER).join("hooks").is_dir()
 }
 
 /// The worktrees of the repo, the main one first (`git worktree list`).
@@ -209,12 +222,10 @@ pub fn plan(ctx: &GuardCtx<'_>, repo_id: &str, common: &Path, store: &RepoStore)
             blockers.push(b);
         }
     };
-    let keys = store.guard_keys().unwrap_or_default();
-    let known = journal(&keys);
-    if known.as_ref().is_some_and(|j| j.stage == Stage::Confirmed) {
+    if status.state == ProtectionState::HooksOnly {
         add(InstallBlocker::AlreadyInstalled);
-    } else if common.join(FOLDER).exists() || std::fs::symlink_metadata(common.join(FOLDER)).is_ok()
-    {
+    } else if std::fs::symlink_metadata(common.join(FOLDER)).is_ok() {
+        // A folder left without its key (or never ours): adopting or removing it is US-GRD-003.
         add(InstallBlocker::OrphanFolder);
     }
     if ctx.dirs.runtime.is_none() {
