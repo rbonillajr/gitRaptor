@@ -21,7 +21,9 @@ pub struct NormalizedPath {
 /// Validates and normalizes the Git common directory of a repo.
 pub fn normalize_common_dir(common_dir: &Path) -> Result<NormalizedPath> {
     validate_input_path(common_dir)?;
-    let canonical_path = common_dir.canonicalize()?;
+    // The drive form on Windows: the daemon opens this path with the read layer, which refuses
+    // verbatim paths (ADR-GRP-009 § 2).
+    let canonical_path = gitraptor_git::paths::canonicalize(common_dir)?;
     let display = canonical_path
         .to_str()
         .ok_or_else(|| ProfileError::InvalidPath {
