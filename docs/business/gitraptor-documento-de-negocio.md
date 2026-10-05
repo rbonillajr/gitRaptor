@@ -3,8 +3,8 @@ id: BRD-GRP-001
 title: GitRaptor — Documento de Negocio
 type: business-requirements
 status: draft
-version: 0.5
-date: 2026-10-02
+version: 0.6
+date: 2026-10-05
 author: Rene Bonilla
 tags: [git, ai-agents, worktrees, mcp, tui, cli, agent-cockpit, safety-net, guardrails, azure-devops, brd]
 changelog:
@@ -13,6 +13,7 @@ changelog:
   - 0.3 (2026-10-01): Decisiones cerradas: herramienta interna al inicio, Claude Code + Cursor como agentes del MVP, desarrollo por una persona orquestando múltiples agentes de IA (dogfooding desde el día uno).
   - 0.4 (2026-10-02): BR-11 deja de fijar el archivo `.gitraptor/policy.yaml`; el formato y la estructura de la configuración del repo se deciden en un ADR (propuesta: JSON en tres niveles perfil/repo/local, con secciones `permissions` y `policies`).
   - 0.5 (2026-10-03): D2 cambia: el MVP da soporte completo solo a Claude Code; después Codex y luego Cursor, uno por uno. Mientras tanto, los demás agentes se aceptan como "otro agente" mediante registro explícito.
+  - 0.6 (2026-10-05): D4 y D5 (decisiones de Rene Bonilla): modelo **open core**, con el núcleo gratuito bajo FSL-1.1-ALv2 y una edición de equipo comercial (BR-23 y BR-25); nombre `gitraptor` en los canales y comando `raptor`. Se cierra la pregunta abierta 2.
 ---
 
 # GitRaptor — Documento de Negocio
@@ -220,9 +221,11 @@ Prioridad MoSCoW. Los IDs (`BR-xx`) se descomponen en historias de usuario en la
 | ID | Capacidad | Prioridad |
 |---|---|---|
 | BR-22 | **Vista visual:** extensión de VS Code/Cursor (Marketplace + Open VSX) y/o app de escritorio (Tauri) con un grafo animado en vivo de agentes. Consume el mismo motor. | Should |
-| BR-23 | **Políticas centralizadas** para la organización: herencia de políticas y distribución desde un repo central. | Should |
+| BR-23 | **Políticas centralizadas** para la organización: herencia de políticas y distribución desde un repo central. **Edición de equipo** (D4). | Should |
 | BR-24 | **Auditoría:** exportar el log de acciones de agentes y de violaciones de política (JSON y SIEM). | Should |
-| BR-25 | **Dashboard de equipo** (opcional, self-hosted): actividad de agentes por repo y métricas. | Could |
+| BR-25 | **Dashboard de equipo** (opcional, self-hosted): actividad de agentes por repo y métricas. **Edición de equipo** (D4). | Could |
+
+> **Edición de equipo (D4):** BR-23 y BR-25 se entregarán con licencia comercial. El núcleo gratuito (FSL-1.1-ALv2) cubre lo que D4 enumera: motor, CLI/TUI, MCP, Time Machine y Guardrails individuales. BR-22, BR-24 y la parte avanzada de Azure DevOps (BR-19) no tienen edición asignada todavía (pregunta abierta 5).
 
 ### 6.4 Fuera de alcance (por ahora)
 
@@ -247,7 +250,7 @@ Prioridad MoSCoW. Los IDs (`BR-xx`) se descomponen en historias de usuario en la
 | NFR-08 | Interoperabilidad | Compatible con MCP estándar. Agnóstico del agente. Sin APIs privadas de ningún IDE. |
 | NFR-09 | UX | TUI navegable por teclado, con temas y accesible (sin depender solo del color). |
 | NFR-10 | i18n | CLI y TUI en inglés y español. |
-| NFR-11 | Legal | Licencia permisiva o open-core apta para empresa (no AGPL en el núcleo). Clean-room respecto a los competidores. |
+| NFR-11 | Legal | Licencia permisiva o open-core apta para empresa (no AGPL en el núcleo). Clean-room respecto a los competidores. **Resuelto por D4:** núcleo bajo FSL-1.1-ALv2. |
 | NFR-12 | Calidad | Suite de integración contra repos reales con escenarios multi-agente simulados y pruebas de caos (kill del proceso a mitad de una operación). |
 
 ---
@@ -261,6 +264,20 @@ Prioridad MoSCoW. Los IDs (`BR-xx`) se descomponen en historias de usuario en la
 | **C. Herramienta interna** | Uso corporativo (ASSA) | Control total, ajuste a nuestro stack | Sin tracción externa |
 
 **Decisión (v0.3):** opción **C, herramienta interna al inicio**. La arquitectura y la licencia se mantienen compatibles con una futura opción **B (open-core)**, que se reevalúa cuando el MVP esté estable y probado internamente.
+
+**Decisión (v0.6, 2026-10-05, Rene Bonilla):** el modelo de licencia y monetización es la opción **B, open core** (D4):
+
+| Edición | Qué incluye | Licencia | Precio |
+|---|---|---|---|
+| **Núcleo** | Motor, CLI/TUI (`raptor`), servidor MCP, Time Machine y Guardrails individuales (políticas por repo y locales) | [FSL-1.1-ALv2](../../LICENSE) (Functional Source License 1.1; cada versión pasa a Apache-2.0 a los dos años) | Gratis para cualquier usuario |
+| **Equipo** (más adelante) | Administración de grupos de usuarios, políticas centralizadas (BR-23) y dashboard de equipo (BR-25) | Comercial | De pago |
+
+- La FSL permite cualquier uso salvo el "uso competidor": ofrecer el software a terceros en un producto o servicio comercial que lo sustituya o que dé la misma funcionalidad o una sustancialmente similar. El uso interno en una empresa está permitido, así que se cumple NFR-11.
+- El núcleo es *source-available* (Fair Source), no open source aprobado por la OSI, hasta que cada versión pasa a Apache-2.0.
+- Decisión del orquestador (2026-10-05), validada por el PO: solo BR-23 y BR-25 se marcan como edición de equipo; BR-19, BR-22 y BR-24 pasan a la pregunta abierta 5, y la administración de grupos de usuarios no recibe BR hasta especificar la Fase 3.
+- La edición de equipo es Fase 3 y **no se construye todavía**. La administración de grupos de usuarios no tiene BR propio: se escribe cuando se especifique la Fase 3.
+- La publicación externa ocurre cuando el MVP esté estable internamente (D1); D4 define la licencia con la que se publicará. Publicar en los canales sigue siendo un paso humano (ADR-GRP-014).
+- Antes del lanzamiento comercial se recomienda una revisión legal: la licencia, la frontera entre ediciones y quién es el titular de la propiedad intelectual (el `LICENSE` nombra como licenciante a Rene Bonilla; la opción C hablaba de uso corporativo en ASSA).
 
 ---
 
@@ -316,20 +333,23 @@ Como el producto arranca como **herramienta interna**, los KPIs miden uso y valo
 
 ## 12. Decisiones y preguntas abiertas
 
-### 12.1 Decisiones tomadas (v0.3)
+### 12.1 Decisiones tomadas (v0.3; D4 y D5 en v0.6)
 
 | # | Pregunta | Decisión |
 |---|---|---|
-| D1 | ¿Producto público o herramienta interna? | **Herramienta interna al inicio** (opción C), sin cerrar la puerta a open-core (B). |
+| D1 | ¿Producto público o herramienta interna? | **Herramienta interna al inicio** (opción C), sin cerrar la puerta a open-core (B). El modelo destino queda fijado en D4 (2026-10-05). |
 | D2 | ¿Qué agentes son prioritarios en el MVP? | **Solo Claude Code** (revisada el 2026-10-03; antes: Claude Code y Cursor). Después, Codex y luego Cursor, uno por uno; Copilot más adelante. |
 | D3 | ¿Capacidad del equipo? | **Sin equipo humano:** una persona orquestando múltiples agentes de IA. La planificación se hace por historias pequeñas y verificables, no por velocity de un equipo. |
+| D4 | ¿Modelo de licencia y monetización? | **Open core** (decisión de Rene Bonilla, 2026-10-05). Núcleo gratuito para cualquier usuario bajo **FSL-1.1-ALv2**; más adelante, una **edición de equipo** de pago con licencia comercial (grupos de usuarios, BR-23 y BR-25). Ver sección 8. |
+| D5 | ¿Nombre y comando? | **GitRaptor**, publicado como `gitraptor` en los canales (tap propio de Homebrew, winget y npm); el comando sigue siendo `raptor` (decisión de Rene Bonilla, 2026-10-05; ADR-GRP-014 § 6). |
 
 ### 12.2 Preguntas abiertas
 
 1. ¿Qué pesa más en el MVP: **Time Machine + Guardrails** (seguridad) o **Cockpit** (visibilidad)? Propuesta: los tres, en versión mínima.
-2. ¿Nombre y licencia definitivos? ¿Se mantiene "GitRaptor" y el comando `raptor`?
+2. ~~¿Nombre y licencia definitivos? ¿Se mantiene "GitRaptor" y el comando `raptor`?~~ Resuelta por D4 y D5 (2026-10-05).
 3. ¿Hay una fecha objetivo para el MVP?
 4. ¿Integramos con Entire Checkpoints desde temprano o esperamos a que el estándar madure?
+5. ¿En qué edición van la vista visual (BR-22), la auditoría (BR-24) y la parte avanzada de Azure DevOps (BR-19)? La opción B original ponía la auditoría y Azure DevOps avanzado en el nivel de pago; D4 solo asigna BR-23 y BR-25 a la edición de equipo.
 
 ---
 

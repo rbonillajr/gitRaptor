@@ -39,3 +39,12 @@ pnpm nx graph                         # grafo de proyectos
 | `gitraptor-api` | `crates/api` | Contrato JSON-RPC/eventos |
 | `gitraptor-theme` | `crates/theme` | Paleta para TUI/CLI |
 | `@gitraptor/tokens` | `packages/design-tokens` | Design tokens (DTCG + Style Dictionary) |
+
+## Licencia
+
+GitRaptor usa un modelo **open core** (decisión D4 del [documento de negocio](docs/business/gitraptor-documento-de-negocio.md)):
+
+- **Núcleo** (motor, `raptor` CLI/TUI, `raptor-mcp`, Time Machine y Guardrails individuales): gratis para cualquier usuario con la [Functional Source License 1.1, licencia futura Apache-2.0](LICENSE) (`FSL-1.1-ALv2`). Se permite cualquier uso, también interno en una empresa, salvo ofrecerlo como producto o servicio comercial competidor. Cada versión pasa a Apache-2.0 a los dos años de publicarse. Hasta entonces el núcleo es *source-available* (Fair Source), no open source aprobado por la OSI.
+- **Edición de equipo** (más adelante, de pago): licencia comercial para administrar grupos de usuarios, políticas centralizadas (BR-23) y el dashboard de equipo (BR-25).
+
+En los canales de instalación el paquete se llama `gitraptor` (Homebrew, winget y npm); el comando es `raptor`. Más detalle en [ADR-GRP-014 § 6](docs/architecture/decisions/ADR-GRP-014-pipeline-release-distribucion.md).
