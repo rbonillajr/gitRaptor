@@ -5,5 +5,7 @@
 pub mod apply;
 pub mod oplog;
 pub mod protected;
-pub mod repo_lock;
+/// The repo write lock lives in a neutral module shared with the executor
+/// (ADR-CKP-002 § 5); re-exported for the applier.
+pub use crate::repo_lock;
 pub mod store;
