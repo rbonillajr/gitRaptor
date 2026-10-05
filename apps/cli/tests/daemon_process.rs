@@ -82,7 +82,7 @@ impl Fixture {
         let (profile, _) = Profile::open(self.dirs()).unwrap();
         let entry = profile.repos().unwrap().remove(0);
         let (mut store, _) = profile.open_store(&entry.repo_id).unwrap();
-        let worktree = worktree.canonicalize().unwrap();
+        let worktree = gitraptor_core::observe::canonical(worktree);
         store
             .write_batch(&[
                 WriteOp::UpsertWorktree {
