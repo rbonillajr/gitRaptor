@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-05
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
@@ -85,7 +85,7 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
   - Linux: `/usr/bin/git`, `/usr/local/bin/git` y el perfil de Nix del usuario.
   - Windows: la ruta de instalación de Git for Windows en el registro (solo lectura), `%ProgramFiles%\Git\cmd\git.exe`, `%LOCALAPPDATA%\Programs\Git\cmd\git.exe` y los shims de Scoop.
 - **Shim de macOS**: `/usr/bin/git` (y cualquier candidato que resuelva a él) solo se invoca si existe un toolchain de desarrollador real, comprobado leyendo el sistema de archivos (que exista el `git` de las Command Line Tools o de Xcode) y no ejecutando el shim. Si no existe, el candidato se descarta sin invocarlo y nunca se abre el diálogo de instalación.
-- **Validación del ejecutable (SEC-10, M10)**: antes de invocarlo, todo candidato (también la ruta explícita) debe ser **absoluto, archivo regular, propiedad del usuario o de root y no escribible por grupo ni otros** (en Windows, sin ACE de escritura para otros usuarios). Un candidato que no cumple se descarta sin ejecutarlo y el motivo se reporta.
+- **Validación del ejecutable (SEC-10, M10)**: antes de invocarlo, todo candidato (también la ruta explícita) debe ser **absoluto, archivo regular, propiedad del usuario o de root y no escribible por grupo ni otros** (en Windows, regla de propietario y DACL de la Enmienda (2026-10-05, TD-GRP-001)). Un candidato que no cumple se descarta sin ejecutarlo y el motivo se reporta.
 - **Selección**: el primer candidato válido que es ejecutable y responde a `git version` con 2.38 o superior. Si ninguno cumple, el motor pasa a "Esperando Git" (BR-WF-002) con el motivo (ausente o versión encontrada) para que la CLI y el Cockpit lo presenten. (Enmienda 2026-10-04, Cockpit: el ejecutor de operaciones de usuario usa este mismo binario.)
 - **Recomprobación**:
   - En "Esperando Git", de forma periódica (⚠️ **ASSUMPTION**: cada 30 s) y al cambiar los directorios de los candidatos.
@@ -252,3 +252,41 @@ El escaneo de perfil, logs y captura del stream IPC sigue exigiendo **0 hallazgo
 3. La captura del stream de eventos y del resto de respuestas sigue con 0 hallazgos.
 
 El arnés identifica las respuestas de diff por su id de petición para excluirlas. La forma de esa consulta es del contrato del canal: **pendiente, dueño: worker del canal (TS-GRP-004)**.
+
+## Enmienda (2026-10-05, TD-GRP-001)
+
+Decisión del orquestador (2026-10-05), validada por Arquitecto y security-expert. Origen: [TD-GRP-001](../../requirements/features/motor-local/technical-stories/TD-GRP-001-acl-windows.md) y su [Dev Spec](../../requirements/features/motor-local/dev-specs/TD-GRP-001-dev-spec.md). Sustituye el paréntesis "sin ACE de escritura para otros usuarios" de la validación del ejecutable en Windows. No cambia la regla de Unix. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| Regla de propietario y DACL para validar `git.exe` en Windows | § 4 | TD-GRP-001; DS-TD-GRP-001 D3 a D6 |
+| Riesgos residuales y validación añadida | Esta sección | DS-TD-GRP-001 D8 y § 5 |
+
+### Regla en Windows (SEC-10, M10)
+
+- **Propietarios de confianza**, comparados por SID y nunca por nombre: el usuario actual, SYSTEM, Administrators y TrustedInstaller. `OWNER RIGHTS` cuenta como de confianza, porque el propietario ya lo es.
+- **El archivo**: nadie más puede escribirlo, cambiar sus atributos, borrarlo ni cambiar su DACL o su propietario.
+- **Su carpeta**: nadie más puede añadir archivos ni subcarpetas, borrar hijos, renombrarla ni cambiar su DACL. Así nadie deja una DLL junto al ejecutable (*DLL planting*).
+- **Cada carpeta superior, hasta la raíz del volumen**: nadie más puede renombrarla, borrar hijos ni cambiar su DACL o su propietario. Añadir subcarpetas sí se permite, como concede `C:\` a *Authenticated Users*: una carpeta nueva no sustituye la ruta.
+- **ACE ignorados en esta cadena**: los de denegar (solo quitan acceso) y los solo heredables (no se aplican al objeto).
+- **Rechazo (fail-closed)**: un ACE de tipo desconocido, una ACL ilegible o NULL, un *reparse point* en la cadena, un volumen sin ACL persistentes y una ruta UNC.
+- **Sin ubicaciones de confianza**: ninguna ruta se acepta por estar en `%ProgramFiles%`. Se verifica igual que cualquier otra.
+- **Lanzador de Git for Windows**: si el candidato es `<raíz>\cmd\git.exe`, también se verifican el Git que lanza y su carpeta, cuando existen: `<raíz>\{mingw64,ucrt64,clangarm64,mingw32}\bin\git.exe` y `<raíz>\bin\git.exe`.
+
+**Implementación**: crate `crates/winsys`, la única excepción a `forbid(unsafe_code)`. La excepción se registra en la enmienda de [ADR-GRP-002](./ADR-GRP-002-monorepo-nx.md) de la rama `feat/windows-requester-resolution`.
+
+### Riesgos residuales
+
+- El resto del árbol de la instalación de Git no se verifica.
+- Los shims de Scoop viven en la carpeta del usuario y son de su confianza.
+- En Unix no se comprueban las carpetas superiores del ejecutable. **Pendiente**.
+
+### Validación añadida
+
+En la Windows real se acepta `C:\Program Files\Git\cmd\git.exe`. Se rechazan:
+
+- un `git.exe` con escritura para `Users`;
+- su carpeta con `FILE_ADD_FILE` para `Users`;
+- una carpeta superior con `FILE_DELETE_CHILD` para `Everyone`;
+- un propietario `Users`;
+- un *junction* en la cadena.
