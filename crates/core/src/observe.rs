@@ -4,8 +4,7 @@
 //! no write, lock or user program touches the repo. [`reconcile`] reads
 //! every worktree from scratch (ADR-GRP-010 § 6) and never touches the
 //! profile: the daemon loop persists and publishes what it returns. The
-//! watcher, the debounce and the periodic reconciliation belong to
-//! US-GRP-002 (ADR-GRP-010 § 5, ADR-GRP-013 § 5).
+//! watcher that keeps it fresh is [`crate::watch`] (US-GRP-002).
 
 use std::path::{Path, PathBuf};
 
@@ -33,7 +32,7 @@ pub fn locate(path: &Path) -> Result<PathBuf, RepoRejection> {
     Ok(canonical(reader.common_dir()))
 }
 
-fn canonical(path: &Path) -> PathBuf {
+pub fn canonical(path: &Path) -> PathBuf {
     std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
@@ -45,6 +44,9 @@ pub struct WorktreeRead {
     pub head_commit: Option<String>,
     /// Digest of the full, untruncated status.
     pub fingerprint: Option<String>,
+    /// An operation (rebase, merge…) is in progress: `HEAD` may be detached
+    /// without the developer having switched branch.
+    pub in_progress: bool,
 }
 
 /// The worktrees of one repo after a full reconciliation.
@@ -119,8 +121,14 @@ pub fn reconcile(common_dir: &Path) -> Result<RepoRead, ReadError> {
         .map(|w| (canonical(&w.path), w.id))
         .collect();
     linked.sort();
+    let common = canonical(common_dir);
     for (path, id) in &linked {
-        worktrees.push(read_worktree(path, false, Some(id)));
+        // A missing folder is reported missing, not untrusted.
+        if !path.exists() || linked_is_trusted(&common, id, path) {
+            worktrees.push(read_worktree(path, false, Some(id)));
+        } else {
+            worktrees.push(untrusted_link(path, id));
+        }
     }
     let mut tips: Vec<String> = reader
         .local_branches()?
@@ -134,17 +142,66 @@ pub fn reconcile(common_dir: &Path) -> Result<RepoRead, ReadError> {
     })
 }
 
-fn read_worktree(path: &Path, main: bool, admin_name: Option<&str>) -> WorktreeRead {
+/// Whether a linked worktree may be read and watched (SEC-11, ADR-GRP-010
+/// § 2): its `.git` file points back to `<common>/worktrees/<id>`, and its
+/// root is not `/`, a drive root, the home folder or an ancestor of the
+/// repo. Its `gitdir` is writable by an agent; this keeps the engine from
+/// being pointed at the whole disk.
+pub fn linked_is_trusted(common_dir: &Path, id: &str, root: &Path) -> bool {
+    if root.parent().is_none() || common_dir.starts_with(root) {
+        return false;
+    }
+    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))
+        && canonical(Path::new(&home)) == root
+    {
+        return false;
+    }
+    let Ok(text) = std::fs::read_to_string(root.join(".git")) else {
+        return false;
+    };
+    let Some(target) = text.trim().strip_prefix("gitdir:") else {
+        return false;
+    };
+    let target = Path::new(target.trim());
+    let target = if target.is_absolute() {
+        target.to_path_buf()
+    } else {
+        root.join(target)
+    };
+    canonical(&target) == canonical(&common_dir.join("worktrees").join(id))
+}
+
+fn untrusted_link(path: &Path, id: &str) -> WorktreeRead {
+    WorktreeRead {
+        view: WorktreeView {
+            path: Untrusted::from_os(path.as_os_str()),
+            main: false,
+            admin_name: Some(Untrusted::new(id)),
+            status: WorktreeStatus::Unavailable {
+                reason: UnavailableReason::Untrusted,
+            },
+        },
+        head_commit: None,
+        fingerprint: None,
+        in_progress: false,
+    }
+}
+
+/// Reads one worktree from scratch: `HEAD`, the full status and whether an
+/// operation is in progress. Never fails: what cannot be read is reported
+/// unavailable with its reason.
+pub fn read_worktree(path: &Path, main: bool, admin_name: Option<&str>) -> WorktreeRead {
     let view = |status| WorktreeView {
         path: Untrusted::from_os(path.as_os_str()),
         main,
         admin_name: admin_name.map(Untrusted::new),
         status,
     };
-    let read = || -> Result<(HeadView, Option<String>, Status), ReadError> {
+    let read = || -> Result<(HeadView, Option<String>, Status, bool), ReadError> {
         let reader = RepoReader::open(path, &ReaderOptions::default())?;
         let head = reader.head()?;
         let status = reader.status()?;
+        let in_progress = reader.in_progress().is_some();
         let name = || Untrusted::new(head.branch.clone().unwrap_or_default());
         let head_view = if head.detached {
             HeadView::Detached
@@ -153,10 +210,10 @@ fn read_worktree(path: &Path, main: bool, admin_name: Option<&str>) -> WorktreeR
         } else {
             HeadView::Branch { name: name() }
         };
-        Ok((head_view, head.commit, status))
+        Ok((head_view, head.commit, status, in_progress))
     };
     match read() {
-        Ok((head, head_commit, status)) => {
+        Ok((head, head_commit, status, in_progress)) => {
             let (counts, changes) = changes(&status);
             WorktreeRead {
                 fingerprint: Some(fingerprint(&changes)),
@@ -166,6 +223,7 @@ fn read_worktree(path: &Path, main: bool, admin_name: Option<&str>) -> WorktreeR
                     changes: bounded(changes),
                 }),
                 head_commit,
+                in_progress,
             }
         }
         Err(err) => WorktreeRead {
@@ -178,6 +236,7 @@ fn read_worktree(path: &Path, main: bool, admin_name: Option<&str>) -> WorktreeR
             }),
             head_commit: None,
             fingerprint: None,
+            in_progress: false,
         },
     }
 }

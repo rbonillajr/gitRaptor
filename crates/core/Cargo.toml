@@ -11,6 +11,10 @@ publish.workspace = true
 directories = "6.0.0"
 # Confirmation challenges of the Time Machine (TS-TMC-004, SEC-TMC-03).
 getrandom = "0.4.3"
+# File watcher of the observer (ADR-GRP-010 § 1). Pinned: every FSEvents
+# stream recreation of 8.2 loses events without a mark, and a new version
+# must pass the recreation scenario before it is taken (US-GRP-002, D2).
+notify = "=8.2.0"
 gitraptor-api.workspace = true
 gitraptor-git.workspace = true
 gitraptor-policy.workspace = true

@@ -109,3 +109,52 @@ fn a_folder_that_is_not_a_repo_is_rejected_as_such() {
         Err(RepoRejection::NotARepo)
     );
 }
+
+/// SEC-11 (US-GRP-002, D13): a linked worktree whose `.git` does not point
+/// back to its `gitdir` is neither read nor watched: it is reported
+/// untrusted. A root at `/` or at an ancestor of the repo never is.
+#[test]
+fn a_linked_worktree_without_its_back_link_is_untrusted() {
+    let f = Fixture::with_commit(&git_from_path());
+    f.git(&["branch", "a"]);
+    f.git(&["branch", "b"]);
+    let a = f.add_worktree("a", "a");
+    let b = f.add_worktree("b", "b");
+    // "b" now claims to be "a"'s worktree.
+    let common = locate(&f.repo).unwrap();
+    std::fs::write(
+        b.join(".git"),
+        format!("gitdir: {}\n", common.join("worktrees/wt-a").display()),
+    )
+    .unwrap();
+
+    let read = reconcile(&common).unwrap();
+    let wts = read.views();
+    let by_path = |p: &Path| {
+        wts.iter()
+            .find(|w| w.path.raw() == canonical(p))
+            .unwrap()
+            .status
+            .clone()
+    };
+    assert!(matches!(by_path(&a), WorktreeStatus::Ready { .. }));
+    assert_eq!(
+        by_path(&b),
+        WorktreeStatus::Unavailable {
+            reason: UnavailableReason::Untrusted
+        }
+    );
+    use gitraptor_core::observe::linked_is_trusted;
+    assert!(linked_is_trusted(
+        &common,
+        "wt-a",
+        Path::new(&canonical(&a))
+    ));
+    assert!(!linked_is_trusted(
+        &common,
+        "wt-b",
+        Path::new(&canonical(&b))
+    ));
+    assert!(!linked_is_trusted(&common, "wt-a", Path::new("/")));
+    assert!(!linked_is_trusted(&common, "wt-a", &f.root));
+}
