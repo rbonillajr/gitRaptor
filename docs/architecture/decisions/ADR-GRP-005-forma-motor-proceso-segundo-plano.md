@@ -114,8 +114,8 @@ El motor tiene que capturar la actividad de los agentes **aunque no haya ninguna
 | Confirmar la rama base y el suelo **iniciales** al instalar (US-GRD-001) (**D9**) | No: confirma `main` sin leer el suelo | Sin ventana. Con configuración del equipo, deja `base-unconfirmed` |
 | Confirmar la rama base y el suelo **iniciales** con un comando explícito (US-GRD-014) (**D9**) | **Sí**, si el suelo trae relajaciones | **D5** cuando el suelo relaja (p. ej. desactiva el mínimo) |
 | Confirmar un cambio del suelo o de la rama base (D7, D8; ADR-GRD-004 § 3 y § 4) | **Sí** | **D5** (por D8), con el diff de lo que se relaja y la ref y el commit de origen a la vista |
-| Relajar la configuración con el comando de edición (futuro, US-GRD-013) | **Sí** | **D5** + factor fuera de banda del SO obligatorio; sin él, fail-closed |
-| Aprobar una petición de la cola (futuro, US-GRD-015) | **Sí** | **D5** + factor fuera de banda del SO obligatorio; sin él, fail-closed |
+| Relajar la configuración con el comando de edición (futuro, US-GRD-013) | **Sí** | **D5** + factor del SO de [ADR-GRD-008](./ADR-GRD-008-factor-autenticacion-fuera-de-banda.md) obligatorio; sin él, fail-closed |
+| Aprobar una petición de la cola (futuro, US-GRD-015) | **Sí** | **D5** + factor del SO de [ADR-GRD-008](./ADR-GRD-008-factor-autenticacion-fuera-de-banda.md) obligatorio; sin él, fail-closed |
 
 - **Refuerzo D5** (Rene Bonilla, 2026-10-04) para los comandos que relajan: **anuncio** `reserved-action-pending` en el stream de todos los clientes; **ventana cancelable** antes de aplicar (⚠️ **ASSUMPTION**: 10 s), en la que cualquier cliente del usuario puede cancelar sin comando reservado; y **auditoría con la cadena completa de ascendencia** (ruta del ejecutable e identificador de cada proceso, terminal de control y líder de sesión) más la **aceptación del riesgo por acción** (ADR-GRP-013 § 1).
 - **Añadir un repo no confirma la rama base ni el suelo** (**D9**, Rene Bonilla, 2026-10-04): la confirmación inicial es un comando de Guardrails (tabla de arriba). Hasta entonces, Guardrails protege la unión de ramas base en las dos fases de ADR-GRD-004 § 3.5 y el motor marca la rama base como "no confirmada" (ADR-GRP-007).
@@ -226,3 +226,14 @@ Sale de la implementación del canal ([Dev Spec de TS-GRP-004](../../requirement
 | 7 | **Confused deputy (DEP-MCP-3)**: un llamante que desciende del propio daemon, como un hook o un `git` lanzado por el futuro ejecutor de operaciones, se rechaza (`daemon-descendant`) y queda en la auditoría. **El riesgo residual de § 6 (doble fork, `setsid`) se extiende a los descendientes del daemon.** Los requisitos para el ejecutor (atribución al solicitante, contención por SO, nada heredable) están en la Dev Spec, D21 | § 6 | Q-MCP-5 |
 | 8 | **Windows**: el named pipe con DACL, primera instancia, rechazo de clientes remotos, SID del servidor y SQOS sigue siendo la decisión, pero **no está implementado**. Hasta entonces el daemon arranca sin canal y el cliente responde "no soportado". Pendiente: etapa de validación multiplataforma | § 5 | Necesita Win32 sin `unsafe` propio |
 | 9 | **Riesgo del modelo (revisión de seguridad, A-2)**: un agente que lanza el comando a través de otra aplicación del usuario obtiene una ascendencia limpia y una terminal de control: `open x.command` (Terminal.app), `tmux new-window` o la terminal de un IDE u orquestador. No necesita doble fork. ⚠️ **Pendiente de decisión de Rene** antes del release de `repo.retire` y `attribution.correct`. Control compensatorio previsto: cada reservado aceptado se publica (`reserved.audit`) y el Cockpit lo muestra | § 6 | Complementa los vectores de ADR-GRD-007 § 2 (`tmux send-keys`, `osascript`) |
+
+## Enmienda (2026-10-04, ADR-GRD-008)
+
+Aplicada desde la tabla de enmiendas de [ADR-GRD-008](./ADR-GRD-008-factor-autenticacion-fuera-de-banda.md). No cambia la forma del motor, el canal ni los controles 1 a 7. El `status` sigue en `accepted`.
+
+| Cambio | Dónde |
+|---|---|
+| Relajar con el comando y aprobar en la cola: el factor es el de ADR-GRD-008, invocado por el daemon después de los controles 1 a 3 (con `daemon-descendant`), sin diálogo si fallan | § 6, tabla de Guardrails |
+| `reserved-action-pending` añade el estado "esperando la autenticación del sistema" | § 6, refuerzo D5 |
+| Validación 7: los casos del factor remiten a la Validación de ADR-GRD-008 | Validación 7 |
+| Enmienda TS-GRP-004, punto 9 (A-2): el factor de ADR-GRD-008, en modo preferente, es el control compensatorio candidato para `repo.retire` y `attribution.correct`; sigue pendiente de decisión de Rene antes de su release | § 6 |

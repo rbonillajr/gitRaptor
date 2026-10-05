@@ -40,7 +40,7 @@ ADR-GRP-005 § 6 (aceptado el 2026-10-04) define los **comandos reservados**, au
     - una **ventana cancelable** antes de aplicar (⚠️ **ASSUMPTION**: 10 s; la excepción también la respeta, antes de emitir el token);
     - **auditoría con la cadena completa de ascendencia**: ruta del ejecutable e identificador de cada proceso, terminal de control y líder de sesión.
   - La **aceptación del riesgo se registra por acción**.
-  - **Requisito duro antes de US-GRD-013 y US-GRD-015**: un **factor fuera de banda del SO** para las acciones que relajan (LocalAuthentication en macOS, Windows Hello / UserConsentVerifier, polkit `auth_self` en Linux). Si no está disponible → **fail-closed**.
+  - **Requisito duro antes de US-GRD-013 y US-GRD-015**: un **factor fuera de banda del SO** para las acciones que relajan (LocalAuthentication en macOS, Windows Hello / UserConsentVerifier, polkit `auth_self` en Linux). Si no está disponible → **fail-closed**. Mecanismo: [ADR-GRD-008](./ADR-GRD-008-factor-autenticacion-fuera-de-banda.md) (aceptado el 2026-10-04).
   - **Instalar** endurece y mantiene ADR-GRP-005 sin ventana.
 
 ## Decisión
@@ -59,8 +59,8 @@ ADR-GRP-005 § 6 (aceptado el 2026-10-04) define los **comandos reservados**, au
 | Retirar una instalación huérfana | US-GRD-003 | **Sí** | Igual que desinstalar |
 | Excepción consciente (`raptor guard exec -- git …`) | US-GRD-006 | **Sí** | ADR-GRP-005 § 6 + **D5** (la ventana va antes de emitir el token) + el token del § 3 |
 | Confirmar un cambio de rama base o una relajación del suelo (ADR-GRD-004 § 3 y § 4) | US-GRD-014, US-GRD-007 (no bloqueadas por este ADR; P8 quedó cerrada por ADR-GRP-007, aceptado el 2026-10-04) | **Sí** | **D8 (Rene Bonilla, 2026-10-04)**: el mecanismo MVP de D5, igual que desinstalar (anuncio, ventana cancelable, auditoría con la ascendencia completa y aceptación de riesgo por acción). Cuando exista el factor fuera de banda, se aplicará también aquí, pero **no bloquea** US-GRD-007 ni US-GRD-014 |
-| Relajar la configuración con el comando de edición | US-GRD-013 (bloqueada) | **Sí** | ADR-GRP-005 § 6 + **factor fuera de banda obligatorio**; sin él, fail-closed (D5). Endurecer no es reservado |
-| Aprobar una petición de la cola | US-GRD-015 (bloqueada) | **Sí** | ADR-GRP-005 § 6 + **factor fuera de banda obligatorio** (D5) |
+| Relajar la configuración con el comando de edición | US-GRD-013 | **Sí** | ADR-GRP-005 § 6 + **factor de [ADR-GRD-008](./ADR-GRD-008-factor-autenticacion-fuera-de-banda.md) obligatorio**; sin él, fail-closed (D5). Endurecer no es reservado |
+| Aprobar una petición de la cola | US-GRD-015 | **Sí** | ADR-GRP-005 § 6 + **factor de [ADR-GRD-008](./ADR-GRD-008-factor-autenticacion-fuera-de-banda.md) obligatorio** (D5) |
 | Rechazar una petición de la cola | US-GRD-015 (bloqueada) | No | ADR-GRP-005 § 6 |
 
 - **Contenido de la confirmación de D8** (cambio de suelo o de rama base): la confirmación y su anuncio en todos los clientes muestran:
@@ -169,7 +169,7 @@ ADR-GRP-005 § 6 (aceptado el 2026-10-04) define los **comandos reservados**, au
 - ⚠️ **Riesgo residual del MVP** (D5, decisión 3): para desinstalar y para la excepción, los vectores de la tabla del § 2 que dicen "No" siguen abiertos, limitados por el anuncio, la ventana y la auditoría.
 - ⚠️ **La ventana de 10 s añade espera** a desinstalar y a la excepción. Es un coste aceptado por D5.
 - ⚠️ **`rebase -i` no está disponible bajo la excepción** por la neutralización de `sequence.editor`.
-- ⚠️ **Dependencias**: la lista de comandos reservados de ADR-GRP-005 § 6 y SEC-03 de motor-local se amplía con los de este ADR: **aplicada (2026-10-04)** (tabla de enmiendas). El factor fuera de banda requiere un ADR propio antes de US-GRD-013 y US-GRD-015.
+- ⚠️ **Dependencias**: la lista de comandos reservados de ADR-GRP-005 § 6 y SEC-03 de motor-local se amplía con los de este ADR: **aplicada (2026-10-04)** (tabla de enmiendas). El factor fuera de banda lo define [ADR-GRD-008](./ADR-GRD-008-factor-autenticacion-fuera-de-banda.md), aceptado el 2026-10-04.
 
 ## Validación
 
@@ -218,3 +218,11 @@ ADR-GRP-005 § 6 (aceptado el 2026-10-04) define los **comandos reservados**, au
 - § 3: la ventana cancelable nombra el `kind` `exception-cancelled` (ADR-GRD-006 § 1) para la excepción cancelada.
 - Corrección tras el Judge: la confirmación inicial de US-GRD-001 no relaja y no tiene ventana; D5 solo en la explícita de US-GRD-014 (§ 1, Validación 13). D9 y D10 en Referencias.
 - Judge de la rama del PO: la fila Adoptar dice que adoptar no confirma la rama base ni el suelo (`base-unconfirmed` hasta la confirmación explícita).
+
+## Enmienda (2026-10-04, ADR-GRD-008)
+
+Aplicada desde la tabla de enmiendas de [ADR-GRD-008](./ADR-GRD-008-factor-autenticacion-fuera-de-banda.md). El `status` sigue en `accepted`.
+
+- § 1: las filas de relajar con el comando y aprobar en la cola citan el factor de ADR-GRD-008; ya no figuran como bloqueadas por falta de ADR.
+- § 2: la columna "Qué lo cierra" ("Factor fuera de banda") se lee como **ADR-GRD-008, en las acciones que lo adoptan**: hoy US-GRD-013, US-GRD-015 y la confirmación de una relajación personal (Q-GRD-32). Desinstalar, la excepción y las confirmaciones de D8 lo adoptan en modo preferente en una historia posterior (OQ-GRD-008-3). El factor cierra también el riesgo A-2 de ADR-GRP-005 (Enmienda TS-GRP-004, punto 9) en esas acciones.
+- Consecuencias: "requiere un ADR propio" pasa a ADR-GRD-008.
