@@ -114,6 +114,19 @@ pub struct ObservedBatch {
 /// Where batches go: the daemon loop.
 pub type Sink = Arc<dyn Fn(ObservedBatch) + Send + Sync>;
 
+/// What the session detector learns from the router, as soon as a file
+/// event arrives and before any debounce (US-GRP-007, ADR-GRP-012).
+pub trait ObserverHooks: Send + Sync {
+    /// A file under the root of a worktree changed: activity of its
+    /// sessions (BR-WF-001). The worktree's own Git files (`index`,
+    /// `HEAD`) do not count: an editor's `git status` rewrites them.
+    fn worktree_touched(&self, repo_id: &str, root: &Path);
+    /// A file of the repo's Git directory changed, `objects/` included: the
+    /// first write of a commit. `t_recv` is the monotonic mark of the
+    /// event, comparable with the batch's [`Marks`].
+    fn git_dir_touched(&self, repo_id: &str, t_recv: u64);
+}
+
 /// Message to a worktree task.
 #[derive(Debug)]
 pub(crate) enum WtMsg {
@@ -158,6 +171,7 @@ const WORKTREE_GIT_FILES: &[&str] = &[
 ];
 
 struct RepoEntry {
+    id: String,
     common: PathBuf,
     tx: Sender<RepoMsg>,
     worktrees: Vec<WtHandle>,
@@ -175,6 +189,7 @@ pub(crate) struct Shared {
     /// Test hook: the router drops every event, as an OS that lost them
     /// without a mark.
     drop_events: std::sync::atomic::AtomicBool,
+    hooks: Option<Arc<dyn ObserverHooks>>,
 }
 
 impl Shared {
@@ -212,6 +227,8 @@ impl Shared {
         let mut per_wt: HashMap<PathBuf, (Sender<WtMsg>, Vec<PathBuf>)> = HashMap::new();
         let mut repo_hit: Vec<&Sender<RepoMsg>> = Vec::new();
         let mut ignore_rules: Vec<&RepoEntry> = Vec::new();
+        let mut touched: Vec<PathBuf> = Vec::new();
+        let mut probed: Vec<String> = Vec::new();
         for path in paths {
             let mut best: Option<(usize, Target)> = None;
             for repo in repos.values() {
@@ -233,6 +250,17 @@ impl Shared {
             match best {
                 None => {}
                 Some((_, Target::Worktree(wt))) => {
+                    if let Some(hooks) = &self.hooks
+                        && !touched.contains(&wt.root)
+                    {
+                        touched.push(wt.root.clone());
+                        if let Some(repo) = repos
+                            .values()
+                            .find(|r| r.worktrees.iter().any(|w| w.root == wt.root))
+                        {
+                            hooks.worktree_touched(&repo.id, &wt.root);
+                        }
+                    }
                     per_wt
                         .entry(wt.root.clone())
                         .or_insert_with(|| (wt.tx.clone(), Vec::new()))
@@ -243,6 +271,14 @@ impl Shared {
                     let Ok(rel) = path.strip_prefix(&repo.common) else {
                         continue;
                     };
+                    // Before the `objects/` filter: a commit writes its
+                    // objects first (S3 samples as early as possible).
+                    if let Some(hooks) = &self.hooks
+                        && !probed.contains(&repo.id)
+                    {
+                        probed.push(repo.id.clone());
+                        hooks.git_dir_touched(&repo.id, t_recv);
+                    }
                     if rel.starts_with("objects") {
                         continue;
                     }
@@ -367,6 +403,16 @@ pub struct Observer {
 impl Observer {
     /// Starts the file watcher. Batches go to `sink`.
     pub fn start(config: WatchConfig, sink: Sink) -> Self {
+        Self::start_with_hooks(config, sink, None)
+    }
+
+    /// Like [`Observer::start`], and the router also tells `hooks` about
+    /// activity and Git directory writes (US-GRP-007).
+    pub fn start_with_hooks(
+        config: WatchConfig,
+        sink: Sink,
+        hooks: Option<Arc<dyn ObserverHooks>>,
+    ) -> Self {
         let shared = Arc::new(Shared {
             config,
             sink,
@@ -374,6 +420,7 @@ impl Observer {
             watchers: Mutex::new(None),
             recomputes: std::sync::atomic::AtomicU64::new(0),
             drop_events: std::sync::atomic::AtomicBool::new(false),
+            hooks,
         });
         let weak = Arc::downgrade(&shared);
         let watchers = Watchers::new(Arc::new(move |result: notify::Result<notify::Event>| {
@@ -418,6 +465,7 @@ impl Observer {
             repos.insert(
                 repo_id.to_owned(),
                 RepoEntry {
+                    id: repo_id.to_owned(),
                     common: common.clone(),
                     tx,
                     worktrees: Vec::new(),
