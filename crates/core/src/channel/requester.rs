@@ -59,7 +59,7 @@ impl Who {
             requester: Requester::Agent {
                 name: "claude-code".into(),
                 origin: RequesterOrigin::Detected,
-                session_id: format!("{}:{}", agent.pid, agent.start_us),
+                session_id: crate::detect::session_id(agent.pid, agent.start_us),
             },
         }
     }
