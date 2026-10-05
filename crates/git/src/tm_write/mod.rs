@@ -98,7 +98,9 @@ impl From<ReadError> for WriteError {
             ReadError::InvalidInput(m) => Self::InvalidInput(m),
             ReadError::Untrusted(m) => Self::Untrusted(m),
             ReadError::TemporarilyUnavailable(m) => Self::TimedOut(m),
-            ReadError::Unavailable(m) => Self::Git(m),
+            // `NotARepository` was split out of `Unavailable` for US-GRP-001; the write layer
+            // keeps treating both the same way.
+            ReadError::NotARepository(m) | ReadError::Unavailable(m) => Self::Git(m),
         }
     }
 }
