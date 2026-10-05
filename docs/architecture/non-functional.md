@@ -94,7 +94,7 @@
 
 ## Enmienda (2026-10-04, Cockpit)
 
-Aplicada desde DEP-CKP-1, 2, 3 y 9 de [CTX-CKP-001](../requirements/features/cockpit/context.md), con [ADR-CKP-001](./decisions/ADR-CKP-001-prediccion-conflictos-merge-en-seco.md), [ADR-CKP-002](./decisions/ADR-CKP-002-catalogo-operaciones-ejecutor.md) y [ADR-CKP-003](./decisions/ADR-CKP-003-arquitectura-tui.md) (proposed). **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. No cambia el modelo de amenaza ni el gate de seguridad.
+Aplicada desde DEP-CKP-1, 2, 3 y 9 de [CTX-CKP-001](../requirements/features/cockpit/context.md), con [ADR-CKP-001](./decisions/ADR-CKP-001-prediccion-conflictos-merge-en-seco.md), [ADR-CKP-002](./decisions/ADR-CKP-002-catalogo-operaciones-ejecutor.md) y [ADR-CKP-003](./decisions/ADR-CKP-003-arquitectura-tui.md) (accepted 2026-10-04). **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. No cambia el modelo de amenaza ni el gate de seguridad.
 
 | Cambio | Dónde | Fuente |
 |---|---|---|
