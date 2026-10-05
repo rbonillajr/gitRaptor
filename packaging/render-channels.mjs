@@ -106,7 +106,8 @@ ${block("linux", "x64")}
   end
 
   def install
-    bin.install "raptor", "raptor-mcp"
+    # raptor-hook: the Guardrails dispatcher, next to raptor (US-GRD-001).
+    bin.install "raptor", "raptor-mcp", "raptor-hook"
   end
 
   test do
@@ -207,7 +208,8 @@ function npm() {
     const exe = a.os === "win32" ? ".exe" : "";
     mkdirSync(path.join(dir, "bin"), { recursive: true });
     copyFileSync(path.join(root, "LICENSE"), path.join(dir, "LICENSE"));
-    for (const bin of ["raptor", "raptor-mcp"]) {
+    // raptor-hook ships next to raptor (the Guardrails dispatcher, US-GRD-001); no launcher.
+    for (const bin of ["raptor", "raptor-mcp", "raptor-hook"]) {
       const dest = path.join(dir, "bin", bin + exe);
       copyFileSync(path.join(tmp, `raptor-${version}-${a.target}`, bin + exe), dest);
       chmodSync(dest, 0o755);
