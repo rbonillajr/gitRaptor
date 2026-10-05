@@ -86,6 +86,8 @@ pub(crate) struct ServerCtx {
     pub divergence: crate::observe::DivergenceCache,
     /// The engine's own consumption (`engine.resources`, US-GRP-017).
     pub resources: Arc<crate::resources::ResourceMonitor>,
+    /// Protected repos for `guard.evaluate` (US-GRD-001).
+    pub guard: Arc<crate::guardrails::GuardRegistry>,
 }
 
 impl ServerCtx {
@@ -146,6 +148,7 @@ pub(crate) struct ServeArgs {
     pub protected: Option<ProtectedWiring>,
     pub time_machine: Option<super::TimeMachineWiring>,
     pub resources: Arc<crate::resources::ResourceMonitor>,
+    pub guard: Arc<crate::guardrails::GuardRegistry>,
 }
 
 impl Server {
@@ -184,6 +187,7 @@ impl Server {
             time_machine: args.time_machine,
             divergence: crate::observe::DivergenceCache::default(),
             resources: args.resources,
+            guard: args.guard,
         });
         let listener = bound.listener;
         let socket = socket_id(&transport::socket_path(&ctx.runtime));

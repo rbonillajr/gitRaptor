@@ -62,6 +62,9 @@ pub enum ClientError {
     /// The socket's folder is not private, or the server runs as another
     /// user (SEC-01, L-06): nothing was sent.
     ChannelRejected,
+    /// The channel server failed the caller's check of who it is (the
+    /// Guardrails hook client, ADR-GRD-003 § 4).
+    NotAuthentic,
 }
 
 impl std::fmt::Display for ClientError {
@@ -88,6 +91,7 @@ impl std::fmt::Display for ClientError {
                 f,
                 "the GitRaptor channel was rejected: its folder or its server is not this user's"
             ),
+            Self::NotAuthentic => f.write_str("the channel server could not be verified"),
         }
     }
 }
@@ -221,12 +225,55 @@ impl Client {
         Err(ClientError::TransportUnsupported)
     }
 
+    /// Connects to the channel in a runtime folder fixed beforehand (the constant of a
+    /// Guardrails dispatcher, ADR-GRD-003 § 4). Before sending anything, `verify` gets the
+    /// server's pid as the kernel reports it; if it refuses, nothing is sent
+    /// ([`ClientError::NotAuthentic`]). Does not start a daemon.
+    #[cfg(unix)]
+    pub fn connect_runtime(
+        runtime: &std::path::Path,
+        kind: ClientKind,
+        protocol: u32,
+        verify: impl FnOnce(u32) -> bool,
+    ) -> Result<Self, ClientError> {
+        let mut client = Self::open_at(runtime)?;
+        let pid = crate::channel::peer::peer_cred(&client.stream)?.pid;
+        if !verify(pid) {
+            return Err(ClientError::NotAuthentic);
+        }
+        match client.greet(kind, protocol)? {
+            Greeting::Ready(hello) => {
+                client.hello = hello;
+                Ok(client)
+            }
+            Greeting::Incompatible(data) if data.daemon_protocol < protocol => {
+                Err(ClientError::Incompatible(data))
+            }
+            Greeting::Incompatible(data) => Err(ClientError::ClientTooOld(data)),
+        }
+    }
+
+    #[cfg(not(unix))]
+    pub fn connect_runtime(
+        _runtime: &std::path::Path,
+        _kind: ClientKind,
+        _protocol: u32,
+        _verify: impl FnOnce(u32) -> bool,
+    ) -> Result<Self, ClientError> {
+        Err(ClientError::TransportUnsupported)
+    }
+
     #[cfg(unix)]
     fn open(dirs: &ProfileDirs) -> Result<Self, ClientError> {
         let runtime = dirs
             .runtime
             .as_deref()
             .ok_or(ClientError::Unsupported("no runtime folder"))?;
+        Self::open_at(runtime)
+    }
+
+    #[cfg(unix)]
+    fn open_at(runtime: &std::path::Path) -> Result<Self, ClientError> {
         let stream = crate::channel::transport::connect(runtime)?;
         let reader = BufReader::new(stream.try_clone()?);
         Ok(Self {
