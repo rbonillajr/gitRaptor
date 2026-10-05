@@ -165,6 +165,10 @@ pub(crate) enum WriteSubcommand {
     PackObjects,
     /// A pack from stdin into the user's repository, checked and kept until refs reach it.
     IndexPack,
+    /// Consolidation of the store (ADR-TMC-007 § 4, Enmienda E10).
+    Repack,
+    /// Loose objects of the store without refs, past the grace period (ADR-TMC-007 § 4).
+    Prune,
 }
 
 impl WriteSubcommand {
@@ -175,6 +179,9 @@ impl WriteSubcommand {
             Self::SkipWorktree => &["update-index", "--skip-worktree", "-z", "--stdin"],
             Self::PackObjects => &["pack-objects", "--revs", "--stdout", "--quiet"],
             Self::IndexPack => &["index-pack", "--stdin", "--strict", "--keep=gitraptor-tm"],
+            Self::Repack => &["repack", "-d", "-q", "--geometric=2"],
+            // Grace period of ADR-TMC-007 § 4 (⚠️ ASSUMPTION: 1 hour) for captures in flight.
+            Self::Prune => &["prune", "--expire=1.hour.ago"],
         }
     }
 }

@@ -127,7 +127,14 @@ mod repo_intact_tm_write {
     use super::*;
 
     /// Plumbing commands the write profile may run (first word of each variant).
-    const ALLOWED: &[&str] = &["update-ref", "update-index", "pack-objects", "index-pack"];
+    const ALLOWED: &[&str] = &[
+        "update-ref",
+        "update-index",
+        "pack-objects",
+        "index-pack",
+        "repack",
+        "prune",
+    ];
     /// Porcelain and remote commands that must never appear in the write profile.
     const FORBIDDEN: &[&str] = &[
         "push",
@@ -205,7 +212,12 @@ mod repo_intact_tm_write {
         let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
         let mut files = Vec::new();
         rust_files(&src, &mut files);
-        let allowed = [src.join("invoke.rs"), src.join("tm_write").join("cli.rs")];
+        let allowed = [
+            src.join("invoke.rs"),
+            src.join("tm_write").join("cli.rs"),
+            // `repack` and `prune` of the store name their variant (ADR-TMC-007 § 4).
+            src.join("tm_write").join("store").join("mod.rs"),
+        ];
         let offenders: Vec<String> = files
             .iter()
             .filter(|f| !allowed.contains(f))
