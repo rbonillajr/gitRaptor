@@ -18,7 +18,9 @@
 //! - [`hooks`]: repos with prior hooks and simulated hook managers (INF-GRD-001).
 //! - [`cut`]: named cut points of the hook-layer transactions and their sweep (NFR-12).
 //! - [`interceptability`]: the matrix executor and the hook-process counter (ADR-GRD-002).
-//! - [`repogen`]: deterministic reference repos of SPIKE-TMC-001 (profile `M`, D-TMC-21).
+//! - [`repogen`]: deterministic reference repos of SPIKE-TMC-001 (profile `M`, D-TMC-21) and of
+//!   INF-GRP-002 (profile `H`, 100K commits).
+//! - [`freshness`]: statistics and gates of the freshness and footprint bench (INF-GRP-002).
 
 #[cfg(unix)]
 pub mod canary;
@@ -28,6 +30,7 @@ pub mod exceptions;
 pub mod exec_audit;
 pub mod fingerprint;
 pub mod fixture;
+pub mod freshness;
 pub mod guard;
 pub mod hooks;
 pub mod interceptability;
