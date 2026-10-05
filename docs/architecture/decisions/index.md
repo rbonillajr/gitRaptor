@@ -6,13 +6,13 @@ updated: 2026-10-04
 generator: architect
 domain: GRP
 feature: motor-local
-total_artifacts: 28
-expanded: 28
+total_artifacts: 31
+expanded: 31
 approved: 28
 related:
   context: [CTX-GRP-001]
   rules: [BR-GRP-001]
-  adrs: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-004, ADR-GRP-005, ADR-GRP-006, ADR-GRP-007, ADR-GRP-008, ADR-GRP-009, ADR-GRP-010, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, ADR-TMC-001, ADR-TMC-002, ADR-TMC-003, ADR-TMC-004, ADR-TMC-005, ADR-TMC-006, ADR-TMC-007, ADR-GRD-001, ADR-GRD-002, ADR-GRD-003, ADR-GRD-004, ADR-GRD-005, ADR-GRD-006, ADR-GRD-007, ADR-GRD-008]
+  adrs: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-004, ADR-GRP-005, ADR-GRP-006, ADR-GRP-007, ADR-GRP-008, ADR-GRP-009, ADR-GRP-010, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, ADR-TMC-001, ADR-TMC-002, ADR-TMC-003, ADR-TMC-004, ADR-TMC-005, ADR-TMC-006, ADR-TMC-007, ADR-GRD-001, ADR-GRD-002, ADR-GRD-003, ADR-GRD-004, ADR-GRD-005, ADR-GRD-006, ADR-GRD-007, ADR-GRD-008, ADR-CKP-001, ADR-CKP-002, ADR-CKP-003]
   stories: [US-GRP-001, US-GRP-002, US-GRP-003, US-GRP-004, US-GRP-005, US-GRP-006, US-GRP-007, US-GRP-008, US-GRP-009, US-GRP-010, US-GRP-011, US-GRP-012, US-GRP-013, US-GRP-014, US-GRP-015, US-GRP-016]
 ---
 
@@ -39,6 +39,8 @@ El formato "JSON estricto con `$schema`" no es una PQ: es la propuesta base del 
 > Los ADR 001 a 004 están aceptados. Los ADR 005 a 013 de la feature `motor-local` están **aceptados** (`status: accepted`, Rene Bonilla, 2026-10-04), igual que los ADR-GRD-001 a 007 de Guardrails. Rene Bonilla ya había aceptado el 2026-10-03 todas las recomendaciones y las preguntas de producto PQ-1 a PQ-9 (PQ-9 sustituida el 2026-10-04). ADR-GRP-007 cierra P8. Este índice solo resume la decisión; el detalle vive en cada archivo.
 >
 > **Enmiendas de Guardrails (2026-10-04)**: ADR-GRP-005, 006, 007, 009, 010 y 013 e INF-GRP-001 incorporan las enmiendas que pedía la arquitectura de Guardrails (ADR-GRD-001 a 007), cada una con su sección "Enmienda (2026-10-04, Guardrails)". Todos quedaron aceptados el 2026-10-04 con sus enmiendas. Lista y estado en [non-functional-guardrails.md](../non-functional-guardrails.md#enmiendas-pendientes-en-otros-frentes-j10).
+>
+> **Cockpit (2026-10-04)**: los ADR-CKP-001 a 003 de la feature `cockpit` están **propuestos** (`status: proposed`). Pasan a `accepted` cuando el orquestador los valide; ADR-CKP-001, además, después de SPIKE-CKP-001. Sus enmiendas a otros ADR llevan la marca "Enmienda (2026-10-04, Cockpit)" en el ADR de destino, y su estado está en la tabla de enmiendas de cada ADR-CKP.
 >
 > **Restricciones activas** (no hay `architecture-constitution.md` en la cascada): ADR-GRP-001 (Rust; gitoxide para leer y Git CLI para escribir; ratatui, clap, rmcp) y ADR-GRP-002 (Nx package-based; `crates/{core,policy,git,api,theme}`, `apps/{cli,mcp}`). ⚠️ **ASSUMPTION**: se tratan como constitución mientras no exista una formal (`/aadd-architect --init-constitution`).
 
@@ -74,6 +76,9 @@ El formato "JSON estricto con `$schema`" no es una PQ: es la propuesta base del 
 | [ADR-GRD-006](./ADR-GRD-006-registro-decisiones.md) | Registro de decisiones (90 días) | Tabla propia de Guardrails en el almacén por repo del perfil, separada de los eventos inmutables; la escribe el daemon con agregación y límite de inserciones, se purga a los 90 días y se consulta por el canal; instalaciones, desinstalaciones, adopciones e intentos de comandos reservados también van a la auditoría de ADR-GRP-013 | accepted |
 | [ADR-GRD-007](./ADR-GRD-007-acciones-reservadas-excepcion.md) | Acciones reservadas al humano y excepción consciente | Amplían los comandos reservados de ADR-GRP-005 § 6 con su mismo mecanismo en el daemon; las que relajan añaden anuncio, ventana cancelable y auditoría en el MVP, y factor fuera de banda antes de US-GRD-013 y US-GRD-015; la excepción es un token de un solo uso ligado al `git` hijo directo del `raptor` que lo pidió y a la transición exacta | accepted |
 | [ADR-GRD-008](./ADR-GRD-008-factor-autenticacion-fuera-de-banda.md) | Factor de autenticación del sistema operativo fuera del canal del agente | El daemon invoca el diálogo del SO (LocalAuthentication, Windows Hello en Windows 11, polkit con agente gráfico), ligado a un reto de un solo uso con el resumen del plan; la prueba nunca cruza el canal; fail-closed si no está disponible; obligatorio para relajar con el comando (US-GRD-013) y aprobar en la cola (US-GRD-015); 9 OQ resueltas por el orquestador con Arquitecto/PO; trinquete de niveles personales (Q-GRD-32); SPIKE-GRD-002 gatea las Dev Specs y el binding | accepted |
+| [ADR-CKP-001](./ADR-CKP-001-prediccion-conflictos-merge-en-seco.md) | Predicción de conflictos con merge en seco sin escribir en el repo | Predictor en el daemon con dos niveles (solape ⚠ y conflicto previsto ⚡) por par, recálculo incremental con cola coalescente y estados con hora de cálculo; merge en memoria con gitoxide como opción preferida (sin drivers, filtros, atributos, reemplazos ni descargas, con cotas de tiempo y memoria), `merge-tree` sobre un almacén del perfil como respaldo y contra el repo rechazado; mecanismo pendiente de SPIKE-CKP-001 | proposed |
+| [ADR-CKP-002](./ADR-CKP-002-catalogo-operaciones-ejecutor.md) | Catálogo de operaciones de usuario y ejecutor del daemon | Catálogo cerrado y versionado de ocho operaciones con marcas Cockpit y MCP; preparar (plan, `planId` ligado a la conexión, huella) y ejecutar bajo el cerrojo del repo dentro de la operación protegida; capa fijada por el daemon según el solicitante y decisión de Guardrails registrada una vez; `git` hijo directo tras una barrera de arranque, sin TTY ni shell; los descendientes del ejecutor actúan como el solicitante del plan; rebase `stop` (Cockpit) o `atomic` (MCP) | proposed |
+| [ADR-CKP-003](./ADR-CKP-003-arquitectura-tui.md) | Arquitectura de la TUI y de la CLI de solo lectura | TEA (`update` y `view` puros) con un bucle de un hilo y render coalescido; cliente del canal con instantánea N y suscripción N+1, resync y reconexión, y comprobación del par antes del handshake; saneado SEC-12 en un único punto por tipo; 100 ms p95 instrumentado con gate; tema agnóstico de `ratatui`; módulos de `apps/cli` sin crates nuevos | proposed |
 
 ## Grafo de dependencias entre ADRs nuevos
 
@@ -103,6 +108,9 @@ El formato "JSON estricto con `$schema`" no es una PQ: es la propuesta base del 
 | ADR-GRD-006 | ADR-GRP-005, 006, 013 (auditoría permanente); GRD-002 (§ 4 rama normalizada), 003 (§ 3 efectos, § 4 spool, § 6 correlación), 007 (§ 3 excepción cancelada) | GRD-001, 003, 005, 007, 008 |
 | ADR-GRD-007 | ADR-GRP-005 § 6, 009 § 4, 012, 013; GRD-001 (§ 2 encadenado), 002 (§ 4 refs y alias), 003 (§ 3 y § 6), 004 (§ 3 confirmaciones), 005 (§ 1 adopción), 006 (§ 1 registro) | GRD-001, 003, 004, 005, 006, 008 |
 | ADR-GRD-008 | ADR-GRP-005 § 3 y § 6, 006, 012, 013 § 1; ADR-TMC-005 (SEC-TMC-03); GRD-004 (§ 2 y § 4 niveles y suelo), 006 (§ 1 registro), 007 (§ 1 a § 3, padre) | GRP-005 (§ 6), GRP-013 (§ 1), GRD-004 (§ 2, trinquete), GRD-007 (§ 1 y § 2) |
+| ADR-CKP-001 | ADR-GRP-001, 002, 005, 006, 009, 010, 011, 013; ADR-GRD-006 (forma del registro y la purga); ADR-TMC-001 (alternates descartados) | CKP-003 (presentación del ⚡); Servidor MCP F-001-05 (`check_conflicts`) — lo valida SPIKE-CKP-001 |
+| ADR-CKP-002 | ADR-GRP-001, 002, 005, 006, 007, 008, 009, 012, 013; ADR-TMC-001, 002, 003, 004, 005, 007; ADR-GRD-002, 003, 006, 007; CKP-003 (editor) | CKP-003; Servidor MCP F-001-05 (herramientas de escritura) |
+| ADR-CKP-003 | ADR-GRP-001, 002, 003, 004, 005, 006, 009, 011, 013; ADR-TMC-004, 005; ADR-GRD-007; CKP-001, CKP-002 | CKP-002 (editor y salida de Git) |
 
 Grafo derivado de la sección Referencias de cada ADR. ADR-GRP-005 es el proceso que aloja al resto, así que sus dependencias con 006, 009, 012 y 013 son mutuas: él usa sus rutas, su Git, su ascendencia y sus huecos, y ellos corren dentro del daemon. Las aristas de los ADR-TMC y ADR-GRD hacia los ADR-GRP (y de los ADR-GRD hacia los ADR-TMC) se listan solo en las filas TMC y GRD; las filas GRP y TMC no se modifican. Entre los ADR-GRD, la sección Referencias solo cita otros frentes, así que sus aristas internas salen de las menciones explícitas: "depende de" significa que el ADR cita al otro, y "lo consumen" es la relación inversa. La mayoría son mutuas porque la capa de hooks, el motor de decisión, el estado y el registro se apoyan unos en otros. La arista de ADR-GRP-007 hacia GRD-003 y 004 es la que ya figura en su fila.
 
@@ -113,6 +121,13 @@ Los ADR-TMC-001 a 007 (aceptados el 2026-10-03) son de la feature `time-machine`
 ### Feature guardrails
 
 Los ADR-GRD-001 a 007 (aceptados el 2026-10-04) son de la feature `guardrails` (F-001-04). Su NFR, los riesgos residuales y la tabla de enmiendas en otros frentes están en [non-functional-guardrails.md](../non-functional-guardrails.md). Las decisiones Q-GRD-1 a Q-GRD-27, que incluyen D5 a D12, y el contexto de la feature están en [context.md](../../requirements/features/guardrails/context.md#decisiones-tomadas).
+
+### Feature cockpit
+
+Los ADR-CKP-001 a 003 (propuestos el 2026-10-04) son de la feature `cockpit` (F-001-02). Las decisiones Q-CKP-1 a Q-CKP-30 y las dependencias DEP-CKP-1 a 14 están en el [contexto de la feature](../../requirements/features/cockpit/context.md#decisiones-tomadas). Los enablers (SPIKE-CKP-001, TS-CKP-001 a 004 e INF-CKP-001), su DAG y el destino de cada DEP-CKP están en el [índice de technical stories](../../requirements/features/cockpit/technical-stories.md).
+
+- Componentes: [c4-ckp-components.md](../diagrams/c4-ckp-components.md).
+- Secuencias: [predicción de conflictos](../diagrams/seq-ckp-prediccion.md) (ADR-CKP-001), [operación de usuario desde la TUI](../diagrams/seq-ckp-operacion-usuario.md) (ADR-CKP-002) y [arranque de la TUI y reconexión](../diagrams/seq-ckp-arranque-tui.md) (ADR-CKP-003).
 
 ---
 
