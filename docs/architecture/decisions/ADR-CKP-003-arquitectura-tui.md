@@ -2,11 +2,12 @@
 id: ADR-CKP-003
 title: Arquitectura de la TUI y de la CLI de solo lectura del Cockpit
 type: adr
-status: proposed
+status: accepted
+accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
 updated: 2026-10-04
-deciders: [Rene Bonilla]
+deciders: [Orquestador (delegación de Rene Bonilla, 2026-10-04)]
 domain: GRP
 feature: cockpit
 related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-004, ADR-GRP-005, ADR-GRP-006, ADR-GRP-009, ADR-GRP-011, ADR-GRP-013, ADR-TMC-004, ADR-TMC-005, ADR-GRD-007, ADR-CKP-001, ADR-CKP-002, TS-GRP-004, INF-GRP-001, INF-GRP-002, CTX-CKP-001, BR-CKP-001, DSYS-GRP-001]
@@ -15,7 +16,9 @@ tags: [cockpit, tui, ratatui, crossterm, tea, elm, estado, bucle-de-eventos, ren
 
 # ADR-CKP-003 — Arquitectura de la TUI y de la CLI de solo lectura del Cockpit
 
-> **Estado**: propuesto (2026-10-04). Las elecciones entre opciones de este ADR son **decisión del orquestador (2026-10-04), validada por Arquitecto, PO y security-expert** (pasada de endurecimiento del 2026-10-04: ver "Revisión de seguridad (2026-10-04)"). Pasa a `accepted` cuando el orquestador lo valide.
+**Status**: Aceptado · **Fecha**: 2026-10-04 · **Decisores**: Orquestador (delegación de Rene Bonilla, 2026-10-04) · **Feature**: Cockpit (F-001-02)
+
+**Decisión del orquestador (2026-10-04), validada por Arquitecto, PO y security-expert** (pasada de endurecimiento del 2026-10-04: ver "Revisión de seguridad (2026-10-04)"). Lo que pide al contrato del canal (N1 a N11, E6) sigue **pendiente, dueño: worker del canal (TS-GRP-004)**.
 >
 > **Constitución**: no hay `architecture-constitution.md` en la cascada. ⚠️ **ASSUMPTION**: rigen como constitución ADR-GRP-001 (Rust; `ratatui`, `clap`) y ADR-GRP-002 (`apps/cli`, `crates/{api,theme}`), más AGENTS.md (NFR-01, NFR-02). Fuente: inline; se formaliza con `/aadd-architect --init-constitution`.
 
@@ -105,7 +108,7 @@ La TUI y la CLI usan la biblioteca cliente de `crates/api` (TS-GRP-004). Encima 
 | N2 | Secuencia contigua por ámbito en el stream y evento `resync` explícito con su causa | SEC-08, § 4 |
 | N3 | Ámbito global: estado del motor (BR-WF-002), repos observados con un resumen de atención por repo (⚡, ⛔, hueco) para el selector, y si el autoarranque está registrado (aviso de ADR-GRP-005 § 3) | Q-CKP-1, BR-CKP-WF-004 |
 | N4 | Consulta "repo de esta ruta": el daemon canonicaliza y devuelve el id del repo observado, porque la TUI no lee Git | Q-CKP-1, BR-VAL-002 |
-| N5 | Solicitante y capa resueltos de la conexión en el handshake, para que la vista diga "actúas como X" y desactive lo que la capa no permite | Q-CKP-16, ADR-TMC-005 § 1, M-03 |
+| N5 | Solicitante y capa resueltos de la conexión en el handshake, para que la vista diga "actúas como X" y desactive lo que la capa no permite. Main ya expone `requester.resolve` (Dev Spec de TS-TMC-004 § 2), que puede cubrirla; es solo UX, porque el daemon re-resuelve en cada petición (ADR-CKP-002 § 3) | Q-CKP-16, ADR-TMC-005 § 1, M-03 |
 | N6 | Texto no confiable con un **tipo propio** en el contrato (envoltorio), con longitud máxima por campo, para imponer el saneado por tipo (§ 8) | SEC-12, ADR-GRP-005 § 5 |
 | N7 | Estados, diagnósticos y motivos como códigos tipados con parámetros, sin cadenas de presentación | NFR-10 |
 | N8 | Consultas bajo demanda (diff, grafo, timeline) con id de petición, cancelación y topes, respondidas fuera del orden del stream sin bloquearlo | DEP-CKP-2, DEP-CKP-3, DEP-CKP-5 |
