@@ -152,8 +152,9 @@ pub struct DaemonConfig {
     /// tests). Wins over `operations`.
     pub protected: Option<crate::channel::ProtectedWiring>,
     /// The catalog of user operations over the daemon's own repo layer
-    /// (US-TMC-001). `None` with no `protected` either: `operation.run`
-    /// answers "not implemented" until TS-CKP-002 wires its catalog.
+    /// (US-TMC-001, TS-CKP-002). `None` with no `protected` either:
+    /// `operation.prepare` answers "not implemented" until the first
+    /// operation story wires its catalog (US-MCP-008).
     pub operations: Option<OperationsWiring>,
 }
 
@@ -561,10 +562,14 @@ impl Daemon {
             return Some(wiring.clone());
         }
         let ops = self.config.operations.clone()?;
-        Some(crate::channel::ProtectedWiring {
-            prior_deadline: ops.prior_deadline,
-            backend: Arc::new(DaemonBackend::new(Arc::clone(&self.tm), ops)),
-        })
+        let mut wiring = crate::channel::ProtectedWiring::new(
+            Arc::new(DaemonBackend::new(Arc::clone(&self.tm), ops.clone())),
+            Arc::clone(&ops.gate),
+            ops.prior_deadline,
+        );
+        // Honored only in debug builds (tests), like `prior_layer`.
+        wiring.test_layer_override = ops.test_layer_override.filter(|_| cfg!(debug_assertions));
+        Some(wiring)
     }
 
     /// Handle for signals and the channel's stop command.

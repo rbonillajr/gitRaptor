@@ -53,10 +53,11 @@ use crate::channel::marks::ExecutorMarks;
 use crate::channel::peer::ProcSource;
 use crate::channel::requester::{Resolution, Who};
 use crate::repo_lock::{self, QueueError};
-use crate::timemachine::oplog::{Channel, OperationKind, Scope, Target};
+use crate::timemachine::oplog::Channel;
 use crate::timemachine::protected::{
     Binding, ChallengeBook, ChallengeError, ProtectedBackend, ProtectedError, ProtectedOperation,
-    ProtectedOutcome, ProtectedRequest, ProtectedStep, RepoHandle, StepCtx, StepError, StepOutput,
+    ProtectedOutcome, ProtectedRequest, ProtectedStep, RepoHandle, ScopeError, StepCtx, StepError,
+    StepOutput, StepScope,
 };
 
 /// Whose work an operation affects (ADR-CKP-002 § 3), from the engine's events. Without a clear
@@ -83,10 +84,6 @@ pub struct OpPlan {
     pub affected: Affected,
     /// Another agent session is present in the worktree (Q-MCP-21).
     pub other_session: bool,
-    /// Roots of every worktree of the scope, for the prior snapshot.
-    pub worktrees: Vec<PathBuf>,
-    /// Refs the operation updates.
-    pub refs: Vec<String>,
 }
 
 /// Why the operation's story refused or could not plan.
@@ -129,6 +126,8 @@ pub enum ExecError {
     Invalid(String),
     /// Too many live plans on this connection.
     TooManyPlans,
+    /// The step declared a scope outside its repo.
+    Scope(ScopeError),
     Protected(ProtectedError),
 }
 
@@ -719,28 +718,23 @@ impl Executor {
                 );
             },
         };
-        let worktrees = if op_plan.worktrees.is_empty() {
-            vec![plan.repo.worktree.clone()]
-        } else {
-            op_plan.worktrees.clone()
+        // The scope the step declares, every worktree checked to be one of
+        // the repo's (US-TMC-001); refused before the intent is recorded.
+        let mut req = match ProtectedRequest::for_step(
+            &plan.repo,
+            &step,
+            plan.who.clone(),
+            oplog_channel(plan.channel),
+            env.engine_mark,
+        ) {
+            Ok(req) => req,
+            Err(e) => {
+                self.close(&plan, PlanClose::Rejected);
+                return Err(ExecError::Scope(e));
+            }
         };
-        let req = ProtectedRequest {
-            kind: OperationKind::Protected,
-            scope: Scope {
-                worktrees: worktrees
-                    .iter()
-                    .map(|w| w.to_string_lossy().into_owned())
-                    .collect(),
-                refs: op_plan.refs.clone(),
-            },
-            worktree_paths: worktrees,
-            who: plan.who.clone(),
-            channel: oplog_channel(plan.channel),
-            confirmed: plan.challenge,
-            target: Target::None,
-            warnings: plan.warnings.iter().map(|w| format!("{w:?}")).collect(),
-            engine_mark: env.engine_mark,
-        };
+        req.confirmed = plan.challenge;
+        req.warnings = plan.warnings.iter().map(|w| format!("{w:?}")).collect();
         let protected = ProtectedOperation {
             oplog: &plan.repo.oplog,
             snapshotter: Arc::clone(&plan.repo.snapshotter),
@@ -838,6 +832,10 @@ struct ExecStep<'a> {
 impl ProtectedStep for ExecStep<'_> {
     fn subtype(&self) -> &str {
         self.inner.subtype()
+    }
+
+    fn scope(&self) -> StepScope {
+        self.inner.scope()
     }
 
     fn run(&mut self, ctx: &mut StepCtx<'_>) -> Result<StepOutput, StepError> {

@@ -145,7 +145,8 @@ fn registered_worktrees(
     any_worktree: &Path,
 ) -> Result<Vec<(PathBuf, Option<String>)>, gitraptor_git::ReadError> {
     let reader = RepoReader::open(any_worktree, &ReaderOptions::default())?;
-    let common = reader.common_dir().to_owned();
+    // Canonical: from a linked worktree gix reports `.git/worktrees/<id>/../..`.
+    let common = canonical(reader.common_dir());
     let mut out = Vec::new();
     if let Some(main) = common.parent().filter(|_| common.ends_with(".git")) {
         out.push((canonical(main), None));

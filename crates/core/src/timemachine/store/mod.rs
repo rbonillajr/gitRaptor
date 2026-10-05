@@ -218,6 +218,27 @@ impl SnapshotStore {
         Ok((Self::from_repo(repo_id, store), status))
     }
 
+    /// Where the store of `repo_id` lives, without opening it: the key of the repo's write lock,
+    /// shared by the applier and the executor (ADR-CKP-002 § 5). Equals [`Self::path`] of the
+    /// opened store.
+    pub fn location(dirs: &ProfileDirs, repo_id: &str) -> Result<PathBuf, CaptureError> {
+        let location = StoreRepo::location(&dirs.data.join(TM_DIR), repo_id)?;
+        // The opened store reports its canonical path: canonicalize the deepest part that
+        // exists, so the key is the same before and after the store is created.
+        let mut existing = location.as_path();
+        let mut rest = Vec::new();
+        while std::fs::symlink_metadata(existing).is_err() {
+            let (Some(parent), Some(name)) = (existing.parent(), existing.file_name()) else {
+                return Ok(location);
+            };
+            rest.push(name.to_owned());
+            existing = parent;
+        }
+        let mut out = std::fs::canonicalize(existing)?;
+        out.extend(rest.iter().rev());
+        Ok(out)
+    }
+
     /// Opens the store of `repo_id` if one exists and can be trusted; `None` otherwise. Used by
     /// the recovery at startup, which never creates or sets aside anything.
     pub fn open_existing(dirs: &ProfileDirs, repo_id: &str) -> Result<Option<Self>, CaptureError> {

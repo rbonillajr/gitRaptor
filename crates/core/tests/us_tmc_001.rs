@@ -4,9 +4,12 @@
 //! (temporary repo, worktrees and home) and a separate temporary profile;
 //! never this repo or the real profile (NFR-01).
 //!
-//! The catalog of operations is TS-CKP-002: here a test catalog plugs into
-//! the daemon's hook (`OperationCatalog`) with three operations run through
-//! `StepCtx::spawn`, like the executor will.
+//! The executor and the catalog are TS-CKP-002: here a test catalog plugs
+//! the operations' own parts into the daemon's hook (`OperationCatalog`),
+//! run through `StepCtx::spawn`, and every call goes through the two-phase
+//! flow (`operation.prepare`, then `operation.run`). In-process clients
+//! descend from the daemon, so the wiring fixes layer `cockpit`
+//! (`test_layer_override`) and a Guardrails double allows everything.
 //!
 //! macOS only, like the other channel tests. Linux: Pendiente: etapa de
 //! validación multiplataforma.
@@ -15,12 +18,13 @@
 mod common;
 
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use common::TempProfile;
+use gitraptor_api::catalog::{Layer, OperationArgs, OperationId, PrepareResult};
 use gitraptor_api::messages::ClientKind;
 use gitraptor_api::rpc::code;
 use gitraptor_api::timemachine::{OperationRunResult, PriorFailedData, PriorFailure};
@@ -30,15 +34,19 @@ use gitraptor_core::client::{Client, ClientError};
 use gitraptor_core::daemon::{
     Daemon, DaemonConfig, DaemonEnv, LogLimits, ShutdownHandle, StopCause, StopReport,
 };
+use gitraptor_core::executor::{
+    Affected, GateDecision, GateRequest, GuardrailsGate, OpPlan, PlanClose, PlanError, RepoFacts,
+    StepPlan,
+};
 use gitraptor_core::timemachine::oplog::{OperationState, Oplog};
 use gitraptor_core::timemachine::protected::{
     OperationCatalog, OperationsWiring, PriorError, PriorRequest, PriorSnapshot, PriorSnapshotter,
-    ProtectedStep, RepoHandle, StepCtx, StepError, StepOutput, StepScope,
+    ProtectedStep, StepCtx, StepError, StepOutput, StepScope,
 };
 use gitraptor_core::timemachine::store::{CaptureError, Meta, SnapshotStore};
 use gitraptor_git::tm_write::store::TreeEntryKind;
 use gitraptor_testkit::{Fixture, diff};
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 
 /// Content of the fake credential files: not a real key.
 const FAKE_KEY: &str = "fake key material\n";
@@ -53,53 +61,92 @@ fn canonical(p: &Path) -> PathBuf {
 
 // ----- Test catalog ------------------------------------------------------------
 
-/// `discard-changes`: `git checkout -- .` and `git clean -fd` in the
-/// requested worktree. `discard-worktree` (`{"path", "branch"}`), launched
-/// from the main worktree: removes a linked worktree and deletes its
-/// branch, declaring both in its scope. `inspect`: reads, changes nothing.
+/// What the stand-in operation does. The test catalog plugs these into ids
+/// of the closed catalog: `abort-in-progress` (not governed, layer
+/// `cockpit`) runs the stand-in; `discard-worktree` really removes the
+/// requested linked worktree and deletes its branch.
+#[derive(Clone)]
+enum StandIn {
+    /// Reads, changes nothing.
+    Inspect,
+    /// `git checkout -- .` and `git clean -fd` in the requested worktree.
+    DiscardChanges,
+    /// Declares a worktree of another repo in its scope.
+    ForeignScope(PathBuf),
+}
+
 struct Catalog {
     fx: Arc<Fixture>,
     runs: Arc<AtomicUsize>,
+    stand_in: Mutex<StandIn>,
 }
 
 struct Step {
-    op: String,
+    op: OperationId,
+    stand_in: StandIn,
     fx: Arc<Fixture>,
-    worktree: PathBuf,
-    args: Map<String, Value>,
+    /// Where `git` runs.
+    cwd: PathBuf,
+    /// `discard-worktree`: the worktree and its branch.
+    target: Option<(PathBuf, String)>,
     runs: Arc<AtomicUsize>,
 }
 
 impl OperationCatalog for Catalog {
-    fn step(
+    fn plan_op(
         &self,
-        operation: &str,
-        args: &Map<String, Value>,
-        repo: &RepoHandle,
-    ) -> Result<Box<dyn ProtectedStep>, StepError> {
+        operation: OperationId,
+        _args: &OperationArgs,
+        _repo: &gitraptor_core::timemachine::protected::RepoHandle,
+        facts: &RepoFacts,
+    ) -> Result<OpPlan, PlanError> {
         if !matches!(
             operation,
-            "discard-changes" | "discard-worktree" | "inspect"
+            OperationId::AbortInProgress | OperationId::DiscardWorktree
         ) {
-            return Err(StepError::new("unknown operation"));
+            return Err(PlanError::NotImplemented);
         }
+        // A detached worktree has no branch to delete: refused, never an
+        // empty ref in the scope.
+        if operation == OperationId::DiscardWorktree && facts.head_branch.is_none() {
+            return Err(PlanError::Rejected(
+                gitraptor_api::catalog::RejectReason::DetachedHead,
+            ));
+        }
+        Ok(OpPlan {
+            expected: json!({ "head": facts.head_commit }),
+            warnings: Vec::new(),
+            affected: Affected::Nobody,
+            other_session: false,
+        })
+    }
+
+    fn step(&self, plan: &StepPlan<'_>) -> Result<Box<dyn ProtectedStep>, StepError> {
+        let target = (plan.operation == OperationId::DiscardWorktree).then(|| {
+            (
+                plan.facts.root.clone(),
+                plan.facts.head_branch.clone().unwrap_or_default(),
+            )
+        });
         Ok(Box::new(Step {
-            op: operation.to_owned(),
+            op: plan.operation,
+            stand_in: self.stand_in.lock().unwrap().clone(),
             fx: Arc::clone(&self.fx),
-            worktree: repo.worktree.clone(),
-            args: args.clone(),
+            // A worktree is removed from the main one.
+            cwd: if target.is_some() {
+                canonical(&self.fx.repo)
+            } else {
+                plan.repo.worktree.clone()
+            },
+            target,
             runs: Arc::clone(&self.runs),
         }))
     }
 }
 
 impl Step {
-    fn arg(&self, key: &str) -> &str {
-        self.args[key].as_str().unwrap()
-    }
-
     fn git(&self, ctx: &mut StepCtx<'_>, args: &[&str]) -> Result<(), StepError> {
-        let mut cmd = self.fx.git_command(&self.worktree, args);
+        let mut cmd = self.fx.git_command(&self.cwd, args);
         cmd.stdout(std::process::Stdio::null());
         let child = ctx
             .spawn(&mut cmd)
@@ -115,14 +162,24 @@ impl Step {
 
 impl ProtectedStep for Step {
     fn subtype(&self) -> &str {
-        &self.op
+        match self.op {
+            OperationId::DiscardWorktree => "discard-worktree",
+            _ => "abort-in-progress",
+        }
     }
 
     fn scope(&self) -> StepScope {
-        match self.op.as_str() {
-            "discard-worktree" => StepScope {
-                worktrees: vec![PathBuf::from(self.arg("path"))],
-                refs: vec![format!("refs/heads/{}", self.arg("branch"))],
+        if let Some((_, branch)) = &self.target {
+            // Launched from the main worktree, which it declares.
+            return StepScope {
+                worktrees: vec![self.cwd.clone()],
+                refs: vec![format!("refs/heads/{branch}")],
+            };
+        }
+        match &self.stand_in {
+            StandIn::ForeignScope(other) => StepScope {
+                worktrees: vec![other.clone()],
+                refs: Vec::new(),
             },
             _ => StepScope::default(),
         }
@@ -130,26 +187,36 @@ impl ProtectedStep for Step {
 
     fn run(&mut self, ctx: &mut StepCtx<'_>) -> Result<StepOutput, StepError> {
         self.runs.fetch_add(1, Ordering::SeqCst);
-        match self.op.as_str() {
-            "discard-changes" => {
+        if let Some((path, branch)) = self.target.clone() {
+            self.git(
+                ctx,
+                &["worktree", "remove", "--force", path.to_str().unwrap()],
+            )?;
+            self.git(ctx, &["branch", "-D", "-q", &branch])?;
+            return Ok(StepOutput {
+                changed_refs: vec![format!("refs/heads/{branch}")],
+                ..StepOutput::default()
+            });
+        }
+        match self.stand_in {
+            StandIn::DiscardChanges => {
                 self.git(ctx, &["checkout", "--", "."])?;
                 self.git(ctx, &["clean", "-fdq"])?;
-                Ok(StepOutput::default())
             }
-            "discard-worktree" => {
-                let (path, branch) = (self.arg("path").to_owned(), self.arg("branch").to_owned());
-                self.git(ctx, &["worktree", "remove", "--force", &path])?;
-                self.git(ctx, &["branch", "-D", "-q", &branch])?;
-                Ok(StepOutput {
-                    changed_refs: vec![format!("refs/heads/{branch}")],
-                })
-            }
-            _ => {
-                self.git(ctx, &["rev-parse", "-q", "--verify", "HEAD"])?;
-                Ok(StepOutput::default())
-            }
+            _ => self.git(ctx, &["rev-parse", "-q", "--verify", "HEAD"])?,
         }
+        Ok(StepOutput::default())
     }
+}
+
+/// Guardrails double: allows everything (TS-CKP-003 is not built yet).
+struct AllowAll;
+
+impl GuardrailsGate for AllowAll {
+    fn evaluate(&self, _req: &GateRequest) -> GateDecision {
+        GateDecision::Allow
+    }
+    fn record_close(&self, _req: &GateRequest, _close: PlanClose) {}
 }
 
 /// Fails every prior with a real `ENOSPC` through the store's error path.
@@ -168,6 +235,7 @@ struct Running {
     tp: TempProfile,
     repo_id: String,
     runs: Arc<AtomicUsize>,
+    catalog: Arc<Catalog>,
     handle: ShutdownHandle,
     join: Option<JoinHandle<StopReport>>,
 }
@@ -220,11 +288,15 @@ fn start(fx: Fixture, settings: Option<&str>, no_space: bool) -> Running {
             Arc::new(|_: Arc<dyn PriorSnapshotter>| Arc::new(NoSpace) as Arc<dyn PriorSnapshotter>)
                 as _
         });
+    let catalog = Arc::new(Catalog {
+        fx: Arc::clone(&fx),
+        runs: Arc::clone(&runs),
+        stand_in: Mutex::new(StandIn::Inspect),
+    });
     let wiring = OperationsWiring {
-        catalog: Arc::new(Catalog {
-            fx: Arc::clone(&fx),
-            runs: Arc::clone(&runs),
-        }),
+        catalog: Arc::clone(&catalog) as Arc<dyn OperationCatalog>,
+        gate: Arc::new(AllowAll),
+        test_layer_override: Some(Layer::Cockpit),
         prior_deadline: Duration::from_secs(30),
         prior_layer: layer,
     };
@@ -236,26 +308,37 @@ fn start(fx: Fixture, settings: Option<&str>, no_space: bool) -> Running {
         tp,
         repo_id: entry.repo_id,
         runs,
+        catalog,
         handle,
         join: Some(join),
     }
 }
 
 impl Running {
-    fn run(&self, operation: &str, worktree: &Path, args: Value) -> Result<Value, ClientError> {
-        connect(&self.tp).call(
-            methods::OPERATION_RUN,
+    /// Prepares `operation` on `worktree`, then runs the plan, from one
+    /// connection.
+    fn run(&self, operation: &str, worktree: &Path) -> Result<Value, ClientError> {
+        let mut c = connect(&self.tp);
+        let plan: PrepareResult = c.call(
+            methods::OPERATION_PREPARE,
             json!({
                 "operation": operation,
                 "worktree": worktree.to_str().unwrap(),
                 "surface": "tui",
-                "args": args,
             }),
+        )?;
+        c.call(
+            methods::OPERATION_RUN,
+            json!({ "plan_id": plan.plan_id, "accepted_warnings": plan.warnings }),
         )
     }
 
-    fn run_ok(&self, operation: &str, worktree: &Path, args: Value) -> OperationRunResult {
-        serde_json::from_value(self.run(operation, worktree, args).unwrap()).unwrap()
+    fn run_ok(&self, operation: &str, worktree: &Path) -> OperationRunResult {
+        serde_json::from_value(self.run(operation, worktree).unwrap()).unwrap()
+    }
+
+    fn stand_in(&self, what: StandIn) {
+        *self.catalog.stand_in.lock().unwrap() = what;
     }
 
     fn store(&self) -> SnapshotStore {
@@ -348,8 +431,9 @@ fn a_gitraptor_operation_saves_uncommitted_work_first() {
     std::fs::write(wt.join("lib.rs"), "fn v2_uncommitted() {}\n").unwrap();
     std::fs::write(wt.join("nuevo.rs"), "fn nuevo() {}\n").unwrap();
     let r = start(fx, None, false);
+    r.stand_in(StandIn::DiscardChanges);
 
-    let out = r.run_ok("discard-changes", &wt, json!({}));
+    let out = r.run_ok("abort-in-progress", &wt);
 
     // The recoverable point holds the work as it was.
     let store = r.store();
@@ -384,13 +468,9 @@ fn discarding_a_worktree_and_its_branch_is_covered() {
     let main = canonical(&fx.repo);
     let r = start(fx, None, false);
 
-    // Launched from the main worktree: feat-pagos is covered only because
-    // the operation declares it in its scope.
-    let out = r.run_ok(
-        "discard-worktree",
-        &main,
-        json!({ "path": wt.to_str().unwrap(), "branch": "feat-pagos" }),
-    );
+    // Asked for feat-pagos and launched from the main worktree: the main
+    // worktree is covered only because the operation declares it.
+    let out = r.run_ok("discard-worktree", &wt);
 
     let store = r.store();
     let meta = store.meta(&out.prior_snapshot_id).unwrap();
@@ -437,7 +517,7 @@ fn ignored_files_are_not_in_the_prior() {
     let before = fx.fingerprint();
     let r = start(fx, None, false);
 
-    let out = r.run_ok("inspect", &main, json!({}));
+    let out = r.run_ok("abort-in-progress", &main);
 
     let store = r.store();
     let prior = files(&store, &out.prior_snapshot_id, &main);
@@ -468,7 +548,7 @@ fn untracked_credentials_are_excluded_and_declared() {
     // A profile without the option.
     let r = start(fx, Some(r#"{"timeMachine": {"retentionDays": 30}}"#), false);
 
-    let out = r.run_ok("inspect", &main, json!({}));
+    let out = r.run_ok("abort-in-progress", &main);
 
     let store = r.store();
     let prior = files(&store, &out.prior_snapshot_id, &main);
@@ -499,7 +579,7 @@ fn the_profile_can_include_credentials() {
         false,
     );
 
-    let out = r.run_ok("inspect", &main, json!({}));
+    let out = r.run_ok("abort-in-progress", &main);
 
     let store = r.store();
     let prior = files(&store, &out.prior_snapshot_id, &main);
@@ -512,7 +592,7 @@ fn the_profile_can_include_credentials() {
 
     // Changing the option takes effect on the next prior, without a restart.
     std::fs::write(r.tp.dirs().config.join("settings.json"), "{}").unwrap();
-    let again = r.run_ok("inspect", &main, json!({}));
+    let again = r.run_ok("abort-in-progress", &main);
     let prior = files(&store, &again.prior_snapshot_id, &main);
     assert!(file(&prior, "deploy.pem").is_none());
 }
@@ -523,15 +603,10 @@ fn no_prior_snapshot_means_no_operation() {
     let (fx, wt) = repo_with_worktree("feat-pagos");
     std::fs::write(wt.join("lib.rs"), "fn pagos() {}\n").unwrap();
     std::fs::write(wt.join("cobro.rs"), "fn cobro() {}\n").unwrap();
-    let main = canonical(&fx.repo);
     let before = fx.fingerprint();
     let r = start(fx, None, true);
 
-    let (code, data) = rpc_error(r.run(
-        "discard-worktree",
-        &main,
-        json!({ "path": wt.to_str().unwrap(), "branch": "feat-pagos" }),
-    ));
+    let (code, data) = rpc_error(r.run("discard-worktree", &wt));
 
     // The requester gets the reason.
     assert_eq!(code, code::PRIOR_SNAPSHOT_FAILED);
@@ -566,15 +641,13 @@ fn a_scope_outside_the_repo_is_refused() {
     let other = canonical(&fx.other_repo);
     let r = start(fx, None, false);
 
-    let (code, _) = rpc_error(r.run(
-        "discard-worktree",
-        &main,
-        json!({ "path": other.to_str().unwrap(), "branch": "main" }),
-    ));
+    r.stand_in(StandIn::ForeignScope(other.clone()));
+    let (code, _) = rpc_error(r.run("abort-in-progress", &main));
     assert_eq!(code, code::SCOPE_REFUSED);
-    let (code, _) = rpc_error(r.run("inspect", &other, json!({})));
+    r.stand_in(StandIn::Inspect);
+    let (code, _) = rpc_error(r.run("abort-in-progress", &other));
     assert_eq!(code, code::SCOPE_REFUSED);
-    let (code, _) = rpc_error(r.run("inspect", &main.join("sub"), json!({})));
+    let (code, _) = rpc_error(r.run("abort-in-progress", &main.join("sub")));
     assert_eq!(code, code::SCOPE_REFUSED);
     assert_eq!(r.runs.load(Ordering::SeqCst), 0);
 
@@ -582,8 +655,8 @@ fn a_scope_outside_the_repo_is_refused() {
     assert!(oplog.operations(&Default::default()).unwrap().is_empty());
 }
 
-/// Without a catalog the daemon still answers "not implemented" (F-001-02,
-/// TS-CKP-002).
+/// Without a catalog the daemon still answers "not implemented" (F-001-02):
+/// the first operation story wires it (US-MCP-008).
 #[test]
 fn without_a_catalog_operations_are_not_implemented() {
     let tp = TempProfile::new();
@@ -591,8 +664,8 @@ fn without_a_catalog_operations_are_not_implemented() {
     let handle = daemon.shutdown_handle();
     let join = std::thread::spawn(move || daemon.run());
     let (code, _) = rpc_error(connect(&tp).call(
-        methods::OPERATION_RUN,
-        json!({ "operation": "inspect", "worktree": "/tmp", "surface": "tui" }),
+        methods::OPERATION_PREPARE,
+        json!({ "operation": "abort-in-progress", "worktree": "/tmp", "surface": "tui" }),
     ));
     assert_eq!(code, code::NOT_IMPLEMENTED);
     handle.request(StopCause::Signal("TERM"));

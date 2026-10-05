@@ -979,6 +979,7 @@ fn exec_error(e: ExecError) -> ErrorObject {
         }
         ExecError::Invalid(why) => ErrorObject::new(code::INVALID_PARAMS, &why),
         ExecError::TooManyPlans => ErrorObject::new(code::LIMIT_REACHED, "too many open plans"),
+        ExecError::Scope(why) => scope_refused(why),
         ExecError::Protected(ProtectedError::Prior {
             reason,
             operation_id,
