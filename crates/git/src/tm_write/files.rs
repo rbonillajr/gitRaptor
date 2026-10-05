@@ -132,6 +132,7 @@ mod unix {
         fd: OwnedFd,
         dev: u64,
         path: PathBuf,
+        no_exchange: bool,
     }
 
     fn io(e: Errno) -> WriteError {
@@ -156,7 +157,29 @@ mod unix {
                 fd,
                 dev,
                 path: root.to_owned(),
+                no_exchange: false,
             })
+        }
+
+        /// Behaves as a file system without atomic exchange or exclusive rename: every such
+        /// rename fails with `EINVAL`, as on one that lacks them (tests of SEC-TMC-11).
+        #[doc(hidden)]
+        pub fn simulating_no_exchange(mut self) -> Self {
+            self.no_exchange = true;
+            self
+        }
+
+        fn rename(
+            &self,
+            dir: &OwnedFd,
+            from: &[u8],
+            to: &[u8],
+            flags: RenameFlags,
+        ) -> std::result::Result<(), Errno> {
+            if self.no_exchange && !flags.is_empty() {
+                return Err(Errno::INVAL);
+            }
+            rustix::fs::renameat_with(dir, from, dir, to, flags)
         }
 
         pub fn path(&self) -> &Path {
@@ -337,7 +360,7 @@ mod unix {
                 Expected::Absent => RenameFlags::NOREPLACE,
                 Expected::Present { .. } => RenameFlags::EXCHANGE,
             };
-            match rustix::fs::renameat_with(&dir, tmp.as_str(), &dir, name.as_slice(), flags) {
+            match self.rename(&dir, tmp.as_bytes(), &name, flags) {
                 Ok(()) => {}
                 // Something is there although the prior snapshot says it is absent, or nothing is
                 // there although it says present: someone else changed it. Keep theirs.
@@ -358,14 +381,9 @@ mod unix {
                 let displaced = Self::observe(&dir, tmp.as_bytes())?;
                 if displaced != Some(Ok((*kind, *id))) {
                     // Undo the exchange: theirs goes back, ours is the temporary again.
-                    if rustix::fs::renameat_with(
-                        &dir,
-                        tmp.as_str(),
-                        &dir,
-                        name.as_slice(),
-                        RenameFlags::EXCHANGE,
-                    )
-                    .is_err()
+                    if self
+                        .rename(&dir, tmp.as_bytes(), &name, RenameFlags::EXCHANGE)
+                        .is_err()
                     {
                         return Ok(Outcome::Overlap {
                             kept_at: Some(self.kept_at(rel, &tmp)),
@@ -397,13 +415,7 @@ mod unix {
                 Err(outcome) => return Ok(outcome),
             };
             let tmp = temp_name();
-            match rustix::fs::renameat_with(
-                &dir,
-                name.as_slice(),
-                &dir,
-                tmp.as_str(),
-                RenameFlags::NOREPLACE,
-            ) {
+            match self.rename(&dir, &name, tmp.as_bytes(), RenameFlags::NOREPLACE) {
                 Ok(()) => {}
                 Err(Errno::NOENT) => return Ok(Outcome::Unchanged),
                 Err(Errno::INVAL | Errno::NOTSUP | Errno::NOSYS) => {
@@ -416,13 +428,7 @@ mod unix {
                 let _ = rustix::fs::fsync(&dir);
                 return Ok(Outcome::Removed);
             }
-            let back = rustix::fs::renameat_with(
-                &dir,
-                tmp.as_str(),
-                &dir,
-                name.as_slice(),
-                RenameFlags::NOREPLACE,
-            );
+            let back = self.rename(&dir, tmp.as_bytes(), &name, RenameFlags::NOREPLACE);
             let _ = rustix::fs::fsync(&dir);
             Ok(Outcome::Overlap {
                 kept_at: back.is_err().then(|| self.kept_at(rel, &tmp)),
@@ -476,6 +482,11 @@ mod other {
 
         pub fn path(&self) -> &Path {
             Path::new("")
+        }
+
+        #[doc(hidden)]
+        pub fn simulating_no_exchange(self) -> Self {
+            self
         }
 
         pub fn probe_folding(&self) -> Result<Folding> {
