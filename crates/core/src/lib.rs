@@ -3,6 +3,7 @@
 pub mod channel;
 pub mod client;
 pub mod daemon;
+pub mod detect;
 pub mod executor;
 pub mod observe;
 pub mod profile;

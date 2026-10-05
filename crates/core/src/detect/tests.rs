@@ -1,0 +1,429 @@
+//! Rules of the detector over a synthetic process table and a fake clock.
+
+use std::sync::atomic::AtomicI64;
+
+use super::*;
+
+const AGENT: &str = "fake-claude";
+
+#[derive(Default)]
+struct Table {
+    procs: Mutex<Vec<ProcEntry>>,
+    cwds: Mutex<HashMap<u32, PathBuf>>,
+}
+
+impl Table {
+    fn add(&self, pid: u32, ppid: u32, start_us: u64, exe: &str, cwd: Option<&str>) {
+        self.procs.lock().unwrap().push(ProcEntry {
+            pid,
+            ppid,
+            start_us,
+            exe: Some(PathBuf::from(exe)),
+        });
+        if let Some(cwd) = cwd {
+            self.cwds.lock().unwrap().insert(pid, PathBuf::from(cwd));
+        }
+    }
+
+    fn kill(&self, pid: u32) {
+        self.procs.lock().unwrap().retain(|p| p.pid != pid);
+        self.cwds.lock().unwrap().remove(&pid);
+    }
+}
+
+impl ProcLister for Arc<Table> {
+    fn list(&self) -> Option<Vec<ProcEntry>> {
+        Some(self.procs.lock().unwrap().clone())
+    }
+    fn cwd(&self, pid: u32) -> Option<PathBuf> {
+        self.cwds.lock().unwrap().get(&pid).cloned()
+    }
+}
+
+struct Rig {
+    table: Arc<Table>,
+    now: Arc<AtomicI64>,
+    changes: Arc<Mutex<Vec<SessionChange>>>,
+    detector: Detector,
+}
+
+impl Rig {
+    /// Repo `/r` (common dir `/r/.git`) with worktrees `/r` (main),
+    /// `/wt/feat-login` and the nested `/r/.claude/worktrees/x`.
+    fn new() -> Self {
+        let table = Arc::new(Table::default());
+        // The shell the agents start from.
+        table.add(10, 1, 100, "/bin/zsh", Some("/home"));
+        let now = Arc::new(AtomicI64::new(1_000_000));
+        let changes = Arc::new(Mutex::new(Vec::new()));
+        let clock_now = Arc::clone(&now);
+        let sink_changes = Arc::clone(&changes);
+        let config = SessionConfig {
+            // The tests drive the scan by hand.
+            scan_interval: Duration::from_secs(3600),
+            ..SessionConfig::default()
+        };
+        let detector = Detector::start(
+            config,
+            AgentMatcher::only(vec![AGENT.into()]),
+            Arc::new(Arc::clone(&table)),
+            Arc::new(move || clock_now.load(Ordering::SeqCst)),
+            Arc::new(move |c| sink_changes.lock().unwrap().extend(c)),
+        );
+        let dead = detector.watch_repo(
+            "r",
+            Path::new("/r/.git"),
+            vec![
+                PathBuf::from("/r"),
+                PathBuf::from("/wt/feat-login"),
+                PathBuf::from("/r/.claude/worktrees/x"),
+            ],
+            Vec::new(),
+        );
+        assert!(dead.is_empty());
+        Self {
+            table,
+            now,
+            changes,
+            detector,
+        }
+    }
+
+    fn take(&self) -> Vec<SessionChange> {
+        std::mem::take(&mut *self.changes.lock().unwrap())
+    }
+
+    fn scan(&self) -> Vec<SessionChange> {
+        self.detector.scan_now();
+        self.take()
+    }
+
+    fn advance(&self, ms: i64) {
+        self.now.fetch_add(ms, Ordering::SeqCst);
+    }
+
+    /// A Claude Code in `cwd`.
+    fn claude(&self, pid: u32, start: u64, cwd: &str) {
+        self.table
+            .add(pid, 10, start, &format!("/opt/bin/{AGENT}"), Some(cwd));
+    }
+
+    fn evidence(&self, worktree: &str, t_recv: u64) -> S3Outcome {
+        self.detector
+            .evidence("r", Path::new(worktree), t_recv, t_recv + 75_000_000)
+    }
+}
+
+fn started(changes: &[SessionChange]) -> Vec<(String, PathBuf)> {
+    changes
+        .iter()
+        .filter_map(|c| match c {
+            SessionChange::Started {
+                session_id,
+                worktree,
+                ..
+            } => Some((session_id.clone(), worktree.clone())),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn a_session_appears_with_its_process_and_ends_with_it() {
+    let rig = Rig::new();
+    rig.claude(20, 2_000, "/wt/feat-login/src");
+    let changes = rig.scan();
+    assert_eq!(
+        started(&changes),
+        [("20:2000".to_owned(), PathBuf::from("/wt/feat-login"))]
+    );
+    assert!(rig.scan().is_empty(), "a session starts once");
+    rig.table.kill(20);
+    let changes = rig.scan();
+    assert!(matches!(
+        &changes[..],
+        [SessionChange::Ended { session_id, cause: EndCause::ProcessGone, at_ms: Some(_), .. }]
+            if session_id == "20:2000"
+    ));
+    // Launched again: a new session; the old one is not reopened (Q41).
+    rig.claude(21, 3_000, "/wt/feat-login");
+    assert_eq!(started(&rig.scan())[0].0, "21:3000");
+}
+
+#[test]
+fn a_reused_pid_is_another_session() {
+    let rig = Rig::new();
+    rig.claude(20, 2_000, "/wt/feat-login");
+    rig.scan();
+    rig.table.kill(20);
+    rig.claude(20, 9_000, "/wt/feat-login");
+    let changes = rig.scan();
+    assert!(
+        changes.iter().any(
+            |c| matches!(c, SessionChange::Ended { session_id, .. } if session_id == "20:2000")
+        )
+    );
+    assert_eq!(started(&changes)[0].0, "20:9000");
+}
+
+#[test]
+fn only_claude_code_in_an_observed_worktree_is_a_session() {
+    let rig = Rig::new();
+    rig.claude(20, 2_000, "/elsewhere");
+    rig.table
+        .add(21, 10, 2_000, "/usr/bin/vim", Some("/wt/feat-login"));
+    rig.table.add(22, 10, 2_000, "/opt/bin/fake-claude", None);
+    assert!(rig.scan().is_empty());
+}
+
+#[test]
+fn the_longest_worktree_holds_the_session() {
+    let rig = Rig::new();
+    rig.claude(20, 2_000, "/r/.claude/worktrees/x/src");
+    rig.claude(21, 2_000, "/r/src");
+    let mut got = started(&rig.scan());
+    got.sort();
+    assert_eq!(
+        got,
+        [
+            (
+                "20:2000".to_owned(),
+                PathBuf::from("/r/.claude/worktrees/x")
+            ),
+            ("21:2000".to_owned(), PathBuf::from("/r")),
+        ]
+    );
+}
+
+#[test]
+fn a_child_claude_folds_into_its_parent_only_in_the_same_worktree() {
+    let rig = Rig::new();
+    rig.claude(20, 2_000, "/wt/feat-login");
+    // A helper of the same session, through a shell.
+    rig.table
+        .add(30, 20, 2_100, "/bin/sh", Some("/wt/feat-login"));
+    rig.table.add(
+        31,
+        30,
+        2_200,
+        "/opt/bin/fake-claude",
+        Some("/wt/feat-login"),
+    );
+    // An orchestrator launching Claude Code in another worktree.
+    rig.table
+        .add(32, 20, 2_300, "/opt/bin/fake-claude", Some("/r"));
+    let mut got = started(&rig.scan());
+    got.sort();
+    assert_eq!(
+        got,
+        [
+            ("20:2000".to_owned(), PathBuf::from("/wt/feat-login")),
+            ("32:2300".to_owned(), PathBuf::from("/r")),
+        ]
+    );
+}
+
+#[test]
+fn five_minutes_without_activity_make_it_inactive_and_activity_makes_it_active() {
+    let rig = Rig::new();
+    rig.claude(20, 2_000, "/wt/feat-login");
+    rig.scan();
+    rig.advance(5 * 60_000 - 1);
+    assert!(rig.scan().is_empty(), "still active at 4:59.999");
+    rig.advance(1);
+    assert!(matches!(
+        &rig.scan()[..],
+        [SessionChange::State {
+            state: SessionStateView::Inactive,
+            ..
+        }]
+    ));
+    assert!(rig.scan().is_empty(), "inactive once");
+    // Activity in another worktree does not count.
+    rig.detector.activity("r", Path::new("/r"));
+    assert!(rig.take().is_empty());
+    rig.detector.activity("r", Path::new("/wt/feat-login"));
+    assert!(matches!(
+        &rig.take()[..],
+        [SessionChange::State {
+            state: SessionStateView::Active,
+            ..
+        }]
+    ));
+    // Activity keeps it active: the threshold counts from the last one.
+    rig.advance(4 * 60_000);
+    rig.detector.activity("r", Path::new("/wt/feat-login"));
+    rig.advance(4 * 60_000);
+    assert!(rig.scan().is_empty());
+}
+
+#[test]
+fn the_observer_hooks_report_activity() {
+    let rig = Rig::new();
+    rig.claude(20, 2_000, "/wt/feat-login");
+    rig.scan();
+    rig.advance(5 * 60_000);
+    rig.scan();
+    rig.detector
+        .observer_hooks()
+        .worktree_touched("r", Path::new("/wt/feat-login"));
+    assert!(matches!(
+        &rig.take()[..],
+        [SessionChange::State {
+            state: SessionStateView::Active,
+            ..
+        }]
+    ));
+}
+
+/// A `git` started now (wall clock), under `parent`, in `cwd`.
+fn git(rig: &Rig, pid: u32, parent: u32, cwd: Option<&str>) {
+    rig.table
+        .add(pid, parent, wall_us() - 1_000, "/usr/bin/git", cwd);
+}
+
+#[test]
+fn s3_attributes_a_git_event_to_the_only_session_whose_git_made_it() {
+    let rig = Rig::new();
+    assert_eq!(rig.evidence("/wt/feat-login", 1_000), S3Outcome::NoSession);
+    rig.claude(20, 2_000, "/wt/feat-login");
+    rig.scan();
+    // Claude Code's shell tool runs `git commit`.
+    rig.table
+        .add(30, 20, 2_100, "/bin/zsh", Some("/wt/feat-login"));
+    git(&rig, 31, 30, Some("/wt/feat-login"));
+    // Another repo's `git` does not matter.
+    git(&rig, 40, 10, Some("/other-repo"));
+    rig.detector.sample_now("r", 1_000);
+    match rig.evidence("/wt/feat-login", 1_000) {
+        S3Outcome::Attributed(p) => {
+            assert_eq!(p.session_id, "20:2000");
+            assert_eq!(p.worktree, PathBuf::from("/wt/feat-login"));
+        }
+        other => panic!("{other:?}"),
+    }
+    // Outside the batch's window the sample does not count.
+    assert_eq!(
+        rig.evidence("/wt/feat-login", 500_000_000),
+        S3Outcome::NoSighting
+    );
+    // Nor for an event of another worktree.
+    assert_eq!(rig.evidence("/r", 1_000), S3Outcome::NoSighting);
+}
+
+#[test]
+fn s3_ignores_a_git_of_the_session_that_started_after_the_write() {
+    let rig = Rig::new();
+    rig.claude(20, 2_000, "/wt/feat-login");
+    rig.scan();
+    rig.table.add(
+        31,
+        20,
+        wall_us() + 60_000_000,
+        "/usr/bin/git",
+        Some("/wt/feat-login"),
+    );
+    rig.detector.sample_now("r", 1_000);
+    assert_eq!(rig.evidence("/wt/feat-login", 1_000), S3Outcome::NoSighting);
+}
+
+/// The developer commits while Claude Code runs a `git status` in the same
+/// worktree: both `git`s are alive, so the commit stays unattributed
+/// (BR-EDGE-004).
+#[test]
+fn s3_with_a_git_outside_every_session_is_ambiguous() {
+    let rig = Rig::new();
+    rig.claude(20, 2_000, "/wt/feat-login");
+    rig.scan();
+    git(&rig, 31, 20, Some("/wt/feat-login"));
+    git(&rig, 41, 10, Some("/wt/feat-login/src"));
+    rig.detector.sample_now("r", 1_000);
+    assert_eq!(rig.evidence("/wt/feat-login", 1_000), S3Outcome::Ambiguous);
+}
+
+#[test]
+fn s3_counts_the_daemons_own_git_and_unreadable_ones_as_foreign() {
+    let rig = Rig::new();
+    rig.claude(20, 2_000, "/wt/feat-login");
+    rig.scan();
+    git(&rig, 31, 20, Some("/wt/feat-login"));
+    let me = std::process::id();
+    rig.table.add(me, 10, 1_000, "/opt/raptor", Some("/"));
+    git(&rig, 50, me, Some("/r"));
+    rig.detector.sample_now("r", 1_000);
+    assert_eq!(rig.evidence("/wt/feat-login", 1_000), S3Outcome::Ambiguous);
+
+    let rig = Rig::new();
+    rig.claude(20, 2_000, "/wt/feat-login");
+    rig.scan();
+    git(&rig, 31, 20, Some("/wt/feat-login"));
+    git(&rig, 51, 10, None);
+    rig.detector.sample_now("r", 1_000);
+    assert_eq!(rig.evidence("/wt/feat-login", 1_000), S3Outcome::Ambiguous);
+}
+
+#[test]
+fn s3_with_two_sessions_in_the_worktree_is_ambiguous() {
+    let rig = Rig::new();
+    rig.claude(20, 2_000, "/wt/feat-login");
+    rig.claude(21, 2_500, "/wt/feat-login");
+    rig.scan();
+    git(&rig, 31, 20, Some("/wt/feat-login"));
+    git(&rig, 32, 21, Some("/wt/feat-login"));
+    rig.detector.sample_now("r", 1_000);
+    assert_eq!(rig.evidence("/wt/feat-login", 1_000), S3Outcome::Ambiguous);
+}
+
+#[test]
+fn a_reused_pid_breaks_the_ancestry() {
+    let rig = Rig::new();
+    rig.claude(20, 2_000, "/wt/feat-login");
+    rig.scan();
+    // Its parent claims pid 20 but started after the `git`: the `git`
+    // belongs to no session, so it is foreign and nothing is attributed.
+    rig.table
+        .add(31, 20, 1_500, "/usr/bin/git", Some("/wt/feat-login"));
+    rig.detector.sample_now("r", 1_000);
+    assert_eq!(rig.evidence("/wt/feat-login", 1_000), S3Outcome::Ambiguous);
+}
+
+#[test]
+fn open_sessions_continue_only_with_their_process() {
+    let rig = Rig::new();
+    rig.claude(20, 2_000, "/wt/feat-login");
+    let open = |id: &str| OpenSession {
+        session_id: id.into(),
+        worktree: PathBuf::from("/wt/feat-login"),
+        started_ms: 5,
+        state: SessionStateView::Inactive,
+    };
+    let dead = rig.detector.watch_repo(
+        "r2",
+        Path::new("/wt/.git"),
+        vec![PathBuf::from("/wt/feat-login")],
+        vec![open("20:2000"), open("20:1999"), open("99:1"), open("bad")],
+    );
+    assert_eq!(dead, ["20:1999", "99:1", "bad"]);
+    // The live one is not started again, and keeps its inactive state.
+    assert!(rig.scan().is_empty());
+    rig.detector.activity("r2", Path::new("/wt/feat-login"));
+    assert!(matches!(
+        &rig.take()[..],
+        [SessionChange::State { state: SessionStateView::Active, session_id, .. }] if session_id == "20:2000"
+    ));
+}
+
+#[test]
+fn a_forgotten_repo_detects_nothing() {
+    let rig = Rig::new();
+    rig.claude(20, 2_000, "/wt/feat-login");
+    rig.detector.forget_repo("r");
+    assert!(rig.scan().is_empty());
+}
+
+#[test]
+fn session_ids_match_the_requester_format() {
+    assert_eq!(session_id(82, 820), "82:820");
+    assert_eq!(parse_session_id("82:820"), Some((82, 820)));
+    assert_eq!(parse_session_id("cc-82"), None);
+}

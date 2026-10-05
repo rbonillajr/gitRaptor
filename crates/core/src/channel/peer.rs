@@ -141,11 +141,42 @@ mod imp {
         }
     }
 
-    /// Working folder of `pid`. libproc has no safe wrapper for
-    /// `PROC_PIDVNODEPATHINFO`; pending (US-GRP-009 needs it to take the
-    /// worktree of a registration from the caller's cwd).
-    pub fn process_cwd(_pid: u32) -> Option<PathBuf> {
-        None
+    /// `struct vnode_info_path`: a `vnode_info` (152 bytes, unused here)
+    /// and the path (`MAXPATHLEN`).
+    #[repr(C)]
+    struct VnodeInfoPath {
+        _info: [u8; 152],
+        path: [u8; 1024],
+    }
+
+    /// `struct proc_vnodepathinfo`: current and root directories. The
+    /// kernel fills it through libproc's `pidinfo`, so this crate stays
+    /// free of `unsafe` (US-GRP-007).
+    #[repr(C)]
+    struct VnodePathInfo {
+        cdir: VnodeInfoPath,
+        _rdir: VnodeInfoPath,
+    }
+
+    // `pidinfo` zero-fills a `VnodePathInfo` and passes its size to the
+    // kernel: only byte arrays, and exactly the C size.
+    const _: () = assert!(std::mem::size_of::<VnodePathInfo>() == 2352);
+
+    impl libproc::libproc::proc_pid::PIDInfo for VnodePathInfo {
+        fn flavor() -> libproc::libproc::proc_pid::PidInfoFlavor {
+            libproc::libproc::proc_pid::PidInfoFlavor::VNodePathInfo
+        }
+    }
+
+    /// Working folder of `pid` (`PROC_PIDVNODEPATHINFO`): the path the
+    /// kernel resolved, without symbolic links. `None` if it cannot be read.
+    pub fn process_cwd(pid: u32) -> Option<PathBuf> {
+        use std::os::unix::ffi::OsStrExt;
+        let raw = i32::try_from(pid).ok()?;
+        let info = pidinfo::<VnodePathInfo>(raw, 0).ok()?;
+        let path = &info.cdir.path;
+        let len = path.iter().position(|b| *b == 0).unwrap_or(path.len());
+        (len > 0).then(|| PathBuf::from(std::ffi::OsStr::from_bytes(&path[..len])))
     }
 }
 
@@ -288,6 +319,21 @@ mod tests {
         assert_eq!(SystemProcs.foreign_to(me.pid, me.uid), Some(false));
         assert!(SystemProcs.pids_of(me.uid).unwrap().contains(&me.pid));
         assert!(me.pgid > 0);
+    }
+
+    #[test]
+    fn reads_the_working_folder_of_a_child() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut child = std::process::Command::new("/bin/sleep")
+            .arg("5")
+            .current_dir(dir.path())
+            .spawn()
+            .unwrap();
+        let cwd = process_cwd(child.id());
+        child.kill().unwrap();
+        child.wait().unwrap();
+        assert_eq!(cwd, Some(dir.path().canonicalize().unwrap()));
+        assert_eq!(process_cwd(child.id()), None);
     }
 
     #[test]
