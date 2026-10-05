@@ -6,10 +6,10 @@ status: approved
 feature: motor-local
 domain: GRP
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-05
 related:
   stories: [TS-GRP-004]
-  adrs: [ADR-GRP-005, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013]
+  adrs: [ADR-GRP-002, ADR-GRP-005, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, ADR-TMC-005]
   nfrs: [NFR-02, NFR-03, SEC-01, SEC-02, SEC-03, SEC-08, SEC-10, SEC-12, SEC-13, SEC-14]
   deps: [DEP-CKP-6, DEP-MCP-3]
 tags: [motor-local, ipc, json-rpc, socket, contrato, comandos-reservados, auditoria, arranque-bajo-demanda, seguridad]
@@ -112,7 +112,7 @@ Todas usan perfiles y repos temporales, nunca este repo ni el perfil real (NFR-0
 
 ## 5. Pendientes
 
-- **Windows** (Pendiente: etapa de validación multiplataforma): named pipe con DACL del SID, primera instancia, rechazo de clientes remotos, comprobación del SID del servidor y SQOS de identificación; identificador por handle; reloj por QPC. Hoy el crate compila en Windows (`clippy -D warnings` con `--target x86_64-pc-windows-msvc`), pero allí no hay canal: el daemon arranca sin él y deja `channel_unsupported` en el log, y el cliente falla con el error tipado `ClientError::TransportUnsupported` (`channel::TRANSPORT_UNSUPPORTED`). Es fail-closed: nunca hay un canal sin control de acceso. **Decisión del orquestador (2026-10-04)**. Requiere Win32 sin `unsafe` propio (crate a evaluar).
+- **Windows** (Pendiente: etapa de validación multiplataforma): named pipe con DACL del SID, primera instancia, rechazo de clientes remotos, comprobación del SID del servidor y SQOS de identificación; identificador por handle; reloj por QPC. Hoy el crate compila en Windows (`clippy -D warnings` con `--target x86_64-pc-windows-msvc`), pero allí no hay canal: el daemon arranca sin él y deja `channel_unsupported` en el log, y el cliente falla con el error tipado `ClientError::TransportUnsupported` (`channel::TRANSPORT_UNSUPPORTED`). Es fail-closed: nunca hay un canal sin control de acceso. **Decisión del orquestador (2026-10-04)**. El acceso a Win32 ya existe (`crates/winsys`, § 6); falta el transporte. La lectura de procesos y la resolución del solicitante en Windows están en el § 6.
 - **Linux** (Pendiente: etapa de validación multiplataforma): `SO_PEERCRED` y `/proc` están escritos pero no se compilaron ni se probaron. El inicio se calcula con 100 Hz supuestos y falta pidfd (`SO_PEERPIDFD`). Las pruebas de proceso son solo de macOS (`script`, `nc -U`, `lsof`).
 - **SPIKE-GRP-001**: leer argv[1] de un intérprete. Hasta entonces, un antecesor `node`, `bun` o `deno` bloquea los comandos reservados (fail-closed).
 - **Riesgo para que Rene lo acepte**: si Claude Code corre sobre `node`, solo se detecta gracias al fail-closed de los intérpretes. Un agente con otro intérprete o desacoplado (doble fork, `setsid`) evade la ascendencia (riesgo residual de ADR-GRP-005 § 6).
@@ -124,3 +124,36 @@ Todas usan perfiles y repos temporales, nunca este repo ni el perfil real (NFR-0
 - **INF-GRP-001**: conectar estas pruebas de proceso a la suite "Proceso" del arnés.
 - `cargo-deny` y `cargo-fuzz` no están configurados en el repo.
 - Seguridad: A-2 (decisión de Rene), B-2 (feature `test-hooks`) y la retención de la auditoría.
+
+## 6. Windows: lectura de procesos y solicitante (2026-10-05)
+
+La resolución del solicitante (ADR-TMC-005 § 1) y los controles de ADR-GRP-005 § 6 ya funcionan en Windows sobre procesos reales. El transporte sigue "no soportado" (§ 5), así que se prueban contra la interfaz `ProcSource`, con un `AcceptedPeer` construido en el test. Enmiendas: [ADR-GRP-005](../../../../architecture/decisions/ADR-GRP-005-forma-motor-proceso-segundo-plano.md#enmienda-2026-10-05-windows-procesos), [ADR-GRP-002](../../../../architecture/decisions/ADR-GRP-002-monorepo-nx.md#enmienda-2026-10-05-crateswinsys) y la nota de [ADR-TMC-005](../../../../architecture/decisions/ADR-TMC-005-solicitante-permisos-solape.md#nota-2026-10-05-windows).
+
+Todas son **decisiones del orquestador (2026-10-05)**, validadas por el Arquitecto (`nassa-architect:architect`) y por `nassa-security:security-expert`, con los ajustes que pidieron. El reparto del crate se coordinó con la rama `win-acl`.
+
+| # | Decisión | Validada por |
+|---|---|---|
+| W1 | **TQ-14 no cambia**: en Windows no hay confirmación de trabajo ajeno ni comando reservado aceptado. Pasa a ser una compuerta explícita, `Checks::terminal_proof` (`authz::TERMINAL_PROOF = cfg!(unix)`), en lugar de un `cfg` dentro de `requester`. Sin prueba de terminal, `check_reserved` rechaza con `Unsupported` después de recorrer la ascendencia, así que un agente sigue recibiendo `agent-ancestry`. La compuerta se inyecta en los tests, de modo que las dos ramas corren en todos los SO. La detección de consola o de sesión interactiva no tiene consumidor en el MVP: en Windows, `controlling_terminal = false` y `session = pgid = 0` | Arquitecto |
+| W2 | **Crate aislado `crates/winsys`** (`gitraptor-winsys`) sobre `windows-sys` 0.61, único crate con `unsafe` y solo en sus módulos privados `ffi*` (`#![deny(unsafe_code)]`, un `#[allow]` por módulo FFI, una llamada por bloque con su `SAFETY`, `undocumented_unsafe_blocks` y `multiple_unsafe_ops_per_block` en deny). Se descarta `sysinfo` porque da la hora de inicio en segundos (en Windows el ppid nunca se actualiza y los PIDs se reutilizan mucho) y se descarta `wmi` (COM, lento). Es compartido con `win-acl` (módulo `acl`). El test `crates/winsys/tests/unsafe_boundary.rs` comprueba que todos los demás crates heredan los lints del workspace | Arquitecto, security-expert |
+| W3 | **Identidad `(pid, hora de creación)` leída por el handle**: primero `OpenProcess`, que fija el proceso y su PID, y después la snapshot de Toolhelp (ppid), la imagen (`QueryFullProcessImageNameW`, ruta Win32) y el token. Un proceso que terminó pero sigue retenido no aparece en la snapshot y cuenta como `Gone`. La hora pasa de 100 ns a µs y se compara con `<=` | Arquitecto, security-expert |
+| W4 | **Usuario**: `uid = current_uid()` (0) si el SID del token es el del daemon y `FOREIGN_UID` si es otro; un token ilegible da `Denied` (cadena rota). El PID 4 (System) es ajeno. La carpeta de Windows se lee del kernel, nunca de `SystemRoot` | Arquitecto, security-expert |
+| W5 | **C-01 de la revisión de seguridad**: sin prueba de terminal, "sin atribuir" es lo máximo a lo que llega un llamante, y aun así puede deshacer trabajo "sin atribuir" sin confirmación. Por eso allí tiene que estar verificado. Una ascendencia que se rompe (padre `Gone` o reutilizado), que cruza un intérprete, que llega al daemon sin marca o que encuentra un multiplexor con un agente vivo se rechaza como `identity-unverified`. Una cadena termina limpia en un proceso de otro usuario o en `explorer.exe` de la carpeta de Windows (su padre, `userinit`, ya terminó). Es el fail-closed del encargo: si no se puede probar la ascendencia, el llamante no actúa como desarrollador | security-expert |
+| W6 | **Marcas del ejecutor (DEP-MCP-3)**: en Windows, por `(pid, creación)` y sin grupo de procesos. Un nieto con el padre marcado vivo se atribuye por ascendencia. Un nieto huérfano se rechaza por W5 (fail-closed), que cierra el H-01 de la revisión de seguridad. Los Job Objects quedan pendientes (atribuirlo bien en vez de rechazarlo) | Arquitecto, security-expert |
+| W7 | Las rutas de Claude Code (`versions/`, `@anthropic-ai/claude-code`) se comparan sin distinguir mayúsculas, como en los sistemas de archivos de Windows y macOS (M-03) | security-expert |
+
+**Pruebas (criterio → test)**:
+- Rama sin prueba de terminal en todos los SO: `requester::tests::without_a_terminal_proof_nobody_confirms`, `without_a_terminal_proof_an_unverifiable_caller_is_refused`, `the_desktop_root_ends_the_walk_cleanly` y `without_a_terminal_proof_a_marked_child_acts_for_the_requester`.
+- Procesos reales en Windows (`cfg(windows)`): `requester::real_processes::a_client_under_a_claude_process_is_that_agent` (una copia del binario de test llamada `claude.exe` lanza un `helper.exe`; el helper se resuelve como ese agente, con `session_id` del proceso `claude`, rechazo `agent-ancestry` e `identity-unverified` cuando el proceso ya terminó) y `a_client_without_an_agent_is_not_one`.
+- Lectura de procesos: `peer::windows_tests::*` y `gitraptor_winsys::process::tests::*` / `system::tests::*`.
+- Hijo del ejecutor marcado en Windows: `timemachine::protected::tests::children_of_the_step_are_marked`, ahora en todos los SO.
+- Frontera de `unsafe`: `crates/winsys/tests/unsafe_boundary.rs`.
+
+**Pendientes** (Pendiente: etapa de validación multiplataforma):
+- **Transporte**: el named pipe y el PID del cliente (`GetNamedPipeClientProcessId`, que según security-expert el cliente puede influir; hay que confirmarlo con una prueba). El handle del par debe abrirse justo después de `ConnectNamedPipe` y guardarse durante toda la conexión.
+- **Job Objects** para los hijos del ejecutor, con la carrera entre `spawn` y la marca (un nieto lanzado antes de marcar al hijo).
+- **Riesgo residual (M-01)**: en Windows, un proceso del mismo usuario puede elegir padre (`PROC_THREAD_ATTRIBUTE_PARENT_PROCESS`) y así suplantar a otro agente, no solo evadir la atribución. Queda fuera del modelo de agente confundido y se anota en ADR-TMC-005.
+- **Intérpretes**: Claude Code instalado por npm corre como `node.exe` y en Windows se rechaza como no verificable hasta que SPIKE-GRP-001 lea argv[1].
+- **Precisión**: la hora de creación avanza por ticks del reloj del sistema, así que un PID reutilizado dentro del mismo tick pasa el `<=` (L-01).
+- **Rendimiento**: cada lectura toma una snapshot de Toolhelp, y un recorrido de hasta 64 niveles puede tomar 64. Hay que medirlo contra ADR-GRP-011 antes de optimizar.
+- **C-01 en Unix**: el mismo hueco (un "sin atribuir" con la cadena rota o un intérprete puede deshacer trabajo "sin atribuir") existe en macOS y Linux. Allí lo mitiga la confirmación de lo ajeno, pero no lo de "sin atribuir". Queda propuesto para revisión, fuera del alcance de esta rama.
+- `cargo-deny` sigue sin configurarse; `windows-sys` queda fijado por `Cargo.lock`.
