@@ -27,7 +27,7 @@ La fuente de verdad es el código de `crates/api`. Este documento es su resumen 
   - La 2 (US-GRP-001) añade el estado de los worktrees a `RepoView`.
   - La 3 (US-GRP-012), la rama base del repo y el ahead/behind de cada worktree.
   - La 3.1.0 (US-GRP-002) es aditiva: `events.history` y el `data` de `git.event`; un cliente nuevo comprueba en `hello.methods` que el daemon ofrece `events.history` y, si no, pide reiniciarlo.
-  - La 4 (TS-CKP-002), el catálogo de operaciones en dos fases. `operation.run` ejecuta un plan preparado.
+  - La 4 (TS-CKP-002), el catálogo de operaciones en dos fases: `operation.run` ejecuta un plan preparado. Incluye todo lo de la 3.1.0.
 
 ## Handshake
 
@@ -152,4 +152,4 @@ Notificación `events.event` con `{ subscription, event }`. El evento lleva:
 - Campos de última actividad (DEP-CKP-4) y timeline (DEP-CKP-5).
 - `caller_repo` real en macOS (F-001-05): hoy `process_cwd` devuelve `None` en macOS; lo implementa US-MCP-003 con la doble comprobación de identidad de ADR-MCP-001 § 2.
 - Servidor MCP (ADR-MCP-001, 2026-10-05), cada método lo añade su historia dueña: comandos reservados `mcp.enable` y `mcp.disable` (US-MCP-002); perfil `mcp` por solicitante agente, sea cual sea el cliente, con rate limit y límites por solicitante (US-MCP-003, US-MCP-005); vista MCP ampliada de `engine.snapshot` (US-MCP-004); registro y retiro del propio agente, no reservados (US-MCP-006); vista MCP de `timemachine.timeline` (US-MCP-017); consulta de la predicción para el perfil `mcp` (US-MCP-016). El contrato de ejecución quedó unificado por TS-CKP-002 (protocolo 4).
-- Cableado de producción del ejecutor: hoy `operation.prepare` y `operation.run` responden `-32004` (`F-001-02`); lo cablea US-MCP-008 (DS-TS-CKP-002 § 9).
+- Catálogo de producción del ejecutor: hoy `operation.prepare` responde `-32004` (`F-001-02`) mientras el daemon no lleve un catálogo; lo cablea US-MCP-008 (DS-TS-CKP-002 § 9).

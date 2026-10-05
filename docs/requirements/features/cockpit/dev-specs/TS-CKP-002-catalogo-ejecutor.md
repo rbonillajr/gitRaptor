@@ -155,6 +155,12 @@ Todas son **decisiones del orquestador (2026-10-05), validadas por el Arquitecto
 - **D8. Planes**. `planId` de 128 bits; TTL de 60 s; como mucho 4 planes vivos por conexión (el quinto recibe `-32006`). El plan se consume en cualquier intento de `run`, y cada plan gobernado se cierra una sola vez.
 - **D9. Eventos de operación**, sin argumentos ni salida de Git, y nunca a MCP.
 - **D10. Motivos tipados** en `RejectReason` (§ 2), cerrados para esta versión del protocolo.
+- **D12. Integración con US-TMC-001** (rebase del 2026-10-05), validada por el Arquitecto:
+  - **`OperationCatalog`** es ahora la parte propia de cada operación: `plan_op` y `step(&StepPlan)`.
+  - **`OperationsWiring`** gana el gate de Guardrails y el override de capa, que solo se aplica en builds de depuración.
+  - **El ejecutor** construye la petición con `ProtectedRequest::for_step`, que valida el ámbito que declara el paso. Si el paso declara un worktree de otro repo: `SCOPE_REFUSED`, sin intención en el oplog. `OpPlan` ya no lleva `worktrees` ni `refs`; el ámbito sale del paso y solo de `StepPlan`.
+  - **Los tests de US-TMC-001** pasan por las dos fases con ids del catálogo y conservan todas sus aserciones.
+  - Se corrigió `registered_worktrees`, que no canonicalizaba el directorio común abierto desde un worktree enlazado.
 - **D11. Alcance**, validado por el PO. La lógica de cada operación y el cableado de producción del backend quedan en sus historias dueñas (§ 9).
 
 ## 9. Fuera de alcance (y a quién pertenece)
@@ -162,14 +168,17 @@ Todas son **decisiones del orquestador (2026-10-05), validadas por el Arquitecto
 Ajustes del PO (2026-10-05) incorporados: cada pendiente tiene un dueño con id.
 
 - **Lógica propia de cada operación**: `plan_op` y `step` de producción. Pertenece a US-CKP-014 (merge), US-CKP-015 y US-MCP-018 (rebase `stop` y `atomic`), US-CKP-017 (descartar), US-CKP-018 y US-MCP-019 (crear worktree con la plantilla; llaman a `check_new_worktree_path` al preparar y bajo el cerrojo), US-MCP-009 (commit), US-MCP-008 (snapshot manual) y US-CKP-016 (abortar). Hasta entonces, `-32004` con `implemented_by`.
-- **Cableado de producción de `ProtectedBackend`**: lo hace **US-MCP-008**, la primera operación no gobernada; su bloqueo por la API de captura de la Time Machine sigue en pie (D-14 del MCP). Lo que cablea:
-  - `repo_of` real y `StoreSnapshotter`.
-  - `RepoFacts::read`.
-  - Las raíces observadas y el perfil, para el `PATH` y la ruta nueva.
-  - El binario de Git resuelto.
-  - **Clave del cerrojo fijada aquí por el Arquitecto**: la ruta del almacén del repo (`SnapshotStore::path()`), la misma que usa el aplicador de TS-TMC-003.
+- **Cableado de producción**:
+  - **Hecho al rebasar sobre US-TMC-001** (D12):
+    - `DaemonBackend` implementa el `ProtectedBackend` ampliado: `repo_of` real con `StoreSnapshotter`, `facts` con `RepoFacts::read`, y la clave del cerrojo con `SnapshotStore::location`.
+    - **Clave del cerrojo fijada por el Arquitecto**: la ruta canónica del almacén del repo, la misma que usa el aplicador de TS-TMC-003 (test `the_lock_key_is_the_appliers`).
+  - **Falta, lo hace US-MCP-008**, la primera operación no gobernada; su bloqueo por la API de captura de la Time Machine sigue en pie (D-14 del MCP):
+    - el `OperationCatalog` de producción;
+    - poner `DaemonConfig.operations` en el daemon real;
+    - las raíces observadas y el perfil, para el `PATH` y la ruta nueva;
+    - el binario de Git resuelto.
 
-  Hasta entonces, en producción `operation.prepare` responde `-32004` (`F-001-02`), como antes `operation.run`.
+  Hasta entonces, en producción `operation.prepare` responde `-32004` (`F-001-02`).
 - **Motor de Guardrails, su registro y el actor de los `git` nietos**: TS-CKP-003. La excepción consciente con su ventana: US-CKP-019 (ADR-GRD-007).
 - **Validaciones de la TS que necesitan una operación real o un arnés**, con dueño:
   - Captura de red y *partial clone* (M-02, Validación 16): suite "ejecutor" de INF-GRP-001. Los flags ya están en el argv y probados aquí.
