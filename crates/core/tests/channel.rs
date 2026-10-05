@@ -68,6 +68,7 @@ impl Running {
             channel,
             protected: None,
             operations: None,
+            tm_prior_layer: None,
         };
         let daemon = Daemon::start(config).unwrap();
         let handle = daemon.shutdown_handle();
@@ -252,6 +253,7 @@ fn a_precreated_open_runtime_folder_stops_the_start() {
         channel: ChannelConfig::default(),
         protected: None,
         operations: None,
+        tm_prior_layer: None,
     };
     assert!(Daemon::start(config).is_err());
     assert!(!runtime.join("raptor.sock").exists());
@@ -844,6 +846,7 @@ fn a_replaced_socket_is_taken_back() {
         channel: ChannelConfig::default(),
         protected: None,
         operations: None,
+        tm_prior_layer: None,
     };
     let daemon = Daemon::start(config).unwrap();
     let handle = daemon.shutdown_handle();

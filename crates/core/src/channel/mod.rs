@@ -138,6 +138,28 @@ impl ProtectedWiring {
     }
 }
 
+/// What the Time Machine's own commands need (US-TMC-002): the observed
+/// repos with their store, and Git. Wired whether or not a catalog of
+/// operations is.
+#[derive(Clone)]
+pub struct TimeMachineWiring {
+    pub backend: std::sync::Arc<dyn crate::timemachine::undo::UndoBackend>,
+    /// Git resolved by the daemon; `None`: undo is rejected.
+    pub git: Option<gitraptor_git::SystemGit>,
+    pub invoker: gitraptor_git::Invoker,
+    /// Deadline of the prior snapshot.
+    pub prior_deadline: Duration,
+}
+
+impl std::fmt::Debug for TimeMachineWiring {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TimeMachineWiring")
+            .field("git", &self.git.is_some())
+            .field("prior_deadline", &self.prior_deadline)
+            .finish_non_exhaustive()
+    }
+}
+
 impl std::fmt::Debug for ProtectedWiring {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ProtectedWiring")

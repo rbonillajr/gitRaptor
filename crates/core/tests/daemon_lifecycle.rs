@@ -27,6 +27,7 @@ fn config(dirs: ProfileDirs, git: ResolveConfig) -> DaemonConfig {
         channel: ChannelConfig::default(),
         protected: None,
         operations: None,
+        tm_prior_layer: None,
     }
 }
 

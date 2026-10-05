@@ -24,9 +24,10 @@ use gitraptor_api::messages::{
 use gitraptor_api::methods::{self, METHODS, MethodSpec};
 use gitraptor_api::rpc::{ErrorObject, Id, Request, Response, code};
 use gitraptor_api::timemachine::{
-    Invalid as TmInvalid, MAX_REPORTED_REFS, McpRequesterView, OperationRunResult, PriorFailedData,
-    RedoParams, RequestChannel, RequesterView, ResolveParams, RestoreParams, SnapshotParams,
-    Surface, TimelineParams, UndoParams,
+    Invalid as TmInvalid, MAX_REPORTED_PATHS, MAX_REPORTED_REFS, McpRequesterView, NotRestored,
+    NotRestoredReason, OperationRunResult, PriorFailedData, RedoParams, RequestChannel,
+    RequesterView, ResolveParams, RestoreParams, SnapshotParams, Surface, TimelineParams,
+    TmRejectedData, UndoParams, UndoResult,
 };
 
 use super::authz::{AcceptedPeer, ChainLink, Verdict, check_reserved};
@@ -38,12 +39,16 @@ use super::{ServerCtx, file_id};
 use crate::daemon::{
     CHANGE_LIST_BUDGET, Field, RepoAddRequest, RepoCommandError, StopCause, now_ms,
 };
-use crate::executor::{Caller, ExecError, PrepareInput, RunEnv, RunInput, layer_for};
+use crate::executor::{
+    Caller, ExecError, PrepareInput, RunEnv, RunInput, layer_for, oplog_channel,
+};
 use crate::profile::AuditRow;
+use crate::timemachine::apply::{ApplyWarning, PathIssue};
 use crate::timemachine::protected::scope::{
     operation_in, require_attributed, scope_for, snapshot_in,
 };
 use crate::timemachine::protected::{ProtectedError, RepoHandle, ScopeError, failure_text};
+use crate::timemachine::undo::{UndoDone, UndoEnv, UndoError, tm_scope_for, undo_last};
 
 /// Longest audit page.
 const MAX_AUDIT_PAGE: u32 = 500;
@@ -512,6 +517,9 @@ impl Connection<'_> {
         if let Some(route) = write_route(spec.name) {
             let result = match route {
                 WriteRoute::Protected => self.operation_run(request),
+                WriteRoute::TimeMachine(_) if spec.name == methods::TM_UNDO => {
+                    self.tm_undo(spec, request)
+                }
                 WriteRoute::TimeMachine(story) => self.tm_command(spec, request, story),
             };
             self.reply(&request.id, result);
@@ -1000,6 +1008,85 @@ fn exec_error(e: ExecError) -> ErrorObject {
     }
 }
 
+/// An undo's failures as contract errors.
+fn undo_error(e: UndoError) -> ErrorObject {
+    match e {
+        UndoError::Rejected {
+            reason,
+            operation_id,
+        } => {
+            ErrorObject::new(code::OPERATION_REJECTED, "undo rejected").with_data(TmRejectedData {
+                reason,
+                operation_id,
+            })
+        }
+        UndoError::Prior {
+            reason,
+            operation_id,
+        } => ErrorObject::new(code::PRIOR_SNAPSHOT_FAILED, failure_text(reason)).with_data(
+            PriorFailedData {
+                reason,
+                operation_id,
+            },
+        ),
+        UndoError::Interrupted { operation_id, .. } => {
+            ErrorObject::new(code::OPERATION_FAILED, "the undo was interrupted")
+                .with_data(serde_json::json!({ "operation_id": operation_id }))
+        }
+        UndoError::Internal(_) => ErrorObject::new(code::INTERNAL, "time machine unavailable"),
+    }
+}
+
+/// What the client sees of a finished undo. Paths are untrusted text.
+fn undo_result(done: UndoDone, requester: RequesterView) -> UndoResult {
+    let not_restored = done
+        .report
+        .paths
+        .iter()
+        .take(MAX_REPORTED_PATHS)
+        .map(|p| {
+            let (reason, kept_at) = match &p.issue {
+                PathIssue::Overlap { kept_at } => (
+                    NotRestoredReason::Overlap,
+                    kept_at
+                        .as_deref()
+                        .map(|k| Untrusted::from_os(k.as_os_str())),
+                ),
+                PathIssue::NotGuaranteed => (NotRestoredReason::NotGuaranteed, None),
+                PathIssue::Blocked(_) => (NotRestoredReason::Blocked, None),
+            };
+            NotRestored {
+                path: Untrusted::new(p.path.clone()),
+                reason,
+                kept_at,
+            }
+        })
+        .collect();
+    UndoResult {
+        operation_id: done.operation_id,
+        prior_snapshot_id: done.prior_snapshot_id,
+        undone_operation_id: done.undone.record.operation_id,
+        undone_subtype: done.undone.record.subtype.map(Untrusted::new),
+        target_snapshot_id: done.target_snapshot_id,
+        requester,
+        written: done.report.written as u64,
+        removed: done.report.removed as u64,
+        not_restored,
+        warnings: done.report.warnings.iter().map(warning_code).collect(),
+    }
+}
+
+fn warning_code(w: &ApplyWarning) -> String {
+    match w {
+        ApplyWarning::IntentToAddNotRestored { .. } => "intent-to-add-not-restored",
+        ApplyWarning::HeadWithoutReflog { .. } => "head-without-reflog",
+        ApplyWarning::StashTopOnly => "stash-top-only",
+        ApplyWarning::StashKept => "stash-kept",
+        ApplyWarning::Excluded { .. } => "excluded",
+    }
+    .to_owned()
+}
+
 fn tm_invalid(why: TmInvalid) -> ErrorObject {
     ErrorObject::new(code::INVALID_PARAMS, &why.message())
 }
@@ -1257,6 +1344,68 @@ impl Connection<'_> {
             .cancel(&r, self.layer(&r), &p.operation_id)
             .map_err(exec_error)?;
         Ok(CancelResult { requested })
+    }
+
+    /// `timemachine.undo` (US-TMC-002): the last operation of the named
+    /// worktree, as a protected operation of the Time Machine. The
+    /// selectors (`since`, `agent`, `operation_id`) stay with their stories.
+    fn tm_undo(
+        &self,
+        spec: &MethodSpec,
+        request: &Request,
+    ) -> Result<serde_json::Value, ErrorObject> {
+        let p: UndoParams = request.params()?;
+        p.validate().map_err(tm_invalid)?;
+        let selector = if p.since.is_some() {
+            Some("US-TMC-010")
+        } else if p.agent.is_some() {
+            Some("US-TMC-011")
+        } else if p.operation_id.is_some() {
+            Some("unassigned")
+        } else {
+            None
+        };
+        if let Some(story) = selector {
+            return self.tm_command(spec, request, story);
+        }
+        let channel = self.request_channel(p.surface)?;
+        let named = self.named_worktree(p.worktree.as_deref())?;
+        let r = self.resolve()?;
+        require_attributed(channel, r.who.is_agent()).map_err(scope_refused)?;
+        let Some(tm) = &self.ctx.time_machine else {
+            return Err(ErrorObject::new(code::NOT_IMPLEMENTED, "no repo layer")
+                .with_data(serde_json::json!({ "implemented_by": "US-TMC-002" })));
+        };
+        let cwd = if self.is_mcp() {
+            process_cwd(self.peer.pid)
+        } else {
+            None
+        };
+        let repo = tm_scope_for(
+            tm.backend.as_ref(),
+            self.is_mcp(),
+            named.as_deref(),
+            cwd.as_deref(),
+        )
+        .map_err(scope_refused)?;
+        let env = UndoEnv {
+            marks: &self.ctx.marks,
+            procs: self.ctx.procs.as_ref(),
+            stopping: &self.ctx.stopping,
+            prior_deadline: tm.prior_deadline,
+            git: tm.git.as_ref(),
+            invoker: &tm.invoker,
+        };
+        let engine_mark = i64::try_from(self.ctx.bus.snapshot().0).unwrap_or(i64::MAX);
+        let done = undo_last(&repo, &r.who, oplog_channel(channel), engine_mark, &env)
+            .map_err(undo_error)?;
+        let result = undo_result(done, self.requester_view(&r, channel));
+        let value = if self.is_mcp() {
+            serde_json::to_value(result.for_mcp())
+        } else {
+            serde_json::to_value(result)
+        };
+        value.map_err(|_| ErrorObject::new(code::INTERNAL, "serialization"))
     }
 
     /// A Time Machine command declared ahead of its story: strict
