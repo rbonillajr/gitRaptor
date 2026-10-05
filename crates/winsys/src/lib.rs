@@ -12,6 +12,8 @@ pub mod acl;
 pub mod process;
 #[cfg(windows)]
 pub mod system;
+#[cfg(windows)]
+pub mod usage;
 
 #[cfg(windows)]
 #[allow(unsafe_code)]
@@ -22,3 +24,6 @@ mod ffi_handle;
 #[cfg(windows)]
 #[allow(unsafe_code)]
 mod ffi_process;
+#[cfg(windows)]
+#[allow(unsafe_code)]
+mod ffi_usage;
