@@ -738,6 +738,33 @@ mod tests {
         assert!(!r.confirmable);
     }
 
+    /// I-02 with C-01: a daemon descendant that waited at the start barrier
+    /// and still has no mark is unverified where no terminal proof exists.
+    #[test]
+    fn an_unmarked_child_after_the_start_barrier_is_unverified_without_a_terminal_proof() {
+        let mut t = terminal();
+        t.add(70, 20, "/usr/local/bin/raptor", 700, false, 70);
+        t.add(71, 70, "/usr/bin/git", 710, false, 70);
+        for proof in [true, false] {
+            let marks = ExecutorMarks::default();
+            let r = std::thread::scope(|s| {
+                let pending = marks.begin_spawn();
+                s.spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                    drop(pending);
+                });
+                resolve_on(&t, 71, 710, Some(&marks), proof)
+            });
+            if proof {
+                let r = r.unwrap();
+                assert_eq!(r.who, Who::unattributed());
+                assert!(!r.confirmable);
+            } else {
+                assert_eq!(r, Err(Unverified));
+            }
+        }
+    }
+
     /// Q34: no path of the resolution yields a "human".
     #[test]
     fn never_human() {
