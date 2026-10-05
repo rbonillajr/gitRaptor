@@ -25,7 +25,7 @@ pub use event::{Event, Timings};
 pub use untrusted::Untrusted;
 
 /// Version of the engine API contract (semantic, for humans).
-pub const API_VERSION: &str = "2.0.0";
+pub const API_VERSION: &str = "2.1.0";
 
 /// Wire protocol version negotiated in the handshake. Client and daemon are
 /// compatible only when they speak the same version; a newer client replaces

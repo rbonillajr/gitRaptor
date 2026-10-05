@@ -14,6 +14,8 @@ pub const ENGINE_SNAPSHOT: &str = "engine.snapshot";
 /// Opens a subscription to the event stream.
 pub const EVENTS_SUBSCRIBE: &str = "events.subscribe";
 pub const EVENTS_UNSUBSCRIBE: &str = "events.unsubscribe";
+/// Reads the history of Git events of one repo (US-GRP-002, ADR-GRP-013 § 6).
+pub const EVENTS_HISTORY: &str = "events.history";
 /// Reads the append-only audit of reserved commands (ADR-GRP-013 § 1).
 pub const AUDIT_LIST: &str = "audit.list";
 /// Orderly stop of the daemon (reserved, SEC-13).
@@ -113,6 +115,9 @@ pub const METHODS: &[MethodSpec] = &[
     method(ENGINE_SNAPSHOT, false, true),
     method(EVENTS_SUBSCRIBE, false, true),
     method(EVENTS_UNSUBSCRIBE, false, true),
+    // Carries paths: not offered to `raptor-mcp` until F-001-05 defines its
+    // projection (SEC-12).
+    method(EVENTS_HISTORY, false, false),
     method(AUDIT_LIST, false, false),
     method(DAEMON_STOP, true, false),
     // Not reserved when the caller is the installed binary (`raptor` or
