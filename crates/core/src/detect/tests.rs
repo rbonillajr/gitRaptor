@@ -342,7 +342,7 @@ fn s3_with_a_git_outside_every_session_is_ambiguous() {
 }
 
 #[test]
-fn s3_counts_the_daemons_own_git_and_unreadable_ones_as_foreign() {
+fn s3_counts_the_daemons_own_git_and_exiting_ones_of_the_repo_as_foreign() {
     let rig = Rig::new();
     rig.claude(20, 2_000, "/wt/feat-login");
     rig.scan();
@@ -357,9 +357,35 @@ fn s3_counts_the_daemons_own_git_and_unreadable_ones_as_foreign() {
     rig.claude(20, 2_000, "/wt/feat-login");
     rig.scan();
     git(&rig, 31, 20, Some("/wt/feat-login"));
-    git(&rig, 51, 10, None);
+    // An exiting `git` (folder unreadable) launched by the developer's
+    // shell in the worktree.
+    rig.table
+        .add(60, 10, 1_500, "/bin/zsh", Some("/wt/feat-login"));
+    git(&rig, 51, 60, None);
     rig.detector.sample_now("r", 1_000);
     assert_eq!(rig.evidence("/wt/feat-login", 1_000), S3Outcome::Ambiguous);
+    let d = rig.detector.diagnostics();
+    assert_eq!((d.cwd_unreadable, d.placed_by_ancestor), (1, 1));
+}
+
+/// An exiting `git` launched from outside the repo (another repo of the
+/// machine, or an editor whose folder is elsewhere) does not hide the
+/// session's `git`; nor does an exiting `git` of the session itself.
+#[test]
+fn s3_ignores_exiting_gits_launched_outside_the_repo() {
+    let rig = Rig::new();
+    rig.claude(20, 2_000, "/wt/feat-login");
+    rig.scan();
+    git(&rig, 31, 20, Some("/wt/feat-login"));
+    git(&rig, 32, 20, None);
+    git(&rig, 51, 10, None);
+    rig.table.add(70, 1, 500, "/Applications/Kraken", None);
+    git(&rig, 52, 70, None);
+    rig.detector.sample_now("r", 1_000);
+    assert!(matches!(
+        rig.evidence("/wt/feat-login", 1_000),
+        S3Outcome::Attributed(_)
+    ));
 }
 
 #[test]
