@@ -17,12 +17,16 @@ El contenedor de `xplat/run-linux.sh` cubre la suite de Rust, `repo_intact` con 
 | Servicio de usuario `systemd --user` (autoarranque del daemon, reinicio ante fallo, `PATH` mínimo) | El contenedor no arranca systemd ni una sesión de usuario con `loginctl` | ADR-GRP-005, TS-GRP-003 |
 | polkit: `CheckAuthorization` con interacción y un agente de autenticación gráfico | No hay bus de sistema, ni `polkitd`, ni sesión gráfica con agente | ADR-GRD-008, SPIKE-GRD-002 |
 | Agotamiento de `fs.inotify.max_user_watches`, `IN_Q_OVERFLOW` y modo degradado | `max_user_watches` es un sysctl del kernel de la VM de Docker Desktop, compartido con todo lo demás; bajarlo desde un contenedor exige `--privileged` y afecta al resto | ADR-GRP-010, SPIKE-GRP-002 |
+| Tiempos de frescura del observador | El contenedor comparte CPU y planificador con Docker Desktop; sus tiempos no representan una máquina Linux | ADR-GRP-011, INF-GRP-002 |
+| Terminales y editores reales (TUI, abrir en editor) | No hay sesión gráfica ni emuladores de terminal | ADR-CKP-003, US-CKP-013 |
+
+Lo de Windows no va en VM: se valida en la máquina Windows real por SSH, cuya receta está en [`docs/architecture/xplat-pendientes.md`](../../docs/architecture/xplat-pendientes.md#máquina-windows-real).
 
 ## Elección
 
-> **Decisión del orquestador (2026-10-04), validada por Arquitecto:** dos VMs con papeles distintos, ambas Ubuntu 24.04 arm64 en este Mac (Apple Silicon).
+> **Decisión del orquestador (2026-10-04), validada por Arquitecto** (ajustes incorporados: sección de tiempos de frescura como referencia aproximada y enlace a la receta de Windows): dos VMs con papeles distintos, ambas Ubuntu 24.04 arm64 en este Mac (Apple Silicon).
 >
-> - **Lima** (sin interfaz, scriptable) para `systemd --user` y `max_user_watches`. Se crea y se destruye con un comando, y su kernel es solo suyo, así que se pueden bajar los límites de inotify sin tocar Docker.
+> - **Lima** (sin interfaz, scriptable) para `systemd --user`, `max_user_watches` y los tiempos de frescura. Se crea y se destruye con un comando, y su kernel es solo suyo, así que se pueden bajar los límites de inotify sin tocar Docker.
 > - **UTM con Ubuntu Desktop** para polkit, que necesita una sesión gráfica real con su agente de autenticación (GNOME Shell lo trae).
 
 Las dos se clonan el repo dentro de la VM, igual que el contenedor: **nunca** se trabaja sobre el directorio del Mac montado (inotify no ve los cambios hechos desde el host y los permisos no son los reales).
@@ -72,6 +76,10 @@ tmp=$(mktemp -d) && cd "$tmp" && git init -q r && cd r && mkdir -p $(seq -f 'd%g
 ```
 
 Con el daemon observando ese repo hay que ver: el aviso de límite estimado antes de registrar los watches, el modo degradado de **ese** repo sin que caigan los demás y la recuperación al subir el límite (`sudo sysctl fs.inotify.max_user_watches=65536`). Para `IN_Q_OVERFLOW`, bajar `fs.inotify.max_queued_events` (por ejemplo a 64) y generar ráfagas de escrituras. Al terminar, `sudo sysctl --system` restaura los valores.
+
+### Tiempos de frescura (ADR-GRP-011, INF-GRP-002)
+
+Se corre el banco de frescura de INF-GRP-002 dentro de Lima, con la VM sin otra carga, y se anota el p95 junto con CPU, memoria y versión del kernel. **Es una referencia aproximada**: la VM comparte el Mac con todo lo demás, así que un p95 por encima del umbral de NFR-04 (300 ms) se investiga, pero no se da por fallo hasta repetirlo en una máquina Linux física o en el runner `ubuntu-latest`. La calibración de `timer_slack` queda igual: se mide aquí y se confirma en hardware real.
 
 ### Cerrar
 
