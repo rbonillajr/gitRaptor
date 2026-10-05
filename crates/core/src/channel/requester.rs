@@ -707,6 +707,11 @@ mod tests {
         let r = resolve_on(&t, 31, 310, None, false).unwrap();
         assert_eq!(r.who, Who::unattributed());
         assert!(!r.confirmable);
+        // Refused for the platform, not for a broken chain.
+        assert_eq!(
+            refusal_on(&t, 31, 310, false),
+            Some(RefusalReason::Unsupported)
+        );
         // `claude.exe` under the desktop is the agent.
         t.add(40, 30, "C:/Users/u/.local/bin/claude.exe", 400, false, 0);
         t.add(41, 40, "C:/Program Files/Git/bin/bash.exe", 410, false, 0);
