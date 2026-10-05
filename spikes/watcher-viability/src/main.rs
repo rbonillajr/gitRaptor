@@ -122,6 +122,7 @@ fn main() -> Result<()> {
         ("ahead_behind", bench::ahead_behind),
         ("timer", bench::timer),
         ("handles", bench::handles),
+        ("stream_isolation", bench::stream_isolation),
     ];
     let mut results = serde_json::Map::new();
     results.insert("environment".into(), environment());
