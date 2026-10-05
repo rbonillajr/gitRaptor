@@ -161,7 +161,7 @@ jobs:
           name="raptor-$VERSION-$TARGET"
           mkdir -p "stage/$name"
           cp "target/$TARGET/release/raptor$ext" "target/$TARGET/release/raptor-mcp$ext" "stage/$name/"
-          cp README.md "stage/$name/"
+          cp README.md LICENSE "stage/$name/"
           echo "name=$name" >> "$GITHUB_OUTPUT"
           echo "ext=$ext" >> "$GITHUB_OUTPUT"
       # Only `raptor --version`: it exits before touching the profile. `raptor-mcp` would start
