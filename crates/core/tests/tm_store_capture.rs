@@ -635,3 +635,26 @@ fn bad_requests_are_rejected_before_reading() {
     let out = env.capture_at(level_obs(), 2, Some(hint(1, 2, &["../../etc/passwd"])));
     assert_eq!(out.detection[0].1, Detection::Full("invalid-hint"));
 }
+
+#[test]
+fn changing_the_credentials_option_forces_a_full_detection() {
+    let env = Env::new(Fixture::with_commit(&git()));
+    write(&env.f.repo, "deploy.pem", b"fake key material\n");
+    let first = env.capture_at(SnapshotLevel::GuaranteedPrior, 1, None);
+    assert!(env.file(&first.snapshot_id, "deploy.pem").is_none());
+    // Same scope, a continuous hint that does not name the file: only the
+    // option changed, and the capture must not trust its cache.
+    let mut req = env.request(SnapshotLevel::GuaranteedPrior, Some(hint(1, 2, &[])));
+    req.engine_mark = Some(2);
+    req.include_credentials = true;
+    let second = env.store.capture(&env.oplog, &req).unwrap();
+    assert_eq!(
+        second.detection,
+        vec![("main".into(), Detection::Full("credential-option-changed"))]
+    );
+    assert_eq!(
+        env.file(&second.snapshot_id, "deploy.pem").unwrap(),
+        b"fake key material\n"
+    );
+    assert!(!second.exclusions.iter().any(|e| e.reason == "credential"));
+}
