@@ -199,8 +199,18 @@ pub fn resolve(
             });
         }
         // A descendant of the daemon without a mark: nothing above the
-        // daemon speaks for it.
+        // daemon speaks for it. If a child is being launched, the caller may
+        // be its hook before the mark: wait for the registration (I-02) and
+        // resolve again; past the wait, unverified (fail-closed).
         if checks.daemon == Some((current.pid, current.start_us)) {
+            if let Some(m) = marks
+                && m.spawn_pending()
+            {
+                if !m.wait_registered(super::marks::REGISTRATION_WAIT) {
+                    return Err(Unverified);
+                }
+                return resolve_after_barrier(peer, checks, m);
+            }
             return Ok(unattributed(ResolvedVia::None, false));
         }
         match class(&current, checks) {
@@ -249,6 +259,39 @@ pub fn resolve(
     // The rest of the reserved checks: terminal, session leader, identity.
     confirmable &= confirm_platform() && check_reserved(peer, checks).refused.is_none();
     Ok(unattributed(ResolvedVia::None, confirmable))
+}
+
+/// Second walk, once the pending registration completed: a mark found now
+/// wins; otherwise the caller stays an unmarked descendant of the daemon.
+fn resolve_after_barrier(
+    peer: AcceptedPeer,
+    checks: &Checks<'_>,
+    marks: &super::marks::ExecutorMarks,
+) -> Result<Resolution, Unverified> {
+    let mut current = checks.procs.read(peer.pid).map_err(|_| Unverified)?;
+    for _ in 0..MAX_DEPTH {
+        if let Some(marked) = marks.lookup(&current) {
+            return Ok(Resolution {
+                who: marked.who,
+                via: ResolvedVia::Executor,
+                executor_operation: Some(marked.operation_id),
+                confirmable: false,
+            });
+        }
+        if checks.daemon == Some((current.pid, current.start_us)) {
+            break;
+        }
+        match parent(&current, checks) {
+            Some(p) => current = p,
+            None => break,
+        }
+    }
+    Ok(Resolution {
+        who: Who::unattributed(),
+        via: ResolvedVia::None,
+        executor_operation: None,
+        confirmable: false,
+    })
 }
 
 /// Windows has no confirmation of another actor's work (TQ-14 → a).

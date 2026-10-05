@@ -106,12 +106,36 @@ impl Default for ChannelConfig {
     }
 }
 
-/// What protected operations need from the daemon (TS-TMC-004).
+/// What protected operations need from the daemon (TS-TMC-004) and the
+/// executor of catalog operations (TS-CKP-002).
 #[derive(Clone)]
 pub struct ProtectedWiring {
     pub backend: std::sync::Arc<dyn crate::timemachine::protected::ProtectedBackend>,
+    pub executor: std::sync::Arc<crate::executor::Executor>,
     /// Deadline of the prior snapshot.
     pub prior_deadline: Duration,
+    /// Tests only: fixes the layer of every caller that does not descend
+    /// from the executor, because in-process clients descend from the daemon
+    /// and never pass the reserved checks. Always `None` in production
+    /// ([`Self::new`]).
+    #[doc(hidden)]
+    pub test_layer_override: Option<gitraptor_api::catalog::Layer>,
+}
+
+impl ProtectedWiring {
+    /// The production wiring: the daemon fixes every layer.
+    pub fn new(
+        backend: std::sync::Arc<dyn crate::timemachine::protected::ProtectedBackend>,
+        gate: std::sync::Arc<dyn crate::executor::GuardrailsGate>,
+        prior_deadline: Duration,
+    ) -> Self {
+        Self {
+            backend,
+            executor: std::sync::Arc::new(crate::executor::Executor::new(gate)),
+            prior_deadline,
+            test_layer_override: None,
+        }
+    }
 }
 
 impl std::fmt::Debug for ProtectedWiring {

@@ -55,6 +55,10 @@ pub mod code {
     /// A repo command was rejected for what it names (not who asks):
     /// `data` is a `RepoRejectedData` (US-GRP-001).
     pub const REPO_REJECTED: i64 = -32013;
+    /// A plan of the catalog was refused before anything ran: no oplog
+    /// entry and no change. `data` is a `catalog::RejectedData`
+    /// (ADR-CKP-002 § 2, TS-CKP-002).
+    pub const OPERATION_REJECTED: i64 = -32014;
 }
 
 /// Request id: a number or a short string.

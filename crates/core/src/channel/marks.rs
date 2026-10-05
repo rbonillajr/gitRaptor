@@ -10,10 +10,20 @@
 //! executor: attributed to the operation's requester and refused for
 //! reserved commands.
 //!
+//! Start barrier (I-02, ADR-CKP-002 § 4), in safe Rust: before a step launches a child it opens
+//! a *pending spawn*, closed once the child is marked. A caller that descends from the daemon
+//! without a mark while a spawn is pending waits for the registration, up to
+//! [`REGISTRATION_WAIT`]; past it, its identity counts as unverified and it is refused. So a hook
+//! that connects the instant `git` starts is attributed to the plan's requester, never resolved
+//! as "unattributed" in the window before the mark. (A suspended spawn needs `unsafe` or
+//! `posix_spawn`, forbidden by the workspace lints: Pendiente in ADR-CKP-002.)
+//!
 //! Accepted residual risk (ADR-GRP-005 § 6): a grandchild that changes its
 //! process group and detaches from the tree escapes the mark.
 
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use super::peer::ProcInfo;
 use super::requester::Who;
@@ -42,6 +52,23 @@ pub struct MarkedBy {
 #[derive(Debug, Default)]
 pub struct ExecutorMarks {
     marks: Mutex<Vec<Mark>>,
+    /// Children being launched and not marked yet.
+    pending: AtomicUsize,
+}
+
+/// Longest wait of a caller for a pending registration.
+pub const REGISTRATION_WAIT: Duration = Duration::from_secs(2);
+
+/// A spawn in flight: closed when dropped, after the child is marked or the spawn failed.
+#[derive(Debug)]
+pub struct PendingSpawn<'a> {
+    marks: &'a ExecutorMarks,
+}
+
+impl Drop for PendingSpawn<'_> {
+    fn drop(&mut self) {
+        self.marks.pending.fetch_sub(1, Ordering::SeqCst);
+    }
 }
 
 impl ExecutorMarks {
@@ -96,6 +123,29 @@ impl ExecutorMarks {
     pub fn is_empty(&self) -> bool {
         self.lock().is_empty()
     }
+
+    /// Opens a pending spawn (start barrier, I-02).
+    pub fn begin_spawn(&self) -> PendingSpawn<'_> {
+        self.pending.fetch_add(1, Ordering::SeqCst);
+        PendingSpawn { marks: self }
+    }
+
+    /// Whether a child is being launched and not marked yet.
+    pub fn spawn_pending(&self) -> bool {
+        self.pending.load(Ordering::SeqCst) > 0
+    }
+
+    /// Waits until no spawn is pending, up to `timeout`. `false` if one still is.
+    pub fn wait_registered(&self, timeout: Duration) -> bool {
+        let deadline = Instant::now() + timeout;
+        while self.spawn_pending() {
+            if Instant::now() >= deadline {
+                return false;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        true
+    }
 }
 
 /// Removes the marks of an operation when it closes.
@@ -116,6 +166,16 @@ impl Drop for MarkGuard {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_pending_spawn_holds_the_barrier_until_dropped() {
+        let marks = ExecutorMarks::default();
+        assert!(marks.wait_registered(Duration::ZERO));
+        let pending = marks.begin_spawn();
+        assert!(!marks.wait_registered(Duration::from_millis(20)));
+        drop(pending);
+        assert!(marks.wait_registered(Duration::ZERO));
+    }
     use gitraptor_api::Actor;
 
     fn proc(pid: u32, start: u64, pgid: u32) -> ProcInfo {
