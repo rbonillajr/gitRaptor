@@ -17,6 +17,14 @@
 //!    live agent of the user descends from it, the caller is that agent;
 //!    with any live agent around, the caller cannot confirm.
 //! 6. Otherwise, unattributed.
+//!
+//! Where nothing proves the caller is the developer at a terminal (Windows,
+//! TQ-14), "unattributed" is the most a caller can be, and it may still undo
+//! unattributed work without a confirmation. So there it also has to be
+//! verified: an ancestry that breaks (a gone or reused parent), crosses an
+//! interpreter, reaches the daemon unmarked or meets a multiplexer with a
+//! live agent is refused as unverified instead (security review of
+//! 2026-10-05, C-01).
 
 use gitraptor_api::messages::RefusalReason;
 use gitraptor_api::timemachine::ResolvedVia;
@@ -119,7 +127,7 @@ fn parent(current: &ProcInfo, checks: &Checks<'_>) -> Option<ProcInfo> {
 /// Whether the walk from `info` ended cleanly (root or another user), as
 /// opposed to a reused pid or an unreadable process of this user.
 fn ended_cleanly(current: &ProcInfo, checks: &Checks<'_>) -> bool {
-    if current.pid <= 1 || current.ppid == 0 {
+    if current.pid <= 1 || current.ppid == 0 || checks.procs.is_session_root(current) {
         return true;
     }
     match checks.procs.read(current.ppid) {
@@ -184,6 +192,15 @@ pub fn resolve(
         executor_operation: None,
         confirmable,
     };
+    // An unattributed caller the ancestry could not vouch for: where no
+    // terminal proof exists, refused instead (C-01).
+    let verified = |vouched: bool, r: Resolution| {
+        if vouched || checks.terminal_proof {
+            Ok(r)
+        } else {
+            Err(Unverified)
+        }
+    };
 
     let mut current = caller.clone();
     let mut server: Option<ProcInfo> = None;
@@ -211,7 +228,7 @@ pub fn resolve(
                 }
                 return resolve_after_barrier(peer, checks, m);
             }
-            return Ok(unattributed(ResolvedVia::None, false));
+            return verified(false, unattributed(ResolvedVia::None, false));
         }
         match class(&current, checks) {
             ExeClass::ClaudeCode => {
@@ -241,7 +258,7 @@ pub fn resolve(
     let mut confirmable = clean && !interpreter;
     if let Some(server) = server {
         match presence(&server, checks) {
-            None => return Ok(unattributed(ResolvedVia::Multiplexer, false)),
+            None => return verified(false, unattributed(ResolvedVia::Multiplexer, false)),
             Some(p) if p.under_server.len() == 1 => {
                 return Ok(Resolution {
                     who: Who::claude(&p.under_server[0]),
@@ -251,18 +268,24 @@ pub fn resolve(
                 });
             }
             Some(p) if p.under_server.len() > 1 => {
-                return Ok(unattributed(ResolvedVia::Multiplexer, false));
+                return verified(false, unattributed(ResolvedVia::Multiplexer, false));
             }
             Some(p) => confirmable &= !p.any_agent,
         }
     }
+    let resolution = |confirmable| unattributed(ResolvedVia::None, confirmable);
+    if !confirmable {
+        return verified(false, resolution(false));
+    }
     // The rest of the reserved checks: terminal, session leader, identity.
-    confirmable &= confirm_platform() && check_reserved(peer, checks).refused.is_none();
-    Ok(unattributed(ResolvedVia::None, confirmable))
+    // Without a terminal proof they refuse as `Unsupported` (TQ-14).
+    confirmable &= check_reserved(peer, checks).refused.is_none();
+    Ok(resolution(confirmable))
 }
 
 /// Second walk, once the pending registration completed: a mark found now
-/// wins; otherwise the caller stays an unmarked descendant of the daemon.
+/// wins; otherwise the caller stays an unmarked descendant of the daemon,
+/// unverified where no terminal proof exists (C-01).
 fn resolve_after_barrier(
     peer: AcceptedPeer,
     checks: &Checks<'_>,
@@ -286,6 +309,9 @@ fn resolve_after_barrier(
             None => break,
         }
     }
+    if !checks.terminal_proof {
+        return Err(Unverified);
+    }
     Ok(Resolution {
         who: Who::unattributed(),
         via: ResolvedVia::None,
@@ -294,20 +320,12 @@ fn resolve_after_barrier(
     })
 }
 
-/// Windows has no confirmation of another actor's work (TQ-14 → a).
-fn confirm_platform() -> bool {
-    !cfg!(windows)
-}
-
 /// Why a caller may not confirm, for the challenge (ADR-TMC-005 § 3).
 pub fn confirmation_refusal(
     peer: AcceptedPeer,
     checks: &Checks<'_>,
     marks: Option<&super::marks::ExecutorMarks>,
 ) -> Option<RefusalReason> {
-    if !confirm_platform() {
-        return Some(RefusalReason::Unsupported);
-    }
     let reserved = check_reserved(peer, checks);
     if let Some(reason) = reserved.refused {
         return Some(reason);
@@ -340,6 +358,8 @@ mod tests {
         procs: HashMap<u32, ProcInfo>,
         denied: HashMap<u32, bool>,
         no_list: bool,
+        /// Desktop roots (Windows `explorer.exe`).
+        roots: Vec<u32>,
     }
 
     impl Tree {
@@ -373,6 +393,9 @@ mod tests {
         fn pids_of(&self, _uid: u32) -> Option<Vec<u32>> {
             (!self.no_list).then(|| self.procs.keys().copied().collect())
         }
+        fn is_session_root(&self, info: &ProcInfo) -> bool {
+            self.roots.contains(&info.pid)
+        }
     }
 
     /// Terminal.app: launchd → login (root, leader 10) → zsh(20) → raptor(30).
@@ -393,6 +416,17 @@ mod tests {
     }
 
     fn run(t: &Tree, pid: u32, start: u64, marks: Option<&ExecutorMarks>) -> Resolution {
+        resolve_on(t, pid, start, marks, true).unwrap()
+    }
+
+    /// Resolves with or without a terminal proof (Unix or Windows).
+    fn resolve_on(
+        t: &Tree,
+        pid: u32,
+        start: u64,
+        marks: Option<&ExecutorMarks>,
+        terminal_proof: bool,
+    ) -> Result<Resolution, Unverified> {
         let matcher = AgentMatcher::default();
         let checks = Checks {
             uid: UID,
@@ -400,11 +434,16 @@ mod tests {
             matcher: &matcher,
             daemon: Some(DAEMON),
             marks,
+            terminal_proof,
         };
-        resolve(peer(pid, start), &checks, marks).unwrap()
+        resolve(peer(pid, start), &checks, marks)
     }
 
     fn refusal(t: &Tree, pid: u32, start: u64) -> Option<RefusalReason> {
+        refusal_on(t, pid, start, true)
+    }
+
+    fn refusal_on(t: &Tree, pid: u32, start: u64, terminal_proof: bool) -> Option<RefusalReason> {
         let matcher = AgentMatcher::default();
         let checks = Checks {
             uid: UID,
@@ -412,6 +451,7 @@ mod tests {
             matcher: &matcher,
             daemon: Some(DAEMON),
             marks: None,
+            terminal_proof,
         };
         confirmation_refusal(peer(pid, start), &checks, None)
     }
@@ -532,6 +572,7 @@ mod tests {
             matcher: &matcher,
             daemon: Some(DAEMON),
             marks: None,
+            terminal_proof: true,
         };
         assert_eq!(resolve(peer(30, 299), &checks, None), Err(Unverified));
     }
@@ -576,6 +617,7 @@ mod tests {
             matcher: &matcher,
             daemon: Some(DAEMON),
             marks: Some(&marks),
+            terminal_proof: true,
         };
         assert_eq!(
             check_reserved(peer(74, 740), &checks).refused,
@@ -587,6 +629,110 @@ mod tests {
         );
     }
 
+    /// Without a terminal proof (Windows, TQ-14) a verified caller is
+    /// unattributed but never confirms, and the refusal says why.
+    #[test]
+    fn without_a_terminal_proof_nobody_confirms() {
+        let r = resolve_on(&terminal(), 30, 300, None, false).unwrap();
+        assert_eq!(r.who, Who::unattributed());
+        assert!(!r.confirmable);
+        assert_eq!(
+            refusal_on(&terminal(), 30, 300, false),
+            Some(RefusalReason::Unsupported)
+        );
+        // An agent is still that agent, and the refusal names the ancestry.
+        let mut t = terminal();
+        t.add(25, 20, CLAUDE, 250, true, 10);
+        t.add(43, 25, "/usr/local/bin/raptor", 430, false, 43);
+        let r = resolve_on(&t, 43, 430, None, false).unwrap();
+        assert!(r.who.is_agent());
+        assert_eq!(r.via, ResolvedVia::Ancestry);
+        assert_eq!(
+            refusal_on(&t, 43, 430, false),
+            Some(RefusalReason::AgentAncestry)
+        );
+    }
+
+    /// C-01: without a terminal proof an ancestry that cannot vouch for the
+    /// caller is refused, never a plain "unattributed" that could undo the
+    /// developer's work.
+    #[test]
+    fn without_a_terminal_proof_an_unverifiable_caller_is_refused() {
+        // A reused pid (a parent younger than its child).
+        let mut t = terminal();
+        t.add(20, 10, "/bin/zsh", 900, true, 10);
+        assert_eq!(resolve_on(&t, 30, 300, None, false), Err(Unverified));
+        // A gone parent: an orphan, such as a hook whose marked parent ended.
+        let mut t = terminal();
+        t.add(31, 29, "/usr/local/bin/raptor", 310, false, 10);
+        assert_eq!(resolve_on(&t, 31, 310, None, false), Err(Unverified));
+        assert!(!run(&t, 31, 310, None).confirmable, "Unix: unconfirmable");
+        // An interpreter that may host an agent (npm Claude Code is `node`).
+        let mut t = terminal();
+        t.add(26, 20, "C:/Program Files/nodejs/node.exe", 260, true, 10);
+        t.add(32, 26, "/usr/local/bin/raptor", 320, true, 10);
+        assert_eq!(resolve_on(&t, 32, 320, None, false), Err(Unverified));
+        // An unmarked descendant of the daemon.
+        let mut t = terminal();
+        t.add(70, 20, "/usr/local/bin/raptor", 700, false, 70);
+        t.add(71, 70, "/usr/bin/git", 710, false, 70);
+        assert_eq!(resolve_on(&t, 71, 710, None, false), Err(Unverified));
+        // A multiplexer while an agent is alive.
+        let mut t = terminal();
+        t.add(1, 0, "/sbin/launchd", 1, false, 1);
+        t.add(25, 20, CLAUDE, 250, true, 10);
+        t.add(80, 1, "/opt/homebrew/bin/tmux", 800, false, 80);
+        t.add(90, 80, "/bin/zsh", 900, true, 90);
+        t.add(91, 90, "/usr/local/bin/raptor", 910, true, 90);
+        assert_eq!(resolve_on(&t, 91, 910, None, false), Err(Unverified));
+    }
+
+    /// Windows desktop: `explorer.exe`'s parent (`userinit`) has exited, so
+    /// the walk ends cleanly only at the desktop root.
+    #[test]
+    fn the_desktop_root_ends_the_walk_cleanly() {
+        let mut t = Tree::default();
+        t.add(20, 8, "C:/Windows/explorer.exe", 200, false, 0);
+        t.add(
+            30,
+            20,
+            "C:/Program Files/PowerShell/7/pwsh.exe",
+            300,
+            false,
+            0,
+        );
+        t.add(31, 30, "C:/Users/u/.cargo/bin/raptor.exe", 310, false, 0);
+        assert_eq!(resolve_on(&t, 31, 310, None, false), Err(Unverified));
+        t.roots.push(20);
+        let r = resolve_on(&t, 31, 310, None, false).unwrap();
+        assert_eq!(r.who, Who::unattributed());
+        assert!(!r.confirmable);
+        // `claude.exe` under the desktop is the agent.
+        t.add(40, 30, "C:/Users/u/.local/bin/claude.exe", 400, false, 0);
+        t.add(41, 40, "C:/Program Files/Git/bin/bash.exe", 410, false, 0);
+        t.add(42, 41, "C:/Users/u/.cargo/bin/raptor.exe", 420, false, 0);
+        let r = resolve_on(&t, 42, 420, None, false).unwrap();
+        assert!(r.who.is_agent());
+        assert_eq!(r.who.requester.session_id(), Some("40:400"));
+    }
+
+    /// DEP-MCP-3 without process groups: the marked child itself acts for
+    /// the requester even without a terminal proof.
+    #[test]
+    fn without_a_terminal_proof_a_marked_child_acts_for_the_requester() {
+        let mut t = terminal();
+        t.add(25, 20, CLAUDE, 250, true, 10);
+        t.add(73, 20, "C:/Program Files/Git/cmd/git.exe", 730, false, 0);
+        let marks = Arc::new(ExecutorMarks::default());
+        let requester = Who::claude(&t.procs[&25]);
+        let _guard = marks.open("op-9", &requester, 720);
+        marks.add_child("op-9", 73, 730, 0);
+        let r = resolve_on(&t, 73, 730, Some(&marks), false).unwrap();
+        assert_eq!(r.who, requester);
+        assert_eq!(r.via, ResolvedVia::Executor);
+        assert!(!r.confirmable);
+    }
+
     /// Q34: no path of the resolution yields a "human".
     #[test]
     fn never_human() {
@@ -595,5 +741,147 @@ mod tests {
         ))
         .unwrap();
         assert!(!schema.to_lowercase().contains("human"));
+    }
+}
+
+/// Real processes on Windows: a copy of this test binary named `claude.exe`
+/// starts a helper and keeps it alive; the helper resolves to that agent.
+#[cfg(all(test, windows))]
+mod real_processes {
+    use super::*;
+    use crate::channel::AgentMatcher;
+    use crate::channel::authz::TERMINAL_PROOF;
+    use crate::channel::peer::{ProcSource, SystemProcs, current_uid};
+    use std::io::{BufRead, BufReader, Read, Write};
+    use std::path::Path;
+    use std::process::{Child, Command, Stdio};
+
+    const MODE: &str = "GITRAPTOR_TEST_PROCESS_MODE";
+    const ENTRY: &str = "channel::requester::real_processes::entry";
+
+    /// Not a test: the body of the copies. `spawn` starts a `helper.exe`
+    /// child, prints its pid and waits for stdin to close; `wait` only waits.
+    #[test]
+    fn entry() {
+        match std::env::var(MODE).as_deref() {
+            Ok("spawn") => {
+                let helper = std::env::current_exe()
+                    .unwrap()
+                    .with_file_name("helper.exe");
+                let mut child = Command::new(helper)
+                    .args(["--exact", ENTRY, "--nocapture"])
+                    .env(MODE, "wait")
+                    .stdin(Stdio::inherit())
+                    .stdout(Stdio::null())
+                    .spawn()
+                    .unwrap();
+                println!("CHILD={}", child.id());
+                std::io::stdout().flush().unwrap();
+                let _ = std::io::stdin().read_to_end(&mut Vec::new());
+                let _ = child.wait();
+            }
+            Ok("wait") => {
+                let _ = std::io::stdin().read_to_end(&mut Vec::new());
+            }
+            _ => {}
+        }
+    }
+
+    /// Copies of this binary under `names` in a temp folder.
+    fn copies(dir: &Path, names: &[&str]) {
+        let me = std::env::current_exe().unwrap();
+        for name in names {
+            std::fs::copy(&me, dir.join(name)).unwrap();
+        }
+    }
+
+    /// Starts `parent` in `spawn` mode and returns it with its child's pid.
+    fn launch(parent: &Path) -> (Child, u32) {
+        let mut proc = Command::new(parent)
+            .args(["--exact", ENTRY, "--nocapture"])
+            .env(MODE, "spawn")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let stdout = proc.stdout.take().unwrap();
+        let pid = BufReader::new(stdout)
+            .lines()
+            .map_while(Result::ok)
+            .find_map(|l| l.strip_prefix("CHILD=").and_then(|p| p.trim().parse().ok()))
+            .expect("the child's pid");
+        (proc, pid)
+    }
+
+    fn stop(mut proc: Child) {
+        drop(proc.stdin.take());
+        let _ = proc.wait();
+    }
+
+    fn resolve_pid(pid: u32) -> (AcceptedPeer, Result<Resolution, Unverified>) {
+        let info = SystemProcs.read(pid).unwrap();
+        let peer = AcceptedPeer {
+            pid,
+            start_us: info.start_us,
+            accepted_us: info.start_us + 1,
+        };
+        let matcher = AgentMatcher::default();
+        let checks = Checks {
+            uid: current_uid(),
+            procs: &SystemProcs,
+            matcher: &matcher,
+            daemon: None,
+            marks: None,
+            terminal_proof: TERMINAL_PROOF,
+        };
+        (peer, resolve(peer, &checks, None))
+    }
+
+    #[test]
+    fn a_client_under_a_claude_process_is_that_agent() {
+        let dir = tempfile::tempdir().unwrap();
+        copies(dir.path(), &["claude.exe", "helper.exe"]);
+        let (claude, child) = launch(&dir.path().join("claude.exe"));
+        let agent = SystemProcs.read(claude.id()).unwrap();
+        let (peer, r) = resolve_pid(child);
+        let r = r.unwrap();
+        assert!(r.who.is_agent(), "{r:?}");
+        assert_eq!(r.via, ResolvedVia::Ancestry);
+        let session = format!("{}:{}", agent.pid, agent.start_us);
+        assert_eq!(r.who.requester.session_id(), Some(session.as_str()));
+        assert!(!r.confirmable);
+        let matcher = AgentMatcher::default();
+        let checks = Checks {
+            uid: current_uid(),
+            procs: &SystemProcs,
+            matcher: &matcher,
+            daemon: None,
+            marks: None,
+            terminal_proof: TERMINAL_PROOF,
+        };
+        assert_eq!(
+            confirmation_refusal(peer, &checks, None),
+            Some(RefusalReason::AgentAncestry)
+        );
+        stop(claude);
+        // Gone: the identity can no longer be verified.
+        assert_eq!(resolve(peer, &checks, None), Err(Unverified));
+    }
+
+    /// The same tree without `claude.exe` is never an agent, and without a
+    /// terminal proof it never confirms.
+    #[test]
+    fn a_client_without_an_agent_is_not_one() {
+        let dir = tempfile::tempdir().unwrap();
+        copies(dir.path(), &["helper.exe"]);
+        let (parent, child) = launch(&dir.path().join("helper.exe"));
+        match resolve_pid(child).1 {
+            Ok(r) => {
+                assert_eq!(r.who, Who::unattributed());
+                assert!(!r.confirmable);
+            }
+            Err(Unverified) => {}
+        }
+        stop(parent);
     }
 }
