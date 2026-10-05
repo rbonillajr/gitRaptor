@@ -642,6 +642,80 @@ mod repo_intact {
     }
 
     #[test]
+    fn without_atomic_exchange_paths_are_reported_and_left_alone() {
+        let t = Apply::busy();
+        let target = t.snapshot();
+        change_everything(t.f());
+        let files_before = t.files();
+        let hooks = ApplyHooks {
+            simulate_no_exchange: true,
+            ..ApplyHooks::default()
+        };
+        let (_, result) = t.apply(&target, hooks);
+        let report = result.unwrap();
+        assert_eq!(report.written + report.removed, 0, "{report:?}");
+        assert!(!report.paths.is_empty());
+        assert!(
+            report
+                .paths
+                .iter()
+                .all(|p| p.issue == PathIssue::NotGuaranteed),
+            "{report:?}"
+        );
+        for path in ["a.txt", "b.txt", "new/deep/file.txt", "link"] {
+            assert!(
+                report.paths.iter().any(|p| p.path == path),
+                "{path} not reported"
+            );
+        }
+        assert_eq!(t.files(), files_before, "a path was touched");
+    }
+
+    #[test]
+    fn restoring_the_stash_keeps_every_older_entry() {
+        let t = Apply::busy();
+        let f = t.f();
+        f.write("b.txt", "first stash\n");
+        f.git(&["stash", "push", "-q", "--", "b.txt"]);
+        let first = f.git(&["rev-parse", "refs/stash"]);
+        let target = t.snapshot();
+        f.write("b.txt", "second stash\n");
+        f.git(&["stash", "push", "-q", "--", "b.txt"]);
+        let second = f.git(&["rev-parse", "refs/stash"]);
+
+        let (_, result) = t.apply(&target, ApplyHooks::default());
+        let report = result.unwrap();
+        assert!(
+            report.warnings.contains(&ApplyWarning::StashTopOnly),
+            "{report:?}"
+        );
+        assert_eq!(f.git(&["rev-parse", "refs/stash"]), first);
+        let entries = f.git(&["reflog", "show", "--format=%H", "refs/stash"]);
+        assert!(
+            entries.contains(second.trim()),
+            "the newer stash was lost: {entries}"
+        );
+        assert!(entries.contains(first.trim()));
+    }
+
+    #[test]
+    fn a_stash_absent_from_the_target_is_never_deleted() {
+        let t = Apply::busy();
+        let target = t.snapshot();
+        t.f().write("b.txt", "stashed later\n");
+        t.f().git(&["stash", "push", "-q", "--", "b.txt"]);
+        let stash = t.f().git(&["rev-parse", "refs/stash"]);
+        let (_, result) = t.apply(&target, ApplyHooks::default());
+        let report = result.unwrap();
+        assert!(
+            report.warnings.contains(&ApplyWarning::StashKept),
+            "{report:?}"
+        );
+        assert_eq!(t.f().git(&["rev-parse", "refs/stash"]), stash);
+        assert_eq!(t.f().git(&["stash", "list"]).lines().count(), 1);
+    }
+
+    #[test]
     fn hostile_names_in_the_meta_are_rejected_before_git_runs() {
         use gitraptor_git::tm_write::refs::{RefUpdate, branch_ref};
         for name in [
