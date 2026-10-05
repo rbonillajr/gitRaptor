@@ -66,8 +66,8 @@ impl Machine {
     fn from_fixture(f: Fixture) -> Self {
         // Without debug assertions `raptor` ignores GITRAPTOR_PROFILE_DIR and would use the
         // real profile (NFR-01): refuse to run.
-        assert!(
-            cfg!(debug_assertions),
+        #[cfg(not(debug_assertions))]
+        panic!(
             "build with debug assertions (CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true for --release)"
         );
         use std::os::unix::fs::PermissionsExt;
