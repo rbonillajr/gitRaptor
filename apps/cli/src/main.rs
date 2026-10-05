@@ -1,5 +1,6 @@
 mod codes;
 mod events;
+mod guard;
 mod i18n;
 mod mcp;
 mod sessions;
@@ -87,6 +88,32 @@ enum Command {
         #[command(subcommand)]
         action: McpAction,
     },
+    /// Protect a repo with GitRaptor hooks (Guardrails).
+    Guard {
+        #[command(subcommand)]
+        action: GuardAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum GuardAction {
+    /// Protect a repo: explains what is installed and asks for your permission (reserved to the
+    /// developer). Denies force-push and deleting the base branch, even with plain Git.
+    Install {
+        /// The repo's Git directory or any of its worktrees; defaults to the current folder.
+        path: Option<PathBuf>,
+        /// Grant the permission without asking.
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Show the protection status of a repo.
+    Status {
+        /// The repo's Git directory or any of its worktrees; defaults to the current folder.
+        path: Option<PathBuf>,
+        /// Print JSON instead of text.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -132,6 +159,12 @@ enum RepoAction {
 }
 
 fn main() -> ExitCode {
+    // What a Guardrails dispatcher starts: positional constants, no clap, no profile, no
+    // daemon start (ADR-GRD-001 § 2).
+    let args: Vec<std::ffi::OsString> = std::env::args_os().collect();
+    if args.get(1).is_some_and(|a| a == "hook") {
+        return guard::hook(&args[2..]);
+    }
     match Cli::parse().command {
         None => {
             println!(
@@ -158,6 +191,12 @@ fn main() -> ExitCode {
         Some(Command::Events { json, limit, all }) => events_command(json, limit, all),
         Some(Command::Sessions { json, all }) => sessions_command(json, all),
         Some(Command::Undo { json }) => undo::run(json),
+        Some(Command::Guard {
+            action: GuardAction::Install { path, yes },
+        }) => guard::install(path, yes),
+        Some(Command::Guard {
+            action: GuardAction::Status { path, json },
+        }) => guard::status(path, json),
         Some(Command::Mcp {
             action: McpAction::Install { agent },
         }) => mcp::install(&agent),
@@ -417,7 +456,7 @@ fn repo_error(command: &str, path: &Path, err: ClientError) -> ExitCode {
             let key = match reason {
                 Some(RepoRejection::NotARepo) => "repo.not-a-repo",
                 Some(RepoRejection::Untrusted) => "repo.untrusted",
-                Some(RepoRejection::UnknownRepo) => "repo.unknown",
+                Some(RepoRejection::UnknownRepo | RepoRejection::NotObserved) => "repo.unknown",
                 Some(RepoRejection::Unreadable) | None => "repo.unreadable",
             };
             t(key, &[("path", &shown(path))])

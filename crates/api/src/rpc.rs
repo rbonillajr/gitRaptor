@@ -59,6 +59,9 @@ pub mod code {
     /// entry and no change. `data` is a `catalog::RejectedData`
     /// (ADR-CKP-002 § 2, TS-CKP-002).
     pub const OPERATION_REJECTED: i64 = -32014;
+    /// The Guardrails install was refused before writing anything: `data`
+    /// is a `guard::GuardRejectedData` with the blockers (US-GRD-001).
+    pub const GUARD_REJECTED: i64 = -32015;
 }
 
 /// Every error code of the contract, so a client presents each one from
