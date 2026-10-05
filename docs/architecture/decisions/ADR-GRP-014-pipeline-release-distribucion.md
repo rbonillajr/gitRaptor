@@ -2,20 +2,20 @@
 id: ADR-GRP-014
 title: Pipeline de release y canales de distribución
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-05
 created: 2026-10-05
 updated: 2026-10-05
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
-related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-006, INF-GRP-003, INF-GRP-004, INF-GRP-002, TS-GRP-001, TS-GRP-002]
-tags: [release, distribucion, ci, firma, notarizacion, checksums, sbom, attestation, homebrew, winget, npm, instalador, nfr-06, nfr-03, nfr-11, sec-07, sec-14]
+related: [BRD-GRP-001, ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-006, INF-GRP-003, INF-GRP-004, INF-GRP-002, TS-GRP-001, TS-GRP-002]
+tags: [release, licencia, fsl, open-core, distribucion, ci, firma, notarizacion, checksums, sbom, attestation, homebrew, winget, npm, instalador, nfr-06, nfr-03, nfr-11, sec-07, sec-14]
 ---
 
 # ADR-GRP-014 — Pipeline de release y canales de distribución
 
-> **Estado**: propuesto. Decisión del orquestador (2026-10-05), validada por el Arquitecto y el PO. Falta que Rene Bonilla la acepte.
+> **Estado**: aceptado (2026-10-05). Decisión del orquestador (2026-10-05), validada por el Arquitecto y el PO. El nombre y la licencia (§ 6) son decisión de Rene Bonilla (2026-10-05, D4 y D5 del documento de negocio); el paso a `accepted` es decisión del orquestador, validada por el Arquitecto.
 
 ## Contexto
 
@@ -25,8 +25,8 @@ Hay cinco restricciones:
 
 - **NFR-03 (100 % local)**: el motor no abre la red. La descarga es del instalador, nunca del binario.
 - **Política de CI**: las acciones de GitHub van fijadas por SHA, igual que en `repo-intact.yml`.
-- **Decisión v0.3 del negocio**: GitRaptor arranca como herramienta interna, y el nombre y la licencia siguen abiertos (pregunta abierta 2). Por eso ahora **no se publica nada**.
-- **Licencia**: el workspace declara `license = "UNLICENSED"`. Homebrew, winget y npm piden licencia (NFR-11).
+- **Decisión v0.3 del negocio**: GitRaptor arranca como herramienta interna. Por eso ahora **no se publica nada**: publicar es un paso humano.
+- **Licencia**: Homebrew, winget y npm piden una licencia (NFR-11). Al proponer este ADR el workspace declaraba `license = "UNLICENSED"` y el nombre y la licencia seguían abiertos (pregunta abierta 2). Los cierra el § 6.
 - **SEC-14 y ADR-GRP-005 § 4**: el autoarranque y la petición de "versión incompatible" solo se aceptan del **binario instalado**, así que cada canal tiene que fijar una ruta canónica.
 
 ## Decisión
@@ -82,7 +82,7 @@ Hay cinco restricciones:
 
 ### 5. Canales (INF-GRP-004)
 
-`packaging/render-channels.mjs` genera los canales de una release a partir de los archivos y de `SHA256SUMS`, en cada release y como artefacto. Su **publicación** vive en `release-channels.yml`, que solo corre cuando un humano publica el borrador, la variable `RELEASE_PUBLISH_CHANNELS` vale `true`, la release no es prerelease y la licencia ya no es `UNLICENSED`.
+`packaging/render-channels.mjs` genera los canales de una release a partir de los archivos y de `SHA256SUMS`, en cada release y como artefacto. Su **publicación** vive en `release-channels.yml`, que solo corre cuando un humano publica el borrador, la variable `RELEASE_PUBLISH_CHANNELS` vale `true`, la release no es prerelease y todos los manifiestos declaran la licencia (§ 6).
 
 | Canal | Forma | Ruta instalada | Requiere |
 |---|---|---|---|
@@ -96,6 +96,21 @@ Hay cinco restricciones:
 - **Actualización en Windows.** Con el daemon en marcha, `raptor.exe` está bloqueado. `install.ps1` renombra el ejecutable en uso a `.old` (Windows lo permite) antes de copiar el nuevo, y el daemon antiguo se para por "versión incompatible" (ADR-GRP-005 § 4). Para winget queda pendiente comprobarlo. Pendiente: etapa de validación multiplataforma.
 - **El comando instalado es `raptor` en todos los canales**, y se actualiza por el mismo canal con el que se instaló. Desinstalar con cualquier canal borra solo los binarios, nunca el perfil ni la Time Machine (NFR-01).
 
+### 6. Nombre y licencia
+
+Decisión de Rene Bonilla (2026-10-05), D4 y D5 del documento de negocio:
+
+- **Nombre en los canales: `gitraptor`.** Fórmula `gitraptor` en el tap propio, `GitRaptor.GitRaptor` en winget y `gitraptor` más `@gitraptor/cli-<os>-<cpu>` en npm. **El comando sigue siendo `raptor`** (y `raptor-mcp`).
+- **Licencia: FSL-1.1-ALv2** (Functional Source License 1.1, con licencia futura Apache-2.0). El núcleo (motor, CLI/TUI, MCP, Time Machine y Guardrails individuales) es gratis para cualquier usuario. La edición de equipo de pago, con licencia comercial, llegará más adelante (BR-23 y BR-25) y no se construye ahora.
+- **Dónde se declara:**
+  - `LICENSE` en la raíz, con el texto oficial de [getsentry/fsl.software](https://github.com/getsentry/fsl.software/blob/85f3fc7ed6d487a49b70dc2d02e2790fd6242467/FSL-1.1-ALv2.template.md). Solo se rellena el aviso: año 2026, licenciante Rene Bonilla. La plantilla no tiene campo para el nombre del software: "el Software" es lo que se distribuye junto a este texto.
+  - `license = "FSL-1.1-ALv2"` en `[workspace.package]`, que heredan todos los crates y apps, y en los dos spikes, que son workspaces aparte.
+  - `"license": "FSL-1.1-ALv2"` en cada `package.json`.
+  - En los canales que genera `render-channels.mjs`: `license` en la fórmula, `License` y `LicenseUrl` (el `LICENSE` del tag de esa versión) en winget y `license` en los siete paquetes npm. Los archivos de la release y los paquetes npm llevan el `LICENSE`. Si el workspace no declara licencia, el render falla.
+- **Identificador SPDX.** `FSL-1.1-ALv2` está en la SPDX License List (comprobado en la 3.29) y no es OSI. Lo reconoce Homebrew, cuya copia de la lista SPDX es la 3.29. En npm está en `spdx-license-ids` 3.0.24, la versión actual; npm 10.9.3 trae la 3.0.21, que no lo tiene, y aun así `npm pack` no avisa. winget acepta texto libre. Cargo no valida la licencia mientras `publish = false`. No hace falta un identificador alternativo; si una herramienta antigua no lo reconociera, la alternativa es `license-file = "LICENSE"` en Cargo y `"license": "SEE LICENSE IN LICENSE"` en npm.
+- **Homebrew.** homebrew-core solo acepta licencias libres, así que la FSL refuerza el tap propio: `gitraptor` no puede ir a homebrew-core.
+- **Control.** `tools/check-license.sh` comprueba con `cargo metadata` y `jq` que todos los crates y `package.json` declaran FSL-1.1-ALv2 y que `LICENSE` es el texto oficial (SHA-256 fijado). Falla si `cargo metadata` falla o si no encuentra ningún crate o paquete. Lo ejecuta `license.yml` en cada PR y `release-channels.yml` antes de publicar.
+
 ## Alternativas consideradas
 
 | Alternativa | Por qué no |
@@ -105,6 +120,7 @@ Hay cinco restricciones:
 | Compilación cruzada con `cross` o `cargo-zigbuild` | Los runners arm64 nativos son gratuitos en repos públicos y evitan una capa más |
 | npm con `postinstall` o shim que descarga | Ver § 5 |
 | Publicar los canales desde `release.yml` | Publicaría con la release aún en borrador. Separarlo deja la publicación detrás de un paso humano |
+| Licencia permisiva (MIT o Apache-2.0) desde el día uno | Descartada por D4: no protege el núcleo frente a un servicio competidor mientras la edición de equipo no exista. La FSL pasa a Apache-2.0 a los dos años |
 | Attestations siempre activas | Cada una es una entrada pública e irreversible en Sigstore, incluso para un tag de prueba |
 
 ## Consecuencias
@@ -112,9 +128,11 @@ Hay cinco restricciones:
 - ✅ Un tag produce los 6 binarios con checksums, SBOM, scripts probados, canales generados y un borrador. Nada sale al público sin un paso humano.
 - ✅ Los secretos que faltan no rompen el pipeline: el paso se salta y avisa con "requiere secreto: X".
 - ⚠️ El canal npm instala el binario en `node_modules` o en la caché de `npx`, que no es una ruta canónica: `raptor daemon enable` debe rechazarlo (SEC-14) y orientar a otro canal. Lo cierra la Dev Spec de TS-GRP-003.
-- ⚠️ Antes de publicar en cualquier canal quedan cuatro decisiones humanas: la licencia y el nombre (pregunta abierta 2, NFR-11), reservar `gitraptor` y `@gitraptor` en npm, crear el tap y configurar los secretos.
+- ✅ El nombre y la licencia están decididos (§ 6): ya no bloquean los canales.
+- ⚠️ Antes de publicar en cualquier canal quedan tres pasos humanos: reservar `gitraptor` y `@gitraptor` en npm, crear el tap y configurar los secretos. Antes del lanzamiento comercial se recomienda una revisión legal de la licencia.
 - ⚠️ Windows sigue con pendientes que bloquean una release real en ese SO: la ACL del perfil (TS-GRP-001, SEC-06) y las ACE de `git.exe` (TS-GRP-002).
-- ⚠️ El pipeline no aplica `cargo-deny` (licencias, NFR-11). Queda como pendiente de SEC-07, fuera de este enabler.
+- ⚠️ El pipeline no aplica `cargo-deny` (licencias, NFR-11). Queda como pendiente de SEC-07, fuera de este enabler. Cuando se configure, revisará también los crates propios y fallaría con la FSL: se eximen con `[licenses.private] ignore = true` (todos son `publish = false`) y FSL-1.1-ALv2 no entra en la lista permitida para dependencias de terceros.
+- ⚠️ Con un licenciante persona física y una edición comercial prevista, conviene un CLA o DCO antes de aceptar contribuciones externas. Entra en la revisión legal recomendada, junto con quién es el titular de la propiedad intelectual.
 
 ## Validación
 
@@ -122,10 +140,12 @@ Hay cinco restricciones:
 2. `install.sh` (Linux y macOS) e `install.ps1` (Windows) instalan desde los archivos del run y rechazan un checksum manipulado sin instalar nada.
 3. En macOS, `raptor --version` corre en arm64 y, con Rosetta, en x86_64. En Linux, `file` confirma que el binario es estático.
 4. `release-channels.yml` no corre mientras `RELEASE_PUBLISH_CHANNELS` no valga `true`.
+5. `license.yml` está en verde: todos los crates y paquetes declaran FSL-1.1-ALv2 y `LICENSE` coincide con el SHA-256 del texto oficial con el aviso rellenado. Los canales generados declaran la misma licencia.
 
 ## Referencias
 
 - NFR-03, NFR-06, NFR-11, SEC-07 y SEC-14 en [non-functional.md](../non-functional.md).
 - [ADR-GRP-001](./ADR-GRP-001-stack-tecnologico.md) (stack), [ADR-GRP-005](./ADR-GRP-005-forma-motor-proceso-segundo-plano.md) § 4 (binario instalado y actualización) y [ADR-GRP-006](./ADR-GRP-006-perfil-ubicacion-almacenamiento.md) (PQ-7).
 - Enablers: [INF-GRP-003](../../requirements/features/motor-local/technical-stories/INF-GRP-003-pipeline-release.md) y [INF-GRP-004](../../requirements/features/motor-local/technical-stories/INF-GRP-004-canales-distribucion.md).
-- Documento de negocio: decisión v0.3 (herramienta interna) y pregunta abierta 2 (nombre y licencia).
+- Documento de negocio: decisión v0.3 (herramienta interna), D4 (open core y FSL-1.1-ALv2) y D5 (nombre), que cierran la pregunta abierta 2.
+- Licencia: [LICENSE](../../../LICENSE) y [fsl.software](https://fsl.software).
