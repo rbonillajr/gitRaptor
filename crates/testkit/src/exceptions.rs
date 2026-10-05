@@ -200,13 +200,13 @@ fn config_command(path: &Path) -> std::process::Command {
         .args(["--list", "-z"])
         .current_dir(path.parent().unwrap_or(Path::new(".")))
         .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("GIT_CONFIG_GLOBAL", null_device())
+        .env("GIT_CONFIG_GLOBAL", NO_GLOBAL_CONFIG)
         .env_remove("GIT_CONFIG_PARAMETERS")
         .env_remove("GIT_CONFIG_COUNT")
         .env_remove("GIT_DIR");
     c
 }
 
-fn null_device() -> &'static str {
-    if cfg!(windows) { "NUL" } else { "/dev/null" }
-}
+/// An empty global config on every OS. Git for Windows maps `/dev/null` to its null device, but
+/// refuses `NUL` as a config file ("unable to access 'NUL': Invalid argument").
+pub const NO_GLOBAL_CONFIG: &str = "/dev/null";
