@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-05
 feature: guardrails
 related:
   context:
@@ -104,4 +104,4 @@ Entonces "otro" sigue en "Sin protección" y sin ningún cambio en sus rutas ope
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica (sin superficie propia; la presentación es del Cockpit y la CLI).
-- **Dev Spec:** pendiente (`/aadd-devspec US-GRD-001`).
+- **Dev Spec:** [DS-US-GRD-001](../dev-specs/US-GRD-001-proteger-repo-force-push.md) (2026-10-05).

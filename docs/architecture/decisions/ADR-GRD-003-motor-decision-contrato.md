@@ -16,7 +16,7 @@ tags: [guardrails, motor-decision, crates-policy, contrato, mcp, minimo-seguro, 
 
 # ADR-GRD-003 — Motor de decisión, mínimo seguro y contrato de decisión
 
-> **Estado**: aceptado por Rene Bonilla el 2026-10-04.
+> **Estado**: aceptado por Rene Bonilla el 2026-10-04. Enmendado el 2026-10-05 por US-GRD-001 (ver "Enmienda (2026-10-05, US-GRD-001)").
 
 ## Contexto
 
@@ -272,3 +272,15 @@ Decisión del orquestador (2026-10-05), validada por Arquitecto y PO. Origen: DE
 | Lecturas y `register_agent` / `unregister_agent` | — | Ninguna |
 
 - La decisión de las tres operaciones gobernadas se toma con capa `mcp` (fijada por el daemon) dentro del flujo del ejecutor (§ 4 y § 5); "pedir confirmación" se aplica como denegar mientras no exista la cola (S-GRD-9).
+
+## Enmienda (2026-10-05, US-GRD-001)
+
+Desviaciones de la implementación de US-GRD-001 respecto al § 4 ([DS-US-GRD-001](../../requirements/features/guardrails/dev-specs/US-GRD-001-proteger-repo-force-push.md), D9 a D11). **Decisión del orquestador (2026-10-05), validada por Arquitecto.** No cambian la función de evaluación, el mínimo seguro ni la forma de la decisión. El `status` sigue en `accepted`.
+
+| Cambio | Resolución | Fuente |
+|---|---|---|
+| Servidor = binario instalado | El cliente compara la **identidad del archivo** del ejecutable del par (pid del kernel; ruta y `dev/inode`) con la de su propio ejecutable, **antes de enviar nada**, en lugar de la firma o la huella: los binarios de desarrollo no están firmados. En Linux es el inodo real (`/proc/<pid>/exe`); en macOS es la ruta y `stat`, más débil (ventana entre comprobación y uso), y se declara | § 4; H-03 |
+| Directorio común (M-02) | Lo comprueba el **cliente del hook** (que es el proceso del hook y ve su `GIT_DIR` y su cwd), además de que el stub compruebe sus constantes. La comprobación del lado del daemon queda pendiente en macOS (US-GRP-009: `process_cwd` necesita un wrapper seguro de libproc) | § 4; M-02 |
+| Arranque bajo demanda desde un hook | **No en US-GRD-001**: sin daemon, el modo degradado (más estricto) decide; queda para US-GRD-005 con el registro | § 4 |
+| Sin interbloqueo | `guard.evaluate` se atiende en el hilo de la conexión desde un registro que publica el bucle; nunca espera al bucle ni al cerrojo del repo | Enmienda (2026-10-04, Cockpit) |
+| Mensajes (M-05) | El saneado neutraliza también Zl, Zp y Cf; los parámetros se acotan a 120 caracteres | § 3 |
