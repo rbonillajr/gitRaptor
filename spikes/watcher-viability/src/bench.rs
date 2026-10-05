@@ -1034,3 +1034,101 @@ pub fn handles(ctx: &mut Ctx) -> Result<Value> {
         .collect();
     Ok(Value::Object(out))
 }
+
+// ---------------------------------------------------------------- stream isolation (US-GRP-002)
+
+/// ADR-GRP-010 § 1 candidate: one `notify` watcher per worktree on macOS. A writer creates a
+/// file per millisecond in `wt-01` while another set of watches is added and removed. With a
+/// shared watcher (`shared`) every add or remove recreates the stream that also covers
+/// `wt-01`; with one watcher per worktree (`per_worktree`) only the other watcher's stream is
+/// recreated. Counts the files of `wt-01` that never got an event.
+pub fn stream_isolation(ctx: &mut Ctx) -> Result<Value> {
+    use notify::{RecursiveMode, Watcher};
+    use std::collections::HashSet;
+    use std::sync::{Arc, Mutex};
+
+    let extra = ctx.profile.join("isolation-extra");
+    std::fs::create_dir_all(&extra)?;
+    let other = ctx.root("wt-02");
+    let reps = if ctx.quick { 5 } else { 10 };
+    let churns = 8;
+    let mut runs = Vec::new();
+    for mode in ["control", "shared", "per_worktree"] {
+        for r in 0..reps {
+            let dir = ctx.root("wt-01").join(format!("iso-{mode}-{r}"));
+            std::fs::create_dir_all(&dir)?;
+            let seen: Arc<Mutex<HashSet<PathBuf>>> = Arc::default();
+            let sink = |seen: Arc<Mutex<HashSet<PathBuf>>>| {
+                move |res: notify::Result<notify::Event>| {
+                    if let Ok(e) = res {
+                        seen.lock().unwrap().extend(e.paths);
+                    }
+                }
+            };
+            let mut probe = notify::recommended_watcher(sink(seen.clone()))?;
+            probe.watch(&ctx.root("wt-01"), RecursiveMode::Recursive)?;
+            let mut neighbour = notify::recommended_watcher(sink(Arc::default()))?;
+            neighbour.watch(&other, RecursiveMode::Recursive)?;
+            if mode == "shared" {
+                probe.watch(&other, RecursiveMode::Recursive)?;
+            }
+            std::thread::sleep(Duration::from_millis(300));
+            let writer = {
+                let dir = dir.clone();
+                std::thread::spawn(move || {
+                    let mut files = Vec::new();
+                    let t_end = now_ns() + 3_000_000_000;
+                    let mut i = 0;
+                    while now_ns() < t_end {
+                        let p = dir.join(format!("f{i:05}"));
+                        let _ = std::fs::write(&p, b"x");
+                        files.push(p);
+                        i += 1;
+                        std::thread::sleep(Duration::from_millis(1));
+                    }
+                    files
+                })
+            };
+            let mut restarts = 0;
+            if mode != "control" {
+                for _ in 0..churns / 2 {
+                    std::thread::sleep(Duration::from_millis(600));
+                    let w: &mut dyn Watcher = if mode == "shared" {
+                        &mut probe
+                    } else {
+                        &mut neighbour
+                    };
+                    w.watch(&extra, RecursiveMode::Recursive)?;
+                    w.unwatch(&extra)?;
+                    restarts += 2;
+                }
+            }
+            let files = writer.join().unwrap();
+            std::thread::sleep(Duration::from_millis(1000));
+            drop(probe);
+            drop(neighbour);
+            let seen = seen.lock().unwrap();
+            let canon = |p: &Path| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+            let seen: HashSet<PathBuf> = seen.iter().map(|p| canon(p)).collect();
+            let lost = files.iter().filter(|f| !seen.contains(&canon(f))).count();
+            runs.push(json!({"mode": mode, "files": files.len(), "stream_restarts": restarts,
+                             "files_without_event": lost}));
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+    }
+    let total = |mode: &str, key: &str| -> u64 {
+        runs.iter()
+            .filter(|r| r["mode"] == mode)
+            .map(|r| r[key].as_u64().unwrap_or(0))
+            .sum()
+    };
+    let summary = json!({
+        "control": {"files": total("control", "files"), "lost": total("control", "files_without_event")},
+        "shared": {"files": total("shared", "files"), "restarts": total("shared", "stream_restarts"),
+                   "lost": total("shared", "files_without_event")},
+        "per_worktree": {"files": total("per_worktree", "files"),
+                         "restarts": total("per_worktree", "stream_restarts"),
+                         "lost": total("per_worktree", "files_without_event")},
+    });
+    Ok(json!({"runs": runs, "summary": summary}))
+}
