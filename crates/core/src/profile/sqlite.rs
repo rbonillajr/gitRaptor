@@ -6,7 +6,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use rusqlite::{Connection, ErrorCode, OpenFlags};
+use rusqlite::{Connection, ErrorCode, OpenFlags, OptionalExtension};
 
 use super::error::{ProfileError, Result};
 use super::fsperm;
@@ -116,10 +116,21 @@ fn migrate(conn: &Connection, migrations: &[&str]) -> Result<()> {
     if pending.len() == 0 {
         return Ok(());
     }
+    // A migration may rebuild a referenced table, which SQLite only allows
+    // with foreign keys off; they can only change outside a transaction, and
+    // are checked before the commit.
+    let foreign_keys: bool = conn.query_row("PRAGMA foreign_keys", [], |row| row.get(0))?;
+    conn.pragma_update(None, "foreign_keys", false)?;
     conn.execute_batch("BEGIN IMMEDIATE")?;
     let result = (|| -> Result<()> {
         for migration in pending {
             conn.execute_batch(migration)?;
+        }
+        let violation: Option<String> = conn
+            .query_row("PRAGMA foreign_key_check", [], |row| row.get(0))
+            .optional()?;
+        if violation.is_some() {
+            return Err(ProfileError::Sqlite(rusqlite::Error::InvalidQuery));
         }
         conn.pragma_update(None, "user_version", migrations.len() as i64)?;
         Ok(())
@@ -128,6 +139,7 @@ fn migrate(conn: &Connection, migrations: &[&str]) -> Result<()> {
         Ok(()) => conn.execute_batch("COMMIT")?,
         Err(_) => conn.execute_batch("ROLLBACK")?,
     }
+    conn.pragma_update(None, "foreign_keys", foreign_keys)?;
     result
 }
 

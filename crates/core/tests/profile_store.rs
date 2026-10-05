@@ -279,7 +279,7 @@ fn newer_schema_is_rejected_and_file_untouched() {
             found, supported, ..
         } => {
             assert_eq!(*found, 99);
-            assert_eq!(*supported, 1);
+            assert_eq!(*supported, 2);
         }
         other => panic!("unexpected {other}"),
     }
@@ -365,4 +365,84 @@ fn damaged_pages_fail_the_integrity_check() {
 
     let (_, status) = profile.open_store(&entry.repo_id).unwrap();
     assert!(matches!(status, StoreOpen::Recovered { .. }), "{status:?}");
+}
+
+/// US-GRP-002: a store of schema 1 with events linked to a gap migrates to
+/// the gap causes of the observer, rows and links intact.
+#[test]
+fn a_v1_store_with_linked_events_migrates_to_the_observer_gap_causes() {
+    let tp = TempProfile::new();
+    let repos = tempfile::tempdir().unwrap();
+    let repo = init_repo(repos.path(), "r", true);
+    let mut profile = tp.open();
+    let (entry, _) = profile.add_repo(&common_dir(&repo), None, 1).unwrap();
+    let path = profile.store_path(&entry.repo_id);
+    {
+        let (mut store, _) = profile.open_store(&entry.repo_id).unwrap();
+        let mut ops = vec![
+            WriteOp::UpsertWorktree {
+                path: repo.clone(),
+                admin_name: None,
+                seen_ms: 1,
+            },
+            WriteOp::OpenGap {
+                gap_id: "g1".into(),
+                started_ms: 2,
+                cause: GapCause::DaemonDown,
+                requested_by: None,
+            },
+        ];
+        if let WriteOp::AppendEvent(mut e) = event(&repo, None, "{}") {
+            e.gap_id = Some("g1".into());
+            e.evidence = None;
+            ops.push(WriteOp::AppendEvent(e));
+        }
+        store.write_batch(&ops).unwrap();
+    }
+    {
+        // Back to schema 1: the gaps table with the old CHECK.
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "PRAGMA foreign_keys = OFF;
+             BEGIN;
+             CREATE TABLE gaps_v1 (
+                 gap_id TEXT PRIMARY KEY, started_ms INTEGER NOT NULL, ended_ms INTEGER,
+                 cause TEXT NOT NULL CHECK (cause IN ('machine-off', 'daemon-down',
+                     'daemon-down-during-session', 'daemon-stopped', 'repo-retired',
+                     'git-unavailable', 'profile-lost', 'store-corrupt')),
+                 requested_by TEXT) STRICT;
+             INSERT INTO gaps_v1 SELECT * FROM gaps;
+             DROP TABLE gaps;
+             ALTER TABLE gaps_v1 RENAME TO gaps;
+             PRAGMA user_version = 1;
+             COMMIT;",
+        )
+        .unwrap();
+    }
+
+    let (mut store, _) = profile.open_store(&entry.repo_id).unwrap();
+    let events = store.events_for_worktree(&repo).unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].gap_id.as_deref(), Some("g1"));
+    assert_eq!(store.gaps().unwrap()[0].cause, GapCause::DaemonDown);
+    store
+        .write_batch(&[WriteOp::OpenGap {
+            gap_id: "g2".into(),
+            started_ms: 3,
+            cause: GapCause::PeriodicReconciliation,
+            requested_by: None,
+        }])
+        .unwrap();
+    assert_eq!(store.gaps().unwrap().len(), 2);
+    // Foreign keys are on again after the migration.
+    let err = store.write_batch(&[WriteOp::AppendEvent(gitraptor_core::profile::NewEvent {
+        worktree: repo.clone(),
+        kind: "commit".into(),
+        metadata: "{}".into(),
+        observed: ts(4),
+        session_id: None,
+        evidence: None,
+        gap_id: Some("missing".into()),
+    })]);
+    assert!(err.is_err());
 }
