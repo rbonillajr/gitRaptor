@@ -3,7 +3,7 @@ id: BRD-GRP-001
 title: GitRaptor — Documento de Negocio
 type: business-requirements
 status: draft
-version: 0.6
+version: 0.7
 date: 2026-10-05
 author: Rene Bonilla
 tags: [git, ai-agents, worktrees, mcp, tui, cli, agent-cockpit, safety-net, guardrails, azure-devops, brd]
@@ -14,12 +14,13 @@ changelog:
   - 0.4 (2026-10-02): BR-11 deja de fijar el archivo `.gitraptor/policy.yaml`; el formato y la estructura de la configuración del repo se deciden en un ADR (propuesta: JSON en tres niveles perfil/repo/local, con secciones `permissions` y `policies`).
   - 0.5 (2026-10-03): D2 cambia: el MVP da soporte completo solo a Claude Code; después Codex y luego Cursor, uno por uno. Mientras tanto, los demás agentes se aceptan como "otro agente" mediante registro explícito.
   - 0.6 (2026-10-05): D4 y D5 (decisiones de Rene Bonilla): modelo **open core**, con el núcleo gratuito bajo FSL-1.1-ALv2 y una edición de equipo comercial (BR-23 y BR-25); nombre `gitraptor` en los canales y comando `raptor`. Se cierra la pregunta abierta 2.
+  - 0.7 (2026-10-05): Research de mercado actualizado ([RES-GRP-COMP-2026-10](research/competitive-2026-10.md)). GitKraken Desktop (desde la 12.0, abr-2026) y GitLens 19 ya tienen vista de agentes con estado en vivo, así que "ver la flota" deja de ser diferencial. Se actualizan § 1, § 2 (P1 y P7), § 3, § 4, § 10 y los anexos. La propuesta de valor pone **"proteger y deshacer" por encima de "ver"** (hipótesis). No cambia ninguna prioridad de BR: los ajustes al backlog quedan como propuesta en el documento de research.
 ---
 
 # GitRaptor — Documento de Negocio
 
 > **El copiloto de Git para equipos que programan con agentes de IA.**
-> GitRaptor muestra en vivo qué están haciendo tus agentes en el repo, impide que rompan algo y te deja deshacer cualquier cosa. Funciona con cualquier agente (Claude Code, Cursor, Codex, Copilot), en cualquier sistema operativo y desde la terminal, el editor o el propio agente vía MCP.
+> GitRaptor hace recuperable lo que hacen tus agentes en el repo, también con Git crudo y el trabajo sin commitear, y frena las operaciones de Git peligrosas antes de que salgan de tu máquina. Además te avisa antes de que dos agentes choquen. Funciona en local y sin cuenta, desde la terminal, el editor o el propio agente vía MCP. En el MVP detecta Claude Code; Codex, Cursor y Copilot vienen después (D2).
 
 Este documento es la entrada para la fase de análisis (requerimientos detallados, historias de usuario) y la de diseño e implementación.
 
@@ -27,7 +28,7 @@ Este documento es la entrada para la fase de análisis (requerimientos detallado
 
 ## 1. Resumen ejecutivo
 
-En 2026 programar dejó de ser "un dev, una rama, un editor". Hoy es común tener **3 a 10 agentes trabajando en paralelo**, cada uno en su worktree o rama, generando commits más rápido de lo que un humano puede revisar. Eso trae tres problemas que las herramientas Git clásicas (GitKraken, GitLens, Git Graph) no resuelven:
+En 2026 programar dejó de ser "un dev, una rama, un editor". Hoy es común tener **3 a 10 agentes trabajando en paralelo**, cada uno en su worktree o rama, generando commits más rápido de lo que un humano puede revisar. Eso trae tres problemas. Desde 2026 los clientes Git ya muestran a los agentes (GitKraken Desktop desde la 12.0 de abril de 2026 y GitLens 19), así que la visibilidad empieza a estar cubierta; la seguridad y el control, no:
 
 1. **Visibilidad:** no sé qué agente está tocando qué, ni si dos agentes van a chocar.
 2. **Seguridad:** miedo a que un agente haga `reset --hard`, un force-push o borre trabajo, y a no poder volver atrás.
@@ -47,12 +48,14 @@ Tiene tres pilares de producto:
 - ⏪ **Time Machine:** snapshots automáticos antes de cada acción y **undo de cualquier cosa**, incluido "deshaz lo que hizo el agente X en los últimos 20 min".
 - 🛡️ **Guardrails:** políticas por repo que los agentes no pueden saltarse (no push a main, no force-push, convenciones de commit), aplicadas en el MCP y en los hooks de Git.
 
-**Diferenciación:** el espacio ya tiene jugadores (sección 3), pero ninguno junta las cuatro cosas siguientes:
+**Diferenciación (v0.7):** el espacio ya tiene jugadores (sección 3), y ver la flota de agentes ya lo hacen varios, GitKraken incluido. Ninguno junta las cuatro cosas siguientes:
 
-1. Funciona con **cualquier agente** y **en cualquier sistema operativo**, Windows incluido.
-2. Usa **Git nativo**: no impone un modelo propio de ramas ni un hosting propio.
-3. Une **visibilidad, undo y guardrails** en un solo producto.
-4. Está **listo para empresa**: integración con **Azure DevOps**, políticas centralizadas y auditoría.
+1. **Recupera lo que hagan los agentes**, también con **Git crudo** (hasta el último estado capturado) y el **trabajo sin commitear**, no solo la última acción hecha en una app.
+2. **Guardrails con semántica de Git**, en los hooks de Git (frenan a cualquier herramienta que los ejecute; si alguien los desactiva, te enteras) y en un servidor MCP con políticas.
+3. **Local, sin cuenta y gratis** para uso interno, con **cualquier agente** y **Git nativo** (sin modelo propio de ramas ni hosting propio).
+4. **Predicción de conflictos local** entre worktrees y con la base, incluido el solape de lo sin commitear.
+
+Windows y Azure DevOps se mantienen como requisitos (BR-03, BR-19), pero ya no diferencian por sí solos: GitKraken y otros los tienen.
 
 ---
 
@@ -60,90 +63,109 @@ Tiene tres pilares de producto:
 
 | # | Problema | Quién lo sufre | Evidencia / contexto 2026 |
 |---|----------|----------------|---------------------------|
-| P1 | No hay una vista unificada de qué hace cada agente: rama, worktree, archivos tocados y si sigue corriendo o ya terminó. | Devs y tech leads que usan agentes en paralelo | Auge de orquestadores locales (Conductor, Claude Squad, Superset). Addy Osmani: "3-10 agentes" como caso típico. |
+| P1 | No hay una vista unificada de qué hace cada agente: rama, worktree, archivos tocados y si sigue corriendo o ya terminó. | Devs y tech leads que usan agentes en paralelo | Auge de orquestadores locales (Conductor, Claude Squad, Superset). Addy Osmani: "3-10 agentes" como caso típico. **v0.7:** este problema ya lo atacan GitKraken Desktop (vista Agents), GitLens 19, Kepler y las vistas nativas de Claude Code, Cursor, Codex y Copilot. |
 | P2 | Los conflictos entre agentes se descubren tarde, al hacer merge. | Equipos con agentes en paralelo | Claude Code Agent Teams añadió *file locking* experimental, lo que confirma el dolor. |
 | P3 | Miedo a acciones destructivas de agentes (reset, force-push, borrado de ramas) y a la *prompt injection*. | Todos los usuarios de agentes | Vulnerabilidades de `mcp-server-git` (ene-2026). Aparecen proxies de políticas (Intercept) y gates (Reflex). |
 | P4 | Deshacer el trabajo de un agente es manual: reflog, cherry-pick, adivinar. | Devs junior y semi-senior, y también seniors | Entire Checkpoints y GitButler apuestan por los snapshots y el rewind. |
 | P5 | Los agentes generan diffs gigantes, difíciles de revisar e integrar. | Revisores y tech leads | Tendencia hacia PRs apilados y commits pequeños. |
 | P6 | En empresa no hay gobierno ni auditoría de qué cambió un agente y bajo qué reglas. | CTO, seguridad, compliance | Entire levantó USD 60M para "agent provenance". Futurum: la procedencia es el activo estratégico. |
-| P7 | Las herramientas actuales son **solo Mac** (Conductor), **sin Windows** (Claude Squad usa tmux), **atadas a un agente** o **atadas a GitHub/Linear**. | Equipos corporativos en Windows o con Azure DevOps | Ver sección 3.2. |
+| P7 | Las herramientas actuales son **solo Mac** (Conductor, Superset), **sin Windows** (Claude Squad usa tmux), **atadas a un agente**, **atadas a GitHub/Linear** o **exigen cuenta y plan de pago** para usar agentes en repos privados (GitKraken). | Equipos corporativos en Windows o con Azure DevOps | Ver sección 3.2. GitKraken sí tiene Windows y Azure DevOps (plan Pro). |
 
 ---
 
 ## 3. Research de mercado
 
+> **Actualizado en v0.7 (2026-10-05)** con la investigación [RES-GRP-COMP-2026-10](research/competitive-2026-10.md), que tiene la matriz de funciones completa y las fuentes con fecha. Los datos de esta sección se resumen de ahí.
+
 ### 3.1 Mapa del mercado
 
-```
-                  Visual / GUI
-                      ▲
-     GitKraken ●      │      ● Conductor (Mac)
-     GitLens  ●       │      ● Nimbalyst / Superset
-                      │      ● GitButler (agents tab)
- Git clásico ─────────┼──────────────► Agent-aware
-                      │      ● Claude Squad (TUI)
-     lazygit  ●       │      ● Entire (provenance + hosting)
-     Git CLI  ●       │      ● git-mcp / Intercept / Reflex
-                      ▼
-                  Terminal / headless
+El eje que más importa en 2026 ya no es "clásico frente a agent-aware": casi todos se volvieron agent-aware. Lo que separa a GitRaptor es **ver** frente a **proteger y deshacer**.
 
-  ◎ GitRaptor: agent-aware, terminal + MCP primero y visual después,
-    multiplataforma, Git nativo y foco en empresa.
+```
+                       Proteger y deshacer
+                       (Git crudo, sin commitear, políticas)
+                               ▲
+                               │        ◎ GitRaptor
+             jj (op log) ●     │
+     GitButler (oplog) ●       │
+                               │
+ Terminal / headless ──────────┼──────────────────► Visual / GUI
+                               │
+      Claude Squad ●           │     ● Conductor (checkpoints por turno)
+       Clash (conflictos) ●    │     ● GitKraken Desktop / GitLens / Kepler
+ Claude Code, Codex (nativo) ● │     ● Nimbalyst / Superset
+                               │     ● Cursor / Copilot (nativo)
+                               ▼
+                             Ver la flota
+
+  ◎ GitRaptor: terminal + MCP primero y visual después; local, sin cuenta,
+    agnóstico del agente y Git nativo; undo de cualquier cosa y guardrails.
 ```
 
 ### 3.2 Competidores directos (agentes + Git)
 
 | Herramienta | Qué hace | Modelo | Fortalezas | Debilidades / hueco para GitRaptor |
 |---|---|---|---|---|
-| **Conductor** (Melty Labs) | App que corre agentes Claude Code y Codex en paralelo, cada uno en su worktree, con flujo de diff y PR | Gratis, closed source. Cobrará por colaboración. | UX pulida, revisión de diff y PR | **Solo macOS**. Es un orquestador, no hay guardrails ni undo profundo. |
+| **GitKraken Desktop + GitLens + Kepler** (GitKraken) | Desde Desktop 12.0 (abr-2026): vista **Agents** con una tarjeta por worktree, estado en vivo de Claude Code, Codex, Copilot CLI y OpenCode, botón para lanzar el agente, PRs y, desde la 12.4, aprobación de permisos del agente. GitLens 19 trae lo mismo a VS Code. Kepler es su entorno de agentes (preview). Undo de la última acción hecha en la app. Conflict Prevention sobre lo commiteado. CLI `gk` con servidor MCP de 22 herramientas | Free solo con repos locales y públicos. Pro (~USD 10, no verificado), Advanced USD 14, Business ~USD 18 por usuario y mes. Requiere cuenta | Cliente Git maduro, multiplataforma, Azure DevOps (Pro), base instalada enorme, ritmo de lanzamiento mensual | Undo solo de **la última acción hecha en su app** (no Git crudo ni lo que hace un agente por terminal, no verificado). MCP **sin políticas documentadas** (expone `git_push`). Conflictos solo de lo commiteado, de pago y con nube entre compañeros. Exige cuenta y plan Pro para agentes en repos privados. **Es el líder en "ver"; la convivencia es posible: GitKraken para ver, GitRaptor para proteger y deshacer.** |
+| **Conductor** (Melty Labs) | App que corre Claude Code, Codex, Cursor y OpenCode en paralelo, un workspace por tarea, con diff, PR y **checkpoint antes de cada turno** | Free, Pro USD 50/mes, Teams USD 60/usuario/mes. Closed source | UX pulida, checkpoints por turno con lo sin commitear | **Solo macOS**. Sin políticas (solo aprobación por herramienta). Cobertura del Git crudo no verificada. |
 | **Claude Squad** | TUI en Go: tmux + un worktree por agente | Open source, AGPL-3.0 | Terminal-first, multi-agente | **Sin Windows nativo**. Sin predicción de conflictos, políticas ni undo. AGPL complica el uso empresarial. |
-| **GitButler** | Cliente Git con *virtual branches*, pestaña de agentes, CLI `but`, skill y MCP | Freemium | Varios agentes en **un solo directorio**, commit automático por prompt | Te obliga a **adoptar su modelo** (virtual branches). Atado a GitButler como cliente. |
+| **GitButler** | Cliente Git con *virtual branches*, pestaña de agentes, CLI `but`, skill y MCP, oplog con snapshots | FSL-1.1-MIT. Serie A de USD 17M (abr-2026) | Varios agentes en **un solo directorio**, commit automático por prompt, oplog que incluye lo sin commitear, Windows | Te obliga a **adoptar su modelo** (virtual branches). Sin Azure DevOps. MCP sin políticas (no verificado). |
 | **Entire** (Thomas Dohmke, ex-CEO de GitHub) | Checkpoints: guarda la sesión del agente en cada commit (rama oculta), shadow branches para rewind, Entire Blame y Review, red Git distribuida | Open source en el CLI. Plataforma y hosting de pago (precios sin anunciar). | Muy bien financiado (USD 60M), visión de procedencia | Va hacia **hosting y plataforma propia**. No es un cockpit local ni tiene guardrails. **Es un posible aliado:** se pueden leer sus checkpoints. |
-| **Nimbalyst** (sucesor de Crystal) | App para sesiones paralelas, kanban | Gratis individual. Teams USD 20/usuario/mes. | Kanban y gestión de tareas | Crystal quedó deprecado (feb-2026). Enfoque en tareas, no en Git. |
+| **Nimbalyst** (sucesor de Crystal) | App para sesiones paralelas, kanban, historial de archivos con snapshot antes y después de cada edición de la IA | MIT. Gratis individual. Teams USD 20/usuario/mes. | Kanban, gestión de tareas, Windows | Crystal quedó deprecado (feb-2026). Enfoque en tareas, no en Git. Sin políticas. |
 | **Vibe Kanban** | Kanban en el que cada tarjeta lanza un agente en su rama | Apache-2.0, comunitario | Planificación visual | La empresa cerró (abr-2026). Mantenimiento incierto. |
-| **Superset, Parallel Code, Emdash, Sculptor, Abralo** | Orquestadores multi-agente con worktrees | Varios | Multi-agente | Mercado fragmentado y poco diferenciado. Varios rankings los publican los propios competidores. |
-| **Cursor Background Agents / Claude Code Agent Teams** | Funciones nativas de cada agente | Incluidas en el agente | Sin fricción | **Cada una atada a su agente.** No dan una vista transversal. |
+| **Superset, Emdash, Sculptor, Orca, Warp, Zed, Amp, ccmanager, Container Use, mux y otros** | Orquestadores multi-agente con worktrees | Varios | Multi-agente | Mercado fragmentado y poco diferenciado. Ninguno documenta políticas Git ni undo de Git crudo. Terragon cerró (feb-2026). |
+| **Clash** | CLI que **predice conflictos entre worktrees** con un merge simulado | MIT | Competidor directo del pilar de predicción | Solo predicción: sin undo, sin políticas, sin vista de agentes. |
+| **Funciones nativas: Claude Code, Cursor, Codex, Copilot** | Worktrees y paralelo (`claude -w`, Agents Window, app de Codex, Copilot app), vistas de flota (`claude agents`, mission control), hooks y managed settings | Incluidas en el agente | Sin fricción, cada vez más completas | **Cada una atada a su agente.** Su undo **no cubre Git crudo**: `/rewind` de Claude Code excluye Bash, Cursor y Copilot solo restauran archivos y Codex retiró `/undo`. Sin predicción de conflictos. |
 
 ### 3.3 Competidores adyacentes
 
 | Categoría | Ejemplos | Relación con GitRaptor |
 |---|---|---|
-| Servidores MCP de Git | `mcp-server-git` (Anthropic), git-mcp (self.agency), GitHub MCP Server | Hacen falta, pero son "Git crudo" con guardrails mínimos. `mcp-server-git` tuvo CVEs en ene-2026. **GitRaptor MCP compite aquí con herramientas de alto nivel y políticas.** |
+| Servidores MCP de Git | `mcp-server-git` (Anthropic), git-mcp (self.agency), GitHub MCP Server, **MCP de GitKraken (`gk mcp`)** | Hacen falta, pero son "Git crudo" con guardrails mínimos. `mcp-server-git` tuvo CVEs en ene-2026. El MCP de GitKraken expone `git_push` y `git_checkout` sin políticas documentadas y exige cuenta. **GitRaptor MCP compite aquí con herramientas de alto nivel y políticas, y sus hooks de Git frenan también a los agentes que usan otro MCP** (si ese MCP ejecuta el Git del sistema). |
 | Capas de política y seguridad | Intercept (proxy MCP con YAML), Reflex (gate de comandos), GitGuardian MCP | Genéricas, no entienden Git. **GitRaptor aplica políticas con semántica de Git** y puede convivir con ellas. |
-| Clientes Git visuales | GitKraken, GitLens, Git Graph (abandonado), Git Graph Plus, GitBit, GitStudio | No pensados para agentes. Fuente de inspiración para la vista visual (Fase 3). Ver Anexo B. |
+| Clientes Git visuales | GitKraken, GitLens, Git Graph (abandonado), Git Graph Plus, GitBit, GitStudio | **v0.7:** GitKraken y GitLens **ya son agent-aware** y pasan a la tabla 3.2. El resto no lo es. Fuente de inspiración para la vista visual (Fase 3). Ver Anexo B. |
 | Terminal | lazygit, tig, gitui | Referente de UX TUI. Ninguno sabe de agentes. |
-| PRs apilados | Graphite, ghstack, git-branchless, Jujutsu (jj, con *operation log* y undo) | Inspiración para Time Machine (oplog de jj) y para Stacks (Fase 3). |
+| PRs apilados | Graphite (comprado por Cursor, dic-2025), PRs apilados de GitHub (preview, jul-2026), ghstack, git-branchless, Jujutsu (jj, con *operation log* y undo) | Inspiración para Time Machine (oplog de jj) y para Stacks (Fase 3). |
 
-### 3.4 Conclusiones del research
+### 3.4 Conclusiones del research (v0.7)
 
-1. **El dolor es real y validado por el mercado:** hay financiamiento (Entire), lanzamientos continuos y funciones nativas en los agentes.
-2. **El mercado está fragmentado y es inestable:** Crystal se deprecó y Vibe Kanban cerró. Nadie consolidó todavía la categoría.
-3. **Los huecos claros son:**
-   - **Multiplataforma real**, con Windows.
-   - **Agnóstico del agente.**
-   - **Guardrails con semántica de Git.**
-   - **Predicción de conflictos entre agentes.**
-   - **Foco en empresa con Azure DevOps.**
-4. **Riesgo principal:** que las funciones nativas de los agentes (Cursor, Claude Code) o de GitLens 19 absorban parte del valor. Lo mitigamos siendo **transversal** a todos los agentes y **Git nativo**.
-5. **No competir con Entire en hosting ni en procedencia.** Mejor **integrarse** con sus checkpoints y estándares abiertos.
+1. **El dolor es real y validado por el mercado:** hay financiamiento (Entire, GitButler), lanzamientos continuos y funciones nativas en los agentes.
+2. **"Ver la flota" ya es higiene.** El riesgo que la v0.6 marcaba como principal se materializó: GitKraken Desktop (12.0, abr-2026), GitLens 19 y las vistas nativas de Claude Code, Cursor, Codex y Copilot muestran los agentes y su estado. GitRaptor no compite en riqueza visual.
+3. **El mercado sigue fragmentado e inestable** en los orquestadores (Crystal deprecado, Vibe Kanban y Terragon cerrados), pero **GitKraken consolida** la parte visual con un ritmo de lanzamiento mensual.
+4. **Los huecos que siguen abiertos son:**
+   - **Undo de cualquier cosa**, incluido el Git crudo de los agentes y el trabajo sin commitear. Nadie lo cubre: GitKraken deshace la última acción de su app y los undos nativos excluyen Git.
+   - **Guardrails con semántica de Git** en hooks y en un MCP con políticas. El MCP de GitKraken no las documenta.
+   - **Local, sin cuenta y gratis** con repos privados. GitKraken exige cuenta y plan Pro para agentes en repos privados.
+   - **Predicción de conflictos local** entre worktrees, con el solape de lo sin commitear. GitKraken solo mira lo commiteado; Clash es un competidor directo en este pilar.
+   - **Agnóstico del agente** en la protección (no en la detección: GitKraken ya detecta cuatro agentes).
+5. **Windows y Azure DevOps ya no diferencian por sí solos** (GitKraken los tiene), aunque siguen siendo requisitos para los equipos corporativos.
+6. **Convivir con GitKraken en lugar de competir de frente:** "GitKraken para ver, GitRaptor para proteger y deshacer". La captura continua observa también lo que se hace desde GitKraken; sus hooks de Git frenan un force-push desde su GUI (`pre-push`), pero no el borrado o el movimiento de ramas locales, porque GitKraken no ejecuta `reference-transaction` (se comprueba en el dogfooding).
+7. **No competir con Entire en hosting ni en procedencia.** Mejor **integrarse** con sus checkpoints y estándares abiertos.
 
 ---
 
 ## 4. Propuesta de valor
 
-> **"Pon a trabajar a 10 agentes en tu repo sin miedo. Ve todo, deshaz todo, y que nadie rompa main."**
+> **"Pon a trabajar a 10 agentes en tu repo sin miedo. Lo que hagan es recuperable y las operaciones peligrosas de Git no pasan."**
 
-| Diferenciador | Conductor | Claude Squad | GitButler | Entire | Funciones nativas del agente | **GitRaptor** |
-|---|---|---|---|---|---|---|
-| Multiplataforma (Win/Mac/Linux) | ✗ | ✗ (sin Windows) | ✔ | ✔ | ✔ | **✔** |
-| Agnóstico del agente | ≈ | ✔ | ≈ | ✔ | ✗ | **✔** |
-| Git nativo (sin modelo propio) | ✔ | ✔ | ✗ | ≈ | ✔ | **✔** |
-| Cockpit en vivo de agentes | ✔ | ✔ | ✔ | ✗ | ≈ | **✔** |
-| Predicción de conflictos entre agentes | ✗ | ✗ | ≈ | ✗ | ≈ | **✔** |
-| Undo universal (Time Machine) | ✗ | ✗ | ✔ | ✔ | ≈ | **✔** |
-| Guardrails y políticas Git | ✗ | ✗ | ✗ | ✗ | ≈ | **✔** |
-| Servidor MCP de alto nivel | ✗ | ✗ | ✔ | ≈ | — | **✔** |
-| Azure DevOps y gobierno empresarial | ✗ | ✗ | ✗ | ≈ | ✗ | **✔** |
+**Hipótesis (v0.7, 2026-10-05):** el diferencial de GitRaptor es **proteger y deshacer**, por encima de **ver**. Ver la flota de agentes ya lo hacen GitKraken Desktop, GitLens y las vistas nativas de los agentes; el Cockpit se mantiene en versión mínima y se diferencia por la predicción de conflictos local. GitRaptor **convive** con esas herramientas: "GitKraken para ver, GitRaptor para proteger y deshacer". Decisión del orquestador (2026-10-05), validada por PO y Arquitecto; responde la pregunta abierta 1 (§ 12.2) y queda **pendiente de confirmar por Rene Bonilla**. Detalle y recomendaciones en [RES-GRP-COMP-2026-10](research/competitive-2026-10.md) § 5.
+
+Mensaje: decir **"recuperable"**, no "todo reversible" (con Git crudo se recupera el último estado capturado); el diferencial es **local**, antes del push (el hosting ya protege sus ramas en el remoto).
+
+| Diferenciador | GitKraken (Desktop, GitLens, `gk`) | Conductor | Claude Squad | GitButler | Entire | Funciones nativas del agente | **GitRaptor** |
+|---|---|---|---|---|---|---|---|
+| Recupera el Git crudo de un agente | ✗ (no verificado) | ? | ✗ | ? | ? | ✗ | **≈** (último estado capturado) |
+| Recupera el trabajo sin commitear | ≈ | ✔ | ✗ | ✔ | ✔ | ≈ (solo archivos) | **✔** |
+| Guardrails y políticas Git | ✗ | ✗ | ✗ | ✗ | ✗ | ≈ (hooks del agente) | **✔** (clientes que ejecutan hooks) |
+| Servidor MCP con políticas | ✗ (sin políticas documentadas) | ✗ | ✗ | ✗ | — | — | **✔** |
+| Predicción de conflictos local, con lo sin commitear | ≈ (solo commiteado, de pago) | ? | ✗ | ≈ | ✗ | ✗ | **✔** |
+| Local, sin cuenta y gratis con repos privados | ✗ (cuenta y Pro) | ? | ✔ | ✔ | ≈ | ✗ | **✔** |
+| Git nativo (sin modelo propio) | ✔ | ✔ | ✔ | ✗ | ≈ | ✔ | **✔** |
+| Cockpit en vivo de agentes | ✔ (4 agentes) | ✔ | ✔ | ✔ | ✗ | ✔ | **✔** (mínimo; Claude Code en el MVP) |
+| Multiplataforma (Win/Mac/Linux) | ✔ | ✗ | ✗ | ✔ | ✔ | ✔ | **✔** (objetivo; hoy solo macOS verificado) |
+| Azure DevOps | ✔ (Pro) | ? | ? | ✗ | ? | ≈ | **Fase 2** (BR-19) |
+
+✔ sí · ≈ parcial · ✗ no · ? no verificado · — no aplica. Las celdas de GitRaptor son compromisos del backlog (pre-MVP).
 
 ---
 
@@ -151,7 +173,7 @@ Tiene tres pilares de producto:
 
 | Persona | Descripción | Necesidad principal |
 |---|---|---|
-| **"Agent wrangler"** | Dev senior que lanza 3-10 agentes en paralelo desde la terminal | Ver todo de un vistazo, saber quién choca con quién, integrar rápido |
+| **"Agent wrangler"** | Dev senior que lanza 3-10 agentes en paralelo desde la terminal, a menudo con un cliente Git que ya le muestra los agentes (GitKraken, GitLens) | Recuperar lo que un agente rompa, saber quién choca con quién, integrar rápido |
 | **Dev junior o semi-senior con agentes** | Usa Cursor o Claude Code pero le da miedo que el agente rompa algo | Red de seguridad: undo de un comando |
 | **Tech lead / revisor** | Revisa y aprueba el trabajo de humanos y agentes | Diffs pequeños, contexto de qué hizo el agente, aprobar o descartar |
 | **Platform / DevEx engineer** | Define cómo trabaja la organización con agentes | Políticas centralizadas, auditoría, integración con Azure DevOps |
@@ -303,7 +325,8 @@ Como el producto arranca como **herramienta interna**, los KPIs miden uso y valo
 
 | Riesgo | Prob. | Impacto | Mitigación |
 |---|---|---|---|
-| Los agentes (Cursor, Claude Code) o GitLens 19 incorporan funciones equivalentes de forma nativa | Alta | Alto | Ser **transversal** a todos los agentes. Los guardrails y la auditoría empresarial difícilmente vienen de un agente en particular. |
+| Los agentes (Cursor, Claude Code) o GitLens 19 incorporan funciones equivalentes de forma nativa | **Materializado en visibilidad** (v0.7) · Alta en el resto | Alto | **Materializado en "ver la flota":** GitKraken Desktop 12, GitLens 19 y las vistas nativas ya lo hacen. Mitigación: diferenciarse en **proteger y deshacer** (undo de Git crudo, guardrails, MCP con políticas), mantener el Cockpit mínimo y **convivir** con GitKraken. Los guardrails y la auditoría empresarial difícilmente vienen de un agente en particular. Repetir la investigación competitiva cada trimestre ([RES-GRP-COMP-2026-10](research/competitive-2026-10.md)). |
+| GitKraken añade undo de Git crudo o políticas en su MCP | Media | Alto | Llegar primero con Time Machine y Guardrails, y ser local, sin cuenta y gratis. Vigilar sus notas de versión (lanzamiento mensual). |
 | Entire u otro jugador financiado ocupa la categoría | Media | Alto | No competir en hosting ni en procedencia: integrarse. Enfocarse en local, guardrails y Azure DevOps. |
 | Un bug de GitRaptor causa pérdida de datos | Media | Crítico | NFR-01, pruebas de caos, snapshots antes de cada operación y releases graduales. |
 | El servidor MCP se vuelve un vector de ataque (prompt injection, RCE) | Media | Crítico | NFR-02, revisión de seguridad por release, argv fijo y allowlists. |
@@ -345,7 +368,7 @@ Como el producto arranca como **herramienta interna**, los KPIs miden uso y valo
 
 ### 12.2 Preguntas abiertas
 
-1. ¿Qué pesa más en el MVP: **Time Machine + Guardrails** (seguridad) o **Cockpit** (visibilidad)? Propuesta: los tres, en versión mínima.
+1. ¿Qué pesa más en el MVP: **Time Machine + Guardrails** (seguridad) o **Cockpit** (visibilidad)? Propuesta: los tres, en versión mínima. **Propuesta v0.7 (2026-10-05):** pesan más **Time Machine y Guardrails** ("proteger y deshacer"), con el Cockpit mínimo y la predicción de conflictos como su diferencial (§ 4 y [RES-GRP-COMP-2026-10](research/competitive-2026-10.md)). Pendiente de confirmar por Rene Bonilla.
 2. ~~¿Nombre y licencia definitivos? ¿Se mantiene "GitRaptor" y el comando `raptor`?~~ Resuelta por D4 y D5 (2026-10-05).
 3. ¿Hay una fecha objetivo para el MVP?
 4. ¿Integramos con Entire Checkpoints desde temprano o esperamos a que el estándar madure?
@@ -369,6 +392,8 @@ Como el producto arranca como **herramienta interna**, los KPIs miden uso y valo
 
 ## Anexo A — Fuentes del research (agentes + Git)
 
+> **v0.7:** la investigación del 2026-10-05, con la matriz de funciones y más de 130 fuentes con fecha, está en [RES-GRP-COMP-2026-10](research/competitive-2026-10.md) § 7. Las fuentes de abajo son las de la v0.2–v0.6.
+
 - [Addy Osmani — The Code Agent Orchestra](https://addyosmani.com/blog/code-agent-orchestra/) · [Top AI Coding Trends for 2026](https://beyond.addy.ie/2026-trends/)
 - [DEV — Best Tools for Managing Parallel AI Coding Agents in 2026](https://dev.to/stravukarl/best-tools-for-managing-parallel-ai-coding-agents-in-2026-14l8) · [Nimbalyst — Agent management tools 2026](https://nimbalyst.com/blog/best-agent-management-tools-2026/) · [AgentsRoom — Multi-agent tools](https://agentsroom.dev/blog/best-multi-agent-coding-tools) · [Parallel Code — Multi-agent tools 2026](https://parallelcode.app/blog/multi-agent-coding-tools-2026/) · [Abralo — alternatives](https://abralo.com/alternatives)
 - [Conductor.build intro](https://codepick.dev/en/guides/conductor-build-intro/) · [Superset](https://superset.sh/)
@@ -378,15 +403,15 @@ Como el producto arranca como **herramienta interna**, los KPIs miden uso y valo
 
 > Nota: varios rankings de herramientas multi-agente los publican competidores (Nimbalyst, AgentsRoom, Abralo, Parallel Code, Superset), así que pueden estar sesgados. Los precios de terceros no están verificados.
 
-## Anexo B — Research previo: extensiones Git para VS Code / Cursor (v0.1)
+## Anexo B — Research previo: extensiones Git para VS Code / Cursor (v0.1, actualizado en v0.7)
 
-Se mantiene como insumo para la vista visual de la Fase 3 (BR-22):
+Se mantiene como insumo para la vista visual de la Fase 3 (BR-22). **Actualización v0.7 (2026-10-05):** GitKraken y GitLens ya no son solo referencia visual; son competidores directos en la parte de "ver" (ver § 3.2 y [RES-GRP-COMP-2026-10](research/competitive-2026-10.md) § 2).
 
-- **GitLens** (GitKraken): suite muy completa. Commit Graph, Visual History, Worktrees y AI son **Pro en repos privados**. v17.12 (abr-2026) añadió un sidebar al grafo.
+- **GitLens** (GitKraken): suite muy completa. Commit Graph, Visual History, Worktrees y AI son **Pro en repos privados**. v17.12 (abr-2026) añadió un sidebar al grafo. **v0.7:** GitLens 18 muestra el estado de Claude Code con hooks propios; la 19.0 (12-ago-2026) hace del Commit Graph la vista principal, con undo en un clic de sus operaciones; la 19.1 (1-sep-2026) suma Codex, Copilot CLI y OpenCode y "Start Agent Session" en worktrees.
 - **Git Graph (mhutchie)**: popular pero **abandonado** desde ~2021, con una licencia que restringe derivados → clean-room obligatorio.
 - **Git Graph Plus, GitBit, GitLG, GitStudio**: alternativas activas con pocos usuarios.
 - **VS Code nativo**: Source Control Graph (desde v1.93) y worktrees (desde jul-2025), lo que sube el mínimo que hay que ofrecer.
 - **Cursor usa Open VSX**: hay que publicar en ambos registros, con el namespace verificado y la verificación de publisher de Cursor.
-- **GitKraken Desktop**: referencia de UX (drag & drop, rebase interactivo, undo, workspaces, Launchpad).
+- **GitKraken Desktop**: referencia de UX (drag & drop, rebase interactivo, undo, workspaces, Launchpad). **v0.7:** desde la 12.0 (14-abr-2026) tiene la vista **Agents** (tarjeta por worktree, estado en vivo de la sesión, lanzar el agente, PRs) y desde la 12.4 (5-ago-2026) aprueba o deniega permisos del agente desde la tarjeta. Su undo cubre solo la última acción hecha en la app. Las funciones de agentes en repos privados requieren plan Pro y cuenta.
 
 Fuentes: [GitLens v17](https://help.gitkraken.com/gitlens/gl-release-v17-x/) · [GitLens Pro](https://gitkraken.com/gitlens/pro-features) · [GitKraken Desktop](https://gitkraken.com/git-client) · [Git Graph #927](https://github.com/mhutchie/vscode-git-graph/issues/927) · [Git Graph Plus](https://open-vsx.org/extension/the0807/git-graph-plus/changes) · [GitBit](https://open-vsx.org/extension/filipstrand/gitbit) · [GitStudio](https://gitstudio.dev/extensions) · [VS Code SCM history](https://code.visualstudio.com/docs/sourcecontrol/history) · [Cursor Extensions](https://cursor.com/help/customization/extensions) · [Open VSX Publishing](https://github.com/eclipse-openvsx/openvsx/wiki/Publishing-Extensions)
