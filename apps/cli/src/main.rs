@@ -1,5 +1,6 @@
 mod events;
 mod i18n;
+mod mcp;
 mod status;
 
 use std::io::{BufRead, IsTerminal, Write};
@@ -59,6 +60,27 @@ enum Command {
         #[arg(long, default_value_t = 50)]
         limit: u32,
     },
+    /// Register or remove the GitRaptor MCP server in your coding agent.
+    Mcp {
+        #[command(subcommand)]
+        action: McpAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum McpAction {
+    /// Register the gitraptor MCP server in Claude Code, for every project (user scope).
+    Install {
+        /// The coding agent. Only claude-code is supported for now.
+        #[arg(long, default_value = "claude-code")]
+        agent: String,
+    },
+    /// Remove the gitraptor MCP server from Claude Code, only if it is this GitRaptor's.
+    Uninstall {
+        /// The coding agent. Only claude-code is supported for now.
+        #[arg(long, default_value = "claude-code")]
+        agent: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -112,6 +134,12 @@ fn main() -> ExitCode {
         }) => repo_retire(path),
         Some(Command::Status { json }) => status(json),
         Some(Command::Events { json, limit }) => events_command(json, limit),
+        Some(Command::Mcp {
+            action: McpAction::Install { agent },
+        }) => mcp::install(&agent),
+        Some(Command::Mcp {
+            action: McpAction::Uninstall { agent },
+        }) => mcp::uninstall(&agent),
     }
 }
 

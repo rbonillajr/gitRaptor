@@ -1,0 +1,12 @@
+gitraptor:
+  Scope: User config (available in all your projects)
+  Status: ✘ Failed to connect
+  Issue: CONNECTION_CLOSED: Connection closed
+  Type: stdio
+  Command: /usr/bin/true
+  Args: --flag two
+  Environment:
+    TOKEN=x
+    B=y
+
+To remove this server, run: claude mcp remove gitraptor -s user
