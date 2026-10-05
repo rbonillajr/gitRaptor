@@ -82,6 +82,9 @@ pub const WORKTREE_STATE: &str = "worktree.state";
 /// One Git event recorded in a repo's history (US-GRP-002). Data:
 /// [`crate::messages::GitEventView`].
 pub const GIT_EVENT: &str = "git.event";
+/// An agent session appeared, changed state or ended (US-GRP-007). Data:
+/// [`crate::messages::SessionView`].
+pub const SESSION_STATE: &str = "session.state";
 
 const fn engine(kind: &'static str) -> EventKind {
     EventKind {
@@ -110,7 +113,7 @@ pub const KINDS: &[EventKind] = &[
     change(WORKTREE_STATE, "US-GRP-001"),
     change(GIT_EVENT, "US-GRP-002"),
     change("gap.recorded", "US-GRP-005"),
-    change("session.state", "US-GRP-007"),
+    change(SESSION_STATE, "US-GRP-007"),
     change("attribution.changed", "US-GRP-010"),
 ];
 
