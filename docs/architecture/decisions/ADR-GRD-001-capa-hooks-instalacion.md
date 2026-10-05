@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-05
 deciders: [Rene Bonilla]
 domain: GRP
 feature: guardrails
@@ -16,7 +16,7 @@ tags: [guardrails, hooks-git, core-hookspath, dispatcher, encadenado, instalacio
 
 # ADR-GRD-001 — Capa de hooks: instalación, encadenado, desinstalación recuperable y cobertura de worktrees
 
-> **Estado**: aceptado por Rene Bonilla el 2026-10-04. Enmendado el 2026-10-04 con los resultados de SPIKE-GRD-001 en macOS (ver "Enmienda (2026-10-04, SPIKE-GRD-001)"); Linux y Windows siguen pendientes.
+> **Estado**: aceptado por Rene Bonilla el 2026-10-04. Enmendado el 2026-10-04 con los resultados de SPIKE-GRD-001 en macOS (ver "Enmienda (2026-10-04, SPIKE-GRD-001)") y el 2026-10-05 por US-GRD-001 (forma del dispatcher nativo y coste en Windows, ver "Enmienda (2026-10-05, US-GRD-001)"); la matriz del spike en Linux y la validación funcional en Windows siguen pendientes.
 
 ## Contexto
 
@@ -331,3 +331,20 @@ Aplicada desde las recomendaciones de [SPIKE-GRD-001-resultados.md](../../requir
 | E-01-7 · Binario nativo | Aceptada con ajuste del Arquitecto: el dispatcher nativo es **necesario para `reference-transaction` desde Git 2.54 en los tres SO** (no solo en Windows); su forma y el respaldo sin `raptor`, en la Dev Spec de US-GRD-001 | § 2, Consecuencias |
 
 **Casos "no se instala"** confirmados por el spike: `extensions.worktreeConfig` con `core.hooksPath` en un `config.worktree` (W03, W04, D18); `include`/`includeIf` locales o de worktree que definan la clave (W05, W07) y cualquier `includeIf "onbranch:…"` (W06). El valor no representable (M-04) sigue sin probar.
+
+## Enmienda (2026-10-05, US-GRD-001)
+
+Fija lo que la Enmienda de SPIKE-GRD-001 dejaba a la Dev Spec de US-GRD-001 ([DS-US-GRD-001](../../requirements/features/guardrails/dev-specs/US-GRD-001-proteger-repo-force-push.md)) y la mide en Windows (§ 14 de los [resultados del spike](../../requirements/features/guardrails/research/SPIKE-GRD-001-resultados.md)). **Decisión del orquestador (2026-10-05), validada por Arquitecto y PO.** El `status` sigue en `accepted`.
+
+| Cambio | Resolución | Dónde |
+|---|---|---|
+| Forma del dispatcher nativo (§ 2) | **Nativo en los tres SO y para todos los dispatchers**, no solo `reference-transaction`: un binario mínimo `raptor-hook` (solo `std`) que se instala junto a `raptor` y se **copia tal cual** a `gitraptor/hooks/<hook>`, sin extensión. Medido en Windows: un dispatcher `sh` cuesta ≈ 43 ms por invocación y el nativo ≈ 6 ms; Git for Windows ejecuta un PE sin extensión como hook | § 2 |
+| Constantes (§ 2, M-04) | En `gitraptor/dispatch.conf`, junto a los dispatchers, que el stub localiza desde su propia ruta de ejecutable: archivo regular (sin seguir enlaces), acotado, `clave<TAB>valor` estricto, hash en el diario. Meter las constantes en el binario invalidaría su firma. Sin shell, una comilla simple o `$(…)` son literales; lo no representable pasa a ser `\n`, `\r`, `\t`, NUL o bytes que no son UTF-8. El stub comprueba que la constante `common` es la ruta canónica de su propia carpeta (si no, deniega) | § 2 |
+| Entorno de la evaluación (§ 2) | La allowlist añade `LC_ALL`, `LC_MESSAGES` y `LANG`: solo eligen el idioma de los mensajes (NFR-10) | § 2 |
+| Código fijo sin `raptor` (§ 3) | No se genera ningún `sh`: el respaldo lo implementa el stub en Rust con las mismas reglas (incluida la excepción del *prune* de `pack-refs`) y trata también como borrado una línea de `HEAD` con valor nuevo cero. Interpreta la salida de `raptor`: 0 permite, 1 deniega y cualquier otra cosa es un error interno con la tabla del § 3. La Validación 7 (contenido del `sh`) pasa a pruebas de comportamiento del stub | § 3, Validación 7 |
+| Excepción con nombre (§ 7) | El stub es el único componente de la capa de hooks con un `Command::new` propio, y solo arranca el `raptor` de sus constantes, con `env_clear` y sin shell (comprobación estática `guard_boundary`) | § 7, Validación 12 |
+| Lecturas de la capa (§ 5, § 7) | `--show-scope --show-origin --get-all core.hooksPath` y los `includeIf "onbranch:"` son un perfil propio de la capa de Guardrails (`GuardRead`), no de la capa de lectura, que nunca lista configuración | § 5, § 7 |
+| Alcance de US-GRD-001 (§ 4 paso 1, § 6) | Sin hooks previos que encadenar: con un hook ejecutable en `<común>/hooks` o un `core.hooksPath` en cualquier nivel, no se instala y se explica (`prior-hooks`; US-GRD-002 encadena). Así ningún hook del usuario deja de ejecutarse | § 4, § 6 |
+| `manifest.json` (§ 1) | Se escribe con los pasos copiables de la recuperación manual | § 1 |
+
+**Riesgo nuevo declarado**: tras actualizar el binario con el daemon viejo vivo, en Linux el par puede ser otro archivo y el hook deniega en refs gobernadas (`channel-not-authentic`) hasta que el daemon se reemplace. La mitigación (el daemon se cierra si cambia la identidad de su propio ejecutable) es de US-GRD-003 con el § 8.
