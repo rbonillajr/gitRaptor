@@ -11,7 +11,7 @@ created: 2026-10-04
 updated: 2026-10-04
 related:
   adrs: [ADR-CKP-003, ADR-GRP-004, ADR-GRP-005, ADR-GRP-011, ADR-GRP-013]
-  stories: [TS-GRP-004, INF-GRP-001, INF-GRP-002, TS-CKP-004]
+  stories: [US-CKP-001, US-CKP-002, US-CKP-003, US-CKP-004, TS-GRP-004, INF-GRP-001, INF-GRP-002, TS-CKP-004]
   specs: []
 ado:
   id: null
@@ -45,7 +45,7 @@ tags: [cockpit, tui, ratatui, tea, canal, saneado, sec-12, latencia, nfr-04, i18
 - **Crear** el catálogo i18n tipado en/es, de modo que una traducción ausente no compile (ADR-CKP-003 § 10).
 - **Crear** la tabla única acción ↔ teclas que alimenta la entrada, las pistas de teclado y la ayuda.
 - **Implementar** la inicialización y la restauración de la terminal, también ante un pánico, y la suspensión que reutilizan el editor y `Ctrl-Z`.
-- **Instrumentar** `t_client_recv` y `t_render` con el reloj monótono común y un histograma local por etapa que nunca sale de la máquina (ADR-CKP-003 § 6).
+- **Instrumentar** las marcas de recepción en el cliente y de render con el reloj monótono común y un histograma local por etapa que nunca sale de la máquina (ADR-CKP-003 § 6).
 - **Conducir** la misma aplicación sin pantalla desde el banco de INF-GRP-002 contra el daemon real, con el gate del Cockpit y el aviso de feedback por tecla.
 - **Crear** el microbanco sintético sin daemon que corre en cada PR que toque `apps/cli`.
 - **Registrar** las comprobaciones estáticas de CI: solo el módulo del subcomando del daemon importa el motor; la TUI no importa la capa de Git ni la de políticas; ningún widget recibe texto del contrato sin sanear.

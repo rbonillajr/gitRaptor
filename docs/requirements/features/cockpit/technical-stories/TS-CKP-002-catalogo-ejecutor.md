@@ -11,7 +11,7 @@ created: 2026-10-04
 updated: 2026-10-04
 related:
   adrs: [ADR-CKP-002, ADR-TMC-002, ADR-TMC-004, ADR-TMC-005, ADR-TMC-007, ADR-GRP-005, ADR-GRP-009]
-  stories: [TS-TMC-004, TS-TMC-003, TS-GRP-002, TS-GRP-003, TS-GRP-004, INF-GRP-001, INF-TMC-001, TS-CKP-003]
+  stories: [US-CKP-014, US-CKP-015, US-CKP-016, US-CKP-017, US-CKP-018, US-CKP-020, US-CKP-024, TS-TMC-004, TS-TMC-003, TS-GRP-002, TS-GRP-003, TS-GRP-004, INF-GRP-001, INF-TMC-001, TS-CKP-003]
   specs: []
 ado:
   id: null
@@ -31,7 +31,7 @@ tags: [cockpit, catalogo-operaciones, ejecutor, operacion-protegida, capa, seria
 
 > Dev Spec: `dev-specs/TS-CKP-002-catalogo-ejecutor.md` | Pendiente
 >
-> **Depende de**: TS-TMC-004 (operación protegida, solicitante y reto ligado al plan), TS-GRP-004 (consultas para describir, preparar, ejecutar y cancelar; `planId`; eventos de operación; marca de la conexión de un descendiente del ejecutor: **pendiente, dueño: worker del canal (TS-GRP-004)**), TS-GRP-002 (lecturas para precondiciones) y TS-GRP-003. Comparte con TS-TMC-003 el cerrojo de escritura por repo: lo crea la primera de las dos que entre. Las operaciones gobernadas necesitan TS-CKP-003 antes de su historia. **ADRs**: ADR-CKP-002 § 1 a § 6, § 11 y § 12, que la Dev Spec sigue punto por punto; ADR-TMC-005 § 1 a § 3; ADR-GRP-009 § 3 y § 4. **Seguridad**: hallazgos H-01, H-02, M-01 a M-05, L-01, L-02, L-04, L-07 e I-02 de la revisión de seguridad de ADR-CKP-002; SEC-02, SEC-05, SEC-10, SEC-12, NFR-02. **Habilita**: BR-07 (merge, rebase, descartar, crear worktree y abortar; BR-CKP-ELIG-001 a 005, WF-003, WF-008, CONS-002, CONS-004, AUTH-002, AUTH-003) y las herramientas de escritura de F-001-05 (`safe_commit`, `safe_rebase`, `create_worktree`, `snapshot`; DEP-MCP-2, DEP-MCP-3, DEP-MCP-5).
+> **Depende de**: TS-TMC-004 (operación protegida, solicitante, reto ligado al plan y marcas de los hijos, ya en main), TS-GRP-004 (consultas para describir, preparar, ejecutar y cancelar; `planId`; eventos de operación: **pendiente, dueño: worker del canal (TS-GRP-004)**; el rechazo `daemon-descendant` de lo reservado ya está en main), TS-GRP-002 (lecturas para precondiciones) y TS-GRP-003. Reutiliza el cerrojo de escritura por repo que creó TS-TMC-003. Las operaciones gobernadas necesitan TS-CKP-003 antes de su historia. **ADRs**: ADR-CKP-002 § 1 a § 6, § 11 y § 12, que la Dev Spec sigue punto por punto; ADR-TMC-005 § 1 a § 3; ADR-GRP-009 § 3 y § 4. **Seguridad**: hallazgos H-01, H-02, M-01 a M-05, L-01, L-02, L-04, L-07 e I-02 de la revisión de seguridad de ADR-CKP-002; SEC-02, SEC-05, SEC-10, SEC-12, NFR-02. **Habilita**: BR-07 (merge, rebase, descartar, crear worktree y abortar; BR-CKP-ELIG-001 a 005, WF-003, WF-008, CONS-002, CONS-004, AUTH-002, AUTH-003) y las herramientas de escritura de F-001-05 (`safe_commit`, `safe_rebase`, `create_worktree`, `snapshot`; DEP-MCP-2, DEP-MCP-3, DEP-MCP-5).
 
 ### Alcance Técnico
 
@@ -40,13 +40,14 @@ tags: [cockpit, catalogo-operaciones, ejecutor, operacion-protegida, capa, seria
 - **Validar** los parámetros en el daemon: rutas canonicalizadas, ruta nueva de un worktree sin enlaces ni padres escribibles por otros, ramas nuevas con las reglas de L-02 y oids tomados siempre del plan.
 - **Implementar** la fase de preparar, sin efectos: precondiciones comunes en su orden, plan con valores esperados e identidad del repo, avisos, trabajo afectado, huella y vista previa de la decisión (ADR-CKP-002 § 2).
 - **Emitir** un `planId` aleatorio ligado a la conexión y al solicitante, que caduca y que solo acepta la misma conexión.
-- **Implementar** la fase de ejecutar: cerrojo, intención, solicitante re-resuelto, plan rehecho y comparado con la huella, decisión que cuenta, snapshot previo garantizado, ejecución y registro.
+- **Implementar** la fase de ejecutar: cerrojo, solicitante re-resuelto, plan rehecho y comparado con la huella, decisión que cuenta y, solo si procede, la operación protegida (intención, snapshot previo garantizado, ejecución y registro).
 - **Revalidar** bajo el cerrojo la identidad del repo y del worktree antes de lanzar, y pasar siempre el repo y el working tree explícitos a Git (ADR-CKP-002 § 5 y § 6).
 - **Comprobar** las precondiciones de Git que la TUI no ve: locks de Git, que nunca se borran; worktree bloqueado; rama sacada en otro worktree; repo con grafts.
 - **Aplicar** la regla base de permisos con la confirmación ligada al plan de ADR-TMC-005 sobre el trabajo afectado de cada operación.
-- **Crear** el cerrojo de escritura por repo en un módulo neutro del motor, compartido con el aplicador de la Time Machine, con una cola que ven todos los clientes.
-- **Crear** el registro de hijos del ejecutor con su barrera de arranque: ningún `git` corre antes de quedar registrado con su identidad no reutilizable y las transiciones de su plan (I-02).
-- **Resolver** todo proceso que desciende de un hijo registrado como el solicitante de ese plan, sin los privilegios de la capa `cockpit`, y rechazar sus peticiones de operación sin esperar al cerrojo (H-01).
+- **Reutilizar** el cerrojo de escritura por repo del aplicador de la Time Machine desde un módulo neutro del motor y añadirle una cola que ven todos los clientes.
+- **Extender** las marcas de hijos de la operación protegida con las transiciones del plan y una barrera de arranque: ningún `git` corre antes de quedar registrado con su identidad no reutilizable (I-02).
+- **Atribuir** al solicitante del plan todo proceso que desciende de un hijo registrado, sin privilegios de la capa `cockpit`, y rechazarle confirmaciones, excepción, Cancelar y operaciones sin esperar al cerrojo; lo reservado ya lo rechaza el canal (H-01).
+- **Cumplir** los requisitos del canal para el ejecutor: contención de los hijos donde el SO la ofrezca y nada heredable (D21 de la Dev Spec de TS-GRP-004).
 - **Crear** en la capa de Git el módulo de invocación de operaciones de usuario: lista cerrada y tipada, padre directo, sin shell ni terminal de control y sin variantes que salten hooks o reescriban de más.
 - **Construir** el entorno de cada `git` desde la allowlist más las variables de sesión validadas, con los ejecutables del usuario y el editor neutralizados, sin red, sin objetos de reemplazo y solo con los descriptores estándar (ADR-CKP-002 § 6).
 - **Pasar** a Git los valores esperados del plan donde Git lo admite, para que un proceso externo no cuele un cambio entre la comprobación y la ejecución.
@@ -65,7 +66,7 @@ tags: [cockpit, catalogo-operaciones, ejecutor, operacion-protegida, capa, seria
 - **Plan (M-04)**: un `planId` de otra conexión se rechaza; un plan ejecutado tras cambiar el solicitante resuelto da `rejected`.
 - **Huella y valor esperado**: dos clientes descartan el mismo worktree y el segundo recibe "ya no existe"; un commit entre preparar y ejecutar un rebase da `rejected`; una base movida por un proceso externo hace fallar entera la actualización de la ref.
 - **Repo revalidado (M-05)**: sustituir el `.git` de un worktree enlazado entre preparar y ejecutar da `rejected` sin efectos.
-- **Barrera y descendientes (I-02, H-01)**: un hook que se conecta al arrancar encuentra al hijo registrado; con el registro fallido, el hijo muere sin ejecutar hooks. Un hook bajo el plan de un agente que pide un comando reservado, una confirmación o una operación se resuelve como ese agente y se rechaza sin esperar al cerrojo.
+- **Barrera y descendientes (I-02, H-01)**: un hook que se conecta al arrancar encuentra al hijo registrado; con el registro fallido, el hijo muere sin ejecutar hooks. Un hook bajo el plan de un agente que pide un comando reservado, una confirmación o una operación se atribuye a ese agente y se rechaza sin esperar al cerrojo (lo reservado, con `daemon-descendant`). Un hook con doble fork, según el SO (Pendiente: etapa de validación multiplataforma para Linux).
 - **Entorno**: con un hook que lee la terminal y editores apuntando a un canario, nada se cuelga y el canario no se ejecuta. Variables de sesión inválidas se omiten con diagnóstico y un PATH con un `git` falso no cambia el `git` lanzado. Un `refs/replace` no cambia los objetos de la operación; un hook solo ve los descriptores 0, 1 y 2.
 - **Ruta nueva y ramas (H-02, L-02)**: se rechazan un padre con un enlace simbólico, una ruta dentro de `.git` o de un worktree observado, una ruta que aparece entre preparar y ejecutar, y las ramas `HEAD`, `@`, hex de 40 caracteres y con caracteres de anchura cero.
 - **Tiempo**: un hook de capa `mcp` que no termina se interrumpe con el motivo `time-limit`; uno igual de capa `cockpit` espera a Cancelar.
