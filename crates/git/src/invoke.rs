@@ -186,6 +186,64 @@ impl WriteSubcommand {
     }
 }
 
+/// The closed list of the Guardrails write layer (ADR-GRD-001 § 7): only the activation key
+/// `core.hooksPath`, only in the common `config` named with `--file`. Adding one requires
+/// revising ADR-GRD-001 (checked by `tests/static_check.rs`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum GuardSubcommand {
+    /// Writes the absolute path of the dispatchers folder (the commit point of the install).
+    Set,
+    /// Removes the key (a revert, or an uninstall with no previous local value).
+    Unset,
+    /// Reads the value in that one file, without includes.
+    Get,
+}
+
+impl GuardSubcommand {
+    pub(crate) fn words(self) -> &'static [&'static str] {
+        match self {
+            Self::Set => &["config", "--no-includes"],
+            Self::Unset => &["config", "--no-includes", "--unset"],
+            Self::Get => &["config", "--no-includes", "--get"],
+        }
+    }
+}
+
+/// The reads of the Guardrails layer (ADR-GRD-001 § 5 and § 7): `core.hooksPath` as each
+/// worktree sees it, with every level and file, and the `includeIf "onbranch:"` that could
+/// change it. Apart from the read layer, which never lists configuration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum GuardRead {
+    HooksPathAll,
+    OnbranchIncludes,
+}
+
+impl GuardRead {
+    pub(crate) fn words(self) -> &'static [&'static str] {
+        match self {
+            Self::HooksPathAll => &[
+                "config",
+                "--show-scope",
+                "--show-origin",
+                "-z",
+                "--get-all",
+                "core.hooksPath",
+            ],
+            Self::OnbranchIncludes => &[
+                "config",
+                "--show-scope",
+                "--name-only",
+                "-z",
+                "--get-regexp",
+                "^includeif\\.onbranch:",
+            ],
+        }
+    }
+}
+
+/// The null device: the global configuration of a Guardrails write-layer child.
+const NULL_DEVICE: &str = if cfg!(windows) { "NUL" } else { "/dev/null" };
+
 /// Where a write-layer invocation acts. Every path is absolute and comes from the validated
 /// state of the daemon, never from repository configuration (ADR-TMC-002 § 2).
 #[derive(Debug, Clone, Copy)]
@@ -389,6 +447,80 @@ impl Invoker {
             .envs(self.write_env(target))
             .current_dir(target.git_dir);
         self.spawn_and_wait(command, input, stdout_to, &subcommand.words().join(" "))
+    }
+
+    /// Run `git config --file <config> … core.hooksPath [<value>]` for the Guardrails write layer
+    /// (ADR-GRD-001 § 4 paso 3 and § 7): argv fixed here, no shell, no system or global
+    /// configuration, no hooks (`git config` runs none) and the folder of `config` as cwd.
+    pub(crate) fn run_guard(
+        &self,
+        git: &Path,
+        config: &Path,
+        subcommand: GuardSubcommand,
+        value: Option<&Path>,
+    ) -> Result<Output, ReadError> {
+        if !git.is_absolute() || !config.is_absolute() || value.is_some_and(|v| !v.is_absolute()) {
+            return Err(ReadError::InvalidInput(
+                "guard write layer paths must be absolute".into(),
+            ));
+        }
+        if (subcommand == GuardSubcommand::Set) != value.is_some() {
+            return Err(ReadError::InvalidInput("hooksPath value mismatch".into()));
+        }
+        let cwd = config
+            .parent()
+            .ok_or_else(|| ReadError::InvalidInput("config has no folder".into()))?;
+        let mut argv: Vec<OsString> = subcommand.words().iter().map(OsString::from).collect();
+        let mut file = OsString::from("--file=");
+        file.push(config);
+        argv.push(file);
+        argv.push("core.hooksPath".into());
+        if let Some(value) = value {
+            argv.push(value.into());
+        }
+        if let Some(sink) = &self.argv_sink {
+            let mut logged = vec![git.to_string_lossy().into_owned()];
+            logged.extend(argv.iter().map(|a| a.to_string_lossy().into_owned()));
+            sink.record(&logged);
+        }
+        let mut env: Vec<(OsString, OsString)> = self
+            .child_env()
+            .into_iter()
+            .filter(|(k, _)| !key_matches(k, "HOME"))
+            .collect();
+        env.push(("GIT_CONFIG_NOSYSTEM".into(), "1".into()));
+        env.push(("GIT_CONFIG_GLOBAL".into(), NULL_DEVICE.into()));
+        let mut command = Command::new(git);
+        command.args(&argv).env_clear().envs(env).current_dir(cwd);
+        self.spawn_and_wait(command, Input::None, None, &subcommand.words().join(" "))
+    }
+
+    /// Run a read of the Guardrails layer in `worktree`: argv fixed here, the read allowlist of
+    /// the environment (so the global and system levels count, `GIT_CONFIG_*` never does).
+    pub(crate) fn run_guard_read(
+        &self,
+        git: &Path,
+        worktree: &Path,
+        read: GuardRead,
+    ) -> Result<Output, ReadError> {
+        if !git.is_absolute() || !worktree.is_absolute() {
+            return Err(ReadError::InvalidInput(
+                "guard layer paths must be absolute".into(),
+            ));
+        }
+        let argv: Vec<OsString> = read.words().iter().map(OsString::from).collect();
+        if let Some(sink) = &self.argv_sink {
+            let mut logged = vec![git.to_string_lossy().into_owned()];
+            logged.extend(argv.iter().map(|a| a.to_string_lossy().into_owned()));
+            sink.record(&logged);
+        }
+        let mut command = Command::new(git);
+        command
+            .args(&argv)
+            .env_clear()
+            .envs(self.child_env())
+            .current_dir(worktree);
+        self.spawn_and_wait(command, Input::None, None, "config")
     }
 
     /// The environment of a write-layer child: the read allowlist without `HOME`, plus the
