@@ -46,22 +46,11 @@ impl RepoStore {
 
     /// Record a confirmation: both keys in one transaction.
     pub fn set_confirmed_team_baseline(&mut self, confirmed: &Confirmed) -> Result<()> {
-        let floor = match &confirmed.floor {
-            ConfirmedFloor::Absent => FLOOR_ABSENT.to_owned(),
-            ConfirmedFloor::Blob(id) if is_object_id(id) => format!("{FLOOR_BLOB}{id}"),
-            ConfirmedFloor::Blob(_) => {
-                return Err(super::ProfileError::InvalidWrite(
-                    "confirmed floor is not an object id".into(),
-                ));
-            }
-        };
+        let rows = rows(confirmed)?;
         let tx = self
             .conn
             .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-        for (key, value) in [
-            (BASE_KEY, confirmed.base_branch.as_str()),
-            (FLOOR_KEY, floor.as_str()),
-        ] {
+        for (key, value) in &rows {
             tx.execute(
                 "INSERT INTO store_meta (key, value) VALUES (?1, ?2)
                  ON CONFLICT (key) DO UPDATE SET value = excluded.value",
@@ -71,6 +60,23 @@ impl RepoStore {
         tx.commit()?;
         Ok(())
     }
+}
+
+/// The two `store_meta` rows of a confirmation, validated.
+pub(super) fn rows(confirmed: &Confirmed) -> Result<[(&'static str, String); 2]> {
+    let floor = match &confirmed.floor {
+        ConfirmedFloor::Absent => FLOOR_ABSENT.to_owned(),
+        ConfirmedFloor::Blob(id) if is_object_id(id) => format!("{FLOOR_BLOB}{id}"),
+        ConfirmedFloor::Blob(_) => {
+            return Err(super::ProfileError::InvalidWrite(
+                "confirmed floor is not an object id".into(),
+            ));
+        }
+    };
+    Ok([
+        (BASE_KEY, confirmed.base_branch.as_str().to_owned()),
+        (FLOOR_KEY, floor),
+    ])
 }
 
 /// A SHA-1 or SHA-256 object id in lowercase hex.

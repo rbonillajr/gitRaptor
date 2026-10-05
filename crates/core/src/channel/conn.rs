@@ -14,6 +14,7 @@ use gitraptor_api::catalog::{
 };
 use gitraptor_api::event::RESERVED_AUDIT;
 use gitraptor_api::framing::{FrameError, MAX_MESSAGE_BYTES, decode_request, read_frame};
+use gitraptor_api::guard::{EvaluateParams, GuardRejectedData, GuardRepoParams};
 use gitraptor_api::messages::{
     AuditEntry, AuditListParams, AuditListResult, AuditOutcome, ClientIdentity, ClientKind,
     ConnectionProfile, DeclaredAgent, EventsHistoryParams, EventsHistoryResult, Hello, HelloResult,
@@ -47,8 +48,8 @@ use super::requester::{self, Resolution};
 use super::validate;
 use super::{ServerCtx, file_id};
 use crate::daemon::{
-    CHANGE_LIST_BUDGET, Field, RegisterRequest, RegistrationError, RepoAddRequest,
-    RepoCommandError, StopCause, WithdrawRequest, now_ms,
+    CHANGE_LIST_BUDGET, Field, GuardReply, GuardRequest, RegisterRequest, RegistrationError,
+    RepoAddRequest, RepoCommandError, StopCause, WithdrawRequest, now_ms,
 };
 use crate::executor::{
     Caller, ExecError, PrepareInput, RunEnv, RunInput, layer_for, oplog_channel,
@@ -658,6 +659,21 @@ impl Connection<'_> {
                 let result = self.registration_withdraw(spec, request);
                 self.reply(&request.id, result);
             }
+            // On this thread, never through the loop: the hook of an executor's own `git`
+            // must not wait for anything (ADR-GRD-003, Enmienda Cockpit).
+            methods::GUARD_EVALUATE => {
+                let result = request
+                    .params::<EvaluateParams>()
+                    .map(|p| crate::guardrails::evaluate::serve(&self.ctx.guard, &p));
+                self.reply(&request.id, result);
+            }
+            methods::GUARD_PLAN
+            | methods::GUARD_STATUS
+            | methods::GUARD_INSTALL
+            | methods::GUARD_DECLINE => {
+                let result = self.guard(spec, request);
+                self.reply(&request.id, result);
+            }
             _ => {
                 // Declared ahead of their stories: validated, authorized and
                 // audited, then "not implemented".
@@ -694,6 +710,40 @@ impl Connection<'_> {
                 t_computed,
             })
             .map_err(repo_command_error)
+    }
+
+    /// `guard.*` (US-GRD-001): the reserved ones are authorized and audited before the path
+    /// is read, like `repo.add`; the loop then acts on an observed repo only.
+    fn guard(
+        &self,
+        spec: &MethodSpec,
+        request: &Request,
+    ) -> Result<serde_json::Value, ErrorObject> {
+        let params: GuardRepoParams = request.params()?;
+        let path = validate::client_path(&params.path).map_err(invalid)?;
+        if spec.reserved {
+            self.reserved(spec, None)?;
+        }
+        let common_dir = crate::observe::locate(&path).map_err(rejected)?;
+        let kind = match spec.name {
+            methods::GUARD_PLAN => GuardRequest::Plan,
+            methods::GUARD_INSTALL => GuardRequest::Install,
+            methods::GUARD_DECLINE => GuardRequest::Decline,
+            _ => GuardRequest::Status,
+        };
+        let value = match self.ctx.control.guard(common_dir, kind) {
+            GuardReply::Plan(plan) => serde_json::to_value(*plan),
+            GuardReply::Status(status) => serde_json::to_value(*status),
+            GuardReply::NotObserved => return Err(rejected(RepoRejection::NotObserved)),
+            GuardReply::Rejected(blockers) => {
+                return Err(ErrorObject::new(code::GUARD_REJECTED, "install refused")
+                    .with_data(GuardRejectedData { blockers }));
+            }
+            GuardReply::Failed => {
+                return Err(ErrorObject::new(code::INTERNAL, "guardrails unavailable"));
+            }
+        };
+        value.map_err(|_| ErrorObject::new(code::INTERNAL, "encode"))
     }
 
     /// `repo.retire` (US-GRP-001): stops observing; the data is kept.
