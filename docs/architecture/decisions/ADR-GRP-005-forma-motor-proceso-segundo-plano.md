@@ -282,3 +282,15 @@ Decisión del orquestador (2026-10-05), validada por Arquitecto, PO y security-e
 | **Perfil `mcp` por solicitante, no por cliente** (S-01): si el solicitante resuelto es un agente, el daemon aplica el perfil `mcp` (métodos, vistas y allowlist) sea cual sea el cliente (`raptor-mcp`, la CLI o JSON-RPC directo). Se resuelve al conectar y en cada llamada, y dentro de una conexión solo se endurece. El cliente del hook de Guardrails se clasifica por su ejecutable instalado y conserva sus métodos; `daemon.replace` del binario instalado sigue permitido. La atribución sale del proceso, nunca del cwd | § 5 | ADR-MCP-001 § 2; M-03 de ADR-CKP-002 |
 | **Límites por solicitante** (S-03): ≤ 8 conexiones por agente con rate limit compartido; los "sin atribuir" sin controles comparten un cupo; plazas reservadas para clientes que pasan los controles 1 a 3 y para el cliente del hook (la plaza no es un permiso) | § 5 (SEC-08) | ADR-MCP-001 § 6 |
 | **Registro y retiro del propio agente por MCP** (`register_agent`, `unregister_agent`): métodos no reservados, solo sobre el proceso que llama y el worktree de su cwd. Retirar el registro de **otro** agente sigue reservado (`registration.withdraw`) | § 6.6 | Q-MCP-23, US-MCP-006 |
+
+## Enmienda (2026-10-05, Windows: procesos)
+
+Decisión del orquestador (2026-10-05), validada por el Arquitecto y por security-expert. Detalle en la [Dev Spec de TS-GRP-004 § 6](../../requirements/features/motor-local/dev-specs/TS-GRP-004-dev-spec.md#6-windows-lectura-de-procesos-y-solicitante-2026-10-05).
+
+| Cambio | Dónde |
+|---|---|
+| La decisión 8 se mantiene para el **transporte**: el named pipe sigue sin implementar y el cliente responde "no soportado". La causa "necesita Win32 sin `unsafe` propio" queda resuelta por `crates/winsys` (Enmienda 2026-10-05 de ADR-GRP-002) | § 5, decisión 8 |
+| **Identificador en Windows: `(pid, hora de creación)` leído con el handle abierto**, que impide reutilizar el PID mientras se lee. El padre se acepta solo si se creó antes que su hijo, porque Windows no actualiza el ppid cuando el padre termina | § 6.1 |
+| **SID → uid**: `0` si el token es del usuario del daemon, ajeno si es de otro usuario, `Denied` si no se puede leer. La cadena termina limpia en un proceso de otro usuario o en `explorer.exe` de la carpeta de Windows leída del kernel | § 6.1 |
+| **Compuerta explícita de comandos reservados y confirmación** (`terminal_proof`): sin terminal de control ni líder de sesión, en Windows todo comando reservado y toda confirmación se rechazan con `Unsupported` después de recorrer la ascendencia (TQ-14). Un "sin atribuir" cuya ascendencia no se puede verificar se rechaza con `identity-unverified` | § 6 |
+| **Riesgo residual añadido**: los nietos huérfanos de un hijo del ejecutor se rechazan en vez de atribuirse (los Job Objects quedan pendientes), hay una carrera entre `spawn` y la marca, y un proceso del mismo usuario puede elegir padre (`PROC_THREAD_ATTRIBUTE_PARENT_PROCESS`) | § 6, Consecuencias |
