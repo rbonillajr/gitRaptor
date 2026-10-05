@@ -31,7 +31,7 @@ ado:
   id: null
   url: null
 covers: [BR-MCP-ELIG-005, BR-MCP-VAL-004, BR-MCP-TIME-001, BR-MCP-AUTH-002, BR-MCP-EDGE-008]
-blocked_by: [ADR-MCP-001, ADR-CKP-002, "API de captura manual de la Time Machine (pendiente en ADR-CKP-002; dueño: Time Machine)"]
+blocked_by: []
 tags: [mcp, snapshot, time-machine, cuota, ola-3]
 ---
 
@@ -52,8 +52,8 @@ BR-MCP-ELIG-005 (parte: `snapshot` manual con cuota y rate limit propios) · BR-
 - **Historias**: US-MCP-005 (respuestas y errores), US-MCP-006 (registro), US-MCP-007 (confused deputy cerrado), US-MCP-009 (empieza cuando su Dev Spec fije el flujo de escritura, D-3). De la Time Machine: US-TMC-001 (operación protegida), US-TMC-016 (retención), TS-TMC-004 (comando de snapshot en el canal).
 - **Habilitadores**: TS-CKP-002 (catálogo y ejecutor) y TS-CKP-003 (decisión única heredada por los hooks), en propuesta, rama docs/arch-cockpit.
 - **Dueña de la operación del catálogo**: esta historia es dueña de `snapshot`.
-- **Externas**: ADR-MCP-001 (DEP-MCP-1, no existe). ADR-CKP-002 (**propuesto**, en docs/arch-cockpit): `snapshot` → operación `snapshot` del catálogo; DEP-MCP-2 y DEP-MCP-5 se resuelven vía ADR-CKP-002. **La operación normalizada de Guardrails para el snapshot está pendiente en ADR-CKP-002**, así que esta historia no fija todavía un escenario de decisión de Guardrails. **API de captura manual de la Time Machine** (etiqueta, cuota y nivel de cobertura): pendiente en ADR-CKP-002, dueño la Time Machine. Los tres son bloqueos de arquitectura.
-- **Transversal**: cifras de cuota y rate limit: supuesto S-MCP-1 (Dev Spec).
+- **Externas**: ADR-MCP-001 (DEP-MCP-1, no existe). ADR-CKP-002 (**propuesto**, en docs/arch-cockpit): `snapshot` → operación `snapshot` del catálogo; DEP-MCP-2 y DEP-MCP-5 se resuelven vía ADR-CKP-002. `snapshot` **no es una operación gobernada** (D-17, BR-MCP-001 v0.3): no hay escenario de decisión de Guardrails. La **API de captura manual** (nivel `manual`, etiqueta, cuota y rate limit) la fija ADR-TMC-004, Enmienda (2026-10-05, MCP) (D-21); con la cuota llena se rechaza y nunca se borra un snapshot manual. Bloqueo de arquitectura que queda: ADR-CKP-002 vía TS-CKP-002.
+- **Transversal**: cifras de ADR-MCP-001 § 6 (D-22): ≤ 20 snapshots por solicitante y worktree en una ventana de 24 h, 5 por minuto y la cuota de disco general por encima.
 
 ## Criterios de Aceptación
 
@@ -90,13 +90,18 @@ Ejemplos:
 | una etiqueta que supera el tope de longitud |
 | una etiqueta con caracteres de control |
 
-**Escenario: Un agente en bucle choca con la cuota de snapshots manuales**
+**Esquema del escenario: Un agente en bucle choca con la cuota de snapshots manuales**
 
-Dado "claude-1" ya alcanzó el límite de snapshots manuales por minuto en "shop-feat-a"
+Dado "claude-1" ya alcanzó <límite> en "shop-feat-a"
 Cuando pide otro `snapshot`
-Entonces la petición se rechaza con el motivo y el tiempo de espera
+Entonces la petición se rechaza con el motivo y <espera>
   Y los snapshots anteriores siguen intactos
   Y los snapshots previos de las operaciones protegidas se siguen tomando
+
+Ejemplos:
+| límite | espera |
+| 5 snapshots en el último minuto | los segundos hasta que pueda pedir otro |
+| 20 snapshots en las últimas 24 h | la hora a la que el más antiguo sale de la ventana |
 
 **Escenario: Sin atribuir no toma snapshots**
 

@@ -25,7 +25,7 @@ ado:
   id: null
   url: null
 covers: [BR-MCP-VAL-001, BR-MCP-EDGE-010, BR-MCP-EDGE-003]
-blocked_by: [ADR-MCP-001, ADR-CKP-002]
+blocked_by: []
 tags: [mcp, safe-commit, rutas, path-traversal, worktree-compartido, ola-3]
 ---
 

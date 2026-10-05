@@ -29,7 +29,7 @@ ado:
   id: null
   url: null
 covers: [BR-MCP-ELIG-003, BR-MCP-WF-002, BR-MCP-WF-003, BR-MCP-EDGE-007, BR-MCP-EDGE-002, BR-MCP-EDGE-003]
-blocked_by: [ADR-MCP-001, ADR-CKP-002]
+blocked_by: []
 tags: [mcp, safe-rebase, rebase-atomico, escritura, ola-5]
 ---
 
@@ -51,7 +51,7 @@ BR-MCP-ELIG-003 (precondiciones de `safe_rebase`) · BR-MCP-WF-002 (abort autom�
 - **Habilitadores**: TS-CKP-002 (catálogo y ejecutor) y TS-CKP-003 (decisión única heredada por los hooks), en propuesta, rama docs/arch-cockpit.
 - **Dueña de la operación del catálogo**: esta historia es dueña del modo `atomic` de `rebase-onto-base`. Relación: US-CKP-015, rebase desde el Cockpit (propuesta, rama docs/stories-cockpit), que usa la misma operación en su modo detenido.
 - **Externas**: ADR-CKP-002 (**propuesto**, en docs/arch-cockpit): `safe_rebase` → `rebase-onto-base` en modo `atomic`, con el abort dentro de la operación y el abort fallido como `stopped`; flags fijados y transiciones de refs del abort no reevaluadas (DEP-MCP-2 y DEP-MCP-5 vía ADR-CKP-002). ADR-MCP-001 (DEP-MCP-1, no existe). ADR-MCP-001 y ADR-CKP-002 son bloqueos de arquitectura.
-- **Pendiente de ADR-MCP-001**: ADR-CKP-002 § 12 exige que el agente enumere los avisos del plan al ejecutar; esta ficha supone una herramienta de una sola llamada. El escenario de la rama ya empujada (BR-MCP-EDGE-007) puede cambiar según lo que se decida.
+- **Avisos del plan** (resuelto por ADR-MCP-001 § 4.3, D-19): si el plan trae avisos, la primera llamada se rechaza sin efectos con la lista y el agente repite la llamada reconociéndolos exactamente (`acknowledge`).
 
 ## Criterios de Aceptación
 
@@ -103,9 +103,11 @@ Ejemplos:
 **Escenario: Rebasar una rama ya empujada avisa de la divergencia**
 
 Dado "feat-a" ya empujada a "origin/feat-a" y Guardrails permite el rebase
-Cuando "claude-1" pide `safe_rebase`
+Cuando "claude-1" pide `safe_rebase` sin reconocer avisos
+Entonces nada cambia y la respuesta lista el aviso de upstream divergente con la acción "repite la llamada reconociéndolo"
+Cuando "claude-1" repite `safe_rebase` reconociendo ese aviso
 Entonces el rebase se hace
-  Y la respuesta avisa de que "feat-a" diverge de "origin/feat-a" y de que el force-push está bloqueado por política
+  Y la respuesta vuelve a avisar de que "feat-a" diverge de "origin/feat-a" y de que el force-push está bloqueado por política
 
 **Escenario: Rebasar la rama base se deniega igual que por Git directo**
 

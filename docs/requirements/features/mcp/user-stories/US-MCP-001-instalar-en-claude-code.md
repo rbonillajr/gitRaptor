@@ -23,7 +23,7 @@ ado:
   id: null
   url: null
 covers: [BR-MCP-WF-007, BR-MCP-EDGE-009]
-blocked_by: [ADR-MCP-001]
+blocked_by: []
 tags: [mcp, instalacion, claude-code, ola-1]
 ---
 

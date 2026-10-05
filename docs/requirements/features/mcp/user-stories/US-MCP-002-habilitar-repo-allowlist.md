@@ -31,7 +31,7 @@ ado:
   id: null
   url: null
 covers: [BR-MCP-WF-006, BR-MCP-CONS-003, BR-MCP-AUTH-004]
-blocked_by: [DEP-MCP-3, DEP-MCP-4]
+blocked_by: []
 tags: [mcp, allowlist, opt-in, comando-reservado, ola-1]
 ---
 

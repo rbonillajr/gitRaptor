@@ -26,7 +26,7 @@ ado:
   id: null
   url: null
 covers: [BR-MCP-ELIG-004, BR-MCP-VAL-002, BR-MCP-EDGE-002, BR-MCP-VAL-001]
-blocked_by: [ADR-MCP-001, ADR-CKP-002]
+blocked_by: []
 tags: [mcp, create-worktree, escritura, ola-5]
 ---
 

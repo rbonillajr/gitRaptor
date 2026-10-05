@@ -24,7 +24,7 @@ ado:
   id: null
   url: null
 covers: [BR-MCP-CALC-004]
-blocked_by: [ADR-MCP-001, ADR-CKP-001, DEP-MCP-6]
+blocked_by: []
 tags: [mcp, check-conflicts, prediccion, lectura, ola-4]
 ---
 

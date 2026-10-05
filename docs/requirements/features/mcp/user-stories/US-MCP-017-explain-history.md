@@ -27,7 +27,7 @@ ado:
   id: null
   url: null
 covers: [BR-MCP-CALC-005, BR-MCP-VAL-002]
-blocked_by: [ADR-MCP-001]
+blocked_by: []
 tags: [mcp, explain-history, timeline, lectura, ola-4]
 ---
 
