@@ -142,7 +142,7 @@ Decisión del orquestador (2026-10-04), validada por el PO y el Arquitecto: la T
 
 | Pendiente | Dónde se resuelve |
 |---|---|
-| Mantenimiento del almacén (`repack -d --geometric=2`, periodo de gracia) y su prueba "captura en curso durante el mantenimiento" | `repack` y `prune` ya están en la lista cerrada de ADR-TMC-002 § 2, pero los ejecuta la capa de escritura con Git CLI → TS-TMC-003 / US-TMC-016 (ADR-TMC-007 § 4) |
+| Mantenimiento del almacén (`repack -d --geometric=2`, periodo de gracia) y su prueba "captura en curso durante el mantenimiento" | `repack` y `prune` ya están en la lista cerrada de ADR-TMC-002 § 2 y los expone la capa de escritura (`StoreRepo::repack`/`prune`, TS-TMC-003); cuándo corren y su gracia → US-TMC-016 (ADR-TMC-007 § 4) |
 | Cuotas de disco (SEC-TMC-12). La **reserva del snapshot previo** es requisito previo de US-TMC-004 (en cuanto exista la observación, compite por el disco) y de US-TMC-016 | US-TMC-004 / US-TMC-016. Mientras no haya disparadores, nada captura solo |
 | Disparadores del daemon: anclaje al publicar commits, verificación periódica fuera de la ruta crítica, cadencia de la observación | Daemon + US-TMC-004. `anchor`, `verify` y la detección completa ya existen |
 | Interfaz del motor "rutas cambiadas desde la marca X" | TS-GRP-002/003. La API ya acepta las pistas; sin ellas, detección completa (siempre correcta, fuera del presupuesto) |

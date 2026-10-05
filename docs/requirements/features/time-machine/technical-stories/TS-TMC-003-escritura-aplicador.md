@@ -8,11 +8,11 @@ domain: GRP
 priority: critical
 complexity: high
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 related:
   adrs: [ADR-TMC-002, ADR-TMC-001, ADR-TMC-003, ADR-GRP-001, ADR-GRP-009]
   stories: [US-TMC-002, US-TMC-003, US-TMC-009, US-TMC-010, US-TMC-011, US-TMC-014, US-TMC-015, US-TMC-019, TS-GRP-002, TS-TMC-001, TS-TMC-002]
-  specs: []
+  specs: [DS-TS-TMC-003]
 ado:
   id: null
   url: null
@@ -29,7 +29,7 @@ tags: [time-machine, escritura, restauracion, locks, seguridad-rutas, nfr-01, nf
 **Quiero** una capa de escritura separada de la de lectura y un aplicador que lleve worktrees, índice y refs al estado de un snapshot
 **Para** que todas las escrituras de la Time Machine en el repo sigan un único protocolo recuperable y el motor no pueda alcanzarlas (Q21)
 
-> Dev Spec: `dev-specs/TS-TMC-003-escritura-aplicador.md` | Pendiente
+> Dev Spec: [`dev-specs/TS-TMC-003-escritura-aplicador.md`](../dev-specs/TS-TMC-003-escritura-aplicador.md) | In Review (implementada en parte, verificada en macOS: lo que falta está en su § 8)
 >
 > **Depende de**: TS-GRP-002 (reglas de invocación y resolución de Git), TS-TMC-001 (almacén) y TS-TMC-002 (diario). **ADRs**: ADR-TMC-002 (frontera, reglas y orden de aplicación), ADR-GRP-009 § 3 (invocación que se hereda).
 
