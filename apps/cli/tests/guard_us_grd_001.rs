@@ -64,6 +64,12 @@ impl Machine {
     }
 
     fn from_fixture(f: Fixture) -> Self {
+        // Without debug assertions `raptor` ignores GITRAPTOR_PROFILE_DIR and would use the
+        // real profile (NFR-01): refuse to run.
+        assert!(
+            cfg!(debug_assertions),
+            "build with debug assertions (CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true for --release)"
+        );
         use std::os::unix::fs::PermissionsExt;
         for dir in ["", "data", "config", "state"] {
             std::fs::set_permissions(f.profile.join(dir), std::fs::Permissions::from_mode(0o700))
@@ -966,5 +972,60 @@ mod recovery {
         assert_eq!(status.permission, Permission::Granted);
         let out = m.git(&m.f.repo, &["branch", "-D", "main"]);
         assert!(!out.status.success(), "{}", text(&out));
+    }
+}
+
+/// NFR-GRD-04 / ADR-GRD-002 § 5, as a report (not a gate; INF-GRD-001 D11): what the hook layer
+/// adds per command, protected against unprotected. Run on a machine at rest with
+/// `CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo test --release -p gitraptor-cli --test
+/// guard_us_grd_001 latency_report -- --ignored --nocapture` (debug assertions keep the
+/// temporary profile).
+#[test]
+#[ignore = "latency report, run by hand on a machine at rest"]
+fn latency_report() {
+    const N: usize = 40;
+    let percentile = |mut v: Vec<f64>, q: f64| {
+        v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        v[((q * (v.len() - 1) as f64).round() as usize).min(v.len() - 1)]
+    };
+    let time = |m: &Machine, args: &[&str], setup: &dyn Fn(&Machine)| {
+        let mut samples = Vec::new();
+        for i in 0..N + 3 {
+            setup(m);
+            let start = Instant::now();
+            let out = m.git(&m.f.repo, args);
+            let ms = start.elapsed().as_secs_f64() * 1000.0;
+            assert!(out.status.success(), "{args:?}: {}", text(&out));
+            if i >= 3 {
+                samples.push(ms);
+            }
+        }
+        (percentile(samples.clone(), 0.5), percentile(samples, 0.95))
+    };
+    let plain = Machine::new();
+    let guarded = Machine::protected();
+    let no_setup = |_: &Machine| {};
+    let tmp_branch = |m: &Machine| {
+        let _ = m.git(&m.f.repo, &["branch", "-q", "tmp"]);
+    };
+    let tmp_tag = |m: &Machine| {
+        let _ = m.git(&m.f.repo, &["tag", "-d", "t"]);
+    };
+    for (name, args, setup) in [
+        (
+            "commit",
+            &["commit", "-q", "--allow-empty", "-m", "x"][..],
+            &no_setup as &dyn Fn(&Machine),
+        ),
+        ("branch -D (governed evaluation)", &["branch", "-q", "-D", "tmp"], &tmp_branch),
+        ("tag (fast path)", &["tag", "t"], &tmp_tag),
+    ] {
+        let (p50, p95) = time(&plain, args, setup);
+        let (g50, g95) = time(&guarded, args, setup);
+        println!(
+            "{name:34} unprotected p50 {p50:6.1} p95 {p95:6.1} | protected p50 {g50:6.1} p95 {g95:6.1} | delta p50 {:+6.1} p95 {:+6.1} ms",
+            g50 - p50,
+            g95 - p95
+        );
     }
 }
