@@ -1,7 +1,280 @@
 {
   "color": {
     "$type": "color",
-    "black": { "$value": "#000000" },
-    "white": { "$value": "#ffffff" }
+    "black": {
+      "$value": "#000000",
+      "$extensions": {
+        "dev.gitraptor": {
+          "ansi16": "black"
+        }
+      }
+    },
+    "white": {
+      "$value": "#ffffff",
+      "$extensions": {
+        "dev.gitraptor": {
+          "ansi16": "brightWhite"
+        }
+      }
+    },
+    "gray": {
+      "200": {
+        "$value": "#e4e4e4",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "white"
+          }
+        }
+      },
+      "300": {
+        "$value": "#c6c6c6",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "white"
+          }
+        }
+      },
+      "500": {
+        "$value": "#8a8a8a",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "brightBlack"
+          }
+        }
+      },
+      "700": {
+        "$value": "#4e4e4e",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "brightBlack"
+          }
+        }
+      },
+      "800": {
+        "$value": "#303030",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "black"
+          }
+        }
+      },
+      "900": {
+        "$value": "#1c1c1c",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "black"
+          }
+        }
+      }
+    },
+    "green": {
+      "400": {
+        "$value": "#7ee787",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "brightGreen"
+          }
+        }
+      },
+      "500": {
+        "$value": "#3fb950",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "green"
+          }
+        }
+      }
+    },
+    "red": {
+      "400": {
+        "$value": "#ffa198",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "brightRed"
+          }
+        }
+      },
+      "500": {
+        "$value": "#f85149",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "red"
+          }
+        }
+      }
+    },
+    "yellow": {
+      "300": {
+        "$value": "#ffe066",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "brightYellow"
+          }
+        }
+      },
+      "500": {
+        "$value": "#d29922",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "yellow"
+          }
+        }
+      }
+    },
+    "orange": {
+      "300": {
+        "$value": "#ffb77c",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "brightYellow"
+          }
+        }
+      },
+      "500": {
+        "$value": "#f0883e",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "yellow"
+          }
+        }
+      }
+    },
+    "blue": {
+      "300": {
+        "$value": "#a5d6ff",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "brightBlue"
+          }
+        }
+      },
+      "500": {
+        "$value": "#58a6ff",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "blue"
+          }
+        }
+      },
+      "800": {
+        "$value": "#0b3d91",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "blue"
+          }
+        }
+      }
+    },
+    "teal": {
+      "300": {
+        "$value": "#7ee8d8",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "brightCyan"
+          }
+        }
+      },
+      "500": {
+        "$value": "#2dc2ad",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "cyan"
+          }
+        }
+      }
+    },
+    "purple": {
+      "300": {
+        "$value": "#e2c5ff",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "brightMagenta"
+          }
+        }
+      },
+      "500": {
+        "$value": "#bc8cff",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "magenta"
+          }
+        }
+      }
+    },
+    "okabeIto": {
+      "$description": "Okabe-Ito categorical palette (color-vision-deficiency safe), black replaced by light gray for dark terminals.",
+      "orange": {
+        "$value": "#e69f00",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "yellow"
+          }
+        }
+      },
+      "skyBlue": {
+        "$value": "#56b4e9",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "cyan"
+          }
+        }
+      },
+      "bluishGreen": {
+        "$value": "#009e73",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "green"
+          }
+        }
+      },
+      "yellow": {
+        "$value": "#f0e442",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "brightYellow"
+          }
+        }
+      },
+      "blue": {
+        "$value": "#0072b2",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "blue"
+          }
+        }
+      },
+      "blueLight": {
+        "$value": "#4fa3e0",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "brightBlue"
+          }
+        }
+      },
+      "vermillion": {
+        "$value": "#d55e00",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "red"
+          }
+        }
+      },
+      "reddishPurple": {
+        "$value": "#cc79a7",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "magenta"
+          }
+        }
+      },
+      "gray": {
+        "$value": "#bbbbbb",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "white"
+          }
+        }
+      }
+    }
   }
 }

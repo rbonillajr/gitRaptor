@@ -1,0 +1,271 @@
+{
+  "color": {
+    "text": {
+      "$type": "color",
+      "default": {
+        "$value": "{color.gray.200}",
+        "$extensions": {
+          "dev.gitraptor": {
+            "highContrast": "{color.white}",
+            "inherit": true
+          }
+        }
+      },
+      "muted": {
+        "$value": "{color.gray.500}",
+        "$extensions": {
+          "dev.gitraptor": {
+            "highContrast": "{color.gray.300}",
+            "noColor": [
+              "dim"
+            ]
+          }
+        }
+      },
+      "inverse": {
+        "$value": "{color.black}",
+        "$extensions": {
+          "dev.gitraptor": {
+            "highContrast": "{color.black}"
+          }
+        }
+      }
+    },
+    "bg": {
+      "$type": "color",
+      "default": {
+        "$value": "{color.gray.900}",
+        "$extensions": {
+          "dev.gitraptor": {
+            "highContrast": "{color.black}",
+            "inherit": true,
+            "role": "background"
+          }
+        }
+      },
+      "selected": {
+        "$value": "{color.gray.700}",
+        "$extensions": {
+          "dev.gitraptor": {
+            "highContrast": "{color.blue.800}",
+            "role": "background",
+            "noColor": [
+              "reverse"
+            ]
+          }
+        }
+      },
+      "highlight": {
+        "$value": "{color.gray.800}",
+        "$extensions": {
+          "dev.gitraptor": {
+            "highContrast": "{color.gray.800}",
+            "role": "background",
+            "noColor": [
+              "bold"
+            ]
+          }
+        }
+      }
+    },
+    "accent": {
+      "$type": "color",
+      "default": {
+        "$value": "{color.teal.500}",
+        "$extensions": {
+          "dev.gitraptor": {
+            "highContrast": "{color.teal.300}",
+            "noColor": [
+              "bold"
+            ]
+          }
+        }
+      }
+    },
+    "focus": {
+      "$type": "color",
+      "default": {
+        "$value": "{color.yellow.300}",
+        "$extensions": {
+          "dev.gitraptor": {
+            "highContrast": "{color.yellow.300}",
+            "noColor": [
+              "bold",
+              "reverse"
+            ]
+          }
+        }
+      }
+    },
+    "status": {
+      "$type": "color",
+      "success": {
+        "$value": "{color.green.500}",
+        "$extensions": {
+          "dev.gitraptor": {
+            "highContrast": "{color.green.400}"
+          }
+        }
+      },
+      "warning": {
+        "$value": "{color.yellow.500}",
+        "$extensions": {
+          "dev.gitraptor": {
+            "highContrast": "{color.yellow.300}",
+            "noColor": [
+              "bold"
+            ]
+          }
+        }
+      },
+      "danger": {
+        "$value": "{color.red.500}",
+        "$extensions": {
+          "dev.gitraptor": {
+            "highContrast": "{color.red.400}",
+            "noColor": [
+              "bold"
+            ]
+          }
+        }
+      },
+      "info": {
+        "$value": "{color.blue.500}",
+        "$extensions": {
+          "dev.gitraptor": {
+            "highContrast": "{color.blue.300}"
+          }
+        }
+      }
+    },
+    "git": {
+      "$type": "color",
+      "added": {
+        "$value": "{color.green.500}",
+        "$extensions": {
+          "dev.gitraptor": {
+            "highContrast": "{color.green.400}"
+          }
+        }
+      },
+      "removed": {
+        "$value": "{color.red.500}",
+        "$extensions": {
+          "dev.gitraptor": {
+            "highContrast": "{color.red.400}"
+          }
+        }
+      },
+      "modified": {
+        "$value": "{color.yellow.500}",
+        "$extensions": {
+          "dev.gitraptor": {
+            "highContrast": "{color.yellow.300}"
+          }
+        }
+      },
+      "conflict": {
+        "$value": "{color.orange.500}",
+        "$extensions": {
+          "dev.gitraptor": {
+            "highContrast": "{color.orange.300}",
+            "noColor": [
+              "bold"
+            ]
+          }
+        }
+      },
+      "branch": {
+        "base": {
+          "$value": "{color.purple.500}",
+          "$extensions": {
+            "dev.gitraptor": {
+              "highContrast": "{color.purple.300}"
+            }
+          }
+        }
+      }
+    },
+    "agent": {
+      "1": {
+        "$value": "{color.okabeIto.orange}",
+        "$extensions": {
+          "dev.gitraptor": {
+            "highContrast": "{color.okabeIto.orange}"
+          }
+        }
+      },
+      "2": {
+        "$value": "{color.okabeIto.skyBlue}",
+        "$extensions": {
+          "dev.gitraptor": {
+            "highContrast": "{color.okabeIto.skyBlue}"
+          }
+        }
+      },
+      "3": {
+        "$value": "{color.okabeIto.bluishGreen}",
+        "$extensions": {
+          "dev.gitraptor": {
+            "highContrast": "{color.okabeIto.bluishGreen}"
+          }
+        }
+      },
+      "4": {
+        "$value": "{color.okabeIto.yellow}",
+        "$extensions": {
+          "dev.gitraptor": {
+            "highContrast": "{color.okabeIto.yellow}"
+          }
+        }
+      },
+      "5": {
+        "$value": "{color.okabeIto.blueLight}",
+        "$extensions": {
+          "dev.gitraptor": {
+            "highContrast": "{color.okabeIto.blueLight}"
+          }
+        }
+      },
+      "6": {
+        "$value": "{color.okabeIto.vermillion}",
+        "$extensions": {
+          "dev.gitraptor": {
+            "highContrast": "{color.okabeIto.vermillion}"
+          }
+        }
+      },
+      "7": {
+        "$value": "{color.okabeIto.reddishPurple}",
+        "$extensions": {
+          "dev.gitraptor": {
+            "highContrast": "{color.okabeIto.reddishPurple}"
+          }
+        }
+      },
+      "8": {
+        "$value": "{color.okabeIto.gray}",
+        "$extensions": {
+          "dev.gitraptor": {
+            "highContrast": "{color.okabeIto.gray}"
+          }
+        }
+      },
+      "$type": "color",
+      "state": {
+        "active": {
+          "$value": "{color.status.success}",
+          "$description": "Agent active: alias of status.success; the symbol is the primary signal"
+        },
+        "idle": {
+          "$value": "{color.text.muted}",
+          "$description": "Agent idle: alias of text.muted"
+        },
+        "done": {
+          "$value": "{color.text.muted}",
+          "$description": "Agent finished: alias of text.muted"
+        }
+      }
+    }
+  }
+}
