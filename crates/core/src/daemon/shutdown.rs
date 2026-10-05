@@ -8,10 +8,11 @@
 use std::sync::mpsc::{Receiver, Sender, SyncSender, channel, sync_channel};
 use std::time::Duration;
 
-use gitraptor_api::messages::{RepoAddResult, RepoRetireResult};
+use gitraptor_api::messages::{EventsHistoryParams, GitEventView, RepoAddResult, RepoRetireResult};
 
 use crate::observe::RepoRead;
 use crate::profile::AuditRow;
+use crate::watch::ObservedBatch;
 
 /// How long a channel thread waits for the loop to persist or read the audit.
 #[cfg_attr(not(unix), allow(dead_code))]
@@ -110,6 +111,15 @@ pub(crate) enum Control {
         repo_id: String,
         reply: SyncSender<Result<RepoRetireResult, RepoCommandError>>,
     },
+    /// What the observer saw in one window (US-GRP-002): persist, then
+    /// publish.
+    Observed(Box<ObservedBatch>),
+    /// One page of a repo's Git events (US-GRP-002).
+    #[cfg_attr(not(unix), allow(dead_code))]
+    EventHistory {
+        params: EventsHistoryParams,
+        reply: SyncSender<Result<Vec<GitEventView>, RepoCommandError>>,
+    },
 }
 
 /// Sends requests to the running daemon. Cheap to clone.
@@ -179,6 +189,28 @@ impl ShutdownHandle {
             .send(Control::RepoRetire { repo_id, reply })
             .map_err(|_| RepoCommandError::Internal)?;
         rx.recv_timeout(REPO_TIMEOUT)
+            .map_err(|_| RepoCommandError::Internal)?
+    }
+}
+
+impl ShutdownHandle {
+    /// Hands an observed batch to the loop. `false` if it already stopped.
+    pub(crate) fn observed(&self, batch: ObservedBatch) -> bool {
+        self.tx.send(Control::Observed(Box::new(batch))).is_ok()
+    }
+
+    /// Reads one page of a repo's Git events through the loop, which owns
+    /// the stores (US-GRP-002).
+    #[cfg_attr(not(unix), allow(dead_code))]
+    pub(crate) fn event_history(
+        &self,
+        params: EventsHistoryParams,
+    ) -> Result<Vec<GitEventView>, RepoCommandError> {
+        let (reply, rx) = sync_channel(1);
+        self.tx
+            .send(Control::EventHistory { params, reply })
+            .map_err(|_| RepoCommandError::Internal)?;
+        rx.recv_timeout(AUDIT_TIMEOUT)
             .map_err(|_| RepoCommandError::Internal)?
     }
 }

@@ -12,10 +12,10 @@ use gitraptor_api::event::RESERVED_AUDIT;
 use gitraptor_api::framing::{FrameError, MAX_MESSAGE_BYTES, decode_request, read_frame};
 use gitraptor_api::messages::{
     AuditEntry, AuditListParams, AuditListResult, AuditOutcome, ClientIdentity, ClientKind,
-    ConnectionProfile, Hello, HelloResult, IncompatibleData, McpRepoView, McpSnapshot, NoParams,
-    RefusalReason, RefusedData, ReplaceParams, RepoAddParams, RepoAddResult, RepoRejectedData,
-    RepoRejection, RepoRetireParams, RepoRetireResult, Snapshot, StopResult, SubscribeParams,
-    SubscribeResult, UnsubscribeParams,
+    ConnectionProfile, EventsHistoryParams, EventsHistoryResult, Hello, HelloResult,
+    IncompatibleData, McpRepoView, McpSnapshot, NoParams, RefusalReason, RefusedData,
+    ReplaceParams, RepoAddParams, RepoAddResult, RepoRejectedData, RepoRejection, RepoRetireParams,
+    RepoRetireResult, Snapshot, StopResult, SubscribeParams, SubscribeResult, UnsubscribeParams,
 };
 use gitraptor_api::methods::{self, METHODS, MethodSpec};
 use gitraptor_api::rpc::{ErrorObject, Id, Request, Response, code};
@@ -536,6 +536,10 @@ impl Connection<'_> {
                 let result = request.params().and_then(|p| self.audit_list(p));
                 self.reply(&request.id, result);
             }
+            methods::EVENTS_HISTORY => {
+                let result = request.params().and_then(|p| self.events_history(p));
+                self.reply(&request.id, result);
+            }
             methods::DAEMON_STOP => {
                 let result = request
                     .params::<NoParams>()
@@ -598,13 +602,7 @@ impl Connection<'_> {
         request: &Request,
     ) -> Result<RepoRetireResult, ErrorObject> {
         let params: RepoRetireParams = request.params()?;
-        let ok = !params.repo_id.is_empty()
-            && params.repo_id.len() <= 64
-            && params
-                .repo_id
-                .chars()
-                .all(|c| c.is_ascii_hexdigit() || c == '-');
-        if !ok {
+        if !valid_repo_id(&params.repo_id) {
             return Err(ErrorObject::new(code::INVALID_PARAMS, "invalid repo_id"));
         }
         self.reserved(spec, Some(params.repo_id.clone()))?;
@@ -701,6 +699,28 @@ impl Connection<'_> {
     fn unsubscribe(&mut self, params: UnsubscribeParams) -> Result<bool, ErrorObject> {
         self.subscriptions.retain(|s| *s != params.subscription);
         Ok(self.ctx.bus.unsubscribe(&self.outbox, params.subscription))
+    }
+
+    /// `events.history` (US-GRP-002): one page of a repo's Git events.
+    fn events_history(
+        &self,
+        params: EventsHistoryParams,
+    ) -> Result<EventsHistoryResult, ErrorObject> {
+        if !valid_repo_id(&params.repo_id) {
+            return Err(ErrorObject::new(code::INVALID_PARAMS, "invalid repo_id"));
+        }
+        if params
+            .worktree
+            .as_ref()
+            .is_some_and(|w| w.is_empty() || w.len() > 4096 || w.contains('\0'))
+        {
+            return Err(ErrorObject::new(code::INVALID_PARAMS, "invalid worktree"));
+        }
+        self.ctx
+            .control
+            .event_history(params)
+            .map(|events| EventsHistoryResult { events })
+            .map_err(repo_command_error)
     }
 
     fn audit_list(&self, params: AuditListParams) -> Result<AuditListResult, ErrorObject> {
@@ -1231,6 +1251,11 @@ fn audit_entry(id: i64, row: &AuditRow) -> Option<AuditEntry> {
         },
         client: serde_json::from_str(&row.client).ok()?,
     })
+}
+
+/// A repo id as the profile makes them: short, hexadecimal and dashes.
+fn valid_repo_id(id: &str) -> bool {
+    !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
 }
 
 #[cfg(test)]

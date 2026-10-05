@@ -392,6 +392,38 @@ impl RepoStore {
         )
     }
 
+    /// One page of events, oldest first: those after `after_seq`, or else
+    /// the latest `limit`; of one worktree if given (US-GRP-002).
+    pub fn events_page(
+        &self,
+        worktree: Option<&Path>,
+        after_seq: Option<i64>,
+        limit: u32,
+    ) -> Result<Vec<Event>> {
+        let path = worktree.map(path_text).transpose()?;
+        let mut events = match after_seq {
+            Some(after) => self.collect(
+                event_select!(
+                    "WHERE e.seq > ?1 AND (?2 IS NULL OR w.canonical_path = ?2)
+                     ORDER BY e.seq LIMIT ?3"
+                ),
+                params![after, path, limit],
+                event_from_row,
+            )?,
+            None => self.collect(
+                event_select!(
+                    "WHERE ?1 IS NULL OR w.canonical_path = ?1 ORDER BY e.seq DESC LIMIT ?2"
+                ),
+                params![path, limit],
+                event_from_row,
+            )?,
+        };
+        if after_seq.is_none() {
+            events.reverse();
+        }
+        Ok(events)
+    }
+
     pub fn gaps(&self) -> Result<Vec<Gap>> {
         self.collect(
             "SELECT gap_id, started_ms, ended_ms, cause, requested_by FROM gaps
