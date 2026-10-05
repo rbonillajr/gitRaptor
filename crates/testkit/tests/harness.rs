@@ -212,6 +212,8 @@ mod repo_intact {
             let f = Fixture::with_commit(&git);
             f.git(&["config", "gc.auto", "1"]);
             f.git(&["config", "gc.autoDetach", "false"]);
+            // Git 2.52+ no longer runs `gc` from `maintenance run --auto` by default.
+            f.git(&["config", "maintenance.gc.enabled", "true"]);
             f
         };
         // One commit with enough loose objects to cross `gc.auto` (Git samples `objects/17`).
