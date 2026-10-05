@@ -727,6 +727,7 @@ version = "0.0.0"
 dependencies = [
  "gitraptor-api",
  "gitraptor-git",
+ "gitraptor-testkit",
  "schemars",
  "serde",
  "serde_json",

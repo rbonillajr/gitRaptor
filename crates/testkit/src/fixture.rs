@@ -35,6 +35,27 @@ pub fn git_from_path() -> PathBuf {
         .expect("tests need git in PATH")
 }
 
+/// `path` canonicalized, in the form Git accepts. On Windows `canonicalize` returns a verbatim
+/// path (`\\?\C:\…`) and Git cannot read its configuration under a `HOME` of that form ("unknown
+/// error occurred while reading the configuration files"); the plain drive form names the same
+/// directory. Other OSes never return that prefix and get the canonical path unchanged.
+pub fn canonical_dir(path: &Path) -> PathBuf {
+    without_verbatim_drive(&path.canonicalize().expect("canonical path"))
+}
+
+/// `\\?\C:\…` becomes `C:\…`; any other path (a verbatim UNC path included) is kept as is.
+pub fn without_verbatim_drive(path: &Path) -> PathBuf {
+    let Some(rest) = path.to_str().and_then(|t| t.strip_prefix(r"\\?\")) else {
+        return path.to_owned();
+    };
+    let b = rest.as_bytes();
+    if b.len() >= 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && b[2] == b'\\' {
+        PathBuf::from(rest)
+    } else {
+        path.to_owned()
+    }
+}
+
 /// mtime of the `n`-th file written by [`Fixture::write`]: 2026-09-21 plus `n` seconds.
 pub fn fixed_mtime(n: u64) -> SystemTime {
     UNIX_EPOCH + Duration::from_secs(1_790_000_000 + n)
@@ -59,7 +80,7 @@ impl Fixture {
     pub fn new(git: &Path) -> Self {
         let tmp = tempfile::tempdir().expect("tempdir");
         // Canonical paths: on macOS `/var` is a symlink to `/private/var`.
-        let root = tmp.path().canonicalize().expect("canonical tempdir");
+        let root = canonical_dir(tmp.path());
         guard::mark(&root);
         let home = root.join("home");
         let repo = root.join("repo");
@@ -249,5 +270,26 @@ impl Fixture {
         let path = first.strip_prefix("file:")?.split('\t').next()?;
         let path = PathBuf::from(path);
         path.is_file().then_some(path)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_a_verbatim_drive_prefix_is_removed() {
+        let plain = |p: &str| without_verbatim_drive(Path::new(p));
+        assert_eq!(
+            plain(r"\\?\C:\Users\dev\tmp"),
+            Path::new(r"C:\Users\dev\tmp")
+        );
+        assert_eq!(
+            plain(r"\\?\UNC\server\share"),
+            Path::new(r"\\?\UNC\server\share")
+        );
+        assert_eq!(plain(r"\\?\Volume{x}\dir"), Path::new(r"\\?\Volume{x}\dir"));
+        assert_eq!(plain(r"C:\Users\dev"), Path::new(r"C:\Users\dev"));
+        assert_eq!(plain("/private/var/tmp"), Path::new("/private/var/tmp"));
     }
 }
