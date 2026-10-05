@@ -23,5 +23,11 @@ clap.workspace = true
 workspace = true
 
 [dev-dependencies]
+gitraptor-git.workspace = true
 gitraptor-testkit.workspace = true
 tempfile.workspace = true
+
+# Freshness, scale and footprint bench of the engine (INF-GRP-002, ADR-GRP-011 § 4).
+[[bench]]
+name = "engine"
+harness = false
