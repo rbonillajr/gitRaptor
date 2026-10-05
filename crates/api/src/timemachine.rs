@@ -8,15 +8,15 @@
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
 
 use crate::Untrusted;
 use crate::actor::Actor;
+use crate::catalog::{Layer, OperationOutcome};
 use crate::untrusted::MAX_MCP_UNTRUSTED_BYTES;
 
-/// Most keys in `operation.run` arguments.
+/// Most keys in `operation.prepare` arguments.
 pub const MAX_ARGS_KEYS: usize = 32;
-/// Most bytes of `operation.run` arguments, serialized.
+/// Most bytes of `operation.prepare` arguments, serialized.
 pub const MAX_ARGS_BYTES: usize = 4096;
 /// Longest `since` duration: 30 days.
 pub const MAX_SINCE_SECS: u64 = 30 * 24 * 3600;
@@ -97,24 +97,6 @@ pub struct ResolveParams {
     pub surface: Option<Surface>,
 }
 
-/// `operation.run` parameters.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct OperationRunParams {
-    /// Name of the operation in the catalog (ADR-CKP-002). Only its shape is
-    /// checked here; the executor says whether it exists.
-    pub operation: String,
-    /// Worktree the operation acts on. Required on a full connection; over
-    /// MCP it comes from the caller's working folder and must be absent.
-    #[serde(default)]
-    pub worktree: Option<String>,
-    /// Arguments, validated by the executor against the catalog.
-    #[serde(default)]
-    pub args: Map<String, Value>,
-    #[serde(default)]
-    pub surface: Option<Surface>,
-}
-
 /// Why the prior snapshot failed: the operation was not run and the repo
 /// did not change (BR-TMC-CONS-001, US-TMC-001 scenario 4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -152,6 +134,13 @@ pub struct OperationRunResult {
     pub requester: RequesterView,
     /// Refs the operation moved (text from the repo).
     pub changed_refs: Vec<Untrusted>,
+    /// How the plan ended (ADR-CKP-002 § 2, step 5).
+    pub outcome: OperationOutcome,
+    /// The layer the daemon fixed for the requester.
+    pub layer: Layer,
+    /// Git's output, untrusted and capped; only for layer `cockpit` (M-03).
+    #[serde(default)]
+    pub git_output: Option<Untrusted>,
 }
 
 /// `operation.run` result for an MCP connection: structured fields only, no
@@ -163,6 +152,7 @@ pub struct McpOperationRunResult {
     pub prior_snapshot_id: String,
     pub actor: Actor,
     pub changed_refs: Vec<Untrusted>,
+    pub outcome: OperationOutcome,
 }
 
 impl OperationRunResult {
@@ -177,6 +167,7 @@ impl OperationRunResult {
                 .take(MAX_REPORTED_REFS)
                 .map(|r| r.capped(MAX_MCP_UNTRUSTED_BYTES))
                 .collect(),
+            outcome: self.outcome,
         }
     }
 }
@@ -268,7 +259,7 @@ pub struct Invalid {
 }
 
 impl Invalid {
-    fn new(field: &'static str, why: &'static str) -> Self {
+    pub(crate) fn new(field: &'static str, why: &'static str) -> Self {
         Self { field, why }
     }
 
@@ -352,21 +343,6 @@ pub fn check_operation_name(text: &str) -> Result<(), Invalid> {
     }
 }
 
-impl OperationRunParams {
-    /// Format checks; the worktree path is checked by the daemon.
-    pub fn validate(&self) -> Result<(), Invalid> {
-        check_operation_name(&self.operation)?;
-        if self.args.len() > MAX_ARGS_KEYS {
-            return Err(Invalid::new("args", "too many arguments"));
-        }
-        let size = serde_json::to_vec(&self.args).map_or(usize::MAX, |v| v.len());
-        if size > MAX_ARGS_BYTES {
-            return Err(Invalid::new("args", "too large"));
-        }
-        Ok(())
-    }
-}
-
 impl UndoParams {
     pub fn validate(&self) -> Result<(), Invalid> {
         let selectors = [
@@ -427,6 +403,7 @@ impl TimelineParams {
 mod tests {
     use super::*;
     use crate::actor::{AgentKind, AgentOrigin};
+    use serde_json::{Map, Value};
 
     const ID: &str = "0f8e2b7a-1c3d-4e5f-8a9b-0c1d2e3f4a5b";
 
@@ -512,9 +489,9 @@ mod tests {
             r#""requester":"claude-2""#,
             r#""channel":"cli""#,
         ] {
-            let run = format!(r#"{{"operation":"checkout","worktree":"/r",{extra}}}"#);
+            let run = format!(r#"{{"operation":"create-worktree","worktree":"/r",{extra}}}"#);
             assert!(
-                serde_json::from_str::<OperationRunParams>(&run).is_err(),
+                serde_json::from_str::<crate::catalog::PrepareParams>(&run).is_err(),
                 "{extra}"
             );
             let undo = format!(r#"{{"worktree":"/r",{extra}}}"#);
@@ -551,11 +528,12 @@ mod tests {
             surface: None,
         };
         assert_eq!(restore.validate().unwrap_err().field, "snapshot_id");
-        let mut run = OperationRunParams {
-            operation: "checkout".into(),
+        let mut run = crate::catalog::PrepareParams {
+            operation: crate::catalog::OperationId::CreateWorktree,
             worktree: None,
             args: Map::new(),
             surface: None,
+            session_env: Vec::new(),
         };
         assert!(run.validate().is_ok());
         for i in 0..=MAX_ARGS_KEYS {
@@ -593,6 +571,9 @@ mod tests {
                 confirmable: false,
             },
             changed_refs: vec![Untrusted::new(evil)],
+            outcome: OperationOutcome::Done,
+            layer: Layer::Mcp,
+            git_output: Some(Untrusted::new("hook said hi")),
         };
         let shown = result.changed_refs[0].sanitized();
         assert!(!shown.contains('\u{1b}') && !shown.contains('\u{7}'));
@@ -601,8 +582,16 @@ mod tests {
         keys.sort();
         assert_eq!(
             keys,
-            ["actor", "changed_refs", "operation_id", "prior_snapshot_id"]
+            [
+                "actor",
+                "changed_refs",
+                "operation_id",
+                "outcome",
+                "prior_snapshot_id"
+            ]
         );
+        // M-03 and SEC-12: never Git's output over MCP.
+        assert!(!mcp.to_string().contains("hook said hi"));
         let r = &mcp["changed_refs"][0];
         assert!(r["untrusted"].as_str().unwrap().len() <= MAX_MCP_UNTRUSTED_BYTES);
         assert_eq!(r["truncated"], true);

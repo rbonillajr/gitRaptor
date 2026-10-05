@@ -83,6 +83,14 @@ pub const WORKTREE_STATE: &str = "worktree.state";
 /// [`crate::messages::GitEventView`].
 pub const GIT_EVENT: &str = "git.event";
 
+/// An operation of the catalog waits for the repo's write lock. Data:
+/// [`crate::catalog::OperationEventData`] (Q-CKP-19).
+pub const OPERATION_QUEUED: &str = "operation.queued";
+/// An operation of the catalog took the lock and starts.
+pub const OPERATION_STARTED: &str = "operation.started";
+/// An operation of the catalog ended, with its outcome.
+pub const OPERATION_FINISHED: &str = "operation.finished";
+
 const fn engine(kind: &'static str) -> EventKind {
     EventKind {
         kind,
@@ -107,6 +115,9 @@ pub const KINDS: &[EventKind] = &[
     engine(DAEMON_STOPPING),
     engine(RESERVED_AUDIT),
     engine(REPO_OBSERVATION),
+    engine(OPERATION_QUEUED),
+    engine(OPERATION_STARTED),
+    engine(OPERATION_FINISHED),
     change(WORKTREE_STATE, "US-GRP-001"),
     change(GIT_EVENT, "US-GRP-002"),
     change("gap.recorded", "US-GRP-005"),
