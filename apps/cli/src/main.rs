@@ -1,3 +1,4 @@
+mod events;
 mod i18n;
 mod status;
 
@@ -9,8 +10,9 @@ use std::time::Duration;
 use clap::{Parser, Subcommand};
 
 use gitraptor_api::messages::{
-    ClientKind, RefusalReason, RefusedData, RepoAddOutcome, RepoAddParams, RepoAddResult,
-    RepoRejectedData, RepoRejection, RepoRetireParams, RepoRetireResult, Snapshot,
+    ClientKind, EventsHistoryParams, EventsHistoryResult, GitEventView, RefusalReason, RefusedData,
+    RepoAddOutcome, RepoAddParams, RepoAddResult, RepoRejectedData, RepoRejection,
+    RepoRetireParams, RepoRetireResult, Snapshot,
 };
 use gitraptor_api::methods;
 use gitraptor_api::rpc::{ErrorObject, code};
@@ -46,6 +48,15 @@ enum Command {
         /// Print JSON instead of text.
         #[arg(long)]
         json: bool,
+    },
+    /// Show the latest Git events of the observed repos, with their time and actor.
+    Events {
+        /// Print JSON instead of text.
+        #[arg(long)]
+        json: bool,
+        /// How many events, the most recent ones (at most 200).
+        #[arg(long, default_value_t = 50)]
+        limit: u32,
     },
 }
 
@@ -99,6 +110,7 @@ fn main() -> ExitCode {
             action: RepoAction::Retire { path },
         }) => repo_retire(path),
         Some(Command::Status { json }) => status(json),
+        Some(Command::Events { json, limit }) => events_command(json, limit),
     }
 }
 
@@ -350,6 +362,59 @@ fn status(json: bool) -> ExitCode {
         }
     } else {
         print!("{}", status::text(&snapshot));
+    }
+    ExitCode::SUCCESS
+}
+
+/// `raptor events` (US-GRP-002): the latest Git events of every observed
+/// repo, oldest first.
+fn events_command(json: bool, limit: u32) -> ExitCode {
+    const CMD: &str = "raptor events";
+    let mut client = match engine(CMD) {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+    // A daemon of the same protocol but older than this binary keeps
+    // running after an upgrade and has no history to serve.
+    if !client
+        .hello()
+        .methods
+        .iter()
+        .any(|m| m == methods::EVENTS_HISTORY)
+    {
+        eprintln!("{CMD}: {}", t("events.restart-engine", &[]));
+        return ExitCode::FAILURE;
+    }
+    let snapshot = match snapshot(&mut client, CMD) {
+        Ok(snapshot) => snapshot,
+        Err(code) => return code,
+    };
+    let limit = limit.clamp(1, gitraptor_api::messages::MAX_HISTORY_PAGE);
+    let mut all: Vec<GitEventView> = Vec::new();
+    for repo in &snapshot.repos {
+        let params = EventsHistoryParams {
+            repo_id: repo.repo_id.clone(),
+            limit: Some(limit),
+            ..EventsHistoryParams::default()
+        };
+        match client.call::<_, EventsHistoryResult>(methods::EVENTS_HISTORY, &params) {
+            Ok(page) => all.extend(page.events),
+            Err(err) => {
+                eprintln!("{CMD}: {}", sanitize(&err.to_string()));
+                return ExitCode::FAILURE;
+            }
+        }
+    }
+    all.sort_by_key(|e| (e.observed_utc_ms, e.seq));
+    let skip = all.len().saturating_sub(limit as usize);
+    let all = &all[skip..];
+    if json {
+        match serde_json::to_string_pretty(&events::json(all)) {
+            Ok(text) => println!("{text}"),
+            Err(_) => return ExitCode::FAILURE,
+        }
+    } else {
+        print!("{}", events::text(all));
     }
     ExitCode::SUCCESS
 }
