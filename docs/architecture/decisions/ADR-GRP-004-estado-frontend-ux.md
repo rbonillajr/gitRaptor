@@ -5,7 +5,7 @@ type: adr
 status: accepted
 date: 2026-10-01
 created: 2026-10-01
-updated: 2026-10-04
+updated: 2026-10-05
 deciders: [Rene Bonilla]
 related: [BRD-GRP-001, ADR-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-005, ADR-GRP-007, ADR-CKP-003]
 tags: [react, state-management, tanstack-query, zustand, jotai, xstate, react-hook-form, zod, tanstack-router, ux, optimistic-ui]
@@ -110,3 +110,10 @@ Aplicada desde DEP-CKP-9 de [CTX-CKP-001](../../requirements/features/cockpit/co
 6. **Fase 3 (referencia)**: React nunca inserta texto no confiable como HTML y aplica las mismas categorías de caracteres.
 
 La parte del MCP de SEC-12 (allowlist de campos, longitudes máximas, sin mensajes de commit ni contenido, limitada al repo del llamante) sigue pendiente de la spec de F-001-05.
+
+## Enmienda (2026-10-05, MCP)
+
+Decisión del orquestador (2026-10-05), validada por Arquitecto, PO y security-expert. Origen: ADR-MCP-001 § 2 y § 5 (S-01).
+
+- **La parte del MCP de SEC-12 queda cerrada** por ADR-MCP-001 § 5: allowlist de campos por herramienta, topes de § 6, escape con las categorías de L-03 y rechazos con código estable.
+- **CLI y TUI lanzadas por un agente**: si el solicitante resuelto es un agente, el daemon les aplica el perfil `mcp`. `raptor status` y la TUI muestran entonces la vista acotada del MCP y, en un repo no habilitado, "repo no habilitado para el MCP" con la acción del desarrollador. La regla "`raptor status` muestra lo mismo que la TUI" (US-CKP-011) vale para el desarrollador. La atribución sale del proceso, nunca del cwd: el desarrollador que trabaja en el worktree de un agente conserva su vista.

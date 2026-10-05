@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-05
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
@@ -199,3 +199,12 @@ Aplicada desde DEP-CKP-11 (y la parte de almacén de DEP-CKP-1) de [CTX-CKP-001]
 **Almacén de trabajo de la predicción: condicionado a SPIKE-CKP-001**. Con la opción preferida (a), merge en memoria con `gix`, **no existe** y nada de este párrafo se aplica. Solo si SPIKE-CKP-001 activa la opción (b): un repo *bare* de trabajo por repo en `<datos>/ckp/<id-repo>/`, con `objects/info/alternates` hacia el repo, escrito solo por el daemon. Contiene contenido del usuario, así que, como `tm/`, lleva carpeta 0700 y archivos 0600, queda excluido de las copias de seguridad del SO, se vacía tras cada lote, tiene cuota y aparece en el diagnóstico. La regla de § 4 "solo metadatos" no le aplica.
 
 **Validación añadida**: el almacén de un repo de prueba con contenido marcado no contiene ese contenido en el registro del KPI (ADR-CKP-001, Validación 7); la purga a 90 días borra lo vencido; un documento de preferencias por encima del tope o con un campo desconocido se rechaza sin tocar el guardado.
+
+## Enmienda (2026-10-05, MCP)
+
+Decisión del orquestador (2026-10-05), validada por Arquitecto y PO. Origen: DEP-MCP-4 (CTX-MCP-001), ADR-MCP-001 § 3.
+
+- **Allowlist del MCP como marca del repo observado**: el registro de repos observados del perfil guarda por repo `mcp_enabled` (booleano), con la fecha y el cliente que la puso. No es una lista aparte, así que la invariante "allowlist ⊆ observados" (Q-GRD-15) se cumple por construcción.
+- **Cascada**: retirar el repo de la observación borra la marca en la misma transacción y publica el aviso (Q-MCP-20). Volver a añadirlo **no** la restaura: el opt-in se repite.
+- **Escritor único**: solo el daemon la escribe, al ejecutar los comandos reservados `mcp.enable` y `mcp.disable` (ADR-GRP-005, Enmienda (2026-10-05, MCP)). Guardrails la lee para el estado de protección (ADR-GRD-005 § 2) y nunca la escribe. No está en ningún nivel de configuración: no se puede habilitar editando un archivo.
+- **Validación añadida**: retirar un repo habilitado deja la marca a falso en la misma transacción; volver a añadirlo lo deja sin habilitar; un fallo a mitad de la transacción no deja la marca en un repo no observado.

@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-05
 deciders: [Orquestador (delegación de Rene Bonilla, 2026-10-04)]
 domain: GRP
 feature: cockpit
@@ -223,3 +223,10 @@ Los criterios de salida M-02, M-06 y L-04 se añaden a SPIKE-CKP-001 en su artef
 - Enablers: [SPIKE-CKP-001](../../requirements/features/cockpit/technical-stories/SPIKE-CKP-001-prediccion-5s.md), INF-GRP-001, INF-GRP-002, TS-GRP-004 (contrato, pendiente).
 - gitoxide: docs.rs de `gix` 0.88.0 (`Repository::merge_trees`, `with_object_memory`, `merge::tree::Outcome`) y de `gix-merge` 0.21.0 (`tree::Options`, `blob::Platform`), consultados el 2026-10-04.
 - Git: `git-merge-tree(1)`, `gitrepository-layout(5)` (`objects/info/alternates`), `gitattributes(5)` (atributo `merge`).
+
+## Enmienda (2026-10-05, MCP)
+
+Decisión del orquestador (2026-10-05), validada por Arquitecto. Origen: DEP-MCP-6 (CTX-MCP-001), ADR-MCP-001 § 4.1.
+
+- **Consulta para el perfil `mcp`** (§ 8): `check_conflicts` lee la predicción publicada con una **consulta** del canal filtrada al repo del llamante, no con el stream (a `raptor-mcp` solo le llegan `engine.state` y `daemon.stopping`). Devuelve pares, nivel, archivos y rangos de líneas (nunca contenido), estado y antigüedad, "calculando" o "pendiente" y los límites declarados. Por defecto, los pares del worktree del llamante; con opción, todo el repo. 50 pares por página.
+- La consulta la añade al contrato de `crates/api` la historia dueña (US-MCP-016), sobre lo que publique TS-CKP-001. No se calcula nada por petición.
