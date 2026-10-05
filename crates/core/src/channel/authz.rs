@@ -194,6 +194,11 @@ fn walk(first: &ProcInfo, checks: &Checks<'_>) -> Walk {
         if current.pid <= 1 || current.ppid == 0 {
             return out;
         }
+        // The desktop root (Windows `explorer.exe`), whose parent is gone.
+        if procs.is_session_root(&current) {
+            out.truncated = true;
+            return out;
+        }
         match procs.read(current.ppid) {
             Ok(parent) if parent.uid != uid => {
                 out.truncated = true;
