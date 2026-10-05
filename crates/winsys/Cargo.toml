@@ -13,10 +13,13 @@ windows-sys = { workspace = true, features = [
     "Win32_Security",
     "Win32_Security_Authorization",
     "Win32_Storage_FileSystem",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_SystemInformation",
     "Win32_System_Threading",
 ] }
 
 [dev-dependencies]
+serde_json.workspace = true
 tempfile.workspace = true
 
 # Own lints instead of the workspace ones: `forbid(unsafe_code)` admits no local `allow`, so
