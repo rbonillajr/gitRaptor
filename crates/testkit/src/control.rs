@@ -12,7 +12,7 @@
 use std::fmt;
 
 use crate::exceptions::Exceptions;
-use crate::fingerprint::{Change, diff};
+use crate::fingerprint::{Change, diff, wait_for_timestamp_tick};
 use crate::fixture::Fixture;
 
 type Action<'a> = Box<dyn Fn(&Fixture) + Sync + 'a>;
@@ -147,6 +147,7 @@ impl<'a> Scenario<'a> {
     fn run_once(&self, with_engine: bool) -> Vec<Change> {
         let f = (self.build)();
         let before = f.snapshot(&self.exceptions);
+        wait_for_timestamp_tick();
         for step in &self.steps {
             match step {
                 Step::User(user) => user(&f),
@@ -184,6 +185,7 @@ pub fn subtract(engine: &[Change], control: &[Change]) -> Vec<Change> {
 /// activity, where the control would be empty anyway.
 pub fn check(name: &str, f: &Fixture, exceptions: &Exceptions, engine: impl FnOnce()) -> Report {
     let before = f.snapshot(exceptions);
+    wait_for_timestamp_tick();
     engine();
     let after = f.snapshot(exceptions);
     Report {

@@ -263,6 +263,30 @@ impl fmt::Display for Change {
     }
 }
 
+/// Wait until the file-system clock has moved past every timestamp written so far.
+///
+/// Kernels stamp mtime and ctime from a coarse clock (one tick: 1 to 10 ms on Linux, about
+/// 15.6 ms on Windows). A lock created and deleted in the same tick as the last change before a
+/// snapshot leaves its directory's mtime and ctime as they were, so the write would go unseen.
+/// Call it right after the "before" snapshot: every later write then gets a newer timestamp.
+pub fn wait_for_timestamp_tick() {
+    let probe = tempfile::NamedTempFile::new().expect("timestamp probe");
+    let stamp = |byte: u8| {
+        std::fs::write(probe.path(), [byte]).expect("write timestamp probe");
+        std::fs::metadata(probe.path())
+            .and_then(|m| m.modified())
+            .expect("timestamp probe mtime")
+    };
+    let first = stamp(0);
+    for i in 1..=1000u32 {
+        std::thread::sleep(std::time::Duration::from_millis(1));
+        if stamp(i as u8) > first {
+            return;
+        }
+    }
+    panic!("file-system timestamps did not advance in one second");
+}
+
 /// Every difference between `before` and `after`, in path order.
 pub fn diff(before: &Snapshot, after: &Snapshot) -> Vec<Change> {
     let mut out = Vec::new();
