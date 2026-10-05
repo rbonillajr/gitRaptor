@@ -349,7 +349,7 @@ Repos y perfiles temporales; nunca este repo.
 
 - **Contrato del canal**: **resuelto (2026-10-05, TS-CKP-002)**, ver "Implementación (TS-CKP-002)". **El lado del canal de DEP-MCP-3 ya está en main**: rechazo `daemon-descendant` de lo reservado (TS-GRP-004, D21) y marcas del ejecutor con la vía `executor` en la resolución del solicitante (TS-TMC-004 § 7 y § 4).
 - **Barrera de arranque con *spawn* suspendido** (§ 4): pendiente; hoy funciona la barrera del lado del lector. Es requisito de la primera historia que lance `git` en producción.
-- **Cableado de producción del ejecutor** (repo real, almacén, clave del cerrojo = ruta del almacén): US-MCP-008 (DS-TS-CKP-002 § 9).
+- **Cableado de producción del ejecutor**: el backend del daemon (`DaemonBackend`, US-TMC-001) ya implementa el contrato del ejecutor, con la clave del cerrojo = ruta canónica del almacén. Falta el catálogo de producción y activarlo en el daemon: US-MCP-008 (DS-TS-CKP-002 § 9).
 - **Motor-local**: publicar el estado en conflicto con sus rutas (DEP-CKP-14) y la atribución commit→evento para "trabajo afectado" (DEP-CKP-2, opcional). Sin ella, cuenta como otro actor.
 - **Para el PO**:
   - BR-CKP-WF-008: Cancelar exige capa `cockpit` (M-03) y ningún descendiente del ejecutor puede pedirlo; las operaciones de capa `mcp` sí tienen tiempo máximo (§ 6), así que "sin límite de tiempo automático" vale para la capa `cockpit`.
@@ -379,6 +379,7 @@ Repos y perfiles temporales; nunca este repo.
   - Cada plan gobernado se cierra una sola vez ante Guardrails: al ejecutarse, al rechazarse, al caducar o al cerrarse la conexión.
 - **Capa**: la fija el daemon. Para los tests in-process existe un override (`test_layer_override`) que nunca se aplica a un descendiente del ejecutor y que vale `None` en producción.
 - **Guardrails**: va detrás de un trait hasta TS-CKP-003. Mientras tanto, la vista previa es `not-evaluated` y toda operación gobernada se rechaza al ejecutar (cerrado ante fallos).
+- **Integración con US-TMC-001** (rebase del 2026-10-05): el enganche `OperationCatalog` del backend del daemon es la parte propia de cada operación (`plan_op`, `step`). El ejecutor construye la petición protegida con `ProtectedRequest::for_step`, que valida el ámbito que declara el paso. Detalle en DS-TS-CKP-002, D12.
 - **Ruta nueva (H-02)**: la valida `executor::check_new_worktree_path`, que llaman US-CKP-018 y US-MCP-019 al preparar y otra vez bajo el cerrojo. Si no pasa: `new-path-refused`.
 - **Eventos**: `operation.queued`, con la posición; `operation.started`, con el `operation_id` que usa Cancelar; y `operation.finished`, con el desenlace. Ninguno llega a `raptor-mcp`.
 
