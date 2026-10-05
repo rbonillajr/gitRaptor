@@ -14,6 +14,8 @@ related:
     - BR-CKP-001
   stories:
     - US-CKP-001
+    - US-CKP-012
+    - US-CKP-014
     - US-TMC-006
     - US-TMC-012
     - US-TMC-016
@@ -39,7 +41,7 @@ BR-CKP-TIME-004 · BR-CKP-WF-002 (Deshacer desde el historial) · BR-CKP-CONS-00
 
 ## Dependencias
 
-- **Historias**: US-CKP-001; US-TMC-006 (timeline), US-TMC-012 (Deshacer se detiene ante solape con otro actor), US-TMC-016 (retención y purga).
+- **Historias**: US-CKP-001; US-CKP-012 (fija las consultas bajo demanda, N8); US-CKP-014 (fija el Deshacer desde la TUI); US-TMC-006 (timeline), US-TMC-012 (Deshacer se detiene ante solape con otro actor), US-TMC-016 (retención y purga).
 - **Huecos del motor**: DEP-CKP-5 (timeline en vivo).
 
 ## Criterios de Aceptación

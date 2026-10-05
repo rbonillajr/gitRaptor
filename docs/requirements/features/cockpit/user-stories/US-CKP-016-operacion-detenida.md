@@ -65,7 +65,7 @@ Entonces Deshacer aparece desactivado con "aborta primero el merge en curso"
 
 **Escenario: Operación de Git a medias hecha por el agente**
 
-Dado un rebase a medias en "feat-login" lanzado por "claude-3" con Git directo
+Dado un rebase a medias en "feat-login" lanzado y detenido por "claude-3" con Git directo
 Cuando el desarrollador selecciona "feat-login"
 Entonces la fila muestra "rebase en curso" y solo ofrece ver diff y abrir en el editor
 
@@ -77,10 +77,23 @@ Entonces la fila muestra "HEAD separado" en lugar de una rama
 
 **Escenario: Cancelar una operación lenta**
 
-Dado el rebase de "feat-pagos" lanzado desde la TUI, en curso desde hace 2 minutos por un hook lento
-Cuando el desarrollador elige Cancelar
-Entonces la operación se interrumpe como un Ctrl-C y la TUI la muestra detenida, fallida con Deshacer o sin cambios, según lo que dejó Git
+Dado el rebase de "feat-pagos" lanzado desde la TUI y un hook lento
+Cuando el desarrollador mira la fila a los 2 minutos y elige Cancelar
+Entonces la fila mostraba "Rebase en curso · 2:00" con Cancelar
+  Y la operación se interrumpe como un Ctrl-C y la TUI la muestra detenida, fallida con Deshacer o sin cambios, según lo que dejó Git
   Y nunca se cancela sola por tiempo
+
+**Escenario: Cancelar desde otra TUI si la que la lanzó se cerró**
+
+Dado el rebase de "feat-pagos" en curso y la TUI que lo lanzó ya cerrada
+Cuando el desarrollador elige Cancelar en otra TUI suya
+Entonces la operación se cancela
+
+**Escenario: Cancelar no se ofrece sobre un Git ajeno**
+
+Dado un rebase en "feat-login" lanzado por "claude-3" con Git directo
+Cuando el desarrollador selecciona "feat-login"
+Entonces Cancelar no se ofrece
 
 ## Requisitos Técnicos
 

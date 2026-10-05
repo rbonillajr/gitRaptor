@@ -13,6 +13,7 @@ related:
   rules:
     - BR-CKP-001
   stories:
+    - US-GRP-016
     - US-CKP-001
     - US-GRD-014
 tags:
@@ -36,7 +37,7 @@ BR-CKP-CALC-002 — ver [business-rules.md](../business-rules.md)
 
 ## Dependencias
 
-- **Historias**: US-CKP-001; US-GRD-014 (rama base confirmada, para los pares contra la base).
+- **Historias**: US-CKP-001; US-GRD-014 y US-GRP-016 (rama base confirmada o pendiente, para los pares contra la base).
 - **Técnicas**: TS-CKP-001 (predictor del daemon), que espera a SPIKE-CKP-001 (ADR-CKP-001). No es un bloqueo: el spike está definido; esta historia empieza cuando TS-CKP-001 esté integrada.
 
 ## Criterios de Aceptación

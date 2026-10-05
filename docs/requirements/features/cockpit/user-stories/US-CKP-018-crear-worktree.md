@@ -13,6 +13,7 @@ related:
   rules:
     - BR-CKP-001
   stories:
+    - US-GRP-016
     - US-CKP-014
 tags:
   - cockpit
@@ -36,7 +37,7 @@ BR-CKP-VAL-001 · BR-CKP-ELIG-005 · BR-CKP-WF-005 (crear desactivado) — ver [
 
 ## Dependencias
 
-- **Historias**: US-CKP-014 (flujo de escritura).
+- **Historias**: US-CKP-014 (flujo de escritura); US-GRP-016 (base pendiente publicada).
 - **Técnicas**: TS-CKP-002, TS-CKP-003.
 
 ## Criterios de Aceptación
@@ -71,7 +72,7 @@ Entonces el worktree se crea en "~/orca/workspaces/shop/feat-pagos"
 
 Dado la rama base no confirmada
 Cuando el desarrollador busca crear un worktree
-Entonces la acción aparece desactivada con "confirma la rama base" y la acción para confirmarla
+Entonces la acción aparece desactivada con "confirma la rama base" y cómo confirmarla
 
 **Escenario: Ruta UNC rechazada**
 

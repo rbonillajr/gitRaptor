@@ -14,6 +14,7 @@ related:
     - BR-CKP-001
   stories:
     - US-CKP-001
+    - US-CKP-004
 tags:
   - cockpit
   - acciones-por-agente
@@ -35,14 +36,14 @@ BR-CKP-VAL-003 · BR-CKP-EDGE-007 · BR-CKP-ELIG-006 (abrir en el editor) — ve
 
 ## Dependencias
 
-- **Historias**: US-CKP-001.
-- **Huecos del motor**: DEP-CKP-12 (el daemon lanza el proceso sin shell) y DEP-CKP-13 (clave del editor solo en perfil y local personal).
+- **Historias**: US-CKP-001; US-CKP-004 (preferencias, donde se guarda la huella del último argv aprobado).
+- **Huecos del motor**: DEP-CKP-11 (preferencias), DEP-CKP-12 (lanzar procesos fuera de `crates/git`) y DEP-CKP-13 (clave del editor solo en perfil y local personal).
 
 ## Criterios de Aceptación
 
 **Escenario: Editor configurado con argumentos**
 
-Dado el editor configurado como `code --wait` en el perfil
+Dado el editor configurado como `code --wait` con `cockpit.editorKind=gui` en el perfil, ya aprobado antes
 Cuando el desarrollador abre "feat-pagos" en el editor
 Entonces se lanza `code` con `--wait` y la ruta de "feat-pagos", y la TUI sigue respondiendo
 
@@ -51,6 +52,12 @@ Entonces se lanza `code` con `--wait` y la ruta de "feat-pagos", y la TUI sigue 
 Dado `$EDITOR=vim` y ningún editor en el perfil
 Cuando el desarrollador abre "feat-pagos" en el editor
 Entonces la TUI se suspende mientras "vim" está abierto y vuelve a su estado al cerrarlo
+
+**Escenario: Un editor que cambió se muestra antes de lanzarlo**
+
+Dado `code --wait` aprobado y después `cockpit.editor` cambiado a `nano` en la configuración local
+Cuando el desarrollador abre "feat-pagos" en el editor
+Entonces la TUI muestra el argv nuevo y pide confirmación con default No antes de lanzar nada
 
 **Escenario: Metacaracteres de shell rechazados**
 

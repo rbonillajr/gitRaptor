@@ -45,12 +45,18 @@ BR-CKP-WF-004 · BR-CKP-EDGE-001 (ahead/behind no calculable) · BR-CKP-EDGE-003
 
 ## Criterios de Aceptación
 
-**Escenario: Sin daemon, la TUI lo arranca o explica cómo, sin embeber el motor**
+**Escenario: Sin daemon, la TUI lo arranca**
 
-Dado que el daemon no está en marcha
+Dado el daemon parado y el autoarranque disponible
 Cuando el desarrollador abre la TUI
-Entonces el daemon queda en marcha y la TUI muestra la vista normal, o la TUI muestra cómo arrancarlo
-  Y en ningún caso el proceso de la TUI observa el repo por su cuenta
+Entonces el daemon queda en marcha y la TUI llega a la vista en vivo
+
+**Escenario: Sin daemon y sin poder arrancarlo, instrucciones**
+
+Dado el daemon parado y su arranque imposible
+Cuando el desarrollador abre la TUI
+Entonces la TUI muestra "Motor no disponible" con cómo arrancarlo
+  Y el proceso de la TUI no observa el repo por su cuenta
 
 **Escenario: "Esperando Git" tiene prioridad sobre "Sin repos"**
 

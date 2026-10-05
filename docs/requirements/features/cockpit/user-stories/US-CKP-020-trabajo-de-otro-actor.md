@@ -14,8 +14,6 @@ related:
     - BR-CKP-001
   stories:
     - US-CKP-014
-    - US-CKP-015
-    - US-CKP-017
     - US-TMC-013
 tags:
   - cockpit
@@ -38,17 +36,23 @@ BR-CKP-AUTH-003 — ver [business-rules.md](../business-rules.md)
 
 ## Dependencias
 
-- **Historias**: US-CKP-014, US-CKP-015 y US-CKP-017; US-TMC-013 (permisos por solicitante).
+- **Historias**: US-CKP-014 (fija la confirmación del plan en el camino feliz; 015 y 017 la reutilizan en el suyo); US-TMC-013 (permisos por solicitante).
+- **Alcance**: esta historia cubre los casos límite de AUTH-003 con el merge; el camino feliz con rebase y descarte lo verifican US-CKP-015 y US-CKP-017.
 - **Técnicas**: TS-CKP-002, TS-TMC-004 (reto ligado al plan).
 
 ## Criterios de Aceptación
 
-**Escenario: Confirmar el plan concreto (macOS)**
+**Escenario: Trabajo sin atribuir, sin confirmación de plan**
 
-Dado "feat-wip" con trabajo de "claude-2" y la TUI del desarrollador como "Tú u otro (sin atribuir)"
-Cuando el desarrollador pide descartar "feat-wip"
-Entonces la TUI pide confirmar el plan "borrar worktree feat-wip y rama feat-wip"
-  Y solo tras confirmarlo se ejecuta
+Dado "feat-docs" con commits "sin atribuir" y la TUI del desarrollador como "Tú u otro (sin atribuir)"
+Cuando el desarrollador integra "feat-docs"
+Entonces no se pide confirmar el plan por trabajo ajeno
+
+**Escenario: Atribución mixta cuenta como otro actor**
+
+Dado "feat-mix" con commits de "claude-2" y commits "sin atribuir"
+Cuando el desarrollador pide integrar "feat-mix"
+Entonces la TUI pide confirmar el plan, como con trabajo de un agente
 
 **Escenario: Si el plan cambia, la confirmación no vale**
 
@@ -56,23 +60,17 @@ Dado la confirmación del plan de integrar "feat-wip" hasta "a1b2c3"
 Cuando "claude-2" commitea "d4e5f6" antes de ejecutar
 Entonces la operación se rechaza con "el estado cambió" y nada cambia
 
-**Escenario: Rebase sobre trabajo de otro actor**
-
-Dado "feat-wip" con commits de "claude-2", su sesión Terminado
-Cuando el desarrollador pide rebasar "feat-wip"
-Entonces la TUI pide confirmar el plan del rebase antes de ejecutarlo
-
 **Escenario: Un agente no toca el trabajo de otro**
 
 Dado la TUI abierta desde el terminal de "claude-1"
-Cuando pide descartar "feat-wip" de "claude-2"
+Cuando pide integrar "feat-wip" de "claude-2" por el canal
 Entonces se rechaza y nada cambia
 
-**Escenario: En Windows, rechazo**
+**Escenario: En Windows, rechazo** (Pendiente: etapa de validación multiplataforma)
 
-Dado el desarrollador en Windows
-Cuando pide descartar "feat-wip" de "claude-2"
-Entonces se rechaza con "no se puede confirmar trabajo de otro actor en Windows todavía"
+Dado el desarrollador en Windows, donde el Cockpit todavía no tiene capa `cockpit` (ADR-CKP-002 § 4)
+Cuando pide integrar "feat-wip" de "claude-2"
+Entonces se rechaza con "no se puede confirmar trabajo de otro actor en Windows todavía" y nada cambia
 
 ## Requisitos Técnicos
 

@@ -15,6 +15,7 @@ related:
   stories:
     - US-CKP-014
     - US-GRD-006
+    - US-GRD-007
     - US-GRD-008
 tags:
   - cockpit
@@ -34,12 +35,13 @@ tags:
 
 ## Reglas cubiertas
 
-BR-CKP-AUTH-001 · BR-CKP-AUTH-002 — ver [business-rules.md](../business-rules.md)
+BR-CKP-AUTH-001 · BR-CKP-AUTH-002 · BR-CKP-WF-001 (la fila con ⛔ sube a la zona de atención) — ver [business-rules.md](../business-rules.md)
 
 ## Dependencias
 
-- **Historias**: US-CKP-014 (flujo de escritura); US-GRD-006 (excepción consciente); US-GRD-008 (ramas protegidas).
+- **Historias**: US-CKP-014 (flujo de escritura); US-GRD-006 (excepción consciente); US-GRD-007 (permiso "pedir confirmación"); US-GRD-008 (ramas protegidas); US-CKP-002 (zona de atención).
 - **Técnicas**: TS-CKP-003 (capa `cockpit`; DEP-CKP-10).
+- **Contrato que fija**: el comando reservado lanzado desde la TUI (excepción consciente); lo reutilizan las demás acciones reservadas de la TUI.
 - **Riesgo aceptado**: R-CKP-3 (todo merge a una base protegida pasa por excepción consciente; Q-CKP-26).
 
 ## Criterios de Aceptación
@@ -50,6 +52,7 @@ Dado "main" protegida en la configuración del equipo
 Cuando el desarrollador integra "feat-pagos" en "main"
 Entonces la TUI muestra "⛔ main es rama protegida (equipo)" y "main" no cambia
   Y ofrece la excepción consciente
+  Y la fila de "feat-pagos" sube a la zona de atención mientras la denegación siga vigente
 
 **Escenario: Excepción consciente con ventana cancelable**
 
@@ -67,9 +70,10 @@ Entonces no se ejecuta nada y la auditoría registra la cancelación
 **Escenario: TUI lanzada desde el terminal de un agente**
 
 Dado la TUI abierta desde la pestaña donde corre "claude-1"
-Cuando el desarrollador mira la cabecera e intenta la excepción consciente
+Cuando el desarrollador mira la cabecera y selecciona "feat-pagos"
 Entonces la cabecera dice "Actúas como claude-1"
-  Y la excepción se rechaza con el motivo "una TUI lanzada por un agente actúa como ese agente"
+  Y "Integrar", "Descartar" y "Cancelar" aparecen desactivados con el motivo "una TUI lanzada por un agente actúa como ese agente"
+  Y la excepción consciente no se ofrece, y si se pide por el canal se rechaza
 
 **Escenario: "Pedir confirmación" sin cola equivale a denegar**
 
@@ -80,8 +84,8 @@ Entonces la TUI la presenta como denegada, con la regla, y no crea ninguna petic
 **Escenario: Confirmar en la TUI no cambia quién pide**
 
 Dado la TUI abierta desde el terminal de "claude-1"
-Cuando el desarrollador confirma una acción en la TUI
-Entonces Guardrails decide con "claude-1" como solicitante
+Cuando el desarrollador rebasa "feat-pagos", trabajo de "claude-1", y confirma en la TUI
+Entonces Guardrails decide con "claude-1" como solicitante y con la capa de los agentes
 
 ## Requisitos Técnicos
 
