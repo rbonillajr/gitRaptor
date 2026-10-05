@@ -1,5 +1,6 @@
 //! Configuration document and Guardrails policy engine.
 
+pub mod guard;
 pub mod settings;
 pub mod team;
 
