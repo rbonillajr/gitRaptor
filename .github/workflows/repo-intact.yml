@@ -239,6 +239,43 @@ jobs:
           echo "::error::repo_intact suites on $OS: $outcome (see lint and test ($OS))"
           exit 1
 
+  # US-GRD-001 (ADR-GRD-001 Validación 13, INF-GRD-001 D11): the Guardrails suites with the
+  # minimum supported Git (NFR-07), built from the kernel.org tarball checked by SHA-256 and
+  # cached. Blocking: Git 2.38 hands a deletion through HEAD over as `HEAD` (SPIKE-GRD-001 D09).
+  guardrails-git-min:
+    name: guardrails (Git 2.38.5, Linux)
+    runs-on: ubuntu-latest
+    env:
+      GIT_MIN_VERSION: 2.38.5
+      GIT_MIN_SHA256: f1b3d39684545a1954a3ab6e11972405c8eb2cf16ae069e96d0502d97843aea5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Toolchain from rust-toolchain.toml
+        run: rustup show
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: Cache Git ${{ env.GIT_MIN_VERSION }}
+        id: git-min
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/git-min
+          key: git-${{ env.GIT_MIN_VERSION }}-${{ runner.os }}-${{ env.GIT_MIN_SHA256 }}
+      - name: Build Git ${{ env.GIT_MIN_VERSION }}
+        if: steps.git-min.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update && sudo apt-get install -y zlib1g-dev
+          curl -fsSLo /tmp/git.tar.xz "https://mirrors.edge.kernel.org/pub/software/scm/git/git-$GIT_MIN_VERSION.tar.xz"
+          echo "$GIT_MIN_SHA256  /tmp/git.tar.xz" | sha256sum -c -
+          tar -xJf /tmp/git.tar.xz -C /tmp
+          make -C "/tmp/git-$GIT_MIN_VERSION" -j"$(nproc)" prefix="$HOME/git-min" \
+            NO_TCLTK=1 NO_GETTEXT=1 NO_CURL=1 NO_EXPAT=1 NO_PERL=1 NO_PYTHON=1 all install >/dev/null
+      - name: Guardrails suites
+        run: |
+          export PATH="$HOME/git-min/bin:$PATH"
+          git version
+          cargo test -p gitraptor-cli --test guard_us_grd_001
+          cargo test -p gitraptor-policy guard
+          cargo test -p gitraptor-core --test guard_evaluate --test guard_boundary
+
   deep-exec-audit-macos:
     name: deep exec audit (macOS, eslogger)
     runs-on: macos-latest
