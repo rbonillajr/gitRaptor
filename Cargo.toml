@@ -6,7 +6,7 @@ members = ["crates/*", "apps/cli", "apps/mcp"]
 version = "0.0.0"
 edition = "2024"
 rust-version = "1.99"
-license = "UNLICENSED"
+license = "FSL-1.1-ALv2"
 publish = false
 
 [workspace.dependencies]

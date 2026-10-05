@@ -3,6 +3,7 @@ name = "watcher-viability"
 version = "0.0.0"
 edition = "2024"
 publish = false
+license = "FSL-1.1-ALv2"
 description = "SPIKE-GRP-002 isolated prototype: change-watcher viability at scale"
 
 # Standalone workspace: this prototype is intentionally outside the product workspace.

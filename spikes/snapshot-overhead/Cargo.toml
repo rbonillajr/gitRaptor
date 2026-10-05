@@ -3,6 +3,7 @@ name = "snapshot-overhead"
 version = "0.0.0"
 edition = "2024"
 publish = false
+license = "FSL-1.1-ALv2"
 description = "SPIKE-TMC-001: isolated prototype of the Time Machine snapshot store (not product code)"
 
 # Standalone workspace: this prototype is NOT a member of the GitRaptor workspace.
