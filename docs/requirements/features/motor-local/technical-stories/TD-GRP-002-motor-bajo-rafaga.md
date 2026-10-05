@@ -1,5 +1,5 @@
 ---
-id: TD-GRP-001
+id: TD-GRP-002
 title: "Frescura y memoria del motor bajo una ráfaga de archivos"
 type: td
 status: ready
@@ -19,7 +19,7 @@ ado:
 tags: [motor-local, deuda-tecnica, rendimiento, rafaga, nfr-04, nfr-05, huella]
 ---
 
-## TD-GRP-001: Frescura y memoria del motor bajo una ráfaga de archivos
+## TD-GRP-002: Frescura y memoria del motor bajo una ráfaga de archivos
 
 **Valor**: una ráfaga en un worktree (instalar dependencias, compilar, reescribir cientos de archivos) no frena a los demás ni deja memoria retenida en un proceso de fondo.
 
@@ -29,7 +29,7 @@ tags: [motor-local, deuda-tecnica, rendimiento, rafaga, nfr-04, nfr-05, huella]
 **Quiero** que la ráfaga de un worktree no retrase lo que veo de los otros nueve y que el motor devuelva la memoria al terminar
 **Para** que el Cockpit siga siendo fiable mientras un agente instala dependencias y que GitRaptor no pese en mi máquina
 
-> Dev Spec: `dev-specs/TD-GRP-001-dev-spec.md` | Pendiente
+> Dev Spec: `dev-specs/TD-GRP-002-dev-spec.md` | Pendiente
 >
 > **Prioridad**: crítica, **Must antes de cerrar el MVP**. Un MVP no sale incumpliendo un NFR comprometido (PO, 2026-10-05).
 

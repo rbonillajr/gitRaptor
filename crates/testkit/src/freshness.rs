@@ -80,7 +80,7 @@ impl Platform {
     }
 
     /// Provisional ceiling of the engine p95 in a burst scenario, which macOS does not meet yet
-    /// (TD-GRP-001): the maximum measured there × 1.25, per scenario. On the runner it applies to
+    /// (TD-GRP-002): the maximum measured there × 1.25, per scenario. On the runner it applies to
     /// the total already widened by the excess timer slack. `None`: the 300 ms budget is the gate
     /// (Linux meets it).
     pub fn burst_ceiling_ms(self, scenario: &str) -> Option<f64> {
@@ -366,8 +366,8 @@ pub struct FootprintLimits {
     pub idle_rss_mib: f64,
     pub fds: f64,
     /// Product target of the burst peak (⚠️ ASSUMPTION of the PO, 2026-10-05): a warning until
-    /// TD-GRP-001 meets it. No ceiling yet: the peak varies too much between runs to bound it
-    /// before TD-GRP-001 explains it (Arquitecto, 2026-10-05).
+    /// TD-GRP-002 meets it. No ceiling yet: the peak varies too much between runs to bound it
+    /// before TD-GRP-002 explains it (Arquitecto, 2026-10-05).
     pub burst_rss_target_mib: f64,
     /// Product target of the retention (⚠️ ASSUMPTION of the PO): back under the idle RSS limit
     /// within this many seconds after a burst; a warning.
@@ -409,7 +409,7 @@ pub fn evaluate_footprint(f: &Footprint, limits: &FootprintLimits) -> Vec<Findin
     if f.burst_rss_mib > limits.burst_rss_target_mib {
         out.push(finding(
             Level::Warn,
-            "burst peak RSS, known gap (TD-GRP-001)",
+            "burst peak RSS, known gap (TD-GRP-002)",
             f.burst_rss_mib,
             limits.burst_rss_target_mib,
             "MiB",
