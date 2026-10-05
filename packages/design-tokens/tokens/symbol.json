@@ -1,0 +1,87 @@
+{
+  "symbol": {
+    "$type": "gitraptorSymbol",
+    "success": {
+      "$value": {
+        "glyph": "✔",
+        "ascii": "[ok]",
+        "width": 1
+      },
+      "$description": "Success"
+    },
+    "error": {
+      "$value": {
+        "glyph": "✖",
+        "ascii": "[x]",
+        "width": 1
+      },
+      "$description": "Error"
+    },
+    "warning": {
+      "$value": {
+        "glyph": "⚠",
+        "ascii": "[!]",
+        "width": 2
+      },
+      "$description": "Warning"
+    },
+    "info": {
+      "$value": {
+        "glyph": "ℹ",
+        "ascii": "[i]",
+        "width": 2
+      },
+      "$description": "Information"
+    },
+    "agent": {
+      "active": {
+        "$value": {
+          "glyph": "●",
+          "ascii": "*",
+          "width": 1
+        },
+        "$description": "Agent active"
+      },
+      "idle": {
+        "$value": {
+          "glyph": "◐",
+          "ascii": "~",
+          "width": 1
+        },
+        "$description": "Agent idle"
+      },
+      "done": {
+        "$value": {
+          "glyph": "○",
+          "ascii": "o",
+          "width": 1
+        },
+        "$description": "Agent finished"
+      }
+    },
+    "conflict": {
+      "$value": {
+        "glyph": "⚡",
+        "ascii": "[c]",
+        "width": 2
+      },
+      "$description": "Predicted conflict"
+    },
+    "blocked": {
+      "$value": {
+        "glyph": "⛔",
+        "ascii": "[blocked]",
+        "width": 2
+      },
+      "$description": "Blocked by policy"
+    },
+    "undo": {
+      "$value": {
+        "glyph": "⟲",
+        "ascii": "[undo]",
+        "width": 1
+      },
+      "$description": "Snapshot / undo available"
+    }
+  }
+}
