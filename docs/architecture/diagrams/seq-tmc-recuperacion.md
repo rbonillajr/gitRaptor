@@ -32,7 +32,7 @@ sequenceDiagram
   end
   N->>O: aviso pendiente de interrupción
   C->>N: se conecta desde el worktree
-  N-->>C: aviso: undo interrumpido; "raptor undo" vuelve al estado previo
+  N-->>C: aviso: undo interrumpido, "raptor undo" vuelve al estado previo
   C->>N: raptor undo
   N->>R: aplica el snapshot previo de la operación interrumpida (con su propio snapshot previo)
   N->>O: terminada

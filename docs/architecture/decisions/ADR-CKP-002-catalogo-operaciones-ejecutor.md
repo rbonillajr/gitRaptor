@@ -78,16 +78,16 @@ sequenceDiagram
   participant T as Time Machine
   participant G as git (hijo directo)
   C->>D: prepare(op, params, secuencia vista)
-  D->>D: solicitante y capa; precondiciones; plan + planId + huella
+  D->>D: solicitante y capa, precondiciones, plan + planId + huella
   D->>P: evaluar(op normalizada, capa, actor)
   D-->>C: planId, plan, avisos, decisión, confirmaciones requeridas, reto
   C->>D: execute(planId, avisos aceptados, respuesta al reto) por la misma conexión
-  D->>D: cerrojo del repo; re-resolver solicitante; rehacer plan; comparar huella; revalidar repo (M-05)
+  D->>D: cerrojo del repo, re-resolver solicitante, rehacer plan, comparar huella, revalidar repo (M-05)
   D->>P: re-evaluar (la que cuenta)
   D->>T: intención (oplog), primer paso de la operación protegida
   D->>T: snapshot previo garantizado (si falla, abortada)
-  D->>G: spawn detenido; registro del hijo y sus transiciones; liberar
-  G-->>D: código de salida; el daemon lee el estado resultante con gix
+  D->>G: spawn detenido, registro del hijo y sus transiciones, liberar
+  G-->>D: código de salida, el daemon lee el estado resultante con gix
   D->>T: registro del resultado
   D-->>C: resultado + evento en el stream de todos los clientes
 ```
