@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-05
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
@@ -177,5 +177,21 @@ Aplicada desde la enmienda E2 de [ADR-CKP-003](./ADR-CKP-003-arquitectura-tui.md
 - **Escenario nuevo en INF-GRP-002**: el objetivo es **aviso** hasta que SPIKE-CKP-001 confirme la cifra, y gate después. Además, el p95 del motor no puede empeorar durante una ráfaga de predicciones; si empeora, falla el gate del motor que ya existe.
 
 **Consultas bajo demanda** (grafo y diff): son respuestas a una petición, no eventos del stream, así que quedan fuera de NFR-04. La TUI muestra su estado pendiente en < 100 ms (feedback por tecla) y su latencia se reporta sin gate en el MVP.
+
+Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
+
+## Enmienda (2026-10-05, INF-GRP-002)
+
+Aplicada desde la [Dev Spec de INF-GRP-002](../../requirements/features/motor-local/dev-specs/INF-GRP-002-dev-spec.md). **Decisión del orquestador (2026-10-05), validada por el Arquitecto y el PO.** Las cifras del reparto (§ 2) no cambian. **Aparta un gate de lo que aceptó Rene**: el de 300 ms en las ráfagas queda suspendido en macOS, con techo provisional y caducidad ligada al cierre de TD-GRP-001. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| **Banco**: `cargo bench -p gitraptor-cli --bench engine`. El daemon corre aislado sobre un perfil temporal, con el repo de 100K commits (perfil `H` de `repogen`) y 10 worktrees. Gate de CI en macOS y Linux | § 4 | Dev Spec, D1, D2 y D11 |
+| **Ráfagas**: la de 1.000 archivos es la de este ADR y lleva el gate de 300 ms. La de 10.000 se mide como estrés. En **macOS**, ninguna de las dos cumple: llevan techos provisionales de no regresión por plataforma y escenario (máximo medido × 1,25) y un aviso por encima de 300 ms, que caducan al cerrar [TD-GRP-001](../../requirements/features/motor-local/technical-stories/TD-GRP-001-motor-bajo-rafaga.md). En Linux, gate de 300 ms sin techo | § 4 | Dev Spec, D6 |
+| **Holgura del temporizador calibrada por máquina**: el banco suma al presupuesto del debounce y del total el exceso de holgura que mide en la misma corrida. Por encima de 100 ms de exceso, la máquina se declara no apta y la latencia queda en aviso. Es el caso del runner `macos-latest`, que se despierta de 92 a 147 ms tarde. La referencia de los 300 ms sigue siendo el Mac real, que tiene exceso 0; la salida prevista para el runner es uno dedicado (plan B de § 4) | § 4 | Dev Spec, D5 |
+| **Tolerancia del debounce**: +5 ms sobre los 75 ms efectivos antes de avisar (ruido) | § 2, § 4 | Dev Spec, D4 |
+| **Pérdida silenciosa y marca de hueco**: las verifican los tests de `crates/core/tests/watch.rs`, no el banco, porque el daemon de release no permite acortar la reconciliación periódica (US-GRP-013). El banco mantiene el gate de corrección de la recreación del stream | § 4 | Dev Spec, D8 |
+| **Reproducibilidad**: \|Δp95 total\| ≤ max(25 ms, 20 %) entre dos corridas en la misma máquina, verificada a mano | § 4 | Dev Spec, D9 |
+| **Interpretación p95 confirmada en Linux (CI)**: sin ráfaga, el p95 del motor está entre 80 y 157 ms. Verificación real en la etapa multiplataforma. **Windows no se mide**: el cliente del canal es solo Unix | § 1, Validación | Dev Spec, § 9 |
 
 Linux y Windows: **Pendiente: etapa de validación multiplataforma**.

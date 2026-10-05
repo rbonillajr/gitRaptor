@@ -8,11 +8,11 @@ domain: GRP
 priority: high
 complexity: medium
 created: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-05
 related:
   adrs: [ADR-GRP-011, ADR-GRP-010, ADR-GRP-005, ADR-GRP-006, ADR-GRP-013]
-  stories: [US-GRP-001, US-GRP-002, US-GRP-012, TS-GRP-004]
-  specs: []
+  stories: [US-GRP-001, US-GRP-002, US-GRP-012, TS-GRP-004, TD-GRP-001]
+  specs: [DS-INF-GRP-002]
 ado:
   id: null
   url: null
@@ -29,7 +29,7 @@ tags: [motor-local, ci, rendimiento, latencia, p95, escala, nfr-04, nfr-05]
 **Quiero** un banco reproducible de latencia por etapa y de escala, convertido en gate de CI
 **Para** que el motor cumpla sus 300 ms de NFR-04 y la escala de NFR-05 con el mismo dato que se usa en dogfooding (ADR-GRP-011)
 
-> Dev Spec: `dev-specs/INF-GRP-002-banco-frescura-escala.md` | Pendiente
+> Dev Spec: `dev-specs/INF-GRP-002-dev-spec.md` | Hecha (2026-10-05). Comando: `cargo bench -p gitraptor-cli --bench engine`. Deuda abierta: [TD-GRP-001](./TD-GRP-001-motor-bajo-rafaga.md)
 >
 > **Depende de**: TS-GRP-004 (tiempos en el evento) y US-GRP-002 (observador implementado). **ADRs**: ADR-GRP-011 § 4 (banco y gates, que la Dev Spec debe seguir), ADR-GRP-010 (escenarios), ADR-GRP-005 y ADR-GRP-006 (huella del daemon y del perfil), ADR-GRP-013 (coste de resolver el actor).
 
@@ -56,15 +56,18 @@ tags: [motor-local, ci, rendimiento, latencia, p95, escala, nfr-04, nfr-05]
 
 - **Sensibilidad**: un retardo artificial en el recomputo que lleva el p95 del motor por encima de 300 ms hace fallar el gate; uno menor que solo pasa una etapa produce aviso y no fallo.
 - **Informe**: cada ejecución publica p50, p95, p99 y máximo por etapa, escenario y SO.
-- **Reproducibilidad**: dos ejecuciones seguidas sobre el mismo runner dan un p95 total dentro de una tolerancia que fija la Dev Spec.
 - **Escala**: durante la ráfaga, el p95 de los otros nueve worktrees sigue dentro de presupuesto.
 - **Recreación del stream**: con un escritor activo en los demás worktrees, 40 altas y bajas no dejan ningún cambio sin publicar tras la reconciliación; un evento descartado sin marca se recupera en la siguiente reconciliación periódica.
 - **Coherencia**: los nombres de las etapas del informe coinciden con los del bloque de tiempos del contrato y con los nombres canónicos de ADR-GRP-011 § 2: `t0`, `t_recv`, `t_flush`, `t_computed`, `t_persisted`, `t_published`, `t_client_recv` y `t_render`.
 
 #### Verificación Manual / Sandbox
 
+- **Reproducibilidad** (movida desde las pruebas automatizadas, decisión del orquestador 2026-10-05, validada por el Arquitecto): dos ejecuciones seguidas en la misma máquina dan un p95 total dentro de max(25 ms, 20 %).
+
 - Comparar las cifras del banco con las de SPIKE-GRP-002 y registrar en ADR-GRP-011 cualquier cambio de presupuesto.
 
 ### Notas de integración
 
 Nota de integración (Time Machine, ADR-TMC-006 y US-TMC-020): el banco añade el escenario 'operación protegida con trabajo sin commitear' sobre el repo de referencia de SPIKE-TMC-001, con 1 y con 10 worktrees activos, con gate de p95 < 200 ms del snapshot previo y aviso por etapa. El gate del motor se ejecuta con la Time Machine activa.
+
+Nota (2026-10-05, Dev Spec): **gate de huella añadido por Rene** (CPU y RSS en reposo y en ráfaga, descriptores y watches). La ráfaga de 10.000 archivos se suma como escenario de estrés a la de 1.000. Los incumplimientos bajo ráfaga los recoge [TD-GRP-001](./TD-GRP-001-motor-bajo-rafaga.md).
