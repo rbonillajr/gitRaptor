@@ -125,3 +125,11 @@ Linux y Windows: **Pendiente: etapa de validación multiplataforma**. Este ADR s
 - **NFRs**: RES-01 a RES-09 y HUELLA en [non-functional.md](../non-functional.md); NFR-04, BR-CONS-005; NFR-TMC-11 y SEC-TMC-12 en [time-machine/non-functional.md](../time-machine/non-functional.md).
 - **ADRs**: ADR-GRP-005 § 3 (autoarranque), ADR-GRP-007 (clave `engine.powerSaving`), ADR-GRP-010 (reconciliación), ADR-GRP-011, ADR-CKP-001 (pool del predictor), ADR-TMC-004, ADR-TMC-006, ADR-TMC-007 (Enmienda 2026-10-05: tope de disco).
 - **Historias**: TS-GRP-005 (clases de trabajo y mecanismo de ahorro), US-GRP-017 (`raptor status --resources`), US-GRP-018 (`raptor doctor`), US-GRP-019 (modo de ahorro de energía), US-TMC-022 (tope de disco), INF-GRP-002 (gate).
+
+## Errata (2026-10-05, US-GRP-017)
+
+**Decisión del orquestador (2026-10-05), validada por el Arquitecto**, al implementar la vista de § 4 ([Dev Spec de US-GRP-017](../../requirements/features/motor-local/dev-specs/US-GRP-017-dev-spec.md)):
+
+- **Unidad de RES-02**: "150 MB" en § 3, en HUELLA y en RES-02 significa **150 MiB** (157 286 400 bytes), la cifra que ya aplica el gate de INF-GRP-002 (`FOOTPRINT_LIMITS`) y la vista (`gitraptor_api::resources::TARGETS`). Lo mismo para los 250 MiB de RES-05. La fila de [non-functional.md](../non-functional.md) se alinea cuando INF-GRP-002 (PR #76), que edita esas filas, esté en `main`.
+- **Mismas definiciones, distinto instante**: la vista mide la CPU con la misma fórmula que el gate (tiempo de CPU del proceso entre tiempo de reloj, en % de un núcleo), pero sobre la ventana de 10 min de RES-01 y no sobre 30 s; el RSS y los descriptores son **instantáneos**, y el gate toma el pico en reposo. En macOS el gate cuenta descriptores con `lsof`, que incluye `cwd`, `txt` y las bibliotecas mapeadas; la vista cuenta solo descriptores numéricos (`/dev/fd`). Pendiente en INF-GRP-002: contar solo las filas con descriptor numérico para que gate y vista coincidan.
+- **Windows**: los descriptores son handles del proceso y no tienen objetivo hasta tener línea base (se muestran sin evaluar).
