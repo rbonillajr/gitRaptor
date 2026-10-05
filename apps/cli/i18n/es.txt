@@ -83,3 +83,21 @@ actor.unattributed = sin atribuir
 actor.claude-code = Claude Code
 actor.other = otro agente
 actor.other-agent = otro agente: {name}
+actor.with-origin = {agent}, {origin}
+
+origin.detected = detectado
+origin.registered = registrado
+
+session-state.active = Activo
+session-state.inactive = Inactivo
+session-state.ended = Terminado
+
+session.present = {agent} · {state} · {origin} · desde {time}
+session.ended = {agent} · {state} · {origin} · terminó {time}
+session.ended-unknown = {agent} · {state} · {origin} · fin desconocido
+
+sessions.none = no hay sesiones de agente
+sessions.line = {worktree}  {session}
+sessions.unavailable = en este sistema todavía no se pueden detectar sesiones de agente
+sessions.restart-engine = el motor en marcha es anterior a este raptor y no puede mostrar sesiones: reinícialo con `raptor daemon stop`
+

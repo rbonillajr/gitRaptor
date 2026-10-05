@@ -1,5 +1,6 @@
 mod events;
 mod i18n;
+mod sessions;
 mod status;
 
 use std::io::{BufRead, IsTerminal, Write};
@@ -12,7 +13,7 @@ use clap::{Parser, Subcommand};
 use gitraptor_api::messages::{
     ClientKind, EventsHistoryParams, EventsHistoryResult, GitEventView, RefusalReason, RefusedData,
     RepoAddOutcome, RepoAddParams, RepoAddResult, RepoRejectedData, RepoRejection,
-    RepoRetireParams, RepoRetireResult, Snapshot,
+    RepoRetireParams, RepoRetireResult, SessionsListParams, SessionsListResult, Snapshot,
 };
 use gitraptor_api::methods;
 use gitraptor_api::rpc::{ErrorObject, code};
@@ -57,6 +58,19 @@ enum Command {
         /// How many events, the most recent ones (at most 200).
         #[arg(long, default_value_t = 50)]
         limit: u32,
+        /// Every recorded event, page by page (ignores --limit).
+        #[arg(long)]
+        all: bool,
+    },
+    /// Show the agent sessions of the observed repos: the present ones and
+    /// the latest ended one of each worktree.
+    Sessions {
+        /// Print JSON instead of text.
+        #[arg(long)]
+        json: bool,
+        /// Also every ended session.
+        #[arg(long)]
+        all: bool,
     },
 }
 
@@ -110,7 +124,8 @@ fn main() -> ExitCode {
             action: RepoAction::Retire { path },
         }) => repo_retire(path),
         Some(Command::Status { json }) => status(json),
-        Some(Command::Events { json, limit }) => events_command(json, limit),
+        Some(Command::Events { json, limit, all }) => events_command(json, limit, all),
+        Some(Command::Sessions { json, all }) => sessions_command(json, all),
     }
 }
 
@@ -355,20 +370,82 @@ fn status(json: bool) -> ExitCode {
         Ok(snapshot) => snapshot,
         Err(code) => return code,
     };
+    // Sessions (US-GRP-007), when the engine offers them.
+    let mut sessions = status::SessionsInfo::default();
+    if offers(&client, methods::SESSIONS_LIST) {
+        match client
+            .call::<_, SessionsListResult>(methods::SESSIONS_LIST, &SessionsListParams::default())
+        {
+            Ok(list) => {
+                sessions.available = Some(list.detection_available);
+                sessions.sessions = list.sessions;
+            }
+            Err(err) => {
+                eprintln!("{CMD}: {}", sanitize(&err.to_string()));
+                return ExitCode::FAILURE;
+            }
+        }
+    }
     if json {
-        match serde_json::to_string_pretty(&status::json(&snapshot)) {
+        match serde_json::to_string_pretty(&status::json(&snapshot, &sessions)) {
             Ok(text) => println!("{text}"),
             Err(_) => return ExitCode::FAILURE,
         }
     } else {
-        print!("{}", status::text(&snapshot));
+        print!("{}", status::text(&snapshot, &sessions));
+    }
+    ExitCode::SUCCESS
+}
+
+/// Whether the running engine offers `method`: a daemon of the same
+/// protocol but older than this binary keeps running after an upgrade.
+fn offers(client: &Client, method: &str) -> bool {
+    client.hello().methods.iter().any(|m| m == method)
+}
+
+/// `raptor sessions` (US-GRP-007): the agent sessions of every observed
+/// repo, oldest first.
+fn sessions_command(json: bool, all: bool) -> ExitCode {
+    const CMD: &str = "raptor sessions";
+    let mut client = match engine(CMD) {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+    if !offers(&client, methods::SESSIONS_LIST) {
+        eprintln!("{CMD}: {}", t("sessions.restart-engine", &[]));
+        return ExitCode::FAILURE;
+    }
+    let params = SessionsListParams {
+        include_ended: all,
+        ..SessionsListParams::default()
+    };
+    let list = match client.call::<_, SessionsListResult>(methods::SESSIONS_LIST, &params) {
+        Ok(list) => list,
+        Err(err) => {
+            eprintln!("{CMD}: {}", sanitize(&err.to_string()));
+            return ExitCode::FAILURE;
+        }
+    };
+    if json {
+        match serde_json::to_string_pretty(&sessions::json(
+            &list.sessions,
+            list.detection_available,
+        )) {
+            Ok(text) => println!("{text}"),
+            Err(_) => return ExitCode::FAILURE,
+        }
+    } else {
+        print!(
+            "{}",
+            sessions::text(&list.sessions, list.detection_available)
+        );
     }
     ExitCode::SUCCESS
 }
 
 /// `raptor events` (US-GRP-002): the latest Git events of every observed
 /// repo, oldest first.
-fn events_command(json: bool, limit: u32) -> ExitCode {
+fn events_command(json: bool, limit: u32, all: bool) -> ExitCode {
     const CMD: &str = "raptor events";
     let mut client = match engine(CMD) {
         Ok(client) => client,
@@ -376,12 +453,7 @@ fn events_command(json: bool, limit: u32) -> ExitCode {
     };
     // A daemon of the same protocol but older than this binary keeps
     // running after an upgrade and has no history to serve.
-    if !client
-        .hello()
-        .methods
-        .iter()
-        .any(|m| m == methods::EVENTS_HISTORY)
-    {
+    if !offers(&client, methods::EVENTS_HISTORY) {
         eprintln!("{CMD}: {}", t("events.restart-engine", &[]));
         return ExitCode::FAILURE;
     }
@@ -389,24 +461,48 @@ fn events_command(json: bool, limit: u32) -> ExitCode {
         Ok(snapshot) => snapshot,
         Err(code) => return code,
     };
-    let limit = limit.clamp(1, gitraptor_api::messages::MAX_HISTORY_PAGE);
-    let mut all: Vec<GitEventView> = Vec::new();
+    let all_pages = all;
+    let limit = if all_pages {
+        gitraptor_api::messages::MAX_HISTORY_PAGE
+    } else {
+        limit.clamp(1, gitraptor_api::messages::MAX_HISTORY_PAGE)
+    };
+    let mut events: Vec<GitEventView> = Vec::new();
     for repo in &snapshot.repos {
-        let params = EventsHistoryParams {
-            repo_id: repo.repo_id.clone(),
-            limit: Some(limit),
-            ..EventsHistoryParams::default()
-        };
-        match client.call::<_, EventsHistoryResult>(methods::EVENTS_HISTORY, &params) {
-            Ok(page) => all.extend(page.events),
-            Err(err) => {
-                eprintln!("{CMD}: {}", sanitize(&err.to_string()));
-                return ExitCode::FAILURE;
+        // With `--all`, every page from the first event (the dogfooding
+        // review of SPIKE-GRP-001 exports whole days).
+        let mut after_seq = all_pages.then_some(0);
+        loop {
+            let params = EventsHistoryParams {
+                repo_id: repo.repo_id.clone(),
+                limit: Some(limit),
+                after_seq,
+                ..EventsHistoryParams::default()
+            };
+            match client.call::<_, EventsHistoryResult>(methods::EVENTS_HISTORY, &params) {
+                Ok(page) => {
+                    let last = page.events.last().map(|e| e.seq);
+                    let full = page.events.len() == limit as usize;
+                    events.extend(page.events);
+                    match (all_pages && full, last) {
+                        (true, Some(seq)) => after_seq = Some(seq),
+                        _ => break,
+                    }
+                }
+                Err(err) => {
+                    eprintln!("{CMD}: {}", sanitize(&err.to_string()));
+                    return ExitCode::FAILURE;
+                }
             }
         }
     }
+    let mut all = events;
     all.sort_by_key(|e| (e.observed_utc_ms, e.seq));
-    let skip = all.len().saturating_sub(limit as usize);
+    let skip = if all_pages {
+        0
+    } else {
+        all.len().saturating_sub(limit as usize)
+    };
     let all = &all[skip..];
     if json {
         match serde_json::to_string_pretty(&events::json(all)) {
