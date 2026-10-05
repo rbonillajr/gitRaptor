@@ -22,6 +22,7 @@ tar -xf - -C /tmp/in
 git clone --quiet /tmp/in/repo.bundle "$SRC"
 if [ -f /tmp/in/overlay.tar ]; then
     tar -xf /tmp/in/overlay.tar -C "$SRC"
+    (cd "$SRC" && xargs -0 -r rm -f -- </tmp/in/deleted.txt)
 fi
 cd "$SRC"
 git config --global user.name "xplat"

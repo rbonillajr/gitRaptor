@@ -37,16 +37,18 @@ if [ "$build" = 1 ]; then
 fi
 
 stage_dir=$(mktemp -d)
-trap 'rm -rf "$stage_dir"' EXIT
+container="$image-$$"
+trap 'rm -rf "$stage_dir"; docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
 git -C "$root" bundle create "$stage_dir/repo.bundle" HEAD 2>/dev/null
 if [ "$dirty" = 1 ]; then
     (cd "$root" && git ls-files -z --modified --others --exclude-standard |
+        while IFS= read -r -d '' f; do [ -e "$f" ] && printf '%s\0' "$f"; done |
         tar --null -T - -cf "$stage_dir/overlay.tar")
+    git -C "$root" ls-files -z --deleted >"$stage_dir/deleted.txt"
 fi
 
 results="$root/xplat/linux/results"
 rm -rf "$results"
-container="$image-$$"
 rc=0
 tar -C "$stage_dir" -cf - . |
     docker run -i --name "$container" \
@@ -54,6 +56,10 @@ tar -C "$stage_dir" -cf - . |
         -v gitraptor-xplat-cargo-registry:/home/raptor/.cargo/registry \
         -v gitraptor-xplat-target:/cache/target \
         "$image" || rc=$?
-docker cp "$container:/results" "$results" >/dev/null && echo "results: $results"
-docker rm "$container" >/dev/null
+if docker cp "$container:/results" "$results" >/dev/null; then
+    echo "results: $results"
+else
+    echo "could not copy the results out of the container" >&2
+    [ "$rc" = 0 ] && rc=1
+fi
 exit "$rc"
