@@ -220,16 +220,30 @@ fn skip_string(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) {
     }
 }
 
-/// Bidi overrides and isolates, marks and zero-width characters: they make
-/// a terminal show text different from what it is.
+/// Bidi overrides and isolates, marks, zero-width and other format characters
+/// (Unicode category Cf) and the line and paragraph separators (Zl, Zp): they
+/// make a terminal show text different from what it is, or break a line where
+/// the reader does not expect it (M-05).
 fn is_invisible_control(c: char) -> bool {
     matches!(
         c,
-        '\u{202a}'..='\u{202e}'
-            | '\u{2066}'..='\u{2069}'
+        '\u{ad}'
+            | '\u{600}'..='\u{605}'
+            | '\u{61c}'
+            | '\u{6dd}'
+            | '\u{70f}'
+            | '\u{180e}'
             | '\u{200b}'..='\u{200f}'
-            | '\u{2060}'
+            | '\u{2028}'..='\u{202e}'
+            | '\u{2060}'..='\u{2064}'
+            | '\u{2066}'..='\u{206f}'
             | '\u{feff}'
+            | '\u{fff9}'..='\u{fffb}'
+            | '\u{110bd}'
+            | '\u{1bca0}'..='\u{1bca3}'
+            | '\u{1d173}'..='\u{1d17a}'
+            | '\u{e0001}'
+            | '\u{e0020}'..='\u{e007f}'
     )
 }
 
@@ -333,5 +347,13 @@ mod tests {
         assert!(text.is_lossy());
         assert_eq!(text.raw(), "feat/\u{FFFD}");
         assert!(!Untrusted::from_os(std::ffi::OsStr::new("ok")).is_lossy());
+    }
+
+    #[test]
+    fn line_separators_and_format_characters_are_neutralized() {
+        // M-05 (US-GRD-001): Zl, Zp and Cf never reach a terminal.
+        let clean = sanitize("a\u{2028}b\u{2029}c\u{61c}d\u{ad}e\u{e0041}f");
+        assert_eq!(clean, "a\u{FFFD}b\u{FFFD}c\u{FFFD}d\u{FFFD}e\u{FFFD}f");
+        assert_eq!(sanitize("caf\u{e9} \u{4e2d}"), "caf\u{e9} \u{4e2d}");
     }
 }
