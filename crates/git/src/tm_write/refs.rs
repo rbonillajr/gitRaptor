@@ -20,7 +20,10 @@ use crate::{Oid, RefName};
 /// Validates a full branch name `refs/heads/<name>`.
 pub fn branch_ref(name: &str) -> Result<RefName> {
     let valid = RefName::new(name)?;
-    if !name.starts_with("refs/heads/") || name.len() == "refs/heads/".len() {
+    if !name.starts_with("refs/heads/")
+        || name.len() == "refs/heads/".len()
+        || name.split('/').any(|c| c.starts_with('-'))
+    {
         return Err(WriteError::InvalidInput(format!(
             "not a branch ref: {name:?}"
         )));
@@ -80,7 +83,11 @@ fn payload(updates: &[RefUpdate]) -> Vec<u8> {
 }
 
 /// Runs the transaction on the common folder of `repo`.
-pub fn transaction(ctx: &WriteContext, repo: &WriteWorktree, updates: &[RefUpdate]) -> Result<()> {
+pub fn apply_updates(
+    ctx: &WriteContext,
+    repo: &WriteWorktree,
+    updates: &[RefUpdate],
+) -> Result<()> {
     if updates.is_empty() {
         return Ok(());
     }
@@ -124,6 +131,8 @@ mod tests {
             "refs/heads/",
             "refs/heads/a\nb",
             "refs/heads/-x/../y",
+            "refs/heads/--upload-pack=x",
+            "refs/heads/a/-b",
             "refs/heads/a..b",
             "refs/tm/snap/x",
         ] {
