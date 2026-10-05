@@ -111,7 +111,7 @@ pub(super) fn run(
                     w.overflow = true;
                 }
             }
-            Ok(WtMsg::Reconcile) => task.open_window(clock::monotonic_ns(), Duration::ZERO),
+            Ok(WtMsg::Reconcile(t_recv)) => task.open_window(t_recv, Duration::ZERO),
             Ok(WtMsg::IgnoreRules) => task.ignore.clear(),
             Ok(WtMsg::Stop) | Err(RecvTimeoutError::Disconnected) => return,
             Err(RecvTimeoutError::Timeout) => {}
@@ -293,15 +293,18 @@ impl Task {
         gap: Option<GapMark>,
         marks: Marks,
     ) {
-        self.shared.send(ObservedBatch {
-            repo_id: self.repo_id.clone(),
-            worktrees: if changed { vec![read] } else { Vec::new() },
-            gone: Vec::new(),
-            events,
-            gap,
-            refs: None,
-            marks,
-        });
+        self.shared.send_from_worktree(
+            &self.root,
+            ObservedBatch {
+                repo_id: self.repo_id.clone(),
+                worktrees: if changed { vec![read] } else { Vec::new() },
+                gone: Vec::new(),
+                events,
+                gap,
+                refs: None,
+                marks,
+            },
+        );
     }
 }
 

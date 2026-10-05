@@ -35,6 +35,9 @@ pub struct WorktreeRefs {
     pub commit: Option<String>,
     /// Last entry of its `HEAD` reflog (`checkout: moving from a to b`).
     pub head_reflog: Option<String>,
+    /// Branch its operation in progress works on: Git moves the branch
+    /// before it reattaches `HEAD` or removes the markers.
+    pub operating_on: Option<String>,
     /// Cheap fingerprint for the backup poll.
     pub fingerprint: String,
 }
@@ -84,8 +87,9 @@ impl RefsView {
     }
 
     /// Where a branch's event happened (D6): the worktree that has it in
-    /// `HEAD`; else the one whose last `HEAD` move names it; else the only
-    /// one at its commit (inferred); else the main one (inferred).
+    /// `HEAD`; else the one whose operation in progress works on it; else
+    /// the one whose last `HEAD` move names it; else the only one at its
+    /// commit (inferred); else the main one (inferred).
     pub fn place(&self, branch: &str, commit: Option<&str>) -> Option<EventPlace> {
         let place = |root: &PathBuf, inferred| EventPlace {
             worktree: root.clone(),
@@ -95,6 +99,13 @@ impl RefsView {
             .worktrees
             .iter()
             .find(|(_, w)| w.branch.as_deref() == Some(branch))
+        {
+            return Some(place(root, false));
+        }
+        if let Some((root, _)) = self
+            .worktrees
+            .iter()
+            .find(|(_, w)| w.operating_on.as_deref() == Some(branch))
         {
             return Some(place(root, false));
         }
@@ -131,26 +142,36 @@ pub struct EventPlace {
 }
 
 fn worktree_refs(root: &Path, git_dir: &Path, main: bool, admin: Option<String>) -> WorktreeRefs {
-    let (branch, commit, head_reflog) = match RepoReader::open(root, &ReaderOptions::default()) {
-        Ok(r) => {
-            let head = r.head().ok();
-            let in_progress = r.in_progress().is_some();
-            (
-                head.as_ref()
-                    .filter(|h| !h.detached && !in_progress)
-                    .and_then(|h| h.branch.clone()),
-                head.and_then(|h| h.commit),
-                r.reflog_last("HEAD").ok().flatten().map(|e| e.message),
-            )
-        }
-        Err(_) => (None, None, None),
-    };
+    let (branch, commit, head_reflog, operating_on) =
+        match RepoReader::open(root, &ReaderOptions::default()) {
+            Ok(r) => {
+                let head = r.head().ok();
+                let in_progress = r.in_progress().is_some();
+                let symbolic = head
+                    .as_ref()
+                    .filter(|h| !h.detached)
+                    .and_then(|h| h.branch.clone());
+                let operating_on = if in_progress {
+                    r.rebase_branch().or_else(|| symbolic.clone())
+                } else {
+                    None
+                };
+                (
+                    symbolic.filter(|_| !in_progress),
+                    head.and_then(|h| h.commit),
+                    r.reflog_last("HEAD").ok().flatten().map(|e| e.message),
+                    operating_on,
+                )
+            }
+            Err(_) => (None, None, None, None),
+        };
     WorktreeRefs {
         main,
         admin,
         branch,
         commit,
         head_reflog,
+        operating_on,
         fingerprint: fingerprint(git_dir),
     }
 }
@@ -272,7 +293,7 @@ pub fn classify(common: &Path, old: &RefsView, new: &RefsView, now: (i64, i32)) 
                 details(None, tip),
             ),
             Some(before) if before != tip => {
-                let entries = reader
+                let mut entries = reader
                     .as_ref()
                     .and_then(|r| {
                         r.reflog_since(
@@ -283,6 +304,11 @@ pub fn classify(common: &Path, old: &RefsView, new: &RefsView, now: (i64, i32)) 
                         .ok()
                     })
                     .unwrap_or_default();
+                // The reflog is read after the view: entries newer than the
+                // view's tip belong to the next window, which names them.
+                if let Some(i) = entries.iter().position(|e| e.new == *tip) {
+                    entries.drain(..i);
+                }
                 let place = new.place(name, Some(tip));
                 if entries.is_empty() {
                     push(
@@ -471,7 +497,7 @@ impl Task {
             .collect();
         for wt in self.shared.worktrees_of(&self.repo_id) {
             if moved.contains(&wt.root) {
-                let _ = wt.tx.send(WtMsg::Reconcile);
+                let _ = wt.tx.send(WtMsg::Reconcile(t_flush));
             }
         }
         self.apply(
@@ -505,6 +531,20 @@ impl Task {
             .collect();
         marks.t_computed = clock::monotonic_ns();
         let refs_changed = new.branches != self.view.branches;
+        // A worktree whose `HEAD` commit moved: a commit writes the index
+        // and then the branch, which only this task sees. Its own task may
+        // have read in between, so it reads again.
+        let moved: Vec<PathBuf> = new
+            .worktrees
+            .iter()
+            .filter(|(root, w)| {
+                self.view
+                    .worktrees
+                    .get(*root)
+                    .is_some_and(|old| old.commit != w.commit)
+            })
+            .map(|(root, _)| root.clone())
+            .collect();
         let mut tips: Vec<String> = new
             .branches
             .iter()
@@ -522,6 +562,11 @@ impl Task {
             || gap.is_some()
             || refs_changed;
         self.view = new;
+        // Their tasks stop before the batch that says they are gone, so no
+        // read of theirs can follow it and bring them back.
+        for root in &gone {
+            self.shared.stop_worktree(&self.repo_id, root);
+        }
         if send {
             self.shared.send(ObservedBatch {
                 repo_id: self.repo_id.clone(),
@@ -533,8 +578,10 @@ impl Task {
                 marks,
             });
         }
-        for root in &gone {
-            self.shared.stop_worktree(&self.repo_id, root);
+        for wt in self.shared.worktrees_of(&self.repo_id) {
+            if moved.contains(&wt.root) {
+                let _ = wt.tx.send(WtMsg::Reconcile(marks.t_recv));
+            }
         }
         for (read, admin) in created {
             if !matches!(
@@ -592,6 +639,7 @@ mod tests {
             branch: branch.map(str::to_owned),
             commit: Some(commit.to_owned()),
             head_reflog: reflog.map(str::to_owned),
+            operating_on: None,
             fingerprint: String::new(),
         }
     }
@@ -642,6 +690,25 @@ mod tests {
                 worktree: "/w/main".into(),
                 inferred: true
             }
+        );
+    }
+
+    /// A worktree in the middle of a rebase of `feat` (detached, no
+    /// `checkout` in its reflog) is where `feat`'s events happen.
+    #[test]
+    fn an_operation_in_progress_places_the_events_of_its_branch() {
+        let mut view = RefsView::default();
+        view.worktrees
+            .insert("/w/main".into(), wt(true, Some("main"), "c1", None));
+        let mut rebasing = wt(false, None, "c2", Some("rebase (pick): a"));
+        rebasing.operating_on = Some("feat".into());
+        view.worktrees.insert("/w/feat".into(), rebasing);
+        assert_eq!(
+            view.place("feat", Some("c2")),
+            Some(EventPlace {
+                worktree: "/w/feat".into(),
+                inferred: false
+            })
         );
     }
 }

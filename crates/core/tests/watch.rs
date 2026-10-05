@@ -260,6 +260,20 @@ fn branches_and_worktrees_are_followed() {
     );
     assert!(batches.iter().any(|b| b.gone.contains(&extra)));
     assert!(!w.observer.worktrees("r").contains(&extra));
+    // No read of the removed worktree follows the batch that says it is
+    // gone: it would bring it back as "missing".
+    let gone_at = batches
+        .iter()
+        .position(|b| b.gone.contains(&extra))
+        .unwrap();
+    let later: Vec<_> = batches[gone_at..]
+        .iter()
+        .chain(&w.drain(Duration::from_millis(500)))
+        .flat_map(|b| &b.worktrees)
+        .filter(|r| r.view.path.raw() == extra.to_str().unwrap())
+        .map(|r| r.view.status.clone())
+        .collect();
+    assert!(later.is_empty(), "{later:?}");
 }
 
 /// D6 fallback: Git does not say where `git branch x` ran; with two
@@ -437,4 +451,148 @@ fn repo_intact_watching_writes_nothing() {
     });
     report.assert_intact();
     let _ = wt;
+}
+
+/// Runs `args` in `wt` and stops Git right after it moves `branch`, with a
+/// `reference-transaction` hook, so the view read then is the one between
+/// Git's steps. Returns the events of a window flushed at that moment.
+#[cfg(unix)]
+fn events_while_git_finishes(f: &Fixture, wt: &Path, branch: &str, args: &[&str]) -> Vec<RawEvent> {
+    use gitraptor_core::watch::{RefsView, classify};
+    use std::os::unix::fs::PermissionsExt;
+
+    let common = observe::locate(&f.repo).unwrap();
+    let old = RefsView::read(&common);
+    let paused = f.root.join("paused");
+    let go = f.root.join("go");
+    let hook = common.join("hooks/reference-transaction");
+    std::fs::create_dir_all(hook.parent().unwrap()).unwrap();
+    std::fs::write(
+        &hook,
+        format!(
+            "#!/bin/sh\n\
+             [ \"$1\" = committed ] || exit 0\n\
+             grep -q ' refs/heads/{branch}$' || exit 0\n\
+             touch '{paused}'\n\
+             i=0\n\
+             while [ ! -f '{go}' ] && [ $i -lt 400 ]; do sleep 0.05; i=$((i+1)); done\n",
+            paused = paused.display(),
+            go = go.display(),
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::thread::scope(|s| {
+        let git = s.spawn(|| f.git_in(wt, args));
+        let start = Instant::now();
+        while !paused.exists() {
+            assert!(
+                start.elapsed() < Duration::from_secs(10),
+                "Git never paused"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let new = RefsView::read(&common);
+        let in_progress = &new.worktrees[wt];
+        // The race itself: the branch moved, the operation is not over.
+        assert_eq!(in_progress.branch, None, "{in_progress:?}");
+        let events = classify(&common, &old, &new, (0, 0));
+        std::fs::write(&go, "").unwrap();
+        git.join().unwrap();
+        std::fs::remove_file(&hook).unwrap();
+        events
+    })
+}
+
+/// "demo" with a commit in "feat-login" and another in `main`.
+#[cfg(unix)]
+fn diverged() -> (Fixture, PathBuf) {
+    let (f, wt) = demo();
+    std::fs::write(wt.join("a.txt"), "a\n").unwrap();
+    f.git_in(&wt, &["add", "a.txt"]);
+    f.git_in(&wt, &["commit", "-q", "-m", "a"]);
+    f.write("b.txt", "b\n");
+    f.git(&["add", "b.txt"]);
+    f.git(&["commit", "-q", "-m", "b"]);
+    (f, wt)
+}
+
+/// D6: Git moves the branch of a rebase before it reattaches `HEAD`; a
+/// window that closes in between places the rebase in its worktree, not
+/// inferred.
+#[cfg(unix)]
+#[test]
+fn a_rebase_seen_before_git_reattaches_head_is_placed_in_its_worktree() {
+    let (f, wt) = diverged();
+    let events = events_while_git_finishes(&f, &wt, "feat-login", &["rebase", "-q", "main"]);
+    let rebase = only(&events, GitEventKind::Rebase);
+    assert_eq!(rebase.worktree, wt);
+    assert!(!rebase.details.worktree_inferred, "{rebase:#?}");
+}
+
+/// D6: the same for a merge, whose `MERGE_HEAD` is still there when Git
+/// moves the branch.
+#[cfg(unix)]
+#[test]
+fn a_merge_seen_before_git_clears_its_markers_is_placed_in_its_worktree() {
+    let (f, wt) = diverged();
+    let events =
+        events_while_git_finishes(&f, &wt, "feat-login", &["merge", "-q", "--no-edit", "main"]);
+    let merge = only(&events, GitEventKind::Merge);
+    assert_eq!(merge.worktree, wt);
+    assert!(!merge.details.worktree_inferred, "{merge:#?}");
+}
+
+/// A branch that moves under its worktree without a write in the
+/// worktree's own Git directory (a commit's last step, or `update-ref`)
+/// wakes the worktree's task: its state follows without waiting for the
+/// periodic reconciliation (ADR-GRP-010 § 5).
+#[test]
+fn a_branch_moved_under_its_worktree_is_read_again() {
+    let (f, wt) = demo();
+    f.write("b.txt", "b\n");
+    f.git(&["add", "b.txt"]);
+    f.git(&["commit", "-q", "-m", "b"]);
+    let tip = f.git(&["rev-parse", "main"]).trim().to_owned();
+    let w = watch(&f, fast());
+    f.git(&["update-ref", "refs/heads/feat-login", &tip]);
+    w.until(|bs| {
+        bs.iter().flat_map(|b| &b.worktrees).any(|r| {
+            r.view.path.raw() == wt.to_str().unwrap() && r.head_commit.as_deref() == Some(&tip)
+        })
+    });
+}
+
+/// The reflog is read after the view of the refs: a commit that lands in
+/// between is left to the next window, which names it, instead of being
+/// named twice.
+#[test]
+fn a_commit_after_the_view_is_named_once_by_the_next_window() {
+    use gitraptor_core::watch::{RefsView, classify};
+
+    let (f, wt) = demo();
+    let common = observe::locate(&f.repo).unwrap();
+    let commit = |file: &str| {
+        std::fs::write(wt.join(file), "x\n").unwrap();
+        f.git_in(&wt, &["add", file]);
+        f.git_in(&wt, &["commit", "-q", "-m", file]);
+    };
+    let first = RefsView::read(&common);
+    commit("a.txt");
+    let second = RefsView::read(&common);
+    commit("b.txt");
+    let third = RefsView::read(&common);
+    let named: Vec<_> = [(&first, &second), (&second, &third)]
+        .iter()
+        .flat_map(|(old, new)| classify(&common, old, new, (0, 0)))
+        .filter(|e| e.kind == GitEventKind::Commit)
+        .map(|e| e.details.new_commit.unwrap())
+        .collect();
+    assert_eq!(
+        named,
+        [
+            second.branches["feat-login"].clone(),
+            third.branches["feat-login"].clone()
+        ]
+    );
 }
