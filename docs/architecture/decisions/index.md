@@ -2,17 +2,17 @@
 mode: draft
 status: accepted
 generated: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-05
 generator: architect
 domain: GRP
 feature: motor-local
-total_artifacts: 31
-expanded: 31
+total_artifacts: 32
+expanded: 32
 approved: 31
 related:
   context: [CTX-GRP-001]
   rules: [BR-GRP-001]
-  adrs: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-004, ADR-GRP-005, ADR-GRP-006, ADR-GRP-007, ADR-GRP-008, ADR-GRP-009, ADR-GRP-010, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, ADR-TMC-001, ADR-TMC-002, ADR-TMC-003, ADR-TMC-004, ADR-TMC-005, ADR-TMC-006, ADR-TMC-007, ADR-GRD-001, ADR-GRD-002, ADR-GRD-003, ADR-GRD-004, ADR-GRD-005, ADR-GRD-006, ADR-GRD-007, ADR-GRD-008, ADR-CKP-001, ADR-CKP-002, ADR-CKP-003]
+  adrs: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-004, ADR-GRP-005, ADR-GRP-006, ADR-GRP-007, ADR-GRP-008, ADR-GRP-009, ADR-GRP-010, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, ADR-GRP-014, ADR-TMC-001, ADR-TMC-002, ADR-TMC-003, ADR-TMC-004, ADR-TMC-005, ADR-TMC-006, ADR-TMC-007, ADR-GRD-001, ADR-GRD-002, ADR-GRD-003, ADR-GRD-004, ADR-GRD-005, ADR-GRD-006, ADR-GRD-007, ADR-GRD-008, ADR-CKP-001, ADR-CKP-002, ADR-CKP-003]
   stories: [US-GRP-001, US-GRP-002, US-GRP-003, US-GRP-004, US-GRP-005, US-GRP-006, US-GRP-007, US-GRP-008, US-GRP-009, US-GRP-010, US-GRP-011, US-GRP-012, US-GRP-013, US-GRP-014, US-GRP-015, US-GRP-016]
 ---
 
@@ -61,6 +61,7 @@ El formato "JSON estricto con `$schema`" no es una PQ: es la propuesta base del 
 | [ADR-GRP-011](./ADR-GRP-011-presupuesto-frescura.md) | Reparto del presupuesto de frescura | Motor ≤ 300 ms, Cockpit ≤ 100 ms y 100 ms de margen, p95 medido con reloj monótono por etapa; enmienda 2026-10-04 de SPIKE-GRP-002 (p95 confirmado en macOS; Linux y Windows pendientes) | accepted |
 | [ADR-GRP-012](./ADR-GRP-012-deteccion-sesiones-claude-code.md) | Detección de sesiones de Claude Code | S1 (proceso y cwd) crea la sesión; atribuyen S2b, S3, S4 o el registro explícito de un "otro agente" si es la única sesión presente (confirmar una sesión detectada no activa esa evidencia); la co-ubicación de una sesión detectada nunca basta; transcripts limitados a metadatos (PQ-2) | accepted |
 | [ADR-GRP-013](./ADR-GRP-013-modelo-eventos-atribucion.md) | Modelo persistido de eventos, sesiones y atribución | Los eventos apuntan a una sesión; registros de atribución append-only (incluido el retiro de registro, que termina la sesión); huecos como intervalos; sin variante "humano" | accepted |
+| [ADR-GRP-014](./ADR-GRP-014-pipeline-release-distribucion.md) | Pipeline de release y canales de distribución | Workflow propio (no cargo-dist) disparado por tag, 6 targets nativos con Linux musl estático, checksums, SBOM y borrador de release que publica un humano; firma de macOS y Windows y attestations preparadas tras secretos y variables; canales Homebrew (tap propio), winget, npm (paquetes por plataforma) y scripts verificados, publicados solo con `RELEASE_PUBLISH_CHANNELS` y licencia decidida | proposed |
 | [ADR-TMC-001](./ADR-TMC-001-almacen-snapshots-perfil.md) | Almacén de snapshots en el perfil | Repo Git bare privado por repo en `tm/<id-repo>/` con objetos propios, contenido en bruto sin filtros y exclusiones declaradas; nunca en el repo del usuario | accepted |
 | [ADR-TMC-002](./ADR-TMC-002-escritor-time-machine.md) | Escritor de la Time Machine | Escrituras internas en el módulo `timemachine` del daemon con capa de escritura propia en `crates/git`, sin hooks, filtros, firma ni red; las operaciones de usuario las ejecuta el ejecutor del daemon | accepted |
 | [ADR-TMC-003](./ADR-TMC-003-oplog-diario-recuperacion.md) | Oplog, diario y recuperación | Oplog SQLite propio por repo, solo por anexión y encadenado por hash; solicitante congelado; recuperación sin escrituras propias salvo liberar su `index.lock` | accepted |
@@ -216,6 +217,13 @@ Los ADR-CKP-001 a 003 (aceptados el 2026-10-04) son de la feature `cockpit` (F-0
 - **Decisión**: cada evento apunta a una sesión o a ninguna; la atribución efectiva se resuelve desde la sesión con registros append-only (registro, confirmación, corrección, retiro de corrección y retiro de registro). El registro explícito de un "otro agente" atribuye los eventos del worktree mientras sea la única sesión presente; una confirmación no. Secuencia monotónica por repo, eventos inmutables, huecos como intervalos con causa y eventos de reconciliación sin sesión. El contrato no tiene variante "humano".
 - **Decisión de producto**: ninguna como ADR. ⚠️ **ASSUMPTION** sobre quién retira un registro (el desarrollador, cualquiera; un agente, solo el suyo). Supuestos dependientes de **P16** (confirmación → origen "registrado") y **P17** (retirar una corrección devuelve los eventos), abiertas para el PO; el modelo admite ambas respuestas.
 - **Impacta**: US-GRP-002, 004 a 011. BR-CONS-002 a 005, BR-EDGE-003, BR-EDGE-005. Q33-Q39, Q41. Contrato de F-001-03 y F-001-04.
+
+### ADR-GRP-014 — Pipeline de release y canales de distribución
+
+- **Pregunta**: ¿cómo se produce y se distribuye el binario único de NFR-06 sin publicar nada hasta que se decidan la licencia y el nombre?
+- **Decisión**: `release.yml` propio, fijado por SHA y disparado por tag; 6 targets nativos; checksums, SBOM y un borrador de release que solo publica un humano. La firma (Apple, Azure) y las attestations quedan preparadas tras secretos y variables. Los canales se generan en cada release y `release-channels.yml` solo los publica cuando el borrador se publica, con `RELEASE_PUBLISH_CHANNELS` activa y una licencia distinta de `UNLICENSED`.
+- **Decisión de producto**: ninguna nueva. Decisión del orquestador (2026-10-05), validada por el Arquitecto y el PO. La licencia y el nombre (pregunta abierta 2) bloquean solo la publicación.
+- **Impacta**: INF-GRP-003, INF-GRP-004, TS-GRP-003 (SEC-14 con el canal npm), INF-GRP-002 (medir el binario musl).
 
 ## Pendientes fuera de los ADRs
 
