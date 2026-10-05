@@ -79,8 +79,11 @@ fn a_replaced_dot_git_changes_the_identity() {
     let before = preflight(&wt).unwrap();
     let dot_git = wt.join(".git");
     let text = std::fs::read_to_string(&dot_git).unwrap();
-    std::fs::remove_file(&dot_git).unwrap();
-    std::fs::write(&dot_git, &text).unwrap();
+    // Substituted the way an attacker would: a new file renamed over the old one. Both exist at
+    // once, so the file system cannot hand the new one the old inode (ext4 reuses a freed one).
+    let replacement = wt.join(".git.new");
+    std::fs::write(&replacement, &text).unwrap();
+    std::fs::rename(&replacement, &dot_git).unwrap();
     let after = preflight(&wt).unwrap();
     assert_ne!(before.dot_git_id, after.dot_git_id);
     assert!(after.gitdir_linked_back);
