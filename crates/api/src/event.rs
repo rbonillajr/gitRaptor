@@ -79,6 +79,9 @@ pub const REPO_OBSERVATION: &str = "repo.observation";
 /// The reconciled worktrees of one repo (US-GRP-001). Data:
 /// [`crate::messages::WorktreeStateData`].
 pub const WORKTREE_STATE: &str = "worktree.state";
+/// One Git event recorded in a repo's history (US-GRP-002). Data:
+/// [`crate::messages::GitEventView`].
+pub const GIT_EVENT: &str = "git.event";
 
 const fn engine(kind: &'static str) -> EventKind {
     EventKind {
@@ -105,7 +108,7 @@ pub const KINDS: &[EventKind] = &[
     engine(RESERVED_AUDIT),
     engine(REPO_OBSERVATION),
     change(WORKTREE_STATE, "US-GRP-001"),
-    change("git.event", "US-GRP-002"),
+    change(GIT_EVENT, "US-GRP-002"),
     change("gap.recorded", "US-GRP-005"),
     change("session.state", "US-GRP-007"),
     change("attribution.changed", "US-GRP-010"),
