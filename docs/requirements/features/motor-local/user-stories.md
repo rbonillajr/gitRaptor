@@ -3,8 +3,8 @@ mode: draft
 generated: 2026-10-03T00:00Z
 updated: 2026-10-05
 generator: product-owner
-total_artifacts: 16
-expanded: 16
+total_artifacts: 19
+expanded: 19
 approved: 0
 blocked: []
 ---
@@ -62,6 +62,9 @@ blocked: []
 | [US-GRP-014](./user-stories/US-GRP-014-git-ausente-o-antiguo.md) | El desarrollador sabe qué Git le falta y el motor empieza solo cuando lo instala | Desarrollador quiere que sin Git 2.38 el motor avise, espere y arranque solo al detectarlo | expanded |
 | [US-GRP-015](./user-stories/US-GRP-015-primer-repo-maquina-nueva.md) | El desarrollador recién instalado sabe cómo añadir su primer repo | Desarrollador quiere una guía sin repos y, en máquina nueva, empezar de cero sin historia atribuida | expanded |
 | [US-GRP-016](./user-stories/US-GRP-016-rama-base-configuracion-equipo.md) | La rama base la define la configuración del equipo | Desarrollador quiere el ahead/behind contra la rama base del equipo, sin que un ajuste personal la cambie | expanded |
+| [US-GRP-017](./user-stories/US-GRP-017-consumo-recursos-status.md) | El desarrollador ve cuánto consume GitRaptor en su máquina | Desarrollador quiere `raptor status --resources` con CPU, RAM, disco del perfil y de la Time Machine y vigilancias (RES-10) | expanded |
+| [US-GRP-018](./user-stories/US-GRP-018-doctor-recursos.md) | El desarrollador diagnostica con raptor doctor si GitRaptor gasta de más | Desarrollador quiere que `raptor doctor` avise de cualquier objetivo de consumo superado, también con el motor parado | expanded |
+| [US-GRP-019](./user-stories/US-GRP-019-modo-ahorro-energia.md) | GitRaptor gasta menos batería cuando el portátil no está enchufado | Desarrollador quiere que con batería se espacien las reconciliaciones y se pause el predictor, sin perder protección (RES-08) | expanded |
 
 ---
 
@@ -87,6 +90,9 @@ blocked: []
 | US-GRP-014 | BR-VAL-003, BR-WF-002, BR-EDGE-005 | US-GRP-001, US-GRP-002, US-GRP-005, US-GRP-009, US-GRP-015 | Cockpit F-001-02 y CLI (presentación del aviso) | Must | Una máquina nueva no parece una herramienta rota |
 | US-GRP-015 | BR-WF-002, BR-EDGE-007 | US-GRP-001, US-GRP-002 | Cockpit F-001-02 y CLI (estado vacío guiado) | Should | El primer minuto termina con un repo observado |
 | US-GRP-016 | BR-CONS-006 (equipo), BR-CONS-007, BR-EDGE-007 (rama base del equipo) | US-GRP-012, US-GRP-013, TS-GRD-001 (Guardrails) | — (Q36 satisfecha: ADR-GRP-007 y ADR-GRD-004 aceptados el 2026-10-04) | Should | Todo el equipo mide contra la misma rama base |
+| US-GRP-017 | RES-10, RES-01, 02, 04, 05 (valores mostrados), NFR-10 | US-GRP-001, US-GRP-002 | TS-GRP-005 (clase por pool; no bloqueante) | Must (M1) | Mide cada día que GitRaptor no le quita recursos |
+| US-GRP-018 | RES-10 (`doctor`), RES-05, RES-09 | US-GRP-017 | US-TMC-022 (aviso del tope; no bloqueante) | Could | Un solo comando descarta a GitRaptor como causa de la lentitud |
+| US-GRP-019 | RES-08, BR-CONS-005 (intervalo vigente) | TS-GRP-005, US-GRP-004, US-GRP-017 | Predictor TS-CKP-001 (Cockpit) para su escenario | Could | Tenerlo encendido no acorta la batería |
 
 > **Cambios de dependencias (2026-10-03, segunda pasada del Artifact Judge)**: US-GRP-004 añade 007 y 009 (sesiones y registros que sobreviven al reinicio); US-GRP-006 añade 005 (lo ocurrido mientras estuvo retirado es un hueco) y 009 (atribuciones recuperadas), y su dependencia del MCP queda como no bloqueante; US-GRP-009 depende de 007 y US-GRP-014 de 015 para que no corran en paralelo sobre el mismo modelo; US-GRP-005 ya no exige el estado "Sin repos" (solo la lista vacía). US-GRP-001 deja BR-CONS-006: el ahead/behind es solo de US-GRP-012. US-GRP-013 pasa a bloqueada por P8 y el umbral por defecto queda en US-GRP-007. Nueva US-GRP-016, bloqueada (Q36).
 >
@@ -100,6 +106,7 @@ blocked: []
 - **Ola 3**: US-GRP-003, US-GRP-004 y US-GRP-008 (tras 009) y US-GRP-016 (tras 012, 013 y TS-GRD-001 de Guardrails).
 - **Ola 4**: US-GRP-005, US-GRP-010 y US-GRP-011 (tras 004).
 - **Ola 5**: US-GRP-006 y US-GRP-014 (tras 005).
+- **Consumo de recursos (2026-10-05)**: US-GRP-017 tras el esqueleto (entra en M1); US-GRP-018 tras 017; US-GRP-019 tras TS-GRP-005 y 004. Decisión del orquestador (2026-10-05), validada por PO y Arquitecto (ADR-GRP-015).
 - **Desbloqueadas el 2026-10-04** (ADR-GRP-007 aceptado, cierra P8): US-GRP-013 → US-GRP-016, en ese orden; US-GRP-016 espera además a TS-GRD-001 (Guardrails).
 
 > **Secuencias por contrato compartido**: US-GRP-007 → US-GRP-009 (modelo de sesión: estados, origen, presencia), US-GRP-009 → US-GRP-008 (quién hizo un evento: agente con su origen o "sin atribuir"), US-GRP-015 → US-GRP-014 (estados del motor de BR-WF-002) y US-GRP-013 → US-GRP-016 (lectura de la configuración en tres niveles) van en serie, no en paralelo. US-GRP-010 y US-GRP-011 corren en paralelo pero tocan la misma regla de sesiones por worktree (corregir frente a añadir, Q33). En todos los casos el contrato compartido lo fija la Dev Spec de la historia que va primero (007, 009, 015, 013 y, para 010/011, 009).
@@ -144,3 +151,4 @@ blocked: []
 | 1.7 | 2026-10-04 | Agente de documentación para Rene Bonilla | Aceptación de ADR-GRP-005 a 013 (Rene Bonilla, 2026-10-04). ADR-GRP-007 cierra P8: US-GRP-013 se desbloquea (pasa a la ola 2, tras 007). US-GRP-016 se desbloquea por decisión de Rene Bonilla (2026-10-04, a propuesta del coordinador): Q36 pedía que existieran Guardrails como dueño de la configuración del equipo y el ADR de formato, y los dos existen como ADRs aceptados (ADR-GRD-004, ADR-GRP-007); queda en la ola 3 con dependencia de US-GRP-013 y TS-GRD-001. Sin historias bloqueadas |
 | 1.8 | 2026-10-04 | Orquestador para Rene Bonilla | US-GRP-001 implementada (en revisión) con [Dev Spec](./dev-specs/US-GRP-001-dev-spec.md). Alcance confirmado según la historia: sin ahead/behind (US-GRP-012/016) ni estados especiales (US-GRP-003); `repo.retire` básico adelantado de US-GRP-006 y reconciliación periódica movida a US-GRP-002. Decisiones del orquestador validadas por PO y Arquitecto |
 | 1.9 | 2026-10-05 | Orquestador para Rene Bonilla | US-GRP-002 implementada (en revisión) con [Dev Spec](./dev-specs/US-GRP-002-dev-spec.md): observador de cambios, historial de eventos de Git "sin atribuir", `events.history` y `raptor events`. Un watcher por worktree en macOS adoptado tras medirlo (0 eventos perdidos). Alcance sin cambios: ahead/behind, estados especiales, sesiones y `gap.recorded` siguen en sus historias. Decisiones del orquestador validadas por PO y Arquitecto |
+| 1.10 | 2026-10-05 | Orquestador (decisión validada por PO y Arquitecto) | Consumo de recursos (Rene Bonilla, 2026-10-05): US-GRP-017 (`raptor status --resources`, Must, M1), US-GRP-018 (`raptor doctor`, Could) y US-GRP-019 (ahorro de energía, Could). Enabler TS-GRP-005; ADR-GRP-015; RES-01 a RES-10 |
