@@ -1,0 +1,225 @@
+{
+  "environment": {
+    "arch": "aarch64",
+    "cores": 10,
+    "cpu": "Apple M5",
+    "git": "git version 2.50.1 (Apple Git-155)",
+    "mem": "34359738368",
+    "notify": "8.2.0",
+    "os": "macos",
+    "os_version": "26.6.2",
+    "temp_dir": "/var/folders/8r/ysq24wxx0bqcc42c1zxhd8fh0000gp/T/"
+  },
+  "generator": {
+    "cfg": {
+      "commit_graph": true,
+      "commits": 2000,
+      "dirs": 250,
+      "files_per_dir": 20,
+      "worktrees": 10
+    },
+    "gen_ms": 4063.322125,
+    "quick": false,
+    "samples": 20
+  },
+  "stream_isolation": {
+    "runs": [
+      {
+        "files": 1739,
+        "files_without_event": 0,
+        "mode": "control",
+        "stream_restarts": 0
+      },
+      {
+        "files": 1846,
+        "files_without_event": 0,
+        "mode": "control",
+        "stream_restarts": 0
+      },
+      {
+        "files": 1854,
+        "files_without_event": 0,
+        "mode": "control",
+        "stream_restarts": 0
+      },
+      {
+        "files": 1831,
+        "files_without_event": 0,
+        "mode": "control",
+        "stream_restarts": 0
+      },
+      {
+        "files": 1796,
+        "files_without_event": 0,
+        "mode": "control",
+        "stream_restarts": 0
+      },
+      {
+        "files": 1680,
+        "files_without_event": 0,
+        "mode": "control",
+        "stream_restarts": 0
+      },
+      {
+        "files": 1699,
+        "files_without_event": 0,
+        "mode": "control",
+        "stream_restarts": 0
+      },
+      {
+        "files": 1716,
+        "files_without_event": 0,
+        "mode": "control",
+        "stream_restarts": 0
+      },
+      {
+        "files": 1711,
+        "files_without_event": 0,
+        "mode": "control",
+        "stream_restarts": 0
+      },
+      {
+        "files": 1699,
+        "files_without_event": 0,
+        "mode": "control",
+        "stream_restarts": 0
+      },
+      {
+        "files": 1729,
+        "files_without_event": 16,
+        "mode": "shared",
+        "stream_restarts": 8
+      },
+      {
+        "files": 1818,
+        "files_without_event": 16,
+        "mode": "shared",
+        "stream_restarts": 8
+      },
+      {
+        "files": 1833,
+        "files_without_event": 14,
+        "mode": "shared",
+        "stream_restarts": 8
+      },
+      {
+        "files": 1800,
+        "files_without_event": 0,
+        "mode": "shared",
+        "stream_restarts": 8
+      },
+      {
+        "files": 1832,
+        "files_without_event": 5,
+        "mode": "shared",
+        "stream_restarts": 8
+      },
+      {
+        "files": 1772,
+        "files_without_event": 5,
+        "mode": "shared",
+        "stream_restarts": 8
+      },
+      {
+        "files": 1801,
+        "files_without_event": 6,
+        "mode": "shared",
+        "stream_restarts": 8
+      },
+      {
+        "files": 1860,
+        "files_without_event": 6,
+        "mode": "shared",
+        "stream_restarts": 8
+      },
+      {
+        "files": 1838,
+        "files_without_event": 12,
+        "mode": "shared",
+        "stream_restarts": 8
+      },
+      {
+        "files": 1854,
+        "files_without_event": 9,
+        "mode": "shared",
+        "stream_restarts": 8
+      },
+      {
+        "files": 1860,
+        "files_without_event": 0,
+        "mode": "per_worktree",
+        "stream_restarts": 8
+      },
+      {
+        "files": 1856,
+        "files_without_event": 0,
+        "mode": "per_worktree",
+        "stream_restarts": 8
+      },
+      {
+        "files": 1781,
+        "files_without_event": 0,
+        "mode": "per_worktree",
+        "stream_restarts": 8
+      },
+      {
+        "files": 1827,
+        "files_without_event": 0,
+        "mode": "per_worktree",
+        "stream_restarts": 8
+      },
+      {
+        "files": 1825,
+        "files_without_event": 0,
+        "mode": "per_worktree",
+        "stream_restarts": 8
+      },
+      {
+        "files": 1801,
+        "files_without_event": 0,
+        "mode": "per_worktree",
+        "stream_restarts": 8
+      },
+      {
+        "files": 1855,
+        "files_without_event": 0,
+        "mode": "per_worktree",
+        "stream_restarts": 8
+      },
+      {
+        "files": 1727,
+        "files_without_event": 0,
+        "mode": "per_worktree",
+        "stream_restarts": 8
+      },
+      {
+        "files": 1592,
+        "files_without_event": 0,
+        "mode": "per_worktree",
+        "stream_restarts": 8
+      },
+      {
+        "files": 1468,
+        "files_without_event": 0,
+        "mode": "per_worktree",
+        "stream_restarts": 8
+      }
+    ],
+    "summary": {
+      "control": {
+        "files": 17571,
+        "lost": 0
+      },
+      "per_worktree": {
+        "files": 17592,
+        "lost": 0,
+        "restarts": 80
+      },
+      "shared": {
+        "files": 18137,
+        "lost": 89,
+        "restarts": 80
+      }
+    }
+  }
+}
