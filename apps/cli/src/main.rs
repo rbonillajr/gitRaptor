@@ -2,6 +2,7 @@ mod events;
 mod i18n;
 mod mcp;
 mod status;
+mod undo;
 
 use std::io::{BufRead, IsTerminal, Write};
 use std::path::{Path, PathBuf};
@@ -59,6 +60,12 @@ enum Command {
         /// How many events, the most recent ones (at most 200).
         #[arg(long, default_value_t = 50)]
         limit: u32,
+    },
+    /// Undo the last operation of the worktree you are in; the state right before the undo is saved.
+    Undo {
+        /// Print JSON instead of text.
+        #[arg(long)]
+        json: bool,
     },
     /// Register or remove the GitRaptor MCP server in your coding agent.
     Mcp {
@@ -134,6 +141,7 @@ fn main() -> ExitCode {
         }) => repo_retire(path),
         Some(Command::Status { json }) => status(json),
         Some(Command::Events { json, limit }) => events_command(json, limit),
+        Some(Command::Undo { json }) => undo::run(json),
         Some(Command::Mcp {
             action: McpAction::Install { agent },
         }) => mcp::install(&agent),
