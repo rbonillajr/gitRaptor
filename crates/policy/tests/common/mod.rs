@@ -23,7 +23,7 @@ impl Repo {
     /// A repository with `main` and one commit without team settings.
     pub fn new() -> Self {
         let tmp = tempfile::tempdir().expect("tempdir");
-        let root = tmp.path().canonicalize().unwrap();
+        let root = gitraptor_testkit::fixture::canonical_dir(tmp.path());
         let home = root.join("home");
         let path = root.join("repo");
         std::fs::create_dir_all(&home).unwrap();

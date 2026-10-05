@@ -37,7 +37,7 @@ impl Fixture {
     pub fn new() -> Self {
         let tmp = tempfile::tempdir().expect("tempdir");
         // Canonical paths: on macOS `/var` is a symlink to `/private/var`.
-        let root = tmp.path().canonicalize().expect("canonical tempdir");
+        let root = gitraptor_testkit::fixture::canonical_dir(tmp.path());
         let home = root.join("home");
         let repo = root.join("repo");
         std::fs::create_dir_all(&home).unwrap();
