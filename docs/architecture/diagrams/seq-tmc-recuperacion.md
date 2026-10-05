@@ -12,7 +12,7 @@ sequenceDiagram
   participant N as Nuevo daemon
   participant C as Siguiente cliente del worktree
 
-  A->>O: intención · snapshot previo completo · lista
+  A->>O: intención · snapshot previo completo · lista; broken on purpose
   A->>O: aplicando(paso 3: index.lock propio, ruta e inodo)
   A->>R: crea index.lock
   A->>O: aplicando(paso 5: refs)
