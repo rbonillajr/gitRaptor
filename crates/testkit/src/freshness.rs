@@ -55,6 +55,11 @@ fn round(v: f64) -> f64 {
 /// Engine part of NFR-04 (ADR-GRP-011 § 2): above it, on the p95, the CI fails.
 pub const ENGINE_BUDGET_MS: f64 = 300.0;
 
+/// Provisional non-regression ceiling of the engine p95 in the burst scenario, which does not
+/// meet the 300 ms yet (TD-GRP-001). Decisión del orquestador (2026-10-05), validada por
+/// Arquitecto y PO.
+pub const BURST_CEILING_MS: f64 = 700.0;
+
 /// What the debounce window may exceed its effective 75 ms by before the bench warns: the
 /// jitter left once the timer slack is discounted (ADR-GRP-010 § 3). Decision of INF-GRP-002.
 pub const DEBOUNCE_TOLERANCE_MS: f64 = 5.0;
@@ -164,6 +169,10 @@ pub struct Scenario {
     pub name: String,
     /// Detection is only isolated in "modify a file" (ADR-GRP-011 § 4, Enmienda 2026-10-04).
     pub isolates_detection: bool,
+    /// Provisional non-regression ceiling of the engine total, for a scenario known not to meet
+    /// the 300 ms yet: above it the CI fails; between the budget and it, a warning. `None`: the
+    /// budget itself is the gate.
+    pub ceiling_ms: Option<f64>,
     pub samples: Vec<Sample>,
 }
 
@@ -238,20 +247,30 @@ pub fn evaluate_latency(scenario: &Scenario) -> Vec<Finding> {
         let (Some(budget), Some(s)) = (stage.budget_ms(), scenario.summary(stage)) else {
             continue;
         };
-        if s.p95 > budget {
-            let (from, to) = stage.marks();
-            out.push(Finding {
-                level: if stage == Stage::Total {
-                    Level::Fail
-                } else {
-                    Level::Warn
-                },
-                scenario: scenario.name.clone(),
-                what: format!("p95 {} ({from} → {to})", stage.name()),
-                measured: s.p95,
-                limit: budget,
-                unit: "ms",
-            });
+        let (from, to) = stage.marks();
+        let finding = |level, limit, note: &str| Finding {
+            level,
+            scenario: scenario.name.clone(),
+            what: format!("p95 {} ({from} → {to}){note}", stage.name()),
+            measured: s.p95,
+            limit,
+            unit: "ms",
+        };
+        match (stage, scenario.ceiling_ms) {
+            (Stage::Total, Some(ceiling)) if s.p95 > ceiling => {
+                out.push(finding(Level::Fail, ceiling, ", provisional ceiling"));
+            }
+            (Stage::Total, Some(_)) if s.p95 > budget => {
+                out.push(finding(
+                    Level::Warn,
+                    budget,
+                    ", known gap under its ceiling",
+                ));
+            }
+            (Stage::Total, None) if s.p95 > budget => out.push(finding(Level::Fail, budget, "")),
+            (Stage::Total, _) => {}
+            _ if s.p95 > budget => out.push(finding(Level::Warn, budget, "")),
+            _ => {}
         }
     }
     out
@@ -263,57 +282,96 @@ pub struct Footprint {
     /// Mean CPU over the idle window, in % of one core.
     pub idle_cpu_pct: f64,
     pub idle_rss_mib: f64,
-    /// Peak RSS during the bursts.
-    pub burst_rss_mib: f64,
-    /// Mean CPU during the bursts, in % of one core. Reported only.
-    pub burst_cpu_pct: f64,
     /// Open descriptors at rest.
     pub fds: f64,
+    /// Peak RSS during the 10K-file bursts.
+    pub burst_rss_mib: f64,
+    /// Mean CPU during the 10K-file bursts, in % of one core. Reported only.
+    pub burst_cpu_pct: f64,
+    /// Seconds until the RSS was back under the idle limit after the bursts; `None` when it was
+    /// not within 60 s.
+    pub burst_back_s: Option<f64>,
 }
 
-/// Limits of the footprint gate. Values in `footprint_limits`.
+/// Limits of the footprint gate.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FootprintLimits {
+    /// NFR HUELLA: failures.
     pub idle_cpu_pct: f64,
     pub idle_rss_mib: f64,
-    pub burst_rss_mib: f64,
     pub fds: f64,
+    /// Provisional non-regression ceiling of the burst peak (TD-GRP-001): a failure.
+    pub burst_rss_ceiling_mib: f64,
+    /// Product target of the burst peak (⚠️ ASSUMPTION of the PO, 2026-10-05): a warning until
+    /// TD-GRP-001 meets it.
+    pub burst_rss_target_mib: f64,
+    /// Product target of the retention (⚠️ ASSUMPTION of the PO): back under the idle RSS limit
+    /// within this many seconds after a burst; a warning.
+    pub burst_back_target_s: f64,
 }
 
-/// Footprint gates (NFR HUELLA, Decisión del orquestador 2026-10-05, validada por Arquitecto y
-/// PO): every limit is a failure. The same on every system: a per-OS slack is a decision to
-/// record in `non-functional.md` when a runner needs it.
+/// Footprint gates (NFR HUELLA; Decisión del orquestador 2026-10-05, validada por Arquitecto y
+/// PO). The same on every system: a per-OS slack is a decision to record in
+/// `non-functional.md` when a runner needs it.
 pub const FOOTPRINT_LIMITS: FootprintLimits = FootprintLimits {
     idle_cpu_pct: 1.0,
     idle_rss_mib: 150.0,
-    burst_rss_mib: 250.0,
     fds: 256.0,
+    burst_rss_ceiling_mib: 480.0,
+    burst_rss_target_mib: 250.0,
+    burst_back_target_s: 60.0,
 };
 
 pub fn evaluate_footprint(f: &Footprint, limits: &FootprintLimits) -> Vec<Finding> {
-    let checks = [
+    let finding = |level, what: &str, measured: f64, limit: f64, unit| Finding {
+        level,
+        scenario: "footprint".into(),
+        what: what.into(),
+        measured,
+        limit,
+        unit,
+    };
+    // A metric that could not be read is a failure, not a pass.
+    let over = |measured: f64, limit: f64| measured > limit || measured.is_nan();
+    let mut out = Vec::new();
+    for (what, measured, limit, unit) in [
         ("idle CPU", f.idle_cpu_pct, limits.idle_cpu_pct, "%"),
         ("idle RSS", f.idle_rss_mib, limits.idle_rss_mib, "MiB"),
-        (
-            "burst peak RSS",
-            f.burst_rss_mib,
-            limits.burst_rss_mib,
-            "MiB",
-        ),
         ("open descriptors", f.fds, limits.fds, ""),
-    ];
-    checks
-        .into_iter()
-        .filter(|(_, measured, limit, _)| measured > limit || measured.is_nan())
-        .map(|(what, measured, limit, unit)| Finding {
-            level: Level::Fail,
-            scenario: "footprint".into(),
-            what: what.into(),
-            measured,
-            limit,
-            unit,
-        })
-        .collect()
+    ] {
+        if over(measured, limit) {
+            out.push(finding(Level::Fail, what, measured, limit, unit));
+        }
+    }
+    let peak = f.burst_rss_mib;
+    if over(peak, limits.burst_rss_ceiling_mib) {
+        out.push(finding(
+            Level::Fail,
+            "burst peak RSS, provisional ceiling",
+            peak,
+            limits.burst_rss_ceiling_mib,
+            "MiB",
+        ));
+    } else if peak > limits.burst_rss_target_mib {
+        out.push(finding(
+            Level::Warn,
+            "burst peak RSS, known gap under its ceiling",
+            peak,
+            limits.burst_rss_target_mib,
+            "MiB",
+        ));
+    }
+    let back = f.burst_back_s.unwrap_or(f64::INFINITY);
+    if back > limits.burst_back_target_s {
+        out.push(finding(
+            Level::Warn,
+            "RSS back under the idle limit after the bursts",
+            back,
+            limits.burst_back_target_s,
+            "s",
+        ));
+    }
+    out
 }
 
 /// Two runs on the same machine agree when their p95 totals differ by at most 25 ms or 20%,
@@ -351,6 +409,7 @@ mod tests {
         Scenario {
             name: "modify".into(),
             isolates_detection: true,
+            ceiling_ms: None,
             samples: (0..200).map(|i| sample(i, extra_compute_ms)).collect(),
         }
     }
@@ -397,6 +456,28 @@ mod tests {
         assert!(findings.iter().any(|f| f.what.contains("recompute")));
     }
 
+    /// A scenario with a provisional ceiling warns between the budget and the ceiling, and
+    /// fails above the ceiling.
+    #[test]
+    fn a_provisional_ceiling_warns_below_it_and_fails_above_it() {
+        let mut s = scenario(200);
+        s.ceiling_ms = Some(500.0);
+        let findings = evaluate_latency(&s);
+        assert!(
+            findings.iter().all(|f| f.level == Level::Warn),
+            "{findings:?}"
+        );
+        assert!(findings.iter().any(|f| f.what.contains("known gap")));
+        s.ceiling_ms = Some(320.0);
+        let findings = evaluate_latency(&s);
+        assert!(
+            findings
+                .iter()
+                .any(|f| f.level == Level::Fail && f.what.contains("provisional ceiling")),
+            "{findings:?}"
+        );
+    }
+
     /// Only 5% of slow samples is still within the p95; 6% is not.
     #[test]
     fn the_gate_is_on_the_p95() {
@@ -431,27 +512,50 @@ mod tests {
         let ok = Footprint {
             idle_cpu_pct: 0.1,
             idle_rss_mib: 40.0,
+            fds: 40.0,
             burst_rss_mib: 90.0,
             burst_cpu_pct: 300.0,
-            fds: 40.0,
+            burst_back_s: Some(2.0),
         };
         assert_eq!(evaluate_footprint(&ok, &FOOTPRINT_LIMITS), vec![]);
         let bad = Footprint {
             idle_cpu_pct: 1.5,
             idle_rss_mib: 151.0,
-            burst_rss_mib: 251.0,
-            burst_cpu_pct: 300.0,
             fds: 300.0,
+            burst_rss_mib: 481.0,
+            burst_cpu_pct: 300.0,
+            burst_back_s: None,
         };
         let findings = evaluate_footprint(&bad, &FOOTPRINT_LIMITS);
-        assert_eq!(findings.len(), 4, "{findings:?}");
-        assert!(findings.iter().all(|f| f.level == Level::Fail));
-        // A metric that could not be read is a failure, not a pass.
+        let fails = findings.iter().filter(|f| f.level == Level::Fail).count();
+        assert_eq!(fails, 4, "{findings:?}");
+        // Retention only warns.
+        assert!(
+            findings
+                .iter()
+                .any(|f| f.level == Level::Warn && f.what.contains("back under"))
+        );
         let unknown = Footprint {
             idle_rss_mib: f64::NAN,
             ..ok
         };
         assert_eq!(evaluate_footprint(&unknown, &FOOTPRINT_LIMITS).len(), 1);
+    }
+
+    /// Between the product target and the provisional ceiling, the burst peak only warns.
+    #[test]
+    fn the_burst_peak_warns_under_its_ceiling() {
+        let f = Footprint {
+            idle_cpu_pct: 0.1,
+            idle_rss_mib: 40.0,
+            fds: 40.0,
+            burst_rss_mib: 300.0,
+            burst_cpu_pct: 100.0,
+            burst_back_s: Some(1.0),
+        };
+        let findings = evaluate_footprint(&f, &FOOTPRINT_LIMITS);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert_eq!(findings[0].level, Level::Warn);
     }
 
     #[test]

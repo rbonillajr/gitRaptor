@@ -64,8 +64,8 @@ mod unix {
     use gitraptor_git::{ReaderOptions, RefName, RepoReader};
     use gitraptor_testkit::fixture::git_from_path;
     use gitraptor_testkit::freshness::{
-        FOOTPRINT_LIMITS, Finding, Footprint, Level, Sample, Scenario, Stage, Summary,
-        evaluate_footprint, evaluate_latency,
+        BURST_CEILING_MS, FOOTPRINT_LIMITS, Finding, Footprint, Level, Sample, Scenario, Stage,
+        Summary, evaluate_footprint, evaluate_latency,
     };
     use gitraptor_testkit::repogen;
     use serde_json::{Value, json};
@@ -82,6 +82,10 @@ mod unix {
     const SETTLE: Duration = Duration::from_millis(150);
     /// Tracked file every write scenario edits (exists in profile `H`).
     const TOUCHED: &str = "bench-touched.txt";
+    /// Scale scenario of ADR-GRP-011 § 4 (1,000 files), gated at 300 ms.
+    const SCALE: &str = "burst-1k";
+    /// Stress scenario (10,000 files), under a provisional ceiling (TD-GRP-001).
+    const STRESS: &str = "burst-10k";
 
     struct Opts {
         profile: String,
@@ -90,6 +94,7 @@ mod unix {
         idle_secs: u64,
         recreations: usize,
         burst_files: usize,
+        scale_files: usize,
         root: Option<PathBuf>,
         out: Option<PathBuf>,
         only: Option<Vec<String>>,
@@ -104,6 +109,7 @@ mod unix {
             idle_secs: 30,
             recreations: 40,
             burst_files: 10_000,
+            scale_files: 1_000,
             root: std::env::var_os("ENGINE_BENCH_ROOT").map(PathBuf::from),
             out: None,
             only: None,
@@ -129,6 +135,7 @@ mod unix {
                 "--idle-secs" => o.idle_secs = next.parse().expect("--idle-secs N"),
                 "--recreations" => o.recreations = next.parse().expect("--recreations N"),
                 "--burst-files" => o.burst_files = next.parse().expect("--burst-files N"),
+                "--scale-files" => o.scale_files = next.parse().expect("--scale-files N"),
                 "--root" => o.root = Some(PathBuf::from(next)),
                 "--out" => o.out = Some(PathBuf::from(next)),
                 "--only" => o.only = Some(next.split(',').map(str::to_owned).collect()),
@@ -345,10 +352,13 @@ mod unix {
     struct Stream {
         rx: Receiver<Received>,
         state: HashMap<PathBuf, WorktreeView>,
+        /// `worktree.state` events received.
+        received: u64,
     }
 
     impl Stream {
         fn absorb(&mut self, r: &Received) {
+            self.received += 1;
             for w in &r.data.worktrees {
                 self.state.insert(PathBuf::from(w.path.raw()), w.clone());
             }
@@ -590,6 +600,13 @@ mod unix {
 
     // ------------------------------------------------------------ the bench
 
+    struct BurstStats {
+        peak_mib: f64,
+        cpu_pct: f64,
+        /// Seconds until the RSS was back under the idle limit, `None` after 60 s.
+        back_s: Option<f64>,
+    }
+
     struct Bench {
         opts: Opts,
         repo: PathBuf,
@@ -600,8 +617,12 @@ mod unix {
         scenarios: Vec<Scenario>,
         findings: Vec<Finding>,
         report: serde_json::Map<String, Value>,
-        /// Next content of the touched file, per worktree.
+        /// Next content of the touched file.
         counter: u64,
+        /// Worktrees whose touched file is modified, its committed and last written content.
+        dirty: std::collections::HashSet<PathBuf>,
+        committed: HashMap<PathBuf, String>,
+        written: HashMap<PathBuf, String>,
     }
 
     impl Bench {
@@ -623,11 +644,31 @@ mod unix {
             let s = Scenario {
                 name: name.into(),
                 isolates_detection,
+                ceiling_ms: ceiling(name),
                 samples: kept,
             };
             let mut j = s.to_json();
             j["lost"] = lost.into();
             let fs = evaluate_latency(&s);
+            // Wiring: every stage of the scenario was extracted, with finite values.
+            for stage in Stage::ALL {
+                if stage == Stage::Detection && !isolates_detection {
+                    continue;
+                }
+                let ok = s
+                    .summary(stage)
+                    .is_some_and(|x| x.p95.is_finite() && x.max.is_finite());
+                if !ok && !s.samples.is_empty() {
+                    self.findings.push(Finding {
+                        level: Level::Fail,
+                        scenario: name.into(),
+                        what: format!("stage {} missing from the report", stage.name()),
+                        measured: 0.0,
+                        limit: 0.0,
+                        unit: "",
+                    });
+                }
+            }
             print_scenario(&s, lost);
             if lost > 0 {
                 // A change that never showed up within the deadline is a correctness failure.
@@ -651,10 +692,29 @@ mod unix {
         }
 
         /// Writes the next content of the touched file in `wt` and returns `t0`.
-        fn touch(&mut self, wt: &Path) -> u64 {
-            self.counter += 1;
-            std::fs::write(wt.join(TOUCHED), format!("{}\n", self.counter)).unwrap();
-            monotonic_ns()
+        /// Writes the touched file of `wt`: back to its committed content when it is modified,
+        /// new content otherwise. Returns `t0` and whether the file is now modified. Alternating
+        /// means no earlier state can pass for the one this write produces.
+        fn touch(&mut self, wt: &Path) -> (u64, bool) {
+            let dirty = self.dirty.contains(wt);
+            let content = if dirty {
+                self.committed
+                    .get(wt)
+                    .cloned()
+                    .unwrap_or_else(|| "0\n".into())
+            } else {
+                self.counter += 1;
+                format!("{}\n", self.counter)
+            };
+            std::fs::write(wt.join(TOUCHED), &content).unwrap();
+            let t0 = monotonic_ns();
+            if dirty {
+                self.dirty.remove(wt);
+            } else {
+                self.dirty.insert(wt.to_path_buf());
+            }
+            self.written.insert(wt.to_path_buf(), content);
+            (t0, !dirty)
         }
 
         fn settle(&mut self) {
@@ -662,13 +722,19 @@ mod unix {
             self.stream.drain();
         }
 
-        /// One "modify a file" sample in `wt`: the change becomes visible as unstaged.
+        /// One "modify a file" sample in `wt`: the touched file becomes modified, or clean
+        /// again, in the published state.
         fn modify_sample(&mut self, wt: &Path) -> Option<Sample> {
             self.stream.drain();
             let since = monotonic_ns();
-            let t0 = self.touch(wt);
+            let (t0, modified) = self.touch(wt);
             let s = self.stream.wait(since, t0, |d| {
-                area_of(d, wt, TOUCHED) == Some(ChangeAreaView::Unstaged)
+                let area = area_of(d, wt, TOUCHED);
+                let ready = matches!(
+                    view(d, wt).map(|w| &w.status),
+                    Some(WorktreeStatus::Ready { .. })
+                );
+                ready && (area == Some(ChangeAreaView::Unstaged)) == modified
             });
             self.settle();
             s
@@ -681,6 +747,10 @@ mod unix {
             let (mut modify, mut add, mut commit) = (Vec::new(), Vec::new(), Vec::new());
             let mut lost = [0; 3];
             for _ in 0..n {
+                // Two writes per cycle at most: the one that leaves the file modified is kept.
+                if self.dirty.contains(&wt) {
+                    let _ = self.modify_sample(&wt);
+                }
                 match self.modify_sample(&wt) {
                     Some(s) => modify.push(s),
                     None => lost[0] += 1,
@@ -702,6 +772,10 @@ mod unix {
                 match self.stream.wait(since, t0, |d| is_clean(d, &wt)) {
                     Some(s) => commit.push(s),
                     None => lost[2] += 1,
+                }
+                self.dirty.remove(&wt);
+                if let Some(c) = self.written.get(&wt).cloned() {
+                    self.committed.insert(wt.clone(), c);
                 }
                 self.settle();
             }
@@ -775,13 +849,15 @@ mod unix {
             self.record("worktree-delete", false, remove, lost[1]);
         }
 
-        /// Bursts of `burst_files` new files in the last worktree while "modify a file" is
-        /// measured in `wt-1`. Also the footprint during the bursts and the time to the final
-        /// state of each burst (clean again after deleting them), reported without a gate.
-        fn burst(&mut self) -> (f64, f64) {
-            let wt = self.wts[0].clone();
+        /// Bursts of `files` new files in the last worktree, created and then deleted, while
+        /// "modify a file" is measured in turn in each of the other nine. Also the footprint
+        /// during the bursts, the time to the final state of each burst (the worktree clean
+        /// again) and how long the daemon takes to give the memory back, without a gate.
+        fn burst(&mut self, name: &str, files: usize) -> BurstStats {
             let target = self.wts[self.wts.len() - 1].clone();
-            let files = self.opts.burst_files;
+            let others: Vec<PathBuf> = std::iter::once(self.repo.clone())
+                .chain(self.wts[..self.wts.len() - 1].iter().cloned())
+                .collect();
             let pid = self.daemon.pid();
             let peak = RssPeak::start(pid);
             let cpu0 = proc_stat(pid).map(|s| s.cpu_s);
@@ -789,6 +865,7 @@ mod unix {
             let mut samples = Vec::new();
             let mut lost = 0;
             let mut finals = Vec::new();
+            let mut next = 0usize;
             while samples.len() < self.opts.samples {
                 let running = Arc::new(AtomicBool::new(true));
                 let (r, dir) = (running.clone(), target.join("burst"));
@@ -802,10 +879,16 @@ mod unix {
                     r.store(false, Ordering::Relaxed);
                     t_last
                 });
-                while running.load(Ordering::Relaxed) {
+                // At least one sample per burst, however short it is.
+                loop {
+                    let wt = others[next % others.len()].clone();
+                    next += 1;
                     match self.modify_sample(&wt) {
                         Some(s) => samples.push(s),
                         None => lost += 1,
+                    }
+                    if !running.load(Ordering::Relaxed) {
+                        break;
                     }
                 }
                 let t_last = writer.join().unwrap();
@@ -814,7 +897,7 @@ mod unix {
                     st.get(&target).and_then(untracked) == Some(0)
                 });
                 if ok {
-                    finals.push((monotonic_ns() - t_last) as f64 / 1e6);
+                    finals.push(monotonic_ns().saturating_sub(t_last) as f64 / 1e6);
                 }
                 self.settle();
             }
@@ -823,18 +906,34 @@ mod unix {
                 _ => f64::NAN,
             };
             let peak_mib = peak.finish();
-            // What the daemon keeps once the bursts are over: retention, not a gate.
-            std::thread::sleep(Duration::from_secs(10));
+            // Retention: seconds until the RSS is back under the idle limit (at most 60 s).
+            let back = Instant::now();
+            let mut back_s = None;
+            while back.elapsed() < Duration::from_secs(60) {
+                if proc_stat(pid).is_some_and(|s| s.rss_mib < FOOTPRINT_LIMITS.idle_rss_mib) {
+                    back_s = Some(back.elapsed().as_secs_f64());
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(500));
+            }
             let after_mib = proc_stat(pid).map(|s| s.rss_mib);
-            println!("after the bursts: RSS {after_mib:?} MiB");
-            self.record("burst-other-worktree", true, samples, lost);
+            println!(
+                "{name}: peak RSS {peak_mib:.1} MiB, back under {} MiB after {back_s:?} s (now {after_mib:?} MiB)",
+                FOOTPRINT_LIMITS.idle_rss_mib
+            );
+            self.record(name, true, samples, lost);
             let finals = Summary::of(&finals).map(Summary::to_json);
             self.report.insert(
-                "burst".into(),
-                json!({"files": files, "final_state_ms": finals, "worktree": "last",
-                       "rss_mib_10s_after": after_mib}),
+                name.into(),
+                json!({"files": files, "final_state_ms": finals, "peak_rss_mib": peak_mib,
+                       "cpu_pct": cpu_pct, "rss_back_under_idle_limit_s": back_s,
+                       "rss_mib_after": after_mib}),
             );
-            (peak_mib, cpu_pct)
+            BurstStats {
+                peak_mib,
+                cpu_pct,
+                back_s,
+            }
         }
 
         /// 40 creations and deletions of a worktree while a writer adds files to the others:
@@ -918,6 +1017,26 @@ mod unix {
             let (fds, watches) = descriptors(pid);
             (cpu, rss, fds, watches)
         }
+    }
+
+    /// The provisional ceiling of a scenario that does not meet the budget yet.
+    fn ceiling(name: &str) -> Option<f64> {
+        (name == STRESS).then_some(BURST_CEILING_MS)
+    }
+
+    /// Bytes of every file under `dir`.
+    fn dir_bytes(dir: &Path) -> u64 {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return 0;
+        };
+        entries
+            .flatten()
+            .map(|e| match e.metadata() {
+                Ok(m) if m.is_dir() => dir_bytes(&e.path()),
+                Ok(m) => m.len(),
+                Err(_) => 0,
+            })
+            .sum()
     }
 
     fn print_scenario(s: &Scenario, lost: usize) {
@@ -1093,6 +1212,7 @@ mod unix {
         let mut stream = Stream {
             rx,
             state: HashMap::new(),
+            received: 0,
         };
         let all: Vec<PathBuf> = std::iter::once(repo.clone())
             .chain(wts.iter().cloned())
@@ -1121,6 +1241,7 @@ mod unix {
             setup.elapsed().as_secs_f64()
         );
 
+        let profile_start = dir_bytes(profile.path());
         let mut b = Bench {
             opts,
             repo,
@@ -1131,23 +1252,26 @@ mod unix {
             findings: Vec::new(),
             report,
             counter: 0,
+            dirty: Default::default(),
+            committed: HashMap::new(),
+            written: HashMap::new(),
         };
 
         let mut footprint = Footprint {
             idle_cpu_pct: f64::NAN,
             idle_rss_mib: f64::NAN,
+            fds: f64::NAN,
             burst_rss_mib: f64::NAN,
             burst_cpu_pct: f64::NAN,
-            fds: f64::NAN,
+            burst_back_s: None,
         };
-        let mut gate_footprint = false;
+        let gate_footprint = b.wants("footprint") && b.wants("burst");
         if b.wants("footprint") {
             let (cpu, rss, fds, watches) = b.idle();
             footprint.idle_cpu_pct = cpu;
             footprint.idle_rss_mib = rss;
             footprint.fds = fds;
             b.report.insert("inotify_watches".into(), watches.into());
-            gate_footprint = true;
         }
         if b.wants("latency") {
             b.write_cycle();
@@ -1155,11 +1279,11 @@ mod unix {
             b.worktree_add_remove();
         }
         if b.wants("burst") {
-            let (peak, cpu) = b.burst();
-            footprint.burst_rss_mib = peak;
-            footprint.burst_cpu_pct = cpu;
-        } else {
-            footprint.burst_rss_mib = 0.0;
+            b.burst(SCALE, b.opts.scale_files);
+            let stress = b.burst(STRESS, b.opts.burst_files);
+            footprint.burst_rss_mib = stress.peak_mib;
+            footprint.burst_cpu_pct = stress.cpu_pct;
+            footprint.burst_back_s = stress.back_s;
         }
         if b.wants("recreation") {
             b.recreation();
@@ -1183,11 +1307,14 @@ mod unix {
                     "idle_rss_mib": footprint.idle_rss_mib,
                     "burst_peak_rss_mib": footprint.burst_rss_mib,
                     "burst_cpu_pct": footprint.burst_cpu_pct,
+                    "burst_back_s": footprint.burst_back_s,
                     "descriptors": footprint.fds,
                     "limits": {
                         "idle_cpu_pct": FOOTPRINT_LIMITS.idle_cpu_pct,
                         "idle_rss_mib": FOOTPRINT_LIMITS.idle_rss_mib,
-                        "burst_peak_rss_mib": FOOTPRINT_LIMITS.burst_rss_mib,
+                        "burst_peak_rss_ceiling_mib": FOOTPRINT_LIMITS.burst_rss_ceiling_mib,
+                        "burst_peak_rss_target_mib": FOOTPRINT_LIMITS.burst_rss_target_mib,
+                        "burst_back_target_s": FOOTPRINT_LIMITS.burst_back_target_s,
                         "descriptors": FOOTPRINT_LIMITS.fds,
                     },
                 }),
@@ -1195,6 +1322,18 @@ mod unix {
         }
 
         stop.store(true, Ordering::Relaxed);
+        // Growth of the profile (ADR-GRP-006): reported only.
+        let grown = dir_bytes(profile.path()).saturating_sub(profile_start);
+        let events = b.stream.received;
+        println!(
+            "profile: +{:.1} MiB over {events} published states ({:.0} B each)",
+            grown as f64 / 1_048_576.0,
+            grown as f64 / events.max(1) as f64
+        );
+        b.report.insert(
+            "profile_growth".into(),
+            json!({"bytes": grown, "worktree_state_events": events}),
+        );
         let findings = std::mem::take(&mut b.findings);
         b.report.insert(
             "findings".into(),
