@@ -174,7 +174,7 @@ Cuando arranque la app de escritorio o la extensión, se amplía este documento 
 
 ## Enmienda (2026-10-04, Cockpit)
 
-Aplicada desde la enmienda E7 de [ADR-CKP-003](../architecture/decisions/ADR-CKP-003-arquitectura-tui.md) (§ 7 y § 10; proposed). **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. No cambia los principios, la paleta, los componentes ni las convenciones de la CLI.
+Aplicada desde la enmienda E7 de [ADR-CKP-003](../architecture/decisions/ADR-CKP-003-arquitectura-tui.md) (§ 7 y § 10; accepted 2026-10-04). **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. No cambia los principios, la paleta, los componentes ni las convenciones de la CLI.
 
 | Cambio | Dónde | Fuente |
 |---|---|---|
