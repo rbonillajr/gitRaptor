@@ -224,6 +224,19 @@ impl StoreRepo {
     }
 }
 
+impl StoreRepo {
+    /// Consolidates the store's packs with `repack -d --geometric=2` (ADR-TMC-007 § 4). Runs at
+    /// rest and outside the store writer's lock; when, is US-TMC-016's.
+    pub fn repack(&self, ctx: &super::WriteContext) -> super::Result<()> {
+        super::cli::maintain_store(ctx, &self.path, crate::invoke::WriteSubcommand::Repack)
+    }
+
+    /// Drops loose objects without refs older than the grace period (ADR-TMC-007 § 4).
+    pub fn prune(&self, ctx: &super::WriteContext) -> super::Result<()> {
+        super::cli::maintain_store(ctx, &self.path, crate::invoke::WriteSubcommand::Prune)
+    }
+}
+
 /// Writes the layout of an empty bare store into `dir`, with the configuration of
 /// ADR-TMC-001 § 4. Folders 0700, files 0600, everything synced.
 #[cfg(unix)]

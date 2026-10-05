@@ -159,3 +159,21 @@ pub(super) fn index_pack(
         .ok_or_else(|| WriteError::Git("index-pack: unexpected output".into()))?;
     Ok(hash.to_owned())
 }
+
+/// `repack` or `prune` on the store, with their fixed options.
+pub(super) fn maintain_store(
+    ctx: &WriteContext,
+    store_dir: &Path,
+    sub: WriteSubcommand,
+) -> Result<()> {
+    debug_assert!(matches!(
+        sub,
+        WriteSubcommand::Repack | WriteSubcommand::Prune
+    ));
+    let out = run(ctx, store_dir, None, None, sub, Input::None, None)?;
+    if out.success {
+        Ok(())
+    } else {
+        Err(failure(sub.words()[0], &out))
+    }
+}
