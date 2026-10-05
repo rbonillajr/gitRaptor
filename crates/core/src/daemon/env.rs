@@ -93,7 +93,7 @@ impl DaemonEnv {
     }
 
     /// Git resolution for the running OS, with `PATH` taken from this capture
-    /// (absolute entries only). An empty `PATH` falls back to the well-known
+    /// (absolute entries only). An absent `PATH` falls back to the well-known
     /// locations (launchd and systemd start with a minimal `PATH`).
     pub fn git_resolve_config(&self, configured_path: Option<PathBuf>) -> ResolveConfig {
         let mut config = ResolveConfig::for_current_os(configured_path);
