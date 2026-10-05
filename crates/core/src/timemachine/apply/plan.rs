@@ -12,7 +12,7 @@ use gitraptor_git::tm_write::refs::{RefUpdate, branch_ref};
 use gitraptor_git::tm_write::store::TreeEntryKind;
 use gitraptor_git::tm_write::worktree::{HeadValue, WriteWorktree};
 
-use super::{PlanWorktree, Refusal};
+use super::{PlanWorktree, RefScope, Refusal};
 use crate::timemachine::store::{Meta, MetaWorktree, SnapshotStore};
 
 /// One worktree, loaded.
@@ -124,7 +124,7 @@ pub(super) fn load(
     target: &str,
     prior: &str,
     worktrees: &[PlanWorktree],
-    move_refs: bool,
+    refs: &RefScope,
 ) -> Result<Loaded, Refusal> {
     let invalid = |snapshot: &str| {
         let snapshot = snapshot.to_owned();
@@ -250,11 +250,12 @@ pub(super) fn load(
     for id in prior_meta.branches.values().chain(prior_meta.stash.iter()) {
         haves.insert(oid(id, "branch").map_err(invalid(prior))?);
     }
-    if move_refs {
+    if *refs != RefScope::None {
         let names: BTreeSet<&String> = prior_meta
             .branches
             .keys()
             .chain(target_meta.branches.keys())
+            .filter(|name| refs.includes(&format!("refs/heads/{name}")))
             .collect();
         for name in names {
             let old = prior_meta
@@ -287,7 +288,9 @@ pub(super) fn load(
             .map(|h| oid(h, "stash"))
             .transpose();
         let (old, new) = (old.map_err(invalid(prior))?, new.map_err(invalid(target))?);
-        if old.is_some() && new.is_none() {
+        if !refs.includes("refs/stash") {
+            // Out of the scope: the stash stays as it is.
+        } else if old.is_some() && new.is_none() {
             // Never delete `refs/stash`: its reflog is the rest of the stack (NFR-01).
             stash_kept = true;
         } else if old != new {
