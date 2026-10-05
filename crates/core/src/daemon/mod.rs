@@ -26,8 +26,8 @@ mod state;
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use gitraptor_api::event::{DAEMON_STOPPING, ENGINE_STATE, REPO_OBSERVATION, WORKTREE_STATE};
@@ -53,6 +53,7 @@ use crate::timemachine::oplog::{
     AbsentStore, ChainBreak, Oplog, OplogStatus, RecoveryOptions, RecoveryReport, SnapshotRefs,
     SystemProbe,
 };
+use crate::timemachine::protected::{DaemonBackend, OperationsWiring, TmRepos};
 use crate::timemachine::store::SnapshotStore;
 
 pub use env::{AGENT_EXECUTABLES_ENV, DaemonEnv};
@@ -140,9 +141,13 @@ pub struct DaemonConfig {
     /// as a crash). `None` in tests that run the daemon in-process.
     pub stop_deadline: Option<Duration>,
     pub channel: ChannelConfig,
-    /// Protected operations (TS-TMC-004). `None`: `operation.run` answers
-    /// "not implemented" until the executor of F-001-02 is wired.
+    /// Protected operations with a double of the repo layer (TS-TMC-004
+    /// tests). Wins over `operations`.
     pub protected: Option<crate::channel::ProtectedWiring>,
+    /// The catalog of user operations over the daemon's own repo layer
+    /// (US-TMC-001). `None` with no `protected` either: `operation.run`
+    /// answers "not implemented" until TS-CKP-002 wires its catalog.
+    pub operations: Option<OperationsWiring>,
 }
 
 impl DaemonConfig {
@@ -162,6 +167,7 @@ impl DaemonConfig {
             stop_deadline: Some(Duration::from_secs(5)),
             channel,
             protected: None,
+            operations: None,
         })
     }
 }
@@ -258,7 +264,9 @@ pub struct Daemon {
     profile: Profile,
     state: EngineState,
     stores: Vec<(String, RepoStore)>,
-    oplogs: Vec<(String, Oplog)>,
+    /// Oplog and snapshot store of every observed repo, shared with the
+    /// channel's protected operations (US-TMC-001).
+    tm: Arc<TmRepos>,
     report: StartupReport,
     handle: ShutdownHandle,
     control_rx: Receiver<Control>,
@@ -369,7 +377,12 @@ impl Daemon {
             }
         }
 
-        let oplogs = recover_time_machine(&config.dirs, &profile, &logger, &mut report)?;
+        let tm = Arc::new(TmRepos::new(config.dirs.clone()));
+        for (repo_id, common_dir, oplog) in
+            recover_time_machine(&config.dirs, &profile, &logger, &mut report)?
+        {
+            tm.insert(&repo_id, &common_dir, oplog);
+        }
 
         let state = EngineState::initial(git.is_some(), stores.len());
         if state != EngineState::Observing {
@@ -478,7 +491,7 @@ impl Daemon {
             profile,
             state,
             stores,
-            oplogs,
+            tm,
             report,
             handle,
             control_rx,
@@ -508,11 +521,21 @@ impl Daemon {
     }
 
     /// The recovered oplog of an observed repo; `None` if it is unavailable.
-    pub fn oplog(&self, repo_id: &str) -> Option<&Oplog> {
-        self.oplogs
-            .iter()
-            .find(|(id, _)| id == repo_id)
-            .map(|(_, oplog)| oplog)
+    pub fn oplog(&self, repo_id: &str) -> Option<Arc<Mutex<Oplog>>> {
+        self.tm.oplog(repo_id)
+    }
+
+    /// The protected-operation wiring: the configured double, or the
+    /// daemon's own repo layer when a catalog of operations is wired.
+    fn protected_wiring(&self) -> Option<crate::channel::ProtectedWiring> {
+        if let Some(wiring) = &self.config.protected {
+            return Some(wiring.clone());
+        }
+        let ops = self.config.operations.clone()?;
+        Some(crate::channel::ProtectedWiring {
+            prior_deadline: ops.prior_deadline,
+            backend: Arc::new(DaemonBackend::new(Arc::clone(&self.tm), ops)),
+        })
     }
 
     /// Handle for signals and the channel's stop command.
@@ -591,7 +614,7 @@ impl Daemon {
                 binary_version: crate::version().to_owned(),
                 started_wall_ms: self.started_ms,
             },
-            protected: self.config.protected.clone(),
+            protected: self.protected_wiring(),
         };
         match crate::channel::Server::serve(bound, args) {
             Ok(server) => {
@@ -693,11 +716,13 @@ impl Daemon {
         let Self {
             lock,
             stores,
-            oplogs,
+            tm,
             profile,
             ..
         } = self;
-        drop(oplogs);
+        // An operation still running keeps its own handle until it ends.
+        tm.clear();
+        drop(tm);
         drop(stores);
         drop(profile);
         if lock.release().is_err() {
@@ -734,6 +759,20 @@ impl Daemon {
                 ("outcome", outcome_field(outcome).into()),
             ],
         );
+        // Its Time Machine, recovered like at startup, so that operations on
+        // it are protected from now on (US-TMC-001).
+        if !self.tm.contains(&repo_id) {
+            match recover_repo(&self.config.dirs, &entry, Instant::now() + TM_RECOVERY_WAIT) {
+                Ok((oplog, _)) => self.tm.insert(&repo_id, &entry.canonical_path, oplog),
+                Err(err) => self.logger.warn(
+                    "tm_unavailable",
+                    &[
+                        ("repo", Field::id(&repo_id)),
+                        ("kind", profile_error_kind(&err).into()),
+                    ],
+                ),
+            }
+        }
         // Without Git the repo is registered but nothing is observed
         // (BR-WF-002).
         if self.state == EngineState::WaitingForGit {
@@ -858,6 +897,7 @@ impl Daemon {
         self.profile
             .retire_repo(repo_id, now)
             .map_err(|err| self.repo_command_failed("repo_retire_failed", &err))?;
+        self.tm.remove(repo_id);
         if let Some(pos) = self.stores.iter().position(|(id, _)| id == repo_id) {
             let (_, mut store) = self.stores.remove(pos);
             if let Err(err) = store.write_batch(&[WriteOp::SetObservedUntil { ms: now }]) {
@@ -947,7 +987,7 @@ fn recover_time_machine(
     profile: &Profile,
     logger: &Logger,
     report: &mut StartupReport,
-) -> Result<Vec<(String, Oplog)>, DaemonError> {
+) -> Result<Vec<(String, PathBuf, Oplog)>, DaemonError> {
     let deadline = Instant::now() + TM_RECOVERY_WAIT;
     let mut oplogs = Vec::new();
     for entry in profile.repos()? {
@@ -980,7 +1020,7 @@ fn recover_time_machine(
                     );
                 }
                 report.time_machine.push(startup);
-                oplogs.push((entry.repo_id, oplog));
+                oplogs.push((entry.repo_id, entry.canonical_path, oplog));
             }
             Err(err) => {
                 logger.warn(

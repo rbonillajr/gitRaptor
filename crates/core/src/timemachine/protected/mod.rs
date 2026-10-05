@@ -11,10 +11,11 @@
 //! here. A step cannot write the oplog: it only annotates its own progress
 //! and the children it starts through [`StepCtx`].
 
+pub mod backend;
 pub mod challenge;
 pub mod scope;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
@@ -22,15 +23,18 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use gitraptor_api::timemachine::PriorFailure;
+use gitraptor_git::{ReaderOptions, RepoReader};
 
 use crate::channel::marks::ExecutorMarks;
 use crate::channel::peer::ProcSource;
 use crate::channel::requester::Who;
+use crate::profile::ProfileDirs;
 use crate::timemachine::oplog::{
     Channel, NewOperation, OperationKind, OperationTransition, Oplog, Scope, Target,
 };
 use crate::timemachine::store::{CaptureError, CaptureRequest, SnapshotStore, WorktreeScope};
 
+pub use backend::{DaemonBackend, OperationCatalog, OperationsWiring, SnapshotterLayer, TmRepos};
 pub use challenge::{Binding, ChallengeBook, ChallengeError, plan_hash};
 pub use scope::{McpAllowlist, NoMcpRepos, ProtectedBackend, RepoHandle, ScopeError};
 
@@ -97,20 +101,23 @@ impl From<CaptureError> for PriorError {
 }
 
 /// The production snapshotter: the repo's store, at level
-/// `guaranteed-prior` (ADR-TMC-004 § 1).
+/// `guaranteed-prior` (ADR-TMC-004 § 1), with the profile's credentials
+/// option read on every prior (BR-TMC-CONS-002).
 pub struct StoreSnapshotter {
     pub store: Arc<SnapshotStore>,
     pub oplog: Arc<Mutex<Oplog>>,
+    pub profile: ProfileDirs,
 }
 
 impl PriorSnapshotter for StoreSnapshotter {
     fn prior(&self, req: &PriorRequest) -> Result<PriorSnapshot, PriorError> {
+        let registered = registered_worktrees(&req.repo).unwrap_or_default();
         let worktrees = req
             .worktrees
             .iter()
             .enumerate()
             .map(|(i, path)| WorktreeScope {
-                key: format!("wt{i}"),
+                key: worktree_key(&registered, path, i),
                 path: path.clone(),
                 hint: None,
             })
@@ -122,6 +129,7 @@ impl PriorSnapshotter for StoreSnapshotter {
             engine_mark: req.engine_mark,
             cause_operation: Some(req.operation_id.clone()),
             cause_event_seq: None,
+            include_credentials: crate::profile::settings::include_credential_files(&self.profile),
         };
         let out = self.store.capture(&self.oplog, &capture)?;
         Ok(PriorSnapshot {
@@ -129,6 +137,46 @@ impl PriorSnapshotter for StoreSnapshotter {
             fast_path: out.fast_path,
         })
     }
+}
+
+/// Every worktree of the repo of `any_worktree`: canonical root and, for a
+/// linked one, its name under `.git/worktrees/`.
+fn registered_worktrees(
+    any_worktree: &Path,
+) -> Result<Vec<(PathBuf, Option<String>)>, gitraptor_git::ReadError> {
+    let reader = RepoReader::open(any_worktree, &ReaderOptions::default())?;
+    let common = reader.common_dir().to_owned();
+    let mut out = Vec::new();
+    if let Some(main) = common.parent().filter(|_| common.ends_with(".git")) {
+        out.push((canonical(main), None));
+    }
+    for wt in reader.worktrees()? {
+        out.push((canonical(&wt.path), Some(wt.id)));
+    }
+    Ok(out)
+}
+
+fn canonical(path: &Path) -> PathBuf {
+    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
+/// A key under `wt/` that stays the same for the same worktree from one
+/// snapshot to the next, so its incremental state and the fast path are kept
+/// (ADR-TMC-006 § 5): `main`, or `wt-<name>` for a linked worktree. Falls
+/// back to the position when the name is not a valid key.
+fn worktree_key(registered: &[(PathBuf, Option<String>)], path: &Path, i: usize) -> String {
+    let path = canonical(path);
+    let key = match registered.iter().find(|(p, _)| *p == path) {
+        Some((_, None)) => Some("main".to_owned()),
+        Some((_, Some(id))) => Some(format!("wt-{id}")),
+        None => None,
+    };
+    key.filter(|k| {
+        k.len() <= 64
+            && k.bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
+    })
+    .unwrap_or_else(|| format!("wt{i}"))
 }
 
 /// What a step reports.
@@ -152,11 +200,27 @@ impl StepError {
     }
 }
 
+/// What an operation touches besides the worktree it was asked for
+/// (ADR-TMC-002 § 5, ADR-TMC-007 § 2): a merge with its base checked out in
+/// another worktree, for example. The prior snapshot covers every worktree
+/// here; the refs are recorded in the oplog (the snapshot always holds every
+/// branch).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct StepScope {
+    /// Roots of other worktrees of the same repo.
+    pub worktrees: Vec<PathBuf>,
+    /// Full ref names the operation moves or deletes.
+    pub refs: Vec<String>,
+}
+
 /// The execution of a protected operation: a catalog operation of the
 /// user-operation executor or the Time Machine applier.
 pub trait ProtectedStep: Send {
     /// Subtype recorded in the oplog (e.g. `checkout`).
     fn subtype(&self) -> &str;
+    /// The scope the operation declares beyond the requested worktree. No
+    /// default: every operation must say what it touches (NFR-01).
+    fn scope(&self) -> StepScope;
     fn run(&mut self, ctx: &mut StepCtx<'_>) -> Result<StepOutput, StepError>;
 }
 
@@ -275,6 +339,53 @@ pub struct ProtectedRequest {
     pub target: Target,
     pub warnings: Vec<String>,
     pub engine_mark: i64,
+}
+
+impl ProtectedRequest {
+    /// A protected operation of kind `Protected` for `step` on `repo`: the
+    /// requested worktree plus the scope the step declares (ADR-TMC-001
+    /// § 1). Every declared worktree must be a registered worktree of the
+    /// same repo; otherwise nothing is recorded and nothing runs.
+    pub fn for_step(
+        repo: &RepoHandle,
+        step: &dyn ProtectedStep,
+        who: Who,
+        channel: Channel,
+        engine_mark: i64,
+    ) -> Result<Self, ScopeError> {
+        let declared = step.scope();
+        let mut worktree_paths = vec![repo.worktree.clone()];
+        if !declared.worktrees.is_empty() {
+            let registered =
+                registered_worktrees(&repo.worktree).map_err(|_| ScopeError::ForeignWorktree)?;
+            for wt in declared.worktrees {
+                let wt = canonical(&wt);
+                if !registered.iter().any(|(p, _)| *p == wt) {
+                    return Err(ScopeError::ForeignWorktree);
+                }
+                if !worktree_paths.contains(&wt) {
+                    worktree_paths.push(wt);
+                }
+            }
+        }
+        Ok(Self {
+            kind: OperationKind::Protected,
+            scope: Scope {
+                worktrees: worktree_paths
+                    .iter()
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .collect(),
+                refs: declared.refs,
+            },
+            worktree_paths,
+            who,
+            channel,
+            confirmed: false,
+            target: Target::None,
+            warnings: Vec::new(),
+            engine_mark,
+        })
+    }
 }
 
 /// A finished protected operation.

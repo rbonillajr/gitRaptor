@@ -217,6 +217,7 @@ impl Wt {
             engine_mark: Some(self.mark),
             cause_operation: None,
             cause_event_seq: None,
+            include_credentials: false,
         }
     }
 }
