@@ -118,3 +118,147 @@ mod repo_intact_tm {
         assert!(!reader.contains("-> &gix::Repository"));
     }
 }
+
+/// ADR-TMC-002 § 2 and Validación 1, SEC-TMC-02, SEC-TMC-05: the write layer of the Time Machine
+/// runs a closed list of plumbing commands, without porcelain or remote operations, only through
+/// the write profile of `invoke.rs`; and its file system writes on the user's repository live in
+/// `src/tm_write/`.
+mod repo_intact_tm_write {
+    use super::*;
+
+    /// Plumbing commands the write profile may run (first word of each variant).
+    const ALLOWED: &[&str] = &["update-ref", "update-index", "pack-objects", "index-pack"];
+    /// Porcelain and remote commands that must never appear in the write profile.
+    const FORBIDDEN: &[&str] = &[
+        "push",
+        "fetch",
+        "pull",
+        "clone",
+        "remote",
+        "ls-remote",
+        "send-pack",
+        "receive-pack",
+        "upload-pack",
+        "fetch-pack",
+        "http-push",
+        "checkout",
+        "restore",
+        "switch",
+        "commit",
+        "add",
+        "stash",
+        "reset",
+        "merge",
+        "rebase",
+        "worktree",
+        "gc",
+        "filter-branch",
+    ];
+
+    fn write_subcommand_words() -> Vec<String> {
+        let src =
+            std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/invoke.rs"))
+                .unwrap();
+        let start = src
+            .find("impl WriteSubcommand")
+            .expect("WriteSubcommand impl");
+        let body = &src[start..];
+        let end = body.find("\n}\n").expect("end of impl");
+        body[..end]
+            .lines()
+            .filter_map(|l| l.split_once("=> &[\""))
+            .map(|(_, rest)| rest.split('"').next().unwrap().to_owned())
+            .collect()
+    }
+
+    #[test]
+    fn write_profile_is_a_closed_plumbing_list() {
+        let words = write_subcommand_words();
+        assert!(words.len() >= ALLOWED.len(), "{words:?}");
+        for w in &words {
+            assert!(ALLOWED.contains(&w.as_str()), "not in the closed list: {w}");
+            assert!(!FORBIDDEN.contains(&w.as_str()), "porcelain or remote: {w}");
+        }
+    }
+
+    #[test]
+    fn write_profile_neutralizes_configurable_code() {
+        let src =
+            std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/invoke.rs"))
+                .unwrap();
+        for needle in [
+            "\"GIT_CONFIG_NOSYSTEM\", \"1\"",
+            "\"GIT_CONFIG_GLOBAL\"",
+            "\"core.hooksPath=\"",
+            "\"gpg.program=\"",
+            "\"protocol.allow=never\"",
+            "\"--git-dir=\"",
+            "\"--work-tree=\"",
+            "\"core.fsmonitor=false\"",
+        ] {
+            assert!(src.contains(needle), "write profile lacks {needle}");
+        }
+    }
+
+    #[test]
+    fn only_the_write_layer_runs_the_write_profile() {
+        let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut files = Vec::new();
+        rust_files(&src, &mut files);
+        let allowed = [src.join("invoke.rs"), src.join("tm_write").join("cli.rs")];
+        let offenders: Vec<String> = files
+            .iter()
+            .filter(|f| !allowed.contains(f))
+            .filter(|f| {
+                let text = std::fs::read_to_string(f).unwrap();
+                text.contains("run_write") || text.contains("WriteSubcommand")
+            })
+            .map(|f| f.display().to_string())
+            .collect();
+        assert!(
+            offenders.is_empty(),
+            "write profile used outside tm_write/cli.rs: {offenders:?}"
+        );
+        // And the write layer never takes the read profile's entry points.
+        let mut tm = Vec::new();
+        rust_files(&src.join("tm_write"), &mut tm);
+        for f in tm {
+            let text = std::fs::read_to_string(&f).unwrap();
+            assert!(
+                !text.contains("GitCli"),
+                "{} uses the read CLI",
+                f.display()
+            );
+        }
+    }
+
+    #[test]
+    fn file_system_writes_on_repos_only_in_the_write_layer() {
+        let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let tm = src.join("tm_write");
+        let mut files = Vec::new();
+        rust_files(&src, &mut files);
+        let offenders: Vec<String> = files
+            .iter()
+            .filter(|f| !f.starts_with(&tm))
+            .filter(|f| {
+                let text = std::fs::read_to_string(f).unwrap();
+                FS_WRITE_PATTERNS.iter().any(|p| text.contains(p))
+            })
+            .map(|f| f.display().to_string())
+            .collect();
+        assert!(
+            offenders.is_empty(),
+            "file system writes outside tm_write: {offenders:?}"
+        );
+    }
+}
+
+/// Root-relative write calls of the applier (ADR-TMC-002 § 3, step 6).
+const FS_WRITE_PATTERNS: &[&str] = &[
+    "renameat",
+    "unlinkat",
+    "mkdirat",
+    "symlinkat",
+    "RenameFlags",
+];
