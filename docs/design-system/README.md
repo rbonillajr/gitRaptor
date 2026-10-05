@@ -3,9 +3,9 @@ id: DSYS-GRP-001
 title: GitRaptor Design System
 type: design-system
 status: draft
-version: 0.3
+version: 0.4
 date: 2026-10-01
-updated: 2026-10-04
+updated: 2026-10-05
 owner: Rene Bonilla
 related: [BRD-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-004, ADR-CKP-003]
 tags: [design-system, design-tokens, tui, cli, ratatui, accessibility, theming, mvp]
@@ -13,6 +13,7 @@ changelog:
   - 0.1 (2026-10-01): Design system completo (tokens, UI kit React, Storybook, Figma, temas web).
   - 0.2 (2026-10-01): Acotado al alcance inicial (MVP = CLI/TUI + MCP). Lo de la UI web/React queda diferido a la Fase 3.
   - 0.3 (2026-10-04): Enmienda del Cockpit (E7 de ADR-CKP-003): símbolos con anchura, `crates/theme` agnóstico de ratatui, alcance de `--plain`, versiones de la TUI e i18n con catálogo tipado.
+  - 0.4 (2026-10-05): Enmienda de TS-CKP-004: `focus.default`, `agent.state.*`, símbolo `info`, gate de contraste del tema de alto contraste y tokens implementados.
 ---
 
 # GitRaptor Design System
@@ -63,9 +64,11 @@ El MVP de GitRaptor (BRD-GRP-001, Fase 1) tiene **tres superficies: CLI, TUI y s
 | Texto | `text.default`, `text.muted`, `text.inverse` |
 | Fondo | `bg.default` (= fondo de la terminal), `bg.selected`, `bg.highlight` |
 | Marca | `accent.default` (color de acento, **por definir**) |
+| Foco | `focus.default`: panel o fila con el foco del teclado (enmienda 2026-10-05) |
 | Estado | `status.success`, `status.warning`, `status.danger`, `status.info` |
 | Git | `git.added`, `git.removed`, `git.modified`, `git.conflict`, `git.branch.base` |
 | Agentes | `agent.1` … `agent.8`: colores categóricos para distinguir agentes y carriles del grafo |
+| Estado de agente | `agent.state.active`, `agent.state.idle`, `agent.state.done`: alias de `status.success` y `text.muted`; el símbolo es la señal principal (enmienda 2026-10-05) |
 
 Cada token semántico define **tres valores**: *truecolor* (hex), *256 colores* (índice ANSI) y *fallback de 16 colores*, para que la TUI se vea bien en cualquier terminal.
 
@@ -78,6 +81,7 @@ El color nunca va solo: cada estado lleva además un símbolo y, si se puede, te
 | Éxito | `✔` | `[ok]` |
 | Error | `✖` | `[x]` |
 | Advertencia | `⚠` | `[!]` |
+| Información | `ℹ` | `[i]` |
 | Agente activo / inactivo / terminado | `●` / `◐` / `○` | `*` / `~` / `o` |
 | Conflicto previsto | `⚡` | `[c]` |
 | Bloqueado por política | `⛔` | `[blocked]` |
@@ -133,7 +137,7 @@ Widgets ratatui en `apps/cli`, todos con los tokens de `crates/theme`:
 
 - Se respeta **`NO_COLOR`** y hay un flag `--no-color`. Sin color, todo sigue entendiéndose gracias a los símbolos y el texto.
 - La información nunca depende solo del color.
-- Hay un **tema de alto contraste** para la TUI (`--theme high-contrast`).
+- Hay un **tema de alto contraste** para la TUI (`--theme high-contrast`). Pinta su propio fondo y su texto cumple **WCAG AA (≥ 4.5:1)**, comprobado en CI (enmienda 2026-10-05).
 - Navegación completa con teclado, sin depender del mouse (aunque se soporta).
 - Funciona con lectores de pantalla en el modo CLI y con `--json`. La TUI ofrece un modo `--plain` sin redibujado continuo. (Enmienda 2026-10-04, Cockpit: alcance de `--plain` y del ratón en el MVP; ver la sección final.)
 
@@ -192,3 +196,22 @@ Aplicada desde la enmienda E7 de [ADR-CKP-003](../architecture/decisions/ADR-CKP
 - **Pruebas visuales**: snapshots con `insta` en 80×24, 100×30, 120×40 y 79×24, con truecolor, 256 colores, 16 colores, `NO_COLOR` y alto contraste, y con los dos juegos de símbolos (ADR-CKP-003, Validación V1).
 
 Linux y Windows (anchura de símbolos y consola de Windows): **Pendiente: etapa de validación multiplataforma**.
+
+---
+
+## Enmienda (2026-10-05, TS-CKP-004)
+
+Aplicada al implementar los tokens ([TS-CKP-004](../requirements/features/cockpit/technical-stories/TS-CKP-004-tokens-semanticos-simbolos.md), [Dev Spec](../requirements/features/cockpit/dev-specs/TS-CKP-004-tokens-semanticos-simbolos.md)). **Decisión del orquestador (2026-10-05), validada por Arquitecto y PO.** No cierra ninguna decisión de § 8.
+
+| Cambio | Dónde |
+|---|---|
+| `focus.default` para el foco del teclado; sin color, negrita + inverso | § 2.1 |
+| `agent.state.{active,idle,done}` como alias de semánticos existentes | § 2.1 |
+| Símbolo `info` (`ℹ` / `[i]`, anchura 2), porque `status.info` no tenía símbolo | § 2.2 |
+| El tema de alto contraste pinta su propio fondo y tiene un gate WCAG AA (4.5:1) en CI; el juego normal hereda texto y fondo de la terminal y su contraste solo se informa | § 6 |
+| Sin color, el significado lo cargan la negrita y el inverso; `dim` solo en `text.muted` | § 6 |
+
+- **Implementación**: `packages/design-tokens/tokens/{color,semantic,symbol}.json` → Style Dictionary → `crates/theme/src/generated.rs` (commiteado). El workflow `tokens` falla si el código generado no coincide con los tokens. El índice de 256 colores se deriva de cada hex (solo 16..255).
+- ⚠️ **ASSUMPTION** (§ 8 sigue abierta): acento teal, paleta de agentes Okabe-Ito (apta para daltonismo) con `agent.8` en blanco y el azul aclarado, y fondo oscuro supuesto para el informe del juego normal.
+
+Anchura real de `⚡`, `⛔`, `⚠` y `ℹ` en Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
