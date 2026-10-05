@@ -1,7 +1,7 @@
 ---
 mode: draft
 generated: 2026-10-03T00:00Z
-updated: 2026-10-04
+updated: 2026-10-05
 generator: product-owner
 total_artifacts: 16
 expanded: 16
@@ -143,3 +143,4 @@ blocked: []
 | 1.6 | 2026-10-04 | PO (AADD) para Rene Bonilla | Artifact Judge (FAIL): US-GRP-016 sigue siendo independiente de Guardrails. Sus escenarios parten de "la rama base confirmada …" como precondición, sin la acción de confirmar; "pendiente de confirmar" y "no confirmada" son lo que muestra el motor. Dependencias sin US-GRD-001 ni US-GRD-014; la coherencia se comprueba en la prueba de integración posterior del índice de Guardrails |
 | 1.7 | 2026-10-04 | Agente de documentación para Rene Bonilla | Aceptación de ADR-GRP-005 a 013 (Rene Bonilla, 2026-10-04). ADR-GRP-007 cierra P8: US-GRP-013 se desbloquea (pasa a la ola 2, tras 007). US-GRP-016 se desbloquea por decisión de Rene Bonilla (2026-10-04, a propuesta del coordinador): Q36 pedía que existieran Guardrails como dueño de la configuración del equipo y el ADR de formato, y los dos existen como ADRs aceptados (ADR-GRD-004, ADR-GRP-007); queda en la ola 3 con dependencia de US-GRP-013 y TS-GRD-001. Sin historias bloqueadas |
 | 1.8 | 2026-10-04 | Orquestador para Rene Bonilla | US-GRP-001 implementada (en revisión) con [Dev Spec](./dev-specs/US-GRP-001-dev-spec.md). Alcance confirmado según la historia: sin ahead/behind (US-GRP-012/016) ni estados especiales (US-GRP-003); `repo.retire` básico adelantado de US-GRP-006 y reconciliación periódica movida a US-GRP-002. Decisiones del orquestador validadas por PO y Arquitecto |
+| 1.9 | 2026-10-05 | Orquestador para Rene Bonilla | US-GRP-002 implementada (en revisión) con [Dev Spec](./dev-specs/US-GRP-002-dev-spec.md): observador de cambios, historial de eventos de Git "sin atribuir", `events.history` y `raptor events`. Un watcher por worktree en macOS adoptado tras medirlo (0 eventos perdidos). Alcance sin cambios: ahead/behind, estados especiales, sesiones y `gap.recorded` siguen en sus historias. Decisiones del orquestador validadas por PO y Arquitecto |

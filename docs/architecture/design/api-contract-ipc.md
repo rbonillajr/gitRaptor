@@ -23,7 +23,7 @@ La fuente de verdad es el código de `crates/api`. Este documento es su resumen 
 
 - Socket Unix `raptor.sock` en la carpeta de ejecución del perfil, con la carpeta en 0700 y el socket en 0600. Solo acepta clientes del mismo uid. El cliente comprueba que el servidor también es de su uid. En Windows, named pipe: pendiente.
 - Un mensaje JSON por línea (`\n`), de 1 MiB como máximo y con una profundidad máxima de 32. No se aceptan batches. Todos los tipos rechazan campos desconocidos.
-- `PROTOCOL_VERSION = 2` (`API_VERSION` 2.0.0). Cliente y daemon son compatibles solo si hablan la misma versión. La 2 (US-GRP-001) añade el estado de los worktrees a `RepoView`.
+- `PROTOCOL_VERSION = 2` (`API_VERSION` 2.1.0). Cliente y daemon son compatibles solo si hablan la misma versión. La 2 (US-GRP-001) añade el estado de los worktrees a `RepoView`. La 2.1.0 (US-GRP-002) es aditiva: `events.history` y el `data` de `git.event`; un cliente nuevo comprueba en `hello.methods` que el daemon ofrece `events.history` y, si no, pide reiniciarlo.
 
 ## Handshake
 
@@ -44,6 +44,7 @@ El resultado trae `protocol`, `binary_version`, `instance_id` (del perfil, ADR-G
 | `events.subscribe` | No | Sí | `{ from_seq?, run_id? }` → `{ subscription, from_seq }`. Hasta 4 por conexión |
 | `events.unsubscribe` | No | Sí | `{ subscription }` → `bool` |
 | `audit.list` | No | No | `{ after_id?, limit? }` → `{ entries: [AuditEntry] }`. Como máximo 500 por página |
+| `events.history` | No | No | `{ repo_id, worktree?, after_seq?, limit? }` → `{ events: [GitEventView] }`, del más antiguo al más reciente. Sin `after_seq`, los `limit` más recientes. Como máximo 200 por página. Fuera del MCP porque lleva rutas (SEC-12) (US-GRP-002) |
 | `daemon.stop` | **Sí** | No | `{ stopping: true }`; luego el daemon cierra las conexiones |
 | `daemon.replace` | Solo si no viene del binario instalado | Sí | `{ protocol }` (más nuevo que el del daemon) |
 | `repo.add` | **Sí** | No | `{ path }` (raíz de un worktree o directorio Git, sin búsqueda hacia arriba) → `{ outcome: new\|already-observed\|reactivated, repo: RepoView }`. Autoriza y audita **antes** de leer la ruta (US-GRP-001) |
@@ -82,7 +83,16 @@ Notificación `events.event` con `{ subscription, event }`. El evento lleva:
 - Tipos propios del motor (sin `timings`): `engine.state`, el primer evento de cada ejecución y cada transición de BR-WF-002; `daemon.stopping`; `reserved.audit`; y `repo.observation` `{repo_id, observed, state, path}` al añadir o retirar un repo (US-GRP-001).
 - `worktree.state` (US-GRP-001, de cambio): `{repo_id, worktrees}` con todos los worktrees del repo reconciliado.
 - A `raptor-mcp` solo le llegan `engine.state` y `daemon.stopping` (allowlist, SEC-12); el resto lleva rutas o auditoría.
-- Tipos de cambio declarados, con `data` definido por su historia: `git.event` (US-GRP-002), `gap.recorded` (US-GRP-005), `session.state` (US-GRP-007) y `attribution.changed` (US-GRP-010).
+- `git.event` (US-GRP-002, de cambio): un `GitEventView` por evento de Git, ya persistido en el historial del repo:
+
+```json
+{"repo_id":"…","seq":12,"worktree":{"untrusted":"/w/demo-feat"},"kind":"commit",
+ "actor":{"actor":"unattributed"},"observed_utc_ms":1791148066018,"utc_offset_s":7200,
+ "details":{"branch":{"untrusted":"feat-login"},"old_commit":"…","new_commit":"…","worktree_inferred":false}}
+```
+
+  `kind`: `commit`, `merge`, `rebase`, `branch-update`, `branch-create`, `branch-delete`, `branch-switch`, `worktree-create`, `worktree-delete`, `push` o `reconciled` (diferencias que encontró una reconciliación, con `gap_id`; no es un comando de Git). `seq` es la secuencia del historial del repo (ADR-GRP-013 § 4), no la del stream. `worktree_inferred` dice que Git no indica desde qué worktree se ejecutó el comando y el motor lo dedujo. Sin sesión con evidencia, el actor es `unattributed` (BR-CONS-003). El observador publica además `worktree.state` en cuanto cambia un worktree, con los `timings` de su ventana de debounce.
+- Tipos de cambio declarados, con `data` definido por su historia: `gap.recorded` (US-GRP-005), `session.state` (US-GRP-007) y `attribution.changed` (US-GRP-010).
 - **Arranque coherente (DEP-CKP-6)**: `engine.snapshot` devuelve `seq = N`. Después, `events.subscribe { from_seq: N + 1, run_id }` no pierde ni repite eventos: el daemon guarda los últimos 1024. Si el `run_id` ya no es el del daemon o `N + 1` salió del buffer, llega `events.resync` con su `reason` (`daemon-restarted` o `replay-unavailable`).
 - **Cliente lento**: si su cola de 1024 mensajes se llena, recibe `events.resync { reason: slow-consumer }` y se le desconecta. Nunca frena al productor.
 
@@ -97,7 +107,7 @@ Notificación `events.event` con `{ subscription, event }`. El evento lleva:
 
 - `head`: `branch {name}`, `unborn {name}` (rama sin commits) o `detached`. `status` también puede ser `{"state":"unavailable","reason":"missing"|"untrusted"|"unreadable"}`; la semántica de los estados especiales es de US-GRP-003.
 - Limpio = todos los `counts` a cero. `changes` está ordenado y acotado a 200 rutas y 32 KiB por worktree. Si un mensaje pasa de 768 KiB, se vacían las listas y se conservan los conteos.
-- Lo recalcula una reconciliación completa al añadir el repo y al arrancar el motor. Los cambios en vivo son de US-GRP-002; el ahead/behind, de US-GRP-012.
+- Lo recalcula una reconciliación completa al añadir el repo y al arrancar el motor, y después el observador de US-GRP-002 en cada cambio. El ahead/behind es de US-GRP-012.
 
 ## Texto no confiable y actor
 
