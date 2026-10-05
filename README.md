@@ -40,6 +40,14 @@ pnpm nx graph                         # grafo de proyectos
 | `gitraptor-theme` | `crates/theme` | Paleta para TUI/CLI |
 | `@gitraptor/tokens` | `packages/design-tokens` | Design tokens (DTCG + Style Dictionary) |
 
+### Finales de línea (Windows)
+
+`.gitattributes` fija `eol=lf` para todo archivo de texto, también en Windows y sea cual sea `core.autocrlf`. El esquema de settings se embebe byte a byte con `include_str!` y hay tests que analizan el código fuente, así que un checkout con CRLF los rompe. Si clonaste antes de que existiera `.gitattributes`, vuelve a hacer el checkout con LF:
+
+```sh
+git rm -r -q --cached . && git reset -q --hard
+```
+
 ## Licencia
 
 GitRaptor usa un modelo **open core** (decisión D4 del [documento de negocio](docs/business/gitraptor-documento-de-negocio.md)):
