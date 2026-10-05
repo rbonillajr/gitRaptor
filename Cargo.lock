@@ -752,6 +752,7 @@ dependencies = [
 name = "gitraptor-winsys"
 version = "0.0.0"
 dependencies = [
+ "serde_json",
  "tempfile",
  "windows-sys 0.61.2",
 ]
