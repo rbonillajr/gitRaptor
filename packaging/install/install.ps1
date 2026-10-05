@@ -86,12 +86,12 @@ try {
 
     Expand-Archive -LiteralPath $archivePath -DestinationPath $tmp
     $src = Join-Path $tmp "raptor-$Version-$target"
-    foreach ($bin in 'raptor.exe', 'raptor-mcp.exe') {
+    foreach ($bin in 'raptor.exe', 'raptor-mcp.exe', 'raptor-hook.exe') {
         if (-not (Test-Path -LiteralPath (Join-Path $src $bin))) { throw 'raptor-install: unexpected archive layout' }
     }
 
     New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-    foreach ($bin in 'raptor.exe', 'raptor-mcp.exe') {
+    foreach ($bin in 'raptor.exe', 'raptor-mcp.exe', 'raptor-hook.exe') {
         $dest = Join-Path $InstallDir $bin
         if (Test-Path -LiteralPath $dest) {
             # A running exe (the engine is `raptor daemon`) cannot be overwritten but can be
