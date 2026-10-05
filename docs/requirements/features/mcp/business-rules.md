@@ -60,7 +60,7 @@ Criticidad "Alta" = crítica. Las cifras marcadas como tope (N) son el supuesto 
 
 ### BR-MCP-VAL-001: Rutas relativas al worktree
 
-**Descripción**: toda ruta que recibe una herramienta (las rutas de `safe_commit`, la ruta opcional de `create_worktree`) es relativa y se valida antes de pedir nada al daemon. Se rechazan las rutas absolutas, las que salen del worktree o de la carpeta por defecto (`..`, enlaces que escapan), las UNC y las que llevan caracteres de control. Las rutas se tratan como literales: nunca como patrón ni como opción. El número de rutas por llamada tiene tope.
+**Descripción**: toda ruta que recibe una herramienta (las rutas de `safe_commit`) es relativa y se valida antes de pedir nada al daemon. Se rechazan las rutas absolutas, las que salen del worktree (`..`, enlaces que escapan), las UNC y las que llevan caracteres de control. Las rutas se tratan como literales: nunca como patrón ni como opción. El número de rutas por llamada tiene tope. `create_worktree` no acepta ruta por MCP: el worktree se crea solo en la ubicación de la plantilla del desarrollador (enmienda 0.2).
 
 **Criticidad**: Alta
 
@@ -75,7 +75,7 @@ IF número de rutas > tope → rechazo "demasiadas rutas"
 
 **Ejemplo**: `safe_commit` con `["src/app.rs", "../otro-repo/secreto"]` → rechazo de toda la llamada: "ruta fuera del worktree: ../otro-repo/secreto". Con `[":(glob)**"]` → se busca el archivo literal `:(glob)**`, que no existe → "ruta no encontrada".
 
-**Fuentes**: Q-MCP-5, Q-MCP-7; SEC-02, SEC-11; BRD BR-16 (CVEs de `mcp-server-git`).
+**Fuentes**: Q-MCP-5, Q-MCP-7 (estrechada por la enmienda 0.2); SEC-02, SEC-11; BRD BR-16 (CVEs de `mcp-server-git`); ADR-CKP-002 (propuesto; hallazgo de seguridad H-02).
 
 ### BR-MCP-VAL-002: Nombres de rama y refs
 
@@ -269,7 +269,7 @@ página = min(solicitado, tope), por defecto 50
 | Sin operación en curso | — | — | — | — | — | Exige | Exige | — | Exige | Exige |
 | Sin otra sesión presente en el worktree | — | — | — | — | — | Sí; en compartido solo rutas explícitas | Exige | — | — | Solape → se detiene |
 | Worktree disponible | Exige | Exige | Exige | Exige | Exige | Exige | Exige | Exige | Exige | Exige |
-| Decisión de Guardrails | — | — | — | — | — | Exige permitir | Exige permitir | Exige permitir | Exige permitir | Exige permitir |
+| Decisión de Guardrails | — | — | — | — | — | Exige permitir | Exige permitir | Exige permitir | Pendiente (sin operación normalizada; ADR-CKP-002 Pendientes) | Exige permitir |
 
 **Regla formal**:
 ```
@@ -320,7 +320,7 @@ IF rama = rama base → decisión de Guardrails (BR-MCP-AUTH-001)
 
 ### BR-MCP-ELIG-004: `create_worktree`
 
-**Descripción**: crea una rama nueva desde la base confirmada y su worktree en el repo del llamante, con las reglas de BR-CKP-ELIG-005 y BR-CKP-VAL-001: ruta por defecto hermana del repo; ruta existente o no válida → error; nunca reutilizar. No registra ni lanza agente. La respuesta aclara que la sesión MCP sigue en el worktree original.
+**Descripción**: crea una rama nueva desde la base confirmada y su worktree en el repo del llamante, con las reglas de BR-CKP-ELIG-005 y BR-CKP-VAL-001. Por MCP no acepta ruta: la ubicación sale solo de la plantilla del desarrollador (enmienda 0.2); ruta existente o no válida → error; nunca reutilizar. No registra ni lanza agente. La respuesta aclara que la sesión MCP sigue en el worktree original.
 
 **Criticidad**: Media
 
@@ -333,7 +333,7 @@ IF rama existe OR ruta existe OR ruta no válida → rechazo + motivo
 
 **Ejemplo**: rama `feat/pagos` → worktree `/code/shop-feat-pagos` creado. "Para trabajar ahí, abre una sesión del agente en esa carpeta."
 
-**Fuentes**: Q-MCP-7; Q-CKP-13.
+**Fuentes**: Q-MCP-7 (estrechada por la enmienda 0.2); Q-CKP-13; ADR-CKP-002 (propuesto; hallazgo de seguridad H-02).
 
 ### BR-MCP-ELIG-005: `snapshot` y `undo`
 
@@ -910,3 +910,4 @@ Cada regla tendrá al menos un escenario Gherkin, incluido uno negativo, en su h
 | Versión | Fecha | Autor | Cambios |
 |---------|-------|-------|---------|
 | 0.1 | 2026-10-04 | PO (AADD) | Versión inicial: 48 reglas a partir de Q-MCP-1 a Q-MCP-31 (decisión del orquestador, validada por PO y Arquitecto) y de las decisiones heredadas de motor-local, Cockpit, Time Machine y Guardrails. |
+| 0.2 | 2026-10-04 | PO (AADD) | Enmienda mínima, fuente ADR-CKP-002 (propuesto; hallazgo de seguridad H-02). BR-MCP-VAL-001 y BR-MCP-ELIG-004: `create_worktree` no acepta ruta por MCP, solo la plantilla del desarrollador (estrecha Q-MCP-7). BR-MCP-ELIG-001: la decisión de Guardrails para `snapshot` queda "Pendiente" (sin operación normalizada; ADR-CKP-002 Pendientes). Sin reglas nuevas: siguen 48. Decisión del orquestador (2026-10-04), validada por Arquitecto/PO. |
