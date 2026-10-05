@@ -2,17 +2,17 @@
 id: TS-CKP-002
 title: "Catálogo de operaciones de usuario y ejecutor del daemon en dos fases"
 type: ts
-status: draft
+status: in-progress
 feature: cockpit
 domain: GRP
 priority: critical
 complexity: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-05
 related:
   adrs: [ADR-CKP-002, ADR-TMC-002, ADR-TMC-004, ADR-TMC-005, ADR-TMC-007, ADR-GRP-005, ADR-GRP-009]
   stories: [US-CKP-014, US-CKP-015, US-CKP-016, US-CKP-017, US-CKP-018, US-CKP-020, US-CKP-024, TS-TMC-004, TS-TMC-003, TS-GRP-002, TS-GRP-003, TS-GRP-004, INF-GRP-001, INF-TMC-001, TS-CKP-003]
-  specs: []
+  specs: [DS-TS-CKP-002]
 ado:
   id: null
   url: null
@@ -29,7 +29,7 @@ tags: [cockpit, catalogo-operaciones, ejecutor, operacion-protegida, capa, seria
 **Quiero** el catálogo cerrado y versionado de operaciones de usuario y el ejecutor del daemon que las prepara y las ejecuta en dos fases
 **Para** que las acciones de BR-07 y las herramientas de escritura del Servidor MCP compartan validación, revalidación y snapshot previo, sin otra vía de escritura y sin que un agente rodee sus límites cambiando de cliente (ADR-CKP-002, ADR-TMC-004, NFR-01)
 
-> Dev Spec: `dev-specs/TS-CKP-002-catalogo-ejecutor.md` | Pendiente
+> Dev Spec: [`dev-specs/TS-CKP-002-catalogo-ejecutor.md`](../dev-specs/TS-CKP-002-catalogo-ejecutor.md) | Review. **Implementada sin cablear** (2026-10-05): el cableado de producción del backend (repo real, almacén y clave del cerrojo = ruta del almacén) lo hace **US-MCP-008**; hasta entonces, en producción, `operation.prepare` responde `NOT_IMPLEMENTED`. Las validaciones que necesitan una operación real o un arnés tienen su dueño en el § 9 de la Dev Spec.
 >
 > **Depende de**: TS-TMC-004 (operación protegida, solicitante, reto ligado al plan y marcas de los hijos, ya en main), TS-GRP-004 (consultas para describir, preparar, ejecutar y cancelar; `planId`; eventos de operación: **pendiente, dueño: worker del canal (TS-GRP-004)**; el rechazo `daemon-descendant` de lo reservado ya está en main), TS-GRP-002 (lecturas para precondiciones) y TS-GRP-003. Reutiliza el cerrojo de escritura por repo que creó TS-TMC-003. Las operaciones gobernadas necesitan TS-CKP-003 antes de su historia. **ADRs**: ADR-CKP-002 § 1 a § 6, § 11 y § 12, que la Dev Spec sigue punto por punto; ADR-TMC-005 § 1 a § 3; ADR-GRP-009 § 3 y § 4. **Seguridad**: hallazgos H-01, H-02, M-01 a M-05, L-01, L-02, L-04, L-07 e I-02 de la revisión de seguridad de ADR-CKP-002; SEC-02, SEC-05, SEC-10, SEC-12, NFR-02. **Habilita**: BR-07 (merge, rebase, descartar, crear worktree y abortar; BR-CKP-ELIG-001 a 005, WF-003, WF-008, CONS-002, CONS-004, AUTH-002, AUTH-003) y las herramientas de escritura de F-001-05 (`safe_commit`, `safe_rebase`, `create_worktree`, `snapshot`; DEP-MCP-2, DEP-MCP-3, DEP-MCP-5).
 
