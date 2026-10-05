@@ -54,6 +54,13 @@ pub struct RepoGuard {
     repo_id: String,
 }
 
+impl RepoGuard {
+    /// The key of the repo this guard holds.
+    pub fn key(&self) -> &str {
+        &self.repo_id
+    }
+}
+
 /// Takes the repo keyed `repo_id` if no one holds it and no one waits for it.
 pub fn try_lock(repo_id: &str) -> Option<RepoGuard> {
     let mut reg = registry();

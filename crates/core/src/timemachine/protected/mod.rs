@@ -34,7 +34,10 @@ use crate::timemachine::oplog::{
 };
 use crate::timemachine::store::{CaptureError, CaptureRequest, SnapshotStore, WorktreeScope};
 
-pub use backend::{DaemonBackend, OperationCatalog, OperationsWiring, SnapshotterLayer, TmRepos};
+pub use backend::{
+    DaemonBackend, OperationCatalog, OperationsWiring, SnapshotterLayer, TimeMachineBackend,
+    TmRepos,
+};
 pub use challenge::{Binding, ChallengeBook, ChallengeError, plan_hash};
 pub use scope::{McpAllowlist, NoMcpRepos, ProtectedBackend, RepoHandle, ScopeError};
 
@@ -141,7 +144,7 @@ impl PriorSnapshotter for StoreSnapshotter {
 
 /// Every worktree of the repo of `any_worktree`: canonical root and, for a
 /// linked one, its name under `.git/worktrees/`.
-fn registered_worktrees(
+pub(crate) fn registered_worktrees(
     any_worktree: &Path,
 ) -> Result<Vec<(PathBuf, Option<String>)>, gitraptor_git::ReadError> {
     let reader = RepoReader::open(any_worktree, &ReaderOptions::default())?;
@@ -157,7 +160,7 @@ fn registered_worktrees(
     Ok(out)
 }
 
-fn canonical(path: &Path) -> PathBuf {
+pub(crate) fn canonical(path: &Path) -> PathBuf {
     std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
@@ -228,6 +231,13 @@ pub trait ProtectedStep: Send {
     /// default: every operation must say what it touches (NFR-01).
     fn scope(&self) -> StepScope;
     fn run(&mut self, ctx: &mut StepCtx<'_>) -> Result<StepOutput, StepError>;
+    /// The Time Machine applier annotates its own steps and its close from
+    /// `ready` (ADR-TMC-002 § 3, TS-TMC-003): the protected operation then
+    /// neither annotates `applying` before it nor closes after it, unless
+    /// the step left the operation open. Every other step keeps the default.
+    fn self_annotated(&self) -> bool {
+        false
+    }
 }
 
 /// A child process the step started, marked for the channel (DEP-MCP-3).
@@ -265,6 +275,12 @@ impl StepCtx<'_> {
 
     pub fn channel(&self) -> Channel {
         self.channel
+    }
+
+    /// The oplog, for the Time Machine applier only (it annotates its own
+    /// steps, locks and close).
+    pub(crate) fn oplog(&self) -> &Mutex<Oplog> {
+        self.oplog
     }
 
     /// The daemon is stopping: finish the current step and return.
@@ -562,15 +578,32 @@ impl ProtectedOperation<'_> {
             procs: self.procs,
             step: 0,
         };
-        let result = ctx.applying().and_then(|_| step.run(&mut ctx));
+        let result = if step.self_annotated() {
+            step.run(&mut ctx)
+        } else {
+            ctx.applying().and_then(|_| step.run(&mut ctx))
+        };
 
-        // (5) Record the end.
+        // (5) Record the end, unless the step already closed it.
         let end = if result.is_ok() {
             OperationTransition::Finished
         } else {
             OperationTransition::Interrupted
         };
-        let closed = lock(self.oplog).advance_operation(&operation_id, end, now_ms());
+        let closed = {
+            let mut log = lock(self.oplog);
+            let open = !step.self_annotated()
+                || log
+                    .operation(&operation_id)
+                    .ok()
+                    .flatten()
+                    .is_none_or(|op| !op.state.is_terminal());
+            if open {
+                log.advance_operation(&operation_id, end, now_ms())
+            } else {
+                Ok(())
+            }
+        };
         match (result, closed) {
             (Ok(output), Ok(())) => Ok(ProtectedOutcome {
                 operation_id,
