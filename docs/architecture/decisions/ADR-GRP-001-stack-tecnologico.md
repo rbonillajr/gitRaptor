@@ -5,7 +5,7 @@ type: adr
 status: accepted
 date: 2026-10-01
 created: 2026-10-01
-updated: 2026-10-01
+updated: 2026-10-05
 deciders: [Rene Bonilla]
 related: [ADR-GRP-002, ADR-GRP-003, ADR-GRP-004]
 tags: [rust, tauri, react, vite, typescript, ratatui, gitoxide, rmcp, stack]
@@ -65,3 +65,13 @@ La decisión se confirma si el spike en Rust demuestra:
 4. Una TUI con ratatui que muestre worktrees en vivo.
 
 Si el spike falla en tiempo o complejidad, se reevalúa con Go (plan B) en un ADR que reemplace a este.
+
+## Enmienda (2026-10-05, MCP)
+
+Decisión del orquestador (2026-10-05), validada por Arquitecto y security-expert. Origen: ADR-MCP-001 § 1 (DEP-MCP-1).
+
+| Cambio | Dónde |
+|---|---|
+| `rmcp` se usa con `default-features = false` y solo las features de servidor, macros y transporte stdio. `cargo-deny` prohíbe en `apps/mcp` las features y crates de transporte de red (NFR-03, SEC-07). La versión la fija `Cargo.lock` en US-MCP-003 | Decisión, fila `raptor-mcp` |
+| `raptor-mcp` solo ofrece la capability `tools` (Q-MCP-13) y solo depende de `crates/api` y de la biblioteca cliente del canal; nunca de `crates/policy`, `crates/git` ni del motor | Decisión, fila `raptor-mcp` |
+| El punto 3 del spike ("prototipo de `rmcp` con una política que bloquee el force-push") queda sustituido por la demo del BRD § 13 en dos partes (Q-MCP-18): el MCP no tiene herramienta de push; la decisión por MCP se prueba con `safe_commit` o `safe_rebase` | Validación (spike), punto 3 |

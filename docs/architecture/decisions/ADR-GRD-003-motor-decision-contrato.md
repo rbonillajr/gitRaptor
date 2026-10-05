@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-05
 deciders: [Rene Bonilla]
 domain: GRP
 feature: guardrails
@@ -257,3 +257,18 @@ Aplicada desde DEP-CKP-10 de [CTX-CKP-001](../../requirements/features/cockpit/c
 - **Abort del rebase atómico** (§ 4 y § 6; DEP-MCP-5): el `git rebase --abort` que el ejecutor lanza dentro de la misma operación cuando un `safe_rebase` choca o vence su tiempo es **otro hijo registrado del mismo plan**. Sus transiciones (HEAD y la rama vuelven a su valor previo) se registran antes de liberarlo y reciben la decisión ya tomada: **no se reevalúan** y no crean entrada propia. Un `git` nieto lanzado por un hook durante el abort sigue la regla anterior.
 - **Barrera de arranque** (§ 4; I-02): el hijo del ejecutor no ejecuta nada hasta que su identidad y sus transiciones están registradas. Ningún hook pregunta por un `git` del ejecutor que el daemon aún no conoce.
 - **Validación añadida** (ADR-CKP-002, Validación 17, 18, 21 y 28): un `git` nieto bajo un plan de claude-1 se evalúa con actor claude-1; el abort de un `safe_rebase` que choca no genera una segunda evaluación; un hook que se conecta al arrancar encuentra al hijo registrado; un agente que abre la TUI recibe la capa `mcp`.
+
+## Enmienda (2026-10-05, MCP)
+
+Decisión del orquestador (2026-10-05), validada por Arquitecto y PO. Origen: DEP-MCP-5 (CTX-MCP-001), ADR-MCP-001 § 4.1 y § 4.4. El resto de DEP-MCP-5 (abort del rebase atómico) ya está en la Enmienda (2026-10-04, Cockpit).
+
+| Herramienta MCP | Operación del catálogo | Operación normalizada (BR-VAL-002) |
+|---|---|---|
+| `safe_commit` | `commit` | Commit |
+| `safe_rebase` | `rebase-onto-base` (`atomic`) | Rebase |
+| `create_worktree` | `create-worktree` | Crear worktree |
+| `snapshot` | `snapshot` | **Ninguna: no gobernada** |
+| `undo` | — (Time Machine) | **Ninguna en el MVP** (política del undo: US-TMC-021, Fase 2) |
+| Lecturas y `register_agent` / `unregister_agent` | — | Ninguna |
+
+- La decisión de las tres operaciones gobernadas se toma con capa `mcp` (fijada por el daemon) dentro del flujo del ejecutor (§ 4 y § 5); "pedir confirmación" se aplica como denegar mientras no exista la cola (S-GRD-9).

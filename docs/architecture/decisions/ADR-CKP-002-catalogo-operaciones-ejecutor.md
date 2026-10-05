@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-04
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-05
 date: 2026-10-04
 domain: GRP
 feature: cockpit
@@ -49,7 +49,7 @@ ADR-TMC-002 § 5 deja las operaciones de usuario al **ejecutor de operaciones de
 | `discard-worktree` | Quita el worktree y borra su rama; con HEAD separado, solo el worktree (§ 8) | Worktree + su rama | Destructiva | Borrar worktree + borrar rama | Sí | **No en el MVP** (fuera de BR-14, Q-MCP-1) |
 | `create-worktree` | Crea rama nueva y worktree desde el oid de la base confirmada | Refs del repo | No destructiva | Crear worktree | Sí | Sí: `create_worktree`, **solo con la plantilla** (H-02) |
 | `commit` | Commitea en el worktree del solicitante rutas literales o "todo lo preparado"; el mensaje no viaja por argv (§ 6) | Worktree + su rama | No destructiva: solo añade un commit; el previo guarda el índice | Commit | No en el MVP (no es acción de BR-07) | Sí: `safe_commit` (DEP-MCP-2, Q-MCP-5) |
-| `snapshot` | Captura manual del worktree del solicitante con una etiqueta corta, con cuota y rate limit | Ese worktree; no escribe en el repo | Sin escritura en el repo: captura de la Time Machine, sin `git` | No está en BR-VAL-002 (ver Pendientes) | No en el MVP | Sí: `snapshot` (DEP-MCP-2, Q-MCP-11) |
+| `snapshot` | Captura manual del worktree del solicitante con una etiqueta corta, con cuota y rate limit | Ese worktree; no escribe en el repo | Sin escritura en el repo: captura de la Time Machine, sin `git` | Ninguna: no gobernada (Enmienda (2026-10-05, MCP)) | No en el MVP | Sí: `snapshot` (DEP-MCP-2, Q-MCP-11) |
 | `abort-in-progress` | Aborta un merge o un rebase que **dejó detenido el propio ejecutor** (§ 9) | Ese worktree | Destructiva | No (no está en BR-VAL-002) | Sí | No como operación suelta: solo dentro de `rebase-onto-base` atómico y sobre lo propio |
 | `open-in-editor` | Resuelve el editor configurado y valida la ruta destino; lo lanza la TUI (§ 10) | Ninguno: no escribe | Sin escritura: fuera de la operación protegida y de Guardrails (BR-CKP-ELIG-006) | No | Sí | **No** |
 
@@ -219,11 +219,11 @@ sequenceDiagram
   | `safe_commit` | `commit` | Commit |
   | `safe_rebase` | `rebase-onto-base`, modo `atomic` (el abort va dentro) | Rebase |
   | `create_worktree` | `create-worktree`, solo con la plantilla | Crear worktree |
-  | `snapshot` | `snapshot` | Ninguna (ver Pendientes) |
+  | `snapshot` | `snapshot` | Ninguna: no gobernada (Enmienda (2026-10-05, MCP)) |
   | `undo` | No es del catálogo: Time Machine (ADR-TMC-005) | — |
 
 - **Fuera del MCP en el MVP** (Q-MCP-1): `merge-into-base`, `discard-worktree`, `abort-in-progress` como operación suelta y `open-in-editor`. Tampoco los comandos reservados, la excepción consciente ni Cancelar.
-- **Avisos**: el agente debe enumerar los códigos de aviso del plan al ejecutar, igual que la TUI.
+- **Avisos**: el agente debe enumerar los códigos de aviso del plan al ejecutar, igual que la TUI. Por MCP, con el parámetro `acknowledge` en una segunda llamada (ADR-MCP-001 § 4.3).
 - **Controles**: lo que necesita confirmación de trabajo ajeno o excepción **se rechaza** con capa `mcp`. Un "sin atribuir" por MCP se rechaza siempre.
 - **Hooks**: sin stdin ni terminal, como toda operación del ejecutor, y con el tiempo máximo de la capa `mcp` (§ 6).
 - **Respuestas** (SEC-12, OWASP LLM01): estructuradas, solo con códigos y campos tipados. Sin la salida de Git ni de los hooks, sin mensajes de commit ni contenido, y limitadas al repo del llamante. El texto no confiable que sí viaja (rutas, ramas, etiquetas) se escapa con las mismas categorías que la TUI (ADR-CKP-003 § 8: C0, DEL, C1, bidi incluido U+061C, U+2028 y U+2029, anchura cero incluido U+2060 a U+2064, y la tabla de Tags U+E0000 a U+E007F), y los nombres llevan un tope de 100 caracteres (L-03).
@@ -339,7 +339,7 @@ Repos y perfiles temporales; nunca este repo.
 | ADR-TMC-005 | § 1 | Un proceso cuya ascendencia pasa por un hijo registrado del ejecutor se atribuye al solicitante del plan, con su capa para el registro, y no puede pedir reservados, confirmaciones, excepciones ni Cancelar | H-01, DEP-MCP-3 | Aplicada (2026-10-04, endurecimiento); reconciliada con `daemon-descendant` (2026-10-04) |
 | ADR-GRP-005 | § 6 | Control añadido a los comandos reservados y a las confirmaciones: el cliente no desciende de un hijo registrado del ejecutor | H-01, DEP-MCP-3 | Aplicada (2026-10-04, endurecimiento); **subsumida** por la Enmienda (2026-10-04, TS-GRP-004), punto 7 (`daemon-descendant`), más estricta |
 | ADR-TMC-002 | § 3.3 y § 5 | El cerrojo por repo del aplicador es el mismo cerrojo de escritura del repo que usa el ejecutor; el catálogo es el de ADR-CKP-002 | Q-CKP-19 | Aplicada |
-| ADR-TMC-002 / ADR-TMC-004 § 4 | API de captura y niveles | Captura manual (`snapshot`) pedida por el ejecutor, con etiqueta, cuota y rate limit; su nivel declarado | DEP-MCP-2 | **Pendiente**, dueño: Time Machine |
+| ADR-TMC-002 / ADR-TMC-004 § 4 | API de captura y niveles | Captura manual (`snapshot`) pedida por el ejecutor, con etiqueta, cuota y rate limit; su nivel declarado | DEP-MCP-2 | Aplicada en ADR-TMC-004, Enmienda (2026-10-05, MCP) |
 | ADR-GRP-006 | Preferencias de la TUI | El esquema excluye `cockpit.editor`, `cockpit.editorKind` y `cockpit.worktreePathTemplate`; solo escribe un "sin atribuir" que pasa los controles 1 a 3 | L-05 | **Pendiente** del orquestador |
 | ADR-GRP-007 | Tabla de claves | `cockpit.editor` (string; perfil y local; equipo no admitido), `cockpit.editorKind` (`auto`\|`terminal`\|`gui`; perfil y local) y `cockpit.worktreePathTemplate` (string; perfil y local) | DEP-CKP-13, BR-CKP-VAL-001 | Aplicada |
 | ADR-GRP-008 | Extracto de niveles | El nivel local personal admite esas tres claves | DEP-CKP-13 | Aplicada |
@@ -351,10 +351,10 @@ Repos y perfiles temporales; nunca este repo.
 - **Motor-local**: publicar el estado en conflicto con sus rutas (DEP-CKP-14) y la atribución commit→evento para "trabajo afectado" (DEP-CKP-2, opcional). Sin ella, cuenta como otro actor.
 - **Para el PO**:
   - BR-CKP-WF-008: Cancelar exige capa `cockpit` (M-03) y ningún descendiente del ejecutor puede pedirlo; las operaciones de capa `mcp` sí tienen tiempo máximo (§ 6), así que "sin límite de tiempo automático" vale para la capa `cockpit`.
-  - BR-MCP-VAL-001 y BR-MCP-ELIG-004 todavía citan una "ruta opcional" de `create_worktree`; con H-02, por MCP solo hay plantilla.
-  - BR-MCP-ELIG-001 exige decisión de Guardrails para `snapshot`, pero `snapshot` no es una operación normalizada de BR-VAL-002: o se añade a BR-VAL-002, o se quita esa fila.
+  - ~~BR-MCP-VAL-001 y BR-MCP-ELIG-004 todavía citan una "ruta opcional" de `create_worktree`~~: **resuelto** por BR-MCP-001 v0.2 (solo plantilla; Enmienda (2026-10-05, MCP)).
+  - ~~BR-MCP-ELIG-001 exige decisión de Guardrails para `snapshot`~~: **resuelto**: `snapshot` no se añade a BR-VAL-002 y queda no gobernada (BR-MCP-001 v0.3; Enmienda (2026-10-05, MCP)).
   - En BR-CKP-EDGE-008, "excluidos por tamaño" sobra (el previo garantizado los incluye) y faltan los repos anidados. En BR-CKP-AUTH-003 falta el rebase como trabajo ajeno. En BR-CKP-ELIG-004 conviene añadir el worktree bloqueado.
-- **Para F-001-05**: añadir y quitar repos de la allowlist del MCP como comandos reservados en ADR-GRP-005 § 6 y SEC-03 (la otra mitad de DEP-MCP-3). No se aplica aquí.
+- ~~**Para F-001-05**: añadir y quitar repos de la allowlist del MCP como comandos reservados~~: **resuelto** en ADR-GRP-005 y SEC-03, Enmienda (2026-10-05, MCP).
 - **Pendiente: etapa de validación multiplataforma**: sesión sin terminal y consola en Windows, barrera de arranque en Windows, muerte del hijo con el daemon en macOS y Windows, capa `cockpit` y confirmación de trabajo ajeno en Windows, el editor de rechazo en Windows y la lista de variables de sesión en Linux y Windows.
 
 ## Revisión de seguridad (2026-10-04)
@@ -390,3 +390,15 @@ Repos y perfiles temporales; nunca este repo.
 - **ADRs**: ADR-GRP-005 § 5 y § 6, ADR-GRP-009 § 3 y § 4, ADR-GRP-013; ADR-TMC-001 § 2, ADR-TMC-002 § 3 y § 5, ADR-TMC-003 § 3 y § 6, ADR-TMC-004 § 1, ADR-TMC-005, ADR-TMC-007 § 2; ADR-GRD-002, ADR-GRD-003 § 1, § 4, § 5 y § 6, ADR-GRD-006, ADR-GRD-007 § 1 y § 3.
 - **NFR y seguridad**: NFR-01, NFR-02, NFR-03, NFR-07, NFR-10; SEC-02, SEC-05, SEC-10, SEC-11, SEC-12; SEC-TMC-03, SEC-TMC-06.
 - **Git**: `githooks(5)`, `git-rebase(1)`, `git-commit(1)` (`-F`), `git-config(1)` (`protocol.allow`, `core.useReplaceRefs`, `submodule.recurse`), `git-var(1)` (orden de `GIT_EDITOR`).
+
+## Enmienda (2026-10-05, MCP)
+
+Decisión del orquestador (2026-10-05), validada por Arquitecto, PO y security-expert. Origen: ADR-MCP-001 (DEP-MCP-1, DEP-MCP-2 y D-16 del índice de historias del MCP).
+
+| Cambio | Dónde | Origen |
+|---|---|---|
+| `snapshot` **no es una operación gobernada**: no se añade a BR-VAL-002, porque no escribe en el repo ni lanza `git` y no tendría capa hooks (BR-CONS-002). La protegen la allowlist, el solicitante, la cuota y el rate limit (ADR-MCP-001 § 4.4 y § 6). BR-MCP-ELIG-001 se enmienda en BR-MCP-001 v0.3 | § 1, § 12, Pendientes | Pendiente "Para el PO" |
+| `create_worktree` por MCP solo con la plantilla: ya lo dicen BR-MCP-VAL-001 y BR-MCP-ELIG-004 desde BR-MCP-001 v0.2. Una petición con `path` falla por esquema con el código `invalid-params` (ADR-MCP-001 § 4.2) | Pendientes | Pendiente "Para el PO", H-02 |
+| **Avisos por MCP**: parámetro `acknowledge` que nombra exactamente los avisos del plan; sin él, rechazo sin efectos `warnings-not-acknowledged` y la segunda llamada vuelve a preparar (ADR-MCP-001 § 4.3) | § 12 | D-16 |
+| **Propiedades que el contrato de ejecución debe cumplir para el MCP** (sin fijar su forma, que unifica TS-CKP-002 con `operation.run`): preparar y ejecutar en la misma conexión dentro de una llamada de herramienta; la operación sobrevive a la cancelación, al vencimiento de la llamada y al cierre de la conexión; el resultado se puede consultar por id de operación | Pendientes, "Contrato del canal" | ADR-MCP-001 § 4.3 y § 7 |
+| Captura manual: aplicada en ADR-TMC-004 § 4 (nivel `manual`) | Tabla de enmiendas | DEP-MCP-2, D-14 |

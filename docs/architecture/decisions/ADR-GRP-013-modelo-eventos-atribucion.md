@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-05
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
@@ -208,3 +208,11 @@ Aplicada desde DEP-CKP-4 y DEP-CKP-14 (y la parte de rutas de DEP-CKP-1) de [CTX
 - **Forma del contrato** (campos y eventos): **pendiente, dueño: worker del canal (TS-GRP-004)**.
 
 **Validación añadida**: un commit en un worktree actualiza su última actividad; un cambio de sesión a inactivo no la actualiza; tras un hueco, la última actividad lleva la marca del hueco; un worktree cuya sesión terminó publica esa sesión con su fin y su causa mientras existe.
+
+## Enmienda (2026-10-05, MCP)
+
+Decisión del orquestador (2026-10-05), validada por Arquitecto. Origen: DEP-MCP-6 (CTX-MCP-001), ADR-MCP-001 § 4.1 y § 5.
+
+- **Vista MCP de eventos y timeline** para `explain_history`: operación, actor, rama o worktree, oids, rutas con tope, hora, cobertura y nivel del punto. **Nunca** mensajes de commit, contenido ni rutas fuera del repo del llamante. Filtro por id de operación, para que un agente consulte el resultado de una escritura que volvió con `running`. 50 por defecto y 200 como máximo por página, con cursor opaco.
+- La consulta del timeline (`timemachine.timeline`, TS-TMC-004) gana la marca MCP **solo con esa vista**; el perfil completo no cambia. La añade la historia dueña (US-MCP-017) al contrato de `crates/api`.
+- Los eventos del stream siguen sin llegar a `raptor-mcp` salvo `engine.state` y `daemon.stopping`: `explain_history` es una consulta, no una suscripción.

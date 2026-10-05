@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-05
 date: 2026-10-03
 domain: GRP
 feature: time-machine
@@ -73,6 +73,7 @@ D-TMC-10 y BR-TMC-CONS-003 fijan dos niveles. (a) **Garantizado**: snapshot prev
 | `previo_garantizado` | Antes de una operación protegida (GitRaptor, undo, redo, restauración) | El estado exacto previo a la operación |
 | `previo_hook` | Antes de una operación de Git crudo con hooks de Guardrails | El estado previo, si el hook se ejecutó y el snapshot se completó |
 | `observacion` | Capturas del motor (ediciones, Git crudo sin hook) | El último estado capturado; puede no ser el inmediato anterior |
+| `manual` | Captura pedida con la operación `snapshot` del catálogo (herramienta MCP `snapshot`; Enmienda (2026-10-05, MCP)) | El estado del worktree en ese momento, con la etiqueta del solicitante |
 
 Un evento de Git sin punto propio se muestra con su nivel real; nunca se presenta como protegido (BR-TMC-CONS-003).
 
@@ -120,3 +121,17 @@ Aplicada desde § 7 de [SPIKE-TMC-001-resultados.md](../../requirements/features
 | Reutilización y captura incremental con las rutas del motor y su marca de continuidad (escalón 2 en el diseño base); detección completa con gitoxide sin continuidad; verificación periódica | § 1, § 2 | E2; ADR-TMC-006 § 5 |
 | Prioridad del previo en el escritor único: solo se serializa ref + oplog, la captura aborta el blob en curso y el previo espera ~10 ms como máximo | § 2, Validación 7 | E8; Resultados § 5.3; revisión del Arquitecto |
 | `Q` = 1 s, `M` = 5 s y cuotas confirmados en macOS | § 2 | Resultados § 6 |
+
+## Enmienda (2026-10-05, MCP)
+
+Decisión del orquestador (2026-10-05), validada por Arquitecto y PO. Origen: DEP-MCP-2 (CTX-MCP-001), pendiente de ADR-CKP-002 ("API de captura y niveles", dueño: Time Machine) y D-14 del índice de historias del MCP.
+
+- **Captura manual**: el ejecutor (ADR-CKP-002, operación `snapshot`) pide a la Time Machine una captura del worktree del solicitante con nivel declarado **`manual`** (§ 4). Usa la API de captura del módulo `timemachine`, no su capa de escritura (ADR-TMC-002 § 1). No escribe en el repo ni lanza `git`.
+- **Etiqueta**: texto corto del solicitante (≤ 64 caracteres, sin controles), guardado y devuelto como texto no confiable (SEC-12). Nunca se usa como nombre de ref ni de archivo.
+- **Cupo y rate limit propios** (SEC-TMC-12, ADR-MCP-001 § 6): ≤ 20 por (solicitante, worktree) en una ventana móvil de 24 h y 5 por minuto. Con el cupo lleno, o con la cuota de disco de SEC-TMC-12 llena, la captura **se rechaza** (`quota-exceeded`) con la hora a la que se libera un hueco; **nunca** se borra un punto para hacer sitio.
+- **No es una operación protegida**: no lleva previo garantizado (no escribe en el repo), no espera al cerrojo de escritura del repo y **no entra en la pila de `undo`**; si entrara, un `undo` después de un `snapshot` no haría nada.
+- **Nunca desplaza al previo garantizado** (NFR-01): la captura manual no consume la reserva de disco del previo garantizado (§ 1) y, en el escritor único, tiene la prioridad de una captura por observación (§ 2), no la del previo.
+- **Retención**: los puntos `manual` siguen ADR-TMC-007 como cualquier otro punto; la purga los cuenta para liberar cuota.
+- **Solicitante y registro**: el solicitante del plan, congelado en el oplog (ADR-TMC-003 § 5), con canal `mcp`. El timeline lo muestra con su nivel y su etiqueta.
+- **Dueña**: la API la implementa la historia dueña de `snapshot` (US-MCP-008) sobre el módulo de la Time Machine, coordinada con su feature.
+- **Validación añadida**: 21 capturas manuales del mismo agente en un worktree en 24 h → la 21.ª se rechaza con la hora de liberación y las 20 siguen; un `undo` tras un `snapshot` deshace la operación anterior, no el snapshot; con el disco en el mínimo, un previo garantizado posterior se completa; una etiqueta con U+202E sale escapada en el timeline.
