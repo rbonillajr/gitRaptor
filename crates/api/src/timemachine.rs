@@ -22,6 +22,8 @@ pub const MAX_ARGS_BYTES: usize = 4096;
 pub const MAX_SINCE_SECS: u64 = 30 * 24 * 3600;
 /// Most refs reported back by one operation.
 pub const MAX_REPORTED_REFS: usize = 64;
+/// Most paths an undo reports as not restored.
+pub const MAX_REPORTED_PATHS: usize = 256;
 
 /// The surface a full connection says it is. A label for the oplog, never a
 /// grant: an MCP connection is always `mcp` and cannot send it.
@@ -168,6 +170,123 @@ impl OperationRunResult {
                 .map(|r| r.capped(MAX_MCP_UNTRUSTED_BYTES))
                 .collect(),
             outcome: self.outcome,
+        }
+    }
+}
+
+/// Why a Time Machine command (undo, and later redo and restore) was
+/// rejected: the repo did not change (BR-TMC-VAL-001). Stable codes, the
+/// client renders them (NFR-TMC-14).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum TmRejectReason {
+    /// The worktree has no operation left to undo.
+    NothingToUndo,
+    /// The last operation is a raw Git event the Time Machine did not
+    /// capture (US-TMC-004).
+    RawGitNotCovered,
+    /// The point to return to is gone, purged or invalid.
+    TargetUnavailable,
+    /// The work to undo belongs to another actor (ADR-TMC-005 § 2).
+    OtherActor,
+    /// Undoing an agent's work needs an interactive confirmation
+    /// (US-TMC-013).
+    ConfirmationRequired,
+    GitOperationInProgress,
+    /// A Git lock is present; it stays.
+    GitBusy,
+    /// Another write holds the repo.
+    RepoBusy,
+    RepoUntrusted,
+    WorktreeUnavailable,
+    InvalidSnapshot,
+    HostileTree,
+    /// A ref moved since the point before the undo was taken.
+    RefMoved,
+    /// A branch the undo would move is checked out in a worktree outside
+    /// its scope.
+    RefInUse,
+    Unsupported,
+    /// The daemon found no usable Git.
+    GitUnavailable,
+}
+
+/// `data` of an `OPERATION_REJECTED` error of a Time Machine command.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TmRejectedData {
+    pub reason: TmRejectReason,
+    /// The rejected request as recorded in the oplog, when it was.
+    #[serde(default)]
+    pub operation_id: Option<String>,
+}
+
+/// Why a path does not hold the state the undo returned to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum NotRestoredReason {
+    /// Someone wrote there meanwhile: their content was kept.
+    Overlap,
+    /// The file system has no atomic exchange.
+    NotGuaranteed,
+    /// A folder on the way is a link, a file or on another device.
+    Blocked,
+}
+
+/// A path the undo left as it was.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NotRestored {
+    /// Relative to its worktree (text from the repo).
+    pub path: Untrusted,
+    pub reason: NotRestoredReason,
+    /// Where someone else's content was kept, if not in place.
+    #[serde(default)]
+    pub kept_at: Option<Untrusted>,
+}
+
+/// `timemachine.undo` result for a full connection (US-TMC-002).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct UndoResult {
+    /// The undo itself, as recorded.
+    pub operation_id: String,
+    /// The point taken right before the undo: what a redo returns to.
+    pub prior_snapshot_id: String,
+    pub undone_operation_id: String,
+    /// Kind of the undone operation (e.g. `commit`), if it has one.
+    #[serde(default)]
+    pub undone_subtype: Option<Untrusted>,
+    /// The state the worktree returned to.
+    pub target_snapshot_id: String,
+    pub requester: RequesterView,
+    pub written: u64,
+    pub removed: u64,
+    pub not_restored: Vec<NotRestored>,
+    /// Applier warnings as stable codes (e.g. `stash-kept`).
+    pub warnings: Vec<String>,
+}
+
+/// `timemachine.undo` result for an MCP connection: no paths (SEC-12).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct McpUndoResult {
+    pub operation_id: String,
+    pub prior_snapshot_id: String,
+    pub undone_operation_id: String,
+    pub actor: Actor,
+    /// How many paths were left as they were.
+    pub not_restored: u64,
+}
+
+impl UndoResult {
+    pub fn for_mcp(&self) -> McpUndoResult {
+        McpUndoResult {
+            operation_id: self.operation_id.clone(),
+            prior_snapshot_id: self.prior_snapshot_id.clone(),
+            undone_operation_id: self.undone_operation_id.clone(),
+            actor: cap_actor(&self.requester.actor),
+            not_restored: self.not_restored.len() as u64,
         }
     }
 }
