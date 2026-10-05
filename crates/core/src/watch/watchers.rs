@@ -12,6 +12,7 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 
@@ -24,20 +25,35 @@ pub(crate) struct Watchers {
     per_root: std::collections::HashMap<PathBuf, RecommendedWatcher>,
     #[cfg(not(target_os = "macos"))]
     shared: Option<RecommendedWatcher>,
+    #[cfg(not(target_os = "macos"))]
+    watched: std::collections::HashSet<PathBuf>,
+    /// Roots watched now, read by `engine.resources` (US-GRP-017).
+    roots: Arc<AtomicU64>,
 }
 
 impl Watchers {
-    pub(crate) fn new(handler: Handler) -> Self {
+    pub(crate) fn new(handler: Handler, roots: Arc<AtomicU64>) -> Self {
         Self {
             #[cfg(not(target_os = "macos"))]
             shared: {
                 let h = Arc::clone(&handler);
                 notify::recommended_watcher(move |r| h(r)).ok()
             },
+            #[cfg(not(target_os = "macos"))]
+            watched: std::collections::HashSet::new(),
             handler,
             #[cfg(target_os = "macos")]
             per_root: std::collections::HashMap::new(),
+            roots,
         }
+    }
+
+    fn publish(&self) {
+        #[cfg(target_os = "macos")]
+        let n = self.per_root.len();
+        #[cfg(not(target_os = "macos"))]
+        let n = self.watched.len();
+        self.roots.store(n as u64, Ordering::Relaxed);
     }
 
     /// Watches every root recursively. `false` if any could not be watched.
@@ -60,6 +76,7 @@ impl Watchers {
                 Err(_) => ok = false,
             }
         }
+        self.publish();
         ok
     }
 
@@ -69,6 +86,7 @@ impl Watchers {
             // Dropping the watcher stops its stream only.
             self.per_root.remove(root);
         }
+        self.publish();
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -79,10 +97,20 @@ impl Watchers {
         };
         let mut paths = watcher.paths_mut();
         let mut ok = true;
+        let mut added = Vec::new();
         for root in roots {
-            ok &= paths.add(root, RecursiveMode::Recursive).is_ok();
+            if paths.add(root, RecursiveMode::Recursive).is_ok() {
+                added.push(root.clone());
+            } else {
+                ok = false;
+            }
         }
-        ok && paths.commit().is_ok()
+        let committed = paths.commit().is_ok();
+        if committed {
+            self.watched.extend(added);
+            self.publish();
+        }
+        ok && committed
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -95,5 +123,9 @@ impl Watchers {
             let _ = paths.remove(root);
         }
         let _ = paths.commit();
+        for root in roots {
+            self.watched.remove(root);
+        }
+        self.publish();
     }
 }

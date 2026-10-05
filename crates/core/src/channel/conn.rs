@@ -595,6 +595,12 @@ impl Connection<'_> {
                 let result = request.params::<NoParams>().map(|_| self.snapshot());
                 self.reply(&request.id, result);
             }
+            methods::ENGINE_RESOURCES => {
+                let result = request
+                    .params::<NoParams>()
+                    .map(|_| self.ctx.resources.read());
+                self.reply(&request.id, result);
+            }
             methods::EVENTS_SUBSCRIBE => {
                 let result = request.params().and_then(|p| self.subscribe(p));
                 self.reply(&request.id, result);
