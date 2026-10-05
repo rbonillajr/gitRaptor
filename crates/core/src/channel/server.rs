@@ -92,6 +92,7 @@ impl ServerCtx {
             matcher: &self.config.agents,
             daemon: self.daemon_id,
             marks: Some(&self.marks),
+            terminal_proof: authz::TERMINAL_PROOF,
         }
     }
 }
