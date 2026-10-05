@@ -80,6 +80,8 @@ pub(crate) struct ServerCtx {
     /// Repos, executor and allowlist for protected operations; `None` until
     /// the executor of F-001-02 is wired.
     pub protected: Option<ProtectedWiring>,
+    /// The Time Machine's own commands; `None` without a repo layer.
+    pub time_machine: Option<super::TimeMachineWiring>,
     /// Ahead/behind counts the snapshots already walked (US-GRP-012).
     pub divergence: crate::observe::DivergenceCache,
 }
@@ -140,6 +142,7 @@ pub(crate) struct ServeArgs {
     pub instance_id: String,
     pub daemon: DaemonView,
     pub protected: Option<ProtectedWiring>,
+    pub time_machine: Option<super::TimeMachineWiring>,
 }
 
 impl Server {
@@ -175,6 +178,7 @@ impl Server {
             runtime: bound.runtime,
             marks: Arc::new(ExecutorMarks::default()),
             protected: args.protected,
+            time_machine: args.time_machine,
             divergence: crate::observe::DivergenceCache::default(),
         });
         let listener = bound.listener;
