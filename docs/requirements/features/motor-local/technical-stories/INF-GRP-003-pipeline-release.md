@@ -70,7 +70,16 @@ tags: [motor-local, ci, release, firma, notarizacion, checksums, sbom, attestati
 
 ### Evidencia
 
-Se completa en el PR de INF-GRP-003 con el enlace al run.
+Ejecución del 2026-10-05 con el tag de prueba `v0.0.0-test.1`, sobre un commit fuera de toda rama que solo sube la versión a `0.0.0-test.1`: [run 37339800959](https://github.com/rbonillajr/gitRaptor/actions/runs/37339800959). Todos los jobs en verde:
+
+- Los 6 builds; la prueba de humo `raptor --version` en cada uno (x86_64 de macOS con Rosetta) y `file` confirma el binario estático en Linux.
+- El SBOM, `SHA256SUMS` comprobado y los canales generados (artefacto `channels`).
+- `install.sh` en Ubuntu y macOS e `install.ps1` en Windows: instalan y rechazan un `SHA256SUMS` manipulado.
+- Un borrador de prerelease con 19 assets: los 6 archivos, los 2 SBOM, sus `.sha256`, `SHA256SUMS` y los dos scripts. El borrador se borró después; los artefactos del run quedan como evidencia.
+
+El primer intento (`v0.0.0`, [run 37339197101](https://github.com/rbonillajr/gitRaptor/actions/runs/37339197101)) falló en `x86_64-apple-darwin`: el build cruzado no lleva la firma ad hoc. Se corrigió firmando ad hoc cuando faltan los secretos.
+
+No se ejecutó la firma real ni la notarización (requieren secreto), ni las attestations (`RELEASE_ATTEST` desactivada). Windows y Linux se compilaron y se probaron solo con `--version` y los scripts. Pendiente: etapa de validación multiplataforma.
 
 ### Pendientes
 
