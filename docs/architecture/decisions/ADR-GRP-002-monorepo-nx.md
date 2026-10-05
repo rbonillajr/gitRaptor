@@ -5,7 +5,7 @@ type: adr
 status: accepted
 date: 2026-10-01
 created: 2026-10-01
-updated: 2026-10-04
+updated: 2026-10-05
 deciders: [Rene Bonilla]
 related: [BRD-GRP-001, ADR-GRP-001, ADR-GRP-003, ADR-GRP-007, ADR-GRP-009, INF-GRP-001]
 tags: [nx, monorepo, package-based, pnpm, cargo, rust, monodon, tauri, ci]
@@ -107,3 +107,12 @@ Decisión del orquestador (2026-10-04), validada por el Arquitecto:
 - **No depende de ningún crate de GitRaptor**, para que los tests de un crate no enlacen dos copias de ese crate.
 - En Nx tiene la etiqueta `type:test-support`.
 - El gate de CI del arnés ejecuta siempre todo el workspace (`cargo test --workspace -- repo_intact`), nunca `nx affected`.
+
+## Enmienda (2026-10-05, crates/winsys)
+
+Decisión del orquestador (2026-10-05), validada por el Arquitecto y por security-expert, y acordada con la rama `win-acl`:
+- Se añade **`crates/winsys`** (`gitraptor-winsys`, `publish = false`, etiqueta Nx `type:sys`): las llamadas a Win32 que necesita el resto del workspace, detrás de una API segura. Por ahora tiene los módulos `process` y `system` (resolución del solicitante, [ADR-GRP-005, Enmienda 2026-10-05](ADR-GRP-005-forma-motor-proceso-segundo-plano.md#enmienda-2026-10-05-windows-procesos)) y `acl` (permisos del perfil, rama `win-acl`).
+- **Es la única excepción a `unsafe_code = "forbid"`**. No hereda `[lints] workspace = true`: declara `unsafe_code = "deny"`, y el `unsafe` solo se permite en sus módulos privados `ffi*` (`#[allow(unsafe_code)]` sobre el módulo). También tiene en deny `unsafe_op_in_unsafe_fn`, `clippy::undocumented_unsafe_blocks` y `clippy::multiple_unsafe_ops_per_block`. Cada bloque hace una llamada y explica por qué es seguro.
+- **Función de fitness**: `crates/winsys/tests/unsafe_boundary.rs` comprueba sobre `cargo metadata` que todos los demás paquetes declaran `[lints] workspace = true`, que el workspace mantiene `forbid` y que fuera de los módulos `ffi*` no hay `unsafe`.
+- `windows-sys` va en `[workspace.dependencies]` (`0.61`, la versión que ya trae gix) y solo lo usa este crate. Se descartan `sysinfo` (hora de inicio en segundos) y `wmi` (COM, lento).
+- Todo cambio en un módulo `ffi*` pasa por una revisión de seguridad.

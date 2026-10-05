@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-05
 date: 2026-10-03
 domain: GRP
 feature: time-machine
@@ -136,3 +136,9 @@ Aplicada desde DEP-CKP-7 de [CTX-CKP-001](../../requirements/features/cockpit/co
 - **Canal**: se registra el canal real del proceso (CLI o hook), con una marca de "descendiente del ejecutor" y el id de la operación. El rechazo en el canal ya está en main: `daemon-descendant` (Dev Spec de TS-GRP-004, D21), con las marcas del ejecutor por grupo de procesos de la Dev Spec de TS-TMC-004 § 7, que dan la vía `executor` al resolver el solicitante. Esta regla rige la atribución en el registro, en Guardrails y en la auditoría, nunca un permiso.
 - **Residuo**: un descendiente que se desacopla de su árbol y de su grupo de procesos (doble fork, `setsid`) deja de pasar por el hijo. Es el riesgo residual ya aceptado en el § 3, compensado por el snapshot previo.
 - **Validación añadida**: un hook bajo el plan de claude-1 que se conecta al canal se resuelve como claude-1; si pide un comando reservado, una confirmación, la excepción o Cancelar, se rechaza, también con una pty abierta con `script` (ADR-CKP-002, Validación 17).
+
+## Nota (2026-10-05, Windows)
+
+- TQ-14 no cambia. En Windows también se rechazan los **comandos reservados**, con `Unsupported`, por la misma falta de prueba de terminal ([ADR-GRP-005, Enmienda 2026-10-05](ADR-GRP-005-forma-motor-proceso-segundo-plano.md#enmienda-2026-10-05-windows-procesos)).
+- En Windows, un solicitante cuya ascendencia no se puede verificar (padre terminado o reutilizado, intérprete, descendiente del daemon sin marca, multiplexor con un agente vivo) se rechaza como no verificado en vez de quedar "sin atribuir". Si quedara "sin atribuir", la fila "solo trabajo sin atribuir" del § 2 le dejaría deshacer trabajo del desarrollador sin confirmación (C-01 de la revisión de seguridad del 2026-10-05).
+- **Riesgo residual de Windows (M-01)**: un proceso del mismo usuario puede elegir padre (`PROC_THREAD_ATTRIBUTE_PARENT_PROCESS`) y colgarse de otro `claude.exe` o de un hijo marcado. Así **suplanta a otro agente o al solicitante de una operación**, no solo evade la atribución. Queda fuera del modelo del agente confundido y lo compensa el snapshot previo, como el resto del riesgo residual del § 3.
