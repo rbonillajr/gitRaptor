@@ -282,7 +282,7 @@ registro de undo = inmutable; atribución mostrada = vigente
 
 ### BR-TMC-TIME-001: Retención de snapshots
 
-**Descripción** (D-TMC-15): los snapshots se conservan un tiempo configurable; por defecto 30 días. El valor lo admiten el perfil y la configuración local personal, no la del equipo (Q24). Nunca se purga el snapshot previo a la última operación destructiva. Se avisa antes de purgar: la purga solo ocurre si el aviso se mostró al menos una vez en la CLI o la TUI **y** pasaron 24 horas desde que se mostró por primera vez; si nadie lo vio, no se purga (TQ-11). Alcanzar una cuota de disco no adelanta la purga (TQ-5). Borrar contenido concreto de los snapshots (`raptor tm forget`) queda fuera del MVP (D-TMC-24, TQ-17).
+**Descripción** (D-TMC-15): los snapshots se conservan un tiempo configurable; por defecto 30 días. El valor lo admiten el perfil y la configuración local personal, no la del equipo (Q24). Nunca se purga el snapshot previo a la última operación destructiva. Se avisa antes de purgar: la purga solo ocurre si el aviso se mostró al menos una vez en la CLI o la TUI **y** pasaron 24 horas desde que se mostró por primera vez; si nadie lo vio, no se purga (TQ-11). ~~Alcanzar una cuota de disco no adelanta la purga (TQ-5).~~ **Enmienda (2026-10-05, decisión de Rene Bonilla)**: hay un tope de disco total de la Time Machine, configurable solo en el perfil (`timeMachine.maxDiskSizeGiB`, 10 GiB por defecto). Al pasar el 80 % se avisa, y tras el mismo aviso visto y las 24 horas se purgan los puntos más antiguos no protegidos, de 7 días o más, hasta bajar al 70 %. Al 100 % antes de la gracia se detiene la captura por observación, sin borrar nada (US-TMC-022, ADR-TMC-007). Borrar contenido concreto de los snapshots (`raptor tm forget`) queda fuera del MVP (D-TMC-24, TQ-17).
 
 **Criticidad**: Media
 
@@ -291,7 +291,9 @@ registro de undo = inmutable; atribución mostrada = vigente
 retención = local personal ?? perfil ?? 30 días        (equipo: no admitido)
 purgable = snapshot más antiguo que la retención AND NOT previo a la última operación destructiva
 purga solo si aviso mostrado en CLI/TUI AND ≥ 24 h desde la primera vez que se mostró   (TQ-11)
-cuota de disco alcanzada → no purga antes de tiempo                   (TQ-5)
+tamaño ≥ 80 % del tope → aviso; candidatos = más antiguos AND NOT protegidos AND edad ≥ 7 días, hasta el 70 %   (2026-10-05)
+purga por tamaño solo si aviso mostrado en CLI/TUI AND ≥ 24 h desde la primera vez que se mostró
+tamaño ≥ 100 % del tope antes de la gracia → se detiene la captura por observación, no se purga
 ```
 
 **Ejemplo (TQ-11)**: un snapshot cumple 30 días el lunes, pero el desarrollador no abre la CLI ni la TUI hasta el miércoles → el miércoles ve el aviso y la purga ocurre a partir del jueves a la misma hora.

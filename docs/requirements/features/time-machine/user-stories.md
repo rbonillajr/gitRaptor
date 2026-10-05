@@ -1,10 +1,10 @@
 ---
 mode: bulk
 generated: 2026-10-03T00:00Z
-updated: 2026-10-04
+updated: 2026-10-05
 generator: product-owner
-total_artifacts: 21
-expanded: 21
+total_artifacts: 22
+expanded: 22
 approved: 0
 blocked:
   - US-TMC-011
@@ -69,11 +69,13 @@ deferred:
 | [US-TMC-019](./user-stories/US-TMC-019-robustez-interrupcion.md) | El repo sigue recuperable aunque GitRaptor muera a mitad de un snapshot o de un undo | Desarrollador quiere resistir pruebas de caos (NFR-12) | 001, 002, 009 | — | expanded |
 | [US-TMC-020](./user-stories/US-TMC-020-overhead-snapshot.md) | El desarrollador y sus agentes no notan el coste de los snapshots | Desarrollador quiere overhead < 200 ms por snapshot (NFR-04) | 001, 004 | Spike (a): repo mediano (D-TMC-21) | expanded |
 | [US-TMC-021](./user-stories/US-TMC-021-politica-guardrails-undo.md) | Las políticas del repo pueden restringir quién deshace, nunca ampliarlo | Desarrollador quiere que Guardrails endurezca los permisos del undo sin poder relajarlos | 013 | Fuera del MVP (Fase 2): Guardrails sin política sobre el undo | expanded |
+| [US-TMC-022](./user-stories/US-TMC-022-tope-disco.md) | La Time Machine nunca pasa del tope de disco que fijé | Desarrollador quiere un tope de disco con aviso y purga de lo más antiguo no protegido (RES-09) | 016 | — | expanded |
 
 ### Orden de ejecución sugerido (capas del DAG, solo dependencias internas)
 
 1. **Capa 0**: 001
 2. **Capa 1**: 002, 004, 016, 018
+   - Tras 016: 022 (tope de disco, 2026-10-05)
 3. **Capa 2**: 006, 013, 014, 005, 017, 020 (bloqueada)
 4. **Capa 3**: 007, 008, 009, 012, 021 (fuera del MVP)
 5. **Capa 4**: 003, 010, 015, 019, 011 (bloqueada por P17)
@@ -94,7 +96,7 @@ deferred:
 | BR-TMC-WF-003 | 009 |
 | BR-TMC-VAL-001 | 002, 003, 010, 011 |
 | BR-TMC-AUTH-001 | 003, 009, 010, 011, 013, 021 |
-| BR-TMC-TIME-001 | 016, 017 |
+| BR-TMC-TIME-001 | 016, 017, 022 |
 | BR-TMC-EDGE-001 | 014 |
 | BR-TMC-EDGE-002 | 007, 009, 011 |
 | BR-TMC-EDGE-003 | 019 |
@@ -116,3 +118,4 @@ deferred:
 | 1.6 | 2026-10-04 | Agente de documentación para Rene Bonilla | Decisión de Rene Bonilla, 2026-10-04: US-TMC-005 se desbloquea. Los hooks de Guardrails existen (ADR-GRD-001 aceptado; los instala US-GRD-001), y el bloqueo cruzado con US-GRD-017 pasa a dependencias: US-TMC-005 depende de US-TMC-004 y US-GRD-001, y US-GRD-017 de US-TMC-005. Bloqueadas: 3 (011, 020, 021) |
 | 1.7 | 2026-10-04 | Agente de documentación para Rene Bonilla | US-TMC-021 sigue bloqueada con el motivo actualizado (Rene Bonilla, 2026-10-04): el formato de `policies` ya existe (ADR-GRP-007), pero Guardrails no define ninguna política sobre el undo. Pregunta abierta para el PO de Guardrails: ¿el catálogo incluye restringir quién deshace (D-TMC-17)? |
 | 1.8 | 2026-10-04 | Agente de documentación para Rene Bonilla | Decisión de Rene Bonilla, 2026-10-04: US-TMC-021 sale del MVP (Fase 2). La regla base de US-TMC-013 ya impide que un agente deshaga trabajo ajeno, y Guardrails no define política sobre el undo. Bloqueadas: 2 (011, 020); fuera del MVP: 1 (021) |
+| 1.9 | 2026-10-05 | Orquestador (decisión validada por PO y Arquitecto) | Decisión de Rene Bonilla (2026-10-05): tope de disco de la Time Machine. Nueva US-TMC-022 (Should, fuera de M1; sube a M1 si US-GRP-017 mide más de 2 GiB). Amplía BR-TMC-TIME-001 y D-TMC-15 con la purga por tamaño (ADR-TMC-007, Enmienda 2026-10-05); el PO actualiza su texto en business-rules.md |
