@@ -28,7 +28,7 @@ ado:
   id: null
   url: null
 covers: [BR-MCP-CONS-006]
-blocked_by: [ADR-MCP-001]
+blocked_by: []
 tags: [mcp, kpi, medicion, ola-3]
 ---
 

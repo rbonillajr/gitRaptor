@@ -26,7 +26,7 @@ ado:
   id: null
   url: null
 covers: [BR-MCP-WF-004]
-blocked_by: [ADR-MCP-001, ADR-CKP-002]
+blocked_by: []
 tags: [mcp, pedir-confirmacion, guardrails, ola-3]
 ---
 

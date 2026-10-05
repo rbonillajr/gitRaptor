@@ -1,16 +1,14 @@
 ---
 mode: bulk
 generated: 2026-10-04T00:00Z
-updated: 2026-10-04
+updated: 2026-10-05
 generator: product-owner
 total_artifacts: 19
 expanded: 19
 approved: 0
 blocked:
   - US-MCP-014
-architecture_gate:
-  - ADR-MCP-001
-  - ADR-CKP-002
+architecture_gate: []
 ---
 
 # User Stories — INDEX: Servidor MCP
@@ -24,7 +22,7 @@ architecture_gate:
 **Feature**: Servidor MCP (F-001-05)
 **Epic**: E-001 — MVP Fase 1: Cockpit + Time Machine + Guardrails (CLI/TUI + MCP)
 **Prioridad**: Alta (BR-14, BR-15 y BR-16 Must; NFR-02)
-**Estado**: En Análisis. 18 historias esperan ADR-MCP-001 (bloqueo de arquitectura común); US-MCP-002 no, porque es CLI y perfil (D-1). Además, las escrituras esperan ADR-CKP-002 aceptado y US-MCP-014 tiene un bloqueo de producto (cola de confirmación, US-GRD-015).
+**Estado**: En Análisis. **Sin bloqueos de arquitectura desde el 2026-10-05** (D-23): ADR-MCP-001, ADR-CKP-001 y ADR-CKP-002 están aceptados y las enmiendas DEP-MCP están aplicadas. Las escrituras siguen dependiendo de sus habilitadores (TS-CKP-002, TS-CKP-003). Solo US-MCP-014 sigue bloqueada, por producto (cola de confirmación, US-GRD-015).
 
 **Enlace a contexto completo**: [`context.md`](./context.md) (CTX-MCP-001, aprobado por Rene Bonilla)
 **Reglas de negocio**: [`business-rules.md`](./business-rules.md) (BR-MCP-001, 48 reglas) · **Diseño**: no aplica (sin superficie visual; los mensajes en/es siguen la guía de contenido del [design system](../../../design-system/README.md))
@@ -47,8 +45,8 @@ architecture_gate:
 > - Windows y Linux: pendientes de la etapa de validación multiplataforma (DEP-MCP-9, S-MCP-4). El MVP se verifica en macOS.
 > - Cero pérdida de datos (NFR-01): toda escritura es operación protegida; se exige en todos los escenarios de escritura.
 > - Seguridad por release (DEP-MCP-8): revisión OWASP / MCP Top 10 antes de cada release y el **corpus de seguridad** (traversal, refs maliciosas, UNC, inyección de argumentos, confused deputy), que verifica las reglas VAL y BR-MCP-AUTH-005 a través de US-MCP-005, 007, 010, 017 y 019.
-> - **Pendiente para la Fase 2 del Arquitecto (hueco de seguridad)**: el KPI "100 % del corpus de seguridad rechazado" (Q-MCP-18) no tiene historia que lo entregue. Se propone el enabler **INF-MCP-001** (propuesto, no creado): el corpus como suite de CI que bloquea el merge, con los casos de US-MCP-005, 007, 010, 017 y 019. Y la revisión MCP Top 10 como puerta de release en `non-functional.md` (SEC-MCP-n, DEP-MCP-8, security-expert), que incluya el *tool shadowing* por otros servidores MCP de la misma sesión y el consumo sin límite. El PO no crea ese enabler: lo decide el Arquitecto.
-> - Cifras de topes, tiempos, rate limit y cuota: supuesto S-MCP-1, se fijan en la Dev Spec. ⚠️ **ASSUMPTION**: tiempo máximo de una escritura en la capa `mcp` de 300 s (supuesto de ADR-CKP-002).
+> - **Resuelto en la Fase 2 (2026-10-05)**: el Arquitecto creó INF-MCP-001 ([technical-stories.md](./technical-stories.md)) y la puerta MCP Top 10 (SEC-MCP-n en `non-functional.md`). Texto original: el KPI "100 % del corpus de seguridad rechazado" (Q-MCP-18) no tiene historia que lo entregue. Se propone el enabler **INF-MCP-001** (propuesto, no creado): el corpus como suite de CI que bloquea el merge, con los casos de US-MCP-005, 007, 010, 017 y 019. Y la revisión MCP Top 10 como puerta de release en `non-functional.md` (SEC-MCP-n, DEP-MCP-8, security-expert), que incluya el *tool shadowing* por otros servidores MCP de la misma sesión y el consumo sin límite. El PO no crea ese enabler: lo decide el Arquitecto.
+> - Cifras de topes, tiempos, rate limit y cuota: fijadas en ADR-MCP-001 § 6 (D-22); la Dev Spec solo puede endurecerlas. El tiempo máximo de una escritura en la capa `mcp` sigue siendo 300 s (ADR-CKP-002 § 6).
 > - Cómo se distingue al humano en un comando reservado: transversal (lo define el Arquitecto; ADR-GRD-007).
 
 ### Decisiones del orquestador (2026-10-04), validadas por PO
@@ -75,11 +73,26 @@ Ajustes del Juez AADD (reservas) y del Arquitecto.
 | D-9 | Las escrituras dependen de TS-CKP-002 (catálogo y ejecutor) y TS-CKP-003 (decisión única heredada por los hooks): 007, 008, 009, 018 y 019. US-MCP-016 depende de TS-CKP-001 (predictor). Hay relación con historias del Cockpit: 018 con US-CKP-015, 019 con US-CKP-018 y 014 con US-CKP-023. Todos son propuestas en otras ramas y sustituyen a los "Cockpit F-001-02: … (historias en curso)". | Dar a la flota IDs concretos en vez de capacidades genéricas. |
 | D-10 | Cada operación del catálogo tiene una historia dueña: 009 es dueña de `commit`, 008 de `snapshot` y 018 del modo `atomic` de `rebase-onto-base`. 019 comparte `create-worktree` con US-CKP-018: la implementa la primera que entre. | Evitar dos implementaciones de la misma operación. |
 | D-11 | US-MCP-011 va antes que US-MCP-010: las dos tocan los parámetros de `safe_commit`. | Un solo contrato de parámetros, fijado por la primera. |
-| D-12 | US-MCP-017 deja de estar bloqueada por DEP-MCP-6. TS-TMC-004 ya expone la consulta del timeline para el MCP en el contrato del canal, y los eventos del motor los fija ADR-GRP-013, ya aceptado. La parte de timeline pasa a dependencia de historia (TS-TMC-004). | Comprobado en TS-TMC-004 ("Exponer los comandos de snapshot, undo, redo, restauración y consulta del timeline para CLI, TUI y MCP"). |
+| D-12 | US-MCP-017 deja de estar bloqueada por DEP-MCP-6. TS-TMC-004 ya expone la consulta del timeline para el MCP en el contrato del canal, y los eventos del motor los fija ADR-GRP-013, ya aceptado. La parte de timeline pasa a dependencia de historia (TS-TMC-004). | Comprobado en TS-TMC-004 ("Exponer los comandos de snapshot, undo, redo, restauración y consulta del timeline para CLI, TUI y MCP"). **Corrección (2026-10-05)**: en main `timemachine.timeline` no tiene marca MCP (`crates/api/src/methods.rs`); la vista MCP del timeline la fija ADR-GRP-013, Enmienda (2026-10-05, MCP), y la añade US-MCP-017. |
 | D-13 | El lado del canal del confused deputy no tiene dueño. ADR-CKP-002 se lo asigna a TS-GRP-004, que ya está mergeada y lo deja fuera de su alcance. El lado del canal es marcar la conexión de un proceso lanzado por el ejecutor y rechazarle lo reservado en describir, preparar, ejecutar y cancelar. Es un bloqueo de US-MCP-007; la propuesta del Arquitecto es TS-CKP-002. | Hueco de seguridad crítico (R-MCP-1) que no puede quedar implícito. |
 | D-14 | US-MCP-008 se bloquea también por la interfaz de captura manual de la Time Machine (etiqueta, cuota y nivel). Está pendiente en ADR-CKP-002 y su dueño es la Time Machine. | Sin ella no hay snapshot manual con cuota propia. |
 | D-15 | Escenarios nuevos y reescritos. 018: tiempo máximo vencido (abort, `time-limit`) y HEAD separado. 009: hook que supera el tiempo máximo. 007: rechazo en el acto de una operación del catálogo, de Cancelar y de confirmaciones pedidas por un hook del ejecutor; atribución observable en el registro de auditoría; se quita el escenario del catálogo, que duplicaba a US-MCP-005. 019: padre con enlace simbólico, ubicación según la plantilla y ramas maliciosas (`refs/heads/x`, hex de 40 caracteres, `@{`, bidi). 005: el catálogo se describe solo por lo observable, sin nombrar el transporte. | Reservas del Juez (J3) y del Arquitecto (A8). Ninguna ficha pasa de 6 escenarios. |
 | D-16 | Pendiente para ADR-MCP-001: ADR-CKP-002 § 12 exige que el agente enumere los avisos del plan al ejecutar. Las fichas suponen herramientas de una sola llamada, y el escenario de rama ya empujada de US-MCP-018 (BR-MCP-EDGE-007) depende de lo que se decida. | Que el contrato del servidor resuelva el flujo de avisos antes de la Dev Spec de 018. |
+
+### Decisiones del orquestador (2026-10-05), validadas por Arquitecto/PO (v1.2, ADR-MCP-001)
+
+| # | Decisión | Motivo |
+|---|----------|--------|
+| D-17 | `snapshot` no es una operación gobernada: no se añade a BR-VAL-002 (BR-MCP-001 v0.3). | No escribe en el repo ni lanza `git`; no tendría capa hooks. La protegen allowlist, solicitante, cuota y rate limit. |
+| D-18 | `undo` no pasa por Guardrails en el MVP; US-TMC-021 queda como relación de Fase 2 en US-MCP-012. | La política del undo es Fase 2; rige la regla base de ADR-TMC-005. |
+| D-19 | Avisos del plan: parámetro `acknowledge` que los nombra exactamente, en una segunda llamada; sin él, rechazo sin efectos (ADR-MCP-001 § 4.3). Cierra D-16; US-MCP-018 reescribe su escenario de rama ya empujada. | ADR-CKP-002 § 2 exige enumerar los avisos; el agente los ve antes de aceptarlos. |
+| D-20 | Se levanta el hueco de D-13: el lado del canal del confused deputy ya está en main (`daemon-descendant`); el rechazo en preparar, ejecutar y cancelar llega con TS-CKP-002, del que US-MCP-007 ya depende. | Comprobado en `crates/core/src/channel/conn.rs`. |
+| D-21 | Captura manual de la Time Machine: nivel `manual`, etiqueta, 5/min y ≤ 20 por solicitante y worktree en 24 h, fuera de la pila de `undo`, sin borrar nunca para hacer sitio ni desplazar previos (ADR-TMC-004, Enmienda (2026-10-05, MCP)). Cierra el bloqueo de arquitectura de D-14. | Destino de DEP-MCP-2. |
+| D-22 | Cifras de S-MCP-1 fijadas en ADR-MCP-001 § 6; la Dev Spec solo puede endurecerlas. | Respuestas por debajo del umbral de 50.000 caracteres de Claude Code. |
+| D-23 | Se levantan todos los bloqueos de arquitectura (`blocked_by` de las fichas): ADR-MCP-001, ADR-CKP-001 y ADR-CKP-002 aceptados; DEP-MCP-3, 4, 6 y 8 aplicadas. Solo queda el bloqueo de producto de US-MCP-014. | Criterio de bloqueo de este índice: se levanta al aceptarse el artefacto. |
+| D-25 | Perfil `mcp` por solicitante (S-01): un agente que usa la CLI `raptor` o habla directo con el socket recibe la vista MCP y la allowlist. La atribución sale del proceso, nunca del cwd: el desarrollador en el worktree de un agente conserva su vista. US-CKP-011 ("`raptor status` igual que la TUI") vale para el desarrollador; anotado para el PO del Cockpit (no se edita aquí). | Hallazgo High de seguridad; refuerza Q-MCP-3. |
+| D-26 | Por MCP, un `undo` que movería la rama base confirmada o una ref protegida se rechaza antes de cualquier efecto, hasta US-TMC-021 (S-04; BR-MCP-ELIG-005). | Endurecimiento coherente con BR-TMC-AUTH-001. |
+| D-24 | S-MCP-3 verificado en macOS con una prueba local (Claude Code 2.1.284): cwd = directorio de arranque de la sesión, padre `claude`, entorno heredado (ADR-MCP-001, "Evidencia de S-MCP-3"). | La documentación oficial no lo documenta. |
 
 ---
 
@@ -164,7 +177,7 @@ MCP-002, MCP-003, MCP-009 ─► US-GRD-016 (Guardrails) queda desbloqueada
 - **Ola 1** (entrega 1 de Q-MCP-19: canal, allowlist, `status`, install y registro): US-MCP-001 y US-MCP-002 en paralelo; luego US-MCP-003 (esqueleto andante); luego US-MCP-004, US-MCP-005 y US-MCP-006 en paralelo.
 - **Ola 2** (entrega 2: confused deputy): US-MCP-007. Requisito previo de toda escritura.
 - **Ola 3** (entrega 3: snapshot/undo y `safe_commit`): US-MCP-009 primero. Cuando su Dev Spec fije el flujo de escritura, US-MCP-008, US-MCP-011, US-MCP-012 y US-MCP-013 en paralelo. Después US-MCP-010 (tras 011) y US-MCP-015. US-MCP-014 queda bloqueada (US-GRD-015).
-- **Ola 4** (entrega 4: lecturas que dependen de otras features): US-MCP-016 y US-MCP-017. Solo dependen de la ola 1. US-MCP-017 se puede adelantar en cuanto exista ADR-MCP-001; US-MCP-016, cuando se levanten ADR-CKP-001 y DEP-MCP-6 (D-7, D-12).
+- **Ola 4** (entrega 4: lecturas que dependen de otras features): US-MCP-016 y US-MCP-017. Solo dependen de la ola 1. US-MCP-017 se puede adelantar en cuanto exista ADR-MCP-001 con la enmienda de ADR-GRP-013 (vista MCP del timeline, aplicada el 2026-10-05); US-MCP-016, cuando se levanten ADR-CKP-001 y DEP-MCP-6 (D-7, D-12).
 - **Ola 5** (entrega 5: rebase y worktree): US-MCP-018 y US-MCP-019 en paralelo.
 
 > **Secuencias por contrato compartido**: 003 → 004/005 (contrato de respuesta de `status`), 005 → 016/017 (respuesta acotada y paginación), 009 → 008/011 (flujo de escritura), 011 → 010 (parámetros de `safe_commit`) y 011 → 018/019 (`expect_worktree` y precondiciones del ejecutor). En cada caso el contrato lo fija la Dev Spec de la historia que va primero.
@@ -229,3 +242,4 @@ Los IDs omiten el prefijo `BR-MCP-`. Fuente: el campo `covers` de cada ficha.
 |---------|-------|-------|---------|
 | 1.0 | 2026-10-04 | PO (AADD) para Rene Bonilla | Versión inicial en modo Bulk (modelo plano, modo lean): 19 historias en 5 olas según Q-MCP-19, mapa para la flota, DAG y cobertura de las 48 reglas. Bloqueo de arquitectura común: ADR-MCP-001. Bloqueo de producto: US-MCP-014 (US-GRD-015). Decisiones D-1 a D-7 del orquestador, validadas por PO |
 | 1.1 | 2026-10-04 | PO (AADD) para Rene Bonilla | Reservas del Juez AADD y ajustes del Arquitecto (D-8 a D-16; D-1, D-3, D-4, D-6 y D-7 actualizadas). Frontmatter de las 19: `ado` y `related.adrs`. Prioridad high en 013, 016, 017 y 019. US-MCP-002 sin ADR-MCP-001. ADR-CKP-002 en `blocked_by` de todas las escrituras del catálogo; DEP-MCP-2 y DEP-MCP-5 vía ADR-CKP-002. Habilitadores y relaciones del Cockpit con IDs propuestos (TS-CKP-001/002/003, US-CKP-015/018/023), sustituyendo los "historias en curso". Dueños de operación del catálogo. Hueco del lado del canal del confused deputy (007) y captura manual de la Time Machine (008) como bloqueos. 008 tras la Dev Spec de 009; 010 tras 011; 017 sin DEP-MCP-6. Escenarios nuevos o reescritos en 005, 007, 009, 018 y 019. Enmienda BR-MCP-001 v0.2 (create_worktree sin ruta; snapshot pendiente en ELIG-001). Pendientes para la Fase 2: INF-MCP-001 (propuesto, no creado), la puerta MCP Top 10 y los avisos del plan en ADR-MCP-001. Ruta crítica nueva. Siguen cubiertas las 48 reglas |
+| 1.2 | 2026-10-05 | Orquestador (Fase 2, ADR-MCP-001) para Rene Bonilla | D-17 a D-26 validadas por Arquitecto/PO (D-25 y D-26 por la revisión de seguridad). D-12 corregida (timeline sin marca MCP en main). Sin bloqueos de arquitectura; solo US-MCP-014 sigue bloqueada (producto). US-MCP-018: escenario de rama ya empujada con `acknowledge`. US-MCP-008: sin decisión de Guardrails y con la captura manual de ADR-TMC-004. US-MCP-012: US-TMC-021 como relación de Fase 2. US-MCP-007: lado del canal resuelto. INF-MCP-001 creado en technical-stories.md |

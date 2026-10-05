@@ -28,7 +28,7 @@ ado:
   id: null
   url: null
 covers: [BR-MCP-ELIG-005, BR-MCP-AUTH-003, BR-MCP-EDGE-003, BR-MCP-AUTH-002]
-blocked_by: [ADR-MCP-001]
+blocked_by: []
 tags: [mcp, undo, time-machine, solape, ola-3]
 ---
 
@@ -46,7 +46,8 @@ BR-MCP-ELIG-005 (parte: `undo` de la última operación propia; redo y restaurar
 
 ## Dependencias
 
-- **Historias**: US-MCP-007 (requisito previo de toda escritura), US-MCP-009 (operaciones propias que deshacer). De la Time Machine: US-TMC-002 (undo y pila por worktree), US-TMC-012 (solape), US-TMC-013 (permisos del solicitante; espera esta feature para el canal MCP), US-TMC-021 (políticas que restringen el undo).
+- **Historias**: US-MCP-007 (requisito previo de toda escritura), US-MCP-009 (operaciones propias que deshacer). De la Time Machine: US-TMC-002 (undo y pila por worktree), US-TMC-012 (solape), US-TMC-013 (permisos del solicitante; espera esta feature para el canal MCP).
+- **Relación (Fase 2)**: US-TMC-021 (políticas de Guardrails que restringen el undo). No es requisito previo: en el MVP el `undo` no pasa por Guardrails (D-18, BR-MCP-001 v0.3). Mientras tanto, por MCP se rechaza el undo que movería la rama base confirmada o una ref protegida (BR-MCP-ELIG-005, S-04; D-26).
 - **Externas**: ADR-MCP-001 (DEP-MCP-1, no existe): bloqueo de arquitectura. El `undo` no es una operación del catálogo de ADR-CKP-002: lo gobierna la Time Machine (ADR-TMC-005).
 
 ## Criterios de Aceptación

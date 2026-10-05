@@ -28,7 +28,7 @@ ado:
   id: null
   url: null
 covers: [BR-MCP-AUTH-005, BR-MCP-AUTH-004]
-blocked_by: [ADR-MCP-001, ADR-CKP-002, DEP-MCP-3, "dueño del lado del canal sin asignar (propuesta del Arquitecto: TS-CKP-002)"]
+blocked_by: []
 tags: [mcp, seguridad, confused-deputy, comando-reservado, ola-2]
 ---
 
@@ -49,7 +49,7 @@ BR-MCP-AUTH-005 (descendientes del ejecutor atribuidos al solicitante y sin coma
 - **Historias**: US-MCP-002 (comandos reservados de la allowlist), US-MCP-003 (conexión del MCP con el motor). La bloquean a ella todas las escrituras: US-MCP-008 a US-MCP-019.
 - **Habilitadores**: TS-CKP-002 (catálogo y ejecutor) y TS-CKP-003 (decisión única heredada por los hooks), ambos en propuesta, rama docs/arch-cockpit.
 - **Externas**: ADR-MCP-001 (DEP-MCP-1, no existe). DEP-MCP-3 (enmienda a ADR-GRP-005 § 6 y SEC-03, no creada). ADR-CKP-002 (catálogo de operaciones y ejecutor; **propuesto**, en revisión en la rama docs/arch-cockpit): fija que los descendientes del ejecutor se atribuyen al solicitante del plan. ADR-GRD-007 § 1 (el canal rechaza los reservados desde la conexión del MCP). Las tres primeras son bloqueos de arquitectura.
-- **Hueco sin dueño (bloqueo)**: el lado del canal (marcar la conexión de un proceso lanzado por el ejecutor y rechazarle lo reservado en todos los métodos de una operación: describir, preparar, ejecutar y cancelar). ADR-CKP-002 se lo asigna a TS-GRP-004, que ya está mergeada y lo deja fuera de su alcance. Propuesta del Arquitecto: que lo asuma TS-CKP-002.
+- **Lado del canal (resuelto, D-20)**: el rechazo `daemon-descendant` de lo reservado ya está en main (TS-GRP-004, D21) con las marcas del ejecutor (TS-TMC-004 § 7). El rechazo en preparar, ejecutar y cancelar llega con TS-CKP-002, del que esta historia ya depende. La allowlist reservada la fija ADR-GRP-005, Enmienda (2026-10-05, MCP).
 - **Transversal**: el corpus de seguridad incluye el caso confused deputy; cómo se distingue al humano en un comando reservado lo define el Arquitecto (ADR-GRD-007).
 
 ## Criterios de Aceptación

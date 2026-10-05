@@ -24,7 +24,7 @@ ado:
   id: null
   url: null
 covers: [BR-MCP-VAL-005, BR-MCP-EDGE-006, BR-MCP-AUTH-003, BR-MCP-EDGE-008, BR-MCP-EDGE-002]
-blocked_by: [ADR-MCP-001, ADR-CKP-002]
+blocked_by: []
 tags: [mcp, safe-commit, expect-worktree, subagente, precondiciones, ola-3]
 ---
 

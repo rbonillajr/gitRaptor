@@ -30,7 +30,7 @@ ado:
   id: null
   url: null
 covers: [BR-MCP-CALC-003, BR-MCP-EDGE-005, BR-MCP-EDGE-002]
-blocked_by: [ADR-MCP-001]
+blocked_by: []
 tags: [mcp, status, no-disponible, rama-base, ola-1]
 ---
 

@@ -24,7 +24,7 @@ ado:
   id: null
   url: null
 covers: [BR-MCP-WF-004]
-blocked_by: [ADR-MCP-001, US-GRD-015]
+blocked_by: [US-GRD-015]
 tags: [mcp, pedir-confirmacion, cola, bloqueada]
 ---
 

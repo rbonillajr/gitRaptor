@@ -32,7 +32,7 @@ ado:
   id: null
   url: null
 covers: [BR-MCP-CALC-001, BR-MCP-ELIG-006, BR-MCP-ELIG-001, BR-MCP-EDGE-004, BR-MCP-CONS-001, BR-MCP-TIME-003, BR-MCP-EDGE-001]
-blocked_by: [ADR-MCP-001]
+blocked_by: []
 tags: [mcp, status, ambito, esqueleto-andante, ola-1]
 ---
 

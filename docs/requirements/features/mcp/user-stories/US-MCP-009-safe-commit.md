@@ -33,7 +33,7 @@ ado:
   id: null
   url: null
 covers: [BR-MCP-WF-001, BR-MCP-ELIG-002, BR-MCP-VAL-003, BR-MCP-AUTH-001, BR-MCP-CONS-002, BR-MCP-TIME-002]
-blocked_by: [ADR-MCP-001, ADR-CKP-002]
+blocked_by: []
 tags: [mcp, safe-commit, escritura, guardrails, operacion-protegida, ola-3]
 ---
 

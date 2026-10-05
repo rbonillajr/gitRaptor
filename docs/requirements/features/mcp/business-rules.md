@@ -4,7 +4,7 @@ title: "Reglas de Negocio — Servidor MCP"
 type: business-rules
 status: draft
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-05
 domain: GRP
 epic: E-001
 feature: mcp
@@ -269,7 +269,7 @@ página = min(solicitado, tope), por defecto 50
 | Sin operación en curso | — | — | — | — | — | Exige | Exige | — | Exige | Exige |
 | Sin otra sesión presente en el worktree | — | — | — | — | — | Sí; en compartido solo rutas explícitas | Exige | — | — | Solape → se detiene |
 | Worktree disponible | Exige | Exige | Exige | Exige | Exige | Exige | Exige | Exige | Exige | Exige |
-| Decisión de Guardrails | — | — | — | — | — | Exige permitir | Exige permitir | Exige permitir | Pendiente (sin operación normalizada; ADR-CKP-002 Pendientes) | Exige permitir |
+| Decisión de Guardrails | — | — | — | — | — | Exige permitir | Exige permitir | Exige permitir | No (no gobernada; BR-VAL-002) | No en el MVP (US-TMC-021, Fase 2); rige ADR-TMC-005: solo lo propio, solape → se detiene |
 
 **Regla formal**:
 ```
@@ -343,7 +343,10 @@ IF rama existe OR ruta existe OR ruta no válida → rechazo + motivo
 
 **Regla formal**:
 ```
-snapshot: IF cuota o rate limit superados → rechazo + acción
+snapshot: IF cupo (20 por solicitante y worktree en 24 h), rate limit (5/min) o cuota de disco superados
+   → rechazo + acción con la hora a la que se libera un hueco (nunca se borra nada)
+undo (capa mcp): IF movería la rama base confirmada o una ref protegida por el suelo de Guardrails
+   → rechazo antes de cualquier efecto + acción "pídeselo al desarrollador desde GitRaptor" (hasta US-TMC-021)
 undo: op = última operación del worktree del llamante
   IF solicitante sin atribuir → rechazo (TQ-7)
   IF actor(op) ≠ solicitante → rechazo "no es tuya"
@@ -375,17 +378,20 @@ IF repo en la allowlist AND worktree disponible → responder (BR-MCP-CALC-002)
 
 ### BR-MCP-WF-001: Flujo de una herramienta de escritura
 
-**Descripción**: toda escritura sigue el mismo orden: allowlist → ámbito → solicitante → `expect_worktree` → precondiciones → decisión de Guardrails con capa `mcp` → operación protegida (intención, snapshot previo, ejecución, registro) → respuesta. Un paso que falla corta el flujo con su motivo; nada cambia en el repo.
+**Descripción**: toda escritura sigue el mismo orden: ámbito (repo y worktree por el cwd) → allowlist → disponible → solicitante → `expect_worktree` → precondiciones → decisión de Guardrails con capa `mcp` → avisos del plan → operación protegida (intención, snapshot previo, ejecución, registro) → respuesta. Una petición denegada nunca pide reconocer avisos. Un paso que falla corta el flujo con su motivo; nada cambia en el repo.
 
 **Criticidad**: Alta
 
 **Regla formal**:
 ```
-allowlist → BR-MCP-EDGE-004 | ámbito → BR-MCP-CALC-001 | solicitante → BR-MCP-AUTH-002
-→ expect_worktree → BR-MCP-VAL-005 | precondiciones → BR-MCP-ELIG-001
-→ Guardrails(capa mcp, operación normalizada) → BR-MCP-AUTH-001
+ámbito → BR-MCP-CALC-001 | allowlist → BR-MCP-EDGE-004 | disponible → BR-MCP-EDGE-005
+→ solicitante → BR-MCP-AUTH-002 | expect_worktree → BR-MCP-VAL-005 | precondiciones → BR-MCP-ELIG-001
+→ Guardrails(capa mcp, operación normalizada) → BR-MCP-AUTH-001 → avisos del plan
 → operación del catálogo como operación protegida → BR-MCP-CONS-002
 → respuesta {resultado, worktree, id de operación}
+IF el plan trae avisos AND la llamada no los reconoce exactamente
+   → rechazo sin efectos "avisos sin reconocer" + lista + acción "repite la llamada reconociéndolos"
+las confirmaciones que son controles (trabajo ajeno, excepción) nunca se reconocen: rechazo
 ```
 
 **Ejemplo**: `safe_commit` en un repo en la allowlist, por claude-1, mensaje válido → Guardrails permite → snapshot → commit → "commit 9f8e7d6 en shop-feat-a; deshacer con undo".
@@ -698,7 +704,7 @@ bloqueos contados por capa; undos por MCP cuentan en el KPI de undos
 
 ### BR-MCP-TIME-001: Tiempo por llamada y rate limit
 
-**Descripción**: cada llamada tiene un tiempo máximo; cada conexión, un rate limit; los snapshots manuales, una cuota y un rate limit propios. Una escritura que tarda por el snapshot declara su estado en la respuesta.
+**Descripción**: cada llamada tiene un tiempo máximo; cada conexión, un rate limit; los snapshots manuales, una cuota y un rate limit propios. Una escritura que tarda por el snapshot declara su estado en la respuesta, y su resultado se puede consultar después por el id de operación. Las cifras las fija ADR-MCP-001 § 6 (antes supuesto S-MCP-1): lectura ≤ 10 s; una escritura vuelve a los 30 s con su estado; 120 lecturas y 20 escrituras por minuto por conexión; 5 snapshots manuales por minuto y 20 vivos por worktree. La Dev Spec solo puede endurecerlas.
 
 **Criticidad**: Media
 
@@ -818,7 +824,7 @@ evaluado en cada llamada
 
 ### BR-MCP-EDGE-007: Rebase de una rama ya empujada
 
-**Descripción**: el MCP no deniega el rebase de una rama con upstream: lo decide Guardrails. Si se permite, la respuesta avisa de que la rama diverge de su upstream. El force-push posterior lo deniega el conjunto mínimo seguro.
+**Descripción**: el MCP no deniega el rebase de una rama con upstream: lo decide Guardrails. El plan lleva el aviso de upstream divergente, que el agente reconoce en una segunda llamada (BR-MCP-WF-001). Si se permite, la respuesta final vuelve a avisar de que la rama diverge de su upstream. El force-push posterior lo deniega el conjunto mínimo seguro.
 
 **Criticidad**: Media
 
@@ -911,3 +917,4 @@ Cada regla tendrá al menos un escenario Gherkin, incluido uno negativo, en su h
 |---------|-------|-------|---------|
 | 0.1 | 2026-10-04 | PO (AADD) | Versión inicial: 48 reglas a partir de Q-MCP-1 a Q-MCP-31 (decisión del orquestador, validada por PO y Arquitecto) y de las decisiones heredadas de motor-local, Cockpit, Time Machine y Guardrails. |
 | 0.2 | 2026-10-04 | PO (AADD) | Enmienda mínima, fuente ADR-CKP-002 (propuesto; hallazgo de seguridad H-02). BR-MCP-VAL-001 y BR-MCP-ELIG-004: `create_worktree` no acepta ruta por MCP, solo la plantilla del desarrollador (estrecha Q-MCP-7). BR-MCP-ELIG-001: la decisión de Guardrails para `snapshot` queda "Pendiente" (sin operación normalizada; ADR-CKP-002 Pendientes). Sin reglas nuevas: siguen 48. Decisión del orquestador (2026-10-04), validada por Arquitecto/PO. |
+| 0.3 | 2026-10-05 | PO (AADD) | Enmienda por ADR-MCP-001, decisión del orquestador (2026-10-05), validada por Arquitecto/PO. BR-MCP-ELIG-001: `snapshot` no gobernada (no está en BR-VAL-002) y `undo` sin decisión de Guardrails en el MVP (US-TMC-021, Fase 2). BR-MCP-WF-001: avisos del plan reconocidos en una segunda llamada, sin efectos si faltan. BR-MCP-EDGE-007: el aviso de upstream divergente se reconoce y la respuesta final vuelve a avisar. BR-MCP-TIME-001: cifras de ADR-MCP-001 § 6 y consulta del resultado por id de operación. BR-MCP-ELIG-005: cupo de 20 snapshots por solicitante y worktree en 24 h, con la cuota llena se rechaza sin borrar nada, y un `undo` por MCP que movería la base o una ref protegida se rechaza (S-04). BR-MCP-WF-001: orden alineado con ADR-MCP-001 (ámbito → allowlist → disponible → solicitante → … → Guardrails → avisos). Sin reglas nuevas: siguen 48. |

@@ -25,7 +25,7 @@ ado:
   id: null
   url: null
 covers: [BR-MCP-CALC-002, BR-MCP-VAL-006, BR-MCP-CONS-004, BR-MCP-CONS-005, BR-MCP-VAL-005, BR-MCP-TIME-001]
-blocked_by: [ADR-MCP-001, DEP-MCP-8]
+blocked_by: []
 tags: [mcp, seguridad, respuesta-acotada, texto-no-confiable, errores, ola-1]
 ---
 

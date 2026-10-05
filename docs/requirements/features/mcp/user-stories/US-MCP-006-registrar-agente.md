@@ -26,7 +26,7 @@ ado:
   id: null
   url: null
 covers: [BR-MCP-WF-005, BR-MCP-VAL-004, BR-MCP-AUTH-002]
-blocked_by: [ADR-MCP-001]
+blocked_by: []
 tags: [mcp, register-agent, atribucion, sin-atribuir, ola-1]
 ---
 
