@@ -22,7 +22,7 @@ tags: [motor-local, release, distribucion, homebrew, winget, npm, instalador, ch
 
 ## INF-GRP-004: Canales de distribución
 
-**Valor**: cada release trae listos la fórmula de Homebrew, los manifiestos de winget, los paquetes npm y los scripts de instalación, verificados contra sus checksums. Publicarlos solo depende de los secretos, la licencia y un paso humano.
+**Valor**: cada release trae listos la fórmula de Homebrew, los manifiestos de winget, los paquetes npm y los scripts de instalación, verificados contra sus checksums. Publicarlos solo depende de los secretos y de un paso humano; la licencia ya está decidida (FSL-1.1-ALv2, ADR-GRP-014 § 6).
 
 ### Descripción
 
@@ -42,7 +42,7 @@ tags: [motor-local, release, distribucion, homebrew, winget, npm, instalador, ch
   - los manifiestos de winget (zip + portable, dos alias);
   - el paquete npm `gitraptor`, con el *launcher* `packaging/npm/launcher.cjs`, y los seis `@gitraptor/cli-<os>-<cpu>`.
 - **Probar** en `release.yml` (job `test-installers`) los dos scripts contra los archivos del run, en Linux, macOS y Windows, incluido un `SHA256SUMS` manipulado que debe abortar sin instalar nada.
-- **Crear** `.github/workflows/release-channels.yml`. Publica solo cuando un humano publica el borrador, `RELEASE_PUBLISH_CHANNELS == 'true'`, la release no es prerelease y la licencia no es `UNLICENSED`.
+- **Crear** `.github/workflows/release-channels.yml`. Publica solo cuando un humano publica el borrador, `RELEASE_PUBLISH_CHANNELS == 'true'`, la release no es prerelease y todos los manifiestos declaran la licencia (`tools/check-license.sh`, ADR-GRP-014 § 6).
 - **Fuera de alcance**: el registro del autoarranque (PQ-1, TS-GRP-003) y la US de instalación (ver "Pendientes").
 
 ### Requiere secreto o configuración (preparado, sin ejecutar)
@@ -52,7 +52,7 @@ tags: [motor-local, release, distribucion, homebrew, winget, npm, instalador, ch
 | Homebrew | Secreto `HOMEBREW_TAP_TOKEN` (contents:write en `rbonillajr/homebrew-tap`); crear el tap |
 | winget | Secreto `WINGET_TOKEN` (public_repo, para el PR a `microsoft/winget-pkgs`) |
 | npm | Trusted publisher configurado en npmjs.com para `gitraptor` y cada `@gitraptor/cli-*`; reservar el nombre y el scope (⚠️ **ASSUMPTION**: no se comprobó que estén libres) |
-| Todos | Variable de repo `RELEASE_PUBLISH_CHANNELS = true`; licencia distinta de `UNLICENSED` (pregunta abierta 2, NFR-11) |
+| Todos | Variable de repo `RELEASE_PUBLISH_CHANNELS = true`; licencia FSL-1.1-ALv2 declarada en todos los manifiestos (resuelto el 2026-10-05, ADR-GRP-014 § 6) |
 
 ### Decisiones de producto (PO, 2026-10-05)
 
@@ -61,7 +61,7 @@ Decisión del orquestador (2026-10-05), validada por el PO:
 - En el MVP interno (decisión v0.3) bastan el script verificado y el tap propio. winget y npm quedan generados pero sin publicar, porque son registros públicos.
 - El comando instalado es `raptor` en todos los canales, y se actualiza por el mismo canal con el que se instaló.
 - Desinstalar borra solo los binarios, nunca el perfil ni los datos de la Time Machine (NFR-01).
-- La licencia es una decisión humana que bloquea **solo la publicación**, no el pipeline.
+- La licencia está resuelta (FSL-1.1-ALv2, ADR-GRP-014 § 6) y todos los canales la declaran; `license.yml` lo comprueba en cada PR.
 
 ### Plan de Verificación
 
