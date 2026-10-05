@@ -57,7 +57,23 @@ fn describe(e: &GitEventView) -> String {
     }
 }
 
+/// The actor with its origin (US-GRP-007): "Claude Code, detected", or
+/// "unattributed".
 fn actor(actor: &Actor) -> String {
+    match actor {
+        Actor::Unattributed => t("actor.unattributed", &[]),
+        Actor::Agent { origin, .. } => t(
+            "actor.with-origin",
+            &[
+                ("origin", &crate::sessions::origin_text(*origin)),
+                ("agent", &actor_name(actor)),
+            ],
+        ),
+    }
+}
+
+/// Who the actor is, without its origin.
+pub fn actor_name(actor: &Actor) -> String {
     match actor {
         Actor::Unattributed => t("actor.unattributed", &[]),
         Actor::Agent { kind, name, .. } => match name {
@@ -169,6 +185,17 @@ mod tests {
             let shown = describe(&event(kind, false));
             assert!(!shown.starts_with("event."), "{kind:?}: {shown}");
         }
+    }
+
+    #[test]
+    fn an_agent_is_shown_with_its_origin() {
+        let mut e = event(GitEventKind::Commit, false);
+        e.actor = Actor::Agent {
+            kind: gitraptor_api::AgentKind::ClaudeCode,
+            name: None,
+            origin: gitraptor_api::AgentOrigin::Detected,
+        };
+        assert!(text(&[e]).contains("(Claude Code, detected)"));
     }
 
     #[test]

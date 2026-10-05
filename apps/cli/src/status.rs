@@ -11,12 +11,34 @@ use std::path::Path;
 use gitraptor_api::Untrusted;
 use gitraptor_api::messages::{
     BaseBranchView, BaseStatusView, ChangeAreaView, ChangeCounts, CommitCountView, DivergenceView,
-    FileChangeView, HeadView, RepoStateView, RepoView, Snapshot, UnavailableReason, WorktreeStatus,
-    WorktreeView,
+    FileChangeView, HeadView, RepoStateView, RepoView, SessionView, Snapshot, UnavailableReason,
+    WorktreeStatus, WorktreeView,
 };
 use serde::Serialize;
 
 use crate::i18n::t;
+use crate::sessions::{SessionJson, session_json};
+
+/// The agent sessions `raptor status` shows (US-GRP-007): the present ones
+/// and the latest ended one of each worktree.
+#[derive(Debug, Default)]
+pub struct SessionsInfo {
+    /// `None`: the engine does not offer `sessions.list` (an older daemon).
+    pub available: Option<bool>,
+    pub sessions: Vec<SessionView>,
+}
+
+impl SessionsInfo {
+    fn of<'a>(
+        &'a self,
+        repo_id: &'a str,
+        w: &'a WorktreeView,
+    ) -> impl Iterator<Item = &'a SessionView> {
+        self.sessions
+            .iter()
+            .filter(move |s| s.repo_id == repo_id && s.worktree.raw() == w.path.raw())
+    }
+}
 
 /// The kebab-case wire text of a contract enum.
 pub fn wire(value: &impl Serialize) -> String {
@@ -53,11 +75,15 @@ pub fn repo_at(snapshot: &Snapshot, path: &Path) -> Option<String> {
         .map(|repo| repo.repo_id.clone())
 }
 
-/// The text output, one line per repo, worktree and listed change.
-pub fn text(snapshot: &Snapshot) -> String {
+/// The text output, one line per repo, worktree, session and listed
+/// change. A worktree without sessions shows none.
+pub fn text(snapshot: &Snapshot, sessions: &SessionsInfo) -> String {
     let mut out = String::new();
     if snapshot.repos.is_empty() {
         let _ = writeln!(out, "{}", t("status.none", &[]));
+    }
+    if sessions.available == Some(false) && !snapshot.repos.is_empty() {
+        let _ = writeln!(out, "{}", t("sessions.unavailable", &[]));
     }
     for repo in &snapshot.repos {
         let folder = sanitize(&repo_folder(repo));
@@ -70,6 +96,9 @@ pub fn text(snapshot: &Snapshot) -> String {
         let base = base_name(&repo.base);
         for w in &repo.worktrees {
             worktree_text(&mut out, w, &base);
+            for s in sessions.of(&repo.repo_id, w) {
+                let _ = writeln!(out, "    {}", crate::sessions::line(s));
+            }
         }
     }
     out
@@ -201,6 +230,10 @@ fn change_text(c: &FileChangeView) -> String {
 #[derive(Serialize)]
 pub struct StatusJson {
     engine: String,
+    /// Whether agent sessions can be detected on this system; absent when
+    /// the engine is older than this `raptor`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    session_detection: Option<bool>,
     repos: Vec<RepoJson>,
 }
 
@@ -237,6 +270,8 @@ struct WorktreeJson {
     /// Against the repo's base branch; absent if the worktree is unavailable.
     #[serde(skip_serializing_if = "Option::is_none")]
     ahead_behind: Option<AheadBehindJson>,
+    /// Present sessions and the latest ended one (US-GRP-007).
+    sessions: Vec<SessionJson>,
 }
 
 #[derive(Serialize)]
@@ -280,9 +315,10 @@ struct ChangeJson {
     kind: String,
 }
 
-pub fn json(snapshot: &Snapshot) -> StatusJson {
+pub fn json(snapshot: &Snapshot, sessions: &SessionsInfo) -> StatusJson {
     StatusJson {
         engine: wire(&snapshot.engine.state),
+        session_detection: sessions.available,
         repos: snapshot
             .repos
             .iter()
@@ -293,7 +329,15 @@ pub fn json(snapshot: &Snapshot) -> StatusJson {
                 state: wire(&repo.state),
                 base_branch: repo.base.name.as_ref().map(|n| n.raw().to_owned()),
                 base_confirmed: repo.base.status == BaseStatusView::Confirmed,
-                worktrees: repo.worktrees.iter().map(worktree_json).collect(),
+                worktrees: repo
+                    .worktrees
+                    .iter()
+                    .map(|w| {
+                        let mut out = worktree_json(w);
+                        out.sessions = sessions.of(&repo.repo_id, w).map(session_json).collect();
+                        out
+                    })
+                    .collect(),
             })
             .collect(),
     }
@@ -312,6 +356,7 @@ fn worktree_json(w: &WorktreeView) -> WorktreeJson {
         changes: Vec::new(),
         changes_truncated: w.changes_truncated(),
         ahead_behind: None,
+        sessions: Vec::new(),
     };
     match &w.status {
         WorktreeStatus::Unavailable { reason } => out.unavailable_reason = Some(wire(reason)),
@@ -436,7 +481,7 @@ mod tests {
 
     #[test]
     fn text_lists_every_worktree_sanitized() {
-        let out = text(&snapshot());
+        let out = text(&snapshot(), &SessionsInfo::default());
         assert!(out.contains("/w/demo"), "{out}");
         assert!(
             out.contains("feat-login") && out.contains("login.txt"),
@@ -447,7 +492,7 @@ mod tests {
 
     #[test]
     fn text_shows_the_base_branch_and_each_ahead_behind() {
-        let out = text(&snapshot());
+        let out = text(&snapshot(), &SessionsInfo::default());
         assert!(out.contains("main (unconfirmed)"), "{out}");
         assert!(out.contains("0 ahead and 0 behind main"), "{out}");
         assert!(
@@ -459,7 +504,7 @@ mod tests {
         if let WorktreeStatus::Ready { divergence, .. } = &mut s.repos[0].worktrees[1].status {
             *divergence = DivergenceView::BaseMissing;
         }
-        let out = text(&s);
+        let out = text(&s, &SessionsInfo::default());
         assert!(out.contains("base branch: main\n"), "{out}");
         assert!(
             out.contains("base branch \"main\" does not exist in the repo"),
@@ -487,7 +532,7 @@ mod tests {
 
     #[test]
     fn json_has_plain_strings_and_flags() {
-        let value = serde_json::to_value(json(&snapshot())).unwrap();
+        let value = serde_json::to_value(json(&snapshot(), &SessionsInfo::default())).unwrap();
         let wts = &value["repos"][0]["worktrees"];
         assert_eq!(value["repos"][0]["path"], "/w/demo");
         assert_eq!(wts[0]["clean"], true);
