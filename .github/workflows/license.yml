@@ -1,0 +1,27 @@
+# Every crate and package declares FSL-1.1-ALv2 and the root LICENSE holds its text
+# (ADR-GRP-014 § 6, NFR-11). Read-only: `cargo metadata --no-deps` and jq over package.json.
+#
+# Actions are pinned by commit SHA.
+name: license
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: license-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  declared:
+    name: license declared
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Toolchain from rust-toolchain.toml
+        run: rustup show
+      - run: tools/check-license.sh
