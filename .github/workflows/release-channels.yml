@@ -4,8 +4,8 @@
 # variable RELEASE_PUBLISH_CHANNELS == 'true' and the release is not a prerelease. Until then
 # nothing here runs: no tap, winget or npm publication (decision v0.3, internal tool).
 #
-# Blocked as well while the workspace license is UNLICENSED (open question 2, NFR-11): every
-# channel needs a license.
+# Blocked as well unless every crate and package declares FSL-1.1-ALv2 and LICENSE holds its
+# text (ADR-GRP-014 § 6, NFR-11): every channel declares the license.
 #
 # Requires secret: HOMEBREW_TAP_TOKEN (contents:write on rbonillajr/homebrew-tap) and
 # WINGET_TOKEN (public_repo, to open the PR on microsoft/winget-pkgs). npm uses trusted
@@ -40,12 +40,10 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ github.event.release.tag_name }}
-      - name: License decided
-        run: |
-          if grep -Eq '^license = "UNLICENSED"' Cargo.toml; then
-            echo "::error::the workspace license is UNLICENSED: channels need a license decision (open question 2)"
-            exit 1
-          fi
+      - name: Toolchain from rust-toolchain.toml
+        run: rustup show
+      - name: License declared
+        run: tools/check-license.sh
       # Re-render from the published assets, verified against their SHA256SUMS.
       - run: |
           gh release download "$TAG" --dir dist --pattern 'raptor-*' --pattern SHA256SUMS
