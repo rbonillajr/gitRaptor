@@ -142,14 +142,16 @@ impl OperationState {
     }
 
     /// Whether the transition `self -> next` is allowed. `applying` may
-    /// repeat, once per applier step.
+    /// repeat, once per applier step. `ready -> rejected` is the applier
+    /// finding a precondition failed under its locks, before any change
+    /// (TS-TMC-003).
     pub fn can_become(self, next: Self) -> bool {
         use OperationState::*;
         matches!(
             (self, next),
             (Intent, PriorSnapshot | Rejected | Aborted)
                 | (PriorSnapshot, Ready | Rejected | Aborted)
-                | (Ready, Applying | Aborted)
+                | (Ready, Applying | Aborted | Rejected)
                 | (Applying, Applying | Finished | Interrupted)
         )
     }
@@ -376,6 +378,7 @@ mod tests {
             (PriorSnapshot, Aborted),
             (PriorSnapshot, Rejected),
             (Applying, Interrupted),
+            (Ready, Rejected),
         ] {
             assert!(from.can_become(to), "{from:?} -> {to:?}");
         }
