@@ -1,6 +1,7 @@
 {
   "name": "gitraptor-docs-lint",
   "version": "0.0.0",
+  "license": "FSL-1.1-ALv2",
   "private": true,
   "description": "Renders every Mermaid block in docs/**/*.md and fails if one does not render",
   "type": "module",
