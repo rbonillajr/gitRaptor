@@ -8,11 +8,11 @@ domain: GRP
 priority: critical
 complexity: medium
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-05
 related:
   adrs: [ADR-GRD-001, ADR-GRD-002, ADR-GRD-005, ADR-GRD-007]
   stories: [US-GRD-001, US-GRD-002, US-GRD-003, US-GRD-004, US-GRD-005, US-GRD-006, US-GRD-007, SPIKE-GRD-001]
-  specs: []
+  specs: [DS-INF-GRD-001]
 ado:
   id: null
   url: null
@@ -29,7 +29,7 @@ tags: [guardrails, ci, arnes, hooks-git, nfr-01, nfr-12, interrupcion, huella, m
 **Quiero** un arnés que monte repos temporales con hooks previos y gestores de hooks y que compare la huella antes y después de instalar y desinstalar, con cortes del proceso en cada paso, como gate de CI en los tres SO
 **Para** verificar NFR-01 y NFR-12 de la capa de hooks con un criterio binario, y que la lista publicada de ADR-GRD-002 coincide con el comportamiento real de Git
 
-> Dev Spec: `dev-specs/INF-GRD-001-arnes-hooks.md` | Pendiente
+> Dev Spec: [`dev-specs/INF-GRD-001-arnes-hooks.md`](../dev-specs/INF-GRD-001-arnes-hooks.md) | Núcleo entregado (2026-10-05); las suites entran con su historia dueña
 >
 > **Depende de**: el núcleo de INF-GRP-001 (huella del repo y de fuera del repo, ejecución de control y guarda), que se reutiliza y amplía, y de SPIKE-GRD-001 (fixtures y matriz). **Núcleo y suites**: el núcleo de este INF no depende de código de Guardrails. Cada suite entra con su historia dueña (US-GRD-001 instalación y mínimo; US-GRD-002 encadenado; US-GRD-003 desinstalación e interrupción; US-GRD-004 pérdida externa y lista publicada; US-GRD-005 registro fuera del repo; US-GRD-006 token) y bloquea solo el merge de su historia y de las siguientes, como regresión. **ADRs**: ADR-GRD-001 (Validación), ADR-GRD-002 (Validación), ADR-GRD-005 (Validación 2). **Seguridad**: SEC-GRD-02, SEC-GRD-08 y SEC-GRD-10.
 
