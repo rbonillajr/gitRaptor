@@ -151,6 +151,8 @@ impl RepoReader {
                 // `untrusted_repo_is_unavailable`, which fails if it changes.
                 return Err(if message.contains("is considered unsafe") {
                     ReadError::Untrusted(message)
+                } else if !looks_like_a_repository(path) {
+                    ReadError::NotARepository(message)
                 } else {
                     ReadError::Unavailable(message)
                 });
@@ -160,6 +162,11 @@ impl RepoReader {
         // Replacement objects (`refs/replace/*`) never change what is read (SEC-GRD-17, H-05).
         repo.objects.ignore_replacements = true;
         Ok(Self { repo })
+    }
+
+    /// The repository has no main working tree.
+    pub fn is_bare(&self) -> bool {
+        self.repo.is_bare()
     }
 
     /// Where `HEAD` points.
@@ -419,6 +426,13 @@ impl RepoReader {
         status.untracked.sort();
         Ok(status)
     }
+}
+
+/// Structural check, after an open failed, of whether `path` is a worktree root (a `.git`
+/// entry) or a Git directory (`HEAD` and `objects/`). Reads metadata only.
+fn looks_like_a_repository(path: &Path) -> bool {
+    path.join(".git").symlink_metadata().is_ok()
+        || (path.join("HEAD").is_file() && path.join("objects").is_dir())
 }
 
 /// Configuration sources gitoxide may read (M1, SEC-10).
