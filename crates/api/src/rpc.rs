@@ -61,6 +61,175 @@ pub mod code {
     pub const OPERATION_REJECTED: i64 = -32014;
 }
 
+/// Every error code of the contract, so a client presents each one from
+/// its code and `data`, never from `message` (N7). `message` is for logs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ErrorCode {
+    ParseError,
+    InvalidRequest,
+    MethodNotFound,
+    InvalidParams,
+    Internal,
+    HandshakeRequired,
+    IncompatibleProtocol,
+    ReservedRefused,
+    NotImplemented,
+    RateLimited,
+    LimitReached,
+    ResyncRequired,
+    PriorSnapshotFailed,
+    NotFound,
+    ScopeRefused,
+    OperationFailed,
+    IdentityUnverified,
+    RepoRejected,
+    OperationRejected,
+}
+
+impl ErrorCode {
+    pub const ALL: [Self; 19] = [
+        Self::ParseError,
+        Self::InvalidRequest,
+        Self::MethodNotFound,
+        Self::InvalidParams,
+        Self::Internal,
+        Self::HandshakeRequired,
+        Self::IncompatibleProtocol,
+        Self::ReservedRefused,
+        Self::NotImplemented,
+        Self::RateLimited,
+        Self::LimitReached,
+        Self::ResyncRequired,
+        Self::PriorSnapshotFailed,
+        Self::NotFound,
+        Self::ScopeRefused,
+        Self::OperationFailed,
+        Self::IdentityUnverified,
+        Self::RepoRejected,
+        Self::OperationRejected,
+    ];
+
+    pub const fn code(self) -> i64 {
+        match self {
+            Self::ParseError => code::PARSE_ERROR,
+            Self::InvalidRequest => code::INVALID_REQUEST,
+            Self::MethodNotFound => code::METHOD_NOT_FOUND,
+            Self::InvalidParams => code::INVALID_PARAMS,
+            Self::Internal => code::INTERNAL,
+            Self::HandshakeRequired => code::HANDSHAKE_REQUIRED,
+            Self::IncompatibleProtocol => code::INCOMPATIBLE_PROTOCOL,
+            Self::ReservedRefused => code::RESERVED_REFUSED,
+            Self::NotImplemented => code::NOT_IMPLEMENTED,
+            Self::RateLimited => code::RATE_LIMITED,
+            Self::LimitReached => code::LIMIT_REACHED,
+            Self::ResyncRequired => code::RESYNC_REQUIRED,
+            Self::PriorSnapshotFailed => code::PRIOR_SNAPSHOT_FAILED,
+            Self::NotFound => code::NOT_FOUND,
+            Self::ScopeRefused => code::SCOPE_REFUSED,
+            Self::OperationFailed => code::OPERATION_FAILED,
+            Self::IdentityUnverified => code::IDENTITY_UNVERIFIED,
+            Self::RepoRejected => code::REPO_REJECTED,
+            Self::OperationRejected => code::OPERATION_REJECTED,
+        }
+    }
+
+    pub fn from_code(code: i64) -> Option<Self> {
+        Self::ALL.into_iter().find(|c| c.code() == code)
+    }
+
+    /// Stable kebab-case name (for message keys).
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ParseError => "parse-error",
+            Self::InvalidRequest => "invalid-request",
+            Self::MethodNotFound => "method-not-found",
+            Self::InvalidParams => "invalid-params",
+            Self::Internal => "internal",
+            Self::HandshakeRequired => "handshake-required",
+            Self::IncompatibleProtocol => "incompatible-protocol",
+            Self::ReservedRefused => "reserved-refused",
+            Self::NotImplemented => "not-implemented",
+            Self::RateLimited => "rate-limited",
+            Self::LimitReached => "limit-reached",
+            Self::ResyncRequired => "resync-required",
+            Self::PriorSnapshotFailed => "prior-snapshot-failed",
+            Self::NotFound => "not-found",
+            Self::ScopeRefused => "scope-refused",
+            Self::OperationFailed => "operation-failed",
+            Self::IdentityUnverified => "identity-unverified",
+            Self::RepoRejected => "repo-rejected",
+            Self::OperationRejected => "operation-rejected",
+        }
+    }
+}
+
+/// Why a path or a name in the parameters was refused (`data` of an
+/// `INVALID_PARAMS` error from the path and name validators, N7).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum InvalidReason {
+    Empty,
+    TooLong,
+    NotAbsolute,
+    ControlCharacter,
+    UncOrDevice,
+    DeviceName,
+    AlternateStream,
+    OutsideObserved,
+    InvalidRef,
+    ReservedName,
+}
+
+impl InvalidReason {
+    pub const ALL: [Self; 10] = [
+        Self::Empty,
+        Self::TooLong,
+        Self::NotAbsolute,
+        Self::ControlCharacter,
+        Self::UncOrDevice,
+        Self::DeviceName,
+        Self::AlternateStream,
+        Self::OutsideObserved,
+        Self::InvalidRef,
+        Self::ReservedName,
+    ];
+}
+
+/// `data` of an `INVALID_PARAMS` error from a validator.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct InvalidData {
+    pub reason: InvalidReason,
+}
+
+/// Why the caller's scope was refused (`data` of `SCOPE_REFUSED`, N7).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum ScopeRefusal {
+    NoWorkingFolder,
+    NotObserved,
+    NotAllowlisted,
+    UnattributedOverMcp,
+    ForeignWorktree,
+}
+
+impl ScopeRefusal {
+    pub const ALL: [Self; 5] = [
+        Self::NoWorkingFolder,
+        Self::NotObserved,
+        Self::NotAllowlisted,
+        Self::UnattributedOverMcp,
+        Self::ForeignWorktree,
+    ];
+}
+
+/// `data` of a `SCOPE_REFUSED` error.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ScopeRefusedData {
+    pub reason: ScopeRefusal,
+}
+
 /// Request id: a number or a short string.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(untagged)]
@@ -216,6 +385,58 @@ pub enum ServerMessage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// N7: every code constant has its typed code, and back.
+    #[test]
+    fn every_code_is_enumerated() {
+        let constants = [
+            code::PARSE_ERROR,
+            code::INVALID_REQUEST,
+            code::METHOD_NOT_FOUND,
+            code::INVALID_PARAMS,
+            code::INTERNAL,
+            code::HANDSHAKE_REQUIRED,
+            code::INCOMPATIBLE_PROTOCOL,
+            code::RESERVED_REFUSED,
+            code::NOT_IMPLEMENTED,
+            code::RATE_LIMITED,
+            code::LIMIT_REACHED,
+            code::RESYNC_REQUIRED,
+            code::PRIOR_SNAPSHOT_FAILED,
+            code::NOT_FOUND,
+            code::SCOPE_REFUSED,
+            code::OPERATION_FAILED,
+            code::IDENTITY_UNVERIFIED,
+            code::REPO_REJECTED,
+            code::OPERATION_REJECTED,
+        ];
+        assert_eq!(constants.len(), ErrorCode::ALL.len());
+        for c in constants {
+            assert_eq!(ErrorCode::from_code(c).unwrap().code(), c);
+        }
+        let mut names: Vec<_> = ErrorCode::ALL.iter().map(|c| c.as_str()).collect();
+        names.sort_unstable();
+        names.dedup();
+        assert_eq!(names.len(), ErrorCode::ALL.len());
+        assert_eq!(ErrorCode::from_code(-1), None);
+    }
+
+    #[test]
+    fn typed_reasons_round_trip() {
+        for r in InvalidReason::ALL {
+            let v = serde_json::to_value(InvalidData { reason: r }).unwrap();
+            assert_eq!(serde_json::from_value::<InvalidData>(v).unwrap().reason, r);
+        }
+        for r in ScopeRefusal::ALL {
+            let v = serde_json::to_value(ScopeRefusedData { reason: r }).unwrap();
+            assert_eq!(
+                serde_json::from_value::<ScopeRefusedData>(v)
+                    .unwrap()
+                    .reason,
+                r
+            );
+        }
+    }
 
     #[test]
     fn unknown_fields_are_refused() {

@@ -4,8 +4,8 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::Untrusted;
 use crate::event::Event;
+use crate::{Untrusted, UntrustedName};
 
 /// Longest accepted client version text.
 pub const MAX_CLIENT_VERSION_LEN: usize = 32;
@@ -54,6 +54,11 @@ pub struct HelloResult {
     pub max_message_bytes: u64,
     /// Methods this connection may call.
     pub methods: Vec<String>,
+    /// Who the daemon sees on this connection and the layer it fixes
+    /// (protocol 6, full profile, `cli` clients; ADR-CKP-003 § 4 N5). UX
+    /// only: the daemon resolves the requester again on every request.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requester: Option<crate::scope::ConnectionRequester>,
 }
 
 /// `data` of an `INCOMPATIBLE_PROTOCOL` error. Frozen across versions.
@@ -149,7 +154,7 @@ pub struct RepoView {
 #[serde(deny_unknown_fields)]
 pub struct BaseBranchView {
     /// Short branch name; `None` only when the status is `invalid`.
-    pub name: Option<Untrusted>,
+    pub name: Option<UntrustedName>,
     pub status: BaseStatusView,
 }
 
@@ -213,9 +218,9 @@ pub const MAX_WORKTREE_CHANGE_BYTES: usize = 32 * 1024;
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum HeadView {
     /// A branch with commits.
-    Branch { name: Untrusted },
+    Branch { name: UntrustedName },
     /// A branch without commits yet.
-    Unborn { name: Untrusted },
+    Unborn { name: UntrustedName },
     /// Directly at a commit.
     Detached,
 }
@@ -280,7 +285,7 @@ pub struct WorktreeView {
     /// The repo's main worktree (not a linked one).
     pub main: bool,
     /// Name of a linked worktree under `<common dir>/worktrees/`.
-    pub admin_name: Option<Untrusted>,
+    pub admin_name: Option<UntrustedName>,
     pub status: WorktreeStatus,
 }
 
@@ -404,10 +409,10 @@ pub struct GitEventDetails {
     /// The branch the event is about (`feat-login`), or the remote-tracking
     /// one of a push (`origin/feat-login`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub branch: Option<Untrusted>,
+    pub branch: Option<UntrustedName>,
     /// Branch before a switch.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub from: Option<Untrusted>,
+    pub from: Option<UntrustedName>,
     /// Commit before and after.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub old_commit: Option<String>,
@@ -709,6 +714,18 @@ pub enum ResyncReason {
     ReplayUnavailable,
     /// The daemon restarted since the client's snapshot.
     DaemonRestarted,
+    /// The repo of a scoped subscription stopped being observed; the
+    /// subscription ended (protocol 6).
+    ScopeClosed,
+}
+
+impl ResyncReason {
+    pub const ALL: [Self; 4] = [
+        Self::SlowConsumer,
+        Self::ReplayUnavailable,
+        Self::DaemonRestarted,
+        Self::ScopeClosed,
+    ];
 }
 
 /// Params of an `events.resync` notification.
@@ -722,9 +739,24 @@ pub struct ResyncNotification {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct StoppingData {
-    /// Stop cause as stored in the profile (`stop-command`, `replace`,
-    /// `signal`).
-    pub cause: String,
+    pub cause: StopCauseCode,
+}
+
+/// Why the daemon stops (N7: a code, never presentation text). Same text
+/// as the cause stored in the profile.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum StopCauseCode {
+    /// `daemon.stop` from the developer.
+    StopCommand,
+    /// A newer installed binary replaces it.
+    Replace,
+    /// A signal from the OS or the service manager.
+    Signal,
+}
+
+impl StopCauseCode {
+    pub const ALL: [Self; 3] = [Self::StopCommand, Self::Replace, Self::Signal];
 }
 
 /// Outcome of a reserved command attempt.
@@ -818,6 +850,7 @@ pub struct AuditListResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::UntrustedName;
 
     /// SEC-12: the MCP projection carries exactly the allowlisted fields.
     #[test]
@@ -854,8 +887,8 @@ mod tests {
             observed_utc_ms: 1,
             utc_offset_s: -18000,
             details: GitEventDetails {
-                branch: Some(Untrusted::new("feat-login")),
-                from: Some(Untrusted::new("main")),
+                branch: Some(UntrustedName::new("feat-login")),
+                from: Some(UntrustedName::new("main")),
                 ..GitEventDetails::default()
             },
             gap_id: None,
@@ -873,6 +906,23 @@ mod tests {
             assert_eq!(text, kind.as_str());
         }
         assert!(serde_json::from_str::<EventsHistoryParams>(r#"{"repo_id":"r","x":1}"#).is_err());
+    }
+
+    /// N7: the stop cause is a code, with the same text as before.
+    #[test]
+    fn stop_cause_is_a_code() {
+        let data = StoppingData {
+            cause: StopCauseCode::StopCommand,
+        };
+        assert_eq!(
+            serde_json::to_value(&data).unwrap(),
+            serde_json::json!({"cause": "stop-command"})
+        );
+        assert!(serde_json::from_str::<StoppingData>(r#"{"cause":"whatever"}"#).is_err());
+        for code in StopCauseCode::ALL {
+            let text = serde_json::to_value(code).unwrap();
+            assert_eq!(serde_json::from_value::<StopCauseCode>(text).unwrap(), code);
+        }
     }
 
     #[test]

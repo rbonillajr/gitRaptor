@@ -92,6 +92,8 @@ pub struct ChannelConfig {
     /// Path the daemon was launched from. `None`: `current_exe()`.
     pub launch_exe: Option<PathBuf>,
     pub protocol: u32,
+    /// Oldest client protocol served (DS-TS-GRP-004 E-D1).
+    pub min_protocol: u32,
 }
 
 impl Default for ChannelConfig {
@@ -102,6 +104,7 @@ impl Default for ChannelConfig {
             expected_uid: None,
             launch_exe: None,
             protocol: PROTOCOL_VERSION,
+            min_protocol: gitraptor_api::MIN_COMPATIBLE_PROTOCOL,
         }
     }
 }

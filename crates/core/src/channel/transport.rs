@@ -98,9 +98,20 @@ mod unix {
         Ok(listener)
     }
 
-    /// Connects to the channel socket in `runtime`, and checks that the
-    /// server runs as this same user before sending anything.
+    /// Connects to the channel socket in `runtime`, and checks that its
+    /// folder is private and that the server runs as this same user before
+    /// sending anything. Both refusals are `PermissionDenied`.
     pub fn connect(runtime: &Path) -> io::Result<UnixStream> {
+        // L-06: the socket's folder must be this user's and private (0700,
+        // not a symbolic link) before anything is sent; a missing folder
+        // means no daemon.
+        std::fs::symlink_metadata(runtime)?;
+        crate::profile::fsperm::verify_private_dir(runtime).map_err(|err| {
+            io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!("channel rejected: {err}"),
+            )
+        })?;
         let path = socket_path(runtime);
         let stream = if path.as_os_str().len() > MAX_SOCKET_PATH {
             in_dir(runtime, || UnixStream::connect(SOCKET_FILE))?

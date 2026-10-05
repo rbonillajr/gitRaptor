@@ -8,7 +8,7 @@
 use std::fmt::Write as _;
 
 use gitraptor_api::messages::{GitEventKind, GitEventView};
-use gitraptor_api::{Actor, Untrusted};
+use gitraptor_api::{Actor, UntrustedName};
 use serde_json::{Value, json};
 
 use crate::i18n::t;
@@ -45,7 +45,8 @@ pub fn text(events: &[GitEventView]) -> String {
 }
 
 fn describe(e: &GitEventView) -> String {
-    let show = |u: &Option<Untrusted>| u.as_ref().map(Untrusted::sanitized).unwrap_or_default();
+    let show =
+        |u: &Option<UntrustedName>| u.as_ref().map(UntrustedName::sanitized).unwrap_or_default();
     let branch = show(&e.details.branch);
     match e.kind {
         GitEventKind::BranchSwitch if e.details.from.is_some() => t(
@@ -85,7 +86,7 @@ pub fn actor_name(actor: &Actor) -> String {
 
 /// The JSON output: a stable, flat shape with plain strings.
 pub fn json(events: &[GitEventView]) -> Value {
-    let plain = |u: &Option<Untrusted>| u.as_ref().map(|u| u.raw().to_owned());
+    let plain = |u: &Option<UntrustedName>| u.as_ref().map(|u| u.raw().to_owned());
     Value::Array(
         events
             .iter()
@@ -144,13 +145,13 @@ mod tests {
         GitEventView {
             repo_id: "r".into(),
             seq: 1,
-            worktree: Untrusted::new("/w/feat-login\u{1b}[31m"),
+            worktree: gitraptor_api::Untrusted::new("/w/feat-login\u{1b}[31m"),
             kind,
             actor: Actor::Unattributed,
             observed_utc_ms: 1_791_148_066_018,
             utc_offset_s: 7200,
             details: GitEventDetails {
-                branch: Some(Untrusted::new("feat-login")),
+                branch: Some(UntrustedName::new("feat-login")),
                 worktree_inferred: inferred,
                 ..GitEventDetails::default()
             },

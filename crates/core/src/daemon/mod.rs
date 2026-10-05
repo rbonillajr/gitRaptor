@@ -723,7 +723,7 @@ impl Daemon {
         self.bus.publish(
             DAEMON_STOPPING,
             StoppingData {
-                cause: cause.as_str().to_owned(),
+                cause: cause.code(),
             },
             None,
             |_| {},
