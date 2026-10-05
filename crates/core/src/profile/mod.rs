@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf};
 
 pub use dirs::{APP_DIR, PROFILE_DIR_ENV, ProfileDirs};
 pub use error::{ProfileError, Result};
-pub use fsperm::{ProfileWarning, create_private_file, set_restrictive_umask};
+pub use fsperm::{create_private_file, set_restrictive_umask};
 pub use index::{AddOutcome, AuditRow, DaemonRun, RepoEntry, RepoState};
 pub use repo_key::{NormalizedPath, normalize_common_dir, validate_input_path};
 pub use store::{
@@ -42,8 +42,6 @@ pub struct OpenReport {
     /// The global index was corrupt and was moved here; every repo starts
     /// as a lost profile (Q26).
     pub quarantined_index: Option<PathBuf>,
-    /// Issues the caller must surface without failing (e.g. Windows ACL).
-    pub warnings: Vec<ProfileWarning>,
 }
 
 /// Result of opening a per-repo store.
@@ -77,12 +75,7 @@ impl Profile {
         for dir in dirs.owned_dirs() {
             fsperm::ensure_private_dir(dir)?;
         }
-        #[allow(unused_mut)]
         let mut report = OpenReport::default();
-        #[cfg(windows)]
-        report
-            .warnings
-            .extend(fsperm::verify_windows_acl(dirs.owned_dirs()));
 
         let opened = sqlite::open_db(
             &dirs.data.join(INDEX_FILE),

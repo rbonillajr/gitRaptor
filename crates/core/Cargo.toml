@@ -33,6 +33,10 @@ nix = { version = "=0.31.3", features = ["socket", "user"] }
 rustix = { version = "1.1.5", features = ["fs", "process", "net", "event", "pipe"] }
 signal-hook = "0.4.5"
 
+[target."cfg(windows)".dependencies]
+# Private DACL of the profile folders (SEC-06, TD-GRP-001).
+gitraptor-winsys.workspace = true
+
 [target."cfg(target_os = \"macos\")".dependencies]
 # `proc_pidinfo` of other processes (ancestry, controlling terminal, start
 # time). Builds its bindings with bindgen (needs the Command Line Tools SDK).
