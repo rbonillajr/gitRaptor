@@ -67,6 +67,19 @@ pub const SCOPE_SUBSCRIBE: &str = "scope.subscribe";
 /// The observed repo and worktree that contain a path (protocol 6, N4).
 pub const REPO_LOCATE: &str = "repo.locate";
 
+/// Guardrails (US-GRD-001): what installing the hook layer in a repo means, before the
+/// developer grants the permission (ADR-GRD-007 § 1). Read-only.
+pub const GUARD_PLAN: &str = "guard.plan";
+/// Installs the hook layer with the developer's permission (reserved; writes the repo's
+/// `core.hooksPath` and `<common>/gitraptor/`, recovered by its own journal).
+pub const GUARD_INSTALL: &str = "guard.install";
+/// Records the developer's denial of the permission (reserved): never offered again.
+pub const GUARD_DECLINE: &str = "guard.decline";
+/// The protection status of a repo (ADR-GRD-005 § 3, the part of US-GRD-001). Read-only.
+pub const GUARD_STATUS: &str = "guard.status";
+/// The decision on a governed operation, asked by `raptor hook` (ADR-GRD-003 § 3 and § 4).
+pub const GUARD_EVALUATE: &str = "guard.evaluate";
+
 /// Notification that carries one stream event.
 pub const NOTIFY_EVENT: &str = "events.event";
 /// Notification sent before a slow subscriber is disconnected: the client
@@ -87,6 +100,10 @@ pub enum RepoWrite {
     Protected,
     /// Undo, redo or restore: protected operations of the Time Machine.
     TimeMachine,
+    /// The install of the Guardrails hook layer: only `core.hooksPath` and
+    /// `<common>/gitraptor/`, never the user's content; recovered by its own
+    /// journal (ADR-GRD-001 § 4), not by a prior snapshot.
+    Guardrails,
 }
 
 /// Static description of one method.
@@ -133,6 +150,11 @@ const fn v5(name: &'static str) -> MethodSpec {
         since: 6,
         ..method(name, false, false)
     }
+}
+
+/// A method of protocol 7 (US-GRD-001).
+const fn v7(spec: MethodSpec) -> MethodSpec {
+    MethodSpec { since: 7, ..spec }
 }
 
 const fn pending(name: &'static str, story: &'static str) -> MethodSpec {
@@ -221,6 +243,20 @@ pub const METHODS: &[MethodSpec] = &[
     v5(SCOPE_SNAPSHOT),
     v5(SCOPE_SUBSCRIBE),
     v5(REPO_LOCATE),
+    // Guardrails (US-GRD-001, ADR-GRD-007 § 1), protocol 7. None is offered
+    // to `raptor-mcp` (BR-AUTH-004): it neither installs nor evaluates.
+    v7(method(GUARD_PLAN, false, false)),
+    v7(MethodSpec {
+        name: GUARD_INSTALL,
+        reserved: true,
+        mcp: false,
+        implemented_by: None,
+        writes: RepoWrite::Guardrails,
+        since: BASE,
+    }),
+    v7(method(GUARD_DECLINE, true, false)),
+    v7(method(GUARD_STATUS, false, false)),
+    v7(method(GUARD_EVALUATE, false, false)),
 ];
 
 pub fn spec(name: &str) -> Option<&'static MethodSpec> {
@@ -274,6 +310,7 @@ mod tests {
         assert_eq!(
             writers,
             [
+                (GUARD_INSTALL, RepoWrite::Guardrails),
                 (OPERATION_RUN, RepoWrite::Protected),
                 (TM_REDO, RepoWrite::TimeMachine),
                 (TM_RESTORE, RepoWrite::TimeMachine),
@@ -281,11 +318,17 @@ mod tests {
             ]
         );
         // A writer is never a reserved command: reserved commands do not go
-        // through the prior snapshot.
+        // through the prior snapshot. The one exception is the Guardrails
+        // install, recovered by its own journal (ADR-GRD-001 § 4); only it
+        // may declare that kind of write.
+        assert!(METHODS.iter().all(|m| !(m.reserved
+            && m.writes != RepoWrite::None
+            && m.writes != RepoWrite::Guardrails)));
         assert!(
             METHODS
                 .iter()
-                .all(|m| !(m.reserved && m.writes != RepoWrite::None))
+                .filter(|m| m.writes == RepoWrite::Guardrails)
+                .all(|m| m.name == GUARD_INSTALL && m.reserved)
         );
     }
 
