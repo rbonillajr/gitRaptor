@@ -10,7 +10,7 @@ use std::path::Path;
 
 use gitraptor_core::timemachine::apply::{
     Applier, ApplyError, ApplyHooks, ApplyPlan, ApplyReport, ApplyWarning, PathIssue, PlanWorktree,
-    Refusal,
+    RefScope, Refusal,
 };
 use gitraptor_core::timemachine::oplog::{
     Channel, NewOperation, OperationKind, OperationState, OperationTransition, Requester, Scope,
@@ -117,7 +117,7 @@ impl Apply {
                 root: self.f().repo.clone(),
                 recreate_id: None,
             }],
-            move_refs: true,
+            refs: RefScope::All,
         }
     }
 

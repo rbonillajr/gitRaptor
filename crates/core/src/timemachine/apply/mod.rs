@@ -52,8 +52,30 @@ pub struct ApplyPlan {
     /// The guaranteed prior snapshot of this operation (step 2): what the repo holds now.
     pub prior_snapshot: String,
     pub worktrees: Vec<PlanWorktree>,
-    /// Whether branches and `refs/stash` move to the target's values.
-    pub move_refs: bool,
+    /// Which branches and whether `refs/stash` move to the target's values.
+    pub refs: RefScope,
+}
+
+/// The refs an application moves to the target's values.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RefScope {
+    /// No ref moves.
+    None,
+    /// Every branch and `refs/stash` (a restore of the whole repo).
+    All,
+    /// Only these full names (`refs/heads/<name>`, `refs/stash`): an undo moves the refs of its
+    /// scope and never another worktree's branch (US-TMC-002).
+    Only(BTreeSet<String>),
+}
+
+impl RefScope {
+    pub fn includes(&self, full_name: &str) -> bool {
+        match self {
+            Self::None => false,
+            Self::All => true,
+            Self::Only(names) => names.contains(full_name),
+        }
+    }
 }
 
 /// One worktree of the plan.
@@ -338,6 +360,27 @@ impl<'a> Applier<'a> {
 
     /// Applies `plan` for `operation_id`, which must be `ready`. See the module docs.
     pub fn apply(&self, operation_id: &str, plan: &ApplyPlan) -> Result<ApplyReport, ApplyError> {
+        self.apply_with(operation_id, plan, None)
+    }
+
+    /// Like [`Self::apply`] for a caller that already holds the repo (an undo takes it before
+    /// choosing its target, so the last operation cannot change under it). A guard of another
+    /// repo is refused as "repo busy".
+    pub fn apply_holding(
+        &self,
+        operation_id: &str,
+        plan: &ApplyPlan,
+        held: &repo_lock::RepoGuard,
+    ) -> Result<ApplyReport, ApplyError> {
+        self.apply_with(operation_id, plan, Some(held))
+    }
+
+    fn apply_with(
+        &self,
+        operation_id: &str,
+        plan: &ApplyPlan,
+        held: Option<&repo_lock::RepoGuard>,
+    ) -> Result<ApplyReport, ApplyError> {
         let reject = |refusals: Vec<Refusal>| -> Result<ApplyReport, ApplyError> {
             let reason = refusals.first().map(Refusal::code).unwrap_or("rejected");
             self.oplog(|log, now| {
@@ -356,7 +399,7 @@ impl<'a> Applier<'a> {
             &plan.target_snapshot,
             &plan.prior_snapshot,
             &plan.worktrees,
-            plan.move_refs,
+            &plan.refs,
         ) {
             Ok(l) => l,
             Err(r) => return reject(vec![r]),
@@ -373,8 +416,14 @@ impl<'a> Applier<'a> {
         }
 
         // ---- 3. locks ----------------------------------------------------------------
-        let Some(repo_guard) = repo_lock::try_lock(&self.store.path().display().to_string()) else {
-            return reject(vec![Refusal::RepoBusy]);
+        let key = self.store.path().display().to_string();
+        let repo_guard = match held {
+            Some(guard) if guard.key() == key => None,
+            Some(_) => return reject(vec![Refusal::RepoBusy]),
+            None => match repo_lock::try_lock(&key) {
+                Some(guard) => Some(guard),
+                None => return reject(vec![Refusal::RepoBusy]),
+            },
         };
         let mut locks: Vec<(usize, GitLock)> = Vec::new();
         for (i, w) in loaded.worktrees.iter().enumerate() {
