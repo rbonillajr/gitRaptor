@@ -251,6 +251,7 @@ fn config(tp: &TempProfile, operations: Option<OperationsWiring>) -> DaemonConfi
         channel: ChannelConfig::default(),
         protected: None,
         operations,
+        tm_prior_layer: None,
     }
 }
 

@@ -23,6 +23,7 @@ use crate::executor::{GuardrailsGate, OpPlan, PlanError, RepoFacts, StepPlan};
 use crate::profile::ProfileDirs;
 use crate::timemachine::oplog::Oplog;
 use crate::timemachine::store::SnapshotStore;
+use crate::timemachine::undo::{TmRepoHandle, UndoBackend};
 
 /// The operations' own parts (ADR-CKP-002 § 1): each one's preconditions,
 /// expected values, warnings and affected work, and the step that runs a
@@ -168,6 +169,57 @@ impl TmRepos {
             repo.store.clone(),
         ))
     }
+
+    /// The observed repo whose worktree root is `folder`, with the
+    /// production snapshotter wrapped by `layer` in debug builds. Nothing
+    /// is searched upwards, like `repo.add`.
+    fn open_worktree(
+        &self,
+        folder: &Path,
+        layer: Option<&SnapshotterLayer>,
+    ) -> Result<Opened, ScopeError> {
+        let reader = RepoReader::open(folder, &ReaderOptions::default())
+            .map_err(|_| ScopeError::NotObserved)?;
+        let worktree = canonical(&reader.workdir().ok_or(ScopeError::NotObserved)?);
+        if worktree != canonical(folder) {
+            return Err(ScopeError::NotObserved);
+        }
+        let common_dir = canonical(reader.common_dir());
+        drop(reader);
+        let (repo_id, oplog, store) = self
+            .by_common_dir(&common_dir)
+            .ok_or(ScopeError::NotObserved)?;
+        let snapshotter: Arc<dyn PriorSnapshotter> = match &store {
+            Some(store) => Arc::new(StoreSnapshotter {
+                store: Arc::clone(store),
+                oplog: Arc::clone(&oplog),
+                profile: self.dirs.clone(),
+            }),
+            None => Arc::new(UnavailableStore),
+        };
+        // Fault injection is honored only in debug builds (tests).
+        let snapshotter = match layer {
+            Some(layer) if cfg!(debug_assertions) => layer(snapshotter),
+            _ => snapshotter,
+        };
+        Ok(Opened {
+            handle: RepoHandle {
+                repo_id,
+                worktree,
+                oplog,
+                snapshotter,
+            },
+            store,
+            common_dir,
+        })
+    }
+}
+
+/// A worktree of an observed repo, opened.
+struct Opened {
+    handle: RepoHandle,
+    store: Option<Arc<SnapshotStore>>,
+    common_dir: PathBuf,
 }
 
 /// A store that could not be opened: every prior fails as "store
@@ -203,37 +255,9 @@ impl ProtectedBackend for DaemonBackend {
     /// `folder` must be the root of a worktree of an observed repo: nothing
     /// is searched upwards, like `repo.add`.
     fn repo_of(&self, folder: &Path) -> Result<RepoHandle, ScopeError> {
-        let reader = RepoReader::open(folder, &ReaderOptions::default())
-            .map_err(|_| ScopeError::NotObserved)?;
-        let worktree = canonical(&reader.workdir().ok_or(ScopeError::NotObserved)?);
-        if worktree != canonical(folder) {
-            return Err(ScopeError::NotObserved);
-        }
-        let common_dir = canonical(reader.common_dir());
-        drop(reader);
-        let (repo_id, oplog, store) = self
-            .repos
-            .by_common_dir(&common_dir)
-            .ok_or(ScopeError::NotObserved)?;
-        let snapshotter: Arc<dyn PriorSnapshotter> = match store {
-            Some(store) => Arc::new(StoreSnapshotter {
-                store,
-                oplog: Arc::clone(&oplog),
-                profile: self.repos.dirs.clone(),
-            }),
-            None => Arc::new(UnavailableStore),
-        };
-        // Fault injection is honored only in debug builds (tests).
-        let snapshotter = match &self.wiring.prior_layer {
-            Some(layer) if cfg!(debug_assertions) => layer(snapshotter),
-            _ => snapshotter,
-        };
-        Ok(RepoHandle {
-            repo_id,
-            worktree,
-            oplog,
-            snapshotter,
-        })
+        self.repos
+            .open_worktree(folder, self.wiring.prior_layer.as_ref())
+            .map(|o| o.handle)
     }
 
     fn write_lock_key(&self, repo: &RepoHandle) -> String {
@@ -256,6 +280,56 @@ impl ProtectedBackend for DaemonBackend {
 
     fn step(&self, plan: &StepPlan<'_>) -> Result<Box<dyn ProtectedStep>, StepError> {
         self.wiring.catalog.step(plan)
+    }
+
+    fn allowlist(&self) -> &dyn McpAllowlist {
+        &self.allowlist
+    }
+}
+
+/// The production [`UndoBackend`]: the observed repos with their real store,
+/// wired whether or not a catalog of operations is (US-TMC-002). The MCP
+/// allowlist admits no repo until DEP-MCP-4.
+pub struct TimeMachineBackend {
+    repos: Arc<TmRepos>,
+    prior_layer: Option<SnapshotterLayer>,
+    allowlist: NoMcpRepos,
+}
+
+impl TimeMachineBackend {
+    /// `prior_layer` wraps the snapshotter of the Time Machine's own
+    /// commands; honored only in debug builds (tests).
+    pub fn new(repos: Arc<TmRepos>, prior_layer: Option<SnapshotterLayer>) -> Self {
+        Self {
+            repos,
+            prior_layer,
+            allowlist: NoMcpRepos,
+        }
+    }
+}
+
+impl UndoBackend for TimeMachineBackend {
+    fn repo_of(&self, folder: &Path) -> Result<TmRepoHandle, ScopeError> {
+        let opened = self
+            .repos
+            .open_worktree(folder, self.prior_layer.as_ref())?;
+        // The main worktree holds refs and objects: the parent of a
+        // `.git` common folder. A bare repo has none.
+        let main_root = opened
+            .common_dir
+            .parent()
+            .filter(|_| opened.common_dir.ends_with(".git"))
+            .map(Path::to_path_buf);
+        let tm_dir = crate::timemachine::oplog::repo_dir(&self.repos.dirs, &opened.handle.repo_id)
+            .map_err(|_| ScopeError::NotObserved)?;
+        Ok(TmRepoHandle {
+            write_lock_key: self.repos.lock_key(&opened.handle.repo_id),
+            repo: opened.handle,
+            store: opened.store,
+            main_root,
+            tm_dir,
+            profile_root: self.repos.dirs.data.clone(),
+        })
     }
 
     fn allowlist(&self) -> &dyn McpAllowlist {
