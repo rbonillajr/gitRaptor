@@ -1,6 +1,7 @@
 # INF-GRP-003: release pipeline (NFR-06, ADR-GRP-014).
 #
-# A `v*` tag builds `raptor` and `raptor-mcp` for the six targets of NFR-06, checksums them,
+# A `v*` tag builds `raptor` and `raptor-mcp` (plus `raptor-hook`, the Guardrails dispatcher) for
+# the six targets of NFR-06, checksums them,
 # tests the install scripts against the built archives, renders the distribution channels
 # (INF-GRP-004) and leaves a DRAFT GitHub Release. Nothing is published here: publishing the
 # draft is a human step, and the channels are published by `release-channels.yml` only after that.
@@ -160,7 +161,9 @@ jobs:
           ext=""; [ "$RUNNER_OS" = Windows ] && ext=".exe"
           name="raptor-$VERSION-$TARGET"
           mkdir -p "stage/$name"
-          cp "target/$TARGET/release/raptor$ext" "target/$TARGET/release/raptor-mcp$ext" "stage/$name/"
+          # raptor-hook: the native Guardrails dispatcher, always next to raptor (US-GRD-001).
+          cp "target/$TARGET/release/raptor$ext" "target/$TARGET/release/raptor-mcp$ext" \
+            "target/$TARGET/release/raptor-hook$ext" "stage/$name/"
           cp README.md LICENSE "stage/$name/"
           echo "name=$name" >> "$GITHUB_OUTPUT"
           echo "ext=$ext" >> "$GITHUB_OUTPUT"
@@ -198,7 +201,7 @@ jobs:
           if [ -z "$P12" ] || [ -z "$API_KEY" ]; then
             echo "::warning::macOS binaries are only ad-hoc signed: requires secret APPLE_CERTIFICATE_P12_BASE64 and APPLE_API_KEY_P8_BASE64"
             # The arm64 linker signs ad hoc on its own; the cross-compiled x86_64 build is not.
-            for bin in raptor raptor-mcp; do
+            for bin in raptor raptor-mcp raptor-hook; do
               codesign --force --sign - "stage/$NAME/$bin"
               codesign --verify --verbose "stage/$NAME/$bin"
             done
@@ -212,7 +215,7 @@ jobs:
           security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$P12_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -k "$kpass" "$keychain" >/dev/null
           security list-keychains -d user -s "$keychain"
-          for bin in raptor raptor-mcp; do
+          for bin in raptor raptor-mcp raptor-hook; do
             codesign --force --options runtime --timestamp --keychain "$keychain" \
               --sign "$IDENTITY" "stage/$NAME/$bin"
           done
@@ -376,6 +379,7 @@ jobs:
           RAPTOR_DOWNLOAD_BASE="$base" RAPTOR_INSTALL_DIR="$dir" sh dist/install.sh --version "$VERSION"
           out=$("$dir/raptor" --version); echo "$out"; [ "$out" = "raptor $VERSION" ]
           test -x "$dir/raptor-mcp"
+          test -x "$dir/raptor-hook"
           # A tampered checksum must abort before anything is installed.
           mkdir -p "$RUNNER_TEMP/bad"; cp dist/* "$RUNNER_TEMP/bad/"
           sed -i.bak -E "s/^[0-9a-f]{64}/$(printf '0%.0s' $(seq 64))/" "$RUNNER_TEMP/bad/SHA256SUMS"
@@ -396,6 +400,7 @@ jobs:
           Write-Output $out
           if ($out -ne "raptor $env:VERSION") { throw "unexpected version: $out" }
           if (-not (Test-Path (Join-Path $dir 'raptor-mcp.exe'))) { throw 'raptor-mcp.exe missing' }
+          if (-not (Test-Path (Join-Path $dir 'raptor-hook.exe'))) { throw 'raptor-hook.exe missing' }
           $bad = Join-Path $env:RUNNER_TEMP 'bad'
           New-Item -ItemType Directory $bad | Out-Null
           Copy-Item dist/* $bad
