@@ -4,19 +4,45 @@
   "private": true,
   "description": "GitRaptor design tokens (DTCG JSON) built with Style Dictionary",
   "type": "module",
-  "files": ["tokens", "build"],
   "scripts": {
-    "build": "style-dictionary build --config style-dictionary.config.json"
+    "build": "node scripts/build.mjs",
+    "check": "node scripts/build.mjs --check",
+    "test": "node --test"
   },
   "nx": {
-    "tags": ["scope:shared", "type:tokens"],
+    "tags": [
+      "scope:shared",
+      "type:tokens"
+    ],
     "targets": {
       "build": {
-        "outputs": ["{projectRoot}/build"]
+        "outputs": [
+          "{projectRoot}/build",
+          "{workspaceRoot}/crates/theme/src/generated.rs"
+        ]
+      },
+      "check": {
+        "cache": true,
+        "inputs": [
+          "default",
+          "{workspaceRoot}/crates/theme/src/generated.rs"
+        ]
+      },
+      "test": {
+        "cache": true,
+        "inputs": [
+          "default",
+          "{workspaceRoot}/crates/theme/src/generated.rs"
+        ]
       }
     }
   },
   "devDependencies": {
     "style-dictionary": "5.5.5"
-  }
+  },
+  "files": [
+    "tokens",
+    "build",
+    "scripts"
+  ]
 }
