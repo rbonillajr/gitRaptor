@@ -10,7 +10,7 @@ complexity: medium
 created: 2026-10-05
 updated: 2026-10-05
 related:
-  adrs: [ADR-GRP-010, ADR-GRP-011]
+  adrs: [ADR-GRP-010, ADR-GRP-011, ADR-GRP-015]
   stories: [INF-GRP-002, US-GRP-001, US-GRP-002]
   specs: [DS-INF-GRP-002]
 ado:
@@ -38,7 +38,7 @@ tags: [motor-local, deuda-tecnica, rendimiento, rafaga, nfr-04, nfr-05, huella]
 - **Latencia, solo en macOS**: durante una ráfaga en un worktree, el p95 del motor en los otros nueve supera los 300 ms de NFR-04: en el Mac de referencia, 336 ms con 1.000 archivos (el escenario de ADR-GRP-011 § 4) y 496 ms con 10.000. El recomputo del worktree medido sube de ~20 ms a cientos. **En Linux (CI) se cumple**: 193 ms p95 en las dos ráfagas.
 - **El cuello está en el motor**: sin daemon, `git status` en otro worktree durante la misma ráfaga no se degrada (33 → 35 ms), ni siquiera con un `F_FULLFSYNC` cada 75 ms (40 ms). La CPU del daemon se queda en torno a un núcleo, así que la causa probable es un recurso compartido que se serializa, no la falta de CPU (Arquitecto, 2026-10-05). Candidatos: el despachador de eventos, el filtro de ignorados, el canal hacia el bucle del daemon o la publicación del estado de todos los worktrees en cada lote.
 - **Memoria, en los dos SO**: el pico de RSS en ráfaga va de 420 a 830 MiB según la corrida, y el daemon retiene después entre 220 y 345 MiB (objetivo de reposo: 150 MiB). La causa candidata es el buffer de reproducción del bus: 1.024 eventos `worktree.state`, cada uno con el estado de los 10 worktrees (hasta 200 cambios o 32 KB por worktree). El banco reporta su tamaño serializado (`replay_buffer`).
-- **Riesgo**: el temporizador del runner de macOS (VM) se despierta de 92 a 147 ms tarde. Un daemon arrancado por launchd con QoS de fondo podría sufrir el mismo coalescing. Hay que verificarlo en dogfooding con el autoarranque.
+- **Riesgo**: el temporizador del runner de macOS (VM) se despierta de 92 a 147 ms tarde. Un daemon arrancado por launchd con QoS de fondo podría sufrir el mismo coalescing. Hay que verificarlo en dogfooding con el autoarranque. Afecta además a las clases de trabajo de ADR-GRP-015 (RES-06): bajar un trabajo a `utility` o `background` en macOS puede activar el mismo coalescing.
 
 Esto refuta la invariante de ADR-GRP-010 § 3 ("la ráfaga de un worktree no retrasa a los demás") y activa el disparador que dejó la Enmienda US-GRP-002 de ADR-GRP-010: "la caché de stat y las dos fases se añaden si INF-GRP-002 muestra que no cabe".
 
