@@ -350,3 +350,70 @@ fn entry_from_row(row: &Row<'_>) -> rusqlite::Result<RepoEntry> {
 fn path_text(path: &Path) -> &str {
     path.to_str().unwrap_or_default()
 }
+
+/// The repos of the index, `(repo_id, canonical path)`, read without the
+/// engine and without writing anything (US-GRP-017: the engine is stopped).
+///
+/// A read-only SQLite connection to a WAL database still creates `-wal` and
+/// `-shm` files, so the index is opened `immutable` and only when no `-wal`
+/// file exists: then every commit is in the main file and there is nothing
+/// to recover. With a `-wal` (the engine runs or crashed), an index of an
+/// unknown schema or any error, the answer is `None` and the caller shows
+/// repo ids instead. Never created, migrated nor recovered.
+pub fn read_only_repos(index: &Path) -> Option<Vec<(String, PathBuf)>> {
+    use rusqlite::OpenFlags;
+    if !index.is_file() {
+        return None;
+    }
+    let mut wal = index.as_os_str().to_owned();
+    wal.push("-wal");
+    if Path::new(&wal).exists() {
+        return None;
+    }
+    let conn = Connection::open_with_flags(
+        immutable_uri(index)?,
+        OpenFlags::SQLITE_OPEN_READ_ONLY
+            | OpenFlags::SQLITE_OPEN_URI
+            | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .ok()?;
+    conn.pragma_update(None, "query_only", true).ok()?;
+    let version: i64 = conn
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .ok()?;
+    let known = i64::try_from(super::schema::INDEX_MIGRATIONS.len()).ok()?;
+    if version < 1 || version > known {
+        return None;
+    }
+    let mut stmt = conn
+        .prepare("SELECT repo_id, canonical_path FROM repos ORDER BY repo_id")
+        .ok()?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .ok()?;
+    rows.map(|r| r.ok().map(|(id, path)| (id, PathBuf::from(path))))
+        .collect()
+}
+
+/// `file:` URI of `path` with `immutable=1`, percent-encoded.
+fn immutable_uri(path: &Path) -> Option<String> {
+    use std::fmt::Write as _;
+    let text = path.to_str()?;
+    let text = if cfg!(windows) {
+        ["/", &text.replace('\\', "/")].concat()
+    } else {
+        text.to_owned()
+    };
+    let mut uri = String::from("file:");
+    for b in text.bytes() {
+        if b.is_ascii_alphanumeric() || b"-._~/:".contains(&b) {
+            uri.push(char::from(b));
+        } else {
+            let _ = write!(uri, "%{b:02X}");
+        }
+    }
+    uri.push_str("?immutable=1");
+    Some(uri)
+}
