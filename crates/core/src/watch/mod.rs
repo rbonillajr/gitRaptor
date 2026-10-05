@@ -120,8 +120,8 @@ pub(crate) enum WtMsg {
     Paths(u64, Vec<PathBuf>),
     /// The watcher lost events (overflow): reconcile, with a gap.
     Rescan(u64),
-    /// Reconcile now, without a gap (backup poll).
-    Reconcile,
+    /// Reconcile now, without a gap (backup poll, or its `HEAD` commit moved).
+    Reconcile(u64),
     /// An ignore rule file outside the worktree changed.
     IgnoreRules,
     Stop,
@@ -180,6 +180,20 @@ pub(crate) struct Shared {
 impl Shared {
     fn send(&self, batch: ObservedBatch) {
         (self.sink)(batch);
+    }
+
+    /// Sends the batch of a worktree task only while the worktree is still
+    /// followed. The check and the send hold the lock that stopping it
+    /// takes, so a read of a removed worktree never follows the batch that
+    /// says it is gone.
+    fn send_from_worktree(&self, root: &Path, batch: ObservedBatch) {
+        let repos = self.repos.read().unwrap_or_else(|e| e.into_inner());
+        let followed = repos
+            .get(&batch.repo_id)
+            .is_some_and(|r| r.worktrees.iter().any(|w| w.root == root));
+        if followed {
+            (self.sink)(batch);
+        }
     }
 
     /// Routes the paths of one file event. Longest watched prefix first.

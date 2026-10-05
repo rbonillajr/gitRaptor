@@ -311,6 +311,19 @@ impl RepoReader {
         Ok(index.entries().len())
     }
 
+    /// The branch a rebase in progress works on, from its `head-name`
+    /// (`refs/heads/feat`); `None` outside a rebase or for a detached one.
+    /// Text from the repo: untrusted (SEC-12), only compared with names.
+    pub fn rebase_branch(&self) -> Option<String> {
+        ["rebase-merge", "rebase-apply"].iter().find_map(|dir| {
+            let name = std::fs::read(self.repo.git_dir().join(dir).join("head-name")).ok()?;
+            let name = String::from_utf8_lossy(&name);
+            name.trim_end()
+                .strip_prefix("refs/heads/")
+                .map(str::to_owned)
+        })
+    }
+
     /// Operation in progress, from the marker files.
     pub fn in_progress(&self) -> Option<InProgress> {
         use gix::state::InProgress as S;
