@@ -30,15 +30,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libssl-dev libcurl4-gnutls-dev libexpat1-dev zlib1g-dev gettext \
     && rm -rf /var/lib/apt/lists/*
 
-# Git built from source, one prefix per version. Docs and Tcl/Tk are not needed.
+# Git built from source, one prefix per version. Docs and Tcl/Tk are not needed. Recent Git
+# builds its Rust parts by default (NO_RUST opts out), so a throwaway toolchain is installed for
+# the build and removed afterwards, to match what upstream ships.
 RUN set -eux; \
+    export RUSTUP_HOME=/tmp/rustup CARGO_HOME=/tmp/cargo PATH="/tmp/cargo/bin:$PATH"; \
+    curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --no-modify-path \
+        --default-toolchain "$RUST_TOOLCHAIN"; \
     for v in "$GIT_MIN_VERSION" "$GIT_LATEST_VERSION"; do \
         curl -fsSL "https://mirrors.edge.kernel.org/pub/software/scm/git/git-$v.tar.xz" \
             | tar -xJ -C /tmp; \
         make -C "/tmp/git-$v" -j"$(nproc)" prefix="/opt/git/$v" NO_TCLTK=1 all install >/dev/null; \
         rm -rf "/tmp/git-$v"; \
         "/opt/git/$v/bin/git" version; \
-    done
+    done; \
+    rm -rf /tmp/rustup /tmp/cargo
 
 # Node from the official binary tarball; pnpm through corepack, pinned like package.json.
 RUN set -eux; \
