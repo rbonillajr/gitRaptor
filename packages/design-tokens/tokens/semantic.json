@@ -244,10 +244,10 @@
         }
       },
       "8": {
-        "$value": "{color.okabeIto.gray}",
+        "$value": "{color.white}",
         "$extensions": {
           "dev.gitraptor": {
-            "highContrast": "{color.okabeIto.gray}"
+            "highContrast": "{color.white}"
           }
         }
       },
