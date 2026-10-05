@@ -372,8 +372,8 @@ fn a_failed_step_is_interrupted_with_its_prior_snapshot() {
 }
 
 /// DEP-MCP-3: a child the step starts is marked with the operation's
-/// requester while the operation runs, and annotated in the journal.
-#[cfg(unix)]
+/// requester while the operation runs, and annotated in the journal. On
+/// Windows too, by `(pid, creation time)`.
 #[test]
 fn children_of_the_step_are_marked() {
     struct Spawner {
@@ -384,8 +384,16 @@ fn children_of_the_step_are_marked() {
             "fetch-free"
         }
         fn run(&mut self, ctx: &mut StepCtx<'_>) -> Result<StepOutput, StepError> {
+            #[cfg(unix)]
+            let mut cmd = Command::new("/bin/sleep");
+            #[cfg(unix)]
+            cmd.arg("0.3");
+            #[cfg(windows)]
+            let mut cmd = Command::new("cmd");
+            #[cfg(windows)]
+            cmd.args(["/C", "ping -n 2 127.0.0.1 >NUL"]);
             let child = ctx
-                .spawn(Command::new("/bin/sleep").arg("0.3"))
+                .spawn(&mut cmd)
                 .map_err(|e| StepError::new(e.to_string()))?;
             let info = SystemProcs.read(child.pid).unwrap();
             self.seen = ctx.marks.lookup(&info);
