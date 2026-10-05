@@ -89,7 +89,7 @@ Entonces el undo no se ejecuta
 ## Diseño y Dev Spec
 
 - **Diseño (flujo/UX):** Pendiente de diseño.
-- **Dev Spec:** pendiente (lo genera el Arquitecto).
+- **Dev Spec:** [DS-US-TMC-002](../dev-specs/US-TMC-002-undo-ultima-operacion.md)
 
 ## Dependencias
 
