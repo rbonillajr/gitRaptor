@@ -11,7 +11,7 @@ created: 2026-10-04
 updated: 2026-10-04
 related:
   adrs: [ADR-CKP-002, ADR-GRD-002, ADR-GRD-003, ADR-GRD-006, ADR-GRD-007]
-  stories: [TS-CKP-002, US-GRD-001, US-GRD-005, US-GRD-016, INF-GRD-001]
+  stories: [US-CKP-014, US-CKP-015, US-CKP-017, US-CKP-018, US-CKP-019, TS-CKP-002, US-GRD-001, US-GRD-005, US-GRD-016, INF-GRD-001]
   specs: []
 ado:
   id: null

@@ -11,7 +11,7 @@ created: 2026-10-04
 updated: 2026-10-04
 related:
   adrs: [ADR-GRP-003, ADR-CKP-003, ADR-GRP-002]
-  stories: []
+  stories: [US-CKP-001, US-CKP-005]
   specs: []
 ado:
   id: null
@@ -38,7 +38,7 @@ tags: [cockpit, design-tokens, tema, simbolos, accesibilidad, nfr-09, dtcg, styl
 - **Definir** en `packages/design-tokens` los tokens semánticos de DSYS-GRP-001 § 2.1 (texto, fondo, marca, estado, Git y los ocho colores de agente) sobre primitivos, cada uno con valor truecolor, índice de 256 colores y fallback de 16.
 - **Definir** una variante de alto contraste del juego semántico.
 - **Definir** los símbolos de DSYS-GRP-001 § 2.2 como tokens con glifo, fallback ASCII y anchura en columnas.
-- **Configurar** la generación con Style Dictionary hacia `crates/theme` y un control de CI que falla si el código generado no coincide con los tokens.
+- **Configurar** la generación de tokens del stack (ADR-GRP-001) hacia `crates/theme` y un control de CI que falla si el código generado no coincide con los tokens.
 - **Exponer** en `crates/theme` el tema por token semántico y por símbolo para cada modo (truecolor, 256, 16, sin color, alto contraste, ASCII), sin depender de la biblioteca de TUI.
 - **Exponer** la asignación de color por agente, que reutiliza los colores a partir del noveno agente (BR-CKP-EDGE-006).
 - **Fuera de alcance**: la elección final del acento y de la paleta (DSYS-GRP-001 § 8, decisión pendiente); la detección del modo desde flags, `NO_COLOR` y locale, que hace la TUI en la historia de accesibilidad; los widgets; las variables CSS de la Fase 3.

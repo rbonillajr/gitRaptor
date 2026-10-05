@@ -11,7 +11,7 @@ created: 2026-10-04
 updated: 2026-10-04
 related:
   adrs: [ADR-CKP-001, ADR-GRP-009, ADR-GRP-006, ADR-GRP-011, ADR-TMC-001]
-  stories: [INF-GRP-001, INF-GRP-002]
+  stories: [US-CKP-006, INF-GRP-001, INF-GRP-002]
   specs: []
 ado:
   id: null

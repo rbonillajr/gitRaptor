@@ -9,14 +9,14 @@ created: 2026-10-04
 updated: 2026-10-04
 related:
   adrs: [ADR-CKP-002, ADR-CKP-003, ADR-TMC-004, ADR-TMC-005, ADR-GRD-003, ADR-GRD-006, ADR-GRD-007]
-  stories: [TS-CKP-002, TS-CKP-003, INF-CKP-001, TS-TMC-004]
+  stories: [TS-CKP-002, TS-CKP-003, INF-CKP-001, TS-TMC-004, US-CKP-014, US-CKP-019, US-CKP-020, US-CKP-024]
 ---
 
 # Secuencia — Operación de usuario desde la TUI: preparar, decidir, proteger y ejecutar (BR-07)
 
-> Covers: BR-07 (BR-CKP-ELIG-002, WF-002, WF-003, WF-008, CONS-002, CONS-004, AUTH-001, AUTH-002) · TS-CKP-002, TS-CKP-003, INF-CKP-001 · ADR-CKP-002 § 1 a § 6, ADR-TMC-004 § 1, ADR-TMC-005 § 1 y § 3, ADR-GRD-003 § 4 a § 6, ADR-GRD-007. Todavía no hay historias de usuario del Cockpit.
+> Covers: BR-07 (BR-CKP-ELIG-002, WF-002, WF-003, WF-008, CONS-002, CONS-004, AUTH-001, AUTH-002) · TS-CKP-002, TS-CKP-003, INF-CKP-001 · ADR-CKP-002 § 1 a § 6, ADR-TMC-004 § 1, ADR-TMC-005 § 1 y § 3, ADR-GRD-003 § 4 a § 6, ADR-GRD-007 · US-CKP-014, US-CKP-019, US-CKP-020, US-CKP-024.
 
-El desarrollador integra en la base confirmada el trabajo del worktree W2 (`merge-into-base`). La TUI no escribe: pide un plan, muestra lo que el daemon devuelve y pide ejecutar ese plan por la misma conexión. El daemon fija el solicitante y la capa, toma la decisión de Guardrails antes de cualquier efecto, toma el snapshot previo y lanza `git` como padre directo tras registrarlo. Los hooks de Guardrails de ese `git` heredan la decisión, y todo proceso que desciende de él actúa como el solicitante del plan. Incluye la rama denegada y la excepción consciente.
+El desarrollador integra en la base confirmada el trabajo del worktree W2 (`merge-into-base`). La TUI no escribe: pide un plan, muestra lo que el daemon devuelve y pide ejecutar ese plan por la misma conexión. El daemon fija el solicitante y la capa, toma la decisión de Guardrails antes de cualquier efecto, toma el snapshot previo y lanza `git` como padre directo tras registrarlo. Los hooks de Guardrails de ese `git` heredan la decisión. El canal rechaza los comandos reservados de todo proceso que desciende de él (`daemon-descendant`), y ese proceso se atribuye al solicitante del plan. Incluye la rama denegada y la excepción consciente.
 
 ```mermaid
 sequenceDiagram
@@ -54,7 +54,7 @@ sequenceDiagram
       else excepción consciente (Q-CKP-15)
         U->>T: pide la excepción
         T->>D: comando reservado de excepción ligado al planId y a la huella
-        alt fallan los controles 1 a 3 o el cliente desciende de un hijo del ejecutor
+        alt fallan los controles 1 a 3 (incluido daemon-descendant)
           D-->>T: rechazo, entrada "exception-rejected"
         else controles superados
           D->>M: anuncio reserved-action-pending a todos los clientes
@@ -70,15 +70,15 @@ sequenceDiagram
 
     D->>D: acepta el planId solo si es de esta conexión y no caducó
     D->>D: cerrojo de escritura del repo (si está ocupado, "en cola" visible en todos los clientes)
-    D->>TM: intención en el oplog
     D->>D: re-resuelve solicitante y capa, rehace el plan, compara la huella y revalida el repo (dev e inode, gitdir bidireccional)
     alt huella, solicitante, capa o repo distintos
-      D-->>T: rejected "el estado cambió", sin efectos
+      D-->>T: rejected "el estado cambió", sin efectos ni apunte en el oplog
     else todo coincide
       D->>P: re-evaluar (la decisión que cuenta, antes de cualquier efecto)
       alt denegada sin excepción aplicada
-        D-->>T: rejected con la regla
+        D-->>T: rejected con la regla, sin apunte en el oplog
       else permitida, o denegada con la excepción de este plan
+        D->>TM: intención en el oplog (primer paso de la operación protegida)
         D->>TM: snapshot previo garantizado
         alt el snapshot falla
           TM-->>D: error
@@ -93,7 +93,7 @@ sequenceDiagram
           D-->>H: decisión ya tomada (hijo registrado, transición coincidente), sin snapshot por hook
           H-->>G: permite y encadena el hook previo del usuario
           opt un hook del usuario abre el canal
-            Note over G,D: Se resuelve como el solicitante del plan. No puede pedir comandos reservados, confirmaciones, la excepción, Cancelar ni operaciones del catálogo. Sus git nietos se evalúan de nuevo con ese actor.
+            Note over G,D: El canal rechaza sus comandos reservados con daemon-descendant y lo audita como el solicitante del plan. El ejecutor le rechaza confirmaciones, la excepción, Cancelar y operaciones del catálogo. Sus git nietos se evalúan de nuevo con ese actor.
           end
           G-->>D: código de salida
           D->>D: lee el estado resultante con gitoxide
@@ -112,4 +112,4 @@ sequenceDiagram
   Note over T,D: Por MCP: mismo flujo con capa mcp y solo operaciones con marca MCP (commit, rebase atómico, crear worktree con plantilla, snapshot). Tiempo máximo, sin salida de Git y rechazo de lo que exige confirmación, del trabajo ajeno y de la excepción.
 ```
 
-Decisión del orquestador (2026-10-04), validada por Arquitecto: la ventana de la excepción consciente corre **antes** de tomar el cerrojo del repo y queda ligada al `planId` y a la huella; si el plan cambia durante la ventana, el `execute` se rechaza. ADR-CKP-002 § 4 no fija ese orden; se confirma en la Dev Spec de la historia de la excepción. Windows (capa `cockpit`, barrera de arranque, confirmación de trabajo ajeno) y Linux: **Pendiente: etapa de validación multiplataforma**.
+Decisión del orquestador (2026-10-04), validada por Arquitecto: la ventana de la excepción consciente corre **antes** de tomar el cerrojo del repo y queda ligada al `planId` y a la huella; si el plan cambia durante la ventana, el `execute` se rechaza con `exception-rejected`. Queda fijado en ADR-CKP-002 § 4 (Excepción consciente, Orden). El rechazo por huella o por Guardrails no deja intención en el oplog (ADR-CKP-002 § 2, paso 4). Windows (capa `cockpit`, barrera de arranque, confirmación de trabajo ajeno) y Linux: **Pendiente: etapa de validación multiplataforma**.
