@@ -8,7 +8,7 @@ domain: GRP
 priority: high
 complexity: medium
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-05
 related:
   adrs: [ADR-GRP-012, ADR-GRP-013, ADR-GRP-005]
   stories: [US-GRP-007, US-GRP-008, US-GRP-009]
@@ -24,6 +24,8 @@ tags: [motor-local, spike, deteccion, atribucion, claude-code, dogfooding, preci
 **Valor**: confirmar, antes de desarrollar US-GRP-007 y US-GRP-008, que las señales de ADR-GRP-012 alcanzan el 90% sin atribuir nunca trabajo humano a Claude Code.
 
 > Un SPIKE no lleva Dev Spec: su entregable es un Research Brief en `research/SPIKE-GRP-001-precision-deteccion.md`. Prototipo aislado, sin código del motor. **Depende de**: — (arranca el día uno). **Valida**: ADR-GRP-012; informa ADR-GRP-013 (evidencia por evento) y ADR-GRP-005 (supuesto de PQ-6).
+>
+> **Cambio (2026-10-05, US-GRP-007)**: por instrucción del coordinador para el hito M1, el spike se valida **con el motor real** de US-GRP-007 en dogfooding, y **solo para S1 + S3**; S2a y S2b quedan abiertas hasta US-GRP-008. El procedimiento (duración, verdad de referencia, suite guionizada en macOS y métricas) está en el § 5 de la [Dev Spec de US-GRP-007](../dev-specs/US-GRP-007-dev-spec.md), y la enmienda en ADR-GRP-012. Pendiente de que Rene ratifique el cambio de secuencia.
 
 ### Pregunta
 
