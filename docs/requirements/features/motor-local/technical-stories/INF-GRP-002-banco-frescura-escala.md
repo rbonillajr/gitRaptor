@@ -11,7 +11,7 @@ created: 2026-10-03
 updated: 2026-10-05
 related:
   adrs: [ADR-GRP-011, ADR-GRP-010, ADR-GRP-005, ADR-GRP-006, ADR-GRP-013]
-  stories: [US-GRP-001, US-GRP-002, US-GRP-012, TS-GRP-004, TD-GRP-001]
+  stories: [US-GRP-001, US-GRP-002, US-GRP-012, TS-GRP-004, TD-GRP-002]
   specs: [DS-INF-GRP-002]
 ado:
   id: null
@@ -29,7 +29,7 @@ tags: [motor-local, ci, rendimiento, latencia, p95, escala, nfr-04, nfr-05]
 **Quiero** un banco reproducible de latencia por etapa y de escala, convertido en gate de CI
 **Para** que el motor cumpla sus 300 ms de NFR-04 y la escala de NFR-05 con el mismo dato que se usa en dogfooding (ADR-GRP-011)
 
-> Dev Spec: `dev-specs/INF-GRP-002-dev-spec.md` | Hecha (2026-10-05). Comando: `cargo bench -p gitraptor-cli --bench engine`. Deuda abierta: [TD-GRP-001](./TD-GRP-001-motor-bajo-rafaga.md)
+> Dev Spec: `dev-specs/INF-GRP-002-dev-spec.md` | Hecha (2026-10-05). Comando: `cargo bench -p gitraptor-cli --bench engine`. Deuda abierta: [TD-GRP-002](./TD-GRP-002-motor-bajo-rafaga.md)
 >
 > **Depende de**: TS-GRP-004 (tiempos en el evento) y US-GRP-002 (observador implementado). **ADRs**: ADR-GRP-011 § 4 (banco y gates, que la Dev Spec debe seguir), ADR-GRP-010 (escenarios), ADR-GRP-005 y ADR-GRP-006 (huella del daemon y del perfil), ADR-GRP-013 (coste de resolver el actor).
 
@@ -70,4 +70,4 @@ tags: [motor-local, ci, rendimiento, latencia, p95, escala, nfr-04, nfr-05]
 
 Nota de integración (Time Machine, ADR-TMC-006 y US-TMC-020): el banco añade el escenario 'operación protegida con trabajo sin commitear' sobre el repo de referencia de SPIKE-TMC-001, con 1 y con 10 worktrees activos, con gate de p95 < 200 ms del snapshot previo y aviso por etapa. El gate del motor se ejecuta con la Time Machine activa.
 
-Nota (2026-10-05, Dev Spec): **gate de huella añadido por Rene** (CPU y RSS en reposo y en ráfaga, descriptores y watches). La ráfaga de 10.000 archivos se suma como escenario de estrés a la de 1.000. Los incumplimientos bajo ráfaga los recoge [TD-GRP-001](./TD-GRP-001-motor-bajo-rafaga.md).
+Nota (2026-10-05, Dev Spec): **gate de huella añadido por Rene** (CPU y RSS en reposo y en ráfaga, descriptores y watches). La ráfaga de 10.000 archivos se suma como escenario de estrés a la de 1.000. Los incumplimientos bajo ráfaga los recoge [TD-GRP-002](./TD-GRP-002-motor-bajo-rafaga.md).
