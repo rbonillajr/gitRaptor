@@ -442,8 +442,9 @@ const OLDEST: GitVersion = GitVersion(2, 38, 0);
 const ANY: GitVersion = GitVersion(u32::MAX, 0, 0);
 
 /// Published list of ADR-GRD-002 § 1–3 (Enmienda 2026-10-04). Files backend: verified by
-/// SPIKE-GRD-001 on macOS with Git 2.38.5, 2.50.1 and 2.56.0, and by this executor with 2.50.1.
-/// Reftable: 2.56.0 (spike) and 2.50.1 (this executor, 2026-10-05). Linux and Windows: Pendiente:
+/// SPIKE-GRD-001 on macOS with Git 2.38.5, 2.50.1 and 2.56.0, and by this executor with 2.50.1
+/// (macOS) and 2.55.0 (Linux and macOS CI runners).
+/// Reftable: 2.56.0 (spike), 2.50.1 and 2.55.0 (this executor, 2026-10-05). Linux and Windows: Pendiente:
 /// etapa de validación multiplataforma.
 pub const REFERENCE: &[Reference] = &[
     r("commit", Published::Impedible, Moment::A),
@@ -482,13 +483,15 @@ pub const REFERENCE: &[Reference] = &[
         published: Published::NotImpedible("C"),
         moment: Moment::C,
     },
-    // Renaming onto the base: with 2.50.1 the hook runs and its denial leaves the source branch
-    // deleted (B, as with files); with 2.56.0 no hook runs (D11). Versions in between: unmeasured.
+    // Renaming onto the base: with 2.50.1 (macOS, local) and 2.55.0 (Linux and macOS CI runners)
+    // the hook runs and its denial leaves the source branch deleted (B, as with files); with
+    // 2.56.0 SPIKE-GRD-001 saw no hook (D11, its setup commits on `feat` first). Versions
+    // outside both rows are unmeasured.
     Reference {
         code: "rename-over-base",
         refs: RefFormat::Reftable,
-        from: GitVersion(2, 45, 0),
-        to: GitVersion(2, 50, 1),
+        from: GitVersion(2, 50, 1),
+        to: GitVersion(2, 55, 0),
         published: Published::NotImpedible("B"),
         moment: Moment::B,
     },
@@ -1001,6 +1004,57 @@ pub const COST_TABLE: &[CostRow] = &[
         1,
         "stash-pop",
         "reference-transaction:abortedx1 reference-transaction:committedx2 reference-transaction:preparedx2",
+    ),
+    // Linux (ubuntu-latest) and macOS (macos-latest, Homebrew) CI runners, Git 2.55.0, 2026-10-05:
+    // identical on both. `preparing` already exists in 2.55.
+    cost(
+        2,
+        55,
+        0,
+        "commit",
+        "commit-msgx1 post-commitx1 pre-commitx1 prepare-commit-msgx1 reference-transaction:abortedx1 reference-transaction:committedx2 reference-transaction:preparedx2 reference-transaction:preparingx2",
+    ),
+    cost(
+        2,
+        55,
+        0,
+        "switch-new",
+        "post-checkoutx1 reference-transaction:abortedx2 reference-transaction:committedx4 reference-transaction:preparedx4 reference-transaction:preparingx4",
+    ),
+    cost(
+        2,
+        55,
+        0,
+        "switch",
+        "post-checkoutx1 reference-transaction:abortedx2 reference-transaction:committedx3 reference-transaction:preparedx3 reference-transaction:preparingx3",
+    ),
+    cost(
+        2,
+        55,
+        0,
+        "rebase-3",
+        "post-checkoutx1 post-commitx3 post-rewritex1 pre-rebasex1 prepare-commit-msgx3 reference-transaction:abortedx9 reference-transaction:committedx22 reference-transaction:preparedx22 reference-transaction:preparingx22",
+    ),
+    cost(
+        2,
+        55,
+        0,
+        "fetch",
+        "reference-transaction:committedx2 reference-transaction:preparedx2 reference-transaction:preparingx2",
+    ),
+    cost(
+        2,
+        55,
+        0,
+        "stash",
+        "reference-transaction:abortedx2 reference-transaction:committedx5 reference-transaction:preparedx5 reference-transaction:preparingx5",
+    ),
+    cost(
+        2,
+        55,
+        0,
+        "stash-pop",
+        "reference-transaction:abortedx1 reference-transaction:committedx2 reference-transaction:preparedx2 reference-transaction:preparingx2",
     ),
 ];
 
