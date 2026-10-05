@@ -30,12 +30,15 @@ use std::sync::Arc;
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use gitraptor_api::event::{DAEMON_STOPPING, ENGINE_STATE, REPO_OBSERVATION, WORKTREE_STATE};
+use gitraptor_api::event::{
+    DAEMON_STOPPING, ENGINE_STATE, GIT_EVENT, REPO_OBSERVATION, WORKTREE_STATE,
+};
 #[cfg(unix)]
 use gitraptor_api::messages::DaemonView;
 use gitraptor_api::messages::{
-    EngineStateView, EngineView, RepoAddOutcome, RepoAddResult, RepoObservationData,
-    RepoRetireResult, RepoStateView, RepoView, StoppingData, WorktreeStateData,
+    EngineStateView, EngineView, EventsHistoryParams, GitEventDetails, GitEventKind, GitEventView,
+    MAX_HISTORY_PAGE, RepoAddOutcome, RepoAddResult, RepoObservationData, RepoRetireResult,
+    RepoStateView, RepoView, StoppingData, WorktreeStateData, WorktreeStatus, WorktreeView,
 };
 use gitraptor_api::{Timings, Untrusted, clock};
 use gitraptor_policy::team::BaseBranch;
@@ -46,14 +49,16 @@ use gitraptor_git::resolve::{Resolution, ResolveConfig, resolve};
 use crate::channel::{ChannelConfig, EngineShared, EventBus};
 use crate::observe::{self, RepoRead};
 use crate::profile::{
-    AddOutcome, DaemonRun, GapCause, Profile, ProfileDirs, ProfileError, RepoEntry, RepoState,
-    RepoStore, StoreOpen, WriteOp, fsperm,
+    AddOutcome, DaemonRun, Event as StoredEvent, GapCause, KnownState, NewEvent, Profile,
+    ProfileDirs, ProfileError, RepoEntry, RepoState, RepoStore, StoreOpen, Timestamp, WriteOp,
+    fsperm,
 };
 use crate::timemachine::oplog::{
     AbsentStore, ChainBreak, Oplog, OplogStatus, RecoveryOptions, RecoveryReport, SnapshotRefs,
     SystemProbe,
 };
 use crate::timemachine::store::SnapshotStore;
+use crate::watch::{ObservedBatch, Observer, WatchConfig};
 
 pub use env::{AGENT_EXECUTABLES_ENV, DaemonEnv};
 pub use lock::{InstanceLock, LOCK_FILE, running_pid, wait_until_released};
@@ -263,6 +268,13 @@ pub struct Daemon {
     handle: ShutdownHandle,
     control_rx: Receiver<Control>,
     bus: Arc<EventBus>,
+    /// The change observer (US-GRP-002); `None` outside "Observing".
+    observer: Option<Observer>,
+    /// Ahead/behind already counted for observed changes (US-GRP-012).
+    divergence_cache: observe::DivergenceCache,
+    /// Periodic reconciliations that found differences: a value above 0 in
+    /// dogfooding points to an unidentified cause of loss (ADR-GRP-010 § 5).
+    periodic_diffs: u64,
     #[cfg_attr(not(unix), allow(dead_code))]
     started_ms: i64,
     #[cfg(unix)]
@@ -471,7 +483,7 @@ impl Daemon {
         logger.info("daemon_started", &fields);
 
         let (handle, control_rx) = ShutdownHandle::new();
-        Ok(Self {
+        let mut daemon = Self {
             config,
             lock,
             logger,
@@ -483,12 +495,26 @@ impl Daemon {
             handle,
             control_rx,
             bus,
+            observer: None,
+            divergence_cache: observe::DivergenceCache::default(),
+            periodic_diffs: 0,
             started_ms: now_ms(),
             #[cfg(unix)]
             bound,
             #[cfg(unix)]
             server: None,
-        })
+        };
+        // The observer starts after the reconciliation; each worktree task
+        // reads once more when its watch runs, so nothing in between is
+        // lost (ADR-GRP-010 § 6).
+        for (repo_id, read) in &reads {
+            let (Some(read), Some(entry)) = (read, daemon.profile.repo(repo_id).ok().flatten())
+            else {
+                continue;
+            };
+            daemon.observe(repo_id, &entry.canonical_path, read);
+        }
+        Ok(daemon)
     }
 
     pub fn state(&self) -> EngineState {
@@ -559,6 +585,10 @@ impl Daemon {
                 }
                 Ok(Control::RepoRetire { repo_id, reply }) => {
                     let _ = reply.send(self.retire_repo(&repo_id));
+                }
+                Ok(Control::Observed(batch)) => self.observed(*batch),
+                Ok(Control::EventHistory { params, reply }) => {
+                    let _ = reply.send(self.event_history(&params));
                 }
                 Err(RecvTimeoutError::Timeout) => {
                     self.persist_observed_until(now_ms());
@@ -695,8 +725,10 @@ impl Daemon {
             stores,
             oplogs,
             profile,
+            observer,
             ..
         } = self;
+        drop(observer);
         drop(oplogs);
         drop(stores);
         drop(profile);
@@ -770,6 +802,9 @@ impl Daemon {
             }
             None => RepoStateView::Unavailable,
         };
+        if state == RepoStateView::Observed {
+            self.observe(&repo_id, &request.common_dir, &request.read);
+        }
         let t_persisted = clock::monotonic_ns();
         let worktrees = request.read.views();
         let view = RepoView {
@@ -820,9 +855,25 @@ impl Daemon {
     /// Publishes the reconciled worktrees of one repo and updates the view
     /// snapshots read, in the same critical section.
     fn publish_worktrees(&self, repo_id: &str, read: &RepoRead, timings: Timings) {
-        let worktrees = read.views();
-        let inputs = read.divergence_inputs();
-        let base = observe::base_view(&read.base);
+        self.publish_views(
+            repo_id,
+            read.views(),
+            read.divergence_inputs(),
+            Some(observe::base_view(&read.base)),
+            timings,
+        );
+    }
+
+    /// Publishes the worktree views of one repo with the inputs of their
+    /// ahead/behind recount, in the same critical section as the snapshot.
+    fn publish_views(
+        &self,
+        repo_id: &str,
+        worktrees: Vec<WorktreeView>,
+        inputs: observe::DivergenceInputs,
+        base: Option<gitraptor_api::messages::BaseBranchView>,
+        timings: Timings,
+    ) {
         let mut data = WorktreeStateData {
             repo_id: repo_id.to_owned(),
             worktrees: worktrees.clone(),
@@ -835,7 +886,9 @@ impl Daemon {
             .publish(WORKTREE_STATE, data, Some(timings), move |shared| {
                 if let Some(repo) = shared.repos.iter_mut().find(|r| r.repo_id == id) {
                     repo.worktrees = worktrees;
-                    repo.base = base;
+                    if let Some(base) = base {
+                        repo.base = base;
+                    }
                     shared.divergence.insert(id, inputs);
                 }
             });
@@ -858,6 +911,9 @@ impl Daemon {
         self.profile
             .retire_repo(repo_id, now)
             .map_err(|err| self.repo_command_failed("repo_retire_failed", &err))?;
+        if let Some(observer) = &self.observer {
+            observer.forget_repo(repo_id);
+        }
         if let Some(pos) = self.stores.iter().position(|(id, _)| id == repo_id) {
             let (_, mut store) = self.stores.remove(pos);
             if let Err(err) = store.write_batch(&[WriteOp::SetObservedUntil { ms: now }]) {
@@ -896,6 +952,313 @@ impl Daemon {
             self.transition(Trigger::LastRepoRetired);
         }
         Ok(RepoRetireResult { retired: true })
+    }
+
+    /// Starts observing a repo, creating the observer on first use. Its
+    /// batches come back to this loop as [`Control::Observed`].
+    fn observe(&mut self, repo_id: &str, common_dir: &std::path::Path, read: &RepoRead) {
+        let observer = self.observer.get_or_insert_with(|| {
+            let handle = self.handle.clone();
+            Observer::start(
+                WatchConfig::default(),
+                Arc::new(move |batch| {
+                    handle.observed(batch);
+                }),
+            )
+        });
+        observer.watch_repo(repo_id, common_dir, read);
+    }
+
+    /// Persists what the observer saw, then publishes it (ADR-GRP-013:
+    /// persisted before published). A batch of a repo no longer observed
+    /// is discarded.
+    fn observed(&mut self, batch: ObservedBatch) {
+        let Some((_, store)) = self.stores.iter_mut().find(|(id, _)| *id == batch.repo_id) else {
+            return;
+        };
+        let now = now_ms();
+        let known: Vec<PathBuf> = store
+            .worktrees()
+            .map(|all| all.into_iter().map(|w| w.path).collect())
+            .unwrap_or_default();
+        let mut ops = Vec::new();
+        for read in &batch.worktrees {
+            let path = PathBuf::from(read.view.path.raw());
+            if !matches!(read.view.status, WorktreeStatus::Ready { .. }) {
+                continue;
+            }
+            let refs = match &batch.refs {
+                Some(refs) => refs.clone(),
+                None => store
+                    .last_known_state(&path)
+                    .ok()
+                    .flatten()
+                    .map(|k| k.refs)
+                    .unwrap_or_default(),
+            };
+            ops.push(WriteOp::UpsertWorktree {
+                path: path.clone(),
+                admin_name: read.view.admin_name.as_ref().map(|n| n.raw().to_owned()),
+                seen_ms: now,
+            });
+            ops.push(WriteOp::SetLastKnownState {
+                worktree: path,
+                state: KnownState {
+                    head: read.head_commit.clone(),
+                    refs,
+                    operation: None,
+                    dirty_fingerprint: read.fingerprint.clone(),
+                    updated_ms: now,
+                },
+            });
+        }
+        // An event's worktree must exist in the store.
+        for event in &batch.events {
+            let listed = batch
+                .worktrees
+                .iter()
+                .any(|r| r.view.path.raw() == event.worktree.to_string_lossy());
+            if !listed
+                && !known.contains(&event.worktree)
+                && !ops.iter().any(|op| {
+                    matches!(op, WriteOp::UpsertWorktree { path, .. } if *path == event.worktree)
+                })
+            {
+                ops.push(WriteOp::UpsertWorktree {
+                    path: event.worktree.clone(),
+                    admin_name: None,
+                    seen_ms: now,
+                });
+            }
+        }
+        let gap_id = batch.gap.map(|gap| {
+            let id = format!("{}-{}", gap.cause.as_str(), run_id());
+            ops.push(WriteOp::OpenGap {
+                gap_id: id.clone(),
+                started_ms: gap.started_ms,
+                cause: gap.cause,
+                requested_by: None,
+            });
+            ops.push(WriteOp::CloseGap {
+                gap_id: id.clone(),
+                ended_ms: gap.ended_ms,
+            });
+            id
+        });
+        for event in &batch.events {
+            ops.push(WriteOp::AppendEvent(NewEvent {
+                worktree: event.worktree.clone(),
+                kind: event.kind.as_str().to_owned(),
+                metadata: serde_json::to_string(&event.details).unwrap_or_default(),
+                observed: Timestamp {
+                    utc_ms: event.observed_ms,
+                    offset_s: event.offset_s,
+                },
+                // No session without positive evidence (ADR-GRP-013 § 3).
+                session_id: None,
+                evidence: None,
+                gap_id: if event.kind == GitEventKind::Reconciled {
+                    gap_id.clone()
+                } else {
+                    None
+                },
+            }));
+        }
+        for gone in &batch.gone {
+            if known.contains(gone) {
+                ops.push(WriteOp::MarkWorktreeGone {
+                    path: gone.clone(),
+                    gone_ms: now,
+                });
+            }
+        }
+        ops.push(WriteOp::SetObservedUntil { ms: now });
+        let seqs = match store.write_batch(&ops) {
+            Ok(result) => result.seqs,
+            Err(err) => {
+                self.logger.error(
+                    "observed_persist_failed",
+                    &[
+                        ("repo", Field::id(&batch.repo_id)),
+                        ("kind", profile_error_kind(&err).into()),
+                    ],
+                );
+                Vec::new()
+            }
+        };
+        let t_persisted = clock::monotonic_ns();
+        if let Some(gap) = batch.gap {
+            if gap.cause == GapCause::PeriodicReconciliation {
+                self.periodic_diffs += 1;
+            }
+            self.logger.warn(
+                "observer_gap",
+                &[
+                    ("repo", Field::id(&batch.repo_id)),
+                    ("cause", gap.cause.as_str().into()),
+                    (
+                        "periodic_diffs",
+                        i64::try_from(self.periodic_diffs)
+                            .unwrap_or(i64::MAX)
+                            .into(),
+                    ),
+                ],
+            );
+        }
+        let timings = Timings {
+            batch_id: self.bus.next_batch(),
+            t_recv: batch.marks.t_recv,
+            t_flush: batch.marks.t_flush,
+            t_computed: batch.marks.t_computed,
+            t_persisted,
+            t_published: 0,
+        };
+        let views_changed = !batch.worktrees.is_empty() || !batch.gone.is_empty();
+        if views_changed {
+            self.publish_observed_views(&batch, timings);
+        }
+        // Only persisted events are published: they have their sequence.
+        for (event, seq) in batch.events.iter().zip(seqs) {
+            let view = GitEventView {
+                repo_id: batch.repo_id.clone(),
+                seq,
+                worktree: Untrusted::from_os(event.worktree.as_os_str()),
+                kind: event.kind,
+                actor: gitraptor_api::Actor::Unattributed,
+                observed_utc_ms: event.observed_ms,
+                utc_offset_s: event.offset_s,
+                details: event.details.clone(),
+                gap_id: (event.kind == GitEventKind::Reconciled)
+                    .then(|| gap_id.clone())
+                    .flatten(),
+            };
+            self.bus.publish(GIT_EVENT, view, Some(timings), |_| {});
+        }
+        // Second phase (ADR-GRP-010 § 4, ADR-GRP-011 § 2): the ahead/behind
+        // against the base branch, outside the first event's budget.
+        if views_changed || batch.refs.is_some() {
+            self.publish_divergence(&batch.repo_id, timings);
+        }
+    }
+
+    /// First phase of an observed change: the repo's worktree views with
+    /// the batch merged in, each changed worktree keeping its previous
+    /// ahead/behind until the second phase counts it again. The inputs of
+    /// the snapshot's recount follow the new `HEAD`s (US-GRP-012).
+    fn publish_observed_views(&self, batch: &ObservedBatch, timings: Timings) {
+        let shared = self.bus.snapshot().1;
+        let old = shared
+            .repos
+            .iter()
+            .find(|r| r.repo_id == batch.repo_id)
+            .map(|r| r.worktrees.clone())
+            .unwrap_or_default();
+        let old_inputs = shared.divergence.get(&batch.repo_id).cloned();
+        let mut worktrees: Vec<(WorktreeView, observe::HeadRef)> = old
+            .iter()
+            .enumerate()
+            .filter(|(_, w)| {
+                !batch
+                    .gone
+                    .iter()
+                    .any(|g| g.to_string_lossy() == w.path.raw())
+            })
+            .map(|(i, w)| {
+                let head = old_inputs
+                    .as_ref()
+                    .and_then(|inp| inp.heads.get(i).cloned())
+                    .unwrap_or(observe::HeadRef::None);
+                (w.clone(), head)
+            })
+            .collect();
+        for read in &batch.worktrees {
+            let mut view = read.view.clone();
+            let previous = worktrees.iter().position(|(w, _)| w.path == view.path);
+            if let Some(WorktreeStatus::Ready { divergence, .. }) =
+                previous.map(|i| &worktrees[i].0.status)
+            {
+                observe::set_divergence(&mut view, divergence.clone());
+            }
+            match previous {
+                Some(i) => worktrees[i] = (view, read.head_ref()),
+                None => worktrees.push((view, read.head_ref())),
+            }
+        }
+        worktrees.sort_by(|(a, _), (b, _)| (!a.main, a.path.raw()).cmp(&(!b.main, b.path.raw())));
+        let base = old_inputs
+            .as_ref()
+            .map(|inp| inp.base.clone())
+            .unwrap_or_else(|| repo_base(&self.stores, &batch.repo_id));
+        let common_dir = old_inputs
+            .map(|inp| inp.common_dir)
+            .or_else(|| {
+                self.profile
+                    .repo(&batch.repo_id)
+                    .ok()
+                    .flatten()
+                    .map(|e| e.canonical_path)
+            })
+            .unwrap_or_default();
+        let (views, heads): (Vec<_>, Vec<_>) = worktrees.into_iter().unzip();
+        let inputs = observe::DivergenceInputs {
+            common_dir,
+            base,
+            heads,
+        };
+        self.publish_views(&batch.repo_id, views, inputs, None, timings);
+    }
+
+    /// Second phase: counts the ahead/behind of the repo as it is now and
+    /// publishes it if it changed.
+    fn publish_divergence(&self, repo_id: &str, timings: Timings) {
+        let shared = self.bus.snapshot().1;
+        let (Some(repo), Some(inputs)) = (
+            shared.repos.iter().find(|r| r.repo_id == repo_id),
+            shared.divergence.get(repo_id),
+        ) else {
+            return;
+        };
+        let mut counted = [repo.clone()];
+        let map = BTreeMap::from([(repo_id.to_owned(), inputs.clone())]);
+        observe::refresh_divergence(&mut counted, &map, &self.divergence_cache);
+        let [counted] = counted;
+        if counted.worktrees == repo.worktrees {
+            return;
+        }
+        let t_computed = clock::monotonic_ns();
+        let timings = Timings {
+            t_computed,
+            t_persisted: t_computed,
+            ..timings
+        };
+        self.publish_views(repo_id, counted.worktrees, inputs.clone(), None, timings);
+    }
+
+    /// One page of a repo's Git events (US-GRP-002, ADR-GRP-013 § 6).
+    fn event_history(
+        &self,
+        params: &EventsHistoryParams,
+    ) -> Result<Vec<GitEventView>, RepoCommandError> {
+        let (_, store) = self
+            .stores
+            .iter()
+            .find(|(id, _)| *id == params.repo_id)
+            .ok_or(RepoCommandError::UnknownRepo)?;
+        let limit = params
+            .limit
+            .unwrap_or(MAX_HISTORY_PAGE)
+            .min(MAX_HISTORY_PAGE);
+        let events = store
+            .events_page(
+                params.worktree.as_deref().map(std::path::Path::new),
+                params.after_seq,
+                limit,
+            )
+            .map_err(|err| self.repo_command_failed("events_history_failed", &err))?;
+        Ok(events
+            .into_iter()
+            .filter_map(|e| git_event_view(&params.repo_id, store, e))
+            .collect())
     }
 
     /// Applies a BR-WF-002 transition and publishes the new engine view.
@@ -1029,6 +1392,42 @@ fn recover_repo(
         recovery,
     };
     Ok((oplog, startup))
+}
+
+/// A stored event as the contract shows it; `None` for kinds of other
+/// stories. Without a session the actor is "unattributed" (BR-CONS-003);
+/// with one, its initial attribution until US-GRP-010 resolves the records.
+fn git_event_view(repo_id: &str, store: &RepoStore, e: StoredEvent) -> Option<GitEventView> {
+    let kind = GitEventKind::parse(&e.kind)?;
+    let actor = match e
+        .session_id
+        .as_deref()
+        .and_then(|id| store.session(id).ok().flatten())
+    {
+        None => gitraptor_api::Actor::Unattributed,
+        Some(session) => gitraptor_api::Actor::Agent {
+            kind: match session.agent.kind {
+                crate::profile::AgentKind::ClaudeCode => gitraptor_api::AgentKind::ClaudeCode,
+                crate::profile::AgentKind::Other => gitraptor_api::AgentKind::Other,
+            },
+            name: session.agent.name.map(Untrusted::new),
+            origin: match session.initial_origin {
+                crate::profile::Origin::Detected => gitraptor_api::AgentOrigin::Detected,
+                crate::profile::Origin::Registered => gitraptor_api::AgentOrigin::Registered,
+            },
+        },
+    };
+    Some(GitEventView {
+        repo_id: repo_id.to_owned(),
+        seq: e.seq,
+        worktree: Untrusted::from_os(e.worktree.as_os_str()),
+        kind,
+        actor,
+        observed_utc_ms: e.observed.utc_ms,
+        utc_offset_s: e.observed.offset_s,
+        details: serde_json::from_str::<GitEventDetails>(&e.metadata).unwrap_or_default(),
+        gap_id: e.gap_id,
+    })
 }
 
 /// Reconciles every observed repo that has a store, one thread per repo.
