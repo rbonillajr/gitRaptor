@@ -23,7 +23,7 @@ tags: [cockpit, spike, prediccion-conflictos, merge-en-seco, gitoxide, gix-merge
 
 **Valor**: decidir con mediciones el mecanismo del merge en seco de ADR-CKP-001 y confirmar o corregir el supuesto S-CKP-1 (≤ 5 s p95) antes de que la historia del predictor y las de BR-06 entren en desarrollo.
 
-> Un SPIKE no lleva Dev Spec: su entregable es un Research Brief en `research/SPIKE-CKP-001-resultados.md`. Es un prototipo aislado, sin código del daemon: un binario de prueba que usa `gix` (feature `merge`, versión fijada; en docs.rs, 0.88.0 con `gix-merge` 0.21.0) y el Git del sistema. Repos temporales, nunca este repo. **Depende de**: el núcleo del arnés de INF-GRP-001 (huella y ejecución de control) y el repo de 100K commits del banco de INF-GRP-002. **Valida**: ADR-CKP-001 (opción preferida, respaldo y cifras de § 3 a § 5). **Bloquea**: el paso de ADR-CKP-001 a `accepted` y la Dev Spec del predictor.
+> Un SPIKE no lleva Dev Spec: su entregable es un Research Brief en `research/SPIKE-CKP-001-resultados.md`. Es un prototipo aislado, sin código del daemon: un binario de prueba que usa `gix` (feature `merge`, versión fijada; en docs.rs, 0.88.0 con `gix-merge` 0.21.0) y el Git del sistema. Repos temporales, nunca este repo. **Depende de**: el núcleo del arnés de INF-GRP-001 (huella y ejecución de control) y el repo de 100K commits del banco de INF-GRP-002. **Valida**: ADR-CKP-001 (opción preferida, respaldo y cifras de § 3 a § 5). **Bloquea**: el paso de ADR-CKP-001 a `accepted` y la Dev Spec del predictor ([TS-CKP-001](./TS-CKP-001-predictor-conflictos.md)).
 >
 > **Plataformas**: macOS ahora (máquina de dogfooding y runner de CI). Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
 
@@ -64,6 +64,7 @@ Las opciones son **(a)** merge en memoria con `gix` (`merge_trees` sobre una ins
 - **Solape**: coste de mantener y cortar los conjuntos de rutas sin commitear con 10 worktrees y una ráfaga de 10K archivos en uno; valor del tope por worktree.
 - **Hunks**: extracción de rangos de líneas desde el resultado en memoria, con marcadores ampliados, frente a los rangos de `git merge`; archivos con líneas que imitan marcadores.
 - **Límites**: valor del tiempo máximo por par, de la memoria por trabajo y de los topes de archivos y hunks con un repo hostil (archivo de 100 MB, 10K conflictos, árbol muy profundo).
+- **Cotas y objetos (M-06, L-04)**: interrupción del merge en curso al vencer el tiempo por par, tope de tamaño de blob por cabecera, miles de renombrados con el límite fijo, y repos con `refs/replace/*`, `info/grafts` y atributos con `merge=<x>` en el disco, en el índice y en el árbol.
 - **Versiones de Git**: 2.38 (mínimo) y la última estable, para (b) y para la referencia de fidelidad.
 
 ### Criterios de Éxito
@@ -71,8 +72,12 @@ Las opciones son **(a)** merge en memoria con `gix` (`merge_trees` sobre una ins
 - **Repo intacto**: cero diferencias imputables y cero marcadores en el canario con la opción elegida. Es una condición eliminatoria.
 - **Rendimiento**: recálculo tras un commit ≤ 5 s p95 con 10 worktrees y 100K commits en macOS, y p95 del motor sin regresión fuera del ruido medido.
 - **Fidelidad**: paridad de archivos en conflicto ≥ el umbral, con el umbral confirmado o corregido con datos, y 0 falsos negativos en la demo del BRD § 13 (Q-CKP-25).
+- **Sin descargas (M-02, ADR-CKP-001 § 1)**: en un *partial clone* con remoto *promisor* local y objetos ausentes, la opción elegida da "no calculable (objeto ausente)" con cero descargas y cero conexiones. Con (b), además, `protocol.allow=never` corta todo intento de transporte. Es condición eliminatoria.
+- **Cotas dentro del proceso (M-06, ADR-CKP-001 § 1 y § 5)**: con la opción (a), el merge en seco respeta el tiempo máximo por par (interrupción a los 2 s), el tope de tamaño de blob leído de la cabecera antes de cargarlo y el límite fijo de renombrados (`rewrites.limit` de GitRaptor, no el del repo), con la memoria por trabajo acotada en el repo hostil. **Si no se demuestran esas cotas dentro del daemon**, la salida es el **proceso trabajador** con `rlimits` de CPU y memoria (el propio binario, nunca `git`), y el SPIKE mide su coste por par.
+- **Mismos objetos y cero atributos (L-04, ADR-CKP-001 § 1 y § 7)**: el merge ignora `refs/replace/*` e `info/grafts`; la pila de atributos queda vacía (ni disco, ni índice, ni árbol); un `merge=<x>` que llegue por cualquier vía se trata como el driver interno de texto y nunca ejecuta nada. Es condición eliminatoria.
 - **Salida hacia ADR-CKP-001**:
   - Mecanismo elegido.
+  - Si el merge en seco corre dentro del daemon o en un proceso trabajador con `rlimits` (M-06), lo que activa o no la enmienda condicionada de ADR-GRP-009 Validación 5.
   - Cifras de § 3 a § 5: tope de rutas, topes de hunks, concurrencia, tiempo y memoria por par.
   - Si el prefiltro se mantiene.
   - Las enmiendas de su tabla que hay que aplicar.
