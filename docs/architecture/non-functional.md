@@ -10,9 +10,9 @@
 - **Estado**: expanded
 - **Dominio**: GRP · **Feature**: motor-local (F-001-01)
 - **Fecha**: 2026-10-03
-- **Actualizado**: 2026-10-04 (enmienda Cockpit: SEC-05, SEC-08, SEC-09, SEC-12 y M8); 2026-10-04 (enmienda SPIKE-GRP-002: NFR-04, BR-CONS-005 y HUELLA); 2026-10-04 (enmienda Guardrails: SEC-03); antes, 2026-10-03 (revisión de seguridad)
+- **Actualizado**: 2026-10-05 (enmienda MCP: SEC-MCP-01 a 12, NFR-02, SEC-03, SEC-08 y SEC-12); 2026-10-04 (enmienda Cockpit: SEC-05, SEC-08, SEC-09, SEC-12 y M8); 2026-10-04 (enmienda SPIKE-GRP-002: NFR-04, BR-CONS-005 y HUELLA); 2026-10-04 (enmienda Guardrails: SEC-03); antes, 2026-10-03 (revisión de seguridad)
 - **Autor**: Arquitecto (AADD); Security NFRs: `security-expert`
-- **Relacionados**: CTX-GRP-001, BR-GRP-001 (BR-CONS-001, BR-CONS-005, BR-AUTH-001, BR-AUTH-002, BR-VAL-003), ADR-GRP-001, ADR-GRP-002, ADR-GRP-004, ADR-GRP-005..013, ADR-CKP-001..003, BRD-GRP-001 § 7 (NFR-01..12), TS-GRP-001..004, INF-GRP-001, INF-GRP-002, SPIKE-GRP-001, SPIKE-GRP-002
+- **Relacionados**: CTX-GRP-001, BR-GRP-001 (BR-CONS-001, BR-CONS-005, BR-AUTH-001, BR-AUTH-002, BR-VAL-003), ADR-GRP-001, ADR-GRP-002, ADR-GRP-004, ADR-GRP-005..013, ADR-CKP-001..003, ADR-MCP-001, BRD-GRP-001 § 7 (NFR-01..12), TS-GRP-001..004, INF-GRP-001, INF-GRP-002, SPIKE-GRP-001, SPIKE-GRP-002
 - **Nota de formato**: no hay tipo canónico `nfr` en el esquema AADD. Por eso este archivo lleva la sección Metadata de la plantilla `template-rnfs.md` y no frontmatter con `id`; así no dispara el gate de tipos ni deja un artefacto inválido en el índice.
 
 ## Atributos de calidad aplicados al motor
@@ -105,3 +105,32 @@ Aplicada desde DEP-CKP-1, 2, 3 y 9 de [CTX-CKP-001](../requirements/features/coc
 | Consultas bajo demanda (grafo, diff) con `gix`, fuera del estado en memoria y sin lanzar `git` | SEC-08 | DEP-CKP-2, DEP-CKP-3; ADR-GRP-005 (Enmienda) |
 
 **Revisión del `security-expert` (2026-10-04)**: hecha sobre ADR-CKP-001, 002 y 003. Sus hallazgos H-01 a I-03 quedan resueltos en texto en esos ADRs (sección "Revisión de seguridad (2026-10-04)" de cada uno), con las enmiendas a ADR-TMC-005 § 1, ADR-GRD-003 § 6 y ADR-GRP-005 § 6. Decisión del orquestador (2026-10-04), validada por Arquitecto, PO y security-expert. La parte MCP de SEC-12 tiene ya las categorías (L-03); su implementación sigue pendiente de la spec de F-001-05.
+
+## Enmienda (2026-10-05, MCP)
+
+Aplicada desde DEP-MCP-8 de [CTX-MCP-001](../requirements/features/mcp/context.md), con [ADR-MCP-001](./decisions/ADR-MCP-001-servidor-mcp-cliente-daemon.md). **Decisión del orquestador (2026-10-05), validada por Arquitecto, PO y security-expert.** Cierra lo que NFR-02 dejaba a "la spec del MCP (F-001-05)" y la parte MCP de M8 y SEC-12. El modelo de amenaza no cambia: el atacante principal sigue siendo un agente comprometido por prompt injection, ahora también como llamante del MCP y con otros servidores MCP en la misma sesión (ADR-MCP-001 § 9).
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| Habilitar y deshabilitar un repo para el MCP son comandos reservados | SEC-03 | DEP-MCP-3; ADR-GRP-005 (Enmienda (2026-10-05, MCP)) |
+| Límites y rate limit por solicitante, además de por conexión; plazas reservadas para TUI, CLI del humano y cliente del hook | SEC-08 | S-03; ADR-MCP-001 § 6 |
+| Spec MCP del contrato de salida: allowlist de campos por herramienta, topes, escape L-03 | SEC-12; M8 | ADR-MCP-001 § 5 |
+
+### Security NFRs del Servidor MCP
+
+| ID | Requisito | Verificación | Severidad |
+|---|---|---|---|
+| SEC-MCP-01 | **Perfil `mcp` y allowlist por solicitante.** Si el solicitante resuelto es un agente, el daemon aplica el perfil `mcp` (métodos, vistas y allowlist) sea cual sea el cliente (`raptor-mcp`, CLI, JSON-RPC directo) | Cliente JSON-RPC directo que se declara `cli` bajo un agente simulado → `repo-not-enabled` y vista MCP; `raptor status` bajo el agente → misma vista | Alta |
+| SEC-MCP-02 | **Ámbito sin TOCTOU.** cwd leído entre dos comprobaciones de identidad del par; pertenencia por componentes y `(dev, inode)`; worktree y marca de allowlist en la huella del plan, revalidados bajo el cerrojo | PID reutilizado → `identity-unverified`; `/w/repo-x` no casa con `/w/repo`; `mcp.disable` entre preparar y ejecutar → `state-changed` sin efectos | Alta |
+| SEC-MCP-03 | **Límites por solicitante.** ≤ 8 conexiones por agente, rate limit compartido entre sus conexiones, ≤ 4 peticiones en curso por conexión, cupo de snapshots por (solicitante, worktree) en 24 h; "sin atribuir" sin controles en un cupo común; plazas reservadas para clientes que pasan los controles 1 a 3 y para el cliente del hook | 50 conexiones de un agente → la TUI y el hook siguen conectando; el agente A no agota la cuota de B | Media |
+| SEC-MCP-04 | **`undo` no mueve refs protegidas** con capa `mcp` (rama base confirmada, refs protegidas por el suelo) hasta la política de US-TMC-021 | Undo de un commit propio en la rama base por MCP → `protected-ref` | Media |
+| SEC-MCP-05 | **Entradas cerradas.** Esquemas con `deny_unknown_fields`, tipos y rangos; `acknowledge` como enum cerrado sin eco; rutas literales; mensaje por stdin; topes de ADR-MCP-001 § 6 | Fuzz de esquemas; código desconocido en `acknowledge` → `invalid-params` sin eco; `create_worktree` con `path` → `invalid-params` | Alta |
+| SEC-MCP-06 | **Respuestas acotadas.** Allowlist de campos por herramienta, ≤ 24 KiB por parte, escape L-03, nombres ≤ 100; ids de operación y cursores ligados a (repo, conexión), con MAC | Instantánea por herramienta; 3.000 archivos modificados → ≤ 24 KiB por parte; id de otro repo → igual que inexistente | Media |
+| SEC-MCP-07 | **Superficie constante.** Nombres, descripciones, esquemas, `serverInfo` e `instructions` constantes del binario; `listChanged: false`; solo la capability `tools` | Instantánea de `initialize` y `tools/list` en INF-MCP-001 | Media |
+| SEC-MCP-08 | **stdout solo protocolo; stderr sin datos.** Diagnósticos como códigos fijos; *panic hook* que redacta; nunca entorno, argv ni contenido | Suite de secretos plantados y gitleaks sobre respuestas y stderr | Media |
+| SEC-MCP-09 | **Entorno no confiable, sin red y con frontera.** Perfil y socket desde la base de usuarios; `CLAUDE_PROJECT_DIR` no se usa; `rmcp` sin features de red; `apps/mcp` sin `crates/policy`, `crates/git` ni el motor | `HOME`, `PATH` y `GIT_*` hostiles sin efecto; `cargo-deny`; test de grafo de dependencias | Alta |
+| SEC-MCP-10 | **Instalación sin suplantación.** Install no sobrescribe un `gitraptor` ajeno ni instala desde npx o temporales; `raptor doctor` detecta un `gitraptor` en un `.mcp.json` de proyecto que no apunta al binario instalado | `gitraptor` ajeno → error sin cambios; `.mcp.json` hostil → diagnóstico | Baja |
+| SEC-MCP-11 | **Corpus de seguridad en CI** (INF-MCP-001): traversal, refs maliciosas, UNC, inyección de argumentos, Unicode, secretos, confused deputy, socket directo y agotamiento; bloquea el merge | Gate de CI; KPI "100 % del corpus rechazado" (Q-MCP-18) | Alta |
+| SEC-MCP-12 | **Puerta de release**: revisión OWASP MCP Top 10 y LLM Top 10 con `security-expert` antes de cada release, sin Critical ni High abiertos | Checklist firmado en el PR de release | Alta |
+
+Linux y Windows (lectura del cwd de otro proceso, identidad del par, UNC): **Pendiente: etapa de validación multiplataforma** (DEP-MCP-9).
