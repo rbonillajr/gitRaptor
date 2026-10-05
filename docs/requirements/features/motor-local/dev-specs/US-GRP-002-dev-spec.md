@@ -55,6 +55,27 @@ Todas son **Decisión del orquestador (2026-10-05), validada por el Arquitecto**
 | D13 | **Validación del enlace (SEC-11)**: antes de vigilar un worktree enlazado se exige que su `.git` apunte de vuelta a `.git/worktrees/<id>` y que su raíz no sea `/`, `$HOME`, la raíz de una unidad ni un ancestro del directorio común. Si no cumple, no se vigila y queda `unavailable` (`untrusted`) | Arquitecto: incluir la raíz de unidad. El tope de watches por repo en Linux sigue pendiente (SEC-11, etapa multiplataforma) |
 | D14 | **CLI**: `raptor events [--json] [--limit N]` lista los últimos eventos de los repos observados (hora local, worktree, tipo, rama y "sin atribuir"), con el i18n por catálogos de US-GRP-001 (`events.*` en `en.txt` y `es.txt`). `raptor status` ya refleja el estado en vivo porque lee la instantánea que actualiza el observador | — |
 
+### Enmienda (2026-10-05, `fix/live-changes-race`): carreras del observador bajo carga
+
+`apps/cli/tests/live_changes.rs` fallaba de forma intermitente con la máquina cargada. La causa no era el test: eran carreras del producto. Las dos primeras se reprodujeron en 3 de 10 ejecuciones con una carga media de ~33; las otras dos aparecieron al repetir las pruebas bajo carga después de corregir las primeras.
+
+- **D6, operación en curso.** Git mueve la rama de un merge o de un rebase *antes* de volver a enlazar `HEAD` (rebase) o de borrar `MERGE_HEAD` (merge). Si la ventana del repo leía la vista entre esos dos pasos, la rama no estaba en ningún `HEAD`, así que el evento caía en "único worktree en el commit" y quedaba marcado como inferido para siempre. Se añade una regla nueva entre la 1 y la 2: el worktree cuya **operación en curso trabaja sobre la rama** (la rama simbólica de `HEAD` durante un merge, un cherry-pick o un revert; `rebase-merge/head-name` o `rebase-apply/head-name` durante un rebase, leído con `RepoReader::rebase_branch` en `crates/git`) se queda el evento, sin marcarlo como inferido.
+- **D3/D4, la rama se mueve bajo su worktree.** Un commit escribe primero el índice y después la ref en el directorio común, y ese cambio solo lo ve la tarea del repo. Si la ventana del worktree se cerraba entre las dos escrituras, el estado se quedaba como "staged" hasta la reconciliación periódica (5 min). Ahora la tarea del repo envía `WtMsg::Reconcile(t_recv)` a cada worktree cuyo commit de `HEAD` cambió entre dos vistas. Así se relee sin abrir hueco y con el `t_recv` de su ventana, para que la frescura de ADR-GRP-011 § 3 no se mida a la baja.
+
+- **D3, lectura de un worktree ya borrado.** Al borrar un worktree, su tarea podía publicar una última lectura ("missing") *después* del lote del repo que lo daba por borrado, y el daemon lo volvía a mostrar como `unavailable`. Ahora la tarea del repo detiene las tareas de los worktrees borrados *antes* de enviar ese lote. Además, un worktree solo publica mientras sigue registrado: la comprobación y el envío ocurren bajo el mismo cerrojo que su baja.
+- **D5, reflog leído después de la vista.** La vista de refs y el reflog se leen en momentos distintos. Un commit que caía entre las dos lecturas se nombraba en esa ventana y otra vez en la siguiente. Ahora solo se nombran las entradas del reflog hasta la punta de la vista; las más nuevas las nombra la ventana siguiente.
+
+Tests en `crates/core/tests/watch.rs`. Un hook `reference-transaction` detiene a Git justo después de mover la rama, y los dos primeros tests leen la vista en ese momento. Los cuatro primeros son deterministas y fallan sin su arreglo:
+- `a_rebase_seen_before_git_reattaches_head_is_placed_in_its_worktree` (solo Unix);
+- `a_merge_seen_before_git_clears_its_markers_is_placed_in_its_worktree` (solo Unix);
+- `a_branch_moved_under_its_worktree_is_read_again`, que usa `update-ref` sin escribir nada en el directorio Git del worktree.
+- `a_commit_after_the_view_is_named_once_by_the_next_window`, que intercala vistas y commits;
+- en `branches_and_worktrees_are_followed`, ninguna lectura del worktree borrado llega después del lote que lo da por borrado. Este test comprueba el invariante, pero no fuerza la carrera.
+
+`live_changes.rs` no cambia.
+
+Decisión del orquestador (2026-10-04), validada por Arquitecto: no hace falta enmendar ADR-GRP-010 ni ADR-GRP-013. El primer arreglo concreta D6 y el segundo cabe en ADR-GRP-010 § 4: un cambio de refs relee lo afectado.
+
 ## 3. Estructura
 
 ```
