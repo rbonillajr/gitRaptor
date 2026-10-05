@@ -171,9 +171,22 @@ mod tests {
         ] {
             assert_eq!(client_path(raw), Err(why), "{raw}");
         }
-        assert!(client_path("/Users/u/work/repo").is_ok());
+        // A drive path is valid on every OS; a rooted path without a drive is not absolute on
+        // Windows (it depends on the current drive).
+        assert!(client_path(r"C:\Users\u\work\repo").is_ok());
+        assert!(client_path("C:/Users/u/work/repo").is_ok());
+        assert_eq!(client_path(r"C:\Users\u\aux"), Err(Invalid::DeviceName));
+        assert_eq!(client_path(r"C:work\repo"), Err(Invalid::AlternateStream));
         #[cfg(unix)]
-        assert!(client_path("/Users/u/paper/aux").is_ok());
+        {
+            assert!(client_path("/Users/u/work/repo").is_ok());
+            assert!(client_path("/Users/u/paper/aux").is_ok());
+        }
+        #[cfg(windows)]
+        {
+            assert_eq!(client_path("/Users/u/work/repo"), Err(Invalid::NotAbsolute));
+            assert_eq!(client_path(r"\Users\u\work"), Err(Invalid::NotAbsolute));
+        }
         assert_eq!(client_path(&"/a".repeat(3000)), Err(Invalid::TooLong));
     }
 
@@ -185,9 +198,18 @@ mod tests {
         let outside = root.join("outside");
         std::fs::create_dir_all(repo.join("src")).unwrap();
         std::fs::create_dir_all(&outside).unwrap();
+        // Observed roots are canonical (`\\?\C:\…` on Windows); a client sends the plain form,
+        // and a verbatim path from a client is refused before anything is resolved.
         let observed = vec![repo.clone()];
-        assert!(observed_path(repo.join("src").to_str().unwrap(), &observed).is_ok());
-        let traversal = format!("{}/src/../../outside", repo.display());
+        let client = gitraptor_testkit::fixture::without_verbatim_drive(&repo);
+        let client = client.to_str().unwrap();
+        assert!(observed_path(&format!("{client}/src"), &observed).is_ok());
+        #[cfg(windows)]
+        assert_eq!(
+            observed_path(repo.join("src").to_str().unwrap(), &observed),
+            Err(Invalid::UncOrDevice)
+        );
+        let traversal = format!("{client}/src/../../outside");
         assert_eq!(
             observed_path(&traversal, &observed),
             Err(Invalid::OutsideObserved)
@@ -195,7 +217,7 @@ mod tests {
         #[cfg(unix)]
         {
             std::os::unix::fs::symlink(&outside, repo.join("escape")).unwrap();
-            let link = format!("{}/escape", repo.display());
+            let link = format!("{client}/escape");
             assert_eq!(
                 observed_path(&link, &observed),
                 Err(Invalid::OutsideObserved)
