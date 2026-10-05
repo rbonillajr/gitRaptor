@@ -10,6 +10,8 @@ publish.workspace = true
 [dependencies]
 gix.workspace = true
 gix-pack.workspace = true
+# NFC/NFD collisions of a tree to restore (SEC-TMC-04); already in the lock through gix.
+unicode-normalization = "0.1.25"
 
 [target."cfg(unix)".dependencies]
 rustix = { version = "1.1.5", features = ["fs", "process"] }
