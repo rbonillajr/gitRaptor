@@ -14,7 +14,7 @@ use std::sync::Arc;
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::time::Instant;
 
-use gitraptor_api::Untrusted;
+use gitraptor_api::UntrustedName;
 use gitraptor_api::clock;
 use gitraptor_api::messages::{GitEventDetails, GitEventKind};
 use gitraptor_git::{ReaderOptions, RepoReader};
@@ -258,7 +258,7 @@ pub fn classify(common: &Path, old: &RefsView, new: &RefsView, now: (i64, i32)) 
                 here(root),
                 GitEventKind::WorktreeCreate,
                 GitEventDetails {
-                    branch: w.branch.clone().map(Untrusted::new),
+                    branch: w.branch.clone().map(UntrustedName::new),
                     new_commit: w.commit.clone(),
                     ..GitEventDetails::default()
                 },
@@ -271,7 +271,7 @@ pub fn classify(common: &Path, old: &RefsView, new: &RefsView, now: (i64, i32)) 
                 here(root),
                 GitEventKind::WorktreeDelete,
                 GitEventDetails {
-                    branch: w.branch.clone().map(Untrusted::new),
+                    branch: w.branch.clone().map(UntrustedName::new),
                     old_commit: w.commit.clone(),
                     ..GitEventDetails::default()
                 },
@@ -281,7 +281,7 @@ pub fn classify(common: &Path, old: &RefsView, new: &RefsView, now: (i64, i32)) 
 
     for (name, tip) in &new.branches {
         let details = |old_commit: Option<&String>, new_commit: &str| GitEventDetails {
-            branch: Some(Untrusted::new(name.clone())),
+            branch: Some(UntrustedName::new(name.clone())),
             old_commit: old_commit.cloned(),
             new_commit: Some(new_commit.to_owned()),
             ..GitEventDetails::default()
@@ -343,7 +343,7 @@ pub fn classify(common: &Path, old: &RefsView, new: &RefsView, now: (i64, i32)) 
                 place,
                 GitEventKind::BranchDelete,
                 GitEventDetails {
-                    branch: Some(Untrusted::new(name.clone())),
+                    branch: Some(UntrustedName::new(name.clone())),
                     old_commit: Some(tip.clone()),
                     ..GitEventDetails::default()
                 },
@@ -394,7 +394,7 @@ pub fn classify(common: &Path, old: &RefsView, new: &RefsView, now: (i64, i32)) 
             place,
             GitEventKind::Push,
             GitEventDetails {
-                branch: Some(Untrusted::new(name.clone())),
+                branch: Some(UntrustedName::new(name.clone())),
                 old_commit: before.cloned(),
                 new_commit: Some(tip.clone()),
                 ..GitEventDetails::default()

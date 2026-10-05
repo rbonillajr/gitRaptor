@@ -53,12 +53,22 @@ pub const TM_UNDO: &str = "timemachine.undo";
 pub const TM_REDO: &str = "timemachine.redo";
 pub const TM_RESTORE: &str = "timemachine.restore";
 pub const TM_TIMELINE: &str = "timemachine.timeline";
+/// Snapshot of one scope with its own sequence (protocol 6, N1 and N3).
+pub const SCOPE_SNAPSHOT: &str = "scope.snapshot";
+/// Subscription to one scope, from a scope sequence (protocol 6, N1, N2).
+pub const SCOPE_SUBSCRIBE: &str = "scope.subscribe";
+/// The observed repo and worktree that contain a path (protocol 6, N4).
+pub const REPO_LOCATE: &str = "repo.locate";
 
 /// Notification that carries one stream event.
 pub const NOTIFY_EVENT: &str = "events.event";
 /// Notification sent before a slow subscriber is disconnected: the client
 /// must take a new snapshot and subscribe again (SEC-08).
 pub const NOTIFY_RESYNC: &str = "events.resync";
+/// Notification that carries one event of a scoped subscription.
+pub const NOTIFY_SCOPE_EVENT: &str = "scope.event";
+/// Notification that one scope cannot continue: take a new snapshot of it.
+pub const NOTIFY_SCOPE_RESYNC: &str = "scope.resync";
 
 /// Whether a method may modify a repository (ADR-TMC-004 § 1). Only the
 /// protected operation and the Time Machine's own protected operations do:
@@ -83,7 +93,20 @@ pub struct MethodSpec {
     /// Story that implements it, for methods declared ahead of it.
     pub implemented_by: Option<&'static str>,
     pub writes: RepoWrite,
+    /// First protocol version that has it: a connection that negotiated an
+    /// older one does not see it (DS-TS-GRP-004 E-D1).
+    pub since: u32,
 }
+
+impl MethodSpec {
+    /// Whether a connection of `protocol` has this method.
+    pub const fn exists_in(&self, protocol: u32) -> bool {
+        protocol >= self.since
+    }
+}
+
+/// Methods of protocol 5 and before: every client in the window has them.
+const BASE: u32 = crate::MIN_COMPATIBLE_PROTOCOL;
 
 const fn method(name: &'static str, reserved: bool, mcp: bool) -> MethodSpec {
     MethodSpec {
@@ -92,6 +115,16 @@ const fn method(name: &'static str, reserved: bool, mcp: bool) -> MethodSpec {
         mcp,
         implemented_by: None,
         writes: RepoWrite::None,
+        since: BASE,
+    }
+}
+
+/// A method of protocol 6 (Cockpit, ADR-CKP-003 § 4). Not reserved and not
+/// offered to `raptor-mcp`: they carry paths (SEC-12).
+const fn v5(name: &'static str) -> MethodSpec {
+    MethodSpec {
+        since: 6,
+        ..method(name, false, false)
     }
 }
 
@@ -102,6 +135,7 @@ const fn pending(name: &'static str, story: &'static str) -> MethodSpec {
         mcp: false,
         implemented_by: Some(story),
         writes: RepoWrite::None,
+        since: BASE,
     }
 }
 
@@ -120,6 +154,7 @@ const fn time_machine(
         mcp,
         implemented_by: Some(story),
         writes,
+        since: BASE,
     }
 }
 
@@ -157,6 +192,7 @@ pub const METHODS: &[MethodSpec] = &[
         mcp: true,
         implemented_by: None,
         writes: RepoWrite::Protected,
+        since: BASE,
     },
     // Not reserved: the executor requires layer `cockpit`, which a
     // descendant of the daemon never has; not offered to `raptor-mcp`.
@@ -169,6 +205,9 @@ pub const METHODS: &[MethodSpec] = &[
     time_machine(TM_REDO, false, RepoWrite::TimeMachine, "US-TMC-003"),
     time_machine(TM_RESTORE, false, RepoWrite::TimeMachine, "US-TMC-009"),
     time_machine(TM_TIMELINE, false, RepoWrite::None, "US-TMC-006"),
+    v5(SCOPE_SNAPSHOT),
+    v5(SCOPE_SUBSCRIBE),
+    v5(REPO_LOCATE),
 ];
 
 pub fn spec(name: &str) -> Option<&'static MethodSpec> {
@@ -232,6 +271,23 @@ mod tests {
                 .iter()
                 .all(|m| !(m.reserved && m.writes != RepoWrite::None))
         );
+    }
+
+    /// E-D1: protocol 5 connections keep exactly the protocol 5 methods;
+    /// the Cockpit's are of protocol 6 and stay out of MCP.
+    #[test]
+    fn protocol_5_methods_are_new_and_not_for_mcp() {
+        for name in [SCOPE_SNAPSHOT, SCOPE_SUBSCRIBE, REPO_LOCATE] {
+            let m = spec(name).unwrap();
+            assert!(!m.exists_in(5) && m.exists_in(6), "{name}");
+            assert!(!m.mcp && !m.reserved, "{name}");
+        }
+        assert!(
+            spec(HELLO)
+                .unwrap()
+                .exists_in(crate::MIN_COMPATIBLE_PROTOCOL)
+        );
+        assert!(METHODS.iter().all(|m| m.since <= crate::PROTOCOL_VERSION));
     }
 
     #[test]

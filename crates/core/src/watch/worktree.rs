@@ -13,7 +13,7 @@ use std::sync::Arc;
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
-use gitraptor_api::Untrusted;
+use gitraptor_api::UntrustedName;
 use gitraptor_api::clock;
 use gitraptor_api::messages::{GitEventDetails, GitEventKind, HeadView, WorktreeStatus};
 use gitraptor_git::{ReaderOptions, RepoReader};
@@ -277,8 +277,8 @@ impl Task {
         let from = std::mem::replace(&mut self.stable_branch, current.clone());
         let to = current?;
         Some(GitEventDetails {
-            branch: Some(Untrusted::new(to)),
-            from: from.map(Untrusted::new),
+            branch: Some(UntrustedName::new(to)),
+            from: from.map(UntrustedName::new),
             old_commit: self.last.head_commit.clone(),
             new_commit: read.head_commit.clone(),
             worktree_inferred: false,

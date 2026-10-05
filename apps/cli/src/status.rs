@@ -112,7 +112,7 @@ fn sanitize(text: &str) -> String {
 fn base_name(base: &BaseBranchView) -> String {
     base.name
         .as_ref()
-        .map(Untrusted::sanitized)
+        .map(gitraptor_api::UntrustedName::sanitized)
         .unwrap_or_default()
 }
 
@@ -420,7 +420,7 @@ mod tests {
                 state: RepoStateView::Observed,
                 path: Untrusted::new("/w/demo/.git"),
                 base: BaseBranchView {
-                    name: Some(Untrusted::new("main")),
+                    name: Some(gitraptor_api::UntrustedName::new("main")),
                     status: BaseStatusView::Unconfirmed,
                 },
                 worktrees: vec![
@@ -429,7 +429,7 @@ mod tests {
                         true,
                         WorktreeStatus::Ready {
                             head: HeadView::Branch {
-                                name: Untrusted::new("main"),
+                                name: gitraptor_api::UntrustedName::new("main"),
                             },
                             counts: ChangeCounts::default(),
                             changes: Vec::new(),
@@ -450,7 +450,7 @@ mod tests {
                         false,
                         WorktreeStatus::Ready {
                             head: HeadView::Branch {
-                                name: Untrusted::new("feat-login"),
+                                name: gitraptor_api::UntrustedName::new("feat-login"),
                             },
                             counts: ChangeCounts {
                                 staged: 0,

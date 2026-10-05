@@ -6,6 +6,11 @@
 //! event (DEP-CKP-6). Publishing never blocks: each connection has a
 //! bounded outbox, and one that overflows is cleared, gets an
 //! `events.resync` and is disconnected once that is written.
+//!
+//! Protocol 5 adds scopes (ADR-CKP-003 § 4 N1, N2): every event also gets a
+//! contiguous sequence within its scope (global, or one repo), assigned
+//! under the same lock, and a scoped subscription receives only its
+//! scope's events with that sequence.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, Condvar, Mutex};
@@ -14,8 +19,11 @@ use gitraptor_api::event::Event;
 use gitraptor_api::messages::{
     EngineView, EventNotification, RepoView, ResyncNotification, ResyncReason,
 };
-use gitraptor_api::methods::{NOTIFY_EVENT, NOTIFY_RESYNC};
+use gitraptor_api::methods::{
+    NOTIFY_EVENT, NOTIFY_RESYNC, NOTIFY_SCOPE_EVENT, NOTIFY_SCOPE_RESYNC,
+};
 use gitraptor_api::rpc::Notification;
+use gitraptor_api::scope::{Scope, ScopeEventNotification, ScopeResyncNotification};
 use gitraptor_api::{Timings, clock};
 use serde::Serialize;
 
@@ -123,14 +131,50 @@ struct Subscriber {
     id: u32,
     /// An MCP connection: only the kinds of the MCP allowlist (no audit).
     mcp: bool,
+    /// A scoped subscription (protocol 6): only this scope's events, as
+    /// `scope.event`. `None`: every event, as `events.event`.
+    scope: Option<Scope>,
+}
+
+/// One buffered event with its place in its scope.
+struct Stamped {
+    event: Event,
+    scope: Option<Scope>,
+    scope_seq: u64,
+}
+
+/// The sequence of one scope.
+#[derive(Debug, Default, Clone, Copy)]
+struct ScopeSeq {
+    /// Last sequence assigned in the scope. Never reset within a run, so
+    /// an old `from_seq` never replays other events (a repo retired and
+    /// added again continues its sequence).
+    seq: u64,
+    /// Last sequence of the scope that left the replay buffer: a scoped
+    /// subscription can replay only from above it.
+    floor: u64,
 }
 
 struct BusInner {
     seq: u64,
-    replay: VecDeque<Event>,
+    replay: VecDeque<Stamped>,
+    scopes: BTreeMap<Scope, ScopeSeq>,
     engine: EngineShared,
     subscribers: Vec<Subscriber>,
     next_batch: u64,
+}
+
+impl BusInner {
+    fn scope_seq(&self, scope: &Scope) -> u64 {
+        self.scopes.get(scope).map_or(0, |s| s.seq)
+    }
+
+    fn knows(&self, scope: &Scope) -> bool {
+        match scope {
+            Scope::Global => true,
+            Scope::Repo { repo_id } => self.engine.repos.iter().any(|r| &r.repo_id == repo_id),
+        }
+    }
 }
 
 /// The event bus of one daemon run.
@@ -147,6 +191,8 @@ pub enum Subscribed {
     From(u64),
     /// The client must resync (already queued on its outbox).
     Resync,
+    /// The scope names a repo that is not observed.
+    UnknownScope,
 }
 
 impl EventBus {
@@ -157,6 +203,7 @@ impl EventBus {
             inner: Mutex::new(BusInner {
                 seq: 0,
                 replay: VecDeque::new(),
+                scopes: BTreeMap::new(),
                 engine,
                 subscribers: Vec::new(),
                 next_batch: 1,
@@ -176,6 +223,15 @@ impl EventBus {
     pub fn snapshot(&self) -> (u64, EngineShared) {
         let inner = self.lock();
         (inner.seq, inner.engine.clone())
+    }
+
+    /// The engine view and the sequence of `scope` it reflects, read
+    /// atomically (N1). `None` if the scope names a repo not observed.
+    pub fn scope_snapshot(&self, scope: &Scope) -> Option<(u64, EngineShared)> {
+        let inner = self.lock();
+        inner
+            .knows(scope)
+            .then(|| (inner.scope_seq(scope), inner.engine.clone()))
     }
 
     /// A new batch id for change events of one debounce window.
@@ -213,10 +269,37 @@ impl EventBus {
             data: serde_json::to_value(data).unwrap_or(serde_json::Value::Null),
         };
         debug_assert!(event.is_well_formed(), "malformed event {kind}");
-        inner.subscribers.retain(|sub| deliver(sub, &event));
-        inner.replay.push_back(event);
+        // A repo kind whose data has no `repo_id` has no scope: only the
+        // unscoped subscriptions of protocol 5 receive it.
+        let scope = event.scope();
+        let scope_seq = match &scope {
+            Some(scope) => {
+                let entry = inner.scopes.entry(scope.clone()).or_default();
+                entry.seq += 1;
+                entry.seq
+            }
+            None => 0,
+        };
+        let stamped = Stamped {
+            event,
+            scope,
+            scope_seq,
+        };
+        inner.subscribers.retain(|sub| deliver(sub, &stamped));
+        if let Some(repo_id) = retired_repo(&stamped.event) {
+            close_scope(&mut inner.subscribers, &repo_id);
+        }
+        inner.replay.push_back(stamped);
         while inner.replay.len() > self.replay_capacity {
-            inner.replay.pop_front();
+            if let Some(Stamped {
+                scope: Some(scope),
+                scope_seq,
+                ..
+            }) = inner.replay.pop_front()
+                && let Some(entry) = inner.scopes.get_mut(&scope)
+            {
+                entry.floor = scope_seq;
+            }
         }
         inner.seq
     }
@@ -246,7 +329,7 @@ impl EventBus {
         let next = inner.seq + 1;
         let from = from_seq.unwrap_or(next).min(next);
         if from < next {
-            let oldest = inner.replay.front().map_or(next, |e| e.seq);
+            let oldest = inner.replay.front().map_or(next, |e| e.event.seq);
             if from < oldest {
                 return resync(ResyncReason::ReplayUnavailable);
             }
@@ -255,9 +338,64 @@ impl EventBus {
             outbox: Arc::clone(outbox),
             id,
             mcp,
+            scope: None,
         };
-        for event in inner.replay.iter().filter(|e| e.seq >= from) {
-            if !deliver(&sub, event) {
+        for stamped in inner.replay.iter().filter(|e| e.event.seq >= from) {
+            if !deliver(&sub, stamped) {
+                return Subscribed::Resync;
+            }
+        }
+        inner.subscribers.push(sub);
+        Subscribed::From(from)
+    }
+
+    /// Subscribes `outbox` to `scope` as subscription `id` (protocol 6).
+    /// With `from_seq` (a sequence of the scope), replays the buffered
+    /// events of the scope from there; a different `run_id` or a sequence
+    /// that left the buffer queues a `scope.resync` instead (N2).
+    pub fn subscribe_scope(
+        &self,
+        outbox: &Arc<Outbox>,
+        id: u32,
+        scope: &Scope,
+        from_seq: Option<u64>,
+        run_id: Option<&str>,
+    ) -> Subscribed {
+        let mut inner = self.lock();
+        let resync = |reason| {
+            outbox.push(&Notification::new(
+                NOTIFY_SCOPE_RESYNC,
+                ScopeResyncNotification {
+                    scope: scope.clone(),
+                    reason,
+                },
+            ));
+            Subscribed::Resync
+        };
+        if run_id.is_some_and(|r| r != self.run_id) {
+            return resync(ResyncReason::DaemonRestarted);
+        }
+        if !inner.knows(scope) {
+            return Subscribed::UnknownScope;
+        }
+        let state = inner.scopes.get(scope).copied().unwrap_or_default();
+        let next = state.seq + 1;
+        let from = from_seq.unwrap_or(next).clamp(1, next);
+        if from <= state.floor {
+            return resync(ResyncReason::ReplayUnavailable);
+        }
+        let sub = Subscriber {
+            outbox: Arc::clone(outbox),
+            id,
+            mcp: false,
+            scope: Some(scope.clone()),
+        };
+        for stamped in inner
+            .replay
+            .iter()
+            .filter(|e| e.scope.as_ref() == Some(scope) && e.scope_seq >= from)
+        {
+            if !deliver(&sub, stamped) {
                 return Subscribed::Resync;
             }
         }
@@ -285,17 +423,61 @@ impl EventBus {
     }
 }
 
-fn deliver(sub: &Subscriber, event: &Event) -> bool {
-    if sub.mcp && !mcp_kind(&event.kind) {
-        return true;
+fn deliver(sub: &Subscriber, stamped: &Stamped) -> bool {
+    let event = &stamped.event;
+    match &sub.scope {
+        None => {
+            if sub.mcp && !mcp_kind(&event.kind) {
+                return true;
+            }
+            sub.outbox.push(&Notification::new(
+                NOTIFY_EVENT,
+                EventNotification {
+                    subscription: sub.id,
+                    event: event.clone(),
+                },
+            ))
+        }
+        Some(scope) if stamped.scope.as_ref() == Some(scope) => {
+            sub.outbox.push(&Notification::new(
+                NOTIFY_SCOPE_EVENT,
+                ScopeEventNotification {
+                    subscription: sub.id,
+                    scope: scope.clone(),
+                    scope_seq: stamped.scope_seq,
+                    event: event.clone(),
+                },
+            ))
+        }
+        Some(_) => true,
     }
-    sub.outbox.push(&Notification::new(
-        NOTIFY_EVENT,
-        EventNotification {
-            subscription: sub.id,
-            event: event.clone(),
-        },
-    ))
+}
+
+/// The repo a `repo.observation` event stops observing.
+fn retired_repo(event: &Event) -> Option<String> {
+    use gitraptor_api::event::REPO_OBSERVATION;
+    if event.kind != REPO_OBSERVATION || event.data.get("observed")?.as_bool()? {
+        return None;
+    }
+    event.data.get("repo_id")?.as_str().map(str::to_owned)
+}
+
+/// A repo stopped being observed: its scoped subscriptions get a
+/// `scope.resync { scope-closed }` and end. Its sequence is kept.
+fn close_scope(subscribers: &mut Vec<Subscriber>, repo_id: &str) {
+    subscribers.retain(|sub| match &sub.scope {
+        Some(scope @ Scope::Repo { repo_id: id }) if id == repo_id => {
+            sub.outbox.push(&Notification::new(
+                NOTIFY_SCOPE_RESYNC,
+                ScopeResyncNotification {
+                    scope: scope.clone(),
+                    reason: ResyncReason::ScopeClosed,
+                },
+            ));
+            false
+        }
+        _ => true,
+    });
 }
 
 /// Event kinds an MCP connection receives: an allowlist, so a new kind is
@@ -412,5 +594,79 @@ mod tests {
         assert_eq!(msgs.len(), 1);
         assert!(matches!(&msgs[0], ServerMessage::Notification(n) if n.method == NOTIFY_RESYNC));
         assert_eq!(seqs(&drain(&fast)).len(), 100);
+    }
+
+    fn scoped(messages: &[ServerMessage]) -> Vec<(u64, u64)> {
+        messages
+            .iter()
+            .filter_map(|m| match m {
+                ServerMessage::Notification(n) if n.method == NOTIFY_SCOPE_EVENT => Some((
+                    n.params["scope_seq"].as_u64().unwrap(),
+                    n.params["event"]["seq"].as_u64().unwrap(),
+                )),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// N2: a scope's sequence is contiguous whatever is published in other
+    /// scopes, and its floor follows the replay buffer.
+    #[test]
+    fn scope_sequences_are_contiguous_and_replay_has_a_floor() {
+        use gitraptor_api::event::OPERATION_QUEUED;
+        let bus = bus(3);
+        let repo = |id: &str| serde_json::json!({ "repo_id": id });
+        bus.publish(RESERVED_AUDIT, 1, None, |_| {}); // global 1
+        bus.publish(OPERATION_QUEUED, repo("b"), None, |_| {}); // b 1
+        bus.publish(RESERVED_AUDIT, 2, None, |_| {}); // global 2
+        bus.publish(OPERATION_QUEUED, repo("b"), None, |_| {}); // b 2
+        let out = Outbox::new(64);
+        // Global 1 left the buffer (capacity 3): from 1 is a resync, from
+        // 2 replays.
+        assert_eq!(
+            bus.subscribe_scope(&out, 1, &Scope::Global, Some(1), None),
+            Subscribed::Resync
+        );
+        let out = Outbox::new(64);
+        assert_eq!(
+            bus.subscribe_scope(&out, 1, &Scope::Global, Some(2), None),
+            Subscribed::From(2)
+        );
+        bus.publish(OPERATION_QUEUED, repo("b"), None, |_| {});
+        bus.publish(RESERVED_AUDIT, 3, None, |_| {});
+        assert_eq!(scoped(&drain(&out)), [(2, 3), (3, 6)]);
+        // An unknown repo has no scope to subscribe to.
+        let out = Outbox::new(64);
+        assert_eq!(
+            bus.subscribe_scope(
+                &out,
+                1,
+                &Scope::Repo {
+                    repo_id: "b".into()
+                },
+                None,
+                None
+            ),
+            Subscribed::UnknownScope
+        );
+    }
+
+    /// SEC-08 with scopes: a scoped subscriber that does not read is
+    /// dropped with the connection-level resync, never blocking.
+    #[test]
+    fn scoped_subscriber_that_does_not_read_gets_a_connection_resync() {
+        let bus = bus(8);
+        let slow = Outbox::new(4);
+        assert_eq!(
+            bus.subscribe_scope(&slow, 1, &Scope::Global, None, None),
+            Subscribed::From(1)
+        );
+        for i in 0..100 {
+            bus.publish(RESERVED_AUDIT, i, None, |_| {});
+        }
+        assert!(slow.is_lagged());
+        assert_eq!(bus.subscriber_count(), 0);
+        let msgs = drain(&slow);
+        assert!(matches!(&msgs[..], [ServerMessage::Notification(n)] if n.method == NOTIFY_RESYNC));
     }
 }

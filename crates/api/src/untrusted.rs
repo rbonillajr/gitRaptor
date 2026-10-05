@@ -6,36 +6,100 @@
 //! explicit, `{"untrusted": "..."}`, so every client sees it, the MCP server
 //! included. A terminal only ever prints [`Untrusted::sanitized`].
 
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 
-/// Upper bound of any untrusted text in the contract, in bytes.
+use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
+use serde::{Deserialize, Deserializer, Serialize};
+
+/// Upper bound of any untrusted text in the contract, in bytes: paths and
+/// free text ([`Untrusted`]).
 pub const MAX_UNTRUSTED_BYTES: usize = 4096;
+
+/// Upper bound of untrusted names, in bytes: branches, worktree and agent
+/// names ([`UntrustedName`], ADR-CKP-003 § 4 N6).
+pub const MAX_UNTRUSTED_NAME_BYTES: usize = 1024;
+
+/// Untrusted paths and free text, bounded at [`MAX_UNTRUSTED_BYTES`].
+pub type Untrusted = UntrustedText<MAX_UNTRUSTED_BYTES>;
+
+/// Untrusted names, bounded at [`MAX_UNTRUSTED_NAME_BYTES`].
+pub type UntrustedName = UntrustedText<MAX_UNTRUSTED_NAME_BYTES>;
 
 /// Bound of untrusted text in responses for `raptor-mcp` (SEC-12).
 pub const MAX_MCP_UNTRUSTED_BYTES: usize = 256;
 
-/// Untrusted text. Longer text is cut at [`MAX_UNTRUSTED_BYTES`] and marked
-/// `truncated`; text that was not valid UTF-8 (a path or a ref) is converted
-/// lossily and marked `lossy`. The daemon never sanitizes: clients do.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct Untrusted {
+/// Untrusted text bounded at `MAX` bytes, its own type per field class so a
+/// widget cannot take it as a plain string (N6). Longer text is cut at `MAX`
+/// and marked `truncated`, when built and when decoded, so a client never
+/// holds more than the bound; text that was not valid UTF-8 (a path or a
+/// ref) is converted lossily and marked `lossy`. The daemon never
+/// sanitizes: clients do.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct UntrustedText<const MAX: usize> {
     untrusted: String,
-    #[serde(default, skip_serializing_if = "is_false")]
+    #[serde(skip_serializing_if = "is_false")]
     truncated: bool,
-    #[serde(default, skip_serializing_if = "is_false")]
+    #[serde(skip_serializing_if = "is_false")]
     lossy: bool,
+}
+
+/// The wire form, decoded before the bound is applied.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Wire {
+    untrusted: String,
+    #[serde(default)]
+    truncated: bool,
+    #[serde(default)]
+    lossy: bool,
+}
+
+impl<'de, const MAX: usize> Deserialize<'de> for UntrustedText<MAX> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let Wire {
+            mut untrusted,
+            truncated,
+            lossy,
+        } = Wire::deserialize(deserializer)?;
+        let cut = truncate(&mut untrusted, MAX);
+        Ok(Self {
+            untrusted,
+            truncated: truncated || cut,
+            lossy,
+        })
+    }
+}
+
+impl<const MAX: usize> JsonSchema for UntrustedText<MAX> {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Owned(format!("Untrusted{MAX}"))
+    }
+
+    fn json_schema(_: &mut SchemaGenerator) -> Schema {
+        json_schema!({
+            "type": "object",
+            "properties": {
+                "untrusted": { "type": "string", "maxLength": MAX },
+                "truncated": { "type": "boolean" },
+                "lossy": { "type": "boolean" }
+            },
+            "required": ["untrusted"],
+            "additionalProperties": false
+        })
+    }
 }
 
 fn is_false(b: &bool) -> bool {
     !*b
 }
 
-impl Untrusted {
+impl<const MAX: usize> UntrustedText<MAX> {
+    /// The bound of this class, in bytes.
+    pub const MAX_BYTES: usize = MAX;
+
     pub fn new(text: impl Into<String>) -> Self {
         let mut text = text.into();
-        let truncated = truncate(&mut text, MAX_UNTRUSTED_BYTES);
+        let truncated = truncate(&mut text, MAX);
         Self {
             untrusted: text,
             truncated,
@@ -49,6 +113,17 @@ impl Untrusted {
         let mut value = Self::new(text.to_string_lossy());
         value.lossy = lossy;
         value
+    }
+
+    /// The same text as another class (cut to its bound if longer).
+    pub fn into_class<const OTHER: usize>(self) -> UntrustedText<OTHER> {
+        let mut text = self.untrusted;
+        let cut = truncate(&mut text, OTHER);
+        UntrustedText {
+            untrusted: text,
+            truncated: self.truncated || cut,
+            lossy: self.lossy,
+        }
     }
 
     /// The same text cut to `max` bytes (at a character boundary).
@@ -209,6 +284,44 @@ mod tests {
                 .contains(r#""truncated":true"#)
         );
         assert!(!Untrusted::new("short").is_truncated());
+    }
+
+    /// N6: the decoder applies each field class's bound, so a client never
+    /// holds more than it, whatever the daemon sent.
+    #[test]
+    fn decoder_enforces_the_field_bound() {
+        let long = "a".repeat(MAX_UNTRUSTED_BYTES + 10);
+        let wire = serde_json::json!({ "untrusted": long });
+        let name: UntrustedName = serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(name.raw().len(), MAX_UNTRUSTED_NAME_BYTES);
+        assert!(name.is_truncated());
+        let path: Untrusted = serde_json::from_value(wire).unwrap();
+        assert_eq!(path.raw().len(), MAX_UNTRUSTED_BYTES);
+        assert!(path.is_truncated());
+        let short: UntrustedName =
+            serde_json::from_value(serde_json::json!({ "untrusted": "main" })).unwrap();
+        assert!(!short.is_truncated());
+        assert_eq!(
+            serde_json::to_string(&short).unwrap(),
+            r#"{"untrusted":"main"}"#
+        );
+        assert!(UntrustedName::new("x".repeat(2000)).is_truncated());
+    }
+
+    /// N6: each class declares its bound in the schema.
+    #[test]
+    fn schema_declares_each_bound() {
+        let name = serde_json::to_value(schemars::schema_for!(UntrustedName)).unwrap();
+        assert_eq!(
+            name["properties"]["untrusted"]["maxLength"],
+            MAX_UNTRUSTED_NAME_BYTES
+        );
+        let path = serde_json::to_value(schemars::schema_for!(Untrusted)).unwrap();
+        assert_eq!(
+            path["properties"]["untrusted"]["maxLength"],
+            MAX_UNTRUSTED_BYTES
+        );
+        assert_eq!(name["additionalProperties"], false);
     }
 
     #[cfg(unix)]

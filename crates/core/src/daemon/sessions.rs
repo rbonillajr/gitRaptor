@@ -425,7 +425,11 @@ pub(super) fn session_actor(session: &Session) -> Actor {
             AgentKind::ClaudeCode => ApiAgentKind::ClaudeCode,
             AgentKind::Other => ApiAgentKind::Other,
         },
-        name: session.agent.name.clone().map(Untrusted::new),
+        name: session
+            .agent
+            .name
+            .clone()
+            .map(gitraptor_api::UntrustedName::new),
         origin: match session.initial_origin {
             Origin::Detected => AgentOrigin::Detected,
             Origin::Registered => AgentOrigin::Registered,
