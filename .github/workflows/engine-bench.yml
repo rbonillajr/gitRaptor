@@ -1,0 +1,79 @@
+# INF-GRP-002: freshness, scale and footprint gates of the engine (ADR-GRP-011 § 4, NFR-04,
+# NFR-05, NFR HUELLA). See the INF-GRP-002 Dev Spec.
+#
+# Runs `cargo bench -p gitraptor-cli --bench engine` (release build) over the 100K-commit
+# reference repo with 10 worktrees. The job fails when the bench names a FAIL: the engine p95
+# above 300 ms in a gated scenario, the footprint of the isolated daemon above its limits, or a
+# change lost by the stream recreation. Stages over budget are warnings in the job summary.
+#
+# Windows: the channel client is Unix-only (TS-GRP-004), so there is nothing to measure yet.
+# Pendiente: etapa de validación multiplataforma.
+#
+# Actions are pinned by commit SHA.
+name: engine-bench
+
+on:
+  pull_request:
+    paths:
+      - "crates/**"
+      - "apps/cli/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".github/workflows/engine-bench.yml"
+  push:
+    branches: [main]
+    paths:
+      - "crates/**"
+      - "apps/cli/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".github/workflows/engine-bench.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: engine-bench-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  engine-bench:
+    name: engine bench (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Toolchain from rust-toolchain.toml
+        run: rustup show
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      # The reference repo is deterministic (repogen, fixed seed): generated once per generator
+      # version and OS, then restored. Bump `v1` when `reference()` in the bench changes.
+      - name: Reference repo (100K commits)
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: |
+            ${{ runner.temp }}/engine-bench/ref-H
+            ${{ runner.temp }}/engine-bench/ref-H.done
+          key: engine-bench-ref-H-v1-${{ runner.os }}-${{ hashFiles('crates/testkit/src/repogen.rs') }}
+      - name: Bench and gates
+        # `runner` is not available in the job's `env`.
+        env:
+          ENGINE_BENCH_ROOT: ${{ runner.temp }}/engine-bench
+        run: cargo bench -p gitraptor-cli --bench engine -- --out "$ENGINE_BENCH_ROOT/engine-bench-${{ runner.os }}.json"
+      - name: Report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: engine-bench-${{ runner.os }}
+          path: ${{ runner.temp }}/engine-bench/engine-bench-*.json
+          if-no-files-found: warn
