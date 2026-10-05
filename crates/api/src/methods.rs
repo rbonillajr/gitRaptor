@@ -120,8 +120,10 @@ pub const METHODS: &[MethodSpec] = &[
     // `daemon.stop` (SEC-13). Its shape is frozen across protocol versions,
     // like `hello`'s, because it is how versions meet.
     method(DAEMON_REPLACE, false, true),
-    pending(REPO_ADD, "US-GRP-001"),
-    pending(REPO_RETIRE, "US-GRP-006"),
+    method(REPO_ADD, true, false),
+    // US-GRP-001 stops the observation; US-GRP-006 adds the history kept
+    // and recovered.
+    method(REPO_RETIRE, true, false),
     pending(ATTRIBUTION_CORRECT, "US-GRP-010"),
     pending(ATTRIBUTION_WITHDRAW, "US-GRP-010"),
     pending(REGISTRATION_WITHDRAW, "US-GRP-009"),

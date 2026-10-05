@@ -52,6 +52,9 @@ pub mod code {
     pub const OPERATION_FAILED: i64 = -32011;
     /// The caller's identity changed since the connection was accepted.
     pub const IDENTITY_UNVERIFIED: i64 = -32012;
+    /// A repo command was rejected for what it names (not who asks):
+    /// `data` is a `RepoRejectedData` (US-GRP-001).
+    pub const REPO_REJECTED: i64 = -32013;
 }
 
 /// Request id: a number or a short string.

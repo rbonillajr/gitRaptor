@@ -8,11 +8,39 @@
 use std::sync::mpsc::{Receiver, Sender, SyncSender, channel, sync_channel};
 use std::time::Duration;
 
+use gitraptor_api::messages::{RepoAddResult, RepoRetireResult};
+
+use crate::observe::RepoRead;
 use crate::profile::AuditRow;
 
 /// How long a channel thread waits for the loop to persist or read the audit.
 #[cfg_attr(not(unix), allow(dead_code))]
 const AUDIT_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// How long a channel thread waits for the loop to add or retire a repo.
+#[cfg_attr(not(unix), allow(dead_code))]
+const REPO_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Why the loop could not add or retire a repo.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RepoCommandError {
+    /// `repo.retire` of an id the profile does not know.
+    UnknownRepo,
+    /// The profile could not be written (or the loop did not answer).
+    Internal,
+}
+
+/// A repo the channel already located and read, for the loop to add.
+#[derive(Debug)]
+#[cfg_attr(not(unix), allow(dead_code))]
+pub(crate) struct RepoAddRequest {
+    pub common_dir: std::path::PathBuf,
+    pub read: RepoRead,
+    /// Monotonic time the request arrived and its read finished
+    /// (ADR-GRP-011 § 3).
+    pub t_recv: u64,
+    pub t_computed: u64,
+}
 
 /// Why the daemon stops.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -74,6 +102,14 @@ pub(crate) enum Control {
         limit: u32,
         reply: SyncSender<Option<Vec<(i64, AuditRow)>>>,
     },
+    RepoAdd(
+        Box<RepoAddRequest>,
+        SyncSender<Result<RepoAddResult, RepoCommandError>>,
+    ),
+    RepoRetire {
+        repo_id: String,
+        reply: SyncSender<Result<RepoRetireResult, RepoCommandError>>,
+    },
 }
 
 /// Sends requests to the running daemon. Cheap to clone.
@@ -113,6 +149,37 @@ impl ShutdownHandle {
             })
             .ok()?;
         rx.recv_timeout(AUDIT_TIMEOUT).ok().flatten()
+    }
+}
+
+impl ShutdownHandle {
+    /// Adds a located and read repo through the loop, which owns the
+    /// profile (US-GRP-001).
+    #[cfg_attr(not(unix), allow(dead_code))]
+    pub(crate) fn repo_add(
+        &self,
+        request: RepoAddRequest,
+    ) -> Result<RepoAddResult, RepoCommandError> {
+        let (reply, rx) = sync_channel(1);
+        self.tx
+            .send(Control::RepoAdd(Box::new(request), reply))
+            .map_err(|_| RepoCommandError::Internal)?;
+        rx.recv_timeout(REPO_TIMEOUT)
+            .map_err(|_| RepoCommandError::Internal)?
+    }
+
+    /// Stops observing a repo through the loop (US-GRP-001).
+    #[cfg_attr(not(unix), allow(dead_code))]
+    pub(crate) fn repo_retire(
+        &self,
+        repo_id: String,
+    ) -> Result<RepoRetireResult, RepoCommandError> {
+        let (reply, rx) = sync_channel(1);
+        self.tx
+            .send(Control::RepoRetire { repo_id, reply })
+            .map_err(|_| RepoCommandError::Internal)?;
+        rx.recv_timeout(REPO_TIMEOUT)
+            .map_err(|_| RepoCommandError::Internal)?
     }
 }
 
