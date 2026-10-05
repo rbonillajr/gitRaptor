@@ -2,7 +2,7 @@
 mode: draft
 status: accepted
 generated: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-05
 generator: architect
 domain: GRP
 feature: motor-local
@@ -79,6 +79,7 @@ El formato "JSON estricto con `$schema`" no es una PQ: es la propuesta base del 
 | [ADR-CKP-001](./ADR-CKP-001-prediccion-conflictos-merge-en-seco.md) | Predicción de conflictos con merge en seco sin escribir en el repo | Predictor en el daemon con dos niveles (solape ⚠ y conflicto previsto ⚡) por par, recálculo incremental con cola coalescente y estados con hora de cálculo; merge en memoria con gitoxide como opción preferida (sin drivers, filtros, atributos, reemplazos ni descargas, con cotas de tiempo y memoria), `merge-tree` sobre un almacén del perfil como respaldo y contra el repo rechazado; mecanismo condicionado a SPIKE-CKP-001 | accepted |
 | [ADR-CKP-002](./ADR-CKP-002-catalogo-operaciones-ejecutor.md) | Catálogo de operaciones de usuario y ejecutor del daemon | Catálogo cerrado y versionado de ocho operaciones con marcas Cockpit y MCP; preparar (plan, `planId` ligado a la conexión, huella) y ejecutar bajo el cerrojo del repo dentro de la operación protegida; capa fijada por el daemon según el solicitante y decisión de Guardrails registrada una vez; `git` hijo directo tras una barrera de arranque, sin TTY ni shell; el canal rechaza lo reservado a los descendientes del daemon (`daemon-descendant`) y el ejecutor los atribuye al solicitante del plan; rebase `stop` (Cockpit) o `atomic` (MCP) | accepted |
 | [ADR-CKP-003](./ADR-CKP-003-arquitectura-tui.md) | Arquitectura de la TUI y de la CLI de solo lectura | TEA (`update` y `view` puros) con un bucle de un hilo y render coalescido; cliente del canal con instantánea N y suscripción N+1, resync y reconexión, y comprobación del par antes del handshake; saneado SEC-12 en un único punto por tipo; 100 ms p95 instrumentado con gate; tema agnóstico de `ratatui`; módulos de `apps/cli` sin crates nuevos | accepted |
+| [ADR-MCP-001](./ADR-MCP-001-servidor-mcp-cliente-daemon.md) | Servidor MCP como cliente del daemon | `raptor-mcp` por stdio con `rmcp`, solo `tools`; ámbito por el cwd y solicitante por ascendencia, resueltos por el daemon en cada llamada; perfil `mcp` por solicitante agente sea cual sea el cliente; allowlist como marca reservada del repo observado; diez herramientas sobre el canal y el catálogo de ADR-CKP-002, avisos reconocidos en una segunda llamada; respuestas con allowlist de campos y 24 KiB por parte; cifras de S-MCP-1; OWASP MCP Top 10 | accepted |
 
 ## Grafo de dependencias entre ADRs nuevos
 
