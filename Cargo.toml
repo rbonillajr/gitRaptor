@@ -16,6 +16,7 @@ gitraptor-git = { path = "crates/git" }
 gitraptor-policy = { path = "crates/policy" }
 gitraptor-testkit = { path = "crates/testkit" }
 gitraptor-theme = { path = "crates/theme" }
+gitraptor-winsys = { path = "crates/winsys" }
 
 clap = { version = "4", features = ["derive"] }
 # Read path of crates/git (ADR-GRP-001, ADR-GRP-009): no default features, so no network,
@@ -27,6 +28,8 @@ gix = { version = "0.88", default-features = false, features = ["sha1", "status"
 gix-pack = { version = "0.75", default-features = false, features = ["sha1", "streaming-input"] }
 serde_json = "1"
 tempfile = "3"
+# Win32 calls of crates/winsys only (ADR-GRP-002); the version gix already brings in.
+windows-sys = "0.61"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -566,6 +566,7 @@ dependencies = [
  "gitraptor-git",
  "gitraptor-policy",
  "gitraptor-testkit",
+ "gitraptor-winsys",
  "libproc",
  "nix",
  "notify",
@@ -584,6 +585,7 @@ name = "gitraptor-git"
 version = "0.0.0"
 dependencies = [
  "gitraptor-testkit",
+ "gitraptor-winsys",
  "gix",
  "gix-pack",
  "rustix",
@@ -626,6 +628,14 @@ name = "gitraptor-theme"
 version = "0.0.0"
 dependencies = [
  "unicode-width",
+]
+
+[[package]]
+name = "gitraptor-winsys"
+version = "0.0.0"
+dependencies = [
+ "tempfile",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
