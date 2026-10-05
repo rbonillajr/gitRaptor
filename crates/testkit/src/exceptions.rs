@@ -40,6 +40,12 @@ impl Exceptions {
         self
     }
 
+    /// Both sets of exceptions.
+    pub fn and(mut self, other: Self) -> Self {
+        self.0.extend(other.0);
+        self
+    }
+
     /// The engine's own data and state folders of the profile (ADR-GRP-006 § 1). The profile's
     /// configuration folder is not included: the engine only reads it.
     pub fn engine_profile(scope: &str) -> Self {
@@ -147,39 +153,60 @@ fn allows(e: &Exception, c: &Change, before: &Snapshot, after: &Snapshot) -> boo
             }
             let content = |s: &Snapshot| s.get(scope, path).and_then(|e| e.content.clone());
             match (content(before), content(after)) {
-                (Some(b), Some(a)) => without_keys(&b, keys) == without_keys(&a, keys),
+                (Some(b), Some(a)) => match (without_keys(&b, keys), without_keys(&a, keys)) {
+                    (Some(b), Some(a)) => b == a,
+                    _ => false,
+                },
                 _ => false,
             }
         }
     }
 }
 
-/// A Git config file reduced to `(full key, value)` lines, without the allowed keys, empty
-/// sections and comments. Enough to compare two versions of a file written by `git config`.
-pub fn without_keys(content: &[u8], keys: &[String]) -> Vec<(String, String)> {
-    let text = String::from_utf8_lossy(content);
-    let mut section = String::new();
-    let mut out = Vec::new();
-    for line in text.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') || line.starts_with(';') {
-            continue;
-        }
-        if let Some(header) = line.strip_prefix('[').and_then(|l| l.split(']').next()) {
-            section = match header.split_once(char::is_whitespace) {
-                Some((name, sub)) => {
-                    format!("{}.{}", name.to_lowercase(), sub.trim().trim_matches('"'))
-                }
-                None => header.to_lowercase(),
-            };
-            continue;
-        }
-        let (name, value) = line.split_once('=').unwrap_or((line, "true"));
-        let full = format!("{section}.{}", name.trim().to_lowercase());
-        if keys.iter().any(|k| k.to_lowercase() == full.to_lowercase()) {
-            continue;
-        }
-        out.push((full, value.trim().to_owned()));
+/// A Git config file as Git itself parses it (`git config --file <tmp> --list -z`): the
+/// `(key, value)` entries in file order, without the allowed keys. Formatting, comments, quoting,
+/// escapes, continuations and empty sections do not count; the order does, because a later
+/// entry overrides an `include.path` read before it (SPIKE-GRD-001 § 5.1, Q-GRD-29). A value-less
+/// key (`[core] bare`) has no value. `None` when Git cannot parse the file.
+pub fn without_keys(content: &[u8], keys: &[String]) -> Option<Vec<(String, Option<String>)>> {
+    let tmp = tempfile::NamedTempFile::new().ok()?;
+    std::fs::write(tmp.path(), content).ok()?;
+    let out = config_command(tmp.path()).output().ok()?;
+    if !out.status.success() {
+        return None;
     }
-    out
+    let keys: Vec<String> = keys.iter().map(|k| k.to_lowercase()).collect();
+    let mut entries = Vec::new();
+    for raw in out.stdout.split(|b| *b == 0).filter(|r| !r.is_empty()) {
+        let raw = String::from_utf8_lossy(raw);
+        let (key, value) = match raw.split_once('\n') {
+            Some((k, v)) => (k.to_owned(), Some(v.to_owned())),
+            None => (raw.into_owned(), None),
+        };
+        if !keys.contains(&key.to_lowercase()) {
+            entries.push((key, value));
+        }
+    }
+    Some(entries)
+}
+
+/// `git config --file <path> --list -z` with an isolated environment: no system, global or
+/// command-line configuration, and includes not followed (the default with `--file`).
+fn config_command(path: &Path) -> std::process::Command {
+    let mut c = std::process::Command::new(crate::fixture::git_from_path());
+    c.arg("config")
+        .arg("--file")
+        .arg(path)
+        .args(["--list", "-z"])
+        .current_dir(path.parent().unwrap_or(Path::new(".")))
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_CONFIG_GLOBAL", null_device())
+        .env_remove("GIT_CONFIG_PARAMETERS")
+        .env_remove("GIT_CONFIG_COUNT")
+        .env_remove("GIT_DIR");
+    c
+}
+
+fn null_device() -> &'static str {
+    if cfg!(windows) { "NUL" } else { "/dev/null" }
 }
