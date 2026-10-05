@@ -100,4 +100,4 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica (sin superficie visual; los mensajes siguen la guía de contenido del design system, DSYS-GRP-001).
-- **Dev Spec:** pendiente (Arquitecto, tras ADR-MCP-001).
+- **Dev Spec:** [DS-US-MCP-001](../dev-specs/US-MCP-001-dev-spec.md).
