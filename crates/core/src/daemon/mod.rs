@@ -53,7 +53,9 @@ use crate::timemachine::oplog::{
     AbsentStore, ChainBreak, Oplog, OplogStatus, RecoveryOptions, RecoveryReport, SnapshotRefs,
     SystemProbe,
 };
-use crate::timemachine::protected::{DaemonBackend, OperationsWiring, TmRepos};
+#[cfg(unix)]
+use crate::timemachine::protected::DaemonBackend;
+use crate::timemachine::protected::{OperationsWiring, TmRepos};
 use crate::timemachine::store::SnapshotStore;
 
 pub use env::{AGENT_EXECUTABLES_ENV, DaemonEnv};
@@ -527,6 +529,7 @@ impl Daemon {
 
     /// The protected-operation wiring: the configured double, or the
     /// daemon's own repo layer when a catalog of operations is wired.
+    #[cfg(unix)]
     fn protected_wiring(&self) -> Option<crate::channel::ProtectedWiring> {
         if let Some(wiring) = &self.config.protected {
             return Some(wiring.clone());
