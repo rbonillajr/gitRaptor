@@ -523,8 +523,10 @@ fn an_observation_gives_way_to_a_guaranteed_prior() {
     let obs = observation.join().unwrap();
     match obs {
         Err(CaptureError::Yielded) => {
-            // ~10 ms in release (gated by the bench); unoptimized hashing is much slower.
-            let limit = if cfg!(debug_assertions) { 250 } else { 20 };
+            // ~10 ms in release, and the bench (`tm_snapshot`) gates that budget. Unoptimized
+            // hashing on a shared CI runner took 270–470 ms to reach the next yield point, so in
+            // debug this only checks that the prior is not stuck behind the whole observation.
+            let limit = if cfg!(debug_assertions) { 2_000 } else { 20 };
             assert!(
                 waited < Duration::from_millis(limit),
                 "prior waited {waited:?} for a yielding observation"
