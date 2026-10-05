@@ -21,6 +21,7 @@
 mod env;
 mod lock;
 mod log;
+mod sessions;
 mod shutdown;
 mod state;
 
@@ -60,7 +61,7 @@ use crate::timemachine::oplog::{
 use crate::timemachine::store::SnapshotStore;
 use crate::watch::{ObservedBatch, Observer, WatchConfig};
 
-pub use env::{AGENT_EXECUTABLES_ENV, DaemonEnv};
+pub use env::{AGENT_EXECUTABLES_ENV, CLOCK_SKEW_FILE_ENV, DaemonEnv};
 pub use lock::{InstanceLock, LOCK_FILE, running_pid, wait_until_released};
 pub use log::{Field, LOG_FILE, Level, LogLimits, Logger};
 use shutdown::Control;
@@ -270,6 +271,8 @@ pub struct Daemon {
     bus: Arc<EventBus>,
     /// The change observer (US-GRP-002); `None` outside "Observing".
     observer: Option<Observer>,
+    /// The session detector (US-GRP-007), started with the observer.
+    detector: Option<crate::detect::Detector>,
     /// Ahead/behind already counted for observed changes (US-GRP-012).
     divergence_cache: observe::DivergenceCache,
     /// Periodic reconciliations that found differences: a value above 0 in
@@ -496,6 +499,7 @@ impl Daemon {
             control_rx,
             bus,
             observer: None,
+            detector: None,
             divergence_cache: observe::DivergenceCache::default(),
             periodic_diffs: 0,
             started_ms: now_ms(),
@@ -587,6 +591,10 @@ impl Daemon {
                     let _ = reply.send(self.retire_repo(&repo_id));
                 }
                 Ok(Control::Observed(batch)) => self.observed(*batch),
+                Ok(Control::Sessions(changes)) => self.sessions_changed(changes),
+                Ok(Control::SessionsList { params, reply }) => {
+                    let _ = reply.send(self.sessions_list(&params));
+                }
                 Ok(Control::EventHistory { params, reply }) => {
                     let _ = reply.send(self.event_history(&params));
                 }
@@ -726,9 +734,11 @@ impl Daemon {
             oplogs,
             profile,
             observer,
+            detector,
             ..
         } = self;
         drop(observer);
+        drop(detector);
         drop(oplogs);
         drop(stores);
         drop(profile);
@@ -914,6 +924,9 @@ impl Daemon {
         if let Some(observer) = &self.observer {
             observer.forget_repo(repo_id);
         }
+        if let Some(detector) = &self.detector {
+            detector.forget_repo(repo_id);
+        }
         if let Some(pos) = self.stores.iter().position(|(id, _)| id == repo_id) {
             let (_, mut store) = self.stores.remove(pos);
             if let Err(err) = store.write_batch(&[WriteOp::SetObservedUntil { ms: now }]) {
@@ -957,22 +970,30 @@ impl Daemon {
     /// Starts observing a repo, creating the observer on first use. Its
     /// batches come back to this loop as [`Control::Observed`].
     fn observe(&mut self, repo_id: &str, common_dir: &std::path::Path, read: &RepoRead) {
+        let hooks = self.detector_hooks();
         let observer = self.observer.get_or_insert_with(|| {
             let handle = self.handle.clone();
-            Observer::start(
+            Observer::start_with_hooks(
                 WatchConfig::default(),
                 Arc::new(move |batch| {
                     handle.observed(batch);
                 }),
+                Some(hooks),
             )
         });
         observer.watch_repo(repo_id, common_dir, read);
+        self.detect_repo(repo_id, common_dir, read);
     }
 
     /// Persists what the observer saw, then publishes it (ADR-GRP-013:
     /// persisted before published). A batch of a repo no longer observed
     /// is discarded.
     fn observed(&mut self, batch: ObservedBatch) {
+        if !self.stores.iter().any(|(id, _)| *id == batch.repo_id) {
+            return;
+        }
+        // S3 (US-GRP-007): the session each event points to, if any.
+        let attributed = self.attribute(&batch);
         let Some((_, store)) = self.stores.iter_mut().find(|(id, _)| *id == batch.repo_id) else {
             return;
         };
@@ -1045,7 +1066,16 @@ impl Daemon {
             });
             id
         });
-        for event in &batch.events {
+        // A session S3 found before the detector's start reached this loop
+        // is created here; its later start is then a no-op.
+        let mut created: Vec<&str> = Vec::new();
+        for p in attributed.iter().flatten() {
+            if !created.contains(&p.session_id.as_str()) {
+                created.push(&p.session_id);
+                ops.extend(sessions::start_ops(store, p));
+            }
+        }
+        for (event, session) in batch.events.iter().zip(&attributed) {
             ops.push(WriteOp::AppendEvent(NewEvent {
                 worktree: event.worktree.clone(),
                 kind: event.kind.as_str().to_owned(),
@@ -1055,8 +1085,8 @@ impl Daemon {
                     offset_s: event.offset_s,
                 },
                 // No session without positive evidence (ADR-GRP-013 § 3).
-                session_id: None,
-                evidence: None,
+                session_id: session.as_ref().map(|p| p.session_id.clone()),
+                evidence: session.as_ref().and_then(|_| sessions::s3_evidence()),
                 gap_id: if event.kind == GitEventKind::Reconciled {
                     gap_id.clone()
                 } else {
@@ -1118,13 +1148,27 @@ impl Daemon {
             self.publish_observed_views(&batch, timings);
         }
         // Only persisted events are published: they have their sequence.
-        for (event, seq) in batch.events.iter().zip(seqs) {
+        for ((event, seq), session) in batch.events.iter().zip(seqs).zip(&attributed) {
+            let actor = session
+                .as_ref()
+                .and_then(|p| {
+                    self.stores
+                        .iter()
+                        .find(|(id, _)| *id == batch.repo_id)?
+                        .1
+                        .session(&p.session_id)
+                        .ok()
+                        .flatten()
+                })
+                .map_or(gitraptor_api::Actor::Unattributed, |s| {
+                    sessions::session_actor(&s)
+                });
             let view = GitEventView {
                 repo_id: batch.repo_id.clone(),
                 seq,
                 worktree: Untrusted::from_os(event.worktree.as_os_str()),
                 kind: event.kind,
-                actor: gitraptor_api::Actor::Unattributed,
+                actor,
                 observed_utc_ms: event.observed_ms,
                 utc_offset_s: event.offset_s,
                 details: event.details.clone(),
@@ -1399,24 +1443,13 @@ fn recover_repo(
 /// with one, its initial attribution until US-GRP-010 resolves the records.
 fn git_event_view(repo_id: &str, store: &RepoStore, e: StoredEvent) -> Option<GitEventView> {
     let kind = GitEventKind::parse(&e.kind)?;
-    let actor = match e
+    let actor = e
         .session_id
         .as_deref()
         .and_then(|id| store.session(id).ok().flatten())
-    {
-        None => gitraptor_api::Actor::Unattributed,
-        Some(session) => gitraptor_api::Actor::Agent {
-            kind: match session.agent.kind {
-                crate::profile::AgentKind::ClaudeCode => gitraptor_api::AgentKind::ClaudeCode,
-                crate::profile::AgentKind::Other => gitraptor_api::AgentKind::Other,
-            },
-            name: session.agent.name.map(Untrusted::new),
-            origin: match session.initial_origin {
-                crate::profile::Origin::Detected => gitraptor_api::AgentOrigin::Detected,
-                crate::profile::Origin::Registered => gitraptor_api::AgentOrigin::Registered,
-            },
-        },
-    };
+        .map_or(gitraptor_api::Actor::Unattributed, |s| {
+            sessions::session_actor(&s)
+        });
     Some(GitEventView {
         repo_id: repo_id.to_owned(),
         seq: e.seq,
