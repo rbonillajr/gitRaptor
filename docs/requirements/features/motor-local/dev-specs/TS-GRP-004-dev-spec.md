@@ -92,7 +92,7 @@ Todas usan perfiles y repos temporales, nunca este repo ni el perfil real (NFR-0
 
 | Criterio de la TS | Test |
 |---|---|
-| Bajo demanda (dos clientes, un daemon) | `apps/cli/tests/channel_process.rs::two_clients_at_once_start_a_single_daemon_on_demand`, `apps/mcp/tests/on_demand.rs::raptor_mcp_starts_the_engine_on_demand` |
+| Bajo demanda (dos clientes, un daemon) | `apps/cli/tests/channel_process.rs::two_clients_at_once_start_a_single_daemon_on_demand`, `apps/mcp/tests/on_demand.rs::raptor_mcp_starts_the_engine_on_demand` (sustituida por US-MCP-001: según ADR-MCP-001 § 1, `raptor-mcp` ya no arranca el motor al iniciar; vuelve con la primera herramienta, US-MCP-003) |
 | Versión (SEC-13) | `crates/core/tests/channel.rs::a_newer_installed_binary_replaces_an_older_daemon`, `replace_from_another_executable_is_a_reserved_stop`, `a_newer_daemon_tells_an_old_client_to_update` |
 | Acceso (SEC-01) | `channel_process::the_channel_is_private_and_never_a_network_port`, `a_precreated_open_socket_folder_stops_the_daemon`, `channel::socket_is_private_and_handshake_presents_the_instance`, `a_client_of_another_user_is_rejected` (con `expected_uid`: sin root no se puede cambiar de usuario), `a_precreated_open_runtime_folder_stops_the_start` |
 | Red (NFR-03) | `channel_process::the_channel_is_private_and_never_a_network_port` (`lsof -i` vacío y `lsof -U` con el socket) |
