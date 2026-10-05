@@ -9,8 +9,8 @@ created: 2026-10-05
 updated: 2026-10-05
 related:
   stories: [INF-GRP-002, TD-GRP-001, US-GRP-002, US-GRP-007, SPIKE-GRP-002, SPIKE-CKP-001]
-  adrs: [ADR-GRP-011, ADR-GRP-010, ADR-GRP-005, ADR-GRP-006, ADR-GRP-013]
-  nfrs: [NFR-04, NFR-05, HUELLA, SEC-06]
+  adrs: [ADR-GRP-011, ADR-GRP-010, ADR-GRP-015, ADR-GRP-005, ADR-GRP-006, ADR-GRP-013]
+  nfrs: [NFR-04, NFR-05, HUELLA, RES-01, RES-02, RES-04, SEC-06]
 tags: [motor-local, banco, ci, rendimiento, latencia, p95, escala, huella, rss, cpu, gate]
 ---
 
@@ -110,6 +110,13 @@ Un job por SO, `engine bench (<so>)`, de unos 15 a 30 minutos. La protección de
 - **Coste de resolver el actor**: se mide cuando US-GRP-007 detecte sesiones reales. Queda registrado como nota en [US-GRP-007](../user-stories/US-GRP-007-sesiones-claude-code.md).
 - **Variante sobre una pseudo-terminal** y medición en una máquina dedicada: no se hacen.
 - **Linux**: se mide en CI, pero se verifica de verdad en la etapa multiplataforma. **Windows**: no se mide. Pendiente: etapa de validación multiplataforma.
+- **ADR-GRP-015 (consumo de recursos, llegó a `main` durante este trabajo)**: este banco ya aplica el gate de RES-01 (CPU < 1 %), RES-02 (RSS < 150 MiB) y la parte de descriptores de RES-04 (≤ 256), con las cifras objetivo y sin superarlas. **Pendiente**:
+  - RES-01: la ventana de 10 min con dos reconciliaciones y la Time Machine activa (hoy, 30 s y sin Time Machine).
+  - RES-03: despertares en reposo.
+  - RES-04: vigilancias de inotify frente a `max_user_watches` y vuelta a la línea base tras 100 altas y bajas.
+  - RES-05: el banco solo reporta el crecimiento del perfil.
+  - RES-07: escenario con todos los núcleos saturados, que bloquea TS-GRP-005.
+  - El hallazgo del § 6.3 (coalescing de timers) toca a RES-06: un trabajo en clase `utility` o `background` en macOS puede despertarse tarde. TS-GRP-005 debe medirlo con este banco antes de bajar de clase al observador.
 - **Agotamiento de watches de inotify**: 3.398 watches en el runner de Linux con 10 worktrees; el modo degradado queda para US-GRP-003 y US-GRP-004.
 
 ## 9. Verificación realizada
