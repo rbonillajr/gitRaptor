@@ -498,8 +498,6 @@ impl Daemon {
             Some(git) => fields.push(("git", git.version.into())),
             None => fields.push(("git", "not-found".into())),
         }
-        logger.info("daemon_started", &fields);
-
         let (handle, control_rx) = ShutdownHandle::new();
         let mut daemon = Self {
             config,
@@ -533,6 +531,9 @@ impl Daemon {
             };
             daemon.observe(repo_id, &entry.canonical_path, read);
         }
+        // Logged once everything runs: observing, detecting sessions
+        // (US-GRP-007). Clients and tests take it as "started".
+        daemon.logger.info("daemon_started", &fields);
         Ok(daemon)
     }
 
