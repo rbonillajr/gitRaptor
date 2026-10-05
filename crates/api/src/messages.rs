@@ -467,6 +467,99 @@ pub struct EventsHistoryResult {
     pub events: Vec<GitEventView>,
 }
 
+/// State of an agent session (BR-WF-001).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum SessionStateView {
+    /// Present, with activity in its worktree within the threshold.
+    Active,
+    /// Present, without activity for the threshold.
+    Inactive,
+    /// No longer present. Never reopened (Q41).
+    Ended,
+}
+
+impl SessionStateView {
+    /// Stable text, also the suffix of the `session-*` kinds stored in the
+    /// repo's history.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Active => "active",
+            Self::Inactive => "inactive",
+            Self::Ended => "ended",
+        }
+    }
+}
+
+/// Why a session ended (ADR-GRP-013 § 1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum SessionEndCauseView {
+    /// Its process disappeared (normal or forced close).
+    ProcessGone,
+    /// Its process disappeared while the engine was not observing; the end
+    /// time is unknown.
+    EndedDuringGap,
+    /// Its explicit registration was withdrawn (US-GRP-009).
+    RegistrationWithdrawn,
+}
+
+/// One agent session, as `session.state` and `sessions.list` show it
+/// (US-GRP-007, ADR-GRP-013 § 6).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SessionView {
+    pub repo_id: String,
+    pub session_id: String,
+    /// Root of the worktree the session is associated with.
+    pub worktree: Untrusted,
+    /// Effective attribution of the session: always an agent with its
+    /// origin.
+    pub actor: crate::Actor,
+    pub state: SessionStateView,
+    pub started_utc_ms: i64,
+    /// Since when it is in `state`.
+    pub state_since_utc_ms: i64,
+    /// Local offset of the engine's machine, to show the times.
+    pub utc_offset_s: i32,
+    /// Absent while present, and when it ended during a gap.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ended_utc_ms: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_cause: Option<SessionEndCauseView>,
+}
+
+/// `sessions.list` parameters.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SessionsListParams {
+    /// Only this repo; every observed repo without it.
+    #[serde(default)]
+    pub repo_id: Option<String>,
+    /// Also the ended sessions. Without it, only the present ones and the
+    /// latest ended session of each worktree (the "latest session" of the
+    /// Cockpit amendment of ADR-GRP-013).
+    #[serde(default)]
+    pub include_ended: bool,
+    /// At most this many, the most recent (capped at
+    /// [`MAX_SESSIONS_PAGE`]).
+    #[serde(default)]
+    pub limit: Option<u32>,
+}
+
+/// Most sessions one `sessions.list` answer returns.
+pub const MAX_SESSIONS_PAGE: u32 = 500;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SessionsListResult {
+    /// Whether this system can detect sessions at all. `false` (Windows,
+    /// for now) means "unknown", not "no sessions".
+    pub detection_available: bool,
+    /// Oldest first.
+    pub sessions: Vec<SessionView>,
+}
+
 /// Data of a `repo.observation` event: a repo started or stopped being
 /// observed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
