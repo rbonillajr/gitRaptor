@@ -26,7 +26,11 @@ fn counts(w: &WorktreeView) -> ChangeCounts {
 }
 
 fn canonical(p: &Path) -> String {
-    p.canonicalize().unwrap().to_str().unwrap().to_owned()
+    // The engine's own canonical form (the drive form on Windows).
+    gitraptor_core::observe::canonical(p)
+        .to_str()
+        .unwrap()
+        .to_owned()
 }
 
 #[test]

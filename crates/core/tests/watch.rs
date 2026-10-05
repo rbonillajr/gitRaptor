@@ -76,7 +76,8 @@ fn events(batches: &[ObservedBatch]) -> Vec<RawEvent> {
 }
 
 fn canonical(p: &Path) -> PathBuf {
-    p.canonicalize().unwrap()
+    // The engine's own canonical form (the drive form on Windows).
+    gitraptor_core::observe::canonical(p)
 }
 
 fn fast() -> WatchConfig {
