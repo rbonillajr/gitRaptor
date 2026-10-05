@@ -151,14 +151,14 @@ Aplicada desde la implementación de [TS-TMC-003](../../requirements/features/ti
 
 ## Enmienda (2026-10-04, Cockpit)
 
-Aplicada desde DEP-CKP-7 de [CTX-CKP-001](../../requirements/features/cockpit/context.md), con [ADR-CKP-002](./ADR-CKP-002-catalogo-operaciones-ejecutor.md) § 1, § 5 y § 6 (proposed) y Q-CKP-19. **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. No cambia la capa de escritura de la Time Machine, el protocolo de aplicación ni que las operaciones de usuario las ejecute el ejecutor del daemon. El `status` sigue en `accepted`.
+Aplicada desde DEP-CKP-7 de [CTX-CKP-001](../../requirements/features/cockpit/context.md), con [ADR-CKP-002](./ADR-CKP-002-catalogo-operaciones-ejecutor.md) § 1, § 5 y § 6 (accepted 2026-10-04) y Q-CKP-19. **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. No cambia la capa de escritura de la Time Machine, el protocolo de aplicación ni que las operaciones de usuario las ejecute el ejecutor del daemon. El `status` sigue en `accepted`.
 
 | Cambio | Dónde | Fuente |
 |---|---|---|
 | El lock por repo del aplicador es el **cerrojo de escritura del repo**, compartido con el ejecutor de operaciones: un merge y un undo nunca se mezclan | § 3, paso 3 | ADR-CKP-002 § 5; Q-CKP-19 |
-| El catálogo de operaciones de usuario es el de ADR-CKP-002 (versión 1: seis operaciones, con su ámbito y su clase) | § 5 | DEP-CKP-7; ADR-CKP-002 § 1 |
+| El catálogo de operaciones de usuario es el de ADR-CKP-002 (versión 1: ocho operaciones, con su ámbito, su clase y sus marcas Cockpit y MCP) | § 5 | DEP-CKP-7; ADR-CKP-002 § 1 |
 | Nota E6 cerrada para el ejecutor: usa el mismo binario de Git resuelto, una vez y con ruta absoluta | Enmienda (SPIKE-TMC-001) | ADR-CKP-002 § 6; ADR-GRP-009 (Enmienda, Cockpit) |
 
-- **Cerrojo compartido**: vive en un módulo neutro de `crates/core` que usan el aplicador y el ejecutor; la clave es el directorio común del repo. No se usa un cerrojo por worktree, porque un merge toca dos worktrees y refs del repo. Las peticiones esperan en orden de llegada y se ven como "en cola" en todos los clientes (ADR-CKP-002 § 5).
+- **Cerrojo compartido**: vive en un módulo neutro de `crates/core` que usan el aplicador y el ejecutor; la clave es el directorio común del repo. No se usa un cerrojo por worktree, porque un merge toca dos worktrees y refs del repo. Las peticiones esperan en orden de llegada y se ven como "en cola" en todos los clientes (ADR-CKP-002 § 5). **Estado en main**: la Enmienda (2026-10-04, TS-TMC-003) implementó el lock del aplicador en `timemachine`, con clave la ruta del almacén (única por repo y perfil) y sin espera; la Dev Spec de TS-CKP-002 lo reutiliza como este cerrojo y le añade la cola.
 - **Sin interbloqueo con los hooks**: la evaluación de un hook de Guardrails nunca espera a este cerrojo (ADR-GRD-003, Enmienda (2026-10-04, Cockpit)). Las escrituras internas de esta capa siguen sin hooks (§ 2).
 - **Validación añadida**: un undo pedido mientras el ejecutor integra en el mismo repo espera en cola y después revalida su plan; nunca se aplican a la vez.

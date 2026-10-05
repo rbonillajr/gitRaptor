@@ -279,7 +279,7 @@ Aplicada desde la tabla de enmiendas de [non-functional-guardrails.md](../non-fu
 
 ## Enmienda (2026-10-04, Cockpit)
 
-Aplicada desde DEP-CKP-13 de [CTX-CKP-001](../../requirements/features/cockpit/context.md), con [ADR-CKP-002](./ADR-CKP-002-catalogo-operaciones-ejecutor.md) § 1 y § 10 y la enmienda E4 de [ADR-CKP-003](./ADR-CKP-003-arquitectura-tui.md) (proposed). **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. No cambia el formato, los nombres de archivo, la precedencia, la sección `engine` ni las de Guardrails. El `status` sigue en `accepted`.
+Aplicada desde DEP-CKP-13 de [CTX-CKP-001](../../requirements/features/cockpit/context.md), con [ADR-CKP-002](./ADR-CKP-002-catalogo-operaciones-ejecutor.md) § 1 y § 10 y la enmienda E4 de [ADR-CKP-003](./ADR-CKP-003-arquitectura-tui.md) (accepted 2026-10-04). **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. No cambia el formato, los nombres de archivo, la precedencia, la sección `engine` ni las de Guardrails. El `status` sigue en `accepted`.
 
 | Cambio | Dónde | Fuente |
 |---|---|---|

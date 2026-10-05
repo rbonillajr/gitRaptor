@@ -143,7 +143,7 @@ Decisión del orquestador (2026-10-04), validada por el Arquitecto. Corrige un f
 
 ## Enmienda (2026-10-04, Cockpit)
 
-Aplicada desde DEP-CKP-5 de [CTX-CKP-001](../../requirements/features/cockpit/context.md), con [ADR-CKP-002](./ADR-CKP-002-catalogo-operaciones-ejecutor.md) § 2 y [ADR-CKP-003](./ADR-CKP-003-arquitectura-tui.md) § 2 y § 4 (proposed). **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. No cambia el oplog, sus entidades, su inmutabilidad ni la recuperación. El `status` sigue en `accepted`.
+Aplicada desde DEP-CKP-5 de [CTX-CKP-001](../../requirements/features/cockpit/context.md), con [ADR-CKP-002](./ADR-CKP-002-catalogo-operaciones-ejecutor.md) § 2 y [ADR-CKP-003](./ADR-CKP-003-arquitectura-tui.md) § 2 y § 4 (accepted 2026-10-04). **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. No cambia el oplog, sus entidades, su inmutabilidad ni la recuperación. El `status` sigue en `accepted`.
 
 | Cambio | Dónde | Fuente |
 |---|---|---|

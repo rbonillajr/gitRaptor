@@ -147,7 +147,7 @@ Aplicada desde las recomendaciones de [SPIKE-GRP-002-resultados.md](../../requir
 
 ## Enmienda (2026-10-04, Cockpit)
 
-Aplicada desde la enmienda E2 de [ADR-CKP-003](./ADR-CKP-003-arquitectura-tui.md) (§ 6, Validación V3) y desde [ADR-CKP-001](./ADR-CKP-001-prediccion-conflictos-merge-en-seco.md) § 5 y Validación 5, los dos `proposed`, con Q-CKP-6 y S-CKP-1 de [CTX-CKP-001](../../requirements/features/cockpit/context.md). **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. **Las cifras del reparto (§ 2) no cambian**: el Cockpit sigue con ≤ 100 ms p95. El `status` sigue en `accepted`.
+Aplicada desde la enmienda E2 de [ADR-CKP-003](./ADR-CKP-003-arquitectura-tui.md) (§ 6, Validación V3) y desde [ADR-CKP-001](./ADR-CKP-001-prediccion-conflictos-merge-en-seco.md) § 5 y Validación 5, los dos `accepted` el 2026-10-04, con Q-CKP-6 y S-CKP-1 de [CTX-CKP-001](../../requirements/features/cockpit/context.md). **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. **Las cifras del reparto (§ 2) no cambian**: el Cockpit sigue con ≤ 100 ms p95. El `status` sigue en `accepted`.
 
 | Cambio | Dónde | Fuente |
 |---|---|---|

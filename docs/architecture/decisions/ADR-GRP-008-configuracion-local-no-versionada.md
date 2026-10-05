@@ -102,7 +102,7 @@ Con repos y perfiles temporales (ADR-GRP-006), nunca con este repo:
 
 ## Enmienda (2026-10-04, Cockpit)
 
-Aplicada desde DEP-CKP-13 de [CTX-CKP-001](../../requirements/features/cockpit/context.md), derivada de la Enmienda (2026-10-04, Cockpit) de [ADR-GRP-007](./ADR-GRP-007-configuracion-tres-niveles-formato.md), con [ADR-CKP-002](./ADR-CKP-002-catalogo-operaciones-ejecutor.md) § 10 y la enmienda E4 de [ADR-CKP-003](./ADR-CKP-003-arquitectura-tui.md) (proposed). **Decisión del orquestador (2026-10-04), validada por Arquitecto**. No cambia la ubicación del nivel local ni que el motor solo lo lea. El `status` sigue en `accepted`.
+Aplicada desde DEP-CKP-13 de [CTX-CKP-001](../../requirements/features/cockpit/context.md), derivada de la Enmienda (2026-10-04, Cockpit) de [ADR-GRP-007](./ADR-GRP-007-configuracion-tres-niveles-formato.md), con [ADR-CKP-002](./ADR-CKP-002-catalogo-operaciones-ejecutor.md) § 10 y la enmienda E4 de [ADR-CKP-003](./ADR-CKP-003-arquitectura-tui.md) (accepted 2026-10-04). **Decisión del orquestador (2026-10-04), validada por Arquitecto**. No cambia la ubicación del nivel local ni que el motor solo lo lea. El `status` sigue en `accepted`.
 
 | Cambio | Dónde | Fuente |
 |---|---|---|
