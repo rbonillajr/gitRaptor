@@ -123,6 +123,8 @@ Nota de integración (INF-GRP-001, 2026-10-04; decisión del orquestador, valida
 - **Validación 5**: la comprobación estática sigue cubriendo solo `crates/git/src`. El testkit queda fuera porque solo puede ser dev-dependency y no es código del motor.
 - **Validación 7**: el gate portable de los tres SO es una auditoría por trampas sin privilegios (shim de `git` que registra el argv desde el hijo y trampas en el `PATH`). eslogger, strace y ETW quedan como auditoría profunda. A 2026-10-04 solo está verificada la auditoría por trampas en macOS (eslogger, strace y ETW sin verificar; ETW sin implementar), así que la condición de esta Validación sigue **abierta**.
 
+Nota de integración (Windows, 2026-10-05; decisión del orquestador, validada por el Arquitecto): en Windows, `std::fs::canonicalize` devuelve rutas verbatim (`\\?\C:\…`), y el § 2 las rechaza por ser verbatim. Quien canonicaliza una ruta que luego llega a la capa de lectura (`observe::locate`, la clave de repo del perfil) usa `gitraptor_git::paths::canonicalize`, que devuelve la forma con letra de unidad cuando nombra el mismo archivo y supera el § 2. Una ruta sin esa forma (`\\?\UNC\…`, GUID de volumen) o que nombraría otro archivo (componente con punto o espacio final) se queda verbatim y se rechaza. El rechazo léxico de UNC, verbatim y dispositivos no cambia.
+
 Nota de integración (Cockpit, ADR-CKP-002; Enmienda 2026-10-04): `crates/git` aloja una **tercera capa de escritura**, la invocación de operaciones de usuario del ejecutor del daemon. Detalle en la sección final.
 
 ## Validación
