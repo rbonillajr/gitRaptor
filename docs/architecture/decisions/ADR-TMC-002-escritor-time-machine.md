@@ -135,3 +135,16 @@ Aplicada desde § 7 de [SPIKE-TMC-001-resultados.md](../../requirements/features
 | La escritura del almacén con gitoxide (escalón 3) vive en un submódulo propio de esta capa: tipo de acceso que solo abre el almacén validado, comprobación estática de CI y gix aislado | § 1, § 2, Validación 1 | E1; ADR-TMC-006 § 5; revisión del Arquitecto |
 | Git CLI de esta capa: el binario que ya resuelve el daemon, una vez y con ruta absoluta; en macOS ni el shim `/usr/bin/git` ni `xcrun` (resolución leyendo el disco). Nota pendiente para el motor y el ejecutor | § 2 | E6; Resultados § 2.1 y § 4; revisión del Arquitecto |
 | `repack` y `prune` del almacén en la lista cerrada | § 2 | E10; ADR-TMC-007 § 4 |
+
+## Enmienda (2026-10-04, TS-TMC-003)
+
+Aplicada desde la implementación de [TS-TMC-003](../../requirements/features/time-machine/dev-specs/TS-TMC-003-escritura-aplicador.md), verificada **solo en macOS** con Git 2.50.1. El `status` sigue en `accepted`. Decisión del orquestador (2026-10-04), validada por el Arquitecto, que pidió registrar aquí el cambio del paso 5.
+
+| Cambio | Dónde | Motivo |
+|---|---|---|
+| **`HEAD` fuera de la transacción de refs.** Las ramas y `refs/stash` van en una sola transacción `update-ref --stdin -z` con valor anterior. Cada `HEAD` se verifica antes y se escribe después con el protocolo de lock de Git (`HEAD.lock` exclusivo, comparación del contenido esperado bajo el lock, `fsync` y rename). Si falla tras la transacción, la operación queda `interrumpida` (§ 3) | § 3, paso 5 | `symref-update` exige Git 2.46 (> 2.38); con `HEAD.lock` tomado, `update-ref` no puede mover la rama a la que apunta `HEAD`; y `update-ref` rechaza `worktrees/<id>/HEAD`, así que el `HEAD` de un worktree enlazado tampoco cabe en la transacción. Comprobado. El `HEAD` restaurado no deja entrada de reflog (aviso tipado) |
+| **`refs/stash` nunca se borra** y solo mueve su cima | § 3, paso 5 | Borrar la ref borra su reflog, la pila entera (NFR-01) |
+| **Lista cerrada** con sus opciones fijas y los datos solo por stdin: `update-ref --stdin -z`, `update-index -z --index-info`, `update-index --skip-worktree -z --stdin`, `pack-objects --revs --stdout`, `index-pack --stdin --strict --keep`, `repack -d --geometric=2`, `prune --expire=1.hour.ago` | § 2 | SEC-TMC-02, SEC-TMC-14; `--keep` evita que un `gc` ajeno tire el pack antes de que las refs lo alcancen |
+| **`safe.directory`**: la confianza la decide antes la capa de lectura con la configuración del usuario; la capa de escritura, que neutraliza la global, pasa `-c safe.directory=<ruta validada>` | § 2 | Sin ello, `GIT_CONFIG_GLOBAL` vacío rechazaría repos que el usuario declaró de confianza |
+| **`ready → rechazada`**: una precondición que falla bajo los locks del aplicador, antes de cualquier cambio, termina la operación como `rechazada` | § 3, pasos 1 y 3; ADR-TMC-003 | Distinguir "no se tocó nada" de una interrupción |
+| **Toda escritura sobre el repo del usuario vive en `crates/git/src/tm_write/`** (intercambio, borrado, `HEAD.lock`, `index.lock`, administración de worktrees), con comprobación estática | § 1, Validación 1 | ADR-GRP-002. Excepción conocida: la liberación de locks anotados de la recuperación (TS-TMC-002), pendiente de moverse |
