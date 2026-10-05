@@ -79,7 +79,21 @@ fn every_other_package_inherits_the_workspace_lints() {
     );
 }
 
-/// Only files named `ffi*.rs` may contain `unsafe`; the crate root denies it
+/// Every `.rs` file under `dir`, recursively.
+fn rust_files(dir: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            out.extend(rust_files(&path));
+        } else if path.extension().is_some_and(|e| e == "rs") {
+            out.push(path);
+        }
+    }
+    out
+}
+
+/// Only top-level files named `ffi*.rs` may contain `unsafe`; the crate root denies it
 /// and allows it back only on those modules.
 #[test]
 fn unsafe_lives_only_in_the_ffi_modules() {
@@ -94,10 +108,10 @@ fn unsafe_lives_only_in_the_ffi_modules() {
             assert!(module.starts_with("mod ffi"), "allow on `{module}`");
         }
     }
-    for entry in std::fs::read_dir(&src).unwrap() {
-        let path = entry.unwrap().path();
+    for path in rust_files(&src) {
         let name = path.file_name().unwrap().to_string_lossy().into_owned();
-        if name.starts_with("ffi") || name == "lib.rs" {
+        // Only top-level FFI modules: `allow` is checked on `lib.rs` above.
+        if path.parent() == Some(src.as_path()) && (name.starts_with("ffi") || name == "lib.rs") {
             continue;
         }
         let text = std::fs::read_to_string(&path).unwrap();
@@ -105,7 +119,8 @@ fn unsafe_lives_only_in_the_ffi_modules() {
             !text.contains("unsafe {")
                 && !text.contains("unsafe fn")
                 && !text.contains("unsafe_code"),
-            "{name} uses `unsafe` outside an FFI module"
+            "{} uses `unsafe` outside an FFI module",
+            path.display()
         );
     }
 }
