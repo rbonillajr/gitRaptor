@@ -1,0 +1,8 @@
+{
+  "feature": "mcp",
+  "context": {
+    "approved": true,
+    "approvedAt": "2026-10-05",
+    "approvedVia": "nl-approval-hook"
+  }
+}
