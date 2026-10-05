@@ -52,6 +52,7 @@ pub(super) struct Loaded {
     pub wants: Vec<Oid>,
     pub haves: Vec<Oid>,
     pub stash_moves: bool,
+    pub stash_kept: bool,
 }
 
 fn kind_of(kind: TreeEntryKind) -> Option<Kind> {
@@ -245,6 +246,7 @@ pub(super) fn load(
 
     let mut ref_updates = Vec::new();
     let mut stash_moves = false;
+    let mut stash_kept = false;
     for id in prior_meta.branches.values().chain(prior_meta.stash.iter()) {
         haves.insert(oid(id, "branch").map_err(invalid(prior))?);
     }
@@ -285,7 +287,10 @@ pub(super) fn load(
             .map(|h| oid(h, "stash"))
             .transpose();
         let (old, new) = (old.map_err(invalid(prior))?, new.map_err(invalid(target))?);
-        if old != new {
+        if old.is_some() && new.is_none() {
+            // Never delete `refs/stash`: its reflog is the rest of the stack (NFR-01).
+            stash_kept = true;
+        } else if old != new {
             wants.extend(new);
             stash_moves = true;
             ref_updates.push(
@@ -301,5 +306,6 @@ pub(super) fn load(
         wants,
         haves: haves.into_iter().collect(),
         stash_moves,
+        stash_kept,
     })
 }

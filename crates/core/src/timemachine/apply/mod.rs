@@ -183,8 +183,11 @@ pub enum ApplyWarning {
     IntentToAddNotRestored { worktree: String, path: String },
     /// `HEAD` was written by compare-and-swap and left no reflog entry.
     HeadWithoutReflog { worktree: String },
-    /// Only the top of `refs/stash` moved; the rest of the stack lives in its reflog.
+    /// Only the top of `refs/stash` moved; the earlier entries stay in its reflog.
     StashTopOnly,
+    /// The target has no stash: `refs/stash` was kept, since deleting it would drop its reflog
+    /// (the whole stack, NFR-01).
+    StashKept,
     /// A path left out of the snapshots: never written or removed.
     Excluded { worktree: String, path: String },
 }
@@ -208,6 +211,9 @@ pub struct ApplyHooks {
     pub at_step: Option<Box<dyn Fn(u32) + Send + Sync>>,
     /// Runs right before each file exchange, with the worktree root and the path.
     pub before_exchange: Option<ExchangeHook>,
+    /// Behave as a file system without atomic exchange (tests of "not restorable with
+    /// guarantee").
+    pub simulate_no_exchange: bool,
 }
 
 impl std::fmt::Debug for ApplyHooks {
@@ -594,6 +600,9 @@ impl<'a> Applier<'a> {
         if loaded.stash_moves {
             report.warnings.push(ApplyWarning::StashTopOnly);
         }
+        if loaded.stash_kept {
+            report.warnings.push(ApplyWarning::StashKept);
+        }
         for w in &loaded.worktrees {
             let (Some(wt), Some(expected), Some(target)) =
                 (&w.worktree, &w.prior_head, &w.target_head)
@@ -690,7 +699,10 @@ impl<'a> Applier<'a> {
 
     /// Step 6 for one worktree: removals deepest first, empty folders, then writes.
     fn files(&self, w: &LoadedWorktree, report: &mut ApplyReport) -> Result<(), StepError> {
-        let root = RootDir::open(&w.root)?;
+        let mut root = RootDir::open(&w.root)?;
+        if self.hooks.simulate_no_exchange {
+            root = root.simulating_no_exchange();
+        }
         let issue = |report: &mut ApplyReport, path: &str, outcome: Outcome| match outcome {
             Outcome::Written => report.written += 1,
             Outcome::Removed => report.removed += 1,
