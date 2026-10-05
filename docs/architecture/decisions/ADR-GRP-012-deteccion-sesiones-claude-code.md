@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-05
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
@@ -149,3 +149,17 @@ Enmienda tras la revisión del security-expert. No cambia las señales ni la reg
 | I4 · Supuesto "la shell de Claude Code no tiene TTY" | Deja de ser crítico: ADR-GRP-005 ya no se apoya en la terminal del cliente, sino en comprobaciones del daemon (terminal de control y líder de sesión). SPIKE-GRP-001 lo sigue midiendo como dato |
 
 Validación ampliada: SEC-04 y SEC-05 (punto "Seguridad"), con los tests en INF-GRP-001.
+
+## Enmienda (2026-10-05, US-GRP-007)
+
+Derivada de la [Dev Spec de US-GRP-007](../../requirements/features/motor-local/dev-specs/US-GRP-007-dev-spec.md). **Decisión del orquestador (2026-10-05), validada por el Arquitecto y el PO.** No cambia las señales, la regla de combinación ni el ciclo de vida: concreta cómo se leen los procesos y la regla de S3, y cómo se valida el spike. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Motivo |
+|---|---|---|
+| **Lectura de procesos sin `sysinfo`**: macOS con `libproc` (lista por uid, `BSDInfo`, `pidpath`) y el cwd con `PROC_PIDVNODEPATHINFO` mediante un tipo propio que implementa el trait `PIDInfo` (sin `unsafe` en el código de GitRaptor); Linux con `/proc`. Nunca se cargan `cmd` ni `environ`. Windows: sin detección todavía (`sessions.list` lo dice con `detection_available: false`). Pendiente: etapa de validación multiplataforma | Señal S1; Revisión de seguridad (M3) | Más estricto que `sysinfo` con `ProcessRefreshKind` y sin la dependencia |
+| **Intérpretes**: un Claude Code instalado por npm (`node …/cli.js`) no se detecta hasta tener la lectura acotada de argv[1], que en macOS necesita `KERN_PROCARGS2` sin envoltorio seguro. No produce falsos positivos | Señal S1 | Lo mide SPIKE-GRP-001 |
+| **Regla concreta de S3**: el observador avisa al detector de cada escritura en el directorio Git (incluido `objects/`) antes del debounce; se toma una muestra con el primer aviso. Un evento de Git apunta a una sesión solo si, en las muestras de la ventana de su lote, hay `git` de **exactamente una sesión** con cwd **en el worktree del evento** y **ningún `git` ajeno** con cwd en el repo, contando solo los `git` que **empezaron antes del aviso**. Los `git` del propio daemon cuentan como ajenos. Un `git` ajeno que está terminando (cwd ilegible) se sitúa por el cwd de su ancestro vivo legible más cercano; si no hay ninguno, se ignora. Un `git` de la sesión con cwd ilegible no cuenta. Ventana: `[t_recv − 100 ms, t_flush]` del lote | Señal S3; regla de combinación, puntos 2, 4 y 6 | Medido en la máquina de dogfooding: 6 de 47 `git` muestreados estaban terminando; contarlos siempre como ajenos dejaba sin atribuir los commits de Claude Code |
+| **Riesgo residual de S3**: un `git` de Claude Code vivo en el mismo worktree cuando el desarrollador hace un commit cuyo `git` ya terminó, o lanzado desde un IDE con su cwd fuera del repo (GitKraken, VS Code), atribuiría ese commit a Claude Code. Lo mide la suite guionizada de SPIKE-GRP-001, con los commits desde IDE marcados aparte | Consecuencias | Hueco declarado |
+| **Identificador de sesión**: `<pid>:<inicio_us>`, el mismo texto que usa el solicitante de la Time Machine, para que una corrección de la sesión llegue a sus operaciones (ADR-TMC-005) | Ciclo de vida | Un solo formato |
+| **Validación con el motor real**: SPIKE-GRP-001 se valida con US-GRP-007 en dogfooding, no con un prototipo aislado, y **solo para S1 + S3**; S2a y S2b quedan abiertas hasta que US-GRP-008 conecte el adaptador de transcripts. El procedimiento está en el § 5 de la Dev Spec. El cambio de secuencia (el spike decía validar antes de desarrollar) queda pendiente de que Rene lo ratifique | Validación | Instrucción del coordinador para el hito M1 |
+
