@@ -84,15 +84,17 @@ pub struct StopResult {
     pub stopping: bool,
 }
 
-/// `repo.add` parameters (implemented by US-GRP-001). The path is validated
-/// before anything touches the file system (SEC-02).
+/// `repo.add` parameters (US-GRP-001). The path is validated before
+/// anything touches the file system (SEC-02). It names the root of a
+/// worktree or a Git directory: the daemon does not search upwards.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RepoAddParams {
     pub path: String,
 }
 
-/// `repo.retire` parameters (implemented by US-GRP-006).
+/// `repo.retire` parameters. US-GRP-001 stops the observation; US-GRP-006
+/// adds what a retired repo keeps and recovers.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RepoRetireParams {
@@ -131,8 +133,208 @@ pub struct RepoView {
     /// Opaque id of the repo in the profile.
     pub repo_id: String,
     pub state: RepoStateView,
-    /// Canonical path (text from the file system).
+    /// Canonical path of the Git common directory (text from the file
+    /// system).
     pub path: Untrusted,
+    /// Every worktree of the repo as of the last reconciliation
+    /// (US-GRP-001): the main one first, then the linked ones by path.
+    pub worktrees: Vec<WorktreeView>,
+}
+
+/// Most changed paths listed per worktree.
+pub const MAX_WORKTREE_CHANGES: usize = 200;
+
+/// Most bytes of listed paths per worktree. With the count bound, it keeps
+/// a snapshot of many worktrees under the message limit; past the snapshot
+/// budget the daemon drops the lists and keeps the counts.
+pub const MAX_WORKTREE_CHANGE_BYTES: usize = 32 * 1024;
+
+/// Where `HEAD` of a worktree points.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum HeadView {
+    /// A branch with commits.
+    Branch { name: Untrusted },
+    /// A branch without commits yet.
+    Unborn { name: Untrusted },
+    /// Directly at a commit.
+    Detached,
+}
+
+/// Why a worktree could not be read. What each one means for the developer
+/// and the special states belong to US-GRP-003.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum UnavailableReason {
+    /// Its folder is not there (BR-EDGE-001).
+    Missing,
+    /// Git's `safe.directory` rules do not trust it (SEC-11).
+    Untrusted,
+    /// It is there but could not be read now.
+    Unreadable,
+}
+
+/// Whether a worktree could be read (US-GRP-001).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "state", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum WorktreeStatus {
+    Ready {
+        head: HeadView,
+        counts: ChangeCounts,
+        /// Changed paths, sorted, bounded by [`MAX_WORKTREE_CHANGES`] and
+        /// [`MAX_WORKTREE_CHANGE_BYTES`]; `counts` says how many there are.
+        changes: Vec<FileChangeView>,
+    },
+    /// Registered in the repo but not readable now: nothing else is
+    /// reported for it rather than made up.
+    Unavailable { reason: UnavailableReason },
+}
+
+/// How many paths changed, by area. All zero: the worktree is clean.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ChangeCounts {
+    pub staged: u32,
+    pub unstaged: u32,
+    pub untracked: u32,
+}
+
+impl ChangeCounts {
+    pub fn total(&self) -> u64 {
+        u64::from(self.staged) + u64::from(self.unstaged) + u64::from(self.untracked)
+    }
+
+    pub fn is_clean(&self) -> bool {
+        self.total() == 0
+    }
+}
+
+/// One worktree of an observed repo (US-GRP-001).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct WorktreeView {
+    /// Root of the working tree, canonical (text from the file system).
+    pub path: Untrusted,
+    /// The repo's main worktree (not a linked one).
+    pub main: bool,
+    /// Name of a linked worktree under `<common dir>/worktrees/`.
+    pub admin_name: Option<Untrusted>,
+    pub status: WorktreeStatus,
+}
+
+impl WorktreeView {
+    /// The listed changes are fewer than the counted ones.
+    pub fn changes_truncated(&self) -> bool {
+        match &self.status {
+            WorktreeStatus::Ready {
+                counts, changes, ..
+            } => (changes.len() as u64) < counts.total(),
+            WorktreeStatus::Unavailable { .. } => false,
+        }
+    }
+}
+
+/// Where a change sits.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum ChangeAreaView {
+    /// Prepared for the next commit (`HEAD` versus the index).
+    Staged,
+    /// Not prepared (index versus the working tree).
+    Unstaged,
+    /// Not tracked and not ignored.
+    Untracked,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum ChangeKindView {
+    Added,
+    Deleted,
+    Modified,
+    TypeChanged,
+    Conflicted,
+}
+
+/// One changed path, relative to the worktree root with `/` separators.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FileChangeView {
+    pub path: Untrusted,
+    pub area: ChangeAreaView,
+    pub kind: ChangeKindView,
+}
+
+/// Data of a `worktree.state` event: the reconciled worktrees of one repo,
+/// all of them (US-GRP-001).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct WorktreeStateData {
+    pub repo_id: String,
+    pub worktrees: Vec<WorktreeView>,
+}
+
+/// Data of a `repo.observation` event: a repo started or stopped being
+/// observed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RepoObservationData {
+    pub repo_id: String,
+    pub observed: bool,
+    pub state: RepoStateView,
+    /// Canonical path of the Git common directory.
+    pub path: Untrusted,
+}
+
+/// What `repo.add` did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum RepoAddOutcome {
+    /// First time this repo is added.
+    New,
+    /// It was already observed; nothing changed.
+    AlreadyObserved,
+    /// A retired repo is observed again with its previous id and data.
+    Reactivated,
+}
+
+/// `repo.add` result.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RepoAddResult {
+    pub outcome: RepoAddOutcome,
+    pub repo: RepoView,
+}
+
+/// `repo.retire` result.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RepoRetireResult {
+    /// `false` if it was not observed (already retired).
+    pub retired: bool,
+}
+
+/// Why `repo.add` rejected a path.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum RepoRejection {
+    /// The path is not a Git repository or worktree.
+    NotARepo,
+    /// Git's `safe.directory` ownership rules do not trust it (SEC-11).
+    Untrusted,
+    /// It looks like a repository but could not be read.
+    Unreadable,
+    /// No longer exists (`repo.retire` of an unknown id).
+    UnknownRepo,
+}
+
+/// `data` of a `REPO_REJECTED` error.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RepoRejectedData {
+    pub reason: RepoRejection,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

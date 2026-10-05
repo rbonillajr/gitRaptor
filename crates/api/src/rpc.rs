@@ -38,6 +38,9 @@ pub mod code {
     /// The subscription could not continue from the requested point; an
     /// `events.resync` notification says why. Take a new snapshot.
     pub const RESYNC_REQUIRED: i64 = -32007;
+    /// A repo command was rejected for what it names (not who asks):
+    /// `data` is a `RepoRejectedData` (US-GRP-001).
+    pub const REPO_REJECTED: i64 = -32008;
 }
 
 /// Request id: a number or a short string.

@@ -294,10 +294,14 @@ fn deliver(sub: &Subscriber, event: &Event) -> bool {
     ))
 }
 
-/// Event kinds an MCP connection receives: not the reserved-command audit,
-/// which `audit.list` does not offer to MCP either (SEC-14).
+/// Event kinds an MCP connection receives: an allowlist, so a new kind is
+/// withheld until it is added here (SEC-12). Not the reserved-command audit,
+/// which `audit.list` does not offer to MCP either (SEC-14), nor anything
+/// carrying paths (`repo.observation`, `worktree.state`): F-001-05 defines
+/// their MCP projection.
 fn mcp_kind(kind: &str) -> bool {
-    kind != gitraptor_api::event::RESERVED_AUDIT
+    use gitraptor_api::event::{DAEMON_STOPPING, ENGINE_STATE};
+    kind == ENGINE_STATE || kind == DAEMON_STOPPING
 }
 
 #[cfg(test)]

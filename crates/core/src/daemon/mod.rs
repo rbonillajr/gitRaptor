@@ -29,19 +29,23 @@ use std::sync::Arc;
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use gitraptor_api::Untrusted;
-use gitraptor_api::event::DAEMON_STOPPING;
-use gitraptor_api::messages::{EngineStateView, EngineView, RepoStateView, RepoView, StoppingData};
+use gitraptor_api::event::{DAEMON_STOPPING, ENGINE_STATE, REPO_OBSERVATION, WORKTREE_STATE};
 #[cfg(unix)]
-use gitraptor_api::{event::ENGINE_STATE, messages::DaemonView};
+use gitraptor_api::messages::DaemonView;
+use gitraptor_api::messages::{
+    EngineStateView, EngineView, RepoAddOutcome, RepoAddResult, RepoObservationData,
+    RepoRetireResult, RepoStateView, RepoView, StoppingData, WorktreeStateData, WorktreeView,
+};
+use gitraptor_api::{Timings, Untrusted, clock};
 
 use gitraptor_git::SystemGit;
 use gitraptor_git::resolve::{Resolution, ResolveConfig, resolve};
 
 use crate::channel::{ChannelConfig, EngineShared, EventBus};
+use crate::observe::{self, RepoRead};
 use crate::profile::{
-    DaemonRun, GapCause, Profile, ProfileDirs, ProfileError, RepoEntry, RepoState, RepoStore,
-    StoreOpen, WriteOp, fsperm,
+    AddOutcome, DaemonRun, GapCause, Profile, ProfileDirs, ProfileError, RepoEntry, RepoState,
+    RepoStore, StoreOpen, WriteOp, fsperm,
 };
 use crate::timemachine::oplog::{
     AbsentStore, ChainBreak, Oplog, OplogStatus, RecoveryOptions, RecoveryReport, SnapshotRefs,
@@ -53,7 +57,8 @@ pub use env::{AGENT_EXECUTABLES_ENV, DaemonEnv};
 pub use lock::{InstanceLock, LOCK_FILE, running_pid, wait_until_released};
 pub use log::{Field, LOG_FILE, Level, LogLimits, Logger};
 use shutdown::Control;
-pub use shutdown::{ShutdownHandle, StopCause, install_signal_handlers};
+pub(crate) use shutdown::RepoAddRequest;
+pub use shutdown::{RepoCommandError, ShutdownHandle, StopCause, install_signal_handlers};
 pub use state::{EngineState, InvalidTransition, Trigger};
 
 /// Exit code of a second `raptor daemon` that found another one running.
@@ -63,6 +68,10 @@ pub const EXIT_ALREADY_RUNNING: i32 = 3;
 /// Longest the start waits, over all repos, for annotated children of an
 /// interrupted operation before keeping their locks (ADR-TMC-003 § 6.4).
 pub const TM_RECOVERY_WAIT: Duration = Duration::from_secs(5);
+
+/// Serialized size past which a `worktree.state` event or a snapshot drops
+/// its change lists and keeps the counts, under the 1 MiB message limit.
+pub const CHANGE_LIST_BUDGET: usize = 768 * 1024;
 
 /// Everything that can stop the daemon from starting or running.
 #[derive(Debug)]
@@ -391,8 +400,17 @@ impl Daemon {
         #[cfg(not(unix))]
         logger.warn("channel_unsupported", &[]);
 
+        // Full reconciliation of every observed repo before serving
+        // (ADR-GRP-010 § 6), one thread per repo; the start does not count
+        // for NFR-04.
+        let entries = profile.repos()?;
+        let reads = if state == EngineState::Observing {
+            reconcile_all(&entries, &stores)
+        } else {
+            Vec::new()
+        };
         let mut repo_views = Vec::new();
-        for entry in profile.repos()? {
+        for entry in entries {
             let state = if report.unavailable.contains(&entry.repo_id) {
                 RepoStateView::Unavailable
             } else if entry.state == RepoState::Observed {
@@ -400,10 +418,20 @@ impl Daemon {
             } else {
                 continue;
             };
+            let read = reads
+                .iter()
+                .find(|(id, _)| *id == entry.repo_id)
+                .and_then(|(_, read)| read.as_ref());
+            if let (Some(read), Some((_, store))) =
+                (read, stores.iter_mut().find(|(id, _)| *id == entry.repo_id))
+            {
+                persist_read(store, read, &logger, &entry.repo_id);
+            }
             repo_views.push(RepoView {
                 repo_id: entry.repo_id,
                 state,
                 path: Untrusted::from_os(entry.canonical_path.as_os_str()),
+                worktrees: read.map(RepoRead::views).unwrap_or_default(),
             });
         }
         let bus = Arc::new(EventBus::new(
@@ -509,6 +537,12 @@ impl Daemon {
                     reply,
                 }) => {
                     let _ = reply.send(self.profile.audit(after_id, limit).ok());
+                }
+                Ok(Control::RepoAdd(request, reply)) => {
+                    let _ = reply.send(self.add_repo(*request));
+                }
+                Ok(Control::RepoRetire { repo_id, reply }) => {
+                    let _ = reply.send(self.retire_repo(&repo_id));
                 }
                 Err(RecvTimeoutError::Timeout) => {
                     self.persist_observed_until(now_ms());
@@ -659,6 +693,201 @@ impl Daemon {
         }
     }
 
+    /// Adds a repo the channel located and read (US-GRP-001): registers it
+    /// in the profile, opens its store, persists the reconciliation and
+    /// publishes it. The loop re-checks the profile, so two adds of the same
+    /// repo end with one entry.
+    fn add_repo(&mut self, request: RepoAddRequest) -> Result<RepoAddResult, RepoCommandError> {
+        let now = now_ms();
+        let (entry, outcome) = self
+            .profile
+            .add_repo(&request.common_dir, None, now)
+            .map_err(|err| self.repo_command_failed("repo_add_failed", &err))?;
+        let outcome = match outcome {
+            AddOutcome::New => RepoAddOutcome::New,
+            AddOutcome::AlreadyObserved => RepoAddOutcome::AlreadyObserved,
+            AddOutcome::Reactivated { .. } => RepoAddOutcome::Reactivated,
+        };
+        let repo_id = entry.repo_id.clone();
+        let path = Untrusted::from_os(entry.canonical_path.as_os_str());
+        self.logger.info(
+            "repo_added",
+            &[
+                ("repo", Field::id(&repo_id)),
+                ("outcome", outcome_field(outcome).into()),
+            ],
+        );
+        // Without Git the repo is registered but nothing is observed
+        // (BR-WF-002).
+        if self.state == EngineState::WaitingForGit {
+            return Ok(RepoAddResult {
+                outcome,
+                repo: RepoView {
+                    repo_id,
+                    state: RepoStateView::Observed,
+                    path,
+                    worktrees: Vec::new(),
+                },
+            });
+        }
+        if !self.stores.iter().any(|(id, _)| *id == repo_id) {
+            match self.profile.open_store(&repo_id) {
+                Ok((store, _)) => self.stores.push((repo_id.clone(), store)),
+                Err(err) => self.logger.warn(
+                    "repo_unavailable",
+                    &[
+                        ("repo", Field::id(&repo_id)),
+                        ("kind", profile_error_kind(&err).into()),
+                    ],
+                ),
+            }
+        }
+        let state = match self.stores.iter_mut().find(|(id, _)| *id == repo_id) {
+            Some((_, store)) => {
+                persist_read(store, &request.read, &self.logger, &repo_id);
+                RepoStateView::Observed
+            }
+            None => RepoStateView::Unavailable,
+        };
+        let t_persisted = clock::monotonic_ns();
+        let worktrees = request.read.views();
+        let view = RepoView {
+            repo_id: repo_id.clone(),
+            state,
+            path: path.clone(),
+            worktrees: worktrees.clone(),
+        };
+        if self.state == EngineState::NoRepos {
+            self.transition(Trigger::FirstRepoAdded);
+        }
+        if outcome != RepoAddOutcome::AlreadyObserved {
+            let added = view.clone();
+            self.bus.publish(
+                REPO_OBSERVATION,
+                RepoObservationData {
+                    repo_id: repo_id.clone(),
+                    observed: true,
+                    state,
+                    path,
+                },
+                None,
+                move |shared| {
+                    shared.repos.retain(|r| r.repo_id != added.repo_id);
+                    shared.repos.push(added);
+                },
+            );
+        }
+        self.publish_worktrees(
+            &repo_id,
+            worktrees,
+            Timings {
+                batch_id: self.bus.next_batch(),
+                t_recv: request.t_recv,
+                t_flush: request.t_recv,
+                t_computed: request.t_computed,
+                t_persisted,
+                t_published: 0,
+            },
+        );
+        Ok(RepoAddResult {
+            outcome,
+            repo: view,
+        })
+    }
+
+    /// Publishes the reconciled worktrees of one repo and updates the view
+    /// snapshots read, in the same critical section.
+    fn publish_worktrees(&self, repo_id: &str, worktrees: Vec<WorktreeView>, timings: Timings) {
+        let mut data = WorktreeStateData {
+            repo_id: repo_id.to_owned(),
+            worktrees: worktrees.clone(),
+        };
+        if serde_json::to_vec(&data).map_or(0, |v| v.len()) > CHANGE_LIST_BUDGET {
+            observe::without_change_lists(&mut data.worktrees);
+        }
+        let id = repo_id.to_owned();
+        self.bus
+            .publish(WORKTREE_STATE, data, Some(timings), move |shared| {
+                if let Some(repo) = shared.repos.iter_mut().find(|r| r.repo_id == id) {
+                    repo.worktrees = worktrees;
+                }
+            });
+    }
+
+    /// Stops observing a repo (US-GRP-001). Its store and data are kept
+    /// (Q25), with "observed until" set to the retirement time, so US-GRP-005 and
+    /// US-GRP-006 can open the gap of the retired interval. Who asked is in
+    /// the reserved-command audit.
+    fn retire_repo(&mut self, repo_id: &str) -> Result<RepoRetireResult, RepoCommandError> {
+        let entry = self
+            .profile
+            .repo(repo_id)
+            .map_err(|err| self.repo_command_failed("repo_retire_failed", &err))?
+            .ok_or(RepoCommandError::UnknownRepo)?;
+        if entry.state == RepoState::Retired {
+            return Ok(RepoRetireResult { retired: false });
+        }
+        let now = now_ms();
+        self.profile
+            .retire_repo(repo_id, now)
+            .map_err(|err| self.repo_command_failed("repo_retire_failed", &err))?;
+        if let Some(pos) = self.stores.iter().position(|(id, _)| id == repo_id) {
+            let (_, mut store) = self.stores.remove(pos);
+            if let Err(err) = store.write_batch(&[WriteOp::SetObservedUntil { ms: now }]) {
+                self.logger.error(
+                    "observed_until_failed",
+                    &[
+                        ("repo", Field::id(repo_id)),
+                        ("kind", profile_error_kind(&err).into()),
+                    ],
+                );
+            }
+        }
+        self.logger
+            .info("repo_retired", &[("repo", Field::id(repo_id))]);
+        let id = repo_id.to_owned();
+        self.bus.publish(
+            REPO_OBSERVATION,
+            RepoObservationData {
+                repo_id: id.clone(),
+                observed: false,
+                state: RepoStateView::Observed,
+                path: Untrusted::from_os(entry.canonical_path.as_os_str()),
+            },
+            None,
+            move |shared| shared.repos.retain(|r| r.repo_id != id),
+        );
+        let observed_left = self
+            .profile
+            .repos()
+            .map(|all| all.iter().any(|r| r.state == RepoState::Observed))
+            .unwrap_or(true);
+        if !observed_left && self.state == EngineState::Observing {
+            self.transition(Trigger::LastRepoRetired);
+        }
+        Ok(RepoRetireResult { retired: true })
+    }
+
+    /// Applies a BR-WF-002 transition and publishes the new engine view.
+    fn transition(&mut self, trigger: Trigger) {
+        let Ok(next) = self.state.on(trigger) else {
+            return;
+        };
+        self.state = next;
+        let view = engine_view(next, self.report.git.as_ref());
+        self.logger
+            .info("engine_state", &[("state", next.as_str().into())]);
+        let shared = view.clone();
+        self.bus
+            .publish(ENGINE_STATE, view, None, move |s| s.engine = shared);
+    }
+
+    fn repo_command_failed(&self, event: &'static str, err: &ProfileError) -> RepoCommandError {
+        self.logger
+            .error(event, &[("kind", profile_error_kind(err).into())]);
+        RepoCommandError::Internal
+    }
+
     /// Writes "observed until" to every observed repo. Returns whether all
     /// writes succeeded.
     fn persist_observed_until(&mut self, ms: i64) -> bool {
@@ -770,6 +999,64 @@ fn recover_repo(
         recovery,
     };
     Ok((oplog, startup))
+}
+
+/// Reconciles every observed repo that has a store, one thread per repo.
+/// A repo that cannot be read gets `None` and keeps an empty worktree list.
+fn reconcile_all(
+    entries: &[RepoEntry],
+    stores: &[(String, RepoStore)],
+) -> Vec<(String, Option<RepoRead>)> {
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = entries
+            .iter()
+            .filter(|e| {
+                e.state == RepoState::Observed && stores.iter().any(|(id, _)| *id == e.repo_id)
+            })
+            .map(|e| {
+                let path = e.canonical_path.clone();
+                (
+                    e.repo_id.clone(),
+                    scope.spawn(move || observe::reconcile(&path).ok()),
+                )
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|(id, handle)| (id, handle.join().ok().flatten()))
+            .collect()
+    })
+}
+
+/// Persists a reconciliation in the repo's store. A failure is logged: the
+/// view is still published, and the next reconciliation writes it again.
+fn persist_read(store: &mut RepoStore, read: &RepoRead, logger: &Logger, repo_id: &str) {
+    let known: Vec<PathBuf> = store
+        .worktrees()
+        .map(|all| {
+            all.into_iter()
+                .filter(|w| w.gone_ms.is_none())
+                .map(|w| w.path)
+                .collect()
+        })
+        .unwrap_or_default();
+    if let Err(err) = store.write_batch(&read.store_ops(&known, now_ms())) {
+        logger.error(
+            "worktree_state_persist_failed",
+            &[
+                ("repo", Field::id(repo_id)),
+                ("kind", profile_error_kind(&err).into()),
+            ],
+        );
+    }
+}
+
+fn outcome_field(outcome: RepoAddOutcome) -> &'static str {
+    match outcome {
+        RepoAddOutcome::New => "new",
+        RepoAddOutcome::AlreadyObserved => "already-observed",
+        RepoAddOutcome::Reactivated => "reactivated",
+    }
 }
 
 /// Entry point of `raptor daemon`: starts the daemon, installs the

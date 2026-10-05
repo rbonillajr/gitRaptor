@@ -540,7 +540,9 @@ dependencies = [
  "clap",
  "gitraptor-api",
  "gitraptor-core",
+ "gitraptor-testkit",
  "gitraptor-theme",
+ "serde",
  "serde_json",
  "tempfile",
 ]
