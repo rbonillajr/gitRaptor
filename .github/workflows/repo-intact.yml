@@ -50,6 +50,13 @@ jobs:
       - name: Pending on Windows
         if: steps.test.outcome == 'failure'
         run: "echo '::warning::cargo test failed on Windows. Pendiente: etapa de validación multiplataforma'"
+      # Blocking on Windows too: the only crate with `unsafe` and the requester
+      # resolution on real processes (ADR-GRP-005, Enmienda 2026-10-05).
+      - name: Windows processes and requester (blocking)
+        if: matrix.os == 'windows-latest'
+        run: |
+          cargo test -p gitraptor-winsys
+          cargo test -p gitraptor-core --lib -- channel::requester channel::peer channel::authz channel::marks children_of_the_step_are_marked
 
   repo-intact:
     name: repo-intact (${{ matrix.os }})
