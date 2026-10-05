@@ -75,6 +75,10 @@ text_enum!(
         GitUnavailable => "git-unavailable",
         ProfileLost => "profile-lost",
         StoreCorrupt => "store-corrupt",
+        // Causes of the observer (ADR-GRP-010 § 6, ADR-GRP-013 § 5).
+        WatcherOverflow => "watcher-overflow",
+        StreamRecreated => "stream-recreated",
+        PeriodicReconciliation => "periodic-reconciliation",
     }
 );
 

@@ -43,7 +43,8 @@ CREATE TRIGGER reserved_audit_no_delete BEFORE DELETE ON reserved_audit
 
 /// Migrations of each per-repo store (`data/repos/<repo_id>.sqlite`), with
 /// the entities of ADR-GRP-013 § 1.
-pub(crate) const STORE_MIGRATIONS: &[&str] = &[r"
+pub(crate) const STORE_MIGRATIONS: &[&str] = &[
+    r"
 CREATE TABLE store_meta (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -124,4 +125,23 @@ CREATE TABLE last_known_state (
     dirty_fingerprint TEXT,
     updated_ms        INTEGER NOT NULL
 ) STRICT;
-"];
+",
+    r"
+-- US-GRP-002: causes of the observer's gaps (ADR-GRP-010 § 6, ADR-GRP-013 § 5).
+-- SQLite cannot alter a CHECK: the table is rebuilt with the same rows. The
+-- migration runs with foreign keys off and is checked before commit.
+CREATE TABLE gaps_v2 (
+    gap_id       TEXT PRIMARY KEY,
+    started_ms   INTEGER NOT NULL,
+    ended_ms     INTEGER,
+    cause        TEXT NOT NULL CHECK (cause IN ('machine-off', 'daemon-down',
+                     'daemon-down-during-session', 'daemon-stopped', 'repo-retired',
+                     'git-unavailable', 'profile-lost', 'store-corrupt',
+                     'watcher-overflow', 'stream-recreated', 'periodic-reconciliation')),
+    requested_by TEXT
+) STRICT;
+INSERT INTO gaps_v2 SELECT gap_id, started_ms, ended_ms, cause, requested_by FROM gaps;
+DROP TABLE gaps;
+ALTER TABLE gaps_v2 RENAME TO gaps;
+",
+];
