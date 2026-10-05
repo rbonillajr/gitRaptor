@@ -8,7 +8,7 @@ domain: GRP
 priority: high
 complexity: high
 created: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-05
 related:
   adrs: [ADR-GRP-005, ADR-GRP-011, ADR-GRP-013, ADR-GRP-012]
   stories: [US-GRP-001, US-GRP-002, US-GRP-003, US-GRP-004, US-GRP-005, US-GRP-006, US-GRP-007, US-GRP-008, US-GRP-009, US-GRP-010, US-GRP-011, US-GRP-012, US-GRP-013, US-GRP-014, US-GRP-015, US-GRP-016, TS-GRP-003]
@@ -93,3 +93,18 @@ tags: [motor-local, ipc, json-rpc, socket, named-pipe, contrato, seguridad, coma
   - DEP-MCP-3: rechazo de los descendientes del propio daemon.
 - **Windows y Linux**: las pruebas de pipe, SID y clientes remotos, y todas las de Linux, quedan como "Pendiente: etapa de validación multiplataforma".
 - **Fuzzing**: prueba de propiedades del decodificador en lugar de `cargo-fuzz`, que necesita nightly.
+
+### Enmienda (2026-10-05, Cockpit: N1 a N7 de ADR-CKP-003 § 4)
+
+**Decisión del orquestador (2026-10-05), validada por el Arquitecto.** Aplica la enmienda E6 de [ADR-CKP-003](../../../../architecture/decisions/ADR-CKP-003-arquitectura-tui.md) para el hito M1 (lo que necesita INF-CKP-001). El detalle está en la [Dev Spec](../dev-specs/TS-GRP-004-dev-spec.md) § 7.
+
+- **Protocolo 6** (el 5 lo tomó US-GRP-007), con ventana de compatibilidad: el daemon atiende también a clientes del 5.
+- **N1 y N2**: ámbitos global y por repo con secuencia contigua propia (`scope.snapshot`, `scope.subscribe`) y `scope.resync` con su causa.
+- **N3**: resumen de atención por repo ("no disponible" hasta que lo publiquen sus dueños) y estado del autoarranque.
+- **N4**: `repo.locate`.
+- **N5**: solicitante y capa en el handshake.
+- **N6**: nombres no confiables con tope propio, impuesto también al decodificar.
+- **N7**: códigos tipados, con mensajes en/es en la CLI.
+- **L-06**: el cliente comprueba la carpeta del socket.
+- **Criterios añadidos**: los de la tabla § 7.2 de la Dev Spec, cada uno con su prueba.
+- **Fuera**: N8 a N10 (Should, sin dueño en M1). N11 ya lo cubre TS-CKP-002.
