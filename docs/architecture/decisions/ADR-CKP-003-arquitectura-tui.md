@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-05
 deciders: [Orquestador (delegación de Rene Bonilla, 2026-10-04)]
 domain: GRP
 feature: cockpit
@@ -18,7 +18,7 @@ tags: [cockpit, tui, ratatui, crossterm, tea, elm, estado, bucle-de-eventos, ren
 
 **Status**: Aceptado · **Fecha**: 2026-10-04 · **Decisores**: Orquestador (delegación de Rene Bonilla, 2026-10-04) · **Feature**: Cockpit (F-001-02)
 
-**Decisión del orquestador (2026-10-04), validada por Arquitecto, PO y security-expert** (pasada de endurecimiento del 2026-10-04: ver "Revisión de seguridad (2026-10-04)"). Lo que pide al contrato del canal (N1 a N11, E6) sigue **pendiente, dueño: worker del canal (TS-GRP-004)**.
+**Decisión del orquestador (2026-10-04), validada por Arquitecto, PO y security-expert** (pasada de endurecimiento del 2026-10-04: ver "Revisión de seguridad (2026-10-04)"). Lo que pide al contrato del canal (E6): N1 a N7 **aplicados el 2026-10-05** (protocolo 5, [Dev Spec de TS-GRP-004](../../requirements/features/motor-local/dev-specs/TS-GRP-004-dev-spec.md) § 6); N11 ya lo cubría TS-CKP-002; N8 a N10 siguen **pendientes, dueño: la historia que los use**.
 >
 > **Constitución**: no hay `architecture-constitution.md` en la cascada. ⚠️ **ASSUMPTION**: rigen como constitución ADR-GRP-001 (Rust; `ratatui`, `clap`) y ADR-GRP-002 (`apps/cli`, `crates/{api,theme}`), más AGENTS.md (NFR-01, NFR-02). Fuente: inline; se formaliza con `/aadd-architect --init-constitution`.
 
@@ -82,7 +82,7 @@ Sin este ADR, cada historia del Cockpit decidiría por su cuenta el estado, el b
 
 La TUI y la CLI usan la biblioteca cliente de `crates/api` (TS-GRP-004). Encima de ella, el módulo `client` de `apps/cli` implementa:
 
-- **Comprobación del par antes del handshake** (L-06): el cliente comprueba que el directorio del socket es del uid y tiene permisos 0700, y que el uid del par es el propio (`getpeereid` en macOS, `SO_PEERCRED` en Linux). Si falla, "Canal rechazado" sin enviar nada. Si la biblioteca cliente de TS-GRP-004 ya lo hace, se reutiliza; dónde vive es **pendiente, dueño: worker del canal (TS-GRP-004)**. Windows: **Pendiente: etapa de validación multiplataforma.**
+- **Comprobación del par antes del handshake** (L-06): el cliente comprueba que el directorio del socket es del uid y tiene permisos 0700, y que el uid del par es el propio (`getpeereid` en macOS, `SO_PEERCRED` en Linux). Si falla, "Canal rechazado" sin enviar nada. **Enmienda (2026-10-05, TS-GRP-004)**: vive en la biblioteca cliente (`channel::transport::connect`), que comprueba la carpeta (0700, del usuario, sin enlace simbólico) y el uid del servidor, y devuelve `ChannelRejected` sin enviar nada. La biblioteca está hoy en `crates/core`: sacarla de ahí para cumplir § 5 y V5 es **pendiente, dueño: INF-CKP-001**. Windows: **Pendiente: etapa de validación multiplataforma.**
 - **Arranque coherente por ámbito** (global y repo seleccionado): instantánea con secuencia `N`, suscripción desde `N+1`. Los eventos con secuencia `≤ última aplicada` se descartan (duplicados). El evento `última + 1` se aplica. Uno mayor es un **hueco**: no se aplica nada más y se pide una nueva instantánea ("Resincronizando").
 - **`resync` del daemon** (SEC-08, cliente lento): mismo camino que un hueco. Mientras dura, la vista conserva lo último aplicado, marcado como desactualizado.
 - **Reconexión**: al perder el canal, la réplica se conserva marcada "desconectado desde hh:mm" y nunca se presenta como actual. El cliente reintenta con espera exponencial (⚠️ **ASSUMPTION**: de 250 ms a un máximo de 5 s, sin límite de intentos mientras la TUI esté abierta). Cada reconexión rehace handshake e instantánea; el MVP no reanuda desde una secuencia.
@@ -100,7 +100,7 @@ La TUI y la CLI usan la biblioteca cliente de `crates/api` (TS-GRP-004). Encima 
 | Versión incompatible | La biblioteca cliente lo resuelve si es el binario instalado (ADR-GRP-005 § 4); si no, instrucciones | No |
 | Canal rechazado | Permisos del socket o del pipe alterados (SEC-01); qué revisar | No |
 
-**Necesidades del contrato del canal**. **Pendiente, dueño: worker del canal (TS-GRP-004)**; no se aplican aquí:
+**Necesidades del contrato del canal**. **Enmienda (2026-10-05, TS-GRP-004)**: N1 a N7 aplicados en el protocolo 5. N11 ya lo cubre TS-CKP-002 (huella del plan y revalidación). N8, N9 y N10 siguen pendientes, dueño: la historia que los use:
 
 | # | Necesidad | Origen |
 |---|---|---|
@@ -263,7 +263,7 @@ Las pruebas usan repos y perfiles temporales y pasan por el arnés de INF-GRP-00
 
 ## Enmiendas que implica (no aplicadas)
 
-**Estado (2026-10-04)**: E1 a E5 y E7 aplicadas como "Enmienda (2026-10-04, Cockpit)" en el documento de destino. E6 sigue pendiente, dueño: worker del canal (TS-GRP-004).
+**Estado (2026-10-05)**: E1 a E5 y E7 aplicadas como "Enmienda (2026-10-04, Cockpit)" en el documento de destino. E6: N1 a N7 aplicados en TS-GRP-004 (protocolo 5, 2026-10-05); N8 a N10 pendientes.
 
 | # | Documento | Qué debe decir | Origen |
 |---|---|---|---|
@@ -272,7 +272,7 @@ Las pruebas usan repos y perfiles temporales y pasan por el arnés de INF-GRP-00
 | E3 | **ADR-GRP-009** Validación 5 | Módulos autorizados para lanzar procesos fuera de `crates/git`: `apps/cli` `tui::editor` (editor, argv fijo, sin shell) y la biblioteca cliente de `crates/api` (autoarranque). Cierra el punto 5 del § 10 del overview | DEP-CKP-12 |
 | E4 | **ADR-GRP-007 / ADR-GRP-008** | La clave del editor (argv y clasificación terminal/gráfico) solo se admite en el perfil y en el local personal | DEP-CKP-13 |
 | E5 | **ADR-GRP-006** | Preferencias de la TUI por usuario en el perfil, escritas solo por el daemon, documento acotado | DEP-CKP-11 |
-| E6 | **TS-GRP-004 / api-contract-ipc.md** | N1 a N11 del § 4. **Pendiente, dueño: worker del canal (TS-GRP-004)** | DEP-CKP-6, 11, 13 |
+| E6 | **TS-GRP-004 / api-contract-ipc.md** | N1 a N11 del § 4. N1 a N7 aplicados (2026-10-05, protocolo 5); N8 a N10 pendientes; N11 cubierto por TS-CKP-002 | DEP-CKP-6, 11, 13 |
 | E7 | **DSYS-GRP-001** (no es ADR) | Símbolos como tokens con fallback ASCII y anchura. `crates/theme` agnóstico de `ratatui`. Alcance de `--plain` en el MVP. `ratatui` 0.30 en § 7 | § 7, § 10 |
 
 ## Revisión de seguridad (2026-10-04)

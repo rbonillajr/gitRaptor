@@ -8,8 +8,8 @@ feature: motor-local
 created: 2026-10-04
 updated: 2026-10-05
 related:
-  adrs: [ADR-GRP-005, ADR-GRP-011, ADR-GRP-013, ADR-CKP-002, ADR-TMC-004]
-  stories: [TS-GRP-004, US-GRP-001, US-GRP-012, TS-TMC-004, TS-CKP-002]
+  adrs: [ADR-GRP-005, ADR-GRP-011, ADR-GRP-013, ADR-CKP-002, ADR-CKP-003, ADR-TMC-004]
+  stories: [TS-GRP-004, US-GRP-001, US-GRP-012, TS-TMC-004, TS-CKP-002, INF-CKP-001]
   specs: [DS-TS-GRP-004, DS-US-GRP-001, DS-US-GRP-012, DS-TS-TMC-004, DS-TS-CKP-002]
   deps: [DEP-CKP-6]
 tags: [ipc, json-rpc, contrato, eventos, mcp, seguridad]
@@ -23,11 +23,19 @@ La fuente de verdad es el código de `crates/api`. Este documento es su resumen 
 
 - Socket Unix `raptor.sock` en la carpeta de ejecución del perfil, con la carpeta en 0700 y el socket en 0600. Solo acepta clientes del mismo uid. El cliente comprueba que el servidor también es de su uid. En Windows, named pipe: pendiente.
 - Un mensaje JSON por línea (`\n`), de 1 MiB como máximo y con una profundidad máxima de 32. No se aceptan batches. Todos los tipos rechazan campos desconocidos.
-- `PROTOCOL_VERSION = 4` (`API_VERSION` 4.0.0). Cliente y daemon son compatibles solo si hablan la misma versión.
+- `PROTOCOL_VERSION = 5` (`API_VERSION` 5.0.0). El daemon atiende a clientes de `MIN_COMPATIBLE_PROTOCOL = 4` a `5`, cada uno con las formas de su versión. `hello` responde con el protocolo negociado. Un cliente más nuevo que el daemon lo reemplaza, y uno más viejo que la ventana recibe `-32002`. Hasta la 4, la compatibilidad era por igualdad.
   - La 2 (US-GRP-001) añade el estado de los worktrees a `RepoView`.
   - La 3 (US-GRP-012), la rama base del repo y el ahead/behind de cada worktree.
   - La 3.1.0 (US-GRP-002) es aditiva: `events.history` y el `data` de `git.event`; un cliente nuevo comprueba en `hello.methods` que el daemon ofrece `events.history` y, si no, pide reiniciarlo.
   - La 4 (TS-CKP-002), el catálogo de operaciones en dos fases: `operation.run` ejecuta un plan preparado. Incluye todo lo de la 3.1.0.
+  - La 5 (TS-GRP-004, N1 a N7 de ADR-CKP-003 § 4) añade, para el Cockpit:
+    - ámbitos con secuencia propia (`scope.snapshot`, `scope.subscribe`, `scope.event`, `scope.resync`);
+    - `repo.locate`;
+    - `requester` en `hello`;
+    - nombres no confiables acotados;
+    - códigos tipados.
+
+    Una conexión 4 no ve nada de esto: no le llegan los métodos nuevos ni `requester`, y el resto del cable no cambia.
 
 ## Handshake
 
@@ -60,13 +68,20 @@ El resultado trae `protocol`, `binary_version`, `instance_id` (del perfil, ADR-G
 | `operation.prepare` | No | Sí | Primera fase, sin efectos ni oplog. `{operation, worktree?, args, surface?, session_env?}` → `{plan_id, catalog_version, operation, layer, requester, fingerprint, warnings, decision, challenge?, expires_in_ms, diagnostics}`. En MCP, el worktree sale del cwd del llamante y la respuesta es la proyección sin `requester`, `layer`, `challenge` ni `diagnostics`. Una operación cuya historia no existe todavía responde `-32004` con `implemented_by`; un quinto plan vivo en la conexión, `-32006` |
 | `operation.run` | No | Sí | Segunda fase: ejecuta un plan **de la misma conexión** como operación protegida. `{plan_id, accepted_warnings, confirmation?}` → `{operation_id, prior_snapshot_id, fast_path, requester, changed_refs, outcome, layer, git_output?}`. `git_output` (texto no confiable) solo va a la capa `cockpit`. En MCP: `{operation_id, prior_snapshot_id, actor, changed_refs, outcome}`. El plan se consume en cualquier intento |
 | `operation.cancel` | No | No | `{operation_id}` → `{requested}`. Exige capa `cockpit`; un descendiente del ejecutor nunca la tiene |
+| `scope.snapshot` | No | No | Protocolo 5. `{scope}` → `{"scope":"global", run_id, scope_seq, engine, daemon, autostart, repos: [{repo_id, state, path, attention}]}` o `{"scope":"repo", run_id, scope_seq, repo: RepoView}`. `attention = {conflicts, denials, gaps}`, cada uno `{"state":"counted","count":n}` o `{"state":"unavailable","reason":"not-published"}` (hoy, los tres sin publicar). `autostart`: `registered`, `not-registered` o `unknown` (hoy `unknown`, US-GRP-004). Un repo no observado responde `-32009` |
+| `scope.subscribe` | No | No | Protocolo 5. `{scope, from_seq?, run_id?}` → `{subscription, scope, from_seq}`. `from_seq` es la secuencia del ámbito. Cuenta en el límite de 4 suscripciones y comparte ids con `events.subscribe`; se cancela con `events.unsubscribe` |
+| `repo.locate` | No | No | Protocolo 5. `{path}` → `{repo_id, worktree}`: el repo observado y la raíz del worktree que contienen la ruta (la más profunda). Validación léxica antes de tocar el FS (`-32602` con `data.reason`). Fuera de los repos observados o inexistente, `-32009` |
 | `timemachine.*` | No | Según el método | Declarados con sus parámetros (TS-TMC-004); los implementan US-TMC-002, 003, 005, 006 y 009 |
 
 La **capa** (`cockpit` o `mcp`) la fija el daemon según el solicitante resuelto, nunca el cliente. Con capa `mcp` solo se ofrecen las operaciones con marca MCP, y un "sin atribuir" sin capa `cockpit` no recibe ninguna (ADR-CKP-002 § 4, M-03).
 
 Un comando reservado lo decide **solo el daemon**, con la identidad del par y sin fiarse de nada que declare el cliente: ascendencia sin agentes y sin el propio daemon, líder de sesión y terminal de control (ADR-GRP-005 § 6 y su Enmienda TS-GRP-004). Cada intento, aceptado o no, queda en la auditoría append-only y se publica como evento `reserved.audit`. Un método declarado responde `-32004` con `{implemented_by}` después de autorizar y auditar.
 
+La conexión de protocolo 5 de un cliente `cli` con perfil completo recibe en `hello` el campo `requester`. Vale `{"state":"resolved", actor, layer, confirmable}` o `{"state":"unverified"}` (N5) y es solo UX: el daemon resuelve otra vez en cada petición, y tras un `-32012` el cliente vuelve a llamar a `requester.resolve`.
+
 ## Errores
+
+Un cliente presenta cada error por su `code` y su `data`, nunca por `message`, que queda para el log (N7). `gitraptor_api::rpc::ErrorCode` enumera todos los códigos. Desde la 5, `-32602` de los validadores de rutas y nombres lleva `data.reason` (`InvalidReason`: `empty`, `too-long`, `not-absolute`, `control-character`, `unc-or-device`, `device-name`, `alternate-stream`, `outside-observed`, `invalid-ref`, `reserved-name`), y `-32010` también (`ScopeRefusal`: `no-working-folder`, `not-observed`, `not-allowlisted`, `unattributed-over-mcp`, `foreign-worktree`). Es aditivo: un cliente 4 lo ignora.
 
 | Código | Significado |
 |---|---|
@@ -114,6 +129,13 @@ Notificación `events.event` con `{ subscription, event }`. El evento lleva:
 - Tipos de cambio declarados, con `data` definido por su historia: `gap.recorded` (US-GRP-005), `session.state` (US-GRP-007) y `attribution.changed` (US-GRP-010).
 - **Arranque coherente (DEP-CKP-6)**: `engine.snapshot` devuelve `seq = N`. Después, `events.subscribe { from_seq: N + 1, run_id }` no pierde ni repite eventos: el daemon guarda los últimos 1024. Si el `run_id` ya no es el del daemon o `N + 1` salió del buffer, llega `events.resync` con su `reason` (`daemon-restarted` o `replay-unavailable`).
 - **Cliente lento**: si su cola de 1024 mensajes se llena, recibe `events.resync { reason: slow-consumer }` y se le desconecta. Nunca frena al productor.
+- **Ámbitos (protocolo 5, N1 y N2)**: cada evento pertenece a un ámbito, `{"scope":"global"}` o `{"scope":"repo","repo_id":…}`.
+  - **Globales**: `engine.state`, `daemon.stopping`, `reserved.audit`, `repo.observation` y `repo.attention` (`{repo_id, attention}`, declarado sin emisor todavía).
+  - **Del repo**: `worktree.state`, `git.event`, `operation.*` y los tipos declarados por historias.
+  - Cada ámbito tiene su secuencia contigua (`scope_seq`), asignada bajo el mismo lock que la global.
+  - **Arranque coherente**: `scope.snapshot` en `N` y `scope.subscribe { from_seq: N + 1, run_id }`. Llegan notificaciones `scope.event { subscription, scope, scope_seq, event }`, y la del ámbito anterior siempre tiene `scope_seq - 1`. Un salto es un hueco: pide otra instantánea.
+  - **`scope.resync { scope, reason }`**: llega si `N + 1` salió del buffer (`replay-unavailable`), si el daemon se reinició (`daemon-restarted`) o si el repo dejó de observarse (`scope-closed`; la suscripción termina y la secuencia del repo no se reinicia).
+  - El cliente lento sigue siendo de conexión: `events.resync { slow-consumer }` vale para todos sus ámbitos.
 
 ## Estado de un worktree (US-GRP-001)
 
@@ -141,14 +163,15 @@ Notificación `events.event` con `{ subscription, event }`. El evento lleva:
 
 ## Texto no confiable y actor
 
-- Todo texto que viene del repo o de un agente viaja como `{"untrusted": "…"}`, con `truncated` y `lossy` cuando aplican. Los clientes muestran solo `Untrusted::sanitized()`, que quita escapes ANSI, OSC y DCS, controles, bidi y caracteres de ancho cero (SEC-12).
+- Todo texto que viene del repo o de un agente viaja como `{"untrusted": "…"}`, con `truncated` y `lossy` cuando aplican. Cada clase de campo tiene su tipo y su tope (N6): `Untrusted` (rutas y texto, 4096 bytes) y `UntrustedName` (ramas, nombres de worktree y de agente, 1024 bytes). El JSON Schema lleva `maxLength`, y el decodificador impone el tope (recorta y marca `truncated`) también en el cliente. Los clientes muestran solo `Untrusted::sanitized()`, que quita escapes ANSI, OSC y DCS, controles, bidi y caracteres de ancho cero (SEC-12).
 - El actor es `{"actor":"agent","kind":"claude-code"|"other","name"?,"origin":"detected"|"registered"}` o `{"actor":"unattributed"}`. No existe la variante "humano" (ADR-GRP-013 § 6).
 
 ## Pendiente
 
 - Descripción OpenRPC generada desde los tipos.
 - Windows (named pipe).
-- Consultas bajo demanda del Cockpit (DEP-CKP-2 y DEP-CKP-3, enmienda de ADR-GRP-005 § 5).
+- Consultas bajo demanda del Cockpit (N8; DEP-CKP-2 y DEP-CKP-3, enmienda de ADR-GRP-005 § 5), preferencias de la TUI (N9) y resolución del editor (N10).
+- Emisores de `repo.attention` (predictor TS-CKP-001, Guardrails, US-GRP-005) y `autostart` real (US-GRP-004).
 - Campos de última actividad (DEP-CKP-4) y timeline (DEP-CKP-5).
 - `caller_repo` real en macOS (F-001-05): hoy `process_cwd` devuelve `None` en macOS; lo implementa US-MCP-003 con la doble comprobación de identidad de ADR-MCP-001 § 2.
 - Servidor MCP (ADR-MCP-001, 2026-10-05), cada método lo añade su historia dueña: comandos reservados `mcp.enable` y `mcp.disable` (US-MCP-002); perfil `mcp` por solicitante agente, sea cual sea el cliente, con rate limit y límites por solicitante (US-MCP-003, US-MCP-005); vista MCP ampliada de `engine.snapshot` (US-MCP-004); registro y retiro del propio agente, no reservados (US-MCP-006); vista MCP de `timemachine.timeline` (US-MCP-017); consulta de la predicción para el perfil `mcp` (US-MCP-016). El contrato de ejecución quedó unificado por TS-CKP-002 (protocolo 4).
