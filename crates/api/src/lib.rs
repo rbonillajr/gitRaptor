@@ -11,6 +11,7 @@
 //! "human" variant ([`Actor`], ADR-GRP-013 § 6).
 
 pub mod actor;
+pub mod catalog;
 pub mod clock;
 pub mod event;
 pub mod framing;
@@ -25,12 +26,15 @@ pub use event::{Event, Timings};
 pub use untrusted::Untrusted;
 
 /// Version of the engine API contract (semantic, for humans).
-pub const API_VERSION: &str = "3.0.0";
+pub const API_VERSION: &str = "4.0.0";
 
 /// Wire protocol version negotiated in the handshake. Client and daemon are
 /// compatible only when they speak the same version; a newer client replaces
 /// an older daemon (ADR-GRP-005 § 4, SEC-13).
-pub const PROTOCOL_VERSION: u32 = 3;
+/// Version 3 (US-GRP-012): ahead/behind of each worktree. Version 4
+/// (TS-CKP-002): the two-phase catalog flow; `operation.run` executes a
+/// prepared plan.
+pub const PROTOCOL_VERSION: u32 = 4;
 
 /// File name of the channel socket inside the profile's runtime folder.
 pub const SOCKET_FILE: &str = "raptor.sock";

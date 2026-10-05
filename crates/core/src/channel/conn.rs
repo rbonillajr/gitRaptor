@@ -8,6 +8,10 @@ use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use gitraptor_api::Untrusted;
+use gitraptor_api::catalog::{
+    self as catalog, CancelParams, CancelResult, Layer, PrepareParams, PrepareResult, RejectedData,
+    RunParams,
+};
 use gitraptor_api::event::RESERVED_AUDIT;
 use gitraptor_api::framing::{FrameError, MAX_MESSAGE_BYTES, decode_request, read_frame};
 use gitraptor_api::messages::{
@@ -20,9 +24,9 @@ use gitraptor_api::messages::{
 use gitraptor_api::methods::{self, METHODS, MethodSpec};
 use gitraptor_api::rpc::{ErrorObject, Id, Request, Response, code};
 use gitraptor_api::timemachine::{
-    Invalid as TmInvalid, MAX_REPORTED_REFS, McpRequesterView, OperationRunParams,
-    OperationRunResult, PriorFailedData, RedoParams, RequestChannel, RequesterView, ResolveParams,
-    RestoreParams, SnapshotParams, Surface, TimelineParams, UndoParams,
+    Invalid as TmInvalid, MAX_REPORTED_REFS, McpRequesterView, OperationRunResult, PriorFailedData,
+    RedoParams, RequestChannel, RequesterView, ResolveParams, RestoreParams, SnapshotParams,
+    Surface, TimelineParams, UndoParams,
 };
 
 use super::authz::{AcceptedPeer, ChainLink, Verdict, check_reserved};
@@ -34,14 +38,12 @@ use super::{ServerCtx, file_id};
 use crate::daemon::{
     CHANGE_LIST_BUDGET, Field, RepoAddRequest, RepoCommandError, StopCause, now_ms,
 };
+use crate::executor::{Caller, ExecError, PrepareInput, RunEnv, RunInput, layer_for};
 use crate::profile::AuditRow;
-use crate::timemachine::oplog::{Channel, OperationKind, Scope, Target};
 use crate::timemachine::protected::scope::{
     operation_in, require_attributed, scope_for, snapshot_in,
 };
-use crate::timemachine::protected::{
-    ProtectedError, ProtectedOperation, ProtectedRequest, RepoHandle, ScopeError, failure_text,
-};
+use crate::timemachine::protected::{ProtectedError, RepoHandle, ScopeError, failure_text};
 
 /// Longest audit page.
 const MAX_AUDIT_PAGE: u32 = 500;
@@ -154,6 +156,7 @@ pub(crate) fn accept(ctx: &Arc<ServerCtx>, stream: UnixStream) {
         .spawn(move || {
             let mut conn = Connection {
                 ctx: &thread_ctx,
+                id,
                 peer,
                 info,
                 outbox: Arc::clone(&outbox),
@@ -168,6 +171,9 @@ pub(crate) fn accept(ctx: &Arc<ServerCtx>, stream: UnixStream) {
                 reserved_bucket: Bucket::new(1, RESERVED_BURST),
             };
             conn.serve(reader_stream);
+            if let Some(wiring) = &thread_ctx.protected {
+                wiring.executor.drop_connection(id);
+            }
             thread_ctx.bus.drop_outbox(&outbox);
             outbox.close();
             remove(&thread_ctx, id);
@@ -293,6 +299,8 @@ enum Phase {
 
 struct Connection<'a> {
     ctx: &'a Arc<ServerCtx>,
+    /// Id of the connection in the table: plans are bound to it (M-04).
+    id: u64,
     peer: AcceptedPeer,
     info: Option<ProcInfo>,
     outbox: Arc<Outbox>,
@@ -510,6 +518,20 @@ impl Connection<'_> {
             return After::Continue;
         }
         match spec.name {
+            methods::OPERATION_DESCRIBE => {
+                let result = request
+                    .params::<NoParams>()
+                    .map(|_| catalog::describe(self.is_mcp()));
+                self.reply(&request.id, result);
+            }
+            methods::OPERATION_PREPARE => {
+                let result = self.operation_prepare(request);
+                self.reply(&request.id, result);
+            }
+            methods::OPERATION_CANCEL => {
+                let result = self.operation_cancel(request);
+                self.reply(&request.id, result);
+            }
             methods::REQUESTER_RESOLVE => {
                 let result = self.requester_resolve(request);
                 self.reply(&request.id, result);
@@ -924,6 +946,39 @@ fn write_route(name: &str) -> Option<WriteRoute> {
     }
 }
 
+/// The executor's refusals as contract errors.
+fn exec_error(e: ExecError) -> ErrorObject {
+    match e {
+        ExecError::Rejected(reason) => {
+            ErrorObject::new(code::OPERATION_REJECTED, "operation rejected")
+                .with_data(RejectedData { reason })
+        }
+        ExecError::NotImplemented(story) => {
+            ErrorObject::new(code::NOT_IMPLEMENTED, "not implemented yet")
+                .with_data(serde_json::json!({ "implemented_by": story }))
+        }
+        ExecError::Invalid(why) => ErrorObject::new(code::INVALID_PARAMS, &why),
+        ExecError::TooManyPlans => ErrorObject::new(code::LIMIT_REACHED, "too many open plans"),
+        ExecError::Protected(ProtectedError::Prior {
+            reason,
+            operation_id,
+            ..
+        }) => ErrorObject::new(code::PRIOR_SNAPSHOT_FAILED, failure_text(reason)).with_data(
+            PriorFailedData {
+                reason,
+                operation_id,
+            },
+        ),
+        ExecError::Protected(ProtectedError::Oplog(_)) => {
+            ErrorObject::new(code::INTERNAL, "oplog unavailable")
+        }
+        ExecError::Protected(ProtectedError::Step { operation_id, .. }) => {
+            ErrorObject::new(code::OPERATION_FAILED, "the operation failed")
+                .with_data(serde_json::json!({ "operation_id": operation_id }))
+        }
+    }
+}
+
 fn tm_invalid(why: TmInvalid) -> ErrorObject {
     ErrorObject::new(code::INVALID_PARAMS, &why.message())
 }
@@ -934,15 +989,6 @@ fn scope_refused(why: ScopeError) -> ErrorObject {
 
 fn not_found_id() -> ErrorObject {
     ErrorObject::new(code::NOT_FOUND, "not found")
-}
-
-fn oplog_channel(c: RequestChannel) -> Channel {
-    match c {
-        RequestChannel::Cli => Channel::Cli,
-        RequestChannel::Tui => Channel::Tui,
-        RequestChannel::Mcp => Channel::Mcp,
-        RequestChannel::Hook => Channel::Hook,
-    }
 }
 
 impl Connection<'_> {
@@ -1030,78 +1076,77 @@ impl Connection<'_> {
         )
     }
 
-    /// `operation.run`: a catalog operation as a protected operation.
-    fn operation_run(&self, request: &Request) -> Result<serde_json::Value, ErrorObject> {
-        let p: OperationRunParams = request.params()?;
+    fn caller(&self) -> Caller {
+        Caller {
+            connection: self.id,
+            pid: self.peer.pid,
+            start_us: self.peer.start_us,
+            mcp: self.is_mcp(),
+        }
+    }
+
+    /// The layer the daemon fixes (ADR-CKP-002 § 4). The test override never
+    /// applies to a descendant of the executor (H-01).
+    fn layer(&self, r: &Resolution) -> Layer {
+        match &self.ctx.protected {
+            Some(w) if r.via != gitraptor_api::timemachine::ResolvedVia::Executor => {
+                w.test_layer_override.unwrap_or_else(|| layer_for(r))
+            }
+            _ => layer_for(r),
+        }
+    }
+
+    fn wiring(&self) -> Result<super::ProtectedWiring, ErrorObject> {
+        self.ctx.protected.clone().ok_or_else(|| {
+            ErrorObject::new(code::NOT_IMPLEMENTED, "no operation executor yet")
+                .with_data(serde_json::json!({ "implemented_by": "F-001-02" }))
+        })
+    }
+
+    /// `operation.prepare`: the plan, without effects (ADR-CKP-002 § 2).
+    fn operation_prepare(&self, request: &Request) -> Result<serde_json::Value, ErrorObject> {
+        let p: PrepareParams = request.params()?;
         p.validate().map_err(tm_invalid)?;
         let channel = self.request_channel(p.surface)?;
         let named = self.named_worktree(p.worktree.as_deref())?;
         let r = self.resolve()?;
-        let Some(wiring) = self.ctx.protected.clone() else {
-            return Err(
-                ErrorObject::new(code::NOT_IMPLEMENTED, "no operation executor yet")
-                    .with_data(serde_json::json!({ "implemented_by": "F-001-02" })),
-            );
-        };
+        let wiring = self.wiring()?;
+        let layer = self.layer(&r);
         let repo = self
             .repo_for(channel, named.as_deref())
             .expect("wiring checked above")?;
-        let mut step = wiring
-            .backend
-            .step(&p.operation, &p.args, &repo)
-            .map_err(|e| ErrorObject::new(code::INVALID_PARAMS, &e.message))?;
-        let worktree = repo.worktree.to_string_lossy().into_owned();
-        let req = ProtectedRequest {
-            kind: OperationKind::Protected,
-            scope: Scope {
-                worktrees: vec![worktree],
-                refs: Vec::new(),
-            },
-            worktree_paths: vec![repo.worktree.clone()],
-            who: r.who.clone(),
-            channel: oplog_channel(channel),
-            confirmed: false,
-            target: Target::None,
-            warnings: Vec::new(),
-            engine_mark: i64::try_from(self.ctx.bus.snapshot().0).unwrap_or(i64::MAX),
-        };
-        let op = ProtectedOperation {
-            oplog: &repo.oplog,
-            snapshotter: Arc::clone(&repo.snapshotter),
-            marks: &self.ctx.marks,
-            procs: self.ctx.procs.as_ref(),
-            stopping: &self.ctx.stopping,
-            deadline: wiring.prior_deadline,
-        };
-        let outcome = op.run(&req, step.as_mut()).map_err(|e| match e {
-            ProtectedError::Prior {
-                reason,
-                operation_id,
-                ..
-            } => ErrorObject::new(code::PRIOR_SNAPSHOT_FAILED, failure_text(reason)).with_data(
-                PriorFailedData {
-                    reason,
-                    operation_id,
+        let refusal = super::requester::confirmation_refusal(
+            self.peer,
+            &self.ctx.checks(),
+            Some(&self.ctx.marks),
+        );
+        let prepared = wiring
+            .executor
+            .prepare(
+                wiring.backend.as_ref(),
+                PrepareInput {
+                    caller: self.caller(),
+                    resolution: &r,
+                    layer,
+                    channel,
+                    params: &p,
+                    repo,
+                    confirm_refusal: refusal,
                 },
-            ),
-            ProtectedError::Oplog(_) => ErrorObject::new(code::INTERNAL, "oplog unavailable"),
-            ProtectedError::Step { operation_id, .. } => {
-                ErrorObject::new(code::OPERATION_FAILED, "the operation failed")
-                    .with_data(serde_json::json!({ "operation_id": operation_id }))
-            }
-        })?;
-        let result = OperationRunResult {
-            operation_id: outcome.operation_id,
-            prior_snapshot_id: outcome.prior.snapshot_id,
-            fast_path: outcome.prior.fast_path,
+            )
+            .map_err(exec_error)?;
+        let result = PrepareResult {
+            plan_id: prepared.plan_id,
+            catalog_version: catalog::CATALOG_VERSION,
+            operation: p.operation,
+            layer: prepared.layer,
             requester: self.requester_view(&r, channel),
-            changed_refs: outcome
-                .output
-                .changed_refs
-                .into_iter()
-                .take(MAX_REPORTED_REFS)
-                .map(Untrusted::new)
-                .collect(),
+            fingerprint: prepared.fingerprint,
+            warnings: prepared.warnings,
+            decision: prepared.decision,
+            challenge: prepared.challenge,
+            expires_in_ms: prepared.expires_in_ms,
+            diagnostics: prepared.diagnostics,
         };
         let value = if self.is_mcp() {
             serde_json::to_value(result.for_mcp())
@@ -1109,6 +1154,88 @@ impl Connection<'_> {
             serde_json::to_value(result)
         };
         value.map_err(|_| ErrorObject::new(code::INTERNAL, "serialization"))
+    }
+
+    /// `operation.run`: executes a plan of this connection as a protected
+    /// operation (ADR-CKP-002 § 2, step 4).
+    fn operation_run(&self, request: &Request) -> Result<serde_json::Value, ErrorObject> {
+        let p: RunParams = request.params()?;
+        let r = self.resolve()?;
+        let wiring = self.wiring()?;
+        let checks_again = || {
+            let again = self
+                .resolve()
+                .map_err(|_| ExecError::Rejected(catalog::RejectReason::StateChanged))?;
+            let layer = self.layer(&again);
+            let refusal = super::requester::confirmation_refusal(
+                self.peer,
+                &self.ctx.checks(),
+                Some(&self.ctx.marks),
+            );
+            Ok((again, layer, refusal))
+        };
+        let bus = Arc::clone(&self.ctx.bus);
+        let publish = move |kind: &str, data: catalog::OperationEventData| {
+            bus.publish(kind, data, None, |_| {});
+        };
+        let env = RunEnv {
+            marks: &self.ctx.marks,
+            procs: self.ctx.procs.as_ref(),
+            stopping: &self.ctx.stopping,
+            prior_deadline: wiring.prior_deadline,
+            engine_mark: i64::try_from(self.ctx.bus.snapshot().0).unwrap_or(i64::MAX),
+            publish: &publish,
+        };
+        let done = wiring
+            .executor
+            .run(
+                wiring.backend.as_ref(),
+                RunInput {
+                    caller: self.caller(),
+                    resolution: &r,
+                    params: &p,
+                    resolve_again: &checks_again,
+                },
+                &env,
+            )
+            .map_err(exec_error)?;
+        let result = OperationRunResult {
+            operation_id: done.outcome.operation_id,
+            prior_snapshot_id: done.outcome.prior.snapshot_id,
+            fast_path: done.outcome.prior.fast_path,
+            requester: self.requester_view(&r, done.channel),
+            changed_refs: done
+                .outcome
+                .output
+                .changed_refs
+                .into_iter()
+                .take(MAX_REPORTED_REFS)
+                .map(Untrusted::new)
+                .collect(),
+            outcome: done.result,
+            layer: done.layer,
+            git_output: done.git_output.map(Untrusted::new),
+        };
+        let value = if self.is_mcp() {
+            serde_json::to_value(result.for_mcp())
+        } else {
+            serde_json::to_value(result)
+        };
+        value.map_err(|_| ErrorObject::new(code::INTERNAL, "serialization"))
+    }
+
+    /// `operation.cancel` (BR-CKP-WF-008): layer `cockpit` only.
+    fn operation_cancel(&self, request: &Request) -> Result<CancelResult, ErrorObject> {
+        let p: CancelParams = request.params()?;
+        gitraptor_api::timemachine::check_oplog_id("operation_id", &p.operation_id)
+            .map_err(tm_invalid)?;
+        let r = self.resolve()?;
+        let wiring = self.wiring()?;
+        let requested = wiring
+            .executor
+            .cancel(&r, self.layer(&r), &p.operation_id)
+            .map_err(exec_error)?;
+        Ok(CancelResult { requested })
     }
 
     /// A Time Machine command declared ahead of its story: strict

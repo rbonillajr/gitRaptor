@@ -108,6 +108,7 @@ impl ProtectedStep for Step {
         }
         Ok(StepOutput {
             changed_refs: self.refs.clone(),
+            ..StepOutput::default()
         })
     }
 }

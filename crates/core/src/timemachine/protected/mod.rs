@@ -136,6 +136,11 @@ impl PriorSnapshotter for StoreSnapshotter {
 pub struct StepOutput {
     /// Refs the step moved (names from the repo: untrusted).
     pub changed_refs: Vec<String>,
+    /// How the operation ended when it is not plainly done (e.g. `stopped`
+    /// with an operation in progress); `None` is `done`.
+    pub outcome: Option<gitraptor_api::catalog::OperationOutcome>,
+    /// Git's output, sanitized by the client; only layer `cockpit` gets it.
+    pub git_output: Option<String>,
 }
 
 /// Why a step failed or refused to start.
@@ -224,7 +229,19 @@ impl StepCtx<'_> {
             use std::os::unix::process::CommandExt;
             cmd.process_group(0);
         }
-        let mut child = cmd.spawn()?;
+        self.spawn_with(|| cmd.spawn())
+    }
+
+    /// Like [`Self::spawn`] for a launch the caller builds (the opaque user
+    /// operations of `crates/git`, which set their own process group). The
+    /// start barrier is open while `launch` runs and until the child is
+    /// marked (I-02).
+    pub fn spawn_with(
+        &mut self,
+        launch: impl FnOnce() -> std::io::Result<Child>,
+    ) -> std::io::Result<MarkedChild> {
+        let pending = self.marks.begin_spawn();
+        let mut child = launch()?;
         let pid = child.id();
         match self.procs.read(pid) {
             Ok(info) => self
@@ -236,8 +253,14 @@ impl StepCtx<'_> {
                 return Err(std::io::Error::other("child identity unreadable"));
             }
         }
+        drop(pending);
         let _ = lock(self.oplog).record_child_started(self.operation_id, pid, now_ms());
         Ok(MarkedChild { child, pid })
+    }
+
+    /// Annotates the end of a marked child the caller waited for itself.
+    pub fn child_ended(&mut self, pid: u32) {
+        let _ = lock(self.oplog).record_child_ended(self.operation_id, pid, now_ms());
     }
 
     /// Waits for a marked child and annotates its end.

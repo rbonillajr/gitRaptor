@@ -11,7 +11,10 @@ use std::sync::{Arc, Mutex};
 
 use gitraptor_api::timemachine::RequestChannel;
 
+use gitraptor_api::catalog::{OperationArgs, OperationId, RejectReason};
+
 use super::{PriorSnapshotter, ProtectedStep, StepError};
+use crate::executor::{OpPlan, PlanError, RepoFacts, StepPlan};
 use crate::timemachine::oplog::{OperationView, Oplog, SnapshotView};
 
 /// Why a scope was refused.
@@ -73,22 +76,33 @@ impl std::fmt::Debug for RepoHandle {
     }
 }
 
-/// What the daemon needs from the rest of the engine to run protected
-/// operations: the repo of a worktree, the executor of catalog operations
-/// (F-001-02/05, ADR-CKP-002) and the MCP allowlist. Production wiring
-/// arrives with the executor; tests inject doubles.
+/// What the daemon needs from the rest of the engine to run catalog
+/// operations (ADR-CKP-002): the repo of a worktree, the key of its write
+/// lock, its facts, and the operations' own parts (each one's story). The
+/// production wiring arrives with the first operation story; tests inject
+/// doubles.
 pub trait ProtectedBackend: Send + Sync {
     /// The observed repo that contains `folder`.
     fn repo_of(&self, folder: &Path) -> Result<RepoHandle, ScopeError>;
-    /// The step that runs catalog operation `operation` with `args` on
-    /// `repo`. Validates both against the catalog; nothing runs yet.
-    fn step(
-        &self,
-        operation: &str,
-        args: &serde_json::Map<String, serde_json::Value>,
-        repo: &RepoHandle,
-    ) -> Result<Box<dyn ProtectedStep>, StepError>;
     fn allowlist(&self) -> &dyn McpAllowlist;
+    /// Key of the repo's write lock. No default on purpose: it must be the
+    /// key the Time Machine applier uses (the path of the repo's store), or a
+    /// merge and an undo would stop being serialized (ADR-CKP-002 § 5).
+    fn write_lock_key(&self, repo: &RepoHandle) -> String;
+    /// The facts of the request's worktree; production reads them with
+    /// [`crate::executor::RepoFacts::read`].
+    fn facts(&self, repo: &RepoHandle) -> Result<RepoFacts, RejectReason>;
+    /// The operation's own part of the plan: its preconditions, expected
+    /// values, warnings and affected work. `NotImplemented` until its story.
+    fn plan_op(
+        &self,
+        operation: OperationId,
+        args: &OperationArgs,
+        repo: &RepoHandle,
+        facts: &RepoFacts,
+    ) -> Result<OpPlan, PlanError>;
+    /// The step that runs a plan whose fingerprint was just checked.
+    fn step(&self, plan: &StepPlan<'_>) -> Result<Box<dyn ProtectedStep>, StepError>;
 }
 
 /// The repo for a request: over MCP from the caller's working folder and
@@ -166,12 +180,22 @@ mod tests {
                 .cloned()
                 .ok_or(ScopeError::NotObserved)
         }
-        fn step(
+        fn write_lock_key(&self, repo: &RepoHandle) -> String {
+            repo.repo_id.clone()
+        }
+        fn facts(&self, _repo: &RepoHandle) -> Result<RepoFacts, RejectReason> {
+            Err(RejectReason::RepoIdentityChanged)
+        }
+        fn plan_op(
             &self,
-            _operation: &str,
-            _args: &serde_json::Map<String, serde_json::Value>,
+            _operation: OperationId,
+            _args: &OperationArgs,
             _repo: &RepoHandle,
-        ) -> Result<Box<dyn ProtectedStep>, StepError> {
+            _facts: &RepoFacts,
+        ) -> Result<OpPlan, PlanError> {
+            Err(PlanError::NotImplemented)
+        }
+        fn step(&self, _plan: &StepPlan<'_>) -> Result<Box<dyn ProtectedStep>, StepError> {
             Err(StepError::new("unused"))
         }
         fn allowlist(&self) -> &dyn McpAllowlist {
