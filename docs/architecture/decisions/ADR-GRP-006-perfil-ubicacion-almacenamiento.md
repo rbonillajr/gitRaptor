@@ -50,7 +50,7 @@ Se usa el crate `directories` para resolver las carpetas estándar del usuario (
 - **Linux sin `XDG_*_HOME` heredados (Enmienda 2026-10-04, TS-GRP-003)**: `XDG_DATA_HOME`, `XDG_CONFIG_HOME` y `XDG_STATE_HOME` se ignoran y se usan sus valores por defecto bajo la carpeta personal (`~/.local/share`, `~/.config`, `~/.local/state`). Así una variable hostil heredada no mueve el perfil (SEC-10). La resolución es una sola función de `crates/core` para el daemon, la CLI y el dispatcher del hook, de modo que todos encuentran las mismas carpetas. `XDG_RUNTIME_DIR` se usa solo si es absoluto; la carpeta del perfil dentro de él se verifica como el resto.
 - `<app>` es un identificador corto y estable (lo fija TS-GRP-001), para no superar el límite de la ruta del socket en macOS (ADR-GRP-005).
 - **Sobreescritura para pruebas**: una variable de entorno (nombre provisional `GITRAPTOR_PROFILE_DIR`) sustituye todas las carpetas por subcarpetas de una sola raíz. Los tests la usan siempre con un directorio temporal. **Solo existe en builds de test**: el binario release la ignora, para que un proceso que controla el entorno no pueda redirigir el perfil (SEC-06, H4).
-- **Permisos (SEC-06)**: carpetas 0700 y archivos 0600 en macOS y Linux, **incluidos `-wal`, `-shm`, logs, lock y archivos en cuarentena**, creados con umask restrictiva (077) para que no exista una ventana con permisos abiertos. Al arrancar, el daemon **verifica propietario y modo** de las carpetas preexistentes y no arranca si no cuadran (no las "arregla"). En Windows, se comprueba que la ACL heredada de `%LOCALAPPDATA%` no tiene ACE para otros usuarios.
+- **Permisos (SEC-06)**: carpetas 0700 y archivos 0600 en macOS y Linux, **incluidos `-wal`, `-shm`, logs, lock y archivos en cuarentena**, creados con umask restrictiva (077) para que no exista una ventana con permisos abiertos. Al arrancar, el daemon **verifica propietario y modo** de las carpetas preexistentes y no arranca si no cuadran (no las "arregla"). En Windows, creación con DACL protegida y verificación de propietario y DACL según la Enmienda (2026-10-05, TD-GRP-001).
 - **Rutas**: las rutas que llegan al perfil (repos, worktrees) se validan antes de tocar el FS; en Windows se rechazan UNC, `\\?\`, dispositivos y ADS (SEC-02, M9). Ningún dato del motor se escribe fuera del perfil.
 
 ### 2. Organización dentro del perfil
@@ -143,7 +143,7 @@ Enmienda tras la revisión del security-expert. No cambia ubicación, clave ni a
 
 | Hallazgo | Cómo se cubre |
 |---|---|
-| M5 · Permisos sin cubrir `-wal`/`-shm`/logs/cuarentena y sin verificar propietario | Apartado 1: 0700/0600 con umask 077 en todos los archivos del perfil, verificación de propietario y modo al arrancar, ACL sin ACE de otros usuarios en Windows (SEC-06); el canal, en ADR-GRP-005 (SEC-01) |
+| M5 · Permisos sin cubrir `-wal`/`-shm`/logs/cuarentena y sin verificar propietario | Apartado 1: 0700/0600 con umask 077 en todos los archivos del perfil, verificación de propietario y modo al arrancar, propietario y DACL en Windows según la Enmienda (2026-10-05, TD-GRP-001) (SEC-06); el canal, en ADR-GRP-005 (SEC-01) |
 | H4 (parte) · Override del perfil por entorno | Apartado 1: `GITRAPTOR_PROFILE_DIR` solo en builds de test (SEC-06) |
 | M9 · UNC en Windows | Apartado 1: rutas validadas antes de tocar el FS (SEC-02) |
 | L3 · SQLite bundled no se actualiza con el SO | Apartado 4: sus avisos se siguen con `cargo-deny`/`cargo-audit` (SEC-07) |
@@ -208,3 +208,24 @@ Decisión del orquestador (2026-10-05), validada por Arquitecto y PO. Origen: DE
 - **Cascada**: retirar el repo de la observación borra la marca en la misma transacción y publica el aviso (Q-MCP-20). Volver a añadirlo **no** la restaura: el opt-in se repite.
 - **Escritor único**: solo el daemon la escribe, al ejecutar los comandos reservados `mcp.enable` y `mcp.disable` (ADR-GRP-005, Enmienda (2026-10-05, MCP)). Guardrails la lee para el estado de protección (ADR-GRD-005 § 2) y nunca la escribe. No está en ningún nivel de configuración: no se puede habilitar editando un archivo.
 - **Validación añadida**: retirar un repo habilitado deja la marca a falso en la misma transacción; volver a añadirlo lo deja sin habilitar; un fallo a mitad de la transacción no deja la marca en un repo no observado.
+
+## Enmienda (2026-10-05, TD-GRP-001)
+
+Decisión del orquestador (2026-10-05), validada por Arquitecto y security-expert. Origen: [TD-GRP-001](../../requirements/features/motor-local/technical-stories/TD-GRP-001-acl-windows.md) y su [Dev Spec](../../requirements/features/motor-local/dev-specs/TD-GRP-001-dev-spec.md) (D7). Sustituye la comprobación de "la ACL heredada de `%LOCALAPPDATA%`" del § 1. No cambia la ubicación, la clave de repo, el almacenamiento ni la regla de Unix. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| Creación de las carpetas del perfil con DACL protegida y verificación de propietario y DACL al arrancar | § 1 (Permisos) | DS-TD-GRP-001 D7 |
+| Fila M5 de la revisión de seguridad remite a esta enmienda | Revisión de seguridad | DS-TD-GRP-001 D7 |
+
+### Permisos del perfil en Windows (SEC-06)
+
+- **Creación**: las carpetas del perfil se crean componente a componente, con el usuario como propietario y una DACL protegida (sin herencia). La DACL da control total `(OI)(CI)` al usuario, SYSTEM y Administrators. Los archivos la heredan. Si un componente ya existe, se verifica como cualquier carpeta existente.
+- **Verificación al arrancar**:
+  - El propietario es el usuario, SYSTEM o Administrators. Se aceptan los dos últimos porque ya pueden tomar la propiedad de todo, y un proceso elevado crea por defecto objetos de Administrators.
+  - Todos los ACE de permitir son de esos tres SID (o de `OWNER RIGHTS`), para cualquier acceso, también la lectura. Cuentan también los solo heredables, que heredarían los archivos nuevos.
+- **Sin arreglos**: si algo no cuadra, el motor no arranca y no se arregla nada, como en Unix.
+- **Desaparece el aviso `AclNotVerified`**.
+- **Carpetas superiores**: `%LOCALAPPDATA%` y las de encima no se comprueban, como en Unix.
+
+**Validación añadida**: una carpeta con lectura para `Users`, o con un ACE `(OI)(IO)` para `Users`, hace fallar la apertura sin cambiar su ACL; una carpeta creada no tiene entradas heredadas.
