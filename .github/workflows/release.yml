@@ -197,7 +197,11 @@ jobs:
         run: |
           if [ -z "$P12" ] || [ -z "$API_KEY" ]; then
             echo "::warning::macOS binaries are only ad-hoc signed: requires secret APPLE_CERTIFICATE_P12_BASE64 and APPLE_API_KEY_P8_BASE64"
-            codesign --verify --verbose "stage/$NAME/raptor"
+            # The arm64 linker signs ad hoc on its own; the cross-compiled x86_64 build is not.
+            for bin in raptor raptor-mcp; do
+              codesign --force --sign - "stage/$NAME/$bin"
+              codesign --verify --verbose "stage/$NAME/$bin"
+            done
             exit 0
           fi
           keychain="$RUNNER_TEMP/signing.keychain-db"; kpass=$(uuidgen)
