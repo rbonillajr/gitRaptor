@@ -37,7 +37,7 @@ sequenceDiagram
   Note over D: Sin actividad durante el umbral (5 min por defecto) → inactiva
   CC-->>OS: El proceso termina
   OS-->>D: (pid, hora de inicio) ya no existe
-  D->>P: Sesión terminada; no se reactiva (Q41)
+  D->>P: Sesión terminada, no se reactiva (Q41)
 ```
 
 - S2a (mtime) solo correlaciona proceso y transcript; nunca atribuye. Si el formato del transcript no se reconoce, S2b se desactiva y lo que habría atribuido queda "sin atribuir" (ADR-GRP-012).

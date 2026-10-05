@@ -35,6 +35,6 @@ sequenceDiagram
   Note over A,C: Motor ≤ 300 ms p95 (ADR-GRP-011)
   C->>C: Aplica el delta y pinta (t_render, ≤ 100 ms)
   opt Cambio grande que no cabe en 150 ms, o ahead/behind por recalcular
-    D->>C: Primero rama, HEAD y operación en curso; después los recuentos
+    D->>C: Primero rama, HEAD y operación en curso, después los recuentos
   end
 ```
