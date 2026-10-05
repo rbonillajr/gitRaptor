@@ -40,8 +40,9 @@ pub fn locate(path: &Path) -> Result<PathBuf, RepoRejection> {
     Ok(canonical(reader.common_dir()))
 }
 
+/// Canonical path in the form the read layer accepts (the drive form on Windows).
 pub fn canonical(path: &Path) -> PathBuf {
-    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+    gitraptor_git::paths::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 /// One worktree as read, with what the store keeps of it.
