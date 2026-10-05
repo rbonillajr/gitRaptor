@@ -13,8 +13,9 @@ use gitraptor_api::framing::{FrameError, MAX_MESSAGE_BYTES, decode_request, read
 use gitraptor_api::messages::{
     AuditEntry, AuditListParams, AuditListResult, AuditOutcome, ClientIdentity, ClientKind,
     ConnectionProfile, Hello, HelloResult, IncompatibleData, McpRepoView, McpSnapshot, NoParams,
-    RefusalReason, RefusedData, ReplaceParams, RepoAddParams, RepoRetireParams, Snapshot,
-    StopResult, SubscribeParams, SubscribeResult, UnsubscribeParams,
+    RefusalReason, RefusedData, ReplaceParams, RepoAddParams, RepoAddResult, RepoRejectedData,
+    RepoRejection, RepoRetireParams, RepoRetireResult, Snapshot, StopResult, SubscribeParams,
+    SubscribeResult, UnsubscribeParams,
 };
 use gitraptor_api::methods::{self, METHODS, MethodSpec};
 use gitraptor_api::rpc::{ErrorObject, Id, Request, Response, code};
@@ -30,7 +31,9 @@ use super::peer::{ProcInfo, peer_cred, process_cwd};
 use super::requester::{self, Resolution};
 use super::validate;
 use super::{ServerCtx, file_id};
-use crate::daemon::{Field, StopCause, now_ms};
+use crate::daemon::{
+    CHANGE_LIST_BUDGET, Field, RepoAddRequest, RepoCommandError, StopCause, now_ms,
+};
 use crate::profile::AuditRow;
 use crate::timemachine::oplog::{Channel, OperationKind, Scope, Target};
 use crate::timemachine::protected::scope::{
@@ -542,56 +545,94 @@ impl Connection<'_> {
                 });
             }
             methods::DAEMON_REPLACE => return self.replace(request),
+            methods::REPO_ADD => {
+                let result = self.repo_add(spec, request);
+                self.reply(&request.id, result);
+            }
+            methods::REPO_RETIRE => {
+                let result = self.repo_retire(spec, request);
+                self.reply(&request.id, result);
+            }
             _ => {
                 // Declared ahead of their stories: validated, authorized and
                 // audited, then "not implemented".
-                let result = self
-                    .pending_params(spec, request)
-                    .and_then(|repo| self.reserved(spec, repo));
+                // Their parameters are not defined yet: none are accepted.
+                let result = request
+                    .params::<NoParams>()
+                    .and_then(|_| self.reserved(spec, None));
                 self.reply(&request.id, result);
             }
         }
         After::Continue
     }
 
-    /// Strict parameters of a method declared ahead of its story. Returns
-    /// the repo it targets, for the audit.
-    fn pending_params(
+    /// `repo.add` (US-GRP-001): parameters checked lexically, then the
+    /// daemon authorizes and audits, and only then is the path read. An
+    /// agent cannot make the daemon probe the file system.
+    fn repo_add(&self, spec: &MethodSpec, request: &Request) -> Result<RepoAddResult, ErrorObject> {
+        let params: RepoAddParams = request.params()?;
+        let path = validate::client_path(&params.path).map_err(invalid)?;
+        self.reserved(spec, None)?;
+        let t_recv = gitraptor_api::clock::monotonic_ns();
+        let common_dir = crate::observe::locate(&path).map_err(rejected)?;
+        let read = crate::observe::reconcile(&common_dir)
+            .map_err(|_| rejected(RepoRejection::Unreadable))?;
+        let t_computed = gitraptor_api::clock::monotonic_ns();
+        self.ctx
+            .control
+            .repo_add(RepoAddRequest {
+                common_dir,
+                read,
+                t_recv,
+                t_computed,
+            })
+            .map_err(repo_command_error)
+    }
+
+    /// `repo.retire` (US-GRP-001): stops observing; the data is kept.
+    fn repo_retire(
         &self,
         spec: &MethodSpec,
         request: &Request,
-    ) -> Result<Option<String>, ErrorObject> {
-        match spec.name {
-            methods::REPO_ADD => {
-                let p: RepoAddParams = request.params()?;
-                validate::client_path(&p.path).map_err(invalid)?;
-                Ok(None)
-            }
-            methods::REPO_RETIRE => {
-                let p: RepoRetireParams = request.params()?;
-                let ok = !p.repo_id.is_empty()
-                    && p.repo_id.len() <= 64
-                    && p.repo_id.chars().all(|c| c.is_ascii_hexdigit() || c == '-');
-                if !ok {
-                    return Err(ErrorObject::new(code::INVALID_PARAMS, "invalid repo_id"));
-                }
-                Ok(Some(p.repo_id))
-            }
-            _ => request.params::<NoParams>().map(|_| None),
+    ) -> Result<RepoRetireResult, ErrorObject> {
+        let params: RepoRetireParams = request.params()?;
+        let ok = !params.repo_id.is_empty()
+            && params.repo_id.len() <= 64
+            && params
+                .repo_id
+                .chars()
+                .all(|c| c.is_ascii_hexdigit() || c == '-');
+        if !ok {
+            return Err(ErrorObject::new(code::INVALID_PARAMS, "invalid repo_id"));
         }
+        self.reserved(spec, Some(params.repo_id.clone()))?;
+        self.ctx
+            .control
+            .repo_retire(params.repo_id)
+            .map_err(repo_command_error)
     }
 
     fn snapshot(&self) -> serde_json::Value {
         let (seq, shared) = self.ctx.bus.snapshot();
         let run_id = self.ctx.bus.run_id().to_owned();
         match self.profile {
-            ConnectionProfile::Full => serde_json::to_value(Snapshot {
-                run_id,
-                seq,
-                engine: shared.engine,
-                daemon: self.ctx.daemon.clone(),
-                repos: shared.repos,
-            }),
+            ConnectionProfile::Full => {
+                let mut snapshot = Snapshot {
+                    run_id,
+                    seq,
+                    engine: shared.engine,
+                    daemon: self.ctx.daemon.clone(),
+                    repos: shared.repos,
+                };
+                // Under the message limit: past the budget the lists go and
+                // the counts stay (US-GRP-001).
+                if serde_json::to_vec(&snapshot).map_or(0, |v| v.len()) > CHANGE_LIST_BUDGET {
+                    for repo in &mut snapshot.repos {
+                        crate::observe::without_change_lists(&mut repo.worktrees);
+                    }
+                }
+                serde_json::to_value(snapshot)
+            }
             ConnectionProfile::Mcp => {
                 let cwd = process_cwd(self.peer.pid);
                 let caller_repo = cwd.and_then(|cwd| {
@@ -1126,6 +1167,17 @@ impl Connection<'_> {
 
 fn invalid(why: validate::Invalid) -> ErrorObject {
     ErrorObject::new(code::INVALID_PARAMS, why.as_str())
+}
+
+fn rejected(reason: RepoRejection) -> ErrorObject {
+    ErrorObject::new(code::REPO_REJECTED, "repo rejected").with_data(RepoRejectedData { reason })
+}
+
+fn repo_command_error(err: RepoCommandError) -> ErrorObject {
+    match err {
+        RepoCommandError::UnknownRepo => rejected(RepoRejection::UnknownRepo),
+        RepoCommandError::Internal => ErrorObject::new(code::INTERNAL, "profile unavailable"),
+    }
 }
 
 /// The kebab-case wire text of a contract enum.

@@ -73,6 +73,12 @@ pub const ENGINE_STATE: &str = "engine.state";
 pub const DAEMON_STOPPING: &str = "daemon.stopping";
 /// A reserved command was attempted. Data: [`crate::messages::AuditEntry`].
 pub const RESERVED_AUDIT: &str = "reserved.audit";
+/// A repo started or stopped being observed (US-GRP-001). Data:
+/// [`crate::messages::RepoObservationData`].
+pub const REPO_OBSERVATION: &str = "repo.observation";
+/// The reconciled worktrees of one repo (US-GRP-001). Data:
+/// [`crate::messages::WorktreeStateData`].
+pub const WORKTREE_STATE: &str = "worktree.state";
 
 const fn engine(kind: &'static str) -> EventKind {
     EventKind {
@@ -97,7 +103,8 @@ pub const KINDS: &[EventKind] = &[
     engine(ENGINE_STATE),
     engine(DAEMON_STOPPING),
     engine(RESERVED_AUDIT),
-    change("worktree.state", "US-GRP-001"),
+    engine(REPO_OBSERVATION),
+    change(WORKTREE_STATE, "US-GRP-001"),
     change("git.event", "US-GRP-002"),
     change("gap.recorded", "US-GRP-005"),
     change("session.state", "US-GRP-007"),
