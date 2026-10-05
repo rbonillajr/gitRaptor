@@ -7,7 +7,7 @@
 //! bounded outbox, and one that overflows is cleared, gets an
 //! `events.resync` and is disconnected once that is written.
 
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, Condvar, Mutex};
 
 use gitraptor_api::event::Event;
@@ -20,6 +20,7 @@ use gitraptor_api::{Timings, clock};
 use serde::Serialize;
 
 use crate::daemon::now_ms;
+use crate::observe::DivergenceInputs;
 
 /// Lines waiting to be written to one connection.
 #[derive(Debug)]
@@ -112,6 +113,9 @@ impl Outbox {
 pub struct EngineShared {
     pub engine: EngineView,
     pub repos: Vec<RepoView>,
+    /// What `engine.snapshot` needs to count each repo's ahead/behind
+    /// again, by repo id (US-GRP-012). Updated with `repos`.
+    pub divergence: BTreeMap<String, DivergenceInputs>,
 }
 
 struct Subscriber {
@@ -320,6 +324,7 @@ mod tests {
                     git_version: None,
                 },
                 repos: Vec::new(),
+                divergence: BTreeMap::new(),
             },
             replay,
         )

@@ -45,6 +45,15 @@ status.lists-dropped = listas de archivos omitidas: demasiados cambios para envi
 status.wt-missing = no disponible: no se encuentra la carpeta
 status.wt-untrusted = no disponible: Git no confía en él (safe.directory)
 status.wt-unreadable = no disponible: no se pudo leer
+status.base = rama base: {name}
+status.base-unconfirmed = rama base: {name} (no confirmada)
+status.base-invalid = rama base: ninguna (la configuración del equipo nombra una rama inválida)
+status.divergence = {ahead} por delante y {behind} por detrás de {base}
+status.at-least = al menos {count}
+status.no-divergence-base-missing = sin ahead/behind: la rama base "{base}" no existe en el repo
+status.no-divergence-no-base = sin ahead/behind: el repo no tiene rama base
+status.no-divergence-no-commits = sin ahead/behind: la rama aún no tiene commits
+status.no-divergence-unreadable = sin ahead/behind: no se pudieron leer los commits del worktree
 
 kind.added = añadido
 kind.deleted = borrado

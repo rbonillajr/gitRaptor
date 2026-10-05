@@ -575,7 +575,9 @@ impl Connection<'_> {
         self.reserved(spec, None)?;
         let t_recv = gitraptor_api::clock::monotonic_ns();
         let common_dir = crate::observe::locate(&path).map_err(rejected)?;
-        let read = crate::observe::reconcile(&common_dir)
+        // Against the base branch without the profile; the daemon loop
+        // counts again if the repo's store keeps a confirmed one.
+        let read = crate::observe::reconcile(&common_dir, &crate::observe::base_branch(None))
             .map_err(|_| rejected(RepoRejection::Unreadable))?;
         let t_computed = gitraptor_api::clock::monotonic_ns();
         self.ctx
@@ -624,6 +626,12 @@ impl Connection<'_> {
                     daemon: self.ctx.daemon.clone(),
                     repos: shared.repos,
                 };
+                // The ahead/behind as of now (US-GRP-012, D5).
+                crate::observe::refresh_divergence(
+                    &mut snapshot.repos,
+                    &shared.divergence,
+                    &self.ctx.divergence,
+                );
                 // Under the message limit: past the budget the lists go and
                 // the counts stay (US-GRP-001).
                 if serde_json::to_vec(&snapshot).map_or(0, |v| v.len()) > CHANGE_LIST_BUDGET {

@@ -80,6 +80,8 @@ pub(crate) struct ServerCtx {
     /// Repos, executor and allowlist for protected operations; `None` until
     /// the executor of F-001-02 is wired.
     pub protected: Option<ProtectedWiring>,
+    /// Ahead/behind counts the snapshots already walked (US-GRP-012).
+    pub divergence: crate::observe::DivergenceCache,
 }
 
 impl ServerCtx {
@@ -172,6 +174,7 @@ impl Server {
             runtime: bound.runtime,
             marks: Arc::new(ExecutorMarks::default()),
             protected: args.protected,
+            divergence: crate::observe::DivergenceCache::default(),
         });
         let listener = bound.listener;
         let socket = socket_id(&transport::socket_path(&ctx.runtime));
