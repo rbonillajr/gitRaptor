@@ -93,7 +93,7 @@ Entonces la operación no se ejecuta
 ## Diseño y Dev Spec
 
 - **Diseño (flujo/UX):** Pendiente de diseño.
-- **Dev Spec:** pendiente (lo genera el Arquitecto).
+- **Dev Spec:** [DS-US-TMC-001](../dev-specs/US-TMC-001-snapshot-previo-operaciones.md)
 
 ## Dependencias
 
