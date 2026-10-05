@@ -323,6 +323,25 @@ impl RepoReader {
         ))
     }
 
+    /// [`Self::ahead_behind`] between two commits given by id, for a `HEAD` that has no ref
+    /// (detached) or whose commit was read before.
+    pub fn ahead_behind_commits(
+        &self,
+        a: &str,
+        b: &str,
+        limit: u64,
+    ) -> Result<(Count, Count), ReadError> {
+        let id = |hex: &str| {
+            gix::ObjectId::from_hex(hex.as_bytes())
+                .map_err(|_| ReadError::InvalidInput("invalid object id".into()))
+        };
+        let (a, b) = (id(a)?, id(b)?);
+        Ok((
+            self.count_only_in(a, b, limit)?,
+            self.count_only_in(b, a, limit)?,
+        ))
+    }
+
     fn count_only_in(
         &self,
         tip: gix::ObjectId,
