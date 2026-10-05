@@ -1,31 +1,41 @@
+mod server;
+
 use std::process::ExitCode;
 
-use gitraptor_api::messages::ClientKind;
-use gitraptor_core::client::{ClientOptions, ensure_daemon};
-use gitraptor_core::profile::ProfileDirs;
+use rmcp::ServiceExt;
+use rmcp::transport::stdio;
 
-/// `raptor-mcp`. The MCP tools are F-001-05; this TS only connects to the
-/// engine, starting it on demand with a clean environment (TS-GRP-004).
+/// `raptor-mcp`: the MCP server Claude Code launches over stdio, one per
+/// session (ADR-MCP-001 § 1). stdout carries only the protocol; stderr only
+/// fixed codes, never data from the repo, the environment or argv (S-10).
+/// It never changes directory: its cwd is the caller's scope (§ 2).
 fn main() -> ExitCode {
-    let dirs = match ProfileDirs::resolve() {
-        Ok(dirs) => dirs,
-        Err(err) => {
-            eprintln!("raptor-mcp: {err}");
+    std::panic::set_hook(Box::new(|_| eprintln!("raptor-mcp: internal-error")));
+    let runtime = match tokio::runtime::Builder::new_current_thread()
+        .enable_time()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(_) => {
+            eprintln!("raptor-mcp: runtime-unavailable");
             return ExitCode::FAILURE;
         }
     };
-    match ensure_daemon(&ClientOptions::new(dirs, ClientKind::Mcp)) {
-        Ok(client) => {
-            eprintln!(
-                "raptor-mcp {}: connected to the engine (protocol {}); MCP tools are not implemented yet",
-                gitraptor_core::version(),
-                client.hello().protocol
-            );
-            ExitCode::SUCCESS
+    runtime.block_on(async {
+        let service = match server::Raptor.serve(stdio()).await {
+            Ok(service) => service,
+            Err(_) => {
+                eprintln!("raptor-mcp: handshake-failed");
+                return ExitCode::FAILURE;
+            }
+        };
+        // Ends when Claude Code closes stdin.
+        match service.waiting().await {
+            Ok(_) => ExitCode::SUCCESS,
+            Err(_) => {
+                eprintln!("raptor-mcp: transport-failed");
+                ExitCode::FAILURE
+            }
         }
-        Err(err) => {
-            eprintln!("raptor-mcp: {err}");
-            ExitCode::FAILURE
-        }
-    }
+    })
 }
