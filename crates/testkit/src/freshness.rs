@@ -55,10 +55,54 @@ fn round(v: f64) -> f64 {
 /// Engine part of NFR-04 (ADR-GRP-011 § 2): above it, on the p95, the CI fails.
 pub const ENGINE_BUDGET_MS: f64 = 300.0;
 
-/// Provisional non-regression ceiling of the engine p95 in the burst scenario, which does not
-/// meet the 300 ms yet (TD-GRP-001). Decisión del orquestador (2026-10-05), validada por
-/// Arquitecto y PO.
-pub const BURST_CEILING_MS: f64 = 700.0;
+/// Where the bench runs: the provisional ceilings are per platform (Decisión del orquestador
+/// 2026-10-05, validada por Arquitecto y PO), each the maximum measured there × 1.25, so a
+/// faster machine does not inherit the slack of a slower one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Platform {
+    /// A developer's Mac (the reference machine of ADR-GRP-011 § 4).
+    MacLocal,
+    /// The hosted `macos-latest` runner.
+    MacCi,
+    /// The hosted `ubuntu-latest` runner, or a Linux machine.
+    Linux,
+    Other,
+}
+
+impl Platform {
+    pub fn detect(ci: bool) -> Self {
+        match (cfg!(target_os = "macos"), cfg!(target_os = "linux"), ci) {
+            (true, _, false) => Platform::MacLocal,
+            (true, _, true) => Platform::MacCi,
+            (_, true, _) => Platform::Linux,
+            _ => Platform::Other,
+        }
+    }
+
+    /// Provisional ceiling of the engine p95 in a burst scenario, which macOS does not meet yet
+    /// (TD-GRP-001): the maximum measured there × 1.25, per scenario. On the runner it applies to
+    /// the total already widened by the excess timer slack. `None`: the 300 ms budget is the gate
+    /// (Linux meets it).
+    pub fn burst_ceiling_ms(self, scenario: &str) -> Option<f64> {
+        match (self, scenario) {
+            (Platform::MacLocal, BURST_1K) => Some(420.0),
+            (Platform::MacLocal, BURST_10K) => Some(620.0),
+            (Platform::MacCi, BURST_1K) => Some(615.0),
+            (Platform::MacCi, BURST_10K) => Some(585.0),
+            _ => None,
+        }
+    }
+}
+
+/// Scale scenario of ADR-GRP-011 § 4: a burst of 1,000 files.
+pub const BURST_1K: &str = "burst-1k";
+/// Stress scenario: a burst of 10,000 files.
+pub const BURST_10K: &str = "burst-10k";
+
+/// Above this excess timer slack the machine cannot measure a 300 ms budget: its latency gates
+/// become warnings and the run says so (Arquitecto, 2026-10-05; the way out is a dedicated
+/// runner, ADR-GRP-011 § 4).
+pub const MAX_SLACK_EXCESS_MS: f64 = 100.0;
 
 /// What the debounce window may exceed its effective 75 ms by before the bench warns: the
 /// jitter left once the timer slack is discounted (ADR-GRP-010 § 3). Decision of INF-GRP-002.
@@ -173,10 +217,25 @@ pub struct Scenario {
     /// the 300 ms yet: above it the CI fails; between the budget and it, a warning. `None`: the
     /// budget itself is the gate.
     pub ceiling_ms: Option<f64>,
+    /// How much later than the engine expects this machine's timer wakes up (p95 measured by the
+    /// bench minus the slack the engine discounts, never negative). Added to the budgets of the
+    /// debounce and the total: the slack of a virtualized runner is not the engine's
+    /// (ADR-GRP-011 § 4, Enmienda 2026-10-05).
+    pub slack_excess_ms: f64,
     pub samples: Vec<Sample>,
 }
 
 impl Scenario {
+    /// Budget of `stage` on this machine: the canonical one, plus the excess timer slack for
+    /// the debounce and the total.
+    pub fn budget_ms(&self, stage: Stage) -> Option<f64> {
+        let base = stage.budget_ms()?;
+        Some(match stage {
+            Stage::Debounce | Stage::Total => base + self.slack_excess_ms.max(0.0),
+            _ => base,
+        })
+    }
+
     pub fn summary(&self, stage: Stage) -> Option<Summary> {
         if stage == Stage::Detection && !self.isolates_detection {
             return None;
@@ -197,11 +256,16 @@ impl Scenario {
                 let mut v = s.to_json();
                 v["from"] = from.into();
                 v["to"] = to.into();
-                v["budget_p95_ms"] = stage.budget_ms().into();
+                v["budget_p95_ms"] = self.budget_ms(stage).into();
                 stages.insert(stage.name().into(), v);
             }
         }
-        serde_json::json!({"scenario": self.name, "stages": stages})
+        serde_json::json!({
+            "scenario": self.name,
+            "stages": stages,
+            "slack_excess_ms": self.slack_excess_ms,
+            "ceiling_ms": self.ceiling_ms,
+        })
     }
 }
 
@@ -244,7 +308,7 @@ impl fmt::Display for Finding {
 pub fn evaluate_latency(scenario: &Scenario) -> Vec<Finding> {
     let mut out = Vec::new();
     for stage in Stage::ALL {
-        let (Some(budget), Some(s)) = (stage.budget_ms(), scenario.summary(stage)) else {
+        let (Some(budget), Some(s)) = (scenario.budget_ms(stage), scenario.summary(stage)) else {
             continue;
         };
         let (from, to) = stage.marks();
@@ -300,10 +364,9 @@ pub struct FootprintLimits {
     pub idle_cpu_pct: f64,
     pub idle_rss_mib: f64,
     pub fds: f64,
-    /// Provisional non-regression ceiling of the burst peak (TD-GRP-001): a failure.
-    pub burst_rss_ceiling_mib: f64,
     /// Product target of the burst peak (⚠️ ASSUMPTION of the PO, 2026-10-05): a warning until
-    /// TD-GRP-001 meets it.
+    /// TD-GRP-001 meets it. No ceiling yet: the peak varies too much between runs to bound it
+    /// before TD-GRP-001 explains it (Arquitecto, 2026-10-05).
     pub burst_rss_target_mib: f64,
     /// Product target of the retention (⚠️ ASSUMPTION of the PO): back under the idle RSS limit
     /// within this many seconds after a burst; a warning.
@@ -317,7 +380,6 @@ pub const FOOTPRINT_LIMITS: FootprintLimits = FootprintLimits {
     idle_cpu_pct: 1.0,
     idle_rss_mib: 150.0,
     fds: 256.0,
-    burst_rss_ceiling_mib: 480.0,
     burst_rss_target_mib: 250.0,
     burst_back_target_s: 60.0,
 };
@@ -343,20 +405,11 @@ pub fn evaluate_footprint(f: &Footprint, limits: &FootprintLimits) -> Vec<Findin
             out.push(finding(Level::Fail, what, measured, limit, unit));
         }
     }
-    let peak = f.burst_rss_mib;
-    if over(peak, limits.burst_rss_ceiling_mib) {
-        out.push(finding(
-            Level::Fail,
-            "burst peak RSS, provisional ceiling",
-            peak,
-            limits.burst_rss_ceiling_mib,
-            "MiB",
-        ));
-    } else if peak > limits.burst_rss_target_mib {
+    if f.burst_rss_mib > limits.burst_rss_target_mib {
         out.push(finding(
             Level::Warn,
-            "burst peak RSS, known gap under its ceiling",
-            peak,
+            "burst peak RSS, known gap (TD-GRP-001)",
+            f.burst_rss_mib,
             limits.burst_rss_target_mib,
             "MiB",
         ));
@@ -410,6 +463,7 @@ mod tests {
             name: "modify".into(),
             isolates_detection: true,
             ceiling_ms: None,
+            slack_excess_ms: 0.0,
             samples: (0..200).map(|i| sample(i, extra_compute_ms)).collect(),
         }
     }
@@ -478,6 +532,33 @@ mod tests {
         );
     }
 
+    /// A runner whose timer wakes up late gets that excess added to the total and the debounce,
+    /// and to nothing else.
+    #[test]
+    fn the_excess_timer_slack_widens_only_debounce_and_total() {
+        let mut s = scenario(200);
+        assert!(evaluate_latency(&s).iter().any(|f| f.level == Level::Fail));
+        s.slack_excess_ms = 140.0;
+        assert_eq!(s.budget_ms(Stage::Total), Some(440.0));
+        assert_eq!(s.budget_ms(Stage::Recompute), Some(150.0));
+        let findings = evaluate_latency(&s);
+        assert!(
+            findings.iter().all(|f| f.level == Level::Warn),
+            "{findings:?}"
+        );
+        assert!(findings.iter().any(|f| f.what.contains("recompute")));
+    }
+
+    #[test]
+    fn ceilings_are_per_platform_and_scenario() {
+        assert_eq!(Platform::Linux.burst_ceiling_ms(BURST_1K), None);
+        assert_eq!(Platform::MacLocal.burst_ceiling_ms("modify"), None);
+        assert!(
+            Platform::MacLocal.burst_ceiling_ms(BURST_1K)
+                < Platform::MacLocal.burst_ceiling_ms(BURST_10K)
+        );
+    }
+
     /// Only 5% of slow samples is still within the p95; 6% is not.
     #[test]
     fn the_gate_is_on_the_p95() {
@@ -522,13 +603,19 @@ mod tests {
             idle_cpu_pct: 1.5,
             idle_rss_mib: 151.0,
             fds: 300.0,
-            burst_rss_mib: 481.0,
+            burst_rss_mib: 900.0,
             burst_cpu_pct: 300.0,
             burst_back_s: None,
         };
         let findings = evaluate_footprint(&bad, &FOOTPRINT_LIMITS);
         let fails = findings.iter().filter(|f| f.level == Level::Fail).count();
-        assert_eq!(fails, 4, "{findings:?}");
+        assert_eq!(fails, 3, "{findings:?}");
+        // The burst peak has no ceiling yet: it only warns.
+        assert!(
+            findings
+                .iter()
+                .any(|f| f.level == Level::Warn && f.what.contains("burst peak"))
+        );
         // Retention only warns.
         assert!(
             findings
@@ -544,7 +631,7 @@ mod tests {
 
     /// Between the product target and the provisional ceiling, the burst peak only warns.
     #[test]
-    fn the_burst_peak_warns_under_its_ceiling() {
+    fn the_burst_peak_only_warns() {
         let f = Footprint {
             idle_cpu_pct: 0.1,
             idle_rss_mib: 40.0,

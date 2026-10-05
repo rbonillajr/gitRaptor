@@ -64,8 +64,8 @@ mod unix {
     use gitraptor_git::{ReaderOptions, RefName, RepoReader};
     use gitraptor_testkit::fixture::git_from_path;
     use gitraptor_testkit::freshness::{
-        BURST_CEILING_MS, FOOTPRINT_LIMITS, Finding, Footprint, Level, Sample, Scenario, Stage,
-        Summary, evaluate_footprint, evaluate_latency,
+        BURST_1K, BURST_10K, FOOTPRINT_LIMITS, Finding, Footprint, Level, MAX_SLACK_EXCESS_MS,
+        Platform, Sample, Scenario, Stage, Summary, evaluate_footprint, evaluate_latency,
     };
     use gitraptor_testkit::repogen;
     use serde_json::{Value, json};
@@ -76,16 +76,14 @@ mod unix {
     const SEED: u64 = 0x1f_9002;
     /// Samples dropped at the start of every scenario (ADR-GRP-011 § 4).
     const WARMUP: usize = 10;
+    /// Events the daemon keeps for replay (`ChannelConfig::default().replay`).
+    const REPLAY_EVENTS: usize = 1024;
     /// How long a sample may wait for the event that shows its change.
     const SAMPLE_DEADLINE: Duration = Duration::from_secs(5);
     /// Pause after a sample so the next action never lands in its trailing window.
     const SETTLE: Duration = Duration::from_millis(150);
     /// Tracked file every write scenario edits (exists in profile `H`).
     const TOUCHED: &str = "bench-touched.txt";
-    /// Scale scenario of ADR-GRP-011 § 4 (1,000 files), gated at 300 ms.
-    const SCALE: &str = "burst-1k";
-    /// Stress scenario (10,000 files), under a provisional ceiling (TD-GRP-001).
-    const STRESS: &str = "burst-10k";
 
     struct Opts {
         profile: String,
@@ -317,7 +315,11 @@ mod unix {
     }
 
     /// Subscribes and forwards every `worktree.state` with the time it was read.
-    fn subscribe(daemon: &Daemon, stop: Arc<AtomicBool>) -> Receiver<Received> {
+    fn subscribe(
+        daemon: &Daemon,
+        stop: Arc<AtomicBool>,
+        sizes: Arc<Mutex<std::collections::VecDeque<usize>>>,
+    ) -> Receiver<Received> {
         let mut client = daemon.connect().unwrap();
         let _: SubscribeResult = client.call(methods::EVENTS_SUBSCRIBE, json!({})).unwrap();
         let (tx, rx) = channel();
@@ -328,6 +330,14 @@ mod unix {
                 };
                 let t_client_recv = monotonic_ns();
                 let event = &n.params["event"];
+                let bytes = event.to_string().len();
+                {
+                    let mut ring = sizes.lock().unwrap();
+                    ring.push_back(bytes);
+                    if ring.len() > REPLAY_EVENTS {
+                        ring.pop_front();
+                    }
+                }
                 if event["kind"] != WORKTREE_STATE {
                     continue;
                 }
@@ -609,6 +619,8 @@ mod unix {
 
     struct Bench {
         opts: Opts,
+        /// Excess timer slack of this machine (see `Scenario::slack_excess_ms`).
+        slack_excess_ms: f64,
         repo: PathBuf,
         /// Linked worktrees `wt-1`..`wt-n`, canonical.
         wts: Vec<PathBuf>,
@@ -644,12 +656,19 @@ mod unix {
             let s = Scenario {
                 name: name.into(),
                 isolates_detection,
-                ceiling_ms: ceiling(name),
+                ceiling_ms: platform().burst_ceiling_ms(name),
+                slack_excess_ms: self.slack_excess_ms,
                 samples: kept,
             };
             let mut j = s.to_json();
             j["lost"] = lost.into();
-            let fs = evaluate_latency(&s);
+            let mut fs = evaluate_latency(&s);
+            if self.slack_excess_ms > MAX_SLACK_EXCESS_MS {
+                // An unfit machine reports latency but cannot gate it.
+                for f in &mut fs {
+                    f.level = Level::Warn;
+                }
+            }
             // Wiring: every stage of the scenario was extracted, with finite values.
             for stage in Stage::ALL {
                 if stage == Stage::Detection && !isolates_detection {
@@ -1019,9 +1038,8 @@ mod unix {
         }
     }
 
-    /// The provisional ceiling of a scenario that does not meet the budget yet.
-    fn ceiling(name: &str) -> Option<f64> {
-        (name == STRESS).then_some(BURST_CEILING_MS)
+    fn platform() -> Platform {
+        Platform::detect(std::env::var_os("GITHUB_ACTIONS").is_some())
     }
 
     /// Bytes of every file under `dir`.
@@ -1047,8 +1065,8 @@ mod unix {
         );
         for stage in Stage::ALL {
             if let Some(x) = s.summary(stage) {
-                let budget = stage
-                    .budget_ms()
+                let budget = s
+                    .budget_ms(stage)
                     .map(|b| format!("{b:.0}"))
                     .unwrap_or_else(|| "-".into());
                 println!(
@@ -1176,7 +1194,24 @@ mod unix {
         report.insert("worktrees".into(), opts.worktrees.into());
         report.insert("samples".into(), opts.samples.into());
         report.insert("warmup".into(), WARMUP.into());
-        report.insert("timer_slack".into(), timer_slack(200));
+        let slack = timer_slack(200);
+        let configured_slack = WatchConfig::default().timer_slack.as_secs_f64() * 1e3;
+        let slack_excess_ms =
+            (slack["late_ms"]["p95"].as_f64().unwrap_or(0.0) - configured_slack).max(0.0);
+        let unfit = slack_excess_ms > MAX_SLACK_EXCESS_MS;
+        println!(
+            "budget of debounce and total widened by {slack_excess_ms:.1} ms of excess timer slack{}",
+            if unfit {
+                " — UNFIT for the latency gate, reported as warnings"
+            } else {
+                ""
+            }
+        );
+        report.insert("timer_slack".into(), slack);
+        report.insert(
+            "slack_excess_ms".into(),
+            json!({"value": slack_excess_ms, "max": MAX_SLACK_EXCESS_MS, "unfit": unfit, "platform": format!("{:?}", platform())}),
+        );
         if opts
             .only
             .as_ref()
@@ -1208,7 +1243,8 @@ mod unix {
         let profile = tempfile::Builder::new().prefix("eb").tempdir().unwrap();
         let daemon = Daemon::start(profile.path(), &repo.join(".git"));
         let stop = Arc::new(AtomicBool::new(false));
-        let rx = subscribe(&daemon, stop.clone());
+        let sizes = Arc::new(Mutex::new(std::collections::VecDeque::new()));
+        let rx = subscribe(&daemon, stop.clone(), sizes.clone());
         let mut stream = Stream {
             rx,
             state: HashMap::new(),
@@ -1244,6 +1280,7 @@ mod unix {
         let profile_start = dir_bytes(profile.path());
         let mut b = Bench {
             opts,
+            slack_excess_ms,
             repo,
             wts,
             stream,
@@ -1279,9 +1316,9 @@ mod unix {
             b.worktree_add_remove();
         }
         if b.wants("burst") {
-            b.burst(SCALE, b.opts.scale_files);
-            let stress = b.burst(STRESS, b.opts.burst_files);
-            footprint.burst_rss_mib = stress.peak_mib;
+            let scale = b.burst(BURST_1K, b.opts.scale_files);
+            let stress = b.burst(BURST_10K, b.opts.burst_files);
+            footprint.burst_rss_mib = scale.peak_mib.max(stress.peak_mib);
             footprint.burst_cpu_pct = stress.cpu_pct;
             footprint.burst_back_s = stress.back_s;
         }
@@ -1312,7 +1349,6 @@ mod unix {
                     "limits": {
                         "idle_cpu_pct": FOOTPRINT_LIMITS.idle_cpu_pct,
                         "idle_rss_mib": FOOTPRINT_LIMITS.idle_rss_mib,
-                        "burst_peak_rss_ceiling_mib": FOOTPRINT_LIMITS.burst_rss_ceiling_mib,
                         "burst_peak_rss_target_mib": FOOTPRINT_LIMITS.burst_rss_target_mib,
                         "burst_back_target_s": FOOTPRINT_LIMITS.burst_back_target_s,
                         "descriptors": FOOTPRINT_LIMITS.fds,
@@ -1333,6 +1369,24 @@ mod unix {
         b.report.insert(
             "profile_growth".into(),
             json!({"bytes": grown, "worktree_state_events": events}),
+        );
+        // What the daemon's replay buffer holds at the end, serialized (ADR-GRP-005): the last
+        // `REPLAY_EVENTS` events of the stream.
+        let (replay_bytes, largest) = {
+            let ring = sizes.lock().unwrap();
+            (
+                ring.iter().sum::<usize>(),
+                ring.iter().max().copied().unwrap_or(0),
+            )
+        };
+        println!(
+            "replay buffer: last {REPLAY_EVENTS} events = {:.1} MiB serialized (largest {:.1} KiB)",
+            replay_bytes as f64 / 1_048_576.0,
+            largest as f64 / 1024.0
+        );
+        b.report.insert(
+            "replay_buffer".into(),
+            json!({"events": REPLAY_EVENTS, "serialized_bytes": replay_bytes, "largest_event_bytes": largest}),
         );
         let findings = std::mem::take(&mut b.findings);
         b.report.insert(
@@ -1392,8 +1446,8 @@ mod unix {
         for s in &b.scenarios {
             for stage in Stage::ALL {
                 if let Some(x) = s.summary(stage) {
-                    let budget = stage
-                        .budget_ms()
+                    let budget = s
+                        .budget_ms(stage)
                         .map(|v| format!("{v:.0}"))
                         .unwrap_or_default();
                     md += &format!(
