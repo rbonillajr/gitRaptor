@@ -336,8 +336,6 @@ impl ProtectedBackend for Backend {
             warnings: self.warnings.lock().unwrap().clone(),
             affected: Affected::Nobody,
             other_session: false,
-            worktrees: Vec::new(),
-            refs: vec![format!("refs/heads/{}", a.branch)],
         })
     }
     fn step(&self, plan: &StepPlan<'_>) -> Result<Box<dyn ProtectedStep>, StepError> {

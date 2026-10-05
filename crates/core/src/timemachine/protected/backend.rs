@@ -2,14 +2,16 @@
 //! observed repos with their oplog and snapshot store, and the hook where
 //! the catalog of user operations plugs in.
 //!
-//! The catalog and its executor are TS-CKP-002 (ADR-CKP-002); they are not
-//! built here. Until one is wired, the daemon answers `operation.run` with
-//! "not implemented".
+//! The executor of the catalog is TS-CKP-002 (`crate::executor`); each
+//! operation's own part (preconditions, expected values, step) is its
+//! story's and plugs in through [`OperationCatalog`]. Until a catalog is
+//! wired, the daemon answers `operation.prepare` with "not implemented".
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
+use gitraptor_api::catalog::{Layer, OperationArgs, OperationId, RejectReason};
 use gitraptor_git::{ReaderOptions, RepoReader};
 
 use super::scope::{McpAllowlist, NoMcpRepos, ProtectedBackend, RepoHandle, ScopeError};
@@ -17,22 +19,28 @@ use super::{
     PriorError, PriorRequest, PriorSnapshot, PriorSnapshotter, ProtectedStep, StepError,
     StoreSnapshotter,
 };
+use crate::executor::{GuardrailsGate, OpPlan, PlanError, RepoFacts, StepPlan};
 use crate::profile::ProfileDirs;
 use crate::timemachine::oplog::Oplog;
 use crate::timemachine::store::SnapshotStore;
 
-/// The catalog of user operations (ADR-CKP-002 § 1): turns an operation
-/// name and its arguments into the step that runs it. Implemented by the
-/// executor of TS-CKP-002; tests plug in their own.
+/// The operations' own parts (ADR-CKP-002 § 1): each one's preconditions,
+/// expected values, warnings and affected work, and the step that runs a
+/// checked plan. The executor of TS-CKP-002 does the rest (plan, queue,
+/// revalidation, Guardrails, protected operation). Each operation's story
+/// implements its part; tests plug in their own.
 pub trait OperationCatalog: Send + Sync {
-    /// The step for `operation` with `args` on `repo`, validated against the
-    /// catalog. Nothing runs yet.
-    fn step(
+    /// The operation's part of the plan. `PlanError::NotImplemented` until
+    /// its story.
+    fn plan_op(
         &self,
-        operation: &str,
-        args: &serde_json::Map<String, serde_json::Value>,
+        operation: OperationId,
+        args: &OperationArgs,
         repo: &RepoHandle,
-    ) -> Result<Box<dyn ProtectedStep>, StepError>;
+        facts: &RepoFacts,
+    ) -> Result<OpPlan, PlanError>;
+    /// The step that runs a plan whose fingerprint was just checked.
+    fn step(&self, plan: &StepPlan<'_>) -> Result<Box<dyn ProtectedStep>, StepError>;
 }
 
 /// A layer over the production snapshotter. Tests inject faults with it
@@ -44,6 +52,12 @@ pub type SnapshotterLayer =
 #[derive(Clone)]
 pub struct OperationsWiring {
     pub catalog: Arc<dyn OperationCatalog>,
+    /// Guardrails (TS-CKP-003); `NoGuardrails` until then (fail-closed).
+    pub gate: Arc<dyn GuardrailsGate>,
+    /// Tests only: see `ProtectedWiring::test_layer_override`. `None` in
+    /// production.
+    #[doc(hidden)]
+    pub test_layer_override: Option<Layer>,
     /// Deadline of the prior snapshot.
     pub prior_deadline: Duration,
     pub prior_layer: Option<SnapshotterLayer>,
@@ -54,6 +68,7 @@ impl std::fmt::Debug for OperationsWiring {
         f.debug_struct("OperationsWiring")
             .field("prior_deadline", &self.prior_deadline)
             .field("prior_layer", &self.prior_layer.is_some())
+            .field("test_layer_override", &self.test_layer_override)
             .finish_non_exhaustive()
     }
 }
@@ -124,6 +139,17 @@ impl TmRepos {
             .iter()
             .find(|r| r.repo_id == repo_id)
             .map(|r| Arc::clone(&r.oplog))
+    }
+
+    /// Key of the repo's write lock: the path of its snapshot store, the same
+    /// key the Time Machine applier uses (ADR-CKP-002 § 5). Derived from the
+    /// profile, so it never depends on whether the store could be opened.
+    fn lock_key(&self, repo_id: &str) -> String {
+        match SnapshotStore::location(&self.dirs, repo_id) {
+            Ok(path) => path.display().to_string(),
+            // An id the store refuses never reaches a write: keep it apart.
+            Err(_) => format!("invalid-store:{repo_id}"),
+        }
     }
 
     /// The repo whose canonical common directory is `common_dir`, with its
@@ -210,13 +236,26 @@ impl ProtectedBackend for DaemonBackend {
         })
     }
 
-    fn step(
+    fn write_lock_key(&self, repo: &RepoHandle) -> String {
+        self.repos.lock_key(&repo.repo_id)
+    }
+
+    fn facts(&self, repo: &RepoHandle) -> Result<RepoFacts, RejectReason> {
+        RepoFacts::read(&repo.worktree)
+    }
+
+    fn plan_op(
         &self,
-        operation: &str,
-        args: &serde_json::Map<String, serde_json::Value>,
+        operation: OperationId,
+        args: &OperationArgs,
         repo: &RepoHandle,
-    ) -> Result<Box<dyn ProtectedStep>, StepError> {
-        self.wiring.catalog.step(operation, args, repo)
+        facts: &RepoFacts,
+    ) -> Result<OpPlan, PlanError> {
+        self.wiring.catalog.plan_op(operation, args, repo, facts)
+    }
+
+    fn step(&self, plan: &StepPlan<'_>) -> Result<Box<dyn ProtectedStep>, StepError> {
+        self.wiring.catalog.step(plan)
     }
 
     fn allowlist(&self) -> &dyn McpAllowlist {
@@ -226,4 +265,24 @@ impl ProtectedBackend for DaemonBackend {
 
 fn canonical(path: &Path) -> PathBuf {
     std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// ADR-CKP-002 § 5: the executor and the applier serialize on the same
+    /// key, the path of the repo's store, whether or not it is open yet.
+    #[test]
+    fn the_lock_key_is_the_appliers() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dirs = ProfileDirs::under_root(tmp.path().join("profile"));
+        let repo_id = "0a1b2c3d-0000-4000-8000-0000000000aa";
+        let repos = TmRepos::new(dirs.clone());
+        let before = repos.lock_key(repo_id);
+        let (store, _) = SnapshotStore::open_or_create(&dirs, repo_id).unwrap();
+        // The applier's key (`apply/mod.rs`): the opened store's path.
+        assert_eq!(before, store.path().display().to_string());
+        assert_eq!(repos.lock_key(repo_id), before);
+    }
 }
