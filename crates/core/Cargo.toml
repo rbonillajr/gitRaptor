@@ -34,18 +34,15 @@ rustix = { version = "1.1.5", features = ["fs", "process", "net", "event", "pipe
 signal-hook = "0.4.5"
 
 [target."cfg(windows)".dependencies]
-# Private DACL of the profile folders (SEC-06, TD-GRP-001).
+# Private DACL of the profile folders (SEC-06, TD-GRP-001) and processes
+# (ancestry, creation time, owner) for the requester: the only crate allowed
+# `unsafe` (ADR-GRP-002, Enmienda 2026-10-05).
 gitraptor-winsys.workspace = true
 
 [target."cfg(target_os = \"macos\")".dependencies]
 # `proc_pidinfo` of other processes (ancestry, controlling terminal, start
 # time). Builds its bindings with bindgen (needs the Command Line Tools SDK).
 libproc = "=0.14.11"
-
-[target."cfg(windows)".dependencies]
-# Processes on Windows (ancestry, creation time, owner): the only crate
-# allowed `unsafe` (ADR-GRP-002, Enmienda 2026-10-05).
-gitraptor-winsys.workspace = true
 
 [dev-dependencies]
 gitraptor-testkit.workspace = true
