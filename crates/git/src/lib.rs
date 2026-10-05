@@ -5,7 +5,11 @@
 //! fixed argv, an environment built from an allowlist and a timeout per invocation. The binary
 //! itself is located and checked by [`resolve`].
 //!
-//! Boundary: nothing in this crate writes to an observed repository, takes a lock or runs a
+//! The user-operation executor of `crates/core` launches `git` only through [`user_ops`], its
+//! own authorized invocation module (ADR-CKP-002 § 11); its preconditions are read by
+//! [`preflight`].
+//!
+//! Boundary: apart from [`user_ops`], nothing in this crate writes to an observed repository, takes a lock or runs a
 //! filter, hook, pager, signing program or credential helper. The only writer is
 //! [`tm_write::store`], the Time Machine store writer, which can only open a validated store in
 //! the profile (ADR-TMC-002 § 1).
@@ -15,11 +19,13 @@ pub mod cli;
 mod committed;
 mod invoke;
 pub mod paths;
+pub mod preflight;
 mod reader;
 pub mod redact;
 pub mod refname;
 pub mod resolve;
 pub mod tm_write;
+pub mod user_ops;
 
 pub use capture::{
     Conversions, EntryKind, FileKind, FileStat, HistoryGap, IgnoreCheck, IndexEntry, IndexView,

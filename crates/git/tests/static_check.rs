@@ -1,9 +1,10 @@
 //! ADR-GRP-009, Validación 5: process launching appears only in the invocation module of
-//! `crates/git` (`src/invoke.rs`).
+//! `crates/git` (`src/invoke.rs`) and in the invocation of user operations (`src/user_ops.rs`).
 
 use std::path::{Path, PathBuf};
 
-const AUTHORIZED: &[&str] = &["invoke.rs"];
+/// `user_ops.rs`: invocation of user operations (ADR-CKP-002 § 11, ADR-GRP-009 Enmienda Cockpit).
+const AUTHORIZED: &[&str] = &["invoke.rs", "user_ops.rs"];
 const PATTERNS: &[&str] = &[
     "Command::new",
     "process::Command",
