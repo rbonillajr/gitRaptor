@@ -15,6 +15,7 @@ pub mod catalog;
 pub mod clock;
 pub mod event;
 pub mod framing;
+pub mod guard;
 pub mod messages;
 pub mod methods;
 pub mod resources;
@@ -28,7 +29,7 @@ pub use event::{Event, Timings};
 pub use untrusted::{Untrusted, UntrustedName};
 
 /// Version of the engine API contract (semantic, for humans).
-pub const API_VERSION: &str = "6.1.0";
+pub const API_VERSION: &str = "7.0.0";
 
 /// Wire protocol version negotiated in the handshake. A daemon serves every
 /// client from [`MIN_COMPATIBLE_PROTOCOL`] up to its own version, each in
@@ -41,8 +42,10 @@ pub const API_VERSION: &str = "6.1.0";
 /// and `sessions.list`. Version 6 (TS-GRP-004, ADR-CKP-003 § 4 N1 to N7):
 /// scopes with their own contiguous sequence, `repo.locate`, the requester
 /// in the handshake, bounded untrusted names and typed codes (6.1:
-/// `engine.resources`, US-GRP-017, additive).
-pub const PROTOCOL_VERSION: u32 = 6;
+/// `engine.resources`, US-GRP-017, additive). Version 7 (US-GRD-001): the
+/// `guard.*` methods and the `not-observed` repo rejection; a connection of
+/// version 5 or 6 sees neither.
+pub const PROTOCOL_VERSION: u32 = 7;
 
 /// Oldest client protocol a daemon still serves: a long-lived `raptor-mcp`
 /// survives an upgrade of the daemon (DS-TS-GRP-004 E-D1).
