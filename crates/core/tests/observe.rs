@@ -7,7 +7,7 @@ use std::path::Path;
 use gitraptor_api::messages::{
     ChangeCounts, HeadView, RepoRejection, UnavailableReason, WorktreeStatus, WorktreeView,
 };
-use gitraptor_core::observe::{locate, reconcile};
+use gitraptor_core::observe::{base_branch, locate, reconcile};
 use gitraptor_testkit::fixture::git_from_path;
 use gitraptor_testkit::{Exceptions, Fixture, check};
 
@@ -43,7 +43,7 @@ fn repo_intact_every_worktree_is_read_and_one_that_is_gone_is_unavailable() {
         // Any worktree locates the same common directory.
         let common = locate(&a).unwrap();
         assert_eq!(locate(&f.repo).unwrap(), common);
-        let read = reconcile(&common).unwrap();
+        let read = reconcile(&common, &base_branch(None)).unwrap();
         let wts = read.views();
         assert_eq!(wts.len(), 3);
         assert!(wts[0].main);
@@ -70,11 +70,11 @@ fn detached_and_unborn_heads_are_reported_as_such() {
     let f = Fixture::with_commit(&git_from_path());
     let head_commit = f.git(&["rev-parse", "HEAD"]);
     f.git(&["checkout", "-q", "--detach", head_commit.trim()]);
-    let read = reconcile(&locate(&f.repo).unwrap()).unwrap();
+    let read = reconcile(&locate(&f.repo).unwrap(), &base_branch(None)).unwrap();
     assert_eq!(head(&read.views()[0]), &HeadView::Detached);
 
     let empty = Fixture::new(&git_from_path());
-    let read = reconcile(&locate(&empty.repo).unwrap()).unwrap();
+    let read = reconcile(&locate(&empty.repo).unwrap(), &base_branch(None)).unwrap();
     match head(&read.views()[0]) {
         HeadView::Unborn { name } => assert_eq!(name.raw(), "main"),
         other => panic!("{other:?}"),
@@ -91,7 +91,7 @@ fn a_bare_repo_has_no_main_worktree_but_its_linked_ones() {
         &bare,
         &["worktree", "add", "-q", wt.to_str().unwrap(), "main"],
     );
-    let read = reconcile(&locate(&bare).unwrap()).unwrap();
+    let read = reconcile(&locate(&bare).unwrap(), &base_branch(None)).unwrap();
     let wts = read.views();
     assert_eq!(wts.len(), 1);
     assert!(!wts[0].main);

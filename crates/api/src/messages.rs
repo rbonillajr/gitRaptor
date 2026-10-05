@@ -136,9 +136,68 @@ pub struct RepoView {
     /// Canonical path of the Git common directory (text from the file
     /// system).
     pub path: Untrusted,
+    /// The branch ahead/behind is counted against (US-GRP-012).
+    pub base: BaseBranchView,
     /// Every worktree of the repo as of the last reconciliation
     /// (US-GRP-001): the main one first, then the linked ones by path.
     pub worktrees: Vec<WorktreeView>,
+}
+
+/// The base branch of a repo (US-GRP-012, ADR-GRD-004 § 3): the one the
+/// developer confirmed or, until then, the resolved one marked unconfirmed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BaseBranchView {
+    /// Short branch name; `None` only when the status is `invalid`.
+    pub name: Option<Untrusted>,
+    pub status: BaseStatusView,
+}
+
+/// Whether the base branch is the confirmed one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum BaseStatusView {
+    /// Confirmed by the developer: the only value of the repo.
+    Confirmed,
+    /// Nothing confirmed yet: the resolved branch (`base-unconfirmed`).
+    Unconfirmed,
+    /// Nothing confirmed and the team declares an invalid name: there is
+    /// no base branch (Q42). Only the team settings of US-GRP-016 lead here.
+    Invalid,
+}
+
+/// Most commits counted on each side of an ahead/behind.
+pub const MAX_DIVERGENCE_WALK: u64 = 10_000;
+
+/// Ahead/behind of a worktree against the base branch of its repo
+/// (US-GRP-012), or why it is not counted.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "state", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum DivergenceView {
+    /// Commits only in the worktree's `HEAD` and only in the base branch.
+    Counted {
+        ahead: CommitCountView,
+        behind: CommitCountView,
+    },
+    /// The base branch does not exist in the repo; no other branch is used
+    /// instead (Q42).
+    BaseMissing,
+    /// The repo has no base branch (status `invalid`).
+    NoBase,
+    /// `HEAD` names a branch without commits.
+    NoCommits,
+    /// The commits could not be read now.
+    Unreadable,
+}
+
+/// A bounded commit count.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CommitCountView {
+    pub count: u64,
+    /// `false`: the walk stopped at [`MAX_DIVERGENCE_WALK`]; there are at
+    /// least `count`.
+    pub exact: bool,
 }
 
 /// Most changed paths listed per worktree.
@@ -184,6 +243,9 @@ pub enum WorktreeStatus {
         /// Changed paths, sorted, bounded by [`MAX_WORKTREE_CHANGES`] and
         /// [`MAX_WORKTREE_CHANGE_BYTES`]; `counts` says how many there are.
         changes: Vec<FileChangeView>,
+        /// Against the base branch (US-GRP-012). `engine.snapshot` counts
+        /// it again with the base branch as it is when asked.
+        divergence: DivergenceView,
     },
     /// Registered in the repo but not readable now: nothing else is
     /// reported for it rather than made up.

@@ -24,6 +24,7 @@ mod log;
 mod shutdown;
 mod state;
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
@@ -34,9 +35,10 @@ use gitraptor_api::event::{DAEMON_STOPPING, ENGINE_STATE, REPO_OBSERVATION, WORK
 use gitraptor_api::messages::DaemonView;
 use gitraptor_api::messages::{
     EngineStateView, EngineView, RepoAddOutcome, RepoAddResult, RepoObservationData,
-    RepoRetireResult, RepoStateView, RepoView, StoppingData, WorktreeStateData, WorktreeView,
+    RepoRetireResult, RepoStateView, RepoView, StoppingData, WorktreeStateData,
 };
 use gitraptor_api::{Timings, Untrusted, clock};
+use gitraptor_policy::team::BaseBranch;
 
 use gitraptor_git::SystemGit;
 use gitraptor_git::resolve::{Resolution, ResolveConfig, resolve};
@@ -414,6 +416,7 @@ impl Daemon {
             Vec::new()
         };
         let mut repo_views = Vec::new();
+        let mut divergence = BTreeMap::new();
         for entry in entries {
             let state = if report.unavailable.contains(&entry.repo_id) {
                 RepoStateView::Unavailable
@@ -431,10 +434,18 @@ impl Daemon {
             {
                 persist_read(store, read, &logger, &entry.repo_id);
             }
+            if let Some(read) = read {
+                divergence.insert(entry.repo_id.clone(), read.divergence_inputs());
+            }
+            let base = match read {
+                Some(read) => read.base.clone(),
+                None => repo_base(&stores, &entry.repo_id),
+            };
             repo_views.push(RepoView {
                 repo_id: entry.repo_id,
                 state,
                 path: Untrusted::from_os(entry.canonical_path.as_os_str()),
+                base: observe::base_view(&base),
                 worktrees: read.map(RepoRead::views).unwrap_or_default(),
             });
         }
@@ -443,6 +454,7 @@ impl Daemon {
             EngineShared {
                 engine: engine_view(state, git.as_ref()),
                 repos: repo_views,
+                divergence,
             },
             config.channel.limits.replay,
         ));
@@ -702,7 +714,7 @@ impl Daemon {
     /// in the profile, opens its store, persists the reconciliation and
     /// publishes it. The loop re-checks the profile, so two adds of the same
     /// repo end with one entry.
-    fn add_repo(&mut self, request: RepoAddRequest) -> Result<RepoAddResult, RepoCommandError> {
+    fn add_repo(&mut self, mut request: RepoAddRequest) -> Result<RepoAddResult, RepoCommandError> {
         let now = now_ms();
         let (entry, outcome) = self
             .profile
@@ -731,6 +743,7 @@ impl Daemon {
                     repo_id,
                     state: RepoStateView::Observed,
                     path,
+                    base: observe::base_view(&observe::base_branch(None)),
                     worktrees: Vec::new(),
                 },
             });
@@ -747,6 +760,9 @@ impl Daemon {
                 ),
             }
         }
+        // The channel counted against the default; the store may keep a
+        // confirmed base branch (US-GRP-012).
+        request.read.set_base(repo_base(&self.stores, &repo_id));
         let state = match self.stores.iter_mut().find(|(id, _)| *id == repo_id) {
             Some((_, store)) => {
                 persist_read(store, &request.read, &self.logger, &repo_id);
@@ -760,6 +776,7 @@ impl Daemon {
             repo_id: repo_id.clone(),
             state,
             path: path.clone(),
+            base: observe::base_view(&request.read.base),
             worktrees: worktrees.clone(),
         };
         if self.state == EngineState::NoRepos {
@@ -784,7 +801,7 @@ impl Daemon {
         }
         self.publish_worktrees(
             &repo_id,
-            worktrees,
+            &request.read,
             Timings {
                 batch_id: self.bus.next_batch(),
                 t_recv: request.t_recv,
@@ -802,7 +819,10 @@ impl Daemon {
 
     /// Publishes the reconciled worktrees of one repo and updates the view
     /// snapshots read, in the same critical section.
-    fn publish_worktrees(&self, repo_id: &str, worktrees: Vec<WorktreeView>, timings: Timings) {
+    fn publish_worktrees(&self, repo_id: &str, read: &RepoRead, timings: Timings) {
+        let worktrees = read.views();
+        let inputs = read.divergence_inputs();
+        let base = observe::base_view(&read.base);
         let mut data = WorktreeStateData {
             repo_id: repo_id.to_owned(),
             worktrees: worktrees.clone(),
@@ -815,6 +835,8 @@ impl Daemon {
             .publish(WORKTREE_STATE, data, Some(timings), move |shared| {
                 if let Some(repo) = shared.repos.iter_mut().find(|r| r.repo_id == id) {
                     repo.worktrees = worktrees;
+                    repo.base = base;
+                    shared.divergence.insert(id, inputs);
                 }
             });
     }
@@ -860,7 +882,10 @@ impl Daemon {
                 path: Untrusted::from_os(entry.canonical_path.as_os_str()),
             },
             None,
-            move |shared| shared.repos.retain(|r| r.repo_id != id),
+            move |shared| {
+                shared.repos.retain(|r| r.repo_id != id);
+                shared.divergence.remove(&id);
+            },
         );
         let observed_left = self
             .profile
@@ -1020,9 +1045,10 @@ fn reconcile_all(
             })
             .map(|e| {
                 let path = e.canonical_path.clone();
+                let base = repo_base(stores, &e.repo_id);
                 (
                     e.repo_id.clone(),
-                    scope.spawn(move || observe::reconcile(&path).ok()),
+                    scope.spawn(move || observe::reconcile(&path, &base).ok()),
                 )
             })
             .collect();
@@ -1031,6 +1057,17 @@ fn reconcile_all(
             .map(|(id, handle)| (id, handle.join().ok().flatten()))
             .collect()
     })
+}
+
+/// The base branch of a repo (US-GRP-012): the one its store keeps as
+/// confirmed; without a store or a readable confirmation, the unconfirmed
+/// default (reading it never confirms anything).
+fn repo_base(stores: &[(String, RepoStore)], repo_id: &str) -> BaseBranch {
+    let confirmed = stores
+        .iter()
+        .find(|(id, _)| id == repo_id)
+        .and_then(|(_, store)| store.confirmed_team_baseline().ok().flatten());
+    observe::base_branch(confirmed.as_ref())
 }
 
 /// Persists a reconciliation in the repo's store. A failure is logged: the

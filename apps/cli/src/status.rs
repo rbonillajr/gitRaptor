@@ -10,8 +10,9 @@ use std::path::Path;
 
 use gitraptor_api::Untrusted;
 use gitraptor_api::messages::{
-    ChangeAreaView, ChangeCounts, FileChangeView, HeadView, RepoStateView, RepoView, Snapshot,
-    UnavailableReason, WorktreeStatus, WorktreeView,
+    BaseBranchView, BaseStatusView, ChangeAreaView, ChangeCounts, CommitCountView, DivergenceView,
+    FileChangeView, HeadView, RepoStateView, RepoView, Snapshot, UnavailableReason, WorktreeStatus,
+    WorktreeView,
 };
 use serde::Serialize;
 
@@ -65,8 +66,10 @@ pub fn text(snapshot: &Snapshot) -> String {
             RepoStateView::Unavailable => "status.repo-unavailable",
         };
         let _ = writeln!(out, "{}", t(key, &[("path", &folder)]));
+        let _ = writeln!(out, "  {}", base_text(&repo.base));
+        let base = base_name(&repo.base);
         for w in &repo.worktrees {
-            worktree_text(&mut out, w);
+            worktree_text(&mut out, w, &base);
         }
     }
     out
@@ -76,7 +79,49 @@ fn sanitize(text: &str) -> String {
     Untrusted::new(text).sanitized()
 }
 
-fn worktree_text(out: &mut String, w: &WorktreeView) {
+/// The base branch name, sanitized (empty if there is none).
+fn base_name(base: &BaseBranchView) -> String {
+    base.name
+        .as_ref()
+        .map(Untrusted::sanitized)
+        .unwrap_or_default()
+}
+
+fn base_text(base: &BaseBranchView) -> String {
+    let name = base_name(base);
+    match base.status {
+        BaseStatusView::Confirmed => t("status.base", &[("name", &name)]),
+        BaseStatusView::Unconfirmed => t("status.base-unconfirmed", &[("name", &name)]),
+        BaseStatusView::Invalid => t("status.base-invalid", &[]),
+    }
+}
+
+fn divergence_text(divergence: &DivergenceView, base: &str) -> String {
+    let count = |c: &CommitCountView| {
+        if c.exact {
+            c.count.to_string()
+        } else {
+            t("status.at-least", &[("count", &c.count)])
+        }
+    };
+    match divergence {
+        // The base name last: it is repo text and must not fill the others.
+        DivergenceView::Counted { ahead, behind } => t(
+            "status.divergence",
+            &[
+                ("ahead", &count(ahead)),
+                ("behind", &count(behind)),
+                ("base", &base),
+            ],
+        ),
+        DivergenceView::BaseMissing => t("status.no-divergence-base-missing", &[("base", &base)]),
+        DivergenceView::NoBase => t("status.no-divergence-no-base", &[]),
+        DivergenceView::NoCommits => t("status.no-divergence-no-commits", &[]),
+        DivergenceView::Unreadable => t("status.no-divergence-unreadable", &[]),
+    }
+}
+
+fn worktree_text(out: &mut String, w: &WorktreeView, base: &str) {
     let key = if w.main {
         "status.worktree-main"
     } else {
@@ -96,8 +141,10 @@ fn worktree_text(out: &mut String, w: &WorktreeView) {
             head,
             counts,
             changes,
+            divergence,
         } => {
             let _ = writeln!(out, "    {}", head_text(head));
+            let _ = writeln!(out, "    {}", divergence_text(divergence, base));
             if counts.is_clean() {
                 let _ = writeln!(out, "    {}", t("status.clean", &[]));
                 return;
@@ -163,6 +210,9 @@ struct RepoJson {
     path: String,
     git_dir: String,
     state: String,
+    /// `None` if the repo has no base branch.
+    base_branch: Option<String>,
+    base_confirmed: bool,
     worktrees: Vec<WorktreeJson>,
 }
 
@@ -184,6 +234,43 @@ struct WorktreeJson {
     counts: Option<ChangeCounts>,
     changes: Vec<ChangeJson>,
     changes_truncated: bool,
+    /// Against the repo's base branch; absent if the worktree is unavailable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ahead_behind: Option<AheadBehindJson>,
+}
+
+#[derive(Serialize)]
+struct AheadBehindJson {
+    /// `counted`, `base-missing`, `no-base`, `no-commits` or `unreadable`.
+    state: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ahead: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    behind: Option<u64>,
+    /// `false`: there are at least that many (the walk is bounded).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    exact: Option<bool>,
+}
+
+fn ahead_behind_json(divergence: &DivergenceView) -> AheadBehindJson {
+    let state = serde_json::to_value(divergence)
+        .ok()
+        .and_then(|v| v["state"].as_str().map(str::to_owned))
+        .unwrap_or_default();
+    match divergence {
+        DivergenceView::Counted { ahead, behind } => AheadBehindJson {
+            state,
+            ahead: Some(ahead.count),
+            behind: Some(behind.count),
+            exact: Some(ahead.exact && behind.exact),
+        },
+        _ => AheadBehindJson {
+            state,
+            ahead: None,
+            behind: None,
+            exact: None,
+        },
+    }
 }
 
 #[derive(Serialize)]
@@ -204,6 +291,8 @@ pub fn json(snapshot: &Snapshot) -> StatusJson {
                 path: repo_folder(repo),
                 git_dir: repo.path.raw().to_owned(),
                 state: wire(&repo.state),
+                base_branch: repo.base.name.as_ref().map(|n| n.raw().to_owned()),
+                base_confirmed: repo.base.status == BaseStatusView::Confirmed,
                 worktrees: repo.worktrees.iter().map(worktree_json).collect(),
             })
             .collect(),
@@ -222,6 +311,7 @@ fn worktree_json(w: &WorktreeView) -> WorktreeJson {
         counts: None,
         changes: Vec::new(),
         changes_truncated: w.changes_truncated(),
+        ahead_behind: None,
     };
     match &w.status {
         WorktreeStatus::Unavailable { reason } => out.unavailable_reason = Some(wire(reason)),
@@ -229,8 +319,10 @@ fn worktree_json(w: &WorktreeView) -> WorktreeJson {
             head,
             counts,
             changes,
+            divergence,
         } => {
             out.state = "ready";
+            out.ahead_behind = Some(ahead_behind_json(divergence));
             let (kind, name) = match head {
                 HeadView::Branch { name } => ("branch", Some(name)),
                 HeadView::Unborn { name } => ("unborn", Some(name)),
@@ -274,7 +366,7 @@ mod tests {
             },
             daemon: DaemonView {
                 pid: 1,
-                protocol: 2,
+                protocol: 3,
                 binary_version: "0".into(),
                 started_wall_ms: 0,
             },
@@ -282,6 +374,10 @@ mod tests {
                 repo_id: "ab-01".into(),
                 state: RepoStateView::Observed,
                 path: Untrusted::new("/w/demo/.git"),
+                base: BaseBranchView {
+                    name: Some(Untrusted::new("main")),
+                    status: BaseStatusView::Unconfirmed,
+                },
                 worktrees: vec![
                     wt(
                         "/w/demo",
@@ -292,6 +388,16 @@ mod tests {
                             },
                             counts: ChangeCounts::default(),
                             changes: Vec::new(),
+                            divergence: DivergenceView::Counted {
+                                ahead: CommitCountView {
+                                    count: 0,
+                                    exact: true,
+                                },
+                                behind: CommitCountView {
+                                    count: 0,
+                                    exact: true,
+                                },
+                            },
                         },
                     ),
                     wt(
@@ -311,6 +417,16 @@ mod tests {
                                 area: ChangeAreaView::Unstaged,
                                 kind: ChangeKindView::Modified,
                             }],
+                            divergence: DivergenceView::Counted {
+                                ahead: CommitCountView {
+                                    count: 3,
+                                    exact: true,
+                                },
+                                behind: CommitCountView {
+                                    count: 10_000,
+                                    exact: false,
+                                },
+                            },
                         },
                     ),
                 ],
@@ -330,6 +446,46 @@ mod tests {
     }
 
     #[test]
+    fn text_shows_the_base_branch_and_each_ahead_behind() {
+        let out = text(&snapshot());
+        assert!(out.contains("main (unconfirmed)"), "{out}");
+        assert!(out.contains("0 ahead and 0 behind main"), "{out}");
+        assert!(
+            out.contains("3 ahead and at least 10000 behind main"),
+            "{out}"
+        );
+        let mut s = snapshot();
+        s.repos[0].base.status = BaseStatusView::Confirmed;
+        if let WorktreeStatus::Ready { divergence, .. } = &mut s.repos[0].worktrees[1].status {
+            *divergence = DivergenceView::BaseMissing;
+        }
+        let out = text(&s);
+        assert!(out.contains("base branch: main\n"), "{out}");
+        assert!(
+            out.contains("base branch \"main\" does not exist in the repo"),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn a_branch_name_cannot_fill_the_other_placeholders() {
+        let d = DivergenceView::Counted {
+            ahead: CommitCountView {
+                count: 1,
+                exact: true,
+            },
+            behind: CommitCountView {
+                count: 2,
+                exact: true,
+            },
+        };
+        assert_eq!(
+            divergence_text(&d, "{ahead}"),
+            "1 ahead and 2 behind {ahead}"
+        );
+    }
+
+    #[test]
     fn json_has_plain_strings_and_flags() {
         let value = serde_json::to_value(json(&snapshot())).unwrap();
         let wts = &value["repos"][0]["worktrees"];
@@ -338,6 +494,12 @@ mod tests {
         assert_eq!(wts[1]["branch"], "feat-login");
         assert_eq!(wts[1]["changes"][0]["path"], "login.txt");
         assert_eq!(wts[1]["changes"][0]["area"], "unstaged");
+        assert_eq!(value["repos"][0]["base_branch"], "main");
+        assert_eq!(value["repos"][0]["base_confirmed"], false);
+        assert_eq!(
+            wts[1]["ahead_behind"],
+            serde_json::json!({"state": "counted", "ahead": 3, "behind": 10_000, "exact": false})
+        );
     }
 
     #[test]

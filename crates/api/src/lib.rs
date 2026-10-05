@@ -25,12 +25,12 @@ pub use event::{Event, Timings};
 pub use untrusted::Untrusted;
 
 /// Version of the engine API contract (semantic, for humans).
-pub const API_VERSION: &str = "2.0.0";
+pub const API_VERSION: &str = "3.0.0";
 
 /// Wire protocol version negotiated in the handshake. Client and daemon are
 /// compatible only when they speak the same version; a newer client replaces
 /// an older daemon (ADR-GRP-005 § 4, SEC-13).
-pub const PROTOCOL_VERSION: u32 = 2;
+pub const PROTOCOL_VERSION: u32 = 3;
 
 /// File name of the channel socket inside the profile's runtime folder.
 pub const SOCKET_FILE: &str = "raptor.sock";
