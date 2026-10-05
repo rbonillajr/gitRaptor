@@ -107,6 +107,25 @@ fn status_reports_what_git_reports() {
         )
         .unwrap();
     assert_eq!(ahead, gitraptor_git::Count::AtLeast(0));
+
+    // The same walk by commit id, as for a detached `HEAD` (US-GRP-012).
+    let tip = |name: &str| {
+        r.resolve_ref(&RefName::new(name).unwrap())
+            .unwrap()
+            .unwrap()
+    };
+    assert_eq!(
+        r.ahead_behind_commits(&tip("main"), &tip("feature"), 1000)
+            .unwrap(),
+        (
+            gitraptor_git::Count::Exact(1),
+            gitraptor_git::Count::Exact(1)
+        )
+    );
+    assert!(matches!(
+        r.ahead_behind_commits("not-an-id", &tip("main"), 1000),
+        Err(gitraptor_git::ReadError::InvalidInput(_))
+    ));
 }
 
 #[test]
