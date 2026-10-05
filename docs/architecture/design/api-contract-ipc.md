@@ -6,11 +6,11 @@ status: draft
 domain: GRP
 feature: motor-local
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-05
 related:
   adrs: [ADR-GRP-005, ADR-GRP-011, ADR-GRP-013]
-  stories: [TS-GRP-004, US-GRP-001]
-  specs: [DS-TS-GRP-004, DS-US-GRP-001]
+  stories: [TS-GRP-004, US-GRP-001, US-GRP-012]
+  specs: [DS-TS-GRP-004, DS-US-GRP-001, DS-US-GRP-012]
   deps: [DEP-CKP-6]
 tags: [ipc, json-rpc, contrato, eventos, mcp, seguridad]
 ---
@@ -23,7 +23,7 @@ La fuente de verdad es el código de `crates/api`. Este documento es su resumen 
 
 - Socket Unix `raptor.sock` en la carpeta de ejecución del perfil, con la carpeta en 0700 y el socket en 0600. Solo acepta clientes del mismo uid. El cliente comprueba que el servidor también es de su uid. En Windows, named pipe: pendiente.
 - Un mensaje JSON por línea (`\n`), de 1 MiB como máximo y con una profundidad máxima de 32. No se aceptan batches. Todos los tipos rechazan campos desconocidos.
-- `PROTOCOL_VERSION = 2` (`API_VERSION` 2.0.0). Cliente y daemon son compatibles solo si hablan la misma versión. La 2 (US-GRP-001) añade el estado de los worktrees a `RepoView`.
+- `PROTOCOL_VERSION = 3` (`API_VERSION` 3.0.0). Cliente y daemon son compatibles solo si hablan la misma versión. La 2 (US-GRP-001) añade el estado de los worktrees a `RepoView`; la 3 (US-GRP-012), la rama base del repo y el ahead/behind de cada worktree.
 
 ## Handshake
 
@@ -97,7 +97,18 @@ Notificación `events.event` con `{ subscription, event }`. El evento lleva:
 
 - `head`: `branch {name}`, `unborn {name}` (rama sin commits) o `detached`. `status` también puede ser `{"state":"unavailable","reason":"missing"|"untrusted"|"unreadable"}`; la semántica de los estados especiales es de US-GRP-003.
 - Limpio = todos los `counts` a cero. `changes` está ordenado y acotado a 200 rutas y 32 KiB por worktree. Si un mensaje pasa de 768 KiB, se vacían las listas y se conservan los conteos.
-- Lo recalcula una reconciliación completa al añadir el repo y al arrancar el motor. Los cambios en vivo son de US-GRP-002; el ahead/behind, de US-GRP-012.
+- Lo recalcula una reconciliación completa al añadir el repo y al arrancar el motor. Los cambios en vivo son de US-GRP-002.
+
+## Rama base y ahead/behind (US-GRP-012)
+
+```json
+"base":{"name":{"untrusted":"main"},"status":"unconfirmed"}
+"divergence":{"state":"counted","ahead":{"count":3,"exact":true},"behind":{"count":1,"exact":true}}
+```
+
+- `RepoView.base`: la rama base confirmada del almacén por repo (`confirmed`) o, sin confirmación, `main` (`unconfirmed`). `invalid` (sin `name`) solo llega con la configuración del equipo de US-GRP-016. Añadir el repo nunca confirma nada (ADR-GRD-004 § 3.5).
+- `divergence` va dentro de `status` `ready`: `counted {ahead, behind}`, cada lado `{count, exact}` (`exact: false` si el recorrido llegó al tope de 10 000); `base-missing` (no existe `refs/heads/<base>`; no se usa ninguna otra ref, Q42); `no-base`; `no-commits`; o `unreadable`.
+- Se calcula en la reconciliación y otra vez en cada `engine.snapshot` de una conexión completa, con la punta de la base leída en ese momento y la rama de cada fila (DS-US-GRP-012 D5). Un `worktree.state` lleva el valor de su reconciliación hasta que US-GRP-002 lo publique en vivo.
 
 ## Texto no confiable y actor
 
