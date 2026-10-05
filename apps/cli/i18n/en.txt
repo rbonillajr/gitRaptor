@@ -1,0 +1,53 @@
+# User-facing messages of `raptor`, English (NFR-10, ADR-GRP-003).
+# One `key = text` per line. Placeholders are `{name}`; the code fills them
+# by name, never by concatenating. Every key exists in es.txt too.
+
+common.not-running = not running
+common.cancelled = cancelled
+common.confirm-needs-terminal = confirmation needs a terminal (or pass --yes)
+common.refused-terminal = refused: run it from your own terminal
+common.refused-unverified = refused: the engine could not verify who is asking
+
+daemon.stop.confirm = Stop the GitRaptor engine? Agent activity will not be observed until it starts again. [y/N]
+daemon.stop.refused-agent = refused: only the developer can stop the engine, not an agent or a process started by one
+daemon.stopped = stopped (pid {pid})
+daemon.stop.timeout = pid {pid} did not stop within 10 s
+daemon.status.engine = engine: {state} (pid {pid}, protocol {protocol})
+daemon.status.git = git: {version}
+daemon.status.git-missing = git: not found
+
+repo.refused-agent = refused: only the developer can change the observed repos, not an agent or a process started by one
+repo.added = observing {path}
+repo.already-observed = already observed: {path}
+repo.reactivated = observing {path} again
+repo.not-a-repo = {path} is not a Git repository
+repo.untrusted = {path} is not trusted by Git (safe.directory)
+repo.unreadable = {path} could not be read
+repo.unknown = {path} is not an observed repo
+repo.retired = no longer observing {path}
+repo.not-observed = {path} was not being observed
+
+status.none = no observed repos
+status.repo = {path}
+status.repo-unavailable = {path} (unavailable)
+status.worktree-main = main worktree {path}
+status.worktree-linked = worktree {path}
+status.branch = branch {name}
+status.unborn = branch {name} (no commits yet)
+status.detached = detached HEAD
+status.clean = no changes
+status.changes = {total} uncommitted changes: {staged} staged, {unstaged} not staged, {untracked} untracked
+status.change-staged = staged {kind} {path}
+status.change-unstaged = not staged {kind} {path}
+status.change-untracked = untracked {path}
+status.truncated = … and {more} more
+status.lists-dropped = file lists omitted: too many changes to send
+status.wt-missing = unavailable: folder not found
+status.wt-untrusted = unavailable: not trusted by Git (safe.directory)
+status.wt-unreadable = unavailable: could not be read
+
+kind.added = added
+kind.deleted = deleted
+kind.modified = modified
+kind.type-changed = type changed
+kind.conflicted = conflicted
