@@ -157,3 +157,70 @@ Todas son **decisiones del orquestador (2026-10-05)**, validadas por el Arquitec
 - **Rendimiento**: cada lectura toma una snapshot de Toolhelp, y un recorrido de hasta 64 niveles puede tomar 64. Hay que medirlo contra ADR-GRP-011 antes de optimizar.
 - **C-01 en Unix**: el mismo hueco (un "sin atribuir" con la cadena rota o un intérprete puede deshacer trabajo "sin atribuir") existe en macOS y Linux. Allí lo mitiga la confirmación de lo ajeno, pero no lo de "sin atribuir". Queda propuesto para revisión, fuera del alcance de esta rama.
 - `cargo-deny` sigue sin configurarse; `windows-sys` queda fijado por `Cargo.lock`.
+
+## 7. Enmienda (2026-10-05): N1 a N7 de ADR-CKP-003 § 4 (protocolo 6)
+
+Aplica la enmienda **E6** de [ADR-CKP-003](../../../../architecture/decisions/ADR-CKP-003-arquitectura-tui.md): lo que el esqueleto de la TUI (INF-CKP-001, hito M1) necesita del canal. No cambia las decisiones D1 a D21. Todas son **Decisión del orquestador (2026-10-05), validada por el Arquitecto**.
+
+### 7.1 Decisiones
+
+| # | Decisión | Nota |
+|---|---|---|
+| E-D1 | **Protocolo 6** (`API_VERSION` 6.0.0; el 5 lo tomó US-GRP-007) con **ventana de compatibilidad**: el daemon acepta clientes de `MIN_COMPATIBLE_PROTOCOL = 5` a `6` y la conexión recuerda el protocolo negociado. Una conexión 5 no ve lo nuevo: `HelloResult` sin `requester`, `methods` sin los métodos de la 6 (le responden `-32601`) y el resto del cable sin cambios. Un cliente 6 ante un daemon 5 recibe `-32002` y lo reemplaza, como hasta ahora (D8, SEC-13). Motivo: un `raptor-mcp` de larga vida bajo Claude Code sobrevive a una actualización | `MethodSpec.since`; `ChannelConfig.min_protocol` configurable para las pruebas |
+| E-D2 | **Ámbitos (N1, N2)**: `Scope` = `{"scope":"global"}` o `{"scope":"repo","repo_id":…}`. Cada tipo de evento declara su ámbito en el registro (`EventScope`). El bus asigna, bajo el mismo lock que la secuencia global, una **secuencia contigua por ámbito** (`scope_seq`). Globales: `engine.state`, `daemon.stopping`, `reserved.audit`, `repo.observation`, `repo.attention`. Del repo: `worktree.state`, `git.event`, `operation.*` y los declarados por historias (su `data` lleva `repo_id`) | `engine.snapshot` y `events.subscribe` siguen igual |
+| E-D3 | `scope.snapshot { scope }` → global `{run_id, scope_seq, engine, daemon, autostart, repos: [RepoSummaryView]}` o repo `{run_id, scope_seq, repo: RepoView}`, leídos bajo el lock con el que se publica. La de repo recuenta el ahead/behind y respeta el presupuesto de mensaje, como `engine.snapshot`. Repo desconocido: `-32009` | — |
+| E-D4 | `scope.subscribe { scope, from_seq?, run_id? }` → `{subscription, scope, from_seq}`; notificaciones `scope.event { subscription, scope, scope_seq, event }`. Mismo buffer de reproducción (1024); el bus guarda por ámbito la última `scope_seq` expulsada. Si `from_seq` ya salió o el `run_id` es otro: **`scope.resync { scope, reason }`** y `-32007`. `events.unsubscribe` vale para las dos clases | El cliente lento sigue siendo de conexión (`events.resync`, `slow-consumer`) y vale para todos sus ámbitos |
+| E-D5 | **N3**: `RepoSummaryView { repo_id, state, path, attention }`, `attention = { conflicts, denials, gaps }`, cada uno `counted {count}` o `unavailable {reason: not-published}`. Hoy los tres son `unavailable` (predictor TS-CKP-001, Guardrails, US-GRP-005); el evento global `repo.attention` queda declarado con su tipo, sin emisor. `autostart`: `registered`, `not-registered` o `unknown`; hoy `unknown` (registro de US-GRP-004) | BR-CKP-CALC-001: lo no publicado es "no disponible", nunca cero |
+| E-D6 | **N4**: `repo.locate { path }` → `{ repo_id, worktree }`. Validación léxica antes de tocar el FS (SEC-02), luego canonicalizar y elegir el worktree observado que la contiene (la raíz más larga). Fuera o inexistente: `-32009`. No reservado; fuera del MCP (devuelve rutas) | — |
+| E-D7 | **N5**: `HelloResult.requester` (protocolo 6, perfil completo, cliente `cli`) = `resolved {actor, layer, confirmable}` o `unverified`. Misma resolución que `requester.resolve` y misma capa del ejecutor (ADR-CKP-002 § 4). Solo UX: el daemon re-resuelve en cada petición | No se resuelve para `other` ni `mcp` (el cliente de hooks no paga el recorrido) |
+| E-D8 | **N6**: `Untrusted<const MAX>` con dos clases: `Untrusted` (rutas, 4096 bytes) y `UntrustedName` (ramas, nombres de worktree y de agente, 1024 bytes). Mismo cable; el JSON Schema lleva `maxLength` y **el decodificador impone el tope** (recorta y marca `truncated`), también en el cliente | Compatible con la 5 |
+| E-D9 | **N7**: `StoppingData.cause` pasa a enum (mismas cadenas); `rpc::ErrorCode` enumera todos los códigos (`ALL`, `from_code`); los errores que solo traían texto llevan `data.reason` tipado (`-32602` por ruta: `InvalidReason`; `-32010`: `ScopeRefusal`); lo nuevo de N1 a N5 es solo enums. Un cliente presenta `code` y `data`, nunca `message` | El catálogo en/es de la CLI tiene una clave por variante nueva, con prueba |
+| E-D10 | **L-06**: la comprobación del par vive en la biblioteca cliente (`channel::transport::connect`): además del uid del servidor, la carpeta del socket debe ser una carpeta real (no un enlace simbólico) del usuario y en 0700, comprobada con `fsperm::verify_private_dir` antes del `connect`, con ruta corta o larga. Si no, `ClientError::ChannelRejected` sin enviar nada | Arquitecto (A1): la biblioteca cliente vive hoy en `crates/core` (`client.rs`, `channel::transport`, `channel::peer`), y ADR-CKP-003 § 5 y V5 prohíben que la TUI importe `gitraptor_core`. **Pendiente, dueño: INF-CKP-001**: sacar el cliente de `crates/core` (a `crates/api` o detrás de una fachada) antes de que la TUI lo use |
+| E-D11 | **CLI**: `raptor daemon status` muestra "actúas como" con la capa y el autoarranque, en en/es | El resto de presentación es de INF-CKP-001 |
+| E-D12 | **N8 a N11 (Should)**: N11 ya lo cubre TS-CKP-002 (huella del plan y revalidación). N8, N9 y N10 quedan pendientes para la historia que los use | — |
+
+**Ajustes del Arquitecto incorporados** (revisión del 2026-10-05):
+
+- **A1** (frontera V5): ver E-D10.
+- **A2** (repo que deja de observarse): con `repo.observation { observed: false }`, las suscripciones de ese repo reciben `scope.resync { reason: scope-closed }` y terminan. Su `scope_seq` no se reinicia dentro del mismo `run_id`, así que un `from_seq` viejo nunca reproduce eventos que no son. **Desvío razonado**: el suelo del ámbito se conserva en lugar de borrarse. Sin el suelo, un `from_seq` antiguo de un repo vuelto a añadir podría pedir eventos ya expulsados del buffer y no recibir el `resync`. El coste es una entrada por repo observado en la ejecución.
+- **A3**: `scope.snapshot`, `scope.subscribe` y `repo.locate` no se ofrecen al perfil `mcp` (llevan rutas, SEC-12): no aparecen en `hello.methods` y responden `-32601`. Las suscripciones por ámbito cuentan dentro del límite de 4 por conexión y comparten espacio de ids con `events.subscribe`.
+- **A4**: prueba de un cliente 5, ya en `Ready`, que intenta `daemon.replace`. Se rechaza con `-32602` y el daemon sigue en marcha.
+- **Opcionales adoptados**: `HelloResult.protocol` lleva el protocolo **negociado**. El `data.reason` de `-32602` y `-32010` es aditivo: un cliente 5 lo tolera porque `ErrorObject.data` es un `Value` genérico. La TUI no avisa de "sin autoarranque" cuando el valor es `unknown` (nota para INF-CKP-001). Si llega `-32012`, el cliente vuelve a llamar a `requester.resolve`.
+- **Opcionales no adoptados, anotados**:
+  - `since` en `EventKind`: hoy ninguna conexión 5 recibe un tipo nuevo, porque `repo.attention` no tiene emisor. Lo añade quien emita el primer tipo nuevo.
+  - Plazo o filtro previo para `canonicalize` en volúmenes de red: riesgo anotado.
+  - `ErrorCode::Other`: un código desconocido devuelve `None` y la CLI muestra el `message` saneado.
+  - `ScopeRefusal` tipado: no añade información. Antes ya viajaba el mismo motivo como texto en `message`, y no distingue "observado pero fuera de la allowlist" de algo que el agente no supiera ya (ADR-MCP-001 § 5).
+
+### 7.2 Plan de pruebas (criterio → test)
+
+Daemon y cliente reales sobre perfiles y repos temporales del testkit (NFR-01). Sin esperas fijas: cada prueba espera la notificación o respuesta que demuestra el hecho, con un plazo solo como techo.
+
+| Criterio | Test (`crates/core/tests/channel_scopes.rs` salvo indicación) |
+|---|---|
+| N1 global | `global_snapshot_then_subscribe_is_gapless` |
+| N1 repo, con un cambio real | `repo_snapshot_then_subscribe_sees_a_real_change_without_gaps` |
+| N2 contigua por ámbito | `each_scope_has_its_own_contiguous_sequence` |
+| N2 `scope.resync` con causa | `a_lost_replay_or_another_run_gets_a_scoped_resync` |
+| N2 cliente lento | `bus::tests::slow_subscriber_is_dropped_without_blocking`, `bus::tests::scoped_subscriber_that_does_not_read_gets_a_connection_resync` |
+| N2 suelo por ámbito | `bus::tests::scope_sequences_are_contiguous_and_replay_has_a_floor` |
+| N2 repo retirado (A2) | `a_retired_repo_closes_its_scope` |
+| N3 | `global_snapshot_has_attention_and_autostart` |
+| N4 | `repo_locate_finds_the_observed_worktree`, `repo_locate_refuses_what_is_not_observed` |
+| N5 | `hello_says_who_the_caller_is` |
+| N6 | `untrusted::tests::decoder_enforces_the_field_bound`, `schema_declares_each_bound` |
+| N7 | `rpc::tests::every_code_is_enumerated`, `rpc::tests::typed_reasons_round_trip`, `messages::tests::stop_cause_is_a_code`, `conn::tests::invalid_path_and_scope_have_typed_reasons`, `event::tests::every_kind_has_a_scope` |
+| N7 i18n | `apps/cli` `codes::tests::every_contract_code_has_both_messages`, `codes::tests::requester_and_autostart_are_presented_from_codes` |
+| Compatibilidad 5 ↔ 6 | `a_protocol_4_client_still_works_with_a_protocol_5_daemon`, `an_older_client_cannot_replace_a_newer_daemon` (A4), `channel::a_newer_installed_binary_replaces_an_older_daemon`, `channel::a_newer_daemon_tells_an_old_client_to_update` (cliente por debajo de la ventana), `methods::tests::protocol_5_methods_are_new_and_not_for_mcp` |
+| MCP sin lo nuevo (SEC-12) | `mcp_connections_do_not_get_scopes_or_locate` |
+| L-06 | `a_client_refuses_an_open_socket_folder` |
+| Repo intacto | `scopes_and_locate_leave_the_repo_intact` (huella del testkit) |
+| CLI | `apps/cli/tests/channel_process.rs::daemon_status_says_who_you_act_as` |
+
+**Verificación (2026-10-05, macOS)**: `cargo clippy --workspace --all-targets -- -D warnings` y `cargo test --workspace` en verde; `channel_scopes` cinco veces seguidas sin fallos.
+
+### 7.3 Pendientes de la enmienda
+
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma*. Las pruebas de `channel_scopes` son solo de macOS, como las de `channel.rs`. En Windows el canal sigue sin transporte (fail-closed). El clippy cruzado a `x86_64-pc-windows-msvc` no se pudo correr en este Mac (falta el compilador C de `libsqlite3-sys`); lo cubre el CI.
+- **INF-CKP-001**: sacar la biblioteca cliente de `crates/core` (A1, V5).
+- N8, N9, N10; emisores de `repo.attention`; `autostart` real (US-GRP-004).
