@@ -84,6 +84,8 @@ pub(crate) struct ServerCtx {
     pub time_machine: Option<super::TimeMachineWiring>,
     /// Ahead/behind counts the snapshots already walked (US-GRP-012).
     pub divergence: crate::observe::DivergenceCache,
+    /// Protected repos for `guard.evaluate` (US-GRD-001).
+    pub guard: Arc<crate::guardrails::GuardRegistry>,
 }
 
 impl ServerCtx {
@@ -143,6 +145,7 @@ pub(crate) struct ServeArgs {
     pub daemon: DaemonView,
     pub protected: Option<ProtectedWiring>,
     pub time_machine: Option<super::TimeMachineWiring>,
+    pub guard: Arc<crate::guardrails::GuardRegistry>,
 }
 
 impl Server {
@@ -180,6 +183,7 @@ impl Server {
             protected: args.protected,
             time_machine: args.time_machine,
             divergence: crate::observe::DivergenceCache::default(),
+            guard: args.guard,
         });
         let listener = bound.listener;
         let socket = socket_id(&transport::socket_path(&ctx.runtime));
