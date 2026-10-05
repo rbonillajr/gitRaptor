@@ -229,3 +229,13 @@ Con esto:
 - Cierre (ronda 3): la secuencia de D9 queda resuelta por Q-GRD-21 y Q-GRD-23 (§ 3.5 y § 5); se retira el punto pendiente.
 - Corrección tras el Judge: D5 solo en la confirmación explícita de US-GRD-014; unión de `base-unconfirmed` en dos fases (§ 3.5, § 5, Validación 10); las notas "pendiente para el PO" pasan a Q-GRD-20 y Q-GRD-21; `floor-relax-pending` se llama diagnóstico.
 - Judge de la rama del PO: adoptar una huérfana no confirma la rama base ni el suelo (`base-unconfirmed` hasta la confirmación explícita); sin confirmación inicial el motor muestra "no confirmada", y "pendiente" queda solo para `base-change-pending`.
+
+## Enmienda (2026-10-04, ADR-GRD-008: trinquete de los niveles personales)
+
+Aplicada desde la tabla de enmiendas de [ADR-GRD-008](./ADR-GRD-008-factor-autenticacion-fuera-de-banda.md) (OQ-GRD-008-8, Q-GRD-32). Es **Decisión del orquestador (2026-10-04), validada por Arquitecto/PO**. Requisito antes de la Dev Spec de US-GRD-013. El `status` sigue en `accepted`.
+
+- **§ 2, niveles perfil y local**: siguen siendo "solo endurecer", y además llevan la regla de D7 (§ 4). El daemon guarda en el almacén del perfil el **resumen confirmado** de cada nivel personal, para los valores en los que los personales solo endurecen (permisos, ramas protegidas, tamaño de diff, rutas prohibidas, plazo de la cola).
+- **Endurecer** (con el comando o a mano) rige al instante y adelanta el confirmado.
+- **Quitar un endurecimiento** frente al confirmado no rige: rige la combinación más restrictiva, con el diagnóstico `personal-relax-pending` (valor anterior, nuevo y archivo de origen), hasta que el humano lo confirma con el factor de ADR-GRD-008. Sin factor no rige; la vía de escape es desinstalar (D5) y reinstalar, y la confirmación inicial explícita (US-GRD-014, § 3.5) compara contra el registro confirmado, que sobrevive a la desinstalación. Sin registro (perfil perdido), se adopta el archivo, nunca por debajo del suelo, y se audita.
+- **Worktree**: sin cambios; quitar un endurecimiento del worktree no está protegido por diseño.
+- **Riesgo residual**: el registro confirmado vive en un almacén que el usuario puede escribir; con el daemon en marcha manda la copia en memoria, y forjarlo y matar el daemon deja un hueco auditado (clase H-04).

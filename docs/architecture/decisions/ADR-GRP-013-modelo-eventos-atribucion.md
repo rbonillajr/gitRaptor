@@ -180,3 +180,11 @@ Derivada de la Enmienda de ADR-GRP-010 con los resultados de [SPIKE-GRP-002](../
 | Cambio | Dónde | Fuente |
 |---|---|---|
 | Causas de hueco nuevas: desbordamiento de la cola del watcher, recreación del stream del watcher y reconciliación periódica, con su intervalo | § 1 (Hueco), § 5 | ADR-GRP-010 § 5 y § 6; decisión del orquestador (2026-10-04), validada por el Arquitecto |
+
+## Enmienda (2026-10-04, ADR-GRD-008)
+
+Aplicada desde la tabla de enmiendas de [ADR-GRD-008](./ADR-GRD-008-factor-autenticacion-fuera-de-banda.md). No cambia el modelo de eventos, sesiones ni atribución. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| La auditoría de los comandos reservados incluye cada intento del factor del SO: acción, resumen del plan, método, resultado (`verified`, `denied`, `cancelled`, `timeout`, `unavailable`, `busy`, `throttled`, `stale`, `precheck-denied`), tipo de autenticación si el SO lo informa y los momentos de petición, resultado, cierre de la ventana y aplicación. Nunca el nonce ni secretos | § 1 (registro de auditoría) | ADR-GRD-008 § 4 |
