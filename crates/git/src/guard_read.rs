@@ -83,4 +83,13 @@ impl RepoReader {
             .boolean("core.ignoreCase")
             .unwrap_or(false)
     }
+
+    /// `core.hooksPath` as the repo's own configuration says (no global or system level when
+    /// opened isolated): whether the activation key is still the one the journal recorded.
+    pub fn hooks_path(&self) -> Option<String> {
+        self.repo
+            .config_snapshot()
+            .string("core.hooksPath")
+            .map(|v| v.to_string())
+    }
 }
