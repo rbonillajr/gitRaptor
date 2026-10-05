@@ -299,6 +299,8 @@ pub struct Daemon {
     observer: Option<Observer>,
     /// The session detector (US-GRP-007), started with the observer.
     detector: Option<crate::detect::Detector>,
+    /// The engine's own consumption (US-GRP-017).
+    resources: Arc<crate::resources::ResourceMonitor>,
     /// Ahead/behind already counted for observed changes (US-GRP-012).
     divergence_cache: observe::DivergenceCache,
     /// Periodic reconciliations that found differences: a value above 0 in
@@ -515,6 +517,7 @@ impl Daemon {
             None => fields.push(("git", "not-found".into())),
         }
         let (handle, control_rx) = ShutdownHandle::new();
+        let config_dirs = config.dirs.clone();
         let mut daemon = Self {
             config,
             lock,
@@ -529,6 +532,11 @@ impl Daemon {
             bus,
             observer: None,
             detector: None,
+            resources: Arc::new(crate::resources::ResourceMonitor::new(
+                crate::resources::ResourceConfig::from_env(),
+                config_dirs,
+                Arc::default(),
+            )),
             divergence_cache: observe::DivergenceCache::default(),
             periodic_diffs: 0,
             started_ms: now_ms(),
@@ -623,6 +631,7 @@ impl Daemon {
     /// Starts serving the channel, then runs until a stop request arrives
     /// and stops in order.
     pub fn run(mut self) -> StopReport {
+        self.resources.start();
         self.serve_channel();
         let mut next_beat = Instant::now() + self.config.heartbeat;
         loop {
@@ -696,6 +705,7 @@ impl Daemon {
             },
             protected: self.protected_wiring(),
             time_machine: Some(self.time_machine_wiring()),
+            resources: Arc::clone(&self.resources),
         };
         match crate::channel::Server::serve(bound, args) {
             Ok(server) => {
@@ -768,6 +778,7 @@ impl Daemon {
         if let Some(mut server) = self.server.take() {
             server.shutdown();
         }
+        self.resources.stop();
         let stopped_ms = now_ms();
         let marks_ok = self.persist_observed_until(stopped_ms);
         let recorded = marks_ok
@@ -1054,14 +1065,16 @@ impl Daemon {
     /// batches come back to this loop as [`Control::Observed`].
     fn observe(&mut self, repo_id: &str, common_dir: &std::path::Path, read: &RepoRead) {
         let hooks = self.detector_hooks();
+        let roots = self.resources.roots_counter();
         let observer = self.observer.get_or_insert_with(|| {
             let handle = self.handle.clone();
-            Observer::start_with_hooks(
+            Observer::start_counted(
                 WatchConfig::default(),
                 Arc::new(move |batch| {
                     handle.observed(batch);
                 }),
                 Some(hooks),
+                roots,
             )
         });
         observer.watch_repo(repo_id, common_dir, read);

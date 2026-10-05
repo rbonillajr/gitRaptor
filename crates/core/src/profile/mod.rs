@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 pub use dirs::{APP_DIR, PROFILE_DIR_ENV, ProfileDirs};
 pub use error::{ProfileError, Result};
 pub use fsperm::{create_private_file, set_restrictive_umask};
-pub use index::{AddOutcome, AuditRow, DaemonRun, RepoEntry, RepoState};
+pub use index::{AddOutcome, AuditRow, DaemonRun, RepoEntry, RepoState, read_only_repos};
 pub use repo_key::{NormalizedPath, normalize_common_dir, validate_input_path};
 pub use store::{
     Agent, AgentKind, AttributionRecord, Author, BatchResult, EndCause, Event, Gap, GapCause,
