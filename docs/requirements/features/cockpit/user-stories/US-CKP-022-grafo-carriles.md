@@ -15,6 +15,7 @@ related:
   stories:
     - US-CKP-001
     - US-CKP-005
+    - US-CKP-012
 tags:
   - cockpit
   - grafo
@@ -35,7 +36,7 @@ BR-CKP-CALC-004 · BR-CKP-EDGE-001 (sin carriles) · BR-CKP-EDGE-005 (el grafo c
 
 ## Dependencias
 
-- **Historias**: US-CKP-001; US-CKP-005 (reparto del espacio).
+- **Historias**: US-CKP-001; US-CKP-005 (reparto del espacio); US-CKP-012 (fija las consultas bajo demanda, N8).
 - **Huecos del motor**: DEP-CKP-2 (consulta de commits base..rama). Actor por commit solo si el motor publica commit→evento (opcional).
 
 ## Criterios de Aceptación

@@ -14,6 +14,7 @@ related:
     - BR-CKP-001
   stories:
     - US-CKP-014
+    - US-GRP-016
 tags:
   - cockpit
   - acciones-por-agente
@@ -32,11 +33,11 @@ tags:
 
 ## Reglas cubiertas
 
-BR-CKP-ELIG-003 · BR-CKP-ELIG-001 (columna rebase) · BR-CKP-EDGE-004 (sesión más restrictiva) · BR-CKP-WF-005 (rebase desactivado) — ver [business-rules.md](../business-rules.md)
+BR-CKP-ELIG-003 · BR-CKP-ELIG-001 (columna rebase) · BR-CKP-EDGE-004 (sesión más restrictiva) · BR-CKP-AUTH-003 (confirmación del plan en el camino feliz) · BR-CKP-WF-005 (rebase desactivado) — ver [business-rules.md](../business-rules.md)
 
 ## Dependencias
 
-- **Historias**: US-CKP-014 (flujo de escritura).
+- **Historias**: US-CKP-014 (flujo de escritura); US-GRP-016 (base pendiente publicada).
 - **Técnicas**: TS-CKP-002, TS-CKP-003.
 
 ## Criterios de Aceptación
@@ -44,7 +45,7 @@ BR-CKP-ELIG-003 · BR-CKP-ELIG-001 (columna rebase) · BR-CKP-EDGE-004 (sesión 
 **Escenario: Rebase de una rama terminada y Deshacer**
 
 Dado "claude-3" Terminado en "feat-login", working tree limpio, y "main" con 2 commits nuevos
-Cuando el desarrollador rebasa "feat-login"
+Cuando el desarrollador pide rebasar "feat-login" y confirma el plan "reescribir 4 commits de claude-3 sobre main"
 Entonces "feat-login" queda sobre el último commit de "main", con snapshot previo y Deshacer disponible
   Y al deshacer, "feat-login" vuelve a su commit anterior
 
@@ -65,6 +66,12 @@ Entonces "Rebasar" sigue desactivado por "claude-2"
 Dado "feat-login" con un archivo sin commitear y su sesión Terminado
 Cuando el desarrollador selecciona "feat-login"
 Entonces "Rebasar" aparece desactivado con "hay cambios sin commitear"
+
+**Escenario: Base pendiente, rebase desactivado**
+
+Dado la rama base pendiente de confirmar y "claude-3" Terminado en "feat-login"
+Cuando el desarrollador selecciona "feat-login"
+Entonces "Rebasar" aparece desactivado con "confirma la rama base" y cómo confirmarla
 
 **Escenario: Con ⚡ contra la base, aviso y confirmación**
 

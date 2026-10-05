@@ -33,7 +33,7 @@ tags:
 
 ## Reglas cubiertas
 
-BR-CKP-ELIG-004 · BR-CKP-EDGE-008 · BR-CKP-ELIG-001 (columna descartar) · BR-CKP-EDGE-002 (HEAD separado) — ver [business-rules.md](../business-rules.md)
+BR-CKP-ELIG-004 · BR-CKP-EDGE-008 · BR-CKP-AUTH-003 (confirmación del plan con trabajo de un agente) · BR-CKP-ELIG-001 (columna descartar) · BR-CKP-EDGE-002 (HEAD separado) — ver [business-rules.md](../business-rules.md)
 
 ## Dependencias
 
@@ -46,25 +46,26 @@ BR-CKP-ELIG-004 · BR-CKP-EDGE-008 · BR-CKP-ELIG-001 (columna descartar) · BR-
 
 Dado "feat-old" integrado en "main", sin cambios y sin sesión presente
 Cuando el desarrollador descarta "feat-old"
-Entonces el worktree y la rama "feat-old" se borran sin confirmación y la TUI ofrece Deshacer
+Entonces el worktree y la rama "feat-old" se borran sin confirmación, porque no afecta trabajo de nadie, y la TUI ofrece Deshacer
   Y al deshacer, worktree y rama vuelven con su contenido
 
 **Escenario: Trabajo sin integrar, confirmación con default No**
 
-Dado "feat-wip" con 2 commits no integrados
+Dado "feat-wip" con 2 commits no integrados de "claude-2", su sesión Terminado
 Cuando el desarrollador pide descartar "feat-wip" y responde con Intro
-Entonces la TUI pidió confirmar "Se perderán 2 commits sin integrar (recuperables con Deshacer)" y no se borra nada
+Entonces la TUI pidió confirmar, en un solo aviso, el plan "borrar worktree feat-wip y rama feat-wip" y "Se perderán 2 commits sin integrar de claude-2 (recuperables con Deshacer)"
+  Y no se borra nada
 
 **Escenario: Lo que el snapshot no guarda se nombra antes**
 
-Dado "feat-wip" con ".env.local" y "node_modules/" ignorados
+Dado "feat-wip" con ".env.local" y "node_modules/" ignorados y un repo anidado sin seguimiento en "vendor/lib"
 Cuando el desarrollador pide descartar "feat-wip"
-Entonces la confirmación es obligatoria y lista ".env.local" y "node_modules/" como no recuperables
+Entonces la confirmación es obligatoria y lista ".env.local", "node_modules/" y "vendor/lib" como no recuperables
   Y tras descartar, Deshacer recupera todo salvo lo listado
 
 **Escenario: No se ofrece donde no procede**
 
-Dado el worktree principal, un worktree en la rama base, uno con "claude-2" Inactivo y uno bloqueado con `git worktree lock`
+Dado el worktree principal, un worktree en la rama base, uno en una rama protegida, uno con "claude-2" Inactivo y uno bloqueado con `git worktree lock`
 Cuando el desarrollador selecciona cada uno
 Entonces "Descartar" aparece desactivado con su motivo, y el bloqueado nunca se desbloquea en su nombre
 

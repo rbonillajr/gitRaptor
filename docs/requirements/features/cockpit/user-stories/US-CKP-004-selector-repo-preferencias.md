@@ -37,6 +37,7 @@ BR-CKP-CONS-006 — ver [business-rules.md](../business-rules.md)
 ## Dependencias
 
 - **Historias**: US-CKP-001; US-CKP-002 (filtro "ver terminadas").
+- **Contrato que fija**: lectura y escritura de preferencias (N9 de ADR-CKP-003); lo reutilizan US-CKP-013 y US-CKP-010.
 - **Huecos del motor**: DEP-CKP-11 (el daemon guarda las preferencias en el perfil; la TUI no lo abre).
 
 ## Criterios de Aceptación
@@ -65,6 +66,18 @@ Dado el filtro "ver terminadas" activo en "shop"
 Cuando el desarrollador cierra la TUI y la vuelve a abrir
 Entonces el filtro sigue activo
   Y ningún archivo del repo "shop" cambió
+
+**Escenario: Una TUI lanzada por un agente no guarda preferencias**
+
+Dado la TUI abierta desde el terminal de "claude-1"
+Cuando el desarrollador cambia un filtro y cierra la TUI
+Entonces las preferencias guardadas no cambian y la TUI lo dijo una vez
+
+**Escenario: Un filtro nunca oculta las alertas**
+
+Dado un filtro que oculta las filas con sesión Terminado
+Cuando una de esas filas tiene ⚡
+Entonces la cabecera sigue contando ese ⚡
 
 ## Requisitos Técnicos
 

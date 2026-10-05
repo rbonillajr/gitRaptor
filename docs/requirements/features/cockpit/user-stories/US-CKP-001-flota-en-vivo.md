@@ -66,10 +66,10 @@ Entonces el actor se presenta "Tú u otro (sin atribuir)"
 
 **Escenario: Un campo que el motor no publica no se calcula en la TUI**
 
-Dado que el motor todavía no publica la última actividad del worktree
+Dado el daemon ya en marcha y el motor sin publicar la última actividad del worktree
 Cuando el desarrollador abre la TUI
 Entonces la columna de última actividad dice "no disponible"
-  Y el proceso de la TUI no ejecuta Git ni abre el perfil (auditoría de procesos de INF-GRP-001)
+  Y el proceso de la TUI no lanza Git (auditoría de procesos de INF-GRP-001 limitada a su PID) ni abre el perfil (V5 y V6 de ADR-CKP-003)
 
 **Escenario: Texto no confiable no altera la terminal**
 

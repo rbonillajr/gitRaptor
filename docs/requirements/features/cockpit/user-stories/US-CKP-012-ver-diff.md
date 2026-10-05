@@ -37,6 +37,7 @@ BR-CKP-CALC-005 · BR-CKP-ELIG-006 (ver diff) · BR-CKP-EDGE-004 (diff sin atrib
 
 - **Historias**: US-CKP-001.
 - **Huecos del motor**: DEP-CKP-3 (diff bajo demanda publicado por el daemon).
+- **Contrato que fija**: las consultas bajo demanda de la TUI (N8 de ADR-CKP-003: id de petición, cancelación y topes); lo reutilizan US-CKP-021 y US-CKP-022.
 - **Transversal**: que el diff nunca sale por el MCP se verifica con F-001-05.
 
 ## Criterios de Aceptación

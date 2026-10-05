@@ -15,6 +15,7 @@ related:
   stories:
     - US-CKP-006
     - US-GRD-014
+    - US-GRP-016
 tags:
   - cockpit
   - prediccion-conflictos
@@ -36,7 +37,7 @@ BR-CKP-WF-005 (parte de predicción; la parte de acciones desactivadas se verifi
 
 ## Dependencias
 
-- **Historias**: US-CKP-006; US-GRD-014 (confirmación de la rama base).
+- **Historias**: US-CKP-006; US-GRP-016 (base pendiente publicada); US-GRD-014 (confirmación de la rama base). Confirmar la base es una acción reservada, no una operación del catálogo: en esta historia se hace con la CLI; ofrecerla desde la TUI reutilizará el comando reservado que fija US-CKP-019.
 
 ## Criterios de Aceptación
 
@@ -44,13 +45,13 @@ BR-CKP-WF-005 (parte de predicción; la parte de acciones desactivadas se verifi
 
 Dado la base del equipo cambiada de "main" a "develop" y aún sin confirmar
 Cuando el desarrollador mira la predicción
-Entonces los pares contra la base dicen "pendiente" y la vista muestra "Rama base pendiente de confirmar (main → develop)" con la acción para confirmarla
+Entonces los pares contra la base dicen "pendiente" y la vista muestra "Rama base pendiente de confirmar (main → develop)" con el comando para confirmarla
   Y el ⚡ entre "claude-1" y "claude-2" sigue visible
 
 **Escenario: Al confirmar, los pares contra la base se calculan**
 
 Dado la base pendiente "develop"
-Cuando el desarrollador la confirma
+Cuando el desarrollador la confirma con la CLI
 Entonces los pares contra "develop" pasan a "calculando" y después muestran su resultado
 
 **Escenario: Base que no existe en el repo**

@@ -14,9 +14,9 @@ related:
     - BR-CKP-001
   stories:
     - US-CKP-001
-    - US-CKP-006
     - US-TMC-001
     - US-TMC-002
+    - US-GRP-016
 tags:
   - cockpit
   - acciones-por-agente
@@ -32,37 +32,34 @@ tags:
 
 **Como** desarrollador orquestador, **quiero** integrar en local la rama de un agente en la base confirmada desde su fila, con snapshot previo y Deshacer, **para** integrar rápido sin miedo a perder trabajo.
 
-**Valor**: BR-07 (Must); KPI "−30 % de tiempo de integración". Esqueleto de toda acción de escritura del Cockpit.
+**Valor**: BR-07 (Must); KPI "−30 % de tiempo de integración". Esqueleto de toda acción de escritura del Cockpit: fija el flujo preparar → confirmar el plan → ejecutar → Deshacer que reutilizan 015, 017, 018 y 024.
 
 ## Reglas cubiertas
 
-BR-CKP-WF-002 · BR-CKP-ELIG-002 · BR-CKP-ELIG-001 (columna merge) · BR-CKP-CONS-002 · BR-CKP-CONS-004 · BR-CKP-EDGE-009 · BR-CKP-WF-005 (merge desactivado) — ver [business-rules.md](../business-rules.md)
+BR-CKP-WF-002 · BR-CKP-ELIG-002 · BR-CKP-ELIG-001 (columna merge) · BR-CKP-CONS-002 · BR-CKP-AUTH-003 (confirmación del plan en el camino feliz) · BR-CKP-WF-005 (merge desactivado) — ver [business-rules.md](../business-rules.md). Los casos límite del merge están en US-CKP-024.
 
 ## Dependencias
 
-- **Historias**: US-CKP-001; US-TMC-001 (snapshot previo) y US-TMC-002 (Deshacer); US-CKP-006 para el aviso por ⚡ (sin ella, ese escenario se verifica después).
-- **Técnicas**: TS-CKP-002 (catálogo y ejecutor), TS-CKP-003 (capa `cockpit` de Guardrails), TS-TMC-004 (operación protegida).
+- **Historias**: US-CKP-001; US-TMC-001 (snapshot previo) y US-TMC-002 (Deshacer); US-GRP-016 (base pendiente publicada).
+- **Técnicas**: TS-CKP-002 (catálogo y ejecutor), TS-CKP-003 (capa `cockpit` de Guardrails), TS-TMC-004 (operación protegida y reto ligado al plan).
+- **Contrato que fija**: el Deshacer desde la TUI (lo reutiliza US-CKP-021).
 
 ## Criterios de Aceptación
 
-**Escenario: Integrar y deshacer**
+**Escenario: Integrar el trabajo de un agente, confirmando el plan, y deshacer**
 
-Dado "main" confirmada y sacada en el worktree principal, limpio y sin sesión, y "feat-pagos" con "claude-1" Terminado
-Cuando el desarrollador integra "feat-pagos"
-Entonces se toma un snapshot previo, "feat-pagos" queda integrada en "main" y la TUI ofrece Deshacer
+Dado "main" confirmada y sacada en el worktree principal, limpio y sin sesión, y "feat-pagos" con commits de "claude-1", su sesión Terminado
+Cuando el desarrollador pide integrar "feat-pagos"
+Entonces la TUI muestra el plan "integrar feat-pagos (3 commits de claude-1) en main" y pide confirmarlo
+  Y tras confirmarlo se toma un snapshot previo, "feat-pagos" queda integrada en "main" y la TUI ofrece Deshacer
   Y al deshacer, "main" vuelve exactamente al commit anterior
 
 **Escenario: Agente activo, se integra hasta el commit visto**
 
 Dado "claude-1" Activo en "feat-pagos" con HEAD "a1b2c3"
-Cuando el desarrollador integra "feat-pagos" y confirma "se integra hasta el commit a1b2c3"
-Entonces "main" recibe los commits hasta "a1b2c3" y ninguno posterior
-
-**Escenario: Con ⚡ en el par, aviso y confirmación**
-
-Dado ⚡ entre "feat-pagos" y "main"
 Cuando el desarrollador pide integrar "feat-pagos"
-Entonces la TUI avisa del conflicto previsto y pide confirmación antes de ejecutar; si la rechaza, nada cambia
+Entonces el mismo aviso reúne "el agente sigue activo; se integra hasta el commit a1b2c3" y el plan
+  Y tras confirmarlo "main" recibe los commits hasta "a1b2c3" y ninguno posterior
 
 **Escenario: Destino con cambios, acción desactivada con motivo**
 
@@ -74,7 +71,7 @@ Entonces "Integrar" aparece desactivado con el motivo y la acción que lo desblo
 
 Dado la rama base pendiente de confirmar
 Cuando el desarrollador selecciona "feat-pagos"
-Entonces "Integrar" aparece desactivado con "confirma la rama base" y la acción para confirmarla
+Entonces "Integrar" aparece desactivado con "confirma la rama base" y cómo confirmarla
 
 **Escenario: Sin snapshot no hay merge**
 
@@ -88,22 +85,9 @@ Dado un remoto "origin" configurado
 Cuando el desarrollador integra "feat-pagos"
 Entonces las refs de "origin" no cambian y la TUI no ofrece push
 
-**Escenario: Dos TUIs a la vez, una sola ejecución**
-
-Dado dos TUIs abiertas en "shop"
-Cuando las dos piden integrar "feat-pagos" al mismo tiempo
-Entonces la primera se ejecuta y la segunda recibe "el estado cambió" sin modificar nada
-  Y las dos TUIs muestran la integración
-
-**Escenario: Ningún worktree tiene la base sacada**
-
-Dado ningún worktree con "main" sacada y "feat-pagos" no integrable con fast-forward
-Cuando el desarrollador pide integrar "feat-pagos"
-Entonces se rechaza con "no hay ningún worktree con main sacada" y la acción que lo resuelve
-
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto (Dev Spec). Catálogo y ejecutor: ADR-CKP-002._
+_Pendiente — lo completa el Arquitecto (Dev Spec). Catálogo y ejecutor: ADR-CKP-002 § 2-3._
 
 ## Diseño y Dev Spec
 

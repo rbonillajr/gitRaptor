@@ -36,7 +36,7 @@ BR-CKP-CONS-005 — ver [business-rules.md](../business-rules.md)
 ## Dependencias
 
 - **Historias**: US-CKP-006; US-CKP-016 para los conflictos de merges lanzados desde el Cockpit (los de Git directo no la necesitan).
-- **Técnicas**: TS-CKP-001. **Huecos del motor**: DEP-CKP-11 (el daemon escribe el registro en el perfil) y DEP-CKP-14 (estado en conflicto publicado).
+- **Técnicas**: TS-CKP-001. Escritura en el perfil vía daemon: reutiliza el contrato de US-CKP-004 (N9). **Huecos del motor**: DEP-CKP-11 (el daemon escribe el registro en el perfil) y DEP-CKP-14 (estado en conflicto publicado).
 
 ## Criterios de Aceptación
 
