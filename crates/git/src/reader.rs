@@ -59,6 +59,18 @@ pub struct Branch {
     pub commit: String,
 }
 
+/// The most recent entry of a reflog.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReflogEntry {
+    /// The commit before the update (all zeros for a new ref).
+    pub old: String,
+    /// The commit after the update.
+    pub new: String,
+    /// What Git wrote (`commit: …`, `checkout: moving from a to b`, `update by push`…). Text
+    /// from the repo: untrusted (SEC-12).
+    pub message: String,
+}
+
 /// A linked worktree registered in the common Git directory.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LinkedWorktree {
@@ -195,6 +207,102 @@ impl RepoReader {
             branches.push(Branch { name, commit });
         }
         Ok(branches)
+    }
+
+    /// Remote-tracking branches (`origin/main`) with the commit each points to.
+    pub fn remote_branches(&self) -> Result<Vec<Branch>, ReadError> {
+        let refs = self.repo.references().map_err(unavailable("refs"))?;
+        let mut branches = Vec::new();
+        for r in refs.remote_branches().map_err(unavailable("refs"))? {
+            let mut r = r.map_err(|e| ReadError::Unavailable(format!("refs: {e}")))?;
+            let name = r.name().shorten().to_str_lossy().into_owned();
+            // `origin/HEAD` is symbolic: it names the default branch, it is not one.
+            if name.ends_with("/HEAD") {
+                continue;
+            }
+            let commit = r.peel_to_id().map_err(unavailable("refs"))?.to_string();
+            branches.push(Branch { name, commit });
+        }
+        Ok(branches)
+    }
+
+    /// Entries of the reflog of `full_name` written since its tip was `since`, newest first:
+    /// walks back until the entry that moved the ref away from `since` (included), at most
+    /// `max` entries. With `since` = `None` (a ref that did not exist), only the newest entry.
+    /// Empty if the ref has no reflog.
+    pub fn reflog_since(
+        &self,
+        full_name: &str,
+        since: Option<&str>,
+        max: usize,
+    ) -> Result<Vec<ReflogEntry>, ReadError> {
+        let name: &gix::refs::FullNameRef = full_name
+            .try_into()
+            .map_err(|_| ReadError::InvalidInput(format!("not a full ref name: {full_name}")))?;
+        let mut buf = vec![0; 4096];
+        let Some(lines) = self
+            .repo
+            .refs
+            .reflog_iter_rev(name, &mut buf)
+            .map_err(|e| ReadError::Unavailable(format!("reflog: {e}")))?
+        else {
+            return Ok(Vec::new());
+        };
+        let mut out = Vec::new();
+        for line in lines.take(max) {
+            let line = line.map_err(|e| ReadError::Unavailable(format!("reflog: {e}")))?;
+            let entry = ReflogEntry {
+                old: line.previous_oid.to_string(),
+                new: line.new_oid.to_string(),
+                message: line.message.to_str_lossy().into_owned(),
+            };
+            let done = since.is_none_or(|since| entry.old == since);
+            out.push(entry);
+            if done {
+                break;
+            }
+        }
+        Ok(out)
+    }
+
+    /// The remote-tracking branch a local branch follows (`origin/main`), from
+    /// `branch.<name>.remote` and `branch.<name>.merge`.
+    pub fn branch_upstream(&self, branch: &str) -> Option<String> {
+        let config = self.repo.config_snapshot();
+        let remote = config.string(format!("branch.{branch}.remote").as_str())?;
+        let merge = config.string(format!("branch.{branch}.merge").as_str())?;
+        let merge = merge.to_str_lossy();
+        let short = merge.strip_prefix("refs/heads/")?;
+        Some(format!("{}/{short}", remote.to_str_lossy()))
+    }
+
+    /// Most recent entry of the reflog of `full_name` (`HEAD`, `refs/heads/main`…), read
+    /// backwards from the end of the file. `HEAD` is the one of the worktree this reader was
+    /// opened on. `None` if the ref has no reflog.
+    pub fn reflog_last(&self, full_name: &str) -> Result<Option<ReflogEntry>, ReadError> {
+        let name: &gix::refs::FullNameRef = full_name
+            .try_into()
+            .map_err(|_| ReadError::InvalidInput(format!("not a full ref name: {full_name}")))?;
+        let mut buf = vec![0; 4096];
+        let Some(mut lines) = self
+            .repo
+            .refs
+            .reflog_iter_rev(name, &mut buf)
+            .map_err(|e| ReadError::Unavailable(format!("reflog: {e}")))?
+        else {
+            return Ok(None);
+        };
+        match lines.next() {
+            None => Ok(None),
+            Some(line) => {
+                let line = line.map_err(|e| ReadError::Unavailable(format!("reflog: {e}")))?;
+                Ok(Some(ReflogEntry {
+                    old: line.previous_oid.to_string(),
+                    new: line.new_oid.to_string(),
+                    message: line.message.to_str_lossy().into_owned(),
+                }))
+            }
+        }
     }
 
     /// Number of index entries. Reads the index, never refreshes or writes it.
