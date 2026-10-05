@@ -79,3 +79,5 @@ Dado el repo "demo" observado en una máquina sin Claude Code instalado
   Y el estado de "demo" muestra sus worktrees sin ninguna sesión de agente
 Cuando el desarrollador instala Claude Code y lo lanza en "feat-login"
 Entonces el motor detecta la sesión de "Claude Code" en "feat-login" sin reinstalar ni reconfigurar GitRaptor
+
+> **Nota (2026-10-05, INF-GRP-002)**: el coste de resolver el actor de un evento (ADR-GRP-013) se mide en el banco de INF-GRP-002 (`cargo bench -p gitraptor-cli --bench engine`) cuando esta historia detecte sesiones reales. Hoy el banco fija el detector de agentes en un nombre ficticio y no lo mide (Dev Spec de INF-GRP-002, § 8).

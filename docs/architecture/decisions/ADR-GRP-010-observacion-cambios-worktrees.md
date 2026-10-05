@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-05
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
@@ -235,3 +235,14 @@ Aplicada desde la [Dev Spec de US-GRP-002](../../requirements/features/motor-loc
 | **Recomputo completo por ventana en el MVP**: el hilo del worktree relee `HEAD` y el status completo con `crates/git`, sin la caché de stat incremental del § 4. SPIKE-GRP-002 midió ~18 ms por status de 5.000 archivos, dentro de los 150 ms de cómputo. La caché de stat y la publicación en dos fases se añaden si INF-GRP-002 muestra que no cabe | § 4 | Dev Spec US-GRP-002 D4 |
 | **Filtro previo de ignorados con caché de directorios**: cada directorio se consulta a las reglas de Git (`gix`) una vez; la caché se vacía al cambiar un `.gitignore` o `info/exclude`. Cumple el § 2 ("se descartan antes del debounce") sin consultar Git por evento: una ráfaga sostenida en un directorio ignorado no provoca recomputos | § 2 (Filtros) | Dev Spec US-GRP-002 D4; revisión del Arquitecto (CPU con `target/`) |
 | **Cachés de `gix` por repo**: no hay cachés persistentes que compartir. El lector se abre por recomputo y se suelta (ADR-GRP-009, `crates/git`), así que los worktrees de un repo no duplican memoria entre recomputos. Si INF-GRP-002 muestra que abrirlo no cabe en el presupuesto, se pasa a una instancia por repo | § 4 | Dev Spec US-GRP-002 D3 |
+
+## Enmienda (2026-10-05, INF-GRP-002)
+
+Aplicada desde la [Dev Spec de INF-GRP-002](../../requirements/features/motor-local/dev-specs/INF-GRP-002-dev-spec.md), con las cifras del banco en el Mac de Rene y en los runners de CI de macOS y Linux. **Decisión del orquestador (2026-10-05), validada por el Arquitecto y el PO.** No cambia el mecanismo. Aparta un gate de lo que Rene aceptó (ver ADR-GRP-011, Enmienda INF-GRP-002), y por eso se le nombra aquí. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| **Holgura del temporizador: basta una constante por SO**, sin calibración en ejecución. Linux: 0,2 ms p95, con la constante 0 correcta (debounce efectivo de 75,4 ms). Mac real: 5 ms p95; la constante de 10 ms deja una ventana efectiva de 70 ms, que sobrecompensa sin daño. El ⚠️ ASSUMPTION del § 3 queda resuelto en macOS; en Linux, pendiente de la etapa multiplataforma | § 3 | Dev Spec, D4 |
+| **Invariante refutada en macOS**: "la ráfaga de un worktree no retrasa a los demás" no se cumple. Con 1.000 archivos, el p95 del motor en los demás llega a 336 ms en el Mac y a 627 ms en el runner; con 10.000, a 496 ms en el Mac. Sin daemon, la misma ráfaga no degrada `git status`, así que el cuello está dentro del motor. En Linux se cumple (193 ms). Lo corrige TD-GRP-001, lo que activa el disparador de la Enmienda US-GRP-002 (caché de stat y dos fases) | § 3, § 4 | Dev Spec, § 6.1; [TD-GRP-001](../../requirements/features/motor-local/technical-stories/TD-GRP-001-motor-bajo-rafaga.md) |
+| **Ahead/behind con `gix`**: con `commit-graph` empata con `git rev-list` (Mac: 30 y 34 ms). Sin él es más lento (Mac: 297 y 281 ms; Linux: 429 y 191 ms). El ASSUMPTION del § 4 queda refutado sin `commit-graph`; como va en la segunda fase, no afecta a NFR-04, y si conviene volver a `git rev-list` sin `commit-graph` se decide en dogfooding | § 4 | Dev Spec, § 6.4 |
+| **Riesgo nuevo**: el temporizador del runner de macOS (VM) se despierta de 92 a 147 ms tarde. Un daemon arrancado por launchd con QoS de fondo podría sufrir el mismo coalescing de timers. Pendiente de verificar en dogfooding con el autoarranque | § 3, Consecuencias | Dev Spec, § 6.3; TD-GRP-001 |
