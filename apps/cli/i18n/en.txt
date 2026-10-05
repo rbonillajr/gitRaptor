@@ -83,6 +83,23 @@ actor.unattributed = unattributed
 actor.claude-code = Claude Code
 actor.other = another agent
 actor.other-agent = another agent: {name}
+actor.with-origin = {agent}, {origin}
+
+origin.detected = detected
+origin.registered = registered
+
+session-state.active = Active
+session-state.inactive = Inactive
+session-state.ended = Ended
+
+session.present = {agent} · {state} · {origin} · since {time}
+session.ended = {agent} · {state} · {origin} · ended {time}
+session.ended-unknown = {agent} · {state} · {origin} · end unknown
+
+sessions.none = no agent sessions
+sessions.line = {worktree}  {session}
+sessions.unavailable = agent sessions cannot be detected on this system yet
+sessions.restart-engine = the running engine is older than this raptor and cannot show sessions: restart it with `raptor daemon stop`
 
 # The prior snapshot failed: the operation did not run (US-TMC-001).
 prior.no-space = not run: there is no disk space to save the work first; nothing changed
