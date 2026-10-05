@@ -2,11 +2,12 @@
 id: ADR-CKP-001
 title: Predicción de conflictos con merge en seco sin escribir en el repo
 type: adr
-status: proposed
+status: accepted
+accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
 updated: 2026-10-04
-deciders: [Rene Bonilla]
+deciders: [Orquestador (delegación de Rene Bonilla, 2026-10-04)]
 domain: GRP
 feature: cockpit
 related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-006, ADR-GRP-009, ADR-GRP-010, ADR-GRP-011, ADR-GRP-013, ADR-GRD-006, ADR-TMC-001, SPIKE-CKP-001, INF-GRP-001, INF-GRP-002, TS-GRP-004, CTX-CKP-001, BR-CKP-001]
@@ -15,7 +16,9 @@ tags: [cockpit, prediccion-conflictos, merge-en-seco, gitoxide, gix-merge, merge
 
 # ADR-CKP-001 — Predicción de conflictos con merge en seco sin escribir en el repo
 
-> **Estado**: propuesto. Decisión del orquestador (2026-10-04), validada por Arquitecto, PO y security-expert (pasada de endurecimiento del 2026-10-04: ver "Revisión de seguridad (2026-10-04)"). El mecanismo queda **pendiente de confirmar por SPIKE-CKP-001**, con los criterios de salida de M-02, M-06 y L-04 (§ 1 y § 5). El ADR no pasa a `accepted` sin sus resultados en macOS.
+**Status**: Aceptado · **Fecha**: 2026-10-04 · **Decisores**: Orquestador (delegación de Rene Bonilla, 2026-10-04) · **Feature**: Cockpit (F-001-02)
+
+**Decisión del orquestador (2026-10-04), validada por Arquitecto, PO y security-expert** (pasada de endurecimiento del 2026-10-04: ver "Revisión de seguridad (2026-10-04)"). Se acepta con el **mecanismo condicionado a SPIKE-CKP-001**, igual que ADR-GRD-001 y ADR-GRD-002 se aceptaron antes de que SPIKE-GRD-001 los enmendara: quedan decididos los invariantes (nunca escribir en el repo ni ejecutar programas del usuario, dos niveles, estados con antigüedad, límites declarados, publicación por el motor) y el orden de preferencia de los mecanismos; SPIKE-CKP-001 elige entre ellos con los criterios de salida de M-02, M-06 y L-04 (§ 1 y § 5) y enmienda este ADR con sus resultados en macOS. La Dev Spec de TS-CKP-001 no se escribe antes. Linux y Windows: Pendiente: etapa de validación multiplataforma.
 
 ## Contexto
 
