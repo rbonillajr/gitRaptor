@@ -60,7 +60,8 @@ pub(crate) fn snapshot() -> Option<Vec<(u32, u32)>> {
 pub(crate) fn open(pid: u32) -> Result<Handle, Error> {
     // SAFETY: plain values; the result is checked by `Handle::new`.
     let raw = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
-    Handle::new(raw).ok_or(match last_error() {
+    // The last error is read right after the failed call.
+    Handle::new(raw).ok_or_else(|| match last_error() {
         Some(ERROR_ACCESS_DENIED) => Error::Denied,
         _ => Error::Gone,
     })
