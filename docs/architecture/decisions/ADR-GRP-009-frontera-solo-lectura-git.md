@@ -273,7 +273,7 @@ Decisión del orquestador (2026-10-05), validada por Arquitecto y security-exper
 - **Sin ubicaciones de confianza**: ninguna ruta se acepta por estar en `%ProgramFiles%`. Se verifica igual que cualquier otra.
 - **Lanzador de Git for Windows**: si el candidato es `<raíz>\cmd\git.exe`, también se verifican el Git que lanza y su carpeta, cuando existen: `<raíz>\{mingw64,ucrt64,clangarm64,mingw32}\bin\git.exe` y `<raíz>\bin\git.exe`.
 
-**Implementación**: crate `crates/winsys`, la única excepción a `forbid(unsafe_code)`. La excepción se registra en la enmienda de [ADR-GRP-002](./ADR-GRP-002-monorepo-nx.md) de la rama `feat/windows-requester-resolution`.
+**Implementación**: crate `crates/winsys`, la única excepción a `forbid(unsafe_code)`. La excepción se registra en la [Enmienda (2026-10-05, crates/winsys) de ADR-GRP-002](./ADR-GRP-002-monorepo-nx.md#enmienda-2026-10-05-crateswinsys).
 
 ### Riesgos residuales
 
