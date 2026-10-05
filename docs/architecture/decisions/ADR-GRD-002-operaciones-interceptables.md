@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-05
 deciders: [Rene Bonilla]
 domain: GRP
 feature: guardrails
@@ -16,7 +16,7 @@ tags: [guardrails, hooks-git, reference-transaction, pre-push, pre-rebase, inter
 
 # ADR-GRD-002 — Operaciones interceptables y límites de la capa de hooks
 
-> **Estado**: aceptado por Rene Bonilla el 2026-10-04. Enmendado el 2026-10-04 con los resultados de SPIKE-GRD-001 en macOS (ver "Enmienda (2026-10-04, SPIKE-GRD-001)"); Linux y Windows siguen pendientes.
+> **Estado**: aceptado por Rene Bonilla el 2026-10-04. Enmendado el 2026-10-04 con los resultados de SPIKE-GRD-001 en macOS (ver "Enmienda (2026-10-04, SPIKE-GRD-001)") y el 2026-10-05 por US-GRD-001 (forma del dispatcher nativo y coste en Windows, ver "Enmienda (2026-10-05, US-GRD-001)"); la matriz del spike en Linux y la validación funcional en Windows siguen pendientes.
 
 ## Contexto
 
@@ -205,3 +205,12 @@ Aplicada desde las recomendaciones de [SPIKE-GRD-001-resultados.md](../../requir
 3. **Regresión**: INF-GRD-001 prueba el renombrado con reftable en cada versión de Git, para retirar la fila si Git lo corrige (Validación 12).
 
 Ajuste respecto a la recomendación del coordinador: el aviso en el Cockpit y la recuperación guiada pasan a después del MVP (PO), y el detector no es solo Q42 porque `-M feat main` reescribe la base sin hacerla desaparecer (Arquitecto).
+
+## Enmienda (2026-10-05, US-GRD-001)
+
+**Decisión del orquestador (2026-10-05), validada por Arquitecto.** El `status` sigue en `accepted`.
+
+- **Vía rápida en el dispatcher** (§ 4): las refs no gobernadas, las pseudo-refs, los valores `ref:` de `HEAD` y los *prunes* de `pack-refs` se permiten en el propio dispatcher nativo, sin arrancar `raptor` (pendiente fija del § 5: una invocación de la vía mínima por transacción). La clasificación es un único archivo solo-`std` que compilan `crates/policy` y el dispatcher. Lo que no entiende del todo (una línea malformada, un `HEAD` que hay que resolver) siempre va a `raptor hook`, que valida de forma estricta.
+- **`HEAD` creado** (§ 4): una línea de `HEAD` con valor viejo cero es el `HEAD` de un worktree nuevo, no una actualización del principal; no es gobernada (motivo `no-reconocible`).
+- **Coste en Windows** (§ 5, medido el 2026-10-05, § 14 de los resultados del spike): con el dispatcher nativo, ≈ 6 ms por invocación que no evalúa (commit con el conjunto mínimo +40 ms p50); el `fetch` de 1.000 refs nuevas añade ≈ +13 s (con `sh`, +130 s). El objetivo ⚠️ ≤ 5 ms p95 por invocación queda algo por encima en esa máquina y se declara.
+- **Latencia en macOS** (US-GRD-001, informe): commit +36 ms p50 / +41 ms p95; evaluación gobernada +26 / +31 ms; vía rápida +12 / +14 ms (portátil, no en reposo).
