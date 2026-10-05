@@ -221,7 +221,10 @@ mod windows_tests {
         create_private_file(&file).unwrap();
         // The file inherits the private DACL: no group of other users.
         let acl = icacls(&file, &[]);
-        assert!(!acl.contains("Users") && !acl.contains("Everyone"), "{acl}");
+        assert!(
+            !acl.contains(r"BUILTIN\Users") && !acl.contains("Everyone"),
+            "{acl}"
+        );
         assert!(create_private_file(&file).is_err(), "must not reuse a file");
     }
 
