@@ -192,7 +192,7 @@ Aplicada desde la tabla de enmiendas de [ADR-GRD-008](./ADR-GRD-008-factor-auten
 
 ## Enmienda (2026-10-04, Cockpit)
 
-Aplicada desde DEP-CKP-4 y DEP-CKP-14 (y la parte de rutas de DEP-CKP-1) de [CTX-CKP-001](../../requirements/features/cockpit/context.md), con [ADR-CKP-001](./ADR-CKP-001-prediccion-conflictos-merge-en-seco.md) y [ADR-CKP-002](./ADR-CKP-002-catalogo-operaciones-ejecutor.md) (proposed). **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. No cambia el modelo de eventos, sesiones ni atribución, ni añade tipos de evento: expone datos derivados de lo que ya se guarda. El `status` sigue en `accepted`.
+Aplicada desde DEP-CKP-4 y DEP-CKP-14 (y la parte de rutas de DEP-CKP-1) de [CTX-CKP-001](../../requirements/features/cockpit/context.md), con [ADR-CKP-001](./ADR-CKP-001-prediccion-conflictos-merge-en-seco.md) y [ADR-CKP-002](./ADR-CKP-002-catalogo-operaciones-ejecutor.md) (accepted 2026-10-04). **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. No cambia el modelo de eventos, sesiones ni atribución, ni añade tipos de evento: expone datos derivados de lo que ya se guarda. El `status` sigue en `accepted`.
 
 | Cambio | Dónde | Fuente |
 |---|---|---|

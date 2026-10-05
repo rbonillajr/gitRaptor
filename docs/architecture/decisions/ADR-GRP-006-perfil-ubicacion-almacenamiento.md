@@ -174,7 +174,7 @@ Decisión del orquestador (2026-10-04), validada por el Arquitecto. No cambia la
 
 ## Enmienda (2026-10-04, Cockpit)
 
-Aplicada desde DEP-CKP-11 (y la parte de almacén de DEP-CKP-1) de [CTX-CKP-001](../../requirements/features/cockpit/context.md), con [ADR-CKP-001](./ADR-CKP-001-prediccion-conflictos-merge-en-seco.md) § 9 y [ADR-CKP-003](./ADR-CKP-003-arquitectura-tui.md) § 10 (proposed). **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. No cambia la ubicación, la clave de repo, el motor de almacenamiento ni el único escritor. El `status` sigue en `accepted`.
+Aplicada desde DEP-CKP-11 (y la parte de almacén de DEP-CKP-1) de [CTX-CKP-001](../../requirements/features/cockpit/context.md), con [ADR-CKP-001](./ADR-CKP-001-prediccion-conflictos-merge-en-seco.md) § 9 y [ADR-CKP-003](./ADR-CKP-003-arquitectura-tui.md) § 10 (accepted 2026-10-04). **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. No cambia la ubicación, la clave de repo, el motor de almacenamiento ni el único escritor. El `status` sigue en `accepted`.
 
 | Cambio | Dónde | Fuente |
 |---|---|---|

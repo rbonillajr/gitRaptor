@@ -206,7 +206,7 @@ Aplicada desde las recomendaciones de [SPIKE-GRP-002-resultados.md](../../requir
 
 ## Enmienda (2026-10-04, Cockpit)
 
-Aplicada desde DEP-CKP-14 y la parte de rutas de DEP-CKP-1 de [CTX-CKP-001](../../requirements/features/cockpit/context.md), con [ADR-CKP-001](./ADR-CKP-001-prediccion-conflictos-merge-en-seco.md) § 3 y § 9 y [ADR-CKP-002](./ADR-CKP-002-catalogo-operaciones-ejecutor.md) § 9 (proposed). **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. No cambia el mecanismo, el debounce, el sondeo ni la reconciliación, y no añade rutas vigiladas. El `status` sigue en `accepted`.
+Aplicada desde DEP-CKP-14 y la parte de rutas de DEP-CKP-1 de [CTX-CKP-001](../../requirements/features/cockpit/context.md), con [ADR-CKP-001](./ADR-CKP-001-prediccion-conflictos-merge-en-seco.md) § 3 y § 9 y [ADR-CKP-002](./ADR-CKP-002-catalogo-operaciones-ejecutor.md) § 9 (accepted 2026-10-04). **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. No cambia el mecanismo, el debounce, el sondeo ni la reconciliación, y no añade rutas vigiladas. El `status` sigue en `accepted`.
 
 | Cambio | Dónde | Fuente |
 |---|---|---|

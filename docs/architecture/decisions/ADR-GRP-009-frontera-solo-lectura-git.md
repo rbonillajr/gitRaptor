@@ -191,7 +191,7 @@ Aplicada desde la tabla de enmiendas de [non-functional-guardrails.md](../non-fu
 
 ## Enmienda (2026-10-04, Cockpit)
 
-Aplicada desde DEP-CKP-1, 3, 7 y 12 de [CTX-CKP-001](../../requirements/features/cockpit/context.md), con [ADR-CKP-001](./ADR-CKP-001-prediccion-conflictos-merge-en-seco.md) (opción preferida (a)), [ADR-CKP-002](./ADR-CKP-002-catalogo-operaciones-ejecutor.md) y la enmienda E3 de [ADR-CKP-003](./ADR-CKP-003-arquitectura-tui.md), los tres `proposed`. **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. **No cambia la frontera de solo lectura del motor ni su criterio binario**: cero diferencias en el repo y cero programas configurados por el usuario. El `status` sigue en `accepted`. Lo que depende de la opción (b) de ADR-CKP-001 **no se aplica**: queda condicionado a SPIKE-CKP-001 (abajo).
+Aplicada desde DEP-CKP-1, 3, 7 y 12 de [CTX-CKP-001](../../requirements/features/cockpit/context.md), con [ADR-CKP-001](./ADR-CKP-001-prediccion-conflictos-merge-en-seco.md) (opción preferida (a)), [ADR-CKP-002](./ADR-CKP-002-catalogo-operaciones-ejecutor.md) y la enmienda E3 de [ADR-CKP-003](./ADR-CKP-003-arquitectura-tui.md), los tres `accepted` el 2026-10-04. **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. **No cambia la frontera de solo lectura del motor ni su criterio binario**: cero diferencias en el repo y cero programas configurados por el usuario. El `status` sigue en `accepted`. Lo que depende de la opción (b) de ADR-CKP-001 **no se aplica**: queda condicionado a SPIKE-CKP-001 (abajo).
 
 | Cambio | Dónde | Fuente |
 |---|---|---|

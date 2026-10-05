@@ -93,7 +93,7 @@ Enmienda 2026-10-03: referencias a policy.yaml sustituidas por ADR-GRP-007 (conf
 
 ## Enmienda (2026-10-04, Cockpit)
 
-Aplicada desde DEP-CKP-9 de [CTX-CKP-001](../../requirements/features/cockpit/context.md) y la enmienda E1 de [ADR-CKP-003](./ADR-CKP-003-arquitectura-tui.md) (proposed). **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. No cambia las secciones 1 a 3, que siguen siendo de la Fase 3 salvo los patrones de UX. El `status` sigue en `accepted`. Si ADR-CKP-003 no pasa a `accepted`, esta enmienda se revisa con él. Cierra M8 en este ADR y el punto 3 del § 10 del overview en su parte de CLI/TUI.
+Aplicada desde DEP-CKP-9 de [CTX-CKP-001](../../requirements/features/cockpit/context.md) y la enmienda E1 de [ADR-CKP-003](./ADR-CKP-003-arquitectura-tui.md) (accepted 2026-10-04). **Decisión del orquestador (2026-10-04), validada por Arquitecto**; el PO valida el alcance después. No cambia las secciones 1 a 3, que siguen siendo de la Fase 3 salvo los patrones de UX. El `status` sigue en `accepted`. ADR-CKP-003 pasó a `accepted` el 2026-10-04. Cierra M8 en este ADR y el punto 3 del § 10 del overview en su parte de CLI/TUI.
 
 | Cambio | Dónde | Fuente |
 |---|---|---|
