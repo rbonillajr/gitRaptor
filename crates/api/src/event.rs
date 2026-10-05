@@ -64,6 +64,39 @@ pub struct EventKind {
     pub change: bool,
     /// Story that defines `data`, for kinds declared ahead of it.
     pub defined_by: Option<&'static str>,
+    /// The scope its events belong to (protocol 5, N1).
+    pub scope: EventScope,
+}
+
+/// Which scope the events of a kind belong to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventScope {
+    Global,
+    /// The repo named by the `repo_id` of its `data`.
+    Repo,
+}
+
+impl Event {
+    /// The scope of this event, from its kind and, for repo kinds, the
+    /// `repo_id` of its data. `None` for an unknown kind or a repo kind
+    /// without a `repo_id`.
+    pub fn scope(&self) -> Option<crate::scope::Scope> {
+        scope_of(&self.kind, &self.data)
+    }
+}
+
+/// The scope of an event of `kind` with `data`.
+pub fn scope_of(kind_name: &str, data: &Value) -> Option<crate::scope::Scope> {
+    match kind(kind_name)?.scope {
+        EventScope::Global => Some(crate::scope::Scope::Global),
+        EventScope::Repo => {
+            data.get("repo_id")
+                .and_then(Value::as_str)
+                .map(|id| crate::scope::Scope::Repo {
+                    repo_id: id.to_owned(),
+                })
+        }
+    }
 }
 
 /// The engine's availability state changed (BR-WF-002). Data:
@@ -90,6 +123,10 @@ pub const OPERATION_QUEUED: &str = "operation.queued";
 pub const OPERATION_STARTED: &str = "operation.started";
 /// An operation of the catalog ended, with its outcome.
 pub const OPERATION_FINISHED: &str = "operation.finished";
+/// The attention summary of one repo changed (global scope, N3). Data:
+/// [`crate::scope::RepoAttentionData`]. Declared ahead of its publishers
+/// (the predictor, Guardrails, US-GRP-005).
+pub const REPO_ATTENTION: &str = "repo.attention";
 
 const fn engine(kind: &'static str) -> EventKind {
     EventKind {
@@ -97,6 +134,15 @@ const fn engine(kind: &'static str) -> EventKind {
         version: 1,
         change: false,
         defined_by: None,
+        scope: EventScope::Global,
+    }
+}
+
+/// An engine kind about one repo (its `data` carries `repo_id`).
+const fn engine_repo(kind: &'static str) -> EventKind {
+    EventKind {
+        scope: EventScope::Repo,
+        ..engine(kind)
     }
 }
 
@@ -106,6 +152,7 @@ const fn change(kind: &'static str, story: &'static str) -> EventKind {
         version: 1,
         change: true,
         defined_by: Some(story),
+        scope: EventScope::Repo,
     }
 }
 
@@ -114,10 +161,12 @@ pub const KINDS: &[EventKind] = &[
     engine(ENGINE_STATE),
     engine(DAEMON_STOPPING),
     engine(RESERVED_AUDIT),
+    // Global: it changes the list of observed repos.
     engine(REPO_OBSERVATION),
-    engine(OPERATION_QUEUED),
-    engine(OPERATION_STARTED),
-    engine(OPERATION_FINISHED),
+    engine(REPO_ATTENTION),
+    engine_repo(OPERATION_QUEUED),
+    engine_repo(OPERATION_STARTED),
+    engine_repo(OPERATION_FINISHED),
     change(WORKTREE_STATE, "US-GRP-001"),
     change(GIT_EVENT, "US-GRP-002"),
     change("gap.recorded", "US-GRP-005"),
@@ -160,6 +209,46 @@ mod tests {
         assert!(event.is_well_formed());
         event.version = 2;
         assert!(!event.is_well_formed());
+    }
+
+    /// N1: the engine's own kinds are global; each repo kind is in the
+    /// scope of the repo its data names.
+    #[test]
+    fn every_kind_has_a_scope() {
+        use crate::scope::Scope;
+        let data = serde_json::json!({"repo_id": "r1"});
+        for k in KINDS {
+            let scope = scope_of(k.kind, &data).unwrap();
+            match k.scope {
+                EventScope::Global => assert_eq!(scope, Scope::Global, "{}", k.kind),
+                EventScope::Repo => assert_eq!(
+                    scope,
+                    Scope::Repo {
+                        repo_id: "r1".into()
+                    },
+                    "{}",
+                    k.kind
+                ),
+            }
+        }
+        for global in [
+            ENGINE_STATE,
+            DAEMON_STOPPING,
+            RESERVED_AUDIT,
+            REPO_OBSERVATION,
+        ] {
+            assert_eq!(kind(global).unwrap().scope, EventScope::Global);
+        }
+        for repo in [
+            WORKTREE_STATE,
+            GIT_EVENT,
+            OPERATION_QUEUED,
+            OPERATION_FINISHED,
+        ] {
+            assert_eq!(kind(repo).unwrap().scope, EventScope::Repo);
+            assert_eq!(scope_of(repo, &Value::Null), None);
+        }
+        assert_eq!(scope_of("nope", &data), None);
     }
 
     #[test]

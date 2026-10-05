@@ -22,7 +22,15 @@ use gitraptor_api::messages::{
     RepoRetireResult, Snapshot, StopResult, SubscribeParams, SubscribeResult, UnsubscribeParams,
 };
 use gitraptor_api::methods::{self, METHODS, MethodSpec};
-use gitraptor_api::rpc::{ErrorObject, Id, Request, Response, code};
+use gitraptor_api::rpc::{
+    ErrorObject, Id, InvalidData, InvalidReason, Request, Response, ScopeRefusal, ScopeRefusedData,
+    code,
+};
+use gitraptor_api::scope::{
+    AttentionView, AutostartView, ConnectionRequester, GlobalSnapshot, RepoLocateParams,
+    RepoLocateResult, RepoSnapshot, RepoSummaryView, Scope, ScopeSnapshot, ScopeSnapshotParams,
+    ScopeSubscribeParams, ScopeSubscribeResult,
+};
 use gitraptor_api::timemachine::{
     Invalid as TmInvalid, MAX_REPORTED_REFS, McpRequesterView, OperationRunResult, PriorFailedData,
     RedoParams, RequestChannel, RequesterView, ResolveParams, RestoreParams, SnapshotParams,
@@ -60,6 +68,7 @@ const REPLACE_AS_STOP: MethodSpec = MethodSpec {
     mcp: false,
     implemented_by: None,
     writes: methods::RepoWrite::None,
+    since: gitraptor_api::MIN_COMPATIBLE_PROTOCOL,
 };
 
 struct ConnEntry {
@@ -161,6 +170,7 @@ pub(crate) fn accept(ctx: &Arc<ServerCtx>, stream: UnixStream) {
                 info,
                 outbox: Arc::clone(&outbox),
                 profile: ConnectionProfile::Full,
+                protocol: thread_ctx.config.protocol,
                 phase: Phase::Handshake,
                 subscriptions: Vec::new(),
                 next_subscription: 1,
@@ -305,6 +315,9 @@ struct Connection<'a> {
     info: Option<ProcInfo>,
     outbox: Arc<Outbox>,
     profile: ConnectionProfile,
+    /// Protocol negotiated in `hello`: the connection sees the methods and
+    /// shapes of this version (DS-TS-GRP-004 E-D1).
+    protocol: u32,
     phase: Phase,
     subscriptions: Vec<u32>,
     next_subscription: u32,
@@ -432,7 +445,8 @@ impl Connection<'_> {
         } else {
             ConnectionProfile::Full
         };
-        if hello.protocol != self.ctx.config.protocol {
+        let window = self.ctx.config.min_protocol..=self.ctx.config.protocol;
+        if !window.contains(&hello.protocol) {
             self.send(Response::err(
                 Some(request.id.clone()),
                 ErrorObject::new(code::INCOMPATIBLE_PROTOCOL, "incompatible protocol").with_data(
@@ -445,8 +459,16 @@ impl Connection<'_> {
             self.phase = Phase::Incompatible;
             return After::Continue;
         }
+        self.protocol = hello.protocol;
+        // N5: who the daemon sees, for the Cockpit's "you act as". Only for
+        // `cli` clients of protocol 5 on a full connection: the hook client
+        // connects often and does not need the process walk.
+        let requester = (self.protocol >= 5
+            && self.profile == ConnectionProfile::Full
+            && hello.client == ClientKind::Cli)
+            .then(|| self.connection_requester());
         let result = HelloResult {
-            protocol: self.ctx.config.protocol,
+            protocol: self.protocol,
             binary_version: self.ctx.daemon.binary_version.clone(),
             instance_id: self.ctx.instance_id.clone(),
             daemon_pid: self.ctx.daemon.pid,
@@ -457,6 +479,7 @@ impl Connection<'_> {
                 .filter(|m| self.offered(m))
                 .map(|m| m.name.to_owned())
                 .collect(),
+            requester,
         };
         self.reply(&request.id, Ok(result));
         self.phase = Phase::Ready;
@@ -464,7 +487,21 @@ impl Connection<'_> {
     }
 
     fn offered(&self, m: &MethodSpec) -> bool {
-        m.name != methods::HELLO && (self.profile == ConnectionProfile::Full || m.mcp)
+        m.name != methods::HELLO
+            && m.exists_in(self.protocol)
+            && (self.profile == ConnectionProfile::Full || m.mcp)
+    }
+
+    /// The requester and layer of this connection as of now (N5).
+    fn connection_requester(&self) -> ConnectionRequester {
+        match self.resolve() {
+            Ok(r) => ConnectionRequester::Resolved {
+                actor: r.who.actor.clone(),
+                layer: self.layer(&r),
+                confirmable: r.confirmable,
+            },
+            Err(_) => ConnectionRequester::Unverified,
+        }
     }
 
     fn incompatible(&mut self, request: &Request) -> After {
@@ -542,6 +579,18 @@ impl Connection<'_> {
                 self.reply(&request.id, result);
             }
             methods::PING => self.reply(&request.id, request.params::<NoParams>().map(|_| "pong")),
+            methods::SCOPE_SNAPSHOT => {
+                let result = request.params().and_then(|p| self.scope_snapshot(p));
+                self.reply(&request.id, result);
+            }
+            methods::SCOPE_SUBSCRIBE => {
+                let result = request.params().and_then(|p| self.scope_subscribe(p));
+                self.reply(&request.id, result);
+            }
+            methods::REPO_LOCATE => {
+                let result = request.params().and_then(|p| self.repo_locate(p));
+                self.reply(&request.id, result);
+            }
             methods::ENGINE_SNAPSHOT => {
                 let result = request.params::<NoParams>().map(|_| self.snapshot());
                 self.reply(&request.id, result);
@@ -688,6 +737,120 @@ impl Connection<'_> {
         .unwrap_or(serde_json::Value::Null)
     }
 
+    /// `scope.snapshot` (N1, N3): one scope with its own sequence, read
+    /// under the lock events are published with.
+    fn scope_snapshot(&self, params: ScopeSnapshotParams) -> Result<ScopeSnapshot, ErrorObject> {
+        valid_scope(&params.scope)?;
+        let (scope_seq, shared) = self
+            .ctx
+            .bus
+            .scope_snapshot(&params.scope)
+            .ok_or_else(not_found_id)?;
+        let run_id = self.ctx.bus.run_id().to_owned();
+        Ok(match params.scope {
+            Scope::Global => ScopeSnapshot::Global(GlobalSnapshot {
+                run_id,
+                scope_seq,
+                engine: shared.engine,
+                daemon: self.ctx.daemon.clone(),
+                // Registration belongs to US-GRP-004.
+                autostart: AutostartView::Unknown,
+                repos: shared
+                    .repos
+                    .into_iter()
+                    .map(|r| RepoSummaryView {
+                        repo_id: r.repo_id,
+                        state: r.state,
+                        path: r.path,
+                        // Published by the predictor, Guardrails and
+                        // US-GRP-005: until then "not available".
+                        attention: AttentionView::unpublished(),
+                    })
+                    .collect(),
+            }),
+            Scope::Repo { repo_id } => {
+                let mut repos: Vec<_> = shared
+                    .repos
+                    .into_iter()
+                    .filter(|r| r.repo_id == repo_id)
+                    .collect();
+                crate::observe::refresh_divergence(
+                    &mut repos,
+                    &shared.divergence,
+                    &self.ctx.divergence,
+                );
+                let mut repo = repos.pop().ok_or_else(not_found_id)?;
+                if serde_json::to_vec(&repo).map_or(0, |v| v.len()) > CHANGE_LIST_BUDGET {
+                    crate::observe::without_change_lists(&mut repo.worktrees);
+                }
+                ScopeSnapshot::Repo(RepoSnapshot {
+                    run_id,
+                    scope_seq,
+                    repo,
+                })
+            }
+        })
+    }
+
+    /// `scope.subscribe` (N1, N2). Counts against the subscriptions of the
+    /// connection and shares their ids with `events.subscribe`.
+    fn scope_subscribe(
+        &mut self,
+        params: ScopeSubscribeParams,
+    ) -> Result<ScopeSubscribeResult, ErrorObject> {
+        valid_scope(&params.scope)?;
+        if self.subscriptions.len() >= self.ctx.config.limits.subscriptions_per_connection {
+            return Err(ErrorObject::new(
+                code::LIMIT_REACHED,
+                "too many subscriptions",
+            ));
+        }
+        let id = self.next_subscription;
+        match self.ctx.bus.subscribe_scope(
+            &self.outbox,
+            id,
+            &params.scope,
+            params.from_seq,
+            params.run_id.as_deref(),
+        ) {
+            Subscribed::From(from_seq) => {
+                self.next_subscription += 1;
+                self.subscriptions.push(id);
+                Ok(ScopeSubscribeResult {
+                    subscription: id,
+                    scope: params.scope,
+                    from_seq,
+                })
+            }
+            Subscribed::Resync => Err(ErrorObject::new(
+                code::RESYNC_REQUIRED,
+                "take a new snapshot of the scope and subscribe again",
+            )),
+            Subscribed::UnknownScope => Err(not_found_id()),
+        }
+    }
+
+    /// `repo.locate` (N4): lexical checks before touching the file system,
+    /// then the canonical path against the observed worktrees; the deepest
+    /// root wins (a linked worktree inside the main one). Anything else is
+    /// "not found", whether the path exists or not.
+    fn repo_locate(&self, params: RepoLocateParams) -> Result<RepoLocateResult, ErrorObject> {
+        let path = validate::client_path(&params.path).map_err(invalid)?;
+        let canonical = std::fs::canonicalize(&path).map_err(|_| not_found_id())?;
+        let (_, shared) = self.ctx.bus.snapshot();
+        shared
+            .repos
+            .iter()
+            .flat_map(|r| r.worktrees.iter().map(move |w| (r, w)))
+            .filter(|(_, w)| canonical.starts_with(w.path.raw()))
+            .max_by_key(|(_, w)| w.path.raw().len())
+            .map(|(r, w)| RepoLocateResult {
+                repo_id: r.repo_id.clone(),
+                worktree: w.path.clone(),
+            })
+            .ok_or_else(not_found_id)
+    }
+
     fn subscribe(&mut self, params: SubscribeParams) -> Result<SubscribeResult, ErrorObject> {
         if self.subscriptions.len() >= self.ctx.config.limits.subscriptions_per_connection {
             return Err(ErrorObject::new(
@@ -715,6 +878,7 @@ impl Connection<'_> {
                 code::RESYNC_REQUIRED,
                 "take a new snapshot and subscribe again",
             )),
+            Subscribed::UnknownScope => Err(not_found_id()),
         }
     }
 
@@ -1005,7 +1169,24 @@ fn tm_invalid(why: TmInvalid) -> ErrorObject {
 }
 
 fn scope_refused(why: ScopeError) -> ErrorObject {
-    ErrorObject::new(code::SCOPE_REFUSED, why.as_str())
+    let reason = match why {
+        ScopeError::NoWorkingFolder => ScopeRefusal::NoWorkingFolder,
+        ScopeError::NotObserved => ScopeRefusal::NotObserved,
+        ScopeError::NotAllowlisted => ScopeRefusal::NotAllowlisted,
+        ScopeError::UnattributedOverMcp => ScopeRefusal::UnattributedOverMcp,
+        ScopeError::ForeignWorktree => ScopeRefusal::ForeignWorktree,
+    };
+    ErrorObject::new(code::SCOPE_REFUSED, why.as_str()).with_data(ScopeRefusedData { reason })
+}
+
+/// A scope's repo id is checked like any other before it is looked up.
+fn valid_scope(scope: &Scope) -> Result<(), ErrorObject> {
+    match scope {
+        Scope::Repo { repo_id } if !valid_repo_id(repo_id) => {
+            Err(ErrorObject::new(code::INVALID_PARAMS, "invalid repo_id"))
+        }
+        _ => Ok(()),
+    }
 }
 
 fn not_found_id() -> ErrorObject {
@@ -1322,7 +1503,20 @@ impl Connection<'_> {
 }
 
 fn invalid(why: validate::Invalid) -> ErrorObject {
-    ErrorObject::new(code::INVALID_PARAMS, why.as_str())
+    use validate::Invalid;
+    let reason = match why {
+        Invalid::Empty => InvalidReason::Empty,
+        Invalid::TooLong => InvalidReason::TooLong,
+        Invalid::NotAbsolute => InvalidReason::NotAbsolute,
+        Invalid::ControlCharacter => InvalidReason::ControlCharacter,
+        Invalid::UncOrDevice => InvalidReason::UncOrDevice,
+        Invalid::DeviceName => InvalidReason::DeviceName,
+        Invalid::AlternateStream => InvalidReason::AlternateStream,
+        Invalid::OutsideObserved => InvalidReason::OutsideObserved,
+        Invalid::InvalidRef => InvalidReason::InvalidRef,
+        Invalid::ReservedName => InvalidReason::ReservedName,
+    };
+    ErrorObject::new(code::INVALID_PARAMS, why.as_str()).with_data(InvalidData { reason })
 }
 
 fn rejected(reason: RepoRejection) -> ErrorObject {
@@ -1410,5 +1604,53 @@ mod tests {
         ] {
             assert_eq!(enum_text(&reason), reason_text(reason));
         }
+    }
+
+    /// N7: path and scope refusals carry a typed reason in `data`, one per
+    /// cause, besides the log text in `message`.
+    #[test]
+    fn invalid_path_and_scope_have_typed_reasons() {
+        use validate::Invalid;
+        let invalids = [
+            Invalid::Empty,
+            Invalid::TooLong,
+            Invalid::NotAbsolute,
+            Invalid::ControlCharacter,
+            Invalid::UncOrDevice,
+            Invalid::DeviceName,
+            Invalid::AlternateStream,
+            Invalid::OutsideObserved,
+            Invalid::InvalidRef,
+            Invalid::ReservedName,
+        ];
+        let reasons: Vec<InvalidReason> = invalids
+            .iter()
+            .map(|why| {
+                let e = invalid(*why);
+                assert_eq!(e.code, code::INVALID_PARAMS);
+                serde_json::from_value::<InvalidData>(e.data.unwrap())
+                    .unwrap()
+                    .reason
+            })
+            .collect();
+        assert_eq!(reasons, InvalidReason::ALL);
+        let scopes = [
+            ScopeError::NoWorkingFolder,
+            ScopeError::NotObserved,
+            ScopeError::NotAllowlisted,
+            ScopeError::UnattributedOverMcp,
+            ScopeError::ForeignWorktree,
+        ];
+        let reasons: Vec<ScopeRefusal> = scopes
+            .iter()
+            .map(|why| {
+                let e = scope_refused(*why);
+                assert_eq!(e.code, code::SCOPE_REFUSED);
+                serde_json::from_value::<ScopeRefusedData>(e.data.unwrap())
+                    .unwrap()
+                    .reason
+            })
+            .collect();
+        assert_eq!(reasons, ScopeRefusal::ALL);
     }
 }

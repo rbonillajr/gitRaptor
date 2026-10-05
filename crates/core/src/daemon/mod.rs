@@ -714,7 +714,7 @@ impl Daemon {
         self.bus.publish(
             DAEMON_STOPPING,
             StoppingData {
-                cause: cause.as_str().to_owned(),
+                cause: cause.code(),
             },
             None,
             |_| {},
@@ -1458,7 +1458,7 @@ fn git_event_view(repo_id: &str, store: &RepoStore, e: StoredEvent) -> Option<Gi
                 crate::profile::AgentKind::ClaudeCode => gitraptor_api::AgentKind::ClaudeCode,
                 crate::profile::AgentKind::Other => gitraptor_api::AgentKind::Other,
             },
-            name: session.agent.name.map(Untrusted::new),
+            name: session.agent.name.map(gitraptor_api::UntrustedName::new),
             origin: match session.initial_origin {
                 crate::profile::Origin::Detected => gitraptor_api::AgentOrigin::Detected,
                 crate::profile::Origin::Registered => gitraptor_api::AgentOrigin::Registered,

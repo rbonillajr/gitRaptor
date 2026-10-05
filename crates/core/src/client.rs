@@ -58,6 +58,9 @@ pub enum ClientError {
     /// This platform has no channel transport yet (Windows): there is no
     /// channel at all rather than one without access control.
     TransportUnsupported,
+    /// The socket's folder is not private, or the server runs as another
+    /// user (SEC-01, L-06): nothing was sent.
+    ChannelRejected,
 }
 
 impl std::fmt::Display for ClientError {
@@ -80,6 +83,10 @@ impl std::fmt::Display for ClientError {
             Self::Protocol(what) => write!(f, "unexpected message from the daemon: {what}"),
             Self::Unsupported(what) => write!(f, "not supported: {what}"),
             Self::TransportUnsupported => f.write_str(crate::channel::TRANSPORT_UNSUPPORTED),
+            Self::ChannelRejected => write!(
+                f,
+                "the GitRaptor channel was rejected: its folder or its server is not this user's"
+            ),
         }
     }
 }
@@ -90,6 +97,7 @@ impl From<io::Error> for ClientError {
     fn from(err: io::Error) -> Self {
         match err.kind() {
             io::ErrorKind::NotFound | io::ErrorKind::ConnectionRefused => Self::NotRunning,
+            io::ErrorKind::PermissionDenied => Self::ChannelRejected,
             _ => Self::Io(err),
         }
     }
@@ -218,6 +226,7 @@ impl Client {
                 profile: gitraptor_api::messages::ConnectionProfile::Full,
                 max_message_bytes: 0,
                 methods: Vec::new(),
+                requester: None,
             },
         })
     }

@@ -6,7 +6,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::Untrusted;
+use crate::UntrustedName;
 
 /// Who an event is attributed to.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -16,7 +16,7 @@ pub enum Actor {
         kind: AgentKind,
         /// Declared name of an "other agent" (text from an agent).
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        name: Option<Untrusted>,
+        name: Option<UntrustedName>,
         origin: AgentOrigin,
     },
     Unattributed,

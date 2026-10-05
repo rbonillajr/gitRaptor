@@ -69,6 +69,16 @@ impl StopCause {
         }
     }
 
+    /// The cause as a contract code (N7).
+    pub fn code(&self) -> gitraptor_api::messages::StopCauseCode {
+        use gitraptor_api::messages::StopCauseCode;
+        match self {
+            Self::Signal(_) => StopCauseCode::Signal,
+            Self::StopCommand { .. } => StopCauseCode::StopCommand,
+            Self::Replace { .. } => StopCauseCode::Replace,
+        }
+    }
+
     /// Cause text stored in the profile: [`Self::as_str`], plus the old
     /// protocol for a replacement (`replace:1`).
     pub fn stored(&self) -> String {

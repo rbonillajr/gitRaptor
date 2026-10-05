@@ -15,12 +15,12 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use gitraptor_api::Untrusted;
 use gitraptor_api::messages::{
     BaseBranchView, BaseStatusView, ChangeAreaView, ChangeCounts, ChangeKindView, CommitCountView,
     DivergenceView, FileChangeView, HeadView, MAX_DIVERGENCE_WALK, MAX_WORKTREE_CHANGE_BYTES,
     MAX_WORKTREE_CHANGES, RepoRejection, RepoView, UnavailableReason, WorktreeStatus, WorktreeView,
 };
+use gitraptor_api::{Untrusted, UntrustedName};
 use gitraptor_git::{ChangeKind, Count, ReadError, ReaderOptions, RefName, RepoReader, Status};
 use gitraptor_policy::team::{BaseBranch, BaseStatus, Confirmed, DEFAULT_BRANCH};
 use sha2::{Digest, Sha256};
@@ -233,7 +233,7 @@ pub fn base_branch(confirmed: Option<&Confirmed>) -> BaseBranch {
 /// The contract view of a base branch.
 pub fn base_view(base: &BaseBranch) -> BaseBranchView {
     BaseBranchView {
-        name: base.name.as_ref().map(|n| Untrusted::new(n.as_str())),
+        name: base.name.as_ref().map(|n| UntrustedName::new(n.as_str())),
         status: match base.status {
             BaseStatus::Confirmed => BaseStatusView::Confirmed,
             BaseStatus::Unconfirmed => BaseStatusView::Unconfirmed,
@@ -427,7 +427,7 @@ fn untrusted_link(path: &Path, id: &str) -> WorktreeRead {
         view: WorktreeView {
             path: Untrusted::from_os(path.as_os_str()),
             main: false,
-            admin_name: Some(Untrusted::new(id)),
+            admin_name: Some(UntrustedName::new(id)),
             status: WorktreeStatus::Unavailable {
                 reason: UnavailableReason::Untrusted,
             },
@@ -446,7 +446,7 @@ pub fn read_worktree(path: &Path, main: bool, admin_name: Option<&str>) -> Workt
     let view = |status| WorktreeView {
         path: Untrusted::from_os(path.as_os_str()),
         main,
-        admin_name: admin_name.map(Untrusted::new),
+        admin_name: admin_name.map(UntrustedName::new),
         status,
     };
     let read = || -> Result<(HeadView, Option<String>, Status, bool), ReadError> {
@@ -454,7 +454,7 @@ pub fn read_worktree(path: &Path, main: bool, admin_name: Option<&str>) -> Workt
         let head = reader.head()?;
         let status = reader.status()?;
         let in_progress = reader.in_progress().is_some();
-        let name = || Untrusted::new(head.branch.clone().unwrap_or_default());
+        let name = || UntrustedName::new(head.branch.clone().unwrap_or_default());
         let head_view = if head.detached {
             HeadView::Detached
         } else if head.unborn {

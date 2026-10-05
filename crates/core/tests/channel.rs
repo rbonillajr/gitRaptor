@@ -735,6 +735,8 @@ fn replace_from_another_executable_is_a_reserved_stop() {
     assert_eq!(pong, "pong");
 }
 
+/// A client older than the daemon's compatibility window is told to
+/// update (DS-TS-GRP-004 E-D1).
 #[test]
 fn a_newer_daemon_tells_an_old_client_to_update() {
     let tp = TempProfile::new();
@@ -742,6 +744,7 @@ fn a_newer_daemon_tells_an_old_client_to_update() {
         tp.dirs(),
         ChannelConfig {
             protocol: PROTOCOL_VERSION + 1,
+            min_protocol: PROTOCOL_VERSION + 1,
             ..ChannelConfig::default()
         },
     );
