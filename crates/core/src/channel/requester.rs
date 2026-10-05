@@ -875,12 +875,10 @@ mod real_processes {
         let dir = tempfile::tempdir().unwrap();
         copies(dir.path(), &["helper.exe"]);
         let (parent, child) = launch(&dir.path().join("helper.exe"));
-        match resolve_pid(child).1 {
-            Ok(r) => {
-                assert_eq!(r.who, Who::unattributed());
-                assert!(!r.confirmable);
-            }
-            Err(Unverified) => {}
+        // Unverified is fine too: the walk may not reach a clean end here.
+        if let Ok(r) = resolve_pid(child).1 {
+            assert_eq!(r.who, Who::unattributed());
+            assert!(!r.confirmable);
         }
         stop(parent);
     }
