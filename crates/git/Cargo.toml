@@ -13,12 +13,19 @@ gix-pack.workspace = true
 # NFC/NFD collisions of a tree to restore (SEC-TMC-04); already in the lock through gix.
 unicode-normalization = "0.1.25"
 
+[target."cfg(windows)".dependencies]
+# Owner and DACL of the Git executable (SEC-10, TD-GRP-001).
+gitraptor-winsys.workspace = true
+
 [target."cfg(unix)".dependencies]
 rustix = { version = "1.1.5", features = ["fs", "process"] }
 
 [dev-dependencies]
 gitraptor-testkit.workspace = true
 tempfile.workspace = true
+
+[target."cfg(windows)".dev-dependencies]
+gitraptor-winsys.workspace = true
 
 [lints]
 workspace = true

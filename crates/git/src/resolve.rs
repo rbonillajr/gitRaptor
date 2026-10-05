@@ -83,7 +83,8 @@ pub enum Rejection {
     WritableByOthers,
     /// No execute permission.
     NotExecutable,
-    /// The ACL of the executable could not be verified (Windows, fail-closed).
+    /// Windows: the ACL could not be read or understood, or the path is not on a local volume
+    /// or goes through a reparse point (fail-closed).
     AclUnverified,
     /// macOS `/usr/bin/git` shim without a developer toolchain; it was not launched.
     MacosShimWithoutToolchain,
@@ -307,13 +308,22 @@ fn check_owner_and_mode(path: &Path, meta: &std::fs::Metadata) -> Result<(), Rej
     Ok(())
 }
 
-/// Windows is fail-closed until the ACE check exists (decision of 2026-10-04): the owner check
-/// of `gix-sec` alone does not prove that other users cannot replace the executable.
-#[cfg(not(unix))]
+/// Windows: owner and DACL of the file, its folder and every folder above it (SEC-10,
+/// TD-GRP-001). No location is trusted for being under `%ProgramFiles%`.
+#[cfg(windows)]
 fn check_owner_and_mode(path: &Path, _meta: &std::fs::Metadata) -> Result<(), Rejection> {
-    if !gix::sec::identity::is_path_owned_by_current_user(path).unwrap_or(false) {
-        return Err(Rejection::UntrustedOwner);
+    use gitraptor_winsys::acl::{AclError, verify_trusted_executable};
+    match verify_trusted_executable(path) {
+        Ok(()) => Ok(()),
+        Err(AclError::UntrustedOwner(_)) => Err(Rejection::UntrustedOwner),
+        Err(AclError::UntrustedWriter(_)) => Err(Rejection::WritableByOthers),
+        Err(_) => Err(Rejection::AclUnverified),
     }
+}
+
+/// Any other OS: nothing is verified, so nothing is accepted.
+#[cfg(not(any(unix, windows)))]
+fn check_owner_and_mode(_path: &Path, _meta: &std::fs::Metadata) -> Result<(), Rejection> {
     Err(Rejection::AclUnverified)
 }
 
