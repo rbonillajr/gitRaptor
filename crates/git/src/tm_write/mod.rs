@@ -170,8 +170,7 @@ impl WriteContext {
 
     /// A fresh path in the scratch folder.
     pub(crate) fn scratch_path(&self, what: &str) -> PathBuf {
-        self.scratch
-            .join(format!("{what}-{}-{}", std::process::id(), nanos()))
+        self.scratch.join(format!("{what}-{}", nanos()))
     }
 }
 
@@ -205,13 +204,13 @@ mod private {
 
     pub(super) fn ensure_dir(path: &Path) -> Result<()> {
         if path.symlink_metadata().is_err() {
-            let mut builder = std::fs::DirBuilder::new();
             #[cfg(unix)]
             {
                 use std::os::unix::fs::DirBuilderExt;
-                builder.mode(0o700);
+                std::fs::DirBuilder::new().mode(0o700).create(path)?;
             }
-            builder.create(path)?;
+            #[cfg(not(unix))]
+            std::fs::create_dir(path)?;
         }
         check_dir(path)
     }
