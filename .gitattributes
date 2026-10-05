@@ -1,0 +1,25 @@
+# Every text file is LF in the repository and in every checkout, whatever `core.autocrlf` says.
+# Git for Windows checks out with CRLF by default, which breaks byte-exact files embedded with
+# `include_str!` (the settings schema) and tests that parse the sources.
+* text=auto eol=lf
+
+# Windows scripts need CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binaries: never normalized nor diffed as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.exe binary
+*.dll binary

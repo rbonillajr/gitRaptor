@@ -166,7 +166,9 @@ mod repo_intact_tm_write {
     fn write_subcommand_words() -> Vec<String> {
         let src =
             std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/invoke.rs"))
-                .unwrap();
+                .unwrap()
+                // A checkout with CRLF (Git for Windows without `.gitattributes`) is the same source.
+                .replace("\r\n", "\n");
         let start = src
             .find("impl WriteSubcommand")
             .expect("WriteSubcommand impl");
@@ -193,7 +195,9 @@ mod repo_intact_tm_write {
     fn write_profile_neutralizes_configurable_code() {
         let src =
             std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/invoke.rs"))
-                .unwrap();
+                .unwrap()
+                // A checkout with CRLF (Git for Windows without `.gitattributes`) is the same source.
+                .replace("\r\n", "\n");
         for needle in [
             "\"GIT_CONFIG_NOSYSTEM\", \"1\"",
             "\"GIT_CONFIG_GLOBAL\"",
