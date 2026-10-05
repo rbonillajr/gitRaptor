@@ -6,6 +6,7 @@ pub mod daemon;
 pub mod observe;
 pub mod profile;
 pub mod timemachine;
+pub mod watch;
 
 pub use gitraptor_api::API_VERSION;
 
