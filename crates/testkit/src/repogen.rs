@@ -57,8 +57,10 @@ pub struct Profile {
     pub ignored_files: usize,
 }
 
-/// `S` (smoke), `P50` (median of the public sample), `M` (reference, D-TMC-21) and `L`
-/// (larger than the reference, US-TMC-020 escenario 3).
+/// `S` (smoke), `P50` (median of the public sample), `M` (reference, D-TMC-21), `L`
+/// (larger than the reference, US-TMC-020 escenario 3) and `H` (history of NFR-05: 100K commits
+/// and worktrees of more than 5,000 files, for the freshness bench of INF-GRP-002 and for
+/// SPIKE-CKP-001).
 pub fn profile(name: &str) -> Option<Profile> {
     Some(match name {
         "S" => Profile {
@@ -81,6 +83,13 @@ pub fn profile(name: &str) -> Option<Profile> {
             wt_bytes: 300 << 20,
             commits: 50_000,
             ignored_files: 3_000,
+        },
+        "H" => Profile {
+            name: "H",
+            files: 6_000,
+            wt_bytes: 40 << 20,
+            commits: 100_000,
+            ignored_files: 1_000,
         },
         "L" => Profile {
             name: "L",
