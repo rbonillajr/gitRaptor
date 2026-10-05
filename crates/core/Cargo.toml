@@ -42,6 +42,11 @@ gitraptor-winsys.workspace = true
 # time). Builds its bindings with bindgen (needs the Command Line Tools SDK).
 libproc = "=0.14.11"
 
+[target."cfg(windows)".dependencies]
+# Processes on Windows (ancestry, creation time, owner): the only crate
+# allowed `unsafe` (ADR-GRP-002, Enmienda 2026-10-05).
+gitraptor-winsys.workspace = true
+
 [dev-dependencies]
 gitraptor-testkit.workspace = true
 schemars = "1.2.2"

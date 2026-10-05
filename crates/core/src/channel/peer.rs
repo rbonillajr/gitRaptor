@@ -21,7 +21,8 @@ pub struct PeerCred {
 pub struct ProcInfo {
     pub pid: u32,
     pub ppid: u32,
-    /// Effective uid.
+    /// Effective uid. Windows: [`current_uid`] for this user's processes,
+    /// [`FOREIGN_UID`] for another user's.
     pub uid: u32,
     /// Start time, microseconds since the epoch. With `pid`, the identity.
     pub start_us: u64,
@@ -55,6 +56,12 @@ pub trait ProcSource {
     /// cannot be read (callers fail closed).
     fn pids_of(&self, _uid: u32) -> Option<Vec<u32>> {
         None
+    }
+    /// Whether `info` is the root of the user's interactive desktop, where
+    /// an ancestry ends cleanly even though its parent is gone (Windows:
+    /// `explorer.exe` in the Windows folder, whose parent `userinit` exits).
+    fn is_session_root(&self, _info: &ProcInfo) -> bool {
+        false
     }
 }
 
@@ -262,9 +269,109 @@ mod imp {
     }
 }
 
+/// Windows: a process is read through its handle (`gitraptor-winsys`), so
+/// the pid is pinned while it is read. The identity is `(pid, creation
+/// time)`; the parent pid is never updated by Windows, so the walk's "parent
+/// started before its child" check is what tells a reused pid apart.
+///
+/// There is no uid: [`ProcInfo::uid`] is [`current_uid`] (0) when the
+/// process token's user is this process's user and [`FOREIGN_UID`] when it
+/// is another; a token that cannot be read makes the process `Denied`. No
+/// controlling terminal, session leader or process group exists in this
+/// sense: they read as absent, and the checks that need them refuse
+/// (TQ-14, ADR-GRP-005 Enmienda 2026-10-05).
+#[cfg(windows)]
+mod imp {
+    use super::*;
+    use gitraptor_winsys::process::{self, Error, Owner};
+
+    /// 100 ns intervals between 1601-01-01 and 1970-01-01.
+    const EPOCH_DIFF_100NS: u64 = 116_444_736_000_000_000;
+
+    /// The System process: always another user's.
+    const SYSTEM_PID: u32 = 4;
+
+    /// Microseconds since the epoch. The last 100 ns are truncated: the
+    /// walk compares with `<=`, so two times that collapse are still in
+    /// order.
+    fn to_epoch_us(created_100ns: u64) -> u64 {
+        created_100ns.saturating_sub(EPOCH_DIFF_100NS) / 10
+    }
+
+    impl ProcSource for SystemProcs {
+        fn read(&self, pid: u32) -> Result<ProcInfo, ProcError> {
+            if pid == 0 || pid == SYSTEM_PID {
+                return Err(ProcError::Denied);
+            }
+            let p = process::process(pid).map_err(|e| match e {
+                Error::Gone => ProcError::Gone,
+                Error::Denied => ProcError::Denied,
+                Error::Unavailable => ProcError::Unsupported,
+            })?;
+            let uid = match p.owner {
+                Owner::Current => current_uid(),
+                Owner::Other => FOREIGN_UID,
+                Owner::Unknown => return Err(ProcError::Denied),
+            };
+            Ok(ProcInfo {
+                pid,
+                ppid: p.ppid,
+                uid,
+                start_us: to_epoch_us(p.created_100ns),
+                exe: p.exe,
+                controlling_terminal: false,
+                session: 0,
+                pgid: 0,
+            })
+        }
+
+        fn foreign_to(&self, pid: u32, uid: u32) -> Option<bool> {
+            if pid == 0 || pid == SYSTEM_PID {
+                return Some(uid == current_uid());
+            }
+            match process::process(pid).ok()?.owner {
+                Owner::Current => Some(uid != current_uid()),
+                Owner::Other => Some(uid == current_uid()),
+                Owner::Unknown => None,
+            }
+        }
+
+        /// The Windows folder comes from the kernel, not from `SystemRoot`,
+        /// which whoever launched the daemon could have set.
+        fn is_session_root(&self, info: &ProcInfo) -> bool {
+            let (Some(exe), Some(windows)) =
+                (info.exe.as_deref(), gitraptor_winsys::system::windows_dir())
+            else {
+                return false;
+            };
+            info.uid == current_uid()
+                && exe
+                    .to_string_lossy()
+                    .eq_ignore_ascii_case(&windows.join("explorer.exe").to_string_lossy())
+        }
+
+        fn pids_of(&self, uid: u32) -> Option<Vec<u32>> {
+            if uid != current_uid() {
+                return None;
+            }
+            Some(
+                process::pids()?
+                    .into_iter()
+                    .filter(|pid| process::process(*pid).is_ok_and(|p| p.owner == Owner::Current))
+                    .collect(),
+            )
+        }
+    }
+
+    /// Pendiente: the working folder of another process needs its PEB.
+    pub fn process_cwd(_pid: u32) -> Option<PathBuf> {
+        None
+    }
+}
+
 /// Other platforms: nothing about a peer can be read, so every reserved
 /// command is refused (fail-closed).
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
 mod imp {
     use super::*;
 
@@ -286,7 +393,10 @@ mod imp {
 pub use imp::peer_cred;
 pub use imp::process_cwd;
 
-/// Effective uid of this process.
+/// The uid of processes of another user on Windows, which has SIDs instead.
+pub const FOREIGN_UID: u32 = u32::MAX;
+
+/// Effective uid of this process. Windows: 0, the stand-in for "this user".
 pub fn current_uid() -> u32 {
     #[cfg(unix)]
     {
@@ -343,5 +453,45 @@ mod tests {
         let pid = child.id();
         child.wait().unwrap();
         assert_eq!(SystemProcs.read(pid), Err(ProcError::Gone));
+    }
+}
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    use super::*;
+
+    #[test]
+    fn reads_this_process_and_its_parent() {
+        let me = SystemProcs.read(std::process::id()).unwrap();
+        assert_eq!(me.uid, current_uid());
+        assert!(me.start_us > 1_600_000_000_000_000, "after 2020");
+        assert_eq!(
+            me.exe.as_deref().and_then(|p| p.file_name()),
+            std::env::current_exe()
+                .ok()
+                .as_deref()
+                .and_then(|p| p.file_name())
+        );
+        let parent = SystemProcs.read(me.ppid).unwrap();
+        assert!(parent.start_us <= me.start_us);
+        assert_eq!(SystemProcs.foreign_to(me.pid, me.uid), Some(false));
+        assert!(SystemProcs.pids_of(me.uid).unwrap().contains(&me.pid));
+        assert!(!SystemProcs.is_session_root(&me));
+        assert!(!me.controlling_terminal);
+        assert_eq!((me.session, me.pgid), (0, 0));
+    }
+
+    #[test]
+    fn system_is_foreign_and_a_dead_pid_is_gone() {
+        assert_eq!(SystemProcs.read(4), Err(ProcError::Denied));
+        assert_eq!(SystemProcs.foreign_to(4, current_uid()), Some(true));
+        let mut child = std::process::Command::new("cmd")
+            .args(["/C", "exit 0"])
+            .spawn()
+            .unwrap();
+        let pid = child.id();
+        child.wait().unwrap();
+        assert_eq!(SystemProcs.read(pid), Err(ProcError::Gone));
+        assert!(!SystemProcs.pids_of(current_uid()).unwrap().contains(&4));
     }
 }
