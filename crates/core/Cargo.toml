@@ -9,6 +9,8 @@ publish.workspace = true
 
 [dependencies]
 directories = "6.0.0"
+# Confirmation challenges of the Time Machine (TS-TMC-004, SEC-TMC-03).
+getrandom = "0.4.3"
 gitraptor-api.workspace = true
 gitraptor-git.workspace = true
 gitraptor-policy.workspace = true
@@ -34,6 +36,7 @@ libproc = "=0.14.11"
 
 [dev-dependencies]
 gitraptor-testkit.workspace = true
+schemars = "1.2.2"
 tempfile = "3.27.0"
 
 # p95 of the guaranteed prior snapshot against NFR-04 (TS-TMC-001, ADR-TMC-006 § 4).

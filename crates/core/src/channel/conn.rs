@@ -2,6 +2,7 @@
 
 use std::io::{BufReader, Write};
 use std::os::unix::net::UnixStream;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
@@ -17,14 +18,27 @@ use gitraptor_api::messages::{
 };
 use gitraptor_api::methods::{self, METHODS, MethodSpec};
 use gitraptor_api::rpc::{ErrorObject, Id, Request, Response, code};
+use gitraptor_api::timemachine::{
+    Invalid as TmInvalid, MAX_REPORTED_REFS, McpRequesterView, OperationRunParams,
+    OperationRunResult, PriorFailedData, RedoParams, RequestChannel, RequesterView, ResolveParams,
+    RestoreParams, SnapshotParams, Surface, TimelineParams, UndoParams,
+};
 
 use super::authz::{AcceptedPeer, ChainLink, Verdict, check_reserved};
 use super::bus::{Outbox, Subscribed};
 use super::peer::{ProcInfo, peer_cred, process_cwd};
+use super::requester::{self, Resolution};
 use super::validate;
 use super::{ServerCtx, file_id};
 use crate::daemon::{Field, StopCause, now_ms};
 use crate::profile::AuditRow;
+use crate::timemachine::oplog::{Channel, OperationKind, Scope, Target};
+use crate::timemachine::protected::scope::{
+    operation_in, require_attributed, scope_for, snapshot_in,
+};
+use crate::timemachine::protected::{
+    ProtectedError, ProtectedOperation, ProtectedRequest, RepoHandle, ScopeError, failure_text,
+};
 
 /// Longest audit page.
 const MAX_AUDIT_PAGE: u32 = 500;
@@ -40,6 +54,7 @@ const REPLACE_AS_STOP: MethodSpec = MethodSpec {
     reserved: true,
     mcp: false,
     implemented_by: None,
+    writes: methods::RepoWrite::None,
 };
 
 struct ConnEntry {
@@ -481,7 +496,26 @@ impl Connection<'_> {
             );
             return After::Continue;
         }
+        // Every method that may modify a repo is served by one route, and
+        // the only route that runs anything is the protected operation.
+        if let Some(route) = write_route(spec.name) {
+            let result = match route {
+                WriteRoute::Protected => self.operation_run(request),
+                WriteRoute::TimeMachine(story) => self.tm_command(spec, request, story),
+            };
+            self.reply(&request.id, result);
+            return After::Continue;
+        }
         match spec.name {
+            methods::REQUESTER_RESOLVE => {
+                let result = self.requester_resolve(request);
+                self.reply(&request.id, result);
+            }
+            methods::TM_SNAPSHOT | methods::TM_TIMELINE => {
+                let story = spec.implemented_by.unwrap_or("US-TMC-006");
+                let result = self.tm_command(spec, request, story);
+                self.reply(&request.id, result);
+            }
             methods::PING => self.reply(&request.id, request.params::<NoParams>().map(|_| "pong")),
             methods::ENGINE_SNAPSHOT => {
                 let result = request.params::<NoParams>().map(|_| self.snapshot());
@@ -818,6 +852,276 @@ impl Connection<'_> {
 
 fn not_found() -> ErrorObject {
     ErrorObject::new(code::METHOD_NOT_FOUND, "method not found")
+}
+
+/// How the channel serves a method that may modify a repo
+/// (ADR-TMC-004 § 1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WriteRoute {
+    /// Through [`ProtectedOperation`].
+    Protected,
+    /// A Time Machine command whose story plans it: validated, then "not
+    /// implemented", without touching the oplog or the repo.
+    TimeMachine(&'static str),
+}
+
+fn write_route(name: &str) -> Option<WriteRoute> {
+    match name {
+        methods::OPERATION_RUN => Some(WriteRoute::Protected),
+        methods::TM_UNDO | methods::TM_REDO | methods::TM_RESTORE => Some(WriteRoute::TimeMachine(
+            methods::spec(name)?.implemented_by.unwrap_or("US-TMC-002"),
+        )),
+        _ => None,
+    }
+}
+
+fn tm_invalid(why: TmInvalid) -> ErrorObject {
+    ErrorObject::new(code::INVALID_PARAMS, &why.message())
+}
+
+fn scope_refused(why: ScopeError) -> ErrorObject {
+    ErrorObject::new(code::SCOPE_REFUSED, why.as_str())
+}
+
+fn not_found_id() -> ErrorObject {
+    ErrorObject::new(code::NOT_FOUND, "not found")
+}
+
+fn oplog_channel(c: RequestChannel) -> Channel {
+    match c {
+        RequestChannel::Cli => Channel::Cli,
+        RequestChannel::Tui => Channel::Tui,
+        RequestChannel::Mcp => Channel::Mcp,
+        RequestChannel::Hook => Channel::Hook,
+    }
+}
+
+impl Connection<'_> {
+    fn is_mcp(&self) -> bool {
+        self.profile == ConnectionProfile::Mcp
+    }
+
+    /// The channel of a request: an MCP connection is always `mcp` and may
+    /// not label itself.
+    fn request_channel(&self, surface: Option<Surface>) -> Result<RequestChannel, ErrorObject> {
+        match (self.is_mcp(), surface) {
+            (true, None) => Ok(RequestChannel::Mcp),
+            (true, Some(_)) => Err(ErrorObject::new(
+                code::INVALID_PARAMS,
+                "surface: not accepted over MCP",
+            )),
+            (false, s) => Ok(s.map_or(RequestChannel::Cli, RequestChannel::from)),
+        }
+    }
+
+    /// The worktree a request names: required on a full connection, absent
+    /// over MCP (it comes from the caller's working folder).
+    fn named_worktree(&self, raw: Option<&str>) -> Result<Option<PathBuf>, ErrorObject> {
+        match (self.is_mcp(), raw) {
+            (true, None) => Ok(None),
+            (true, Some(_)) => Err(ErrorObject::new(
+                code::INVALID_PARAMS,
+                "worktree: taken from the caller's working folder over MCP",
+            )),
+            (false, None) => Err(ErrorObject::new(code::INVALID_PARAMS, "worktree: required")),
+            (false, Some(w)) => validate::client_path(w).map(Some).map_err(invalid),
+        }
+    }
+
+    /// Who is asking, from the kernel's view of the peer (ADR-TMC-005 § 1).
+    fn resolve(&self) -> Result<Resolution, ErrorObject> {
+        requester::resolve(self.peer, &self.ctx.checks(), Some(&self.ctx.marks)).map_err(|_| {
+            ErrorObject::new(
+                code::IDENTITY_UNVERIFIED,
+                "the caller's identity could not be verified",
+            )
+        })
+    }
+
+    fn requester_view(&self, r: &Resolution, channel: RequestChannel) -> RequesterView {
+        RequesterView {
+            actor: r.who.actor.clone(),
+            channel,
+            via: r.via,
+            confirmable: r.confirmable,
+        }
+    }
+
+    fn requester_resolve(&self, request: &Request) -> Result<serde_json::Value, ErrorObject> {
+        let p: ResolveParams = request.params()?;
+        let channel = self.request_channel(p.surface)?;
+        let r = self.resolve()?;
+        // Over MCP only the actor: how it was found, and whether it could
+        // confirm, would be an unaudited oracle for evasion attempts.
+        let value = if self.is_mcp() {
+            serde_json::to_value(McpRequesterView {
+                actor: r.who.actor,
+                channel,
+            })
+        } else {
+            serde_json::to_value(self.requester_view(&r, channel))
+        };
+        value.map_err(|_| ErrorObject::new(code::INTERNAL, "serialization"))
+    }
+
+    fn repo_for(
+        &self,
+        channel: RequestChannel,
+        named: Option<&Path>,
+    ) -> Option<Result<RepoHandle, ErrorObject>> {
+        let wiring = self.ctx.protected.as_ref()?;
+        let cwd = if channel == RequestChannel::Mcp {
+            process_cwd(self.peer.pid)
+        } else {
+            None
+        };
+        Some(
+            scope_for(wiring.backend.as_ref(), channel, named, cwd.as_deref())
+                .map_err(scope_refused),
+        )
+    }
+
+    /// `operation.run`: a catalog operation as a protected operation.
+    fn operation_run(&self, request: &Request) -> Result<serde_json::Value, ErrorObject> {
+        let p: OperationRunParams = request.params()?;
+        p.validate().map_err(tm_invalid)?;
+        let channel = self.request_channel(p.surface)?;
+        let named = self.named_worktree(p.worktree.as_deref())?;
+        let r = self.resolve()?;
+        let Some(wiring) = self.ctx.protected.clone() else {
+            return Err(
+                ErrorObject::new(code::NOT_IMPLEMENTED, "no operation executor yet")
+                    .with_data(serde_json::json!({ "implemented_by": "F-001-02" })),
+            );
+        };
+        let repo = self
+            .repo_for(channel, named.as_deref())
+            .expect("wiring checked above")?;
+        let mut step = wiring
+            .backend
+            .step(&p.operation, &p.args, &repo)
+            .map_err(|e| ErrorObject::new(code::INVALID_PARAMS, &e.message))?;
+        let worktree = repo.worktree.to_string_lossy().into_owned();
+        let req = ProtectedRequest {
+            kind: OperationKind::Protected,
+            scope: Scope {
+                worktrees: vec![worktree],
+                refs: Vec::new(),
+            },
+            worktree_paths: vec![repo.worktree.clone()],
+            who: r.who.clone(),
+            channel: oplog_channel(channel),
+            confirmed: false,
+            target: Target::None,
+            warnings: Vec::new(),
+            engine_mark: i64::try_from(self.ctx.bus.snapshot().0).unwrap_or(i64::MAX),
+        };
+        let op = ProtectedOperation {
+            oplog: &repo.oplog,
+            snapshotter: Arc::clone(&repo.snapshotter),
+            marks: &self.ctx.marks,
+            procs: self.ctx.procs.as_ref(),
+            stopping: &self.ctx.stopping,
+            deadline: wiring.prior_deadline,
+        };
+        let outcome = op.run(&req, step.as_mut()).map_err(|e| match e {
+            ProtectedError::Prior {
+                reason,
+                operation_id,
+                ..
+            } => ErrorObject::new(code::PRIOR_SNAPSHOT_FAILED, failure_text(reason)).with_data(
+                PriorFailedData {
+                    reason,
+                    operation_id,
+                },
+            ),
+            ProtectedError::Oplog(_) => ErrorObject::new(code::INTERNAL, "oplog unavailable"),
+            ProtectedError::Step { operation_id, .. } => {
+                ErrorObject::new(code::OPERATION_FAILED, "the operation failed")
+                    .with_data(serde_json::json!({ "operation_id": operation_id }))
+            }
+        })?;
+        let result = OperationRunResult {
+            operation_id: outcome.operation_id,
+            prior_snapshot_id: outcome.prior.snapshot_id,
+            fast_path: outcome.prior.fast_path,
+            requester: self.requester_view(&r, channel),
+            changed_refs: outcome
+                .output
+                .changed_refs
+                .into_iter()
+                .take(MAX_REPORTED_REFS)
+                .map(Untrusted::new)
+                .collect(),
+        };
+        let value = if self.is_mcp() {
+            serde_json::to_value(result.for_mcp())
+        } else {
+            serde_json::to_value(result)
+        };
+        value.map_err(|_| ErrorObject::new(code::INTERNAL, "serialization"))
+    }
+
+    /// A Time Machine command declared ahead of its story: strict
+    /// parameters, the requester and, when the repo layer is wired, the
+    /// scope and the ids are checked; then "not implemented". Nothing is
+    /// recorded and nothing is touched.
+    fn tm_command(
+        &self,
+        spec: &MethodSpec,
+        request: &Request,
+        story: &'static str,
+    ) -> Result<serde_json::Value, ErrorObject> {
+        let (worktree, surface, operation_id, snapshot_id) = match spec.name {
+            methods::TM_UNDO => {
+                let p: UndoParams = request.params()?;
+                p.validate().map_err(tm_invalid)?;
+                (p.worktree, p.surface, p.operation_id, None)
+            }
+            methods::TM_REDO => {
+                let p: RedoParams = request.params()?;
+                p.validate().map_err(tm_invalid)?;
+                (p.worktree, p.surface, p.operation_id, None)
+            }
+            methods::TM_RESTORE => {
+                let p: RestoreParams = request.params()?;
+                p.validate().map_err(tm_invalid)?;
+                (p.worktree, p.surface, None, Some(p.snapshot_id))
+            }
+            methods::TM_SNAPSHOT => {
+                let p: SnapshotParams = request.params()?;
+                (p.worktree, p.surface, None, None)
+            }
+            _ => {
+                let p: TimelineParams = request.params()?;
+                p.validate().map_err(tm_invalid)?;
+                (p.worktree, None, None, None)
+            }
+        };
+        let channel = self.request_channel(surface)?;
+        let named = self.named_worktree(worktree.as_deref())?;
+        let r = self.resolve()?;
+        if matches!(spec.name, methods::TM_UNDO | methods::TM_RESTORE) {
+            require_attributed(channel, r.who.is_agent()).map_err(scope_refused)?;
+        }
+        if let Some(repo) = self.repo_for(channel, named.as_deref()) {
+            let repo = repo?;
+            if let Some(id) = &snapshot_id
+                && snapshot_in(&repo, id).is_none()
+            {
+                return Err(not_found_id());
+            }
+            if let Some(id) = &operation_id
+                && operation_in(&repo, id).is_none()
+            {
+                return Err(not_found_id());
+            }
+        }
+        Err(
+            ErrorObject::new(code::NOT_IMPLEMENTED, "not implemented yet")
+                .with_data(serde_json::json!({ "implemented_by": story })),
+        )
+    }
 }
 
 fn invalid(why: validate::Invalid) -> ErrorObject {

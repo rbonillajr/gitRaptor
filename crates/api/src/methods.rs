@@ -25,12 +25,35 @@ pub const REPO_RETIRE: &str = "repo.retire";
 pub const ATTRIBUTION_CORRECT: &str = "attribution.correct";
 pub const ATTRIBUTION_WITHDRAW: &str = "attribution.withdraw-correction";
 pub const REGISTRATION_WITHDRAW: &str = "registration.withdraw";
+/// Runs one operation of the catalog (ADR-CKP-002) as a protected
+/// operation: intent, prior snapshot, execution, record (ADR-TMC-004 § 1).
+pub const OPERATION_RUN: &str = "operation.run";
+/// How the daemon sees the caller: "agent X" or "unattributed" (ADR-TMC-005
+/// § 1). Read-only.
+pub const REQUESTER_RESOLVE: &str = "requester.resolve";
+pub const TM_SNAPSHOT: &str = "timemachine.snapshot";
+pub const TM_UNDO: &str = "timemachine.undo";
+pub const TM_REDO: &str = "timemachine.redo";
+pub const TM_RESTORE: &str = "timemachine.restore";
+pub const TM_TIMELINE: &str = "timemachine.timeline";
 
 /// Notification that carries one stream event.
 pub const NOTIFY_EVENT: &str = "events.event";
 /// Notification sent before a slow subscriber is disconnected: the client
 /// must take a new snapshot and subscribe again (SEC-08).
 pub const NOTIFY_RESYNC: &str = "events.resync";
+
+/// Whether a method may modify a repository (ADR-TMC-004 § 1). Only the
+/// protected operation and the Time Machine's own protected operations do:
+/// every write takes a prior snapshot first (BR-TMC-CONS-001).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RepoWrite {
+    None,
+    /// A catalog operation run through the protected operation.
+    Protected,
+    /// Undo, redo or restore: protected operations of the Time Machine.
+    TimeMachine,
+}
 
 /// Static description of one method.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,6 +65,7 @@ pub struct MethodSpec {
     pub mcp: bool,
     /// Story that implements it, for methods declared ahead of it.
     pub implemented_by: Option<&'static str>,
+    pub writes: RepoWrite,
 }
 
 const fn method(name: &'static str, reserved: bool, mcp: bool) -> MethodSpec {
@@ -50,6 +74,7 @@ const fn method(name: &'static str, reserved: bool, mcp: bool) -> MethodSpec {
         reserved,
         mcp,
         implemented_by: None,
+        writes: RepoWrite::None,
     }
 }
 
@@ -59,6 +84,25 @@ const fn pending(name: &'static str, story: &'static str) -> MethodSpec {
         reserved: true,
         mcp: false,
         implemented_by: Some(story),
+        writes: RepoWrite::None,
+    }
+}
+
+/// A Time Machine command: not reserved (an agent may undo its own work,
+/// ADR-TMC-005 § 2), declared with its parameters and validated, and
+/// implemented by its story.
+const fn time_machine(
+    name: &'static str,
+    mcp: bool,
+    writes: RepoWrite,
+    story: &'static str,
+) -> MethodSpec {
+    MethodSpec {
+        name,
+        reserved: false,
+        mcp,
+        implemented_by: Some(story),
+        writes,
     }
 }
 
@@ -81,6 +125,21 @@ pub const METHODS: &[MethodSpec] = &[
     pending(ATTRIBUTION_CORRECT, "US-GRP-010"),
     pending(ATTRIBUTION_WITHDRAW, "US-GRP-010"),
     pending(REGISTRATION_WITHDRAW, "US-GRP-009"),
+    MethodSpec {
+        name: OPERATION_RUN,
+        reserved: false,
+        mcp: true,
+        implemented_by: None,
+        writes: RepoWrite::Protected,
+    },
+    method(REQUESTER_RESOLVE, false, true),
+    // Redo, restore and the full timeline are not offered over MCP
+    // (Q-MCP-11); the hook snapshot is a CLI command (US-TMC-005).
+    time_machine(TM_SNAPSHOT, false, RepoWrite::None, "US-TMC-005"),
+    time_machine(TM_UNDO, true, RepoWrite::TimeMachine, "US-TMC-002"),
+    time_machine(TM_REDO, false, RepoWrite::TimeMachine, "US-TMC-003"),
+    time_machine(TM_RESTORE, false, RepoWrite::TimeMachine, "US-TMC-009"),
+    time_machine(TM_TIMELINE, false, RepoWrite::None, "US-TMC-006"),
 ];
 
 pub fn spec(name: &str) -> Option<&'static MethodSpec> {
@@ -107,8 +166,50 @@ mod tests {
     #[test]
     fn pending_methods_name_their_story() {
         for m in METHODS.iter().filter(|m| m.implemented_by.is_some()) {
-            assert!(m.reserved);
-            assert!(m.implemented_by.unwrap().starts_with("US-GRP-"));
+            let story = m.implemented_by.unwrap();
+            if m.name.starts_with("timemachine.") {
+                assert!(!m.reserved, "{}", m.name);
+                assert!(story.starts_with("US-TMC-"), "{}", m.name);
+            } else {
+                assert!(m.reserved);
+                assert!(story.starts_with("US-GRP-"));
+            }
         }
+    }
+
+    /// ADR-TMC-004 § 1 and TS-TMC-004: only the protected operation and
+    /// the Time Machine's undo, redo and restore may modify a repo.
+    #[test]
+    fn only_protected_paths_write() {
+        let mut writers: Vec<_> = METHODS
+            .iter()
+            .filter(|m| m.writes != RepoWrite::None)
+            .map(|m| (m.name, m.writes))
+            .collect();
+        writers.sort_by_key(|(name, _)| *name);
+        assert_eq!(
+            writers,
+            [
+                (OPERATION_RUN, RepoWrite::Protected),
+                (TM_REDO, RepoWrite::TimeMachine),
+                (TM_RESTORE, RepoWrite::TimeMachine),
+                (TM_UNDO, RepoWrite::TimeMachine),
+            ]
+        );
+        // A writer is never a reserved command: reserved commands do not go
+        // through the prior snapshot.
+        assert!(
+            METHODS
+                .iter()
+                .all(|m| !(m.reserved && m.writes != RepoWrite::None))
+        );
+    }
+
+    #[test]
+    fn method_names_are_unique() {
+        let mut names: Vec<_> = METHODS.iter().map(|m| m.name).collect();
+        names.sort_unstable();
+        names.dedup();
+        assert_eq!(names.len(), METHODS.len());
     }
 }

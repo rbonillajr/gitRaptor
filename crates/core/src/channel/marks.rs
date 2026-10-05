@@ -1,0 +1,156 @@
+//! Processes started by a protected operation (DEP-MCP-3).
+//!
+//! A hook or `git` that the operation's step runs acts with the authority of
+//! whoever asked for the operation: a confused deputy if it could use a
+//! reserved command or pass for someone else. Every child the step spawns is
+//! marked by `(pid, start)` and by its process group, from the moment it
+//! starts until the operation closes (not until the child ends, so an orphan
+//! grandchild of the same group is still covered). The channel treats a
+//! marked process, and any descendant of one, as a descendant of the
+//! executor: attributed to the operation's requester and refused for
+//! reserved commands.
+//!
+//! Accepted residual risk (ADR-GRP-005 § 6): a grandchild that changes its
+//! process group and detaches from the tree escapes the mark.
+
+use std::sync::{Arc, Mutex};
+
+use super::peer::ProcInfo;
+use super::requester::Who;
+
+#[derive(Debug, Clone)]
+struct Mark {
+    operation_id: String,
+    who: Who,
+    /// Wall clock when the operation opened, microseconds since the epoch.
+    /// A process group only matches processes started after it, so a
+    /// reused group id of an older process never matches.
+    opened_us: u64,
+    children: Vec<(u32, u64)>,
+    groups: Vec<u32>,
+}
+
+/// The operation a marked process belongs to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MarkedBy {
+    pub operation_id: String,
+    pub who: Who,
+}
+
+/// The marks of the operations running now. Shared by the protected
+/// operation (writes) and the channel (reads).
+#[derive(Debug, Default)]
+pub struct ExecutorMarks {
+    marks: Mutex<Vec<Mark>>,
+}
+
+impl ExecutorMarks {
+    fn lock(&self) -> std::sync::MutexGuard<'_, Vec<Mark>> {
+        // A panic while holding the lock leaves a consistent list.
+        self.marks.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Opens the marks of an operation; they last until the guard drops.
+    pub fn open(self: &Arc<Self>, operation_id: &str, who: &Who, opened_us: u64) -> MarkGuard {
+        self.lock().push(Mark {
+            operation_id: operation_id.to_owned(),
+            who: who.clone(),
+            opened_us,
+            children: Vec::new(),
+            groups: Vec::new(),
+        });
+        MarkGuard {
+            marks: Arc::clone(self),
+            operation_id: operation_id.to_owned(),
+        }
+    }
+
+    /// Marks a child the operation started.
+    pub fn add_child(&self, operation_id: &str, pid: u32, start_us: u64, pgid: u32) {
+        if let Some(m) = self
+            .lock()
+            .iter_mut()
+            .find(|m| m.operation_id == operation_id)
+        {
+            m.children.push((pid, start_us));
+            if pgid > 1 && !m.groups.contains(&pgid) {
+                m.groups.push(pgid);
+            }
+        }
+    }
+
+    /// Whether `info` is a process started by a running operation.
+    pub fn lookup(&self, info: &ProcInfo) -> Option<MarkedBy> {
+        self.lock()
+            .iter()
+            .find(|m| {
+                m.children.contains(&(info.pid, info.start_us))
+                    || (m.groups.contains(&info.pgid) && info.start_us >= m.opened_us)
+            })
+            .map(|m| MarkedBy {
+                operation_id: m.operation_id.clone(),
+                who: m.who.clone(),
+            })
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.lock().is_empty()
+    }
+}
+
+/// Removes the marks of an operation when it closes.
+#[derive(Debug)]
+pub struct MarkGuard {
+    marks: Arc<ExecutorMarks>,
+    operation_id: String,
+}
+
+impl Drop for MarkGuard {
+    fn drop(&mut self) {
+        self.marks
+            .lock()
+            .retain(|m| m.operation_id != self.operation_id);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gitraptor_api::Actor;
+
+    fn proc(pid: u32, start: u64, pgid: u32) -> ProcInfo {
+        ProcInfo {
+            pid,
+            ppid: 1,
+            uid: 501,
+            start_us: start,
+            exe: None,
+            controlling_terminal: false,
+            session: pid,
+            pgid,
+        }
+    }
+
+    #[test]
+    fn children_and_their_group_are_marked_until_the_operation_closes() {
+        let marks = Arc::new(ExecutorMarks::default());
+        let who = Who::unattributed();
+        let guard = marks.open("op-1", &who, 1_000);
+        marks.add_child("op-1", 50, 1_100, 50);
+        assert_eq!(
+            marks.lookup(&proc(50, 1_100, 50)).unwrap().operation_id,
+            "op-1"
+        );
+        // A grandchild of the same group, even reparented after the child
+        // ended.
+        assert!(marks.lookup(&proc(51, 1_200, 50)).is_some());
+        // The same pid with another start, or an older process of a reused
+        // group, is not marked.
+        assert!(marks.lookup(&proc(50, 900, 7)).is_none());
+        assert!(marks.lookup(&proc(52, 900, 50)).is_none());
+        drop(guard);
+        assert!(marks.lookup(&proc(50, 1_100, 50)).is_none());
+        assert!(marks.is_empty());
+        assert_eq!(who.actor, Actor::Unattributed);
+    }
+}

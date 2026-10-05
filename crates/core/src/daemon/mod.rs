@@ -129,6 +129,9 @@ pub struct DaemonConfig {
     /// as a crash). `None` in tests that run the daemon in-process.
     pub stop_deadline: Option<Duration>,
     pub channel: ChannelConfig,
+    /// Protected operations (TS-TMC-004). `None`: `operation.run` answers
+    /// "not implemented" until the executor of F-001-02 is wired.
+    pub protected: Option<crate::channel::ProtectedWiring>,
 }
 
 impl DaemonConfig {
@@ -147,6 +150,7 @@ impl DaemonConfig {
             log: LogLimits::default(),
             stop_deadline: Some(Duration::from_secs(5)),
             channel,
+            protected: None,
         })
     }
 }
@@ -541,6 +545,7 @@ impl Daemon {
                 binary_version: crate::version().to_owned(),
                 started_wall_ms: self.started_ms,
             },
+            protected: self.config.protected.clone(),
         };
         match crate::channel::Server::serve(bound, args) {
             Ok(server) => {

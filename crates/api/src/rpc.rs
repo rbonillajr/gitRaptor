@@ -38,6 +38,20 @@ pub mod code {
     /// The subscription could not continue from the requested point; an
     /// `events.resync` notification says why. Take a new snapshot.
     pub const RESYNC_REQUIRED: i64 = -32007;
+    /// The prior snapshot failed: the operation was not run and the repo
+    /// did not change (BR-TMC-CONS-001). `data` says why.
+    pub const PRIOR_SNAPSHOT_FAILED: i64 = -32008;
+    /// The thing asked for does not exist for this caller: an id of another
+    /// repo answers the same as an unknown one (SEC-TMC-07).
+    pub const NOT_FOUND: i64 = -32009;
+    /// The caller's scope is refused: no readable working folder, not in an
+    /// observed repo, or the repo is not in the MCP allowlist (SEC-TMC-15).
+    pub const SCOPE_REFUSED: i64 = -32010;
+    /// The operation started after its prior snapshot and failed: the oplog
+    /// marks it interrupted and the prior snapshot can undo it.
+    pub const OPERATION_FAILED: i64 = -32011;
+    /// The caller's identity changed since the connection was accepted.
+    pub const IDENTITY_UNVERIFIED: i64 = -32012;
 }
 
 /// Request id: a number or a short string.

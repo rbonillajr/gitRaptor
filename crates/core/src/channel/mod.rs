@@ -11,7 +11,9 @@ pub mod authz;
 pub mod bus;
 #[cfg(unix)]
 mod conn;
+pub mod marks;
 pub mod peer;
+pub mod requester;
 #[cfg(unix)]
 mod server;
 pub mod transport;
@@ -101,5 +103,21 @@ impl Default for ChannelConfig {
             launch_exe: None,
             protocol: PROTOCOL_VERSION,
         }
+    }
+}
+
+/// What protected operations need from the daemon (TS-TMC-004).
+#[derive(Clone)]
+pub struct ProtectedWiring {
+    pub backend: std::sync::Arc<dyn crate::timemachine::protected::ProtectedBackend>,
+    /// Deadline of the prior snapshot.
+    pub prior_deadline: Duration,
+}
+
+impl std::fmt::Debug for ProtectedWiring {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProtectedWiring")
+            .field("prior_deadline", &self.prior_deadline)
+            .finish_non_exhaustive()
     }
 }

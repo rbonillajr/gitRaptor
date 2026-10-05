@@ -8,6 +8,8 @@ use std::time::Duration;
 
 use gitraptor_api::messages::DaemonView;
 
+use super::ProtectedWiring;
+use super::marks::ExecutorMarks;
 use super::{ChannelConfig, EventBus, authz, conn, peer, transport};
 use crate::daemon::{Logger, ShutdownHandle};
 
@@ -73,6 +75,11 @@ pub(crate) struct ServerCtx {
     pub conns: Mutex<conn::ConnTable>,
     pub stopping: AtomicBool,
     pub runtime: PathBuf,
+    /// Processes started by running protected operations (DEP-MCP-3).
+    pub marks: Arc<ExecutorMarks>,
+    /// Repos, executor and allowlist for protected operations; `None` until
+    /// the executor of F-001-02 is wired.
+    pub protected: Option<ProtectedWiring>,
 }
 
 impl ServerCtx {
@@ -82,6 +89,7 @@ impl ServerCtx {
             procs: self.procs.as_ref(),
             matcher: &self.config.agents,
             daemon: self.daemon_id,
+            marks: Some(&self.marks),
         }
     }
 }
@@ -128,6 +136,7 @@ pub(crate) struct ServeArgs {
     pub logger: Logger,
     pub instance_id: String,
     pub daemon: DaemonView,
+    pub protected: Option<ProtectedWiring>,
 }
 
 impl Server {
@@ -161,6 +170,8 @@ impl Server {
             conns: Mutex::new(conn::ConnTable::default()),
             stopping: AtomicBool::new(false),
             runtime: bound.runtime,
+            marks: Arc::new(ExecutorMarks::default()),
+            protected: args.protected,
         });
         let listener = bound.listener;
         let socket = socket_id(&transport::socket_path(&ctx.runtime));

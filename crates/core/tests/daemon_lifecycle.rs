@@ -25,6 +25,7 @@ fn config(dirs: ProfileDirs, git: ResolveConfig) -> DaemonConfig {
         log: LogLimits::default(),
         stop_deadline: None,
         channel: ChannelConfig::default(),
+        protected: None,
     }
 }
 

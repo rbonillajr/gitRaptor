@@ -29,6 +29,8 @@ pub struct ProcInfo {
     pub controlling_terminal: bool,
     /// Session id: the pid of the session leader.
     pub session: u32,
+    /// Process group id.
+    pub pgid: u32,
 }
 
 /// Why a process could not be read.
@@ -49,6 +51,11 @@ pub trait ProcSource {
     /// `Some(true)` when `pid` exists and its effective uid is not `uid`;
     /// `Some(false)` when it is; `None` when unknown.
     fn foreign_to(&self, pid: u32, uid: u32) -> Option<bool>;
+    /// Every process whose effective uid is `uid`; `None` when the list
+    /// cannot be read (callers fail closed).
+    fn pids_of(&self, _uid: u32) -> Option<Vec<u32>> {
+        None
+    }
 }
 
 /// The running OS.
@@ -115,6 +122,7 @@ mod imp {
                 exe: pidpath(raw).ok().map(PathBuf::from),
                 controlling_terminal: bsd.pbi_flags & PROC_FLAG_CONTROLT != 0,
                 session,
+                pgid: bsd.pbi_pgid,
             })
         }
 
@@ -126,6 +134,10 @@ mod imp {
             // and runs with root's rights, not the user's.
             let mine = pids_by_type(ProcFilter::ByUID { uid }).ok()?;
             Some(!mine.contains(&pid))
+        }
+
+        fn pids_of(&self, uid: u32) -> Option<Vec<u32>> {
+            pids_by_type(ProcFilter::ByUID { uid }).ok()
         }
     }
 
@@ -191,12 +203,26 @@ mod imp {
                 exe: std::fs::read_link(format!("/proc/{pid}/exe")).ok(),
                 controlling_terminal: num(4).is_some_and(|t| t != 0),
                 session: num(3).ok_or(ProcError::Gone)? as u32,
+                pgid: num(2).ok_or(ProcError::Gone)? as u32,
             })
         }
 
         fn foreign_to(&self, pid: u32, uid: u32) -> Option<bool> {
             let meta = std::fs::metadata(format!("/proc/{pid}")).ok()?;
             Some(meta.uid() != uid)
+        }
+
+        fn pids_of(&self, uid: u32) -> Option<Vec<u32>> {
+            let entries = std::fs::read_dir("/proc").ok()?;
+            Some(
+                entries
+                    .filter_map(Result::ok)
+                    .filter_map(|e| {
+                        let pid = e.file_name().to_str()?.parse::<u32>().ok()?;
+                        (e.metadata().ok()?.uid() == uid).then_some(pid)
+                    })
+                    .collect(),
+            )
         }
     }
 
@@ -260,6 +286,8 @@ mod tests {
         let parent = SystemProcs.read(me.ppid).unwrap();
         assert!(parent.start_us <= me.start_us);
         assert_eq!(SystemProcs.foreign_to(me.pid, me.uid), Some(false));
+        assert!(SystemProcs.pids_of(me.uid).unwrap().contains(&me.pid));
+        assert!(me.pgid > 0);
     }
 
     #[test]
