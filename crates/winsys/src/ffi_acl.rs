@@ -9,9 +9,8 @@ use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
 use std::ptr;
 
-use windows_sys::Win32::Foundation::{
-    CloseHandle, ERROR_SUCCESS, HANDLE, INVALID_HANDLE_VALUE, LocalFree,
-};
+use crate::ffi_handle::Handle;
+use windows_sys::Win32::Foundation::{ERROR_SUCCESS, HANDLE, INVALID_HANDLE_VALUE, LocalFree};
 use windows_sys::Win32::Security::Authorization::{
     ConvertStringSecurityDescriptorToSecurityDescriptorW, GetSecurityInfo, SDDL_REVISION_1,
     SE_FILE_OBJECT,
@@ -43,16 +42,6 @@ pub(crate) struct RawSecurity {
 
 /// `FILE_PERSISTENT_ACLS` (in `Win32_System_SystemServices`, not worth the feature).
 const FILE_PERSISTENT_ACLS: u32 = 0x0000_0008;
-
-/// A handle closed on drop.
-struct Handle(HANDLE);
-
-impl Drop for Handle {
-    fn drop(&mut self) {
-        // SAFETY: `self.0` is a valid handle owned by this guard and closed only here.
-        unsafe { CloseHandle(self.0) };
-    }
-}
 
 /// A block allocated by Windows with `LocalAlloc`, freed on drop.
 struct Local(*mut core::ffi::c_void);
@@ -122,20 +111,20 @@ pub(crate) fn read_security(path: &Path) -> io::Result<RawSecurity> {
     if raw == INVALID_HANDLE_VALUE {
         return Err(io::Error::last_os_error());
     }
-    let handle = Handle(raw);
+    let handle = Handle::new(raw).ok_or_else(|| io::Error::other("invalid handle"))?;
 
     // SAFETY: zeroed is a valid value of this plain C struct.
     let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
-    // SAFETY: `handle.0` is open and `info` is a local the call writes into.
-    if unsafe { GetFileInformationByHandle(handle.0, &mut info) } == 0 {
+    // SAFETY: `handle.raw()` is open and `info` is a local the call writes into.
+    if unsafe { GetFileInformationByHandle(handle.raw(), &mut info) } == 0 {
         return Err(io::Error::last_os_error());
     }
     let mut fs_flags = 0u32;
-    // SAFETY: `handle.0` is open; null buffers with size 0 and null out pointers are accepted
+    // SAFETY: `handle.raw()` is open; null buffers with size 0 and null out pointers are accepted
     // for the values not wanted; `fs_flags` is a local.
     let ok = unsafe {
         GetVolumeInformationByHandleW(
-            handle.0,
+            handle.raw(),
             ptr::null_mut(),
             0,
             ptr::null_mut(),
@@ -152,11 +141,11 @@ pub(crate) fn read_security(path: &Path) -> io::Result<RawSecurity> {
     let mut owner: PSID = ptr::null_mut();
     let mut dacl: *mut ACL = ptr::null_mut();
     let mut descriptor: PSECURITY_DESCRIPTOR = ptr::null_mut();
-    // SAFETY: `handle.0` is an open handle with READ_CONTROL; every out pointer points to a
+    // SAFETY: `handle.raw()` is an open handle with READ_CONTROL; every out pointer points to a
     // local that lives through the call. `owner` and `dacl` point into `descriptor`.
     let status = unsafe {
         GetSecurityInfo(
-            handle.0,
+            handle.raw(),
             SE_FILE_OBJECT,
             OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
             &mut owner,
@@ -190,11 +179,11 @@ pub(crate) fn current_user_sid() -> io::Result<Vec<u8>> {
     if unsafe { OpenProcessToken(process, TOKEN_QUERY, &mut raw) } == 0 {
         return Err(io::Error::last_os_error());
     }
-    let token = Handle(raw);
+    let token = Handle::new(raw).ok_or_else(|| io::Error::other("invalid token handle"))?;
 
     let mut needed = 0u32;
     // SAFETY: a null buffer of length 0 asks only for the size, written to `needed`.
-    unsafe { GetTokenInformation(token.0, TokenUser, ptr::null_mut(), 0, &mut needed) };
+    unsafe { GetTokenInformation(token.raw(), TokenUser, ptr::null_mut(), 0, &mut needed) };
     if needed == 0 {
         return Err(io::Error::last_os_error());
     }
@@ -203,7 +192,7 @@ pub(crate) fn current_user_sid() -> io::Result<Vec<u8>> {
     // SAFETY: `buffer` holds at least `needed` writable bytes and lives through the call.
     let ok = unsafe {
         GetTokenInformation(
-            token.0,
+            token.raw(),
             TokenUser,
             buffer.as_mut_ptr().cast(),
             needed,

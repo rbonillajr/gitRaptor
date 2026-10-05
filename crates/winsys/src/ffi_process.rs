@@ -7,9 +7,7 @@ use std::path::PathBuf;
 use std::ptr::null_mut;
 use std::sync::OnceLock;
 
-use windows_sys::Win32::Foundation::{
-    CloseHandle, ERROR_ACCESS_DENIED, ERROR_NO_MORE_FILES, FILETIME, HANDLE, INVALID_HANDLE_VALUE,
-};
+use windows_sys::Win32::Foundation::{ERROR_ACCESS_DENIED, ERROR_NO_MORE_FILES, FILETIME, HANDLE};
 use windows_sys::Win32::Security::{
     EqualSid, GetTokenInformation, TOKEN_QUERY, TOKEN_USER, TokenUser,
 };
@@ -22,6 +20,7 @@ use windows_sys::Win32::System::Threading::{
     PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
 };
 
+use crate::ffi_handle::Handle;
 use crate::process::{Error, Owner};
 
 /// Longest image path read, in UTF-16 units (the `\\?\` limit).
@@ -29,23 +28,6 @@ const MAX_PATH_UNITS: usize = 32_768;
 
 /// Largest `TOKEN_USER` accepted, in bytes (a SID is at most 68 bytes).
 const MAX_TOKEN_USER: u32 = 1024;
-
-/// An owned kernel handle, closed once on drop.
-pub(crate) struct Handle(HANDLE);
-
-impl Handle {
-    fn new(raw: HANDLE) -> Option<Self> {
-        (!raw.is_null() && raw != INVALID_HANDLE_VALUE).then_some(Self(raw))
-    }
-}
-
-impl Drop for Handle {
-    fn drop(&mut self) {
-        // SAFETY: `self.0` is a valid handle owned only by this guard, so it
-        // is closed exactly once.
-        unsafe { CloseHandle(self.0) };
-    }
-}
 
 fn last_error() -> Option<u32> {
     std::io::Error::last_os_error()
@@ -65,11 +47,11 @@ pub(crate) fn snapshot() -> Option<Vec<(u32, u32)>> {
     let mut out = Vec::new();
     // SAFETY: `snap` is a valid snapshot handle and `entry` an initialized
     // `PROCESSENTRY32W` with `dwSize` set, borrowed only for the call.
-    let mut more = unsafe { Process32FirstW(snap.0, &mut entry) } != 0;
+    let mut more = unsafe { Process32FirstW(snap.raw(), &mut entry) } != 0;
     while more {
         out.push((entry.th32ProcessID, entry.th32ParentProcessID));
         // SAFETY: as above.
-        more = unsafe { Process32NextW(snap.0, &mut entry) } != 0;
+        more = unsafe { Process32NextW(snap.raw(), &mut entry) } != 0;
     }
     // The list ends with `ERROR_NO_MORE_FILES`; anything else is a failure.
     (last_error() == Some(ERROR_NO_MORE_FILES)).then_some(out)
@@ -89,7 +71,7 @@ pub(crate) fn created(process: &Handle) -> Option<u64> {
     let [creation, exit, kernel, user] = &mut times;
     // SAFETY: `process` is a valid handle with query rights and the four
     // pointers are distinct, writable `FILETIME`s that outlive the call.
-    let ok = unsafe { GetProcessTimes(process.0, creation, exit, kernel, user) };
+    let ok = unsafe { GetProcessTimes(process.raw(), creation, exit, kernel, user) };
     (ok != 0).then(|| u64::from(creation.dwHighDateTime) << 32 | u64::from(creation.dwLowDateTime))
 }
 
@@ -99,7 +81,12 @@ pub(crate) fn image(process: &Handle) -> Option<PathBuf> {
     // SAFETY: `buf` holds `len` writable UTF-16 units and `len` is a valid
     // in/out pointer; the API writes at most `len` units.
     let ok = unsafe {
-        QueryFullProcessImageNameW(process.0, PROCESS_NAME_WIN32, buf.as_mut_ptr(), &mut len)
+        QueryFullProcessImageNameW(
+            process.raw(),
+            PROCESS_NAME_WIN32,
+            buf.as_mut_ptr(),
+            &mut len,
+        )
     };
     let len = len as usize;
     (ok != 0 && len > 0 && len < MAX_PATH_UNITS)
@@ -123,7 +110,7 @@ impl TokenUserBuf {
         let mut needed = 0u32;
         // SAFETY: a null buffer of length 0 only asks for the size, written
         // to `needed`; the call fails by design.
-        unsafe { GetTokenInformation(token.0, TokenUser, null_mut(), 0, &mut needed) };
+        unsafe { GetTokenInformation(token.raw(), TokenUser, null_mut(), 0, &mut needed) };
         if needed < std::mem::size_of::<TOKEN_USER>() as u32 || needed > MAX_TOKEN_USER {
             return None;
         }
@@ -132,7 +119,7 @@ impl TokenUserBuf {
         // bytes; `needed` is a valid out pointer.
         let ok = unsafe {
             GetTokenInformation(
-                token.0,
+                token.raw(),
                 TokenUser,
                 buf.as_mut_ptr().cast(),
                 needed,
@@ -167,7 +154,7 @@ fn current_user() -> Option<&'static TokenUserBuf> {
 }
 
 pub(crate) fn owner(process: &Handle) -> Owner {
-    match (TokenUserBuf::read(process.0), current_user()) {
+    match (TokenUserBuf::read(process.raw()), current_user()) {
         (Some(theirs), Some(mine)) if theirs.same_user(mine) => Owner::Current,
         (Some(_), Some(_)) => Owner::Other,
         _ => Owner::Unknown,

@@ -18,4 +18,7 @@ pub mod system;
 mod ffi_acl;
 #[cfg(windows)]
 #[allow(unsafe_code)]
+mod ffi_handle;
+#[cfg(windows)]
+#[allow(unsafe_code)]
 mod ffi_process;
