@@ -21,7 +21,6 @@ tags:
   - pedir-confirmacion
   - cola
   - should
-  - bloqueada
 ---
 
 # US-GRD-015: El desarrollador aprueba o rechaza las acciones de riesgo que un agente deja en espera
@@ -39,7 +38,7 @@ BR-WF-001 (pendiente, aprobada, rechazada, caducada; finales; una aprobación va
 ## Dependencias
 
 - **Historias**: US-GRD-007 (permiso "pedir confirmación"; esta historia sustituye el trato como denegar), US-GRD-005 (registro de cada transición).
-- **Externas**: **bloqueada** por el Cockpit F-001-02 (superficie donde el humano decide; Q-GRD-13) y por el gate de Q-GRD-19 de abajo. P8 ya no la bloquea (ADR-GRP-007, aceptado el 2026-10-04). **Gate de Q-GRD-19**: aprobar una petición exige el factor de autenticación del sistema operativo, fuera del canal del agente; esta historia no se empieza sin él. Distinguir al humano: transversal (lo define el Arquitecto; R-GRD-3).
+- **Externas**: **desbloqueada el 2026-10-04** al aceptarse [ADR-GRD-008](../../../../architecture/decisions/ADR-GRD-008-factor-autenticacion-fuera-de-banda.md) (gate de Q-GRD-19). Su Dev Spec espera a los resultados de [SPIKE-GRD-002](../technical-stories/SPIKE-GRD-002-factor-so-daemon.md) (parte macOS; Linux y Windows: Pendiente: etapa de validación multiplataforma). **Ya no depende del Cockpit F-001-02**: Guardrails entrega la cola completa en el daemon y la CLI; el humano decide desde la CLI y el factor lo pide el sistema, nunca la terminal (Q-GRD-13 solo exige que quien decide sea el humano). El Cockpit presenta la cola y consume esta historia (DEP-CKP-8, Q-CKP-14). Rechazar no exige el factor. Donde el factor no está disponible, aprobar no se ofrece y la petición caduca (ADR-GRD-008, OQ-GRD-008-1 y 7). P8 ya no la bloquea (ADR-GRP-007). Distinguir al humano: transversal (ADR-GRD-008; R-GRD-3).
 - **Transversal**: Windows, macOS y Linux. Los escenarios usan push con Git directo, una operación interceptable según la lista de US-GRD-004. La cola por la capa MCP sigue la misma decisión (BR-CONS-002) y se verifica cuando exista F-001-05 (US-GRD-016); por eso esta historia no depende del MCP.
 
 ## Criterios de Aceptación

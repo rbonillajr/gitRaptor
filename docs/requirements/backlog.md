@@ -28,7 +28,7 @@
 
 *   **F-001-04**: Guardrails (BR-11, BR-12, BR-13)
     -   **Contexto**: [context.md](features/guardrails/context.md) (reglas en [business-rules.md](features/guardrails/business-rules.md), 2026-10-03)
-    -   **Historias**: [user-stories.md](features/guardrails/user-stories.md) (17 historias en `features/guardrails/user-stories/`, 2026-10-04; 14 listas y 3 bloqueadas: US-GRD-013 y US-GRD-015 por el factor fuera de banda de Q-GRD-19 (015 también por el Cockpit) y US-GRD-016 por el MCP. ADR-GRP-005 a 013 y ADR-GRD-001 a 007 aceptados el 2026-10-04)
+    -   **Historias**: [user-stories.md](features/guardrails/user-stories.md) (17 historias en `features/guardrails/user-stories/`, 2026-10-04; 16 listas y 1 bloqueada, US-GRD-016, por el MCP. US-GRD-013 y US-GRD-015 se desbloquearon el 2026-10-04 al aceptarse ADR-GRD-008 (factor del SO de Q-GRD-19); su Dev Spec espera a SPIKE-GRD-002. ADR-GRP-005 a 013 y ADR-GRD-001 a 008 aceptados el 2026-10-04. Pendiente del PO: historia de la relajación personal pendiente (Q-GRD-32) y de la adopción del factor por D8, desinstalar y la excepción (OQ-GRD-008-3))
     -   **Status**: Priorizada
 
 *   **F-001-05**: Servidor MCP (BR-14, BR-15, BR-16)

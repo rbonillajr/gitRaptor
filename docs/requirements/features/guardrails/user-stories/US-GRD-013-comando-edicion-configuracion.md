@@ -20,7 +20,6 @@ tags:
   - comando-edicion
   - configuracion-tres-niveles
   - nfr-01
-  - bloqueada
 ---
 
 # US-GRD-013: El desarrollador cambia la configuración con un comando sin perder lo que editó a mano
@@ -38,7 +37,7 @@ BR-CONS-006 (comando, Guardrails: no pisa cambios a mano, escritura atómica y r
 ## Dependencias
 
 - **Historias**: US-GRD-010 (precedencia), US-GRD-014 (rama base como valor del equipo).
-- **Externas**: **bloqueada** por el gate de Q-GRD-19 (P8 ya no la bloquea: ADR-GRP-007 se aceptó el 2026-10-04). **Gate de Q-GRD-19**: relajar con el comando exige el factor de autenticación del sistema operativo, fuera del canal del agente; esta historia no se empieza sin él. Distinguir al humano: transversal (lo define el Arquitecto; R-GRD-3). Por Q-GRD-17 y Q-GRD-20, un endurecimiento del comando en el nivel de equipo se aplica al commitearlo en el worktree; una relajación, solo cuando llega a la rama principal y el desarrollador la confirma en su máquina (Q-GRD-21).
+- **Externas**: **desbloqueada el 2026-10-04** al aceptarse [ADR-GRD-008](../../../../architecture/decisions/ADR-GRD-008-factor-autenticacion-fuera-de-banda.md) (factor de autenticación del sistema operativo fuera del canal del agente, gate de Q-GRD-19). Su Dev Spec espera a dos cosas: los resultados de [SPIKE-GRD-002](../technical-stories/SPIKE-GRD-002-factor-so-daemon.md) (parte macOS; Linux y Windows: Pendiente: etapa de validación multiplataforma, con fail-closed mientras tanto) y el trinquete de los niveles personales de Q-GRD-32 (enmienda de ADR-GRD-004, aplicada el 2026-10-04). P8 ya no la bloquea (ADR-GRP-007). Endurecer con el comando no exige el factor. Donde el factor no está disponible, relajar no se ofrece (ADR-GRD-008, OQ-GRD-008-1 y 7). Distinguir al humano: transversal (ADR-GRD-008; R-GRD-3). Por Q-GRD-17 y Q-GRD-20, un endurecimiento del comando en el nivel de equipo se aplica al commitearlo en el worktree; una relajación, solo cuando llega a la rama principal y el desarrollador la confirma en su máquina (Q-GRD-21).
 - **Transversal**: Windows, macOS y Linux; pruebas de interrupción (NFR-12).
 
 ## Criterios de Aceptación
