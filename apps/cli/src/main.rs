@@ -16,6 +16,7 @@ use gitraptor_api::messages::{
 };
 use gitraptor_api::methods;
 use gitraptor_api::rpc::{ErrorObject, code};
+use gitraptor_api::timemachine::{PriorFailedData, PriorFailure};
 use gitraptor_api::untrusted::sanitize;
 use gitraptor_core::client::{Client, ClientError, ClientOptions, ensure_daemon};
 use gitraptor_core::daemon::{self, DaemonConfig, DaemonError, EXIT_ALREADY_RUNNING};
@@ -170,7 +171,7 @@ fn stop_daemon(yes: bool) -> ExitCode {
             return ExitCode::SUCCESS;
         }
         Err(err) => {
-            eprintln!("raptor daemon stop: {}", sanitize(&err.to_string()));
+            eprintln!("raptor daemon stop: {}", error_text(err));
             return ExitCode::FAILURE;
         }
     };
@@ -204,9 +205,35 @@ fn stop_daemon(yes: bool) -> ExitCode {
             ExitCode::FAILURE
         }
         Err(err) => {
-            eprintln!("raptor daemon stop: {}", sanitize(&err.to_string()));
+            eprintln!("raptor daemon stop: {}", error_text(err));
             ExitCode::FAILURE
         }
+    }
+}
+
+/// The message for any other failed call. A failed prior snapshot says, in
+/// the user's language, that the operation did not run and why (US-TMC-001).
+fn error_text(err: ClientError) -> String {
+    match err {
+        ClientError::Rpc(err) if err.code == code::PRIOR_SNAPSHOT_FAILED => t(
+            prior_failure_key(
+                err.data
+                    .and_then(|d| serde_json::from_value::<PriorFailedData>(d).ok())
+                    .map(|d| d.reason),
+            ),
+            &[],
+        ),
+        other => sanitize(&other.to_string()),
+    }
+}
+
+fn prior_failure_key(reason: Option<PriorFailure>) -> &'static str {
+    match reason {
+        Some(PriorFailure::NoSpace) => "prior.no-space",
+        Some(PriorFailure::StoreUnavailable) => "prior.store-unavailable",
+        Some(PriorFailure::Timeout) => "prior.timeout",
+        Some(PriorFailure::DaemonStopping) => "prior.daemon-stopping",
+        Some(PriorFailure::CaptureFailed) | None => "prior.capture-failed",
     }
 }
 
@@ -337,7 +364,7 @@ fn repo_error(command: &str, path: &Path, err: ClientError) -> ExitCode {
             };
             t(key, &[("path", &shown(path))])
         }
-        other => sanitize(&other.to_string()),
+        other => error_text(other),
     };
     eprintln!("{command}: {message}");
     ExitCode::FAILURE
@@ -471,5 +498,28 @@ mod tests {
     #[test]
     fn cli_definition_is_valid() {
         Cli::command().debug_assert();
+    }
+
+    /// Every reason of a failed prior snapshot has its message (en/es).
+    #[test]
+    fn every_prior_failure_has_a_message() {
+        let reasons = [
+            PriorFailure::NoSpace,
+            PriorFailure::StoreUnavailable,
+            PriorFailure::Timeout,
+            PriorFailure::DaemonStopping,
+            PriorFailure::CaptureFailed,
+        ];
+        for reason in reasons.into_iter().map(Some).chain([None]) {
+            let key = prior_failure_key(reason);
+            assert!(i18n::has_key(key), "{key}");
+        }
+        let err = ClientError::Rpc(
+            ErrorObject::new(code::PRIOR_SNAPSHOT_FAILED, "no space").with_data(PriorFailedData {
+                reason: PriorFailure::NoSpace,
+                operation_id: None,
+            }),
+        );
+        assert_ne!(error_text(err), "prior.no-space");
     }
 }

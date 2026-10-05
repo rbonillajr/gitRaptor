@@ -83,3 +83,10 @@ actor.unattributed = sin atribuir
 actor.claude-code = Claude Code
 actor.other = otro agente
 actor.other-agent = otro agente: {name}
+
+# El snapshot previo falló: la operación no se ejecutó (US-TMC-001).
+prior.no-space = no se ejecutó: no hay espacio en disco para guardar antes el trabajo; nada cambió
+prior.store-unavailable = no se ejecutó: el almacén de snapshots no está disponible; nada cambió
+prior.timeout = no se ejecutó: guardar antes el trabajo tardó demasiado; nada cambió
+prior.daemon-stopping = no se ejecutó: el motor se está deteniendo; nada cambió
+prior.capture-failed = no se ejecutó: no se pudo guardar antes el trabajo; nada cambió

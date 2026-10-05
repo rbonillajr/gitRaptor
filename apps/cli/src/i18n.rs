@@ -46,6 +46,12 @@ pub fn t(key: &str, args: &[(&str, &dyn std::fmt::Display)]) -> String {
     text
 }
 
+/// Both catalogs have `key` (tests of the callers).
+#[cfg(test)]
+pub fn has_key(key: &str) -> bool {
+    parse(EN).contains_key(key) && parse(ES).contains_key(key)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
