@@ -334,8 +334,8 @@ const COLOR_SPECS: [ColorSpec; 28] = [
         role: Role::Foreground,
         inherit: false,
         no_color: Attrs::NONE,
-        normal: Values { rgb: Rgb(187, 187, 187), ansi256: 250, ansi256_rgb: Rgb(188, 188, 188), ansi16: Ansi16::White },
-        high_contrast: Values { rgb: Rgb(187, 187, 187), ansi256: 250, ansi256_rgb: Rgb(188, 188, 188), ansi16: Ansi16::White },
+        normal: Values { rgb: Rgb(255, 255, 255), ansi256: 231, ansi256_rgb: Rgb(255, 255, 255), ansi16: Ansi16::BrightWhite },
+        high_contrast: Values { rgb: Rgb(255, 255, 255), ansi256: 231, ansi256_rgb: Rgb(255, 255, 255), ansi16: Ansi16::BrightWhite },
     },
     // agent.state.active
     ColorSpec {

@@ -202,7 +202,7 @@
       }
     },
     "okabeIto": {
-      "$description": "Okabe-Ito categorical palette (color-vision-deficiency safe), black replaced by light gray for dark terminals.",
+      "$description": "Okabe-Ito categorical palette (color-vision-deficiency safe). Its black is replaced by color.white in agent.8 and its blue gets a lighter variant for dark terminals.",
       "orange": {
         "$value": "#e69f00",
         "$extensions": {
@@ -264,14 +264,6 @@
         "$extensions": {
           "dev.gitraptor": {
             "ansi16": "magenta"
-          }
-        }
-      },
-      "gray": {
-        "$value": "#bbbbbb",
-        "$extensions": {
-          "dev.gitraptor": {
-            "ansi16": "white"
           }
         }
       }
