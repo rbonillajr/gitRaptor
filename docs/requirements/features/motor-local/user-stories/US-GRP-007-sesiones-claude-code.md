@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-05
 feature: motor-local
 related:
   context:
@@ -38,6 +38,7 @@ BR-WF-001 · BR-TIME-001 (umbral por defecto de 5 minutos, sin ninguna configura
 - **Secuencia**: esta historia fija el modelo de sesión (estados, origen, presencia) que reutiliza US-GRP-009; van en serie, 007 antes que 009, y el contrato compartido lo fija la Dev Spec.
 - **Externas**: el mecanismo de detección se valida en el spike (c) del BRD; meta de precisión del 90% en dogfooding (Q9).
 - **Transversal**: todo escenario se cumple igual en Windows, macOS y Linux (BR-03) y sin escribir nada en el repo observado (BR-CONS-001); cómo se verifica lo define el plan técnico.
+- **Implementación (2026-10-05)**: ver la [Dev Spec](../dev-specs/US-GRP-007-dev-spec.md). Verificada en macOS. En Windows el motor todavía no detecta sesiones (lo dice en `raptor status` y `raptor sessions`) y en Linux solo están probadas las pruebas del motor. Pendiente: etapa de validación multiplataforma.
 
 ## Criterios de Aceptación
 
