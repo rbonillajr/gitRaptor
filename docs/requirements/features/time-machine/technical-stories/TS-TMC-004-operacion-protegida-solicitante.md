@@ -8,11 +8,11 @@ domain: GRP
 priority: critical
 complexity: high
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 related:
   adrs: [ADR-TMC-004, ADR-TMC-005, ADR-TMC-002, ADR-GRP-005, ADR-GRP-012, ADR-GRP-013]
   stories: [US-TMC-001, US-TMC-002, US-TMC-003, US-TMC-005, US-TMC-009, US-TMC-010, US-TMC-011, US-TMC-013, TS-GRP-004, TS-TMC-001, TS-TMC-002]
-  specs: []
+  specs: [DS-TS-TMC-004]
 ado:
   id: null
   url: null
@@ -29,7 +29,7 @@ tags: [time-machine, canal, contrato, solicitante, snapshot-previo, mcp, br-tmc-
 **Quiero** la operación protegida y los comandos de la Time Machine en el contrato del canal, con el solicitante resuelto en el daemon
 **Para** que CLI, TUI, MCP, Cockpit y los hooks de Guardrails usen un único camino de escritura que cumple BR-TMC-CONS-001 y D-TMC-23
 
-> Dev Spec: `dev-specs/TS-TMC-004-operacion-protegida-solicitante.md` | Pendiente
+> Dev Spec: [`dev-specs/TS-TMC-004-operacion-protegida-solicitante.md`](../dev-specs/TS-TMC-004-operacion-protegida-solicitante.md) | En revisión
 >
 > **Depende de**: TS-GRP-004 (canal, contrato y controles de comandos reservados), TS-TMC-001 (snapshot) y TS-TMC-002 (oplog). **ADRs**: ADR-TMC-004 § 1 (operación protegida), ADR-TMC-005 § 1 (solicitante), ADR-GRP-005 § 6 (identificación del proceso llamante), ADR-GRP-012 (procesos de agente).
 
