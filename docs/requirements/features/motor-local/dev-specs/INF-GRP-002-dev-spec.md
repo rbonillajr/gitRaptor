@@ -57,7 +57,7 @@ Todas son **decisiones del orquestador (2026-10-05)**, validadas por el Arquitec
 
 ## 3. Medición
 
-- **`t0`**: fin de la escritura en "modificar un archivo" y fin del comando en los escenarios de Git. Se aceptan los eventos publicados mientras el comando aún corre: cuentan con un total de 0 (el cambio ya se veía en `t0`). La detección solo se aísla en "modificar un archivo" y en las ráfagas.
+- **`t0`**: fin de la escritura en "modificar un archivo" y fin del comando en los escenarios de Git. Se aceptan los eventos publicados mientras el comando aún corre: cuentan con un total de 0 (el cambio ya se veía en `t0`). La detección solo se aísla en "modificar un archivo" y en las ráfagas. Si `t_recv` llega antes de `t0` la detección vale 0: en Linux, inotify notifica la escritura antes de que `write` vuelva.
 - **`t_client_recv`**: el hilo lector del suscriptor lo toma con `clock::monotonic_ns()` al recibir la notificación. La muestra es el primer `worktree.state` posterior al inicio de la acción **cuyo estado muestra el cambio esperado**. El archivo tocado alterna entre su contenido commiteado y uno nuevo, para que ningún estado anterior pueda pasar por el de la muestra.
 - **Etapas** (§ 2 de ADR-GRP-011): `detection` (`t0` → `t_recv`), `debounce` (`t_recv` → `t_flush`), `compute` y `persist` (reportadas), `recompute` (`t_flush` → `t_persisted`, presupuesto de 150 ms), `publish` (`t_persisted` → `t_client_recv`, 25 ms) y `total` (`t0` → `t_client_recv`, 300 ms).
 - **Muestras**: 200 por escenario y 10 de calentamiento descartadas; en crear y borrar un worktree, N/4 (50).
