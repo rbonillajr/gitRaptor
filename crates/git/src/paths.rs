@@ -49,7 +49,8 @@ pub fn validate_with_rules(path: &Path, windows: bool) -> Result<(), ReadError> 
                 return reject("device name");
             }
         }
-    } else if !path.is_absolute() {
+    } else if !text.starts_with('/') {
+        // Lexical, not `Path::is_absolute`: the Unix rules must hold on a Windows host too.
         return reject("not absolute");
     }
     Ok(())
@@ -74,6 +75,24 @@ mod tests {
         assert!(!ok("relative/repo", false));
         assert!(!ok("//server/share/repo", false));
         assert!(!ok("\\\\server\\share", false));
+        assert!(!ok(r"C:\Users\dev\repo", false));
+    }
+
+    /// The rules of the running OS: `validate` accepts its own absolute paths and refuses UNC.
+    #[test]
+    fn current_os_rules() {
+        #[cfg(unix)]
+        {
+            assert!(validate(Path::new("/home/dev/repo")).is_ok());
+            assert!(validate(Path::new(r"C:\Users\dev\repo")).is_err());
+        }
+        #[cfg(windows)]
+        {
+            assert!(validate(Path::new(r"C:\Users\dev\repo")).is_ok());
+            assert!(validate(Path::new(r"\\server\share\repo")).is_err());
+            assert!(validate(Path::new(r"\\?\C:\repo")).is_err());
+            assert!(validate(Path::new("/home/dev/repo")).is_err());
+        }
     }
 
     #[test]
