@@ -29,10 +29,15 @@ pub fn wire(value: &impl Serialize) -> String {
 /// Folder a repo is shown by: the main worktree root when the common
 /// directory is its `.git`, else the common directory (a bare repo).
 fn repo_folder(repo: &RepoView) -> String {
-    let common = Path::new(repo.path.raw());
-    match (common.file_name(), common.parent()) {
+    folder_of(repo.path.raw())
+}
+
+/// The folder shown for a repo whose Git common directory is `common`.
+pub fn folder_of(common: &str) -> String {
+    let path = Path::new(common);
+    match (path.file_name(), path.parent()) {
         (Some(name), Some(parent)) if name == ".git" => parent.display().to_string(),
-        _ => repo.path.raw().to_owned(),
+        _ => common.to_owned(),
     }
 }
 
