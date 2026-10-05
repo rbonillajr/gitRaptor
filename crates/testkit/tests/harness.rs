@@ -204,7 +204,9 @@ mod repo_intact {
     // --- Control run ---------------------------------------------------------------------------
 
     /// An agent commit triggers `gc --auto` (user config). The engine reads nothing here, so the
-    /// whole difference is the control's: nothing is imputed.
+    /// whole difference is the control's: nothing is imputed. Recent Git runs a geometric
+    /// maintenance strategy after a commit by default, which ignores `gc.auto`; a user who wants
+    /// `gc` sets `maintenance.strategy=gc`, which older Git ignores.
     #[test]
     fn control_gc_auto_by_agent_commit_is_not_imputed() {
         let git = git_from_path();
@@ -212,6 +214,7 @@ mod repo_intact {
             let f = Fixture::with_commit(&git);
             f.git(&["config", "gc.auto", "1"]);
             f.git(&["config", "gc.autoDetach", "false"]);
+            f.git(&["config", "maintenance.strategy", "gc"]);
             f
         };
         // One commit with enough loose objects to cross `gc.auto` (Git samples `objects/17`).
