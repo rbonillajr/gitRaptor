@@ -253,11 +253,13 @@ mod repo_intact_tm_write {
     fn file_system_writes_on_repos_only_in_the_write_layer() {
         let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
         let tm = src.join("tm_write");
+        // The Guardrails write layer (ADR-GRD-001 § 7), only inside `<common>/gitraptor/`.
+        let guard = src.join("guard_write");
         let mut files = Vec::new();
         rust_files(&src, &mut files);
         let offenders: Vec<String> = files
             .iter()
-            .filter(|f| !f.starts_with(&tm))
+            .filter(|f| !f.starts_with(&tm) && !f.starts_with(&guard))
             .filter(|f| {
                 let text = std::fs::read_to_string(f).unwrap();
                 FS_WRITE_PATTERNS.iter().any(|p| text.contains(p))
@@ -279,3 +281,64 @@ const FS_WRITE_PATTERNS: &[&str] = &[
     "symlinkat",
     "RenameFlags",
 ];
+
+/// ADR-GRD-001 § 7 (US-GRD-001): the Guardrails write layer is a closed list that only touches
+/// `core.hooksPath` through `git config --file`, and only its own module runs it.
+mod repo_intact_guard_write {
+    use super::*;
+
+    #[test]
+    fn the_guard_profile_is_a_closed_config_list() {
+        let src =
+            std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/invoke.rs"))
+                .unwrap();
+        let start = src.find("impl GuardSubcommand").unwrap();
+        let body = &src[start..start + src[start..].find("\n}\n").unwrap()];
+        let mut words = 0;
+        for line in body.lines().filter(|l| l.contains("=> &[")) {
+            words += 1;
+            assert!(line.contains("&[\"config\", \"--no-includes\""), "{line}");
+        }
+        assert_eq!(words, 3, "set, unset and get only");
+        // The reads: only `core.hooksPath` and the `onbranch` includes, by name.
+        let start = src.find("impl GuardRead").unwrap();
+        let reads = &src[start..start + src[start..].find("\n}\n").unwrap()];
+        assert!(reads.contains("\"--get-all\",\n                \"core.hooksPath\""));
+        assert!(reads.contains("\"--name-only\""));
+        assert!(!reads.contains("--list"));
+        assert!(src.contains("argv.push(\"core.hooksPath\".into())"));
+        assert!(src.contains("(\"GIT_CONFIG_NOSYSTEM\".into(), \"1\".into())"));
+    }
+
+    #[test]
+    fn only_the_guard_write_layer_runs_the_guard_profile() {
+        let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let guard = src.join("guard_write");
+        let mut files = Vec::new();
+        rust_files(&src, &mut files);
+        let offenders: Vec<String> = files
+            .iter()
+            .filter(|f| **f != src.join("invoke.rs") && !f.starts_with(&guard))
+            .filter(|f| {
+                let text = std::fs::read_to_string(f).unwrap();
+                text.contains("run_guard")
+                    || text.contains("GuardSubcommand")
+                    || text.contains("GuardRead")
+            })
+            .map(|f| f.display().to_string())
+            .collect();
+        assert!(
+            offenders.is_empty(),
+            "guard profile used outside guard_write: {offenders:?}"
+        );
+        // And the Guardrails layer takes neither the Time Machine's profile nor its writer.
+        let mut own = Vec::new();
+        rust_files(&guard, &mut own);
+        for f in own {
+            let text = std::fs::read_to_string(&f).unwrap();
+            for word in ["run_write", "WriteSubcommand", "tm_write"] {
+                assert!(!text.contains(word), "{} uses {word}", f.display());
+            }
+        }
+    }
+}
