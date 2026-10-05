@@ -7,6 +7,7 @@ pub mod executor;
 pub mod observe;
 pub mod profile;
 pub mod repo_lock;
+pub mod resources;
 pub mod timemachine;
 pub mod watch;
 

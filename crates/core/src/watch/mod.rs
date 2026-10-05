@@ -367,6 +367,16 @@ pub struct Observer {
 impl Observer {
     /// Starts the file watcher. Batches go to `sink`.
     pub fn start(config: WatchConfig, sink: Sink) -> Self {
+        Self::start_counted(config, sink, Arc::default())
+    }
+
+    /// Like [`Observer::start`], keeping in `roots` how many roots are
+    /// watched (`engine.resources`, US-GRP-017).
+    pub fn start_counted(
+        config: WatchConfig,
+        sink: Sink,
+        roots: Arc<std::sync::atomic::AtomicU64>,
+    ) -> Self {
         let shared = Arc::new(Shared {
             config,
             sink,
@@ -376,29 +386,32 @@ impl Observer {
             drop_events: std::sync::atomic::AtomicBool::new(false),
         });
         let weak = Arc::downgrade(&shared);
-        let watchers = Watchers::new(Arc::new(move |result: notify::Result<notify::Event>| {
-            let Some(shared) = weak.upgrade() else {
-                return;
-            };
-            let t_recv = gitraptor_api::clock::monotonic_ns();
-            if shared
-                .drop_events
-                .load(std::sync::atomic::Ordering::Relaxed)
-            {
-                return;
-            }
-            match result {
-                Ok(event) => {
-                    let rescan = event.need_rescan();
-                    if !rescan && !is_change(&event.kind) {
-                        return;
-                    }
-                    shared.route(t_recv, event.paths, rescan);
+        let watchers = Watchers::new(
+            Arc::new(move |result: notify::Result<notify::Event>| {
+                let Some(shared) = weak.upgrade() else {
+                    return;
+                };
+                let t_recv = gitraptor_api::clock::monotonic_ns();
+                if shared
+                    .drop_events
+                    .load(std::sync::atomic::Ordering::Relaxed)
+                {
+                    return;
                 }
-                // An error of the watcher itself: reconcile everything.
-                Err(_) => shared.route(t_recv, Vec::new(), true),
-            }
-        }));
+                match result {
+                    Ok(event) => {
+                        let rescan = event.need_rescan();
+                        if !rescan && !is_change(&event.kind) {
+                            return;
+                        }
+                        shared.route(t_recv, event.paths, rescan);
+                    }
+                    // An error of the watcher itself: reconcile everything.
+                    Err(_) => shared.route(t_recv, Vec::new(), true),
+                }
+            }),
+            roots,
+        );
         *shared.watchers.lock().unwrap_or_else(|e| e.into_inner()) = Some(watchers);
         Self { shared }
     }
