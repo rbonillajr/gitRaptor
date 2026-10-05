@@ -1,3 +1,4 @@
+mod codes;
 mod events;
 mod i18n;
 mod mcp;
@@ -266,6 +267,12 @@ fn error_text(err: ClientError) -> String {
             ),
             &[],
         ),
+        ClientError::ChannelRejected => t("channel.rejected", &[]),
+        // N7: presented from the code, never from the daemon's message.
+        ClientError::Rpc(err) => match gitraptor_api::rpc::ErrorCode::from_code(err.code) {
+            Some(code) => t(&codes::error_key(code), &[]),
+            None => sanitize(&err.message),
+        },
         other => sanitize(&other.to_string()),
     }
 }
@@ -600,6 +607,17 @@ fn daemon_status() -> ExitCode {
             t("daemon.status.git", &[("version", &sanitize(version))])
         ),
         None => println!("{}", t("daemon.status.git-missing", &[])),
+    }
+    if let Some(requester) = &client.hello().requester {
+        println!("{}", codes::requester_text(requester));
+    }
+    if let Ok(gitraptor_api::scope::ScopeSnapshot::Global(global)) = client.call(
+        gitraptor_api::methods::SCOPE_SNAPSHOT,
+        gitraptor_api::scope::ScopeSnapshotParams {
+            scope: gitraptor_api::scope::Scope::Global,
+        },
+    ) {
+        println!("{}", codes::autostart_text(global.autostart));
     }
     for repo in &snapshot.repos {
         // Everything that comes from the daemon is printed sanitized: the

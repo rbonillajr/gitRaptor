@@ -449,3 +449,52 @@ fn untrusted_repo_text_is_printed_sanitized() {
     fx.stop_as_developer();
     fx.wait_released();
 }
+
+/// N5 (ADR-CKP-003 § 4) with the real binaries: `raptor daemon status`
+/// says who the daemon sees and the layer it fixes, in English and in
+/// Spanish; the developer's terminal gets `cockpit`, a process under an
+/// agent gets `mcp`. It also shows the autostart state (N3).
+#[test]
+fn daemon_status_says_who_you_act_as() {
+    let fx = Fixture::new();
+    let developer = |lang: &str| {
+        Command::new("/usr/bin/script")
+            .args(["-q", "/dev/null", RAPTOR, "daemon", "status"])
+            .env_clear()
+            .envs(fx.base_env())
+            .env("PATH", "/usr/bin:/bin")
+            .env("LANG", lang)
+            .stdin(Stdio::null())
+            .output()
+            .unwrap()
+    };
+    let en = developer("en_US.UTF-8");
+    assert!(en.status.success(), "{}", text(&en));
+    assert!(
+        text(&en).contains("you act as: unattributed (layer cockpit)"),
+        "{}",
+        text(&en)
+    );
+    assert!(
+        text(&en).contains("autostart at login: unknown"),
+        "{}",
+        text(&en)
+    );
+    let es = developer("es_ES.UTF-8");
+    assert!(
+        text(&es).contains("actúas como: sin atribuir (capa cockpit)"),
+        "{}",
+        text(&es)
+    );
+    assert!(
+        text(&es).contains("autoarranque al iniciar sesión: desconocido"),
+        "{}",
+        text(&es)
+    );
+
+    let agent = fx.as_agent(&[RAPTOR, "daemon", "status"]);
+    assert!(agent.status.success(), "{}", text(&agent));
+    let out = text(&agent);
+    assert!(out.contains("you act as: agent"), "{out}");
+    assert!(out.contains("(layer mcp)"), "{out}");
+}
