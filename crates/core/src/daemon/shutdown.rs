@@ -8,6 +8,7 @@
 use std::sync::mpsc::{Receiver, Sender, SyncSender, channel, sync_channel};
 use std::time::Duration;
 
+use gitraptor_api::guard::{GuardPlan, GuardStatus, InstallBlocker};
 use gitraptor_api::messages::{EventsHistoryParams, GitEventView, RepoAddResult, RepoRetireResult};
 
 use crate::observe::RepoRead;
@@ -30,6 +31,34 @@ pub enum RepoCommandError {
     /// The profile could not be written (or the loop did not answer).
     Internal,
 }
+
+/// A Guardrails request to the loop, for a repo the channel already located.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(not(unix), allow(dead_code))]
+pub(crate) enum GuardRequest {
+    Plan,
+    Status,
+    Install,
+    Decline,
+}
+
+/// What the loop answers to a [`GuardRequest`].
+#[derive(Debug)]
+#[cfg_attr(not(unix), allow(dead_code))]
+pub(crate) enum GuardReply {
+    Plan(Box<GuardPlan>),
+    Status(Box<GuardStatus>),
+    /// The repo is not observed (Q-GRD-15).
+    NotObserved,
+    /// The install was refused before writing anything.
+    Rejected(Vec<InstallBlocker>),
+    /// A step failed and was reverted, or the profile is unavailable.
+    Failed,
+}
+
+/// How long a channel thread waits for the loop to install the hook layer.
+#[cfg_attr(not(unix), allow(dead_code))]
+const GUARD_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// A repo the channel already located and read, for the loop to add.
 #[derive(Debug)]
@@ -122,6 +151,12 @@ pub(crate) enum Control {
         params: gitraptor_api::messages::SessionsListParams,
         reply: SyncSender<SessionsListReply>,
     },
+    /// Guardrails (US-GRD-001): plan, status, install or decline.
+    Guard {
+        common_dir: std::path::PathBuf,
+        request: GuardRequest,
+        reply: SyncSender<GuardReply>,
+    },
     /// One page of a repo's Git events (US-GRP-002).
     #[cfg_attr(not(unix), allow(dead_code))]
     EventHistory {
@@ -203,6 +238,30 @@ impl ShutdownHandle {
             .map_err(|_| RepoCommandError::Internal)?;
         rx.recv_timeout(REPO_TIMEOUT)
             .map_err(|_| RepoCommandError::Internal)?
+    }
+}
+
+impl ShutdownHandle {
+    /// A Guardrails request through the loop, which owns the stores (US-GRD-001).
+    #[cfg_attr(not(unix), allow(dead_code))]
+    pub(crate) fn guard(
+        &self,
+        common_dir: std::path::PathBuf,
+        request: GuardRequest,
+    ) -> GuardReply {
+        let (reply, rx) = sync_channel(1);
+        if self
+            .tx
+            .send(Control::Guard {
+                common_dir,
+                request,
+                reply,
+            })
+            .is_err()
+        {
+            return GuardReply::Failed;
+        }
+        rx.recv_timeout(GUARD_TIMEOUT).unwrap_or(GuardReply::Failed)
     }
 }
 

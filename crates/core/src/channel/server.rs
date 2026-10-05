@@ -82,6 +82,8 @@ pub(crate) struct ServerCtx {
     pub protected: Option<ProtectedWiring>,
     /// Ahead/behind counts the snapshots already walked (US-GRP-012).
     pub divergence: crate::observe::DivergenceCache,
+    /// Protected repos for `guard.evaluate` (US-GRD-001).
+    pub guard: Arc<crate::guardrails::GuardRegistry>,
 }
 
 impl ServerCtx {
@@ -140,6 +142,7 @@ pub(crate) struct ServeArgs {
     pub instance_id: String,
     pub daemon: DaemonView,
     pub protected: Option<ProtectedWiring>,
+    pub guard: Arc<crate::guardrails::GuardRegistry>,
 }
 
 impl Server {
@@ -176,6 +179,7 @@ impl Server {
             marks: Arc::new(ExecutorMarks::default()),
             protected: args.protected,
             divergence: crate::observe::DivergenceCache::default(),
+            guard: args.guard,
         });
         let listener = bound.listener;
         let socket = socket_id(&transport::socket_path(&ctx.runtime));

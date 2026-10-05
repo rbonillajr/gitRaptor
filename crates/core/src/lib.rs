@@ -5,6 +5,7 @@ pub mod client;
 pub mod daemon;
 pub mod detect;
 pub mod executor;
+pub mod guardrails;
 pub mod observe;
 pub mod profile;
 pub mod repo_lock;
