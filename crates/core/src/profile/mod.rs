@@ -11,6 +11,7 @@ pub(crate) mod fsperm;
 mod index;
 mod repo_key;
 mod schema;
+pub mod settings;
 pub(crate) mod sqlite;
 mod store;
 mod team_baseline;

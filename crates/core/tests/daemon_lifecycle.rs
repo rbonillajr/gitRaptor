@@ -26,6 +26,7 @@ fn config(dirs: ProfileDirs, git: ResolveConfig) -> DaemonConfig {
         stop_deadline: None,
         channel: ChannelConfig::default(),
         protected: None,
+        operations: None,
     }
 }
 
@@ -350,6 +351,7 @@ fn start_recovers_the_time_machine_oplog() {
     assert!(!lock.exists());
     assert!(foreign.exists(), "a lock not in the journal stays");
     let oplog = daemon.oplog(&entry.repo_id).unwrap();
+    let oplog = oplog.lock().unwrap();
     assert_eq!(
         oplog.operation(&op).unwrap().unwrap().state,
         OperationState::Interrupted

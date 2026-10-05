@@ -46,6 +46,10 @@ pub struct CaptureRequest {
     pub engine_mark: Option<i64>,
     pub cause_operation: Option<String>,
     pub cause_event_seq: Option<i64>,
+    /// Capture the closed list of credential files when untracked (profile option
+    /// `timeMachine.includeCredentialFiles`; BR-TMC-CONS-002). Otherwise they are left out and
+    /// declared.
+    pub include_credentials: bool,
 }
 
 /// One worktree of a capture.
@@ -133,6 +137,8 @@ struct WtState {
     excluded: BTreeMap<BString, &'static str>,
     mark: Option<i64>,
     ignore_sig: Vec<Option<FileStat>>,
+    /// Credential files were captured (`include_credentials`) when this state was read.
+    credentials: bool,
 }
 
 /// Index marks of a worktree, as written to `meta`.
@@ -369,6 +375,7 @@ impl SnapshotStore {
                 reader,
                 i,
                 scope,
+                req.include_credentials,
                 prev,
                 started,
                 &mut anchor_lap,
@@ -580,6 +587,7 @@ impl SnapshotStore {
         reader: &RepoReader,
         wt_index: usize,
         scope: &WorktreeScope,
+        credentials: bool,
         prev: Option<WtState>,
         started: (i64, u32),
         anchor_time: &mut Duration,
@@ -610,11 +618,13 @@ impl SnapshotStore {
                 excluded: BTreeMap::new(),
                 mark: None,
                 ignore_sig: Vec::new(),
+                credentials,
             },
         };
 
         let mut detection = match &scope.hint {
             _ if !had_prev => Detection::Full("first-capture"),
+            _ if st.credentials != credentials => Detection::Full("credential-option-changed"),
             None => Detection::Full("no-hint"),
             Some(h) if !h.continuous => Detection::Full("not-continuous"),
             Some(h) if st.mark != Some(h.since) => Detection::Full("mark-mismatch"),
@@ -630,6 +640,7 @@ impl SnapshotStore {
             Some(_) => Detection::Engine,
         };
         st.ignore_sig = ignore_sig;
+        st.credentials = credentials;
 
         // The `index` tree mirrors the user's index (stage 0, no intent-to-add entries).
         let index_changed = !had_prev || st.index_sig != sig || sig.0.is_none();
@@ -768,7 +779,7 @@ impl SnapshotStore {
                     }
                     continue;
                 }
-                if is_credential(path.as_bstr()) {
+                if !st.credentials && is_credential(path.as_bstr()) {
                     st.excluded.insert(path.clone(), "credential");
                     if st.cache.remove(path).is_some() {
                         work.changes.push(Change::Remove(path.clone()));
@@ -869,7 +880,7 @@ impl SnapshotStore {
                 }
                 UntrackedKind::Other => {}
                 UntrackedKind::File | UntrackedKind::Symlink => {
-                    if is_credential(u.path.as_bstr()) {
+                    if !st.credentials && is_credential(u.path.as_bstr()) {
                         excluded.insert(u.path, "credential");
                         continue;
                     }

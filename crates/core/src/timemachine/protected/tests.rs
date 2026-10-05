@@ -99,6 +99,9 @@ impl ProtectedStep for Step {
     fn subtype(&self) -> &str {
         "checkout"
     }
+    fn scope(&self) -> StepScope {
+        StepScope::default()
+    }
     fn run(&mut self, ctx: &mut StepCtx<'_>) -> Result<StepOutput, StepError> {
         self.ran = true;
         assert!(!ctx.prior_snapshot_id().is_empty());
@@ -382,6 +385,9 @@ fn children_of_the_step_are_marked() {
     impl ProtectedStep for Spawner {
         fn subtype(&self) -> &str {
             "fetch-free"
+        }
+        fn scope(&self) -> StepScope {
+            StepScope::default()
         }
         fn run(&mut self, ctx: &mut StepCtx<'_>) -> Result<StepOutput, StepError> {
             let child = ctx

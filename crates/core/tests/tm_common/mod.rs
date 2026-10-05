@@ -62,6 +62,7 @@ impl Env {
             engine_mark: None,
             cause_operation: None,
             cause_event_seq: None,
+            include_credentials: false,
         }
     }
 
