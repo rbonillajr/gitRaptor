@@ -23,11 +23,12 @@ La fuente de verdad es el código de `crates/api`. Este documento es su resumen 
 
 - Socket Unix `raptor.sock` en la carpeta de ejecución del perfil, con la carpeta en 0700 y el socket en 0600. Solo acepta clientes del mismo uid. El cliente comprueba que el servidor también es de su uid. En Windows, named pipe: pendiente.
 - Un mensaje JSON por línea (`\n`), de 1 MiB como máximo y con una profundidad máxima de 32. No se aceptan batches. Todos los tipos rechazan campos desconocidos.
-- `PROTOCOL_VERSION = 4` (`API_VERSION` 4.0.0). Cliente y daemon son compatibles solo si hablan la misma versión.
+- `PROTOCOL_VERSION = 4` (`API_VERSION` 4.1.0). Cliente y daemon son compatibles solo si hablan la misma versión.
   - La 2 (US-GRP-001) añade el estado de los worktrees a `RepoView`.
   - La 3 (US-GRP-012), la rama base del repo y el ahead/behind de cada worktree.
   - La 3.1.0 (US-GRP-002) es aditiva: `events.history` y el `data` de `git.event`; un cliente nuevo comprueba en `hello.methods` que el daemon ofrece `events.history` y, si no, pide reiniciarlo.
   - La 4 (TS-CKP-002), el catálogo de operaciones en dos fases: `operation.run` ejecuta un plan preparado. Incluye todo lo de la 3.1.0.
+  - La 4.1.0 (US-GRP-017) es aditiva: `engine.resources`. La CLI comprueba en `hello.methods` que el daemon lo ofrece y, si no, pide reiniciarlo.
 
 ## Handshake
 
@@ -45,6 +46,7 @@ El resultado trae `protocol`, `binary_version`, `instance_id` (del perfil, ADR-G
 |---|---|---|---|
 | `ping` | No | Sí | `"pong"` |
 | `engine.snapshot` | No | Sí | `Snapshot { run_id, seq, engine, daemon, repos }`, cada repo con sus `worktrees` (ver más abajo); en MCP, `McpSnapshot { run_id, seq, engine_state, caller_repo }` (allowlist de campos) |
+| `engine.resources` | No | No | `{}` → `ResourcesResult { process {cpu {mean_pct?, peak_pct?, window_s}, rss_bytes?, open_fds?}, watches {roots, inotify? {watches, max_user_watches?}}, disk {profile_bytes, time_machine [{repo_id, bytes}], complete}, pools?, power_saving?, targets }`. Solo números, booleanos y enums, sin texto de presentación (NFR-10); `null` = no disponible. CPU en % de un núcleo sobre una ventana de hasta 10 min; RSS y descriptores instantáneos; disco en bytes asignados. `pools` (TS-GRP-005) y `power_saving` (US-GRP-019) llegan `null` hasta sus historias. Fuera del MCP (SEC-MCP-01) (US-GRP-017) |
 | `events.subscribe` | No | Sí | `{ from_seq?, run_id? }` → `{ subscription, from_seq }`. Hasta 4 por conexión |
 | `events.unsubscribe` | No | Sí | `{ subscription }` → `bool` |
 | `audit.list` | No | No | `{ after_id?, limit? }` → `{ entries: [AuditEntry] }`. Como máximo 500 por página |

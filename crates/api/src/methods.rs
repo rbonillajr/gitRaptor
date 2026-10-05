@@ -11,6 +11,9 @@ pub const HELLO: &str = "hello";
 pub const PING: &str = "ping";
 /// Coherent snapshot with the sequence it reflects (DEP-CKP-6).
 pub const ENGINE_SNAPSHOT: &str = "engine.snapshot";
+/// What the engine consumes on the machine (US-GRP-017, ADR-GRP-015 § 4).
+/// Read-only.
+pub const ENGINE_RESOURCES: &str = "engine.resources";
 /// Opens a subscription to the event stream.
 pub const EVENTS_SUBSCRIBE: &str = "events.subscribe";
 pub const EVENTS_UNSUBSCRIBE: &str = "events.unsubscribe";
@@ -125,6 +128,9 @@ pub const METHODS: &[MethodSpec] = &[
     method(HELLO, false, true),
     method(PING, false, true),
     method(ENGINE_SNAPSHOT, false, true),
+    // Read-only, like the snapshot; not offered to `raptor-mcp`
+    // (SEC-MCP-01): an agent does not see the engine's consumption.
+    method(ENGINE_RESOURCES, false, false),
     method(EVENTS_SUBSCRIBE, false, true),
     method(EVENTS_UNSUBSCRIBE, false, true),
     // Carries paths: not offered to `raptor-mcp` until F-001-05 defines its
@@ -185,6 +191,9 @@ mod tests {
             );
         }
         assert!(!spec(AUDIT_LIST).unwrap().mcp);
+        let resources = spec(ENGINE_RESOURCES).unwrap();
+        assert!(!resources.mcp && !resources.reserved);
+        assert_eq!(resources.writes, RepoWrite::None);
     }
 
     #[test]
