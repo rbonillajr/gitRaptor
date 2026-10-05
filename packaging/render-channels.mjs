@@ -173,7 +173,7 @@ Publisher: GitRaptor
 PackageName: GitRaptor
 PackageUrl: https://github.com/${repo}
 License: ${license}
-LicenseUrl: https://github.com/${repo}/blob/main/LICENSE
+LicenseUrl: https://github.com/${repo}/blob/v${version}/LICENSE
 ShortDescription: Git copilot for teams that code with AI agents.
 Moniker: raptor
 ManifestType: defaultLocale
