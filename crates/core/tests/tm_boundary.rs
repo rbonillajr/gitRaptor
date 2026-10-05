@@ -49,3 +49,46 @@ mod repo_intact {
         );
     }
 }
+
+/// ADR-GRP-002 and ADR-TMC-002 § 1 (review of the Architect, TS-TMC-003): writes on the user's
+/// repository live in `crates/git/src/tm_write/`. The only exception is the release of an
+/// annotated lock by the oplog recovery (TS-TMC-002), pending a move into the write layer.
+mod repo_intact_fs {
+    use super::*;
+
+    const FS_WRITE_PATTERNS: &[&str] = &[
+        "renameat",
+        "mkdirat",
+        "symlinkat",
+        "RenameFlags",
+        "unlinkat",
+    ];
+    const KNOWN_EXCEPTIONS: &[&str] = &["timemachine/oplog/recovery.rs"];
+
+    #[test]
+    fn core_does_not_write_repos_with_raw_calls() {
+        let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut files = Vec::new();
+        rust_files(&src, &mut files);
+        let offenders: Vec<String> = files
+            .iter()
+            .filter(|f| {
+                let rel = f
+                    .strip_prefix(&src)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                !KNOWN_EXCEPTIONS.contains(&rel.as_str())
+            })
+            .filter(|f| {
+                let text = std::fs::read_to_string(f).unwrap();
+                FS_WRITE_PATTERNS.iter().any(|p| text.contains(p))
+            })
+            .map(|f| f.display().to_string())
+            .collect();
+        assert!(
+            offenders.is_empty(),
+            "raw repo writes outside crates/git: {offenders:?}"
+        );
+    }
+}

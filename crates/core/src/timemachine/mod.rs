@@ -2,6 +2,8 @@
 //! the parts that live in the engine (TQ-2 → a); the write layer on the
 //! user's repo lives in `crates/git` (ADR-TMC-002).
 
+pub mod apply;
 pub mod oplog;
 pub mod protected;
+pub mod repo_lock;
 pub mod store;
