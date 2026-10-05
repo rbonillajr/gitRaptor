@@ -128,10 +128,7 @@ impl TmRepos {
 
     /// The repo whose canonical common directory is `common_dir`, with its
     /// oplog and its store (`None` if the store cannot be opened).
-    fn by_common_dir(
-        &self,
-        common_dir: &Path,
-    ) -> Option<FoundRepo> {
+    fn by_common_dir(&self, common_dir: &Path) -> Option<FoundRepo> {
         let mut repos = self.lock();
         let repo = repos.iter_mut().find(|r| r.common_dir == common_dir)?;
         if repo.store.is_none() {
