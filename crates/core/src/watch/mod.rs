@@ -376,6 +376,9 @@ impl Observer {
             match result {
                 Ok(event) => {
                     let rescan = event.need_rescan();
+                    if !rescan && !is_change(&event.kind) {
+                        return;
+                    }
                     shared.route(t_recv, event.paths, rescan);
                 }
                 // An error of the watcher itself: reconcile everything.
@@ -507,6 +510,19 @@ impl Drop for Observer {
     }
 }
 
+/// Whether an event can mean a change. inotify also reports opens (its
+/// mask includes `IN_OPEN` in `notify` 8.2): the engine's own reads would
+/// wake the tasks that made them, in a loop. Only a close after writing is
+/// an access that changes something.
+fn is_change(kind: &notify::EventKind) -> bool {
+    use notify::event::{AccessKind, AccessMode};
+    match kind {
+        notify::EventKind::Access(AccessKind::Close(AccessMode::Write)) => true,
+        notify::EventKind::Access(_) => false,
+        _ => true,
+    }
+}
+
 /// The private Git directory of a worktree.
 fn worktree_git_dir(common: &Path, read: &WorktreeRead) -> PathBuf {
     match &read.view.admin_name {
@@ -529,5 +545,30 @@ impl Watchable for gitraptor_api::messages::WorktreeStatus {
     /// watch and an untrusted link must never be (SEC-11).
     fn is_watchable(&self) -> bool {
         matches!(self, Self::Ready { .. })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use notify::EventKind;
+    use notify::event::{AccessKind, AccessMode, CreateKind, ModifyKind};
+
+    /// Reads never wake a task; writes and their close do.
+    #[test]
+    fn only_changes_are_routed() {
+        assert!(!is_change(&EventKind::Access(AccessKind::Open(
+            AccessMode::Any
+        ))));
+        assert!(!is_change(&EventKind::Access(AccessKind::Close(
+            AccessMode::Read
+        ))));
+        assert!(!is_change(&EventKind::Access(AccessKind::Read)));
+        assert!(is_change(&EventKind::Access(AccessKind::Close(
+            AccessMode::Write
+        ))));
+        assert!(is_change(&EventKind::Create(CreateKind::File)));
+        assert!(is_change(&EventKind::Modify(ModifyKind::Any)));
+        assert!(is_change(&EventKind::Any));
     }
 }
