@@ -1,0 +1,127 @@
+# INF-GRP-004: publishes a release to the distribution channels (NFR-06, ADR-GRP-014 § 5).
+#
+# Runs only when a human publishes the draft that `release.yml` left, and only when the repo
+# variable RELEASE_PUBLISH_CHANNELS == 'true' and the release is not a prerelease. Until then
+# nothing here runs: no tap, winget or npm publication (decision v0.3, internal tool).
+#
+# Blocked as well while the workspace license is UNLICENSED (open question 2, NFR-11): every
+# channel needs a license.
+#
+# Requires secret: HOMEBREW_TAP_TOKEN (contents:write on rbonillajr/homebrew-tap) and
+# WINGET_TOKEN (public_repo, to open the PR on microsoft/winget-pkgs). npm uses trusted
+# publishing (OIDC, provenance) and needs no token, but requires a trusted publisher configured
+# on npmjs.com for `gitraptor` and each `@gitraptor/cli-*` package.
+#
+# Actions are pinned by commit SHA.
+name: release-channels
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-channels-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ github.event.release.tag_name }}
+  GH_TOKEN: ${{ github.token }}
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  render:
+    name: render channels
+    if: vars.RELEASE_PUBLISH_CHANNELS == 'true' && !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - name: License decided
+        run: |
+          if grep -Eq '^license = "UNLICENSED"' Cargo.toml; then
+            echo "::error::the workspace license is UNLICENSED: channels need a license decision (open question 2)"
+            exit 1
+          fi
+      # Re-render from the published assets, verified against their SHA256SUMS.
+      - run: |
+          gh release download "$TAG" --dir dist --pattern 'raptor-*' --pattern SHA256SUMS
+          (cd dist && sha256sum --check --ignore-missing SHA256SUMS)
+          node packaging/render-channels.mjs --version "${TAG#v}" --dist dist --out channels \
+            --repo "$GITHUB_REPOSITORY"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: channels
+          path: channels/
+          if-no-files-found: error
+
+  homebrew:
+    name: Homebrew tap
+    needs: render
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: channels
+          path: channels
+      # Requires secret: HOMEBREW_TAP_TOKEN.
+      - env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          [ -n "$TAP_TOKEN" ] || { echo "::error::requires secret HOMEBREW_TAP_TOKEN"; exit 1; }
+          git clone --depth 1 "https://x-access-token:${TAP_TOKEN}@github.com/rbonillajr/homebrew-tap.git" tap
+          mkdir -p tap/Formula
+          cp channels/homebrew/Formula/gitraptor.rb tap/Formula/
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/gitraptor.rb
+          git commit -m "gitraptor ${TAG#v}"
+          git push origin HEAD
+
+  winget:
+    name: winget
+    needs: render
+    runs-on: windows-latest
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: channels
+          path: channels
+      # Requires secret: WINGET_TOKEN. Opens a PR on microsoft/winget-pkgs; Microsoft reviews it.
+      - shell: pwsh
+        env:
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: |
+          if (-not $env:WINGET_TOKEN) { throw 'requires secret WINGET_TOKEN' }
+          $version = $env:TAG.TrimStart('v')
+          Invoke-WebRequest https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
+          ./wingetcreate.exe submit --token $env:WINGET_TOKEN "channels/winget/manifests/g/GitRaptor/GitRaptor/$version"
+
+  npm:
+    name: npm
+    needs: render
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing and provenance.
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: channels
+          path: channels
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      # Platform packages first, so `gitraptor` never points at a version that does not exist.
+      # Artifacts drop the exec bit; npm keeps whatever mode the files have when packing.
+      - run: |
+          chmod 755 channels/npm/cli-*/bin/*
+          for dir in channels/npm/cli-*; do
+            npm publish "$dir" --provenance --access public
+          done
+          npm publish channels/npm/gitraptor --provenance --access public
