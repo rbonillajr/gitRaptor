@@ -272,18 +272,17 @@ impl Daemon {
                     S3Outcome::Ambiguous => "ambiguous",
                     S3Outcome::Attributed(_) => "attributed",
                 };
+                let diag = detector.diagnostics();
+                let count = |n: u64| Field::from(i64::try_from(n).unwrap_or(i64::MAX));
                 self.logger.info(
                     "s3_evidence",
                     &[
                         ("repo", Field::id(&batch.repo_id)),
                         ("event", event.kind.as_str().into()),
                         ("outcome", label.into()),
-                        (
-                            "samples",
-                            i64::try_from(detector.diagnostics().samples)
-                                .unwrap_or(i64::MAX)
-                                .into(),
-                        ),
+                        ("samples", count(diag.samples)),
+                        ("s3_cwd_unreadable", count(diag.cwd_unreadable)),
+                        ("s3_placed_by_ancestor", count(diag.placed_by_ancestor)),
                     ],
                 );
                 match outcome {

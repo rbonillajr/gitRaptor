@@ -170,6 +170,10 @@ impl HookEvidence for NoHooks {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Diagnostics {
     pub samples: u64,
+    /// `git`s whose working folder could not be read (exiting).
+    pub cwd_unreadable: u64,
+    /// Of those, placed by the folder of a live ancestor.
+    pub placed_by_ancestor: u64,
     pub sessions_detected: u64,
     pub sessions_ended: u64,
 }
@@ -206,12 +210,25 @@ impl RepoPaths {
 /// One `git` process of a sample.
 #[derive(Debug, Clone)]
 struct GitSeen {
-    /// The present session of the repo it descends from.
-    session: Option<String>,
+    owner: Owner,
+    /// Its working folder. For a `git` of no session whose folder cannot be
+    /// read (it is exiting), that of its nearest live ancestor that can be
+    /// read: the shell or the editor that launched it.
     cwd: Option<PathBuf>,
     /// It existed before the write that triggered the sample, so it may
     /// have made it.
     started_before: bool,
+}
+
+/// Whose a `git` is, by its ancestry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Owner {
+    /// A present session of the repo.
+    Session(String),
+    /// The daemon itself (the Time Machine's writer): foreign to every
+    /// session, or a restore could be attributed to Claude Code.
+    Daemon,
+    Other,
 }
 
 #[derive(Debug, Clone)]
@@ -249,6 +266,8 @@ struct Inner {
     state: Mutex<State>,
     notices: Mutex<Option<Sender<Notice>>>,
     samples: AtomicU64,
+    cwd_unreadable: AtomicU64,
+    placed_by_ancestor: AtomicU64,
     detected: AtomicU64,
     ended: AtomicU64,
 }
@@ -281,6 +300,8 @@ impl Detector {
             state: Mutex::new(State::default()),
             notices: Mutex::new(Some(notice_tx)),
             samples: AtomicU64::new(0),
+            cwd_unreadable: AtomicU64::new(0),
+            placed_by_ancestor: AtomicU64::new(0),
             detected: AtomicU64::new(0),
             ended: AtomicU64::new(0),
         });
@@ -444,18 +465,23 @@ impl Detector {
         let samples = st.sightings.get(repo_id).into_iter().flatten();
         for sighting in samples.filter(|s| s.t_recv >= from && s.t_recv <= t_flush) {
             for git in sighting.gits.iter().filter(|g| g.started_before) {
-                match (&git.session, &git.cwd) {
-                    (Some(id), Some(cwd)) if cwd.starts_with(worktree) => {
+                match (&git.owner, &git.cwd) {
+                    (Owner::Session(id), Some(cwd)) if cwd.starts_with(worktree) => {
                         if !sessions.contains(&id.as_str()) {
                             sessions.push(id);
                         }
                     }
-                    // A `git` of the session in another worktree did not
-                    // make this event.
-                    (Some(_), Some(_)) => {}
-                    // Unreadable: cannot be ruled out.
-                    (_, None) => foreign = true,
-                    (None, Some(cwd)) => foreign |= repo.contains(cwd),
+                    // A `git` of the session in another worktree, or one
+                    // that is exiting, is no evidence and not foreign.
+                    (Owner::Session(_), _) => {}
+                    // The daemon's own `git` in this repo, or exiting.
+                    (Owner::Daemon, None) => foreign = true,
+                    (Owner::Daemon | Owner::Other, Some(cwd)) => foreign |= repo.contains(cwd),
+                    // Exiting and launched from nowhere readable: like a
+                    // `git` that already ended, it is not seen (the S3 race
+                    // accepted by ADR-GRP-012; an editor such as GitKraken
+                    // falls here, a declared gap of SPIKE-GRP-001).
+                    (Owner::Other, None) => {}
                 }
             }
         }
@@ -469,6 +495,8 @@ impl Detector {
     pub fn diagnostics(&self) -> Diagnostics {
         Diagnostics {
             samples: self.inner.samples.load(Ordering::Relaxed),
+            cwd_unreadable: self.inner.cwd_unreadable.load(Ordering::Relaxed),
+            placed_by_ancestor: self.inner.placed_by_ancestor.load(Ordering::Relaxed),
             sessions_detected: self.inner.detected.load(Ordering::Relaxed),
             sessions_ended: self.inner.ended.load(Ordering::Relaxed),
         }
@@ -684,6 +712,8 @@ impl Inner {
             .iter()
             .map(|g| (g.pid, self.procs.cwd(g.pid)))
             .collect();
+        let unreadable = cwds.values().filter(|c| c.is_none()).count() as u64;
+        self.cwd_unreadable.fetch_add(unreadable, Ordering::Relaxed);
         let tolerance = u64::try_from(self.config.start_tolerance.as_micros()).unwrap_or(0);
         let mut st = self.lock();
         for notice in notices {
@@ -695,10 +725,20 @@ impl Inner {
                 .collect();
             let seen: Vec<GitSeen> = gits
                 .iter()
-                .map(|g| GitSeen {
-                    session: self.session_of(g, &by_pid, &sessions),
-                    cwd: cwds.get(&g.pid).cloned().flatten(),
-                    started_before: g.start_us <= notice.wall_us.saturating_add(tolerance),
+                .map(|g| {
+                    let owner = self.owner(g, &by_pid, &sessions);
+                    let mut cwd = cwds.get(&g.pid).cloned().flatten();
+                    if cwd.is_none() && owner == Owner::Other {
+                        cwd = self.launched_from(g, &by_pid);
+                        if cwd.is_some() {
+                            self.placed_by_ancestor.fetch_add(1, Ordering::Relaxed);
+                        }
+                    }
+                    GitSeen {
+                        owner,
+                        cwd,
+                        started_before: g.start_us <= notice.wall_us.saturating_add(tolerance),
+                    }
                 })
                 .collect();
             let ring = st.sightings.entry(notice.repo_id.clone()).or_default();
@@ -712,31 +752,55 @@ impl Inner {
         }
     }
 
-    /// The present session `git` descends from. The walk stops at a younger
-    /// parent (a reused pid) and at the daemon: a `git` of the daemon (the
-    /// Time Machine's writer) belongs to no session.
-    fn session_of(
+    /// Whose `git` is: the present session it descends from, the daemon,
+    /// or nobody known. The walk follows the rules of `requester.rs`: at
+    /// most [`MAX_DEPTH`] steps, a parent younger than its child is a reused
+    /// pid and ends it, and it stops at the daemon.
+    fn owner(
         &self,
         git: &ProcEntry,
         by_pid: &HashMap<u32, &ProcEntry>,
         sessions: &HashMap<(u32, u64), String>,
-    ) -> Option<String> {
+    ) -> Owner {
         let mut current = git;
         for _ in 0..MAX_DEPTH {
             if current.pid == self.own_pid {
-                return None;
+                return Owner::Daemon;
             }
             if let Some(id) = sessions.get(&(current.pid, current.start_us)) {
-                return Some(id.clone());
+                return Owner::Session(id.clone());
             }
-            let parent = by_pid.get(&current.ppid)?;
-            if parent.pid == current.pid || parent.start_us > current.start_us {
+            match parent_of(current, by_pid) {
+                Some(parent) => current = parent,
+                None => return Owner::Other,
+            }
+        }
+        Owner::Other
+    }
+
+    /// The working folder of the nearest live ancestor of `git` that can be
+    /// read, with the same walk rules as [`Inner::owner`].
+    fn launched_from(&self, git: &ProcEntry, by_pid: &HashMap<u32, &ProcEntry>) -> Option<PathBuf> {
+        let mut current = git;
+        for _ in 0..MAX_DEPTH {
+            let parent = parent_of(current, by_pid)?;
+            if parent.pid == self.own_pid {
                 return None;
+            }
+            if let Some(cwd) = self.procs.cwd(parent.pid) {
+                return Some(cwd);
             }
             current = parent;
         }
         None
     }
+}
+
+/// The parent of `child` in the table, unless it is younger than the child
+/// (a reused pid) or the root.
+fn parent_of<'a>(child: &ProcEntry, by_pid: &HashMap<u32, &'a ProcEntry>) -> Option<&'a ProcEntry> {
+    let parent = by_pid.get(&child.ppid)?;
+    (parent.pid != child.pid && parent.start_us <= child.start_us).then_some(*parent)
 }
 
 fn is_git(entry: &ProcEntry) -> bool {
@@ -748,12 +812,10 @@ fn is_git(entry: &ProcEntry) -> bool {
 }
 
 fn scan_loop(inner: &Inner, stop: &Receiver<()>) {
-    loop {
+    // The first scan after one interval: the repos are added just after the
+    // detector starts.
+    while let Err(RecvTimeoutError::Timeout) = stop.recv_timeout(inner.config.scan_interval) {
         inner.scan();
-        match stop.recv_timeout(inner.config.scan_interval) {
-            Err(RecvTimeoutError::Timeout) => {}
-            _ => return,
-        }
     }
 }
 
