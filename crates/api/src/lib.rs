@@ -17,6 +17,7 @@ pub mod framing;
 pub mod messages;
 pub mod methods;
 pub mod rpc;
+pub mod timemachine;
 pub mod untrusted;
 
 pub use actor::{Actor, AgentKind, AgentOrigin};

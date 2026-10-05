@@ -3,4 +3,5 @@
 //! user's repo lives in `crates/git` (ADR-TMC-002).
 
 pub mod oplog;
+pub mod protected;
 pub mod store;

@@ -168,6 +168,7 @@ fn walk(first: &ProcInfo, checks: &Checks<'_>) -> Walk {
         procs,
         matcher,
         daemon,
+        marks,
     } = *checks;
     let mut out = Walk {
         chain: Vec::new(),
@@ -181,7 +182,10 @@ fn walk(first: &ProcInfo, checks: &Checks<'_>) -> Walk {
         let (l, agent) = link(&current, matcher);
         out.chain.push(l);
         out.agent |= agent;
-        out.daemon |= daemon == Some((current.pid, current.start_us));
+        // The daemon itself, or a process a running operation started
+        // (DEP-MCP-3), even if it was reparented away from the daemon.
+        out.daemon |= daemon == Some((current.pid, current.start_us))
+            || marks.is_some_and(|m| m.lookup(&current).is_some());
         if current.pid <= 1 || current.ppid == 0 {
             return out;
         }
@@ -218,6 +222,9 @@ pub struct Checks<'a> {
     pub matcher: &'a AgentMatcher,
     /// `(pid, start)` of the daemon: its descendants are refused.
     pub daemon: Option<(u32, u64)>,
+    /// Processes started by running operations: refused like the daemon's
+    /// descendants.
+    pub marks: Option<&'a super::marks::ExecutorMarks>,
 }
 
 /// Runs the checks of ADR-GRP-005 § 6 (points 1 to 3) on the peer of a
@@ -342,6 +349,7 @@ mod tests {
                     exe: Some(PathBuf::from(exe)),
                     controlling_terminal: tty,
                     session,
+                    pgid: pid,
                 },
             );
         }
@@ -390,6 +398,7 @@ mod tests {
             procs: t,
             matcher: &matcher,
             daemon: Some(DAEMON),
+            marks: None,
         };
         check_reserved(peer(pid, start), &checks)
     }
