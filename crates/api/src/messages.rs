@@ -612,6 +612,8 @@ pub enum RepoRejection {
     Unreadable,
     /// No longer exists (`repo.retire` of an unknown id).
     UnknownRepo,
+    /// A repo, but not one the engine observes (Guardrails, Q-GRD-15).
+    NotObserved,
 }
 
 /// `data` of a `REPO_REJECTED` error.
