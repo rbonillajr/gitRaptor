@@ -13,7 +13,9 @@ use gitraptor_core::daemon::{
     Daemon, DaemonConfig, DaemonEnv, DaemonError, EngineState, LOG_FILE, LogLimits, StopCause,
     running_pid,
 };
-use gitraptor_core::profile::{DaemonRun, GapCause, Profile, ProfileDirs};
+use gitraptor_core::profile::{
+    Agent, AgentKind, DaemonRun, EndCause, GapCause, Origin, Profile, ProfileDirs, WriteOp,
+};
 use gitraptor_git::resolve::ResolveConfig;
 
 fn config(dirs: ProfileDirs, git: ResolveConfig) -> DaemonConfig {
@@ -192,7 +194,25 @@ fn crash_during_active_session_is_marked_on_next_start() {
         let profile = tp.open();
         let entry = profile.repos().unwrap().remove(0);
         let (mut store, _) = profile.open_store(&entry.repo_id).unwrap();
-        store.write_batch(&sample_batch(&repo, "s1", 1)).unwrap();
+        // A registered session: it stays active across starts. A detected
+        // one with a fake process would be closed as ended during the gap by
+        // the first start (US-GRP-007, ADR-GRP-012).
+        let mut batch = sample_batch(&repo, "s1", 1);
+        if let WriteOp::StartSession {
+            agent,
+            origin,
+            detection_key,
+            ..
+        } = &mut batch[1]
+        {
+            *agent = Agent {
+                kind: AgentKind::Other,
+                name: Some("codex".into()),
+            };
+            *origin = Origin::Registered;
+            *detection_key = None;
+        }
+        store.write_batch(&batch).unwrap();
     }
     let daemon = Daemon::start(config(tp.dirs(), system_git())).unwrap();
     // Dropping without `stop` is what a crash leaves behind: the OS frees the
@@ -363,4 +383,38 @@ fn start_recovers_the_time_machine_oplog() {
     let daemon = Daemon::start(config(tp.dirs(), system_git())).unwrap();
     assert!(daemon.report().time_machine[0].recovery.is_clean());
     daemon.stop(StopCause::Signal("TERM"));
+}
+
+/// A detected session whose process died while the engine was stopped is
+/// closed at start as ended during the gap, with an unknown end time, and is
+/// never reopened (US-GRP-007, ADR-GRP-012).
+#[test]
+fn a_detected_session_whose_process_died_is_closed_at_start() {
+    let tp = TempProfile::new();
+    let repo = profile_with_repo(&tp);
+    let repo_id = {
+        let profile = tp.open();
+        let entry = profile.repos().unwrap().remove(0);
+        let (mut store, _) = profile.open_store(&entry.repo_id).unwrap();
+        // `(pid 1, start 1)`: not a live Claude Code.
+        let mut batch = sample_batch(&repo, "1:1", 0);
+        if let WriteOp::StartSession { detection_key, .. } = &mut batch[1] {
+            *detection_key = Some("1:1".into());
+        }
+        store.write_batch(&batch).unwrap();
+        entry.repo_id
+    };
+    let daemon = Daemon::start(config(tp.dirs(), system_git())).unwrap();
+    daemon.stop(StopCause::Signal("TERM"));
+
+    let profile = tp.open();
+    let (store, _) = profile.open_store(&repo_id).unwrap();
+    let session = store.session("1:1").unwrap().unwrap();
+    assert_eq!(session.end_cause, Some(EndCause::EndedDuringGap));
+    assert_eq!(session.ended_ms, None);
+    let states = store.sessions_with_state().unwrap();
+    assert_eq!(
+        states[0].1.as_ref().map(|(k, _)| k.as_str()),
+        Some("session-end")
+    );
 }
