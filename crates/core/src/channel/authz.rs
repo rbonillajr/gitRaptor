@@ -84,12 +84,15 @@ impl AgentMatcher {
 }
 
 /// `…/claude/versions/<version>`: the native installer names the binary
-/// after its version.
+/// after its version. Compared without case, as Windows and macOS paths are.
 fn in_native_versions(exe: &Path) -> bool {
     let mut parents = exe.ancestors().skip(1);
     let versions = parents.next().and_then(Path::file_name);
     let claude = parents.next().and_then(Path::file_name);
-    versions.is_some_and(|v| v == "versions") && claude.is_some_and(|c| c == "claude")
+    let is = |name: Option<&std::ffi::OsStr>, want: &str| {
+        name.is_some_and(|n| n.to_string_lossy().eq_ignore_ascii_case(want))
+    };
+    is(versions, "versions") && is(claude, "claude")
 }
 
 /// Any path through `@anthropic-ai/claude-code`.
@@ -101,9 +104,10 @@ fn in_npm_package(exe: &Path) -> bool {
             _ => None,
         })
         .collect();
-    parts
-        .windows(2)
-        .any(|w| w[0] == "@anthropic-ai" && w[1].starts_with("claude-code"))
+    parts.windows(2).any(|w| {
+        w[0].eq_ignore_ascii_case("@anthropic-ai")
+            && w[1].to_ascii_lowercase().starts_with("claude-code")
+    })
 }
 
 /// One process of the ancestry, as stored in the audit.
@@ -169,6 +173,7 @@ fn walk(first: &ProcInfo, checks: &Checks<'_>) -> Walk {
         matcher,
         daemon,
         marks,
+        ..
     } = *checks;
     let mut out = Walk {
         chain: Vec::new(),
@@ -225,7 +230,17 @@ pub struct Checks<'a> {
     /// Processes started by running operations: refused like the daemon's
     /// descendants.
     pub marks: Option<&'a super::marks::ExecutorMarks>,
+    /// Whether this platform can prove a caller is the developer at a
+    /// terminal (controlling terminal and session leader). Without it every
+    /// reserved command and every confirmation is refused as `Unsupported`
+    /// after the ancestry is walked (TQ-14). [`TERMINAL_PROOF`] in
+    /// production; injected by tests so both branches run on every OS.
+    pub terminal_proof: bool,
 }
+
+/// Unix has a controlling terminal and session leaders; Windows has no
+/// equivalent proof yet (TQ-14 → a; OS-verified presence in Phase 2).
+pub const TERMINAL_PROOF: bool = cfg!(unix);
 
 /// Runs the checks of ADR-GRP-005 § 6 (points 1 to 3) on the peer of a
 /// connection, now.
@@ -275,6 +290,10 @@ pub fn check_reserved(peer: AcceptedPeer, checks: &Checks<'_>) -> Verdict {
     }
     if own.broken {
         return refuse(client, chain, RefusalReason::IdentityUnverified);
+    }
+    // Nothing else can prove the caller is the developer (Windows, TQ-14).
+    if !checks.terminal_proof {
+        return refuse(client, chain, RefusalReason::Unsupported);
     }
 
     // The session leader, unless it is the caller (already walked).
@@ -399,6 +418,7 @@ mod tests {
             matcher: &matcher,
             daemon: Some(DAEMON),
             marks: None,
+            terminal_proof: true,
         };
         check_reserved(peer(pid, start), &checks)
     }
@@ -566,6 +586,15 @@ mod tests {
             ("/bin/zsh", ExeClass::Other),
             ("/Users/u/versions/2.1.3", ExeClass::Other),
             ("/usr/local/bin/raptor", ExeClass::Other),
+            // Case-insensitive file systems (Windows, macOS).
+            (
+                "/Users/u/.local/share/Claude/Versions/2.1.3",
+                ExeClass::ClaudeCode,
+            ),
+            (
+                "/x/node_modules/@Anthropic-AI/Claude-Code/bin/CLAUDE.EXE",
+                ExeClass::ClaudeCode,
+            ),
         ] {
             assert_eq!(m.classify(Path::new(path)), class, "{path}");
         }
