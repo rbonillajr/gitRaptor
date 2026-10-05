@@ -7,8 +7,6 @@ total_artifacts: 17
 expanded: 17
 approved: 0
 blocked:
-  - US-GRD-013
-  - US-GRD-015
   - US-GRD-016
 ---
 
@@ -23,7 +21,7 @@ blocked:
 **Feature**: Guardrails (F-001-04)
 **Epic**: E-001 — MVP Fase 1: Cockpit + Time Machine + Guardrails (CLI/TUI + MCP)
 **Prioridad**: Alta (BR-11 y BR-12 Must; BR-13 Should)
-**Estado**: Listo para Desarrollo: US-GRD-001 a US-GRD-012, US-GRD-014 y US-GRD-017 (14 listas). Bloqueadas: US-GRD-013, US-GRD-015 y US-GRD-016 (3; ver `blocked`). US-GRD-007 a 012 y 014 se desbloquearon el 2026-10-04 al aceptarse ADR-GRP-007, que cierra P8.
+**Estado**: Listo para Desarrollo: US-GRD-001 a US-GRD-015 y US-GRD-017 (16 listas; la Dev Spec de US-GRD-013 y la de US-GRD-015 esperan a SPIKE-GRD-002). Bloqueada: US-GRD-016 (1; ver `blocked`). US-GRD-013 y US-GRD-015 se desbloquearon el 2026-10-04 al aceptarse ADR-GRD-008. US-GRD-007 a 012 y 014 se desbloquearon el 2026-10-04 al aceptarse ADR-GRP-007, que cierra P8.
 
 **Enlace a contexto completo**: [`context.md`](./context.md) (CTX-GRD-001)
 **Reglas de negocio**: [`business-rules.md`](./business-rules.md) (BR-GRD-001, 23 reglas) · **Diseño**: no aplica (sin superficie propia; la cola y el estado de protección los presenta el Cockpit, F-001-02, y la CLI)
@@ -65,9 +63,9 @@ blocked:
 | [US-GRD-010](./user-stories/US-GRD-010-endurecer-sin-relajar.md) | El desarrollador endurece las reglas en su máquina sin poder relajar las del equipo | Desarrollador quiere la precedencia de Q-GRD-14 entre equipo, perfil y local | expanded |
 | [US-GRD-011](./user-stories/US-GRD-011-configuracion-ilegible.md) | Una configuración rota no deja pasar las operaciones peligrosas | Desarrollador quiere que una configuración ilegible mantenga el mínimo seguro | expanded |
 | [US-GRD-012](./user-stories/US-GRD-012-agente-no-relaja-configuracion.md) | Un agente no puede relajar las reglas del equipo cambiando su configuración | Desarrollador quiere la configuración como ruta prohibida para agentes | expanded |
-| [US-GRD-013](./user-stories/US-GRD-013-comando-edicion-configuracion.md) | El desarrollador cambia la configuración con un comando sin perder lo que editó a mano | Desarrollador quiere un comando seguro que respete niveles y cambios a mano (bloqueada: factor fuera de banda, Q-GRD-19) | expanded |
+| [US-GRD-013](./user-stories/US-GRD-013-comando-edicion-configuracion.md) | El desarrollador cambia la configuración con un comando sin perder lo que editó a mano | Desarrollador quiere un comando seguro que respete niveles y cambios a mano (Dev Spec tras SPIKE-GRD-002 y Q-GRD-32; ADR-GRD-008) | expanded |
 | [US-GRD-014](./user-stories/US-GRD-014-rama-base-del-equipo.md) | El equipo fija la rama base del repo y Guardrails la protege | Desarrollador quiere que Guardrails proteja la rama base que fija el equipo | expanded |
-| [US-GRD-015](./user-stories/US-GRD-015-cola-de-confirmacion.md) | El desarrollador aprueba o rechaza las acciones de riesgo que un agente deja en espera | Desarrollador quiere la cola de confirmación con caducidad de 5 minutos (bloqueada: Cockpit y factor fuera de banda, Q-GRD-19) | expanded |
+| [US-GRD-015](./user-stories/US-GRD-015-cola-de-confirmacion.md) | El desarrollador aprueba o rechaza las acciones de riesgo que un agente deja en espera | Desarrollador quiere la cola de confirmación con caducidad de 5 minutos (Dev Spec tras SPIKE-GRD-002; ADR-GRD-008; el Cockpit la presenta) | expanded |
 | [US-GRD-016](./user-stories/US-GRD-016-misma-decision-por-mcp.md) | Un agente que usa las herramientas MCP recibe la misma decisión que con Git directo | Desarrollador quiere la misma decisión por MCP para todo el catálogo y los estados según la allowlist (bloqueada: F-001-05) | expanded |
 | [US-GRD-017](./user-stories/US-GRD-017-sin-snapshot-no-se-ejecuta.md) | Una operación destructiva permitida no se ejecuta sin un punto de recuperación | Desarrollador quiere que sin snapshot previo la operación se deniegue | expanded |
 
@@ -91,9 +89,9 @@ blocked:
 | US-GRD-010 | BR-CONS-001, BR-VAL-001 | US-GRD-007, US-GRD-008 | — | Must | Las reglas del equipo son un suelo |
 | US-GRD-011 | BR-EDGE-004 | US-GRD-010, TS-GRD-001 | — (Q-GRD-17 resuelta; la alineación con BR-CONS-007 la cierran ADR-GRP-007 y TS-GRD-001) | Must | Nunca "todo permitido" |
 | US-GRD-012 | BR-AUTH-004, BR-AUTH-001 | US-GRD-008, US-GRD-010 | — (Q-GRD-17 resuelta; R-GRD-3 en ADR-GRD-007) | Must | Las reglas no las cambia quien está sujeto a ellas |
-| US-GRD-013 | BR-CONS-006, BR-VAL-001, BR-CONS-001, BR-AUTH-001 | US-GRD-010, US-GRD-014 | **Bloqueada**: factor fuera de banda del SO (Q-GRD-19, D5; ADR sin crear) | Should | Editar la configuración es seguro |
+| US-GRD-013 | BR-CONS-006, BR-VAL-001, BR-CONS-001, BR-AUTH-001 | US-GRD-010, US-GRD-014 | Factor del SO de ADR-GRD-008 (aceptado); Dev Spec tras SPIKE-GRD-002 y el trinquete de Q-GRD-32 | Should | Editar la configuración es seguro |
 | US-GRD-014 | BR-CONS-003, BR-EDGE-001 | US-GRD-007, TS-GRD-001 | — | Should | La rama de integración del equipo queda protegida |
-| US-GRD-015 | BR-WF-001, BR-TIME-001, BR-AUTH-001 | US-GRD-004, US-GRD-005, US-GRD-007 | **Bloqueada**: Cockpit F-001-02 y factor fuera de banda del SO (Q-GRD-19, D5) | Should | El humano tiene la última palabra en lo arriesgado |
+| US-GRD-015 | BR-WF-001, BR-TIME-001, BR-AUTH-001 | US-GRD-004, US-GRD-005, US-GRD-007 | Factor del SO de ADR-GRD-008 (aceptado); Dev Spec tras SPIKE-GRD-002. El Cockpit la consume (DEP-CKP-8), no la bloquea | Should | El humano tiene la última palabra en lo arriesgado |
 | US-GRD-016 | BR-CONS-002, BR-WF-002, BR-AUTH-004 | US-GRD-001, US-GRD-004, US-GRD-007 | **Bloqueada**: Servidor MCP F-001-05 | Must | Dos capas, una sola decisión |
 | US-GRD-017 | BR-EDGE-005 | US-GRD-001, US-TMC-005 | — (Time Machine con historias; contrato en ADR-GRD-003) | Must | Permitir nunca significa perder trabajo |
 
@@ -119,12 +117,13 @@ GRD-001, US-TMC-005 (Time Machine) ─► GRD-017
 - **Ola 1** (en paralelo): US-GRD-002, US-GRD-004 y US-GRD-005.
 - **Ola 2**: US-GRD-003 (tras 002 y 004; de US-GRD-004, una Should, solo depende la parte de instalaciones huérfanas: el resto de US-GRD-003 se puede entregar sin ella) y US-GRD-006 (tras 005).
 - **Tras US-GRP-013 (motor-local) y TS-GRD-001** (desbloqueadas el 2026-10-04 al aceptarse ADR-GRP-007, que cierra P8): US-GRD-007; luego US-GRD-008 y US-GRD-014 en paralelo; luego US-GRD-009 y US-GRD-010; por último US-GRD-011 y US-GRD-012.
-- **Siguen bloqueadas**: US-GRD-013 (factor de autenticación fuera de banda del SO, Q-GRD-19; además tras 010 y 014), US-GRD-015 (Cockpit F-001-02 y Q-GRD-19) y US-GRD-016 (Servidor MCP F-001-05).
+- **Tras SPIKE-GRD-002** (desbloqueadas el 2026-10-04 al aceptarse ADR-GRD-008): US-GRD-013 (además tras 010 y 014, y con el trinquete de Q-GRD-32) y US-GRD-015 (tras 004, 005 y 007).
+- **Sigue bloqueada**: US-GRD-016 (Servidor MCP F-001-05).
 - **Tras US-TMC-005 (Time Machine)**: US-GRD-017 (desbloqueada el 2026-10-04; antes se bloqueaba en cruz con US-TMC-005).
 
 > **Secuencias por contrato compartido**: 001 → 002 → 003 (instalación de hooks), 004 → 003 (detección de la instalación huérfana), 001 → 007 (contrato de decisión), 004 → 007 (lista de operaciones interceptables) y 004 → 016 (estados de protección). Van en serie. En cada caso el contrato lo fija la Dev Spec de la historia que va primero. La lectura de los tres niveles la fija US-GRP-013 (motor-local).
 >
-> **Ruta crítica de la protección base**: US-GRP-001 → GRD-001 → GRD-005 → GRD-006. **Ruta crítica de las reglas configuradas** (ejecutable desde el 2026-10-04, tras cerrarse P8): US-GRP-013 → TS-GRD-001 → GRD-007 → GRD-008 → GRD-010 → GRD-011 / GRD-012. **Ruta crítica total**: la anterior → GRD-013, cuando exista el factor fuera de banda (Q-GRD-19).
+> **Ruta crítica de la protección base**: US-GRP-001 → GRD-001 → GRD-005 → GRD-006. **Ruta crítica de las reglas configuradas** (ejecutable desde el 2026-10-04, tras cerrarse P8): US-GRP-013 → TS-GRD-001 → GRD-007 → GRD-008 → GRD-010 → GRD-011 / GRD-012. **Ruta crítica total**: la anterior → GRD-013, tras SPIKE-GRD-002 (factor de ADR-GRD-008, Q-GRD-19).
 
 ### Relación con US-GRP-016 (motor-local)
 
@@ -160,7 +159,7 @@ US-GRD-014 **no** desbloquea US-GRP-016. Según el contexto aprobado, US-GRP-016
 | | | BR-EDGE-004 | US-GRD-011 |
 | | | BR-EDGE-005 | US-GRD-017 |
 
-**Resultado**: las 23 reglas tienen al menos una historia. Solo la cubren historias bloqueadas: BR-CONS-006 (US-GRD-013, factor fuera de banda Q-GRD-19); BR-WF-001 y BR-TIME-001 (US-GRD-015, Cockpit y Q-GRD-19); BR-CONS-002 (US-GRD-016, MCP). Desde el 2026-10-04 (ADR-GRP-007 aceptado) ya no esperan a P8 BR-VAL-001, BR-VAL-002, BR-VAL-003, BR-CONS-001, BR-CONS-003, BR-EDGE-004 ni BR-AUTH-004. El catálogo completo de BR-VAL-002, incluido `reset --hard`, se verifica por la capa MCP en US-GRD-016; por Git directo, US-GRD-007 cubre las operaciones que la lista de US-GRD-004 declara interceptables.
+**Resultado**: las 23 reglas tienen al menos una historia. Solo la cubre una historia bloqueada: BR-CONS-002 (US-GRD-016, MCP). BR-CONS-006 (US-GRD-013), BR-WF-001 y BR-TIME-001 (US-GRD-015) dependen de historias cuya Dev Spec espera a SPIKE-GRD-002. Desde el 2026-10-04 (ADR-GRP-007 aceptado) ya no esperan a P8 BR-VAL-001, BR-VAL-002, BR-VAL-003, BR-CONS-001, BR-CONS-003, BR-EDGE-004 ni BR-AUTH-004. El catálogo completo de BR-VAL-002, incluido `reset --hard`, se verifica por la capa MCP en US-GRD-016; por Git directo, US-GRD-007 cubre las operaciones que la lista de US-GRD-004 declara interceptables.
 
 ---
 
@@ -178,3 +177,4 @@ US-GRD-014 **no** desbloquea US-GRP-016. Según el contexto aprobado, US-GRP-016
 | 1.7 | 2026-10-04 | PO (AADD) para Rene Bonilla | Artifact Judge (FAIL). US-GRD-007 y US-GRD-014: instalar no confirma una configuración del equipo existente; se instala y después se confirma de forma explícita (Q-GRD-23). US-GRD-003: el desinstalar se anuncia y abre una ventana cancelable (Q-GRD-19); reglas cubiertas fusionadas y BR-AUTH-001; la huérfana pasa a esquema retirar/adoptar, con la rama base no confirmada al adoptar; depende de US-GRD-004 (detección). US-GRD-001: BR-AUTH-001 en reglas cubiertas y alcance en párrafo propio. Matriz, mapa y DAG actualizados (BR-AUTH-001 con 001 y 003; 004 → 003). US-GRP-016 (motor-local) no depende de US-GRD-001 ni de US-GRD-014: la coherencia se comprueba en la prueba de integración posterior |
 | 1.8 | 2026-10-04 | Agente de documentación para Rene Bonilla | Aceptación de ADR-GRP-005 a 013 y ADR-GRD-001 a 007 (Rene Bonilla, 2026-10-04). ADR-GRP-007 cierra P8: se desbloquean US-GRD-007, 008, 009, 010, 011, 012 y 014 (y TS-GRD-001 en el índice de enablers). Siguen bloqueadas US-GRD-013 (Q-GRD-19), US-GRD-015 (Cockpit y Q-GRD-19), US-GRD-016 (MCP) y US-GRD-017 (Time Machine), con el motivo actualizado. 13 listas y 4 bloqueadas; DAG, olas, rutas críticas y cobertura actualizados |
 | 1.9 | 2026-10-04 | Agente de documentación para Rene Bonilla | Decisión de Rene Bonilla, 2026-10-04: US-GRD-017 se desbloquea y depende de US-GRD-001 y US-TMC-005 (Time Machine), que también se desbloquea; se rompe el bloqueo cruzado entre las dos. El criterio de bloqueo ya no cita a la Time Machine, que tiene historias. 14 listas y 3 bloqueadas |
+| 1.10 | 2026-10-04 | Orquestador para Rene Bonilla | Aceptación de ADR-GRD-008 (decisión del orquestador validada por Arquitecto y PO). US-GRD-013 y US-GRD-015 se desbloquean; su Dev Spec espera a SPIKE-GRD-002, y la de US-GRD-013 al trinquete de Q-GRD-32. US-GRD-015 ya no depende del Cockpit, que la consume (DEP-CKP-8). Pendiente del PO: historia de la relajación personal pendiente (Q-GRD-32) y de la adopción del factor por D8, desinstalar y excepción (OQ-GRD-008-3) |

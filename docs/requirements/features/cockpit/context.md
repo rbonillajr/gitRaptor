@@ -116,7 +116,7 @@ Impacto de no resolverlo:
     | Vista agregada multi-repo | Fuera del MVP (Q-CKP-1) |
     | Acciones de BR-07 desde la CLI | Fuera del MVP; solo TUI (Q-CKP-20) |
     | Atribución por archivo en worktree compartido | Fase posterior (Q7 de motor-local) |
-    | Aprobar en la cola de confirmación | Bloqueado hasta US-GRD-015 + factor OS (Q-CKP-14, DEP-CKP-8) |
+    | Aprobar en la cola de confirmación | Bloqueado hasta US-GRD-015 con el factor de ADR-GRD-008 (Q-CKP-14, DEP-CKP-8) |
     | Cálculo del estado, detección de sesiones, atribución | Motor local (F-001-01) |
     | Snapshots, undo y timeline como capacidad | Time Machine (F-001-03); el Cockpit los presenta |
     | Decisión de políticas y la cola como regla | Guardrails (F-001-04); el Cockpit las presenta |
@@ -315,7 +315,7 @@ Estas dependencias se anotan; **no se aplican** en este documento. Las resuelve 
 | DEP-CKP-5 | Timeline en vivo | Enmienda a ADR-TMC-003 (evento de stream). |
 | DEP-CKP-6 | Arranque coherente (instantánea con secuencia N + suscripción desde N+1) | Enmienda a TS-GRP-004; crear api-contract-ipc.md (citado en el overview, no existe). |
 | DEP-CKP-7 | Catálogo de operaciones y ejecutor del daemon (propiedad del Cockpit) | ADR-CKP-002: catálogo, entorno del ejecutor, serialización, permisos (extensión de ADR-TMC-005), cuarentena al descartar; sin otra vía de escritura (ADR-TMC-004); ejecutor padre directo de git (ADR-GRD-003 § 4). Enmienda a ADR-GRP-009 Validación 5. |
-| DEP-CKP-8 | Cola de confirmación publicada | US-GRD-015 + factor OS (Q-GRD-19). Sin artefacto nuevo. |
+| DEP-CKP-8 | Cola de confirmación publicada | US-GRD-015 (cola en el daemon y la CLI, con el factor de ADR-GRD-008, aceptado el 2026-10-04; su Dev Spec espera a SPIKE-GRD-002). Sin artefacto nuevo. US-GRD-015 ya no depende del Cockpit: el Cockpit la consume. |
 | DEP-CKP-9 | Saneado SEC-12 en la TUI | Enmienda a ADR-GRP-004 (overview § 10.3). |
 | DEP-CKP-10 | Capa `cockpit` en la decisión de Guardrails, registrada una sola vez | Enmiendas a ADR-GRD-003 § 1 y ADR-GRD-006. |
 | DEP-CKP-11 | Escrituras del Cockpit en el perfil (preferencias Q-CKP-17, registro KPI Q-CKP-21) vía daemon | Enmiendas a ADR-GRP-006 y TS-GRP-004. |
@@ -342,7 +342,7 @@ Estas dependencias se anotan; **no se aplican** en este documento. Las resuelve 
 | Q-GRD-1, Q-GRD-24 (Guardrails) | Una acción del humano en el Cockpit que choca con una regla es una excepción consciente con anuncio, ventana y auditoría. Base de Q-CKP-15 y Q-CKP-26. |
 | Q-GRD-5 (Guardrails) | El conjunto mínimo solo deniega force-push y el borrado de la rama base: no protege el merge a la base (mitigación de R-CKP-3). |
 | Q-GRD-13 (Guardrails) | Cómo se presenta la cola es del Cockpit y de la CLI; Guardrails exige que decida el humano. |
-| Q-GRD-19 (Guardrails) | Aprobar en la cola exige el factor OS; sin él no se ofrece (Q-CKP-14). |
+| Q-GRD-19 (Guardrails) | Aprobar en la cola exige el factor OS de ADR-GRD-008, que invoca el daemon y el Cockpit muestra como "esperando la autenticación del sistema"; sin él no se ofrece (Q-CKP-14). |
 | Q-GRD-21, Q-GRD-23 (Guardrails) | Rama base confirmada, no confirmada o pendiente; la confirmación inicial nunca ocurre al añadir el repo (Q-CKP-27). |
 | Q-GRD-25 (Guardrails) | El Cockpit presenta los 4 estados de protección y los 2 diagnósticos con su acción. |
 | D-TMC-10 (Time Machine) | Toda operación lanzada por el Cockpit lleva snapshot previo garantizado. |
