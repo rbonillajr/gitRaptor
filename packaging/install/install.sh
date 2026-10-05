@@ -93,10 +93,11 @@ say "checksum verified (sha256 $actual)"
 
 tar -xzf "$tmp/$archive" -C "$tmp"
 src="$tmp/raptor-${version}-${target}"
-[ -f "$src/raptor" ] && [ -f "$src/raptor-mcp" ] || fail "unexpected archive layout"
+[ -f "$src/raptor" ] && [ -f "$src/raptor-mcp" ] && [ -f "$src/raptor-hook" ] || fail "unexpected archive layout"
 
 mkdir -p "$install_dir"
-for bin in raptor raptor-mcp; do
+# raptor-hook is the Guardrails dispatcher: it must sit next to raptor (US-GRD-001).
+for bin in raptor raptor-mcp raptor-hook; do
   # Copy next to the destination, then rename: a running binary is never half-written.
   cp "$src/$bin" "$install_dir/.$bin.tmp.$$"
   chmod 755 "$install_dir/.$bin.tmp.$$"
