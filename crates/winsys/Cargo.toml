@@ -1,0 +1,32 @@
+[package]
+name = "gitraptor-winsys"
+description = "The only crate with `unsafe`: a minimal, reviewed Win32 surface with a safe API"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Not `workspace = true`: the workspace forbids `unsafe`, and this crate is
+# where the Win32 calls the rest of the workspace needs are isolated
+# (ADR-GRP-005, Enmienda Windows). Every other lint stays as strict.
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+undocumented_unsafe_blocks = "deny"
+multiple_unsafe_ops_per_block = "deny"
+
+[target."cfg(windows)".dependencies]
+windows-sys = { version = "=0.61.2", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_System_Diagnostics_ToolHelp",
+  "Win32_System_SystemInformation",
+  "Win32_System_Threading",
+] }
+
+[dev-dependencies]
+tempfile = "3.27.0"
+serde_json.workspace = true

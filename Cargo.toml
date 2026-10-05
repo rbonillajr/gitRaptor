@@ -16,6 +16,7 @@ gitraptor-git = { path = "crates/git" }
 gitraptor-policy = { path = "crates/policy" }
 gitraptor-testkit = { path = "crates/testkit" }
 gitraptor-theme = { path = "crates/theme" }
+gitraptor-winsys = { path = "crates/winsys" }
 
 clap = { version = "4", features = ["derive"] }
 # Read path of crates/git (ADR-GRP-001, ADR-GRP-009): no default features, so no network,
