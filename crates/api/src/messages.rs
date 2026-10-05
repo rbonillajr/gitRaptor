@@ -338,6 +338,135 @@ pub struct WorktreeStateData {
     pub worktrees: Vec<WorktreeView>,
 }
 
+/// What happened in a `git.event` (US-GRP-002).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum GitEventKind {
+    Commit,
+    Merge,
+    Rebase,
+    /// A branch moved without a commit, merge or rebase (reset, a ref
+    /// written by a tool, a repo without reflogs).
+    BranchUpdate,
+    BranchCreate,
+    BranchDelete,
+    /// `HEAD` of the worktree moved to another branch.
+    BranchSwitch,
+    WorktreeCreate,
+    WorktreeDelete,
+    Push,
+    /// A reconciliation found differences no Git event explains; linked to
+    /// a gap (ADR-GRP-013 § 5). Not a Git command.
+    Reconciled,
+}
+
+impl GitEventKind {
+    /// Stable text, also the `kind` stored in the repo's history.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Commit => "commit",
+            Self::Merge => "merge",
+            Self::Rebase => "rebase",
+            Self::BranchUpdate => "branch-update",
+            Self::BranchCreate => "branch-create",
+            Self::BranchDelete => "branch-delete",
+            Self::BranchSwitch => "branch-switch",
+            Self::WorktreeCreate => "worktree-create",
+            Self::WorktreeDelete => "worktree-delete",
+            Self::Push => "push",
+            Self::Reconciled => "reconciled",
+        }
+    }
+
+    pub fn parse(text: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|k| k.as_str() == text)
+    }
+
+    pub const ALL: [Self; 11] = [
+        Self::Commit,
+        Self::Merge,
+        Self::Rebase,
+        Self::BranchUpdate,
+        Self::BranchCreate,
+        Self::BranchDelete,
+        Self::BranchSwitch,
+        Self::WorktreeCreate,
+        Self::WorktreeDelete,
+        Self::Push,
+        Self::Reconciled,
+    ];
+}
+
+/// Metadata of a Git event: refs and commit ids, never content (NFR-03).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GitEventDetails {
+    /// The branch the event is about (`feat-login`), or the remote-tracking
+    /// one of a push (`origin/feat-login`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<Untrusted>,
+    /// Branch before a switch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<Untrusted>,
+    /// Commit before and after.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub old_commit: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub new_commit: Option<String>,
+    /// Git does not say which worktree ran the command: the engine placed
+    /// the event by a fallback rule (US-GRP-002, D6) and says so.
+    #[serde(default)]
+    pub worktree_inferred: bool,
+}
+
+/// Data of a `git.event` event and one entry of `events.history`
+/// (US-GRP-002, ADR-GRP-013 § 1).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GitEventView {
+    pub repo_id: String,
+    /// Sequence in the repo's history (ADR-GRP-013 § 4), not the stream's.
+    pub seq: i64,
+    /// Root of the worktree it happened in.
+    pub worktree: Untrusted,
+    pub kind: GitEventKind,
+    /// Without evidence of a session, "unattributed" (BR-CONS-003).
+    pub actor: crate::Actor,
+    /// When the engine observed it, UTC milliseconds, and the local offset.
+    pub observed_utc_ms: i64,
+    pub utc_offset_s: i32,
+    pub details: GitEventDetails,
+    /// The gap a reconciliation event belongs to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gap_id: Option<String>,
+}
+
+/// Most entries one `events.history` page returns.
+pub const MAX_HISTORY_PAGE: u32 = 200;
+
+/// `events.history` parameters.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct EventsHistoryParams {
+    pub repo_id: String,
+    /// Only the events of this worktree root.
+    #[serde(default)]
+    pub worktree: Option<String>,
+    /// Events with a greater sequence, oldest first. Without it, the most
+    /// recent `limit` events, oldest first.
+    #[serde(default)]
+    pub after_seq: Option<i64>,
+    /// At most this many (capped at [`MAX_HISTORY_PAGE`]).
+    #[serde(default)]
+    pub limit: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct EventsHistoryResult {
+    pub events: Vec<GitEventView>,
+}
+
 /// Data of a `repo.observation` event: a repo started or stopped being
 /// observed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -617,6 +746,40 @@ mod tests {
         let mut keys: Vec<_> = repo.keys().cloned().collect();
         keys.sort();
         assert_eq!(keys, ["repo_id", "state"]);
+    }
+
+    /// US-GRP-002: the wire form of a Git event; the actor without a session
+    /// is "unattributed" and every kind round-trips through its text.
+    #[test]
+    fn git_event_wire_form() {
+        let view = GitEventView {
+            repo_id: "r".into(),
+            seq: 7,
+            worktree: Untrusted::new("/w/feat-login"),
+            kind: GitEventKind::BranchSwitch,
+            actor: crate::Actor::Unattributed,
+            observed_utc_ms: 1,
+            utc_offset_s: -18000,
+            details: GitEventDetails {
+                branch: Some(Untrusted::new("feat-login")),
+                from: Some(Untrusted::new("main")),
+                ..GitEventDetails::default()
+            },
+            gap_id: None,
+        };
+        let value = serde_json::to_value(&view).unwrap();
+        assert_eq!(value["kind"], "branch-switch");
+        assert_eq!(value["actor"], serde_json::json!({"actor": "unattributed"}));
+        assert_eq!(value["details"]["worktree_inferred"], false);
+        assert!(value.get("gap_id").is_none());
+        let back: GitEventView = serde_json::from_value(value).unwrap();
+        assert_eq!(back, view);
+        for kind in GitEventKind::ALL {
+            assert_eq!(GitEventKind::parse(kind.as_str()), Some(kind));
+            let text = serde_json::to_value(kind).unwrap();
+            assert_eq!(text, kind.as_str());
+        }
+        assert!(serde_json::from_str::<EventsHistoryParams>(r#"{"repo_id":"r","x":1}"#).is_err());
     }
 
     #[test]
