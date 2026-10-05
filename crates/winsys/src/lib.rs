@@ -6,7 +6,12 @@
 #![deny(unsafe_code)]
 
 pub mod acl;
+pub mod process;
 
 #[cfg(windows)]
 #[allow(unsafe_code)]
 mod ffi_acl;
+
+#[cfg(windows)]
+#[allow(unsafe_code)]
+mod ffi_process;
