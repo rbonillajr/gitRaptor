@@ -102,6 +102,12 @@ fn completes_the_mcp_handshake_over_stdio_and_exits_when_stdin_closes() {
     );
     // The tools arrive with US-MCP-003 and later stories.
     assert_eq!(s.tools["result"]["tools"], json!([]));
+    // US-GRP-017, escenario 5: no tool exposes the engine's consumption.
+    let tools = s.tools["result"]["tools"].as_array().unwrap();
+    assert!(tools.iter().all(|tool| {
+        let name = tool["name"].as_str().unwrap_or_default();
+        !name.contains("resource") && !name.contains("consumption")
+    }));
 }
 
 /// BR-MCP-TIME-003: Claude Code starts `raptor-mcp` with every session (and
