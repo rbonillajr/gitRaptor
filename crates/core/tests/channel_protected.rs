@@ -36,7 +36,7 @@ use gitraptor_core::timemachine::oplog::{
 use gitraptor_core::timemachine::protected::scope::McpAllowlist;
 use gitraptor_core::timemachine::protected::{
     PriorError, PriorRequest, PriorSnapshot, PriorSnapshotter, ProtectedBackend, ProtectedStep,
-    RepoHandle, ScopeError, StepCtx, StepError, StepOutput,
+    RepoHandle, ScopeError, StepCtx, StepError, StepOutput, StepScope,
 };
 use gitraptor_git::resolve::ResolveConfig;
 use serde_json::{Value, json};
@@ -127,6 +127,9 @@ const EVIL_REF: &str = "refs/heads/feat/\u{1b}]52;c;cm0gLXJmIH4=\u{7}x";
 impl ProtectedStep for Step {
     fn subtype(&self) -> &str {
         "checkout"
+    }
+    fn scope(&self) -> StepScope {
+        StepScope::default()
     }
     fn run(&mut self, ctx: &mut StepCtx<'_>) -> Result<StepOutput, StepError> {
         self.runs.fetch_add(1, Ordering::SeqCst);
@@ -263,6 +266,7 @@ fn start(fail: Option<PriorError>, behavior: Behavior, wired: bool) -> Running {
             backend: Arc::clone(&backend) as Arc<dyn ProtectedBackend>,
             prior_deadline: Duration::from_secs(10),
         }),
+        operations: None,
     };
     let daemon = Daemon::start(config).unwrap();
     let handle = daemon.shutdown_handle();

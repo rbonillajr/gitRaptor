@@ -35,7 +35,7 @@ use crate::daemon::{
     CHANGE_LIST_BUDGET, Field, RepoAddRequest, RepoCommandError, StopCause, now_ms,
 };
 use crate::profile::AuditRow;
-use crate::timemachine::oplog::{Channel, OperationKind, Scope, Target};
+use crate::timemachine::oplog::Channel;
 use crate::timemachine::protected::scope::{
     operation_in, require_attributed, scope_for, snapshot_in,
 };
@@ -1070,21 +1070,15 @@ impl Connection<'_> {
             .backend
             .step(&p.operation, &p.args, &repo)
             .map_err(|e| ErrorObject::new(code::INVALID_PARAMS, &e.message))?;
-        let worktree = repo.worktree.to_string_lossy().into_owned();
-        let req = ProtectedRequest {
-            kind: OperationKind::Protected,
-            scope: Scope {
-                worktrees: vec![worktree],
-                refs: Vec::new(),
-            },
-            worktree_paths: vec![repo.worktree.clone()],
-            who: r.who.clone(),
-            channel: oplog_channel(channel),
-            confirmed: false,
-            target: Target::None,
-            warnings: Vec::new(),
-            engine_mark: i64::try_from(self.ctx.bus.snapshot().0).unwrap_or(i64::MAX),
-        };
+        let engine_mark = i64::try_from(self.ctx.bus.snapshot().0).unwrap_or(i64::MAX);
+        let req = ProtectedRequest::for_step(
+            &repo,
+            step.as_ref(),
+            r.who.clone(),
+            oplog_channel(channel),
+            engine_mark,
+        )
+        .map_err(scope_refused)?;
         let op = ProtectedOperation {
             oplog: &repo.oplog,
             snapshotter: Arc::clone(&repo.snapshotter),

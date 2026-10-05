@@ -25,6 +25,8 @@ pub enum ScopeError {
     NotAllowlisted,
     /// "Unattributed" over MCP may not undo or restore (TQ-7 → a).
     UnattributedOverMcp,
+    /// The operation declared a worktree that is not one of its repo's.
+    ForeignWorktree,
 }
 
 impl ScopeError {
@@ -34,6 +36,7 @@ impl ScopeError {
             Self::NotObserved => "not in an observed repo",
             Self::NotAllowlisted => "the repo is not in the MCP allowlist",
             Self::UnattributedOverMcp => "an unattributed requester cannot do this over MCP",
+            Self::ForeignWorktree => "the operation's scope is outside its repo",
         }
     }
 }

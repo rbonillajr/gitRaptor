@@ -67,6 +67,7 @@ impl Running {
             stop_deadline: None,
             channel,
             protected: None,
+            operations: None,
         };
         let daemon = Daemon::start(config).unwrap();
         let handle = daemon.shutdown_handle();
@@ -250,6 +251,7 @@ fn a_precreated_open_runtime_folder_stops_the_start() {
         stop_deadline: None,
         channel: ChannelConfig::default(),
         protected: None,
+        operations: None,
     };
     assert!(Daemon::start(config).is_err());
     assert!(!runtime.join("raptor.sock").exists());
@@ -841,6 +843,7 @@ fn a_replaced_socket_is_taken_back() {
         stop_deadline: None,
         channel: ChannelConfig::default(),
         protected: None,
+        operations: None,
     };
     let daemon = Daemon::start(config).unwrap();
     let handle = daemon.shutdown_handle();
