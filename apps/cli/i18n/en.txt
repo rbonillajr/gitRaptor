@@ -60,3 +60,10 @@ kind.deleted = deleted
 kind.modified = modified
 kind.type-changed = type changed
 kind.conflicted = conflicted
+
+# The prior snapshot failed: the operation did not run (US-TMC-001).
+prior.no-space = not run: there is no disk space to save the work first; nothing changed
+prior.store-unavailable = not run: the snapshot store is unavailable; nothing changed
+prior.timeout = not run: saving the work first took too long; nothing changed
+prior.daemon-stopping = not run: the engine is stopping; nothing changed
+prior.capture-failed = not run: the work could not be saved first; nothing changed
