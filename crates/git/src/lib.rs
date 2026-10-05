@@ -74,6 +74,8 @@ impl std::fmt::Debug for Oid {
 pub enum ReadError {
     /// The input was rejected before touching the file system or spawning anything.
     InvalidInput(String),
+    /// The path is neither a worktree root nor a Git directory.
+    NotARepository(String),
     /// The repository is not trusted by the `safe.directory` ownership rules (SEC-11).
     /// Reported as "not available" without touching any Git configuration.
     Untrusted(String),
@@ -87,6 +89,7 @@ impl std::fmt::Display for ReadError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::InvalidInput(m) => write!(f, "invalid input: {m}"),
+            Self::NotARepository(m) => write!(f, "not a Git repository: {m}"),
             Self::Untrusted(m) => write!(f, "repository not trusted (safe.directory): {m}"),
             Self::TemporarilyUnavailable(m) => write!(f, "temporarily unavailable: {m}"),
             Self::Unavailable(m) => write!(f, "unavailable: {m}"),
