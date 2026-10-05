@@ -112,6 +112,32 @@ pub(crate) fn agent_executables_override() -> Option<Vec<String>> {
     }
 }
 
+/// Debug-build test hook: `GITRAPTOR_TEST_CLOCK_SKEW_FILE` names a file
+/// with a number of milliseconds that the clock of the sessions adds to the
+/// real time, re-read at every reading, so a test checks the 5-minute
+/// inactivity threshold without waiting for it (US-GRP-007). Release builds
+/// do not even read it (SEC-06).
+pub const CLOCK_SKEW_FILE_ENV: &str = "GITRAPTOR_TEST_CLOCK_SKEW_FILE";
+
+pub(crate) fn clock_skew_file() -> Option<PathBuf> {
+    if cfg!(debug_assertions) {
+        std::env::var_os(CLOCK_SKEW_FILE_ENV)
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from)
+    } else {
+        None
+    }
+}
+
+/// The skew written in `file`: never negative, 0 if unreadable.
+pub(crate) fn read_clock_skew(file: &std::path::Path) -> i64 {
+    std::fs::read_to_string(file)
+        .ok()
+        .and_then(|t| t.trim().parse::<i64>().ok())
+        .unwrap_or(0)
+        .max(0)
+}
+
 fn parse_agent_override(value: Option<&OsStr>) -> Option<Vec<String>> {
     let names: Vec<String> = value?
         .to_str()?

@@ -540,6 +540,10 @@ impl Connection<'_> {
                 let result = request.params().and_then(|p| self.events_history(p));
                 self.reply(&request.id, result);
             }
+            methods::SESSIONS_LIST => {
+                let result = request.params().and_then(|p| self.sessions_list(p));
+                self.reply(&request.id, result);
+            }
             methods::DAEMON_STOP => {
                 let result = request
                     .params::<NoParams>()
@@ -720,6 +724,27 @@ impl Connection<'_> {
             .control
             .event_history(params)
             .map(|events| EventsHistoryResult { events })
+            .map_err(repo_command_error)
+    }
+
+    /// `sessions.list` (US-GRP-007): the agent sessions of the observed
+    /// repos.
+    fn sessions_list(
+        &self,
+        params: gitraptor_api::messages::SessionsListParams,
+    ) -> Result<gitraptor_api::messages::SessionsListResult, ErrorObject> {
+        if params.repo_id.as_ref().is_some_and(|id| !valid_repo_id(id)) {
+            return Err(ErrorObject::new(code::INVALID_PARAMS, "invalid repo_id"));
+        }
+        self.ctx
+            .control
+            .sessions_list(params)
+            .map(
+                |(detection_available, sessions)| gitraptor_api::messages::SessionsListResult {
+                    detection_available,
+                    sessions,
+                },
+            )
             .map_err(repo_command_error)
     }
 

@@ -204,6 +204,9 @@ pub struct Session {
     pub end_cause: Option<EndCause>,
 }
 
+/// A session and its latest `session-*` event: kind and UTC milliseconds.
+pub type SessionWithState = (Session, Option<(String, i64)>);
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AttributionRecord {
     pub effective_seq: i64,
@@ -331,6 +334,46 @@ impl RepoStore {
         )?)
     }
 
+    /// Every session of the repo, oldest first, with its latest state
+    /// change: the kind of its last `session-*` event and when it was
+    /// observed (BR-WF-001, US-GRP-007).
+    pub fn sessions_with_state(&self) -> Result<Vec<SessionWithState>> {
+        let mut out = self.collect(
+            "SELECT s.session_id, w.canonical_path, s.agent_kind, s.agent_name,
+                 s.initial_origin, s.detection_key, s.started_ms, s.ended_ms, s.end_cause
+             FROM sessions s JOIN worktrees w ON w.id = s.worktree_id
+             ORDER BY s.started_ms, s.session_id",
+            [],
+            |row| Ok((session_from_row(row)?, None)),
+        )?;
+        for (session, state) in &mut out {
+            *state = self
+                .conn
+                .query_row(
+                    "SELECT kind, observed_utc_ms FROM events
+                     WHERE session_id = ?1 AND kind LIKE 'session-%'
+                     ORDER BY seq DESC LIMIT 1",
+                    params![session.session_id],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .optional()?;
+        }
+        Ok(out)
+    }
+
+    /// Sessions without an end, oldest first: reconciled when the repo
+    /// starts being observed (ADR-GRP-012).
+    pub fn open_sessions(&self) -> Result<Vec<Session>> {
+        self.collect(
+            "SELECT s.session_id, w.canonical_path, s.agent_kind, s.agent_name,
+                 s.initial_origin, s.detection_key, s.started_ms, s.ended_ms, s.end_cause
+             FROM sessions s JOIN worktrees w ON w.id = s.worktree_id
+             WHERE s.end_cause IS NULL ORDER BY s.started_ms, s.session_id",
+            [],
+            session_from_row,
+        )
+    }
+
     /// Sessions of a worktree, oldest first.
     pub fn sessions_for_worktree(&self, worktree: &Path) -> Result<Vec<Session>> {
         self.collect(
@@ -393,7 +436,9 @@ impl RepoStore {
     }
 
     /// One page of events, oldest first: those after `after_seq`, or else
-    /// the latest `limit`; of one worktree if given (US-GRP-002).
+    /// the latest `limit`; of one worktree if given (US-GRP-002). The state
+    /// changes of the sessions (`session-*`, US-GRP-007) are not Git events
+    /// and are left out.
     pub fn events_page(
         &self,
         worktree: Option<&Path>,
@@ -405,6 +450,7 @@ impl RepoStore {
             Some(after) => self.collect(
                 event_select!(
                     "WHERE e.seq > ?1 AND (?2 IS NULL OR w.canonical_path = ?2)
+                       AND e.kind NOT LIKE 'session-%'
                      ORDER BY e.seq LIMIT ?3"
                 ),
                 params![after, path, limit],
@@ -412,7 +458,8 @@ impl RepoStore {
             )?,
             None => self.collect(
                 event_select!(
-                    "WHERE ?1 IS NULL OR w.canonical_path = ?1 ORDER BY e.seq DESC LIMIT ?2"
+                    "WHERE (?1 IS NULL OR w.canonical_path = ?1) AND e.kind NOT LIKE 'session-%'
+                     ORDER BY e.seq DESC LIMIT ?2"
                 ),
                 params![path, limit],
                 event_from_row,
