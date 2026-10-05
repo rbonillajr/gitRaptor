@@ -1,10 +1,9 @@
 ---
-id: XPLAT-LINUX-VM
 title: Receta de VM Linux para lo que el contenedor no cubre
-type: runbook
 status: draft
-date: 2026-10-05
-owner: Rene Bonilla
+generated: 2026-10-05
+generator: orquestador
+domain: GRP
 tags: [xplat, linux, vm, lima, utm, systemd, polkit, inotify, max_user_watches, validacion-multiplataforma]
 related: [ADR-GRP-005, ADR-GRP-010, ADR-GRD-008, SPIKE-GRD-002, SPIKE-GRP-002, US-GRP-002, TS-GRP-003]
 ---
