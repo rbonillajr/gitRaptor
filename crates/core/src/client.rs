@@ -647,6 +647,7 @@ pub(crate) fn debug_overrides() -> Vec<(std::ffi::OsString, std::ffi::OsString)>
             crate::profile::PROFILE_DIR_ENV,
             crate::daemon::AGENT_EXECUTABLES_ENV,
             crate::daemon::CLOCK_SKEW_FILE_ENV,
+            crate::daemon::TEST_GIT_ENV,
             crate::resources::RESOURCE_TARGETS_ENV,
             crate::autostart::AUTOSTART_DIR_ENV,
             crate::autostart::SERVICE_TOOL_ENV,

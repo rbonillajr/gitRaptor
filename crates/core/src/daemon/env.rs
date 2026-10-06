@@ -102,6 +102,33 @@ impl DaemonEnv {
     }
 }
 
+/// Debug-build test hook: `GITRAPTOR_TEST_GIT` is the only Git the daemon may
+/// resolve, so an end-to-end test runs the daemon with the Git it creates its
+/// repos with (a version of the matrix) and not with `/usr/bin/git` of the
+/// fixed `PATH` (XP-30). It is strict: no `PATH` and no well-known locations
+/// after it, so a wrong value fails instead of silently testing another Git.
+/// Release builds do not even read it (SEC-06).
+pub const TEST_GIT_ENV: &str = "GITRAPTOR_TEST_GIT";
+
+pub(crate) fn test_git() -> Option<PathBuf> {
+    if cfg!(debug_assertions) {
+        std::env::var_os(TEST_GIT_ENV)
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from)
+    } else {
+        None
+    }
+}
+
+/// Resolution that accepts `git` and nothing else (see [`TEST_GIT_ENV`]).
+pub(crate) fn only_git(git: PathBuf) -> ResolveConfig {
+    ResolveConfig {
+        path_env: None,
+        known_locations: Vec::new(),
+        ..ResolveConfig::for_current_os(Some(git))
+    }
+}
+
 /// Debug-build test hook: `GITRAPTOR_AGENT_EXECUTABLES` replaces the agent
 /// classifier with a `:`-separated list of executable names, so tests use a
 /// simulated agent and are not refused because a real Claude Code session
@@ -245,6 +272,17 @@ mod tests {
         let config = env.git_resolve_config(None);
         let path = config.path_env.unwrap();
         assert!(std::env::split_paths(&path).all(|p| p.is_absolute()));
+    }
+
+    #[test]
+    fn the_test_git_is_the_only_candidate() {
+        let config = only_git(PathBuf::from("/opt/git/2.56.0/bin/git"));
+        assert_eq!(
+            config.configured_path,
+            Some(PathBuf::from("/opt/git/2.56.0/bin/git"))
+        );
+        assert_eq!(config.path_env, None);
+        assert!(config.known_locations.is_empty());
     }
 
     #[test]

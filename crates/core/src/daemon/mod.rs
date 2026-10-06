@@ -67,7 +67,9 @@ use crate::timemachine::protected::{OperationsWiring, TmRepos};
 use crate::timemachine::store::SnapshotStore;
 use crate::watch::{ObservedBatch, Observer, WatchConfig};
 
-pub use env::{AGENT_EXECUTABLES_ENV, CLOCK_SKEW_FILE_ENV, DaemonEnv, TM_NO_FREE_SPACE_FLOOR_ENV};
+pub use env::{
+    AGENT_EXECUTABLES_ENV, CLOCK_SKEW_FILE_ENV, DaemonEnv, TEST_GIT_ENV, TM_NO_FREE_SPACE_FLOOR_ENV,
+};
 pub use lock::{InstanceLock, LOCK_FILE, running_pid, wait_until_released};
 pub use log::{Field, LOG_FILE, Level, LogLimits, Logger};
 use shutdown::Control;
@@ -193,7 +195,7 @@ impl DaemonConfig {
         channel.autostart = crate::autostart::Autostart::for_current_user();
         Ok(Self {
             dirs: ProfileDirs::resolve()?,
-            git: env.git_resolve_config(None),
+            git: env::test_git().map_or_else(|| env.git_resolve_config(None), env::only_git),
             env,
             heartbeat: Duration::from_secs(60),
             log: LogLimits::default(),
