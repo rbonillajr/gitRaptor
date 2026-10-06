@@ -1,0 +1,258 @@
+---
+source: apps/cli/src/tui/widgets/tests.rs
+expression: "snapshot(story, full_ascii)"
+---
+=== text (unicode) ===
+┏━ › Timeline ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃› ⟲ 14:02  claude-1    rebase feat/parser onto main                           ┃
+┃  ⟲ 13:58  claude-2    commit "lexer: handle tabs"                            ┃
+┃  ⟲ 13:40  you         merge feat/lexer                                       ┃
+┃    13:12  claude-3    reset --hard (blocked)                                 ┃
+┃                                                                              ┃
+┃ ⚠  Snapshots older than 30 days are purged tonight                           ┃
+┃ u undo  r restore                                                            ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+=== styles (truecolor, unicode) ===
+0:0-4 fg=#ffe066
+0:5-12 fg=#ffe066 BOLD
+0:13-79 fg=#ffe066
+1:0-0 fg=#ffe066
+1:1-1 fg=#ffe066 bg=#4e4e4e
+1:2-2 bg=#4e4e4e
+1:3-3 fg=#3fb950 bg=#4e4e4e
+1:4-4 bg=#4e4e4e
+1:5-9 fg=#8a8a8a bg=#4e4e4e
+1:10-11 bg=#4e4e4e
+1:12-19 fg=#e69f00 bg=#4e4e4e
+1:20-78 bg=#4e4e4e
+1:79-79 fg=#ffe066
+2:0-0 fg=#ffe066
+2:3-3 fg=#3fb950
+2:5-9 fg=#8a8a8a
+2:12-19 fg=#56b4e9
+2:79-79 fg=#ffe066
+3:0-0 fg=#ffe066
+3:3-3 fg=#3fb950
+3:5-9 fg=#8a8a8a
+3:79-79 fg=#ffe066
+4:0-0 fg=#ffe066
+4:5-9 fg=#8a8a8a
+4:12-19 fg=#009e73
+4:79-79 fg=#ffe066
+5:0-0 fg=#ffe066
+5:79-79 fg=#ffe066
+6:0-0 fg=#ffe066
+6:2-3 fg=#d29922
+6:5-51 fg=#d29922
+6:79-79 fg=#ffe066
+7:0-0 fg=#ffe066
+7:2-2 fg=#2dc2ad BOLD
+7:10-10 fg=#2dc2ad BOLD
+7:79-79 fg=#ffe066
+8:0-79 fg=#ffe066
+=== styles (256, unicode) ===
+0:0-4 fg=@221
+0:5-12 fg=@221 BOLD
+0:13-79 fg=@221
+1:0-0 fg=@221
+1:1-1 fg=@221 bg=@239
+1:2-2 bg=@239
+1:3-3 fg=@35 bg=@239
+1:4-4 bg=@239
+1:5-9 fg=@245 bg=@239
+1:10-11 bg=@239
+1:12-19 fg=@178 bg=@239
+1:20-78 bg=@239
+1:79-79 fg=@221
+2:0-0 fg=@221
+2:3-3 fg=@35
+2:5-9 fg=@245
+2:12-19 fg=@74
+2:79-79 fg=@221
+3:0-0 fg=@221
+3:3-3 fg=@35
+3:5-9 fg=@245
+3:79-79 fg=@221
+4:0-0 fg=@221
+4:5-9 fg=@245
+4:12-19 fg=@36
+4:79-79 fg=@221
+5:0-0 fg=@221
+5:79-79 fg=@221
+6:0-0 fg=@221
+6:2-3 fg=@172
+6:5-51 fg=@172
+6:79-79 fg=@221
+7:0-0 fg=@221
+7:2-2 fg=@43 BOLD
+7:10-10 fg=@43 BOLD
+7:79-79 fg=@221
+8:0-79 fg=@221
+=== styles (16, unicode) ===
+0:0-4 fg=LightYellow
+0:5-12 fg=LightYellow BOLD
+0:13-79 fg=LightYellow
+1:0-0 fg=LightYellow
+1:1-1 fg=LightYellow bg=DarkGray
+1:2-2 bg=DarkGray
+1:3-3 fg=Green bg=DarkGray
+1:4-4 bg=DarkGray
+1:5-9 fg=DarkGray bg=DarkGray
+1:10-11 bg=DarkGray
+1:12-19 fg=Yellow bg=DarkGray
+1:20-78 bg=DarkGray
+1:79-79 fg=LightYellow
+2:0-0 fg=LightYellow
+2:3-3 fg=Green
+2:5-9 fg=DarkGray
+2:12-19 fg=Cyan
+2:79-79 fg=LightYellow
+3:0-0 fg=LightYellow
+3:3-3 fg=Green
+3:5-9 fg=DarkGray
+3:79-79 fg=LightYellow
+4:0-0 fg=LightYellow
+4:5-9 fg=DarkGray
+4:12-19 fg=Green
+4:79-79 fg=LightYellow
+5:0-0 fg=LightYellow
+5:79-79 fg=LightYellow
+6:0-0 fg=LightYellow
+6:2-3 fg=Yellow
+6:5-51 fg=Yellow
+6:79-79 fg=LightYellow
+7:0-0 fg=LightYellow
+7:2-2 fg=Cyan BOLD
+7:10-10 fg=Cyan BOLD
+7:79-79 fg=LightYellow
+8:0-79 fg=LightYellow
+=== styles (no-color, unicode) ===
+0:0-79 BOLD | REVERSED
+1:0-1 BOLD | REVERSED
+1:2-4 REVERSED
+1:5-9 DIM | REVERSED
+1:10-78 REVERSED
+1:79-79 BOLD | REVERSED
+2:0-0 BOLD | REVERSED
+2:5-9 DIM
+2:79-79 BOLD | REVERSED
+3:0-0 BOLD | REVERSED
+3:5-9 DIM
+3:79-79 BOLD | REVERSED
+4:0-0 BOLD | REVERSED
+4:5-9 DIM
+4:79-79 BOLD | REVERSED
+5:0-0 BOLD | REVERSED
+5:79-79 BOLD | REVERSED
+6:0-0 BOLD | REVERSED
+6:2-3 BOLD
+6:5-51 BOLD
+6:79-79 BOLD | REVERSED
+7:0-0 BOLD | REVERSED
+7:2-2 BOLD
+7:10-10 BOLD
+7:79-79 BOLD | REVERSED
+8:0-79 BOLD | REVERSED
+=== styles (high-contrast, unicode) ===
+0:0-4 fg=#ffe066 bg=#000000
+0:5-12 fg=#ffe066 bg=#000000 BOLD
+0:13-79 fg=#ffe066 bg=#000000
+1:0-0 fg=#ffe066 bg=#000000
+1:1-1 fg=#ffe066 bg=#0b3d91
+1:2-2 fg=#ffffff bg=#0b3d91
+1:3-3 fg=#7ee787 bg=#0b3d91
+1:4-4 fg=#ffffff bg=#0b3d91
+1:5-9 fg=#c6c6c6 bg=#0b3d91
+1:10-11 fg=#ffffff bg=#0b3d91
+1:12-19 fg=#e69f00 bg=#0b3d91
+1:20-78 fg=#ffffff bg=#0b3d91
+1:79-79 fg=#ffe066 bg=#000000
+2:0-0 fg=#ffe066 bg=#000000
+2:1-2 fg=#ffffff bg=#000000
+2:3-3 fg=#7ee787 bg=#000000
+2:4-4 fg=#ffffff bg=#000000
+2:5-9 fg=#c6c6c6 bg=#000000
+2:10-11 fg=#ffffff bg=#000000
+2:12-19 fg=#56b4e9 bg=#000000
+2:20-78 fg=#ffffff bg=#000000
+2:79-79 fg=#ffe066 bg=#000000
+3:0-0 fg=#ffe066 bg=#000000
+3:1-2 fg=#ffffff bg=#000000
+3:3-3 fg=#7ee787 bg=#000000
+3:4-4 fg=#ffffff bg=#000000
+3:5-9 fg=#c6c6c6 bg=#000000
+3:10-78 fg=#ffffff bg=#000000
+3:79-79 fg=#ffe066 bg=#000000
+4:0-0 fg=#ffe066 bg=#000000
+4:1-4 fg=#ffffff bg=#000000
+4:5-9 fg=#c6c6c6 bg=#000000
+4:10-11 fg=#ffffff bg=#000000
+4:12-19 fg=#009e73 bg=#000000
+4:20-78 fg=#ffffff bg=#000000
+4:79-79 fg=#ffe066 bg=#000000
+5:0-0 fg=#ffe066 bg=#000000
+5:1-78 fg=#ffffff bg=#000000
+5:79-79 fg=#ffe066 bg=#000000
+6:0-0 fg=#ffe066 bg=#000000
+6:1-1 fg=#ffffff bg=#000000
+6:2-3 fg=#ffe066 bg=#000000
+6:4-4 fg=#ffffff bg=#000000
+6:5-51 fg=#ffe066 bg=#000000
+6:52-78 fg=#ffffff bg=#000000
+6:79-79 fg=#ffe066 bg=#000000
+7:0-0 fg=#ffe066 bg=#000000
+7:1-1 fg=#ffffff bg=#000000
+7:2-2 fg=#7ee8d8 bg=#000000 BOLD
+7:3-9 fg=#ffffff bg=#000000
+7:10-10 fg=#7ee8d8 bg=#000000 BOLD
+7:11-78 fg=#ffffff bg=#000000
+7:79-79 fg=#ffe066 bg=#000000
+8:0-79 fg=#ffe066 bg=#000000
+=== text (ascii) ===
+#= > Timeline =================================================================#
+#> [undo] 14:02  claude-1    rebase feat/parser onto main                      #
+#  [undo] 13:58  claude-2    commit "lexer: handle tabs"                       #
+#  [undo] 13:40  you         merge feat/lexer                                  #
+#         13:12  claude-3    reset --hard (blocked)                            #
+#                                                                              #
+# [!] Snapshots older than 30 days are purged tonight                          #
+# u undo  r restore                                                            #
+#==============================================================================#
+=== styles (truecolor, ascii) ===
+0:0-4 fg=#ffe066
+0:5-12 fg=#ffe066 BOLD
+0:13-79 fg=#ffe066
+1:0-0 fg=#ffe066
+1:1-1 fg=#ffe066 bg=#4e4e4e
+1:2-2 bg=#4e4e4e
+1:3-8 fg=#3fb950 bg=#4e4e4e
+1:9-9 bg=#4e4e4e
+1:10-14 fg=#8a8a8a bg=#4e4e4e
+1:15-16 bg=#4e4e4e
+1:17-24 fg=#e69f00 bg=#4e4e4e
+1:25-78 bg=#4e4e4e
+1:79-79 fg=#ffe066
+2:0-0 fg=#ffe066
+2:3-8 fg=#3fb950
+2:10-14 fg=#8a8a8a
+2:17-24 fg=#56b4e9
+2:79-79 fg=#ffe066
+3:0-0 fg=#ffe066
+3:3-8 fg=#3fb950
+3:10-14 fg=#8a8a8a
+3:79-79 fg=#ffe066
+4:0-0 fg=#ffe066
+4:10-14 fg=#8a8a8a
+4:17-24 fg=#009e73
+4:79-79 fg=#ffe066
+5:0-0 fg=#ffe066
+5:79-79 fg=#ffe066
+6:0-0 fg=#ffe066
+6:2-4 fg=#d29922
+6:6-52 fg=#d29922
+6:79-79 fg=#ffe066
+7:0-0 fg=#ffe066
+7:2-2 fg=#2dc2ad BOLD
+7:10-10 fg=#2dc2ad BOLD
+7:79-79 fg=#ffe066
+8:0-79 fg=#ffe066

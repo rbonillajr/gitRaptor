@@ -1,0 +1,165 @@
+---
+source: apps/cli/src/tui/widgets/tests.rs
+expression: "snapshot(story, full_ascii)"
+---
+=== text (unicode) ===
+
+   ┏━ › ⚠  Approval needed ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+   ┃ Rule no-force-push                                           ┃
+   ┃ claude-2 asks to force-push feat/lexer.                      ┃
+   ┃ ℹ  Expires in 4:32                                           ┃
+   ┃                                                              ┃
+   ┃ a approve  d deny  Esc later                                 ┃
+   ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+=== styles (truecolor, unicode) ===
+1:3-10 fg=#ffe066
+1:11-25 fg=#ffe066 BOLD
+1:26-66 fg=#ffe066
+2:3-3 fg=#ffe066
+2:5-8 fg=#8a8a8a
+2:10-22 fg=#d29922 BOLD
+2:66-66 fg=#ffe066
+3:3-3 fg=#ffe066
+3:66-66 fg=#ffe066
+4:3-3 fg=#ffe066
+4:5-6 fg=#58a6ff
+4:8-22 fg=#d29922
+4:66-66 fg=#ffe066
+5:3-3 fg=#ffe066
+5:66-66 fg=#ffe066
+6:3-3 fg=#ffe066
+6:5-5 fg=#2dc2ad BOLD
+6:16-16 fg=#2dc2ad BOLD
+6:24-26 fg=#2dc2ad BOLD
+6:66-66 fg=#ffe066
+7:3-66 fg=#ffe066
+=== styles (256, unicode) ===
+1:3-10 fg=@221
+1:11-25 fg=@221 BOLD
+1:26-66 fg=@221
+2:3-3 fg=@221
+2:5-8 fg=@245
+2:10-22 fg=@172 BOLD
+2:66-66 fg=@221
+3:3-3 fg=@221
+3:66-66 fg=@221
+4:3-3 fg=@221
+4:5-6 fg=@75
+4:8-22 fg=@172
+4:66-66 fg=@221
+5:3-3 fg=@221
+5:66-66 fg=@221
+6:3-3 fg=@221
+6:5-5 fg=@43 BOLD
+6:16-16 fg=@43 BOLD
+6:24-26 fg=@43 BOLD
+6:66-66 fg=@221
+7:3-66 fg=@221
+=== styles (16, unicode) ===
+1:3-10 fg=LightYellow
+1:11-25 fg=LightYellow BOLD
+1:26-66 fg=LightYellow
+2:3-3 fg=LightYellow
+2:5-8 fg=DarkGray
+2:10-22 fg=Yellow BOLD
+2:66-66 fg=LightYellow
+3:3-3 fg=LightYellow
+3:66-66 fg=LightYellow
+4:3-3 fg=LightYellow
+4:5-6 fg=Blue
+4:8-22 fg=Yellow
+4:66-66 fg=LightYellow
+5:3-3 fg=LightYellow
+5:66-66 fg=LightYellow
+6:3-3 fg=LightYellow
+6:5-5 fg=Cyan BOLD
+6:16-16 fg=Cyan BOLD
+6:24-26 fg=Cyan BOLD
+6:66-66 fg=LightYellow
+7:3-66 fg=LightYellow
+=== styles (no-color, unicode) ===
+1:3-66 BOLD | REVERSED
+2:3-3 BOLD | REVERSED
+2:5-8 DIM
+2:10-22 BOLD
+2:66-66 BOLD | REVERSED
+3:3-3 BOLD | REVERSED
+3:66-66 BOLD | REVERSED
+4:3-3 BOLD | REVERSED
+4:8-22 BOLD
+4:66-66 BOLD | REVERSED
+5:3-3 BOLD | REVERSED
+5:66-66 BOLD | REVERSED
+6:3-3 BOLD | REVERSED
+6:5-5 BOLD
+6:16-16 BOLD
+6:24-26 BOLD
+6:66-66 BOLD | REVERSED
+7:3-66 BOLD | REVERSED
+=== styles (high-contrast, unicode) ===
+1:3-10 fg=#ffe066 bg=#000000
+1:11-25 fg=#ffe066 bg=#000000 BOLD
+1:26-66 fg=#ffe066 bg=#000000
+2:3-3 fg=#ffe066 bg=#000000
+2:4-4 fg=#ffffff bg=#000000
+2:5-8 fg=#c6c6c6 bg=#000000
+2:9-9 fg=#ffffff bg=#000000
+2:10-22 fg=#ffe066 bg=#000000 BOLD
+2:23-65 fg=#ffffff bg=#000000
+2:66-66 fg=#ffe066 bg=#000000
+3:3-3 fg=#ffe066 bg=#000000
+3:4-65 fg=#ffffff bg=#000000
+3:66-66 fg=#ffe066 bg=#000000
+4:3-3 fg=#ffe066 bg=#000000
+4:4-4 fg=#ffffff bg=#000000
+4:5-6 fg=#a5d6ff bg=#000000
+4:7-7 fg=#ffffff bg=#000000
+4:8-22 fg=#ffe066 bg=#000000
+4:23-65 fg=#ffffff bg=#000000
+4:66-66 fg=#ffe066 bg=#000000
+5:3-3 fg=#ffe066 bg=#000000
+5:4-65 fg=#ffffff bg=#000000
+5:66-66 fg=#ffe066 bg=#000000
+6:3-3 fg=#ffe066 bg=#000000
+6:4-4 fg=#ffffff bg=#000000
+6:5-5 fg=#7ee8d8 bg=#000000 BOLD
+6:6-15 fg=#ffffff bg=#000000
+6:16-16 fg=#7ee8d8 bg=#000000 BOLD
+6:17-23 fg=#ffffff bg=#000000
+6:24-26 fg=#7ee8d8 bg=#000000 BOLD
+6:27-65 fg=#ffffff bg=#000000
+6:66-66 fg=#ffe066 bg=#000000
+7:3-66 fg=#ffe066 bg=#000000
+=== text (ascii) ===
+
+   #= > [!] Approval needed ======================================#
+   # Rule no-force-push                                           #
+   # claude-2 asks to force-push feat/lexer.                      #
+   # [i] Expires in 4:32                                          #
+   #                                                              #
+   # a approve  d deny  Esc later                                 #
+   #==============================================================#
+
+=== styles (truecolor, ascii) ===
+1:3-11 fg=#ffe066
+1:12-26 fg=#ffe066 BOLD
+1:27-66 fg=#ffe066
+2:3-3 fg=#ffe066
+2:5-8 fg=#8a8a8a
+2:10-22 fg=#d29922 BOLD
+2:66-66 fg=#ffe066
+3:3-3 fg=#ffe066
+3:66-66 fg=#ffe066
+4:3-3 fg=#ffe066
+4:5-7 fg=#58a6ff
+4:9-23 fg=#d29922
+4:66-66 fg=#ffe066
+5:3-3 fg=#ffe066
+5:66-66 fg=#ffe066
+6:3-3 fg=#ffe066
+6:5-5 fg=#2dc2ad BOLD
+6:16-16 fg=#2dc2ad BOLD
+6:24-26 fg=#2dc2ad BOLD
+6:66-66 fg=#ffe066
+7:3-66 fg=#ffe066

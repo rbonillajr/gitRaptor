@@ -1,0 +1,32 @@
+---
+source: apps/cli/src/tui/widgets/tests.rs
+expression: "snapshot(story, full_ascii)"
+---
+=== text (unicode) ===
+
+
+             │ ✖ Rebase stopped: conflict in src/parser.rs
+=== styles (truecolor, unicode) ===
+2:13-13 fg=#f85149
+2:15-15 fg=#f85149
+=== styles (256, unicode) ===
+2:13-13 fg=@203
+2:15-15 fg=@203
+=== styles (16, unicode) ===
+2:13-13 fg=Red
+2:15-15 fg=Red
+=== styles (no-color, unicode) ===
+2:13-13 BOLD
+2:15-15 BOLD
+=== styles (high-contrast, unicode) ===
+2:13-13 fg=#ffa198 bg=#000000
+2:14-14 fg=#ffffff bg=#000000
+2:15-15 fg=#ffa198 bg=#000000
+2:16-59 fg=#ffffff bg=#000000
+=== text (ascii) ===
+
+
+           | [x] Rebase stopped: conflict in src/parser.rs
+=== styles (truecolor, ascii) ===
+2:11-11 fg=#f85149
+2:13-15 fg=#f85149

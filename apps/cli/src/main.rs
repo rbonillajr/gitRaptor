@@ -2,9 +2,11 @@ mod codes;
 mod events;
 mod i18n;
 mod mcp;
+mod model;
 mod resources;
 mod sessions;
 mod status;
+mod tui;
 mod undo;
 
 use std::io::{BufRead, IsTerminal, Write};
@@ -93,6 +95,25 @@ enum Command {
         #[command(subcommand)]
         action: McpAction,
     },
+    /// Developer tools of the TUI (hidden: not a user surface).
+    #[command(hide = true)]
+    Ui {
+        #[command(subcommand)]
+        action: UiAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum UiAction {
+    /// Every TUI component in every state, with sample data, browsable with the keyboard.
+    Gallery {
+        /// Print every story as plain text instead of opening the gallery.
+        #[arg(long)]
+        dump: bool,
+        /// Theme mode to start in (or to dump).
+        #[arg(long, value_enum, default_value = "truecolor")]
+        mode: tui::gallery::Mode,
+    },
 }
 
 #[derive(Subcommand)]
@@ -177,6 +198,27 @@ fn main() -> ExitCode {
         Some(Command::Mcp {
             action: McpAction::Uninstall { agent },
         }) => mcp::uninstall(&agent),
+        Some(Command::Ui {
+            action: UiAction::Gallery { dump, mode },
+        }) => ui_gallery(dump, mode),
+    }
+}
+
+fn ui_gallery(dump: bool, mode: tui::gallery::Mode) -> ExitCode {
+    let result = if dump {
+        tui::gallery::dump(mode, &mut std::io::stdout().lock())
+    } else if std::io::stdin().is_terminal() && std::io::stdout().is_terminal() {
+        tui::gallery::run(mode)
+    } else {
+        eprintln!("raptor ui gallery: needs a terminal; use --dump");
+        return ExitCode::from(2);
+    };
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(err) => {
+            eprintln!("raptor ui gallery: {err}");
+            ExitCode::FAILURE
+        }
     }
 }
 

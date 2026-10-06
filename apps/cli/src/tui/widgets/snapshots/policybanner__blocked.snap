@@ -1,0 +1,255 @@
+---
+source: apps/cli/src/tui/widgets/tests.rs
+expression: "snapshot(story, full_ascii)"
+---
+=== text (unicode) ===
+
+   ┏━ › ⛔ Push blocked ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+   ┃ Rule protect-main                                            ┃
+   ┃ claude-1 tried to push to main, which only accepts merges    ┃
+   ┃ through a PR.                                                ┃
+   ┃ Create a branch: raptor branch new <name>                    ┃
+   ┃                                                              ┃
+   ┃ Esc close                                                    ┃
+   ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+=== styles (truecolor, unicode) ===
+1:3-8 fg=#ffe066
+1:10-10 fg=#ffe066
+1:11-22 fg=#ffe066 BOLD
+1:23-66 fg=#ffe066
+2:3-3 fg=#ffe066
+2:5-8 fg=#8a8a8a
+2:10-21 fg=#f85149 BOLD
+2:66-66 fg=#ffe066
+3:3-3 fg=#ffe066
+3:66-66 fg=#ffe066
+4:3-3 fg=#ffe066
+4:66-66 fg=#ffe066
+5:3-3 fg=#ffe066
+5:5-45 fg=#58a6ff
+5:66-66 fg=#ffe066
+6:3-3 fg=#ffe066
+6:66-66 fg=#ffe066
+7:3-3 fg=#ffe066
+7:5-7 fg=#2dc2ad BOLD
+7:66-66 fg=#ffe066
+8:3-66 fg=#ffe066
+=== styles (256, unicode) ===
+1:3-8 fg=@221
+1:10-10 fg=@221
+1:11-22 fg=@221 BOLD
+1:23-66 fg=@221
+2:3-3 fg=@221
+2:5-8 fg=@245
+2:10-21 fg=@203 BOLD
+2:66-66 fg=@221
+3:3-3 fg=@221
+3:66-66 fg=@221
+4:3-3 fg=@221
+4:66-66 fg=@221
+5:3-3 fg=@221
+5:5-45 fg=@75
+5:66-66 fg=@221
+6:3-3 fg=@221
+6:66-66 fg=@221
+7:3-3 fg=@221
+7:5-7 fg=@43 BOLD
+7:66-66 fg=@221
+8:3-66 fg=@221
+=== styles (16, unicode) ===
+1:3-8 fg=LightYellow
+1:10-10 fg=LightYellow
+1:11-22 fg=LightYellow BOLD
+1:23-66 fg=LightYellow
+2:3-3 fg=LightYellow
+2:5-8 fg=DarkGray
+2:10-21 fg=Red BOLD
+2:66-66 fg=LightYellow
+3:3-3 fg=LightYellow
+3:66-66 fg=LightYellow
+4:3-3 fg=LightYellow
+4:66-66 fg=LightYellow
+5:3-3 fg=LightYellow
+5:5-45 fg=Blue
+5:66-66 fg=LightYellow
+6:3-3 fg=LightYellow
+6:66-66 fg=LightYellow
+7:3-3 fg=LightYellow
+7:5-7 fg=Cyan BOLD
+7:66-66 fg=LightYellow
+8:3-66 fg=LightYellow
+=== styles (no-color, unicode) ===
+1:3-8 BOLD | REVERSED
+1:10-66 BOLD | REVERSED
+2:3-3 BOLD | REVERSED
+2:5-8 DIM
+2:10-21 BOLD
+2:66-66 BOLD | REVERSED
+3:3-3 BOLD | REVERSED
+3:66-66 BOLD | REVERSED
+4:3-3 BOLD | REVERSED
+4:66-66 BOLD | REVERSED
+5:3-3 BOLD | REVERSED
+5:66-66 BOLD | REVERSED
+6:3-3 BOLD | REVERSED
+6:66-66 BOLD | REVERSED
+7:3-3 BOLD | REVERSED
+7:5-7 BOLD
+7:66-66 BOLD | REVERSED
+8:3-66 BOLD | REVERSED
+=== styles (high-contrast, unicode) ===
+1:3-8 fg=#ffe066 bg=#000000
+1:10-10 fg=#ffe066 bg=#000000
+1:11-22 fg=#ffe066 bg=#000000 BOLD
+1:23-66 fg=#ffe066 bg=#000000
+2:3-3 fg=#ffe066 bg=#000000
+2:4-4 fg=#ffffff bg=#000000
+2:5-8 fg=#c6c6c6 bg=#000000
+2:9-9 fg=#ffffff bg=#000000
+2:10-21 fg=#ffa198 bg=#000000 BOLD
+2:22-65 fg=#ffffff bg=#000000
+2:66-66 fg=#ffe066 bg=#000000
+3:3-3 fg=#ffe066 bg=#000000
+3:4-65 fg=#ffffff bg=#000000
+3:66-66 fg=#ffe066 bg=#000000
+4:3-3 fg=#ffe066 bg=#000000
+4:4-65 fg=#ffffff bg=#000000
+4:66-66 fg=#ffe066 bg=#000000
+5:3-3 fg=#ffe066 bg=#000000
+5:4-4 fg=#ffffff bg=#000000
+5:5-45 fg=#a5d6ff bg=#000000
+5:46-65 fg=#ffffff bg=#000000
+5:66-66 fg=#ffe066 bg=#000000
+6:3-3 fg=#ffe066 bg=#000000
+6:4-65 fg=#ffffff bg=#000000
+6:66-66 fg=#ffe066 bg=#000000
+7:3-3 fg=#ffe066 bg=#000000
+7:4-4 fg=#ffffff bg=#000000
+7:5-7 fg=#7ee8d8 bg=#000000 BOLD
+7:8-65 fg=#ffffff bg=#000000
+7:66-66 fg=#ffe066 bg=#000000
+8:3-66 fg=#ffe066 bg=#000000
+=== text (ascii) ===
+
+   #= > [blocked] Push blocked ===================================#
+   # Rule protect-main                                            #
+   # claude-1 tried to push to main, which only accepts merges    #
+   # through a PR.                                                #
+   # Create a branch: raptor branch new <name>                    #
+   #                                                              #
+   # Esc close                                                    #
+   #==============================================================#
+
+=== styles (truecolor, ascii) ===
+1:3-17 fg=#ffe066
+1:18-29 fg=#ffe066 BOLD
+1:30-66 fg=#ffe066
+2:3-3 fg=#ffe066
+2:5-8 fg=#8a8a8a
+2:10-21 fg=#f85149 BOLD
+2:66-66 fg=#ffe066
+3:3-3 fg=#ffe066
+3:66-66 fg=#ffe066
+4:3-3 fg=#ffe066
+4:66-66 fg=#ffe066
+5:3-3 fg=#ffe066
+5:5-45 fg=#58a6ff
+5:66-66 fg=#ffe066
+6:3-3 fg=#ffe066
+6:66-66 fg=#ffe066
+7:3-3 fg=#ffe066
+7:5-7 fg=#2dc2ad BOLD
+7:66-66 fg=#ffe066
+8:3-66 fg=#ffe066
+=== styles (256, ascii) ===
+1:3-17 fg=@221
+1:18-29 fg=@221 BOLD
+1:30-66 fg=@221
+2:3-3 fg=@221
+2:5-8 fg=@245
+2:10-21 fg=@203 BOLD
+2:66-66 fg=@221
+3:3-3 fg=@221
+3:66-66 fg=@221
+4:3-3 fg=@221
+4:66-66 fg=@221
+5:3-3 fg=@221
+5:5-45 fg=@75
+5:66-66 fg=@221
+6:3-3 fg=@221
+6:66-66 fg=@221
+7:3-3 fg=@221
+7:5-7 fg=@43 BOLD
+7:66-66 fg=@221
+8:3-66 fg=@221
+=== styles (16, ascii) ===
+1:3-17 fg=LightYellow
+1:18-29 fg=LightYellow BOLD
+1:30-66 fg=LightYellow
+2:3-3 fg=LightYellow
+2:5-8 fg=DarkGray
+2:10-21 fg=Red BOLD
+2:66-66 fg=LightYellow
+3:3-3 fg=LightYellow
+3:66-66 fg=LightYellow
+4:3-3 fg=LightYellow
+4:66-66 fg=LightYellow
+5:3-3 fg=LightYellow
+5:5-45 fg=Blue
+5:66-66 fg=LightYellow
+6:3-3 fg=LightYellow
+6:66-66 fg=LightYellow
+7:3-3 fg=LightYellow
+7:5-7 fg=Cyan BOLD
+7:66-66 fg=LightYellow
+8:3-66 fg=LightYellow
+=== styles (no-color, ascii) ===
+1:3-66 BOLD | REVERSED
+2:3-3 BOLD | REVERSED
+2:5-8 DIM
+2:10-21 BOLD
+2:66-66 BOLD | REVERSED
+3:3-3 BOLD | REVERSED
+3:66-66 BOLD | REVERSED
+4:3-3 BOLD | REVERSED
+4:66-66 BOLD | REVERSED
+5:3-3 BOLD | REVERSED
+5:66-66 BOLD | REVERSED
+6:3-3 BOLD | REVERSED
+6:66-66 BOLD | REVERSED
+7:3-3 BOLD | REVERSED
+7:5-7 BOLD
+7:66-66 BOLD | REVERSED
+8:3-66 BOLD | REVERSED
+=== styles (high-contrast, ascii) ===
+1:3-17 fg=#ffe066 bg=#000000
+1:18-29 fg=#ffe066 bg=#000000 BOLD
+1:30-66 fg=#ffe066 bg=#000000
+2:3-3 fg=#ffe066 bg=#000000
+2:4-4 fg=#ffffff bg=#000000
+2:5-8 fg=#c6c6c6 bg=#000000
+2:9-9 fg=#ffffff bg=#000000
+2:10-21 fg=#ffa198 bg=#000000 BOLD
+2:22-65 fg=#ffffff bg=#000000
+2:66-66 fg=#ffe066 bg=#000000
+3:3-3 fg=#ffe066 bg=#000000
+3:4-65 fg=#ffffff bg=#000000
+3:66-66 fg=#ffe066 bg=#000000
+4:3-3 fg=#ffe066 bg=#000000
+4:4-65 fg=#ffffff bg=#000000
+4:66-66 fg=#ffe066 bg=#000000
+5:3-3 fg=#ffe066 bg=#000000
+5:4-4 fg=#ffffff bg=#000000
+5:5-45 fg=#a5d6ff bg=#000000
+5:46-65 fg=#ffffff bg=#000000
+5:66-66 fg=#ffe066 bg=#000000
+6:3-3 fg=#ffe066 bg=#000000
+6:4-65 fg=#ffffff bg=#000000
+6:66-66 fg=#ffe066 bg=#000000
+7:3-3 fg=#ffe066 bg=#000000
+7:4-4 fg=#ffffff bg=#000000
+7:5-7 fg=#7ee8d8 bg=#000000 BOLD
+7:8-65 fg=#ffffff bg=#000000
+7:66-66 fg=#ffe066 bg=#000000
+8:3-66 fg=#ffe066 bg=#000000

@@ -1,0 +1,83 @@
+---
+source: apps/cli/src/tui/widgets/tests.rs
+expression: "snapshot(story, full_ascii)"
+---
+=== text (unicode) ===
+┌─ src/lexer.rs ───────────────────────────────────────────────────────────────┐
+│ ℹ  No changes in this file                                                   │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+=== styles (truecolor, unicode) ===
+0:0-2 fg=#8a8a8a
+0:3-14 fg=#8a8a8a BOLD
+0:15-79 fg=#8a8a8a
+1:0-0 fg=#8a8a8a
+1:2-3 fg=#58a6ff
+1:5-27 fg=#8a8a8a
+1:79-79 fg=#8a8a8a
+2:0-0 fg=#8a8a8a
+2:79-79 fg=#8a8a8a
+3:0-79 fg=#8a8a8a
+=== styles (256, unicode) ===
+0:0-2 fg=@245
+0:3-14 fg=@245 BOLD
+0:15-79 fg=@245
+1:0-0 fg=@245
+1:2-3 fg=@75
+1:5-27 fg=@245
+1:79-79 fg=@245
+2:0-0 fg=@245
+2:79-79 fg=@245
+3:0-79 fg=@245
+=== styles (16, unicode) ===
+0:0-2 fg=DarkGray
+0:3-14 fg=DarkGray BOLD
+0:15-79 fg=DarkGray
+1:0-0 fg=DarkGray
+1:2-3 fg=Blue
+1:5-27 fg=DarkGray
+1:79-79 fg=DarkGray
+2:0-0 fg=DarkGray
+2:79-79 fg=DarkGray
+3:0-79 fg=DarkGray
+=== styles (no-color, unicode) ===
+0:0-2 DIM
+0:3-14 BOLD | DIM
+0:15-79 DIM
+1:0-0 DIM
+1:5-27 DIM
+1:79-79 DIM
+2:0-0 DIM
+2:79-79 DIM
+3:0-79 DIM
+=== styles (high-contrast, unicode) ===
+0:0-2 fg=#c6c6c6 bg=#000000
+0:3-14 fg=#c6c6c6 bg=#000000 BOLD
+0:15-79 fg=#c6c6c6 bg=#000000
+1:0-0 fg=#c6c6c6 bg=#000000
+1:1-1 fg=#ffffff bg=#000000
+1:2-3 fg=#a5d6ff bg=#000000
+1:4-4 fg=#ffffff bg=#000000
+1:5-27 fg=#c6c6c6 bg=#000000
+1:28-78 fg=#ffffff bg=#000000
+1:79-79 fg=#c6c6c6 bg=#000000
+2:0-0 fg=#c6c6c6 bg=#000000
+2:1-78 fg=#ffffff bg=#000000
+2:79-79 fg=#c6c6c6 bg=#000000
+3:0-79 fg=#c6c6c6 bg=#000000
+=== text (ascii) ===
++- src/lexer.rs ---------------------------------------------------------------+
+| [i] No changes in this file                                                  |
+|                                                                              |
++------------------------------------------------------------------------------+
+=== styles (truecolor, ascii) ===
+0:0-2 fg=#8a8a8a
+0:3-14 fg=#8a8a8a BOLD
+0:15-79 fg=#8a8a8a
+1:0-0 fg=#8a8a8a
+1:2-4 fg=#58a6ff
+1:6-28 fg=#8a8a8a
+1:79-79 fg=#8a8a8a
+2:0-0 fg=#8a8a8a
+2:79-79 fg=#8a8a8a
+3:0-79 fg=#8a8a8a
