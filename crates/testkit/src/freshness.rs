@@ -55,43 +55,219 @@ fn round(v: f64) -> f64 {
 /// Engine part of NFR-04 (ADR-GRP-011 § 2): above it, on the p95, the CI fails.
 pub const ENGINE_BUDGET_MS: f64 = 300.0;
 
-/// Where the bench runs: the provisional ceilings are per platform (Decisión del orquestador
-/// 2026-10-05, validada por Arquitecto y PO), each the maximum measured there × 1.25, so a
-/// faster machine does not inherit the slack of a slower one.
+/// How a run gates (INF-GRP-002, Enmienda 2026-10-05: calibración del gate). Chosen explicitly
+/// with `--gate`; without it, `GITHUB_ACTIONS` selects [`GateMode::SharedCi`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GateMode {
+    /// The reference machine: the NFR-04 budget (300 ms, and the provisional ceilings of the
+    /// bursts) fails the run.
+    Reference,
+    /// A shared CI runner: the NFR-04 budget is only reported, and the calibrated regression
+    /// ceilings of the runner fail the run, once confirmed.
+    SharedCi,
+}
+
+/// Where the bench runs: ceilings are per platform, so a faster machine does not inherit the
+/// slack of a slower one (Decisión del orquestador 2026-10-05, validada por Arquitecto y PO).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Platform {
     /// A developer's Mac (the reference machine of ADR-GRP-011 § 4).
     MacLocal,
     /// The hosted `macos-latest` runner.
     MacCi,
-    /// The hosted `ubuntu-latest` runner, or a Linux machine.
+    /// A Linux machine outside CI.
     Linux,
+    /// The hosted `ubuntu-latest` runner.
+    LinuxCi,
     Other,
 }
 
 impl Platform {
-    pub fn detect(ci: bool) -> Self {
+    pub fn detect(mode: GateMode) -> Self {
+        let ci = mode == GateMode::SharedCi;
         match (cfg!(target_os = "macos"), cfg!(target_os = "linux"), ci) {
             (true, _, false) => Platform::MacLocal,
             (true, _, true) => Platform::MacCi,
-            (_, true, _) => Platform::Linux,
+            (_, true, false) => Platform::Linux,
+            (_, true, true) => Platform::LinuxCi,
             _ => Platform::Other,
         }
     }
 
-    /// Provisional ceiling of the engine p95 in a burst scenario, which macOS does not meet yet
-    /// (TD-GRP-002): the maximum measured there × 1.25, per scenario. On the runner it applies to
-    /// the total already widened by the excess timer slack. `None`: the 300 ms budget is the gate
-    /// (Linux meets it).
+    /// Provisional ceiling of the engine p95 in a burst scenario on the reference Mac, which
+    /// does not meet the 300 ms yet (TD-GRP-002): the maximum measured there × 1.25. `None`: the
+    /// 300 ms budget is the gate. Only [`GateMode::Reference`] uses it.
     pub fn burst_ceiling_ms(self, scenario: &str) -> Option<f64> {
         match (self, scenario) {
             (Platform::MacLocal, BURST_1K) => Some(420.0),
             (Platform::MacLocal, BURST_10K) => Some(620.0),
-            (Platform::MacCi, BURST_1K) => Some(615.0),
-            (Platform::MacCi, BURST_10K) => Some(585.0),
             _ => None,
         }
     }
+
+    /// Calibrated regression ceiling of `scenario` on a shared runner ([`REGRESSION_CEILINGS`]).
+    /// `None` on a platform or scenario without calibration: the gate then fails rather than
+    /// passing in silence.
+    pub fn regression_ceiling(self, scenario: &str) -> Option<RegressionCeiling> {
+        REGRESSION_CEILINGS
+            .iter()
+            .find(|(p, s, _)| *p == self && *s == scenario)
+            .map(|(_, _, c)| *c)
+    }
+
+    /// Largest excess timer slack the ceilings of this runner were calibrated with, plus margin.
+    /// Above it the runner is out of calibration and its regression gate only warns.
+    pub fn calibrated_slack_ms(self) -> Option<f64> {
+        match self {
+            Platform::MacCi => Some(CALIBRATED_SLACK_MAC_CI_MS),
+            Platform::LinuxCi => Some(CALIBRATED_SLACK_LINUX_CI_MS),
+            _ => None,
+        }
+    }
+}
+
+/// Regression ceiling of the engine total in one scenario on a shared runner: the run regresses
+/// when the p50, or the p95 where the runner can gate it, goes over.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RegressionCeiling {
+    pub p50_ms: f64,
+    /// `None`: the p95 of this scenario is dominated by the noise of the runner and is only
+    /// reported (bursts on `macos-latest`).
+    pub p95_ms: Option<f64>,
+}
+
+/// A ceiling from the largest value measured over the calibration runs:
+/// `max(largest × factor, largest + REGRESSION_MIN_MARGIN_MS)`.
+pub const fn calibrated(largest_ms: f64, factor: f64) -> f64 {
+    let scaled = largest_ms * factor;
+    let shifted = largest_ms + REGRESSION_MIN_MARGIN_MS;
+    if scaled > shifted { scaled } else { shifted }
+}
+
+/// Smallest margin of a regression ceiling over the largest value measured: with p50s as tight
+/// as Linux's, a factor alone would leave a few milliseconds (Arquitecto, 2026-10-05).
+pub const REGRESSION_MIN_MARGIN_MS: f64 = 30.0;
+/// Factor over the largest p50 measured in a steady scenario.
+pub const STEADY_P50_FACTOR: f64 = 1.25;
+/// Factor over the largest p50 of a burst, and over the largest p95 where it is gated.
+pub const WIDE_FACTOR: f64 = 1.5;
+
+/// Calibrated regression ceilings of the shared runners. Each figure is the largest value
+/// measured over the calibration runs of INF-GRP-002 (Enmienda 2026-10-05, table and runs in its
+/// Dev Spec), failed attempts included, passed through [`calibrated`]. Recalibrate when the
+/// engine gets faster on purpose or the runner image changes.
+pub const REGRESSION_CEILINGS: &[(Platform, &str, RegressionCeiling)] = &[
+    (Platform::MacCi, "modify", steady(224.3, 293.7)),
+    (Platform::MacCi, "git-add", steady(212.6, 277.0)),
+    (Platform::MacCi, "commit", steady(174.6, 242.8)),
+    (Platform::MacCi, "checkout", steady(188.9, 254.6)),
+    (Platform::MacCi, "worktree-create", steady(219.7, 363.9)),
+    (Platform::MacCi, "worktree-delete", steady(186.2, 237.0)),
+    (Platform::MacCi, BURST_1K, burst_p50_only(458.7)),
+    (Platform::MacCi, BURST_10K, burst_p50_only(445.8)),
+    (Platform::LinuxCi, "modify", steady(105.1, 105.6)),
+    (Platform::LinuxCi, "git-add", steady(104.5, 105.2)),
+    (Platform::LinuxCi, "commit", steady(100.8, 103.7)),
+    (Platform::LinuxCi, "checkout", steady(98.6, 99.1)),
+    (Platform::LinuxCi, "worktree-create", steady(183.7, 366.5)),
+    (Platform::LinuxCi, "worktree-delete", steady(81.5, 84.7)),
+    (Platform::LinuxCi, BURST_1K, burst(220.0, 268.4)),
+    (Platform::LinuxCi, BURST_10K, burst(239.8, 337.6)),
+];
+
+const fn steady(p50: f64, p95: f64) -> RegressionCeiling {
+    RegressionCeiling {
+        p50_ms: calibrated(p50, STEADY_P50_FACTOR),
+        p95_ms: Some(calibrated(p95, WIDE_FACTOR)),
+    }
+}
+
+const fn burst(p50: f64, p95: f64) -> RegressionCeiling {
+    RegressionCeiling {
+        p50_ms: calibrated(p50, WIDE_FACTOR),
+        p95_ms: Some(calibrated(p95, WIDE_FACTOR)),
+    }
+}
+
+const fn burst_p50_only(p50: f64) -> RegressionCeiling {
+    RegressionCeiling {
+        p50_ms: calibrated(p50, WIDE_FACTOR),
+        p95_ms: None,
+    }
+}
+
+/// Largest excess timer slack of the calibration runs on `macos-latest` (two modes, ~64 and
+/// ~139 ms) plus 50 ms.
+pub const CALIBRATED_SLACK_MAC_CI_MS: f64 = 190.0;
+/// Same on `ubuntu-latest` (~0.2 ms) plus 50 ms.
+pub const CALIBRATED_SLACK_LINUX_CI_MS: f64 = 50.0;
+
+/// Attempts of a scenario whose regression gate fails: it is measured again until two attempts
+/// agree, three at most (the median of three over the ceiling is two of three).
+pub const MAX_ATTEMPTS: usize = 3;
+
+/// What the confirmation decides after the attempts measured so far.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Verdict {
+    Pass,
+    /// Measure the scenario once more.
+    Retry,
+    Fail,
+}
+
+/// Two of three: fails when two attempts regressed, passes when the first did not or two did
+/// not, and asks for another attempt otherwise.
+pub fn confirm(regressed: &[bool]) -> Verdict {
+    let bad = regressed.iter().filter(|r| **r).count();
+    let good = regressed.len() - bad;
+    if bad == 0 && !regressed.is_empty() || good >= 2 {
+        Verdict::Pass
+    } else if bad >= 2 {
+        Verdict::Fail
+    } else {
+        Verdict::Retry
+    }
+}
+
+/// Regression gate of one attempt of a scenario on a shared runner. Empty when it is within its
+/// ceilings or has no samples (a lost sample fails on its own). Without a calibrated ceiling it
+/// fails: an uncalibrated scenario must not pass in silence.
+pub fn evaluate_regression(
+    scenario: &Scenario,
+    ceiling: Option<RegressionCeiling>,
+) -> Vec<Finding> {
+    let Some(s) = scenario.summary(Stage::Total) else {
+        return Vec::new();
+    };
+    let finding = |what: String, measured, limit| Finding {
+        level: Level::Fail,
+        scenario: scenario.name.clone(),
+        what,
+        measured,
+        limit,
+        unit: "ms",
+    };
+    let Some(c) = ceiling else {
+        return vec![finding(
+            "no calibrated regression ceiling for this runner".into(),
+            s.p50,
+            0.0,
+        )];
+    };
+    let mut out = Vec::new();
+    if s.p50 > c.p50_ms || s.p50.is_nan() {
+        out.push(finding(
+            "p50 total, regression ceiling".into(),
+            s.p50,
+            c.p50_ms,
+        ));
+    }
+    if let Some(p95) = c.p95_ms
+        && (s.p95 > p95 || s.p95.is_nan())
+    {
+        out.push(finding("p95 total, regression ceiling".into(), s.p95, p95));
+    }
+    out
 }
 
 /// Scale scenario of ADR-GRP-011 § 4: a burst of 1,000 files.
@@ -366,9 +542,13 @@ pub struct FootprintLimits {
     pub idle_rss_mib: f64,
     pub fds: f64,
     /// Product target of the burst peak (⚠️ ASSUMPTION of the PO, 2026-10-05): a warning until
-    /// TD-GRP-002 meets it. No ceiling yet: the peak varies too much between runs to bound it
-    /// before TD-GRP-002 explains it (Arquitecto, 2026-10-05).
+    /// TD-GRP-002 meets it.
     pub burst_rss_target_mib: f64,
+    /// Ceiling of the burst peak: a detector of unbounded growth, not a budget. The largest peak
+    /// measured (830 MiB on the reference Mac, 717 MiB on the runners) × 1.5; it fails without
+    /// confirmation and only the first bursts count, since a retry inherits the retained RSS
+    /// (INF-GRP-002, Enmienda 2026-10-05).
+    pub burst_rss_ceiling_mib: f64,
     /// Product target of the retention (⚠️ ASSUMPTION of the PO): back under the idle RSS limit
     /// within this many seconds after a burst; a warning.
     pub burst_back_target_s: f64,
@@ -382,6 +562,7 @@ pub const FOOTPRINT_LIMITS: FootprintLimits = FootprintLimits {
     idle_rss_mib: 150.0,
     fds: 256.0,
     burst_rss_target_mib: 250.0,
+    burst_rss_ceiling_mib: 1250.0,
     burst_back_target_s: 60.0,
 };
 
@@ -406,7 +587,15 @@ pub fn evaluate_footprint(f: &Footprint, limits: &FootprintLimits) -> Vec<Findin
             out.push(finding(Level::Fail, what, measured, limit, unit));
         }
     }
-    if f.burst_rss_mib > limits.burst_rss_target_mib {
+    if f.burst_rss_mib > limits.burst_rss_ceiling_mib {
+        out.push(finding(
+            Level::Fail,
+            "burst peak RSS, growth ceiling",
+            f.burst_rss_mib,
+            limits.burst_rss_ceiling_mib,
+            "MiB",
+        ));
+    } else if f.burst_rss_mib > limits.burst_rss_target_mib {
         out.push(finding(
             Level::Warn,
             "burst peak RSS, known gap (TD-GRP-002)",
@@ -569,6 +758,182 @@ mod tests {
             Platform::MacLocal.burst_ceiling_ms(BURST_1K)
                 < Platform::MacLocal.burst_ceiling_ms(BURST_10K)
         );
+        // On the runner the budget is only reported: no provisional ceiling there.
+        assert_eq!(Platform::MacCi.burst_ceiling_ms(BURST_1K), None);
+    }
+
+    /// Samples whose engine total is `total_ms` for the first `n - slow` and `slow_ms` for the
+    /// last `slow`.
+    fn flat(name: &str, total_ms: f64, slow: usize, slow_ms: f64) -> Scenario {
+        let n = 200;
+        let samples = (0..n)
+            .map(|i| {
+                let ms = if i >= n - slow { slow_ms } else { total_ms };
+                let t0 = 1_000 * MS + i as u64 * 1_000 * MS;
+                let end = t0 + (ms * 1e6) as u64;
+                Sample {
+                    t0,
+                    t_recv: t0,
+                    t_flush: t0,
+                    t_computed: t0,
+                    t_persisted: end,
+                    t_published: end,
+                    t_client_recv: end,
+                }
+            })
+            .collect();
+        Scenario {
+            name: name.into(),
+            isolates_detection: true,
+            ceiling_ms: None,
+            slack_excess_ms: 0.0,
+            samples,
+        }
+    }
+
+    const SCENARIOS: [&str; 8] = [
+        "modify",
+        "git-add",
+        "commit",
+        "checkout",
+        "worktree-create",
+        "worktree-delete",
+        BURST_1K,
+        BURST_10K,
+    ];
+
+    /// Every scenario the bench gates has a calibrated ceiling on both shared runners.
+    #[test]
+    fn every_scenario_is_calibrated_on_both_runners() {
+        for p in [Platform::MacCi, Platform::LinuxCi] {
+            for name in SCENARIOS {
+                assert!(p.regression_ceiling(name).is_some(), "{p:?} {name}");
+            }
+            assert!(p.calibrated_slack_ms().is_some());
+        }
+        assert_eq!(Platform::MacLocal.regression_ceiling("modify"), None);
+    }
+
+    /// An uncalibrated scenario fails instead of passing in silence.
+    #[test]
+    fn a_scenario_without_a_ceiling_fails() {
+        let findings = evaluate_regression(&flat("new-scenario", 10.0, 0, 0.0), None);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].level, Level::Fail);
+        assert!(findings[0].what.contains("no calibrated"));
+    }
+
+    /// A ceiling is the largest measurement × factor, and at least 30 ms above it.
+    #[test]
+    fn a_ceiling_keeps_a_minimum_margin() {
+        assert_eq!(calibrated(100.0, 1.25), 130.0);
+        assert_eq!(calibrated(400.0, 1.25), 500.0);
+        assert_eq!(calibrated(400.0, 1.5), 600.0);
+    }
+
+    /// Sensitivity: just under its ceilings a scenario passes; a delay in every sample that
+    /// pushes the p50 over fails, and so does a tail that pushes the p95 over.
+    #[test]
+    fn the_regression_gate_sees_a_shift_and_a_tail() {
+        for p in [Platform::MacCi, Platform::LinuxCi] {
+            for name in SCENARIOS {
+                let c = p.regression_ceiling(name).unwrap();
+                let ok = flat(name, c.p50_ms - 1.0, 0, 0.0);
+                assert_eq!(evaluate_regression(&ok, Some(c)), vec![], "{p:?} {name}");
+                let shifted = flat(name, c.p50_ms + 1.0, 0, 0.0);
+                assert!(
+                    evaluate_regression(&shifted, Some(c))
+                        .iter()
+                        .any(|f| f.level == Level::Fail && f.what.contains("p50")),
+                    "{p:?} {name}"
+                );
+                // 6% of the samples far out: the p50 is unchanged, the p95 is not.
+                let tail = flat(name, 50.0, 12, 5_000.0);
+                let findings = evaluate_regression(&tail, Some(c));
+                assert_eq!(
+                    findings.iter().any(|f| f.what.contains("p95")),
+                    c.p95_ms.is_some(),
+                    "{p:?} {name} {findings:?}"
+                );
+            }
+        }
+    }
+
+    /// The p95 of the bursts on `macos-latest` is noise of the runner: only reported. On Linux
+    /// it gates.
+    #[test]
+    fn only_the_mac_runner_leaves_the_burst_p95_ungated() {
+        for name in [BURST_1K, BURST_10K] {
+            assert_eq!(
+                Platform::MacCi.regression_ceiling(name).unwrap().p95_ms,
+                None
+            );
+            assert!(
+                Platform::LinuxCi
+                    .regression_ceiling(name)
+                    .unwrap()
+                    .p95_ms
+                    .is_some()
+            );
+        }
+        assert!(
+            Platform::MacCi
+                .regression_ceiling("modify")
+                .unwrap()
+                .p95_ms
+                .is_some()
+        );
+    }
+
+    /// The steady ceilings of the Linux runner stay stricter than NFR-04 where the runner meets
+    /// it with room, so the regression gate is not looser than the budget it replaces there.
+    #[test]
+    fn the_linux_steady_ceilings_are_within_the_budget() {
+        for name in ["modify", "git-add", "commit", "checkout", "worktree-delete"] {
+            let c = Platform::LinuxCi.regression_ceiling(name).unwrap();
+            assert!(c.p95_ms.unwrap() < ENGINE_BUDGET_MS, "{name}");
+        }
+    }
+
+    /// Two of three attempts decide.
+    #[test]
+    fn confirmation_is_two_of_three() {
+        use Verdict::*;
+        assert_eq!(confirm(&[false]), Pass);
+        assert_eq!(confirm(&[true]), Retry);
+        assert_eq!(confirm(&[true, true]), Fail);
+        assert_eq!(confirm(&[true, false]), Retry);
+        assert_eq!(confirm(&[true, false, false]), Pass);
+        assert_eq!(confirm(&[true, false, true]), Fail);
+        assert_eq!(confirm(&[]), Retry);
+    }
+
+    #[test]
+    fn the_mode_picks_the_platform() {
+        let ci = Platform::detect(GateMode::SharedCi);
+        let reference = Platform::detect(GateMode::Reference);
+        if cfg!(target_os = "macos") {
+            assert_eq!((ci, reference), (Platform::MacCi, Platform::MacLocal));
+        } else if cfg!(target_os = "linux") {
+            assert_eq!((ci, reference), (Platform::LinuxCi, Platform::Linux));
+        }
+    }
+
+    /// Unbounded growth of the burst peak fails; under the ceiling it only warns.
+    #[test]
+    fn the_burst_peak_fails_over_its_growth_ceiling() {
+        let f = Footprint {
+            idle_cpu_pct: 0.1,
+            idle_rss_mib: 40.0,
+            fds: 40.0,
+            burst_rss_mib: 1300.0,
+            burst_cpu_pct: 100.0,
+            burst_back_s: Some(1.0),
+        };
+        let findings = evaluate_footprint(&f, &FOOTPRINT_LIMITS);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert_eq!(findings[0].level, Level::Fail);
+        assert!(findings[0].what.contains("growth ceiling"));
     }
 
     /// Only 5% of slow samples is still within the p95; 6% is not.
@@ -622,7 +987,7 @@ mod tests {
         let findings = evaluate_footprint(&bad, &FOOTPRINT_LIMITS);
         let fails = findings.iter().filter(|f| f.level == Level::Fail).count();
         assert_eq!(fails, 3, "{findings:?}");
-        // The burst peak has no ceiling yet: it only warns.
+        // Under its growth ceiling the burst peak only warns.
         assert!(
             findings
                 .iter()
@@ -641,7 +1006,7 @@ mod tests {
         assert_eq!(evaluate_footprint(&unknown, &FOOTPRINT_LIMITS).len(), 1);
     }
 
-    /// Between the product target and the provisional ceiling, the burst peak only warns.
+    /// Between the product target and the growth ceiling, the burst peak only warns.
     #[test]
     fn the_burst_peak_only_warns() {
         let f = Footprint {
