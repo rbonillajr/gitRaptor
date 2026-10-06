@@ -9,6 +9,8 @@
 
 pub mod acl;
 #[cfg(windows)]
+pub mod file_lock;
+#[cfg(windows)]
 pub mod process;
 #[cfg(windows)]
 pub mod system;
@@ -16,6 +18,9 @@ pub mod system;
 #[cfg(windows)]
 #[allow(unsafe_code)]
 mod ffi_acl;
+#[cfg(windows)]
+#[allow(unsafe_code)]
+mod ffi_file;
 #[cfg(windows)]
 #[allow(unsafe_code)]
 mod ffi_handle;
