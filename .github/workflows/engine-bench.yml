@@ -37,6 +37,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 # Manual runs never cancel each other: calibrating the gates takes several runs of the same ref.
 concurrency:
@@ -74,6 +75,20 @@ jobs:
         env:
           ENGINE_BENCH_ROOT: ${{ runner.temp }}/engine-bench
         run: cargo bench -p gitraptor-cli --bench engine -- --gate ci --out "$ENGINE_BENCH_ROOT/engine-bench-${{ runner.os }}.json"
+      # TD-GRP-003: the NFR-04 budget gates on the reference machine. A PR that touches the
+      # engine is reminded to attach the report of `--gate reference` before the merge.
+      - name: Reference machine reminder
+        if: always() && github.event_name == 'pull_request' && matrix.os == 'ubuntu-latest'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          files="$(gh pr diff "$PR" --repo "$GITHUB_REPOSITORY" --name-only)"
+          if grep -qE '^crates/core/src/(watch/|daemon/|channel/|observe\.rs)' <<<"$files"; then
+            msg="This PR touches the engine: attach the report of 'cargo bench -p gitraptor-cli --bench engine -- --gate reference' from the reference machine before the merge (TD-GRP-003)."
+            echo "::warning::$msg"
+            echo "> **NFR-04**: $msg" >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
