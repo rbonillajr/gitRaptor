@@ -114,7 +114,7 @@ pub fn decision_lines(decision: &Decision) -> Vec<String> {
 /// `raptor hook <constants> -- <git args>`: never prompts, never starts the daemon.
 pub fn hook(args: &[OsString]) -> ExitCode {
     let Some(args) = HookArgs::parse(args) else {
-        eprintln!("GitRaptor: {}", t("guard.deny.input", &[]));
+        eprintln!("{}", t("guard.deny.input", &[]));
         return ExitCode::FAILURE;
     };
     let mut input = Vec::new();
@@ -124,7 +124,7 @@ pub fn hook(args: &[OsString]) -> ExitCode {
         .take(MAX_INPUT_BYTES + 1)
         .read_to_end(&mut input);
     if read.is_err() || input.len() as u64 > MAX_INPUT_BYTES {
-        eprintln!("GitRaptor: {}", t("guard.deny.input", &[]));
+        eprintln!("{}", t("guard.deny.input", &[]));
         return ExitCode::FAILURE;
     }
     let env = HookEnv {
