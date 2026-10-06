@@ -30,7 +30,9 @@ pub const MAX_PATH_ENTRIES: usize = 64;
 pub const MAX_PATH_BYTES: usize = 4096;
 /// Longest locale value.
 const MAX_LOCALE_BYTES: usize = 64;
-/// Editor used when the installed `raptor-no-editor` cannot be used (never `:`).
+/// Editor used when the installed `raptor-no-editor` cannot be used (never `:`). On Windows it is
+/// not an absolute path, so [`UserGitCommand::new`] refuses every launch there (fail-closed) until
+/// the rejecting editor of Windows exists. Pendiente: etapa de validación multiplataforma (XP-19).
 pub const FALLBACK_NO_EDITOR: &str = "/usr/bin/false";
 /// Minimal `PATH` when the client declared none that passed.
 const DEFAULT_PATH: &str = "/usr/bin:/bin";
@@ -251,8 +253,14 @@ fn path_entry_problem(entry: &Path, excluded: &[PathBuf]) -> Option<&'static str
     if writable_by_others(&meta) {
         return Some("path-entry-writable-by-others");
     }
+    // One form on both sides, the one of `std::fs::canonicalize` (verbatim on Windows): the
+    // roots may come in the drive form.
     let canonical = std::fs::canonicalize(entry).unwrap_or_else(|_| entry.to_owned());
-    if inside_any(&canonical, excluded) || inside_any(entry, excluded) {
+    let roots: Vec<PathBuf> = excluded
+        .iter()
+        .map(|r| std::fs::canonicalize(r).unwrap_or_else(|_| r.clone()))
+        .collect();
+    if inside_any(&canonical, &roots) || inside_any(entry, excluded) {
         return Some("path-entry-in-repo");
     }
     None
@@ -579,17 +587,37 @@ mod tests {
     use super::*;
     use crate::GitVersion;
 
+    /// An absolute path of the running OS for `unix` (`/w/repo` is `C:\w\repo` on Windows):
+    /// these tests check the argv, which is the same on every OS.
+    fn abs(unix: &str) -> PathBuf {
+        if cfg!(windows) {
+            PathBuf::from(format!("C:{}", unix.replace('/', "\\")))
+        } else {
+            PathBuf::from(unix)
+        }
+    }
+
+    /// The rejecting editor of these tests. On Windows [`FALLBACK_NO_EDITOR`] is not absolute and
+    /// `UserGitCommand::new` refuses it (XP-19): the argv tests use a path that is never run.
+    fn editor() -> PathBuf {
+        if cfg!(windows) {
+            abs("/raptor/raptor-no-editor.exe")
+        } else {
+            PathBuf::from(FALLBACK_NO_EDITOR)
+        }
+    }
+
     fn git() -> SystemGit {
         SystemGit {
-            path: PathBuf::from("/usr/bin/git"),
+            path: abs("/usr/bin/git"),
             version: GitVersion::parse("git version 2.50.0").unwrap(),
         }
     }
 
     fn target() -> RepoTarget {
         RepoTarget {
-            git_dir: PathBuf::from("/w/repo/.git"),
-            work_tree: Some(PathBuf::from("/w/repo")),
+            git_dir: abs("/w/repo/.git"),
+            work_tree: Some(abs("/w/repo")),
         }
     }
 
@@ -604,8 +632,8 @@ mod tests {
             &op,
             message,
             &SessionEnv::default(),
-            Path::new(FALLBACK_NO_EDITOR),
-            Some(Path::new("/home/u")),
+            &editor(),
+            Some(&abs("/home/u")),
         )
     }
 
@@ -622,11 +650,11 @@ mod tests {
             UserOp::RebaseAbort,
             UserOp::WorktreeAdd {
                 branch: RefName::new("feat/x").unwrap(),
-                path: PathBuf::from("/w/repo-feat-x"),
+                path: abs("/w/repo-feat-x"),
                 start: oid(),
             },
             UserOp::WorktreeRemove {
-                path: PathBuf::from("/w/repo-feat-x"),
+                path: abs("/w/repo-feat-x"),
             },
             UserOp::UpdateRef {
                 name: RefName::new("refs/heads/main").unwrap(),
@@ -640,17 +668,18 @@ mod tests {
         ];
         for op in ops {
             let argv = build(op.clone(), None).unwrap().argv();
+            let editor = editor().display().to_string();
             for needle in [
-                "--git-dir=/w/repo/.git",
-                "--work-tree=/w/repo",
-                "protocol.allow=never",
-                "core.useReplaceRefs=false",
-                "core.editor=/usr/bin/false",
-                "sequence.editor=/usr/bin/false",
-                "gc.auto=0",
-                "rebase.updateRefs=false",
+                format!("--git-dir={}", abs("/w/repo/.git").display()),
+                format!("--work-tree={}", abs("/w/repo").display()),
+                "protocol.allow=never".into(),
+                "core.useReplaceRefs=false".into(),
+                format!("core.editor={editor}"),
+                format!("sequence.editor={editor}"),
+                "gc.auto=0".into(),
+                "rebase.updateRefs=false".into(),
             ] {
-                assert!(argv.iter().any(|a| a == needle), "{op:?} lacks {needle}");
+                assert!(argv.contains(&needle), "{op:?} lacks {needle}");
             }
             for forbidden in [
                 "--amend",
@@ -710,6 +739,23 @@ mod tests {
             );
         }
         assert!(names.contains(&"PATH".into()));
+    }
+
+    /// XP-19: until Windows has its rejecting editor, the fallback is not absolute there and
+    /// every launch is refused (fail-closed).
+    #[cfg(windows)]
+    #[test]
+    fn windows_refuses_the_unix_fallback_editor() {
+        let refused = UserGitCommand::new(
+            &git(),
+            &target(),
+            &UserOp::MergeAbort,
+            None,
+            &SessionEnv::default(),
+            Path::new(FALLBACK_NO_EDITOR),
+            None,
+        );
+        assert!(refused.is_err());
     }
 
     /// L-01 (Validación 24): a path with spaces falls back to `/usr/bin/false`; never `:`.
