@@ -234,6 +234,7 @@ pub fn paint(cursor: Cursor, all: &[Story], area: Rect, buf: &mut Buffer) {
             KeyHint::new(SafeText::text("m"), SafeText::text("mode")),
         ],
         help: KeyHint::new(SafeText::text("q"), SafeText::text("quit")),
+        legend: None,
     };
     let last = Rect::new(area.x, area.bottom().saturating_sub(1), area.width, 1);
     themed(&hints, &styles).render(last, buf);

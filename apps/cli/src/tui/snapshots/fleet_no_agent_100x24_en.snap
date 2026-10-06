@@ -1,0 +1,121 @@
+---
+source: apps/cli/src/tui/view.rs
+expression: snap
+---
+ shop · ✔ live · engine observing · acting as you                                        ⚡ –  ⛔ –
+┏━ › Fleet · ↑↓ vs main (local copy, fetched 3 h ago) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃     Agent                     Branch                             Files ↑↓          Activity      ┃
+┃  ○  No agent · shop           main                               ~0    ↑0 ↓0       not available ┃
+┃  ●  Claude Code · feat-pagos  feat-pagos                         ~2    ↑3 ↓1       2 min ago     ┃
+┃  ○  No agent · feat-docs      feat-docs                          ~0    ↑1 ↓0       not available ┃
+┃  ○  No agent · scratch        39e852f (no branch) · temporary    ~1    ↑0 ↓0       not available ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ r retry   ○ no agent: changes by you or another tool                                        q quit
+=== styles ===
+0:0-0 bg=#3a3a3a
+0:1-4 bg=#3a3a3a BOLD
+0:5-7 fg=#949494 bg=#3a3a3a
+0:8-8 fg=#3fb950 bg=#3a3a3a
+0:9-9 bg=#3a3a3a
+0:10-32 fg=#3fb950 bg=#3a3a3a
+0:33-35 fg=#949494 bg=#3a3a3a
+0:36-88 bg=#3a3a3a
+0:89-89 fg=#d29922 bg=#3a3a3a
+0:91-91 bg=#3a3a3a
+0:92-92 fg=#d29922 bg=#3a3a3a BOLD
+0:93-94 bg=#3a3a3a
+0:95-95 fg=#f85149 bg=#3a3a3a
+0:97-97 bg=#3a3a3a
+0:98-98 fg=#f85149 bg=#3a3a3a BOLD
+0:99-99 bg=#3a3a3a
+1:0-4 fg=#ffe066
+1:5-52 fg=#ffe066 BOLD
+1:53-99 fg=#ffe066
+2:0-0 fg=#ffe066
+2:6-10 fg=#949494 BOLD
+2:32-37 fg=#949494 BOLD
+2:67-71 fg=#949494 BOLD
+2:73-74 fg=#949494 BOLD
+2:85-92 fg=#949494 BOLD
+2:99-99 fg=#ffe066
+3:0-0 fg=#ffe066
+3:3-3 fg=#949494
+3:6-20 fg=#949494
+3:32-35 fg=#949494
+3:67-68 fg=#949494
+3:73-77 fg=#949494
+3:85-97 fg=#949494
+3:99-99 fg=#ffe066
+4:0-0 fg=#ffe066
+4:3-3 fg=#3fb950
+4:6-29 fg=#e69f00 BOLD
+4:67-68 fg=#d29922
+4:85-93 fg=#949494
+4:99-99 fg=#ffe066
+5:0-0 fg=#ffe066
+5:3-3 fg=#949494
+5:6-25 fg=#949494
+5:32-40 fg=#949494
+5:67-68 fg=#949494
+5:73-77 fg=#949494
+5:85-97 fg=#949494
+5:99-99 fg=#ffe066
+6:0-0 fg=#ffe066
+6:3-3 fg=#949494
+6:6-23 fg=#949494
+6:32-50 fg=#d29922
+6:52-62 fg=#949494
+6:67-68 fg=#d29922
+6:73-77 fg=#949494
+6:85-97 fg=#949494
+6:99-99 fg=#ffe066
+7:0-0 fg=#ffe066
+7:99-99 fg=#ffe066
+8:0-0 fg=#ffe066
+8:99-99 fg=#ffe066
+9:0-0 fg=#ffe066
+9:99-99 fg=#ffe066
+10:0-0 fg=#ffe066
+10:99-99 fg=#ffe066
+11:0-0 fg=#ffe066
+11:99-99 fg=#ffe066
+12:0-0 fg=#ffe066
+12:99-99 fg=#ffe066
+13:0-0 fg=#ffe066
+13:99-99 fg=#ffe066
+14:0-0 fg=#ffe066
+14:99-99 fg=#ffe066
+15:0-0 fg=#ffe066
+15:99-99 fg=#ffe066
+16:0-0 fg=#ffe066
+16:99-99 fg=#ffe066
+17:0-0 fg=#ffe066
+17:99-99 fg=#ffe066
+18:0-0 fg=#ffe066
+18:99-99 fg=#ffe066
+19:0-0 fg=#ffe066
+19:99-99 fg=#ffe066
+20:0-0 fg=#ffe066
+20:99-99 fg=#ffe066
+21:0-0 fg=#ffe066
+21:99-99 fg=#ffe066
+22:0-99 fg=#ffe066
+23:1-1 fg=#2dc2ad BOLD
+23:11-11 fg=#949494
+23:13-52 fg=#949494
+23:93-93 fg=#2dc2ad BOLD

@@ -292,7 +292,7 @@ fn a_change_reaches_the_row_live() {
 
 /// Lo no atribuido nunca se presenta como "humano".
 #[test]
-fn a_commit_without_an_agent_is_unattributed() {
+fn a_commit_without_an_agent_shows_no_agent() {
     let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let shop = Shop::new();
     shop.observed();
@@ -301,7 +301,7 @@ fn a_commit_without_an_agent_is_unattributed() {
     shop.f.git_in(&shop.docs, &["commit", "-q", "-m", "docs"]);
     let mut tui = Tui::open(shop.dirs(), &shop.f.repo);
     let screen = tui.until("feat-docs one commit ahead", |s| {
-        has(s, "feat-docs", &["Unattributed (you/other)", "↑1 ↓1"])
+        has(s, "feat-docs", &["No agent · wt-docs", "↑1 ↓1"])
     });
     let all = screen.join("\n").to_lowercase();
     assert!(!all.contains("human"), "{all}");
@@ -457,7 +457,7 @@ fn untrusted_text_is_painted_inert() {
     assert!(!refused.status.success(), "{}", text(&refused));
     let mut tui = Tui::open(shop.dirs(), &shop.f.repo);
     let screen = tui.until("the worktree with the escape in its folder", |s| {
-        has(s, "feat-evil", &["Unattributed"])
+        has(s, "feat-evil", &["No agent"])
     });
     let painted: String = tui
         .app

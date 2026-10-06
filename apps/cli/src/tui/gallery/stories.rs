@@ -92,6 +92,7 @@ fn row(i: usize, name: &'static str, state: AgentState, branch: &'static str) ->
             behind: 0,
         },
         activity: t("2 min ago"),
+        tag: None,
         conflict: false,
         blocked: false,
         operation: None,
@@ -168,24 +169,29 @@ fn agents_unavailable(area: Rect, buf: &mut Buffer, s: &Styles) {
     agent_list(vec![a, b], Some(1), true).render(area, buf, s);
 }
 
-/// The fleet of a repo as US-CKP-001 shows it: worktrees without a session and an activity the
-/// engine does not publish yet.
+/// The fleet of a repo as US-CKP-001 shows it: worktrees without a session (one of them a
+/// scratch worktree in the temporary folder, with no branch) and an activity the engine does
+/// not publish yet.
 fn agents_no_agent(area: Rect, buf: &mut Buffer, s: &Styles) {
-    let mut main = row(0, "Unattributed (you/other)", AgentState::NoAgent, "main");
+    // The catalog joins the agent and the worktree with a "·"; the story uses the separator of
+    // the active set so the ASCII mode stays ASCII.
+    let named =
+        |agent: &str, worktree: &str| t(&format!("{agent}{}{worktree}", s.glyphs.separator));
+    let mut main = row(0, "", AgentState::NoAgent, "main");
+    main.name = named("No agent", "shop");
     main.changes = 0;
     main.activity = t("not available");
-    let mut a = row(1, "claude-1", AgentState::Active, "feat-pagos");
+    let mut a = row(1, "", AgentState::Active, "feat-pagos");
+    a.name = named("Claude Code", "feat-pagos");
     a.sync = Sync::Known {
         ahead: 3,
         behind: 1,
     };
     a.activity = t("not available");
-    let mut b = row(
-        2,
-        "Unattributed (you/other)",
-        AgentState::NoAgent,
-        "feat-docs",
-    );
+    let mut b = row(2, "", AgentState::NoAgent, "");
+    b.name = named("No agent", "scratch");
+    b.branch = Branch::Detached(t("39e852f (no branch)"));
+    b.tag = Some(t("temporary"));
     b.sync = Sync::Unknown(t("no base"));
     b.activity = t("not available");
     agent_list(vec![main, a, b], Some(1), true).render(area, buf, s);
@@ -649,6 +655,7 @@ fn hints(list: Vec<KeyHint>) -> KeyHintsModel {
     KeyHintsModel {
         hints: list,
         help: hint("?", "help"),
+        legend: None,
     }
 }
 

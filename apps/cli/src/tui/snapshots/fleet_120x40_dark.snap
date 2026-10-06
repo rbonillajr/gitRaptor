@@ -4,10 +4,10 @@ expression: snap
 ---
  shop · ✔ live · engine observing · acting as you                                                            ⚡ –  ⛔ –
 ┏━ › Fleet · ↑↓ vs main (local copy, fetched 3 h ago) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃     Agent                     Branch                                                 Files ↑↓          Activity      ┃
-┃     Unattributed (you/other)  main                                                   ~0    ↑0 ↓0       not available ┃
-┃  ●  claude-1 · feat-pagos     feat-pagos                                             ~2    ↑3 ↓1       2 min ago     ┃
-┃     Unattributed (you/other)  feat-docs                                              ~0    ↑1 ↓0       not available ┃
+┃     Agent                  Branch                                                    Files ↑↓          Activity      ┃
+┃  ○  No agent · shop        main                                                      ~0    ↑0 ↓0       not available ┃
+┃  ●  claude-1 · feat-pagos  feat-pagos                                                ~2    ↑3 ↓1       2 min ago     ┃
+┃  ○  No agent · feat-docs   feat-docs                                                 ~0    ↑1 ↓0       not available ┃
 ┃                                                                                                                      ┃
 ┃                                                                                                                      ┃
 ┃                                                                                                                      ┃
@@ -41,7 +41,7 @@ expression: snap
 ┃                                                                                                                      ┃
 ┃                                                                                                                      ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
- r retry                                                                                                         q quit
+ r retry   ○ no agent: changes by you or another tool                                                            q quit
 === styles (dark) ===
 0:0-0 bg=#3a3a3a
 0:1-4 bg=#3a3a3a BOLD
@@ -64,14 +64,17 @@ expression: snap
 1:53-119 fg=#ffe066
 2:0-0 fg=#ffe066
 2:6-10 fg=#949494 BOLD
-2:32-37 fg=#949494 BOLD
+2:29-34 fg=#949494 BOLD
 2:87-91 fg=#949494 BOLD
 2:93-94 fg=#949494 BOLD
 2:105-112 fg=#949494 BOLD
 2:119-119 fg=#ffe066
 3:0-0 fg=#ffe066
-3:6-29 fg=#949494
+3:3-3 fg=#949494
+3:6-20 fg=#949494
+3:29-32 fg=#949494
 3:87-88 fg=#949494
+3:93-97 fg=#949494
 3:105-117 fg=#949494
 3:119-119 fg=#ffe066
 4:0-0 fg=#ffe066
@@ -81,8 +84,11 @@ expression: snap
 4:105-113 fg=#949494
 4:119-119 fg=#ffe066
 5:0-0 fg=#ffe066
-5:6-29 fg=#949494
+5:3-3 fg=#949494
+5:6-25 fg=#949494
+5:29-37 fg=#949494
 5:87-88 fg=#949494
+5:93-97 fg=#949494
 5:105-117 fg=#949494
 5:119-119 fg=#ffe066
 6:0-0 fg=#ffe066
@@ -151,4 +157,6 @@ expression: snap
 37:119-119 fg=#ffe066
 38:0-119 fg=#ffe066
 39:1-1 fg=#2dc2ad BOLD
+39:11-11 fg=#949494
+39:13-52 fg=#949494
 39:113-113 fg=#2dc2ad BOLD
