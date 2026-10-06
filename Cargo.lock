@@ -667,6 +667,7 @@ dependencies = [
  "gitraptor-git",
  "gitraptor-testkit",
  "gitraptor-theme",
+ "rustix",
  "serde",
  "serde_json",
  "tempfile",

@@ -19,6 +19,10 @@ serde_json = "1.0.151"
 gitraptor-theme.workspace = true
 clap.workspace = true
 
+# Raw-ish mode for the OSC 11 background query of the TUI (TS-CKP-004, 2026-10-05).
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1.1.5", features = ["termios"] }
+
 [lints]
 workspace = true
 
@@ -26,6 +30,10 @@ workspace = true
 gitraptor-git.workspace = true
 gitraptor-testkit.workspace = true
 tempfile.workspace = true
+
+# A pseudo-terminal plays the emulator in the OSC 11 tests.
+[target.'cfg(unix)'.dev-dependencies]
+rustix = { version = "1.1.5", features = ["termios", "pty"] }
 
 # Freshness, scale and footprint bench of the engine (INF-GRP-002, ADR-GRP-011 § 4).
 [[bench]]
