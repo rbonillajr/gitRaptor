@@ -70,11 +70,11 @@ pub use env::{AGENT_EXECUTABLES_ENV, CLOCK_SKEW_FILE_ENV, DaemonEnv};
 pub use lock::{InstanceLock, LOCK_FILE, running_pid, wait_until_released};
 pub use log::{Field, LOG_FILE, Level, LogLimits, Logger};
 use shutdown::Control;
+pub(crate) use shutdown::{GuardReply, GuardRequest};
 pub(crate) use shutdown::{RegisterRequest, RepoAddRequest, WithdrawRequest};
 pub use shutdown::{
     RegistrationError, RepoCommandError, ShutdownHandle, StopCause, install_signal_handlers,
 };
-pub(crate) use shutdown::{GuardReply, GuardRequest};
 pub use state::{EngineState, InvalidTransition, Trigger};
 
 /// Exit code of a second `raptor daemon` that found another one running.
