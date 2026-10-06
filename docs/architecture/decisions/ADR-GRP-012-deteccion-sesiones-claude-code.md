@@ -10,8 +10,8 @@ updated: 2026-10-06
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
-related: [ADR-GRP-005, ADR-GRP-006, ADR-GRP-007, ADR-GRP-009, ADR-GRP-010, ADR-GRP-013, SPIKE-GRP-001]
-tags: [deteccion, atribucion, claude-code, sesiones, procesos, transcripts, privacidad, nfr-08, seguridad]
+related: [ADR-GRP-005, ADR-GRP-006, ADR-GRP-007, ADR-GRP-009, ADR-GRP-010, ADR-GRP-013, ADR-GRD-001, ADR-GRD-002, ADR-GRD-003, ADR-GRD-004, SPIKE-GRP-001, US-GRD-018, US-GRD-019]
+tags: [deteccion, atribucion, claude-code, sesiones, procesos, transcripts, privacidad, nfr-08, seguridad, autoria, co-authored-by, br-26]
 ---
 
 # ADR-GRP-012 — Detección de sesiones de Claude Code sin hooks propios
@@ -182,3 +182,94 @@ Origen: primer dogfooding real (2026-10-06). `raptor events` mostró 3 commits d
 **Límite conocido**: la condición "proceso vivo durante la ventana del lote" se aproxima con la sesión presente y activa en el detector en el momento de atribuir. El escaneo S1 retira las sesiones cuyo proceso terminó.
 
 Implementación: `Detector::single_session` (`crates/core/src/detect/mod.rs`), `attribute_one` y `inferred_agent` (`crates/core/src/daemon/sessions.rs`). Tests: casos de 0, 1 y 2 sesiones, sesión registrada e inactiva en `detect/tests.rs`; ida y vuelta de la evidencia en `daemon/sessions.rs`; contrato en `api/src/messages.rs`; texto y JSON en `apps/cli/src/events.rs`.
+
+## Enmienda (2026-10-06, autoría de commits: BR-26 / US-GRD-018 / US-GRD-019)
+
+Origen: decisión de Rene Bonilla (2026-10-06). GitRaptor acepta commits de personas y de agentes. **Modelo por defecto**: el autor del commit es la persona y el agente va como trailer `Co-Authored-By`, porque los permisos y las credenciales de Git son del usuario y el agente actúa con ellos. Variantes por repo en Guardrails: `agents-commit` (el agente puede hacer commits y se exige el trailer), `human-author` (el agente no hace commits: bloquear o avisar según la política) y `flexible` (solo registrar). El PO las recoge como **BR-26** (D6 del documento de negocio; no es la D6 de Guardrails), **BR-AUTH-005** de Guardrails, **US-GRD-018** (la política) y **US-GRD-019** (quién ejecutó frente a a nombre de quién, y la validación de la pista). **Decisión del orquestador (2026-10-06), validada por el Arquitecto.** No cambia las señales, la regla de combinación, el ciclo de vida ni los valores del actor (Q34, Q35). El `status` sigue en `accepted`. El modelo de datos está en ADR-GRP-013, Enmienda (2026-10-06, autoría declarada).
+
+### 1. Quién ejecutó y a nombre de quién entra
+
+Son dos preguntas distintas, con fuentes distintas, y el motor no las mezcla:
+
+| | **Quién ejecutó** (observación) | **A nombre de quién entra** (autoría declarada) |
+|---|---|---|
+| Fuente | Proceso, sesión y worktree: S1 a S4 y el registro (este ADR) | El objeto commit: autor, committer y trailers `Co-Authored-By` |
+| Valor | El actor de ADR-GRP-013 § 2 (agente con origen o "sin atribuir") y la pista `inferred` | Identidades de Git tal como las declara el commit, como texto no confiable (SEC-12). Un co-autor reconocido como agente lleva además su tipo |
+| Quién lo fija | El motor, por observación | Quien hace el commit: el mensaje y la identidad los escribe él |
+| Para qué sirve | Atribución, correcciones, Time Machine (ADR-TMC-005) y el actor de Guardrails | Mostrar la autoría, validar la pista (§ 2) y las reglas de autoría de Guardrails (§ 4) |
+
+- **La autoría declarada nunca es evidencia de atribución.** Un trailer de un agente no asigna el evento a ninguna sesión, y un autor persona no se la quita. Las evidencias siguen siendo S2b, S3, S4 y el registro (regla de combinación, punto 2). Cualquiera puede escribir un trailer.
+- **No introduce el valor "humano".** El autor declarado es una identidad de Git (nombre y correo), no un valor del actor. Los clientes dicen "commit de <nombre>", nunca "humano" (Q34).
+- **Agentes reconocidos en el trailer**: los reconoce el adaptador de cada agente con una tabla versionada de identidades conocidas, con el mismo aislamiento que el adaptador de transcripts. Un co-autor no reconocido queda como identidad sin tipo.
+
+### 2. La pista `inferred` frente al trailer
+
+> ⚠️ **Pendiente de la política de autoría (BR-26 / US-GRD-018), no ratificada.** Mientras tanto la pista sigue en `main` como la dejó la Enmienda (2026-10-06, carrera S3): solo en `raptor events`, sin efecto en la Time Machine ni en Guardrails y sin contar como atribución. Lo que sigue es el comportamiento objetivo, que entra con US-GRD-019.
+
+Al observar el evento, si su commit nuevo se puede leer, el motor compara la pista con los trailers de agente del commit:
+
+| Trailers de agente en el commit | Estado de la pista | Qué se muestra |
+|---|---|---|
+| Uno del **mismo agente** que la sesión de la pista | `confirmed` | "sin atribuir; inferido: Claude Code (confirmado por el trailer)" |
+| Ninguno | `unconfirmed` | Lo de hoy: "sin atribuir; inferido: Claude Code" |
+| Solo de **otro** agente | `contradicted` | **No se muestra la pista**: el contrato omite `inferred` y queda la autoría declarada ("commit de <persona> con <otro agente>") |
+
+- **Confirmada no es atribuida.** El actor sigue "sin atribuir": el trailer lo escribe quien hace el commit y no prueba qué proceso lo ejecutó. Si una pista confirmada pasa a ser atribución lo decide el PO o Rene con BR-26; en ese caso se enmienda la regla de combinación de este ADR.
+- **Ante la contradicción, no se infiere.** Dos señales débiles que no coinciden no se resuelven a favor de ninguna. La evidencia guarda `contradicted` para la métrica de la pista de SPIKE-GRP-001; el contrato no lo expone.
+- **Con `human-author` no hay pista.** Allí el agente no hace commits: el humano los hace desde el worktree del agente, que suele tener su única sesión activa, así que la pista señalaría al agente casi siempre. El motor no la registra si la política efectiva del repo al observar es `human-author`.
+- **Con `agents-commit` (también el valor por defecto, sin política configurada) o `flexible`**, la pista se registra y se valida según la tabla.
+- **De dónde sale la política**: de la configuración efectiva (ADR-GRP-007, ADR-GRD-004), aunque los hooks no estén instalados. Se toma al observar porque los eventos no se reescriben (ADR-GRP-013 § 4): cambiar la política después no reescribe pistas antiguas.
+- **S4 la vuelve innecesaria**: con los hooks de Guardrails instalados, el hook corre dentro del `git` y da el actor sin carrera (ADR-GRD-003 § 4), así que el caso `NoSighting` sin S4 desaparece en los commits gobernados.
+
+```mermaid
+flowchart TD
+  A["Evento de Git sin sesión: S3 NoSighting, sin S4 ni registro"] --> B{"¿Una sola sesión, detectada y activa, en el worktree?"}
+  B -- "No" --> X["Sin pista"]
+  B -- "Sí" --> C{"¿Política efectiva human-author?"}
+  C -- "Sí" --> X
+  C -- "No" --> D{"Trailers de agente del commit"}
+  D -- "Del mismo agente" --> E["Pista confirmed"]
+  D -- "Ninguno" --> F["Pista unconfirmed"]
+  D -- "Solo de otro agente" --> G["contradicted: se guarda en la evidencia y no se expone"]
+```
+
+### 3. Cómo se muestra (Cockpit y `raptor events`)
+
+Historia dueña: US-GRD-019. Para un evento que crea un commit, la línea junta las dos respuestas cuando difieren:
+
+- **Forma base**: "commit de <autor> con <agente> · <worktree>", donde `<autor>` es el autor declarado y `<agente>`, los co-autores reconocidos como agente. Sin trailer de agente: "commit de <autor> · <worktree>".
+- **Lo que añade la observación** va detrás, solo si aporta algo: "· ejecutado por Claude Code (detectado)" cuando el actor es un agente que no figura como co-autor; "· sin atribuir" o "· sin atribuir; inferido: …" según el § 2. Si el actor es el mismo agente que el co-autor, no se repite.
+- **Ejemplos**:
+  - Actor Claude Code (detectado) con su trailer: "commit de Rene Bonilla con Claude Code · feat-login".
+  - Sin atribuir, pista confirmada: "commit de Rene Bonilla con Claude Code · feat-login · sin atribuir; inferido: Claude Code (confirmado por el trailer)".
+  - Actor Claude Code (detectado) sin trailer: "commit de Rene Bonilla · feat-login · ejecutado por Claude Code (detectado)".
+- Nombres, correos y worktrees son texto no confiable (SEC-12) y se limpian antes de mostrarlos (ADR-GRP-005 § 5). El Cockpit aplica la misma regla donde muestra eventos de commit; el actor por commit en el grafo sigue pendiente (ADR-GRP-013, Enmienda Cockpit).
+
+### 4. Qué hace el motor en cada variante
+
+| Variante | Detección y pista (este ADR) | Guardrails (capa de hooks) |
+|---|---|---|
+| `agents-commit` (por defecto, también sin política configurada, BR-AUTH-005) | Pista registrada y validada (§ 2) | Si el actor del hook es un agente y el commit no lleva su `Co-Authored-By` reconocido, no se ejecuta ("trailer exigido"). Solo actúa con los hooks instalados; no forma parte del mínimo seguro de ADR-GRD-003 § 2 y el suelo del equipo puede cambiar la variante |
+| `human-author` | **Sin pista** | Si el actor del hook es un agente: deniega o avisa, según la política. Con el actor "sin atribuir", no actúa |
+| `flexible` | Pista registrada y validada | Ninguna decisión: solo queda la autoría declarada en el evento |
+
+- **Dónde se evalúa**: en la capa de hooks de ADR-GRD-001, con la matriz del commit de ADR-GRD-002 § 1. `pre-commit` ya conoce el actor, así que `human-author` puede cortar antes de que se escriba el mensaje. `commit-msg` ve los trailers, para `agents-commit`. `reference-transaction` en `prepared` es la segunda línea, la que `--no-verify` no salta: lee autor, committer y trailers de los commits del rango.
+- **Qué evalúa**: reglas nuevas de autoría en `crates/policy`, añadidas sin cambiar el contrato (ADR-GRD-003 § 1 y § 7). Reciben la autoría declarada como hechos de contenido y el actor de ADR-GRD-003 § 4: la ascendencia desde el hook, que es la señal S4 y no tiene carrera.
+- **Choque con ADR-GRD-003 § 1** ("El actor no cambia la decisión", Q-GRD-1): `agents-commit` y `human-author` son las primeras reglas cuya condición lee el actor. No eximen a nadie de otra regla y solo endurecen, así que se mantiene el fail-safe de Q-GRD-1. Aun así, el texto de ADR-GRD-003 § 1 hay que enmendarlo con US-GRD-018. Hasta entonces estas reglas no existen y no hay contradicción vigente.
+- **Ante la duda, no se bloquea**: con el actor "sin atribuir" ninguna regla de autoría deniega. Eso incluye a un agente no detectado ni registrado y al modo degradado de ADR-GRD-003 § 4, donde el actor siempre es "sin atribuir". Bloquear en la duda bloquearía commits humanos (BR-EDGE-004). **Residuo declarado**: en esos casos un agente escapa a `agents-commit` y `human-author`, y el modo degradado pierde estas reglas aunque estén en el suelo legible. La garantía de ADR-GRD-003 § 4 se enmienda con US-GRD-018 para declararlo.
+- **"Avisar"**: el contrato de ADR-GRD-003 § 3 solo tiene `allow`, `ask` y `deny`. La forma del aviso que deja pasar el commit la fija la Dev Spec de US-GRD-018, sin cambiar el orden `deny > ask > allow`.
+- **Registro**: el registro de decisiones (ADR-GRD-006) nunca guarda el mensaje de commit (ADR-GRD-003 § 1, M-06). De la autoría guarda solo lo que usa la regla: el tipo de agente del trailer y si estaba.
+
+### 5. Validación (con US-GRD-018 y US-GRD-019)
+
+- **Pista**: los estados `confirmed`, `unconfirmed` y `contradicted` (este último sin `inferred` en el contrato); con `human-author`, sin pista; cambiar la política después no reescribe la evidencia de eventos anteriores.
+- **Autoría sin efecto en la atribución**: un commit sin sesión con un trailer falso de Claude Code sigue "sin atribuir" y sin pista. Una prueba de propiedades con trailers y autores aleatorios comprueba que el actor resuelto no cambia.
+- **Guardrails**, en repos temporales: con `human-author`, un commit de Claude Code se deniega (o avisa) y un commit humano en el worktree del agente pasa. Con `agents-commit`, un commit de Claude Code sin trailer se deniega y con trailer pasa. `--no-verify` lo cubre `reference-transaction`. En modo degradado, ninguna regla de autoría deniega y la causa queda en el spool.
+
+### 6. Para las Dev Specs de US-GRD-018 y US-GRD-019
+
+- La tabla versionada de identidades de agente en trailers, por adaptador.
+- De dónde sale la identidad del autor en `pre-commit` y `commit-msg`, y qué commits se leen en eventos con varios (rebase, cherry-pick de un rango, merge).
+- La clave de configuración, sus niveles (suelo de equipo, personal) y el efecto por defecto de cada variante (ADR-GRP-007, ADR-GRD-004).
+- La forma del aviso, las cadenas en/es, el JSON de `raptor events` y la presentación en el Cockpit.
+- Las enmiendas de ADR-GRD-003 § 1 (actor como condición de las reglas de autoría) y § 4 (garantía del modo degradado).

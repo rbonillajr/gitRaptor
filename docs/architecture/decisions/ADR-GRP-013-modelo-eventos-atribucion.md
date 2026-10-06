@@ -6,12 +6,12 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-05
+updated: 2026-10-06
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
-related: [ADR-GRP-005, ADR-GRP-006, ADR-GRP-010, ADR-GRP-012, ADR-GRD-006, ADR-GRD-007, ADR-CKP-001, ADR-CKP-002, CTX-GRP-001, BR-GRP-001]
-tags: [motor-local, eventos, sesiones, atribucion, correccion, huecos, append-only, modelo-de-datos, auditoria, no-repudio, seguridad]
+related: [ADR-GRP-005, ADR-GRP-006, ADR-GRP-010, ADR-GRP-012, ADR-GRD-003, ADR-GRD-006, ADR-GRD-007, ADR-CKP-001, ADR-CKP-002, CTX-GRP-001, BR-GRP-001, US-GRD-018, US-GRD-019]
+tags: [motor-local, eventos, sesiones, atribucion, correccion, huecos, append-only, modelo-de-datos, auditoria, no-repudio, seguridad, autoria, co-authored-by]
 ---
 
 # ADR-GRP-013 — Modelo persistido de eventos, sesiones y atribución
@@ -228,3 +228,20 @@ Decisión del orquestador (2026-10-05), validada por el Arquitecto y el PO. Deta
 | **Evidencia guardada** de un evento atribuido por registro: `{"signals":["registration"]}`, solo para la sesión de un "otro agente" creada por registro y única presente en el worktree | § 1, § 3 |
 | La **identidad del proceso que se registra** (nota de integración) entra con US-MCP-006 como columna anulable de la sesión: un cambio aditivo del esquema | Nota de integración |
 | El **aviso de cambio de atribución** (`attribution.changed`) sigue declarado para US-GRP-010; una confirmación se publica hoy como `session.state` de la misma sesión con su nuevo actor | § 6 |
+
+## Enmienda (2026-10-06, autoría declarada)
+
+Derivada de la Enmienda (2026-10-06, autoría de commits: BR-26 / US-GRD-018 / US-GRD-019) de [ADR-GRP-012](./ADR-GRP-012-deteccion-sesiones-claude-code.md), que separa **quién ejecutó** (la observación) de **a nombre de quién entra** el commit (autor, committer y trailer `Co-Authored-By`). **Decisión del orquestador (2026-10-06), validada por el Arquitecto.** No cambia la resolución de la atribución (§ 2), la asignación de sesión (§ 3) ni la semántica de `actor`: añade al evento un dato declarado, junto a la atribución observada y separado de ella. El `status` sigue en `accepted`. Entra con US-GRD-019 (dueña de la presentación y de la validación de la pista); la pista que valida sigue **pendiente de la política de autoría (BR-26 / US-GRD-018), no ratificada**.
+
+| Cambio | Dónde |
+|---|---|
+| **Autoría declarada** en los eventos que crean un commit: autor y committer (nombre y correo) y los trailers `Co-Authored-By` (nombre, correo y tipo de agente si el adaptador lo reconoce, ADR-GRP-012). Se lee del commit nuevo al observar, igual que las fechas de Git que § 4 ya guarda como metadatos, y es inmutable como el evento. Nunca se guarda el mensaje de commit | § 1 (Evento), § 4 |
+| **Separada de la atribución**: no entra en el actor (§ 2), ni en la asignación de sesión (§ 3), ni en las correcciones o sus retiros. Una corrección cambia el actor y no toca la autoría declarada. Que un trailer nombre a un agente nunca crea, confirma ni corrige una sesión | § 2, § 3 |
+| **Evidencia de la pista** de ADR-GRP-012: `{"signals":["single-session"],"session":"<id>","trailer":"confirmed\|unconfirmed\|contradicted"}`. Sin pista si la política efectiva al observar es `human-author`. Un evento anterior sin `trailer` se lee como `unconfirmed` | § 1 (Evento) |
+| **Contrato**: `GitEventView` gana un campo opcional de autoría declarada (autor, committer y co-autores con tipo de agente opcional), todo marcado como no confiable (SEC-12). `InferredAgent` gana el estado (`confirmed` o `unconfirmed`); con `contradicted` el contrato omite `inferred`. Es un cambio aditivo con el versionado del protocolo (ADR-GRP-005 § 5). Los nombres exactos de los campos los fija la Dev Spec de US-GRD-019 | § 6 |
+| **Vista MCP** (Enmienda 2026-10-05, MCP): solo el tipo de agente de los co-autores reconocidos; ni nombres, ni correos, ni el texto de los trailers. ⚠️ **ASSUMPTION** conservadora (SEC-12, ADR-MCP-001), a revisar con la US del MCP que la necesite | § 6 |
+| **Privacidad**: nombres y correos ya están en el repo; el perfil es local (ADR-GRP-006) y no guarda más que estos campos | § 1 |
+
+**Por qué un dato aparte y no una variante del actor**: el actor responde quién ejecutó con evidencia observada, y sus dos variantes (agente con origen o "sin atribuir") sostienen Q34, BR-EDGE-004 y las correcciones de Q37. La autoría la escribe quien hace el commit y se puede falsear. Mezclarla con el actor rompería la regla "ante la duda, sin atribuir". Como dato aparte, la Time Machine (ADR-TMC-005) sigue usando solo el actor, y Guardrails lee las dos cosas sin confundirlas (ADR-GRP-012, Enmienda § 4).
+
+**Validación añadida**: la autoría declarada de un commit sobrevive a un reinicio del daemon; una corrección de la sesión cambia el actor y deja intacta la autoría; la prueba de propiedades del punto 11 incluye autores y trailers aleatorios y el actor resuelto sigue siendo un agente con origen o "sin atribuir", el mismo que sin ellos; la vista MCP no lleva nombres ni correos.
