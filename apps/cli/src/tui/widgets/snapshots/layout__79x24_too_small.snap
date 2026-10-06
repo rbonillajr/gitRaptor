@@ -1,0 +1,136 @@
+---
+source: apps/cli/src/tui/widgets/tests.rs
+expression: "snapshot(story, full_ascii)"
+---
+=== text (unicode) ===
+
+
+
+
+
+
+
+
+
+
+        ⚠  The Cockpit needs at least 80x24. Make the terminal larger.
+
+                                    q quit
+
+
+
+
+
+
+
+
+
+
+
+=== styles (truecolor, unicode) ===
+10:8-9 fg=#d29922
+12:36-36 fg=#2dc2ad BOLD
+=== styles (256, unicode) ===
+10:8-9 fg=@172
+12:36-36 fg=@43 BOLD
+=== styles (16, unicode) ===
+10:8-9 fg=Yellow
+12:36-36 fg=Cyan BOLD
+=== styles (no-color, unicode) ===
+10:8-9 BOLD
+12:36-36 BOLD
+=== styles (high-contrast, unicode) ===
+0:0-78 fg=#ffffff bg=#000000
+1:0-78 fg=#ffffff bg=#000000
+2:0-78 fg=#ffffff bg=#000000
+3:0-78 fg=#ffffff bg=#000000
+4:0-78 fg=#ffffff bg=#000000
+5:0-78 fg=#ffffff bg=#000000
+6:0-78 fg=#ffffff bg=#000000
+7:0-78 fg=#ffffff bg=#000000
+8:0-78 fg=#ffffff bg=#000000
+9:0-78 fg=#ffffff bg=#000000
+10:0-7 fg=#ffffff bg=#000000
+10:8-9 fg=#ffe066 bg=#000000
+10:10-78 fg=#ffffff bg=#000000
+11:0-78 fg=#ffffff bg=#000000
+12:0-35 fg=#ffffff bg=#000000
+12:36-36 fg=#7ee8d8 bg=#000000 BOLD
+12:37-78 fg=#ffffff bg=#000000
+13:0-78 fg=#ffffff bg=#000000
+14:0-78 fg=#ffffff bg=#000000
+15:0-78 fg=#ffffff bg=#000000
+16:0-78 fg=#ffffff bg=#000000
+17:0-78 fg=#ffffff bg=#000000
+18:0-78 fg=#ffffff bg=#000000
+19:0-78 fg=#ffffff bg=#000000
+20:0-78 fg=#ffffff bg=#000000
+21:0-78 fg=#ffffff bg=#000000
+22:0-78 fg=#ffffff bg=#000000
+23:0-78 fg=#ffffff bg=#000000
+=== text (ascii) ===
+
+
+
+
+
+
+
+
+
+
+        [!] The Cockpit needs at least 80x24. Make the terminal larger.
+
+                                    q quit
+
+
+
+
+
+
+
+
+
+
+
+=== styles (truecolor, ascii) ===
+10:8-10 fg=#d29922
+12:36-36 fg=#2dc2ad BOLD
+=== styles (256, ascii) ===
+10:8-10 fg=@172
+12:36-36 fg=@43 BOLD
+=== styles (16, ascii) ===
+10:8-10 fg=Yellow
+12:36-36 fg=Cyan BOLD
+=== styles (no-color, ascii) ===
+10:8-10 BOLD
+12:36-36 BOLD
+=== styles (high-contrast, ascii) ===
+0:0-78 fg=#ffffff bg=#000000
+1:0-78 fg=#ffffff bg=#000000
+2:0-78 fg=#ffffff bg=#000000
+3:0-78 fg=#ffffff bg=#000000
+4:0-78 fg=#ffffff bg=#000000
+5:0-78 fg=#ffffff bg=#000000
+6:0-78 fg=#ffffff bg=#000000
+7:0-78 fg=#ffffff bg=#000000
+8:0-78 fg=#ffffff bg=#000000
+9:0-78 fg=#ffffff bg=#000000
+10:0-7 fg=#ffffff bg=#000000
+10:8-10 fg=#ffe066 bg=#000000
+10:11-78 fg=#ffffff bg=#000000
+11:0-78 fg=#ffffff bg=#000000
+12:0-35 fg=#ffffff bg=#000000
+12:36-36 fg=#7ee8d8 bg=#000000 BOLD
+12:37-78 fg=#ffffff bg=#000000
+13:0-78 fg=#ffffff bg=#000000
+14:0-78 fg=#ffffff bg=#000000
+15:0-78 fg=#ffffff bg=#000000
+16:0-78 fg=#ffffff bg=#000000
+17:0-78 fg=#ffffff bg=#000000
+18:0-78 fg=#ffffff bg=#000000
+19:0-78 fg=#ffffff bg=#000000
+20:0-78 fg=#ffffff bg=#000000
+21:0-78 fg=#ffffff bg=#000000
+22:0-78 fg=#ffffff bg=#000000
+23:0-78 fg=#ffffff bg=#000000
