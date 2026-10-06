@@ -4,7 +4,7 @@ expression: "snapshot(story, full_ascii)"
 ---
 === text (unicode) ===
 ┏━ › Agents ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃     Agent          Branch                 Files Sync        Activity         ┃
+┃     Agent          Branch                       Files Sync        Activity   ┃
 ┃     No agents yet. Start one in a worktree of this repo.                     ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 === styles (truecolor, unicode) ===
@@ -14,9 +14,9 @@ expression: "snapshot(story, full_ascii)"
 1:0-0 fg=#ffe066
 1:6-10 fg=#949494 BOLD
 1:21-26 fg=#949494 BOLD
-1:44-48 fg=#949494 BOLD
-1:50-53 fg=#949494 BOLD
-1:62-69 fg=#949494 BOLD
+1:50-54 fg=#949494 BOLD
+1:56-59 fg=#949494 BOLD
+1:68-75 fg=#949494 BOLD
 1:79-79 fg=#ffe066
 2:0-0 fg=#ffe066
 2:6-57 fg=#949494
@@ -29,9 +29,9 @@ expression: "snapshot(story, full_ascii)"
 1:0-0 fg=@221
 1:6-10 fg=@246 BOLD
 1:21-26 fg=@246 BOLD
-1:44-48 fg=@246 BOLD
-1:50-53 fg=@246 BOLD
-1:62-69 fg=@246 BOLD
+1:50-54 fg=@246 BOLD
+1:56-59 fg=@246 BOLD
+1:68-75 fg=@246 BOLD
 1:79-79 fg=@221
 2:0-0 fg=@221
 2:6-57 fg=@246
@@ -44,9 +44,9 @@ expression: "snapshot(story, full_ascii)"
 1:0-0 fg=LightYellow
 1:6-10 fg=DarkGray BOLD
 1:21-26 fg=DarkGray BOLD
-1:44-48 fg=DarkGray BOLD
-1:50-53 fg=DarkGray BOLD
-1:62-69 fg=DarkGray BOLD
+1:50-54 fg=DarkGray BOLD
+1:56-59 fg=DarkGray BOLD
+1:68-75 fg=DarkGray BOLD
 1:79-79 fg=LightYellow
 2:0-0 fg=LightYellow
 2:6-57 fg=DarkGray
@@ -57,9 +57,9 @@ expression: "snapshot(story, full_ascii)"
 1:0-0 BOLD | REVERSED
 1:6-10 BOLD | DIM
 1:21-26 BOLD | DIM
-1:44-48 BOLD | DIM
-1:50-53 BOLD | DIM
-1:62-69 BOLD | DIM
+1:50-54 BOLD | DIM
+1:56-59 BOLD | DIM
+1:68-75 BOLD | DIM
 1:79-79 BOLD | REVERSED
 2:0-0 BOLD | REVERSED
 2:6-57 DIM
@@ -74,13 +74,13 @@ expression: "snapshot(story, full_ascii)"
 1:6-10 fg=#c6c6c6 bg=#000000 BOLD
 1:11-20 fg=#ffffff bg=#000000
 1:21-26 fg=#c6c6c6 bg=#000000 BOLD
-1:27-43 fg=#ffffff bg=#000000
-1:44-48 fg=#c6c6c6 bg=#000000 BOLD
-1:49-49 fg=#ffffff bg=#000000
-1:50-53 fg=#c6c6c6 bg=#000000 BOLD
-1:54-61 fg=#ffffff bg=#000000
-1:62-69 fg=#c6c6c6 bg=#000000 BOLD
-1:70-78 fg=#ffffff bg=#000000
+1:27-49 fg=#ffffff bg=#000000
+1:50-54 fg=#c6c6c6 bg=#000000 BOLD
+1:55-55 fg=#ffffff bg=#000000
+1:56-59 fg=#c6c6c6 bg=#000000 BOLD
+1:60-67 fg=#ffffff bg=#000000
+1:68-75 fg=#c6c6c6 bg=#000000 BOLD
+1:76-78 fg=#ffffff bg=#000000
 1:79-79 fg=#ffe066 bg=#000000
 2:0-0 fg=#ffe066 bg=#000000
 2:1-5 fg=#ffffff bg=#000000
@@ -90,7 +90,7 @@ expression: "snapshot(story, full_ascii)"
 3:0-79 fg=#ffe066 bg=#000000
 === text (ascii) ===
 #= > Agents ===================================================================#
-#      Agent          Branch        Files Sync        Activity                 #
+#      Agent          Branch                      Files Sync        Activity   #
 #      No agents yet. Start one in a worktree of this repo.                    #
 #==============================================================================#
 === styles (truecolor, ascii) ===
@@ -100,9 +100,9 @@ expression: "snapshot(story, full_ascii)"
 1:0-0 fg=#ffe066
 1:7-11 fg=#949494 BOLD
 1:22-27 fg=#949494 BOLD
-1:36-40 fg=#949494 BOLD
-1:42-45 fg=#949494 BOLD
-1:54-61 fg=#949494 BOLD
+1:50-54 fg=#949494 BOLD
+1:56-59 fg=#949494 BOLD
+1:68-75 fg=#949494 BOLD
 1:79-79 fg=#ffe066
 2:0-0 fg=#ffe066
 2:7-58 fg=#949494

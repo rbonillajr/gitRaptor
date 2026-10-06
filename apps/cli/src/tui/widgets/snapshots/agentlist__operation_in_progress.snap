@@ -4,9 +4,9 @@ expression: "snapshot(story, full_ascii)"
 ---
 === text (unicode) ===
 ┏━ › Agents ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃     Agent          Branch                 Files Sync        Activity         ┃
+┃     Agent          Branch                       Files Sync        Activity   ┃
 ┃› ●  claude-1       rebasing onto main 0:42  c cancel                         ┃
-┃  ◐  claude-2       feat/lexer             ~3    ↑2 ↓0       2 min ago        ┃
+┃  ◐  claude-2       feat/lexer                   ~3    ↑2 ↓0       2 min ago  ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 === styles (truecolor, unicode) ===
 0:0-4 fg=#ffe066
@@ -15,9 +15,9 @@ expression: "snapshot(story, full_ascii)"
 1:0-0 fg=#ffe066
 1:6-10 fg=#949494 BOLD
 1:21-26 fg=#949494 BOLD
-1:44-48 fg=#949494 BOLD
-1:50-53 fg=#949494 BOLD
-1:62-69 fg=#949494 BOLD
+1:50-54 fg=#949494 BOLD
+1:56-59 fg=#949494 BOLD
+1:68-75 fg=#949494 BOLD
 1:79-79 fg=#ffe066
 2:0-0 fg=#ffe066
 2:1-1 fg=#ffe066 bg=#303030
@@ -36,8 +36,8 @@ expression: "snapshot(story, full_ascii)"
 3:0-0 fg=#ffe066
 3:3-3 fg=#949494
 3:6-13 fg=#56b4e9 BOLD
-3:44-45 fg=#d29922
-3:62-70 fg=#949494
+3:50-51 fg=#d29922
+3:68-76 fg=#949494
 3:79-79 fg=#ffe066
 4:0-79 fg=#ffe066
 === styles (256, unicode) ===
@@ -47,9 +47,9 @@ expression: "snapshot(story, full_ascii)"
 1:0-0 fg=@221
 1:6-10 fg=@246 BOLD
 1:21-26 fg=@246 BOLD
-1:44-48 fg=@246 BOLD
-1:50-53 fg=@246 BOLD
-1:62-69 fg=@246 BOLD
+1:50-54 fg=@246 BOLD
+1:56-59 fg=@246 BOLD
+1:68-75 fg=@246 BOLD
 1:79-79 fg=@221
 2:0-0 fg=@221
 2:1-1 fg=@221 bg=@236
@@ -68,8 +68,8 @@ expression: "snapshot(story, full_ascii)"
 3:0-0 fg=@221
 3:3-3 fg=@246
 3:6-13 fg=@74 BOLD
-3:44-45 fg=@172
-3:62-70 fg=@246
+3:50-51 fg=@172
+3:68-76 fg=@246
 3:79-79 fg=@221
 4:0-79 fg=@221
 === styles (16, unicode) ===
@@ -79,9 +79,9 @@ expression: "snapshot(story, full_ascii)"
 1:0-0 fg=LightYellow
 1:6-10 fg=DarkGray BOLD
 1:21-26 fg=DarkGray BOLD
-1:44-48 fg=DarkGray BOLD
-1:50-53 fg=DarkGray BOLD
-1:62-69 fg=DarkGray BOLD
+1:50-54 fg=DarkGray BOLD
+1:56-59 fg=DarkGray BOLD
+1:68-75 fg=DarkGray BOLD
 1:79-79 fg=LightYellow
 2:0-0 fg=LightYellow
 2:1-1 fg=LightYellow bg=DarkGray
@@ -100,8 +100,8 @@ expression: "snapshot(story, full_ascii)"
 3:0-0 fg=LightYellow
 3:3-3 fg=DarkGray
 3:6-13 fg=Cyan BOLD
-3:44-45 fg=Yellow
-3:62-70 fg=DarkGray
+3:50-51 fg=Yellow
+3:68-76 fg=DarkGray
 3:79-79 fg=LightYellow
 4:0-79 fg=LightYellow
 === styles (no-color, unicode) ===
@@ -109,9 +109,9 @@ expression: "snapshot(story, full_ascii)"
 1:0-0 BOLD | REVERSED
 1:6-10 BOLD | DIM
 1:21-26 BOLD | DIM
-1:44-48 BOLD | DIM
-1:50-53 BOLD | DIM
-1:62-69 BOLD | DIM
+1:50-54 BOLD | DIM
+1:56-59 BOLD | DIM
+1:68-75 BOLD | DIM
 1:79-79 BOLD | REVERSED
 2:0-1 BOLD | REVERSED
 2:2-5 REVERSED
@@ -127,7 +127,7 @@ expression: "snapshot(story, full_ascii)"
 3:0-0 BOLD | REVERSED
 3:3-3 DIM
 3:6-13 BOLD
-3:62-70 DIM
+3:68-76 DIM
 3:79-79 BOLD | REVERSED
 4:0-79 BOLD | REVERSED
 === styles (high-contrast, unicode) ===
@@ -139,13 +139,13 @@ expression: "snapshot(story, full_ascii)"
 1:6-10 fg=#c6c6c6 bg=#000000 BOLD
 1:11-20 fg=#ffffff bg=#000000
 1:21-26 fg=#c6c6c6 bg=#000000 BOLD
-1:27-43 fg=#ffffff bg=#000000
-1:44-48 fg=#c6c6c6 bg=#000000 BOLD
-1:49-49 fg=#ffffff bg=#000000
-1:50-53 fg=#c6c6c6 bg=#000000 BOLD
-1:54-61 fg=#ffffff bg=#000000
-1:62-69 fg=#c6c6c6 bg=#000000 BOLD
-1:70-78 fg=#ffffff bg=#000000
+1:27-49 fg=#ffffff bg=#000000
+1:50-54 fg=#c6c6c6 bg=#000000 BOLD
+1:55-55 fg=#ffffff bg=#000000
+1:56-59 fg=#c6c6c6 bg=#000000 BOLD
+1:60-67 fg=#ffffff bg=#000000
+1:68-75 fg=#c6c6c6 bg=#000000 BOLD
+1:76-78 fg=#ffffff bg=#000000
 1:79-79 fg=#ffe066 bg=#000000
 2:0-0 fg=#ffe066 bg=#000000
 2:1-1 fg=#ffe066 bg=#0b3d91
@@ -166,18 +166,18 @@ expression: "snapshot(story, full_ascii)"
 3:3-3 fg=#c6c6c6 bg=#000000
 3:4-5 fg=#ffffff bg=#000000
 3:6-13 fg=#56b4e9 bg=#000000 BOLD
-3:14-43 fg=#ffffff bg=#000000
-3:44-45 fg=#ffe066 bg=#000000
-3:46-61 fg=#ffffff bg=#000000
-3:62-70 fg=#c6c6c6 bg=#000000
-3:71-78 fg=#ffffff bg=#000000
+3:14-49 fg=#ffffff bg=#000000
+3:50-51 fg=#ffe066 bg=#000000
+3:52-67 fg=#ffffff bg=#000000
+3:68-76 fg=#c6c6c6 bg=#000000
+3:77-78 fg=#ffffff bg=#000000
 3:79-79 fg=#ffe066 bg=#000000
 4:0-79 fg=#ffe066 bg=#000000
 === text (ascii) ===
 #= > Agents ===================================================================#
-#      Agent          Branch        Files Sync        Activity                 #
+#      Agent          Branch                      Files Sync        Activity   #
 #> *   claude-1       rebasing onto main 0:42  c cancel                        #
-#  ~   claude-2       feat/lexer    ~3    +2 -0       2 min ago                #
+#  ~   claude-2       feat/lexer                  ~3    +2 -0       2 min ago  #
 #==============================================================================#
 === styles (truecolor, ascii) ===
 0:0-4 fg=#ffe066
@@ -186,9 +186,9 @@ expression: "snapshot(story, full_ascii)"
 1:0-0 fg=#ffe066
 1:7-11 fg=#949494 BOLD
 1:22-27 fg=#949494 BOLD
-1:36-40 fg=#949494 BOLD
-1:42-45 fg=#949494 BOLD
-1:54-61 fg=#949494 BOLD
+1:50-54 fg=#949494 BOLD
+1:56-59 fg=#949494 BOLD
+1:68-75 fg=#949494 BOLD
 1:79-79 fg=#ffe066
 2:0-0 fg=#ffe066
 2:1-1 fg=#ffe066 bg=#303030
@@ -207,7 +207,7 @@ expression: "snapshot(story, full_ascii)"
 3:0-0 fg=#ffe066
 3:3-3 fg=#949494
 3:7-14 fg=#56b4e9 BOLD
-3:36-37 fg=#d29922
-3:54-62 fg=#949494
+3:50-51 fg=#d29922
+3:68-76 fg=#949494
 3:79-79 fg=#ffe066
 4:0-79 fg=#ffe066

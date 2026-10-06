@@ -62,8 +62,8 @@ fn status_bar(
         connection_label: t(label),
         protection: Some(t("main protected")),
         requester: t(requester),
-        conflicts: 2,
-        blocked: 1,
+        conflicts: Some(2),
+        blocked: Some(1),
     }
 }
 
@@ -166,6 +166,29 @@ fn agents_unavailable(area: Rect, buf: &mut Buffer, s: &Styles) {
     let a = row(0, "claude-1", AgentState::Active, "feat/parser");
     let b = row(1, "claude-2", AgentState::Unavailable, "feat/lexer");
     agent_list(vec![a, b], Some(1), true).render(area, buf, s);
+}
+
+/// The fleet of a repo as US-CKP-001 shows it: worktrees without a session and an activity the
+/// engine does not publish yet.
+fn agents_no_agent(area: Rect, buf: &mut Buffer, s: &Styles) {
+    let mut main = row(0, "Unattributed (you/other)", AgentState::NoAgent, "main");
+    main.changes = 0;
+    main.activity = t("not available");
+    let mut a = row(1, "claude-1", AgentState::Active, "feat-pagos");
+    a.sync = Sync::Known {
+        ahead: 3,
+        behind: 1,
+    };
+    a.activity = t("not available");
+    let mut b = row(
+        2,
+        "Unattributed (you/other)",
+        AgentState::NoAgent,
+        "feat-docs",
+    );
+    b.sync = Sync::Unknown(t("no base"));
+    b.activity = t("not available");
+    agent_list(vec![main, a, b], Some(1), true).render(area, buf, s);
 }
 
 fn agents_empty(area: Rect, buf: &mut Buffer, s: &Styles) {
@@ -767,7 +790,15 @@ pub fn stories() -> Vec<Story> {
             "acting as claude-1"
         )
         .render(a, b, s)),
+        story!("StatusBar", "counts not published", 80, 1, |a, b, s| {
+            let mut m = status_bar(Connection::Live, "live", "you");
+            m.protection = None;
+            m.conflicts = None;
+            m.blocked = None;
+            m.render(a, b, s)
+        }),
         story!("AgentList", "mixed states", 80, 7, agents_mixed),
+        story!("AgentList", "fleet without agents", 80, 6, agents_no_agent),
         story!(
             "AgentList",
             "ninth agent reuses color",

@@ -128,8 +128,12 @@ pub struct StatusBarModel {
     pub protection: Option<SafeText>,
     /// Who is acting: the developer or "acting as claude-1" (US-CKP-019).
     pub requester: SafeText,
-    pub conflicts: u32,
-    pub blocked: u32,
+    /// `None`: the engine does not publish the count yet; painted as [`Glyphs::unknown`]
+    /// ("not available"), never as a zero that was not counted (BR-CKP-CALC-001).
+    ///
+    /// [`Glyphs::unknown`]: crate::tui::style::Glyphs::unknown
+    pub conflicts: Option<u32>,
+    pub blocked: Option<u32>,
 }
 
 impl Component for StatusBarModel {
@@ -146,7 +150,9 @@ impl Component for StatusBarModel {
         let danger = styles.fg(ColorToken::StatusDanger).patch(bar);
         let conflict = styles.symbol(SymbolToken::Conflict);
         let blocked = styles.symbol(SymbolToken::Blocked);
-        let (c, b) = (self.conflicts.to_string(), self.blocked.to_string());
+        let count =
+            |n: Option<u32>| n.map_or_else(|| styles.glyphs.unknown.to_owned(), |n| n.to_string());
+        let (c, b) = (count(self.conflicts), count(self.blocked));
         let counts = u16::from(conflict.width)
             + 1
             + width(&c)
