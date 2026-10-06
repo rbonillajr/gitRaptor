@@ -155,6 +155,8 @@ pub(crate) enum Control {
     Guard {
         common_dir: std::path::PathBuf,
         request: GuardRequest,
+        /// Past it the caller was already told it failed: the loop must not act any more.
+        deadline: std::time::Instant,
         reply: SyncSender<GuardReply>,
     },
     /// One page of a repo's Git events (US-GRP-002).
@@ -255,6 +257,7 @@ impl ShutdownHandle {
             .send(Control::Guard {
                 common_dir,
                 request,
+                deadline: std::time::Instant::now() + GUARD_TIMEOUT - Duration::from_secs(5),
                 reply,
             })
             .is_err()

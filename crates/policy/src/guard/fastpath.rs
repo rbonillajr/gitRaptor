@@ -112,11 +112,12 @@ pub fn split_ref_update(line: &str) -> Option<(Value<'_>, Value<'_>, &str)> {
     Some((value(old, true)?, value(new, true)?, name))
 }
 
-/// One `pre-push` line: the remote ref and the local value.
+/// One `pre-push` line: the remote ref and the local value. The three last fields are fixed;
+/// the local side is whatever Git wrote, spaces included (`main@{1 day ago}`).
 pub fn split_push_update(line: &str) -> Option<(Value<'_>, &str, Value<'_>)> {
-    let mut f = line.split(' ');
-    let (Some(local_ref), Some(local), Some(remote_ref), Some(remote), None) =
-        (f.next(), f.next(), f.next(), f.next(), f.next())
+    let mut f = line.rsplitn(4, ' ');
+    let (Some(remote), Some(remote_ref), Some(local), Some(local_ref)) =
+        (f.next(), f.next(), f.next(), f.next())
     else {
         return None;
     };
@@ -220,7 +221,8 @@ pub fn deletes_a_branch(input: &[u8], common: &Path, max_line: usize) -> bool {
         Some((old, new, name)) => {
             new == Value::Zero
                 && (name.starts_with("refs/heads/") || is_head(name))
-                && old != Value::Symbolic
+                // Removing a symbolic `HEAD` itself moves no branch; a symbolic branch does.
+                && !(is_head(name) && old == Value::Symbolic)
                 && !is_prune(old, new, name, common)
         }
     })
