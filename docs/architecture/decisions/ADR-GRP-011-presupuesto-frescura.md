@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-05
+updated: 2026-10-06
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
@@ -210,3 +210,15 @@ Aplicada desde la [Dev Spec de INF-GRP-002](../../requirements/features/motor-lo
 | **Deuda deliberada**: en CI no bloquea una regresión que respete los techos de regresión pero rompa los 300 ms. Hasta tener un runner dedicado, el banco corre con `--gate reference` en el Mac de referencia antes de cada release → [TD-GRP-003](../../requirements/features/motor-local/technical-stories/TD-GRP-003-nfr04-maquina-referencia.md) | § 4, Máquinas de referencia | TD-GRP-003 |
 
 Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
+
+## Enmienda (2026-10-06, US-CKP-001): escenario `tui-modify`
+
+Aplicada desde la [Dev Spec de US-CKP-001](../../requirements/features/cockpit/dev-specs/US-CKP-001-flota-en-vivo.md) (D4). **Decisión del orquestador (2026-10-06), validada por el Arquitecto.** El banco mide la frescura de punta a punta hasta la pantalla (criterio 6 del hito M1).
+
+| Cambio | Detalle |
+|---|---|
+| **Escenario `tui-modify`** | La `App` real del Cockpit (colas, hilo del canal, `update`, `view`) sobre `TestBackend` 120×40, conectada al daemon aislado del banco por el canal real. Cada muestra escribe el archivo del banco en `wt-3` (`t0`) y avanza la TUI hasta que el frame pintado muestra el nuevo recuento (`t_render`, `metrics.last_render_ns`). Con las mismas condiciones que el resto: perfil H (100K commits) y 10 worktrees. `--only tui-modify` lo corre solo |
+| **Presupuesto de punta a punta** | NFR-04: 500 ms p95, más el exceso de holgura del temporizador. Falla en `--gate reference` (con la regla "no apta") y en `--gate ci` solo se reporta |
+| **Etapa del Cockpit** | `t_client_recv` → `t_render` ≤ 100 ms p95 (ADR-GRP-011 E2). Falla en los dos modos: es trabajo de CPU sobre `TestBackend` y no depende de la holgura del runner |
+| **Regresión en `ci`** | Techo por runner con la confirmación 2 de 3. ⚠️ **Provisional** hasta calibrarlo con tres corridas por runner: los techos de `modify` más 100 ms (`TUI_MODIFY` en `REGRESSION_CEILINGS`) |
+| **Dónde corre** | Igual que el banco: Linux en cada PR y macOS en `main`, en el nightly y bajo demanda. El workflow no cambia |

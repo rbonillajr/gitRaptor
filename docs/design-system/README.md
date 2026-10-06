@@ -3,9 +3,9 @@ id: DSYS-GRP-001
 title: GitRaptor Design System
 type: design-system
 status: draft
-version: 0.6
+version: 0.7
 date: 2026-10-01
-updated: 2026-10-05
+updated: 2026-10-06
 owner: Rene Bonilla
 related: [BRD-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-004, ADR-CKP-003]
 tags: [design-system, design-tokens, tui, cli, ratatui, accessibility, theming, mvp]
@@ -16,6 +16,7 @@ changelog:
   - 0.4 (2026-10-05): Enmienda de TS-CKP-004: `focus.default`, `agent.state.*`, símbolo `info`, gate de contraste del tema de alto contraste y tokens implementados.
   - 0.5 (2026-10-05): Enmienda de TS-CKP-005: componentes implementados, glifos estructurales fuera de los tokens, foco por forma y galería.
   - 0.6 (2026-10-05): Paleta A («Grafito y teal») decidida por Rene Bonilla; variante para terminal clara de cada token, detección del fondo (OSC 11, `COLORFGBG`) y `--theme light|dark|high-contrast`. Cierra § 8.1 y § 8.2.
+  - 0.7 (2026-10-06): Enmienda de US-CKP-001: fila sin agente, columnas de AgentList que crecen hasta su texto, "–" para un recuento que el motor no publica, y profundidad de color y símbolos detectados del entorno.
 ---
 
 # GitRaptor Design System
@@ -262,3 +263,21 @@ Anchura real de los símbolos y la galería en Linux y Windows: **Pendiente: eta
 - **Galería**: `cargo run -p gitraptor-theme --example palette` pinta los tokens en la terminal; con `-- --html`, la misma galería en HTML.
 
 Detección del fondo en Linux y en Windows (consola y Windows Terminal; en Windows hoy no se consulta y se usa `COLORFGBG` u oscura): **Pendiente: etapa de validación multiplataforma**.
+
+---
+
+## Enmienda (2026-10-06, US-CKP-001)
+
+**Decisión del orquestador (2026-10-06), validada por Arquitecto y PO**, al componer la primera pantalla ([Dev Spec de US-CKP-001](../requirements/features/cockpit/dev-specs/US-CKP-001-flota-en-vivo.md), D2 y D3). No cambia la paleta ni los tokens; amplía tres componentes de § 3 y fija la detección de § 6.
+
+| Cambio | Componente o sección |
+|---|---|
+| **Fila sin agente**: un worktree sin sesión presente no lleva símbolo de estado y su nombre, atenuado, dice quién actúa: "Tú u otro (sin atribuir)" / "Unattributed (you/other)", nunca "humano" (BR-CKP-CONS-003). Si el motor no puede decir si hay sesiones, "agente no disponible", nunca "sin agente" | AgentList / AgentRow |
+| **Columnas que crecen**: el nombre (de 14 a 26 columnas) y la actividad (de 11 a 14) se ajustan al texto más ancho de todas las filas, no solo de las visibles, para que no salten al hacer scroll; la rama conserva al menos 12. Las columnas ⚡ y ⛔ solo ocupan sitio cuando alguna fila tiene una marca | AgentList |
+| **"No disponible" no es cero**: un recuento que el motor no publica (los ⚡ y ⛔ de la cabecera hoy) se pinta `–` (fallback ASCII `-`), que significa "no disponible" (BR-CKP-CALC-001). El guion es un glifo estructural del juego que elige `SymbolSet`, como `…` | StatusBar; `Glyphs::unknown` |
+| **Profundidad y símbolos detectados**: sin color con `--no-color`, `NO_COLOR` no vacío o `TERM=dumb`; truecolor con `COLORTERM=truecolor` o `24bit`; 256 colores con un `TERM` acabado en `256color`; si no, 16. Símbolos ASCII con `--ascii` o con una locale (`LC_ALL` > `LC_CTYPE` > `LANG`) que no sea UTF-8, `C` y `POSIX` incluidas. ⚠️ **ASSUMPTION**: sin ninguna locale, Unicode. Una variable vacía cuenta como ausente. La lógica es pura en `crates/theme` (`color_mode`, `symbol_set`) | § 6 |
+
+- **`--theme`, `--no-color` y `--ascii`** están cableados en `raptor` y `raptor tui`. El tema se resuelve antes de que arranque el lector de eventos de la TUI, para que la respuesta OSC 11 no se lea como teclas (cierra el pendiente de TS-CKP-004).
+- **Snapshots de la pantalla**: la flota se fija en 80×24 y 120×40, en terminal oscura y clara (`apps/cli/src/tui/snapshots/fleet_*`). El texto es el mismo en las dos y solo cambian los colores.
+
+Detección de la locale y de la profundidad en Linux y Windows: **Pendiente: etapa de validación multiplataforma**.

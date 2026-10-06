@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
-updated: 2026-10-05
+updated: 2026-10-06
 deciders: [Orquestador (delegación de Rene Bonilla, 2026-10-04)]
 domain: GRP
 feature: cockpit
@@ -87,6 +87,7 @@ La TUI y la CLI usan la biblioteca cliente de `crates/api` (TS-GRP-004). Encima 
 - **`resync` del daemon** (SEC-08, cliente lento): mismo camino que un hueco. Mientras dura, la vista conserva lo último aplicado, marcado como desactualizado.
 - **Reconexión**: al perder el canal, la réplica se conserva marcada "desconectado desde hh:mm" y nunca se presenta como actual. El cliente reintenta con espera exponencial (⚠️ **ASSUMPTION**: de 250 ms a un máximo de 5 s, sin límite de intentos mientras la TUI esté abierta). Cada reconexión rehace handshake e instantánea; el MVP no reanuda desde una secuencia.
 - **Cambio de repo** (Q-CKP-1): baja de la suscripción del repo anterior, instantánea y suscripción del nuevo.
+- **Enmienda (2026-10-06, US-CKP-001): sesiones del repo.** La instantánea del ámbito repo (N1) trae los worktrees, pero no las sesiones de agente. Tras la instantánea y la suscripción del repo, el hilo del canal pide `sessions.list {repo_id, include_ended: false}` y lo entrega a la cola del motor. `update` fusiona esa lista y cada `session.state` con un único upsert por sesión: gana el `state_since` posterior y, si empatan, la Terminada. Converge en cualquier orden, porque la lista se pide después de suscribirse desde `N+1`. Cada instantánea nueva (hueco, `resync`, reconexión, cambio de repo) vacía las sesiones y las vuelve a pedir. Sin la lista, o con `detection_available: false`, el agente es "no disponible". **Decisión del orquestador (2026-10-06), validada por Arquitecto.** Deuda: incluir las sesiones en la instantánea del repo cuando se toque el contrato, **dueño: TS-GRP-004**.
 
 | Estado de conexión | Qué ve el desarrollador (BR-CKP-WF-004) | Escrituras |
 |---|---|---|
@@ -129,6 +130,7 @@ La TUI y la CLI usan la biblioteca cliente de `crates/api` (TS-GRP-004). Encima 
 - Ambos con el helper de reloj monótono de `crates/api` (ADR-GRP-011 § 3). Nunca se devuelven al motor y nunca salen de la máquina (NFR-03).
 - **Histograma local** en memoria por etapa (decodificar, aplicar, pintar) y total. Se ve en un panel de diagnóstico de la TUI y, con `--timings` (nombre provisional), se imprime al salir. La TUI no escribe el perfil.
 - **Gate de CI sin pantalla**: el arnés de INF-GRP-002 conduce la misma `App` (colas, `update`, `view`) sobre `TestBackend`, conectada al daemon real del banco. Gates en Validación V3.
+- **Enmienda (2026-10-06, US-CKP-001)**: el gate con el daemon real es el escenario `tui-modify` del banco INF-GRP-002. Mide "modificar un archivo" de punta a punta, de `t0` al `t_render` del frame que muestra el cambio (NFR-04: 500 ms p95, más el exceso de holgura del temporizador), y la etapa propia de la TUI (100 ms p95). Los 100 ms fallan en todos los modos: son trabajo de CPU sobre `TestBackend`. Los 500 ms fallan en `reference` y en `ci` solo se reportan; allí bloquea el techo de regresión, confirmado 2 de 3. `App` expone `metrics.last_render_ns` como marca final. **Decisión del orquestador (2026-10-06), validada por Arquitecto.**
 
 ### 7. Layout 80×24 y prioridades (Q-CKP-18, BR-CKP-EDGE-005)
 

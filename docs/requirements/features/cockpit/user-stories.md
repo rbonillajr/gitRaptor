@@ -42,7 +42,7 @@ blocked:
 
 | ID | Título | Ola | Prioridad | Arranque (enablers y enmiendas) | Status |
 |----|--------|-----|-----------|----------------------------------|--------|
-| [US-CKP-001](./user-stories/US-CKP-001-flota-en-vivo.md) | El desarrollador ve en vivo qué agente trabaja en cada worktree de un repo | 0 | Must | INF-CKP-001, TS-CKP-004, TS-GRP-004 (DEP-CKP-6), TS-CKP-005 | expanded |
+| [US-CKP-001](./user-stories/US-CKP-001-flota-en-vivo.md) | El desarrollador ve en vivo qué agente trabaja en cada worktree de un repo | 0 | Must | INF-CKP-001, TS-CKP-004, TS-GRP-004 (DEP-CKP-6), TS-CKP-005 | implemented ([DS](./dev-specs/US-CKP-001-flota-en-vivo.md)); macOS. Pendiente: etapa de validación multiplataforma |
 | [US-CKP-002](./user-stories/US-CKP-002-orden-atencion-terminadas.md) | La lista pone primero lo que pide atención y no se llena de sesiones viejas | 1 | Must | DEP-CKP-4, TS-CKP-005 | expanded |
 | [US-CKP-003](./user-stories/US-CKP-003-estados-motor-conexion.md) | La TUI dice en qué estado está el motor y qué hacer en cada caso | 1 | Must | DEP-CKP-12 (solo el autoarranque), TS-CKP-005 | expanded |
 | [US-CKP-004](./user-stories/US-CKP-004-selector-repo-preferencias.md) | El desarrollador cambia de repo y la TUI recuerda cómo la dejó | 2 | Should | DEP-CKP-11, TS-CKP-005 | expanded |
