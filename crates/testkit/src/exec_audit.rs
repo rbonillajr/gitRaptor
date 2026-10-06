@@ -172,8 +172,11 @@ fn exe_name(name: &str) -> String {
     format!("{name}{}", std::env::consts::EXE_SUFFIX)
 }
 
+/// A hard link where it is safe, a copy otherwise. On Windows a hard link shares the DACL of the
+/// test binary, and a build folder under `C:\` lets Authenticated Users modify it: the resolver
+/// would rightly refuse the shim (SEC-10). A copy takes the DACL of its private folder.
 fn link_or_copy(from: &Path, to: &Path) {
-    if std::fs::hard_link(from, to).is_err() {
+    if cfg!(windows) || std::fs::hard_link(from, to).is_err() {
         std::fs::copy(from, to).expect("copy test binary");
     }
 }

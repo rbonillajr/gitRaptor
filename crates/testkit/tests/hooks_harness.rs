@@ -393,8 +393,9 @@ mod repo_intact {
                 let v = at
                     .value
                     .as_ref()
-                    .map(|v| (v.scope.as_str(), v.value.as_str()));
-                if v != Some(("local", ours.to_str().unwrap())) {
+                    .map(|v| (v.scope.as_str(), Path::new(&v.value)));
+                // As paths: on Windows the value has `/` and `ours` has `\`.
+                if v != Some(("local", ours.as_path())) {
                     return Err(format!("{}: hooksPath {v:?}", at.worktree.display()));
                 }
             }
@@ -652,8 +653,9 @@ mod repo_intact {
                 matches!(report.outcome("key:during"), Some(Outcome::Broken { .. })),
                 "{report}"
             );
-            // The report names the scenario, the cut point, the path and the kind of change.
-            let text = report.to_string();
+            // The report names the scenario, the cut point, the path and the kind of change. Its
+            // paths have the separator of the OS.
+            let text = report.to_string().replace('\\', "/");
             assert!(text.contains("cut sweep 'no recovery'"), "{text}");
             assert!(
                 text.contains("folder-rename:after: FAILED")
@@ -777,7 +779,11 @@ mod repo_intact {
             f.add_coverage_blocker(CoverageBlocker::Include);
             let v = f.hooks_path_state()[0].value.clone().unwrap();
             assert_eq!(v.scope, "local");
-            assert!(v.origin.ends_with("hooks.inc"), "{v:?}");
+            // Git quotes an origin with a backslash (`file:"C:\\…\\hooks.inc"`, on Windows).
+            assert!(
+                v.origin.trim_end_matches('"').ends_with("hooks.inc"),
+                "{v:?}"
+            );
 
             let f = Fixture::with_commit(&git());
             f.add_coverage_blocker(CoverageBlocker::IncludeIfOnbranch);
