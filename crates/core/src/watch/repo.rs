@@ -509,6 +509,9 @@ struct Task {
     window: Option<(Instant, u64, bool)>,
     last_event_ms: i64,
     next_poll: Instant,
+    /// A `HEAD` reflog grew alone in the last flush: its window was
+    /// extended once.
+    heads_deferred: bool,
 }
 
 pub(super) fn run(
@@ -527,6 +530,7 @@ pub(super) fn run(
         window: None,
         last_event_ms: wall_now().0,
         next_poll: Instant::now() + config.backup_poll,
+        heads_deferred: false,
     };
     let len = config.window.saturating_sub(config.timer_slack);
     loop {
@@ -657,12 +661,25 @@ impl Task {
         // checkout of the same branch) still tells the Time Machine the
         // engine saw it.
         let heads_changed = new.head_logs() != self.view.head_logs();
-        let send = !events.is_empty()
+        let others = !events.is_empty()
             || !created.is_empty()
             || !gone.is_empty()
             || gap.is_some()
-            || refs_changed
-            || heads_changed;
+            || refs_changed;
+        // A `HEAD` reflog that grew alone is often a `git` half-way: it
+        // appends to the reflog before it renames the ref. The window is
+        // extended once, from the same first event, so the commit and its
+        // reflog come in one batch (and the S3 sample of that first event
+        // still covers it); if it is still alone, it is sent.
+        if heads_changed && !others && !self.heads_deferred {
+            self.heads_deferred = true;
+            let config = self.shared.config;
+            let len = config.window.saturating_sub(config.timer_slack);
+            self.window = Some((Instant::now() + len, marks.t_recv, overflow_from.is_some()));
+            return;
+        }
+        self.heads_deferred = false;
+        let send = others || heads_changed;
         let head_logs = new.head_logs();
         self.view = new;
         // Their tasks stop before the batch that says they are gone, so no
