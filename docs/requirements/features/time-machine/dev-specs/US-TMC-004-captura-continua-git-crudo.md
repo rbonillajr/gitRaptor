@@ -35,7 +35,7 @@ Plano compacto de [US-TMC-004](../user-stories/US-TMC-004-captura-continua-git-c
 | `crates/core/src/timemachine/engine.rs` (nuevo) | `EngineLink` (marca, calma por estado, eventos de Git crudo de un worktree, generación), `RepoMarks`, `GitState` (guarda) y `generation_floor` |
 | `crates/core/src/profile/store.rs`, `crates/core/src/timemachine/oplog/{mod,stack}.rs` | `RepoStore::last_seq` y `generation` (en `store_meta`); `Oplog::last_seq`; `undo_stack_in` con las filas de otra generación delante de todo evento |
 | `crates/core/src/executor/mod.rs` | `RunEnv.engine_mark` (marca en calma o `git-busy`) y `RunEnv.after_step` (ancla) |
-| `crates/core/src/channel/bus.rs`, `crates/api/src/lib.rs` | Protocolo 7: un cliente anterior no recibe eventos `reset` (ni por suscripción ni en `events.history`) |
+| `crates/core/src/channel/bus.rs`, `crates/api/src/lib.rs`, `docs/architecture/design/api-contract-ipc.md` | Protocolo 8: un cliente anterior no recibe eventos `reset` (ni por suscripción ni en `events.history`) |
 | `crates/core/src/timemachine/continuous.rs` (nuevo) | El servicio de captura continua: disparadores, coalescencia, guarda de consistencia y anclas posteriores |
 | `crates/core/src/timemachine/store/capture.rs` | `CaptureRequest.still_valid`: la captura se descarta antes del punto de validez si deja de ser consistente (`CaptureError::Discarded`) |
 | `crates/core/src/timemachine/undo.rs` | El Git crudo entra en la pila; destino, actor y ámbito de un `GitEvent` |
@@ -92,7 +92,7 @@ Las escrituras de una operación de GitRaptor (undo incluido) también producen 
 
 ### 2.7 Contrato y pruebas
 
-- **Protocolo 7** (`API_VERSION` 7.0.0): el tipo `reset` es nuevo. Un cliente de protocolo 5 o 6 no lo sabría leer, así que no lo recibe ni por suscripción ni en `events.history`.
+- **Protocolo 8** (`API_VERSION` 8.0.0; la 7 es la de US-GRD-001): el tipo `reset` es nuevo. Un cliente de protocolo 5 a 7 no lo sabría leer, así que no lo recibe ni por suscripción ni en `events.history`.
 - `DaemonConfig.tm_capture` fija `Q`, `M`, una capa de fallos para los tests y si se omite el suelo de espacio libre; capa y suelo solo cuentan en builds con `debug_assertions` (mismo patrón que `tm_prior_layer`). El binario de debug lee `GITRAPTOR_TEST_TM_NO_FREE_SPACE_FLOOR=1` para el e2e. Los tests usan `Q` corto, nunca esperas fijas.
 
 ## 3. Decisiones
@@ -111,7 +111,7 @@ Todas son **Decisión del orquestador (2026-10-06), validada por el Arquitecto**
 | D8 | `ENOSPC` = captura fallida, sin cuota propia; suelo de espacio libre de SEC-TMC-12 antes de cada captura | La cuota y el hueco "sin espacio" los entrega US-TMC-022. El suelo evita que la captura llene el disco del usuario (ajuste 3 del Arquitecto) |
 | D9 | El e2e del criterio 3 atribuye el `reset` por la muestra S3, con un hook `reference-transaction` que mantiene vivo el `git` un momento | Es el mismo recurso que usan los tests de US-GRP-007 con un commit. El registro (US-GRP-009) solo atribuye a un "otro agente" registrado, no a Claude Code detectado |
 | D10 | Generación del almacén del motor en `store_meta` y frontera en la Time Machine | Sin ella, un almacén del motor recreado reinicia la secuencia y el destino de un evento podía ser una captura antigua (bloqueante B2) |
-| D11 | Protocolo 7 para el tipo `reset`, sin entregarlo a clientes anteriores | Un `raptor-mcp` o una CLI anteriores no saben leerlo (ajuste 4) |
+| D11 | Protocolo 8 para el tipo `reset`, sin entregarlo a clientes anteriores | Un `raptor-mcp` o una CLI anteriores no saben leerlo (ajuste 4) |
 
 ## 4. Plan de tests
 
@@ -154,4 +154,4 @@ Veredicto: **aprobada con ajustes**, con cuatro bloqueantes. Todo está incorpor
 3. **B3**: la marca de intención de toda operación protegida y de todo undo es en calma; sin calma, `git-busy` / `repo-busy` (§ 2.3).
 4. **B4**: el presupuesto del motor se verifica aquí, con el banco del motor y la captura activa (§ 5).
 
-No bloqueantes incorporados: ancla acotada y con el repo tomado (§ 2.5); el evento más reciente de un tipo no soportado da `raw-git-not-covered` (§ 2.6); suelo de espacio libre (D8); protocolo 7 (D11); enmiendas de ADR-TMC-003 y ADR-TMC-004; límites declarados (§ 6). D9 cambió al implementar: el registro no atribuye a Claude Code detectado, así que el e2e usa la muestra S3 como US-GRP-007.
+No bloqueantes incorporados: ancla acotada y con el repo tomado (§ 2.5); el evento más reciente de un tipo no soportado da `raw-git-not-covered` (§ 2.6); suelo de espacio libre (D8); protocolo 8 (D11); enmiendas de ADR-TMC-003 y ADR-TMC-004; límites declarados (§ 6). D9 cambió al implementar: el registro no atribuye a Claude Code detectado, así que el e2e usa la muestra S3 como US-GRP-007.
