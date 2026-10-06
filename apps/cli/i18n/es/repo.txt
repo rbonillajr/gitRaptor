@@ -1,0 +1,14 @@
+# Mensajes de `raptor` para el usuario, en español (NFR-10, ADR-GRP-003): repo.
+# Una línea `clave = texto`. Los marcadores son `{nombre}`; el código los
+# rellena por nombre, nunca concatenando. Toda clave existe también en ../en/repo.txt.
+
+repo.refused-agent = rechazado: solo el desarrollador puede cambiar los repos observados, no un agente ni un proceso lanzado por él
+repo.added = observando {path}
+repo.already-observed = ya se observaba: {path}
+repo.reactivated = observando de nuevo {path}
+repo.not-a-repo = {path} no es un repo Git
+repo.untrusted = Git no confía en {path} (safe.directory)
+repo.unreadable = no se pudo leer {path}
+repo.unknown = {path} no es un repo observado
+repo.retired = ya no se observa {path}
+repo.not-observed = {path} no se estaba observando

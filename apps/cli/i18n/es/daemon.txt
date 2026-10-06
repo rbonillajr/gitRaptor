@@ -1,0 +1,26 @@
+# Mensajes de `raptor` para el usuario, en español (NFR-10, ADR-GRP-003): daemon.
+# Una línea `clave = texto`. Los marcadores son `{nombre}`; el código los
+# rellena por nombre, nunca concatenando. Toda clave existe también en ../en/daemon.txt.
+
+daemon.stop.confirm = ¿Parar el motor de GitRaptor? La actividad de los agentes no se observará hasta que vuelva a arrancar. [s/N]
+daemon.stop.refused-agent = rechazado: solo el desarrollador puede parar el motor, no un agente ni un proceso lanzado por él
+daemon.stopped = parado (pid {pid})
+daemon.stop.timeout = el pid {pid} no paró en 10 s
+daemon.status.engine = motor: {state} (pid {pid}, protocolo {protocol})
+daemon.status.git = git: {version}
+daemon.status.git-missing = git: no encontrado
+daemon.enable.done = autoarranque al iniciar sesión activado: {artifact}
+daemon.enable.already = el autoarranque al iniciar sesión ya estaba activado: {artifact}
+daemon.enable.active = desde ahora el gestor de servicios del sistema arranca el motor, también en esta sesión
+daemon.enable.next-login = se aplica a partir de tu próximo inicio de sesión
+daemon.enable.not-installed = rechazado: {path} no es un GitRaptor instalado (npm, una caché de npx, una carpeta temporal, u otros usuarios pueden modificarlo); instala GitRaptor y ejecuta raptor daemon enable desde la copia instalada
+daemon.enable.no-manager = rechazado: el systemd de tu usuario no carga la unidad (no hay sesión de usuario, o lee otra carpeta); no quedó nada escrito
+daemon.disable.done = autoarranque al iniciar sesión desactivado; el motor en marcha sigue hasta que lo pares o cierres la sesión
+daemon.disable.already = el autoarranque al iniciar sesión ya estaba desactivado
+daemon.autostart.unsupported = este sistema no tiene un autoarranque compatible (launchd en macOS, systemd --user en Linux o Windows); el motor sigue arrancando cuando un cliente lo necesita
+daemon.autostart.failed = no se pudo cambiar el autoarranque: {error}
+
+# Códigos del contrato (ADR-CKP-003 § 4 N7): un mensaje por código.
+daemon.status.requester = actúas como: {actor} (capa {layer})
+daemon.status.requester-unverified = actúas como: desconocido (el motor no pudo verificar quién eres; las escrituras están desactivadas)
+daemon.status.autostart = autoarranque al iniciar sesión: {state}

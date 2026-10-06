@@ -1,0 +1,9 @@
+# User-facing messages of `raptor`, English (NFR-10, ADR-GRP-003): common.
+# One `key = text` per line. Placeholders are `{name}`; the code fills them
+# by name, never by concatenating. Every key exists in ../es/common.txt too.
+
+common.not-running = not running
+common.cancelled = cancelled
+common.confirm-needs-terminal = confirmation needs a terminal (or pass --yes)
+common.refused-terminal = refused: run it from your own terminal
+common.refused-unverified = refused: the engine could not verify who is asking

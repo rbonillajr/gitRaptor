@@ -1,0 +1,19 @@
+# User-facing messages of `raptor`, English (NFR-10, ADR-GRP-003): mcp.
+# One `key = text` per line. Placeholders are `{name}`; the code fills them
+# by name, never by concatenating. Every key exists in ../es/mcp.txt too.
+
+mcp.agent-unsupported = {agent} is not supported yet; use --agent claude-code
+mcp.not-installed = refused: GitRaptor is running from {path}, a temporary folder or an npx cache; install GitRaptor first and run raptor mcp install from the installed copy
+mcp.server-missing = refused: raptor-mcp was not found at {path}; reinstall GitRaptor
+mcp.server-unsafe = refused: other users can modify {path}; fix its permissions or reinstall GitRaptor
+mcp.claude-missing = Claude Code CLI not found; nothing was changed. Register the server yourself with:
+mcp.claude-changed = refused: the Claude Code CLI answered in a form this GitRaptor does not know; nothing was changed. Update GitRaptor, or run this command yourself:
+mcp.claude-failed = the Claude Code CLI failed (exit {code}); GitRaptor changed nothing else
+mcp.foreign = refused: a gitraptor server that is not this GitRaptor already exists in Claude Code; remove it with claude mcp remove gitraptor and install again
+mcp.foreign-uninstall = refused: the gitraptor server in Claude Code is not this GitRaptor's; remove it with claude mcp remove gitraptor if you want it gone
+mcp.install.plan = Registering the gitraptor MCP server in Claude Code for every project (user scope); your other MCP servers and your repos stay as they are. Running:
+mcp.install.done = gitraptor registered in Claude Code (user scope) → {path}
+mcp.install.already = gitraptor is already installed in Claude Code; nothing to do
+mcp.uninstall.plan = Removing the gitraptor MCP server from Claude Code (user scope); your other MCP servers stay as they are. Running:
+mcp.uninstall.done = gitraptor removed from Claude Code
+mcp.uninstall.absent = gitraptor is not installed in Claude Code; nothing to do

@@ -1,0 +1,31 @@
+# User-facing messages of `raptor`, English (NFR-10, ADR-GRP-003): status.
+# One `key = text` per line. Placeholders are `{name}`; the code fills them
+# by name, never by concatenating. Every key exists in ../es/status.txt too.
+
+status.none = no observed repos
+status.repo = {path}
+status.repo-unavailable = {path} (unavailable)
+status.worktree-main = main worktree {path}
+status.worktree-linked = worktree {path}
+status.branch = branch {name}
+status.unborn = branch {name} (no commits yet)
+status.detached = detached HEAD
+status.clean = no changes
+status.changes = {total} uncommitted changes: {staged} staged, {unstaged} not staged, {untracked} untracked
+status.change-staged = staged {kind} {path}
+status.change-unstaged = not staged {kind} {path}
+status.change-untracked = untracked {path}
+status.truncated = … and {more} more
+status.lists-dropped = file lists omitted: too many changes to send
+status.wt-missing = unavailable: folder not found
+status.wt-untrusted = unavailable: not trusted by Git (safe.directory)
+status.wt-unreadable = unavailable: could not be read
+status.base = base branch: {name}
+status.base-unconfirmed = base branch: {name} (unconfirmed)
+status.base-invalid = base branch: none (the team settings name an invalid branch)
+status.divergence = {ahead} ahead and {behind} behind {base}
+status.at-least = at least {count}
+status.no-divergence-base-missing = no ahead/behind: base branch "{base}" does not exist in the repo
+status.no-divergence-no-base = no ahead/behind: the repo has no base branch
+status.no-divergence-no-commits = no ahead/behind: the branch has no commits yet
+status.no-divergence-unreadable = no ahead/behind: could not read the worktree's commits
