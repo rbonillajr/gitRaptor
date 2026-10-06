@@ -26,6 +26,8 @@ clap = { version = "4", features = ["derive"] }
 gix = { version = "0.88", default-features = false, features = ["sha1", "status", "revision", "excludes", "dirwalk", "parallel"] }
 # Index of a seeded pack, regenerated in process (ADR-TMC-001 § 3); same version gix 0.88 uses.
 gix-pack = { version = "0.75", default-features = false, features = ["sha1", "streaming-input"] }
+# The Cockpit TUI (ADR-CKP-003 § 1): crossterm 0.29 backend, chosen by feature.
+ratatui = { version = "0.30.2", default-features = false, features = ["crossterm_0_29", "layout-cache"] }
 serde_json = "1"
 tempfile = "3"
 # Win32 calls of crates/winsys only (ADR-GRP-002); the version gix already brings in.
