@@ -32,6 +32,28 @@ impl Lang {
     }
 }
 
+/// How old the local copy of the remote is: the last fetch of the repo.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Fetched {
+    /// The engine does not publish it.
+    NotAvailable,
+    /// The repo was never fetched.
+    Never,
+    /// Age in milliseconds.
+    Ago(i64),
+}
+
+/// An age in the largest whole unit: seconds, minutes, hours or days.
+fn age(ms: i64) -> (i64, &'static str) {
+    let s = ms.max(0) / 1000;
+    match s {
+        0..60 => (s, "s"),
+        60..3_600 => (s / 60, "min"),
+        3_600..86_400 => (s / 3_600, "h"),
+        _ => (s / 86_400, "d"),
+    }
+}
+
 /// Every text the TUI paints.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Text<'a> {
@@ -41,7 +63,13 @@ pub enum Text<'a> {
     /// The fleet panel, with the reference of ahead/behind (BR-CKP-CALC-001).
     FleetTitle {
         base: Option<&'a SafeText>,
+        fetched: Fetched,
     },
+    /// The observed repos to choose from (the folder is in none of them).
+    PickTitle,
+    PickPrompt,
+    /// When something last happened, as an age in milliseconds (never negative).
+    Ago(i64),
     FleetEmpty,
     FleetWaiting,
     FleetNoRepo,
@@ -56,6 +84,11 @@ pub enum Text<'a> {
     AgentNotAvailable,
     ClaudeCode,
     OtherAgent,
+    /// The agent and the folder of its worktree, to tell apart agents of the same kind.
+    AgentInWorktree {
+        agent: &'a str,
+        worktree: &'a str,
+    },
     /// More than one present session in the worktree: the first one and how many more.
     AgentAndMore {
         name: &'a str,
@@ -79,6 +112,9 @@ pub enum Text<'a> {
     Notice(Notice),
     KeyQuit,
     KeyRetry,
+    KeyUp,
+    KeyDown,
+    KeyOpen,
     TooSmall {
         width: u16,
         height: u16,
@@ -100,10 +136,25 @@ fn en(text: Text<'_>) -> String {
         Text::Title => "GitRaptor".into(),
         Text::Repo(path) => format!("repo {path}"),
         Text::NoRepo => "no repo selected".into(),
-        Text::FleetTitle { base: Some(base) } => {
-            format!("Fleet · ↑↓ vs {base} (local copy, fetch age not available)")
+        Text::FleetTitle {
+            base: Some(base),
+            fetched,
+        } => {
+            let fetched = match fetched {
+                Fetched::NotAvailable => "fetch age not available".into(),
+                Fetched::Never => "never fetched".into(),
+                Fetched::Ago(ms) => format!("fetched {}", en(Text::Ago(ms))),
+            };
+            format!("Fleet · ↑↓ vs {base} (local copy, {fetched})")
         }
-        Text::FleetTitle { base: None } => "Fleet · no base branch".into(),
+        Text::FleetTitle { base: None, .. } => "Fleet · no base branch".into(),
+        Text::PickTitle => "Observed repos".into(),
+        Text::PickPrompt => "This folder is not in an observed repo: choose one.".into(),
+        Text::Ago(ms) if ms < 1000 => "just now".into(),
+        Text::Ago(ms) => {
+            let (n, unit) = age(ms);
+            format!("{n} {unit} ago")
+        }
         Text::FleetEmpty => "The engine publishes no worktree for this repo.".into(),
         Text::FleetWaiting => "Waiting for the engine…".into(),
         Text::FleetNoRepo => {
@@ -119,6 +170,7 @@ fn en(text: Text<'_>) -> String {
         Text::ClaudeCode => "Claude Code".into(),
         Text::OtherAgent => "other agent".into(),
         Text::AgentAndMore { name, more } => format!("{name} +{more}"),
+        Text::AgentInWorktree { agent, worktree } => format!("{agent} · {worktree}"),
         Text::Detached => "detached HEAD".into(),
         Text::NoBase => "no base".into(),
         Text::BaseMissing => "base absent".into(),
@@ -160,6 +212,9 @@ fn en(text: Text<'_>) -> String {
         Text::Notice(Notice::Retrying) => "reconnecting now…".into(),
         Text::KeyQuit => "quit".into(),
         Text::KeyRetry => "retry".into(),
+        Text::KeyUp => "up".into(),
+        Text::KeyDown => "down".into(),
+        Text::KeyOpen => "open".into(),
         Text::TooSmall { width, height } => {
             format!("Terminal too small ({width}×{height}): at least 80×24 is needed.")
         }
@@ -174,10 +229,25 @@ fn es(text: Text<'_>) -> String {
         Text::Title => "GitRaptor".into(),
         Text::Repo(path) => format!("repo {path}"),
         Text::NoRepo => "sin repo seleccionado".into(),
-        Text::FleetTitle { base: Some(base) } => {
-            format!("Flota · ↑↓ respecto a {base} (copia local, antigüedad no disponible)")
+        Text::FleetTitle {
+            base: Some(base),
+            fetched,
+        } => {
+            let fetched = match fetched {
+                Fetched::NotAvailable => "antigüedad no disponible".into(),
+                Fetched::Never => "sin fetch".into(),
+                Fetched::Ago(ms) => format!("fetch {}", es(Text::Ago(ms))),
+            };
+            format!("Flota · ↑↓ respecto a {base} (copia local, {fetched})")
         }
-        Text::FleetTitle { base: None } => "Flota · sin rama base".into(),
+        Text::FleetTitle { base: None, .. } => "Flota · sin rama base".into(),
+        Text::PickTitle => "Repos observados".into(),
+        Text::PickPrompt => "Esta carpeta no está en un repo observado: elige uno.".into(),
+        Text::Ago(ms) if ms < 1000 => "ahora".into(),
+        Text::Ago(ms) => {
+            let (n, unit) = age(ms);
+            format!("hace {n} {unit}")
+        }
         Text::FleetEmpty => "El motor no publica ningún worktree de este repo.".into(),
         Text::FleetWaiting => "Esperando al motor…".into(),
         Text::FleetNoRepo => {
@@ -193,6 +263,7 @@ fn es(text: Text<'_>) -> String {
         Text::ClaudeCode => "Claude Code".into(),
         Text::OtherAgent => "otro agente".into(),
         Text::AgentAndMore { name, more } => format!("{name} +{more}"),
+        Text::AgentInWorktree { agent, worktree } => format!("{agent} · {worktree}"),
         Text::Detached => "HEAD separado".into(),
         Text::NoBase => "sin base".into(),
         Text::BaseMissing => "falta base".into(),
@@ -236,6 +307,9 @@ fn es(text: Text<'_>) -> String {
         Text::Notice(Notice::Retrying) => "reconectando ahora…".into(),
         Text::KeyQuit => "salir".into(),
         Text::KeyRetry => "reintentar".into(),
+        Text::KeyUp => "subir".into(),
+        Text::KeyDown => "bajar".into(),
+        Text::KeyOpen => "abrir".into(),
         Text::TooSmall { width, height } => {
             format!("Terminal demasiado pequeña ({width}×{height}): hacen falta al menos 80×24.")
         }

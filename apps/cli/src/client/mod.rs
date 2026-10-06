@@ -48,6 +48,11 @@ pub trait Connector: Send + 'static {
 pub trait Link: Send {
     /// Who the daemon sees on this connection, from the handshake (N5).
     fn requester(&self) -> Option<ConnectionRequester>;
+    /// Whether the connection has a capability (ADR-GRP-016 § 1). A link that cannot tell has
+    /// none of them.
+    fn has(&self, _capability: &str) -> bool {
+        false
+    }
     /// A request and its answer.
     fn call(&mut self, method: &str, params: Value) -> Result<Value, LinkError>;
     /// The next message, waiting up to `timeout`; `None` on timeout.
@@ -85,7 +90,14 @@ pub enum LinkError {
 /// Commands for the channel thread.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LinkCmd {
-    Resync { scope: Scope, resubscribe: bool },
+    Resync {
+        scope: Scope,
+        resubscribe: bool,
+    },
+    /// Show this repo, chosen because the folder is in none (kept across reconnections).
+    Open {
+        repo_id: String,
+    },
     Reconnect,
     Shutdown,
 }
@@ -137,6 +149,8 @@ fn run(
     cmds: &Receiver<LinkCmd>,
 ) {
     let mut attempt: u32 = 0;
+    // The repo the developer chose (or the only one) when the folder is in none.
+    let mut chosen: Option<String> = None;
     loop {
         let state = if attempt == 0 {
             ConnState::Connecting
@@ -147,7 +161,7 @@ fn run(
             return;
         }
         let failure = match connector.connect() {
-            Ok(mut link) => match session(link.as_mut(), cwd.as_ref(), out, cmds) {
+            Ok(mut link) => match session(link.as_mut(), cwd.as_ref(), &mut chosen, out, cmds) {
                 Ok(End::Shutdown) | Err(Closed) => return,
                 Ok(End::Reconnect) => {
                     attempt = 0;
@@ -177,6 +191,7 @@ fn run(
         match cmds.recv_timeout(backoff(attempt)) {
             Ok(LinkCmd::Shutdown) | Err(RecvTimeoutError::Disconnected) => return,
             Ok(LinkCmd::Reconnect) => attempt = 0,
+            Ok(LinkCmd::Open { repo_id }) => chosen = Some(repo_id),
             Ok(LinkCmd::Resync { .. }) | Err(RecvTimeoutError::Timeout) => {}
         }
     }
@@ -198,19 +213,30 @@ fn send_state(out: &Outlet, state: ConnState) -> Result<(), Closed> {
 fn session(
     link: &mut dyn Link,
     cwd: Option<&PathBuf>,
+    chosen: &mut Option<String>,
     out: &Outlet,
     cmds: &Receiver<LinkCmd>,
 ) -> Result<End, Closed> {
     let requester = link.requester().map(|r| present::ingest::requester(&r));
     out.send(Msg::Conn(ConnEvent::Requester(requester)))?;
+    out.send(Msg::Conn(ConnEvent::Activity(
+        link.has(methods::CAP_SCOPE_ACTIVITY.name),
+    )))?;
     send_state(out, ConnState::Syncing)?;
     if sync(link, &Scope::Global, true, out)?.is_err() {
         return Ok(End::Reconnect);
     }
-    if let Some(repo_id) = cwd.and_then(|path| locate(link, path))
-        && sync(link, &Scope::Repo { repo_id }, true, out)?.is_err()
+    match cwd
+        .and_then(|path| locate(link, path))
+        .or_else(|| chosen.clone())
     {
-        return Ok(End::Reconnect);
+        Some(repo_id) => {
+            if sync(link, &Scope::Repo { repo_id }, true, out)?.is_err() {
+                return Ok(End::Reconnect);
+            }
+        }
+        // `update` opens the only observed repo or lets the developer choose one.
+        None => out.send(Msg::Conn(ConnEvent::Unlocated))?,
     }
     send_state(out, ConnState::Live)?;
     loop {
@@ -220,6 +246,12 @@ fn session(
                 LinkCmd::Reconnect => return Ok(End::Reconnect),
                 LinkCmd::Resync { scope, resubscribe } => {
                     if sync(link, &scope, resubscribe, out)?.is_err() {
+                        return Ok(End::Reconnect);
+                    }
+                }
+                LinkCmd::Open { repo_id } => {
+                    *chosen = Some(repo_id.clone());
+                    if sync(link, &Scope::Repo { repo_id }, true, out)?.is_err() {
                         return Ok(End::Reconnect);
                     }
                 }

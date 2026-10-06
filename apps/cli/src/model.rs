@@ -46,6 +46,7 @@ impl Model {
                 ),
                 notice: None,
                 quit: false,
+                pick: Pick::None,
             },
             conn: ConnState::Connecting,
             now_ms: 0,
@@ -69,6 +70,19 @@ pub struct Ui {
     /// The answer to the last key, so every key changes something visible.
     pub notice: Option<Notice>,
     pub quit: bool,
+    /// Choosing the repo when the folder is in none of the observed ones.
+    pub pick: Pick,
+}
+
+/// The repo to show when the TUI starts outside every observed repo (dogfooding 2026-10-06).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pick {
+    /// The folder's repo, or none observed.
+    None,
+    /// Several observed repos: the developer chooses with ↑↓ and Enter.
+    Choosing { selected: usize },
+    /// One chosen (or the only one): its snapshot is on its way.
+    Opening,
 }
 
 /// Terminal size in cells.
@@ -97,6 +111,9 @@ pub struct EngineReplica {
     pub repo: Option<ScopeReplica<RepoView>>,
     /// Who the daemon sees on this connection (N5); UX only.
     pub requester: Option<Requester>,
+    /// The engine publishes the last activity and fetch (`scope.activity`); without it they
+    /// are "not available", never "never".
+    pub activity: bool,
 }
 
 impl EngineReplica {
@@ -152,8 +169,17 @@ pub struct GlobalView {
     pub git_version: Option<SafeText>,
     pub autostart: AutostartView,
     pub repo_count: usize,
+    /// The observed repos, in the engine's order, to choose one outside all of them.
+    pub repos: Vec<RepoChoice>,
     /// ⚡ and ⛔ of each observed repo; `None` while the engine does not count them.
     pub attention: Vec<RepoAttention>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RepoChoice {
+    pub repo_id: String,
+    pub name: SafeText,
+    pub path: SafeText,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -177,6 +203,8 @@ pub struct RepoView {
     pub worktrees: Vec<WorktreeRow>,
     /// Agent sessions of the repo, from `sessions.list` and then `session.state`.
     pub sessions: Vec<SessionRow>,
+    /// When the repo was last fetched (UTC ms); `None` if never (or not published).
+    pub fetched_ms: Option<i64>,
     /// Whether this system detects sessions (`sessions.list`); `None` until the list arrives.
     /// Without it the agent is "not available", never "no agent".
     pub detection: Option<bool>,
@@ -210,10 +238,14 @@ impl RepoView {
 pub struct WorktreeRow {
     /// Root of the worktree, to show.
     pub path: SafeText,
+    /// Folder name of the root: tells apart agents of the same kind.
+    pub name: SafeText,
     /// Hash of the raw root: sessions are matched on it, never on sanitized text.
     pub key: u64,
     pub main: bool,
     pub state: WorktreeState,
+    /// When the engine last saw it change (UTC ms); `None` while it has not.
+    pub last_activity_ms: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -338,6 +370,10 @@ pub enum ConnEvent {
     State(ConnState),
     /// The handshake ended; who the daemon sees (N5).
     Requester(Option<Requester>),
+    /// Whether the engine publishes the last activity and fetch (`scope.activity`).
+    Activity(bool),
+    /// The folder is in no observed repo (or there is no folder).
+    Unlocated,
 }
 
 /// Effects that `update` asks for; they run outside it.
@@ -351,5 +387,9 @@ pub enum Cmd {
     },
     /// Drop the connection and connect again now.
     Reconnect,
+    /// Show this repo (the folder is in none of the observed ones).
+    Open {
+        repo_id: String,
+    },
     Quit,
 }

@@ -3,10 +3,10 @@ source: apps/cli/src/tui/view.rs
 expression: snap
 ---
  shop · ✔ live · engine observing · acting as you                                                            ⚡ –  ⛔ –
-┏━ › Fleet · ↑↓ vs main (local copy, fetch age not available) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┏━ › Fleet · ↑↓ vs main (local copy, fetched 3 h ago) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 ┃     Agent                     Branch                                                 Files ↑↓          Activity      ┃
 ┃     Unattributed (you/other)  main                                                   ~0    ↑0 ↓0       not available ┃
-┃  ●  claude-1                  feat-pagos                                             ~2    ↑3 ↓1       not available ┃
+┃  ●  claude-1 · feat-pagos     feat-pagos                                             ~2    ↑3 ↓1       2 min ago     ┃
 ┃     Unattributed (you/other)  feat-docs                                              ~0    ↑1 ↓0       not available ┃
 ┃                                                                                                                      ┃
 ┃                                                                                                                      ┃
@@ -60,8 +60,8 @@ expression: snap
 0:118-118 fg=#f85149 bg=#3a3a3a BOLD
 0:119-119 bg=#3a3a3a
 1:0-4 fg=#ffe066
-1:5-60 fg=#ffe066 BOLD
-1:61-119 fg=#ffe066
+1:5-52 fg=#ffe066 BOLD
+1:53-119 fg=#ffe066
 2:0-0 fg=#ffe066
 2:6-10 fg=#949494 BOLD
 2:32-37 fg=#949494 BOLD
@@ -76,9 +76,9 @@ expression: snap
 3:119-119 fg=#ffe066
 4:0-0 fg=#ffe066
 4:3-3 fg=#3fb950
-4:6-13 fg=#e69f00 BOLD
+4:6-26 fg=#e69f00 BOLD
 4:87-88 fg=#d29922
-4:105-117 fg=#949494
+4:105-113 fg=#949494
 4:119-119 fg=#ffe066
 5:0-0 fg=#ffe066
 5:6-29 fg=#949494
