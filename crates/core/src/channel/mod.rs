@@ -94,6 +94,9 @@ pub struct ChannelConfig {
     pub protocol: u32,
     /// Oldest client protocol served (DS-TS-GRP-004 E-D1).
     pub min_protocol: u32,
+    /// The login autostart whose presence `scope.snapshot` reports
+    /// (US-GRP-004). `None`: unknown.
+    pub autostart: Option<crate::autostart::Autostart>,
 }
 
 impl Default for ChannelConfig {
@@ -105,6 +108,7 @@ impl Default for ChannelConfig {
             launch_exe: None,
             protocol: PROTOCOL_VERSION,
             min_protocol: gitraptor_api::MIN_COMPATIBLE_PROTOCOL,
+            autostart: None,
         }
     }
 }

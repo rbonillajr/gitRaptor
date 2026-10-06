@@ -889,8 +889,11 @@ impl Connection<'_> {
                 scope_seq,
                 engine: shared.engine,
                 daemon: self.ctx.daemon.clone(),
-                // Registration belongs to US-GRP-004.
-                autostart: AutostartView::Unknown,
+                autostart: match &self.ctx.config.autostart {
+                    Some(a) if a.is_registered() => AutostartView::Registered,
+                    Some(_) => AutostartView::NotRegistered,
+                    None => AutostartView::Unknown,
+                },
                 repos: shared
                     .repos
                     .into_iter()

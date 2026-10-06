@@ -4,9 +4,9 @@
 //! Connects to the daemon's channel and greets it; if no daemon runs, starts
 //! the installed binary with a clean environment (SEC-10) and waits for the
 //! handshake. An older daemon is replaced by asking it to stop, which it
-//! accepts only from the installed binary (SEC-13). Registering the login
-//! autostart, and starting through the service manager when it is
-//! registered, belong to US-GRP-004.
+//! accepts only from the installed binary (SEC-13). When the login
+//! autostart is registered, the service manager starts it instead
+//! (US-GRP-004, [`crate::autostart`]).
 
 use std::collections::VecDeque;
 use std::io;
@@ -542,6 +542,11 @@ fn launch(options: &ClientOptions) -> Result<(), ClientError> {
     let Launcher::Installed(exe) = &options.launcher else {
         return Err(ClientError::NotRunning);
     };
+    // Registered autostart: the service manager starts it, with its own
+    // environment (ADR-GRP-005 § 3, US-GRP-004).
+    if crate::autostart::Autostart::for_current_user().is_some_and(|a| a.start(exe)) {
+        return Ok(());
+    }
     let cwd = if options.dirs.state.is_dir() {
         options.dirs.state.clone()
     } else {
@@ -571,8 +576,7 @@ pub const DAEMON_PATH: &str = "/usr/bin:/bin:/usr/sbin:/sbin";
 /// Environment of an on-demand daemon. `HOME`, `USER` and `LOGNAME` come
 /// from the user database, not from the client: a client with a hostile
 /// `HOME` cannot move the daemon to another profile. Debug builds also pass
-/// the test overrides of the profile, of the agent classifier and of the
-/// sessions' clock and the resource targets.
+/// the test overrides ([`debug_overrides`]).
 #[cfg(unix)]
 pub fn clean_env() -> Vec<(OsString, OsString)> {
     let mut env = vec![(OsString::from("PATH"), OsString::from(DAEMON_PATH))];
@@ -581,12 +585,23 @@ pub fn clean_env() -> Vec<(OsString, OsString)> {
         env.push(("USER".into(), user.name.clone().into()));
         env.push(("LOGNAME".into(), user.name.into()));
     }
+    env.extend(debug_overrides());
+    env
+}
+
+/// The test overrides a daemon started for this client keeps: the
+/// profile, the agent classifier, the sessions' clock, the resource
+/// targets and the autostart folder. Empty in release builds (SEC-06).
+#[cfg_attr(not(unix), allow(dead_code))]
+pub(crate) fn debug_overrides() -> Vec<(std::ffi::OsString, std::ffi::OsString)> {
+    let mut env = Vec::new();
     if cfg!(debug_assertions) {
         for name in [
             crate::profile::PROFILE_DIR_ENV,
             crate::daemon::AGENT_EXECUTABLES_ENV,
             crate::daemon::CLOCK_SKEW_FILE_ENV,
             crate::resources::RESOURCE_TARGETS_ENV,
+            crate::autostart::AUTOSTART_DIR_ENV,
         ] {
             if let Some(value) = std::env::var_os(name) {
                 env.push((name.into(), value));
