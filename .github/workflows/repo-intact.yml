@@ -87,11 +87,11 @@ jobs:
           # macOS: the trap gate is blocking; eslogger runs in `deep-exec-audit-macos`.
           - os: macos-latest
             exec_audit: auto
-            repo_intact_min: 102
+            repo_intact_min: 103
           # Windows: trap gate only; ETW is pending (Dev Spec § 6).
           - os: windows-latest
             exec_audit: auto
-            repo_intact_min: 67
+            repo_intact_min: 75
     env:
       # Not RUST_* or CARGO_*: rust-cache hashes those into its key, and a new value would miss
       # main's cache.
