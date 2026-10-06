@@ -5,9 +5,9 @@
 //! - Synthetic microbench (Validation V3): a burst of 1,000 `worktree.state`
 //!   events of 10 worktrees goes through the channel thread (decode
 //!   included). It fails when the p95 of `t_client_recv` → `t_render` goes
-//!   over 100 ms, naming the slowest stage. Apply is trivial in the
-//!   skeleton; US-CKP-001 recalibrates this bench when the fleet arrives.
-//!   The gate with the real daemon (bench of INF-GRP-002) is pending.
+//!   over 100 ms, naming the slowest stage. Apply ingests the fleet rows
+//!   (US-CKP-001). The gate with the real daemon, end to end, is the
+//!   `tui-modify` scenario of the engine bench (INF-GRP-002).
 //! - Coalescing and input first: deterministic, no clock thresholds.
 //! - Resync and reconnection redo the snapshot.
 
