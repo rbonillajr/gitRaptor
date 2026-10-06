@@ -453,3 +453,189 @@ fn session_ids_match_the_requester_format() {
     assert_eq!(parse_session_id("82:820"), Some((82, 820)));
     assert_eq!(parse_session_id("cc-82"), None);
 }
+
+// ------------------------------------------------- Registered (US-GRP-009)
+
+fn codex(rig: &Rig, id: &str, worktree: &str, state: SessionStateView, last: Option<i64>) {
+    rig.detector.register(RegisteredSession {
+        repo_id: "r".into(),
+        session_id: id.into(),
+        worktree: PathBuf::from(worktree),
+        started_ms: 1_000_000,
+        state,
+        last_activity_ms: last,
+        registration_evidence: true,
+    });
+}
+
+fn states(changes: &[SessionChange]) -> Vec<(String, SessionStateView)> {
+    changes
+        .iter()
+        .filter_map(|c| match c {
+            SessionChange::State {
+                session_id, state, ..
+            } => Some((session_id.clone(), *state)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// BR-WF-001, Q41: a registered session has no process to end it; it goes
+/// idle after the threshold and back with activity, and only its withdrawal
+/// stops it.
+#[test]
+fn a_registered_session_goes_idle_and_back_without_any_process() {
+    let rig = Rig::new();
+    codex(
+        &rig,
+        "reg:1:0",
+        "/wt/feat-login",
+        SessionStateView::Active,
+        None,
+    );
+    rig.advance(5 * 60 * 1000 - 1);
+    assert!(rig.scan().is_empty(), "not idle yet, and never ended");
+    rig.advance(1);
+    assert_eq!(
+        states(&rig.scan()),
+        [("reg:1:0".to_owned(), SessionStateView::Inactive)]
+    );
+    rig.detector.activity("r", Path::new("/wt/feat-login"));
+    assert_eq!(
+        states(&rig.take()),
+        [("reg:1:0".to_owned(), SessionStateView::Active)]
+    );
+    rig.detector.end_registered("reg:1:0");
+    rig.advance(10 * 60 * 1000);
+    assert!(rig.scan().is_empty(), "a withdrawn session is not followed");
+}
+
+/// ADR-GRP-013 § 5 (Architect, D9): after a restart, hours without the
+/// engine are not activity.
+#[test]
+fn a_reloaded_registered_session_counts_from_its_last_activity() {
+    let rig = Rig::new();
+    let long_ago = 1_000_000 - 3 * 60 * 60 * 1000;
+    codex(
+        &rig,
+        "reg:1:0",
+        "/wt/feat-login",
+        SessionStateView::Active,
+        Some(long_ago),
+    );
+    assert_eq!(
+        states(&rig.scan()),
+        [("reg:1:0".to_owned(), SessionStateView::Inactive)]
+    );
+}
+
+/// The idle check runs where processes cannot be listed (Windows).
+#[test]
+fn registered_sessions_go_idle_without_a_process_table() {
+    struct NoProcs;
+    impl ProcLister for NoProcs {
+        fn list(&self) -> Option<Vec<ProcEntry>> {
+            None
+        }
+        fn cwd(&self, _pid: u32) -> Option<PathBuf> {
+            None
+        }
+    }
+    let now = Arc::new(AtomicI64::new(1_000_000));
+    let changes = Arc::new(Mutex::new(Vec::new()));
+    let (clock_now, sink) = (Arc::clone(&now), Arc::clone(&changes));
+    let detector = Detector::start(
+        SessionConfig {
+            scan_interval: Duration::from_secs(3600),
+            ..SessionConfig::default()
+        },
+        AgentMatcher::only(vec![AGENT.into()]),
+        Arc::new(NoProcs),
+        Arc::new(move || clock_now.load(Ordering::SeqCst)),
+        Arc::new(move |c| sink.lock().unwrap().extend(c)),
+    );
+    detector.register(RegisteredSession {
+        repo_id: "r".into(),
+        session_id: "reg:1:0".into(),
+        worktree: PathBuf::from("/wt/feat-login"),
+        started_ms: 1_000_000,
+        state: SessionStateView::Active,
+        last_activity_ms: None,
+        registration_evidence: true,
+    });
+    now.fetch_add(5 * 60 * 1000, Ordering::SeqCst);
+    detector.scan_now();
+    assert_eq!(
+        states(&changes.lock().unwrap()),
+        [("reg:1:0".to_owned(), SessionStateView::Inactive)]
+    );
+}
+
+/// ADR-GRP-012 rule 3 and ADR-GRP-013 Validation 5: the registration is the
+/// evidence only while that "other agent" is the only present session of
+/// the worktree.
+#[test]
+fn the_registration_is_evidence_only_as_the_only_present_session() {
+    let rig = Rig::new();
+    let evidence = || {
+        rig.detector
+            .registration_evidence("r", Path::new("/wt/feat-login"))
+            .map(|p| p.session_id)
+    };
+    codex(
+        &rig,
+        "reg:1:0",
+        "/wt/feat-login",
+        SessionStateView::Active,
+        None,
+    );
+    assert_eq!(evidence().as_deref(), Some("reg:1:0"));
+    assert_eq!(
+        rig.detector.registration_evidence("r", Path::new("/r")),
+        None,
+        "another worktree"
+    );
+    // A second registered agent: shared, nobody.
+    codex(
+        &rig,
+        "reg:2:0",
+        "/wt/feat-login",
+        SessionStateView::Active,
+        None,
+    );
+    assert_eq!(evidence(), None);
+    rig.detector.end_registered("reg:2:0");
+    assert_eq!(evidence().as_deref(), Some("reg:1:0"));
+    // A detected Claude Code there too: shared, nobody.
+    rig.claude(20, 2_000, "/wt/feat-login");
+    rig.scan();
+    assert_eq!(evidence(), None);
+}
+
+/// ADR-GRP-013 Validation 6: Claude Code, registered or confirmed, never
+/// gets the registration as evidence: a human edit stays unattributed.
+#[test]
+fn claude_code_never_gets_the_registration_as_evidence() {
+    let rig = Rig::new();
+    rig.detector.register(RegisteredSession {
+        repo_id: "r".into(),
+        session_id: "reg:1:0".into(),
+        worktree: PathBuf::from("/wt/feat-login"),
+        started_ms: 1_000_000,
+        state: SessionStateView::Active,
+        last_activity_ms: None,
+        registration_evidence: false,
+    });
+    assert_eq!(
+        rig.detector
+            .registration_evidence("r", Path::new("/wt/feat-login")),
+        None
+    );
+    // A forgotten repo drops its registered sessions too.
+    codex(&rig, "reg:2:0", "/r", SessionStateView::Active, None);
+    rig.detector.forget_repo("r");
+    assert_eq!(
+        rig.detector.registration_evidence("r", Path::new("/r")),
+        None
+    );
+}
