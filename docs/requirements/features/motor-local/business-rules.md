@@ -620,6 +620,8 @@ Constraint: una corrección (BR-CONS-002) no cambia el número de sesiones
 - Claude Code (detectado) en `feat-login` se registra a sí mismo en `feat-login` → la misma sesión, confirmada; una sola sesión, no compartido (Q39).
 
 > ⚠️ **ASSUMPTION** `[POR VERIFICAR]` (P16): una sesión confirmada por registro pasa a mostrar origen "registrado". Las historias solo exigen que sea la misma sesión y que el worktree no pase a compartido.
+>
+> **Decisión del orquestador (2026-10-05), validada por el PO (agente)**: US-GRP-009 adopta el supuesto "sí" (D6 de su [Dev Spec](./dev-specs/US-GRP-009-dev-spec.md)). Queda pendiente de ratificar por Rene Bonilla; si la respuesta fuera "no", solo cambia el origen mostrado (ADR-GRP-013 § 2).
 - El desarrollador edita en Cursor dentro de `feat-login`, donde trabaja Claude Code → una sola sesión (Claude Code); el editor del humano no cuenta como sesión de agente (BR-EDGE-004).
 
 **Referencias**:

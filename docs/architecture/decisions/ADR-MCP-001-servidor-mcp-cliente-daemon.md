@@ -350,3 +350,10 @@ Gate: **PASS CON CONDICIONES**; las condiciones para aceptar (S-01, S-02, S-04, 
 | S-12 · `initialize` y nombres de agente | Low | § 1, § 6, SEC-MCP-07 |
 | I-01 · Confidencialidad frente al mismo usuario | Info | § 9 |
 | I-02 · Gobernanza | Info | Esta sección y § 11 |
+
+## Enmienda (2026-10-05, US-GRP-009)
+
+Decisión del orquestador (2026-10-05), validada por el Arquitecto. Origen: la [Dev Spec de US-GRP-009](../../requirements/features/motor-local/dev-specs/US-GRP-009-dev-spec.md), que implementa en el motor el registro que `register_agent` llamará.
+
+- **`register_agent` no está sujeto a la allowlist**: escribe en el perfil, no en el repo, y un agente sin soporte completo ("otro agente: Codex") tiene que poder registrarse en un repo observado aunque nadie lo haya habilitado para el MCP (BR-VAL-001). El método del canal es `registration.register`, ofrecido al perfil `mcp` y sin rutas en su resultado (SEC-12).
+- **Dependencia futura**: el perfil `mcp` por solicitante (S-01, Enmienda 2026-10-05 MCP de ADR-GRP-005) todavía no está implementado; hoy el canal decide el perfil por el cliente. El registro ya trata toda conexión `mcp` como un agente, así que no depende de S-01.

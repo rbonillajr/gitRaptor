@@ -216,3 +216,15 @@ Decisión del orquestador (2026-10-05), validada por Arquitecto. Origen: DEP-MCP
 - **Vista MCP de eventos y timeline** para `explain_history`: operación, actor, rama o worktree, oids, rutas con tope, hora, cobertura y nivel del punto. **Nunca** mensajes de commit, contenido ni rutas fuera del repo del llamante. Filtro por id de operación, para que un agente consulte el resultado de una escritura que volvió con `running`. 50 por defecto y 200 como máximo por página, con cursor opaco.
 - La consulta del timeline (`timemachine.timeline`, TS-TMC-004) gana la marca MCP **solo con esa vista**; el perfil completo no cambia. La añade la historia dueña (US-MCP-017) al contrato de `crates/api`.
 - Los eventos del stream siguen sin llegar a `raptor-mcp` salvo `engine.state` y `daemon.stopping`: `explain_history` es una consulta, no una suscripción.
+
+## Enmienda (2026-10-05, US-GRP-009)
+
+Decisión del orquestador (2026-10-05), validada por el Arquitecto y el PO. Detalle en la [Dev Spec de US-GRP-009](../../requirements/features/motor-local/dev-specs/US-GRP-009-dev-spec.md).
+
+| Cambio | Dónde |
+|---|---|
+| El registro de auditoría incluye, además de los comandos reservados, los **rechazos de `registration.register`** por `worktree-mismatch` y `agent-mismatch` (ADR-GRP-005, Enmienda 2026-10-05 US-GRP-009) | § 1 (registro de auditoría) |
+| **P16**: la confirmación pasa el origen de la sesión a "registrado", el supuesto del § 2, adoptado con US-GRP-009 y pendiente de ratificar por Rene. La confirmación sigue sin activar la evidencia por registro del § 3 | § 2 |
+| **Evidencia guardada** de un evento atribuido por registro: `{"signals":["registration"]}`, solo para la sesión de un "otro agente" creada por registro y única presente en el worktree | § 1, § 3 |
+| La **identidad del proceso que se registra** (nota de integración) entra con US-MCP-006 como columna anulable de la sesión: un cambio aditivo del esquema | Nota de integración |
+| El **aviso de cambio de atribución** (`attribution.changed`) sigue declarado para US-GRP-010; una confirmación se publica hoy como `session.state` de la misma sesión con su nuevo actor | § 6 |
