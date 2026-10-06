@@ -41,6 +41,26 @@ test('the control fails when a token is edited without regenerating', async () =
   });
 });
 
+test('the control fails when a light-terminal value is edited without regenerating', async () => {
+  await withTempTokens(async (dir) => {
+    const file = path.join(dir, 'tokens', 'semantic.json');
+    const json = JSON.parse(await readFile(file, 'utf8'));
+    json.color.focus.default.$extensions[EXT].light = '{color.yellow.300}';
+    await writeFile(file, JSON.stringify(json));
+    assert.equal(await isUpToDate({ tokensDir: path.join(dir, 'tokens') }), false);
+  });
+});
+
+test('the build fails when a semantic token has no light-terminal value', async () => {
+  await withTempTokens(async (dir) => {
+    const file = path.join(dir, 'tokens', 'semantic.json');
+    const json = JSON.parse(await readFile(file, 'utf8'));
+    delete json.color.accent.default.$extensions[EXT].light;
+    await writeFile(file, JSON.stringify(json));
+    await assert.rejects(buildTokens({ tokensDir: path.join(dir, 'tokens'), rustFile: path.join(dir, 'g.rs') }), /accent\.default \(light\)/);
+  });
+});
+
 test('the control fails when a symbol is edited without regenerating', async () => {
   await withTempTokens(async (dir) => {
     const file = path.join(dir, 'tokens', 'symbol.json');
@@ -65,7 +85,7 @@ test('generation is deterministic', async () => {
   }
 });
 
-test('every semantic token references primitives for both sets, or aliases a semantic', async () => {
+test('every semantic token references primitives for every set, or aliases a semantic', async () => {
   const primitives = new Map(leaves((await readJson('color.json'))));
   const semantic = new Map(leaves((await readJson('semantic.json'))));
   const ref = (v) => /^\{([^}]+)\}$/.exec(v)?.[1];
@@ -80,6 +100,7 @@ test('every semantic token references primitives for both sets, or aliases a sem
     const ext = token.$extensions?.[EXT];
     assert.ok(primitives.has(target), `${name}: ${target} is not a primitive`);
     assert.ok(primitives.has(ref(ext?.highContrast)), `${name}: missing high-contrast value`);
+    assert.ok(primitives.has(ref(ext?.light)), `${name}: missing light-terminal value`);
   }
   for (const [name, token] of primitives) {
     assert.match(token.$value, /^#[0-9a-f]{6}$/, name);

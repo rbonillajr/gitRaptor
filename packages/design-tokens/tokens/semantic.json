@@ -7,15 +7,17 @@
         "$extensions": {
           "dev.gitraptor": {
             "highContrast": "{color.white}",
+            "light": "{color.gray.950}",
             "inherit": true
           }
         }
       },
       "muted": {
-        "$value": "{color.gray.500}",
+        "$value": "{color.gray.400}",
         "$extensions": {
           "dev.gitraptor": {
             "highContrast": "{color.gray.300}",
+            "light": "{color.gray.600}",
             "noColor": [
               "dim"
             ]
@@ -26,7 +28,8 @@
         "$value": "{color.black}",
         "$extensions": {
           "dev.gitraptor": {
-            "highContrast": "{color.black}"
+            "highContrast": "{color.black}",
+            "light": "{color.white}"
           }
         }
       }
@@ -38,16 +41,18 @@
         "$extensions": {
           "dev.gitraptor": {
             "highContrast": "{color.black}",
+            "light": "{color.white}",
             "inherit": true,
             "role": "background"
           }
         }
       },
       "selected": {
-        "$value": "{color.gray.700}",
+        "$value": "{color.gray.800}",
         "$extensions": {
           "dev.gitraptor": {
             "highContrast": "{color.blue.800}",
+            "light": "{color.gray.150}",
             "role": "background",
             "noColor": [
               "reverse"
@@ -56,10 +61,11 @@
         }
       },
       "highlight": {
-        "$value": "{color.gray.800}",
+        "$value": "{color.gray.750}",
         "$extensions": {
           "dev.gitraptor": {
             "highContrast": "{color.gray.800}",
+            "light": "{color.gray.100}",
             "role": "background",
             "noColor": [
               "bold"
@@ -75,6 +81,7 @@
         "$extensions": {
           "dev.gitraptor": {
             "highContrast": "{color.teal.300}",
+            "light": "{color.teal.700}",
             "noColor": [
               "bold"
             ]
@@ -89,6 +96,7 @@
         "$extensions": {
           "dev.gitraptor": {
             "highContrast": "{color.yellow.300}",
+            "light": "{color.yellow.700}",
             "noColor": [
               "bold",
               "reverse"
@@ -103,7 +111,8 @@
         "$value": "{color.green.500}",
         "$extensions": {
           "dev.gitraptor": {
-            "highContrast": "{color.green.400}"
+            "highContrast": "{color.green.400}",
+            "light": "{color.green.700}"
           }
         }
       },
@@ -112,6 +121,7 @@
         "$extensions": {
           "dev.gitraptor": {
             "highContrast": "{color.yellow.300}",
+            "light": "{color.yellow.600}",
             "noColor": [
               "bold"
             ]
@@ -123,6 +133,7 @@
         "$extensions": {
           "dev.gitraptor": {
             "highContrast": "{color.red.400}",
+            "light": "{color.red.700}",
             "noColor": [
               "bold"
             ]
@@ -133,7 +144,8 @@
         "$value": "{color.blue.500}",
         "$extensions": {
           "dev.gitraptor": {
-            "highContrast": "{color.blue.300}"
+            "highContrast": "{color.blue.300}",
+            "light": "{color.blue.700}"
           }
         }
       }
@@ -144,7 +156,8 @@
         "$value": "{color.green.500}",
         "$extensions": {
           "dev.gitraptor": {
-            "highContrast": "{color.green.400}"
+            "highContrast": "{color.green.400}",
+            "light": "{color.green.700}"
           }
         }
       },
@@ -152,7 +165,8 @@
         "$value": "{color.red.500}",
         "$extensions": {
           "dev.gitraptor": {
-            "highContrast": "{color.red.400}"
+            "highContrast": "{color.red.400}",
+            "light": "{color.red.700}"
           }
         }
       },
@@ -160,7 +174,8 @@
         "$value": "{color.yellow.500}",
         "$extensions": {
           "dev.gitraptor": {
-            "highContrast": "{color.yellow.300}"
+            "highContrast": "{color.yellow.300}",
+            "light": "{color.yellow.600}"
           }
         }
       },
@@ -169,6 +184,7 @@
         "$extensions": {
           "dev.gitraptor": {
             "highContrast": "{color.orange.300}",
+            "light": "{color.orange.700}",
             "noColor": [
               "bold"
             ]
@@ -180,7 +196,8 @@
           "$value": "{color.purple.500}",
           "$extensions": {
             "dev.gitraptor": {
-              "highContrast": "{color.purple.300}"
+              "highContrast": "{color.purple.300}",
+              "light": "{color.purple.700}"
             }
           }
         }
@@ -191,7 +208,8 @@
         "$value": "{color.okabeIto.orange}",
         "$extensions": {
           "dev.gitraptor": {
-            "highContrast": "{color.okabeIto.orange}"
+            "highContrast": "{color.okabeIto.orange}",
+            "light": "{color.okabeIto.orangeOnLight}"
           }
         }
       },
@@ -199,7 +217,8 @@
         "$value": "{color.okabeIto.skyBlue}",
         "$extensions": {
           "dev.gitraptor": {
-            "highContrast": "{color.okabeIto.skyBlue}"
+            "highContrast": "{color.okabeIto.skyBlue}",
+            "light": "{color.okabeIto.skyBlueOnLight}"
           }
         }
       },
@@ -207,7 +226,8 @@
         "$value": "{color.okabeIto.bluishGreen}",
         "$extensions": {
           "dev.gitraptor": {
-            "highContrast": "{color.okabeIto.bluishGreen}"
+            "highContrast": "{color.okabeIto.bluishGreen}",
+            "light": "{color.okabeIto.bluishGreenOnLight}"
           }
         }
       },
@@ -215,7 +235,8 @@
         "$value": "{color.okabeIto.yellow}",
         "$extensions": {
           "dev.gitraptor": {
-            "highContrast": "{color.okabeIto.yellow}"
+            "highContrast": "{color.okabeIto.yellow}",
+            "light": "{color.okabeIto.yellowOnLight}"
           }
         }
       },
@@ -223,7 +244,8 @@
         "$value": "{color.okabeIto.blueLight}",
         "$extensions": {
           "dev.gitraptor": {
-            "highContrast": "{color.okabeIto.blueLight}"
+            "highContrast": "{color.okabeIto.blueLight}",
+            "light": "{color.okabeIto.blueOnLight}"
           }
         }
       },
@@ -231,7 +253,8 @@
         "$value": "{color.okabeIto.vermillion}",
         "$extensions": {
           "dev.gitraptor": {
-            "highContrast": "{color.okabeIto.vermillion}"
+            "highContrast": "{color.okabeIto.vermillion}",
+            "light": "{color.okabeIto.vermillionOnLight}"
           }
         }
       },
@@ -239,7 +262,8 @@
         "$value": "{color.okabeIto.reddishPurple}",
         "$extensions": {
           "dev.gitraptor": {
-            "highContrast": "{color.okabeIto.reddishPurple}"
+            "highContrast": "{color.okabeIto.reddishPurple}",
+            "light": "{color.okabeIto.reddishPurpleOnLight}"
           }
         }
       },
@@ -247,7 +271,8 @@
         "$value": "{color.white}",
         "$extensions": {
           "dev.gitraptor": {
-            "highContrast": "{color.white}"
+            "highContrast": "{color.white}",
+            "light": "{color.black}"
           }
         }
       },

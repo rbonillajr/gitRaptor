@@ -1,8 +1,8 @@
 // Style Dictionary format that writes `crates/theme/src/generated.rs` (ADR-GRP-003, ADR-CKP-003 § 10).
 //
 // The output is plain data: the semantic color tokens with their three depths (truecolor, 256,
-// 16) for the normal and the high-contrast sets, and the symbols with glyph, ASCII fallback and
-// width. `crates/theme` owns the types and the resolution logic.
+// 16) for the normal set on a dark and on a light terminal and for the high-contrast set, and the
+// symbols with glyph, ASCII fallback and width. `crates/theme` owns the types and the resolution logic.
 
 export const EXT = 'dev.gitraptor';
 
@@ -150,6 +150,7 @@ export function renderRust(dictionary) {
         `        inherit: ${ext.inherit === true},`,
         `        no_color: ${attrs(ext.noColor, name)},`,
         `        normal: ${values(primitive(def.original.$value, byPath, name))},`,
+        `        light: ${values(primitive(ext.light, byPath, `${name} (light)`))},`,
         `        high_contrast: ${values(primitive(ext.highContrast, byPath, `${name} (highContrast)`))},`,
         `    }`,
       ].join('\n'),

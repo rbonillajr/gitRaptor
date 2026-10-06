@@ -143,6 +143,7 @@ const COLOR_SPECS: [ColorSpec; 28] = [
         inherit: true,
         no_color: Attrs::NONE,
         normal: Values { rgb: Rgb(228, 228, 228), ansi256: 254, ansi256_rgb: Rgb(228, 228, 228), ansi16: Ansi16::White },
+        light: Values { rgb: Rgb(31, 31, 31), ansi256: 234, ansi256_rgb: Rgb(28, 28, 28), ansi16: Ansi16::Black },
         high_contrast: Values { rgb: Rgb(255, 255, 255), ansi256: 231, ansi256_rgb: Rgb(255, 255, 255), ansi16: Ansi16::BrightWhite },
     },
     // text.muted
@@ -150,7 +151,8 @@ const COLOR_SPECS: [ColorSpec; 28] = [
         role: Role::Foreground,
         inherit: false,
         no_color: Attrs::DIM,
-        normal: Values { rgb: Rgb(138, 138, 138), ansi256: 245, ansi256_rgb: Rgb(138, 138, 138), ansi16: Ansi16::BrightBlack },
+        normal: Values { rgb: Rgb(148, 148, 148), ansi256: 246, ansi256_rgb: Rgb(148, 148, 148), ansi16: Ansi16::BrightBlack },
+        light: Values { rgb: Rgb(107, 107, 107), ansi256: 242, ansi256_rgb: Rgb(108, 108, 108), ansi16: Ansi16::BrightBlack },
         high_contrast: Values { rgb: Rgb(198, 198, 198), ansi256: 251, ansi256_rgb: Rgb(198, 198, 198), ansi16: Ansi16::White },
     },
     // text.inverse
@@ -159,6 +161,7 @@ const COLOR_SPECS: [ColorSpec; 28] = [
         inherit: false,
         no_color: Attrs::NONE,
         normal: Values { rgb: Rgb(0, 0, 0), ansi256: 16, ansi256_rgb: Rgb(0, 0, 0), ansi16: Ansi16::Black },
+        light: Values { rgb: Rgb(255, 255, 255), ansi256: 231, ansi256_rgb: Rgb(255, 255, 255), ansi16: Ansi16::BrightWhite },
         high_contrast: Values { rgb: Rgb(0, 0, 0), ansi256: 16, ansi256_rgb: Rgb(0, 0, 0), ansi16: Ansi16::Black },
     },
     // bg.default
@@ -167,6 +170,7 @@ const COLOR_SPECS: [ColorSpec; 28] = [
         inherit: true,
         no_color: Attrs::NONE,
         normal: Values { rgb: Rgb(28, 28, 28), ansi256: 234, ansi256_rgb: Rgb(28, 28, 28), ansi16: Ansi16::Black },
+        light: Values { rgb: Rgb(255, 255, 255), ansi256: 231, ansi256_rgb: Rgb(255, 255, 255), ansi16: Ansi16::BrightWhite },
         high_contrast: Values { rgb: Rgb(0, 0, 0), ansi256: 16, ansi256_rgb: Rgb(0, 0, 0), ansi16: Ansi16::Black },
     },
     // bg.selected
@@ -174,7 +178,8 @@ const COLOR_SPECS: [ColorSpec; 28] = [
         role: Role::Background,
         inherit: false,
         no_color: Attrs::REVERSE,
-        normal: Values { rgb: Rgb(78, 78, 78), ansi256: 239, ansi256_rgb: Rgb(78, 78, 78), ansi16: Ansi16::BrightBlack },
+        normal: Values { rgb: Rgb(48, 48, 48), ansi256: 236, ansi256_rgb: Rgb(48, 48, 48), ansi16: Ansi16::BrightBlack },
+        light: Values { rgb: Rgb(232, 232, 232), ansi256: 254, ansi256_rgb: Rgb(228, 228, 228), ansi16: Ansi16::White },
         high_contrast: Values { rgb: Rgb(11, 61, 145), ansi256: 19, ansi256_rgb: Rgb(0, 0, 175), ansi16: Ansi16::Blue },
     },
     // bg.highlight
@@ -182,8 +187,9 @@ const COLOR_SPECS: [ColorSpec; 28] = [
         role: Role::Background,
         inherit: false,
         no_color: Attrs::BOLD,
-        normal: Values { rgb: Rgb(48, 48, 48), ansi256: 236, ansi256_rgb: Rgb(48, 48, 48), ansi16: Ansi16::Black },
-        high_contrast: Values { rgb: Rgb(48, 48, 48), ansi256: 236, ansi256_rgb: Rgb(48, 48, 48), ansi16: Ansi16::Black },
+        normal: Values { rgb: Rgb(58, 58, 58), ansi256: 237, ansi256_rgb: Rgb(58, 58, 58), ansi16: Ansi16::BrightBlack },
+        light: Values { rgb: Rgb(240, 240, 240), ansi256: 255, ansi256_rgb: Rgb(238, 238, 238), ansi16: Ansi16::White },
+        high_contrast: Values { rgb: Rgb(48, 48, 48), ansi256: 236, ansi256_rgb: Rgb(48, 48, 48), ansi16: Ansi16::BrightBlack },
     },
     // accent.default
     ColorSpec {
@@ -191,6 +197,7 @@ const COLOR_SPECS: [ColorSpec; 28] = [
         inherit: false,
         no_color: Attrs::BOLD,
         normal: Values { rgb: Rgb(45, 194, 173), ansi256: 43, ansi256_rgb: Rgb(0, 215, 175), ansi16: Ansi16::Cyan },
+        light: Values { rgb: Rgb(15, 125, 112), ansi256: 29, ansi256_rgb: Rgb(0, 135, 95), ansi16: Ansi16::Cyan },
         high_contrast: Values { rgb: Rgb(126, 232, 216), ansi256: 116, ansi256_rgb: Rgb(135, 215, 215), ansi16: Ansi16::BrightCyan },
     },
     // focus.default
@@ -199,6 +206,7 @@ const COLOR_SPECS: [ColorSpec; 28] = [
         inherit: false,
         no_color: Attrs::BOLD.union(Attrs::REVERSE),
         normal: Values { rgb: Rgb(255, 224, 102), ansi256: 221, ansi256_rgb: Rgb(255, 215, 95), ansi16: Ansi16::BrightYellow },
+        light: Values { rgb: Rgb(138, 90, 0), ansi256: 94, ansi256_rgb: Rgb(135, 95, 0), ansi16: Ansi16::Yellow },
         high_contrast: Values { rgb: Rgb(255, 224, 102), ansi256: 221, ansi256_rgb: Rgb(255, 215, 95), ansi16: Ansi16::BrightYellow },
     },
     // status.success
@@ -207,6 +215,7 @@ const COLOR_SPECS: [ColorSpec; 28] = [
         inherit: false,
         no_color: Attrs::NONE,
         normal: Values { rgb: Rgb(63, 185, 80), ansi256: 35, ansi256_rgb: Rgb(0, 175, 95), ansi16: Ansi16::Green },
+        light: Values { rgb: Rgb(26, 127, 55), ansi256: 28, ansi256_rgb: Rgb(0, 135, 0), ansi16: Ansi16::Green },
         high_contrast: Values { rgb: Rgb(126, 231, 135), ansi256: 114, ansi256_rgb: Rgb(135, 215, 135), ansi16: Ansi16::BrightGreen },
     },
     // status.warning
@@ -215,6 +224,7 @@ const COLOR_SPECS: [ColorSpec; 28] = [
         inherit: false,
         no_color: Attrs::BOLD,
         normal: Values { rgb: Rgb(210, 153, 34), ansi256: 172, ansi256_rgb: Rgb(215, 135, 0), ansi16: Ansi16::Yellow },
+        light: Values { rgb: Rgb(154, 103, 0), ansi256: 130, ansi256_rgb: Rgb(175, 95, 0), ansi16: Ansi16::Yellow },
         high_contrast: Values { rgb: Rgb(255, 224, 102), ansi256: 221, ansi256_rgb: Rgb(255, 215, 95), ansi16: Ansi16::BrightYellow },
     },
     // status.danger
@@ -223,6 +233,7 @@ const COLOR_SPECS: [ColorSpec; 28] = [
         inherit: false,
         no_color: Attrs::BOLD,
         normal: Values { rgb: Rgb(248, 81, 73), ansi256: 203, ansi256_rgb: Rgb(255, 95, 95), ansi16: Ansi16::Red },
+        light: Values { rgb: Rgb(207, 34, 46), ansi256: 160, ansi256_rgb: Rgb(215, 0, 0), ansi16: Ansi16::Red },
         high_contrast: Values { rgb: Rgb(255, 161, 152), ansi256: 217, ansi256_rgb: Rgb(255, 175, 175), ansi16: Ansi16::BrightRed },
     },
     // status.info
@@ -231,6 +242,7 @@ const COLOR_SPECS: [ColorSpec; 28] = [
         inherit: false,
         no_color: Attrs::NONE,
         normal: Values { rgb: Rgb(88, 166, 255), ansi256: 75, ansi256_rgb: Rgb(95, 175, 255), ansi16: Ansi16::Blue },
+        light: Values { rgb: Rgb(9, 105, 218), ansi256: 26, ansi256_rgb: Rgb(0, 95, 215), ansi16: Ansi16::Blue },
         high_contrast: Values { rgb: Rgb(165, 214, 255), ansi256: 153, ansi256_rgb: Rgb(175, 215, 255), ansi16: Ansi16::BrightBlue },
     },
     // git.added
@@ -239,6 +251,7 @@ const COLOR_SPECS: [ColorSpec; 28] = [
         inherit: false,
         no_color: Attrs::NONE,
         normal: Values { rgb: Rgb(63, 185, 80), ansi256: 35, ansi256_rgb: Rgb(0, 175, 95), ansi16: Ansi16::Green },
+        light: Values { rgb: Rgb(26, 127, 55), ansi256: 28, ansi256_rgb: Rgb(0, 135, 0), ansi16: Ansi16::Green },
         high_contrast: Values { rgb: Rgb(126, 231, 135), ansi256: 114, ansi256_rgb: Rgb(135, 215, 135), ansi16: Ansi16::BrightGreen },
     },
     // git.removed
@@ -247,6 +260,7 @@ const COLOR_SPECS: [ColorSpec; 28] = [
         inherit: false,
         no_color: Attrs::NONE,
         normal: Values { rgb: Rgb(248, 81, 73), ansi256: 203, ansi256_rgb: Rgb(255, 95, 95), ansi16: Ansi16::Red },
+        light: Values { rgb: Rgb(207, 34, 46), ansi256: 160, ansi256_rgb: Rgb(215, 0, 0), ansi16: Ansi16::Red },
         high_contrast: Values { rgb: Rgb(255, 161, 152), ansi256: 217, ansi256_rgb: Rgb(255, 175, 175), ansi16: Ansi16::BrightRed },
     },
     // git.modified
@@ -255,6 +269,7 @@ const COLOR_SPECS: [ColorSpec; 28] = [
         inherit: false,
         no_color: Attrs::NONE,
         normal: Values { rgb: Rgb(210, 153, 34), ansi256: 172, ansi256_rgb: Rgb(215, 135, 0), ansi16: Ansi16::Yellow },
+        light: Values { rgb: Rgb(154, 103, 0), ansi256: 130, ansi256_rgb: Rgb(175, 95, 0), ansi16: Ansi16::Yellow },
         high_contrast: Values { rgb: Rgb(255, 224, 102), ansi256: 221, ansi256_rgb: Rgb(255, 215, 95), ansi16: Ansi16::BrightYellow },
     },
     // git.conflict
@@ -263,6 +278,7 @@ const COLOR_SPECS: [ColorSpec; 28] = [
         inherit: false,
         no_color: Attrs::BOLD,
         normal: Values { rgb: Rgb(240, 136, 62), ansi256: 208, ansi256_rgb: Rgb(255, 135, 0), ansi16: Ansi16::Yellow },
+        light: Values { rgb: Rgb(188, 76, 0), ansi256: 124, ansi256_rgb: Rgb(175, 0, 0), ansi16: Ansi16::Yellow },
         high_contrast: Values { rgb: Rgb(255, 183, 124), ansi256: 216, ansi256_rgb: Rgb(255, 175, 135), ansi16: Ansi16::BrightYellow },
     },
     // git.branch.base
@@ -271,6 +287,7 @@ const COLOR_SPECS: [ColorSpec; 28] = [
         inherit: false,
         no_color: Attrs::NONE,
         normal: Values { rgb: Rgb(188, 140, 255), ansi256: 141, ansi256_rgb: Rgb(175, 135, 255), ansi16: Ansi16::Magenta },
+        light: Values { rgb: Rgb(130, 80, 223), ansi256: 98, ansi256_rgb: Rgb(135, 95, 215), ansi16: Ansi16::Magenta },
         high_contrast: Values { rgb: Rgb(226, 197, 255), ansi256: 189, ansi256_rgb: Rgb(215, 215, 255), ansi16: Ansi16::BrightMagenta },
     },
     // agent.1
@@ -279,6 +296,7 @@ const COLOR_SPECS: [ColorSpec; 28] = [
         inherit: false,
         no_color: Attrs::NONE,
         normal: Values { rgb: Rgb(230, 159, 0), ansi256: 178, ansi256_rgb: Rgb(215, 175, 0), ansi16: Ansi16::Yellow },
+        light: Values { rgb: Rgb(163, 95, 0), ansi256: 94, ansi256_rgb: Rgb(135, 95, 0), ansi16: Ansi16::Yellow },
         high_contrast: Values { rgb: Rgb(230, 159, 0), ansi256: 178, ansi256_rgb: Rgb(215, 175, 0), ansi16: Ansi16::Yellow },
     },
     // agent.2
@@ -287,6 +305,7 @@ const COLOR_SPECS: [ColorSpec; 28] = [
         inherit: false,
         no_color: Attrs::NONE,
         normal: Values { rgb: Rgb(86, 180, 233), ansi256: 74, ansi256_rgb: Rgb(95, 175, 215), ansi16: Ansi16::Cyan },
+        light: Values { rgb: Rgb(31, 111, 168), ansi256: 25, ansi256_rgb: Rgb(0, 95, 175), ansi16: Ansi16::Cyan },
         high_contrast: Values { rgb: Rgb(86, 180, 233), ansi256: 74, ansi256_rgb: Rgb(95, 175, 215), ansi16: Ansi16::Cyan },
     },
     // agent.3
@@ -295,6 +314,7 @@ const COLOR_SPECS: [ColorSpec; 28] = [
         inherit: false,
         no_color: Attrs::NONE,
         normal: Values { rgb: Rgb(0, 158, 115), ansi256: 36, ansi256_rgb: Rgb(0, 175, 135), ansi16: Ansi16::Green },
+        light: Values { rgb: Rgb(0, 112, 79), ansi256: 23, ansi256_rgb: Rgb(0, 95, 95), ansi16: Ansi16::Green },
         high_contrast: Values { rgb: Rgb(0, 158, 115), ansi256: 36, ansi256_rgb: Rgb(0, 175, 135), ansi16: Ansi16::Green },
     },
     // agent.4
@@ -303,6 +323,7 @@ const COLOR_SPECS: [ColorSpec; 28] = [
         inherit: false,
         no_color: Attrs::NONE,
         normal: Values { rgb: Rgb(240, 228, 66), ansi256: 220, ansi256_rgb: Rgb(255, 215, 0), ansi16: Ansi16::BrightYellow },
+        light: Values { rgb: Rgb(122, 114, 0), ansi256: 58, ansi256_rgb: Rgb(95, 95, 0), ansi16: Ansi16::Yellow },
         high_contrast: Values { rgb: Rgb(240, 228, 66), ansi256: 220, ansi256_rgb: Rgb(255, 215, 0), ansi16: Ansi16::BrightYellow },
     },
     // agent.5
@@ -311,6 +332,7 @@ const COLOR_SPECS: [ColorSpec; 28] = [
         inherit: false,
         no_color: Attrs::NONE,
         normal: Values { rgb: Rgb(79, 163, 224), ansi256: 74, ansi256_rgb: Rgb(95, 175, 215), ansi16: Ansi16::BrightBlue },
+        light: Values { rgb: Rgb(11, 79, 138), ansi256: 24, ansi256_rgb: Rgb(0, 95, 135), ansi16: Ansi16::Blue },
         high_contrast: Values { rgb: Rgb(79, 163, 224), ansi256: 74, ansi256_rgb: Rgb(95, 175, 215), ansi16: Ansi16::BrightBlue },
     },
     // agent.6
@@ -319,6 +341,7 @@ const COLOR_SPECS: [ColorSpec; 28] = [
         inherit: false,
         no_color: Attrs::NONE,
         normal: Values { rgb: Rgb(213, 94, 0), ansi256: 166, ansi256_rgb: Rgb(215, 95, 0), ansi16: Ansi16::Red },
+        light: Values { rgb: Rgb(184, 58, 0), ansi256: 124, ansi256_rgb: Rgb(175, 0, 0), ansi16: Ansi16::Red },
         high_contrast: Values { rgb: Rgb(213, 94, 0), ansi256: 166, ansi256_rgb: Rgb(215, 95, 0), ansi16: Ansi16::Red },
     },
     // agent.7
@@ -327,6 +350,7 @@ const COLOR_SPECS: [ColorSpec; 28] = [
         inherit: false,
         no_color: Attrs::NONE,
         normal: Values { rgb: Rgb(204, 121, 167), ansi256: 175, ansi256_rgb: Rgb(215, 135, 175), ansi16: Ansi16::Magenta },
+        light: Values { rgb: Rgb(168, 69, 127), ansi256: 96, ansi256_rgb: Rgb(135, 95, 135), ansi16: Ansi16::Magenta },
         high_contrast: Values { rgb: Rgb(204, 121, 167), ansi256: 175, ansi256_rgb: Rgb(215, 135, 175), ansi16: Ansi16::Magenta },
     },
     // agent.8
@@ -335,6 +359,7 @@ const COLOR_SPECS: [ColorSpec; 28] = [
         inherit: false,
         no_color: Attrs::NONE,
         normal: Values { rgb: Rgb(255, 255, 255), ansi256: 231, ansi256_rgb: Rgb(255, 255, 255), ansi16: Ansi16::BrightWhite },
+        light: Values { rgb: Rgb(0, 0, 0), ansi256: 16, ansi256_rgb: Rgb(0, 0, 0), ansi16: Ansi16::Black },
         high_contrast: Values { rgb: Rgb(255, 255, 255), ansi256: 231, ansi256_rgb: Rgb(255, 255, 255), ansi16: Ansi16::BrightWhite },
     },
     // agent.state.active
@@ -343,6 +368,7 @@ const COLOR_SPECS: [ColorSpec; 28] = [
         inherit: false,
         no_color: Attrs::NONE,
         normal: Values { rgb: Rgb(63, 185, 80), ansi256: 35, ansi256_rgb: Rgb(0, 175, 95), ansi16: Ansi16::Green },
+        light: Values { rgb: Rgb(26, 127, 55), ansi256: 28, ansi256_rgb: Rgb(0, 135, 0), ansi16: Ansi16::Green },
         high_contrast: Values { rgb: Rgb(126, 231, 135), ansi256: 114, ansi256_rgb: Rgb(135, 215, 135), ansi16: Ansi16::BrightGreen },
     },
     // agent.state.idle
@@ -350,7 +376,8 @@ const COLOR_SPECS: [ColorSpec; 28] = [
         role: Role::Foreground,
         inherit: false,
         no_color: Attrs::DIM,
-        normal: Values { rgb: Rgb(138, 138, 138), ansi256: 245, ansi256_rgb: Rgb(138, 138, 138), ansi16: Ansi16::BrightBlack },
+        normal: Values { rgb: Rgb(148, 148, 148), ansi256: 246, ansi256_rgb: Rgb(148, 148, 148), ansi16: Ansi16::BrightBlack },
+        light: Values { rgb: Rgb(107, 107, 107), ansi256: 242, ansi256_rgb: Rgb(108, 108, 108), ansi16: Ansi16::BrightBlack },
         high_contrast: Values { rgb: Rgb(198, 198, 198), ansi256: 251, ansi256_rgb: Rgb(198, 198, 198), ansi16: Ansi16::White },
     },
     // agent.state.done
@@ -358,7 +385,8 @@ const COLOR_SPECS: [ColorSpec; 28] = [
         role: Role::Foreground,
         inherit: false,
         no_color: Attrs::DIM,
-        normal: Values { rgb: Rgb(138, 138, 138), ansi256: 245, ansi256_rgb: Rgb(138, 138, 138), ansi16: Ansi16::BrightBlack },
+        normal: Values { rgb: Rgb(148, 148, 148), ansi256: 246, ansi256_rgb: Rgb(148, 148, 148), ansi16: Ansi16::BrightBlack },
+        light: Values { rgb: Rgb(107, 107, 107), ansi256: 242, ansi256_rgb: Rgb(108, 108, 108), ansi16: Ansi16::BrightBlack },
         high_contrast: Values { rgb: Rgb(198, 198, 198), ansi256: 251, ansi256_rgb: Rgb(198, 198, 198), ansi16: Ansi16::White },
     },
 ];
