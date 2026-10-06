@@ -206,12 +206,14 @@ mod repo_intact {
     /// An agent commit triggers `gc --auto` (user config). The engine reads nothing here, so the
     /// whole difference is the control's: nothing is imputed. Recent Git runs a geometric
     /// maintenance strategy after a commit by default, which ignores `gc.auto`; a user who wants
-    /// `gc` sets `maintenance.strategy=gc`, which older Git ignores.
+    /// `gc` sets `maintenance.strategy=gc`, which older Git ignores. The fixture home turns
+    /// automatic maintenance off; this repo turns it back on.
     #[test]
     fn control_gc_auto_by_agent_commit_is_not_imputed() {
         let git = git_from_path();
         let build = || {
             let f = Fixture::with_commit(&git);
+            f.git(&["config", "maintenance.auto", "true"]);
             f.git(&["config", "gc.auto", "1"]);
             f.git(&["config", "gc.autoDetach", "false"]);
             f.git(&["config", "maintenance.strategy", "gc"]);
@@ -238,6 +240,17 @@ mod repo_intact {
             "gc --auto did not run: {report}"
         );
         report.assert_intact();
+    }
+
+    /// No background maintenance of a fixture lands in a fingerprint (`maintenance.lock`).
+    #[test]
+    fn fixture_turns_automatic_maintenance_off() {
+        let f = Fixture::with_commit(&git_from_path());
+        let get = |k: &str| f.git(&["config", "--get", k]).trim().to_owned();
+        assert_eq!(get("maintenance.auto"), "false");
+        assert_eq!(get("maintenance.autoDetach"), "false");
+        assert_eq!(get("gc.auto"), "0");
+        assert_eq!(get("gc.autoDetach"), "false");
     }
 
     #[test]
