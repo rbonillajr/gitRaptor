@@ -658,3 +658,36 @@ fn changing_the_credentials_option_forces_a_full_detection() {
     );
     assert!(!second.exclusions.iter().any(|e| e.reason == "credential"));
 }
+
+/// US-TMC-004 (ADR-TMC-004 § 2, consistency): a capture whose guard says no at the validity point
+/// leaves no row and no ref; the next one, with the guard holding, is a normal snapshot.
+#[test]
+fn a_capture_that_stopped_being_consistent_is_discarded_without_a_row() {
+    use gitraptor_core::timemachine::store::ValidityGuard;
+    let env = Env::new(Fixture::with_commit(&git()));
+    write(&env.f.repo, "api.rs", b"fn api() {}\n");
+    let mut req = env.request(level_obs(), None);
+    req.still_valid = Some(ValidityGuard(Arc::new(|| false)));
+    assert!(matches!(
+        env.store.capture(&env.oplog, &req),
+        Err(CaptureError::Discarded)
+    ));
+    let rows = env
+        .oplog
+        .lock()
+        .unwrap()
+        .snapshots(&SnapshotFilter::default())
+        .unwrap();
+    assert!(rows.is_empty(), "{rows:#?}");
+    assert!(
+        env.store_git(&["for-each-ref", "refs/tm/snap"])
+            .trim()
+            .is_empty()
+    );
+    req.still_valid = Some(ValidityGuard(Arc::new(|| true)));
+    let out = env.store.capture(&env.oplog, &req).unwrap();
+    assert_eq!(
+        env.file(&out.snapshot_id, "api.rs").unwrap(),
+        b"fn api() {}\n"
+    );
+}
