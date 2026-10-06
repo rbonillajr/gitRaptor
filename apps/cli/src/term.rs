@@ -11,7 +11,7 @@
 
 use std::time::Duration;
 
-use gitraptor_theme::{Detection, QUERY_TIMEOUT, Rgb, ThemeChoice, parse_osc11_reply, resolve};
+use gitraptor_theme::{Detection, QUERY_TIMEOUT, Rgb, ThemeChoice, resolve};
 
 /// The theme to draw with: `flag` is `--theme`, `no_color` is `--no-color`; the rest comes from
 /// the environment and, when nothing is explicit, from the terminal.
@@ -30,7 +30,7 @@ pub fn detect_theme(flag: Option<ThemeChoice>, no_color: bool) -> Detection {
 pub fn query_background(timeout: Duration) -> Option<Rgb> {
     #[cfg(unix)]
     {
-        unix::query(timeout).and_then(|reply| parse_osc11_reply(&reply))
+        unix::query(timeout).and_then(|reply| gitraptor_theme::parse_osc11_reply(&reply))
     }
     #[cfg(not(unix))]
     {
