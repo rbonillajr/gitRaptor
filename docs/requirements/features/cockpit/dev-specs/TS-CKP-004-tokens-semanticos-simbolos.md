@@ -155,6 +155,8 @@ Precedencia: `--theme` > `GITRAPTOR_THEME` > OSC 11 > `COLORFGBG` > oscura. `aut
 | D15 | Tenue oscuro `#949494` en vez de `#8a8a8a`; `bg.highlight` oscuro `#3a3a3a` | Ajuste a la decisión de Rene: 4.35 → 4.95 sobre Solarized oscuro; `#262626` no se distinguía del fondo |
 | D16 | Gate AA (truecolor y 256): texto y tenue de cada variante sobre sus fondos típicos y `text.default` sobre selección y barra; en la clara, todo primer plano sobre blanco y `text.inverse` sobre acento, foco y estados; en 256, `status.*`/`git.*` distintos no comparten índice. Informe del resto | Amplía D8. `text.default` se hereda: el gate mide su referencia |
 
+**Por debajo de AA en el informe (sin gate, validado por Arquitecto)**: `status.danger` y `git.removed` oscuros sobre Solarized oscuro (4.48 en truecolor); `agent.3` (4.4) y `agent.6` (3.9) oscuros sobre Solarized oscuro, y `agent.6` sobre `#1e1e1e` (4.3); el tenue sobre la selección (4.4 en las dos variantes); en la clara, `accent`, `status.success`, `status.warning`, `git.*` y algún agente sobre `bg.selected` (3.6–4.1 en 256) y varios colores sobre Solarized claro (4.2–4.4). La fila seleccionada lleva además una marca que no es color (NFR-09).
+
 ### 8.4 Plan de tests (añadidos)
 
 | Criterio | Test |
