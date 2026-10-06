@@ -81,6 +81,9 @@ pub struct Metrics {
     /// Key read → frame.
     pub key: Samples,
     pub frames: u64,
+    /// `t_render` of the last frame, on the common monotonic clock: the end mark of the
+    /// end-to-end freshness the engine bench measures (`tui-modify`, US-CKP-001).
+    pub last_render_ns: u64,
 }
 
 impl Metrics {

@@ -143,6 +143,7 @@ impl<B: Backend> App<B> {
         let render_ns = monotonic_ns();
         self.model.dirty = false;
         self.metrics.frames += 1;
+        self.metrics.last_render_ns = render_ns;
         for a in self.applied.drain(..) {
             self.metrics
                 .record(a.recv_ns, a.decoded_ns, a.applied_ns, render_ns);
