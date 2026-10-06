@@ -8,7 +8,7 @@ domain: GRP
 priority: high
 complexity: medium
 created: 2026-10-03
-updated: 2026-10-05
+updated: 2026-10-06
 related:
   adrs: [ADR-GRP-012, ADR-GRP-013, ADR-GRP-005]
   stories: [US-GRP-007, US-GRP-008, US-GRP-009]
@@ -63,3 +63,15 @@ tags: [motor-local, spike, deteccion, atribucion, claude-code, dogfooding, preci
 ### Time-box
 
 2 semanas de dogfooding más 2 días de suite guionizada (BRD § 13, spike c). ⚠️ **ASSUMPTION**: al menos 50 sesiones reales para que el porcentaje sea significativo.
+
+### Mediciones
+
+#### 2026-10-06 — primer dato real de la carrera S3 (macOS, dogfooding)
+
+- **Observado**: en la salida de `raptor events` revisada, los **3 commits** del worktree `dehotspot` (09:46:26) salieron "sin atribuir", y el push del worktree `xp30` salió "Claude Code, detected". `raptor sessions` veía las 3 sesiones activas. En ese momento `dehotspot` tenía una sola sesión, así que la causa es la carrera de S3: el `git` terminó antes de la muestra.
+- **Dato**: 3 commits sin atribuir por la carrera, frente a 1 push detectado en la misma salida. No se contó el total N de eventos del día: **N queda pendiente** de la revisión diaria.
+- **Cómo lo cambia la regla** ([enmienda de ADR-GRP-012 del 2026-10-06](../../../../architecture/decisions/ADR-GRP-012-deteccion-sesiones-claude-code.md)): esos 3 commits **siguen contando como "sin atribuir"** en la precisión de atribución. Ahora además llevan la pista `inferred` (Claude Code, la sesión única del worktree). Se mide aparte:
+  - **Pistas emitidas**: eventos sin atribuir que llevan `inferred`.
+  - **Pistas correctas**: las que Rene confirma en la revisión diaria como de esa sesión.
+  - **Pistas sobre trabajo humano**: el riesgo residual de la enmienda. No es un error humano → Claude Code de BR-EDGE-004, porque el actor sigue "sin atribuir", pero se cuenta para decidir si S4 o S5 son urgentes.
+- **Pendiente**: repetir la medición con la regla desplegada, con N real y la tasa de carreras perdidas de S3 (eventos `s3_evidence` con `outcome=no-sighting` del log del daemon).
