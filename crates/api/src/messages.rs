@@ -363,6 +363,11 @@ pub enum GitEventKind {
     /// A reconciliation found differences no Git event explains; linked to
     /// a gap (ADR-GRP-013 § 5). Not a Git command.
     Reconciled,
+    /// `HEAD` of the worktree was reset without moving a branch: a reset to
+    /// the same commit (`git reset --hard` discarding uncommitted work) or
+    /// with `HEAD` detached (US-TMC-004). A reset that moves a branch is a
+    /// `branch-update`.
+    Reset,
 }
 
 impl GitEventKind {
@@ -380,6 +385,7 @@ impl GitEventKind {
             Self::WorktreeDelete => "worktree-delete",
             Self::Push => "push",
             Self::Reconciled => "reconciled",
+            Self::Reset => "reset",
         }
     }
 
@@ -387,7 +393,7 @@ impl GitEventKind {
         Self::ALL.into_iter().find(|k| k.as_str() == text)
     }
 
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 12] = [
         Self::Commit,
         Self::Merge,
         Self::Rebase,
@@ -399,6 +405,7 @@ impl GitEventKind {
         Self::WorktreeDelete,
         Self::Push,
         Self::Reconciled,
+        Self::Reset,
     ];
 }
 
