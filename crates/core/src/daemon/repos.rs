@@ -14,12 +14,12 @@ use gitraptor_api::messages::{
 };
 use gitraptor_api::{Timings, Untrusted, clock};
 
-use super::shutdown::{RepoAddRequest, RepoCommandError};
 use super::state::{EngineState, Trigger};
 use super::{
     CHANGE_LIST_BUDGET, Daemon, Field, TM_RECOVERY_WAIT, git_event_view, now_ms, outcome_field,
     persist_read, profile_error_kind, recover_repo, repo_base, run_id, sessions,
 };
+use super::{RepoAddRequest, RepoCommandError};
 
 use crate::observe::{self, RepoRead};
 use crate::profile::{AddOutcome, GapCause, KnownState, NewEvent, RepoState, Timestamp, WriteOp};
