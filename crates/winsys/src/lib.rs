@@ -9,6 +9,8 @@
 
 pub mod acl;
 #[cfg(windows)]
+pub mod file_id;
+#[cfg(windows)]
 pub mod file_lock;
 #[cfg(windows)]
 pub mod process;

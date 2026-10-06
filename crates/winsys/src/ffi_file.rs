@@ -1,5 +1,6 @@
-//! Byte-range locks of an open file (`LockFileEx`, `UnlockFileEx`), one call per `unsafe`
-//! block. Nothing here is public outside the crate.
+//! Byte-range locks (`LockFileEx`, `UnlockFileEx`) and the identity of an open file
+//! (`GetFileInformationByHandle`), one call per `unsafe` block. Nothing here is public outside
+//! the crate.
 
 use std::fs::File;
 use std::io;
@@ -7,7 +8,8 @@ use std::os::windows::io::AsRawHandle;
 
 use windows_sys::Win32::Foundation::{ERROR_LOCK_VIOLATION, HANDLE};
 use windows_sys::Win32::Storage::FileSystem::{
-    LOCKFILE_EXCLUSIVE_LOCK, LOCKFILE_FAIL_IMMEDIATELY, LockFileEx, UnlockFileEx,
+    BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle, LOCKFILE_EXCLUSIVE_LOCK,
+    LOCKFILE_FAIL_IMMEDIATELY, LockFileEx, UnlockFileEx,
 };
 use windows_sys::Win32::System::IO::OVERLAPPED;
 
@@ -54,4 +56,18 @@ pub(crate) fn unlock_byte(file: &File, offset: u64) -> io::Result<()> {
     } else {
         Err(io::Error::last_os_error())
     }
+}
+
+/// `(volume serial number, file index)` of an open file.
+pub(crate) fn file_index(file: &File) -> io::Result<(u32, u64)> {
+    let handle = file.as_raw_handle() as HANDLE;
+    let mut info = BY_HANDLE_FILE_INFORMATION::default();
+    // SAFETY: `handle` is the open handle of `file`, borrowed for the call; `info` is an
+    // initialized `BY_HANDLE_FILE_INFORMATION` borrowed only for the call.
+    let ok = unsafe { GetFileInformationByHandle(handle, &mut info) } != 0;
+    if !ok {
+        return Err(io::Error::last_os_error());
+    }
+    let index = (u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow);
+    Ok((info.dwVolumeSerialNumber, index))
 }
