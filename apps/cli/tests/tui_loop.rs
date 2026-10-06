@@ -168,6 +168,7 @@ fn worktree_event(scope_seq: u64) -> Event {
     let worktrees = (0..WORKTREES)
         .map(|i| WorktreeView {
             last_activity_utc_ms: None,
+            last_activity_in_gap: false,
             detached_at: None,
             path: Untrusted::new(format!("/w/agent-{i}")),
             main: i == 0,

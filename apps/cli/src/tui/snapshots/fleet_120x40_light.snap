@@ -4,10 +4,10 @@ expression: snap
 ---
  shop · ✔ live · engine observing · acting as you                                                            ⚡ –  ⛔ –
 ┏━ › Fleet · ↑↓ vs main (local copy, fetched 3 h ago) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃     Agent                  Branch                                                    Files ↑↓          Activity      ┃
-┃  ○  No agent · shop        main                                                      ~0    ↑0 ↓0       not available ┃
-┃  ●  claude-1 · feat-pagos  feat-pagos                                                ~2    ↑3 ↓1       2 min ago     ┃
-┃  ○  No agent · feat-docs   feat-docs                                                 ~0    ↑1 ↓0       not available ┃
+┃     Agent                  Branch                                                       Files ↑↓          Activity   ┃
+┃  ○  No agent · shop        main                                                         ~0    ↑0 ↓0       –          ┃
+┃  ●  claude-1 · feat-pagos  feat-pagos                                                   ~2    ↑3 ↓1       2 min ago  ┃
+┃  ○  No agent · feat-docs   feat-docs                                                    ~0    ↑1 ↓0       –          ┃
 ┃                                                                                                                      ┃
 ┃                                                                                                                      ┃
 ┃                                                                                                                      ┃
@@ -65,31 +65,31 @@ expression: snap
 2:0-0 fg=#8a5a00
 2:6-10 fg=#6b6b6b BOLD
 2:29-34 fg=#6b6b6b BOLD
-2:87-91 fg=#6b6b6b BOLD
-2:93-94 fg=#6b6b6b BOLD
-2:105-112 fg=#6b6b6b BOLD
+2:90-94 fg=#6b6b6b BOLD
+2:96-97 fg=#6b6b6b BOLD
+2:108-115 fg=#6b6b6b BOLD
 2:119-119 fg=#8a5a00
 3:0-0 fg=#8a5a00
 3:3-3 fg=#6b6b6b
 3:6-20 fg=#6b6b6b
 3:29-32 fg=#6b6b6b
-3:87-88 fg=#6b6b6b
-3:93-97 fg=#6b6b6b
-3:105-117 fg=#6b6b6b
+3:90-91 fg=#6b6b6b
+3:96-100 fg=#6b6b6b
+3:108-108 fg=#6b6b6b
 3:119-119 fg=#8a5a00
 4:0-0 fg=#8a5a00
 4:3-3 fg=#1a7f37
 4:6-26 fg=#a35f00 BOLD
-4:87-88 fg=#9a6700
-4:105-113 fg=#6b6b6b
+4:90-91 fg=#9a6700
+4:108-116 fg=#6b6b6b
 4:119-119 fg=#8a5a00
 5:0-0 fg=#8a5a00
 5:3-3 fg=#6b6b6b
 5:6-25 fg=#6b6b6b
 5:29-37 fg=#6b6b6b
-5:87-88 fg=#6b6b6b
-5:93-97 fg=#6b6b6b
-5:105-117 fg=#6b6b6b
+5:90-91 fg=#6b6b6b
+5:96-100 fg=#6b6b6b
+5:108-108 fg=#6b6b6b
 5:119-119 fg=#8a5a00
 6:0-0 fg=#8a5a00
 6:119-119 fg=#8a5a00

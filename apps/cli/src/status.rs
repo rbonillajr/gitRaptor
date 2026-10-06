@@ -411,6 +411,7 @@ mod tests {
     fn snapshot() -> Snapshot {
         let wt = |path: &str, main, status| WorktreeView {
             last_activity_utc_ms: None,
+            last_activity_in_gap: false,
             detached_at: None,
             path: Untrusted::new(path),
             main,
