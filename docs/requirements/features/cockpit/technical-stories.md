@@ -2,12 +2,12 @@
 mode: bulk
 status: expanded
 generated: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-05
 generator: architect
 domain: GRP
 feature: cockpit
-total_artifacts: 6
-expanded: 6
+total_artifacts: 7
+expanded: 7
 approved: 0
 related:
   context: [CTX-CKP-001]
@@ -19,7 +19,7 @@ related:
 
 > Índice. Cada historia vive en su archivo, dentro de [`technical-stories/`](./technical-stories/), con `status: draft` en el frontmatter. La columna Status indica el siguiente paso: `Dev Spec Pending` para los TS y el INF (la Dev Spec se genera con `/aadd-devspec <id>`) y `Research Pending` para el SPIKE, que lleva un Research Brief y no una Dev Spec.
 >
-> **Criterio de inclusión (Enabler Decision Gate)**: solo entra el trabajo técnico **sin historia de usuario dueña y sin resultado observable** por el usuario. La columna "Habilita" apunta a capacidades del BRD (BR-04 a BR-07), a reglas BR-CKP y al Servidor MCP (F-001-05). Las historias US-CKP-001 a 024 llegaron a main después de estos enablers; cada ficha las enlaza en `related.stories` (validación final, 2026-10-04) y el destino de cada trabajo que no es enabler está en su tabla. Hay **6 enablers**: 5 nuevos más SPIKE-CKP-001. El resto del trabajo técnico tendrá una historia dueña y va a su Dev Spec: ver [Trabajo técnico que no es enabler](#trabajo-técnico-que-no-es-enabler).
+> **Criterio de inclusión (Enabler Decision Gate)**: solo entra el trabajo técnico **sin historia de usuario dueña y sin resultado observable** por el usuario. La columna "Habilita" apunta a capacidades del BRD (BR-04 a BR-07), a reglas BR-CKP y al Servidor MCP (F-001-05). Las historias US-CKP-001 a 024 llegaron a main después de estos enablers; cada ficha las enlaza en `related.stories` (validación final, 2026-10-04) y el destino de cada trabajo que no es enabler está en su tabla. Hay **7 enablers**: 6 nuevos más SPIKE-CKP-001. TS-CKP-005 (biblioteca de componentes) se añadió el 2026-10-05 por decisión de Rene: los componentes de DSYS-GRP-001 § 3 se construyen antes de las historias. El resto del trabajo técnico tendrá una historia dueña y va a su Dev Spec: ver [Trabajo técnico que no es enabler](#trabajo-técnico-que-no-es-enabler).
 >
 > **Conjunto mínimo**: decisión del orquestador (2026-10-04), validada por Arquitecto. No se crea un INF de arnés ni de banco para la predicción ni para el ejecutor: se reutilizan INF-GRP-001 e INF-GRP-002 con suites y escenarios que entran con TS-CKP-001, TS-CKP-002 e INF-CKP-001.
 
@@ -33,6 +33,7 @@ related:
 | [TS-CKP-003](./technical-stories/TS-CKP-003-capa-cockpit-guardrails.md) | TS | Capa cockpit en la decisión de Guardrails | Una decisión por operación, antes de cualquier efecto, heredada por los hooks del `git` del ejecutor y registrada una vez | ADR-CKP-002 § 4 | BR-07 gobernadas (BR-CKP-AUTH-001, WF-002); F-001-05 (DEP-MCP-3, DEP-MCP-5) | TS-CKP-002; US-GRD-001; US-GRD-005; INF-GRD-001 (enmiendas de ADR-GRD-003 y ADR-GRD-006 ya aplicadas) | Medium | Dev Spec Pending |
 | [INF-CKP-001](./technical-stories/INF-CKP-001-esqueleto-tui.md) | INF | Esqueleto de la TUI: cliente del canal, bucle TEA, saneado único y gate de 100 ms | Mismo bucle, cliente y saneador para todas las pantallas; una regresión de latencia rompe el CI | ADR-CKP-003 | BR-04 a BR-07 (todas sus historias); CLI de solo lectura (Q-CKP-20) | TS-GRP-004 (N1 a N7); TS-CKP-004; INF-GRP-002 | Medium | In Progress (Entrega 1) |
 | [TS-CKP-004](./technical-stories/TS-CKP-004-tokens-semanticos-simbolos.md) | TS | Tokens semánticos y símbolos con fallback en el tema | Ningún literal de color ni de glifo; se lee igual en todas las profundidades de color y en ASCII (NFR-09) | ADR-GRP-003, ADR-CKP-003 § 10 | BR-04 a BR-07 (todas las pantallas); NFR-09; BR-CKP-EDGE-006 | — | Low | **Done (macOS)** (PR #50, [Dev Spec](./dev-specs/TS-CKP-004-tokens-semanticos-simbolos.md)). Pendiente: anchura de símbolos en Linux y Windows (etapa de validación multiplataforma) |
+| [TS-CKP-005](./technical-stories/TS-CKP-005-biblioteca-componentes-tui.md) | TS | Biblioteca de componentes TUI v0 | Los 10 widgets de DSYS-GRP-001 § 3, puros, con snapshots en los 6 modos y la galería `raptor ui gallery`; cada US-CKP solo arma su vista | ADR-CKP-003 § 7, § 8, § 10 y § 12 | BR-04 a BR-07 (las US-CKP de la TUI, todas menos US-CKP-010 y 011); NFR-09 | TS-CKP-004; INF-CKP-001 (`SafeText`, target de biblioteca) | Medium | Dev Spec aprobada ([DS](./dev-specs/TS-CKP-005-biblioteca-componentes-tui.md)); implementada en macOS; tests de la TUI verificados en Windows. Pendiente: etapa de validación multiplataforma |
 
 ## DAG de enablers
 

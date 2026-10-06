@@ -22,7 +22,7 @@ blocked:
 **Prioridad**: Alta (BR-04 a BR-07 Must; abrir en el editor, selector de repo y CLI de solo lectura, Should)
 **Estado**: 23 historias listas para Dev Spec; 1 bloqueada (US-CKP-023). Requerimiento aprobado por Rene Bonilla (marca de aprobación del 2026-10-05).
 
-**Contexto**: [`context.md`](./context.md) (CTX-CKP-001) · **Reglas**: [`business-rules.md`](./business-rules.md) (BR-CKP-001) · **Enablers**: [`technical-stories.md`](./technical-stories.md) (ADR-CKP-001 a 003, TS-CKP-001 a 004, INF-CKP-001, SPIKE-CKP-001)
+**Contexto**: [`context.md`](./context.md) (CTX-CKP-001) · **Reglas**: [`business-rules.md`](./business-rules.md) (BR-CKP-001) · **Enablers**: [`technical-stories.md`](./technical-stories.md) (ADR-CKP-001 a 003, TS-CKP-001 a 005, INF-CKP-001, SPIKE-CKP-001)
 
 ---
 
@@ -42,30 +42,30 @@ blocked:
 
 | ID | Título | Ola | Prioridad | Arranque (enablers y enmiendas) | Status |
 |----|--------|-----|-----------|----------------------------------|--------|
-| [US-CKP-001](./user-stories/US-CKP-001-flota-en-vivo.md) | El desarrollador ve en vivo qué agente trabaja en cada worktree de un repo | 0 | Must | INF-CKP-001, TS-CKP-004, TS-GRP-004 (DEP-CKP-6) | expanded |
-| [US-CKP-002](./user-stories/US-CKP-002-orden-atencion-terminadas.md) | La lista pone primero lo que pide atención y no se llena de sesiones viejas | 1 | Must | DEP-CKP-4 | expanded |
-| [US-CKP-003](./user-stories/US-CKP-003-estados-motor-conexion.md) | La TUI dice en qué estado está el motor y qué hacer en cada caso | 1 | Must | DEP-CKP-12 (solo el autoarranque) | expanded |
-| [US-CKP-004](./user-stories/US-CKP-004-selector-repo-preferencias.md) | El desarrollador cambia de repo y la TUI recuerda cómo la dejó | 2 | Should | DEP-CKP-11 | expanded |
-| [US-CKP-005](./user-stories/US-CKP-005-terminal-pequena-sin-color.md) | La TUI se puede usar en una terminal pequeña, sin color o en ASCII | 1 | Must | TS-CKP-004 | expanded |
-| [US-CKP-006](./user-stories/US-CKP-006-conflictos-previstos.md) | El desarrollador ve qué agentes van a chocar antes de hacer merge | 2 | Must | SPIKE-CKP-001 → TS-CKP-001 | expanded |
-| [US-CKP-007](./user-stories/US-CKP-007-frescura-prediccion.md) | Una predicción vieja nunca se presenta como actual | 3 | Must | TS-CKP-001 | expanded |
-| [US-CKP-008](./user-stories/US-CKP-008-alerta-conflicto-nuevo.md) | El desarrollador se entera en la TUI cuando aparece un conflicto previsto nuevo | 3 | Must | TS-CKP-001 | expanded |
-| [US-CKP-009](./user-stories/US-CKP-009-base-pendiente.md) | Con la rama base sin confirmar, la predicción contra la base queda pendiente | 3 | Must | TS-CKP-001 | expanded |
+| [US-CKP-001](./user-stories/US-CKP-001-flota-en-vivo.md) | El desarrollador ve en vivo qué agente trabaja en cada worktree de un repo | 0 | Must | INF-CKP-001, TS-CKP-004, TS-GRP-004 (DEP-CKP-6), TS-CKP-005 | expanded |
+| [US-CKP-002](./user-stories/US-CKP-002-orden-atencion-terminadas.md) | La lista pone primero lo que pide atención y no se llena de sesiones viejas | 1 | Must | DEP-CKP-4, TS-CKP-005 | expanded |
+| [US-CKP-003](./user-stories/US-CKP-003-estados-motor-conexion.md) | La TUI dice en qué estado está el motor y qué hacer en cada caso | 1 | Must | DEP-CKP-12 (solo el autoarranque), TS-CKP-005 | expanded |
+| [US-CKP-004](./user-stories/US-CKP-004-selector-repo-preferencias.md) | El desarrollador cambia de repo y la TUI recuerda cómo la dejó | 2 | Should | DEP-CKP-11, TS-CKP-005 | expanded |
+| [US-CKP-005](./user-stories/US-CKP-005-terminal-pequena-sin-color.md) | La TUI se puede usar en una terminal pequeña, sin color o en ASCII | 1 | Must | TS-CKP-004, TS-CKP-005 | expanded |
+| [US-CKP-006](./user-stories/US-CKP-006-conflictos-previstos.md) | El desarrollador ve qué agentes van a chocar antes de hacer merge | 2 | Must | SPIKE-CKP-001 → TS-CKP-001, TS-CKP-005 | expanded |
+| [US-CKP-007](./user-stories/US-CKP-007-frescura-prediccion.md) | Una predicción vieja nunca se presenta como actual | 3 | Must | TS-CKP-001, TS-CKP-005 | expanded |
+| [US-CKP-008](./user-stories/US-CKP-008-alerta-conflicto-nuevo.md) | El desarrollador se entera en la TUI cuando aparece un conflicto previsto nuevo | 3 | Must | TS-CKP-001, TS-CKP-005 | expanded |
+| [US-CKP-009](./user-stories/US-CKP-009-base-pendiente.md) | Con la rama base sin confirmar, la predicción contra la base queda pendiente | 3 | Must | TS-CKP-001, TS-CKP-005 | expanded |
 | [US-CKP-010](./user-stories/US-CKP-010-kpi-deteccion.md) | El desarrollador sabe qué parte de los conflictos reales se vio antes de ocurrir | 3 | Must | DEP-CKP-11, DEP-CKP-14 | expanded |
 | [US-CKP-011](./user-stories/US-CKP-011-cli-solo-lectura.md) | El desarrollador consulta la flota y los conflictos desde la línea de comandos | 3 | Should | TS-CKP-001 | expanded |
-| [US-CKP-012](./user-stories/US-CKP-012-ver-diff.md) | El desarrollador revisa lo que un agente integraría antes de hacer merge | 1 | Must | DEP-CKP-3 | expanded |
-| [US-CKP-013](./user-stories/US-CKP-013-abrir-en-editor.md) | El desarrollador abre el worktree de un agente en su editor | 3 | Should | DEP-CKP-11, 12, 13 | expanded |
-| [US-CKP-014](./user-stories/US-CKP-014-integrar-rama-agente.md) | El desarrollador integra la rama de un agente con una tecla y puede deshacerlo | 2 | Must | TS-TMC-004 → TS-CKP-002 → TS-CKP-003 | expanded |
-| [US-CKP-015](./user-stories/US-CKP-015-rebasar-rama-agente.md) | El desarrollador pone al día la rama de un agente sobre la base | 3 | Must | TS-CKP-002, TS-CKP-003 | expanded |
-| [US-CKP-016](./user-stories/US-CKP-016-operacion-detenida.md) | Un merge o rebase que choca queda detenido y el desarrollador decide cómo salir | 4 | Must | TS-CKP-002, DEP-CKP-14 | expanded |
-| [US-CKP-017](./user-stories/US-CKP-017-descartar-worktree.md) | El desarrollador descarta el trabajo de un agente sin miedo a perderlo | 3 | Must | TS-CKP-002, TS-CKP-003 | expanded |
-| [US-CKP-018](./user-stories/US-CKP-018-crear-worktree.md) | El desarrollador prepara un worktree para un agente nuevo | 3 | Must | TS-CKP-002, TS-CKP-003 | expanded |
-| [US-CKP-019](./user-stories/US-CKP-019-denegada-excepcion-consciente.md) | El desarrollador entiende por qué Guardrails frena una acción y puede hacer una excepción consciente | 3 | Must | TS-CKP-003 (DEP-CKP-10) | expanded |
-| [US-CKP-020](./user-stories/US-CKP-020-trabajo-de-otro-actor.md) | Tocar el trabajo de otro actor exige confirmar el plan concreto | 3 | Must | TS-TMC-004, TS-CKP-002 | expanded |
-| [US-CKP-021](./user-stories/US-CKP-021-historial-aviso-purga.md) | El desarrollador ve en la TUI el historial de operaciones y el aviso de purga | 3 | Must | DEP-CKP-5 | expanded |
-| [US-CKP-022](./user-stories/US-CKP-022-grafo-carriles.md) | El desarrollador ve crecer la rama de cada agente sobre la base | 2 | Must | DEP-CKP-2 | expanded |
-| [US-CKP-023](./user-stories/US-CKP-023-cola-confirmacion.md) | El desarrollador aprueba o rechaza desde la TUI las acciones que un agente deja en espera | — | Should | ⛔ US-GRD-015 + factor de Q-GRD-19 | blocked |
-| [US-CKP-024](./user-stories/US-CKP-024-integrar-casos-limite.md) | Integrar sigue siendo seguro cuando el estado cambia, choca o la base no está sacada | 3 | Must | TS-CKP-002 | expanded |
+| [US-CKP-012](./user-stories/US-CKP-012-ver-diff.md) | El desarrollador revisa lo que un agente integraría antes de hacer merge | 1 | Must | DEP-CKP-3, TS-CKP-005 | expanded |
+| [US-CKP-013](./user-stories/US-CKP-013-abrir-en-editor.md) | El desarrollador abre el worktree de un agente en su editor | 3 | Should | DEP-CKP-11, 12, 13, TS-CKP-005 | expanded |
+| [US-CKP-014](./user-stories/US-CKP-014-integrar-rama-agente.md) | El desarrollador integra la rama de un agente con una tecla y puede deshacerlo | 2 | Must | TS-TMC-004 → TS-CKP-002 → TS-CKP-003, TS-CKP-005 | expanded |
+| [US-CKP-015](./user-stories/US-CKP-015-rebasar-rama-agente.md) | El desarrollador pone al día la rama de un agente sobre la base | 3 | Must | TS-CKP-002, TS-CKP-003, TS-CKP-005 | expanded |
+| [US-CKP-016](./user-stories/US-CKP-016-operacion-detenida.md) | Un merge o rebase que choca queda detenido y el desarrollador decide cómo salir | 4 | Must | TS-CKP-002, DEP-CKP-14, TS-CKP-005 | expanded |
+| [US-CKP-017](./user-stories/US-CKP-017-descartar-worktree.md) | El desarrollador descarta el trabajo de un agente sin miedo a perderlo | 3 | Must | TS-CKP-002, TS-CKP-003, TS-CKP-005 | expanded |
+| [US-CKP-018](./user-stories/US-CKP-018-crear-worktree.md) | El desarrollador prepara un worktree para un agente nuevo | 3 | Must | TS-CKP-002, TS-CKP-003, TS-CKP-005 | expanded |
+| [US-CKP-019](./user-stories/US-CKP-019-denegada-excepcion-consciente.md) | El desarrollador entiende por qué Guardrails frena una acción y puede hacer una excepción consciente | 3 | Must | TS-CKP-003 (DEP-CKP-10), TS-CKP-005 | expanded |
+| [US-CKP-020](./user-stories/US-CKP-020-trabajo-de-otro-actor.md) | Tocar el trabajo de otro actor exige confirmar el plan concreto | 3 | Must | TS-TMC-004, TS-CKP-002, TS-CKP-005 | expanded |
+| [US-CKP-021](./user-stories/US-CKP-021-historial-aviso-purga.md) | El desarrollador ve en la TUI el historial de operaciones y el aviso de purga | 3 | Must | DEP-CKP-5, TS-CKP-005 | expanded |
+| [US-CKP-022](./user-stories/US-CKP-022-grafo-carriles.md) | El desarrollador ve crecer la rama de cada agente sobre la base | 2 | Must | DEP-CKP-2, TS-CKP-005 | expanded |
+| [US-CKP-023](./user-stories/US-CKP-023-cola-confirmacion.md) | El desarrollador aprueba o rechaza desde la TUI las acciones que un agente deja en espera | — | Should | ⛔ US-GRD-015 + factor de Q-GRD-19, TS-CKP-005 | blocked |
+| [US-CKP-024](./user-stories/US-CKP-024-integrar-casos-limite.md) | Integrar sigue siendo seguro cuando el estado cambia, choca o la base no está sacada | 3 | Must | TS-CKP-002, TS-CKP-005 | expanded |
 
 ---
 
