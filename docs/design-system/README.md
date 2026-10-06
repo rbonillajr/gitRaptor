@@ -15,6 +15,7 @@ changelog:
   - 0.3 (2026-10-04): Enmienda del Cockpit (E7 de ADR-CKP-003): símbolos con anchura, `crates/theme` agnóstico de ratatui, alcance de `--plain`, versiones de la TUI e i18n con catálogo tipado.
   - 0.4 (2026-10-05): Enmienda de TS-CKP-004: `focus.default`, `agent.state.*`, símbolo `info`, gate de contraste del tema de alto contraste y tokens implementados.
   - 0.5 (2026-10-05): Enmienda de TS-CKP-005: componentes implementados, glifos estructurales fuera de los tokens, foco por forma y galería.
+  - 0.6 (2026-10-05): Paleta A («Grafito y teal») decidida por Rene Bonilla; variante para terminal clara de cada token, detección del fondo (OSC 11, `COLORFGBG`) y `--theme light|dark|high-contrast`. Cierra § 8.1 y § 8.2.
 ---
 
 # GitRaptor Design System
@@ -64,14 +65,14 @@ El MVP de GitRaptor (BRD-GRP-001, Fase 1) tiene **tres superficies: CLI, TUI y s
 |---|---|
 | Texto | `text.default`, `text.muted`, `text.inverse` |
 | Fondo | `bg.default` (= fondo de la terminal), `bg.selected`, `bg.highlight` |
-| Marca | `accent.default` (color de acento, **por definir**) |
+| Marca | `accent.default`: teal (paleta A, decidida el 2026-10-05; ver la enmienda de la paleta) |
 | Foco | `focus.default`: panel o fila con el foco del teclado (enmienda 2026-10-05) |
 | Estado | `status.success`, `status.warning`, `status.danger`, `status.info` |
 | Git | `git.added`, `git.removed`, `git.modified`, `git.conflict`, `git.branch.base` |
 | Agentes | `agent.1` … `agent.8`: colores categóricos para distinguir agentes y carriles del grafo |
 | Estado de agente | `agent.state.active`, `agent.state.idle`, `agent.state.done`: alias de `status.success` y `text.muted`; el símbolo es la señal principal (enmienda 2026-10-05) |
 
-Cada token semántico define **tres valores**: *truecolor* (hex), *256 colores* (índice ANSI) y *fallback de 16 colores*, para que la TUI se vea bien en cualquier terminal.
+Cada token semántico define **tres valores**: *truecolor* (hex), *256 colores* (índice ANSI) y *fallback de 16 colores*, para que la TUI se vea bien en cualquier terminal. (Enmienda 2026-10-05: y los define **dos veces**, para terminal oscura y para terminal clara.)
 
 ### 2.2 Símbolos
 
@@ -157,8 +158,8 @@ Widgets ratatui en `apps/cli`, todos con los tokens de `crates/theme`:
 
 ## 8. Decisiones pendientes (v0)
 
-1. **Color de acento de marca** (`accent.default`) y paleta final de agentes, validada para daltonismo.
-2. **Tema por defecto:** detectar si la terminal es clara u oscura, o asumir oscura.
+1. ~~**Color de acento de marca** (`accent.default`) y paleta final de agentes, validada para daltonismo.~~ **Cerrada el 2026-10-05**: paleta A, «Grafito y teal», con agentes Okabe-Ito (enmienda de la paleta).
+2. ~~**Tema por defecto:** detectar si la terminal es clara u oscura, o asumir oscura.~~ **Cerrada el 2026-10-05**: se detecta (OSC 11, después `COLORFGBG`) y, si nada responde, oscura (enmienda de la paleta).
 3. **Responsable** del design system.
 
 ---
@@ -213,7 +214,7 @@ Aplicada al implementar los tokens ([TS-CKP-004](../requirements/features/cockpi
 | Sin color, el significado lo cargan la negrita y el inverso; `dim` solo en `text.muted` | § 6 |
 
 - **Implementación**: `packages/design-tokens/tokens/{color,semantic,symbol}.json` → Style Dictionary → `crates/theme/src/generated.rs` (commiteado). El workflow `tokens` falla si el código generado no coincide con los tokens. El índice de 256 colores se deriva de cada hex (solo 16..255).
-- ⚠️ **ASSUMPTION** (§ 8 sigue abierta): acento teal, paleta de agentes Okabe-Ito (apta para daltonismo) con `agent.8` en blanco y el azul aclarado, y fondo oscuro supuesto para el informe del juego normal.
+- ~~⚠️ **ASSUMPTION**~~ **Retirada el 2026-10-05** (paleta A decidida; ver la enmienda de la paleta). Texto original (§ 8 entonces abierta): acento teal, paleta de agentes Okabe-Ito (apta para daltonismo) con `agent.8` en blanco y el azul aclarado, y fondo oscuro supuesto para el informe del juego normal.
 
 Anchura real de `⚡`, `⛔`, `⚠` y `ℹ` en Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
 
@@ -231,3 +232,33 @@ Aplicada al construir la biblioteca de componentes ([TS-CKP-005](../requirements
 | Snapshots por componente y estado: texto Unicode y ASCII, y estilos en truecolor, 256, 16, `NO_COLOR` y alto contraste; Layout en 80×24, 100×30, 120×40 y 79×24 | § 7 |
 
 Anchura real de los símbolos y la galería en Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
+
+## Enmienda (2026-10-05, paleta A y terminal clara)
+
+**Decisión de Rene Bonilla (2026-10-05)**: la paleta de la TUI es la **opción A, «Grafito y teal»**, la que vio en la [comparativa de paletas](https://claude.ai/code/artifact/272a0fdd-8104-4449-b16c-ee347d7ea969). Retira la ⚠️ ASSUMPTION de la enmienda anterior y cierra § 8.1 y § 8.2. El resto lo aplicó el orquestador: **Decisión del orquestador (2026-10-05), validada por Arquitecto** ([TS-CKP-004](../requirements/features/cockpit/technical-stories/TS-CKP-004-tokens-semanticos-simbolos.md), enmienda del 2026-10-05).
+
+**Por qué hay dos variantes.** En el tema normal la TUI **hereda el fondo y el texto de la terminal** y solo pinta acento, tenue, selección, foco, estados, Git y agentes. Con una sola variante pensada para fondo oscuro, en una terminal clara el foco amarillo y el agente 4 no se leían. Cada token semántico tiene ahora una variante para terminal oscura y otra para terminal clara, en truecolor, 256 y 16 colores. El alto contraste no cambia: pinta su propio fondo negro.
+
+| Token | Terminal oscura | Terminal clara |
+|---|---|---|
+| `accent.default` | `#2dc2ad` | `#0f7d70` |
+| `text.muted` | `#949494` (ver ajuste) | `#6b6b6b` |
+| `bg.selected` | `#303030` | `#e8e8e8` |
+| `bg.highlight` (barra de estado) | `#3a3a3a` | `#f0f0f0` |
+| `focus.default` | `#ffe066` | `#8a5a00` |
+| `status.success` / `git.added` | `#3fb950` | `#1a7f37` |
+| `status.warning` / `git.modified` | `#d29922` | `#9a6700` |
+| `status.danger` / `git.removed` | `#f85149` | `#cf222e` |
+| `status.info` | `#58a6ff` | `#0969da` |
+| `git.branch.base` | `#bc8cff` | `#8250df` |
+| `git.conflict` | `#f0883e` | `#bc4c00` |
+| `text.inverse` | `#000000` | `#ffffff` |
+| `agent.1` … `agent.8` | Okabe-Ito: `#e69f00`, `#56b4e9`, `#009e73`, `#f0e442`, `#4fa3e0`, `#d55e00`, `#cc79a7`, `#ffffff` | Okabe-Ito oscurecido: `#a35f00`, `#1f6fa8`, `#00704f`, `#7a7200`, `#0b4f8a`, `#b83a00`, `#a8457f`, `#000000` |
+
+- **Ajustes a la decisión de Rene** (decisión del orquestador, validada por Arquitecto): el tenue oscuro pasa de `#8a8a8a` a **`#949494`** (índice xterm 246), porque `#8a8a8a` daba 4.35:1 sobre Solarized oscuro y el gate pide 4.5; la diferencia visual es mínima. `bg.highlight` oscuro es `#3a3a3a` y no `#262626`, que no se distinguía del fondo (1.10:1 sobre `#1e1e1e`).
+- **256 colores**: el índice se deriva del hex, salvo overrides donde el derivado no pasaba 4.5:1 sobre blanco o juntaba colores distintos en un índice: acento claro → 29, `agent.7` claro → 96, `agent.1` claro → 94, `agent.4` claro → 58, `git.conflict` claro → 124.
+- **Detección del fondo** (la hace la TUI al arrancar, antes de su lector de eventos): `--theme light|dark|high-contrast|auto` > variable `GITRAPTOR_THEME` (mismos valores) > respuesta OSC 11 de la terminal > `COLORFGBG` > oscura. La consulta OSC 11 va seguida de una petición DA1, así que una terminal que no soporta OSC 11 responde al instante; si no responde nada, se espera como mucho 200 ms. No se consulta con `NO_COLOR`, `--no-color` o `TERM=dumb`. Un valor de `GITRAPTOR_THEME` que no es un tema se ignora y se avisa sin repetirlo (SEC-12). La lógica vive en `crates/theme` (sin dependencias) y la E/S de la terminal en `apps/cli` (módulo `term`).
+- **Contraste** (gate en CI, WCAG AA 4.5:1, truecolor y 256): `text.default` y `text.muted` de cada variante sobre sus fondos típicos (oscura: `#1e1e1e` y Solarized oscuro; clara: blanco), y `text.default` sobre la selección y la barra; en la clara, además, cada color de primer plano sobre blanco y `text.inverse` sobre acento, foco y estados. En 256 colores, los `status.*` y `git.*` con valores distintos no comparten índice. `text.default` se hereda de la terminal, así que el gate mide su valor de referencia. Informe sin gate: `cargo test -p gitraptor-theme contrast_report -- --nocapture`. Sigue por debajo de AA, solo en el informe: el tenue sobre la selección (4.4 en las dos variantes), `status.danger` y `agent.3` sobre Solarized oscuro (4.5 y 4.4), `agent.6` oscuro (4.3), y varios colores claros sobre Solarized claro.
+- **Galería**: `cargo run -p gitraptor-theme --example palette` pinta los tokens en la terminal; con `-- --html`, la misma galería en HTML.
+
+Detección del fondo en Linux y en Windows (consola y Windows Terminal; en Windows hoy no se consulta y se usa `COLORFGBG` u oscura): **Pendiente: etapa de validación multiplataforma**.
