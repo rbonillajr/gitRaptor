@@ -818,6 +818,7 @@ dependencies = [
  "gitraptor-git",
  "gitraptor-testkit",
  "gitraptor-theme",
+ "nix",
  "ratatui",
  "serde",
  "serde_json",

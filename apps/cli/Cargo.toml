@@ -38,3 +38,7 @@ tempfile.workspace = true
 [[bench]]
 name = "engine"
 harness = false
+
+[target.'cfg(unix)'.dev-dependencies]
+# `setsid` for the simulated agent that runs without a terminal (US-GRP-009).
+nix = { version = "=0.31.3", features = ["process"] }

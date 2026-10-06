@@ -101,6 +101,20 @@ sessions.line = {worktree}  {session}
 sessions.unavailable = agent sessions cannot be detected on this system yet
 sessions.restart-engine = the running engine is older than this raptor and cannot show sessions: restart it with `raptor daemon stop`
 
+# Explicit registration of an agent (US-GRP-009).
+agent.created = {agent} is registered here
+agent.confirmed = {agent} was already detected here: its session is confirmed
+agent.already-registered = {agent} was already registered here; nothing changed
+agent.other-notice = {name} registered as another agent: it is observed and its activity attributed to it, without specific functions. It is not detected on its own: it stays present until you run raptor agent withdraw "{name}"
+agent.withdrawn = the registration of {agent} was withdrawn; its session ended
+agent.refused-agent = refused: only the developer can withdraw the registration of another agent
+registration.not-a-worktree = that folder is not a worktree of any observed repo
+registration.repo-not-observed = the repo is not observed
+registration.worktree-mismatch = refused: an agent can only register in the worktree it works in
+registration.agent-mismatch = refused: an agent can only register as the agent it is
+registration.no-working-folder = the working folder of the caller could not be read
+registration.not-registered = {agent} has no registration to withdraw in that worktree; a detected session ends when its process ends
+
 # The prior snapshot failed: the operation did not run (US-TMC-001).
 prior.no-space = not run: there is no disk space to save the work first; nothing changed
 prior.store-unavailable = not run: the snapshot store is unavailable; nothing changed
@@ -177,6 +191,7 @@ error.operation-failed = the operation failed; it can be undone
 error.identity-unverified = the engine could not verify who you are
 error.repo-rejected = the repo was rejected
 error.operation-rejected = the operation was refused before running
+error.registration-rejected = the registration was refused
 # raptor undo (US-TMC-002).
 undo.done = undone {operation} ({id}) in {worktree}
 undo.saved = the state right before this undo is saved as {snapshot}; nothing was lost
