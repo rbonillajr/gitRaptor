@@ -294,3 +294,14 @@ Decisión del orquestador (2026-10-05), validada por el Arquitecto y por securit
 | **SID → uid**: `0` si el token es del usuario del daemon, ajeno si es de otro usuario, `Denied` si no se puede leer. La cadena termina limpia en un proceso de otro usuario o en `explorer.exe` de la carpeta de Windows leída del kernel | § 6.1 |
 | **Compuerta explícita de comandos reservados y confirmación** (`terminal_proof`): sin terminal de control ni líder de sesión, en Windows todo comando reservado y toda confirmación se rechazan con `Unsupported` después de recorrer la ascendencia (TQ-14). Un "sin atribuir" cuya ascendencia no se puede verificar se rechaza con `identity-unverified` | § 6 |
 | **Riesgo residual añadido**: los nietos huérfanos de un hijo del ejecutor se rechazan en vez de atribuirse (los Job Objects quedan pendientes), hay una carrera entre `spawn` y la marca, y un proceso del mismo usuario puede elegir padre (`PROC_THREAD_ATTRIBUTE_PARENT_PROCESS`) | § 6, Consecuencias |
+
+## Enmienda (2026-10-05, US-GRP-009: registro de agentes)
+
+Decisión del orquestador (2026-10-05), validada por el Arquitecto y el PO. Detalle en la [Dev Spec de US-GRP-009](../../requirements/features/motor-local/dev-specs/US-GRP-009-dev-spec.md).
+
+| Cambio | Dónde |
+|---|---|
+| **El registro es un solo método no reservado, `registration.register`**. El daemon pasa al llamante los controles 1 a 3 y `daemon-descendant` (sin auditarlos como comando reservado). Si los pasa, es el **desarrollador** y el worktree puede venir de un **parámetro**: es la excepción a "nunca de un parámetro" del punto 6, necesaria para registrar a otro agente (BR-VAL-002). Si no los pasa, y siempre en una conexión `mcp`, es un **agente**: el worktree es el de su cwd, y un parámetro con otro worktree se rechaza con `worktree-mismatch` sin examinar esa ruta | § 6.6 |
+| **Un agente se registra como el agente que es**: Claude Code solo desde una sesión detectada de Claude Code, y una sesión de Claude Code no como otro agente (`agent-mismatch`). Así ningún proceso aparece como "Claude Code · registrado" ni confirma la sesión de otro | § 6.6 (M7) |
+| **Los rechazos `worktree-mismatch` y `agent-mismatch` se auditan**, aunque el registro no sea reservado, con los motivos nuevos del contrato (Validación 7). Los registros aceptados dejan su rastro en los registros de atribución, con su autor | § 6, punto 7 |
+| **Retiro**: `registration.withdraw` lo pide el desarrollador (reservado, controles 1 a 4). El retiro del propio registro por el agente (`unregister_agent`) sigue en US-MCP-006 | § 6.6 |
