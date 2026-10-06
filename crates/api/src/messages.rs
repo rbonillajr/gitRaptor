@@ -165,6 +165,7 @@ impl RepoView {
         self.fetched_utc_ms = None;
         for w in &mut self.worktrees {
             w.last_activity_utc_ms = None;
+            w.detached_at = None;
         }
     }
 }
@@ -314,6 +315,12 @@ pub struct WorktreeView {
     /// and for a connection without `scope.activity`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_activity_utc_ms: Option<i64>,
+    /// The commit (hex) a detached `HEAD` is at, so a worktree without a
+    /// branch can still be told apart (US-CKP-001, dogfooding amendment).
+    /// Absent when `HEAD` is on a branch, and for a connection without
+    /// `scope.activity`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detached_at: Option<String>,
 }
 
 impl WorktreeView {
@@ -379,6 +386,7 @@ impl WorktreeStateData {
         self.fetched_utc_ms = None;
         for w in &mut self.worktrees {
             w.last_activity_utc_ms = None;
+            w.detached_at = None;
         }
     }
 }
@@ -1032,6 +1040,29 @@ pub struct AuditListResult {
 mod tests {
     use super::*;
     use crate::UntrustedName;
+
+    /// US-CKP-001: the commit of a detached `HEAD` travels only with `scope.activity`; without
+    /// it the field is not even serialized (the types of an older client reject it).
+    #[test]
+    fn without_activity_drops_the_detached_commit() {
+        let mut data = WorktreeStateData {
+            repo_id: "r1".into(),
+            worktrees: vec![WorktreeView {
+                path: Untrusted::new("/w/scratch"),
+                main: false,
+                admin_name: None,
+                status: WorktreeStatus::Unavailable {
+                    reason: UnavailableReason::Missing,
+                },
+                last_activity_utc_ms: None,
+                detached_at: Some("39e852f".into()),
+            }],
+            fetched_utc_ms: None,
+        };
+        data.without_activity();
+        let json = serde_json::to_value(&data).unwrap();
+        assert!(json["worktrees"][0].get("detached_at").is_none(), "{json}");
+    }
 
     /// SEC-12: the MCP projection carries exactly the allowlisted fields.
     #[test]

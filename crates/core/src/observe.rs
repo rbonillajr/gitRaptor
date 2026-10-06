@@ -502,6 +502,7 @@ fn untrusted_link(path: &Path, id: &str) -> WorktreeRead {
                 reason: UnavailableReason::Untrusted,
             },
             last_activity_utc_ms: None,
+            detached_at: None,
         },
         head_commit: None,
         fingerprint: None,
@@ -514,12 +515,13 @@ fn untrusted_link(path: &Path, id: &str) -> WorktreeRead {
 /// unavailable with its reason. The ahead/behind is not counted here (it is
 /// left "unreadable"): the caller counts it for the whole repo.
 pub fn read_worktree(path: &Path, main: bool, admin_name: Option<&str>) -> WorktreeRead {
-    let view = |status| WorktreeView {
+    let view = |status, detached_at| WorktreeView {
         path: Untrusted::from_os(path.as_os_str()),
         main,
         admin_name: admin_name.map(UntrustedName::new),
         status,
         last_activity_utc_ms: None,
+        detached_at,
     };
     let read = || -> Result<(HeadView, Option<String>, Status, bool), ReadError> {
         let reader = RepoReader::open(path, &ReaderOptions::default())?;
@@ -539,27 +541,37 @@ pub fn read_worktree(path: &Path, main: bool, admin_name: Option<&str>) -> Workt
     match read() {
         Ok((head, head_commit, status, in_progress)) => {
             let (counts, changes) = changes(&status);
+            let detached_at = match head {
+                HeadView::Detached => head_commit.clone(),
+                _ => None,
+            };
             WorktreeRead {
                 fingerprint: Some(fingerprint(&changes)),
-                view: view(WorktreeStatus::Ready {
-                    head,
-                    counts,
-                    changes: bounded(changes),
-                    // Counted by `reconcile` once every head is read.
-                    divergence: DivergenceView::Unreadable,
-                }),
+                view: view(
+                    WorktreeStatus::Ready {
+                        head,
+                        counts,
+                        changes: bounded(changes),
+                        // Counted by `reconcile` once every head is read.
+                        divergence: DivergenceView::Unreadable,
+                    },
+                    detached_at,
+                ),
                 head_commit,
                 in_progress,
             }
         }
         Err(err) => WorktreeRead {
-            view: view(WorktreeStatus::Unavailable {
-                reason: match err {
-                    ReadError::Untrusted(_) => UnavailableReason::Untrusted,
-                    _ if !path.exists() => UnavailableReason::Missing,
-                    _ => UnavailableReason::Unreadable,
+            view: view(
+                WorktreeStatus::Unavailable {
+                    reason: match err {
+                        ReadError::Untrusted(_) => UnavailableReason::Untrusted,
+                        _ if !path.exists() => UnavailableReason::Missing,
+                        _ => UnavailableReason::Unreadable,
+                    },
                 },
-            }),
+                None,
+            ),
             head_commit: None,
             fingerprint: None,
             in_progress: false,
