@@ -83,7 +83,7 @@ Repos, remotos, perfiles y daemons temporales (NFR-01); `raptor`, `raptor-hook` 
 | ADR-GRD-002 Val. 10; ADR-GRD-001 Val. 14 · `pack-refs` y `gc` pasan; la base empaquetada sigue protegida | `criteria::repo_intact_pack_refs_and_gc_pass_and_the_packed_base_stays_protected` |
 | ADR-GRD-003 Val. 9 · modo degradado sin daemon | `criteria::repo_intact_degraded_mode_without_the_daemon` |
 | ADR-GRD-003 Val. 6 · perfil recreado (`instance-mismatch`) y servidor impostor (`channel-not-authentic`, el cliente no envía nada) | `criteria::repo_intact_the_channel_is_authenticated` |
-| ADR-GRD-001 Val. 7 · entorno hostil (`PATH`, `HOME`, `XDG_*`, `GITRAPTOR_PROFILE_DIR`, `LD_PRELOAD`, `DYLD_*`) | `criteria::repo_intact_a_hostile_environment_does_not_steer_the_hook` |
+| ADR-GRD-001 Val. 7 · entorno hostil (`PATH`, `HOME`, `XDG_*`, `GITRAPTOR_PROFILE_DIR`; la inyección de bibliotecas rompería antes al propio Git y el stub limpia el entorno, comprobado por `guard_boundary`) | `criteria::repo_intact_a_hostile_environment_does_not_steer_the_hook` |
 | ADR-GRD-001 Val. 5 y 14 · sin `raptor` | `criteria::repo_intact_without_raptor_risky_hooks_fail_closed` |
 | ADR-GRD-001 Val. 6 · error interno | `criteria::repo_intact_an_internal_error_fails_closed_only_where_risky` |
 | ADR-GRD-001 § 2, M-02 · constantes de otro repo | `criteria::repo_intact_moved_dispatchers_deny` |
