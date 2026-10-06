@@ -245,3 +245,22 @@ Aplicada desde la [Dev Spec de US-CKP-001](../../cockpit/dev-specs/US-CKP-001-fl
 | **Etapa del Cockpit** | `t_client_recv` → `t_render` ≤ 100 ms p95 (ADR-GRP-011 E2). Falla en los dos modos: es trabajo de CPU sobre `TestBackend` y no depende de la holgura del runner |
 | **Regresión en `ci`** | Techo por runner con la confirmación 2 de 3. ⚠️ **Provisional** hasta calibrarlo con tres corridas por runner: los techos de `modify` más 100 ms (`TUI_MODIFY` en `REGRESSION_CEILINGS`) |
 | **Dónde corre** | Igual que el banco: Linux en cada PR y macOS en `main`, en el nightly y bajo demanda. El workflow no cambia |
+
+## Enmienda (2026-10-06): escenario `channel_flood`
+
+El test debug `slow_client_and_connection_flood_do_not_starve_the_others` (TS-GRP-004, SEC-08) exigía `p95 < 25 ms`, y con carga fallaba 2 de cada 50 veces (lo midió el PR #129). La regla del proyecto es que los límites de rendimiento van en release o en el banco, nunca en tests debug. Por eso el límite pasa al banco con el mismo presupuesto.
+
+| Cambio | Detalle |
+|---|---|
+| **Test debug** | Conserva solo lo funcional: el cliente bueno recibe los 3000 eventos, el lento recibe el resync y el límite de conexiones se aplica. Ya no mide tiempos |
+| **Bench `channel_flood`** | `cargo bench -p gitraptor-core --bench channel_flood` (release). Usa un daemon en proceso sobre un perfil temporal (NFR-01), con un suscriptor bueno, uno que nunca lee y 100 conexiones extra. Publica 3000 eventos de unos 2 KB en el bus y mide `t_published` → recepción del cliente bueno |
+| **Gate** | p95 < 25 ms (presupuesto IPC de ADR-GRP-011 § 4), en `ci` y en la máquina de referencia por igual. Un intento por encima se mide otra vez y el bench falla con 2 de 3 intentos por encima, como el resto del banco |
+| **Dónde corre** | Es un paso más del job `engine-bench`: Linux en cada PR y macOS en `main`, en el nightly y bajo demanda. Windows lo salta (el cliente del canal es solo Unix) |
+
+**Decisiones del orquestador (2026-10-06):**
+- **Bench propio en `gitraptor-core`, no un escenario de `engine.rs`.** El banco del motor ejecuta el daemon como un proceso aparte, así que no puede publicar en el bus directamente. Medir la inundación con eventos reales del observador mezclaría el canal con el motor. El bench en proceso mide solo el canal, que es lo mismo que medía el test.
+- **Sin techos de regresión calibrados.** En release, el p95 queda dos órdenes de magnitud por debajo del presupuesto (macOS: p50 0,08 ms, p95 0,22 ms, máx. 1,22 ms), así que el presupuesto se aplica directamente con la confirmación 2 de 3.
+
+No se consultó al Arquitecto: el presupuesto (ADR-GRP-011) y la regla de dónde van los límites de rendimiento ya estaban decididos. Lo único que se elige aquí es dónde se ubica el bench.
+
+**Verificación:** en macOS (local, release) da p95 0,22 ms en 3000 eventos. En Linux se verá en el job `engine-bench` del PR. **Pendiente: Windows** (no aplica hasta que el canal exista allí).
