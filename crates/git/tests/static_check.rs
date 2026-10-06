@@ -289,9 +289,11 @@ mod repo_intact_guard_write {
 
     #[test]
     fn the_guard_profile_is_a_closed_config_list() {
+        // A Windows checkout may have CRLF line endings.
         let src =
             std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/invoke.rs"))
-                .unwrap();
+                .unwrap()
+                .replace("\r\n", "\n");
         let start = src.find("impl GuardSubcommand").unwrap();
         let body = &src[start..start + src[start..].find("\n}\n").unwrap()];
         let mut words = 0;
