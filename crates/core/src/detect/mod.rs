@@ -12,6 +12,11 @@
 //!   to a session only when the samples of its window show a `git` of
 //!   exactly one session and no other `git` in the repo (rules 2, 4 and 6).
 //! - **S4**: the signals of Guardrails hooks; none exist yet ([`HookEvidence`]).
+//! - **Registered sessions** (US-GRP-009): present until their registration
+//!   is withdrawn (Q41), with the same states and threshold, without any
+//!   process to check. A registered "other agent" that is the only present
+//!   session of its worktree receives that worktree's Git events (the
+//!   registration as evidence, ADR-GRP-012 rule 3).
 //!
 //! The detector never writes: it hands [`SessionChange`]s to the daemon
 //! loop, the single writer (ADR-GRP-005). It reads processes only through
@@ -137,6 +142,26 @@ pub struct PresentSession {
     pub started_ms: i64,
 }
 
+/// A session created or confirmed by an explicit registration, for the
+/// detector to follow (US-GRP-009).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RegisteredSession {
+    pub repo_id: String,
+    pub session_id: String,
+    pub worktree: PathBuf,
+    pub started_ms: i64,
+    pub state: SessionStateView,
+    /// Its latest known activity: after an engine restart, the time the
+    /// engine last observed, so hours without the engine do not count as
+    /// activity. `None` for a new registration (now).
+    pub last_activity_ms: Option<i64>,
+    /// An "other agent" created by registration: while it is the only
+    /// present session of its worktree, the registration is the evidence
+    /// of that worktree's events (ADR-GRP-012 rule 3). Never for Claude
+    /// Code, registered or confirmed.
+    pub registration_evidence: bool,
+}
+
 /// Outcome of the S3 rule for one Git event (diagnostics, SPIKE-GRP-001).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum S3Outcome {
@@ -185,6 +210,51 @@ struct Live {
     started_ms: i64,
     state: SessionStateView,
     last_activity_ms: i64,
+}
+
+impl Live {
+    fn present(&self) -> PresentSession {
+        PresentSession {
+            session_id: self.session_id.clone(),
+            worktree: self.worktree.clone(),
+            started_ms: self.started_ms,
+        }
+    }
+
+    /// Idle after the threshold without activity: the change, if any.
+    fn idle(&mut self, now: i64, threshold: i64) -> Option<SessionChange> {
+        if self.state != SessionStateView::Active || now - self.last_activity_ms < threshold {
+            return None;
+        }
+        self.state = SessionStateView::Inactive;
+        Some(SessionChange::State {
+            repo_id: self.repo_id.clone(),
+            session_id: self.session_id.clone(),
+            state: SessionStateView::Inactive,
+            at_ms: now,
+        })
+    }
+
+    /// Activity: the change back to active, if it was idle.
+    fn touch(&mut self, now: i64) -> Option<SessionChange> {
+        self.last_activity_ms = now;
+        if self.state != SessionStateView::Inactive {
+            return None;
+        }
+        self.state = SessionStateView::Active;
+        Some(SessionChange::State {
+            repo_id: self.repo_id.clone(),
+            session_id: self.session_id.clone(),
+            state: SessionStateView::Active,
+            at_ms: now,
+        })
+    }
+}
+
+/// A registered session: no process, present until withdrawn.
+struct Registered {
+    live: Live,
+    registration_evidence: bool,
 }
 
 struct RepoPaths {
@@ -248,6 +318,8 @@ struct Notice {
 struct State {
     repos: HashMap<String, RepoPaths>,
     live: HashMap<(u32, u64), Live>,
+    /// Registered sessions, by session id (US-GRP-009).
+    registered: HashMap<String, Registered>,
     /// Classification of each process seen, by identity: only new
     /// processes are classified at each scan.
     classified: HashMap<(u32, u64), bool>,
@@ -404,13 +476,63 @@ impl Detector {
         }
     }
 
+    /// Follows a registered session (US-GRP-009): a new registration, or
+    /// an open one of the store when the repo starts being observed. It
+    /// continues in its state; an idle one stays idle until activity.
+    pub fn register(&self, session: RegisteredSession) {
+        let now = (self.inner.clock)();
+        let threshold = ms(self.inner.config.inactivity);
+        let state = match session.state {
+            SessionStateView::Inactive => SessionStateView::Inactive,
+            _ => SessionStateView::Active,
+        };
+        self.inner.lock().registered.insert(
+            session.session_id.clone(),
+            Registered {
+                live: Live {
+                    repo_id: session.repo_id,
+                    session_id: session.session_id,
+                    worktree: session.worktree,
+                    started_ms: session.started_ms,
+                    state,
+                    last_activity_ms: match state {
+                        SessionStateView::Active => session.last_activity_ms.unwrap_or(now),
+                        _ => now - threshold,
+                    },
+                },
+                registration_evidence: session.registration_evidence,
+            },
+        );
+    }
+
+    /// Stops following a registered session: its registration was
+    /// withdrawn (Q41: never reopened).
+    pub fn end_registered(&self, session_id: &str) {
+        self.inner.lock().registered.remove(session_id);
+    }
+
     /// Stops detecting in a repo. Its sessions are not closed: when it is
     /// added again, [`Detector::watch_repo`] reconciles them.
     pub fn forget_repo(&self, repo_id: &str) {
         let mut st = self.inner.lock();
         st.repos.remove(repo_id);
         st.live.retain(|_, l| l.repo_id != repo_id);
+        st.registered.retain(|_, r| r.live.repo_id != repo_id);
         st.sightings.remove(repo_id);
+    }
+
+    /// The registration as evidence (ADR-GRP-012 rule 3, ADR-GRP-013 § 3):
+    /// the registered "other agent" session of `worktree`, when it is the
+    /// only present session there.
+    pub fn registration_evidence(&self, repo_id: &str, worktree: &Path) -> Option<PresentSession> {
+        let st = self.inner.lock();
+        let here = |l: &Live| l.repo_id == repo_id && l.worktree == worktree;
+        let detected = st.live.values().filter(|l| here(l)).count();
+        let mut registered = st.registered.values().filter(|r| here(&r.live));
+        match (detected, registered.next(), registered.next()) {
+            (0, Some(only), None) if only.registration_evidence => Some(only.live.present()),
+            _ => None,
+        }
     }
 
     /// Activity in a worktree (BR-WF-001): a Git event observed in it.
@@ -534,18 +656,44 @@ impl Inner {
 
     /// One S1 scan: sessions that appeared, ended or went idle.
     fn scan(&self) {
-        let Some(table) = self.procs.list() else {
-            return;
-        };
+        let table = self.procs.list();
         let now = (self.clock)();
-        let by_pid: HashMap<u32, &ProcEntry> = table.iter().map(|e| (e.pid, e)).collect();
         let mut st = self.lock();
         let mut changes = Vec::new();
+        if let Some(table) = &table {
+            self.scan_processes(&mut st, table, now, &mut changes);
+        }
+        // Idle: no activity for the threshold. Registered sessions too,
+        // even where processes cannot be listed.
+        let threshold = ms(self.config.inactivity);
+        let State {
+            live, registered, ..
+        } = &mut *st;
+        let all = live
+            .values_mut()
+            .chain(registered.values_mut().map(|r| &mut r.live));
+        changes.extend(all.filter_map(|l| l.idle(now, threshold)));
+        if !changes.is_empty() {
+            // Under the lock: changes reach the loop in the order they
+            // happened.
+            (self.sink)(changes);
+        }
+    }
+
+    /// The process part of a scan: sessions that appeared or ended.
+    fn scan_processes(
+        &self,
+        st: &mut State,
+        table: &[ProcEntry],
+        now: i64,
+        changes: &mut Vec<SessionChange>,
+    ) {
+        let by_pid: HashMap<u32, &ProcEntry> = table.iter().map(|e| (e.pid, e)).collect();
         // Classify only processes not seen before.
         st.classified
             .retain(|key, _| by_pid.get(&key.0).is_some_and(|e| e.start_us == key.1));
         let mut claude: Vec<&ProcEntry> = Vec::new();
-        for entry in &table {
+        for entry in table {
             let key = (entry.pid, entry.start_us);
             let is = match st.classified.get(&key) {
                 Some(is) => *is,
@@ -594,7 +742,7 @@ impl Inner {
             }
             let here = placed
                 .entry(entry.pid)
-                .or_insert_with(|| place(&st, entry.pid))
+                .or_insert_with(|| place(st, entry.pid))
                 .clone();
             let Some((repo_id, worktree)) = here else {
                 continue;
@@ -616,7 +764,7 @@ impl Inner {
                         Some(l) => Some((l.repo_id.clone(), l.worktree.clone())),
                         None => placed
                             .entry(parent.pid)
-                            .or_insert_with(|| place(&st, parent.pid))
+                            .or_insert_with(|| place(st, parent.pid))
                             .clone(),
                     };
                     if theirs.as_ref() == Some(&(repo_id.clone(), worktree.clone())) {
@@ -649,46 +797,20 @@ impl Inner {
                 },
             );
         }
-        // Idle: no activity for the threshold.
-        let threshold = ms(self.config.inactivity);
-        for live in st.live.values_mut() {
-            if live.state == SessionStateView::Active && now - live.last_activity_ms >= threshold {
-                live.state = SessionStateView::Inactive;
-                changes.push(SessionChange::State {
-                    repo_id: live.repo_id.clone(),
-                    session_id: live.session_id.clone(),
-                    state: SessionStateView::Inactive,
-                    at_ms: now,
-                });
-            }
-        }
-        if !changes.is_empty() {
-            // Under the lock: changes reach the loop in the order they
-            // happened.
-            (self.sink)(changes);
-        }
     }
 
     fn activity(&self, repo_id: &str, worktree: &Path) {
         let now = (self.clock)();
         let mut st = self.lock();
-        let mut changes = Vec::new();
-        for live in st
-            .live
+        let State {
+            live, registered, ..
+        } = &mut *st;
+        let changes: Vec<SessionChange> = live
             .values_mut()
+            .chain(registered.values_mut().map(|r| &mut r.live))
             .filter(|l| l.repo_id == repo_id && l.worktree == worktree)
-        {
-            live.last_activity_ms = now;
-            if live.state == SessionStateView::Inactive {
-                live.state = SessionStateView::Active;
-                changes.push(SessionChange::State {
-                    repo_id: live.repo_id.clone(),
-                    session_id: live.session_id.clone(),
-                    state: SessionStateView::Active,
-                    at_ms: now,
-                });
-            }
-        }
+            .filter_map(|l| l.touch(now))
+            .collect();
         if !changes.is_empty() {
             (self.sink)(changes);
         }
