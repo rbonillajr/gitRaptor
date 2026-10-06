@@ -59,6 +59,12 @@ pub struct HelloResult {
     /// only: the daemon resolves the requester again on every request.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requester: Option<crate::scope::ConnectionRequester>,
+    /// Every capability the daemon knows (protocol 9, ADR-GRP-016 § 1); a
+    /// client asks for the ones it understands with `connection.accept`.
+    /// Absent for connections of protocol 5 to 8: they reject unknown
+    /// fields.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<Vec<String>>,
 }
 
 /// `data` of an `INCOMPATIBLE_PROTOCOL` error. Frozen across versions.

@@ -15,7 +15,10 @@ pub const JSONRPC: &str = "2.0";
 /// Longest accepted string id.
 pub const MAX_ID_LEN: usize = 64;
 
-/// Error codes. Standard JSON-RPC codes plus the engine's own range.
+/// Error codes. Standard JSON-RPC codes plus the engine's shared list,
+/// frozen at `-32016` (ADR-GRP-016 § 3): a new code is declared by its
+/// module, in its own block, as an [`ErrorSpec`] in its file under
+/// [`crate::methods`]. These constants never change their number.
 pub mod code {
     pub const PARSE_ERROR: i64 = -32700;
     pub const INVALID_REQUEST: i64 = -32600;
@@ -67,8 +70,38 @@ pub mod code {
     pub const GUARD_REJECTED: i64 = -32016;
 }
 
-/// Every error code of the contract, so a client presents each one from
-/// its code and `data`, never from `message` (N7). `message` is for logs.
+/// One error code a module added after the shared list froze
+/// (ADR-GRP-016 § 3): in the module's block, with the stable name a client
+/// presents it by (`error.<name>`), never by `message` (N7).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ErrorSpec {
+    pub code: i64,
+    /// Stable kebab-case name, unique in the contract.
+    pub name: &'static str,
+}
+
+impl ErrorSpec {
+    pub const fn new(code: i64, name: &'static str) -> Self {
+        Self { code, name }
+    }
+}
+
+/// Every code a module declared, from every module.
+pub fn module_errors() -> impl Iterator<Item = &'static ErrorSpec> {
+    crate::methods::GROUPS.iter().flat_map(|g| g.errors.iter())
+}
+
+/// The stable name of any code of the contract: the frozen list or a
+/// module's own. `None` for a code the contract does not have.
+pub fn error_name(code: i64) -> Option<&'static str> {
+    ErrorCode::from_code(code)
+        .map(ErrorCode::as_str)
+        .or_else(|| module_errors().find(|e| e.code == code).map(|e| e.name))
+}
+
+/// Every error code of the frozen shared list, so a client presents each
+/// one from its code and `data`, never from `message` (N7). `message` is
+/// for logs. Frozen: a new code is an [`ErrorSpec`] of its module.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ErrorCode {
     ParseError,
