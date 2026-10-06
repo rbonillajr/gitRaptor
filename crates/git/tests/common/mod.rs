@@ -44,7 +44,7 @@ impl Fixture {
         std::fs::create_dir_all(&repo).unwrap();
         std::fs::write(
             home.join(".gitconfig"),
-            "[user]\n\tname = Test\n\temail = test@example.com\n[init]\n\tdefaultBranch = main\n",
+            gitraptor_testkit::fixture::HOME_GITCONFIG,
         )
         .unwrap();
         let fixture = Self {
