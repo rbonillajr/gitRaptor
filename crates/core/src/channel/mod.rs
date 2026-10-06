@@ -97,6 +97,9 @@ pub struct ChannelConfig {
     /// The login autostart whose presence `scope.snapshot` reports
     /// (US-GRP-004). `None`: unknown.
     pub autostart: Option<crate::autostart::Autostart>,
+    /// The capabilities this daemon serves (ADR-GRP-016 § 1): every one of
+    /// the contract. Tests play an older daemon with fewer.
+    pub capabilities: Vec<&'static str>,
 }
 
 impl Default for ChannelConfig {
@@ -109,6 +112,7 @@ impl Default for ChannelConfig {
             protocol: PROTOCOL_VERSION,
             min_protocol: gitraptor_api::MIN_COMPATIBLE_PROTOCOL,
             autostart: None,
+            capabilities: gitraptor_api::capability::all().map(|c| c.name).collect(),
         }
     }
 }
