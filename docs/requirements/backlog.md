@@ -26,9 +26,9 @@
     -   **Historias**: [user-stories.md](features/time-machine/user-stories.md) (21 historias expandidas en `features/time-machine/user-stories/`, 2026-10-03; desde el 2026-10-04, 2 bloqueadas (US-TMC-011 por P17, US-TMC-020 por SPIKE-TMC-001) y 1 fuera del MVP (US-TMC-021, Fase 2), por decisiones de Rene Bonilla)
     -   **Status**: Propuesta
 
-*   **F-001-04**: Guardrails (BR-11, BR-12, BR-13)
+*   **F-001-04**: Guardrails (BR-11, BR-12, BR-13, BR-26)
     -   **Contexto**: [context.md](features/guardrails/context.md) (reglas en [business-rules.md](features/guardrails/business-rules.md), 2026-10-03)
-    -   **Historias**: [user-stories.md](features/guardrails/user-stories.md) (17 historias en `features/guardrails/user-stories/`, 2026-10-04; 16 listas y 1 bloqueada, US-GRD-016, por el MCP. US-GRD-013 y US-GRD-015 se desbloquearon el 2026-10-04 al aceptarse ADR-GRD-008 (factor del SO de Q-GRD-19); su Dev Spec espera a SPIKE-GRD-002. ADR-GRP-005 a 013 y ADR-GRD-001 a 008 aceptados el 2026-10-04. Pendiente del PO: historia de la relajación personal pendiente (Q-GRD-32) y de la adopción del factor por D8, desinstalar y la excepción (OQ-GRD-008-3))
+    -   **Historias**: [user-stories.md](features/guardrails/user-stories.md) (19 historias en `features/guardrails/user-stories/`, 2026-10-04 y 2026-10-06; 18 listas y 1 bloqueada, US-GRD-016, por el MCP. US-GRD-018 (política de autoría de los commits) y US-GRD-019 (quién ejecutó frente a a nombre de quién entra) se añadieron el 2026-10-06 por BR-26 y D6 del BRD (decisión de Rene Bonilla); entran en el MVP, fuera de M1 (decisión del orquestador, 2026-10-06, validada por el PO). US-GRD-013 y US-GRD-015 se desbloquearon el 2026-10-04 al aceptarse ADR-GRD-008 (factor del SO de Q-GRD-19); su Dev Spec espera a SPIKE-GRD-002. ADR-GRP-005 a 013 y ADR-GRD-001 a 008 aceptados el 2026-10-04. Pendiente del PO: historia de la relajación personal pendiente (Q-GRD-32) y de la adopción del factor por D8, desinstalar y la excepción (OQ-GRD-008-3))
     -   **Status**: Priorizada
 
 *   **F-001-05**: Servidor MCP (BR-14, BR-15, BR-16)
@@ -86,7 +86,7 @@ M1 termina cuando se cumplen los seis puntos, verificados en **macOS** (Linux y 
 | MCP mínimo | US-MCP-001, US-MCP-002, US-MCP-003 | Should | US-MCP-001 en curso; ADR-MCP-001 aceptado | No bloquea la salida: la detección funciona por observación y US-MCP-002 arrastra US-GRP-006 y US-GRD-004. Si no entra, es lo primero de M2 |
 | Ver | TS-GRP-004: N8 a N11 | Should | Pendiente | Solo si una historia de M1 los usa |
 
-**Fuera de M1** (siguen en el MVP): US-TMC-022 (tope de disco; sube a M1 si US-GRP-017 mide un almacén de más de 2 GiB), US-GRP-018 (`raptor doctor`), US-GRP-019 (ahorro de energía; el predictor no está en M1), US-GRP-014, US-GRP-015 e INF-GRP-004 (Rene ya tiene Git y compila desde el código), y el predictor de conflictos (SPIKE-CKP-001, TS-CKP-001).
+**Fuera de M1** (siguen en el MVP): US-TMC-022 (tope de disco; sube a M1 si US-GRP-017 mide un almacén de más de 2 GiB), US-GRP-018 (`raptor doctor`), US-GRP-019 (ahorro de energía; el predictor no está en M1), US-GRP-014, US-GRP-015 e INF-GRP-004 (Rene ya tiene Git y compila desde el código), el predictor de conflictos (SPIKE-CKP-001, TS-CKP-001) y la política de autoría de los commits (US-GRD-018 y US-GRD-019, BR-26): el criterio de salida no la necesita y Claude Code ya añade el trailer `Co-Authored-By` por defecto (decisión del orquestador, 2026-10-06, validada por el PO).
 
 ### DAG del hito
 

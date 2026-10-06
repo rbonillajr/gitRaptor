@@ -3,8 +3,8 @@ id: BRD-GRP-001
 title: GitRaptor — Documento de Negocio
 type: business-requirements
 status: draft
-version: 0.7
-date: 2026-10-05
+version: 0.8
+date: 2026-10-06
 author: Rene Bonilla
 tags: [git, ai-agents, worktrees, mcp, tui, cli, agent-cockpit, safety-net, guardrails, azure-devops, brd]
 changelog:
@@ -15,6 +15,7 @@ changelog:
   - 0.5 (2026-10-03): D2 cambia: el MVP da soporte completo solo a Claude Code; después Codex y luego Cursor, uno por uno. Mientras tanto, los demás agentes se aceptan como "otro agente" mediante registro explícito.
   - 0.6 (2026-10-05): D4 y D5 (decisiones de Rene Bonilla): modelo **open core**, con el núcleo gratuito bajo FSL-1.1-ALv2 y una edición de equipo comercial (BR-23 y BR-25); nombre `gitraptor` en los canales y comando `raptor`. Se cierra la pregunta abierta 2.
   - 0.7 (2026-10-05): Research de mercado actualizado ([RES-GRP-COMP-2026-10](research/competitive-2026-10.md)). GitKraken Desktop (desde la 12.0, abr-2026) y GitLens 19 ya tienen vista de agentes con estado en vivo, así que "ver la flota" deja de ser diferencial. Se actualizan § 1, § 2 (P1 y P7), § 3, § 4, § 10 y los anexos. La propuesta de valor pone **"proteger y deshacer" por encima de "ver"** (hipótesis). No cambia ninguna prioridad de BR: los ajustes al backlog quedan como propuesta en el documento de research.
+  - 0.8 (2026-10-06): D6 (decisión de Rene Bonilla): el autor de un commit es la persona y el agente va como trailer `Co-Authored-By`. Nueva **BR-26** (Should, Guardrails del MVP): política de autoría por repo (`agents-commit` por defecto, `human-author`, `flexible`), que separa quién ejecutó el commit de a nombre de quién entra. La pregunta abierta 5 anota que la auditoría local de autoría va en el núcleo y su exportación sigue a BR-24.
 ---
 
 # GitRaptor — Documento de Negocio
@@ -219,6 +220,7 @@ Prioridad MoSCoW. Los IDs (`BR-xx`) se descomponen en historias de usuario en la
 | BR-11 | **Políticas por repo** en la configuración versionable del repo (carpeta `.gitraptor/`; formato y estructura en un ADR de arquitectura): ramas protegidas, prohibir force-push o `reset --hard`, límite de tamaño de diff, formato de commit, rutas prohibidas. | Must |
 | BR-12 | **Aplicación de políticas** en dos capas: (a) en las herramientas MCP, que rechazan antes de ejecutar; (b) en los hooks de Git (pre-commit, pre-push, reference-transaction), para cubrir a los agentes que usan Git crudo. | Must |
 | BR-13 | **Modo "pedir confirmación":** las acciones de riesgo de un agente quedan en cola para que un humano las apruebe en la TUI. | Should |
+| BR-26 | **Política de autoría de los commits** (D6): GitRaptor acepta commits de personas y de agentes. Por defecto el autor es la persona y el agente va como trailer `Co-Authored-By`. Variantes por repo: `agents-commit` (el agente hace commits con el trailer exigido; valor por defecto), `human-author` (el agente no hace commits: bloquear o avisar) y `flexible` (solo registrar). Distingue **quién ejecutó** el commit (proceso, sesión, worktree) de **a nombre de quién entra** (autor, committer, trailer), y muestra las dos cosas cuando difieren. | Should |
 
 **🤖 Servidor MCP**
 
@@ -356,7 +358,7 @@ Como el producto arranca como **herramienta interna**, los KPIs miden uso y valo
 
 ## 12. Decisiones y preguntas abiertas
 
-### 12.1 Decisiones tomadas (v0.3; D4 y D5 en v0.6)
+### 12.1 Decisiones tomadas (v0.3; D4 y D5 en v0.6; D6 en v0.8)
 
 | # | Pregunta | Decisión |
 |---|---|---|
@@ -365,6 +367,7 @@ Como el producto arranca como **herramienta interna**, los KPIs miden uso y valo
 | D3 | ¿Capacidad del equipo? | **Sin equipo humano:** una persona orquestando múltiples agentes de IA. La planificación se hace por historias pequeñas y verificables, no por velocity de un equipo. |
 | D4 | ¿Modelo de licencia y monetización? | **Open core** (decisión de Rene Bonilla, 2026-10-05). Núcleo gratuito para cualquier usuario bajo **FSL-1.1-ALv2**; más adelante, una **edición de equipo** de pago con licencia comercial (grupos de usuarios, BR-23 y BR-25). Ver sección 8. |
 | D5 | ¿Nombre y comando? | **GitRaptor**, publicado como `gitraptor` en los canales (tap propio de Homebrew, winget y npm); el comando sigue siendo `raptor` (decisión de Rene Bonilla, 2026-10-05; ADR-GRP-014 § 6). |
+| D6 | ¿A nombre de quién entra un commit que hace un agente? | **El autor es la persona y el agente va como trailer `Co-Authored-By`** (decisión de Rene Bonilla, 2026-10-06), porque los permisos y las credenciales de Git son del usuario y el agente actúa con ellos. Cada empresa puede ser más estricta o más flexible, porque su harness puede dejar o no que el agente haga commits: por eso la política es configurable por repo en Guardrails (BR-26: `agents-commit`, `human-author`, `flexible`). |
 
 ### 12.2 Preguntas abiertas
 
@@ -372,7 +375,7 @@ Como el producto arranca como **herramienta interna**, los KPIs miden uso y valo
 2. ~~¿Nombre y licencia definitivos? ¿Se mantiene "GitRaptor" y el comando `raptor`?~~ Resuelta por D4 y D5 (2026-10-05).
 3. ¿Hay una fecha objetivo para el MVP?
 4. ¿Integramos con Entire Checkpoints desde temprano o esperamos a que el estándar madure?
-5. ¿En qué edición van la vista visual (BR-22), la auditoría (BR-24) y la parte avanzada de Azure DevOps (BR-19)? La opción B original ponía la auditoría y Azure DevOps avanzado en el nivel de pago; D4 solo asigna BR-23 y BR-25 a la edición de equipo.
+5. ¿En qué edición van la vista visual (BR-22), la auditoría (BR-24) y la parte avanzada de Azure DevOps (BR-19)? La opción B original ponía la auditoría y Azure DevOps avanzado en el nivel de pago; D4 solo asigna BR-23 y BR-25 a la edición de equipo. **Nota v0.8 (2026-10-06)**: la auditoría de autoría de BR-26 (política, registro local y la presentación "commit de \<persona\> con \<agente\> · \<worktree\>") va en el núcleo gratuito como parte de Guardrails individuales (D4) y no depende de esta pregunta. Exportar esas entradas a JSON o SIEM sí es BR-24 y sigue la edición que se le asigne aquí (decisión del orquestador, 2026-10-06, validada por el PO).
 
 ---
 

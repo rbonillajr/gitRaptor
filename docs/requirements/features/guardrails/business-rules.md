@@ -4,7 +4,7 @@ title: "Reglas de Negocio — Guardrails"
 type: business-rules
 status: draft
 created: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-06
 domain: GRP
 epic: E-001
 feature: guardrails
@@ -29,6 +29,8 @@ related:
     - US-GRD-015
     - US-GRD-016
     - US-GRD-017
+    - US-GRD-018
+    - US-GRD-019
 tags:
   - guardrails
   - politicas
@@ -37,6 +39,7 @@ tags:
   - pedir-confirmacion
   - hooks-git
   - registro-decisiones
+  - autoria-commits
 ---
 
 # Reglas de Negocio: Guardrails
@@ -53,7 +56,7 @@ tags:
 
 **Feature**: Guardrails (F-001-04)
 **Enlace a contexto**: [`context.md`](./context.md) (CTX-GRD-001)
-**Última actualización**: 2026-10-04 (Q-GRD-28 a Q-GRD-31, resultados de SPIKE-GRD-001 en macOS; antes, Q-GRD-17 a Q-GRD-27 y sus aplicaciones derivadas: Q-GRD-12 en la versión del worktree, confirmación inicial y configuración antes de confirmar, unión de la rama base por historia; ver Changelog). Antes, 2026-10-03 (versión inicial)
+**Última actualización**: 2026-10-06 (BR-AUTH-005, política de autoría de los commits, por D6 del BRD y Q-GRD-34). Antes, 2026-10-04 (Q-GRD-28 a Q-GRD-31, resultados de SPIKE-GRD-001 en macOS; antes, Q-GRD-17 a Q-GRD-27 y sus aplicaciones derivadas: Q-GRD-12 en la versión del worktree, confirmación inicial y configuración antes de confirmar, unión de la rama base por historia; ver Changelog). Antes, 2026-10-03 (versión inicial)
 
 ---
 
@@ -65,11 +68,11 @@ tags:
 | Cálculos de Negocio | 1 | 1 |
 | Reglas de Elegibilidad | 0 | 0 |
 | Workflows y Estados | 2 | 1 |
-| Permisos y Autorizaciones | 4 | 4 |
+| Permisos y Autorizaciones | 5 | 4 |
 | Reglas de Consistencia de Datos | 6 | 4 |
 | Reglas de Tiempo y Expiración | 2 | 0 |
 | Reglas Excepcionales (Edge Cases) | 5 | 5 |
-| **Total** | **23** | **18** |
+| **Total** | **24** | **18** |
 
 "Críticas" = reglas con criticidad Alta.
 
@@ -473,6 +476,52 @@ Puede: editarla a mano o con el comando (relajar requiere BR-AUTH-001)
 **Cómo se verifica**: commit de un agente sobre la configuración (denegado); worktree en un commit con una configuración más laxa que la de la rama principal (no relaja nada); ausencia de herramientas MCP que editen la configuración o decidan en la cola.
 
 **Referencias**: Q27 de motor-local; NFR-02; Q-GRD-7, Q-GRD-17, Q-GRD-20, Q-GRD-21, S-GRD-4 (confirmado por Q-GRD-7); riesgo R-GRD-4.
+
+---
+
+### BR-AUTH-005: Política de autoría de los commits
+
+**Descripción**: GitRaptor acepta commits de personas y de agentes. Hay que distinguir dos cosas: **quién ejecutó** el commit, que es una observación (proceso, sesión, worktree: "agente X" o "sin atribuir"), y **a nombre de quién entra**, que es la autoría registrada en Git (autor, committer y trailer `Co-Authored-By`). **Modelo por defecto**: el autor es la persona, porque los permisos y las credenciales de Git son suyos y el agente actúa con ellos, y el agente figura como trailer `Co-Authored-By`. GitRaptor nunca reescribe el autor ni añade el trailer: solo decide y registra.
+
+> **Decisión** (Q-GRD-34; D6 del BRD, Rene Bonilla, 2026-10-06): modelo por defecto persona autora + agente como trailer, con variantes por repo en la configuración, porque cada empresa puede ser más estricta o más flexible según si su harness deja hacer commits al agente:
+>
+> | Valor | Commit ejecutado por un agente detectado o registrado |
+> |-------|------------------------------------------------------|
+> | `agents-commit` (**valor por defecto**) | Pasa solo si lleva un trailer `Co-Authored-By` que identifica a ese agente. Sin él → **denegado**, con el motivo y un trailer de ejemplo |
+> | `human-author` | El agente no hace commits. Efecto **bloquear** (por defecto) o **avisar**, según la política. Con "avisar" el commit pasa con aviso, siempre que cumpla `agents-commit` |
+> | `flexible` | Pasa siempre; **solo se registra** quién lo ejecutó, su autor y si lleva trailer |
+
+> **Decisión del orquestador (2026-10-06), validada por el PO**:
+> 1. **Valor por defecto `agents-commit`**: es el modelo por defecto de D6 y el punto medio entre las dos variantes. No forma parte del mínimo seguro de BR-EDGE-001: sin la protección de hooks instalada no se evalúa.
+> 2. **Solo aplica a commits que ejecuta un agente detectado o registrado.** Un commit "sin atribuir" no necesita trailer ni lo bloquea `human-author`. Es una excepción consciente al fail-safe de BR-AUTH-003, porque exigir un trailer a una persona no tiene sentido. Límite conocido: un agente sin registrar que el motor no detecta escapa a la política (R-GRD-2). La pista `inferred` (ADR-GRP-012) **nunca** decide.
+> 3. **Orden de restricción** para BR-CONS-001 y BR-CALC-001: `flexible` < `agents-commit` < `human-author` con avisar < `human-author` con bloquear. Un nivel personal puede endurecer, nunca relajar; relajar la del equipo sigue Q-GRD-21.
+> 4. **Registro** (BR-CONS-004): con `human-author` y con `flexible`, cada commit de un agente deja una entrada con quién lo ejecutó, el autor, el committer, el trailer y la decisión. Los avisos y las entradas de `flexible` **no** cuentan en el KPI de acciones bloqueadas; las denegaciones sí.
+> 5. **Presentación** (US-GRD-019): `raptor events` y el Cockpit muestran las dos cosas cuando difieren ("commit de \<persona\> con \<agente\> · \<worktree\>"). La pista `inferred` de un evento sin atribuir se contrasta con el trailer cuando existe, nunca cambia el actor y **no se muestra con `human-author`**.
+
+**Aplicabilidad**: Todo commit en un repo con la protección instalada, por las dos capas (BR-CONS-002).
+
+**Criticidad**: Media
+
+**Regla de autorización**:
+```
+IF el commit lo ejecuta un agente detectado o registrado
+THEN según la política de autoría efectiva:
+     agents-commit → permitir si hay trailer del agente; si no, denegar (motivo + ejemplo)
+     human-author  → bloquear, o avisar si así está marcada (y exigir el trailer)
+     flexible      → permitir y registrar
+ELSE (sin atribuir) → la política de autoría no aporta nada a la decisión
+```
+
+**Ejemplos**:
+- Sin política configurada, Claude Code hace un commit de "Ana Pérez" con `Co-Authored-By: Claude` → permitido; entra a nombre de Ana con Claude como coautor.
+- Con `agents-commit`, Claude Code hace un commit sin trailer → denegado; el motivo incluye un trailer de ejemplo.
+- Con `human-author` marcada como bloquear, Claude Code hace un commit → denegado y registrado.
+- Con `flexible`, Claude Code hace un commit sin trailer → permitido; el registro anota que no lleva trailer.
+- Ana hace un commit desde su terminal, sin agente detectado, con `agents-commit` → permitido sin trailer.
+
+**Cómo se verifica**: para cada valor, un commit de un agente con trailer y otro sin él, y un commit sin atribuir; un nivel personal que intenta relajar la del equipo; las entradas del registro y su efecto en el KPI.
+
+**Referencias**: BRD BR-26, D6; BR-11 (política del repo); Q-GRD-34; ADR-GRP-012 (pista `inferred`); BR-24 (exportar: Fase 3).
 
 ---
 
@@ -906,6 +955,7 @@ Acción al expirar: se descarta
 | BR-WF-002 | Media | Media | 🟡 P1 |
 | BR-WF-001 | Alta | Media | 🟡 P1 (BR-13 es Should) |
 | BR-TIME-001 | Media | Baja | 🟡 P1 (BR-13 es Should) |
+| BR-AUTH-005 | Media | Media | 🟡 P1 (BR-26 es Should) |
 | BR-TIME-002 | Baja | Baja | 🟢 P2 |
 
 **Leyenda**:
@@ -919,7 +969,7 @@ Acción al expirar: se descarta
 
 ### Reglas → User Stories
 
-Las 23 reglas tienen al menos una historia. La tabla vive en el [índice de historias](./user-stories.md#cobertura-de-reglas-regla--historias), sección "Cobertura de reglas".
+Las 24 reglas tienen al menos una historia. La tabla vive en el [índice de historias](./user-stories.md#cobertura-de-reglas-regla--historias), sección "Cobertura de reglas".
 
 ### Reglas → Criterios de Aceptación
 
@@ -942,3 +992,4 @@ Cada regla debe reflejarse en al menos un escenario Gherkin de su historia. Cada
 | 1.8 | 2026-10-04 | PO (AADD) para Rene Bonilla | Aplicación de decisiones existentes, sin IDs nuevos. BR-EDGE-004: por Q-GRD-12, también la versión ilegible commiteada en el worktree de la operación fuerza el mínimo. BR-CONS-003: tras perder el perfil o adoptar una protección huérfana, la rama base queda "no confirmada" con la unión protegida hasta la confirmación (Q-GRD-21, Q-GRD-23). Sin reglas nuevas. |
 | 1.9 | 2026-10-04 | PO (AADD) para Rene Bonilla | Artifact Judge (FAIL). Q-GRD-23 tal cual: instalar no confirma una configuración del equipo existente; el ejemplo de máquina nueva de BR-CONS-003 confirma después de forma explícita. BR-VAL-001 y BR-EDGE-001: sin confirmación inicial la configuración del equipo solo endurece y el mínimo sigue aplicando (aplicación de Q-GRD-21 y Q-GRD-23, con ejemplo). BR-CONS-005: detecta US-GRD-004; adopta o retira US-GRD-003. BR-CONS-003: la rama base leída entra en la unión con US-GRD-014 y TS-GRD-001; antes, US-GRD-001 protege {`main`, rama principal}. Cabeceras y Trazabilidad hasta Q-GRD-27 con las derivadas; se quita "Sin historias todavía". Sin reglas nuevas. |
 | 1.10 | 2026-10-04 | PO (AADD); decisión del orquestador validada por Arquitecto/PO | Resultados de SPIKE-GRD-001 en macOS. Q-GRD-28: BR-EDGE-001 añade la excepción del renombrado de la rama base en repos reftable y BR-EDGE-003 sus ejemplos (también el efecto parcial con el formato habitual). Q-GRD-29: BR-CONS-005 con criterio semántico en la entrada de la clave de hooks. Q-GRD-31: apartado "lo que se deniega de más" en BR-EDGE-003. Q-GRD-30 solo cambia el RNF de context.md. Sin reglas nuevas. |
+| 1.11 | 2026-10-06 | PO (AADD); decisión del orquestador (2026-10-06), validada por el PO | D6 del BRD (decisión de Rene Bonilla, 2026-10-06), registrada como Q-GRD-34: nueva **BR-AUTH-005**, política de autoría de los commits (modelo por defecto persona autora + agente como trailer `Co-Authored-By`; valores `agents-commit` por defecto, `human-author` con bloquear o avisar, `flexible`). Solo aplica a commits ejecutados por un agente detectado o registrado; orden de restricción; entradas de autoría en el registro sin contar en el KPI salvo las denegaciones; presentación y pista `inferred` en US-GRD-019. 24 reglas (18 críticas). |
