@@ -14,6 +14,11 @@
 //! ENGINE_BENCH_ROOT=/scratch cargo bench -p gitraptor-cli --bench engine -- --keep
 //! ```
 //!
+//! Scenario `tui-modify` (US-CKP-001, M1 criterion 6): the Cockpit's `App` on `TestBackend`,
+//! connected to the daemon through the real channel, measures "modify a file" end to end, from
+//! `t0` to `t_render` of the frame that shows it (NFR-04: 500 ms p95), and its own stage
+//! (`t_client_recv` → `t_render`: 100 ms p95). `--only tui-modify` runs it alone.
+//!
 //! Gates (exit code 1), by `--gate` (INF-GRP-002, Enmienda 2026-10-05):
 //! - `reference` (default outside CI): the p95 of the engine total (`t0` → `t_client_recv`)
 //!   above 300 ms in any scenario, or above the provisional ceiling of a burst (NFR-04).
@@ -62,19 +67,27 @@ mod unix {
         WorktreeView,
     };
     use gitraptor_api::methods;
+    use gitraptor_cli::client::{self as tui_client, ClientThread};
+    use gitraptor_cli::link::EngineConnector;
+    use gitraptor_cli::model::{ConnState, Model, Size, WorktreeState};
+    use gitraptor_cli::present::i18n::Lang;
+    use gitraptor_cli::tui::app::App;
     use gitraptor_core::channel::AgentMatcher;
-    use gitraptor_core::client::Client;
+    use gitraptor_core::client::{Client, ClientOptions, Launcher};
     use gitraptor_core::daemon::{self, DaemonConfig};
     use gitraptor_core::profile::{Profile, ProfileDirs};
     use gitraptor_core::watch::WatchConfig;
     use gitraptor_git::{ReaderOptions, RefName, RepoReader};
     use gitraptor_testkit::fixture::git_from_path;
     use gitraptor_testkit::freshness::{
-        BURST_1K, BURST_10K, FOOTPRINT_LIMITS, Finding, Footprint, GateMode, Level, MAX_ATTEMPTS,
-        MAX_SLACK_EXCESS_MS, Platform, Sample, Scenario, Stage, Summary, Verdict, confirm,
-        evaluate_footprint, evaluate_latency, evaluate_regression,
+        BURST_1K, BURST_10K, COCKPIT_P95_MS, E2E_BUDGET_MS, FOOTPRINT_LIMITS, Finding, Footprint,
+        GateMode, Level, MAX_ATTEMPTS, MAX_SLACK_EXCESS_MS, Platform, Sample, Scenario, Stage,
+        Summary, TUI_MODIFY, Verdict, confirm, evaluate_footprint, evaluate_latency,
+        evaluate_regression,
     };
     use gitraptor_testkit::repogen;
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
     use serde_json::{Value, json};
 
     /// Executable name no process of the bench has: no client is classified as an agent, as
@@ -677,6 +690,80 @@ mod unix {
         }
     }
 
+    // ------------------------------------------------------------ the TUI
+
+    /// The Cockpit's `App` on `TestBackend`, connected to the isolated daemon (never starts
+    /// one).
+    struct Tui {
+        app: App<TestBackend>,
+        channel: Option<ClientThread>,
+    }
+
+    impl Tui {
+        fn open(dirs: &ProfileDirs, cwd: &Path) -> Self {
+            let mut options = ClientOptions::new(dirs.clone(), ClientKind::Cli);
+            options.launcher = Launcher::Never;
+            let (inbox, _input, engine) = gitraptor_cli::queue::inbox();
+            let size = Size {
+                width: 120,
+                height: 40,
+            };
+            let mut app = App::new(
+                Terminal::new(TestBackend::new(size.width, size.height)).unwrap(),
+                Model::new(Lang::En, size),
+                inbox,
+            );
+            let channel =
+                tui_client::spawn(EngineConnector::new(options), Some(cwd.into()), engine);
+            app.attach(channel.cmds.clone());
+            Self {
+                app,
+                channel: Some(channel),
+            }
+        }
+
+        /// Steps the TUI until a painted frame shows a model that satisfies `ok`.
+        fn until(&mut self, timeout: Duration, ok: impl Fn(&Model) -> bool) -> bool {
+            let deadline = Instant::now() + timeout;
+            loop {
+                let _ = self.app.step(Duration::from_millis(10));
+                if !self.app.model.dirty && ok(&self.app.model) {
+                    return true;
+                }
+                if Instant::now() >= deadline {
+                    return false;
+                }
+            }
+        }
+    }
+
+    impl Drop for Tui {
+        fn drop(&mut self) {
+            if let Some(channel) = self.channel.take() {
+                channel.shutdown();
+            }
+        }
+    }
+
+    fn worktrees(model: &Model) -> usize {
+        model
+            .engine
+            .repo
+            .as_ref()
+            .and_then(|r| r.data.as_ref())
+            .map_or(0, |d| d.worktrees.len())
+    }
+
+    /// Changed files the fleet shows for the worktree at `path`.
+    fn changes(model: &Model, path: &str) -> Option<u64> {
+        let data = model.engine.repo.as_ref()?.data.as_ref()?;
+        let row = data.worktrees.iter().find(|w| w.path.as_str() == path)?;
+        match row.state {
+            WorktreeState::Ready { changes, .. } => Some(changes),
+            WorktreeState::Unavailable(_) => None,
+        }
+    }
+
     // ------------------------------------------------------------ the bench
 
     struct BurstStats {
@@ -747,6 +834,7 @@ mod unix {
                 Group::Burst10k => {
                     self.burst(BURST_10K, self.opts.burst_files);
                 }
+                Group::Tui => self.tui_modify(),
             }
         }
 
@@ -1073,6 +1161,184 @@ mod unix {
             self.record("worktree-delete", false, remove, lost[1]);
         }
 
+        /// "Modify a file" seen by the real TUI (US-CKP-001, M1 criterion 6; NFR-04): the
+        /// `App` of the Cockpit (queues, channel thread, `update`, `view`) on `TestBackend`,
+        /// connected to the isolated daemon through the real channel, as `raptor` is. Each
+        /// sample writes the touched file of `wt-3` (`t0`) and steps the TUI until the frame it
+        /// painted shows the new count of changed files (`t_render`). The TUI's own stage
+        /// (`t_client_recv` → `t_render`) comes from its metrics.
+        fn tui_modify(&mut self) {
+            let wt = self.wts[2].clone();
+            let key = wt.to_string_lossy().into_owned();
+            let mut tui = Tui::open(&self.daemon.dirs, &self.repo);
+            let listed = self.wts.len() + 1;
+            let ready = tui.until(Duration::from_secs(30), |m| {
+                m.conn == ConnState::Live && changes(m, &key).is_some() && worktrees(m) >= listed
+            });
+            assert!(
+                ready,
+                "the TUI never showed the fleet: {:?}",
+                tui.app.model.conn
+            );
+            let clean =
+                changes(&tui.app.model, &key).unwrap() - u64::from(self.dirty.contains(&wt));
+            // Only this scenario's messages in the Cockpit stage.
+            tui.app.metrics = Default::default();
+            let (mut samples, mut lost) = (Vec::new(), 0);
+            for _ in 0..self.opts.samples {
+                self.stream.drain();
+                let (t0, modified) = self.touch(&wt);
+                let expected = clean + u64::from(modified);
+                if tui.until(SAMPLE_DEADLINE, |m| changes(m, &key) == Some(expected)) {
+                    let t_render = tui.app.metrics.last_render_ns;
+                    samples.push(Sample {
+                        t0,
+                        t_recv: t0,
+                        t_flush: t0,
+                        t_computed: t0,
+                        t_persisted: t0,
+                        t_published: t0,
+                        t_client_recv: t_render.max(t0),
+                    });
+                } else {
+                    lost += 1;
+                }
+                // The TUI keeps applying the stream while the bench settles.
+                let settle = Instant::now() + SETTLE;
+                while Instant::now() < settle {
+                    let _ = tui.app.step(Duration::from_millis(10));
+                }
+                self.stream.drain();
+            }
+            let cockpit = tui.app.metrics.total.p95().map(|ns| ns as f64 / 1e6);
+            let slowest = tui.app.metrics.slowest_stage();
+            drop(tui);
+            self.record_tui(samples, lost, cockpit, slowest.map(|s| s.to_string()));
+        }
+
+        /// Gates of `tui-modify`: the end-to-end budget (500 ms p95 plus the excess timer slack)
+        /// fails on the reference machine and is reported on a shared runner, where the
+        /// calibrated regression ceiling gates it with the confirmation of two of three; the
+        /// Cockpit's own 100 ms p95 is CPU work on `TestBackend` and fails anywhere (Decisión
+        /// del orquestador 2026-10-06, validada por Arquitecto).
+        fn record_tui(
+            &mut self,
+            samples: Vec<Sample>,
+            lost: usize,
+            cockpit_p95_ms: Option<f64>,
+            slowest: Option<String>,
+        ) {
+            let kept: Vec<Sample> = samples.into_iter().skip(WARMUP).collect();
+            let s = Scenario {
+                name: TUI_MODIFY.into(),
+                isolates_detection: false,
+                ceiling_ms: None,
+                slack_excess_ms: self.slack_excess_ms,
+                samples: kept,
+            };
+            let e2e = s.summary(Stage::Total);
+            let budget = E2E_BUDGET_MS + self.slack_excess_ms.max(0.0);
+            let mut fs = Vec::new();
+            if let Some(e) = e2e
+                && e.p95 > budget
+            {
+                let shared = self.opts.gate == GateMode::SharedCi
+                    || self.slack_excess_ms > MAX_SLACK_EXCESS_MS;
+                fs.push(Finding {
+                    level: if shared { Level::Warn } else { Level::Fail },
+                    scenario: TUI_MODIFY.into(),
+                    what: "p95 end to end (t0 → t_render), NFR-04".into(),
+                    measured: e.p95,
+                    limit: budget,
+                    unit: "ms",
+                });
+            }
+            match cockpit_p95_ms {
+                Some(p95) if p95 > COCKPIT_P95_MS => fs.push(Finding {
+                    level: Level::Fail,
+                    scenario: TUI_MODIFY.into(),
+                    what: format!(
+                        "p95 Cockpit (t_client_recv → t_render), slowest stage {}",
+                        slowest.as_deref().unwrap_or("?")
+                    ),
+                    measured: p95,
+                    limit: COCKPIT_P95_MS,
+                    unit: "ms",
+                }),
+                None if !s.samples.is_empty() => fs.push(Finding {
+                    level: Level::Fail,
+                    scenario: TUI_MODIFY.into(),
+                    what: "the Cockpit stage is missing from the report".into(),
+                    measured: 0.0,
+                    limit: 0.0,
+                    unit: "",
+                }),
+                _ => {}
+            }
+            if self.attempt > 1 {
+                fs.clear();
+            }
+            let mut j = json!({
+                "scenario": TUI_MODIFY,
+                "attempt": self.attempt,
+                "lost": lost,
+                "slack_excess_ms": self.slack_excess_ms,
+                "end_to_end": e2e.map(|x| x.to_json()),
+                "end_to_end_budget_p95_ms": budget,
+                "cockpit_p95_ms": cockpit_p95_ms,
+                "cockpit_budget_p95_ms": COCKPIT_P95_MS,
+            });
+            if self.opts.gate == GateMode::SharedCi
+                && (self.attempt == 1 || self.verdict(TUI_MODIFY) == Verdict::Retry)
+            {
+                let ceiling = self.platform().regression_ceiling(TUI_MODIFY);
+                let findings = evaluate_regression(&s, ceiling);
+                j["regression"] = json!({
+                    "p50_ceiling_ms": ceiling.map(|c| c.p50_ms),
+                    "p95_ceiling_ms": ceiling.and_then(|c| c.p95_ms),
+                    "regressed": !findings.is_empty(),
+                });
+                let attempt = Attempt {
+                    attempt: self.attempt,
+                    p50: e2e.map_or(f64::NAN, |t| t.p50),
+                    p95: e2e.map_or(f64::NAN, |t| t.p95),
+                    findings,
+                };
+                match self.regressions.iter_mut().find(|(n, _)| n == TUI_MODIFY) {
+                    Some((_, a)) => a.push(attempt),
+                    None => self.regressions.push((TUI_MODIFY.into(), vec![attempt])),
+                }
+            }
+            println!(
+                "\n{TUI_MODIFY} (attempt {}): end to end {} · Cockpit p95 {} · lost {lost}",
+                self.attempt,
+                e2e.map_or("-".into(), |x| format!(
+                    "p50 {:.1} ms, p95 {:.1} ms (budget {budget:.0}), max {:.1} ms",
+                    x.p50, x.p95, x.max
+                )),
+                cockpit_p95_ms.map_or("-".into(), |v| format!(
+                    "{v:.1} ms (budget {COCKPIT_P95_MS:.0})"
+                )),
+            );
+            if lost > 0 {
+                self.findings.push(Finding {
+                    level: Level::Fail,
+                    scenario: TUI_MODIFY.into(),
+                    what: format!("samples the TUI never showed within {SAMPLE_DEADLINE:?}"),
+                    measured: lost as f64,
+                    limit: 0.0,
+                    unit: "",
+                });
+            }
+            self.findings.extend(fs);
+            self.report
+                .entry("tui")
+                .or_insert_with(|| json!([]))
+                .as_array_mut()
+                .unwrap()
+                .push(j);
+        }
+
         /// Bursts of `files` new files in the last worktree, created and then deleted, while
         /// "modify a file" is measured in turn in each of the other nine. Also the footprint
         /// during the bursts, the time to the final state of each burst (the worktree clean
@@ -1257,13 +1523,15 @@ mod unix {
         Worktrees,
         Burst1k,
         Burst10k,
+        Tui,
     }
 
     impl Group {
-        const ALL: [Group; 5] = [
+        const ALL: [Group; 6] = [
             Group::WriteCycle,
             Group::Checkout,
             Group::Worktrees,
+            Group::Tui,
             Group::Burst1k,
             Group::Burst10k,
         ];
@@ -1275,6 +1543,7 @@ mod unix {
                 Group::Worktrees => &["worktree-create", "worktree-delete"],
                 Group::Burst1k => &[BURST_1K],
                 Group::Burst10k => &[BURST_10K],
+                Group::Tui => &[TUI_MODIFY],
             }
         }
     }
@@ -1573,6 +1842,9 @@ mod unix {
             b.checkout();
             b.worktree_add_remove();
         }
+        if b.wants("latency") || b.wants(TUI_MODIFY) {
+            b.tui_modify();
+        }
         if b.wants("burst") {
             let scale = b.burst(BURST_1K, b.opts.scale_files);
             let stress = b.burst(BURST_10K, b.opts.burst_files);
@@ -1758,6 +2030,23 @@ mod unix {
                         x.max
                     );
                 }
+            }
+        }
+        if let Some(tui) = b.report.get("tui").and_then(Value::as_array) {
+            md += "\n**Cockpit end to end** (`tui-modify`: t0 → t_render of the TUI, US-CKP-001)\n\n| attempt | p50 | p95 | max | budget p95 | Cockpit p95 | budget |\n|---|---|---|---|---|---|---|\n";
+            for t in tui {
+                let e = &t["end_to_end"];
+                let ms = |v: &Value| v.as_f64().map_or("-".into(), |x| format!("{x:.1}"));
+                md += &format!(
+                    "| {} | {} | {} | {} | {} | {} | {} |\n",
+                    t["attempt"],
+                    ms(&e["p50"]),
+                    ms(&e["p95"]),
+                    ms(&e["max"]),
+                    ms(&t["end_to_end_budget_p95_ms"]),
+                    ms(&t["cockpit_p95_ms"]),
+                    ms(&t["cockpit_budget_p95_ms"]),
+                );
             }
         }
         if !b.regressions.is_empty() {

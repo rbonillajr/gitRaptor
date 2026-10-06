@@ -175,7 +175,20 @@ pub const REGRESSION_CEILINGS: &[(Platform, &str, RegressionCeiling)] = &[
     (Platform::LinuxCi, "worktree-delete", steady(81.5, 175.0)),
     (Platform::LinuxCi, BURST_1K, burst(220.0, 268.4)),
     (Platform::LinuxCi, BURST_10K, burst(239.8, 337.6)),
+    // ⚠️ Provisional until calibrated with its own runs: the "modify" figures of the runner
+    // plus the Cockpit budget (COCKPIT_P95_MS), since `tui-modify` is "modify" seen through the
+    // TUI (US-CKP-001; Decisión del orquestador 2026-10-06, validada por Arquitecto).
+    (Platform::MacCi, TUI_MODIFY, steady(224.3 + COCKPIT_P95_MS, 293.7 + COCKPIT_P95_MS)),
+    (Platform::LinuxCi, TUI_MODIFY, steady(105.1 + COCKPIT_P95_MS, 151.0 + COCKPIT_P95_MS)),
 ];
+
+/// End-to-end scenario of the Cockpit (US-CKP-001, M1 criterion 6): "modify a file" seen by the
+/// real TUI, from `t0` to `t_render` of the frame that shows it.
+pub const TUI_MODIFY: &str = "tui-modify";
+/// NFR-04: a change reaches the TUI in under 500 ms p95, end to end.
+pub const E2E_BUDGET_MS: f64 = 500.0;
+/// The Cockpit's own budget, `t_client_recv` → `t_render` p95 (ADR-GRP-011 E2).
+pub const COCKPIT_P95_MS: f64 = 100.0;
 
 const fn steady(p50: f64, p95: f64) -> RegressionCeiling {
     RegressionCeiling {
