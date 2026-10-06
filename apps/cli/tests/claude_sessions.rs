@@ -743,19 +743,25 @@ fn claude_code_installed_later_is_detected_without_touching_gitraptor() {
 // ------------------------------------------- S3 (ADR-GRP-012, Arquitecto)
 
 /// A quick `git commit -m` of Claude Code may end before the sample: its
-/// actor is Claude Code or "unattributed", never anything else.
+/// actor is Claude Code or "unattributed", never anything else. When
+/// unattributed, a hint can only name the worktree's one session
+/// (amendment of ADR-GRP-012).
 #[test]
 fn a_quick_claude_code_commit_is_claude_code_or_unattributed() {
     let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let (m, wt) = observed();
     let mut claude = m.launch_claude(&wt);
-    m.sessions_when(&wt, |s| s.len() == 1);
+    let sessions = m.sessions_when(&wt, |s| s.len() == 1);
     claude.run("printf 'quick\\n' >> login.txt && git commit -qam quick");
     let e = m.event(GitEventKind::Commit, &wt);
     assert!(
         e.actor == claude_code_detected() || e.actor == Actor::Unattributed,
         "{e:#?}"
     );
+    if let Some(hint) = &e.inferred {
+        assert_eq!(e.actor, Actor::Unattributed, "{e:#?}");
+        assert_eq!(hint.session_id, sessions[0]["session_id"], "{e:#?}");
+    }
     m.stop();
 }
 
