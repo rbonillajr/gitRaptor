@@ -27,6 +27,10 @@ clap.workspace = true
 ratatui.workspace = true
 unicode-width = "0.2"
 
+# Raw-ish mode for the OSC 11 background query of the TUI (TS-CKP-004, 2026-10-05).
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1.1.5", features = ["termios"] }
+
 [lints]
 workspace = true
 
@@ -35,6 +39,10 @@ gitraptor-git.workspace = true
 gitraptor-testkit.workspace = true
 tempfile.workspace = true
 insta.workspace = true
+
+# A pseudo-terminal plays the emulator in the OSC 11 tests.
+[target.'cfg(unix)'.dev-dependencies]
+rustix = { version = "1.1.5", features = ["termios", "pty"] }
 
 # Freshness, scale and footprint bench of the engine (INF-GRP-002, ADR-GRP-011 § 4).
 [[bench]]

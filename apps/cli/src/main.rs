@@ -6,6 +6,7 @@ mod mcp;
 mod resources;
 mod sessions;
 mod status;
+mod term;
 mod undo;
 
 use std::io::{BufRead, IsTerminal, Write};

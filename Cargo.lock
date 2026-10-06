@@ -838,6 +838,7 @@ dependencies = [
  "insta",
  "nix",
  "ratatui",
+ "rustix",
  "serde",
  "serde_json",
  "tempfile",
