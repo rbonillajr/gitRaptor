@@ -11,7 +11,7 @@ use std::fmt;
 use std::str::FromStr;
 use std::time::Duration;
 
-use crate::{Contrast, Rgb, relative_luminance};
+use crate::{ColorMode, Contrast, Rgb, SymbolSet, relative_luminance};
 
 /// Environment variable with the same values as `--theme`.
 pub const THEME_ENV: &str = "GITRAPTOR_THEME";
@@ -197,6 +197,50 @@ pub fn resolve(
         background,
         source,
         invalid_env,
+    }
+}
+
+/// The color depth from the environment (US-CKP-001; DSYS-GRP-001 § 6): no color with
+/// `no_color` (`--no-color`), a non-empty `NO_COLOR` or `TERM=dumb`; truecolor with
+/// `COLORTERM=truecolor|24bit`; 256 colors with a `TERM` ending in `256color`; 16 colors
+/// otherwise. An empty variable counts as absent.
+pub fn color_mode(no_color: bool, env: impl Fn(&str) -> Option<String>) -> ColorMode {
+    let var = |name: &str| env(name).filter(|v| !v.trim().is_empty());
+    let term = var("TERM").unwrap_or_default();
+    if no_color || var("NO_COLOR").is_some() || term == "dumb" {
+        return ColorMode::NoColor;
+    }
+    let colorterm = var("COLORTERM").unwrap_or_default().to_ascii_lowercase();
+    if colorterm == "truecolor" || colorterm == "24bit" {
+        ColorMode::TrueColor
+    } else if term.ends_with("256color") {
+        ColorMode::Ansi256
+    } else {
+        ColorMode::Ansi16
+    }
+}
+
+/// The symbol set (DSYS-GRP-001, 2026-10-04 amendment): ASCII with `ascii` (`--ascii`) or a
+/// locale that is not UTF-8 (`C` and `POSIX` included). The locale is the first non-empty of
+/// `LC_ALL`, `LC_CTYPE` and `LANG`; without any, Unicode (⚠️ ASSUMPTION: a terminal without a
+/// locale is a modern UTF-8 one).
+pub fn symbol_set(ascii: bool, env: impl Fn(&str) -> Option<String>) -> SymbolSet {
+    if ascii {
+        return SymbolSet::Ascii;
+    }
+    let locale = ["LC_ALL", "LC_CTYPE", "LANG"]
+        .iter()
+        .find_map(|name| env(name).filter(|v| !v.trim().is_empty()));
+    match locale {
+        None => SymbolSet::Unicode,
+        Some(l) => {
+            let l = l.to_ascii_lowercase();
+            if l.contains("utf-8") || l.contains("utf8") {
+                SymbolSet::Unicode
+            } else {
+                SymbolSet::Ascii
+            }
+        }
     }
 }
 
