@@ -131,31 +131,32 @@ Ver la tabla de cifras en el PR. Comandos: `cargo test -p gitraptor-testkit --li
 
 Linux también falló una vez sin motivo (run 37392881094): `worktree-create` dio 366,5 ms frente a 300 ms. Así el gate bloqueaba merges correctos y enseñaba a relanzar sin mirar.
 
-**Decisión del orquestador (2026-10-05), validada por el Arquitecto y el PO** con sus ajustes, que se recogen abajo. Enmienda D5, D6 y D7 y añade D13 y D14. Se aplica también como enmienda de [ADR-GRP-011](../../../../architecture/decisions/ADR-GRP-011-presupuesto-frescura.md) § 4 y deja la deuda [TD-GRP-003](../technical-stories/TD-GRP-003-nfr04-maquina-referencia.md).
+**Decisión del orquestador (2026-10-05), validada por el Arquitecto y el PO** con sus ajustes, que se recogen abajo. Enmienda D5, D6, D7 y D11, y añade D13 a D16. Se aplica también como enmienda de [ADR-GRP-011](../../../../architecture/decisions/ADR-GRP-011-presupuesto-frescura.md) § 4 y deja la deuda [TD-GRP-003](../technical-stories/TD-GRP-003-nfr04-maquina-referencia.md).
 
 ### Distribución medida
 
 Se usaron 20 corridas del banco por SO en los runners hospedados, con el mismo motor:
 - 12 de PR y de `main` (runs 37359042618 a 37401807069).
 - 8 con `workflow_dispatch` sobre esta rama sin cambios en el motor (runs 37404943810 a 37404963167).
+- En Linux, además, las 10 corridas de la primera ronda de aceptación (runs 37418857936 a 37418880656), que destaparon el ruido de la cola del p95. Por eso la aceptación se repitió con corridas nuevas.
 - Los 3 intentos fallidos que el relanzamiento sobrescribió, sacados de sus logs.
 
 La tabla da el total `t0` → `t_client_recv` en ms, como rango entre corridas.
 
 | Escenario | macOS p50 | macOS p95 | Linux p50 | Linux p95 |
 |---|---|---|---|---|
-| modify | 160–224 | 242–294 | 91–105 | 92–106 |
-| git-add | 156–213 | 239–277 | 90–105 | 91–105 |
-| commit | 118–175 | 207–243 | 87–101 | 89–104 |
-| checkout | 141–189 | 222–255 | 86–99 | 87–99 |
-| worktree-create | 142–220 | 290–372 | 117–185 | 157–**367** |
-| worktree-delete | 129–193 | 217–246 | 79–82 | 80–**147** |
+| modify | 160–224 | 242–294 | 91–105 | 92–**151** |
+| git-add | 156–213 | 239–277 | 90–105 | 91–**148** |
+| commit | 118–175 | 207–243 | 87–101 | 89–**180** |
+| checkout | 141–189 | 222–255 | 86–99 | 87–**135** |
+| worktree-create | 142–220 | 290–372 | 90–185 | 157–**367** |
+| worktree-delete | 129–193 | 217–246 | 79–82 | 80–**175** |
 | burst-1k | 223–459 | 327–**1.670** | 141–220 | 193–268 |
 | burst-10k | 199–446 | 299–**1.831** | 151–240 | 192–**338** |
 
 Hallazgos:
 
-1. **En los escenarios sin ráfaga, el p50 y el p95 son estables** en los dos runners. La excepción es la cola de crear y borrar un worktree en Linux, con una corrida de cada 20 muy por encima.
+1. **En los escenarios sin ráfaga, el p50 es estable** en los dos runners, y el p95 casi siempre. Pero de vez en cuando un runner de Linux va ruidoso durante todo el job, más o menos 2 corridas de cada 30. En esas corridas, todos los p95 de los escenarios sin ráfaga suben de ~100 a 135–180 ms y el p50 no se mueve (run 37418857936, de la primera ronda de aceptación). La confirmación no lo filtra, porque el ruido sigue ahí al repetir. Lo absorben los techos de p95, calibrados con esas corridas.
 2. **El p95 de las ráfagas en macOS es ruido del runner**: varía ×6 con el mismo código. El p50 varía ×2.
 3. **El exceso de holgura del temporizador en macOS es bimodal**: unos 64 ms o unos 137 ms, según la VM. Con la regla de D5 ("no apta" por encima de 100 ms), **el gate de macOS solo estuvo activo en 1 de cada 3 corridas**, y fue justo en esas donde dio los falsos positivos.
 4. **Huella**: la CPU en reposo fue de 0,0 a 0,4 % (límite 1 %), el RSS en reposo de 25 a 38 MiB (límite 150) y los descriptores, 30 y 39 (límite 256). Hay margen de sobra y es estable. El pico de RSS en ráfaga fue de 422 a 718 MiB.
@@ -169,6 +170,7 @@ Hallazgos:
 | D7 (enmendada) | La huella en reposo sigue bloqueante en todas partes: es el presupuesto real y tiene margen. Al **pico de RSS en ráfaga** se le añade un **techo de crecimiento de 1.250 MiB** (máximo medido: 830 MiB en el Mac de referencia × 1,5) que **falla sin confirmación**. Es un detector de fugas, no un presupuesto. Cuenta solo la primera ráfaga de cada tamaño, porque un reintento hereda el RSS retenido. Se mantiene el aviso de 250 MiB (TD-GRP-002) | Arquitecto (techo bloqueante), PO |
 | D13 | **Gate de regresión en los runners compartidos**, bloqueante. Hay un techo calibrado por runner y escenario sobre la **mediana (p50)** del total, y sobre el **p95** donde el runner lo sostiene: todos los escenarios en Linux y los escenarios sin ráfaga en macOS. En las ráfagas de macOS el p95 solo se reporta. Cada techo es `max(máximo × factor, máximo + 30 ms)`, con factor ×1,25 para el p50 de los escenarios sin ráfaga y ×1,5 para el p50 de las ráfagas y para todos los p95. El margen mínimo de 30 ms evita que los p50 tan estrechos de Linux dejen solo unos milisegundos (ajuste del Arquitecto). Un escenario sin techo calibrado **falla**: no puede pasar en silencio. Si el exceso de holgura del runner supera el de calibración más 50 ms (macOS 190 ms, Linux 50 ms), el runner está **fuera de calibración** y el gate de regresión pasa a aviso con su motivo. La holgura se mide sin daemon, así que eso no oculta regresiones del motor | Arquitecto |
 | D14 | **Confirmación, 2 de 3**. Si un escenario supera un techo de regresión, el banco **vuelve a medir el paso entero**, con calentamiento y todas sus muestras, en el mismo daemon. Los pasos son el ciclo de modify, add y commit; el checkout; crear y borrar un worktree; y cada ráfaga. Antes de repetir una ráfaga espera 10 s. **Falla si dos de tres intentos superan el techo** (equivale a la mediana de tres). Un intento que superó el techo sin confirmarse queda como **aviso**. Cada intento figura en el informe (`regression`) y en el job summary, con el número de confirmaciones. Si la confirmación salta en más de 1 de cada 5 corridas, hay que recalibrar (Arquitecto). Se descartó comparar contra una línea base de `main` en el mismo runner: dobla los 15 a 30 minutos del job y el ruido es temporal, no de máquina | Arquitecto |
+| D16 | **Dónde corre (coste)**. Enmienda D11. Lo pidió el coordinador: el banco de macOS (22 min de media por PR) era la mayor parte del CI por PR y ocupaba los 5 runners de macOS del repo, que también usan los checks obligatorios. Queda así:<br>• **Pull requests**: solo `ubuntu-latest`. Es el runner estable y el más sensible.<br>• **macOS**: en cada push a `main` (con el filtro de rutas), en un **nightly** (`schedule`) y bajo demanda. Una regresión exclusiva de macOS pone `main` en rojo después del merge, no para un PR. Para bisecarla, `workflow_dispatch` admite `-f os=macos -f ref=<sha>`, y el job summary nombra el commit medido.<br>• **Concurrencia**: solo un PR cancela su corrida anterior. Cada push a `main` se mide, y las corridas manuales no se cancelan entre sí.<br>• **Nightly**: se salta un commit que un push ya midió en verde.<br>• **Timeout**: 45 min en Linux y 90 en macOS, porque una regresión confirmada repite sus pasos (la sonda de 150 ms agotó los 60 min de antes en macOS).<br>• **Correr macOS en PR por rutas**: se descartó. `Cargo.lock` cambia con cualquier actualización y se comería el ahorro. En su lugar, un PR que toca `crates/core/src/watch/` recibe un aviso que recomienda lanzarlo en macOS.<br>• **Recalibrar**: si en los 10 primeros nightlies de macOS hay más de 1 falso positivo | Arquitecto (ajustes: concurrencia, matriz, timeout por SO, `ref`, nightly, sin rutas) |
 | D15 | **Recordatorio y trazabilidad del presupuesto** (ajustes del PO). En un PR que toca el motor (`crates/core/src/{watch,daemon,channel}/`, `observe.rs`), el job avisa y pide adjuntar el informe de `--gate reference`. El informe registra las condiciones (`conditions`: commit, si había cambios sin commitear, SO, modelo, núcleos, carga, alimentación y si es CI). Antes de cada release se corre `--gate reference` en la máquina de referencia, como paso de [INF-GRP-003](../technical-stories/INF-GRP-003-pipeline-release.md) → TD-GRP-003 | PO |
 
 ### Techos de regresión (`REGRESSION_CEILINGS`, `crates/testkit/src/freshness.rs`)
@@ -177,12 +179,12 @@ Máximo medido → techo, en ms. Se recalibran cuando el motor mejore a propósi
 
 | Escenario | macOS p50 | macOS p95 | Linux p50 | Linux p95 |
 |---|---|---|---|---|
-| modify | 224,3 → 280 | 293,7 → 441 | 105,1 → 135 | 105,6 → 158 |
-| git-add | 212,6 → 266 | 277,0 → 416 | 104,5 → 135 | 105,2 → 158 |
-| commit | 174,6 → 218 | 242,8 → 364 | 100,8 → 131 | 103,7 → 156 |
-| checkout | 188,9 → 236 | 254,6 → 382 | 98,6 → 129 | 99,1 → 149 |
+| modify | 224,3 → 280 | 293,7 → 441 | 105,1 → 135 | 151,0 → 227 |
+| git-add | 212,6 → 266 | 277,0 → 416 | 104,5 → 135 | 148,0 → 222 |
+| commit | 174,6 → 218 | 242,8 → 364 | 100,8 → 131 | 179,5 → 269 |
+| checkout | 188,9 → 236 | 254,6 → 382 | 98,6 → 129 | 135,0 → 203 |
 | worktree-create | 219,7 → 275 | 371,5 → 557 | 185,4 → 232 | 366,5 → 550 |
-| worktree-delete | 192,7 → 241 | 246,1 → 369 | 81,5 → 112 | 147,1 → 221 |
+| worktree-delete | 192,7 → 241 | 246,1 → 369 | 81,5 → 112 | 175,0 → 263 |
 | burst-1k | 458,7 → 688 | solo se reporta | 220,0 → 330 | 268,4 → 403 |
 | burst-10k | 445,8 → 669 | solo se reporta | 239,8 → 360 | 337,6 → 506 |
 
@@ -196,7 +198,16 @@ Por eso, una regresión de ráfaga en macOS de menos de unos 350 ms solo la ve e
 
 ### Sensibilidad demostrada
 
-PENDIENTE_SONDAS
+Se metió un retardo artificial en el recomputo del daemon (`std::thread::sleep` antes de `t_persisted` en `crates/core/src/daemon/mod.rs`) con commits de prueba, que después se revirtieron. Las cifras son el p50 o el p95 confirmado frente a su techo, en ms.
+
+| Retardo | Runner | Run | Resultado |
+|---|---|---|---|
+| 150 ms | Linux | [37412533485](https://github.com/rbonillajr/gitRaptor/actions/runs/37412533485) | **Falla** con los 8 escenarios confirmados 2 de 2. modify 253 > 135 (p50), commit 383 > 131, worktree-create 734 > 232, burst-1k 358 > 330 y burst-10k 401 > 360. También falla la recreación del stream (gate de corrección) |
+| 150 ms | macOS | [37412533485](https://github.com/rbonillajr/gitRaptor/actions/runs/37412533485) | **Falla**: modify 437 > 280 (p50), git-add 434 > 266, commit 586 > 218, checkout 399 > 236 y worktree-create 2.149 > 275, todos confirmados 2 de 2, más una muestra perdida. El job agotó el timeout de 60 min de entonces mientras terminaba, y de ahí el de 90 min (D16). Las ráfagas se repitieron y no constan como fallo en las anotaciones visibles, que GitHub limita a 10. Cuadra con su regresión mínima detectable, de unos 350 ms |
+| 50 ms | Linux | [37412538185](https://github.com/rbonillajr/gitRaptor/actions/runs/37412538185) | **Falla** en 5 escenarios confirmados 2 de 2: modify 153 > 135, git-add 153 > 135, commit 182 > 131, checkout 148 > 129 y worktree-delete 142 > 112. Las ráfagas no la ven, como predice la tabla de sensibilidad. También falla la recreación del stream |
+| 50 ms | macOS | — | **No verificado**: se canceló para liberar la cola de macOS a los PR de producto. Por la tabla, un retardo de 50 ms queda por debajo de la regresión mínima detectable en macOS (70 a 90 ms) |
+
+La primera ronda de sondas (runs 37408932800 y 37408956073) destapó un fallo del banco: al confirmar el checkout después de las ráfagas, el archivo tocado seguía modificado en ese worktree y `git switch` abortaba con un panic. Se corrigió restaurándolo antes de repetir el paso, con una prueba local que reproduce el orden.
 
 ### Pruebas
 
@@ -204,6 +215,21 @@ PENDIENTE_SONDAS
 
 ### Estabilidad demostrada
 
-PENDIENTE_ESTABILIDAD
+El coordinador pidió hacer la validación en Linux, donde es equivalente, y dejar en macOS solo 3 corridas para no quitar runners a los PR de producto. El Arquitecto lo aprobó: macOS ya no bloquea PR, así que un falso positivo allí cuesta un `main` en rojo, no un PR parado.
+
+**Primera ronda en Linux** (`8fa916f`, runs 37418857936 a 37418880656): **9 de 10 en verde**. El run [37418857936](https://github.com/rbonillajr/gitRaptor/actions/runs/37418857936) dio un **falso positivo**: `commit`, p95 de 179,5 ms frente a 155,6 ms, confirmado 2 de 2. En ese job todos los p95 de los escenarios sin ráfaga salieron altos (135–179 ms) y los p50 normales (94–99 ms), es decir, ruido del runner durante todo el job. Se recalibraron los techos de p95 de Linux con esas corridas (D13; siguen por debajo de 300 ms) y la aceptación se repitió con corridas nuevas.
+
+**Segunda ronda en Linux** (`0fe52ae`, main en `71284a3` más este cambio): **10 de 10 en verde, sin ninguna confirmación**, de 12 a 14 min por job. Runs:
+
+[37420534956](https://github.com/rbonillajr/gitRaptor/actions/runs/37420534956), [37420537782](https://github.com/rbonillajr/gitRaptor/actions/runs/37420537782), [37420540503](https://github.com/rbonillajr/gitRaptor/actions/runs/37420540503), [37420542790](https://github.com/rbonillajr/gitRaptor/actions/runs/37420542790), [37420545059](https://github.com/rbonillajr/gitRaptor/actions/runs/37420545059), [37420547574](https://github.com/rbonillajr/gitRaptor/actions/runs/37420547574), [37420550301](https://github.com/rbonillajr/gitRaptor/actions/runs/37420550301), [37420553014](https://github.com/rbonillajr/gitRaptor/actions/runs/37420553014), [37420555567](https://github.com/rbonillajr/gitRaptor/actions/runs/37420555567) y [37420558008](https://github.com/rbonillajr/gitRaptor/actions/runs/37420558008).
+
+**macOS: pendiente.** Las 3 corridas en macOS con el gate final no se lanzaron, porque la cola de macOS tenía PR de producto esperando. Para lanzarlas cuando esté libre: `gh workflow run engine-bench.yml --ref <rama o main> --field os=macos`. Tras el merge, cada push a `main` y el nightly siguen midiendo en macOS. Si en los 10 primeros nightlies hay más de 1 falso positivo, se recalibra (D16). Los techos de macOS se calibraron con 20 corridas de ese runner, pero el gate final **todavía no se ha visto en verde en macOS**.
+
+**Coste** (duración media del job; D16):
+
+| | Por PR, antes | Por PR, ahora |
+|---|---|---|
+| Linux | 14,5 min (12–18; 19 jobs) | 13,5 min (12–14; 10 jobs) |
+| macOS | 22,1 min (17–27; 19 jobs), más la espera en la cola de 5 runners | 0 (corre en el push a `main`, en el nightly y bajo demanda) |
 
 Linux y Windows: el runner de Linux se calibró en CI. **Windows no se mide** (el cliente del canal es solo Unix). **Pendiente: etapa de validación multiplataforma**.
