@@ -15,6 +15,16 @@ daemon.stop.timeout = el pid {pid} no paró en 10 s
 daemon.status.engine = motor: {state} (pid {pid}, protocolo {protocol})
 daemon.status.git = git: {version}
 daemon.status.git-missing = git: no encontrado
+daemon.enable.done = autoarranque al iniciar sesión activado: {artifact}
+daemon.enable.already = el autoarranque al iniciar sesión ya estaba activado: {artifact}
+daemon.enable.active = desde ahora el gestor de servicios del sistema arranca el motor, también en esta sesión
+daemon.enable.next-login = se aplica a partir de tu próximo inicio de sesión
+daemon.enable.not-installed = rechazado: {path} no es un GitRaptor instalado (npm, una caché de npx, una carpeta temporal, u otros usuarios pueden modificarlo); instala GitRaptor y ejecuta raptor daemon enable desde la copia instalada
+daemon.enable.no-manager = rechazado: el systemd de tu usuario no carga la unidad (no hay sesión de usuario, o lee otra carpeta); no quedó nada escrito
+daemon.disable.done = autoarranque al iniciar sesión desactivado; el motor en marcha sigue hasta que lo pares o cierres la sesión
+daemon.disable.already = el autoarranque al iniciar sesión ya estaba desactivado
+daemon.autostart.unsupported = este sistema no tiene un autoarranque compatible (launchd en macOS, systemd --user en Linux o Windows); el motor sigue arrancando cuando un cliente lo necesita
+daemon.autostart.failed = no se pudo cambiar el autoarranque: {error}
 
 repo.refused-agent = rechazado: solo el desarrollador puede cambiar los repos observados, no un agente ni un proceso lanzado por él
 repo.added = observando {path}
