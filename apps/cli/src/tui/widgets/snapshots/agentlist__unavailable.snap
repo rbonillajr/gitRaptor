@@ -13,27 +13,27 @@ expression: "snapshot(story, full_ascii)"
 0:5-10 fg=#ffe066 BOLD
 0:11-79 fg=#ffe066
 1:0-0 fg=#ffe066
-1:6-10 fg=#8a8a8a BOLD
-1:21-26 fg=#8a8a8a BOLD
-1:44-48 fg=#8a8a8a BOLD
-1:50-53 fg=#8a8a8a BOLD
-1:62-69 fg=#8a8a8a BOLD
+1:6-10 fg=#949494 BOLD
+1:21-26 fg=#949494 BOLD
+1:44-48 fg=#949494 BOLD
+1:50-53 fg=#949494 BOLD
+1:62-69 fg=#949494 BOLD
 1:79-79 fg=#ffe066
 2:0-0 fg=#ffe066
 2:3-3 fg=#3fb950
 2:6-13 fg=#e69f00 BOLD
 2:44-45 fg=#d29922
-2:62-70 fg=#8a8a8a
+2:62-70 fg=#949494
 2:79-79 fg=#ffe066
 3:0-0 fg=#ffe066
-3:1-1 fg=#ffe066 bg=#4e4e4e
-3:2-2 bg=#4e4e4e
-3:3-4 fg=#d29922 bg=#4e4e4e
-3:5-5 bg=#4e4e4e
-3:6-13 fg=#56b4e9 bg=#4e4e4e BOLD
-3:14-20 bg=#4e4e4e
-3:21-31 fg=#d29922 bg=#4e4e4e
-3:32-78 bg=#4e4e4e
+3:1-1 fg=#ffe066 bg=#303030
+3:2-2 bg=#303030
+3:3-4 fg=#d29922 bg=#303030
+3:5-5 bg=#303030
+3:6-13 fg=#56b4e9 bg=#303030 BOLD
+3:14-20 bg=#303030
+3:21-31 fg=#d29922 bg=#303030
+3:32-78 bg=#303030
 3:79-79 fg=#ffe066
 4:0-79 fg=#ffe066
 === styles (256, unicode) ===
@@ -41,27 +41,27 @@ expression: "snapshot(story, full_ascii)"
 0:5-10 fg=@221 BOLD
 0:11-79 fg=@221
 1:0-0 fg=@221
-1:6-10 fg=@245 BOLD
-1:21-26 fg=@245 BOLD
-1:44-48 fg=@245 BOLD
-1:50-53 fg=@245 BOLD
-1:62-69 fg=@245 BOLD
+1:6-10 fg=@246 BOLD
+1:21-26 fg=@246 BOLD
+1:44-48 fg=@246 BOLD
+1:50-53 fg=@246 BOLD
+1:62-69 fg=@246 BOLD
 1:79-79 fg=@221
 2:0-0 fg=@221
 2:3-3 fg=@35
 2:6-13 fg=@178 BOLD
 2:44-45 fg=@172
-2:62-70 fg=@245
+2:62-70 fg=@246
 2:79-79 fg=@221
 3:0-0 fg=@221
-3:1-1 fg=@221 bg=@239
-3:2-2 bg=@239
-3:3-4 fg=@172 bg=@239
-3:5-5 bg=@239
-3:6-13 fg=@74 bg=@239 BOLD
-3:14-20 bg=@239
-3:21-31 fg=@172 bg=@239
-3:32-78 bg=@239
+3:1-1 fg=@221 bg=@236
+3:2-2 bg=@236
+3:3-4 fg=@172 bg=@236
+3:5-5 bg=@236
+3:6-13 fg=@74 bg=@236 BOLD
+3:14-20 bg=@236
+3:21-31 fg=@172 bg=@236
+3:32-78 bg=@236
 3:79-79 fg=@221
 4:0-79 fg=@221
 === styles (16, unicode) ===
@@ -165,26 +165,26 @@ expression: "snapshot(story, full_ascii)"
 0:5-10 fg=#ffe066 BOLD
 0:11-79 fg=#ffe066
 1:0-0 fg=#ffe066
-1:7-11 fg=#8a8a8a BOLD
-1:22-27 fg=#8a8a8a BOLD
-1:36-40 fg=#8a8a8a BOLD
-1:42-45 fg=#8a8a8a BOLD
-1:54-61 fg=#8a8a8a BOLD
+1:7-11 fg=#949494 BOLD
+1:22-27 fg=#949494 BOLD
+1:36-40 fg=#949494 BOLD
+1:42-45 fg=#949494 BOLD
+1:54-61 fg=#949494 BOLD
 1:79-79 fg=#ffe066
 2:0-0 fg=#ffe066
 2:3-3 fg=#3fb950
 2:7-14 fg=#e69f00 BOLD
 2:36-37 fg=#d29922
-2:54-62 fg=#8a8a8a
+2:54-62 fg=#949494
 2:79-79 fg=#ffe066
 3:0-0 fg=#ffe066
-3:1-1 fg=#ffe066 bg=#4e4e4e
-3:2-2 bg=#4e4e4e
-3:3-5 fg=#d29922 bg=#4e4e4e
-3:6-6 bg=#4e4e4e
-3:7-14 fg=#56b4e9 bg=#4e4e4e BOLD
-3:15-21 bg=#4e4e4e
-3:22-32 fg=#d29922 bg=#4e4e4e
-3:33-78 bg=#4e4e4e
+3:1-1 fg=#ffe066 bg=#303030
+3:2-2 bg=#303030
+3:3-5 fg=#d29922 bg=#303030
+3:6-6 bg=#303030
+3:7-14 fg=#56b4e9 bg=#303030 BOLD
+3:15-21 bg=#303030
+3:22-32 fg=#d29922 bg=#303030
+3:33-78 bg=#303030
 3:79-79 fg=#ffe066
 4:0-79 fg=#ffe066
