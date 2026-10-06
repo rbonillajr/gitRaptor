@@ -17,15 +17,17 @@ pub enum AgentState {
     Done,
     /// The engine cannot read the worktree now (US-CKP-003).
     Unavailable,
-    /// No agent session in the worktree: no state symbol, and the name says who acts instead
-    /// ("You or another (unattributed)", BR-CKP-CONS-003), muted (US-CKP-001).
+    /// No agent session in the worktree: the hollow ○, the name says so ("No agent · <worktree>",
+    /// BR-CKP-CONS-003) and the row is muted, so it reads without color (US-CKP-001).
     NoAgent,
+    /// Whether the worktree has an agent is not known: no state symbol, muted.
+    Unknown,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Branch {
     Named(SafeText),
-    /// Detached HEAD, with its label (e.g. "HEAD at a1b2c3d").
+    /// Detached HEAD, with its label (e.g. "a1b2c3d (no branch)").
     Detached(SafeText),
 }
 
@@ -59,6 +61,8 @@ pub struct AgentRowModel {
     pub changes: u32,
     pub sync: Sync,
     pub activity: SafeText,
+    /// A label after the branch, muted (e.g. "temporary").
+    pub tag: Option<SafeText>,
     pub conflict: bool,
     pub blocked: bool,
     pub operation: Option<Operation>,
@@ -88,7 +92,7 @@ pub struct AgentListModel {
 
 const MARK: u16 = 2;
 /// The name column grows from `NAME` up to `NAME_MAX` to fit the widest name, as long as the
-/// branch keeps `BRANCH_MIN` columns (US-CKP-001: "You or another (unattributed)").
+/// branch keeps `BRANCH_MIN` columns (US-CKP-001: "No agent · <worktree>").
 const NAME: u16 = 14;
 const NAME_MAX: u16 = 26;
 const BRANCH_MIN: u16 = 12;
@@ -169,7 +173,8 @@ impl AgentRowModel {
             AgentState::Idle => (SymbolToken::AgentIdle, ColorToken::AgentStateIdle),
             AgentState::Done => (SymbolToken::AgentDone, ColorToken::AgentStateDone),
             AgentState::Unavailable => (SymbolToken::Warning, ColorToken::StatusWarning),
-            AgentState::NoAgent => return None,
+            AgentState::NoAgent => (SymbolToken::AgentDone, ColorToken::TextMuted),
+            AgentState::Unknown => return None,
         })
     }
 
@@ -192,7 +197,7 @@ impl AgentRowModel {
         }
         pen.to(start + cols.state);
         let muted = styles.fg(ColorToken::TextMuted).patch(row);
-        let name = if self.state == AgentState::NoAgent {
+        let name = if matches!(self.state, AgentState::NoAgent | AgentState::Unknown) {
             muted
         } else {
             styles
@@ -202,7 +207,13 @@ impl AgentRowModel {
         };
         pen.cell(self.name.as_str(), cols.name, name).gap(1);
 
-        let text = styles.fg(ColorToken::TextDefault).patch(row);
+        // A row without an agent is muted whole, so it recedes without relying on color alone
+        // (the ○ and the name say it too).
+        let text = if self.state == AgentState::NoAgent {
+            muted
+        } else {
+            styles.fg(ColorToken::TextDefault).patch(row)
+        };
         let middle = cols.branch + CHANGES + cols.sync + cols.activity;
         let start = pen.x;
         if let Some(op) = &self.operation {
@@ -218,14 +229,30 @@ impl AgentRowModel {
                 styles.fg(ColorToken::StatusWarning).patch(row),
             );
         } else {
-            match &self.branch {
-                Branch::Named(b) => pen.cell(b.as_str(), cols.branch, text),
-                Branch::Detached(b) => pen.cell(
-                    b.as_str(),
-                    cols.branch,
-                    styles.fg(ColorToken::StatusWarning).patch(row),
-                ),
+            // The tag keeps its room at the end of the branch column while the branch keeps
+            // `BRANCH_MIN`; otherwise it is left out.
+            let tag = (self.tag.as_ref()).map(|t| {
+                let label = format!("{}{}", g.separator.trim_start(), t.as_str());
+                let w = width(&label) + 1;
+                (label, w)
+            });
+            let tag = tag.filter(|(_, w)| cols.branch >= BRANCH_MIN + w);
+            let (b, style) = match &self.branch {
+                Branch::Named(b) => (b, text),
+                Branch::Detached(b) => (b, styles.fg(ColorToken::StatusWarning).patch(row)),
             };
+            match &tag {
+                // The tag right after the branch, the rest of the column blank.
+                Some((label, w)) => {
+                    let branch = (cols.branch - w).min(width(b.as_str()) + 1);
+                    pen.cell(b.as_str(), branch, style)
+                        .cell(label, *w, muted)
+                        .gap(cols.branch - branch - w);
+                }
+                None => {
+                    pen.cell(b.as_str(), cols.branch, style);
+                }
+            }
             let changes = format!("{}{}", g.changes, self.changes);
             pen.cell(
                 &changes,

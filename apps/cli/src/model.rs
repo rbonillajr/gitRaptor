@@ -246,6 +246,8 @@ pub struct WorktreeRow {
     pub state: WorktreeState,
     /// When the engine last saw it change (UTC ms); `None` while it has not.
     pub last_activity_ms: Option<i64>,
+    /// Under the system's temporary folder: a scratch worktree (US-CKP-001).
+    pub temporary: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -264,7 +266,8 @@ pub enum Head {
     Branch(SafeText),
     /// A branch without commits yet.
     Unborn(SafeText),
-    Detached,
+    /// Directly at a commit, with its short hash when the engine publishes it.
+    Detached(Option<SafeText>),
 }
 
 /// One agent session, sanitized.

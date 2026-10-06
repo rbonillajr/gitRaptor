@@ -51,11 +51,18 @@ pub fn view(model: &Model, frame: &mut Frame) {
         return;
     };
     frame.render_widget(themed(&status_bar(model, &styles), &styles), regions.header);
+    let mut hints = key_hints(model);
     match picker(model, regions.list.height) {
         Some(picker) => frame.render_widget(themed(&picker, &styles), regions.list),
-        None => frame.render_widget(themed(&fleet(model, &styles), &styles), regions.list),
+        None => {
+            let fleet = fleet(model, &styles);
+            if fleet.rows.iter().any(|r| r.state == AgentState::NoAgent) {
+                hints.legend = Some(catalog(Text::NoAgentLegend, lang));
+            }
+            frame.render_widget(themed(&fleet, &styles), regions.list);
+        }
     }
-    frame.render_widget(themed(&key_hints(model), &styles), regions.hints);
+    frame.render_widget(themed(&hints, &styles), regions.hints);
 }
 
 fn catalog(text: Text<'_>, lang: Lang) -> SafeText {
@@ -273,9 +280,17 @@ fn row(
             };
             (SafeText::name(&name), state)
         }
-        (Some(true), None) => (catalog(Text::Unattributed, lang), AgentState::NoAgent),
+        (Some(true), None) => (
+            catalog(
+                Text::NoAgent {
+                    worktree: worktree.name.as_str(),
+                },
+                lang,
+            ),
+            AgentState::NoAgent,
+        ),
         // Detection unknown or not available on this system: never "no agent".
-        _ => (catalog(Text::AgentNotAvailable, lang), AgentState::NoAgent),
+        _ => (catalog(Text::AgentNotAvailable, lang), AgentState::Unknown),
     };
     let g = styles.glyphs;
     let mut row = AgentRowModel {
@@ -287,6 +302,7 @@ fn row(
         changes: 0,
         sync: Sync::Unknown(SafeText::default()),
         activity: catalog(Text::NotAvailable, lang),
+        tag: worktree.temporary.then(|| catalog(Text::Temporary, lang)),
         // Published by the predictor and Guardrails (US-CKP-006, TS-GRD); not before.
         conflict: false,
         blocked: false,
@@ -304,7 +320,10 @@ fn row(
         } => {
             row.branch = match head {
                 Head::Branch(name) | Head::Unborn(name) => Branch::Named(name.clone()),
-                Head::Detached => Branch::Detached(catalog(Text::Detached, lang)),
+                Head::Detached(commit) => Branch::Detached(catalog(
+                    Text::NoBranch(commit.as_ref().map(SafeText::as_str)),
+                    lang,
+                )),
             };
             row.changes = u32::try_from(*changes).unwrap_or(u32::MAX);
             row.sync = match divergence {
@@ -349,6 +368,7 @@ fn key_hints(model: &Model) -> KeyHintsModel {
             .collect(),
         help: hint(Action::Quit, lang)
             .unwrap_or_else(|| KeyHint::new(SafeText::text("q"), catalog(Text::KeyQuit, lang))),
+        legend: None,
     }
 }
 
@@ -433,6 +453,7 @@ mod tests {
     fn worktree(path: &str, main: bool, status: WorktreeStatus) -> WorktreeView {
         WorktreeView {
             last_activity_utc_ms: None,
+            detached_at: None,
             path: Untrusted::new(path),
             main,
             admin_name: None,
@@ -571,19 +592,109 @@ mod tests {
         );
     }
 
-    /// Scenario 3: a worktree without an agent session is "unattributed", never "human".
+    /// Scenario 3: a worktree without an agent session says so with its folder and the hollow
+    /// ○, never "human"; the key hints say what the ○ means (dogfooding amendment 2026-10-06).
     #[test]
-    fn a_worktree_without_an_agent_is_unattributed_never_human() {
-        for (lang, text) in [
-            (Lang::En, "Unattributed (you/other)"),
-            (Lang::Es, "Tú u otro (sin atribuir)"),
+    fn a_worktree_without_an_agent_says_no_agent_never_human() {
+        for (lang, text, legend) in [
+            (
+                Lang::En,
+                "○  No agent · feat-docs",
+                "○ no agent: changes by you or another tool",
+            ),
+            (
+                Lang::Es,
+                "○  Sin agente · feat-docs",
+                "○ sin agente: cambios tuyos o de otra herramienta",
+            ),
         ] {
             let all = screen(&shop_model(lang), 100, 30);
             let screen = lines(&render(&shop_model(lang), 100, 30));
             assert!(row(&screen, "feat-docs").contains(text), "{all}");
+            assert!(screen[29].contains(legend), "{all}");
             assert!(!all.to_lowercase().contains("human"), "{all}");
             assert!(!all.to_lowercase().contains("humano"), "{all}");
         }
+    }
+
+    /// The legend only explains a ○ that is on screen.
+    #[test]
+    fn without_a_row_without_an_agent_there_is_no_legend() {
+        let model = model_with(
+            Lang::En,
+            vec![worktree("/w/shop", true, ready("main", 0, 0, 0))],
+            Some(vec![claude("s1", "/w/shop")]),
+        );
+        let all = screen(&model, 100, 30);
+        assert!(!all.contains("no agent"), "{all}");
+    }
+
+    /// A worktree in the system's temporary folder at a commit without a branch: the short
+    /// hash "(no branch)" and the "temporary" label, in English and in Spanish.
+    fn scratch(lang: Lang, published: bool) -> Model {
+        let root = std::env::temp_dir().join("scratch");
+        let mut status = ready("", 1, 0, 0);
+        if let WorktreeStatus::Ready { head, .. } = &mut status {
+            *head = HeadView::Detached;
+        }
+        let mut scratch = worktree(root.to_str().unwrap(), false, status);
+        if published {
+            scratch.detached_at = Some("39e852f0a1b2c3d4e5f60718293a4b5c6d7e8f90".into());
+        }
+        let mut worktrees = shop();
+        worktrees.push(scratch);
+        model_with(
+            lang,
+            worktrees,
+            Some(vec![claude("s1", "/w/shop/feat-pagos")]),
+        )
+    }
+
+    #[test]
+    fn a_scratch_worktree_without_a_branch_says_so() {
+        for (lang, branch, label, unknown) in [
+            (
+                Lang::En,
+                "39e852f (no branch)",
+                "· temporary",
+                "(no branch)",
+            ),
+            (Lang::Es, "39e852f (sin rama)", "· temporal", "(sin rama)"),
+        ] {
+            let screen = lines(&render(&scratch(lang, true), 100, 30));
+            let line = row(&screen, "scratch");
+            assert!(line.contains(branch), "{line}");
+            assert!(line.contains(label), "{line}");
+            assert!(!row(&screen, "feat-docs").contains(label), "{screen:#?}");
+            // An engine that does not publish the commit: no hash, never a made-up one.
+            let screen = lines(&render(&scratch(lang, false), 100, 30));
+            let line = row(&screen, "scratch");
+            assert!(line.contains(unknown), "{line}");
+            assert!(!line.contains("39e852f"), "{line}");
+        }
+    }
+
+    /// The fleet with rows without an agent, a scratch worktree without a branch and the legend,
+    /// in English and in Spanish (snapshots of the dogfooding amendment of US-CKP-001).
+    #[test]
+    fn the_fleet_without_agents_in_english_and_spanish() {
+        let mut settings = insta::Settings::clone_current();
+        settings.set_prepend_module_to_snapshot(false);
+        settings.set_snapshot_path("snapshots");
+        settings.bind(|| {
+            for (name, lang) in [("en", Lang::En), ("es", Lang::Es)] {
+                let theme = Theme::new(ColorMode::TrueColor, Contrast::Normal, SymbolSet::Unicode)
+                    .with_background(Background::Dark);
+                let model = published(scratch(lang, true)).with_theme(theme);
+                let buffer = render(&model, 100, 24);
+                let snap = format!(
+                    "{}\n=== styles ===\n{}",
+                    lines(&buffer).join("\n"),
+                    style_runs(&buffer)
+                );
+                insta::assert_snapshot!(format!("fleet_no_agent_100x24_{name}"), snap);
+            }
+        });
     }
 
     /// Without the session list the TUI cannot tell: "agent not available", not "no agent".
@@ -592,7 +703,7 @@ mod tests {
         let model = model_with(Lang::En, shop(), None);
         let screen = lines(&render(&model, 100, 30));
         assert!(row(&screen, "feat-pagos").contains("agent not available"));
-        assert!(!screen.join("\n").contains("Unattributed"));
+        assert!(!screen.join("\n").contains("No agent"));
     }
 
     /// Scenario 4: the last activity is not published, so every row says so.

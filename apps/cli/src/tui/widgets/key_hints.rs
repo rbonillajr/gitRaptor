@@ -3,7 +3,7 @@
 //! Both are fed from the single action ↔ keys table of `tui::keymap` (INF-CKP-001), so they
 //! cannot diverge from the input.
 
-use gitraptor_theme::ColorToken;
+use gitraptor_theme::{ColorToken, SymbolToken};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
@@ -73,6 +73,9 @@ pub struct KeyHintsModel {
     pub hints: Vec<KeyHint>,
     /// Always shown, at the right end, whatever the width.
     pub help: KeyHint,
+    /// What the ○ of a row without an agent means (US-CKP-001), muted after the hints when
+    /// some row has no agent and it fits whole.
+    pub legend: Option<SafeText>,
 }
 
 impl Component for KeyHintsModel {
@@ -106,7 +109,15 @@ impl Component for KeyHintsModel {
                 pen.gap(2);
             }
             if !hint.paint(&mut pen, styles) {
-                break;
+                return;
+            }
+        }
+        if let Some(legend) = &self.legend {
+            let glyph = styles.symbol(SymbolToken::AgentDone);
+            let gap = if self.hints.is_empty() { 0 } else { 3 };
+            if gap + u16::from(glyph.width) + 1 + width(legend.as_str()) <= pen.remaining() {
+                let muted = styles.fg(ColorToken::TextMuted);
+                pen.gap(gap).symbol(glyph, muted).gap(1).safe(legend, muted);
             }
         }
     }

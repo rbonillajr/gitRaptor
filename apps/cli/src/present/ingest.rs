@@ -76,6 +76,35 @@ fn repo_name(common_dir: &str) -> String {
     }
 }
 
+/// The first seven digits of a commit hash; `None` for anything that is not one.
+fn short_commit(hex: &str) -> Option<SafeText> {
+    (hex.len() >= 7 && hex.bytes().all(|b| b.is_ascii_hexdigit()))
+        .then(|| SafeText::text(&hex[..7]))
+}
+
+/// The system's temporary folders, as written and resolved (on macOS `/var` is `/private/var`,
+/// and the engine publishes resolved roots).
+fn temp_roots() -> &'static [std::path::PathBuf] {
+    static ROOTS: std::sync::OnceLock<Vec<std::path::PathBuf>> = std::sync::OnceLock::new();
+    ROOTS.get_or_init(|| {
+        let mut roots = vec![std::env::temp_dir()];
+        if cfg!(unix) {
+            roots.push("/tmp".into());
+        }
+        let resolved: Vec<_> = roots
+            .iter()
+            .filter_map(|r| std::fs::canonicalize(r).ok())
+            .collect();
+        roots.extend(resolved);
+        roots
+    })
+}
+
+/// Whether a worktree root lies under one of the temporary folders.
+fn temporary(root: &std::path::Path, roots: &[std::path::PathBuf]) -> bool {
+    roots.iter().any(|r| root.starts_with(r))
+}
+
 /// The last component of a worktree root (the root itself when it has none).
 fn leaf(root: &str) -> String {
     std::path::Path::new(root)
@@ -101,6 +130,7 @@ pub fn worktrees(views: &[WorktreeView]) -> Vec<WorktreeRow> {
             key: key(w.path.raw()),
             main: w.main,
             last_activity_ms: w.last_activity_utc_ms,
+            temporary: temporary(std::path::Path::new(w.path.raw()), temp_roots()),
             state: match &w.status {
                 WorktreeStatus::Ready {
                     head,
@@ -115,7 +145,9 @@ pub fn worktrees(views: &[WorktreeView]) -> Vec<WorktreeRow> {
                         HeadView::Unborn { name } => {
                             Head::Unborn(SafeText::name_from_untrusted(name))
                         }
-                        HeadView::Detached => Head::Detached,
+                        HeadView::Detached => {
+                            Head::Detached(w.detached_at.as_deref().and_then(short_commit))
+                        }
                     },
                     changes: counts.total(),
                     divergence: divergence.clone(),
@@ -170,6 +202,33 @@ mod tests {
     use gitraptor_api::UntrustedName;
     use gitraptor_api::actor::{AgentKind, AgentOrigin};
     use gitraptor_api::catalog::Layer;
+    use std::path::{Path, PathBuf};
+
+    /// US-CKP-001: only a real hash becomes the short one; anything else is left out.
+    #[test]
+    fn only_a_commit_hash_is_shortened() {
+        let short = |hex: &str| short_commit(hex).map(|s| s.as_str().to_owned());
+        assert_eq!(
+            short("39e852f0a1b2c3d4e5f60718293a4b5c6d7e8f90").as_deref(),
+            Some("39e852f")
+        );
+        assert_eq!(short("39e85"), None);
+        assert_eq!(short("39e852f\u{1b}[31m"), None);
+    }
+
+    /// A worktree is temporary when it lies under a temporary folder, by whole components.
+    #[test]
+    fn a_worktree_under_the_temporary_folder_is_temporary() {
+        let roots = [
+            PathBuf::from("/tmp"),
+            PathBuf::from("/private/var/folders/x/T"),
+        ];
+        assert!(temporary(Path::new("/tmp/scratch"), &roots));
+        assert!(temporary(Path::new("/private/var/folders/x/T/wt"), &roots));
+        assert!(!temporary(Path::new("/tmpfoo/wt"), &roots));
+        assert!(!temporary(Path::new("/w/shop"), &roots));
+        assert!(temporary(&std::env::temp_dir().join("wt"), temp_roots()));
+    }
 
     #[test]
     fn an_agent_name_is_sanitized_on_the_way_in() {
