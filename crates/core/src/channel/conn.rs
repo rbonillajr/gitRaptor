@@ -8,6 +8,7 @@ use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use gitraptor_api::Untrusted;
+use gitraptor_api::capability::{self, AcceptParams, AcceptResult, CAPABILITIES_PROTOCOL};
 use gitraptor_api::catalog::{
     self as catalog, CancelParams, CancelResult, Layer, PrepareParams, PrepareResult, RejectedData,
     RunParams,
@@ -181,6 +182,8 @@ pub(crate) fn accept(ctx: &Arc<ServerCtx>, stream: UnixStream) {
                 outbox: Arc::clone(&outbox),
                 profile: ConnectionProfile::Full,
                 protocol: thread_ctx.config.protocol,
+                capabilities: std::collections::BTreeSet::new(),
+                accepted: false,
                 phase: Phase::Handshake,
                 subscriptions: Vec::new(),
                 next_subscription: 1,
@@ -328,6 +331,11 @@ struct Connection<'a> {
     /// Protocol negotiated in `hello`: the connection sees the methods and
     /// shapes of this version (DS-TS-GRP-004 E-D1).
     protocol: u32,
+    /// The shapes the connection understands: those its protocol implies,
+    /// and from protocol 9 the ones it accepted (ADR-GRP-016 § 1).
+    capabilities: std::collections::BTreeSet<&'static str>,
+    /// `connection.accept` was answered: it is taken once.
+    accepted: bool,
     phase: Phase,
     subscriptions: Vec<u32>,
     next_subscription: u32,
@@ -470,11 +478,15 @@ impl Connection<'_> {
             return After::Continue;
         }
         self.protocol = hello.protocol;
-        self.outbox.set_before_reset(self.protocol < 8);
+        self.capabilities = capability::implied(self.protocol)
+            .into_iter()
+            .filter(|c| self.ctx.config.capabilities.contains(c))
+            .collect();
+        self.apply_capabilities();
         // N5: who the daemon sees, for the Cockpit's "you act as". Only for
         // `cli` clients of protocol 6 on a full connection: the hook client
         // connects often and does not need the process walk.
-        let requester = (self.protocol >= 6
+        let requester = (self.has(methods::CAP_REQUESTER.name)
             && self.profile == ConnectionProfile::Full
             && hello.client == ClientKind::Cli)
             .then(|| self.connection_requester());
@@ -491,10 +503,67 @@ impl Connection<'_> {
                 .map(|m| m.name.to_owned())
                 .collect(),
             requester,
+            // Protocol 5 to 8 reject unknown fields: only 9 hears of them.
+            capabilities: (self.protocol >= CAPABILITIES_PROTOCOL).then(|| {
+                self.ctx
+                    .config
+                    .capabilities
+                    .iter()
+                    .map(|c| (*c).to_owned())
+                    .collect()
+            }),
         };
         self.reply(&request.id, Ok(result));
         self.phase = Phase::Ready;
         After::Continue
+    }
+
+    /// Whether the connection understands the shape `capability` names.
+    fn has(&self, capability: &str) -> bool {
+        self.capabilities.contains(capability)
+    }
+
+    /// What the connection's capabilities change in what it is sent.
+    fn apply_capabilities(&self) {
+        // A connection without it cannot read Git events of kind `reset`
+        // (protocol 8, US-TMC-004).
+        self.outbox
+            .set_before_reset(!self.has(methods::CAP_GIT_RESET.name));
+    }
+
+    /// `connection.accept` (protocol 9): the client's capabilities, once and
+    /// before its first subscription, so no event it already received
+    /// changes shape. Names the daemon does not serve are ignored.
+    fn connection_accept(&mut self, params: AcceptParams) -> Result<AcceptResult, ErrorObject> {
+        if self.accepted || !self.subscriptions.is_empty() {
+            return Err(ErrorObject::new(
+                code::INVALID_REQUEST,
+                "capabilities are accepted once, before any subscription",
+            ));
+        }
+        if params.capabilities.len() > capability::MAX_ACCEPTED
+            || params
+                .capabilities
+                .iter()
+                .any(|c| c.is_empty() || c.len() > capability::MAX_NAME_LEN)
+        {
+            return Err(ErrorObject::new(
+                code::INVALID_PARAMS,
+                "invalid capabilities",
+            ));
+        }
+        self.accepted = true;
+        let served = &self.ctx.config.capabilities;
+        self.capabilities.extend(
+            served
+                .iter()
+                .copied()
+                .filter(|c| params.capabilities.iter().any(|asked| asked == c)),
+        );
+        self.apply_capabilities();
+        Ok(AcceptResult {
+            capabilities: self.capabilities.iter().map(|c| (*c).to_owned()).collect(),
+        })
     }
 
     fn offered(&self, m: &MethodSpec) -> bool {
@@ -595,6 +664,10 @@ impl Connection<'_> {
                 self.reply(&request.id, result);
             }
             methods::PING => self.reply(&request.id, request.params::<NoParams>().map(|_| "pong")),
+            methods::CONNECTION_ACCEPT => {
+                let result = request.params().and_then(|p| self.connection_accept(p));
+                self.reply(&request.id, result);
+            }
             methods::SCOPE_SNAPSHOT => {
                 let result = request.params().and_then(|p| self.scope_snapshot(p));
                 self.reply(&request.id, result);
@@ -1094,13 +1167,13 @@ impl Connection<'_> {
         {
             return Err(ErrorObject::new(code::INVALID_PARAMS, "invalid worktree"));
         }
-        let before_reset = self.protocol < 8;
+        let before_reset = !self.has(methods::CAP_GIT_RESET.name);
         self.ctx
             .control
             .event_history(params)
             .map(|mut events| {
-                // A client older than protocol 8 cannot read `reset`
-                // (US-TMC-004).
+                // A client without the capability (older than protocol 8)
+                // cannot read `reset` (US-TMC-004).
                 if before_reset {
                     events.retain(|e| e.kind != gitraptor_api::messages::GitEventKind::Reset);
                 }
@@ -1151,13 +1224,27 @@ impl Connection<'_> {
     /// stop (SEC-13).
     fn replace(&mut self, request: &Request) -> After {
         let result = request.params::<ReplaceParams>().and_then(|params| {
-            if params.protocol <= self.ctx.config.protocol {
+            // From protocol 9 the number no longer grows with each feature:
+            // an upgrade of the same protocol replaces the daemon too, but
+            // only from the installed binary (ADR-GRP-016 § 1, SEC-13).
+            let same = params.protocol == self.ctx.config.protocol
+                && params.protocol >= CAPABILITIES_PROTOCOL;
+            if params.protocol < self.ctx.config.protocol
+                || (params.protocol == self.ctx.config.protocol && !same)
+            {
                 return Err(ErrorObject::new(
                     code::INVALID_PARAMS,
                     "only a newer protocol replaces the daemon",
                 ));
             }
-            if self.is_installed_replacement() {
+            let installed = self.is_installed_replacement();
+            if same && !installed {
+                return Err(ErrorObject::new(
+                    code::INVALID_PARAMS,
+                    "only the installed binary replaces a daemon of its protocol",
+                ));
+            }
+            if installed {
                 self.audit(
                     methods::DAEMON_REPLACE,
                     None,

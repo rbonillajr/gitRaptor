@@ -147,6 +147,10 @@ pub struct ClientOptions {
     pub launcher: Launcher,
     /// From launch to completed handshake.
     pub start_timeout: Duration,
+    /// The capabilities this binary understands (ADR-GRP-016 § 1): a daemon
+    /// of the same protocol that lacks one is replaced. Every one of the
+    /// contract; tests play a newer binary with more.
+    pub capabilities: Vec<&'static str>,
 }
 
 impl ClientOptions {
@@ -157,6 +161,7 @@ impl ClientOptions {
             protocol: PROTOCOL_VERSION,
             launcher: Launcher::installed(),
             start_timeout: Duration::from_secs(5),
+            capabilities: gitraptor_api::capability::all().map(|c| c.name).collect(),
         }
     }
 }
@@ -207,6 +212,7 @@ impl Client {
         match client.greet(kind, protocol)? {
             Greeting::Ready(hello) => {
                 client.hello = hello;
+                client.accept_capabilities()?;
                 Ok(client)
             }
             Greeting::Incompatible(data) if data.daemon_protocol < protocol => {
@@ -244,6 +250,7 @@ impl Client {
         match client.greet(kind, protocol)? {
             Greeting::Ready(hello) => {
                 client.hello = hello;
+                client.accept_capabilities()?;
                 Ok(client)
             }
             Greeting::Incompatible(data) if data.daemon_protocol < protocol => {
@@ -290,6 +297,7 @@ impl Client {
                 max_message_bytes: 0,
                 methods: Vec::new(),
                 requester: None,
+                capabilities: None,
             },
         })
     }
@@ -317,6 +325,43 @@ impl Client {
     /// What the daemon said in the handshake.
     pub fn hello(&self) -> &HelloResult {
         &self.hello
+    }
+
+    /// Capabilities this binary understands that the daemon does not serve
+    /// (ADR-GRP-016 § 1): the daemon is older than this binary. Empty for a
+    /// daemon of protocol 5 to 8, which the protocol number replaces.
+    pub fn missing_capabilities(&self, known: &[&'static str]) -> Vec<&'static str> {
+        let Some(served) = &self.hello.capabilities else {
+            return Vec::new();
+        };
+        known
+            .iter()
+            .copied()
+            .filter(|k| !served.iter().any(|s| s == k))
+            .collect()
+    }
+
+    /// Asks the daemon for the capabilities added after protocol 9 that this
+    /// binary understands and the daemon serves; the legacy ones come with
+    /// the protocol. Nothing to ask, nothing sent.
+    #[cfg(unix)]
+    fn accept_capabilities(&mut self) -> Result<(), ClientError> {
+        let Some(served) = &self.hello.capabilities else {
+            return Ok(());
+        };
+        let wanted: Vec<String> = gitraptor_api::capability::all()
+            .filter(|c| c.legacy.is_none() && served.iter().any(|s| s == c.name))
+            .map(|c| c.name.to_owned())
+            .collect();
+        if !wanted.is_empty() {
+            let _: gitraptor_api::capability::AcceptResult = self.call(
+                methods::CONNECTION_ACCEPT,
+                gitraptor_api::capability::AcceptParams {
+                    capabilities: wanted,
+                },
+            )?;
+        }
+        Ok(())
     }
 
     /// Sends a request and waits for its answer. Notifications that arrive
@@ -484,7 +529,21 @@ fn decode(bytes: &[u8]) -> Result<ServerMessage, ClientError> {
 #[cfg(unix)]
 pub fn ensure_daemon(options: &ClientOptions) -> Result<Client, ClientError> {
     match Client::connect(&options.dirs, options.kind, options.protocol) {
-        Ok(client) => return Ok(client),
+        Ok(client)
+            if client
+                .missing_capabilities(&options.capabilities)
+                .is_empty() =>
+        {
+            return Ok(client);
+        }
+        // A daemon of this protocol but older than this binary: replaced if
+        // it accepts (only from the installed binary); otherwise the client
+        // goes on with what it was granted, as before capabilities.
+        Ok(client) => {
+            if let Some(client) = replace_same_protocol(options, client)? {
+                return Ok(client);
+            }
+        }
         Err(ClientError::NotRunning) => {}
         Err(ClientError::Incompatible(data)) => replace(options, &data)?,
         Err(err) => return Err(err),
@@ -549,6 +608,33 @@ impl Client {
 #[cfg(not(unix))]
 pub fn ensure_daemon(options: &ClientOptions) -> Result<Client, ClientError> {
     Client::connect(&options.dirs, options.kind, options.protocol)
+}
+
+/// Asks a daemon of this protocol that lacks capabilities of this binary
+/// to step down for it (ADR-GRP-016 § 1). `Some(client)`: it refused, go on
+/// with that connection; `None`: it stopped and released its lock.
+#[cfg(unix)]
+fn replace_same_protocol(
+    options: &ClientOptions,
+    mut old: Client,
+) -> Result<Option<Client>, ClientError> {
+    let stop: Result<StopResult, ClientError> = old.call(
+        methods::DAEMON_REPLACE,
+        ReplaceParams {
+            protocol: options.protocol,
+        },
+    );
+    match stop {
+        Ok(stop) if stop.stopping => {}
+        Ok(_) | Err(ClientError::Rpc(_)) => return Ok(Some(old)),
+        Err(err) => return Err(err),
+    }
+    old.wait_closed(Duration::from_secs(10));
+    if wait_until_released(&options.dirs.state, Duration::from_secs(10)).unwrap_or(false) {
+        Ok(None)
+    } else {
+        Err(ClientError::StartTimeout)
+    }
 }
 
 /// Asks an older daemon to step down for this (installed) binary and waits
