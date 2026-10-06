@@ -19,6 +19,11 @@ gitraptor-theme = { path = "crates/theme" }
 gitraptor-winsys = { path = "crates/winsys" }
 
 clap = { version = "4", features = ["derive"] }
+# TUI (ADR-CKP-003 § 1): ratatui 0.30 on the crossterm 0.29 backend, pinned by Cargo.lock.
+crossterm = "0.29"
+ratatui = { version = "0.30", default-features = false, features = ["crossterm_0_29"] }
+# Snapshot tests of the TUI widgets (DSYS-GRP-001 § 7, TS-CKP-005).
+insta = "1"
 # Read path of crates/git (ADR-GRP-001, ADR-GRP-009): no default features, so no network,
 # credentials or worktree mutation; versions are pinned by Cargo.lock.
 # `parallel` makes the repository handles thread-safe, so the Time Machine store writes blobs
