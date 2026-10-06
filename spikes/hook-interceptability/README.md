@@ -20,6 +20,8 @@ Prototipo aislado del [SPIKE-GRD-001](../../docs/requirements/features/guardrail
 | `suites/04-config-worktrees.sh` | Huella byte a byte del `config`, cobertura de worktrees (`config.worktree`, `include`, `includeIf`) y `GIT_DIR` cruzado |
 | `suites/05-hookset.sh` | Hooks que cambian el comportamiento de Git por existir, y número de invocaciones por comando |
 | `suites/06-cost.sh` | Coste por invocación: sin hooks, dispatcher `sh` con salida rápida + binario nativo, solo binario, guard en `sh`; fetch de 1.000 refs |
+| `suites/07-cost-native.sh` | Coste con el binario nativo como dispatcher (variante VN), portable a Windows: cronómetro en Rust (`lib/bench.rs`), sin Python; comprueba que Git ejecuta un hook nativo con y sin `.exe` (2026-10-05, US-GRD-001) |
+| `lib/bench.rs` | Cronómetro (p50 y p95) de un comando lanzado sin shell, para la suite 07 |
 | `results/<so>-<arch>-git<versión>[-reftable]/` | Evidencia de cada ejecución (TSV); `01-matrix-detail/` guarda la traza de hooks de cada caso |
 
 ## Cómo reproducir
@@ -33,6 +35,7 @@ SKIP_COST=1 ./run-all.sh                  # suites 01–05 con el git del PATH
 GIT_BIN_DIR=/ruta/a/git-2.38.5/bin SKIP_COST=1 ./run-all.sh   # otra versión de Git
 GIT_BIN_DIR=/ruta/a/git-2.56.0/bin REF_FORMAT=reftable SKIP_COST=1 ./run-all.sh
 BENCH_N=100 bash suites/06-cost.sh        # coste: en una máquina en reposo, sin otras suites en paralelo
+BENCH_N=100 bash suites/07-cost-native.sh # coste con dispatcher nativo; también en Git Bash (Windows)
 ```
 
 - **Versiones de Git del spike**: Git 2.38.5 y 2.56.0 se compilaron desde las etiquetas `v2.38.5` y `v2.56.0` de `github.com/git/git` con `make prefix=<dir> NO_GETTEXT=1 NO_TCLTK=1 NO_CURL=1 NO_EXPAT=1 NO_PERL=1 NO_PYTHON=1 install`. La 2.50.1 es la de Apple (`/usr/bin/git`).
