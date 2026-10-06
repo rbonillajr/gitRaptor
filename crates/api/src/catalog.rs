@@ -940,7 +940,8 @@ mod tests {
             .is_err()
         );
         // H-02: over MCP `create-worktree` has no path.
-        let with_path = args(json!({ "branch": "feat/x", "path": "/tmp/x" }));
+        let abs = if cfg!(windows) { r"C:\tmp\x" } else { "/tmp/x" };
+        let with_path = args(json!({ "branch": "feat/x", "path": abs }));
         assert!(OperationArgs::parse(OperationId::CreateWorktree, &with_path, true).is_err());
         assert!(OperationArgs::parse(OperationId::CreateWorktree, &with_path, false).is_ok());
     }

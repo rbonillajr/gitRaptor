@@ -83,16 +83,20 @@ pub fn check_new_worktree_path(
         return Err(NewPathError::ParentNotPrivate);
     }
     // No symlink on the way, so the canonical parent is the parent itself (modulo case on
-    // case-insensitive file systems).
-    let canonical = std::fs::canonicalize(parent)
+    // case-insensitive file systems). Containment compares one form on both sides, the one of
+    // `std::fs::canonicalize` (verbatim on Windows); Git gets the drive form when there is one.
+    let key = std::fs::canonicalize(parent)
+        .map_err(|_| NewPathError::ParentMissing)?
+        .join(name);
+    let canonical = gitraptor_git::paths::canonicalize(parent)
         .map_err(|_| NewPathError::ParentMissing)?
         .join(name);
     let inside = |root: &PathBuf| {
         let root = std::fs::canonicalize(root).unwrap_or_else(|_| root.clone());
-        canonical.starts_with(&root)
+        key.starts_with(&root)
     };
     if protected.iter().any(inside)
-        || canonical
+        || key
             .components()
             .any(|c| c.as_os_str().to_string_lossy().eq_ignore_ascii_case(".git"))
     {
