@@ -1,4 +1,5 @@
 mod agent;
+mod autostart;
 mod codes;
 mod events;
 mod i18n;
@@ -26,8 +27,9 @@ use gitraptor_api::resources::ResourcesResult;
 use gitraptor_api::rpc::{ErrorObject, code};
 use gitraptor_api::timemachine::{PriorFailedData, PriorFailure};
 use gitraptor_api::untrusted::sanitize;
+use gitraptor_core::autostart::start_failure_exit;
 use gitraptor_core::client::{Client, ClientError, ClientOptions, ensure_daemon};
-use gitraptor_core::daemon::{self, DaemonConfig, DaemonError, EXIT_ALREADY_RUNNING};
+use gitraptor_core::daemon::{self, DaemonConfig, DaemonError};
 use gitraptor_core::profile::{INDEX_FILE, ProfileDirs, read_only_repos};
 
 use i18n::t;
@@ -46,6 +48,10 @@ enum Command {
     Tui,
     /// Run the GitRaptor engine in the foreground (one per user).
     Daemon {
+        /// Started by the login autostart: a start that fails exits with 0,
+        /// so the service manager does not relaunch it in a loop.
+        #[arg(long, hide = true)]
+        autostart: bool,
         #[command(subcommand)]
         action: Option<DaemonAction>,
     },
@@ -173,6 +179,10 @@ enum DaemonAction {
     },
     /// Show the engine state, starting the engine if it is not running.
     Status,
+    /// Start the engine at login (launchd, systemd --user or HKCU Run).
+    Enable,
+    /// Stop starting the engine at login. The running engine keeps running.
+    Disable,
 }
 
 #[derive(Subcommand)]
@@ -192,13 +202,26 @@ enum RepoAction {
 fn main() -> ExitCode {
     match Cli::parse().command {
         None | Some(Command::Tui) => tui(),
-        Some(Command::Daemon { action: None }) => run_daemon(),
+        Some(Command::Daemon {
+            autostart,
+            action: None,
+        }) => run_daemon(autostart),
         Some(Command::Daemon {
             action: Some(DaemonAction::Stop { yes }),
+            ..
         }) => stop_daemon(yes),
         Some(Command::Daemon {
             action: Some(DaemonAction::Status),
+            ..
         }) => daemon_status(),
+        Some(Command::Daemon {
+            action: Some(DaemonAction::Enable),
+            ..
+        }) => autostart::enable(),
+        Some(Command::Daemon {
+            action: Some(DaemonAction::Disable),
+            ..
+        }) => autostart::disable(),
         Some(Command::Repo {
             action: RepoAction::Add { path },
         }) => repo_add(path),
@@ -285,17 +308,16 @@ fn tui() -> ExitCode {
     }
 }
 
-fn run_daemon() -> ExitCode {
+/// `raptor daemon`. Started by the login autostart (`--autostart`), a
+/// start that fails exits with 0 (US-GRP-004, ADR-GRP-015).
+fn run_daemon(autostart: bool) -> ExitCode {
     let result = DaemonConfig::for_current_user().and_then(daemon::run_process);
     match result {
         Ok(_) => ExitCode::SUCCESS,
-        Err(err @ DaemonError::AlreadyRunning { .. }) => {
-            eprintln!("raptor daemon: {err}");
-            ExitCode::from(EXIT_ALREADY_RUNNING as u8)
-        }
         Err(err) => {
             eprintln!("raptor daemon: {err}");
-            ExitCode::FAILURE
+            let already = matches!(err, DaemonError::AlreadyRunning { .. });
+            ExitCode::from(start_failure_exit(autostart, already))
         }
     }
 }
