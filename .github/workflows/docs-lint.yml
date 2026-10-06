@@ -14,7 +14,7 @@ permissions:
 
 # Pull requests: one run per branch, a new push cancels the previous one. main never cancels.
 concurrency:
-  group: docs-lint-${{ github.event_name == 'pull_request' && github.head_ref || github.run_id }}
+  group: docs-lint-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -27,7 +27,8 @@ jobs:
       pull-requests: read
     steps:
       # Pull requests that touch none of these paths still report the check, in success, without
-      # running it. `push` to main always runs it. The filter reads the changed files from the API.
+      # running it. `push` to main always runs it. The filter reads the changed files from the API,
+      # which lists at most 3000: a larger pull request always runs the check.
       - id: filter
         if: github.event_name == 'pull_request'
         uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -38,22 +39,22 @@ jobs:
               - 'tools/docs-lint/**'
               - '.github/workflows/docs-lint.yml'
       - name: Nothing to check
-        if: steps.filter.outputs.changed == 'false'
+        if: steps.filter.outputs.changed == 'false' && github.event.pull_request.changed_files < 3000
         run: "echo '::notice::No docs changes in this pull request: Mermaid check not needed (main always runs it)'"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        if: steps.filter.outputs.changed != 'false'
+        if: steps.filter.outputs.changed != 'false' || github.event.pull_request.changed_files >= 3000
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        if: steps.filter.outputs.changed != 'false'
+        if: steps.filter.outputs.changed != 'false' || github.event.pull_request.changed_files >= 3000
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: tools/docs-lint/package-lock.json
       # Isolated from the pnpm workspace: only CI needs Chrome and the Mermaid CLI.
       - name: Install the Mermaid CLI
-        if: steps.filter.outputs.changed != 'false'
+        if: steps.filter.outputs.changed != 'false' || github.event.pull_request.changed_files >= 3000
         working-directory: tools/docs-lint
         run: npm ci --no-audit --no-fund
       - name: Render every Mermaid block
-        if: steps.filter.outputs.changed != 'false'
+        if: steps.filter.outputs.changed != 'false' || github.event.pull_request.changed_files >= 3000
         working-directory: tools/docs-lint
         run: node check-mermaid.mjs
