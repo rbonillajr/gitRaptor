@@ -1,0 +1,34 @@
+# User-facing messages of `raptor`, English (NFR-10, ADR-GRP-003): resources.
+# One `key = text` per line. Placeholders are `{name}`; the code fills them
+# by name, never by concatenating. Every key exists in ../es/resources.txt too.
+
+# raptor status --resources (US-GRP-017)
+res.engine-running = engine: running (pid {pid})
+res.engine-stopped = engine: not running (not started to measure it); only the disk is shown, read from the profile
+res.restart-engine = the running engine is older and cannot report its consumption: stop it with `raptor daemon stop` and run the command again
+res.line = {label}: {value} — {verdict}
+res.cpu = CPU
+res.cpu-value = {mean} average over {window} (peak {peak})
+res.window-min = {n} min
+res.window-s = {n} s
+res.rss = memory (RSS)
+res.fds = open descriptors
+res.watches = watches
+res.roots = {n} watched folders
+res.inotify = inotify watches
+res.inotify-value = {n} of {max} allowed
+res.profile-disk = profile disk (without the Time Machine)
+res.tm-disk = Time Machine disk
+res.tm-reference = reference {target} (the cap is not enforced yet)
+res.tm-repo = {repo}: {value}
+res.at-least = at least {value}
+res.within = target {target}: ok
+res.over = OVER TARGET (target {target})
+res.not-judged = target {target}: not measured
+res.no-target = no target
+res.not-available = not available
+res.pools = work classes: {value}
+res.pools-reported = reported
+res.power = power saving: {value}
+res.power-on = on
+res.power-off = off

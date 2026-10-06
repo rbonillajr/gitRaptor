@@ -1,0 +1,14 @@
+# User-facing messages of `raptor`, English (NFR-10, ADR-GRP-003): repo.
+# One `key = text` per line. Placeholders are `{name}`; the code fills them
+# by name, never by concatenating. Every key exists in ../es/repo.txt too.
+
+repo.refused-agent = refused: only the developer can change the observed repos, not an agent or a process started by one
+repo.added = observing {path}
+repo.already-observed = already observed: {path}
+repo.reactivated = observing {path} again
+repo.not-a-repo = {path} is not a Git repository
+repo.untrusted = {path} is not trusted by Git (safe.directory)
+repo.unreadable = {path} could not be read
+repo.unknown = {path} is not an observed repo
+repo.retired = no longer observing {path}
+repo.not-observed = {path} was not being observed

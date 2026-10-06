@@ -1,0 +1,17 @@
+# Mensajes de `raptor` para el usuario, en español (NFR-10, ADR-GRP-003): registration.
+# Una línea `clave = texto`. Los marcadores son `{nombre}`; el código los
+# rellena por nombre, nunca concatenando. Toda clave existe también en ../en/registration.txt.
+
+# Registro explícito de un agente (US-GRP-009).
+agent.created = {agent} quedó registrado aquí
+agent.confirmed = {agent} ya se detectaba aquí: se confirmó su sesión
+agent.already-registered = {agent} ya estaba registrado aquí; no cambió nada
+agent.other-notice = {name} se registró como otro agente: se observa y se le atribuye su actividad, sin funciones específicas. No se detecta solo: figura presente hasta que ejecutes raptor agent withdraw "{name}"
+agent.withdrawn = se retiró el registro de {agent}; su sesión terminó
+agent.refused-agent = rechazado: solo el desarrollador puede retirar el registro de otro agente
+registration.not-a-worktree = ese directorio no es un worktree de ningún repo observado
+registration.repo-not-observed = el repo no está observado
+registration.worktree-mismatch = rechazado: un agente solo puede registrarse en el worktree donde trabaja
+registration.agent-mismatch = rechazado: un agente solo puede registrarse como el agente que es
+registration.no-working-folder = no se pudo leer la carpeta de trabajo de quien lo pide
+registration.not-registered = {agent} no tiene un registro que retirar en ese worktree; una sesión detectada termina cuando termina su proceso

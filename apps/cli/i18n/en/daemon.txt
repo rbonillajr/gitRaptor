@@ -1,0 +1,26 @@
+# User-facing messages of `raptor`, English (NFR-10, ADR-GRP-003): daemon.
+# One `key = text` per line. Placeholders are `{name}`; the code fills them
+# by name, never by concatenating. Every key exists in ../es/daemon.txt too.
+
+daemon.stop.confirm = Stop the GitRaptor engine? Agent activity will not be observed until it starts again. [y/N]
+daemon.stop.refused-agent = refused: only the developer can stop the engine, not an agent or a process started by one
+daemon.stopped = stopped (pid {pid})
+daemon.stop.timeout = pid {pid} did not stop within 10 s
+daemon.status.engine = engine: {state} (pid {pid}, protocol {protocol})
+daemon.status.git = git: {version}
+daemon.status.git-missing = git: not found
+daemon.enable.done = autostart at login is on: {artifact}
+daemon.enable.already = autostart at login was already on: {artifact}
+daemon.enable.active = the system's service manager starts the engine from now on, also in this session
+daemon.enable.next-login = it takes effect at your next login
+daemon.enable.not-installed = refused: {path} is not an installed GitRaptor (npm, an npx cache, a temporary folder, or other users can modify it); install GitRaptor and run raptor daemon enable from the installed copy
+daemon.enable.no-manager = refused: your user's systemd does not load the unit (no user session, or it reads another folder); nothing was left written
+daemon.disable.done = autostart at login is off; the running engine keeps running until you stop it or log out
+daemon.disable.already = autostart at login was already off
+daemon.autostart.unsupported = this system has no supported login autostart (macOS launchd, Linux systemd --user or Windows); the engine still starts when a client needs it
+daemon.autostart.failed = could not change the autostart: {error}
+
+# Contract codes (ADR-CKP-003 § 4 N7): one message per code.
+daemon.status.requester = you act as: {actor} (layer {layer})
+daemon.status.requester-unverified = you act as: unknown (the engine could not verify who you are; writes are disabled)
+daemon.status.autostart = autostart at login: {state}
