@@ -82,7 +82,7 @@ fn same_path(a: &Path, b: &Path) -> bool {
 /// Reads the preflight facts of the worktree rooted at `worktree` (no upward discovery).
 pub fn preflight(worktree: &Path) -> Result<Preflight, ReadError> {
     crate::paths::validate(worktree)?;
-    let root = std::fs::canonicalize(worktree)
+    let root = crate::paths::canonicalize(worktree)
         .map_err(|e| ReadError::Unavailable(format!("worktree root: {e}")))?;
     let dot_git = root.join(".git");
     let meta = std::fs::symlink_metadata(&dot_git)
@@ -93,7 +93,7 @@ pub fn preflight(worktree: &Path) -> Result<Preflight, ReadError> {
     let linked = meta.is_file();
 
     let reader = RepoReader::open(&root, &ReaderOptions::default())?;
-    let canonical = |p: &Path| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_owned());
+    let canonical = |p: &Path| crate::paths::canonicalize(p).unwrap_or_else(|_| p.to_owned());
     let git_dir = canonical(reader.repo.git_dir());
     let common_dir = canonical(reader.repo.common_dir());
 

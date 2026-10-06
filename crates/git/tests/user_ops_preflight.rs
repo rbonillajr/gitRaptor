@@ -10,6 +10,16 @@ use gitraptor_git::preflight::preflight;
 use gitraptor_git::user_ops::{FALLBACK_NO_EDITOR, RepoTarget, SessionEnv, UserGitCommand, UserOp};
 use gitraptor_git::{InProgress, Oid, RefName};
 
+/// The rejecting editor. On Windows [`FALLBACK_NO_EDITOR`] is not absolute and the launch is
+/// refused (XP-19); a ref update never opens an editor, so any absolute path serves there.
+fn no_editor(f: &Fixture) -> PathBuf {
+    if cfg!(windows) {
+        f.root().join("raptor-no-editor.exe")
+    } else {
+        PathBuf::from(FALLBACK_NO_EDITOR)
+    }
+}
+
 fn head(f: &Fixture, dir: &Path) -> String {
     f.git_in(dir, &["rev-parse", "HEAD"]).trim().to_owned()
 }
@@ -121,7 +131,7 @@ fn a_ref_update_with_a_stale_old_value_fails_whole() {
         &op,
         None,
         &SessionEnv::default(),
-        Path::new(FALLBACK_NO_EDITOR),
+        &no_editor(&f),
         Some(&f.home),
     )
     .unwrap();
