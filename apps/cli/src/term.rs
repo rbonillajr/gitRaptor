@@ -5,13 +5,26 @@
 //! termios state has a single owner. It must run **before** the TUI's event reader, or the reply
 //! would be read as key presses.
 
-// Wired by the TUI start-up (INF-CKP-001); until then only the pty tests use it, and they do
-// not call `query`, which would touch the real terminal of whoever runs `cargo test`.
-#![allow(dead_code)]
-
 use std::time::Duration;
 
-use gitraptor_theme::{Detection, QUERY_TIMEOUT, Rgb, ThemeChoice, resolve};
+use gitraptor_theme::{
+    Contrast, Detection, QUERY_TIMEOUT, Rgb, Theme, ThemeChoice, color_mode, resolve, symbol_set,
+};
+
+/// The whole theme of the TUI at start-up (US-CKP-001): depth and symbols from the environment
+/// and the flags, contrast and background from [`detect_theme`]. Called before the TUI starts
+/// its event reader.
+pub fn theme(flag: Option<ThemeChoice>, no_color: bool, ascii: bool) -> Theme {
+    let env = |name: &str| std::env::var(name).ok();
+    let detection = detect_theme(flag, no_color);
+    let contrast = detection.contrast;
+    Theme::new(color_mode(no_color, env), contrast, symbol_set(ascii, env)).with_background(
+        match contrast {
+            Contrast::High => gitraptor_theme::Background::Dark,
+            Contrast::Normal => detection.background,
+        },
+    )
+}
 
 /// The theme to draw with: `flag` is `--theme`, `no_color` is `--no-color`; the rest comes from
 /// the environment and, when nothing is explicit, from the terminal.

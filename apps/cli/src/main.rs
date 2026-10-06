@@ -39,14 +39,40 @@ use i18n::t;
 #[derive(Parser)]
 #[command(name = "raptor", version, about)]
 struct Cli {
+    #[command(flatten)]
+    display: Display,
     #[command(subcommand)]
     command: Option<Command>,
+}
+
+/// How the cockpit paints (DSYS-GRP-001 § 6; TS-CKP-004, 2026-10-05 amendment).
+#[derive(clap::Args, Clone, Copy)]
+struct Display {
+    /// Colors for a dark or light terminal, or high contrast [default: detect the background;
+    /// also GITRAPTOR_THEME].
+    #[arg(long, value_parser = parse_theme)]
+    theme: Option<gitraptor_theme::ThemeChoice>,
+    /// Paint without colors (also NO_COLOR).
+    #[arg(long)]
+    no_color: bool,
+    /// ASCII symbols instead of Unicode ones.
+    #[arg(long)]
+    ascii: bool,
+}
+
+fn parse_theme(value: &str) -> Result<gitraptor_theme::ThemeChoice, String> {
+    value
+        .parse()
+        .map_err(|err: gitraptor_theme::ParseThemeChoiceError| err.to_string())
 }
 
 #[derive(Subcommand)]
 enum Command {
     /// Open the cockpit (the default without a subcommand); needs a terminal.
-    Tui,
+    Tui {
+        #[command(flatten)]
+        display: Display,
+    },
     /// Run the GitRaptor engine in the foreground (one per user).
     Daemon {
         /// Started by the login autostart: a start that fails exits with 0,
@@ -233,8 +259,14 @@ fn main() -> ExitCode {
     if args.get(1).is_some_and(|a| a == "hook") {
         return guard::hook(&args[2..]);
     }
-    match Cli::parse().command {
-        None | Some(Command::Tui) => tui(),
+    let cli = Cli::parse();
+    match cli.command {
+        None => tui(cli.display),
+        Some(Command::Tui { display }) => tui(Display {
+            theme: display.theme.or(cli.display.theme),
+            no_color: display.no_color || cli.display.no_color,
+            ascii: display.ascii || cli.display.ascii,
+        }),
         Some(Command::Daemon {
             autostart,
             action: None,
@@ -325,7 +357,7 @@ fn ui_gallery(dump: bool, mode: gitraptor_cli::tui::gallery::Mode) -> ExitCode {
 
 /// `raptor` or `raptor tui`: the cockpit when stdin and stdout are a
 /// terminal; otherwise exit code 2 with a hint (ADR-CKP-003 § 11).
-fn tui() -> ExitCode {
+fn tui(display: Display) -> ExitCode {
     use gitraptor_cli::present::i18n::{Lang, Text};
     if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
         eprintln!("raptor: {}", Text::NeedsTerminal.render(Lang::detect()));
@@ -338,7 +370,9 @@ fn tui() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    match gitraptor_cli::tui::run(connector, std::env::current_dir().ok()) {
+    // Before the TUI's event reader: the terminal's answer must not be read as keys.
+    let theme = term::theme(display.theme, display.no_color, display.ascii);
+    match gitraptor_cli::tui::run(connector, std::env::current_dir().ok(), theme) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
             eprintln!("raptor: {}", sanitize(&err.to_string()));

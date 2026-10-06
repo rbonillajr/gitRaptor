@@ -2,10 +2,13 @@
 //! untrusted text goes through [`SafeText`] here and nowhere else; the
 //! model never keeps it raw.
 
-use gitraptor_api::Actor;
-use gitraptor_api::scope::{ConnectionRequester, GlobalSnapshot, RepoSnapshot};
+use gitraptor_api::messages::{HeadView, SessionView, WorktreeStatus, WorktreeView};
+use gitraptor_api::scope::{AttentionCount, ConnectionRequester, GlobalSnapshot, RepoSnapshot};
+use gitraptor_api::{Actor, AgentKind};
 
-use crate::model::{GlobalView, RepoView, Requester};
+use crate::model::{
+    GlobalView, Head, RepoAttention, RepoView, Requester, SessionRow, WorktreeRow, WorktreeState,
+};
 use crate::present::SafeText;
 
 pub fn global(snapshot: &GlobalSnapshot) -> GlobalView {
@@ -14,14 +17,111 @@ pub fn global(snapshot: &GlobalSnapshot) -> GlobalView {
         git_version: snapshot.engine.git_version.as_deref().map(SafeText::name),
         autostart: snapshot.autostart,
         repo_count: snapshot.repos.len(),
+        attention: snapshot
+            .repos
+            .iter()
+            .map(|r| {
+                let count = |c: &AttentionCount| match c {
+                    AttentionCount::Counted { count } => Some(*count),
+                    AttentionCount::Unavailable { .. } => None,
+                };
+                RepoAttention {
+                    repo_id: r.repo_id.clone(),
+                    conflicts: count(&r.attention.conflicts),
+                    denials: count(&r.attention.denials),
+                }
+            })
+            .collect(),
     }
 }
 
+/// The repo of a snapshot. Its sessions come apart (`sessions.list`), so they start empty.
 pub fn repo(snapshot: &RepoSnapshot) -> RepoView {
     RepoView {
         repo_id: snapshot.repo.repo_id.clone(),
         path: SafeText::from_untrusted(&snapshot.repo.path),
-        worktree_count: snapshot.repo.worktrees.len(),
+        name: SafeText::name(&repo_name(snapshot.repo.path.raw())),
+        base: snapshot
+            .repo
+            .base
+            .name
+            .as_ref()
+            .map(SafeText::name_from_untrusted),
+        worktrees: worktrees(&snapshot.repo.worktrees),
+        sessions: Vec::new(),
+        detection: None,
+    }
+}
+
+/// The folder of a repo from its common dir: `shop` for `/w/shop/.git`, `shop.git` for a bare
+/// `/w/shop.git`.
+fn repo_name(common_dir: &str) -> String {
+    let path = std::path::Path::new(common_dir);
+    let leaf = |p: &std::path::Path| p.file_name().map(|n| n.to_string_lossy().into_owned());
+    match leaf(path) {
+        Some(n) if n == ".git" => path.parent().and_then(leaf).unwrap_or(n),
+        Some(n) => n,
+        None => common_dir.to_owned(),
+    }
+}
+
+/// The key a worktree and its sessions share: a hash of the raw root, so two roots that only
+/// differ in what the sanitizer neutralizes stay apart.
+fn key(raw: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    raw.hash(&mut h);
+    h.finish()
+}
+
+pub fn worktrees(views: &[WorktreeView]) -> Vec<WorktreeRow> {
+    views
+        .iter()
+        .map(|w| WorktreeRow {
+            path: SafeText::from_untrusted(&w.path),
+            key: key(w.path.raw()),
+            main: w.main,
+            state: match &w.status {
+                WorktreeStatus::Ready {
+                    head,
+                    counts,
+                    divergence,
+                    ..
+                } => WorktreeState::Ready {
+                    head: match head {
+                        HeadView::Branch { name } => {
+                            Head::Branch(SafeText::name_from_untrusted(name))
+                        }
+                        HeadView::Unborn { name } => {
+                            Head::Unborn(SafeText::name_from_untrusted(name))
+                        }
+                        HeadView::Detached => Head::Detached,
+                    },
+                    changes: counts.total(),
+                    divergence: divergence.clone(),
+                },
+                WorktreeStatus::Unavailable { reason } => WorktreeState::Unavailable(*reason),
+            },
+        })
+        .collect()
+}
+
+/// A session is always an agent (ADR-GRP-013); an unattributed actor would be a contract
+/// error and is shown as an "other agent" without a name rather than dropped.
+pub fn session(view: &SessionView) -> SessionRow {
+    let (kind, name) = match &view.actor {
+        Actor::Agent { kind, name, .. } => {
+            (*kind, name.as_ref().map(SafeText::name_from_untrusted))
+        }
+        Actor::Unattributed => (AgentKind::Other, None),
+    };
+    SessionRow {
+        session_id: view.session_id.clone(),
+        worktree: key(view.worktree.raw()),
+        kind,
+        name,
+        state: view.state,
+        state_since_ms: view.state_since_utc_ms,
     }
 }
 
