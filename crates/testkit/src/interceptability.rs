@@ -444,8 +444,9 @@ const ANY: GitVersion = GitVersion(u32::MAX, 0, 0);
 /// Published list of ADR-GRD-002 § 1–3 (Enmienda 2026-10-04). Files backend: verified by
 /// SPIKE-GRD-001 on macOS with Git 2.38.5, 2.50.1 and 2.56.0, and by this executor with 2.50.1
 /// (macOS) and 2.55.0 (Linux and macOS CI runners).
-/// Reftable: 2.56.0 (spike), 2.50.1 and 2.55.0 (this executor, 2026-10-05). Linux and Windows: Pendiente:
-/// etapa de validación multiplataforma.
+/// Reftable: 2.56.0 (spike), 2.50.1 and 2.55.0 (this executor, 2026-10-05) and 2.56.0 (this
+/// executor in the Linux container, 2026-10-06). Windows: Pendiente: etapa de validación
+/// multiplataforma.
 pub const REFERENCE: &[Reference] = &[
     r("commit", Published::Impedible, Moment::A),
     r("commit-second-line", Published::Impedible, Moment::A),
@@ -483,25 +484,19 @@ pub const REFERENCE: &[Reference] = &[
         published: Published::NotImpedible("C"),
         moment: Moment::C,
     },
-    // Renaming onto the base: with 2.50.1 (macOS, local) and 2.55.0 (Linux and macOS CI runners)
-    // the hook runs and its denial leaves the source branch deleted (B, as with files); with
-    // 2.56.0 SPIKE-GRD-001 saw no hook (D11, its setup commits on `feat` first). Versions
-    // outside both rows are unmeasured.
+    // Renaming onto the base: the rename itself (deleting `feat`, rewriting `main`) runs no hook
+    // either. The only transaction afterwards moves `HEAD` (`0000… ref:refs/heads/main HEAD`),
+    // once `main` is already rewritten and `feat` gone; the probe denies it because its stdin
+    // names `refs/heads/main`, so the case reads B. A probe that matched only the ref name would
+    // read C, as SPIKE-GRD-001 D11 did with 2.56.0 (Enmienda 2026-10-06 of ADR-GRD-002).
+    // Measured with 2.50.1 (macOS), 2.55.0 (Linux and macOS CI) and 2.56.0 (Linux container).
     Reference {
         code: "rename-over-base",
         refs: RefFormat::Reftable,
         from: GitVersion(2, 50, 1),
-        to: GitVersion(2, 55, 0),
+        to: ANY,
         published: Published::NotImpedible("B"),
         moment: Moment::B,
-    },
-    Reference {
-        code: "rename-over-base",
-        refs: RefFormat::Reftable,
-        from: GitVersion(2, 56, 0),
-        to: ANY,
-        published: Published::NotImpedible("C"),
-        moment: Moment::C,
     },
 ];
 
@@ -1007,56 +1002,57 @@ pub const COST_TABLE: &[CostRow] = &[
     ),
     // Linux (ubuntu-latest) and macOS (macos-latest, Homebrew) CI runners, Git 2.55.0, 2026-10-05:
     // identical on both. `preparing` already exists in 2.55.
-    cost(
-        2,
-        55,
-        0,
-        "commit",
-        "commit-msgx1 post-commitx1 pre-commitx1 prepare-commit-msgx1 reference-transaction:abortedx1 reference-transaction:committedx2 reference-transaction:preparedx2 reference-transaction:preparingx2",
-    ),
-    cost(
-        2,
-        55,
-        0,
-        "switch-new",
-        "post-checkoutx1 reference-transaction:abortedx2 reference-transaction:committedx4 reference-transaction:preparedx4 reference-transaction:preparingx4",
-    ),
-    cost(
-        2,
-        55,
-        0,
-        "switch",
-        "post-checkoutx1 reference-transaction:abortedx2 reference-transaction:committedx3 reference-transaction:preparedx3 reference-transaction:preparingx3",
-    ),
-    cost(
-        2,
-        55,
-        0,
-        "rebase-3",
-        "post-checkoutx1 post-commitx3 post-rewritex1 pre-rebasex1 prepare-commit-msgx3 reference-transaction:abortedx9 reference-transaction:committedx22 reference-transaction:preparedx22 reference-transaction:preparingx22",
-    ),
-    cost(
-        2,
-        55,
-        0,
-        "fetch",
-        "reference-transaction:committedx2 reference-transaction:preparedx2 reference-transaction:preparingx2",
-    ),
-    cost(
-        2,
-        55,
-        0,
-        "stash",
-        "reference-transaction:abortedx2 reference-transaction:committedx5 reference-transaction:preparedx5 reference-transaction:preparingx5",
-    ),
-    cost(
-        2,
-        55,
-        0,
-        "stash-pop",
-        "reference-transaction:abortedx1 reference-transaction:committedx2 reference-transaction:preparedx2 reference-transaction:preparingx2",
-    ),
+    cost(2, 55, 0, "commit", PREPARING_COMMIT),
+    cost(2, 55, 0, "switch-new", PREPARING_SWITCH_NEW),
+    cost(2, 55, 0, "switch", PREPARING_SWITCH),
+    cost(2, 55, 0, "rebase-3", PREPARING_REBASE_3),
+    cost(2, 55, 0, "fetch", PREPARING_FETCH),
+    cost(2, 55, 0, "stash", PREPARING_STASH),
+    cost(2, 55, 0, "stash-pop", PREPARING_STASH_POP),
+    // Linux container (xplat/run-linux.sh, arm64), Git 2.56.0 built from source, 2026-10-06:
+    // identical to 2.55.0.
+    cost(2, 56, 0, "commit", PREPARING_COMMIT),
+    cost(2, 56, 0, "switch-new", PREPARING_SWITCH_NEW),
+    cost(2, 56, 0, "switch", PREPARING_SWITCH),
+    cost(2, 56, 0, "rebase-3", PREPARING_REBASE_3),
+    cost(2, 56, 0, "fetch", PREPARING_FETCH),
+    cost(2, 56, 0, "stash", PREPARING_STASH),
+    cost(2, 56, 0, "stash-pop", PREPARING_STASH_POP),
+    // Linux container (xplat/run-linux.sh, arm64), 2026-10-06: Git 2.38.5 built from source (the
+    // minimum, NFR-07) and the distro's 2.43.0, identical. Before the symbolic-ref transactions
+    // (`ref:<target>`, SPIKE-GRD-001 § 3) moving `HEAD` runs no `reference-transaction`.
+    cost(2, 38, 5, "commit", LEGACY_COMMIT),
+    cost(2, 38, 5, "switch-new", LEGACY_SWITCH_NEW),
+    cost(2, 38, 5, "switch", LEGACY_SWITCH),
+    cost(2, 38, 5, "rebase-3", LEGACY_REBASE_3),
+    cost(2, 38, 5, "fetch", LEGACY_FETCH),
+    cost(2, 38, 5, "stash", LEGACY_STASH),
+    cost(2, 38, 5, "stash-pop", LEGACY_STASH_POP),
+    cost(2, 43, 0, "commit", LEGACY_COMMIT),
+    cost(2, 43, 0, "switch-new", LEGACY_SWITCH_NEW),
+    cost(2, 43, 0, "switch", LEGACY_SWITCH),
+    cost(2, 43, 0, "rebase-3", LEGACY_REBASE_3),
+    cost(2, 43, 0, "fetch", LEGACY_FETCH),
+    cost(2, 43, 0, "stash", LEGACY_STASH),
+    cost(2, 43, 0, "stash-pop", LEGACY_STASH_POP),
 ];
+
+// Counts shared by several measured versions (each version still has its own rows).
+const PREPARING_COMMIT: &str = "commit-msgx1 post-commitx1 pre-commitx1 prepare-commit-msgx1 reference-transaction:abortedx1 reference-transaction:committedx2 reference-transaction:preparedx2 reference-transaction:preparingx2";
+const PREPARING_SWITCH_NEW: &str = "post-checkoutx1 reference-transaction:abortedx2 reference-transaction:committedx4 reference-transaction:preparedx4 reference-transaction:preparingx4";
+const PREPARING_SWITCH: &str = "post-checkoutx1 reference-transaction:abortedx2 reference-transaction:committedx3 reference-transaction:preparedx3 reference-transaction:preparingx3";
+const PREPARING_REBASE_3: &str = "post-checkoutx1 post-commitx3 post-rewritex1 pre-rebasex1 prepare-commit-msgx3 reference-transaction:abortedx9 reference-transaction:committedx22 reference-transaction:preparedx22 reference-transaction:preparingx22";
+const PREPARING_FETCH: &str = "reference-transaction:committedx2 reference-transaction:preparedx2 reference-transaction:preparingx2";
+const PREPARING_STASH: &str = "reference-transaction:abortedx2 reference-transaction:committedx5 reference-transaction:preparedx5 reference-transaction:preparingx5";
+const PREPARING_STASH_POP: &str = "reference-transaction:abortedx1 reference-transaction:committedx2 reference-transaction:preparedx2 reference-transaction:preparingx2";
+const LEGACY_COMMIT: &str = "commit-msgx1 post-commitx1 pre-commitx1 prepare-commit-msgx1 reference-transaction:committedx1 reference-transaction:preparedx1";
+const LEGACY_SWITCH_NEW: &str =
+    "post-checkoutx1 reference-transaction:committedx1 reference-transaction:preparedx1";
+const LEGACY_SWITCH: &str = "post-checkoutx1";
+const LEGACY_REBASE_3: &str = "post-checkoutx1 post-commitx3 post-rewritex1 pre-rebasex1 prepare-commit-msgx3 reference-transaction:abortedx6 reference-transaction:committedx15 reference-transaction:preparedx15";
+const LEGACY_FETCH: &str = "reference-transaction:committedx1 reference-transaction:preparedx1";
+const LEGACY_STASH: &str = "reference-transaction:committedx3 reference-transaction:preparedx3";
+const LEGACY_STASH_POP: &str = "reference-transaction:abortedx1 reference-transaction:committedx1 reference-transaction:preparedx1";
 
 const fn cost(
     major: u32,
