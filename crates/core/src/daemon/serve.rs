@@ -1,13 +1,17 @@
 //! The daemon's channel: serving it, the wiring of its protected operations
 //! and taking it back when its socket is replaced (ADR-GRP-005 § 5).
 
+#[cfg(unix)]
 use std::sync::Arc;
 
+#[cfg(unix)]
 use gitraptor_api::event::ENGINE_STATE;
 #[cfg(unix)]
 use gitraptor_api::messages::DaemonView;
 
-use super::{Daemon, profile_error_kind};
+use super::Daemon;
+#[cfg(unix)]
+use super::profile_error_kind;
 
 #[cfg(unix)]
 use crate::timemachine::protected::{DaemonBackend, TimeMachineBackend};

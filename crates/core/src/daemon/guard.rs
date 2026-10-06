@@ -3,8 +3,8 @@
 
 use gitraptor_git::SystemGit;
 
-use super::shutdown::{GuardReply, GuardRequest};
 use super::{Daemon, DaemonConfig, Field, Logger, now_ms, raptor_path};
+use super::{GuardReply, GuardRequest};
 
 use crate::guardrails::install::{GuardCtx, InstallError};
 use crate::guardrails::{GuardRegistry, install as guard_install};
