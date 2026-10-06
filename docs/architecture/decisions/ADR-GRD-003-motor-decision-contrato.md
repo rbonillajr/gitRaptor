@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
-updated: 2026-10-05
+updated: 2026-10-06
 deciders: [Rene Bonilla]
 domain: GRP
 feature: guardrails
@@ -55,7 +55,7 @@ Sin E/S, sin reloj y sin aleatoriedad:
   - Las expresiones del formato de commit usan un motor de **tiempo lineal** con tope de tamaño.
   - Los globs de rutas se evalúan en tiempo lineal.
   - Los límites del documento JSON están en ADR-GRD-004 § 1.
-- **El actor no cambia la decisión** (Q-GRD-1). Solo entra en el registro y en las excepciones.
+- **El actor no cambia la decisión** (Q-GRD-1). Solo entra en el registro y en las excepciones. (Enmienda 2026-10-06, US-GRD-018: salvo las reglas de autoría de BR-AUTH-005, que solo endurecen y solo con un actor agente; ver la sección final.)
 
 ### 2. Mínimo seguro (BR-EDGE-001, Q-GRD-5)
 
@@ -121,7 +121,7 @@ Sin E/S, sin reloj y sin aleatoriedad:
   - **Sin excepciones**: no hay excepción posible y el actor es "sin atribuir".
   - **Registro**: la entrada va al spool (ADR-GRD-006 § 4).
   - **Trazabilidad**: el estado registra la causa (`daemon-unreachable`, `instance-mismatch` o, para el deny, `channel-not-authentic`) con aviso, y el daemon guarda la **ventana degradada** (inicio y fin) cuando vuelve, no solo las entradas del spool (ADR-GRD-005, ADR-GRD-006).
-  - **Garantía**: el modo degradado nunca es menos restrictivo que el mínimo más el suelo legible. Solo pierde los endurecimientos personales y las excepciones.
+  - **Garantía**: el modo degradado nunca es menos restrictivo que el mínimo más el suelo legible. Solo pierde los endurecimientos personales, las excepciones y las reglas de autoría, porque el actor es "sin atribuir" (Enmienda 2026-10-06, US-GRD-018).
 
 ### 5. Contrato para F-001-05 (solo interfaz)
 
@@ -284,3 +284,18 @@ Desviaciones de la implementación de US-GRD-001 respecto al § 4 ([DS-US-GRD-00
 | Arranque bajo demanda desde un hook | **No en US-GRD-001**: sin daemon, el modo degradado (más estricto) decide; queda para US-GRD-005 con el registro | § 4 |
 | Sin interbloqueo | `guard.evaluate` se atiende en el hilo de la conexión desde un registro que publica el bucle; nunca espera al bucle ni al cerrojo del repo | Enmienda (2026-10-04, Cockpit) |
 | Mensajes (M-05) | El saneado neutraliza también Zl, Zp y Cf; los parámetros se acotan a 120 caracteres | § 3 |
+
+## Enmienda (2026-10-06, US-GRD-018)
+
+Origen: BR-26 y D6 del BRD (Rene Bonilla, 2026-10-06), BR-AUTH-005 y ADR-GRP-012, Enmienda (2026-10-06, autoría de commits) § 4 y § 6, que pedían enmendar el § 1 y el § 4 con la Dev Spec de US-GRD-018 ([DS-US-GRD-018](../../requirements/features/guardrails/dev-specs/US-GRD-018-autoria-commits-persona-y-agente.md)). **Decisión del orquestador (2026-10-06), validada por el Arquitecto.** No cambia el mínimo seguro, el orden `deny > ask > allow` ni el canal. No relaja la garantía del modo degradado: le añade un residuo declarado (pierde las reglas de autoría). El `status` sigue en `accepted`.
+
+| Cambio | Resolución | Dónde |
+|---|---|---|
+| **El actor entra en la condición de las reglas de autoría** | `authorship.trailer-required` (`agents-commit`) y `authorship.human-author` son las únicas reglas que leen el actor. Solo actúan si el actor es un agente, detectado o registrado: con "sin atribuir" no deniegan ni avisan (BR-EDGE-004; excepción consciente al fail-safe de BR-AUTH-003, declarada en BR-AUTH-005). Solo endurecen y no eximen a nadie de otra regla, así que el principio de Q-GRD-1 (el actor nunca relaja) se mantiene | § 1 |
+| **Hechos de autoría** | Entran como hechos de contenido: los tipos de agente de los `Co-Authored-By` reconocidos por la tabla versionada de `crates/policy`, si el mensaje era legible y la versión de la tabla. El cliente del hook los calcula; al daemon nunca llegan el mensaje, nombres ni correos (M-06) | § 1 |
+| **El actor lo resuelve el daemon** | Señal S4 desde el `git` antecesor más cercano: sesión detectada, después agente registrado en el worktree, después "sin atribuir". El cliente no puede declarar el actor. Lo implementa US-GRD-018 (adelanta el pendiente de US-GRD-005/006) | § 4 |
+| **Avisos** | `Decision.notices[]` (forma de `reasons[]`). La capacidad `guard.authorship` de ADR-GRP-016 cubre este campo y `EvaluateParams.authorship`: el cliente solo envía los hechos de autoría si el daemon la concede, así que un daemon sin ella evalúa como antes y no rechaza la petición: reglas que avisan sin cambiar `effect`. `human-author` con `warn` da `allow` más un aviso, nunca `ask`, porque `ask` se aplica hoy como `deny` (S-GRD-9). Si `appliedEffect` no es `allow`, los avisos se descartan | § 3 |
+| **Dónde se evalúan** | Dispatchers nuevos `pre-commit` y `commit-msg` (plantilla 2, ADR-GRD-001) y `reference-transaction` `prepared` como segunda línea para `--no-verify`: con actor agente, un único commit nuevo con la forma de un commit, una fusión o un amend se evalúa **siempre**, salvo que el subcomando del `git` antecesor sea con certeza `rebase`, `cherry-pick`, `revert` o `am` (conservan autor y trailers del original). Un alias, `commit-tree` + `update-ref` o una línea de órdenes ilegible se evalúan. El subcomando se lee tras saltar las opciones globales, solo para clasificar; no se guarda ni se envía (lo que nunca guarda sigue siendo argv) | § 4; ADR-GRD-002 § 1 |
+| **Garantía del modo degradado** | El actor es siempre "sin atribuir", así que el modo degradado **pierde las reglas de autoría** aunque estén en el suelo legible. Residuo declarado: no relaja nada del mínimo ni de las demás reglas | § 4 |
+
+**Validación añadida**: con un actor agente, `agents-commit` deniega sin su trailer y `human-author` deniega o avisa; con "sin atribuir" (incluido el modo degradado) ninguna regla de autoría deniega; un aviso nunca cambia `effect`; un cliente frente a un daemon sin `guard.authorship` no envía los hechos de autoría y no recibe avisos; el daemon nunca recibe el mensaje de commit.
