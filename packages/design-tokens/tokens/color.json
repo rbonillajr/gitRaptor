@@ -18,6 +18,22 @@
       }
     },
     "gray": {
+      "100": {
+        "$value": "#f0f0f0",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "white"
+          }
+        }
+      },
+      "150": {
+        "$value": "#e8e8e8",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "white"
+          }
+        }
+      },
       "200": {
         "$value": "#e4e4e4",
         "$extensions": {
@@ -34,8 +50,24 @@
           }
         }
       },
+      "400": {
+        "$value": "#949494",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "brightBlack"
+          }
+        }
+      },
       "500": {
         "$value": "#8a8a8a",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "brightBlack"
+          }
+        }
+      },
+      "600": {
+        "$value": "#6b6b6b",
         "$extensions": {
           "dev.gitraptor": {
             "ansi16": "brightBlack"
@@ -50,16 +82,32 @@
           }
         }
       },
+      "750": {
+        "$value": "#3a3a3a",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "brightBlack"
+          }
+        }
+      },
       "800": {
         "$value": "#303030",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "brightBlack"
+          }
+        }
+      },
+      "900": {
+        "$value": "#1c1c1c",
         "$extensions": {
           "dev.gitraptor": {
             "ansi16": "black"
           }
         }
       },
-      "900": {
-        "$value": "#1c1c1c",
+      "950": {
+        "$value": "#1f1f1f",
         "$extensions": {
           "dev.gitraptor": {
             "ansi16": "black"
@@ -83,6 +131,14 @@
             "ansi16": "green"
           }
         }
+      },
+      "700": {
+        "$value": "#1a7f37",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "green"
+          }
+        }
       }
     },
     "red": {
@@ -96,6 +152,14 @@
       },
       "500": {
         "$value": "#f85149",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "red"
+          }
+        }
+      },
+      "700": {
+        "$value": "#cf222e",
         "$extensions": {
           "dev.gitraptor": {
             "ansi16": "red"
@@ -119,6 +183,22 @@
             "ansi16": "yellow"
           }
         }
+      },
+      "600": {
+        "$value": "#9a6700",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "yellow"
+          }
+        }
+      },
+      "700": {
+        "$value": "#8a5a00",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "yellow"
+          }
+        }
       }
     },
     "orange": {
@@ -137,6 +217,15 @@
             "ansi16": "yellow"
           }
         }
+      },
+      "700": {
+        "$value": "#bc4c00",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "yellow",
+            "ansi256": 124
+          }
+        }
       }
     },
     "blue": {
@@ -150,6 +239,14 @@
       },
       "500": {
         "$value": "#58a6ff",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "blue"
+          }
+        }
+      },
+      "700": {
+        "$value": "#0969da",
         "$extensions": {
           "dev.gitraptor": {
             "ansi16": "blue"
@@ -181,6 +278,15 @@
             "ansi16": "cyan"
           }
         }
+      },
+      "700": {
+        "$value": "#0f7d70",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "cyan",
+            "ansi256": 29
+          }
+        }
       }
     },
     "purple": {
@@ -199,10 +305,18 @@
             "ansi16": "magenta"
           }
         }
+      },
+      "700": {
+        "$value": "#8250df",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "magenta"
+          }
+        }
       }
     },
     "okabeIto": {
-      "$description": "Okabe-Ito categorical palette (color-vision-deficiency safe). Its black is replaced by color.white in agent.8 and its blue gets a lighter variant for dark terminals.",
+      "$description": "Okabe-Ito categorical palette (color-vision-deficiency safe). Dark terminals: its black is replaced by color.white in agent.8 and its blue gets a lighter variant. Light terminals: the *OnLight variants are darkened to reach 4.5:1 on white, and agent.8 keeps the original black.",
       "orange": {
         "$value": "#e69f00",
         "$extensions": {
@@ -264,6 +378,65 @@
         "$extensions": {
           "dev.gitraptor": {
             "ansi16": "magenta"
+          }
+        }
+      },
+      "orangeOnLight": {
+        "$value": "#a35f00",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "yellow",
+            "ansi256": 94
+          }
+        }
+      },
+      "skyBlueOnLight": {
+        "$value": "#1f6fa8",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "cyan"
+          }
+        }
+      },
+      "bluishGreenOnLight": {
+        "$value": "#00704f",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "green"
+          }
+        }
+      },
+      "yellowOnLight": {
+        "$value": "#7a7200",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "yellow",
+            "ansi256": 58
+          }
+        }
+      },
+      "blueOnLight": {
+        "$value": "#0b4f8a",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "blue"
+          }
+        }
+      },
+      "vermillionOnLight": {
+        "$value": "#b83a00",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "red"
+          }
+        }
+      },
+      "reddishPurpleOnLight": {
+        "$value": "#a8457f",
+        "$extensions": {
+          "dev.gitraptor": {
+            "ansi16": "magenta",
+            "ansi256": 96
           }
         }
       }
