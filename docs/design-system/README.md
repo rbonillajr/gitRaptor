@@ -3,7 +3,7 @@ id: DSYS-GRP-001
 title: GitRaptor Design System
 type: design-system
 status: draft
-version: 0.4
+version: 0.5
 date: 2026-10-01
 updated: 2026-10-05
 owner: Rene Bonilla
@@ -14,6 +14,7 @@ changelog:
   - 0.2 (2026-10-01): Acotado al alcance inicial (MVP = CLI/TUI + MCP). Lo de la UI web/React queda diferido a la Fase 3.
   - 0.3 (2026-10-04): Enmienda del Cockpit (E7 de ADR-CKP-003): símbolos con anchura, `crates/theme` agnóstico de ratatui, alcance de `--plain`, versiones de la TUI e i18n con catálogo tipado.
   - 0.4 (2026-10-05): Enmienda de TS-CKP-004: `focus.default`, `agent.state.*`, símbolo `info`, gate de contraste del tema de alto contraste y tokens implementados.
+  - 0.5 (2026-10-05): Enmienda de TS-CKP-005: componentes implementados, glifos estructurales fuera de los tokens, foco por forma y galería.
 ---
 
 # GitRaptor Design System
@@ -215,3 +216,18 @@ Aplicada al implementar los tokens ([TS-CKP-004](../requirements/features/cockpi
 - ⚠️ **ASSUMPTION** (§ 8 sigue abierta): acento teal, paleta de agentes Okabe-Ito (apta para daltonismo) con `agent.8` en blanco y el azul aclarado, y fondo oscuro supuesto para el informe del juego normal.
 
 Anchura real de `⚡`, `⛔`, `⚠` y `ℹ` en Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
+
+---
+
+## Enmienda (2026-10-05, TS-CKP-005)
+
+Aplicada al construir la biblioteca de componentes ([TS-CKP-005](../requirements/features/cockpit/technical-stories/TS-CKP-005-biblioteca-componentes-tui.md), [Dev Spec](../requirements/features/cockpit/dev-specs/TS-CKP-005-biblioteca-componentes-tui.md)). **Decisión del orquestador (2026-10-05), validada por Arquitecto y PO.** No cambia los tokens, la paleta ni la lista de componentes.
+
+| Cambio | Dónde |
+|---|---|
+| Los 10 componentes de § 3 existen como widgets puros en `apps/cli/src/tui/widgets/`, cada uno con su modelo de vista, y se ven en la galería oculta `raptor ui gallery` | § 3 |
+| **Glifos estructurales**: bordes, carriles del grafo, elipsis, marcador de foco, flechas de ahead/behind y signos del diff **no son tokens**. Viven en `tui::style::Glyphs`, con un juego Unicode y otro ASCII elegidos por el juego de símbolos del tema. Ningún widget escribe un glifo literal | § 2.2 |
+| **Foco visible por forma**: borde grueso (`┏━┓`; en ASCII `#=#`) y marcador `›` (en ASCII `>`) en el título y en la fila. El color `focus.default` acompaña, no basta | § 6 |
+| Snapshots por componente y estado: texto Unicode y ASCII, y estilos en truecolor, 256, 16, `NO_COLOR` y alto contraste; Layout en 80×24, 100×30, 120×40 y 79×24 | § 7 |
+
+Anchura real de los símbolos y la galería en Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
