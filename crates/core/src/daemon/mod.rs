@@ -183,6 +183,7 @@ impl DaemonConfig {
         if let Some(names) = env::agent_executables_override() {
             channel.agents = crate::channel::AgentMatcher::only(names);
         }
+        channel.autostart = crate::autostart::Autostart::for_current_user();
         Ok(Self {
             dirs: ProfileDirs::resolve()?,
             git: env.git_resolve_config(None),
