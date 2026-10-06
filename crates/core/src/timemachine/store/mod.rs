@@ -27,7 +27,9 @@ use gitraptor_git::{Oid, ReadError, ReaderOptions, RepoReader};
 use super::oplog::{SnapshotRefs, TM_DIR, repo_dir};
 use crate::profile::{ProfileDirs, ProfileError, fsperm};
 
-pub use capture::{CaptureOutcome, CaptureRequest, ChangeHint, Detection, WorktreeScope};
+pub use capture::{
+    CaptureOutcome, CaptureRequest, ChangeHint, Detection, ValidityGuard, WorktreeScope,
+};
 pub use meta::{ConflictEntry, META_FORMAT, Meta, MetaWorktree, RegisteredWorktree};
 
 /// Files larger than this are left out of an observation capture, which is then partial
@@ -42,6 +44,9 @@ pub enum CaptureError {
     /// An observation capture gave way to a guaranteed prior (ADR-TMC-004 § 2). Nothing was
     /// recorded; the next capture covers the same changes.
     Yielded,
+    /// The capture stopped being consistent before its validity point (a `git` ran while it
+    /// read): nothing was recorded and it is taken again (ADR-TMC-004 § 2).
+    Discarded,
     Read(ReadError),
     Store(StoreError),
     Oplog(ProfileError),
@@ -53,6 +58,7 @@ impl std::fmt::Display for CaptureError {
         match self {
             Self::InvalidInput(m) => write!(f, "invalid capture request: {m}"),
             Self::Yielded => write!(f, "gave way to a guaranteed prior snapshot"),
+            Self::Discarded => write!(f, "discarded: the worktree changed under Git while read"),
             Self::Read(e) => write!(f, "{e}"),
             Self::Store(e) => write!(f, "{e}"),
             Self::Oplog(e) => write!(f, "oplog: {e}"),

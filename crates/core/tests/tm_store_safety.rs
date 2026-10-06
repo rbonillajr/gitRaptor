@@ -75,6 +75,7 @@ mod repo_intact {
                     cause_operation: None,
                     cause_event_seq: None,
                     include_credentials: false,
+                    still_valid: None,
                 };
                 store.capture(&oplog, &req).unwrap();
                 req.level = SnapshotLevel::Observation;

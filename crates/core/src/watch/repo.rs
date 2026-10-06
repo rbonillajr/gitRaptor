@@ -58,6 +58,14 @@ pub struct RefsView {
 }
 
 impl RefsView {
+    /// Size of each worktree's `HEAD` reflog.
+    pub fn head_logs(&self) -> Vec<(PathBuf, u64)> {
+        self.worktrees
+            .iter()
+            .map(|(root, w)| (root.clone(), w.head_log_len))
+            .collect()
+    }
+
     /// Reads the view; what cannot be read is left out.
     pub fn read(common: &Path) -> Self {
         let mut view = Self::default();
@@ -231,7 +239,6 @@ fn head_log_tail(git_dir: &Path, from: u64, to: u64) -> Vec<(String, String, Str
         })
         .collect()
 }
-
 
 /// `HEAD`, size and mtime of the index, and which operation markers exist
 /// (ADR-GRP-010 § 5). Metadata only.
@@ -646,11 +653,17 @@ impl Task {
             started_ms,
             ended_ms: now.0,
         });
+        // A `HEAD` reflog that grew without an event (a detached commit, a
+        // checkout of the same branch) still tells the Time Machine the
+        // engine saw it.
+        let heads_changed = new.head_logs() != self.view.head_logs();
         let send = !events.is_empty()
             || !created.is_empty()
             || !gone.is_empty()
             || gap.is_some()
-            || refs_changed;
+            || refs_changed
+            || heads_changed;
+        let head_logs = new.head_logs();
         self.view = new;
         // Their tasks stop before the batch that says they are gone, so no
         // read of theirs can follow it and bring them back.
@@ -665,6 +678,8 @@ impl Task {
                 events,
                 gap,
                 refs: Some(tips.join("\n")),
+                head_logs,
+                heads: Vec::new(),
                 marks,
             });
         }
@@ -684,7 +699,7 @@ impl Task {
                 Some(id) => self.common.join("worktrees").join(id),
                 None => self.common.clone(),
             };
-            self.shared.start_worktree(&self.repo_id, read, git_dir);
+            let _ = self.shared.start_worktree(&self.repo_id, read, git_dir);
         }
     }
 }

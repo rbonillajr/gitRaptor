@@ -50,6 +50,20 @@ pub struct CaptureRequest {
     /// `timeMachine.includeCredentialFiles`; BR-TMC-CONS-002). Otherwise they are left out and
     /// declared.
     pub include_credentials: bool,
+    /// Checked right before the validity point: if it says no, the capture is discarded without
+    /// a row (`CaptureError::Discarded`). The continuous capture uses it so a snapshot never mixes
+    /// the state before and after a `git` (ADR-TMC-004 § 2, consistency).
+    pub still_valid: Option<ValidityGuard>,
+}
+
+/// A check of [`CaptureRequest::still_valid`].
+#[derive(Clone)]
+pub struct ValidityGuard(pub std::sync::Arc<dyn Fn() -> bool + Send + Sync>);
+
+impl std::fmt::Debug for ValidityGuard {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ValidityGuard")
+    }
 }
 
 /// One worktree of a capture.
@@ -540,6 +554,9 @@ impl SnapshotStore {
         // ---- validity point: barrier, pending row, ref, complete row ----------------------------
         if yield_now() {
             return Err(CaptureError::Yielded);
+        }
+        if req.still_valid.as_ref().is_some_and(|g| !(g.0)()) {
+            return Err(CaptureError::Discarded);
         }
         // The flush of the `pending` row is the full barrier of ADR-TMC-001 § 4: the oplog runs
         // with `fullfsync` (macOS) and `synchronous=FULL`, and that flush empties the drive

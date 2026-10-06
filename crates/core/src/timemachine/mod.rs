@@ -3,6 +3,8 @@
 //! user's repo lives in `crates/git` (ADR-TMC-002).
 
 pub mod apply;
+pub mod continuous;
+pub mod engine;
 pub mod oplog;
 pub mod protected;
 /// The repo write lock lives in a neutral module shared with the executor

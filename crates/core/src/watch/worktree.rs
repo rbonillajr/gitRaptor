@@ -33,6 +33,8 @@ struct Task {
     shared: Arc<Shared>,
     repo_id: String,
     root: PathBuf,
+    /// Its Git directory: `HEAD` is read from it before each batch.
+    git_dir: PathBuf,
     main: bool,
     admin: Option<String>,
     last: WorktreeRead,
@@ -47,12 +49,15 @@ struct Task {
     last_periodic_ms: i64,
     degraded: bool,
     next_degraded: Instant,
+    /// Files outside every ignored folder changed in the open window.
+    touched: bool,
 }
 
 pub(super) fn run(
     shared: Arc<Shared>,
     repo_id: String,
     initial: WorktreeRead,
+    git_dir: PathBuf,
     degraded: bool,
     rx: Receiver<WtMsg>,
 ) {
@@ -87,8 +92,10 @@ pub(super) fn run(
         last_periodic_ms: wall_now().0,
         degraded,
         next_degraded: now + config.degraded_poll,
+        touched: false,
         shared,
         root,
+        git_dir,
     };
     // The watch is running: read once more, so a change written between
     // the reconciliation that started the task and the watch is not lost.
@@ -102,6 +109,7 @@ pub(super) fn run(
                     continue;
                 }
                 task.last_event_ms = wall_now().0;
+                task.touched = true;
                 task.open_window(t_recv, task.window_len());
             }
             Ok(WtMsg::Rescan(t_recv)) => {
@@ -170,6 +178,7 @@ impl Task {
 
     fn flush(&mut self, window: Window) {
         let t_flush = clock::monotonic_ns();
+        let head = self.head();
         let read = self.read();
         let t_computed = clock::monotonic_ns();
         let (now_ms, offset_s) = wall_now();
@@ -202,6 +211,7 @@ impl Task {
         if changed || !events.is_empty() || gap.is_some() {
             self.send(
                 read.clone(),
+                head,
                 changed,
                 events,
                 gap,
@@ -213,6 +223,16 @@ impl Task {
             );
         }
         self.last = read;
+        if std::mem::take(&mut self.touched) || changed {
+            self.changed();
+        }
+    }
+
+    /// Tells the hooks the worktree changed, after its batch is handed over.
+    fn changed(&self) {
+        if let Some(hooks) = &self.shared.hooks {
+            hooks.worktree_changed(&self.repo_id, &self.root);
+        }
     }
 
     /// Full reconciliation every period (ADR-GRP-010 § 5): what it finds
@@ -227,6 +247,7 @@ impl Task {
             return;
         }
         let t_flush = clock::monotonic_ns();
+        let head = self.head();
         let read = self.read();
         let t_computed = clock::monotonic_ns();
         if read == self.last {
@@ -238,6 +259,7 @@ impl Task {
         let event = self.reconciled(now_ms, offset_s);
         self.send(
             read.clone(),
+            head,
             true,
             vec![event],
             Some(GapMark {
@@ -252,6 +274,7 @@ impl Task {
             },
         );
         self.last = read;
+        self.changed();
     }
 
     fn reconciled(&self, observed_ms: i64, offset_s: i32) -> RawEvent {
@@ -285,9 +308,16 @@ impl Task {
         })
     }
 
+    /// `HEAD` as it is now, before the read: once the batch is persisted,
+    /// the Time Machine knows the engine saw it (US-TMC-004).
+    fn head(&self) -> Vec<u8> {
+        std::fs::read(self.git_dir.join("HEAD")).unwrap_or_default()
+    }
+
     fn send(
         &self,
         read: WorktreeRead,
+        head: Vec<u8>,
         changed: bool,
         events: Vec<RawEvent>,
         gap: Option<GapMark>,
@@ -302,6 +332,8 @@ impl Task {
                 events,
                 gap,
                 refs: None,
+                head_logs: Vec::new(),
+                heads: vec![(self.root.clone(), head)],
                 marks,
             },
         );

@@ -10,8 +10,9 @@
 //! TS-TMC-003 from `ready`. Every request that reaches the stack is in the
 //! oplog, accepted or rejected, with its requester and reason.
 //!
-//! Prepared for later stories: raw Git events in the stack (US-TMC-004),
-//! redo (US-TMC-003), overlap (US-TMC-012), confirmation (US-TMC-013) and
+//! Raw Git events of the engine are in the stack too (US-TMC-004): their
+//! target is the latest capture before them, and their owner the session the
+//! engine attributed them to. Prepared for later stories: redo (US-TMC-003), overlap (US-TMC-012), confirmation (US-TMC-013) and
 //! Guardrails (US-TMC-021) plug in at the marked points.
 
 use std::collections::BTreeSet;
@@ -26,6 +27,9 @@ use gitraptor_git::tm_write::WriteContext;
 use gitraptor_git::{Invoker, ReaderOptions, RepoReader, SystemGit};
 
 use super::apply::{Applier, ApplyError, ApplyPlan, ApplyReport, PlanWorktree, RefScope, Refusal};
+use super::continuous::{ANCHOR_SETTLE_LIMIT, CaptureDeps, anchor};
+use super::engine::{RawGitEvent, is_undoable};
+use super::oplog::ExternalEvent;
 use super::oplog::{
     Channel, NewOperation, OpRef, OperationKind, OperationTransition, OperationView, Oplog,
     Requester, Scope, StackScope, Target,
@@ -104,6 +108,10 @@ pub struct UndoEnv<'a> {
     /// Git resolved by the daemon; `None`: the undo is rejected.
     pub git: Option<&'a SystemGit>,
     pub invoker: &'a Invoker,
+    /// The engine and the anchor capture (US-TMC-004); `None` for doubles:
+    /// only oplog operations are in the stack, at `fallback_mark`.
+    pub engine: Option<&'a CaptureDeps>,
+    pub fallback_mark: i64,
 }
 
 /// A finished undo.
@@ -111,7 +119,7 @@ pub struct UndoEnv<'a> {
 pub struct UndoDone {
     pub operation_id: String,
     pub prior_snapshot_id: String,
-    pub undone: OperationView,
+    pub undone: Undone,
     pub target_snapshot_id: String,
     pub report: ApplyReport,
 }
@@ -197,13 +205,126 @@ fn now_ms() -> i64 {
     crate::daemon::now_ms()
 }
 
+/// What an undo takes back: an operation of the oplog or a raw Git event
+/// of the engine (US-TMC-004).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Undone {
+    pub op: OpRef,
+    /// The operation's id, or `git-event-<seq>` for a raw event.
+    pub id: String,
+    /// The operation's subtype, or the event's kind (`reset`, `commit`).
+    pub subtype: Option<String>,
+    /// Whose work it is: the operation's frozen requester, or the session
+    /// the engine attributed the event to.
+    pub requester: Requester,
+}
+
 /// What an undo is about to do.
 struct Planned {
-    undone: OperationView,
+    undone: Undone,
     target: String,
     scope: Scope,
     worktrees: Vec<PlanWorktree>,
     refs: BTreeSet<String>,
+}
+
+/// The engine's side of an undo's plan (US-TMC-004): the worktree's raw Git
+/// events and where the current generation of the engine store starts in
+/// the oplog. Empty without an engine: only oplog operations count.
+#[derive(Debug, Clone, Default)]
+pub struct RawSide {
+    pub events: Vec<RawGitEvent>,
+    pub floor: i64,
+}
+
+/// The raw events of `key` as the stack sees them: each one an operation of
+/// GitRaptor caused is marked with it (ADR-TMC-003 § 4). An operation's echo
+/// runs from its mark to the mark of its anchor (the capture of the state it
+/// left); without an anchor, to the next snapshot of the worktree, or on.
+fn external_events(oplog: &Oplog, raw: &RawSide, key: &str, wt_key: &str) -> Vec<ExternalEvent> {
+    use super::oplog::{OperationState, SnapshotFilter, SnapshotLevel};
+    let ops = oplog.operations(&Default::default()).unwrap_or_default();
+    let snaps = oplog
+        .snapshots(&SnapshotFilter::default())
+        .unwrap_or_default();
+    let ran: Vec<(&OperationView, i64)> = ops
+        .iter()
+        .filter(|o| {
+            o.record.seq >= raw.floor
+                && o.record.scope.worktrees.iter().any(|w| w == key)
+                && matches!(
+                    o.state,
+                    OperationState::Applying
+                        | OperationState::Finished
+                        | OperationState::Interrupted
+                )
+        })
+        .map(|o| {
+            let anchor = snaps
+                .iter()
+                .filter(|s| {
+                    s.record.level == SnapshotLevel::Observation
+                        && s.record.cause_operation.as_deref() == Some(&o.record.operation_id)
+                })
+                .filter_map(|s| s.record.engine_mark)
+                .max();
+            let next = || {
+                snaps
+                    .iter()
+                    .filter(|s| {
+                        s.record.seq > o.record.seq
+                            && s.record.worktrees.iter().any(|w| w == wt_key)
+                            && s.record.cause_operation.as_deref() != Some(&o.record.operation_id)
+                    })
+                    .filter_map(|s| s.record.engine_mark)
+                    .filter(|m| *m > o.record.engine_mark)
+                    .min()
+            };
+            (o, anchor.or_else(next).unwrap_or(i64::MAX))
+        })
+        .collect();
+    raw.events
+        .iter()
+        .map(|e| ExternalEvent {
+            seq: e.seq,
+            caused_by: ran
+                .iter()
+                .find(|(o, end)| o.record.engine_mark < e.seq && e.seq <= *end)
+                .map(|(o, _)| o.record.operation_id.clone()),
+        })
+        .collect()
+}
+
+/// The state before a raw Git event (ADR-TMC-003 § 4): the latest snapshot
+/// of the worktree, of the current generation, whose mark is before the
+/// event, still a point of the timeline and intact in the store.
+fn raw_target(
+    oplog: &Oplog,
+    store: Option<&SnapshotStore>,
+    wt_key: &str,
+    seq: i64,
+    floor: i64,
+) -> Option<String> {
+    use super::oplog::SnapshotFilter;
+    let mut candidates: Vec<_> = oplog
+        .snapshots(&SnapshotFilter::default())
+        .ok()?
+        .into_iter()
+        .filter(|s| {
+            s.record.seq >= floor
+                && s.record.worktrees.iter().any(|w| w == wt_key)
+                && s.record.engine_mark.is_some_and(|m| m < seq)
+                && s.state.is_available()
+                && !s.tampered
+        })
+        .collect();
+    candidates.sort_by_key(|s| (s.record.engine_mark, s.record.seq));
+    let store = store?;
+    candidates
+        .into_iter()
+        .rev()
+        .find(|s| store.verify(&s.record.snapshot_id).is_ok())
+        .map(|s| s.record.snapshot_id)
 }
 
 /// Steps 4–6 of ADR-TMC-005 § 4 (set, target, base rule). A refusal
@@ -214,6 +335,7 @@ fn plan(
     worktree: &Path,
     who: &Who,
     channel: Channel,
+    raw: &RawSide,
 ) -> Result<Planned, (TmRejectReason, Scope, Vec<OpRef>)> {
     let key = worktree.to_string_lossy().into_owned();
     let own_scope = Scope {
@@ -221,38 +343,74 @@ fn plan(
         refs: Vec::new(),
     };
     let reject = |reason, scope: &Scope, target: Vec<OpRef>| (reason, scope.clone(), target);
-    // Raw Git events join the stack with US-TMC-004.
+    let wt_key = super::protected::worktree_key(
+        &registered_worktrees(worktree).unwrap_or_default(),
+        worktree,
+        0,
+    );
+    let external = external_events(oplog, raw, &key, &wt_key);
     let stack = oplog
-        .undo_stack(&StackScope::Worktree(key), &[])
+        .undo_stack_in(&StackScope::Worktree(key), &external, raw.floor)
         .map_err(|_| reject(TmRejectReason::TargetUnavailable, &own_scope, vec![]))?;
-    let undone = match stack.last_operation() {
+    let (undone, scope, target) = match stack.last_operation() {
         None => return Err(reject(TmRejectReason::NothingToUndo, &own_scope, vec![])),
-        Some(op @ OpRef::GitEvent(_)) => {
-            return Err(reject(
-                TmRejectReason::RawGitNotCovered,
-                &own_scope,
-                vec![op.clone()],
-            ));
+        Some(op @ OpRef::GitEvent(seq)) => {
+            let event = raw.events.iter().find(|e| e.seq == *seq);
+            let Some(event) = event.filter(|e| is_undoable(e.kind)) else {
+                // Pushes, reconciliations, branches and worktrees created or
+                // deleted: not undone yet, and never skipped.
+                return Err(reject(
+                    TmRejectReason::RawGitNotCovered,
+                    &own_scope,
+                    vec![op.clone()],
+                ));
+            };
+            let scope = Scope {
+                worktrees: own_scope.worktrees.clone(),
+                refs: event
+                    .branch
+                    .iter()
+                    .map(|b| format!("refs/heads/{b}"))
+                    .collect(),
+            };
+            let target = raw_target(oplog, store, &wt_key, *seq, raw.floor).ok_or_else(|| {
+                reject(TmRejectReason::TargetUnavailable, &scope, vec![op.clone()])
+            })?;
+            let undone = Undone {
+                op: op.clone(),
+                id: format!("git-event-{seq}"),
+                subtype: Some(event.kind.as_str().to_owned()),
+                requester: event.actor.clone(),
+            };
+            (undone, scope, target)
         }
-        Some(OpRef::Oplog(id)) => oplog.operation(id).ok().flatten(),
+        Some(OpRef::Oplog(id)) => {
+            let Some(view) = oplog.operation(id).ok().flatten() else {
+                return Err(reject(
+                    TmRejectReason::TargetUnavailable,
+                    &own_scope,
+                    vec![],
+                ));
+            };
+            let scope = view.record.scope.clone();
+            let op = OpRef::Oplog(view.record.operation_id.clone());
+            // The target: the operation's guaranteed prior snapshot.
+            let target = view.prior_snapshot.clone().ok_or_else(|| {
+                reject(TmRejectReason::TargetUnavailable, &scope, vec![op.clone()])
+            })?;
+            let undone = Undone {
+                op,
+                id: view.record.operation_id.clone(),
+                subtype: view.record.subtype.clone(),
+                requester: view.record.requester.clone(),
+            };
+            (undone, scope, target)
+        }
     };
-    let Some(undone) = undone else {
-        return Err(reject(
-            TmRejectReason::TargetUnavailable,
-            &own_scope,
-            vec![],
-        ));
-    };
-    let target_ref = vec![OpRef::Oplog(undone.record.operation_id.clone())];
-    let scope = undone.record.scope.clone();
+    let target_ref = vec![undone.op.clone()];
     let refuse = |reason| reject(reason, &scope, target_ref.clone());
 
-    // The target: the operation's guaranteed prior snapshot, still a
-    // point of the timeline and intact in the store.
-    let target = undone
-        .prior_snapshot
-        .clone()
-        .ok_or_else(|| refuse(TmRejectReason::TargetUnavailable))?;
+    // Still a point of the timeline and intact in the store.
     let available = oplog
         .snapshot(&target)
         .ok()
@@ -267,7 +425,7 @@ fn plan(
         .map_err(|_| refuse(TmRejectReason::TargetUnavailable))?;
 
     // Base permission rule (ADR-TMC-005 § 2).
-    permission(&who.requester, channel, &undone.record.requester).map_err(refuse)?;
+    permission(&who.requester, channel, &undone.requester).map_err(refuse)?;
     // Next, in this order: confirmation (US-TMC-013), Guardrails
     // (US-TMC-021) and overlap (US-TMC-012).
 
@@ -278,8 +436,8 @@ fn plan(
     let registered =
         registered_worktrees(worktree).map_err(|_| refuse(TmRejectReason::WorktreeUnavailable))?;
     let mut worktrees = Vec::new();
-    let mut refs: BTreeSet<String> = undone.record.scope.refs.iter().cloned().collect();
-    for root in &undone.record.scope.worktrees {
+    let mut refs: BTreeSet<String> = scope.refs.iter().cloned().collect();
+    for root in &scope.worktrees {
         if !registered.iter().any(|(p, _)| p == Path::new(root)) {
             // Removed, moved or foreign: not recreated yet (US-TMC-009).
             return Err(refuse(TmRejectReason::WorktreeUnavailable));
@@ -304,12 +462,7 @@ fn plan(
     // A branch checked out in a worktree outside the scope never moves: it
     // would change that worktree's history under its files.
     for (root, _) in &registered {
-        let outside = !undone
-            .record
-            .scope
-            .worktrees
-            .iter()
-            .any(|w| Path::new(w) == root);
+        let outside = !scope.worktrees.iter().any(|w| Path::new(w) == root);
         if outside
             && let Some(branch) = head_branch(root)
             && refs.contains(&format!("refs/heads/{branch}"))
@@ -429,14 +582,14 @@ pub fn undo_last(
     repo: &TmRepoHandle,
     who: &Who,
     channel: Channel,
-    engine_mark: i64,
     env: &UndoEnv<'_>,
 ) -> Result<UndoDone, UndoError> {
     let oplog = &repo.repo.oplog;
     let worktree = repo.repo.worktree.as_path();
-    let rejected = |scope, target, reason| {
-        record_rejection(oplog, scope, target, who, channel, engine_mark, reason)
-    };
+    let repo_id = repo.repo.repo_id.as_str();
+    let mut engine_mark = env
+        .engine
+        .map_or(env.fallback_mark, |d| d.engine.mark(repo_id));
     // The repo is held from choosing the target to the close, with the key
     // the executor queues on (ADR-CKP-002 § 5): the last operation cannot
     // change under the undo, and a busy repo costs no prior snapshot.
@@ -449,19 +602,64 @@ pub fn undo_last(
                     worktrees: vec![worktree.to_string_lossy().into_owned()],
                     refs: Vec::new(),
                 };
-                return Err(rejected(scope, Vec::new(), TmRejectReason::RepoBusy));
+                return Err(record_rejection(
+                    oplog,
+                    scope,
+                    Vec::new(),
+                    who,
+                    channel,
+                    engine_mark,
+                    TmRejectReason::RepoBusy,
+                ));
             }
         };
 
+    // The engine first (US-TMC-004): every `git` that already ended in the
+    // worktree is persisted, so it is in the stack and the mark covers it.
+    // An undo never plans on a stale mark: not calm in time, the repo is
+    // busy.
+    let mut raw = RawSide::default();
+    if let Some(deps) = env.engine {
+        let wt = [worktree.to_path_buf()];
+        match deps.engine.settle(repo_id, &wt, ANCHOR_SETTLE_LIMIT) {
+            Some(mark) => engine_mark = mark,
+            None => {
+                let scope = Scope {
+                    worktrees: vec![worktree.to_string_lossy().into_owned()],
+                    refs: Vec::new(),
+                };
+                return Err(record_rejection(
+                    oplog,
+                    scope,
+                    Vec::new(),
+                    who,
+                    channel,
+                    engine_mark,
+                    TmRejectReason::RepoBusy,
+                ));
+            }
+        }
+        raw = RawSide {
+            events: deps
+                .engine
+                .raw_events(repo_id, worktree)
+                .unwrap_or_default(),
+            floor: deps.engine.generation_floor(repo_id),
+        };
+    }
+    let rejected = |scope, target, reason| {
+        record_rejection(oplog, scope, target, who, channel, engine_mark, reason)
+    };
+
     let planned = {
         let log = lock(oplog);
-        plan(&log, repo.store.as_deref(), worktree, who, channel)
+        plan(&log, repo.store.as_deref(), worktree, who, channel, &raw)
     };
     let planned = match planned {
         Ok(p) => p,
         Err((reason, scope, target)) => return Err(rejected(scope, target, reason)),
     };
-    let target_ref = vec![OpRef::Oplog(planned.undone.record.operation_id.clone())];
+    let target_ref = vec![planned.undone.op.clone()];
     let (Some(store), Some(main_root)) = (repo.store.as_deref(), repo.main_root.clone()) else {
         return Err(rejected(
             planned.scope,
@@ -534,7 +732,21 @@ pub fn undo_last(
         stopping: env.stopping,
         deadline: env.prior_deadline,
     };
-    match protected.run(&req, &mut step) {
+    let ran = protected.run(&req, &mut step);
+    // The state the undo left, while the repo is still held: its echo in the
+    // engine is never taken for raw Git (US-TMC-004).
+    if let Some(deps) = env.engine {
+        let id = match &ran {
+            Ok(o) => Some(o.operation_id.as_str()),
+            Err(ProtectedError::Step { operation_id, .. }) => Some(operation_id.as_str()),
+            Err(_) => None,
+        };
+        if let Some(id) = id {
+            let worktrees: Vec<PathBuf> = req.worktree_paths.clone();
+            anchor(deps, repo_id, &worktrees, id);
+        }
+    }
+    match ran {
         Ok(outcome) => Ok(UndoDone {
             operation_id: outcome.operation_id,
             prior_snapshot_id: outcome.prior.snapshot_id,

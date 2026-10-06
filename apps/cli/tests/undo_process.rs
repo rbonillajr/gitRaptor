@@ -180,6 +180,7 @@ fn machine() -> Machine {
             prior_layer: None,
         }),
         tm_prior_layer: None,
+        tm_capture: Default::default(),
     })
     .unwrap();
     let oplog = daemon.oplog(&entry.repo_id).unwrap();

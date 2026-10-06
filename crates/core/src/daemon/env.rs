@@ -134,6 +134,16 @@ pub(crate) fn clock_skew_file() -> Option<PathBuf> {
     }
 }
 
+/// Debug-build test hook: with `GITRAPTOR_TEST_TM_NO_FREE_SPACE_FLOOR=1` the
+/// continuous capture does not check the free-space floor of SEC-TMC-12, so
+/// an end-to-end test of the binary does not depend on the runner's disk
+/// (US-TMC-004). Release builds do not even read it.
+pub const TM_NO_FREE_SPACE_FLOOR_ENV: &str = "GITRAPTOR_TEST_TM_NO_FREE_SPACE_FLOOR";
+
+pub(crate) fn tm_no_free_space_floor() -> bool {
+    cfg!(debug_assertions) && std::env::var_os(TM_NO_FREE_SPACE_FLOOR_ENV).is_some_and(|v| v == "1")
+}
+
 /// The skew written in `file`: never negative, 0 if unreadable.
 pub(crate) fn read_clock_skew(file: &std::path::Path) -> i64 {
     std::fs::read_to_string(file)

@@ -30,6 +30,7 @@ fn config(dirs: ProfileDirs, git: ResolveConfig) -> DaemonConfig {
         protected: None,
         operations: None,
         tm_prior_layer: None,
+        tm_capture: Default::default(),
     }
 }
 
