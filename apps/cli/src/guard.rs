@@ -118,12 +118,12 @@ pub fn hook(args: &[OsString]) -> ExitCode {
         return ExitCode::FAILURE;
     };
     let mut input = Vec::new();
-    if std::io::stdin()
+    // One byte past the bound means the input was cut: never decide on a prefix.
+    let read = std::io::stdin()
         .lock()
-        .take(MAX_INPUT_BYTES)
-        .read_to_end(&mut input)
-        .is_err()
-    {
+        .take(MAX_INPUT_BYTES + 1)
+        .read_to_end(&mut input);
+    if read.is_err() || input.len() as u64 > MAX_INPUT_BYTES {
         eprintln!("GitRaptor: {}", t("guard.deny.input", &[]));
         return ExitCode::FAILURE;
     }

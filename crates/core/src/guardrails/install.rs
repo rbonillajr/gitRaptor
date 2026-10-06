@@ -419,11 +419,16 @@ pub fn install(
         Ok(Some(id)) => journal.config = Some(id.into()),
         Ok(None) | Err(_) => return Err(revert(store, "config is not a regular file".into())),
     }
-    save(store, &journal)?;
+    // Past the commit point, any failure is undone here, not left to the next start.
+    if save(store, &journal).is_err() {
+        return Err(revert(store, "journal after the key".into()));
+    }
     if let Err(why) = verify(ctx, common, &hooks_dir) {
         return Err(revert(store, why));
     }
-    confirm(ctx, repo_id, store, registry, journal).map_err(InstallError::Failed)?;
+    if let Err(why) = confirm(ctx, repo_id, store, registry, journal) {
+        return Err(revert(store, why));
+    }
     Ok(status(repo_id, common, store))
 }
 
