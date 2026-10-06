@@ -109,32 +109,16 @@ jobs:
         if: env.BUILD_RUST != 'false'
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - if: env.BUILD_RUST != 'false'
-        run: cargo fmt --all -- --check
-      - if: env.BUILD_RUST != 'false'
-        run: cargo clippy --workspace --all-targets -- -D warnings
-      # Windows: TS-GRP-002 rejects every Git candidate on Windows (fail-closed until the ACE
-      # check exists) and the canary uses /bin/sh scripts, so the tests cannot pass there yet.
-      # Pendiente: etapa de validación multiplataforma. The step never fails the job on Windows;
-      # fmt and clippy stay blocking everywhere.
-      # The `repo_intact` suites run in their own step below, with the OS tracer.
-      - id: test
+      - id: fmt
         if: env.BUILD_RUST != 'false'
-        run: cargo test --workspace -- --skip repo_intact
-        continue-on-error: ${{ matrix.os == 'windows-latest' }}
-      - name: Pending on Windows
-        if: steps.test.outcome == 'failure'
-        run: "echo '::warning::cargo test failed on Windows. Pendiente: etapa de validación multiplataforma'"
-      # Blocking on Windows too: the only crate with `unsafe` and the requester
-      # resolution on real processes (ADR-GRP-005, Enmienda 2026-10-05).
-      - name: Windows processes and requester (blocking)
-        if: env.BUILD_RUST != 'false' && matrix.os == 'windows-latest'
-        run: |
-          cargo test -p gitraptor-winsys
-          cargo test -p gitraptor-core --lib -- channel::requester channel::peer channel::authz channel::marks children_of_the_step_are_marked
+        run: cargo fmt --all -- --check
+      - id: clippy
+        if: env.BUILD_RUST != 'false'
+        run: cargo clippy --workspace --all-targets -- -D warnings
       # The `repo-intact` gate. Always the whole workspace, never `nx affected`: the gate must run
-      # every suite. It runs even when lint or the other tests failed, so the gate reports on its
-      # own suites. Windows: non-blocking (Pendiente: etapa de validación multiplataforma).
+      # every suite. It runs first among the tests, on a runner no other test has loaded yet (as the
+      # separate job did), and even when fmt or clippy failed, so the gate reports on its own
+      # suites. Windows: non-blocking (Pendiente: etapa de validación multiplataforma).
       - name: Core and registered repo_intact suites
         id: suites
         if: ${{ !cancelled() && env.BUILD_RUST != 'false' }}
@@ -154,6 +138,25 @@ jobs:
           retention-days: 1
           # A re-run of the job replaces the record, so the gate reads the latest attempt.
           overwrite: true
+      # Windows: TS-GRP-002 rejects every Git candidate on Windows (fail-closed until the ACE
+      # check exists) and the canary uses /bin/sh scripts, so the tests cannot pass there yet.
+      # Pendiente: etapa de validación multiplataforma. The step never fails the job on Windows;
+      # fmt and clippy stay blocking everywhere. Runs after the gate even when it failed, so a
+      # failing suite does not hide the other tests' results.
+      - id: test
+        if: ${{ !cancelled() && steps.fmt.outcome == 'success' && steps.clippy.outcome == 'success' }}
+        run: cargo test --workspace -- --skip repo_intact
+        continue-on-error: ${{ matrix.os == 'windows-latest' }}
+      - name: Pending on Windows
+        if: steps.test.outcome == 'failure'
+        run: "echo '::warning::cargo test failed on Windows. Pendiente: etapa de validación multiplataforma'"
+      # Blocking on Windows too: the only crate with `unsafe` and the requester
+      # resolution on real processes (ADR-GRP-005, Enmienda 2026-10-05).
+      - name: Windows processes and requester (blocking)
+        if: ${{ !cancelled() && steps.clippy.outcome == 'success' && matrix.os == 'windows-latest' }}
+        run: |
+          cargo test -p gitraptor-winsys
+          cargo test -p gitraptor-core --lib -- channel::requester channel::peer channel::authz channel::marks children_of_the_step_are_marked
 
   repo-intact:
     name: repo-intact (${{ matrix.os }})
