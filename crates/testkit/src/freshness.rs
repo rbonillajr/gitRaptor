@@ -154,8 +154,10 @@ pub const WIDE_FACTOR: f64 = 1.5;
 
 /// Calibrated regression ceilings of the shared runners. Each figure is the largest value
 /// measured over the calibration runs of INF-GRP-002 (Enmienda 2026-10-05, table and runs in its
-/// Dev Spec), failed attempts included, passed through [`calibrated`]. Recalibrate when the
-/// engine gets faster on purpose or the runner image changes.
+/// Dev Spec), failed attempts included, passed through [`calibrated`]. A runner that is noisy for
+/// a whole job lifts every steady p95 of Linux to 135–180 ms with its p50 untouched, and the
+/// confirmation cannot see past it: the p95 ceilings cover it. Recalibrate when the engine gets
+/// faster on purpose, the runner image changes or a false positive shows up.
 pub const REGRESSION_CEILINGS: &[(Platform, &str, RegressionCeiling)] = &[
     (Platform::MacCi, "modify", steady(224.3, 293.7)),
     (Platform::MacCi, "git-add", steady(212.6, 277.0)),
@@ -165,12 +167,12 @@ pub const REGRESSION_CEILINGS: &[(Platform, &str, RegressionCeiling)] = &[
     (Platform::MacCi, "worktree-delete", steady(192.7, 246.1)),
     (Platform::MacCi, BURST_1K, burst_p50_only(458.7)),
     (Platform::MacCi, BURST_10K, burst_p50_only(445.8)),
-    (Platform::LinuxCi, "modify", steady(105.1, 105.6)),
-    (Platform::LinuxCi, "git-add", steady(104.5, 105.2)),
-    (Platform::LinuxCi, "commit", steady(100.8, 103.7)),
-    (Platform::LinuxCi, "checkout", steady(98.6, 99.1)),
+    (Platform::LinuxCi, "modify", steady(105.1, 151.0)),
+    (Platform::LinuxCi, "git-add", steady(104.5, 148.0)),
+    (Platform::LinuxCi, "commit", steady(100.8, 179.5)),
+    (Platform::LinuxCi, "checkout", steady(98.6, 135.0)),
     (Platform::LinuxCi, "worktree-create", steady(185.4, 366.5)),
-    (Platform::LinuxCi, "worktree-delete", steady(81.5, 147.1)),
+    (Platform::LinuxCi, "worktree-delete", steady(81.5, 175.0)),
     (Platform::LinuxCi, BURST_1K, burst(220.0, 268.4)),
     (Platform::LinuxCi, BURST_10K, burst(239.8, 337.6)),
 ];
