@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-06
 date: 2026-10-03
 domain: GRP
 feature: time-machine
@@ -157,3 +157,17 @@ Aplicada desde DEP-CKP-5 de [CTX-CKP-001](../../requirements/features/cockpit/co
 - **Forma del evento** (tipo, campos y secuencia dentro del stream del repo): **pendiente, dueño: worker del canal (TS-GRP-004)**.
 
 **Validación añadida**: con una TUI sin pantalla suscrita, un undo produce el evento de `terminada` después de su fila en el oplog; una muerte forzada antes de anotar no publica nada.
+
+## Enmienda (2026-10-06, US-TMC-004)
+
+Aplicada desde la [Dev Spec de US-TMC-004](../../requirements/features/time-machine/dev-specs/US-TMC-004-captura-continua-git-crudo.md). **Decisión del orquestador (2026-10-06), validada por el Arquitecto** (aprobada con ajustes, incorporados). No cambia el esquema del oplog ni su cadena. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| **Marca común**: la marca del motor de operaciones, undos y snapshots es la última secuencia de evento persistida del repo (ADR-GRP-013). Antes las operaciones guardaban la secuencia del bus, que no se compara con la de los eventos | § 2, § 4 | D2; bloqueante B2 |
+| **Generación**: el almacén del motor guarda un id de generación (`store_meta`). La Time Machine anota en `tm/<repo>/engine-generation` desde qué fila del oplog vale cada generación. Las filas anteriores (otra generación, o la secuencia del bus) se ordenan antes de todo evento y nunca son destino de un evento | § 1 (Q26), § 4 | B2 |
+| **Marca en calma**: la marca de una intención (operación protegida, undo) y la de una captura se toman cuando el motor ya persistió todo `git` terminado en los worktrees del ámbito (calma por estado, ADR-TMC-004 § 2). Sin calma en 2 s, el undo se rechaza con `repo-busy` y la operación del catálogo con `git-busy`: nunca se planifica con una marca vieja | § 3, § 4 | B1, B3 |
+| **Git crudo en la pila**: `commit`, `merge`, `rebase`, `branch-update`, `branch-switch` y `reset` (nuevo tipo del motor: `reset` que no mueve rama) del worktree. Destino: la última captura disponible y verificada del worktree, de la generación actual, con marca anterior al evento. Actor: la sesión a la que el motor lo atribuyó. Si el evento más reciente es de un tipo que todavía no se deshace (`push`, `reconciled`, crear o borrar ramas o worktrees), el undo responde `raw-git-not-covered`: nunca lo salta | § 4 | US-TMC-004 |
+| **`caused_by` por ancla**: al terminar una operación protegida o un undo, el daemon toma un **ancla**: una captura `observation` de su ámbito con `cause_operation` = la operación y una marca en calma. Los eventos del ámbito con `marca de la operación < seq ≤ marca del ancla` son su eco. Sin ancla, hasta la siguiente captura del worktree | § 4 | D5; ajuste 1 |
+
+**Validación añadida**: el eco de un undo no entra en la pila (un segundo undo responde `nothing-to-undo`); dos operaciones del catálogo y dos undos siguen retrocediendo una a una con la captura continua activa (tests de US-TMC-002 en verde).

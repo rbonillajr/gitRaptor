@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-05
+updated: 2026-10-06
 date: 2026-10-03
 domain: GRP
 feature: time-machine
@@ -135,3 +135,20 @@ Decisión del orquestador (2026-10-05), validada por Arquitecto y PO. Origen: DE
 - **Solicitante y registro**: el solicitante del plan, congelado en el oplog (ADR-TMC-003 § 5), con canal `mcp`. El timeline lo muestra con su nivel y su etiqueta.
 - **Dueña**: la API la implementa la historia dueña de `snapshot` (US-MCP-008) sobre el módulo de la Time Machine, coordinada con su feature.
 - **Validación añadida**: 21 capturas manuales del mismo agente en un worktree en 24 h → la 21.ª se rechaza con la hora de liberación y las 20 siguen; un `undo` tras un `snapshot` deshace la operación anterior, no el snapshot; con el disco en el mínimo, un previo garantizado posterior se completa; una etiqueta con U+202E sale escapada en el timeline.
+
+## Enmienda (2026-10-06, US-TMC-004)
+
+Aplicada desde la [Dev Spec de US-TMC-004](../../requirements/features/time-machine/dev-specs/US-TMC-004-captura-continua-git-crudo.md), que implementa el nivel (b). **Decisión del orquestador (2026-10-06), validada por el Arquitecto** (aprobada con ajustes, incorporados). El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| **Calma por estado** antes de cada captura: un worktree está en calma cuando el tamaño de su reflog de `HEAD` y su `HEAD` en disco son los que el motor leyó en su último lote persistido, y ningún `git` tiene su índice. Solo sin reflog se usa el respaldo por tiempo (150 ms sin cambios en el directorio Git). Sustituye a "la marca al empezar" como garantía: un `git` terminado antes de la captura ya está en la marca, aunque su notificación llegue tarde | § 2, Consistencia | Bloqueante B1 del Arquitecto |
+| **Consistencia por guarda**: la captura compara al empezar y en su punto de validez el reflog de `HEAD`, `HEAD`, la identidad del índice y `index.lock` de cada worktree. Si cambió, se descarta sin fila (`Discarded`) y se repite. Concreta "se descarta si llega un evento de Git durante la lectura" sin depender de la latencia del motor | § 2, Consistencia; Validación 4 | B1 |
+| **Ancla posterior** a cada operación protegida y undo (captura `observation` con `cause_operation`): delimita su eco en el motor (ADR-TMC-003, Enmienda 2026-10-06) | § 1, § 2 | D5 |
+| **Detección completa** en cada captura: las rutas del motor con su marca de continuidad (escalón 2, ADR-TMC-006 § 5) siguen pendientes en TS-GRP-002/003 | § 2, captura incremental | D7 |
+| **Cuotas diferidas**: la cuota del almacén y el hueco "sin espacio" son de US-TMC-022. Mientras tanto, la captura continua se omite (y lo registra) por debajo del suelo de espacio libre de SEC-TMC-12, máx(5 GB, 5 %), y un `ENOSPC` es una captura fallida sin punto | § 2, Cuotas | D8; ajuste 3 |
+| **Un hilo de captura por daemon**, en serie; el motor solo le entrega señales por un canal y nunca espera | § 2, Coalescencia | D6 |
+
+**Límites declarados**: sin reflog de `HEAD` (`core.logAllRefUpdates=false` o el backend reftable) no hay evento `reset` y la calma es por tiempo; `git checkout -- .`, `git restore` y `git clean` no escriben reflog ni índice y no son eventos (su efecto queda en la siguiente captura y lo anterior sigue restaurable desde el almacén); R2 se mantiene.
+
+**Validación añadida**: los escenarios de US-TMC-004 y el e2e del criterio 3 de M1 (un agente simulado hace `git reset --hard` y lo recupera con `raptor undo`); el banco del motor (INF-GRP-002) con la captura continua activa.
