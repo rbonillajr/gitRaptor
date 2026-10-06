@@ -202,6 +202,7 @@ error.identity-unverified = el motor no pudo verificar quién eres
 error.repo-rejected = el repo fue rechazado
 error.operation-rejected = la operación se rechazó antes de ejecutarse
 error.registration-rejected = el registro se rechazó
+error.guard-rejected = la protección no se instaló
 # raptor undo (US-TMC-002).
 undo.done = deshecha {operation} ({id}) en {worktree}
 undo.saved = el estado justo antes de este undo queda guardado como {snapshot}; no se perdió nada
