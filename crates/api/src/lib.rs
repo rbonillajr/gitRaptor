@@ -29,7 +29,7 @@ pub use event::{Event, Timings};
 pub use untrusted::{Untrusted, UntrustedName};
 
 /// Version of the engine API contract (semantic, for humans).
-pub const API_VERSION: &str = "7.0.0";
+pub const API_VERSION: &str = "8.0.0";
 
 /// Wire protocol version negotiated in the handshake. A daemon serves every
 /// client from [`MIN_COMPATIBLE_PROTOCOL`] up to its own version, each in
@@ -46,7 +46,9 @@ pub const API_VERSION: &str = "7.0.0";
 /// and `registration.withdraw`, US-GRP-009, additive). Version 7
 /// (US-GRD-001): the `guard.*` methods, the `-32016` code and the
 /// `not-observed` repo rejection; a connection of version 5 or 6 sees none.
-pub const PROTOCOL_VERSION: u32 = 7;
+/// Version 8 (US-TMC-004): Git events of kind `reset`; a connection of
+/// version 5 to 7 never receives them.
+pub const PROTOCOL_VERSION: u32 = 8;
 
 /// Oldest client protocol a daemon still serves: a long-lived `raptor-mcp`
 /// survives an upgrade of the daemon (DS-TS-GRP-004 E-D1).

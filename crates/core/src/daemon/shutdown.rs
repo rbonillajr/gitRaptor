@@ -223,6 +223,13 @@ pub(crate) enum Control {
         params: EventsHistoryParams,
         reply: SyncSender<Result<Vec<GitEventView>, RepoCommandError>>,
     },
+    /// The raw Git events of a worktree, for the Time Machine's undo
+    /// stack (US-TMC-004).
+    RawEvents {
+        repo_id: String,
+        worktree: std::path::PathBuf,
+        reply: SyncSender<Option<Vec<crate::timemachine::engine::RawGitEvent>>>,
+    },
 }
 
 /// Answer of `sessions.list`: whether detection is available here, and the
@@ -394,6 +401,26 @@ impl ShutdownHandle {
             .map_err(|_| RepoCommandError::Internal)?;
         rx.recv_timeout(AUDIT_TIMEOUT)
             .map_err(|_| RepoCommandError::Internal)?
+    }
+}
+
+impl ShutdownHandle {
+    /// The raw Git events of a worktree, read through the loop, which owns
+    /// the stores (US-TMC-004). `None` if the loop does not answer.
+    pub(crate) fn raw_events(
+        &self,
+        repo_id: &str,
+        worktree: &std::path::Path,
+    ) -> Option<Vec<crate::timemachine::engine::RawGitEvent>> {
+        let (reply, rx) = sync_channel(1);
+        self.tx
+            .send(Control::RawEvents {
+                repo_id: repo_id.to_owned(),
+                worktree: worktree.to_path_buf(),
+                reply,
+            })
+            .ok()?;
+        rx.recv_timeout(AUDIT_TIMEOUT).ok().flatten()
     }
 }
 

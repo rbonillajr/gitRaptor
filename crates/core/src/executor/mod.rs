@@ -283,7 +283,13 @@ pub struct RunEnv<'a> {
     pub procs: &'a dyn ProcSource,
     pub stopping: &'a AtomicBool,
     pub prior_deadline: Duration,
-    pub engine_mark: i64,
+    /// The engine mark of the operation's repo once its worktrees are calm
+    /// (US-TMC-004); `None`: a `git` the engine has not persisted yet is
+    /// still in the way.
+    pub engine_mark: &'a (dyn Fn(&str, &[std::path::PathBuf]) -> Option<i64> + Sync),
+    /// After the step ran: takes the anchor of the state it left, with the
+    /// operation as cause (US-TMC-004).
+    pub after_step: &'a (dyn Fn(&str, &[std::path::PathBuf], &str) + Sync),
     pub publish: &'a (dyn Fn(&str, OperationEventData) + Sync),
 }
 
@@ -725,13 +731,20 @@ impl Executor {
             &step,
             plan.who.clone(),
             oplog_channel(plan.channel),
-            env.engine_mark,
+            0,
         ) {
             Ok(req) => req,
             Err(e) => {
                 self.close(&plan, PlanClose::Rejected);
                 return Err(ExecError::Scope(e));
             }
+        };
+        // The intent's mark, with every `git` that already ended in the
+        // scope persisted by the engine: a raw `git` just before is never
+        // taken for this operation's echo (US-TMC-004).
+        req.engine_mark = match (env.engine_mark)(&plan.repo.repo_id, &req.worktree_paths) {
+            Some(mark) => mark,
+            None => return refuse(&plan, RejectReason::GitBusy),
         };
         req.confirmed = plan.challenge;
         req.warnings = plan.warnings.iter().map(|w| format!("{w:?}")).collect();
@@ -744,6 +757,12 @@ impl Executor {
             deadline: env.prior_deadline,
         };
         let ran = protected.run(&req, &mut step);
+        // The state the step left, while the repo is still held.
+        if let Ok(o) = &ran {
+            (env.after_step)(&plan.repo.repo_id, &req.worktree_paths, &o.operation_id);
+        } else if let Err(ProtectedError::Step { operation_id, .. }) = &ran {
+            (env.after_step)(&plan.repo.repo_id, &req.worktree_paths, operation_id);
+        }
         drop(guard);
         let (outcome, close) = match &ran {
             Ok(o) => {

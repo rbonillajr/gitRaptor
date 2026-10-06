@@ -269,6 +269,14 @@ impl RepoStore {
             "INSERT OR IGNORE INTO store_meta (key, value) VALUES ('common_dir', ?1)",
             params![path_text(common_dir)?],
         )?;
+        // Identifies this numbering of events: a store recreated after a loss
+        // starts its sequence again, and the Time Machine must not compare
+        // marks across both (US-TMC-004).
+        let generation = super::sqlite::new_uuid(&conn)?;
+        conn.execute(
+            "INSERT OR IGNORE INTO store_meta (key, value) VALUES ('generation', ?1)",
+            params![generation],
+        )?;
         let next_seq: i64 = conn.query_row(
             "SELECT MAX(
                  COALESCE((SELECT MAX(seq) FROM events), 0),
@@ -293,6 +301,21 @@ impl RepoStore {
         tx.commit()?;
         self.next_seq = next_seq;
         Ok(result)
+    }
+
+    /// The last sequence assigned (0 if none): the engine mark of the repo
+    /// (ADR-GRP-013).
+    pub fn last_seq(&self) -> i64 {
+        self.next_seq - 1
+    }
+
+    /// Id of this store's numbering of events.
+    pub fn generation(&self) -> Result<String> {
+        Ok(self.conn.query_row(
+            "SELECT value FROM store_meta WHERE key = 'generation'",
+            [],
+            |row| row.get(0),
+        )?)
     }
 
     pub fn worktrees(&self) -> Result<Vec<Worktree>> {

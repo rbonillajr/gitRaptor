@@ -238,6 +238,13 @@ impl Oplog {
         Ok((oplog, OplogOpen { status, new_breaks }))
     }
 
+    /// The last row's sequence (0 for an empty oplog).
+    pub fn last_seq(&self) -> Result<i64> {
+        Ok(self
+            .conn
+            .query_row("SELECT COALESCE(MAX(seq), 0) FROM chain", [], |r| r.get(0))?)
+    }
+
     pub fn repo_id(&self) -> &str {
         &self.repo_id
     }

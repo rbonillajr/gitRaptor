@@ -252,6 +252,7 @@ fn config(tp: &TempProfile, operations: Option<OperationsWiring>) -> DaemonConfi
         protected: None,
         operations,
         tm_prior_layer: None,
+        tm_capture: Default::default(),
     }
 }
 
