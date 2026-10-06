@@ -23,7 +23,7 @@ La fuente de verdad es el código de `crates/api`. Este documento es su resumen 
 
 - Socket Unix `raptor.sock` en la carpeta de ejecución del perfil, con la carpeta en 0700 y el socket en 0600. Solo acepta clientes del mismo uid. El cliente comprueba que el servidor también es de su uid. En Windows, named pipe: pendiente.
 - Un mensaje JSON por línea (`\n`), de 1 MiB como máximo y con una profundidad máxima de 32. No se aceptan batches. Todos los tipos rechazan campos desconocidos.
-- `PROTOCOL_VERSION = 6` (`API_VERSION` 6.1.0). El daemon atiende a clientes de `MIN_COMPATIBLE_PROTOCOL = 5` a `6`, cada uno con las formas de su versión. `hello` responde con el protocolo negociado. Un cliente más nuevo que el daemon lo reemplaza, y uno más viejo que la ventana recibe `-32002`. Hasta la 5, la compatibilidad era por igualdad.
+- `PROTOCOL_VERSION = 6` (`API_VERSION` 6.2.0). El daemon atiende a clientes de `MIN_COMPATIBLE_PROTOCOL = 5` a `6`, cada uno con las formas de su versión. `hello` responde con el protocolo negociado. Un cliente más nuevo que el daemon lo reemplaza, y uno más viejo que la ventana recibe `-32002`. Hasta la 5, la compatibilidad era por igualdad.
   - La 2 (US-GRP-001) añade el estado de los worktrees a `RepoView`.
   - La 3 (US-GRP-012), la rama base del repo y el ahead/behind de cada worktree.
   - La 3.1.0 (US-GRP-002) es aditiva: `events.history` y el `data` de `git.event`; un cliente nuevo comprueba en `hello.methods` que el daemon ofrece `events.history` y, si no, pide reiniciarlo.
@@ -38,6 +38,7 @@ La fuente de verdad es el código de `crates/api`. Este documento es su resumen 
 
     Una conexión 5 no ve nada de esto: no le llegan los métodos nuevos ni `requester`, y el resto del cable no cambia.
   - La 6.1.0 (US-GRP-017) es aditiva: `engine.resources`. La CLI comprueba en `hello.methods` que el daemon lo ofrece y, si no, pide reiniciarlo.
+  - La 6.2.0 (US-GRP-009) es aditiva: `registration.register`, `registration.withdraw` implementado, el código `-32015` y los motivos de auditoría `worktree-mismatch` y `agent-mismatch`.
 
 ## Handshake
 
@@ -65,7 +66,8 @@ El resultado trae `protocol`, `binary_version`, `instance_id` (del perfil, ADR-G
 | `repo.add` | **Sí** | No | `{ path }` (raíz de un worktree o directorio Git, sin búsqueda hacia arriba) → `{ outcome: new\|already-observed\|reactivated, repo: RepoView }`. Autoriza y audita **antes** de leer la ruta (US-GRP-001) |
 | `repo.retire` | **Sí** | No | `{ repo_id }` → `{ retired }`. Deja de observar y conserva los datos (US-GRP-001; US-GRP-006 añade el historial y el hueco) |
 | `attribution.correct`, `attribution.withdraw-correction` | **Sí** | No | Declarados. Los implementa US-GRP-010 |
-| `registration.withdraw` | **Sí** | No | Declarado. Lo implementa US-GRP-009 |
+| `registration.register` | No | Sí | `{ agent: {kind:"claude-code"}\|{kind:"other", name}, worktree? }` → `{ repo_id, session_id, outcome: created\|confirmed\|already-registered, actor, support: full\|observed }`, sin rutas (SEC-12). Quien pasa los controles 1 a 3 es el desarrollador y nombra el worktree; cualquier otro, y toda conexión MCP, es un agente que se registra en el worktree de su cwd y como el agente que es (ADR-GRP-005 § 6.6, Enmienda 2026-10-05). Los rechazos `worktree-mismatch` y `agent-mismatch` se auditan (US-GRP-009) |
+| `registration.withdraw` | **Sí** | No | `{ worktree, agent }` → `{ repo_id, session_id }`. Termina la sesión creada por el registro de ese agente (`registration-withdrawn`); una sesión detectada, aunque esté confirmada, termina con su proceso (US-GRP-009) |
 | `requester.resolve` | No | Sí | Cómo ve el daemon al llamante (ADR-TMC-005 § 1). En MCP, solo `{actor, channel}` |
 | `operation.describe` | No | Sí | Catálogo de operaciones (ADR-CKP-002 § 1): `{catalog_version, operations: [{id, class, governed, cockpit, mcp, args_schema}]}`. En MCP, solo las operaciones con marca MCP y sus esquemas MCP (`create-worktree` sin `path`) |
 | `operation.prepare` | No | Sí | Primera fase, sin efectos ni oplog. `{operation, worktree?, args, surface?, session_env?}` → `{plan_id, catalog_version, operation, layer, requester, fingerprint, warnings, decision, challenge?, expires_in_ms, diagnostics}`. En MCP, el worktree sale del cwd del llamante y la respuesta es la proyección sin `requester`, `layer`, `challenge` ni `diagnostics`. Una operación cuya historia no existe todavía responde `-32004` con `implemented_by`; un quinto plan vivo en la conexión, `-32006` |
@@ -91,7 +93,7 @@ Un cliente presenta cada error por su `code` y su `data`, nunca por `message`, q
 | `-32700`, `-32600`, `-32601`, `-32602`, `-32603` | JSON-RPC estándar (análisis, petición, método, parámetros, interno) |
 | `-32001` | Falta el `hello` (la conexión se cierra) |
 | `-32002` | Versión de protocolo incompatible |
-| `-32003` | Comando reservado rechazado; `data.reason`: `agent-ancestry`, `session-leader-agent`, `daemon-descendant`, `no-controlling-terminal`, `identity-unverified`, `not-available-to-mcp` o `unsupported` |
+| `-32003` | Comando reservado rechazado; `data.reason`: `agent-ancestry`, `session-leader-agent`, `daemon-descendant`, `no-controlling-terminal`, `identity-unverified`, `not-available-to-mcp` o `unsupported`. En la auditoría, además, `worktree-mismatch` y `agent-mismatch` (rechazos de `registration.register`, que no es reservado) |
 | `-32004` | Declarado, pero sin implementar todavía |
 | `-32005` | Rate limit (100/s, ráfaga de 200). La conexión sigue abierta |
 | `-32006` | Límite de conexiones o de suscripciones |
@@ -103,6 +105,7 @@ Un cliente presenta cada error por su `code` y su `data`, nunca por `message`, q
 | `-32012` | La identidad del llamante cambió desde que se aceptó la conexión |
 | `-32013` | Repo rechazado por lo que nombra (no por quién lo pide); `data.reason`: `not-a-repo`, `untrusted`, `unreadable` o `unknown-repo`. (Hasta 2026-10-05 este documento lo listaba por error como `-32008`) |
 | `-32014` | Plan del catálogo rechazado antes de ejecutar nada, sin apunte en el oplog (TS-CKP-002). `data.reason`: `state-changed`, `plan-unknown`, `not-available-for-layer`, `unattributed-without-cockpit`, `executor-descendant`, `warnings-mismatch`, `confirmation-required`, `challenge-invalid`, `foreign-work`, `other-session-present`, `operation-in-progress`, `detached-head`, `git-busy`, `worktree-locked`, `branch-checked-out-elsewhere`, `grafts`, `repo-identity-changed`, `guardrails-denied`, `new-path-refused`, `queue-full` o `daemon-stopping` |
+| `-32015` | Registro de agente o su retiro rechazado (US-GRP-009). `data.reason`: `not-a-worktree`, `repo-not-observed`, `worktree-mismatch`, `agent-mismatch`, `no-working-folder` o `not-registered` |
 
 ## Eventos
 
