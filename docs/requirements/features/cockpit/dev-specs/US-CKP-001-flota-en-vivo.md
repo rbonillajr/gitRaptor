@@ -146,3 +146,31 @@ Pendiente de esta enmienda:
 - Token propio `symbol.agent.none` en `packages/design-tokens`.
 - Sin asignación automática del dueño: si algún día se ofrece "asignar a un agente", lo confirma el humano.
 - Solo se verificó en macOS. La detección de la carpeta temporal en Windows (`%TEMP%`, rutas `\\?\`) y en Linux queda para la validación en máquinas reales.
+
+## 8. Enmienda (2026-10-06): la actividad tras un arranque en frío
+
+Rene probó la TUI tras `raptor daemon stop` y un nuevo arranque. La columna Actividad decía "no disponible" en todas las filas hasta que cada worktree cambiaba. Era la simplificación declarada en el § 6, pero el usuario la leía como un fallo. Esta enmienda cierra el primer pendiente del § 6. **Decisión del orquestador (2026-10-06), validada por Arquitecto** (con ajustes: el nombre y la semántica de la marca y la enmienda de ADR-GRP-013 § 6).
+
+| # | Cambio |
+|---|---|
+| G1 | **Siembra desde el almacén.** Al arrancar (tras la reconciliación inicial) y en `repo.add`, el motor siembra `last_activity_utc_ms` de cada worktree sin valor con la hora de observación de su **último evento de Git** en el almacén del repo. Es la misma consulta que `raptor events`, sin los cambios de sesión (`RepoStore::events_page`, `daemon::seed_activity`). La hora se recorta a "ahora". Sin eventos, el valor queda ausente: no se inventa nada |
+| G2 | **Marca del hueco.** Hay un campo nuevo, `WorktreeView.last_activity_in_gap` (booleano, solo se serializa si es verdadero), bajo la capacidad `scope.activity` que ya existía, sin subir el protocolo (ADR-GRP-016). `without_activity` lo quita. Es verdadero cuando el evento sembrado está enlazado a un hueco (`gap_id`), porque su hora real cae dentro del hueco (ADR-GRP-013 § 6). Un commit visto en vivo antes de la parada no lleva marca. El primer cambio en vivo pone "ahora" y quita la marca (`observe::stamp_activity`); sin cambios, conserva valor y marca |
+| G3 | **TUI.** Con `scope.activity`, el valor sembrado se pinta igual que uno en vivo ("hace 2 min" / "2 min ago"). Sin dato se pinta el glifo de "no disponible" del juego (`Glyphs::unknown`: `–`, ASCII `-`), según la guía de contenido del design system ("No disponible" no es cero). Es igual en en y en es. Sin la capacidad, la columna sigue diciendo "no disponible", porque el motor no publica el dato |
+
+Decisiones (orquestador, 2026-10-06; validadas por Arquitecto):
+
+- **Un booleano y no `Option<gap_id>`.** La TUI solo muestra antigüedades. Si un cliente necesita el hueco, se añade otro campo con `serde(default)` sin romper nada.
+- **`–` del design system y no `—`.** El encargo pedía `—`, pero la guía de contenido (`docs/design-system/README.md`, "No disponible no es cero") fija `–` con el respaldo ASCII `-` del `SymbolSet`, y ganó la guía.
+- **La TUI no distingue el valor sembrado.** El encargo pide la misma forma "hace N min". La marca viaja en el contrato para quien la necesite.
+
+| Escenario | Test |
+|---|---|
+| G1, G2 | `crates/core/tests/channel_capabilities.rs`: `a_restarted_engine_seeds_the_last_activity_from_the_stored_events`, con un perfil temporal: eventos guardados por una ejecución anterior, uno de ellos enlazado a un hueco, y un worktree sin eventos que sigue ausente. `scope_activity_carries_…` sigue verde: un repo recién creado no tiene eventos |
+| G2 (`stamp_activity`) | `crates/core/tests/observe.rs`: `activity::a_live_change_clears_the_gap_mark_of_a_seeded_value` |
+| G3 | `view::tests::published_activity_and_fetch_show_their_age` (en/es); snapshots `fleet_no_agent_100x24_{en,es}` y `fleet_{80x24,120x40}_{dark,light}` con `–` |
+
+Pendiente de esta enmienda:
+
+- Los eventos de reconciliación de un hueco **del observador** en vivo (desbordamiento, recreación del stream, reconciliación periódica) todavía no marcan el valor al sellarlo con `stamp_activity`, que compara vistas y no ve eventos. El Arquitecto lo pidió como ajuste y queda como deuda.
+- La siembra hace una consulta al almacén por worktree al arrancar. No se midió con muchos worktrees. El arranque no cuenta para NFR-04.
+- Solo se verificó en macOS. Linux y Windows quedan para la validación en máquinas reales.
