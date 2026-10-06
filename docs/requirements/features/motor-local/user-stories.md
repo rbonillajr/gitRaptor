@@ -1,7 +1,7 @@
 ---
 mode: draft
 generated: 2026-10-03T00:00Z
-updated: 2026-10-05
+updated: 2026-10-06
 generator: product-owner
 total_artifacts: 19
 expanded: 19
@@ -49,7 +49,7 @@ blocked: []
 | [US-GRP-001](./user-stories/US-GRP-001-estado-worktrees-repo-anadido.md) | El desarrollador ve el estado de cada worktree del repo que añadió | Desarrollador quiere añadir un repo y ver rama, cambios y archivos modificados de sus worktrees sin tocar el repo | in-review ([Dev Spec](./dev-specs/US-GRP-001-dev-spec.md)) |
 | [US-GRP-002](./user-stories/US-GRP-002-cambios-eventos-en-vivo.md) | El desarrollador ve los cambios y eventos de Git de sus worktrees casi al instante | Desarrollador quiere ver en vivo cambios y eventos (commit, rama, rebase, push) con su momento y actor | expanded |
 | [US-GRP-003](./user-stories/US-GRP-003-estados-especiales-no-disponible.md) | El desarrollador sabe qué worktree está en un estado especial o ya no existe | Desarrollador quiere ver estados especiales y worktrees no disponibles sin perder la vista del resto | expanded |
-| [US-GRP-004](./user-stories/US-GRP-004-observacion-continua.md) | El desarrollador encuentra lo ocurrido aunque no tuviera GitRaptor abierto | Desarrollador quiere que la actividad se capture sin superficie abierta y sobreviva a reinicios | expanded |
+| [US-GRP-004](./user-stories/US-GRP-004-observacion-continua.md) | El desarrollador encuentra lo ocurrido aunque no tuviera GitRaptor abierto | Desarrollador quiere que la actividad se capture sin superficie abierta y sobreviva a reinicios | in-review ([Dev Spec](./dev-specs/US-GRP-004-dev-spec.md)) |
 | [US-GRP-005](./user-stories/US-GRP-005-hueco-sin-atribuir.md) | El desarrollador distingue lo que el motor no vio ocurrir | Desarrollador quiere que los cambios de un hueco o tras perder el perfil queden "sin atribuir" | expanded |
 | [US-GRP-006](./user-stories/US-GRP-006-retirar-y-volver-a-anadir.md) | El desarrollador recupera el historial de un repo que retiró y volvió a añadir | Desarrollador quiere retirar un repo sin perder sus datos y recuperarlos al volver a añadirlo | expanded |
 | [US-GRP-007](./user-stories/US-GRP-007-sesiones-claude-code.md) | El desarrollador sabe qué sesión de Claude Code trabaja en cada worktree y si sigue activa | Desarrollador quiere detectar sesiones de Claude Code con su estado sin registrarlas a mano | expanded |
@@ -153,3 +153,4 @@ blocked: []
 | 1.9 | 2026-10-05 | Orquestador para Rene Bonilla | US-GRP-002 implementada (en revisión) con [Dev Spec](./dev-specs/US-GRP-002-dev-spec.md): observador de cambios, historial de eventos de Git "sin atribuir", `events.history` y `raptor events`. Un watcher por worktree en macOS adoptado tras medirlo (0 eventos perdidos). Alcance sin cambios: ahead/behind, estados especiales, sesiones y `gap.recorded` siguen en sus historias. Decisiones del orquestador validadas por PO y Arquitecto |
 | 1.10 | 2026-10-05 | Orquestador (decisión validada por PO y Arquitecto) | Consumo de recursos (Rene Bonilla, 2026-10-05): US-GRP-017 (`raptor status --resources`, Must, M1), US-GRP-018 (`raptor doctor`, Could) y US-GRP-019 (ahorro de energía, Could). Enabler TS-GRP-005; ADR-GRP-015; RES-01 a RES-10 |
 | 1.11 | 2026-10-05 | Orquestador (decisiones validadas por PO y Arquitecto) | US-GRP-009 implementada (en revisión) con [Dev Spec](./dev-specs/US-GRP-009-dev-spec.md): `registration.register` y `registration.withdraw`, `raptor agent register` y `raptor agent withdraw`, confirmación de la sesión detectada (P16 con el supuesto "sí", pendiente de ratificar por Rene), evidencia por registro para un "otro agente" único en su worktree y sesiones registradas que sobreviven al reinicio. Sin cambios de alcance ni de dependencias; la vía MCP (`register_agent`) sigue en US-MCP-006 |
+| 1.12 | 2026-10-06 | Orquestador (decisiones validadas por el Arquitecto) | US-GRP-004 implementada (en revisión) con [Dev Spec](./dev-specs/US-GRP-004-dev-spec.md): la captura sin superficie abierta y la persistencia tras el reinicio se prueban de punta a punta, y llega el autoarranque real con `raptor daemon enable` y `disable` (PQ-1). Los clientes arrancan el motor por el gestor de servicios cuando está registrado, y `scope.snapshot` dice si lo está. Sin cambios de alcance ni de dependencias |

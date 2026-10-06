@@ -223,4 +223,4 @@ Daemon y cliente reales sobre perfiles y repos temporales del testkit (NFR-01). 
 
 - Linux y Windows: *Pendiente: etapa de validación multiplataforma*. Las pruebas de `channel_scopes` son solo de macOS, como las de `channel.rs`. En Windows el canal sigue sin transporte (fail-closed). El clippy cruzado a `x86_64-pc-windows-msvc` no se pudo correr en este Mac (falta el compilador C de `libsqlite3-sys`); lo cubre el CI.
 - **INF-CKP-001**: sacar la biblioteca cliente de `crates/core` (A1, V5).
-- N8, N9, N10; emisores de `repo.attention`; `autostart` real (US-GRP-004).
+- N8, N9, N10; emisores de `repo.attention`. El `autostart` real ya lo entrega US-GRP-004 ([Dev Spec](./US-GRP-004-dev-spec.md)).
