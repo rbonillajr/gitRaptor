@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
-updated: 2026-10-05
+updated: 2026-10-06
 deciders: [Rene Bonilla]
 domain: GRP
 feature: guardrails
@@ -348,3 +348,13 @@ Fija lo que la Enmienda de SPIKE-GRD-001 dejaba a la Dev Spec de US-GRD-001 ([DS
 | `manifest.json` (§ 1) | Se escribe con los pasos copiables de la recuperación manual | § 1 |
 
 **Riesgo nuevo declarado**: tras actualizar el binario con el daemon viejo vivo, en Linux el par puede ser otro archivo y el hook deniega en refs gobernadas (`channel-not-authentic`) hasta que el daemon se reemplace. La mitigación (el daemon se cierra si cambia la identidad de su propio ejecutable) es de US-GRD-003 con el § 8.
+
+## Enmienda (2026-10-06, US-GRD-018)
+
+Dispatchers de la política de autoría de los commits (BR-AUTH-005; [DS-US-GRD-018](../../requirements/features/guardrails/dev-specs/US-GRD-018-autoria-commits-persona-y-agente.md), D6; ADR-GRD-003, Enmienda 2026-10-06). **Decisión del orquestador (2026-10-06), validada por el Arquitecto.** El `status` sigue en `accepted`.
+
+| Cambio | Resolución | Dónde |
+|---|---|---|
+| Conjunto de dispatchers | Se añaden `pre-commit` y `commit-msg` al conjunto instalado (`pre-push`, `pre-rebase`, `reference-transaction`). El stub nativo los reconoce y su respaldo sin `raptor` es **dejar pasar con aviso** (un commit no es una operación de riesgo del mínimo) | § 1, § 2, § 3 |
+| Plantilla | `TEMPLATE_VERSION = 2`; `raptor hook` acepta la 1 y la 2. Una instalación con la plantilla 1 sigue protegida por el mínimo y gana los dos dispatchers al reinstalar | § 2 |
+| Hooks previos | Sin cambio: `pre-commit` y `commit-msg` ya cuentan como hooks previos que impiden instalar (US-GRD-001, D3) | § 4 |
