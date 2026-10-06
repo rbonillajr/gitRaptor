@@ -7,7 +7,7 @@ feature: cockpit
 domain: GRP
 story: TS-CKP-004
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-06
 related:
   adrs: [ADR-GRP-003, ADR-CKP-003, ADR-GRP-002, ADR-GRP-001]
   nfrs: [NFR-09]
@@ -169,6 +169,6 @@ Precedencia: `--theme` > `GITRAPTOR_THEME` > OSC 11 > `COLORFGBG` > oscura. `aut
 
 ### 8.5 Fuera de alcance
 
-- Cablear `--theme` en clap y llamar a `term::detect_theme` al arrancar la TUI: INF-CKP-001 (antes del lector de eventos de crossterm). Snapshots de widgets en las dos variantes: TS-CKP-005.
+- ~~Cablear `--theme` en clap y llamar a `term::detect_theme` al arrancar la TUI~~: hecho en US-CKP-001 (2026-10-06), antes del lector de eventos de crossterm, junto con `--no-color`, `--ascii` y la profundidad de color ([DS-US-CKP-001](./US-CKP-001-flota-en-vivo.md) D3). Snapshots de widgets en las dos variantes: TS-CKP-005.
 - Detección en Linux (probada solo en macOS) y en Windows (stub): **Pendiente: etapa de validación multiplataforma**.
 

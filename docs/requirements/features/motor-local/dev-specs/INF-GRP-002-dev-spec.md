@@ -6,7 +6,7 @@ status: approved
 feature: motor-local
 domain: GRP
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-06
 related:
   stories: [INF-GRP-002, TD-GRP-002, TD-GRP-003, US-GRP-002, US-GRP-007, SPIKE-GRP-002, SPIKE-CKP-001]
   adrs: [ADR-GRP-011, ADR-GRP-010, ADR-GRP-015, ADR-GRP-005, ADR-GRP-006, ADR-GRP-013]
@@ -233,3 +233,15 @@ El coordinador pidió hacer la validación en Linux, donde es equivalente, y dej
 | macOS | 22,1 min (17–27; 19 jobs), más la espera en la cola de 5 runners | 0 (corre en el push a `main`, en el nightly y bajo demanda) |
 
 Linux y Windows: el runner de Linux se calibró en CI. **Windows no se mide** (el cliente del canal es solo Unix). **Pendiente: etapa de validación multiplataforma**.
+
+## Enmienda (2026-10-06, US-CKP-001): escenario `tui-modify`
+
+Aplicada desde la [Dev Spec de US-CKP-001](../../cockpit/dev-specs/US-CKP-001-flota-en-vivo.md) (D4). **Decisión del orquestador (2026-10-06), validada por el Arquitecto.** El banco mide la frescura de punta a punta hasta la pantalla (criterio 6 del hito M1).
+
+| Cambio | Detalle |
+|---|---|
+| **Escenario `tui-modify`** | La `App` real del Cockpit (colas, hilo del canal, `update`, `view`) sobre `TestBackend` 120×40, conectada al daemon aislado del banco por el canal real. Cada muestra escribe el archivo del banco en `wt-3` (`t0`) y avanza la TUI hasta que el frame pintado muestra el nuevo recuento (`t_render`, `metrics.last_render_ns`). Con las mismas condiciones que el resto: perfil H (100K commits) y 10 worktrees. `--only tui-modify` lo corre solo |
+| **Presupuesto de punta a punta** | NFR-04: 500 ms p95, más el exceso de holgura del temporizador. Falla en `--gate reference` (con la regla "no apta") y en `--gate ci` solo se reporta |
+| **Etapa del Cockpit** | `t_client_recv` → `t_render` ≤ 100 ms p95 (ADR-GRP-011 E2). Falla en los dos modos: es trabajo de CPU sobre `TestBackend` y no depende de la holgura del runner |
+| **Regresión en `ci`** | Techo por runner con la confirmación 2 de 3. ⚠️ **Provisional** hasta calibrarlo con tres corridas por runner: los techos de `modify` más 100 ms (`TUI_MODIFY` en `REGRESSION_CEILINGS`) |
+| **Dónde corre** | Igual que el banco: Linux en cada PR y macOS en `main`, en el nightly y bajo demanda. El workflow no cambia |

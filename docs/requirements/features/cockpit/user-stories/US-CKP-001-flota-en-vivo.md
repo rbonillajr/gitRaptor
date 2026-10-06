@@ -2,16 +2,23 @@
 id: US-CKP-001
 title: "El desarrollador ve en vivo qué agente trabaja en cada worktree de un repo"
 type: us
-status: draft
+status: implemented
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-06
 feature: cockpit
 related:
   context:
     - CTX-CKP-001
   rules:
-    - BR-CKP-001
+    - BR-CKP-CALC-001
+    - BR-CKP-CONS-001
+    - BR-CKP-CONS-003
+    - BR-CKP-VAL-002
+    - BR-CKP-TIME-001
+    - BR-CKP-WF-001
+  dev-spec:
+    - DS-US-CKP-001
   stories:
     - US-GRP-001
     - US-GRP-002
@@ -46,10 +53,10 @@ BR-CKP-CALC-001 · BR-CKP-CONS-001 · BR-CKP-CONS-003 · BR-CKP-VAL-002 · BR-CK
 
 **Escenario: Una fila por worktree, con el agente primero**
 
-Dado el repo "shop" observado, con el worktree principal en "main" y el worktree "feat-pagos" con una sesión Activa de "claude-1", 2 archivos modificados y 3 commits por delante y 1 por detrás de la copia local del remoto
+Dado el repo "shop" observado, con el worktree principal en "main" y el worktree "feat-pagos" con una sesión Activa de "claude-1", 2 archivos modificados y 3 commits por delante y 1 por detrás de la rama base "main" (copia local)
 Cuando el desarrollador abre la TUI en "shop"
 Entonces la vista muestra el worktree principal en la primera fila
-  Y la fila de "feat-pagos" muestra "claude-1", Activo, la rama, 2 archivos y "↑3 ↓1 según copia local" con su antigüedad
+  Y la fila de "feat-pagos" muestra "claude-1", Activo, la rama, 2 archivos y "↑3 ↓1" respecto a "main", con la antigüedad de la copia local "no disponible"
 
 **Escenario: Un cambio se ve en menos de medio segundo**
 
@@ -77,11 +84,18 @@ Dado un worktree cuya rama lleva en el nombre una secuencia de escape que borrar
 Cuando la TUI pinta su fila
 Entonces la secuencia aparece neutralizada y visible, y la terminal no cambia de estado
 
+> **Enmienda (2026-10-06), ajuste del PO al implementar.** El motor cuenta el ahead/behind contra la rama base (`DivergenceView`), no contra el remoto, y no publica la antigüedad de la copia local. El escenario 1 nombra la referencia real y la antigüedad se muestra "no disponible" (BR-CKP-CALC-001, misma enmienda).
+
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto (Dev Spec)._
+Ver la [Dev Spec](../dev-specs/US-CKP-001-flota-en-vivo.md) (DS-US-CKP-001). En resumen:
+
+- La vista compone StatusBar, AgentList y KeyHints de la biblioteca TS-CKP-005, que se amplía en tres puntos: fila sin agente, columnas que crecen y recuentos "no disponibles".
+- Las sesiones llegan por `sessions.list` tras la instantánea del repo y se fusionan con `session.state` con un único upsert (D1, enmienda de ADR-CKP-003 § 4).
+- `--theme`, `--no-color` y `--ascii`, más la detección del fondo, se resuelven antes del lector de eventos (D3).
+- El gate de frescura de punta a punta es el escenario `tui-modify` del banco INF-GRP-002 (D4).
 
 ## Diseño y Dev Spec
 
-- **Diseño:** DSYS-GRP-001 (TUI); ADR-GRP-004 § 3; ADR-CKP-003.
-- **Dev Spec:** pendiente.
+- **Diseño:** DSYS-GRP-001 (TUI, enmienda del 2026-10-06); ADR-GRP-004 § 3; ADR-CKP-003.
+- **Dev Spec:** [DS-US-CKP-001](../dev-specs/US-CKP-001-flota-en-vivo.md).

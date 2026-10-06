@@ -125,6 +125,8 @@ IF campo no publicado → "no disponible"; nunca se calcula en la TUI
 
 **Ejemplo**: `feat-pagos` muestra "↑3 ↓1 según copia local (hace 2 h)". La última actividad no se publica aún → "no disponible" hasta DEP-CKP-4.
 
+> **Enmienda (2026-10-06, US-CKP-001), ajuste del PO.** El motor publica el ahead/behind contra la **rama base** (`DivergenceView`, US-GRP-012), no contra el remoto, y no publica la antigüedad de la copia local. La etiqueta nombra la referencia real ("↑3 ↓1 respecto a main") y la antigüedad se muestra "no disponible". Publicarla es una dependencia nueva del motor, todavía sin dueño. Un recuento acotado se presenta como "al menos" ("↑10000+"). Si no hay recuento (sin base, base ausente, sin commits, ilegible), se muestra el motivo y nunca un 0. Los ⚡ y ⛔ de la cabecera que el motor no cuenta todavía se pintan "–", que significa "no disponible" (DSYS-GRP-001, enmienda del 2026-10-06).
+
 **Fuentes**: Q-CKP-29; Q12 de motor-local; ADR-GRP-005, ADR-GRP-013; DEP-CKP-4.
 
 ### BR-CKP-CALC-002: Predicción en dos niveles con límites declarados
