@@ -5,8 +5,12 @@
 //! releases it when the process dies, so a crash never leaves a stale lock
 //! that needs manual cleanup. The file itself is never deleted: deleting a
 //! lock file races with a daemon that already opened it.
+//!
+//! On Windows a locked range cannot be read through another handle, so the
+//! lock covers one byte far past the PID (`LOCK_BYTE`) instead of the whole
+//! file: the holder's PID stays readable.
 
-use std::fs::{File, OpenOptions, TryLockError};
+use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
@@ -29,14 +33,10 @@ impl InstanceLock {
     pub fn acquire(state_dir: &Path) -> Result<Self, DaemonError> {
         let path = state_dir.join(LOCK_FILE);
         let mut file = open_lock_file(&path)?;
-        match file.try_lock() {
-            Ok(()) => {}
-            Err(TryLockError::WouldBlock) => {
-                return Err(DaemonError::AlreadyRunning {
-                    pid: read_pid(&mut file),
-                });
-            }
-            Err(TryLockError::Error(err)) => return Err(err.into()),
+        if !try_lock(&file, true)? {
+            return Err(DaemonError::AlreadyRunning {
+                pid: read_pid(&mut file),
+            });
         }
         file.set_len(0)?;
         file.seek(SeekFrom::Start(0))?;
@@ -54,7 +54,16 @@ impl InstanceLock {
     pub fn release(self) -> io::Result<()> {
         self.file.set_len(0)?;
         self.file.sync_all()?;
-        self.file.unlock()
+        unlock(&self.file)
+    }
+}
+
+impl Drop for InstanceLock {
+    /// Unlocks explicitly: closing the handle releases the lock too, but
+    /// Windows does not say when. After [`InstanceLock::release`] this finds
+    /// nothing to unlock, which is fine.
+    fn drop(&mut self) {
+        let _ = unlock(&self.file);
     }
 }
 
@@ -64,6 +73,11 @@ impl InstanceLock {
 /// one. If no daemon runs, the probe holds the shared lock for an instant;
 /// a daemon starting in that instant exits as "already running" and the
 /// client retries (TS-GRP-004).
+///
+/// A held lock is never reported as `None`. Its PID can be missing for an
+/// instant (a daemon between taking the lock and writing it, or clearing it
+/// on stop): the probe retries, and if the lock is still held without a PID
+/// it fails with [`DaemonError::AlreadyRunning`] and no PID.
 pub fn running_pid(state_dir: &Path) -> Result<Option<u32>, DaemonError> {
     let path = state_dir.join(LOCK_FILE);
     let mut file = match open_existing(&path) {
@@ -72,13 +86,57 @@ pub fn running_pid(state_dir: &Path) -> Result<Option<u32>, DaemonError> {
         Err(err) => return Err(err.into()),
     };
     verify_lock_file(&file, &path)?;
-    match file.try_lock_shared() {
-        Ok(()) => {
-            file.unlock()?;
-            Ok(None)
+    for _ in 0..PID_RETRIES {
+        if try_lock(&file, false)? {
+            unlock(&file)?;
+            return Ok(None);
         }
-        Err(TryLockError::WouldBlock) => Ok(read_pid(&mut file)),
-        Err(TryLockError::Error(err)) => Err(err.into()),
+        if let Some(pid) = read_pid(&mut file) {
+            return Ok(Some(pid));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    Err(DaemonError::AlreadyRunning { pid: None })
+}
+
+/// Reads of a held lock without a PID before giving up (10 ms apart).
+const PID_RETRIES: u32 = 20;
+
+/// The byte the lock covers on Windows: past any PID, so it stays readable.
+#[cfg(windows)]
+const LOCK_BYTE: u64 = 1 << 62;
+
+/// Takes the lock without waiting, exclusive or shared. `Ok(false)` when
+/// another handle holds a conflicting one.
+fn try_lock(file: &File, exclusive: bool) -> io::Result<bool> {
+    #[cfg(windows)]
+    {
+        gitraptor_winsys::file_lock::try_lock_byte(file, LOCK_BYTE, exclusive)
+    }
+    #[cfg(not(windows))]
+    {
+        use std::fs::TryLockError;
+        let taken = if exclusive {
+            file.try_lock()
+        } else {
+            file.try_lock_shared()
+        };
+        match taken {
+            Ok(()) => Ok(true),
+            Err(TryLockError::WouldBlock) => Ok(false),
+            Err(TryLockError::Error(err)) => Err(err),
+        }
+    }
+}
+
+fn unlock(file: &File) -> io::Result<()> {
+    #[cfg(windows)]
+    {
+        gitraptor_winsys::file_lock::unlock_byte(file, LOCK_BYTE)
+    }
+    #[cfg(not(windows))]
+    {
+        file.unlock()
     }
 }
 
@@ -90,8 +148,10 @@ pub fn wait_until_released(
 ) -> Result<bool, DaemonError> {
     let start = std::time::Instant::now();
     loop {
-        if running_pid(state_dir)?.is_none() {
-            return Ok(true);
+        match running_pid(state_dir) {
+            Ok(None) => return Ok(true),
+            Ok(Some(_)) | Err(DaemonError::AlreadyRunning { .. }) => {}
+            Err(err) => return Err(err),
         }
         if start.elapsed() >= timeout {
             return Ok(false);
