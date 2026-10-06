@@ -215,3 +215,5 @@ Aplicada al implementar los tokens ([TS-CKP-004](../requirements/features/cockpi
 - ⚠️ **ASSUMPTION** (§ 8 sigue abierta): acento teal, paleta de agentes Okabe-Ito (apta para daltonismo) con `agent.8` en blanco y el azul aclarado, y fondo oscuro supuesto para el informe del juego normal.
 
 Anchura real de `⚡`, `⛔`, `⚠` y `ℹ` en Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
+
+<!-- ci speed probe: mixed -->

@@ -60,3 +60,5 @@ mod tests {
         const { assert!(MIN_COMPATIBLE_PROTOCOL <= PROTOCOL_VERSION) };
     }
 }
+
+// ci speed probe: mixed
