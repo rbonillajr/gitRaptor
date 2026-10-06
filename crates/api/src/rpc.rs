@@ -91,10 +91,12 @@ pub enum ErrorCode {
     RepoRejected,
     OperationRejected,
     RegistrationRejected,
+    /// Protocol 7 (US-GRD-001).
+    GuardRejected,
 }
 
 impl ErrorCode {
-    pub const ALL: [Self; 20] = [
+    pub const ALL: [Self; 21] = [
         Self::ParseError,
         Self::InvalidRequest,
         Self::MethodNotFound,
@@ -115,6 +117,7 @@ impl ErrorCode {
         Self::RepoRejected,
         Self::OperationRejected,
         Self::RegistrationRejected,
+        Self::GuardRejected,
     ];
 
     pub const fn code(self) -> i64 {
@@ -139,6 +142,7 @@ impl ErrorCode {
             Self::RepoRejected => code::REPO_REJECTED,
             Self::OperationRejected => code::OPERATION_REJECTED,
             Self::RegistrationRejected => code::REGISTRATION_REJECTED,
+            Self::GuardRejected => code::GUARD_REJECTED,
         }
     }
 
@@ -169,6 +173,7 @@ impl ErrorCode {
             Self::RepoRejected => "repo-rejected",
             Self::OperationRejected => "operation-rejected",
             Self::RegistrationRejected => "registration-rejected",
+            Self::GuardRejected => "guard-rejected",
         }
     }
 }
@@ -420,6 +425,7 @@ mod tests {
             code::REPO_REJECTED,
             code::OPERATION_REJECTED,
             code::REGISTRATION_REJECTED,
+            code::GUARD_REJECTED,
         ];
         assert_eq!(constants.len(), ErrorCode::ALL.len());
         for c in constants {
