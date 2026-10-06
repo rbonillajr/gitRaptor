@@ -6,7 +6,6 @@
 use gitraptor_api::Actor;
 #[cfg(test)]
 use gitraptor_api::catalog::Layer;
-use gitraptor_api::rpc::ErrorCode;
 use gitraptor_api::scope::{AutostartView, ConnectionRequester};
 use serde::Serialize;
 
@@ -18,9 +17,10 @@ pub fn key(group: &str, value: &impl Serialize) -> String {
     format!("{group}.{}", status::wire(value))
 }
 
-/// The message of an error code (`error.<name>`).
-pub fn error_key(code: ErrorCode) -> String {
-    format!("error.{}", code.as_str())
+/// The message of the code named `name`, of the frozen list or of a module
+/// (`error.<name>`, ADR-GRP-016 § 3).
+pub fn error_name_key(name: &str) -> String {
+    format!("error.{name}")
 }
 
 fn actor_text(actor: &Actor) -> String {
@@ -67,14 +67,18 @@ mod tests {
     use crate::i18n::has_key;
     use gitraptor_api::AgentKind;
     use gitraptor_api::messages::{ResyncReason, StopCauseCode};
-    use gitraptor_api::rpc::{InvalidReason, ScopeRefusal};
+    use gitraptor_api::rpc::{ErrorCode, InvalidReason, ScopeRefusal};
     use gitraptor_api::scope::UnavailableCause;
 
     /// V8: every code of the contract that a client presents has its
     /// message in English and Spanish.
     #[test]
     fn every_contract_code_has_both_messages() {
-        let mut keys: Vec<String> = ErrorCode::ALL.into_iter().map(error_key).collect();
+        let mut keys: Vec<String> = ErrorCode::ALL
+            .iter()
+            .map(|c| error_name_key(c.as_str()))
+            .collect();
+        keys.extend(gitraptor_api::rpc::module_errors().map(|e| error_name_key(e.name)));
         keys.extend(ResyncReason::ALL.iter().map(|v| key("resync", v)));
         keys.extend(UnavailableCause::ALL.iter().map(|v| key("unavailable", v)));
         keys.extend(AutostartView::ALL.iter().map(|v| key("autostart", v)));
