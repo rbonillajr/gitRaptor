@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 
 use common::*;
 use gitraptor_api::capability::{AcceptResult, CAPABILITIES_PROTOCOL};
-use gitraptor_api::messages::{ClientKind, SubscribeResult};
+use gitraptor_api::messages::ClientKind;
 use gitraptor_api::rpc::code;
 use gitraptor_api::{PROTOCOL_VERSION, methods};
 use gitraptor_core::channel::ChannelConfig;
@@ -33,17 +33,31 @@ struct Running {
 
 impl Running {
     fn start(dirs: ProfileDirs, channel: ChannelConfig) -> Self {
+        Self::start_with(dirs, channel, false)
+    }
+
+    /// With `git`, the system Git of the environment: the engine observes its repos.
+    fn start_with(dirs: ProfileDirs, channel: ChannelConfig, git: bool) -> Self {
         let protocol = channel.protocol;
+        let env = DaemonEnv::from_vars(if git {
+            std::env::vars_os().collect()
+        } else {
+            Vec::new()
+        });
         let config = DaemonConfig {
             dirs: dirs.clone(),
-            env: DaemonEnv::from_vars(Vec::new()),
-            git: ResolveConfig {
-                configured_path: None,
-                path_env: None,
-                known_locations: Vec::new(),
-                shim_paths: Vec::new(),
-                toolchain_gits: Vec::new(),
+            git: if git {
+                env.git_resolve_config(None)
+            } else {
+                ResolveConfig {
+                    configured_path: None,
+                    path_env: None,
+                    known_locations: Vec::new(),
+                    shim_paths: Vec::new(),
+                    toolchain_gits: Vec::new(),
+                }
             },
+            env,
             heartbeat: Duration::from_secs(3600),
             log: LogLimits::default(),
             stop_deadline: None,
@@ -116,9 +130,15 @@ impl Raw {
         let line = json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params});
         self.stream.write_all(line.to_string().as_bytes()).unwrap();
         self.stream.write_all(b"\n").unwrap();
-        let mut answer = String::new();
-        self.reader.read_line(&mut answer).unwrap();
-        serde_json::from_str(&answer).unwrap()
+        // Notifications that arrive before the answer are skipped.
+        loop {
+            let mut answer = String::new();
+            self.reader.read_line(&mut answer).unwrap();
+            let answer: Value = serde_json::from_str(&answer).unwrap();
+            if answer["id"] == id {
+                return answer;
+            }
+        }
     }
 
     fn hello(&mut self, protocol: u32) -> Value {
@@ -175,37 +195,27 @@ fn only_protocol_9_hears_of_capabilities() {
 fn accept_grants_what_the_daemon_serves_once_before_subscribing() {
     let tp = TempProfile::new();
     let r = Running::start(tp.dirs(), ChannelConfig::default());
-    let mut client = r.connect(PROTOCOL_VERSION);
-    let granted: AcceptResult = client
-        .call(
-            methods::CONNECTION_ACCEPT,
-            json!({"capabilities": ["events.git-reset", "nobody.knows-this"]}),
-        )
-        .unwrap();
-    assert!(
-        granted
-            .capabilities
-            .contains(&"events.git-reset".to_owned())
+    // Raw connections: the library client already accepts what it knows on connecting.
+    let mut client = r.raw();
+    client.hello(PROTOCOL_VERSION);
+    let answer = client.call(
+        1,
+        methods::CONNECTION_ACCEPT,
+        json!({"capabilities": ["events.git-reset", "scope.activity", "nobody.knows-this"]}),
     );
-    assert!(
-        granted
-            .capabilities
-            .contains(&"connection.requester".to_owned())
-    );
+    let granted: AcceptResult = serde_json::from_value(answer["result"].clone()).unwrap();
+    for name in ["events.git-reset", "connection.requester", "scope.activity"] {
+        assert!(granted.capabilities.contains(&name.to_owned()), "{name}");
+    }
     assert!(!granted.capabilities.iter().any(|c| c.starts_with("nobody")));
-    let again = client
-        .call::<_, AcceptResult>(methods::CONNECTION_ACCEPT, json!({"capabilities": []}))
-        .unwrap_err();
-    assert_eq!(rpc_code(again), code::INVALID_REQUEST);
+    let again = client.call(2, methods::CONNECTION_ACCEPT, json!({"capabilities": []}));
+    assert_eq!(again["error"]["code"], code::INVALID_REQUEST, "{again}");
 
-    let mut subscribed = r.connect(PROTOCOL_VERSION);
-    let _: SubscribeResult = subscribed
-        .call(methods::EVENTS_SUBSCRIBE, json!({"from_seq": 1}))
-        .unwrap();
-    let late = subscribed
-        .call::<_, AcceptResult>(methods::CONNECTION_ACCEPT, json!({"capabilities": []}))
-        .unwrap_err();
-    assert_eq!(rpc_code(late), code::INVALID_REQUEST);
+    let mut subscribed = r.raw();
+    subscribed.hello(PROTOCOL_VERSION);
+    subscribed.call(1, methods::EVENTS_SUBSCRIBE, json!({"from_seq": 1}));
+    let late = subscribed.call(2, methods::CONNECTION_ACCEPT, json!({"capabilities": []}));
+    assert_eq!(late["error"]["code"], code::INVALID_REQUEST, "{late}");
 
     let mut old = r.connect(8);
     let missing = old
@@ -213,14 +223,17 @@ fn accept_grants_what_the_daemon_serves_once_before_subscribing() {
         .unwrap_err();
     assert_eq!(rpc_code(missing), code::METHOD_NOT_FOUND);
 
-    let mut flood = r.connect(PROTOCOL_VERSION);
+    let mut flood = r.raw();
+    flood.hello(PROTOCOL_VERSION);
     let names: Vec<String> = (0..=gitraptor_api::capability::MAX_ACCEPTED)
         .map(|i| format!("x.{i}"))
         .collect();
-    let refused = flood
-        .call::<_, AcceptResult>(methods::CONNECTION_ACCEPT, json!({"capabilities": names}))
-        .unwrap_err();
-    assert_eq!(rpc_code(refused), code::INVALID_PARAMS);
+    let refused = flood.call(
+        1,
+        methods::CONNECTION_ACCEPT,
+        json!({ "capabilities": names }),
+    );
+    assert_eq!(refused["error"]["code"], code::INVALID_PARAMS, "{refused}");
 }
 
 /// A client knows which capabilities of its own an older daemon of its
@@ -326,4 +339,88 @@ fn before_9_the_same_protocol_never_replaces() {
     assert!(raw.hello(8)["result"].is_object());
     let refused = raw.call(1, methods::DAEMON_REPLACE, json!({"protocol": 8}));
     assert_eq!(refused["error"]["code"], code::INVALID_PARAMS, "{refused}");
+}
+
+/// The scope of one repo.
+fn repo_scope(repo_id: &str) -> Value {
+    serde_json::to_value(gitraptor_api::scope::Scope::Repo {
+        repo_id: repo_id.to_owned(),
+    })
+    .unwrap()
+}
+
+/// The next `worktree.state` of a repo scope, as the connection receives it.
+fn next_worktree_state(next: &mut dyn FnMut() -> Option<Value>) -> Value {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while Instant::now() < deadline {
+        if let Some(n) = next()
+            && n["method"] == methods::NOTIFY_SCOPE_EVENT
+            && n["params"]["event"]["kind"] == gitraptor_api::event::WORKTREE_STATE
+        {
+            return n["params"]["event"]["data"].clone();
+        }
+    }
+    panic!("no worktree.state");
+}
+
+/// DEP-CKP-4 (ADR-GRP-013, amendment 2026-10-04): with `scope.activity` a connection sees the
+/// repo's last fetch and, once a worktree changes, its last activity; without it, neither
+/// field reaches it (its types reject unknown fields), in the snapshot or in `worktree.state`.
+#[test]
+fn scope_activity_carries_the_last_fetch_and_activity_only_to_who_accepted_it() {
+    let tp = TempProfile::new();
+    let tmp = tempfile::tempdir().unwrap();
+    let wt = init_repo(tmp.path(), "shop", true);
+    std::fs::write(common_dir(&wt).join("FETCH_HEAD"), "").unwrap();
+    let (entry, _) = tp.open().add_repo(&common_dir(&wt), None, 1).unwrap();
+    let repo_id = entry.repo_id;
+    let r = Running::start_with(tp.dirs(), ChannelConfig::default(), true);
+
+    // The library client accepts every capability it knows when it connects.
+    let mut with = r.connect(PROTOCOL_VERSION);
+    let mut without = r.raw();
+    without.hello(PROTOCOL_VERSION);
+
+    let scope = repo_scope(&repo_id);
+    let snap: Value = with
+        .call(methods::SCOPE_SNAPSHOT, json!({ "scope": scope }))
+        .unwrap();
+    assert!(snap["repo"]["fetched_utc_ms"].is_i64(), "{snap}");
+    // Nothing changed yet in this run: no activity is known.
+    assert!(
+        snap["repo"]["worktrees"][0]
+            .get("last_activity_utc_ms")
+            .is_none()
+    );
+    let next = |snap: &Value| json!({"scope": scope, "from_seq": snap["scope_seq"].as_u64().unwrap() + 1, "run_id": snap["run_id"]});
+    let _: Value = with.call(methods::SCOPE_SUBSCRIBE, next(&snap)).unwrap();
+    let bare = without.call(2, methods::SCOPE_SNAPSHOT, json!({ "scope": scope }));
+    assert!(
+        bare["result"]["repo"].get("fetched_utc_ms").is_none(),
+        "{bare}"
+    );
+    let sub = without.call(3, methods::SCOPE_SUBSCRIBE, next(&bare["result"]));
+    assert!(sub["result"].is_object(), "{sub}");
+
+    std::fs::write(wt.join("new.txt"), "x").unwrap();
+    let seen = next_worktree_state(&mut || {
+        with.next_notification(Duration::from_millis(200))
+            .unwrap()
+            .map(|n| serde_json::to_value(n).unwrap())
+    });
+    assert!(
+        seen["worktrees"][0]["last_activity_utc_ms"].is_i64(),
+        "{seen}"
+    );
+    assert!(seen["fetched_utc_ms"].is_i64(), "{seen}");
+    let plain = next_worktree_state(&mut || {
+        let mut line = String::new();
+        without.reader.read_line(&mut line).ok()?;
+        serde_json::from_str(&line).ok()
+    });
+    assert!(
+        plain["worktrees"][0].get("last_activity_utc_ms").is_none(),
+        "{plain}"
+    );
+    assert!(plain.get("fetched_utc_ms").is_none(), "{plain}");
 }

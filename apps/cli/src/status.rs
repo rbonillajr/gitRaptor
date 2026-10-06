@@ -410,6 +410,7 @@ mod tests {
 
     fn snapshot() -> Snapshot {
         let wt = |path: &str, main, status| WorktreeView {
+            last_activity_utc_ms: None,
             path: Untrusted::new(path),
             main,
             admin_name: None,
@@ -429,6 +430,7 @@ mod tests {
                 started_wall_ms: 0,
             },
             repos: vec![RepoView {
+                fetched_utc_ms: None,
                 repo_id: "ab-01".into(),
                 state: RepoStateView::Observed,
                 path: Untrusted::new("/w/demo/.git"),

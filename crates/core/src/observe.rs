@@ -45,6 +45,75 @@ pub fn canonical(path: &Path) -> PathBuf {
     gitraptor_git::paths::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
+/// When the local copy of the remote was last fetched (DEP-CKP-4): the time
+/// of `<common dir>/FETCH_HEAD`, never later than `now_ms` (a clock moved
+/// back would show a fetch in the future). `None` if the repo was never
+/// fetched. A fetch that writes no `FETCH_HEAD` is not seen.
+pub fn fetched_utc_ms(common_dir: &Path, now_ms: i64) -> Option<i64> {
+    let modified = std::fs::metadata(common_dir.join("FETCH_HEAD"))
+        .ok()?
+        .modified()
+        .ok()?;
+    let ms = modified
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_millis();
+    Some(i64::try_from(ms).unwrap_or(i64::MAX).min(now_ms))
+}
+
+/// The last activity of each worktree (DEP-CKP-4, ADR-GRP-013 amendment of
+/// 2026-10-04): `now_ms` when its head commit, its branch, its changes or
+/// its readability changed since the `old` views, the old value otherwise.
+/// The ahead/behind does not count (a fetch moves it with nobody touching
+/// the worktree), nor do sessions. A worktree that appears in a repo that
+/// already had worktrees is activity; on the first read of a repo nothing
+/// is known yet. `old_heads` and `new_heads` are aligned with their views.
+pub fn stamp_activity(
+    old: &[WorktreeView],
+    old_heads: &[HeadRef],
+    new: &mut [WorktreeView],
+    new_heads: &[HeadRef],
+    now_ms: i64,
+) {
+    for (i, view) in new.iter_mut().enumerate() {
+        let Some(j) = old.iter().position(|o| o.path == view.path) else {
+            if !old.is_empty() {
+                view.last_activity_utc_ms = Some(now_ms);
+            }
+            continue;
+        };
+        let moved = matches!(
+            (old_heads.get(j), new_heads.get(i)),
+            (Some(a), Some(b)) if a != b
+        );
+        view.last_activity_utc_ms = if moved || !same_but_divergence(&old[j].status, &view.status) {
+            Some(now_ms)
+        } else {
+            old[j].last_activity_utc_ms
+        };
+    }
+}
+
+fn same_but_divergence(a: &WorktreeStatus, b: &WorktreeStatus) -> bool {
+    match (a, b) {
+        (
+            WorktreeStatus::Ready {
+                head: h1,
+                counts: c1,
+                changes: x1,
+                ..
+            },
+            WorktreeStatus::Ready {
+                head: h2,
+                counts: c2,
+                changes: x2,
+                ..
+            },
+        ) => h1 == h2 && c1 == c2 && x1 == x2,
+        _ => a == b,
+    }
+}
+
 /// One worktree as read, with what the store keeps of it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorktreeRead {
@@ -432,6 +501,7 @@ fn untrusted_link(path: &Path, id: &str) -> WorktreeRead {
             status: WorktreeStatus::Unavailable {
                 reason: UnavailableReason::Untrusted,
             },
+            last_activity_utc_ms: None,
         },
         head_commit: None,
         fingerprint: None,
@@ -449,6 +519,7 @@ pub fn read_worktree(path: &Path, main: bool, admin_name: Option<&str>) -> Workt
         main,
         admin_name: admin_name.map(UntrustedName::new),
         status,
+        last_activity_utc_ms: None,
     };
     let read = || -> Result<(HeadView, Option<String>, Status, bool), ReadError> {
         let reader = RepoReader::open(path, &ReaderOptions::default())?;

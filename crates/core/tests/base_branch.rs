@@ -177,6 +177,7 @@ fn repo_intact_the_snapshot_follows_the_base_branch_but_keeps_the_heads() {
     let (f, wt) = demo();
     let read = read(&f);
     let mut repos = vec![RepoView {
+        fetched_utc_ms: None,
         repo_id: "r1".into(),
         state: RepoStateView::Observed,
         path: Untrusted::from_os(read.common_dir.as_os_str()),

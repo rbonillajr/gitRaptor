@@ -162,3 +162,116 @@ fn a_linked_worktree_without_its_back_link_is_untrusted() {
     assert!(!linked_is_trusted(&common, "wt-a", Path::new("/")));
     assert!(!linked_is_trusted(&common, "wt-a", &f.root));
 }
+
+mod activity {
+    //! DEP-CKP-4 (ADR-GRP-013, amendment 2026-10-04): what counts as activity of a worktree,
+    //! and the age of the local copy of the remote.
+
+    use gitraptor_api::messages::{
+        ChangeCounts, CommitCountView, DivergenceView, HeadView, WorktreeStatus, WorktreeView,
+    };
+    use gitraptor_api::{Untrusted, UntrustedName};
+    use gitraptor_core::observe::{HeadRef, fetched_utc_ms, stamp_activity};
+
+    const NOW: i64 = 1_000_000;
+
+    fn view(path: &str, unstaged: u32, behind: u64, last: Option<i64>) -> WorktreeView {
+        let count = |count| CommitCountView { count, exact: true };
+        WorktreeView {
+            path: Untrusted::new(path),
+            main: false,
+            admin_name: None,
+            status: WorktreeStatus::Ready {
+                head: HeadView::Branch {
+                    name: UntrustedName::new("feat"),
+                },
+                counts: ChangeCounts {
+                    staged: 0,
+                    unstaged,
+                    untracked: 0,
+                },
+                changes: Vec::new(),
+                divergence: DivergenceView::Counted {
+                    ahead: count(0),
+                    behind: count(behind),
+                },
+            },
+            last_activity_utc_ms: last,
+        }
+    }
+
+    fn at(commit: &str) -> HeadRef {
+        HeadRef::Branch {
+            name: "feat".into(),
+            commit: commit.into(),
+        }
+    }
+
+    fn stamped(
+        old: &[WorktreeView],
+        old_heads: &[HeadRef],
+        new: WorktreeView,
+        head: HeadRef,
+    ) -> Option<i64> {
+        let mut new = vec![new];
+        stamp_activity(old, old_heads, &mut new, &[head], NOW);
+        new[0].last_activity_utc_ms
+    }
+
+    #[test]
+    fn a_change_in_the_worktree_is_activity() {
+        let old = [view("/w/a", 0, 0, Some(5))];
+        assert_eq!(
+            stamped(&old, &[at("c1")], view("/w/a", 1, 0, None), at("c1")),
+            Some(NOW)
+        );
+    }
+
+    /// A commit leaves the counts as they were (clean before and after) but moves the head.
+    #[test]
+    fn a_commit_is_activity() {
+        let old = [view("/w/a", 0, 0, Some(5))];
+        assert_eq!(
+            stamped(&old, &[at("c1")], view("/w/a", 0, 0, None), at("c2")),
+            Some(NOW)
+        );
+    }
+
+    /// A fetch moves "behind" with nobody touching the worktree: the old activity stays.
+    #[test]
+    fn a_new_ahead_behind_alone_is_not_activity() {
+        let old = [view("/w/a", 0, 0, Some(5))];
+        assert_eq!(
+            stamped(&old, &[at("c1")], view("/w/a", 0, 3, None), at("c1")),
+            Some(5)
+        );
+    }
+
+    #[test]
+    fn the_first_read_knows_no_activity_and_a_new_worktree_is_activity() {
+        assert_eq!(stamped(&[], &[], view("/w/a", 0, 0, None), at("c1")), None);
+        let old = [view("/w/a", 0, 0, Some(5))];
+        assert_eq!(
+            stamped(&old, &[at("c1")], view("/w/b", 0, 0, None), at("c1")),
+            Some(NOW)
+        );
+    }
+
+    #[test]
+    fn the_last_fetch_is_the_time_of_fetch_head_never_in_the_future() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert_eq!(fetched_utc_ms(tmp.path(), NOW), None);
+        std::fs::write(tmp.path().join("FETCH_HEAD"), "").unwrap();
+        let now = i64::try_from(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis(),
+        )
+        .unwrap();
+        let fetched = fetched_utc_ms(tmp.path(), i64::MAX).unwrap();
+        assert!((fetched - now).abs() < 60_000, "{fetched} vs {now}");
+        // A clock moved back: the fetch is not shown in the future.
+        assert_eq!(fetched_utc_ms(tmp.path(), NOW), Some(NOW));
+    }
+}

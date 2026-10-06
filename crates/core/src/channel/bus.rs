@@ -38,6 +38,8 @@ pub struct Outbox {
     capacity: usize,
     /// Negotiated protocol older than 8 (see [`Outbox::set_before_reset`]).
     before_reset: std::sync::atomic::AtomicBool,
+    /// Without `scope.activity` (see [`Outbox::set_without_activity`]).
+    without_activity: std::sync::atomic::AtomicBool,
 }
 
 #[derive(Debug, Default)]
@@ -56,6 +58,7 @@ impl Outbox {
             ready: Condvar::new(),
             capacity,
             before_reset: std::sync::atomic::AtomicBool::new(false),
+            without_activity: std::sync::atomic::AtomicBool::new(true),
         })
     }
 
@@ -65,6 +68,33 @@ impl Outbox {
     pub fn set_before_reset(&self, before: bool) {
         self.before_reset
             .store(before, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// The connection lacks `scope.activity` (DEP-CKP-4): `worktree.state`
+    /// reaches it without the last activity and fetch, which it cannot read.
+    pub fn set_without_activity(&self, without: bool) {
+        self.without_activity
+            .store(without, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// The event in the shapes this connection reads.
+    fn shape<'e>(&self, event: &'e Event) -> std::borrow::Cow<'e, Event> {
+        if !self
+            .without_activity
+            .load(std::sync::atomic::Ordering::Relaxed)
+            || event.kind != gitraptor_api::event::WORKTREE_STATE
+        {
+            return std::borrow::Cow::Borrowed(event);
+        }
+        let Ok(mut data) = serde_json::from_value::<gitraptor_api::messages::WorktreeStateData>(
+            event.data.clone(),
+        ) else {
+            return std::borrow::Cow::Borrowed(event);
+        };
+        data.without_activity();
+        let mut event = event.clone();
+        event.data = serde_json::to_value(data).unwrap_or(serde_json::Value::Null);
+        std::borrow::Cow::Owned(event)
     }
 
     fn skips(&self, event: &Event) -> bool {
@@ -269,8 +299,23 @@ impl EventBus {
         timings: Option<Timings>,
         update: impl FnOnce(&mut EngineShared),
     ) -> u64 {
+        self.publish_with(kind, timings, |engine| {
+            update(engine);
+            data
+        })
+    }
+
+    /// [`EventBus::publish`] with the data built from the engine view in the
+    /// same critical section that changes it, when the event depends on what
+    /// the view held before.
+    pub fn publish_with<D: Serialize>(
+        &self,
+        kind: &str,
+        timings: Option<Timings>,
+        update: impl FnOnce(&mut EngineShared) -> D,
+    ) -> u64 {
         let mut inner = self.lock();
-        update(&mut inner.engine);
+        let data = update(&mut inner.engine);
         inner.seq += 1;
         let version = gitraptor_api::event::kind(kind).map_or(0, |k| k.version);
         let timings = timings.map(|mut t| {
@@ -454,7 +499,7 @@ fn deliver(sub: &Subscriber, stamped: &Stamped) -> bool {
                 NOTIFY_EVENT,
                 EventNotification {
                     subscription: sub.id,
-                    event: event.clone(),
+                    event: sub.outbox.shape(event).into_owned(),
                 },
             ))
         }
@@ -465,7 +510,7 @@ fn deliver(sub: &Subscriber, stamped: &Stamped) -> bool {
                     subscription: sub.id,
                     scope: scope.clone(),
                     scope_seq: stamped.scope_seq,
-                    event: event.clone(),
+                    event: sub.outbox.shape(event).into_owned(),
                 },
             ))
         }
