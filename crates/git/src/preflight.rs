@@ -54,8 +54,18 @@ fn file_id(path: &Path) -> Option<FileId> {
     })
 }
 
-/// Pendiente: etapa de validación multiplataforma (file index on Windows).
-#[cfg(not(unix))]
+/// The volume serial number and the file index, without following a link.
+#[cfg(windows)]
+fn file_id(path: &Path) -> Option<FileId> {
+    gitraptor_winsys::file_id::of_path(path)
+        .ok()
+        .map(|(volume, index)| FileId {
+            dev: u64::from(volume),
+            ino: index,
+        })
+}
+
+#[cfg(not(any(unix, windows)))]
 fn file_id(_path: &Path) -> Option<FileId> {
     None
 }
