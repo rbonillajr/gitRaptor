@@ -23,7 +23,7 @@ La fuente de verdad es el código de `crates/api`. Este documento es su resumen 
 
 - Socket Unix `raptor.sock` en la carpeta de ejecución del perfil, con la carpeta en 0700 y el socket en 0600. Solo acepta clientes del mismo uid. El cliente comprueba que el servidor también es de su uid. En Windows, named pipe: pendiente.
 - Un mensaje JSON por línea (`\n`), de 1 MiB como máximo y con una profundidad máxima de 32. No se aceptan batches. Todos los tipos rechazan campos desconocidos.
-- `PROTOCOL_VERSION = 6` (`API_VERSION` 6.2.0). El daemon atiende a clientes de `MIN_COMPATIBLE_PROTOCOL = 5` a `6`, cada uno con las formas de su versión. `hello` responde con el protocolo negociado. Un cliente más nuevo que el daemon lo reemplaza, y uno más viejo que la ventana recibe `-32002`. Hasta la 5, la compatibilidad era por igualdad.
+- `PROTOCOL_VERSION = 7` (`API_VERSION` 7.0.0, sobre la 6.2.0; la 7 añade `guard.*`, el código `-32016` y el rechazo `not-observed`, US-GRD-001). El daemon atiende a clientes de `MIN_COMPATIBLE_PROTOCOL = 5` a `7`, cada uno con las formas de su versión. `hello` responde con el protocolo negociado. Un cliente más nuevo que el daemon lo reemplaza, y uno más viejo que la ventana recibe `-32002`. Hasta la 5, la compatibilidad era por igualdad.
   - La 2 (US-GRP-001) añade el estado de los worktrees a `RepoView`.
   - La 3 (US-GRP-012), la rama base del repo y el ahead/behind de cada worktree.
   - La 3.1.0 (US-GRP-002) es aditiva: `events.history` y el `data` de `git.event`; un cliente nuevo comprueba en `hello.methods` que el daemon ofrece `events.history` y, si no, pide reiniciarlo.
@@ -76,6 +76,9 @@ El resultado trae `protocol`, `binary_version`, `instance_id` (del perfil, ADR-G
 | `scope.snapshot` | No | No | Protocolo 6. `{scope}` → `{"scope":"global", run_id, scope_seq, engine, daemon, autostart, repos: [{repo_id, state, path, attention}]}` o `{"scope":"repo", run_id, scope_seq, repo: RepoView}`. `attention = {conflicts, denials, gaps}`, cada uno `{"state":"counted","count":n}` o `{"state":"unavailable","reason":"not-published"}` (hoy, los tres sin publicar). `autostart`: `registered`, `not-registered` o `unknown` (hoy `unknown`, US-GRP-004). Un repo no observado responde `-32009` |
 | `scope.subscribe` | No | No | Protocolo 6. `{scope, from_seq?, run_id?}` → `{subscription, scope, from_seq}`. `from_seq` es la secuencia del ámbito. Cuenta en el límite de 4 suscripciones y comparte ids con `events.subscribe`; se cancela con `events.unsubscribe` |
 | `repo.locate` | No | No | Protocolo 6. `{path}` → `{repo_id, worktree}`: el repo observado y la raíz del worktree que contienen la ruta (la más profunda). Validación léxica antes de tocar el FS (`-32602` con `data.reason`). Fuera de los repos observados o inexistente, `-32009` |
+| `guard.plan`, `guard.status` | No | No | Protocolo 7 (US-GRD-001). `{path}` → qué instalaría la capa de hooks y por qué no (`GuardPlan`, con `status`, `blockers`, lo no impedible y la rama base) o el estado de protección (`GuardStatus`: `unprotected`/`hooks-only`, permiso, `offer`, ramas base protegidas, último rechazo). Repo no observado: `-32013` con `not-observed` |
+| `guard.install`, `guard.decline` | Sí | No | Protocolo 7. `{path}` → `GuardStatus`. `guard.install` escribe `core.hooksPath` y `<común>/gitraptor/` (`RepoWrite::Guardrails`, recuperable por su diario); si no se puede instalar, `-32016` con `data.blockers`. `guard.decline` guarda la denegación del permiso |
+| `guard.evaluate` | No | No | Protocolo 7. Lo llama `raptor hook` con las constantes de su dispatcher: `{repo_id, common_dir, hook, operation}` → `Decision` (`decisionId`, `effect`, `appliedEffect`, `reasons[]`, `exception`, `configStatus`, `configRef`; ADR-GRD-003 § 3). Se atiende en el hilo de la conexión, sin esperar al bucle ni al cerrojo del repo |
 | `timemachine.*` | No | Según el método | Declarados con sus parámetros (TS-TMC-004); los implementan US-TMC-002, 003, 005, 006 y 009 |
 
 La **capa** (`cockpit` o `mcp`) la fija el daemon según el solicitante resuelto, nunca el cliente. Con capa `mcp` solo se ofrecen las operaciones con marca MCP, y un "sin atribuir" sin capa `cockpit` no recibe ninguna (ADR-CKP-002 § 4, M-03).
@@ -103,9 +106,10 @@ Un cliente presenta cada error por su `code` y su `data`, nunca por `message`, q
 | `-32010` | Ámbito rechazado (sin carpeta de trabajo legible, fuera de un repo observado o fuera de la allowlist MCP) |
 | `-32011` | La operación empezó tras su snapshot previo y falló: queda `interrupted` y se puede deshacer |
 | `-32012` | La identidad del llamante cambió desde que se aceptó la conexión |
-| `-32013` | Repo rechazado por lo que nombra (no por quién lo pide); `data.reason`: `not-a-repo`, `untrusted`, `unreadable` o `unknown-repo`. (Hasta 2026-10-05 este documento lo listaba por error como `-32008`) |
+| `-32013` | Repo rechazado por lo que nombra (no por quién lo pide); `data.reason`: `not-a-repo`, `untrusted`, `unreadable`, `unknown-repo` o, desde el protocolo 7 y solo en `guard.*`, `not-observed`. (Hasta 2026-10-05 este documento lo listaba por error como `-32008`) |
 | `-32014` | Plan del catálogo rechazado antes de ejecutar nada, sin apunte en el oplog (TS-CKP-002). `data.reason`: `state-changed`, `plan-unknown`, `not-available-for-layer`, `unattributed-without-cockpit`, `executor-descendant`, `warnings-mismatch`, `confirmation-required`, `challenge-invalid`, `foreign-work`, `other-session-present`, `operation-in-progress`, `detached-head`, `git-busy`, `worktree-locked`, `branch-checked-out-elsewhere`, `grafts`, `repo-identity-changed`, `guardrails-denied`, `new-path-refused`, `queue-full` o `daemon-stopping` |
 | `-32015` | Registro de agente o su retiro rechazado (US-GRP-009). `data.reason`: `not-a-worktree`, `repo-not-observed`, `worktree-mismatch`, `agent-mismatch`, `no-working-folder` o `not-registered` |
+| `-32016` | Protocolo 7 (US-GRD-001): no se instaló la capa de hooks; `data.blockers`: `prior-hooks`, `worktree-config`, `include-defines-hooks-path`, `include-if-onbranch`, `not-representable`, `orphan-folder`, `already-installed`, `dispatcher-missing`, `bare` o `platform-unsupported` |
 
 ## Eventos
 
@@ -182,3 +186,6 @@ Notificación `events.event` con `{ subscription, event }`. El evento lleva:
 - `caller_repo` real en macOS (F-001-05): hoy `process_cwd` devuelve `None` en macOS; lo implementa US-MCP-003 con la doble comprobación de identidad de ADR-MCP-001 § 2.
 - Servidor MCP (ADR-MCP-001, 2026-10-05), cada método lo añade su historia dueña: comandos reservados `mcp.enable` y `mcp.disable` (US-MCP-002); perfil `mcp` por solicitante agente, sea cual sea el cliente, con rate limit y límites por solicitante (US-MCP-003, US-MCP-005); vista MCP ampliada de `engine.snapshot` (US-MCP-004); registro y retiro del propio agente, no reservados (US-MCP-006); vista MCP de `timemachine.timeline` (US-MCP-017); consulta de la predicción para el perfil `mcp` (US-MCP-016). El contrato de ejecución quedó unificado por TS-CKP-002 (protocolo 4).
 - Catálogo de producción del ejecutor: hoy `operation.prepare` responde `-32004` (`F-001-02`) mientras el daemon no lleve un catálogo; lo cablea US-MCP-008 (DS-TS-CKP-002 § 9).
+
+
+> **Compatibilidad del protocolo 7** (US-GRD-001; Decisión del orquestador, 2026-10-06): una conexión de protocolo 5 o 6 no ve `guard.*` en `hello` y, si los pide, recibe `-32601` aunque sean reservados (no se auditan); `-32016` y `not-observed` solo salen de `guard.*`, así que sus formas no cambian.
