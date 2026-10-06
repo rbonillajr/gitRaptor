@@ -1221,7 +1221,7 @@ impl Daemon {
             }
         };
         // PROBE (INF-GRP-002, calibration of the gate): artificial regression, reverted below.
-        std::thread::sleep(std::time::Duration::from_millis(150));
+        std::thread::sleep(std::time::Duration::from_millis(50));
         let t_persisted = clock::monotonic_ns();
         if let Some(gap) = batch.gap {
             if gap.cause == GapCause::PeriodicReconciliation {
