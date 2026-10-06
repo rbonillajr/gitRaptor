@@ -1012,6 +1012,9 @@ mod unix {
                 git(&wt, &["branch", "co-b"]);
                 git(&wt, &["reset", "-q", "--hard", "HEAD~1"]);
                 self.checkout_ready = true;
+            } else if self.dirty.remove(&wt) {
+                // A confirmation runs after the bursts, which modify the touched file here too.
+                git(&wt, &["restore", TOUCHED]);
             }
             self.settle();
             let mut samples = Vec::new();
