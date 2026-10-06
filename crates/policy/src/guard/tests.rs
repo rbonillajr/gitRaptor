@@ -369,6 +369,20 @@ mod fast_path {
             8192
         ));
         assert!(deletes_a_branch(b"garbage\n", none, 8192));
+        // A symbolic branch deleted (`symref-delete`) is still a branch deletion; only a
+        // symbolic `HEAD` itself is not.
+        assert!(deletes_a_branch(
+            &input(&[format!("ref:refs/heads/x {Z} refs/heads/main")]),
+            none,
+            8192
+        ));
+        assert!(!deletes_a_branch(
+            &input(&[format!("ref:refs/heads/x {Z} HEAD")]),
+            none,
+            8192
+        ));
+        let spaced = input(&[format!("main@{{1 day ago}} {O} refs/tags/t {Z}")]);
+        assert!(skippable_push(&spaced, 8192));
         assert!(!deletes_a_branch(
             &input(&[format!("{O} {O} refs/heads/feat")]),
             none,
