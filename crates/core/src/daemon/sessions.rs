@@ -1,34 +1,54 @@
-//! Agent sessions in the daemon loop (US-GRP-007, ADR-GRP-012, ADR-GRP-013).
+//! Agent sessions in the daemon loop (US-GRP-007, US-GRP-009, ADR-GRP-012,
+//! ADR-GRP-013).
 //!
 //! The detector finds Claude Code sessions and their state; this loop, the
 //! single writer, persists every change as a session row plus a `session-*`
 //! event of the repo's history, then publishes `session.state`. It also
-//! asks the detector, for each Git event it persists, whether S3 points to
-//! one session.
+//! asks the detector, for each Git event it persists, whether S3 or a
+//! registration points to one session. Explicit registrations (US-GRP-009)
+//! create or confirm sessions here and hand them to the detector, which
+//! follows their state until the registration is withdrawn.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gitraptor_api::event::SESSION_STATE;
 use gitraptor_api::messages::{
-    GitEventKind, MAX_SESSIONS_PAGE, SessionEndCauseView, SessionStateView, SessionView,
-    SessionsListParams,
+    AgentSupport, GitEventKind, MAX_SESSIONS_PAGE, RegistrationOutcome, RegistrationRegisterResult,
+    RegistrationRejection, RegistrationWithdrawResult, SessionEndCauseView, SessionStateView,
+    SessionView, SessionsListParams,
 };
 use gitraptor_api::{Actor, AgentKind as ApiAgentKind, AgentOrigin, Timings, Untrusted, clock};
 
-use super::{Daemon, Field, RepoCommandError, env, now_ms, profile_error_kind};
+use super::{
+    Daemon, Field, RegisterRequest, RegistrationError, RepoCommandError, WithdrawRequest, env,
+    now_ms, profile_error_kind,
+};
 use crate::detect::{
-    Detector, OpenSession, PresentSession, S3Outcome, SessionChange, SessionConfig,
-    SystemProcLister, detection_supported,
+    Detector, OpenSession, PresentSession, RegisteredSession, S3Outcome, SessionChange,
+    SessionConfig, SystemProcLister, detection_supported,
 };
 use crate::observe::RepoRead;
 use crate::profile::{
-    Agent, AgentKind, EndCause, NewEvent, Origin, RepoStore, Session, Timestamp, WriteOp,
+    Agent, AgentKind, Author, EndCause, NewEvent, Origin, RecordKind, RepoStore, Session,
+    Timestamp, WriteOp,
 };
 use crate::watch::{ObservedBatch, ObserverHooks};
 
 /// Evidence stored with an event that S3 attributed (ADR-GRP-013 § 1).
 const S3_EVIDENCE: &str = r#"{"signals":["s3"]}"#;
+
+/// Evidence stored with an event attributed by a registration: the only
+/// present session of its worktree, a registered "other agent"
+/// (ADR-GRP-012 rule 3).
+const REGISTRATION_EVIDENCE: &str = r#"{"signals":["registration"]}"#;
+
+/// The session an event points to, and the evidence of it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct Attribution {
+    pub session: PresentSession,
+    pub evidence: &'static str,
+}
 
 impl Daemon {
     /// Starts the detector on first use; the observer gets its hooks.
@@ -85,6 +105,16 @@ impl Daemon {
             .collect();
         let common = crate::observe::canonical(common_dir);
         let dead = detector.watch_repo(repo_id, &common, worktrees, open);
+        // Registered sessions continue: present until withdrawn (Q41). Their
+        // latest activity is at most when the engine last observed.
+        let observed_until = store.observed_until().ok().flatten();
+        for (s, state) in store.sessions_with_state().unwrap_or_default() {
+            if s.end_cause.is_none() && s.initial_origin == Origin::Registered {
+                let (state, since) = state_of(&s, state.as_ref());
+                let last = observed_until.map_or(since, |o| o.max(since));
+                detector.register(registered(repo_id, &s, state, Some(last)));
+            }
+        }
         let changes = dead
             .into_iter()
             .map(|session_id| SessionChange::Ended {
@@ -208,6 +238,11 @@ impl Daemon {
             }
             published.push((repo_id, session_id));
         }
+        self.publish_sessions(published, t_recv);
+    }
+
+    /// Publishes the current view of persisted sessions (`session.state`).
+    fn publish_sessions(&self, published: Vec<(String, String)>, t_recv: u64) {
         let t_persisted = clock::monotonic_ns();
         for (repo_id, session_id) in published {
             let Some((_, store)) = self.stores.iter().find(|(id, _)| *id == repo_id) else {
@@ -219,7 +254,7 @@ impl Daemon {
                 .into_iter()
                 .flatten()
                 .find(|(s, _)| s.session_id == session_id)
-                .map(|(s, state)| session_view(&repo_id, &s, state.as_ref()))
+                .map(|(s, state)| session_view(&repo_id, store, &s, state.as_ref()))
             else {
                 continue;
             };
@@ -236,9 +271,10 @@ impl Daemon {
     }
 
     /// For each event of `batch`, the session S3 points to (ADR-GRP-012,
-    /// rules 2 to 6), and the activity it means for its worktree. The
-    /// outcome goes to the diagnostic log (SPIKE-GRP-001).
-    pub(super) fn attribute(&self, batch: &ObservedBatch) -> Vec<Option<PresentSession>> {
+    /// rules 2 to 6) or, without it, the registration (rule 3), and the
+    /// activity it means for its worktree. The S3 outcome goes to the
+    /// diagnostic log (SPIKE-GRP-001).
+    pub(super) fn attribute(&self, batch: &ObservedBatch) -> Vec<Option<Attribution>> {
         let Some(detector) = &self.detector else {
             return vec![None; batch.events.len()];
         };
@@ -266,8 +302,16 @@ impl Daemon {
                     batch.marks.t_recv,
                     batch.marks.t_flush,
                 );
+                let by_registration = || {
+                    detector
+                        .registration_evidence(&batch.repo_id, &event.worktree)
+                        .map(|session| Attribution {
+                            session,
+                            evidence: REGISTRATION_EVIDENCE,
+                        })
+                };
                 let label = match &outcome {
-                    S3Outcome::NoSession => return None,
+                    S3Outcome::NoSession => return by_registration(),
                     S3Outcome::NoSighting => "no-sighting",
                     S3Outcome::Ambiguous => "ambiguous",
                     S3Outcome::Attributed(_) => "attributed",
@@ -286,11 +330,248 @@ impl Daemon {
                     ],
                 );
                 match outcome {
-                    S3Outcome::Attributed(p) => Some(p),
-                    _ => None,
+                    S3Outcome::Attributed(session) => Some(Attribution {
+                        session,
+                        evidence: S3_EVIDENCE,
+                    }),
+                    _ => by_registration(),
                 }
             })
             .collect()
+    }
+
+    /// `registration.register` (US-GRP-009): confirms the present session
+    /// of the same agent in the worktree, or creates a registered one
+    /// (BR-CONS-004, Q39). The channel already decided who asks and, for an
+    /// agent, that the folder is its working folder (ADR-GRP-005 § 6.6).
+    pub(super) fn register(
+        &mut self,
+        request: RegisterRequest,
+    ) -> Result<RegistrationRegisterResult, RegistrationError> {
+        let (repo_id, worktree) = self.locate_worktree(&request.folder)?;
+        if request
+            .named
+            .as_ref()
+            .is_some_and(|named| !named.starts_with(&worktree))
+        {
+            return Err(RegistrationError::Rejected(
+                RegistrationRejection::WorktreeMismatch,
+            ));
+        }
+        let t_recv = clock::monotonic_ns();
+        let now = now_ms();
+        let offset = crate::watch::wall_now().1;
+        let store = self.store_mut(&repo_id)?;
+        let present: Vec<Session> = store
+            .sessions_for_worktree(&worktree)
+            .map_err(|_| RegistrationError::Internal)?
+            .into_iter()
+            .filter(|s| s.end_cause.is_none() && same_agent(&s.agent, &request.agent))
+            .collect();
+        // The caller's own session first; the developer confirms the most
+        // recent one of that agent.
+        let same = present
+            .iter()
+            .find(|s| request.caller_session.as_deref() == Some(s.session_id.as_str()))
+            .or_else(|| match request.author {
+                Author::Developer => present.last(),
+                Author::Agent => None,
+            })
+            .cloned();
+        let (session, outcome) = match same {
+            Some(session) => {
+                if session_actor(store, &session) == registered_actor(&session.agent) {
+                    (session, RegistrationOutcome::AlreadyRegistered)
+                } else {
+                    store
+                        .write_batch(&[WriteOp::AppendAttribution {
+                            session_id: session.session_id.clone(),
+                            kind: RecordKind::Confirm,
+                            agent: session.agent.clone(),
+                            author: request.author,
+                            recorded_ms: now,
+                        }])
+                        .map_err(|err| self.registration_failed(&err))?;
+                    (session, RegistrationOutcome::Confirmed)
+                }
+            }
+            None => {
+                let session_id = new_session_id(store, now);
+                let mut ops = worktree_op(store, &worktree, now);
+                ops.extend([
+                    WriteOp::StartSession {
+                        session_id: session_id.clone(),
+                        worktree: worktree.clone(),
+                        agent: request.agent.clone(),
+                        origin: Origin::Registered,
+                        detection_key: None,
+                        started_ms: now,
+                    },
+                    WriteOp::AppendAttribution {
+                        session_id: session_id.clone(),
+                        kind: RecordKind::Register,
+                        agent: request.agent.clone(),
+                        author: request.author,
+                        recorded_ms: now,
+                    },
+                    state_event(worktree.clone(), "session-start", now, offset, &session_id),
+                ]);
+                store
+                    .write_batch(&ops)
+                    .map_err(|err| self.registration_failed(&err))?;
+                let session = self
+                    .store_mut(&repo_id)?
+                    .session(&session_id)
+                    .ok()
+                    .flatten()
+                    .ok_or(RegistrationError::Internal)?;
+                if let Some(detector) = &self.detector {
+                    detector.register(registered(
+                        &repo_id,
+                        &session,
+                        SessionStateView::Active,
+                        None,
+                    ));
+                }
+                (session, RegistrationOutcome::Created)
+            }
+        };
+        let store = self.store_mut(&repo_id)?;
+        let actor = session_actor(store, &session);
+        self.logger.info(
+            "agent_registered",
+            &[
+                ("repo", Field::id(&repo_id)),
+                ("agent", session.agent.kind.as_str().into()),
+                ("author", request.author.as_str().into()),
+                ("outcome", outcome_text(outcome).into()),
+            ],
+        );
+        if outcome != RegistrationOutcome::AlreadyRegistered {
+            self.publish_sessions(vec![(repo_id.clone(), session.session_id.clone())], t_recv);
+        }
+        Ok(RegistrationRegisterResult {
+            repo_id,
+            session_id: session.session_id,
+            outcome,
+            actor,
+            support: match session.agent.kind {
+                AgentKind::ClaudeCode => AgentSupport::Full,
+                AgentKind::Other => AgentSupport::Observed,
+            },
+        })
+    }
+
+    /// `registration.withdraw` (US-GRP-009, Q41), already authorized as a
+    /// reserved command: ends the present session that a registration of
+    /// that agent created. A detected session, even confirmed, ends with
+    /// its process instead.
+    pub(super) fn withdraw(
+        &mut self,
+        request: WithdrawRequest,
+    ) -> Result<RegistrationWithdrawResult, RegistrationError> {
+        let (repo_id, worktree) = self.locate_worktree(&request.folder)?;
+        let t_recv = clock::monotonic_ns();
+        let now = now_ms();
+        let offset = crate::watch::wall_now().1;
+        let store = self.store_mut(&repo_id)?;
+        let session = store
+            .sessions_for_worktree(&worktree)
+            .map_err(|_| RegistrationError::Internal)?
+            .into_iter()
+            .rev()
+            .find(|s| {
+                s.end_cause.is_none()
+                    && s.initial_origin == Origin::Registered
+                    && same_agent(&s.agent, &request.agent)
+            })
+            .ok_or(RegistrationError::Rejected(
+                RegistrationRejection::NotRegistered,
+            ))?;
+        let ops = [
+            WriteOp::AppendAttribution {
+                session_id: session.session_id.clone(),
+                kind: RecordKind::WithdrawRegistration,
+                agent: session.agent.clone(),
+                author: Author::Developer,
+                recorded_ms: now,
+            },
+            WriteOp::EndSession {
+                session_id: session.session_id.clone(),
+                ended_ms: Some(now),
+                cause: EndCause::RegistrationWithdrawn,
+            },
+            state_event(worktree, "session-end", now, offset, &session.session_id),
+        ];
+        store
+            .write_batch(&ops)
+            .map_err(|err| self.registration_failed(&err))?;
+        if let Some(detector) = &self.detector {
+            detector.end_registered(&session.session_id);
+        }
+        self.logger.info(
+            "registration_withdrawn",
+            &[
+                ("repo", Field::id(&repo_id)),
+                ("agent", session.agent.kind.as_str().into()),
+            ],
+        );
+        self.publish_sessions(vec![(repo_id.clone(), session.session_id.clone())], t_recv);
+        Ok(RegistrationWithdrawResult {
+            repo_id,
+            session_id: session.session_id,
+        })
+    }
+
+    /// The observed worktree that holds `folder` (BR-VAL-002): the longest
+    /// root, for nested worktrees. Outside every one, whether it is a Git
+    /// repo the engine does not observe or not a worktree at all.
+    fn locate_worktree(&self, folder: &Path) -> Result<(String, PathBuf), RegistrationError> {
+        let folder = crate::observe::canonical(folder);
+        let found = self
+            .stores
+            .iter()
+            .flat_map(|(repo_id, _)| {
+                self.observer
+                    .as_ref()
+                    .map(|o| o.worktrees(repo_id))
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(move |w| (repo_id.clone(), w))
+            })
+            .filter(|(_, w)| folder.starts_with(w))
+            .max_by_key(|(_, w)| w.as_os_str().len());
+        if let Some(found) = found {
+            return Ok(found);
+        }
+        let reason = match crate::observe::locate(&folder) {
+            Ok(common) => match self.profile.repo_by_common_dir(&common) {
+                Ok(Some(entry)) if self.stores.iter().any(|(id, _)| *id == entry.repo_id) => {
+                    RegistrationRejection::NotAWorktree
+                }
+                _ => RegistrationRejection::RepoNotObserved,
+            },
+            Err(_) => RegistrationRejection::NotAWorktree,
+        };
+        Err(RegistrationError::Rejected(reason))
+    }
+
+    fn store_mut(&mut self, repo_id: &str) -> Result<&mut RepoStore, RegistrationError> {
+        self.stores
+            .iter_mut()
+            .find(|(id, _)| id == repo_id)
+            .map(|(_, store)| store)
+            .ok_or(RegistrationError::Rejected(
+                RegistrationRejection::RepoNotObserved,
+            ))
+    }
+
+    fn registration_failed(&self, err: &crate::profile::ProfileError) -> RegistrationError {
+        self.logger.error(
+            "registration_persist_failed",
+            &[("kind", profile_error_kind(err).into())],
+        );
+        RegistrationError::Internal
     }
 
     /// `sessions.list`: the sessions of the observed repos.
@@ -323,7 +604,7 @@ impl Daemon {
                     .filter(|(s, _)| {
                         params.include_ended || s.end_cause.is_none() || latest_ended(s)
                     })
-                    .map(|(s, state)| session_view(repo_id, s, state.as_ref())),
+                    .map(|(s, state)| session_view(repo_id, store, s, state.as_ref())),
             );
         }
         views.sort_by_key(|v| v.started_utc_ms);
@@ -336,23 +617,86 @@ impl Daemon {
     }
 }
 
+/// A stored registered session, for the detector.
+fn registered(
+    repo_id: &str,
+    session: &Session,
+    state: SessionStateView,
+    last_activity_ms: Option<i64>,
+) -> RegisteredSession {
+    RegisteredSession {
+        repo_id: repo_id.to_owned(),
+        session_id: session.session_id.clone(),
+        worktree: session.worktree.clone(),
+        started_ms: session.started_ms,
+        state,
+        last_activity_ms,
+        registration_evidence: session.agent.kind == AgentKind::Other,
+    }
+}
+
+/// The same agent (BR-CONS-004): the same kind and, for an "other agent",
+/// the same declared name, without case or surrounding spaces.
+fn same_agent(a: &Agent, b: &Agent) -> bool {
+    let fold = |n: &Option<String>| n.as_deref().map(|n| n.trim().to_lowercase());
+    a.kind == b.kind && fold(&a.name) == fold(&b.name)
+}
+
+/// The actor of `agent` once registered or confirmed.
+fn registered_actor(agent: &Agent) -> Actor {
+    Actor::Agent {
+        kind: api_kind(agent.kind),
+        name: agent.name.clone().map(gitraptor_api::UntrustedName::new),
+        origin: AgentOrigin::Registered,
+    }
+}
+
+fn api_kind(kind: AgentKind) -> ApiAgentKind {
+    match kind {
+        AgentKind::ClaudeCode => ApiAgentKind::ClaudeCode,
+        AgentKind::Other => ApiAgentKind::Other,
+    }
+}
+
+/// A new id for a registered session: not a `(pid, start)` one, so the
+/// restart reconciliation of detected sessions never takes it for a process.
+fn new_session_id(store: &RepoStore, now: i64) -> String {
+    (0u32..)
+        .map(|n| format!("reg:{now}:{n}"))
+        .find(|id| store.session(id).ok().flatten().is_none())
+        .unwrap_or_default()
+}
+
+/// The worktree row a new session needs, if the store lacks it.
+fn worktree_op(store: &RepoStore, worktree: &Path, now: i64) -> Vec<WriteOp> {
+    let known = store
+        .worktrees()
+        .map(|all| all.iter().any(|w| w.path == worktree))
+        .unwrap_or(false);
+    if known {
+        return Vec::new();
+    }
+    vec![WriteOp::UpsertWorktree {
+        path: worktree.to_owned(),
+        admin_name: None,
+        seen_ms: now,
+    }]
+}
+
+fn outcome_text(outcome: RegistrationOutcome) -> &'static str {
+    match outcome {
+        RegistrationOutcome::Created => "created",
+        RegistrationOutcome::Confirmed => "confirmed",
+        RegistrationOutcome::AlreadyRegistered => "already-registered",
+    }
+}
+
 /// Operations that create a detected session, if the store lacks it.
 pub(super) fn start_ops(store: &RepoStore, session: &PresentSession) -> Vec<WriteOp> {
     if store.session(&session.session_id).ok().flatten().is_some() {
         return Vec::new();
     }
-    let mut ops = Vec::new();
-    let known = store
-        .worktrees()
-        .map(|all| all.iter().any(|w| w.path == session.worktree))
-        .unwrap_or(false);
-    if !known {
-        ops.push(WriteOp::UpsertWorktree {
-            path: session.worktree.clone(),
-            admin_name: None,
-            seen_ms: session.started_ms,
-        });
-    }
+    let mut ops = worktree_op(store, &session.worktree, session.started_ms);
     ops.push(WriteOp::StartSession {
         session_id: session.session_id.clone(),
         worktree: session.worktree.clone(),
@@ -365,11 +709,6 @@ pub(super) fn start_ops(store: &RepoStore, session: &PresentSession) -> Vec<Writ
         started_ms: session.started_ms,
     });
     ops
-}
-
-/// The evidence text of an event S3 attributed.
-pub(super) fn s3_evidence() -> Option<String> {
-    Some(S3_EVIDENCE.to_owned())
 }
 
 fn state_event(
@@ -417,33 +756,43 @@ fn state_of(session: &Session, latest: Option<&(String, i64)>) -> (SessionStateV
     }
 }
 
-/// Effective attribution of a session: its initial one until the records
-/// of US-GRP-009 and US-GRP-010 exist.
-pub(super) fn session_actor(session: &Session) -> Actor {
+/// Effective attribution of a session (ADR-GRP-013 § 2): its initial one
+/// and the records in force. Here only a confirmation changes it: the
+/// origin becomes "registered" (P16). Corrections belong to US-GRP-010.
+pub(super) fn session_actor(store: &RepoStore, session: &Session) -> Actor {
+    let confirmed = session.initial_origin == Origin::Registered
+        || store
+            .attribution_records(&session.session_id)
+            .unwrap_or_default()
+            .iter()
+            .any(|r| r.kind == RecordKind::Confirm);
     Actor::Agent {
-        kind: match session.agent.kind {
-            AgentKind::ClaudeCode => ApiAgentKind::ClaudeCode,
-            AgentKind::Other => ApiAgentKind::Other,
-        },
+        kind: api_kind(session.agent.kind),
         name: session
             .agent
             .name
             .clone()
             .map(gitraptor_api::UntrustedName::new),
-        origin: match session.initial_origin {
-            Origin::Detected => AgentOrigin::Detected,
-            Origin::Registered => AgentOrigin::Registered,
+        origin: if confirmed {
+            AgentOrigin::Registered
+        } else {
+            AgentOrigin::Detected
         },
     }
 }
 
-fn session_view(repo_id: &str, session: &Session, latest: Option<&(String, i64)>) -> SessionView {
+fn session_view(
+    repo_id: &str,
+    store: &RepoStore,
+    session: &Session,
+    latest: Option<&(String, i64)>,
+) -> SessionView {
     let (state, since) = state_of(session, latest);
     SessionView {
         repo_id: repo_id.to_owned(),
         session_id: session.session_id.clone(),
         worktree: Untrusted::from_os(session.worktree.as_os_str()),
-        actor: session_actor(session),
+        actor: session_actor(store, session),
         state,
         started_utc_ms: session.started_ms,
         state_since_utc_ms: since,
