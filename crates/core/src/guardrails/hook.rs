@@ -153,12 +153,12 @@ fn transaction_git_dir(env: &HookEnv) -> Option<PathBuf> {
         } else {
             env.cwd.join(dir)
         };
-        return dir.canonicalize().ok();
+        return dir.canonicalize().ok().map(fastpath::simplified);
     }
     // Git runs hooks at the root of the worktree, or in `$GIT_DIR` for a bare repo.
     let dot_git = env.cwd.join(".git");
     match std::fs::symlink_metadata(&dot_git) {
-        Ok(m) if m.is_dir() => dot_git.canonicalize().ok(),
+        Ok(m) if m.is_dir() => dot_git.canonicalize().ok().map(fastpath::simplified),
         Ok(m) if m.is_file() => {
             let text = std::fs::read_to_string(&dot_git).ok()?;
             let target = text.trim_end().strip_prefix("gitdir: ")?;
@@ -168,13 +168,13 @@ fn transaction_git_dir(env: &HookEnv) -> Option<PathBuf> {
             } else {
                 env.cwd.join(target)
             };
-            target.canonicalize().ok()
+            target.canonicalize().ok().map(fastpath::simplified)
         }
         _ => env
             .cwd
             .join("HEAD")
             .is_file()
-            .then(|| env.cwd.canonicalize().ok())
+            .then(|| env.cwd.canonicalize().ok().map(fastpath::simplified))
             .flatten(),
     }
 }
@@ -188,7 +188,7 @@ fn common_of(git_dir: &Path) -> Option<PathBuf> {
             } else {
                 git_dir.join(c)
             };
-            c.canonicalize().ok()
+            c.canonicalize().ok().map(fastpath::simplified)
         }
         Err(_) => Some(git_dir.to_path_buf()),
     }
@@ -198,9 +198,11 @@ fn same_repo(common: &Path, env: &HookEnv) -> bool {
     let Some(git_dir) = transaction_git_dir(env) else {
         return false;
     };
-    let ours = common
-        .canonicalize()
-        .unwrap_or_else(|_| common.to_path_buf());
+    let ours = fastpath::simplified(
+        common
+            .canonicalize()
+            .unwrap_or_else(|_| common.to_path_buf()),
+    );
     common_of(&git_dir).is_some_and(|c| c == ours)
 }
 
