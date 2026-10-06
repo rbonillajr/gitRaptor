@@ -565,6 +565,119 @@ pub struct SessionsListResult {
     pub sessions: Vec<SessionView>,
 }
 
+/// The agent a registration declares (US-GRP-009, BR-VAL-001): Claude Code,
+/// with full support, or any other agent by the name it declares.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum DeclaredAgent {
+    ClaudeCode,
+    /// The daemon validates the name: printable, bounded and not reserved
+    /// ("Claude Code" is declared by its kind, never by a name).
+    Other {
+        name: String,
+    },
+}
+
+/// `registration.register` parameters (US-GRP-009, ADR-GRP-005 § 6.6).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RegistrationRegisterParams {
+    pub agent: DeclaredAgent,
+    /// Where the agent works. Only the developer names it; for an agent
+    /// the daemon takes its working folder, and a different one is refused.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worktree: Option<String>,
+}
+
+/// What a registration did (BR-CONS-004, Q39).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum RegistrationOutcome {
+    /// A new session with origin "registered".
+    Created,
+    /// The detected session of the same agent, confirmed.
+    Confirmed,
+    /// The same agent was already registered or confirmed there: nothing
+    /// changed.
+    AlreadyRegistered,
+}
+
+/// What the engine does for a registered agent (BR-VAL-001).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum AgentSupport {
+    /// Claude Code: detection and registration.
+    Full,
+    /// "Other agent": observed and its activity attributed, without
+    /// specific functions.
+    Observed,
+}
+
+/// `registration.register` result. No paths (SEC-12): it is offered to
+/// `raptor-mcp`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RegistrationRegisterResult {
+    pub repo_id: String,
+    pub session_id: String,
+    pub outcome: RegistrationOutcome,
+    /// Effective attribution of the session.
+    pub actor: crate::Actor,
+    pub support: AgentSupport,
+}
+
+/// `registration.withdraw` parameters: reserved to the developer.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RegistrationWithdrawParams {
+    pub worktree: String,
+    pub agent: DeclaredAgent,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RegistrationWithdrawResult {
+    pub repo_id: String,
+    pub session_id: String,
+}
+
+/// Why a registration or its withdrawal was refused (BR-VAL-002,
+/// BR-AUTH-001).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum RegistrationRejection {
+    /// The folder is not a worktree of any observed repo.
+    NotAWorktree,
+    /// A worktree of a repo the engine does not observe.
+    RepoNotObserved,
+    /// An agent named a worktree other than its own working folder.
+    WorktreeMismatch,
+    /// An agent declared an agent it is not (ADR-GRP-005 § 6.6, M7).
+    AgentMismatch,
+    /// The caller's working folder could not be read.
+    NoWorkingFolder,
+    /// Withdrawal: that agent has no registration in that worktree.
+    NotRegistered,
+}
+
+impl RegistrationRejection {
+    pub const ALL: [Self; 6] = [
+        Self::NotAWorktree,
+        Self::RepoNotObserved,
+        Self::WorktreeMismatch,
+        Self::AgentMismatch,
+        Self::NoWorkingFolder,
+        Self::NotRegistered,
+    ];
+}
+
+/// `data` of a `REGISTRATION_REJECTED` error.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RegistrationRejectedData {
+    pub reason: RegistrationRejection,
+}
+
 /// Data of a `repo.observation` event: a repo started or stopped being
 /// observed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -788,6 +901,12 @@ pub enum RefusalReason {
     NotAvailableToMcp,
     /// The platform cannot run the checks yet.
     Unsupported,
+    /// Audited registration refusals (US-GRP-009, ADR-GRP-005 § 6.6): an
+    /// agent named a worktree other than its working folder.
+    WorktreeMismatch,
+    /// An agent declared an agent it is not (Claude Code without being a
+    /// detected Claude Code session, or another agent while being one).
+    AgentMismatch,
 }
 
 /// The client as the daemon saw it (never as the client declared it).
