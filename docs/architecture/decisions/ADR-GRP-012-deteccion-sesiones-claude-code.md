@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-05
+updated: 2026-10-06
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
@@ -163,3 +163,22 @@ Derivada de la [Dev Spec de US-GRP-007](../../requirements/features/motor-local/
 | **Identificador de sesión**: `<pid>:<inicio_us>`, el mismo texto que usa el solicitante de la Time Machine, para que una corrección de la sesión llegue a sus operaciones (ADR-TMC-005) | Ciclo de vida | Un solo formato |
 | **Validación con el motor real**: SPIKE-GRP-001 se valida con US-GRP-007 en dogfooding, no con un prototipo aislado, y **solo para S1 + S3**; S2a y S2b quedan abiertas hasta que US-GRP-008 conecte el adaptador de transcripts. El procedimiento está en el § 5 de la Dev Spec. El cambio de secuencia (el spike decía validar antes de desarrollar) queda pendiente de que Rene lo ratifique | Validación | Instrucción del coordinador para el hito M1 |
 
+## Enmienda (2026-10-06, carrera S3 de commits cortos)
+
+Origen: primer dogfooding real (2026-10-06). `raptor events` mostró 3 commits de un worktree como "sin atribuir", aunque ese worktree tenía exactamente una sesión de Claude Code activa y `raptor sessions` la veía. Es la carrera de S3 que este ADR acepta: el `git commit` termina antes de la muestra. **Decisión del orquestador (2026-10-06), validada por el Arquitecto con ajustes, todos incorporados.** No cambia las señales, la regla de combinación (punto 3: la co-ubicación nunca basta para atribuir) ni ADR-GRP-013 § 3 y § 6. El `status` sigue en `accepted`.
+
+**Regla: pista de sesión única, no atribución.**
+
+- **Cuándo se aplica**: a un evento de Git (nunca a una reconciliación, BR-EDGE-005, ni a cambios de archivos) cuyo resultado S3 es "ningún `git` visto" (`NoSighting`) y al que la regla 3 (registro) no atribuye.
+- **Condición**: el worktree del evento tiene **exactamente una** sesión presente. Esa sesión es **detectada** (no registrada) y está **activa** (no inactiva) antes de contar la actividad del propio evento. Una sesión registrada en el mismo worktree cuenta como segunda sesión.
+- **Ambigüedad**: si S3 vio un `git` ajeno o de varias sesiones, no hay pista. Con 0 o con 2 o más sesiones, tampoco.
+- **Efecto**: el evento se guarda **sin sesión**, así que su actor sigue siendo "sin atribuir". La evidencia del evento guarda la pista: `{"signals":["single-session"],"session":"<id>"}`. El contrato la expone en `GitEventView.inferred` (`{kind, session_id}`), un campo opcional que no toca el actor. `raptor events` muestra "unattributed; inferred: Claude Code" / "sin atribuir; inferido: Claude Code", y la salida JSON la lleva en `inferred`.
+- **Sin efectos de autorización**: como el evento no tiene sesión, la Time Machine lo trata como "sin atribuir" (ADR-TMC-005). Una corrección (Q37) no lo convierte en "registrado". Las métricas de precisión de atribución no lo cuentan como atribuido.
+
+**Riesgo residual**: un commit humano hecho en una terminal dentro de un worktree con una sola sesión activa, y no visto por S3, mostrará la pista de esa sesión. Por eso la pista lleva otra etiqueta y no atribuye. **La aceptación de ese riesgo y cualquier cambio de BR-EDGE-004 los decide el PO o Rene, no el Arquitecto.** Con esta forma (actor "sin atribuir"), BR-EDGE-004 no cambia: queda anotado en el PR para que Rene lo ratifique.
+
+**Solución de fondo**: S4, un hook que corre dentro del proceso `git` y no tiene carrera, o S5 opt-in. La pista es un paliativo. SPIKE-GRP-001 mide los aciertos de la pista en una métrica separada de la precisión de atribución.
+
+**Límite conocido**: la condición "proceso vivo durante la ventana del lote" se aproxima con la sesión presente y activa en el detector en el momento de atribuir. El escaneo S1 retira las sesiones cuyo proceso terminó.
+
+Implementación: `Detector::single_session` (`crates/core/src/detect/mod.rs`), `attribute_one` y `inferred_agent` (`crates/core/src/daemon/sessions.rs`). Tests: casos de 0, 1 y 2 sesiones, sesión registrada e inactiva en `detect/tests.rs`; ida y vuelta de la evidencia en `daemon/sessions.rs`; contrato en `api/src/messages.rs`; texto y JSON en `apps/cli/src/events.rs`.
