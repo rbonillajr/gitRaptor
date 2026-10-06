@@ -148,6 +148,7 @@ Aplicada desde la [Dev Spec de US-TMC-004](../../requirements/features/time-mach
 | **Detección completa** en cada captura: las rutas del motor con su marca de continuidad (escalón 2, ADR-TMC-006 § 5) siguen pendientes en TS-GRP-002/003 | § 2, captura incremental | D7 |
 | **Cuotas diferidas**: la cuota del almacén y el hueco "sin espacio" son de US-TMC-022. Mientras tanto, la captura continua se omite (y lo registra) por debajo del suelo de espacio libre de SEC-TMC-12, máx(5 GB, 5 %), y un `ENOSPC` es una captura fallida sin punto | § 2, Cuotas | D8; ajuste 3 |
 | **Un hilo de captura por daemon**, en serie; el motor solo le entrega señales por un canal y nunca espera | § 2, Coalescencia | D6 |
+| **Fuera del camino del motor**: la captura por observación escribe blobs con un hilo y cede ante nueva actividad del repo (sin fila, sin contar como fallo) salvo tras 6×`M`; la primera captura de un repo espera a la siembra de sus packs (ADR-TMC-001 § 3), en segundo plano con un hilo. El banco del motor falló sin ello y pasa con ello (macOS) | § 2, Coalescencia y contrapresión | D12, D13; segunda validación del Arquitecto |
 
 **Límites declarados**: sin reflog de `HEAD` (`core.logAllRefUpdates=false` o el backend reftable) no hay evento `reset` y la calma es por tiempo; `git checkout -- .`, `git restore` y `git clean` no escriben reflog ni índice y no son eventos (su efecto queda en la siguiente captura y lo anterior sigue restaurable desde el almacén); R2 se mantiene.
 
