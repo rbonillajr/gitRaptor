@@ -4,7 +4,7 @@ title: "Contexto — Guardrails"
 type: context
 status: draft
 created: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-06
 domain: GRP
 epic: E-001
 feature: guardrails
@@ -385,7 +385,7 @@ Rene Bonilla aceptó el 2026-10-03 las recomendaciones del PO para las 16 pregun
 
 ## Preguntas abiertas
 
-Todas las preguntas de esta feature están resueltas (ver [Decisiones tomadas](#decisiones-tomadas)). La tabla se conserva como historia.
+Todas las preguntas de esta feature están resueltas salvo P-GRD-33 (ver [Decisiones tomadas](#decisiones-tomadas)). La tabla se conserva como historia.
 
 | # | Pregunta | Recomendación del PO | Estado |
 |---|----------|----------------------|------------|
@@ -405,6 +405,7 @@ Todas las preguntas de esta feature están resueltas (ver [Decisiones tomadas](#
 | P-GRD-14 | **Refinamiento de Q23 de motor-local**: ¿un endurecimiento en el perfil prevalece sobre un "permitir" del equipo? Q23 deja que el equipo gane al perfil, con la única excepción de que un nivel personal no relaja una prohibición del equipo. | Sí. Ampliar la excepción de Q23: un nivel personal (perfil o local) puede endurecer cualquier regla del equipo y nunca relajarla. Motivo: cada persona puede ser más estricta con sus agentes en su máquina sin afectar al equipo. Alternativa fiel a Q23: el equipo gana al perfil siempre y solo la configuración local personal puede endurecer. | Resuelta (Q-GRD-14) |
 | P-GRD-15 | ¿Cuándo entra un repo en el alcance de Guardrails: al ser observado por el motor o al estar en la allowlist del MCP (NFR-02)? | Al añadirlo a la observación del motor (BR-AUTH-001 (motor-local)), para que haya actor atribuido. La allowlist del MCP debería ser un subconjunto de los repos observados (a coordinar con F-001-05). Retirar un repo de la observación no desinstala sus hooks: siguen aplicando las reglas con actor "sin atribuir" y Guardrails avisa de ello. | Resuelta (Q-GRD-15) |
 | P-GRD-16 | ¿Qué hace el comando de edición si se fija como rama base una rama que no existe en el repo? (relacionada con Q42 de motor-local) | Avisar y pedir confirmación al humano; si confirma, guardarla (puede existir solo en el remoto o crearse después). El motor aplica Q42: indica que no puede calcular ahead/behind y no elige otra rama. | Resuelta (Q-GRD-16) |
+| P-GRD-33 | XP-30: con un repo que el Git del motor no puede leer (formato de refs reftable o versión más nueva que la del sistema), instalar la protección de hooks falla con un error interno y lo revierte todo; no se pierden datos, pero el desarrollador no sabe por qué. ¿Debe la instalación detectar que el Git del motor no puede leer el repo (formato de refs o versión) y mostrar un bloqueo claro con la acción (configurar el Git del motor), y debe el motor respetar `engine.gitPath`? | Sí a las dos. Comprobarlo antes de tocar nada; el estado de protección muestra el bloqueo y la acción. No cambia el límite publicado (Q-GRD-28). Que el motor use `engine.gitPath` depende de motor-local; lo resuelve el Arquitecto. Fuera del alcance de XP-30 | Abierta (2026-10-06; la registra el PO a petición del Arquitecto; decide Rene Bonilla; BR-CONS-005, BR-WF-002, BR-EDGE-004, NFR-01) |
 
 ---
 

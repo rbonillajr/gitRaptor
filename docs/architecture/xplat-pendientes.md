@@ -2,7 +2,7 @@
 title: Pendientes de la etapa de validación multiplataforma
 status: expanded
 generated: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-06
 generator: orquestador
 domain: GRP
 tags: [xplat, validacion-multiplataforma, linux, windows, contenedor, vm, lima, utm, ssh, repo-intact, strace]
@@ -56,8 +56,8 @@ Las rutas cortas de la columna Origen van bajo `docs/requirements/features/`. La
 | XP-27 | Linux + Windows | INF-GRP-003 | Binarios de release probados más allá de `--version` | Contenedor + máquina Windows | pendiente |
 | XP-28 | Windows | INF-GRP-003, ADR-GRP-014 | Artifact Signing en Windows ARM (`windows-11-arm`) | Máquina Windows ARM | pendiente |
 | XP-29 | Windows | INF-GRP-004, ADR-GRP-014, ADR-GRP-005 § 4 | Actualizar con winget o `install.ps1` mientras corre el daemon | Máquina Windows | pendiente |
-| XP-30 | Varios | INF-GRD-001, ADR-GRD-002 (Validación 12 y 13), SPIKE-GRD-001 (D11) | Datos por versión de Git de la matriz de interceptabilidad: la fila de `rename-over-base` en reftable para Git ≥ 2.56.0 (publicada C; este ejecutor mide B) y las filas de `COST_TABLE` para Git 2.56.0 (y 2.43.0, el Git de la distro del contenedor). No depende del SO: Windows y el contenedor Linux miden lo mismo con 2.56.0 | Máquina Windows + contenedor | falla: lo resuelve el dueño de INF-GRD-001 (ver [segunda ronda](#segunda-ronda-2026-10-05)) |
-| XP-31 | Linux | US-GRD-001, ADR-GRD-001 Validación 13 | Suites de US-GRD-001 (escenarios, criterios y recuperación) con la terminal del desarrollador vía `script` de util-linux, con Git 2.38.5 y la distro (2.43) | Contenedor + CI (`guardrails-git-min`) | **pasa** en el contenedor (2026-10-05): 22/22 con Git 2.38.5 y con 2.43.0 (arm64). La matriz de SPIKE-GRD-001 en Linux sigue pendiente |
+| XP-30 | Varios | INF-GRD-001, ADR-GRD-002 (Validación 12 y 13), SPIKE-GRD-001 (D11) | Datos por versión de Git de la matriz de interceptabilidad: la fila de `rename-over-base` en reftable para Git ≥ 2.56.0 (publicada C; este ejecutor mide B) y las filas de `COST_TABLE` para Git 2.56.0 (y 2.43.0, el Git de la distro del contenedor). No depende del SO: Windows y el contenedor Linux miden lo mismo con 2.56.0 | Máquina Windows + contenedor | **pasa** en el contenedor (2026-10-06, XP-30): `./xplat/run-linux.sh` en verde con Git 2.43.0, 2.38.5 y 2.56.0. No era un cambio de Git 2.56: la fila C venía de la sonda del spike (ADR-GRD-002, Enmienda 2026-10-06). Se añadieron las filas de procesos de hook de 2.38.5, 2.43.0 y 2.56.0. Windows real: pendiente de volver a pasar en la máquina de Rene |
+| XP-31 | Linux | US-GRD-001, ADR-GRD-001 Validación 13 | Suites de US-GRD-001 (escenarios, criterios y recuperación) con la terminal del desarrollador vía `script` de util-linux, con Git 2.38.5 y la distro (2.43) | Contenedor + CI (`guardrails-git-min`) | **pasa** en el contenedor (2026-10-05): 22/22 con Git 2.38.5 y con 2.43.0 (arm64). Corrección (2026-10-06, XP-30): hasta entonces el daemon de esas suites usaba siempre `/usr/bin/git` (2.43). Desde XP-30 usa el Git de la etapa (`GITRAPTOR_TEST_GIT`) y pasa con 2.43.0, 2.38.5 y 2.56.0. La matriz de SPIKE-GRD-001 en Linux sigue pendiente |
 | XP-32 | Windows | US-GRD-001, SPIKE-GRD-001 § 11 y § 14, ADR-GRD-001 (Enmienda 2026-10-05) | Coste del dispatcher (`sh` frente a nativo) y dispatcher nativo en modo degradado; la instalación espera al canal (XP-01) y la DACL de la carpeta (M-07) | Máquina Windows | parcial: coste medido (2026-10-05, § 14 de los resultados del spike); ver el PR de US-GRD-001 para el humo funcional |
 
 ## Contenedor Linux: resultados del 2026-10-05
@@ -129,7 +129,7 @@ No apareció ningún bug real de Linux en el código de producto (clase a) ni ni
 | `timemachine::protected::tests::a_full_disk_from_the_store_reads_as_no_space` | (d) | El test usaba el código 28 (`ENOSPC`), que en Windows es `ERROR_OUT_OF_PAPER`. | En Windows usa 112 (`ERROR_DISK_FULL`); producción ya mapeaba 39 y 112. |
 | `repo_intact::exec_audit::trap_gate_on_reads` | (d) | El shim era un hard link del binario de test, que comparte su DACL: bajo `C:\src` hereda Modify para Authenticated Users, y el resolvedor lo rechaza con razón (SEC-10). | En Windows el shim se copia y hereda la DACL de su carpeta privada. El resolvedor no cambia. |
 | `hooks_harness` (5) | (d) | Comparaciones de `core.hooksPath` como cadenas (`/` frente a `\`), el origen entre comillas que Git da a una ruta con `\` y los separadores del informe. | Se comparan como rutas y se normalizan los separadores en las aserciones. |
-| `interceptability` (2) | XP-30 | Datos de Git 2.56.0, no de Windows: el contenedor Linux con Git 2.56.0 mide lo mismo (B en `rename-over-base` reftable y conteos de hooks idénticos). | Pendiente del dueño de INF-GRD-001. |
+| `interceptability` (2) | XP-30 | Datos de Git 2.56.0, no de Windows: el contenedor Linux con Git 2.56.0 mide lo mismo (B en `rename-over-base` reftable y conteos de hooks idénticos). | Resuelto en XP-30 (2026-10-06): datos de 2.56.0 corregidos para todos los SO. |
 | `watch::commit_merge_rebase_and_push_are_named_by_the_reflog` (solo en la última pasada) | sin clasificar | Durante el `rebase` llegó un evento `BranchSwitch`. Pasó en las otras tres pasadas completas y 15 de 15 veces aislado, con dos workers más compilando en la misma máquina. No lo toca esta rama. | Sin cambio. Si se repite bajo carga, se abre una ficha TD con el criterio de la clase (c); es del watcher (XP-05 y XP-06). |
 
 > **Decisión del orquestador (2026-10-05), validada por Arquitecto**:
