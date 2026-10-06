@@ -78,14 +78,20 @@ jobs:
       matrix:
         include:
           # Linux: strace traces the probe's own process tree without root; blocking.
+          # `repo_intact_min`: the `repo_intact` tests the gate must execute on that OS (passed plus
+          # failed). Fewer fails the gate, so a filter that matches nothing, or a suite that stops
+          # matching it, never passes green. Raise it when a suite lands; lower it only on purpose.
           - os: ubuntu-latest
             exec_audit: strace
+            repo_intact_min: 96
           # macOS: the trap gate is blocking; eslogger runs in `deep-exec-audit-macos`.
           - os: macos-latest
             exec_audit: auto
+            repo_intact_min: 102
           # Windows: trap gate only; ETW is pending (Dev Spec § 6).
           - os: windows-latest
             exec_audit: auto
+            repo_intact_min: 67
     env:
       # Not RUST_* or CARGO_*: rust-cache hashes those into its key, and a new value would miss
       # main's cache.
@@ -119,17 +125,46 @@ jobs:
       # every suite. It runs first among the tests, on a runner no other test has loaded yet (as the
       # separate job did), and even when fmt or clippy failed, so the gate reports on its own
       # suites. Windows: non-blocking (Pendiente: etapa de validación multiplataforma).
+      # The output goes to a log too, to count the tests. Each OS keeps its default shell, so the
+      # suites run in the same environment as before (Git Bash would change PATH on Windows).
       - name: Core and registered repo_intact suites
         id: suites
-        if: ${{ !cancelled() && env.BUILD_RUST != 'false' }}
+        if: ${{ !cancelled() && env.BUILD_RUST != 'false' && matrix.os != 'windows-latest' }}
         env:
           GITRAPTOR_EXEC_AUDIT: ${{ matrix.exec_audit }}
-        run: cargo test --workspace -- repo_intact
-        continue-on-error: ${{ matrix.os == 'windows-latest' }}
+        run: |
+          set -o pipefail
+          cargo test --workspace --no-fail-fast -- repo_intact | tee repo-intact-suites.log
+      - name: Core and registered repo_intact suites
+        id: suites_windows
+        if: ${{ !cancelled() && env.BUILD_RUST != 'false' && matrix.os == 'windows-latest' }}
+        env:
+          GITRAPTOR_EXEC_AUDIT: ${{ matrix.exec_audit }}
+        run: cargo test --workspace --no-fail-fast -- repo_intact | Tee-Object -FilePath repo-intact-suites.log
+        continue-on-error: true
+      # Empty-gate guard: the suites pass only if they executed at least `repo_intact_min` tests,
+      # counted from every `test result:` line (the libtest ones and the `harness = false` one).
       - name: Record the repo_intact outcome
+        id: record
         if: ${{ !cancelled() && env.BUILD_RUST != 'false' }}
         shell: bash
-        run: echo "${{ steps.suites.outcome }}" > repo-intact-outcome.txt
+        env:
+          OS: ${{ matrix.os }}
+          SUITES: ${{ matrix.os == 'windows-latest' && steps.suites_windows.outcome || steps.suites.outcome }}
+          MIN: ${{ matrix.repo_intact_min }}
+        run: |
+          touch repo-intact-suites.log
+          executed=$(tr -d '\r' < repo-intact-suites.log | sed 's/\x1b\[[0-9;]*m//g' \
+            | awk '/^test result: /{for (i = 1; i < NF; i++) if ($(i + 1) ~ /^(passed|failed);$/) n += $i} END {print n + 0}')
+          outcome=$SUITES
+          if [ "$outcome" = success ] && [ "$executed" -lt "$MIN" ]; then
+            echo "::error::repo_intact suites on $OS executed $executed tests, fewer than the $MIN required: the gate filter no longer selects them"
+            outcome=failure
+          fi
+          echo "repo_intact suites on $OS: $outcome, $executed tests executed (minimum $MIN)"
+          printf '%s\n%s\n' "$outcome" "$executed" > repo-intact-outcome.txt
+          if [ "$outcome" != success ] && [ "$SUITES" = success ]; then exit 1; fi
+        continue-on-error: ${{ matrix.os == 'windows-latest' }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() && env.BUILD_RUST != 'false' }}
         with:
@@ -188,8 +223,14 @@ jobs:
         env:
           OS: ${{ matrix.os }}
         run: |
-          outcome=$(cat repo-intact-outcome.txt)
-          echo "repo_intact suites on $OS: $outcome"
+          outcome=$(sed -n 1p repo-intact-outcome.txt)
+          executed=$(sed -n 2p repo-intact-outcome.txt)
+          echo "repo_intact suites on $OS: $outcome, ${executed:-no} tests executed"
+          # Defense in depth: a success with no tests is not a success.
+          if [ "$outcome" = success ] && ! [ "${executed:-0}" -gt 0 ] 2>/dev/null; then
+            echo "::error::repo_intact suites on $OS reported success with no tests executed"
+            outcome=failure
+          fi
           if [ "$outcome" = success ]; then exit 0; fi
           if [ "$OS" = windows-latest ]; then
             echo "::warning::repo_intact suites failed on Windows. Pendiente: etapa de validación multiplataforma"
