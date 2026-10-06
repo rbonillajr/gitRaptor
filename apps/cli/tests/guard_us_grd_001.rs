@@ -644,7 +644,8 @@ mod criteria {
             ],
         );
         assert!(!out.status.success(), "{}", text(&out));
-        // An alias of the base on a case-insensitive file system (H-06).
+        // An alias of the base on a case-insensitive file system (H-06), also when the repo's
+        // own `core.ignoreCase` says otherwise: the file system decides.
         let ignores_case = m.git(&m.f.repo, &["config", "--bool", "core.ignoreCase"]);
         if String::from_utf8_lossy(&ignores_case.stdout).trim() == "true" {
             let out = m.git(&m.f.repo, &["branch", "-D", "Main"]);
@@ -654,6 +655,10 @@ mod criteria {
                 "{}",
                 text(&out)
             );
+            m.git_ok(&m.f.repo, &["config", "core.ignoreCase", "false"]);
+            let out = m.git(&m.f.repo, &["update-ref", "-d", "refs/heads/MAIN"]);
+            assert!(!out.status.success(), "{}", text(&out));
+            m.git_ok(&m.f.repo, &["config", "core.ignoreCase", "true"]);
         }
         assert_eq!(m.local_ref("refs/heads/main").unwrap(), main);
     }
@@ -928,6 +933,47 @@ mod criteria {
         assert!(out.status.success(), "{}", text(&out));
         assert_eq!(m.status(&m.f.repo).state, ProtectionState::HooksOnly);
         let out = m.git(&m.f.repo, &["branch", "-D", "main"]);
+        assert!(!out.status.success(), "{}", text(&out));
+    }
+
+    // ADR-GRD-002 Enmienda (reftable): a reftable repo installs, its explanation says renaming
+    // the base is not preventable, a commit on a detached HEAD passes (the real HEAD is in the
+    // tables) and deleting the base is denied.
+    #[test]
+    fn repo_intact_a_reftable_repo_is_protected_with_its_declared_limit() {
+        let m = Machine::new();
+        let repo = m.f.root.join("reftable");
+        let init = m.git(
+            &m.f.root,
+            &[
+                "init",
+                "-q",
+                "--ref-format=reftable",
+                "-b",
+                "main",
+                repo.to_str().unwrap(),
+            ],
+        );
+        if !init.status.success() {
+            eprintln!("Git without reftable (< 2.45): skipped");
+            return;
+        }
+        m.git_ok(&repo, &["commit", "-q", "--allow-empty", "-m", "a"]);
+        m.git_ok(&repo, &["branch", "feat"]);
+        m.add(&repo);
+        let out = m.protect(&repo);
+        assert!(out.status.success(), "{}", text(&out));
+        assert!(text(&out).contains("uses reftable"), "{}", text(&out));
+        let status = m.status(&repo);
+        assert!(
+            status
+                .not_preventable
+                .contains(&gitraptor_api::guard::NotPreventable::RenameBaseReftable)
+        );
+        m.git_ok(&repo, &["switch", "-q", "--detach", "feat"]);
+        let out = m.git(&repo, &["commit", "-q", "--allow-empty", "-m", "detached"]);
+        assert!(out.status.success(), "{}", text(&out));
+        let out = m.git(&repo, &["branch", "-D", "main"]);
         assert!(!out.status.success(), "{}", text(&out));
     }
 

@@ -97,14 +97,11 @@ pub fn parse_ref_update(line: &[u8]) -> Result<RawRefUpdate, LineError> {
 /// Parses one `pre-push` line.
 pub fn parse_push_update(line: &[u8]) -> Result<RawPushUpdate, LineError> {
     let line = text(line)?;
-    let mut fields = line.split(' ');
-    let (Some(local_ref), Some(local), Some(remote_ref), Some(remote), None) = (
-        fields.next(),
-        fields.next(),
-        fields.next(),
-        fields.next(),
-        fields.next(),
-    ) else {
+    // The three last fields are fixed; the local side is whatever Git wrote, spaces included.
+    let mut fields = line.rsplitn(4, ' ');
+    let (Some(remote), Some(remote_ref), Some(local), Some(local_ref)) =
+        (fields.next(), fields.next(), fields.next(), fields.next())
+    else {
         return Err(LineError::Shape);
     };
     let local = object_id(local)?;
@@ -174,5 +171,10 @@ mod tests {
         assert_eq!(upd.local_ref.as_deref(), Some("refs/heads/f"));
         assert!(parse_push_update(format!("(delete) {A} refs/heads/main {A}").as_bytes()).is_err());
         assert!(parse_push_update(format!("x {A} ref:refs/heads/x {A}").as_bytes()).is_err());
+        let spaced =
+            parse_push_update(format!("main@{{1 day ago}} {A} refs/heads/x {Z}").as_bytes())
+                .unwrap();
+        assert_eq!(spaced.local_ref.as_deref(), Some("main@{1 day ago}"));
+        assert!(parse_push_update(format!("{A} refs/heads/x {Z}").as_bytes()).is_err());
     }
 }
