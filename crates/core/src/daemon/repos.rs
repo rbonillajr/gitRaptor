@@ -165,18 +165,21 @@ impl Daemon {
             read.views(),
             read.divergence_inputs(),
             Some(observe::base_view(&read.base)),
+            Vec::new(),
             timings,
         );
     }
 
     /// Publishes the worktree views of one repo with the inputs of their
     /// ahead/behind recount, in the same critical section as the snapshot.
+    /// `in_gap` are the worktrees read by the reconciliation of a gap.
     pub(super) fn publish_views(
         &self,
         repo_id: &str,
         worktrees: Vec<WorktreeView>,
         inputs: observe::DivergenceInputs,
         base: Option<gitraptor_api::messages::BaseBranchView>,
+        in_gap: Vec<String>,
         timings: Timings,
     ) {
         let id = repo_id.to_owned();
@@ -196,6 +199,7 @@ impl Daemon {
                         &mut worktrees,
                         &inputs.heads,
                         now_ms(),
+                        &in_gap,
                     );
                     repo.worktrees = worktrees.clone();
                     repo.fetched_utc_ms = fetched;
@@ -585,7 +589,8 @@ impl Daemon {
             base,
             heads,
         };
-        self.publish_views(&batch.repo_id, views, inputs, None, timings);
+        let in_gap = batch.gap_worktrees();
+        self.publish_views(&batch.repo_id, views, inputs, None, in_gap, timings);
     }
 
     /// Second phase: counts the ahead/behind of the repo as it is now and
@@ -611,7 +616,14 @@ impl Daemon {
             t_persisted: t_computed,
             ..timings
         };
-        self.publish_views(repo_id, counted.worktrees, inputs.clone(), None, timings);
+        self.publish_views(
+            repo_id,
+            counted.worktrees,
+            inputs.clone(),
+            None,
+            Vec::new(),
+            timings,
+        );
     }
 
     /// One page of a repo's Git events (US-GRP-002, ADR-GRP-013 § 6).

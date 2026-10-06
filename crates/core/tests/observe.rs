@@ -176,7 +176,9 @@ mod activity {
         ChangeCounts, CommitCountView, DivergenceView, HeadView, WorktreeStatus, WorktreeView,
     };
     use gitraptor_api::{Untrusted, UntrustedName};
-    use gitraptor_core::observe::{HeadRef, fetched_utc_ms, stamp_activity};
+    use gitraptor_core::observe::{HeadRef, WorktreeRead, fetched_utc_ms, stamp_activity};
+    use gitraptor_core::profile::GapCause;
+    use gitraptor_core::watch::{GapMark, Marks, ObservedBatch};
 
     const NOW: i64 = 1_000_000;
 
@@ -221,7 +223,7 @@ mod activity {
         head: HeadRef,
     ) -> Option<i64> {
         let mut new = vec![new];
-        stamp_activity(old, old_heads, &mut new, &[head], NOW);
+        stamp_activity(old, old_heads, &mut new, &[head], NOW, &[]);
         new[0].last_activity_utc_ms
     }
 
@@ -252,11 +254,11 @@ mod activity {
         seeded.last_activity_in_gap = true;
         let old = [seeded];
         let mut quiet = vec![view("/w/a", 0, 3, None)];
-        stamp_activity(&old, &[at("c1")], &mut quiet, &[at("c1")], NOW);
+        stamp_activity(&old, &[at("c1")], &mut quiet, &[at("c1")], NOW, &[]);
         assert_eq!(quiet[0].last_activity_utc_ms, Some(5));
         assert!(quiet[0].last_activity_in_gap);
         let mut changed = vec![view("/w/a", 1, 0, None)];
-        stamp_activity(&old, &[at("c1")], &mut changed, &[at("c1")], NOW);
+        stamp_activity(&old, &[at("c1")], &mut changed, &[at("c1")], NOW, &[]);
         assert_eq!(changed[0].last_activity_utc_ms, Some(NOW));
         assert!(!changed[0].last_activity_in_gap);
     }
@@ -269,6 +271,67 @@ mod activity {
             stamped(&old, &[at("c1")], view("/w/a", 0, 3, None), at("c1")),
             Some(5)
         );
+    }
+
+    fn batch(read: &WorktreeView, gap: Option<GapMark>) -> ObservedBatch {
+        ObservedBatch {
+            repo_id: "r".into(),
+            worktrees: vec![WorktreeRead {
+                view: read.clone(),
+                head_commit: None,
+                fingerprint: None,
+                in_progress: false,
+            }],
+            gone: Vec::new(),
+            events: Vec::new(),
+            gap,
+            refs: None,
+            head_logs: Vec::new(),
+            heads: Vec::new(),
+            marks: Marks::default(),
+        }
+    }
+
+    /// A change read by the reconciliation of a live observer gap (overflow, periodic
+    /// reconciliation) carries the gap mark, as a seeded one does; the next change seen
+    /// live clears it, and a quiet read keeps it (ADR-GRP-013 § 6, DS-US-CKP-001 § 8).
+    #[test]
+    fn a_change_reconciled_in_a_live_gap_carries_the_gap_mark() {
+        let gap = GapMark {
+            cause: GapCause::WatcherOverflow,
+            started_ms: 1,
+            ended_ms: 2,
+        };
+        let mut views = vec![view("/w/a", 0, 0, Some(5)), view("/w/b", 0, 0, Some(5))];
+        let heads = [at("c1"), at("c1")];
+
+        // The overflow reconciliation read a change in /w/a only.
+        let lost = view("/w/a", 1, 0, None);
+        let in_gap = batch(&lost, Some(gap)).gap_worktrees();
+        assert_eq!(in_gap, ["/w/a"]);
+        let mut new = vec![lost, view("/w/b", 0, 0, None)];
+        stamp_activity(&views, &heads, &mut new, &heads, NOW, &in_gap);
+        assert_eq!(new[0].last_activity_utc_ms, Some(NOW));
+        assert!(new[0].last_activity_in_gap);
+        assert_eq!(new[1].last_activity_utc_ms, Some(5));
+        assert!(!new[1].last_activity_in_gap);
+        views = new;
+
+        // A quiet recount (the ahead/behind) keeps value and mark.
+        let mut quiet = vec![view("/w/a", 1, 4, None), view("/w/b", 0, 0, None)];
+        stamp_activity(&views, &heads, &mut quiet, &heads, NOW + 1, &[]);
+        assert_eq!(quiet[0].last_activity_utc_ms, Some(NOW));
+        assert!(quiet[0].last_activity_in_gap);
+        views = quiet;
+
+        // The next change, seen live, clears it.
+        let live = view("/w/a", 2, 4, None);
+        let in_gap = batch(&live, None).gap_worktrees();
+        assert!(in_gap.is_empty());
+        let mut new = vec![live, view("/w/b", 0, 0, None)];
+        stamp_activity(&views, &heads, &mut new, &heads, NOW + 2, &in_gap);
+        assert_eq!(new[0].last_activity_utc_ms, Some(NOW + 2));
+        assert!(!new[0].last_activity_in_gap);
     }
 
     #[test]

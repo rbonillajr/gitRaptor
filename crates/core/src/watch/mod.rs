@@ -118,6 +118,20 @@ pub struct ObservedBatch {
     pub marks: Marks,
 }
 
+impl ObservedBatch {
+    /// The worktrees whose state this batch read while closing a gap: what
+    /// changed in them happened at some point inside it (ADR-GRP-013 § 6).
+    pub fn gap_worktrees(&self) -> Vec<String> {
+        if self.gap.is_none() {
+            return Vec::new();
+        }
+        self.worktrees
+            .iter()
+            .map(|r| r.view.path.raw().to_owned())
+            .collect()
+    }
+}
+
 /// What a repo's tasks start from: each worktree's `HEAD` reflog size and
 /// `HEAD` (US-TMC-004).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

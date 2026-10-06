@@ -68,17 +68,24 @@ pub fn fetched_utc_ms(common_dir: &Path, now_ms: i64) -> Option<i64> {
 /// the worktree), nor do sessions. A worktree that appears in a repo that
 /// already had worktrees is activity; on the first read of a repo nothing
 /// is known yet. A live change clears the gap mark of a seeded value. `old_heads` and `new_heads` are aligned with their views.
+/// The worktrees in `in_gap` were read by a reconciliation that closes a
+/// gap of the live observer (overflow, periodic reconciliation): their
+/// change happened at some point inside it, so its activity carries the
+/// gap mark (ADR-GRP-013 § 6), as a seeded one does.
 pub fn stamp_activity(
     old: &[WorktreeView],
     old_heads: &[HeadRef],
     new: &mut [WorktreeView],
     new_heads: &[HeadRef],
     now_ms: i64,
+    in_gap: &[String],
 ) {
+    let gap_linked = |view: &WorktreeView| in_gap.iter().any(|p| p == view.path.raw());
     for (i, view) in new.iter_mut().enumerate() {
         let Some(j) = old.iter().position(|o| o.path == view.path) else {
             if !old.is_empty() {
                 view.last_activity_utc_ms = Some(now_ms);
+                view.last_activity_in_gap = gap_linked(view);
             }
             continue;
         };
@@ -88,7 +95,7 @@ pub fn stamp_activity(
         );
         if moved || !same_but_divergence(&old[j].status, &view.status) {
             view.last_activity_utc_ms = Some(now_ms);
-            view.last_activity_in_gap = false;
+            view.last_activity_in_gap = gap_linked(view);
         } else {
             view.last_activity_utc_ms = old[j].last_activity_utc_ms;
             view.last_activity_in_gap = old[j].last_activity_in_gap;
