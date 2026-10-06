@@ -134,13 +134,13 @@ jobs:
           GITRAPTOR_EXEC_AUDIT: ${{ matrix.exec_audit }}
         run: |
           set -o pipefail
-          cargo test --workspace --no-fail-fast -- repo_intact | tee repo-intact-suites.log
+          cargo test --workspace --no-fail-fast -- repo_intact_no_such_suite | tee repo-intact-suites.log
       - name: Core and registered repo_intact suites
         id: suites_windows
         if: ${{ !cancelled() && env.BUILD_RUST != 'false' && matrix.os == 'windows-latest' }}
         env:
           GITRAPTOR_EXEC_AUDIT: ${{ matrix.exec_audit }}
-        run: cargo test --workspace --no-fail-fast -- repo_intact | Tee-Object -FilePath repo-intact-suites.log
+        run: cargo test --workspace --no-fail-fast -- repo_intact_no_such_suite | Tee-Object -FilePath repo-intact-suites.log
         continue-on-error: true
       # Empty-gate guard: the suites pass only if they executed at least `repo_intact_min` tests,
       # counted from every `test result:` line (the libtest ones and the `harness = false` one).
