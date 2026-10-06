@@ -24,6 +24,7 @@ use crate::profile::ProfileDirs;
 #[cfg(unix)]
 use {
     crate::daemon::wait_until_released,
+    gitraptor_api::clock::monotonic_ns,
     gitraptor_api::framing::{FrameError, MAX_MESSAGE_BYTES, read_frame},
     gitraptor_api::messages::{Hello, NoParams, ReplaceParams},
     gitraptor_api::methods,
@@ -164,8 +165,23 @@ pub struct Client {
     #[cfg(unix)]
     reader: BufReader<std::os::unix::net::UnixStream>,
     next_id: u64,
-    notifications: VecDeque<Notification>,
+    /// Notifications read while waiting for an answer, with the
+    /// [`monotonic_ns`] reading taken when their frame was read.
+    notifications: VecDeque<(u64, Notification)>,
     hello: HelloResult,
+}
+
+/// A message from the daemon with the moment it was read
+/// (`t_client_recv`, ADR-CKP-003 § 6), before it is decoded.
+#[derive(Debug)]
+pub enum Incoming {
+    /// A notification read while a call waited for its answer, already decoded.
+    Buffered {
+        recv_ns: u64,
+        notification: Notification,
+    },
+    /// A complete frame, not decoded yet: decoding counts in the client's budget.
+    Frame { recv_ns: u64, bytes: Vec<u8> },
 }
 
 /// Outcome of a handshake on an open connection.
@@ -273,21 +289,24 @@ impl Client {
             if remaining.is_zero() {
                 return Err(ClientError::Io(io::ErrorKind::TimedOut.into()));
             }
-            match self.read_message(Some(remaining))? {
-                Some(ServerMessage::Response(resp)) if resp.id == Some(Id::Num(id)) => {
+            let Some(bytes) = self.read_frame(Some(remaining))? else {
+                return Err(ClientError::Io(io::ErrorKind::UnexpectedEof.into()));
+            };
+            let recv_ns = monotonic_ns();
+            match decode(&bytes)? {
+                ServerMessage::Response(resp) if resp.id == Some(Id::Num(id)) => {
                     return Ok(resp.into_result()?);
                 }
                 // An error the daemon could not tie to a request (a frame
                 // too large, a connection limit) answers this one.
-                Some(ServerMessage::Response(resp)) if resp.id.is_none() => {
+                ServerMessage::Response(resp) if resp.id.is_none() => {
                     return Err(resp
                         .error
                         .map(ClientError::Rpc)
                         .unwrap_or(ClientError::Protocol("response without id")));
                 }
-                Some(ServerMessage::Response(_)) => {}
-                Some(ServerMessage::Notification(n)) => self.notifications.push_back(n),
-                None => return Err(ClientError::Io(io::ErrorKind::UnexpectedEof.into())),
+                ServerMessage::Response(_) => {}
+                ServerMessage::Notification(n) => self.notifications.push_back((recv_ns, n)),
             }
         }
     }
@@ -312,15 +331,51 @@ impl Client {
         &mut self,
         timeout: Option<Duration>,
     ) -> Result<Option<ServerMessage>, ClientError> {
+        match self.read_frame(timeout)? {
+            Some(bytes) => decode(&bytes).map(Some),
+            None => Ok(None),
+        }
+    }
+
+    /// The next complete frame, not decoded; `None` at end of stream.
+    #[cfg(unix)]
+    fn read_frame(&mut self, timeout: Option<Duration>) -> Result<Option<Vec<u8>>, ClientError> {
         self.reader.get_ref().set_read_timeout(timeout)?;
         let mut buf = Vec::new();
         match read_frame(&mut self.reader, &mut buf, MAX_MESSAGE_BYTES) {
-            Ok(true) => serde_json::from_slice(&buf)
-                .map(Some)
-                .map_err(|_| ClientError::Protocol("not a contract message")),
+            Ok(true) => Ok(Some(buf)),
             Ok(false) => Ok(None),
             Err(FrameError::TooLarge) => Err(ClientError::Protocol("message too large")),
             Err(FrameError::Io(err)) => Err(ClientError::Io(err)),
+        }
+    }
+
+    /// The next message, stamped with [`monotonic_ns`] as soon as its frame
+    /// is read, waiting up to `timeout`. `None` on timeout; the end of the
+    /// stream is an `UnexpectedEof` error.
+    #[cfg(unix)]
+    pub fn next_incoming(&mut self, timeout: Duration) -> Result<Option<Incoming>, ClientError> {
+        if let Some((recv_ns, notification)) = self.notifications.pop_front() {
+            return Ok(Some(Incoming::Buffered {
+                recv_ns,
+                notification,
+            }));
+        }
+        match self.read_frame(Some(timeout)) {
+            Ok(Some(bytes)) => Ok(Some(Incoming::Frame {
+                recv_ns: monotonic_ns(),
+                bytes,
+            })),
+            Ok(None) => Err(ClientError::Io(io::ErrorKind::UnexpectedEof.into())),
+            Err(ClientError::Io(err))
+                if matches!(
+                    err.kind(),
+                    io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+                ) =>
+            {
+                Ok(None)
+            }
+            Err(err) => Err(err),
         }
     }
 
@@ -331,7 +386,7 @@ impl Client {
         &mut self,
         timeout: Duration,
     ) -> Result<Option<Notification>, ClientError> {
-        if let Some(n) = self.notifications.pop_front() {
+        if let Some((_, n)) = self.notifications.pop_front() {
             return Ok(Some(n));
         }
         match self.read_message(Some(timeout)) {
@@ -369,6 +424,12 @@ impl Client {
             }
         }
     }
+}
+
+/// A frame as a message of the contract.
+#[cfg(unix)]
+fn decode(bytes: &[u8]) -> Result<ServerMessage, ClientError> {
+    serde_json::from_slice(bytes).map_err(|_| ClientError::Protocol("not a contract message"))
 }
 
 /// Connects to the daemon, starting it if needed (ADR-GRP-005 § 3) and
@@ -422,6 +483,10 @@ impl Client {
         &mut self,
         _timeout: Duration,
     ) -> Result<Option<Notification>, ClientError> {
+        Err(ClientError::TransportUnsupported)
+    }
+
+    pub fn next_incoming(&mut self, _timeout: Duration) -> Result<Option<Incoming>, ClientError> {
         Err(ClientError::TransportUnsupported)
     }
 
