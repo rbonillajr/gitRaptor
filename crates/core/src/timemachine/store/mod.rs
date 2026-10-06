@@ -290,6 +290,30 @@ impl SnapshotStore {
         Ok(self.store.seed_from(&reader, self.seed_limits)?)
     }
 
+    /// Like [`SnapshotStore::seed`], with the indexing limited to `limits` (the continuous
+    /// capture seeds with one thread, US-TMC-004).
+    pub fn seed_with(
+        &self,
+        repo: &Path,
+        limits: gitraptor_git::tm_write::store::SeedLimits,
+    ) -> Result<SeedReport, CaptureError> {
+        let reader = RepoReader::open(repo, &ReaderOptions::default())?;
+        Ok(self.store.seed_from(&reader, limits)?)
+    }
+
+    /// Whether the store has the commit `HEAD` of `worktree` points to: once it does, a capture
+    /// of it copies only what is new (ADR-TMC-001 § 3). An unborn or unreadable `HEAD` counts as
+    /// had: there is nothing to copy.
+    pub fn has_head_of(&self, worktree: &Path) -> bool {
+        let Ok(reader) = RepoReader::open(worktree, &ReaderOptions::default()) else {
+            return true;
+        };
+        match reader.head().ok().and_then(|h| h.commit) {
+            Some(hex) => Oid::from_hex(&hex).is_none_or(|id| self.store.handle().has(id)),
+            None => true,
+        }
+    }
+
     /// Copies into the store the commits `tips` reach and it lacks (anchoring, ADR-TMC-001 § 3).
     /// The daemon calls it when the engine publishes a new commit or a ref move.
     pub fn anchor(&self, repo: &Path, tips: &[String]) -> Result<u64, CaptureError> {

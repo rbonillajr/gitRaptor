@@ -58,6 +58,10 @@ impl EngineLink for DaemonEngine {
     fn generation_floor(&self, repo_id: &str) -> i64 {
         self.marks.floor(repo_id)
     }
+
+    fn activity(&self, repo_id: &str) -> u64 {
+        self.marks.activity(repo_id)
+    }
 }
 
 impl Daemon {

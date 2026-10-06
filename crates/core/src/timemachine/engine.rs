@@ -55,12 +55,16 @@ pub trait EngineLink: Send + Sync {
     /// First oplog sequence of the current generation of the repo's engine store: rows before it
     /// carry marks of another numbering (or of the bus, before US-TMC-004).
     fn generation_floor(&self, repo_id: &str) -> i64;
+    /// A counter of the repo's file activity as the engine published it: a capture that sees it
+    /// move gives way (US-TMC-004).
+    fn activity(&self, repo_id: &str) -> u64;
 }
 
 #[derive(Debug, Default)]
 struct RepoMark {
     seq: AtomicI64,
     touch_ns: AtomicU64,
+    activity: AtomicU64,
     floor: AtomicI64,
     /// Size of each worktree's `HEAD` reflog in the last persisted batch, by canonical root.
     head_logs: Mutex<HashMap<PathBuf, u64>>,
@@ -127,6 +131,15 @@ impl RepoMarks {
 
     pub fn touched(&self, repo_id: &str) -> u64 {
         self.get(repo_id).touch_ns.load(Ordering::Acquire)
+    }
+
+    /// A worktree of the repo changed (published by the engine).
+    pub fn bump_activity(&self, repo_id: &str) {
+        self.get(repo_id).activity.fetch_add(1, Ordering::AcqRel);
+    }
+
+    pub fn activity(&self, repo_id: &str) -> u64 {
+        self.get(repo_id).activity.load(Ordering::Acquire)
     }
 
     pub fn set_floor(&self, repo_id: &str, floor: i64) {

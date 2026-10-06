@@ -216,6 +216,7 @@ impl ObserverHooks for Hooks {
     }
 
     fn worktree_changed(&self, repo_id: &str, root: &Path) {
+        self.marks.bump_activity(repo_id);
         let _ = self
             .tx
             .lock()
@@ -249,8 +250,89 @@ impl Pending {
     }
 }
 
+/// The seeding of a repo's store, once per run (ADR-TMC-001 § 3).
+enum Seed {
+    /// Seeding in the background; its captures wait.
+    Running(Arc<std::sync::atomic::AtomicBool>),
+    Done,
+}
+
+/// Indexing limits of the seeding the continuous capture starts: one thread and a bounded
+/// allocation, so it never competes with the engine (US-TMC-004).
+fn seed_limits() -> gitraptor_git::tm_write::store::SeedLimits {
+    gitraptor_git::tm_write::store::SeedLimits {
+        threads: 1,
+        alloc_limit_bytes: 256 << 20,
+    }
+}
+
+/// Whether the store of `repo_id` can take a capture of `worktree` that only copies what is new.
+/// A store that lacks the worktree's `HEAD` commit is seeded first, in the background: without
+/// it, the first capture of a large repo would copy its whole history object by object.
+fn seeded(
+    deps: &CaptureDeps,
+    seeds: &mut HashMap<String, Seed>,
+    repo_id: &str,
+    worktree: &Path,
+) -> bool {
+    match seeds.get(repo_id) {
+        Some(Seed::Done) => return true,
+        Some(Seed::Running(done)) => {
+            if done.load(std::sync::atomic::Ordering::Acquire) {
+                seeds.insert(repo_id.to_owned(), Seed::Done);
+                return true;
+            }
+            return false;
+        }
+        None => {}
+    }
+    let Some((_, Some(store))) = deps.repos.repo(repo_id) else {
+        // No store: the capture says so itself.
+        return true;
+    };
+    if store.has_head_of(worktree) {
+        seeds.insert(repo_id.to_owned(), Seed::Done);
+        return true;
+    }
+    let done = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let flag = Arc::clone(&done);
+    let logger = deps.logger.clone();
+    let repo = repo_id.to_owned();
+    let path = worktree.to_path_buf();
+    let spawned = std::thread::Builder::new()
+        .name("raptor-tm-seed".into())
+        .spawn(move || {
+            match store.seed_with(&path, seed_limits()) {
+                Ok(report) => logger.info(
+                    "tm_seeded",
+                    &[
+                        ("repo", Field::id(&repo)),
+                        (
+                            "objects",
+                            i64::try_from(report.objects).unwrap_or(i64::MAX).into(),
+                        ),
+                        ("skipped", report.skipped.len().into()),
+                    ],
+                ),
+                // A capture then copies what it lacks.
+                Err(_) => logger.warn("tm_seed_failed", &[("repo", Field::id(&repo))]),
+            }
+            flag.store(true, std::sync::atomic::Ordering::Release);
+        });
+    if spawned.is_err() {
+        seeds.insert(repo_id.to_owned(), Seed::Done);
+        return true;
+    }
+    seeds.insert(repo_id.to_owned(), Seed::Running(done));
+    false
+}
+
+/// While a repo's store seeds, its captures are tried again this often.
+const SEED_WAIT: Duration = Duration::from_secs(1);
+
 fn run(config: CaptureConfig, deps: CaptureDeps, rx: Receiver<Signal>) {
     let mut pending: HashMap<(String, PathBuf), Pending> = HashMap::new();
+    let mut seeds: HashMap<String, Seed> = HashMap::new();
     loop {
         let next = pending.values().map(|p| p.due(&config)).min();
         let signal = match next {
@@ -273,7 +355,10 @@ fn run(config: CaptureConfig, deps: CaptureDeps, rx: Receiver<Signal>) {
             let now = Instant::now();
             match s {
                 Signal::Stop => return,
-                Signal::Forget { repo_id } => pending.retain(|(r, _), _| *r != repo_id),
+                Signal::Forget { repo_id } => {
+                    pending.retain(|(r, _), _| *r != repo_id);
+                    seeds.remove(&repo_id);
+                }
                 Signal::Activity { repo_id, worktree } => {
                     if !config.enabled {
                         continue;
@@ -318,7 +403,14 @@ fn run(config: CaptureConfig, deps: CaptureDeps, rx: Receiver<Signal>) {
             let Some(p) = pending.get_mut(&key) else {
                 continue;
             };
-            match capture_one(&deps, &key.0, &key.1, p.event) {
+            if !seeded(&deps, &mut seeds, &key.0, &key.1) {
+                p.retry_at = Some(Instant::now() + SEED_WAIT);
+                continue;
+            }
+            // A capture gives way to new activity of its repo, unless it has waited too long:
+            // then it runs to the end (at most every `M` while the activity goes on).
+            let give_way = p.first.elapsed() < config.max_interval * 6;
+            match capture_one(&deps, &key.0, &key.1, p.event, give_way) {
                 Attempt::Done => {
                     pending.remove(&key);
                 }
@@ -344,7 +436,13 @@ enum Attempt {
     Again,
 }
 
-fn capture_one(deps: &CaptureDeps, repo_id: &str, worktree: &Path, event: Option<i64>) -> Attempt {
+fn capture_one(
+    deps: &CaptureDeps,
+    repo_id: &str,
+    worktree: &Path,
+    event: Option<i64>,
+    give_way: bool,
+) -> Attempt {
     if !worktree.is_dir() {
         return Attempt::Done;
     }
@@ -355,6 +453,7 @@ fn capture_one(deps: &CaptureDeps, repo_id: &str, worktree: &Path, event: Option
         None,
         event,
         CAPTURE_SETTLE_LIMIT,
+        give_way,
     ) {
         Ok(_) => Attempt::Done,
         Err(Failure::NotCalm | Failure::Busy) => Attempt::Again,
@@ -395,7 +494,8 @@ pub enum Failure {
 }
 
 /// Takes one `observation` snapshot of `worktrees` (US-TMC-004): after a calm engine, with its
-/// mark, guarded at the validity point.
+/// mark, guarded at the validity point. With `give_way`, new activity in the repo makes it give
+/// way (`Yielded`), so it never competes with the engine during a burst.
 pub fn observe(
     deps: &CaptureDeps,
     repo_id: &str,
@@ -403,6 +503,7 @@ pub fn observe(
     cause_operation: Option<&str>,
     cause_event_seq: Option<i64>,
     settle: Duration,
+    give_way: bool,
 ) -> Result<CaptureOutcome, Failure> {
     let (oplog, store) = deps.repos.repo(repo_id).ok_or(Failure::Unavailable)?;
     let store = store.ok_or(Failure::Unavailable)?;
@@ -433,6 +534,9 @@ pub fn observe(
         })
         .collect();
     let guarded: Vec<PathBuf> = worktrees.to_vec();
+    let activity = deps.engine.activity(repo_id);
+    let engine = Arc::clone(&deps.engine);
+    let repo = repo_id.to_owned();
     let req = CaptureRequest {
         level: SnapshotLevel::Observation,
         repo: first.clone(),
@@ -447,6 +551,8 @@ pub fn observe(
                 .map(|w| GitState::read(w))
                 .eq(at_start.iter().cloned())
         }))),
+        give_way: give_way
+            .then(|| ValidityGuard(Arc::new(move || engine.activity(&repo) != activity))),
     };
     if cfg!(debug_assertions)
         && let Some(err) = deps.layer.as_ref().and_then(|layer| layer(&req))
@@ -473,6 +579,7 @@ pub fn anchor(
             Some(operation_id),
             None,
             ANCHOR_SETTLE_LIMIT,
+            false,
         ) {
             Ok(out) => return Some(out.snapshot_id),
             Err(

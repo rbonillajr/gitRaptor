@@ -54,6 +54,10 @@ pub struct CaptureRequest {
     /// a row (`CaptureError::Discarded`). The continuous capture uses it so a snapshot never mixes
     /// the state before and after a `git` (ADR-TMC-004 § 2, consistency).
     pub still_valid: Option<ValidityGuard>,
+    /// Observation only: when it says yes, the capture gives way, as it does to a guaranteed
+    /// prior (`CaptureError::Yielded`, nothing recorded). The continuous capture gives way to new
+    /// activity in the repo, so it never competes with the engine during a burst (US-TMC-004).
+    pub give_way: Option<ValidityGuard>,
 }
 
 /// A check of [`CaptureRequest::still_valid`].
@@ -350,7 +354,8 @@ impl SnapshotStore {
         t_all: Instant,
         mut timings: StageTimings,
     ) -> Result<CaptureOutcome, CaptureError> {
-        let yield_now = || !prior && self.prior_waiting();
+        let yield_now =
+            || !prior && (self.prior_waiting() || req.give_way.as_ref().is_some_and(|g| (g.0)()));
         if yield_now() {
             return Err(CaptureError::Yielded);
         }
@@ -939,10 +944,16 @@ impl SnapshotStore {
         } else {
             Some(OBSERVATION_MAX_FILE_BYTES)
         };
-        let threads = std::thread::available_parallelism()
-            .map_or(4, |n| n.get())
-            .min(8)
-            .min(jobs.len());
+        // An observation has no latency gate (ADR-TMC-006 § 1): one thread, so it never
+        // competes with the engine for the machine (US-TMC-004). A prior uses up to 8.
+        let threads = if prior {
+            std::thread::available_parallelism()
+                .map_or(4, |n| n.get())
+                .min(8)
+                .min(jobs.len())
+        } else {
+            1
+        };
         let next = AtomicUsize::new(0);
         let stop = AtomicBool::new(false);
         let run = |handle: StoreHandle| -> Result<Vec<JobResult>, CaptureError> {
