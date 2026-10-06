@@ -1,0 +1,272 @@
+---
+id: DS-US-GRD-018
+title: "Dev Spec — US-GRD-018 y US-GRD-019: política de autoría de los commits y quién ejecutó frente a a nombre de quién entra"
+type: dev-spec
+status: approved
+feature: guardrails
+domain: GRP
+story: US-GRD-018
+created: 2026-10-06
+updated: 2026-10-06
+related:
+  stories: [US-GRD-018, US-GRD-019, US-GRD-001, US-GRD-005, US-GRD-007, US-GRD-009, US-GRD-010, US-GRP-002, US-GRP-007, US-GRP-009]
+  adrs: [ADR-GRD-001, ADR-GRD-002, ADR-GRD-003, ADR-GRD-004, ADR-GRD-006, ADR-GRP-005, ADR-GRP-007, ADR-GRP-012, ADR-GRP-013, ADR-GRP-016]
+  rules: [BR-AUTH-005, BR-AUTH-003, BR-CONS-001, BR-CONS-004, BR-CALC-001, BR-EDGE-001, BR-EDGE-004]
+  nfrs: [NFR-01, NFR-02]
+tags: [guardrails, autoria-commits, co-authored-by, agents-commit, human-author, flexible, actor-s4, raptor-events, pista-inferida, capacidades]
+---
+
+# Dev Spec — US-GRD-018 y US-GRD-019: política de autoría de los commits
+
+Plano compacto (AADD ligero) de [US-GRD-018](../user-stories/US-GRD-018-autoria-commits-persona-y-agente.md) (la política: decidir el commit) y de [US-GRD-019](../user-stories/US-GRD-019-quien-ejecuto-y-a-nombre-de-quien.md) (la presentación y la validación de la pista `inferred`). Las dos historias comparten la tabla de identidades, la lectura de trailers y el contrato, así que van en **una sola Dev Spec y se implementan en dos PR** (§ 9). La regla es [BR-AUTH-005](../business-rules.md) (D6 del BRD, Rene Bonilla, 2026-10-06). El marco lo fijan [ADR-GRP-012](../../../../architecture/decisions/ADR-GRP-012-deteccion-sesiones-claude-code.md), Enmienda (2026-10-06, autoría de commits), [ADR-GRP-013](../../../../architecture/decisions/ADR-GRP-013-modelo-eventos-atribucion.md), Enmienda (2026-10-06, autoría declarada), y [ADR-GRD-003](../../../../architecture/decisions/ADR-GRD-003-motor-decision-contrato.md), Enmienda (2026-10-06, US-GRD-018), que deja esta Dev Spec. La forma de extender sigue [ADR-GRP-016](../../../../architecture/decisions/ADR-GRP-016-extension-registro-capacidades.md).
+
+**Invariante**: GitRaptor **nunca** reescribe el autor ni añade el trailer. Solo decide, avisa y registra.
+
+## 1. Decisiones
+
+Cada fila es una **Decisión del orquestador (2026-10-06), validada por el Arquitecto** (`nassa-architect:architect`, una consulta). La columna de la derecha recoge los ajustes que pidió, ya incorporados (cuatro bloqueantes: D2, D9, D11 y rellenar esta columna).
+
+| # | Decisión | Ajuste de la validación |
+|---|---|---|
+| D1 | **Clave de configuración** `policies.commitAuthorship` (§ 4): `{ "mode": "agents-commit" \| "human-author" \| "flexible", "onAgentCommit": "deny" \| "warn" }`. `onAgentCommit` solo vale con `human-author` (por defecto `deny`); con otro `mode` es clave fuera de lugar → diagnóstico y se ignora. Niveles admitidos (`x-gitraptor-levels`): equipo (suelo y worktree), perfil y local. Es la **primera clave soportada de `policies`**: deja de producir `policy-not-supported` | Sin ajuste |
+| D2 | **Combinación** (BR-CONS-001, BR-CALC-001, Q-GRD-20): orden total `flexible` < `agents-commit` < `human-author`+`warn` < `human-author`+`deny`. Valor efectivo = el **máximo** entre el valor por defecto (`agents-commit`) y las fuentes que la fijan. **Relajar por debajo del valor por defecto (`flexible`) solo se lee del suelo** (equipo en la rama principal, confirmado y legible; un cambio del suelo sigue Q-GRD-21). Un `flexible` en el worktree, el perfil o el local se ignora con el diagnóstico `relaxation-not-allowed`. Con el suelo `parcial` o ilegible, nunca se baja de `agents-commit` | **Ajuste (bloqueante)**: el borrador dejaba que un nivel personal pusiera `flexible` sin clave en el equipo, en contra de Q-GRD-20 |
+| D3 | **`warn` no es `ask`** (pregunta del Arquitecto en ADR-GRP-012 § 4). `ask` se aplica hoy como `deny` (`ask-unavailable`, S-GRD-9), así que bloquearía. `warn` se traduce a `effect = allow` más una entrada en un campo nuevo **`notices[]`** de `Decision` (misma forma que `reasons[]`). El orden `deny > ask > allow` no cambia y un aviso nunca sube el efecto. Si `appliedEffect` no es `allow` (otra regla deniega, o `ask` aplicado como `deny`), los avisos se descartan. El cliente del hook imprime la plantilla del aviso por stderr y sale con 0. En el registro la decisión es `allow` con aviso y **no cuenta** en el KPI de acciones bloqueadas | **Ajuste**: descartar los avisos con cualquier `appliedEffect` distinto de `allow`, no solo con `deny` |
+| D4 | **El actor entra en la condición de las reglas de autoría** (enmienda de ADR-GRD-003 § 1). Solo endurecen y solo cuando el actor es un agente (detectado o registrado). Con "sin atribuir" ninguna regla de autoría deniega ni avisa (BR-EDGE-004). Ninguna otra regla lee el actor | Sin ajuste |
+| D5 | **Actor S4 en `guard.evaluate`** (ADR-GRD-003 § 4; pendiente de US-GRD-001 asignado a US-GRD-005/006, **lo adelanta esta historia**). El daemon toma el pid del cliente del hook por las credenciales del canal, sube hasta el `git` antecesor más cercano (identidad `(pid, inicio)` verificada en cada paso) y **sigue subiendo por encima de él** (agente → shell → `git`): un antecesor que es el proceso de una sesión detectada (US-GRP-007, `detect`) → `agent(kind, detected)`; si no, agente registrado en ese worktree (US-GRP-009) → `agent(kind, registered)`; si no, `unattributed`. Modo degradado: siempre `unattributed`. El código vive en `crates/core/src/guardrails/actor.rs` para que US-GRD-005 y US-GRD-006 lo reutilicen | **Ajuste**: la búsqueda de la sesión sube por encima del `git`; US-GRD-005 y US-GRD-006 usan `actor.rs` y no lo rehacen (anotado en sus historias) |
+| D6 | **Dónde se evalúa** (ADR-GRD-002 § 1, fila Commit): se añaden los dispatchers `pre-commit` y `commit-msg` al conjunto instalado (plantilla `TEMPLATE_VERSION = 2`; `raptor hook` acepta la 1 y la 2; una instalación con la plantilla 1 se actualiza al reinstalar). `pre-commit`: solo `human-author`+`deny` con actor agente (corta antes del mensaje). `commit-msg`: todas las reglas, con los trailers del archivo del mensaje. `reference-transaction` `prepared`: **segunda línea** para `--no-verify` (§ 5). Una decisión por operación (ADR-GRD-003 § 6): si la identidad de la operación ya tiene decisión de autoría, la segunda línea la reutiliza | Sin ajuste (ADR-GRD-001 y ADR-GRD-002 § 1 ganan su enmienda) |
+| D7 | **Hechos de contenido** (ADR-GRD-003 § 1): el cliente del hook lee el mensaje (archivo de `commit-msg`, acotado a 64 KiB, `O_NOFOLLOW`, solo archivo regular) o el commit nuevo (segunda línea, con gix aislado) y calcula con la función pura de `crates/policy` solo `{ coauthors: [{ agent: AgentKind? }], trailerTable: u32 }`. **Al daemon nunca llega el mensaje, ni nombres ni correos**. Mensaje ilegible o mayor de 64 KiB → `coauthors = []` (si el actor es un agente, `agents-commit` deniega con causa `message-unreadable`) | **Ajuste**: `commit-msg` recibe el mensaje **antes** del *cleanup*; el parser aplica `core.commentChar` y el modo de `--cleanup`/`commit.cleanup`, y el corpus de conformidad cubre esos casos |
+| D8 | **Tabla versionada de identidades** (`crates/policy/src/authorship/agents.rs`, § 3). Hoy una sola fila, Claude Code. El formato admite Codex y Cursor (D2 del BRD) sin cambiar el código: una fila por agente. `trailerTable` (versión de la tabla) va en `configRef` y en el registro | **Ajuste**: se declara que cualquier herramienta basada en el SDK de Anthropic que firme con ese correo cuenta como Claude Code |
+| D9 | **Rebase, cherry-pick, revert, merge y amend** (§ 5): la política gobierna la operación **commit** del catálogo (BR-VAL-002): `commit` (también `--amend`) y el commit de fusión de `merge`. Rebase, cherry-pick y revert **no** se evalúan: conservan el autor y los trailers del original y GitRaptor no exige trailers a commits que no creó en esa operación. Quien quiera impedir que un agente reescriba usa `permissions` (`rebase` en `deny`) | **Ajuste (bloqueante)**: la segunda línea no usa una lista de subcomandos evaluados (se salta con alias o `commit-tree` + `update-ref`), sino la lista inversa (§ 5.3) |
+| D10 | **Contrato de eventos** (US-GRD-019, ADR-GRP-016 § 1): capacidad nueva **`events.authorship`**. Con ella, `GitEventView` lleva `authorship` (autor, committer y co-autores con `agent` opcional, todo `Untrusted`) e `InferredAgent` lleva `trailer: confirmed \| unconfirmed`. Sin ella, la forma de siempre. `raptor-mcp` no la pide, así que la vista MCP no recibe nombres ni correos (ADR-GRP-013, Enmienda autoría declarada) | Sin ajuste |
+| D11 | **Capacidad `guard.authorship`** (ADR-GRP-016 § 1): cubre los dos campos nuevos de un método existente, `EvaluateParams.authorship` (petición) y `Decision.notices[]` (respuesta). El cliente del hook la pide en `connection.accept` y **solo envía `authorship` si el daemon se la concede** (`EvaluateParams` es `deny_unknown_fields`). Un daemon sin ella evalúa como hoy: sin reglas de autoría ni avisos, y el commit sigue las demás reglas (no endurece ni relaja respecto a hoy) | **Ajuste (bloqueante)**: el borrador (`guard.notices`) solo cubría la respuesta; un hook nuevo frente a un daemon viejo habría recibido `INVALID_PARAMS` y bloqueado commits |
+| D12 | **Registro** (BR-CONS-004, ADR-GRD-006): con `human-author` y `flexible`, y en toda denegación de autoría, la entrada lleva el actor, los tipos de agente de los co-autores, si había trailer, la decisión y el oid del commit cuando la operación llega a `reference-transaction`. **El autor y el committer no se copian al registro**: se muestran uniendo por oid con la autoría declarada del evento (ADR-GRP-013), que ya los guarda. Así el registro sigue sin guardar contenido del commit (ADR-GRP-012 § 4). **Huecos declarados**: una denegación no tiene oid ni evento, así que su entrada muestra "autor no disponible" (el criterio de `human-author` no pide el autor); si el evento se purga antes que la entrada, también. **Pendiente del PO**: BR-AUTH-005 punto 4 pide autor y committer en la entrada; la unión por oid se propone como forma de cumplirlo y la confirma o enmienda el PO | **Ajuste**: declarar los dos huecos y llevar la unión por oid al PO |
+| D13 | **Dos PR**: PR-A = US-GRD-018 (D1 a D9, D11, D12); PR-B = US-GRD-019 (D10, presentación y pista). PR-B depende de PR-A por la tabla y el parser de trailers. Si US-GRD-005 (registro) no está en `main` cuando se implemente PR-A, las entradas de D12 quedan pendientes con dueño US-GRD-005 y se dice en el PR; el resto de PR-A no depende del registro | Sin ajuste |
+
+## 2. Forma (archivos que se tocan)
+
+Cada pieza nueva va en un archivo propio de su módulo (ADR-GRP-016); los archivos centrales solo ganan una línea.
+
+| Pieza | Archivo | PR |
+|---|---|---|
+| Tabla de identidades y parser de trailers (puro, sin E/S) | `crates/policy/src/authorship/{mod,agents,trailers}.rs` (nuevo); `crates/policy/src/lib.rs` (+1 línea `pub mod authorship;`) | A |
+| Reglas `authorship.*` y combinación de D2 | `crates/policy/src/guard/authorship.rs` (nuevo); `crates/policy/src/guard/mod.rs` (llamada desde `evaluate` y campo `actor`/`authorship` en `Context`/`Facts`) | A |
+| Clave `policies.commitAuthorship`, schema y niveles | `crates/policy/src/settings/{model,schema,document}.rs` | A |
+| Contrato: `Decision.notices`, `EvaluateParams.authorship`, `Actor` en el contexto | `crates/api/src/guard.rs` | A |
+| Capacidad `guard.authorship` | `crates/api/src/methods/guard.rs` (su `Group`) | A |
+| Actor S4 | `crates/core/src/guardrails/actor.rs` (nuevo); `crates/core/src/guardrails/{mod,evaluate}.rs` | A |
+| Dispatchers `pre-commit` y `commit-msg`, plantilla 2 | `crates/core/src/guardrails/{constants,install}.rs`; `apps/cli/src/bin/raptor-hook.rs` | A |
+| Cliente del hook: lectura del mensaje y del commit, aviso por stderr | `apps/cli/src/commands/guard.rs` (o el módulo de `raptor hook` donde viva hoy) | A |
+| Mensajes del hook (deny y aviso) | `apps/cli/i18n/{en,es}/guard.txt` | A |
+| Entrada de registro de autoría | Archivo de US-GRD-005 en `crates/core/src/guardrails/` (si existe; D13) | A |
+| Autoría declarada del evento y estado de la pista | `crates/api/src/messages.rs` (`GitEventView`, `InferredAgent`, tipos `DeclaredAuthorship`, `GitIdentity`, `CoAuthor`, `TrailerCheck`) | B |
+| Capacidad `events.authorship` | `crates/api/src/methods/events.rs` | B |
+| Lectura de la autoría del commit nuevo al observar y evidencia `trailer` | `crates/core/src/observe.rs` y el almacén de eventos de `crates/core/src/profile/` | B |
+| Política efectiva al observar (para "sin pista con `human-author`") | `crates/core/src/observe.rs` (lee la configuración efectiva por el cargador de TS-GRD-001) | B |
+| `raptor events` (texto y `--json`) | `apps/cli/src/commands/events.rs`; `apps/cli/i18n/{en,es}/events.txt` | B |
+| Tests | § 7 | A y B |
+| Documentación | Este archivo (estado y verificación); `docs/architecture/ipc-contract*` si documenta `guard.evaluate` y `git.event` | A y B |
+
+## 3. Identidades del trailer por agente
+
+`crates/policy/src/authorship/agents.rs`, tabla `AGENT_TRAILERS: &[AgentTrailer]`, con `TABLE_VERSION: u32 = 1`:
+
+```rust
+pub struct AgentTrailer {
+    pub agent: AgentKind,            // ClaudeCode hoy; Codex y Cursor cuando entren (D2)
+    pub emails: &'static [&'static str],        // comparación exacta, ASCII sin mayúsculas
+    pub name_prefixes: &'static [&'static str], // prefijo tras NFC y plegado de mayúsculas
+    pub example: &'static str,       // el trailer de ejemplo del mensaje de denegación
+}
+```
+
+| Agente | Correo | Prefijo del nombre | Ejemplo |
+|---|---|---|---|
+| Claude Code | `noreply@anthropic.com` | `Claude` | `Co-Authored-By: Claude <noreply@anthropic.com>` |
+| Codex, Cursor | — (filas que se añaden con su adaptador, D2; cambian `TABLE_VERSION`) | — | — |
+
+- **Reconocido** = el correo coincide **y** el nombre empieza por el prefijo. Así entran "Claude", "Claude Opus 4.x" o "Claude Sonnet 5.x" con el correo de Anthropic, y no entra "Claudia <claudia@x.com>". Un co-autor que no encaja queda **sin tipo**.
+- **Parser** (`trailers.rs`): sigue las reglas de `git interpret-trailers` para el **último párrafo** del mensaje (líneas `clave: valor`, clave sin distinguir mayúsculas, continuación con espacio, líneas de comentario `#` fuera con `commit.cleanup` por defecto). Solo se miran las claves `Co-Authored-By`. Valor `Nombre <correo>`; uno malformado cuenta como co-autor sin tipo. Tope: 64 KiB de mensaje y 32 co-autores.
+- **Conformidad**: un test compara el parser con `git interpret-trailers --parse` sobre un corpus (trailer al final, en medio, con comentarios, con `Signed-off-by` mezclado, CRLF, sin línea en blanco previa, mayúsculas distintas).
+- El adaptador de cada agente (ADR-GRP-012 § 1) es el dueño de su fila; la tabla vive en `crates/policy` porque la usa la función pura.
+
+## 4. Esquema de la política en la configuración del repo
+
+Archivo de equipo `.gitraptor/config.json` (ADR-GRP-007; el perfil y el local usan la misma forma):
+
+```json
+{
+  "policies": {
+    "commitAuthorship": { "mode": "human-author", "onAgentCommit": "warn" }
+  }
+}
+```
+
+| Campo | Tipo | Por defecto | Validación |
+|---|---|---|---|
+| `policies.commitAuthorship.mode` | `enum` `agents-commit`, `human-author`, `flexible` | `agents-commit` (sin la clave) | Otro valor → la fuente queda `parcial` (D12 de ADR-GRP-007) y la clave no aplica |
+| `policies.commitAuthorship.onAgentCommit` | `enum` `deny`, `warn` | `deny` | Solo con `mode = human-author`; con otro → diagnóstico `key-out-of-place` y se ignora |
+
+- **Relajar a `flexible` solo desde el suelo** (Q-GRD-20, D2): en el worktree, el perfil o el local se ignora con `relaxation-not-allowed`; `human-author` sí se admite en cualquier nivel porque endurece.
+- Schema con `x-gitraptor-levels: [team, profile, local]` y el subconjunto cerrado de palabras clave de TS-GRD-001.
+- El estado de protección (`guard.status`) muestra la política efectiva y de qué fuente sale.
+- Modo degradado: la clave del suelo legible se lee, pero no cambia nada porque el actor es `unattributed` (enmienda de ADR-GRD-003 § 4).
+
+## 5. Decisión por operación
+
+### 5.1 Reglas (`crates/policy/src/guard/authorship.rs`)
+
+| Política efectiva | Actor agente con su trailer | Actor agente sin su trailer | Actor `unattributed` |
+|---|---|---|---|
+| `agents-commit` | `allow` | `deny`, `authorship.trailer-required` (params: agente, ejemplo de la tabla) | `allow`, sin regla |
+| `human-author` + `deny` | `deny`, `authorship.human-author` | `deny`, `authorship.human-author` | `allow`, sin regla |
+| `human-author` + `warn` | `allow` + aviso `authorship.human-author` | `deny`, `authorship.trailer-required` + aviso (BR-AUTH-005: "con avisar… siempre que cumpla `agents-commit`") — el aviso se descarta por D3 | `allow`, sin regla |
+| `flexible` | `allow` | `allow` | `allow` |
+
+- "Su trailer" = un co-autor reconocido con el **mismo** `AgentKind` que el actor. El trailer de otro agente no cuenta.
+- `level` de la razón: la fuente que fija el máximo (`floor`, `worktree`, `profile`, `local`) o `system` para el valor por defecto.
+
+### 5.2 Mapeo a `allow` / `ask` / `deny` (ADR-GRD-003 § 3)
+
+| Resultado de la política | `effect` | `appliedEffect` | `reasons[]` | `notices[]` | Salida del hook |
+|---|---|---|---|---|---|
+| Pasa | `allow` | `allow` | — | — | 0 |
+| Deniega | `deny` | `deny` | la regla | — | 1, plantilla del motivo |
+| Avisa (`warn`) | `allow` | `allow` | — | la regla | 0, plantilla del aviso por stderr |
+
+Nunca se produce `ask`. Con otras reglas (mínimo, permisos, US-GRD-009) manda el máximo de siempre.
+
+### 5.3 Por operación de Git
+
+| Operación | Hook que decide | Qué se evalúa |
+|---|---|---|
+| `git commit` | `pre-commit` (solo `human-author`+`deny`), `commit-msg` (todo) | El mensaje del archivo de `commit-msg` |
+| `git commit --amend` | Igual que `commit` | El mensaje nuevo. Enmendar el commit de una persona sin trailer **es** un commit del agente: con `agents-commit` exige el trailer |
+| `git commit --no-verify` | `reference-transaction` `prepared` | El commit nuevo (gix aislado), si la operación no tenía ya decisión de autoría |
+| `git merge` con commit de fusión (también `pull` que fusiona) | `commit-msg` (Git lo ejecuta en `merge`), segunda línea con `--no-verify` | El commit de fusión, no los commits fusionados |
+| `git merge` fast-forward | — | Nada: no hay commit nuevo |
+| `git rebase`, `cherry-pick`, `revert`, `am` | — | Nada (D9). Los gobiernan `permissions` y US-GRD-009 |
+| Escrituras internas de la Time Machine | — | Desactivan los hooks (ADR-TMC-002 § 2) |
+
+**Cómo sabe la segunda línea que es un commit** (lista inversa, ajuste del Arquitecto): con actor agente, una línea de `refs/heads/*` (o de `HEAD` separado) con **un único commit nuevo cuyo primer padre es `viejo`** (commit, fusión) o cuyos padres son los de `viejo` (amend) **se evalúa siempre**, salvo que el subcomando del `git` antecesor más cercano sea **con certeza** `rebase`, `cherry-pick`, `revert` o `am`. El subcomando se lee de la línea de órdenes del proceso tras saltar las opciones globales (`-C`, `-c`, `--git-dir`, `--work-tree`, `--namespace`, `--exec-path`, `-p`, …), **solo para clasificar** (no se guarda ni se envía: ADR-GRD-003 § 1, "lo que nunca guarda: argv"). Un alias (`git ci`), `git -c alias.x=commit x`, `commit-tree` + `update-ref` o una línea de órdenes ilegible **se evalúan**. Con varios commits nuevos en `viejo..nuevo` no se evalúa (no es la forma de un commit) y queda el diagnóstico `authorship-unclassified`. Residuo declarado: un agente que escribe con `update-ref` un rango de varios commits escapa a la segunda línea.
+
+## 6. Contrato
+
+### 6.1 Decisión (`crates/api/src/guard.rs`, PR-A)
+
+```rust
+pub struct Decision {
+    // … campos de siempre (ADR-GRD-003 § 3)
+    /// Rules that warn without changing the effect (capability `guard.authorship`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notices: Vec<Reason>,
+}
+
+pub struct EvaluateParams {
+    // … campos de siempre
+    /// Commit facts the hook client derived from the message or the new commit (never the text).
+    /// Sent only when the daemon granted `guard.authorship`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authorship: Option<AuthorshipFacts>,
+}
+
+pub struct AuthorshipFacts {
+    pub coauthors: Vec<Option<AgentKind>>, // one entry per Co-Authored-By; None = not recognised
+    pub trailer_table: u32,
+    pub unreadable: bool,                  // message missing, too large or not a regular file
+}
+```
+
+- Reglas nuevas: `authorship.trailer-required`, `authorship.human-author`. Causas: `message-unreadable`, `authorship-unclassified`. Ningún código de error nuevo.
+- El actor **no** viaja en `EvaluateParams`: lo resuelve el daemon (D5). El cliente no puede declararlo.
+
+### 6.2 Eventos (`crates/api/src/messages.rs`, PR-B, capacidad `events.authorship`)
+
+```rust
+pub struct GitEventView {
+    // … campos de siempre
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authorship: Option<DeclaredAuthorship>, // only for events that create a commit
+}
+
+pub struct DeclaredAuthorship {
+    pub author: GitIdentity,
+    pub committer: GitIdentity,
+    pub coauthors: Vec<CoAuthor>,
+}
+pub struct GitIdentity { pub name: Untrusted, pub email: Untrusted }
+pub struct CoAuthor { pub name: Untrusted, pub email: Untrusted,
+                      #[serde(default, skip_serializing_if = "Option::is_none")] pub agent: Option<AgentKind> }
+
+pub struct InferredAgent {
+    pub kind: AgentKind,
+    pub session_id: String,
+    pub trailer: TrailerCheck,                  // confirmed | unconfirmed; contradicted → no `inferred`
+}
+```
+
+- Sin `events.authorship` la conexión recibe la forma del protocolo 9 (sin `authorship` ni `trailer`). Un evento antiguo sin evidencia `trailer` se lee como `unconfirmed`.
+- **Persona y agente en `raptor events`**: la línea se compone en el cliente con las reglas de ADR-GRP-012, Enmienda § 3: "commit de \<autor\> con \<agentes co-autores\> · \<worktree\>", más "· ejecutado por \<agente\> (detectado)" si el actor es un agente que no figura como co-autor, o "· sin atribuir" / "· sin atribuir; inferido: … (confirmado por el trailer)". `--json` lleva `actor`, `authorship` e `inferred` por separado.
+- Cadenas nuevas (en/es) en `events.txt`: `events.commit_by` ("commit by {author}" / "commit de {author}"), `events.commit_with` ("with {agents}" / "con {agents}"), `events.run_by` ("run by {agent}" / "ejecutado por {agent}"), `events.inferred_confirmed` ("confirmed by the trailer" / "confirmado por el trailer"), `events.no_trailer` ("no trailer" / "sin trailer").
+
+### 6.3 Mensajes del hook (`guard.txt`, PR-A; M-05)
+
+| Clave | es | en |
+|---|---|---|
+| `guard.reason.authorship-trailer-required` | En este repo el commit de un agente lleva su trailer (política «agents-commit»). Añade al final del mensaje: «{example}» | In this repo an agent's commit carries its trailer ("agents-commit" policy). Add at the end of the message: «{example}» |
+| `guard.reason.authorship-human-author` | En este repo los commits los hace la persona (política «human-author», {level}) | In this repo commits are made by the person ("human-author" policy, {level}) |
+| `guard.notice.authorship-human-author` | Aviso: en este repo los commits los hace la persona (política «human-author»). El commit sigue | Warning: in this repo commits are made by the person ("human-author" policy). The commit goes ahead |
+
+Plantillas fijas, parámetros etiquetados y saneados; nunca mencionan la excepción ni cómo desactivar la política.
+
+## 7. Criterios de aceptación verificables
+
+Repos, remotos, perfiles y daemons temporales (NFR-01); Git, `raptor` y `raptor-hook` reales; el agente es `raptor-fake-agent` como Claude Code (patrón de `apps/cli/tests/claude_sessions.rs`) o `raptor agent register`; sin esperas fijas. Suites nuevas: `apps/cli/tests/guard_us_grd_018.rs` y `apps/cli/tests/events_us_grd_019.rs` (se niegan a correr sin *debug assertions*, como la de US-GRD-001).
+
+| Criterio | Test |
+|---|---|
+| US-GRD-018 esquema 1 · sin política y con `agents-commit`: con trailer pasa (autor = identidad de Git del usuario, trailer intacto en `git log`); sin trailer no pasa, el motivo nombra `agents-commit` y trae el ejemplo | `agents_commit_needs_the_agents_trailer` (4 filas) |
+| US-GRD-018 · commit sin agente sin trailer pasa | `an_unattributed_commit_needs_no_trailer` |
+| US-GRD-018 · `human-author` con `deny` y con `warn` (texto en en y es; salida 0 con aviso) | `human_author_blocks_or_warns` |
+| US-GRD-018 · `flexible` pasa sin trailer | `flexible_lets_the_commit_through` |
+| US-GRD-018 · un nivel local `flexible` no relaja el `human-author` del equipo; el motivo nombra la configuración del equipo | `a_personal_level_does_not_relax_the_team_policy` |
+| D2 · un `flexible` en el worktree, el perfil o el local se ignora (`relaxation-not-allowed`) y rige `agents-commit`; un `flexible` del suelo confirmado sí aplica | `only_the_floor_relaxes_to_flexible` |
+| D5 · actor detectado (`raptor-fake-agent`) y registrado (`raptor agent register`) deciden igual; un trailer falso en un commit sin agente no cambia nada | `detected_and_registered_agents_are_the_actor`, `a_fake_trailer_does_not_make_an_actor` |
+| D6 · `--no-verify` lo cubre la segunda línea; una sola entrada por operación; un alias (`git ci --no-verify`), `-c alias.x=commit` y `commit-tree` + `update-ref` también | `no_verify_is_caught_by_the_second_line`, `aliases_and_plumbing_are_caught_by_the_second_line` |
+| D9 · `--amend` de un commit humano por el agente exige el trailer; rebase y cherry-pick del agente no se evalúan; merge con commit de fusión sí; fast-forward no | `amend_merge_rebase_and_cherry_pick` |
+| D7 · mensaje mayor de 64 KiB o enlace → `message-unreadable`; el daemon nunca recibe el mensaje (espía en el canal de test) | `the_message_never_reaches_the_daemon` |
+| D3 · modo degradado: ninguna regla de autoría deniega | `degraded_mode_does_not_apply_authorship_rules` |
+| D12 · registro con `human-author` y `flexible`; los avisos y `flexible` no cuentan en el KPI | `authorship_entries_in_the_decision_log` (si US-GRD-005 está en `main`; si no, pendiente) |
+| § 3 · parser frente a `git interpret-trailers --parse` (también `core.commentChar` y los modos de `--cleanup`); tabla de identidades | `crates/policy` `authorship::tests::*` |
+| § 5.1 · tabla completa de reglas y combinación de D2 (prueba de propiedades: un nivel personal nunca baja el máximo) | `crates/policy` `guard::authorship::tests::*` |
+| § 4 · schema, `onAgentCommit` fuera de lugar, valor desconocido → `parcial`; `commitAuthorship` ya no da `policy-not-supported` | `crates/policy` `settings::document::tests::commit_authorship_*` |
+| D11 · sin `guard.authorship` el cliente no envía `authorship`, no hay `notices` en el cable y un daemon viejo no rechaza el commit con `INVALID_PARAMS` | `crates/api` `legacy_protocols.rs` y `crates/core/tests/guard_evaluate.rs` |
+| US-GRD-019 · "commit de Ana Pérez con Claude Code · feat-x"; `--json` separa actor y autoría | `events_us_grd_019::agent_commit_shows_both` |
+| US-GRD-019 · sin agente: "commit de Ana Pérez · main" y "sin atribuir" | `events_us_grd_019::an_unattributed_commit_does_not_repeat_the_author` |
+| US-GRD-019 · pista `confirmed`, `unconfirmed`, `contradicted` (sin `inferred`); el actor sigue "sin atribuir" | `events_us_grd_019::the_inferred_hint_is_checked_against_the_trailer` (3 filas) |
+| US-GRD-019 · con `human-author` no hay pista; cambiar la política después no reescribe eventos | `events_us_grd_019::human_author_records_no_hint` |
+| US-GRD-019 · `flexible`, agente sin trailer: ejecutado por Claude Code, a nombre de Ana, sin trailer | `events_us_grd_019::an_agent_commit_without_trailer_shows_the_difference` |
+| ADR-GRP-013 (autoría declarada) · sobrevive a un reinicio; una corrección cambia el actor y no la autoría; prueba de propiedades con autores y trailers aleatorios: el actor no cambia; sin `events.authorship` no hay nombres | `crates/core/tests/` (archivo de eventos existente) y `crates/api` |
+
+**Comandos de cierre** (una vez, antes del PR): `cargo fmt --all`, `cargo clippy --all-targets -- -D warnings`, `cargo test --workspace`. Durante el desarrollo: `cargo test -p gitraptor-policy authorship`, `cargo test -p raptor --test guard_us_grd_018` (nombres de paquete según `Cargo.toml`).
+
+## 8. Pendientes y fuera de alcance
+
+| Pendiente | Dueño |
+|---|---|
+| Filas de Codex y Cursor en la tabla de identidades | Sus adaptadores (D2 del BRD) |
+| La misma decisión por MCP (`safe_commit`) | US-GRD-016 (BR-CONS-002) |
+| Presentación en el Cockpit | Historia del Cockpit por escribir (PO de Cockpit) |
+| Exportar las entradas de autoría | BR-24 (Fase 3) |
+| Confirmar la unión por oid frente al texto de BR-AUTH-005 punto 4 (autor y committer en la entrada) | PO (D12) |
+| Que US-GRD-005 y US-GRD-006 reutilicen `actor.rs` | Sus Dev Specs (D5) |
+| Agente que escribe con `update-ref` un rango de varios commits escapa a la segunda línea | Residuo declarado (§ 5.3) |
+| Registro de autoría si US-GRD-005 no está en `main` | US-GRD-005 (D13) |
+| Que una pista confirmada pase a ser atribución | PO o Rene (ADR-GRP-012, Enmienda § 2) |
+| Ratificar la pista `inferred` | Rene Bonilla (US-GRD-019) |
+| Windows y Linux: leer la línea de órdenes del `git` antecesor (Windows: `NtQueryInformationProcess`) y los dispatchers nuevos | **Pendiente: etapa de validación multiplataforma** |
+| Agente no detectado ni registrado escapa a la política (R-GRD-2) | Residuo declarado (BR-AUTH-005) |
+
+## 9. Orden de implementación
+
+1. **PR-A (US-GRD-018)**: `crates/policy` (tabla, parser, reglas, clave) → `crates/api` (contrato, `guard.authorship`) → `crates/core` (actor S4, dispatchers, segunda línea) → `apps/cli` (cliente del hook, mensajes) → suites. Se implementa con `/nassa-core:implement --autonomous DS-US-GRD-018` limitado a PR-A.
+2. **PR-B (US-GRD-019)**: `crates/api` (autoría declarada, `events.authorship`) → `crates/core` (observación y evidencia) → `apps/cli` (`raptor events`) → suite.
