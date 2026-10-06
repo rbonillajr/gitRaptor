@@ -6,9 +6,9 @@ status: draft
 domain: GRP
 feature: motor-local
 created: 2026-10-04
-updated: 2026-10-05
+updated: 2026-10-06
 related:
-  adrs: [ADR-GRP-005, ADR-GRP-011, ADR-GRP-013, ADR-CKP-002, ADR-CKP-003, ADR-TMC-004]
+  adrs: [ADR-GRP-005, ADR-GRP-016, ADR-GRP-011, ADR-GRP-013, ADR-CKP-002, ADR-CKP-003, ADR-TMC-004]
   stories: [TS-GRP-004, US-GRP-001, US-GRP-012, TS-TMC-004, TS-CKP-002, INF-CKP-001]
   specs: [DS-TS-GRP-004, DS-US-GRP-001, DS-US-GRP-012, DS-TS-TMC-004, DS-TS-CKP-002]
   deps: [DEP-CKP-6]
@@ -23,7 +23,7 @@ La fuente de verdad es el código de `crates/api`. Este documento es su resumen 
 
 - Socket Unix `raptor.sock` en la carpeta de ejecución del perfil, con la carpeta en 0700 y el socket en 0600. Solo acepta clientes del mismo uid. El cliente comprueba que el servidor también es de su uid. En Windows, named pipe: pendiente.
 - Un mensaje JSON por línea (`\n`), de 1 MiB como máximo y con una profundidad máxima de 32. No se aceptan batches. Todos los tipos rechazan campos desconocidos.
-- `PROTOCOL_VERSION = 8` (`API_VERSION` 8.0.0; la 7 añade `guard.*`, el código `-32016` y el rechazo `not-observed`, US-GRD-001; la 8, el tipo de evento `reset`, US-TMC-004). El daemon atiende a clientes de `MIN_COMPATIBLE_PROTOCOL = 5` a `8`, cada uno con las formas de su versión. `hello` responde con el protocolo negociado. Un cliente más nuevo que el daemon lo reemplaza, y uno más viejo que la ventana recibe `-32002`. Hasta la 5, la compatibilidad era por igualdad.
+- `PROTOCOL_VERSION = 9`, **congelado para cambios aditivos** (`API_VERSION` 9.0.0, ADR-GRP-016 § 1). La 7 añade `guard.*`, el código `-32016` y el rechazo `not-observed` (US-GRD-001); la 8, el tipo de evento `reset` (US-TMC-004); la 9, las capacidades (`hello.capabilities` y `connection.accept`). Desde la 9, un método nuevo se descubre en `hello.methods` y un cambio de forma es una capacidad: el número ya no sube. El daemon atiende a clientes de `MIN_COMPATIBLE_PROTOCOL = 5` a `9`, cada uno con las formas de su versión. `hello` responde con el protocolo negociado. Un cliente más nuevo que el daemon lo reemplaza, y uno más viejo que la ventana recibe `-32002`. Hasta la 5, la compatibilidad era por igualdad.
   - La 2 (US-GRP-001) añade el estado de los worktrees a `RepoView`.
   - La 3 (US-GRP-012), la rama base del repo y el ahead/behind de cada worktree.
   - La 3.1.0 (US-GRP-002) es aditiva: `events.history` y el `data` de `git.event`; un cliente nuevo comprueba en `hello.methods` que el daemon ofrece `events.history` y, si no, pide reiniciarlo.
@@ -50,11 +50,23 @@ El primer mensaje es `hello`; si no llega en 2 s, el daemon cierra la conexión.
 
 El resultado trae `protocol`, `binary_version`, `instance_id` (del perfil, ADR-GRP-006 § 4), `daemon_pid`, `profile` (`full` o `mcp`), `max_message_bytes` y `methods`: los métodos que puede llamar esa conexión. Si la versión no coincide, el daemon responde `-32002` con `{daemon_protocol, binary_version}`. Si el cliente es más nuevo, puede enviar `daemon.replace`.
 
+### Capacidades (protocolo 9, ADR-GRP-016 § 1)
+
+Una conexión de protocolo 9 recibe también `capabilities`: los nombres de todas las capacidades que sirve el daemon. Las conexiones de 5 a 8 no lo reciben, porque rechazan campos desconocidos. Una capacidad es un **cambio de forma**, se llama `<módulo>.<feature>` y la declara su módulo en `crates/api/src/methods/`.
+
+| Capacidad | Legada de | Qué cambia |
+|---|---|---|
+| `connection.requester` | protocolo 6 | `hello.requester` |
+| `events.git-reset` | protocolo 8 | Eventos Git de tipo `reset` en el stream y en `events.history` |
+
+Una conexión tiene las capacidades legadas de su protocolo (todas, si es de protocolo 9) y las que acepte con `connection.accept`. Si no llama a ese método, recibe las formas del protocolo 8. Desde el protocolo 9, `daemon.replace` con el **mismo** protocolo lo acepta el daemon solo si viene del binario instalado y actualizado; si no, responde `-32602` y la conexión sigue. El cliente lo pide cuando el daemon no anuncia una capacidad que él conoce.
+
 ## Métodos
 
 | Método | Reservado | MCP | Resultado / notas |
 |---|---|---|---|
 | `ping` | No | Sí | `"pong"` |
+| `connection.accept` | No | Sí | Protocolo 9. `{capabilities: [nombre]}` (como mucho 64, de 64 caracteres) → `{capabilities}`: las que tiene ahora la conexión. Una sola vez y antes de la primera suscripción; si no, `-32600`. Ignora los nombres que el daemon no sirve |
 | `engine.snapshot` | No | Sí | `Snapshot { run_id, seq, engine, daemon, repos }`, cada repo con sus `worktrees` (ver más abajo); en MCP, `McpSnapshot { run_id, seq, engine_state, caller_repo }` (allowlist de campos) |
 | `engine.resources` | No | No | `{}` → `ResourcesResult { process {cpu {mean_pct?, peak_pct?, window_s}, rss_bytes?, open_fds?}, watches {roots, inotify? {watches, max_user_watches?}}, disk {profile_bytes, time_machine [{repo_id, bytes}], complete}, pools?, power_saving?, targets }`. Solo números, booleanos y enums, sin texto de presentación (NFR-10); `null` = no disponible. CPU en % de un núcleo sobre una ventana de hasta 10 min; RSS y descriptores instantáneos; disco en bytes asignados. `pools` (TS-GRP-005) y `power_saving` (US-GRP-019) llegan `null` hasta sus historias. Fuera del MCP (SEC-MCP-01) (US-GRP-017) |
 | `events.subscribe` | No | Sí | `{ from_seq?, run_id? }` → `{ subscription, from_seq }`. Hasta 4 por conexión |
@@ -62,7 +74,7 @@ El resultado trae `protocol`, `binary_version`, `instance_id` (del perfil, ADR-G
 | `audit.list` | No | No | `{ after_id?, limit? }` → `{ entries: [AuditEntry] }`. Como máximo 500 por página |
 | `events.history` | No | No | `{ repo_id, worktree?, after_seq?, limit? }` → `{ events: [GitEventView] }`, del más antiguo al más reciente. Sin `after_seq`, los `limit` más recientes. Como máximo 200 por página. Fuera del MCP porque lleva rutas (SEC-12) (US-GRP-002) |
 | `daemon.stop` | **Sí** | No | `{ stopping: true }`; luego el daemon cierra las conexiones |
-| `daemon.replace` | Solo si no viene del binario instalado | Sí | `{ protocol }` (más nuevo que el del daemon) |
+| `daemon.replace` | Solo si no viene del binario instalado | Sí | `{ protocol }`: más nuevo que el del daemon o, desde el 9, el mismo si viene del binario instalado y actualizado |
 | `repo.add` | **Sí** | No | `{ path }` (raíz de un worktree o directorio Git, sin búsqueda hacia arriba) → `{ outcome: new\|already-observed\|reactivated, repo: RepoView }`. Autoriza y audita **antes** de leer la ruta (US-GRP-001) |
 | `repo.retire` | **Sí** | No | `{ repo_id }` → `{ retired }`. Deja de observar y conserva los datos (US-GRP-001; US-GRP-006 añade el historial y el hueco) |
 | `attribution.correct`, `attribution.withdraw-correction` | **Sí** | No | Declarados. Los implementa US-GRP-010 |
@@ -89,7 +101,7 @@ La conexión de protocolo 6 de un cliente `cli` con perfil completo recibe en `h
 
 ## Errores
 
-Un cliente presenta cada error por su `code` y su `data`, nunca por `message`, que queda para el log (N7). `gitraptor_api::rpc::ErrorCode` enumera todos los códigos. Desde la 6, `-32602` de los validadores de rutas y nombres lleva `data.reason` (`InvalidReason`: `empty`, `too-long`, `not-absolute`, `control-character`, `unc-or-device`, `device-name`, `alternate-stream`, `outside-observed`, `invalid-ref`, `reserved-name`), y `-32010` también (`ScopeRefusal`: `no-working-folder`, `not-observed`, `not-allowlisted`, `unattributed-over-mcp`, `foreign-worktree`). Es aditivo: un cliente 5 lo ignora.
+Un cliente presenta cada error por su `code` y su `data`, nunca por `message`, que queda para el log (N7). La lista de abajo está **congelada en `-32016`** (`gitraptor_api::rpc::ErrorCode`). Un código nuevo lo declara su módulo en su bloque de 20, desde `-33000` hacia abajo (`Group::error_block` y `ErrorSpec`, ADR-GRP-016 § 3), y `rpc::error_name` da el nombre estable de cualquier código. Desde la 6, `-32602` de los validadores de rutas y nombres lleva `data.reason` (`InvalidReason`: `empty`, `too-long`, `not-absolute`, `control-character`, `unc-or-device`, `device-name`, `alternate-stream`, `outside-observed`, `invalid-ref`, `reserved-name`), y `-32010` también (`ScopeRefusal`: `no-working-folder`, `not-observed`, `not-allowlisted`, `unattributed-over-mcp`, `foreign-worktree`). Es aditivo: un cliente 5 lo ignora.
 
 | Código | Significado |
 |---|---|
