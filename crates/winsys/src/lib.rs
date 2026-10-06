@@ -15,6 +15,8 @@ pub mod file_lock;
 #[cfg(windows)]
 pub mod process;
 #[cfg(windows)]
+pub mod registry;
+#[cfg(windows)]
 pub mod system;
 #[cfg(windows)]
 pub mod usage;
@@ -31,6 +33,9 @@ mod ffi_handle;
 #[cfg(windows)]
 #[allow(unsafe_code)]
 mod ffi_process;
+#[cfg(windows)]
+#[allow(unsafe_code)]
+mod ffi_registry;
 #[cfg(windows)]
 #[allow(unsafe_code)]
 mod ffi_usage;
