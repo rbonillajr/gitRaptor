@@ -8,6 +8,21 @@
 
 use std::path::Path;
 
+/// A canonical path without the Windows verbatim prefix of a drive path (`\\?\C:\…` →
+/// `C:\…`): the form the dispatcher's constants hold and the read layer accepts. Identity
+/// elsewhere.
+pub fn simplified(path: std::path::PathBuf) -> std::path::PathBuf {
+    #[cfg(windows)]
+    {
+        if let Some(rest) = path.to_str().and_then(|s| s.strip_prefix(r"\\?\"))
+            && rest.as_bytes().get(1) == Some(&b':')
+        {
+            return std::path::PathBuf::from(rest);
+        }
+    }
+    path
+}
+
 /// Prefixes of refs that are not governed (ADR-GRD-002 § 4).
 pub const NOT_GOVERNED_PREFIXES: &[&str] = &[
     "refs/remotes/",

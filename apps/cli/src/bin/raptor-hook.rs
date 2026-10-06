@@ -237,7 +237,8 @@ fn main() -> ExitCode {
     let folder = exe.parent().and_then(Path::parent);
     let common_here = folder
         .and_then(Path::parent)
-        .and_then(|c| c.canonicalize().ok());
+        .and_then(|c| c.canonicalize().ok())
+        .map(fastpath::simplified);
     let conf = folder.and_then(|f| Conf::read(&f.join("dispatch.conf")));
     let Some(conf) = conf else {
         return fallback(
