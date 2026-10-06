@@ -64,11 +64,23 @@ pub fn default_bases(reader: &RepoReader) -> Vec<String> {
     bases
 }
 
-/// Evaluates with the repo's own facts and case folding.
-pub fn evaluate(reader: &RepoReader, op: &Operation, bases: Vec<String>) -> Evaluation {
+/// Whether the file system of the common directory does not distinguish case: the probe is
+/// the file system itself, not a setting the repo (or an agent) can change.
+pub fn folds_case(common: &Path) -> bool {
+    common.join("HEAD").is_file() && std::fs::symlink_metadata(common.join("hEAD")).is_ok()
+}
+
+/// Evaluates with the repo's own facts and case folding: `core.ignoreCase` or a file system
+/// that folds case (SEC-GRD-18).
+pub fn evaluate(
+    reader: &RepoReader,
+    common: &Path,
+    op: &Operation,
+    bases: Vec<String>,
+) -> Evaluation {
     let ctx = Context {
         bases,
-        fold_case: reader.ignores_case(),
+        fold_case: reader.ignores_case() || folds_case(common),
     };
     policy::evaluate(op, &facts(reader, op), &ctx)
 }
@@ -179,5 +191,10 @@ pub fn serve(registry: &GuardRegistry, params: &EvaluateParams) -> Decision {
         Some(e) => e.bases,
         None => default_bases(&reader),
     };
-    decision(evaluate(&reader, &params.operation, bases))
+    decision(evaluate(
+        &reader,
+        Path::new(&params.common_dir),
+        &params.operation,
+        bases,
+    ))
 }
