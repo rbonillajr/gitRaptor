@@ -3,11 +3,17 @@
 //! Widgets ask for a meaning (a [`ColorToken`] or a [`SymbolToken`]) and the [`Theme`] resolves
 //! its color, attributes, glyph and width for the active mode. The crate has no dependencies and
 //! knows nothing about the TUI library: `apps/cli` maps [`Style`] to its own styles
-//! (ADR-CKP-003 § 10). Detecting the mode (flags, `NO_COLOR`, `COLORTERM`, locale) is the TUI's job.
+//! (ADR-CKP-003 § 10). Detecting the depth (flags, `NO_COLOR`, `COLORTERM`, locale) is the TUI's
+//! job; the background of the terminal and the `--theme` override are resolved here ([`resolve`]).
 
+mod detect;
 #[rustfmt::skip]
 mod generated;
 
+pub use detect::{
+    Background, Detection, OSC11_QUERY, ParseThemeChoiceError, QUERY_MAX_REPLY, QUERY_TIMEOUT,
+    Source, THEME_ENV, ThemeChoice, parse_osc11_reply, reply_complete, resolve,
+};
 pub use generated::{ColorToken, SymbolToken};
 
 /// An RGB color.
@@ -94,7 +100,10 @@ pub(crate) struct ColorSpec {
     /// In the normal set, keep the terminal default (the values are only a contrast reference).
     pub(crate) inherit: bool,
     pub(crate) no_color: Attrs,
+    /// Normal set on a dark terminal.
     pub(crate) normal: Values,
+    /// Normal set on a light terminal.
+    pub(crate) light: Values,
     pub(crate) high_contrast: Values,
 }
 
@@ -119,7 +128,7 @@ pub enum ColorMode {
 /// The semantic set in use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Contrast {
-    /// Inherits the terminal's text and background.
+    /// Inherits the terminal's text and background, with the values for its [`Background`].
     Normal,
     /// `--theme high-contrast`: paints its own ground, so nothing is inherited.
     High,
@@ -156,21 +165,33 @@ pub struct Glyph {
     pub width: u8,
 }
 
-/// The active theme: a color mode, a semantic set and a symbol set.
+/// The active theme: a color mode, a semantic set, the terminal background and a symbol set.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Theme {
     mode: ColorMode,
     contrast: Contrast,
+    background: Background,
     symbols: SymbolSet,
 }
 
 impl Theme {
+    /// A theme for a dark terminal; see [`Theme::with_background`].
     pub const fn new(mode: ColorMode, contrast: Contrast, symbols: SymbolSet) -> Self {
         Self {
             mode,
             contrast,
+            background: Background::Dark,
             symbols,
         }
+    }
+
+    /// The same theme for a terminal with that background (from [`resolve`]).
+    pub const fn with_background(self, background: Background) -> Self {
+        Self { background, ..self }
+    }
+
+    pub const fn background(&self) -> Background {
+        self.background
     }
 
     pub const fn mode(&self) -> ColorMode {
@@ -195,7 +216,7 @@ impl Theme {
             };
         }
         let color = (!token.inherits(self.contrast)).then(|| {
-            let v = token.values(self.contrast);
+            let v = token.values(self.contrast, self.background);
             match self.mode {
                 ColorMode::TrueColor => Color::Rgb(v.rgb),
                 ColorMode::Ansi256 => Color::Indexed(v.ansi256),
@@ -230,11 +251,13 @@ impl ColorToken {
         self.spec().role
     }
 
-    /// The values of the token in a semantic set.
-    pub const fn values(self, contrast: Contrast) -> Values {
-        match contrast {
-            Contrast::Normal => self.spec().normal,
-            Contrast::High => self.spec().high_contrast,
+    /// The values of the token in a semantic set. The high-contrast set paints its own ground,
+    /// so it ignores the background.
+    pub const fn values(self, contrast: Contrast, background: Background) -> Values {
+        match (contrast, background) {
+            (Contrast::Normal, Background::Dark) => self.spec().normal,
+            (Contrast::Normal, Background::Light) => self.spec().light,
+            (Contrast::High, _) => self.spec().high_contrast,
         }
     }
 
@@ -280,7 +303,7 @@ pub fn contrast_ratio(a: Rgb, b: Rgb) -> f64 {
 }
 
 /// WCAG 2.1 relative luminance.
-fn relative_luminance(Rgb(r, g, b): Rgb) -> f64 {
+pub(crate) fn relative_luminance(Rgb(r, g, b): Rgb) -> f64 {
     let lin = |c: u8| {
         let v = f64::from(c) / 255.0;
         if v <= 0.04045 {

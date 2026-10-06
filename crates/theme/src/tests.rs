@@ -7,7 +7,12 @@ const ALL_MODES: [ColorMode; 4] = [
     ColorMode::Ansi16,
     ColorMode::NoColor,
 ];
-const ALL_CONTRASTS: [Contrast; 2] = [Contrast::Normal, Contrast::High];
+/// The three value sets: normal on a dark and on a light terminal, and high contrast.
+const ALL_SETS: [(Contrast, Background); 3] = [
+    (Contrast::Normal, Background::Dark),
+    (Contrast::Normal, Background::Light),
+    (Contrast::High, Background::Dark),
+];
 
 /// WCAG 2.1 AA for text. Gate of the high-contrast set until DSYS-GRP-001 § 8 sets another.
 const MIN_HIGH_CONTRAST: f64 = 4.5;
@@ -23,13 +28,13 @@ fn xterm_rgb(index: u8) -> Rgb {
 }
 
 #[test]
-fn every_color_token_has_three_depths_in_both_sets() {
+fn every_color_token_has_three_depths_in_every_set() {
     let mut names = HashSet::new();
     for (i, token) in ColorToken::ALL.into_iter().enumerate() {
         assert_eq!(token as usize, i, "{} out of order", token.name());
         assert!(names.insert(token.name()), "{} repeated", token.name());
-        for contrast in ALL_CONTRASTS {
-            let v = token.values(contrast);
+        for (contrast, background) in ALL_SETS {
+            let v = token.values(contrast, background);
             assert!(
                 v.ansi256 >= 16,
                 "{}: index {} is user-remapped",
@@ -146,9 +151,10 @@ fn ascii_set_returns_the_fallback_and_its_length() {
 
 #[test]
 fn no_color_never_yields_a_color_and_keeps_the_meaning_in_attributes() {
-    for contrast in ALL_CONTRASTS {
+    for (contrast, background) in ALL_SETS {
         for symbols in [SymbolSet::Unicode, SymbolSet::Ascii] {
-            let theme = Theme::new(ColorMode::NoColor, contrast, symbols);
+            let theme =
+                Theme::new(ColorMode::NoColor, contrast, symbols).with_background(background);
             for token in ColorToken::ALL {
                 let style = theme.style(token);
                 assert_eq!(
@@ -203,22 +209,19 @@ fn dim_and_underline_only_where_losing_them_loses_no_information() {
 
 #[test]
 fn each_mode_yields_its_depth() {
-    for contrast in ALL_CONTRASTS {
+    for (contrast, background) in ALL_SETS {
+        let theme =
+            |mode| Theme::new(mode, contrast, SymbolSet::Unicode).with_background(background);
         for token in ColorToken::ALL {
-            let v = token.values(contrast);
+            let v = token.values(contrast, background);
             let expect = |mode| {
-                let style = Theme::new(mode, contrast, SymbolSet::Unicode).style(token);
+                let style = theme(mode).style(token);
                 assert!(style.attrs.is_empty());
                 style.color
             };
             if token.inherits(contrast) {
                 for mode in ALL_MODES {
-                    assert_eq!(
-                        Theme::new(mode, contrast, SymbolSet::Unicode)
-                            .style(token)
-                            .color,
-                        None
-                    );
+                    assert_eq!(theme(mode).style(token).color, None);
                 }
                 continue;
             }
@@ -268,12 +271,13 @@ fn ninth_agent_reuses_the_first_color() {
 
 #[test]
 fn crate_has_no_normal_dependencies() {
-    // ADR-CKP-003 § 10: agnostic of the TUI library. Dev-dependencies (tests) are allowed.
+    // ADR-CKP-003 § 10: agnostic of the TUI library. Dev-dependencies (tests) are allowed. The
+    // OSC 11 query is pure here; its terminal I/O lives in apps/cli (2026-10-05 amendment).
     let manifest = include_str!("../Cargo.toml");
     let mut in_deps = false;
     for line in manifest.lines().map(str::trim) {
         if line.starts_with('[') {
-            in_deps = line == "[dependencies]";
+            in_deps = line.ends_with("dependencies]") && !line.contains("dev-dependencies");
             continue;
         }
         assert!(
@@ -321,7 +325,10 @@ fn contrast_pairs() -> Vec<(ColorToken, ColorToken)> {
 fn high_contrast_meets_wcag_aa_in_truecolor_and_256() {
     let mut failures = Vec::new();
     for (fg, bg) in contrast_pairs() {
-        let (f, b) = (fg.values(Contrast::High), bg.values(Contrast::High));
+        let (f, b) = (
+            fg.values(Contrast::High, Background::Dark),
+            bg.values(Contrast::High, Background::Dark),
+        );
         for (depth, ratio) in [
             ("truecolor", contrast_ratio(f.rgb, b.rgb)),
             ("256", contrast_ratio(f.ansi256_rgb, b.ansi256_rgb)),
@@ -341,35 +348,270 @@ fn high_contrast_meets_wcag_aa_in_truecolor_and_256() {
     );
 }
 
-/// Report without gate (TS-CKP-004): the normal set over the assumed dark ground and the 16-color
-/// collisions of the agent palette. Run with `--nocapture` to read it.
-#[test]
-fn report_normal_contrast_and_agent_collisions() {
-    println!("normal set, assumed dark ground (DSYS-GRP-001 § 8.2):");
-    for (fg, bg) in contrast_pairs() {
-        let (f, b) = (fg.values(Contrast::Normal), bg.values(Contrast::Normal));
-        let (tc, c256) = (
-            contrast_ratio(f.rgb, b.rgb),
-            contrast_ratio(f.ansi256_rgb, b.ansi256_rgb),
-        );
-        assert!(tc.is_finite() && c256.is_finite());
-        let flag = if tc < MIN_HIGH_CONTRAST { "  < AA" } else { "" };
-        println!(
-            "  {:<20} on {:<14} {tc:>5.2} / 256: {c256:>5.2}{flag}",
-            fg.name(),
-            bg.name()
-        );
+/// Typical terminal grounds the normal sets are measured on (TS-CKP-004, 2026-10-05 amendment):
+/// the TUI inherits the ground, so `bg.default` alone says nothing.
+const DARK_GROUNDS: [(&str, Rgb); 2] = [
+    ("#1e1e1e", Rgb(0x1e, 0x1e, 0x1e)),
+    ("Solarized dark", Rgb(0x00, 0x2b, 0x36)),
+];
+const LIGHT_GROUNDS: [(&str, Rgb); 1] = [("white", Rgb(0xff, 0xff, 0xff))];
+/// Only reported: a common light ground the values were not designed against.
+const LIGHT_GROUNDS_REPORTED: [(&str, Rgb); 1] = [("Solarized light", Rgb(0xfd, 0xf6, 0xe3))];
+
+fn grounds(background: Background) -> &'static [(&'static str, Rgb)] {
+    match background {
+        Background::Dark => &DARK_GROUNDS,
+        Background::Light => &LIGHT_GROUNDS,
     }
-    let mut seen: Vec<(Ansi16, Vec<&str>)> = Vec::new();
-    for token in AGENT_COLORS {
-        let ansi = token.values(Contrast::Normal).ansi16;
-        match seen.iter_mut().find(|(a, _)| *a == ansi) {
-            Some((_, names)) => names.push(token.name()),
-            None => seen.push((ansi, vec![token.name()])),
+}
+
+/// What the normal-set gate measures, as `(fg, ground name, fg rgb, ground rgb)` at a depth.
+/// - `text.default` and `text.muted` on each typical ground of the variant;
+/// - `text.default` on `bg.selected` and `bg.highlight`;
+/// - on a light terminal, also every other foreground on white (designed for 4.5:1) and
+///   `text.inverse` on the colors it is printed over.
+fn normal_gate_pairs(background: Background, depth: Depth) -> Vec<(String, Rgb, Rgb)> {
+    let v = |t: ColorToken| depth(t.values(Contrast::Normal, background));
+    let mut pairs = Vec::new();
+    for (name, ground) in grounds(background) {
+        for fg in [ColorToken::TextDefault, ColorToken::TextMuted] {
+            pairs.push((format!("{} on {name}", fg.name()), v(fg), *ground));
         }
     }
-    println!("agent colors sharing a 16-color slot (name and symbol tell them apart):");
-    for (ansi, names) in seen.iter().filter(|(_, n)| n.len() > 1) {
-        println!("  {ansi:?}: {}", names.join(", "));
+    for ground in [ColorToken::BgSelected, ColorToken::BgHighlight] {
+        pairs.push((
+            format!("text.default on {}", ground.name()),
+            v(ColorToken::TextDefault),
+            v(ground),
+        ));
+    }
+    if background == Background::Light {
+        let (name, white) = LIGHT_GROUNDS[0];
+        for fg in ColorToken::ALL
+            .into_iter()
+            .filter(|t| t.role() == Role::Foreground && !matches!(t, ColorToken::TextInverse))
+        {
+            pairs.push((format!("{} on {name}", fg.name()), v(fg), white));
+        }
+        for ground in INVERSE_GROUNDS {
+            pairs.push((
+                format!("text.inverse on {}", ground.name()),
+                v(ColorToken::TextInverse),
+                v(ground),
+            ));
+        }
+    }
+    pairs
+}
+
+const INVERSE_GROUNDS: [ColorToken; 6] = [
+    ColorToken::AccentDefault,
+    ColorToken::FocusDefault,
+    ColorToken::StatusSuccess,
+    ColorToken::StatusWarning,
+    ColorToken::StatusDanger,
+    ColorToken::StatusInfo,
+];
+
+/// Picks the RGB measured at a depth.
+type Depth = fn(Values) -> Rgb;
+
+const DEPTHS: [(&str, Depth); 2] = [("truecolor", |v| v.rgb), ("256", |v| v.ansi256_rgb)];
+
+#[test]
+fn normal_sets_meet_wcag_aa_on_typical_grounds() {
+    let mut failures = Vec::new();
+    for background in [Background::Dark, Background::Light] {
+        for (depth, pick) in DEPTHS {
+            for (what, fg, bg) in normal_gate_pairs(background, pick) {
+                let ratio = contrast_ratio(fg, bg);
+                if ratio < MIN_HIGH_CONTRAST {
+                    failures.push(format!("{background:?} {what} ({depth}): {ratio:.2}"));
+                }
+            }
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "below {MIN_HIGH_CONTRAST}:1: {failures:#?}"
+    );
+}
+
+#[test]
+fn status_and_git_colors_keep_distinct_256_indices_in_each_variant() {
+    // Tokens on different primitives must not collapse into one 256-color index; agents may
+    // (they are told apart by name and symbol), and so may tokens sharing a primitive.
+    const TOKENS: [ColorToken; 9] = [
+        ColorToken::StatusSuccess,
+        ColorToken::StatusWarning,
+        ColorToken::StatusDanger,
+        ColorToken::StatusInfo,
+        ColorToken::GitAdded,
+        ColorToken::GitRemoved,
+        ColorToken::GitModified,
+        ColorToken::GitConflict,
+        ColorToken::GitBranchBase,
+    ];
+    for background in [Background::Dark, Background::Light] {
+        let v = |t: ColorToken| t.values(Contrast::Normal, background);
+        for (i, a) in TOKENS.iter().enumerate() {
+            for b in &TOKENS[i + 1..] {
+                if v(*a).rgb != v(*b).rgb {
+                    assert_ne!(
+                        v(*a).ansi256,
+                        v(*b).ansi256,
+                        "{background:?}: {} and {} share a 256 index",
+                        a.name(),
+                        b.name()
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn light_values_differ_from_dark_where_the_brief_found_them_unreadable() {
+    // The yellow focus and agent.4 were unreadable on a light terminal.
+    let white = Rgb(255, 255, 255);
+    for token in [ColorToken::FocusDefault, ColorToken::Agent4] {
+        let dark = token.values(Contrast::Normal, Background::Dark).rgb;
+        let light = token.values(Contrast::Normal, Background::Light).rgb;
+        assert!(contrast_ratio(dark, white) < 2.0, "{}", token.name());
+        assert!(
+            contrast_ratio(light, white) >= MIN_HIGH_CONTRAST,
+            "{}",
+            token.name()
+        );
+    }
+    // Option A, decided by Rene Bonilla (2026-10-05).
+    let rgb = |t: ColorToken, b| t.values(Contrast::Normal, b).rgb;
+    assert_eq!(
+        rgb(ColorToken::AccentDefault, Background::Dark),
+        Rgb(0x2d, 0xc2, 0xad)
+    );
+    assert_eq!(
+        rgb(ColorToken::AccentDefault, Background::Light),
+        Rgb(0x0f, 0x7d, 0x70)
+    );
+    assert_eq!(
+        rgb(ColorToken::FocusDefault, Background::Light),
+        Rgb(0x8a, 0x5a, 0x00)
+    );
+    assert_eq!(
+        rgb(ColorToken::BgSelected, Background::Dark),
+        Rgb(0x30, 0x30, 0x30)
+    );
+    assert_eq!(
+        rgb(ColorToken::BgSelected, Background::Light),
+        Rgb(0xe8, 0xe8, 0xe8)
+    );
+    assert_eq!(
+        rgb(ColorToken::TextMuted, Background::Light),
+        Rgb(0x6b, 0x6b, 0x6b)
+    );
+}
+
+#[test]
+fn a_light_theme_paints_the_light_values_and_high_contrast_ignores_the_background() {
+    let light = Theme::new(ColorMode::TrueColor, Contrast::Normal, SymbolSet::Unicode)
+        .with_background(Background::Light);
+    assert_eq!(light.background(), Background::Light);
+    assert_eq!(
+        light.style(ColorToken::AccentDefault).color,
+        Some(Color::Rgb(Rgb(0x0f, 0x7d, 0x70)))
+    );
+    // Text and ground are still inherited.
+    assert_eq!(light.style(ColorToken::TextDefault).color, None);
+    assert_eq!(light.style(ColorToken::BgDefault).color, None);
+    for token in ColorToken::ALL {
+        let high = Theme::new(ColorMode::TrueColor, Contrast::High, SymbolSet::Unicode);
+        assert_eq!(
+            high.style(token),
+            high.with_background(Background::Light).style(token),
+            "{}",
+            token.name()
+        );
+    }
+}
+
+/// The contrast report of TS-CKP-004 (no gate beyond the tests above): every foreground of each
+/// normal variant on its typical grounds and on its selection, in truecolor and 256, and the
+/// 16-color collisions of the agent palette. Run with
+/// `cargo test -p gitraptor-theme contrast_report -- --nocapture`.
+#[test]
+fn contrast_report() {
+    let foregrounds: Vec<_> = ColorToken::ALL
+        .into_iter()
+        .filter(|t| t.role() == Role::Foreground && *t != ColorToken::TextInverse)
+        .collect();
+    for background in [Background::Dark, Background::Light] {
+        let v = |t: ColorToken| t.values(Contrast::Normal, background);
+        let mut columns: Vec<(String, Values)> = grounds(background)
+            .iter()
+            .map(|(n, rgb)| ((*n).to_owned(), plain(*rgb)))
+            .collect();
+        if background == Background::Light {
+            columns.extend(
+                LIGHT_GROUNDS_REPORTED
+                    .iter()
+                    .map(|(n, rgb)| (format!("{n} (info)"), plain(*rgb))),
+            );
+        }
+        columns.push(("bg.selected".to_owned(), v(ColorToken::BgSelected)));
+        println!("\n{background:?} terminal, truecolor / 256 (* = below {MIN_HIGH_CONTRAST}):");
+        let header: Vec<_> = columns.iter().map(|(n, _)| format!("{n:>24}")).collect();
+        println!("  {:<18}{}", "", header.join(""));
+        for fg in &foregrounds {
+            let cells: Vec<_> = columns
+                .iter()
+                .map(|(_, g)| {
+                    let (tc, c256) = (
+                        contrast_ratio(v(*fg).rgb, g.rgb),
+                        contrast_ratio(v(*fg).ansi256_rgb, g.ansi256_rgb),
+                    );
+                    assert!(tc.is_finite() && c256.is_finite());
+                    let flag = |r: f64| if r < MIN_HIGH_CONTRAST { '*' } else { ' ' };
+                    format!(
+                        "{:>24}",
+                        format!("{tc:.1}{}/{c256:.1}{}", flag(tc), flag(c256))
+                    )
+                })
+                .collect();
+            println!("  {:<18}{}", fg.name(), cells.join(""));
+        }
+        let inverse: Vec<_> = INVERSE_GROUNDS
+            .iter()
+            .map(|g| {
+                format!(
+                    "{} {:.1}",
+                    g.name(),
+                    contrast_ratio(v(ColorToken::TextInverse).rgb, v(*g).rgb)
+                )
+            })
+            .collect();
+        println!("  text.inverse on: {}", inverse.join(", "));
+        let mut seen: Vec<(Ansi16, Vec<&str>)> = Vec::new();
+        for token in AGENT_COLORS {
+            let ansi = v(token).ansi16;
+            match seen.iter_mut().find(|(a, _)| *a == ansi) {
+                Some((_, names)) => names.push(token.name()),
+                None => seen.push((ansi, vec![token.name()])),
+            }
+        }
+        println!("  agent colors sharing a 16-color slot (name and symbol tell them apart):");
+        for (ansi, names) in seen.iter().filter(|(_, n)| n.len() > 1) {
+            println!("    {ansi:?}: {}", names.join(", "));
+        }
+    }
+}
+
+/// A ground given as RGB, measured as is at both depths (it is the terminal's own color).
+fn plain(rgb: Rgb) -> Values {
+    Values {
+        rgb,
+        ansi256: 16,
+        ansi256_rgb: rgb,
+        ansi16: Ansi16::Black,
     }
 }
