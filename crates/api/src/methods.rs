@@ -32,6 +32,10 @@ pub const REPO_ADD: &str = "repo.add";
 pub const REPO_RETIRE: &str = "repo.retire";
 pub const ATTRIBUTION_CORRECT: &str = "attribution.correct";
 pub const ATTRIBUTION_WITHDRAW: &str = "attribution.withdraw-correction";
+/// Registers an agent in a worktree (US-GRP-009): not reserved, the
+/// daemon decides who asks and where (ADR-GRP-005 § 6.6).
+pub const REGISTRATION_REGISTER: &str = "registration.register";
+/// Withdraws a registration (reserved, ADR-GRP-005 § 6).
 pub const REGISTRATION_WITHDRAW: &str = "registration.withdraw";
 /// The catalog of user operations, filtered for the connection
 /// (ADR-CKP-002 § 1). Read-only.
@@ -189,7 +193,10 @@ pub const METHODS: &[MethodSpec] = &[
     method(REPO_RETIRE, true, false),
     pending(ATTRIBUTION_CORRECT, "US-GRP-010"),
     pending(ATTRIBUTION_WITHDRAW, "US-GRP-010"),
-    pending(REGISTRATION_WITHDRAW, "US-GRP-009"),
+    // Its result carries no paths (SEC-12); an agent registers itself in
+    // the worktree of its working folder.
+    method(REGISTRATION_REGISTER, false, true),
+    method(REGISTRATION_WITHDRAW, true, false),
     method(OPERATION_DESCRIBE, false, true),
     method(OPERATION_PREPARE, false, true),
     MethodSpec {

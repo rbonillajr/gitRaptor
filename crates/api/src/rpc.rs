@@ -59,6 +59,9 @@ pub mod code {
     /// entry and no change. `data` is a `catalog::RejectedData`
     /// (ADR-CKP-002 § 2, TS-CKP-002).
     pub const OPERATION_REJECTED: i64 = -32014;
+    /// A registration or its withdrawal was refused; `data.reason` says
+    /// why (US-GRP-009).
+    pub const REGISTRATION_REJECTED: i64 = -32015;
 }
 
 /// Every error code of the contract, so a client presents each one from
@@ -84,10 +87,11 @@ pub enum ErrorCode {
     IdentityUnverified,
     RepoRejected,
     OperationRejected,
+    RegistrationRejected,
 }
 
 impl ErrorCode {
-    pub const ALL: [Self; 19] = [
+    pub const ALL: [Self; 20] = [
         Self::ParseError,
         Self::InvalidRequest,
         Self::MethodNotFound,
@@ -107,6 +111,7 @@ impl ErrorCode {
         Self::IdentityUnverified,
         Self::RepoRejected,
         Self::OperationRejected,
+        Self::RegistrationRejected,
     ];
 
     pub const fn code(self) -> i64 {
@@ -130,6 +135,7 @@ impl ErrorCode {
             Self::IdentityUnverified => code::IDENTITY_UNVERIFIED,
             Self::RepoRejected => code::REPO_REJECTED,
             Self::OperationRejected => code::OPERATION_REJECTED,
+            Self::RegistrationRejected => code::REGISTRATION_REJECTED,
         }
     }
 
@@ -159,6 +165,7 @@ impl ErrorCode {
             Self::IdentityUnverified => "identity-unverified",
             Self::RepoRejected => "repo-rejected",
             Self::OperationRejected => "operation-rejected",
+            Self::RegistrationRejected => "registration-rejected",
         }
     }
 }
@@ -409,6 +416,7 @@ mod tests {
             code::IDENTITY_UNVERIFIED,
             code::REPO_REJECTED,
             code::OPERATION_REJECTED,
+            code::REGISTRATION_REJECTED,
         ];
         assert_eq!(constants.len(), ErrorCode::ALL.len());
         for c in constants {
