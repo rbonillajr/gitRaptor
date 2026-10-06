@@ -424,3 +424,112 @@ fn scope_activity_carries_the_last_fetch_and_activity_only_to_who_accepted_it() 
     );
     assert!(plain.get("fetched_utc_ms").is_none(), "{plain}");
 }
+
+/// Dogfooding 2026-10-06 (cold start): after a restart the last activity is seeded with the
+/// latest Git event each worktree has in the store, with the gap mark when that event is
+/// linked to a gap (ADR-GRP-013 § 6); a worktree without events stays absent.
+#[test]
+fn a_restarted_engine_seeds_the_last_activity_from_the_stored_events() {
+    use gitraptor_core::profile::{GapCause, NewEvent, WriteOp};
+
+    let tp = TempProfile::new();
+    let tmp = tempfile::tempdir().unwrap();
+    let wt = init_repo(tmp.path(), "shop", true);
+    let linked = tmp.path().join("shop-linked");
+    let quiet = tmp.path().join("shop-quiet");
+    git(
+        &wt,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "-b",
+            "linked",
+            linked.to_str().unwrap(),
+        ],
+    );
+    git(
+        &wt,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "-b",
+            "quiet",
+            quiet.to_str().unwrap(),
+        ],
+    );
+    let (main, linked) = (wt.canonicalize().unwrap(), linked.canonicalize().unwrap());
+    let (entry, _) = tp.open().add_repo(&common_dir(&wt), None, 1).unwrap();
+    let repo_id = entry.repo_id;
+
+    // What a previous run of the engine left in the store.
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64;
+    let (main_at, linked_at) = (now - 120_000, now - 60_000);
+    let stored = |path: &Path, at: i64, gap_id: Option<&str>| {
+        WriteOp::AppendEvent(NewEvent {
+            observed: ts(at),
+            gap_id: gap_id.map(str::to_owned),
+            ..match event(path, None, "{}") {
+                WriteOp::AppendEvent(e) => e,
+                _ => unreachable!(),
+            }
+        })
+    };
+    let (mut store, _) = tp.open().open_store(&repo_id).unwrap();
+    let mut ops = Vec::new();
+    for path in [&main, &linked] {
+        ops.push(WriteOp::UpsertWorktree {
+            path: path.clone(),
+            admin_name: None,
+            seen_ms: 1,
+        });
+    }
+    ops.extend([
+        stored(&main, main_at - 1_000, None),
+        stored(&main, main_at, None),
+        WriteOp::OpenGap {
+            gap_id: "g1".into(),
+            started_ms: linked_at - 1_000,
+            cause: GapCause::DaemonDown,
+            requested_by: None,
+        },
+        stored(&linked, linked_at, Some("g1")),
+    ]);
+    store.write_batch(&ops).unwrap();
+    drop(store);
+
+    let r = Running::start_with(tp.dirs(), ChannelConfig::default(), true);
+    let mut client = r.connect(PROTOCOL_VERSION);
+    let snap: Value = client
+        .call(
+            methods::SCOPE_SNAPSHOT,
+            json!({ "scope": repo_scope(&repo_id) }),
+        )
+        .unwrap();
+    let worktree = |path: &Path| {
+        snap["repo"]["worktrees"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|w| w["path"]["untrusted"].as_str().map(Path::new) == Some(path))
+            .cloned()
+            .unwrap_or_else(|| panic!("{path:?} in {snap}"))
+    };
+    let main_view = worktree(&main);
+    assert_eq!(main_view["last_activity_utc_ms"], json!(main_at), "{snap}");
+    assert!(main_view.get("last_activity_in_gap").is_none(), "{snap}");
+    let linked_view = worktree(&linked);
+    assert_eq!(
+        linked_view["last_activity_utc_ms"],
+        json!(linked_at),
+        "{snap}"
+    );
+    assert_eq!(linked_view["last_activity_in_gap"], json!(true), "{snap}");
+    let quiet_view = worktree(&quiet.canonicalize().unwrap());
+    assert!(quiet_view.get("last_activity_utc_ms").is_none(), "{snap}");
+    assert!(quiet_view.get("last_activity_in_gap").is_none(), "{snap}");
+}

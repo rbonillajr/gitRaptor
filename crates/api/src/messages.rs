@@ -165,6 +165,7 @@ impl RepoView {
         self.fetched_utc_ms = None;
         for w in &mut self.worktrees {
             w.last_activity_utc_ms = None;
+            w.last_activity_in_gap = false;
             w.detached_at = None;
         }
     }
@@ -311,16 +312,28 @@ pub struct WorktreeView {
     pub status: WorktreeStatus,
     /// When the engine last saw the worktree change (its head, its changes
     /// or an operation in progress; not its ahead/behind nor its sessions),
-    /// DEP-CKP-4. Absent until the first change this engine run observes,
-    /// and for a connection without `scope.activity`.
+    /// DEP-CKP-4. When the engine starts observing the repo it is seeded with
+    /// the time of the worktree's latest Git event in the store (ADR-GRP-013
+    /// § 6). Absent when there is none and nothing changed since, and for a
+    /// connection without `scope.activity`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_activity_utc_ms: Option<i64>,
+    /// The gap mark of [`Self::last_activity_utc_ms`]: the value comes from
+    /// the store, not from a change this engine run saw live, so the real
+    /// time may fall in a gap (ADR-GRP-013 § 6). Cleared by the first live
+    /// change. Absent (false) for a connection without `scope.activity`.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub last_activity_in_gap: bool,
     /// The commit (hex) a detached `HEAD` is at, so a worktree without a
     /// branch can still be told apart (US-CKP-001, dogfooding amendment).
     /// Absent when `HEAD` is on a branch, and for a connection without
     /// `scope.activity`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detached_at: Option<String>,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 impl WorktreeView {
@@ -386,6 +399,7 @@ impl WorktreeStateData {
         self.fetched_utc_ms = None;
         for w in &mut self.worktrees {
             w.last_activity_utc_ms = None;
+            w.last_activity_in_gap = false;
             w.detached_at = None;
         }
     }
@@ -1055,6 +1069,7 @@ mod tests {
                     reason: UnavailableReason::Missing,
                 },
                 last_activity_utc_ms: None,
+                last_activity_in_gap: true,
                 detached_at: Some("39e852f".into()),
             }],
             fetched_utc_ms: None,

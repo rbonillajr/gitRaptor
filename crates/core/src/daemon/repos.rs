@@ -17,7 +17,7 @@ use gitraptor_api::{Timings, Untrusted, clock};
 use super::state::{EngineState, Trigger};
 use super::{
     CHANGE_LIST_BUDGET, Daemon, Field, TM_RECOVERY_WAIT, git_event_view, now_ms, outcome_field,
-    persist_read, profile_error_kind, recover_repo, repo_base, run_id, sessions,
+    persist_read, profile_error_kind, recover_repo, repo_base, run_id, seed_activity, sessions,
 };
 use super::{RepoAddRequest, RepoCommandError};
 
@@ -109,7 +109,8 @@ impl Daemon {
             self.observe(&repo_id, &request.common_dir, &request.read);
         }
         let t_persisted = clock::monotonic_ns();
-        let worktrees = request.read.views();
+        let mut worktrees = request.read.views();
+        seed_activity(&self.stores, &repo_id, &mut worktrees);
         let view = RepoView {
             repo_id: repo_id.clone(),
             state,

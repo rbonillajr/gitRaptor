@@ -67,7 +67,7 @@ pub fn fetched_utc_ms(common_dir: &Path, now_ms: i64) -> Option<i64> {
 /// The ahead/behind does not count (a fetch moves it with nobody touching
 /// the worktree), nor do sessions. A worktree that appears in a repo that
 /// already had worktrees is activity; on the first read of a repo nothing
-/// is known yet. `old_heads` and `new_heads` are aligned with their views.
+/// is known yet. A live change clears the gap mark of a seeded value. `old_heads` and `new_heads` are aligned with their views.
 pub fn stamp_activity(
     old: &[WorktreeView],
     old_heads: &[HeadRef],
@@ -86,11 +86,13 @@ pub fn stamp_activity(
             (old_heads.get(j), new_heads.get(i)),
             (Some(a), Some(b)) if a != b
         );
-        view.last_activity_utc_ms = if moved || !same_but_divergence(&old[j].status, &view.status) {
-            Some(now_ms)
+        if moved || !same_but_divergence(&old[j].status, &view.status) {
+            view.last_activity_utc_ms = Some(now_ms);
+            view.last_activity_in_gap = false;
         } else {
-            old[j].last_activity_utc_ms
-        };
+            view.last_activity_utc_ms = old[j].last_activity_utc_ms;
+            view.last_activity_in_gap = old[j].last_activity_in_gap;
+        }
     }
 }
 
@@ -502,6 +504,7 @@ fn untrusted_link(path: &Path, id: &str) -> WorktreeRead {
                 reason: UnavailableReason::Untrusted,
             },
             last_activity_utc_ms: None,
+            last_activity_in_gap: false,
             detached_at: None,
         },
         head_commit: None,
@@ -521,6 +524,7 @@ pub fn read_worktree(path: &Path, main: bool, admin_name: Option<&str>) -> Workt
         admin_name: admin_name.map(UntrustedName::new),
         status,
         last_activity_utc_ms: None,
+        last_activity_in_gap: false,
         detached_at,
     };
     let read = || -> Result<(HeadView, Option<String>, Status, bool), ReadError> {

@@ -202,6 +202,7 @@ mod activity {
                 },
             },
             last_activity_utc_ms: last,
+            last_activity_in_gap: false,
             detached_at: None,
         }
     }
@@ -241,6 +242,23 @@ mod activity {
             stamped(&old, &[at("c1")], view("/w/a", 0, 0, None), at("c2")),
             Some(NOW)
         );
+    }
+
+    /// A value seeded from the store keeps its gap mark until a live change replaces it
+    /// (ADR-GRP-013 § 6, cold start).
+    #[test]
+    fn a_live_change_clears_the_gap_mark_of_a_seeded_value() {
+        let mut seeded = view("/w/a", 0, 0, Some(5));
+        seeded.last_activity_in_gap = true;
+        let old = [seeded];
+        let mut quiet = vec![view("/w/a", 0, 3, None)];
+        stamp_activity(&old, &[at("c1")], &mut quiet, &[at("c1")], NOW);
+        assert_eq!(quiet[0].last_activity_utc_ms, Some(5));
+        assert!(quiet[0].last_activity_in_gap);
+        let mut changed = vec![view("/w/a", 1, 0, None)];
+        stamp_activity(&old, &[at("c1")], &mut changed, &[at("c1")], NOW);
+        assert_eq!(changed[0].last_activity_utc_ms, Some(NOW));
+        assert!(!changed[0].last_activity_in_gap);
     }
 
     /// A fetch moves "behind" with nobody touching the worktree: the old activity stays.

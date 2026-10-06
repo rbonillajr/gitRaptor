@@ -40,7 +40,7 @@ use gitraptor_api::Untrusted;
 use gitraptor_api::event::{DAEMON_STOPPING, ENGINE_STATE};
 use gitraptor_api::messages::{
     EngineStateView, EngineView, GitEventDetails, GitEventKind, GitEventView, RepoAddOutcome,
-    RepoStateView, RepoView, StoppingData,
+    RepoStateView, RepoView, StoppingData, WorktreeView,
 };
 use gitraptor_policy::team::BaseBranch;
 
@@ -520,12 +520,14 @@ impl Daemon {
                 Some(read) => read.base.clone(),
                 None => repo_base(&stores, &entry.repo_id),
             };
+            let mut worktrees = read.map(RepoRead::views).unwrap_or_default();
+            seed_activity(&stores, &entry.repo_id, &mut worktrees);
             repo_views.push(RepoView {
                 repo_id: entry.repo_id,
                 state,
                 path: Untrusted::from_os(entry.canonical_path.as_os_str()),
                 base: observe::base_view(&base),
-                worktrees: read.map(RepoRead::views).unwrap_or_default(),
+                worktrees,
                 fetched_utc_ms: observe::fetched_utc_ms(&entry.canonical_path, now_ms()),
             });
         }
@@ -1034,6 +1036,29 @@ fn repo_base(stores: &[(String, RepoStore)], repo_id: &str) -> BaseBranch {
         .find(|(id, _)| id == repo_id)
         .and_then(|(_, store)| store.confirmed_team_baseline().ok().flatten());
     observe::base_branch(confirmed.as_ref())
+}
+
+/// Seeds the last activity of each worktree that has none with the time of its latest Git
+/// event in the repo's store, with the gap mark when that event is linked to a gap
+/// (ADR-GRP-013 § 6). Without events it stays absent: nothing is made up.
+fn seed_activity(stores: &[(String, RepoStore)], repo_id: &str, worktrees: &mut [WorktreeView]) {
+    let Some((_, store)) = stores.iter().find(|(id, _)| id == repo_id) else {
+        return;
+    };
+    let now = now_ms();
+    for w in worktrees
+        .iter_mut()
+        .filter(|w| w.last_activity_utc_ms.is_none())
+    {
+        let latest = store
+            .events_page(Some(std::path::Path::new(w.path.raw())), None, 1)
+            .ok()
+            .and_then(|events| events.into_iter().last());
+        if let Some(event) = latest {
+            w.last_activity_utc_ms = Some(event.observed.utc_ms.min(now));
+            w.last_activity_in_gap = event.gap_id.is_some();
+        }
+    }
 }
 
 /// Persists a reconciliation in the repo's store. A failure is logged: the
