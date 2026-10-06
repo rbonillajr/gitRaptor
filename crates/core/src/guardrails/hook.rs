@@ -208,16 +208,24 @@ fn same_repo(common: &Path, env: &HookEnv) -> bool {
 /// which worktree, and a plain `HEAD` is the transaction's `GIT_DIR`, never the cwd's guess of
 /// another repo (E-02-3).
 fn resolve_head(name: &str, common: &Path, env: &HookEnv) -> Option<Option<String>> {
-    let file = if name == "HEAD" {
-        transaction_git_dir(env)?.join("HEAD")
+    let dir = if name == "HEAD" {
+        transaction_git_dir(env)?
     } else if name == "main-worktree/HEAD" {
-        common.join("HEAD")
+        common.to_path_buf()
     } else {
         let id = name.strip_prefix("worktrees/")?.strip_suffix("/HEAD")?;
-        common.join("worktrees").join(id).join("HEAD")
+        common.join("worktrees").join(id)
     };
-    let text = std::fs::read_to_string(file).ok()?;
-    Some(text.trim_end().strip_prefix("ref: ").map(str::to_owned))
+    let text = std::fs::read_to_string(dir.join("HEAD")).ok()?;
+    match text.trim_end().strip_prefix("ref: ") {
+        // reftable keeps the real `HEAD` in its tables; the file only says so.
+        Some("refs/heads/.invalid") => {
+            let reader = evaluate::open(&dir)?;
+            let head = gitraptor_git::RefName::new("HEAD").ok()?;
+            Some(reader.symbolic_target(&head).ok()?)
+        }
+        target => Some(target.map(str::to_owned)),
+    }
 }
 
 /// Normalizes a `reference-transaction` (ADR-GRD-002 § 4). `Ok(None)` when nothing governed
@@ -363,15 +371,19 @@ enum Asked {
 
 fn ask_daemon(args: &HookArgs, params: &EvaluateParams) -> Asked {
     // The server must be the installed binary itself (H-03, SEC-GRD-16), checked before
-    // anything is sent.
-    let connected = Client::connect_runtime(
-        &args.channel,
-        ClientKind::Other,
-        PROTOCOL_VERSION,
-        same_executable,
-    );
+    // anything is sent. A server whose executable cannot be read at all (replaced on disk
+    // after an upgrade) is not trusted either, but decides nothing: degraded mode, stricter.
+    let identity = std::cell::Cell::new(Identity::Different);
+    let connected =
+        Client::connect_runtime(&args.channel, ClientKind::Other, PROTOCOL_VERSION, |pid| {
+            identity.set(same_executable(pid));
+            identity.get() == Identity::Same
+        });
     let mut client = match connected {
         Ok(client) => client,
+        Err(ClientError::NotAuthentic) if identity.get() == Identity::Unknown => {
+            return Asked::Degraded(Degraded::DaemonUnreachable);
+        }
         Err(ClientError::NotAuthentic) => return Asked::NotAuthentic,
         Err(ClientError::Rpc(_) | ClientError::Protocol(_)) => return Asked::Failed,
         // No daemon, a stale socket, another protocol or no transport (Windows).
@@ -387,31 +399,41 @@ fn ask_daemon(args: &HookArgs, params: &EvaluateParams) -> Asked {
     }
 }
 
+/// What the client can tell of the channel server's executable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Identity {
+    Same,
+    Different,
+    /// Its executable cannot be read (on Linux, a binary replaced on disk is `(deleted)`).
+    Unknown,
+}
+
 /// The executable of the channel server is the same file as this client's (ADR-GRD-003 § 4,
 /// Enmienda 2026-10-05: the identity of the file instead of a signature or fingerprint).
-fn same_executable(pid: u32) -> bool {
+fn same_executable(pid: u32) -> Identity {
     #[cfg(unix)]
     {
         use crate::channel::peer::{ProcSource, SystemProcs};
         let Ok(info) = SystemProcs.read(pid) else {
-            return false;
+            return Identity::Unknown;
         };
         let Some(server) = info.exe else {
-            return false;
+            return Identity::Unknown;
         };
         let Ok(own) = std::env::current_exe() else {
-            return false;
+            return Identity::Unknown;
         };
         let id = |p: &Path| crate::channel::file_id(p);
         match (id(&server), id(&own)) {
-            (Some(a), Some(b)) => a == b,
-            _ => false,
+            (Some(a), Some(b)) if a == b => Identity::Same,
+            (Some(_), Some(_)) => Identity::Different,
+            _ => Identity::Unknown,
         }
     }
     #[cfg(not(unix))]
     {
         let _ = pid;
-        false
+        Identity::Unknown
     }
 }
 
@@ -435,7 +457,7 @@ fn degraded(args: &HookArgs, op: &Operation, cause: Degraded) -> HookOutcome {
             }
         }
     }
-    let mut eval = evaluate::evaluate(&reader, op, bases);
+    let mut eval = evaluate::evaluate(&reader, &args.common, op, bases);
     if eval.effect != Effect::Allow {
         eval.reasons.push(Reason {
             rule: Rule::Degraded,
