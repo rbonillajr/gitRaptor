@@ -27,7 +27,7 @@ fn actor_text(actor: &Actor) -> String {
     match actor {
         Actor::Unattributed => t("actor.unattributed", &[]),
         Actor::Agent { kind, name, .. } => t(
-            &key("actor", kind),
+            &key("requester.actor", kind),
             &[(
                 "name",
                 &name.as_ref().map(|n| n.sanitized()).unwrap_or_default(),
@@ -85,7 +85,7 @@ mod tests {
         keys.extend(
             [AgentKind::ClaudeCode, AgentKind::Other]
                 .iter()
-                .map(|v| key("actor", v)),
+                .map(|v| key("requester.actor", v)),
         );
         keys.extend(
             [

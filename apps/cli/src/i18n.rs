@@ -66,6 +66,23 @@ mod tests {
         out
     }
 
+    /// No key is defined twice: the second definition would silently win.
+    #[test]
+    fn no_key_is_defined_twice() {
+        for catalog in [EN, ES] {
+            let mut keys: Vec<&str> = catalog
+                .lines()
+                .map(str::trim)
+                .filter(|l| !l.is_empty() && !l.starts_with('#'))
+                .filter_map(|l| l.split_once(" = ").map(|(k, _)| k.trim()))
+                .collect();
+            let total = keys.len();
+            keys.sort_unstable();
+            keys.dedup();
+            assert_eq!(keys.len(), total, "duplicate keys in a catalog");
+        }
+    }
+
     /// Both catalogs have the same keys and each key the same placeholders.
     #[test]
     fn catalogs_match() {
