@@ -129,7 +129,7 @@ mod repo_intact {
                 refs: RefFormat::Reftable,
                 ..gap
             };
-            let m = compare(&gap, GitVersion(2, 55, 1)).expect("not in the list");
+            let m = compare(&gap, GitVersion(2, 44, 0)).expect("not in the list");
             assert!(m.to_string().contains("not in the reference list"), "{m}");
             assert!(compare(&gap, v).is_none());
         }
