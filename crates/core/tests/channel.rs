@@ -435,7 +435,10 @@ fn slow_client_and_connection_flood_do_not_starve_the_others() {
     slow.send(r#"{"jsonrpc":"2.0","id":1,"method":"events.subscribe"}"#);
     let deadline = Instant::now() + Duration::from_secs(5);
     while r.bus.subscriber_count() < 2 {
-        assert!(Instant::now() < deadline, "the slow client never subscribed");
+        assert!(
+            Instant::now() < deadline,
+            "the slow client never subscribed"
+        );
         std::thread::yield_now();
     }
 
