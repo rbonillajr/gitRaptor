@@ -195,6 +195,55 @@ mod unix {
         String::from_utf8_lossy(&out.stdout).trim().to_owned()
     }
 
+    /// Output of a command, trimmed; `None` when it does not run or fails.
+    fn output(program: &str, args: &[&str]) -> Option<String> {
+        let out = Command::new(program)
+            .args(args)
+            .stdin(Stdio::null())
+            .output()
+            .ok()?;
+        out.status
+            .success()
+            .then(|| String::from_utf8_lossy(&out.stdout).trim().to_owned())
+    }
+
+    /// What the measurement ran on, so reports of different releases can be compared (TD-GRP-003):
+    /// commit, machine, system, cores, load and power source.
+    fn conditions() -> Value {
+        let manifest = env!("CARGO_MANIFEST_DIR");
+        let commit = std::env::var("GITHUB_SHA")
+            .ok()
+            .or_else(|| output("git", &["-C", manifest, "rev-parse", "HEAD"]));
+        let dirty = output(
+            "git",
+            &[
+                "-C",
+                manifest,
+                "status",
+                "--porcelain",
+                "--untracked-files=no",
+            ],
+        )
+        .map(|s| !s.is_empty());
+        let power = if cfg!(target_os = "macos") {
+            output("pmset", &["-g", "batt"]).and_then(|s| s.lines().next().map(str::to_owned))
+        } else {
+            std::fs::read_to_string("/sys/class/power_supply/AC/online")
+                .ok()
+                .map(|v| format!("AC online: {}", v.trim()))
+        };
+        json!({
+            "commit": commit,
+            "worktree_dirty": dirty,
+            "system": output("uname", &["-srm"]),
+            "model": if cfg!(target_os = "macos") { output("sysctl", &["-n", "hw.model"]) } else { None },
+            "cores": std::thread::available_parallelism().map(|n| n.get()).ok(),
+            "load": output("uptime", &[]),
+            "power": power,
+            "ci": std::env::var_os("GITHUB_ACTIONS").is_some(),
+        })
+    }
+
     fn now_ms() -> i64 {
         let d = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -1391,6 +1440,7 @@ mod unix {
 
         let mut report = serde_json::Map::new();
         report.insert("os".into(), os().into());
+        report.insert("conditions".into(), conditions());
         report.insert("profile".into(), opts.profile.clone().into());
         report.insert("commits".into(), commits.into());
         report.insert("worktrees".into(), opts.worktrees.into());
