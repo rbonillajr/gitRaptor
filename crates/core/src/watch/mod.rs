@@ -108,7 +108,22 @@ pub struct ObservedBatch {
     pub gap: Option<GapMark>,
     /// Tips of the local branches (as in [`RepoRead::refs`]), when read.
     pub refs: Option<String>,
+    /// Size of each worktree's `HEAD` reflog as the repo task read it, when
+    /// it read them: once persisted, the Time Machine knows the engine saw
+    /// every `git` that wrote there (US-TMC-004, calm by state).
+    pub head_logs: Vec<(PathBuf, u64)>,
+    /// `HEAD` of each worktree as its task read it before computing the
+    /// batch (US-TMC-004, calm by state: its events are persisted with it).
+    pub heads: Vec<(PathBuf, Vec<u8>)>,
     pub marks: Marks,
+}
+
+/// What a repo's tasks start from: each worktree's `HEAD` reflog size and
+/// `HEAD` (US-TMC-004).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct WatchStart {
+    pub head_logs: Vec<(PathBuf, u64)>,
+    pub heads: Vec<(PathBuf, Vec<u8>)>,
 }
 
 /// Where batches go: the daemon loop.
@@ -125,6 +140,33 @@ pub trait ObserverHooks: Send + Sync {
     /// first write of a commit. `t_recv` is the monotonic mark of the
     /// event, comparable with the batch's [`Marks`].
     fn git_dir_touched(&self, repo_id: &str, t_recv: u64);
+    /// A worktree's window closed with files outside every ignored folder,
+    /// or with a new state: after its batch is handed over, outside the
+    /// budget (US-TMC-004, the Time Machine's continuous capture).
+    fn worktree_changed(&self, _repo_id: &str, _root: &Path) {}
+}
+
+/// Several hooks, called in order.
+pub struct FanoutHooks(pub Vec<Arc<dyn ObserverHooks>>);
+
+impl ObserverHooks for FanoutHooks {
+    fn worktree_touched(&self, repo_id: &str, root: &Path) {
+        for h in &self.0 {
+            h.worktree_touched(repo_id, root);
+        }
+    }
+
+    fn git_dir_touched(&self, repo_id: &str, t_recv: u64) {
+        for h in &self.0 {
+            h.git_dir_touched(repo_id, t_recv);
+        }
+    }
+
+    fn worktree_changed(&self, repo_id: &str, root: &Path) {
+        for h in &self.0 {
+            h.worktree_changed(repo_id, root);
+        }
+    }
 }
 
 /// Message to a worktree task.
@@ -325,30 +367,36 @@ impl Shared {
 
     /// Starts the task of one worktree and its watch. A worktree that cannot
     /// be watched is polled instead (degraded mode).
-    fn start_worktree(self: &Arc<Self>, repo_id: &str, initial: WorktreeRead, git_dir: PathBuf) {
+    /// Returns the worktree's `HEAD` as the task starts from it.
+    fn start_worktree(
+        self: &Arc<Self>,
+        repo_id: &str,
+        initial: WorktreeRead,
+        git_dir: PathBuf,
+    ) -> Option<(PathBuf, Vec<u8>)> {
         let root = PathBuf::from(initial.view.path.raw());
         let (tx, rx) = channel();
         let handle = WtHandle {
             root: root.clone(),
-            git_dir,
+            git_dir: git_dir.clone(),
             tx,
         };
         {
             let mut repos = self.repos.write().unwrap_or_else(|e| e.into_inner());
-            let Some(repo) = repos.get_mut(repo_id) else {
-                return;
-            };
+            let repo = repos.get_mut(repo_id)?;
             if repo.worktrees.iter().any(|w| w.root == root) {
-                return;
+                return None;
             }
             repo.worktrees.push(handle);
         }
+        let head = std::fs::read(git_dir.join("HEAD")).unwrap_or_default();
         let degraded = !self.watch(std::slice::from_ref(&root));
         let shared = Arc::clone(self);
         let repo_id = repo_id.to_owned();
         let _ = std::thread::Builder::new()
             .name("raptor-watch-worktree".into())
-            .spawn(move || worktree::run(shared, repo_id, initial, degraded, rx));
+            .spawn(move || worktree::run(shared, repo_id, initial, git_dir, degraded, rx));
+        Some((root, head))
     }
 
     fn stop_worktree(&self, repo_id: &str, root: &Path) {
@@ -468,13 +516,15 @@ impl Observer {
     /// directory. Each worktree task re-reads once its watch is running, so
     /// nothing written between `read` and the watch is lost (ADR-GRP-010
     /// § 6).
-    pub fn watch_repo(&self, repo_id: &str, common_dir: &Path, read: &RepoRead) {
+    /// Returns what its tasks start from (empty if the repo was already
+    /// watched).
+    pub fn watch_repo(&self, repo_id: &str, common_dir: &Path, read: &RepoRead) -> WatchStart {
         let common = crate::observe::canonical(common_dir);
         let (tx, rx) = channel();
         {
             let mut repos = self.shared.repos.write().unwrap_or_else(|e| e.into_inner());
             if repos.contains_key(repo_id) {
-                return;
+                return WatchStart::default();
             }
             repos.insert(
                 repo_id.to_owned(),
@@ -497,18 +547,21 @@ impl Observer {
             self.shared.watch(std::slice::from_ref(&common));
         }
         let refs = RefsView::read(&common);
+        let head_logs = refs.head_logs();
+        let mut heads = Vec::new();
         for w in &read.worktrees {
             if !w.view.status.is_watchable() {
                 continue;
             }
             let git_dir = worktree_git_dir(&common, w);
-            self.shared.start_worktree(repo_id, w.clone(), git_dir);
+            heads.extend(self.shared.start_worktree(repo_id, w.clone(), git_dir));
         }
         let shared = Arc::clone(&self.shared);
         let repo_id = repo_id.to_owned();
         let _ = std::thread::Builder::new()
             .name("raptor-watch-repo".into())
             .spawn(move || repo::run(shared, repo_id, common, refs, rx));
+        WatchStart { head_logs, heads }
     }
 
     /// Stops observing a repo: its watches close and its tasks end. A batch

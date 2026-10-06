@@ -225,6 +225,7 @@ fn start(fx: Fixture, undo_no_space: bool) -> Running {
                 Arc::new(NoSpace) as Arc<dyn PriorSnapshotter>
             }))
         }),
+        tm_capture: Default::default(),
     };
     let daemon = Daemon::start(config).unwrap();
     let handle = daemon.shutdown_handle();

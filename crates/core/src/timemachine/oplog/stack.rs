@@ -94,6 +94,19 @@ impl Oplog {
     /// interrupted one, of any kind, counts as something done, so the next
     /// undo returns to its prior snapshot (US-TMC-019).
     pub fn undo_stack(&self, scope: &StackScope, external: &[ExternalEvent]) -> Result<UndoStack> {
+        self.undo_stack_in(scope, external, 0)
+    }
+
+    /// Like [`Oplog::undo_stack`], with the rows before oplog sequence
+    /// `floor` from another generation of the engine store (or from before
+    /// the common mark, US-TMC-004): their marks do not compare with the
+    /// events', so they go before every event, in their own order.
+    pub fn undo_stack_in(
+        &self,
+        scope: &StackScope,
+        external: &[ExternalEvent],
+        floor: i64,
+    ) -> Result<UndoStack> {
         let mut keyed: Vec<((i64, u8, i64), StackItem)> = Vec::new();
         for event in external.iter().filter(|e| e.caused_by.is_none()) {
             keyed.push(((event.seq, 0, 0), StackItem::Do(OpRef::GitEvent(event.seq))));
@@ -135,7 +148,12 @@ impl Oplog {
                 ) => StackItem::Do(OpRef::Oplog(id)),
                 _ => continue,
             };
-            keyed.push(((op.record.engine_mark, 1, op.record.seq), item));
+            let mark = if op.record.seq < floor {
+                i64::MIN
+            } else {
+                op.record.engine_mark
+            };
+            keyed.push(((mark, 1, op.record.seq), item));
         }
         keyed.sort_by_key(|(key, _)| *key);
         Ok(UndoStack::build(keyed.into_iter().map(|(_, item)| item)))

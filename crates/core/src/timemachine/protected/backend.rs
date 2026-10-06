@@ -74,6 +74,9 @@ impl std::fmt::Debug for OperationsWiring {
     }
 }
 
+/// Oplog and store (`None` if it cannot be opened) of a repo.
+pub(crate) type OpenedStore = (Arc<Mutex<Oplog>>, Option<Arc<SnapshotStore>>);
+
 /// Repo id, oplog and store (`None` if it cannot be opened).
 type FoundRepo = (String, Arc<Mutex<Oplog>>, Option<Arc<SnapshotStore>>);
 
@@ -151,6 +154,19 @@ impl TmRepos {
             // An id the store refuses never reaches a write: keep it apart.
             Err(_) => format!("invalid-store:{repo_id}"),
         }
+    }
+
+    /// An observed repo by id, with its oplog and its store (`None` if the
+    /// store cannot be opened).
+    pub(crate) fn repo(&self, repo_id: &str) -> Option<OpenedStore> {
+        let mut repos = self.lock();
+        let repo = repos.iter_mut().find(|r| r.repo_id == repo_id)?;
+        if repo.store.is_none() {
+            repo.store = SnapshotStore::open_or_create(&self.dirs, &repo.repo_id)
+                .ok()
+                .map(|(store, _)| Arc::new(store));
+        }
+        Some((Arc::clone(&repo.oplog), repo.store.clone()))
     }
 
     /// The repo whose canonical common directory is `common_dir`, with its

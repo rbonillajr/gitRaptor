@@ -74,6 +74,7 @@ impl Running {
             protected: None,
             operations: None,
             tm_prior_layer: None,
+            tm_capture: Default::default(),
         };
         let daemon = Daemon::start(config).unwrap();
         let handle = daemon.shutdown_handle();

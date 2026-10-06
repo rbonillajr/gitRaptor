@@ -76,7 +76,7 @@ pub trait PriorSnapshotter: Send + Sync {
 }
 
 /// `ENOSPC` and `EDQUOT`.
-fn is_no_space(e: &std::io::Error) -> bool {
+pub(crate) fn is_no_space(e: &std::io::Error) -> bool {
     #[cfg(target_os = "macos")]
     const CODES: &[i32] = &[28, 69];
     #[cfg(target_os = "linux")]
@@ -133,6 +133,7 @@ impl PriorSnapshotter for StoreSnapshotter {
             cause_operation: Some(req.operation_id.clone()),
             cause_event_seq: None,
             include_credentials: crate::profile::settings::include_credential_files(&self.profile),
+            still_valid: None,
         };
         let out = self.store.capture(&self.oplog, &capture)?;
         Ok(PriorSnapshot {
@@ -168,7 +169,11 @@ pub(crate) fn canonical(path: &Path) -> PathBuf {
 /// snapshot to the next, so its incremental state and the fast path are kept
 /// (ADR-TMC-006 § 5): `main`, or `wt-<name>` for a linked worktree. Falls
 /// back to the position when the name is not a valid key.
-fn worktree_key(registered: &[(PathBuf, Option<String>)], path: &Path, i: usize) -> String {
+pub(crate) fn worktree_key(
+    registered: &[(PathBuf, Option<String>)],
+    path: &Path,
+    i: usize,
+) -> String {
     let path = canonical(path);
     let key = match registered.iter().find(|(p, _)| *p == path) {
         Some((_, None)) => Some("main".to_owned()),

@@ -470,6 +470,7 @@ impl Connection<'_> {
             return After::Continue;
         }
         self.protocol = hello.protocol;
+        self.outbox.set_before_reset(self.protocol < 8);
         // N5: who the daemon sees, for the Cockpit's "you act as". Only for
         // `cli` clients of protocol 6 on a full connection: the hook client
         // connects often and does not need the process walk.
@@ -1093,10 +1094,18 @@ impl Connection<'_> {
         {
             return Err(ErrorObject::new(code::INVALID_PARAMS, "invalid worktree"));
         }
+        let before_reset = self.protocol < 8;
         self.ctx
             .control
             .event_history(params)
-            .map(|events| EventsHistoryResult { events })
+            .map(|mut events| {
+                // A client older than protocol 8 cannot read `reset`
+                // (US-TMC-004).
+                if before_reset {
+                    events.retain(|e| e.kind != gitraptor_api::messages::GitEventKind::Reset);
+                }
+                EventsHistoryResult { events }
+            })
             .map_err(repo_command_error)
     }
 
@@ -1433,8 +1442,8 @@ fn undo_result(done: UndoDone, requester: RequesterView) -> UndoResult {
     UndoResult {
         operation_id: done.operation_id,
         prior_snapshot_id: done.prior_snapshot_id,
-        undone_operation_id: done.undone.record.operation_id,
-        undone_subtype: done.undone.record.subtype.map(Untrusted::new),
+        undone_operation_id: done.undone.id,
+        undone_subtype: done.undone.subtype.map(Untrusted::new),
         target_snapshot_id: done.target_snapshot_id,
         requester,
         written: done.report.written as u64,
@@ -1671,12 +1680,30 @@ impl Connection<'_> {
         let publish = move |kind: &str, data: catalog::OperationEventData| {
             bus.publish(kind, data, None, |_| {});
         };
+        // The intent's mark once the engine is calm, and the anchor after the
+        // step (US-TMC-004). Without an engine (doubles), the bus sequence.
+        let tm_engine = self.ctx.tm_engine.clone();
+        let bus_mark = i64::try_from(self.ctx.bus.snapshot().0).unwrap_or(i64::MAX);
+        let engine_mark = |repo_id: &str, worktrees: &[std::path::PathBuf]| match &tm_engine {
+            Some(deps) => deps.engine.settle(
+                repo_id,
+                worktrees,
+                crate::timemachine::continuous::ANCHOR_SETTLE_LIMIT,
+            ),
+            None => Some(bus_mark),
+        };
+        let after_step = |repo_id: &str, worktrees: &[std::path::PathBuf], operation_id: &str| {
+            if let Some(deps) = &tm_engine {
+                crate::timemachine::continuous::anchor(deps, repo_id, worktrees, operation_id);
+            }
+        };
         let env = RunEnv {
             marks: &self.ctx.marks,
             procs: self.ctx.procs.as_ref(),
             stopping: &self.ctx.stopping,
             prior_deadline: wiring.prior_deadline,
-            engine_mark: i64::try_from(self.ctx.bus.snapshot().0).unwrap_or(i64::MAX),
+            engine_mark: &engine_mark,
+            after_step: &after_step,
             publish: &publish,
         };
         let done = wiring
@@ -1780,10 +1807,10 @@ impl Connection<'_> {
             prior_deadline: tm.prior_deadline,
             git: tm.git.as_ref(),
             invoker: &tm.invoker,
+            engine: self.ctx.tm_engine.as_ref(),
+            fallback_mark: i64::try_from(self.ctx.bus.snapshot().0).unwrap_or(i64::MAX),
         };
-        let engine_mark = i64::try_from(self.ctx.bus.snapshot().0).unwrap_or(i64::MAX);
-        let done = undo_last(&repo, &r.who, oplog_channel(channel), engine_mark, &env)
-            .map_err(undo_error)?;
+        let done = undo_last(&repo, &r.who, oplog_channel(channel), &env).map_err(undo_error)?;
         let result = undo_result(done, self.requester_view(&r, channel));
         let value = if self.is_mcp() {
             serde_json::to_value(result.for_mcp())

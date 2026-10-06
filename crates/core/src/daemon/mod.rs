@@ -24,6 +24,7 @@ mod log;
 mod sessions;
 mod shutdown;
 mod state;
+mod tm;
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -66,7 +67,7 @@ use crate::timemachine::protected::{OperationsWiring, TmRepos};
 use crate::timemachine::store::SnapshotStore;
 use crate::watch::{ObservedBatch, Observer, WatchConfig};
 
-pub use env::{AGENT_EXECUTABLES_ENV, CLOCK_SKEW_FILE_ENV, DaemonEnv};
+pub use env::{AGENT_EXECUTABLES_ENV, CLOCK_SKEW_FILE_ENV, DaemonEnv, TM_NO_FREE_SPACE_FLOOR_ENV};
 pub use lock::{InstanceLock, LOCK_FILE, running_pid, wait_until_released};
 pub use log::{Field, LOG_FILE, Level, LogLimits, Logger};
 use shutdown::Control;
@@ -76,6 +77,7 @@ pub use shutdown::{
     RegistrationError, RepoCommandError, ShutdownHandle, StopCause, install_signal_handlers,
 };
 pub use state::{EngineState, InvalidTransition, Trigger};
+pub use tm::TmCapture;
 
 /// Exit code of a second `raptor daemon` that found another one running.
 /// Service managers must not treat it as a failure to relaunch (US-GRP-004).
@@ -166,6 +168,8 @@ pub struct DaemonConfig {
     /// (undo) to inject faults. Honored only in debug builds.
     #[doc(hidden)]
     pub tm_prior_layer: Option<TmPriorLayer>,
+    /// The Time Machine's continuous capture (US-TMC-004).
+    pub tm_capture: TmCapture,
 }
 
 /// A layer over the snapshotter of the Time Machine's own commands (tests).
@@ -198,6 +202,10 @@ impl DaemonConfig {
             protected: None,
             operations: None,
             tm_prior_layer: None,
+            tm_capture: TmCapture {
+                no_free_space_floor: env::tm_no_free_space_floor(),
+                ..TmCapture::default()
+            },
         })
     }
 }
@@ -299,6 +307,10 @@ pub struct Daemon {
     tm: Arc<TmRepos>,
     /// Protected repos as `guard.evaluate` reads them (US-GRD-001).
     guard: Arc<GuardRegistry>,
+    /// Engine marks and calm per repo, for the Time Machine (US-TMC-004).
+    marks: Arc<crate::timemachine::engine::RepoMarks>,
+    /// The Time Machine's continuous capture (US-TMC-004).
+    capture: Option<crate::timemachine::continuous::ContinuousCapture>,
     report: StartupReport,
     handle: ShutdownHandle,
     control_rx: Receiver<Control>,
@@ -547,6 +559,8 @@ impl Daemon {
             stores,
             tm,
             guard,
+            marks: Arc::default(),
+            capture: None,
             report,
             handle,
             control_rx,
@@ -565,6 +579,20 @@ impl Daemon {
             bound,
             #[cfg(unix)]
             server: None,
+        };
+        let repo_ids: Vec<String> = daemon.stores.iter().map(|(id, _)| id.clone()).collect();
+        for repo_id in &repo_ids {
+            daemon.link_marks(repo_id);
+        }
+        daemon.capture = match crate::timemachine::continuous::ContinuousCapture::start(
+            daemon.config.tm_capture.config,
+            daemon.capture_deps(),
+        ) {
+            Ok(capture) => Some(capture),
+            Err(_) => {
+                daemon.logger.warn("tm_capture_unavailable", &[]);
+                None
+            }
         };
         // The observer starts after the reconciliation; each worktree task
         // reads once more when its watch runs, so nothing in between is
@@ -601,6 +629,23 @@ impl Daemon {
     /// The recovered oplog of an observed repo; `None` if it is unavailable.
     pub fn oplog(&self, repo_id: &str) -> Option<Arc<Mutex<Oplog>>> {
         self.tm.oplog(repo_id)
+    }
+
+    /// What a Time Machine capture needs: repos, the engine, the profile.
+    fn capture_deps(&self) -> crate::timemachine::continuous::CaptureDeps {
+        let tm = &self.config.tm_capture;
+        crate::timemachine::continuous::CaptureDeps {
+            repos: Arc::clone(&self.tm),
+            engine: Arc::new(tm::DaemonEngine {
+                marks: Arc::clone(&self.marks),
+                handle: self.handle.clone(),
+            }),
+            profile: self.config.dirs.clone(),
+            logger: self.logger.clone(),
+            layer: tm.layer.clone().filter(|_| cfg!(debug_assertions)),
+            free_space_floor: (!(tm.no_free_space_floor && cfg!(debug_assertions)))
+                .then(crate::timemachine::continuous::FreeSpaceFloor::default),
+        }
     }
 
     /// The protected-operation wiring: the configured double, or the
@@ -713,6 +758,13 @@ impl Daemon {
                     };
                     let _ = reply.send(answer);
                 }
+                Ok(Control::RawEvents {
+                    repo_id,
+                    worktree,
+                    reply,
+                }) => {
+                    let _ = reply.send(self.raw_events(&repo_id, &worktree));
+                }
                 Err(RecvTimeoutError::Timeout) => {
                     self.persist_observed_until(now_ms());
                     self.check_channel();
@@ -746,6 +798,7 @@ impl Daemon {
             },
             protected: self.protected_wiring(),
             time_machine: Some(self.time_machine_wiring()),
+            tm_engine: Some(self.capture_deps()),
             resources: Arc::clone(&self.resources),
             guard: Arc::clone(&self.guard),
         };
@@ -854,10 +907,15 @@ impl Daemon {
             profile,
             observer,
             detector,
+            capture,
             ..
         } = self;
         drop(observer);
         drop(detector);
+        // A capture in progress ends before the stores close.
+        if let Some(capture) = capture {
+            capture.stop();
+        }
         // An operation still running keeps its own handle until it ends.
         tm.clear();
         drop(tm);
@@ -1036,6 +1094,7 @@ impl Daemon {
             None => RepoStateView::Unavailable,
         };
         if state == RepoStateView::Observed {
+            self.link_marks(&repo_id);
             self.observe(&repo_id, &request.common_dir, &request.read);
         }
         let t_persisted = clock::monotonic_ns();
@@ -1151,6 +1210,10 @@ impl Daemon {
             detector.forget_repo(repo_id);
         }
         self.tm.remove(repo_id);
+        if let Some(capture) = &self.capture {
+            capture.forget(repo_id);
+        }
+        self.marks.remove(repo_id);
         if let Some(pos) = self.stores.iter().position(|(id, _)| id == repo_id) {
             let (_, mut store) = self.stores.remove(pos);
             if let Err(err) = store.write_batch(&[WriteOp::SetObservedUntil { ms: now }]) {
@@ -1194,7 +1257,12 @@ impl Daemon {
     /// Starts observing a repo, creating the observer on first use. Its
     /// batches come back to this loop as [`Control::Observed`].
     fn observe(&mut self, repo_id: &str, common_dir: &std::path::Path, read: &RepoRead) {
-        let hooks = self.detector_hooks();
+        let mut hooks = vec![self.detector_hooks()];
+        if let Some(capture) = &self.capture {
+            hooks.push(capture.observer_hooks(Arc::clone(&self.marks)));
+        }
+        let hooks: Arc<dyn crate::watch::ObserverHooks> =
+            Arc::new(crate::watch::FanoutHooks(hooks));
         let roots = self.resources.roots_counter();
         let observer = self.observer.get_or_insert_with(|| {
             let handle = self.handle.clone();
@@ -1207,7 +1275,9 @@ impl Daemon {
                 roots,
             )
         });
-        observer.watch_repo(repo_id, common_dir, read);
+        let start = observer.watch_repo(repo_id, common_dir, read);
+        self.marks.set_head_logs(repo_id, &start.head_logs);
+        self.marks.set_heads(repo_id, &start.heads);
         self.detect_repo(repo_id, common_dir, read);
     }
 
@@ -1330,7 +1400,14 @@ impl Daemon {
         }
         ops.push(WriteOp::SetObservedUntil { ms: now });
         let seqs = match store.write_batch(&ops) {
-            Ok(result) => result.seqs,
+            Ok(result) => {
+                // The mark first, then what the engine read: once a worktree's
+                // `HEAD` reflog matches, its mark already covers it (US-TMC-004).
+                self.marks.set_seq(&batch.repo_id, store.last_seq());
+                self.marks.set_head_logs(&batch.repo_id, &batch.head_logs);
+                self.marks.set_heads(&batch.repo_id, &batch.heads);
+                result.seqs
+            }
             Err(err) => {
                 self.logger.error(
                     "observed_persist_failed",
@@ -1397,6 +1474,10 @@ impl Daemon {
                     .flatten(),
             };
             self.bus.publish(GIT_EVENT, view, Some(timings), |_| {});
+            // After publishing, outside the engine's budget (ADR-TMC-004 § 2).
+            if let Some(capture) = &self.capture {
+                capture.git_event(&batch.repo_id, &event.worktree, seq);
+            }
         }
         // Second phase (ADR-GRP-010 § 4, ADR-GRP-011 § 2): the ahead/behind
         // against the base branch, outside the first event's budget.

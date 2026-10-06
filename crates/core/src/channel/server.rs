@@ -82,6 +82,9 @@ pub(crate) struct ServerCtx {
     pub protected: Option<ProtectedWiring>,
     /// The Time Machine's own commands; `None` without a repo layer.
     pub time_machine: Option<super::TimeMachineWiring>,
+    /// The engine as the Time Machine reads it, and the anchor capture
+    /// (US-TMC-004); `None` without the daemon's repo layer.
+    pub tm_engine: Option<crate::timemachine::continuous::CaptureDeps>,
     /// Ahead/behind counts the snapshots already walked (US-GRP-012).
     pub divergence: crate::observe::DivergenceCache,
     /// The engine's own consumption (`engine.resources`, US-GRP-017).
@@ -147,6 +150,7 @@ pub(crate) struct ServeArgs {
     pub daemon: DaemonView,
     pub protected: Option<ProtectedWiring>,
     pub time_machine: Option<super::TimeMachineWiring>,
+    pub tm_engine: Option<crate::timemachine::continuous::CaptureDeps>,
     pub resources: Arc<crate::resources::ResourceMonitor>,
     pub guard: Arc<crate::guardrails::GuardRegistry>,
 }
@@ -185,6 +189,7 @@ impl Server {
             marks: Arc::new(ExecutorMarks::default()),
             protected: args.protected,
             time_machine: args.time_machine,
+            tm_engine: args.tm_engine,
             divergence: crate::observe::DivergenceCache::default(),
             resources: args.resources,
             guard: args.guard,

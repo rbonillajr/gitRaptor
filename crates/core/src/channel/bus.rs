@@ -36,6 +36,8 @@ pub struct Outbox {
     state: Mutex<OutState>,
     ready: Condvar,
     capacity: usize,
+    /// Negotiated protocol older than 8 (see [`Outbox::set_before_reset`]).
+    before_reset: std::sync::atomic::AtomicBool,
 }
 
 #[derive(Debug, Default)]
@@ -53,7 +55,22 @@ impl Outbox {
             state: Mutex::new(OutState::default()),
             ready: Condvar::new(),
             capacity,
+            before_reset: std::sync::atomic::AtomicBool::new(false),
         })
+    }
+
+    /// The connection negotiated a protocol older than 8: Git events of
+    /// kind `reset` (US-TMC-004) are not delivered to it, since it cannot
+    /// read them.
+    pub fn set_before_reset(&self, before: bool) {
+        self.before_reset
+            .store(before, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    fn skips(&self, event: &Event) -> bool {
+        self.before_reset.load(std::sync::atomic::Ordering::Relaxed)
+            && event.kind == gitraptor_api::event::GIT_EVENT
+            && event.data.get("kind").and_then(|k| k.as_str()) == Some("reset")
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, OutState> {
@@ -425,6 +442,9 @@ impl EventBus {
 
 fn deliver(sub: &Subscriber, stamped: &Stamped) -> bool {
     let event = &stamped.event;
+    if sub.outbox.skips(event) {
+        return true;
+    }
     match &sub.scope {
         None => {
             if sub.mcp && !mcp_kind(&event.kind) {
