@@ -56,6 +56,7 @@ Las rutas cortas de la columna Origen van bajo `docs/requirements/features/`. La
 | XP-27 | Linux + Windows | INF-GRP-003 | Binarios de release probados más allá de `--version` | Contenedor + máquina Windows | pendiente |
 | XP-28 | Windows | INF-GRP-003, ADR-GRP-014 | Artifact Signing en Windows ARM (`windows-11-arm`) | Máquina Windows ARM | pendiente |
 | XP-29 | Windows | INF-GRP-004, ADR-GRP-014, ADR-GRP-005 § 4 | Actualizar con winget o `install.ps1` mientras corre el daemon | Máquina Windows | pendiente |
+| XP-30 | Varios | INF-GRD-001, ADR-GRD-002 (Validación 12 y 13), SPIKE-GRD-001 (D11) | Datos por versión de Git de la matriz de interceptabilidad: la fila de `rename-over-base` en reftable para Git ≥ 2.56.0 (publicada C; este ejecutor mide B) y las filas de `COST_TABLE` para Git 2.56.0 (y 2.43.0, el Git de la distro del contenedor). No depende del SO: Windows y el contenedor Linux miden lo mismo con 2.56.0 | Máquina Windows + contenedor | falla: lo resuelve el dueño de INF-GRD-001 (ver [segunda ronda](#segunda-ronda-2026-10-05)) |
 
 ## Contenedor Linux: resultados del 2026-10-05
 
@@ -105,6 +106,38 @@ No apareció ningún bug real de Linux en el código de producto (clase a) ni ni
 
 **Flujo**: clonar la rama dentro de la máquina; no se comparte el directorio del Mac. Después, `cargo test --workspace` y `cargo test --workspace -- repo_intact` (la auditoría por trampas; ETW sigue pendiente, XP-08), y el resultado se anota en la columna Estado.
 
+### Segunda ronda (2026-10-05)
+
+`cargo test --workspace --no-fail-fast` en la máquina real (Windows 10 Pro 19045, Git for Windows 2.56.0, toolchain MSVC), en un clon nuevo de la rama `fix/windows-round2`.
+
+| Pasada | Commit | Pasan | Fallan | Ignorados |
+|---|---|---|---|---|
+| Línea base del coordinador (checkout antiguo de `main`) | `e4dbe16` | 474 | 22 | 2 |
+| Línea base en un clon nuevo | `e4dbe16` | 475 | 21 | 2 |
+| Después de esta rama | `251a295` | 496 | 3 | 2 |
+
+| Fallo | Clase | Causa | Resolución |
+|---|---|---|---|
+| `settings::schema::tests::schema_has_not_drifted` | (e) | El checkout del coordinador era anterior a `.gitattributes` y tenía CRLF. | Ninguna: en un clon nuevo pasa. |
+| `user_ops_preflight` (4) | (a) | `preflight` canonicalizaba con `std` (forma verbatim `\\?\C:\…`), que la capa de lectura rechaza (SEC-02); y en Windows no había identidad de archivo, así que un `.git` sustituido pasaba inadvertido (M-05). | Corregido: `paths::canonicalize` (forma de unidad, decisión de #74) y la identidad sale del número de serie del volumen y el índice del archivo (`gitraptor-winsys::file_id`, sin seguir enlaces). |
+| `user_ops::tests` (3) y el test de `update-ref` | (d) | Rutas Unix (`/usr/bin/git`, `/w/repo`) y el editor de rechazo `/usr/bin/false`, que no es absoluto en Windows. | Tests con rutas de la plataforma. En producción el ejecutor sigue rechazando todo lanzamiento en Windows hasta que exista su editor de rechazo (XP-19, fail-closed), y un test `cfg(windows)` lo fija. |
+| `catalog::tests::unknown_operations_and_fields_fail_the_schema` | (d) | `/tmp/x` no es absoluta en Windows. | Ruta absoluta de la plataforma. |
+| `daemon::lock` (1) y `daemon_lifecycle` (2) | (a) | `File::try_lock` de std bloquea todo el archivo en Windows, y otro handle no puede leer un rango bloqueado: el PID del dueño nunca se leía y `running_pid` decía "no corre" con el daemon vivo. | Corregido: en Windows el lock cubre un byte en 2^62 (`gitraptor-winsys::file_lock`), así que el PID sigue legible. Un lock tomado sin PID legible ya nunca se informa como libre. |
+| `timemachine::protected::backend::tests::the_lock_key_is_the_appliers` | pendiente | El almacén de snapshots no existe en Windows (`Unsupported`). | Marcado `cfg(unix)` con XP-12, como `tm_store_capture` y `tm_store_safety`. |
+| `timemachine::protected::tests::a_full_disk_from_the_store_reads_as_no_space` | (d) | El test usaba el código 28 (`ENOSPC`), que en Windows es `ERROR_OUT_OF_PAPER`. | En Windows usa 112 (`ERROR_DISK_FULL`); producción ya mapeaba 39 y 112. |
+| `repo_intact::exec_audit::trap_gate_on_reads` | (d) | El shim era un hard link del binario de test, que comparte su DACL: bajo `C:\src` hereda Modify para Authenticated Users, y el resolvedor lo rechaza con razón (SEC-10). | En Windows el shim se copia y hereda la DACL de su carpeta privada. El resolvedor no cambia. |
+| `hooks_harness` (5) | (d) | Comparaciones de `core.hooksPath` como cadenas (`/` frente a `\`), el origen entre comillas que Git da a una ruta con `\` y los separadores del informe. | Se comparan como rutas y se normalizan los separadores en las aserciones. |
+| `interceptability` (2) | XP-30 | Datos de Git 2.56.0, no de Windows: el contenedor Linux con Git 2.56.0 mide lo mismo (B en `rename-over-base` reftable y conteos de hooks idénticos). | Pendiente del dueño de INF-GRD-001. |
+| `watch::commit_merge_rebase_and_push_are_named_by_the_reflog` (solo en la última pasada) | sin clasificar | Durante el `rebase` llegó un evento `BranchSwitch`. Pasó en las otras tres pasadas completas y 15 de 15 veces aislado, con dos workers más compilando en la misma máquina. No lo toca esta rama. | Sin cambio. Si se repite bajo carga, se abre una ficha TD con el criterio de la clase (c); es del watcher (XP-05 y XP-06). |
+
+> **Decisión del orquestador (2026-10-05), validada por Arquitecto**:
+>
+> - El lock del daemon en Windows cubre un solo byte lejos del PID en lugar de usar un `daemon.pid` aparte. El código con `unsafe` vive en un módulo FFI privado de `gitraptor-winsys` (ADR-GRP-002, Enmienda 2026-10-05). Las versiones viejas y nuevas del daemon siguen chocando, porque el lock de std cubre ese byte.
+> - Las comparaciones de contención (rutas de PATH frente a las raíces del repo, M-01, y la ruta de un worktree nuevo frente a las raíces protegidas) usan una sola forma en los dos lados: la de `std::fs::canonicalize`. La forma de unidad se usa solo para la ruta que recibe Git. Así, una ruta que se queda en forma verbatim (un componente acabado en punto) no se escapa de la comparación.
+> - El almacén de Time Machine no se porta en esta ronda (XP-12).
+> - Las tablas de INF-GRD-001 no se tocan aquí: `cfg(not(windows))` escondería una discrepancia medida y no hay dimensión de SO. Hay que corregir los datos de la versión 2.56.0 para todos los SO.
+> - Cuando se use el PID del lock en Windows para terminar un proceso, antes hay que verificar su identidad (imagen y SID) (SEC-06, XP-19).
+
 ## Mantenimiento del índice
 
 - Al añadir o cerrar una marca "Pendiente: etapa de validación multiplataforma" en un artefacto, se actualiza la fila de su XP y el conteo.
@@ -126,14 +159,14 @@ Rutas de `docs/requirements/features/` abreviadas (`motor-local/`, `time-machine
 - **XP-09**: INF-GRP-001-dev-spec.md:184
 - **XP-10**: INF-GRP-001-dev-spec.md:141, :178 (workflow)
 - **XP-11**: time-machine/dev-specs/TS-TMC-001-almacen-captura-snapshots.md:153 (Linux)
-- **XP-12**: crates/core/tests/tm_store_capture.rs:5; crates/core/tests/tm_store_safety.rs:6; crates/git/src/tm_write/store/mod.rs:52; crates/git/src/tm_write/mod.rs:57; crates/git/src/tm_write/files.rs:15, :472; TS-TMC-001-almacen-captura-snapshots.md:153 (Windows); time-machine/dev-specs/TS-TMC-003-escritura-aplicador.md:133
+- **XP-12**: crates/core/src/timemachine/protected/backend.rs:271; crates/core/tests/tm_store_capture.rs:5; crates/core/tests/tm_store_safety.rs:6; crates/git/src/tm_write/store/mod.rs:52; crates/git/src/tm_write/mod.rs:57; crates/git/src/tm_write/files.rs:15, :472; TS-TMC-001-almacen-captura-snapshots.md:153 (Windows); time-machine/dev-specs/TS-TMC-003-escritura-aplicador.md:133
 - **XP-13**: TS-TMC-003-escritura-aplicador.md:134
 - **XP-14**: time-machine/dev-specs/TS-TMC-002-oplog-diario.md:156
 - **XP-15**: TS-TMC-002-oplog-diario.md:155
 - **XP-16**: time-machine/dev-specs/TS-TMC-004-operacion-protegida-solicitante.md:144
 - **XP-17**: TS-TMC-004-operacion-protegida-solicitante.md:102; docs/architecture/decisions/ADR-CKP-002-catalogo-operaciones-ejecutor.md:110, :310; cockpit/technical-stories/TS-CKP-002-catalogo-ejecutor.md:69; docs/architecture/decisions/ADR-MCP-001-servidor-mcp-cliente-daemon.md:243
 - **XP-18**: ADR-CKP-002-catalogo-operaciones-ejecutor.md:166 (Linux), :358 (Linux); TS-CKP-002-catalogo-ejecutor.md:79 (Linux); cockpit/technical-stories/TS-CKP-003-capa-cockpit-guardrails.md:66 (Linux); docs/architecture/diagrams/seq-ckp-operacion-usuario.md:115 (Linux)
-- **XP-19**: docs/architecture/decisions/ADR-TMC-005-solicitante-permisos-solape.md:129; ADR-CKP-002-catalogo-operaciones-ejecutor.md:114, :121, :125, :144, :166 (Windows), :285, :358 (Windows); ADR-GRP-005-forma-motor-proceso-segundo-plano.md:268; cockpit/user-stories/US-CKP-020-trabajo-de-otro-actor.md:69, :82; seq-ckp-operacion-usuario.md:115 (Windows); TS-CKP-002-catalogo-ejecutor.md:79 (Windows); TS-CKP-003-capa-cockpit-guardrails.md:66 (Windows); TS-TMC-004-operacion-protegida-solicitante.md:145
+- **XP-19**: crates/git/src/user_ops.rs:35 (editor de rechazo); docs/architecture/decisions/ADR-TMC-005-solicitante-permisos-solape.md:129; ADR-CKP-002-catalogo-operaciones-ejecutor.md:114, :121, :125, :144, :166 (Windows), :285, :358 (Windows); ADR-GRP-005-forma-motor-proceso-segundo-plano.md:268; cockpit/user-stories/US-CKP-020-trabajo-de-otro-actor.md:69, :82; seq-ckp-operacion-usuario.md:115 (Windows); TS-CKP-002-catalogo-ejecutor.md:79 (Windows); TS-CKP-003-capa-cockpit-guardrails.md:66 (Windows); TS-TMC-004-operacion-protegida-solicitante.md:145
 - **XP-20**: docs/architecture/decisions/ADR-CKP-001-prediccion-conflictos-merge-en-seco.md:21, :86, :201; cockpit/technical-stories/SPIKE-CKP-001-prediccion-5s.md:28, :92; cockpit/technical-stories/TS-CKP-001-predictor-conflictos.md:76; docs/architecture/diagrams/seq-ckp-prediccion.md:79
 - **XP-21**: ADR-CKP-003-arquitectura-tui.md:52; docs/design-system/README.md:198, :217; cockpit/technical-stories/TS-CKP-004-tokens-semanticos-simbolos.md:59; cockpit/dev-specs/TS-CKP-004-tokens-semanticos-simbolos.md:115; cockpit/technical-stories.md:35; cockpit/technical-stories/INF-CKP-001-esqueleto-tui.md:72; cockpit/user-stories/US-CKP-005-terminal-pequena-sin-color.md:82; cockpit/user-stories.md:37
 - **XP-22**: cockpit/user-stories/US-CKP-013-abrir-en-editor.md:87; ADR-CKP-003-arquitectura-tui.md:170, :259
@@ -144,3 +177,4 @@ Rutas de `docs/requirements/features/` abreviadas (`motor-local/`, `time-machine
 - **XP-27**: motor-local/technical-stories/INF-GRP-003-pipeline-release.md:82
 - **XP-28**: INF-GRP-003-pipeline-release.md:86; docs/architecture/decisions/ADR-GRP-014-pipeline-release-distribucion.md:81
 - **XP-29**: motor-local/technical-stories/INF-GRP-004-canales-distribucion.md:83; ADR-GRP-014-pipeline-release-distribucion.md:96
+- **XP-30**: crates/testkit/tests/interceptability.rs (sin marca en el código: los tests fallan en rojo a propósito, ver la segunda ronda)
