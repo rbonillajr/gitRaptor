@@ -15,7 +15,8 @@ pub const NOTIFY_SCOPE_RESYNC: &str = "scope.resync";
 
 /// The last activity of each worktree (`WorktreeView::last_activity_utc_ms`) and the last
 /// fetch of each repo (`RepoView::fetched_utc_ms`, `WorktreeStateData::fetched_utc_ms`):
-/// DEP-CKP-4, ADR-GRP-013 (amendment 2026-10-04). A connection without it never sees them.
+/// DEP-CKP-4, ADR-GRP-013 (amendment 2026-10-04). Also the commit of a detached `HEAD`
+/// (`WorktreeView::detached_at`, US-CKP-001). A connection without it never sees them.
 pub const CAP_SCOPE_ACTIVITY: Capability = Capability::new("scope.activity");
 
 pub(super) const GROUP: Group = Group {

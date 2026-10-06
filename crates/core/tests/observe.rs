@@ -76,6 +76,11 @@ fn detached_and_unborn_heads_are_reported_as_such() {
     f.git(&["checkout", "-q", "--detach", head_commit.trim()]);
     let read = reconcile(&locate(&f.repo).unwrap(), &base_branch(None)).unwrap();
     assert_eq!(head(&read.views()[0]), &HeadView::Detached);
+    // US-CKP-001: the commit it is at, so a worktree without a branch can be told apart.
+    assert_eq!(
+        read.views()[0].detached_at.as_deref(),
+        Some(head_commit.trim())
+    );
 
     let empty = Fixture::new(&git_from_path());
     let read = reconcile(&locate(&empty.repo).unwrap(), &base_branch(None)).unwrap();
@@ -197,6 +202,7 @@ mod activity {
                 },
             },
             last_activity_utc_ms: last,
+            detached_at: None,
         }
     }
 
