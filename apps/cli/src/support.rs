@@ -57,8 +57,9 @@ pub(crate) fn error_text(err: ClientError) -> String {
         ),
         ClientError::ChannelRejected => t("channel.rejected", &[]),
         // N7: presented from the code, never from the daemon's message.
-        ClientError::Rpc(err) => match gitraptor_api::rpc::ErrorCode::from_code(err.code) {
-            Some(code) => t(&codes::error_key(code), &[]),
+        // A module's own code (ADR-GRP-016 § 3) is presented the same way.
+        ClientError::Rpc(err) => match gitraptor_api::rpc::error_name(err.code) {
+            Some(name) => t(&codes::error_name_key(name), &[]),
             None => sanitize(&err.message),
         },
         other => sanitize(&other.to_string()),
