@@ -421,8 +421,10 @@ fn a_restarted_daemon_asks_for_a_resync() {
 
 // ---------------------------------------------------------------- SEC-08
 
-/// A client that never reads and 100 simultaneous connections do not take
-/// the others out of the IPC budget of ADR-GRP-011 (≤ 25 ms p95).
+/// A client that never reads and 100 simultaneous connections do not starve
+/// the others: the good client gets every event and the slow one a resync.
+/// The IPC budget of ADR-GRP-011 (≤ 25 ms p95) under this load is gated in
+/// release by the `channel_flood` bench (INF-GRP-002), not here.
 #[test]
 fn slow_client_and_connection_flood_do_not_starve_the_others() {
     let (_tp, r) = running();
@@ -446,7 +448,7 @@ fn slow_client_and_connection_flood_do_not_starve_the_others() {
     let flood: Vec<Raw> = (0..100).map(|_| Raw::open(&r.socket())).collect();
     std::thread::sleep(Duration::from_millis(100));
 
-    let mut latencies = Vec::new();
+    let mut received = 0;
     let mut slow_messages = None;
     let payload = "x".repeat(2048);
     for i in 0..3000 {
@@ -466,24 +468,21 @@ fn slow_client_and_connection_flood_do_not_starve_the_others() {
         if i % 10 == 0 {
             // Drain the good client as a real one would.
             while let Some(note) = good.next_notification(Duration::from_millis(1)).unwrap() {
-                if let Some(published) = note.params["event"]["timings"]["t_published"].as_u64() {
-                    latencies.push(clock::monotonic_ns() - published);
+                if note.params["event"]["timings"]["t_published"].is_u64() {
+                    received += 1;
                 }
             }
         }
     }
     let start = Instant::now();
-    while latencies.len() < 3000 && start.elapsed() < Duration::from_secs(10) {
+    while received < 3000 && start.elapsed() < Duration::from_secs(10) {
         if let Some(note) = good.next_notification(Duration::from_millis(50)).unwrap()
-            && let Some(published) = note.params["event"]["timings"]["t_published"].as_u64()
+            && note.params["event"]["timings"]["t_published"].is_u64()
         {
-            latencies.push(clock::monotonic_ns() - published);
+            received += 1;
         }
     }
-    assert_eq!(latencies.len(), 3000, "the good client lost events");
-    latencies.sort_unstable();
-    let p95 = latencies[latencies.len() * 95 / 100];
-    assert!(p95 < 25_000_000, "p95 {} ms", p95 / 1_000_000);
+    assert_eq!(received, 3000, "the good client lost events");
 
     // The slow one was told to resync and dropped (it never read: its
     // socket buffer may still hold events before the resync).
