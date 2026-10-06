@@ -221,14 +221,17 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
     let mut input = Vec::new();
-    if hook != Hook::PreRebase
-        && std::io::stdin()
+    if hook != Hook::PreRebase {
+        // One byte past the bound means the input was cut: never decide on a prefix (Git
+        // ignores a hook that stops reading).
+        let read = std::io::stdin()
             .lock()
-            .take(MAX_INPUT)
-            .read_to_end(&mut input)
-            .is_err()
-    {
-        return fallback(hook, b"unreadable\n", Path::new(""), "", false);
+            .take(MAX_INPUT + 1)
+            .read_to_end(&mut input);
+        if read.is_err() || input.len() as u64 > MAX_INPUT {
+            say(Msg::Internal);
+            return ExitCode::FAILURE;
+        }
     }
     // <common>/gitraptor/hooks/<hook>
     let folder = exe.parent().and_then(Path::parent);

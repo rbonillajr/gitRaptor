@@ -701,9 +701,16 @@ impl Daemon {
                 Ok(Control::Guard {
                     common_dir,
                     request,
+                    deadline,
                     reply,
                 }) => {
-                    let _ = reply.send(self.guard(&common_dir, request));
+                    // A late install never runs after its caller was told it failed.
+                    let answer = if Instant::now() >= deadline {
+                        GuardReply::Failed
+                    } else {
+                        self.guard(&common_dir, request)
+                    };
+                    let _ = reply.send(answer);
                 }
                 Err(RecvTimeoutError::Timeout) => {
                     self.persist_observed_until(now_ms());
@@ -865,14 +872,10 @@ impl Daemon {
         }
     }
 
-    /// The installed `raptor`: the binary the daemon was launched from.
+    /// The installed `raptor`: the binary the daemon was launched from, as launched (absolute,
+    /// links not resolved: a stable link survives an upgrade, ADR-GRD-001 § 8).
     fn raptor_path(&self) -> Option<PathBuf> {
-        self.config
-            .channel
-            .launch_exe
-            .clone()
-            .or_else(|| std::env::current_exe().ok())
-            .and_then(|p| p.canonicalize().ok())
+        raptor_path(&self.config)
     }
 
     /// A Guardrails request for an observed repo (US-GRD-001). The loop is the only writer
@@ -1710,6 +1713,16 @@ fn reconcile_all(
 /// The base branch of a repo (US-GRP-012): the one its store keeps as
 /// confirmed; without a store or a readable confirmation, the unconfirmed
 /// default (reading it never confirms anything).
+/// The installed `raptor` for the dispatchers' constants.
+fn raptor_path(config: &DaemonConfig) -> Option<PathBuf> {
+    let path = config
+        .channel
+        .launch_exe
+        .clone()
+        .or_else(|| std::env::current_exe().ok())?;
+    std::path::absolute(path).ok()
+}
+
 /// Startup recovery of the Guardrails installs of every observed repo.
 fn recover_guardrails(
     config: &DaemonConfig,
@@ -1719,13 +1732,7 @@ fn recover_guardrails(
     stores: &mut [(String, RepoStore)],
     registry: &GuardRegistry,
 ) {
-    let Some(raptor) = config
-        .channel
-        .launch_exe
-        .clone()
-        .or_else(|| std::env::current_exe().ok())
-        .and_then(|p| p.canonicalize().ok())
-    else {
+    let Some(raptor) = raptor_path(config) else {
         return;
     };
     let invoker = config.env.invoker();
