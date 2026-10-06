@@ -87,29 +87,31 @@ jobs:
           - os: windows-latest
             exec_audit: auto
     env:
-      RUST_CHANGED: ${{ needs.changes.outputs.rust }}
+      # Not RUST_* or CARGO_*: rust-cache hashes those into its key, and a new value would miss
+      # main's cache.
+      BUILD_RUST: ${{ needs.changes.outputs.rust }}
     steps:
       - name: No Rust changes
-        if: env.RUST_CHANGED == 'false'
+        if: env.BUILD_RUST == 'false'
         run: "echo '::notice::No Rust input changed in this pull request: nothing to build (main always runs everything)'"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        if: env.RUST_CHANGED != 'false'
+        if: env.BUILD_RUST != 'false'
       - name: Install strace
-        if: env.RUST_CHANGED != 'false' && matrix.exec_audit == 'strace'
+        if: env.BUILD_RUST != 'false' && matrix.exec_audit == 'strace'
         run: sudo apt-get update && sudo apt-get install -y strace
       - name: Toolchain from rust-toolchain.toml
-        if: env.RUST_CHANGED != 'false'
+        if: env.BUILD_RUST != 'false'
         run: rustup show
       # rust-cache keys by job, OS, arch, rustc version and Cargo.lock
       # (`v0-rust-lint-and-test-<OS>-<arch>-<rustc>-<lock>`). Only main saves: pull request caches
       # used to push the repo past the 10 GB limit and evict main's.
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        if: env.RUST_CHANGED != 'false'
+        if: env.BUILD_RUST != 'false'
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - if: env.RUST_CHANGED != 'false'
+      - if: env.BUILD_RUST != 'false'
         run: cargo fmt --all -- --check
-      - if: env.RUST_CHANGED != 'false'
+      - if: env.BUILD_RUST != 'false'
         run: cargo clippy --workspace --all-targets -- -D warnings
       # Windows: TS-GRP-002 rejects every Git candidate on Windows (fail-closed until the ACE
       # check exists) and the canary uses /bin/sh scripts, so the tests cannot pass there yet.
@@ -117,7 +119,7 @@ jobs:
       # fmt and clippy stay blocking everywhere.
       # The `repo_intact` suites run in their own step below, with the OS tracer.
       - id: test
-        if: env.RUST_CHANGED != 'false'
+        if: env.BUILD_RUST != 'false'
         run: cargo test --workspace -- --skip repo_intact
         continue-on-error: ${{ matrix.os == 'windows-latest' }}
       - name: Pending on Windows
@@ -126,7 +128,7 @@ jobs:
       # Blocking on Windows too: the only crate with `unsafe` and the requester
       # resolution on real processes (ADR-GRP-005, Enmienda 2026-10-05).
       - name: Windows processes and requester (blocking)
-        if: env.RUST_CHANGED != 'false' && matrix.os == 'windows-latest'
+        if: env.BUILD_RUST != 'false' && matrix.os == 'windows-latest'
         run: |
           cargo test -p gitraptor-winsys
           cargo test -p gitraptor-core --lib -- channel::requester channel::peer channel::authz channel::marks children_of_the_step_are_marked
@@ -135,17 +137,17 @@ jobs:
       # own suites. Windows: non-blocking (Pendiente: etapa de validación multiplataforma).
       - name: Core and registered repo_intact suites
         id: suites
-        if: ${{ !cancelled() && env.RUST_CHANGED != 'false' }}
+        if: ${{ !cancelled() && env.BUILD_RUST != 'false' }}
         env:
           GITRAPTOR_EXEC_AUDIT: ${{ matrix.exec_audit }}
         run: cargo test --workspace -- repo_intact
         continue-on-error: ${{ matrix.os == 'windows-latest' }}
       - name: Record the repo_intact outcome
-        if: ${{ !cancelled() && env.RUST_CHANGED != 'false' }}
+        if: ${{ !cancelled() && env.BUILD_RUST != 'false' }}
         shell: bash
         run: echo "${{ steps.suites.outcome }}" > repo-intact-outcome.txt
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: ${{ !cancelled() && env.RUST_CHANGED != 'false' }}
+        if: ${{ !cancelled() && env.BUILD_RUST != 'false' }}
         with:
           name: repo-intact-${{ matrix.os }}
           path: repo-intact-outcome.txt
