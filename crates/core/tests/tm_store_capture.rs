@@ -700,7 +700,11 @@ fn a_capture_that_stopped_being_consistent_is_discarded_without_a_row() {
 fn a_capture_stopped_at_its_validity_point_never_lends_the_previous_root() {
     use gitraptor_core::timemachine::store::ValidityGuard;
     let env = Env::new(Fixture::with_commit(&git()));
-    write(&env.f.repo, "api.rs", b"fn api() { trabajo_sin_commitear(); }\n");
+    write(
+        &env.f.repo,
+        "api.rs",
+        b"fn api() { trabajo_sin_commitear(); }\n",
+    );
     let prior = env.capture_at(SnapshotLevel::GuaranteedPrior, 1, None);
     write(&env.f.repo, "api.rs", b"fn api() {}\n");
     let mut req = env.request(level_obs(), None);
