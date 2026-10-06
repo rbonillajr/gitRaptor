@@ -88,6 +88,8 @@ event.worktree-create = worktree created on {branch}
 event.worktree-delete = worktree deleted
 event.push = push to {branch}
 event.reconciled = reconciliation: changes found after a gap (not a Git command)
+event.reset = reset on {branch} without moving it
+event.reset-detached = reset with HEAD detached
 
 actor.unattributed = unattributed
 actor.claude-code = Claude Code

@@ -54,6 +54,7 @@ fn describe(e: &GitEventView) -> String {
             &[("from", &show(&e.details.from)), ("branch", &branch)],
         ),
         GitEventKind::BranchSwitch => t("event.branch-switch-to", &[("branch", &branch)]),
+        GitEventKind::Reset if e.details.branch.is_none() => t("event.reset-detached", &[]),
         kind => t(&format!("event.{}", kind.as_str()), &[("branch", &branch)]),
     }
 }

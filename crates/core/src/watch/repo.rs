@@ -26,6 +26,9 @@ use crate::profile::GapCause;
 /// Most reflog entries read per ref and window.
 const MAX_REFLOG_ENTRIES: usize = 64;
 
+/// Most bytes of a `HEAD` reflog read per window: only its new tail.
+const MAX_HEAD_LOG_TAIL: u64 = 64 * 1024;
+
 /// One worktree as the repo task sees it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorktreeRefs {
@@ -35,6 +38,9 @@ pub struct WorktreeRefs {
     pub commit: Option<String>,
     /// Last entry of its `HEAD` reflog (`checkout: moving from a to b`).
     pub head_reflog: Option<String>,
+    /// Size of its `HEAD` reflog file: what grew since the previous view is
+    /// read for resets that move no branch (US-TMC-004).
+    pub head_log_len: u64,
     /// Branch its operation in progress works on: Git moves the branch
     /// before it reattaches `HEAD` or removes the markers.
     pub operating_on: Option<String>,
@@ -172,9 +178,60 @@ fn worktree_refs(root: &Path, git_dir: &Path, main: bool, admin: Option<String>)
         commit,
         head_reflog,
         operating_on,
+        head_log_len: head_log_len(git_dir),
         fingerprint: fingerprint(git_dir),
     }
 }
+
+/// Size of a worktree's `HEAD` reflog, without following links; 0 if
+/// there is none.
+fn head_log_len(git_dir: &Path) -> u64 {
+    std::fs::symlink_metadata(git_dir.join("logs").join("HEAD"))
+        .ok()
+        .filter(std::fs::Metadata::is_file)
+        .map_or(0, |m| m.len())
+}
+
+/// The entries appended to a worktree's `HEAD` reflog from byte `from` on,
+/// at most [`MAX_HEAD_LOG_TAIL`] bytes of them, as `(old, new, message)`.
+/// Metadata only: the file is the repo's, read without following links.
+fn head_log_tail(git_dir: &Path, from: u64, to: u64) -> Vec<(String, String, String)> {
+    use std::io::{Read, Seek, SeekFrom};
+    let path = git_dir.join("logs").join("HEAD");
+    if !std::fs::symlink_metadata(&path).is_ok_and(|m| m.is_file()) || to <= from {
+        return Vec::new();
+    }
+    let start = from.max(to.saturating_sub(MAX_HEAD_LOG_TAIL));
+    let Ok(mut file) = std::fs::File::open(&path) else {
+        return Vec::new();
+    };
+    let mut buf = Vec::new();
+    if file.seek(SeekFrom::Start(start)).is_err()
+        || file.take(to - start).read_to_end(&mut buf).is_err()
+    {
+        return Vec::new();
+    }
+    // A cut tail starts in the middle of a line: skip to the next one.
+    if start > from {
+        match buf.iter().position(|b| *b == b'\n') {
+            Some(i) => {
+                buf.drain(..=i);
+            }
+            None => return Vec::new(),
+        }
+    }
+    String::from_utf8_lossy(&buf)
+        .lines()
+        .filter_map(|line| {
+            let (head, message) = line.split_once('\t')?;
+            let mut parts = head.split(' ');
+            let old = parts.next()?.to_owned();
+            let new = parts.next()?.to_owned();
+            Some((old, new, message.to_owned()))
+        })
+        .collect()
+}
+
 
 /// `HEAD`, size and mtime of the index, and which operation markers exist
 /// (ADR-GRP-010 § 5). Metadata only.
@@ -276,6 +333,39 @@ pub fn classify(common: &Path, old: &RefsView, new: &RefsView, now: (i64, i32)) 
                     ..GitEventDetails::default()
                 },
             );
+        }
+    }
+
+    // A reset that moves no branch, or with `HEAD` detached, only shows in
+    // the `HEAD` reflog of its worktree (US-TMC-004). One that moves a
+    // branch is that branch's `branch-update`, below.
+    for (root, w) in &new.worktrees {
+        let Some(before) = old.worktrees.get(root) else {
+            continue;
+        };
+        if w.head_log_len <= before.head_log_len {
+            continue;
+        }
+        let git_dir = match (&w.main, &w.admin) {
+            (true, _) => common.to_path_buf(),
+            (false, Some(admin)) => common.join("worktrees").join(admin),
+            (false, None) => continue,
+        };
+        for (old_commit, new_commit, message) in
+            head_log_tail(&git_dir, before.head_log_len, w.head_log_len)
+        {
+            if message.starts_with("reset:") && (old_commit == new_commit || w.branch.is_none()) {
+                push(
+                    here(root),
+                    GitEventKind::Reset,
+                    GitEventDetails {
+                        branch: w.branch.clone().map(UntrustedName::new),
+                        old_commit: Some(old_commit),
+                        new_commit: Some(new_commit),
+                        ..GitEventDetails::default()
+                    },
+                );
+            }
         }
     }
 
@@ -640,6 +730,7 @@ mod tests {
             commit: Some(commit.to_owned()),
             head_reflog: reflog.map(str::to_owned),
             operating_on: None,
+            head_log_len: 0,
             fingerprint: String::new(),
         }
     }

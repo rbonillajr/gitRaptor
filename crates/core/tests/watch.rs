@@ -597,3 +597,30 @@ fn a_commit_after_the_view_is_named_once_by_the_next_window() {
         ]
     );
 }
+
+/// US-TMC-004: a `reset --hard` that keeps the branch where it is only
+/// shows in the worktree's `HEAD` reflog; it is a `reset` event, once. A
+/// reset that moves the branch stays a `branch-update`, never both.
+#[test]
+fn a_reset_that_moves_no_branch_is_a_reset_event() {
+    let (f, wt) = demo();
+    let w = watch(&f, fast());
+    std::fs::write(wt.join("login.txt"), "user\npassword\n").unwrap();
+    f.git_in(&wt, &["reset", "-q", "--hard"]);
+    let all = w.events_until(GitEventKind::Reset);
+    let e = only(&all, GitEventKind::Reset);
+    assert_eq!(e.worktree, wt);
+    assert_eq!(e.details.branch.as_ref().unwrap().raw(), "feat-login");
+    assert_eq!(e.details.old_commit, e.details.new_commit);
+    assert!(!all.iter().any(|e| e.kind == GitEventKind::BranchUpdate), "{all:#?}");
+    assert_eq!(std::fs::read_to_string(wt.join("login.txt")).unwrap(), "user\n");
+
+    // A reset that moves the branch: its branch-update only.
+    std::fs::write(wt.join("a.txt"), "a\n").unwrap();
+    f.git_in(&wt, &["add", "a.txt"]);
+    f.git_in(&wt, &["commit", "-q", "-m", "a"]);
+    w.events_until(GitEventKind::Commit);
+    f.git_in(&wt, &["reset", "-q", "--hard", "HEAD~1"]);
+    let all = w.events_until(GitEventKind::BranchUpdate);
+    assert!(!all.iter().any(|e| e.kind == GitEventKind::Reset), "{all:#?}");
+}
