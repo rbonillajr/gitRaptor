@@ -19,7 +19,7 @@ expression: "snapshot(story, full_ascii)"
 1:11-22 fg=#ffe066 BOLD
 1:23-66 fg=#ffe066
 2:3-3 fg=#ffe066
-2:5-8 fg=#8a8a8a
+2:5-8 fg=#949494
 2:10-21 fg=#f85149 BOLD
 2:66-66 fg=#ffe066
 3:3-3 fg=#ffe066
@@ -41,7 +41,7 @@ expression: "snapshot(story, full_ascii)"
 1:11-22 fg=@221 BOLD
 1:23-66 fg=@221
 2:3-3 fg=@221
-2:5-8 fg=@245
+2:5-8 fg=@246
 2:10-21 fg=@203 BOLD
 2:66-66 fg=@221
 3:3-3 fg=@221
@@ -146,7 +146,7 @@ expression: "snapshot(story, full_ascii)"
 1:18-29 fg=#ffe066 BOLD
 1:30-66 fg=#ffe066
 2:3-3 fg=#ffe066
-2:5-8 fg=#8a8a8a
+2:5-8 fg=#949494
 2:10-21 fg=#f85149 BOLD
 2:66-66 fg=#ffe066
 3:3-3 fg=#ffe066
@@ -167,7 +167,7 @@ expression: "snapshot(story, full_ascii)"
 1:18-29 fg=@221 BOLD
 1:30-66 fg=@221
 2:3-3 fg=@221
-2:5-8 fg=@245
+2:5-8 fg=@246
 2:10-21 fg=@203 BOLD
 2:66-66 fg=@221
 3:3-3 fg=@221

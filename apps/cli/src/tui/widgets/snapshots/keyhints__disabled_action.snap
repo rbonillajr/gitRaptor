@@ -6,16 +6,16 @@ expression: "snapshot(story, full_ascii)"
  d diff  m merge (rebase in progress)  q quit                            ? help
 === styles (truecolor, unicode) ===
 0:1-1 fg=#2dc2ad BOLD
-0:9-9 fg=#8a8a8a
-0:11-15 fg=#8a8a8a
-0:17-36 fg=#8a8a8a
+0:9-9 fg=#949494
+0:11-15 fg=#949494
+0:17-36 fg=#949494
 0:39-39 fg=#2dc2ad BOLD
 0:73-73 fg=#2dc2ad BOLD
 === styles (256, unicode) ===
 0:1-1 fg=@43 BOLD
-0:9-9 fg=@245
-0:11-15 fg=@245
-0:17-36 fg=@245
+0:9-9 fg=@246
+0:11-15 fg=@246
+0:17-36 fg=@246
 0:39-39 fg=@43 BOLD
 0:73-73 fg=@43 BOLD
 === styles (16, unicode) ===
@@ -50,8 +50,8 @@ expression: "snapshot(story, full_ascii)"
  d diff  m merge (rebase in progress)  q quit                            ? help
 === styles (truecolor, ascii) ===
 0:1-1 fg=#2dc2ad BOLD
-0:9-9 fg=#8a8a8a
-0:11-15 fg=#8a8a8a
-0:17-36 fg=#8a8a8a
+0:9-9 fg=#949494
+0:11-15 fg=#949494
+0:17-36 fg=#949494
 0:39-39 fg=#2dc2ad BOLD
 0:73-73 fg=#2dc2ad BOLD
