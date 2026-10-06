@@ -1,0 +1,252 @@
+---
+source: apps/cli/src/tui/widgets/tests.rs
+expression: "snapshot(story, full_ascii)"
+---
+=== text (unicode) ===
+
+   ┏━ › ⚠  Discard worktree ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+   ┃ Discard the worktree of claude-3? This cannot be undone.     ┃
+   ┃  ✖ 2 files with uncommitted changes                          ┃
+   ┃  ✖ 1 commit not in any other branch                          ┃
+   ┃                                                              ┃
+   ┃                               › [No]    [Discard worktree]   ┃
+   ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+=== styles (truecolor, unicode) ===
+1:3-10 fg=#ffe066
+1:11-26 fg=#ffe066 BOLD
+1:27-66 fg=#ffe066
+2:3-3 fg=#ffe066
+2:5-60 BOLD
+2:66-66 fg=#ffe066
+3:3-3 fg=#ffe066
+3:6-6 fg=#f85149
+3:66-66 fg=#ffe066
+4:3-3 fg=#ffe066
+4:6-6 fg=#f85149
+4:66-66 fg=#ffe066
+5:3-3 fg=#ffe066
+5:66-66 fg=#ffe066
+6:3-3 fg=#ffe066
+6:35-35 fg=#ffe066 BOLD
+6:37-40 fg=#ffe066 BOLD
+6:45-62 fg=#8a8a8a
+6:66-66 fg=#ffe066
+7:3-66 fg=#ffe066
+=== styles (256, unicode) ===
+1:3-10 fg=@221
+1:11-26 fg=@221 BOLD
+1:27-66 fg=@221
+2:3-3 fg=@221
+2:5-60 BOLD
+2:66-66 fg=@221
+3:3-3 fg=@221
+3:6-6 fg=@203
+3:66-66 fg=@221
+4:3-3 fg=@221
+4:6-6 fg=@203
+4:66-66 fg=@221
+5:3-3 fg=@221
+5:66-66 fg=@221
+6:3-3 fg=@221
+6:35-35 fg=@221 BOLD
+6:37-40 fg=@221 BOLD
+6:45-62 fg=@245
+6:66-66 fg=@221
+7:3-66 fg=@221
+=== styles (16, unicode) ===
+1:3-10 fg=LightYellow
+1:11-26 fg=LightYellow BOLD
+1:27-66 fg=LightYellow
+2:3-3 fg=LightYellow
+2:5-60 BOLD
+2:66-66 fg=LightYellow
+3:3-3 fg=LightYellow
+3:6-6 fg=Red
+3:66-66 fg=LightYellow
+4:3-3 fg=LightYellow
+4:6-6 fg=Red
+4:66-66 fg=LightYellow
+5:3-3 fg=LightYellow
+5:66-66 fg=LightYellow
+6:3-3 fg=LightYellow
+6:35-35 fg=LightYellow BOLD
+6:37-40 fg=LightYellow BOLD
+6:45-62 fg=DarkGray
+6:66-66 fg=LightYellow
+7:3-66 fg=LightYellow
+=== styles (no-color, unicode) ===
+1:3-66 BOLD | REVERSED
+2:3-3 BOLD | REVERSED
+2:5-60 BOLD
+2:66-66 BOLD | REVERSED
+3:3-3 BOLD | REVERSED
+3:6-6 BOLD
+3:66-66 BOLD | REVERSED
+4:3-3 BOLD | REVERSED
+4:6-6 BOLD
+4:66-66 BOLD | REVERSED
+5:3-3 BOLD | REVERSED
+5:66-66 BOLD | REVERSED
+6:3-3 BOLD | REVERSED
+6:35-35 BOLD | REVERSED
+6:37-40 BOLD | REVERSED
+6:45-62 DIM
+6:66-66 BOLD | REVERSED
+7:3-66 BOLD | REVERSED
+=== styles (high-contrast, unicode) ===
+1:3-10 fg=#ffe066 bg=#000000
+1:11-26 fg=#ffe066 bg=#000000 BOLD
+1:27-66 fg=#ffe066 bg=#000000
+2:3-3 fg=#ffe066 bg=#000000
+2:4-4 fg=#ffffff bg=#000000
+2:5-60 fg=#ffffff bg=#000000 BOLD
+2:61-65 fg=#ffffff bg=#000000
+2:66-66 fg=#ffe066 bg=#000000
+3:3-3 fg=#ffe066 bg=#000000
+3:4-5 fg=#ffffff bg=#000000
+3:6-6 fg=#ffa198 bg=#000000
+3:7-65 fg=#ffffff bg=#000000
+3:66-66 fg=#ffe066 bg=#000000
+4:3-3 fg=#ffe066 bg=#000000
+4:4-5 fg=#ffffff bg=#000000
+4:6-6 fg=#ffa198 bg=#000000
+4:7-65 fg=#ffffff bg=#000000
+4:66-66 fg=#ffe066 bg=#000000
+5:3-3 fg=#ffe066 bg=#000000
+5:4-65 fg=#ffffff bg=#000000
+5:66-66 fg=#ffe066 bg=#000000
+6:3-3 fg=#ffe066 bg=#000000
+6:4-34 fg=#ffffff bg=#000000
+6:35-35 fg=#ffe066 bg=#000000 BOLD
+6:36-36 fg=#ffffff bg=#000000
+6:37-40 fg=#ffe066 bg=#000000 BOLD
+6:41-44 fg=#ffffff bg=#000000
+6:45-62 fg=#c6c6c6 bg=#000000
+6:63-65 fg=#ffffff bg=#000000
+6:66-66 fg=#ffe066 bg=#000000
+7:3-66 fg=#ffe066 bg=#000000
+=== text (ascii) ===
+
+   #= > [!] Discard worktree =====================================#
+   # Discard the worktree of claude-3? This cannot be undone.     #
+   #  [x] 2 files with uncommitted changes                        #
+   #  [x] 1 commit not in any other branch                        #
+   #                                                              #
+   #                               > [No]    [Discard worktree]   #
+   #==============================================================#
+
+=== styles (truecolor, ascii) ===
+1:3-11 fg=#ffe066
+1:12-27 fg=#ffe066 BOLD
+1:28-66 fg=#ffe066
+2:3-3 fg=#ffe066
+2:5-60 BOLD
+2:66-66 fg=#ffe066
+3:3-3 fg=#ffe066
+3:6-8 fg=#f85149
+3:66-66 fg=#ffe066
+4:3-3 fg=#ffe066
+4:6-8 fg=#f85149
+4:66-66 fg=#ffe066
+5:3-3 fg=#ffe066
+5:66-66 fg=#ffe066
+6:3-3 fg=#ffe066
+6:35-35 fg=#ffe066 BOLD
+6:37-40 fg=#ffe066 BOLD
+6:45-62 fg=#8a8a8a
+6:66-66 fg=#ffe066
+7:3-66 fg=#ffe066
+=== styles (256, ascii) ===
+1:3-11 fg=@221
+1:12-27 fg=@221 BOLD
+1:28-66 fg=@221
+2:3-3 fg=@221
+2:5-60 BOLD
+2:66-66 fg=@221
+3:3-3 fg=@221
+3:6-8 fg=@203
+3:66-66 fg=@221
+4:3-3 fg=@221
+4:6-8 fg=@203
+4:66-66 fg=@221
+5:3-3 fg=@221
+5:66-66 fg=@221
+6:3-3 fg=@221
+6:35-35 fg=@221 BOLD
+6:37-40 fg=@221 BOLD
+6:45-62 fg=@245
+6:66-66 fg=@221
+7:3-66 fg=@221
+=== styles (16, ascii) ===
+1:3-11 fg=LightYellow
+1:12-27 fg=LightYellow BOLD
+1:28-66 fg=LightYellow
+2:3-3 fg=LightYellow
+2:5-60 BOLD
+2:66-66 fg=LightYellow
+3:3-3 fg=LightYellow
+3:6-8 fg=Red
+3:66-66 fg=LightYellow
+4:3-3 fg=LightYellow
+4:6-8 fg=Red
+4:66-66 fg=LightYellow
+5:3-3 fg=LightYellow
+5:66-66 fg=LightYellow
+6:3-3 fg=LightYellow
+6:35-35 fg=LightYellow BOLD
+6:37-40 fg=LightYellow BOLD
+6:45-62 fg=DarkGray
+6:66-66 fg=LightYellow
+7:3-66 fg=LightYellow
+=== styles (no-color, ascii) ===
+1:3-66 BOLD | REVERSED
+2:3-3 BOLD | REVERSED
+2:5-60 BOLD
+2:66-66 BOLD | REVERSED
+3:3-3 BOLD | REVERSED
+3:6-8 BOLD
+3:66-66 BOLD | REVERSED
+4:3-3 BOLD | REVERSED
+4:6-8 BOLD
+4:66-66 BOLD | REVERSED
+5:3-3 BOLD | REVERSED
+5:66-66 BOLD | REVERSED
+6:3-3 BOLD | REVERSED
+6:35-35 BOLD | REVERSED
+6:37-40 BOLD | REVERSED
+6:45-62 DIM
+6:66-66 BOLD | REVERSED
+7:3-66 BOLD | REVERSED
+=== styles (high-contrast, ascii) ===
+1:3-11 fg=#ffe066 bg=#000000
+1:12-27 fg=#ffe066 bg=#000000 BOLD
+1:28-66 fg=#ffe066 bg=#000000
+2:3-3 fg=#ffe066 bg=#000000
+2:4-4 fg=#ffffff bg=#000000
+2:5-60 fg=#ffffff bg=#000000 BOLD
+2:61-65 fg=#ffffff bg=#000000
+2:66-66 fg=#ffe066 bg=#000000
+3:3-3 fg=#ffe066 bg=#000000
+3:4-5 fg=#ffffff bg=#000000
+3:6-8 fg=#ffa198 bg=#000000
+3:9-65 fg=#ffffff bg=#000000
+3:66-66 fg=#ffe066 bg=#000000
+4:3-3 fg=#ffe066 bg=#000000
+4:4-5 fg=#ffffff bg=#000000
+4:6-8 fg=#ffa198 bg=#000000
+4:9-65 fg=#ffffff bg=#000000
+4:66-66 fg=#ffe066 bg=#000000
+5:3-3 fg=#ffe066 bg=#000000
+5:4-65 fg=#ffffff bg=#000000
+5:66-66 fg=#ffe066 bg=#000000
+6:3-3 fg=#ffe066 bg=#000000
+6:4-34 fg=#ffffff bg=#000000
+6:35-35 fg=#ffe066 bg=#000000 BOLD
+6:36-36 fg=#ffffff bg=#000000
+6:37-40 fg=#ffe066 bg=#000000 BOLD
+6:41-44 fg=#ffffff bg=#000000
+6:45-62 fg=#c6c6c6 bg=#000000
+6:63-65 fg=#ffffff bg=#000000
+6:66-66 fg=#ffe066 bg=#000000
+7:3-66 fg=#ffe066 bg=#000000

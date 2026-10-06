@@ -1,0 +1,101 @@
+---
+source: apps/cli/src/tui/widgets/tests.rs
+expression: "snapshot(story, full_ascii)"
+---
+=== text (unicode) ===
+
+   ┏━ › ✖ Request expired ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+   ┃ Rule no-force-push                                           ┃
+   ┃ The request of claude-2 expired without an answer. Nothing   ┃
+   ┃ was done.                                                    ┃
+   ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+=== styles (truecolor, unicode) ===
+1:3-9 fg=#ffe066
+1:10-24 fg=#ffe066 BOLD
+1:25-66 fg=#ffe066
+2:3-3 fg=#ffe066
+2:5-8 fg=#8a8a8a
+2:10-22 fg=#8a8a8a BOLD
+2:66-66 fg=#ffe066
+3:3-3 fg=#ffe066
+3:66-66 fg=#ffe066
+4:3-3 fg=#ffe066
+4:66-66 fg=#ffe066
+5:3-66 fg=#ffe066
+=== styles (256, unicode) ===
+1:3-9 fg=@221
+1:10-24 fg=@221 BOLD
+1:25-66 fg=@221
+2:3-3 fg=@221
+2:5-8 fg=@245
+2:10-22 fg=@245 BOLD
+2:66-66 fg=@221
+3:3-3 fg=@221
+3:66-66 fg=@221
+4:3-3 fg=@221
+4:66-66 fg=@221
+5:3-66 fg=@221
+=== styles (16, unicode) ===
+1:3-9 fg=LightYellow
+1:10-24 fg=LightYellow BOLD
+1:25-66 fg=LightYellow
+2:3-3 fg=LightYellow
+2:5-8 fg=DarkGray
+2:10-22 fg=DarkGray BOLD
+2:66-66 fg=LightYellow
+3:3-3 fg=LightYellow
+3:66-66 fg=LightYellow
+4:3-3 fg=LightYellow
+4:66-66 fg=LightYellow
+5:3-66 fg=LightYellow
+=== styles (no-color, unicode) ===
+1:3-66 BOLD | REVERSED
+2:3-3 BOLD | REVERSED
+2:5-8 DIM
+2:10-22 BOLD | DIM
+2:66-66 BOLD | REVERSED
+3:3-3 BOLD | REVERSED
+3:66-66 BOLD | REVERSED
+4:3-3 BOLD | REVERSED
+4:66-66 BOLD | REVERSED
+5:3-66 BOLD | REVERSED
+=== styles (high-contrast, unicode) ===
+1:3-9 fg=#ffe066 bg=#000000
+1:10-24 fg=#ffe066 bg=#000000 BOLD
+1:25-66 fg=#ffe066 bg=#000000
+2:3-3 fg=#ffe066 bg=#000000
+2:4-4 fg=#ffffff bg=#000000
+2:5-8 fg=#c6c6c6 bg=#000000
+2:9-9 fg=#ffffff bg=#000000
+2:10-22 fg=#c6c6c6 bg=#000000 BOLD
+2:23-65 fg=#ffffff bg=#000000
+2:66-66 fg=#ffe066 bg=#000000
+3:3-3 fg=#ffe066 bg=#000000
+3:4-65 fg=#ffffff bg=#000000
+3:66-66 fg=#ffe066 bg=#000000
+4:3-3 fg=#ffe066 bg=#000000
+4:4-65 fg=#ffffff bg=#000000
+4:66-66 fg=#ffe066 bg=#000000
+5:3-66 fg=#ffe066 bg=#000000
+=== text (ascii) ===
+
+   #= > [x] Request expired ======================================#
+   # Rule no-force-push                                           #
+   # The request of claude-2 expired without an answer. Nothing   #
+   # was done.                                                    #
+   #==============================================================#
+
+=== styles (truecolor, ascii) ===
+1:3-11 fg=#ffe066
+1:12-26 fg=#ffe066 BOLD
+1:27-66 fg=#ffe066
+2:3-3 fg=#ffe066
+2:5-8 fg=#8a8a8a
+2:10-22 fg=#8a8a8a BOLD
+2:66-66 fg=#ffe066
+3:3-3 fg=#ffe066
+3:66-66 fg=#ffe066
+4:3-3 fg=#ffe066
+4:66-66 fg=#ffe066
+5:3-66 fg=#ffe066
