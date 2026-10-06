@@ -72,7 +72,7 @@ impl Link for EngineLink {
 fn link_error(err: ClientError) -> LinkError {
     match err {
         ClientError::NotRunning | ClientError::StartTimeout => LinkError::EngineUnavailable,
-        ClientError::ChannelRejected => LinkError::Rejected,
+        ClientError::ChannelRejected | ClientError::NotAuthentic => LinkError::Rejected,
         ClientError::Incompatible(_) | ClientError::ClientTooOld(_) => LinkError::Incompatible,
         ClientError::TransportUnsupported | ClientError::Unsupported(_) => LinkError::Unsupported,
         ClientError::Rpc(_) => LinkError::Refused,
