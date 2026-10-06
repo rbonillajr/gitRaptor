@@ -457,6 +457,19 @@ pub struct GitEventView {
     /// The gap a reconciliation event belongs to.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gap_id: Option<String>,
+    /// For an unattributed event, the worktree's only active session when
+    /// detection did not see the `git` (amendment of ADR-GRP-012). A hint
+    /// shown as "inferred", never an attribution: it grants no authorship.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inferred: Option<InferredAgent>,
+}
+
+/// The agent an unattributed event is inferred to come from.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct InferredAgent {
+    pub kind: crate::AgentKind,
+    pub session_id: String,
 }
 
 /// Most entries one `events.history` page returns.
@@ -1026,14 +1039,35 @@ mod tests {
                 ..GitEventDetails::default()
             },
             gap_id: None,
+            inferred: None,
         };
         let value = serde_json::to_value(&view).unwrap();
         assert_eq!(value["kind"], "branch-switch");
+        assert!(value.get("inferred").is_none());
         assert_eq!(value["actor"], serde_json::json!({"actor": "unattributed"}));
         assert_eq!(value["details"]["worktree_inferred"], false);
         assert!(value.get("gap_id").is_none());
         let back: GitEventView = serde_json::from_value(value).unwrap();
         assert_eq!(back, view);
+        // The hint of the amendment of ADR-GRP-012: the actor stays
+        // unattributed.
+        let hinted = GitEventView {
+            inferred: Some(InferredAgent {
+                kind: crate::AgentKind::ClaudeCode,
+                session_id: "20:2000".into(),
+            }),
+            ..view
+        };
+        let value = serde_json::to_value(&hinted).unwrap();
+        assert_eq!(
+            value["inferred"],
+            serde_json::json!({"kind": "claude-code", "session_id": "20:2000"})
+        );
+        assert_eq!(value["actor"], serde_json::json!({"actor": "unattributed"}));
+        assert_eq!(
+            serde_json::from_value::<GitEventView>(value).unwrap(),
+            hinted
+        );
         for kind in GitEventKind::ALL {
             assert_eq!(GitEventKind::parse(kind.as_str()), Some(kind));
             let text = serde_json::to_value(kind).unwrap();

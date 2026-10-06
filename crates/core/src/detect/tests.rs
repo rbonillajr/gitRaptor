@@ -639,3 +639,65 @@ fn claude_code_never_gets_the_registration_as_evidence() {
         None
     );
 }
+
+/// Amendment of ADR-GRP-012 (short-commit race): the hint for an event S3
+/// did not see is the only present session of the worktree, and only when
+/// it is a detected one, active. With none or two, no hint.
+#[test]
+fn the_hint_is_the_only_active_detected_session_of_the_worktree() {
+    let rig = Rig::new();
+    let hint = || {
+        rig.detector
+            .single_session("r", Path::new("/wt/feat-login"))
+            .map(|p| p.session_id)
+    };
+    // 0 sessions.
+    assert_eq!(hint(), None);
+    // 1 session: S3 saw no `git` (it already ended), the hint is that session.
+    rig.claude(20, 2_000, "/wt/feat-login");
+    rig.scan();
+    rig.detector.sample_now("r", 1_000);
+    assert_eq!(rig.evidence("/wt/feat-login", 1_000), S3Outcome::NoSighting);
+    assert_eq!(hint().as_deref(), Some("20:2000"));
+    assert_eq!(
+        rig.detector.single_session("r", Path::new("/r")),
+        None,
+        "another worktree"
+    );
+    // A session in another worktree does not count.
+    rig.claude(21, 2_100, "/r");
+    rig.scan();
+    assert_eq!(hint().as_deref(), Some("20:2000"));
+    // 2 sessions in the worktree: no hint.
+    rig.claude(22, 2_200, "/wt/feat-login");
+    rig.scan();
+    assert_eq!(hint(), None);
+    rig.table.kill(22);
+    rig.scan();
+    assert_eq!(hint().as_deref(), Some("20:2000"));
+    // A registered session there makes it two.
+    codex(
+        &rig,
+        "reg:1:0",
+        "/wt/feat-login",
+        SessionStateView::Active,
+        None,
+    );
+    assert_eq!(hint(), None);
+    rig.detector.end_registered("reg:1:0");
+    assert_eq!(hint().as_deref(), Some("20:2000"));
+}
+
+#[test]
+fn an_inactive_session_is_no_hint() {
+    let rig = Rig::new();
+    rig.claude(20, 2_000, "/wt/feat-login");
+    rig.scan();
+    rig.advance(5 * 60_000);
+    rig.scan();
+    assert_eq!(
+        rig.detector
+            .single_session("r", Path::new("/wt/feat-login")),
+        None
+    );
+}

@@ -978,6 +978,11 @@ fn git_event_view(repo_id: &str, store: &RepoStore, e: StoredEvent) -> Option<Gi
         utc_offset_s: e.observed.offset_s,
         details: serde_json::from_str::<GitEventDetails>(&e.metadata).unwrap_or_default(),
         gap_id: e.gap_id,
+        inferred: e
+            .session_id
+            .is_none()
+            .then(|| sessions::inferred_agent(e.evidence.as_deref()))
+            .flatten(),
     })
 }
 
