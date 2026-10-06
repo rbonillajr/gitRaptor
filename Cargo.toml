@@ -28,6 +28,8 @@ gix = { version = "0.88", default-features = false, features = ["sha1", "status"
 gix-pack = { version = "0.75", default-features = false, features = ["sha1", "streaming-input"] }
 # The Cockpit TUI (ADR-CKP-003 § 1): crossterm 0.29 backend, chosen by feature.
 ratatui = { version = "0.30.2", default-features = false, features = ["crossterm_0_29", "layout-cache"] }
+# Snapshot tests of the TUI widgets (DSYS-GRP-001 § 7, TS-CKP-005).
+insta = "1"
 serde_json = "1"
 tempfile = "3"
 # Win32 calls of crates/winsys only (ADR-GRP-002); the version gix already brings in.
