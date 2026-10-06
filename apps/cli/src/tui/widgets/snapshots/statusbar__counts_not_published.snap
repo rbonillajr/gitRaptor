@@ -1,0 +1,101 @@
+---
+source: apps/cli/src/tui/widgets/tests.rs
+expression: "snapshot(story, full_ascii)"
+---
+=== text (unicode) ===
+ gitraptor · ✔ live · you                                            ⚡ –  ⛔ –
+=== styles (truecolor, unicode) ===
+0:0-0 bg=#3a3a3a
+0:1-9 bg=#3a3a3a BOLD
+0:10-12 fg=#949494 bg=#3a3a3a
+0:13-13 fg=#3fb950 bg=#3a3a3a
+0:14-14 bg=#3a3a3a
+0:15-18 fg=#3fb950 bg=#3a3a3a
+0:19-21 fg=#949494 bg=#3a3a3a
+0:22-68 bg=#3a3a3a
+0:69-69 fg=#d29922 bg=#3a3a3a
+0:71-71 bg=#3a3a3a
+0:72-72 fg=#d29922 bg=#3a3a3a BOLD
+0:73-74 bg=#3a3a3a
+0:75-75 fg=#f85149 bg=#3a3a3a
+0:77-77 bg=#3a3a3a
+0:78-78 fg=#f85149 bg=#3a3a3a BOLD
+0:79-79 bg=#3a3a3a
+=== styles (256, unicode) ===
+0:0-0 bg=@237
+0:1-9 bg=@237 BOLD
+0:10-12 fg=@246 bg=@237
+0:13-13 fg=@35 bg=@237
+0:14-14 bg=@237
+0:15-18 fg=@35 bg=@237
+0:19-21 fg=@246 bg=@237
+0:22-68 bg=@237
+0:69-69 fg=@172 bg=@237
+0:71-71 bg=@237
+0:72-72 fg=@172 bg=@237 BOLD
+0:73-74 bg=@237
+0:75-75 fg=@203 bg=@237
+0:77-77 bg=@237
+0:78-78 fg=@203 bg=@237 BOLD
+0:79-79 bg=@237
+=== styles (16, unicode) ===
+0:0-0 bg=DarkGray
+0:1-9 bg=DarkGray BOLD
+0:10-12 fg=DarkGray bg=DarkGray
+0:13-13 fg=Green bg=DarkGray
+0:14-14 bg=DarkGray
+0:15-18 fg=Green bg=DarkGray
+0:19-21 fg=DarkGray bg=DarkGray
+0:22-68 bg=DarkGray
+0:69-69 fg=Yellow bg=DarkGray
+0:71-71 bg=DarkGray
+0:72-72 fg=Yellow bg=DarkGray BOLD
+0:73-74 bg=DarkGray
+0:75-75 fg=Red bg=DarkGray
+0:77-77 bg=DarkGray
+0:78-78 fg=Red bg=DarkGray BOLD
+0:79-79 bg=DarkGray
+=== styles (no-color, unicode) ===
+0:0-9 BOLD
+0:10-12 BOLD | DIM
+0:13-18 BOLD
+0:19-21 BOLD | DIM
+0:22-69 BOLD
+0:71-75 BOLD
+0:77-79 BOLD
+=== styles (high-contrast, unicode) ===
+0:0-0 fg=#ffffff bg=#303030
+0:1-9 fg=#ffffff bg=#303030 BOLD
+0:10-12 fg=#c6c6c6 bg=#303030
+0:13-13 fg=#7ee787 bg=#303030
+0:14-14 fg=#ffffff bg=#303030
+0:15-18 fg=#7ee787 bg=#303030
+0:19-21 fg=#c6c6c6 bg=#303030
+0:22-68 fg=#ffffff bg=#303030
+0:69-69 fg=#ffe066 bg=#303030
+0:71-71 fg=#ffffff bg=#303030
+0:72-72 fg=#ffe066 bg=#303030 BOLD
+0:73-74 fg=#ffffff bg=#303030
+0:75-75 fg=#ffa198 bg=#303030
+0:77-77 fg=#ffffff bg=#303030
+0:78-78 fg=#ffa198 bg=#303030 BOLD
+0:79-79 fg=#ffffff bg=#303030
+=== text (ascii) ===
+ gitraptor | [ok] live | you                                 [c] -  [blocked] -
+=== styles (truecolor, ascii) ===
+0:0-0 bg=#3a3a3a
+0:1-9 bg=#3a3a3a BOLD
+0:10-12 fg=#949494 bg=#3a3a3a
+0:13-16 fg=#3fb950 bg=#3a3a3a
+0:17-17 bg=#3a3a3a
+0:18-21 fg=#3fb950 bg=#3a3a3a
+0:22-24 fg=#949494 bg=#3a3a3a
+0:25-60 bg=#3a3a3a
+0:61-63 fg=#d29922 bg=#3a3a3a
+0:64-64 bg=#3a3a3a
+0:65-65 fg=#d29922 bg=#3a3a3a BOLD
+0:66-67 bg=#3a3a3a
+0:68-76 fg=#f85149 bg=#3a3a3a
+0:77-77 bg=#3a3a3a
+0:78-78 fg=#f85149 bg=#3a3a3a BOLD
+0:79-79 bg=#3a3a3a

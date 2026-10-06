@@ -8,7 +8,7 @@ use ratatui::style::{Modifier, Style};
 
 use super::Component;
 use crate::model::SafeText;
-use crate::tui::style::{Pen, Styles, panel};
+use crate::tui::style::{Pen, Styles, panel, width};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AgentState {
@@ -17,6 +17,9 @@ pub enum AgentState {
     Done,
     /// The engine cannot read the worktree now (US-CKP-003).
     Unavailable,
+    /// No agent session in the worktree: no state symbol, and the name says who acts instead
+    /// ("You or another (unattributed)", BR-CKP-CONS-003), muted (US-CKP-001).
+    NoAgent,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -84,27 +87,41 @@ pub struct AgentListModel {
 }
 
 const MARK: u16 = 2;
+/// The name column grows from `NAME` up to `NAME_MAX` to fit the widest name, as long as the
+/// branch keeps `BRANCH_MIN` columns (US-CKP-001: "You or another (unattributed)").
 const NAME: u16 = 14;
+const NAME_MAX: u16 = 26;
+const BRANCH_MIN: u16 = 12;
 const CHANGES: u16 = 6;
 const SYNC: u16 = 12;
+/// The activity column grows the same way up to `ACTIVITY_MAX` ("not available").
 const ACTIVITY: u16 = 11;
+const ACTIVITY_MAX: u16 = 14;
 
 /// Column widths for an inner width: activity goes first, then ahead/behind.
 #[derive(Debug, Clone, Copy)]
 struct Cols {
     /// The widest state symbol of the active set, plus a space.
     state: u16,
+    name: u16,
     branch: u16,
     sync: u16,
     activity: u16,
 }
 
 impl Cols {
-    fn new(inner: u16, styles: &Styles) -> Self {
-        let flags = u16::from(styles.symbol(SymbolToken::Conflict).width)
-            + 1
-            + u16::from(styles.symbol(SymbolToken::Blocked).width)
-            + 1;
+    /// `widest` holds the widest name and the widest activity text of all the rows (not only
+    /// the visible ones, so the columns do not jump while scrolling); `flags` whether any row
+    /// has a ⚡ or ⛔ to show, the only case their columns take room.
+    fn new(inner: u16, styles: &Styles, widest: (u16, u16), flags: bool) -> Self {
+        let flags = if flags {
+            u16::from(styles.symbol(SymbolToken::Conflict).width)
+                + 1
+                + u16::from(styles.symbol(SymbolToken::Blocked).width)
+                + 1
+        } else {
+            0
+        };
         let state = [
             SymbolToken::AgentActive,
             SymbolToken::AgentIdle,
@@ -116,8 +133,13 @@ impl Cols {
         .max()
         .unwrap_or(1)
             + 1;
-        let fixed = MARK + state + NAME + 1 + CHANGES + flags;
-        let activity = if inner >= fixed + SYNC + ACTIVITY + 12 {
+        let base = MARK + state + 1 + CHANGES + flags;
+        let fixed = base + NAME;
+        // A cell keeps one blank column, so a text needs its width plus one.
+        let wanted = (widest.1 + 1).clamp(ACTIVITY, ACTIVITY_MAX);
+        let activity = if inner >= fixed + SYNC + wanted + 12 {
+            wanted
+        } else if inner >= fixed + SYNC + ACTIVITY + 12 {
             ACTIVITY
         } else {
             0
@@ -127,9 +149,12 @@ impl Cols {
         } else {
             0
         };
-        let branch = inner.saturating_sub(fixed + sync + activity);
+        let room = inner.saturating_sub(base + sync + activity + BRANCH_MIN);
+        let name = (widest.0 + 1).clamp(NAME, NAME_MAX).min(room.max(NAME));
+        let branch = inner.saturating_sub(base + name + sync + activity);
         Self {
             state,
+            name,
             branch,
             sync,
             activity,
@@ -138,13 +163,14 @@ impl Cols {
 }
 
 impl AgentRowModel {
-    fn state_symbol(&self) -> (SymbolToken, ColorToken) {
-        match self.state {
+    fn state_symbol(&self) -> Option<(SymbolToken, ColorToken)> {
+        Some(match self.state {
             AgentState::Active => (SymbolToken::AgentActive, ColorToken::AgentStateActive),
             AgentState::Idle => (SymbolToken::AgentIdle, ColorToken::AgentStateIdle),
             AgentState::Done => (SymbolToken::AgentDone, ColorToken::AgentStateDone),
             AgentState::Unavailable => (SymbolToken::Warning, ColorToken::StatusWarning),
-        }
+            AgentState::NoAgent => return None,
+        })
     }
 
     fn paint(
@@ -160,17 +186,22 @@ impl AgentRowModel {
             Some(f) => pen.cell(g.focus, MARK, f),
             None => pen.gap(MARK),
         };
-        let (sym, token) = self.state_symbol();
         let start = pen.x;
-        pen.symbol(styles.symbol(sym), styles.fg(token).patch(row));
+        if let Some((sym, token)) = self.state_symbol() {
+            pen.symbol(styles.symbol(sym), styles.fg(token).patch(row));
+        }
         pen.to(start + cols.state);
-        let name = styles
-            .agent(self.color_index)
-            .patch(row)
-            .add_modifier(Modifier::BOLD);
-        pen.cell(self.name.as_str(), NAME, name).gap(1);
-
         let muted = styles.fg(ColorToken::TextMuted).patch(row);
+        let name = if self.state == AgentState::NoAgent {
+            muted
+        } else {
+            styles
+                .agent(self.color_index)
+                .patch(row)
+                .add_modifier(Modifier::BOLD)
+        };
+        pen.cell(self.name.as_str(), cols.name, name).gap(1);
+
         let text = styles.fg(ColorToken::TextDefault).patch(row);
         let middle = cols.branch + CHANGES + cols.sync + cols.activity;
         let start = pen.x;
@@ -242,13 +273,20 @@ impl Component for AgentListModel {
         if inner.height == 0 {
             return;
         }
-        let cols = Cols::new(inner.width, styles);
+        let widest = self.rows.iter().fold((0, 0), |(n, a), r| {
+            (
+                n.max(width(r.name.as_str())),
+                a.max(width(r.activity.as_str())),
+            )
+        });
+        let flags = self.rows.iter().any(|r| r.conflict || r.blocked);
+        let cols = Cols::new(inner.width, styles, widest, flags);
         let head = styles
             .fg(ColorToken::TextMuted)
             .add_modifier(Modifier::BOLD);
         let mut pen = Pen::new(buf, inner, inner.y, styles);
         pen.gap(MARK + cols.state)
-            .cell(self.columns.agent.as_str(), NAME, head)
+            .cell(self.columns.agent.as_str(), cols.name, head)
             .gap(1)
             .cell(self.columns.branch.as_str(), cols.branch, head)
             .cell(self.columns.changes.as_str(), CHANGES, head);

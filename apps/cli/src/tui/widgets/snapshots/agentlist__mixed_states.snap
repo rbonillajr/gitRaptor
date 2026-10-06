@@ -4,11 +4,11 @@ expression: "snapshot(story, full_ascii)"
 ---
 === text (unicode) ===
 ┏━ › Agents ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃     Agent          Branch                 Files Sync        Activity         ┃
-┃› ●  claude-1       feat/parser            ~3    ↑2 ↓0       2 min ago  ⚡    ┃
-┃  ◐  claude-2       feat/lexer             ~0    ↑5 ↓3       14 min ago       ┃
-┃  ○  claude-3       fix/flaky-test         ~3    ↑2 ↓0       1 h ago    ⛔    ┃
-┃  ●  claude-4-wit…  HEAD at a1b2c3d        ~3    unknown     2 min ago        ┃
+┃     Agent                     Branch      Files Sync        Activity         ┃
+┃› ●  claude-1                  feat/parser ~3    ↑2 ↓0       2 min ago  ⚡    ┃
+┃  ◐  claude-2                  feat/lexer  ~0    ↑5 ↓3       14 min ago       ┃
+┃  ○  claude-3                  fix/flaky-… ~3    ↑2 ↓0       1 h ago    ⛔    ┃
+┃  ●  claude-4-with-a-very-lo…  HEAD at a1… ~3    unknown     2 min ago        ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 === styles (truecolor, unicode) ===
 0:0-4 fg=#ffe066
@@ -16,7 +16,7 @@ expression: "snapshot(story, full_ascii)"
 0:11-79 fg=#ffe066
 1:0-0 fg=#ffe066
 1:6-10 fg=#949494 BOLD
-1:21-26 fg=#949494 BOLD
+1:32-37 fg=#949494 BOLD
 1:44-48 fg=#949494 BOLD
 1:50-53 fg=#949494 BOLD
 1:62-69 fg=#949494 BOLD
@@ -50,8 +50,8 @@ expression: "snapshot(story, full_ascii)"
 4:79-79 fg=#ffe066
 5:0-0 fg=#ffe066
 5:3-3 fg=#3fb950
-5:6-18 fg=#f0e442 BOLD
-5:21-35 fg=#d29922
+5:6-29 fg=#f0e442 BOLD
+5:32-42 fg=#d29922
 5:44-45 fg=#d29922
 5:50-56 fg=#949494
 5:62-70 fg=#949494
@@ -63,7 +63,7 @@ expression: "snapshot(story, full_ascii)"
 0:11-79 fg=@221
 1:0-0 fg=@221
 1:6-10 fg=@246 BOLD
-1:21-26 fg=@246 BOLD
+1:32-37 fg=@246 BOLD
 1:44-48 fg=@246 BOLD
 1:50-53 fg=@246 BOLD
 1:62-69 fg=@246 BOLD
@@ -97,8 +97,8 @@ expression: "snapshot(story, full_ascii)"
 4:79-79 fg=@221
 5:0-0 fg=@221
 5:3-3 fg=@35
-5:6-18 fg=@220 BOLD
-5:21-35 fg=@172
+5:6-29 fg=@220 BOLD
+5:32-42 fg=@172
 5:44-45 fg=@172
 5:50-56 fg=@246
 5:62-70 fg=@246
@@ -110,7 +110,7 @@ expression: "snapshot(story, full_ascii)"
 0:11-79 fg=LightYellow
 1:0-0 fg=LightYellow
 1:6-10 fg=DarkGray BOLD
-1:21-26 fg=DarkGray BOLD
+1:32-37 fg=DarkGray BOLD
 1:44-48 fg=DarkGray BOLD
 1:50-53 fg=DarkGray BOLD
 1:62-69 fg=DarkGray BOLD
@@ -144,8 +144,8 @@ expression: "snapshot(story, full_ascii)"
 4:79-79 fg=LightYellow
 5:0-0 fg=LightYellow
 5:3-3 fg=Green
-5:6-18 fg=LightYellow BOLD
-5:21-35 fg=Yellow
+5:6-29 fg=LightYellow BOLD
+5:32-42 fg=Yellow
 5:44-45 fg=Yellow
 5:50-56 fg=DarkGray
 5:62-70 fg=DarkGray
@@ -155,7 +155,7 @@ expression: "snapshot(story, full_ascii)"
 0:0-79 BOLD | REVERSED
 1:0-0 BOLD | REVERSED
 1:6-10 BOLD | DIM
-1:21-26 BOLD | DIM
+1:32-37 BOLD | DIM
 1:44-48 BOLD | DIM
 1:50-53 BOLD | DIM
 1:62-69 BOLD | DIM
@@ -182,8 +182,8 @@ expression: "snapshot(story, full_ascii)"
 4:73-73 BOLD
 4:79-79 BOLD | REVERSED
 5:0-0 BOLD | REVERSED
-5:6-18 BOLD
-5:21-35 BOLD
+5:6-29 BOLD
+5:32-42 BOLD
 5:50-56 DIM
 5:62-70 DIM
 5:79-79 BOLD | REVERSED
@@ -195,9 +195,9 @@ expression: "snapshot(story, full_ascii)"
 1:0-0 fg=#ffe066 bg=#000000
 1:1-5 fg=#ffffff bg=#000000
 1:6-10 fg=#c6c6c6 bg=#000000 BOLD
-1:11-20 fg=#ffffff bg=#000000
-1:21-26 fg=#c6c6c6 bg=#000000 BOLD
-1:27-43 fg=#ffffff bg=#000000
+1:11-31 fg=#ffffff bg=#000000
+1:32-37 fg=#c6c6c6 bg=#000000 BOLD
+1:38-43 fg=#ffffff bg=#000000
 1:44-48 fg=#c6c6c6 bg=#000000 BOLD
 1:49-49 fg=#ffffff bg=#000000
 1:50-53 fg=#c6c6c6 bg=#000000 BOLD
@@ -247,10 +247,10 @@ expression: "snapshot(story, full_ascii)"
 5:1-2 fg=#ffffff bg=#000000
 5:3-3 fg=#7ee787 bg=#000000
 5:4-5 fg=#ffffff bg=#000000
-5:6-18 fg=#f0e442 bg=#000000 BOLD
-5:19-20 fg=#ffffff bg=#000000
-5:21-35 fg=#ffe066 bg=#000000
-5:36-43 fg=#ffffff bg=#000000
+5:6-29 fg=#f0e442 bg=#000000 BOLD
+5:30-31 fg=#ffffff bg=#000000
+5:32-42 fg=#ffe066 bg=#000000
+5:43-43 fg=#ffffff bg=#000000
 5:44-45 fg=#ffe066 bg=#000000
 5:46-49 fg=#ffffff bg=#000000
 5:50-56 fg=#c6c6c6 bg=#000000
@@ -261,11 +261,11 @@ expression: "snapshot(story, full_ascii)"
 6:0-79 fg=#ffe066 bg=#000000
 === text (ascii) ===
 #= > Agents ===================================================================#
-#      Agent          Branch        Files Sync        Activity                 #
-#> *   claude-1       feat/parser   ~3    +2 -0       2 min ago  [c]           #
-#  ~   claude-2       feat/lexer    ~0    +5 -3       14 min ago               #
-#  o   claude-3       fix/flaky-... ~3    +2 -0       1 h ago    [blocked]     #
-#  *   claude-4-w...  HEAD at a1... ~3    unknown     2 min ago                #
+#      Agent            Branch      Files Sync        Activity                 #
+#> *   claude-1         feat/parser ~3    +2 -0       2 min ago  [c]           #
+#  ~   claude-2         feat/lexer  ~0    +5 -3       14 min ago               #
+#  o   claude-3         fix/flak... ~3    +2 -0       1 h ago    [blocked]     #
+#  *   claude-4-wit...  HEAD at ... ~3    unknown     2 min ago                #
 #==============================================================================#
 === styles (truecolor, ascii) ===
 0:0-4 fg=#ffe066
@@ -273,7 +273,7 @@ expression: "snapshot(story, full_ascii)"
 0:11-79 fg=#ffe066
 1:0-0 fg=#ffe066
 1:7-11 fg=#949494 BOLD
-1:22-27 fg=#949494 BOLD
+1:24-29 fg=#949494 BOLD
 1:36-40 fg=#949494 BOLD
 1:42-45 fg=#949494 BOLD
 1:54-61 fg=#949494 BOLD
@@ -307,8 +307,8 @@ expression: "snapshot(story, full_ascii)"
 4:79-79 fg=#ffe066
 5:0-0 fg=#ffe066
 5:3-3 fg=#3fb950
-5:7-19 fg=#f0e442 BOLD
-5:22-34 fg=#d29922
+5:7-21 fg=#f0e442 BOLD
+5:24-34 fg=#d29922
 5:36-37 fg=#d29922
 5:42-48 fg=#949494
 5:54-62 fg=#949494
@@ -320,7 +320,7 @@ expression: "snapshot(story, full_ascii)"
 0:11-79 fg=@221
 1:0-0 fg=@221
 1:7-11 fg=@246 BOLD
-1:22-27 fg=@246 BOLD
+1:24-29 fg=@246 BOLD
 1:36-40 fg=@246 BOLD
 1:42-45 fg=@246 BOLD
 1:54-61 fg=@246 BOLD
@@ -354,8 +354,8 @@ expression: "snapshot(story, full_ascii)"
 4:79-79 fg=@221
 5:0-0 fg=@221
 5:3-3 fg=@35
-5:7-19 fg=@220 BOLD
-5:22-34 fg=@172
+5:7-21 fg=@220 BOLD
+5:24-34 fg=@172
 5:36-37 fg=@172
 5:42-48 fg=@246
 5:54-62 fg=@246
@@ -367,7 +367,7 @@ expression: "snapshot(story, full_ascii)"
 0:11-79 fg=LightYellow
 1:0-0 fg=LightYellow
 1:7-11 fg=DarkGray BOLD
-1:22-27 fg=DarkGray BOLD
+1:24-29 fg=DarkGray BOLD
 1:36-40 fg=DarkGray BOLD
 1:42-45 fg=DarkGray BOLD
 1:54-61 fg=DarkGray BOLD
@@ -401,8 +401,8 @@ expression: "snapshot(story, full_ascii)"
 4:79-79 fg=LightYellow
 5:0-0 fg=LightYellow
 5:3-3 fg=Green
-5:7-19 fg=LightYellow BOLD
-5:22-34 fg=Yellow
+5:7-21 fg=LightYellow BOLD
+5:24-34 fg=Yellow
 5:36-37 fg=Yellow
 5:42-48 fg=DarkGray
 5:54-62 fg=DarkGray
@@ -412,7 +412,7 @@ expression: "snapshot(story, full_ascii)"
 0:0-79 BOLD | REVERSED
 1:0-0 BOLD | REVERSED
 1:7-11 BOLD | DIM
-1:22-27 BOLD | DIM
+1:24-29 BOLD | DIM
 1:36-40 BOLD | DIM
 1:42-45 BOLD | DIM
 1:54-61 BOLD | DIM
@@ -439,8 +439,8 @@ expression: "snapshot(story, full_ascii)"
 4:65-73 BOLD
 4:79-79 BOLD | REVERSED
 5:0-0 BOLD | REVERSED
-5:7-19 BOLD
-5:22-34 BOLD
+5:7-21 BOLD
+5:24-34 BOLD
 5:42-48 DIM
 5:54-62 DIM
 5:79-79 BOLD | REVERSED
@@ -452,9 +452,9 @@ expression: "snapshot(story, full_ascii)"
 1:0-0 fg=#ffe066 bg=#000000
 1:1-6 fg=#ffffff bg=#000000
 1:7-11 fg=#c6c6c6 bg=#000000 BOLD
-1:12-21 fg=#ffffff bg=#000000
-1:22-27 fg=#c6c6c6 bg=#000000 BOLD
-1:28-35 fg=#ffffff bg=#000000
+1:12-23 fg=#ffffff bg=#000000
+1:24-29 fg=#c6c6c6 bg=#000000 BOLD
+1:30-35 fg=#ffffff bg=#000000
 1:36-40 fg=#c6c6c6 bg=#000000 BOLD
 1:41-41 fg=#ffffff bg=#000000
 1:42-45 fg=#c6c6c6 bg=#000000 BOLD
@@ -504,9 +504,9 @@ expression: "snapshot(story, full_ascii)"
 5:1-2 fg=#ffffff bg=#000000
 5:3-3 fg=#7ee787 bg=#000000
 5:4-6 fg=#ffffff bg=#000000
-5:7-19 fg=#f0e442 bg=#000000 BOLD
-5:20-21 fg=#ffffff bg=#000000
-5:22-34 fg=#ffe066 bg=#000000
+5:7-21 fg=#f0e442 bg=#000000 BOLD
+5:22-23 fg=#ffffff bg=#000000
+5:24-34 fg=#ffe066 bg=#000000
 5:35-35 fg=#ffffff bg=#000000
 5:36-37 fg=#ffe066 bg=#000000
 5:38-41 fg=#ffffff bg=#000000

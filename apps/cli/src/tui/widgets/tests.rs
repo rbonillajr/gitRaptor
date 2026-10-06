@@ -40,7 +40,7 @@ fn color(c: Color) -> String {
 }
 
 /// The styled runs of a buffer: `row:from-to fg bg modifiers`, default cells left out.
-fn style_runs(buf: &Buffer) -> String {
+pub(crate) fn style_runs(buf: &Buffer) -> String {
     let mut out = String::new();
     let area = buf.area;
     for y in area.top()..area.bottom() {

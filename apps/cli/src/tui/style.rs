@@ -30,6 +30,8 @@ pub struct Glyphs {
     pub behind: &'static str,
     pub changes: &'static str,
     pub bullet: &'static str,
+    /// A value the engine does not publish yet ("not available").
+    pub unknown: &'static str,
     /// Graph: trunk, branch-off, last branch-off, edge and commit node.
     pub lane_trunk: &'static str,
     pub lane_fork: &'static str,
@@ -58,6 +60,7 @@ pub const UNICODE_GLYPHS: Glyphs = Glyphs {
     behind: "↓",
     changes: "~",
     bullet: "•",
+    unknown: "–",
     lane_trunk: "│",
     lane_fork: "├",
     lane_last: "└",
@@ -81,6 +84,7 @@ pub const ASCII_GLYPHS: Glyphs = Glyphs {
     behind: "-",
     changes: "~",
     bullet: "-",
+    unknown: "-",
     lane_trunk: "|",
     lane_fork: "|",
     lane_last: "`",

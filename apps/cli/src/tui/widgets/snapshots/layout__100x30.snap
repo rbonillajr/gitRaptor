@@ -5,11 +5,11 @@ expression: "snapshot(story, full_ascii)"
 === text (unicode) ===
  gitraptor · ✔ live · main protected · you                                               ⚡ 2  ⛔ 1
 ┏━ › Agents ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃     Agent          Branch                                     Files Sync        Activity         ┃
-┃› ●  claude-1       feat/parser                                ~3    ↑2 ↓0       2 min ago  ⚡    ┃
-┃  ◐  claude-2       feat/lexer                                 ~0    ↑5 ↓3       14 min ago       ┃
-┃  ○  claude-3       fix/flaky-test                             ~3    ↑2 ↓0       1 h ago    ⛔    ┃
-┃  ●  claude-4-wit…  HEAD at a1b2c3d                            ~3    unknown     2 min ago        ┃
+┃     Agent                      Branch                         Files Sync        Activity         ┃
+┃› ●  claude-1                   feat/parser                    ~3    ↑2 ↓0       2 min ago  ⚡    ┃
+┃  ◐  claude-2                   feat/lexer                     ~0    ↑5 ↓3       14 min ago       ┃
+┃  ○  claude-3                   fix/flaky-test                 ~3    ↑2 ↓0       1 h ago    ⛔    ┃
+┃  ●  claude-4-with-a-very-lon…  HEAD at a1b2c3d                ~3    unknown     2 min ago        ┃
 ┃                                                                                                  ┃
 ┃                                                                                                  ┃
 ┃                                                                                                  ┃
@@ -57,7 +57,7 @@ expression: "snapshot(story, full_ascii)"
 1:11-99 fg=#ffe066
 2:0-0 fg=#ffe066
 2:6-10 fg=#949494 BOLD
-2:21-26 fg=#949494 BOLD
+2:33-38 fg=#949494 BOLD
 2:64-68 fg=#949494 BOLD
 2:70-73 fg=#949494 BOLD
 2:82-89 fg=#949494 BOLD
@@ -91,8 +91,8 @@ expression: "snapshot(story, full_ascii)"
 5:99-99 fg=#ffe066
 6:0-0 fg=#ffe066
 6:3-3 fg=#3fb950
-6:6-18 fg=#f0e442 BOLD
-6:21-35 fg=#d29922
+6:6-30 fg=#f0e442 BOLD
+6:33-47 fg=#d29922
 6:64-65 fg=#d29922
 6:70-76 fg=#949494
 6:82-90 fg=#949494
@@ -193,7 +193,7 @@ expression: "snapshot(story, full_ascii)"
 1:11-99 fg=@221
 2:0-0 fg=@221
 2:6-10 fg=@246 BOLD
-2:21-26 fg=@246 BOLD
+2:33-38 fg=@246 BOLD
 2:64-68 fg=@246 BOLD
 2:70-73 fg=@246 BOLD
 2:82-89 fg=@246 BOLD
@@ -227,8 +227,8 @@ expression: "snapshot(story, full_ascii)"
 5:99-99 fg=@221
 6:0-0 fg=@221
 6:3-3 fg=@35
-6:6-18 fg=@220 BOLD
-6:21-35 fg=@172
+6:6-30 fg=@220 BOLD
+6:33-47 fg=@172
 6:64-65 fg=@172
 6:70-76 fg=@246
 6:82-90 fg=@246
@@ -329,7 +329,7 @@ expression: "snapshot(story, full_ascii)"
 1:11-99 fg=LightYellow
 2:0-0 fg=LightYellow
 2:6-10 fg=DarkGray BOLD
-2:21-26 fg=DarkGray BOLD
+2:33-38 fg=DarkGray BOLD
 2:64-68 fg=DarkGray BOLD
 2:70-73 fg=DarkGray BOLD
 2:82-89 fg=DarkGray BOLD
@@ -363,8 +363,8 @@ expression: "snapshot(story, full_ascii)"
 5:99-99 fg=LightYellow
 6:0-0 fg=LightYellow
 6:3-3 fg=Green
-6:6-18 fg=LightYellow BOLD
-6:21-35 fg=Yellow
+6:6-30 fg=LightYellow BOLD
+6:33-47 fg=Yellow
 6:64-65 fg=Yellow
 6:70-76 fg=DarkGray
 6:82-90 fg=DarkGray
@@ -454,7 +454,7 @@ expression: "snapshot(story, full_ascii)"
 1:0-99 BOLD | REVERSED
 2:0-0 BOLD | REVERSED
 2:6-10 BOLD | DIM
-2:21-26 BOLD | DIM
+2:33-38 BOLD | DIM
 2:64-68 BOLD | DIM
 2:70-73 BOLD | DIM
 2:82-89 BOLD | DIM
@@ -481,8 +481,8 @@ expression: "snapshot(story, full_ascii)"
 5:93-93 BOLD
 5:99-99 BOLD | REVERSED
 6:0-0 BOLD | REVERSED
-6:6-18 BOLD
-6:21-35 BOLD
+6:6-30 BOLD
+6:33-47 BOLD
 6:70-76 DIM
 6:82-90 DIM
 6:99-99 BOLD | REVERSED
@@ -572,9 +572,9 @@ expression: "snapshot(story, full_ascii)"
 2:0-0 fg=#ffe066 bg=#000000
 2:1-5 fg=#ffffff bg=#000000
 2:6-10 fg=#c6c6c6 bg=#000000 BOLD
-2:11-20 fg=#ffffff bg=#000000
-2:21-26 fg=#c6c6c6 bg=#000000 BOLD
-2:27-63 fg=#ffffff bg=#000000
+2:11-32 fg=#ffffff bg=#000000
+2:33-38 fg=#c6c6c6 bg=#000000 BOLD
+2:39-63 fg=#ffffff bg=#000000
 2:64-68 fg=#c6c6c6 bg=#000000 BOLD
 2:69-69 fg=#ffffff bg=#000000
 2:70-73 fg=#c6c6c6 bg=#000000 BOLD
@@ -624,10 +624,10 @@ expression: "snapshot(story, full_ascii)"
 6:1-2 fg=#ffffff bg=#000000
 6:3-3 fg=#7ee787 bg=#000000
 6:4-5 fg=#ffffff bg=#000000
-6:6-18 fg=#f0e442 bg=#000000 BOLD
-6:19-20 fg=#ffffff bg=#000000
-6:21-35 fg=#ffe066 bg=#000000
-6:36-63 fg=#ffffff bg=#000000
+6:6-30 fg=#f0e442 bg=#000000 BOLD
+6:31-32 fg=#ffffff bg=#000000
+6:33-47 fg=#ffe066 bg=#000000
+6:48-63 fg=#ffffff bg=#000000
 6:64-65 fg=#ffe066 bg=#000000
 6:66-69 fg=#ffffff bg=#000000
 6:70-76 fg=#c6c6c6 bg=#000000
@@ -753,11 +753,11 @@ expression: "snapshot(story, full_ascii)"
 === text (ascii) ===
  gitraptor | [ok] live | main protected | you                                    [c] 2  [blocked] 1
 #= > Agents =======================================================================================#
-#      Agent          Branch                            Files Sync        Activity                 #
-#> *   claude-1       feat/parser                       ~3    +2 -0       2 min ago  [c]           #
-#  ~   claude-2       feat/lexer                        ~0    +5 -3       14 min ago               #
-#  o   claude-3       fix/flaky-test                    ~3    +2 -0       1 h ago    [blocked]     #
-#  *   claude-4-w...  HEAD at a1b2c3d                   ~3    unknown     2 min ago                #
+#      Agent                      Branch                Files Sync        Activity                 #
+#> *   claude-1                   feat/parser           ~3    +2 -0       2 min ago  [c]           #
+#  ~   claude-2                   feat/lexer            ~0    +5 -3       14 min ago               #
+#  o   claude-3                   fix/flaky-test        ~3    +2 -0       1 h ago    [blocked]     #
+#  *   claude-4-with-a-very-l...  HEAD at a1b2c3d       ~3    unknown     2 min ago                #
 #                                                                                                  #
 #                                                                                                  #
 #                                                                                                  #
@@ -805,7 +805,7 @@ expression: "snapshot(story, full_ascii)"
 1:11-99 fg=#ffe066
 2:0-0 fg=#ffe066
 2:7-11 fg=#949494 BOLD
-2:22-27 fg=#949494 BOLD
+2:34-39 fg=#949494 BOLD
 2:56-60 fg=#949494 BOLD
 2:62-65 fg=#949494 BOLD
 2:74-81 fg=#949494 BOLD
@@ -839,8 +839,8 @@ expression: "snapshot(story, full_ascii)"
 5:99-99 fg=#ffe066
 6:0-0 fg=#ffe066
 6:3-3 fg=#3fb950
-6:7-19 fg=#f0e442 BOLD
-6:22-36 fg=#d29922
+6:7-31 fg=#f0e442 BOLD
+6:34-48 fg=#d29922
 6:56-57 fg=#d29922
 6:62-68 fg=#949494
 6:74-82 fg=#949494
@@ -940,7 +940,7 @@ expression: "snapshot(story, full_ascii)"
 1:11-99 fg=@221
 2:0-0 fg=@221
 2:7-11 fg=@246 BOLD
-2:22-27 fg=@246 BOLD
+2:34-39 fg=@246 BOLD
 2:56-60 fg=@246 BOLD
 2:62-65 fg=@246 BOLD
 2:74-81 fg=@246 BOLD
@@ -974,8 +974,8 @@ expression: "snapshot(story, full_ascii)"
 5:99-99 fg=@221
 6:0-0 fg=@221
 6:3-3 fg=@35
-6:7-19 fg=@220 BOLD
-6:22-36 fg=@172
+6:7-31 fg=@220 BOLD
+6:34-48 fg=@172
 6:56-57 fg=@172
 6:62-68 fg=@246
 6:74-82 fg=@246
@@ -1075,7 +1075,7 @@ expression: "snapshot(story, full_ascii)"
 1:11-99 fg=LightYellow
 2:0-0 fg=LightYellow
 2:7-11 fg=DarkGray BOLD
-2:22-27 fg=DarkGray BOLD
+2:34-39 fg=DarkGray BOLD
 2:56-60 fg=DarkGray BOLD
 2:62-65 fg=DarkGray BOLD
 2:74-81 fg=DarkGray BOLD
@@ -1109,8 +1109,8 @@ expression: "snapshot(story, full_ascii)"
 5:99-99 fg=LightYellow
 6:0-0 fg=LightYellow
 6:3-3 fg=Green
-6:7-19 fg=LightYellow BOLD
-6:22-36 fg=Yellow
+6:7-31 fg=LightYellow BOLD
+6:34-48 fg=Yellow
 6:56-57 fg=Yellow
 6:62-68 fg=DarkGray
 6:74-82 fg=DarkGray
@@ -1197,7 +1197,7 @@ expression: "snapshot(story, full_ascii)"
 1:0-99 BOLD | REVERSED
 2:0-0 BOLD | REVERSED
 2:7-11 BOLD | DIM
-2:22-27 BOLD | DIM
+2:34-39 BOLD | DIM
 2:56-60 BOLD | DIM
 2:62-65 BOLD | DIM
 2:74-81 BOLD | DIM
@@ -1224,8 +1224,8 @@ expression: "snapshot(story, full_ascii)"
 5:85-93 BOLD
 5:99-99 BOLD | REVERSED
 6:0-0 BOLD | REVERSED
-6:7-19 BOLD
-6:22-36 BOLD
+6:7-31 BOLD
+6:34-48 BOLD
 6:62-68 DIM
 6:74-82 DIM
 6:99-99 BOLD | REVERSED
@@ -1314,9 +1314,9 @@ expression: "snapshot(story, full_ascii)"
 2:0-0 fg=#ffe066 bg=#000000
 2:1-6 fg=#ffffff bg=#000000
 2:7-11 fg=#c6c6c6 bg=#000000 BOLD
-2:12-21 fg=#ffffff bg=#000000
-2:22-27 fg=#c6c6c6 bg=#000000 BOLD
-2:28-55 fg=#ffffff bg=#000000
+2:12-33 fg=#ffffff bg=#000000
+2:34-39 fg=#c6c6c6 bg=#000000 BOLD
+2:40-55 fg=#ffffff bg=#000000
 2:56-60 fg=#c6c6c6 bg=#000000 BOLD
 2:61-61 fg=#ffffff bg=#000000
 2:62-65 fg=#c6c6c6 bg=#000000 BOLD
@@ -1366,10 +1366,10 @@ expression: "snapshot(story, full_ascii)"
 6:1-2 fg=#ffffff bg=#000000
 6:3-3 fg=#7ee787 bg=#000000
 6:4-6 fg=#ffffff bg=#000000
-6:7-19 fg=#f0e442 bg=#000000 BOLD
-6:20-21 fg=#ffffff bg=#000000
-6:22-36 fg=#ffe066 bg=#000000
-6:37-55 fg=#ffffff bg=#000000
+6:7-31 fg=#f0e442 bg=#000000 BOLD
+6:32-33 fg=#ffffff bg=#000000
+6:34-48 fg=#ffe066 bg=#000000
+6:49-55 fg=#ffffff bg=#000000
 6:56-57 fg=#ffe066 bg=#000000
 6:58-61 fg=#ffffff bg=#000000
 6:62-68 fg=#c6c6c6 bg=#000000

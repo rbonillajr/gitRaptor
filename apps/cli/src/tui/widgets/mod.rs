@@ -29,7 +29,7 @@ pub mod policy_banner;
 pub mod timeline;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
