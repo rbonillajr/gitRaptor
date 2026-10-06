@@ -9,6 +9,10 @@
 # stream recreation. The budget itself gates on the reference machine (INF-GRP-002, Enmienda
 # 2026-10-05; TD-GRP-003).
 #
+# It also runs `cargo bench -p gitraptor-core --bench channel_flood`: the p95 of the channel
+# (`t_published` → client) under a slow client and 100 extra connections against the IPC budget
+# of ADR-GRP-011 (25 ms), failing when two of three attempts are over.
+#
 # Where it runs (cost; Enmienda 2026-10-05): a pull request runs Linux only, the stable and most
 # sensitive runner. macOS, scarce and noisy, runs on every push to main, nightly and on demand: a
 # macOS-only regression turns main red after the merge, and `workflow_dispatch` with `ref` and
@@ -116,6 +120,11 @@ jobs:
         env:
           ENGINE_BENCH_ROOT: ${{ runner.temp }}/engine-bench
         run: cargo bench -p gitraptor-cli --bench engine -- --gate ci --out "$ENGINE_BENCH_ROOT/engine-bench-${{ runner.os }}.json"
+      # The IPC budget of ADR-GRP-011 (25 ms p95) under a slow client and a connection flood
+      # (TS-GRP-004 SEC-08), in release: the debug test keeps only the functional side.
+      - name: Channel under flood
+        if: steps.prior.outputs.skip != 'true'
+        run: cargo bench -p gitraptor-core --bench channel_flood
       # TD-GRP-003: the NFR-04 budget gates on the reference machine. A PR that touches the
       # engine is reminded to attach the report of `--gate reference` before the merge; one that
       # touches the observer, to measure it on macOS too (FSEvents), on demand.
