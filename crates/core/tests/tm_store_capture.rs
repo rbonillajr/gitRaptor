@@ -691,3 +691,32 @@ fn a_capture_that_stopped_being_consistent_is_discarded_without_a_row() {
         b"fn api() {}\n"
     );
 }
+
+/// US-TMC-004 (D13): an observation gives way when asked, with no row, like it gives way to a
+/// guaranteed prior; a prior never gives way.
+#[test]
+fn an_observation_gives_way_when_asked_and_a_prior_never_does() {
+    use gitraptor_core::timemachine::store::ValidityGuard;
+    let env = Env::new(Fixture::with_commit(&git()));
+    write(&env.f.repo, "api.rs", b"fn api() {}\n");
+    let mut req = env.request(level_obs(), None);
+    req.give_way = Some(ValidityGuard(Arc::new(|| true)));
+    assert!(matches!(
+        env.store.capture(&env.oplog, &req),
+        Err(CaptureError::Yielded)
+    ));
+    let rows = env
+        .oplog
+        .lock()
+        .unwrap()
+        .snapshots(&SnapshotFilter::default())
+        .unwrap();
+    assert!(rows.is_empty(), "{rows:#?}");
+    let mut prior = env.request(SnapshotLevel::GuaranteedPrior, None);
+    prior.give_way = Some(ValidityGuard(Arc::new(|| true)));
+    let out = env.store.capture(&env.oplog, &prior).unwrap();
+    assert_eq!(
+        env.file(&out.snapshot_id, "api.rs").unwrap(),
+        b"fn api() {}\n"
+    );
+}
