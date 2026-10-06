@@ -260,3 +260,36 @@ fn no_color_flag_skips_the_query() {
         (Background::Dark, Source::Default)
     );
 }
+
+#[test]
+fn the_color_depth_comes_from_the_environment() {
+    let mode = |no_color, vars: &[(&str, &str)]| color_mode(no_color, env_of(vars));
+    assert_eq!(mode(false, &[("COLORTERM", "truecolor")]), ColorMode::TrueColor);
+    assert_eq!(mode(false, &[("COLORTERM", "24bit")]), ColorMode::TrueColor);
+    assert_eq!(mode(false, &[("TERM", "xterm-256color")]), ColorMode::Ansi256);
+    assert_eq!(mode(false, &[("TERM", "xterm")]), ColorMode::Ansi16);
+    assert_eq!(mode(false, &[]), ColorMode::Ansi16);
+    // No color wins over everything, and an empty value is absent.
+    assert_eq!(mode(true, &[("COLORTERM", "truecolor")]), ColorMode::NoColor);
+    assert_eq!(
+        mode(false, &[("NO_COLOR", "1"), ("COLORTERM", "truecolor")]),
+        ColorMode::NoColor
+    );
+    assert_eq!(
+        mode(false, &[("NO_COLOR", ""), ("COLORTERM", "truecolor")]),
+        ColorMode::TrueColor
+    );
+    assert_eq!(mode(false, &[("TERM", "dumb")]), ColorMode::NoColor);
+}
+
+#[test]
+fn the_symbol_set_follows_the_flag_and_the_locale() {
+    let set = |ascii, vars: &[(&str, &str)]| symbol_set(ascii, env_of(vars));
+    assert_eq!(set(false, &[("LANG", "es_ES.UTF-8")]), SymbolSet::Unicode);
+    assert_eq!(set(false, &[("LANG", "en_US.utf8")]), SymbolSet::Unicode);
+    assert_eq!(set(false, &[("LANG", "C")]), SymbolSet::Ascii);
+    assert_eq!(set(false, &[("LC_ALL", "POSIX"), ("LANG", "en_US.UTF-8")]), SymbolSet::Ascii);
+    assert_eq!(set(false, &[("LC_ALL", ""), ("LC_CTYPE", "en_US.ISO8859-1")]), SymbolSet::Ascii);
+    assert_eq!(set(false, &[]), SymbolSet::Unicode);
+    assert_eq!(set(true, &[("LANG", "en_US.UTF-8")]), SymbolSet::Ascii);
+}

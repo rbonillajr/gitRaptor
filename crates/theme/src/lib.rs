@@ -12,7 +12,8 @@ mod generated;
 
 pub use detect::{
     Background, Detection, OSC11_QUERY, ParseThemeChoiceError, QUERY_MAX_REPLY, QUERY_TIMEOUT,
-    Source, THEME_ENV, ThemeChoice, parse_osc11_reply, reply_complete, resolve,
+    Source, THEME_ENV, ThemeChoice, color_mode, parse_osc11_reply, reply_complete, resolve,
+    symbol_set,
 };
 pub use generated::{ColorToken, SymbolToken};
 
