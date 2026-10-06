@@ -501,14 +501,17 @@ mod tests {
 
     #[test]
     fn arguments_are_the_dispatcher_constants() {
+        // Absolute on every OS (`C:\…` on Windows).
+        let abs = |p: &str| std::env::temp_dir().join(p).to_string_lossy().into_owned();
+        let (r, c, st) = (abs("r/.git"), abs("run"), abs("state"));
         let a = HookArgs::parse(&argv(&[
             "1",
             "pre-push",
             "abc",
-            "/r/.git",
-            "/run",
+            &r,
+            &c,
             "inst",
-            "/state",
+            &st,
             "",
             "--",
             "origin",
@@ -518,10 +521,10 @@ mod tests {
         assert_eq!(a.hook, Hook::PrePush);
         assert_eq!(a.git_args, argv(&["origin", "/remote.git"]));
         for bad in [
-            &["9", "pre-push", "a", "/r", "/c", "i", "/s", "", "--"][..],
-            &["1", "pre-commit", "a", "/r", "/c", "i", "/s", "", "--"],
-            &["1", "pre-push", "a", "rel", "/c", "i", "/s", "", "--"],
-            &["1", "pre-push", "a", "/r", "/c", "i", "/s", ""],
+            &["9", "pre-push", "a", &r, &c, "i", &st, "", "--"][..],
+            &["1", "pre-commit", "a", &r, &c, "i", &st, "", "--"],
+            &["1", "pre-push", "a", "rel", &c, "i", &st, "", "--"],
+            &["1", "pre-push", "a", &r, &c, "i", &st, ""],
         ] {
             assert!(HookArgs::parse(&argv(bad)).is_none(), "{bad:?}");
         }
