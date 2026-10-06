@@ -544,7 +544,10 @@ fn reserved_commands_from_an_agent_descendant_are_refused_and_audited() {
         (methods::REPO_ADD, json!({"path": "/tmp/some/repo"})),
         (methods::REPO_RETIRE, json!({"repo_id": "abc-123"})),
         (methods::ATTRIBUTION_CORRECT, json!({})),
-        (methods::REGISTRATION_WITHDRAW, json!({})),
+        (
+            methods::REGISTRATION_WITHDRAW,
+            json!({"worktree": "/tmp/some/repo", "agent": {"kind": "other", "name": "Codex"}}),
+        ),
     ];
     for (method, params) in &attempts {
         let err = client
