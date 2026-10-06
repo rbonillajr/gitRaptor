@@ -408,13 +408,14 @@ fn an_unpublished_field_is_not_computed_by_the_tui() {
         std::fs::read_to_string(&fired)
     );
     // Every row shows the last activity as the engine published it (`scope.activity`): its
-    // age, or "not available" while the engine has not seen the worktree change.
+    // age (seeded from the store after a restart), or the unknown glyph (`–`, ASCII `-`) while
+    // the worktree has no activity at all.
     let rows = rows(&screen);
     assert_eq!(rows.len(), 3, "{screen:#?}");
     for r in rows {
         let end = r.trim_end_matches(['┃', '│']).trim_end();
         assert!(
-            ["not available", "just now", " ago"]
+            ["–", "-", "just now", " ago"]
                 .iter()
                 .any(|t| end.ends_with(t)),
             "{r}"

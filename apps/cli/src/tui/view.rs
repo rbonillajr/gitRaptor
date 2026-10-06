@@ -212,14 +212,13 @@ fn rows(repo: &RepoView, model: &Model, styles: &Styles) -> Vec<AgentRowModel> {
     ordered
         .map(|w| {
             let mut row = row(repo, w, agents, lang, styles);
+            // With `scope.activity` the engine seeds what the store knows (ADR-GRP-013 § 6), so
+            // an absent value is "nothing yet", painted as the set's unknown glyph.
             if model.engine.activity {
-                row.activity = catalog(
-                    match w.last_activity_ms {
-                        Some(at) => Text::Ago(model.now_ms.saturating_sub(at)),
-                        None => Text::NotAvailable,
-                    },
-                    lang,
-                );
+                row.activity = match w.last_activity_ms {
+                    Some(at) => catalog(Text::Ago(model.now_ms.saturating_sub(at)), lang),
+                    None => SafeText::text(styles.glyphs.unknown),
+                };
             }
             if matches!(row.state, AgentState::Active | AgentState::Idle) {
                 agents += 1;
@@ -453,6 +452,7 @@ mod tests {
     fn worktree(path: &str, main: bool, status: WorktreeStatus) -> WorktreeView {
         WorktreeView {
             last_activity_utc_ms: None,
+            last_activity_in_gap: false,
             detached_at: None,
             path: Untrusted::new(path),
             main,
@@ -890,23 +890,14 @@ mod tests {
     }
 
     /// Dogfooding 2026-10-06: with `scope.activity` the column shows the age of the last
-    /// activity and the title the age of the last fetch; what the engine has not seen yet is
-    /// still "not available".
+    /// activity (also when seeded from the store after a restart) and the title the age of the
+    /// last fetch; a worktree without any activity yet shows the unknown glyph, in both
+    /// languages, never "not available".
     #[test]
     fn published_activity_and_fetch_show_their_age() {
         for (lang, ago, unseen, fetched) in [
-            (
-                Lang::En,
-                "2 min ago",
-                "not available",
-                "(local copy, fetched 3 h ago)",
-            ),
-            (
-                Lang::Es,
-                "hace 2 min",
-                "no disponible",
-                "(copia local, fetch hace 3 h)",
-            ),
+            (Lang::En, "2 min ago", "–", "(local copy, fetched 3 h ago)"),
+            (Lang::Es, "hace 2 min", "–", "(copia local, fetch hace 3 h)"),
         ] {
             let screen = lines(&render(&published(shop_model(lang)), 100, 30));
             let end = |name: &str| {
