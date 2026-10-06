@@ -184,7 +184,7 @@ La TUI y la CLI usan la biblioteca cliente de `crates/api` (TS-GRP-004). Encima 
 - `raptor status` y `raptor conflicts` reutilizan `client` (una instantánea, sin suscripción) y `present::ingest`. Ven por tanto el mismo estado que la TUI. Arrancan el daemon igual que ella (§ 5).
 - Salida humana con el renderer de texto, color solo en TTY (DSYS-GRP-001 § 4). `--json` usa un **esquema propio de `apps/cli`, versionado**, mapeado desde el modelo de vista, y no reenvía el contrato de `crates/api`. Así la allowlist (sin mensajes de commit ni contenido de diff) se impone en un solo mapeo, y el contrato interno puede evolucionar sin romper scripts.
 - ⚠️ **ASSUMPTION**: los códigos de salida siguen DSYS-GRP-001 § 4. `raptor conflicts` devuelve `4` si hay al menos un ⚡ vigente, para scripts; se confirma en la Dev Spec.
-- `raptor` sin subcomando abre la TUI si la entrada y la salida estándar son TTY. Si no, termina con código `2` y sugiere `raptor status`.
+- `raptor` sin subcomando abre la TUI si la entrada y la salida estándar son TTY. Si no, termina con código `2` y sugiere `raptor status`. **Enmienda (2026-10-05, INF-CKP-001)**: `raptor tui` es un alias explícito con el mismo comportamiento (decisión del orquestador, validada por Arquitecto).
 
 ### 12. Ubicación en el monorepo
 

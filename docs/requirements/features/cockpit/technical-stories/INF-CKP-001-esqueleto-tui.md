@@ -2,17 +2,17 @@
 id: INF-CKP-001
 title: "Esqueleto de la TUI: cliente del canal, bucle TEA, saneado único y gate de 100 ms"
 type: inf
-status: draft
+status: in-progress
 feature: cockpit
 domain: GRP
 priority: critical
 complexity: medium
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-05
 related:
   adrs: [ADR-CKP-003, ADR-GRP-004, ADR-GRP-005, ADR-GRP-011, ADR-GRP-013]
   stories: [US-CKP-001, US-CKP-002, US-CKP-003, US-CKP-004, TS-GRP-004, INF-GRP-001, INF-GRP-002, TS-CKP-004]
-  specs: []
+  specs: [DS-INF-CKP-001]
 ado:
   id: null
   url: null
@@ -29,7 +29,7 @@ tags: [cockpit, tui, ratatui, tea, canal, saneado, sec-12, latencia, nfr-04, i18
 **Quiero** el esqueleto de la TUI de `apps/cli` con su cliente del canal, su modelo TEA, el punto único de saneado y la conducción sin pantalla desde el banco
 **Para** que cada historia de BR-04 a BR-07 añada solo su vista y su lógica, con la fuente única, SEC-12 y los 100 ms p95 del Cockpit (ADR-GRP-011) impuestos por construcción (ADR-CKP-003)
 
-> Dev Spec: `dev-specs/INF-CKP-001-esqueleto-tui.md` | Pendiente
+> Dev Spec: [`dev-specs/INF-CKP-001-esqueleto-tui.md`](../dev-specs/INF-CKP-001-esqueleto-tui.md) | Entrega 1 implementada (bucle, cliente, saneado, microbanco y fronteras); Entrega 2 pendiente (§ 9 de la Dev Spec)
 >
 > **Depende de**: TS-GRP-004 (biblioteca cliente y contrato; el esqueleto necesita N1 a N7 de ADR-CKP-003 § 4, **pendiente, dueño: worker del canal (TS-GRP-004)**), TS-CKP-004 (tema: ningún widget usa literales) e INF-GRP-002 (banco y suscriptor sin pantalla). El gate de 100 ms es el de la enmienda E2 de ADR-GRP-011, aplicada el 2026-10-04. **ADRs**: ADR-CKP-003 § 1 a § 8, § 10 y § 12, que la Dev Spec sigue punto por punto; ADR-GRP-011 § 3 (reloj monótono). **Seguridad**: SEC-01 y L-06 (par del canal), SEC-08 (resync), SEC-12. **Habilita**: todas las historias de BR-04 a BR-07 y la CLI de solo lectura (Q-CKP-20).
 
