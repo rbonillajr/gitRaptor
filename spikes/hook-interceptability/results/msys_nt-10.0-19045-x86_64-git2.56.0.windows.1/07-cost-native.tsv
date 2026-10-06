@@ -1,0 +1,34 @@
+scenario	variant	hook_spawns	n	p50_ms	p95_ms	max_ms	failures
+spawn-floor	$SANDBOX/raptor-stub.exe	-	100	4.11	4.51	4.70	0
+spawn-floor	sh -c :	-	100	31.29	45.44	60.53	0
+spawn-floor	sh -c exec\ '$SANDBOX/raptor-stub.exe'	-	100	46.76	63.08	92.58	0
+native-hook	reference-transaction	-	ran-and-denied	-	-	-	-
+native-hook	reference-transaction.exe	-	ran-and-denied	-	-	-	-
+update-ref-1-tx	V0	3	100	37.72	65.66	75.44	0
+update-ref-1-tx	V1	3	100	174.30	206.28	235.99	0
+update-ref-1-tx	V2	3	100	175.07	236.55	266.85	0
+update-ref-1-tx	VN	3	100	57.53	86.87	95.99	0
+commit-min-set	V0	7	100	65.89	69.24	117.12	0
+commit-min-set	V1	7	100	368.61	423.75	458.60	0
+commit-min-set	V2	7	100	411.01	492.08	533.70	0
+commit-min-set	VN	7	100	106.24	110.92	158.44	0
+commit-full-set	V0	11	100	66.23	69.79	156.52	0
+commit-full-set	V1	11	100	563.73	649.48	718.63	0
+commit-full-set	V2	11	100	624.81	703.77	773.14	0
+commit-full-set	VN	11	100	132.69	137.94	299.47	0
+switch-c-min-set	V0	14	100	44.45	70.58	73.39	0
+switch-c-min-set	V1	14	100	644.01	713.34	755.00	0
+switch-c-min-set	V2	14	100	722.74	799.77	862.44	0
+switch-c-min-set	VN	14	100	118.67	150.09	157.74	0
+push-ff-min-set	V0	4	50	207.34	245.41	246.26	0
+push-ff-min-set	V1	4	50	410.09	469.31	519.26	0
+push-ff-min-set	V2	4	50	425.19	493.92	511.87	0
+push-ff-min-set	VN	4	50	242.42	289.26	318.70	0
+fetch-1000-refs	V0	3018	3	2556.55	2560.01	2560.01	0
+fetch-1000-refs	V1	3018	3	132303.89	132335.24	132335.24	0
+fetch-1000-refs	V2	3018	3	142085.08	142772.03	142772.03	0
+fetch-1000-refs	VN	3018	3	15713.70	15786.82	15786.82	0
+pack-refs-1000-loose	V0	9021	3	1046.04	1050.26	1050.26	0
+pack-refs-1000-loose	V1	9021	3	126972.08	129409.27	129409.27	0
+pack-refs-1000-loose	V2	9021	3	160801.52	242409.53	242409.53	0
+pack-refs-1000-loose	VN	9021	3	15749.65	16039.62	16039.62	0
