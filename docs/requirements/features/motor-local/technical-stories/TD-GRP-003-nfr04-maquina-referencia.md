@@ -31,6 +31,8 @@ tags: [motor-local, deuda-tecnica, rendimiento, nfr-04, ci, banco, runner, gate,
 
 > Dev Spec: N/A (el gate ya existe: `--gate reference` del banco de INF-GRP-002)
 
+> **Decisión del orquestador (2026-10-05), validada por el Arquitecto y el PO** (con sus ajustes: TD nueva y no ampliación de TD-GRP-002; caducidad atada a un hito; recordatorio automático en los PR del motor; condiciones de medición en el informe).
+
 **Origen (INF-GRP-002, Enmienda 2026-10-05: calibración del gate).** Los runners compartidos de GitHub no pueden medir un presupuesto absoluto de 300 ms sin falsos positivos. Lo muestran 20 corridas del banco:
 
 - **macOS**: el p95 de las ráfagas va de 299 a 1.831 ms en el mismo código. El temporizador se despierta de 64 a 139 ms tarde, con dos modas.
@@ -43,7 +45,10 @@ Desde la enmienda, en CI (`--gate ci`) el presupuesto **solo se reporta**. Lo qu
 
 ### Alcance Técnico
 
-1. **Disparador manual mientras tanto**: correr `cargo bench -p gitraptor-cli --bench engine -- --gate reference` en el Mac de referencia **antes de cada release** (paso del checklist de INF-GRP-003) y en los PR que toquen el motor (`crates/core/src/{watch,daemon,channel}`), y adjuntar el informe al PR o a la release.
+1. **Disparadores mientras tanto** (ajustes del PO, 2026-10-05):
+   - **Antes de cada release**: correr `cargo bench -p gitraptor-cli --bench engine -- --gate reference` en el Mac de referencia sobre el commit del tag y adjuntar el informe. Es un paso de la verificación de [INF-GRP-003](./INF-GRP-003-pipeline-release.md). Sin informe en verde, la release no se publica. Si la máquina de referencia no está disponible, la release espera.
+   - **En los PR que tocan el motor** (`crates/core/src/{watch,daemon,channel}`): el job `engine bench` lo recuerda con un aviso y una línea en el job summary, y pide el informe de `--gate reference` adjunto al PR antes del merge.
+   - **El informe registra las condiciones** (commit, máquina, SO, núcleos, carga y alimentación), para que las mediciones de distintas releases se puedan comparar.
 2. **Salida (plan B de ADR-GRP-011 § 4)**: un runner dedicado o autoalojado con la máquina de referencia, donde el job corra con `--gate reference` y bloquee. Sus techos de regresión no hacen falta: el presupuesto es el gate.
 3. Cuando exista el runner dedicado, el gate de regresión de los runners compartidos se mantiene como señal temprana, y esta TD se cierra.
 
@@ -59,4 +64,4 @@ Desde la enmienda, en CI (`--gate ci`) el presupuesto **solo se reporta**. Lo qu
 #### Verificación Manual / Sandbox
 
 - Hasta cerrar esta TD: el informe de `--gate reference` del Mac de referencia está adjunto a cada release. Si falta, la release no se publica.
-- **Caducidad**: antes de cerrar el MVP. NFR-04 consta en `non-functional.md` como **verificado en la máquina de referencia y reportado, no bloqueante, en CI**.
+- **Caducidad**: antes de la **primera release pública (beta) del MVP** (PO, 2026-10-05). NFR-04 consta en `non-functional.md` como **verificado en la máquina de referencia y reportado, no bloqueante, en CI**.

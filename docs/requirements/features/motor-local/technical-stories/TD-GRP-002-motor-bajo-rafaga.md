@@ -11,7 +11,7 @@ created: 2026-10-05
 updated: 2026-10-05
 related:
   adrs: [ADR-GRP-010, ADR-GRP-011, ADR-GRP-015]
-  stories: [INF-GRP-002, US-GRP-001, US-GRP-002]
+  stories: [INF-GRP-002, US-GRP-001, US-GRP-002, TD-GRP-003]
   specs: [DS-INF-GRP-002]
 ado:
   id: null
@@ -48,7 +48,7 @@ Esto refuta la invariante de ADR-GRP-010 § 3 ("la ráfaga de un worktree no ret
 2. **Aislar** el trabajo por worktree para que el recomputo de uno no espere al de otro.
 3. Si no basta, **añadir** la caché de stat y la publicación en dos fases de ADR-GRP-010 § 4. Después, si hace falta, **acotar** el coste del recomputo del worktree en ráfaga.
 4. **Acotar** el pico de memoria y **devolverla** tras la ráfaga.
-5. **Retirar** los techos provisionales del banco (`Platform::burst_ceiling_ms` en `crates/testkit/src/freshness.rs`) y pasar los dos escenarios de ráfaga al gate de 300 ms.
+5. **Retirar** los techos provisionales del Mac de referencia (`Platform::burst_ceiling_ms` en `crates/testkit/src/freshness.rs`) y pasar los dos escenarios de ráfaga al gate de 300 ms de `--gate reference`. **Recalibrar** a la baja los techos de regresión de ráfaga de los runners (`REGRESSION_CEILINGS`), para que el CI proteja la mejora (INF-GRP-002, Enmienda 2026-10-05).
 
 - **Fuera de alcance**: la medición del Cockpit (`t_render`), el modo degradado y la reconciliación, que no cuentan para NFR-04.
 
@@ -58,8 +58,8 @@ Esto refuta la invariante de ADR-GRP-010 § 3 ("la ráfaga de un worktree no ret
 
 Criterios de cierre, medidos con el banco de INF-GRP-002 (`cargo bench -p gitraptor-cli --bench engine`):
 
-- `burst-1k` y `burst-10k`: p95 del motor ≤ 300 ms en el Mac de referencia y en Linux (gate bloqueante, sin techo provisional).
-- El pico de RSS tiene un techo acordado con el Arquitecto, que hoy no existe porque su variación no está explicada.
+- `burst-1k` y `burst-10k`: p95 del motor ≤ 300 ms en el Mac de referencia (`--gate reference`, bloqueante, sin techo provisional) y en Linux. En los runners compartidos el presupuesto solo se reporta (TD-GRP-003).
+- El pico de RSS tiene un techo acordado con el Arquitecto. Desde la Enmienda 2026-10-05 de INF-GRP-002 existe un **techo de crecimiento de 1.250 MiB** (bloqueante, detector de fugas, no presupuesto). Esta TD lo baja hasta el objetivo de producto cuando explique la variación.
 - Verificado en dogfooding el coalescing de timers con el daemon arrancado por launchd.
 - ⚠️ **ASSUMPTION** (objetivo de producto del PO; pendiente de que lo valide Rene): pico de RSS en ráfaga < 250 MiB.
 - ⚠️ **ASSUMPTION** (PO): tras la ráfaga, RSS < 150 MiB en ≤ 60 s y CPU de vuelta al reposo (< 1 %).

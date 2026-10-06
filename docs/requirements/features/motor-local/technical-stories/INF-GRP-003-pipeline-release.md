@@ -11,7 +11,7 @@ created: 2026-10-05
 updated: 2026-10-05
 related:
   adrs: [ADR-GRP-014, ADR-GRP-001, ADR-GRP-005]
-  stories: [INF-GRP-004, INF-GRP-002, TS-GRP-001, TS-GRP-002]
+  stories: [INF-GRP-004, INF-GRP-002, TS-GRP-001, TS-GRP-002, TD-GRP-003]
   specs: []
 ado:
   id: null
@@ -67,6 +67,7 @@ tags: [motor-local, ci, release, firma, notarizacion, checksums, sbom, attestati
 #### Verificación Manual / Sandbox
 
 - Un tag de prueba sobre la rama, que se borra después junto con el borrador. La evidencia está en "Evidencia".
+- **Presupuesto NFR-04 antes de publicar** (INF-GRP-002, Enmienda 2026-10-05; [TD-GRP-003](./TD-GRP-003-nfr04-maquina-referencia.md)): antes de pasar el borrador a release, se corre `cargo bench -p gitraptor-cli --bench engine -- --gate reference` en la máquina de referencia sobre el commit del tag, y el informe JSON (con commit, máquina y condiciones) se adjunta a la release. Sin un informe en verde, la release no se publica. Si la máquina de referencia no está disponible, la release espera. Este paso existe hasta que haya un runner dedicado.
 
 ### Evidencia
 

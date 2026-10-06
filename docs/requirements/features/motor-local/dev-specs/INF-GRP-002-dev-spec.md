@@ -8,10 +8,10 @@ domain: GRP
 created: 2026-10-05
 updated: 2026-10-05
 related:
-  stories: [INF-GRP-002, TD-GRP-002, US-GRP-002, US-GRP-007, SPIKE-GRP-002, SPIKE-CKP-001]
+  stories: [INF-GRP-002, TD-GRP-002, TD-GRP-003, US-GRP-002, US-GRP-007, SPIKE-GRP-002, SPIKE-CKP-001]
   adrs: [ADR-GRP-011, ADR-GRP-010, ADR-GRP-015, ADR-GRP-005, ADR-GRP-006, ADR-GRP-013]
   nfrs: [NFR-04, NFR-05, HUELLA, RES-01, RES-02, RES-04, SEC-06]
-tags: [motor-local, banco, ci, rendimiento, latencia, p95, escala, huella, rss, cpu, gate]
+tags: [motor-local, banco, ci, rendimiento, latencia, p95, p50, escala, huella, rss, cpu, gate, calibracion, regresion]
 ---
 
 # Dev Spec — INF-GRP-002: banco de frescura, escala y huella
@@ -122,3 +122,88 @@ Un job por SO, `engine bench (<so>)`, de unos 15 a 30 minutos. La protección de
 ## 9. Verificación realizada
 
 Ver la tabla de cifras en el PR. Comandos: `cargo test -p gitraptor-testkit --lib freshness`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, el banco completo dos veces en el Mac de Rene (reproducibilidad) y el CI del PR en macOS y Linux.
+
+## Enmienda (2026-10-05): calibración del gate
+
+**Problema.** El job `engine bench (macos-latest)` daba falsos positivos en PR que no tocan el motor:
+- En el run 37395980639 (#89), `burst-1k` dio 1.282 ms y `burst-10k` 1.830 ms, frente a techos de 615 y 585 ms. Al relanzarlo, pasó.
+- En el run 37402220407 (#91), `burst-10k` dio 608,7 ms frente a 585 ms.
+
+Linux también falló una vez sin motivo (run 37392881094): `worktree-create` dio 366,5 ms frente a 300 ms. Así el gate bloqueaba merges correctos y enseñaba a relanzar sin mirar.
+
+**Decisión del orquestador (2026-10-05), validada por el Arquitecto y el PO** con sus ajustes, que se recogen abajo. Enmienda D5, D6 y D7 y añade D13 y D14. Se aplica también como enmienda de [ADR-GRP-011](../../../../architecture/decisions/ADR-GRP-011-presupuesto-frescura.md) § 4 y deja la deuda [TD-GRP-003](../technical-stories/TD-GRP-003-nfr04-maquina-referencia.md).
+
+### Distribución medida
+
+Se usaron 20 corridas del banco por SO en los runners hospedados, con el mismo motor:
+- 12 de PR y de `main` (runs 37359042618 a 37401807069).
+- 8 con `workflow_dispatch` sobre esta rama sin cambios en el motor (runs 37404943810 a 37404963167).
+- Los 3 intentos fallidos que el relanzamiento sobrescribió, sacados de sus logs.
+
+La tabla da el total `t0` → `t_client_recv` en ms, como rango entre corridas.
+
+| Escenario | macOS p50 | macOS p95 | Linux p50 | Linux p95 |
+|---|---|---|---|---|
+| modify | 160–224 | 242–294 | 91–105 | 92–106 |
+| git-add | 156–213 | 239–277 | 90–105 | 91–105 |
+| commit | 118–175 | 207–243 | 87–101 | 89–104 |
+| checkout | 141–189 | 222–255 | 86–99 | 87–99 |
+| worktree-create | 142–220 | 290–372 | 117–185 | 157–**367** |
+| worktree-delete | 129–193 | 217–246 | 79–82 | 80–**147** |
+| burst-1k | 223–459 | 327–**1.670** | 141–220 | 193–268 |
+| burst-10k | 199–446 | 299–**1.831** | 151–240 | 192–**338** |
+
+Hallazgos:
+
+1. **En los escenarios sin ráfaga, el p50 y el p95 son estables** en los dos runners. La excepción es la cola de crear y borrar un worktree en Linux, con una corrida de cada 20 muy por encima.
+2. **El p95 de las ráfagas en macOS es ruido del runner**: varía ×6 con el mismo código. El p50 varía ×2.
+3. **El exceso de holgura del temporizador en macOS es bimodal**: unos 64 ms o unos 137 ms, según la VM. Con la regla de D5 ("no apta" por encima de 100 ms), **el gate de macOS solo estuvo activo en 1 de cada 3 corridas**, y fue justo en esas donde dio los falsos positivos.
+4. **Huella**: la CPU en reposo fue de 0,0 a 0,4 % (límite 1 %), el RSS en reposo de 25 a 38 MiB (límite 150) y los descriptores, 30 y 39 (límite 256). Hay margen de sobra y es estable. El pico de RSS en ráfaga fue de 422 a 718 MiB.
+
+### Decisiones
+
+| # | Decisión | Validada por |
+|---|---|---|
+| D5 (enmendada) | La regla "máquina no apta" (más de 100 ms de exceso de holgura) aplica **solo al gate del presupuesto** en `--gate reference` | Arquitecto |
+| D6 (enmendada) | El **presupuesto NFR-04** (p95 ≤ 300 ms + exceso de holgura, con los techos de ráfaga del Mac de referencia de 420 y 620 ms) **bloquea en la máquina de referencia** (`--gate reference`, por defecto fuera de CI). En los **runners compartidos** (`--gate ci`, por defecto con `GITHUB_ACTIONS`, y explícito en el workflow) **se mide y se reporta** como aviso y en el job summary, sin bloquear. Desaparecen los techos de ráfaga del runner de macOS (615 y 585 ms). El modo se elige de forma explícita, no solo por la variable de entorno (ajuste del Arquitecto) | Arquitecto y PO |
+| D7 (enmendada) | La huella en reposo sigue bloqueante en todas partes: es el presupuesto real y tiene margen. Al **pico de RSS en ráfaga** se le añade un **techo de crecimiento de 1.250 MiB** (máximo medido: 830 MiB en el Mac de referencia × 1,5) que **falla sin confirmación**. Es un detector de fugas, no un presupuesto. Cuenta solo la primera ráfaga de cada tamaño, porque un reintento hereda el RSS retenido. Se mantiene el aviso de 250 MiB (TD-GRP-002) | Arquitecto (techo bloqueante), PO |
+| D13 | **Gate de regresión en los runners compartidos**, bloqueante. Hay un techo calibrado por runner y escenario sobre la **mediana (p50)** del total, y sobre el **p95** donde el runner lo sostiene: todos los escenarios en Linux y los escenarios sin ráfaga en macOS. En las ráfagas de macOS el p95 solo se reporta. Cada techo es `max(máximo × factor, máximo + 30 ms)`, con factor ×1,25 para el p50 de los escenarios sin ráfaga y ×1,5 para el p50 de las ráfagas y para todos los p95. El margen mínimo de 30 ms evita que los p50 tan estrechos de Linux dejen solo unos milisegundos (ajuste del Arquitecto). Un escenario sin techo calibrado **falla**: no puede pasar en silencio. Si el exceso de holgura del runner supera el de calibración más 50 ms (macOS 190 ms, Linux 50 ms), el runner está **fuera de calibración** y el gate de regresión pasa a aviso con su motivo. La holgura se mide sin daemon, así que eso no oculta regresiones del motor | Arquitecto |
+| D14 | **Confirmación, 2 de 3**. Si un escenario supera un techo de regresión, el banco **vuelve a medir el paso entero**, con calentamiento y todas sus muestras, en el mismo daemon. Los pasos son el ciclo de modify, add y commit; el checkout; crear y borrar un worktree; y cada ráfaga. Antes de repetir una ráfaga espera 10 s. **Falla si dos de tres intentos superan el techo** (equivale a la mediana de tres). Un intento que superó el techo sin confirmarse queda como **aviso**. Cada intento figura en el informe (`regression`) y en el job summary, con el número de confirmaciones. Si la confirmación salta en más de 1 de cada 5 corridas, hay que recalibrar (Arquitecto). Se descartó comparar contra una línea base de `main` en el mismo runner: dobla los 15 a 30 minutos del job y el ruido es temporal, no de máquina | Arquitecto |
+| D15 | **Recordatorio y trazabilidad del presupuesto** (ajustes del PO). En un PR que toca el motor (`crates/core/src/{watch,daemon,channel}/`, `observe.rs`), el job avisa y pide adjuntar el informe de `--gate reference`. El informe registra las condiciones (`conditions`: commit, si había cambios sin commitear, SO, modelo, núcleos, carga, alimentación y si es CI). Antes de cada release se corre `--gate reference` en la máquina de referencia, como paso de [INF-GRP-003](../technical-stories/INF-GRP-003-pipeline-release.md) → TD-GRP-003 | PO |
+
+### Techos de regresión (`REGRESSION_CEILINGS`, `crates/testkit/src/freshness.rs`)
+
+Máximo medido → techo, en ms. Se recalibran cuando el motor mejore a propósito (por ejemplo, al cerrar TD-GRP-002) o cuando cambie la imagen del runner.
+
+| Escenario | macOS p50 | macOS p95 | Linux p50 | Linux p95 |
+|---|---|---|---|---|
+| modify | 224,3 → 280 | 293,7 → 441 | 105,1 → 135 | 105,6 → 158 |
+| git-add | 212,6 → 266 | 277,0 → 416 | 104,5 → 135 | 105,2 → 158 |
+| commit | 174,6 → 218 | 242,8 → 364 | 100,8 → 131 | 103,7 → 156 |
+| checkout | 188,9 → 236 | 254,6 → 382 | 98,6 → 129 | 99,1 → 149 |
+| worktree-create | 219,7 → 275 | 371,5 → 557 | 185,4 → 232 | 366,5 → 550 |
+| worktree-delete | 192,7 → 241 | 246,1 → 369 | 81,5 → 112 | 147,1 → 221 |
+| burst-1k | 458,7 → 688 | solo se reporta | 220,0 → 330 | 268,4 → 403 |
+| burst-10k | 445,8 → 669 | solo se reporta | 239,8 → 360 | 337,6 → 506 |
+
+En Linux, los techos de p95 de los escenarios sin ráfaga siguen por debajo de 300 ms, así que ahí el gate es más estricto que NFR-04. Las excepciones son crear un worktree y las ráfagas.
+
+**Regresión mínima detectable** (techo de p50 menos el p50 típico, la mitad del rango):
+- **Linux**: unos 30 a 40 ms en los escenarios estables, unos 80 ms en crear un worktree y unos 150 ms en las ráfagas.
+- **macOS**: unos 70 a 90 ms en los escenarios estables y unos 350 ms en las ráfagas.
+
+Por eso, una regresión de ráfaga en macOS de menos de unos 350 ms solo la ve el gate de la máquina de referencia (TD-GRP-003) o, si no es exclusiva de macOS, el runner de Linux.
+
+### Sensibilidad demostrada
+
+PENDIENTE_SONDAS
+
+### Pruebas
+
+`freshness::tests`: `every_scenario_is_calibrated_on_both_runners`, `a_scenario_without_a_ceiling_fails`, `a_ceiling_keeps_a_minimum_margin`, `the_regression_gate_sees_a_shift_and_a_tail`, `only_the_mac_runner_leaves_the_burst_p95_ungated`, `the_linux_steady_ceilings_are_within_the_budget`, `confirmation_is_two_of_three`, `the_mode_picks_the_platform`, `the_burst_peak_fails_over_its_growth_ceiling`. En local, `--quick --gate ci` con el techo de `modify` y de `checkout` bajado a 31 ms: el banco repitió los dos pasos, confirmó 2 de 2 y falló nombrándolos.
+
+### Estabilidad demostrada
+
+PENDIENTE_ESTABILIDAD
+
+Linux y Windows: el runner de Linux se calibró en CI. **Windows no se mide** (el cliente del canal es solo Unix). **Pendiente: etapa de validación multiplataforma**.

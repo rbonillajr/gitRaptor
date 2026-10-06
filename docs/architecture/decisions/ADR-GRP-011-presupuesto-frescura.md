@@ -10,7 +10,7 @@ updated: 2026-10-05
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
-related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-006, ADR-GRP-009, ADR-GRP-010, ADR-GRP-013, ADR-CKP-001, ADR-CKP-003, SPIKE-CKP-001, INF-GRP-002, SPIKE-GRP-002, TS-GRP-004, CTX-GRP-001, US-GRP-002]
+related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-006, ADR-GRP-009, ADR-GRP-010, ADR-GRP-013, ADR-CKP-001, ADR-CKP-003, SPIKE-CKP-001, INF-GRP-002, SPIKE-GRP-002, TS-GRP-004, CTX-GRP-001, US-GRP-002, TD-GRP-003]
 tags: [rendimiento, latencia, presupuesto, p95, nfr-04, timestamps, instrumentacion, ci, dogfooding, cockpit]
 ---
 
@@ -193,5 +193,19 @@ Aplicada desde la [Dev Spec de INF-GRP-002](../../requirements/features/motor-lo
 | **Pérdida silenciosa y marca de hueco**: las verifican los tests de `crates/core/tests/watch.rs`, no el banco, porque el daemon de release no permite acortar la reconciliación periódica (US-GRP-013). El banco mantiene el gate de corrección de la recreación del stream | § 4 | Dev Spec, D8 |
 | **Reproducibilidad**: \|Δp95 total\| ≤ max(25 ms, 20 %) entre dos corridas en la misma máquina, verificada a mano | § 4 | Dev Spec, D9 |
 | **Interpretación p95 confirmada en Linux (CI)**: sin ráfaga, el p95 del motor está entre 80 y 157 ms. Verificación real en la etapa multiplataforma. **Windows no se mide**: el cliente del canal es solo Unix | § 1, Validación | Dev Spec, § 9 |
+
+Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
+
+## Enmienda (2026-10-05, calibración del gate de INF-GRP-002)
+
+Aplicada desde la [Dev Spec de INF-GRP-002](../../requirements/features/motor-local/dev-specs/INF-GRP-002-dev-spec.md), sección "Enmienda (2026-10-05): calibración del gate". **Decisión del orquestador (2026-10-05), validada por el Arquitecto y el PO.** El gate de 300 ms del § 4 daba falsos positivos en los runners compartidos y bloqueaba merges correctos. Se activa el **supuesto del § 4** ("si el ruido de los runners compartidos hace inestable el gate, se mueve a un runner dedicado o se pasa a gate sobre la mediana con el p95 como aviso"). Las cifras del reparto (§ 2) no cambian, y el `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| **Dos gates separados**. El **presupuesto** (p95 del motor ≤ 300 ms, con los techos de ráfaga del Mac de referencia) bloquea en la **máquina de referencia** (`--gate reference`). En los **runners compartidos** (`--gate ci`) se mide y se reporta, sin bloquear | § 4, Gates | Dev Spec, D13 |
+| **Gate de regresión en los runners compartidos**. Hay techos calibrados por runner y escenario sobre la **mediana (p50)** del total. También sobre el **p95** donde el runner lo sostiene: todos los escenarios en Linux y los escenarios sin ráfaga en macOS. En las ráfagas de macOS el p95 solo se reporta. Cada techo es max(máximo medido × factor, máximo + 30 ms). Un escenario sin techo calibrado falla | § 4, Gates | Dev Spec, D13 y D14 |
+| **Confirmación, 2 de 3**. Si un escenario supera su techo, se vuelve a medir el paso entero, con calentamiento y muestras. Falla si lo superan dos de tres intentos. Si el runner sale de calibración (exceso de holgura mayor que el de calibración más 50 ms), el gate de regresión pasa a aviso | § 4, Gates | Dev Spec, D14 |
+| **La regla "no apta" (más de 100 ms de exceso de holgura)** queda solo para el gate del presupuesto en `--gate reference` | § 4 | Dev Spec, D5 (enmendada) |
+| **Deuda deliberada**: en CI no bloquea una regresión que respete los techos de regresión pero rompa los 300 ms. Hasta tener un runner dedicado, el banco corre con `--gate reference` en el Mac de referencia antes de cada release → [TD-GRP-003](../../requirements/features/motor-local/technical-stories/TD-GRP-003-nfr04-maquina-referencia.md) | § 4, Máquinas de referencia | TD-GRP-003 |
 
 Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
