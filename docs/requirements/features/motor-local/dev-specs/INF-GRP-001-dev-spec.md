@@ -6,7 +6,7 @@ status: approved
 feature: motor-local
 domain: GRP
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-05
 related:
   stories: [INF-GRP-001, TS-GRP-002, TS-GRP-003, TS-GRP-004, US-GRP-002, US-GRP-004, US-GRP-007, INF-GRD-001, INF-TMC-001]
   adrs: [ADR-GRP-009, ADR-GRP-002, ADR-GRP-005, ADR-GRP-006, ADR-GRD-001]
@@ -166,6 +166,20 @@ En `.github/workflows/repo-intact.yml` hay tres jobs:
 - **`deep-exec-audit-macos`**: eslogger, con `continue-on-error`.
 
 En los dos primeros, Windows va con `continue-on-error` hasta que TS-GRP-002 implemente la comprobación de ACE. Las actions se fijan por SHA y no se usa `nx affected` (D9). No se pudo ejecutar desde aquí.
+
+### Enmienda 2026-10-05: un solo build por SO y filtro por ruta
+
+> Decisión del orquestador (2026-10-04), validada por Arquitecto. Rama `ci/speedup-cache-and-paths`.
+
+`main` exige 9 checks con `strict`, entre ellos `lint and test (<so>)` y `repo-intact (<so>)` en los tres SO. Los nombres no cambian. Lo que cambia es dónde se hace el trabajo:
+- **`lint and test (<so>)` compila el workspace una sola vez.** Después corre `cargo test --workspace -- --skip repo_intact` y luego `cargo test --workspace -- repo_intact` con el trazador del SO (`GITRAPTOR_EXEC_AUDIT`: `strace` en Linux, `auto` en el resto). El paso del gate lleva `if: !cancelled()`, así que reporta su propia suite aunque fallen `fmt` o `clippy`. El resultado (`steps.suites.outcome`) se guarda en el artefacto `repo-intact-<so>`.
+- **`repo-intact (<so>)` es un gate ligero en `ubuntu-latest`.** Descarga ese artefacto y falla si el resultado no es `success`. En Windows emite un aviso, igual que antes. Así desaparecen tres compilaciones completas por PR y un job de macOS y otro de Windows.
+- **Fail-closed:** el gate falla si falta el artefacto (job cancelado o que no corrió) o si el job `changes` no terminó en `success`. Un re-run reemplaza el artefacto (`overwrite: true`).
+- **Filtro por ruta (solo en `pull_request`).** El job `changes` usa `dorny/paths-filter`. Solo se salta el trabajo con un `'false'` explícito de un filtro que terminó en `success`, y nunca en PRs de 3000 archivos o más (es el límite de la API). Cuando se salta, los dos checks reportan `success` desde un runner Linux, sin compilar. En `push` a `main` y en ejecuciones manuales siempre corre todo.
+- **Invariante que justifica el filtro frente a D9:** el resultado de los tests solo depende de las rutas del filtro (`crates/**`, `apps/**`, `Cargo.toml`, `Cargo.lock`, toolchain, configuración de rustfmt y clippy, `.cargo/**`, `.gitattributes` y el propio workflow). Un `include_str!` o una lectura nueva fuera de `crates/` o `apps/` **obliga a ampliar el filtro**.
+- **El filtro depende de `strict`.** Un PR apilado que se redirige a `main` solo se reevalúa porque `strict` obliga a actualizar la rama.
+- **Caché:** `Swatinem/rust-cache` usa una clave por job, SO, arquitectura, versión de rustc y `Cargo.lock`, y solo guarda en `main`. Los cachés de PR llevaban el repo por encima del límite de 10 GB y desalojaban los de `main`.
+- **Pendiente (otra rama):** `cargo test -- repo_intact` pasa aunque no encuentre ningún test, por ejemplo tras renombrar un módulo. Un mínimo de tests ejecutados (hoy 42) cerraría ese hueco, que ya existía.
 
 ## 10. Verificación realizada
 
