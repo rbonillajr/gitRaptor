@@ -1,0 +1,213 @@
+---
+source: apps/cli/src/tui/widgets/tests.rs
+expression: "snapshot(story, full_ascii)"
+---
+=== text (unicode) ===
+┏━ › Agents ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃     Agent          Branch                 Files Sync        Activity         ┃
+┃› ●  claude-1       rebasing onto main 0:42  c cancel                         ┃
+┃  ◐  claude-2       feat/lexer             ~3    ↑2 ↓0       2 min ago        ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+=== styles (truecolor, unicode) ===
+0:0-4 fg=#ffe066
+0:5-10 fg=#ffe066 BOLD
+0:11-79 fg=#ffe066
+1:0-0 fg=#ffe066
+1:6-10 fg=#8a8a8a BOLD
+1:21-26 fg=#8a8a8a BOLD
+1:44-48 fg=#8a8a8a BOLD
+1:50-53 fg=#8a8a8a BOLD
+1:62-69 fg=#8a8a8a BOLD
+1:79-79 fg=#ffe066
+2:0-0 fg=#ffe066
+2:1-1 fg=#ffe066 bg=#4e4e4e
+2:2-2 bg=#4e4e4e
+2:3-3 fg=#3fb950 bg=#4e4e4e
+2:4-5 bg=#4e4e4e
+2:6-13 fg=#e69f00 bg=#4e4e4e BOLD
+2:14-20 bg=#4e4e4e
+2:21-38 fg=#d29922 bg=#4e4e4e
+2:39-39 bg=#4e4e4e
+2:40-43 fg=#8a8a8a bg=#4e4e4e
+2:44-45 bg=#4e4e4e
+2:46-46 fg=#2dc2ad bg=#4e4e4e BOLD
+2:47-78 bg=#4e4e4e
+2:79-79 fg=#ffe066
+3:0-0 fg=#ffe066
+3:3-3 fg=#8a8a8a
+3:6-13 fg=#56b4e9 BOLD
+3:44-45 fg=#d29922
+3:62-70 fg=#8a8a8a
+3:79-79 fg=#ffe066
+4:0-79 fg=#ffe066
+=== styles (256, unicode) ===
+0:0-4 fg=@221
+0:5-10 fg=@221 BOLD
+0:11-79 fg=@221
+1:0-0 fg=@221
+1:6-10 fg=@245 BOLD
+1:21-26 fg=@245 BOLD
+1:44-48 fg=@245 BOLD
+1:50-53 fg=@245 BOLD
+1:62-69 fg=@245 BOLD
+1:79-79 fg=@221
+2:0-0 fg=@221
+2:1-1 fg=@221 bg=@239
+2:2-2 bg=@239
+2:3-3 fg=@35 bg=@239
+2:4-5 bg=@239
+2:6-13 fg=@178 bg=@239 BOLD
+2:14-20 bg=@239
+2:21-38 fg=@172 bg=@239
+2:39-39 bg=@239
+2:40-43 fg=@245 bg=@239
+2:44-45 bg=@239
+2:46-46 fg=@43 bg=@239 BOLD
+2:47-78 bg=@239
+2:79-79 fg=@221
+3:0-0 fg=@221
+3:3-3 fg=@245
+3:6-13 fg=@74 BOLD
+3:44-45 fg=@172
+3:62-70 fg=@245
+3:79-79 fg=@221
+4:0-79 fg=@221
+=== styles (16, unicode) ===
+0:0-4 fg=LightYellow
+0:5-10 fg=LightYellow BOLD
+0:11-79 fg=LightYellow
+1:0-0 fg=LightYellow
+1:6-10 fg=DarkGray BOLD
+1:21-26 fg=DarkGray BOLD
+1:44-48 fg=DarkGray BOLD
+1:50-53 fg=DarkGray BOLD
+1:62-69 fg=DarkGray BOLD
+1:79-79 fg=LightYellow
+2:0-0 fg=LightYellow
+2:1-1 fg=LightYellow bg=DarkGray
+2:2-2 bg=DarkGray
+2:3-3 fg=Green bg=DarkGray
+2:4-5 bg=DarkGray
+2:6-13 fg=Yellow bg=DarkGray BOLD
+2:14-20 bg=DarkGray
+2:21-38 fg=Yellow bg=DarkGray
+2:39-39 bg=DarkGray
+2:40-43 fg=DarkGray bg=DarkGray
+2:44-45 bg=DarkGray
+2:46-46 fg=Cyan bg=DarkGray BOLD
+2:47-78 bg=DarkGray
+2:79-79 fg=LightYellow
+3:0-0 fg=LightYellow
+3:3-3 fg=DarkGray
+3:6-13 fg=Cyan BOLD
+3:44-45 fg=Yellow
+3:62-70 fg=DarkGray
+3:79-79 fg=LightYellow
+4:0-79 fg=LightYellow
+=== styles (no-color, unicode) ===
+0:0-79 BOLD | REVERSED
+1:0-0 BOLD | REVERSED
+1:6-10 BOLD | DIM
+1:21-26 BOLD | DIM
+1:44-48 BOLD | DIM
+1:50-53 BOLD | DIM
+1:62-69 BOLD | DIM
+1:79-79 BOLD | REVERSED
+2:0-1 BOLD | REVERSED
+2:2-5 REVERSED
+2:6-13 BOLD | REVERSED
+2:14-20 REVERSED
+2:21-38 BOLD | REVERSED
+2:39-39 REVERSED
+2:40-43 DIM | REVERSED
+2:44-45 REVERSED
+2:46-46 BOLD | REVERSED
+2:47-78 REVERSED
+2:79-79 BOLD | REVERSED
+3:0-0 BOLD | REVERSED
+3:3-3 DIM
+3:6-13 BOLD
+3:62-70 DIM
+3:79-79 BOLD | REVERSED
+4:0-79 BOLD | REVERSED
+=== styles (high-contrast, unicode) ===
+0:0-4 fg=#ffe066 bg=#000000
+0:5-10 fg=#ffe066 bg=#000000 BOLD
+0:11-79 fg=#ffe066 bg=#000000
+1:0-0 fg=#ffe066 bg=#000000
+1:1-5 fg=#ffffff bg=#000000
+1:6-10 fg=#c6c6c6 bg=#000000 BOLD
+1:11-20 fg=#ffffff bg=#000000
+1:21-26 fg=#c6c6c6 bg=#000000 BOLD
+1:27-43 fg=#ffffff bg=#000000
+1:44-48 fg=#c6c6c6 bg=#000000 BOLD
+1:49-49 fg=#ffffff bg=#000000
+1:50-53 fg=#c6c6c6 bg=#000000 BOLD
+1:54-61 fg=#ffffff bg=#000000
+1:62-69 fg=#c6c6c6 bg=#000000 BOLD
+1:70-78 fg=#ffffff bg=#000000
+1:79-79 fg=#ffe066 bg=#000000
+2:0-0 fg=#ffe066 bg=#000000
+2:1-1 fg=#ffe066 bg=#0b3d91
+2:2-2 fg=#ffffff bg=#0b3d91
+2:3-3 fg=#7ee787 bg=#0b3d91
+2:4-5 fg=#ffffff bg=#0b3d91
+2:6-13 fg=#e69f00 bg=#0b3d91 BOLD
+2:14-20 fg=#ffffff bg=#0b3d91
+2:21-38 fg=#ffe066 bg=#0b3d91
+2:39-39 fg=#ffffff bg=#0b3d91
+2:40-43 fg=#c6c6c6 bg=#0b3d91
+2:44-45 fg=#ffffff bg=#0b3d91
+2:46-46 fg=#7ee8d8 bg=#0b3d91 BOLD
+2:47-78 fg=#ffffff bg=#0b3d91
+2:79-79 fg=#ffe066 bg=#000000
+3:0-0 fg=#ffe066 bg=#000000
+3:1-2 fg=#ffffff bg=#000000
+3:3-3 fg=#c6c6c6 bg=#000000
+3:4-5 fg=#ffffff bg=#000000
+3:6-13 fg=#56b4e9 bg=#000000 BOLD
+3:14-43 fg=#ffffff bg=#000000
+3:44-45 fg=#ffe066 bg=#000000
+3:46-61 fg=#ffffff bg=#000000
+3:62-70 fg=#c6c6c6 bg=#000000
+3:71-78 fg=#ffffff bg=#000000
+3:79-79 fg=#ffe066 bg=#000000
+4:0-79 fg=#ffe066 bg=#000000
+=== text (ascii) ===
+#= > Agents ===================================================================#
+#      Agent          Branch        Files Sync        Activity                 #
+#> *   claude-1       rebasing onto main 0:42  c cancel                        #
+#  ~   claude-2       feat/lexer    ~3    +2 -0       2 min ago                #
+#==============================================================================#
+=== styles (truecolor, ascii) ===
+0:0-4 fg=#ffe066
+0:5-10 fg=#ffe066 BOLD
+0:11-79 fg=#ffe066
+1:0-0 fg=#ffe066
+1:7-11 fg=#8a8a8a BOLD
+1:22-27 fg=#8a8a8a BOLD
+1:36-40 fg=#8a8a8a BOLD
+1:42-45 fg=#8a8a8a BOLD
+1:54-61 fg=#8a8a8a BOLD
+1:79-79 fg=#ffe066
+2:0-0 fg=#ffe066
+2:1-1 fg=#ffe066 bg=#4e4e4e
+2:2-2 bg=#4e4e4e
+2:3-3 fg=#3fb950 bg=#4e4e4e
+2:4-6 bg=#4e4e4e
+2:7-14 fg=#e69f00 bg=#4e4e4e BOLD
+2:15-21 bg=#4e4e4e
+2:22-39 fg=#d29922 bg=#4e4e4e
+2:40-40 bg=#4e4e4e
+2:41-44 fg=#8a8a8a bg=#4e4e4e
+2:45-46 bg=#4e4e4e
+2:47-47 fg=#2dc2ad bg=#4e4e4e BOLD
+2:48-78 bg=#4e4e4e
+2:79-79 fg=#ffe066
+3:0-0 fg=#ffe066
+3:3-3 fg=#8a8a8a
+3:7-14 fg=#56b4e9 BOLD
+3:36-37 fg=#d29922
+3:54-62 fg=#8a8a8a
+3:79-79 fg=#ffe066
+4:0-79 fg=#ffe066

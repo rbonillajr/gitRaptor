@@ -1,0 +1,178 @@
+---
+source: apps/cli/src/tui/widgets/tests.rs
+expression: "snapshot(story, full_ascii)"
+---
+=== text (unicode) ===
+ gitraptor · ✔ live · main protected · you                           ⚡ 2  ⛔ 1
+=== styles (truecolor, unicode) ===
+0:0-0 bg=#303030
+0:1-9 bg=#303030 BOLD
+0:10-12 fg=#8a8a8a bg=#303030
+0:13-13 fg=#3fb950 bg=#303030
+0:14-14 bg=#303030
+0:15-18 fg=#3fb950 bg=#303030
+0:19-21 fg=#8a8a8a bg=#303030
+0:22-35 bg=#303030
+0:36-38 fg=#8a8a8a bg=#303030
+0:39-68 bg=#303030
+0:69-69 fg=#d29922 bg=#303030
+0:71-71 bg=#303030
+0:72-72 fg=#d29922 bg=#303030 BOLD
+0:73-74 bg=#303030
+0:75-75 fg=#f85149 bg=#303030
+0:77-77 bg=#303030
+0:78-78 fg=#f85149 bg=#303030 BOLD
+0:79-79 bg=#303030
+=== styles (256, unicode) ===
+0:0-0 bg=@236
+0:1-9 bg=@236 BOLD
+0:10-12 fg=@245 bg=@236
+0:13-13 fg=@35 bg=@236
+0:14-14 bg=@236
+0:15-18 fg=@35 bg=@236
+0:19-21 fg=@245 bg=@236
+0:22-35 bg=@236
+0:36-38 fg=@245 bg=@236
+0:39-68 bg=@236
+0:69-69 fg=@172 bg=@236
+0:71-71 bg=@236
+0:72-72 fg=@172 bg=@236 BOLD
+0:73-74 bg=@236
+0:75-75 fg=@203 bg=@236
+0:77-77 bg=@236
+0:78-78 fg=@203 bg=@236 BOLD
+0:79-79 bg=@236
+=== styles (16, unicode) ===
+0:0-0 bg=Black
+0:1-9 bg=Black BOLD
+0:10-12 fg=DarkGray bg=Black
+0:13-13 fg=Green bg=Black
+0:14-14 bg=Black
+0:15-18 fg=Green bg=Black
+0:19-21 fg=DarkGray bg=Black
+0:22-35 bg=Black
+0:36-38 fg=DarkGray bg=Black
+0:39-68 bg=Black
+0:69-69 fg=Yellow bg=Black
+0:71-71 bg=Black
+0:72-72 fg=Yellow bg=Black BOLD
+0:73-74 bg=Black
+0:75-75 fg=Red bg=Black
+0:77-77 bg=Black
+0:78-78 fg=Red bg=Black BOLD
+0:79-79 bg=Black
+=== styles (no-color, unicode) ===
+0:0-9 BOLD
+0:10-12 BOLD | DIM
+0:13-18 BOLD
+0:19-21 BOLD | DIM
+0:22-35 BOLD
+0:36-38 BOLD | DIM
+0:39-69 BOLD
+0:71-75 BOLD
+0:77-79 BOLD
+=== styles (high-contrast, unicode) ===
+0:0-0 fg=#ffffff bg=#303030
+0:1-9 fg=#ffffff bg=#303030 BOLD
+0:10-12 fg=#c6c6c6 bg=#303030
+0:13-13 fg=#7ee787 bg=#303030
+0:14-14 fg=#ffffff bg=#303030
+0:15-18 fg=#7ee787 bg=#303030
+0:19-21 fg=#c6c6c6 bg=#303030
+0:22-35 fg=#ffffff bg=#303030
+0:36-38 fg=#c6c6c6 bg=#303030
+0:39-68 fg=#ffffff bg=#303030
+0:69-69 fg=#ffe066 bg=#303030
+0:71-71 fg=#ffffff bg=#303030
+0:72-72 fg=#ffe066 bg=#303030 BOLD
+0:73-74 fg=#ffffff bg=#303030
+0:75-75 fg=#ffa198 bg=#303030
+0:77-77 fg=#ffffff bg=#303030
+0:78-78 fg=#ffa198 bg=#303030 BOLD
+0:79-79 fg=#ffffff bg=#303030
+=== text (ascii) ===
+ gitraptor | [ok] live | main protected | you                [c] 2  [blocked] 1
+=== styles (truecolor, ascii) ===
+0:0-0 bg=#303030
+0:1-9 bg=#303030 BOLD
+0:10-12 fg=#8a8a8a bg=#303030
+0:13-16 fg=#3fb950 bg=#303030
+0:17-17 bg=#303030
+0:18-21 fg=#3fb950 bg=#303030
+0:22-24 fg=#8a8a8a bg=#303030
+0:25-38 bg=#303030
+0:39-41 fg=#8a8a8a bg=#303030
+0:42-60 bg=#303030
+0:61-63 fg=#d29922 bg=#303030
+0:64-64 bg=#303030
+0:65-65 fg=#d29922 bg=#303030 BOLD
+0:66-67 bg=#303030
+0:68-76 fg=#f85149 bg=#303030
+0:77-77 bg=#303030
+0:78-78 fg=#f85149 bg=#303030 BOLD
+0:79-79 bg=#303030
+=== styles (256, ascii) ===
+0:0-0 bg=@236
+0:1-9 bg=@236 BOLD
+0:10-12 fg=@245 bg=@236
+0:13-16 fg=@35 bg=@236
+0:17-17 bg=@236
+0:18-21 fg=@35 bg=@236
+0:22-24 fg=@245 bg=@236
+0:25-38 bg=@236
+0:39-41 fg=@245 bg=@236
+0:42-60 bg=@236
+0:61-63 fg=@172 bg=@236
+0:64-64 bg=@236
+0:65-65 fg=@172 bg=@236 BOLD
+0:66-67 bg=@236
+0:68-76 fg=@203 bg=@236
+0:77-77 bg=@236
+0:78-78 fg=@203 bg=@236 BOLD
+0:79-79 bg=@236
+=== styles (16, ascii) ===
+0:0-0 bg=Black
+0:1-9 bg=Black BOLD
+0:10-12 fg=DarkGray bg=Black
+0:13-16 fg=Green bg=Black
+0:17-17 bg=Black
+0:18-21 fg=Green bg=Black
+0:22-24 fg=DarkGray bg=Black
+0:25-38 bg=Black
+0:39-41 fg=DarkGray bg=Black
+0:42-60 bg=Black
+0:61-63 fg=Yellow bg=Black
+0:64-64 bg=Black
+0:65-65 fg=Yellow bg=Black BOLD
+0:66-67 bg=Black
+0:68-76 fg=Red bg=Black
+0:77-77 bg=Black
+0:78-78 fg=Red bg=Black BOLD
+0:79-79 bg=Black
+=== styles (no-color, ascii) ===
+0:0-9 BOLD
+0:10-12 BOLD | DIM
+0:13-21 BOLD
+0:22-24 BOLD | DIM
+0:25-38 BOLD
+0:39-41 BOLD | DIM
+0:42-79 BOLD
+=== styles (high-contrast, ascii) ===
+0:0-0 fg=#ffffff bg=#303030
+0:1-9 fg=#ffffff bg=#303030 BOLD
+0:10-12 fg=#c6c6c6 bg=#303030
+0:13-16 fg=#7ee787 bg=#303030
+0:17-17 fg=#ffffff bg=#303030
+0:18-21 fg=#7ee787 bg=#303030
+0:22-24 fg=#c6c6c6 bg=#303030
+0:25-38 fg=#ffffff bg=#303030
+0:39-41 fg=#c6c6c6 bg=#303030
+0:42-60 fg=#ffffff bg=#303030
+0:61-63 fg=#ffe066 bg=#303030
+0:64-64 fg=#ffffff bg=#303030
+0:65-65 fg=#ffe066 bg=#303030 BOLD
+0:66-67 fg=#ffffff bg=#303030
+0:68-76 fg=#ffa198 bg=#303030
+0:77-77 fg=#ffffff bg=#303030
+0:78-78 fg=#ffa198 bg=#303030 BOLD
+0:79-79 fg=#ffffff bg=#303030

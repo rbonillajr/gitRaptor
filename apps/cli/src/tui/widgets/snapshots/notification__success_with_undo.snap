@@ -1,0 +1,54 @@
+---
+source: apps/cli/src/tui/widgets/tests.rs
+expression: "snapshot(story, full_ascii)"
+---
+=== text (unicode) ===
+
+
+                    │ ✔ Rebased claude-1 onto main   u undo
+=== styles (truecolor, unicode) ===
+2:20-20 fg=#3fb950
+2:22-22 fg=#3fb950
+2:53-53 fg=#2dc2ad BOLD
+=== styles (256, unicode) ===
+2:20-20 fg=@35
+2:22-22 fg=@35
+2:53-53 fg=@43 BOLD
+=== styles (16, unicode) ===
+2:20-20 fg=Green
+2:22-22 fg=Green
+2:53-53 fg=Cyan BOLD
+=== styles (no-color, unicode) ===
+2:53-53 BOLD
+=== styles (high-contrast, unicode) ===
+2:20-20 fg=#7ee787 bg=#000000
+2:21-21 fg=#ffffff bg=#000000
+2:22-22 fg=#7ee787 bg=#000000
+2:23-52 fg=#ffffff bg=#000000
+2:53-53 fg=#7ee8d8 bg=#000000 BOLD
+2:54-59 fg=#ffffff bg=#000000
+=== text (ascii) ===
+
+
+                 | [ok] Rebased claude-1 onto main   u undo
+=== styles (truecolor, ascii) ===
+2:17-17 fg=#3fb950
+2:19-22 fg=#3fb950
+2:53-53 fg=#2dc2ad BOLD
+=== styles (256, ascii) ===
+2:17-17 fg=@35
+2:19-22 fg=@35
+2:53-53 fg=@43 BOLD
+=== styles (16, ascii) ===
+2:17-17 fg=Green
+2:19-22 fg=Green
+2:53-53 fg=Cyan BOLD
+=== styles (no-color, ascii) ===
+2:53-53 BOLD
+=== styles (high-contrast, ascii) ===
+2:17-17 fg=#7ee787 bg=#000000
+2:18-18 fg=#ffffff bg=#000000
+2:19-22 fg=#7ee787 bg=#000000
+2:23-52 fg=#ffffff bg=#000000
+2:53-53 fg=#7ee8d8 bg=#000000 BOLD
+2:54-59 fg=#ffffff bg=#000000

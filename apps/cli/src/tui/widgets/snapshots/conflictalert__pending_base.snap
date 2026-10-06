@@ -1,0 +1,164 @@
+---
+source: apps/cli/src/tui/widgets/tests.rs
+expression: "snapshot(story, full_ascii)"
+---
+=== text (unicode) ===
+┌─ ⚡ Conflict predicted ──────────────────────────────────┐
+│ claude-1 ↔ claude-2                                      │
+│ ℹ  pending: the base branch is not confirmed             │
+│  • src/parser.rs                                         │
+│  • src/lexer.rs                                          │
+└──────────────────────────────────────────────────────────┘
+=== styles (truecolor, unicode) ===
+0:0-3 fg=#d29922
+0:5-5 fg=#d29922
+0:6-23 fg=#d29922 BOLD
+0:24-59 fg=#d29922
+1:0-0 fg=#d29922
+1:2-9 fg=#e69f00 BOLD
+1:11-11 fg=#8a8a8a
+1:13-20 fg=#56b4e9 BOLD
+1:59-59 fg=#d29922
+2:0-0 fg=#d29922
+2:2-3 fg=#58a6ff
+2:5-45 fg=#58a6ff
+2:59-59 fg=#d29922
+3:0-0 fg=#d29922
+3:3-3 fg=#8a8a8a
+3:5-17 fg=#f0883e
+3:59-59 fg=#d29922
+4:0-0 fg=#d29922
+4:3-3 fg=#8a8a8a
+4:5-16 fg=#f0883e
+4:59-59 fg=#d29922
+5:0-59 fg=#d29922
+=== styles (256, unicode) ===
+0:0-3 fg=@172
+0:5-5 fg=@172
+0:6-23 fg=@172 BOLD
+0:24-59 fg=@172
+1:0-0 fg=@172
+1:2-9 fg=@178 BOLD
+1:11-11 fg=@245
+1:13-20 fg=@74 BOLD
+1:59-59 fg=@172
+2:0-0 fg=@172
+2:2-3 fg=@75
+2:5-45 fg=@75
+2:59-59 fg=@172
+3:0-0 fg=@172
+3:3-3 fg=@245
+3:5-17 fg=@208
+3:59-59 fg=@172
+4:0-0 fg=@172
+4:3-3 fg=@245
+4:5-16 fg=@208
+4:59-59 fg=@172
+5:0-59 fg=@172
+=== styles (16, unicode) ===
+0:0-3 fg=Yellow
+0:5-5 fg=Yellow
+0:6-23 fg=Yellow BOLD
+0:24-59 fg=Yellow
+1:0-0 fg=Yellow
+1:2-9 fg=Yellow BOLD
+1:11-11 fg=DarkGray
+1:13-20 fg=Cyan BOLD
+1:59-59 fg=Yellow
+2:0-0 fg=Yellow
+2:2-3 fg=Blue
+2:5-45 fg=Blue
+2:59-59 fg=Yellow
+3:0-0 fg=Yellow
+3:3-3 fg=DarkGray
+3:5-17 fg=Yellow
+3:59-59 fg=Yellow
+4:0-0 fg=Yellow
+4:3-3 fg=DarkGray
+4:5-16 fg=Yellow
+4:59-59 fg=Yellow
+5:0-59 fg=Yellow
+=== styles (no-color, unicode) ===
+0:0-3 BOLD
+0:5-59 BOLD
+1:0-0 BOLD
+1:2-9 BOLD
+1:11-11 DIM
+1:13-20 BOLD
+1:59-59 BOLD
+2:0-0 BOLD
+2:59-59 BOLD
+3:0-0 BOLD
+3:3-3 DIM
+3:5-17 BOLD
+3:59-59 BOLD
+4:0-0 BOLD
+4:3-3 DIM
+4:5-16 BOLD
+4:59-59 BOLD
+5:0-59 BOLD
+=== styles (high-contrast, unicode) ===
+0:0-3 fg=#ffe066 bg=#000000
+0:5-5 fg=#ffe066 bg=#000000
+0:6-23 fg=#ffe066 bg=#000000 BOLD
+0:24-59 fg=#ffe066 bg=#000000
+1:0-0 fg=#ffe066 bg=#000000
+1:1-1 fg=#ffffff bg=#000000
+1:2-9 fg=#e69f00 bg=#000000 BOLD
+1:10-10 fg=#ffffff bg=#000000
+1:11-11 fg=#c6c6c6 bg=#000000
+1:12-12 fg=#ffffff bg=#000000
+1:13-20 fg=#56b4e9 bg=#000000 BOLD
+1:21-58 fg=#ffffff bg=#000000
+1:59-59 fg=#ffe066 bg=#000000
+2:0-0 fg=#ffe066 bg=#000000
+2:1-1 fg=#ffffff bg=#000000
+2:2-3 fg=#a5d6ff bg=#000000
+2:4-4 fg=#ffffff bg=#000000
+2:5-45 fg=#a5d6ff bg=#000000
+2:46-58 fg=#ffffff bg=#000000
+2:59-59 fg=#ffe066 bg=#000000
+3:0-0 fg=#ffe066 bg=#000000
+3:1-2 fg=#ffffff bg=#000000
+3:3-3 fg=#c6c6c6 bg=#000000
+3:4-4 fg=#ffffff bg=#000000
+3:5-17 fg=#ffb77c bg=#000000
+3:18-58 fg=#ffffff bg=#000000
+3:59-59 fg=#ffe066 bg=#000000
+4:0-0 fg=#ffe066 bg=#000000
+4:1-2 fg=#ffffff bg=#000000
+4:3-3 fg=#c6c6c6 bg=#000000
+4:4-4 fg=#ffffff bg=#000000
+4:5-16 fg=#ffb77c bg=#000000
+4:17-58 fg=#ffffff bg=#000000
+4:59-59 fg=#ffe066 bg=#000000
+5:0-59 fg=#ffe066 bg=#000000
+=== text (ascii) ===
++- [c] Conflict predicted ---------------------------------+
+| claude-1 <-> claude-2                                    |
+| [i] pending: the base branch is not confirmed            |
+|  - src/parser.rs                                         |
+|  - src/lexer.rs                                          |
++----------------------------------------------------------+
+=== styles (truecolor, ascii) ===
+0:0-6 fg=#d29922
+0:7-24 fg=#d29922 BOLD
+0:25-59 fg=#d29922
+1:0-0 fg=#d29922
+1:2-9 fg=#e69f00 BOLD
+1:11-13 fg=#8a8a8a
+1:15-22 fg=#56b4e9 BOLD
+1:59-59 fg=#d29922
+2:0-0 fg=#d29922
+2:2-4 fg=#58a6ff
+2:6-46 fg=#58a6ff
+2:59-59 fg=#d29922
+3:0-0 fg=#d29922
+3:3-3 fg=#8a8a8a
+3:5-17 fg=#f0883e
+3:59-59 fg=#d29922
+4:0-0 fg=#d29922
+4:3-3 fg=#8a8a8a
+4:5-16 fg=#f0883e
+4:59-59 fg=#d29922
+5:0-59 fg=#d29922
