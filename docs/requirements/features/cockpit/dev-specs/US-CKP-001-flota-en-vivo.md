@@ -109,6 +109,10 @@ Rene usó la TUI por primera vez el 2026-10-06 (`bitacora/orquestador/TRASPASO.m
 | E4 | `view::tests::agents_of_the_same_kind_are_told_apart_by_their_worktree` |
 | E5 | `outside_a_repo_the_only_observed_one_opens`, `outside_a_repo_with_none_observed_it_says_how_to_add_one`, `outside_a_repo_the_developer_chooses_among_several`; snapshot `repo_picker_80x24` (y su texto en es) |
 
+**G4 (2026-10-06): huecos del observador en vivo.** Cuando un lote del observador cierra un hueco (`ObservedBatch.gap`: desbordamiento de los eventos del sistema, reconciliación periódica), los worktrees que ese lote leyó se pasan a `stamp_activity` (`ObservedBatch::gap_worktrees`). Si su vista cambió, la actividad pone "ahora" **con** la marca del hueco, igual que un valor sembrado de un evento enlazado a un hueco. El siguiente cambio visto en vivo, sin hueco, la limpia; un recuento quieto (↑↓) la conserva. No hay campos nuevos en el contrato.
+
+- **Decisión del orquestador (2026-10-06):** se marcan todos los worktrees leídos por el lote del hueco, no solo los que llevan evento `reconciled`. En un desbordamiento, un `branch_switch` deducido dentro del hueco tampoco tiene hora real, y el lote es la unidad que el observador ya enlaza al hueco. Implementa el ajuste que el Arquitecto pidió en G2, sin decisión de diseño nueva, así que no se volvió a consultar.
+
 Pendiente de esta enmienda:
 
 - Derivar la última actividad de los eventos del almacén al arrancar, con la marca del hueco (ADR-GRP-013, Enmienda 2026-10-04).
@@ -167,10 +171,11 @@ Decisiones (orquestador, 2026-10-06; validadas por Arquitecto):
 |---|---|
 | G1, G2 | `crates/core/tests/channel_capabilities.rs`: `a_restarted_engine_seeds_the_last_activity_from_the_stored_events`, con un perfil temporal: eventos guardados por una ejecución anterior, uno de ellos enlazado a un hueco, y un worktree sin eventos que sigue ausente. `scope_activity_carries_…` sigue verde: un repo recién creado no tiene eventos |
 | G2 (`stamp_activity`) | `crates/core/tests/observe.rs`: `activity::a_live_change_clears_the_gap_mark_of_a_seeded_value` |
+| G4 | `crates/core/tests/observe.rs`: `activity::a_change_reconciled_in_a_live_gap_carries_the_gap_mark` (lote de hueco simulado, sin watcher ni tiempo: marca, recuento quieto que la conserva y cambio en vivo que la limpia) |
 | G3 | `view::tests::published_activity_and_fetch_show_their_age` (en/es); snapshots `fleet_no_agent_100x24_{en,es}` y `fleet_{80x24,120x40}_{dark,light}` con `–` |
 
 Pendiente de esta enmienda:
 
-- Los eventos de reconciliación de un hueco **del observador** en vivo (desbordamiento, recreación del stream, reconciliación periódica) todavía no marcan el valor al sellarlo con `stamp_activity`, que compara vistas y no ve eventos. El Arquitecto lo pidió como ajuste y queda como deuda.
+- ~~Los eventos de reconciliación de un hueco **del observador** en vivo (desbordamiento, recreación del stream, reconciliación periódica) todavía no marcan el valor al sellarlo con `stamp_activity`, que compara vistas y no ve eventos. El Arquitecto lo pidió como ajuste y queda como deuda.~~ Resuelto el 2026-10-06 (G4).
 - La siembra hace una consulta al almacén por worktree al arrancar. No se midió con muchos worktrees. El arranque no cuenta para NFR-04.
 - Solo se verificó en macOS. Linux y Windows quedan para la validación en máquinas reales.
