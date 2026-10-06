@@ -134,7 +134,10 @@ mod tests {
             for (key, _) in entries(file) {
                 let group = key.split('.').next().unwrap_or(key);
                 let first = *owner.entry(group).or_insert(feature);
-                assert_eq!(first, *feature, "the group {group}. is in {first} and {feature}");
+                assert_eq!(
+                    first, *feature,
+                    "the group {group}. is in {first} and {feature}"
+                );
             }
         }
     }
