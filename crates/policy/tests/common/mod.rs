@@ -30,7 +30,7 @@ impl Repo {
         std::fs::create_dir_all(&path).unwrap();
         std::fs::write(
             home.join(".gitconfig"),
-            "[user]\n\tname = Test\n\temail = test@example.com\n[init]\n\tdefaultBranch = main\n",
+            gitraptor_testkit::fixture::HOME_GITCONFIG,
         )
         .unwrap();
         let git = match resolve::resolve(&ResolveConfig::for_current_os(None), &Invoker::default())

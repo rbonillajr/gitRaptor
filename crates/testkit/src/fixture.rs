@@ -24,6 +24,16 @@ use crate::exceptions::Exceptions;
 use crate::fingerprint::{Scope, Snapshot};
 use crate::guard;
 
+/// `~/.gitconfig` of every fixture home. Automatic maintenance is off: a commit or fetch of the
+/// fixture would otherwise start `git maintenance run --auto` (Git >= 2.29) or `gc --auto`, in the
+/// background by default (`maintenance.autoDetach`, Git >= 2.47), and its lock or pack lands in a
+/// fingerprint at random (`objects/maintenance.lock`, `gc.pid`). A test that provokes `gc --auto`
+/// on purpose turns it back on in the repo config, which wins over this file.
+pub const HOME_GITCONFIG: &str = "[user]\n\tname = Test\n\temail = test@example.com\n\
+[init]\n\tdefaultBranch = main\n\
+[maintenance]\n\tauto = false\n\tautoDetach = false\n\
+[gc]\n\tauto = 0\n\tautoPackLimit = 0\n\tautoDetach = false\n";
+
 /// The first absolute `git` in `PATH`, for the testkit's own tests. Crates under test resolve
 /// Git with their own code and pass it to [`Fixture::new`].
 pub fn git_from_path() -> PathBuf {
@@ -98,11 +108,7 @@ impl Fixture {
         ] {
             std::fs::create_dir_all(dir).unwrap();
         }
-        std::fs::write(
-            home.join(".gitconfig"),
-            "[user]\n\tname = Test\n\temail = test@example.com\n[init]\n\tdefaultBranch = main\n",
-        )
-        .unwrap();
+        std::fs::write(home.join(".gitconfig"), HOME_GITCONFIG).unwrap();
         std::fs::write(home.join(".config/git/ignore"), "*.swp\n").unwrap();
         std::fs::write(home.join(".gnupg/pubring.kbx"), "keyring").unwrap();
         std::fs::write(home.join(".claude/settings.json"), "{}\n").unwrap();
