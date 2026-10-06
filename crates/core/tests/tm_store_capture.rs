@@ -692,6 +692,43 @@ fn a_capture_that_stopped_being_consistent_is_discarded_without_a_row() {
     );
 }
 
+/// NFR-01: a capture that fails after building its trees (discarded, or given way to a prior)
+/// leaves no stale fast path behind. The next capture sees the change and records it, never the
+/// root of the capture before it.
+#[test]
+fn a_failed_capture_never_lets_the_next_one_reuse_a_stale_root() {
+    use gitraptor_core::timemachine::store::ValidityGuard;
+    let env = Env::new(Fixture::with_commit(&git()));
+    write(&env.f.repo, "api.rs", b"fn api() { login(); }\n");
+    let first = env
+        .store
+        .capture(&env.oplog, &env.request(level_obs(), None))
+        .unwrap();
+    assert_eq!(
+        env.file(&first.snapshot_id, "api.rs").unwrap(),
+        b"fn api() { login(); }\n"
+    );
+    write(&env.f.repo, "api.rs", b"fn api() {}\n");
+    let mut discarded = env.request(level_obs(), None);
+    discarded.still_valid = Some(ValidityGuard(Arc::new(|| false)));
+    assert!(matches!(
+        env.store.capture(&env.oplog, &discarded),
+        Err(CaptureError::Discarded)
+    ));
+    let prior = env
+        .store
+        .capture(
+            &env.oplog,
+            &env.request(SnapshotLevel::GuaranteedPrior, None),
+        )
+        .unwrap();
+    assert!(!prior.fast_path);
+    assert_eq!(
+        env.file(&prior.snapshot_id, "api.rs").unwrap(),
+        b"fn api() {}\n"
+    );
+}
+
 /// US-TMC-004 (D13): an observation gives way when asked, with no row, like it gives way to a
 /// guaranteed prior; a prior never gives way.
 #[test]

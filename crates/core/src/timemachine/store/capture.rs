@@ -331,7 +331,12 @@ impl SnapshotStore {
         if result.is_err() {
             // What was read stays true (the stat cache names blobs the store has, the `index`
             // tree matches its index signature), so it is kept; but the next capture of these
-            // worktrees must look at everything again: their mark is dropped.
+            // worktrees must look at everything again: their mark is dropped. Their `files` tree
+            // may already be the new one while the last root of every scope holding them is
+            // still the old one: that root is no longer a fast path (NFR-01).
+            state
+                .last
+                .retain(|scope, _| !scope.split(',').any(|k| works.iter().any(|w| w.key == k)));
             for w in works.drain(..) {
                 let mut st = w.state;
                 st.mark = None;
