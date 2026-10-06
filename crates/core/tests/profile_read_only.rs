@@ -48,7 +48,11 @@ fn a_missing_or_foreign_index_gives_nothing() {
 fn an_index_with_a_wal_is_not_read() {
     let tp = TempProfile::new();
     // `?` is not a valid file name character on Windows.
-    let odd = if cfg!(windows) { "demo  #&%" } else { "demo  #?%" };
+    let odd = if cfg!(windows) {
+        "demo  #&%"
+    } else {
+        "demo  #?%"
+    };
     let repo = init_repo(tp.root.path(), odd, true);
     let mut profile = tp.open();
     profile.add_repo(&common_dir(&repo), None, 1).unwrap();
