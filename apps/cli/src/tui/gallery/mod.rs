@@ -61,13 +61,22 @@ impl Mode {
     }
 
     pub fn theme(self) -> Theme {
-        let (mode, contrast, symbols) = match self {
-            Mode::TrueColor => (ColorMode::TrueColor, Contrast::Normal, SymbolSet::Unicode),
-            Mode::Ansi256 => (ColorMode::Ansi256, Contrast::Normal, SymbolSet::Unicode),
-            Mode::Ansi16 => (ColorMode::Ansi16, Contrast::Normal, SymbolSet::Unicode),
-            Mode::NoColor => (ColorMode::NoColor, Contrast::Normal, SymbolSet::Unicode),
-            Mode::HighContrast => (ColorMode::TrueColor, Contrast::High, SymbolSet::Unicode),
-            Mode::Ascii => (ColorMode::TrueColor, Contrast::Normal, SymbolSet::Ascii),
+        self.theme_with(match self {
+            Mode::Ascii => SymbolSet::Ascii,
+            _ => SymbolSet::Unicode,
+        })
+    }
+
+    /// The theme of this mode with a given symbol set. Every setting of a mode (depth, contrast
+    /// and, when it lands, the terminal background) lives here, so the snapshots that cross
+    /// symbol sets with modes keep all of it.
+    pub fn theme_with(self, symbols: SymbolSet) -> Theme {
+        let (mode, contrast) = match self {
+            Mode::TrueColor | Mode::Ascii => (ColorMode::TrueColor, Contrast::Normal),
+            Mode::Ansi256 => (ColorMode::Ansi256, Contrast::Normal),
+            Mode::Ansi16 => (ColorMode::Ansi16, Contrast::Normal),
+            Mode::NoColor => (ColorMode::NoColor, Contrast::Normal),
+            Mode::HighContrast => (ColorMode::TrueColor, Contrast::High),
         };
         Theme::new(mode, contrast, symbols)
     }

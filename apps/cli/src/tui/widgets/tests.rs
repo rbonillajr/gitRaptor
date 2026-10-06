@@ -77,8 +77,7 @@ fn style_runs(buf: &Buffer) -> String {
 }
 
 fn with_symbols(mode: Mode, symbols: SymbolSet) -> Styles {
-    let theme = mode.theme();
-    Styles::new(Theme::new(theme.mode(), theme.contrast(), symbols))
+    Styles::new(mode.theme_with(symbols))
 }
 
 fn snapshot(story: &Story, full_ascii: bool) -> String {
