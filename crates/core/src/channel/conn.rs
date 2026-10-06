@@ -16,9 +16,11 @@ use gitraptor_api::event::RESERVED_AUDIT;
 use gitraptor_api::framing::{FrameError, MAX_MESSAGE_BYTES, decode_request, read_frame};
 use gitraptor_api::messages::{
     AuditEntry, AuditListParams, AuditListResult, AuditOutcome, ClientIdentity, ClientKind,
-    ConnectionProfile, EventsHistoryParams, EventsHistoryResult, Hello, HelloResult,
+    ConnectionProfile, DeclaredAgent, EventsHistoryParams, EventsHistoryResult, Hello, HelloResult,
     IncompatibleData, McpRepoView, McpSnapshot, NoParams, RefusalReason, RefusedData,
-    ReplaceParams, RepoAddParams, RepoAddResult, RepoRejectedData, RepoRejection, RepoRetireParams,
+    RegistrationRegisterParams, RegistrationRegisterResult, RegistrationRejectedData,
+    RegistrationRejection, RegistrationWithdrawParams, RegistrationWithdrawResult, ReplaceParams,
+    RepoAddParams, RepoAddResult, RepoRejectedData, RepoRejection, RepoRetireParams,
     RepoRetireResult, Snapshot, StopResult, SubscribeParams, SubscribeResult, UnsubscribeParams,
 };
 use gitraptor_api::methods::{self, METHODS, MethodSpec};
@@ -45,13 +47,15 @@ use super::requester::{self, Resolution};
 use super::validate;
 use super::{ServerCtx, file_id};
 use crate::daemon::{
-    CHANGE_LIST_BUDGET, Field, RepoAddRequest, RepoCommandError, StopCause, now_ms,
+    CHANGE_LIST_BUDGET, Field, RegisterRequest, RegistrationError, RepoAddRequest,
+    RepoCommandError, StopCause, WithdrawRequest, now_ms,
 };
 use crate::executor::{
     Caller, ExecError, PrepareInput, RunEnv, RunInput, layer_for, oplog_channel,
 };
-use crate::profile::AuditRow;
+use crate::profile::{Agent, AgentKind, AuditRow, Author};
 use crate::timemachine::apply::{ApplyWarning, PathIssue};
+use crate::timemachine::oplog::Requester;
 use crate::timemachine::protected::scope::{
     operation_in, require_attributed, scope_for, snapshot_in,
 };
@@ -646,6 +650,14 @@ impl Connection<'_> {
                 let result = self.repo_retire(spec, request);
                 self.reply(&request.id, result);
             }
+            methods::REGISTRATION_REGISTER => {
+                let result = self.registration_register(spec, request);
+                self.reply(&request.id, result);
+            }
+            methods::REGISTRATION_WITHDRAW => {
+                let result = self.registration_withdraw(spec, request);
+                self.reply(&request.id, result);
+            }
             _ => {
                 // Declared ahead of their stories: validated, authorized and
                 // audited, then "not implemented".
@@ -699,6 +711,112 @@ impl Connection<'_> {
             .control
             .repo_retire(params.repo_id)
             .map_err(repo_command_error)
+    }
+
+    /// `registration.register` (US-GRP-009, ADR-GRP-005 § 6.6). Not
+    /// reserved: whoever passes the checks of the reserved commands is the
+    /// developer and names the worktree; anyone else, and every MCP
+    /// connection, is an agent registering itself in the worktree of its
+    /// working folder, as the agent it is. Its refusals for naming another
+    /// worktree or another agent are audited.
+    fn registration_register(
+        &self,
+        spec: &MethodSpec,
+        request: &Request,
+    ) -> Result<RegistrationRegisterResult, ErrorObject> {
+        let params: RegistrationRegisterParams = request.params()?;
+        let agent = declared_agent(&params.agent)?;
+        let named = params
+            .worktree
+            .as_deref()
+            .map(validate::client_path)
+            .transpose()
+            .map_err(invalid)?;
+        let verdict = (!self.is_mcp()).then(|| check_reserved(self.peer, &self.ctx.checks()));
+        if verdict.as_ref().is_some_and(|v| v.refused.is_none()) {
+            let folder = named
+                .or_else(|| process_cwd(self.peer.pid))
+                .ok_or_else(|| registration_rejected(RegistrationRejection::NoWorkingFolder))?;
+            return self
+                .ctx
+                .control
+                .register(RegisterRequest {
+                    agent,
+                    folder,
+                    named: None,
+                    author: Author::Developer,
+                    caller_session: None,
+                })
+                .map_err(registration_error);
+        }
+        let verdict = verdict.unwrap_or_else(|| Verdict {
+            client: self.identity_without_walk(),
+            chain: Vec::new(),
+            refused: Some(RefusalReason::NotAvailableToMcp),
+        });
+        let refuse = |reason: RefusalReason, rejection: RegistrationRejection| {
+            self.audit(
+                spec.name,
+                None,
+                AuditOutcome::Rejected,
+                Some(reason),
+                &verdict.client,
+                &verdict.chain,
+            )?;
+            Err(registration_rejected(rejection))
+        };
+        // An agent declares the agent it is (M7): Claude Code only from a
+        // detected Claude Code session, and such a session not as another.
+        let who = self.resolve()?.who;
+        let caller_session = match &who.requester {
+            Requester::Agent { session_id, .. } => Some(session_id.clone()),
+            Requester::Unattributed => None,
+        };
+        let caller_is_claude = matches!(
+            who.actor,
+            gitraptor_api::Actor::Agent {
+                kind: gitraptor_api::AgentKind::ClaudeCode,
+                ..
+            }
+        );
+        if caller_is_claude != (agent.kind == AgentKind::ClaudeCode) {
+            return refuse(
+                RefusalReason::AgentMismatch,
+                RegistrationRejection::AgentMismatch,
+            );
+        }
+        let folder = process_cwd(self.peer.pid)
+            .ok_or_else(|| registration_rejected(RegistrationRejection::NoWorkingFolder))?;
+        match self.ctx.control.register(RegisterRequest {
+            agent,
+            folder,
+            named,
+            author: Author::Agent,
+            caller_session,
+        }) {
+            Err(RegistrationError::Rejected(RegistrationRejection::WorktreeMismatch)) => refuse(
+                RefusalReason::WorktreeMismatch,
+                RegistrationRejection::WorktreeMismatch,
+            ),
+            other => other.map_err(registration_error),
+        }
+    }
+
+    /// `registration.withdraw` (US-GRP-009): a reserved command. An agent
+    /// withdrawing its own registration is `unregister_agent` of US-MCP-006.
+    fn registration_withdraw(
+        &self,
+        spec: &MethodSpec,
+        request: &Request,
+    ) -> Result<RegistrationWithdrawResult, ErrorObject> {
+        let params: RegistrationWithdrawParams = request.params()?;
+        let agent = declared_agent(&params.agent)?;
+        let folder = validate::client_path(&params.worktree).map_err(invalid)?;
+        self.reserved(spec, None)?;
+        self.ctx
+            .control
+            .withdraw(WithdrawRequest { agent, folder })
+            .map_err(registration_error)
     }
 
     fn snapshot(&self) -> serde_json::Value {
@@ -1703,6 +1821,32 @@ fn rejected(reason: RepoRejection) -> ErrorObject {
     ErrorObject::new(code::REPO_REJECTED, "repo rejected").with_data(RepoRejectedData { reason })
 }
 
+/// The agent a registration declares, with its name validated (M7).
+fn declared_agent(agent: &DeclaredAgent) -> Result<Agent, ErrorObject> {
+    Ok(match agent {
+        DeclaredAgent::ClaudeCode => Agent {
+            kind: AgentKind::ClaudeCode,
+            name: None,
+        },
+        DeclaredAgent::Other { name } => Agent {
+            kind: AgentKind::Other,
+            name: Some(validate::declared_agent_name(name).map_err(invalid)?),
+        },
+    })
+}
+
+fn registration_rejected(reason: RegistrationRejection) -> ErrorObject {
+    ErrorObject::new(code::REGISTRATION_REJECTED, "registration rejected")
+        .with_data(RegistrationRejectedData { reason })
+}
+
+fn registration_error(err: RegistrationError) -> ErrorObject {
+    match err {
+        RegistrationError::Rejected(reason) => registration_rejected(reason),
+        RegistrationError::Internal => ErrorObject::new(code::INTERNAL, "profile unavailable"),
+    }
+}
+
 fn repo_command_error(err: RepoCommandError) -> ErrorObject {
     match err {
         RepoCommandError::UnknownRepo => rejected(RepoRejection::UnknownRepo),
@@ -1735,6 +1879,8 @@ fn reason_text(reason: RefusalReason) -> &'static str {
         RefusalReason::IdentityUnverified => "identity-unverified",
         RefusalReason::NotAvailableToMcp => "not-available-to-mcp",
         RefusalReason::Unsupported => "unsupported",
+        RefusalReason::WorktreeMismatch => "worktree-mismatch",
+        RefusalReason::AgentMismatch => "agent-mismatch",
     }
 }
 

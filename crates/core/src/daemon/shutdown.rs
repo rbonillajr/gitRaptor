@@ -8,7 +8,10 @@
 use std::sync::mpsc::{Receiver, Sender, SyncSender, channel, sync_channel};
 use std::time::Duration;
 
-use gitraptor_api::messages::{EventsHistoryParams, GitEventView, RepoAddResult, RepoRetireResult};
+use gitraptor_api::messages::{
+    EventsHistoryParams, GitEventView, RegistrationRegisterResult, RegistrationRejection,
+    RegistrationWithdrawResult, RepoAddResult, RepoRetireResult,
+};
 
 use crate::observe::RepoRead;
 use crate::profile::AuditRow;
@@ -29,6 +32,39 @@ pub enum RepoCommandError {
     UnknownRepo,
     /// The profile could not be written (or the loop did not answer).
     Internal,
+}
+
+/// Why the loop refused a registration or its withdrawal (US-GRP-009).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RegistrationError {
+    Rejected(RegistrationRejection),
+    /// The profile could not be written (or the loop did not answer).
+    Internal,
+}
+
+/// A registration the channel authorized: who asks, for which agent and
+/// where (US-GRP-009, ADR-GRP-005 § 6.6).
+#[derive(Debug, Clone)]
+#[cfg_attr(not(unix), allow(dead_code))]
+pub(crate) struct RegisterRequest {
+    pub agent: crate::profile::Agent,
+    /// The developer's named folder, or the agent's working folder.
+    pub folder: std::path::PathBuf,
+    /// For an agent, the worktree it named, if any: it must be the one of
+    /// its working folder, compared without reading that path.
+    pub named: Option<std::path::PathBuf>,
+    pub author: crate::profile::Author,
+    /// The detected session the caller descends from, if any: the one it
+    /// confirms (Q39).
+    pub caller_session: Option<String>,
+}
+
+/// A withdrawal the channel authorized as a reserved command.
+#[derive(Debug, Clone)]
+#[cfg_attr(not(unix), allow(dead_code))]
+pub(crate) struct WithdrawRequest {
+    pub agent: crate::profile::Agent,
+    pub folder: std::path::PathBuf,
 }
 
 /// A repo the channel already located and read, for the loop to add.
@@ -131,6 +167,18 @@ pub(crate) enum Control {
     SessionsList {
         params: gitraptor_api::messages::SessionsListParams,
         reply: SyncSender<SessionsListReply>,
+    },
+    /// Registers an agent (US-GRP-009).
+    #[cfg_attr(not(unix), allow(dead_code))]
+    Register {
+        request: RegisterRequest,
+        reply: SyncSender<Result<RegistrationRegisterResult, RegistrationError>>,
+    },
+    /// Withdraws a registration (US-GRP-009), already authorized.
+    #[cfg_attr(not(unix), allow(dead_code))]
+    Withdraw {
+        request: WithdrawRequest,
+        reply: SyncSender<Result<RegistrationWithdrawResult, RegistrationError>>,
     },
     /// One page of a repo's Git events (US-GRP-002).
     #[cfg_attr(not(unix), allow(dead_code))]
@@ -240,6 +288,35 @@ impl ShutdownHandle {
             .map_err(|_| RepoCommandError::Internal)?;
         rx.recv_timeout(AUDIT_TIMEOUT)
             .map_err(|_| RepoCommandError::Internal)?
+    }
+
+    /// Registers an agent through the loop, which owns the stores
+    /// (US-GRP-009).
+    #[cfg_attr(not(unix), allow(dead_code))]
+    pub(crate) fn register(
+        &self,
+        request: RegisterRequest,
+    ) -> Result<RegistrationRegisterResult, RegistrationError> {
+        let (reply, rx) = sync_channel(1);
+        self.tx
+            .send(Control::Register { request, reply })
+            .map_err(|_| RegistrationError::Internal)?;
+        rx.recv_timeout(AUDIT_TIMEOUT)
+            .map_err(|_| RegistrationError::Internal)?
+    }
+
+    /// Withdraws a registration through the loop (US-GRP-009).
+    #[cfg_attr(not(unix), allow(dead_code))]
+    pub(crate) fn withdraw(
+        &self,
+        request: WithdrawRequest,
+    ) -> Result<RegistrationWithdrawResult, RegistrationError> {
+        let (reply, rx) = sync_channel(1);
+        self.tx
+            .send(Control::Withdraw { request, reply })
+            .map_err(|_| RegistrationError::Internal)?;
+        rx.recv_timeout(AUDIT_TIMEOUT)
+            .map_err(|_| RegistrationError::Internal)?
     }
 
     /// Reads one page of a repo's Git events through the loop, which owns

@@ -68,8 +68,10 @@ pub use env::{AGENT_EXECUTABLES_ENV, CLOCK_SKEW_FILE_ENV, DaemonEnv};
 pub use lock::{InstanceLock, LOCK_FILE, running_pid, wait_until_released};
 pub use log::{Field, LOG_FILE, Level, LogLimits, Logger};
 use shutdown::Control;
-pub(crate) use shutdown::RepoAddRequest;
-pub use shutdown::{RepoCommandError, ShutdownHandle, StopCause, install_signal_handlers};
+pub(crate) use shutdown::{RegisterRequest, RepoAddRequest, WithdrawRequest};
+pub use shutdown::{
+    RegistrationError, RepoCommandError, ShutdownHandle, StopCause, install_signal_handlers,
+};
 pub use state::{EngineState, InvalidTransition, Trigger};
 
 /// Exit code of a second `raptor daemon` that found another one running.
@@ -669,6 +671,12 @@ impl Daemon {
                 Ok(Control::SessionsList { params, reply }) => {
                     let _ = reply.send(self.sessions_list(&params));
                 }
+                Ok(Control::Register { request, reply }) => {
+                    let _ = reply.send(self.register(request));
+                }
+                Ok(Control::Withdraw { request, reply }) => {
+                    let _ = reply.send(self.withdraw(request));
+                }
                 Ok(Control::EventHistory { params, reply }) => {
                     let _ = reply.send(self.event_history(&params));
                 }
@@ -1165,10 +1173,10 @@ impl Daemon {
         // A session S3 found before the detector's start reached this loop
         // is created here; its later start is then a no-op.
         let mut created: Vec<&str> = Vec::new();
-        for p in attributed.iter().flatten() {
-            if !created.contains(&p.session_id.as_str()) {
-                created.push(&p.session_id);
-                ops.extend(sessions::start_ops(store, p));
+        for a in attributed.iter().flatten() {
+            if !created.contains(&a.session.session_id.as_str()) {
+                created.push(&a.session.session_id);
+                ops.extend(sessions::start_ops(store, &a.session));
             }
         }
         for (event, session) in batch.events.iter().zip(&attributed) {
@@ -1181,8 +1189,8 @@ impl Daemon {
                     offset_s: event.offset_s,
                 },
                 // No session without positive evidence (ADR-GRP-013 § 3).
-                session_id: session.as_ref().map(|p| p.session_id.clone()),
-                evidence: session.as_ref().and_then(|_| sessions::s3_evidence()),
+                session_id: session.as_ref().map(|a| a.session.session_id.clone()),
+                evidence: session.as_ref().map(|a| a.evidence.to_owned()),
                 gap_id: if event.kind == GitEventKind::Reconciled {
                     gap_id.clone()
                 } else {
@@ -1247,18 +1255,12 @@ impl Daemon {
         for ((event, seq), session) in batch.events.iter().zip(seqs).zip(&attributed) {
             let actor = session
                 .as_ref()
-                .and_then(|p| {
-                    self.stores
-                        .iter()
-                        .find(|(id, _)| *id == batch.repo_id)?
-                        .1
-                        .session(&p.session_id)
-                        .ok()
-                        .flatten()
+                .and_then(|a| {
+                    let store = &self.stores.iter().find(|(id, _)| *id == batch.repo_id)?.1;
+                    let s = store.session(&a.session.session_id).ok().flatten()?;
+                    Some(sessions::session_actor(store, &s))
                 })
-                .map_or(gitraptor_api::Actor::Unattributed, |s| {
-                    sessions::session_actor(&s)
-                });
+                .unwrap_or(gitraptor_api::Actor::Unattributed);
             let view = GitEventView {
                 repo_id: batch.repo_id.clone(),
                 seq,
@@ -1544,7 +1546,7 @@ fn git_event_view(repo_id: &str, store: &RepoStore, e: StoredEvent) -> Option<Gi
         .as_deref()
         .and_then(|id| store.session(id).ok().flatten())
         .map_or(gitraptor_api::Actor::Unattributed, |s| {
-            sessions::session_actor(&s)
+            sessions::session_actor(store, &s)
         });
     Some(GitEventView {
         repo_id: repo_id.to_owned(),
