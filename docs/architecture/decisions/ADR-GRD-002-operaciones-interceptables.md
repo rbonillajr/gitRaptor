@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
-updated: 2026-10-05
+updated: 2026-10-06
 deciders: [Rene Bonilla]
 domain: GRP
 feature: guardrails
@@ -16,7 +16,7 @@ tags: [guardrails, hooks-git, reference-transaction, pre-push, pre-rebase, inter
 
 # ADR-GRD-002 — Operaciones interceptables y límites de la capa de hooks
 
-> **Estado**: aceptado por Rene Bonilla el 2026-10-04. Enmendado el 2026-10-04 con los resultados de SPIKE-GRD-001 en macOS (ver "Enmienda (2026-10-04, SPIKE-GRD-001)") y el 2026-10-05 por US-GRD-001 (forma del dispatcher nativo y coste en Windows, ver "Enmienda (2026-10-05, US-GRD-001)"); la matriz del spike en Linux y la validación funcional en Windows siguen pendientes.
+> **Estado**: aceptado por Rene Bonilla el 2026-10-04. Enmendado el 2026-10-04 con los resultados de SPIKE-GRD-001 en macOS (ver "Enmienda (2026-10-04, SPIKE-GRD-001)") y el 2026-10-05 por US-GRD-001 (forma del dispatcher nativo y coste en Windows, ver "Enmienda (2026-10-05, US-GRD-001)") y el 2026-10-06 por XP-30 (renombrado sobre la base con reftable y procesos de hook por versión de Git, ver "Enmienda (2026-10-06, XP-30)"); la matriz del spike en Linux y la validación funcional en Windows siguen pendientes.
 
 ## Contexto
 
@@ -46,7 +46,7 @@ Hay otros tres requisitos:
 | **Push** | `pre-push` (refs y objetos por la entrada estándar) | — | A | Impedible | `--no-verify`; plumbing `send-pack`, que no ejecuta `pre-push` (declarado; Enmienda 2026-10-04) |
 | **Force-push** | `pre-push`: una ref es forzada si el objeto remoto no es ancestro del local **sin objetos de reemplazo ni grafts y sin fiarse del commit-graph para los padres**, o si el objeto remoto falta o la historia es superficial (H-05) | — | A | Impedible. **Se deniega de más**: un push fast-forward desde un clon superficial cuenta como forzado (F07; Enmienda 2026-10-04) | `--no-verify` |
 | **Borrar rama (local)** | `reference-transaction` `prepared`, con valor nuevo igual a ceros sobre `refs/heads/*`, salvo el *prune* de `pack-refs` (§ 4) | — | A | Impedible | `--no-verify` no la salta |
-| **Borrar o reescribir la rama base renombrando** (`branch -m base x`, `branch -M x base`) (Enmienda 2026-10-04) | `reference-transaction` `prepared` (backend de archivos) | — | A con archivos (`-M x base` deja `x` borrada: B, § 2) / **C con reftable** | Impedible con archivos. **No impedible en repos reftable**: el renombrado no ejecuta ningún hook (D10, D11) | — |
+| **Borrar o reescribir la rama base renombrando** (`branch -m base x`, `branch -M x base`) (Enmienda 2026-10-04) | `reference-transaction` `prepared` (backend de archivos) | — | A con archivos (`-M x base` deja `x` borrada: B, § 2) / **C con reftable** (solo corre después la transacción de `HEAD`; Enmienda 2026-10-06) | Impedible con archivos. **No impedible en repos reftable**: el renombrado no ejecuta ningún hook (D10, D11) | — |
 | **Borrar rama (remota)** | `pre-push` con el objeto local igual a ceros | — | A | Impedible | `--no-verify` |
 | **`reset --hard`** | Ninguno antes de reescribir el working tree | `reference-transaction` si mueve la rama | C / B | **No impedible**. Mitigación: Time Machine | — |
 | **Rebase** | `pre-rebase` (también en `pull --rebase`, después del `fetch` y antes de tocar el working tree) | `reference-transaction` al mover la rama al final | A (principal) | Impedible | `--no-verify` salta el principal |
@@ -214,3 +214,12 @@ Ajuste respecto a la recomendación del coordinador: el aviso en el Cockpit y la
 - **`HEAD` creado** (§ 4): una línea de `HEAD` con valor viejo cero es el `HEAD` de un worktree nuevo, no una actualización del principal; no es gobernada (motivo `no-reconocible`).
 - **Coste en Windows** (§ 5, medido el 2026-10-05, § 14 de los resultados del spike): con el dispatcher nativo, ≈ 6 ms por invocación que no evalúa (commit con el conjunto mínimo +40 ms p50); el `fetch` de 1.000 refs nuevas añade ≈ +13 s (con `sh`, +130 s). El objetivo ⚠️ ≤ 5 ms p95 por invocación queda algo por encima en esa máquina y se declara.
 - **Latencia en macOS** (US-GRD-001, informe): commit +36 ms p50 / +41 ms p95; evaluación gobernada +26 / +31 ms; vía rápida +12 / +14 ms (portátil, no en reposo).
+
+## Enmienda (2026-10-06, XP-30)
+
+**Decisión del orquestador (2026-10-06), validada por Arquitecto.** El `status` sigue en `accepted`. La garantía a los usuarios no cambia: el renombrado sobre la base en un repo reftable sigue publicado como no impedible (`RenameBaseReftable`, Q-GRD-28), así que no hace falta pasar por el PO.
+
+- **Renombrar sobre la base con reftable** (`branch -M feat main`, § 1 y § 3; SPIKE-GRD-001 D11): **no es un cambio de Git 2.56**. Con 2.50.1 (macOS), 2.55.0 (CI) y 2.56.0 (contenedor Linux), el renombrado (borrar `feat` y reescribir `main`) **no ejecuta ningún hook**. Después solo corre una transacción, la del symref `0000… ref:refs/heads/main HEAD`, cuando `main` ya está reescrita y `feat` borrada. El producto nunca la evalúa (vía rápida de los valores `ref:`, Enmienda 2026-10-05), así que para Guardrails el caso sigue siendo C, como dice el § 1.
+- **El veredicto del ejecutor de INF-GRD-001 depende de su sonda**: deniega cualquier entrada que contenga `refs/heads/main`, también esa línea de `HEAD`, y por eso mide **B** en todas esas versiones. La guarda del spike solo denegaba borrados de `main`, no denegó esa línea y midió C con 2.56.0. La fila "C para ≥ 2.56.0" se heredó de ahí. La lista de referencia del ejecutor tiene ahora **una sola fila** reftable para `rename-over-base`: B desde 2.50.1 en adelante. Si la sonda cambia (por ejemplo, para comparar solo el nombre de la ref), la fila deja de valer y hay que volver a medir.
+- **Procesos de hook por comando** (§ 5, Validación 13): la tabla de referencia añade filas exactas medidas en el contenedor Linux: 2.56.0, idéntica a 2.55.0, y 2.38.5 y 2.43.0, idénticas entre sí, sin las transacciones de symref ni `preparing`. Se siguen usando versiones exactas para que una actualización del runner nunca cambie el gate en silencio.
+- **Pruebas de extremo a extremo con la matriz**: el daemon resuelve Git con un `PATH` fijo, así que en el contenedor usaba el Git de la distro y no el de la etapa de la matriz. En las compilaciones de depuración, `GITRAPTOR_TEST_GIT` fija el único Git que el daemon puede resolver, de forma estricta y sin otros candidatos. Release no lo lee (SEC-06).
