@@ -56,6 +56,8 @@ Las rutas cortas de la columna Origen van bajo `docs/requirements/features/`. La
 | XP-27 | Linux + Windows | INF-GRP-003 | Binarios de release probados más allá de `--version` | Contenedor + máquina Windows | pendiente |
 | XP-28 | Windows | INF-GRP-003, ADR-GRP-014 | Artifact Signing en Windows ARM (`windows-11-arm`) | Máquina Windows ARM | pendiente |
 | XP-29 | Windows | INF-GRP-004, ADR-GRP-014, ADR-GRP-005 § 4 | Actualizar con winget o `install.ps1` mientras corre el daemon | Máquina Windows | pendiente |
+| XP-30 | Linux | US-GRD-001, ADR-GRD-001 Validación 13 | Suites de US-GRD-001 (escenarios, criterios y recuperación) con la terminal del desarrollador vía `script` de util-linux, con Git 2.38.5 y la distro (2.43) | Contenedor + CI (`guardrails-git-min`) | **pasa** en el contenedor (2026-10-05): 22/22 con Git 2.38.5 y con 2.43.0 (arm64). La matriz de SPIKE-GRD-001 en Linux sigue pendiente |
+| XP-31 | Windows | US-GRD-001, SPIKE-GRD-001 § 11 y § 14, ADR-GRD-001 (Enmienda 2026-10-05) | Coste del dispatcher (`sh` frente a nativo) y dispatcher nativo en modo degradado; la instalación espera al canal (XP-01) y la DACL de la carpeta (M-07) | Máquina Windows | parcial: coste medido (2026-10-05, § 14 de los resultados del spike); ver el PR de US-GRD-001 para el humo funcional |
 
 ## Contenedor Linux: resultados del 2026-10-05
 
