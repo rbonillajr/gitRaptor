@@ -209,7 +209,8 @@ Aplicada desde DEP-CKP-4 y DEP-CKP-14 (y la parte de rutas de DEP-CKP-1) de [CTX
   - Campos: `WorktreeView.last_activity_utc_ms` y, para la antigüedad de la copia local del remoto, `RepoView.fetched_utc_ms` y `WorktreeStateData.fetched_utc_ms` (mtime de `FETCH_HEAD`, recortado a "ahora"). Viajan en `scope.snapshot`, `engine.snapshot`, `repo.add` y `worktree.state`, sin evento nuevo.
   - Capacidad `scope.activity` (ADR-GRP-016): sin ella, el daemon no envía esos campos.
   - Regla de cambio: cuenta el head (rama o commit), los recuentos y la lista de cambios, y la legibilidad. No cuentan el ↑↓ ni los cambios de sesión.
-  - **Desviación declarada**: no lleva el desfase local, porque el Cockpit solo muestra antigüedades. Por ahora se deriva en memoria al publicar, no de los eventos del almacén, y no lleva la marca del hueco: vale "no disponible" hasta el primer cambio de cada ejecución del motor.
+  - **Desviación declarada**: no lleva el desfase local, porque el Cockpit solo muestra antigüedades. Se deriva en memoria al publicar y, al arrancar o al añadir el repo, se **siembra con el último evento de Git del worktree en el almacén**. Sin eventos queda ausente.
+  - **Marca del hueco** (Enmienda 2026-10-06, arranque en frío, DS-US-CKP-001 § 8; decisión del orquestador validada por Arquitecto): `WorktreeView.last_activity_in_gap`, un booleano bajo `scope.activity`. Es verdadero si el evento sembrado está enlazado a un hueco, y el primer cambio en vivo lo quita. Pendiente: que los huecos del observador en vivo también marquen el valor.
   - Última sesión y estado en conflicto: siguen **pendientes, dueño: worker del canal (TS-GRP-004)**.
 
 **Validación añadida**: un commit en un worktree actualiza su última actividad; un cambio de sesión a inactivo no la actualiza; tras un hueco, la última actividad lleva la marca del hueco; un worktree cuya sesión terminó publica esa sesión con su fin y su causa mientras existe.
