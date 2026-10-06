@@ -100,6 +100,9 @@ impl Machine {
             // Debug builds only: the agents the daemon knows; none of this test's ancestors.
             ("GITRAPTOR_AGENT_EXECUTABLES", "raptor-fake-agent".into()),
             ("PATH", "/usr/bin:/bin".into()),
+            // Debug builds only: the daemon uses the Git the repos are created with (the
+            // matrix version), never another one (XP-30).
+            ("GITRAPTOR_TEST_GIT", git_from_path().into_os_string()),
             ("HOME", self.f.home.clone().into_os_string()),
             ("LANG", "en_US.UTF-8".into()),
         ]
