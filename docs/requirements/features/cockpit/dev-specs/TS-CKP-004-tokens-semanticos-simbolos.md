@@ -12,7 +12,7 @@ related:
   adrs: [ADR-GRP-003, ADR-CKP-003, ADR-GRP-002, ADR-GRP-001]
   nfrs: [NFR-09]
   rules: [BR-CKP-EDGE-006]
-tags: [cockpit, design-tokens, tema, simbolos, accesibilidad, nfr-09, dtcg, style-dictionary, contraste, no-color]
+tags: [cockpit, design-tokens, tema, simbolos, accesibilidad, nfr-09, dtcg, style-dictionary, contraste, no-color, paleta-a, terminal-clara, osc-11, colorfgbg]
 ---
 
 # Dev Spec — TS-CKP-004: tokens semánticos y símbolos
@@ -92,7 +92,7 @@ contrast_ratio(Rgb, Rgb) -> f64        // WCAG 2.1
 
 **Pares medidos** (D8): cada token de primer plano sobre `bg.default`; `text.default` y `text.muted` sobre `bg.selected` y `bg.highlight`; `text.inverse` sobre `accent`, `focus` y `status.*` (los colores sobre los que se imprime invertido).
 
-⚠️ **ASSUMPTION** (DSYS-GRP-001 § 8.1 y § 8.2 abiertas): acento teal; paleta de agentes Okabe-Ito (apta para daltonismo) con el negro sustituido por blanco en `agent.8` (un gris se confundía con `text.muted`, es decir, con un agente inactivo) y el azul aclarado (`#4fa3e0`; el original daba 3.3:1 sobre fondo oscuro); fondo oscuro supuesto para el informe del juego normal. Choques conocidos y aceptados porque el símbolo y el nombre distinguen siempre: el acento teal frente a `agent.2` (azul cielo), y bermellón, amarillo y verde azulado de agentes frente a `status.danger`, `warning` y `success`. En el juego normal, el informe marca por debajo de 4.5:1 `agent.6` (4.4), `text.muted` sobre `bg.selected` (2.4) y sobre `bg.highlight` (3.8): sin gate hasta que § 8 fije la paleta y el umbral.
+~~⚠️ **ASSUMPTION**~~ **Retirada el 2026-10-05** (paleta A decidida; ver § 8). Texto original (DSYS-GRP-001 § 8.1 y § 8.2 entonces abiertas): acento teal; paleta de agentes Okabe-Ito (apta para daltonismo) con el negro sustituido por blanco en `agent.8` (un gris se confundía con `text.muted`, es decir, con un agente inactivo) y el azul aclarado (`#4fa3e0`; el original daba 3.3:1 sobre fondo oscuro); fondo oscuro supuesto para el informe del juego normal. Choques conocidos y aceptados porque el símbolo y el nombre distinguen siempre: el acento teal frente a `agent.2` (azul cielo), y bermellón, amarillo y verde azulado de agentes frente a `status.danger`, `warning` y `success`. En el juego normal, el informe marca por debajo de 4.5:1 `agent.6` (4.4), `text.muted` sobre `bg.selected` (2.4) y sobre `bg.highlight` (3.8): sin gate hasta que § 8 fije la paleta y el umbral.
 
 ## 6. Plan de tests
 
@@ -114,3 +114,59 @@ contrast_ratio(Rgb, Rgb) -> f64        // WCAG 2.1
 - Verificación manual de la paleta en emuladores de macOS (claro/oscuro, truecolor, 256, 16): se hace cuando exista la primera pantalla (INF-CKP-001), porque esta historia no pinta nada.
 - Anchura real de `⚡`, `⛔`, `⚠` y `ℹ` en terminales de Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
 - El job `tokens up to date` bloquea el merge solo si se añade a la protección de rama (hoy solo se exigen los jobs `repo-intact`): anotado en el PR.
+
+## 8. Enmienda (2026-10-05): paleta A, terminal clara y detección del fondo
+
+**Decisión de Rene Bonilla (2026-10-05)**: paleta **A, «Grafito y teal»**. Retira la ⚠️ ASSUMPTION de § 5 (D7). El resto: **Decisión del orquestador (2026-10-05), validada por Arquitecto**. Valores en DSYS-GRP-001, enmienda de la paleta.
+
+### 8.1 Ubicación
+
+| Archivo | Cambio |
+|---|---|
+| `tokens/color.json` | Primitivos claros (`gray.{100,150,600,950}`, `*.700`, `yellow.600`, `okabeIto.*OnLight`) y `gray.{400,750}` para la oscura; overrides `ansi256` donde hace falta |
+| `tokens/semantic.json` | `$extensions["dev.gitraptor"].light` en cada semántico no alias (obligatorio: el build falla sin él) |
+| `scripts/rust-format.mjs` | Emite `light: Values` en `ColorSpec` |
+| `crates/theme/src/lib.rs` | `Background`, `Theme::with_background`, `ColorToken::values(contrast, background)` |
+| `crates/theme/src/detect.rs` | Lógica pura: `ThemeChoice`, `resolve`, `parse_osc11_reply`, `Background::{from_rgb, from_colorfgbg}`, `OSC11_QUERY`, `reply_complete` |
+| `apps/cli/src/term.rs` | E/S (solo Unix, `rustix` `termios`): `detect_theme`, `query_background`. Lo cablea INF-CKP-001 |
+| `crates/theme/examples/palette.rs` | Galería de tokens (ANSI o `--html`) |
+
+### 8.2 API
+
+```rust
+Theme::new(mode, contrast, symbols)              // terminal oscura, como antes
+    .with_background(Background::{Dark|Light})   // de resolve()
+token.values(Contrast, Background) -> Values     // el alto contraste ignora el fondo
+resolve(flag: Option<ThemeChoice>, no_color: bool, env, query) -> Detection { contrast, background, source, invalid_env }
+// apps/cli: term::detect_theme(flag, no_color) = resolve(flag, no_color, env::var, || query_background(QUERY_TIMEOUT))
+```
+
+Precedencia: `--theme` > `GITRAPTOR_THEME` > OSC 11 > `COLORFGBG` > oscura. `auto` cede al siguiente. Sin color (`no_color`, `NO_COLOR` no vacío, `TERM=dumb`) no se consulta la terminal. `Source` dice de dónde salió (para diagnóstico).
+
+### 8.3 Decisiones
+
+| # | Decisión | Motivo |
+|---|---|---|
+| D10 | Variante `light` por token semántico, mismo esquema y tres profundidades; obligatoria salvo en alias | Una caída silenciosa a la oscura es el fallo que se corrige |
+| D11 | Lógica en `crates/theme` sin dependencias; E/S de la terminal en `apps/cli` (`term`) | Mantiene D9 y el dueño único del estado de termios (ADR-CKP-003 § 12). Alternativa descartada: feature opcional con `rustix` en `crates/theme`, y el crate `terminal-colorsaurus` (más dependencias) |
+| D12 | OSC 11 seguido de DA1; modo sin eco ni canónico (se mantiene `ISIG`), `VMIN=0`/`VTIME=1`, tope de 200 ms y 1 KiB, `tcflush` de la entrada y restauración con guardia | DA1 acaba la espera al instante en terminales sin OSC 11; `poll(2)` no sirve con `/dev/tty` en macOS. Una respuesta posterior al timeout puede llegar al lector de la TUI, que ignora secuencias desconocidas |
+| D13 | Claro si la luminancia relativa > 0.179 (contrasta más con negro que con blanco); `COLORFGBG`: último campo, 7 y 9–15 claro | Umbral WCAG simétrico; convención de rxvt y vim |
+| D14 | `GITRAPTOR_THEME` inválido: se ignora y se informa sin repetir el valor | Entrada sin controlar (SEC-12) |
+| D15 | Tenue oscuro `#949494` en vez de `#8a8a8a`; `bg.highlight` oscuro `#3a3a3a` | Ajuste a la decisión de Rene: 4.35 → 4.95 sobre Solarized oscuro; `#262626` no se distinguía del fondo |
+| D16 | Gate AA (truecolor y 256): texto y tenue de cada variante sobre sus fondos típicos y `text.default` sobre selección y barra; en la clara, todo primer plano sobre blanco y `text.inverse` sobre acento, foco y estados; en 256, `status.*`/`git.*` distintos no comparten índice. Informe del resto | Amplía D8. `text.default` se hereda: el gate mide su referencia |
+
+### 8.4 Plan de tests (añadidos)
+
+| Criterio | Test |
+|---|---|
+| Variante clara completa | Node: `every semantic token references primitives for every set…`, `the build fails when a semantic token has no light-terminal value`, `the control fails when a light-terminal value is edited…`. Rust: `every_color_token_has_three_depths_in_every_set` |
+| Tema claro y alto contraste | `a_light_theme_paints_the_light_values_and_high_contrast_ignores_the_background`, `light_values_differ_from_dark_where_the_brief_found_them_unreadable` |
+| Contraste | `normal_sets_meet_wcag_aa_on_typical_grounds` (gate), `status_and_git_colors_keep_distinct_256_indices_in_each_variant` (gate), `contrast_report` (informe) |
+| Detección | `detect::tests::*`: respuestas OSC 11 simuladas, basura, luminancia, `COLORFGBG`, `ThemeChoice`, precedencia, sin respuesta, solo DA1, `NO_COLOR`/`TERM=dumb`/`--no-color`, variable inválida |
+| E/S | `term::unix::tests::*` contra una pseudoterminal: responde, sin OSC 11 (vuelve al instante), muda (no pasa del timeout y restaura el modo), fichero que no es terminal |
+
+### 8.5 Fuera de alcance
+
+- Cablear `--theme` en clap y llamar a `term::detect_theme` al arrancar la TUI: INF-CKP-001 (antes del lector de eventos de crossterm). Snapshots de widgets en las dos variantes: TS-CKP-005.
+- Detección en Linux (probada solo en macOS) y en Windows (stub): **Pendiente: etapa de validación multiplataforma**.
+
