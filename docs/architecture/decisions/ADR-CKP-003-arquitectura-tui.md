@@ -10,7 +10,7 @@ updated: 2026-10-06
 deciders: [Orquestador (delegación de Rene Bonilla, 2026-10-04)]
 domain: GRP
 feature: cockpit
-related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-004, ADR-GRP-005, ADR-GRP-006, ADR-GRP-009, ADR-GRP-011, ADR-GRP-013, ADR-TMC-004, ADR-TMC-005, ADR-GRD-007, ADR-CKP-001, ADR-CKP-002, TS-GRP-004, INF-GRP-001, INF-GRP-002, CTX-CKP-001, BR-CKP-001, DSYS-GRP-001]
+related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-004, ADR-GRP-005, ADR-GRP-006, ADR-GRP-009, ADR-GRP-011, ADR-GRP-013, ADR-TMC-004, ADR-TMC-005, ADR-GRD-007, ADR-CKP-001, ADR-CKP-002, TS-GRP-004, INF-GRP-001, INF-GRP-002, CTX-CKP-001, BR-CKP-001, DSYS-GRP-001, ADR-GRP-016]
 tags: [cockpit, tui, ratatui, crossterm, tea, elm, estado, bucle-de-eventos, render, canal, reconexion, latencia, nfr-04, sec-12, saneado, accesibilidad, i18n, editor, cli]
 ---
 
@@ -289,6 +289,15 @@ Las pruebas usan repos y perfiles temporales y pasan por el arnés de INF-GRP-00
 | I-03 · Ruta absoluta al editor | § 4 (N10), § 9; V9 |
 | M-03 · Capa fijada por el daemon (efecto en la TUI) | § 2 (acciones según la capa), § 4 (N5); V12 |
 | PO · `--plain` | § 10 y Consecuencias: cita R-CKP-10 de CTX-CKP-001; el supuesto se retira |
+
+## Enmienda (2026-10-06, ADR-GRP-016: códigos por módulo e i18n por feature)
+
+Decisión del orquestador (2026-10-06), validada por el Arquitecto. Detalle en [ADR-GRP-016](./ADR-GRP-016-extension-registro-capacidades.md) § 3 y § 4.
+
+| Cambio | Dónde |
+|---|---|
+| **N7, códigos por módulo.** La lista compartida (`rpc::code`, `ErrorCode`) se congela en `-32016` con sus 21 códigos. Un código nuevo lo declara su módulo como `ErrorSpec` dentro de su bloque de 20, desde `-33000` hacia abajo, fuera del rango reservado de JSON-RPC. El cliente lo presenta igual, por código y `data` con la clave `error.<name>` (`rpc::error_name`), nunca por `message`. V8 cubre también los códigos de los módulos. Un código nuevo de un método que ya existe es un cambio de forma y pide una capacidad | § 4 (N7) |
+| **i18n por feature.** Los catálogos de cadenas de la CLI pasan a `apps/cli/i18n/<idioma>/<feature>.txt`, que `build.rs` registra por su presencia. La garantía de "ninguna traducción ausente" la dan los tests: paridad en/es por archivo, mismas claves y marcadores, ninguna clave duplicada y cada grupo de claves en un solo archivo. El catálogo tipado de la TUI (`present::i18n`) sigue con su `match` exhaustivo | § 10 |
 
 ## Referencias
 

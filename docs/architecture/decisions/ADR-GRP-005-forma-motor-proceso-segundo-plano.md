@@ -10,7 +10,7 @@ updated: 2026-10-06
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
-related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-006, ADR-GRP-009, ADR-GRP-010, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, ADR-GRD-003, ADR-GRD-004, ADR-GRD-006, ADR-GRD-007, ADR-CKP-001, ADR-CKP-002, ADR-CKP-003, CTX-GRP-001, BR-GRP-001]
+related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-006, ADR-GRP-009, ADR-GRP-010, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, ADR-GRD-003, ADR-GRD-004, ADR-GRD-006, ADR-GRD-007, ADR-CKP-001, ADR-CKP-002, ADR-CKP-003, CTX-GRP-001, BR-GRP-001, ADR-GRP-016]
 tags: [motor-local, daemon, ipc, json-rpc, autoarranque, unix-socket, named-pipe, seguridad, continuidad, comandos-reservados, prompt-injection]
 ---
 
@@ -319,3 +319,13 @@ Decisión del orquestador (2026-10-06), validada por el Arquitecto. Detalle en l
 | **Arranque por el gestor**: el cliente pide el arranque (`launchctl kickstart`, nunca con `-k`, o `systemctl --user start`) solo si el artefacto ejecuta **su mismo binario** (comparación canónica). Si no, o si el gestor falla, lo arranca él con entorno limpio. Las herramientas se ejecutan por ruta absoluta fija, con argv y entorno fijos y un tiempo máximo. `XDG_RUNTIME_DIR` se deriva del uid y se verifica | § 3 |
 | **SEC-14 ampliado**: también se rechaza todo el canal npm (`node_modules`), las cachés de `pnpm dlx` y `bunx`, y un binario que otros usuarios pueden modificar (ADR-GRP-014, INF-GRP-004) | § 3 |
 | **Validación 11, aclaración**: si faltan, `enable` crea las carpetas estándar del artefacto (`~/Library/LaunchAgents`, `~/.config/systemd/user` y su `default.target.wants`), y `disable` no las borra. Fuera del perfil solo cambian el artefacto y, como mucho, esas carpetas | Validación 11 |
+
+## Enmienda (2026-10-06, ADR-GRP-016: capacidades)
+
+Decisión del orquestador (2026-10-06), validada por el Arquitecto. Detalle en [ADR-GRP-016](./ADR-GRP-016-extension-registro-capacidades.md) § 1.
+
+| Cambio | Dónde |
+|---|---|
+| **El protocolo 9 es el último para cambios aditivos.** Un método nuevo se descubre en `hello.methods`. Un cambio de forma es una **capacidad** con nombre (`<módulo>.<feature>`) que declara su módulo. Las formas de los protocolos 6 (`connection.requester`) y 8 (`events.git-reset`) pasan a ser capacidades legadas, implícitas para esos protocolos y para el 9. Solo se vuelve a subir el protocolo si se quita algo | § 4 |
+| **`hello` no cambia de forma.** Un daemon de protocolo 9 añade `capabilities` a `HelloResult`, y solo para conexiones de protocolo 9. El método `connection.accept` (todos los perfiles, no reservado) recibe las capacidades del cliente una sola vez y antes de la primera suscripción. Una conexión que no lo llama recibe las formas del 8 | § 5 |
+| **Reemplazo con el mismo protocolo.** `ReplaceParams` no cambia. Desde el protocolo 9, un daemon acepta un `protocol` igual al suyo solo del binario instalado y actualizado (SEC-13). Si no, responde `-32602` y la conexión sigue. El cliente lo pide cuando el daemon no anuncia una capacidad que él conoce, y si el daemon se niega, sigue con lo concedido. Con un daemon de protocolo 8 o anterior, la regla de "solo un protocolo más nuevo" no cambia. El registro `replace:9` se clasifica como caída hasta que exista la primera capacidad posterior al 9 | § 4 |
