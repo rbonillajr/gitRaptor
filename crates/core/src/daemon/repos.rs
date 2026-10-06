@@ -374,7 +374,7 @@ impl Daemon {
         // A session S3 found before the detector's start reached this loop
         // is created here; its later start is then a no-op.
         let mut created: Vec<&str> = Vec::new();
-        for a in attributed.iter().flatten() {
+        for a in attributed.iter().flatten().filter(|a| !a.inferred) {
             if !created.contains(&a.session.session_id.as_str()) {
                 created.push(&a.session.session_id);
                 ops.extend(sessions::start_ops(store, &a.session));
@@ -390,8 +390,10 @@ impl Daemon {
                     offset_s: event.offset_s,
                 },
                 // No session without positive evidence (ADR-GRP-013 § 3).
-                session_id: session.as_ref().map(|a| a.session.session_id.clone()),
-                evidence: session.as_ref().map(|a| a.evidence.to_owned()),
+                session_id: session
+                    .as_ref()
+                    .and_then(|a| a.session_id().map(str::to_owned)),
+                evidence: session.as_ref().map(sessions::Attribution::evidence),
                 gap_id: if event.kind == GitEventKind::Reconciled {
                     gap_id.clone()
                 } else {
@@ -465,7 +467,7 @@ impl Daemon {
                 .as_ref()
                 .and_then(|a| {
                     let store = &self.stores.iter().find(|(id, _)| *id == batch.repo_id)?.1;
-                    let s = store.session(&a.session.session_id).ok().flatten()?;
+                    let s = store.session(a.session_id()?).ok().flatten()?;
                     Some(sessions::session_actor(store, &s))
                 })
                 .unwrap_or(gitraptor_api::Actor::Unattributed);
@@ -481,6 +483,12 @@ impl Daemon {
                 gap_id: (event.kind == GitEventKind::Reconciled)
                     .then(|| gap_id.clone())
                     .flatten(),
+                inferred: session.as_ref().filter(|a| a.inferred).map(|a| {
+                    gitraptor_api::messages::InferredAgent {
+                        kind: gitraptor_api::AgentKind::ClaudeCode,
+                        session_id: a.session.session_id.clone(),
+                    }
+                }),
             };
             self.bus.publish(GIT_EVENT, view, Some(timings), |_| {});
             // After publishing, outside the engine's budget (ADR-TMC-004 § 2).

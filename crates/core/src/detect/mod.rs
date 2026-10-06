@@ -535,6 +535,23 @@ impl Detector {
         }
     }
 
+    /// The hint for an event S3 did not see (the short-commit race,
+    /// amendment of ADR-GRP-012): the only present session of `worktree`,
+    /// when it is a detected one, alive and active. `None` with zero or
+    /// several present sessions there, registered ones included.
+    pub fn single_session(&self, repo_id: &str, worktree: &Path) -> Option<PresentSession> {
+        let st = self.inner.lock();
+        let here = |l: &&Live| l.repo_id == repo_id && l.worktree == worktree;
+        if st.registered.values().map(|r| &r.live).any(|l| here(&l)) {
+            return None;
+        }
+        let mut detected = st.live.values().filter(here);
+        match (detected.next(), detected.next()) {
+            (Some(only), None) if only.state == SessionStateView::Active => Some(only.present()),
+            _ => None,
+        }
+    }
+
     /// Activity in a worktree (BR-WF-001): a Git event observed in it.
     pub fn activity(&self, repo_id: &str, worktree: &Path) {
         self.inner.activity(repo_id, worktree);

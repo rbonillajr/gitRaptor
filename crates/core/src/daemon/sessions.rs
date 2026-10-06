@@ -14,9 +14,9 @@ use std::sync::Arc;
 
 use gitraptor_api::event::SESSION_STATE;
 use gitraptor_api::messages::{
-    AgentSupport, GitEventKind, MAX_SESSIONS_PAGE, RegistrationOutcome, RegistrationRegisterResult,
-    RegistrationRejection, RegistrationWithdrawResult, SessionEndCauseView, SessionStateView,
-    SessionView, SessionsListParams,
+    AgentSupport, GitEventKind, InferredAgent, MAX_SESSIONS_PAGE, RegistrationOutcome,
+    RegistrationRegisterResult, RegistrationRejection, RegistrationWithdrawResult,
+    SessionEndCauseView, SessionStateView, SessionView, SessionsListParams,
 };
 use gitraptor_api::{Actor, AgentKind as ApiAgentKind, AgentOrigin, Timings, Untrusted, clock};
 
@@ -33,7 +33,7 @@ use crate::profile::{
     Agent, AgentKind, Author, EndCause, NewEvent, Origin, RecordKind, RepoStore, Session,
     Timestamp, WriteOp,
 };
-use crate::watch::{ObservedBatch, ObserverHooks};
+use crate::watch::{ObservedBatch, ObserverHooks, RawEvent};
 
 /// Evidence stored with an event that S3 attributed (ADR-GRP-013 § 1).
 const S3_EVIDENCE: &str = r#"{"signals":["s3"]}"#;
@@ -43,11 +43,51 @@ const S3_EVIDENCE: &str = r#"{"signals":["s3"]}"#;
 /// (ADR-GRP-012 rule 3).
 const REGISTRATION_EVIDENCE: &str = r#"{"signals":["registration"]}"#;
 
+/// Signal of an event inferred from the only active session of its
+/// worktree, when S3 saw no `git` (amendment of ADR-GRP-012).
+const SINGLE_SESSION_EVIDENCE: &str = "single-session";
+
 /// The session an event points to, and the evidence of it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct Attribution {
     pub session: PresentSession,
     pub evidence: &'static str,
+    /// Only a hint (amendment of ADR-GRP-012): the event stays without a
+    /// session, so unattributed, and its evidence names the session.
+    pub inferred: bool,
+}
+
+impl Attribution {
+    /// The session the event is stored with: none for a hint.
+    pub fn session_id(&self) -> Option<&str> {
+        (!self.inferred).then_some(self.session.session_id.as_str())
+    }
+
+    /// The evidence stored with the event; a hint names its session.
+    pub fn evidence(&self) -> String {
+        if self.inferred {
+            serde_json::json!({
+                "signals": [self.evidence],
+                "session": self.session.session_id,
+            })
+            .to_string()
+        } else {
+            self.evidence.to_owned()
+        }
+    }
+}
+
+/// The hint stored with an unattributed event, if it has one.
+pub(super) fn inferred_agent(evidence: Option<&str>) -> Option<InferredAgent> {
+    let value: serde_json::Value = serde_json::from_str(evidence?).ok()?;
+    let single = value["signals"]
+        .as_array()?
+        .iter()
+        .any(|s| s == SINGLE_SESSION_EVIDENCE);
+    Some(InferredAgent {
+        kind: ApiAgentKind::ClaudeCode,
+        session_id: value["session"].as_str().filter(|_| single)?.to_owned(),
+    })
 }
 
 impl Daemon {
@@ -291,53 +331,81 @@ impl Daemon {
             .events
             .iter()
             .map(|event| {
+                let attribution = self.attribute_one(detector, batch, event);
+                // After the hint, which wants a session already active.
                 detector.activity(&batch.repo_id, &event.worktree);
-                // A reconciliation never has a session (BR-EDGE-005).
-                if event.kind == GitEventKind::Reconciled {
-                    return None;
-                }
-                let outcome = detector.evidence(
-                    &batch.repo_id,
-                    &event.worktree,
-                    batch.marks.t_recv,
-                    batch.marks.t_flush,
-                );
-                let by_registration = || {
-                    detector
-                        .registration_evidence(&batch.repo_id, &event.worktree)
-                        .map(|session| Attribution {
-                            session,
-                            evidence: REGISTRATION_EVIDENCE,
-                        })
-                };
-                let label = match &outcome {
-                    S3Outcome::NoSession => return by_registration(),
-                    S3Outcome::NoSighting => "no-sighting",
-                    S3Outcome::Ambiguous => "ambiguous",
-                    S3Outcome::Attributed(_) => "attributed",
-                };
-                let diag = detector.diagnostics();
-                let count = |n: u64| Field::from(i64::try_from(n).unwrap_or(i64::MAX));
-                self.logger.info(
-                    "s3_evidence",
-                    &[
-                        ("repo", Field::id(&batch.repo_id)),
-                        ("event", event.kind.as_str().into()),
-                        ("outcome", label.into()),
-                        ("samples", count(diag.samples)),
-                        ("s3_cwd_unreadable", count(diag.cwd_unreadable)),
-                        ("s3_placed_by_ancestor", count(diag.placed_by_ancestor)),
-                    ],
-                );
-                match outcome {
-                    S3Outcome::Attributed(session) => Some(Attribution {
-                        session,
-                        evidence: S3_EVIDENCE,
-                    }),
-                    _ => by_registration(),
-                }
+                attribution
             })
             .collect()
+    }
+
+    fn attribute_one(
+        &self,
+        detector: &Detector,
+        batch: &ObservedBatch,
+        event: &RawEvent,
+    ) -> Option<Attribution> {
+        // A reconciliation never has a session (BR-EDGE-005).
+        if event.kind == GitEventKind::Reconciled {
+            return None;
+        }
+        let outcome = detector.evidence(
+            &batch.repo_id,
+            &event.worktree,
+            batch.marks.t_recv,
+            batch.marks.t_flush,
+        );
+        let by_registration = || {
+            detector
+                .registration_evidence(&batch.repo_id, &event.worktree)
+                .map(|session| Attribution {
+                    session,
+                    evidence: REGISTRATION_EVIDENCE,
+                    inferred: false,
+                })
+        };
+        // S3 saw no `git` (the short-commit race): the worktree's
+        // only active session, as a hint and not an attribution
+        // (amendment of ADR-GRP-012).
+        let inferred = || {
+            by_registration().or_else(|| {
+                detector
+                    .single_session(&batch.repo_id, &event.worktree)
+                    .map(|session| Attribution {
+                        session,
+                        evidence: SINGLE_SESSION_EVIDENCE,
+                        inferred: true,
+                    })
+            })
+        };
+        let label = match &outcome {
+            S3Outcome::NoSession => return by_registration(),
+            S3Outcome::NoSighting => "no-sighting",
+            S3Outcome::Ambiguous => "ambiguous",
+            S3Outcome::Attributed(_) => "attributed",
+        };
+        let diag = detector.diagnostics();
+        let count = |n: u64| Field::from(i64::try_from(n).unwrap_or(i64::MAX));
+        self.logger.info(
+            "s3_evidence",
+            &[
+                ("repo", Field::id(&batch.repo_id)),
+                ("event", event.kind.as_str().into()),
+                ("outcome", label.into()),
+                ("samples", count(diag.samples)),
+                ("s3_cwd_unreadable", count(diag.cwd_unreadable)),
+                ("s3_placed_by_ancestor", count(diag.placed_by_ancestor)),
+            ],
+        );
+        match outcome {
+            S3Outcome::Attributed(session) => Some(Attribution {
+                session,
+                evidence: S3_EVIDENCE,
+                inferred: false,
+            }),
+            S3Outcome::NoSighting => inferred(),
+            S3Outcome::NoSession | S3Outcome::Ambiguous => by_registration(),
+        }
     }
 
     /// `registration.register` (US-GRP-009): confirms the present session
@@ -803,5 +871,45 @@ fn session_view(
             EndCause::EndedDuringGap => SessionEndCauseView::EndedDuringGap,
             EndCause::RegistrationWithdrawn => SessionEndCauseView::RegistrationWithdrawn,
         }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn attribution(evidence: &'static str, inferred: bool) -> Attribution {
+        Attribution {
+            session: PresentSession {
+                session_id: "20:2000".into(),
+                worktree: PathBuf::from("/wt/feat-login"),
+                started_ms: 1,
+            },
+            evidence,
+            inferred,
+        }
+    }
+
+    /// Amendment of ADR-GRP-012: a hint is stored without a session (the
+    /// event stays unattributed) and its evidence names the session.
+    #[test]
+    fn a_hint_is_stored_without_a_session_and_read_back() {
+        let hint = attribution(SINGLE_SESSION_EVIDENCE, true);
+        assert_eq!(hint.session_id(), None);
+        let stored = hint.evidence();
+        assert_eq!(
+            inferred_agent(Some(&stored)),
+            Some(InferredAgent {
+                kind: ApiAgentKind::ClaudeCode,
+                session_id: "20:2000".into(),
+            })
+        );
+        let s3 = attribution(S3_EVIDENCE, false);
+        assert_eq!(s3.session_id(), Some("20:2000"));
+        assert_eq!(s3.evidence(), S3_EVIDENCE);
+        assert_eq!(inferred_agent(Some(S3_EVIDENCE)), None);
+        assert_eq!(inferred_agent(Some(REGISTRATION_EVIDENCE)), None);
+        assert_eq!(inferred_agent(None), None);
+        assert_eq!(inferred_agent(Some("not json")), None);
     }
 }
