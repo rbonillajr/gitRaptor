@@ -319,7 +319,7 @@ fn a_burst_of_1000_events_is_painted_within_the_cockpit_budget() {
             .repo
             .as_ref()
             .and_then(|r| r.data.as_ref())
-            .map(|d| d.worktree_count),
+            .map(|d| d.worktrees.len()),
         Some(WORKTREES)
     );
     let p95 = metrics.total.p95().unwrap();

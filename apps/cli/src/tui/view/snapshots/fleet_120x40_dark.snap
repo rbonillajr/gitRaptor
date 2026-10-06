@@ -1,0 +1,154 @@
+---
+source: apps/cli/src/tui/view/tests.rs
+expression: snap
+---
+ shop · ✔ live · engine observing · acting as you                                                            ⚡ –  ⛔ –
+┏━ › Fleet · ↑↓ vs main (local copy, fetch age not available) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃     Agent                     Branch                                                 Files ↑↓          Activity      ┃
+┃     Unattributed (you/other)  main                                                   ~0    ↑0 ↓0       not available ┃
+┃  ●  claude-1                  feat-pagos                                             ~2    ↑3 ↓1       not available ┃
+┃     Unattributed (you/other)  feat-docs                                              ~0    ↑1 ↓0       not available ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ r retry                                                                                                         q quit
+=== styles (dark) ===
+0:0-0 bg=#3a3a3a
+0:1-4 bg=#3a3a3a BOLD
+0:5-7 fg=#949494 bg=#3a3a3a
+0:8-8 fg=#3fb950 bg=#3a3a3a
+0:9-9 bg=#3a3a3a
+0:10-32 fg=#3fb950 bg=#3a3a3a
+0:33-35 fg=#949494 bg=#3a3a3a
+0:36-108 bg=#3a3a3a
+0:109-109 fg=#d29922 bg=#3a3a3a
+0:111-111 bg=#3a3a3a
+0:112-112 fg=#d29922 bg=#3a3a3a BOLD
+0:113-114 bg=#3a3a3a
+0:115-115 fg=#f85149 bg=#3a3a3a
+0:117-117 bg=#3a3a3a
+0:118-118 fg=#f85149 bg=#3a3a3a BOLD
+0:119-119 bg=#3a3a3a
+1:0-4 fg=#ffe066
+1:5-60 fg=#ffe066 BOLD
+1:61-119 fg=#ffe066
+2:0-0 fg=#ffe066
+2:6-10 fg=#949494 BOLD
+2:32-37 fg=#949494 BOLD
+2:87-91 fg=#949494 BOLD
+2:93-94 fg=#949494 BOLD
+2:105-112 fg=#949494 BOLD
+2:119-119 fg=#ffe066
+3:0-0 fg=#ffe066
+3:6-29 fg=#949494
+3:87-88 fg=#949494
+3:105-117 fg=#949494
+3:119-119 fg=#ffe066
+4:0-0 fg=#ffe066
+4:3-3 fg=#3fb950
+4:6-13 fg=#e69f00 BOLD
+4:87-88 fg=#d29922
+4:105-117 fg=#949494
+4:119-119 fg=#ffe066
+5:0-0 fg=#ffe066
+5:6-29 fg=#949494
+5:87-88 fg=#949494
+5:105-117 fg=#949494
+5:119-119 fg=#ffe066
+6:0-0 fg=#ffe066
+6:119-119 fg=#ffe066
+7:0-0 fg=#ffe066
+7:119-119 fg=#ffe066
+8:0-0 fg=#ffe066
+8:119-119 fg=#ffe066
+9:0-0 fg=#ffe066
+9:119-119 fg=#ffe066
+10:0-0 fg=#ffe066
+10:119-119 fg=#ffe066
+11:0-0 fg=#ffe066
+11:119-119 fg=#ffe066
+12:0-0 fg=#ffe066
+12:119-119 fg=#ffe066
+13:0-0 fg=#ffe066
+13:119-119 fg=#ffe066
+14:0-0 fg=#ffe066
+14:119-119 fg=#ffe066
+15:0-0 fg=#ffe066
+15:119-119 fg=#ffe066
+16:0-0 fg=#ffe066
+16:119-119 fg=#ffe066
+17:0-0 fg=#ffe066
+17:119-119 fg=#ffe066
+18:0-0 fg=#ffe066
+18:119-119 fg=#ffe066
+19:0-0 fg=#ffe066
+19:119-119 fg=#ffe066
+20:0-0 fg=#ffe066
+20:119-119 fg=#ffe066
+21:0-0 fg=#ffe066
+21:119-119 fg=#ffe066
+22:0-0 fg=#ffe066
+22:119-119 fg=#ffe066
+23:0-0 fg=#ffe066
+23:119-119 fg=#ffe066
+24:0-0 fg=#ffe066
+24:119-119 fg=#ffe066
+25:0-0 fg=#ffe066
+25:119-119 fg=#ffe066
+26:0-0 fg=#ffe066
+26:119-119 fg=#ffe066
+27:0-0 fg=#ffe066
+27:119-119 fg=#ffe066
+28:0-0 fg=#ffe066
+28:119-119 fg=#ffe066
+29:0-0 fg=#ffe066
+29:119-119 fg=#ffe066
+30:0-0 fg=#ffe066
+30:119-119 fg=#ffe066
+31:0-0 fg=#ffe066
+31:119-119 fg=#ffe066
+32:0-0 fg=#ffe066
+32:119-119 fg=#ffe066
+33:0-0 fg=#ffe066
+33:119-119 fg=#ffe066
+34:0-0 fg=#ffe066
+34:119-119 fg=#ffe066
+35:0-0 fg=#ffe066
+35:119-119 fg=#ffe066
+36:0-0 fg=#ffe066
+36:119-119 fg=#ffe066
+37:0-0 fg=#ffe066
+37:119-119 fg=#ffe066
+38:0-119 fg=#ffe066
+39:1-1 fg=#2dc2ad BOLD
+39:113-113 fg=#2dc2ad BOLD

@@ -3,8 +3,10 @@
 //! of the engine; a gap or a `resync` stops applying and asks for a new
 //! snapshot.
 
-use gitraptor_api::event::{ENGINE_STATE, WORKTREE_STATE};
-use gitraptor_api::messages::{EngineView, ResyncReason, WorktreeStateData};
+use gitraptor_api::event::{ENGINE_STATE, SESSION_STATE, WORKTREE_STATE};
+use gitraptor_api::messages::{
+    EngineView, ResyncReason, SessionView, SessionsListResult, WorktreeStateData,
+};
 use gitraptor_api::scope::{Scope, ScopeSnapshot};
 use ratatui::crossterm::event::KeyEventKind;
 
@@ -91,7 +93,24 @@ fn on_engine(model: &mut Model, msg: EngineMsg) -> Vec<Cmd> {
             event,
         } => on_event(model, &scope, scope_seq, &event),
         EngineMsg::Resync { scope, reason } => on_resync(model, scope, reason),
+        EngineMsg::Sessions { repo_id, result } => {
+            on_sessions(model, &repo_id, &result);
+            Vec::new()
+        }
     }
+}
+
+/// The sessions listed right after the repo's snapshot, merged with what the stream already
+/// applied (the same upsert: neither order regresses a session).
+fn on_sessions(model: &mut Model, repo_id: &str, result: &SessionsListResult) {
+    let Some(data) = selected(model, repo_id).and_then(|r| r.data.as_mut()) else {
+        return;
+    };
+    data.detection = Some(result.detection_available);
+    for view in &result.sessions {
+        data.upsert(ingest::session(view));
+    }
+    model.dirty = true;
 }
 
 fn on_snapshot(model: &mut Model, snapshot: ScopeSnapshot) {
@@ -177,13 +196,18 @@ fn apply(model: &mut Model, scope: &Scope, event: &gitraptor_api::Event) {
                 return;
             };
             replica.applied += 1;
+            let Some(data) = replica.data.as_mut() else {
+                return;
+            };
             if event.kind == WORKTREE_STATE
-                && let (Some(data), Ok(state)) = (
-                    replica.data.as_mut(),
-                    serde_json::from_value::<WorktreeStateData>(event.data.clone()),
-                )
+                && let Ok(state) = serde_json::from_value::<WorktreeStateData>(event.data.clone())
             {
-                data.worktree_count = state.worktrees.len();
+                data.worktrees = ingest::worktrees(&state.worktrees);
+            } else if event.kind == SESSION_STATE
+                && let Ok(view) = serde_json::from_value::<SessionView>(event.data.clone())
+                && view.repo_id == data.repo_id
+            {
+                data.upsert(ingest::session(&view));
             }
         }
     }
@@ -228,6 +252,7 @@ mod tests {
     use gitraptor_api::event::Event;
     use gitraptor_api::messages::{
         BaseBranchView, BaseStatusView, DaemonView, EngineStateView, RepoStateView, RepoView,
+        SessionStateView,
     };
     use gitraptor_api::scope::{AutostartView, GlobalSnapshot, RepoSnapshot};
     use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -496,5 +521,145 @@ mod tests {
             );
         }
         assert_eq!(m.engine.global.data, before);
+    }
+
+    fn session_view(id: &str, state: SessionStateView, since: i64) -> SessionView {
+        SessionView {
+            repo_id: "r1".into(),
+            session_id: id.into(),
+            worktree: Untrusted::new("/w/a"),
+            actor: gitraptor_api::Actor::Agent {
+                kind: gitraptor_api::AgentKind::ClaudeCode,
+                name: None,
+                origin: gitraptor_api::AgentOrigin::Detected,
+            },
+            state,
+            started_utc_ms: 0,
+            state_since_utc_ms: since,
+            utc_offset_s: 0,
+            ended_utc_ms: None,
+            end_cause: None,
+        }
+    }
+
+    fn sessions_list(views: Vec<SessionView>) -> Msg {
+        engine(EngineMsg::Sessions {
+            repo_id: "r1".into(),
+            result: Box::new(SessionsListResult {
+                detection_available: true,
+                sessions: views,
+            }),
+        })
+    }
+
+    fn session_event(seq: u64, view: &SessionView) -> Msg {
+        engine(EngineMsg::Event {
+            scope: Scope::Repo {
+                repo_id: "r1".into(),
+            },
+            scope_seq: seq,
+            event: Box::new(Event {
+                seq,
+                kind: SESSION_STATE.into(),
+                version: 1,
+                wall_ms: 0,
+                timings: None,
+                data: serde_json::to_value(view).unwrap(),
+            }),
+        })
+    }
+
+    fn sessions(m: &Model) -> Vec<(String, SessionStateView)> {
+        m.engine
+            .repo
+            .as_ref()
+            .unwrap()
+            .data
+            .as_ref()
+            .unwrap()
+            .sessions
+            .iter()
+            .map(|s| (s.session_id.clone(), s.state))
+            .collect()
+    }
+
+    /// D1: an event read before the list answer but applied after it does not regress the
+    /// session; a later one applies.
+    #[test]
+    fn the_session_list_and_the_stream_converge_in_any_order() {
+        let mut m = model();
+        update(&mut m, repo_snapshot(2));
+        update(
+            &mut m,
+            sessions_list(vec![session_view("s1", SessionStateView::Inactive, 20)]),
+        );
+        update(
+            &mut m,
+            session_event(3, &session_view("s1", SessionStateView::Active, 10)),
+        );
+        assert_eq!(
+            sessions(&m),
+            vec![("s1".into(), SessionStateView::Inactive)]
+        );
+        update(
+            &mut m,
+            session_event(4, &session_view("s1", SessionStateView::Active, 30)),
+        );
+        assert_eq!(sessions(&m), vec![("s1".into(), SessionStateView::Active)]);
+        // At the same instant, ended wins: an ended session is never reopened.
+        update(
+            &mut m,
+            session_event(5, &session_view("s1", SessionStateView::Ended, 30)),
+        );
+        update(
+            &mut m,
+            session_event(6, &session_view("s1", SessionStateView::Active, 30)),
+        );
+        assert_eq!(sessions(&m), vec![("s1".into(), SessionStateView::Ended)]);
+    }
+
+    /// A new snapshot (gap, resync, reconnection) drops the sessions and their detection until
+    /// the channel lists them again.
+    #[test]
+    fn a_new_repo_snapshot_waits_for_the_session_list_again() {
+        let mut m = model();
+        update(&mut m, repo_snapshot(2));
+        update(
+            &mut m,
+            sessions_list(vec![session_view("s1", SessionStateView::Active, 1)]),
+        );
+        update(&mut m, repo_snapshot(9));
+        let data = m.engine.repo.as_ref().unwrap().data.as_ref().unwrap();
+        assert!(data.sessions.is_empty());
+        assert_eq!(data.detection, None);
+    }
+
+    #[test]
+    fn a_worktree_state_event_replaces_the_rows() {
+        let mut m = model();
+        update(&mut m, repo_snapshot(2));
+        let event = engine(EngineMsg::Event {
+            scope: Scope::Repo {
+                repo_id: "r1".into(),
+            },
+            scope_seq: 3,
+            event: Box::new(Event {
+                seq: 3,
+                kind: WORKTREE_STATE.into(),
+                version: 1,
+                wall_ms: 0,
+                timings: None,
+                data: json!({"repo_id": "r1", "worktrees": [{
+                    "path": {"untrusted": "/w/a\u{1b}]0;x\u{7}"},
+                    "main": true,
+                    "admin_name": null,
+                    "status": {"state": "unavailable", "reason": "missing"}
+                }]}),
+            }),
+        });
+        update(&mut m, event);
+        let data = m.engine.repo.as_ref().unwrap().data.as_ref().unwrap();
+        assert_eq!(data.worktrees.len(), 1);
+        assert!(!data.worktrees[0].path.as_str().contains('\u{1b}'));
     }
 }

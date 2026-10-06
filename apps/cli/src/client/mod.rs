@@ -18,6 +18,7 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use gitraptor_api::clock::monotonic_ns;
+use gitraptor_api::messages::{SessionsListParams, SessionsListResult};
 use gitraptor_api::methods;
 use gitraptor_api::rpc::{Notification, ServerMessage};
 use gitraptor_api::scope::{
@@ -269,6 +270,45 @@ fn sync(
     if subscribe && let Err(err) = link.call(methods::SCOPE_SUBSCRIBE, to_value(&next)) {
         return Ok(Err(err));
     }
+    if let Scope::Repo { repo_id } = scope {
+        return sessions(link, repo_id, out);
+    }
+    Ok(Ok(()))
+}
+
+/// The sessions of the repo, asked after its snapshot and subscription: the snapshot does not
+/// carry them (US-CKP-001, D1; ADR-CKP-003 § 4 amendment). Every `session.state` after the
+/// snapshot's sequence comes on the stream after this answer, and `update` merges both with
+/// the same upsert, so they converge. A refusal leaves the agents "not available".
+fn sessions(
+    link: &mut dyn Link,
+    repo_id: &str,
+    out: &Outlet,
+) -> Result<Result<(), LinkError>, Closed> {
+    let params = SessionsListParams {
+        repo_id: Some(repo_id.to_owned()),
+        // The present sessions and the latest ended one of each worktree; with the ended ones
+        // too, a page could leave out a present session that started long ago.
+        include_ended: false,
+        limit: None,
+    };
+    let value = match link.call(methods::SESSIONS_LIST, to_value(&params)) {
+        Ok(value) => value,
+        Err(LinkError::Refused) => return Ok(Ok(())),
+        Err(err) => return Ok(Err(err)),
+    };
+    let recv_ns = monotonic_ns();
+    let Ok(result) = serde_json::from_value::<SessionsListResult>(value) else {
+        return Ok(Err(LinkError::Lost));
+    };
+    out.send(Msg::Engine(Stamped {
+        recv_ns,
+        decoded_ns: monotonic_ns(),
+        msg: EngineMsg::Sessions {
+            repo_id: repo_id.to_owned(),
+            result: Box::new(result),
+        },
+    }))?;
     Ok(Ok(()))
 }
 

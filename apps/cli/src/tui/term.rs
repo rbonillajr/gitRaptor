@@ -5,6 +5,8 @@
 use std::io;
 use std::path::PathBuf;
 
+use gitraptor_theme::Theme;
+
 use crate::client::{self, Connector};
 use crate::model::{Model, Size};
 use crate::present::i18n::Lang;
@@ -22,8 +24,9 @@ impl Drop for Restore {
     }
 }
 
-/// Opens the TUI and runs it until the user quits.
-pub fn run(connector: impl Connector, cwd: Option<PathBuf>) -> io::Result<()> {
+/// Opens the TUI and runs it until the user quits. `theme` is resolved before, while no
+/// event reader is running (`term::theme` of the binary).
+pub fn run(connector: impl Connector, cwd: Option<PathBuf>, theme: Theme) -> io::Result<()> {
     let terminal = ratatui::try_init()?;
     let _restore = Restore;
     let area = terminal.size()?;
@@ -32,7 +35,11 @@ pub fn run(connector: impl Connector, cwd: Option<PathBuf>) -> io::Result<()> {
         height: area.height,
     };
     let (inbox, input_out, engine_out) = queue::inbox();
-    let mut app = App::new(terminal, Model::new(Lang::detect(), size), inbox);
+    let mut app = App::new(
+        terminal,
+        Model::new(Lang::detect(), size).with_theme(theme),
+        inbox,
+    );
     // The first frame ("connecting…") before anything else.
     app.draw()?;
     let input = InputThread::spawn(input_out);

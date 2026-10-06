@@ -3,7 +3,7 @@
 //! missing translation does not compile. Parameters are [`SafeText`] or
 //! numbers.
 
-use gitraptor_api::messages::EngineStateView;
+use gitraptor_api::messages::{EngineStateView, UnavailableReason};
 
 use crate::model::{ConnState, Notice};
 use crate::present::SafeText;
@@ -38,8 +38,38 @@ pub enum Text<'a> {
     Title,
     Repo(&'a SafeText),
     NoRepo,
-    FleetTitle,
+    /// The fleet panel, with the reference of ahead/behind (BR-CKP-CALC-001).
+    FleetTitle {
+        base: Option<&'a SafeText>,
+    },
     FleetEmpty,
+    FleetWaiting,
+    FleetNoRepo,
+    ColAgent,
+    ColBranch,
+    ColFiles,
+    ColSync,
+    ColActivity,
+    /// No agent session in the worktree (BR-CKP-CONS-003): never "human".
+    Unattributed,
+    /// The engine cannot say whether there are sessions.
+    AgentNotAvailable,
+    ClaudeCode,
+    OtherAgent,
+    /// More than one present session in the worktree: the first one and how many more.
+    AgentAndMore {
+        name: &'a str,
+        more: usize,
+    },
+    Detached,
+    NoBase,
+    BaseMissing,
+    NoCommits,
+    Unreadable,
+    WorktreeUnavailable(UnavailableReason),
+    /// A value the engine does not publish yet (BR-CKP-CALC-001).
+    NotAvailable,
+    RequesterUnknown,
     Engine(Option<EngineStateView>),
     Conn(ConnState),
     Stale,
@@ -49,7 +79,10 @@ pub enum Text<'a> {
     Notice(Notice),
     KeyQuit,
     KeyRetry,
-    TooSmall { width: u16, height: u16 },
+    TooSmall {
+        width: u16,
+        height: u16,
+    },
     NeedsTerminal,
 }
 
@@ -67,8 +100,37 @@ fn en(text: Text<'_>) -> String {
         Text::Title => "GitRaptor".into(),
         Text::Repo(path) => format!("repo {path}"),
         Text::NoRepo => "no repo selected".into(),
-        Text::FleetTitle => "Fleet".into(),
-        Text::FleetEmpty => "The live fleet will appear here.".into(),
+        Text::FleetTitle { base: Some(base) } => {
+            format!("Fleet · ↑↓ vs {base} (local copy, fetch age not available)")
+        }
+        Text::FleetTitle { base: None } => "Fleet · no base branch".into(),
+        Text::FleetEmpty => "The engine publishes no worktree for this repo.".into(),
+        Text::FleetWaiting => "Waiting for the engine…".into(),
+        Text::FleetNoRepo => {
+            "This folder is not in an observed repo: add it with `raptor repo add`.".into()
+        }
+        Text::ColAgent => "Agent".into(),
+        Text::ColBranch => "Branch".into(),
+        Text::ColFiles => "Files".into(),
+        Text::ColSync => "↑↓".into(),
+        Text::ColActivity => "Activity".into(),
+        Text::Unattributed => "Unattributed (you/other)".into(),
+        Text::AgentNotAvailable => "agent not available".into(),
+        Text::ClaudeCode => "Claude Code".into(),
+        Text::OtherAgent => "other agent".into(),
+        Text::AgentAndMore { name, more } => format!("{name} +{more}"),
+        Text::Detached => "detached HEAD".into(),
+        Text::NoBase => "no base".into(),
+        Text::BaseMissing => "base absent".into(),
+        Text::NoCommits => "no commits".into(),
+        Text::Unreadable => "unreadable".into(),
+        Text::WorktreeUnavailable(UnavailableReason::Missing) => "folder missing".into(),
+        Text::WorktreeUnavailable(UnavailableReason::Untrusted) => {
+            "not trusted by Git (safe.directory)".into()
+        }
+        Text::WorktreeUnavailable(UnavailableReason::Unreadable) => "unreadable now".into(),
+        Text::NotAvailable => "not available".into(),
+        Text::RequesterUnknown => "—".into(),
         Text::Engine(None) => "engine —".into(),
         Text::Engine(Some(EngineStateView::WaitingForGit)) => "engine waiting for Git".into(),
         Text::Engine(Some(EngineStateView::NoRepos)) => "engine without repos".into(),
@@ -112,8 +174,37 @@ fn es(text: Text<'_>) -> String {
         Text::Title => "GitRaptor".into(),
         Text::Repo(path) => format!("repo {path}"),
         Text::NoRepo => "sin repo seleccionado".into(),
-        Text::FleetTitle => "Flota".into(),
-        Text::FleetEmpty => "Aquí aparecerá la flota en vivo.".into(),
+        Text::FleetTitle { base: Some(base) } => {
+            format!("Flota · ↑↓ respecto a {base} (copia local, antigüedad no disponible)")
+        }
+        Text::FleetTitle { base: None } => "Flota · sin rama base".into(),
+        Text::FleetEmpty => "El motor no publica ningún worktree de este repo.".into(),
+        Text::FleetWaiting => "Esperando al motor…".into(),
+        Text::FleetNoRepo => {
+            "Esta carpeta no está en un repo observado: añádelo con `raptor repo add`.".into()
+        }
+        Text::ColAgent => "Agente".into(),
+        Text::ColBranch => "Rama".into(),
+        Text::ColFiles => "Arch.".into(),
+        Text::ColSync => "↑↓".into(),
+        Text::ColActivity => "Actividad".into(),
+        Text::Unattributed => "Tú u otro (sin atribuir)".into(),
+        Text::AgentNotAvailable => "agente no disponible".into(),
+        Text::ClaudeCode => "Claude Code".into(),
+        Text::OtherAgent => "otro agente".into(),
+        Text::AgentAndMore { name, more } => format!("{name} +{more}"),
+        Text::Detached => "HEAD separado".into(),
+        Text::NoBase => "sin base".into(),
+        Text::BaseMissing => "falta base".into(),
+        Text::NoCommits => "sin commits".into(),
+        Text::Unreadable => "ilegible".into(),
+        Text::WorktreeUnavailable(UnavailableReason::Missing) => "falta la carpeta".into(),
+        Text::WorktreeUnavailable(UnavailableReason::Untrusted) => {
+            "Git no confía en él (safe.directory)".into()
+        }
+        Text::WorktreeUnavailable(UnavailableReason::Unreadable) => "ilegible ahora".into(),
+        Text::NotAvailable => "no disponible".into(),
+        Text::RequesterUnknown => "—".into(),
         Text::Engine(None) => "motor —".into(),
         Text::Engine(Some(EngineStateView::WaitingForGit)) => "motor esperando Git".into(),
         Text::Engine(Some(EngineStateView::NoRepos)) => "motor sin repos".into(),

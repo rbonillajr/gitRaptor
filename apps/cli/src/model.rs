@@ -2,10 +2,15 @@
 //! [`Cmd`]. The engine part only holds what the engine published, already
 //! through the ingest (no raw untrusted text); `view` never reads the clock.
 
+use gitraptor_api::AgentKind;
 use gitraptor_api::catalog::Layer;
 use gitraptor_api::event::Event;
-use gitraptor_api::messages::{EngineStateView, ResyncReason};
+use gitraptor_api::messages::{
+    DivergenceView, EngineStateView, ResyncReason, SessionStateView, SessionsListResult,
+    UnavailableReason,
+};
 use gitraptor_api::scope::{AutostartView, Scope, ScopeSnapshot};
+use gitraptor_theme::Theme;
 use ratatui::crossterm::event::KeyEvent;
 
 use crate::client::sequence::SeqTrack;
@@ -26,12 +31,19 @@ pub struct Model {
 }
 
 impl Model {
+    /// A model with the default theme (dark terminal, truecolor, Unicode); the TUI sets the
+    /// detected one with [`Model::with_theme`].
     pub fn new(lang: Lang, size: Size) -> Self {
         Self {
             engine: EngineReplica::default(),
             ui: Ui {
                 lang,
                 size,
+                theme: Theme::new(
+                    gitraptor_theme::ColorMode::TrueColor,
+                    gitraptor_theme::Contrast::Normal,
+                    gitraptor_theme::SymbolSet::Unicode,
+                ),
                 notice: None,
                 quit: false,
             },
@@ -40,6 +52,11 @@ impl Model {
             dirty: true,
         }
     }
+
+    pub fn with_theme(mut self, theme: Theme) -> Self {
+        self.ui.theme = theme;
+        self
+    }
 }
 
 /// State of the interface itself.
@@ -47,6 +64,8 @@ impl Model {
 pub struct Ui {
     pub lang: Lang,
     pub size: Size,
+    /// Resolved once at start-up (`--theme`, environment, terminal background).
+    pub theme: Theme,
     /// The answer to the last key, so every key changes something visible.
     pub notice: Option<Notice>,
     pub quit: bool,
@@ -133,15 +152,101 @@ pub struct GlobalView {
     pub git_version: Option<SafeText>,
     pub autostart: AutostartView,
     pub repo_count: usize,
+    /// ⚡ and ⛔ of each observed repo; `None` while the engine does not count them.
+    pub attention: Vec<RepoAttention>,
 }
 
-/// The selected repo as the view sees it. Its worktrees are US-CKP-001's.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RepoAttention {
+    pub repo_id: String,
+    pub conflicts: Option<u32>,
+    pub denials: Option<u32>,
+}
+
+/// The selected repo as the view sees it (US-CKP-001).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RepoView {
     /// The daemon's id: actions reference ids, never texts.
     pub repo_id: String,
     pub path: SafeText,
-    pub worktree_count: usize,
+    /// The folder name of the repo, for the header.
+    pub name: SafeText,
+    /// The base branch ahead/behind is counted against; `None` without one.
+    pub base: Option<SafeText>,
+    /// As the engine published them, in its order.
+    pub worktrees: Vec<WorktreeRow>,
+    /// Agent sessions of the repo, from `sessions.list` and then `session.state`.
+    pub sessions: Vec<SessionRow>,
+    /// Whether this system detects sessions (`sessions.list`); `None` until the list arrives.
+    /// Without it the agent is "not available", never "no agent".
+    pub detection: Option<bool>,
+}
+
+impl RepoView {
+    /// Upserts a view of a session: the later `state_since` wins and, at the same instant, an
+    /// ended one (ended is never reopened). A view older than the one kept is dropped, so the
+    /// list and the stream converge in any order (US-CKP-001, D1).
+    pub fn upsert(&mut self, session: SessionRow) {
+        match self
+            .sessions
+            .iter_mut()
+            .find(|s| s.session_id == session.session_id)
+        {
+            Some(kept) => {
+                let newer = session.state_since_ms > kept.state_since_ms
+                    || (session.state_since_ms == kept.state_since_ms
+                        && kept.state != SessionStateView::Ended);
+                if newer {
+                    *kept = session;
+                }
+            }
+            None => self.sessions.push(session),
+        }
+    }
+}
+
+/// One worktree of the selected repo.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorktreeRow {
+    /// Root of the worktree, to show.
+    pub path: SafeText,
+    /// Hash of the raw root: sessions are matched on it, never on sanitized text.
+    pub key: u64,
+    pub main: bool,
+    pub state: WorktreeState,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WorktreeState {
+    Ready {
+        head: Head,
+        /// Changed paths: staged, unstaged and untracked.
+        changes: u64,
+        divergence: DivergenceView,
+    },
+    Unavailable(UnavailableReason),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Head {
+    Branch(SafeText),
+    /// A branch without commits yet.
+    Unborn(SafeText),
+    Detached,
+}
+
+/// One agent session, sanitized.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionRow {
+    pub session_id: String,
+    /// [`WorktreeRow::key`] of its worktree.
+    pub worktree: u64,
+    pub kind: AgentKind,
+    /// Declared name of an "other agent".
+    pub name: Option<SafeText>,
+    pub state: SessionStateView,
+    /// Orders two views of the same session: the later one wins.
+    pub state_since_ms: i64,
 }
 
 /// Who the daemon sees on this connection, sanitized.
@@ -219,6 +324,11 @@ pub enum EngineMsg {
     Resync {
         scope: Scope,
         reason: ResyncReason,
+    },
+    /// The sessions of a repo, asked right after its snapshot and subscription.
+    Sessions {
+        repo_id: String,
+        result: Box<SessionsListResult>,
     },
 }
 
