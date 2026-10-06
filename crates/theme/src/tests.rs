@@ -14,8 +14,8 @@ const ALL_SETS: [(Contrast, Background); 3] = [
     (Contrast::High, Background::Dark),
 ];
 
-/// WCAG 2.1 AA for text. Gate of the high-contrast set until DSYS-GRP-001 § 8 sets another.
-const MIN_HIGH_CONTRAST: f64 = 4.5;
+/// WCAG 2.1 AA for text: gate of the high-contrast set and of the normal sets on typical grounds.
+const WCAG_AA: f64 = 4.5;
 
 fn xterm_rgb(index: u8) -> Rgb {
     const CUBE: [u8; 6] = [0, 95, 135, 175, 215, 255];
@@ -333,7 +333,7 @@ fn high_contrast_meets_wcag_aa_in_truecolor_and_256() {
             ("truecolor", contrast_ratio(f.rgb, b.rgb)),
             ("256", contrast_ratio(f.ansi256_rgb, b.ansi256_rgb)),
         ] {
-            if ratio < MIN_HIGH_CONTRAST {
+            if ratio < WCAG_AA {
                 failures.push(format!(
                     "{} on {} ({depth}): {ratio:.2}",
                     fg.name(),
@@ -342,10 +342,7 @@ fn high_contrast_meets_wcag_aa_in_truecolor_and_256() {
             }
         }
     }
-    assert!(
-        failures.is_empty(),
-        "below {MIN_HIGH_CONTRAST}:1: {failures:#?}"
-    );
+    assert!(failures.is_empty(), "below {WCAG_AA}:1: {failures:#?}");
 }
 
 /// Typical terminal grounds the normal sets are measured on (TS-CKP-004, 2026-10-05 amendment):
@@ -425,16 +422,13 @@ fn normal_sets_meet_wcag_aa_on_typical_grounds() {
         for (depth, pick) in DEPTHS {
             for (what, fg, bg) in normal_gate_pairs(background, pick) {
                 let ratio = contrast_ratio(fg, bg);
-                if ratio < MIN_HIGH_CONTRAST {
+                if ratio < WCAG_AA {
                     failures.push(format!("{background:?} {what} ({depth}): {ratio:.2}"));
                 }
             }
         }
     }
-    assert!(
-        failures.is_empty(),
-        "below {MIN_HIGH_CONTRAST}:1: {failures:#?}"
-    );
+    assert!(failures.is_empty(), "below {WCAG_AA}:1: {failures:#?}");
 }
 
 #[test]
@@ -478,11 +472,7 @@ fn light_values_differ_from_dark_where_the_brief_found_them_unreadable() {
         let dark = token.values(Contrast::Normal, Background::Dark).rgb;
         let light = token.values(Contrast::Normal, Background::Light).rgb;
         assert!(contrast_ratio(dark, white) < 2.0, "{}", token.name());
-        assert!(
-            contrast_ratio(light, white) >= MIN_HIGH_CONTRAST,
-            "{}",
-            token.name()
-        );
+        assert!(contrast_ratio(light, white) >= WCAG_AA, "{}", token.name());
     }
     // Option A, decided by Rene Bonilla (2026-10-05).
     let rgb = |t: ColorToken, b| t.values(Contrast::Normal, b).rgb;
@@ -559,7 +549,8 @@ fn contrast_report() {
             );
         }
         columns.push(("bg.selected".to_owned(), v(ColorToken::BgSelected)));
-        println!("\n{background:?} terminal, truecolor / 256 (* = below {MIN_HIGH_CONTRAST}):");
+        columns.push(("bg.highlight".to_owned(), v(ColorToken::BgHighlight)));
+        println!("\n{background:?} terminal, truecolor / 256 (* = below {WCAG_AA}):");
         let header: Vec<_> = columns.iter().map(|(n, _)| format!("{n:>24}")).collect();
         println!("  {:<18}{}", "", header.join(""));
         for fg in &foregrounds {
@@ -571,7 +562,7 @@ fn contrast_report() {
                         contrast_ratio(v(*fg).ansi256_rgb, g.ansi256_rgb),
                     );
                     assert!(tc.is_finite() && c256.is_finite());
-                    let flag = |r: f64| if r < MIN_HIGH_CONTRAST { '*' } else { ' ' };
+                    let flag = |r: f64| if r < WCAG_AA { '*' } else { ' ' };
                     format!(
                         "{:>24}",
                         format!("{tc:.1}{}/{c256:.1}{}", flag(tc), flag(c256))
