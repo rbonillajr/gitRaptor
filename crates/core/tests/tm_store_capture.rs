@@ -692,6 +692,37 @@ fn a_capture_that_stopped_being_consistent_is_discarded_without_a_row() {
     );
 }
 
+/// NFR-01 (US-TMC-002 on macOS under load): a capture that read the new content and then stopped
+/// at its validity point recorded no root, so the next one must not reuse the previous root as
+/// "unchanged". Otherwise the snapshot after a `reset --hard` held the work from before it, and
+/// the undo of the reset found nothing to write.
+#[test]
+fn a_capture_stopped_at_its_validity_point_never_lends_the_previous_root() {
+    use gitraptor_core::timemachine::store::ValidityGuard;
+    let env = Env::new(Fixture::with_commit(&git()));
+    write(&env.f.repo, "api.rs", b"fn api() { trabajo_sin_commitear(); }\n");
+    let prior = env.capture_at(SnapshotLevel::GuaranteedPrior, 1, None);
+    write(&env.f.repo, "api.rs", b"fn api() {}\n");
+    let mut req = env.request(level_obs(), None);
+    req.engine_mark = Some(2);
+    req.still_valid = Some(ValidityGuard(Arc::new(|| false)));
+    assert!(matches!(
+        env.store.capture(&env.oplog, &req),
+        Err(CaptureError::Discarded)
+    ));
+    req.still_valid = None;
+    let after = env.store.capture(&env.oplog, &req).unwrap();
+    assert!(!after.fast_path);
+    assert_eq!(
+        env.file(&after.snapshot_id, "api.rs").unwrap(),
+        b"fn api() {}\n"
+    );
+    assert_eq!(
+        env.file(&prior.snapshot_id, "api.rs").unwrap(),
+        b"fn api() { trabajo_sin_commitear(); }\n"
+    );
+}
+
 /// US-TMC-004 (D13): an observation gives way when asked, with no row, like it gives way to a
 /// guaranteed prior; a prior never gives way.
 #[test]

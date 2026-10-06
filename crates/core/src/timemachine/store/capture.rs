@@ -135,8 +135,18 @@ pub struct CaptureOutcome {
 #[derive(Default)]
 pub(super) struct State {
     worktrees: HashMap<String, WtState>,
-    /// Last root tree and meta per scope, for the fast path.
-    last: HashMap<String, (Oid, Vec<u8>)>,
+    /// Last root tree per scope, for the fast path.
+    last: HashMap<String, LastRoot>,
+}
+
+/// A root tree the writer recorded, and what it holds: the fast path reuses it only for the same
+/// meta and the same trees of every worktree, never on the writer's word that nothing changed (a
+/// capture that gave way at its validity point kept its new trees but recorded no root).
+struct LastRoot {
+    root: Oid,
+    meta: Vec<u8>,
+    /// `files` and `index` trees of each worktree, in scope order.
+    trees: Vec<(Oid, Oid)>,
 }
 
 struct WtState {
@@ -295,7 +305,6 @@ struct WtWork {
     changes: Vec<Change>,
     jobs: Vec<Job>,
     meta: MetaWorktree,
-    index_tree_changed: bool,
 }
 
 /// Stopwatch over the stages.
@@ -476,7 +485,6 @@ impl SnapshotStore {
         }
 
         // ---- trees and commit ------------------------------------------------------------------
-        let mut any_tree_changed = false;
         for w in works.iter_mut() {
             let files = if w.changes.is_empty() {
                 w.base
@@ -492,7 +500,6 @@ impl SnapshotStore {
                 }
                 edit.write()?
             };
-            any_tree_changed |= files != w.state.files_tree || w.index_tree_changed;
             w.state.files_tree = files;
         }
         let mut exclusions = Vec::new();
@@ -522,11 +529,15 @@ impl SnapshotStore {
         };
         let meta_bytes = meta.to_bytes();
         let scope_key = meta.scope.join(",");
+        let trees: Vec<(Oid, Oid)> = works
+            .iter()
+            .map(|w| (w.state.files_tree, w.state.index_tree))
+            .collect();
         let reuse = state
             .last
             .get(&scope_key)
-            .filter(|(_, last_meta)| !any_tree_changed && *last_meta == meta_bytes)
-            .map(|(root, _)| *root);
+            .filter(|last| last.meta == meta_bytes && last.trees == trees)
+            .map(|last| last.root);
         let fast_path = reuse.is_some();
         let root = match reuse {
             Some(root) => root,
@@ -585,7 +596,14 @@ impl SnapshotStore {
             }
             state.worktrees.insert(w.key, st);
         }
-        state.last.insert(scope_key, (root, meta_bytes));
+        state.last.insert(
+            scope_key,
+            LastRoot {
+                root,
+                meta: meta_bytes,
+                trees,
+            },
+        );
         timings.total = t_all.elapsed();
         Ok(CaptureOutcome {
             snapshot_id,
@@ -667,7 +685,6 @@ impl SnapshotStore {
         // The `index` tree mirrors the user's index (stage 0, no intent-to-add entries).
         let index_changed = !had_prev || st.index_sig != sig || sig.0.is_none();
         let mut index: Option<IndexView> = None;
-        let mut index_tree_changed = false;
         let mut status_changed: Vec<BString> = Vec::new();
         if index_changed {
             if yield_now() {
@@ -702,7 +719,6 @@ impl SnapshotStore {
                 }
             }
             let tree = edit.write()?;
-            index_tree_changed = tree != st.index_tree;
             status_changed = st.tracked.symmetric_difference(&tracked).cloned().collect();
             st.index_tree = tree;
             st.index_map = map;
@@ -719,7 +735,6 @@ impl SnapshotStore {
             changes: Vec::new(),
             jobs: Vec::new(),
             meta: worktree_meta(reader, &scope.key, &scope.path, &st.marks)?,
-            index_tree_changed,
             state: st,
         };
 
