@@ -35,8 +35,9 @@ on:
 permissions:
   contents: read
 
+# Manual runs never cancel each other: calibrating the gates takes several runs of the same ref.
 concurrency:
-  group: engine-bench-${{ github.ref }}
+  group: engine-bench-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || 'auto' }}
   cancel-in-progress: true
 
 env:
