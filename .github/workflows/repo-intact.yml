@@ -1,9 +1,16 @@
 # INF-GRP-001: "intact repo" gate (BR-CONS-001, NFR-01, ADR-GRP-009 § Validación).
 #
-# Proposal, not yet run on GitHub (see the INF-GRP-001 Dev Spec). Branch protection should require
-# only the `repo-intact` jobs: every suite registers itself by naming its tests `repo_intact::…`,
-# so a new suite is gated as soon as it lands with its owning story, without touching branch
-# protection, and an earlier story is never blocked by a suite that does not exist yet.
+# Branch protection requires `lint and test (<os>)` and `repo-intact (<os>)` on all three OSes.
+# Every suite registers itself by naming its tests `repo_intact::…`, so a new suite is gated as
+# soon as it lands with its owning story, without touching branch protection.
+#
+# One build per OS: `lint and test` compiles the workspace once and runs both the regular tests
+# and the `repo_intact` suites (with the OS tracer), and records the suites' outcome. The
+# `repo-intact` jobs are thin gates on Linux that read that outcome, so the workspace is no longer
+# built twice per OS and no macOS or Windows runner is taken twice.
+#
+# Path filter: a pull request that touches no Rust input still reports every required check, in
+# success, on a Linux runner and without building. `push` to main and manual runs always run all.
 #
 # Actions are pinned by commit SHA.
 name: repo-intact
@@ -18,49 +25,50 @@ on:
 permissions:
   contents: read
 
+# Pull requests: one run per branch, a new push cancels the previous one. main and manual runs
+# get a group of their own, so they are never cancelled.
 concurrency:
-  group: repo-intact-${{ github.ref }}
-  cancel-in-progress: true
+  group: repo-intact-${{ github.event_name == 'pull_request' && github.head_ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      # 'false' only on a pull request with no Rust input; anything else runs everything.
+      rust: ${{ github.event_name != 'pull_request' || steps.filter.outputs.rust == 'true' }}
+    steps:
+      # On pull requests the filter reads the changed files from the API: no checkout needed.
+      - id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            rust:
+              - 'crates/**'
+              - 'apps/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'rust-toolchain.toml'
+              - '.cargo/**'
+              - 'rustfmt.toml'
+              - 'clippy.toml'
+              - '.gitattributes'
+              - '.github/workflows/repo-intact.yml'
+
   lint-and-test:
     name: lint and test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - name: Toolchain from rust-toolchain.toml
-        run: rustup show
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - run: cargo fmt --all -- --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-      # Windows: TS-GRP-002 rejects every Git candidate on Windows (fail-closed until the ACE
-      # check exists) and the canary uses /bin/sh scripts, so the tests cannot pass there yet.
-      # Pendiente: etapa de validación multiplataforma. The step never fails the job on Windows;
-      # fmt and clippy stay blocking everywhere.
-      - id: test
-        run: cargo test --workspace
-        continue-on-error: ${{ matrix.os == 'windows-latest' }}
-      - name: Pending on Windows
-        if: steps.test.outcome == 'failure'
-        run: "echo '::warning::cargo test failed on Windows. Pendiente: etapa de validación multiplataforma'"
-      # Blocking on Windows too: the only crate with `unsafe` and the requester
-      # resolution on real processes (ADR-GRP-005, Enmienda 2026-10-05).
-      - name: Windows processes and requester (blocking)
-        if: matrix.os == 'windows-latest'
-        run: |
-          cargo test -p gitraptor-winsys
-          cargo test -p gitraptor-core --lib -- channel::requester channel::peer channel::authz channel::marks children_of_the_step_are_marked
-
-  repo-intact:
-    name: repo-intact (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    needs: changes
+    # Without Rust changes the check still reports, from a Linux runner, so a docs-only pull
+    # request never waits for a macOS or Windows runner.
+    runs-on: ${{ needs.changes.outputs.rust == 'false' && 'ubuntu-latest' || matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -75,24 +83,103 @@ jobs:
           - os: windows-latest
             exec_audit: auto
     env:
-      GITRAPTOR_EXEC_AUDIT: ${{ matrix.exec_audit }}
+      RUST_CHANGED: ${{ needs.changes.outputs.rust }}
     steps:
+      - name: No Rust changes
+        if: env.RUST_CHANGED == 'false'
+        run: "echo '::notice::No Rust input changed in this pull request: nothing to build (main always runs everything)'"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: env.RUST_CHANGED != 'false'
       - name: Install strace
-        if: matrix.exec_audit == 'strace'
+        if: env.RUST_CHANGED != 'false' && matrix.exec_audit == 'strace'
         run: sudo apt-get update && sudo apt-get install -y strace
       - name: Toolchain from rust-toolchain.toml
+        if: env.RUST_CHANGED != 'false'
         run: rustup show
+      # Key: OS + toolchain file (rust-cache also adds the rustc version and Cargo.lock). Only main
+      # saves, so pull requests restore main's cache and never evict it.
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      # Always the whole workspace, never `nx affected`: the gate must run every suite.
-      # Windows: non-blocking (Pendiente: etapa de validación multiplataforma).
-      - name: Core and registered suites
-        id: suites
-        run: cargo test --workspace -- repo_intact
+        if: env.RUST_CHANGED != 'false'
+        with:
+          key: ${{ runner.os }}-${{ hashFiles('rust-toolchain.toml') }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - if: env.RUST_CHANGED != 'false'
+        run: cargo fmt --all -- --check
+      - if: env.RUST_CHANGED != 'false'
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      # Windows: TS-GRP-002 rejects every Git candidate on Windows (fail-closed until the ACE
+      # check exists) and the canary uses /bin/sh scripts, so the tests cannot pass there yet.
+      # Pendiente: etapa de validación multiplataforma. The step never fails the job on Windows;
+      # fmt and clippy stay blocking everywhere.
+      # The `repo_intact` suites run in their own step below, with the OS tracer.
+      - id: test
+        if: env.RUST_CHANGED != 'false'
+        run: cargo test --workspace -- --skip repo_intact
         continue-on-error: ${{ matrix.os == 'windows-latest' }}
       - name: Pending on Windows
-        if: steps.suites.outcome == 'failure'
-        run: "echo '::warning::repo_intact suites failed on Windows. Pendiente: etapa de validación multiplataforma'"
+        if: steps.test.outcome == 'failure'
+        run: "echo '::warning::cargo test failed on Windows. Pendiente: etapa de validación multiplataforma'"
+      # Blocking on Windows too: the only crate with `unsafe` and the requester
+      # resolution on real processes (ADR-GRP-005, Enmienda 2026-10-05).
+      - name: Windows processes and requester (blocking)
+        if: env.RUST_CHANGED != 'false' && matrix.os == 'windows-latest'
+        run: |
+          cargo test -p gitraptor-winsys
+          cargo test -p gitraptor-core --lib -- channel::requester channel::peer channel::authz channel::marks children_of_the_step_are_marked
+      # The `repo-intact` gate. Always the whole workspace, never `nx affected`: the gate must run
+      # every suite. It runs even when lint or the other tests failed, so the gate reports on its
+      # own suites. Windows: non-blocking (Pendiente: etapa de validación multiplataforma).
+      - name: Core and registered repo_intact suites
+        id: suites
+        if: ${{ !cancelled() && env.RUST_CHANGED != 'false' }}
+        env:
+          GITRAPTOR_EXEC_AUDIT: ${{ matrix.exec_audit }}
+        run: cargo test --workspace -- repo_intact
+        continue-on-error: ${{ matrix.os == 'windows-latest' }}
+      - name: Record the repo_intact outcome
+        if: ${{ !cancelled() && env.RUST_CHANGED != 'false' }}
+        shell: bash
+        run: echo "${{ steps.suites.outcome }}" > repo-intact-outcome.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ !cancelled() && env.RUST_CHANGED != 'false' }}
+        with:
+          name: repo-intact-${{ matrix.os }}
+          path: repo-intact-outcome.txt
+          retention-days: 1
+
+  repo-intact:
+    name: repo-intact (${{ matrix.os }})
+    needs: [changes, lint-and-test]
+    # Reports even when lint failed: the verdict is the suites' own outcome. A missing outcome
+    # (lint-and-test cancelled or never run) fails the gate: fail-closed.
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: No Rust changes
+        if: needs.changes.outputs.rust == 'false'
+        run: "echo '::notice::No Rust input changed in this pull request: nothing to gate (main always runs everything)'"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        if: needs.changes.outputs.rust != 'false'
+        with:
+          name: repo-intact-${{ matrix.os }}
+      - name: repo_intact suites on ${{ matrix.os }}
+        if: needs.changes.outputs.rust != 'false'
+        env:
+          OS: ${{ matrix.os }}
+        run: |
+          outcome=$(cat repo-intact-outcome.txt)
+          echo "repo_intact suites on $OS: $outcome"
+          if [ "$outcome" = success ]; then exit 0; fi
+          if [ "$OS" = windows-latest ]; then
+            echo "::warning::repo_intact suites failed on Windows. Pendiente: etapa de validación multiplataforma"
+            exit 0
+          fi
+          echo "::error::repo_intact suites on $OS: $outcome (see lint and test ($OS))"
+          exit 1
 
   deep-exec-audit-macos:
     name: deep exec audit (macOS, eslogger)
