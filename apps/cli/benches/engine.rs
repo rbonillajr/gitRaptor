@@ -211,9 +211,9 @@ mod unix {
     /// commit, machine, system, cores, load and power source.
     fn conditions() -> Value {
         let manifest = env!("CARGO_MANIFEST_DIR");
-        let commit = std::env::var("GITHUB_SHA")
-            .ok()
-            .or_else(|| output("git", &["-C", manifest, "rev-parse", "HEAD"]));
+        // The checked-out commit: with `workflow_dispatch -f ref=…`, `GITHUB_SHA` is another.
+        let commit = output("git", &["-C", manifest, "rev-parse", "HEAD"])
+            .or_else(|| std::env::var("GITHUB_SHA").ok());
         let dirty = output(
             "git",
             &[
@@ -1735,10 +1735,11 @@ mod unix {
             return;
         };
         let mut md = format!(
-            "### Engine bench ({}, profile {}, {} worktrees)\n\n| scenario | stage | p50 | p95 | p99 | max | budget p95 |\n|---|---|---|---|---|---|---|\n",
+            "### Engine bench ({}, profile {}, {} worktrees, commit {})\n\n| scenario | stage | p50 | p95 | p99 | max | budget p95 |\n|---|---|---|---|---|---|---|\n",
             os(),
             b.opts.profile,
-            b.opts.worktrees
+            b.opts.worktrees,
+            b.report["conditions"]["commit"].as_str().unwrap_or("?")
         );
         for s in &b.scenarios {
             for stage in Stage::ALL {
