@@ -7,7 +7,7 @@ feature: guardrails
 domain: GRP
 spike: SPIKE-GRD-001
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-05
 related:
   adrs: [ADR-GRD-001, ADR-GRD-002]
   stories: [US-GRD-001, US-GRD-002, US-GRD-004]
@@ -19,7 +19,7 @@ tags: [guardrails, spike, hooks-git, reference-transaction, pre-push, force-push
 
 > **Alcance de esta entrega**: macOS 26.6.2 (arm64, APFS sin distinción de mayúsculas), con Git **2.38.5** (mínima, NFR-07), **2.50.1** (la de Apple) y **2.56.0** (última estable). La 2.56.0 se probó además con **reftable**. **Linux y Windows quedan sin verificar** (procedimiento al final). El prototipo y la evidencia están en [`spikes/hook-interceptability/`](../../../../../spikes/hook-interceptability/). Cada afirmación remite a un caso de una suite (`01-…` a `06-…`) y a su TSV en `results/<so>-git<versión>/`.
 >
-> **Estado (2026-10-04): Done para macOS.** Las 17 enmiendas del § 9 y la decisión sobre reftable se **aplicaron el 2026-10-04** como secciones "Enmienda (2026-10-04, SPIKE-GRD-001)" de ADR-GRD-001 y ADR-GRD-002 (con efectos en ADR-GRD-003 y ADR-GRD-005) y como Q-GRD-28 a Q-GRD-31 en el requerimiento. La resolución de cada una está en el § 13. Linux, Windows y el coste en Windows siguen pendientes y bloquean el merge de US-GRD-001.
+> **Estado (2026-10-04): Done para macOS.** Las 17 enmiendas del § 9 y la decisión sobre reftable se **aplicaron el 2026-10-04** como secciones "Enmienda (2026-10-04, SPIKE-GRD-001)" de ADR-GRD-001 y ADR-GRD-002 (con efectos en ADR-GRD-003 y ADR-GRD-005) y como Q-GRD-28 a Q-GRD-31 en el requerimiento. La resolución de cada una está en el § 13. Linux, Windows y el coste en Windows siguen pendientes y bloquean el merge de US-GRD-001. **Actualización (2026-10-05)**: el coste en Windows está medido en una máquina Windows real (§ 14); la matriz en Linux y Windows sigue pendiente.
 
 ## 1. Veredicto
 
@@ -393,3 +393,31 @@ Cada fila es una **Decisión del orquestador (2026-10-04), validada por Arquitec
 | Coste 17–39 s / 1.000 refs | Coste lineal declarado, pendiente ≤ una invocación de la vía mínima por transacción, vía rápida en el binario, dispatcher nativo; sin quitar `reference-transaction` | "Infrecuente" no se asume (Arquitecto); decirlo en la documentación y en el permiso (PO) | ADR-GRD-002 § 5; Q-GRD-30 |
 
 **Pendiente en otros frentes**: ADR-GRP-010 (que el observador vigile `reftable/`) y ADR-TMC-004 § 2 (nivel b con eventos de reftable), en la tabla de [non-functional-guardrails.md](../../../../architecture/non-functional-guardrails.md). **Fuera de alcance**: reportar aguas arriba a Git el renombrado sin hook en reftable.
+
+## 14. Coste en Windows (2026-10-05, US-GRD-001)
+
+**Máquina**: Windows 10 22H2 (19045), Intel Core i5-7400, 8 GB, Git 2.56.0.windows.1, ejecutado por SSH con el `bash` de Git for Windows. **Suite**: [`suites/07-cost-native.sh`](../../../../../spikes/hook-interceptability/suites/07-cost-native.sh), nueva y portable: el cronómetro es [`lib/bench.rs`](../../../../../spikes/hook-interceptability/lib/bench.rs) (sin Python ni `sh` alrededor del comando medido) y añade la variante **VN**, el binario nativo como archivo del hook, sin `sh`. N = 100 (push 50; `fetch` y `pack-refs` 3). TSV: `results/msys_nt-10.0-19045-x86_64-git2.56.0.windows.1/07-cost-native.tsv`.
+
+**Git for Windows ejecuta un PE nativo como hook**, tanto sin extensión (`hooks/reference-transaction`) como con `.exe` (`native-hook`: un binario que sale con 1 hace fallar `update-ref`).
+
+| Escenario (procesos de hook) | V0 sin hooks | V1 `sh` + nativo en `prepared` | V2 `sh` + nativo siempre | VN nativo |
+|---|---|---|---|---|
+| Arranque: binario / `sh -c :` / `sh` + `exec` | — | 31,3 (`sh -c :`) | 46,8 (`sh` + `exec`) | 4,1 |
+| `update-ref` (3) | 37,7 | 174,3 | 175,1 | 57,5 |
+| commit, conjunto mínimo (7) | 65,9 | 368,6 | 411,0 | 106,2 |
+| commit, conjunto completo (11) | 66,2 | 563,7 | 624,8 | 132,7 |
+| `switch -c`, conjunto mínimo (14) | 44,5 | 644,0 | 722,7 | 118,7 |
+| push fast-forward, conjunto mínimo (4) | 207,3 | 410,1 | 425,2 | 242,4 |
+| `fetch` de 1.000 refs nuevas (3.018) | 2.557 | 132.304 | 142.085 | 15.714 |
+| `pack-refs` de 1.000 ramas sueltas | 1.046 | 126.972 | 160.802 | 15.750 |
+
+p50 en ms. Las p95 están en el TSV.
+
+**Conclusiones**:
+
+1. **Un dispatcher `sh` cuesta ≈ 43 ms por invocación en Windows** (commit con el conjunto mínimo: +303 ms), cuatro veces más que en macOS. Con `sh`, un commit o un cambio de rama habitual supera el techo ⚠️ ≤ 150 ms p95 de ADR-GRD-002 § 5 sin evaluar nada.
+2. **El nativo cuesta ≈ 6 ms por invocación** (commit con el conjunto mínimo +40 ms; `switch -c` +74 ms con 14 invocaciones). El objetivo ⚠️ ≤ 5 ms p95 por invocación que no evalúa queda algo por encima en esta máquina, que no está en reposo ni es rápida.
+3. **Las operaciones masivas** bajan de +130 s a +13 s (`fetch` de 1.000 refs) y de +126 s a +15 s (`pack-refs`). Siguen siendo lineales en el número de refs (ADR-GRD-002 § 5, declarado).
+4. **Decisión que habilita** (US-GRD-001, D1; ADR-GRD-001, Enmienda 2026-10-05): el dispatcher nativo es necesario en Windows para todo el conjunto, no solo para `reference-transaction`, y se adopta en los tres SO.
+
+**Lo que no cubre**: la evaluación con el daemon en Windows (no hay canal todavía, XP-01) y la matriz funcional de los §§ 2 a 7 en Windows.
