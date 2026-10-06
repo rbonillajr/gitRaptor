@@ -750,7 +750,9 @@ mod criteria {
         let _ = std::fs::remove_file(&socket);
     }
 
-    // ADR-GRD-001 Validación 7: a hostile environment changes nothing (constants only).
+    // ADR-GRD-001 Validación 7: a hostile environment changes nothing (constants only). Library
+    // injection (`LD_PRELOAD`, `DYLD_*`) would break Git itself first; the dispatcher clears the
+    // environment of `raptor hook` (`env_clear`, checked by `guard_boundary`).
     #[test]
     fn repo_intact_a_hostile_environment_does_not_steer_the_hook() {
         let m = Machine::protected();
@@ -763,8 +765,6 @@ mod criteria {
             .env("XDG_RUNTIME_DIR", fake.join("run"))
             .env("XDG_CONFIG_HOME", &fake)
             .env("GITRAPTOR_PROFILE_DIR", &fake)
-            .env("LD_PRELOAD", fake.join("evil.so"))
-            .env("DYLD_INSERT_LIBRARIES", fake.join("evil.dylib"))
             .output()
             .unwrap();
         assert!(!out.status.success(), "{}", text(&out));
