@@ -16,7 +16,7 @@ related:
 ado:
   id: null
   url: null
-tags: [cockpit, design-tokens, tema, simbolos, accesibilidad, nfr-09, dtcg, style-dictionary, br-04]
+tags: [cockpit, design-tokens, tema, simbolos, accesibilidad, nfr-09, dtcg, style-dictionary, br-04, paleta-a, terminal-clara, osc-11, colorfgbg]
 ---
 
 ## TS-CKP-004: Tokens semánticos y símbolos con fallback en el tema de la TUI
@@ -57,3 +57,18 @@ tags: [cockpit, design-tokens, tema, simbolos, accesibilidad, nfr-09, dtcg, styl
 
 - Pintar la paleta y los símbolos en los emuladores de terminal de macOS, con fondo claro y oscuro, en truecolor, 256 y 16 colores.
 - Anchura de `⚡`, `⛔`, `⚠` y `ℹ` en terminales de Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
+
+### Enmienda (2026-10-05): paleta A y terminal clara
+
+**Decisión de Rene Bonilla (2026-10-05)**: la paleta es la **opción A, «Grafito y teal»**; deja de ser provisional y cierra DSYS-GRP-001 § 8.1 y § 8.2. **Hallazgo que corrige**: en el juego normal la TUI hereda el fondo y el texto de la terminal, pero cada token tenía una sola variante pensada para fondo oscuro; en una terminal clara el foco amarillo y el agente 4 no se leían. Detalle en la [Dev Spec](../dev-specs/TS-CKP-004-tokens-semanticos-simbolos.md), § 8.
+
+**Alcance que se añade**:
+- **Definir** la variante para terminal clara de cada token semántico (truecolor, 256 y 16), con agentes Okabe-Ito oscurecidos.
+- **Detectar** el fondo de la terminal: OSC 11 con timeout corto y sin bloquear, `COLORFGBG` como alternativa y oscura en último caso; override `--theme light|dark|high-contrast` y variable `GITRAPTOR_THEME`. `NO_COLOR` y el alto contraste no cambian.
+- Sale del "fuera de alcance": la elección del acento y de la paleta.
+
+**Verificación que se añade**:
+- **Detección**: respuestas OSC 11 simuladas (formatos de 1 a 4 dígitos, BEL y ST, `rgba:`, mezcladas con otras teclas), `COLORFGBG`, sin respuesta, solo DA1, precedencia de flag y variable, `NO_COLOR` sin consulta; E/S contra una pseudoterminal (responde, no soporta OSC 11, muda con timeout y modo restaurado).
+- **Contraste**: **gate WCAG AA ≥ 4.5:1** (truecolor y 256) para el texto normal y el tenue de las dos variantes sobre sus fondos típicos (blanco, `#1e1e1e`, Solarized oscuro), y para todo primer plano de la variante clara sobre blanco; informe del resto. Decisión del orquestador (2026-10-05), validada por Arquitecto.
+- Pendiente: detección en Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
+
