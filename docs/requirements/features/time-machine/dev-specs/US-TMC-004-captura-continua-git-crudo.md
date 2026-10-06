@@ -49,6 +49,8 @@ Plano compacto de [US-TMC-004](../user-stories/US-TMC-004-captura-continua-git-c
 
 `git reset --hard` sobre el mismo commit (el caso típico de un agente que descarta trabajo) no mueve ninguna rama: hoy el motor no publica nada. Git sí añade una entrada al reflog de `HEAD` del worktree (`reset: moving to HEAD`). El repo guarda, por worktree, el tamaño de `logs/HEAD` (solo metadatos); cuando crece, lee **solo el tramo nuevo** (como mucho 64 KiB, sin seguir enlaces) y publica `reset` por cada entrada `reset:` con el commit igual antes y después, o con `HEAD` separado. Los `reset` que mueven una rama siguen siendo `branch-update` (ya los nombra el reflog de la rama), así que nada cuenta dos veces. Si el archivo se acorta (`reflog expire`), solo se toma el tamaño nuevo.
 
+Git añade al reflog de `HEAD` antes de renombrar la ref. Si una ventana del repo ve crecer el reflog sin ningún otro cambio, se alarga una vez desde el mismo primer evento, para que el commit y su reflog lleguen en un solo lote (y la muestra S3 de ese primer evento lo siga cubriendo); si sigue solo, se envía (un commit con `HEAD` separado, por ejemplo).
+
 ### 2.2 Marca del motor común y generación (ADR-GRP-013, ADR-TMC-003 § 1)
 
 La pila de undo intercala operaciones y eventos por la marca del motor. Hasta ahora las operaciones guardaban la secuencia del bus (por ejecución) y los eventos la del repo: dos numeraciones distintas. Desde esta historia, **toda marca es la última secuencia de evento persistida del repo** (`RepoMarks`, la mantiene el bucle del daemon después de cada lote escrito; al arrancar sale del almacén). La usan la intención de una operación, el undo y cada captura.
