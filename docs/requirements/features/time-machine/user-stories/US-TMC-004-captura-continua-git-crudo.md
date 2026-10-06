@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-06
 domain: GRP
 epic: E-001
 feature: time-machine
@@ -79,11 +79,12 @@ Entonces ese cambio figura sin punto recuperable
 - Coalescencia (una captura en curso por worktree), captura incremental y descarte si llega un evento de Git durante la lectura.
 - Archivos grandes en esta captura: exclusión declarada de los de más de 50 MB (ADR-TMC-001 § 2) y hueco "sin espacio" al llegar a la cuota (SEC-TMC-12); una captura fallida no crea punto (nivel declarado, ADR-TMC-004 § 4).
 - Verificación: el gate de INF-GRP-002 con la Time Machine activa mantiene el p95 del motor ≤ 300 ms.
+- Diferido (Decisión del orquestador, 2026-10-06, validada por el Arquitecto; ver la Dev Spec): la captura incremental con las rutas del motor (escalón 2) espera a TS-GRP-002/003 y cada captura hace detección completa; la cuota y el hueco "sin espacio" son de US-TMC-022, y mientras tanto la captura se omite por debajo del suelo de espacio libre de SEC-TMC-12. La consistencia se garantiza por estado (reflog de `HEAD`, `HEAD`, índice), no por la marca al empezar.
 
 ## Diseño y Dev Spec
 
 - **Diseño (flujo/UX):** Pendiente de diseño.
-- **Dev Spec:** pendiente (lo genera el Arquitecto).
+- **Dev Spec:** [DS-US-TMC-004](../dev-specs/US-TMC-004-captura-continua-git-crudo.md) (validada por el Arquitecto, 2026-10-06).
 
 ## Dependencias
 
