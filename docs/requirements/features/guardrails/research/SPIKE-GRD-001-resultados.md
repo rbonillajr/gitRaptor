@@ -7,7 +7,7 @@ feature: guardrails
 domain: GRP
 spike: SPIKE-GRD-001
 created: 2026-10-04
-updated: 2026-10-05
+updated: 2026-10-06
 related:
   adrs: [ADR-GRD-001, ADR-GRD-002]
   stories: [US-GRD-001, US-GRD-002, US-GRD-004]
@@ -153,6 +153,8 @@ Con `--ref-format=reftable` (Git 2.45 en adelante), `git branch -m main otra` y 
 - reportarlo aguas arriba a Git.
 
 Es una decisión de producto y arquitectura (§ 9, E-02-4).
+
+> **Enmienda (2026-10-06, XP-30; Decisión del orquestador, validada por Arquitecto)**: lo que vio D11 no depende de la versión. Con 2.50.1, 2.55.0 y 2.56.0, el renombrado en sí no ejecuta ningún hook. Después corre una transacción, la del symref `0000… ref:refs/heads/main HEAD`, con `main` ya reescrita. La guarda de esta suite solo denegaba borrados de `main` y dejó pasar esa línea, así que midió "no denegado". El ejecutor de INF-GRD-001 la deniega porque nombra `refs/heads/main` y mide B. En los dos casos es no impedible. Ver ADR-GRD-002, Enmienda (2026-10-06, XP-30).
 
 ## 4. Saltos (ADR-GRD-002 § 2)
 

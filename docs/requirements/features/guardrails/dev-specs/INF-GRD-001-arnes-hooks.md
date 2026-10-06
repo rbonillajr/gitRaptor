@@ -7,7 +7,7 @@ feature: guardrails
 domain: GRP
 story: INF-GRD-001
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-06
 related:
   stories: [INF-GRD-001, INF-GRP-001, SPIKE-GRD-001, US-GRD-001, US-GRD-002, US-GRD-003, US-GRD-004, US-GRD-005, US-GRD-006]
   adrs: [ADR-GRD-001, ADR-GRD-002, ADR-GRD-005, ADR-GRP-009]
@@ -79,6 +79,8 @@ Si un barrido falla, el informe nombra el escenario, el punto de corte, la ruta 
 - **Coste por comando**: commit, `switch` (rama nueva y existente), `rebase` de 3 commits, `fetch` de una ref, `stash` y `stash pop`. Se mide con todas las sondas de `COST_HOOKS` y con las del conjunto mínimo (`pre-push`, `pre-rebase` y `reference-transaction`). Se exige que el mínimo coincida con el recuento completo restringido a esos hooks.
 
 **Hallazgo (2026-10-05)**: con **reftable**, `git branch -M feat main` **sí** ejecuta `reference-transaction` en `prepared` con Git 2.50.1 (macOS, en local) y con Git 2.55.0 (runners de CI de Linux y macOS). La denegación deja `feat` borrada (B, igual que con el backend de archivos). SPIKE-GRD-001 midió C (ningún hook) con 2.56.0, con una preparación algo distinta (un commit en `feat` antes del renombrado). En todas las versiones la operación se publica como no impedible y solo cambia el motivo (B o C). La tabla lo recoge con dos filas por rango de versión: 2.50.1–2.55.0 y 2.56.0 en adelante. Ninguna de esas versiones es de la matriz (2.38 y la última estable): son **evidencia local y de CI**, no un gate de la matriz. Una versión fuera de los dos rangos falla con el motivo "no está en la lista de referencia". **Pendiente**: que el Arquitecto propague el hallazgo a ADR-GRD-002 (§ 1, § 3 y la Enmienda) y confirme la fila de 2.56.0 con la preparación del ejecutor. Este PR no toca el ADR.
+
+**Enmienda (2026-10-06, XP-30; Decisión del orquestador, validada por Arquitecto)**: el ejecutor también mide B con 2.56.0 (contenedor Linux). La diferencia con SPIKE-GRD-001 no es de versión ni de preparación, sino de sonda. Con reftable, el renombrado no ejecuta ningún hook. La única transacción que corre es la posterior del symref `HEAD` (`ref:refs/heads/main`), cuando `main` ya está reescrita. La sonda del ejecutor la deniega (su entrada contiene `refs/heads/main`) y la del spike no. La lista de referencia queda con **una fila**: `rename-over-base` reftable, B desde 2.50.1. El hueco del test de sensibilidad pasa a 2.44.0. La tabla de procesos por comando añade 2.38.5, 2.43.0 y 2.56.0 (contenedor). Queda propagado a ADR-GRD-002 (Enmienda 2026-10-06), lo que cierra el pendiente anterior.
 
 ## 6. Plan de pruebas (criterio de la INF → test)
 
