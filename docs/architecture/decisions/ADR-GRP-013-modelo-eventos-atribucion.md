@@ -205,7 +205,12 @@ Aplicada desde DEP-CKP-4 y DEP-CKP-14 (y la parte de rutas de DEP-CKP-1) de [CTX
 - **Última sesión**: la sesión más reciente del worktree por inicio, presente o terminada, con su agente y origen según la atribución efectiva (§ 2), su inicio, su fin y la causa del fin. Sale de la entidad Sesión (§ 1). La regla de visibilidad de 24 h (BR-CKP-TIME-002) es de la presentación, no del motor.
 - **Estado en conflicto**: tipo de operación en curso, oids de `MERGE_HEAD` u `onto`, y rutas sin fusionar con su tope (ADR-GRP-010, Enmienda (2026-10-04, Cockpit)). Forma parte del último estado conocido para que la reconciliación tras un hueco también lo detecte. Rutas y ramas son texto no confiable (SEC-12).
 - **Relación commit → evento** para el actor por commit en el grafo (DEP-CKP-2, opcional): **no se decide aquí**; sigue pendiente de motor-local. Sin ella, el Cockpit muestra "sin atribuir" (Q-CKP-4).
-- **Forma del contrato** (campos y eventos): **pendiente, dueño: worker del canal (TS-GRP-004)**.
+- **Forma del contrato** (campos y eventos), solo para la última actividad (Decisión del orquestador, 2026-10-06, validada por Arquitecto; DS-US-CKP-001 § 6):
+  - Campos: `WorktreeView.last_activity_utc_ms` y, para la antigüedad de la copia local del remoto, `RepoView.fetched_utc_ms` y `WorktreeStateData.fetched_utc_ms` (mtime de `FETCH_HEAD`, recortado a "ahora"). Viajan en `scope.snapshot`, `engine.snapshot`, `repo.add` y `worktree.state`, sin evento nuevo.
+  - Capacidad `scope.activity` (ADR-GRP-016): sin ella, el daemon no envía esos campos.
+  - Regla de cambio: cuenta el head (rama o commit), los recuentos y la lista de cambios, y la legibilidad. No cuentan el ↑↓ ni los cambios de sesión.
+  - **Desviación declarada**: no lleva el desfase local, porque el Cockpit solo muestra antigüedades. Por ahora se deriva en memoria al publicar, no de los eventos del almacén, y no lleva la marca del hueco: vale "no disponible" hasta el primer cambio de cada ejecución del motor.
+  - Última sesión y estado en conflicto: siguen **pendientes, dueño: worker del canal (TS-GRP-004)**.
 
 **Validación añadida**: un commit en un worktree actualiza su última actividad; un cambio de sesión a inactivo no la actualiza; tras un hueco, la última actividad lleva la marca del hueco; un worktree cuya sesión terminó publica esa sesión con su fin y su causa mientras existe.
 

@@ -84,5 +84,35 @@ Una fila por worktree publicado. El principal va primero y el resto sigue el ord
 
 - Etapa de validación multiplataforma: los tests de proceso son de macOS (`script`, `lsof`). El banco corre en Linux en el PR. La detección de la locale y de la profundidad de color está probada solo como función pura.
 - Calibrar los techos `ci` de `tui-modify` con tres corridas por runner, como en INF-GRP-002.
-- Dependencias del motor: la antigüedad de la copia local del remoto (nueva) y DEP-CKP-4 (última actividad).
+- ~~Dependencias del motor: la antigüedad de la copia local del remoto (nueva) y DEP-CKP-4 (última actividad).~~ Cubiertas por la enmienda del § 6, con la simplificación que allí se declara.
 - Sesiones en la instantánea del repo (deuda de D1, dueño TS-GRP-004).
+
+## 6. Enmienda (2026-10-06): hallazgos del primer dogfooding
+
+Rene usó la TUI por primera vez el 2026-10-06 (`bitacora/orquestador/TRASPASO.md`, "Hallazgos del dogfooding", puntos 1 y 4). Esta enmienda corrige cuatro defectos. **Decisión del orquestador (2026-10-06), validada por Arquitecto** en la forma del contrato (E1–E3); E4 y E5 los fija el encargo.
+
+| # | Defecto | Cambio |
+|---|---|---|
+| E1 | La columna Actividad decía "no disponible" en todas las filas | El motor publica `WorktreeView.last_activity_utc_ms` (DEP-CKP-4). La TUI pinta la antigüedad ("hace 2 min") con el reloj de `Msg::Tick`, que ahora repinta una vez por segundo mientras hay datos. Calcular la antigüedad a partir del dato publicado es presentación, no derivación (BR-CKP-CALC-001). Un worktree sin cambios desde que arrancó el motor sigue diciendo "no disponible" |
+| E2 | El título decía "antigüedad no disponible" | El motor publica `RepoView.fetched_utc_ms` y `WorktreeStateData.fetched_utc_ms`, que son el mtime de `<common dir>/FETCH_HEAD`, recortado a "ahora" si está en el futuro. El título dice "(copia local, fetch hace 3 h)" o, sin `FETCH_HEAD`, "(copia local, sin fetch)" |
+| E3 | Contrato | Capacidad nueva `scope.activity` (ADR-GRP-016, sin subir el protocolo). Es la primera posterior al 9. Sin ella, el daemon quita los campos del snapshot (`engine.snapshot`, `scope.snapshot`), del resultado de `repo.add` y de cada `worktree.state` (bus, `Outbox::shape`). El cliente de `crates/core` la pide al conectar, así que la CLI, la TUI y `raptor-mcp` la reciben. La TUI la consulta en el `hello` (`Link::has`): sin ella, la actividad y el fetch dicen "no disponible", nunca "sin fetch" |
+| E4 | Todos los agentes se llamaban "Claude Code" | El nombre lleva la carpeta del worktree: "Claude Code · dehotspot" o "claude-1 · feat-pagos +1" (texto `AgentInWorktree` del catálogo). La carpeta es el último componente de la raíz publicada y pasa por `SafeText` en la ingesta |
+| E5 | Fuera de un repo, la TUI pedía `raptor repo add` aunque ya había repos observados | El hilo del canal avisa `ConnEvent::Unlocated` cuando `repo.locate` no encuentra la carpeta. Con un repo observado, `update` lo abre (`Cmd::Open`). Con varios, muestra el selector `RepoPicker` (↑↓ o k/j, Enter). Solo sin ningún repo observado sugiere `raptor repo add`. El repo elegido se recuerda entre reconexiones. Las teclas de lista solo aparecen en las pistas mientras el selector está abierto |
+
+**Regla de actividad (Arquitecto)**: cuenta un cambio del commit o la rama del head, de los recuentos o la lista de cambios, o de la legibilidad del worktree. **No cuenta** el ↑↓ (un fetch lo mueve sin que nadie toque el worktree) ni los cambios de sesión. Un worktree nuevo en un repo que ya tenía worktrees cuenta como actividad. **Simplificación declarada**: el valor se deriva en memoria al publicar (`observe::stamp_activity`, en la misma sección crítica del bus, `EventBus::publish_with`). Todavía no se deriva de los eventos del almacén ni lleva la marca del hueco, así que vale "no disponible" hasta el primer cambio de cada ejecución del motor. El desfase local no viaja: la TUI solo muestra antigüedades relativas.
+
+| Escenario | Test |
+|---|---|
+| E1, E2 | `view::tests::published_activity_and_fetch_show_their_age` (en/es), `a_repo_never_fetched_says_so`, `ages_use_the_largest_whole_unit`; snapshots `fleet_{80x24,120x40}_{dark,light}` con los datos publicados |
+| Regla de actividad | `crates/core/tests/observe.rs` (`activity::*`): un cambio y un commit cuentan; el ↑↓ solo no cuenta; la primera lectura no sabe nada; `FETCH_HEAD` nunca en el futuro |
+| E3 | `crates/core/tests/channel_capabilities.rs`: `scope_activity_carries_the_last_fetch_and_activity_only_to_who_accepted_it` (con y sin la capacidad, en el snapshot y en `worktree.state`). `accept_grants_…` pasa a conexiones crudas, porque el cliente de la librería ya acepta al conectar |
+| E4 | `view::tests::agents_of_the_same_kind_are_told_apart_by_their_worktree` |
+| E5 | `outside_a_repo_the_only_observed_one_opens`, `outside_a_repo_with_none_observed_it_says_how_to_add_one`, `outside_a_repo_the_developer_chooses_among_several`; snapshot `repo_picker_80x24` (y su texto en es) |
+
+Pendiente de esta enmienda:
+
+- Derivar la última actividad de los eventos del almacén al arrancar, con la marca del hueco (ADR-GRP-013, Enmienda 2026-10-04).
+- Un `fetch` que no escribe `FETCH_HEAD` no se ve.
+- El selector usa la lista de repos del snapshot global. Si se añade un repo mientras está abierto, aparece en el siguiente resync.
+- `replace:9` (ADR-GRP-016): un reemplazo con el mismo protocolo sigue contándose como caída. No se afina aquí.
+- Las KeyHints y la navegación de historias posteriores (US-CKP-002+) quedan fuera.
