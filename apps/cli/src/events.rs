@@ -36,7 +36,7 @@ pub fn text(events: &[GitEventView]) -> String {
                     ("time", &local_time(e.observed_utc_ms, e.utc_offset_s)),
                     ("worktree", &worktree),
                     ("event", &describe(e)),
-                    ("actor", &actor(&e.actor)),
+                    ("actor", &actor_of(e)),
                 ],
             )
         );
@@ -56,6 +56,18 @@ fn describe(e: &GitEventView) -> String {
         GitEventKind::BranchSwitch => t("event.branch-switch-to", &[("branch", &branch)]),
         GitEventKind::Reset if e.details.branch.is_none() => t("event.reset-detached", &[]),
         kind => t(&format!("event.{}", kind.as_str()), &[("branch", &branch)]),
+    }
+}
+
+/// The event's actor, or for an unattributed one with a hint, the agent it
+/// is inferred to come from (amendment of ADR-GRP-012).
+fn actor_of(e: &GitEventView) -> String {
+    match (&e.actor, &e.inferred) {
+        (Actor::Unattributed, Some(hint)) => t(
+            "actor.inferred",
+            &[("agent", &t(&format!("actor.{}", wire(&hint.kind)), &[]))],
+        ),
+        (actor_, _) => actor(actor_),
     }
 }
 
@@ -109,6 +121,7 @@ pub fn json(events: &[GitEventView]) -> Value {
                     "old_commit": e.details.old_commit,
                     "new_commit": e.details.new_commit,
                     "gap_id": e.gap_id,
+                    "inferred": e.inferred,
                 })
             })
             .collect(),
@@ -157,6 +170,7 @@ mod tests {
                 ..GitEventDetails::default()
             },
             gap_id: None,
+            inferred: None,
         }
     }
 
@@ -207,5 +221,25 @@ mod tests {
         assert_eq!(value[0]["actor"], "unattributed");
         assert_eq!(value[0]["branch"], "feat-login");
         assert_eq!(value[0]["worktree_inferred"], false);
+    }
+
+    /// Amendment of ADR-GRP-012: an unattributed event with a hint shows
+    /// the inferred agent, and still says "unattributed".
+    #[test]
+    fn an_inferred_event_says_so() {
+        let mut e = event(GitEventKind::Commit, false);
+        e.inferred = Some(gitraptor_api::messages::InferredAgent {
+            kind: gitraptor_api::AgentKind::ClaudeCode,
+            session_id: "20:2000".into(),
+        });
+        let out = text(std::slice::from_ref(&e));
+        assert!(
+            out.contains("(unattributed; inferred: Claude Code)"),
+            "{out}"
+        );
+        let value = json(&[e]);
+        assert_eq!(value[0]["actor"], "unattributed");
+        assert_eq!(value[0]["inferred"]["kind"], "claude-code");
+        assert_eq!(value[0]["inferred"]["session_id"], "20:2000");
     }
 }
