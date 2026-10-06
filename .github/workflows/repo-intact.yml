@@ -96,12 +96,12 @@ jobs:
       - name: Toolchain from rust-toolchain.toml
         if: env.RUST_CHANGED != 'false'
         run: rustup show
-      # Key: OS + toolchain file (rust-cache also adds the rustc version and Cargo.lock). Only main
-      # saves, so pull requests restore main's cache and never evict it.
+      # rust-cache keys by job, OS, arch, rustc version and Cargo.lock
+      # (`v0-rust-lint-and-test-<OS>-<arch>-<rustc>-<lock>`). Only main saves: pull request caches
+      # used to push the repo past the 10 GB limit and evict main's.
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         if: env.RUST_CHANGED != 'false'
         with:
-          key: ${{ runner.os }}-${{ hashFiles('rust-toolchain.toml') }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - if: env.RUST_CHANGED != 'false'
         run: cargo fmt --all -- --check
