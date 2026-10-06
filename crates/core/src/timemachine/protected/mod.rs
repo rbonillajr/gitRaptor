@@ -134,6 +134,7 @@ impl PriorSnapshotter for StoreSnapshotter {
             cause_event_seq: None,
             include_credentials: crate::profile::settings::include_credential_files(&self.profile),
             still_valid: None,
+            give_way: None,
         };
         let out = self.store.capture(&self.oplog, &capture)?;
         Ok(PriorSnapshot {
