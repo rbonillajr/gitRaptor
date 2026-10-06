@@ -162,9 +162,9 @@ struct Raw {
 impl Raw {
     fn open(path: &Path) -> Self {
         let stream = UnixStream::connect(path).unwrap();
-        stream
-            .set_read_timeout(Some(Duration::from_secs(5)))
-            .unwrap();
+        // A connection past the limit may already be closed by the daemon,
+        // and macOS refuses options on it (EINVAL); its reads end at once.
+        let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
         let reader = BufReader::new(stream.try_clone().unwrap());
         Self { stream, reader }
     }
@@ -433,12 +433,18 @@ fn slow_client_and_connection_flood_do_not_starve_the_others() {
     let mut slow = Raw::open(&r.socket());
     slow.hello();
     slow.send(r#"{"jsonrpc":"2.0","id":1,"method":"events.subscribe"}"#);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while r.bus.subscriber_count() < 2 {
+        assert!(Instant::now() < deadline, "the slow client never subscribed");
+        std::thread::yield_now();
+    }
 
     // 100 more connections; past the limit they are told so and closed.
     let flood: Vec<Raw> = (0..100).map(|_| Raw::open(&r.socket())).collect();
     std::thread::sleep(Duration::from_millis(100));
 
     let mut latencies = Vec::new();
+    let mut slow_messages = None;
     let payload = "x".repeat(2048);
     for i in 0..3000 {
         r.bus.publish(
@@ -447,6 +453,13 @@ fn slow_client_and_connection_flood_do_not_starve_the_others() {
             Some(change_timings(3)),
             |_| {},
         );
+        // The bus just dropped the slow one: it overflowed its outbox. Its
+        // writer has been blocked on a full socket since the first events
+        // and gives up after `write_timeout`, so the slow client reads now,
+        // not after the whole run, or the resync never reaches it.
+        if slow_messages.is_none() && r.bus.subscriber_count() < 2 {
+            slow_messages = Some(std::iter::from_fn(|| slow.recv()).collect::<Vec<_>>());
+        }
         if i % 10 == 0 {
             // Drain the good client as a real one would.
             while let Some(note) = good.next_notification(Duration::from_millis(1)).unwrap() {
@@ -471,13 +484,10 @@ fn slow_client_and_connection_flood_do_not_starve_the_others() {
 
     // The slow one was told to resync and dropped (it never read: its
     // socket buffer may still hold events before the resync).
-    let mut saw_resync = false;
-    while let Some(msg) = slow.recv() {
-        if msg["method"] == methods::NOTIFY_RESYNC {
-            saw_resync = true;
-        }
-    }
-    assert!(saw_resync);
+    let slow_messages = slow_messages.expect("the slow client never overflowed");
+    let last = slow_messages.last().expect("the slow client got nothing");
+    assert_eq!(last["method"], methods::NOTIFY_RESYNC, "{last}");
+    assert_eq!(last["params"]["reason"], "slow-consumer");
     let limited = flood
         .into_iter()
         .filter_map(|mut raw| {
