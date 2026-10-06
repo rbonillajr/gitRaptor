@@ -11,8 +11,8 @@ use std::path::Path;
 use gitraptor_api::Untrusted;
 use gitraptor_api::messages::{
     BaseBranchView, BaseStatusView, ChangeAreaView, ChangeCounts, CommitCountView, DivergenceView,
-    FileChangeView, HeadView, RepoStateView, RepoView, SessionView, Snapshot, UnavailableReason,
-    WorktreeStatus, WorktreeView,
+    FileChangeView, HeadView, RepoStateView, RepoView, SessionStateView, SessionView, Snapshot,
+    UnavailableReason, WorktreeStatus, WorktreeView,
 };
 use serde::Serialize;
 
@@ -277,6 +277,8 @@ struct WorktreeJson {
     ahead_behind: Option<AheadBehindJson>,
     /// Present sessions and the latest ended one (US-GRP-007).
     sessions: Vec<SessionJson>,
+    /// More than one present session (BR-CONS-004): two agents share it.
+    shared: bool,
 }
 
 #[derive(Serialize)]
@@ -340,6 +342,11 @@ pub fn json(snapshot: &Snapshot, sessions: &SessionsInfo) -> StatusJson {
                     .map(|w| {
                         let mut out = worktree_json(w);
                         out.sessions = sessions.of(&repo.repo_id, w).map(session_json).collect();
+                        out.shared = sessions
+                            .of(&repo.repo_id, w)
+                            .filter(|s| s.state != SessionStateView::Ended)
+                            .count()
+                            > 1;
                         out
                     })
                     .collect(),
@@ -362,6 +369,7 @@ fn worktree_json(w: &WorktreeView) -> WorktreeJson {
         changes_truncated: w.changes_truncated(),
         ahead_behind: None,
         sessions: Vec::new(),
+        shared: false,
     };
     match &w.status {
         WorktreeStatus::Unavailable { reason } => out.unavailable_reason = Some(wire(reason)),

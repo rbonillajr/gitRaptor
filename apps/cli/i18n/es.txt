@@ -101,6 +101,20 @@ sessions.line = {worktree}  {session}
 sessions.unavailable = en este sistema todavía no se pueden detectar sesiones de agente
 sessions.restart-engine = el motor en marcha es anterior a este raptor y no puede mostrar sesiones: reinícialo con `raptor daemon stop`
 
+# Registro explícito de un agente (US-GRP-009).
+agent.created = {agent} quedó registrado aquí
+agent.confirmed = {agent} ya se detectaba aquí: se confirmó su sesión
+agent.already-registered = {agent} ya estaba registrado aquí; no cambió nada
+agent.other-notice = {name} se registró como otro agente: se observa y se le atribuye su actividad, sin funciones específicas. No se detecta solo: figura presente hasta que ejecutes raptor agent withdraw "{name}"
+agent.withdrawn = se retiró el registro de {agent}; su sesión terminó
+agent.refused-agent = rechazado: solo el desarrollador puede retirar el registro de otro agente
+registration.not-a-worktree = ese directorio no es un worktree de ningún repo observado
+registration.repo-not-observed = el repo no está observado
+registration.worktree-mismatch = rechazado: un agente solo puede registrarse en el worktree donde trabaja
+registration.agent-mismatch = rechazado: un agente solo puede registrarse como el agente que es
+registration.no-working-folder = no se pudo leer la carpeta de trabajo de quien lo pide
+registration.not-registered = {agent} no tiene un registro que retirar en ese worktree; una sesión detectada termina cuando termina su proceso
+
 # El snapshot previo falló: la operación no se ejecutó (US-TMC-001).
 prior.no-space = no se ejecutó: no hay espacio en disco para guardar antes el trabajo; nada cambió
 prior.store-unavailable = no se ejecutó: el almacén de snapshots no está disponible; nada cambió
@@ -177,6 +191,7 @@ error.operation-failed = la operación falló; se puede deshacer
 error.identity-unverified = el motor no pudo verificar quién eres
 error.repo-rejected = el repo fue rechazado
 error.operation-rejected = la operación se rechazó antes de ejecutarse
+error.registration-rejected = el registro se rechazó
 # raptor undo (US-TMC-002).
 undo.done = deshecha {operation} ({id}) en {worktree}
 undo.saved = el estado justo antes de este undo queda guardado como {snapshot}; no se perdió nada

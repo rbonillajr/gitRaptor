@@ -1,3 +1,4 @@
+mod agent;
 mod codes;
 mod events;
 mod i18n;
@@ -82,6 +83,11 @@ enum Command {
         #[arg(long)]
         all: bool,
     },
+    /// Register the agent that works in a worktree, or withdraw its registration.
+    Agent {
+        #[command(subcommand)]
+        action: AgentAction,
+    },
     /// Undo the last operation of the worktree you are in; the state right before the undo is saved.
     Undo {
         /// Print JSON instead of text.
@@ -92,6 +98,30 @@ enum Command {
     Mcp {
         #[command(subcommand)]
         action: McpAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum AgentAction {
+    /// Register an agent in a worktree: "Claude Code", or any other agent by its name
+    /// (Codex, Cursor...). An agent registers itself in the worktree it works in.
+    Register {
+        /// The agent: "Claude Code" or the name of another agent.
+        agent: String,
+        /// The worktree (default: the current folder). Only the developer names another one.
+        #[arg(long)]
+        worktree: Option<PathBuf>,
+        /// Print JSON instead of text.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Withdraw the registration of an agent: its session ends (reserved to the developer).
+    Withdraw {
+        /// The agent: "Claude Code" or the name of another agent.
+        agent: String,
+        /// The worktree (default: the current folder).
+        #[arg(long)]
+        worktree: Option<PathBuf>,
     },
 }
 
@@ -170,6 +200,17 @@ fn main() -> ExitCode {
         }) => status_resources(json),
         Some(Command::Events { json, limit, all }) => events_command(json, limit, all),
         Some(Command::Sessions { json, all }) => sessions_command(json, all),
+        Some(Command::Agent {
+            action:
+                AgentAction::Register {
+                    agent,
+                    worktree,
+                    json,
+                },
+        }) => agent::register(&agent, worktree, json),
+        Some(Command::Agent {
+            action: AgentAction::Withdraw { agent, worktree },
+        }) => agent::withdraw(&agent, worktree),
         Some(Command::Undo { json }) => undo::run(json),
         Some(Command::Mcp {
             action: McpAction::Install { agent },
