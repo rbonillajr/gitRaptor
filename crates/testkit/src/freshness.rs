@@ -178,8 +178,16 @@ pub const REGRESSION_CEILINGS: &[(Platform, &str, RegressionCeiling)] = &[
     // ⚠️ Provisional until calibrated with its own runs: the "modify" figures of the runner
     // plus the Cockpit budget (COCKPIT_P95_MS), since `tui-modify` is "modify" seen through the
     // TUI (US-CKP-001; Decisión del orquestador 2026-10-06, validada por Arquitecto).
-    (Platform::MacCi, TUI_MODIFY, steady(224.3 + COCKPIT_P95_MS, 293.7 + COCKPIT_P95_MS)),
-    (Platform::LinuxCi, TUI_MODIFY, steady(105.1 + COCKPIT_P95_MS, 151.0 + COCKPIT_P95_MS)),
+    (
+        Platform::MacCi,
+        TUI_MODIFY,
+        steady(224.3 + COCKPIT_P95_MS, 293.7 + COCKPIT_P95_MS),
+    ),
+    (
+        Platform::LinuxCi,
+        TUI_MODIFY,
+        steady(105.1 + COCKPIT_P95_MS, 151.0 + COCKPIT_P95_MS),
+    ),
 ];
 
 /// End-to-end scenario of the Cockpit (US-CKP-001, M1 criterion 6): "modify a file" seen by the
