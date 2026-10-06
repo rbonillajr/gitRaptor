@@ -302,6 +302,8 @@ fn seeded(
     let spawned = std::thread::Builder::new()
         .name("raptor-tm-seed".into())
         .spawn(move || {
+            let started = Instant::now();
+            let ms = || i64::try_from(started.elapsed().as_millis()).unwrap_or(i64::MAX);
             match store.seed_with(&path, seed_limits()) {
                 Ok(report) => logger.info(
                     "tm_seeded",
@@ -312,10 +314,14 @@ fn seeded(
                             i64::try_from(report.objects).unwrap_or(i64::MAX).into(),
                         ),
                         ("skipped", report.skipped.len().into()),
+                        ("ms", ms().into()),
                     ],
                 ),
                 // A capture then copies what it lacks.
-                Err(_) => logger.warn("tm_seed_failed", &[("repo", Field::id(&repo))]),
+                Err(_) => logger.warn(
+                    "tm_seed_failed",
+                    &[("repo", Field::id(&repo)), ("ms", ms().into())],
+                ),
             }
             flag.store(true, std::sync::atomic::Ordering::Release);
         });
@@ -407,33 +413,51 @@ fn run(config: CaptureConfig, deps: CaptureDeps, rx: Receiver<Signal>) {
                 p.retry_at = Some(Instant::now() + SEED_WAIT);
                 continue;
             }
-            // A capture gives way to new activity of its repo, unless it has waited too long:
-            // then it runs to the end (at most every `M` while the activity goes on).
-            let give_way = p.first.elapsed() < config.max_interval * 6;
-            match capture_one(&deps, &key.0, &key.1, p.event, give_way) {
-                Attempt::Done => {
-                    pending.remove(&key);
+            let attempt = capture_one(&deps, &key.0, &key.1, p.event, p.give_way(&config));
+            if !p.after(attempt, Instant::now(), &config) {
+                if p.retries > MAX_RETRIES {
+                    deps.logger
+                        .warn("tm_capture_gave_up", &[("repo", Field::id(&key.0))]);
                 }
-                Attempt::Again => {
-                    p.retries += 1;
-                    if p.retries > MAX_RETRIES {
-                        deps.logger
-                            .warn("tm_capture_gave_up", &[("repo", Field::id(&key.0))]);
-                        pending.remove(&key);
-                    } else {
-                        p.retry_at = Some(Instant::now() + SETTLE);
-                    }
-                }
+                pending.remove(&key);
             }
         }
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Attempt {
     /// Captured, or failed for good (the change has no point).
     Done,
     /// Not consistent or not calm yet: try again shortly.
     Again,
+    /// Gave way to new activity of the repo: try again once it is quiet. Never counts as a
+    /// failure, so sustained activity never makes the capture give up.
+    GaveWay,
+}
+
+impl Pending {
+    /// Whether the capture gives way to new activity of its repo: not once it has waited six
+    /// times `M`, so sustained activity still gets a capture (at most every 6×M while it lasts).
+    fn give_way(&self, config: &CaptureConfig) -> bool {
+        self.first.elapsed() < config.max_interval * 6
+    }
+
+    /// After an attempt at `now`: whether the worktree stays pending, and when it is tried again.
+    fn after(&mut self, attempt: Attempt, now: Instant, config: &CaptureConfig) -> bool {
+        match attempt {
+            Attempt::Done => false,
+            Attempt::GaveWay => {
+                self.retry_at = Some(now + config.quiet);
+                true
+            }
+            Attempt::Again => {
+                self.retries += 1;
+                self.retry_at = Some(now + SETTLE);
+                self.retries <= MAX_RETRIES
+            }
+        }
+    }
 }
 
 fn capture_one(
@@ -457,7 +481,8 @@ fn capture_one(
     ) {
         Ok(_) => Attempt::Done,
         Err(Failure::NotCalm | Failure::Busy) => Attempt::Again,
-        Err(Failure::Capture(CaptureError::Yielded | CaptureError::Discarded)) => Attempt::Again,
+        Err(Failure::Capture(CaptureError::Yielded)) => Attempt::GaveWay,
+        Err(Failure::Capture(CaptureError::Discarded)) => Attempt::Again,
         Err(Failure::Unavailable) => Attempt::Done,
         Err(Failure::NoSpace) => {
             deps.logger.warn(
@@ -625,5 +650,71 @@ fn failure_kind(e: &CaptureError) -> &'static str {
         CaptureError::Oplog(_) => "oplog",
         CaptureError::Io(e) if super::protected::is_no_space(e) => "no-space",
         CaptureError::Io(_) => "io",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn config() -> CaptureConfig {
+        CaptureConfig {
+            enabled: true,
+            quiet: Duration::from_millis(100),
+            max_interval: Duration::from_millis(500),
+        }
+    }
+
+    fn pending(first: Instant) -> Pending {
+        Pending {
+            first,
+            last: first,
+            event: None,
+            retry_at: None,
+            retries: 0,
+        }
+    }
+
+    /// Architect's A1: giving way to sustained activity never makes the capture give up, and
+    /// after six times `M` it no longer gives way, so the activity still gets a capture.
+    #[test]
+    fn sustained_activity_still_gets_a_capture() {
+        let config = config();
+        let now = Instant::now();
+        let mut p = pending(now);
+        assert!(p.give_way(&config));
+        for _ in 0..(MAX_RETRIES * 4) {
+            assert!(p.after(Attempt::GaveWay, now, &config));
+        }
+        assert_eq!(p.retries, 0);
+        assert_eq!(p.retry_at, Some(now + config.quiet));
+        let old = pending(now - config.max_interval * 6);
+        assert!(!old.give_way(&config));
+    }
+
+    #[test]
+    fn a_capture_that_never_becomes_consistent_gives_up() {
+        let config = config();
+        let now = Instant::now();
+        let mut p = pending(now);
+        let mut kept = 0;
+        while p.after(Attempt::Again, now, &config) {
+            kept += 1;
+        }
+        assert_eq!(kept, MAX_RETRIES);
+        assert!(!pending(now).after(Attempt::Done, now, &config));
+    }
+
+    #[test]
+    fn a_git_event_is_due_at_once_and_activity_after_the_quiet_time() {
+        let config = config();
+        let now = Instant::now();
+        let mut p = pending(now);
+        assert_eq!(p.due(&config), now + config.quiet);
+        p.first = now - config.max_interval;
+        assert_eq!(p.due(&config), now);
+        let mut p = pending(now);
+        p.event = Some(3);
+        assert_eq!(p.due(&config), now);
     }
 }

@@ -446,3 +446,36 @@ fn a_failed_capture_is_not_presented_as_protected() {
         "{points:#?}"
     );
 }
+
+// ----- Seeding (D12) --------------------------------------------------------------
+
+/// The first continuous capture of a repo whose store lacks its history waits for the store to
+/// be seeded from the repo's packs (ADR-TMC-001 § 3), then captures.
+#[test]
+fn the_store_is_seeded_from_the_packs_before_the_first_capture() {
+    let (fx, wt) = repo_with_login();
+    fx.git(&["gc", "-q"]);
+    let r = start(fx, None);
+    std::fs::write(wt.join("api.rs"), EDITED).unwrap();
+    let id = r.snapshot_when(KEY, |f| has(f, "api.rs", EDITED));
+    let log = r.log();
+    assert!(log.contains("tm_seeded"), "{log}");
+    let packs =
+        r.tp.dirs()
+            .data
+            .join("tm")
+            .join(&r.repo_id)
+            .join("store.git/objects/pack");
+    assert!(
+        std::fs::read_dir(&packs)
+            .unwrap()
+            .flatten()
+            .any(|e| e.file_name().to_string_lossy().ends_with(".pack")),
+        "no pack seeded"
+    );
+    let (_fx, oplog) = r.stop_and_oplog();
+    assert_eq!(
+        snapshot(&oplog, &id).record.level,
+        SnapshotLevel::Observation
+    );
+}
