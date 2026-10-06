@@ -1,0 +1,38 @@
+# User-facing messages of `raptor`, English (NFR-10, ADR-GRP-003): timemachine.
+# One `key = text` per line. Placeholders are `{name}`; the code fills them
+# by name, never by concatenating. Every key exists in ../es/timemachine.txt too.
+
+# The prior snapshot failed: the operation did not run (US-TMC-001).
+prior.no-space = not run: there is no disk space to save the work first; nothing changed
+prior.store-unavailable = not run: the snapshot store is unavailable; nothing changed
+prior.timeout = not run: saving the work first took too long; nothing changed
+prior.daemon-stopping = not run: the engine is stopping; nothing changed
+prior.capture-failed = not run: the work could not be saved first; nothing changed
+
+# raptor undo (US-TMC-002).
+undo.done = undone {operation} ({id}) in {worktree}
+undo.saved = the state right before this undo is saved as {snapshot}; nothing was lost
+undo.not-restored = left as it was ({reason}): {path}
+undo.path.overlap = someone else changed it meanwhile
+undo.path.not-guaranteed = this file system cannot restore it safely
+undo.path.blocked = a folder on the way is a link or on another disk
+undo.operation-unnamed = the operation
+undo.not-in-worktree = not inside a Git worktree
+undo.not-observed = {worktree} is not in a repo GitRaptor observes; add it with raptor repo add
+undo.interrupted = interrupted half-way ({id}); run raptor undo again to return to the state before it
+undo.reason.nothing-to-undo = nothing to undo in this worktree; nothing changed
+undo.reason.raw-git-not-covered = the last change was made with Git directly and undoing that kind of change is not available yet; nothing changed
+undo.reason.target-unavailable = the state before that operation is no longer available; nothing changed
+undo.reason.other-actor = that work belongs to another actor; nothing changed
+undo.reason.confirmation-required = that work belongs to an agent: ask the agent to run raptor undo itself (confirming it from your terminal is not available yet); nothing changed
+undo.reason.git-operation-in-progress = a Git operation is in progress (merge, rebase, cherry-pick...); finish or abort it first; nothing changed
+undo.reason.git-busy = Git is busy (a lock file is present); nothing changed
+undo.reason.repo-busy = another operation is running on this repo; try again; nothing changed
+undo.reason.repo-untrusted = Git does not trust this repo (safe.directory); nothing changed
+undo.reason.worktree-unavailable = a worktree of that operation is missing or moved; nothing changed
+undo.reason.invalid-snapshot = a saved state failed its integrity check; nothing changed
+undo.reason.hostile-tree = the saved state has paths that are unsafe on this file system; nothing changed
+undo.reason.ref-moved = a branch moved meanwhile; nothing changed
+undo.reason.ref-in-use = a branch it would move is checked out in another worktree; nothing changed
+undo.reason.unsupported = undo is not supported here yet; nothing changed
+undo.reason.git-unavailable = the engine found no usable Git; nothing changed

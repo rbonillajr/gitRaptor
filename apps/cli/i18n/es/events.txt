@@ -1,0 +1,29 @@
+# Mensajes de `raptor` para el usuario, en español (NFR-10, ADR-GRP-003): events.
+# Una línea `clave = texto`. Los marcadores son `{nombre}`; el código los
+# rellena por nombre, nunca concatenando. Toda clave existe también en ../en/events.txt.
+
+kind.added = añadido
+kind.deleted = borrado
+kind.modified = modificado
+kind.type-changed = cambio de tipo
+kind.conflicted = en conflicto
+
+events.none = todavía no hay eventos de Git
+events.line = {time}  {worktree}  {event}  ({actor})
+events.inferred = {worktree} (deducido)
+events.restart-engine = el motor en marcha es anterior a este raptor y no puede mostrar eventos: reinícialo con `raptor daemon stop`
+
+event.commit = commit en {branch}
+event.merge = merge en {branch}
+event.rebase = rebase de {branch}
+event.branch-update = la rama {branch} se movió
+event.branch-create = rama {branch} creada
+event.branch-delete = rama {branch} borrada
+event.branch-switch = cambio de la rama {from} a {branch}
+event.branch-switch-to = cambio a la rama {branch}
+event.worktree-create = worktree creado en {branch}
+event.worktree-delete = worktree borrado
+event.push = push a {branch}
+event.reconciled = reconciliación: cambios encontrados tras un hueco (no es un comando de Git)
+event.reset = reset en {branch} sin moverla
+event.reset-detached = reset con HEAD separado

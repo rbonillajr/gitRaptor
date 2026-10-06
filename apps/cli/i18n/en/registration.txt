@@ -1,0 +1,17 @@
+# User-facing messages of `raptor`, English (NFR-10, ADR-GRP-003): registration.
+# One `key = text` per line. Placeholders are `{name}`; the code fills them
+# by name, never by concatenating. Every key exists in ../es/registration.txt too.
+
+# Explicit registration of an agent (US-GRP-009).
+agent.created = {agent} is registered here
+agent.confirmed = {agent} was already detected here: its session is confirmed
+agent.already-registered = {agent} was already registered here; nothing changed
+agent.other-notice = {name} registered as another agent: it is observed and its activity attributed to it, without specific functions. It is not detected on its own: it stays present until you run raptor agent withdraw "{name}"
+agent.withdrawn = the registration of {agent} was withdrawn; its session ended
+agent.refused-agent = refused: only the developer can withdraw the registration of another agent
+registration.not-a-worktree = that folder is not a worktree of any observed repo
+registration.repo-not-observed = the repo is not observed
+registration.worktree-mismatch = refused: an agent can only register in the worktree it works in
+registration.agent-mismatch = refused: an agent can only register as the agent it is
+registration.no-working-folder = the working folder of the caller could not be read
+registration.not-registered = {agent} has no registration to withdraw in that worktree; a detected session ends when its process ends

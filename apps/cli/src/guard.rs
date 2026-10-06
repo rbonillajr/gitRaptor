@@ -476,10 +476,7 @@ mod tests {
 
     #[test]
     fn no_message_mentions_an_exception_or_how_to_disable() {
-        for lang in [
-            include_str!("../i18n/en.txt"),
-            include_str!("../i18n/es.txt"),
-        ] {
+        for lang in crate::i18n::feature_files("guard") {
             for line in lang
                 .lines()
                 .filter(|l| l.starts_with("guard.deny") || l.starts_with("guard.degraded"))

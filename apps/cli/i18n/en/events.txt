@@ -1,0 +1,29 @@
+# User-facing messages of `raptor`, English (NFR-10, ADR-GRP-003): events.
+# One `key = text` per line. Placeholders are `{name}`; the code fills them
+# by name, never by concatenating. Every key exists in ../es/events.txt too.
+
+kind.added = added
+kind.deleted = deleted
+kind.modified = modified
+kind.type-changed = type changed
+kind.conflicted = conflicted
+
+events.none = no Git events yet
+events.line = {time}  {worktree}  {event}  ({actor})
+events.inferred = {worktree} (inferred)
+events.restart-engine = the running engine is older than this raptor and cannot show events: restart it with `raptor daemon stop`
+
+event.commit = commit on {branch}
+event.merge = merge into {branch}
+event.rebase = rebase of {branch}
+event.branch-update = branch {branch} moved
+event.branch-create = branch {branch} created
+event.branch-delete = branch {branch} deleted
+event.branch-switch = switched from {from} to {branch}
+event.branch-switch-to = switched to {branch}
+event.worktree-create = worktree created on {branch}
+event.worktree-delete = worktree deleted
+event.push = push to {branch}
+event.reconciled = reconciliation: changes found after a gap (not a Git command)
+event.reset = reset on {branch} without moving it
+event.reset-detached = reset with HEAD detached
