@@ -11,6 +11,7 @@
 //! "human" variant ([`Actor`], ADR-GRP-013 § 6).
 
 pub mod actor;
+pub mod capability;
 pub mod catalog;
 pub mod clock;
 pub mod event;
@@ -28,8 +29,10 @@ pub use actor::{Actor, AgentKind, AgentOrigin};
 pub use event::{Event, Timings};
 pub use untrusted::{Untrusted, UntrustedName};
 
-/// Version of the engine API contract (semantic, for humans).
-pub const API_VERSION: &str = "8.0.0";
+/// Version of the engine API contract (semantic, for humans). Frozen with
+/// the protocol at 9 (ADR-GRP-016 § 1): what a connection has is told by
+/// its methods and capabilities, not by this text.
+pub const API_VERSION: &str = "9.0.0";
 
 /// Wire protocol version negotiated in the handshake. A daemon serves every
 /// client from [`MIN_COMPATIBLE_PROTOCOL`] up to its own version, each in
@@ -47,8 +50,12 @@ pub const API_VERSION: &str = "8.0.0";
 /// (US-GRD-001): the `guard.*` methods, the `-32016` code and the
 /// `not-observed` repo rejection; a connection of version 5 or 6 sees none.
 /// Version 8 (US-TMC-004): Git events of kind `reset`; a connection of
-/// version 5 to 7 never receives them.
-pub const PROTOCOL_VERSION: u32 = 8;
+/// version 5 to 7 never receives them. Version 9 (ADR-GRP-016): the last
+/// one for additive changes. The handshake announces the daemon's
+/// capabilities and `connection.accept` takes the client's; a new method or
+/// a new shape is declared by its module ([`methods`], [`capability`]) and
+/// this number does not change again unless something is removed.
+pub const PROTOCOL_VERSION: u32 = 9;
 
 /// Oldest client protocol a daemon still serves: a long-lived `raptor-mcp`
 /// survives an upgrade of the daemon (DS-TS-GRP-004 E-D1).
