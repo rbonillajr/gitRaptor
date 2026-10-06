@@ -22,6 +22,7 @@ mod env;
 mod guard;
 mod lock;
 mod log;
+mod modules;
 mod repos;
 mod serve;
 mod sessions;
@@ -306,8 +307,9 @@ pub struct Daemon {
     guard: Arc<GuardRegistry>,
     /// Engine marks and calm per repo, for the Time Machine (US-TMC-004).
     marks: Arc<crate::timemachine::engine::RepoMarks>,
-    /// The Time Machine's continuous capture (US-TMC-004).
-    capture: Option<crate::timemachine::continuous::ContinuousCapture>,
+    /// The feature modules: the Time Machine's continuous capture
+    /// (US-TMC-004) and the ones after it (ADR-GRP-016 § 5).
+    modules: modules::Modules,
     report: StartupReport,
     handle: ShutdownHandle,
     control_rx: Receiver<Control>,
@@ -557,7 +559,7 @@ impl Daemon {
             tm,
             guard,
             marks: Arc::default(),
-            capture: None,
+            modules: modules::Modules::default(),
             report,
             handle,
             control_rx,
@@ -581,16 +583,7 @@ impl Daemon {
         for repo_id in &repo_ids {
             daemon.link_marks(repo_id);
         }
-        daemon.capture = match crate::timemachine::continuous::ContinuousCapture::start(
-            daemon.config.tm_capture.config,
-            daemon.capture_deps(),
-        ) {
-            Ok(capture) => Some(capture),
-            Err(_) => {
-                daemon.logger.warn("tm_capture_unavailable", &[]);
-                None
-            }
-        };
+        daemon.modules = modules::Modules::start(&daemon);
         // The observer starts after the reconciliation; each worktree task
         // reads once more when its watch runs, so nothing in between is
         // lost (ADR-GRP-010 § 6).
@@ -802,15 +795,13 @@ impl Daemon {
             profile,
             observer,
             detector,
-            capture,
+            modules,
             ..
         } = self;
         drop(observer);
         drop(detector);
-        // A capture in progress ends before the stores close.
-        if let Some(capture) = capture {
-            capture.stop();
-        }
+        // A module's work in progress ends before the stores close.
+        modules.stop();
         // An operation still running keeps its own handle until it ends.
         tm.clear();
         drop(tm);

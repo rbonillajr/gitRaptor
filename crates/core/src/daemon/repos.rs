@@ -223,9 +223,7 @@ impl Daemon {
             detector.forget_repo(repo_id);
         }
         self.tm.remove(repo_id);
-        if let Some(capture) = &self.capture {
-            capture.forget(repo_id);
-        }
+        self.modules.repo_retired(repo_id);
         self.marks.remove(repo_id);
         if let Some(pos) = self.stores.iter().position(|(id, _)| id == repo_id) {
             let (_, mut store) = self.stores.remove(pos);
@@ -271,9 +269,7 @@ impl Daemon {
     /// batches come back to this loop as [`Control::Observed`].
     pub(super) fn observe(&mut self, repo_id: &str, common_dir: &std::path::Path, read: &RepoRead) {
         let mut hooks = vec![self.detector_hooks()];
-        if let Some(capture) = &self.capture {
-            hooks.push(capture.observer_hooks(Arc::clone(&self.marks)));
-        }
+        hooks.extend(self.modules.observer_hooks());
         let hooks: Arc<dyn crate::watch::ObserverHooks> =
             Arc::new(crate::watch::FanoutHooks(hooks));
         let roots = self.resources.roots_counter();
@@ -488,9 +484,7 @@ impl Daemon {
             };
             self.bus.publish(GIT_EVENT, view, Some(timings), |_| {});
             // After publishing, outside the engine's budget (ADR-TMC-004 § 2).
-            if let Some(capture) = &self.capture {
-                capture.git_event(&batch.repo_id, &event.worktree, seq);
-            }
+            self.modules.git_event(&batch.repo_id, &event.worktree, seq);
         }
         // Second phase (ADR-GRP-010 § 4, ADR-GRP-011 § 2): the ahead/behind
         // against the base branch, outside the first event's budget.
