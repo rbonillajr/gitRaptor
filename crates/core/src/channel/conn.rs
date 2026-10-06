@@ -535,8 +535,10 @@ impl Connection<'_> {
             return After::Continue;
         }
         // A reserved command asked over MCP is refused (and audited); any
-        // other method outside the MCP allowlist does not exist for it.
-        if !self.offered(spec) && !spec.reserved {
+        // other method outside the MCP allowlist does not exist for it. A
+        // method newer than the connection's protocol does not exist either,
+        // reserved or not (US-GRD-001: `guard.*` is protocol 7).
+        if !spec.exists_in(self.protocol) || (!self.offered(spec) && !spec.reserved) {
             self.reply::<()>(&request.id, Err(not_found()));
             return After::Continue;
         }

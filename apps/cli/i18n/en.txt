@@ -177,6 +177,7 @@ error.operation-failed = the operation failed; it can be undone
 error.identity-unverified = the engine could not verify who you are
 error.repo-rejected = the repo was rejected
 error.operation-rejected = the operation was refused before running
+error.guard-rejected = the protection was not installed
 # raptor undo (US-TMC-002).
 undo.done = undone {operation} ({id}) in {worktree}
 undo.saved = the state right before this undo is saved as {snapshot}; nothing was lost

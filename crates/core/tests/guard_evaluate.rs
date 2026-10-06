@@ -63,6 +63,7 @@ fn repo_intact_evaluation_never_waits_and_fails_closed() {
         channel: ChannelConfig::default(),
         protected: None,
         operations: None,
+        tm_prior_layer: None,
     };
     let daemon = Daemon::start(config).unwrap();
     let handle = daemon.shutdown_handle();
@@ -111,6 +112,35 @@ fn repo_intact_evaluation_never_waits_and_fails_closed() {
     assert_eq!(decision.reasons[0].rule, Rule::InputRejected);
 
     drop(client);
+
+    // Protocol 7: a client of version 5 or 6 neither sees nor reaches `guard.*`, reserved
+    // ones included (nothing to audit), and keeps its own shapes.
+    for older in [5, 6] {
+        let mut old = Client::connect(&profile.dirs(), ClientKind::Cli, older).unwrap();
+        assert!(
+            !old.hello().methods.iter().any(|m| m.starts_with("guard.")),
+            "protocol {older}"
+        );
+        for method in [methods::GUARD_INSTALL, methods::GUARD_EVALUATE] {
+            let err = old
+                .call::<_, serde_json::Value>(method, serde_json::json!({"path": "/x"}))
+                .unwrap_err();
+            assert!(
+                matches!(&err, gitraptor_core::client::ClientError::Rpc(e) if e.code == gitraptor_api::rpc::code::METHOD_NOT_FOUND),
+                "protocol {older} {method}: {err:?}"
+            );
+        }
+    }
+    let current = Client::connect(&profile.dirs(), ClientKind::Cli, PROTOCOL_VERSION).unwrap();
+    assert!(
+        current
+            .hello()
+            .methods
+            .iter()
+            .any(|m| m == methods::GUARD_EVALUATE)
+    );
+    drop(current);
+
     handle.request(StopCause::Signal("TERM"));
     join.join().unwrap();
 }
