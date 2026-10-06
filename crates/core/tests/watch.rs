@@ -612,8 +612,14 @@ fn a_reset_that_moves_no_branch_is_a_reset_event() {
     assert_eq!(e.worktree, wt);
     assert_eq!(e.details.branch.as_ref().unwrap().raw(), "feat-login");
     assert_eq!(e.details.old_commit, e.details.new_commit);
-    assert!(!all.iter().any(|e| e.kind == GitEventKind::BranchUpdate), "{all:#?}");
-    assert_eq!(std::fs::read_to_string(wt.join("login.txt")).unwrap(), "user\n");
+    assert!(
+        !all.iter().any(|e| e.kind == GitEventKind::BranchUpdate),
+        "{all:#?}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(wt.join("login.txt")).unwrap(),
+        "user\n"
+    );
 
     // A reset that moves the branch: its branch-update only.
     std::fs::write(wt.join("a.txt"), "a\n").unwrap();
@@ -622,5 +628,8 @@ fn a_reset_that_moves_no_branch_is_a_reset_event() {
     w.events_until(GitEventKind::Commit);
     f.git_in(&wt, &["reset", "-q", "--hard", "HEAD~1"]);
     let all = w.events_until(GitEventKind::BranchUpdate);
-    assert!(!all.iter().any(|e| e.kind == GitEventKind::Reset), "{all:#?}");
+    assert!(
+        !all.iter().any(|e| e.kind == GitEventKind::Reset),
+        "{all:#?}"
+    );
 }
