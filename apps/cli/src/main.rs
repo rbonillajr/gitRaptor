@@ -40,6 +40,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Open the cockpit (the default without a subcommand); needs a terminal.
+    Tui,
     /// Run the GitRaptor engine in the foreground (one per user).
     Daemon {
         #[command(subcommand)]
@@ -139,14 +141,7 @@ enum RepoAction {
 
 fn main() -> ExitCode {
     match Cli::parse().command {
-        None => {
-            println!(
-                "raptor {} (api {})",
-                gitraptor_core::version(),
-                gitraptor_core::API_VERSION
-            );
-            ExitCode::SUCCESS
-        }
+        None | Some(Command::Tui) => tui(),
         Some(Command::Daemon { action: None }) => run_daemon(),
         Some(Command::Daemon {
             action: Some(DaemonAction::Stop { yes }),
@@ -177,6 +172,30 @@ fn main() -> ExitCode {
         Some(Command::Mcp {
             action: McpAction::Uninstall { agent },
         }) => mcp::uninstall(&agent),
+    }
+}
+
+/// `raptor` or `raptor tui`: the cockpit when stdin and stdout are a
+/// terminal; otherwise exit code 2 with a hint (ADR-CKP-003 § 11).
+fn tui() -> ExitCode {
+    use gitraptor_cli::present::i18n::{Lang, Text};
+    if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
+        eprintln!("raptor: {}", Text::NeedsTerminal.render(Lang::detect()));
+        return ExitCode::from(2);
+    }
+    let connector = match gitraptor_cli::link::EngineConnector::for_current_user() {
+        Ok(connector) => connector,
+        Err(err) => {
+            eprintln!("raptor: {}", sanitize(&err));
+            return ExitCode::FAILURE;
+        }
+    };
+    match gitraptor_cli::tui::run(connector, std::env::current_dir().ok()) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(err) => {
+            eprintln!("raptor: {}", sanitize(&err.to_string()));
+            ExitCode::FAILURE
+        }
     }
 }
 
