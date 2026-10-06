@@ -205,7 +205,7 @@ fn constants(ctx: &GuardCtx<'_>, repo_id: &str, common: &Path) -> Option<Constan
         template: TEMPLATE_VERSION,
         raptor: ctx.raptor.to_path_buf(),
         repo: repo_id.to_owned(),
-        common: common.to_path_buf(),
+        common: gitraptor_policy::guard::fastpath::simplified(common.to_path_buf()),
         channel: ctx.dirs.runtime.clone()?,
         instance: ctx.instance.to_owned(),
         state: ctx.dirs.state.clone(),
