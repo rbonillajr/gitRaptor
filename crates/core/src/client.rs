@@ -591,7 +591,7 @@ pub fn clean_env() -> Vec<(OsString, OsString)> {
 
 /// The test overrides a daemon started for this client keeps: the
 /// profile, the agent classifier, the sessions' clock, the resource
-/// targets and the autostart folder. Empty in release builds (SEC-06).
+/// targets and the autostart folder and service tool. Empty in release builds (SEC-06).
 #[cfg_attr(not(unix), allow(dead_code))]
 pub(crate) fn debug_overrides() -> Vec<(std::ffi::OsString, std::ffi::OsString)> {
     let mut env = Vec::new();
@@ -602,6 +602,7 @@ pub(crate) fn debug_overrides() -> Vec<(std::ffi::OsString, std::ffi::OsString)>
             crate::daemon::CLOCK_SKEW_FILE_ENV,
             crate::resources::RESOURCE_TARGETS_ENV,
             crate::autostart::AUTOSTART_DIR_ENV,
+            crate::autostart::SERVICE_TOOL_ENV,
         ] {
             if let Some(value) = std::env::var_os(name) {
                 env.push((name.into(), value));
