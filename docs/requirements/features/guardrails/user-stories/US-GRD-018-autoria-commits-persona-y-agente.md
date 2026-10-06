@@ -99,9 +99,10 @@ Entonces el commit no se ejecuta
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+- **Gobierno**: ADR-GRD-003 § 1 a § 4 con su Enmienda (2026-10-06, US-GRD-018): el actor entra en la condición de las reglas de autoría, `warn` es `allow` con `notices[]` y el modo degradado pierde estas reglas; ADR-GRP-012, Enmienda (2026-10-06, autoría de commits) § 4; ADR-GRD-002 § 1 (fila Commit) y ADR-GRP-016 (capacidad `guard.notices`).
+- **Forma**: clave `policies.commitAuthorship` (`mode`, `onAgentCommit`), dispatchers `pre-commit` y `commit-msg`, actor S4 en el daemon, tabla versionada de identidades del trailer en `crates/policy`. Detalle en la Dev Spec.
 
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica.
-- **Dev Spec:** pendiente (Arquitecto).
+- **Dev Spec:** [DS-US-GRD-018](../dev-specs/US-GRD-018-autoria-commits-persona-y-agente.md) (2026-10-06; compartida por US-GRD-018 y US-GRD-019, esta historia es su PR-A).

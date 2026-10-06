@@ -90,9 +90,10 @@ Entonces `raptor events` muestra que lo ejecutó Claude Code en "feat-x", que en
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+- **Gobierno**: ADR-GRP-012, Enmienda (2026-10-06, autoría de commits) § 2 y § 3; ADR-GRP-013, Enmienda (2026-10-06, autoría declarada); ADR-GRP-016 (capacidad `events.authorship`).
+- **Forma**: `GitEventView.authorship` e `InferredAgent.trailer`, con la tabla de identidades y el parser de trailers de US-GRD-018. Detalle en la Dev Spec.
 
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica (la presentación del Cockpit va en su propia historia).
-- **Dev Spec:** pendiente (Arquitecto).
+- **Dev Spec:** [DS-US-GRD-018](../dev-specs/US-GRD-018-autoria-commits-persona-y-agente.md) (2026-10-06; compartida por US-GRD-018 y US-GRD-019, esta historia es su PR-B).
