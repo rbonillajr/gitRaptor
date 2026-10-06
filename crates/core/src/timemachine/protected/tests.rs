@@ -247,7 +247,8 @@ fn no_space_aborts_without_running_the_step() {
 
 #[test]
 fn a_full_disk_from_the_store_reads_as_no_space() {
-    let enospc = std::io::Error::from_raw_os_error(28);
+    // `ENOSPC`, or `ERROR_DISK_FULL` on Windows, where 28 is "out of paper".
+    let enospc = std::io::Error::from_raw_os_error(if cfg!(windows) { 112 } else { 28 });
     assert_eq!(
         PriorError::from(CaptureError::Io(enospc)),
         PriorError::NoSpace
