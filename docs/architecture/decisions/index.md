@@ -2,17 +2,17 @@
 mode: draft
 status: accepted
 generated: 2026-10-03
-updated: 2026-10-05
+updated: 2026-10-06
 generator: architect
 domain: GRP
 feature: motor-local
-total_artifacts: 33
-expanded: 33
-approved: 31
+total_artifacts: 34
+expanded: 34
+approved: 32
 related:
   context: [CTX-GRP-001]
   rules: [BR-GRP-001]
-  adrs: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-004, ADR-GRP-005, ADR-GRP-006, ADR-GRP-007, ADR-GRP-008, ADR-GRP-009, ADR-GRP-010, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, ADR-GRP-014, ADR-GRP-015, ADR-TMC-001, ADR-TMC-002, ADR-TMC-003, ADR-TMC-004, ADR-TMC-005, ADR-TMC-006, ADR-TMC-007, ADR-GRD-001, ADR-GRD-002, ADR-GRD-003, ADR-GRD-004, ADR-GRD-005, ADR-GRD-006, ADR-GRD-007, ADR-GRD-008, ADR-CKP-001, ADR-CKP-002, ADR-CKP-003]
+  adrs: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-004, ADR-GRP-005, ADR-GRP-006, ADR-GRP-007, ADR-GRP-008, ADR-GRP-009, ADR-GRP-010, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, ADR-GRP-014, ADR-GRP-015, ADR-GRP-016, ADR-TMC-001, ADR-TMC-002, ADR-TMC-003, ADR-TMC-004, ADR-TMC-005, ADR-TMC-006, ADR-TMC-007, ADR-GRD-001, ADR-GRD-002, ADR-GRD-003, ADR-GRD-004, ADR-GRD-005, ADR-GRD-006, ADR-GRD-007, ADR-GRD-008, ADR-CKP-001, ADR-CKP-002, ADR-CKP-003]
   stories: [US-GRP-001, US-GRP-002, US-GRP-003, US-GRP-004, US-GRP-005, US-GRP-006, US-GRP-007, US-GRP-008, US-GRP-009, US-GRP-010, US-GRP-011, US-GRP-012, US-GRP-013, US-GRP-014, US-GRP-015, US-GRP-016]
 ---
 
@@ -63,6 +63,7 @@ El formato "JSON estricto con `$schema`" no es una PQ: es la propuesta base del 
 | [ADR-GRP-013](./ADR-GRP-013-modelo-eventos-atribucion.md) | Modelo persistido de eventos, sesiones y atribución | Los eventos apuntan a una sesión; registros de atribución append-only (incluido el retiro de registro, que termina la sesión); huecos como intervalos; sin variante "humano" | accepted |
 | [ADR-GRP-014](./ADR-GRP-014-pipeline-release-distribucion.md) | Pipeline de release y canales de distribución | Workflow propio (no cargo-dist) disparado por tag, 6 targets nativos con Linux musl estático, checksums, SBOM y borrador de release que publica un humano; firma de macOS y Windows y attestations preparadas tras secretos y variables; canales Homebrew (tap propio), winget, npm (paquetes por plataforma) y scripts verificados, publicados solo con `RELEASE_PUBLISH_CHANNELS`; nombre `gitraptor` en los canales y licencia FSL-1.1-ALv2 comprobada en CI | accepted |
 | [ADR-GRP-015](./ADR-GRP-015-consumo-recursos.md) | Consumo de recursos: clases de trabajo, ahorro de energía y presupuesto de huella | Cuatro clases de trabajo (`user-initiated`, `default`, `utility`, `background`) con prioridad del SO por hilo y heredada por los `git` hijos; el snapshot previo y Guardrails nunca bajan; `engine.powerSaving` (reconciliación cada 15 min y predictor en pausa con batería); HUELLA dividida en RES-01 a RES-05 con gate en INF-GRP-002; `engine.resources` para `raptor status --resources` | proposed |
+| [ADR-GRP-016](./ADR-GRP-016-extension-registro-capacidades.md) | Extensión por registro y negociación de capacidades | Protocolo congelado en 9 para cambios aditivos: métodos descubiertos en `hello.methods` y cambios de forma como capacidades con nombre (`connection.accept`); registro de métodos, capacidades y bloques de 20 códigos de error en un archivo por módulo del contrato; i18n por feature; subcomandos de la CLI y módulos del daemon registrables; test de arquitectura contra declaraciones en archivos centrales | accepted |
 | [ADR-TMC-001](./ADR-TMC-001-almacen-snapshots-perfil.md) | Almacén de snapshots en el perfil | Repo Git bare privado por repo en `tm/<id-repo>/` con objetos propios, contenido en bruto sin filtros y exclusiones declaradas; nunca en el repo del usuario | accepted |
 | [ADR-TMC-002](./ADR-TMC-002-escritor-time-machine.md) | Escritor de la Time Machine | Escrituras internas en el módulo `timemachine` del daemon con capa de escritura propia en `crates/git`, sin hooks, filtros, firma ni red; las operaciones de usuario las ejecuta el ejecutor del daemon | accepted |
 | [ADR-TMC-003](./ADR-TMC-003-oplog-diario-recuperacion.md) | Oplog, diario y recuperación | Oplog SQLite propio por repo, solo por anexión y encadenado por hash; solicitante congelado; recuperación sin escrituras propias salvo liberar su `index.lock` | accepted |
@@ -97,6 +98,7 @@ El formato "JSON estricto con `$schema`" no es una PQ: es la propuesta base del 
 | ADR-GRP-012 | 005, 006, 007 (umbral), 009, 010 | 005 (ascendencia), 013 — lo valida SPIKE-GRP-001 |
 | ADR-GRP-013 | 005 (único escritor), 006 (almacén), 010 (reconciliación), 012 (señales y evidencia) | 005 (huecos y auditoría), 011 |
 | ADR-GRP-015 | 005 (autoarranque), 007 (`engine.powerSaving`), 010 (reconciliación), 011 (NFR-04); CKP-001 (predictor); TMC-004, 006, 007 | — (lo implementan TS-GRP-005, US-GRP-017 y INF-GRP-002) |
+| ADR-GRP-016 | 002 (monorepo), 005 (§ 4 y § 5, protocolo y reemplazo); CKP-003 (§ 4 N7, § 10) | 005, CKP-003 (enmiendas del 2026-10-06) |
 | ADR-TMC-001 | ADR-GRP-006 (perfil), 009 (lectura sin escrituras), 010 (filtros de ignorados y eventos) | TMC-002, 003, 004, 006, 007 |
 | ADR-TMC-002 | ADR-GRP-001, 002, 005 (daemon y canal), 006 (único escritor), 009 (reglas de invocación); TMC-001 | TMC-003, 004, 005 |
 | ADR-TMC-003 | ADR-GRP-006, 013 (atribución vigente); TMC-001, 002 | TMC-004, 005, 007 |
