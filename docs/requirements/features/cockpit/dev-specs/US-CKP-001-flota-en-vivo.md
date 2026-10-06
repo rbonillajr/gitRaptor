@@ -116,3 +116,33 @@ Pendiente de esta enmienda:
 - El selector usa la lista de repos del snapshot global. Si se añade un repo mientras está abierto, aparece en el siguiente resync.
 - `replace:9` (ADR-GRP-016): un reemplazo con el mismo protocolo sigue contándose como caída. No se afina aquí.
 - Las KeyHints y la navegación de historias posteriores (US-CKP-002+) quedan fuera.
+
+## 7. Enmienda (2026-10-06): la fila "sin agente"
+
+La fila "Unattributed (you/other)" con `detached HEAD` no se entendía (`bitacora/orquestador/TRASPASO.md`, "Propuesta acordada con Rene (2026-10-06)"). Los textos y los glifos los fijó Rene. La forma del contrato es **Decisión del orquestador (2026-10-06)**: no se consultó al Arquitecto por la cuota y queda abierta a su revisión en el PR.
+
+| # | Cambio |
+|---|---|
+| F1 | Una fila sin sesión de agente dice `No agent · <worktree>` / `Sin agente · <worktree>` (texto `NoAgent` del catálogo), con el glifo `○` (`symbol.agent.done`, ASCII `o`). Toda la fila va en el tono tenue (`text.muted`), salvo el HEAD sin rama, que sigue en aviso. Se lee sin color porque el glifo y el nombre lo dicen. Con la detección desconocida, la fila dice "agente no disponible", sin glifo (`AgentState::Unknown`) |
+| F2 | HEAD sin rama: `39e852f (no branch)` / `39e852f (sin rama)`. El motor publica `WorktreeView.detached_at` (el hash completo, solo con HEAD separado) bajo la capacidad `scope.activity`, que ya existía (E3), y `without_activity` lo quita. La TUI acepta solo un hash hexadecimal y muestra 7 dígitos. Sin el dato, dice `(no branch)` y nunca inventa un hash |
+| F3 | Etiqueta `temporary` / `temporal` tras la rama, en tono tenue, para un worktree bajo la carpeta temporal del sistema (`std::env::temp_dir()` y, en Unix, `/tmp`, escritas y resueltas). La TUI la calcula en la ingesta a partir de la raíz publicada. Si la columna no deja `BRANCH_MIN` para la rama, la etiqueta se omite |
+| F4 | Leyenda en las KeyHints, después de las acciones y solo si alguna fila no tiene agente y cabe entera: `○ no agent: changes by you or another tool` / `○ sin agente: cambios tuyos o de otra herramienta`. El glifo sale del tema |
+
+Decisiones (orquestador, 2026-10-06):
+
+- **`detached_at` bajo `scope.activity`, sin capacidad nueva.** Es otro dato de presentación para el Cockpit con la misma regla de forma: un cliente sin la capacidad no lo ve, porque sus tipos rechazan campos desconocidos. Una capacidad propia habría añadido otro indicador al bus (`Outbox`) sin ganar nada.
+- **`○` reutiliza `symbol.agent.done`.** El estado "terminado" no se pinta hoy en la flota, porque una sesión terminada deja la fila sin agente. Un token `symbol.agent.none` propio queda pendiente para el design system.
+
+| Escenario | Test |
+|---|---|
+| F1, F4 | `view::tests::a_worktree_without_an_agent_says_no_agent_never_human` (en/es), `without_a_row_without_an_agent_there_is_no_legend`, `unknown_detection_is_not_presented_as_no_agent`; `tests/live_fleet.rs` con el motor real |
+| F2, F3 | `view::tests::a_scratch_worktree_without_a_branch_says_so` (en/es, con y sin el hash publicado); `present::ingest::tests::{only_a_commit_hash_is_shortened, a_worktree_under_the_temporary_folder_is_temporary}`; `crates/core/tests/observe.rs` (`detached_and_unborn_heads_are_reported_as_such`); `gitraptor-api` `without_activity_drops_the_detached_commit` |
+| Pantalla | snapshots `fleet_no_agent_100x24_{en,es}`, `fleet_{80x24,120x40}_{dark,light}`, `agentlist__fleet_without_agents` (Unicode y ASCII) |
+
+Pendiente de esta enmienda:
+
+- La etiqueta `external` / `externo` (worktree fuera de las rutas habituales) y el panel de detalle de `enter` (ruta, desde cuándo, qué significa) son de US-CKP-002.
+- El catálogo une agente y worktree con un `·` literal (`AgentInWorktree`, `NoAgent`). En el juego ASCII no se sustituye.
+- Token propio `symbol.agent.none` en `packages/design-tokens`.
+- Sin asignación automática del dueño: si algún día se ofrece "asignar a un agente", lo confirma el humano.
+- Solo se verificó en macOS. La detección de la carpeta temporal en Windows (`%TEMP%`, rutas `\\?\`) y en Linux queda para la validación en máquinas reales.
