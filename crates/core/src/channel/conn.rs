@@ -529,6 +529,10 @@ impl Connection<'_> {
         // (protocol 8, US-TMC-004).
         self.outbox
             .set_before_reset(!self.has(methods::CAP_GIT_RESET.name));
+        // Nor the last activity and fetch of `worktree.state` without
+        // `scope.activity` (DEP-CKP-4).
+        self.outbox
+            .set_without_activity(!self.has(methods::CAP_SCOPE_ACTIVITY.name));
     }
 
     /// `connection.accept` (protocol 9): the client's capabilities, once and
@@ -785,6 +789,12 @@ impl Connection<'_> {
                 t_recv,
                 t_computed,
             })
+            .map(|mut result| {
+                if !self.has(methods::CAP_SCOPE_ACTIVITY.name) {
+                    result.repo.without_activity();
+                }
+                result
+            })
             .map_err(repo_command_error)
     }
 
@@ -957,6 +967,12 @@ impl Connection<'_> {
                     daemon: self.ctx.daemon.clone(),
                     repos: shared.repos,
                 };
+                if !self.has(methods::CAP_SCOPE_ACTIVITY.name) {
+                    snapshot
+                        .repos
+                        .iter_mut()
+                        .for_each(gitraptor_api::messages::RepoView::without_activity);
+                }
                 // The ahead/behind as of now (US-GRP-012, D5).
                 crate::observe::refresh_divergence(
                     &mut snapshot.repos,
@@ -1045,6 +1061,9 @@ impl Connection<'_> {
                     &self.ctx.divergence,
                 );
                 let mut repo = repos.pop().ok_or_else(not_found_id)?;
+                if !self.has(methods::CAP_SCOPE_ACTIVITY.name) {
+                    repo.without_activity();
+                }
                 if serde_json::to_vec(&repo).map_or(0, |v| v.len()) > CHANGE_LIST_BUDGET {
                     crate::observe::without_change_lists(&mut repo.worktrees);
                 }

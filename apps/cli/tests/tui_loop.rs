@@ -151,6 +151,7 @@ fn repo_snapshot() -> ScopeSnapshot {
         run_id: "run".into(),
         scope_seq: 0,
         repo: RepoView {
+            fetched_utc_ms: None,
             repo_id: REPO.into(),
             state: RepoStateView::Observed,
             path: Untrusted::new("/w/.git"),
@@ -166,6 +167,7 @@ fn repo_snapshot() -> ScopeSnapshot {
 fn worktree_event(scope_seq: u64) -> Event {
     let worktrees = (0..WORKTREES)
         .map(|i| WorktreeView {
+            last_activity_utc_ms: None,
             path: Untrusted::new(format!("/w/agent-{i}")),
             main: i == 0,
             admin_name: Some(UntrustedName::new(format!("agent-{i}"))),
@@ -181,6 +183,7 @@ fn worktree_event(scope_seq: u64) -> Event {
         wall_ms: 0,
         timings: None,
         data: serde_json::to_value(WorktreeStateData {
+            fetched_utc_ms: None,
             repo_id: REPO.into(),
             worktrees,
         })

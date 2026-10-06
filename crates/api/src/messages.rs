@@ -152,6 +152,21 @@ pub struct RepoView {
     /// Every worktree of the repo as of the last reconciliation
     /// (US-GRP-001): the main one first, then the linked ones by path.
     pub worktrees: Vec<WorktreeView>,
+    /// When the local copy of the remote was last fetched: the time of
+    /// `FETCH_HEAD`, never later than its reading. Absent when the repo was
+    /// never fetched, and for a connection without `scope.activity`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fetched_utc_ms: Option<i64>,
+}
+
+impl RepoView {
+    /// The repo in the shapes of a connection without `scope.activity`.
+    pub fn without_activity(&mut self) {
+        self.fetched_utc_ms = None;
+        for w in &mut self.worktrees {
+            w.last_activity_utc_ms = None;
+        }
+    }
 }
 
 /// The base branch of a repo (US-GRP-012, ADR-GRD-004 § 3): the one the
@@ -293,6 +308,12 @@ pub struct WorktreeView {
     /// Name of a linked worktree under `<common dir>/worktrees/`.
     pub admin_name: Option<UntrustedName>,
     pub status: WorktreeStatus,
+    /// When the engine last saw the worktree change (its head, its changes
+    /// or an operation in progress; not its ahead/behind nor its sessions),
+    /// DEP-CKP-4. Absent until the first change this engine run observes,
+    /// and for a connection without `scope.activity`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_activity_utc_ms: Option<i64>,
 }
 
 impl WorktreeView {
@@ -347,6 +368,19 @@ pub struct FileChangeView {
 pub struct WorktreeStateData {
     pub repo_id: String,
     pub worktrees: Vec<WorktreeView>,
+    /// The repo's [`RepoView::fetched_utc_ms`] as of this reconciliation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fetched_utc_ms: Option<i64>,
+}
+
+impl WorktreeStateData {
+    /// The data in the shapes of a connection without `scope.activity`.
+    pub fn without_activity(&mut self) {
+        self.fetched_utc_ms = None;
+        for w in &mut self.worktrees {
+            w.last_activity_utc_ms = None;
+        }
+    }
 }
 
 /// What happened in a `git.event` (US-GRP-002).

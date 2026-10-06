@@ -78,6 +78,7 @@ impl Daemon {
                     path,
                     base: observe::base_view(&observe::base_branch(None)),
                     worktrees: Vec::new(),
+                    fetched_utc_ms: None,
                 },
             });
         }
@@ -115,6 +116,7 @@ impl Daemon {
             path: path.clone(),
             base: observe::base_view(&request.read.base),
             worktrees: worktrees.clone(),
+            fetched_utc_ms: observe::fetched_utc_ms(&request.common_dir, now_ms()),
         };
         if self.state == EngineState::NoRepos {
             self.transition(Trigger::FirstRepoAdded);
@@ -176,23 +178,40 @@ impl Daemon {
         base: Option<gitraptor_api::messages::BaseBranchView>,
         timings: Timings,
     ) {
-        let mut data = WorktreeStateData {
-            repo_id: repo_id.to_owned(),
-            worktrees: worktrees.clone(),
-        };
-        if serde_json::to_vec(&data).map_or(0, |v| v.len()) > CHANGE_LIST_BUDGET {
-            observe::without_change_lists(&mut data.worktrees);
-        }
         let id = repo_id.to_owned();
+        let fetched = observe::fetched_utc_ms(&inputs.common_dir, now_ms());
         self.bus
-            .publish(WORKTREE_STATE, data, Some(timings), move |shared| {
+            .publish_with(WORKTREE_STATE, Some(timings), move |shared| {
+                let mut worktrees = worktrees;
+                let old_heads = shared
+                    .divergence
+                    .get(&id)
+                    .map(|i| i.heads.clone())
+                    .unwrap_or_default();
                 if let Some(repo) = shared.repos.iter_mut().find(|r| r.repo_id == id) {
-                    repo.worktrees = worktrees;
+                    observe::stamp_activity(
+                        &repo.worktrees,
+                        &old_heads,
+                        &mut worktrees,
+                        &inputs.heads,
+                        now_ms(),
+                    );
+                    repo.worktrees = worktrees.clone();
+                    repo.fetched_utc_ms = fetched;
                     if let Some(base) = base {
                         repo.base = base;
                     }
-                    shared.divergence.insert(id, inputs);
+                    shared.divergence.insert(id.clone(), inputs);
                 }
+                let mut data = WorktreeStateData {
+                    repo_id: id,
+                    worktrees,
+                    fetched_utc_ms: fetched,
+                };
+                if serde_json::to_vec(&data).map_or(0, |v| v.len()) > CHANGE_LIST_BUDGET {
+                    observe::without_change_lists(&mut data.worktrees);
+                }
+                data
             });
     }
 

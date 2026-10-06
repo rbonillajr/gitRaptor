@@ -526,6 +526,7 @@ impl Daemon {
                 path: Untrusted::from_os(entry.canonical_path.as_os_str()),
                 base: observe::base_view(&base),
                 worktrees: read.map(RepoRead::views).unwrap_or_default(),
+                fetched_utc_ms: observe::fetched_utc_ms(&entry.canonical_path, now_ms()),
             });
         }
         let bus = Arc::new(EventBus::new(

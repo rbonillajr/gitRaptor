@@ -282,6 +282,7 @@ mod tests {
             run_id: "run".into(),
             scope_seq: 4,
             repo: RepoView {
+                fetched_utc_ms: None,
                 repo_id: "r1".into(),
                 state: RepoStateView::Observed,
                 path: Untrusted::new("/w/.git"),
