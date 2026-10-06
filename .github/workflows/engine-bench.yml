@@ -9,6 +9,11 @@
 # stream recreation. The budget itself gates on the reference machine (INF-GRP-002, Enmienda
 # 2026-10-05; TD-GRP-003).
 #
+# Where it runs (cost; Enmienda 2026-10-05): a pull request runs Linux only, the stable and most
+# sensitive runner. macOS, scarce and noisy, runs on every push to main, nightly and on demand: a
+# macOS-only regression turns main red after the merge, and `workflow_dispatch` with `ref` and
+# `os` bisects it.
+#
 # Windows: the channel client is Unix-only (TS-GRP-004), so there is nothing to measure yet.
 # Pendiente: etapa de validación multiplataforma.
 #
@@ -33,16 +38,31 @@ on:
       - "Cargo.lock"
       - "rust-toolchain.toml"
       - ".github/workflows/engine-bench.yml"
+  # Nightly: catches a change in the runner image and the pushes that did not run.
+  schedule:
+    - cron: "23 7 * * *"
   workflow_dispatch:
+    inputs:
+      os:
+        description: Runners to measure on
+        type: choice
+        options: [both, ubuntu, macos]
+        default: both
+      ref:
+        description: Commit, branch or tag to measure (default, the dispatched ref)
+        type: string
+        default: ""
 
 permissions:
   contents: read
   pull-requests: read
+  actions: read
 
-# Manual runs never cancel each other: calibrating the gates takes several runs of the same ref.
+# Only a pull request cancels its previous run. Every push to main is measured, and manual runs
+# never cancel each other: calibrating and bisecting take several runs of the same ref.
 concurrency:
-  group: engine-bench-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || 'auto' }}
-  cancel-in-progress: true
+  group: engine-bench-${{ github.event_name }}-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -51,19 +71,39 @@ jobs:
   engine-bench:
     name: engine bench (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    # A confirmed regression measures its steps again, so a failing job takes longer.
+    timeout-minutes: ${{ matrix.os == 'macos-latest' && 90 || 45 }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || (github.event_name == 'workflow_dispatch' && inputs.os == 'ubuntu' && '["ubuntu-latest"]') || (github.event_name == 'workflow_dispatch' && inputs.os == 'macos' && '["macos-latest"]') || '["ubuntu-latest","macos-latest"]') }}
     steps:
+      # A nightly on a commit a push to main already measured green on both runners has nothing
+      # new to say.
+      - name: Nightly already measured
+        id: prior
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/engine-bench.yml/runs?head_sha=$GITHUB_SHA&event=push&status=success" --jq '.total_count')"
+          if [ "$n" -gt 0 ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::$GITHUB_SHA was already measured green on a push to main"
+          fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: steps.prior.outputs.skip != 'true'
+        with:
+          ref: ${{ inputs.ref }}
       - name: Toolchain from rust-toolchain.toml
+        if: steps.prior.outputs.skip != 'true'
         run: rustup show
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        if: steps.prior.outputs.skip != 'true'
       # The reference repo is deterministic (repogen, fixed seed): generated once per generator
       # version and OS, then restored. Bump `v1` when `reference()` in the bench changes.
       - name: Reference repo (100K commits)
+        if: steps.prior.outputs.skip != 'true'
         uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
         with:
           path: |
@@ -71,17 +111,20 @@ jobs:
             ${{ runner.temp }}/engine-bench/ref-H.done
           key: engine-bench-ref-H-v1-${{ runner.os }}-${{ hashFiles('crates/testkit/src/repogen.rs') }}
       - name: Bench and gates
+        if: steps.prior.outputs.skip != 'true'
         # `runner` is not available in the job's `env`.
         env:
           ENGINE_BENCH_ROOT: ${{ runner.temp }}/engine-bench
         run: cargo bench -p gitraptor-cli --bench engine -- --gate ci --out "$ENGINE_BENCH_ROOT/engine-bench-${{ runner.os }}.json"
       # TD-GRP-003: the NFR-04 budget gates on the reference machine. A PR that touches the
-      # engine is reminded to attach the report of `--gate reference` before the merge.
+      # engine is reminded to attach the report of `--gate reference` before the merge; one that
+      # touches the observer, to measure it on macOS too (FSEvents), on demand.
       - name: Reference machine reminder
         if: always() && github.event_name == 'pull_request' && matrix.os == 'ubuntu-latest'
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
+          BRANCH: ${{ github.head_ref }}
         run: |
           files="$(gh pr diff "$PR" --repo "$GITHUB_REPOSITORY" --name-only)"
           if grep -qE '^crates/core/src/(watch/|daemon/|channel/|observe\.rs)' <<<"$files"; then
@@ -89,8 +132,13 @@ jobs:
             echo "::warning::$msg"
             echo "> **NFR-04**: $msg" >> "$GITHUB_STEP_SUMMARY"
           fi
+          if grep -qE '^crates/core/src/watch/' <<<"$files"; then
+            msg="This PR touches the observer: measure it on macOS too with 'gh workflow run engine-bench.yml --ref $BRANCH -f os=macos'."
+            echo "::warning::$msg"
+            echo "> **macOS**: $msg" >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Report
-        if: always()
+        if: always() && steps.prior.outputs.skip != 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: engine-bench-${{ runner.os }}
