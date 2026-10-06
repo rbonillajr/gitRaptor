@@ -177,7 +177,7 @@ Notificación `events.event` con `{ subscription, event }`. El evento lleva:
 - Descripción OpenRPC generada desde los tipos.
 - Windows (named pipe).
 - Consultas bajo demanda del Cockpit (N8; DEP-CKP-2 y DEP-CKP-3, enmienda de ADR-GRP-005 § 5), preferencias de la TUI (N9) y resolución del editor (N10).
-- Emisores de `repo.attention` (predictor TS-CKP-001, Guardrails, US-GRP-005) y `autostart` real (US-GRP-004).
+- Emisores de `repo.attention` (predictor TS-CKP-001, Guardrails, US-GRP-005). El `autostart` de `scope.snapshot` ya es real desde US-GRP-004: `registered` o `not-registered` según exista el artefacto de `raptor daemon enable`, y `unknown` solo si el SO no tiene autoarranque compatible.
 - Campos de última actividad (DEP-CKP-4) y timeline (DEP-CKP-5).
 - `caller_repo` real en macOS (F-001-05): hoy `process_cwd` devuelve `None` en macOS; lo implementa US-MCP-003 con la doble comprobación de identidad de ADR-MCP-001 § 2.
 - Servidor MCP (ADR-MCP-001, 2026-10-05), cada método lo añade su historia dueña: comandos reservados `mcp.enable` y `mcp.disable` (US-MCP-002); perfil `mcp` por solicitante agente, sea cual sea el cliente, con rate limit y límites por solicitante (US-MCP-003, US-MCP-005); vista MCP ampliada de `engine.snapshot` (US-MCP-004); registro y retiro del propio agente, no reservados (US-MCP-006); vista MCP de `timemachine.timeline` (US-MCP-017); consulta de la predicción para el perfil `mcp` (US-MCP-016). El contrato de ejecución quedó unificado por TS-CKP-002 (protocolo 4).

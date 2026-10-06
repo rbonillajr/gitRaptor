@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-05
+updated: 2026-10-06
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
@@ -305,3 +305,17 @@ Decisión del orquestador (2026-10-05), validada por el Arquitecto y el PO. Deta
 | **Un agente se registra como el agente que es**: Claude Code solo desde una sesión detectada de Claude Code, y una sesión de Claude Code no como otro agente (`agent-mismatch`). Así ningún proceso aparece como "Claude Code · registrado" ni confirma la sesión de otro | § 6.6 (M7) |
 | **Los rechazos `worktree-mismatch` y `agent-mismatch` se auditan**, aunque el registro no sea reservado, con los motivos nuevos del contrato (Validación 7). Los registros aceptados dejan su rastro en los registros de atribución, con su autor | § 6, punto 7 |
 | **Retiro**: `registration.withdraw` lo pide el desarrollador (reservado, controles 1 a 4). El retiro del propio registro por el agente (`unregister_agent`) sigue en US-MCP-006 | § 6.6 |
+
+## Enmienda (2026-10-06, US-GRP-004: autoarranque)
+
+Decisión del orquestador (2026-10-06), validada por el Arquitecto. Detalle en la [Dev Spec de US-GRP-004](../../requirements/features/motor-local/dev-specs/US-GRP-004-dev-spec.md).
+
+| Cambio | Dónde |
+|---|---|
+| **Nombres finales**: `raptor daemon enable` y `raptor daemon disable`. Se ejecutan en el proceso de la CLI, sin método del canal; el MCP no los expone. No son comandos reservados. Artefactos: `~/Library/LaunchAgents/dev.gitraptor.plist`, `~/.config/systemd/user/gitraptor.service` con su enlace en `default.target.wants`, y el valor `GitRaptor` de HKCU `Run`. `~` es el HOME de la base de usuarios. El artefacto lleva la ruta estable del binario (p. ej. el enlace de Homebrew), no la canónica; SEC-14 se comprueba sobre las dos | § 3 |
+| **`disable` no para el motor en marcha** (ni `bootout` ni `systemctl stop`): pararlo sería una parada sin reservar (SEC-13). En macOS el job queda cargado hasta el cierre de sesión | § 3, § 6 |
+| **Riesgo residual añadido**: un agente puede ejecutar `raptor daemon disable` (o borrar el artefacto a mano) y desactivar el autoarranque del **próximo** inicio de sesión. La captura en curso no se interrumpe, y el tiempo hasta que un cliente arranque el motor queda como hueco "sin atribuir" registrado (BR-EDGE-005) | § 6, riesgo residual |
+| **`raptor daemon --autostart`**: el gestor de servicios arranca el motor con este argumento. Si el arranque falla por cualquier motivo (otra instancia, perfil inseguro, E/S), sale con 0, así `KeepAlive.SuccessfulExit=false` y `Restart=on-failure` no lo relanzan en bucle (ADR-GRP-015). Un panic sigue saliendo con un código distinto de 0 y se relanza | § 3, § 4 |
+| **Arranque por el gestor**: el cliente pide el arranque (`launchctl kickstart`, nunca con `-k`, o `systemctl --user start`) solo si el artefacto ejecuta **su mismo binario** (comparación canónica). Si no, o si el gestor falla, lo arranca él con entorno limpio. Las herramientas se ejecutan por ruta absoluta fija, con argv y entorno fijos y un tiempo máximo. `XDG_RUNTIME_DIR` se deriva del uid y se verifica | § 3 |
+| **SEC-14 ampliado**: también se rechaza todo el canal npm (`node_modules`), las cachés de `pnpm dlx` y `bunx`, y un binario que otros usuarios pueden modificar (ADR-GRP-014, INF-GRP-004) | § 3 |
+| **Validación 11, aclaración**: si faltan, `enable` crea las carpetas estándar del artefacto (`~/Library/LaunchAgents`, `~/.config/systemd/user` y su `default.target.wants`), y `disable` no las borra. Fuera del perfil solo cambian el artefacto y, como mucho, esas carpetas | Validación 11 |
