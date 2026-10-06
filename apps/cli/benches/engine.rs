@@ -10,12 +10,18 @@
 //! ```sh
 //! cargo bench -p gitraptor-cli --bench engine                    # full run, ~10-15 min
 //! cargo bench -p gitraptor-cli --bench engine -- --quick         # smoke, ~2 min
+//! cargo bench -p gitraptor-cli --bench engine -- --gate ci       # the gate of the CI runners
 //! ENGINE_BENCH_ROOT=/scratch cargo bench -p gitraptor-cli --bench engine -- --keep
 //! ```
 //!
-//! Gates (exit code 1): the p95 of the engine total (`t0` → `t_client_recv`) above 300 ms in any
-//! scenario; the footprint of the isolated daemon above its limits; a change lost by the stream
-//! recreation. A stage over its budget with the total within only warns, naming the stage.
+//! Gates (exit code 1), by `--gate` (INF-GRP-002, Enmienda 2026-10-05):
+//! - `reference` (default outside CI): the p95 of the engine total (`t0` → `t_client_recv`)
+//!   above 300 ms in any scenario, or above the provisional ceiling of a burst (NFR-04).
+//! - `ci` (default under `GITHUB_ACTIONS`): that budget is only reported; a scenario over the
+//!   regression ceilings calibrated for the runner (p50, and p95 where the runner can gate it)
+//!   is measured again, and fails when two of three attempts are over.
+//! - Both: the footprint of the isolated daemon above its limits; a sample without its event; a
+//!   change lost by the stream recreation. A stage over its budget only warns, naming the stage.
 //!
 //! Everything lives under a root outside any Git repo (NFR-01): `ENGINE_BENCH_ROOT` or a
 //! temporary folder. The generated reference repo is kept in that root and reused (CI caches
@@ -64,8 +70,9 @@ mod unix {
     use gitraptor_git::{ReaderOptions, RefName, RepoReader};
     use gitraptor_testkit::fixture::git_from_path;
     use gitraptor_testkit::freshness::{
-        BURST_1K, BURST_10K, FOOTPRINT_LIMITS, Finding, Footprint, Level, MAX_SLACK_EXCESS_MS,
-        Platform, Sample, Scenario, Stage, Summary, evaluate_footprint, evaluate_latency,
+        BURST_1K, BURST_10K, FOOTPRINT_LIMITS, Finding, Footprint, GateMode, Level, MAX_ATTEMPTS,
+        MAX_SLACK_EXCESS_MS, Platform, Sample, Scenario, Stage, Summary, Verdict, confirm,
+        evaluate_footprint, evaluate_latency, evaluate_regression,
     };
     use gitraptor_testkit::repogen;
     use serde_json::{Value, json};
@@ -97,6 +104,7 @@ mod unix {
         out: Option<PathBuf>,
         only: Option<Vec<String>>,
         keep: bool,
+        gate: GateMode,
     }
 
     fn opts() -> Opts {
@@ -112,6 +120,11 @@ mod unix {
             out: None,
             only: None,
             keep: false,
+            gate: if std::env::var_os("GITHUB_ACTIONS").is_some() {
+                GateMode::SharedCi
+            } else {
+                GateMode::Reference
+            },
         };
         let args: Vec<String> = std::env::args().skip(1).collect();
         let mut i = 0;
@@ -137,6 +150,13 @@ mod unix {
                 "--root" => o.root = Some(PathBuf::from(next)),
                 "--out" => o.out = Some(PathBuf::from(next)),
                 "--only" => o.only = Some(next.split(',').map(str::to_owned).collect()),
+                "--gate" => {
+                    o.gate = match next.as_str() {
+                        "ci" => GateMode::SharedCi,
+                        "reference" => GateMode::Reference,
+                        _ => panic!("--gate ci|reference"),
+                    }
+                }
                 "--keep" => {
                     o.keep = true;
                     used = false;
@@ -635,9 +655,111 @@ mod unix {
         dirty: std::collections::HashSet<PathBuf>,
         committed: HashMap<PathBuf, String>,
         written: HashMap<PathBuf, String>,
+        /// Attempt being measured: 1, or a confirmation of a regression.
+        attempt: usize,
+        /// Attempts of every scenario at the regression gate, in the order measured.
+        regressions: Vec<(String, Vec<Attempt>)>,
+        /// The branches of the checkout scenario exist.
+        checkout_ready: bool,
     }
 
     impl Bench {
+        fn platform(&self) -> Platform {
+            Platform::detect(self.opts.gate)
+        }
+
+        /// Attempts at the regression gate of `name` so far.
+        fn attempts(&self, name: &str) -> &[Attempt] {
+            self.regressions
+                .iter()
+                .find(|(n, _)| n == name)
+                .map(|(_, a)| a.as_slice())
+                .unwrap_or_default()
+        }
+
+        /// Verdict of the confirmation for `name`; a scenario not measured has nothing to
+        /// confirm.
+        fn verdict(&self, name: &str) -> Verdict {
+            let a = self.attempts(name);
+            if a.is_empty() {
+                return Verdict::Pass;
+            }
+            confirm(&a.iter().map(|x| !x.findings.is_empty()).collect::<Vec<_>>())
+        }
+
+        fn run_group(&mut self, g: Group) {
+            match g {
+                Group::WriteCycle => self.write_cycle(),
+                Group::Checkout => self.checkout(),
+                Group::Worktrees => self.worktree_add_remove(),
+                Group::Burst1k => {
+                    self.burst(BURST_1K, self.opts.scale_files);
+                }
+                Group::Burst10k => {
+                    self.burst(BURST_10K, self.opts.burst_files);
+                }
+            }
+        }
+
+        /// Measures again every step with a scenario over its regression ceiling, until two
+        /// attempts agree (two of three). A burst waits first for the daemon to settle.
+        fn confirm_regressions(&mut self) {
+            for g in Group::ALL {
+                for attempt in 2..=MAX_ATTEMPTS {
+                    let pending: Vec<&str> = g
+                        .scenarios()
+                        .iter()
+                        .copied()
+                        .filter(|n| self.verdict(n) == Verdict::Retry)
+                        .collect();
+                    if pending.is_empty() {
+                        break;
+                    }
+                    println!(
+                        "\n{} over a regression ceiling: measuring again, attempt {attempt} of {MAX_ATTEMPTS}",
+                        pending.join(", ")
+                    );
+                    if matches!(g, Group::Burst1k | Group::Burst10k) {
+                        std::thread::sleep(Duration::from_secs(10));
+                        self.stream.drain();
+                    }
+                    self.attempt = attempt;
+                    self.run_group(g);
+                }
+            }
+            self.attempt = 1;
+        }
+
+        /// The findings of the regression gate once confirmed: a regression in two of the
+        /// attempts fails; one that was not confirmed warns. Out of calibration, everything
+        /// warns (the ceilings do not apply to that runner).
+        fn regression_findings(&self, out_of_calibration: bool) -> Vec<Finding> {
+            let mut out = Vec::new();
+            for (name, attempts) in &self.regressions {
+                let bad: Vec<&Attempt> =
+                    attempts.iter().filter(|a| !a.findings.is_empty()).collect();
+                let note = format!(" ({} of {} attempts)", bad.len(), attempts.len());
+                let (level, label) = match self.verdict(name) {
+                    Verdict::Pass if bad.is_empty() => continue,
+                    Verdict::Pass => (Level::Warn, "not confirmed"),
+                    Verdict::Fail | Verdict::Retry => (Level::Fail, "confirmed"),
+                };
+                let level = if out_of_calibration {
+                    Level::Warn
+                } else {
+                    level
+                };
+                for f in &bad.last().unwrap().findings {
+                    out.push(Finding {
+                        level,
+                        what: format!("{}, {label}{note}", f.what),
+                        ..f.clone()
+                    });
+                }
+            }
+            out
+        }
+
         fn wants(&self, name: &str) -> bool {
             self.opts
                 .only
@@ -656,17 +778,45 @@ mod unix {
             let s = Scenario {
                 name: name.into(),
                 isolates_detection,
-                ceiling_ms: platform().burst_ceiling_ms(name),
+                ceiling_ms: self.platform().burst_ceiling_ms(name),
                 slack_excess_ms: self.slack_excess_ms,
                 samples: kept,
             };
             let mut j = s.to_json();
             j["lost"] = lost.into();
+            j["attempt"] = self.attempt.into();
             let mut fs = evaluate_latency(&s);
-            if self.slack_excess_ms > MAX_SLACK_EXCESS_MS {
-                // An unfit machine reports latency but cannot gate it.
+            if self.opts.gate == GateMode::SharedCi || self.slack_excess_ms > MAX_SLACK_EXCESS_MS {
+                // A shared runner, or an unfit machine, reports the NFR-04 budget but cannot
+                // gate it: the reference machine does (INF-GRP-002, Enmienda 2026-10-05).
                 for f in &mut fs {
                     f.level = Level::Warn;
+                }
+            }
+            if self.attempt > 1 {
+                // A confirmation only feeds the regression gate.
+                fs.clear();
+            }
+            if self.opts.gate == GateMode::SharedCi
+                && (self.attempt == 1 || self.verdict(name) == Verdict::Retry)
+            {
+                let ceiling = self.platform().regression_ceiling(name);
+                let findings = evaluate_regression(&s, ceiling);
+                let total = s.summary(Stage::Total);
+                j["regression"] = json!({
+                    "p50_ceiling_ms": ceiling.map(|c| c.p50_ms),
+                    "p95_ceiling_ms": ceiling.and_then(|c| c.p95_ms),
+                    "regressed": !findings.is_empty(),
+                });
+                let attempt = Attempt {
+                    attempt: self.attempt,
+                    p50: total.map_or(f64::NAN, |t| t.p50),
+                    p95: total.map_or(f64::NAN, |t| t.p95),
+                    findings,
+                };
+                match self.regressions.iter_mut().find(|(n, _)| n == name) {
+                    Some((_, a)) => a.push(attempt),
+                    None => self.regressions.push((name.into(), vec![attempt])),
                 }
             }
             // Wiring: every stage of the scenario was extracted, with finite values.
@@ -688,7 +838,7 @@ mod unix {
                     });
                 }
             }
-            print_scenario(&s, lost);
+            print_scenario(&s, lost, self.attempt);
             if lost > 0 {
                 // A change that never showed up within the deadline is a correctness failure.
                 self.findings.push(Finding {
@@ -806,11 +956,14 @@ mod unix {
         /// Checkout between two branches one commit apart, on `wt-2`.
         fn checkout(&mut self) {
             let wt = self.wts[1].clone();
-            git(&wt, &["switch", "-q", "-c", "co-a"]);
-            std::fs::write(wt.join(TOUCHED), "checkout\n").unwrap();
-            git(&wt, &["commit", "-qam", "co-b"]);
-            git(&wt, &["branch", "co-b"]);
-            git(&wt, &["reset", "-q", "--hard", "HEAD~1"]);
+            if !self.checkout_ready {
+                git(&wt, &["switch", "-q", "-c", "co-a"]);
+                std::fs::write(wt.join(TOUCHED), "checkout\n").unwrap();
+                git(&wt, &["commit", "-qam", "co-b"]);
+                git(&wt, &["branch", "co-b"]);
+                git(&wt, &["reset", "-q", "--hard", "HEAD~1"]);
+                self.checkout_ready = true;
+            }
             self.settle();
             let mut samples = Vec::new();
             let mut lost = 0;
@@ -942,8 +1095,13 @@ mod unix {
             );
             self.record(name, true, samples, lost);
             let finals = Summary::of(&finals).map(Summary::to_json);
+            let key = if self.attempt > 1 {
+                format!("{name}#{}", self.attempt)
+            } else {
+                name.into()
+            };
             self.report.insert(
-                name.into(),
+                key,
                 json!({"files": files, "final_state_ms": finals, "peak_rss_mib": peak_mib,
                        "cpu_pct": cpu_pct, "rss_back_under_idle_limit_s": back_s,
                        "rss_mib_after": after_mib}),
@@ -1038,8 +1196,43 @@ mod unix {
         }
     }
 
-    fn platform() -> Platform {
-        Platform::detect(std::env::var_os("GITHUB_ACTIONS").is_some())
+    /// The scenarios one measuring step produces, so a regression is confirmed by measuring the
+    /// whole step again, with its warm-up and its samples.
+    #[derive(Debug, Clone, Copy)]
+    enum Group {
+        WriteCycle,
+        Checkout,
+        Worktrees,
+        Burst1k,
+        Burst10k,
+    }
+
+    impl Group {
+        const ALL: [Group; 5] = [
+            Group::WriteCycle,
+            Group::Checkout,
+            Group::Worktrees,
+            Group::Burst1k,
+            Group::Burst10k,
+        ];
+
+        fn scenarios(self) -> &'static [&'static str] {
+            match self {
+                Group::WriteCycle => &["modify", "git-add", "commit"],
+                Group::Checkout => &["checkout"],
+                Group::Worktrees => &["worktree-create", "worktree-delete"],
+                Group::Burst1k => &[BURST_1K],
+                Group::Burst10k => &[BURST_10K],
+            }
+        }
+    }
+
+    /// One attempt of a scenario at the regression gate.
+    struct Attempt {
+        attempt: usize,
+        p50: f64,
+        p95: f64,
+        findings: Vec<Finding>,
     }
 
     /// Bytes of every file under `dir`.
@@ -1057,8 +1250,17 @@ mod unix {
             .sum()
     }
 
-    fn print_scenario(s: &Scenario, lost: usize) {
-        println!("\n{} ({} samples, {lost} lost)", s.name, s.samples.len());
+    fn print_scenario(s: &Scenario, lost: usize, attempt: usize) {
+        let attempt = if attempt > 1 {
+            format!(", attempt {attempt}")
+        } else {
+            String::new()
+        };
+        println!(
+            "\n{} ({} samples, {lost} lost{attempt})",
+            s.name,
+            s.samples.len()
+        );
         println!(
             "  {:<10} {:>8} {:>8} {:>8} {:>8} {:>8}",
             "stage", "p50", "p95", "p99", "max", "budget"
@@ -1210,7 +1412,7 @@ mod unix {
         report.insert("timer_slack".into(), slack);
         report.insert(
             "slack_excess_ms".into(),
-            json!({"value": slack_excess_ms, "max": MAX_SLACK_EXCESS_MS, "unfit": unfit, "platform": format!("{:?}", platform())}),
+            json!({"value": slack_excess_ms, "max": MAX_SLACK_EXCESS_MS, "unfit": unfit, "platform": format!("{:?}", Platform::detect(opts.gate)), "gate": format!("{:?}", opts.gate)}),
         );
         if opts
             .only
@@ -1292,6 +1494,9 @@ mod unix {
             dirty: Default::default(),
             committed: HashMap::new(),
             written: HashMap::new(),
+            attempt: 1,
+            regressions: Vec::new(),
+            checkout_ready: false,
         };
 
         let mut footprint = Footprint {
@@ -1321,6 +1526,45 @@ mod unix {
             footprint.burst_rss_mib = scale.peak_mib.max(stress.peak_mib);
             footprint.burst_cpu_pct = stress.cpu_pct;
             footprint.burst_back_s = stress.back_s;
+        }
+        // Regression gate of the shared runners (INF-GRP-002, Enmienda 2026-10-05). Before the
+        // recreation, which leaves untracked files in the worktree of the bursts.
+        if b.opts.gate == GateMode::SharedCi {
+            b.confirm_regressions();
+            let calibrated = b.platform().calibrated_slack_ms().unwrap_or(f64::INFINITY);
+            let out_of_calibration = b.slack_excess_ms > calibrated;
+            if out_of_calibration {
+                println!(
+                    "\nexcess timer slack {:.1} ms above the {calibrated:.0} ms the ceilings were calibrated with: the regression gate only warns",
+                    b.slack_excess_ms
+                );
+            }
+            let findings = b.regression_findings(out_of_calibration);
+            let scenarios: serde_json::Map<String, Value> = b
+                .regressions
+                .iter()
+                .map(|(name, attempts)| {
+                    let a: Vec<Value> = attempts
+                        .iter()
+                        .map(|a| json!({"attempt": a.attempt, "p50": a.p50, "p95": a.p95, "regressed": !a.findings.is_empty()}))
+                        .collect();
+                    let ceiling = b.platform().regression_ceiling(name);
+                    (
+                        name.clone(),
+                        json!({"attempts": a, "verdict": format!("{:?}", b.verdict(name)),
+                               "p50_ceiling_ms": ceiling.map(|c| c.p50_ms),
+                               "p95_ceiling_ms": ceiling.and_then(|c| c.p95_ms)}),
+                    )
+                })
+                .collect();
+            let confirmations = b.regressions.iter().filter(|(_, a)| a.len() > 1).count();
+            b.report.insert(
+                "regression".into(),
+                json!({"platform": format!("{:?}", b.platform()), "calibrated_slack_ms": calibrated,
+                       "out_of_calibration": out_of_calibration, "confirmations": confirmations,
+                       "scenarios": scenarios}),
+            );
+            b.findings.extend(findings);
         }
         if b.wants("recreation") {
             b.recreation();
@@ -1458,6 +1702,33 @@ mod unix {
                         x.p95,
                         x.p99,
                         x.max
+                    );
+                }
+            }
+        }
+        if !b.regressions.is_empty() {
+            md += &format!(
+                "\n**Regression gate** ({:?}; the NFR-04 budget above is only reported on a shared runner)\n\n| scenario | attempt | p50 | p50 ceiling | p95 | p95 ceiling | regressed |\n|---|---|---|---|---|---|---|\n",
+                b.platform()
+            );
+            for (name, attempts) in &b.regressions {
+                let c = b.platform().regression_ceiling(name);
+                let p50c = c.map(|c| format!("{:.0}", c.p50_ms)).unwrap_or("-".into());
+                let p95c = c
+                    .and_then(|c| c.p95_ms)
+                    .map(|v| format!("{v:.0}"))
+                    .unwrap_or("reported".into());
+                for a in attempts {
+                    md += &format!(
+                        "| {name} | {} | {:.1} | {p50c} | {:.1} | {p95c} | {} |\n",
+                        a.attempt,
+                        a.p50,
+                        a.p95,
+                        if a.findings.is_empty() {
+                            "no"
+                        } else {
+                            "**yes**"
+                        }
                     );
                 }
             }

@@ -2,9 +2,12 @@
 # NFR-05, NFR HUELLA). See the INF-GRP-002 Dev Spec.
 #
 # Runs `cargo bench -p gitraptor-cli --bench engine` (release build) over the 100K-commit
-# reference repo with 10 worktrees. The job fails when the bench names a FAIL: the engine p95
-# above 300 ms in a gated scenario, the footprint of the isolated daemon above its limits, or a
-# change lost by the stream recreation. Stages over budget are warnings in the job summary.
+# reference repo with 10 worktrees, with `--gate ci`: on a shared runner the NFR-04 budget (p95
+# 300 ms) is measured and reported, and what fails is a regression over the ceilings calibrated
+# for that runner, confirmed by measuring the scenario again (two of three attempts). The job
+# also fails on the footprint of the isolated daemon over its limits, or a change lost by the
+# stream recreation. The budget itself gates on the reference machine (INF-GRP-002, Enmienda
+# 2026-10-05; TD-GRP-003).
 #
 # Windows: the channel client is Unix-only (TS-GRP-004), so there is nothing to measure yet.
 # Pendiente: etapa de validación multiplataforma.
@@ -70,7 +73,7 @@ jobs:
         # `runner` is not available in the job's `env`.
         env:
           ENGINE_BENCH_ROOT: ${{ runner.temp }}/engine-bench
-        run: cargo bench -p gitraptor-cli --bench engine -- --out "$ENGINE_BENCH_ROOT/engine-bench-${{ runner.os }}.json"
+        run: cargo bench -p gitraptor-cli --bench engine -- --gate ci --out "$ENGINE_BENCH_ROOT/engine-bench-${{ runner.os }}.json"
       - name: Report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
