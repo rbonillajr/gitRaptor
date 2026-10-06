@@ -154,11 +154,15 @@ struct FakeClaude {
 }
 
 impl FakeClaude {
-    /// Runs `command` in its shell and waits for it.
-    fn run(&mut self, command: &str) {
+    /// Hands `command` to its shell without waiting for it.
+    fn send(&mut self, command: &str) {
         let stdin = self.stdin.as_mut().unwrap();
         writeln!(stdin, "{command}").unwrap();
         stdin.flush().unwrap();
+    }
+
+    /// Waits until the command sent last ends.
+    fn done(&mut self, command: &str) {
         let mut line = String::new();
         loop {
             line.clear();
@@ -209,6 +213,25 @@ impl Machine {
         let outside = tempfile::tempdir().unwrap();
         std::fs::create_dir(outside.path().join("bin")).unwrap();
         let m = Self { f, outside };
+        // A hook folder used per command (`git -c core.hooksPath=…`), the
+        // repo's hooks untouched: `post-commit` keeps the `git` alive until
+        // the test releases it, so the S3 sample always sees it (the S3
+        // race accepted by ADR-GRP-012; US-GRP-007 Dev Spec). Bounded by
+        // the deadline, so a failed test leaves no `git` behind.
+        std::fs::create_dir(m.held_hooks()).unwrap();
+        let post_commit = m.held_hooks().join("post-commit");
+        std::fs::write(
+            &post_commit,
+            format!(
+                "#!/bin/sh\n\
+                 n=0\n\
+                 while [ ! -e '{release}' ] && [ $n -lt {polls} ]; do sleep 0.05; n=$((n+1)); done\n",
+                release = m.release_file().display(),
+                polls = DEADLINE.as_millis() / 50,
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&post_commit, std::fs::Permissions::from_mode(0o755)).unwrap();
         let tool = m.launchctl();
         std::fs::write(
             &tool,
@@ -260,6 +283,15 @@ impl Machine {
 
     fn skew_file(&self) -> PathBuf {
         self.outside.path().join("clock-skew-ms")
+    }
+
+    fn held_hooks(&self) -> PathBuf {
+        self.outside.path().join("held-hooks")
+    }
+
+    /// Its existence lets the held `post-commit` end.
+    fn release_file(&self) -> PathBuf {
+        self.outside.path().join("release")
     }
 
     fn env(&self) -> Vec<(&'static str, OsString)> {
@@ -693,7 +725,15 @@ fn what_was_observed_survives_a_restart(crash: bool) {
         s.iter()
             .any(|x| x["agent"] == "claude-code" && x["state"] == "active")
     });
-    claude.run("printf 'user\\nclaude\\n' > login.txt && git commit -qam claude");
+    // Its `git` lives until the engine recorded the commit.
+    let command = format!(
+        "printf 'user\\nclaude\\n' > login.txt && git -c core.hooksPath='{}' commit -qam claude",
+        m.held_hooks().display()
+    );
+    claude.send(&command);
+    m.commits(&api, 1);
+    std::fs::write(m.release_file(), "").unwrap();
+    claude.done(&command);
     claude.close();
     m.sessions_when(&api, |s| {
         s.len() == 1 && s[0]["agent"] == "claude-code" && s[0]["state"] == "ended"
