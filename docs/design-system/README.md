@@ -3,7 +3,7 @@ id: DSYS-GRP-001
 title: GitRaptor Design System
 type: design-system
 status: draft
-version: 0.5
+version: 0.6
 date: 2026-10-01
 updated: 2026-10-05
 owner: Rene Bonilla
