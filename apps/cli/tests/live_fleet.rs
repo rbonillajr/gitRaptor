@@ -255,9 +255,11 @@ fn one_row_per_worktree_with_the_agent_first() {
     let pagos = row(&screen, "feat-pagos").unwrap();
     assert!(pagos.find('●').unwrap() < pagos.find("claude-1").unwrap());
     assert!(pagos.find("claude-1").unwrap() < pagos.find("feat-pagos").unwrap());
-    // ahead/behind names its reference and says the age is not available.
+    // Each agent names the folder of its worktree (dogfooding 2026-10-06).
+    assert!(pagos.contains("claude-1 · wt-pagos"), "{pagos}");
+    // ahead/behind names its reference and the age of the local copy: never fetched here.
     assert!(
-        screen[1].contains("↑↓ vs main (local copy, fetch age not available)"),
+        screen[1].contains("↑↓ vs main (local copy, never fetched)"),
         "{}",
         screen[1]
     );
@@ -327,9 +329,9 @@ fn tui_probe_entry() {
     std::process::exit(0);
 }
 
-/// Un campo que el motor no publica no se calcula en la TUI: la última actividad dice "no
-/// disponible", y el proceso de la TUI no lanza Git ni abre el perfil (V5 y V6 de ADR-CKP-003,
-/// auditados en su propio PID).
+/// La TUI no calcula ningún campo: la última actividad se pinta como la publica el motor
+/// (su antigüedad, o "no disponible" mientras no la conoce), y el proceso de la TUI no lanza Git
+/// ni abre el perfil (V5 y V6 de ADR-CKP-003, auditados en su propio PID).
 #[test]
 fn an_unpublished_field_is_not_computed_by_the_tui() {
     let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
@@ -405,14 +407,16 @@ fn an_unpublished_field_is_not_computed_by_the_tui() {
         "the TUI launched git: {:?}",
         std::fs::read_to_string(&fired)
     );
-    // Every row says the last activity is not available.
+    // Every row shows the last activity as the engine published it (`scope.activity`): its
+    // age, or "not available" while the engine has not seen the worktree change.
     let rows = rows(&screen);
     assert_eq!(rows.len(), 3, "{screen:#?}");
     for r in rows {
+        let end = r.trim_end_matches(['┃', '│']).trim_end();
         assert!(
-            r.trim_end_matches(['┃', '│'])
-                .trim_end()
-                .ends_with("not available"),
+            ["not available", "just now", " ago"]
+                .iter()
+                .any(|t| end.ends_with(t)),
             "{r}"
         );
     }

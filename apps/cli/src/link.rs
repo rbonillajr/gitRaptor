@@ -48,6 +48,16 @@ impl Link for EngineLink {
         self.0.hello().requester.clone()
     }
 
+    fn has(&self, capability: &str) -> bool {
+        // The client asked for every capability it knows (`connection.accept`): what the
+        // daemon serves is what the connection has.
+        self.0
+            .hello()
+            .capabilities
+            .as_ref()
+            .is_some_and(|served| served.iter().any(|c| c == capability))
+    }
+
     fn call(&mut self, method: &str, params: Value) -> Result<Value, LinkError> {
         self.0.call(method, params).map_err(link_error)
     }

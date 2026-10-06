@@ -7,7 +7,8 @@ use gitraptor_api::scope::{AttentionCount, ConnectionRequester, GlobalSnapshot, 
 use gitraptor_api::{Actor, AgentKind};
 
 use crate::model::{
-    GlobalView, Head, RepoAttention, RepoView, Requester, SessionRow, WorktreeRow, WorktreeState,
+    GlobalView, Head, RepoAttention, RepoChoice, RepoView, Requester, SessionRow, WorktreeRow,
+    WorktreeState,
 };
 use crate::present::SafeText;
 
@@ -17,6 +18,15 @@ pub fn global(snapshot: &GlobalSnapshot) -> GlobalView {
         git_version: snapshot.engine.git_version.as_deref().map(SafeText::name),
         autostart: snapshot.autostart,
         repo_count: snapshot.repos.len(),
+        repos: snapshot
+            .repos
+            .iter()
+            .map(|r| RepoChoice {
+                repo_id: r.repo_id.clone(),
+                name: SafeText::name(&repo_name(r.path.raw())),
+                path: SafeText::from_untrusted(&r.path),
+            })
+            .collect(),
         attention: snapshot
             .repos
             .iter()
@@ -48,6 +58,7 @@ pub fn repo(snapshot: &RepoSnapshot) -> RepoView {
             .as_ref()
             .map(SafeText::name_from_untrusted),
         worktrees: worktrees(&snapshot.repo.worktrees),
+        fetched_ms: snapshot.repo.fetched_utc_ms,
         sessions: Vec::new(),
         detection: None,
     }
@@ -65,6 +76,13 @@ fn repo_name(common_dir: &str) -> String {
     }
 }
 
+/// The last component of a worktree root (the root itself when it has none).
+fn leaf(root: &str) -> String {
+    std::path::Path::new(root)
+        .file_name()
+        .map_or_else(|| root.to_owned(), |n| n.to_string_lossy().into_owned())
+}
+
 /// The key a worktree and its sessions share: a hash of the raw root, so two roots that only
 /// differ in what the sanitizer neutralizes stay apart.
 fn key(raw: &str) -> u64 {
@@ -79,8 +97,10 @@ pub fn worktrees(views: &[WorktreeView]) -> Vec<WorktreeRow> {
         .iter()
         .map(|w| WorktreeRow {
             path: SafeText::from_untrusted(&w.path),
+            name: SafeText::name(&leaf(w.path.raw())),
             key: key(w.path.raw()),
             main: w.main,
+            last_activity_ms: w.last_activity_utc_ms,
             state: match &w.status {
                 WorktreeStatus::Ready {
                     head,

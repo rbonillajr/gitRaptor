@@ -11,7 +11,7 @@ use gitraptor_api::scope::{Scope, ScopeSnapshot};
 use ratatui::crossterm::event::KeyEventKind;
 
 use crate::client::sequence::Verdict;
-use crate::model::{Cmd, ConnEvent, ConnState, EngineMsg, Model, Msg, Notice, ScopeReplica};
+use crate::model::{Cmd, ConnEvent, ConnState, EngineMsg, Model, Msg, Notice, Pick, ScopeReplica};
 use crate::present::{SafeText, ingest};
 use crate::tui::keymap::{self, Action};
 
@@ -27,13 +27,14 @@ pub fn update(model: &mut Model, msg: Msg) -> Vec<Cmd> {
             Vec::new()
         }
         Msg::Engine(stamped) => on_engine(model, stamped.msg),
-        Msg::Conn(event) => {
-            on_conn(model, event);
-            Vec::new()
-        }
-        // Nothing visible depends on the clock yet.
+        Msg::Conn(event) => on_conn(model, event),
+        // The ages of the fleet move with the clock.
         Msg::Tick { now_ms } => {
             model.now_ms = now_ms;
+            if model.engine.activity && model.engine.repo.as_ref().is_some_and(|r| r.data.is_some())
+            {
+                model.dirty = true;
+            }
             Vec::new()
         }
     }
@@ -55,6 +56,7 @@ fn on_action(model: &mut Model, action: Option<Action>) -> Vec<Cmd> {
             model.ui.notice = Some(Notice::Retrying);
             vec![Cmd::Reconnect]
         }
+        Some(action @ (Action::Up | Action::Down | Action::Open)) => on_pick(model, action),
         None => {
             model.ui.notice = Some(Notice::UnknownKey);
             Vec::new()
@@ -62,9 +64,76 @@ fn on_action(model: &mut Model, action: Option<Action>) -> Vec<Cmd> {
     }
 }
 
-fn on_conn(model: &mut Model, event: ConnEvent) {
+/// The repo picker: ↑↓ move, Enter opens. Outside it these keys do nothing (yet).
+fn on_pick(model: &mut Model, action: Action) -> Vec<Cmd> {
+    let repos = model
+        .engine
+        .global
+        .data
+        .as_ref()
+        .map(|g| g.repos.as_slice())
+        .unwrap_or_default();
+    let Pick::Choosing { selected } = model.ui.pick else {
+        model.ui.notice = Some(Notice::UnknownKey);
+        return Vec::new();
+    };
+    let last = repos.len().saturating_sub(1);
+    match action {
+        Action::Up => {
+            model.ui.pick = Pick::Choosing {
+                selected: selected.saturating_sub(1),
+            }
+        }
+        Action::Down => {
+            model.ui.pick = Pick::Choosing {
+                selected: (selected + 1).min(last),
+            }
+        }
+        _ => {
+            if let Some(repo) = repos.get(selected.min(last)) {
+                let repo_id = repo.repo_id.clone();
+                model.ui.pick = Pick::Opening;
+                return vec![Cmd::Open { repo_id }];
+            }
+        }
+    }
+    Vec::new()
+}
+
+/// The folder is in no observed repo: the only one opens by itself; with several, the
+/// developer chooses; with none, the fleet says how to add one.
+fn on_unlocated(model: &mut Model) -> Vec<Cmd> {
+    let repos = model
+        .engine
+        .global
+        .data
+        .as_ref()
+        .map(|g| g.repos.as_slice())
+        .unwrap_or_default();
+    match repos {
+        [] => {
+            model.ui.pick = Pick::None;
+            Vec::new()
+        }
+        [only] => {
+            let repo_id = only.repo_id.clone();
+            model.ui.pick = Pick::Opening;
+            vec![Cmd::Open { repo_id }]
+        }
+        _ => {
+            if !matches!(model.ui.pick, Pick::Choosing { .. }) {
+                model.ui.pick = Pick::Choosing { selected: 0 };
+            }
+            Vec::new()
+        }
+    }
+}
+
+fn on_conn(model: &mut Model, event: ConnEvent) -> Vec<Cmd> {
     model.dirty = true;
     match event {
+        ConnEvent::Unlocated => return on_unlocated(model),
+        ConnEvent::Activity(activity) => model.engine.activity = activity,
         ConnEvent::Requester(requester) => model.engine.requester = requester,
         ConnEvent::State(state) => {
             if matches!(
@@ -79,6 +148,7 @@ fn on_conn(model: &mut Model, event: ConnEvent) {
             model.conn = state;
         }
     }
+    Vec::new()
 }
 
 fn on_engine(model: &mut Model, msg: EngineMsg) -> Vec<Cmd> {
@@ -124,6 +194,7 @@ fn on_snapshot(model: &mut Model, snapshot: ScopeSnapshot) {
         ScopeSnapshot::Repo(repo) => {
             let replica = model.engine.repo.get_or_insert_with(ScopeReplica::default);
             replica.data = Some(ingest::repo(&repo));
+            model.ui.pick = Pick::None;
             synced(replica, &repo.run_id, repo.scope_seq);
         }
     }
@@ -203,6 +274,7 @@ fn apply(model: &mut Model, scope: &Scope, event: &gitraptor_api::Event) {
                 && let Ok(state) = serde_json::from_value::<WorktreeStateData>(event.data.clone())
             {
                 data.worktrees = ingest::worktrees(&state.worktrees);
+                data.fetched_ms = state.fetched_utc_ms;
             } else if event.kind == SESSION_STATE
                 && let Ok(view) = serde_json::from_value::<SessionView>(event.data.clone())
                 && view.repo_id == data.repo_id
@@ -305,6 +377,7 @@ mod tests {
                 run_id: "run".into(),
                 scope_seq: seq,
                 repo: RepoView {
+                    fetched_utc_ms: None,
                     repo_id: "r1".into(),
                     state: RepoStateView::Observed,
                     path: Untrusted::new("/w/\u{1b}]0;x\u{7}/.git"),

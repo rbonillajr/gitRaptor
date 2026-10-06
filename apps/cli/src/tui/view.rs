@@ -13,16 +13,18 @@ use gitraptor_api::messages::{DivergenceView, SessionStateView};
 use ratatui::Frame;
 
 use crate::model::{
-    ConnState, Head, Model, RepoView, Requester, SafeText, SessionRow, WorktreeRow, WorktreeState,
+    ConnState, Head, Model, Pick, RepoView, Requester, SafeText, SessionRow, WorktreeRow,
+    WorktreeState,
 };
-use crate::present::i18n::{Lang, Text};
+use crate::present::i18n::{Fetched, Lang, Text};
 use crate::tui::keymap::{Action, BINDINGS};
-use crate::tui::style::Styles;
+use crate::tui::style::{Styles, follow};
 use crate::tui::widgets::agent_list::{
     AgentColumns, AgentListModel, AgentRowModel, AgentState, Branch, Sync,
 };
 use crate::tui::widgets::key_hints::{KeyHint, KeyHintsModel};
 use crate::tui::widgets::layout::{self, BodyPlan, Connection, StatusBarModel, TooSmallModel};
+use crate::tui::widgets::repo_picker::{RepoChoiceModel, RepoPickerModel};
 use crate::tui::widgets::themed;
 
 /// Smallest size with the full layout (Q-CKP-18).
@@ -49,8 +51,11 @@ pub fn view(model: &Model, frame: &mut Frame) {
         return;
     };
     frame.render_widget(themed(&status_bar(model, &styles), &styles), regions.header);
-    frame.render_widget(themed(&fleet(model, &styles), &styles), regions.list);
-    frame.render_widget(themed(&key_hints(lang), &styles), regions.hints);
+    match picker(model, regions.list.height) {
+        Some(picker) => frame.render_widget(themed(&picker, &styles), regions.list),
+        None => frame.render_widget(themed(&fleet(model, &styles), &styles), regions.list),
+    }
+    frame.render_widget(themed(&key_hints(model), &styles), regions.hints);
 }
 
 fn catalog(text: Text<'_>, lang: Lang) -> SafeText {
@@ -126,20 +131,26 @@ pub fn status_bar(model: &Model, styles: &Styles) -> StatusBarModel {
 pub fn fleet(model: &Model, styles: &Styles) -> AgentListModel {
     let lang = model.ui.lang;
     let repo = repo(model);
-    let rows = repo.map(|r| rows(r, lang, styles)).unwrap_or_default();
+    let rows = repo.map(|r| rows(r, model, styles)).unwrap_or_default();
     let empty = match (&model.engine.repo, repo) {
         (Some(_), Some(_)) => Text::FleetEmpty,
         (Some(_), None) => Text::FleetWaiting,
-        (None, _) if model.conn == ConnState::Live => Text::FleetNoRepo,
+        (None, _) if model.conn == ConnState::Live && model.ui.pick == Pick::None => {
+            Text::FleetNoRepo
+        }
         (None, _) => Text::FleetWaiting,
+    };
+    let fetched = match repo.map(|r| r.fetched_ms) {
+        Some(_) if !model.engine.activity => Fetched::NotAvailable,
+        Some(Some(at)) => Fetched::Ago(model.now_ms.saturating_sub(at)),
+        Some(None) => Fetched::Never,
+        None => Fetched::NotAvailable,
     };
     AgentListModel {
         title: catalog(
-            match repo {
-                Some(r) => Text::FleetTitle {
-                    base: r.base.as_ref(),
-                },
-                None => Text::FleetTitle { base: None },
+            Text::FleetTitle {
+                base: repo.and_then(|r| r.base.as_ref()),
+                fetched,
             },
             lang,
         ),
@@ -158,7 +169,33 @@ pub fn fleet(model: &Model, styles: &Styles) -> AgentListModel {
     }
 }
 
-fn rows(repo: &RepoView, lang: Lang, styles: &Styles) -> Vec<AgentRowModel> {
+/// The observed repos to choose from, while the developer chooses one.
+pub fn picker(model: &Model, height: u16) -> Option<RepoPickerModel> {
+    let Pick::Choosing { selected } = model.ui.pick else {
+        return None;
+    };
+    let lang = model.ui.lang;
+    let repos = model.engine.global.data.as_ref()?.repos.as_slice();
+    let selected = selected.min(repos.len().saturating_sub(1));
+    // Borders and the prompt line.
+    let visible = usize::from(height.saturating_sub(4)).max(1);
+    Some(RepoPickerModel {
+        title: catalog(Text::PickTitle, lang),
+        prompt: catalog(Text::PickPrompt, lang),
+        repos: repos
+            .iter()
+            .map(|r| RepoChoiceModel {
+                name: r.name.clone(),
+                path: r.path.clone(),
+            })
+            .collect(),
+        selected,
+        offset: follow(0, selected, visible),
+    })
+}
+
+fn rows(repo: &RepoView, model: &Model, styles: &Styles) -> Vec<AgentRowModel> {
+    let lang = model.ui.lang;
     let ordered = repo
         .worktrees
         .iter()
@@ -167,7 +204,16 @@ fn rows(repo: &RepoView, lang: Lang, styles: &Styles) -> Vec<AgentRowModel> {
     let mut agents = 0;
     ordered
         .map(|w| {
-            let row = row(repo, w, agents, lang, styles);
+            let mut row = row(repo, w, agents, lang, styles);
+            if model.engine.activity {
+                row.activity = catalog(
+                    match w.last_activity_ms {
+                        Some(at) => Text::Ago(model.now_ms.saturating_sub(at)),
+                        None => Text::NotAvailable,
+                    },
+                    lang,
+                );
+            }
             if matches!(row.state, AgentState::Active | AgentState::Idle) {
                 agents += 1;
             }
@@ -212,7 +258,11 @@ fn row(
     let sessions = present(repo, worktree);
     let (name, state) = match (repo.detection, sessions.first()) {
         (Some(true), Some(first)) => {
-            let name = agent_name(first, lang);
+            let name = Text::AgentInWorktree {
+                agent: &agent_name(first, lang),
+                worktree: worktree.name.as_str(),
+            }
+            .render(lang);
             let name = match sessions.len() - 1 {
                 0 => name,
                 more => Text::AgentAndMore { name: &name, more }.render(lang),
@@ -285,12 +335,16 @@ fn row(
     row
 }
 
-/// The key hints, from the single keymap table: quit is the hint always shown.
-fn key_hints(lang: Lang) -> KeyHintsModel {
+/// The key hints, from the single keymap table: quit is the hint always shown, and the list
+/// keys only while there is a list to move in.
+fn key_hints(model: &Model) -> KeyHintsModel {
+    let lang = model.ui.lang;
+    let list = matches!(model.ui.pick, Pick::Choosing { .. });
     KeyHintsModel {
         hints: BINDINGS
             .iter()
             .filter(|b| b.action != Action::Quit)
+            .filter(|b| list || !b.action.is_list())
             .filter_map(|b| hint(b.action, lang))
             .collect(),
         help: hint(Action::Quit, lang)
@@ -378,6 +432,7 @@ mod tests {
 
     fn worktree(path: &str, main: bool, status: WorktreeStatus) -> WorktreeView {
         WorktreeView {
+            last_activity_utc_ms: None,
             path: Untrusted::new(path),
             main,
             admin_name: None,
@@ -431,6 +486,7 @@ mod tests {
             layer: gitraptor_api::catalog::Layer::Cockpit,
         });
         model.engine.global.data = Some(GlobalView {
+            repos: Vec::new(),
             engine: EngineStateView::Observing,
             git_version: None,
             autostart: AutostartView::Unknown,
@@ -444,6 +500,7 @@ mod tests {
                     run_id: "run".into(),
                     scope_seq: 1,
                     repo: ApiRepo {
+                        fetched_utc_ms: None,
                         repo_id: "r1".into(),
                         state: RepoStateView::Observed,
                         path: Untrusted::new("/w/shop/.git"),
@@ -650,7 +707,7 @@ mod tests {
         );
         let screen = lines(&render(&model, 100, 30));
         assert!(
-            row(&screen, "feat-pagos").contains("●  claude-1 +1"),
+            row(&screen, "feat-pagos").contains("●  claude-1 · feat-pagos +1"),
             "{screen:#?}"
         );
     }
@@ -672,6 +729,220 @@ mod tests {
         assert!(screen.contains("raptor repo add"), "{screen}");
     }
 
+    const NOW: i64 = 1_800_000_000_000;
+
+    /// The shop with what `scope.activity` publishes: feat-pagos changed 2 minutes ago, the
+    /// others not since the engine started, and the repo fetched 3 hours ago.
+    fn published(mut model: Model) -> Model {
+        model.engine.activity = true;
+        model.now_ms = NOW;
+        let data = model.engine.repo.as_mut().unwrap().data.as_mut().unwrap();
+        data.fetched_ms = Some(NOW - 3 * 3_600_000);
+        for w in &mut data.worktrees {
+            if w.name.as_str() == "feat-pagos" {
+                w.last_activity_ms = Some(NOW - 120_000);
+            }
+        }
+        model
+    }
+
+    fn claude(id: &str, worktree: &str) -> SessionView {
+        let mut s = session(id, worktree, "", SessionStateView::Active);
+        s.actor = Actor::Agent {
+            kind: AgentKind::ClaudeCode,
+            name: None,
+            origin: AgentOrigin::Detected,
+        };
+        s
+    }
+
+    /// Dogfooding 2026-10-06: three "Claude Code" rows could not be told apart; each one now
+    /// names the folder of its worktree.
+    #[test]
+    fn agents_of_the_same_kind_are_told_apart_by_their_worktree() {
+        let model = model_with(
+            Lang::En,
+            shop(),
+            Some(vec![
+                claude("s1", "/w/shop/feat-pagos"),
+                claude("s2", "/w/shop/feat-docs"),
+                claude("s3", "/w/shop"),
+            ]),
+        );
+        let screen = lines(&render(&model, 100, 30));
+        assert!(row(&screen, "feat-pagos").contains("Claude Code · feat-pagos"));
+        assert!(row(&screen, "feat-docs").contains("Claude Code · feat-docs"));
+        assert!(
+            row(&screen, "Claude Code · shop").contains(" main "),
+            "{screen:#?}"
+        );
+    }
+
+    /// Dogfooding 2026-10-06: with `scope.activity` the column shows the age of the last
+    /// activity and the title the age of the last fetch; what the engine has not seen yet is
+    /// still "not available".
+    #[test]
+    fn published_activity_and_fetch_show_their_age() {
+        for (lang, ago, unseen, fetched) in [
+            (
+                Lang::En,
+                "2 min ago",
+                "not available",
+                "(local copy, fetched 3 h ago)",
+            ),
+            (
+                Lang::Es,
+                "hace 2 min",
+                "no disponible",
+                "(copia local, fetch hace 3 h)",
+            ),
+        ] {
+            let screen = lines(&render(&published(shop_model(lang)), 100, 30));
+            let end = |name: &str| {
+                row(&screen, name)
+                    .trim_end_matches('┃')
+                    .trim_end()
+                    .to_owned()
+            };
+            assert!(end("feat-pagos").ends_with(ago), "{screen:#?}");
+            assert!(end("feat-docs").ends_with(unseen), "{screen:#?}");
+            assert!(screen[1].contains(fetched), "{}", screen[1]);
+        }
+    }
+
+    #[test]
+    fn a_repo_never_fetched_says_so() {
+        for (lang, text) in [(Lang::En, "never fetched"), (Lang::Es, "sin fetch")] {
+            let mut model = published(shop_model(lang));
+            model
+                .engine
+                .repo
+                .as_mut()
+                .unwrap()
+                .data
+                .as_mut()
+                .unwrap()
+                .fetched_ms = None;
+            let screen = lines(&render(&model, 100, 30));
+            assert!(screen[1].contains(text), "{}", screen[1]);
+        }
+    }
+
+    #[test]
+    fn ages_use_the_largest_whole_unit() {
+        for (ms, en, es) in [
+            (400, "just now", "ahora"),
+            (59_999, "59 s ago", "hace 59 s"),
+            (3_599_999, "59 min ago", "hace 59 min"),
+            (7_200_000, "2 h ago", "hace 2 h"),
+            (3 * 86_400_000, "3 d ago", "hace 3 d"),
+        ] {
+            assert_eq!(Text::Ago(ms).render(Lang::En), en);
+            assert_eq!(Text::Ago(ms).render(Lang::Es), es);
+        }
+    }
+
+    fn outside(lang: Lang, repos: &[&str]) -> Model {
+        let mut model = shop_model(lang);
+        model.engine.repo = None;
+        model.engine.global.data.as_mut().unwrap().repos = repos
+            .iter()
+            .map(|name| crate::model::RepoChoice {
+                repo_id: format!("id-{name}"),
+                name: SafeText::name(name),
+                path: SafeText::text(&format!("/w/{name}/.git")),
+            })
+            .collect();
+        model
+    }
+
+    fn key(code: ratatui::crossterm::event::KeyCode) -> Msg {
+        Msg::Key(ratatui::crossterm::event::KeyEvent::new(
+            code,
+            ratatui::crossterm::event::KeyModifiers::NONE,
+        ))
+    }
+
+    /// Dogfooding 2026-10-06: outside every observed repo, the only one opens by itself.
+    #[test]
+    fn outside_a_repo_the_only_observed_one_opens() {
+        let mut model = outside(Lang::En, &["shop"]);
+        let cmds = update(&mut model, Msg::Conn(crate::model::ConnEvent::Unlocated));
+        assert_eq!(
+            cmds,
+            vec![crate::model::Cmd::Open {
+                repo_id: "id-shop".into()
+            }]
+        );
+        let screen = screen(&model, 100, 30);
+        assert!(!screen.contains("raptor repo add"), "{screen}");
+        assert!(screen.contains("Waiting for the engine"), "{screen}");
+    }
+
+    /// Only without any observed repo does the fleet suggest `raptor repo add`.
+    #[test]
+    fn outside_a_repo_with_none_observed_it_says_how_to_add_one() {
+        let mut model = outside(Lang::En, &[]);
+        assert!(update(&mut model, Msg::Conn(crate::model::ConnEvent::Unlocated)).is_empty());
+        assert!(screen(&model, 100, 30).contains("raptor repo add"));
+    }
+
+    /// With several, the developer chooses with ↑↓ and Enter; the choice opens that repo.
+    #[test]
+    fn outside_a_repo_the_developer_chooses_among_several() {
+        use ratatui::crossterm::event::KeyCode;
+        let mut model = outside(Lang::En, &["shop", "blog", "api"]);
+        assert!(update(&mut model, Msg::Conn(crate::model::ConnEvent::Unlocated)).is_empty());
+        let first = screen(&model, 100, 30);
+        assert!(
+            first.contains("not in an observed repo: choose one"),
+            "{first}"
+        );
+        assert!(!first.contains("raptor repo add"), "{first}");
+        assert!(first.contains("↑ up"), "{first}");
+        assert!(first.contains("Enter open"), "{first}");
+        for code in [KeyCode::Down, KeyCode::Down, KeyCode::Down, KeyCode::Up] {
+            assert!(update(&mut model, key(code)).is_empty());
+        }
+        let lines = lines(&render(&model, 100, 30));
+        assert!(row(&lines, "blog").contains('›'), "{lines:#?}");
+        assert!(!row(&lines, "api").contains('›'), "{lines:#?}");
+        assert_eq!(
+            update(&mut model, key(KeyCode::Enter)),
+            vec![crate::model::Cmd::Open {
+                repo_id: "id-blog".into()
+            }]
+        );
+        // The list keys are not hinted (nor act) outside the picker.
+        let after = screen(&model, 100, 30);
+        assert!(!after.contains("Enter open"), "{after}");
+        assert!(update(&mut model, key(KeyCode::Enter)).is_empty());
+    }
+
+    #[test]
+    fn the_repo_picker_in_spanish_and_on_screen() {
+        let mut model = outside(Lang::Es, &["shop", "blog"]);
+        update(&mut model, Msg::Conn(crate::model::ConnEvent::Unlocated));
+        let painted = screen(&model, 80, 24);
+        assert!(painted.contains("Repos observados"), "{painted}");
+        assert!(painted.contains("elige uno"), "{painted}");
+        let mut settings = insta::Settings::clone_current();
+        settings.set_prepend_module_to_snapshot(false);
+        settings.set_snapshot_path("snapshots");
+        settings.bind(|| {
+            let english = outside(Lang::En, &["shop", "blog"]);
+            let mut english = english;
+            update(&mut english, Msg::Conn(crate::model::ConnEvent::Unlocated));
+            let buffer = render(&english, 80, 24);
+            let snap = format!(
+                "{}\n=== styles ===\n{}",
+                lines(&buffer).join("\n"),
+                style_runs(&buffer)
+            );
+            insta::assert_snapshot!("repo_picker_80x24", snap);
+        });
+    }
+
     /// The whole screen at 80×24 and 120×40 on a dark and a light terminal: the text is the same,
     /// only the colors change (DSYS-GRP-001, TS-CKP-004 amendment).
     #[test]
@@ -687,7 +958,7 @@ mod tests {
                     let theme =
                         Theme::new(ColorMode::TrueColor, Contrast::Normal, SymbolSet::Unicode)
                             .with_background(background);
-                    let model = shop_model(Lang::En).with_theme(theme);
+                    let model = published(shop_model(Lang::En)).with_theme(theme);
                     let buffer = render(&model, w, h);
                     let painted = lines(&buffer).join("\n");
                     if let Some(text) = &text {

@@ -10,6 +10,11 @@ pub enum Action {
     Quit,
     /// Reconnect now instead of waiting for the next attempt.
     Retry,
+    /// Move the selection of a list.
+    Up,
+    Down,
+    /// Open what is selected.
+    Open,
 }
 
 /// A key as the table names it.
@@ -17,6 +22,9 @@ pub enum Action {
 pub enum Key {
     Char(char),
     Ctrl(char),
+    Up,
+    Down,
+    Enter,
 }
 
 impl Key {
@@ -24,6 +32,9 @@ impl Key {
         match self {
             Self::Char(c) => c.to_string(),
             Self::Ctrl(c) => format!("Ctrl-{}", c.to_ascii_uppercase()),
+            Self::Up => "↑".into(),
+            Self::Down => "↓".into(),
+            Self::Enter => "Enter".into(),
         }
     }
 
@@ -32,6 +43,9 @@ impl Key {
         match (self, event.code) {
             (Self::Char(k), KeyCode::Char(c)) => !ctrl && k == c,
             (Self::Ctrl(k), KeyCode::Char(c)) => ctrl && k.eq_ignore_ascii_case(&c),
+            (Self::Up, KeyCode::Up)
+            | (Self::Down, KeyCode::Down)
+            | (Self::Enter, KeyCode::Enter) => !ctrl,
             _ => false,
         }
     }
@@ -56,7 +70,29 @@ pub const BINDINGS: &[Binding] = &[
         keys: &[Key::Char('r')],
         hint: Text::KeyRetry,
     },
+    Binding {
+        action: Action::Up,
+        keys: &[Key::Up, Key::Char('k')],
+        hint: Text::KeyUp,
+    },
+    Binding {
+        action: Action::Down,
+        keys: &[Key::Down, Key::Char('j')],
+        hint: Text::KeyDown,
+    },
+    Binding {
+        action: Action::Open,
+        keys: &[Key::Enter],
+        hint: Text::KeyOpen,
+    },
 ];
+
+impl Action {
+    /// Moves within a list: hinted only while there is one to move in.
+    pub fn is_list(self) -> bool {
+        matches!(self, Self::Up | Self::Down | Self::Open)
+    }
+}
 
 pub fn action(event: &KeyEvent) -> Option<Action> {
     BINDINGS
@@ -90,5 +126,17 @@ mod tests {
         );
         assert_eq!(action(&key(KeyCode::Esc, KeyModifiers::NONE)), None);
         assert_eq!(Key::Ctrl('c').label(), "Ctrl-C");
+        assert_eq!(
+            action(&key(KeyCode::Down, KeyModifiers::NONE)),
+            Some(Action::Down)
+        );
+        assert_eq!(
+            action(&key(KeyCode::Char('k'), KeyModifiers::NONE)),
+            Some(Action::Up)
+        );
+        assert_eq!(
+            action(&key(KeyCode::Enter, KeyModifiers::NONE)),
+            Some(Action::Open)
+        );
     }
 }
