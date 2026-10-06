@@ -73,6 +73,7 @@ impl Running {
             channel,
             protected: None,
             operations: None,
+            tm_prior_layer: None,
         };
         let daemon = Daemon::start(config).unwrap();
         let handle = daemon.shutdown_handle();
