@@ -6,7 +6,7 @@ status: approved
 feature: motor-local
 domain: GRP
 created: 2026-10-04
-updated: 2026-10-05
+updated: 2026-10-06
 related:
   stories: [INF-GRP-001, TS-GRP-002, TS-GRP-003, TS-GRP-004, US-GRP-002, US-GRP-004, US-GRP-007, INF-GRD-001, INF-TMC-001]
   adrs: [ADR-GRP-009, ADR-GRP-002, ADR-GRP-005, ADR-GRP-006, ADR-GRD-001]
@@ -179,8 +179,27 @@ En los dos primeros, Windows va con `continue-on-error` hasta que TS-GRP-002 imp
 - **Invariante que justifica el filtro frente a D9:** el resultado de los tests solo depende de las rutas del filtro (`crates/**`, `apps/**`, `Cargo.toml`, `Cargo.lock`, toolchain, configuración de rustfmt y clippy, `.cargo/**`, `.gitattributes` y el propio workflow). Un `include_str!` o una lectura nueva fuera de `crates/` o `apps/` **obliga a ampliar el filtro**.
 - **El filtro depende de `strict`.** Un PR apilado que se redirige a `main` solo se reevalúa porque `strict` obliga a actualizar la rama.
 - **Caché:** `Swatinem/rust-cache` usa una clave por job, SO, arquitectura, versión de rustc y `Cargo.lock`, y solo guarda en `main`. Los cachés de PR llevaban el repo por encima del límite de 10 GB y desalojaban los de `main`.
-- **Pendiente (otra rama):** los fixtures del testkit no desactivan la auto-maintenance de git (`maintenance.auto`, `gc.auto`). Es una inestabilidad que ya existía: falló en `main` en macOS (`c5644f6`).
-- **Pendiente (otra rama):** `cargo test -- repo_intact` pasa aunque no encuentre ningún test, por ejemplo tras renombrar un módulo. Un mínimo de tests ejecutados (hoy 42) cerraría ese hueco, que ya existía.
+- **Pendiente (otra rama):** los fixtures del testkit no desactivan la auto-maintenance de git (`maintenance.auto`, `gc.auto`). Es una inestabilidad que ya existía: falló en `main` en macOS (`c5644f6`).  *Resuelto en la enmienda 2026-10-06.*
+- **Pendiente (otra rama):** `cargo test -- repo_intact` pasa aunque no encuentre ningún test, por ejemplo tras renombrar un módulo. Un mínimo de tests ejecutados (hoy 42) cerraría ese hueco, que ya existía. *Resuelto en la enmienda 2026-10-06.*
+
+### Enmienda 2026-10-06: salvaguarda contra el gate vacío y fixtures sin mantenimiento automático
+
+> Decisión del orquestador (2026-10-04), validada por Arquitecto. Rama `fix/repo-intact-gate-and-maintenance`. Cierra los dos pendientes de la enmienda anterior.
+
+**Hallazgo.** Se reportó que el gate `repo-intact` pasaba con 0 tests. Los logs de CI lo desmienten para el filtro actual. `cargo test --workspace -- repo_intact` ejecuta **95 tests en Linux, 101 en macOS y 66 en Windows** (61 aprobados y 5 fallidos, no bloqueante), tanto antes como después del build único por SO. Los tests están bajo `mod repo_intact` o empiezan por `repo_intact_`, y el binario `harness = false` (`repo_intact_exec`) aplica el mismo filtro por subcadena. Lo que sí registra 0 tests es el job ligero `repo-intact (<so>)`: solo lee el artefacto y no ejecuta tests. El hueco real era el del pendiente anterior: si un renombrado dejaba de casar con el filtro, el gate pasaba en verde sin proteger nada.
+
+**Salvaguarda contra el gate vacío.**
+- Cada entrada de la matriz de `lint and test` lleva `repo_intact_min`, el número de tests `repo_intact` que el gate debe ejecutar en ese SO: **Linux 96 y macOS 102** (el conteo de CI más el test nuevo de esta enmienda, sin margen, a propósito). Las suites corren con `--no-fail-fast`, así que un binario que falla no oculta a los demás y el conteo de Windows es exacto. El mínimo de Windows sale del run de CI de esta rama.
+- La salida de las suites también se guarda en un log. Se cuentan los tests ejecutados (aprobados más fallidos) en todas las líneas `test result:`, incluida la del binario `harness = false`, que imprime el mismo formato. Si las suites pasan con menos tests que el mínimo, el resultado es `failure` y `lint and test` falla en Linux y macOS.
+- El artefacto `repo-intact-<so>` guarda el resultado y el número de tests. El job `repo-intact (<so>)` imprime ese número en su log y, como defensa en profundidad, falla si recibe `success` con 0 tests.
+- **Mantenimiento:** el mínimo se sube a mano cuando llega una suite nueva con su historia. Bajarlo es una decisión explícita y visible en el diff del workflow.
+- Para capturar la salida sin cambiar el entorno de Windows, las suites van en dos pasos con el mismo nombre: `bash` con `pipefail` y `tee` en Linux y macOS, y `pwsh` con `Tee-Object` en Windows. Git Bash cambiaría el `PATH` y, con él, la resolución de Git.
+
+**Fixtures sin mantenimiento automático (flake de `maintenance.lock`).** Un commit de un fixture podía lanzar `git maintenance run --auto`, en segundo plano por defecto (`maintenance.autoDetach`, Git ≥ 2.47), y su lock o su pack acababa en la huella al azar. Ahora el `~/.gitconfig` de cada fixture usa la constante `HOME_GITCONFIG` del testkit, que comparten también los fixtures de `crates/git/tests/common` y `crates/policy/tests/common`, y fija:
+- `maintenance.auto=false` (Git ≥ 2.29) y `maintenance.autoDetach=false`;
+- `gc.auto=0`, `gc.autoPackLimit=0` y `gc.autoDetach=false`.
+
+Cubre de Git 2.38 a 2.56: cada versión ignora las claves que no conoce. Los controles de gc del arnés no cambian lo que miden. Los `gc` explícitos (`tm_store_safety`, `tm_apply`, `repo_intact::concurrent_user_gc`) no dependen de la config automática. El control `control_gc_auto_by_agent_commit_is_not_imputed`, que provoca `gc --auto` a propósito, reactiva `maintenance.auto=true` en la config del repo, que tiene prioridad sobre la global. Se verificó que sin esa línea falla con "gc --auto did not run". El test `repo_intact::fixture_turns_automatic_maintenance_off` fija la configuración.
 
 ## 10. Verificación realizada
 
