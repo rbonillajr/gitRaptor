@@ -250,6 +250,7 @@ mod repo_intact {
         assert_eq!(get("maintenance.auto"), "false");
         assert_eq!(get("maintenance.autoDetach"), "false");
         assert_eq!(get("gc.auto"), "0");
+        assert_eq!(get("gc.autoPackLimit"), "0");
         assert_eq!(get("gc.autoDetach"), "false");
     }
 
