@@ -39,8 +39,8 @@ pub use committed::{BlobRead, CommittedFile, NotRegular};
 pub use guard_read::{Ancestry, CommitShape, MAX_ANCESTRY_WALK, RefStorage};
 pub use invoke::{ArgvSink, Invoker, MemoryArgvLog};
 pub use reader::{
-    Branch, Change, ChangeKind, Count, Head, InProgress, LinkedWorktree, ReaderOptions,
-    ReflogEntry, RepoReader, Status,
+    Branch, Change, ChangeKind, CommitIdentity, Count, Head, InProgress, LinkedWorktree,
+    ReaderOptions, ReflogEntry, RepoReader, Status,
 };
 pub use refname::RefName;
 pub use resolve::{GitVersion, SystemGit};
