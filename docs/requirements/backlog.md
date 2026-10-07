@@ -18,7 +18,7 @@
 
 *   **F-001-02**: Cockpit (BR-04, BR-05, BR-06, BR-07)
     -   **Contexto**: [context.md](features/cockpit/context.md) (reglas en [business-rules.md](features/cockpit/business-rules.md), 2026-10-04; decisiones Q-CKP-1 a Q-CKP-30 tomadas por el orquestador y validadas por PO y Arquitecto. Depende de 14 huecos del motor y de otras features, anotados como DEP-CKP-1 a DEP-CKP-14 sin aplicar; entre ellos SPIKE-CKP-001/ADR-CKP-001 (predicción de conflictos) y ADR-CKP-002 (catálogo y ejecutor de operaciones))
-    -   **Historias**: [user-stories.md](features/cockpit/user-stories.md) (25 historias en `features/cockpit/user-stories/`, 2026-10-04, tras aprobar Rene Bonilla el requerimiento (marca del 2026-10-05), más US-CKP-025 (la TUI en un repo no observado) del 2026-10-07; 24 listas para Dev Spec y 1 bloqueada: US-CKP-023, la cola de confirmación, por US-GRD-015 y el factor fuera de banda de Q-GRD-19. DAG en olas con esqueletos US-CKP-001 (lectura) y US-CKP-014 (escritura))
+    -   **Historias**: [user-stories.md](features/cockpit/user-stories.md) (25 historias en `features/cockpit/user-stories/`, 2026-10-04, tras aprobar Rene Bonilla el requerimiento (marca del 2026-10-05), más US-CKP-025 (la TUI en un repo no observado) y US-CKP-026 (autoría del último commit en la flota) del 2026-10-07; 25 listas para Dev Spec y 1 bloqueada: US-CKP-023, la cola de confirmación, por US-GRD-015 y el factor fuera de banda de Q-GRD-19. DAG en olas con esqueletos US-CKP-001 (lectura) y US-CKP-014 (escritura))
     -   **Status**: Priorizada
 
 *   **F-001-03**: Time Machine (BR-08, BR-09, BR-10)

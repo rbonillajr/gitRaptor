@@ -3,8 +3,8 @@ mode: bulk
 generated: 2026-10-04T00:00Z
 updated: 2026-10-07
 generator: product-owner
-total_artifacts: 25
-expanded: 25
+total_artifacts: 26
+expanded: 26
 approved: 0
 blocked:
   - US-CKP-023
@@ -20,7 +20,7 @@ blocked:
 
 **Feature**: Cockpit (F-001-02) · **Epic**: E-001 — MVP Fase 1
 **Prioridad**: Alta (BR-04 a BR-07 Must; abrir en el editor, selector de repo y CLI de solo lectura, Should)
-**Estado**: 24 historias listas para Dev Spec (US-CKP-025 añadida el 2026-10-07); 1 bloqueada (US-CKP-023). Requerimiento aprobado por Rene Bonilla (marca de aprobación del 2026-10-05).
+**Estado**: 25 historias listas para Dev Spec (US-CKP-025 y US-CKP-026 añadidas el 2026-10-07); 1 bloqueada (US-CKP-023). Requerimiento aprobado por Rene Bonilla (marca de aprobación del 2026-10-05).
 
 **Contexto**: [`context.md`](./context.md) (CTX-CKP-001) · **Reglas**: [`business-rules.md`](./business-rules.md) (BR-CKP-001) · **Enablers**: [`technical-stories.md`](./technical-stories.md) (ADR-CKP-001 a 003, TS-CKP-001 a 005, INF-CKP-001, SPIKE-CKP-001)
 
@@ -67,6 +67,7 @@ blocked:
 | [US-CKP-023](./user-stories/US-CKP-023-cola-confirmacion.md) | El desarrollador aprueba o rechaza desde la TUI las acciones que un agente deja en espera | — | Should | ⛔ US-GRD-015 + factor de Q-GRD-19, TS-CKP-005 | blocked |
 | [US-CKP-024](./user-stories/US-CKP-024-integrar-casos-limite.md) | Integrar sigue siendo seguro cuando el estado cambia, choca o la base no está sacada | 3 | Must | TS-CKP-002, TS-CKP-005 | expanded |
 | [US-CKP-025](./user-stories/US-CKP-025-tui-repo-no-observado.md) | La TUI ofrece observar el repo en el que se abre y, fuera de un repo, lleva a los ya observados | 1 | Should | TS-CKP-005; US-GRP-020 y US-GRP-022 (solo el escenario de descubiertos) | expanded |
+| [US-CKP-026](./user-stories/US-CKP-026-autoria-en-la-flota.md) | El desarrollador ve en la flota de quién es el último commit de cada worktree y con qué agente | 1 | Should | US-GRD-019, TS-CKP-005 | expanded |
 
 ---
 
@@ -76,6 +77,7 @@ blocked:
 INF-CKP-001, TS-CKP-004, US-GRP-001/002/007/008 ─► CKP-001 ─┬─► CKP-002 ─► CKP-004 ─► CKP-013
                                                             ├─► CKP-003
                                                             ├─► CKP-025 (descubiertos: + US-GRP-020, 022)
+                                                            ├─► CKP-026 (+ US-GRD-019)
                                                             ├─► CKP-005 ─┐
                                                             └─► CKP-012 ─┴─► CKP-022
                                                                  └────────────────► CKP-021 (+ 014, US-TMC-006, 012, 016)
