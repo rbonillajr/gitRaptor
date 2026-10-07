@@ -18,6 +18,7 @@
 use std::collections::VecDeque;
 use std::sync::Mutex;
 
+use gitraptor_api::guard::AuthorshipFacts;
 use gitraptor_policy::authorship::subcommand::second_line_evaluates;
 
 use crate::channel::authz::{AcceptedPeer, Checks};
@@ -60,26 +61,32 @@ pub fn evaluates(git: Option<GitProcess>, checks: &Checks<'_>) -> bool {
     second_line_evaluates(argv.as_deref().filter(|_| same))
 }
 
-/// The `git` processes whose commit already had its authorship decision at `commit-msg`.
+/// The `git` processes whose commit `commit-msg` already let through, with the facts it saw: the
+/// second line skips only the same process with the same facts, so a second `commit-msg` run
+/// by hand (an editor that calls the hook with another message) proves nothing about the
+/// commit that lands.
 #[derive(Debug, Default)]
-pub struct Decided(Mutex<VecDeque<GitProcess>>);
+pub struct Decided(Mutex<VecDeque<(GitProcess, AuthorshipFacts)>>);
 
 impl Decided {
-    pub fn record(&self, git: GitProcess) {
+    pub fn record(&self, git: GitProcess, facts: &AuthorshipFacts) {
         let Ok(mut seen) = self.0.lock() else {
             return;
         };
-        if seen.contains(&git) {
+        let entry = (git, facts.clone());
+        if seen.contains(&entry) {
             return;
         }
         if seen.len() >= REMEMBERED {
             seen.pop_front();
         }
-        seen.push_back(git);
+        seen.push_back(entry);
     }
 
-    pub fn contains(&self, git: GitProcess) -> bool {
-        self.0.lock().is_ok_and(|seen| seen.contains(&git))
+    pub fn contains(&self, git: GitProcess, facts: &AuthorshipFacts) -> bool {
+        self.0
+            .lock()
+            .is_ok_and(|seen| seen.iter().any(|(g, f)| *g == git && f == facts))
     }
 }
 
@@ -215,15 +222,26 @@ mod tests {
     }
 
     #[test]
-    fn decided_is_bounded_and_keyed_by_the_start_time() {
+    fn decided_is_bounded_and_keyed_by_the_start_time_and_the_facts() {
+        use gitraptor_api::AgentKind;
+        let signed = AuthorshipFacts {
+            coauthors: vec![Some(AgentKind::ClaudeCode)],
+            trailer_table: 1,
+            unreadable: false,
+        };
+        let unsigned = AuthorshipFacts {
+            coauthors: vec![],
+            ..signed.clone()
+        };
         let d = Decided::default();
-        d.record((30, 3));
-        assert!(d.contains((30, 3)));
-        assert!(!d.contains((30, 4)));
+        d.record((30, 3), &signed);
+        assert!(d.contains((30, 3), &signed));
+        assert!(!d.contains((30, 4), &signed));
+        assert!(!d.contains((30, 3), &unsigned));
         for pid in 0..REMEMBERED as u32 {
-            d.record((1000 + pid, 1));
+            d.record((1000 + pid, 1), &signed);
         }
-        assert!(!d.contains((30, 3)));
-        assert!(d.contains((1000, 1)));
+        assert!(!d.contains((30, 3), &signed));
+        assert!(d.contains((1000, 1), &signed));
     }
 }

@@ -56,6 +56,14 @@ pub fn second_line_evaluates(argv: Option<&[impl AsRef<OsStr>]>) -> bool {
     let Some(argv) = argv else {
         return true;
     };
+    // The program must be `git` itself: an empty or odd `argv[0]` could shift what follows.
+    let program = argv.first().map(|a| std::path::Path::new(a.as_ref()));
+    if !program
+        .and_then(std::path::Path::file_name)
+        .is_some_and(|n| n == "git" || n == "git.exe")
+    {
+        return true;
+    }
     let mut args = argv.iter().skip(1).map(|a| a.as_ref().to_str());
     while let Some(arg) = args.next() {
         // A non-UTF-8 argument before the subcommand is not one Git knows: evaluate.
@@ -118,6 +126,9 @@ mod tests {
             "git",
             "git rebase-alias",
             "git pull --rebase",
+            "rebase",
+            "/usr/bin/git-rebase rebase",
+            "sh rebase main",
         ] {
             assert!(evaluates(line), "{line}");
         }

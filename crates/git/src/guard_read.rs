@@ -79,8 +79,10 @@ impl RepoReader {
 
     /// The shape of the update `old → new` (`old = None` for a new ref), read without
     /// replacement objects or the commit-graph, and the raw message of the new commit when it is
-    /// one and at most `max_message` bytes long. A commit any other ref (outside `updated`)
-    /// already reaches is not new: a fast-forward or a reset to it is [`CommitShape::Other`].
+    /// one and at most `max_message` bytes long. A commit another branch or remote-tracking
+    /// branch (outside `updated`) already reaches is not new: a fast-forward or a reset to it is
+    /// [`CommitShape::Other`]. Tags and other refs do not count: an agent writes them without
+    /// any evaluation, so a commit parked there is still new.
     pub fn commit_shape(
         &self,
         old: Option<&str>,
@@ -107,7 +109,9 @@ impl RepoReader {
             return Ok(CommitShape::Other);
         };
         let one = match old {
-            None => new_parents.is_empty(),
+            // A new ref (or one whose old value Git did not give): any commit no other branch
+            // reaches yet is new, whatever its parents (`commit-tree` + `branch x <new>`).
+            None => true,
             Some(old) if old == new => false,
             Some(old) => {
                 new_parents.first() == Some(&old) || parents(old)?.is_some_and(|p| p == new_parents)
@@ -145,7 +149,8 @@ impl RepoReader {
         for reference in platform.all().map_err(|e| unavailable(&e))? {
             let mut reference = reference.map_err(|e| unavailable(&e))?;
             let name = reference.name().as_bstr().to_string();
-            if updated.contains(&name.as_str()) {
+            let trusted = name.starts_with("refs/heads/") || name.starts_with("refs/remotes/");
+            if !trusted || updated.contains(&name.as_str()) {
                 continue;
             }
             let Ok(id) = reference.peel_to_id() else {
