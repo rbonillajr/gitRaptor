@@ -3,9 +3,9 @@ id: DSYS-GRP-001
 title: GitRaptor Design System
 type: design-system
 status: draft
-version: 0.7
+version: 0.8
 date: 2026-10-01
-updated: 2026-10-06
+updated: 2026-10-07
 owner: Rene Bonilla
 related: [BRD-GRP-001, ADR-GRP-002, ADR-GRP-003, ADR-GRP-004, ADR-CKP-003]
 tags: [design-system, design-tokens, tui, cli, ratatui, accessibility, theming, mvp]
@@ -17,6 +17,7 @@ changelog:
   - 0.5 (2026-10-05): Enmienda de TS-CKP-005: componentes implementados, glifos estructurales fuera de los tokens, foco por forma y galería.
   - 0.6 (2026-10-05): Paleta A («Grafito y teal») decidida por Rene Bonilla; variante para terminal clara de cada token, detección del fondo (OSC 11, `COLORFGBG`) y `--theme light|dark|high-contrast`. Cierra § 8.1 y § 8.2.
   - 0.7 (2026-10-06): Enmienda de US-CKP-001: fila sin agente, columnas de AgentList que crecen hasta su texto, "–" para un recuento que el motor no publica, y profundidad de color y símbolos detectados del entorno.
+  - 0.8 (2026-10-07): **Decisión de Rene (2026-10-07)**: acepta los ajustes de contraste de la paleta A (`#949494` y `#3a3a3a`).
 ---
 
 # GitRaptor Design System
@@ -256,7 +257,7 @@ Anchura real de los símbolos y la galería en Linux y Windows: **Pendiente: eta
 | `text.inverse` | `#000000` | `#ffffff` |
 | `agent.1` … `agent.8` | Okabe-Ito: `#e69f00`, `#56b4e9`, `#009e73`, `#f0e442`, `#4fa3e0`, `#d55e00`, `#cc79a7`, `#ffffff` | Okabe-Ito oscurecido: `#a35f00`, `#1f6fa8`, `#00704f`, `#7a7200`, `#0b4f8a`, `#b83a00`, `#a8457f`, `#000000` |
 
-- **Ajustes a la decisión de Rene** (decisión del orquestador, validada por Arquitecto): el tenue oscuro pasa de `#8a8a8a` a **`#949494`** (índice xterm 246), porque `#8a8a8a` daba 4.35:1 sobre Solarized oscuro y el gate pide 4.5; la diferencia visual es mínima. `bg.highlight` oscuro es `#3a3a3a` y no `#262626`, que no se distinguía del fondo (1.10:1 sobre `#1e1e1e`).
+- **Ajustes a la decisión de Rene** (decisión del orquestador, validada por Arquitecto): el tenue oscuro pasa de `#8a8a8a` a **`#949494`** (índice xterm 246), porque `#8a8a8a` daba 4.35:1 sobre Solarized oscuro y el gate pide 4.5; la diferencia visual es mínima. `bg.highlight` oscuro es `#3a3a3a` y no `#262626`, que no se distinguía del fondo (1.10:1 sobre `#1e1e1e`). **Decisión de Rene (2026-10-07)**: acepta los dos ajustes: `#949494` para el texto tenue (`text.muted`) y `#3a3a3a` para `bg.highlight`.
 - **256 colores**: el índice se deriva del hex, salvo overrides donde el derivado no pasaba 4.5:1 sobre blanco o juntaba colores distintos en un índice: acento claro → 29, `agent.7` claro → 96, `agent.1` claro → 94, `agent.4` claro → 58, `git.conflict` claro → 124.
 - **Detección del fondo** (la hace la TUI al arrancar, antes de su lector de eventos): `--theme light|dark|high-contrast|auto` > variable `GITRAPTOR_THEME` (mismos valores) > respuesta OSC 11 de la terminal > `COLORFGBG` > oscura. La consulta OSC 11 va seguida de una petición DA1, así que una terminal que no soporta OSC 11 responde al instante; si no responde nada, se espera como mucho 200 ms. No se consulta con `NO_COLOR`, `--no-color` o `TERM=dumb`. Un valor de `GITRAPTOR_THEME` que no es un tema se ignora y se avisa sin repetirlo (SEC-12). La lógica vive en `crates/theme` (sin dependencias) y la E/S de la terminal en `apps/cli` (módulo `term`).
 - **Contraste** (gate en CI, WCAG AA 4.5:1, truecolor y 256): `text.default` y `text.muted` de cada variante sobre sus fondos típicos (oscura: `#1e1e1e` y Solarized oscuro; clara: blanco), y `text.default` sobre la selección y la barra; en la clara, además, cada color de primer plano sobre blanco y `text.inverse` sobre acento, foco y estados. En 256 colores, los `status.*` y `git.*` con valores distintos no comparten índice. `text.default` se hereda de la terminal, así que el gate mide su valor de referencia. Informe sin gate: `cargo test -p gitraptor-theme contrast_report -- --nocapture`. Sigue por debajo de AA, solo en el informe: el tenue sobre la selección (4.4 en las dos variantes), `status.danger` y `agent.3` sobre Solarized oscuro (4.5 y 4.4), `agent.6` oscuro (4.3), y varios colores claros sobre Solarized claro.
