@@ -13,6 +13,7 @@ publish = false
 gitraptor-api = { path = "crates/api" }
 gitraptor-core = { path = "crates/core" }
 gitraptor-git = { path = "crates/git" }
+gitraptor-macsys = { path = "crates/macsys" }
 gitraptor-policy = { path = "crates/policy" }
 gitraptor-testkit = { path = "crates/testkit" }
 gitraptor-theme = { path = "crates/theme" }
@@ -34,6 +35,8 @@ serde_json = "1"
 tempfile = "3"
 # Win32 calls of crates/winsys only (ADR-GRP-002); the version gix already brings in.
 windows-sys = "0.61"
+# sysctl of crates/macsys only (ADR-GRP-002, Enmienda 2026-10-07); the version the lock already has.
+libc = "0.2.190"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

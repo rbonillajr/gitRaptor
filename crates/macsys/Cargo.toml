@@ -1,0 +1,22 @@
+[package]
+name = "gitraptor-macsys"
+description = "macOS system calls behind a safe API: `unsafe` confined to private FFI modules, like gitraptor-winsys (ADR-GRP-002)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[target."cfg(target_os = \"macos\")".dependencies]
+libc.workspace = true
+
+# Own lints instead of the workspace ones: `forbid(unsafe_code)` admits no local `allow`, so
+# this crate denies it and only its private FFI modules allow it.
+[lints.rust]
+unsafe_code = "deny"
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+undocumented_unsafe_blocks = "deny"
+multiple_unsafe_ops_per_block = "deny"
