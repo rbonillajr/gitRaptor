@@ -702,7 +702,7 @@ fn activity_is_captured_with_no_surface_open() {
     let out = m.raptor(&["events"]);
     assert_eq!(
         // With its declared authorship (US-GRD-019): "commit by Test · wt-feat-login (feat-login)".
-        text(&out).matches("(feat-login)  (unattributed)").count(),
+        text(&out).matches("(feat-login)  (no agent)").count(),
         2,
         "{}",
         text(&out)

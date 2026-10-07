@@ -479,11 +479,16 @@ fn agent_commit_shows_both() {
         en.contains(&format!("commit by Ana Pérez with Claude Code · {name}")),
         "{en}"
     );
+    // The agent's actor reads as before: "no agent" is only for events without one.
+    assert!(en.contains("(Claude Code, detected)"), "{en}");
+    assert!(!en.contains("no agent"), "{en}");
     let es = m.events_text("es_ES.UTF-8");
     assert!(
         es.contains(&format!("commit de Ana Pérez con Claude Code · {name}")),
         "{es}"
     );
+    assert!(es.contains("(Claude Code, detectado)"), "{es}");
+    assert!(!es.contains("sin agente"), "{es}");
     assert!(!es.contains("ejecutado por"), "{es}");
     let json = m.events_json();
     let row = json
@@ -512,9 +517,10 @@ fn agent_commit_shows_both() {
     assert!(stored.iter().all(|s| !s.contains(SECRET)), "{stored:?}");
 }
 
-/// Without an agent: "commit by Ana Pérez · main" and the actor "unattributed".
+/// Without an agent: "commit by Ana Pérez · main" and the actor "no agent" / "sin agente",
+/// never "unattributed" (it read as a failure); `--json` keeps the wire value.
 #[test]
-fn an_unattributed_commit_does_not_repeat_the_author() {
+fn a_commit_without_an_agent_says_so_and_does_not_repeat_the_author() {
     let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let (m, wt) = observed();
     std::fs::write(wt.join("login.txt"), "user\ndeveloper\n").unwrap();
@@ -533,13 +539,29 @@ fn an_unattributed_commit_does_not_repeat_the_author() {
         line.contains(&format!("commit by Ana Pérez · {name}")),
         "{en}"
     );
-    assert!(line.contains("(unattributed)"), "{en}");
+    assert!(line.contains("(no agent)"), "{en}");
+    assert!(!line.contains("unattributed"), "{en}");
     assert!(!line.contains(" with "), "{en}");
     let es = m.events_text("es_ES.UTF-8");
+    let line = es
+        .lines()
+        .find(|l| l.contains("commit de"))
+        .unwrap_or_default();
     assert!(
-        es.contains(&format!("commit de Ana Pérez · {name}")),
+        line.contains(&format!("commit de Ana Pérez · {name}")),
         "{es}"
     );
+    assert!(line.contains("(sin agente)"), "{es}");
+    assert!(!line.contains("sin atribuir"), "{es}");
+    let json = m.events_json();
+    let row = json
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["kind"] == "commit" && r["worktree"] == wt.to_str().unwrap())
+        .unwrap()
+        .clone();
+    assert_eq!(row["actor"], "unattributed", "{row}");
     m.stop();
 }
 
@@ -553,14 +575,14 @@ fn the_inferred_hint_is_checked_against_the_trailer() {
         (
             vec![SECRET, TRAILER],
             TrailerCheck::Confirmed,
-            "inferred: Claude Code (confirmed by the trailer)",
-            "inferido: Claude Code (confirmado por el trailer)",
+            "(no agent; inferred: Claude Code (confirmed by the trailer))",
+            "(sin agente; inferido: Claude Code (confirmado por el trailer))",
         ),
         (
             vec![SECRET],
             TrailerCheck::Unconfirmed,
-            "inferred: Claude Code (not confirmed by the trailer)",
-            "inferido: Claude Code (no confirmado por el trailer)",
+            "(no agent; inferred: Claude Code (not confirmed by the trailer))",
+            "(sin agente; inferido: Claude Code (no confirmado por el trailer))",
         ),
     ] {
         let (m, wt) = observed();

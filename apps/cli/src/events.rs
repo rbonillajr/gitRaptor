@@ -127,17 +127,18 @@ fn actor_of(e: &GitEventView) -> String {
                 }
                 None => agent,
             };
-            t("actor.inferred", &[("agent", &agent)])
+            t("events.no_agent_inferred", &[("agent", &agent)])
         }
         (actor_, _) => actor(actor_),
     }
 }
 
 /// The actor with its origin (US-GRP-007): "Claude Code, detected", or
-/// "unattributed".
+/// "no agent" (the wire value stays `unattributed`; the text says what the
+/// Cockpit says, so a person's own commit does not read as a failure).
 fn actor(actor: &Actor) -> String {
     match actor {
-        Actor::Unattributed => t("actor.unattributed", &[]),
+        Actor::Unattributed => t("events.no_agent", &[]),
         Actor::Agent { origin, .. } => t(
             "actor.with-origin",
             &[
@@ -271,7 +272,8 @@ mod tests {
         let out = text(&[event(GitEventKind::Commit, false)]);
         assert!(!out.contains('\u{1b}'), "{out}");
         assert!(out.contains("commit on feat-login"), "{out}");
-        assert!(out.contains("unattributed"), "{out}");
+        assert!(out.contains("(no agent)"), "{out}");
+        assert!(!out.contains("unattributed"), "{out}");
         let out = text(&[event(GitEventKind::BranchDelete, true)]);
         assert!(out.contains("(inferred)"), "{out}");
     }
@@ -304,8 +306,9 @@ mod tests {
         assert_eq!(value[0]["worktree_inferred"], false);
     }
 
-    /// Amendment of ADR-GRP-012: an unattributed event with a hint shows
-    /// the inferred agent, and still says "unattributed".
+    /// Amendment of ADR-GRP-012: an event without an agent but with a hint
+    /// shows the inferred agent, and still says "no agent"; `--json` keeps
+    /// the wire value `unattributed`.
     #[test]
     fn an_inferred_event_says_so() {
         let mut e = event(GitEventKind::Commit, false);
@@ -315,10 +318,7 @@ mod tests {
             session_id: "20:2000".into(),
         });
         let out = text(std::slice::from_ref(&e));
-        assert!(
-            out.contains("(unattributed; inferred: Claude Code)"),
-            "{out}"
-        );
+        assert!(out.contains("(no agent; inferred: Claude Code)"), "{out}");
         let value = json(&[e]);
         assert_eq!(value[0]["actor"], "unattributed");
         assert_eq!(value[0]["inferred"]["kind"], "claude-code");
@@ -332,10 +332,7 @@ mod tests {
     fn an_older_event_reads_as_before() {
         let e = event(GitEventKind::Commit, false);
         let out = text(std::slice::from_ref(&e));
-        assert!(
-            out.contains("commit on feat-login  (unattributed)"),
-            "{out}"
-        );
+        assert!(out.contains("commit on feat-login  (no agent)"), "{out}");
         let value = json(&[e]);
         assert!(value[0].get("authorship").is_none(), "{value}");
     }
