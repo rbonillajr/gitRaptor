@@ -78,6 +78,50 @@ pub(super) fn write_folder(common: &Path, files: &[NewFile<'_>]) -> Result<FileI
     Ok(FileId { dev: 0, ino: 0 })
 }
 
+pub(super) fn replace_files(common: &Path, _expected: FileId, files: &[NewFile<'_>]) -> Result<()> {
+    not_link(common)?;
+    let root = common.join(super::FOLDER);
+    match not_link(&root)? {
+        Some(m) if m.is_dir() => {}
+        _ => return Err(GuardWriteError::Changed("the guardrails folder")),
+    }
+    for f in files {
+        let path = root.join(f.path);
+        if let Some(parent) = path.parent()
+            && parent != root
+        {
+            match std::fs::create_dir(parent) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                    not_link(parent)?;
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
+        let temp = path.with_file_name(format!(
+            "{}.{}",
+            path.file_name().and_then(|n| n.to_str()).unwrap_or("file"),
+            temporary_name()
+        ));
+        let written = (|| -> Result<()> {
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&temp)?;
+            file.write_all(f.bytes)?;
+            file.sync_all()?;
+            not_link(&path)?;
+            std::fs::rename(&temp, &path)?;
+            Ok(())
+        })();
+        if written.is_err() {
+            let _ = std::fs::remove_file(&temp);
+        }
+        written?;
+    }
+    Ok(())
+}
+
 pub(super) fn remove_folder(
     common: &Path,
     name: &str,
