@@ -212,7 +212,32 @@ mod commit_authorship {
             actor: Some(AgentKind::ClaudeCode),
             cwd: Some(cwd.to_path_buf()),
             authorship: true,
+            ..Caller::default()
         }
+    }
+
+    /// DS-US-GRD-018 § 11 (S5, S6): the second line evaluates like `commit-msg`, unless the
+    /// channel found the same `git` already decided or certainly a rebase (`second_line_skip`).
+    #[test]
+    fn the_second_line_evaluates_unless_skipped() {
+        let (repo, common, _) =
+            repo_with(r#"{"policies":{"commitAuthorship":{"mode":"human-author"}}}"#);
+        let mut params = commit_params(&common, vec![Some(AgentKind::ClaudeCode)]);
+        params.hook = Hook::ReferenceTransaction;
+        params.operation = Operation::Commit {
+            stage: CommitStage::SecondLine,
+        };
+        let d = serve_as(&registry(&common, None), &params, &agent(repo.path()));
+        assert_eq!(d.applied_effect, Effect::Deny, "{d:?}");
+        assert_eq!(d.reasons[0].rule, Rule::AuthorshipHumanAuthor);
+
+        let skipped = Caller {
+            second_line_skip: true,
+            ..agent(repo.path())
+        };
+        let d = serve_as(&registry(&common, None), &params, &skipped);
+        assert_eq!(d.applied_effect, Effect::Allow, "{d:?}");
+        assert!(d.reasons.is_empty() && d.notices.is_empty(), "{d:?}");
     }
 
     #[test]
