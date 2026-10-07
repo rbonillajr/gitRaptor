@@ -12,6 +12,13 @@ events.none = todavía no hay eventos de Git
 events.line = {time}  {worktree}  {event}  ({actor})
 events.inferred = {worktree} (deducido)
 events.restart-engine = el motor en marcha es anterior a este raptor y no puede mostrar eventos: reinícialo con `raptor daemon stop`
+events.commit_by = commit de {author}
+events.merge_by = merge de {author}
+events.commit_with = con {agents}
+events.run_by = ejecutado por {agent}
+events.no_trailer = sin trailer
+events.inferred_confirmed = confirmado por el trailer
+events.inferred_unconfirmed = no confirmado por el trailer
 
 event.commit = commit en {branch}
 event.merge = merge en {branch}

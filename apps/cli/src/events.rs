@@ -7,7 +7,7 @@
 
 use std::fmt::Write as _;
 
-use gitraptor_api::messages::{GitEventKind, GitEventView};
+use gitraptor_api::messages::{GitEventKind, GitEventView, TrailerCheck};
 use gitraptor_api::{Actor, UntrustedName};
 use serde_json::{Value, json};
 
@@ -45,6 +45,9 @@ pub fn text(events: &[GitEventView]) -> String {
 }
 
 fn describe(e: &GitEventView) -> String {
+    if let Some(authored) = authored(e) {
+        return authored;
+    }
     let show =
         |u: &Option<UntrustedName>| u.as_ref().map(UntrustedName::sanitized).unwrap_or_default();
     let branch = show(&e.details.branch);
@@ -59,14 +62,69 @@ fn describe(e: &GitEventView) -> String {
     }
 }
 
+/// Who a commit went in under and who ran it, when they differ (US-GRD-019,
+/// amendment § 3 of ADR-GRP-012): "commit by Ana with Claude Code · feat-x",
+/// plus "run by …" when the actor is an agent the trailers do not name, and
+/// "no trailer" when no agent's trailer is there.
+fn authored(e: &GitEventView) -> Option<String> {
+    let a = e.authorship.as_ref()?;
+    let key = match e.kind {
+        GitEventKind::Commit => "events.commit_by",
+        GitEventKind::Merge => "events.merge_by",
+        _ => return None,
+    };
+    let mut agents: Vec<_> = Vec::new();
+    for kind in a.coauthors.iter().filter_map(|c| c.agent) {
+        if !agents.contains(&kind) {
+            agents.push(kind);
+        }
+    }
+    let mut out = t(key, &[("author", &a.author.name.sanitized())]);
+    if !agents.is_empty() {
+        let names: Vec<String> = agents
+            .iter()
+            .map(|k| t(&format!("actor.{}", wire(k)), &[]))
+            .collect();
+        out.push(' ');
+        out.push_str(&t("events.commit_with", &[("agents", &names.join(", "))]));
+    }
+    let worktree = e.worktree.sanitized();
+    let name = std::path::Path::new(&worktree)
+        .file_name()
+        .map_or(worktree.clone(), |n| n.to_string_lossy().into_owned());
+    out.push_str(" · ");
+    out.push_str(&name);
+    if let Actor::Agent { kind, .. } = &e.actor
+        && !agents.contains(kind)
+    {
+        out.push_str(" · ");
+        out.push_str(&t("events.run_by", &[("agent", &actor_name(&e.actor))]));
+        if agents.is_empty() {
+            out.push_str(" · ");
+            out.push_str(&t("events.no_trailer", &[]));
+        }
+    }
+    Some(out)
+}
+
 /// The event's actor, or for an unattributed one with a hint, the agent it
-/// is inferred to come from (amendment of ADR-GRP-012).
+/// is inferred to come from (amendment of ADR-GRP-012), checked against the
+/// commit's trailers when the engine did (US-GRD-019).
 fn actor_of(e: &GitEventView) -> String {
     match (&e.actor, &e.inferred) {
-        (Actor::Unattributed, Some(hint)) => t(
-            "actor.inferred",
-            &[("agent", &t(&format!("actor.{}", wire(&hint.kind)), &[]))],
-        ),
+        (Actor::Unattributed, Some(hint)) => {
+            let agent = t(&format!("actor.{}", wire(&hint.kind)), &[]);
+            let agent = match hint.trailer {
+                Some(TrailerCheck::Confirmed) => {
+                    format!("{agent} ({})", t("events.inferred_confirmed", &[]))
+                }
+                Some(TrailerCheck::Unconfirmed) => {
+                    format!("{agent} ({})", t("events.inferred_unconfirmed", &[]))
+                }
+                None => agent,
+            };
+            t("actor.inferred", &[("agent", &agent)])
+        }
         (actor_, _) => actor(actor_),
     }
 }
@@ -104,7 +162,7 @@ pub fn json(events: &[GitEventView]) -> Value {
         events
             .iter()
             .map(|e| {
-                json!({
+                let mut entry = json!({
                     "repo_id": e.repo_id,
                     "seq": e.seq,
                     "worktree": e.worktree.raw(),
@@ -122,7 +180,25 @@ pub fn json(events: &[GitEventView]) -> Value {
                     "new_commit": e.details.new_commit,
                     "gap_id": e.gap_id,
                     "inferred": e.inferred,
-                })
+                });
+                // Who it went in under, apart from who ran it (US-GRD-019);
+                // absent for events stored before it was recorded.
+                if let Some(a) = &e.authorship {
+                    let who = |name: &gitraptor_api::Untrusted,
+                               email: &gitraptor_api::Untrusted| {
+                        json!({"name": name.raw(), "email": email.raw()})
+                    };
+                    entry["authorship"] = json!({
+                        "author": who(&a.author.name, &a.author.email),
+                        "committer": who(&a.committer.name, &a.committer.email),
+                        "coauthors": a.coauthors.iter().map(|c| {
+                            let mut co = who(&c.name, &c.email);
+                            co["agent"] = c.agent.map_or(Value::Null, |k| json!(wire(&k)));
+                            co
+                        }).collect::<Vec<_>>(),
+                    });
+                }
+                entry
             })
             .collect(),
     )
@@ -171,6 +247,7 @@ mod tests {
             },
             gap_id: None,
             inferred: None,
+            authorship: None,
         }
     }
 
@@ -229,6 +306,7 @@ mod tests {
     fn an_inferred_event_says_so() {
         let mut e = event(GitEventKind::Commit, false);
         e.inferred = Some(gitraptor_api::messages::InferredAgent {
+            trailer: None,
             kind: gitraptor_api::AgentKind::ClaudeCode,
             session_id: "20:2000".into(),
         });
@@ -241,5 +319,52 @@ mod tests {
         assert_eq!(value[0]["actor"], "unattributed");
         assert_eq!(value[0]["inferred"]["kind"], "claude-code");
         assert_eq!(value[0]["inferred"]["session_id"], "20:2000");
+    }
+
+    /// US-GRD-019 (ajuste 3): an event stored before the declared
+    /// authorship existed reads exactly as before, and `--json` has no
+    /// `authorship` for it.
+    #[test]
+    fn an_older_event_reads_as_before() {
+        let e = event(GitEventKind::Commit, false);
+        let out = text(std::slice::from_ref(&e));
+        assert!(
+            out.contains("commit on feat-login  (unattributed)"),
+            "{out}"
+        );
+        let value = json(&[e]);
+        assert!(value[0].get("authorship").is_none(), "{value}");
+    }
+
+    /// US-GRD-019: the declared authorship is flat plain strings in
+    /// `--json`, and the text names author, agents and worktree, sanitized.
+    #[test]
+    fn an_authored_commit_shows_the_person_and_the_agent() {
+        use gitraptor_api::messages::{CoAuthor, DeclaredAuthorship, GitIdentity};
+        use gitraptor_api::{AgentKind, Untrusted};
+        let mut e = event(GitEventKind::Commit, false);
+        let ana = || GitIdentity {
+            name: Untrusted::new("Ana\u{1b}[31m Pérez"),
+            email: Untrusted::new("ana@example.com"),
+        };
+        e.authorship = Some(DeclaredAuthorship {
+            author: ana(),
+            committer: ana(),
+            coauthors: vec![CoAuthor {
+                name: Untrusted::new("Claude"),
+                email: Untrusted::new("noreply@anthropic.com"),
+                agent: Some(AgentKind::ClaudeCode),
+            }],
+        });
+        let out = text(std::slice::from_ref(&e));
+        assert!(!out.contains('\u{1b}'), "{out:?}");
+        assert!(out.contains("with Claude Code · feat-login"), "{out}");
+        let value = json(&[e]);
+        assert_eq!(value[0]["authorship"]["author"]["email"], "ana@example.com");
+        assert_eq!(
+            value[0]["authorship"]["coauthors"][0]["agent"],
+            "claude-code"
+        );
+        assert_eq!(value[0]["actor"], "unattributed");
     }
 }
