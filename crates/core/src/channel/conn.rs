@@ -523,6 +523,13 @@ impl Connection<'_> {
         self.capabilities.contains(capability)
     }
 
+    /// Declared authorship in Git events (US-GRD-019): only with the
+    /// capability, and never for `raptor-mcp`, whose view carries no names
+    /// or emails (amendment of ADR-GRP-013), even if it asked for it.
+    fn authorship_events(&self) -> bool {
+        self.profile == ConnectionProfile::Full && self.has(methods::CAP_EVENTS_AUTHORSHIP.name)
+    }
+
     /// What the connection's capabilities change in what it is sent.
     fn apply_capabilities(&self) {
         // A connection without it cannot read Git events of kind `reset`
@@ -533,6 +540,10 @@ impl Connection<'_> {
         // `scope.activity` (DEP-CKP-4).
         self.outbox
             .set_without_activity(!self.has(methods::CAP_SCOPE_ACTIVITY.name));
+        // Nor the declared authorship of commits without `events.authorship`
+        // (US-GRD-019): `raptor-mcp` never asks for it.
+        self.outbox
+            .set_without_authorship(!self.authorship_events());
     }
 
     /// `connection.accept` (protocol 9): the client's capabilities, once and
@@ -1322,10 +1333,18 @@ impl Connection<'_> {
             return Err(ErrorObject::new(code::INVALID_PARAMS, "invalid worktree"));
         }
         let before_reset = !self.has(methods::CAP_GIT_RESET.name);
+        let without_authorship = !self.authorship_events();
         self.ctx
             .control
             .event_history(params)
             .map(|mut events| {
+                // Names and emails only with `events.authorship` (US-GRD-019).
+                if without_authorship {
+                    events = events
+                        .into_iter()
+                        .map(gitraptor_api::messages::GitEventView::without_authorship)
+                        .collect();
+                }
                 // A client without the capability (older than protocol 8)
                 // cannot read `reset` (US-TMC-004).
                 if before_reset {

@@ -325,6 +325,8 @@ impl Daemon {
         }
         // S3 (US-GRP-007): the session each event points to, if any.
         let attributed = self.attribute(&batch);
+        // US-GRD-019: who the commit went in under, and the hint checked against it.
+        let (declared, attributed) = self.declared_authorship(&batch, attributed);
         let Some((_, store)) = self.stores.iter_mut().find(|(id, _)| *id == batch.repo_id) else {
             return;
         };
@@ -406,8 +408,11 @@ impl Daemon {
                 ops.extend(sessions::start_ops(store, &a.session));
             }
         }
-        for (event, session) in batch.events.iter().zip(&attributed) {
+        for ((event, session), declared) in batch.events.iter().zip(&attributed).zip(&declared) {
             ops.push(WriteOp::AppendEvent(NewEvent {
+                authorship: declared
+                    .as_ref()
+                    .and_then(|d| serde_json::to_string(d).ok()),
                 worktree: event.worktree.clone(),
                 kind: event.kind.as_str().to_owned(),
                 metadata: serde_json::to_string(&event.details).unwrap_or_default(),
@@ -488,7 +493,9 @@ impl Daemon {
             self.publish_observed_views(&batch, timings);
         }
         // Only persisted events are published: they have their sequence.
-        for ((event, seq), session) in batch.events.iter().zip(seqs).zip(&attributed) {
+        for (((event, seq), session), declared) in
+            batch.events.iter().zip(seqs).zip(&attributed).zip(declared)
+        {
             let actor = session
                 .as_ref()
                 .and_then(|a| {
@@ -513,8 +520,10 @@ impl Daemon {
                     gitraptor_api::messages::InferredAgent {
                         kind: gitraptor_api::AgentKind::ClaudeCode,
                         session_id: a.session.session_id.clone(),
+                        trailer: a.trailer,
                     }
                 }),
+                authorship: declared,
             };
             self.bus.publish(GIT_EVENT, view, Some(timings), |_| {});
             // After publishing, outside the engine's budget (ADR-TMC-004 § 2).

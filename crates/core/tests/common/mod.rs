@@ -123,6 +123,7 @@ pub fn event(worktree: &Path, session: Option<&str>, metadata: &str) -> WriteOp 
         session_id: session.map(str::to_owned),
         evidence: Some("S3".into()),
         gap_id: None,
+        authorship: None,
     })
 }
 

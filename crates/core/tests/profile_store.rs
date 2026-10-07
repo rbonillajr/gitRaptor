@@ -443,6 +443,7 @@ fn a_v1_store_with_linked_events_migrates_to_the_observer_gap_causes() {
         session_id: None,
         evidence: None,
         gap_id: Some("missing".into()),
+        authorship: None,
     })]);
     assert!(err.is_err());
 }

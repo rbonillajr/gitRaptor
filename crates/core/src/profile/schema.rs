@@ -150,4 +150,9 @@ INSERT INTO gaps_v2 SELECT gap_id, started_ms, ended_ms, cause, requested_by FRO
 DROP TABLE gaps;
 ALTER TABLE gaps_v2 RENAME TO gaps;
 ",
+    r"
+-- US-GRD-019: declared authorship of the commit an event created (amendment of
+-- ADR-GRP-013): author, committer and co-authors as JSON, never the message.
+ALTER TABLE events ADD COLUMN authorship TEXT;
+",
 ];
