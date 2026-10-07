@@ -19,6 +19,11 @@ pub const NOTIFY_RESYNC: &str = "events.resync";
 /// without it never receives them.
 pub const CAP_GIT_RESET: Capability = Capability::legacy("events.git-reset", 8);
 
+/// Declared authorship of commit events and the trailer check of the
+/// `inferred` hint (US-GRD-019, DS-US-GRD-018 D10). `raptor-mcp` does not
+/// ask for it: its view never carries names or emails.
+pub const CAP_EVENTS_AUTHORSHIP: Capability = Capability::new("events.authorship");
+
 pub(super) const GROUP: Group = Group {
     methods: &[
         method(EVENTS_SUBSCRIBE, false, true),
@@ -28,6 +33,6 @@ pub(super) const GROUP: Group = Group {
         method(EVENTS_HISTORY, false, false),
     ],
     notifications: &[NOTIFY_EVENT, NOTIFY_RESYNC],
-    capabilities: &[CAP_GIT_RESET],
+    capabilities: &[CAP_GIT_RESET, CAP_EVENTS_AUTHORSHIP],
     ..Group::new("events")
 };
