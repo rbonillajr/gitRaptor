@@ -59,6 +59,16 @@ pub struct Branch {
     pub commit: String,
 }
 
+/// Who a commit names and its raw message, bounded (see
+/// [`RepoReader::commit_identity`]). `(name, email)` pairs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommitIdentity {
+    pub author: (String, String),
+    pub committer: (String, String),
+    /// `None` when the message exceeded the bound.
+    pub message: Option<Vec<u8>>,
+}
+
 /// The most recent entry of a reflog.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReflogEntry {
@@ -402,6 +412,41 @@ impl RepoReader {
     /// Commit a ref points to.
     pub fn resolve_ref(&self, name: &RefName) -> Result<Option<String>, ReadError> {
         Ok(self.commit_of(name)?.map(|id| id.to_string()))
+    }
+
+    /// Author, committer and message of a commit (US-GRD-019): the facts the
+    /// engine derives its declared authorship from. Reads the object only,
+    /// with the programs of the repository neutralized; a message larger than
+    /// `max_message` comes back as `None` and is never copied.
+    pub fn commit_identity(
+        &self,
+        id: &str,
+        max_message: usize,
+    ) -> Result<CommitIdentity, ReadError> {
+        let oid = gix::ObjectId::from_hex(id.as_bytes())
+            .map_err(|e| ReadError::Unavailable(format!("commit id: {e}")))?;
+        let commit = self
+            .repo
+            .find_commit(oid)
+            .map_err(|e| ReadError::Unavailable(format!("commit: {e}")))?;
+        let commit = commit
+            .decode()
+            .map_err(|e| ReadError::Unavailable(format!("commit: {e}")))?;
+        let who = |s: gix::actor::SignatureRef<'_>| {
+            (
+                s.name.to_str_lossy().into_owned(),
+                s.email.to_str_lossy().into_owned(),
+            )
+        };
+        let bad = |e| ReadError::Unavailable(format!("commit signature: {e}"));
+        let author = who(commit.author().map_err(bad)?);
+        let committer = who(commit.committer().map_err(bad)?);
+        let message = (commit.message.len() <= max_message).then(|| commit.message.to_vec());
+        Ok(CommitIdentity {
+            author,
+            committer,
+            message,
+        })
     }
 
     fn commit_of(&self, name: &RefName) -> Result<Option<gix::ObjectId>, ReadError> {
