@@ -7,7 +7,7 @@ feature: cockpit
 domain: GRP
 story: INF-CKP-001
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-07
 related:
   adrs: [ADR-CKP-003, ADR-GRP-011, ADR-GRP-005, ADR-GRP-004, ADR-GRP-002]
   nfrs: [NFR-04, NFR-10, SEC-01, SEC-08, SEC-12]
@@ -101,11 +101,23 @@ Los widgets son puros, viven en `apps/cli/src/tui/widgets/<nombre>.rs` y cada un
 
 ## 9. Pendiente: Entrega 2 de INF-CKP-001
 
+La Entrega 2 se parte en dos. La **2a** (UX) está hecha: ver la enmienda de abajo. Queda para la **2b**:
+
 - Gate con el daemon real en el banco de INF-GRP-002 (E2 de ADR-GRP-011): la `App` sobre `TestBackend` como suscriptor del banco.
 - Extraer el cliente del canal de `crates/core` a `crates/api` y retirar la excepción `link` (§ 5, V5).
 - Pruebas L-06 desde la TUI (socket 0755, de otro uid o servidor falso: "Canal rechazado" sin handshake) y la suite "TUI sin perfil" de INF-GRP-001.
-- Catálogo i18n completo: todo código del contrato (N7) y `--lang`.
-- Editor y suspensión `Ctrl-Z` (pausa del hilo de entrada).
-- Tecla de reintento con estado "Arrancando el motor…" separado de "Conectando".
-- Recorte por anchura de visualización con elipsis, en los widgets de TS-CKP-005.
-- Linux y Windows: **Pendiente: etapa de validación multiplataforma**. En Windows el canal no existe todavía (`Unsupported`) y las pruebas de pty son solo de macOS.
+- Linux y Windows: **Pendiente: etapa de validación multiplataforma**. En Windows el canal no existe todavía (`Unsupported`), `Ctrl-Z` solo avisa y las pruebas de pty son solo de macOS.
+
+## 10. Enmienda (2026-10-07): Entrega 2a, UX
+
+Implementada en la rama `feat/INF-CKP-001-delivery-2-ux`. Sigue ADR-CKP-003 § 4, § 9 y § 10 sin decisiones de arquitectura nuevas.
+
+| Punto | Qué se hizo | Prueba |
+|---|---|---|
+| `--lang` | Opción global `--lang en\|es` (también tras el subcomando) y variable `GITRAPTOR_LANG`. Orden: `--lang`, `GITRAPTOR_LANG`, `LC_ALL`, `LC_MESSAGES`, `LANG` y `en`. `Lang::choose` la fija una vez en `main`, y la usan el catálogo tipado de la TUI y el de la CLI (`i18n.rs`), así que es global de verdad. Un `GITRAPTOR_LANG` desconocido se ignora y decide el locale; un `--lang` desconocido lo rechaza `clap` | `present::i18n::tests::lang_precedence`; `tests/tui_process.rs::lang_flag_beats_the_locale` |
+| Catálogo N7 (V8) | `Text::EngineError(ErrorCode)` con `match` exhaustivo de los 21 códigos congelados; `Text::ModuleError(name)` para los códigos de módulo (`error.<name>`, tabla `MODULE_ERRORS`, hoy vacía porque ningún módulo declaró uno); `Text::UnknownError(code)`; y los motivos tipados `ScopeRefusal`, `InvalidReason` y `ResyncReason`. `Text::error(code)` elige la variante | `present::i18n::tests::every_contract_code_has_both_languages`: texto en y es distinto para todos, y ningún código de módulo cae en el genérico |
+| `Ctrl-Z` | Acción `Suspend` en el keymap (sin pista: es la convención de la terminal). `update` devuelve `Cmd::Suspend` en Unix y `Notice::SuspendUnsupported` en el resto. El bucle la ejecuta tras la entrada de su iteración: pausa el hilo de entrada **y espera su confirmación** (`input::Pause`, acotada a 500 ms; un hilo que ya terminó cuenta como pausado y, si uno vivo no confirma, no se entrega la terminal), restaura la terminal y muestra el cursor, envía `SIGTSTP` a su grupo de procesos como lo haría la terminal (`rustix`, feature `process`; `Cargo.lock` sin cambios), y al volver reentra en modo raw y en la pantalla alternativa, reanuda la entrada y fuerza un redibujado completo con `Terminal::resize` (no `clear`, que pregunta la posición del cursor), recogiendo el tamaño nuevo. `term::suspended(pause, f)` es el mecanismo que reutilizará el editor | `tui::update` (unitario); `tests/tui_loop.rs::ctrl_z_suspends_and_repaints`; `tests/tui_process.rs::pty::ctrl_z_restores_and_reenters` (macOS, sin `sleep`: espera la salida) |
+| Arranque del motor | `ConnState::Starting` ("Arrancando el motor…"), distinto de `Connecting`. `crates/core` gana `ensure_daemon_with(options, on_launch)` (aditivo: `ensure_daemon` lo llama con un cierre vacío), que avisa justo antes de lanzar el daemon. `Connector::connect_starting` lo propaga al hilo del canal. `r` durante el arranque avisa "el motor está arrancando" y no encola una reconexión | `tests/tui_loop.rs::starting_the_engine_is_not_connecting` |
+| Elipsis | El recorte por anchura con elipsis ya lo hacían `style::put` y `Pen` (TS-CKP-005) en todos los widgets: ninguno escribe sin pasar por ellos. Se añaden snapshots en y es con nombres largos y caracteres anchos, en Unicode (`…`) y ASCII (`...`) | `tui::view::tests::long_names_end_in_an_ellipsis`; snapshots `fleet_ellipsis_80x24_{en,es}` |
+
+Fuera de la 2a, además de la 2b: el **lanzador del editor** (historia de Q-CKP-9, que reutiliza `term::suspended`) y **mostrar en la vista** un error RPC concreto, que hará la historia que lo provoque (el catálogo ya lo traduce). Con `script`, la TUI encabeza un grupo de procesos huérfano y el sistema descarta el `SIGTSTP`: la prueba de pty comprueba la salida y la vuelta de la terminal, no la parada en sí, que es control de trabajos del shell.
