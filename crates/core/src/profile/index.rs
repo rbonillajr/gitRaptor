@@ -245,6 +245,7 @@ impl Index {
             Some(entry) => {
                 tx.execute(
                     "UPDATE repos SET state = 'observed', retired_ms = NULL,
+                         mcp_enabled_ms = NULL, mcp_enabled_by = NULL,
                          root_commit_hint = COALESCE(?2, root_commit_hint)
                      WHERE repo_id = ?1",
                     params![entry.repo_id, root_commit_hint],
@@ -278,13 +279,60 @@ impl Index {
 
     pub(crate) fn retire(&mut self, repo_id: &str, now_ms: i64) -> Result<()> {
         let changed = self.conn.execute(
-            "UPDATE repos SET state = ?2, retired_ms = ?3 WHERE repo_id = ?1 AND state = 'observed'",
+            // The MCP mark goes in the same statement (US-MCP-002 cascade).
+            "UPDATE repos SET state = ?2, retired_ms = ?3, mcp_enabled_ms = NULL,
+                 mcp_enabled_by = NULL
+             WHERE repo_id = ?1 AND state = 'observed'",
             params![repo_id, RepoState::Retired.as_str(), now_ms],
         )?;
         if changed == 0 && self.get(repo_id)?.is_none() {
             return Err(ProfileError::UnknownRepo(repo_id.to_owned()));
         }
         Ok(())
+    }
+
+    /// Puts or takes the MCP mark of an observed repo (US-MCP-002). `None`
+    /// when the repo is not observed: the allowlist stays a subset of the
+    /// observed repos by construction. `Some(changed)` otherwise.
+    pub(crate) fn set_mcp_enabled(
+        &mut self,
+        repo_id: &str,
+        enabled: bool,
+        by: &str,
+        now_ms: i64,
+    ) -> Result<Option<bool>> {
+        let changed = if enabled {
+            self.conn.execute(
+                "UPDATE repos SET mcp_enabled_ms = ?2, mcp_enabled_by = ?3
+                 WHERE repo_id = ?1 AND state = 'observed' AND mcp_enabled_ms IS NULL",
+                params![repo_id, now_ms, by],
+            )?
+        } else {
+            self.conn.execute(
+                "UPDATE repos SET mcp_enabled_ms = NULL, mcp_enabled_by = NULL
+                 WHERE repo_id = ?1 AND state = 'observed' AND mcp_enabled_ms IS NOT NULL",
+                params![repo_id],
+            )?
+        };
+        if changed > 0 {
+            return Ok(Some(true));
+        }
+        let observed = self
+            .get(repo_id)?
+            .is_some_and(|e| e.state == RepoState::Observed);
+        Ok(observed.then_some(false))
+    }
+
+    /// The observed repos with the MCP mark (US-MCP-002).
+    pub(crate) fn mcp_enabled(&self) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT repo_id FROM repos
+             WHERE state = 'observed' AND mcp_enabled_ms IS NOT NULL ORDER BY repo_id",
+        )?;
+        let ids = stmt
+            .query_map([], |row| row.get(0))?
+            .collect::<rusqlite::Result<Vec<String>>>()?;
+        Ok(ids)
     }
 
     pub(crate) fn get(&self, repo_id: &str) -> Result<Option<RepoEntry>> {
