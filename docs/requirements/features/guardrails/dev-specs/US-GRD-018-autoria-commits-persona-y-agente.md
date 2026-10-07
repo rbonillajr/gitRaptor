@@ -259,18 +259,19 @@ Repos, remotos, perfiles y daemons temporales (NFR-01); Git, `raptor` y `raptor-
 | Exportar las entradas de autoría | BR-24 (Fase 3) |
 | Que US-GRD-005 y US-GRD-006 reutilicen `actor.rs` | Sus Dev Specs (D5) |
 | Agente que escribe con `update-ref` un rango de varios commits escapa a la segunda línea | Residuo declarado (§ 5.3) |
+| Un commit sin trailer hecho con `commit-tree` (no toca ninguna ref, así que no hay hook) y luego aplicado con `git cherry-pick` escapa por D9 | Residuo declarado (§ 11; en `voluntary-skips`) |
 | Registro de autoría si US-GRD-005 no está en `main` | US-GRD-005 (D13) |
 | Que una pista confirmada pase a ser atribución | PO o Rene (ADR-GRP-012, Enmienda § 2) |
 | Ratificar la pista `inferred` | Rene Bonilla (US-GRD-019) |
-| Windows y Linux: leer la línea de órdenes del `git` antecesor (Windows: `NtQueryInformationProcess`) y los dispatchers nuevos | **Pendiente: etapa de validación multiplataforma** |
+| Windows: leer la línea de órdenes del `git` antecesor (`NtQueryInformationProcess`, en `winsys`) y los dispatchers nuevos. Hasta entonces la línea de órdenes es ilegible y se evalúa: cada paso de un `rebase` o `cherry-pick` de un agente tiene la forma de un commit y, con `agents-commit`, se podría bloquear (fail-closed). Linux: validarlo en una máquina real | **Pendiente: etapa de validación multiplataforma** |
 | Agente no detectado ni registrado escapa a la política (R-GRD-2) | Residuo declarado (BR-AUTH-005) |
-| **Segunda línea frente a `--no-verify`** (D6, § 5.3): no entró en PR-A. Hasta que entre, `git commit --no-verify` **salta** `agents-commit` y `human-author` (también con `deny`); figura en la lista de lo que no se puede impedir (`voluntary-skips`) y los mensajes del hook no prometen que el commit quede bloqueado. **Bloqueo técnico hallado**: clasificar el subcomando del `git` antecesor exige leer la línea de órdenes de otro proceso; en macOS eso es `sysctl(KERN_PROCARGS2)`, que el workspace no puede llamar (`unsafe_code = "forbid"`) y que ninguna dependencia actual envuelve (`libproc`, `nix` y `rustix` no lo ofrecen). Hace falta decidir una dependencia nueva o otra forma de clasificar (ADR) | Historia de seguimiento de PR-A (PO de Guardrails) y Arquitecto |
+| ~~Segunda línea frente a `--no-verify`~~ **Hecho** (§ 11): `git commit --no-verify` ya no salta `agents-commit` ni `human-author`. Verificado en macOS; Linux implementado con `/proc` y cubierto por el CI de ubuntu; Windows no tiene canal todavía | — |
 | Agente **registrado** (US-GRP-009) sin proceso detectado como actor de `guard.evaluate` (D5, desviación de PR-A): los registros viven en el almacén del daemon, fuera del hilo de la conexión; hace falta una copia compartida de solo lectura. La prueba `detected_and_registered_agents_are_the_actor` queda pendiente en su parte "registrado" | US-GRP-009 / US-GRD-005 |
 | Nivel **local** de `commitAuthorship`: no hay lector de `settings.local.json` | US-GRP-013 |
 | `flexible` de extremo a extremo: un suelo con configuración de equipo queda sin confirmar al instalar (Q-GRD-23); se confirma con US-GRD-014 | US-GRD-014 |
 | Un agente `other` no tiene fila en la tabla de identidades: con `agents-commit` no podría cumplir (hoy no se resuelve como actor). Cuando entre el agente registrado hará falta una regla explícita para `other` | US-GRP-009 / US-GRD-005 |
 | Una clave desconocida dentro de `policies.commitAuthorship` da `policy-not-supported` (deja la fuente `parcial`, correcto) aunque la política sí está soportada; el diagnóstico debería nombrar la subclave | Deuda del validador (TS-GRD-001) |
-| Reinstalar un repo con la plantilla 1 para pasar a la 2 (hoy la plantilla 1 sigue funcionando sin evaluar commits) | Seguimiento de PR-A |
+| ~~Reinstalar un repo con la plantilla 1 para pasar a la 2~~ **Hecho** (§ 11): `raptor guard install` actualiza en el sitio | — |
 
 ## 9. Orden de implementación
 
@@ -302,3 +303,40 @@ Implementado en la rama `feat/US-GRD-018-commit-authorship-policy` (D1 a D5, D6 
 5. El actor es solo el agente detectado (o el marcado por el ejecutor); el registrado queda pendiente (§ 8). **Ajuste del Arquitecto**: anotado como desviación de D5 con dueño.
 
 **Criterios del § 7 cubiertos por PR-A**: `agents_commit_needs_the_agents_trailer`, `an_unattributed_commit_needs_no_trailer`, `human_author_blocks_or_warns`, `a_personal_level_does_not_relax_the_team_policy`, `only_the_floor_relaxes_to_flexible` (e2e con el perfil; el suelo confirmado en `crates/core/tests/guard_evaluate.rs`), `degraded_mode_does_not_apply_authorship_rules`, `an_unreadable_message_denies_the_agent` (mayor de 64 KiB), `a_template_1_install_keeps_working`, `amend_merge_rebase_and_cherry_pick` (sin la parte de `--no-verify`), `crates/policy` `authorship::tests::*`, `guard::authorship::tests::*`, `settings::document::tests::commit_authorship_*`, compatibilidad D11 en `crates/core/tests/guard_evaluate.rs`. **Sin cubrir**: `no_verify_is_caught_by_the_second_line`, `aliases_and_plumbing_are_caught_by_the_second_line`, `detected_and_registered_agents_are_the_actor` (solo detectado), `the_message_never_reaches_the_daemon` con espía en el canal (el contrato no tiene campo para el texto: `AuthorshipFacts` es `deny_unknown_fields`), `authorship_entries_in_the_decision_log` (D12). Verificado solo en macOS.
+
+## 11. Enmienda (2026-10-07): segunda línea frente a `--no-verify` y reinstalación 1→2
+
+Implementado en la rama `feat/US-GRD-018-no-verify-second-line`. Cierra el bloqueo técnico de § 8 (leer la línea de órdenes de otro proceso en macOS) y el criterio de reinstalación de D6.
+
+**Decisiones del orquestador (2026-10-07), validadas por el Arquitecto** (`nassa-architect:architect`, una consulta; sus ajustes ya están incorporados). El coordinador aprobó el plan con cuatro ajustes, también incorporados (marcados "coord."):
+
+| # | Decisión | Ajuste de la validación |
+|---|---|---|
+| S1 | **Crate hermano `crates/macsys`** con el patrón de `winsys`, no un crate de sistema común ([ADR-GRP-002, Enmienda 2026-10-07](../../../../architecture/decisions/ADR-GRP-002-monorepo-nx.md#enmienda-2026-10-07-cratesmacsys)). `process_args(pid)` con `sysctl(KERN_PROCARGS2)`: solo `argc` y `argv`, búfer acotado; cualquier error es `None` | **Arquitecto (bloqueante)**: enmendar ADR-GRP-002 y una sola lista de excepciones en el test de frontera. **Coord.**: mismos lints que `winsys` y el test falla si aparece `unsafe` fuera de `ffi_*` |
+| S2 | **Linux** `/proc/<pid>/cmdline` sin `unsafe`; **Windows** `None` | **Arquitecto**: declarar en § 8 que en Windows cada paso de un rebase se evalúa |
+| S3 | **El cliente del hook detecta y lee el commit** en `reference-transaction` `prepared` (plantilla ≥ 2): una única pareja `viejo → nuevo` entre `refs/heads/*` y `HEAD`; `nuevo` es un commit cuyo primer padre es `viejo`, cuyos padres son los de `viejo` (amend) o raíz en una ref nueva, y **que ninguna otra ref alcanza** (un fast-forward o un reset a un commit existente no es un commit nuevo). Un `viejo` cero (`update-ref <ref> <nuevo>` sin valor esperado) se toma del valor actual de la ref. El mensaje se lee con gix aislado (≤ 64 KiB, si no, ilegible) y solo viajan los `AuthorshipFacts` (D7) | Sin ajuste |
+| S4 | **Contrato**: etapa `CommitStage::SecondLine` detrás de la capacidad nueva `guard.authorship.second-line` (un daemon de PR-A rechazaría la variante con `INVALID_PARAMS`). Sin ella el cliente no la envía y todo sigue como en PR-A | Sin ajuste |
+| S5 | **El daemon decide si la evalúa**: sube desde el cliente hasta el `git` antecesor más cercano con el mismo recorrido del solicitante (`requester::parent`, identidad `(pid, inicio)` en cada paso) y lee su línea de órdenes **solo para clasificar** (`crates/policy/src/authorship/subcommand.rs`); no se guarda, no se registra y no se envía | **Arquitecto (bloqueante)**: el mismo recorrido, no un segundo; comprobar `(pid, inicio)` antes y después de leer. **Coord.**: lo desconocido se evalúa |
+| S6 | **Una decisión por operación**: el daemon recuerda en memoria (256 entradas, FIFO) los `(pid, inicio)` de los `git` que ya tuvieron decisión en `commit-msg`; su segunda línea se acepta sin reglas ni avisos, así que un `warn` sale una vez. Si la entrada ya no está (expulsada, daemon reiniciado), se evalúa otra vez: lo único que se pierde es que el aviso pueda salir dos veces | **Coord.**: el `git` se identifica por pid más hora de inicio; si no se prueba, se evalúa |
+| S7 | **Fail-closed**: sin `git` antecesor, con la hora de inicio cambiada, con la línea de órdenes ilegible (Windows, permisos, proceso terminado), con una opción global desconocida, un alias o `commit-tree` → se evalúa. Solo `rebase`, `cherry-pick`, `revert` y `am` leídos con certeza se saltan. En modo degradado, sin segunda línea (el actor es "sin atribuir", D3) | **Coord.** |
+| S8 | **Reinstalación**: `raptor guard install` sobre una instalación confirmada de una plantilla anterior (su `dispatch.conf` dice una plantilla menor o falta un dispatcher) no es "ya instalado": reemplaza en el sitio, archivo por archivo (temporal, `fsync`, `rename` atómico), dentro de la carpeta que registra el diario; nunca deja el repo sin un dispatcher que funcione y no toca la clave. El diario lista los archivos nuevos antes de escribir; una actualización interrumpida deja una mezcla que funciona y la siguiente `raptor guard install` la completa | Sin ajuste |
+| S9 | **NFR-01 frente a una denegación en `prepared`**: Git ya escribió el objeto del commit (y, con `-a`, el índice nuevo) antes de la transacción; al fallar, el índice, el árbol de trabajo y la rama quedan como antes, el mensaje sigue en `COMMIT_EDITMSG` y el commit queda como objeto inalcanzable, recuperable | **Coord.**: test e2e |
+| S10 | **`voluntary-skips`**: `--no-verify` sigue en la lista (también salta `pre-push` y el mínimo), pero el texto ya no dice que salte la política de autoría; nombra los dos residuos (varios commits con `update-ref`; `commit-tree` y luego `cherry-pick`) | **Arquitecto**: declarar el residuo de `commit-tree` + `cherry-pick` |
+
+**Verificación**:
+
+| Criterio | Test |
+|---|---|
+| D6 · `--no-verify` de un agente con `human-author` + `deny` → bloqueado por la segunda línea; nada se pierde (índice, árbol, rama, `COMMIT_EDITMSG`, objeto inalcanzable); la línea de órdenes no llega al perfil; la persona pasa; con `agents-commit`, sin trailer no pasa y con trailer sí | `apps/cli/tests/guard_us_grd_018.rs::no_verify_is_caught_by_the_second_line` |
+| D6 · un alias (`git ci`), `-c alias.x=commit` y `commit-tree` + `update-ref` | `aliases_and_plumbing_are_caught_by_the_second_line` |
+| ADR-GRD-003 § 6 · una decisión por operación (el aviso sale una vez, con hooks y con `--no-verify`) | `one_decision_per_commit` |
+| D9 · rebase y cherry-pick del agente siguen sin evaluarse (ahora también en la segunda línea) | `amend_merge_rebase_and_cherry_pick` |
+| D6 · plantilla 1 sigue igual (sin segunda línea); `raptor guard install` la sube a la 2 y entonces se evalúa, también con `--no-verify`; el mínimo sigue | `a_template_1_install_keeps_working`, `a_template_1_install_is_upgraded_by_reinstalling` |
+| S3 · forma del commit (commit, merge, amend, raíz; no: fast-forward, varios commits, sin cambio, rama sobre un commit existente; mensaje mayor que el límite) | `crates/git/tests/commit_shape.rs` |
+| S5, S7 · clasificación (opciones globales, `--opt=valor`, alias, opción desconocida, vacía, no UTF-8) | `crates/policy` `authorship::subcommand::tests::*` |
+| S5–S7 · `git` más cercano por identidad, pid reutilizado, línea de órdenes ilegible o con la hora cambiada, memoria acotada | `crates/core` `guardrails::second_line::tests::*` |
+| S1 · `KERN_PROCARGS2` (este proceso, pid inexistente, áreas mal formadas, nunca el entorno) | `crates/macsys` `process::tests::*` |
+| S1 · frontera de `unsafe` con dos excepciones | `crates/winsys/tests/unsafe_boundary.rs` |
+
+**Sin cubrir**: un test de que un daemon con `guard.authorship` pero sin `guard.authorship.second-line` no recibe la etapa (`legacy_protocols.rs`; hoy lo garantiza el cliente comprobando las dos capacidades en `hook.rs::second_line`). Verificado solo en macOS; Linux lo cubre el CI de ubuntu (la suite e2e es `cfg(unix)`); Windows no tiene canal (Pendiente: etapa de validación multiplataforma).
+

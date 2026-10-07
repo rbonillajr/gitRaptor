@@ -5,7 +5,7 @@ type: adr
 status: accepted
 date: 2026-10-01
 created: 2026-10-01
-updated: 2026-10-05
+updated: 2026-10-07
 deciders: [Rene Bonilla]
 related: [BRD-GRP-001, ADR-GRP-001, ADR-GRP-003, ADR-GRP-007, ADR-GRP-009, INF-GRP-001]
 tags: [nx, monorepo, package-based, pnpm, cargo, rust, monodon, tauri, ci]
@@ -116,3 +116,13 @@ Decisión del orquestador (2026-10-05), validada por el Arquitecto y por securit
 - **Función de fitness**: `crates/winsys/tests/unsafe_boundary.rs` comprueba sobre `cargo metadata` que todos los demás paquetes declaran `[lints] workspace = true`, que el workspace mantiene `forbid` y que fuera de los módulos `ffi_*` (en cualquier subcarpeta de `src/`) no hay `unsafe`.
 - `windows-sys` va en `[workspace.dependencies]` (`0.61`, la versión que ya trae gix) y solo lo usa este crate. Se descartan `sysinfo` (hora de inicio en segundos) y `wmi` (COM, lento).
 - Todo cambio en un módulo `ffi*` pasa por una revisión de seguridad.
+
+## Enmienda (2026-10-07, crates/macsys)
+
+Decisión del orquestador (2026-10-07), validada por el Arquitecto (`nassa-architect:architect`, una consulta; sus ajustes ya están incorporados). La pide la segunda línea frente a `git commit --no-verify` ([DS-US-GRD-018](../../requirements/features/guardrails/dev-specs/US-GRD-018-autoria-commits-persona-y-agente.md), D6 y § 11): para clasificar el subcomando del `git` antecesor hay que leer la línea de órdenes de otro proceso, y en macOS eso es `sysctl(KERN_PROCARGS2)`, que ninguna dependencia segura envuelve.
+
+- Se añade **`crates/macsys`** (`gitraptor-macsys`, `publish = false`, etiqueta Nx `type:engine`): las llamadas al sistema de macOS que necesita el resto del workspace, detrás de una API segura. Hoy tiene un módulo público, `process` (`process_args(pid)`: solo `argc` y `argv`, nunca el entorno, con un búfer acotado a 4 MiB; cualquier error, también `EINVAL` o `EPERM` de otro usuario, es `None`), y un módulo FFI privado, `ffi_procargs`. `libc` va en `[workspace.dependencies]` con la versión que ya tenía el lock (`0.2.190`) y solo como dependencia de `cfg(target_os = "macos")`.
+- **Crate hermano, no un crate de sistema común.** Se descarta renombrar `winsys` a un crate por SO: obliga a tocar todas las rutas de Windows y mezcla dos superficies que se revisan por separado.
+- **Con él, las excepciones a `unsafe_code = "forbid"` son dos**: `winsys` y `macsys`, con las mismas reglas: `unsafe_code = "deny"`, `unsafe` solo en módulos privados `ffi_*` (un `#[allow(unsafe_code)]` sobre cada uno, en `lib.rs`), `unsafe_op_in_unsafe_fn`, `clippy::undocumented_unsafe_blocks` y `clippy::multiple_unsafe_ops_per_block` en deny, un bloque por llamada con su comentario `SAFETY`, y revisión de seguridad en todo cambio de un módulo `ffi*`.
+- **Una sola lista de excepciones**: `crates/winsys/tests/unsafe_boundary.rs` la declara (`EXCEPTIONS`) y comprueba, para cada una, sus lints, que `lib.rs` niega `unsafe` y que fuera de sus `ffi_*` no hay `unsafe`; y, para el resto del workspace, que hereda `[lints] workspace = true`.
+- Linux no necesita crate: lee `/proc/<pid>/cmdline` sin `unsafe` (`crates/core/src/channel/peer.rs`). Windows queda sin leer (`None`, se evalúa): **Pendiente: etapa de validación multiplataforma** (`NtQueryInformationProcess`, en `winsys`).
