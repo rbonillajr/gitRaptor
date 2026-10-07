@@ -88,6 +88,8 @@ fn repo_retire(path: Option<PathBuf>) -> ExitCode {
         );
         return ExitCode::FAILURE;
     };
+    // The retirement takes the repo out of the MCP allowlist too (US-MCP-002).
+    let was_enabled = super::mcp::is_enabled(&mut client, &repo_id) == Some(true);
     let params = RepoRetireParams { repo_id };
     match client.call::<_, RepoRetireResult>(methods::REPO_RETIRE, &params) {
         Ok(result) => {
@@ -97,6 +99,9 @@ fn repo_retire(path: Option<PathBuf>) -> ExitCode {
                 "repo.not-observed"
             };
             println!("{}", t(key, &[("path", &shown(&path))]));
+            if result.retired && was_enabled {
+                println!("{}", t("mcp.retired-from-allowlist", &[("path", &shown(&path))]));
+            }
             ExitCode::SUCCESS
         }
         Err(err) => repo_error(CMD, &path, err),
