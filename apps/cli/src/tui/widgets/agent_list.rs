@@ -66,6 +66,18 @@ pub struct AgentRowModel {
     pub conflict: bool,
     pub blocked: bool,
     pub operation: Option<Operation>,
+    /// The last commit of the worktree with its authorship, on a muted line under the row
+    /// (US-CKP-026).
+    pub commit: Option<CommitLine>,
+}
+
+/// The line under a row: "└ • commit by Ana with Claude Code".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommitLine {
+    pub text: SafeText,
+    /// An agent committed without its trailer: the warning symbol leads, so it reads without
+    /// color.
+    pub warning: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -333,8 +345,23 @@ impl Component for AgentListModel {
             return;
         }
         let visible = usize::from(inner.height - 1);
-        for (i, row) in self.rows.iter().enumerate().skip(self.offset).take(visible) {
-            let y = inner.y + 1 + u16::try_from(i - self.offset).unwrap_or(0);
+        // The rows win: the commit lines only show when every visible row keeps its own line
+        // with them (US-CKP-026, PO 2026-10-07).
+        let shown = self.rows.len().saturating_sub(self.offset);
+        let lines = shown
+            + self
+                .rows
+                .iter()
+                .skip(self.offset)
+                .filter(|r| r.commit.is_some())
+                .count();
+        let sublines = lines <= visible;
+        let mut y = inner.y + 1;
+        let bottom = inner.y + inner.height;
+        for (i, row) in self.rows.iter().enumerate().skip(self.offset) {
+            if y >= bottom {
+                break;
+            }
             let selected = self.selected == Some(i);
             let line = Rect::new(inner.x, y, inner.width, 1);
             let row_style = if selected {
@@ -352,6 +379,32 @@ impl Component for AgentListModel {
                 focus,
                 styles,
             );
+            y += 1;
+            if let Some(commit) = row.commit.as_ref().filter(|_| sublines) {
+                let line = Rect::new(inner.x, y, inner.width, 1);
+                paint_commit(&mut Pen::new(buf, line, y, styles), cols, commit, styles);
+                y += 1;
+            }
         }
     }
+}
+
+/// The commit line, under the name column: the structural glyphs of the active set (`└ •`, in
+/// ASCII `` ` o ``), the warning symbol when the agent left no trailer, and the text, muted.
+fn paint_commit(pen: &mut Pen<'_>, cols: Cols, commit: &CommitLine, styles: &Styles) {
+    let g = styles.glyphs;
+    let muted = styles.fg(ColorToken::TextMuted);
+    pen.gap(MARK + cols.state)
+        .text(g.lane_last, muted)
+        .gap(1)
+        .text(g.commit, muted)
+        .gap(1);
+    if commit.warning {
+        pen.symbol(
+            styles.symbol(SymbolToken::Warning),
+            styles.fg(ColorToken::StatusWarning),
+        )
+        .gap(1);
+    }
+    pen.safe(&commit.text, muted);
 }

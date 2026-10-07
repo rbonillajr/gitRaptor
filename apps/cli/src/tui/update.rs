@@ -3,9 +3,9 @@
 //! of the engine; a gap or a `resync` stops applying and asks for a new
 //! snapshot.
 
-use gitraptor_api::event::{ENGINE_STATE, SESSION_STATE, WORKTREE_STATE};
+use gitraptor_api::event::{ENGINE_STATE, GIT_EVENT, SESSION_STATE, WORKTREE_STATE};
 use gitraptor_api::messages::{
-    EngineView, ResyncReason, SessionView, SessionsListResult, WorktreeStateData,
+    EngineView, GitEventView, ResyncReason, SessionView, SessionsListResult, WorktreeStateData,
 };
 use gitraptor_api::scope::{Scope, ScopeSnapshot};
 use ratatui::crossterm::event::KeyEventKind;
@@ -180,7 +180,23 @@ fn on_engine(model: &mut Model, msg: EngineMsg) -> Vec<Cmd> {
             on_sessions(model, &repo_id, &result);
             Vec::new()
         }
+        EngineMsg::History { repo_id, events } => {
+            on_history(model, &repo_id, &events);
+            Vec::new()
+        }
     }
+}
+
+/// The latest Git events, asked right after the repo's sessions: the last commit of each
+/// worktree (US-CKP-026), merged with what the stream already applied (the later one wins).
+fn on_history(model: &mut Model, repo_id: &str, events: &[GitEventView]) {
+    let Some(data) = selected(model, repo_id).and_then(|r| r.data.as_mut()) else {
+        return;
+    };
+    for commit in events.iter().filter_map(ingest::last_commit) {
+        data.record(commit);
+    }
+    model.dirty = true;
 }
 
 /// The sessions listed right after the repo's snapshot, merged with what the stream already
@@ -293,6 +309,12 @@ fn apply(model: &mut Model, scope: &Scope, event: &gitraptor_api::Event) {
                 && view.repo_id == data.repo_id
             {
                 data.upsert(ingest::session(&view));
+            } else if event.kind == GIT_EVENT
+                && let Ok(view) = serde_json::from_value::<GitEventView>(event.data.clone())
+                && view.repo_id == data.repo_id
+                && let Some(commit) = ingest::last_commit(&view)
+            {
+                data.record(commit);
             }
         }
     }
@@ -767,5 +789,105 @@ mod tests {
         let data = m.engine.repo.as_ref().unwrap().data.as_ref().unwrap();
         assert_eq!(data.worktrees.len(), 1);
         assert!(!data.worktrees[0].path.as_str().contains('\u{1b}'));
+    }
+
+    fn git_commit(seq: i64, worktree: &str, author: &str) -> gitraptor_api::messages::GitEventView {
+        use gitraptor_api::messages::{
+            DeclaredAuthorship, GitEventDetails, GitEventKind, GitEventView, GitIdentity,
+        };
+        let who = || GitIdentity {
+            name: Untrusted::new(author),
+            email: Untrusted::new("x@example.com"),
+        };
+        GitEventView {
+            repo_id: "r1".into(),
+            seq,
+            worktree: Untrusted::new(worktree),
+            kind: GitEventKind::Commit,
+            actor: gitraptor_api::Actor::Unattributed,
+            observed_utc_ms: 0,
+            utc_offset_s: 0,
+            details: GitEventDetails::default(),
+            gap_id: None,
+            inferred: None,
+            authorship: Some(DeclaredAuthorship {
+                author: who(),
+                committer: who(),
+                coauthors: Vec::new(),
+            }),
+        }
+    }
+
+    fn git_event(scope_seq: u64, view: &gitraptor_api::messages::GitEventView) -> Msg {
+        engine(EngineMsg::Event {
+            scope: Scope::Repo {
+                repo_id: "r1".into(),
+            },
+            scope_seq,
+            event: Box::new(Event {
+                seq: 200 + scope_seq,
+                kind: GIT_EVENT.into(),
+                version: 1,
+                wall_ms: 0,
+                timings: None,
+                data: serde_json::to_value(view).unwrap(),
+            }),
+        })
+    }
+
+    fn authors(m: &Model) -> Vec<String> {
+        let data = m.engine.repo.as_ref().unwrap().data.as_ref().unwrap();
+        data.commits
+            .iter()
+            .map(|c| c.author.as_str().to_owned())
+            .collect()
+    }
+
+    /// US-CKP-026: the last commit of each worktree comes from the history and then the stream;
+    /// the most recent wins, an older one never replaces it, and a new snapshot (a resync or a
+    /// reconnection) drops them until the history arrives again, so none is left stale.
+    #[test]
+    fn the_last_commit_comes_from_history_and_stream() {
+        let mut m = model();
+        update(&mut m, repo_snapshot(3));
+        update(
+            &mut m,
+            engine(EngineMsg::History {
+                repo_id: "r1".into(),
+                events: vec![git_commit(4, "/w/a", "Ana"), git_commit(5, "/w/b", "Bea")],
+            }),
+        );
+        assert_eq!(authors(&m), ["Ana", "Bea"]);
+        update(&mut m, git_event(4, &git_commit(7, "/w/a", "Carla")));
+        assert_eq!(authors(&m), ["Carla", "Bea"]);
+        // An older one arriving late does not replace it.
+        update(
+            &mut m,
+            engine(EngineMsg::History {
+                repo_id: "r1".into(),
+                events: vec![git_commit(4, "/w/a", "Ana")],
+            }),
+        );
+        assert_eq!(authors(&m), ["Carla", "Bea"]);
+        // Another repo's history is not ours.
+        update(
+            &mut m,
+            engine(EngineMsg::History {
+                repo_id: "r2".into(),
+                events: vec![git_commit(9, "/w/c", "Dora")],
+            }),
+        );
+        assert_eq!(authors(&m), ["Carla", "Bea"]);
+        // A resync: the new snapshot drops them, the history rebuilds them.
+        update(&mut m, repo_snapshot(10));
+        assert!(authors(&m).is_empty());
+        update(
+            &mut m,
+            engine(EngineMsg::History {
+                repo_id: "r1".into(),
+                events: vec![git_commit(8, "/w/b", "Eva")],
+            }),
+        );
+        assert_eq!(authors(&m), ["Eva"]);
     }
 }

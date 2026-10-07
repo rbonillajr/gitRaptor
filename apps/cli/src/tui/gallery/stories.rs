@@ -96,6 +96,7 @@ fn row(i: usize, name: &'static str, state: AgentState, branch: &'static str) ->
         conflict: false,
         blocked: false,
         operation: None,
+        commit: None,
     }
 }
 

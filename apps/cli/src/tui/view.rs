@@ -13,14 +13,14 @@ use gitraptor_api::messages::{DivergenceView, SessionStateView};
 use ratatui::Frame;
 
 use crate::model::{
-    ConnState, Head, Model, Pick, RepoView, Requester, SafeText, SessionRow, WorktreeRow,
-    WorktreeState,
+    ConnState, Head, LastCommit, Model, Pick, RepoView, Requester, SafeText, SessionRow,
+    WorktreeRow, WorktreeState,
 };
 use crate::present::i18n::{Fetched, Lang, Text};
 use crate::tui::keymap::{Action, BINDINGS};
 use crate::tui::style::{Styles, follow};
 use crate::tui::widgets::agent_list::{
-    AgentColumns, AgentListModel, AgentRowModel, AgentState, Branch, Sync,
+    AgentColumns, AgentListModel, AgentRowModel, AgentState, Branch, CommitLine, Sync,
 };
 use crate::tui::widgets::key_hints::{KeyHint, KeyHintsModel};
 use crate::tui::widgets::layout::{self, BodyPlan, Connection, StatusBarModel, TooSmallModel};
@@ -255,6 +255,34 @@ fn agent_name(session: &SessionRow, lang: Lang) -> String {
     }
 }
 
+fn kind_name(kind: AgentKind, lang: Lang) -> String {
+    match kind {
+        AgentKind::ClaudeCode => Text::ClaudeCode.render(lang),
+        AgentKind::Other => Text::OtherAgent.render(lang),
+    }
+}
+
+/// "commit by Ana with Claude Code" under the row (US-CKP-026): who it went in under and with
+/// which agents; the warning leads when an agent ran it without its trailer.
+fn commit_line(commit: &LastCommit, lang: Lang) -> CommitLine {
+    let agents: Vec<String> = commit.agents.iter().map(|k| kind_name(*k, lang)).collect();
+    let ran_by = commit.ran_by.map(|k| kind_name(k, lang));
+    let inferred = commit.inferred.map(|k| kind_name(k, lang));
+    CommitLine {
+        text: catalog(
+            Text::LastCommit {
+                merge: commit.merge,
+                author: commit.author.as_str(),
+                agents: &agents.join(", "),
+                ran_by: ran_by.as_deref(),
+                inferred: inferred.as_deref(),
+            },
+            lang,
+        ),
+        warning: commit.ran_by.is_some() && commit.agents.is_empty(),
+    }
+}
+
 fn row(
     repo: &RepoView,
     worktree: &WorktreeRow,
@@ -307,6 +335,7 @@ fn row(
         conflict: false,
         blocked: false,
         operation: None,
+        commit: repo.last_commit(worktree.key).map(|c| commit_line(c, lang)),
     };
     match &worktree.state {
         WorktreeState::Unavailable(reason) => {
@@ -1129,5 +1158,228 @@ mod tests {
                 }
             }
         });
+    }
+
+    /// A commit in `worktree` by "Ana", run by `actor`, with the trailers of `agents` and an
+    /// optional unconfirmed hint (US-CKP-026, from US-GRD-019's `events.authorship`).
+    fn commit_by_ana(
+        seq: i64,
+        worktree: &str,
+        actor: Actor,
+        agents: &[AgentKind],
+        inferred: Option<AgentKind>,
+    ) -> gitraptor_api::messages::GitEventView {
+        use gitraptor_api::messages::{
+            CoAuthor, DeclaredAuthorship, GitEventDetails, GitEventKind, GitEventView, GitIdentity,
+            InferredAgent, TrailerCheck,
+        };
+        let ana = || GitIdentity {
+            name: Untrusted::new("Ana"),
+            email: Untrusted::new("ana@example.com"),
+        };
+        GitEventView {
+            repo_id: "r1".into(),
+            seq,
+            worktree: Untrusted::new(worktree),
+            kind: GitEventKind::Commit,
+            actor,
+            observed_utc_ms: 0,
+            utc_offset_s: 0,
+            details: GitEventDetails::default(),
+            gap_id: None,
+            inferred: inferred.map(|kind| InferredAgent {
+                kind,
+                session_id: "1:1".into(),
+                trailer: Some(TrailerCheck::Unconfirmed),
+            }),
+            authorship: Some(DeclaredAuthorship {
+                author: ana(),
+                committer: ana(),
+                coauthors: agents
+                    .iter()
+                    .map(|k| CoAuthor {
+                        name: Untrusted::new("Claude"),
+                        email: Untrusted::new("noreply@anthropic.com"),
+                        agent: Some(*k),
+                    })
+                    .collect(),
+            }),
+        }
+    }
+
+    fn detected_claude() -> Actor {
+        Actor::Agent {
+            kind: AgentKind::ClaudeCode,
+            name: None,
+            origin: AgentOrigin::Detected,
+        }
+    }
+
+    /// The fleet of "shop" with the three cases of US-CKP-026: a person's commit with an
+    /// agent's trailer (feat-pagos), an agent that left no trailer (feat-api) and a person's
+    /// commit without an agent (feat-docs).
+    fn authored(lang: Lang) -> Model {
+        let mut worktrees = shop();
+        worktrees.push(worktree(
+            "/w/shop/feat-api",
+            false,
+            ready("feat-api", 0, 1, 0),
+        ));
+        let mut model = model_with(
+            lang,
+            worktrees,
+            Some(vec![claude("s1", "/w/shop/feat-pagos")]),
+        );
+        update(
+            &mut model,
+            engine(EngineMsg::History {
+                repo_id: "r1".into(),
+                events: vec![
+                    commit_by_ana(
+                        1,
+                        "/w/shop/feat-pagos",
+                        Actor::Unattributed,
+                        &[AgentKind::ClaudeCode],
+                        None,
+                    ),
+                    commit_by_ana(2, "/w/shop/feat-api", detected_claude(), &[], None),
+                    commit_by_ana(3, "/w/shop/feat-docs", Actor::Unattributed, &[], None),
+                ],
+            }),
+        );
+        published(model)
+    }
+
+    /// US-CKP-026: the three cases under their rows, in English and in Spanish, with names only
+    /// (never the email) and the author sanitized.
+    #[test]
+    fn the_last_commit_authorship_in_english_and_spanish() {
+        let mut settings = insta::Settings::clone_current();
+        settings.set_prepend_module_to_snapshot(false);
+        settings.set_snapshot_path("snapshots");
+        settings.bind(|| {
+            for (name, lang, human, agent, alone) in [
+                (
+                    "en",
+                    Lang::En,
+                    "└ • commit by Ana with Claude Code",
+                    "└ • ⚠  commit by Ana · run by Claude Code · no trailer",
+                    "└ • commit by Ana",
+                ),
+                (
+                    "es",
+                    Lang::Es,
+                    "└ • commit de Ana con Claude Code",
+                    "└ • ⚠  commit de Ana · ejecutado por Claude Code · sin trailer",
+                    "└ • commit de Ana",
+                ),
+            ] {
+                let theme = Theme::new(ColorMode::TrueColor, Contrast::Normal, SymbolSet::Unicode)
+                    .with_background(Background::Dark);
+                let buffer = render(&authored(lang).with_theme(theme), 100, 24);
+                let screen = lines(&buffer);
+                let under = |name: &str| {
+                    let i = screen.iter().position(|l| l.contains(name)).unwrap();
+                    screen[i + 1].clone()
+                };
+                assert!(under("feat-pagos").contains(human), "{screen:#?}");
+                assert!(under("feat-api").contains(agent), "{screen:#?}");
+                assert!(under("feat-docs").contains(alone), "{screen:#?}");
+                assert!(!under("feat-docs").contains(" · "), "{screen:#?}");
+                // The main worktree has no known commit: no line under it.
+                assert!(!under("main").contains("commit"), "{screen:#?}");
+                let all = screen.join("\n");
+                assert!(
+                    !all.contains("example.com") && !all.contains('\u{1b}'),
+                    "{all}"
+                );
+                let snap = format!("{all}\n=== styles ===\n{}", style_runs(&buffer));
+                insta::assert_snapshot!(format!("fleet_authorship_100x24_{name}"), snap);
+            }
+        });
+    }
+
+    /// The commit line reads without color: in ASCII the structural glyphs and the warning
+    /// symbol have their fallbacks.
+    #[test]
+    fn the_last_commit_authorship_in_ascii() {
+        let theme = Theme::new(ColorMode::NoColor, Contrast::Normal, SymbolSet::Ascii);
+        let screen = lines(&render(&authored(Lang::En).with_theme(theme), 100, 24));
+        let all = screen.join("\n");
+        assert!(all.contains("` o commit by Ana with Claude Code"), "{all}");
+        assert!(
+            all.contains("` o [!] commit by Ana · run by Claude Code · no trailer"),
+            "{all}"
+        );
+    }
+
+    /// An unattributed commit with an unconfirmed hint says "possibly", never as a fact; a
+    /// commit without published authorship has no line, never a placeholder.
+    #[test]
+    fn authorship_edge_cases() {
+        for (lang, text) in [
+            (Lang::En, "commit by Ana · possibly Claude Code (inferred)"),
+            (Lang::Es, "commit de Ana · posible Claude Code (inferido)"),
+        ] {
+            let mut model = shop_model(lang);
+            let mut bare = commit_by_ana(9, "/w/shop/feat-pagos", Actor::Unattributed, &[], None);
+            bare.authorship = None;
+            update(
+                &mut model,
+                engine(EngineMsg::History {
+                    repo_id: "r1".into(),
+                    events: vec![
+                        commit_by_ana(
+                            1,
+                            "/w/shop/feat-docs",
+                            Actor::Unattributed,
+                            &[],
+                            Some(AgentKind::ClaudeCode),
+                        ),
+                        bare,
+                    ],
+                }),
+            );
+            let screen = lines(&render(&model, 100, 30));
+            let i = screen.iter().position(|l| l.contains("feat-docs")).unwrap();
+            assert!(screen[i + 1].contains(text), "{screen:#?}");
+            let i = screen
+                .iter()
+                .position(|l| l.contains("feat-pagos"))
+                .unwrap();
+            assert!(!screen[i + 1].contains("commit"), "{screen:#?}");
+        }
+    }
+
+    /// The rows win (PO, 2026-10-07): when the rows and their commit lines do not fit, no
+    /// commit line is painted and every row that fits is there.
+    #[test]
+    fn rows_win_over_sublines_when_short() {
+        let mut worktrees = shop();
+        let mut events = Vec::new();
+        for i in 0..12 {
+            let path = format!("/w/shop/wt-{i:02}");
+            worktrees.push(worktree(
+                &path,
+                false,
+                ready(&format!("wt-{i:02}"), 0, 0, 0),
+            ));
+            events.push(commit_by_ana(i, &path, Actor::Unattributed, &[], None));
+        }
+        let mut model = model_with(Lang::En, worktrees, Some(Vec::new()));
+        update(
+            &mut model,
+            engine(EngineMsg::History {
+                repo_id: "r1".into(),
+                events,
+            }),
+        );
+        let all = screen(&model, 80, 24);
+        assert!(!all.contains("commit by"), "{all}");
+        for i in 0..12 {
+            assert!(all.contains(&format!("wt-{i:02}")), "{all}");
+        }
+        // With room for both, the lines are back.
+        assert!(screen(&model, 80, 40).contains("commit by Ana"));
     }
 }

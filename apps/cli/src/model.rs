@@ -6,8 +6,8 @@ use gitraptor_api::AgentKind;
 use gitraptor_api::catalog::Layer;
 use gitraptor_api::event::Event;
 use gitraptor_api::messages::{
-    DivergenceView, EngineStateView, ResyncReason, SessionStateView, SessionsListResult,
-    UnavailableReason,
+    DivergenceView, EngineStateView, GitEventView, ResyncReason, SessionStateView,
+    SessionsListResult, UnavailableReason,
 };
 use gitraptor_api::scope::{AutostartView, Scope, ScopeSnapshot};
 use gitraptor_theme::Theme;
@@ -212,9 +212,31 @@ pub struct RepoView {
     /// Whether this system detects sessions (`sessions.list`); `None` until the list arrives.
     /// Without it the agent is "not available", never "no agent".
     pub detection: Option<bool>,
+    /// The last commit of each worktree with its declared authorship (US-CKP-026), from
+    /// `events.history` and then `git.event`. Empty after every snapshot until the history
+    /// arrives again.
+    pub commits: Vec<LastCommit>,
 }
 
 impl RepoView {
+    /// Keeps the most recent commit of its worktree: a later sequence of the repo's history wins.
+    pub fn record(&mut self, commit: LastCommit) {
+        match self
+            .commits
+            .iter_mut()
+            .find(|c| c.worktree == commit.worktree)
+        {
+            Some(kept) if commit.seq > kept.seq => *kept = commit,
+            Some(_) => {}
+            None => self.commits.push(commit),
+        }
+    }
+
+    /// The last commit of a worktree, when one with authorship is known.
+    pub fn last_commit(&self, worktree: u64) -> Option<&LastCommit> {
+        self.commits.iter().find(|c| c.worktree == worktree)
+    }
+
     /// Upserts a view of a session: the later `state_since` wins and, at the same instant, an
     /// ended one (ended is never reopened). A view older than the one kept is dropped, so the
     /// list and the stream converge in any order (US-CKP-001, D1).
@@ -272,6 +294,25 @@ pub enum Head {
     Unborn(SafeText),
     /// Directly at a commit, with its short hash when the engine publishes it.
     Detached(Option<SafeText>),
+}
+
+/// The last commit or merge of a worktree, as declared (US-CKP-026, US-GRD-019): the person
+/// it went in under and the agents of its trailers, apart from who ran it. Names only, never
+/// emails: the fleet is often on a shared screen.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LastCommit {
+    /// [`WorktreeRow::key`] of its worktree.
+    pub worktree: u64,
+    /// Sequence in the repo's history: orders two commits of the same worktree.
+    pub seq: i64,
+    pub merge: bool,
+    pub author: SafeText,
+    /// Agents named by its `Co-Authored-By` trailers, in order, without repeats.
+    pub agents: Vec<AgentKind>,
+    /// The detected agent that ran it when no trailer names it ("no trailer").
+    pub ran_by: Option<AgentKind>,
+    /// An unattributed commit with an unconfirmed hint: possibly this agent.
+    pub inferred: Option<AgentKind>,
 }
 
 /// One agent session, sanitized.
@@ -370,6 +411,11 @@ pub enum EngineMsg {
     Sessions {
         repo_id: String,
         result: Box<SessionsListResult>,
+    },
+    /// The latest Git events of a repo, asked after its sessions (US-CKP-026).
+    History {
+        repo_id: String,
+        events: Vec<GitEventView>,
     },
 }
 
