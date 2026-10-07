@@ -279,7 +279,7 @@ fn newer_schema_is_rejected_and_file_untouched() {
             found, supported, ..
         } => {
             assert_eq!(*found, 99);
-            assert_eq!(*supported, 2);
+            assert_eq!(*supported, 3);
         }
         other => panic!("unexpected {other}"),
     }
@@ -414,6 +414,7 @@ fn a_v1_store_with_linked_events_migrates_to_the_observer_gap_causes() {
              INSERT INTO gaps_v1 SELECT * FROM gaps;
              DROP TABLE gaps;
              ALTER TABLE gaps_v1 RENAME TO gaps;
+             ALTER TABLE events DROP COLUMN authorship;
              PRAGMA user_version = 1;
              COMMIT;",
         )
@@ -424,6 +425,8 @@ fn a_v1_store_with_linked_events_migrates_to_the_observer_gap_causes() {
     let events = store.events_for_worktree(&repo).unwrap();
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].gap_id.as_deref(), Some("g1"));
+    // An event from before US-GRD-019 has no declared authorship.
+    assert_eq!(events[0].authorship, None);
     assert_eq!(store.gaps().unwrap()[0].cause, GapCause::DaemonDown);
     store
         .write_batch(&[WriteOp::OpenGap {
