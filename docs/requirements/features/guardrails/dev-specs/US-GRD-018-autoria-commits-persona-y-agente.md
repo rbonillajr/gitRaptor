@@ -323,6 +323,20 @@ Implementado en la rama `feat/US-GRD-018-no-verify-second-line`. Cierra el bloqu
 | S9 | **NFR-01 frente a una denegación en `prepared`**: Git ya escribió el objeto del commit (y, con `-a`, el índice nuevo) antes de la transacción; al fallar, el índice, el árbol de trabajo y la rama quedan como antes, el mensaje sigue en `COMMIT_EDITMSG` y el commit queda como objeto inalcanzable, recuperable | **Coord.**: test e2e |
 | S10 | **`voluntary-skips`**: `--no-verify` sigue en la lista (también salta `pre-push` y el mínimo), pero el texto ya no dice que salte la política de autoría; nombra los dos residuos (varios commits con `update-ref`; `commit-tree` y luego `cherry-pick`) | **Arquitecto**: declarar el residuo de `commit-tree` + `cherry-pick` |
 
+**Ronda de revisión** (revisor de código con contexto limpio; los cuatro hallazgos altos y dos bajos, corregidos):
+
+- Un `viejo` cero en `HEAD` y en su rama ya no da dos movimientos distintos: se agrupan por el valor nuevo. Con una ref nueva (o sin valor esperado), **cualquier** commit que ninguna rama alcance todavía es nuevo (`commit-tree` + `branch x <nuevo>`, `update-ref HEAD <nuevo>`).
+- Solo las ramas (`refs/heads/*`) y las ramas remotas (`refs/remotes/*`) prueban que un commit "ya existía": un commit aparcado bajo una etiqueta u otra ref (que el agente escribe sin evaluación) y luego alcanzado por fast-forward se evalúa.
+- La clasificación exige que `argv[0]` sea `git` o `git.exe`: un `argv[0]` vacío o raro podría desplazar el resto.
+- "Una decisión por operación" recuerda, además del `git`, los hechos que vio `commit-msg`, y solo las decisiones `allow`: un `commit-msg` lanzado a mano (un editor que llama al hook con otro mensaje) no hace saltar el commit que llega.
+- `replace_files` reutiliza el descriptor de la carpeta ya comprobada; `outdated` mira también la plantilla del diario.
+
+**Residuos y límites declarados** (además de los de § 5.3 y § 8):
+
+- Un agente que aparca un commit nuevo bajo `refs/remotes/*` escrito a mano (`update-ref`) y luego hace fast-forward escapa a la segunda línea.
+- Fail-closed con coste: un `git fetch <remoto> x:x` de un agente que trae **un** commit directamente a una rama, o una rama nueva sobre un commit que solo alcanza una etiqueta, se evalúan como commits del agente.
+- Rendimiento: cada transacción `prepared` con la forma de un commit (también los de la persona y cada paso de un rebase) lee las ramas y hace una ida y vuelta al daemon. Sin medir en repos grandes; seguimiento.
+
 **Verificación**:
 
 | Criterio | Test |
