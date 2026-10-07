@@ -29,13 +29,16 @@ const MAX_LINE: usize = 8 * 1024;
 const MAX_CONF: u64 = 64 * 1024;
 const MAX_INPUT: u64 = 256 * 1024 * 1024;
 /// Template versions this dispatcher understands (ADR-GRD-001 § 8).
-const TEMPLATES: &[&str] = &["1"];
+const TEMPLATES: &[&str] = &["1", "2"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Hook {
     PrePush,
     PreRebase,
     ReferenceTransaction,
+    /// Commit authorship (US-GRD-018, template 2).
+    PreCommit,
+    CommitMsg,
 }
 
 impl Hook {
@@ -44,6 +47,8 @@ impl Hook {
             "pre-push" => Some(Self::PrePush),
             "pre-rebase" => Some(Self::PreRebase),
             "reference-transaction" => Some(Self::ReferenceTransaction),
+            "pre-commit" => Some(Self::PreCommit),
+            "commit-msg" => Some(Self::CommitMsg),
             _ => None,
         }
     }
@@ -53,6 +58,8 @@ impl Hook {
             Self::PrePush => "pre-push",
             Self::PreRebase => "pre-rebase",
             Self::ReferenceTransaction => "reference-transaction",
+            Self::PreCommit => "pre-commit",
+            Self::CommitMsg => "commit-msg",
         }
     }
 }
@@ -166,6 +173,8 @@ fn fallback(hook: Hook, input: &[u8], common: &Path, raptor: &str, missing: bool
     let deny = match hook {
         Hook::PrePush | Hook::PreRebase => true,
         Hook::ReferenceTransaction => fastpath::deletes_a_branch(input, common, MAX_LINE),
+        // A commit is not risky by itself: it passes with the warning (decision 4).
+        Hook::PreCommit | Hook::CommitMsg => false,
     };
     match (deny, missing) {
         (true, true) => say(Msg::Missing(raptor)),
@@ -221,7 +230,8 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
     let mut input = Vec::new();
-    if hook != Hook::PreRebase {
+    // `pre-rebase`, `pre-commit` and `commit-msg` take no input.
+    if matches!(hook, Hook::PrePush | Hook::ReferenceTransaction) {
         // One byte past the bound means the input was cut: never decide on a prefix (Git
         // ignores a hook that stops reading).
         let read = std::io::stdin()
@@ -261,7 +271,7 @@ fn main() -> ExitCode {
             fastpath::skippable_ref_transaction(&input, &common, MAX_LINE)
         }
         Hook::PrePush => fastpath::skippable_push(&input, MAX_LINE),
-        Hook::PreRebase => false,
+        Hook::PreRebase | Hook::PreCommit | Hook::CommitMsg => false,
     };
     if skippable {
         return ExitCode::SUCCESS;

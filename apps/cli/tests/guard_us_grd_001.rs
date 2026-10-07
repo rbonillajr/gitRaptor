@@ -304,7 +304,7 @@ mod repo_intact {
         assert!(out.status.success(), "{shown}");
         // What, where, why, how to revert, what it cannot prevent, which base is confirmed.
         for expected in [
-            "What: the hooks pre-push, reference-transaction, pre-rebase",
+            "What: the hooks pre-push, reference-transaction, pre-rebase, pre-commit, commit-msg",
             "Where: only this repository",
             "Why: so that no agent force-pushes or deletes the base branch",
             "To revert by hand:",
@@ -334,13 +334,23 @@ mod repo_intact {
             ["main"]
         );
         assert!(!after.offer);
-        // ADR-GRD-001 Validación 15: only the mandatory dispatchers.
+        // ADR-GRD-001 Validación 15: only the mandatory dispatchers, plus the commit ones of
+        // template 2 (US-GRD-018).
         let mut hooks: Vec<_> = std::fs::read_dir(common(&m).join("gitraptor/hooks"))
             .unwrap()
             .map(|e| e.unwrap().file_name().into_string().unwrap())
             .collect();
         hooks.sort();
-        assert_eq!(hooks, ["pre-push", "pre-rebase", "reference-transaction"]);
+        assert_eq!(
+            hooks,
+            [
+                "commit-msg",
+                "pre-commit",
+                "pre-push",
+                "pre-rebase",
+                "reference-transaction"
+            ]
+        );
         // The key is absolute and local (ADR-GRD-001 § 1).
         let key = m.git_ok(&m.f.repo, &["config", "--local", "core.hooksPath"]);
         assert_eq!(Path::new(&key), common(&m).join("gitraptor/hooks"));

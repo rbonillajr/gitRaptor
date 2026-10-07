@@ -14,7 +14,7 @@ use std::process::ExitCode;
 use gitraptor_api::Untrusted;
 use gitraptor_api::guard::{
     Cause, Decision, Effect, GuardPlan, GuardRejectedData, GuardRepoParams, GuardStatus,
-    InstallBlocker, NotPreventable, Param, ParamKind, Permission, ProtectionState, Reason,
+    InstallBlocker, Level, NotPreventable, Param, ParamKind, Permission, ProtectionState, Reason,
     RefBackend, Rule,
 };
 use gitraptor_api::methods;
@@ -100,13 +100,45 @@ fn reason_text(reason: &Reason) -> String {
         (Rule::RepoMismatch, _) => t("guard.deny.repo-mismatch", &[]),
         (Rule::InputRejected, _) => t("guard.deny.input", &[]),
         (Rule::InternalError, _) => t("guard.deny.internal", &[]),
+        (Rule::AuthorshipTrailerRequired, cause) => t(
+            if cause == Some(Cause::MessageUnreadable) {
+                "guard.reason.authorship-message-unreadable"
+            } else {
+                "guard.reason.authorship-trailer-required"
+            },
+            &[("example", &find(p, ParamKind::Example))],
+        ),
+        (Rule::AuthorshipHumanAuthor, _) => t(
+            "guard.reason.authorship-human-author",
+            &[("level", &level_text(reason.level))],
+        ),
     }
 }
 
-/// The lines a decision prints on standard error.
+fn level_text(level: Level) -> String {
+    t(
+        match level {
+            Level::Floor | Level::Minimum => "guard.level.floor",
+            Level::Worktree => "guard.level.worktree",
+            Level::Profile => "guard.level.profile",
+            Level::Local => "guard.level.local",
+            Level::System => "guard.level.system",
+        },
+        &[],
+    )
+}
+
+/// The fixed template of one warning (US-GRD-018, D3).
+fn notice_text(notice: &Reason) -> Option<String> {
+    (notice.rule == Rule::AuthorshipHumanAuthor)
+        .then(|| t("guard.notice.authorship-human-author", &[]))
+}
+
+/// The lines a decision prints on standard error: its reasons when it does not go ahead, its
+/// warnings when it does.
 pub fn decision_lines(decision: &Decision) -> Vec<String> {
     if decision.applied_effect == Effect::Allow {
-        return Vec::new();
+        return decision.notices.iter().filter_map(notice_text).collect();
     }
     decision.reasons.iter().map(reason_text).collect()
 }
