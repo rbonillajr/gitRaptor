@@ -16,7 +16,7 @@ tags: [rendimiento, latencia, presupuesto, p95, nfr-04, timestamps, instrumentac
 
 # ADR-GRP-011 — Reparto del presupuesto de frescura (NFR-04)
 
-> **Estado**: aceptado por Rene Bonilla el 2026-10-04. La [Enmienda (2026-10-07, observación por niveles)](#enmienda-2026-10-07-observación-por-niveles) está **propuesta, pendiente de aceptar por Rene Bonilla**, junto con la de ADR-GRP-010.
+> **Estado**: aceptado por Rene Bonilla el 2026-10-04. La [Enmienda (2026-10-07, observación por niveles)](#enmienda-2026-10-07-observación-por-niveles) está **aceptada**, junto con la de ADR-GRP-010. **Decisión de Rene (2026-10-07)**: acepta las dos enmiendas.
 
 ## Contexto
 
@@ -225,7 +225,7 @@ Aplicada desde la [Dev Spec de US-CKP-001](../../requirements/features/cockpit/d
 
 ## Enmienda (2026-10-07, observación por niveles)
 
-> **Estado de la enmienda**: **propuesta, pendiente de aceptar por Rene Bonilla**, junto con la [de ADR-GRP-010](./ADR-GRP-010-observacion-cambios-worktrees.md#enmienda-2026-10-07-observación-por-niveles). Mientras no la acepte, rige lo anterior.
+> **Estado de la enmienda**: **aceptada**, junto con la [de ADR-GRP-010](./ADR-GRP-010-observacion-cambios-worktrees.md#enmienda-2026-10-07-observación-por-niveles). **Decisión de Rene (2026-10-07)**: acepta las dos enmiendas.
 
 Origen: la propuesta B de Rene Bonilla (2026-10-06), para más de 100 repos clonados. **Decisión del orquestador (2026-10-07), validada por el Arquitecto.** Las cifras del reparto (§ 2) no cambian: cambia **a qué repos se aplican**.
 

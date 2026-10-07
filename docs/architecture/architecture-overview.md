@@ -147,7 +147,7 @@ Pendiente. Se generan con `/aadd-devspec <id>`: una por TS e INF y una por cada 
 - **Supuestos por confirmar**:
   - "< 500 ms" de NFR-04 como p95 en las máquinas de referencia (ADR-GRP-011; lo mide SPIKE-GRP-002).
   - La shell de Claude Code no tiene TTY interactiva (PQ-6 en ADR-GRP-005; lo comprueba SPIKE-GRP-001). Tras la revisión de seguridad deja de ser crítico: los comandos reservados se autorizan en el daemon (I4).
-  - P16 y P17, abiertas para el PO, con supuesto "sí" en ADR-GRP-013.
+  - P17, abierta para el PO, con supuesto "sí" en ADR-GRP-013. P16 resuelta: **Decisión de Rene (2026-10-07)**: sí.
 - **Ruta crítica**: TS-GRP-001 y TS-GRP-002 → TS-GRP-003 → TS-GRP-004 → US-GRP-001 → US-GRP-002. El núcleo de INF-GRP-001 (tras TS-GRP-002) bloquea el merge de todas las historias; cada suite incremental bloquea solo el de su historia dueña. El Scrum Master debe recalcular las olas.
 - **Riesgo de atribución**: si S2b se desactiva por un cambio de formato, los cambios sin commitear en un worktree con editor abierto quedan casi siempre "sin atribuir". La meta del 90% puede cumplirse para sesiones y no para cambios (R1, R2, R7). Vía de salida: S5 opt-in y registro explícito (ADR-GRP-012).
 - **Riesgo de Windows**: los handles del watcher podrían impedir borrar o mover worktrees. Lo verifica SPIKE-GRP-002 (R4).
@@ -160,7 +160,7 @@ Estos documentos solo cubren la arquitectura. Lo siguiente queda para otros due�
    - **PQ-1 (autoarranque)**: actualizar Q17, la verificación 2 de BR-CONS-001 ("fuera del repo, lo único que cambia son los datos del motor en el perfil") y el NFR "fuera del repo solo cambia el perfil" con la excepción acotada del autoarranque.
    - **PQ-3 (configuración local)**: actualizar la tabla de datos de BR-CONS-001 (fila de configuración local personal: "perfil, indexada por repo"), su punto 6 y BR-CONS-007 (nivel 3).
    - **Perfil**: confirmar que "perfil" abarca las carpetas exclusivas de GitRaptor de datos, configuración, estado y ejecución (ADR-GRP-006).
-   - **P16 y P17**: responder si una confirmación pasa el origen a "registrado" y si retirar una corrección devuelve sus eventos (ADR-GRP-013).
+   - **P17**: responder si retirar una corrección devuelve sus eventos (ADR-GRP-013). P16 (una confirmación pasa el origen a "registrado") está resuelta: **Decisión de Rene (2026-10-07)**: sí.
    - **Retirar una corrección con la sesión ya terminada**: BR-CONS-002 no lo cubre; ADR-GRP-013 supone que se resuelve igual que con la sesión presente.
    - **BR-WF-001 (actividad)**: dejar explícito que las ediciones del humano también mantienen activa la sesión y que el mtime de transcripts no cuenta como actividad (ADR-GRP-012).
    - **`--resume` / `--continue`**: dejar explícito que es una sesión nueva (ADR-GRP-012, Q41).
