@@ -627,3 +627,47 @@ fn budget_warm_load_p95() {
         "warm p95 {p95:?}"
     );
 }
+
+// ── Archivo de configuración con nombre equivocado (ADR-GRP-007) ─────────────────────────────
+
+fn misnamed(c: &TeamConfig) -> Vec<(SourceKind, Option<Location>)> {
+    c.diagnostics()
+        .filter(|d| d.code == Code::UnknownSettingsFile)
+        .map(|d| (d.source, d.location.clone()))
+        .collect()
+}
+
+#[test]
+fn a_misnamed_settings_file_is_reported_and_the_default_still_applies() {
+    let repo = Repo::new();
+    repo.write(
+        &repo.path,
+        ".gitraptor/config.json",
+        r#"{"policies":{"commitAuthorship":{"mode":"human-author"}}}"#,
+    );
+    repo.git(&["add", "-A"]);
+    repo.git(&["commit", "-q", "-m", "misnamed"]);
+    repo.set_origin_main(&repo.head());
+    let c = load(&repo, None);
+    let file = Some(Location::File(".gitraptor/config.json".into()));
+    assert_eq!(
+        misnamed(&c),
+        vec![
+            (SourceKind::Floor, file.clone()),
+            (SourceKind::Worktree, file)
+        ]
+    );
+    // Only a diagnostic: the file is not read, the team level stays absent (default policy).
+    assert_eq!(c.floor.status(), SourceStatus::Absent);
+    assert_eq!(c.worktree.status(), SourceStatus::Absent);
+    assert!(c.floor.parsed.applicable().is_none());
+    assert!(c.worktree.parsed.applicable().is_none());
+}
+
+#[test]
+fn the_real_settings_file_gives_no_misnamed_diagnostic() {
+    let (repo, conf) = confirmed_repo(DENY_PUSH);
+    let c = load(&repo, Some(&conf));
+    assert!(misnamed(&c).is_empty());
+    assert_eq!(c.permissions.permission(Operation::Push), Permission::Deny);
+}

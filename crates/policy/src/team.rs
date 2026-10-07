@@ -15,13 +15,39 @@ use std::sync::Mutex;
 
 use gitraptor_git::{BlobRead, CommittedFile, NotRegular, ReadError, RefName, RepoReader};
 
-use crate::settings::diagnostic::{Code, Diagnostic, Limit, Location, SourceKind};
+use crate::settings::diagnostic::{Code, Diagnostic, Limit, Location, SourceKind, file_name};
 use crate::settings::document::{Parsed, SourceStatus, parse_document};
 use crate::settings::model::{Level, Operation, Settings};
 use crate::settings::strict::MAX_BYTES;
 
 /// Path of the team settings in a commit.
 pub const SETTINGS_PATH: [&str; 2] = [".gitraptor", "settings.json"];
+
+/// Most misnamed settings files reported per source.
+const MISNAMED_MAX: usize = 8;
+
+/// One diagnostic per `*.json` file in the committed `.gitraptor/` other than `settings.json`
+/// (and the local `settings.local.json`, ADR-GRP-008): a misnamed file is never read, so it must
+/// not go unnoticed. Informational: the policy is the one of `settings.json`, or the default.
+fn misnamed_settings(reader: &RepoReader, commit: &str, kind: SourceKind) -> Vec<Diagnostic> {
+    let (dir, file) = (SETTINGS_PATH[0], SETTINGS_PATH[1]);
+    let Ok(names) = reader.committed_file_names(commit, &[dir], usize::MAX) else {
+        return Vec::new();
+    };
+    names
+        .iter()
+        .filter(|n| {
+            n.to_ascii_lowercase().ends_with(".json")
+                && n.as_str() != file
+                && n.as_str() != "settings.local.json"
+        })
+        .take(MISNAMED_MAX)
+        .map(|n| {
+            Diagnostic::new(Code::UnknownSettingsFile, kind)
+                .at(Location::File(file_name(&format!("{dir}/{n}"))))
+        })
+        .collect()
+}
 
 /// Base branch and main branch when nothing says otherwise (BR-CONS-006).
 pub const DEFAULT_BRANCH: &str = "main";
@@ -386,6 +412,22 @@ impl TeamLoader {
     }
 
     fn committed(&self, reader: &RepoReader, commit: Option<&str>, kind: SourceKind) -> TeamSource {
+        let mut source = self.committed_settings(reader, commit, kind);
+        if let Some(commit) = commit {
+            source
+                .parsed
+                .diagnostics
+                .extend(misnamed_settings(reader, commit, kind));
+        }
+        source
+    }
+
+    fn committed_settings(
+        &self,
+        reader: &RepoReader,
+        commit: Option<&str>,
+        kind: SourceKind,
+    ) -> TeamSource {
         let Some(commit) = commit else {
             return TeamSource::absent(kind);
         };

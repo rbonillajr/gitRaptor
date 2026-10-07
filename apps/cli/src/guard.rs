@@ -340,6 +340,12 @@ fn status_lines(status: &GuardStatus) -> Vec<String> {
     for b in &status.last_refusal {
         out.push(format!("  - {}", blocker_text(*b)));
     }
+    for file in &status.misnamed_settings {
+        out.push(t(
+            "guard.status.misnamed-settings",
+            &[("file", &file.sanitized())],
+        ));
+    }
     out
 }
 
@@ -489,6 +495,7 @@ mod tests {
             "guard.degraded.unreachable",
             "guard.refused-agent",
             "guard.unsupported-platform",
+            "guard.status.misnamed-settings",
         ] {
             assert!(has_key(key), "{key}");
         }
@@ -529,5 +536,35 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn status_names_a_misnamed_settings_file_without_its_control_characters() {
+        let status = GuardStatus {
+            repo_id: "r".into(),
+            state: ProtectionState::Unprotected,
+            permission: Permission::NotAsked,
+            offer: true,
+            protected_bases: Vec::new(),
+            base_confirmed: false,
+            not_preventable: Vec::new(),
+            last_refusal: Vec::new(),
+            misnamed_settings: vec![Untrusted::new(".gitraptor/config\u{1b}[31m.json")],
+        };
+        let lines = status_lines(&status);
+        let last = lines.last().unwrap();
+        assert!(last.contains(".gitraptor/config"), "{last}");
+        assert!(last.contains("settings.json"), "{last}");
+        assert!(!last.contains('\u{1b}'), "{last}");
+
+        let clean = GuardStatus {
+            misnamed_settings: Vec::new(),
+            ..status
+        };
+        assert!(
+            !status_lines(&clean)
+                .iter()
+                .any(|l| l.contains("settings.json"))
+        );
     }
 }

@@ -479,6 +479,10 @@ pub struct GuardStatus {
     /// The last install attempt that was refused, with its causes
     /// (BR-EDGE-002); a refusal is not a denial of the permission.
     pub last_refusal: Vec<InstallBlocker>,
+    /// Committed `.gitraptor/*.json` files other than `settings.json`, on the floor or the
+    /// `HEAD`: never read, likely a misnamed settings file (ADR-GRP-007). Informational.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub misnamed_settings: Vec<Untrusted>,
 }
 
 /// `data` of a `GUARD_REJECTED` error: the install did not happen.
