@@ -7,7 +7,6 @@ actor.claude-code = Claude Code
 actor.other = another agent
 actor.other-agent = another agent: {name}
 actor.with-origin = {agent}, {origin}
-actor.inferred = unattributed; inferred: {agent}
 
 origin.detected = detected
 origin.registered = registered

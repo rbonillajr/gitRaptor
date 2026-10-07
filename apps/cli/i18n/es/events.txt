@@ -19,6 +19,8 @@ events.run_by = ejecutado por {agent}
 events.no_trailer = sin trailer
 events.inferred_confirmed = confirmado por el trailer
 events.inferred_unconfirmed = no confirmado por el trailer
+events.no_agent = sin agente
+events.no_agent_inferred = sin agente; inferido: {agent}
 
 event.commit = commit en {branch}
 event.merge = merge en {branch}
