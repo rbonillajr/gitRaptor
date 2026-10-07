@@ -14,7 +14,7 @@ use std::time::Duration;
 use gitraptor_api::catalog::{Layer, OperationArgs, OperationId, RejectReason};
 use gitraptor_git::{ReaderOptions, RepoReader};
 
-use super::scope::{McpAllowlist, NoMcpRepos, ProtectedBackend, RepoHandle, ScopeError};
+use super::scope::{McpAllowlist, McpRepos, ProtectedBackend, RepoHandle, ScopeError};
 use super::{
     PriorError, PriorRequest, PriorSnapshot, PriorSnapshotter, ProtectedStep, StepError,
     StoreSnapshotter,
@@ -249,20 +249,20 @@ impl PriorSnapshotter for UnavailableStore {
 }
 
 /// The production [`ProtectedBackend`]: observed repos, the real store and
-/// the catalog that was wired. The MCP allowlist admits no repo until
-/// DEP-MCP-4.
+/// the catalog that was wired, and the MCP allowlist of the profile
+/// (US-MCP-002).
 pub struct DaemonBackend {
     repos: Arc<TmRepos>,
     wiring: OperationsWiring,
-    allowlist: NoMcpRepos,
+    allowlist: Arc<McpRepos>,
 }
 
 impl DaemonBackend {
-    pub fn new(repos: Arc<TmRepos>, wiring: OperationsWiring) -> Self {
+    pub fn new(repos: Arc<TmRepos>, wiring: OperationsWiring, allowlist: Arc<McpRepos>) -> Self {
         Self {
             repos,
             wiring,
-            allowlist: NoMcpRepos,
+            allowlist,
         }
     }
 }
@@ -299,27 +299,31 @@ impl ProtectedBackend for DaemonBackend {
     }
 
     fn allowlist(&self) -> &dyn McpAllowlist {
-        &self.allowlist
+        self.allowlist.as_ref()
     }
 }
 
 /// The production [`UndoBackend`]: the observed repos with their real store,
-/// wired whether or not a catalog of operations is (US-TMC-002). The MCP
-/// allowlist admits no repo until DEP-MCP-4.
+/// wired whether or not a catalog of operations is (US-TMC-002), and the MCP
+/// allowlist of the profile (US-MCP-002).
 pub struct TimeMachineBackend {
     repos: Arc<TmRepos>,
     prior_layer: Option<SnapshotterLayer>,
-    allowlist: NoMcpRepos,
+    allowlist: Arc<McpRepos>,
 }
 
 impl TimeMachineBackend {
     /// `prior_layer` wraps the snapshotter of the Time Machine's own
     /// commands; honored only in debug builds (tests).
-    pub fn new(repos: Arc<TmRepos>, prior_layer: Option<SnapshotterLayer>) -> Self {
+    pub fn new(
+        repos: Arc<TmRepos>,
+        prior_layer: Option<SnapshotterLayer>,
+        allowlist: Arc<McpRepos>,
+    ) -> Self {
         Self {
             repos,
             prior_layer,
-            allowlist: NoMcpRepos,
+            allowlist,
         }
     }
 }
@@ -349,7 +353,7 @@ impl UndoBackend for TimeMachineBackend {
     }
 
     fn allowlist(&self) -> &dyn McpAllowlist {
-        &self.allowlist
+        self.allowlist.as_ref()
     }
 }
 

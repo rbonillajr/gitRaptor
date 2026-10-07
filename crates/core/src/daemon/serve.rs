@@ -26,7 +26,11 @@ impl Daemon {
         }
         let ops = self.config.operations.clone()?;
         let mut wiring = crate::channel::ProtectedWiring::new(
-            Arc::new(DaemonBackend::new(Arc::clone(&self.tm), ops.clone())),
+            Arc::new(DaemonBackend::new(
+                Arc::clone(&self.tm),
+                ops.clone(),
+                Arc::clone(&self.mcp_repos),
+            )),
             Arc::clone(&ops.gate),
             ops.prior_deadline,
         );
@@ -46,7 +50,11 @@ impl Daemon {
             .filter(|_| cfg!(debug_assertions))
             .map(|l| l.0);
         crate::channel::TimeMachineWiring {
-            backend: Arc::new(TimeMachineBackend::new(Arc::clone(&self.tm), layer)),
+            backend: Arc::new(TimeMachineBackend::new(
+                Arc::clone(&self.tm),
+                layer,
+                Arc::clone(&self.mcp_repos),
+            )),
             git: self.report.git.clone(),
             invoker: self.config.env.invoker(),
             prior_deadline: crate::timemachine::protected::DEFAULT_PRIOR_DEADLINE,
@@ -75,6 +83,7 @@ impl Daemon {
             tm_engine: Some(self.capture_deps()),
             resources: Arc::clone(&self.resources),
             guard: Arc::clone(&self.guard),
+            mcp_repos: Arc::clone(&self.mcp_repos),
         };
         match crate::channel::Server::serve(bound, args) {
             Ok(server) => {

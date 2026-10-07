@@ -731,6 +731,22 @@ impl Connection<'_> {
                 let result = self.repo_retire(spec, request);
                 self.reply(&request.id, result);
             }
+            methods::MCP_ENABLE | methods::MCP_DISABLE => {
+                let result = self.mcp_mark(spec, request);
+                self.reply(&request.id, result);
+            }
+            methods::MCP_ALLOWLIST => {
+                let result = request
+                    .params::<NoParams>()
+                    .map(|_| methods::McpAllowlistResult {
+                        repo_ids: self.ctx.mcp_repos.ids(),
+                    });
+                self.reply(&request.id, result);
+            }
+            methods::MCP_STATUS => {
+                let result = request.params::<NoParams>().and_then(|_| self.mcp_status());
+                self.reply(&request.id, result);
+            }
             methods::REGISTRATION_REGISTER => {
                 let result = self.registration_register(spec, request);
                 self.reply(&request.id, result);
@@ -874,6 +890,65 @@ impl Connection<'_> {
             .control
             .repo_retire(params.repo_id)
             .map_err(repo_command_error)
+    }
+
+    /// `mcp.enable` and `mcp.disable` (US-MCP-002): like `repo.add`, the
+    /// parameters are checked lexically, then the daemon authorizes and
+    /// audits, and only then is the path read.
+    fn mcp_mark(
+        &self,
+        spec: &MethodSpec,
+        request: &Request,
+    ) -> Result<methods::McpRepoResult, ErrorObject> {
+        let params: methods::McpRepoParams = request.params()?;
+        let path = validate::client_path(&params.path).map_err(invalid)?;
+        self.reserved(spec, None)?;
+        let common_dir = crate::observe::locate(&path).map_err(rejected)?;
+        self.ctx
+            .control
+            .mcp_mark(common_dir, spec.name == methods::MCP_ENABLE)
+            .map_err(|err| match err {
+                crate::daemon::McpMarkError::NotObserved => rejected(RepoRejection::NotObserved),
+                crate::daemon::McpMarkError::Internal => {
+                    ErrorObject::new(code::INTERNAL, "profile unavailable")
+                }
+            })
+    }
+
+    /// `mcp.status` (US-MCP-003, ADR-MCP-001 § 2): the repo and the worktree
+    /// come from the caller's working folder, read by the daemon between two
+    /// checks of the caller's identity. Outside an enabled repo the refusal
+    /// carries no data of any repo.
+    fn mcp_status(&self) -> Result<methods::McpStatus, ErrorObject> {
+        self.resolve()?;
+        let cwd = process_cwd(self.peer.pid).and_then(|p| p.canonicalize().ok());
+        let who = self.resolve()?.who;
+        let cwd = cwd.ok_or_else(|| scope_refused(ScopeError::NotObserved))?;
+        let (_, shared) = self.ctx.bus.snapshot();
+        let (r, w) = super::mcp_scope::locate(&cwd, &shared.repos)
+            .ok_or_else(|| scope_refused(ScopeError::NotObserved))?;
+        let repo = &shared.repos[r];
+        if !crate::timemachine::protected::McpAllowlist::allows(
+            self.ctx.mcp_repos.as_ref(),
+            &repo.repo_id,
+        ) {
+            return Err(scope_refused(ScopeError::NotAllowlisted));
+        }
+        let worktree = &repo.worktrees[w];
+        let name = Path::new(worktree.path.raw())
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let action = matches!(who.actor, gitraptor_api::Actor::Unattributed)
+            .then_some(methods::McpStatusAction::RegisterToWrite);
+        Ok(methods::McpStatus {
+            repo_id: repo.repo_id.clone(),
+            repo_state: repo.state,
+            worktree: gitraptor_api::UntrustedName::new(name),
+            main: worktree.main,
+            requester: who.actor,
+            action,
+        })
     }
 
     /// `registration.register` (US-GRP-009, ADR-GRP-005 § 6.6). Not
@@ -1025,7 +1100,13 @@ impl Connection<'_> {
                         } else {
                             common
                         };
-                        cwd.starts_with(worktree).then(|| McpRepoView {
+                        // Outside the allowlist, not even its key (US-MCP-003).
+                        (cwd.starts_with(worktree)
+                            && crate::timemachine::protected::McpAllowlist::allows(
+                                self.ctx.mcp_repos.as_ref(),
+                                &r.repo_id,
+                            ))
+                        .then(|| McpRepoView {
                             repo_id: r.repo_id.clone(),
                             state: r.state,
                         })

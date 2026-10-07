@@ -12,6 +12,7 @@ pub mod bus;
 #[cfg(unix)]
 mod conn;
 pub mod marks;
+mod mcp_scope;
 pub mod peer;
 pub mod requester;
 #[cfg(unix)]

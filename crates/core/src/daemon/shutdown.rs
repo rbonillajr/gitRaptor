@@ -186,6 +186,12 @@ pub(crate) enum Control {
         repo_id: String,
         reply: SyncSender<Result<RepoRetireResult, RepoCommandError>>,
     },
+    /// Puts or takes the MCP mark of an observed repo (US-MCP-002).
+    McpMark {
+        common_dir: std::path::PathBuf,
+        enabled: bool,
+        reply: SyncSender<Result<gitraptor_api::methods::McpRepoResult, super::McpMarkError>>,
+    },
     /// What the observer saw in one window (US-GRP-002): persist, then
     /// publish.
     Observed(Box<ObservedBatch>),
@@ -305,6 +311,28 @@ impl ShutdownHandle {
             .map_err(|_| RepoCommandError::Internal)?;
         rx.recv_timeout(REPO_TIMEOUT)
             .map_err(|_| RepoCommandError::Internal)?
+    }
+}
+
+impl ShutdownHandle {
+    /// Puts or takes the MCP mark through the loop, which owns the profile
+    /// (US-MCP-002).
+    #[cfg_attr(not(unix), allow(dead_code))]
+    pub(crate) fn mcp_mark(
+        &self,
+        common_dir: std::path::PathBuf,
+        enabled: bool,
+    ) -> Result<gitraptor_api::methods::McpRepoResult, super::McpMarkError> {
+        let (reply, rx) = sync_channel(1);
+        self.tx
+            .send(Control::McpMark {
+                common_dir,
+                enabled,
+                reply,
+            })
+            .map_err(|_| super::McpMarkError::Internal)?;
+        rx.recv_timeout(REPO_TIMEOUT)
+            .map_err(|_| super::McpMarkError::Internal)?
     }
 }
 
