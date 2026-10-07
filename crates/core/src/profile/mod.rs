@@ -118,6 +118,23 @@ impl Profile {
         self.index.retire(repo_id, now_ms)
     }
 
+    /// Puts (`enabled`) or takes the MCP mark of an observed repo
+    /// (US-MCP-002). `None`: the repo is not observed; `Some(changed)`.
+    pub fn set_mcp_enabled(
+        &mut self,
+        repo_id: &str,
+        enabled: bool,
+        by: &str,
+        now_ms: i64,
+    ) -> Result<Option<bool>> {
+        self.index.set_mcp_enabled(repo_id, enabled, by, now_ms)
+    }
+
+    /// The observed repos in the MCP allowlist (US-MCP-002).
+    pub fn mcp_enabled_repos(&self) -> Result<Vec<String>> {
+        self.index.mcp_enabled()
+    }
+
     /// Last recorded run of the daemon (ADR-GRP-005 § 4, SEC-13).
     pub fn daemon_run(&self) -> Result<DaemonRun> {
         self.index.daemon_run()

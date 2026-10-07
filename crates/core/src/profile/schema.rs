@@ -39,6 +39,12 @@ CREATE TRIGGER reserved_audit_no_update BEFORE UPDATE ON reserved_audit
 CREATE TRIGGER reserved_audit_no_delete BEFORE DELETE ON reserved_audit
     BEGIN SELECT RAISE(ABORT, 'the audit is append-only'); END;
 ",
+    r"
+-- US-MCP-002: the MCP allowlist is a mark of the observed repo (ADR-GRP-006,
+-- Enmienda (2026-10-05, MCP)). NULL: not enabled.
+ALTER TABLE repos ADD COLUMN mcp_enabled_ms INTEGER;
+ALTER TABLE repos ADD COLUMN mcp_enabled_by TEXT;
+",
 ];
 
 /// Migrations of each per-repo store (`data/repos/<repo_id>.sqlite`), with
