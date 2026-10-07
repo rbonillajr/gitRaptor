@@ -1,10 +1,10 @@
 ---
 mode: draft
 generated: 2026-10-03T00:00Z
-updated: 2026-10-06
+updated: 2026-10-07
 generator: product-owner
-total_artifacts: 19
-expanded: 19
+total_artifacts: 22
+expanded: 22
 approved: 0
 blocked: []
 ---
@@ -23,7 +23,7 @@ blocked: []
 **Estado**: Listo para Desarrollo, sin historias bloqueadas: US-GRP-013 y US-GRP-016 se desbloquearon el 2026-10-04 al aceptarse ADR-GRP-007, que cierra P8 (requerimiento aprobado por Rene Bonilla el 2026-10-03; alcance ajustado por Q32 y Q33-Q36 el mismo día)
 
 **Enlace a contexto completo**: [`context.md`](./context.md) (CTX-GRP-001)
-**Reglas de negocio**: [`business-rules.md`](./business-rules.md) (BR-GRP-001, 22 reglas) · **Diseño**: no aplica (el motor no tiene superficie propia)
+**Reglas de negocio**: [`business-rules.md`](./business-rules.md) (BR-GRP-001, 23 reglas) · **Diseño**: no aplica (el motor no tiene superficie propia)
 
 ---
 
@@ -65,6 +65,9 @@ blocked: []
 | [US-GRP-017](./user-stories/US-GRP-017-consumo-recursos-status.md) | El desarrollador ve cuánto consume GitRaptor en su máquina | Desarrollador quiere `raptor status --resources` con CPU, RAM, disco del perfil y de la Time Machine y vigilancias (RES-10) | expanded |
 | [US-GRP-018](./user-stories/US-GRP-018-doctor-recursos.md) | El desarrollador diagnostica con raptor doctor si GitRaptor gasta de más | Desarrollador quiere que `raptor doctor` avise de cualquier objetivo de consumo superado, también con el motor parado | expanded |
 | [US-GRP-019](./user-stories/US-GRP-019-modo-ahorro-energia.md) | GitRaptor gasta menos batería cuando el portátil no está enchufado | Desarrollador quiere que con batería se espacien las reconciliaciones y se pause el predictor, sin perder protección (RES-08) | expanded |
+| [US-GRP-020](./user-stories/US-GRP-020-carpetas-codigo-repos-descubiertos.md) | El desarrollador ve los repos que aparecen en sus carpetas de código sin tener que añadirlos uno a uno | Desarrollador quiere declarar sus carpetas de código y que se le propongan los repos del primer nivel, sin observarlos | expanded |
+| [US-GRP-021](./user-stories/US-GRP-021-raptor-clone.md) | El desarrollador clona un repo con raptor clone y decide en el momento si GitRaptor lo observa | Desarrollador quiere `raptor clone <url>` con la pregunta de observar al terminar, "no" por defecto | expanded |
+| [US-GRP-022](./user-stories/US-GRP-022-aceptar-descartar-repo-descubierto.md) | El desarrollador decide qué repos descubiertos se observan y los que descarta no vuelven a aparecer | Desarrollador quiere aceptar o descartar repos descubiertos; solo el humano decide y el descarte persiste | expanded |
 
 ---
 
@@ -90,9 +93,12 @@ blocked: []
 | US-GRP-014 | BR-VAL-003, BR-WF-002, BR-EDGE-005 | US-GRP-001, US-GRP-002, US-GRP-005, US-GRP-009, US-GRP-015 | Cockpit F-001-02 y CLI (presentación del aviso) | Must | Una máquina nueva no parece una herramienta rota |
 | US-GRP-015 | BR-WF-002, BR-EDGE-007 | US-GRP-001, US-GRP-002 | Cockpit F-001-02 y CLI (estado vacío guiado) | Should | El primer minuto termina con un repo observado |
 | US-GRP-016 | BR-CONS-006 (equipo), BR-CONS-007, BR-EDGE-007 (rama base del equipo) | US-GRP-012, US-GRP-013, TS-GRD-001 (Guardrails) | — (Q36 satisfecha: ADR-GRP-007 y ADR-GRD-004 aceptados el 2026-10-04) | Should | Todo el equipo mide contra la misma rama base |
-| US-GRP-017 | RES-10, RES-01, 02, 04, 05 (valores mostrados), NFR-10 | US-GRP-001, US-GRP-002 | TS-GRP-005 (clase por pool; no bloqueante) | Must (M1) | Mide cada día que GitRaptor no le quita recursos |
+| US-GRP-017 | RES-10, RES-01, 02, 04, 05 (valores mostrados), NFR-10 | US-GRP-001, US-GRP-002 | TS-GRP-005 (clase por pool; no bloqueante); TS-GRP-006 (activos y dormidos, enmienda 2026-10-07; no bloqueante) | Must (M1) | Mide cada día que GitRaptor no le quita recursos |
 | US-GRP-018 | RES-10 (`doctor`), RES-05, RES-09 | US-GRP-017 | US-TMC-022 (aviso del tope; no bloqueante) | Could | Un solo comando descarta a GitRaptor como causa de la lentitud |
 | US-GRP-019 | RES-08, BR-CONS-005 (intervalo vigente) | TS-GRP-005, US-GRP-004, US-GRP-017 | Predictor TS-CKP-001 (Cockpit) para su escenario | Could | Tenerlo encendido no acorta la batería |
+| US-GRP-020 | BR-AUTH-003, BR-AUTH-001 (enmienda 2026-10-07), BR-CONS-001, SEC-15 | US-GRP-001 | US-CKP-025 (aviso en la TUI; no bloqueante); TS-GRP-006 (coste de un descubierto; no bloqueante) | Should | Ningún repo clonado fuera de GitRaptor se queda sin proteger por olvido |
+| US-GRP-021 | BR-AUTH-003, BR-AUTH-001, NFR-02 | US-GRP-001 | — | Could | Clonar y observar en un paso |
+| US-GRP-022 | BR-AUTH-003, BR-AUTH-001, BR-CONS-005 | US-GRP-020 | US-CKP-025 (decidir desde la TUI; no bloqueante) | Should | Con más de 100 repos, la lista de propuestas no se vuelve ruido |
 
 > **Cambios de dependencias (2026-10-03, segunda pasada del Artifact Judge)**: US-GRP-004 añade 007 y 009 (sesiones y registros que sobreviven al reinicio); US-GRP-006 añade 005 (lo ocurrido mientras estuvo retirado es un hueco) y 009 (atribuciones recuperadas), y su dependencia del MCP queda como no bloqueante; US-GRP-009 depende de 007 y US-GRP-014 de 015 para que no corran en paralelo sobre el mismo modelo; US-GRP-005 ya no exige el estado "Sin repos" (solo la lista vacía). US-GRP-001 deja BR-CONS-006: el ahead/behind es solo de US-GRP-012. US-GRP-013 pasa a bloqueada por P8 y el umbral por defecto queda en US-GRP-007. Nueva US-GRP-016, bloqueada (Q36).
 >
@@ -107,9 +113,10 @@ blocked: []
 - **Ola 4**: US-GRP-005, US-GRP-010 y US-GRP-011 (tras 004).
 - **Ola 5**: US-GRP-006 y US-GRP-014 (tras 005).
 - **Consumo de recursos (2026-10-05)**: US-GRP-017 tras el esqueleto (entra en M1); US-GRP-018 tras 017; US-GRP-019 tras TS-GRP-005 y 004. Decisión del orquestador (2026-10-05), validada por PO y Arquitecto (ADR-GRP-015).
+- **Repos descubiertos (2026-10-07)**: US-GRP-020 y US-GRP-021 en paralelo tras US-GRP-001 (no se tocan: 021 no depende del descubrimiento); US-GRP-022 tras 020, porque decide sobre la lista que fija 020. Ninguna entra en M1. Decisión del orquestador (2026-10-07), validada por el PO.
 - **Desbloqueadas el 2026-10-04** (ADR-GRP-007 aceptado, cierra P8): US-GRP-013 → US-GRP-016, en ese orden; US-GRP-016 espera además a TS-GRD-001 (Guardrails).
 
-> **Secuencias por contrato compartido**: US-GRP-007 → US-GRP-009 (modelo de sesión: estados, origen, presencia), US-GRP-009 → US-GRP-008 (quién hizo un evento: agente con su origen o "sin atribuir"), US-GRP-015 → US-GRP-014 (estados del motor de BR-WF-002) y US-GRP-013 → US-GRP-016 (lectura de la configuración en tres niveles) van en serie, no en paralelo. US-GRP-010 y US-GRP-011 corren en paralelo pero tocan la misma regla de sesiones por worktree (corregir frente a añadir, Q33). En todos los casos el contrato compartido lo fija la Dev Spec de la historia que va primero (007, 009, 015, 013 y, para 010/011, 009).
+> **Secuencias por contrato compartido**: US-GRP-020 → US-GRP-022 (la lista de repos descubiertos y la decisión del humano sobre ella; la fija la Dev Spec de 020). US-GRP-007 → US-GRP-009 (modelo de sesión: estados, origen, presencia), US-GRP-009 → US-GRP-008 (quién hizo un evento: agente con su origen o "sin atribuir"), US-GRP-015 → US-GRP-014 (estados del motor de BR-WF-002) y US-GRP-013 → US-GRP-016 (lectura de la configuración en tres niveles) van en serie, no en paralelo. US-GRP-010 y US-GRP-011 corren en paralelo pero tocan la misma regla de sesiones por worktree (corregir frente a añadir, Q33). En todos los casos el contrato compartido lo fija la Dev Spec de la historia que va primero (007, 009, 015, 013 y, para 010/011, 009).
 >
 > **Ruta crítica**: 001 → 002 → 007 → 009 → 004 → 005 → 006 / 014.
 >
@@ -126,14 +133,15 @@ blocked: []
 | BR-VAL-003 | US-GRP-014 | BR-CONS-007 | US-GRP-013, US-GRP-016 |
 | BR-WF-001 | US-GRP-007, US-GRP-009 | BR-TIME-001 | US-GRP-007, US-GRP-013 |
 | BR-WF-002 | US-GRP-014, US-GRP-015 | BR-EDGE-001 | US-GRP-003 |
-| BR-AUTH-001 | US-GRP-001, US-GRP-006, US-GRP-010 | BR-EDGE-002 | US-GRP-003 |
+| BR-AUTH-001 | US-GRP-001, US-GRP-006, US-GRP-010 (+ enmienda 2026-10-07: US-GRP-020, 021, 022) | BR-EDGE-002 | US-GRP-003 |
 | BR-AUTH-002 | US-GRP-001, US-GRP-007 | BR-EDGE-003 | US-GRP-008 |
 | BR-CONS-001 | US-GRP-001, US-GRP-012 (+ transversal en todas) | BR-EDGE-004 | US-GRP-008 |
 | BR-CONS-002 | US-GRP-010 | BR-EDGE-005 | US-GRP-005, US-GRP-006, US-GRP-014 |
 | BR-CONS-003 | US-GRP-002, 007, 008, 009, 010 | BR-EDGE-006 | US-GRP-007 |
 | BR-CONS-004 | US-GRP-011, US-GRP-009 (confirmar sesión) | BR-EDGE-007 | US-GRP-015, US-GRP-016 (rama base del equipo) |
+| BR-AUTH-003 | US-GRP-020, US-GRP-022, US-GRP-021 (+ US-CKP-025, Cockpit) | | |
 
-**Resultado**: 22 de 22 reglas cubiertas. BR-CONS-007 la cubren US-GRP-013 y US-GRP-016, desbloqueadas el 2026-10-04 (ADR-GRP-007 cierra P8). La parte "configuración del equipo" de BR-CONS-006 y BR-EDGE-007 la verifica US-GRP-016. BR-AUTH-002 es un principio de frontera: en el MVP solo lleva sus dos escenarios exigidos (el motor no modifica hooks, configuración de Git ni metadatos de worktrees, en US-GRP-001; la detección funciona sin hooks propios, en US-GRP-007). Su modelo de permiso explícito no tiene escenarios en el MVP. El rechazo a un agente que cambia los repos observados (Q40) está en una historia Must (US-GRP-001) y se repite con un agente registrado en US-GRP-006. **Codex y Cursor** no tienen historia de soporte completo en el MVP (Q32): quedan cubiertos como "otro agente" por US-GRP-009.
+**Resultado**: 23 de 23 reglas cubiertas (BR-AUTH-003 desde el 2026-10-07). BR-CONS-007 la cubren US-GRP-013 y US-GRP-016, desbloqueadas el 2026-10-04 (ADR-GRP-007 cierra P8). La parte "configuración del equipo" de BR-CONS-006 y BR-EDGE-007 la verifica US-GRP-016. BR-AUTH-002 es un principio de frontera: en el MVP solo lleva sus dos escenarios exigidos (el motor no modifica hooks, configuración de Git ni metadatos de worktrees, en US-GRP-001; la detección funciona sin hooks propios, en US-GRP-007). Su modelo de permiso explícito no tiene escenarios en el MVP. El rechazo a un agente que cambia los repos observados (Q40) está en una historia Must (US-GRP-001) y se repite con un agente registrado en US-GRP-006. **Codex y Cursor** no tienen historia de soporte completo en el MVP (Q32): quedan cubiertos como "otro agente" por US-GRP-009.
 
 ---
 
@@ -154,3 +162,4 @@ blocked: []
 | 1.10 | 2026-10-05 | Orquestador (decisión validada por PO y Arquitecto) | Consumo de recursos (Rene Bonilla, 2026-10-05): US-GRP-017 (`raptor status --resources`, Must, M1), US-GRP-018 (`raptor doctor`, Could) y US-GRP-019 (ahorro de energía, Could). Enabler TS-GRP-005; ADR-GRP-015; RES-01 a RES-10 |
 | 1.11 | 2026-10-05 | Orquestador (decisiones validadas por PO y Arquitecto) | US-GRP-009 implementada (en revisión) con [Dev Spec](./dev-specs/US-GRP-009-dev-spec.md): `registration.register` y `registration.withdraw`, `raptor agent register` y `raptor agent withdraw`, confirmación de la sesión detectada (P16 con el supuesto "sí", pendiente de ratificar por Rene), evidencia por registro para un "otro agente" único en su worktree y sesiones registradas que sobreviven al reinicio. Sin cambios de alcance ni de dependencias; la vía MCP (`register_agent`) sigue en US-MCP-006 |
 | 1.12 | 2026-10-06 | Orquestador (decisiones validadas por el Arquitecto) | US-GRP-004 implementada (en revisión) con [Dev Spec](./dev-specs/US-GRP-004-dev-spec.md): la captura sin superficie abierta y la persistencia tras el reinicio se prueban de punta a punta, y llega el autoarranque real con `raptor daemon enable` y `disable` (PQ-1). Los clientes arrancan el motor por el gestor de servicios cuando está registrado, y `scope.snapshot` dice si lo está. Sin cambios de alcance ni de dependencias |
+| 1.13 | 2026-10-07 | PO (AADD) para Rene Bonilla | Repos descubiertos (propuestas A1 a A3, aceptadas por Rene Bonilla el 2026-10-06; decisión del orquestador validada por el PO): US-GRP-020 (carpetas de código y repos descubiertos, Should), US-GRP-021 (`raptor clone`, Could) y US-GRP-022 (aceptar o descartar un descubierto, Should; el PO la separa de 020 para no pasar de seis escenarios). Ninguna en M1. Nueva BR-AUTH-003 y enmienda de BR-AUTH-001 (23 reglas). US-GRP-017 recibe una enmienda con los repos activos y dormidos por nivel (TS-GRP-006, no bloqueante). La observación por niveles no tiene historia propia (Q49). La pregunta en la TUI es US-CKP-025 (Cockpit) |

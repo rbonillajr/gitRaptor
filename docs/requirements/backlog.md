@@ -13,12 +13,12 @@
 
 *   **F-001-01**: Motor local (BR-01, BR-02, BR-03)
     -   **Contexto**: [context.md](features/motor-local/context.md)
-    -   **Historias**: [user-stories.md](features/motor-local/user-stories.md) (16 historias expandidas en `features/motor-local/user-stories/`, 2026-10-03; ninguna bloqueada desde el 2026-10-04: US-GRP-013 y US-GRP-016 se desbloquearon al aceptarse ADR-GRP-007, que cierra P8)
+    -   **Historias**: [user-stories.md](features/motor-local/user-stories.md) (22 historias expandidas en `features/motor-local/user-stories/`: 16 del 2026-10-03, US-GRP-017 a 019 (recursos) del 2026-10-05 y US-GRP-020 a 022 (repos descubiertos y `raptor clone`) del 2026-10-07; ninguna bloqueada desde el 2026-10-04: US-GRP-013 y US-GRP-016 se desbloquearon al aceptarse ADR-GRP-007, que cierra P8)
     -   **Status**: Priorizada
 
 *   **F-001-02**: Cockpit (BR-04, BR-05, BR-06, BR-07)
     -   **Contexto**: [context.md](features/cockpit/context.md) (reglas en [business-rules.md](features/cockpit/business-rules.md), 2026-10-04; decisiones Q-CKP-1 a Q-CKP-30 tomadas por el orquestador y validadas por PO y Arquitecto. Depende de 14 huecos del motor y de otras features, anotados como DEP-CKP-1 a DEP-CKP-14 sin aplicar; entre ellos SPIKE-CKP-001/ADR-CKP-001 (predicción de conflictos) y ADR-CKP-002 (catálogo y ejecutor de operaciones))
-    -   **Historias**: [user-stories.md](features/cockpit/user-stories.md) (24 historias en `features/cockpit/user-stories/`, 2026-10-04, tras aprobar Rene Bonilla el requerimiento (marca del 2026-10-05); 23 listas para Dev Spec y 1 bloqueada: US-CKP-023, la cola de confirmación, por US-GRD-015 y el factor fuera de banda de Q-GRD-19. DAG en olas con esqueletos US-CKP-001 (lectura) y US-CKP-014 (escritura))
+    -   **Historias**: [user-stories.md](features/cockpit/user-stories.md) (25 historias en `features/cockpit/user-stories/`, 2026-10-04, tras aprobar Rene Bonilla el requerimiento (marca del 2026-10-05), más US-CKP-025 (la TUI en un repo no observado) del 2026-10-07; 24 listas para Dev Spec y 1 bloqueada: US-CKP-023, la cola de confirmación, por US-GRD-015 y el factor fuera de banda de Q-GRD-19. DAG en olas con esqueletos US-CKP-001 (lectura) y US-CKP-014 (escritura))
     -   **Status**: Priorizada
 
 *   **F-001-03**: Time Machine (BR-08, BR-09, BR-10)
@@ -86,7 +86,7 @@ M1 termina cuando se cumplen los seis puntos, verificados en **macOS** (Linux y 
 | MCP mínimo | US-MCP-001, US-MCP-002, US-MCP-003 | Should | US-MCP-001 en curso; ADR-MCP-001 aceptado | No bloquea la salida: la detección funciona por observación y US-MCP-002 arrastra US-GRP-006 y US-GRD-004. Si no entra, es lo primero de M2 |
 | Ver | TS-GRP-004: N8 a N11 | Should | Pendiente | Solo si una historia de M1 los usa |
 
-**Fuera de M1** (siguen en el MVP): US-TMC-022 (tope de disco; sube a M1 si US-GRP-017 mide un almacén de más de 2 GiB), US-GRP-018 (`raptor doctor`), US-GRP-019 (ahorro de energía; el predictor no está en M1), US-GRP-014, US-GRP-015 e INF-GRP-004 (Rene ya tiene Git y compila desde el código), el predictor de conflictos (SPIKE-CKP-001, TS-CKP-001) y la política de autoría de los commits (US-GRD-018 y US-GRD-019, BR-26): el criterio de salida no la necesita y Claude Code ya añade el trailer `Co-Authored-By` por defecto (decisión del orquestador, 2026-10-06, validada por el PO).
+**Fuera de M1** (siguen en el MVP): US-TMC-022 (tope de disco; sube a M1 si US-GRP-017 mide un almacén de más de 2 GiB), US-GRP-018 (`raptor doctor`), US-GRP-019 (ahorro de energía; el predictor no está en M1), US-GRP-014, US-GRP-015 e INF-GRP-004 (Rene ya tiene Git y compila desde el código), el predictor de conflictos (SPIKE-CKP-001, TS-CKP-001) y la política de autoría de los commits (US-GRD-018 y US-GRD-019, BR-26): el criterio de salida no la necesita y Claude Code ya añade el trailer `Co-Authored-By` por defecto (decisión del orquestador, 2026-10-06, validada por el PO). Tampoco entran los repos descubiertos (US-GRP-020 y US-GRP-022, Should), `raptor clone` (US-GRP-021, Could) ni la TUI en un repo no observado (US-CKP-025, Should): Rene ya observa sus repos con `raptor repo add` (decisión del orquestador, 2026-10-07, validada por el PO). US-CKP-025 corrige el hallazgo 1 del dogfooding y conviene tomarla en cuanto haya un agente libre.
 
 ### DAG del hito
 
@@ -167,3 +167,14 @@ flowchart LR
 | De los cambios del canal, solo N1 a N7 son Must | Propuesta del PO, aceptada por el orquestador |
 | **MCP mínimo como Should, no como Must ni fuera de M1** | El PO propuso sacarlo de M1. El orquestador lo deja como Should porque US-MCP-001 ya está en curso, pero no bloquea la salida |
 | US-GRP-017 Must; TS-GRP-005 Should; US-TMC-022, US-GRP-018 y US-GRP-019 fuera de M1 | Decisión del orquestador (2026-10-05), validada por el PO y el Arquitecto |
+| Repos descubiertos y observación por niveles (propuestas A1 a A4 y B de Rene Bonilla, 2026-10-06): US-GRP-020 y US-GRP-022 Should, US-GRP-021 Could y US-CKP-025 Should, todas en el MVP y fuera de M1; nueva BR-AUTH-003 y enmienda de BR-AUTH-001; la notificación nativa del SO queda fuera del MVP (pendiente de que Rene lo ratifique); A4 pasa a la épica E-002 (Fase 2); la observación por niveles no tiene historia propia y se ve en la enmienda de US-GRP-017 | Decisión del orquestador (2026-10-07), validada por el PO. El PO separó US-GRP-022 de US-GRP-020 (seis escenarios como máximo) |
+
+---
+
+## Epic: E-002 - Fase 2: Revisión e integración con la plataforma de código
+**Status**: Propuesta (2026-10-07) | **Value**: Medium
+> Fuente: BRD § 6.2 (Fase 2). No se construye en el MVP. Sin features ni historias expandidas todavía.
+
+*   **Conectar GitHub o Azure DevOps** (propuesta A4 de Rene Bonilla, 2026-10-06; Q48 del contexto del Motor local): el desarrollador conecta su cuenta de GitHub o de Azure DevOps para listar sus repos remotos, clonar uno y observarlo en un paso, y enlazar las ramas de los agentes con sus PRs. Encaja con BR-19 (creación de PRs con work items).
+    -   **Condición**: **opt-in explícito**. Sin conectar nada, GitRaptor no usa la red ni guarda tokens (NFR-03, 100 % local). Conectar una cuenta es una decisión del humano, nunca de un agente; observar un repo clonado así sigue exigiendo su confirmación (BR-AUTH-003).
+    -   **Status**: Propuesta (pendiente de la edición que le corresponde, pregunta abierta 5 del BRD)

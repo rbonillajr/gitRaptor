@@ -1,10 +1,10 @@
 ---
 mode: bulk
 generated: 2026-10-04T00:00Z
-updated: 2026-10-04
+updated: 2026-10-07
 generator: product-owner
-total_artifacts: 24
-expanded: 24
+total_artifacts: 25
+expanded: 25
 approved: 0
 blocked:
   - US-CKP-023
@@ -20,7 +20,7 @@ blocked:
 
 **Feature**: Cockpit (F-001-02) · **Epic**: E-001 — MVP Fase 1
 **Prioridad**: Alta (BR-04 a BR-07 Must; abrir en el editor, selector de repo y CLI de solo lectura, Should)
-**Estado**: 23 historias listas para Dev Spec; 1 bloqueada (US-CKP-023). Requerimiento aprobado por Rene Bonilla (marca de aprobación del 2026-10-05).
+**Estado**: 24 historias listas para Dev Spec (US-CKP-025 añadida el 2026-10-07); 1 bloqueada (US-CKP-023). Requerimiento aprobado por Rene Bonilla (marca de aprobación del 2026-10-05).
 
 **Contexto**: [`context.md`](./context.md) (CTX-CKP-001) · **Reglas**: [`business-rules.md`](./business-rules.md) (BR-CKP-001) · **Enablers**: [`technical-stories.md`](./technical-stories.md) (ADR-CKP-001 a 003, TS-CKP-001 a 005, INF-CKP-001, SPIKE-CKP-001)
 
@@ -66,6 +66,7 @@ blocked:
 | [US-CKP-022](./user-stories/US-CKP-022-grafo-carriles.md) | El desarrollador ve crecer la rama de cada agente sobre la base | 2 | Must | DEP-CKP-2, TS-CKP-005 | expanded |
 | [US-CKP-023](./user-stories/US-CKP-023-cola-confirmacion.md) | El desarrollador aprueba o rechaza desde la TUI las acciones que un agente deja en espera | — | Should | ⛔ US-GRD-015 + factor de Q-GRD-19, TS-CKP-005 | blocked |
 | [US-CKP-024](./user-stories/US-CKP-024-integrar-casos-limite.md) | Integrar sigue siendo seguro cuando el estado cambia, choca o la base no está sacada | 3 | Must | TS-CKP-002, TS-CKP-005 | expanded |
+| [US-CKP-025](./user-stories/US-CKP-025-tui-repo-no-observado.md) | La TUI ofrece observar el repo en el que se abre y, fuera de un repo, lleva a los ya observados | 1 | Should | TS-CKP-005; US-GRP-020 y US-GRP-022 (solo el escenario de descubiertos) | expanded |
 
 ---
 
@@ -74,6 +75,7 @@ blocked:
 ```
 INF-CKP-001, TS-CKP-004, US-GRP-001/002/007/008 ─► CKP-001 ─┬─► CKP-002 ─► CKP-004 ─► CKP-013
                                                             ├─► CKP-003
+                                                            ├─► CKP-025 (descubiertos: + US-GRP-020, 022)
                                                             ├─► CKP-005 ─┐
                                                             └─► CKP-012 ─┴─► CKP-022
                                                                  └────────────────► CKP-021 (+ 014, US-TMC-006, 012, 016)
@@ -97,7 +99,7 @@ US-GRD-015 + factor OS (Q-GRD-19) ─► CKP-023   ⛔ bloqueada
 Las olas cuentan desde US-CKP-001 y suponen integrados sus enablers. Las tres ramas del DAG (lectura, predicción, escritura) avanzan en paralelo en cuanto lo permiten sus enablers.
 
 - **Ola 0 — esqueleto andante**: US-CKP-001.
-- **Ola 1** (en paralelo): US-CKP-002, 003, 005 y 012.
+- **Ola 1** (en paralelo): US-CKP-002, 003, 005, 012 y 025 (su escenario de repos descubiertos se verifica cuando estén US-GRP-020 y 022; no frena el arranque).
 - **Ola 2** (en paralelo): US-CKP-004 y 022 (lectura); US-CKP-006 (cuando esté TS-CKP-001); US-CKP-014 (cuando estén TS-CKP-002 y TS-CKP-003).
 - **Ola 3** (en paralelo): US-CKP-013 y 021 (lectura); US-CKP-007, 008, 009, 010 y 011 (tras 006); US-CKP-015, 017, 018, 019, 020 y 024 (tras 014).
 - **Ola 4**: US-CKP-016 (tras 014 y 015).
@@ -116,6 +118,7 @@ Dos historias de la misma ola no implementan el mismo contrato: lo fija la prime
 | Consultas bajo demanda (N8 de ADR-CKP-003) | US-CKP-012 | US-CKP-021, US-CKP-022 |
 | Preferencias de la TUI (N9 de ADR-CKP-003) | US-CKP-004 | US-CKP-010, US-CKP-013 |
 | Flujo de escritura, confirmación del plan y Deshacer desde la TUI | US-CKP-014 | US-CKP-015, 017, 018, 020, 021, 024 |
+| Arranque fuera de un repo y pregunta de observar | US-CKP-025 | US-CKP-004 (la vista recordada gana cuando existe) |
 | Comando reservado desde la TUI (excepción consciente) | US-CKP-019 | confirmar la base desde la TUI (US-CKP-009 usa la CLI mientras tanto) |
 
 > **Dependencias blandas**: US-CKP-002 sube filas por ⚡ cuando exista US-CKP-006 (por ⛔ lo verifica US-CKP-019); US-CKP-010 cuenta los conflictos de merges del Cockpit cuando exista US-CKP-016. Esos escenarios se verifican al integrarse la otra historia; no frenan el arranque.
@@ -158,7 +161,7 @@ Las 46 reglas BR-CKP (las 45 de `main` más BR-CKP-WF-008, que añade ADR-CKP-00
 
 | Capacidad | Historias |
 |-----------|-----------|
-| BR-04 Lista en vivo | US-CKP-001 a 005, 011 |
+| BR-04 Lista en vivo | US-CKP-001 a 005, 011, 025 |
 | BR-05 Grafo en vivo | US-CKP-022 |
 | BR-06 Predicción de conflictos | US-CKP-006 a 011 |
 | BR-07 Acciones por agente | US-CKP-012 a 021, 024, 023 ⛔ |
@@ -178,3 +181,12 @@ Ninguna decisión de este índice cambia una decisión del requerimiento. Todas:
 | D-US-CKP-5 | Cada contrato compartido tiene una historia que lo fija (tabla de contratos) para que la flota no lo implemente dos veces en paralelo. | Ajuste del Arquitecto |
 | D-US-CKP-6 | Confirmar la rama base es una acción reservada: US-CKP-009 la verifica con la CLI; ofrecerla desde la TUI reutiliza el comando reservado de US-CKP-019. | Ajuste del Arquitecto |
 | D-US-CKP-7 | Las historias cubren ya BR-CKP-WF-008 (Cancelar, solo desde la TUI) y los ajustes de ELIG-004, EDGE-008, AUTH-003 y CONS-005 que introducen ADR-CKP-001 y ADR-CKP-002. Que WF-008 permita cancelar desde la CLI choca con CONS-007 (CLI de solo lectura): queda para el Arquitecto antes de la Dev Spec de US-CKP-016. | Detectado por el PO |
+| D-US-CKP-8 | US-CKP-025 (2026-10-07): la TUI pregunta "¿Observar este repo? [s/N]" en un repo no observado, con "no" por defecto, y no pregunta si la lanzó un agente; fuera de un repo y sin vista recordada lleva a los observados en lugar de sugerir `raptor repo add`; propone los repos descubiertos (US-GRP-020). Sus reglas son BR-CKP-AUTH-002 y BR-AUTH-001/003 del Motor local; ninguna regla BR-CKP nueva. Should, fuera de M1; se recomienda tomarla pronto porque corrige el hallazgo 1 del dogfooding. | Decisión del orquestador (2026-10-07), validada por el PO |
+
+---
+
+## Changelog
+
+| Versión | Fecha | Autor | Cambios |
+|---------|-------|-------|---------|
+| 1.1 | 2026-10-07 | PO (AADD) para Rene Bonilla | Nueva US-CKP-025 (propuesta A3 y hallazgo 1 del dogfooding, aceptados por Rene Bonilla el 2026-10-06): ola 1, Should. Fila del índice, DAG, olas, contratos compartidos, cobertura de BR-04 y D-US-CKP-8. `total_artifacts: 25`. Las versiones anteriores no tenían changelog en este índice (1.0 = índice del 2026-10-04) |

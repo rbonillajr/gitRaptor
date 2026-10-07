@@ -4,7 +4,7 @@ title: "Reglas de Negocio — Motor local"
 type: business-rules
 status: draft
 created: 2026-10-01
-updated: 2026-10-04
+updated: 2026-10-07
 domain: GRP
 epic: E-001
 feature: motor-local
@@ -28,6 +28,10 @@ related:
     - US-GRP-014
     - US-GRP-015
     - US-GRP-016
+    - US-GRP-020
+    - US-GRP-021
+    - US-GRP-022
+    - US-CKP-025
 tags:
   - motor-local
   - atribucion
@@ -37,6 +41,7 @@ tags:
   - configuracion-tres-niveles
   - primer-uso
   - requisitos-entorno
+  - repos-descubiertos
 ---
 
 # Reglas de Negocio: Motor local
@@ -63,11 +68,11 @@ tags:
 | Cálculos de Negocio | 0 | 0 |
 | Reglas de Elegibilidad | 0 | 0 |
 | Workflows y Estados | 2 | 2 |
-| Permisos y Autorizaciones | 2 | 2 |
+| Permisos y Autorizaciones | 3 | 3 |
 | Reglas de Consistencia de Datos | 7 | 4 |
 | Reglas de Tiempo y Expiración | 1 | 0 |
 | Reglas Excepcionales (Edge Cases) | 7 | 3 |
-| **Total** | **22** | **13** |
+| **Total** | **23** | **14** |
 
 "Críticas" = reglas con criticidad Alta.
 
@@ -289,6 +294,7 @@ Observando | Sin repos → Esperando Git
 - Ningún estado requiere tener un agente instalado (BR-EDGE-006).
 - Cómo se presenta cada estado (texto, diseño del estado vacío) lo deciden el Cockpit y la CLI; el motor expone el estado y lo que falta.
 - Mientras el motor está en "Esperando Git" no se pueden añadir repos, porque sin Git el motor no puede comprobar que un directorio es un repo (BR-VAL-002); el desarrollador los añade cuando Git ya cumple el requisito (supuesto S18, aceptado por Rene Bonilla el 2026-10-02; cierra P13).
+- **Enmienda (2026-10-07)**: un repo descubierto (BR-AUTH-003) no cuenta como observado. Con repos descubiertos y ninguno aceptado, el estado sigue siendo "Sin repos"; la guía para añadir el primero puede ofrecer los descubiertos.
 
 #### Cómo se verifica (escenarios de verificación)
 
@@ -312,7 +318,7 @@ Observando | Sin repos → Esperando Git
 
 ### BR-AUTH-001: Solo se observan los repos que el desarrollador añadió
 
-**Descripción**: El motor observa únicamente los repos que el desarrollador añadió de forma explícita. No descubre repos por su cuenta, y un agente no puede ampliar ese conjunto. Añadir un repo no crea nada en él: el repo queda anotado en el perfil de GitRaptor (Q21, BR-CONS-001). Retirarlo deja de observarlo.
+**Descripción**: El motor observa únicamente los repos que el desarrollador añadió de forma explícita. Solo descubre repos dentro de las carpetas de código que el desarrollador declaró, y descubrir nunca es observar (BR-AUTH-003) *(enmienda 2026-10-07: antes, "No descubre repos por su cuenta")*. Un agente no puede ampliar ese conjunto. Añadir un repo no crea nada en él: el repo queda anotado en el perfil de GitRaptor (Q21, BR-CONS-001). Retirarlo deja de observarlo.
 
 **Retirar no borra** (Q25, confirma el supuesto S16): retirar un repo de la observación no borra sus datos del perfil (registro de agentes, atribuciones, historial de eventos, estado de sesiones). Si el desarrollador vuelve a añadir ese repo, esos datos vuelven a estar disponibles. Lo ocurrido en el repo mientras estuvo retirado no se observó y se trata como un hueco de observación: queda "sin atribuir" (BR-EDGE-005).
 
@@ -338,22 +344,31 @@ No puede: Añadir ni retirar repos observados (Q40); corregir una atribución (B
 |-----|--------|-----------|-------------|
 | **Desarrollador** | Añadir / retirar repo observado | ✅ | Queda anotado en el perfil; no se crea nada en el repo (Q21). Retirarlo no borra sus datos del perfil (Q25) |
 | **Desarrollador** | Registrar / retirar agente en un worktree | ✅ | BR-VAL-001, BR-VAL-002 |
+| **Desarrollador** | Declarar / retirar una carpeta de código (raíz) | ✅ | Con `raptor repo roots add` / `remove` (comando reservado), nunca como configuración; raíces válidas según BR-AUTH-003 (enmienda 2026-10-07) |
+| **Desarrollador** | Aceptar / descartar un repo descubierto | ✅ | Aceptar es añadir el repo; solo desde la TUI o la CLI en su propia terminal, nunca por MCP (BR-AUTH-003) |
 | **Desarrollador** | Corregir una atribución automática | ✅ | Reemplaza la atribución detectada; no añade sesión (BR-CONS-002, Q33) |
 | **Desarrollador** | Ajustar el umbral de inactividad de un repo | ✅ | Lo edita él en la configuración local personal del repo; el motor solo la lee (BR-TIME-001, BR-CONS-007) |
 | **Agente** (cualquier tipo) | Registrarse en su worktree | ✅ | BR-VAL-001, BR-VAL-002 |
 | **Agente** (cualquier tipo) | Añadir / retirar repo observado | ❌ | Solo el desarrollador cambia los repos observados (Q40) |
 | **Agente** (cualquier tipo) | Corregir una atribución | ❌ | Solo el desarrollador corrige; el agente se registra (BR-CONS-002) |
+| **Agente** (cualquier tipo) | Declarar / retirar una raíz; aceptar / descartar un repo descubierto | ❌ | Ni por MCP ni desde un proceso lanzado por el agente (BR-AUTH-003, enmienda 2026-10-07) |
 
 **Excepciones**:
 - Ninguna en el MVP.
 
 **Un agente no cambia los repos observados** (Q40, confirma el supuesto S7; coherente con la allowlist de NFR-02): solo el desarrollador añade o retira repos. Si un agente lo pide, el motor lo rechaza y la lista de repos observados no cambia.
 
+#### Enmienda (2026-10-07): descubrir dentro de las raíces declaradas
+
+> **Origen**: Decisión del orquestador (2026-10-07), validada por el PO, sobre las propuestas A1 a A3 aceptadas por Rene Bonilla (2026-10-06). Decisiones Q43 a Q48 del contexto.
+
+La frase "no descubre repos por su cuenta" se sustituye por: **el motor solo descubre repos dentro de las carpetas de código que el desarrollador declaró, y descubrir nunca es observar**. Lo que no cambia: solo el humano decide qué se observa, y un agente no amplía el conjunto. Las condiciones del descubrimiento (raíces, primer nivel, confirmación humana, descarte) están en BR-AUTH-003.
+
 **Referencias**:
-- User Story: US-GRP-001, US-GRP-006, US-GRP-010 (el agente no corrige)
+- User Story: US-GRP-001, US-GRP-006, US-GRP-010 (el agente no corrige); US-GRP-020, US-GRP-022 y US-CKP-025 (enmienda 2026-10-07)
 - BRD: NFR-02, NFR-03
-- Contexto: decisiones Q16, Q21, Q25 y Q40
-- Relacionada: BR-EDGE-005
+- Contexto: decisiones Q16, Q21, Q25, Q40 y Q43 a Q48
+- Relacionada: BR-EDGE-005, BR-AUTH-003
 
 ---
 
@@ -401,6 +416,53 @@ Lo que está fuera del repo observado (configuración global de Git, otros repos
 - BRD: BR-02, BR-12, NFR-01, NFR-07
 - Contexto: decisiones Q11, Q14, Q15, Q17 y Q22; riesgos R7, R8 y R9
 - Relacionada: BR-CONS-001
+
+---
+
+### BR-AUTH-003: Descubrir repos dentro de las carpetas de código declaradas nunca es observar
+
+> **Origen**: Decisión del orquestador (2026-10-07), validada por el PO, sobre las propuestas A1 a A3 aceptadas por Rene Bonilla (2026-10-06). Enmienda BR-AUTH-001 (decisiones Q43 a Q48 del contexto).
+
+**Descripción**: El desarrollador puede declarar una o varias **carpetas de código** (raíces), por ejemplo `~/Documents/code`. El motor vigila **solo el primer nivel** de cada raíz y, cuando encuentra en él un repo que no observa, lo marca como **descubierto** y lo propone: "¿Observar *x*?". Un repo descubierto **no se observa**: el motor no registra sus eventos ni sus sesiones, no aparece en la vista de la flota y no entra en la lista de repos que puede usar el MCP. Pasa a observado solo cuando el humano lo **acepta**, y aceptar es lo mismo que añadirlo (BR-AUTH-001).
+
+**Criticidad**: Alta
+
+**Condiciones**:
+
+1. **Las raíces son personales y de la máquina, y no son configuración.** Se guardan en el perfil, junto a la lista de repos observados, y solo se gestionan con comandos reservados al humano: `raptor repo roots` (listar), `raptor repo roots add <ruta>` y `raptor repo roots remove <ruta>` *(ajuste 2026-10-07: antes, "se declaran en el perfil" como valor de configuración)*. Una raíz escrita en cualquier archivo de configuración (del equipo, del perfil o local del repo) no se tiene en cuenta y el motor avisa. Motivo: un repo clonado no puede decidir qué carpetas de la máquina se vigilan, y un agente puede escribir un archivo de configuración pero no ejecutar un comando reservado.
+2. **Raíces válidas.** Se rechaza, con su motivo y la alternativa: la raíz del sistema de archivos o de una unidad, la carpeta personal entera o una carpeta que la contiene, una ruta que no existe o que no es una carpeta, una carpeta que ya es un repo (se añade con `raptor repo add`), una carpeta dentro de un repo, el propio perfil de GitRaptor y una ruta de red. Como mucho 16 raíces (SEC-15). Declarar dos veces la misma raíz no cambia nada.
+3. **Solo el primer nivel.** Un repo anidado más abajo (`~/code/clientes/acme`) no se descubre. Un worktree de un repo ya observado no se propone como repo nuevo: ya se observa como worktree.
+4. **Avisos.** Al declarar una raíz, los repos que ya contiene quedan descubiertos con **un único aviso** que da el número. Después, cada repo que aparece genera un aviso. Un repo descubierto sigue en la lista de descubiertos hasta que el humano decida. En el MVP el aviso se ve en la TUI y en la lista de la CLI (`raptor repo discovered`); la notificación nativa del sistema operativo queda fuera del MVP (Q46).
+5. **Observar exige confirmación humana.** Aceptar un repo descubierto, responder a la pregunta de `raptor clone` o a la de la TUI abierta en un repo no observado son acciones del humano: desde la TUI o la CLI que él lanza en su propia terminal. Nunca por MCP y nunca desde un proceso lanzado por un agente (el motor resuelve quién pide la acción por la ascendencia del proceso, como en BR-CKP-AUTH-002). Sin terminal interactiva no se pregunta y no se observa. **La respuesta por defecto es no observar** (`[s/N]`).
+6. **Descartar es persistente** (`raptor repo dismiss <ruta>`; aceptar es `raptor repo add <ruta>`). Un repo descartado no se vuelve a proponer, tampoco tras reiniciar el motor (BR-CONS-005). Se puede añadir a mano en cualquier momento con `raptor repo add`. Responder "N" a una pregunta no es descartar: solo no observa ahora.
+7. **Retirar una raíz** quita las propuestas pendientes de esa raíz y no cambia nada de lo observado.
+8. **Un agente no decide.** Un agente no puede declarar ni retirar raíces, ni aceptar ni descartar repos descubiertos (coherente con Q40). Sí puede clonar (con `git clone` o con `raptor clone`), pero sin que eso observe nada.
+9. **Descubrir no escribe nada** en el repo descubierto ni en la raíz (BR-CONS-001): la lista de raíces, de descubiertos y de descartados vive en el perfil.
+
+> ⚠️ **ASSUMPTION**: el PO rechaza la carpeta personal entera como raíz porque mezcla código con carpetas personales y, en macOS, su primer nivel cambia sin parar. Si Rene clona repos directamente en su carpeta personal, habría que admitirla con un aviso `[POR VERIFICAR con Rene Bonilla]`.
+>
+> ⚠️ **ASSUMPTION**: un repo descartado se identifica por su ruta; si en la misma ruta aparece otro repo, sigue descartado. Retirar un repo observado que vive en una raíz cuenta como descartarlo: no se vuelve a proponer `[POR VERIFICAR con Rene Bonilla]`.
+
+**Regla formal**:
+```
+raíces ⊆ índice del perfil (solo por comando reservado);  raíz válida ⇔ carpeta existente ∧ ¬raíz del sistema o unidad ∧ ¬carpeta personal ∧ ¬repo ∧ ¬dentro de un repo
+descubierto(r) ⇔ r es repo en el primer nivel de una raíz ∧ r ∉ observados ∧ r ∉ descartados ∧ r ∉ worktrees de observados
+observado(r) ⇐ añadir(r) | aceptar(r)   con solicitante = humano y canal ∈ {TUI, CLI en su terminal}
+Constraint: solicitante = agente ∨ canal = MCP → rechazo; la lista no cambia
+Constraint: pregunta sin respuesta, sin terminal interactiva o con Intro → no observar
+```
+
+**Ejemplo**:
+- Rene declara `~/Documents/code` con 104 repos → un aviso: "104 repos descubiertos"; ninguno se observa. Acepta `gitRaptor` y descarta el resto que no usa.
+- Clona `billing` desde GitKraken en `~/Documents/code` → la TUI propone "¿Observar billing?"; mientras no responda, `billing` no se observa.
+- Claude Code pide por MCP observar `~/Documents/code/otro` → no hay herramienta para hacerlo.
+- La configuración de equipo de `shop` declara `~/proyectos` como raíz → no se vigila; el motor avisa.
+
+**Referencias**:
+- User Story: US-GRP-020 (raíces y descubrimiento), US-GRP-022 (aceptar y descartar), US-GRP-021 (`raptor clone`), US-CKP-025 (la TUI)
+- BRD: NFR-02, NFR-03, NFR-01
+- Contexto: decisiones Q43 a Q48
+- Relacionada: BR-AUTH-001, BR-CONS-001, BR-CONS-005, BR-WF-002 · NFR: SEC-15, RES-11
 
 ---
 
@@ -656,6 +718,14 @@ Constraint: atribución + historial de eventos + estado de sesiones antes del re
 - Contexto: decisiones Q1 y Q6
 - Relacionada: BR-EDGE-005 (qué pasa si aun así hay un hueco)
 
+#### Enmienda (2026-10-07): un repo en reposo sigue observado
+
+> **Origen**: Decisión del orquestador (2026-10-07), validada por el PO (condición Q49) y por el Arquitecto (TS-GRP-006, RES-12).
+
+Un repo observado puede pasar a **dormido** cuando lleva un tiempo configurable sin actividad, sin sesiones presentes y sin ninguna superficie abierta sobre él. **Dormir no lo saca de la observación**: lo que ocurre en él se sigue capturando y la protección no se reduce (Q49). Lo que cambia es el retraso: el primer cambio lo despierta y queda publicado en ≤ 2 s p95 (RES-12), frente al presupuesto en vivo de un repo activo (NFR-04). También lo despiertan la aparición de una sesión de agente, abrir la TUI en él o la petición de cualquier cliente. Un repo con algún worktree que el motor no puede vigilar en vivo no duerme.
+
+**Ejemplo**: `docs-site` lleva 8 horas sin actividad y duerme. Claude Code empieza una sesión en él → el repo despierta y la sesión y sus commits se atribuyen como en un repo activo.
+
 ---
 
 ### BR-CONS-006: La rama base de cada repo la define solo la configuración del repo del equipo; por defecto `main`
@@ -870,11 +940,14 @@ Acción al cumplirse: la sesión pasa a Inactivo
 
 **Regla**: lo que el motor no vio ocurrir no se atribuye a ningún agente. El hueco queda señalado para que la Time Machine sepa que en ese periodo no hay atribución.
 
+**Enmienda (2026-10-07), causa `dormant`**: lo que el motor encuentra en un repo dormido **sin que su vigilancia lo señalara**, solo en una comprobación periódica de respaldo, es un hueco de causa `dormant` ("observación en reposo"): queda "sin atribuir" como cualquier otro hueco. Lo que la vigilancia sí señaló al despertar el repo **no es hueco** y se atribuye con normalidad (BR-CONS-005). El motor lleva la cuenta de los huecos `dormant` como diagnóstico. Si esa cuenta deja de ser excepcional en el dogfooding, el PO revisa Q49.
+
 **Otros casos que se tratan como hueco**: el tiempo en que un repo estuvo retirado de la observación y se vuelve a añadir (Q25), y la pérdida o el borrado del perfil de GitRaptor: el motor sigue funcionando, los repos se vuelven a añadir y lo ocurrido mientras no hubo datos queda "sin atribuir" (Q26). Una computadora nueva se comporta igual que un perfil perdido (BR-EDGE-007, Q31).
 
 **Ejemplo**:
 - Claude Code está registrado en `feat-login`; la máquina se apaga; mientras tanto, desde otra máquina se hacen dos commits en esa rama sobre el disco compartido. Al encender, el motor muestra el estado actual de `feat-login` y los dos commits como "sin atribuir".
 - El perfil de GitRaptor se borra. El desarrollador vuelve a añadir `gitRaptor`; el motor muestra su estado actual, observa desde ese momento y presenta como "sin atribuir" todo lo anterior que ya no tiene datos.
+- *(Enmienda 2026-10-07)* `docs-site` duerme. Una edición en él lo despierta y se publica sin hueco. Si la vigilancia hubiera fallado y el commit lo encontrara la comprobación de respaldo, ese commit quedaría "sin atribuir" en un hueco `dormant`.
 
 **Referencias**:
 - User Story: US-GRP-005, US-GRP-006
@@ -956,6 +1029,7 @@ Acción al cumplirse: la sesión pasa a Inactivo
 | BR-VAL-003 | Media | Baja | 🟡 P1 |
 | BR-EDGE-006 | Media | Baja | 🟡 P1 |
 | BR-EDGE-007 | Media | Baja | 🟡 P1 |
+| BR-AUTH-003 | Alta | Media | 🟡 P1 (sus historias son Should: el MVP funciona añadiendo repos a mano) |
 
 **Leyenda**:
 - 🔴 **P0**: Crítico. Sin esto el feature no funciona.
@@ -968,11 +1042,11 @@ Acción al cumplirse: la sesión pasa a Inactivo
 
 ### Reglas → User Stories
 
-Cada regla indica sus historias en su apartado "Referencias". La matriz completa está en el índice [`user-stories.md`](./user-stories.md) (sección "Cobertura de reglas"). Las 22 reglas tienen al menos una historia. BR-CONS-007 solo la cubren historias bloqueadas por P8 (US-GRP-013 y US-GRP-016), y la parte "configuración del equipo" de BR-CONS-006 y BR-EDGE-007 está en US-GRP-016 (Q36). BR-CONS-002 (corregir, US-GRP-010) y BR-CONS-004 (registrar otro agente, US-GRP-011) tienen escenarios que se contrastan entre sí (Q33); US-GRP-009 añade el registro que confirma una sesión ya detectada (Q39). BR-AUTH-001 exige que un agente no cambie los repos observados ya en una historia Must (US-GRP-001) y que no corrija atribuciones (US-GRP-010). BR-CONS-005 se comprueba también en la persistencia de una corrección (US-GRP-010) y de un worktree compartido (US-GRP-011). BR-CONS-001 (cero escrituras en el repo) y el mismo comportamiento en Windows, macOS y Linux se exigen además en todas las historias.
+Cada regla indica sus historias en su apartado "Referencias". La matriz completa está en el índice [`user-stories.md`](./user-stories.md) (sección "Cobertura de reglas"). Las 23 reglas tienen al menos una historia. BR-CONS-007 solo la cubren historias bloqueadas por P8 (US-GRP-013 y US-GRP-016), y la parte "configuración del equipo" de BR-CONS-006 y BR-EDGE-007 está en US-GRP-016 (Q36). BR-CONS-002 (corregir, US-GRP-010) y BR-CONS-004 (registrar otro agente, US-GRP-011) tienen escenarios que se contrastan entre sí (Q33); US-GRP-009 añade el registro que confirma una sesión ya detectada (Q39). BR-AUTH-001 exige que un agente no cambie los repos observados ya en una historia Must (US-GRP-001) y que no corrija atribuciones (US-GRP-010). BR-CONS-005 se comprueba también en la persistencia de una corrección (US-GRP-010) y de un worktree compartido (US-GRP-011). BR-CONS-001 (cero escrituras en el repo) y el mismo comportamiento en Windows, macOS y Linux se exigen además en todas las historias. **Enmienda 2026-10-07**: BR-AUTH-003 la cubren US-GRP-020 (raíces, primer nivel, raíz inválida, raíz en la configuración de un repo, agente que declara), US-GRP-022 (aceptar, descartar, agente que acepta), US-GRP-021 (`raptor clone`, no por defecto) y US-CKP-025 (la TUI pregunta con N por defecto; una TUI de agente no pregunta); la enmienda de BR-AUTH-001 se verifica en esas mismas historias.
 
 ### Reglas → Criterios de Aceptación
 
-Cada regla debe estar reflejada en al menos un **escenario Gherkin** (criterio de aceptación del PO) de la user story correspondiente. BR-CONS-001 se verifica además con la comparación "antes y después" descrita en la propia regla (nada cambia en el repo; fuera de él solo cambian los datos del motor en el perfil), e incluye un escenario en el que preparar todos los cambios del repo después de observarlo no recoge nada del motor. BR-AUTH-002 necesita en el MVP un escenario negativo (el motor no modifica hooks, configuración de Git del repo ni metadatos de worktrees en ninguna situación) y uno de detección sin hooks (la detección funciona sin hooks propios y con los de Guardrails ausentes o desactivados); el modelo de permiso explícito no tiene escenarios en el MVP. BR-CONS-007 necesita escenarios de precedencia por valor (Q24): para el umbral de inactividad, la configuración local personal gana al perfil y un umbral en la configuración del equipo no se tiene en cuenta; para la rama base, solo cuenta la configuración del equipo y un valor en el perfil o en la configuración local personal no la cambia. Necesita además uno que compruebe que el motor no escribe ningún nivel. BR-EDGE-005 necesita, además del hueco por máquina apagada, un escenario de repo retirado y vuelto a añadir (sus datos anteriores siguen disponibles, Q25) y uno de perfil perdido (el motor sigue funcionando y lo no observado queda "sin atribuir", Q26). El primer uso (Q28-Q31) necesita los cinco escenarios de verificación de BR-WF-002: máquina nueva con GitRaptor instalado antes que Git, Git instalado después, Git antiguo actualizado, Claude Code instalado después y sin repos. BR-VAL-003 necesita además un escenario negativo (con Git ausente o antiguo no se observa ningún repo y el motor no instala ni actualiza Git) y BR-EDGE-007 uno de máquina nueva (perfil vacío, lo anterior "sin atribuir" y la rama base del equipo aplicada desde el primer momento).
+Cada regla debe estar reflejada en al menos un **escenario Gherkin** (criterio de aceptación del PO) de la user story correspondiente. BR-CONS-001 se verifica además con la comparación "antes y después" descrita en la propia regla (nada cambia en el repo; fuera de él solo cambian los datos del motor en el perfil), e incluye un escenario en el que preparar todos los cambios del repo después de observarlo no recoge nada del motor. BR-AUTH-002 necesita en el MVP un escenario negativo (el motor no modifica hooks, configuración de Git del repo ni metadatos de worktrees en ninguna situación) y uno de detección sin hooks (la detección funciona sin hooks propios y con los de Guardrails ausentes o desactivados); el modelo de permiso explícito no tiene escenarios en el MVP. BR-CONS-007 necesita escenarios de precedencia por valor (Q24): para el umbral de inactividad, la configuración local personal gana al perfil y un umbral en la configuración del equipo no se tiene en cuenta; para la rama base, solo cuenta la configuración del equipo y un valor en el perfil o en la configuración local personal no la cambia. Necesita además uno que compruebe que el motor no escribe ningún nivel. BR-EDGE-005 necesita, además del hueco por máquina apagada, un escenario de repo retirado y vuelto a añadir (sus datos anteriores siguen disponibles, Q25) y uno de perfil perdido (el motor sigue funcionando y lo no observado queda "sin atribuir", Q26). El primer uso (Q28-Q31) necesita los cinco escenarios de verificación de BR-WF-002: máquina nueva con GitRaptor instalado antes que Git, Git instalado después, Git antiguo actualizado, Claude Code instalado después y sin repos. BR-VAL-003 necesita además un escenario negativo (con Git ausente o antiguo no se observa ningún repo y el motor no instala ni actualiza Git) y BR-EDGE-007 uno de máquina nueva (perfil vacío, lo anterior "sin atribuir" y la rama base del equipo aplicada desde el primer momento). BR-AUTH-003 necesita escenarios negativos de agente (por MCP y desde su terminal) para declarar raíces y para aceptar, uno de raíz inválida, uno de primer nivel, uno de descarte que sobrevive al reinicio y uno de respuesta por defecto "no observar".
 
 ---
 
@@ -994,3 +1068,5 @@ Cada regla debe estar reflejada en al menos un **escenario Gherkin** (criterio d
 | 1.11 | 2026-10-03 | PO (AADD) para Rene Bonilla | Decisiones Q37-Q42 (segunda pasada del Artifact Judge, RESERVAS). Q37 (cierra P14): BR-CONS-002 reatribuye los eventos de la sesión mal detectada desde su inicio; los de otras sesiones no cambian. Q38 (cierra P15): sin atribución detectada no se corrige; el motor indica que se use el registro. BR-CONS-002 añade que solo corrige el desarrollador y que la corrección persiste al reiniciar el motor, con ejemplos; nuevo supuesto P17 (retirar la corrección y los eventos reatribuidos). Q39: BR-CONS-004 distingue registrar al mismo agente ya detectado (confirma la sesión, no duplica, no comparte) de registrar otro; nuevo supuesto P16 (origen de la sesión confirmada). Q40 (confirma S7): BR-AUTH-001 sin marca de supuesto y con la fila "un agente no corrige". Q41 (confirma S8): BR-WF-001 sin marcas de supuesto. Q42: BR-CONS-006, rama base inexistente sin marca de supuesto. S18 y S19 figuran como aceptados en BR-VAL-003 y BR-WF-002 (cierra P13). Referencias y trazabilidad actualizadas. Sin reglas nuevas: conteos (22 / 13) y matriz sin cambios |
 | 1.12 | 2026-10-04 | PO (AADD) para Rene Bonilla | Decisiones heredadas de Guardrails Q-GRD-18, Q-GRD-20 y Q-GRD-21 (Rene Bonilla, revisión de arquitectura de Guardrails), posteriores a la aprobación del requerimiento. BR-CONS-006: la rama base se lee de la configuración del equipo commiteada en la copia conocida de la rama principal (no del archivo en disco del worktree principal); el ahead/behind se calcula contra la rama base confirmada, la misma que protege Guardrails; un cambio queda "pendiente de confirmar" y, sin confirmación inicial, se calcula contra la leída marcada como "no confirmada". BR-EDGE-007: la confirmación inicial al añadir el repo en una máquina nueva. Sin reglas nuevas. |
 | 1.13 | 2026-10-04 | PO (AADD) para Rene Bonilla | Decisión heredada de Guardrails Q-GRD-23 (Rene Bonilla): la confirmación inicial de la rama base se hace al instalar la protección de Guardrails o de forma explícita, nunca al añadir el repo. BR-EDGE-007 vuelve a su sentido original (la rama base del equipo aplica desde el primer momento) con la marca "no confirmada" hasta la confirmación; BR-CONS-006 quita "al añadir el repo" como vía de confirmación. Sin reglas nuevas. |
+| 1.14 | 2026-10-07 | PO (AADD) para Rene Bonilla | Decisión del orquestador (2026-10-07), validada por el PO, sobre las propuestas A1 a A3 aceptadas por Rene Bonilla (2026-10-06); decisiones Q43 a Q48 del contexto. Enmienda de BR-AUTH-001: el motor solo descubre dentro de las carpetas de código declaradas y descubrir nunca es observar (frase anterior marcada); nuevas filas de permisos. Nueva BR-AUTH-003 (raíces solo en el perfil, raíces válidas, primer nivel, avisos, confirmación humana con "no" por defecto, descarte persistente, el agente no decide; dos supuestos para Rene). BR-CONS-007 añade el valor "carpetas de código" (solo perfil). BR-WF-002: un repo descubierto no cuenta como observado. Conteos (23 / 14), matriz y trazabilidad actualizados |
+| 1.15 | 2026-10-07 | PO (AADD) para Rene Bonilla | Ajustes tras el Arquitecto (TS-GRP-006, SEC-15, RES-11/12). BR-CONS-005: enmienda "un repo en reposo sigue observado" (despierta en ≤ 2 s p95; un repo sin vigilancia en vivo no duerme). BR-EDGE-005: causa de hueco `dormant` (solo lo que encuentra la comprobación de respaldo sin aviso de la vigilancia) con ejemplo. BR-AUTH-003: las raíces no son configuración; viven en el perfil y se gestionan con comandos reservados (`raptor repo roots`, `roots add`, `roots remove`, `repo dismiss`, `repo add`); raíces inválidas alineadas con SEC-15 (ancestros de la carpeta personal, perfil, rutas de red, tope de 16). Se quita de BR-CONS-007 la fila de las raíces añadida en la 1.14 |
