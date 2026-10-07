@@ -518,6 +518,24 @@ pub struct GitEventView {
     /// shown as "inferred", never an attribution: it grants no authorship.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub inferred: Option<InferredAgent>,
+    /// The declared authorship of the commit the event created (US-GRD-019,
+    /// amendment of ADR-GRP-013): who it went in under, separate from who
+    /// ran it (`actor`). Only for `commit` and `merge`, and only for a
+    /// connection with the capability `events.authorship`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authorship: Option<DeclaredAuthorship>,
+}
+
+impl GitEventView {
+    /// The shape of protocol 9 (DS-US-GRD-018 D10): without the
+    /// capability `events.authorship`, no names, emails or trailer check.
+    pub fn without_authorship(mut self) -> Self {
+        self.authorship = None;
+        if let Some(hint) = self.inferred.as_mut() {
+            hint.trailer = None;
+        }
+        self
+    }
 }
 
 /// The agent an unattributed event is inferred to come from.
@@ -526,6 +544,48 @@ pub struct GitEventView {
 pub struct InferredAgent {
     pub kind: crate::AgentKind,
     pub session_id: String,
+    /// The hint checked against the commit's trailer (US-GRD-019). A
+    /// contradicted hint is not recorded; an older event reads as
+    /// `unconfirmed`. Only with the capability `events.authorship`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trailer: Option<TrailerCheck>,
+}
+
+/// Whether the commit's `Co-Authored-By` names the inferred agent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum TrailerCheck {
+    Confirmed,
+    Unconfirmed,
+}
+
+/// Author, committer and co-authors of a commit, as Git recorded them
+/// (amendment of ADR-GRP-013, autoría declarada). Never the message.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DeclaredAuthorship {
+    pub author: GitIdentity,
+    pub committer: GitIdentity,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub coauthors: Vec<CoAuthor>,
+}
+
+/// A Git identity: name and email, both untrusted.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GitIdentity {
+    pub name: Untrusted,
+    pub email: Untrusted,
+}
+
+/// One `Co-Authored-By`, with the agent the trailer table recognises.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CoAuthor {
+    pub name: Untrusted,
+    pub email: Untrusted,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<crate::AgentKind>,
 }
 
 /// Most entries one `events.history` page returns.
@@ -1120,9 +1180,11 @@ mod tests {
             },
             gap_id: None,
             inferred: None,
+            authorship: None,
         };
         let value = serde_json::to_value(&view).unwrap();
         assert_eq!(value["kind"], "branch-switch");
+        assert!(value.get("authorship").is_none());
         assert!(value.get("inferred").is_none());
         assert_eq!(value["actor"], serde_json::json!({"actor": "unattributed"}));
         assert_eq!(value["details"]["worktree_inferred"], false);
@@ -1135,6 +1197,7 @@ mod tests {
             inferred: Some(InferredAgent {
                 kind: crate::AgentKind::ClaudeCode,
                 session_id: "20:2000".into(),
+                trailer: None,
             }),
             ..view
         };
@@ -1147,6 +1210,42 @@ mod tests {
         assert_eq!(
             serde_json::from_value::<GitEventView>(value).unwrap(),
             hinted
+        );
+        // US-GRD-019: the declared authorship and the trailer check, and
+        // the shape of protocol 9 without them.
+        let id = |n: &str| GitIdentity {
+            name: Untrusted::new(n),
+            email: Untrusted::new(format!("{n}@x")),
+        };
+        let authored = GitEventView {
+            kind: GitEventKind::Commit,
+            inferred: Some(InferredAgent {
+                trailer: Some(TrailerCheck::Confirmed),
+                ..hinted.inferred.clone().unwrap()
+            }),
+            authorship: Some(DeclaredAuthorship {
+                author: id("ana"),
+                committer: id("ana"),
+                coauthors: vec![CoAuthor {
+                    name: Untrusted::new("Claude"),
+                    email: Untrusted::new("noreply@anthropic.com"),
+                    agent: Some(crate::AgentKind::ClaudeCode),
+                }],
+            }),
+            ..hinted.clone()
+        };
+        let value = serde_json::to_value(&authored).unwrap();
+        assert_eq!(value["inferred"]["trailer"], "confirmed");
+        assert_eq!(value["authorship"]["coauthors"][0]["agent"], "claude-code");
+        assert_eq!(
+            serde_json::from_value::<GitEventView>(value).unwrap(),
+            authored
+        );
+        let legacy = serde_json::to_value(authored.without_authorship()).unwrap();
+        assert!(legacy.get("authorship").is_none());
+        assert_eq!(
+            legacy["inferred"],
+            serde_json::json!({"kind": "claude-code", "session_id": "20:2000"})
         );
         for kind in GitEventKind::ALL {
             assert_eq!(GitEventKind::parse(kind.as_str()), Some(kind));
