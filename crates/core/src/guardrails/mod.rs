@@ -15,5 +15,6 @@ pub mod hook;
 pub mod install;
 pub mod journal;
 pub mod registry;
+pub mod second_line;
 
 pub use registry::{GuardEntry, GuardRegistry};

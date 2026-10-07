@@ -760,7 +760,18 @@ impl Connection<'_> {
             methods::GUARD_EVALUATE => {
                 let result = request.params::<EvaluateParams>().map(|p| {
                     let caller = self.guard_caller(&p);
-                    crate::guardrails::evaluate::serve_as(&self.ctx.guard, &p, &caller)
+                    let decision =
+                        crate::guardrails::evaluate::serve_as(&self.ctx.guard, &p, &caller);
+                    // One decision per operation (ADR-GRD-003 § 6): the second line of the
+                    // same `git` reuses the one `commit-msg` gave.
+                    if let (Some(git), gitraptor_api::guard::Operation::Commit { stage }) =
+                        (caller.git, &p.operation)
+                        && *stage == gitraptor_api::guard::CommitStage::CommitMsg
+                        && caller.authorship
+                    {
+                        self.ctx.commit_decisions.record(git);
+                    }
+                    decision
                 });
                 self.reply(&request.id, result);
             }
@@ -799,14 +810,28 @@ impl Connection<'_> {
                 ..Default::default()
             };
         }
+        use crate::guardrails::second_line;
+        use gitraptor_api::guard::{CommitStage, Operation};
+        let checks = self.ctx.checks();
+        let actor = crate::guardrails::actor::resolve(self.peer, &checks, Some(&self.ctx.marks));
+        // The `git` behind the hook only matters for an agent's commit.
+        let git = actor.and_then(|_| second_line::nearest_git(self.peer, &checks));
+        let second_line_skip = match params.operation {
+            Operation::Commit {
+                stage: CommitStage::SecondLine,
+            } => {
+                !self.has(methods::CAP_GUARD_AUTHORSHIP_SECOND_LINE.name)
+                    || git.is_some_and(|g| self.ctx.commit_decisions.contains(g))
+                    || !second_line::evaluates(git, &checks)
+            }
+            _ => false,
+        };
         crate::guardrails::evaluate::Caller {
-            actor: crate::guardrails::actor::resolve(
-                self.peer,
-                &self.ctx.checks(),
-                Some(&self.ctx.marks),
-            ),
+            actor,
             cwd: process_cwd(self.peer.pid),
             authorship,
+            git,
+            second_line_skip,
         }
     }
 

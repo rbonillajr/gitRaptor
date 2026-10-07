@@ -63,6 +63,12 @@ pub trait ProcSource {
     fn is_session_root(&self, _info: &ProcInfo) -> bool {
         false
     }
+    /// The command line of `pid` (program name first), read only to classify a Git subcommand
+    /// and never stored (DS-US-GRD-018 § 5.3). `None` when it cannot be read, and on Windows
+    /// (Pendiente: etapa de validación multiplataforma): callers evaluate (fail-closed).
+    fn args(&self, _pid: u32) -> Option<Vec<std::ffi::OsString>> {
+        None
+    }
 }
 
 /// The running OS.
@@ -104,6 +110,10 @@ mod imp {
     }
 
     impl ProcSource for SystemProcs {
+        fn args(&self, pid: u32) -> Option<Vec<std::ffi::OsString>> {
+            gitraptor_macsys::process::process_args(pid)
+        }
+
         fn read(&self, pid: u32) -> Result<ProcInfo, ProcError> {
             let raw = i32::try_from(pid).map_err(|_| ProcError::Gone)?;
             let info = match pidinfo::<TaskAllInfo>(raw, 0) {
@@ -222,6 +232,20 @@ mod imp {
     }
 
     impl ProcSource for SystemProcs {
+        fn args(&self, pid: u32) -> Option<Vec<std::ffi::OsString>> {
+            use std::os::unix::ffi::OsStrExt;
+            let raw = std::fs::read(format!("/proc/{pid}/cmdline")).ok()?;
+            let raw = raw.strip_suffix(&[0]).unwrap_or(&raw);
+            if raw.is_empty() {
+                return None;
+            }
+            Some(
+                raw.split(|b| *b == 0)
+                    .map(|a| std::ffi::OsStr::from_bytes(a).to_owned())
+                    .collect(),
+            )
+        }
+
         fn read(&self, pid: u32) -> Result<ProcInfo, ProcError> {
             let meta = std::fs::metadata(format!("/proc/{pid}")).map_err(|_| ProcError::Gone)?;
             let f = stat_fields(pid)?;

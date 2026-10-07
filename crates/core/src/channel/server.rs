@@ -93,6 +93,8 @@ pub(crate) struct ServerCtx {
     pub guard: Arc<crate::guardrails::GuardRegistry>,
     /// The MCP allowlist, written by the daemon's loop (US-MCP-002).
     pub mcp_repos: Arc<crate::timemachine::protected::McpRepos>,
+    /// `git` processes whose commit already had its authorship decision (DS-US-GRD-018 D6).
+    pub commit_decisions: crate::guardrails::second_line::Decided,
 }
 
 impl ServerCtx {
@@ -197,6 +199,7 @@ impl Server {
             resources: args.resources,
             guard: args.guard,
             mcp_repos: args.mcp_repos,
+            commit_decisions: Default::default(),
         });
         let listener = bound.listener;
         let socket = socket_id(&transport::socket_path(&ctx.runtime));

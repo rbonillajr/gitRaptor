@@ -133,11 +133,26 @@ pub fn run(args: &HookArgs, env: &HookEnv, input: &[u8]) -> HookOutcome {
             if git_arg(0) != Some("prepared") {
                 return HookOutcome::allow();
             }
-            match ref_transaction(args, env, input) {
-                Ok(Some(op)) => op,
-                Ok(None) => return HookOutcome::allow(),
+            let minimum = match ref_transaction(args, env, input) {
+                Ok(Some(op)) => {
+                    // M-02, SEC-GRD-19: the transaction must be in the repo of the dispatcher.
+                    if !same_repo(&args.common, env) {
+                        return HookOutcome::deny(Rule::RepoMismatch);
+                    }
+                    decide(args, op)
+                }
+                Ok(None) => HookOutcome::allow(),
                 Err(rule) => return HookOutcome::deny(rule),
+            };
+            // The second line runs only after the minimum let the transaction through, and not
+            // in degraded mode (the actor is "unattributed" there).
+            if !minimum.allowed() || minimum.degraded.is_some() {
+                return minimum;
             }
+            return match second_line(args, env, input) {
+                Some(outcome) => outcome,
+                None => minimum,
+            };
         }
         Hook::PrePush => match push(git_arg(0), git_arg(1), input) {
             Ok(Some(op)) => op,
@@ -398,6 +413,108 @@ fn commit(args: &HookArgs, env: &HookEnv) -> HookOutcome {
         Ok(decision) => HookOutcome::decided(decision),
         Err(_) => HookOutcome::deny(Rule::InternalError),
     }
+}
+
+/// The second line against `--no-verify` (DS-US-GRD-018 D6, § 5.3): a transaction that moves a
+/// branch (or a detached `HEAD`) by exactly one new commit sends the facts of that commit,
+/// read here with the isolated reader, so the daemon can evaluate it as `commit-msg` would have.
+/// Only the facts leave this process (D7). Template 1 has no second line (it does not evaluate
+/// commits at all), and a daemon without `guard.authorship.second-line` is not sent it. `None`
+/// when there is nothing to evaluate.
+fn second_line(args: &HookArgs, env: &HookEnv, input: &[u8]) -> Option<HookOutcome> {
+    use gitraptor_git::CommitShape;
+    use gitraptor_policy::authorship::{self, Cleanup, MAX_MESSAGE_BYTES, MessageOptions};
+    if args.template < 2 {
+        return None;
+    }
+    let reader = evaluate::open(&args.common);
+    let mut pairs: Vec<(Option<String>, String)> = Vec::new();
+    let mut refs: Vec<String> = Vec::new();
+    for line in input.split(|b| *b == b'\n').filter(|l| !l.is_empty()) {
+        let raw = input::parse_ref_update(line).ok()?;
+        if !(fastpath::is_head(&raw.refname) || raw.refname.starts_with("refs/heads/")) {
+            continue;
+        }
+        let RefValue::Oid(new) = raw.new else {
+            continue;
+        };
+        let old = match raw.old {
+            RefValue::Oid(old) => Some(old),
+            // Zero is also what Git sends when the writer gave no expected old value
+            // (`update-ref <ref> <new>`): the ref's value before the transaction is the old one.
+            RefValue::Zero => reader
+                .as_ref()
+                .filter(|_| !fastpath::is_head(&raw.refname))
+                .and_then(|r| {
+                    let name = gitraptor_git::RefName::new(&raw.refname).ok()?;
+                    r.resolve_ref(&name).ok().flatten()
+                }),
+            RefValue::Symbolic(_) => continue,
+        };
+        refs.push(raw.refname);
+        if !pairs.contains(&(old.clone(), new.clone())) {
+            pairs.push((old, new));
+        }
+    }
+    // Several different moves at once are not the shape of one commit (residue, § 5.3).
+    let [(old, new)] = pairs.as_slice() else {
+        return None;
+    };
+    if !same_repo(&args.common, env) {
+        return Some(HookOutcome::deny(Rule::RepoMismatch));
+    }
+    let refs: Vec<&str> = refs.iter().map(String::as_str).collect();
+    let facts = match reader
+        .as_ref()
+        .map(|r| r.commit_shape(old.as_deref(), new, &refs, MAX_MESSAGE_BYTES))
+    {
+        Some(Ok(CommitShape::Other)) => return None,
+        Some(Ok(CommitShape::One {
+            message: Some(message),
+        })) => {
+            // The stored message is already cleaned up: read as it is.
+            let options = MessageOptions {
+                cleanup: Cleanup::Verbatim,
+                ..MessageOptions::default()
+            };
+            authorship::facts(&message, &options)
+        }
+        // Too large, or the repo could not be read: unreadable, never skipped (fail-closed).
+        _ => authorship::unreadable(),
+    };
+    let mut client = match connect(args) {
+        Ok(client) => client,
+        Err(Unusable::NotAuthentic) => return Some(HookOutcome::deny(Rule::ChannelNotAuthentic)),
+        Err(Unusable::Failed) => return Some(HookOutcome::deny(Rule::InternalError)),
+        // Degraded: unattributed, nothing to decide.
+        Err(Unusable::Degraded(_)) => return None,
+    };
+    let granted = client.hello().capabilities.as_ref().is_some_and(|served| {
+        [
+            methods::CAP_GUARD_AUTHORSHIP.name,
+            methods::CAP_GUARD_AUTHORSHIP_SECOND_LINE.name,
+        ]
+        .iter()
+        .all(|c| served.iter().any(|s| s == c))
+    });
+    if !granted {
+        return None;
+    }
+    let params = EvaluateParams {
+        repo_id: args.repo.clone(),
+        common_dir: args.common.to_string_lossy().into_owned(),
+        hook: args.hook,
+        operation: Operation::Commit {
+            stage: CommitStage::SecondLine,
+        },
+        authorship: Some(facts),
+    };
+    Some(
+        match client.call::<_, Decision>(methods::GUARD_EVALUATE, &params) {
+            Ok(decision) => HookOutcome::decided(decision),
+            Err(_) => HookOutcome::deny(Rule::InternalError),
+        },
+    )
 }
 
 /// The facts of the message file `commit-msg` received (D7): a regular file, never a link, at

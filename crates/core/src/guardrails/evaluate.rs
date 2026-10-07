@@ -7,8 +7,8 @@ use std::path::Path;
 
 use gitraptor_api::AgentKind;
 use gitraptor_api::guard::{
-    ConfigSource, ConfigStatus, Decision, Effect, EvaluateParams, ExceptionState, Level, Operation,
-    Reason, Rule,
+    CommitStage, ConfigSource, ConfigStatus, Decision, Effect, EvaluateParams, ExceptionState,
+    Level, Operation, Reason, Rule,
 };
 use gitraptor_git::{Ancestry, ReaderOptions, RefName, RepoReader};
 use gitraptor_policy::guard::authorship::Effective;
@@ -229,6 +229,11 @@ pub struct Caller {
     pub cwd: Option<std::path::PathBuf>,
     /// The connection was granted `guard.authorship`.
     pub authorship: bool,
+    /// The `git` process that ran the hook, for an agent's commit (DS-US-GRD-018 D6).
+    pub git: Option<super::second_line::GitProcess>,
+    /// The second line does not evaluate this commit: the same `git` already had its decision,
+    /// or it is certainly a rebase, cherry-pick, revert or am (§ 5.3).
+    pub second_line_skip: bool,
 }
 
 /// [`serve`] for a caller the channel resolved.
@@ -248,6 +253,9 @@ pub fn serve_as(registry: &GuardRegistry, params: &EvaluateParams, caller: &Call
         None => (default_bases(&reader), None),
     };
     let commit = match &params.operation {
+        Operation::Commit {
+            stage: CommitStage::SecondLine,
+        } if caller.second_line_skip => CommitContext::default(),
         Operation::Commit { .. } if caller.authorship => {
             let worktree = caller
                 .cwd

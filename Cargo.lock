@@ -853,6 +853,7 @@ dependencies = [
  "getrandom",
  "gitraptor-api",
  "gitraptor-git",
+ "gitraptor-macsys",
  "gitraptor-policy",
  "gitraptor-testkit",
  "gitraptor-winsys",
