@@ -315,6 +315,10 @@ pub enum CommitStage {
     PreCommit,
     /// With the facts of the message: every authorship rule.
     CommitMsg,
+    /// `reference-transaction` `prepared`, with the facts of the new commit: every authorship
+    /// rule, unless the same `git` process already had its decision or certainly is a rebase,
+    /// cherry-pick, revert or am (§ 5.3). Only with `guard.authorship.second-line`.
+    SecondLine,
 }
 
 /// What the hook client derived from a commit message (D7): never its text, names or emails.

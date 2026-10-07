@@ -20,6 +20,11 @@ pub const GUARD_EVALUATE: &str = "guard.evaluate";
 /// the `pre-commit` and `commit-msg` hooks and `Decision.notices`. The hook client sends them
 /// only when the daemon granted it; a daemon without it evaluates as before.
 pub const CAP_GUARD_AUTHORSHIP: Capability = Capability::new("guard.authorship");
+/// The second line against `--no-verify` (DS-US-GRD-018 D6, § 5.3): the `second-line` stage of
+/// the `commit` operation, sent from `reference-transaction`. A daemon with `guard.authorship`
+/// alone would reject the stage, so the hook client sends it only when this is granted too.
+pub const CAP_GUARD_AUTHORSHIP_SECOND_LINE: Capability =
+    Capability::new("guard.authorship.second-line");
 
 pub(super) const GROUP: Group = Group {
     // None is offered to `raptor-mcp` (BR-AUTH-004): it neither installs nor
@@ -33,6 +38,6 @@ pub(super) const GROUP: Group = Group {
         method(GUARD_STATUS, false, false).since(7),
         method(GUARD_EVALUATE, false, false).since(7),
     ],
-    capabilities: &[CAP_GUARD_AUTHORSHIP],
+    capabilities: &[CAP_GUARD_AUTHORSHIP, CAP_GUARD_AUTHORSHIP_SECOND_LINE],
     ..Group::new("guard")
 };
