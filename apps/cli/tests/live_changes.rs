@@ -337,11 +337,13 @@ fn git_event_commit() {
 
     let out = m.raptor(&["events"], &[]);
     let shown = String::from_utf8_lossy(&out.stdout);
-    assert!(shown.contains("commit on feat-login"), "{shown}");
+    // With its declared authorship (US-GRD-019): "commit by … · wt-feat-login (feat-login)".
+    assert!(shown.contains("commit by "), "{shown}");
+    assert!(shown.contains("(feat-login)"), "{shown}");
     assert!(shown.contains("(unattributed)"), "{shown}");
     let out = m.raptor(&["events"], &[("LANG", "es_ES.UTF-8")]);
     let shown = String::from_utf8_lossy(&out.stdout);
-    assert!(shown.contains("commit en feat-login"), "{shown}");
+    assert!(shown.contains("commit de "), "{shown}");
     assert!(shown.contains("(sin atribuir)"), "{shown}");
     m.stop();
 }
