@@ -36,7 +36,7 @@ pub use capture::{
     Untracked, UntrackedKind,
 };
 pub use committed::{BlobRead, CommittedFile, NotRegular};
-pub use guard_read::{Ancestry, MAX_ANCESTRY_WALK, RefStorage};
+pub use guard_read::{Ancestry, CommitShape, MAX_ANCESTRY_WALK, RefStorage};
 pub use invoke::{ArgvSink, Invoker, MemoryArgvLog};
 pub use reader::{
     Branch, Change, ChangeKind, Count, Head, InProgress, LinkedWorktree, ReaderOptions,
