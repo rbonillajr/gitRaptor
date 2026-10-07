@@ -153,6 +153,12 @@ struct Tui {
     channel: Option<ClientThread>,
 }
 
+/// The header says "live": the snapshot, the sessions and the Git history of the repo arrived
+/// (US-CKP-026), so the rows can be painted a frame before the connection is live.
+fn live(screen: &[String]) -> bool {
+    screen.first().is_some_and(|h| h.contains("✔ live"))
+}
+
 impl Tui {
     fn open(dirs: ProfileDirs, cwd: &Path) -> Self {
         let mut options = ClientOptions::new(dirs, ClientKind::Cli);
@@ -245,7 +251,7 @@ fn one_row_per_worktree_with_the_agent_first() {
     let mut tui = Tui::open(shop.dirs(), &shop.f.repo);
     let screen = tui.until(
         "claude-1 Active in feat-pagos with 2 files and ↑3 ↓1",
-        |s| has(s, "feat-pagos", &["●", "claude-1", "~2", "↑3 ↓1"]),
+        |s| live(s) && has(s, "feat-pagos", &["●", "claude-1", "~2", "↑3 ↓1"]),
     );
     let rows = rows(&screen);
     assert_eq!(rows.len(), 3, "{screen:#?}");
@@ -458,7 +464,7 @@ fn untrusted_text_is_painted_inert() {
     assert!(!refused.status.success(), "{}", text(&refused));
     let mut tui = Tui::open(shop.dirs(), &shop.f.repo);
     let screen = tui.until("the worktree with the escape in its folder", |s| {
-        has(s, "feat-evil", &["No agent"])
+        live(s) && has(s, "feat-evil", &["No agent"])
     });
     let painted: String = tui
         .app
