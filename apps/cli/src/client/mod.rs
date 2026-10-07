@@ -344,8 +344,10 @@ fn history(
         Err(err) => return Ok(Err(err)),
     };
     let recv_ns = monotonic_ns();
+    // An optional line: a page this client cannot read leaves no lines, never a reconnection
+    // (it would ask for the same page again).
     let Ok(result) = serde_json::from_value::<EventsHistoryResult>(value) else {
-        return Ok(Err(LinkError::Lost));
+        return Ok(Ok(()));
     };
     out.send(Msg::Engine(Stamped {
         recv_ns,
