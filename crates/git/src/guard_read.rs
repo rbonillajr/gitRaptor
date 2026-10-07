@@ -84,6 +84,14 @@ impl RepoReader {
             .unwrap_or(false)
     }
 
+    /// `commit.cleanup` and `core.commentChar`, to read a commit message as Git will clean it
+    /// (US-GRD-018, D7). `None` where unset.
+    pub fn commit_message_config(&self) -> (Option<String>, Option<String>) {
+        let config = self.repo.config_snapshot();
+        let get = |key: &str| config.string(key).map(|v| v.to_string());
+        (get("commit.cleanup"), get("core.commentChar"))
+    }
+
     /// `core.hooksPath` as the repo's own configuration says (no global or system level when
     /// opened isolated): whether the activation key is still the one the journal recorded.
     pub fn hooks_path(&self) -> Option<String> {

@@ -440,7 +440,7 @@ impl Daemon {
 
         // Guardrails: a confirmed install is published again; one left half-way is completed
         // or undone before anything else runs (ADR-GRD-001 § 4, Recuperación).
-        let guard = Arc::new(GuardRegistry::default());
+        let guard = Arc::new(GuardRegistry::for_profile(config.dirs.clone()));
         recover_guardrails(
             &config,
             &profile,

@@ -7,7 +7,9 @@ use std::path::{Path, PathBuf};
 
 /// Version of the dispatcher template: `raptor hook` accepts this one and the previous one
 /// (ADR-GRD-001 § 8).
-pub const TEMPLATE_VERSION: u32 = 1;
+/// 2 adds the `pre-commit` and `commit-msg` dispatchers (US-GRD-018); a repo installed with 1
+/// keeps working unchanged and gets them when it is installed again.
+pub const TEMPLATE_VERSION: u32 = 2;
 
 /// The constants file, next to `hooks/`.
 pub const DISPATCH_CONF: &str = "dispatch.conf";
