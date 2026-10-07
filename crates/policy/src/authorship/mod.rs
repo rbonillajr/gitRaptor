@@ -3,6 +3,7 @@
 //! the message and sends the daemon only what it derived (D7), never the text, names or emails.
 
 pub mod agents;
+pub mod subcommand;
 pub mod trailers;
 
 use gitraptor_api::AgentKind;
