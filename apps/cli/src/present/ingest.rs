@@ -2,13 +2,15 @@
 //! untrusted text goes through [`SafeText`] here and nowhere else; the
 //! model never keeps it raw.
 
-use gitraptor_api::messages::{HeadView, SessionView, WorktreeStatus, WorktreeView};
+use gitraptor_api::messages::{
+    GitEventKind, GitEventView, HeadView, SessionView, TrailerCheck, WorktreeStatus, WorktreeView,
+};
 use gitraptor_api::scope::{AttentionCount, ConnectionRequester, GlobalSnapshot, RepoSnapshot};
 use gitraptor_api::{Actor, AgentKind};
 
 use crate::model::{
-    GlobalView, Head, RepoAttention, RepoChoice, RepoView, Requester, SessionRow, WorktreeRow,
-    WorktreeState,
+    GlobalView, Head, LastCommit, RepoAttention, RepoChoice, RepoView, Requester, SessionRow,
+    WorktreeRow, WorktreeState,
 };
 use crate::present::SafeText;
 
@@ -61,7 +63,47 @@ pub fn repo(snapshot: &RepoSnapshot) -> RepoView {
         fetched_ms: snapshot.repo.fetched_utc_ms,
         sessions: Vec::new(),
         detection: None,
+        commits: Vec::new(),
     }
+}
+
+/// The last commit a Git event records, with its declared authorship (US-CKP-026): only a
+/// `commit` or a `merge` that carries it (`events.authorship`). The author's name is
+/// sanitized; the emails are never kept.
+pub fn last_commit(event: &GitEventView) -> Option<LastCommit> {
+    let merge = match event.kind {
+        GitEventKind::Commit => false,
+        GitEventKind::Merge => true,
+        _ => return None,
+    };
+    let declared = event.authorship.as_ref()?;
+    let mut agents: Vec<AgentKind> = Vec::new();
+    for kind in declared.coauthors.iter().filter_map(|c| c.agent) {
+        if !agents.contains(&kind) {
+            agents.push(kind);
+        }
+    }
+    let ran_by = match &event.actor {
+        Actor::Agent { kind, .. } if !agents.contains(kind) => Some(*kind),
+        _ => None,
+    };
+    let inferred = match (&event.actor, &event.inferred) {
+        (Actor::Unattributed, Some(hint))
+            if hint.trailer != Some(TrailerCheck::Confirmed) && !agents.contains(&hint.kind) =>
+        {
+            Some(hint.kind)
+        }
+        _ => None,
+    };
+    Some(LastCommit {
+        worktree: key(event.worktree.raw()),
+        seq: event.seq,
+        merge,
+        author: SafeText::name_from_untrusted(&declared.author.name),
+        agents,
+        ran_by,
+        inferred,
+    })
 }
 
 /// The folder of a repo from its common dir: `shop` for `/w/shop/.git`, `shop.git` for a bare

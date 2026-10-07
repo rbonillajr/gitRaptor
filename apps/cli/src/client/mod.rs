@@ -18,7 +18,10 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use gitraptor_api::clock::monotonic_ns;
-use gitraptor_api::messages::{SessionsListParams, SessionsListResult};
+use gitraptor_api::messages::{
+    EventsHistoryParams, EventsHistoryResult, MAX_HISTORY_PAGE, SessionsListParams,
+    SessionsListResult,
+};
 use gitraptor_api::methods;
 use gitraptor_api::rpc::{Notification, ServerMessage};
 use gitraptor_api::scope::{
@@ -313,8 +316,45 @@ fn sync(
         return Ok(Err(err));
     }
     if let Scope::Repo { repo_id } = scope {
-        return sessions(link, repo_id, out);
+        if let Err(err) = sessions(link, repo_id, out)? {
+            return Ok(Err(err));
+        }
+        return history(link, repo_id, out);
     }
+    Ok(Ok(()))
+}
+
+/// The latest Git events of the repo, asked after its sessions, for the last commit of each
+/// worktree and its authorship (US-CKP-026). Every `git.event` after the snapshot comes on the
+/// stream, and `update` keeps the most recent commit per worktree either way. A commit older
+/// than this page has no line; a refusal (an older daemon) leaves none.
+fn history(
+    link: &mut dyn Link,
+    repo_id: &str,
+    out: &Outlet,
+) -> Result<Result<(), LinkError>, Closed> {
+    let params = EventsHistoryParams {
+        repo_id: repo_id.to_owned(),
+        limit: Some(MAX_HISTORY_PAGE),
+        ..EventsHistoryParams::default()
+    };
+    let value = match link.call(methods::EVENTS_HISTORY, to_value(&params)) {
+        Ok(value) => value,
+        Err(LinkError::Refused) => return Ok(Ok(())),
+        Err(err) => return Ok(Err(err)),
+    };
+    let recv_ns = monotonic_ns();
+    let Ok(result) = serde_json::from_value::<EventsHistoryResult>(value) else {
+        return Ok(Err(LinkError::Lost));
+    };
+    out.send(Msg::Engine(Stamped {
+        recv_ns,
+        decoded_ns: monotonic_ns(),
+        msg: EngineMsg::History {
+            repo_id: repo_id.to_owned(),
+            events: result.events,
+        },
+    }))?;
     Ok(Ok(()))
 }
 

@@ -145,6 +145,17 @@ pub enum Text<'a> {
         name: &'a str,
         more: usize,
     },
+    /// The last commit of a worktree with its declared authorship (US-CKP-026): the person,
+    /// the agents of its trailers, the agent that ran it without one, or an unconfirmed hint.
+    /// A person's commit without an agent is "commit by Ana", nothing more: not a fault.
+    LastCommit {
+        merge: bool,
+        author: &'a str,
+        /// The agents of the trailers, already named and joined; empty without any.
+        agents: &'a str,
+        ran_by: Option<&'a str>,
+        inferred: Option<&'a str>,
+    },
     /// A detached `HEAD`: the short hash it is at, when published.
     NoBranch(Option<&'a str>),
     NoBase,
@@ -236,6 +247,27 @@ fn en(text: Text<'_>) -> String {
         Text::AgentNotAvailable => "agent not available".into(),
         Text::ClaudeCode => "Claude Code".into(),
         Text::OtherAgent => "other agent".into(),
+        Text::LastCommit {
+            merge,
+            author,
+            agents,
+            ran_by,
+            inferred,
+        } => {
+            let mut out = format!("{} by {author}", if merge { "merge" } else { "commit" });
+            if !agents.is_empty() {
+                out.push_str(&format!(" with {agents}"));
+            }
+            if let Some(agent) = ran_by {
+                out.push_str(&format!(" · run by {agent}"));
+                if agents.is_empty() {
+                    out.push_str(" · no trailer");
+                }
+            } else if let Some(agent) = inferred {
+                out.push_str(&format!(" · possibly {agent} (inferred)"));
+            }
+            out
+        }
         Text::AgentAndMore { name, more } => format!("{name} +{more}"),
         Text::AgentInWorktree { agent, worktree } => format!("{agent} · {worktree}"),
         Text::NoBranch(Some(commit)) => format!("{commit} (no branch)"),
@@ -370,6 +402,27 @@ fn es(text: Text<'_>) -> String {
         Text::AgentNotAvailable => "agente no disponible".into(),
         Text::ClaudeCode => "Claude Code".into(),
         Text::OtherAgent => "otro agente".into(),
+        Text::LastCommit {
+            merge,
+            author,
+            agents,
+            ran_by,
+            inferred,
+        } => {
+            let mut out = format!("{} de {author}", if merge { "merge" } else { "commit" });
+            if !agents.is_empty() {
+                out.push_str(&format!(" con {agents}"));
+            }
+            if let Some(agent) = ran_by {
+                out.push_str(&format!(" · ejecutado por {agent}"));
+                if agents.is_empty() {
+                    out.push_str(" · sin trailer");
+                }
+            } else if let Some(agent) = inferred {
+                out.push_str(&format!(" · posible {agent} (inferido)"));
+            }
+            out
+        }
         Text::AgentAndMore { name, more } => format!("{name} +{more}"),
         Text::AgentInWorktree { agent, worktree } => format!("{agent} · {worktree}"),
         Text::NoBranch(Some(commit)) => format!("{commit} (sin rama)"),
