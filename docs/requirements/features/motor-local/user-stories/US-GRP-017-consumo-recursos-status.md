@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-07
 feature: motor-local
 source: inline
 related:
@@ -20,6 +20,7 @@ related:
     - US-GRP-002
     - US-GRP-018
     - TS-GRP-005
+    - TS-GRP-006
 tags:
   - motor-local
   - recursos
@@ -84,6 +85,21 @@ Entonces ve que el motor no está en marcha y el disco del perfil y de la Time M
 Dado "Claude Code" conectado por MCP al repo "demo"
 Cuando consulta las herramientas disponibles
 Entonces ninguna expone el consumo de recursos del motor
+
+## Enmienda (2026-10-07)
+
+> **Origen**: Decisión del orquestador (2026-10-07), validada por el PO: observación por niveles (propuesta B, aceptada por Rene Bonilla el 2026-10-06). Con más de 100 repos, el desarrollador tiene que poder comprobar que el consumo escala con los repos activos y no con los observados.
+
+- **Dependencia nueva, no bloqueante**: TS-GRP-005 sigue igual; los niveles los da TS-GRP-006 (observación por niveles, del Arquitecto). Sin TS-GRP-006, los niveles se muestran como "no disponible" y el resto del escenario no cambia.
+- **Regla**: RES-10 (visibilidad), con la enmienda de NFRs del Arquitecto para la observación por niveles.
+
+**Escenario: El desarrollador ve los repos activos y dormidos y lo que cuesta cada nivel**
+
+Dado el motor observando 12 repos, 3 con actividad reciente y 9 sin actividad desde hace más que el umbral de reposo
+Cuando el desarrollador ejecuta `raptor status --resources`
+Entonces ve cuántos repos están activos y cuántos dormidos
+  Y ve, por nivel, las vigilancias y los descriptores que usa
+  Y la salida con `--json` trae los mismos recuentos y valores en unidades fijas
 
 ## Requisitos Técnicos (para la Dev Spec)
 
