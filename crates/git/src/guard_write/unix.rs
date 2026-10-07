@@ -160,6 +160,39 @@ fn fill(root: &OwnedFd, temp: &str, files: &[NewFile<'_>]) -> Result<()> {
     Ok(())
 }
 
+pub(super) fn replace_files(common: &Path, expected: FileId, files: &[NewFile<'_>]) -> Result<()> {
+    let root = open_dir(common)?;
+    let folder = open_subdir(&root, super::FOLDER)?;
+    let stat = rustix::fs::fstat(&folder).map_err(|e| GuardWriteError::Io(e.into()))?;
+    if id(&stat) != expected {
+        return Err(GuardWriteError::Changed("the guardrails folder"));
+    }
+    for f in files {
+        let (dir, name) = match f.path.split_once('/') {
+            None => (open_subdir(&root, super::FOLDER)?, f.path),
+            Some((sub, name)) => {
+                match rustix::fs::mkdirat(&folder, sub, Mode::RWXU) {
+                    Ok(()) | Err(rustix::io::Errno::EXIST) => {}
+                    Err(e) => return Err(GuardWriteError::Io(e.into())),
+                }
+                (open_subdir(&folder, sub)?, name)
+            }
+        };
+        let temp = format!("{name}.{}", temporary_name());
+        if let Err(e) = write_file(&dir, &temp, f.bytes, f.executable) {
+            let _ = unlink(&dir, &temp);
+            return Err(e);
+        }
+        if let Err(e) = rustix::fs::renameat(&dir, temp.as_str(), &dir, name) {
+            let _ = unlink(&dir, &temp);
+            return Err(GuardWriteError::Io(e.into()));
+        }
+        rustix::fs::fsync(&dir).map_err(|e| GuardWriteError::Io(e.into()))?;
+    }
+    rustix::fs::fsync(&folder).map_err(|e| GuardWriteError::Io(e.into()))?;
+    Ok(())
+}
+
 pub(super) fn remove_folder(
     common: &Path,
     name: &str,

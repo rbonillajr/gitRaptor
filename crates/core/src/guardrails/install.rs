@@ -222,8 +222,12 @@ pub fn plan(ctx: &GuardCtx<'_>, repo_id: &str, common: &Path, store: &RepoStore)
             blockers.push(b);
         }
     };
-    if status.state == ProtectionState::HooksOnly {
+    let upgrade = status.state == ProtectionState::HooksOnly && outdated(common);
+    if status.state == ProtectionState::HooksOnly && !upgrade {
         add(InstallBlocker::AlreadyInstalled);
+    } else if upgrade {
+        // An older template of our own install (ADR-GRD-001 § 8): the key and the folder are
+        // ours, so only what the files themselves need is checked.
     } else if std::fs::symlink_metadata(common.join(FOLDER)).is_ok() {
         // A folder left without its key (or never ours): adopting or removing it is US-GRD-003.
         add(InstallBlocker::OrphanFolder);
@@ -240,7 +244,7 @@ pub fn plan(ctx: &GuardCtx<'_>, repo_id: &str, common: &Path, store: &RepoStore)
     }
     let trees = worktrees(ctx, common).unwrap_or_default();
     let writer = GuardWriter::new(ctx.git, ctx.invoker);
-    for tree in &trees {
+    for tree in trees.iter().filter(|_| !upgrade) {
         match writer.hooks_path_entries(tree) {
             Ok(entries) => {
                 for e in &entries {
@@ -262,7 +266,7 @@ pub fn plan(ctx: &GuardCtx<'_>, repo_id: &str, common: &Path, store: &RepoStore)
             add(InstallBlocker::IncludeIfOnbranch);
         }
     }
-    if has_prior_hook_files(common) {
+    if !upgrade && has_prior_hook_files(common) {
         add(InstallBlocker::PriorHooks);
     }
     if constants(ctx, repo_id, common).is_some_and(|c| c.render().is_err()) {
@@ -325,6 +329,9 @@ pub fn install(
     now_ms: i64,
 ) -> Result<GuardStatus, InstallError> {
     let plan = plan(ctx, repo_id, common, store);
+    if plan.blockers.is_empty() && plan.status.state == ProtectionState::HooksOnly {
+        return upgrade(ctx, repo_id, common, store, now_ms);
+    }
     if !plan.blockers.is_empty() {
         let refusal = serde_json::to_string(&plan.blockers).unwrap_or_default();
         let _ = store.set_guard_keys(None, None, Some(Some(&refusal)), None);
@@ -429,6 +436,105 @@ pub fn install(
     if let Err(why) = confirm(ctx, repo_id, store, registry, journal) {
         return Err(revert(store, why));
     }
+    Ok(status(repo_id, common, store))
+}
+
+/// Whether the confirmed install in place is of an older template: its `dispatch.conf` names
+/// one, or a dispatcher of the current template is missing (ADR-GRD-001 § 8, DS-US-GRD-018 D6).
+fn outdated(common: &Path) -> bool {
+    let folder = common.join(FOLDER);
+    let template = std::fs::symlink_metadata(folder.join(DISPATCH_CONF))
+        .ok()
+        .filter(std::fs::Metadata::is_file)
+        .and_then(|_| std::fs::read_to_string(folder.join(DISPATCH_CONF)).ok())
+        .and_then(|conf| {
+            conf.lines()
+                .find_map(|l| l.strip_prefix("template\t"))
+                .and_then(|v| v.trim().parse::<u32>().ok())
+        });
+    template.is_some_and(|t| t < TEMPLATE_VERSION)
+        || Hook::ALL.iter().any(|h| {
+            std::fs::symlink_metadata(folder.join("hooks").join(h.git_name()))
+                .map_or(true, |m| !m.is_file())
+        })
+}
+
+/// Upgrades a confirmed install of an older template in place (ADR-GRD-001 § 8): every file of
+/// the current template is replaced atomically inside the folder the journal recorded, so the
+/// repo is never without a working dispatcher, and the key is not touched. The journal lists
+/// the new files before the writes; an interrupted upgrade leaves a working mix that the next
+/// `raptor guard install` completes (it is idempotent).
+fn upgrade(
+    ctx: &GuardCtx<'_>,
+    repo_id: &str,
+    common: &Path,
+    store: &mut RepoStore,
+    now_ms: i64,
+) -> Result<GuardStatus, InstallError> {
+    let keys = store.guard_keys().unwrap_or_default();
+    let mut journal = journal(&keys)
+        .filter(|j| j.stage == Stage::Confirmed)
+        .ok_or_else(|| InstallError::Failed("no confirmed journal".into()))?;
+    let folder = journal
+        .folder
+        .clone()
+        .ok_or_else(|| InstallError::Failed("journal without the folder".into()))?;
+    let constants = constants(ctx, repo_id, common)
+        .ok_or_else(|| InstallError::Rejected(vec![InstallBlocker::PlatformUnsupported]))?;
+    let conf = constants
+        .render()
+        .map_err(|_| InstallError::Rejected(vec![InstallBlocker::NotRepresentable]))?;
+    let stub_path = ctx
+        .stub()
+        .ok_or_else(|| InstallError::Rejected(vec![InstallBlocker::DispatcherMissing]))?;
+    let stub = std::fs::read(&stub_path).map_err(|e| InstallError::Failed(format!("stub: {e}")))?;
+    let hooks_dir = common.join(FOLDER).join("hooks");
+    let mut paths: Vec<String> = Hook::ALL
+        .iter()
+        .map(|h| format!("hooks/{}", h.git_name()))
+        .collect();
+    paths.push(DISPATCH_CONF.to_owned());
+    paths.push(MANIFEST.to_owned());
+    let manifest = manifest(&constants, &hooks_dir, &paths);
+    let content = |p: &str| -> &[u8] {
+        match p {
+            DISPATCH_CONF => conf.as_bytes(),
+            MANIFEST => manifest.as_bytes(),
+            _ => &stub,
+        }
+    };
+    // Before any write: the journal lists every file that may exist afterwards.
+    journal.files = paths
+        .iter()
+        .map(|p| FileHash {
+            path: p.clone(),
+            sha256: sha256(content(p)),
+        })
+        .collect();
+    journal.at_ms = now_ms;
+    journal.raptor = constants.raptor.to_string_lossy().into_owned();
+    let save = |store: &mut RepoStore, j: &Journal| {
+        store
+            .set_guard_keys(Some(Some(&j.to_json())), None, None, None)
+            .map_err(|e| InstallError::Failed(format!("journal: {e:?}")))
+    };
+    save(store, &journal)?;
+    // `dispatch.conf` and the manifest last: until then the old template's constants rule.
+    let mut files: Vec<NewFile<'_>> = paths
+        .iter()
+        .map(|p| NewFile {
+            path: p,
+            bytes: content(p),
+            executable: p.starts_with("hooks/"),
+        })
+        .collect();
+    files.sort_by_key(|f| !f.executable);
+    GuardWriter::new(ctx.git, ctx.invoker)
+        .replace_files(common, folder.into(), &files)
+        .map_err(|e| InstallError::Failed(format!("upgrade: {e}")))?;
+    journal.template = TEMPLATE_VERSION;
+    save(store, &journal)?;
+    verify(ctx, common, &hooks_dir).map_err(InstallError::Failed)?;
     Ok(status(repo_id, common, store))
 }
 

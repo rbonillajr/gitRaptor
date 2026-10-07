@@ -268,6 +268,22 @@ impl<'a> GuardWriter<'a> {
         fs::write_folder(common, files)
     }
 
+    /// Replaces (or adds) `files` inside the existing `gitraptor/`, each one written to a
+    /// temporary file next to it, synced and renamed over it atomically: the folder is never
+    /// without a working dispatcher (template upgrade, ADR-GRD-001 § 8). The folder must still be
+    /// the one the journal recorded (`expected`).
+    pub fn replace_files(
+        &self,
+        common: &Path,
+        expected: FileId,
+        files: &[NewFile<'_>],
+    ) -> Result<()> {
+        for f in files {
+            check_relative(f.path)?;
+        }
+        fs::replace_files(common, expected, files)
+    }
+
     /// Removes the listed files of `gitraptor/`, then its sub-folders and the folder if they are
     /// empty. Never recursive: a foreign file is left in place. The folder must still be the one
     /// the journal recorded (`expected`).
