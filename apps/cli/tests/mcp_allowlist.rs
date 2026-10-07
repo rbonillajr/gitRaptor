@@ -312,14 +312,20 @@ fn path(p: &Path) -> &str {
 fn assert_refused(result: &Value, reason: &str, action: &str, secrets: &[&str]) {
     assert_eq!(result["isError"], true, "{result}");
     assert_eq!(
-        result["structuredContent"],
+        refusal(result),
         json!({"reason": reason, "action": action}),
         "{result}"
     );
+    assert!(result.get("structuredContent").is_none(), "{result}");
     let wire = result.to_string();
     for secret in secrets {
         assert!(!wire.contains(secret), "{secret} leaked: {wire}");
     }
+}
+
+/// The `{reason, action}` of a refused call, from its text block.
+fn refusal(result: &Value) -> Value {
+    serde_json::from_str(result["content"][0]["text"].as_str().unwrap()).unwrap()
 }
 
 fn shop() -> Machine {
@@ -395,7 +401,7 @@ fn retiring_the_repo_takes_it_out_of_the_allowlist() {
     m.ok(&["repo", "add", path(&m.f.repo)]);
     assert!(m.allowlist().is_empty());
     assert_eq!(
-        m.mcp_status(&m.f.repo)["structuredContent"]["reason"],
+        refusal(&m.mcp_status(&m.f.repo))["reason"],
         "repo-not-enabled"
     );
 }
@@ -573,7 +579,8 @@ fn the_engine_starts_with_the_first_call() {
     assert!(m.running(), "{result}");
     // No repo observed yet: an answer, without data.
     assert_eq!(
-        result["structuredContent"]["reason"], "not-in-observed-worktree",
+        refusal(&result)["reason"],
+        "not-in-observed-worktree",
         "{result}"
     );
 }

@@ -1091,27 +1091,23 @@ impl Connection<'_> {
                 serde_json::to_value(snapshot)
             }
             ConnectionProfile::Mcp => {
-                let cwd = process_cwd(self.peer.pid);
-                let caller_repo = cwd.and_then(|cwd| {
-                    shared.repos.iter().find_map(|r| {
-                        let common = std::path::Path::new(r.path.raw());
-                        let worktree = if common.file_name().is_some_and(|n| n == ".git") {
-                            common.parent().unwrap_or(common)
-                        } else {
-                            common
-                        };
-                        // Outside the allowlist, not even its key (US-MCP-003).
-                        (cwd.starts_with(worktree)
-                            && crate::timemachine::protected::McpAllowlist::allows(
-                                self.ctx.mcp_repos.as_ref(),
-                                &r.repo_id,
-                            ))
-                        .then(|| McpRepoView {
-                            repo_id: r.repo_id.clone(),
-                            state: r.state,
-                        })
+                // The same scope as `mcp.status`: the deepest observed
+                // worktree of the canonical cwd, and outside the allowlist
+                // not even its key (US-MCP-003).
+                let caller_repo = process_cwd(self.peer.pid)
+                    .and_then(|cwd| cwd.canonicalize().ok())
+                    .and_then(|cwd| super::mcp_scope::locate(&cwd, &shared.repos))
+                    .map(|(r, _)| &shared.repos[r])
+                    .filter(|r| {
+                        crate::timemachine::protected::McpAllowlist::allows(
+                            self.ctx.mcp_repos.as_ref(),
+                            &r.repo_id,
+                        )
                     })
-                });
+                    .map(|r| McpRepoView {
+                        repo_id: r.repo_id.clone(),
+                        state: r.state,
+                    });
                 serde_json::to_value(McpSnapshot {
                     run_id,
                     seq,

@@ -75,28 +75,33 @@ impl std::fmt::Debug for Engine {
 }
 
 impl Engine {
-    /// `mcp.status`: the caller's repo, resolved by the engine.
+    /// `mcp.status`: the caller's repo, resolved by the engine. A broken
+    /// connection (the engine restarted) is opened again once.
     pub fn status(&self) -> Result<McpStatus, Refusal> {
         let mut slot = self.client.lock().unwrap_or_else(|e| e.into_inner());
-        if slot.is_none() {
-            let dirs = ProfileDirs::resolve().map_err(|_| Refusal::EngineUnavailable)?;
-            let client = ensure_daemon(&ClientOptions::new(dirs, ClientKind::Mcp))
-                .map_err(|_| Refusal::EngineUnavailable)?;
-            *slot = Some(client);
-        }
-        let client = slot.as_mut().ok_or(Refusal::Internal)?;
-        match client.call::<_, McpStatus>(methods::MCP_STATUS, serde_json::json!({})) {
-            Ok(status) => Ok(status),
-            Err(err) => {
-                let refusal = refusal(&err);
-                // A broken connection is opened again on the next call.
-                if matches!(err, ClientError::Io(_) | ClientError::Protocol(_)) {
-                    *slot = None;
-                }
-                Err(refusal)
+        let reused = slot.is_some();
+        match call_status(&mut slot) {
+            Err(ClientError::Io(_) | ClientError::Protocol(_)) if reused => {
+                call_status(&mut slot).map_err(|err| refusal(&err))
             }
+            other => other.map_err(|err| refusal(&err)),
         }
     }
+}
+
+/// One `mcp.status`, connecting first when there is no connection; a
+/// connection that breaks is dropped.
+fn call_status(slot: &mut Option<Client>) -> Result<McpStatus, ClientError> {
+    if slot.is_none() {
+        let dirs = ProfileDirs::resolve().map_err(|_| ClientError::NotRunning)?;
+        *slot = Some(ensure_daemon(&ClientOptions::new(dirs, ClientKind::Mcp))?);
+    }
+    let client = slot.as_mut().ok_or(ClientError::NotRunning)?;
+    let result = client.call::<_, McpStatus>(methods::MCP_STATUS, serde_json::json!({}));
+    if matches!(result, Err(ClientError::Io(_) | ClientError::Protocol(_))) {
+        *slot = None;
+    }
+    result
 }
 
 fn refusal(err: &ClientError) -> Refusal {
@@ -113,8 +118,12 @@ fn refusal(err: &ClientError) -> Refusal {
             }
         }
         ClientError::Rpc(e) if e.code == code::IDENTITY_UNVERIFIED => Refusal::IdentityUnverified,
-        ClientError::Io(_) => Refusal::EngineUnavailable,
-        _ => Refusal::Internal,
+        ClientError::Rpc(_) | ClientError::Protocol(_) | ClientError::Unsupported(_) => {
+            Refusal::Internal
+        }
+        // Not running and not startable, an incompatible engine, a rejected
+        // channel or a broken connection: the installation must be checked.
+        _ => Refusal::EngineUnavailable,
     }
 }
 

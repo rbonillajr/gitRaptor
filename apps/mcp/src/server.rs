@@ -59,16 +59,18 @@ fn status_tool() -> Tool {
         .with_raw_output_schema(Arc::new(output))
 }
 
-/// A result with the same JSON as structured content and as text.
-fn result(value: serde_json::Value, error: bool) -> CallToolResult {
-    let text = ContentBlock::text(value.to_string());
-    let mut result = if error {
-        CallToolResult::error(vec![text])
-    } else {
-        CallToolResult::success(vec![text])
-    };
+/// A status: the same JSON as structured content (it matches the output
+/// schema) and as text.
+fn success(value: serde_json::Value) -> CallToolResult {
+    let mut result = CallToolResult::success(vec![ContentBlock::text(value.to_string())]);
     result.structured_content = Some(value);
     result
+}
+
+/// A refusal: `{reason, action}` as text only, since it does not match the
+/// status's output schema.
+fn refused(value: serde_json::Value) -> CallToolResult {
+    CallToolResult::error(vec![ContentBlock::text(value.to_string())])
 }
 
 impl ServerHandler for Raptor {
@@ -92,9 +94,15 @@ impl ServerHandler for Raptor {
         if request.arguments.as_ref().is_some_and(|a| !a.is_empty()) {
             return Err(ErrorData::invalid_params("status takes no arguments", None));
         }
-        let response = match self.engine.status() {
-            Ok(status) => serde_json::to_value(status).map(|v| result(v, false)),
-            Err(refusal) => serde_json::to_value(refusal.refused()).map(|v| result(v, true)),
+        // The client is blocking: off the runtime's only thread, so the
+        // session keeps reading stdin meanwhile.
+        let engine = Arc::clone(&self.engine);
+        let status = tokio::task::spawn_blocking(move || engine.status())
+            .await
+            .map_err(|_| ErrorData::internal_error("internal-error", None))?;
+        let response = match status {
+            Ok(status) => serde_json::to_value(status).map(success),
+            Err(refusal) => serde_json::to_value(refusal.refused()).map(refused),
         };
         response
             .map(Into::into)
