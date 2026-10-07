@@ -279,7 +279,7 @@ pub fn plan(ctx: &GuardCtx<'_>, repo_id: &str, common: &Path, store: &RepoStore)
             .iter()
             .map(|t| Untrusted::from_os(t.as_os_str()))
             .collect(),
-        hooks: Hook::MANDATORY.to_vec(),
+        hooks: Hook::ALL.to_vec(),
         hooks_dir: Untrusted::from_os(common.join(FOLDER).join("hooks").as_os_str()),
         backend: backend(storage),
         not_preventable: not_preventable(backend(storage)),
@@ -340,7 +340,7 @@ pub fn install(
         .ok_or_else(|| InstallError::Rejected(vec![InstallBlocker::DispatcherMissing]))?;
     let stub = std::fs::read(&stub_path).map_err(|e| InstallError::Failed(format!("stub: {e}")))?;
     let hooks_dir = common.join(FOLDER).join("hooks");
-    let mut paths: Vec<String> = Hook::MANDATORY
+    let mut paths: Vec<String> = Hook::ALL
         .iter()
         .map(|h| format!("hooks/{}", h.git_name()))
         .collect();
@@ -477,17 +477,24 @@ fn confirm(
             confirmed.as_ref(),
         )
         .map_err(|e| format!("confirm: {e:?}"))?;
-    publish(ctx.dirs, repo_id, &journal, registry);
+    publish(ctx.dirs, repo_id, &journal, registry, confirmed);
     Ok(())
 }
 
 /// Puts a confirmed install where the channel and degraded mode see it.
-pub fn publish(dirs: &ProfileDirs, repo_id: &str, journal: &Journal, registry: &GuardRegistry) {
+pub fn publish(
+    dirs: &ProfileDirs,
+    repo_id: &str,
+    journal: &Journal,
+    registry: &GuardRegistry,
+    confirmed: Option<Confirmed>,
+) {
     registry.set(
         repo_id,
         GuardEntry {
             common_dir: journal.common_dir.clone(),
             bases: journal.protected_bases.clone(),
+            confirmed,
         },
     );
     let _ = export_snapshot(
@@ -587,7 +594,8 @@ pub fn recover(
         return Recovery::Nothing;
     };
     if journal.stage == Stage::Confirmed {
-        publish(ctx.dirs, repo_id, &journal, registry);
+        let confirmed = store.confirmed_team_baseline().ok().flatten();
+        publish(ctx.dirs, repo_id, &journal, registry, confirmed);
         return Recovery::Nothing;
     }
     let writer = GuardWriter::new(ctx.git, ctx.invoker);

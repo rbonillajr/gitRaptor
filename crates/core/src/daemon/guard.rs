@@ -124,7 +124,8 @@ pub(super) fn recover_guardrails(
                 .and_then(|j| crate::guardrails::journal::Journal::from_json(&j))
                 .filter(|j| j.stage == crate::guardrails::journal::Stage::Confirmed)
             {
-                guard_install::publish(&config.dirs, repo_id, &journal, registry);
+                let confirmed = store.confirmed_team_baseline().ok().flatten();
+                guard_install::publish(&config.dirs, repo_id, &journal, registry, confirmed);
             }
             continue;
         };

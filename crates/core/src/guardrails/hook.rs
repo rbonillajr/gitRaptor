@@ -10,8 +10,8 @@ use std::path::{Path, PathBuf};
 
 use gitraptor_api::Untrusted;
 use gitraptor_api::guard::{
-    Cause, Decision, Effect, EvaluateParams, Hook, Level, Operation, OrphanHead, PushUpdate,
-    Reason, RefUpdate, RefValue, Rule,
+    AuthorshipFacts, Cause, CommitStage, Decision, Effect, EvaluateParams, Hook, Level, Operation,
+    OrphanHead, PushUpdate, Reason, RefUpdate, RefValue, Rule,
 };
 use gitraptor_api::messages::ClientKind;
 use gitraptor_api::{PROTOCOL_VERSION, methods};
@@ -137,6 +137,7 @@ pub fn run(args: &HookArgs, env: &HookEnv, input: &[u8]) -> HookOutcome {
             upstream: git_arg(0).map(Untrusted::new),
             branch: git_arg(1).map(Untrusted::new),
         },
+        Hook::PreCommit | Hook::CommitMsg => return commit(args, env),
     };
     // M-02, SEC-GRD-19: the transaction must be in the repo of the dispatcher.
     if !same_repo(&args.common, env) {
@@ -146,7 +147,7 @@ pub fn run(args: &HookArgs, env: &HookEnv, input: &[u8]) -> HookOutcome {
 }
 
 /// The canonical common directory of the transaction: `GIT_DIR` or the repo of the cwd.
-fn transaction_git_dir(env: &HookEnv) -> Option<PathBuf> {
+pub(crate) fn transaction_git_dir(env: &HookEnv) -> Option<PathBuf> {
     if let Some(dir) = &env.git_dir {
         let dir = if dir.is_absolute() {
             dir.clone()
@@ -179,7 +180,7 @@ fn transaction_git_dir(env: &HookEnv) -> Option<PathBuf> {
     }
 }
 
-fn common_of(git_dir: &Path) -> Option<PathBuf> {
+pub(crate) fn common_of(git_dir: &Path) -> Option<PathBuf> {
     match std::fs::read_to_string(git_dir.join("commondir")) {
         Ok(text) => {
             let c = Path::new(text.trim_end());
@@ -345,6 +346,99 @@ fn push(remote: Option<&str>, url: Option<&str>, input: &[u8]) -> Result<Option<
     }))
 }
 
+/// `pre-commit` and `commit-msg` (US-GRD-018, D6, D11): only the commit authorship policy
+/// governs a commit, and only an authentic daemon of this instance that grants
+/// `guard.authorship` evaluates it. Without one the commit goes ahead as before: in degraded
+/// mode the actor is "unattributed", so no authorship rule applies (D3, BR-EDGE-004).
+fn commit(args: &HookArgs, env: &HookEnv) -> HookOutcome {
+    if !same_repo(&args.common, env) {
+        return HookOutcome::deny(Rule::RepoMismatch);
+    }
+    let mut client = match connect(args) {
+        Ok(client) => client,
+        Err(Asked::NotAuthentic) => return HookOutcome::deny(Rule::ChannelNotAuthentic),
+        // Degraded: unattributed, nothing to decide. The `reference-transaction` of the same
+        // commit already says the layer is degraded.
+        Err(_) => return HookOutcome::allow(),
+    };
+    let granted = client.hello().capabilities.as_ref().is_some_and(|served| {
+        served
+            .iter()
+            .any(|c| c == methods::CAP_GUARD_AUTHORSHIP.name)
+    });
+    if !granted {
+        return HookOutcome::allow();
+    }
+    let (stage, facts) = match args.hook {
+        Hook::PreCommit => (CommitStage::PreCommit, None),
+        _ => (CommitStage::CommitMsg, Some(message_facts(args, env))),
+    };
+    let params = EvaluateParams {
+        repo_id: args.repo.clone(),
+        common_dir: args.common.to_string_lossy().into_owned(),
+        hook: args.hook,
+        operation: Operation::Commit { stage },
+        authorship: facts,
+    };
+    match client.call::<_, Decision>(methods::GUARD_EVALUATE, &params) {
+        Ok(decision) => HookOutcome {
+            decision: Some(decision),
+            degraded: None,
+        },
+        Err(_) => HookOutcome::deny(Rule::InternalError),
+    }
+}
+
+/// The facts of the message file `commit-msg` received (D7): a regular file, never a link, at
+/// most 64 KiB; anything else is unreadable. Only the facts leave this process.
+fn message_facts(args: &HookArgs, env: &HookEnv) -> AuthorshipFacts {
+    use gitraptor_policy::authorship::{self, Cleanup, MAX_MESSAGE_BYTES, MessageOptions};
+    let Some(path) = args.git_args.first() else {
+        return authorship::unreadable();
+    };
+    let path = env.cwd.join(path);
+    let Some(bytes) = read_regular(&path, MAX_MESSAGE_BYTES as u64) else {
+        return authorship::unreadable();
+    };
+    let mut options = MessageOptions::default();
+    if let Some(git_dir) = transaction_git_dir(env)
+        && let Ok(reader) =
+            gitraptor_git::RepoReader::open(&git_dir, &gitraptor_git::ReaderOptions::default())
+    {
+        let (cleanup, comment) = reader.commit_message_config();
+        if let Some(c) = cleanup {
+            options.cleanup = Cleanup::from_config(&c);
+        }
+        // `auto` picks a character absent from the message: `#` unless it is used.
+        match comment.as_deref() {
+            Some("auto") | None => {}
+            Some(c) if !c.is_empty() => options.comment = c.to_owned(),
+            Some(_) => {}
+        }
+    }
+    authorship::facts(&bytes, &options)
+}
+
+/// A regular file of at most `max` bytes, opened without following a link.
+fn read_regular(path: &Path, max: u64) -> Option<Vec<u8>> {
+    use std::io::Read;
+    let meta = std::fs::symlink_metadata(path).ok()?;
+    if !meta.is_file() || meta.len() > max {
+        return None;
+    }
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(rustix::fs::OFlags::NOFOLLOW.bits() as i32);
+    }
+    let file = options.open(path).ok()?;
+    let mut bytes = Vec::new();
+    file.take(max + 1).read_to_end(&mut bytes).ok()?;
+    (bytes.len() as u64 <= max).then_some(bytes)
+}
+
 /// Asks the daemon; without an authentic daemon of this instance, degraded mode.
 fn decide(args: &HookArgs, op: Operation) -> HookOutcome {
     let params = EvaluateParams {
@@ -352,6 +446,7 @@ fn decide(args: &HookArgs, op: Operation) -> HookOutcome {
         common_dir: args.common.to_string_lossy().into_owned(),
         hook: args.hook,
         operation: op,
+        authorship: None,
     };
     match ask_daemon(args, &params) {
         Asked::Decision(decision) => HookOutcome {
@@ -372,6 +467,18 @@ enum Asked {
 }
 
 fn ask_daemon(args: &HookArgs, params: &EvaluateParams) -> Asked {
+    let mut client = match connect(args) {
+        Ok(client) => client,
+        Err(asked) => return asked,
+    };
+    match client.call::<_, Decision>(methods::GUARD_EVALUATE, params) {
+        Ok(decision) => Asked::Decision(decision),
+        Err(_) => Asked::Failed,
+    }
+}
+
+/// An authentic daemon of this profile instance, or what to do without one.
+fn connect(args: &HookArgs) -> Result<Client, Asked> {
     // The server must be the installed binary itself (H-03, SEC-GRD-16), checked before
     // anything is sent. A server whose executable cannot be read at all (replaced on disk
     // after an upgrade) is not trusted either, but decides nothing: degraded mode, stricter.
@@ -381,24 +488,21 @@ fn ask_daemon(args: &HookArgs, params: &EvaluateParams) -> Asked {
             identity.set(same_executable(pid));
             identity.get() == Identity::Same
         });
-    let mut client = match connected {
+    let client = match connected {
         Ok(client) => client,
         Err(ClientError::NotAuthentic) if identity.get() == Identity::Unknown => {
-            return Asked::Degraded(Degraded::DaemonUnreachable);
+            return Err(Asked::Degraded(Degraded::DaemonUnreachable));
         }
-        Err(ClientError::NotAuthentic) => return Asked::NotAuthentic,
-        Err(ClientError::Rpc(_) | ClientError::Protocol(_)) => return Asked::Failed,
+        Err(ClientError::NotAuthentic) => return Err(Asked::NotAuthentic),
+        Err(ClientError::Rpc(_) | ClientError::Protocol(_)) => return Err(Asked::Failed),
         // No daemon, a stale socket, another protocol or no transport (Windows).
-        Err(_) => return Asked::Degraded(Degraded::DaemonUnreachable),
+        Err(_) => return Err(Asked::Degraded(Degraded::DaemonUnreachable)),
     };
     // …and this profile instance; another one decides nothing here (ADR-GRD-003 § 4).
     if client.hello().instance_id != args.instance {
-        return Asked::Degraded(Degraded::InstanceMismatch);
+        return Err(Asked::Degraded(Degraded::InstanceMismatch));
     }
-    match client.call::<_, Decision>(methods::GUARD_EVALUATE, params) {
-        Ok(decision) => Asked::Decision(decision),
-        Err(_) => Asked::Failed,
-    }
+    Ok(client)
 }
 
 /// What the client can tell of the channel server's executable.
@@ -524,7 +628,7 @@ mod tests {
         assert_eq!(a.git_args, argv(&["origin", "/remote.git"]));
         for bad in [
             &["9", "pre-push", "a", &r, &c, "i", &st, "", "--"][..],
-            &["1", "pre-commit", "a", &r, &c, "i", &st, "", "--"],
+            &["1", "post-commit", "a", &r, &c, "i", &st, "", "--"],
             &["1", "pre-push", "a", "rel", &c, "i", &st, "", "--"],
             &["1", "pre-push", "a", &r, &c, "i", &st, ""],
         ] {

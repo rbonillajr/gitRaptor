@@ -5,11 +5,13 @@
 
 use std::path::Path;
 
+use gitraptor_api::AgentKind;
 use gitraptor_api::guard::{
     ConfigSource, ConfigStatus, Decision, Effect, EvaluateParams, ExceptionState, Level, Operation,
     Reason, Rule,
 };
 use gitraptor_git::{Ancestry, ReaderOptions, RefName, RepoReader};
+use gitraptor_policy::guard::authorship::Effective;
 use gitraptor_policy::guard::{self as policy, Context, Evaluation, Facts, FastForward};
 use gitraptor_policy::team::{DEFAULT_BRANCH, resolve_main_branch};
 
@@ -34,6 +36,7 @@ pub fn facts(reader: &RepoReader, op: &Operation) -> Facts {
         return Facts::default();
     };
     Facts {
+        authorship: None,
         push: updates
             .iter()
             .map(|u| {
@@ -70,6 +73,15 @@ pub fn folds_case(common: &Path) -> bool {
     common.join("HEAD").is_file() && std::fs::symlink_metadata(common.join("hEAD")).is_ok()
 }
 
+/// Who and under which authorship policy a commit is evaluated (US-GRD-018). The default is
+/// "unattributed": no authorship rule applies (BR-EDGE-004).
+#[derive(Debug, Clone, Default)]
+pub struct CommitContext {
+    pub actor: Option<AgentKind>,
+    pub authorship: Effective,
+    pub facts: Option<gitraptor_api::guard::AuthorshipFacts>,
+}
+
 /// Evaluates with the repo's own facts and case folding: `core.ignoreCase` or a file system
 /// that folds case (SEC-GRD-18).
 pub fn evaluate(
@@ -78,11 +90,26 @@ pub fn evaluate(
     op: &Operation,
     bases: Vec<String>,
 ) -> Evaluation {
+    evaluate_commit(reader, common, op, bases, CommitContext::default())
+}
+
+/// [`evaluate`] with the actor, the authorship policy and the facts of the message.
+pub fn evaluate_commit(
+    reader: &RepoReader,
+    common: &Path,
+    op: &Operation,
+    bases: Vec<String>,
+    commit: CommitContext,
+) -> Evaluation {
     let ctx = Context {
         bases,
         fold_case: reader.ignores_case() || folds_case(common),
+        actor: commit.actor,
+        authorship: commit.authorship,
     };
-    policy::evaluate(op, &facts(reader, op), &ctx)
+    let mut facts = facts(reader, op);
+    facts.authorship = commit.facts;
+    policy::evaluate(op, &facts, &ctx)
 }
 
 /// A fresh opaque decision id.
@@ -105,11 +132,18 @@ pub fn decision(eval: Evaluation) -> Decision {
         Effect::Ask => Effect::Deny,
         other => other,
     };
+    // A warning only travels with a commit that goes ahead (D3).
+    let notices = if applied_effect == Effect::Allow {
+        eval.notices
+    } else {
+        Vec::new()
+    };
     Decision {
         decision_id: decision_id(),
         effect: eval.effect,
         applied_effect,
         reasons: eval.reasons,
+        notices,
         exception: ExceptionState::None,
         // US-GRD-001 reads no configuration: the minimum applies alone.
         config_status: vec![ConfigSource {
@@ -130,6 +164,7 @@ pub fn system_deny(rule: Rule) -> Decision {
             cause: None,
             params: Vec::new(),
         }],
+        notices: Vec::new(),
     })
 }
 
@@ -170,14 +205,34 @@ fn valid(params: &EvaluateParams) -> bool {
                     .as_ref()
                     .is_none_or(|o| name(&o.branch) && value(&RefValue::Oid(o.oid.clone())))
         }
-        Operation::Rebase { .. } => true,
+        Operation::Rebase { .. } | Operation::Commit { .. } => true,
     };
-    id_ok && ops_ok && Path::new(&params.common_dir).is_absolute()
+    let facts_ok = params
+        .authorship
+        .as_ref()
+        .is_none_or(|f| f.coauthors.len() <= gitraptor_policy::authorship::MAX_COAUTHORS);
+    id_ok && ops_ok && facts_ok && Path::new(&params.common_dir).is_absolute()
 }
 
 /// `guard.evaluate` in the daemon. A repo it does not know as protected (an orphan install, a
 /// copied dispatcher) is evaluated with the union {`main`, main branch}: never less.
 pub fn serve(registry: &GuardRegistry, params: &EvaluateParams) -> Decision {
+    serve_as(registry, params, &Caller::default())
+}
+
+/// What the daemon knows of the hook client of a `commit` (US-GRD-018).
+#[derive(Debug, Clone, Default)]
+pub struct Caller {
+    /// The agent resolved from the client's ancestry (D5).
+    pub actor: Option<AgentKind>,
+    /// The client's working directory: the worktree of the commit (Git runs hooks there).
+    pub cwd: Option<std::path::PathBuf>,
+    /// The connection was granted `guard.authorship`.
+    pub authorship: bool,
+}
+
+/// [`serve`] for a caller the channel resolved.
+pub fn serve_as(registry: &GuardRegistry, params: &EvaluateParams, caller: &Caller) -> Decision {
     if !valid(params) {
         return system_deny(Rule::InputRejected);
     }
@@ -187,14 +242,38 @@ pub fn serve(registry: &GuardRegistry, params: &EvaluateParams) -> Decision {
     let Some(reader) = open(Path::new(&params.common_dir)) else {
         return system_deny(Rule::InternalError);
     };
-    let bases = match entry {
-        Some(e) => e.bases,
-        None => default_bases(&reader),
+    let common = Path::new(&params.common_dir);
+    let (bases, confirmed) = match entry {
+        Some(e) => (e.bases, e.confirmed),
+        None => (default_bases(&reader), None),
     };
-    decision(evaluate(
+    let commit = match &params.operation {
+        Operation::Commit { .. } if caller.authorship => {
+            let worktree = caller
+                .cwd
+                .as_deref()
+                .and_then(|cwd| super::authorship::worktree_reader(cwd, common));
+            CommitContext {
+                actor: caller.actor,
+                authorship: super::authorship::policy_for(
+                    worktree.as_ref().unwrap_or(&reader),
+                    confirmed.as_ref(),
+                    registry.profile().as_ref(),
+                ),
+                facts: params.authorship.clone(),
+            }
+        }
+        _ => CommitContext::default(),
+    };
+    let mut out = decision(evaluate_commit(
         &reader,
-        Path::new(&params.common_dir),
+        common,
         &params.operation,
         bases,
-    ))
+        commit,
+    ));
+    if !caller.authorship {
+        out.notices.clear();
+    }
+    out
 }

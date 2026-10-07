@@ -42,6 +42,7 @@ fn params(common_dir: &std::path::Path, refname: &str) -> EvaluateParams {
             }],
             orphan_head: None,
         },
+        authorship: None,
     }
 }
 

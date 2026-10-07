@@ -7,6 +7,8 @@
 //!
 //! Only this module reaches the Guardrails write layer of `crates/git` (ADR-GRD-001 § 7).
 
+pub mod actor;
+pub mod authorship;
 pub mod constants;
 pub mod evaluate;
 pub mod hook;

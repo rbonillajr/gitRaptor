@@ -742,9 +742,10 @@ impl Connection<'_> {
             // On this thread, never through the loop: the hook of an executor's own `git`
             // must not wait for anything (ADR-GRD-003, Enmienda Cockpit).
             methods::GUARD_EVALUATE => {
-                let result = request
-                    .params::<EvaluateParams>()
-                    .map(|p| crate::guardrails::evaluate::serve(&self.ctx.guard, &p));
+                let result = request.params::<EvaluateParams>().map(|p| {
+                    let caller = self.guard_caller(&p);
+                    crate::guardrails::evaluate::serve_as(&self.ctx.guard, &p, &caller)
+                });
                 self.reply(&request.id, result);
             }
             methods::GUARD_PLAN
@@ -765,6 +766,32 @@ impl Connection<'_> {
             }
         }
         After::Continue
+    }
+
+    /// What the daemon knows of a hook client (US-GRD-018): the actor and the worktree are
+    /// resolved only for a commit, the one operation whose rules read them.
+    fn guard_caller(&self, params: &EvaluateParams) -> crate::guardrails::evaluate::Caller {
+        let authorship = self.has(methods::CAP_GUARD_AUTHORSHIP.name);
+        if !authorship
+            || !matches!(
+                params.operation,
+                gitraptor_api::guard::Operation::Commit { .. }
+            )
+        {
+            return crate::guardrails::evaluate::Caller {
+                authorship,
+                ..Default::default()
+            };
+        }
+        crate::guardrails::evaluate::Caller {
+            actor: crate::guardrails::actor::resolve(
+                self.peer,
+                &self.ctx.checks(),
+                Some(&self.ctx.marks),
+            ),
+            cwd: process_cwd(self.peer.pid),
+            authorship,
+        }
     }
 
     /// `repo.add` (US-GRP-001): parameters checked lexically, then the
