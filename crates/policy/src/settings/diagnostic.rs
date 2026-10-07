@@ -90,6 +90,9 @@ pub enum Code {
     FloorRelaxPending,
     /// The confirmed floor blob is not readable any more (for example, after `gc`).
     ConfirmedFloorMissing,
+    /// A `*.json` file in the committed `.gitraptor/` that is not `settings.json` (file name
+    /// given): likely a misnamed settings file. Informational: it is never read.
+    UnknownSettingsFile,
 }
 
 impl Code {
@@ -122,6 +125,7 @@ impl Code {
             Self::BaseChangePending { invalid: true } => "base-change-pending-invalid",
             Self::FloorRelaxPending => "floor-relax-pending",
             Self::ConfirmedFloorMissing => "confirmed-floor-missing",
+            Self::UnknownSettingsFile => "unknown-settings-file",
         }
     }
 }
@@ -133,6 +137,8 @@ pub enum Location {
     Position { line: usize, column: usize },
     /// JSON pointer (RFC 6901) of the key. Segments are truncated and neutralized.
     Pointer(String),
+    /// Name of a committed file, truncated and neutralized like a pointer segment.
+    File(String),
 }
 
 /// One diagnostic.
@@ -185,6 +191,20 @@ pub(crate) fn pointer(segments: &[String]) -> String {
                 c => out.push(c),
             }
         }
+    }
+    out
+}
+
+/// A committed file name made safe to show: cut to 64 characters, control and format
+/// characters replaced (SEC-11).
+pub(crate) fn file_name(name: &str) -> String {
+    let mut out = String::new();
+    for (i, c) in name.chars().enumerate() {
+        if i == SEGMENT_MAX {
+            out.push('…');
+            break;
+        }
+        out.push(if is_neutralized(c) { '\u{FFFD}' } else { c });
     }
     out
 }

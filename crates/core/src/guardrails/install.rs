@@ -10,7 +10,7 @@ use gitraptor_api::guard::{
 };
 use gitraptor_git::cli::GitCli;
 use gitraptor_git::guard_write::{FOLDER, GuardWriteError, GuardWriter, NewFile};
-use gitraptor_git::{Invoker, RefStorage, SystemGit};
+use gitraptor_git::{Invoker, RefStorage, RepoReader, SystemGit};
 use gitraptor_policy::guard::not_preventable;
 use gitraptor_policy::team::{Confirmed, ConfirmedFloor, DEFAULT_BRANCH, SETTINGS_PATH};
 use sha2::{Digest, Sha256};
@@ -132,7 +132,26 @@ pub fn status(repo_id: &str, common: &Path, store: &RepoStore) -> GuardStatus {
             .as_deref()
             .and_then(|r| serde_json::from_str(r).ok())
             .unwrap_or_default(),
+        misnamed_settings: reader.as_ref().map(misnamed_settings).unwrap_or_default(),
     }
+}
+
+/// The misnamed settings files of the floor and the `HEAD`, once each (ADR-GRP-007).
+fn misnamed_settings(reader: &RepoReader) -> Vec<Untrusted> {
+    let Ok(team) = gitraptor_policy::team::TeamLoader::default().load(reader, None) else {
+        return Vec::new();
+    };
+    let mut files: Vec<String> = team
+        .diagnostics()
+        .filter(|d| d.code == gitraptor_policy::settings::Code::UnknownSettingsFile)
+        .filter_map(|d| match &d.location {
+            Some(gitraptor_policy::settings::Location::File(f)) => Some(f.clone()),
+            _ => None,
+        })
+        .collect();
+    files.sort();
+    files.dedup();
+    files.into_iter().map(Untrusted::new).collect()
 }
 
 /// The confirmed install is still where it was: the repo's own `core.hooksPath` is the

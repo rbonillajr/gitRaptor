@@ -55,6 +55,7 @@ guard.status.base-unconfirmed = ramas base protegidas: {bases} (sin confirmar)
 guard.permission.not-asked = permiso: no pedido
 guard.permission.granted = permiso: concedido
 guard.permission.denied = permiso: denegado (no se vuelve a ofrecer)
+guard.status.misnamed-settings = aviso: {file} no se lee; ¿quisiste decir `.gitraptor/settings.json`?
 guard.np.reset-hard = git reset --hard (la Time Machine puede deshacerlo)
 guard.np.merge = merge, también fast-forward
 guard.np.remove-worktree = borrar un worktree

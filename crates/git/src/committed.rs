@@ -112,6 +112,56 @@ impl RepoReader {
         })
     }
 
+    /// Names of the regular files directly inside the directory `dir` (components) of `commit`,
+    /// sorted; at most `max` of them. Empty when the directory is absent or not a directory.
+    /// Only reads trees: no blob is loaded.
+    pub fn committed_file_names(
+        &self,
+        commit: &str,
+        dir: &[&str],
+        max: usize,
+    ) -> Result<Vec<String>, ReadError> {
+        if dir
+            .iter()
+            .any(|c| c.is_empty() || *c == "." || *c == ".." || c.contains(['/', '\\']))
+        {
+            return Err(ReadError::InvalidInput("invalid committed path".into()));
+        }
+        let repo = &self.repo;
+        let commit = repo
+            .find_object(parse_id(commit)?)
+            .map_err(|e| ReadError::Unavailable(format!("commit: {e}")))?
+            .try_into_commit()
+            .map_err(|_| ReadError::InvalidInput("not a commit".into()))?;
+        let mut tree = commit
+            .tree()
+            .map_err(|e| ReadError::Unavailable(format!("tree: {e}")))?;
+        for component in dir {
+            let Some(entry) = tree.find_entry(component.as_bytes()) else {
+                return Ok(Vec::new());
+            };
+            if !entry.mode().is_tree() {
+                return Ok(Vec::new());
+            }
+            let id = entry.object_id();
+            tree = repo
+                .find_tree(id)
+                .map_err(|e| ReadError::Unavailable(format!("tree: {e}")))?;
+        }
+        let decoded = tree
+            .decode()
+            .map_err(|e| ReadError::Unavailable(format!("tree: {e}")))?;
+        let mut names: Vec<String> = decoded
+            .entries
+            .iter()
+            .filter(|e| e.mode.is_blob())
+            .map(|e| e.filename.to_str_lossy().into_owned())
+            .collect();
+        names.sort();
+        names.truncate(max);
+        Ok(names)
+    }
+
     /// The blob with id `id` (hex), if the object database has it.
     pub fn blob_by_id(&self, id: &str, max_size: u64) -> Result<BlobRead, ReadError> {
         self.read_blob(parse_id(id)?, max_size)
