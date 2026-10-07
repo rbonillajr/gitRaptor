@@ -260,7 +260,7 @@ Origen: propuesta B de Rene Bonilla (2026-10-06), preocupado por tener más de 1
 | **Redes de seguridad de los dormidos**: barrido de metadatos cada 120 s y reconciliación lenta con presupuesto. El sondeo de respaldo de 30 s y la reconciliación periódica de 5 min solo corren en los activos | N3; § 5 | Propuesta B |
 | **Despertar**: el repo reconcilia por completo con las vigilancias que nunca se retiraron, así que no hay hueco | N4; § 6 | Revisión del Arquitecto |
 | **Huecos**: los cambios que señala el centinela no son un hueco. Lo que encuentra una red de seguridad sin que el centinela lo señalara sí lo es, con la causa `dormant` | N5; § 6 | BR-CONS-005, BR-EDGE-005; ADR-GRP-013 (Enmienda 2026-10-07) |
-| **Descubrimiento en raíces**: primer nivel sin recursión, raíces en el perfil gestionadas solo con comandos reservados y nada por MCP | N6; § 2 | BR-AUTH-003; SEC-15; SEC-MCP-01 |
+| **Descubrimiento en raíces**: primer nivel sin recursión, raíces en el perfil gestionadas solo con comandos reservados y nada por MCP. `$HOME` se admite como raíz amplia con confirmación y exclusiones fijas (**Decisión de Rene (2026-10-07)**) | N6; § 2 | BR-AUTH-003; SEC-15; SEC-MCP-01 |
 | **Claves** `engine.observation.*` | N7 | ADR-GRP-007 |
 | **Contrato aditivo**: nivel por repo, bloque `observation` de `engine.resources` y métodos de descubrimiento | N8 | ADR-GRP-015 § 4; ADR-GRP-016 § 1 |
 
@@ -384,13 +384,18 @@ Son las mismas redes que tienen los activos (§ 5), con menos frecuencia.
 
 - **Las raíces viven en el índice global del perfil** (ADR-GRP-006), como la lista de repos observados, y **no en `settings.json`**. Un agente puede escribir un archivo del perfil del usuario, y BR-AUTH-003 (condición 8) le prohíbe declarar raíces. Por eso declarar y retirar una raíz son **comandos reservados** (SEC-03). El orquestador proponía una clave de configuración; se corrige.
 - **Validación de cada raíz** (SEC-15). La raíz tiene que ser absoluta, canónica, existir y ser una carpeta. No puede ser:
-  - `/`, la raíz de una unidad, `$HOME` ni un ancestro de `$HOME`;
-  - un repo ni una carpeta dentro de un repo (BR-AUTH-003, condición 2);
+  - `/`, la raíz de la unidad del sistema (`C:\`) ni un ancestro de `$HOME` (`/Users`, `/home`, `C:\Users`), porque contienen las carpetas de otros usuarios (criterio de propietario de SEC-11);
+  - un repo ni una carpeta dentro de un repo (BR-AUTH-003, condición 2); un `$HOME` con `~/.git` (dotfiles) es un repo y se rechaza;
   - una ruta dentro del perfil;
   - una ruta de red, UNC o de un sistema de archivos de red.
 
   Como mucho hay 16 raíces (⚠️ **ASSUMPTION**). Una raíz rechazada se devuelve con su motivo y no se toca.
-  - **`$HOME` no**: su primer nivel tiene archivos que cambian sin parar, como el historial de la shell o las cachés de los editores, y cada cambio despertaría al daemon (RES-03). Es el criterio de SEC-11 para la raíz de un worktree, y coincide con el supuesto del PO.
+  - **`$HOME` sí, como raíz amplia** *(enmienda 2026-10-07; **Decisión de Rene (2026-10-07)**: "que el usuario dé el path de la ruta que quiere monitorear"; sustituye a "`$HOME` no")*. **Decisión del orquestador (2026-10-07), validada por el Arquitecto.** Una raíz es **amplia** si es `$HOME`, la raíz de otro volumen (`/Volumes/X`, `D:\`) o tiene más de **512** entradas de primer nivel (⚠️ **ASSUMPTION**: la octava parte del tope de 4.096). `discovery.root.add` la devuelve con el código tipado `root_broad` y el motivo (`home`, `volume` o el número de entradas). La CLI avisa del coste, pregunta `[s/N]` y reintenta con `confirm_broad: true`; el daemon vuelve a validar la ruta y al solicitante por la ascendencia del proceso. Sin TTY se rechaza y no hay flag en el MVP. Si una raíz normal pasa después de 512 entradas, cambia a la vigilancia de raíz amplia con un diagnóstico, sin volver a pedir confirmación.
+  - **Una raíz amplia no se vigila** (RES-03): en macOS, kqueue avisa de cualquier cambio del directorio sin decir qué entrada cambió, y en `$HOME` cada comando de la shell reescribe el historial. Su primer nivel solo se lista cada 60 s (⚠️ **ASSUMPTION**) y se compara con el listado anterior. Las raíces normales mantienen la vigilancia, con una espera de 2 s antes de relistar. En Linux y Windows el evento trae el nombre de la entrada y se filtra contra las exclusiones antes de despertar al motor.
+  - **Exclusiones fijas**, que no se miran nunca:
+    - en cualquier raíz: las entradas que no son carpeta, las ocultas (`.*`) y los enlaces simbólicos; en Windows, además, las carpetas con atributo oculto o de sistema, los reparse points y los placeholders de nube que se descargan al leerlos (OneDrive); en macOS, las entradas *dataless* de iCloud sin copia local;
+    - solo cuando la raíz es `$HOME`: en macOS, `Library`, `Desktop`, `Documents`, `Downloads`, `Pictures`, `Movies` y `Music` (datos de otras aplicaciones y carpetas protegidas por TCC: mirar su `.git` haría que macOS pidiera permiso de acceso para el daemon); en Linux, `snap` (las ocultas ya cubren `.cache`, `.config` y `.local`); en Windows, `AppData` y `OneDrive`.
+  - **SEC-11 no cambia**: regula la raíz de un worktree que se observa, y descubrir no es observar. Un `gitdir` que apunta a `$HOME` o a `/` sigue sin vigilarse. Los nombres del primer nivel de `$HOME` no se guardan: solo se persisten los candidatos.
 - **Solo el primer nivel, sin recursión**, con una vigilancia no recursiva por raíz:
   - Linux: inotify sobre el directorio.
   - Windows: ReadDirectoryChangesW sin subárbol.
@@ -402,7 +407,7 @@ Son las mismas redes que tienen los activos (§ 5), con menos frecuencia.
 - **Deduplicación** por la clave de repo (ADR-GRP-006: ruta canónica del directorio Git común). Un worktree enlazado de un repo ya observado no es candidato. El descarte se guarda por ruta, según el supuesto del PO en BR-AUTH-003, ratificado (**Decisión de Rene (2026-10-07)**).
 - **Un candidato no consume nada** hasta que el humano lo acepta con `repo.add` (reservado). Descartarlo también es reservado (BR-AUTH-003, condición 8).
 - **Nada por MCP** (SEC-MCP-01): ni las raíces, ni los candidatos, ni sus eventos.
-- **Coste**: como mucho 16 vigilancias o descriptores, un listado cada 5 min y ningún efecto en el repo descubierto (BR-AUTH-003, condición 9).
+- **Coste**: como mucho 16 vigilancias o descriptores, un listado cada 5 min (cada 60 s en una raíz amplia, que no se vigila) y ningún efecto en el repo descubierto (BR-AUTH-003, condición 9).
 - La notificación nativa del SO queda fuera del MVP (Q46; **Decisión de Rene (2026-10-07)**). Si vuelve: en macOS, un daemon sin bundle de aplicación no puede usar el centro de notificaciones sin lanzar un proceso del sistema, y hoy la auditoría de `exec` de INF-GRP-001 no lo permite.
 
 ### N7. Configuración (ADR-GRP-007)
@@ -470,7 +475,9 @@ Son las mismas redes que tienen los activos (§ 5), con menos frecuencia.
   - un worktree degradado no se duerme;
   - una sesión simulada despierta el repo.
 - **Tests funcionales de US-GRP-020 y US-GRP-022**:
-  - un corpus de raíces inválidas (`/`, `$HOME`, un ancestro, un repo, una carpeta dentro de un repo, UNC, un enlace simbólico y el perfil) se rechaza con su motivo;
+  - un corpus de raíces inválidas (`/`, un ancestro de `$HOME`, un repo, una carpeta dentro de un repo, UNC, un enlace simbólico y el perfil) se rechaza con su motivo;
+  - `$HOME`, otro volumen y una carpeta con más de 512 entradas devuelven `root_broad`; sin TTY no se declaran; con `confirm_broad: true` desde la terminal del humano, sí;
+  - con `$HOME` como raíz, ni las ocultas ni las exclusiones del SO se miran (en macOS, ningún aviso de permiso de TCC), y los despertares en reposo cumplen RES-03;
   - un clon en curso pasa a candidato cuando termina;
   - un repo canario con configuración y hooks hostiles no deja ningún marcador;
   - un cliente bajo un agente no puede declarar una raíz, ni aceptar ni descartar un candidato.
