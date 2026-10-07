@@ -883,6 +883,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "gitraptor-macsys"
+version = "0.0.0"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "gitraptor-mcp"
 version = "0.0.0"
 dependencies = [

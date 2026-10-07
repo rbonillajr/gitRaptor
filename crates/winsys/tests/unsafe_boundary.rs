@@ -1,11 +1,20 @@
-//! `gitraptor-winsys` is the only crate allowed `unsafe`, and within it only
-//! its private FFI modules (ADR-GRP-002, Enmienda 2026-10-05). Every other
-//! package of the workspace inherits the workspace lints, which forbid it.
-//! Checked on `cargo metadata` and on the sources, on every OS.
+//! `gitraptor-winsys` and `gitraptor-macsys` are the only crates allowed
+//! `unsafe`, and within them only their private FFI modules (ADR-GRP-002,
+//! Enmiendas 2026-10-05 and 2026-10-07). Every other package of the workspace
+//! inherits the workspace lints, which forbid it. Checked on `cargo metadata`
+//! and on the sources, on every OS. This is the one list of exceptions.
 
 use std::path::{Path, PathBuf};
 
-const EXCEPTION: &str = "gitraptor-winsys";
+/// Package name and crate folder (from the workspace root) of each exception.
+const EXCEPTIONS: [(&str, &str); 2] = [
+    ("gitraptor-winsys", "crates/winsys"),
+    ("gitraptor-macsys", "crates/macsys"),
+];
+
+fn is_exception(name: &str) -> bool {
+    EXCEPTIONS.iter().any(|(n, _)| *n == name)
+}
 
 fn manifests() -> Vec<(String, PathBuf)> {
     let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
@@ -66,10 +75,12 @@ fn the_workspace_forbids_unsafe() {
 #[test]
 fn every_other_package_inherits_the_workspace_lints() {
     let packages = manifests();
-    assert!(packages.iter().any(|(n, _)| n == EXCEPTION));
+    for (exception, _) in EXCEPTIONS {
+        assert!(packages.iter().any(|(n, _)| n == exception), "{exception}");
+    }
     let offenders: Vec<_> = packages
         .iter()
-        .filter(|(name, _)| name != EXCEPTION)
+        .filter(|(name, _)| !is_exception(name))
         .filter(|(_, path)| !inherits_workspace_lints(&std::fs::read_to_string(path).unwrap()))
         .map(|(name, _)| name.clone())
         .collect();
@@ -93,11 +104,26 @@ fn rust_files(dir: &Path) -> Vec<PathBuf> {
     out
 }
 
-/// Only top-level files named `ffi*.rs` may contain `unsafe`; the crate root denies it
-/// and allows it back only on those modules.
+/// Only top-level files named `ffi*.rs` may contain `unsafe`; each exception's crate root
+/// denies it and allows it back only on those modules, and keeps the stricter lints.
 #[test]
 fn unsafe_lives_only_in_the_ffi_modules() {
-    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    for (name, folder) in EXCEPTIONS {
+        let manifest = std::fs::read_to_string(root.join(folder).join("Cargo.toml")).unwrap();
+        for lint in [
+            "unsafe_code = \"deny\"",
+            "unsafe_op_in_unsafe_fn = \"deny\"",
+            "undocumented_unsafe_blocks = \"deny\"",
+            "multiple_unsafe_ops_per_block = \"deny\"",
+        ] {
+            assert!(manifest.contains(lint), "{name} without `{lint}`");
+        }
+        check_sources(&root.join(folder).join("src"));
+    }
+}
+
+fn check_sources(src: &Path) {
     let lib = std::fs::read_to_string(src.join("lib.rs")).unwrap();
     assert!(lib.contains("#![deny(unsafe_code)]"));
     let lines: Vec<&str> = lib.lines().map(str::trim).collect();
@@ -108,10 +134,10 @@ fn unsafe_lives_only_in_the_ffi_modules() {
             assert!(module.starts_with("mod ffi"), "allow on `{module}`");
         }
     }
-    for path in rust_files(&src) {
+    for path in rust_files(src) {
         let name = path.file_name().unwrap().to_string_lossy().into_owned();
         // Only top-level FFI modules: `allow` is checked on `lib.rs` above.
-        if path.parent() == Some(src.as_path()) && (name.starts_with("ffi") || name == "lib.rs") {
+        if path.parent() == Some(src) && (name.starts_with("ffi") || name == "lib.rs") {
             continue;
         }
         let text = std::fs::read_to_string(&path).unwrap();
