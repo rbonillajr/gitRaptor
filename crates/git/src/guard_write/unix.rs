@@ -169,7 +169,7 @@ pub(super) fn replace_files(common: &Path, expected: FileId, files: &[NewFile<'_
     }
     for f in files {
         let (dir, name) = match f.path.split_once('/') {
-            None => (open_subdir(&root, super::FOLDER)?, f.path),
+            None => (folder.try_clone().map_err(GuardWriteError::Io)?, f.path),
             Some((sub, name)) => {
                 match rustix::fs::mkdirat(&folder, sub, Mode::RWXU) {
                     Ok(()) | Err(rustix::io::Errno::EXIST) => {}

@@ -222,7 +222,8 @@ pub fn plan(ctx: &GuardCtx<'_>, repo_id: &str, common: &Path, store: &RepoStore)
             blockers.push(b);
         }
     };
-    let upgrade = status.state == ProtectionState::HooksOnly && outdated(common);
+    let recorded = journal(&store.guard_keys().unwrap_or_default()).map(|j| j.template);
+    let upgrade = status.state == ProtectionState::HooksOnly && outdated(common, recorded);
     if status.state == ProtectionState::HooksOnly && !upgrade {
         add(InstallBlocker::AlreadyInstalled);
     } else if upgrade {
@@ -439,9 +440,13 @@ pub fn install(
     Ok(status(repo_id, common, store))
 }
 
-/// Whether the confirmed install in place is of an older template: its `dispatch.conf` names
-/// one, or a dispatcher of the current template is missing (ADR-GRD-001 § 8, DS-US-GRD-018 D6).
-fn outdated(common: &Path) -> bool {
+/// Whether the confirmed install in place is of an older template: the journal or its
+/// `dispatch.conf` names one, or a dispatcher of the current template is missing (ADR-GRD-001
+/// § 8, DS-US-GRD-018 D6).
+fn outdated(common: &Path, recorded: Option<u32>) -> bool {
+    if recorded.is_some_and(|t| t < TEMPLATE_VERSION) {
+        return true;
+    }
     let folder = common.join(FOLDER);
     let template = std::fs::symlink_metadata(folder.join(DISPATCH_CONF))
         .ok()
