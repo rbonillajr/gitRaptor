@@ -101,6 +101,10 @@ pub enum Notice {
     AlreadyLive,
     /// Retry asked: reconnecting now.
     Retrying,
+    /// Retry asked while the engine is starting: the start is already the attempt.
+    Starting,
+    /// `Ctrl-Z` on a platform without job control.
+    SuspendUnsupported,
 }
 
 /// The replica of the engine: the global scope and the selected repo's.
@@ -303,6 +307,8 @@ pub enum Requester {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConnState {
     Connecting,
+    /// No engine was running: the client is starting it (ADR-CKP-003 § 4 and § 5).
+    Starting,
     Syncing,
     Live,
     Resyncing,
@@ -394,5 +400,7 @@ pub enum Cmd {
     Open {
         repo_id: String,
     },
+    /// Hand the terminal back to the shell (`Ctrl-Z`) and take it again when resumed.
+    Suspend,
     Quit,
 }

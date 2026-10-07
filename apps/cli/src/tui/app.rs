@@ -14,9 +14,10 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use gitraptor_api::clock::monotonic_ns;
 use ratatui::Terminal;
 use ratatui::backend::Backend;
+use ratatui::layout::Rect;
 
 use crate::client::LinkCmd;
-use crate::model::{Cmd, Model, Msg};
+use crate::model::{Cmd, Model, Msg, Size};
 use crate::queue::Inbox;
 use crate::tui::metrics::Metrics;
 use crate::tui::update::update;
@@ -37,6 +38,10 @@ struct Applied {
     applied_ns: u64,
 }
 
+/// Hands the terminal to someone else and takes it back (`Ctrl-Z`; later, the editor). The
+/// real one lives in `tui::term`; tests plug in their own.
+pub type Suspend<B> = Box<dyn FnMut() -> Result<(), <B as Backend>::Error>>;
+
 pub struct App<B: Backend> {
     terminal: Terminal<B>,
     pub model: Model,
@@ -49,6 +54,9 @@ pub struct App<B: Backend> {
     /// The engine queue was left with messages: do not wait.
     backlog: bool,
     next_tick: Instant,
+    suspend: Option<Suspend<B>>,
+    /// `Ctrl-Z` was pressed in this iteration.
+    suspend_asked: bool,
     /// Debug builds only: the view panics, to check that the terminal is
     /// restored (`GITRAPTOR_TUI_PANIC_IN_VIEW`).
     panic_in_view: bool,
@@ -66,6 +74,8 @@ impl<B: Backend> App<B> {
             keys: Vec::new(),
             backlog: false,
             next_tick: Instant::now() + TICK,
+            suspend: None,
+            suspend_asked: false,
             panic_in_view: cfg!(debug_assertions)
                 && std::env::var_os("GITRAPTOR_TUI_PANIC_IN_VIEW").is_some(),
         }
@@ -74,6 +84,11 @@ impl<B: Backend> App<B> {
     /// Where the commands for the channel go.
     pub fn attach(&mut self, link: Sender<LinkCmd>) {
         self.link = Some(link);
+    }
+
+    /// What `Ctrl-Z` runs. Without one, the key does nothing.
+    pub fn on_suspend(&mut self, suspend: Suspend<B>) {
+        self.suspend = Some(suspend);
     }
 
     pub fn terminal(&self) -> &Terminal<B> {
@@ -103,6 +118,9 @@ impl<B: Backend> App<B> {
                 self.keys.push(monotonic_ns());
             }
             self.dispatch(msg);
+        }
+        if std::mem::take(&mut self.suspend_asked) {
+            self.suspend()?;
         }
         // (2) The engine, within the apply budget.
         let start = Instant::now();
@@ -154,6 +172,26 @@ impl<B: Backend> App<B> {
         Ok(())
     }
 
+    /// Runs the suspension and, back from it, forces a full repaint: whatever the shell
+    /// painted meanwhile is not what the last frame left (ADR-CKP-003 § 9, step 5).
+    fn suspend(&mut self) -> Result<(), B::Error> {
+        let Some(suspend) = self.suspend.as_mut() else {
+            return Ok(());
+        };
+        suspend()?;
+        // `resize` and not `clear`: `clear` asks the terminal where the cursor is, and the
+        // terminal may have changed size while it was someone else's.
+        let size = self.terminal.size()?;
+        self.terminal
+            .resize(Rect::new(0, 0, size.width, size.height))?;
+        self.dispatch(Msg::Resize(Size {
+            width: size.width,
+            height: size.height,
+        }));
+        self.model.dirty = true;
+        Ok(())
+    }
+
     /// `update`, then its commands outside it.
     fn dispatch(&mut self, msg: Msg) {
         for cmd in update(&mut self.model, msg) {
@@ -163,6 +201,11 @@ impl<B: Backend> App<B> {
                 Cmd::Open { repo_id } => LinkCmd::Open { repo_id },
                 // The model already says quit; the loop ends after this iteration.
                 Cmd::Quit => continue,
+                // After the input of this iteration, outside `update`.
+                Cmd::Suspend => {
+                    self.suspend_asked = true;
+                    continue;
+                }
             };
             if let Some(link) = &self.link {
                 let _ = link.send(link_cmd);

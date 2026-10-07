@@ -31,6 +31,10 @@ use commands::Command;
 struct Cli {
     #[command(flatten)]
     display: Display,
+    /// Language of the messages: en or es [default: GITRAPTOR_LANG, then LC_ALL, LC_MESSAGES,
+    /// LANG].
+    #[arg(long, global = true, value_parser = parse_lang)]
+    lang: Option<gitraptor_cli::present::i18n::Lang>,
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -56,6 +60,14 @@ fn parse_theme(value: &str) -> Result<gitraptor_theme::ThemeChoice, String> {
         .map_err(|err: gitraptor_theme::ParseThemeChoiceError| err.to_string())
 }
 
+fn parse_lang(value: &str) -> Result<gitraptor_cli::present::i18n::Lang, String> {
+    match value {
+        "en" => Ok(gitraptor_cli::present::i18n::Lang::En),
+        "es" => Ok(gitraptor_cli::present::i18n::Lang::Es),
+        _ => Err("expected `en` or `es`".into()),
+    }
+}
+
 fn main() -> ExitCode {
     // What a Guardrails dispatcher starts: positional constants, no clap, no profile, no
     // daemon start (ADR-GRD-001 § 2).
@@ -64,6 +76,8 @@ fn main() -> ExitCode {
         return guard::hook(&args[2..]);
     }
     let cli = Cli::parse();
+    // Before any message: every catalog (the TUI's and the CLI's) reads it from here.
+    gitraptor_cli::present::i18n::Lang::choose(cli.lang);
     let global = commands::Global {
         display: cli.display,
     };

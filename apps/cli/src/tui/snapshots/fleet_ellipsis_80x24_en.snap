@@ -1,0 +1,28 @@
+---
+source: apps/cli/src/tui/view.rs
+expression: "screen.join(\"\\n\")"
+---
+ shop · ✔ live · engine observing · acting as you                    ⚡ –  ⛔ –
+┏━ › Fleet · ↑↓ vs main (local copy, fetch age not available) ━━━━━━━━━━━━━━━━━┓
+┃     Agent                      Branch        Files ↑↓          Activity      ┃
+┃  ○  No agent · shop            main          ~0    ↑0 ↓0       not available ┃
+┃  ○  No agent · feat-pagos      feat-pagos    ~2    ↑3 ↓1       not available ┃
+┃  ○  No agent · feat-docs       feat-docs     ~0    ↑1 ↓0       not available ┃
+┃  ●  agente-con-un-nombre-muy…  feat/界面-a-… ~1    ↑0 ↓0       not available ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ r retry   ○ no agent: changes by you or another tool                    q quit

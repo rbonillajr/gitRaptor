@@ -15,6 +15,8 @@ pub enum Action {
     Down,
     /// Open what is selected.
     Open,
+    /// Hand the terminal back to the shell until `fg` (job control).
+    Suspend,
 }
 
 /// A key as the table names it.
@@ -85,9 +87,19 @@ pub const BINDINGS: &[Binding] = &[
         keys: &[Key::Enter],
         hint: Text::KeyOpen,
     },
+    Binding {
+        action: Action::Suspend,
+        keys: &[Key::Ctrl('z')],
+        hint: Text::KeySuspend,
+    },
 ];
 
 impl Action {
+    /// Not in the key hints: the terminal convention every shell user already knows.
+    pub fn is_hinted(self) -> bool {
+        !matches!(self, Self::Quit | Self::Suspend)
+    }
+
     /// Moves within a list: hinted only while there is one to move in.
     pub fn is_list(self) -> bool {
         matches!(self, Self::Up | Self::Down | Self::Open)
@@ -138,5 +150,10 @@ mod tests {
             action(&key(KeyCode::Enter, KeyModifiers::NONE)),
             Some(Action::Open)
         );
+        assert_eq!(
+            action(&key(KeyCode::Char('z'), KeyModifiers::CONTROL)),
+            Some(Action::Suspend)
+        );
+        assert_eq!(action(&key(KeyCode::Char('z'), KeyModifiers::NONE)), None);
     }
 }

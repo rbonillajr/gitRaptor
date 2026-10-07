@@ -36,10 +36,15 @@ impl Fixture {
     }
 
     fn raptor(&self, args: &[&str]) -> Output {
+        self.raptor_with(args, &[])
+    }
+
+    fn raptor_with(&self, args: &[&str], extra: &[(&str, &str)]) -> Output {
         Command::new(RAPTOR)
             .args(args)
             .env_clear()
             .envs(self.env())
+            .envs(extra.iter().map(|(k, v)| (*k, *v)))
             .current_dir(self.tmp.path())
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -126,6 +131,66 @@ mod pty {
         assert!(text.contains("\u{1b}[?25h"), "cursor shown again");
     }
 
+    /// `Ctrl-Z` hands the terminal back (leaves the alternate screen) and takes it again
+    /// (enters it again), and the TUI goes on: `q` still quits. Under `script` the TUI leads
+    /// an orphaned process group, so the system discards the stop and it resumes at once;
+    /// the stop itself is the shell's job control. Waits on the output, never on a clock.
+    #[test]
+    fn ctrl_z_restores_and_reenters() {
+        use std::io::{Read, Write};
+        use std::sync::mpsc;
+
+        let fx = Fixture::new();
+        let mut child = Command::new("/usr/bin/script")
+            .args(["-q", "/dev/null", RAPTOR, "tui"])
+            .env_clear()
+            .envs(fx.env())
+            .current_dir(fx.tmp.path())
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let mut stdin = child.stdin.take().unwrap();
+        let mut stdout = child.stdout.take().unwrap();
+        let (tx, rx) = mpsc::channel::<Vec<u8>>();
+        let reader = std::thread::spawn(move || {
+            let mut chunk = [0u8; 4096];
+            while let Ok(n) = stdout.read(&mut chunk) {
+                if n == 0 || tx.send(chunk[..n].to_vec()).is_err() {
+                    break;
+                }
+            }
+        });
+        let mut seen = String::new();
+        let wait_for = |seen: &mut String, what: &str, count: usize| {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+            while seen.matches(what).count() < count {
+                let left = deadline.saturating_duration_since(std::time::Instant::now());
+                let bytes = rx
+                    .recv_timeout(left)
+                    .unwrap_or_else(|_| panic!("waiting for {what:?} x{count}: {seen:?}"));
+                seen.push_str(&String::from_utf8_lossy(&bytes));
+            }
+        };
+        // Raw mode is on before the alternate screen: from here the byte is a key, kept by
+        // the terminal until the input thread reads it (not a SIGTSTP of the line discipline).
+        wait_for(&mut seen, ENTER_ALT, 1);
+        stdin.write_all(b"\x1a").unwrap();
+        wait_for(&mut seen, LEAVE_ALT, 1);
+        wait_for(&mut seen, ENTER_ALT, 2);
+        // The shell gets its cursor back while the TUI is suspended.
+        let handed = seen.find(LEAVE_ALT).unwrap();
+        let back = handed + seen[handed..].find(ENTER_ALT).unwrap();
+        assert!(seen[handed..back].contains("\u{1b}[?25h"), "{seen:?}");
+        stdin.write_all(b"q").unwrap();
+        wait_for(&mut seen, LEAVE_ALT, 2);
+        let status = child.wait().unwrap();
+        drop(rx);
+        reader.join().unwrap();
+        assert!(status.success(), "{status:?}: {seen:?}");
+    }
+
     /// A panic in the view leaves the terminal restored: the panic hook of
     /// `ratatui::init()` leaves the alternate screen before the message.
     #[test]
@@ -143,6 +208,40 @@ mod pty {
         // The panic hit the first frame, before the channel thread started.
         assert!(!fx.root().join("run").exists());
     }
+}
+
+/// `--lang` beats `GITRAPTOR_LANG`, which beats the locale; an unknown `GITRAPTOR_LANG`
+/// falls back to the locale and an unknown `--lang` is refused by the command line
+/// (ADR-CKP-003 § 10). The locale of the fixture is English.
+#[test]
+fn lang_flag_beats_the_locale() {
+    const ES: &str = "el cockpit necesita una terminal";
+    const EN: &str = "the cockpit needs a terminal";
+    let fx = Fixture::new();
+    type Case<'a> = (&'a [&'a str], &'a [(&'a str, &'a str)], &'a str);
+    let cases: [Case; 6] = [
+        (&["--lang", "es"], &[], ES),
+        (&["tui", "--lang", "es"], &[], ES),
+        (&["tui"], &[("GITRAPTOR_LANG", "es")], ES),
+        (&["--lang", "en", "tui"], &[("GITRAPTOR_LANG", "es")], EN),
+        (&["tui"], &[("GITRAPTOR_LANG", "fr")], EN),
+        (
+            &["tui"],
+            &[("GITRAPTOR_LANG", "fr"), ("LANG", "es_ES.UTF-8")],
+            ES,
+        ),
+    ];
+    for (args, env, expected) in cases {
+        let out = fx.raptor_with(args, env);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(out.status.code(), Some(2), "{args:?} {env:?}: {stderr}");
+        assert!(stderr.contains(expected), "{args:?} {env:?}: {stderr}");
+    }
+    let out = fx.raptor(&["--lang", "fr", "tui"]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(stderr.contains("expected `en` or `es`"), "{stderr}");
+    assert!(!stderr.contains(EN) && !stderr.contains(ES), "{stderr}");
 }
 
 /// Two headless TUIs on the same real daemon reach "live" and see the same

@@ -59,9 +59,20 @@ struct FakeConnector {
     daemon: Arc<Daemon>,
     /// Each connection takes a new stream receiver from here.
     streams: Arc<Mutex<VecDeque<Receiver<Vec<u8>>>>>,
+    /// No engine is running: the first connection starts one, and the start ends when the
+    /// test sends on this.
+    start: Option<Receiver<()>>,
 }
 
 impl Connector for FakeConnector {
+    fn connect_starting(&mut self, starting: &mut dyn FnMut()) -> Result<Box<dyn Link>, LinkError> {
+        if let Some(started) = self.start.take() {
+            starting();
+            started.recv().unwrap();
+        }
+        self.connect()
+    }
+
     fn connect(&mut self) -> Result<Box<dyn Link>, LinkError> {
         let Some(rx) = self.streams.lock().unwrap().pop_front() else {
             return Err(LinkError::EngineUnavailable);
@@ -223,6 +234,11 @@ struct Harness {
 impl Harness {
     /// A TUI over the fake daemon; `connections` streams are ready.
     fn new(connections: usize) -> Self {
+        Self::starting(connections, None)
+    }
+
+    /// A TUI whose first connection starts the engine and waits on `start`.
+    fn starting(connections: usize, start: Option<Receiver<()>>) -> Self {
         let daemon = Arc::new(Daemon::default());
         let mut senders = Vec::new();
         let mut receivers = VecDeque::new();
@@ -244,6 +260,7 @@ impl Harness {
         let connector = FakeConnector {
             daemon: Arc::clone(&daemon),
             streams: Arc::new(Mutex::new(receivers)),
+            start,
         };
         let channel = client::spawn(connector, Some("/w".into()), engine);
         app.attach(channel.cmds.clone());
@@ -473,4 +490,75 @@ fn a_lost_channel_reconnects_and_redoes_the_snapshots() {
     assert_eq!(h.daemon.connects.load(Ordering::SeqCst), 2);
     assert_eq!(h.daemon.global_snapshots.load(Ordering::SeqCst), 2);
     assert!(!h.app.model.engine.repo.as_ref().unwrap().stale);
+}
+
+fn screen(app: &App<TestBackend>) -> String {
+    let buffer = app.terminal().backend().buffer();
+    buffer
+        .content()
+        .chunks(usize::from(buffer.area.width))
+        .map(|row| row.iter().map(|c| c.symbol()).collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// "Starting the engine…" is its own state, apart from "connecting…", and `r` does not
+/// pile a reconnection on a start in progress (ADR-CKP-003 § 4).
+#[test]
+fn starting_the_engine_is_not_connecting() {
+    let (started, start) = channel();
+    let mut h = Harness::starting(1, Some(start));
+    h.drive("starting", |m| m.conn == ConnState::Starting);
+    h.app.draw().unwrap();
+    let text = screen(&h.app);
+    assert!(text.contains("starting the engine…"), "{text}");
+    assert!(!text.contains("connecting…"), "{text}");
+    h.input
+        .send(Msg::Key(KeyEvent::new(
+            KeyCode::Char('r'),
+            KeyModifiers::NONE,
+        )))
+        .unwrap();
+    h.app.step(Duration::ZERO).unwrap();
+    assert_eq!(
+        h.app.model.ui.notice,
+        Some(gitraptor_cli::model::Notice::Starting)
+    );
+    started.send(()).unwrap();
+    h.live();
+    assert_eq!(h.daemon.connects.load(Ordering::SeqCst), 1);
+}
+
+/// `Ctrl-Z` runs the suspension once, after the input of its iteration, and the loop then
+/// repaints the whole screen.
+#[test]
+fn ctrl_z_suspends_and_repaints() {
+    let mut h = Harness::new(1);
+    h.live();
+    let suspended = Arc::new(AtomicU32::new(0));
+    let count = Arc::clone(&suspended);
+    h.app.on_suspend(Box::new(move || {
+        count.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }));
+    let frames = h.app.metrics.frames;
+    h.input
+        .send(Msg::Key(KeyEvent::new(
+            KeyCode::Char('z'),
+            KeyModifiers::CONTROL,
+        )))
+        .unwrap();
+    h.app.step(Duration::ZERO).unwrap();
+    assert_eq!(suspended.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        h.app.metrics.frames,
+        frames + 1,
+        "one full frame after resuming"
+    );
+    let text = screen(&h.app);
+    assert!(text.contains("live"), "{text}");
+    assert!(!h.app.model.ui.quit);
+    // Back from it, nothing is pending: another iteration does not suspend again.
+    h.app.step(Duration::ZERO).unwrap();
+    assert_eq!(suspended.load(Ordering::SeqCst), 1);
 }

@@ -82,6 +82,7 @@ pub fn status_bar(model: &Model, styles: &Styles) -> StatusBarModel {
     let connection = match model.conn {
         ConnState::Live => Connection::Live,
         ConnState::Connecting
+        | ConnState::Starting
         | ConnState::Syncing
         | ConnState::Resyncing
         | ConnState::Reconnecting { .. } => Connection::Reconnecting,
@@ -361,7 +362,7 @@ fn key_hints(model: &Model) -> KeyHintsModel {
     KeyHintsModel {
         hints: BINDINGS
             .iter()
-            .filter(|b| b.action != Action::Quit)
+            .filter(|b| b.action.is_hinted())
             .filter(|b| list || !b.action.is_list())
             .filter_map(|b| hint(b.action, lang))
             .collect(),
@@ -402,6 +403,7 @@ mod tests {
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
     use ratatui::buffer::Buffer;
+    use unicode_width::UnicodeWidthStr;
 
     fn render(model: &Model, width: u16, height: u16) -> Buffer {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
@@ -693,6 +695,57 @@ mod tests {
                     style_runs(&buffer)
                 );
                 insta::assert_snapshot!(format!("fleet_no_agent_100x24_{name}"), snap);
+            }
+        });
+    }
+
+    /// Names that do not fit are cut by display width and end in the ellipsis of the symbol
+    /// set: wide characters are never split and no line goes past the screen, in English and
+    /// in Spanish (DS-INF-CKP-001 § 9, Entrega 2a).
+    #[test]
+    fn long_names_end_in_an_ellipsis() {
+        let long = "feat/界面-a-branch-name-far-too-long-for-any-column-of-the-fleet";
+        let fleet = || {
+            let mut worktrees = shop();
+            worktrees.push(worktree(
+                "/w/shop/un-worktree-con-un-nombre-larguísimo-que-no-cabe",
+                false,
+                ready(long, 1, 0, 0),
+            ));
+            worktrees
+        };
+        let agent = "agente-con-un-nombre-muy-largo-que-tampoco-cabe";
+        let sessions = || {
+            Some(vec![session(
+                "s9",
+                "/w/shop/un-worktree-con-un-nombre-larguísimo-que-no-cabe",
+                agent,
+                SessionStateView::Active,
+            )])
+        };
+        let mut settings = insta::Settings::clone_current();
+        settings.set_prepend_module_to_snapshot(false);
+        settings.set_snapshot_path("snapshots");
+        settings.bind(|| {
+            for (name, lang) in [("en", Lang::En), ("es", Lang::Es)] {
+                for (set, ellipsis) in [(SymbolSet::Unicode, "…"), (SymbolSet::Ascii, "...")] {
+                    let theme = Theme::new(ColorMode::TrueColor, Contrast::Normal, set)
+                        .with_background(Background::Dark);
+                    let model = model_with(lang, fleet(), sessions()).with_theme(theme);
+                    let screen = lines(&render(&model, 80, 24));
+                    let line = row(&screen, "feat/");
+                    assert!(line.contains(ellipsis), "{line}");
+                    assert!(!line.contains(long), "{line}");
+                    for l in &screen {
+                        assert!(UnicodeWidthStr::width(l.as_str()) <= 80, "{l}");
+                    }
+                    if set == SymbolSet::Unicode {
+                        insta::assert_snapshot!(
+                            format!("fleet_ellipsis_80x24_{name}"),
+                            screen.join("\n")
+                        );
+                    }
+                }
             }
         });
     }
