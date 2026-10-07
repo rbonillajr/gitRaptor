@@ -23,6 +23,7 @@ mod daemon;
 mod engine;
 mod events;
 mod guard;
+mod mcp;
 mod operation;
 mod registration;
 mod repo;
@@ -38,6 +39,7 @@ pub use daemon::*;
 pub use engine::*;
 pub use events::*;
 pub use guard::*;
+pub use mcp::*;
 pub use operation::*;
 pub use registration::*;
 pub use repo::*;
@@ -63,6 +65,7 @@ pub const GROUPS: &[&Group] = &[
     &timemachine::GROUP,
     &scope::GROUP,
     &guard::GROUP,
+    &mcp::GROUP,
 ];
 
 /// What one contract module declares, in its own file.
