@@ -92,7 +92,7 @@ pub struct Resolution {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Unverified;
 
-fn file_name(info: &ProcInfo) -> String {
+pub(crate) fn file_name(info: &ProcInfo) -> String {
     info.exe
         .as_deref()
         .and_then(|p| p.file_name())
@@ -114,7 +114,7 @@ fn class(info: &ProcInfo, checks: &Checks<'_>) -> ExeClass {
 
 /// Reads the parent of `current` under the walk rules: `None` ends the walk
 /// (root, another user's process, unreadable or a reused pid).
-fn parent(current: &ProcInfo, checks: &Checks<'_>) -> Option<ProcInfo> {
+pub(crate) fn parent(current: &ProcInfo, checks: &Checks<'_>) -> Option<ProcInfo> {
     if current.pid <= 1 || current.ppid == 0 {
         return None;
     }

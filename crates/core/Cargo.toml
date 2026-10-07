@@ -43,6 +43,9 @@ gitraptor-winsys.workspace = true
 # `proc_pidinfo` of other processes (ancestry, controlling terminal, start
 # time). Builds its bindings with bindgen (needs the Command Line Tools SDK).
 libproc = "=0.14.11"
+# Command line of the nearest `git` ancestor (`KERN_PROCARGS2`), read only to classify the
+# subcommand of the second line (DS-US-GRD-018 § 5.3, ADR-GRP-002 Enmienda 2026-10-07).
+gitraptor-macsys.workspace = true
 
 [dev-dependencies]
 gitraptor-testkit.workspace = true
