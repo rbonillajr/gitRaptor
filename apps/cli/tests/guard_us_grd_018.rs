@@ -595,6 +595,22 @@ fn aliases_and_plumbing_are_caught_by_the_second_line() {
         String::from_utf8(m.human("rev-parse feat").stdout).unwrap(),
         before
     );
+    // Through `HEAD` without an expected old value, as a new branch, or parked under a tag and
+    // then fast-forwarded to: still a new commit.
+    let tree = format!("oid=$('{git}' commit-tree 'HEAD^{{tree}}' -p HEAD -m 'feat: parked')");
+    for then in [
+        format!("'{git}' update-ref HEAD \"$oid\""),
+        format!("'{git}' branch parked \"$oid\""),
+        format!("'{git}' tag parked \"$oid\" && '{git}' merge -q --ff-only parked"),
+    ] {
+        let out = m.agent_sh(&format!("{tree} && {then}"));
+        assert!(!out.status.success(), "{then}: {}", text(&out));
+        assert_eq!(
+            String::from_utf8(m.human("rev-parse feat").stdout).unwrap(),
+            before
+        );
+        let _ = m.human("tag -d parked");
+    }
     // With the agent's trailer the same plumbing goes in.
     let line = format!(
         "oid=$('{git}' commit-tree 'HEAD^{{tree}}' -p HEAD -m 'feat: plumbing' -m '{CLAUDE}') \
