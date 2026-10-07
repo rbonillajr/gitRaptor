@@ -9,7 +9,7 @@ use std::time::Duration;
 use gitraptor_api::messages::ClientKind;
 use gitraptor_api::scope::ConnectionRequester;
 use gitraptor_core::client::{
-    Client, ClientError, ClientOptions, Incoming as CoreIncoming, ensure_daemon,
+    Client, ClientError, ClientOptions, Incoming as CoreIncoming, ensure_daemon_with,
 };
 use gitraptor_core::profile::ProfileDirs;
 use serde_json::Value;
@@ -35,7 +35,11 @@ impl EngineConnector {
 
 impl Connector for EngineConnector {
     fn connect(&mut self) -> Result<Box<dyn Link>, LinkError> {
-        ensure_daemon(&self.options)
+        self.connect_starting(&mut || {})
+    }
+
+    fn connect_starting(&mut self, starting: &mut dyn FnMut()) -> Result<Box<dyn Link>, LinkError> {
+        ensure_daemon_with(&self.options, starting)
             .map(|client| Box::new(EngineLink(client)) as Box<dyn Link>)
             .map_err(link_error)
     }

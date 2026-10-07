@@ -4,9 +4,9 @@
 //!
 //! Minimal by design (Decisión del orquestador, 2026-10-04, validada por el
 //! Arquitecto): catalogs embedded at build time, `key = text` lines with
-//! named placeholders, no dependencies. The language comes from `LC_ALL`,
-//! `LC_MESSAGES` or `LANG`, in that order; anything that is not Spanish is
-//! English.
+//! named placeholders, no dependencies. The language comes from `--lang`,
+//! `GITRAPTOR_LANG`, `LC_ALL`, `LC_MESSAGES` or `LANG`, in that order;
+//! anything that is not Spanish is English.
 //!
 //! One file per feature and language, `i18n/<lang>/<feature>.txt`
 //! (ADR-GRP-016 § 4): `build.rs` registers every file it finds, so a story
@@ -45,11 +45,9 @@ pub fn feature_files(feature: &str) -> Vec<&'static str> {
         .collect()
 }
 
+/// `--lang`, then `GITRAPTOR_LANG`, then the locale: the same order as the TUI's catalog.
 fn spanish() -> bool {
-    ["LC_ALL", "LC_MESSAGES", "LANG"]
-        .iter()
-        .find_map(|k| std::env::var(k).ok().filter(|v| !v.is_empty()))
-        .is_some_and(|lang| lang.starts_with("es"))
+    gitraptor_cli::present::i18n::Lang::detect() == gitraptor_cli::present::i18n::Lang::Es
 }
 
 fn catalog() -> &'static HashMap<&'static str, &'static str> {

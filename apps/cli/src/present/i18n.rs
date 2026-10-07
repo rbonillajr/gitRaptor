@@ -3,7 +3,10 @@
 //! missing translation does not compile. Parameters are [`SafeText`] or
 //! numbers.
 
-use gitraptor_api::messages::{EngineStateView, UnavailableReason};
+use std::sync::OnceLock;
+
+use gitraptor_api::messages::{EngineStateView, ResyncReason, UnavailableReason};
+use gitraptor_api::rpc::{ErrorCode, InvalidReason, ScopeRefusal};
 
 use crate::model::{ConnState, Notice};
 use crate::present::SafeText;
@@ -14,14 +17,55 @@ pub enum Lang {
     Es,
 }
 
+/// The language chosen with `--lang` for the whole process; read by [`Lang::detect`].
+static CHOSEN: OnceLock<Lang> = OnceLock::new();
+
+/// The variable that chooses the language without the command line.
+pub const LANG_VAR: &str = "GITRAPTOR_LANG";
+
 impl Lang {
-    /// From `LC_ALL`, `LC_MESSAGES` or `LANG`, in that order; anything that
-    /// is not Spanish is English.
+    /// `--lang`, then `GITRAPTOR_LANG`, then `LC_ALL`, `LC_MESSAGES` or `LANG`, and `en`
+    /// (ADR-CKP-003 § 10).
     pub fn detect() -> Self {
-        let lang = ["LC_ALL", "LC_MESSAGES", "LANG"]
+        if let Some(lang) = CHOSEN.get() {
+            return *lang;
+        }
+        Self::pick(None, |k| std::env::var(k).ok())
+    }
+
+    /// Fixes the language of the process from `--lang` (the binary calls it once, before
+    /// anything is printed). Without a flag, the environment decides.
+    pub fn choose(flag: Option<Self>) -> Self {
+        let lang = Self::pick(flag, |k| std::env::var(k).ok());
+        let _ = CHOSEN.set(lang);
+        lang
+    }
+
+    /// The order of precedence, over any environment. An unknown `GITRAPTOR_LANG` is
+    /// ignored and the locale decides: it never fails.
+    pub fn pick(flag: Option<Self>, env: impl Fn(&str) -> Option<String>) -> Self {
+        if let Some(lang) = flag {
+            return lang;
+        }
+        if let Some(lang) = env(LANG_VAR).as_deref().and_then(Self::parse) {
+            return lang;
+        }
+        let locale = ["LC_ALL", "LC_MESSAGES", "LANG"]
             .iter()
-            .find_map(|k| std::env::var(k).ok().filter(|v| !v.is_empty()));
-        Self::from_locale(lang.as_deref())
+            .find_map(|k| env(k).filter(|v| !v.is_empty()));
+        Self::from_locale(locale.as_deref())
+    }
+
+    /// `en` or `es` (any case, also as a locale such as `es_ES.UTF-8`); anything else is
+    /// `None`.
+    pub fn parse(value: &str) -> Option<Self> {
+        let value = value.trim().to_ascii_lowercase();
+        let tag = value.split(['_', '-', '.']).next().unwrap_or_default();
+        match tag {
+            "en" => Some(Self::En),
+            "es" => Some(Self::Es),
+            _ => None,
+        }
     }
 
     pub fn from_locale(locale: Option<&str>) -> Self {
@@ -123,6 +167,19 @@ pub enum Text<'a> {
     KeyUp,
     KeyDown,
     KeyOpen,
+    KeySuspend,
+    /// An error of the contract's frozen list, by its code (N7), never by its `message`.
+    EngineError(ErrorCode),
+    /// An error a module declared after the list froze, by its stable name (`error.<name>`).
+    ModuleError(&'a str),
+    /// A code the contract does not have (a newer engine).
+    UnknownError(i64),
+    /// Why the caller's scope was refused (`data` of `scope-refused`).
+    ScopeRefused(ScopeRefusal),
+    /// Why a path or a name was refused (`data` of `invalid-params`).
+    Invalid(InvalidReason),
+    /// Why the engine asked for a new snapshot (`events.resync`).
+    Resync(ResyncReason),
     TooSmall {
         width: u16,
         height: u16,
@@ -199,6 +256,7 @@ fn en(text: Text<'_>) -> String {
         Text::Engine(Some(EngineStateView::NoRepos)) => "engine without repos".into(),
         Text::Engine(Some(EngineStateView::Observing)) => "engine observing".into(),
         Text::Conn(ConnState::Connecting) => "connecting…".into(),
+        Text::Conn(ConnState::Starting) => "starting the engine…".into(),
         Text::Conn(ConnState::Syncing) => "syncing…".into(),
         Text::Conn(ConnState::Live) => "live".into(),
         Text::Conn(ConnState::Resyncing) => "resyncing".into(),
@@ -221,11 +279,48 @@ fn en(text: Text<'_>) -> String {
         Text::Notice(Notice::UnknownKey) => "key without an action".into(),
         Text::Notice(Notice::AlreadyLive) => "already live".into(),
         Text::Notice(Notice::Retrying) => "reconnecting now…".into(),
+        Text::Notice(Notice::Starting) => "the engine is starting; wait for it".into(),
+        Text::Notice(Notice::SuspendUnsupported) => {
+            "suspending is not available on this platform".into()
+        }
         Text::KeyQuit => "quit".into(),
         Text::KeyRetry => "retry".into(),
         Text::KeyUp => "up".into(),
         Text::KeyDown => "down".into(),
         Text::KeyOpen => "open".into(),
+        Text::KeySuspend => "suspend".into(),
+        Text::EngineError(code) => en_error(code).into(),
+        Text::ModuleError(name) => module_error(name, Lang::En)
+            .map_or_else(|| format!("the engine refused it ({name})"), Into::into),
+        Text::UnknownError(code) => format!("the engine answered an unknown error ({code})"),
+        Text::ScopeRefused(reason) => match reason {
+            ScopeRefusal::NoWorkingFolder => "no readable working folder",
+            ScopeRefusal::NotObserved => "the folder is not in an observed repo",
+            ScopeRefusal::NotAllowlisted => "the repo is not in the MCP allowlist",
+            ScopeRefusal::UnattributedOverMcp => "an unattributed caller cannot use MCP",
+            ScopeRefusal::ForeignWorktree => "the worktree belongs to another repo",
+        }
+        .into(),
+        Text::Invalid(reason) => match reason {
+            InvalidReason::Empty => "empty value",
+            InvalidReason::TooLong => "value too long",
+            InvalidReason::NotAbsolute => "the path is not absolute",
+            InvalidReason::ControlCharacter => "the value has control characters",
+            InvalidReason::UncOrDevice => "UNC or device paths are not accepted",
+            InvalidReason::DeviceName => "reserved device name",
+            InvalidReason::AlternateStream => "alternate data streams are not accepted",
+            InvalidReason::OutsideObserved => "outside the observed repos",
+            InvalidReason::InvalidRef => "not a valid Git reference",
+            InvalidReason::ReservedName => "reserved name",
+        }
+        .into(),
+        Text::Resync(reason) => match reason {
+            ResyncReason::SlowConsumer => "the view fell behind the engine",
+            ResyncReason::ReplayUnavailable => "the engine no longer has the missed events",
+            ResyncReason::DaemonRestarted => "the engine restarted",
+            ResyncReason::ScopeClosed => "the repo stopped being observed",
+        }
+        .into(),
         Text::TooSmall { width, height } => {
             format!("Terminal too small ({width}×{height}): at least 80×24 is needed.")
         }
@@ -295,6 +390,7 @@ fn es(text: Text<'_>) -> String {
         Text::Engine(Some(EngineStateView::NoRepos)) => "motor sin repos".into(),
         Text::Engine(Some(EngineStateView::Observing)) => "motor observando".into(),
         Text::Conn(ConnState::Connecting) => "conectando…".into(),
+        Text::Conn(ConnState::Starting) => "arrancando el motor…".into(),
         Text::Conn(ConnState::Syncing) => "sincronizando…".into(),
         Text::Conn(ConnState::Live) => "en vivo".into(),
         Text::Conn(ConnState::Resyncing) => "resincronizando".into(),
@@ -319,11 +415,48 @@ fn es(text: Text<'_>) -> String {
         Text::Notice(Notice::UnknownKey) => "tecla sin acción".into(),
         Text::Notice(Notice::AlreadyLive) => "ya estás en vivo".into(),
         Text::Notice(Notice::Retrying) => "reconectando ahora…".into(),
+        Text::Notice(Notice::Starting) => "el motor está arrancando; espera".into(),
+        Text::Notice(Notice::SuspendUnsupported) => {
+            "suspender no está disponible en esta plataforma".into()
+        }
         Text::KeyQuit => "salir".into(),
         Text::KeyRetry => "reintentar".into(),
         Text::KeyUp => "subir".into(),
         Text::KeyDown => "bajar".into(),
         Text::KeyOpen => "abrir".into(),
+        Text::KeySuspend => "suspender".into(),
+        Text::EngineError(code) => es_error(code).into(),
+        Text::ModuleError(name) => module_error(name, Lang::Es)
+            .map_or_else(|| format!("el motor lo rechazó ({name})"), Into::into),
+        Text::UnknownError(code) => format!("el motor respondió un error desconocido ({code})"),
+        Text::ScopeRefused(reason) => match reason {
+            ScopeRefusal::NoWorkingFolder => "no hay una carpeta de trabajo legible",
+            ScopeRefusal::NotObserved => "la carpeta no está en un repo observado",
+            ScopeRefusal::NotAllowlisted => "el repo no está en la lista permitida del MCP",
+            ScopeRefusal::UnattributedOverMcp => "quien no está atribuido no puede usar el MCP",
+            ScopeRefusal::ForeignWorktree => "el worktree es de otro repo",
+        }
+        .into(),
+        Text::Invalid(reason) => match reason {
+            InvalidReason::Empty => "valor vacío",
+            InvalidReason::TooLong => "valor demasiado largo",
+            InvalidReason::NotAbsolute => "la ruta no es absoluta",
+            InvalidReason::ControlCharacter => "el valor tiene caracteres de control",
+            InvalidReason::UncOrDevice => "no se aceptan rutas UNC ni de dispositivo",
+            InvalidReason::DeviceName => "nombre de dispositivo reservado",
+            InvalidReason::AlternateStream => "no se aceptan flujos de datos alternativos",
+            InvalidReason::OutsideObserved => "fuera de los repos observados",
+            InvalidReason::InvalidRef => "no es una referencia de Git válida",
+            InvalidReason::ReservedName => "nombre reservado",
+        }
+        .into(),
+        Text::Resync(reason) => match reason {
+            ResyncReason::SlowConsumer => "la vista se quedó atrás del motor",
+            ResyncReason::ReplayUnavailable => "el motor ya no tiene los eventos perdidos",
+            ResyncReason::DaemonRestarted => "el motor se reinició",
+            ResyncReason::ScopeClosed => "el repo dejó de observarse",
+        }
+        .into(),
         Text::TooSmall { width, height } => {
             format!("Terminal demasiado pequeña ({width}×{height}): hacen falta al menos 80×24.")
         }
@@ -333,9 +466,163 @@ fn es(text: Text<'_>) -> String {
     }
 }
 
+impl Text<'static> {
+    /// The text of any error code of the contract (N7): the frozen list, a module's own,
+    /// or unknown.
+    pub fn error(code: i64) -> Self {
+        match ErrorCode::from_code(code) {
+            Some(code) => Self::EngineError(code),
+            None => gitraptor_api::rpc::error_name(code)
+                .map_or(Self::UnknownError(code), Self::ModuleError),
+        }
+    }
+}
+
+/// The codes modules declared after the list froze (`rpc::module_errors`), by name. A
+/// module that adds one adds its line here; the catalog test fails until it does.
+fn module_error(name: &str, lang: Lang) -> Option<&'static str> {
+    MODULE_ERRORS
+        .iter()
+        .find(|(n, _, _)| *n == name)
+        .map(|(_, en, es)| match lang {
+            Lang::En => *en,
+            Lang::Es => *es,
+        })
+}
+
+/// `(name, en, es)` of each module's own code. None has declared one yet.
+const MODULE_ERRORS: &[(&str, &str, &str)] = &[];
+
+fn en_error(code: ErrorCode) -> &'static str {
+    match code {
+        ErrorCode::ParseError => "the engine could not read the request",
+        ErrorCode::InvalidRequest => "the request is not valid",
+        ErrorCode::MethodNotFound => "the engine does not know that request",
+        ErrorCode::InvalidParams => "the request has invalid parameters",
+        ErrorCode::Internal => "internal error of the engine",
+        ErrorCode::HandshakeRequired => "the channel needs a handshake first",
+        ErrorCode::IncompatibleProtocol => "the engine speaks another protocol version",
+        ErrorCode::ReservedRefused => "only a person at a terminal can do that",
+        ErrorCode::NotImplemented => "the engine does not do that yet",
+        ErrorCode::RateLimited => "too many requests; wait a moment",
+        ErrorCode::LimitReached => "connection or subscription limit reached",
+        ErrorCode::ResyncRequired => "the view must be refreshed from a new snapshot",
+        ErrorCode::PriorSnapshotFailed => "the prior snapshot failed: nothing was changed",
+        ErrorCode::NotFound => "not found",
+        ErrorCode::ScopeRefused => "that scope is refused",
+        ErrorCode::OperationFailed => "the operation failed; its prior snapshot can undo it",
+        ErrorCode::IdentityUnverified => "your identity changed: reconnect",
+        ErrorCode::RepoRejected => "the repo was rejected",
+        ErrorCode::OperationRejected => "the operation was refused before running",
+        ErrorCode::RegistrationRejected => "the registration was refused",
+        ErrorCode::GuardRejected => "the Guardrails install was refused",
+    }
+}
+
+fn es_error(code: ErrorCode) -> &'static str {
+    match code {
+        ErrorCode::ParseError => "el motor no pudo leer la petición",
+        ErrorCode::InvalidRequest => "la petición no es válida",
+        ErrorCode::MethodNotFound => "el motor no conoce esa petición",
+        ErrorCode::InvalidParams => "la petición tiene parámetros no válidos",
+        ErrorCode::Internal => "error interno del motor",
+        ErrorCode::HandshakeRequired => "el canal necesita antes un saludo",
+        ErrorCode::IncompatibleProtocol => "el motor habla otra versión del protocolo",
+        ErrorCode::ReservedRefused => "solo una persona en una terminal puede hacer eso",
+        ErrorCode::NotImplemented => "el motor todavía no hace eso",
+        ErrorCode::RateLimited => "demasiadas peticiones; espera un momento",
+        ErrorCode::LimitReached => "se alcanzó el límite de conexiones o suscripciones",
+        ErrorCode::ResyncRequired => "la vista debe rehacerse desde una instantánea nueva",
+        ErrorCode::PriorSnapshotFailed => "falló la instantánea previa: no se cambió nada",
+        ErrorCode::NotFound => "no encontrado",
+        ErrorCode::ScopeRefused => "ese ámbito está rechazado",
+        ErrorCode::OperationFailed => "la operación falló; su instantánea previa puede deshacerla",
+        ErrorCode::IdentityUnverified => "tu identidad cambió: reconecta",
+        ErrorCode::RepoRejected => "el repo fue rechazado",
+        ErrorCode::OperationRejected => "la operación se rechazó antes de ejecutarse",
+        ErrorCode::RegistrationRejected => "el registro fue rechazado",
+        ErrorCode::GuardRejected => "se rechazó la instalación de Guardrails",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn env<'a>(vars: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<String> + 'a {
+        move |k| {
+            vars.iter()
+                .find(|(n, _)| *n == k)
+                .map(|(_, v)| (*v).to_owned())
+        }
+    }
+
+    #[test]
+    fn lang_precedence() {
+        let all = [
+            ("GITRAPTOR_LANG", "es"),
+            ("LC_ALL", "en_US.UTF-8"),
+            ("LANG", "en_US.UTF-8"),
+        ];
+        // `--lang` beats everything.
+        assert_eq!(Lang::pick(Some(Lang::En), env(&all)), Lang::En);
+        // `GITRAPTOR_LANG` beats the locale.
+        assert_eq!(Lang::pick(None, env(&all)), Lang::Es);
+        // An unknown value is ignored: the locale decides, nothing fails.
+        assert_eq!(
+            Lang::pick(None, env(&[("GITRAPTOR_LANG", "fr"), ("LANG", "es_ES")])),
+            Lang::Es
+        );
+        assert_eq!(
+            Lang::pick(None, env(&[("GITRAPTOR_LANG", ""), ("LANG", "en_GB")])),
+            Lang::En
+        );
+        // Then LC_ALL, LC_MESSAGES and LANG, in that order; then English.
+        assert_eq!(
+            Lang::pick(None, env(&[("LC_MESSAGES", "es_MX"), ("LANG", "en_US")])),
+            Lang::Es
+        );
+        assert_eq!(
+            Lang::pick(None, env(&[("LC_ALL", "C"), ("LC_MESSAGES", "es_MX")])),
+            Lang::En
+        );
+        assert_eq!(Lang::pick(None, env(&[])), Lang::En);
+        assert_eq!(Lang::parse("ES"), Some(Lang::Es));
+        assert_eq!(Lang::parse("en-GB"), Some(Lang::En));
+        assert_eq!(Lang::parse("fr"), None);
+    }
+
+    /// V8: every code and typed reason of the contract (N7) has a message in en and es,
+    /// different, and no module's code falls back to the generic text.
+    #[test]
+    fn every_contract_code_has_both_languages() {
+        let mut texts: Vec<Text<'static>> = Vec::new();
+        texts.extend(ErrorCode::ALL.map(Text::EngineError));
+        texts.extend(ScopeRefusal::ALL.map(Text::ScopeRefused));
+        texts.extend(InvalidReason::ALL.map(Text::Invalid));
+        texts.extend(ResyncReason::ALL.map(Text::Resync));
+        for text in &texts {
+            let en = text.render(Lang::En);
+            let es = text.render(Lang::Es);
+            assert!(!en.is_empty() && !es.is_empty(), "{text:?}");
+            assert_ne!(en, es, "{text:?}");
+        }
+        for code in ErrorCode::ALL {
+            assert_eq!(Text::error(code.code()), Text::EngineError(code));
+        }
+        for spec in gitraptor_api::rpc::module_errors() {
+            assert_eq!(Text::error(spec.code), Text::ModuleError(spec.name));
+            for lang in [Lang::En, Lang::Es] {
+                assert!(
+                    module_error(spec.name, lang).is_some(),
+                    "error.{} has no text in {lang:?}",
+                    spec.name
+                );
+            }
+        }
+        assert_eq!(Text::error(-39_999), Text::UnknownError(-39_999));
+        assert!(Text::error(-39_999).render(Lang::Es).contains("-39999"));
+    }
 
     #[test]
     fn spanish_only_for_spanish_locales() {
@@ -349,6 +636,7 @@ mod tests {
     fn every_connection_state_has_both_languages() {
         let states = [
             ConnState::Connecting,
+            ConnState::Starting,
             ConnState::Syncing,
             ConnState::Live,
             ConnState::Resyncing,

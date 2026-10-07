@@ -42,6 +42,13 @@ const READ_SLICE: Duration = Duration::from_millis(20);
 /// Opens greeted connections, starting the daemon if needed (§ 5).
 pub trait Connector: Send + 'static {
     fn connect(&mut self) -> Result<Box<dyn Link>, LinkError>;
+
+    /// [`Connector::connect`], calling `starting` when no engine was running and one is being
+    /// started, so the TUI says "starting the engine" apart from "connecting".
+    fn connect_starting(&mut self, starting: &mut dyn FnMut()) -> Result<Box<dyn Link>, LinkError> {
+        let _ = starting;
+        self.connect()
+    }
 }
 
 /// One greeted connection.
@@ -160,7 +167,10 @@ fn run(
         if send_state(out, state).is_err() {
             return;
         }
-        let failure = match connector.connect() {
+        let mut starting = || {
+            let _ = send_state(out, ConnState::Starting);
+        };
+        let failure = match connector.connect_starting(&mut starting) {
             Ok(mut link) => match session(link.as_mut(), cwd.as_ref(), &mut chosen, out, cmds) {
                 Ok(End::Shutdown) | Err(Closed) => return,
                 Ok(End::Reconnect) => {

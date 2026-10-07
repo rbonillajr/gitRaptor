@@ -35,7 +35,7 @@ unicode-width = "0.2"
 
 # Raw-ish mode for the OSC 11 background query of the TUI (TS-CKP-004, 2026-10-05).
 [target.'cfg(unix)'.dependencies]
-rustix = { version = "1.1.5", features = ["termios"] }
+rustix = { version = "1.1.5", features = ["termios", "process"] }
 
 [lints]
 workspace = true

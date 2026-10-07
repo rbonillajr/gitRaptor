@@ -1,0 +1,28 @@
+---
+source: apps/cli/src/tui/view.rs
+expression: "screen.join(\"\\n\")"
+---
+ shop · ✔ en vivo · motor observando · actúas como tú                ⚡ –  ⛔ –
+┏━ › Flota · ↑↓ respecto a main (copia local, antigüedad no disponible) ━━━━━━━┓
+┃     Agente                     Rama          Arch. ↑↓          Actividad     ┃
+┃  ○  Sin agente · shop          main          ~0    ↑0 ↓0       no disponible ┃
+┃  ○  Sin agente · feat-pagos    feat-pagos    ~2    ↑3 ↓1       no disponible ┃
+┃  ○  Sin agente · feat-docs     feat-docs     ~0    ↑1 ↓0       no disponible ┃
+┃  ●  agente-con-un-nombre-muy…  feat/界面-a-… ~1    ↑0 ↓0       no disponible ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ r reintentar   ○ sin agente: cambios tuyos o de otra herramienta       q salir

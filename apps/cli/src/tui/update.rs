@@ -52,9 +52,19 @@ fn on_action(model: &mut Model, action: Option<Action>) -> Vec<Cmd> {
             model.ui.notice = Some(Notice::AlreadyLive);
             Vec::new()
         }
+        Some(Action::Retry) if model.conn == ConnState::Starting => {
+            model.ui.notice = Some(Notice::Starting);
+            Vec::new()
+        }
         Some(Action::Retry) => {
             model.ui.notice = Some(Notice::Retrying);
             vec![Cmd::Reconnect]
+        }
+        // Job control exists only on Unix; elsewhere the key says so and nothing else happens.
+        Some(Action::Suspend) if cfg!(unix) => vec![Cmd::Suspend],
+        Some(Action::Suspend) => {
+            model.ui.notice = Some(Notice::SuspendUnsupported);
+            Vec::new()
         }
         Some(action @ (Action::Up | Action::Down | Action::Open)) => on_pick(model, action),
         None => {
@@ -138,7 +148,10 @@ fn on_conn(model: &mut Model, event: ConnEvent) -> Vec<Cmd> {
         ConnEvent::State(state) => {
             if matches!(
                 state,
-                ConnState::Connecting | ConnState::Reconnecting { .. } | ConnState::Syncing
+                ConnState::Connecting
+                    | ConnState::Starting
+                    | ConnState::Reconnecting { .. }
+                    | ConnState::Syncing
             ) {
                 model.engine.mark_all_stale();
             }
@@ -560,6 +573,26 @@ mod tests {
             Msg::Key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE)),
         );
         assert_eq!(cmds, vec![Cmd::Reconnect]);
+        // Starting the engine is already the attempt: `r` says so and asks for nothing.
+        m.conn = ConnState::Starting;
+        let cmds = update(
+            &mut m,
+            Msg::Key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE)),
+        );
+        assert!(cmds.is_empty());
+        assert_eq!(m.ui.notice, Some(Notice::Starting));
+        // `Ctrl-Z`: a suspension where there is job control, a typed hint elsewhere.
+        let cmds = update(
+            &mut m,
+            Msg::Key(KeyEvent::new(KeyCode::Char('z'), KeyModifiers::CONTROL)),
+        );
+        if cfg!(unix) {
+            assert_eq!(cmds, vec![Cmd::Suspend]);
+        } else {
+            assert!(cmds.is_empty());
+            assert_eq!(m.ui.notice, Some(Notice::SuspendUnsupported));
+        }
+        assert!(!m.ui.quit);
         let cmds = update(
             &mut m,
             Msg::Key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE)),
