@@ -95,3 +95,13 @@ Entonces se ven todas las filas que caben sin sublíneas
 
 - **Diseño:** DSYS-GRP-001 § 2.2 y § 5.
 - **Dev Spec:** no aplica (historia pequeña; brief de `/nassa-core:implement`).
+
+## Estado de la implementación (2026-10-07)
+
+Rama `feat/US-CKP-026-authorship-in-cockpit`. Notas del coordinador al aprobar el plan, aplicadas:
+
+- En la TUI solo nombres, nunca emails (la fila se comparte a menudo en pantalla).
+- Tras un `resync` o una reconexión, el snapshot nuevo vacía las sublíneas y el `events.history` siguiente las reconstruye: no queda ninguna obsoleta (test `the_last_commit_comes_from_history_and_stream`).
+- Un worktree cuyo último commit queda fuera de la ventana de 200 eventos no tiene sublínea, sin texto de relleno.
+
+Verificación: snapshots `fleet_authorship_100x24_{en,es}`, prueba ASCII sin color y pruebas de `update` y `view`. macOS; Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
