@@ -17,6 +17,7 @@ guard.reason.authorship-trailer-required = GitRaptor: in this repo an agent's co
 guard.reason.authorship-message-unreadable = GitRaptor: in this repo an agent's commit carries its trailer ("agents-commit" policy) and the message could not be read (missing, over 64 KiB or not a regular file). Add at the end of the message: {example}
 guard.reason.authorship-human-author = GitRaptor: in this repo commits are made by the person ("human-author" policy, {level}).
 guard.notice.authorship-human-author = GitRaptor: warning: in this repo commits are made by the person ("human-author" policy). The commit goes ahead.
+guard.notice.authorship-unavailable = GitRaptor: the running service does not apply the commit authorship policy (it is an older version). The commit goes ahead without it.
 guard.level.floor = team configuration
 guard.level.worktree = team configuration on this branch
 guard.level.profile = personal configuration

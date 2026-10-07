@@ -511,10 +511,10 @@ mod tests {
 
     #[test]
     fn hooks_round_trip_their_git_names() {
-        for h in Hook::MANDATORY {
+        for h in Hook::ALL {
             assert_eq!(Hook::from_git_name(h.git_name()), Some(h));
         }
-        assert_eq!(Hook::from_git_name("pre-commit"), None);
+        assert_eq!(Hook::from_git_name("post-commit"), None);
     }
 
     #[test]

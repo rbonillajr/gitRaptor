@@ -89,6 +89,9 @@ pub struct HookOutcome {
     /// Exit 0 when `allow`; any other applied effect exits 1.
     pub decision: Option<Decision>,
     pub degraded: Option<Degraded>,
+    /// A commit went ahead because the daemon does not serve `guard.authorship` (an older
+    /// daemon): the authorship policy was not applied (US-GRD-018, D11).
+    pub authorship_unavailable: bool,
 }
 
 impl HookOutcome {
@@ -96,13 +99,21 @@ impl HookOutcome {
         Self {
             decision: None,
             degraded: None,
+            authorship_unavailable: false,
         }
     }
 
     fn deny(rule: Rule) -> Self {
         Self {
             decision: Some(evaluate::system_deny(rule)),
-            degraded: None,
+            ..Self::allow()
+        }
+    }
+
+    fn decided(decision: Decision) -> Self {
+        Self {
+            decision: Some(decision),
+            ..Self::allow()
         }
     }
 
@@ -356,7 +367,7 @@ fn commit(args: &HookArgs, env: &HookEnv) -> HookOutcome {
     }
     let mut client = match connect(args) {
         Ok(client) => client,
-        Err(Asked::NotAuthentic) => return HookOutcome::deny(Rule::ChannelNotAuthentic),
+        Err(Unusable::NotAuthentic) => return HookOutcome::deny(Rule::ChannelNotAuthentic),
         // Degraded: unattributed, nothing to decide. The `reference-transaction` of the same
         // commit already says the layer is degraded.
         Err(_) => return HookOutcome::allow(),
@@ -367,7 +378,10 @@ fn commit(args: &HookArgs, env: &HookEnv) -> HookOutcome {
             .any(|c| c == methods::CAP_GUARD_AUTHORSHIP.name)
     });
     if !granted {
-        return HookOutcome::allow();
+        return HookOutcome {
+            authorship_unavailable: true,
+            ..HookOutcome::allow()
+        };
     }
     let (stage, facts) = match args.hook {
         Hook::PreCommit => (CommitStage::PreCommit, None),
@@ -381,10 +395,7 @@ fn commit(args: &HookArgs, env: &HookEnv) -> HookOutcome {
         authorship: facts,
     };
     match client.call::<_, Decision>(methods::GUARD_EVALUATE, &params) {
-        Ok(decision) => HookOutcome {
-            decision: Some(decision),
-            degraded: None,
-        },
+        Ok(decision) => HookOutcome::decided(decision),
         Err(_) => HookOutcome::deny(Rule::InternalError),
     }
 }
@@ -449,10 +460,7 @@ fn decide(args: &HookArgs, op: Operation) -> HookOutcome {
         authorship: None,
     };
     match ask_daemon(args, &params) {
-        Asked::Decision(decision) => HookOutcome {
-            decision: Some(decision),
-            degraded: None,
-        },
+        Asked::Decision(decision) => HookOutcome::decided(decision),
         Asked::NotAuthentic => HookOutcome::deny(Rule::ChannelNotAuthentic),
         Asked::Failed => HookOutcome::deny(Rule::InternalError),
         Asked::Degraded(cause) => degraded(args, &params.operation, cause),
@@ -469,7 +477,9 @@ enum Asked {
 fn ask_daemon(args: &HookArgs, params: &EvaluateParams) -> Asked {
     let mut client = match connect(args) {
         Ok(client) => client,
-        Err(asked) => return asked,
+        Err(Unusable::NotAuthentic) => return Asked::NotAuthentic,
+        Err(Unusable::Failed) => return Asked::Failed,
+        Err(Unusable::Degraded(cause)) => return Asked::Degraded(cause),
     };
     match client.call::<_, Decision>(methods::GUARD_EVALUATE, params) {
         Ok(decision) => Asked::Decision(decision),
@@ -477,8 +487,15 @@ fn ask_daemon(args: &HookArgs, params: &EvaluateParams) -> Asked {
     }
 }
 
+/// Why there is no daemon to ask.
+enum Unusable {
+    NotAuthentic,
+    Failed,
+    Degraded(Degraded),
+}
+
 /// An authentic daemon of this profile instance, or what to do without one.
-fn connect(args: &HookArgs) -> Result<Client, Asked> {
+fn connect(args: &HookArgs) -> Result<Client, Unusable> {
     // The server must be the installed binary itself (H-03, SEC-GRD-16), checked before
     // anything is sent. A server whose executable cannot be read at all (replaced on disk
     // after an upgrade) is not trusted either, but decides nothing: degraded mode, stricter.
@@ -491,16 +508,16 @@ fn connect(args: &HookArgs) -> Result<Client, Asked> {
     let client = match connected {
         Ok(client) => client,
         Err(ClientError::NotAuthentic) if identity.get() == Identity::Unknown => {
-            return Err(Asked::Degraded(Degraded::DaemonUnreachable));
+            return Err(Unusable::Degraded(Degraded::DaemonUnreachable));
         }
-        Err(ClientError::NotAuthentic) => return Err(Asked::NotAuthentic),
-        Err(ClientError::Rpc(_) | ClientError::Protocol(_)) => return Err(Asked::Failed),
+        Err(ClientError::NotAuthentic) => return Err(Unusable::NotAuthentic),
+        Err(ClientError::Rpc(_) | ClientError::Protocol(_)) => return Err(Unusable::Failed),
         // No daemon, a stale socket, another protocol or no transport (Windows).
-        Err(_) => return Err(Asked::Degraded(Degraded::DaemonUnreachable)),
+        Err(_) => return Err(Unusable::Degraded(Degraded::DaemonUnreachable)),
     };
     // …and this profile instance; another one decides nothing here (ADR-GRD-003 § 4).
     if client.hello().instance_id != args.instance {
-        return Err(Asked::Degraded(Degraded::InstanceMismatch));
+        return Err(Unusable::Degraded(Degraded::InstanceMismatch));
     }
     Ok(client)
 }
@@ -578,6 +595,7 @@ fn degraded(args: &HookArgs, op: &Operation, cause: Degraded) -> HookOutcome {
     HookOutcome {
         decision: Some(evaluate::decision(eval)),
         degraded: Some(cause),
+        authorship_unavailable: false,
     }
 }
 
