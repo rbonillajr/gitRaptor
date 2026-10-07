@@ -555,9 +555,14 @@ impl Daemon {
             None => fields.push(("git", "not-found".into())),
         }
         // Fail-closed: a profile that cannot be read enables no repo.
-        let mcp_repos = Arc::new(crate::timemachine::protected::McpRepos::new(
-            profile.mcp_enabled_repos().unwrap_or_default(),
-        ));
+        let enabled = profile.mcp_enabled_repos().unwrap_or_else(|err| {
+            logger.error(
+                "mcp_allowlist_load_failed",
+                &[("error", profile_error_kind(&err).into())],
+            );
+            Vec::new()
+        });
+        let mcp_repos = Arc::new(crate::timemachine::protected::McpRepos::new(enabled));
         let (handle, control_rx) = ShutdownHandle::new();
         let config_dirs = config.dirs.clone();
         let mut daemon = Self {
