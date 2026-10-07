@@ -14,6 +14,8 @@ fn ctx() -> Context {
     Context {
         bases: vec!["main".into()],
         fold_case: true,
+        actor: None,
+        authorship: authorship::Effective::default(),
     }
 }
 
@@ -52,7 +54,10 @@ fn tx(updates: Vec<(&str, RefValue, RefValue)>) -> Operation {
 }
 
 fn facts(push: Vec<Option<FastForward>>) -> Facts {
-    Facts { push }
+    Facts {
+        push,
+        ..Facts::default()
+    }
 }
 
 fn rules(e: &Evaluation) -> Vec<(Rule, Option<Cause>)> {
@@ -172,6 +177,7 @@ fn aliases_are_denied_on_every_line() {
     let nfc = Context {
         bases: vec!["caf\u{e9}".into()],
         fold_case: false,
+        ..ctx()
     };
     let nfd = tx(vec![("refs/heads/cafe\u{301}", oid(A), RefValue::Zero)]);
     assert_eq!(evaluate(&nfd, &Facts::default(), &nfc).effect, Effect::Deny);
@@ -209,6 +215,7 @@ fn every_base_of_the_union_is_protected() {
     let union = Context {
         bases: vec!["main".into(), "trunk".into()],
         fold_case: false,
+        ..ctx()
     };
     for base in ["refs/heads/main", "refs/heads/trunk"] {
         let op = tx(vec![(base, oid(A), RefValue::Zero)]);

@@ -1,6 +1,7 @@
 //! Guardrails (US-GRD-001, ADR-GRD-007 § 1), protocol 7.
 
 use super::{Group, RepoWrite, method};
+use crate::capability::Capability;
 
 /// What installing the hook layer in a repo means, before the developer
 /// grants the permission (ADR-GRD-007 § 1). Read-only.
@@ -15,6 +16,11 @@ pub const GUARD_STATUS: &str = "guard.status";
 /// The decision on a governed operation, asked by `raptor hook` (ADR-GRD-003 § 3 and § 4).
 pub const GUARD_EVALUATE: &str = "guard.evaluate";
 
+/// Commit authorship (US-GRD-018, D11): `EvaluateParams.authorship`, the `commit` operation,
+/// the `pre-commit` and `commit-msg` hooks and `Decision.notices`. The hook client sends them
+/// only when the daemon granted it; a daemon without it evaluates as before.
+pub const CAP_GUARD_AUTHORSHIP: Capability = Capability::new("guard.authorship");
+
 pub(super) const GROUP: Group = Group {
     // None is offered to `raptor-mcp` (BR-AUTH-004): it neither installs nor
     // evaluates. A connection of protocol 5 or 6 sees none.
@@ -27,5 +33,6 @@ pub(super) const GROUP: Group = Group {
         method(GUARD_STATUS, false, false).since(7),
         method(GUARD_EVALUATE, false, false).since(7),
     ],
+    capabilities: &[CAP_GUARD_AUTHORSHIP],
     ..Group::new("guard")
 };

@@ -18,8 +18,8 @@ pub struct Settings {
     pub engine: Option<Engine>,
     /// Permission of each governed operation (ADR-GRD-003, BR-VAL-002).
     pub permissions: Option<Permissions>,
-    /// Repository policies (ADR-GRD-003). No key is supported yet: US-GRD-008, US-GRD-009 and
-    /// US-GRD-015 add them.
+    /// Repository policies (ADR-GRD-003). `commitAuthorship` (US-GRD-018) is the first key;
+    /// US-GRD-008, US-GRD-009 and US-GRD-015 add others.
     pub policies: Option<Policies>,
     /// Time Machine values (ADR-TMC-007).
     #[serde(rename = "timeMachine")]
@@ -98,8 +98,41 @@ pub struct Permissions {
 
 /// `policies` section. Open: its keys arrive with their stories.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 #[schemars(extend("x-gitraptor-levels" = ["profile", "team", "local"]))]
-pub struct Policies {}
+pub struct Policies {
+    /// Who makes the commits (US-GRD-018, BR-AUTH-005). Only the floor relaxes it to
+    /// `flexible` (Q-GRD-20).
+    #[schemars(extend("x-gitraptor-levels" = ["profile", "team", "local"]))]
+    pub commit_authorship: Option<CommitAuthorship>,
+}
+
+/// `policies.commitAuthorship`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitAuthorship {
+    /// `agents-commit` (default), `human-author` or `flexible`.
+    pub mode: Option<AuthorshipMode>,
+    /// With `human-author` only: `deny` (default) or `warn`.
+    pub on_agent_commit: Option<OnAgentCommit>,
+}
+
+/// The authorship mode of a repo.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum AuthorshipMode {
+    AgentsCommit,
+    HumanAuthor,
+    Flexible,
+}
+
+/// What `human-author` does with an agent's commit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum OnAgentCommit {
+    Deny,
+    Warn,
+}
 
 /// An operation governed by Guardrails (BR-VAL-002).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, JsonSchema)]

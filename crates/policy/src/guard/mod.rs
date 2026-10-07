@@ -6,13 +6,15 @@
 //! US-GRD-001 evaluates the safe minimum only (BR-EDGE-001): no configuration
 //! is read, so nothing can turn it off.
 
+pub mod authorship;
 pub mod fastpath;
 pub mod input;
 pub mod refs;
 
+use gitraptor_api::AgentKind;
 use gitraptor_api::guard::{
-    Cause, Effect, Level, NotPreventable, Operation, Param, ParamKind, PushUpdate, Reason,
-    RefBackend, RefUpdate, Rule,
+    AuthorshipFacts, Cause, Effect, Level, NotPreventable, Operation, Param, ParamKind, PushUpdate,
+    Reason, RefBackend, RefUpdate, Rule,
 };
 
 /// What the client proved about a `pre-push` update whose local and remote
@@ -33,6 +35,8 @@ pub struct Facts {
     /// creation or a deletion). A missing fact where one is needed is treated
     /// as a forced update (fail-closed).
     pub push: Vec<Option<FastForward>>,
+    /// What the hook client derived from the commit message (US-GRD-018, D7).
+    pub authorship: Option<AuthorshipFacts>,
 }
 
 /// The context of an evaluation.
@@ -43,6 +47,10 @@ pub struct Context {
     pub bases: Vec<String>,
     /// The repo's file system does not distinguish case (`core.ignoreCase`).
     pub fold_case: bool,
+    /// The agent the daemon resolved for the operation (D5); `None` when unattributed.
+    pub actor: Option<AgentKind>,
+    /// `policies.commitAuthorship` in force (D2).
+    pub authorship: authorship::Effective,
 }
 
 /// The effect and every rule that produces it (BR-CALC-001).
@@ -50,6 +58,8 @@ pub struct Context {
 pub struct Evaluation {
     pub effect: Effect,
     pub reasons: Vec<Reason>,
+    /// Rules that warn without changing the effect (US-GRD-018, D3).
+    pub notices: Vec<Reason>,
 }
 
 impl Evaluation {
@@ -57,6 +67,14 @@ impl Evaluation {
         Self {
             effect: Effect::Allow,
             reasons: Vec::new(),
+            notices: Vec::new(),
+        }
+    }
+
+    /// Adds a warning: it never raises the effect (D3).
+    pub fn notice(&mut self, reason: Reason) {
+        if !self.notices.contains(&reason) {
+            self.notices.push(reason);
         }
     }
 
@@ -93,6 +111,13 @@ pub fn evaluate(operation: &Operation, facts: &Facts, ctx: &Context) -> Evaluati
         }
         // Nothing of the minimum governs a rebase (US-GRD-007 adds rules).
         Operation::Rebase { .. } => {}
+        Operation::Commit { stage } => authorship::evaluate(
+            &mut out,
+            *stage,
+            ctx.actor,
+            facts.authorship.as_ref(),
+            ctx.authorship,
+        ),
     }
     out
 }
