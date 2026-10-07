@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-07
 date: 2026-10-03
 domain: GRP
 feature: time-machine
@@ -72,6 +72,8 @@ Cifras medidas en macOS por SPIKE-TMC-001 (Enmienda 2026-10-04). Cada valor es e
 - Cada snapshot lleva sus tiempos por etapa en el oplog (diagnóstico local, NFR-03), con el reloj monótono común de ADR-GRP-011 § 3.
 - **Banco**: el de INF-GRP-002, ampliado con un escenario "operación protegida con trabajo sin commitear" sobre el repo de referencia, con 1 y con 10 worktrees activos (los mismos de § 1). El trabajo vive en la Dev Spec de US-TMC-020 (dueña del NFR); no hay un INF nuevo.
 - **Gates**: p95 total ≥ 200 ms en el repo de referencia, entonces **el CI falla**; una etapa por encima de su presupuesto con el total dentro, aviso con la etapa nombrada; p95 del motor con la Time Machine activa por encima de 300 ms, el CI falla (gate de ADR-GRP-011).
+
+> **Decisión de Rene (2026-10-07)**: el banco de rendimiento **no bloquea en los runners compartidos**: allí solo avisa. El presupuesto absoluto se mide en una **máquina de referencia**, igual que el de NFR-04 (ADR-GRP-011, Enmienda 2026-10-05; TD-GRP-003).
 
 ### 5. Si no se cumple (en este orden)
 

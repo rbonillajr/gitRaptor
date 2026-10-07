@@ -28,7 +28,7 @@ El motor guarda en el perfil (ADR-GRP-006) los eventos de Git, las sesiones de a
 - Una sesión terminada no se reactiva, y un agente registrado figura presente hasta que se **retira su registro**, lo que termina su sesión (Q41, BR-WF-001).
 - Lo que el motor no vio ocurrir queda "sin atribuir", aunque hubiera un agente registrado antes del hueco (BR-EDGE-005).
 - Todo sobrevive a reinicios (Q6, BR-CONS-005).
-- Abiertas para el PO: **P16** (¿una sesión confirmada por registro pasa a origen "registrado"?) y **P17** (¿al retirar una corrección, sus eventos vuelven a la atribución detectada?).
+- **P16** (¿una sesión confirmada por registro pasa a origen "registrado"?): resuelta. **Decisión de Rene (2026-10-07)**: sí. Abierta para el PO: **P17** (¿al retirar una corrección, sus eventos vuelven a la atribución detectada?).
 
 ## Decisión
 
@@ -116,7 +116,7 @@ Los cambios de estado de las sesiones (inicio, activo, inactivo, terminado) se g
 - ✅ "Humano" no se puede emitir porque el contrato no tiene esa variante (Q34).
 - ✅ Los huecos quedan señalados y sus cambios nunca se atribuyen a un agente (BR-EDGE-005); la Time Machine sabe qué periodos no tienen atribución.
 - ✅ La evidencia guardada por evento permite medir la precisión de la detección (SPIKE-GRP-001).
-- ⚠️ **Depende de P16 y P17**, abiertas para el PO. **Mitigación**: el modelo cubre ambas respuestas cambiando solo la regla de resolución, no los datos.
+- ⚠️ **Depende de P17**, abierta para el PO (P16 resuelta: **Decisión de Rene (2026-10-07)**). **Mitigación**: el modelo cubre ambas respuestas cambiando solo la regla de resolución, no los datos.
 - ⚠️ BR-CONS-002 no dice qué pasa al retirar una corrección **si la sesión ya terminó** ("si la sesión sigue presente, vuelve la atribución detectada"). ⚠️ **ASSUMPTION**: se resuelve igual que con la sesión presente. **Pendiente para el PO**.
 - ⚠️ En un worktree compartido, los cambios de archivos quedan casi siempre "sin atribuir" en el MVP, porque no hay atribución por archivo (Q7). **Mitigación**: los eventos de Git con evidencia de una sola sesión (por ejemplo, un commit por ascendencia de procesos) sí se atribuyen.
 - ⚠️ Resolver el actor exige un cruce entre evento y sesión. **Mitigación**: índices por sesión y por worktree, y la atribución efectiva de cada sesión en memoria del daemon; se mide en INF-GRP-002 dentro del presupuesto de ADR-GRP-011.
@@ -230,7 +230,7 @@ Decisión del orquestador (2026-10-05), validada por el Arquitecto y el PO. Deta
 | Cambio | Dónde |
 |---|---|
 | El registro de auditoría incluye, además de los comandos reservados, los **rechazos de `registration.register`** por `worktree-mismatch` y `agent-mismatch` (ADR-GRP-005, Enmienda 2026-10-05 US-GRP-009) | § 1 (registro de auditoría) |
-| **P16**: la confirmación pasa el origen de la sesión a "registrado", el supuesto del § 2, adoptado con US-GRP-009 y pendiente de ratificar por Rene. La confirmación sigue sin activar la evidencia por registro del § 3 | § 2 |
+| **P16**: la confirmación pasa el origen de la sesión a "registrado", el supuesto del § 2, adoptado con US-GRP-009 y ratificado. **Decisión de Rene (2026-10-07)**: P16 = sí. La confirmación sigue sin activar la evidencia por registro del § 3 | § 2 |
 | **Evidencia guardada** de un evento atribuido por registro: `{"signals":["registration"]}`, solo para la sesión de un "otro agente" creada por registro y única presente en el worktree | § 1, § 3 |
 | La **identidad del proceso que se registra** (nota de integración) entra con US-MCP-006 como columna anulable de la sesión: un cambio aditivo del esquema | Nota de integración |
 | El **aviso de cambio de atribución** (`attribution.changed`) sigue declarado para US-GRP-010; una confirmación se publica hoy como `session.state` de la misma sesión con su nuevo actor | § 6 |
@@ -254,7 +254,7 @@ Derivada de la Enmienda (2026-10-06, autoría de commits: BR-26 / US-GRD-018 / U
 
 ## Enmienda (2026-10-07, observación por niveles)
 
-Derivada de la [Enmienda (2026-10-07) de ADR-GRP-010](./ADR-GRP-010-observacion-cambios-worktrees.md#enmienda-2026-10-07-observación-por-niveles), que está **propuesta, pendiente de aceptar por Rene Bonilla**, y sigue su estado. **Decisión del orquestador (2026-10-07), validada por el Arquitecto.** No cambia el modelo de eventos, sesiones ni atribución: amplía la lista cerrada de causas de hueco, igual que la Enmienda (2026-10-04, SPIKE-GRP-002). El `status` sigue en `accepted`.
+Derivada de la [Enmienda (2026-10-07) de ADR-GRP-010](./ADR-GRP-010-observacion-cambios-worktrees.md#enmienda-2026-10-07-observación-por-niveles), y sigue su estado: **aceptada**. **Decisión de Rene (2026-10-07)**: acepta las enmiendas de observación por niveles, esta incluida. **Decisión del orquestador (2026-10-07), validada por el Arquitecto.** No cambia el modelo de eventos, sesiones ni atribución: amplía la lista cerrada de causas de hueco, igual que la Enmienda (2026-10-04, SPIKE-GRP-002). El `status` sigue en `accepted`.
 
 | Cambio | Dónde | Fuente |
 |---|---|---|

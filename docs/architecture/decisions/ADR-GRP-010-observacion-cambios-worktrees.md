@@ -16,7 +16,7 @@ tags: [watcher, notify, fsevents, inotify, readdirectorychangesw, debounce, reco
 
 # ADR-GRP-010 — Observación de cambios en worktrees
 
-> **Estado**: aceptado por Rene Bonilla el 2026-10-04. La [Enmienda (2026-10-07, observación por niveles)](#enmienda-2026-10-07-observación-por-niveles) está **propuesta, pendiente de aceptar por Rene Bonilla**: cambia el mecanismo aceptado (un repo dormido deja de observarse por eventos). Hasta que la acepte, rige el ADR sin ella.
+> **Estado**: aceptado por Rene Bonilla el 2026-10-04. La [Enmienda (2026-10-07, observación por niveles)](#enmienda-2026-10-07-observación-por-niveles) está **aceptada**. **Decisión de Rene (2026-10-07)**: acepta la enmienda, incluido el diseño de centinela (un repo dormido conserva sus watchers para que un edit seguido de `reset --hard` no escape a Time Machine, Q49).
 
 ## Contexto
 
@@ -249,7 +249,7 @@ Aplicada desde la [Dev Spec de INF-GRP-002](../../requirements/features/motor-lo
 
 ## Enmienda (2026-10-07, observación por niveles)
 
-> **Estado de la enmienda**: **propuesta, pendiente de aceptar por Rene Bonilla.** El `status` del ADR sigue en `accepted`, porque para los repos activos el mecanismo no cambia. Pero la enmienda cambia lo que Rene aceptó el 2026-10-04 en dos puntos: un repo dormido deja de procesar sus eventos y de reconciliarse cada 5 min, y lo hace de una forma distinta de la que él propuso el 2026-10-06 (ver "Discrepancia con la propuesta B"). Por eso no rige hasta que la acepte.
+> **Estado de la enmienda**: **aceptada.** **Decisión de Rene (2026-10-07)**: acepta la enmienda tal como está, incluido el diseño de centinela que corrige la propuesta B (Q49). El `status` del ADR sigue en `accepted`, porque para los repos activos el mecanismo no cambia. Pero la enmienda cambia lo que Rene aceptó el 2026-10-04 en dos puntos: un repo dormido deja de procesar sus eventos y de reconciliarse cada 5 min, y lo hace de una forma distinta de la que él propuso el 2026-10-06 (ver "Discrepancia con la propuesta B"). Por eso necesitaba su aceptación, que ya está dada.
 
 Origen: propuesta B de Rene Bonilla (2026-10-06), preocupado por tener más de 100 repos clonados; propuesta A1, que el PO recoge en BR-AUTH-003 y US-GRP-020 a 022; y la condición del PO en Q49 ("dormir no puede reducir la protección"). **Decisión del orquestador (2026-10-07), validada por el Arquitecto**, con las correcciones de cada punto. La implementa [TS-GRP-006](../../requirements/features/motor-local/technical-stories/TS-GRP-006-observacion-por-niveles.md). El descubrimiento lo implementan las historias del PO, porque tiene un resultado observable ("¿Observar *x*?"). Objetivos: RES-11, RES-12 y SEC-15 de [non-functional.md](../non-functional.md).
 
@@ -399,11 +399,11 @@ Son las mismas redes que tienen los activos (§ 5), con menos frecuencia.
 - **Qué se lee de una entrada**: solo lo necesario para saber si es un repo Git. Se mira si `<entrada>/.git` es un directorio con `HEAD` o un archivo `gitdir:` (≤ 4 KiB), y esa es la única lectura.
   - No se siguen enlaces simbólicos, no se lee la configuración, no se abre el repo con la capa de lectura y no se ejecuta nada.
   - Si un clon está en curso y todavía no tiene `HEAD`, se vuelve a mirar en el listado siguiente.
-- **Deduplicación** por la clave de repo (ADR-GRP-006: ruta canónica del directorio Git común). Un worktree enlazado de un repo ya observado no es candidato. El descarte se guarda por ruta, según el supuesto del PO en BR-AUTH-003.
+- **Deduplicación** por la clave de repo (ADR-GRP-006: ruta canónica del directorio Git común). Un worktree enlazado de un repo ya observado no es candidato. El descarte se guarda por ruta, según el supuesto del PO en BR-AUTH-003, ratificado (**Decisión de Rene (2026-10-07)**).
 - **Un candidato no consume nada** hasta que el humano lo acepta con `repo.add` (reservado). Descartarlo también es reservado (BR-AUTH-003, condición 8).
 - **Nada por MCP** (SEC-MCP-01): ni las raíces, ni los candidatos, ni sus eventos.
 - **Coste**: como mucho 16 vigilancias o descriptores, un listado cada 5 min y ningún efecto en el repo descubierto (BR-AUTH-003, condición 9).
-- La notificación nativa del SO queda fuera del MVP (Q46). Si vuelve: en macOS, un daemon sin bundle de aplicación no puede usar el centro de notificaciones sin lanzar un proceso del sistema, y hoy la auditoría de `exec` de INF-GRP-001 no lo permite.
+- La notificación nativa del SO queda fuera del MVP (Q46; **Decisión de Rene (2026-10-07)**). Si vuelve: en macOS, un daemon sin bundle de aplicación no puede usar el centro de notificaciones sin lanzar un proceso del sistema, y hoy la auditoría de `exec` de INF-GRP-001 no lo permite.
 
 ### N7. Configuración (ADR-GRP-007)
 

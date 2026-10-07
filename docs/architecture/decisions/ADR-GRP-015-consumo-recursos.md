@@ -136,7 +136,7 @@ Linux y Windows: **Pendiente: etapa de validación multiplataforma**. Este ADR s
 
 ## Enmienda (2026-10-07, observación por niveles)
 
-Referencia cruzada de la [Enmienda (2026-10-07) de ADR-GRP-010](./ADR-GRP-010-observacion-cambios-worktrees.md#enmienda-2026-10-07-observación-por-niveles), que está propuesta y pendiente de aceptar por Rene Bonilla. **Decisión del orquestador (2026-10-07), validada por el Arquitecto.** No cambia las clases, el modo de ahorro ni los objetivos de RES-01 a RES-10: los extiende a muchos repos observados. El `status` sigue en `proposed`.
+Referencia cruzada de la [Enmienda (2026-10-07) de ADR-GRP-010](./ADR-GRP-010-observacion-cambios-worktrees.md#enmienda-2026-10-07-observación-por-niveles), que está aceptada. **Decisión de Rene (2026-10-07)**: acepta las enmiendas de observación por niveles, esta referencia cruzada incluida. **Decisión del orquestador (2026-10-07), validada por el Arquitecto.** No cambia las clases, el modo de ahorro ni los objetivos de RES-01 a RES-10: los extiende a muchos repos observados. El `status` sigue en `proposed` por lo que dice el Estado del inicio (RES-01, RES-02 y TS-GRP-005), no por esta enmienda.
 
 | Cambio | Dónde | Fuente |
 |---|---|---|
