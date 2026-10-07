@@ -414,6 +414,58 @@ mod tests {
         assert_eq!(team(r#"{"policies":{}}"#).status, SourceStatus::Readable);
     }
 
+    /// US-GRD-018 § 4: `commitAuthorship` is a supported key in every level.
+    #[test]
+    fn commit_authorship_is_a_supported_policy() {
+        use crate::settings::model::{AuthorshipMode, OnAgentCommit};
+        let doc =
+            br#"{"policies":{"commitAuthorship":{"mode":"human-author","onAgentCommit":"warn"}}}"#;
+        for (level, source) in [
+            (Level::Team, SourceKind::Floor),
+            (Level::Profile, SourceKind::Profile),
+            (Level::Local, SourceKind::Local),
+        ] {
+            let p = parse_document(doc, level, source);
+            assert_eq!(p.status, SourceStatus::Readable, "{:?}", p.diagnostics);
+            assert!(p.diagnostics.is_empty());
+            let ca = p
+                .applicable()
+                .unwrap()
+                .policies
+                .clone()
+                .unwrap()
+                .commit_authorship
+                .unwrap();
+            assert_eq!(ca.mode, Some(AuthorshipMode::HumanAuthor));
+            assert_eq!(ca.on_agent_commit, Some(OnAgentCommit::Warn));
+        }
+    }
+
+    /// An unknown value leaves the source partial and the key without effect (D12).
+    #[test]
+    fn commit_authorship_unknown_value_is_partial() {
+        let p = team(r#"{"policies":{"commitAuthorship":{"mode":"robots-only"}}}"#);
+        assert_eq!(p.status, SourceStatus::Partial);
+        assert_eq!(codes(&p), ["unknown-operation"]);
+        let ca = p
+            .applicable()
+            .unwrap()
+            .policies
+            .clone()
+            .unwrap()
+            .commit_authorship
+            .unwrap();
+        assert_eq!(ca.mode, None);
+
+        let p = team(r#"{"policies":{"commitAuthorship":{"mode":"flexible","extra":1}}}"#);
+        assert_eq!(p.status, SourceStatus::Partial);
+        // Unknown keys anywhere under `policies` are reported as an unsupported policy.
+        assert_eq!(codes(&p), ["policy-not-supported"]);
+
+        let p = team(r#"{"policies":{"commitAuthorship":{"mode":7}}}"#);
+        assert_eq!(p.status, SourceStatus::Ignored);
+    }
+
     #[test]
     fn diagnostics_never_carry_values() {
         let secret = "ghp_SECRETVALUE";

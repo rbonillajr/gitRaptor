@@ -72,6 +72,12 @@ pub enum Code {
     PolicyNotSupported,
     /// A key in a level that does not admit it (Q24). Only that key is ignored.
     KeyNotAllowedAtLevel,
+    /// A level other than the floor relaxes a policy below its default (`flexible`, Q-GRD-20,
+    /// US-GRD-018). Ignored.
+    RelaxationNotAllowed,
+    /// A key that only applies with another value of its section (`onAgentCommit` without
+    /// `human-author`). Ignored.
+    KeyOutOfPlace,
     /// A key that only the floor can set (base branch, safe minimum) in the worktree. No effect.
     FloorOnlyKey,
     /// `engine.baseBranch` is not a valid branch name (SEC-11). Never passed to Git.
@@ -107,6 +113,8 @@ impl Code {
             Self::UnknownOperation => "unknown-operation",
             Self::PolicyNotSupported => "policy-not-supported",
             Self::KeyNotAllowedAtLevel => "key-not-allowed-at-level",
+            Self::RelaxationNotAllowed => "relaxation-not-allowed",
+            Self::KeyOutOfPlace => "key-out-of-place",
             Self::FloorOnlyKey => "floor-only-key",
             Self::InvalidBaseBranch => "invalid-base-branch",
             Self::BaseUnconfirmed => "base-unconfirmed",

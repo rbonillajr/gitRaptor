@@ -9,7 +9,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::Untrusted;
+use crate::{AgentKind, Untrusted};
 
 /// Effect of a decision, ordered by restriction: `deny > ask > allow`.
 #[derive(
@@ -60,6 +60,12 @@ pub enum Rule {
     /// The evaluation failed: fail-closed on governed refs (ADR-GRD-001 § 3).
     #[serde(rename = "system.internal-error")]
     InternalError,
+    /// An agent's commit must carry its trailer (`agents-commit`, US-GRD-018).
+    #[serde(rename = "authorship.trailer-required")]
+    AuthorshipTrailerRequired,
+    /// Commits are made by the person (`human-author`, US-GRD-018).
+    #[serde(rename = "authorship.human-author")]
+    AuthorshipHumanAuthor,
 }
 
 /// Why a rule matched (ADR-GRD-003 § 3 and its 2026-10-04 amendment).
@@ -84,6 +90,11 @@ pub enum Cause {
     DaemonUnreachable,
     /// Degraded mode: an authentic daemon of another profile instance.
     InstanceMismatch,
+    /// The commit message could not be read (missing, larger than 64 KiB, not a regular
+    /// file): no trailer can be proved (US-GRD-018, D7).
+    MessageUnreadable,
+    /// The second line saw a shape it cannot classify as one commit (US-GRD-018, § 5.3).
+    AuthorshipUnclassified,
 }
 
 /// Kind of a labelled parameter.
@@ -95,6 +106,10 @@ pub enum ParamKind {
     Remote,
     Oid,
     Base,
+    /// The agent a rule names (`claude-code`).
+    Agent,
+    /// The example trailer of the agents' table.
+    Example,
 }
 
 /// One labelled, untrusted parameter of a reason.
@@ -171,6 +186,10 @@ pub struct Decision {
     pub config_status: Vec<ConfigSource>,
     /// Ids of the configuration blobs evaluated.
     pub config_ref: Vec<String>,
+    /// Rules that warn without changing the effect (capability `guard.authorship`). Only with
+    /// `appliedEffect = allow`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notices: Vec<Reason>,
 }
 
 /// The hook a dispatcher serves.
@@ -180,11 +199,25 @@ pub enum Hook {
     PrePush,
     PreRebase,
     ReferenceTransaction,
+    /// Commit authorship (US-GRD-018, template 2).
+    PreCommit,
+    /// Commit authorship (US-GRD-018, template 2).
+    CommitMsg,
 }
 
 impl Hook {
     /// The mandatory dispatchers of US-GRD-001 (ADR-GRD-001 § 2, Enmienda).
     pub const MANDATORY: [Self; 3] = [Self::PrePush, Self::ReferenceTransaction, Self::PreRebase];
+
+    /// Every dispatcher of the current template (2): the mandatory ones and the commit ones
+    /// of US-GRD-018 (ADR-GRD-002 § 1, fila Commit).
+    pub const ALL: [Self; 5] = [
+        Self::PrePush,
+        Self::ReferenceTransaction,
+        Self::PreRebase,
+        Self::PreCommit,
+        Self::CommitMsg,
+    ];
 
     /// Git's name of the hook.
     pub fn git_name(self) -> &'static str {
@@ -192,11 +225,13 @@ impl Hook {
             Self::PrePush => "pre-push",
             Self::PreRebase => "pre-rebase",
             Self::ReferenceTransaction => "reference-transaction",
+            Self::PreCommit => "pre-commit",
+            Self::CommitMsg => "commit-msg",
         }
     }
 
     pub fn from_git_name(name: &str) -> Option<Self> {
-        Self::MANDATORY.into_iter().find(|h| h.git_name() == name)
+        Self::ALL.into_iter().find(|h| h.git_name() == name)
     }
 }
 
@@ -267,6 +302,32 @@ pub enum Operation {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         branch: Option<Untrusted>,
     },
+    /// A commit (also `--amend` and a merge commit), only sent when the daemon granted
+    /// `guard.authorship` (US-GRD-018, D11).
+    Commit { stage: CommitStage },
+}
+
+/// Where a commit is evaluated (DS-US-GRD-018 § 5.3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum CommitStage {
+    /// Before the message: only `human-author` with `deny` applies.
+    PreCommit,
+    /// With the facts of the message: every authorship rule.
+    CommitMsg,
+}
+
+/// What the hook client derived from a commit message (D7): never its text, names or emails.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct AuthorshipFacts {
+    /// One entry per `Co-Authored-By`; `None` = not recognised by the table.
+    pub coauthors: Vec<Option<AgentKind>>,
+    /// Version of the agents' trailer table.
+    pub trailer_table: u32,
+    /// The message was missing, larger than 64 KiB or not a regular file.
+    #[serde(default)]
+    pub unreadable: bool,
 }
 
 /// The branch `HEAD` names but that is gone, and the last oid it had.
@@ -288,6 +349,10 @@ pub struct EvaluateParams {
     pub common_dir: String,
     pub hook: Hook,
     pub operation: Operation,
+    /// Commit facts the hook client derived from the message (never the text). Sent only when
+    /// the daemon granted `guard.authorship` (D11).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authorship: Option<AuthorshipFacts>,
 }
 
 /// Protection state of the hook layer (BR-WF-002, ADR-GRD-005 § 3). Until the

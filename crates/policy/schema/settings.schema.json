@@ -1,5 +1,28 @@
 {
   "$defs": {
+    "AuthorshipMode": {
+      "description": "The authorship mode of a repo.",
+      "enum": [
+        "agents-commit",
+        "human-author",
+        "flexible"
+      ],
+      "type": "string"
+    },
+    "CommitAuthorship": {
+      "description": "`policies.commitAuthorship`.",
+      "properties": {
+        "mode": {
+          "$ref": "#/$defs/AuthorshipMode",
+          "description": "`agents-commit` (default), `human-author` or `flexible`."
+        },
+        "onAgentCommit": {
+          "$ref": "#/$defs/OnAgentCommit",
+          "description": "With `human-author` only: `deny` (default) or `warn`."
+        }
+      },
+      "type": "object"
+    },
     "Engine": {
       "description": "`engine` section.",
       "properties": {
@@ -34,6 +57,14 @@
         }
       },
       "type": "object"
+    },
+    "OnAgentCommit": {
+      "description": "What `human-author` does with an agent's commit.",
+      "enum": [
+        "deny",
+        "warn"
+      ],
+      "type": "string"
     },
     "Operation": {
       "description": "An operation governed by Guardrails (BR-VAL-002).",
@@ -101,6 +132,17 @@
     },
     "Policies": {
       "description": "`policies` section. Open: its keys arrive with their stories.",
+      "properties": {
+        "commitAuthorship": {
+          "$ref": "#/$defs/CommitAuthorship",
+          "description": "Who makes the commits (US-GRD-018, BR-AUTH-005). Only the floor relaxes it to\n`flexible` (Q-GRD-20).",
+          "x-gitraptor-levels": [
+            "profile",
+            "team",
+            "local"
+          ]
+        }
+      },
       "type": "object",
       "x-gitraptor-levels": [
         "profile",
@@ -192,7 +234,7 @@
     },
     "policies": {
       "$ref": "#/$defs/Policies",
-      "description": "Repository policies (ADR-GRD-003). No key is supported yet: US-GRD-008, US-GRD-009 and\nUS-GRD-015 add them."
+      "description": "Repository policies (ADR-GRD-003). `commitAuthorship` (US-GRD-018) is the first key;\nUS-GRD-008, US-GRD-009 and US-GRD-015 add others."
     },
     "timeMachine": {
       "$ref": "#/$defs/TimeMachine",
