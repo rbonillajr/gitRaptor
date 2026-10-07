@@ -7,7 +7,7 @@ feature: guardrails
 domain: GRP
 story: US-GRD-018
 created: 2026-10-06
-updated: 2026-10-06
+updated: 2026-10-07
 related:
   stories: [US-GRD-018, US-GRD-019, US-GRD-001, US-GRD-005, US-GRD-007, US-GRD-009, US-GRD-010, US-GRP-002, US-GRP-007, US-GRP-009]
   adrs: [ADR-GRD-001, ADR-GRD-002, ADR-GRD-003, ADR-GRD-004, ADR-GRD-006, ADR-GRP-005, ADR-GRP-007, ADR-GRP-012, ADR-GRP-013, ADR-GRP-016]
@@ -264,8 +264,41 @@ Repos, remotos, perfiles y daemons temporales (NFR-01); Git, `raptor` y `raptor-
 | Ratificar la pista `inferred` | Rene Bonilla (US-GRD-019) |
 | Windows y Linux: leer la línea de órdenes del `git` antecesor (Windows: `NtQueryInformationProcess`) y los dispatchers nuevos | **Pendiente: etapa de validación multiplataforma** |
 | Agente no detectado ni registrado escapa a la política (R-GRD-2) | Residuo declarado (BR-AUTH-005) |
+| **Segunda línea frente a `--no-verify`** (D6, § 5.3): no entró en PR-A. Hasta que entre, `git commit --no-verify` **salta** `agents-commit` y `human-author` (también con `deny`); figura en la lista de lo que no se puede impedir (`voluntary-skips`) y los mensajes del hook no prometen que el commit quede bloqueado | Historia de seguimiento de PR-A (PO de Guardrails) |
+| Agente **registrado** (US-GRP-009) sin proceso detectado como actor de `guard.evaluate` (D5, desviación de PR-A): los registros viven en el almacén del daemon, fuera del hilo de la conexión; hace falta una copia compartida de solo lectura. La prueba `detected_and_registered_agents_are_the_actor` queda pendiente en su parte "registrado" | US-GRP-009 / US-GRD-005 |
+| Nivel **local** de `commitAuthorship`: no hay lector de `settings.local.json` | US-GRP-013 |
+| `flexible` de extremo a extremo: un suelo con configuración de equipo queda sin confirmar al instalar (Q-GRD-23); se confirma con US-GRD-014 | US-GRD-014 |
+| Un agente `other` no tiene fila en la tabla de identidades: con `agents-commit` no podría cumplir (hoy no se resuelve como actor). Cuando entre el agente registrado hará falta una regla explícita para `other` | US-GRP-009 / US-GRD-005 |
+| Una clave desconocida dentro de `policies.commitAuthorship` da `policy-not-supported` (deja la fuente `parcial`, correcto) aunque la política sí está soportada; el diagnóstico debería nombrar la subclave | Deuda del validador (TS-GRD-001) |
+| Reinstalar un repo con la plantilla 1 para pasar a la 2 (hoy la plantilla 1 sigue funcionando sin evaluar commits) | Seguimiento de PR-A |
 
 ## 9. Orden de implementación
 
 1. **PR-A (US-GRD-018)**: `crates/policy` (tabla, parser, reglas, clave) → `crates/api` (contrato, `guard.authorship`) → `crates/core` (actor S4, dispatchers, segunda línea) → `apps/cli` (cliente del hook, mensajes) → suites. Se implementa con `/nassa-core:implement --autonomous DS-US-GRD-018` limitado a PR-A.
 2. **PR-B (US-GRD-019)**: `crates/api` (autoría declarada, `events.authorship`) → `crates/core` (observación y evidencia) → `apps/cli` (`raptor events`) → suite.
+
+## 10. Estado de PR-A (2026-10-07)
+
+Implementado en la rama `feat/US-GRD-018-commit-authorship-policy` (D1 a D5, D6 sin segunda línea, D7, D8, D11; D12 pendiente porque US-GRD-005 no está en `main`, D13).
+
+| Pieza | Dónde |
+|---|---|
+| Tabla de identidades y parser de trailers (conformidad con `git interpret-trailers --parse`, `core.commentChar`, modos de limpieza) | `crates/policy/src/authorship/` |
+| Reglas y combinación de D2 (prueba de propiedades) | `crates/policy/src/guard/authorship.rs` |
+| Clave `policies.commitAuthorship`, diagnósticos `relaxation-not-allowed` y `key-out-of-place` | `crates/policy/src/settings/` |
+| Contrato (`notices`, `authorship`, operación `commit`, hooks `pre-commit`/`commit-msg`, capacidad `guard.authorship`) | `crates/api/src/guard.rs`, `crates/api/src/methods/guard.rs` |
+| Actor S4, política efectiva (suelo, worktree, perfil), plantilla 2 | `crates/core/src/guardrails/{actor,authorship,evaluate,hook,constants,install,registry}.rs` |
+| Mensajes en/es y dispatcher | `apps/cli/src/guard.rs`, `apps/cli/i18n/{en,es}/guard.txt`, `apps/cli/src/bin/raptor-hook.rs` |
+| Suites | `apps/cli/tests/guard_us_grd_018.rs`, `crates/core/tests/guard_evaluate.rs` |
+
+**D6 aplazado en parte**: la segunda línea (`reference-transaction` frente a `--no-verify`, § 5.3) no entra en PR-A; la prueba `no_verify_is_caught_by_the_second_line` queda pendiente (§ 8).
+
+**Decisiones del orquestador (2026-10-07), validadas por el Arquitecto** (`nassa-architect:architect`, una consulta; sus ajustes ya están incorporados) tomadas al implementar (registradas también en el PR):
+
+1. El actor reutiliza `crates/core/src/channel/requester.rs::resolve` en lugar de un segundo recorrido de la ascendencia.
+2. En modo degradado o con otra instancia, `pre-commit` y `commit-msg` salen 0 sin mensaje: el actor es "sin atribuir" y el `reference-transaction` del mismo commit ya avisa del modo degradado. **Ajuste del Arquitecto**: con un daemon antiguo sin `guard.authorship` nada más avisaría, así que el hook imprime una línea (`guard.notice.authorship-unavailable`, en/es) y sale 0.
+3. La lectura de `commit.cleanup` y `core.commentChar` usa la configuración del usuario (no aislada): solo sirve para leer el mensaje como Git lo limpiará; la decisión no depende de ella más allá de los trailers.
+4. Claves desconocidas dentro de `policies.commitAuthorship` siguen el validador existente: `policy-not-supported` y fuente `parcial` (el Arquitecto lo acepta como deuda, § 8).
+5. El actor es solo el agente detectado (o el marcado por el ejecutor); el registrado queda pendiente (§ 8). **Ajuste del Arquitecto**: anotado como desviación de D5 con dueño.
+
+**Criterios del § 7 cubiertos por PR-A**: `agents_commit_needs_the_agents_trailer`, `an_unattributed_commit_needs_no_trailer`, `human_author_blocks_or_warns`, `a_personal_level_does_not_relax_the_team_policy`, `only_the_floor_relaxes_to_flexible` (e2e con el perfil; el suelo confirmado en `crates/core/tests/guard_evaluate.rs`), `degraded_mode_does_not_apply_authorship_rules`, `an_unreadable_message_denies_the_agent` (mayor de 64 KiB), `a_template_1_install_keeps_working`, `amend_merge_rebase_and_cherry_pick` (sin la parte de `--no-verify`), `crates/policy` `authorship::tests::*`, `guard::authorship::tests::*`, `settings::document::tests::commit_authorship_*`, compatibilidad D11 en `crates/core/tests/guard_evaluate.rs`. **Sin cubrir**: `no_verify_is_caught_by_the_second_line`, `aliases_and_plumbing_are_caught_by_the_second_line`, `detected_and_registered_agents_are_the_actor` (solo detectado), `the_message_never_reaches_the_daemon` con espía en el canal (el contrato no tiene campo para el texto: `AuthorshipFacts` es `deny_unknown_fields`), `authorship_entries_in_the_decision_log` (D12). Verificado solo en macOS.
