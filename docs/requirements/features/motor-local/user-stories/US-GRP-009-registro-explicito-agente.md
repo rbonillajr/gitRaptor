@@ -36,7 +36,7 @@ BR-VAL-001 · BR-VAL-002 · BR-CONS-003 · BR-WF-001 (presente hasta retirar el 
 ## Dependencias
 
 - **Historias**: US-GRP-002; US-GRP-007 (en serie: reutiliza el modelo de sesión que fija 007; el contrato compartido lo fija la Dev Spec). Va antes que US-GRP-008: su Dev Spec fija el contrato de "quién hizo un evento" (agente con su origen o "sin atribuir") que 008 reutiliza.
-- **Abierta**: P16 (si la sesión confirmada pasa a origen "registrado"); el escenario de confirmación solo exige lo decidido.
+- **Resuelta**: P16 (si la sesión confirmada pasa a origen "registrado"). **Decisión de Rene (2026-10-07)**: sí. El escenario de confirmación solo exige lo decidido.
 - **Externas**: el registro hecho por el propio agente llega por el Servidor MCP (F-001-05) y la CLI expone el del desarrollador; esta historia define la capacidad del motor.
 - **Transversal**: todo escenario se cumple igual en Windows, macOS y Linux (BR-03) y sin escribir nada en el repo observado (BR-CONS-001); cómo se verifica lo define el plan técnico.
 

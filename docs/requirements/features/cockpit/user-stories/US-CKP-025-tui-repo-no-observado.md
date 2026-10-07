@@ -94,7 +94,7 @@ Entonces la TUI avisa "¿Observar billing?" y permite aceptarlo o descartarlo
 
 ## Requisitos Técnicos
 
-> Arquitecto, 2026-10-07. Decisión del orquestador, validada por el Arquitecto. Diseño en ADR-GRP-010, Enmienda (2026-10-07) N4, N6 y N8, propuesta y pendiente de aceptar por Rene Bonilla.
+> Arquitecto, 2026-10-07. Decisión del orquestador, validada por el Arquitecto. Diseño en ADR-GRP-010, Enmienda (2026-10-07) N4, N6 y N8, aceptada (**Decisión de Rene (2026-10-07)**).
 
 - **Al arrancar**, la TUI resuelve el cwd con `repo.locate`. Si está dentro de un repo no observado, hay una terminal interactiva y el solicitante (`hello.requester`) no es un agente, pregunta "¿Observar este repo? [s/N]", con "N" por defecto. Con "s" llama a `repo.add`, comando reservado que el daemon vuelve a autorizar (SEC-03). Si la TUI la lanzó un agente, no pregunta.
 - **Fuera de un repo**: lee los repos observados de la instantánea. Con uno, lo abre. Con varios, ofrece elegir, salvo que haya una vista recordada.

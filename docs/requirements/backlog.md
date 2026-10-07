@@ -167,7 +167,7 @@ flowchart LR
 | De los cambios del canal, solo N1 a N7 son Must | Propuesta del PO, aceptada por el orquestador |
 | **MCP mínimo como Should, no como Must ni fuera de M1** | El PO propuso sacarlo de M1. El orquestador lo deja como Should porque US-MCP-001 ya está en curso, pero no bloquea la salida |
 | US-GRP-017 Must; TS-GRP-005 Should; US-TMC-022, US-GRP-018 y US-GRP-019 fuera de M1 | Decisión del orquestador (2026-10-05), validada por el PO y el Arquitecto |
-| Repos descubiertos y observación por niveles (propuestas A1 a A4 y B de Rene Bonilla, 2026-10-06): US-GRP-020 y US-GRP-022 Should, US-GRP-021 Could y US-CKP-025 Should, todas en el MVP y fuera de M1; nueva BR-AUTH-003 y enmienda de BR-AUTH-001; la notificación nativa del SO queda fuera del MVP (pendiente de que Rene lo ratifique); A4 pasa a la épica E-002 (Fase 2); la observación por niveles no tiene historia propia y se ve en la enmienda de US-GRP-017 | Decisión del orquestador (2026-10-07), validada por el PO. El PO separó US-GRP-022 de US-GRP-020 (seis escenarios como máximo) |
+| Repos descubiertos y observación por niveles (propuestas A1 a A4 y B de Rene Bonilla, 2026-10-06): US-GRP-020 y US-GRP-022 Should, US-GRP-021 Could y US-CKP-025 Should, todas en el MVP y fuera de M1; nueva BR-AUTH-003 y enmienda de BR-AUTH-001; la notificación nativa del SO queda fuera del MVP (**Decisión de Rene (2026-10-07)**: ratificado; en el MVP el aviso solo sale en la TUI); A4 pasa a la épica E-002 (Fase 2); la observación por niveles no tiene historia propia y se ve en la enmienda de US-GRP-017 | Decisión del orquestador (2026-10-07), validada por el PO. El PO separó US-GRP-022 de US-GRP-020 (seis escenarios como máximo) |
 
 ---
 

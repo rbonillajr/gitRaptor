@@ -7,7 +7,7 @@ feature: cockpit
 domain: GRP
 story: TS-CKP-004
 created: 2026-10-05
-updated: 2026-10-06
+updated: 2026-10-07
 related:
   adrs: [ADR-GRP-003, ADR-CKP-003, ADR-GRP-002, ADR-GRP-001]
   nfrs: [NFR-09]
@@ -152,7 +152,7 @@ Precedencia: `--theme` > `GITRAPTOR_THEME` > OSC 11 > `COLORFGBG` > oscura. `aut
 | D12 | OSC 11 seguido de DA1; modo sin eco ni canónico (se mantiene `ISIG`), `VMIN=0`/`VTIME=1`, tope de 200 ms y 1 KiB, `tcflush` de la entrada y restauración con guardia | DA1 acaba la espera al instante en terminales sin OSC 11; `poll(2)` no sirve con `/dev/tty` en macOS. Una respuesta posterior al timeout puede llegar al lector de la TUI, que ignora secuencias desconocidas |
 | D13 | Claro si la luminancia relativa > 0.179 (contrasta más con negro que con blanco); `COLORFGBG`: último campo, 7 y 9–15 claro | Umbral WCAG simétrico; convención de rxvt y vim |
 | D14 | `GITRAPTOR_THEME` inválido: se ignora y se informa sin repetir el valor | Entrada sin controlar (SEC-12) |
-| D15 | Tenue oscuro `#949494` en vez de `#8a8a8a`; `bg.highlight` oscuro `#3a3a3a` | Ajuste a la decisión de Rene: 4.35 → 4.95 sobre Solarized oscuro; `#262626` no se distinguía del fondo |
+| D15 | Tenue oscuro `#949494` en vez de `#8a8a8a`; `bg.highlight` oscuro `#3a3a3a` | Ajuste a la decisión de Rene: 4.35 → 4.95 sobre Solarized oscuro; `#262626` no se distinguía del fondo. **Decisión de Rene (2026-10-07)**: ajustes aceptados |
 | D16 | Gate AA (truecolor y 256): texto y tenue de cada variante sobre sus fondos típicos y `text.default` sobre selección y barra; en la clara, todo primer plano sobre blanco y `text.inverse` sobre acento, foco y estados; en 256, `status.*`/`git.*` distintos no comparten índice. Informe del resto | Amplía D8. `text.default` se hereda: el gate mide su referencia |
 
 **Por debajo de AA en el informe (sin gate, validado por Arquitecto)**: `status.danger` y `git.removed` oscuros sobre Solarized oscuro (4.48 en truecolor); `agent.3` (4.4) y `agent.6` (3.9) oscuros sobre Solarized oscuro, y `agent.6` sobre `#1e1e1e` (4.3); el tenue sobre la selección (4.4 en las dos variantes); en la clara, `accent`, `status.success`, `status.warning`, `git.*` y algún agente sobre `bg.selected` (3.6–4.1 en 256) y varios colores sobre Solarized claro (4.2–4.4). La fila seleccionada lleva además una marca que no es color (NFR-09).
