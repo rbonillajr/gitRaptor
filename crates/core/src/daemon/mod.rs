@@ -18,6 +18,7 @@
 //! ADR-TMC-003 § 6). It does not depend on the engine store: a repo whose
 //! engine store cannot be opened still recovers its oplog (Q26).
 
+mod authorship;
 mod env;
 mod guard;
 mod lock;
@@ -1005,8 +1006,14 @@ fn git_event_view(repo_id: &str, store: &RepoStore, e: StoredEvent) -> Option<Gi
         inferred: e
             .session_id
             .is_none()
-            .then(|| sessions::inferred_agent(e.evidence.as_deref()))
+            .then(|| {
+                sessions::inferred_agent(e.evidence.as_deref(), authorship::creates_commit(kind))
+            })
             .flatten(),
+        authorship: e
+            .authorship
+            .as_deref()
+            .and_then(|a| serde_json::from_str(a).ok()),
     })
 }
 

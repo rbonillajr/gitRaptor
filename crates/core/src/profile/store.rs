@@ -110,6 +110,9 @@ pub struct NewEvent {
     /// Signals of ADR-GRP-012 that back the attribution.
     pub evidence: Option<String>,
     pub gap_id: Option<String>,
+    /// Declared authorship of the commit the event created (US-GRD-019):
+    /// author, committer and co-authors, never the message.
+    pub authorship: Option<String>,
 }
 
 /// Last known state of a worktree, base of reconciliation (ADR-GRP-010).
@@ -227,6 +230,7 @@ pub struct Event {
     pub session_id: Option<String>,
     pub evidence: Option<String>,
     pub gap_id: Option<String>,
+    pub authorship: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -251,7 +255,7 @@ macro_rules! event_select {
     ($tail:literal) => {
         concat!(
             "SELECT e.seq, w.canonical_path, e.kind, e.metadata, e.observed_utc_ms,
-                 e.utc_offset_s, e.session_id, e.evidence, e.gap_id
+                 e.utc_offset_s, e.session_id, e.evidence, e.gap_id, e.authorship
              FROM events e JOIN worktrees w ON w.id = e.worktree_id ",
             $tail
         )
@@ -657,8 +661,8 @@ fn apply(
             let seq = take_seq(next_seq, out);
             tx.execute(
                 "INSERT INTO events (seq, worktree_id, kind, metadata, observed_utc_ms,
-                     utc_offset_s, session_id, evidence, gap_id)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                     utc_offset_s, session_id, evidence, gap_id, authorship)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
                 params![
                     seq,
                     id,
@@ -668,7 +672,8 @@ fn apply(
                     event.observed.offset_s,
                     event.session_id,
                     event.evidence,
-                    event.gap_id
+                    event.gap_id,
+                    event.authorship
                 ],
             )?;
         }
@@ -781,5 +786,6 @@ fn event_from_row(row: &Row<'_>) -> rusqlite::Result<Event> {
         session_id: row.get(6)?,
         evidence: row.get(7)?,
         gap_id: row.get(8)?,
+        authorship: row.get(9)?,
     })
 }

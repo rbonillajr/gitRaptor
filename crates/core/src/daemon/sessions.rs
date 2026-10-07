@@ -16,7 +16,7 @@ use gitraptor_api::event::SESSION_STATE;
 use gitraptor_api::messages::{
     AgentSupport, GitEventKind, InferredAgent, MAX_SESSIONS_PAGE, RegistrationOutcome,
     RegistrationRegisterResult, RegistrationRejection, RegistrationWithdrawResult,
-    SessionEndCauseView, SessionStateView, SessionView, SessionsListParams,
+    SessionEndCauseView, SessionStateView, SessionView, SessionsListParams, TrailerCheck,
 };
 use gitraptor_api::{Actor, AgentKind as ApiAgentKind, AgentOrigin, Timings, Untrusted, clock};
 
@@ -55,6 +55,9 @@ pub(super) struct Attribution {
     /// Only a hint (amendment of ADR-GRP-012): the event stays without a
     /// session, so unattributed, and its evidence names the session.
     pub inferred: bool,
+    /// The hint checked against the commit's trailers (US-GRD-019), set
+    /// when the event is stored.
+    pub trailer: Option<TrailerCheck>,
 }
 
 impl Attribution {
@@ -66,19 +69,27 @@ impl Attribution {
     /// The evidence stored with the event; a hint names its session.
     pub fn evidence(&self) -> String {
         if self.inferred {
-            serde_json::json!({
+            let mut value = serde_json::json!({
                 "signals": [self.evidence],
                 "session": self.session.session_id,
-            })
-            .to_string()
+            });
+            if let Some(check) = self.trailer {
+                value["trailer"] = serde_json::to_value(check).unwrap_or_default();
+            }
+            value.to_string()
         } else {
             self.evidence.to_owned()
         }
     }
 }
 
-/// The hint stored with an unattributed event, if it has one.
-pub(super) fn inferred_agent(evidence: Option<&str>) -> Option<InferredAgent> {
+/// The hint stored with an unattributed event, if it has one. A commit
+/// stored before the hint was checked against its trailers reads as
+/// `unconfirmed` (DS-US-GRD-018 § 6.2).
+pub(super) fn inferred_agent(
+    evidence: Option<&str>,
+    creates_commit: bool,
+) -> Option<InferredAgent> {
     let value: serde_json::Value = serde_json::from_str(evidence?).ok()?;
     let single = value["signals"]
         .as_array()?
@@ -87,6 +98,9 @@ pub(super) fn inferred_agent(evidence: Option<&str>) -> Option<InferredAgent> {
     Some(InferredAgent {
         kind: ApiAgentKind::ClaudeCode,
         session_id: value["session"].as_str().filter(|_| single)?.to_owned(),
+        trailer: serde_json::from_value(value["trailer"].clone())
+            .ok()
+            .or(creates_commit.then_some(TrailerCheck::Unconfirmed)),
     })
 }
 
@@ -362,6 +376,7 @@ impl Daemon {
                     session,
                     evidence: REGISTRATION_EVIDENCE,
                     inferred: false,
+                    trailer: None,
                 })
         };
         // S3 saw no `git` (the short-commit race): the worktree's
@@ -375,6 +390,7 @@ impl Daemon {
                         session,
                         evidence: SINGLE_SESSION_EVIDENCE,
                         inferred: true,
+                        trailer: None,
                     })
             })
         };
@@ -402,6 +418,7 @@ impl Daemon {
                 session,
                 evidence: S3_EVIDENCE,
                 inferred: false,
+                trailer: None,
             }),
             S3Outcome::NoSighting => inferred(),
             S3Outcome::NoSession | S3Outcome::Ambiguous => by_registration(),
@@ -797,6 +814,7 @@ fn state_event(
         session_id: Some(session_id.to_owned()),
         evidence: None,
         gap_id: None,
+        authorship: None,
     })
 }
 
@@ -887,6 +905,7 @@ mod tests {
             },
             evidence,
             inferred,
+            trailer: None,
         }
     }
 
@@ -898,18 +917,32 @@ mod tests {
         assert_eq!(hint.session_id(), None);
         let stored = hint.evidence();
         assert_eq!(
-            inferred_agent(Some(&stored)),
+            inferred_agent(Some(&stored), false),
             Some(InferredAgent {
                 kind: ApiAgentKind::ClaudeCode,
                 session_id: "20:2000".into(),
+                trailer: None,
             })
+        );
+        // A commit stored before the check reads as unconfirmed.
+        assert_eq!(
+            inferred_agent(Some(&stored), true).and_then(|h| h.trailer),
+            Some(TrailerCheck::Unconfirmed)
+        );
+        let checked = Attribution {
+            trailer: Some(TrailerCheck::Confirmed),
+            ..attribution(SINGLE_SESSION_EVIDENCE, true)
+        };
+        assert_eq!(
+            inferred_agent(Some(&checked.evidence()), true).and_then(|h| h.trailer),
+            Some(TrailerCheck::Confirmed)
         );
         let s3 = attribution(S3_EVIDENCE, false);
         assert_eq!(s3.session_id(), Some("20:2000"));
         assert_eq!(s3.evidence(), S3_EVIDENCE);
-        assert_eq!(inferred_agent(Some(S3_EVIDENCE)), None);
-        assert_eq!(inferred_agent(Some(REGISTRATION_EVIDENCE)), None);
-        assert_eq!(inferred_agent(None), None);
-        assert_eq!(inferred_agent(Some("not json")), None);
+        assert_eq!(inferred_agent(Some(S3_EVIDENCE), true), None);
+        assert_eq!(inferred_agent(Some(REGISTRATION_EVIDENCE), true), None);
+        assert_eq!(inferred_agent(None, true), None);
+        assert_eq!(inferred_agent(Some("not json"), true), None);
     }
 }
