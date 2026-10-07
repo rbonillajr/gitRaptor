@@ -564,6 +564,34 @@ fn a_branch_moved_under_its_worktree_is_read_again() {
     });
 }
 
+/// US-TMC-004: a batch carries the `HEAD` read before the worktree. When a
+/// `git` renames `HEAD` in between, the read already shows the new state and
+/// the next window reads nothing new: it still hands the new `HEAD` over, or
+/// the Time Machine waits for a calm that never comes (`repo-busy`). Here
+/// `HEAD` changes its bytes and nothing a read shows: same branch, no final
+/// newline.
+#[test]
+fn a_head_that_changes_after_the_read_is_handed_over() {
+    let (f, wt) = demo();
+    let git_dir = gitraptor_core::timemachine::engine::git_dir_of(&wt).unwrap();
+    let w = watch(&f, fast());
+    let head = b"ref: refs/heads/feat-login".to_vec();
+    let tmp = git_dir.join("HEAD.lock");
+    std::fs::write(&tmp, &head).unwrap();
+    std::fs::rename(&tmp, git_dir.join("HEAD")).unwrap();
+    let batches = w.until(|bs| {
+        bs.iter()
+            .flat_map(|b| &b.heads)
+            .any(|(root, h)| root == &wt && h == &head)
+    });
+    // A `HEAD` handed over again, not a change: no read and no event.
+    assert!(
+        batches.iter().all(|b| b.worktrees.is_empty()),
+        "{batches:#?}"
+    );
+    assert!(events(&batches).is_empty(), "{batches:#?}");
+}
+
 /// The reflog is read after the view of the refs: a commit that lands in
 /// between is left to the next window, which names it, instead of being
 /// named twice.

@@ -35,6 +35,8 @@ struct Task {
     root: PathBuf,
     /// Its Git directory: `HEAD` is read from it before each batch.
     git_dir: PathBuf,
+    /// The `HEAD` of the last batch handed over (or read at the start).
+    sent_head: Vec<u8>,
     main: bool,
     admin: Option<String>,
     last: WorktreeRead,
@@ -58,6 +60,7 @@ pub(super) fn run(
     repo_id: String,
     initial: WorktreeRead,
     git_dir: PathBuf,
+    head: Vec<u8>,
     degraded: bool,
     rx: Receiver<WtMsg>,
 ) {
@@ -96,6 +99,7 @@ pub(super) fn run(
         shared,
         root,
         git_dir,
+        sent_head: head,
     };
     // The watch is running: read once more, so a change written between
     // the reconciliation that started the task and the watch is not lost.
@@ -193,6 +197,11 @@ impl Task {
             });
         }
         let changed = read != self.last;
+        // `HEAD` is read before the worktree: a `git` that renames it in
+        // between leaves a batch with the old one and a read with the new
+        // one. The next flush has nothing else to publish, but must hand the
+        // new `HEAD` over, or the Time Machine never sees the worktree calm.
+        let head_moved = head != self.sent_head;
         // An overflow always opens a gap, from the last event received
         // until this reconciliation ends (ADR-GRP-013 § 5).
         let gap = if window.overflow {
@@ -208,7 +217,7 @@ impl Task {
         } else {
             None
         };
-        if changed || !events.is_empty() || gap.is_some() {
+        if changed || head_moved || !events.is_empty() || gap.is_some() {
             self.send(
                 read.clone(),
                 head,
@@ -315,7 +324,7 @@ impl Task {
     }
 
     fn send(
-        &self,
+        &mut self,
         read: WorktreeRead,
         head: Vec<u8>,
         changed: bool,
@@ -323,6 +332,7 @@ impl Task {
         gap: Option<GapMark>,
         marks: Marks,
     ) {
+        self.sent_head.clone_from(&head);
         self.shared.send_from_worktree(
             &self.root,
             ObservedBatch {
