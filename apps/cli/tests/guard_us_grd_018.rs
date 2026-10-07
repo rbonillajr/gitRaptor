@@ -147,6 +147,11 @@ impl Machine {
 
     /// `git <args>` run by the simulated Claude Code.
     fn agent(&self, args: &str) -> Output {
+        self.agent_sh(&self.git_line(args))
+    }
+
+    /// A shell line run by the simulated Claude Code.
+    fn agent_sh(&self, line: &str) -> Output {
         let agent = self.outside.path().join("bin").join(FAKE_AGENT);
         if !agent.exists() {
             std::fs::copy(std::env::current_exe().unwrap(), &agent).unwrap();
@@ -160,7 +165,7 @@ impl Machine {
             ])
             .env_clear()
             .envs(self.env())
-            .env(AGENT_CMD, self.git_line(args))
+            .env(AGENT_CMD, line)
             .current_dir(&self.f.repo)
             .stdin(Stdio::null())
             .output()
@@ -169,6 +174,11 @@ impl Machine {
 
     /// A commit of a new file, with `message` (written to a file: trailers keep their lines).
     fn commit_by(&self, agent: bool, message: &str) -> Output {
+        self.commit_with(agent, message, "commit -q")
+    }
+
+    /// [`Machine::commit_by`] with another `git` command line in front of `-F <message>`.
+    fn commit_with(&self, agent: bool, message: &str, command: &str) -> Output {
         static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
         let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let name = format!("f{n}.txt");
@@ -177,7 +187,7 @@ impl Machine {
         std::fs::write(&msg, message).unwrap();
         let add = self.human(&format!("add {name}"));
         assert!(add.status.success(), "{}", text(&add));
-        let args = format!("commit -q -F '{}'", msg.to_str().unwrap());
+        let args = format!("{command} -F '{}'", msg.to_str().unwrap());
         if agent {
             self.agent(&args)
         } else {
@@ -378,17 +388,8 @@ fn an_unreadable_message_denies_the_agent() {
 #[test]
 fn a_template_1_install_keeps_working() {
     let m = Machine::new(None);
-    let folder = m.f.repo.join(".git/gitraptor");
-    let conf = std::fs::read_to_string(folder.join("dispatch.conf")).unwrap();
-    std::fs::write(
-        folder.join("dispatch.conf"),
-        conf.replace("template\t2\n", "template\t1\n"),
-    )
-    .unwrap();
-    for hook in ["pre-commit", "commit-msg"] {
-        std::fs::remove_file(folder.join("hooks").join(hook)).unwrap();
-    }
-    // No commit dispatcher: the agent's commit is not evaluated.
+    downgrade_to_template_1(&m);
+    // No commit dispatcher and no second line: the agent's commit is not evaluated.
     let out = m.commit_by(true, "feat: x\n");
     assert!(out.status.success(), "{}", text(&out));
     // The minimum still applies through the template-1 dispatchers.
@@ -436,4 +437,206 @@ fn amend_merge_rebase_and_cherry_pick() {
     assert!(m.human("switch -q main").status.success());
     let out = m.agent("merge -q --ff-only ff");
     assert!(out.status.success(), "{}", text(&out));
+}
+
+/// Removes the commit dispatchers and marks the install as template 1, as US-GRD-001 left it.
+fn downgrade_to_template_1(m: &Machine) {
+    let folder = m.f.repo.join(".git/gitraptor");
+    let conf = std::fs::read_to_string(folder.join("dispatch.conf")).unwrap();
+    std::fs::write(
+        folder.join("dispatch.conf"),
+        conf.replace("template\t2\n", "template\t1\n"),
+    )
+    .unwrap();
+    for hook in ["pre-commit", "commit-msg"] {
+        std::fs::remove_file(folder.join("hooks").join(hook)).unwrap();
+    }
+}
+
+/// What a denied commit must leave untouched (NFR-01): the index, the working tree and the
+/// branch, plus the message in `COMMIT_EDITMSG` and the commit object itself for undo.
+fn worktree_state(m: &Machine) -> (String, String, String) {
+    let out = |args: &str| String::from_utf8_lossy(&m.human(args).stdout).into_owned();
+    (
+        out("status --porcelain=v1 --untracked-files=all"),
+        out("diff --cached"),
+        out("rev-parse HEAD"),
+    )
+}
+
+/// Whether any file under `dir` contains `needle`.
+fn profile_contains(dir: &std::path::Path, needle: &[u8]) -> bool {
+    std::fs::read_dir(dir).unwrap().any(|entry| {
+        let path = entry.unwrap().path();
+        let meta = std::fs::symlink_metadata(&path).unwrap();
+        if meta.is_dir() {
+            profile_contains(&path, needle)
+        } else if meta.is_file() {
+            std::fs::read(&path)
+                .unwrap_or_default()
+                .windows(needle.len())
+                .any(|w| w == needle)
+        } else {
+            false
+        }
+    })
+}
+
+fn unreachable_commits(m: &Machine) -> Vec<String> {
+    let out = m.human("fsck --unreachable --no-reflogs --no-progress");
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .filter_map(|l| l.strip_prefix("unreachable commit "))
+        .map(str::to_owned)
+        .collect()
+}
+
+/// D6, § 5.3: `git commit --no-verify` skips `pre-commit` and `commit-msg`, and the second line
+/// in `reference-transaction` decides instead. Under `human-author` with `deny` the agent's
+/// commit does not land, and nothing is lost: index, working tree and branch are as before, the
+/// message stays in `COMMIT_EDITMSG` and the commit object is still there for undo. The person
+/// is not blocked; under the default the trailer is still what decides.
+#[test]
+fn no_verify_is_caught_by_the_second_line() {
+    let m = Machine::new(Some(HUMAN_DENY));
+    let message = format!("feat: skipped hooks\n\n{CLAUDE}\n");
+    std::fs::write(m.f.repo.join("pending.txt"), "not staged\n").unwrap();
+    let out = m.commit_with(true, &message, "commit -q --no-verify");
+    let before = worktree_state(&m);
+    assert!(!out.status.success(), "{}", text(&out));
+    assert!(
+        text(&out).contains("\"human-author\" policy, team configuration"),
+        "{}",
+        text(&out)
+    );
+    // `commit_with` staged its file before committing: nothing moved after the denial.
+    assert_eq!(worktree_state(&m), before);
+    assert!(before.1.contains("+++ b/f"), "{}", before.1);
+    let editmsg = std::fs::read_to_string(m.f.repo.join(".git/COMMIT_EDITMSG")).unwrap();
+    assert!(editmsg.contains("feat: skipped hooks"), "{editmsg}");
+    let dangling = unreachable_commits(&m);
+    assert!(
+        dangling.iter().any(|oid| {
+            let out = m.human(&format!("log -1 --format=%s {oid}"));
+            String::from_utf8_lossy(&out.stdout).trim() == "feat: skipped hooks"
+        }),
+        "{dangling:?}"
+    );
+    // The command line of the `git` was read only to classify it: it is nowhere in the
+    // profile (logs, store, state).
+    assert!(
+        !profile_contains(&m.f.profile, b"--no-verify"),
+        "the command line reached the profile"
+    );
+    // The person commits with `--no-verify` as before.
+    let out = m.human(&format!(
+        "commit -q --no-verify -F '{}'",
+        m.f.repo.join(".git/COMMIT_EDITMSG").to_str().unwrap()
+    ));
+    assert!(out.status.success(), "{}", text(&out));
+
+    // The default (`agents-commit`): without the trailer the second line denies; with it, in.
+    let m = Machine::new(None);
+    let out = m.commit_with(true, "feat: no trailer\n", "commit -q --no-verify");
+    assert!(!out.status.success(), "{}", text(&out));
+    assert!(text(&out).contains("\"agents-commit\""), "{}", text(&out));
+    m.human("reset -q");
+    let out = m.commit_with(true, &message, "commit -q --no-verify");
+    assert!(out.status.success(), "{}", text(&out));
+    assert!(m.head_message().contains(CLAUDE));
+}
+
+/// ADR-GRD-003 § 6: with the hooks, `commit-msg` decides and the second line of the same `git`
+/// reuses that decision, so a warning is shown once; with `--no-verify` it is shown by the
+/// second line.
+#[test]
+fn one_decision_per_commit() {
+    let m = Machine::new(Some(HUMAN_WARN));
+    let warning = "warning: in this repo commits are made by the person";
+    let out = m.commit_by(true, &format!("feat: x\n\n{CLAUDE}\n"));
+    assert!(out.status.success(), "{}", text(&out));
+    assert_eq!(text(&out).matches(warning).count(), 1, "{}", text(&out));
+    let out = m.commit_with(
+        true,
+        &format!("feat: y\n\n{CLAUDE}\n"),
+        "commit -q --no-verify",
+    );
+    assert!(out.status.success(), "{}", text(&out));
+    assert_eq!(text(&out).matches(warning).count(), 1, "{}", text(&out));
+}
+
+/// D6, § 5.3 (inverse list): an alias, `-c alias.x=commit` and `commit-tree` + `update-ref` are
+/// evaluated too; only a subcommand that certainly keeps the original commits is not.
+#[test]
+fn aliases_and_plumbing_are_caught_by_the_second_line() {
+    let m = Machine::new(None);
+    let git = m.f.git.to_str().unwrap().to_owned();
+    assert!(m.human("config alias.ci commit").status.success());
+    let out = m.commit_with(true, "feat: alias\n", "ci -q --no-verify");
+    assert!(!out.status.success(), "{}", text(&out));
+    m.human("reset -q");
+    let out = m.commit_with(
+        true,
+        "feat: -c alias\n",
+        "-c alias.x=commit x -q --no-verify",
+    );
+    assert!(!out.status.success(), "{}", text(&out));
+    m.human("reset -q");
+
+    assert!(m.human("switch -q -c feat").status.success());
+    let line = format!(
+        "oid=$('{git}' commit-tree 'HEAD^{{tree}}' -p HEAD -m 'feat: plumbing') && \
+         '{git}' update-ref refs/heads/feat \"$oid\""
+    );
+    let before = String::from_utf8(m.human("rev-parse feat").stdout).unwrap();
+    let out = m.agent_sh(&line);
+    assert!(!out.status.success(), "{}", text(&out));
+    assert_eq!(
+        String::from_utf8(m.human("rev-parse feat").stdout).unwrap(),
+        before
+    );
+    // With the agent's trailer the same plumbing goes in.
+    let line = format!(
+        "oid=$('{git}' commit-tree 'HEAD^{{tree}}' -p HEAD -m 'feat: plumbing' -m '{CLAUDE}') \
+         && '{git}' update-ref refs/heads/feat \"$oid\""
+    );
+    let out = m.agent_sh(&line);
+    assert!(out.status.success(), "{}", text(&out));
+    assert!(m.head_message().contains(CLAUDE));
+}
+
+/// D6 (reinstall criterion): a repo protected with template 1 keeps working unchanged with the
+/// new engine (no commit dispatchers, no second line), and `raptor guard install` upgrades it
+/// cleanly to template 2, after which commits are evaluated, `--no-verify` included.
+#[test]
+fn a_template_1_install_is_upgraded_by_reinstalling() {
+    let m = Machine::new(None);
+    downgrade_to_template_1(&m);
+    let out = m.commit_with(true, "feat: x\n", "commit -q --no-verify");
+    assert!(out.status.success(), "{}", text(&out));
+
+    let out = m.developer(&["guard", "install", "--yes", m.f.repo.to_str().unwrap()]);
+    assert!(out.status.success(), "{}", text(&out));
+    let folder = m.f.repo.join(".git/gitraptor");
+    let conf = std::fs::read_to_string(folder.join("dispatch.conf")).unwrap();
+    assert!(conf.contains("template\t2\n"), "{conf}");
+    for hook in [
+        "pre-commit",
+        "commit-msg",
+        "reference-transaction",
+        "pre-push",
+        "pre-rebase",
+    ] {
+        assert!(folder.join("hooks").join(hook).is_file(), "{hook}");
+    }
+    let out = m.commit_by(true, "feat: y\n");
+    assert!(!out.status.success(), "{}", text(&out));
+    m.human("reset -q");
+    let out = m.commit_with(true, "feat: z\n", "commit -q --no-verify");
+    assert!(!out.status.success(), "{}", text(&out));
+    m.human("reset -q");
+    // The minimum still holds after the upgrade.
+    assert!(m.human("switch -q -c side").status.success());
+    let out = m.agent("branch -D main");
+    assert!(!out.status.success(), "{}", text(&out));
 }
