@@ -212,7 +212,7 @@ impl Client {
         match client.greet(kind, protocol)? {
             Greeting::Ready(hello) => {
                 client.hello = hello;
-                client.accept_capabilities()?;
+                client.accept_capabilities(kind)?;
                 Ok(client)
             }
             Greeting::Incompatible(data) if data.daemon_protocol < protocol => {
@@ -250,7 +250,7 @@ impl Client {
         match client.greet(kind, protocol)? {
             Greeting::Ready(hello) => {
                 client.hello = hello;
-                client.accept_capabilities()?;
+                client.accept_capabilities(kind)?;
                 Ok(client)
             }
             Greeting::Incompatible(data) if data.daemon_protocol < protocol => {
@@ -345,12 +345,14 @@ impl Client {
     /// binary understands and the daemon serves; the legacy ones come with
     /// the protocol. Nothing to ask, nothing sent.
     #[cfg(unix)]
-    fn accept_capabilities(&mut self) -> Result<(), ClientError> {
+    fn accept_capabilities(&mut self, kind: ClientKind) -> Result<(), ClientError> {
         let Some(served) = &self.hello.capabilities else {
             return Ok(());
         };
         let wanted: Vec<String> = gitraptor_api::capability::all()
             .filter(|c| c.legacy.is_none() && served.iter().any(|s| s == c.name))
+            // `raptor-mcp` never asks for names and emails (US-GRD-019).
+            .filter(|c| !(kind == ClientKind::Mcp && c.name == methods::CAP_EVENTS_AUTHORSHIP.name))
             .map(|c| c.name.to_owned())
             .collect();
         if !wanted.is_empty() {

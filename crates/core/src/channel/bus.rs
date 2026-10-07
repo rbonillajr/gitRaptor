@@ -40,6 +40,8 @@ pub struct Outbox {
     before_reset: std::sync::atomic::AtomicBool,
     /// Without `scope.activity` (see [`Outbox::set_without_activity`]).
     without_activity: std::sync::atomic::AtomicBool,
+    /// Without `events.authorship` (see [`Outbox::set_without_authorship`]).
+    without_authorship: std::sync::atomic::AtomicBool,
 }
 
 #[derive(Debug, Default)]
@@ -59,6 +61,7 @@ impl Outbox {
             capacity,
             before_reset: std::sync::atomic::AtomicBool::new(false),
             without_activity: std::sync::atomic::AtomicBool::new(true),
+            without_authorship: std::sync::atomic::AtomicBool::new(true),
         })
     }
 
@@ -77,8 +80,19 @@ impl Outbox {
             .store(without, std::sync::atomic::Ordering::Relaxed);
     }
 
+    /// The connection lacks `events.authorship` (US-GRD-019): `git.event`
+    /// reaches it without the declared authorship nor the trailer check of
+    /// the hint, so no names or emails (`raptor-mcp`).
+    pub fn set_without_authorship(&self, without: bool) {
+        self.without_authorship
+            .store(without, std::sync::atomic::Ordering::Relaxed);
+    }
+
     /// The event in the shapes this connection reads.
     fn shape<'e>(&self, event: &'e Event) -> std::borrow::Cow<'e, Event> {
+        if event.kind == gitraptor_api::event::GIT_EVENT {
+            return self.shape_git_event(event);
+        }
         if !self
             .without_activity
             .load(std::sync::atomic::Ordering::Relaxed)
@@ -94,6 +108,26 @@ impl Outbox {
         data.without_activity();
         let mut event = event.clone();
         event.data = serde_json::to_value(data).unwrap_or(serde_json::Value::Null);
+        std::borrow::Cow::Owned(event)
+    }
+
+    fn shape_git_event<'e>(&self, event: &'e Event) -> std::borrow::Cow<'e, Event> {
+        if !self
+            .without_authorship
+            .load(std::sync::atomic::Ordering::Relaxed)
+        {
+            return std::borrow::Cow::Borrowed(event);
+        }
+        let Ok(view) =
+            serde_json::from_value::<gitraptor_api::messages::GitEventView>(event.data.clone())
+        else {
+            return std::borrow::Cow::Borrowed(event);
+        };
+        if view.authorship.is_none() && view.inferred.as_ref().is_none_or(|h| h.trailer.is_none()) {
+            return std::borrow::Cow::Borrowed(event);
+        }
+        let mut event = event.clone();
+        event.data = serde_json::to_value(view.without_authorship()).unwrap_or_default();
         std::borrow::Cow::Owned(event)
     }
 
@@ -733,5 +767,43 @@ mod tests {
         assert_eq!(bus.subscriber_count(), 0);
         let msgs = drain(&slow);
         assert!(matches!(&msgs[..], [ServerMessage::Notification(n)] if n.method == NOTIFY_RESYNC));
+    }
+
+    /// US-GRD-019: without `events.authorship` (the default, and always for
+    /// `raptor-mcp`) a `git.event` loses the declared authorship and the
+    /// trailer check of its hint; with it, both stay.
+    #[test]
+    fn git_events_carry_authorship_only_with_the_capability() {
+        use gitraptor_api::event::GIT_EVENT;
+        let data = serde_json::json!({
+            "repo_id": "r", "seq": 1, "worktree": {"untrusted": "/wt"}, "kind": "commit",
+            "actor": {"actor": "unattributed"}, "observed_utc_ms": 1, "utc_offset_s": 0,
+            "details": {},
+            "inferred": {"kind": "claude-code", "session_id": "1:1", "trailer": "confirmed"},
+            "authorship": {
+                "author": {"name": {"untrusted": "Ana"}, "email": {"untrusted": "ana@x"}},
+                "committer": {"name": {"untrusted": "Ana"}, "email": {"untrusted": "ana@x"}}
+            }
+        });
+        let event = Event {
+            seq: 1,
+            kind: GIT_EVENT.into(),
+            version: 1,
+            wall_ms: 1,
+            timings: None,
+            data: data.clone(),
+        };
+        let outbox = Outbox::new(4);
+        let shaped = outbox.shape(&event).into_owned();
+        assert!(shaped.data.get("authorship").is_none(), "{}", shaped.data);
+        assert!(
+            shaped.data["inferred"].get("trailer").is_none(),
+            "{}",
+            shaped.data
+        );
+        assert_eq!(shaped.data["inferred"]["session_id"], "1:1");
+        assert!(!shaped.data.to_string().contains("Ana"));
+        outbox.set_without_authorship(false);
+        assert_eq!(outbox.shape(&event).data, data);
     }
 }
