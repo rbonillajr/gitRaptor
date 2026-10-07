@@ -94,6 +94,10 @@ fn authored(e: &GitEventView) -> Option<String> {
         .map_or(worktree.clone(), |n| n.to_string_lossy().into_owned());
     out.push_str(" · ");
     out.push_str(&name);
+    // The branch stays, as in the plain line: "· feat-x (main)".
+    if let Some(branch) = &e.details.branch {
+        out.push_str(&format!(" ({})", branch.sanitized()));
+    }
     if let Actor::Agent { kind, .. } = &e.actor
         && !agents.contains(kind)
     {
@@ -358,7 +362,10 @@ mod tests {
         });
         let out = text(std::slice::from_ref(&e));
         assert!(!out.contains('\u{1b}'), "{out:?}");
-        assert!(out.contains("with Claude Code · feat-login"), "{out}");
+        assert!(
+            out.contains("with Claude Code · feat-login (feat-login)"),
+            "{out}"
+        );
         let value = json(&[e]);
         assert_eq!(value[0]["authorship"]["author"]["email"], "ana@example.com");
         assert_eq!(

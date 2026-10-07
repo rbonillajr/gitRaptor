@@ -630,14 +630,14 @@ fn an_agent_commit_without_trailer_shows_the_difference() {
     let en = m.events_text("en_US.UTF-8");
     assert!(
         en.contains(&format!(
-            "commit by Ana Pérez · {name} · run by Claude Code · no trailer"
+            "commit by Ana Pérez · {name} (feat-login) · run by Claude Code · no trailer"
         )),
         "{en}"
     );
     let es = m.events_text("es_ES.UTF-8");
     assert!(
         es.contains(&format!(
-            "commit de Ana Pérez · {name} · ejecutado por Claude Code · sin trailer"
+            "commit de Ana Pérez · {name} (feat-login) · ejecutado por Claude Code · sin trailer"
         )),
         "{es}"
     );
