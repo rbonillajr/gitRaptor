@@ -477,7 +477,6 @@ fn upgrade(
         .ok_or_else(|| InstallError::Failed("no confirmed journal".into()))?;
     let folder = journal
         .folder
-        .clone()
         .ok_or_else(|| InstallError::Failed("journal without the folder".into()))?;
     let constants = constants(ctx, repo_id, common)
         .ok_or_else(|| InstallError::Rejected(vec![InstallBlocker::PlatformUnsupported]))?;
