@@ -174,6 +174,9 @@ pub fn hook(args: &[OsString]) -> ExitCode {
         };
         eprintln!("{}", t("guard.degraded", &[("reason", &t(reason, &[]))]));
     }
+    if outcome.authorship_unavailable {
+        eprintln!("{}", t("guard.notice.authorship-unavailable", &[]));
+    }
     if let Some(decision) = &outcome.decision {
         for line in decision_lines(decision) {
             eprintln!("{line}");

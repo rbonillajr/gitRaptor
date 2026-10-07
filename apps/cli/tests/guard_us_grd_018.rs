@@ -396,3 +396,44 @@ fn a_template_1_install_keeps_working() {
     let out = m.agent("branch -D main");
     assert!(!out.status.success(), "{}", text(&out));
 }
+
+/// D9: `--amend` of the person's commit by the agent needs the trailer; a merge commit by the
+/// agent is evaluated; a fast-forward, a rebase and a cherry-pick are not.
+#[test]
+fn amend_merge_rebase_and_cherry_pick() {
+    let m = Machine::new(None);
+    let out = m.commit_by(false, "feat: by the person\n");
+    assert!(out.status.success(), "{}", text(&out));
+    let out = m.agent("commit -q --amend -m 'feat: amended'");
+    assert!(!out.status.success(), "{}", text(&out));
+    let msg = format!("feat: amended\n\n{CLAUDE}");
+    let out = m.agent(&format!("commit -q --amend -m \"{msg}\""));
+    assert!(out.status.success(), "{}", text(&out));
+
+    // A side branch by the person, then a merge commit by the agent.
+    assert!(m.human("switch -q -c side").status.success());
+    let out = m.commit_by(false, "feat: side\n");
+    assert!(out.status.success(), "{}", text(&out));
+    assert!(m.human("switch -q main").status.success());
+    let out = m.commit_by(false, "feat: main moves\n");
+    assert!(out.status.success(), "{}", text(&out));
+    let out = m.agent("merge -q --no-ff side -m 'merge side'");
+    assert!(!out.status.success(), "{}", text(&out));
+    let _ = m.human("merge --abort");
+
+    // Cherry-pick and rebase by the agent keep the original commits: not evaluated.
+    let side = String::from_utf8(m.human("rev-parse side").stdout).unwrap();
+    let out = m.agent(&format!("cherry-pick {}", side.trim()));
+    assert!(out.status.success(), "{}", text(&out));
+    assert!(m.human("switch -q side").status.success());
+    let out = m.agent("rebase -q main");
+    assert!(out.status.success(), "{}", text(&out));
+    // A fast-forward creates no commit.
+    assert!(m.human("switch -q main").status.success());
+    assert!(m.human("switch -q -c ff").status.success());
+    let out = m.commit_by(false, "feat: ff\n");
+    assert!(out.status.success(), "{}", text(&out));
+    assert!(m.human("switch -q main").status.success());
+    let out = m.agent("merge -q --ff-only ff");
+    assert!(out.status.success(), "{}", text(&out));
+}
