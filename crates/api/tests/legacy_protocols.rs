@@ -86,16 +86,30 @@ fn every_legacy_protocol_keeps_its_methods() {
     }
 }
 
+/// Methods added after the freeze: a client of protocol 9 finds them in the
+/// handshake's `methods` (ADR-GRP-016 § 1). US-MCP-002 and US-MCP-003.
+const AFTER_FREEZE_FULL: &[&str] = &["mcp.enable", "mcp.disable", "mcp.allowlist", "mcp.status"];
+const AFTER_FREEZE_MCP: &[&str] = &["mcp.status"];
+
 /// Protocol 9 adds `connection.accept`, for every profile, and nothing else
-/// that a connection of 8 could miss.
+/// that a connection of 8 could miss; methods added later exist only from 9.
 #[test]
 fn protocol_9_adds_only_the_capability_handshake() {
     let p = CAPABILITIES_PROTOCOL;
     assert_eq!(
         offered(p, false),
-        set(&[BASE_FULL, COCKPIT, GUARD, &["connection.accept"]])
+        set(&[
+            BASE_FULL,
+            COCKPIT,
+            GUARD,
+            &["connection.accept"],
+            AFTER_FREEZE_FULL
+        ])
     );
-    assert_eq!(offered(p, true), set(&[MCP, &["connection.accept"]]));
+    assert_eq!(
+        offered(p, true),
+        set(&[MCP, &["connection.accept"], AFTER_FREEZE_MCP])
+    );
 }
 
 /// The three shapes that came with a protocol number: the requester in
