@@ -39,7 +39,7 @@ pub use backend::{
     TmRepos,
 };
 pub use challenge::{Binding, ChallengeBook, ChallengeError, plan_hash};
-pub use scope::{McpAllowlist, NoMcpRepos, ProtectedBackend, RepoHandle, ScopeError};
+pub use scope::{McpAllowlist, McpRepos, NoMcpRepos, ProtectedBackend, RepoHandle, ScopeError};
 
 /// Default deadline of the prior snapshot.
 pub const DEFAULT_PRIOR_DEADLINE: Duration = Duration::from_secs(10);

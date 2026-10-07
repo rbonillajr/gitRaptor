@@ -247,6 +247,8 @@ impl Daemon {
             detector.forget_repo(repo_id);
         }
         self.tm.remove(repo_id);
+        // The profile cleared the MCP mark with the retirement (US-MCP-002).
+        self.mcp_repos.set(repo_id, false);
         self.modules.repo_retired(repo_id);
         self.marks.remove(repo_id);
         if let Some(pos) = self.stores.iter().position(|(id, _)| id == repo_id) {

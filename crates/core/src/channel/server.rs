@@ -91,6 +91,8 @@ pub(crate) struct ServerCtx {
     pub resources: Arc<crate::resources::ResourceMonitor>,
     /// Protected repos for `guard.evaluate` (US-GRD-001).
     pub guard: Arc<crate::guardrails::GuardRegistry>,
+    /// The MCP allowlist, written by the daemon's loop (US-MCP-002).
+    pub mcp_repos: Arc<crate::timemachine::protected::McpRepos>,
 }
 
 impl ServerCtx {
@@ -153,6 +155,7 @@ pub(crate) struct ServeArgs {
     pub tm_engine: Option<crate::timemachine::continuous::CaptureDeps>,
     pub resources: Arc<crate::resources::ResourceMonitor>,
     pub guard: Arc<crate::guardrails::GuardRegistry>,
+    pub mcp_repos: Arc<crate::timemachine::protected::McpRepos>,
 }
 
 impl Server {
@@ -193,6 +196,7 @@ impl Server {
             divergence: crate::observe::DivergenceCache::default(),
             resources: args.resources,
             guard: args.guard,
+            mcp_repos: args.mcp_repos,
         });
         let listener = bound.listener;
         let socket = socket_id(&transport::socket_path(&ctx.runtime));

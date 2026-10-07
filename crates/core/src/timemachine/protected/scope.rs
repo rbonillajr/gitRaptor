@@ -60,6 +60,41 @@ impl McpAllowlist for NoMcpRepos {
     }
 }
 
+/// The production allowlist (US-MCP-002): the observed repos with the MCP
+/// mark, loaded from the profile when the daemon starts and kept by the
+/// daemon's loop, its only writer. Shared with the channel.
+#[derive(Debug, Default)]
+pub struct McpRepos(std::sync::RwLock<std::collections::BTreeSet<String>>);
+
+impl McpRepos {
+    pub fn new(repo_ids: impl IntoIterator<Item = String>) -> Self {
+        Self(std::sync::RwLock::new(repo_ids.into_iter().collect()))
+    }
+
+    /// Puts or takes a repo; the profile was written first.
+    pub fn set(&self, repo_id: &str, enabled: bool) {
+        let mut ids = self.0.write().unwrap_or_else(|e| e.into_inner());
+        if enabled {
+            ids.insert(repo_id.to_owned());
+        } else {
+            ids.remove(repo_id);
+        }
+    }
+
+    /// The enabled repos, by key.
+    pub fn ids(&self) -> Vec<String> {
+        let ids = self.0.read().unwrap_or_else(|e| e.into_inner());
+        ids.iter().cloned().collect()
+    }
+}
+
+impl McpAllowlist for McpRepos {
+    fn allows(&self, repo_id: &str) -> bool {
+        let ids = self.0.read().unwrap_or_else(|e| e.into_inner());
+        ids.contains(repo_id)
+    }
+}
+
 /// One repo, ready for protected operations.
 #[derive(Clone)]
 pub struct RepoHandle {
@@ -247,6 +282,11 @@ mod tests {
         let cli = scope_for(&b, RequestChannel::Cli, Some(Path::new("/repos/b")), None).unwrap();
         assert_eq!(cli.repo_id, B);
         assert!(!NoMcpRepos.allows(A));
+        let repos = McpRepos::new([A.to_owned()]);
+        assert!(repos.allows(A) && !repos.allows(B));
+        repos.set(B, true);
+        repos.set(A, false);
+        assert_eq!(repos.ids(), [B]);
         assert_eq!(
             require_attributed(mcp, false),
             Err(ScopeError::UnattributedOverMcp)

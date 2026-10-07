@@ -22,6 +22,7 @@ mod env;
 mod guard;
 mod lock;
 mod log;
+mod mcp;
 mod modules;
 mod repos;
 mod serve;
@@ -68,6 +69,7 @@ pub use env::{
 use guard::recover_guardrails;
 pub use lock::{InstanceLock, LOCK_FILE, running_pid, wait_until_released};
 pub use log::{Field, LOG_FILE, Level, LogLimits, Logger};
+pub use mcp::McpMarkError;
 use shutdown::Control;
 pub(crate) use shutdown::{GuardReply, GuardRequest};
 pub(crate) use shutdown::{RegisterRequest, RepoAddRequest, WithdrawRequest};
@@ -307,6 +309,8 @@ pub struct Daemon {
     guard: Arc<GuardRegistry>,
     /// Engine marks and calm per repo, for the Time Machine (US-TMC-004).
     marks: Arc<crate::timemachine::engine::RepoMarks>,
+    /// The MCP allowlist, shared with the channel (US-MCP-002).
+    mcp_repos: Arc<crate::timemachine::protected::McpRepos>,
     /// The feature modules: the Time Machine's continuous capture
     /// (US-TMC-004) and the ones after it (ADR-GRP-016 § 5).
     modules: modules::Modules,
@@ -550,6 +554,10 @@ impl Daemon {
             Some(git) => fields.push(("git", git.version.into())),
             None => fields.push(("git", "not-found".into())),
         }
+        // Fail-closed: a profile that cannot be read enables no repo.
+        let mcp_repos = Arc::new(crate::timemachine::protected::McpRepos::new(
+            profile.mcp_enabled_repos().unwrap_or_default(),
+        ));
         let (handle, control_rx) = ShutdownHandle::new();
         let config_dirs = config.dirs.clone();
         let mut daemon = Self {
@@ -562,6 +570,7 @@ impl Daemon {
             tm,
             guard,
             marks: Arc::default(),
+            mcp_repos,
             modules: modules::Modules::default(),
             report,
             handle,
@@ -686,6 +695,13 @@ impl Daemon {
                 }
                 Ok(Control::RepoRetire { repo_id, reply }) => {
                     let _ = reply.send(self.retire_repo(&repo_id));
+                }
+                Ok(Control::McpMark {
+                    common_dir,
+                    enabled,
+                    reply,
+                }) => {
+                    let _ = reply.send(self.mcp_mark(&common_dir, enabled));
                 }
                 Ok(Control::Observed(batch)) => self.observed(*batch),
                 Ok(Control::Sessions(changes)) => self.sessions_changed(changes),
