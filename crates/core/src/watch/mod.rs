@@ -407,9 +407,10 @@ impl Shared {
         let degraded = !self.watch(std::slice::from_ref(&root));
         let shared = Arc::clone(self);
         let repo_id = repo_id.to_owned();
+        let sent = head.clone();
         let _ = std::thread::Builder::new()
             .name("raptor-watch-worktree".into())
-            .spawn(move || worktree::run(shared, repo_id, initial, git_dir, degraded, rx));
+            .spawn(move || worktree::run(shared, repo_id, initial, git_dir, sent, degraded, rx));
         Some((root, head))
     }
 
