@@ -5,11 +5,11 @@ type: adr
 status: proposed
 date: 2026-10-05
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-07
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
-related: [BRD-GRP-001, ADR-GRP-005, ADR-GRP-006, ADR-GRP-010, ADR-GRP-011, ADR-CKP-001, ADR-TMC-004, ADR-TMC-006, ADR-TMC-007, TS-GRP-005, INF-GRP-002, US-GRP-017, US-GRP-018, US-GRP-019, US-TMC-022]
+related: [BRD-GRP-001, ADR-GRP-005, ADR-GRP-006, ADR-GRP-010, ADR-GRP-011, ADR-GRP-016, ADR-CKP-001, ADR-TMC-004, ADR-TMC-006, ADR-TMC-007, TS-GRP-005, TS-GRP-006, INF-GRP-002, US-GRP-017, US-GRP-018, US-GRP-019, US-TMC-022]
 tags: [recursos, huella, cpu, memoria, disco, prioridad, qos, nice, ionice, ecoqos, bateria, ahorro-energia, daemon, res-01, res-09, m1]
 ---
 
@@ -133,3 +133,15 @@ Linux y Windows: **Pendiente: etapa de validación multiplataforma**. Este ADR s
 - **Unidad de RES-02**: "150 MB" en § 3, en HUELLA y en RES-02 significa **150 MiB** (157 286 400 bytes), la cifra que ya aplica el gate de INF-GRP-002 (`FOOTPRINT_LIMITS`) y la vista (`gitraptor_api::resources::TARGETS`). Lo mismo para los 250 MiB de RES-05. La fila de [non-functional.md](../non-functional.md) se alinea cuando INF-GRP-002 (PR #76), que edita esas filas, esté en `main`.
 - **Mismas definiciones, distinto instante**: la vista mide la CPU con la misma fórmula que el gate (tiempo de CPU del proceso entre tiempo de reloj, en % de un núcleo), pero sobre la ventana de 10 min de RES-01 y no sobre 30 s; el RSS y los descriptores son **instantáneos**, y el gate toma el pico en reposo. En macOS el gate cuenta descriptores con `lsof`, que incluye `cwd`, `txt` y las bibliotecas mapeadas; la vista cuenta solo descriptores numéricos (`/dev/fd`). Pendiente en INF-GRP-002: contar solo las filas con descriptor numérico para que gate y vista coincidan.
 - **Windows**: los descriptores son handles del proceso y no tienen objetivo hasta tener línea base (se muestran sin evaluar).
+
+## Enmienda (2026-10-07, observación por niveles)
+
+Referencia cruzada de la [Enmienda (2026-10-07) de ADR-GRP-010](./ADR-GRP-010-observacion-cambios-worktrees.md#enmienda-2026-10-07-observación-por-niveles), que está propuesta y pendiente de aceptar por Rene Bonilla. **Decisión del orquestador (2026-10-07), validada por el Arquitecto.** No cambia las clases, el modo de ahorro ni los objetivos de RES-01 a RES-10: los extiende a muchos repos observados. El `status` sigue en `proposed`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| **Clases**: el barrido de dormidos, su reconciliación lenta y el descubrimiento en raíces corren en `utility`, como la reconciliación periódica. Despertar un repo (abrir el almacén y reconciliarlo) va en `default`, porque lo espera una sesión, un cliente o una edición que la Time Machine tiene que capturar | § 1 | ADR-GRP-010, N1 a N6 |
+| **Por qué hacen falta los niveles**: con 100 repos activos, solo los almacenes abiertos (3 descriptores y hasta 2 MiB de caché cada uno) superarían RES-02 y RES-04, y el sondeo y la reconciliación periódica costarían alrededor del 0,6 % de un núcleo en reposo. Un repo dormido conserva sus vigilancias como centinela (Q49 del PO), pero no ese coste | § 3 | ADR-GRP-010, Discrepancia con la propuesta B |
+| **Modo de ahorro**: barrido de dormidos cada 300 s en lugar de 120, y reconciliación lenta con un intervalo mínimo de 180 min en lugar de 60 (⚠️ **ASSUMPTION**) | § 2 | ADR-GRP-010, N2 y N3 |
+| **Gate**: RES-11 (100 repos observados, 5 activos) con los mismos objetivos que RES-01, RES-02 y RES-04, y RES-12 (retraso de un dormido y tiempo de despertar), en el escenario `tiered-scale` de INF-GRP-002 | § 3 | [non-functional.md](../non-functional.md) § Consumo de recursos |
+| **Visibilidad**: `engine.resources` añade el bloque opcional `observation` (repos y worktrees por nivel, vigilancias por nivel y CPU de las tareas de los dormidos y del descubrimiento), detrás de la capacidad `observation.tiers` (ADR-GRP-016). La dueña de la vista sigue siendo US-GRP-017, y el PO la enmienda | § 4 | ADR-GRP-010, N8 |

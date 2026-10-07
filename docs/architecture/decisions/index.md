@@ -2,7 +2,7 @@
 mode: draft
 status: accepted
 generated: 2026-10-03
-updated: 2026-10-06
+updated: 2026-10-07
 generator: architect
 domain: GRP
 feature: motor-local
@@ -42,6 +42,8 @@ El formato "JSON estricto con `$schema`" no es una PQ: es la propuesta base del 
 >
 > **Cockpit (2026-10-04)**: los ADR-CKP-001 a 003 de la feature `cockpit` están **aceptados** (`status: accepted`, 2026-10-04). Decisión del orquestador (2026-10-04), validada por Arquitecto, PO y security-expert. ADR-CKP-001 se acepta con el mecanismo condicionado a SPIKE-CKP-001, que lo enmendará con sus resultados (mismo patrón que ADR-GRD-001 y 002 con SPIKE-GRD-001). Sus enmiendas a otros ADR llevan la marca "Enmienda (2026-10-04, Cockpit)" en el ADR de destino, y su estado está en la tabla de enmiendas de cada ADR-CKP.
 >
+> **Observación por niveles (2026-10-07)**: las Enmiendas (2026-10-07, observación por niveles) de ADR-GRP-010, ADR-GRP-011 y ADR-GRP-013, y la referencia cruzada de ADR-GRP-015, están **propuestas, pendientes de aceptar por Rene Bonilla**. Los ADR siguen en `accepted` (ADR-GRP-015, en `proposed`), pero las enmiendas no rigen hasta su aceptación. Contenido: repos activos, despertando y dormidos (centinela y redes de seguridad), descubrimiento en raíces (BR-AUTH-003) y RES-11, RES-12 y SEC-15. Enabler: TS-GRP-006. Decisión del orquestador (2026-10-07), validada por el Arquitecto.
+>
 > **Restricciones activas** (no hay `architecture-constitution.md` en la cascada): ADR-GRP-001 (Rust; gitoxide para leer y Git CLI para escribir; ratatui, clap, rmcp) y ADR-GRP-002 (Nx package-based; `crates/{core,policy,git,api,theme}`, `apps/{cli,mcp}`). ⚠️ **ASSUMPTION**: se tratan como constitución mientras no exista una formal (`/aadd-architect --init-constitution`).
 
 ## Outline
@@ -57,7 +59,7 @@ El formato "JSON estricto con `$schema`" no es una PQ: es la propuesta base del 
 | [ADR-GRP-007](./ADR-GRP-007-configuracion-tres-niveles-formato.md) | Configuración en tres niveles: formato y precedencia | JSON estricto con `$schema` (propuesta base del BRD v0.4), nombres de archivos y sección `engine` (PQ-4), niveles admitidos por clave, JSON o schema inválido ignora el nivel entero (PQ-8); equipo leído de lo commiteado con suelo en la rama principal y rama base confirmada (decisión 1 de Guardrails, sustituye a PQ-9); `permissions`/`policies` y estado por fuente (enmienda 2026-10-04) | accepted |
 | [ADR-GRP-008](./ADR-GRP-008-configuracion-local-no-versionada.md) | Configuración local personal sin versionar | `settings.local.json` en el perfil, indexado por repo (PQ-3); P10 desaparece | accepted |
 | [ADR-GRP-009](./ADR-GRP-009-frontera-solo-lectura-git.md) | Frontera de solo lectura e invocación del Git del sistema | Frontera estricta: cero escrituras (ni locks transitorios), cero programas del usuario, gitoxide + allowlist del CLI; Git ≥ 2.38 sin depender del PATH | accepted |
-| [ADR-GRP-010](./ADR-GRP-010-observacion-cambios-worktrees.md) | Observación de cambios en worktrees | Watcher nativo (`notify`), debounce fijo de 75 ms, recomputo incremental, sondeo de respaldo, modo degradado y reconciliación; enmienda 2026-10-04 de SPIKE-GRP-002 (validado en macOS; Linux y Windows pendientes) | accepted |
+| [ADR-GRP-010](./ADR-GRP-010-observacion-cambios-worktrees.md) | Observación de cambios en worktrees | Watcher nativo (`notify`), debounce fijo de 75 ms, recomputo incremental, sondeo de respaldo, modo degradado y reconciliación; enmienda 2026-10-04 de SPIKE-GRP-002 (validado en macOS; Linux y Windows pendientes); enmienda 2026-10-07 de observación por niveles y descubrimiento (propuesta, pendiente de Rene) | accepted |
 | [ADR-GRP-011](./ADR-GRP-011-presupuesto-frescura.md) | Reparto del presupuesto de frescura | Motor ≤ 300 ms, Cockpit ≤ 100 ms y 100 ms de margen, p95 medido con reloj monótono por etapa; enmienda 2026-10-04 de SPIKE-GRP-002 (p95 confirmado en macOS; Linux y Windows pendientes) | accepted |
 | [ADR-GRP-012](./ADR-GRP-012-deteccion-sesiones-claude-code.md) | Detección de sesiones de Claude Code | S1 (proceso y cwd) crea la sesión; atribuyen S2b, S3, S4 o el registro explícito de un "otro agente" si es la única sesión presente (confirmar una sesión detectada no activa esa evidencia); la co-ubicación de una sesión detectada nunca basta; transcripts limitados a metadatos (PQ-2); enmienda 2026-10-06 de autoría de commits: separa quién ejecutó de la autoría declarada (autor, committer, `Co-Authored-By`), la pista `inferred` se valida contra el trailer y no existe con `human-author` (pendiente de BR-26 / US-GRD-018 / US-GRD-019) | accepted |
 | [ADR-GRP-013](./ADR-GRP-013-modelo-eventos-atribucion.md) | Modelo persistido de eventos, sesiones y atribución | Los eventos apuntan a una sesión; registros de atribución append-only (incluido el retiro de registro, que termina la sesión); huecos como intervalos; sin variante "humano"; enmienda 2026-10-06: autoría declarada del commit como dato del evento, aparte del actor | accepted |
@@ -194,7 +196,14 @@ Los ADR-CKP-001 a 003 (aceptados el 2026-10-04) son de la feature `cockpit` (F-0
 - **Decisión**: un watcher `notify` compartido (FSEvents, inotify, ReadDirectoryChangesW) sobre working trees y las rutas de `.git` que importan (no `objects/`). Debounce de **ventana fija de 75 ms** por worktree. Recomputo incremental con caché de stat en memoria. Publicación en dos fases. Sondeo de respaldo (30 s) y modo degradado por worktree (2 s), configurables en perfil y local. Reconciliación completa al arrancar, al volver de suspensión, ante desbordamiento y al volver a añadir; lo encontrado queda "sin atribuir" con marca de hueco. Nunca cambia límites del sistema.
 - **Enmienda 2026-10-04 (SPIKE-GRP-002)**: debounce con duración efectiva de 75 ms (holgura del temporizador descontada); reconciliación tras cada recreación del stream de FSEvents, con el stream nuevo ya arrancado, y escenario de recreación como gate de CI al subir `notify` (un watcher por worktree en macOS queda como candidata a medir); el sondeo de respaldo solo cubre metadatos de Git, y una reconciliación periódica cada 5 min (⚠️ **ASSUMPTION**) recupera los cambios del working tree perdidos sin marca; ahead/behind en la segunda fase, en proceso con `gix` (⚠️ **ASSUMPTION** sin medir); cachés de `gix` por repo.
 - **Decisión de producto**: ninguna; recomendación aceptada por Rene. La valida SPIKE-GRP-002: validado en macOS; Linux y Windows pendientes.
-- **Impacta**: US-GRP-002, 003, 004, 005, 006, 014. BR-CONS-005, BR-EDGE-001, BR-EDGE-002, BR-EDGE-005. NFR-04, NFR-05.
+- **Enmienda 2026-10-07 (observación por niveles; propuesta, pendiente de aceptar por Rene Bonilla)**:
+  - **Niveles por repo**: activo, despertando y dormido.
+  - **Un repo dormido conserva sus vigilancias como centinela** (condición Q49 del PO: dormir no reduce la protección) y el primer cambio lo despierta. Cierra su almacén, suelta su estado en memoria y cambia el sondeo de 30 s y la reconciliación de 5 min por un barrido de metadatos (120 s, sin procesos `git`) y una reconciliación lenta con presupuesto (60 min).
+  - **Despertar**: en ≤ 2 s se reconcilia sin hueco.
+  - **Huecos**: lo que encuentra una red de seguridad sin que el centinela lo señalara es un hueco `dormant`.
+  - **Descubrimiento en el primer nivel de raíces** guardadas en el perfil y gestionadas con comandos reservados, sin nada por MCP.
+  - **Corrige la propuesta B** ("dormidos sin watchers") y el orden "reconciliar y luego vigilar".
+- **Impacta**: US-GRP-002, 003, 004, 005, 006, 014. BR-CONS-005, BR-EDGE-001, BR-EDGE-002, BR-EDGE-005. NFR-04, NFR-05. Enmienda 2026-10-07: TS-GRP-006, US-GRP-017, US-GRP-020, US-GRP-022, US-CKP-025, BR-AUTH-003, RES-11, RES-12 y SEC-15.
 
 ### ADR-GRP-011 — Reparto del presupuesto de frescura (NFR-04)
 
@@ -202,6 +211,7 @@ Los ADR-CKP-001 a 003 (aceptados el 2026-10-04) son de la feature `cockpit` (F-0
 - **Decisión**: detección ≤ 50 ms, debounce 75 ms, recomputo y persistencia ≤ 150 ms, publicación ≤ 25 ms → **motor ≤ 300 ms**; Cockpit ≤ 100 ms; margen 100 ms que nadie reclama. Tiempos por etapa en cada evento con reloj monótono común. Gate de CI sobre el p95 del total (INF-GRP-002) y aviso por etapa.
 - **Enmienda 2026-10-04 (SPIKE-GRP-002)**: el debounce se presupuesta como ventana efectiva de 75 ms; el banco reporta además p99 y máximo; `t0` es el fin del comando en los escenarios de Git; la reconciliación periódica no cuenta para NFR-04; los escenarios de recreación del stream y de reconciliación periódica llevan gate de corrección.
 - **Decisión de producto**: ninguna. "< 500 ms" es p95 en las máquinas de referencia: **confirmado en macOS** por SPIKE-GRP-002; ⚠️ **ASSUMPTION** pendiente en Linux y Windows.
+- **Enmienda 2026-10-07 (observación por niveles; propuesta, pendiente de aceptar por Rene Bonilla)**: NFR-04 y NFR-05 rigen solo en los repos activos. El despertar es una reconciliación, fuera de NFR-04, con objetivo propio (RES-12). El escenario `tiered-scale` comprueba que el barrido de los dormidos no empeora el p95 de los activos.
 - **Impacta**: US-GRP-002. NFR-04, NFR-05. Feature F-001-02.
 
 ### ADR-GRP-012 — Detección de sesiones de Claude Code

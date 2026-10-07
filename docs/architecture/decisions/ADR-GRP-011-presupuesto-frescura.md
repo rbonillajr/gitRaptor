@@ -6,17 +6,17 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-06
+updated: 2026-10-07
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
-related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-006, ADR-GRP-009, ADR-GRP-010, ADR-GRP-013, ADR-CKP-001, ADR-CKP-003, SPIKE-CKP-001, INF-GRP-002, SPIKE-GRP-002, TS-GRP-004, CTX-GRP-001, US-GRP-002, TD-GRP-003]
-tags: [rendimiento, latencia, presupuesto, p95, nfr-04, timestamps, instrumentacion, ci, dogfooding, cockpit]
+related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-006, ADR-GRP-009, ADR-GRP-010, ADR-GRP-013, ADR-GRP-015, ADR-CKP-001, ADR-CKP-003, SPIKE-CKP-001, INF-GRP-002, SPIKE-GRP-002, TS-GRP-004, TS-GRP-006, CTX-GRP-001, US-GRP-002, TD-GRP-003]
+tags: [rendimiento, latencia, presupuesto, p95, nfr-04, timestamps, instrumentacion, ci, dogfooding, cockpit, niveles, dormido, res-11, res-12]
 ---
 
 # ADR-GRP-011 — Reparto del presupuesto de frescura (NFR-04)
 
-> **Estado**: aceptado por Rene Bonilla el 2026-10-04.
+> **Estado**: aceptado por Rene Bonilla el 2026-10-04. La [Enmienda (2026-10-07, observación por niveles)](#enmienda-2026-10-07-observación-por-niveles) está **propuesta, pendiente de aceptar por Rene Bonilla**, junto con la de ADR-GRP-010.
 
 ## Contexto
 
@@ -222,3 +222,19 @@ Aplicada desde la [Dev Spec de US-CKP-001](../../requirements/features/cockpit/d
 | **Etapa del Cockpit** | `t_client_recv` → `t_render` ≤ 100 ms p95 (ADR-GRP-011 E2). Falla en los dos modos: es trabajo de CPU sobre `TestBackend` y no depende de la holgura del runner |
 | **Regresión en `ci`** | Techo por runner con la confirmación 2 de 3. ⚠️ **Provisional** hasta calibrarlo con tres corridas por runner: los techos de `modify` más 100 ms (`TUI_MODIFY` en `REGRESSION_CEILINGS`) |
 | **Dónde corre** | Igual que el banco: Linux en cada PR y macOS en `main`, en el nightly y bajo demanda. El workflow no cambia |
+
+## Enmienda (2026-10-07, observación por niveles)
+
+> **Estado de la enmienda**: **propuesta, pendiente de aceptar por Rene Bonilla**, junto con la [de ADR-GRP-010](./ADR-GRP-010-observacion-cambios-worktrees.md#enmienda-2026-10-07-observación-por-niveles). Mientras no la acepte, rige lo anterior.
+
+Origen: la propuesta B de Rene Bonilla (2026-10-06), para más de 100 repos clonados. **Decisión del orquestador (2026-10-07), validada por el Arquitecto.** Las cifras del reparto (§ 2) no cambian: cambia **a qué repos se aplican**.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| **NFR-04 rige solo en los repos activos.** Un repo dormido queda fuera, igual que el modo degradado: su frescura es la de RES-12 y se presenta como tal ("dormido, comprobado hace X") | § 2 | ADR-GRP-010, N1 |
+| **El despertar es una reconciliación** y no cuenta para NFR-04: el repo se publica como "reconciliando" hasta que termina. Tiene su propio objetivo, RES-12 (≤ 2 s p95, ⚠️ **ASSUMPTION**). El primer cambio **después** de que el repo esté activo sí cuenta | § 2 | ADR-GRP-010, N4 |
+| **Los escenarios de NFR-04 del banco no cambian**: los 10 worktrees del repo de 100K commits son activos durante toda la corrida (el banco no espera el umbral). Lo nuevo es el escenario `tiered-scale`, que mide recursos y el retraso de un dormido, no NFR-04 | § 4 | Dev Spec de INF-GRP-002, Enmienda 2026-10-07 |
+| **NFR-05 se lee por niveles**: "10 o más worktrees **activos**" es la condición de escala de la frescura. Los observados pueden ser muchos más (100 en el banco, RES-11) sin afectar al p95 de los activos | § 1 | RES-11 |
+| **Comprobación cruzada**: con 95 repos dormidos y el barrido en marcha, el p95 del motor en los activos no empeora. Se mide en `tiered-scale` (un archivo modificado en un repo activo mientras pasa un barrido) y se reporta como aviso hasta tener línea base. Después lleva un techo de regresión calibrado, como el resto del banco (D13) | § 4 | Revisión del Arquitecto |
+
+Linux y Windows: **Pendiente: etapa de validación multiplataforma**.

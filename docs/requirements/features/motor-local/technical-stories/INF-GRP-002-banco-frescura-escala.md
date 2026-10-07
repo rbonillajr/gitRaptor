@@ -8,10 +8,10 @@ domain: GRP
 priority: high
 complexity: medium
 created: 2026-10-03
-updated: 2026-10-05
+updated: 2026-10-07
 related:
-  adrs: [ADR-GRP-011, ADR-GRP-010, ADR-GRP-005, ADR-GRP-006, ADR-GRP-013]
-  stories: [US-GRP-001, US-GRP-002, US-GRP-012, TS-GRP-004, TD-GRP-002]
+  adrs: [ADR-GRP-011, ADR-GRP-010, ADR-GRP-005, ADR-GRP-006, ADR-GRP-013, ADR-GRP-015]
+  stories: [US-GRP-001, US-GRP-002, US-GRP-012, US-GRP-017, TS-GRP-004, TD-GRP-002, TS-GRP-006]
   specs: [DS-INF-GRP-002]
 ado:
   id: null
@@ -48,6 +48,7 @@ tags: [motor-local, ci, rendimiento, latencia, p95, escala, nfr-04, nfr-05]
   - Ahead/behind con la primitiva en proceso de `crates/git` (`gix`) frente a `git rev-list --count --left-right`, en una rama a 50K commits de la base, con y sin `commit-graph`.
   - **Recreación del stream** (alta y baja de worktrees con escrituras concurrentes en los demás) y **pérdida silenciosa** recuperada por la reconciliación periódica dentro de su intervalo: gate de corrección (100% recuperado y marcado como hueco), sin gate de latencia. En macOS bloquea además cualquier PR que suba `notify`.
   - Worktrees de más de 5.000 archivos (coste del recomputo y del modo degradado) y RSS aislado del daemon.
+- **Incorporar** el escenario de escala por niveles (Enmienda 2026-10-07 de la Dev Spec; decisión del orquestador, validada por el Arquitecto): 100 repos pequeños observados, 5 activos y 95 dormidos, con los techos de consumo en reposo de 10 worktrees, el tiempo de despertar y el retraso de un dormido (RES-11 y RES-12). Se implementa con TS-GRP-006.
 - **Fuera de alcance**: el histograma de dogfooding dentro del daemon (Dev Spec de US-GRP-002); el modo degradado y la reconciliación, que no cuentan para NFR-04; la medición del Cockpit hasta que exista F-001-02.
 
 ### Plan de Verificación
@@ -58,6 +59,7 @@ tags: [motor-local, ci, rendimiento, latencia, p95, escala, nfr-04, nfr-05]
 - **Informe**: cada ejecución publica p50, p95, p99 y máximo por etapa, escenario y SO.
 - **Escala**: durante la ráfaga, el p95 de los otros nueve worktrees sigue dentro de presupuesto.
 - **Recreación del stream**: con un escritor activo en los demás worktrees, 40 altas y bajas no dejan ningún cambio sin publicar tras la reconciliación; un evento descartado sin marca se recupera en la siguiente reconciliación periódica.
+- **Escala por niveles** (`tiered-scale`): con 100 repos observados, la CPU, el RSS y los descriptores en reposo siguen bajo los techos de 10 worktrees, los almacenes de los dormidos están cerrados y un commit en un dormido se publica dentro del intervalo del barrido más 2 s. Las cifras marginales y el despertar van como aviso hasta tener línea base.
 - **Coherencia**: los nombres de las etapas del informe coinciden con los del bloque de tiempos del contrato y con los nombres canónicos de ADR-GRP-011 § 2: `t0`, `t_recv`, `t_flush`, `t_computed`, `t_persisted`, `t_published`, `t_client_recv` y `t_render`.
 
 #### Verificación Manual / Sandbox
