@@ -934,6 +934,8 @@ mod criteria {
             "hooks/pre-push",
             "hooks/pre-rebase",
             "hooks/reference-transaction",
+            "hooks/pre-commit",
+            "hooks/commit-msg",
         ] {
             std::fs::remove_file(folder.join(f)).unwrap();
         }
