@@ -67,7 +67,10 @@ mod tests {
 
     #[test]
     fn reads_argv_and_never_the_environment() {
-        let a = area(3, b"/usr/bin/git\0\0\0\0git\0commit\0--no-verify\0SECRET=1\0");
+        let a = area(
+            3,
+            b"/usr/bin/git\0\0\0\0git\0commit\0--no-verify\0SECRET=1\0",
+        );
         let args = parse_procargs2(&a).unwrap();
         assert_eq!(args, ["git", "commit", "--no-verify"]);
     }
