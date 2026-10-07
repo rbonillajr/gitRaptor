@@ -526,8 +526,18 @@ fn decode(bytes: &[u8]) -> Result<ServerMessage, ClientError> {
 
 /// Connects to the daemon, starting it if needed (ADR-GRP-005 § 3) and
 /// replacing an older one (SEC-13).
-#[cfg(unix)]
 pub fn ensure_daemon(options: &ClientOptions) -> Result<Client, ClientError> {
+    ensure_daemon_with(options, &mut || {})
+}
+
+/// [`ensure_daemon`], calling `on_launch` right before a daemon is started,
+/// so a client can say "starting the engine" apart from "connecting"
+/// (ADR-CKP-003 § 4).
+#[cfg(unix)]
+pub fn ensure_daemon_with(
+    options: &ClientOptions,
+    on_launch: &mut dyn FnMut(),
+) -> Result<Client, ClientError> {
     match Client::connect(&options.dirs, options.kind, options.protocol) {
         Ok(client)
             if client
@@ -548,6 +558,7 @@ pub fn ensure_daemon(options: &ClientOptions) -> Result<Client, ClientError> {
         Err(ClientError::Incompatible(data)) => replace(options, &data)?,
         Err(err) => return Err(err),
     }
+    on_launch();
     launch(options)?;
     let deadline = Instant::now() + options.start_timeout;
     loop {
@@ -606,7 +617,10 @@ impl Client {
 }
 
 #[cfg(not(unix))]
-pub fn ensure_daemon(options: &ClientOptions) -> Result<Client, ClientError> {
+pub fn ensure_daemon_with(
+    options: &ClientOptions,
+    _on_launch: &mut dyn FnMut(),
+) -> Result<Client, ClientError> {
     Client::connect(&options.dirs, options.kind, options.protocol)
 }
 
