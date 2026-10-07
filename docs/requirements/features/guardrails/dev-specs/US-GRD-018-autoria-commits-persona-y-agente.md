@@ -354,3 +354,27 @@ Implementado en la rama `feat/US-GRD-018-no-verify-second-line`. Cierra el bloqu
 
 **Sin cubrir**: un test de que un daemon con `guard.authorship` pero sin `guard.authorship.second-line` no recibe la etapa (`legacy_protocols.rs`; hoy lo garantiza el cliente comprobando las dos capacidades en `hook.rs::second_line`). Verificado solo en macOS; Linux lo cubre el CI de ubuntu (la suite e2e es `cfg(unix)`); Windows no tiene canal (Pendiente: etapa de validación multiplataforma).
 
+
+## 12. Estado de PR-B (2026-10-07)
+
+Implementado en la rama `feat/US-GRD-019-who-ran-and-whose-name` (D10, § 6.2). La TUI y el Cockpit quedan fuera (historia del Cockpit aparte, § 8).
+
+| Pieza | Dónde |
+|---|---|
+| Contrato: `GitEventView.authorship`, `DeclaredAuthorship`, `GitIdentity`, `CoAuthor`, `InferredAgent.trailer`, `TrailerCheck`, capacidad `events.authorship` | `crates/api/src/messages.rs`, `crates/api/src/methods/events.rs` |
+| Lectura del commit (autor, committer, mensaje acotado a 64 KiB) con el lector aislado de Guardrails | `crates/git/src/reader.rs` (`commit_identity`), `crates/core/src/daemon/authorship.rs` |
+| Columna `events.authorship` (migración append-only) | `crates/core/src/profile/{schema,store}.rs` |
+| Pista `inferred` contrastada con el trailer al guardar; sin pista con `human-author` | `crates/core/src/daemon/{authorship,sessions,repos}.rs` |
+| Sin la capacidad (y siempre para `raptor-mcp`): sin `authorship` ni `trailer` en `events.history` y en el stream | `crates/core/src/channel/{conn,bus}.rs`, `crates/core/src/client.rs` |
+| `raptor events` (texto en/es y `--json`) | `apps/cli/src/events.rs`, `apps/cli/i18n/{en,es}/events.txt` |
+| Suite | `apps/cli/tests/events_us_grd_019.rs` |
+
+**Decisiones del orquestador (2026-10-07)**, dentro de lo que la DS ya fija (sin consulta nueva al Arquitecto ni al PO, regla de validación proporcional); plan aprobado por el coordinador con cuatro ajustes, incorporados:
+
+1. La autoría declarada se guarda en una columna nueva `events.authorship` (JSON de `DeclaredAuthorship`), solo para `commit` y `merge`. Del mensaje solo se guardan los co-autores (`Co-Authored-By`); el texto, el asunto y los demás trailers nunca se guardan ni viajan (ajuste 1 del coordinador).
+2. `InferredAgent.trailer` es opcional en el cable (`Option<TrailerCheck>`): `InferredAgent` es `deny_unknown_fields` y una conexión sin `events.authorship` debe recibir la forma del protocolo 9. Desviación menor de la firma del § 6.2 (`trailer: TrailerCheck`). Un `commit`/`merge` guardado antes del contraste se lee como `unconfirmed`; los demás eventos no llevan `trailer`.
+3. La pista se contrasta una sola vez, al guardar el evento: trailer del mismo agente → `confirmed`; ninguno reconocido → `unconfirmed`; de otro agente → la pista no se guarda; política efectiva `human-author` (con `deny` o `warn`) → la pista no se guarda. Cambiar la política después no reescribe eventos.
+4. `raptor-mcp` no pide `events.authorship` (el cliente la filtra) y el daemon no se la aplica aunque la pida (perfil MCP). Hoy el stream del MCP no lleva `git.event` y `events.history` no se le ofrece; la forma sin capacidad se prueba en `channel::bus` (ajuste 2).
+5. Texto de `raptor events`: "commit de {autor}[ con {agentes}] · {worktree}[ · ejecutado por {agente}[ · sin trailer]]", con {worktree} = nombre de la carpeta del worktree; la pista añade "(confirmado por el trailer)" o "(no confirmado por el trailer)". Claves nuevas: `events.commit_by`, `events.merge_by`, `events.commit_with`, `events.run_by`, `events.no_trailer`, `events.inferred_confirmed`, `events.inferred_unconfirmed`.
+
+**Criterios del § 7 cubiertos por PR-B**: `agent_commit_shows_both` (también: ni el almacén ni `--json` llevan el texto del mensaje), `an_unattributed_commit_does_not_repeat_the_author`, `the_inferred_hint_is_checked_against_the_trailer` (`confirmed` y `unconfirmed` de extremo a extremo; `contradicted` en `daemon::authorship::tests`, porque la tabla de identidades tiene hoy un solo agente), `human_author_records_no_hint`, `an_agent_commit_without_trailer_shows_the_difference` (mide la presentación; la política `flexible` de extremo a extremo depende de US-GRD-014, § 8), `an_mcp_connection_gets_no_authorship`, `channel::bus::tests::git_events_carry_authorship_only_with_the_capability`, `events::tests::an_older_event_reads_as_before`. **Sin cubrir**: la fila de ADR-GRP-013 "sobrevive a un reinicio; una corrección cambia el actor y no la autoría; prueba de propiedades con autores y trailers aleatorios" (la autoría vive en la fila append-only y no depende del actor, pero no hay prueba dedicada). Verificado solo en macOS (la suite usa `script` y `raptor-fake-agent` de macOS); Linux y Windows: pendiente de la etapa de validación multiplataforma.
