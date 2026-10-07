@@ -204,7 +204,7 @@ Son dos preguntas distintas, con fuentes distintas, y el motor no las mezcla:
 
 ### 2. La pista `inferred` frente al trailer
 
-> ⚠️ **Pendiente de la política de autoría (BR-26 / US-GRD-018), no ratificada.** Mientras tanto la pista sigue en `main` como la dejó la Enmienda (2026-10-06, carrera S3): solo en `raptor events`, sin efecto en la Time Machine ni en Guardrails y sin contar como atribución. Lo que sigue es el comportamiento objetivo, que entra con US-GRD-019.
+> ✅ **Decisión de Rene (2026-10-07): pista `inferred` ratificada.** La política de autoría ya está en `main` (US-GRD-018, PR #137 y #141; US-GRD-019, PR #144): la pista se contrasta con el trailer al guardar el evento (`confirmed` / `unconfirmed`), se descarta si un trailer nombra a otro agente y no se muestra con `human-author`. Sigue sin contar como atribución: no tiene efecto en la Time Machine ni en Guardrails.
 
 Al observar el evento, si su commit nuevo se puede leer, el motor compara la pista con los trailers de agente del commit:
 
