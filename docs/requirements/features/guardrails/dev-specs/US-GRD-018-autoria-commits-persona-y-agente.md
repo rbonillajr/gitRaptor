@@ -91,7 +91,7 @@ pub struct AgentTrailer {
 
 ## 4. Esquema de la política en la configuración del repo
 
-Archivo de equipo `.gitraptor/config.json` (ADR-GRP-007; el perfil y el local usan la misma forma):
+Archivo de equipo `.gitraptor/settings.json` (ADR-GRP-007; el perfil y el local usan la misma forma):
 
 ```json
 {
