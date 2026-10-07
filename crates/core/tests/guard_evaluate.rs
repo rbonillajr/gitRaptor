@@ -146,3 +146,133 @@ fn repo_intact_evaluation_never_waits_and_fails_closed() {
     handle.request(StopCause::Signal("TERM"));
     join.join().unwrap();
 }
+
+/// US-GRD-018 on the daemon's evaluation, without a channel: a confirmed floor relaxes to
+/// `flexible`, an unconfirmed one does not (D2); without `guard.authorship` no authorship rule
+/// applies and no notice travels, and the old wire shapes are unchanged (D11).
+mod commit_authorship {
+    use super::*;
+    use gitraptor_api::AgentKind;
+    use gitraptor_api::guard::{AuthorshipFacts, CommitStage};
+    use gitraptor_core::guardrails::evaluate::{Caller, serve_as};
+    use gitraptor_core::guardrails::{GuardEntry, GuardRegistry};
+    use gitraptor_policy::team::{Confirmed, ConfirmedFloor};
+
+    fn repo_with(settings: &str) -> (tempfile::TempDir, std::path::PathBuf, String) {
+        let repo = tempfile::tempdir().unwrap();
+        git(repo.path(), &["init", "-q", "-b", "main"]);
+        std::fs::create_dir_all(repo.path().join(".gitraptor")).unwrap();
+        std::fs::write(repo.path().join(".gitraptor/settings.json"), settings).unwrap();
+        git(repo.path(), &["add", "."]);
+        git(repo.path(), &["commit", "-q", "-m", "a"]);
+        let blob = std::process::Command::new("git")
+            .args(["rev-parse", "main:.gitraptor/settings.json"])
+            .current_dir(repo.path())
+            .output()
+            .unwrap();
+        let blob = String::from_utf8(blob.stdout).unwrap().trim().to_owned();
+        let common = repo.path().join(".git").canonicalize().unwrap();
+        (repo, common, blob)
+    }
+
+    fn commit_params(
+        common: &std::path::Path,
+        coauthors: Vec<Option<AgentKind>>,
+    ) -> EvaluateParams {
+        EvaluateParams {
+            repo_id: "0000-ffff".into(),
+            common_dir: common.to_string_lossy().into_owned(),
+            hook: Hook::CommitMsg,
+            operation: Operation::Commit {
+                stage: CommitStage::CommitMsg,
+            },
+            authorship: Some(AuthorshipFacts {
+                coauthors,
+                trailer_table: 1,
+                unreadable: false,
+            }),
+        }
+    }
+
+    fn registry(common: &std::path::Path, confirmed: Option<Confirmed>) -> GuardRegistry {
+        let r = GuardRegistry::default();
+        r.set(
+            "0000-ffff",
+            GuardEntry {
+                common_dir: common.to_string_lossy().into_owned(),
+                bases: vec!["main".into()],
+                confirmed,
+            },
+        );
+        r
+    }
+
+    fn agent(cwd: &std::path::Path) -> Caller {
+        Caller {
+            actor: Some(AgentKind::ClaudeCode),
+            cwd: Some(cwd.to_path_buf()),
+            authorship: true,
+        }
+    }
+
+    #[test]
+    fn a_confirmed_floor_relaxes_to_flexible() {
+        let (repo, common, blob) =
+            repo_with(r#"{"policies":{"commitAuthorship":{"mode":"flexible"}}}"#);
+        let confirmed = Confirmed {
+            base_branch: gitraptor_git::RefName::new("main").unwrap(),
+            floor: ConfirmedFloor::Blob(blob),
+        };
+        let d = serve_as(
+            &registry(&common, Some(confirmed)),
+            &commit_params(&common, vec![]),
+            &agent(repo.path()),
+        );
+        assert_eq!(d.applied_effect, Effect::Allow, "{d:?}");
+
+        // Unconfirmed: `agents-commit` rules.
+        let d = serve_as(
+            &registry(&common, None),
+            &commit_params(&common, vec![]),
+            &agent(repo.path()),
+        );
+        assert_eq!(d.applied_effect, Effect::Deny);
+        assert_eq!(d.reasons[0].rule, Rule::AuthorshipTrailerRequired);
+    }
+
+    #[test]
+    fn without_the_capability_nothing_changes() {
+        let (repo, common, _) = repo_with(
+            r#"{"policies":{"commitAuthorship":{"mode":"human-author","onAgentCommit":"warn"}}}"#,
+        );
+        let params = commit_params(&common, vec![Some(AgentKind::ClaudeCode)]);
+        let d = serve_as(&registry(&common, None), &params, &agent(repo.path()));
+        assert_eq!(d.applied_effect, Effect::Allow);
+        assert_eq!(d.notices.len(), 1, "{d:?}");
+        assert_eq!(d.notices[0].rule, Rule::AuthorshipHumanAuthor);
+
+        let old = Caller {
+            authorship: false,
+            ..agent(repo.path())
+        };
+        let d = serve_as(
+            &registry(&common, None),
+            &commit_params(&common, vec![]),
+            &old,
+        );
+        assert_eq!(d.applied_effect, Effect::Allow);
+        assert!(d.notices.is_empty());
+        // The wire shape of a decision without notices is the old one.
+        let wire = serde_json::to_value(&d).unwrap();
+        assert!(wire.get("notices").is_none(), "{wire}");
+        // A request without `authorship` parses as before.
+        let legacy = serde_json::json!({
+            "repo_id": "0000-ffff",
+            "common_dir": common.to_string_lossy(),
+            "hook": "reference-transaction",
+            "operation": {"kind": "ref-transaction", "updates": []}
+        });
+        let p: EvaluateParams = serde_json::from_value(legacy).unwrap();
+        assert!(p.authorship.is_none());
+    }
+}
