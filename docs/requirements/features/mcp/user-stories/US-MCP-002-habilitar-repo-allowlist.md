@@ -110,4 +110,4 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica (comandos de la CLI; mensajes según la guía de contenido del design system, DSYS-GRP-001).
-- **Dev Spec:** pendiente (Arquitecto, tras ADR-MCP-001 y las enmiendas DEP-MCP-3 y DEP-MCP-4).
+- **Dev Spec:** [DS-US-MCP-002](../dev-specs/US-MCP-002-dev-spec.md).

@@ -357,3 +357,12 @@ Decisión del orquestador (2026-10-05), validada por el Arquitecto. Origen: la [
 
 - **`register_agent` no está sujeto a la allowlist**: escribe en el perfil, no en el repo, y un agente sin soporte completo ("otro agente: Codex") tiene que poder registrarse en un repo observado aunque nadie lo haya habilitado para el MCP (BR-VAL-001). El método del canal es `registration.register`, ofrecido al perfil `mcp` y sin rutas en su resultado (SEC-12).
 - **Dependencia futura**: el perfil `mcp` por solicitante (S-01, Enmienda 2026-10-05 MCP de ADR-GRP-005) todavía no está implementado; hoy el canal decide el perfil por el cliente. El registro ya trata toda conexión `mcp` como un agente, así que no depende de S-01.
+
+## Enmienda (2026-10-07, US-MCP-002 y US-MCP-003)
+
+Decisión del orquestador (2026-10-07), validada por Arquitecto y PO. Origen: [DS-US-MCP-002](../../requirements/features/mcp/dev-specs/US-MCP-002-dev-spec.md) y [DS-US-MCP-003](../../requirements/features/mcp/dev-specs/US-MCP-003-dev-spec.md).
+
+- **§ 3, nombres finales**: los comandos reservados son `mcp.enable` y `mcp.disable` (módulo del contrato `mcp`, sin marca MCP), con `raptor mcp enable|disable [ruta]`. La lectura de la allowlist es `mcp.allowlist` (`raptor mcp list`), nunca por MCP. Los métodos nacen en el protocolo 9 (`since(9)`): los clientes de 5 a 8 conservan su contrato.
+- **§ 4, fila `status`**: la herramienta usa un método nuevo, `mcp.status` (con marca MCP, sin parámetros), en lugar de `engine.snapshot` + `requester.resolve`. Ampliar `McpSnapshot` cambiaría una forma existente (pediría una capacidad, ADR-GRP-016), y dos llamadas abren una ventana entre el ámbito y el solicitante. `mcp.status` resuelve el ámbito por el cwd del par entre dos comprobaciones de identidad, aplica la allowlist en el daemon y devuelve repo, nombre del worktree y solicitante en una sola respuesta.
+- **`engine.snapshot` por MCP**: `caller_repo` queda vacío si el repo del llamante no está en la allowlist (cambio de comportamiento, no de forma). Así ningún cliente con perfil `mcp` obtiene la clave de un repo no habilitado por ninguna de las dos vías (MCP02, MCP10).
+- **`NoMcpRepos`** deja de usarse en producción: los backends de operaciones protegidas y del undo reciben la allowlist del perfil (`McpRepos`).
