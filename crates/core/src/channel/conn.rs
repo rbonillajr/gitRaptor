@@ -764,12 +764,16 @@ impl Connection<'_> {
                         crate::guardrails::evaluate::serve_as(&self.ctx.guard, &p, &caller);
                     // One decision per operation (ADR-GRD-003 § 6): the second line of the
                     // same `git` reuses the one `commit-msg` gave.
-                    if let (Some(git), gitraptor_api::guard::Operation::Commit { stage }) =
-                        (caller.git, &p.operation)
+                    if let (
+                        Some(git),
+                        gitraptor_api::guard::Operation::Commit { stage },
+                        Some(facts),
+                    ) = (caller.git, &p.operation, &p.authorship)
                         && *stage == gitraptor_api::guard::CommitStage::CommitMsg
                         && caller.authorship
+                        && decision.applied_effect == gitraptor_api::guard::Effect::Allow
                     {
-                        self.ctx.commit_decisions.record(git);
+                        self.ctx.commit_decisions.record(git, facts);
                     }
                     decision
                 });
@@ -821,7 +825,9 @@ impl Connection<'_> {
                 stage: CommitStage::SecondLine,
             } => {
                 !self.has(methods::CAP_GUARD_AUTHORSHIP_SECOND_LINE.name)
-                    || git.is_some_and(|g| self.ctx.commit_decisions.contains(g))
+                    || git
+                        .zip(params.authorship.as_ref())
+                        .is_some_and(|(g, f)| self.ctx.commit_decisions.contains(g, f))
                     || !second_line::evaluates(git, &checks)
             }
             _ => false,

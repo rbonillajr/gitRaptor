@@ -452,8 +452,15 @@ fn second_line(args: &HookArgs, env: &HookEnv, input: &[u8]) -> Option<HookOutco
             RefValue::Symbolic(_) => continue,
         };
         refs.push(raw.refname);
-        if !pairs.contains(&(old.clone(), new.clone())) {
-            pairs.push((old, new));
+        // `HEAD` and its branch move together: one move per new value, with the old value
+        // whichever line gives one.
+        match pairs.iter_mut().find(|(_, n)| *n == new) {
+            Some(pair) => {
+                if pair.0.is_none() {
+                    pair.0 = old;
+                }
+            }
+            None => pairs.push((old, new)),
         }
     }
     // Several different moves at once are not the shape of one commit (residue, § 5.3).
