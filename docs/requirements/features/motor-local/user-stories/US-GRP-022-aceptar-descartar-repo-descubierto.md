@@ -90,10 +90,10 @@ Entonces "billing" deja de figurar como descubierto
 
 ## Requisitos Técnicos
 
-> Arquitecto, 2026-10-07. Decisión del orquestador, validada por el Arquitecto. Diseño en ADR-GRP-010, Enmienda (2026-10-07) N6 y N8, propuesta y pendiente de aceptar por Rene Bonilla; seguridad en SEC-03 y SEC-15.
+> Arquitecto, 2026-10-07. Decisión del orquestador, validada por el Arquitecto. Diseño en ADR-GRP-010, Enmienda (2026-10-07) N6 y N8, aceptada (**Decisión de Rene (2026-10-07)**); seguridad en SEC-03 y SEC-15.
 
 - **Aceptar es `repo.add`** (comando reservado que ya existe, US-GRP-001) sobre la ruta del candidato, desde `raptor repo add <ruta>` o desde la TUI. El daemon vuelve a comprobar que la ruta existe y que es el mismo repo (clave del directorio Git común) antes de añadirlo. Si ya no existe, rechaza con un motivo tipado y retira el candidato.
-- **Descartar es un método reservado nuevo**, `discovery.dismiss` (`raptor repo dismiss <ruta>`). El descarte se guarda por ruta en el índice global del perfil (supuesto del PO en BR-AUTH-003) y sobrevive a un reinicio. Un `raptor repo add` posterior observa el repo y borra el descarte.
+- **Descartar es un método reservado nuevo**, `discovery.dismiss` (`raptor repo dismiss <ruta>`). El descarte se guarda por ruta en el índice global del perfil (supuesto del PO en BR-AUTH-003, ratificado: **Decisión de Rene (2026-10-07)**) y sobrevive a un reinicio. Un `raptor repo add` posterior observa el repo y borra el descarte.
 - **Retirar una raíz** (`discovery.root.remove`) quita sus candidatos pendientes y no toca los repos observados ni los descartes.
 - **Un agente no decide**: el daemon rechaza `repo.add` y `discovery.dismiss` a un cliente que desciende de un agente (SEC-03), y ninguno de los dos existe en el perfil `mcp` (SEC-MCP-01). Las dos decisiones quedan en `reserved.audit`.
 - **Un repo aceptado entra activo** y después sigue los niveles de observación (ADR-GRP-010 N1, TS-GRP-006).

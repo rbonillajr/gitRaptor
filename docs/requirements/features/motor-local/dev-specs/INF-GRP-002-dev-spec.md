@@ -267,7 +267,7 @@ No se consultó al Arquitecto: el presupuesto (ADR-GRP-011) y la regla de dónde
 
 ## Enmienda (2026-10-07): escenario de escala por niveles
 
-**Decisión del orquestador (2026-10-07), validada por el Arquitecto.** Es el gate de RES-11 y RES-12 ([non-functional.md](../../../../architecture/non-functional.md)) para la observación por niveles ([ADR-GRP-010](../../../../architecture/decisions/ADR-GRP-010-observacion-cambios-worktrees.md), Enmienda 2026-10-07, que está propuesta y pendiente de aceptar por Rene Bonilla). Responde a la preocupación de Rene por tener más de 100 repos clonados. **Queda sin implementar hasta [TS-GRP-006](../technical-stories/TS-GRP-006-observacion-por-niveles.md)**; la parte de la raíz de descubrimiento, hasta US-GRP-020.
+**Decisión del orquestador (2026-10-07), validada por el Arquitecto.** Es el gate de RES-11 y RES-12 ([non-functional.md](../../../../architecture/non-functional.md)) para la observación por niveles ([ADR-GRP-010](../../../../architecture/decisions/ADR-GRP-010-observacion-cambios-worktrees.md), Enmienda 2026-10-07, aceptada: **Decisión de Rene (2026-10-07)**). Responde a la preocupación de Rene por tener más de 100 repos clonados. **Queda sin implementar hasta [TS-GRP-006](../technical-stories/TS-GRP-006-observacion-por-niveles.md)**; la parte de la raíz de descubrimiento, hasta US-GRP-020.
 
 | # | Decisión |
 |---|---|

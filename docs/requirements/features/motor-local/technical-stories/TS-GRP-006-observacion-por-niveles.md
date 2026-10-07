@@ -2,7 +2,7 @@
 id: TS-GRP-006
 title: "Observación por niveles: activo, dormido con centinela y despertar"
 type: ts
-status: draft
+status: ready
 feature: motor-local
 domain: GRP
 priority: high
@@ -31,7 +31,7 @@ tags: [motor-local, recursos, escala, niveles, dormido, centinela, despertar, re
 
 > Dev Spec: `dev-specs/TS-GRP-006-dev-spec.md` | Pendiente (se genera cuando se planifique la implementación)
 >
-> **Estado**: `draft` hasta que Rene Bonilla acepte la Enmienda (2026-10-07) de ADR-GRP-010 y ADR-GRP-011.
+> **Estado**: `ready`. **Decisión de Rene (2026-10-07)**: acepta la Enmienda (2026-10-07) de ADR-GRP-010 y ADR-GRP-011, incluido el diseño de centinela (Q49).
 >
 > **Por qué es un enabler** (Enabler Decision Gate): no tiene una historia dueña única, porque lo consumen la observación en vivo (US-GRP-002), la observación continua (US-GRP-004), los huecos (US-GRP-005), la vista de recursos (US-GRP-017), el descubrimiento (US-GRP-020) y la flota del Cockpit (US-CKP-001). Su resultado observable directo ya está en la enmienda de US-GRP-017 (Q49 del contexto). El descubrimiento **no** forma parte de este enabler: tiene resultado observable y su dueña es US-GRP-020.
 

@@ -432,16 +432,16 @@ Lo que está fuera del repo observado (configuración global de Git, otros repos
 1. **Las raíces son personales y de la máquina, y no son configuración.** Se guardan en el perfil, junto a la lista de repos observados, y solo se gestionan con comandos reservados al humano: `raptor repo roots` (listar), `raptor repo roots add <ruta>` y `raptor repo roots remove <ruta>` *(ajuste 2026-10-07: antes, "se declaran en el perfil" como valor de configuración)*. Una raíz escrita en cualquier archivo de configuración (del equipo, del perfil o local del repo) no se tiene en cuenta y el motor avisa. Motivo: un repo clonado no puede decidir qué carpetas de la máquina se vigilan, y un agente puede escribir un archivo de configuración pero no ejecutar un comando reservado.
 2. **Raíces válidas.** Se rechaza, con su motivo y la alternativa: la raíz del sistema de archivos o de una unidad, la carpeta personal entera o una carpeta que la contiene, una ruta que no existe o que no es una carpeta, una carpeta que ya es un repo (se añade con `raptor repo add`), una carpeta dentro de un repo, el propio perfil de GitRaptor y una ruta de red. Como mucho 16 raíces (SEC-15). Declarar dos veces la misma raíz no cambia nada.
 3. **Solo el primer nivel.** Un repo anidado más abajo (`~/code/clientes/acme`) no se descubre. Un worktree de un repo ya observado no se propone como repo nuevo: ya se observa como worktree.
-4. **Avisos.** Al declarar una raíz, los repos que ya contiene quedan descubiertos con **un único aviso** que da el número. Después, cada repo que aparece genera un aviso. Un repo descubierto sigue en la lista de descubiertos hasta que el humano decida. En el MVP el aviso se ve en la TUI y en la lista de la CLI (`raptor repo discovered`); la notificación nativa del sistema operativo queda fuera del MVP (Q46).
+4. **Avisos.** Al declarar una raíz, los repos que ya contiene quedan descubiertos con **un único aviso** que da el número. Después, cada repo que aparece genera un aviso. Un repo descubierto sigue en la lista de descubiertos hasta que el humano decida. En el MVP el aviso se ve en la TUI y en la lista de la CLI (`raptor repo discovered`); la notificación nativa del sistema operativo queda fuera del MVP (Q46; **Decisión de Rene (2026-10-07)**).
 5. **Observar exige confirmación humana.** Aceptar un repo descubierto, responder a la pregunta de `raptor clone` o a la de la TUI abierta en un repo no observado son acciones del humano: desde la TUI o la CLI que él lanza en su propia terminal. Nunca por MCP y nunca desde un proceso lanzado por un agente (el motor resuelve quién pide la acción por la ascendencia del proceso, como en BR-CKP-AUTH-002). Sin terminal interactiva no se pregunta y no se observa. **La respuesta por defecto es no observar** (`[s/N]`).
 6. **Descartar es persistente** (`raptor repo dismiss <ruta>`; aceptar es `raptor repo add <ruta>`). Un repo descartado no se vuelve a proponer, tampoco tras reiniciar el motor (BR-CONS-005). Se puede añadir a mano en cualquier momento con `raptor repo add`. Responder "N" a una pregunta no es descartar: solo no observa ahora.
 7. **Retirar una raíz** quita las propuestas pendientes de esa raíz y no cambia nada de lo observado.
 8. **Un agente no decide.** Un agente no puede declarar ni retirar raíces, ni aceptar ni descartar repos descubiertos (coherente con Q40). Sí puede clonar (con `git clone` o con `raptor clone`), pero sin que eso observe nada.
 9. **Descubrir no escribe nada** en el repo descubierto ni en la raíz (BR-CONS-001): la lista de raíces, de descubiertos y de descartados vive en el perfil.
 
-> ⚠️ **ASSUMPTION**: el PO rechaza la carpeta personal entera como raíz porque mezcla código con carpetas personales y, en macOS, su primer nivel cambia sin parar. Si Rene clona repos directamente en su carpeta personal, habría que admitirla con un aviso `[POR VERIFICAR con Rene Bonilla]`.
+> ⚠️ **ASSUMPTION**: el PO rechaza la carpeta personal entera como raíz porque mezcla código con carpetas personales y, en macOS, su primer nivel cambia sin parar. Si Rene clona repos directamente en su carpeta personal, habría que admitirla con un aviso `[POR VERIFICAR con Rene Bonilla]`. **Pendiente de confirmar con Rene (2026-10-07)**: la ratificación de los supuestos de US-GRP-020 llegó con este punto invertido ("el home puede ser una raíz"); mientras Rene no lo confirme, rige el texto escrito: la carpeta personal entera se rechaza como raíz.
 >
-> ⚠️ **ASSUMPTION**: un repo descartado se identifica por su ruta; si en la misma ruta aparece otro repo, sigue descartado. Retirar un repo observado que vive en una raíz cuenta como descartarlo: no se vuelve a proponer `[POR VERIFICAR con Rene Bonilla]`.
+> ✅ **Supuesto ratificado**: un repo descartado se identifica por su ruta; si en la misma ruta aparece otro repo, sigue descartado. Retirar un repo observado que vive en una raíz cuenta como descartarlo: no se vuelve a proponer. **Decisión de Rene (2026-10-07)**: ratifica el supuesto; un repo descartado se recuerda por su ruta y no se vuelve a preguntar.
 
 **Regla formal**:
 ```
@@ -681,9 +681,11 @@ Constraint: una corrección (BR-CONS-002) no cambia el número de sesiones
 - Mismo punto de partida, pero el desarrollador **corrige** la atribución a Codex → una sola sesión, no compartido (BR-CONS-002).
 - Claude Code (detectado) en `feat-login` se registra a sí mismo en `feat-login` → la misma sesión, confirmada; una sola sesión, no compartido (Q39).
 
-> ⚠️ **ASSUMPTION** `[POR VERIFICAR]` (P16): una sesión confirmada por registro pasa a mostrar origen "registrado". Las historias solo exigen que sea la misma sesión y que el worktree no pase a compartido.
+> ✅ **Supuesto ratificado** (P16): una sesión confirmada por registro pasa a mostrar origen "registrado". Las historias solo exigen que sea la misma sesión y que el worktree no pase a compartido.
 >
 > **Decisión del orquestador (2026-10-05), validada por el PO (agente)**: US-GRP-009 adopta el supuesto "sí" (D6 de su [Dev Spec](./dev-specs/US-GRP-009-dev-spec.md)). Queda pendiente de ratificar por Rene Bonilla; si la respuesta fuera "no", solo cambia el origen mostrado (ADR-GRP-013 § 2).
+>
+> **Decisión de Rene (2026-10-07)**: P16 = sí. Ratifica el supuesto; el origen de una sesión confirmada por registro es "registrado".
 - El desarrollador edita en Cursor dentro de `feat-login`, donde trabaja Claude Code → una sola sesión (Claude Code); el editor del humano no cuenta como sesión de agente (BR-EDGE-004).
 
 **Referencias**:

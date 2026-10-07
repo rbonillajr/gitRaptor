@@ -83,4 +83,4 @@ Además, en el mismo archivo: `a_registration_survives_an_engine_restart` (parar
 ## 5. Validación
 
 - **Arquitecto** (2026-10-05): aprobada con ajustes (tabla del § 1), incorporados. Pidió las enmiendas de ADR-GRP-005 § 6.6 (parámetro del desarrollador, anti-suplantación, auditoría de los rechazos), ADR-GRP-013 § 1 y § 2 (auditoría, P16, evidencia guardada, identidad del proceso como columna anulable futura) y ADR-MCP-001 (`register_agent` sin allowlist; S-01 como dependencia futura), aplicadas.
-- **PO** (2026-10-05): aprobada con ajustes (tabla del § 1 y § 4), incorporados. P16 queda adoptada con el supuesto "sí" y pendiente de ratificar por Rene en BR-CONS-004.
+- **PO** (2026-10-05): aprobada con ajustes (tabla del § 1 y § 4), incorporados. P16 queda adoptada con el supuesto "sí" y pendiente de ratificar por Rene en BR-CONS-004. **Decisión de Rene (2026-10-07)**: P16 = sí, ratificada.

@@ -35,6 +35,8 @@ tags:
 **Valor**: hoy un repo clonado fuera de GitRaptor queda sin observar hasta que el desarrollador se acuerda de `raptor repo add`; mientras tanto la Time Machine no lo protege. Proponerlo cierra ese hueco sin quitarle al humano la decisión de observar (BR-AUTH-001).
 
 > **Origen**: Decisión del orquestador (2026-10-07), validada por el PO, sobre la propuesta A1 aceptada por Rene Bonilla (2026-10-06). Aceptar o descartar un repo descubierto va en US-GRP-022; la pregunta en la TUI, en US-CKP-025.
+>
+> **Decisión de Rene (2026-10-07)**: la notificación nativa del sistema ("¿Observar *x*?") queda fuera del MVP; en el MVP el aviso solo sale en la TUI (Q46). Ratifica el supuesto del descarte por ruta: un repo descartado no se vuelve a preguntar (BR-AUTH-003). **Pendiente de confirmar con Rene (2026-10-07)**: si la carpeta personal puede ser una raíz; hasta entonces rige el escenario "Una raíz demasiado amplia…", que la rechaza.
 
 ## Reglas cubiertas
 
@@ -93,7 +95,7 @@ Entonces ninguna herramienta permite declarar o retirar raíces
 
 ## Requisitos Técnicos
 
-> Arquitecto, 2026-10-07. Decisión del orquestador, validada por el Arquitecto. Diseño en ADR-GRP-010, Enmienda (2026-10-07) N6 y N8, propuesta y pendiente de aceptar por Rene Bonilla; objetivos en SEC-15 y RES-11.
+> Arquitecto, 2026-10-07. Decisión del orquestador, validada por el Arquitecto. Diseño en ADR-GRP-010, Enmienda (2026-10-07) N6 y N8, aceptada (**Decisión de Rene (2026-10-07)**); objetivos en SEC-15 y RES-11.
 
 - **Raíces en el índice global del perfil** (ADR-GRP-006), nunca en `settings.json`, porque un agente puede escribir un archivo del perfil. Declarar y retirar una raíz son métodos **reservados** del daemon (`discovery.root.add`, `discovery.root.remove`; SEC-03), y `discovery.roots` es de lectura. Subcomandos: `raptor repo roots`, `raptor repo roots add <ruta>`, `raptor repo roots remove <ruta>` y `raptor repo discovered`. Nada de esto existe en el perfil `mcp` (SEC-MCP-01).
 - **El daemon valida la raíz** según SEC-15 y devuelve el rechazo con un motivo tipado (código, sin texto; NFR-10). La CLI pone el texto y la alternativa en en y es.
