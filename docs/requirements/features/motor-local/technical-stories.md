@@ -2,7 +2,7 @@
 mode: draft
 status: expanded
 generated: 2026-10-03
-updated: 2026-10-05
+updated: 2026-10-07
 generator: architect
 domain: GRP
 feature: motor-local
@@ -12,7 +12,7 @@ approved: 0
 related:
   context: [CTX-GRP-001]
   rules: [BR-GRP-001]
-  adrs: [ADR-GRP-005, ADR-GRP-006, ADR-GRP-007, ADR-GRP-009, ADR-GRP-010, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, ADR-GRP-014, ADR-GRP-015]
+  adrs: [ADR-GRP-005, ADR-GRP-006, ADR-GRP-007, ADR-GRP-009, ADR-GRP-010, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, ADR-GRP-014, ADR-GRP-015, ADR-GRP-016]
 ---
 
 # Technical Stories — INDEX: Motor local
@@ -33,6 +33,7 @@ related:
 | [TS-GRP-003](./technical-stories/TS-GRP-003-proceso-motor.md) | TS | Proceso del motor en segundo plano por usuario | `raptor daemon`: instancia única, ciclo de vida y parada ordenada | ADR-GRP-005 | US-GRP-001, 002, 004, 005, 014, 015 | TS-GRP-001, TS-GRP-002 | High | Dev Spec Pending |
 | [TS-GRP-004](./technical-stories/TS-GRP-004-canal-clientes.md) | TS | Canal local de clientes y contrato de mensajes | Canal solo del usuario, contrato JSON-RPC, comandos reservados y biblioteca cliente con arranque bajo demanda | ADR-GRP-005, ADR-GRP-011, ADR-GRP-013 | US-GRP-001..016 | TS-GRP-003 | High | Dev Spec Pending |
 | [TS-GRP-005](./technical-stories/TS-GRP-005-clases-trabajo-ahorro-energia.md) | TS | Clases de trabajo del daemon y mecanismo de ahorro de energía | El trabajo de fondo corre con prioridad baja del SO y lo que el usuario espera nunca baja (RES-06, RES-07, RES-08) | ADR-GRP-015 | US-GRP-017 (clase por pool), US-GRP-019; consumidores: TS-TMC-001, US-TMC-004, TS-CKP-001 | TS-GRP-003, US-GRP-002, INF-GRP-002 (RES-07) | High | Dev Spec Pending (M1, Should) |
+| [TS-GRP-006](./technical-stories/TS-GRP-006-observacion-por-niveles.md) | TS | Observación por niveles: activo, dormido con centinela y despertar | Más de 100 repos observados con el consumo en reposo de 10 worktrees, sin reducir la protección (RES-11, RES-12, Q49) | ADR-GRP-010, ADR-GRP-011, ADR-GRP-013 (Enmiendas 2026-10-07) | US-GRP-002, 004, 005, 017, 020; US-CKP-001 | TS-GRP-003, TS-GRP-004, TS-GRP-005 (clase `utility`), INF-GRP-002 (`tiered-scale`) | High | Draft: pendiente de que Rene acepte la Enmienda de ADR-GRP-010. Dev Spec Pending |
 | [INF-GRP-001](./technical-stories/INF-GRP-001-arnes-repo-intacto.md) | INF | Arnés de verificación "repo intacto" en los tres SO | Gate de CI: cero diferencias imputables al motor en el repo y fuera del perfil; repo canario y auditoría de `exec` (SEC-09) | ADR-GRP-009, ADR-GRP-006 | Todas, de forma transversal (BR-CONS-001) | TS-GRP-002 (núcleo); suites incrementales con TS-GRP-003, TS-GRP-004, US-GRP-002, US-GRP-004 y US-GRP-007 | Medium | Dev Spec lista; núcleo implementado, pendiente de la primera ejecución del gate en CI |
 | [INF-GRP-002](./technical-stories/INF-GRP-002-banco-frescura-escala.md) | INF | Banco de medición de frescura y escala | Gate de CI de NFR-04 y NFR-05 que nombra la etapa que se pasó | ADR-GRP-011, ADR-GRP-010 | US-GRP-001, 002, 012 | TS-GRP-004, US-GRP-002 | Medium | Dev Spec Done |
 | [TD-GRP-002](./technical-stories/TD-GRP-002-motor-bajo-rafaga.md) | TD | Frescura y memoria del motor bajo una ráfaga de archivos | Una ráfaga en un worktree no frena a los demás ni deja memoria retenida | ADR-GRP-010, ADR-GRP-011 | US-GRP-001, 002 | INF-GRP-002 | Medium | Ready (Must antes del MVP) |
@@ -49,5 +50,6 @@ related:
 - **Antes del esqueleto andante**: TS-GRP-001 y TS-GRP-002 en paralelo; luego TS-GRP-003 y después TS-GRP-004. El núcleo de INF-GRP-001 sale tras TS-GRP-002 y bloquea el merge de cualquier historia (BR-CONS-001 es transversal); sus suites incrementales entran con TS-GRP-003, TS-GRP-004, US-GRP-002, US-GRP-004 y US-GRP-007, y cada una bloquea solo el merge de su historia dueña.
 - **En paralelo desde el día uno**: SPIKE-GRP-001 y SPIKE-GRP-002, que no dependen de código del motor. Sus resultados pueden cambiar ADR-GRP-012, ADR-GRP-010, ADR-GRP-011 y ADR-GRP-005 § 6 antes de que US-GRP-002 y US-GRP-007 entren en desarrollo.
 - **Después de US-GRP-002**: INF-GRP-002 y, tras él, TS-GRP-005 (su merge lo bloquea RES-07 en el banco; decisión del orquestador, 2026-10-05, validada por Arquitecto y PO).
+- **Observación por niveles** (decisión del orquestador, 2026-10-07, validada por el Arquitecto): TS-GRP-006 va después de TS-GRP-005, que aporta la clase `utility`, y entra a la vez que el escenario `tiered-scale` de INF-GRP-002. Antes, Rene tiene que aceptar la Enmienda de ADR-GRP-010. US-GRP-020 (descubrimiento) no depende de TS-GRP-006, pero sin niveles, 100 repos aceptados superan RES-11.
 - **Sin dependencias de código**: INF-GRP-003 y después INF-GRP-004. Decisión del orquestador (2026-10-05), validada por el Arquitecto y el PO: el release se divide en dos enablers y no se publica nada hasta decidir la licencia y el nombre.
 - ⚠️ **ASSUMPTION**: la base de CI del monorepo con runners de Windows, macOS y Linux viene del spike del stack (ADR-GRP-001) o de un bootstrap común. Si no existe, INF-GRP-001 la incorpora. **Resuelto (2026-10-04)**: no existía; INF-GRP-001 propone el primer workflow (`.github/workflows/repo-intact.yml`).

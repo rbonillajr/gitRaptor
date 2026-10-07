@@ -6,11 +6,11 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-06
+updated: 2026-10-07
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
-related: [ADR-GRP-005, ADR-GRP-006, ADR-GRP-010, ADR-GRP-012, ADR-GRD-003, ADR-GRD-006, ADR-GRD-007, ADR-CKP-001, ADR-CKP-002, CTX-GRP-001, BR-GRP-001, US-GRD-018, US-GRD-019]
+related: [ADR-GRP-005, ADR-GRP-006, ADR-GRP-010, ADR-GRP-012, ADR-GRD-003, ADR-GRD-006, ADR-GRD-007, ADR-CKP-001, ADR-CKP-002, CTX-GRP-001, BR-GRP-001, US-GRD-018, US-GRD-019, TS-GRP-006]
 tags: [motor-local, eventos, sesiones, atribucion, correccion, huecos, append-only, modelo-de-datos, auditoria, no-repudio, seguridad, autoria, co-authored-by]
 ---
 
@@ -251,3 +251,12 @@ Derivada de la Enmienda (2026-10-06, autoría de commits: BR-26 / US-GRD-018 / U
 **Por qué un dato aparte y no una variante del actor**: el actor responde quién ejecutó con evidencia observada, y sus dos variantes (agente con origen o "sin atribuir") sostienen Q34, BR-EDGE-004 y las correcciones de Q37. La autoría la escribe quien hace el commit y se puede falsear. Mezclarla con el actor rompería la regla "ante la duda, sin atribuir". Como dato aparte, la Time Machine (ADR-TMC-005) sigue usando solo el actor, y Guardrails lee las dos cosas sin confundirlas (ADR-GRP-012, Enmienda § 4).
 
 **Validación añadida**: la autoría declarada de un commit sobrevive a un reinicio del daemon; una corrección de la sesión cambia el actor y deja intacta la autoría; la prueba de propiedades del punto 11 incluye autores y trailers aleatorios y el actor resuelto sigue siendo un agente con origen o "sin atribuir", el mismo que sin ellos; la vista MCP no lleva nombres ni correos.
+
+## Enmienda (2026-10-07, observación por niveles)
+
+Derivada de la [Enmienda (2026-10-07) de ADR-GRP-010](./ADR-GRP-010-observacion-cambios-worktrees.md#enmienda-2026-10-07-observación-por-niveles), que está **propuesta, pendiente de aceptar por Rene Bonilla**, y sigue su estado. **Decisión del orquestador (2026-10-07), validada por el Arquitecto.** No cambia el modelo de eventos, sesiones ni atribución: amplía la lista cerrada de causas de hueco, igual que la Enmienda (2026-10-04, SPIKE-GRP-002). El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| **Causa de hueco nueva: "observación en reposo"** (`dormant`). La abre una red de seguridad de un repo dormido (el barrido de metadatos o la reconciliación lenta) cuando encuentra diferencias que el centinela no señaló. Va desde la red de seguridad anterior hasta ahora y, como la reconciliación periódica, solo se abre si hay diferencias. Los cambios que señala el centinela **no** abren hueco: se publican al despertar con las reglas de atribución de siempre | § 1 (Hueco), § 5 | ADR-GRP-010, N5 |
+| **Eventos de Git reconstruidos del reflog** al reconciliar un despertar, en orden y con la hora del reflog. Su actor sale de las reglas de siempre, y en un hueco son "sin atribuir" (BR-EDGE-005) | § 5 | ADR-GRP-010, N4 |

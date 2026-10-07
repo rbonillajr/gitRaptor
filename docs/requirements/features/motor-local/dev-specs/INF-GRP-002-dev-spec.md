@@ -6,11 +6,11 @@ status: approved
 feature: motor-local
 domain: GRP
 created: 2026-10-05
-updated: 2026-10-06
+updated: 2026-10-07
 related:
-  stories: [INF-GRP-002, TD-GRP-002, TD-GRP-003, US-GRP-002, US-GRP-007, SPIKE-GRP-002, SPIKE-CKP-001]
+  stories: [INF-GRP-002, TD-GRP-002, TD-GRP-003, US-GRP-002, US-GRP-007, SPIKE-GRP-002, SPIKE-CKP-001, TS-GRP-006, US-GRP-020]
   adrs: [ADR-GRP-011, ADR-GRP-010, ADR-GRP-015, ADR-GRP-005, ADR-GRP-006, ADR-GRP-013]
-  nfrs: [NFR-04, NFR-05, HUELLA, RES-01, RES-02, RES-04, SEC-06]
+  nfrs: [NFR-04, NFR-05, HUELLA, RES-01, RES-02, RES-04, RES-11, RES-12, SEC-06]
 tags: [motor-local, banco, ci, rendimiento, latencia, p95, p50, escala, huella, rss, cpu, gate, calibracion, regresion]
 ---
 
@@ -264,3 +264,37 @@ El test debug `slow_client_and_connection_flood_do_not_starve_the_others` (TS-GR
 No se consultó al Arquitecto: el presupuesto (ADR-GRP-011) y la regla de dónde van los límites de rendimiento ya estaban decididos. Lo único que se elige aquí es dónde se ubica el bench.
 
 **Verificación:** en macOS (local, release) da p95 0,22 ms en 3000 eventos. En Linux se verá en el job `engine-bench` del PR. **Pendiente: Windows** (no aplica hasta que el canal exista allí).
+
+## Enmienda (2026-10-07): escenario de escala por niveles
+
+**Decisión del orquestador (2026-10-07), validada por el Arquitecto.** Es el gate de RES-11 y RES-12 ([non-functional.md](../../../../architecture/non-functional.md)) para la observación por niveles ([ADR-GRP-010](../../../../architecture/decisions/ADR-GRP-010-observacion-cambios-worktrees.md), Enmienda 2026-10-07, que está propuesta y pendiente de aceptar por Rene Bonilla). Responde a la preocupación de Rene por tener más de 100 repos clonados. **Queda sin implementar hasta [TS-GRP-006](../technical-stories/TS-GRP-006-observacion-por-niveles.md)**; la parte de la raíz de descubrimiento, hasta US-GRP-020.
+
+| # | Decisión |
+|---|---|
+| D17 | **Escenario `tiered-scale`** en `apps/cli/benches/engine.rs` (`--only tiered-scale`), con el mismo daemon aislado de D1 sobre un perfil temporal (NFR-01) |
+| D18 | **Repos** (`repogen`, deterministas, generados una vez y cacheados en CI como el perfil H, D2). Todos cuelgan de un único directorio, que hace de raíz de descubrimiento. **Pequeños a propósito**: el escenario mide cuánto cuesta observar muchos repos, no repos grandes, porque la escala de un repo grande ya la miden los escenarios de D6.<br>• 5 repos **activos** con el perfil nuevo `S` (1.000 archivos, 200 commits), con 2 worktrees cada uno: 10 worktrees activos, la misma carga que los gates de huella de D7.<br>• 95 repos **dormidos** con el perfil nuevo `XS` (200 archivos, 20 commits), con 1 worktree.<br>• 3 carpetas que son repos no observados (candidatos) y 2 que no lo son.<br>⚠️ **ASSUMPTION**: unos 100 MiB en disco y menos de 1 min para generarlos |
+| D19 | **Dormidos sin esperar el umbral**: la configuración del daemon del banco (D1, `DaemonConfig`) fija un umbral de segundos y los intervalos de las redes de seguridad. No es una clave de usuario: `engine.observation.*` no admite valores por debajo de 1 h ni de 30 s (ADR-GRP-010 N7), y el `raptor` de release no lee ningún mando del banco |
+| D20 | **Fases**. Cada fase empieza con los 5 repos activos y después 30 s de asentamiento:<br>1. **Solo activos**: los 5 activos, sin dormidos. Es la línea base del mismo daemon.<br>2. **100 observados**: los 95 se añaden y se duermen. Se mide en reposo durante **60 s, con el barrido cada 30 s**. 30 s es el mínimo de la clave, así que el resultado es conservador frente a los 120 s por defecto.<br>3. **Despertar**: 20 muestras de una edición en un dormido distinto (centinela) y 20 de una suscripción de un cliente a un dormido. Se mide el tiempo hasta el estado activo publicado.<br>4. **Retraso por red de seguridad**: con el centinela desactivado en la configuración del banco, 10 commits en dormidos, con el barrido cada 5 s. Se mide el tiempo hasta el evento publicado.<br>5. **Frescura de los activos con el barrido en marcha**: 200 muestras de `modify` en un activo |
+| D21 | **Medición**: igual que D7 (CPU con la fórmula del banco, pico de RSS en reposo, descriptores numéricos, watches de inotify en Linux), en las fases 1 y 2. En macOS, además, el número de hilos del daemon (el coste de los streams inactivos, ⚠️ de ADR-GRP-010). Además se reportan el coste del barrido por worktree (fase 2, con su propio temporizador en el informe), el intervalo efectivo de la reconciliación lenta y los contadores del bloque `observation` de `engine.resources` |
+
+**Gates** (se suman a los del § 4):
+
+| Gate | Nivel | Valor |
+|---|---|---|
+| CPU, RSS y descriptores en reposo con 100 observados (fase 2) | **Fallo** desde el primer día, en `ci` y en `reference` | < 1 %, < 150 MiB y ≤ 256 (los `FOOTPRINT_LIMITS` de D7; RES-11) |
+| Watches de inotify con 100 observados (Linux) | **Fallo** | ≤ 50 % de `max_user_watches` (RES-04) |
+| Almacén de los dormidos (fase 2) | **Fallo** | 0 archivos del almacén de un dormido abiertos (estructural) |
+| Bloque `observation` (fase 2) | **Fallo** | 5 activos, 95 dormidos y 3 candidatos, en los contadores (cableado) |
+| Retraso por red de seguridad (fase 4) | **Fallo** | Cada commit publicado en ≤ intervalo del barrido + 2 s (RES-12; corrección) |
+| RSS y descriptores marginales (fase 2 − fase 1) | **Aviso** hasta tener línea base | ≤ 16 MiB y ≤ 8 descriptores (RES-11) |
+| CPU marginal de los dormidos (fase 2 − fase 1) | **Aviso** hasta tener línea base | ≤ 0,1 % (RES-11). En los runners compartidos, la CPU en reposo varió entre 0,0 y 0,4 % con el mismo código (§ "Distribución medida"), así que una diferencia de 0,1 % no se resuelve allí |
+| Despertar p95 (fase 3) | **Aviso** hasta tener línea base | ≤ 2 s (RES-12) |
+| Barrido por worktree p95 | **Aviso** hasta tener línea base | ≤ 1 ms (RES-12) |
+| Frescura de los activos (fase 5) | **Aviso** hasta tener línea base | p50 y p95 dentro de los techos de `modify` de D13 |
+
+- **Línea base y paso a gate**: con 10 corridas en el runner de Linux, los avisos pasan a techos de regresión por runner con la fórmula de D13 y la confirmación 2 de 3 de D14. Las cifras de RES-11 y RES-12 se quedan como objetivo y nunca se superan sin enmendar ADR-GRP-015.
+- **Dónde corre**: igual que el resto del banco (D16). En cada PR, solo Linux (`ubuntu-latest`). macOS, en el push a `main` y en el nightly, nunca lanzado a mano para este escenario. Windows no se mide (el cliente del canal es solo Unix). El workflow no cambia: es un experimento más de `engine.rs`.
+- **No en tests de debug**: los límites de rendimiento van en el banco. Las comprobaciones funcionales (0 procesos `git` en el barrido, hueco `dormant`, almacén cerrado) son tests de `crates/core` de TS-GRP-006.
+- **Coste**: unos 4 min más por job de Linux. ⚠️ **ASSUMPTION**: se mide en la primera corrida. Si pasa de 6 min, la fase 3 baja a 10 muestras.
+
+Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
