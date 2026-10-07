@@ -889,6 +889,8 @@ dependencies = [
  "gitraptor-api",
  "gitraptor-core",
  "rmcp",
+ "schemars",
+ "serde",
  "serde_json",
  "tempfile",
  "tokio",

@@ -1,3 +1,4 @@
+mod engine;
 mod server;
 
 use std::process::ExitCode;
@@ -22,7 +23,7 @@ fn main() -> ExitCode {
         }
     };
     runtime.block_on(async {
-        let service = match server::Raptor.serve(stdio()).await {
+        let service = match server::Raptor::default().serve(stdio()).await {
             Ok(service) => service,
             Err(_) => {
                 eprintln!("raptor-mcp: handshake-failed");
