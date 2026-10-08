@@ -11,7 +11,8 @@
 //!   the router sees a write in the repo's Git directory. A Git event points
 //!   to a session only when the samples of its window show a `git` of
 //!   exactly one session and no other `git` in the repo (rules 2, 4 and 6).
-//! - **S4**: the signals of Guardrails hooks; none exist yet ([`HookEvidence`]).
+//! - **S4**: the claims Guardrails hooks leave ([`HookClaims`]): a hook that ran inside an
+//!   agent's `git` names the branch move that `git` made, without the S3 race.
 //! - **Registered sessions** (US-GRP-009): present until their registration
 //!   is withdrawn (Q41), with the same states and threshold, without any
 //!   process to check. A registered "other agent" that is the only present
@@ -22,6 +23,7 @@
 //! loop, the single writer (ADR-GRP-005). It reads processes only through
 //! [`ProcLister`], never their command line nor their environment (SEC-04).
 
+pub mod hook;
 pub mod procs;
 
 use std::collections::{HashMap, VecDeque};
@@ -38,6 +40,7 @@ use crate::channel::{AgentMatcher, ExeClass};
 use crate::profile::EndCause;
 use crate::watch::ObserverHooks;
 
+pub use hook::{HookClaims, RefMove};
 pub use procs::{ProcEntry, ProcLister, SystemProcLister, detection_supported};
 
 /// Longest ancestry walked.
@@ -172,23 +175,8 @@ pub enum S3Outcome {
     /// Several sessions, or a `git` outside every session.
     Ambiguous,
     Attributed(PresentSession),
-}
-
-/// Signals left by Guardrails hooks (S4, ADR-GRP-012). Guardrails does not
-/// leave any yet (US-GRD-001); when it does, they join the S3 rule.
-pub trait HookEvidence: Send + Sync {
-    /// The session a Git event of `worktree` points to, if a hook says so.
-    fn session_for(&self, repo_id: &str, worktree: &Path, t_recv: u64) -> Option<String>;
-}
-
-/// No Guardrails signals.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct NoHooks;
-
-impl HookEvidence for NoHooks {
-    fn session_for(&self, _repo_id: &str, _worktree: &Path, _t_recv: u64) -> Option<String> {
-        None
-    }
+    /// A Guardrails hook proved the move (S4).
+    Hook(PresentSession),
 }
 
 /// Counters for the dogfooding review (SPIKE-GRP-001).
@@ -330,7 +318,7 @@ struct Inner {
     config: SessionConfig,
     matcher: AgentMatcher,
     procs: Arc<dyn ProcLister>,
-    hooks: Arc<dyn HookEvidence>,
+    hooks: Arc<HookClaims>,
     clock: Clock,
     sink: ChangeSink,
     /// The daemon itself: its `git`s are foreign to every session.
@@ -352,11 +340,13 @@ pub struct Detector {
 }
 
 impl Detector {
-    /// Starts the S1 scan and the S3 sampler.
+    /// Starts the S1 scan and the S3 sampler; `hooks` are the S4 claims, which learn from it
+    /// which repos have a present session.
     pub fn start(
         config: SessionConfig,
         matcher: AgentMatcher,
         procs: Arc<dyn ProcLister>,
+        hooks: Arc<HookClaims>,
         clock: Clock,
         sink: ChangeSink,
     ) -> Self {
@@ -365,7 +355,7 @@ impl Detector {
             config,
             matcher,
             procs,
-            hooks: Arc::new(NoHooks),
+            hooks: Arc::clone(&hooks),
             clock,
             sink,
             own_pid: std::process::id(),
@@ -377,6 +367,11 @@ impl Detector {
             detected: AtomicU64::new(0),
             ended: AtomicU64::new(0),
         });
+        let weak = Arc::downgrade(&inner);
+        hooks.attach(Arc::new(move |repo_id| {
+            weak.upgrade()
+                .is_some_and(|i| i.lock().live.values().any(|l| l.repo_id == repo_id))
+        }));
         let (stop_tx, stop_rx) = channel::<()>();
         let mut threads = Vec::new();
         let scanner = Arc::clone(&inner);
@@ -572,10 +567,18 @@ impl Detector {
         }]);
     }
 
-    /// The S3 rule (and S4, when it exists) for a Git event of `worktree`
-    /// observed in the window that opened at `t_recv` and flushed at
-    /// `t_flush` (monotonic marks of the batch).
-    pub fn evidence(&self, repo_id: &str, worktree: &Path, t_recv: u64, t_flush: u64) -> S3Outcome {
+    /// The S4 and S3 rules for a Git event of `worktree` observed in the
+    /// window that opened at `t_recv` and flushed at `t_flush` (monotonic
+    /// marks of the batch). `moved` is the branch move of the event, which
+    /// only S4 reads.
+    pub fn evidence(
+        &self,
+        repo_id: &str,
+        worktree: &Path,
+        moved: Option<RefMove<'_>>,
+        t_recv: u64,
+        t_flush: u64,
+    ) -> S3Outcome {
         let st = self.inner.lock();
         let present = |id: &str| {
             st.live
@@ -590,14 +593,22 @@ impl Detector {
         if !st.live.values().any(|l| l.repo_id == repo_id) {
             return S3Outcome::NoSession;
         }
-        if let Some(id) = self.inner.hooks.session_for(repo_id, worktree, t_recv)
-            && let Some(p) = present(&id)
-        {
-            return S3Outcome::Attributed(p);
-        }
         let Some(repo) = st.repos.get(repo_id) else {
             return S3Outcome::NoSession;
         };
+        // S4 first: it proves which `git` made this move, even with a foreign
+        // `git` in the repo at the same time (DS-US-GRP-007 § 7).
+        if let Some(moved) = moved {
+            let from = t_recv.saturating_sub(ns(hook::CLAIM_LEAD));
+            let sessions = self.inner.hooks.take(repo_id, moved, from, t_flush, |cwd| {
+                repo.worktree_of(cwd).is_some_and(|w| w == worktree)
+            });
+            if let [id] = sessions.as_slice()
+                && let Some(p) = present(id)
+            {
+                return S3Outcome::Hook(p);
+            }
+        }
         let from = t_recv.saturating_sub(ns(self.inner.config.s3_lead));
         let mut sessions: Vec<&str> = Vec::new();
         let mut foreign = false;

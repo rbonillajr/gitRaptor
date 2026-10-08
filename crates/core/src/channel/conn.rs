@@ -816,6 +816,7 @@ impl Connection<'_> {
                     // Before the answer: the entry reaches the loop ahead of any later query,
                     // and the actor is read while the hook client is alive (US-GRD-005, D3).
                     self.log_decision(&p, &decision, &caller, policy);
+                    self.hook_claims(&p, &caller, &decision);
                     decision
                 });
                 self.reply(&request.id, result);
@@ -842,6 +843,40 @@ impl Connection<'_> {
             }
         }
         After::Continue
+    }
+
+    /// S4 (DS-US-GRP-007 § 7), before the reply while the hook's `git` waits: an allowed
+    /// `reference-transaction` of an agent leaves its claims for the detector, and a commit the
+    /// second line denies takes its `git`'s claims back.
+    fn hook_claims(
+        &self,
+        params: &EvaluateParams,
+        caller: &crate::guardrails::evaluate::Caller,
+        decision: &gitraptor_api::guard::Decision,
+    ) {
+        use gitraptor_api::guard::{CommitStage, Effect, Operation};
+        let allowed = decision.applied_effect == Effect::Allow;
+        if let (
+            Operation::Commit {
+                stage: CommitStage::SecondLine,
+            },
+            false,
+            Some(git),
+        ) = (&params.operation, allowed, caller.git)
+        {
+            self.ctx.hook_claims.revoke(git);
+        }
+        // The form of the observed worktree roots, as for `mcp.status`.
+        let cwd =
+            || process_cwd(self.peer.pid).and_then(|p| gitraptor_git::paths::canonicalize(&p).ok());
+        self.ctx.hook_claims.observe(
+            self.peer,
+            &self.ctx.checks(),
+            params,
+            allowed,
+            cwd,
+            gitraptor_api::clock::monotonic_ns(),
+        );
     }
 
     /// What the daemon knows of a hook client (US-GRD-018): the actor and the worktree are

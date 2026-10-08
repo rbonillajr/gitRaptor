@@ -5,6 +5,8 @@ use std::sync::atomic::AtomicI64;
 use super::*;
 
 const AGENT: &str = "fake-claude";
+const OLD: &str = "1111111111111111111111111111111111111111";
+const NEW: &str = "2222222222222222222222222222222222222222";
 
 #[derive(Default)]
 struct Table {
@@ -45,6 +47,7 @@ struct Rig {
     now: Arc<AtomicI64>,
     changes: Arc<Mutex<Vec<SessionChange>>>,
     detector: Detector,
+    hooks: Arc<HookClaims>,
 }
 
 impl Rig {
@@ -63,10 +66,12 @@ impl Rig {
             scan_interval: Duration::from_secs(3600),
             ..SessionConfig::default()
         };
+        let hooks = Arc::new(HookClaims::default());
         let detector = Detector::start(
             config,
             AgentMatcher::only(vec![AGENT.into()]),
             Arc::new(Arc::clone(&table)),
+            Arc::clone(&hooks),
             Arc::new(move || clock_now.load(Ordering::SeqCst)),
             Arc::new(move |c| sink_changes.lock().unwrap().extend(c)),
         );
@@ -86,6 +91,7 @@ impl Rig {
             now,
             changes,
             detector,
+            hooks,
         }
     }
 
@@ -110,7 +116,36 @@ impl Rig {
 
     fn evidence(&self, worktree: &str, t_recv: u64) -> S3Outcome {
         self.detector
-            .evidence("r", Path::new(worktree), t_recv, t_recv + 75_000_000)
+            .evidence("r", Path::new(worktree), None, t_recv, t_recv + 75_000_000)
+    }
+
+    /// The S4 rule for the move of `feat-login` from [`OLD`] to [`NEW`].
+    fn evidence_moved(&self, worktree: &str, t_recv: u64) -> S3Outcome {
+        let moved = RefMove {
+            branch: "feat-login",
+            old: Some(OLD),
+            new: NEW,
+        };
+        self.detector.evidence(
+            "r",
+            Path::new(worktree),
+            Some(moved),
+            t_recv,
+            t_recv + 75_000_000,
+        )
+    }
+
+    /// A hook claim of `session` for that move, from `cwd`, at `t`.
+    fn hook_claim(&self, session: &str, cwd: &str, t: u64) {
+        self.hooks.claim_for_test(
+            "r",
+            cwd,
+            "refs/heads/feat-login",
+            Some(OLD),
+            NEW,
+            session,
+            t,
+        );
     }
 }
 
@@ -551,6 +586,7 @@ fn registered_sessions_go_idle_without_a_process_table() {
         },
         AgentMatcher::only(vec![AGENT.into()]),
         Arc::new(NoProcs),
+        Arc::new(HookClaims::default()),
         Arc::new(move || clock_now.load(Ordering::SeqCst)),
         Arc::new(move |c| sink.lock().unwrap().extend(c)),
     );
@@ -700,4 +736,92 @@ fn an_inactive_session_is_no_hint() {
             .single_session("r", Path::new("/wt/feat-login")),
         None
     );
+}
+
+// ------------------------------------------------------------------- S4
+
+/// A hook claim attributes the move even with no sample at all: the `git`
+/// already ended (the S3 race), DS-US-GRP-007 § 7.
+#[test]
+fn s4_attributes_the_move_s3_did_not_see() {
+    let rig = Rig::new();
+    rig.claude(500, 7, "/wt/feat-login");
+    rig.scan();
+    rig.hook_claim("500:7", "/wt/feat-login", 1_000);
+    match rig.evidence_moved("/wt/feat-login", 1_000) {
+        S3Outcome::Hook(p) => assert_eq!(p.session_id, "500:7"),
+        other => panic!("{other:?}"),
+    }
+    // Consumed: the next event of the same move has no S4.
+    assert_eq!(
+        rig.evidence_moved("/wt/feat-login", 1_000),
+        S3Outcome::NoSighting
+    );
+}
+
+/// The claim must come from the event's worktree (longest root), name a
+/// present session, and be the only session claiming the move; otherwise S3
+/// decides, as without hooks.
+#[test]
+fn s4_needs_the_events_worktree_and_one_present_session() {
+    let rig = Rig::new();
+    rig.claude(500, 7, "/wt/feat-login");
+    rig.claude(600, 8, "/r");
+    rig.scan();
+    // Another worktree, and a nested worktree under the main one.
+    rig.hook_claim("500:7", "/r", 1_000);
+    assert_eq!(
+        rig.evidence_moved("/wt/feat-login", 1_000),
+        S3Outcome::NoSighting
+    );
+    // It belongs to the event of `/r`, where that `git` ran (as for S3).
+    assert!(matches!(
+        rig.evidence_moved("/r", 1_000),
+        S3Outcome::Hook(p) if p.session_id == "500:7"
+    ));
+    rig.hook_claim("600:8", "/r/.claude/worktrees/x", 1_000);
+    assert_eq!(rig.evidence_moved("/r", 1_000), S3Outcome::NoSighting);
+    // A session that is not present.
+    rig.hook_claim("999:1", "/wt/feat-login", 1_000);
+    assert_eq!(
+        rig.evidence_moved("/wt/feat-login", 1_000),
+        S3Outcome::NoSighting
+    );
+    // Two sessions claim the same move.
+    rig.hook_claim("500:7", "/wt/feat-login", 1_000);
+    rig.hook_claim("600:8", "/wt/feat-login", 1_000);
+    assert_eq!(
+        rig.evidence_moved("/wt/feat-login", 1_000),
+        S3Outcome::NoSighting
+    );
+    // Out of the window: after the flush, or older than the lead.
+    rig.hook_claim("500:7", "/wt/feat-login", 900_000_000);
+    assert_eq!(
+        rig.evidence_moved("/wt/feat-login", 1_000),
+        S3Outcome::NoSighting
+    );
+    assert_eq!(
+        rig.evidence_moved("/wt/feat-login", 10_000_000_000),
+        S3Outcome::NoSighting
+    );
+}
+
+/// No move (a switch, a push) or no session in the repo: S4 is not read and
+/// the outcome is the one without hooks.
+#[test]
+fn s4_is_not_read_without_a_move_or_a_session() {
+    let rig = Rig::new();
+    rig.hook_claim("500:7", "/wt/feat-login", 1_000);
+    assert_eq!(
+        rig.evidence_moved("/wt/feat-login", 1_000),
+        S3Outcome::NoSession
+    );
+    rig.claude(500, 7, "/wt/feat-login");
+    rig.scan();
+    assert_eq!(rig.evidence("/wt/feat-login", 1_000), S3Outcome::NoSighting);
+    // The claim is still there for its own event.
+    assert!(matches!(
+        rig.evidence_moved("/wt/feat-login", 1_000),
+        S3Outcome::Hook(_)
+    ));
 }
