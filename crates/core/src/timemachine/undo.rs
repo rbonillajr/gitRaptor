@@ -41,7 +41,9 @@ use super::protected::{
     ScopeError, StepCtx, StepError, StepOutput, StepScope, registered_worktrees,
 };
 use super::repo_lock;
-use super::restore::{KEPT_REF_IN_RECREATED_WORKTREE, RECREATED_WORKTREE_WARNING};
+use super::restore::{
+    RECREATED_WORKTREE_ROOT_WARNING, RECREATED_WORKTREE_WARNING, kept_ref_warning,
+};
 use super::store::SnapshotStore;
 use crate::channel::marks::ExecutorMarks;
 use crate::channel::peer::ProcSource;
@@ -126,7 +128,8 @@ pub struct UndoDone {
     pub target_snapshot_id: String,
     pub report: ApplyReport,
     /// The undo's own warnings as stable codes, also recorded in the oplog
-    /// (e.g. [`super::restore::KEPT_REF_IN_RECREATED_WORKTREE`]).
+    /// (e.g. [`super::restore::KEPT_REF_IN_RECREATED_WORKTREE`] followed by
+    /// `:` and the kept ref).
     pub warnings: Vec<String>,
 }
 
@@ -384,6 +387,9 @@ fn plan(
     // Keys of the worktrees the undone operation recreated, if it is a
     // restore: their branches are kept rather than refused (NFR-01).
     let mut recreated: Vec<String> = Vec::new();
+    // Their roots, when the restore recorded them: the key alone could name
+    // another worktree that took the same id since.
+    let mut recreated_roots: Vec<PathBuf> = Vec::new();
     let (undone, scope, target) = match stack.last_operation() {
         None => return Err(reject(TmRejectReason::NothingToUndo, &own_scope, vec![])),
         Some(op @ OpRef::GitEvent(seq)) => {
@@ -426,15 +432,18 @@ fn plan(
             };
             let scope = view.record.scope.clone();
             if view.record.kind == OperationKind::Restore {
-                recreated = view
-                    .record
-                    .warnings
-                    .iter()
-                    .filter_map(|w| {
-                        w.strip_prefix(RECREATED_WORKTREE_WARNING)?
-                            .strip_prefix(':')
-                    })
-                    .map(str::to_owned)
+                let tagged = |prefix: &str| -> Vec<String> {
+                    view.record
+                        .warnings
+                        .iter()
+                        .filter_map(|w| w.strip_prefix(prefix)?.strip_prefix(':'))
+                        .map(str::to_owned)
+                        .collect()
+                };
+                recreated = tagged(RECREATED_WORKTREE_WARNING);
+                recreated_roots = tagged(RECREATED_WORKTREE_ROOT_WARNING)
+                    .into_iter()
+                    .map(PathBuf::from)
                     .collect();
             }
             let op = OpRef::Oplog(view.record.operation_id.clone());
@@ -517,7 +526,8 @@ fn plan(
         {
             let full = format!("refs/heads/{branch}");
             let key = super::protected::worktree_key(&registered, root, i);
-            if recreated.contains(&key) {
+            let same_root = recreated_roots.is_empty() || recreated_roots.contains(root);
+            if recreated.contains(&key) && same_root {
                 kept.insert(full);
             } else {
                 in_use.insert(full);
@@ -530,11 +540,7 @@ fn plan(
     for full in &kept {
         refs.remove(full);
     }
-    let warnings = if kept.is_empty() {
-        Vec::new()
-    } else {
-        vec![KEPT_REF_IN_RECREATED_WORKTREE.to_owned()]
-    };
+    let warnings = kept.iter().map(|full| kept_ref_warning(full)).collect();
     // The undo records the refs it may move, so undoing it (or redoing)
     // keeps the same scope.
     let scope = Scope {

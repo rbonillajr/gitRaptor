@@ -8,11 +8,13 @@
 //! It stays in the worktree's stack, so `undo` takes it back.
 //!
 //! Worktrees the point had and that are gone are recreated without
-//! checkout. Each one is recorded in the restore's `warnings` as
+//! checkout. Each one is recorded in the restore's `warnings` twice: as
 //! `recreated-worktree:<key>` ([`recreated_worktree_warning`]), with the
-//! key the point's meta gives it, so an undo of the restore never refuses
-//! a branch only that worktree has out: it keeps it and says so with
-//! [`KEPT_REF_IN_RECREATED_WORKTREE`].
+//! key the point's meta gives it, and as `recreated-worktree-root:<root>`
+//! ([`recreated_worktree_root_warning`]). An undo of the restore never
+//! refuses a branch only that worktree (same key and, when recorded, same
+//! root) has out: it keeps it and records
+//! `kept-ref-in-recreated-worktree:<ref>` ([`kept_ref_warning`]) for each.
 //!
 //! What a restore reaches: the requested worktree, plus the worktrees and
 //! branches that the work done from it after the point touched (the scopes
@@ -56,13 +58,28 @@ use crate::channel::requester::Who;
 /// followed by `:` and the worktree's key in the point's meta.
 pub const RECREATED_WORKTREE_WARNING: &str = "recreated-worktree";
 
-/// Warning code an undo of a restore records when it leaves a branch as it
-/// is because only a worktree that restore recreated has it checked out.
+/// Warning prefix a restore records for each worktree it recreated,
+/// followed by `:` and the worktree's root.
+pub const RECREATED_WORKTREE_ROOT_WARNING: &str = "recreated-worktree-root";
+
+/// Warning prefix an undo of a restore records for each branch it leaves as
+/// it is because only a worktree that restore recreated has it checked out,
+/// followed by `:` and the full ref name.
 pub const KEPT_REF_IN_RECREATED_WORKTREE: &str = "kept-ref-in-recreated-worktree";
 
 /// The warning a restore records for the recreated worktree `key`.
 pub fn recreated_worktree_warning(key: &str) -> String {
     format!("{RECREATED_WORKTREE_WARNING}:{key}")
+}
+
+/// The warning a restore records with the root of a worktree it recreated.
+pub fn recreated_worktree_root_warning(root: &Path) -> String {
+    format!("{RECREATED_WORKTREE_ROOT_WARNING}:{}", root.display())
+}
+
+/// The warning an undo of a restore records for the kept ref `full`.
+pub fn kept_ref_warning(full: &str) -> String {
+    format!("{KEPT_REF_IN_RECREATED_WORKTREE}:{full}")
 }
 
 /// A finished restore.
@@ -626,7 +643,12 @@ pub fn restore_to(
         target: Target::Snapshot(snapshot_id.to_owned()),
         warnings: recreate
             .iter()
-            .map(|w| recreated_worktree_warning(&w.key))
+            .flat_map(|w| {
+                [
+                    recreated_worktree_warning(&w.key),
+                    recreated_worktree_root_warning(&w.root),
+                ]
+            })
             .collect(),
         engine_mark,
     };
