@@ -139,6 +139,7 @@ impl ProcessProbe for SystemProbe {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum StartRule {
     /// The start time is fixed when the process is created (macOS).
+    #[cfg(any(not(target_os = "linux"), test))]
     Exact,
     /// Linux: the start time is the boot time (whole seconds, recomputed
     /// from the wall clock, so it moves when the clock is stepped) plus the
@@ -146,7 +147,7 @@ pub(crate) enum StartRule {
     /// ticks alone, tells two processes apart; equal sub-seconds with other
     /// seconds may be the same child after a clock step, so it is the same
     /// (fail-closed: a reuse within the same hundredth is not detected).
-    #[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
+    #[cfg(any(target_os = "linux", test))]
     SubSecond,
 }
 
@@ -160,7 +161,9 @@ const UNIX_START_RULE: StartRule = StartRule::Exact;
 #[cfg(any(unix, test))]
 pub(crate) fn same_start(stored: u64, current: u64, rule: StartRule) -> bool {
     match rule {
+        #[cfg(any(not(target_os = "linux"), test))]
         StartRule::Exact => stored == current,
+        #[cfg(any(target_os = "linux", test))]
         StartRule::SubSecond => stored % 1_000_000 == current % 1_000_000,
     }
 }
