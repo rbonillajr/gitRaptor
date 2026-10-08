@@ -282,6 +282,14 @@ fn prior_hook(conf: &Conf, common: &Path, hook: Hook) -> Option<PathBuf> {
     (cfg!(windows) && is_executable(&exe)).then_some(exe)
 }
 
+/// The `sh` of Git for Windows the install recorded in `dispatch.conf` (`git_sh`): the only one
+/// that runs a prior hook that is a script. Never read from the environment or `PATH`, which
+/// any caller of `git` controls (ADR-GRD-001 § 2); and only while it is still a file.
+fn git_sh(conf: &Conf) -> Option<PathBuf> {
+    let sh = PathBuf::from(conf.get("git_sh").filter(|v| !v.is_empty())?);
+    (cfg!(windows) && sh.is_absolute() && sh.is_file()).then_some(sh)
+}
+
 /// Where the prior hook's standard input comes from.
 enum Input<'a> {
     /// What this dispatcher already read (`pre-push`, `reference-transaction` in `prepared`).
@@ -293,7 +301,13 @@ enum Input<'a> {
 /// Runs the prior hook as Git would have: same arguments, same input, Git's own environment and
 /// working folder, its output straight through. Its exit code is the result. Without a prior
 /// hook the operation simply goes ahead.
-fn chain(prior: Option<&Path>, args: &[OsString], input: Input<'_>) -> ExitCode {
+#[cfg_attr(not(windows), allow(unused_variables))]
+fn chain(
+    prior: Option<&Path>,
+    args: &[OsString],
+    input: Input<'_>,
+    git_sh: Option<&Path>,
+) -> ExitCode {
     let Some(prior) = prior else {
         return ExitCode::SUCCESS;
     };
@@ -325,7 +339,7 @@ fn chain(prior: Option<&Path>, args: &[OsString], input: Input<'_>) -> ExitCode 
         // Git for Windows runs a hook that is not a program (a script, with or without `#!`)
         // through its own `sh`: so does the dispatcher, with the same `exec "$0" "$@"` shape.
         #[cfg(windows)]
-        Err(e) if e.raw_os_error() == Some(ERROR_BAD_EXE_FORMAT) => match git_sh() {
+        Err(e) if e.raw_os_error() == Some(ERROR_BAD_EXE_FORMAT) => match git_sh {
             Some(sh) => {
                 let mut command = Command::new(sh);
                 command.arg("-c").arg(r#"exec "$0" "$@""#).arg(&program);
@@ -357,20 +371,6 @@ const ENOEXEC: i32 = 8;
 /// `CreateProcess` on a file that is not a PE image.
 #[cfg(windows)]
 const ERROR_BAD_EXE_FORMAT: i32 = 193;
-
-/// The `sh` of the Git for Windows that runs this hook: next to the folder `GIT_EXEC_PATH` (which
-/// Git sets for its hooks) names, never one looked up in `PATH` first, so a `sh.exe` planted in
-/// the repo or the working folder is not what runs.
-#[cfg(windows)]
-fn git_sh() -> Option<PathBuf> {
-    let exec = PathBuf::from(std::env::var_os("GIT_EXEC_PATH")?);
-    exec.ancestors().skip(1).take(4).find_map(|root| {
-        ["usr/bin/sh.exe", "bin/sh.exe"]
-            .into_iter()
-            .map(|rel| root.join(rel))
-            .find(|sh| sh.is_file())
-    })
-}
 
 fn main() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().skip(1).collect();
@@ -409,6 +409,7 @@ fn main() -> ExitCode {
             prior_hook(conf, &common, hook).as_deref(),
             &args,
             Input::Inherited,
+            git_sh(conf).as_deref(),
         );
     }
     let mut input = Vec::new();
@@ -452,6 +453,7 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
     let prior = prior_hook(&conf, &common, hook);
+    let sh = git_sh(&conf);
     let skippable = match hook {
         Hook::ReferenceTransaction => {
             fastpath::skippable_ref_transaction(&input, &common, MAX_LINE)
@@ -460,11 +462,11 @@ fn main() -> ExitCode {
         Hook::PreRebase | Hook::PreCommit | Hook::CommitMsg | Hook::Chain(_) => false,
     };
     if skippable {
-        return chain(prior.as_deref(), &args, input_for_prior());
+        return chain(prior.as_deref(), &args, input_for_prior(), sh.as_deref());
     }
     let passes = |missing: bool| {
         if fallback(hook, &input, &common, raptor, missing) {
-            chain(prior.as_deref(), &args, input_for_prior())
+            chain(prior.as_deref(), &args, input_for_prior(), sh.as_deref())
         } else {
             ExitCode::FAILURE
         }
@@ -498,7 +500,7 @@ fn main() -> ExitCode {
     }
     match child.wait().ok().and_then(|s| s.code()) {
         // GitRaptor allows: the prior hook runs and may still fail the operation.
-        Some(0) => chain(prior.as_deref(), &args, input_for_prior()),
+        Some(0) => chain(prior.as_deref(), &args, input_for_prior(), sh.as_deref()),
         // GitRaptor denies: the operation will not happen, so the prior hook does not run.
         Some(1) => ExitCode::FAILURE,
         // A signal, a panic or an unexpected code: an internal error (ADR-GRD-001 § 3).
