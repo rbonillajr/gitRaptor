@@ -26,7 +26,14 @@ impl Removed {
     fn new() -> Self {
         let f = Fixture::with_commit();
         let wt = f.repo.parent().unwrap().join("w");
-        f.git(&["worktree", "add", "-q", "-b", "feature", wt.to_str().unwrap()]);
+        f.git(&[
+            "worktree",
+            "add",
+            "-q",
+            "-b",
+            "feature",
+            wt.to_str().unwrap(),
+        ]);
         let head = HeadValue::parse(&std::fs::read(f.repo.join(".git/worktrees/w/HEAD")).unwrap())
             .unwrap();
         f.git(&["worktree", "remove", "--force", wt.to_str().unwrap()]);
@@ -119,7 +126,10 @@ fn a_worktrees_folder_that_is_a_link_is_refused() {
     link(&r.f.repo.join(".git/worktrees"), elsewhere.path());
     let result = r.recreate(&|_| {});
     refused(&result, "worktrees folder");
-    assert!(entries(elsewhere.path()).is_empty(), "written through the link");
+    assert!(
+        entries(elsewhere.path()).is_empty(),
+        "written through the link"
+    );
     assert!(r.wt.symlink_metadata().is_err() || entries(&r.wt).is_empty());
 }
 
