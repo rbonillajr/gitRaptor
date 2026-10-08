@@ -872,24 +872,37 @@ impl Observer {
         let Some(repo) = repos.get_mut(repo_id) else {
             return Err(SleepRefused::Unknown);
         };
-        let Some(refs) = refs.filter(|_| flushed) else {
-            // A task did not answer: back to active, and the daemon
-            // reconciles it as after any wake.
-            repo.tier.store(Tier::Waking.as_u8(), Ordering::Release);
-            drop(repos);
-            self.shared.wake(repo_id, WakeCause::Sentinel);
-            return Err(SleepRefused::Busy);
-        };
         let roots: Vec<PathBuf> = repo.worktrees.drain(..).map(|w| w.root).collect();
         let git_dirs: Vec<PathBuf> = worktrees.iter().map(|w| w.git_dir.clone()).collect();
         let print = Print::read(&repo.common, &git_dirs);
+        let now = wall_now().0;
+        let busy = refs.is_none() || !flushed;
+        // A task that did not answer may have lost its window: the refs are
+        // read now and the repo wakes at once, with a gap that covers it.
+        let refs = match refs.filter(|_| flushed) {
+            Some(refs) => refs,
+            None => RefsView::read(&repo.common),
+        };
         repo.asleep = Some(Asleep {
             refs,
             roots,
             git_dirs,
             print,
-            checked_ms: wall_now().0,
+            checked_ms: now,
         });
+        if busy {
+            for wt in &worktrees {
+                let _ = wt.tx.send(WtMsg::Stop);
+            }
+            let _ = repo_tx.send(RepoMsg::Stop);
+            let woke = repo.start_waking();
+            drop(repos);
+            if woke {
+                self.shared
+                    .wake(repo_id, WakeCause::SafetyNet { since_ms: now });
+            }
+            return Err(SleepRefused::Busy);
+        }
         Ok(())
     }
 
