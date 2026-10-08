@@ -53,7 +53,8 @@ pub enum KeptReason {
     /// Its content is not the prior content of any path of its folder: the new content of the
     /// interrupted write, or someone else's.
     Unknown,
-    /// It changed, or another program holds it, between the look and the rename.
+    /// It changed, another entry took its name, or another program holds it, between the look
+    /// and the rename.
     Changed,
     /// The file system has no exclusive rename, or a folder on the way changed.
     NotGuaranteed,
@@ -91,6 +92,10 @@ pub struct KeptTemp {
 pub struct SweepReport {
     pub restored: Vec<RestoredTemp>,
     pub kept: Vec<KeptTemp>,
+    /// Another entry took the temporary name between the last check and the rename, and is at
+    /// the path now (Enmienda T2): nothing was overwritten or deleted, and it is not moved again.
+    /// Not a kept entry: there is no temporary name left.
+    pub moved_unverified: Vec<RestoredTemp>,
     /// Worktrees or snapshots that could not be read: nothing was touched there.
     pub unreadable: usize,
     /// Only the folders of the prior snapshot were swept: the target was not known by id or could
@@ -100,7 +105,10 @@ pub struct SweepReport {
 
 impl SweepReport {
     pub fn is_clean(&self) -> bool {
-        self.restored.is_empty() && self.kept.is_empty() && self.unreadable == 0
+        self.restored.is_empty()
+            && self.kept.is_empty()
+            && self.moved_unverified.is_empty()
+            && self.unreadable == 0
     }
 }
 
@@ -272,6 +280,14 @@ impl Worktree<'_> {
         let reason = match root.restore_temp(path.as_bytes(), &temp.name, self.prior[&path])? {
             Restore::Restored => {
                 report.restored.push(RestoredTemp {
+                    operation_id: self.operation_id.to_owned(),
+                    worktree: self.root.to_owned(),
+                    path,
+                });
+                return Ok(None);
+            }
+            Restore::Swapped => {
+                report.moved_unverified.push(RestoredTemp {
                     operation_id: self.operation_id.to_owned(),
                     worktree: self.root.to_owned(),
                     path,

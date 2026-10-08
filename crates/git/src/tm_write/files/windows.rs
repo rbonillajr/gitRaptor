@@ -19,7 +19,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use gitraptor_winsys::fs::{delete_through, is_in_use, rename_no_replace};
+use gitraptor_winsys::fs::{delete_through, is_in_use, rename_no_replace, rename_through};
 
 use super::*;
 
@@ -42,7 +42,7 @@ const WAIT_BUDGET_MS: u64 = 5_000;
 /// A worktree root, held open; every write happens beneath it.
 #[derive(Debug)]
 pub struct RootDir {
-    _handle: File,
+    handle: File,
     volume: u32,
     path: PathBuf,
     /// `\\?\` form of `path`: every operation takes names as they are, so the open, the
@@ -50,6 +50,7 @@ pub struct RootDir {
     verbatim: PathBuf,
     no_exchange: bool,
     crash_between_moves: bool,
+    swap_at: Option<SwapPoint>,
     wait_left_ms: AtomicU64,
 }
 
@@ -177,12 +178,13 @@ impl RootDir {
         }
         let (volume, _) = gitraptor_winsys::file_id::of_file(&handle)?;
         Ok(Self {
-            _handle: handle,
+            handle,
             volume,
             path: root.to_owned(),
             verbatim: verbatim(root),
             no_exchange: false,
             crash_between_moves: false,
+            swap_at: None,
             wait_left_ms: AtomicU64::new(WAIT_BUDGET_MS),
         })
     }
@@ -200,6 +202,27 @@ impl RootDir {
     pub fn simulating_crash_between_moves(mut self) -> Self {
         self.crash_between_moves = true;
         self
+    }
+
+    /// Tries to make another entry take the temporary name while [`Self::restore_temp`] holds it
+    /// (tests of the race of DS-TS-TMC-003, Enmienda T2): the held handle must refuse it.
+    #[doc(hidden)]
+    pub fn simulating_swap_during_restore(mut self, at: SwapPoint) -> Self {
+        self.swap_at = Some(at);
+        self
+    }
+
+    /// The attempt of [`Self::simulating_swap_during_restore`]: a copy renamed over `temp`,
+    /// replacing it, as another program would.
+    fn try_swap(&self, temp: &Path) {
+        if self.swap_at.is_none() {
+            return;
+        }
+        let mut other = temp.as_os_str().to_owned();
+        other.push("-swap");
+        if std::fs::write(&other, b"swapped").is_ok() {
+            let _ = std::fs::rename(&other, temp);
+        }
     }
 
     pub fn path(&self) -> &Path {
@@ -619,34 +642,37 @@ impl RootDir {
 
     /// Puts the temporary entry `temp`, in the folder of `rel`, back at `rel` if it still holds
     /// `expected` and nothing is at `rel`: compared through a handle that shares only reading,
-    /// then one exclusive rename (`MoveFileExW` without `MOVEFILE_REPLACE_EXISTING`), which never
-    /// follows a link or junction. Anything else leaves both untouched.
+    /// then renamed **through that same handle** (`FileRenameInfo` without `ReplaceIfExists`,
+    /// relative to the pinned folder), so the entry renamed is the entry compared: nobody can
+    /// write to it, rename it or take its name meanwhile (Enmienda T2), and [`Restore::Swapped`]
+    /// never happens here. Never follows a link or junction. Anything else leaves both untouched.
     pub fn restore_temp(&self, rel: &[u8], temp: &str, expected: (Kind, Oid)) -> Result<Restore> {
         if !is_temp_name(temp) {
             return Err(WriteError::InvalidInput("not a temporary name".into()));
         }
-        let (_pins, dir, name) = match self.parent(rel, false)? {
+        let (pins, dir, name) = match self.parent(rel, false)? {
             Ok(found) => found,
             Err(_) => return Ok(Restore::Blocked),
         };
         if self.no_exchange {
             return Ok(Restore::NotGuaranteed);
         }
+        let folder = pins.last().unwrap_or(&self.handle);
         let aside = dir.join(temp);
-        match self.hold(&aside)? {
+        let held = match self.hold(&aside)? {
             Held::Open(file, seen) => {
-                drop(file);
                 if !Self::same(Some(seen), expected.1) {
                     return Ok(Restore::Mismatch);
                 }
+                file
             }
             Held::Gone => return Ok(Restore::Mismatch),
             Held::InUse => return Ok(Restore::Busy),
-        }
-        match rename_no_replace(&aside, &dir.join(&name)) {
+        };
+        self.try_swap(&aside);
+        match rename_through(&held, folder, std::ffi::OsStr::new(&name)) {
             Ok(()) => Ok(Restore::Restored),
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(Restore::Occupied),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Restore::Mismatch),
             Err(e) if is_in_use(&e) => Ok(Restore::Busy),
             Err(e) => Err(e.into()),
         }
@@ -860,6 +886,37 @@ mod tests {
         );
         assert_eq!(std::fs::read(&path).unwrap(), b"agent work");
         assert_eq!(temps(tmp.path()).len(), 1);
+    }
+
+    #[test]
+    fn the_entry_renamed_is_the_entry_compared() {
+        let tmp = tempfile::tempdir().unwrap();
+        let temp = format!("{TEMP_PREFIX}123");
+        let at = tmp.path().join(&temp);
+        std::fs::write(&at, b"prior").unwrap();
+        let compared = gitraptor_winsys::file_id::of_path(&at).unwrap();
+        for point in [SwapPoint::AfterCompare, SwapPoint::BeforeRename] {
+            let root = RootDir::open(tmp.path())
+                .unwrap()
+                .simulating_swap_during_restore(point);
+            let rel = format!("a-{point:?}");
+            let expected = (Kind::File, blob_id(b"prior"));
+            assert_eq!(
+                root.restore_temp(rel.as_bytes(), &temp, expected).unwrap(),
+                Restore::Restored
+            );
+            // The swap was refused while the handle was held: the entry at the path is the
+            // one compared, byte for byte.
+            let path = tmp.path().join(&rel);
+            assert_eq!(gitraptor_winsys::file_id::of_path(&path).unwrap(), compared);
+            assert_eq!(std::fs::read(&path).unwrap(), b"prior");
+            assert!(!at.exists());
+            let mut swap = at.as_os_str().to_owned();
+            swap.push("-swap");
+            assert_eq!(std::fs::read(&swap).unwrap(), b"swapped");
+            std::fs::remove_file(&swap).unwrap();
+            std::fs::rename(&path, &at).unwrap();
+        }
     }
 
     #[test]
