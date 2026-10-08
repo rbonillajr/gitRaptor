@@ -1040,6 +1040,7 @@ impl Connection<'_> {
                 if !self.has(methods::CAP_OBSERVATION_TIERS.name) {
                     result.repo.without_tier();
                 }
+                self.kept_temps(std::slice::from_mut(&mut result.repo));
                 result
             })
             .map_err(repo_command_error)
@@ -1384,6 +1385,16 @@ impl Connection<'_> {
             .map_err(registration_error)
     }
 
+    /// The kept temporary entries still there, for a connection with
+    /// `timemachine.kept-temps` (DS-TS-TMC-003, Enmienda T2).
+    fn kept_temps(&self, repos: &mut [gitraptor_api::messages::RepoView]) {
+        if let Some(deps) = &self.ctx.tm_engine
+            && self.has(methods::CAP_TM_KEPT_TEMPS.name)
+        {
+            crate::timemachine::kept::refresh_kept_temps(&deps.repos, repos);
+        }
+    }
+
     fn snapshot(&self) -> serde_json::Value {
         let (seq, shared) = self.ctx.bus.snapshot();
         let run_id = self.ctx.bus.run_id().to_owned();
@@ -1408,6 +1419,7 @@ impl Connection<'_> {
                         .iter_mut()
                         .for_each(gitraptor_api::messages::RepoView::without_tier);
                 }
+                self.kept_temps(&mut snapshot.repos);
                 // The ahead/behind as of now (US-GRP-012, D5).
                 crate::observe::refresh_divergence(
                     &mut snapshot.repos,
@@ -1507,6 +1519,7 @@ impl Connection<'_> {
                 if !self.has(methods::CAP_OBSERVATION_TIERS.name) {
                     repo.without_tier();
                 }
+                self.kept_temps(std::slice::from_mut(&mut repo));
                 if serde_json::to_vec(&repo).map_or(0, |v| v.len()) > CHANGE_LIST_BUDGET {
                     crate::observe::without_change_lists(&mut repo.worktrees);
                 }
