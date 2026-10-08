@@ -1,0 +1,15 @@
+{
+  "source": { "kind": "devspec", "ref": "docs/requirements/features/time-machine/dev-specs/US-TMC-006-timeline-que-cuando-quien.md" },
+  "criteria": [
+    { "id": "TL1", "statement": "Un commit de un agente detectado figura con momento, worktree, rutas y actor detectado", "verify": "cargo test -p gitraptor-core --test us_tmc_006 a_raw_commit_shows_when_where_and_which_files", "layer": "runtime", "tests": ["crates/core/tests/us_tmc_006.rs"] },
+    { "id": "TL2", "statement": "Un agente registrado figura como registrado (e2e CLI)", "verify": "cargo test -p gitraptor-cli --test timeline_process a_registered_agent_commit_is_shown_as_registered", "layer": "runtime", "tests": ["apps/cli/tests/timeline_process.rs"] },
+    { "id": "TL3", "statement": "Lo no atribuido nunca figura como humano", "verify": "cargo test -p gitraptor-core --test us_tmc_006 nothing_is_ever_attributed_to_a_human", "layer": "runtime", "tests": ["crates/core/tests/us_tmc_006.rs"] },
+    { "id": "TL4", "statement": "Cada punto declara su nivel de protección; sin punto, sin protección", "verify": "cargo test -p gitraptor-core --test us_tmc_006 an_event_without_a_point_is_shown_unprotected", "layer": "runtime", "tests": ["crates/core/tests/us_tmc_006.rs"] },
+    { "id": "TL5", "statement": "Repo sin actividad: timeline vacío con aviso", "verify": "cargo test -p gitraptor-core --test us_tmc_006 an_empty_repo_gives_an_empty_timeline_with_sources_available", "layer": "runtime", "tests": ["crates/core/tests/us_tmc_006.rs"] },
+    { "id": "TL6", "statement": "Tope de rutas con total real", "verify": "cargo test -p gitraptor-core --test us_tmc_006 files_are_capped_and_the_real_total_is_reported", "layer": "runtime", "tests": ["crates/core/tests/us_tmc_006.rs"] },
+    { "id": "TL7", "statement": "Un undo figura como entrada con su solicitante registrado", "verify": "cargo test -p gitraptor-core --test us_tmc_006 an_undo_is_an_entry_with_what_it_acted_on", "layer": "runtime", "tests": ["crates/core/tests/us_tmc_006.rs"] },
+    { "id": "TL8", "statement": "Privacidad: ni mensajes de commit ni contenido salen del daemon", "verify": "cargo test -p gitraptor-core --test us_tmc_006 no_commit_message_or_file_content_leaves_the_daemon", "layer": "runtime", "tests": ["crates/core/tests/us_tmc_006.rs"] }
+  ],
+  "constraints": { "deny_paths": ["Cargo.lock", "docs/ARTIFACTS.md", "docs/architecture/decisions"], "allow_dependency_changes": false },
+  "budget": { "maxRounds": 3, "verifyTimeoutMs": 600000, "suiteTimeoutMs": 1800000 }
+}
