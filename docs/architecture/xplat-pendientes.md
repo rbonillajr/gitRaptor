@@ -221,6 +221,16 @@ Antes de esta rama se saltaban en Windows estos tests, que ahora corren y pasan:
 - **Identidad de ejecutables**: `channel::file_id` da en Windows `(número de serie del volumen, índice de archivo)`. Con eso funcionan `daemon.replace` y la comprobación "servidor = binario instalado" del hook (ADR-GRD-003 § 4).
 - **Columna `inode`**: guarda el u64 bit a bit (complemento a dos), así que cabe un índice NTFS con el bit alto puesto. En Unix, un inodo mayor que `i64::MAX` ya no hace fallar la anotación.
 
+**Resultado en la máquina real** (`C:\src\xp15`, `CARGO_BUILD_JOBS=2`):
+
+| Ámbito | `main` (`42b7d1d`) | Esta rama |
+|---|---|---|
+| `cargo test -p gitraptor-winsys --lib` | 27 pasan, 0 fallan | 29 pasan, 0 fallan |
+| `cargo test -p gitraptor-core --lib timemachine::oplog` | 28 pasan, 0 fallan (los de locks no corrían: `cfg(unix)`) | 38 pasan, 0 fallan |
+| `cargo test --workspace --no-fail-fast` | — | 1001 pasan, 0 fallan, 3 ignorados |
+
+`cargo clippy --all-targets -- -D warnings` está limpio en la máquina. Los nombres 8.3 están activos en `C:`, así que el test de la ruta corta se ejecutó.
+
 **Tests nuevos en la máquina real**:
 
 - `winsys`: `file_id::tests` (la entrada lee su identidad y borra exactamente lo que fijó; dos grafías de la misma ruta, en mayúsculas o con el nombre 8.3, son el mismo archivo) y `process::tests` (hora de creación de un hijo vivo y `Gone` al terminar).
