@@ -8,7 +8,7 @@
 
 use std::path::PathBuf;
 
-use crate::ffi_process::{created, image, open, owner, snapshot};
+use crate::ffi_process::{created, ended, image, open, owner, snapshot};
 
 /// Whose a process is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,8 +57,12 @@ pub fn process(pid: u32) -> Result<Process, Error> {
     // while the rest is read.
     let handle = open(pid)?;
     let created_100ns = created(&handle).ok_or(Error::Gone)?;
-    // A process that ended but is still pinned by some handle is not in the
-    // list: that counts as gone.
+    // A process that ended but is still pinned by some handle (its parent's
+    // `Child`, say) counts as gone: right after the end it can still be in
+    // the list for a moment, and once torn down it is not.
+    if ended(&handle) {
+        return Err(Error::Gone);
+    }
     let ppid = snapshot()
         .ok_or(Error::Unavailable)?
         .into_iter()
