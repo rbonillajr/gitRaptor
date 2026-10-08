@@ -165,6 +165,11 @@ pub struct RepoView {
     /// it, so a client shows "dormant, checked X ago" without waking it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub checked_utc_ms: Option<i64>,
+    /// Temporary entries kept by the sweep after a crash (DS-TS-TMC-003,
+    /// Enmienda T2). Only in snapshots, and only for a connection with
+    /// `timemachine.kept-temps`; absent when there are none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kept_temps: Option<crate::timemachine::KeptTempsView>,
 }
 
 /// How an observed repo is observed (TS-GRP-006, ADR-GRP-010, Enmienda
