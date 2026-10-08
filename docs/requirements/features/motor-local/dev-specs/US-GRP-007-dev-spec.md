@@ -158,6 +158,15 @@ Cierra el pendiente de Windows de D3. **Decisión del orquestador (2026-10-08), 
 
 **Revisión de seguridad (2026-10-08)**: sin críticos; el alto (H-01: la ruta leída del PEB se abría con `canonicalize`: UNC, rutas de dispositivo y letras redefinidas por el proceso) y los hallazgos M-02 (cwd atado a la hora de creación) y L-01 (componentes con punto o espacio al final) están corregidos aquí. **Quedan abiertos**: M-01 (el `canonicalize` del cwd corre con el cerrojo del detector; con solo discos fijos el bloqueo es improbable, pero conviene calcular los cwd antes del cerrojo como hace `sample()`), I-01 (contar en el diagnóstico los procesos cuyo token no se lee) e I-04 (`list()` lee la imagen de todos los procesos cuando solo hacen falta los `git`). Riesgo residual aceptado (I-02): un proceso del mismo usuario cuya imagen se llame `claude.exe` es una sesión, como en macOS y Linux. Modelo de amenazas por decidir: procesos de baja integridad o AppContainer con el mismo SID cuentan como del usuario actual.
 
+**PENDIENTE (Rene): aceptación con una sesión real de Claude Code.** La máquina Windows de pruebas no tiene Claude Code instalado (hace falta la cuenta de Rene), así que la detección se validó con un `claude.exe` simulado (copia de `cmd.exe`) y con el agente conocido de los tests. Pasos para cerrarla cuando lo instale (instalador nativo, que deja `claude.exe`; una instalación por npm es `node …\cli.js` y no se detecta, igual que en las otras plataformas):
+
+1. `raptor repo add C:\ruta\al\repo` (consola interactiva) y comprobar `raptor status`: el worktree sin sesiones.
+2. En otra consola, `cd C:\ruta\al\repo` y `claude` (sesión interactiva).
+3. En la primera consola, `raptor status`: debe salir `Claude Code · Active · detected` bajo el worktree (unos segundos como mucho).
+4. Hacer un commit desde esa sesión de Claude Code y ver `raptor events`: el commit atribuido a "Claude Code, detected" (S3) si el `git` queda a la vista; si no, "sin atribuir" es el resultado esperado de la carrera de S3.
+5. Cerrar Claude Code: `raptor status` pasa a `Ended`.
+6. Con la protección instalada (`raptor guard install`), un `git push --force` desde la sesión de Claude Code queda denegado y `raptor guard log` lo muestra con el repo en forma de unidad.
+
 **Pendiente**: medir el coste del escaneo por segundo en Windows (RES-01 en la etapa de validación); S3 (atribución de commits por ascendencia) sigue la misma regla que en macOS pero no tiene su e2e en Windows; Windows 11.
 
 ## Estado de la implementación (2026-10-08)
