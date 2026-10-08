@@ -113,7 +113,7 @@ Las fichas del alcance de M1 que siguen en este hito. INF-GRP-001, INF-GRP-002 y
 | US-MCP-001, US-MCP-002, US-MCP-003 | MCP mínimo (Should) | I |
 | SPIKE-GRP-001 | Precisión de la detección: falta la medición en el dogfooding (criterio 2) | P |
 
-Lo primero que necesita M1 es el **registro diario de dogfooding**: fecha, sesiones, daemon encendido, lectura de `raptor status --resources` e incidentes. Hoy no existe (hueco 1 de [Huecos y limpieza](#huecos-y-limpieza)) y es la evidencia de los criterios 1, 2, 3 y 5. El primer uso del 2026-10-06 no cuenta para la racha porque no hubo registro ni continuidad.
+Lo primero que necesita M1 es el **registro diario de dogfooding**: fecha, sesiones, daemon encendido, lectura de `raptor status --resources` e incidentes. Instrumento: registro diario de dogfooding, PR #188 ([`tools/dogfooding/`](../../tools/dogfooding/README.md)), que cierra el hueco 1 de [Huecos y limpieza](#huecos-y-limpieza); falta que Rene lo instale. Es la evidencia de los criterios 1, 2, 3 y 5. El primer uso del 2026-10-06 no cuenta para la racha porque no hubo registro ni continuidad.
 
 ## M2: MVP funcionalmente completo en macOS
 
@@ -379,7 +379,7 @@ Ninguna se ha tomado en su nombre. Hasta que decida, el plan aplica la recomenda
 
 | # | Hueco | Lo necesita | Quién |
 |---|---|---|---|
-| 1 | Registro diario de dogfooding (artefacto, no historia) | M1 (criterios 1, 2, 3 y 5) y la demo de M2 | Orquestador |
+| 1 | Registro diario de dogfooding (artefacto, no historia). Hecho en el PR #188 (`tools/dogfooding/`) | M1 (criterios 1, 2, 3 y 5) y la demo de M2 | Orquestador |
 | 2 | Guion o test e2e de la demo del BRD § 13 (el D-5 del MCP la declara prueba de aceptación) | M2 (criterio 2) y M3 (criterio 6) | PO y Arquitecto |
 | 3 | TS del spool en modo degradado de US-GRD-005 | M2 | Arquitecto |
 | 4 | Historias de Guardrails que debe el PO: relajación personal (Q-GRD-32), adopción del factor (D8), desinstalar y excepción (OQ-GRD-008-3) | M2, según la decisión 15 | PO |
