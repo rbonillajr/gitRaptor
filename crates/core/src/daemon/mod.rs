@@ -467,6 +467,9 @@ impl Daemon {
         {
             tm.insert(&repo_id, &common_dir, oplog);
         }
+        for startup in &report.time_machine {
+            tm.kept.record(&startup.repo_id, &startup.temps);
+        }
 
         // Guardrails: a confirmed install is published again; one left half-way is completed
         // or undone before anything else runs (ADR-GRD-001 § 4, Recuperación).
@@ -561,6 +564,7 @@ impl Daemon {
                 tier: (state == RepoStateView::Observed)
                     .then_some(gitraptor_api::messages::RepoTier::Active),
                 checked_utc_ms: None,
+                kept_temps: None,
             });
         }
         let bus = Arc::new(EventBus::new(

@@ -64,7 +64,8 @@ impl Daemon {
             match recover_repo(&self.config.dirs, &entry, Instant::now() + TM_RECOVERY_WAIT) {
                 Ok((oplog, startup)) => {
                     super::log_temps(&self.logger, &repo_id, &startup.temps);
-                    self.tm.insert(&repo_id, &entry.canonical_path, oplog)
+                    self.tm.insert(&repo_id, &entry.canonical_path, oplog);
+                    self.tm.kept.record(&repo_id, &startup.temps);
                 }
                 Err(err) => self.logger.warn(
                     "tm_unavailable",
@@ -89,6 +90,7 @@ impl Daemon {
                     fetched_utc_ms: None,
                     tier: None,
                     checked_utc_ms: None,
+                    kept_temps: None,
                 },
             });
         }
@@ -130,6 +132,7 @@ impl Daemon {
             fetched_utc_ms: observe::fetched_utc_ms(&request.common_dir, now_ms()),
             tier: (state == RepoStateView::Observed).then_some(RepoTier::Active),
             checked_utc_ms: None,
+            kept_temps: None,
         };
         if self.state == EngineState::NoRepos {
             self.transition(Trigger::FirstRepoAdded);
