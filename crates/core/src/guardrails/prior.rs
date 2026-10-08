@@ -335,9 +335,10 @@ mod tests {
     #[test]
     fn a_tilde_expands_only_under_the_account_home() {
         let home = Path::new("/Users/someone");
+        // The separator of the platform: `C:\Users\me\hooks` on Windows.
         assert_eq!(
             expand("~/hooks", Some(home), Some(home)).unwrap(),
-            "/Users/someone/hooks"
+            home.join("hooks").to_string_lossy()
         );
         assert_eq!(
             expand("~/hooks", Some(home), Some(Path::new("/Users/other"))),
