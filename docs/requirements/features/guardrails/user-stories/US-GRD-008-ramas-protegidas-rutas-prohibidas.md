@@ -2,10 +2,10 @@
 id: US-GRD-008
 title: "Ningún agente cambia una rama protegida ni toca una ruta prohibida"
 type: us
-status: draft
+status: implemented
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 feature: guardrails
 related:
   context:
@@ -105,3 +105,9 @@ El detalle técnico vive en la [Dev Spec DS-US-GRD-008](../dev-specs/US-GRD-008-
 
 - **Diseño:** no aplica.
 - **Dev Spec:** [DS-US-GRD-008](../dev-specs/US-GRD-008-ramas-protegidas-rutas-prohibidas.md).
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #<n>. Dev Spec: [DS-US-GRD-008](../dev-specs/US-GRD-008-ramas-protegidas-rutas-prohibidas.md).
+
+Los siete escenarios están cubiertos por `apps/cli/tests/guard_us_grd_008.rs` (verificado en macOS; Linux lo cubre el CI de ubuntu; Windows no tiene canal: **Pendiente: etapa de validación multiplataforma**). Límites declarados en la lista "lo que no se puede impedir" (`policy-actor`, `policy-reach`). Pendiente fuera de esta historia: push solo a tags ([TD-GRD-001](../technical-stories/TD-GRD-001-dispatcher-plantilla-3-pre-push-toda-ref.md)) y confirmación de Rene de Q-GRD-35.
