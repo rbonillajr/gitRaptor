@@ -25,11 +25,16 @@ pub struct ProcInfo {
     /// Start time, microseconds since the epoch. With `pid`, the identity.
     pub start_us: u64,
     pub exe: Option<PathBuf>,
+    /// Unix: a controlling terminal. Windows: a console (see `session`) in
+    /// an interactive Windows session (DS-TS-GRP-004 § 9, C1 and C3).
     pub controlling_terminal: bool,
-    /// Session id: the pid of the session leader.
+    /// Session id: the pid of the session leader. Windows: the pid of the
+    /// process hosting its console, or its own pid without one.
     pub session: u32,
     /// Process group id.
     pub pgid: u32,
+    /// Windows session (`None` on Unix), recorded in the audit.
+    pub desktop_session: Option<u32>,
 }
 
 /// Why a process could not be read.
@@ -59,6 +64,13 @@ pub trait ProcSource {
     /// an ancestry ends cleanly even though its parent is gone (Windows:
     /// `explorer.exe` in the Windows folder, whose parent `userinit` exits).
     fn is_session_root(&self, _info: &ProcInfo) -> bool {
+        false
+    }
+    /// Whether `session` names the process hosting a console (Windows)
+    /// rather than a session leader. Then the console's creator, the host's
+    /// parent, must be the caller or one of its ancestors (DS-TS-GRP-004
+    /// § 9, C8).
+    fn console_hosts(&self) -> bool {
         false
     }
     /// The command line of `pid` (program name first), read only to classify a Git subcommand
@@ -116,6 +128,7 @@ mod imp {
                     .saturating_add(bsd.pbi_start_tvusec),
                 exe: pidpath(raw).ok().map(PathBuf::from),
                 controlling_terminal: bsd.pbi_flags & PROC_FLAG_CONTROLT != 0,
+                desktop_session: None,
                 session,
                 pgid: bsd.pbi_pgid,
             })
@@ -250,6 +263,7 @@ mod imp {
                 start_us,
                 exe: std::fs::read_link(format!("/proc/{pid}/exe")).ok(),
                 controlling_terminal: num(4).is_some_and(|t| t != 0),
+                desktop_session: None,
                 session: num(3).ok_or(ProcError::Gone)? as u32,
                 pgid: num(2).ok_or(ProcError::Gone)? as u32,
             })
@@ -286,10 +300,10 @@ mod imp {
 ///
 /// There is no uid: [`ProcInfo::uid`] is [`current_uid`] (0) when the
 /// process token's user is this process's user and [`FOREIGN_UID`] when it
-/// is another; a token that cannot be read makes the process `Denied`. No
-/// controlling terminal, session leader or process group exists in this
-/// sense: they read as absent, and the checks that need them refuse
-/// (TQ-14, ADR-GRP-005 Enmienda 2026-10-05).
+/// is another; a token that cannot be read makes the process `Denied`. The
+/// terminal is the console (TQ-14, DS-TS-GRP-004 § 9): `session` is the
+/// process hosting it and `controlling_terminal` says it is in an
+/// interactive Windows session. There is no process group (`pgid` is 0).
 #[cfg(windows)]
 mod imp {
     use super::*;
@@ -323,16 +337,31 @@ mod imp {
                 Owner::Other => FOREIGN_UID,
                 Owner::Unknown => return Err(ProcError::Denied),
             };
+            // Without a console there is no leader to walk: the process is
+            // its own session, and it has no terminal.
+            let (session, controlling_terminal) = match p.console_host {
+                Some(host) => (
+                    host,
+                    p.session_id
+                        .is_some_and(gitraptor_winsys::system::session_is_interactive),
+                ),
+                None => (pid, false),
+            };
             Ok(ProcInfo {
                 pid,
                 ppid: p.ppid,
                 uid,
                 start_us: to_epoch_us(p.created_100ns),
                 exe: p.exe,
-                controlling_terminal: false,
-                session: 0,
+                controlling_terminal,
+                session,
                 pgid: 0,
+                desktop_session: p.session_id,
             })
+        }
+
+        fn console_hosts(&self) -> bool {
+            true
         }
 
         fn foreign_to(&self, pid: u32, uid: u32) -> Option<bool> {
@@ -521,8 +550,39 @@ mod windows_tests {
         assert_eq!(SystemProcs.foreign_to(me.pid, me.uid), Some(false));
         assert!(SystemProcs.pids_of(me.uid).unwrap().contains(&me.pid));
         assert!(!SystemProcs.is_session_root(&me));
-        assert!(!me.controlling_terminal);
-        assert_eq!((me.session, me.pgid), (0, 0));
+        assert!(SystemProcs.console_hosts());
+        assert_eq!(me.pgid, 0);
+        // OpenSSH and services run in session 0: never a terminal there.
+        let session = me.desktop_session.expect("the Windows session");
+        if session == 0 {
+            assert!(!me.controlling_terminal);
+        }
+        // `session` is the console host, or the process itself without one.
+        if me.session == me.pid {
+            assert!(!me.controlling_terminal);
+        } else {
+            let host = SystemProcs.read(me.session).unwrap();
+            let name = host.exe.unwrap().file_name().unwrap().to_ascii_lowercase();
+            assert!(
+                name == "conhost.exe" || name == "openconsole.exe",
+                "{name:?}"
+            );
+            assert_eq!(host.desktop_session, Some(session));
+        }
+        // The CLI explains a refusal by the same reading (C10).
+        let issue = super::super::authz::console_issue(&SystemProcs, me.uid, me.pid);
+        if !me.controlling_terminal {
+            assert!(issue.is_some());
+        }
+        if session == 0 {
+            use super::super::authz::ConsoleIssue;
+            let want = if me.session == me.pid {
+                ConsoleIssue::NoConsole
+            } else {
+                ConsoleIssue::NotInteractive
+            };
+            assert_eq!(issue, Some(want));
+        }
     }
 
     #[test]
