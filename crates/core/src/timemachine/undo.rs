@@ -241,7 +241,12 @@ pub struct RawSide {
 /// GitRaptor caused is marked with it (ADR-TMC-003 § 4). An operation's echo
 /// runs from its mark to the mark of its anchor (the capture of the state it
 /// left); without an anchor, to the next snapshot of the worktree, or on.
-fn external_events(oplog: &Oplog, raw: &RawSide, key: &str, wt_key: &str) -> Vec<ExternalEvent> {
+pub(crate) fn external_events(
+    oplog: &Oplog,
+    raw: &RawSide,
+    key: &str,
+    wt_key: &str,
+) -> Vec<ExternalEvent> {
     use super::oplog::{OperationState, SnapshotFilter, SnapshotLevel};
     let ops = oplog.operations(&Default::default()).unwrap_or_default();
     let snaps = oplog

@@ -14,4 +14,5 @@ pub mod protected;
 pub use crate::repo_lock;
 pub mod store;
 pub mod sweep;
+pub mod timeline;
 pub mod undo;
