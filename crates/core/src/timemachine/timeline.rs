@@ -18,16 +18,17 @@ use std::time::{Duration, Instant};
 use gitraptor_api::messages::{GitEventKind, GitEventView, SessionView};
 use gitraptor_api::timemachine::{
     ActedOn, Attribution, ChangedFiles, EntryOrigin, Protection, ProtectionLevel,
-    TIMELINE_MAX_FILES, TimelineEntry, TimelineOperationKind, TimelineOperationState,
-    TimelineResult, TimelineSource,
+    TIMELINE_MAX_FILES, TimelineChannel, TimelineEntry, TimelineOperationKind,
+    TimelineOperationState, TimelineResult, TimelineSource,
 };
 use gitraptor_api::{Actor, AgentKind, AgentOrigin, Untrusted, UntrustedName};
 use gitraptor_git::{ChangedPaths, ReadError, RepoReader};
 
+use super::manual::identity_key_root;
 use super::oplog::{
-    CurrentAttribution, OpRef, OperationFilter, OperationKind, OperationState, OperationView,
-    Oplog, Requester, RequesterOrigin, SnapshotFilter, SnapshotLevel, SnapshotRefs, SnapshotView,
-    Target,
+    Channel, CurrentAttribution, OpRef, OperationFilter, OperationKind, OperationState,
+    OperationView, Oplog, Requester, RequesterOrigin, SnapshotFilter, SnapshotLevel, SnapshotRefs,
+    SnapshotView, Target,
 };
 use super::undo::{RawSide, external_events_in};
 
@@ -380,6 +381,66 @@ pub fn build_timeline_from(
         None => unavailable.push(TimelineSource::Operations),
     }
 
+    // The points an agent or the developer took by hand: one entry each, with the label as data.
+    // Only the offerable ones (their ref exists and their row is complete and intact).
+    if read.points.is_some() {
+        for view in points
+            .all
+            .iter()
+            .filter(|s| s.record.level == SnapshotLevel::Manual)
+        {
+            let r = &view.record;
+            let Some(meta) = &r.manual else {
+                continue;
+            };
+            if operations_floor.is_some_and(|floor| r.recorded_ms < floor)
+                || query.since_ms.is_some_and(|since| r.recorded_ms < since)
+            {
+                continue;
+            }
+            let root = identity_key_root(&meta.worktree_key);
+            if query
+                .only_worktree
+                .as_deref()
+                .is_some_and(|only| root != Some(only))
+            {
+                continue;
+            }
+            let actor = recorded_actor(&meta.requester);
+            if query.agent.as_ref().is_some_and(|a| !a.keeps(&actor)) {
+                continue;
+            }
+            let entry = TimelineEntry {
+                id: format!("manual:{}", r.snapshot_id),
+                origin: EntryOrigin::ManualSnapshot {
+                    snapshot_id: r.snapshot_id.clone(),
+                    label: UntrustedName::new(meta.label.clone()),
+                    channel: match meta.channel {
+                        Channel::Cli => TimelineChannel::Cli,
+                        Channel::Tui => TimelineChannel::Tui,
+                        Channel::Mcp => TimelineChannel::Mcp,
+                        Channel::Hook => TimelineChannel::Hook,
+                    },
+                },
+                occurred_utc_ms: r.recorded_ms,
+                utc_offset_s: now.1,
+                worktrees: root.map(Untrusted::new).into_iter().collect(),
+                actor,
+                attribution: Attribution::Recorded,
+                protection: Protection {
+                    level: ProtectionLevel::Manual,
+                    snapshot_id: Some(r.snapshot_id.clone()),
+                },
+                files: ChangedFiles::Available {
+                    paths: Vec::new(),
+                    total: 0,
+                    first_parent: false,
+                },
+            };
+            entries.push(((r.recorded_ms, 0, r.seq), entry));
+        }
+    }
+
     match engine {
         None => unavailable.push(TimelineSource::Events),
         Some(engine) => {
@@ -433,6 +494,19 @@ pub fn build_timeline_from(
         truncated: over > 0 || events_full_page,
         unavailable,
         detection_available: engine.is_some_and(|e| e.detection_available),
+    }
+}
+
+/// The timeline as a connection without `timemachine.timeline-manual` sees it: no manual point,
+/// and an event they protect shows the point as an observation, as it always did.
+pub fn without_manual(result: &mut TimelineResult) {
+    result
+        .entries
+        .retain(|e| !matches!(e.origin, EntryOrigin::ManualSnapshot { .. }));
+    for entry in &mut result.entries {
+        if entry.protection.level == ProtectionLevel::Manual {
+            entry.protection.level = ProtectionLevel::Observation;
+        }
     }
 }
 
