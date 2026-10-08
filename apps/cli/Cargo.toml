@@ -59,3 +59,8 @@ nix = { version = "=0.31.3", features = ["process"] }
 name = "engine"
 harness = false
 
+
+# CPU of the daemon at rest with N agent sessions over M worktrees (RES-01, M1 criterion 5).
+[[bench]]
+name = "idle"
+harness = false
