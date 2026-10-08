@@ -107,9 +107,16 @@ impl Daemon {
                         );
                         GuardReply::Rejected(blockers)
                     }
-                    Err(InstallError::Failed(_)) => {
-                        self.logger
-                            .error("guard_install_failed", &[("repo", Field::id(repo_id))]);
+                    Err(InstallError::Failed(why)) => {
+                        // Only which step failed, from a closed list: the text carries paths.
+                        let step = ["folder acl", "folder", "key", "journal", "stub", "config"]
+                            .into_iter()
+                            .find(|s| why.starts_with(s))
+                            .unwrap_or("other");
+                        self.logger.error(
+                            "guard_install_failed",
+                            &[("repo", Field::id(repo_id)), ("step", step.into())],
+                        );
                         GuardReply::Failed
                     }
                 }
