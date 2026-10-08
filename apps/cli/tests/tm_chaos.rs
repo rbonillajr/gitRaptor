@@ -642,6 +642,11 @@ fn hostile_half_done_merge_rejects_until_aborted() {
     m.git(&["add", "conf.txt"]);
     m.git(&["commit", "-q", "-m", "ours"]);
     let (s0, s1, _) = m.lose_work();
+    // The captures are asynchronous (the daemon takes a point once the worktree
+    // has been quiet): wait for the clean S1 before the merge starts, so what
+    // the undo takes back never depends on how fast the daemon is.
+    let known = m.snapshot_ids();
+    m.captured(&s1, &known);
 
     let merge =
         m.f.git_command(&m.worktree, &["merge", "-q", "other"])
@@ -652,13 +657,20 @@ fn hostile_half_done_merge_rejects_until_aborted() {
     m.undo_rejected(&["a Git operation is in progress"]);
     assert_eq!(m.state(), stopped);
 
+    // The daemon may capture the half-done merge too, whenever it likes: wait
+    // for that point, so the next undo has a single possible target.
+    let known = m.snapshot_ids();
+    m.captured(&stopped, &known);
+
     // `merge --abort` is raw Git too (a reset to `HEAD`): the first undo
-    // takes it back, to the last state the Time Machine could restore, the
-    // clean S1 (a merge in progress is never restored); the next takes back
-    // the reset. Nothing was lost.
+    // takes it back, to the last state the Time Machine captured, the
+    // half-done merge (`stopped`; its files and index, a merge in progress is
+    // never restored as such); the next takes back the reset. Nothing was
+    // lost. The undo only sees the abort once the engine observed it.
     m.git(&["merge", "--abort"]);
+    m.events(GitEventKind::Reset, 2);
     m.undo();
-    assert_eq!(m.state(), s1);
+    assert_eq!(m.state(), stopped);
     m.undo();
     assert_eq!(m.state(), s0);
 }
