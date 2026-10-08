@@ -72,8 +72,8 @@ use crate::timemachine::protected::{
     ProtectedError, RepoHandle, ScopeError, failure_text, registered_worktrees, worktree_key,
 };
 use crate::timemachine::timeline::{
-    AgentFilter, EngineSide, FILES_BUDGET, PathsCache, PathsSource, SessionActors, TimelineQuery,
-    build_timeline, fill_files,
+    AgentFilter, EngineSide, FILES_BUDGET, OplogRead, PathsCache, PathsSource, SessionActors,
+    TimelineQuery, build_timeline_from, fill_files,
 };
 use crate::timemachine::undo::{RawSide, UndoDone, UndoEnv, UndoError, tm_scope_for, undo_last};
 
@@ -2461,7 +2461,9 @@ impl Connection<'_> {
             .control
             .event_history(EventsHistoryParams {
                 repo_id: repo.repo.repo_id.clone(),
-                worktree: None,
+                // The page is of the worktree asked for: a filter applied after a full page
+                // would find fewer entries than exist.
+                worktree: query.only_worktree.clone(),
                 after_seq: None,
                 limit: Some(MAX_HISTORY_PAGE),
             })
@@ -2480,12 +2482,18 @@ impl Connection<'_> {
             .map(|(_, s)| SessionActors::from_sessions(s))
             .unwrap_or_default();
         let engine = history.map(|mut events| {
+            // Whether the page was full is a fact of the page, before anything is removed from it.
+            let history_full =
+                events.len() >= usize::try_from(MAX_HISTORY_PAGE).unwrap_or(usize::MAX);
+            let history_oldest_ms = events.iter().map(|e| e.observed_utc_ms).min();
             // A client without the capability cannot read `reset` (US-TMC-004).
             if !self.has(methods::CAP_GIT_RESET.name) {
                 events.retain(|e| e.kind != GitEventKind::Reset);
             }
             let mut side = EngineSide {
                 detection_available: sessions.as_ref().is_some_and(|(d, _)| *d),
+                history_full,
+                history_oldest_ms,
                 ..EngineSide::default()
             };
             if let Some(deps) = &self.ctx.tm_engine {
@@ -2510,21 +2518,22 @@ impl Connection<'_> {
         });
 
         // The oplog only while the list is assembled: Git is read after it is let go.
-        let mut result = {
+        // The oplog is only read under its lock; the work on what was read happens after it.
+        let read = {
             let oplog = repo.repo.oplog.lock().unwrap_or_else(|e| e.into_inner());
             let refs: &dyn SnapshotRefs = match repo.store.as_deref() {
                 Some(store) => store,
                 None => &AbsentStore,
             };
-            build_timeline(
-                &oplog,
-                refs,
-                &query,
-                engine.as_ref(),
-                &actors,
-                (now, gitraptor_git::local_utc_offset_s()),
-            )
+            OplogRead::read(&oplog, refs, &query)
         };
+        let mut result = build_timeline_from(
+            &read,
+            &query,
+            engine.as_ref(),
+            &actors,
+            (now, gitraptor_git::local_utc_offset_s()),
+        );
         if let Some(engine) = &engine
             && result
                 .entries
