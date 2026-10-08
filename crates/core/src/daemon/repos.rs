@@ -62,7 +62,10 @@ impl Daemon {
         // it are protected from now on (US-TMC-001).
         if !self.tm.contains(&repo_id) {
             match recover_repo(&self.config.dirs, &entry, Instant::now() + TM_RECOVERY_WAIT) {
-                Ok((oplog, _)) => self.tm.insert(&repo_id, &entry.canonical_path, oplog),
+                Ok((oplog, startup)) => {
+                    super::log_temps(&self.logger, &repo_id, &startup.temps);
+                    self.tm.insert(&repo_id, &entry.canonical_path, oplog)
+                }
                 Err(err) => self.logger.warn(
                     "tm_unavailable",
                     &[

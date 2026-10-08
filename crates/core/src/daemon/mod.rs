@@ -64,6 +64,7 @@ use crate::timemachine::oplog::{
 };
 use crate::timemachine::protected::{OperationsWiring, TmRepos};
 use crate::timemachine::store::SnapshotStore;
+use crate::timemachine::sweep::{SUGGESTED_ACTION, SweepReport, sweep_temps};
 use crate::watch::Observer;
 
 pub use discovery::{DISCOVERY_HOME_ENV, DISCOVERY_POLL_ENV, DiscoveryConfig};
@@ -255,6 +256,9 @@ pub struct TmStartup {
     /// Breaks of the hash chain declared by this start (SEC-TMC-09).
     pub new_breaks: Vec<ChainBreak>,
     pub recovery: RecoveryReport,
+    /// Temporary entries of an interrupted application, swept after the recovery
+    /// (DS-TS-TMC-003, Enmienda T).
+    pub temps: SweepReport,
 }
 
 /// What the daemon found when it started.
@@ -995,6 +999,7 @@ fn recover_time_machine(
                         ],
                     );
                 }
+                log_temps(logger, &entry.repo_id, &startup.temps);
                 report.time_machine.push(startup);
                 oplogs.push((entry.repo_id, entry.canonical_path, oplog));
             }
@@ -1038,13 +1043,48 @@ fn recover_repo(
         },
         now_ms(),
     )?;
+    // Before any Time Machine operation is accepted on the repo.
+    let temps = store
+        .as_ref()
+        .map(|store| sweep_temps(&oplog, store))
+        .unwrap_or_default();
     let startup = TmStartup {
         repo_id: entry.repo_id.clone(),
         oplog: opened.status,
         new_breaks: opened.new_breaks,
         recovery,
+        temps,
     };
     Ok((oplog, startup))
+}
+
+/// Events of the sweep of temporary entries: counts only, never paths. A kept entry is a
+/// warning, with `raptor undo` as the way back.
+fn log_temps(logger: &Logger, repo_id: &str, temps: &SweepReport) {
+    if !temps.restored.is_empty() {
+        logger.info(
+            "tm_temps_restored",
+            &[
+                ("repo", Field::id(repo_id)),
+                ("restored", temps.restored.len().into()),
+            ],
+        );
+    }
+    if !temps.kept.is_empty() || temps.unreadable > 0 {
+        let in_store = temps.kept.iter().filter(|k| k.in_store).count();
+        logger.warn(
+            "tm_temps_kept",
+            &[
+                ("repo", Field::id(repo_id)),
+                ("kept", temps.kept.len().into()),
+                ("in_store", in_store.into()),
+                ("foreign", (temps.kept.len() - in_store).into()),
+                ("unreadable", temps.unreadable.into()),
+                ("partial", temps.partial.into()),
+                ("action", SUGGESTED_ACTION.into()),
+            ],
+        );
+    }
 }
 
 /// A stored event as the contract shows it; `None` for kinds of other
