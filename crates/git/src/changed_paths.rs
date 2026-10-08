@@ -197,7 +197,9 @@ impl RepoReader {
             prefix.extend_from_slice(&item.key);
             if item.key.last() == Some(&b'/') {
                 if stack.len() >= MAX_TREE_DEPTH {
-                    return Err(ReadError::Unavailable("changed paths: tree too deep".into()));
+                    return Err(ReadError::Unavailable(
+                        "changed paths: tree too deep".into(),
+                    ));
                 }
                 let items = self.changed_items(item.before, item.after, walk.deadline)?;
                 stack.push(Frame {
