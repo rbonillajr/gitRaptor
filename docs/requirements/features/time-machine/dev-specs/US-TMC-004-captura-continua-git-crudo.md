@@ -2,12 +2,12 @@
 id: DS-US-TMC-004
 title: "Dev Spec — Captura continua de lo hecho con Git crudo y en el editor"
 type: dev-spec
-status: approved
+status: implemented
 feature: time-machine
 domain: GRP
 story: US-TMC-004
 created: 2026-10-06
-updated: 2026-10-06
+updated: 2026-10-08
 related:
   stories: [US-TMC-004, US-TMC-001, US-TMC-002, US-GRP-002, US-GRP-004, US-GRP-007, US-GRP-009]
   enablers: [TS-TMC-001, TS-TMC-002, TS-TMC-003, TS-TMC-004, SPIKE-TMC-001]
@@ -166,3 +166,13 @@ Veredicto: **aprobada con ajustes**, con cuatro bloqueantes. Todo está incorpor
 **Segunda validación (D12, D13)**: aprobadas con ajustes. A1 (bloqueante): ceder ante la actividad contaba como reintento y la actividad sostenida podía acabar sin captura; ahora no cuenta (§ 2.4). A2: tests de la siembra, de ceder y de las reglas de reintento (§ 4). A3: decisiones, cotas medidas y límites declarados (§ 3, § 5, § 6). El test de "la siembra falla y se captura igual" no se pudo construir sin romper también la lectura del motor (un `objects/pack` ilegible deja el repo sin observar): el camino es una línea (la captura sigue tras marcar la siembra como hecha) y queda sin test.
 
 No bloqueantes incorporados: ancla acotada y con el repo tomado (§ 2.5); el evento más reciente de un tipo no soportado da `raw-git-not-covered` (§ 2.6); suelo de espacio libre (D8); protocolo 8 (D11); enmiendas de ADR-TMC-003 y ADR-TMC-004; límites declarados (§ 6). D9 cambió al implementar: el registro no atribuye a Claude Code detectado, así que el e2e usa la muestra S3 como US-GRP-007.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #120 (ajustes en #127 y #146).
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- Cuota del almacén: US-TMC-022. Deshacer `push` y crear o borrar ramas y worktrees: US-TMC-009/014.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

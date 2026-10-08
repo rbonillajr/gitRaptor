@@ -2,7 +2,7 @@
 id: DS-TS-TMC-003
 title: "Dev Spec — Capa de escritura acotada y aplicador de estados"
 type: dev-spec
-status: review
+status: implemented
 feature: time-machine
 domain: GRP
 story: TS-TMC-003
@@ -209,3 +209,13 @@ En `files/windows.rs` hay además un test del hueco entre los dos renombrados de
 > - La línea en `raptor status` necesita una capacidad nueva, un campo en `RepoView` e i18n. Es un cambio de contrato y se anota como continuación de L-02. Mientras tanto se informa con el evento del log y con el aviso `interruption`.
 > - Falta un test de que `raptor undo` limpia los temporales conservados (suposición del Arquitecto, sin verificar).
 > - Comprobar la identidad del temporal antes y después del renombrado (mitigación del TOCTOU que propuso el Arquitecto). Es el mismo residuo que ya se aceptó en `remove`: el renombrado exclusivo nunca sobrescribe y no se borra nada.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #45, #171, #172.
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- Línea en `raptor status` para los temporales conservados tras un crash (aplazada con el Arquitecto, #172).
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

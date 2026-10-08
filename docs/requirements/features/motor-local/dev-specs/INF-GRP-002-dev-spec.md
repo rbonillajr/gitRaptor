@@ -2,11 +2,11 @@
 id: DS-INF-GRP-002
 title: "Dev Spec — Banco de frescura, escala y huella del motor"
 type: dev-spec
-status: approved
+status: partially-implemented
 feature: motor-local
 domain: GRP
 created: 2026-10-05
-updated: 2026-10-07
+updated: 2026-10-08
 related:
   stories: [INF-GRP-002, TD-GRP-002, TD-GRP-003, US-GRP-002, US-GRP-007, SPIKE-GRP-002, SPIKE-CKP-001, TS-GRP-006, US-GRP-020]
   adrs: [ADR-GRP-011, ADR-GRP-010, ADR-GRP-015, ADR-GRP-005, ADR-GRP-006, ADR-GRP-013]
@@ -298,3 +298,14 @@ No se consultó al Arquitecto: el presupuesto (ADR-GRP-011) y la regla de dónde
 - **Coste**: unos 4 min más por job de Linux. ⚠️ **ASSUMPTION**: se mide en la primera corrida. Si pasa de 6 min, la fase 3 baja a 10 muestras.
 
 Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #76, #98, #133.
+
+Estado: implementación parcial. Pendiente:
+- ADR-GRP-015: ventana de 10 min con la Time Machine activa (RES-01), RES-03, gate de inotify (RES-04), RES-05 y RES-07.
+- Runner dedicado para el gate de latencia (TD-GRP-003) y escenario `tiered-scale`.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

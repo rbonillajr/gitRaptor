@@ -2,10 +2,10 @@
 id: US-TMC-001
 title: "El desarrollador recupera su trabajo sin commitear tras cualquier operación lanzada por GitRaptor"
 type: us
-status: draft
+status: implemented
 priority: high
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-08
 domain: GRP
 epic: E-001
 feature: time-machine
@@ -100,3 +100,11 @@ Entonces la operación no se ejecuta
 - **Historias**: US-GRP-001 (repo observado).
 - **Externas**: F-001-02 Cockpit (descartar, merge, rebase; BR-07) y F-001-05 Servidor MCP usan esta garantía para sus acciones.
 - **Transversal**: transversal (lo define el Arquitecto): verificación en repos temporales, nunca en un repo real; mismo comportamiento en Windows, macOS y Linux; mensajes en inglés y español.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #61.
+
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

@@ -2,13 +2,13 @@
 id: SPIKE-GRD-001
 title: "Interceptabilidad, coexistencia y coste de la capa de hooks en los tres SO"
 type: spike
-status: draft
+status: partially-implemented
 feature: guardrails
 domain: GRP
 priority: critical
 complexity: medium
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 related:
   adrs: [ADR-GRD-001, ADR-GRD-002, ADR-GRD-005, ADR-GRD-007]
   stories: [US-GRD-001, US-GRD-002, US-GRD-003, US-GRD-004, US-GRD-007]
@@ -84,3 +84,13 @@ tags: [guardrails, spike, hooks-git, interceptabilidad, reference-transaction, h
 ### Time-box
 
 ⚠️ **ASSUMPTION**: 2 semanas, repartidas entre los tres SO. Se amplía desde semana y media por los casos que añadió la revisión de seguridad (2026-10-04).
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #22, #25, #121.
+
+Estado: implementación parcial. Pendiente:
+- Matriz en Linux y Windows (incluido el coste con el dispatcher nativo) y los casos sin verificar del § 11 de los resultados.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

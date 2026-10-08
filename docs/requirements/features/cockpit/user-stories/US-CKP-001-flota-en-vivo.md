@@ -5,7 +5,7 @@ type: us
 status: implemented
 priority: high
 created: 2026-10-04
-updated: 2026-10-06
+updated: 2026-10-08
 feature: cockpit
 related:
   context:
@@ -99,3 +99,11 @@ Ver la [Dev Spec](../dev-specs/US-CKP-001-flota-en-vivo.md) (DS-US-CKP-001). En 
 
 - **Diseño:** DSYS-GRP-001 (TUI, enmienda del 2026-10-06); ADR-GRP-004 § 3; ADR-CKP-003.
 - **Dev Spec:** [DS-US-CKP-001](../dev-specs/US-CKP-001-flota-en-vivo.md).
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #118 (ajustes en #126, #129, #130, #131, #136 y #175).
+
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

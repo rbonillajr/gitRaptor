@@ -2,7 +2,7 @@
 id: DS-US-GRP-017
 title: "Dev Spec — El desarrollador ve cuánto consume GitRaptor en su máquina"
 type: dev-spec
-status: approved
+status: implemented
 feature: motor-local
 domain: GRP
 created: 2026-10-05
@@ -91,3 +91,13 @@ Cubre el escenario de la Enmienda (2026-10-07) de la historia ("repos activos y 
 **Tests**: `text_in_english_shows_the_tiers`, `text_in_spanish_shows_the_tiers` y `json_has_the_tier_counts` (1 repo activo y 1 dormido, perfil temporal); `resources::tests::without_tiers_they_are_not_available` (unit).
 
 **Tests de D13**: `resources::tests::discovered_repos_are_shown_at_zero_cost` (unit) y la aserción de `discovered_repos` en `json_has_the_tier_counts`.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #93, #173.
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- `pools` (TS-GRP-005) y `power_saving` (US-GRP-019) se rellenan en sus historias.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

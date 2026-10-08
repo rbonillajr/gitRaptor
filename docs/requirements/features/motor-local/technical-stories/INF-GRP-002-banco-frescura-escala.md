@@ -2,13 +2,13 @@
 id: INF-GRP-002
 title: "Banco de medición de frescura y escala"
 type: inf
-status: ready
+status: partially-implemented
 feature: motor-local
 domain: GRP
 priority: high
 complexity: medium
 created: 2026-10-03
-updated: 2026-10-07
+updated: 2026-10-08
 related:
   adrs: [ADR-GRP-011, ADR-GRP-010, ADR-GRP-005, ADR-GRP-006, ADR-GRP-013, ADR-GRP-015]
   stories: [US-GRP-001, US-GRP-002, US-GRP-012, US-GRP-017, TS-GRP-004, TD-GRP-002, TS-GRP-006]
@@ -73,3 +73,14 @@ tags: [motor-local, ci, rendimiento, latencia, p95, escala, nfr-04, nfr-05]
 Nota de integración (Time Machine, ADR-TMC-006 y US-TMC-020): el banco añade el escenario 'operación protegida con trabajo sin commitear' sobre el repo de referencia de SPIKE-TMC-001, con 1 y con 10 worktrees activos, con gate de p95 < 200 ms del snapshot previo y aviso por etapa. El gate del motor se ejecuta con la Time Machine activa.
 
 Nota (2026-10-05, Dev Spec): **gate de huella añadido por Rene** (CPU y RSS en reposo y en ráfaga, descriptores y watches). La ráfaga de 10.000 archivos se suma como escenario de estrés a la de 1.000. Los incumplimientos bajo ráfaga los recoge [TD-GRP-002](./TD-GRP-002-motor-bajo-rafaga.md).
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #76, #98, #133.
+
+Estado: implementación parcial. Pendiente:
+- ADR-GRP-015: ventana de 10 min con la Time Machine activa (RES-01), RES-03, gate de inotify (RES-04), RES-05 y RES-07.
+- Runner dedicado para el gate de latencia (TD-GRP-003) y escenario `tiered-scale`.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

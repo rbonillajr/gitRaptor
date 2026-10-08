@@ -2,12 +2,12 @@
 id: DS-US-TMC-002
 title: "Dev Spec — Deshacer la última operación del worktree (raptor undo)"
 type: dev-spec
-status: approved
+status: implemented
 feature: time-machine
 domain: GRP
 story: US-TMC-002
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-08
 related:
   stories: [US-TMC-002, US-TMC-001, US-TMC-003, US-TMC-004, US-TMC-012, US-TMC-013, US-TMC-021]
   enablers: [TS-TMC-002, TS-TMC-003, TS-TMC-004, TS-CKP-002]
@@ -153,3 +153,13 @@ macOS (Apple Silicon): `cargo clippy --all-targets -- -D warnings` y `cargo test
 1. US-TMC-002 entrega el mecanismo; el e2e es su evidencia, no la del criterio 3, que pide uso real. El e2e prueba también el rechazo `confirmation-required` (§ 4).
 2. El criterio 3 se cierra con US-TMC-004, por la vía que dé la atribución real del `reset --hard` capturado: atribuido a la sesión de Claude, lo deshace el propio agente desde su shell; "sin atribuir", lo deshace Rene sin confirmación. Condición para US-TMC-004: el Git crudo capturado debe llegar a la pila de `raptor undo` (si solo se recuperara con una restauración, avisar antes de cerrar M1).
 3. US-TMC-013 queda fuera de M1. Riesgo a anotar en el backlog por quien cierre M1: "en M1, Rene no puede deshacer trabajo atribuido a un agente; lo pide el propio agente". El texto de `confirmation-required` en la CLI ya lo dice.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #90 (ajustes en #127, #146 y #156).
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- Recrear un worktree que la operación deshecha borró: US-TMC-009.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

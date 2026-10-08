@@ -2,10 +2,10 @@
 id: US-TMC-002
 title: "El desarrollador deshace con un comando la última operación de su worktree"
 type: us
-status: draft
+status: implemented
 priority: high
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-08
 domain: GRP
 epic: E-001
 feature: time-machine
@@ -96,3 +96,13 @@ Entonces el undo no se ejecuta
 - **Historias**: US-TMC-001.
 - **Externas**: ninguna. Si la última operación es de otro actor, aplican US-TMC-012 (solape) y US-TMC-013 (permisos).
 - **Transversal**: transversal (lo define el Arquitecto): verificación en repos temporales, nunca en un repo real; mismo comportamiento en Windows, macOS y Linux; mensajes en inglés y español.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #90 (ajustes en #127, #146 y #156).
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- Recrear un worktree que la operación deshecha borró: US-TMC-009.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

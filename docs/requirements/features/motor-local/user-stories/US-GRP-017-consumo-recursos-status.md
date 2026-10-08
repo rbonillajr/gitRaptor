@@ -2,7 +2,7 @@
 id: US-GRP-017
 title: "El desarrollador ve cuánto consume GitRaptor en su máquina"
 type: us
-status: draft
+status: implemented
 priority: high
 created: 2026-10-05
 updated: 2026-10-08
@@ -109,3 +109,13 @@ Entonces ve cuántos repos están activos y cuántos dormidos
 - La CPU media se calcula en el daemon sobre una ventana de 10 min; no se lanza ningún proceso externo por petición (SEC-08).
 - El disco se mide con el tamaño en disco de los archivos del perfil, con un tope de tiempo de lectura.
 - Textos en/es en `apps/cli`.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #93, #173.
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- `pools` (TS-GRP-005) y `power_saving` (US-GRP-019) se rellenan en sus historias.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

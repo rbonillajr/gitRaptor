@@ -2,11 +2,11 @@
 id: DS-US-GRP-007
 title: "Dev Spec — El desarrollador sabe qué sesión de Claude Code trabaja en cada worktree y si sigue activa"
 type: dev-spec
-status: approved
+status: implemented
 feature: motor-local
 domain: GRP
 created: 2026-10-05
-updated: 2026-10-07
+updated: 2026-10-08
 related:
   stories: [US-GRP-007, US-GRP-002, US-GRP-008, US-GRP-009, US-GRP-010, US-GRP-013]
   enablers: [SPIKE-GRP-001, INF-GRP-001, TS-GRP-001, TS-GRP-004]
@@ -140,3 +140,14 @@ Todas son **Decisión del orquestador (2026-10-07), validada por el Arquitecto**
 - **Falsos negativos aceptados** (el evento queda como sin S4, nunca mal atribuido): un `branch-update` que agrupa varios movimientos (repo sin reflog, o `git am` / dos commits seguidos dentro de la misma ventana del observador), porque su oid anterior no es el de ninguna transacción; `update-ref` o `branch -f` sin oid anterior; `git worktree add -b`, cuyo hook corre en el worktree principal; y un worktree recién creado que el detector todavía no conoce.
 - **Coste**: con una sesión presente en el repo, una transacción del desarrollador bajo un multiplexor recorre los procesos del usuario (`presence()` del solicitante) mientras el `git` espera. Sin sesión presente no se hace el recorrido. Medir el p95 queda pendiente (SPIKE-GRP-001).
 - **Hooks de plantilla 1**: también dejan S4 (el `reference-transaction` es obligatorio desde la plantilla 1); la segunda línea (revocación) solo existe en la 2.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #80, #119, #124, #155, #169.
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- La medición en el dogfooding real es de SPIKE-GRP-001 (criterio 2 de M1).
+- Claude Code instalado con npm (`node …/cli.js`) no se detecta: lo registra el desarrollador (US-GRP-009).
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

@@ -2,10 +2,10 @@
 id: US-GRD-001
 title: "Un agente que intenta hacer force-push en un repo protegido queda bloqueado"
 type: us
-status: draft
+status: implemented
 priority: high
 created: 2026-10-04
-updated: 2026-10-05
+updated: 2026-10-08
 feature: guardrails
 related:
   context:
@@ -105,3 +105,11 @@ Entonces "otro" sigue en "Sin protección" y sin ningún cambio en sus rutas ope
 
 - **Diseño:** no aplica (sin superficie propia; la presentación es del Cockpit y la CLI).
 - **Dev Spec:** [DS-US-GRD-001](../dev-specs/US-GRD-001-proteger-repo-force-push.md) (2026-10-05).
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #116, #121.
+
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

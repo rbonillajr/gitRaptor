@@ -2,13 +2,13 @@
 id: TS-CKP-004
 title: "Tokens semánticos y símbolos con fallback en el tema de la TUI"
 type: ts
-status: draft
+status: implemented
 feature: cockpit
 domain: GRP
 priority: high
 complexity: low
 created: 2026-10-04
-updated: 2026-10-05
+updated: 2026-10-08
 related:
   adrs: [ADR-GRP-003, ADR-CKP-003, ADR-GRP-002]
   stories: [US-CKP-001, US-CKP-005]
@@ -72,3 +72,10 @@ tags: [cockpit, design-tokens, tema, simbolos, accesibilidad, nfr-09, dtcg, styl
 - **Contraste**: **gate WCAG AA ≥ 4.5:1** (truecolor y 256) para el texto normal y el tenue de las dos variantes sobre sus fondos típicos (blanco, `#1e1e1e`, Solarized oscuro), y para todo primer plano de la variante clara sobre blanco; informe del resto. Decisión del orquestador (2026-10-05), validada por Arquitecto.
 - Pendiente: detección en Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
 
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #50, #115.
+
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

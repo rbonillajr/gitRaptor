@@ -2,10 +2,10 @@
 id: US-MCP-002
 title: "El desarrollador decide qué repos pueden usar los agentes por el MCP"
 type: us
-status: draft
+status: implemented
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 domain: GRP
 epic: E-001
 feature: mcp
@@ -111,3 +111,11 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 
 - **Diseño:** no aplica (comandos de la CLI; mensajes según la guía de contenido del design system, DSYS-GRP-001).
 - **Dev Spec:** [DS-US-MCP-002](../dev-specs/US-MCP-002-dev-spec.md).
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #140, #159.
+
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

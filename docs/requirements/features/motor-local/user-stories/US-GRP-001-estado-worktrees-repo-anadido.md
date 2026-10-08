@@ -2,10 +2,10 @@
 id: US-GRP-001
 title: "El desarrollador ve el estado de cada worktree del repo que añadió"
 type: us
-status: draft
+status: implemented
 priority: high
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-08
 feature: motor-local
 related:
   context:
@@ -84,3 +84,11 @@ Entonces la huella del repo es idéntica a la inicial
 Dado un repo "demo" observado en el que el desarrollador modificó "login.txt"
 Cuando el desarrollador prepara todos los cambios del repo para el próximo commit
 Entonces lo preparado contiene solo "login.txt"
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #46.
+
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

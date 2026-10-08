@@ -2,13 +2,13 @@
 id: TS-TMC-003
 title: "Capa de escritura acotada y aplicador de estados"
 type: ts
-status: draft
+status: implemented
 feature: time-machine
 domain: GRP
 priority: critical
 complexity: high
 created: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-08
 related:
   adrs: [ADR-TMC-002, ADR-TMC-001, ADR-TMC-003, ADR-GRP-001, ADR-GRP-009]
   stories: [US-TMC-002, US-TMC-003, US-TMC-009, US-TMC-010, US-TMC-011, US-TMC-014, US-TMC-015, US-TMC-019, TS-GRP-002, TS-TMC-001, TS-TMC-002]
@@ -64,3 +64,13 @@ tags: [time-machine, escritura, restauracion, locks, seguridad-rutas, nfr-01, nf
 #### Verificación Manual / Sandbox
 
 - En Windows, restaurar con un editor que mantiene abierto un archivo afectado y comprobar que la operación queda interrumpida y que el undo la recupera.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #45, #171, #172.
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- Línea en `raptor status` para los temporales conservados tras un crash (aplazada con el Arquitecto, #172).
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

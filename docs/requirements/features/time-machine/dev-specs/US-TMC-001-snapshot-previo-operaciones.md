@@ -2,12 +2,12 @@
 id: DS-US-TMC-001
 title: "Dev Spec — Snapshot previo antes de toda operación lanzada por GitRaptor"
 type: dev-spec
-status: approved
+status: implemented
 feature: time-machine
 domain: GRP
 story: US-TMC-001
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-08
 related:
   stories: [US-TMC-001, US-GRP-001]
   enablers: [TS-TMC-001, TS-TMC-002, TS-TMC-004, TS-GRD-001, INF-GRP-001]
@@ -124,3 +124,11 @@ Veredicto: **aprobada con ajustes**, sin bloqueantes en D1–D6. Todos los ajust
 5. La raíz del worktree por MCP, documentada como pendiente (§ 2.1).
 6. `prior_layer` solo en builds de debug (§ 2.4, D5).
 7. Test lanzado desde el worktree principal con el ámbito declarado. Escenarios de credenciales con `inspect`. Cita del test de contrato (§ 4).
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #61.
+
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

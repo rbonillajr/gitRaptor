@@ -2,13 +2,13 @@
 id: TS-TMC-002
 title: "Oplog de la Time Machine con diario de intención y recuperación"
 type: ts
-status: draft
+status: implemented
 feature: time-machine
 domain: GRP
 priority: critical
 complexity: medium
 created: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-08
 related:
   adrs: [ADR-TMC-003, ADR-TMC-007, ADR-GRP-006, ADR-GRP-013]
   stories: [US-TMC-001, US-TMC-002, US-TMC-003, US-TMC-006, US-TMC-008, US-TMC-009, US-TMC-010, US-TMC-011, US-TMC-016, US-TMC-019, TS-GRP-001, TS-GRP-003]
@@ -62,3 +62,14 @@ tags: [time-machine, oplog, journal, inmutabilidad, recuperacion, nfr-12, d-tmc-
 #### Verificación Manual / Sandbox
 
 - Revisar con Rene el modelo de estados frente a los escenarios de US-TMC-019 antes de cerrar la Dev Spec.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #32, #176.
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- Revisión manual con Rene del modelo de estados frente a US-TMC-019 (la DS sigue en `review`).
+- PID reutilizado en Unix: INF-TMC-001.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

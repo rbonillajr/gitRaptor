@@ -2,11 +2,11 @@
 id: DS-US-GRP-012
 title: "Dev Spec — El desarrollador ve el ahead/behind de cada worktree contra la rama base del repo"
 type: dev-spec
-status: approved
+status: implemented
 feature: motor-local
 domain: GRP
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-08
 related:
   stories: [US-GRP-012, US-GRP-001, US-GRP-002, US-GRP-016]
   enablers: [TS-GRP-002, TS-GRD-001, INF-GRP-001]
@@ -73,3 +73,13 @@ Además, `crates/core/tests/base_branch.rs` corre en todos los SO del CI: base `
 - **Ahead/behind en vivo para los suscriptores**: US-GRP-002 (D5). Hasta entonces, `engine.snapshot` (y `raptor status`) está al día, pero un evento `worktree.state` lleva el valor de su reconciliación, que puede quedarse viejo. Cuando la segunda fase de US-GRP-002 (ADR-GRP-010 § 4, ADR-GRP-011) publique el ahead/behind al cambiar las refs, US-GRP-002 **quita el recálculo del snapshot** para no tener dos fuentes de verdad. El snapshot tampoco coincide exactamente con el flujo hasta `seq` (DEP-CKP-6): se tolera porque `worktree.state` lleva el estado completo del repo y es idempotente.
 - **Linux y Windows**: los escenarios de proceso usan `script` y el canal Unix, así que solo corren en macOS. `crates/core/tests/base_branch.rs` corre en todos los SO del CI. Pendiente: etapa de validación multiplataforma.
 - **Coste del recorrido con gix sin `commit-graph`** (supuesto de ADR-GRP-010 § 4): sin medir en esta historia; el tope de 10 000 y la caché lo acotan.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #55.
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- Rama base del equipo (`base-change-pending`, `invalid`): US-GRP-016; confirmarla: US-GRD-001/014.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

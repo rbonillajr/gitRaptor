@@ -2,10 +2,10 @@
 id: US-GRP-020
 title: "El desarrollador ve los repos que aparecen en sus carpetas de código sin tener que añadirlos uno a uno"
 type: us
-status: draft
+status: implemented
 priority: medium
 created: 2026-10-07
-updated: 2026-10-07
+updated: 2026-10-08
 feature: motor-local
 source: inline
 related:
@@ -134,3 +134,11 @@ Entonces ninguna herramienta permite declarar o retirar raíces
 - **Aviso en la TUI**: un solo aviso pendiente a la vez y el resto en cola. Nunca quita el foco a la vista de la flota. Esc lo deja para más tarde y no lo descarta. Decisión del coordinador (2026-10-08).
 - **Clave de raíces en configuración**: `discovery`, `codeRoots` o `roots`, arriba o en `engine`, se ignora con el diagnóstico `discovery-roots-ignored`. Ese diagnóstico todavía no tiene texto en la CLI, igual que el resto de diagnósticos de configuración.
 - **Diferido**: kqueue en macOS, el bloque `discovery` de `engine.resources` (US-GRP-017) y las unidades de red mapeadas en Windows (solo se detecta UNC). Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #170 (ajustes en #153 y #178).
+
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

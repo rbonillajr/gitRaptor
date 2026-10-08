@@ -2,10 +2,10 @@
 id: US-MCP-003
 title: "Un agente consulta por MCP el estado del repo en el que trabaja, y de ningún otro"
 type: us
-status: draft
+status: implemented
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 domain: GRP
 epic: E-001
 feature: mcp
@@ -115,3 +115,11 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 
 - **Diseño:** no aplica (respuesta de herramienta; mensajes según la guía de contenido del design system, DSYS-GRP-001).
 - **Dev Spec:** [DS-US-MCP-003](../dev-specs/US-MCP-003-dev-spec.md).
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #140, #159 (ajuste en #153).
+
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

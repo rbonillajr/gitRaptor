@@ -2,13 +2,13 @@
 id: TS-GRP-003
 title: "Proceso del motor en segundo plano por usuario"
 type: ts
-status: ready
+status: implemented
 feature: motor-local
 domain: GRP
 priority: high
 complexity: high
 created: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-08
 related:
   adrs: [ADR-GRP-005, ADR-GRP-006, ADR-GRP-009, ADR-GRP-013]
   stories: [US-GRP-001, US-GRP-002, US-GRP-004, US-GRP-005, US-GRP-014, US-GRP-015, TS-GRP-001, TS-GRP-002]
@@ -63,3 +63,11 @@ tags: [motor-local, daemon, ciclo-de-vida, instancia-unica, continuidad, segurid
 #### Verificación Manual / Sandbox
 
 - Arrancar y parar el daemon en los tres SO desde una terminal y desde el entorno de sesión, y revisar estado, bloqueo y logs en el perfil.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #26.
+
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

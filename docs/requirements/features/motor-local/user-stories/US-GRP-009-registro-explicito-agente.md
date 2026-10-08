@@ -2,10 +2,10 @@
 id: US-GRP-009
 title: "El desarrollador o el agente declaran qué agente trabaja en un worktree"
 type: us
-status: draft
+status: implemented
 priority: high
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-08
 feature: motor-local
 related:
   context:
@@ -89,3 +89,14 @@ Cuando pasa más del umbral de inactividad sin actividad en "feat-login"
 Entonces su sesión figura como "Inactivo", no como "Terminado"
 Cuando el desarrollador retira el registro de "Codex" en "feat-login"
 Entonces la sesión pasa a "Terminado"
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #106.
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- Las herramientas MCP `register_agent`/`unregister_agent` son de US-MCP-006.
+- Perfil `mcp` por solicitante (S-01): sin implementar.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

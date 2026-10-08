@@ -2,10 +2,10 @@
 id: US-MCP-005
 title: "Un agente recibe respuestas acotadas que no pueden darle órdenes ni filtrar secretos"
 type: us
-status: draft
+status: implemented
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 domain: GRP
 epic: E-001
 feature: mcp
@@ -101,3 +101,13 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 
 - **Diseño:** no aplica (contrato de respuestas; mensajes en/es según la guía de contenido del design system, DSYS-GRP-001).
 - **Dev Spec:** [DS-US-MCP-005](../dev-specs/US-MCP-005-dev-spec.md).
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #157, #159.
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- Los límites por solicitante (S-03) salieron de la historia por la Enmienda (2026-10-07) de ADR-MCP-001: son condición de entrada de US-MCP-008/009.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

@@ -2,13 +2,13 @@
 id: INF-GRP-004
 title: "Canales de distribución: Homebrew, winget, npm y scripts de instalación verificados"
 type: inf
-status: in-progress
+status: partially-implemented
 feature: motor-local
 domain: GRP
 priority: high
 complexity: medium
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-08
 related:
   adrs: [ADR-GRP-014, ADR-GRP-005, ADR-GRP-006]
   stories: [INF-GRP-003, TS-GRP-003]
@@ -82,3 +82,13 @@ Decisión del orquestador (2026-10-05), validada por el PO:
 - **`raptor --version` con el canal de origen** (PO): queda para cuando exista la US de instalación.
 - Actualización con winget mientras corre el daemon. Pendiente: etapa de validación multiplataforma.
 - La validación de los manifiestos de winget con `winget validate` y la de la fórmula con `brew audit` se hacen antes de la primera publicación.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #51.
+
+Estado: implementación parcial. Pendiente:
+- Pasos humanos antes de publicar (npm, tap, secretos, releases inmutables); `winget validate`/`brew audit` antes de la primera publicación.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

@@ -2,10 +2,10 @@
 id: US-GRP-004
 title: "El desarrollador encuentra lo ocurrido aunque no tuviera GitRaptor abierto"
 type: us
-status: draft
+status: implemented
 priority: high
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-08
 feature: motor-local
 related:
   context:
@@ -65,3 +65,11 @@ Dado el repo "demo" observado
 Cuando el motor deja de ejecutarse y vuelve a arrancar sin que el desarrollador abra ninguna superficie de GitRaptor
   Y después se hace un commit en "feat-login"
 Entonces el commit aparece en el historial de eventos de "feat-login"
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #112.
+
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

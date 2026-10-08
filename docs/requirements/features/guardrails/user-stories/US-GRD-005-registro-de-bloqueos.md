@@ -2,10 +2,10 @@
 id: US-GRD-005
 title: "El desarrollador cuenta las acciones peligrosas que Guardrails bloqueó en cada repo"
 type: us
-status: draft
+status: partially-implemented
 priority: high
 created: 2026-10-04
-updated: 2026-10-07
+updated: 2026-10-08
 feature: guardrails
 related:
   context:
@@ -95,3 +95,14 @@ Entonces solo aparece la de hace 89 días
 
 - **Diseño:** no aplica.
 - **Dev Spec:** [DS-US-GRD-005](../dev-specs/US-GRD-005-registro-de-bloqueos.md) (2026-10-07). Primera entrega: escenarios 1, 2, 3 (el de los permitidos), 4, 5 y 6 con el daemon. Queda diferido el escenario de las entradas en modo degradado (el spool, `spool-unverified`), con dueño en la Dev Spec (Fuera de alcance).
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #154 (ajuste en #168).
+
+Estado: implementación parcial. Pendiente:
+- El escenario de las entradas en modo degradado: spool y `spool-unverified` (segunda entrega, TS a crear).
+- Entradas `request` y `exception*` (US-GRD-015 y US-GRD-006) y `protection-state` (US-GRD-003).
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

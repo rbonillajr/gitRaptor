@@ -2,13 +2,13 @@
 id: INF-CKP-001
 title: "Esqueleto de la TUI: cliente del canal, bucle TEA, saneado único y gate de 100 ms"
 type: inf
-status: in-progress
+status: implemented
 feature: cockpit
 domain: GRP
 priority: critical
 complexity: medium
 created: 2026-10-04
-updated: 2026-10-05
+updated: 2026-10-08
 related:
   adrs: [ADR-CKP-003, ADR-GRP-004, ADR-GRP-005, ADR-GRP-011, ADR-GRP-013]
   stories: [US-CKP-001, US-CKP-002, US-CKP-003, US-CKP-004, TS-GRP-004, INF-GRP-001, INF-GRP-002, TS-CKP-004]
@@ -70,3 +70,13 @@ tags: [cockpit, tui, ratatui, tea, canal, saneado, sec-12, latencia, nfr-04, i18
 
 - En macOS, abrir la TUI en dos emuladores de terminal durante una ráfaga del banco y revisar el histograma local por etapa.
 - Consola de Windows y terminales de Linux: **Pendiente: etapa de validación multiplataforma**.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #100, #139, #174 (ajuste en #153).
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- El lanzador del editor es de la historia de Q-CKP-9.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

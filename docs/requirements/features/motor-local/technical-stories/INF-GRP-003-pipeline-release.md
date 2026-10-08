@@ -2,13 +2,13 @@
 id: INF-GRP-003
 title: "Pipeline de release: 6 targets, firma, checksums, SBOM y borrador de GitHub Release"
 type: inf
-status: in-progress
+status: partially-implemented
 feature: motor-local
 domain: GRP
 priority: high
 complexity: medium
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-08
 related:
   adrs: [ADR-GRP-014, ADR-GRP-001, ADR-GRP-005]
   stories: [INF-GRP-004, INF-GRP-002, TS-GRP-001, TS-GRP-002, TD-GRP-003]
@@ -87,3 +87,14 @@ No se ejecutó la firma real ni la notarización (requieren secreto), ni las att
 - Firma en Windows ARM con Artifact Signing, sin verificar. Pendiente: etapa de validación multiplataforma.
 - El banco INF-GRP-002 debe medir NFR-04 y NFR-05 sobre el binario musl (ADR-GRP-014 § 2).
 - La firma del SBOM con `attest-sbom` se activa junto con `RELEASE_ATTEST`.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #51.
+
+Estado: implementación parcial. Pendiente:
+- Pasos humanos antes de publicar: reservar los nombres en npm, crear el tap, configurar secretos y variables y activar las releases inmutables.
+- Borrar a mano los tags de prueba `v0.0.0` y `v0.0.0-test.1`.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

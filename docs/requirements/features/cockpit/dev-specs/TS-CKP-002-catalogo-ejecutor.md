@@ -2,12 +2,12 @@
 id: DS-TS-CKP-002
 title: "Dev Spec — Catálogo de operaciones de usuario y ejecutor del daemon"
 type: dev-spec
-status: review
+status: implemented
 feature: cockpit
 domain: GRP
 story: TS-CKP-002
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-08
 related:
   adrs: [ADR-CKP-002, ADR-TMC-002, ADR-TMC-004, ADR-TMC-005, ADR-TMC-007, ADR-GRP-005, ADR-GRP-009]
   nfrs: [NFR-01, NFR-02, NFR-07, SEC-02, SEC-05, SEC-10, SEC-11, SEC-12]
@@ -197,3 +197,13 @@ Ajustes del PO (2026-10-05) incorporados: cada pendiente tiene un dueño con id.
 - **Windows**: `CREATE_NO_WINDOW` y consola, la interrupción con Ctrl-C al grupo (hoy no hace nada), el `FileId` del `.git` (hoy `None`), los permisos de `PATH`, `SSH_AUTH_SOCK` y `GNUPGHOME` (hoy no se comprueban), el editor de rechazo y la capa `cockpit` (sin controles equivalentes, TQ-14).
 - **Linux**: el daemon como *subreaper*, la muerte del hijo con el daemon y un hook con doble fork.
 - Todo compila con `cfg` en las tres plataformas, pero solo se ejecutó en macOS.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #73.
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- Cableado de producción de `operation.prepare`/`operation.run`: US-MCP-008. La lógica de cada operación es de sus historias.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

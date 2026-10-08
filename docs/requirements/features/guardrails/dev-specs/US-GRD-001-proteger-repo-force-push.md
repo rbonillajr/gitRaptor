@@ -2,12 +2,12 @@
 id: DS-US-GRD-001
 title: "Dev Spec — US-GRD-001: proteger un repo y denegar el force-push y el borrado de la rama base"
 type: dev-spec
-status: approved
+status: implemented
 feature: guardrails
 domain: GRP
 story: US-GRD-001
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-08
 related:
   stories: [US-GRD-001, US-GRP-001, US-GRP-012, INF-GRD-001, SPIKE-GRD-001, US-GRD-002, US-GRD-003, US-GRD-004, US-GRD-005, US-GRD-006]
   adrs: [ADR-GRD-001, ADR-GRD-002, ADR-GRD-003, ADR-GRD-004, ADR-GRD-005, ADR-GRD-007, ADR-GRP-005, ADR-GRP-006, ADR-GRP-009]
@@ -142,3 +142,11 @@ Un dispatcher `sh` cuesta ≈ 43 ms por invocación en Windows y el nativo ≈ 6
 - **Windows** (máquina real, Git 2.56.0.windows.1): `cargo fmt --check` y `cargo clippy --workspace --all-targets -D warnings` en verde; pasan los tests de `crates/policy` (evaluación y vía rápida), `crates/core` (`guardrails`, `guard_boundary`), `crates/git` (`static_check`) y de la CLI (`guard`). Fallan tests previos y ajenos (`settings::schema` por CRLF, `team_config` porque `git init` no lee la configuración del entorno de prueba, `catalog` y `mcp`). **Humo funcional del dispatcher nativo en modo degradado** (sin canal en Windows): commit permitido con el aviso, `branch -D main` denegado, borrar una rama de trabajo permitido, `pack-refs` y `gc` pasan, la base empaquetada sigue protegida y, sin `raptor`, el commit pasa con "protección inactiva" y `branch -D main` sale con 1. La instalación en Windows espera al canal (XP-01). **Pendiente: etapa de validación multiplataforma** para el resto.
 
 **Revisión de código** (subagente, 2026-10-05): once hallazgos, corregidos en `fix(guard): close the gaps found in review` salvo dos que quedan anotados: el tiempo máximo de la llamada al daemon (10 s, ya acotado por el cliente) y que, sin configuración del equipo, la rama base confirmada sea `main` aunque el repo use `master` (es lo que fijan Q-GRD-23 y ADR-GRD-004 § 3.5; el modo degradado protege además la rama principal). **Observación de producto** para US-GRD-014: en un repo cuya rama principal es `master`, la explicación lo deja ver ("rama base confirmada: main") y el desarrollador puede no autorizar.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #116, #121.
+
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

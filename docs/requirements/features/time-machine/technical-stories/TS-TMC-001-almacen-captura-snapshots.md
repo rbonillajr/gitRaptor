@@ -2,13 +2,13 @@
 id: TS-TMC-001
 title: "Almacén de snapshots en el perfil y captura de estado"
 type: ts
-status: draft
+status: implemented
 feature: time-machine
 domain: GRP
 priority: critical
 complexity: high
 created: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-08
 related:
   adrs: [ADR-TMC-001, ADR-TMC-004, ADR-TMC-006, ADR-GRP-006, ADR-GRP-009, ADR-GRP-010]
   stories: [US-TMC-001, US-TMC-004, US-TMC-005, US-TMC-009, US-TMC-016, US-TMC-018, US-TMC-020, TS-GRP-001, TS-GRP-002, TS-TMC-002]
@@ -74,3 +74,13 @@ tags: [time-machine, snapshots, almacen, perfil, captura, nfr-01, d-tmc-11]
 #### Verificación Manual / Sandbox
 
 - Medir en la máquina de dogfooding la siembra y el disco del almacén con un repo real de tamaño medio, y comparar con las cifras de SPIKE-TMC-001.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #38, #127, #171.
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- Ref + oplog por encima de 25 ms (aviso, no gate): cuatro `F_FULLFSYNC` por snapshot (DS § 7).
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

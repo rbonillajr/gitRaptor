@@ -2,10 +2,10 @@
 id: US-GRP-007
 title: "El desarrollador sabe qué sesión de Claude Code trabaja en cada worktree y si sigue activa"
 type: us
-status: draft
+status: implemented
 priority: high
 created: 2026-10-03
-updated: 2026-10-05
+updated: 2026-10-08
 feature: motor-local
 related:
   context:
@@ -82,3 +82,14 @@ Cuando el desarrollador instala Claude Code y lo lanza en "feat-login"
 Entonces el motor detecta la sesión de "Claude Code" en "feat-login" sin reinstalar ni reconfigurar GitRaptor
 
 > **Nota (2026-10-05, INF-GRP-002)**: el coste de resolver el actor de un evento (ADR-GRP-013) se mide en el banco de INF-GRP-002 (`cargo bench -p gitraptor-cli --bench engine`) cuando esta historia detecte sesiones reales. Hoy el banco fija el detector de agentes en un nombre ficticio y no lo mide (Dev Spec de INF-GRP-002, § 8).
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #80, #119, #124, #155, #169.
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- La medición en el dogfooding real es de SPIKE-GRP-001 (criterio 2 de M1).
+- Claude Code instalado con npm (`node …/cli.js`) no se detecta: lo registra el desarrollador (US-GRP-009).
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

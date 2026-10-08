@@ -6,7 +6,7 @@ status: implemented
 feature: motor-local
 domain: GRP
 created: 2026-10-07
-updated: 2026-10-07
+updated: 2026-10-08
 related:
   stories: [TS-GRP-006]
   adrs: [ADR-GRP-010, ADR-GRP-011, ADR-GRP-013, ADR-GRP-015, ADR-GRP-007, ADR-GRP-009, ADR-GRP-016, ADR-TMC-004]
@@ -117,3 +117,13 @@ Todo con repos y perfiles temporales; esperas por señal, sin `sleep` fijos. Las
 - **Presentación** del nivel en `raptor status --resources`, la CLI y la TUI: es de US-GRP-017 y del Cockpit, fuera de esta TS.
 - **Escenario `tiered-scale`** del banco (INF-GRP-002): fuera de alcance de la TS; queda declarado.
 - **Linux y Windows**: **Pendiente: etapa de validación multiplataforma**. En macOS, el coste de los streams de FSEvents inactivos es un supuesto (Discrepancia de la Enmienda).
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #164, #167, #173 (ajuste en #178).
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- Nivel local de `dormantAfterHours` (US-GRP-013) y el escenario `tiered-scale` del banco (INF-GRP-002).
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

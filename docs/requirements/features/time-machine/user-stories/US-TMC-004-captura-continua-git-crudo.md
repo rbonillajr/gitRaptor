@@ -2,10 +2,10 @@
 id: US-TMC-004
 title: "El trabajo hecho fuera de GitRaptor queda capturado como punto recuperable"
 type: us
-status: draft
+status: implemented
 priority: high
 created: 2026-10-03
-updated: 2026-10-06
+updated: 2026-10-08
 domain: GRP
 epic: E-001
 feature: time-machine
@@ -91,3 +91,13 @@ Entonces ese cambio figura sin punto recuperable
 - **Historias**: US-TMC-001; US-GRP-002 (eventos en vivo) y US-GRP-004 (observación continua) de motor-local.
 - **Externas**: ninguna. Riesgo residual R2: lo editado entre la última captura y una operación destructiva de Git crudo puede perderse.
 - **Transversal**: transversal (lo define el Arquitecto): verificación en repos temporales, nunca en un repo real; mismo comportamiento en Windows, macOS y Linux; mensajes en inglés y español.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #120 (ajustes en #127 y #146).
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- Cuota del almacén: US-TMC-022. Deshacer `push` y crear o borrar ramas y worktrees: US-TMC-009/014.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

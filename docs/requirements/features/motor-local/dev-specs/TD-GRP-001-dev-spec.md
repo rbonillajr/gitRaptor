@@ -2,11 +2,11 @@
 id: DS-TD-GRP-001
 title: "Dev Spec — Verificación de ACL en Windows: git.exe (SEC-10) y perfil (SEC-06)"
 type: dev-spec
-status: approved
+status: partially-implemented
 feature: motor-local
 domain: GRP
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-08
 related:
   stories: [TD-GRP-001, TS-GRP-001, TS-GRP-002]
   adrs: [ADR-GRP-002, ADR-GRP-006, ADR-GRP-009]
@@ -64,3 +64,13 @@ Todas las decisiones son **Decisión del orquestador (2026-10-05), validada por 
 - Verificar el árbol completo de la instalación de Git, más allá del lanzador, el Git que lanza y la carpeta de sus DLL. Los shims de Scoop viven en la carpeta del usuario y son de su confianza, como `~/.nix-profile` en Unix (riesgo residual registrado en ADR-GRP-009).
 - La ruta de instalación leída del registro (ADR-GRP-009 § 4) sigue pendiente.
 - Usuarios no administradores en la Windows real: la máquina de pruebas solo tiene una cuenta de administrador.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #72.
+
+Estado: implementación parcial. Pendiente:
+- Ruta de instalación de Git leída del registro (ADR-GRP-009 § 4).
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

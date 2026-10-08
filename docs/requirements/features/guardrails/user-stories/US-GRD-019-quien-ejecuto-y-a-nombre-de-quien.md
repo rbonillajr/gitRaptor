@@ -2,10 +2,10 @@
 id: US-GRD-019
 title: "El desarrollador ve quién ejecutó cada commit y a nombre de quién entró cuando no coinciden"
 type: us
-status: draft
+status: implemented
 priority: medium
 created: 2026-10-06
-updated: 2026-10-06
+updated: 2026-10-08
 feature: guardrails
 related:
   context:
@@ -97,3 +97,11 @@ Entonces `raptor events` muestra que lo ejecutó Claude Code en "feat-x", que en
 
 - **Diseño:** no aplica (la presentación del Cockpit va en su propia historia).
 - **Dev Spec:** [DS-US-GRD-018](../dev-specs/US-GRD-018-autoria-commits-persona-y-agente.md) (2026-10-06; compartida por US-GRD-018 y US-GRD-019, esta historia es su PR-B).
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #144, #147, #151, #175.
+
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

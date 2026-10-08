@@ -2,12 +2,12 @@
 id: DS-TS-TMC-001
 title: "Dev Spec — Almacén de snapshots en el perfil y captura de estado"
 type: dev-spec
-status: review
+status: implemented
 feature: time-machine
 domain: GRP
 story: TS-TMC-001
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 related:
   adrs: [ADR-TMC-001, ADR-TMC-002, ADR-TMC-003, ADR-TMC-004, ADR-TMC-006, ADR-GRP-006, ADR-GRP-009, ADR-GRP-010]
   nfrs: [NFR-01, NFR-04, SEC-TMC-01, SEC-TMC-06, SEC-TMC-09, SEC-TMC-12]
@@ -169,3 +169,13 @@ Decisión del orquestador (2026-10-04), validada por el PO y el Arquitecto: la T
 | Prioridad del previo (≤ 20 ms en release, 250 ms en debug; el banco mide el p95 de la espera) | `an_observation_gives_way_to_a_guaranteed_prior` |
 | Frontera del escritor gix | `crates/git/tests/static_check.rs`, `crates/core/tests/tm_boundary.rs` |
 | p95 frente a 200 ms con el perfil `M` | `crates/core/benches/tm_snapshot.rs` |
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #38, #127, #171.
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- Ref + oplog por encima de 25 ms (aviso, no gate): cuatro `F_FULLFSYNC` por snapshot (DS § 7).
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

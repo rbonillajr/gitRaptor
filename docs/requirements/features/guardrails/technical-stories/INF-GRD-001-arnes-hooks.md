@@ -2,13 +2,13 @@
 id: INF-GRD-001
 title: "Arnés de la capa de hooks: repos con hooks previos, huella, interrupción y matriz de CI"
 type: inf
-status: draft
+status: implemented
 feature: guardrails
 domain: GRP
 priority: critical
 complexity: medium
 created: 2026-10-04
-updated: 2026-10-05
+updated: 2026-10-08
 related:
   adrs: [ADR-GRD-001, ADR-GRD-002, ADR-GRD-005, ADR-GRD-007]
   stories: [US-GRD-001, US-GRD-002, US-GRD-003, US-GRD-004, US-GRD-005, US-GRD-006, US-GRD-007, SPIKE-GRD-001]
@@ -73,3 +73,11 @@ Las del núcleo se cumplen al cerrar este INF. Las de cada suite, al cerrar su h
 #### Verificación Manual / Sandbox
 
 - Revisar el informe de una ejecución fallida provocada a propósito y comprobar que nombra el escenario, el paso de la transacción, la ruta y el tipo de cambio.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #65, #121 (job con Git 2.38.5 en #116).
+
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

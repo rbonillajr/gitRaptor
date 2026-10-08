@@ -2,11 +2,11 @@
 id: DS-TS-GRP-003
 title: "Dev Spec — Proceso del motor en segundo plano por usuario"
 type: dev-spec
-status: approved
+status: implemented
 feature: motor-local
 domain: GRP
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 related:
   stories: [TS-GRP-003]
   adrs: [ADR-GRP-005, ADR-GRP-006, ADR-GRP-009, ADR-GRP-013]
@@ -139,3 +139,11 @@ Todas usan perfiles temporales (`ProfileDirs::under_root`, o `GITRAPTOR_PROFILE_
 - **Windows**: la notificación de cierre de sesión llega como mensaje de ventana, así que hasta entonces un logoff cuenta como caída. Faltan además las ACL del lock y de los logs. Nada de esto se verificó desde macOS.
 - **Linux**: no se verificó en esta rama (solo macOS).
 - `cargo-deny` no está configurado en el repo. `signal-hook` es MIT o Apache-2.0 y no se pasó por `cargo-deny`.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #26.
+
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

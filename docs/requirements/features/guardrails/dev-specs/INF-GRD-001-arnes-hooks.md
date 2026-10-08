@@ -2,12 +2,12 @@
 id: DS-INF-GRD-001
 title: "Dev Spec — Arnés de la capa de hooks (núcleo)"
 type: dev-spec
-status: approved
+status: implemented
 feature: guardrails
 domain: GRP
 story: INF-GRD-001
 created: 2026-10-05
-updated: 2026-10-06
+updated: 2026-10-08
 related:
   stories: [INF-GRD-001, INF-GRP-001, SPIKE-GRD-001, US-GRD-001, US-GRD-002, US-GRD-003, US-GRD-004, US-GRD-005, US-GRD-006]
   adrs: [ADR-GRD-001, ADR-GRD-002, ADR-GRD-005, ADR-GRP-009]
@@ -114,3 +114,11 @@ Si un barrido falla, el informe nombra el escenario, el punto de corte, la ruta 
 - El banco de latencia p95 por evaluación gobernada y de la vía rápida: con US-GRD-001.
 - Los casos de regresión de SPIKE-GRD-001 que dependen de la decisión de la política: con US-GRD-001 (D12).
 - Propagar a ADR-GRD-002 el hallazgo de reftable con Git 2.50.1 (§ 5).
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #65, #121 (job con Git 2.38.5 en #116).
+
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

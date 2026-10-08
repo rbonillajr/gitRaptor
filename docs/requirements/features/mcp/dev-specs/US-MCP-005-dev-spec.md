@@ -2,11 +2,11 @@
 id: DS-US-MCP-005
 title: "Dev Spec — US-MCP-005: respuestas del MCP acotadas, con el texto del repo como dato y sin secretos"
 type: dev-spec
-status: approved
+status: implemented
 feature: mcp
 domain: MCP
 created: 2026-10-07
-updated: 2026-10-07
+updated: 2026-10-08
 related:
   stories: [US-MCP-005, US-MCP-003, US-MCP-004]
   adrs: [ADR-MCP-001, ADR-GRP-005, ADR-GRP-016]
@@ -92,3 +92,12 @@ security-expert: sin Critical ni High. Corregido en la rama:
 
 Pendiente, anotado en el PR: **L-01** (claves de objeto no saneadas; hoy todas las claves son del binario). **L-04** (`retry_after_s` sale del cubo MCP; si rechaza el cubo general del canal, 1 s sigue siendo una cota válida). Y una prueba contra un daemon sin la capacidad `mcp.status-branch` (el mecanismo de capacidades ya se prueba en el canal).
 
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #157, #159.
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- Los límites por solicitante (S-03) salieron de la historia por la Enmienda (2026-10-07) de ADR-MCP-001: son condición de entrada de US-MCP-008/009.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

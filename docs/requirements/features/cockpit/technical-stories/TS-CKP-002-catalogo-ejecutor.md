@@ -2,13 +2,13 @@
 id: TS-CKP-002
 title: "Catálogo de operaciones de usuario y ejecutor del daemon en dos fases"
 type: ts
-status: in-progress
+status: implemented
 feature: cockpit
 domain: GRP
 priority: critical
 complexity: high
 created: 2026-10-04
-updated: 2026-10-05
+updated: 2026-10-08
 related:
   adrs: [ADR-CKP-002, ADR-TMC-002, ADR-TMC-004, ADR-TMC-005, ADR-TMC-007, ADR-GRP-005, ADR-GRP-009]
   stories: [US-CKP-014, US-CKP-015, US-CKP-016, US-CKP-017, US-CKP-018, US-CKP-020, US-CKP-024, TS-TMC-004, TS-TMC-003, TS-GRP-002, TS-GRP-003, TS-GRP-004, INF-GRP-001, INF-TMC-001, TS-CKP-003]
@@ -77,3 +77,13 @@ tags: [cockpit, catalogo-operaciones, ejecutor, operacion-protegida, capa, seria
 
 - En un repo temporal con hooks reales (formateador con `node`, firma), lanzar un merge y un rebase desde un cliente de prueba de capa `cockpit` y revisar la salida de Git y el resultado.
 - Windows (capa `cockpit`, barrera, consola) y Linux (muerte del hijo con el daemon, variables de sesión): **Pendiente: etapa de validación multiplataforma**.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #73.
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- Cableado de producción de `operation.prepare`/`operation.run`: US-MCP-008. La lógica de cada operación es de sus historias.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).
