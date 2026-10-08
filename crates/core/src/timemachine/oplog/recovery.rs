@@ -58,10 +58,22 @@ impl SnapshotRefs for AbsentStore {
 /// Whether a process still runs.
 pub trait ProcessProbe {
     fn is_alive(&self, pid: u32) -> bool;
+
+    /// Whether `pid` is still the annotated child whose start time, in µs
+    /// since the epoch as [`crate::channel::peer::ProcInfo::start_us`], was
+    /// `start_us`: a live process with another start time is a reuse of the
+    /// pid. Without a start time (rows annotated before it was recorded),
+    /// as [`Self::is_alive`].
+    fn is_same(&self, pid: u32, start_us: Option<u64>) -> bool {
+        let _ = start_us;
+        self.is_alive(pid)
+    }
 }
 
-/// The OS answer. When it cannot tell (PID reused, no permission, Windows)
-/// it says alive: the lock is then kept, never wrongly deleted.
+/// The OS answer. When it cannot tell (no permission, the list cannot be
+/// read) it says alive: the lock is then kept, never wrongly deleted. Unix
+/// cannot tell a reused pid from the child; Windows can, by the process's
+/// creation time.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SystemProbe;
 
@@ -80,10 +92,38 @@ impl ProcessProbe for SystemProbe {
         )
     }
 
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    fn is_alive(&self, pid: u32) -> bool {
+        !matches!(
+            gitraptor_winsys::process::created_100ns(pid),
+            Err(gitraptor_winsys::process::Error::Gone)
+        )
+    }
+
+    #[cfg(windows)]
+    fn is_same(&self, pid: u32, start_us: Option<u64>) -> bool {
+        let Some(start_us) = start_us else {
+            return self.is_alive(pid);
+        };
+        match gitraptor_winsys::process::created_100ns(pid) {
+            Ok(created) => windows_epoch_us(created) == start_us,
+            Err(gitraptor_winsys::process::Error::Gone) => false,
+            Err(_) => true,
+        }
+    }
+
+    #[cfg(not(any(unix, windows)))]
     fn is_alive(&self, _pid: u32) -> bool {
         true
     }
+}
+
+/// A process creation time (100 ns since 1601) as µs since the Unix epoch,
+/// truncated exactly as the channel's process reader does.
+#[cfg(windows)]
+fn windows_epoch_us(t_100ns: u64) -> u64 {
+    const UNIX_EPOCH_100NS: u64 = 116_444_736_000_000_000;
+    t_100ns.saturating_sub(UNIX_EPOCH_100NS) / 10
 }
 
 /// Inputs of the recovery of one repo.
@@ -113,7 +153,8 @@ pub enum KeptLockReason {
     /// The journal entry is at a break of the chain.
     Tampered,
     /// The file's identity cannot be checked: this OS or file system gives
-    /// no birth time, or the lock was annotated without one.
+    /// no birth time or no stable index (Windows: anything but NTFS), or the
+    /// lock was annotated without one.
     Unsupported,
     Io,
 }
@@ -352,21 +393,24 @@ impl Oplog {
             }
 
             // Wait, within the shared deadline, for annotated children.
-            let children: Vec<u32> = started
+            let children: Vec<(u32, Option<u64>)> = started
                 .iter()
                 .filter(|c| c.subject_id.as_deref() == Some(&op))
                 .filter(|c| !ended.contains(&(c.subject_id.clone(), c.pid)))
-                .filter_map(|c| c.pid.and_then(|p| u32::try_from(p).ok()))
+                .filter_map(|c| {
+                    let pid = c.pid.and_then(|p| u32::try_from(p).ok())?;
+                    Some((pid, child_start_us(c.detail.as_deref())))
+                })
                 .collect();
-            let mut alive: Vec<u32> = children.clone();
+            let mut alive = children.clone();
             loop {
-                alive.retain(|pid| options.probe.is_alive(*pid));
+                alive.retain(|(pid, start)| options.probe.is_same(*pid, *start));
                 if alive.is_empty() || Instant::now() >= options.deadline {
                     break;
                 }
                 std::thread::sleep(options.poll);
             }
-            for pid in children.iter().filter(|p| !alive.contains(p)) {
+            for (pid, _) in children.iter().filter(|c| !alive.contains(c)) {
                 self.record_child_ended(&op, *pid, now_ms)?;
             }
             if !alive.is_empty() {
@@ -377,13 +421,10 @@ impl Oplog {
                 continue;
             }
 
-            let identity =
-                lock.inode
-                    .and_then(|i| u64::try_from(i).ok())
-                    .map(|inode| FileIdentity {
-                        inode,
-                        birth_ns: lock.birth_ns,
-                    });
+            let identity = lock.inode.map(|inode| FileIdentity {
+                inode: inode_from_column(inode),
+                birth_ns: lock.birth_ns,
+            });
             match release_own_lock(options.git_dir, &path, identity) {
                 Ok(LockOutcome::Released) => {
                     self.record_lock_released(&op, &path, now_ms)?;
@@ -401,10 +442,29 @@ impl Oplog {
     }
 }
 
+/// The start time a `child-started` row carries in its detail, if any.
+fn child_start_us(detail: Option<&str>) -> Option<u64> {
+    serde_json::from_str::<serde_json::Value>(detail?)
+        .ok()?
+        .get("start_us")?
+        .as_u64()
+}
+
+/// The journal's `inode` column is a signed 64-bit integer: the inode is kept
+/// bit for bit, so an NTFS file index with its high bit set (sequence number
+/// 0x8000 and above) still fits. Inodes written before were all positive.
+pub(crate) fn inode_to_column(inode: u64) -> i64 {
+    i64::from_ne_bytes(inode.to_ne_bytes())
+}
+
+pub(crate) fn inode_from_column(inode: i64) -> u64 {
+    u64::from_ne_bytes(inode.to_ne_bytes())
+}
+
 /// Result of trying to release an annotated lock.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum LockOutcome {
-    #[cfg_attr(not(unix), allow(dead_code))]
+    #[cfg_attr(not(any(unix, windows)), allow(dead_code))]
     Released,
     /// No file there any more: nothing to do.
     Gone,
@@ -414,7 +474,8 @@ pub(crate) enum LockOutcome {
 /// Identity of a file: its inode and its birth time. The inode alone is not
 /// enough, because file systems such as ext4 hand a freed inode to the next
 /// file created, so a foreign lock taken at the same path can get the inode
-/// of ours (ADR-TMC-003 § 4).
+/// of ours (ADR-TMC-003 § 4). Windows: the NTFS file index, which carries
+/// the MFT record's sequence number, and the creation time.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FileIdentity {
     pub inode: u64,
@@ -424,8 +485,7 @@ pub struct FileIdentity {
 }
 
 /// Identity of a file, to annotate a lock when it is taken. Never follows a
-/// symbolic link. `None` where the OS gives no stable identity through std
-/// (Windows: pending).
+/// symbolic link. `None` where the OS gives no stable identity.
 pub fn file_identity(path: &Path) -> io::Result<Option<FileIdentity>> {
     #[cfg(unix)]
     {
@@ -440,11 +500,26 @@ pub fn file_identity(path: &Path) -> io::Result<Option<FileIdentity>> {
             birth_ns,
         }))
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        let id = gitraptor_winsys::file_id::Entry::open(path, false)?.identity();
+        Ok(Some(FileIdentity {
+            inode: id.index,
+            birth_ns: windows_epoch_ns(id.created_100ns),
+        }))
+    }
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = std::fs::symlink_metadata(path)?;
         Ok(None)
     }
+}
+
+/// A Windows file time (100 ns since 1601) as ns since the Unix epoch.
+#[cfg(windows)]
+fn windows_epoch_ns(t_100ns: i64) -> Option<i64> {
+    const UNIX_EPOCH_100NS: i64 = 116_444_736_000_000_000;
+    t_100ns.checked_sub(UNIX_EPOCH_100NS)?.checked_mul(100)
 }
 
 /// The only write recovery makes in the user's repo: deletes the lock at
@@ -564,8 +639,46 @@ fn stat_at(dir: &impl rustix::fd::AsFd, name: &str) -> io::Result<Option<(u32, u
     Ok(Some((stat.st_mode as u32, stat.st_ino as u64, birth_ns)))
 }
 
-#[cfg(not(unix))]
+/// Windows has no `unlinkat`: the lock is opened by its path itself (never
+/// following a link or junction) with `DELETE` access, and the handle pins
+/// the entry. Only on NTFS, where the file index is stable. What is checked and what is deleted is that one entry,
+/// whatever the path names afterwards; it is ours only with the index and
+/// creation time the journal recorded. A process still holding it open
+/// without `FILE_SHARE_DELETE` makes the open fail, and the lock is kept.
+#[cfg(windows)]
+fn unlink_if_same(parent: &Path, name: &str, identity: FileIdentity) -> io::Result<LockOutcome> {
+    use gitraptor_winsys::file_id::Entry;
+    let entry = match Entry::open(&parent.join(name), true) {
+        Ok(entry) => entry,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(LockOutcome::Gone),
+        Err(err) => return Err(err),
+    };
+    if !entry.is_regular_file() {
+        return Ok(LockOutcome::Kept(KeptLockReason::NotALockFile));
+    }
+    if !entry.is_ntfs() {
+        return Ok(LockOutcome::Kept(KeptLockReason::Unsupported));
+    }
+    let current = entry.identity();
+    if current.index != identity.inode {
+        return Ok(LockOutcome::Kept(KeptLockReason::InodeChanged));
+    }
+    let (Some(recorded), Some(current)) =
+        (identity.birth_ns, windows_epoch_ns(current.created_100ns))
+    else {
+        return Ok(LockOutcome::Kept(KeptLockReason::Unsupported));
+    };
+    if recorded != current {
+        return Ok(LockOutcome::Kept(KeptLockReason::InodeChanged));
+    }
+    // Marked for deletion through the handle. If another process holds the
+    // file open with `FILE_SHARE_DELETE`, the name stays, pending, until it
+    // closes: no one can open it any more and Git sees it gone once it does.
+    entry.delete()?;
+    Ok(LockOutcome::Released)
+}
+
+#[cfg(not(any(unix, windows)))]
 fn unlink_if_same(_parent: &Path, _name: &str, _identity: FileIdentity) -> io::Result<LockOutcome> {
-    // Pending: cross-platform validation stage (Windows file identity).
     Ok(LockOutcome::Kept(KeptLockReason::Unsupported))
 }

@@ -474,8 +474,7 @@ impl Oplog {
         now_ms: i64,
     ) -> Result<()> {
         let path = path_text(path)?;
-        let inode = i64::try_from(identity.inode)
-            .map_err(|_| ProfileError::InvalidWrite("inode out of range".into()))?;
+        let inode = recovery::inode_to_column(identity.inode);
         self.write(|batch| {
             require_operation(&batch.tx, operation_id)?;
             batch.journal(
@@ -515,18 +514,29 @@ impl Oplog {
         })
     }
 
-    /// Annotates a child process the applier started (ADR-TMC-003 § 2).
+    /// Annotates a child process the applier started (ADR-TMC-003 § 2), with
+    /// its start time (µs since the epoch, as the channel's process reader
+    /// gives it): with the pid, the identity recovery checks, so a reused pid
+    /// is not taken for the child.
     pub fn record_child_started(
         &mut self,
         operation_id: &str,
         pid: u32,
+        start_us: Option<u64>,
         now_ms: i64,
     ) -> Result<()> {
-        self.child_entry("child-started", operation_id, pid, now_ms)
+        let detail = start_us.map(|s| serde_json::json!({ "start_us": s }).to_string());
+        self.child_entry(
+            "child-started",
+            operation_id,
+            pid,
+            detail.as_deref(),
+            now_ms,
+        )
     }
 
     pub fn record_child_ended(&mut self, operation_id: &str, pid: u32, now_ms: i64) -> Result<()> {
-        self.child_entry("child-ended", operation_id, pid, now_ms)
+        self.child_entry("child-ended", operation_id, pid, None, now_ms)
     }
 
     fn child_entry(
@@ -534,6 +544,7 @@ impl Oplog {
         entry: &'static str,
         operation_id: &str,
         pid: u32,
+        detail: Option<&str>,
         now_ms: i64,
     ) -> Result<()> {
         self.write(|batch| {
@@ -543,6 +554,7 @@ impl Oplog {
                     entry,
                     subject_id: Some(operation_id),
                     pid: Some(i64::from(pid)),
+                    detail,
                     ..Entry::default()
                 },
                 now_ms,
