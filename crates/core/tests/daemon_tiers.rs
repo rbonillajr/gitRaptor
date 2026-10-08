@@ -316,3 +316,50 @@ fn a_dormant_repo_has_its_store_closed() {
         std::thread::sleep(Duration::from_millis(20));
     }
 }
+
+/// The tier of each repo in the snapshot (`observation.tiers`, N8): dormant
+/// with the time it was checked, then active once a request wakes it.
+#[test]
+fn the_snapshot_shows_the_tier() {
+    let (fx, _wt) = repo_with_login();
+    let r = start(fx);
+    let tier = |r: &Running| -> (String, Option<i64>) {
+        let snap: serde_json::Value = connect(&r.tp)
+            .call(methods::ENGINE_SNAPSHOT, json!({}))
+            .unwrap();
+        let repo = &snap["repos"][0];
+        (
+            repo["tier"].as_str().unwrap_or("").to_owned(),
+            repo["checked_utc_ms"].as_i64(),
+        )
+    };
+    r.logged("repo_dormant", 1);
+    let (t, checked) = tier(&r);
+    // It may already be awake again only if something woke it.
+    if !r.log().contains("repo_woken") {
+        assert_eq!(t, "dormant", "{}", r.log());
+        assert!(checked.is_some());
+    }
+    // A request about the repo wakes it.
+    let _: serde_json::Value = connect(&r.tp)
+        .call(
+            methods::EVENTS_HISTORY,
+            json!({ "repo_id": r.repo_id, "limit": 1 }),
+        )
+        .unwrap();
+    r.logged("repo_woken", 1);
+    let start = Instant::now();
+    loop {
+        let (t, checked) = tier(&r);
+        if t == "active" {
+            assert_eq!(checked, None);
+            break;
+        }
+        // Or it went back to sleep already: then it was active in between.
+        if r.log().matches("repo_dormant").count() > 1 {
+            break;
+        }
+        assert!(start.elapsed() < DEADLINE, "{t}\n{}", r.log());
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}

@@ -91,6 +91,9 @@ pub struct RepoSummaryView {
     /// Canonical path of the Git common directory.
     pub path: Untrusted,
     pub attention: AttentionView,
+    /// Observation tier (TS-GRP-006); absent without `observation.tiers`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tier: Option<crate::messages::RepoTier>,
 }
 
 /// What asks for attention in a repo (Q-CKP-28): predicted conflicts (⚡),
@@ -291,6 +294,8 @@ mod tests {
                     status: crate::messages::BaseStatusView::Invalid,
                 },
                 worktrees: Vec::new(),
+                tier: None,
+                checked_utc_ms: None,
             },
         });
         let value = serde_json::to_value(&snapshot).unwrap();

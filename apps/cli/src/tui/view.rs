@@ -561,6 +561,8 @@ mod tests {
                             status: BaseStatusView::Confirmed,
                         },
                         worktrees,
+                        tier: None,
+                        checked_utc_ms: None,
                     },
                 },
             )))),
