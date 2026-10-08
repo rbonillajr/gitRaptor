@@ -324,6 +324,7 @@ impl Daemon {
             )
         });
         let start = observer.watch_repo(repo_id, common_dir, read);
+        self.resources.set_observation(observer.usage_source());
         self.note_activity(repo_id);
         self.marks.set_head_logs(repo_id, &start.head_logs);
         self.marks.set_heads(repo_id, &start.heads);
