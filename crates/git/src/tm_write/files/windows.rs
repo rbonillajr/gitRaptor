@@ -42,7 +42,7 @@ const WAIT_BUDGET_MS: u64 = 5_000;
 /// A worktree root, held open; every write happens beneath it.
 #[derive(Debug)]
 pub struct RootDir {
-    handle: File,
+    _handle: File,
     volume: u32,
     path: PathBuf,
     /// `\\?\` form of `path`: every operation takes names as they are, so the open, the
@@ -178,7 +178,7 @@ impl RootDir {
         }
         let (volume, _) = gitraptor_winsys::file_id::of_file(&handle)?;
         Ok(Self {
-            handle,
+            _handle: handle,
             volume,
             path: root.to_owned(),
             verbatim: verbatim(root),
@@ -642,22 +642,21 @@ impl RootDir {
 
     /// Puts the temporary entry `temp`, in the folder of `rel`, back at `rel` if it still holds
     /// `expected` and nothing is at `rel`: compared through a handle that shares only reading,
-    /// then renamed **through that same handle** (`FileRenameInfo` without `ReplaceIfExists`,
-    /// relative to the pinned folder), so the entry renamed is the entry compared: nobody can
+    /// then renamed **through that same handle** (`FileRenameInfo` without `ReplaceIfExists`, to
+    /// the full path under the pinned folders, which cannot be renamed or swapped meanwhile), so the entry renamed is the entry compared: nobody can
     /// write to it, rename it or take its name meanwhile (Enmienda T2), and [`Restore::Swapped`]
     /// never happens here. Never follows a link or junction. Anything else leaves both untouched.
     pub fn restore_temp(&self, rel: &[u8], temp: &str, expected: (Kind, Oid)) -> Result<Restore> {
         if !is_temp_name(temp) {
             return Err(WriteError::InvalidInput("not a temporary name".into()));
         }
-        let (pins, dir, name) = match self.parent(rel, false)? {
+        let (_pins, dir, name) = match self.parent(rel, false)? {
             Ok(found) => found,
             Err(_) => return Ok(Restore::Blocked),
         };
         if self.no_exchange {
             return Ok(Restore::NotGuaranteed);
         }
-        let folder = pins.last().unwrap_or(&self.handle);
         let aside = dir.join(temp);
         let held = match self.hold(&aside)? {
             Held::Open(file, seen) => {
@@ -670,7 +669,7 @@ impl RootDir {
             Held::InUse => return Ok(Restore::Busy),
         };
         self.try_swap(&aside);
-        match rename_through(&held, folder, std::ffi::OsStr::new(&name)) {
+        match rename_through(&held, &dir.join(&name)) {
             Ok(()) => Ok(Restore::Restored),
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(Restore::Occupied),
             Err(e) if is_in_use(&e) => Ok(Restore::Busy),
