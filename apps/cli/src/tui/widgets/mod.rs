@@ -25,6 +25,7 @@ pub mod graph_lanes;
 pub mod key_hints;
 pub mod layout;
 pub mod notification;
+pub mod observe_prompt;
 pub mod policy_banner;
 pub mod repo_picker;
 pub mod timeline;

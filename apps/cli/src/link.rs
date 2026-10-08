@@ -14,7 +14,7 @@ use gitraptor_core::client::{
 use gitraptor_core::profile::ProfileDirs;
 use serde_json::Value;
 
-use crate::client::{Connector, Incoming, Link, LinkError};
+use crate::client::{Connector, Incoming, Link, LinkError, Refusal};
 
 /// Connects through the client library of the engine.
 pub struct EngineConnector {
@@ -64,6 +64,16 @@ impl Link for EngineLink {
 
     fn call(&mut self, method: &str, params: Value) -> Result<Value, LinkError> {
         self.0.call(method, params).map_err(link_error)
+    }
+
+    fn call_refusal(&mut self, method: &str, params: Value) -> Result<Value, Refusal> {
+        self.0.call(method, params).map_err(|err| match err {
+            ClientError::Rpc(err) => Refusal::Engine {
+                code: err.code,
+                data: err.data,
+            },
+            other => Refusal::Link(link_error(other)),
+        })
     }
 
     fn next(&mut self, timeout: Duration) -> Result<Option<Incoming>, LinkError> {

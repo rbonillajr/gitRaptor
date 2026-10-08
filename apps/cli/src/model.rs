@@ -47,6 +47,8 @@ impl Model {
                 notice: None,
                 quit: false,
                 pick: Pick::None,
+                asked: false,
+                here: None,
             },
             conn: ConnState::Connecting,
             now_ms: 0,
@@ -72,6 +74,37 @@ pub struct Ui {
     pub quit: bool,
     /// Choosing the repo when the folder is in none of the observed ones.
     pub pick: Pick,
+    /// "Observe this repo?" was already answered in this run (US-CKP-025, D5): a reconnection
+    /// does not ask again. The folder of a run never changes, so one flag is enough.
+    pub asked: bool,
+    /// The unobserved repo the folder is in, while it is offered or being observed.
+    pub here: Option<Candidate>,
+}
+
+/// The repo the folder is in when the engine does not observe it (US-CKP-025): the root of
+/// the worktree that holds the folder, to hand to `repo.add`, and the repo as the developer
+/// knows it. Not read from Git: the engine checks it again when it is added.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Candidate {
+    pub root: std::path::PathBuf,
+    /// The repo's folder name (the main worktree's, for a linked worktree).
+    pub name: SafeText,
+    /// The folder shown, and the one `raptor repo add` takes to retry.
+    pub path: SafeText,
+}
+
+/// Why observing the repo of the folder failed, from the engine's typed answer; never its
+/// text (SEC-12).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ObserveFailure {
+    NotARepo,
+    NotTrusted,
+    Unreadable,
+    /// Reserved to the developer, and the engine did not see them (BR-AUTH-001).
+    Refused,
+    /// The connection dropped before the answer.
+    Disconnected,
+    Unknown,
 }
 
 /// The repo to show when the TUI starts outside every observed repo (dogfooding 2026-10-06).
@@ -83,6 +116,11 @@ pub enum Pick {
     Choosing { selected: usize },
     /// One chosen (or the only one): its snapshot is on its way.
     Opening,
+    /// The folder is in a repo the engine does not observe: "Observe this repo? [y/N]"
+    /// ([`Ui::here`]; US-CKP-025).
+    Asking,
+    /// The developer said yes: `repo.add` and then the repo's snapshot are on their way.
+    Observing,
 }
 
 /// Terminal size in cells.
@@ -105,6 +143,8 @@ pub enum Notice {
     Starting,
     /// `Ctrl-Z` on a platform without job control.
     SuspendUnsupported,
+    /// The repo of the folder could not be observed ([`Ui::here`] names it).
+    ObserveFailed(ObserveFailure),
 }
 
 /// The replica of the engine: the global scope and the selected repo's.
@@ -429,6 +469,11 @@ pub enum ConnEvent {
     Activity(bool),
     /// The folder is in no observed repo (or there is no folder).
     Unlocated,
+    /// The folder is in a repo the engine does not observe (US-CKP-025); sent instead of
+    /// [`ConnEvent::Unlocated`].
+    Unobserved(Candidate),
+    /// `repo.add` of [`Cmd::Observe`] failed.
+    ObserveFailed(ObserveFailure),
 }
 
 /// Effects that `update` asks for; they run outside it.
@@ -445,6 +490,11 @@ pub enum Cmd {
     /// Show this repo (the folder is in none of the observed ones).
     Open {
         repo_id: String,
+    },
+    /// Observe the repo of the folder (`repo.add`, reserved: the engine authorizes it again)
+    /// and show it.
+    Observe {
+        root: std::path::PathBuf,
     },
     /// Hand the terminal back to the shell (`Ctrl-Z`) and take it again when resumed.
     Suspend,

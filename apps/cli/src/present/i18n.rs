@@ -8,7 +8,7 @@ use std::sync::OnceLock;
 use gitraptor_api::messages::{EngineStateView, ResyncReason, UnavailableReason};
 use gitraptor_api::rpc::{ErrorCode, InvalidReason, ScopeRefusal};
 
-use crate::model::{ConnState, Notice};
+use crate::model::{ConnState, Notice, ObserveFailure};
 use crate::present::SafeText;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -98,6 +98,20 @@ fn age(ms: i64) -> (i64, &'static str) {
     }
 }
 
+/// `word` as one shell word, so the command around it can be copied: as it is when it is
+/// plain, between single quotes otherwise.
+fn shell_word(word: &str) -> String {
+    let plain = !word.is_empty()
+        && word
+            .chars()
+            .all(|c| c.is_alphanumeric() || matches!(c, '/' | '.' | '_' | '-' | '+' | ',' | ':'));
+    if plain {
+        word.to_owned()
+    } else {
+        format!("'{}'", word.replace('\'', r"'\''"))
+    }
+}
+
 /// Every text the TUI paints.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Text<'a> {
@@ -179,6 +193,21 @@ pub enum Text<'a> {
     KeyDown,
     KeyOpen,
     KeySuspend,
+    KeyObserve,
+    KeyNo,
+    /// "Observe this repo?" (US-CKP-025): the panel's title, what it means and the question
+    /// with its default.
+    ObserveTitle,
+    ObserveWhy,
+    ObserveQuestion,
+    /// The developer said yes; `repo.add` is on its way.
+    Observing(&'a SafeText),
+    /// What happened, why and what to do (DSYS-GRP-001 § 4).
+    ObserveFailed {
+        name: &'a SafeText,
+        path: &'a SafeText,
+        reason: ObserveFailure,
+    },
     /// An error of the contract's frozen list, by its code (N7), never by its `message`.
     EngineError(ErrorCode),
     /// An error a module declared after the list froze, by its stable name (`error.<name>`).
@@ -314,6 +343,29 @@ fn en(text: Text<'_>) -> String {
         Text::Notice(Notice::Starting) => "the engine is starting; wait for it".into(),
         Text::Notice(Notice::SuspendUnsupported) => {
             "suspending is not available on this platform".into()
+        }
+        Text::Notice(Notice::ObserveFailed(_)) => "the repo was not observed".into(),
+        Text::KeyObserve => "observe".into(),
+        Text::KeyNo => "no".into(),
+        Text::ObserveTitle => "Repo not observed".into(),
+        Text::ObserveWhy => "GitRaptor does not observe the repo of this folder yet.".into(),
+        Text::ObserveQuestion => "Observe this repo? [y/N]".into(),
+        Text::Observing(name) => format!("Observing {name}…"),
+        Text::ObserveFailed { name, path, reason } => {
+            let why = match reason {
+                ObserveFailure::NotARepo => "it is not a Git repo",
+                ObserveFailure::NotTrusted => {
+                    "Git does not trust it (another owner; see safe.directory)"
+                }
+                ObserveFailure::Unreadable => "it cannot be read now",
+                ObserveFailure::Refused => "only you can observe it, from your own terminal",
+                ObserveFailure::Disconnected => "the engine disconnected",
+                ObserveFailure::Unknown => "the engine refused it",
+            };
+            format!(
+                "{name} not observed: {why} → raptor repo add {}",
+                shell_word(path.as_str())
+            )
         }
         Text::KeyQuit => "quit".into(),
         Text::KeyRetry => "retry".into(),
@@ -471,6 +523,29 @@ fn es(text: Text<'_>) -> String {
         Text::Notice(Notice::Starting) => "el motor está arrancando; espera".into(),
         Text::Notice(Notice::SuspendUnsupported) => {
             "suspender no está disponible en esta plataforma".into()
+        }
+        Text::Notice(Notice::ObserveFailed(_)) => "el repo no quedó observado".into(),
+        Text::KeyObserve => "observar".into(),
+        Text::KeyNo => "no".into(),
+        Text::ObserveTitle => "Repo sin observar".into(),
+        Text::ObserveWhy => "GitRaptor aún no observa el repo de esta carpeta.".into(),
+        Text::ObserveQuestion => "¿Observar este repo? [s/N]".into(),
+        Text::Observing(name) => format!("Observando {name}…"),
+        Text::ObserveFailed { name, path, reason } => {
+            let why = match reason {
+                ObserveFailure::NotARepo => "no es un repo de Git",
+                ObserveFailure::NotTrusted => {
+                    "Git no confía en él (otro propietario; mira safe.directory)"
+                }
+                ObserveFailure::Unreadable => "ahora no se puede leer",
+                ObserveFailure::Refused => "solo tú puedes observarlo, desde tu propia terminal",
+                ObserveFailure::Disconnected => "el motor se desconectó",
+                ObserveFailure::Unknown => "el motor lo rechazó",
+            };
+            format!(
+                "{name} sin observar: {why} → raptor repo add {}",
+                shell_word(path.as_str())
+            )
         }
         Text::KeyQuit => "salir".into(),
         Text::KeyRetry => "reintentar".into(),
