@@ -165,7 +165,7 @@ Se quita el corte de `raptor guard` en Windows y se porta la capa de hooks. **De
 
 ## Estado de la implementación (2026-10-08)
 
-Implementado en: PR #116, #121 y, para Windows, el PR #205 (enmienda de 2026-10-08).
+Implementado en: PR #116, #121 y, para Windows, el PR #207 (enmienda de 2026-10-08).
 
 - Windows: la capa de hooks está portada y verificada en la máquina real (enmienda de 2026-10-08, XP-32). Linux: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
 
