@@ -46,6 +46,7 @@ fn config(dirs: &ProfileDirs, channel: ChannelConfig) -> DaemonConfig {
         protected: None,
         operations: None,
         tm_prior_layer: None,
+        tiers: Default::default(),
         tm_capture: Default::default(),
     }
 }
