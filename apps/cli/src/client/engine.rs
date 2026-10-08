@@ -1,35 +1,29 @@
-//! The channel client library plugged into the TUI's [`Connector`] and
-//! [`Link`]. The only module of the library that imports `gitraptor_core`:
-//! the client still lives there (TS-GRP-004) and moves to `crates/api`
-//! later (pending, owner: INF-CKP-001). It brings the peer check of the
-//! channel before the handshake (L-06) and the on-demand start (§ 5).
+//! The channel client library of `crates/api` plugged into the TUI's [`Connector`] and
+//! [`Link`] (INF-CKP-001 Entrega 2b). It brings the peer check of the channel before the
+//! handshake (L-06). How a daemon is started is injected as a [`Launch`]: the binary builds
+//! it from the engine (`gitraptor_core::client::ClientOptions::launcher`), so nothing of the
+//! TUI imports the engine nor launches a process (ADR-CKP-003, Enmienda 2026-10-08).
 
 use std::time::Duration;
 
-use gitraptor_api::messages::ClientKind;
-use gitraptor_api::scope::ConnectionRequester;
-use gitraptor_core::client::{
-    Client, ClientError, ClientOptions, Incoming as CoreIncoming, ensure_daemon_with,
+use gitraptor_api::client::{
+    Client, ClientError, Connect, Incoming as ApiIncoming, Launch, ensure_daemon_with,
 };
-use gitraptor_core::profile::ProfileDirs;
+use gitraptor_api::scope::ConnectionRequester;
 use serde_json::Value;
 
 use crate::client::{Connector, Incoming, Link, LinkError, Refusal};
 
-/// Connects through the client library of the engine.
+/// Connects through the client library of `crates/api`.
 pub struct EngineConnector {
-    options: ClientOptions,
+    connect: Connect,
+    launch: Box<dyn Launch>,
 }
 
 impl EngineConnector {
-    pub fn new(options: ClientOptions) -> Self {
-        Self { options }
-    }
-
-    /// The user's profile, as `raptor` resolves it.
-    pub fn for_current_user() -> Result<Self, String> {
-        let dirs = ProfileDirs::resolve().map_err(|err| err.to_string())?;
-        Ok(Self::new(ClientOptions::new(dirs, ClientKind::Cli)))
+    /// `connect` says where the channel is; `launch` starts a daemon that is not running.
+    pub fn new(connect: Connect, launch: Box<dyn Launch>) -> Self {
+        Self { connect, launch }
     }
 }
 
@@ -39,7 +33,7 @@ impl Connector for EngineConnector {
     }
 
     fn connect_starting(&mut self, starting: &mut dyn FnMut()) -> Result<Box<dyn Link>, LinkError> {
-        ensure_daemon_with(&self.options, starting)
+        ensure_daemon_with(&self.connect, self.launch.as_mut(), starting)
             .map(|client| Box::new(EngineLink(client)) as Box<dyn Link>)
             .map_err(link_error)
     }
@@ -79,23 +73,23 @@ impl Link for EngineLink {
     fn next(&mut self, timeout: Duration) -> Result<Option<Incoming>, LinkError> {
         Ok(match self.0.next_incoming(timeout).map_err(link_error)? {
             None => None,
-            Some(CoreIncoming::Buffered {
+            Some(ApiIncoming::Buffered {
                 recv_ns,
                 notification,
             }) => Some(Incoming::Decoded {
                 recv_ns,
                 notification,
             }),
-            Some(CoreIncoming::Frame { recv_ns, bytes }) => {
-                Some(Incoming::Frame { recv_ns, bytes })
-            }
+            Some(ApiIncoming::Frame { recv_ns, bytes }) => Some(Incoming::Frame { recv_ns, bytes }),
         })
     }
 }
 
 fn link_error(err: ClientError) -> LinkError {
     match err {
-        ClientError::NotRunning | ClientError::StartTimeout => LinkError::EngineUnavailable,
+        ClientError::NotRunning | ClientError::StartTimeout | ClientError::Launch(_) => {
+            LinkError::EngineUnavailable
+        }
         ClientError::ChannelRejected | ClientError::NotAuthentic => LinkError::Rejected,
         ClientError::Incompatible(_) | ClientError::ClientTooOld(_) => LinkError::Incompatible,
         ClientError::TransportUnsupported | ClientError::Unsupported(_) => LinkError::Unsupported,

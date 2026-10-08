@@ -67,8 +67,8 @@ mod unix {
         WorktreeView,
     };
     use gitraptor_api::methods;
+    use gitraptor_cli::client::engine::EngineConnector;
     use gitraptor_cli::client::{self as tui_client, ClientThread};
-    use gitraptor_cli::link::EngineConnector;
     use gitraptor_cli::model::{ConnState, Model, Size, WorktreeState};
     use gitraptor_cli::present::i18n::Lang;
     use gitraptor_cli::tui::app::App;
@@ -713,8 +713,11 @@ mod unix {
                 Model::new(Lang::En, size),
                 inbox,
             );
-            let channel =
-                tui_client::spawn(EngineConnector::new(options), Some(cwd.into()), engine);
+            let channel = tui_client::spawn(
+                EngineConnector::new(options.connect().unwrap(), Box::new(options.launcher())),
+                Some(cwd.into()),
+                engine,
+            );
             app.attach(channel.cmds.clone());
             Self {
                 app,

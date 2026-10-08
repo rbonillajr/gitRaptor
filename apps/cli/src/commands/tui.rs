@@ -34,7 +34,7 @@ pub(crate) fn tui(display: Display) -> ExitCode {
         eprintln!("raptor: {}", Text::NeedsTerminal.render(Lang::detect()));
         return ExitCode::from(2);
     }
-    let connector = match gitraptor_cli::link::EngineConnector::for_current_user() {
+    let connector = match engine_connector() {
         Ok(connector) => connector,
         Err(err) => {
             eprintln!("raptor: {}", sanitize(&err));
@@ -50,4 +50,20 @@ pub(crate) fn tui(display: Display) -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// The TUI's connector on the user's profile, as `raptor` resolves it. The engine's
+/// launcher (on-demand start, autostart, clean environment) is built here, in the binary,
+/// and reaches the TUI as a `Launch` (ADR-CKP-003, Enmienda 2026-10-08).
+fn engine_connector() -> Result<gitraptor_cli::client::engine::EngineConnector, String> {
+    use gitraptor_api::messages::ClientKind;
+    use gitraptor_core::client::ClientOptions;
+    use gitraptor_core::profile::ProfileDirs;
+    let dirs = ProfileDirs::resolve().map_err(|err| err.to_string())?;
+    let options = ClientOptions::new(dirs, ClientKind::Cli);
+    let connect = options.connect().map_err(|err| err.to_string())?;
+    Ok(gitraptor_cli::client::engine::EngineConnector::new(
+        connect,
+        Box::new(options.launcher()),
+    ))
 }

@@ -19,8 +19,8 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use gitraptor_api::messages::ClientKind;
+use gitraptor_cli::client::engine::EngineConnector;
 use gitraptor_cli::client::{self, ClientThread};
-use gitraptor_cli::link::EngineConnector;
 use gitraptor_cli::model::{ConnState, Model, Size};
 use gitraptor_cli::present::i18n::Lang;
 use gitraptor_cli::queue;
@@ -174,7 +174,11 @@ impl Tui {
             model,
             inbox,
         );
-        let channel = client::spawn(EngineConnector::new(options), Some(cwd.to_owned()), engine);
+        let channel = client::spawn(
+            EngineConnector::new(options.connect().unwrap(), Box::new(options.launcher())),
+            Some(cwd.to_owned()),
+            engine,
+        );
         app.attach(channel.cmds.clone());
         Self {
             app,

@@ -10,6 +10,7 @@
 //! does not import the engine: the binary plugs in the client library
 //! (today in `crates/core`, to be moved to `crates/api`).
 
+pub mod engine;
 pub mod sequence;
 
 use std::path::{Path, PathBuf};

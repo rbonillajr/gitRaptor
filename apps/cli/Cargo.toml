@@ -24,7 +24,7 @@ name = "raptor-hook"
 path = "src/bin/raptor-hook.rs"
 
 [dependencies]
-gitraptor-api.workspace = true
+gitraptor-api = { workspace = true, features = ["client"] }
 gitraptor-core.workspace = true
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"

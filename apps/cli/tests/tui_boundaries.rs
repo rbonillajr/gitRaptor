@@ -3,9 +3,10 @@
 //!
 //! - The TUI modules (`tui`, `model`, `client`, `present`, `queue`) never
 //!   import the engine (`gitraptor_core`), the Git layer (`gitraptor_git`)
-//!   nor the policy layer (`gitraptor_policy`). `link` is the named
-//!   exception until the channel client moves from `crates/core` to
-//!   `crates/api` (pending, owner: INF-CKP-001).
+//!   nor the policy layer (`gitraptor_policy`), with no exception: the
+//!   channel client lives in `crates/api` (INF-CKP-001, Entrega 2b), and the
+//!   engine's launcher is injected by the binary (ADR-CKP-003, Enmienda
+//!   2026-10-08).
 //! - `apps/cli` does not depend on the Git or the policy layer outside its
 //!   tests.
 //! - No TUI module launches processes (the editor launcher, `tui::editor`,
@@ -19,9 +20,6 @@ const SRC: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src");
 
 /// Modules of the TUI, relative to `src`.
 const TUI_MODULES: &[&str] = &["tui", "model.rs", "client", "present", "queue.rs"];
-
-/// The named exception: plugs in the client library of `crates/core`.
-const LINK_EXCEPTION: &str = "link.rs";
 
 const FORBIDDEN_CRATES: &[&str] = &["gitraptor_core", "gitraptor_git", "gitraptor_policy"];
 
@@ -80,27 +78,48 @@ fn the_tui_does_not_import_the_engine_git_or_policy() {
 }
 
 #[test]
-fn only_link_is_the_exception_and_it_says_why() {
+fn every_module_of_the_library_is_covered() {
     let lib = code(&Path::new(SRC).join("lib.rs"));
     let modules: Vec<&str> = lib
         .lines()
         .filter_map(|l| l.trim().strip_prefix("pub mod "))
         .map(|m| m.trim_end_matches(';'))
         .collect();
+    assert!(!modules.is_empty(), "no module found in lib.rs");
     for module in &modules {
         let covered = TUI_MODULES
             .iter()
-            .any(|m| m.trim_end_matches(".rs") == *module)
-            || format!("{module}.rs") == LINK_EXCEPTION;
+            .any(|m| m.trim_end_matches(".rs") == *module);
         assert!(
             covered,
             "module `{module}` is not covered by the boundary check"
         );
     }
-    let link = std::fs::read_to_string(Path::new(SRC).join(LINK_EXCEPTION)).unwrap();
+    // The former exception is gone for good.
     assert!(
-        link.contains("crates/api"),
-        "the exception must name its way out"
+        !Path::new(SRC).join("link.rs").exists(),
+        "src/link.rs is back"
+    );
+}
+
+/// The engine's launcher (on-demand start, autostart, clean environment) is
+/// built by the binary only and reaches the TUI as a `Launch` trait object.
+#[test]
+fn only_the_binary_builds_the_launcher() {
+    for file in tui_files() {
+        let code = code(&file);
+        for name in ["InstalledLauncher", "ClientOptions", "ensure_daemon("] {
+            assert!(
+                !code.contains(name),
+                "{} uses {name} of the engine",
+                file.display()
+            );
+        }
+    }
+    let tui = code(&Path::new(SRC).join("commands").join("tui.rs"));
+    assert!(
+        tui.contains(".launcher()"),
+        "the binary no longer injects it"
     );
 }
 
