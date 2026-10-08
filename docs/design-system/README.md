@@ -282,3 +282,4 @@ Detección del fondo en Linux y en Windows (consola y Windows Terminal; en Windo
 - **Snapshots de la pantalla**: la flota se fija en 80×24 y 120×40, en terminal oscura y clara (`apps/cli/src/tui/snapshots/fleet_*`). El texto es el mismo en las dos y solo cambian los colores.
 
 Detección de la locale y de la profundidad en Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
+
