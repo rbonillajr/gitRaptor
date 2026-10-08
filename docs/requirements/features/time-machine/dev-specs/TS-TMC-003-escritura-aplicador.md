@@ -7,7 +7,7 @@ feature: time-machine
 domain: GRP
 story: TS-TMC-003
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 related:
   adrs: [ADR-TMC-002, ADR-TMC-001, ADR-TMC-003, ADR-GRP-002, ADR-GRP-009]
   nfrs: [NFR-01, NFR-02, NFR-07, NFR-TMC-07, NFR-TMC-12, SEC-TMC-02, SEC-TMC-04, SEC-TMC-05, SEC-TMC-09, SEC-TMC-11, SEC-TMC-14]
@@ -122,7 +122,7 @@ El lock por repo se indexa por la ruta del almacén (única por repo y perfil) y
 
 | Pendiente | Dónde se resuelve |
 |---|---|
-| Muerte del daemon en cada paso 3–7 y limpieza de temporales `.gitraptor-tm-*` tras un crash (su contenido está en el almacén: sin pérdida) | INF-TMC-001 (usa `ApplyHooks::at_step`) y la recuperación de TS-TMC-002 |
+| Muerte del daemon en cada paso 3–7 (la limpieza de temporales `.gitraptor-tm-*` tras un crash ya está: Enmienda T) | INF-TMC-001 (usa `ApplyHooks::at_step`) y la recuperación de TS-TMC-002 |
 | Llamar al aplicador desde la operación protegida, y compartir `repo_lock` con la captura, la purga y el mantenimiento | TS-TMC-004 y US-TMC-016 |
 | Cuándo corren `repack` y `prune` (ya en la lista cerrada) y la prueba "captura en curso durante el mantenimiento" | US-TMC-016 |
 | Mover la liberación de locks de la recuperación a `tm_write::lock` | Deuda de TS-TMC-002 |
@@ -181,3 +181,31 @@ Porta a Windows el almacén de TS-TMC-001 y las escrituras del aplicador de esta
 > **Desviaciones conscientes**:
 > - No se anota en el diario cada ruta antes del primer renombrado, como pidió el coordinador. Tras un crash en el hueco, lo desplazado queda bajo un `.gitraptor-tm-*`: es el previo, que está en el almacén, o contenido ajeno conservado, y la operación queda `interrumpida` y se recupera con undo. Devolverlo a su sitio solo al arrancar es parte del barrido de temporales de INF-TMC-001.
 > - El e2e con el binario real (`raptor undo`) no corre en Windows porque el daemon rechaza al solicitante sin identidad verificable (TQ-14, XP-19). El flujo se verifica en el motor con `work_thrown_away_by_a_raw_reset_hard_comes_back`.
+
+## Enmienda 2026-10-08 — Barrido de temporales tras un corte (T, L-02)
+
+Cierra el pendiente L-02 del `/security-review` de XP-12 (#171) y la parte "temporales" de INF-TMC-001 en § 8. Rama `fix/TS-TMC-003-temp-sweep-after-crash`.
+
+| # | Decisión |
+|---|---|
+| T1 | **Cuándo.** Al arrancar el daemon y al volver a observar un repo, en `recover_repo`, justo después de `Oplog::recover` y antes de aceptar operaciones de la Time Machine en ese repo. Solo actúa si la **última** operación del repo quedó `interrupted` en el paso 6 (archivos), que es el único que crea temporales en el worktree. Una interrupción más antigua ya tuvo otra operación detrás, y el previo garantizado de esa operación capturó lo que quedara como archivo sin seguimiento. Así el barrido no crece con el historial. |
+| T2 | **Dónde mira.** En las carpetas del previo y del destino de cada worktree del previo (`meta`), más la raíz. Nunca recorre el worktree entero. Para un undo o un redo el destino no está en el registro por id, así que se barre solo el previo y el informe dice `partial`. Solo cuentan los nombres con la forma exacta del aplicador (`.gitraptor-tm-<dígitos>`): un `.gitraptor-tm-notes` del usuario no es nuestro. |
+| T3 | **Qué restaura.** Un temporal cuyo contenido es el previo de **exactamente una** ruta libre de su carpeta vuelve a esa ruta con un único renombrado exclusivo (`RENAME_NOREPLACE`/`RENAME_EXCL` en Unix; `MoveFileExW` sin `MOVEFILE_REPLACE_EXISTING` en Windows, con las carpetas del camino fijadas como en W2). Antes compara como el aplicador: `(tipo, id)` en Unix, incluido el bit de ejecución, y solo el id en Windows, leyendo un handle que solo comparte la lectura. Nunca sigue un enlace ni un reparse point (`RootDir::temps`, `RootDir::restore_temp`). |
+| T4 | **Qué no toca.** Todo lo demás se queda donde está y se informa: la ruta está ocupada (`path-occupied`), varias rutas libres podrían ser la suya (`ambiguous`), el contenido no es el previo de ninguna ruta de su carpeta (`unknown`: el contenido nuevo de la escritura interrumpida, o uno ajeno), cambió o está en uso entre la lectura y el renombrado (`changed`), o el sistema de archivos no tiene renombrado exclusivo (`not-guaranteed`). Cada temporal conservado dice si su contenido está en el almacén (`in_store`: es un blob del previo o del destino) o es ajeno. **Nunca se borra nada** (NFR-01). Un temporal conservado es un archivo sin seguimiento: el previo garantizado de la siguiente operación lo captura, y `raptor undo` es la acción sugerida. |
+| T5 | **Cómo se informa.** El resultado va en `TmStartup.temps` (`SweepReport`). Además se emiten dos eventos del log, solo con contadores y nunca con rutas: `tm_temps_restored` (info) y `tm_temps_kept` (warn, con `in_store`, `foreign`, `unreadable`, `partial` y `action = "raptor undo"`). El aviso `interruption` que ya existe sigue señalando la operación. |
+| T6 | **Inyección de fallo.** `ApplyHooks::simulate_crash_between_moves` (y `RootDir::simulating_crash_between_moves` en Unix y Windows) para `remove` tras mover lo actual a un lado, y en Windows también para `replace` entre los dos renombrados. |
+
+**Verificación.** Tests en `crates/core/tests/tm_apply.rs` (`temp_sweep`), en macOS y en la máquina Windows real:
+- Tras el corte, el archivo vuelve a su sitio con el contenido exacto, y un segundo barrido no hace nada.
+- Con la ruta ocupada por otro contenido no se toca nada y se informa `path-occupied`.
+- Un temporal ajeno (`.gitraptor-tm-42`) se conserva como `unknown` y fuera del almacén, y `.gitraptor-tm-notes` se ignora.
+- Sin una escritura interrumpida no se barre nada.
+
+En `files/windows.rs` hay además un test del hueco entre los dos renombrados de `replace`: con la ruta ocupada devuelve `Occupied`, y con la ruta libre `Restored` byte a byte.
+
+> **Decisión del orquestador (2026-10-08), validada por el Arquitecto** (aprobó con ajustes, incorporados: solo la última operación, carpetas del previo y del destino, nombre exacto, clasificar `in_store` frente a ajeno y barrer antes de aceptar operaciones).
+>
+> **Pendiente:**
+> - La línea en `raptor status` necesita una capacidad nueva, un campo en `RepoView` e i18n. Es un cambio de contrato y se anota como continuación de L-02. Mientras tanto se informa con el evento del log y con el aviso `interruption`.
+> - Falta un test de que `raptor undo` limpia los temporales conservados (suposición del Arquitecto, sin verificar).
+> - Comprobar la identidad del temporal antes y después del renombrado (mitigación del TOCTOU que propuso el Arquitecto). Es el mismo residuo que ya se aceptó en `remove`: el renombrado exclusivo nunca sobrescribe y no se borra nada.
