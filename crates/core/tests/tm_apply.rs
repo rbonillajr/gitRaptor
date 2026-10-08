@@ -829,3 +829,117 @@ mod repo_intact {
         assert!(branch_ref("refs/heads/-x").is_err());
     }
 }
+
+/// The sweep of temporary entries after a crash between the two renames (DS-TS-TMC-003,
+/// Enmienda T; L-02 of XP-12).
+mod temp_sweep {
+    use super::*;
+    use gitraptor_core::timemachine::sweep::{KeptReason, SweepReport, sweep_temps};
+
+    fn temps(root: &Path) -> Vec<String> {
+        let mut found: Vec<String> = std::fs::read_dir(root)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .filter(|n| n.starts_with(".gitraptor-tm-"))
+            .collect();
+        found.sort();
+        found
+    }
+
+    fn sweep(t: &Apply) -> SweepReport {
+        sweep_temps(&t.env.oplog.lock().unwrap(), &t.env.store)
+    }
+
+    /// The target lacks `extra.txt`; the application dies right after moving it aside.
+    fn crashed() -> Apply {
+        let t = Apply::busy();
+        let target = t.snapshot();
+        t.f().write("extra.txt", "agent work\n");
+        let (op, result) = t.apply(
+            &target,
+            ApplyHooks {
+                simulate_crash_between_moves: true,
+                ..Default::default()
+            },
+        );
+        assert!(
+            matches!(result, Err(ApplyError::Interrupted { step: 6, .. })),
+            "{result:?}"
+        );
+        assert_eq!(t.state_of(&op), OperationState::Interrupted);
+        assert!(!t.f().repo.join("extra.txt").exists());
+        assert_eq!(temps(&t.f().repo).len(), 1);
+        t
+    }
+
+    #[test]
+    fn the_displaced_file_goes_back_with_its_exact_content() {
+        let t = crashed();
+        let report = sweep(&t);
+        assert_eq!(report.restored.len(), 1, "{report:?}");
+        assert_eq!(report.restored[0].path, "extra.txt");
+        assert!(report.kept.is_empty(), "{report:?}");
+        assert_eq!(
+            std::fs::read(t.f().repo.join("extra.txt")).unwrap(),
+            b"agent work\n"
+        );
+        assert!(temps(&t.f().repo).is_empty());
+        // A second start finds nothing to do.
+        let again = sweep(&t);
+        assert!(
+            again.restored.is_empty() && again.kept.is_empty(),
+            "{again:?}"
+        );
+    }
+
+    #[test]
+    fn a_path_taken_meanwhile_is_left_alone_and_reported() {
+        let t = crashed();
+        t.f().write("extra.txt", "someone else\n");
+        let before = temps(&t.f().repo);
+        let report = sweep(&t);
+        assert!(report.restored.is_empty(), "{report:?}");
+        assert_eq!(report.kept.len(), 1, "{report:?}");
+        let kept = &report.kept[0];
+        assert_eq!(kept.reason, KeptReason::PathOccupied);
+        assert_eq!(kept.path.as_deref(), Some("extra.txt"));
+        assert!(kept.in_store);
+        assert_eq!(
+            std::fs::read(t.f().repo.join("extra.txt")).unwrap(),
+            b"someone else\n"
+        );
+        assert_eq!(temps(&t.f().repo), before);
+        assert_eq!(
+            std::fs::read(t.f().repo.join(&before[0])).unwrap(),
+            b"agent work\n"
+        );
+    }
+
+    #[test]
+    fn a_foreign_temporary_file_is_never_deleted() {
+        let t = crashed();
+        std::fs::write(t.f().repo.join(".gitraptor-tm-42"), b"not ours").unwrap();
+        // A user's file with the prefix but not the applier's form is not one of ours.
+        std::fs::write(t.f().repo.join(".gitraptor-tm-notes"), b"notes").unwrap();
+        let report = sweep(&t);
+        assert_eq!(report.restored.len(), 1, "{report:?}");
+        assert_eq!(report.kept.len(), 1, "{report:?}");
+        let kept = &report.kept[0];
+        assert_eq!(kept.temp, ".gitraptor-tm-42");
+        assert_eq!(kept.reason, KeptReason::Unknown);
+        assert!(!kept.in_store);
+        assert_eq!(
+            std::fs::read(t.f().repo.join(".gitraptor-tm-42")).unwrap(),
+            b"not ours"
+        );
+        assert!(t.f().repo.join(".gitraptor-tm-notes").exists());
+    }
+
+    #[test]
+    fn without_an_interrupted_write_nothing_is_swept() {
+        let t = Apply::busy();
+        std::fs::write(t.f().repo.join(".gitraptor-tm-7"), b"left by someone").unwrap();
+        assert_eq!(sweep(&t), SweepReport::default());
+        assert!(t.f().repo.join(".gitraptor-tm-7").exists());
+    }
+}
