@@ -86,6 +86,18 @@ pub fn observation(dirs: &ProfileDirs) -> gitraptor_policy::settings::Observatio
         .unwrap_or_default()
 }
 
+/// `engine.watcher.backend` of the profile: `fsevents` unless the profile asks for `notify`
+/// (ADR-GRP-010, Enmienda 2026-10-08). Read when the daemon starts; an unusable document is
+/// the default.
+pub fn watch_backend(dirs: &ProfileDirs) -> gitraptor_policy::settings::WatchBackend {
+    profile_settings(dirs)
+        .applicable()
+        .and_then(|s| s.engine.as_ref())
+        .and_then(|e| e.watcher.as_ref())
+        .and_then(|w| w.backend)
+        .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -152,5 +164,19 @@ mod tests {
         .unwrap();
         std::os::unix::fs::symlink(&target, dirs.config.join(PROFILE_SETTINGS_FILE)).unwrap();
         assert!(!include_credential_files(&dirs));
+    }
+
+    #[test]
+    fn the_watcher_backend_defaults_to_fsevents_and_follows_the_profile() {
+        use gitraptor_policy::settings::WatchBackend;
+        let (_tmp, dirs) = dirs();
+        assert_eq!(watch_backend(&dirs), WatchBackend::Fsevents);
+        write(&dirs, r#"{"engine": {"watcher": {"backend": "notify"}}}"#);
+        assert_eq!(watch_backend(&dirs), WatchBackend::Notify);
+        write(&dirs, r#"{"engine": {"watcher": {"backend": "fsevents"}}}"#);
+        assert_eq!(watch_backend(&dirs), WatchBackend::Fsevents);
+        // A value that is not one of the two: the document is not applied, the default stays.
+        write(&dirs, r#"{"engine": {"watcher": {"backend": "kqueue"}}}"#);
+        assert_eq!(watch_backend(&dirs), WatchBackend::Fsevents);
     }
 }

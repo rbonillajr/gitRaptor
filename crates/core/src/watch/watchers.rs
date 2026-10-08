@@ -7,6 +7,10 @@
 //! removing a worktree only touches its own stream, and a stream that replaces another starts
 //! from the last event id the old one delivered, so changing its exclusions loses nothing.
 //!
+//! `engine.watcher.backend = "notify"` brings back, on macOS, what ran before: one `notify`
+//! watcher (one stream) per root, and no exclusions. A fallback for one release (Enmienda
+//! 2026-10-08).
+//!
 //! Linux and Windows: `notify`, one shared watcher (a single inotify instance respects
 //! `max_user_instances`), with additions and removals grouped through
 //! `paths_mut()`. Pendiente: etapa de validación multiplataforma.
@@ -15,8 +19,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-#[cfg(not(target_os = "macos"))]
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+
+pub use gitraptor_policy::settings::WatchBackend;
 
 /// Receives every file event of every watcher.
 pub(crate) type Handler = Arc<dyn Fn(notify::Result<notify::Event>) + Send + Sync>;
@@ -28,6 +33,11 @@ pub(crate) struct Watchers {
     per_root: std::collections::HashMap<PathBuf, mac::Entry>,
     #[cfg(target_os = "macos")]
     generation: u64,
+    /// The `notify` fallback on macOS: one watcher per root.
+    #[cfg(target_os = "macos")]
+    notify_roots: std::collections::HashMap<PathBuf, RecommendedWatcher>,
+    #[cfg(target_os = "macos")]
+    backend: WatchBackend,
     #[cfg(not(target_os = "macos"))]
     shared: Option<RecommendedWatcher>,
     #[cfg(not(target_os = "macos"))]
@@ -37,7 +47,9 @@ pub(crate) struct Watchers {
 }
 
 impl Watchers {
-    pub(crate) fn new(handler: Handler, roots: Arc<AtomicU64>) -> Self {
+    pub(crate) fn new(handler: Handler, roots: Arc<AtomicU64>, backend: WatchBackend) -> Self {
+        #[cfg(not(target_os = "macos"))]
+        let _ = backend;
         Self {
             #[cfg(not(target_os = "macos"))]
             shared: {
@@ -52,13 +64,17 @@ impl Watchers {
             per_root: std::collections::HashMap::new(),
             #[cfg(target_os = "macos")]
             generation: 0,
+            #[cfg(target_os = "macos")]
+            notify_roots: std::collections::HashMap::new(),
+            #[cfg(target_os = "macos")]
+            backend,
             roots,
         }
     }
 
     fn publish(&self) {
         #[cfg(target_os = "macos")]
-        let n = self.per_root.len();
+        let n = self.per_root.len() + self.notify_roots.len();
         #[cfg(not(target_os = "macos"))]
         let n = self.watched.len();
         self.roots.store(n as u64, Ordering::Relaxed);
@@ -71,6 +87,23 @@ impl Watchers {
 
         let mut ok = true;
         for root in roots {
+            if self.backend == WatchBackend::Notify {
+                if self.notify_roots.contains_key(root) {
+                    continue;
+                }
+                let h = Arc::clone(&self.handler);
+                let watcher = notify::recommended_watcher(move |r| h(r)).and_then(|mut w| {
+                    w.watch(root, RecursiveMode::Recursive)?;
+                    Ok(w)
+                });
+                match watcher {
+                    Ok(w) => {
+                        self.notify_roots.insert(root.clone(), w);
+                    }
+                    Err(_) => ok = false,
+                }
+                continue;
+            }
             if self.per_root.contains_key(root) {
                 continue;
             }
@@ -102,6 +135,10 @@ impl Watchers {
         &mut self,
         roots: &[PathBuf],
     ) -> Vec<Arc<gitraptor_macsys::fsevents::Stream>> {
+        for root in roots {
+            // Dropping a `notify` watcher stops its stream only (the fallback backend).
+            self.notify_roots.remove(root);
+        }
         let removed = roots
             .iter()
             .filter_map(|root| self.per_root.remove(root))
@@ -152,6 +189,18 @@ impl Watchers {
             self.watched.remove(root);
         }
         self.publish();
+    }
+
+    /// The backend that runs: what the setting asked for on macOS, `notify` elsewhere.
+    pub(crate) fn backend_name(&self) -> &'static str {
+        #[cfg(target_os = "macos")]
+        {
+            self.backend.as_str()
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            WatchBackend::Notify.as_str()
+        }
     }
 
     /// The folders `root`'s stream was asked to leave out.

@@ -79,6 +79,29 @@ pub struct Watcher {
     #[schemars(range(min = 1, max = 60))]
     #[schemars(extend("x-gitraptor-levels" = ["profile", "local"]))]
     pub degraded_poll_seconds: Option<u32>,
+    /// Backend of the file watcher on macOS: `fsevents` (default, the engine's own FSEvents
+    /// stream) or `notify` (the library, the behaviour before ADR-GRP-010 Enmienda 2026-10-08;
+    /// fallback for one release). Read when the daemon starts. No effect on Linux or Windows.
+    #[schemars(extend("x-gitraptor-levels" = ["profile"]))]
+    pub backend: Option<WatchBackend>,
+}
+
+/// `engine.watcher.backend`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum WatchBackend {
+    #[default]
+    Fsevents,
+    Notify,
+}
+
+impl WatchBackend {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Fsevents => "fsevents",
+            Self::Notify => "notify",
+        }
+    }
 }
 
 /// `timeMachine` section.

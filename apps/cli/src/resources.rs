@@ -191,6 +191,17 @@ pub fn text(view: &View) -> String {
                     &t("res.no-target", &[]),
                 )
             );
+            if let Some(backend) = &r.watches.backend {
+                let _ = writeln!(
+                    out,
+                    "{}",
+                    line(
+                        "res.backend",
+                        &t("res.backend-value", &[("name", &backend.as_str())]),
+                        &t("res.no-target", &[]),
+                    )
+                );
+            }
             if let Some(inotify) = &r.watches.inotify {
                 let max = inotify.max_user_watches.map_or_else(na, |m| m.to_string());
                 let value = t(
@@ -375,6 +386,7 @@ pub fn json(view: &View) -> Value {
             ),
             "watches": {
                 "roots": r.watches.roots,
+                "backend": r.watches.backend.map(|b| b.as_str()),
                 "inotify": r.watches.inotify.map(|i| json!({
                     "watches": i.watches,
                     "max_user_watches": i.max_user_watches,
@@ -438,6 +450,7 @@ mod tests {
             },
             watches: WatchUsage {
                 roots: 3,
+                backend: Some(gitraptor_api::resources::WatchBackendKind::Fsevents),
                 inotify: None,
             },
             disk: DiskUsage {
