@@ -71,7 +71,7 @@ CREATE TABLE discovery_dismissed (
     r"
 -- US-GRD-003 E6 and ADR-GRD-007 § 2: the audit admits the outcomes of an announced
 -- uninstall (applied, cancelled, failed, expired), which the CHECK of migration 2 refused and
--- lost. SQLite cannot alter a CHECK, so the table is rebuilt in the migration's transaction:
+-- lost; only for `guard.uninstall`. SQLite cannot alter a CHECK, so the table is rebuilt in the migration's transaction:
 -- every row is copied in order with its id, the copy is verified (same count, no row differs,
 -- `chain` included) before the old table goes, and the append-only triggers come back as they
 -- were. A failed verification aborts the transaction and leaves the profile untouched.
@@ -84,7 +84,9 @@ CREATE TABLE reserved_audit_next (
                   'applied', 'cancelled', 'failed', 'expired')),
     reason    TEXT,
     client    TEXT NOT NULL,
-    chain     TEXT NOT NULL
+    chain     TEXT NOT NULL,
+    CHECK (outcome IN ('accepted', 'rejected', 'not-implemented')
+           OR operation = 'guard.uninstall')
 ) STRICT;
 INSERT INTO reserved_audit_next (id, at_ms, operation, repo_id, outcome, reason, client, chain)
     SELECT id, at_ms, operation, repo_id, outcome, reason, client, chain

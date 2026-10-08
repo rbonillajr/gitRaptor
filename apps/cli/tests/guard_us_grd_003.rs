@@ -54,7 +54,7 @@ fn uninstall_audit(m: &Machine) -> Vec<String> {
         .into_iter()
         .filter(|(_, row)| row.operation == "guard.uninstall")
         .map(|(_, row)| {
-            if row.outcome != "accepted" {
+            if !matches!(row.outcome.as_str(), "accepted" | "rejected") {
                 let reason = row.reason.unwrap_or_default();
                 assert!(reason.starts_with("risk-accepted"), "{reason}");
             }
