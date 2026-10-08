@@ -7,7 +7,9 @@ use std::path::PathBuf;
 use std::ptr::null_mut;
 use std::sync::OnceLock;
 
-use windows_sys::Win32::Foundation::{ERROR_ACCESS_DENIED, ERROR_NO_MORE_FILES, FILETIME, HANDLE};
+use windows_sys::Win32::Foundation::{
+    ERROR_ACCESS_DENIED, ERROR_NO_MORE_FILES, FILETIME, HANDLE, STILL_ACTIVE,
+};
 use windows_sys::Win32::Security::{
     EqualSid, GetTokenInformation, TOKEN_QUERY, TOKEN_USER, TokenUser,
 };
@@ -16,8 +18,8 @@ use windows_sys::Win32::System::Diagnostics::ToolHelp::{
 };
 use windows_sys::Win32::System::SystemInformation::GetSystemWindowsDirectoryW;
 use windows_sys::Win32::System::Threading::{
-    GetCurrentProcess, GetProcessTimes, OpenProcess, OpenProcessToken, PROCESS_NAME_WIN32,
-    PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
+    GetCurrentProcess, GetExitCodeProcess, GetProcessTimes, OpenProcess, OpenProcessToken,
+    PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
 };
 
 use crate::ffi_handle::Handle;
@@ -74,6 +76,17 @@ pub(crate) fn created(process: &Handle) -> Option<u64> {
     // pointers are distinct, writable `FILETIME`s that outlive the call.
     let ok = unsafe { GetProcessTimes(process.raw(), creation, exit, kernel, user) };
     (ok != 0).then(|| u64::from(creation.dwHighDateTime) << 32 | u64::from(creation.dwLowDateTime))
+}
+
+/// Whether the process has ended. One that ended with the code 259 (`STILL_ACTIVE`) or whose
+/// code cannot be read counts as running here; the process list leaves it out once it is torn
+/// down.
+pub(crate) fn ended(process: &Handle) -> bool {
+    let mut code = 0u32;
+    // SAFETY: `process` is a valid handle with query rights and `code` a
+    // writable out pointer that outlives the call.
+    let ok = unsafe { GetExitCodeProcess(process.raw(), &mut code) };
+    ok != 0 && code != STILL_ACTIVE as u32
 }
 
 pub(crate) fn image(process: &Handle) -> Option<PathBuf> {
