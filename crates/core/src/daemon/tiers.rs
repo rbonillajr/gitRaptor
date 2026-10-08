@@ -11,6 +11,9 @@
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
+use gitraptor_api::event::REPO_TIER;
+use gitraptor_api::messages::{RepoTier, RepoTierData};
+
 use super::{Daemon, Field, ShutdownHandle, profile_error_kind, repo_base};
 use crate::observe;
 use crate::profile::WriteOp;
@@ -188,6 +191,7 @@ impl Daemon {
             }
         }
         self.tiers.dormant.insert(repo_id.to_owned());
+        self.publish_tier(repo_id, RepoTier::Dormant, Some(super::now_ms()));
         self.logger
             .info("repo_dormant", &[("repo", Field::id(repo_id))]);
     }
@@ -225,6 +229,8 @@ impl Daemon {
         }
         self.tiers.dormant.remove(repo_id);
         self.note_activity(repo_id);
+        // "Reconciling" with its last known state (ADR-GRP-011 § 2).
+        self.publish_tier(repo_id, RepoTier::Waking, None);
         let base = repo_base(&self.stores, repo_id);
         let Ok(read) = observe::reconcile(&entry.canonical_path, &base) else {
             self.logger
@@ -237,6 +243,7 @@ impl Daemon {
         let start = observer.wake_repo(repo_id, &read, cause);
         self.marks.set_head_logs(repo_id, &start.head_logs);
         self.marks.set_heads(repo_id, &start.heads);
+        self.publish_tier(repo_id, RepoTier::Active, None);
         let cause_field = match cause {
             WakeCause::Sentinel => "sentinel",
             WakeCause::SafetyNet { .. } => "safety-net",
@@ -269,6 +276,27 @@ impl Daemon {
         if let Ok(Some(entry)) = self.profile.repo_by_common_dir(common_dir) {
             self.wake_for_request(&entry.repo_id);
         }
+    }
+
+    /// Publishes a repo's tier (`repo.tier`, only to connections with
+    /// `observation.tiers`) and keeps it in the snapshot.
+    fn publish_tier(&self, repo_id: &str, tier: RepoTier, checked_utc_ms: Option<i64>) {
+        let id = repo_id.to_owned();
+        self.bus.publish(
+            REPO_TIER,
+            RepoTierData {
+                repo_id: id.clone(),
+                tier,
+                checked_utc_ms,
+            },
+            None,
+            move |shared| {
+                if let Some(repo) = shared.repos.iter_mut().find(|r| r.repo_id == id) {
+                    repo.tier = Some(tier);
+                    repo.checked_utc_ms = checked_utc_ms;
+                }
+            },
+        );
     }
 
     /// A retired repo leaves the tiers.

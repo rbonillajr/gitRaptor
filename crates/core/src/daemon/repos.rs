@@ -9,7 +9,7 @@ use std::time::Instant;
 use gitraptor_api::event::{GIT_EVENT, REPO_OBSERVATION, WORKTREE_STATE};
 use gitraptor_api::messages::{
     EventsHistoryParams, GitEventKind, GitEventView, MAX_HISTORY_PAGE, RepoAddOutcome,
-    RepoAddResult, RepoObservationData, RepoRetireResult, RepoStateView, RepoView,
+    RepoAddResult, RepoObservationData, RepoRetireResult, RepoStateView, RepoTier, RepoView,
     WorktreeStateData, WorktreeStatus, WorktreeView,
 };
 use gitraptor_api::{Timings, Untrusted, clock};
@@ -35,6 +35,8 @@ impl Daemon {
         mut request: RepoAddRequest,
     ) -> Result<RepoAddResult, RepoCommandError> {
         let now = now_ms();
+        // Adding it again wakes a dormant repo (TS-GRP-006, N4).
+        self.wake_for_common_dir(&request.common_dir);
         let (entry, outcome) = self
             .profile
             .add_repo(&request.common_dir, None, now)
@@ -79,6 +81,8 @@ impl Daemon {
                     base: observe::base_view(&observe::base_branch(None)),
                     worktrees: Vec::new(),
                     fetched_utc_ms: None,
+                    tier: None,
+                    checked_utc_ms: None,
                 },
             });
         }
@@ -118,6 +122,8 @@ impl Daemon {
             base: observe::base_view(&request.read.base),
             worktrees: worktrees.clone(),
             fetched_utc_ms: observe::fetched_utc_ms(&request.common_dir, now_ms()),
+            tier: (state == RepoStateView::Observed).then_some(RepoTier::Active),
+            checked_utc_ms: None,
         };
         if self.state == EngineState::NoRepos {
             self.transition(Trigger::FirstRepoAdded);

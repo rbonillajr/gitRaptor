@@ -492,6 +492,8 @@ mod tests {
                         },
                     ),
                 ],
+                tier: None,
+                checked_utc_ms: None,
             }],
         }
     }

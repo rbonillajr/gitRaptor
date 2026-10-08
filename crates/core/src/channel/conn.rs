@@ -553,6 +553,9 @@ impl Connection<'_> {
         // `scope.activity` (DEP-CKP-4).
         self.outbox
             .set_without_activity(!self.has(methods::CAP_SCOPE_ACTIVITY.name));
+        // Nor the observation tiers without `observation.tiers` (TS-GRP-006).
+        self.outbox
+            .set_without_tiers(!self.has(methods::CAP_OBSERVATION_TIERS.name));
         // Nor the declared authorship of commits without `events.authorship`
         // (US-GRD-019): `raptor-mcp` never asks for it.
         self.outbox
@@ -1003,6 +1006,9 @@ impl Connection<'_> {
                 if !self.has(methods::CAP_SCOPE_ACTIVITY.name) {
                     result.repo.without_activity();
                 }
+                if !self.has(methods::CAP_OBSERVATION_TIERS.name) {
+                    result.repo.without_tier();
+                }
                 result
             })
             .map_err(repo_command_error)
@@ -1276,6 +1282,12 @@ impl Connection<'_> {
                         .iter_mut()
                         .for_each(gitraptor_api::messages::RepoView::without_activity);
                 }
+                if !self.has(methods::CAP_OBSERVATION_TIERS.name) {
+                    snapshot
+                        .repos
+                        .iter_mut()
+                        .for_each(gitraptor_api::messages::RepoView::without_tier);
+                }
                 // The ahead/behind as of now (US-GRP-012, D5).
                 crate::observe::refresh_divergence(
                     &mut snapshot.repos,
@@ -1330,6 +1342,7 @@ impl Connection<'_> {
             .scope_snapshot(&params.scope)
             .ok_or_else(not_found_id)?;
         let run_id = self.ctx.bus.run_id().to_owned();
+        let tiers = self.has(methods::CAP_OBSERVATION_TIERS.name);
         Ok(match params.scope {
             Scope::Global => ScopeSnapshot::Global(GlobalSnapshot {
                 run_id,
@@ -1351,6 +1364,7 @@ impl Connection<'_> {
                         // Published by the predictor, Guardrails and
                         // US-GRP-005: until then "not available".
                         attention: AttentionView::unpublished(),
+                        tier: r.tier.filter(|_| tiers),
                     })
                     .collect(),
             }),
@@ -1368,6 +1382,9 @@ impl Connection<'_> {
                 let mut repo = repos.pop().ok_or_else(not_found_id)?;
                 if !self.has(methods::CAP_SCOPE_ACTIVITY.name) {
                     repo.without_activity();
+                }
+                if !self.has(methods::CAP_OBSERVATION_TIERS.name) {
+                    repo.without_tier();
                 }
                 if serde_json::to_vec(&repo).map_or(0, |v| v.len()) > CHANGE_LIST_BUDGET {
                     crate::observe::without_change_lists(&mut repo.worktrees);
