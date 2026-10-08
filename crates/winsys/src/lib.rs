@@ -13,6 +13,8 @@ pub mod file_id;
 #[cfg(windows)]
 pub mod file_lock;
 #[cfg(windows)]
+pub mod fs;
+#[cfg(windows)]
 pub mod pipe;
 #[cfg(windows)]
 pub mod process;
