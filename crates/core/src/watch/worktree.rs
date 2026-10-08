@@ -131,7 +131,12 @@ pub(super) fn run(
                 if let Some(window) = task.window.take() {
                     task.flush(window);
                 }
-                let _ = done.send(());
+                let _ = done.send(super::Slept {
+                    root: task.root.clone(),
+                    main: task.main,
+                    admin: task.admin.clone(),
+                    fingerprint: task.last.fingerprint.clone(),
+                });
                 return;
             }
             Ok(WtMsg::Stop) | Err(RecvTimeoutError::Disconnected) => return,
