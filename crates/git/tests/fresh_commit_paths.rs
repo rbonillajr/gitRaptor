@@ -38,7 +38,7 @@ fn read(
     limits: &PathLimits,
 ) -> NewCommitPaths {
     reader(f)
-        .new_commit_paths(old, new, updated, hide, limits)
+        .fresh_commit_paths(old, new, updated, hide, limits)
         .unwrap()
 }
 
@@ -331,9 +331,13 @@ fn every_bound_ends_in_unverifiable_never_in_nothing() {
         })
         .unverifiable
     );
-    // More branch tips than allowed.
-    f.git(&["branch", "other", &c0]);
-    assert!(tight(PathLimits { tips: 0, ..default }).unverifiable);
+    // More branch tips than hidden: the rest hide nothing, so what they hold counts as new
+    // (never as nothing): a superset, not a verdict.
+    f.git(&["branch", "other", &c3]);
+    let found = tight(PathLimits { tips: 0, ..default });
+    assert!(!found.unverifiable);
+    assert_eq!(found.commits, 3);
+    assert_eq!(tight(default).commits, 0);
 }
 
 #[test]

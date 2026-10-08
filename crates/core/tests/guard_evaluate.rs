@@ -320,3 +320,270 @@ mod commit_authorship {
         assert!(p.authorship.is_none());
     }
 }
+
+/// US-GRD-008 on the daemon's evaluation, without a channel: the protected branches and
+/// forbidden paths apply to a connection that asked for `guard.policies` and to the actor it
+/// resolved (D3, D9), and whatever cannot be verified within the bounds is denied, never allowed
+/// (D5).
+mod protected_branches_and_forbidden_paths {
+    use super::*;
+    use gitraptor_api::AgentKind;
+    use gitraptor_core::guardrails::evaluate::{Caller, serve_as};
+    use gitraptor_core::guardrails::{GuardEntry, GuardRegistry};
+
+    const SETTINGS: &str = r#"{"policies":{
+        "protectedBranches":{"patterns":["main"]},
+        "forbiddenPaths":{"patterns":["secrets/"]}}}"#;
+
+    fn rev(repo: &std::path::Path, what: &str) -> String {
+        let out = std::process::Command::new("git")
+            .args(["rev-parse", what])
+            .current_dir(repo)
+            .output()
+            .unwrap();
+        String::from_utf8(out.stdout).unwrap().trim().to_owned()
+    }
+
+    fn repo() -> (tempfile::TempDir, std::path::PathBuf) {
+        let repo = tempfile::tempdir().unwrap();
+        git(repo.path(), &["init", "-q", "-b", "main"]);
+        std::fs::create_dir_all(repo.path().join(".gitraptor")).unwrap();
+        std::fs::write(repo.path().join(".gitraptor/settings.json"), SETTINGS).unwrap();
+        git(repo.path(), &["add", "."]);
+        git(repo.path(), &["commit", "-q", "-m", "a"]);
+        let common = repo.path().join(".git").canonicalize().unwrap();
+        (repo, common)
+    }
+
+    fn registry(common: &std::path::Path) -> GuardRegistry {
+        let r = GuardRegistry::default();
+        r.set(
+            "0000-ffff",
+            GuardEntry {
+                common_dir: common.to_string_lossy().into_owned(),
+                bases: vec!["main".into()],
+                confirmed: None,
+            },
+        );
+        r
+    }
+
+    fn update(common: &std::path::Path, refname: &str, old: &str, new: &str) -> EvaluateParams {
+        let value = |v: &str| RefValue::Oid(v.to_owned());
+        EvaluateParams {
+            repo_id: "0000-ffff".into(),
+            common_dir: common.to_string_lossy().into_owned(),
+            hook: Hook::ReferenceTransaction,
+            operation: Operation::RefTransaction {
+                updates: vec![RefUpdate {
+                    refname: refname.into(),
+                    old: value(old),
+                    new: value(new),
+                }],
+                orphan_head: None,
+            },
+            authorship: None,
+        }
+    }
+
+    fn caller(repo: &std::path::Path, agent: bool, policies: bool) -> Caller {
+        Caller {
+            actor: agent.then_some(AgentKind::ClaudeCode),
+            cwd: Some(repo.to_path_buf()),
+            policies,
+            ..Caller::default()
+        }
+    }
+
+    #[test]
+    fn they_apply_to_the_agent_of_a_connection_that_asked_for_them() {
+        let (repo, common) = repo();
+        let head = rev(repo.path(), "HEAD");
+        git(repo.path(), &["commit", "-q", "--allow-empty", "-m", "b"]);
+        let next = rev(repo.path(), "HEAD");
+        let params = update(&common, "refs/heads/main", &head, &next);
+
+        let d = serve_as(
+            &registry(&common),
+            &params,
+            &caller(repo.path(), true, true),
+        );
+        assert_eq!(d.applied_effect, Effect::Deny, "{d:?}");
+        assert_eq!(d.reasons[0].rule, Rule::ProtectedBranch);
+        // The person, and a connection that did not ask for them (an older hook): as before.
+        for (agent, policies) in [(false, true), (true, false), (false, false)] {
+            let d = serve_as(
+                &registry(&common),
+                &params,
+                &caller(repo.path(), agent, policies),
+            );
+            assert_eq!(d.applied_effect, Effect::Allow, "{agent} {policies} {d:?}");
+        }
+    }
+
+    #[test]
+    fn what_cannot_be_verified_is_denied_never_allowed() {
+        let (repo, common) = repo();
+        let base = rev(repo.path(), "HEAD");
+        let denied = |new: &str| {
+            let params = update(&common, "refs/heads/feat-x", &base, new);
+            serve_as(
+                &registry(&common),
+                &params,
+                &caller(repo.path(), true, true),
+            )
+        };
+        let check = |d: gitraptor_api::guard::Decision, why: &str| {
+            assert_eq!(d.applied_effect, Effect::Deny, "{why}: {d:?}");
+            assert_eq!(d.reasons[0].rule, Rule::ForbiddenPath, "{why}");
+            assert_eq!(d.reasons[0].cause, Some(Cause::Unverifiable), "{why}");
+        };
+        // An object the repo does not have.
+        check(denied(&"e".repeat(40)), "missing object");
+        // More new commits than the bound (256): a chain written with plumbing, nothing moved.
+        let tree = rev(repo.path(), "HEAD^{tree}");
+        let mut tip = base.clone();
+        for n in 0..300 {
+            let out = std::process::Command::new("git")
+                .args(["commit-tree", &tree, "-p", &tip, "-m", &format!("c{n}")])
+                .current_dir(repo.path())
+                .output()
+                .unwrap();
+            tip = String::from_utf8(out.stdout).unwrap().trim().to_owned();
+        }
+        check(denied(&tip), "more commits than the bound");
+        // The same chain by the person: nothing to verify, nothing denied.
+        let params = update(&common, "refs/heads/feat-x", &base, &tip);
+        let d = serve_as(
+            &registry(&common),
+            &params,
+            &caller(repo.path(), false, true),
+        );
+        assert_eq!(d.applied_effect, Effect::Allow, "{d:?}");
+    }
+}
+
+/// Measurement of DS-US-GRD-008 D12, not a gate (a performance gate never runs in a debug test):
+/// the evaluation of an agent's branch movement with 2 000 branches, for one new commit and for
+/// a range of 256. Run it in release: `cargo test --release -p gitraptor-core --test
+/// guard_evaluate policies_cost -- --ignored --nocapture`.
+mod policies_cost {
+    use super::*;
+    use gitraptor_api::AgentKind;
+    use gitraptor_core::guardrails::evaluate::{Caller, serve_as};
+    use gitraptor_core::guardrails::{GuardEntry, GuardRegistry};
+
+    #[test]
+    #[ignore = "measurement, run in release"]
+    fn measure_an_evaluation_with_2000_branches() {
+        let repo = tempfile::tempdir().unwrap();
+        let path = repo.path();
+        git(path, &["init", "-q", "-b", "main"]);
+        std::fs::create_dir_all(path.join(".gitraptor")).unwrap();
+        std::fs::write(
+            path.join(".gitraptor/settings.json"),
+            r#"{"policies":{"protectedBranches":{"patterns":["main","release/*"]},
+                "forbiddenPaths":{"patterns":["secrets/","*.pem"]}}}"#,
+        )
+        .unwrap();
+        git(path, &["add", "."]);
+        git(path, &["commit", "-q", "-m", "a"]);
+        let rev = |what: &str| {
+            let out = std::process::Command::new("git")
+                .args(["rev-parse", what])
+                .current_dir(path)
+                .output()
+                .unwrap();
+            String::from_utf8(out.stdout).unwrap().trim().to_owned()
+        };
+        let base = rev("HEAD");
+        let tree = rev("HEAD^{tree}");
+        let refs: String = (0..1999)
+            .map(|n| format!("create refs/heads/b/{n} {base}\n"))
+            .collect();
+        let mut child = std::process::Command::new("git")
+            .args(["update-ref", "--stdin"])
+            .current_dir(path)
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        std::io::Write::write_all(&mut child.stdin.take().unwrap(), refs.as_bytes()).unwrap();
+        assert!(child.wait().unwrap().success());
+        let mut tip = base.clone();
+        let mut one = String::new();
+        for n in 0..256 {
+            let out = std::process::Command::new("git")
+                .args(["commit-tree", &tree, "-p", &tip, "-m", &format!("c{n}")])
+                .current_dir(path)
+                .output()
+                .unwrap();
+            tip = String::from_utf8(out.stdout).unwrap().trim().to_owned();
+            if n == 0 {
+                one = tip.clone();
+            }
+        }
+        let common = path.join(".git").canonicalize().unwrap();
+        let registry = GuardRegistry::default();
+        registry.set(
+            "0000-ffff",
+            GuardEntry {
+                common_dir: common.to_string_lossy().into_owned(),
+                bases: vec!["main".into()],
+                confirmed: None,
+            },
+        );
+        let caller = Caller {
+            actor: Some(AgentKind::ClaudeCode),
+            cwd: Some(path.to_path_buf()),
+            policies: true,
+            ..Caller::default()
+        };
+        let evaluation = |new: &str| EvaluateParams {
+            repo_id: "0000-ffff".into(),
+            common_dir: common.to_string_lossy().into_owned(),
+            hook: Hook::ReferenceTransaction,
+            operation: Operation::RefTransaction {
+                updates: vec![RefUpdate {
+                    refname: "refs/heads/feat-x".into(),
+                    old: RefValue::Oid(base.clone()),
+                    new: RefValue::Oid(new.to_owned()),
+                }],
+                orphan_head: None,
+            },
+            authorship: None,
+        };
+        let person = Caller {
+            actor: None,
+            ..caller.clone()
+        };
+        let d = serve_as(&registry, &evaluation(&one), &person);
+        assert_eq!(d.applied_effect, Effect::Allow, "{d:?}");
+        let mut times: Vec<f64> = (0..21)
+            .map(|_| {
+                let start = Instant::now();
+                serve_as(&registry, &evaluation(&one), &person);
+                start.elapsed().as_secs_f64() * 1000.0
+            })
+            .collect();
+        times.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        println!(
+            "the person (nothing to read): p50 {:.1} ms, p95 {:.1} ms",
+            times[10], times[19]
+        );
+        for (label, new) in [("1 new commit", &one), ("256 new commits", &tip)] {
+            let mut times: Vec<f64> = (0..21)
+                .map(|_| {
+                    let start = Instant::now();
+                    let d = serve_as(&registry, &evaluation(new), &caller);
+                    assert_eq!(d.applied_effect, Effect::Allow, "{d:?}");
+                    start.elapsed().as_secs_f64() * 1000.0
+                })
+                .collect();
+            times.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            println!(
+                "{label}: p50 {:.1} ms, p95 {:.1} ms (2000 branches)",
+                times[10], times[19]
+            );
+        }
+    }
+}
