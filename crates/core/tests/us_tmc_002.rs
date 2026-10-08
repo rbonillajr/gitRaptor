@@ -34,12 +34,14 @@ use gitraptor_api::{PROTOCOL_VERSION, methods};
 use gitraptor_core::channel::ChannelConfig;
 use gitraptor_core::client::{Client, ClientError};
 use gitraptor_core::daemon::{
-    Daemon, DaemonConfig, DaemonEnv, LogLimits, ShutdownHandle, StopCause, StopReport, TmPriorLayer,
+    Daemon, DaemonConfig, DaemonEnv, LogLimits, ShutdownHandle, StopCause, StopReport, TmCapture,
+    TmPriorLayer,
 };
 use gitraptor_core::executor::{
     Affected, GateDecision, GateRequest, GuardrailsGate, OpPlan, PlanClose, PlanError, RepoFacts,
     StepPlan,
 };
+use gitraptor_core::timemachine::continuous::CaptureConfig;
 use gitraptor_core::timemachine::oplog::{
     Channel, OpRef, OperationKind, OperationState, Oplog, Requester, SnapshotRefs, Target,
 };
@@ -191,6 +193,11 @@ fn connect(tp: &TempProfile) -> Client {
 /// Observes `fx`'s repo in a fresh profile and starts the daemon with the
 /// test catalog; with `undo_no_space`, the undo's prior fails with `ENOSPC`.
 fn start(fx: Fixture, undo_no_space: bool) -> Running {
+    start_with(fx, undo_no_space, CaptureConfig::default())
+}
+
+/// [`start`] with the continuous capture of `capture`.
+fn start_with(fx: Fixture, undo_no_space: bool, capture: CaptureConfig) -> Running {
     let fx = Arc::new(fx);
     let tp = TempProfile::new();
     let mut profile = tp.open();
@@ -225,7 +232,10 @@ fn start(fx: Fixture, undo_no_space: bool) -> Running {
                 Arc::new(NoSpace) as Arc<dyn PriorSnapshotter>
             }))
         }),
-        tm_capture: Default::default(),
+        tm_capture: TmCapture {
+            config: capture,
+            ..Default::default()
+        },
     };
     let daemon = Daemon::start(config).unwrap();
     let handle = daemon.shutdown_handle();
@@ -569,11 +579,19 @@ fn a_failed_prior_means_no_undo() {
 /// Git preconditions run before the undo's prior (ADR-TMC-005 § 4): with a
 /// merge in progress the undo is rejected, nothing changes and no point is
 /// spent; once it is gone, the same undo runs.
+///
+/// Continuous capture is off: writing `MERGE_HEAD` is a Git event, and a
+/// capture of its own once the worktree is quiet (`Q`) would add a point
+/// whenever the undo answers later than `Q`, as under load.
 #[test]
 fn an_undo_with_a_git_operation_in_progress_is_rejected() {
     let (fx, wt) = repo_with_login();
     std::fs::write(wt.join("a.rs"), "fn a() { v2(); }\n").unwrap();
-    let r = start(fx, false);
+    let no_capture = CaptureConfig {
+        enabled: false,
+        ..CaptureConfig::default()
+    };
+    let r = start_with(fx, false, no_capture);
     let op = r.operation(&wt, reset_hard());
     let gitdir = PathBuf::from(
         r.fx.git_in(&wt, &["rev-parse", "--absolute-git-dir"])
