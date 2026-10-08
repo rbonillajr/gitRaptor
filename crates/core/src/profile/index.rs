@@ -90,7 +90,8 @@ pub struct AuditRow {
     pub at_ms: i64,
     pub operation: String,
     pub repo_id: Option<String>,
-    /// `accepted`, `rejected` or `not-implemented`.
+    /// `accepted`, `rejected` or `not-implemented` for a reserved call; `applied`, `cancelled`,
+    /// `failed` or `expired` for the end of an announced uninstall (ADR-GRD-007 § 2).
     pub outcome: String,
     pub reason: Option<String>,
     pub client: String,
