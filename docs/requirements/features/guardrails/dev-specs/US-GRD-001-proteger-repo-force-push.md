@@ -143,10 +143,28 @@ Un dispatcher `sh` cuesta ≈ 43 ms por invocación en Windows y el nativo ≈ 6
 
 **Revisión de código** (subagente, 2026-10-05): once hallazgos, corregidos en `fix(guard): close the gaps found in review` salvo dos que quedan anotados: el tiempo máximo de la llamada al daemon (10 s, ya acotado por el cliente) y que, sin configuración del equipo, la rama base confirmada sea `main` aunque el repo use `master` (es lo que fijan Q-GRD-23 y ADR-GRD-004 § 3.5; el modo degradado protege además la rama principal). **Observación de producto** para US-GRD-014: en un repo cuya rama principal es `master`, la explicación lo deja ver ("rama base confirmada: main") y el desarrollador puede no autorizar.
 
+## Enmienda 2026-10-08 — Guardrails en Windows
+
+Se quita el corte de `raptor guard` en Windows y se porta la capa de hooks. **Decisión del orquestador (2026-10-08), validada por el Arquitecto.** No cambia las decisiones D1 a D16; concreta cómo se cumplen en Windows.
+
+| Tema | Resolución |
+|---|---|
+| Dispatcher (XP-32) | **Nativo, sin `sh`**: el `raptor-hook.exe` ya existente se copia como `hooks/<hook>` (Git for Windows ejecuta un PE sin extensión, SPIKE-GRD-001 § 14). Medido en la máquina real con el binario release: instalación, force-push, borrado remoto, local y por `update-ref` de la rama base, todo con el binario real |
+| Corte de la CLI | Se eliminan los cinco `if cfg!(windows)` de `apps/cli/src/guard.rs` (instalar, estado, desinstalar, cancelar, registro). `InstallBlocker::PlatformUnsupported` solo queda para un perfil sin carpeta de ejecución (el canal de Windows existe desde #158) |
+| `GIT_CONFIG_GLOBAL` | `/dev/null` también en Windows: Git for Windows 2.56 falla con `NUL` ("unable to access 'NUL'") y **toda escritura de la clave `core.hooksPath` fallaba** (`guard_install_failed`, paso `key`). `guard_install_failed` registra ahora el paso que falló, de una lista cerrada, sin rutas |
+| DACL (M-07, ADR-GRD-001 § 1) | La carpeta temporal se crea con `winsys::acl::create_private_dir` (DACL protegida: usuario, SYSTEM y Administrators, heredada por los dispatchers, `dispatch.conf` y el manifiesto) antes del renombrado atómico; la instalación **verifica** lo escrito con `verify_private_dir` y revierte si falla, y la actualización en el sitio lo vuelve a comprobar. La identidad de la carpeta (`winsys::file_id`, volumen e índice) sustituye los ceros del escritor portable: se anota en el diario y se comprueba antes de reemplazar o borrar (M-03) |
+| Hooks previos que son scripts (#193) | `CreateProcess` no ejecuta un script (`ERROR_BAD_EXE_FORMAT`): sin esto, un repo con husky u otros hooks previos quedaba **sin poder hacer commit ni push**. El stub lo ejecuta con el `sh` de Git for Windows como lo hace Git: `sh -c 'exec "$0" "$@"' <hook previo>` (el programa viaja como `$0`; con `#!` se respeta el intérprete). Ese `sh` es la constante `git_sh` de `dispatch.conf`, derivada al instalar desde el `git.exe` validado (`<raíz>\usr\bin\sh.exe`), con hash en el diario; nunca se busca en `PATH` ni en `GIT_EXEC_PATH`. Sin `git_sh` o si ya no es un archivo, el encadenado falla cerrado. En Unix no cambia nada |
+| Segunda línea | Sin cambio: en Windows no se lee la línea de comandos de otro proceso y la segunda línea **siempre se evalúa** (#153, #141; fail-closed) |
+| Ruta canónica | Las constantes y `core.hooksPath` van en forma de unidad (`C:\…`), sin el prefijo `\\?\`; probado con una ruta con espacios |
+
+**Pruebas nuevas** (Windows, `#[cfg(windows)]`): `crates/git/tests/guard_write_windows.rs` (DACL de la carpeta y de sus archivos, identidad que se comprueba) y `apps/cli/tests/guard_windows.rs` (instalación en una ruta con espacios con el dispatcher real y Git: force-push y borrado de la base denegados, el trabajo normal pasa, hook previo script encadenado, desinstalación). Las suites de US-GRD-001 con el demonio real y la consola siguen siendo de Unix: el comando reservado solo responde a la consola de una sesión de escritorio (TQ-14), así que `raptor guard install` se verifica a mano en la máquina (ver el PR).
+
+**Pendiente en Windows**: el registro de decisiones (`raptor guard log`) sale vacío porque el demonio no lee el cwd del `git` que lo llama (lo trae la detección de sesiones de Windows); Windows 11 con Windows Terminal (XP-34); y los mensajes con «…» salen en UTF-8 aunque la consola use otra página de códigos.
+
 ## Estado de la implementación (2026-10-08)
 
-Implementado en: PR #116, #121.
+Implementado en: PR #116, #121 y, para Windows, el PR de la rama `feat/windows-guardrails-and-sessions` (enmienda de 2026-10-08).
 
-- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+- Windows: la capa de hooks está portada y verificada en la máquina real (enmienda de 2026-10-08, XP-32). Linux: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
 
 Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

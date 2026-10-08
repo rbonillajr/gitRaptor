@@ -373,3 +373,15 @@ Encadenado de los hooks previos y desinstalación ([DS-US-GRD-002](../../require
 | Desinstalación (§ 4) | Comando reservado en dos llamadas con la ventana de D5 impuesta por el daemon (ADR-GRD-007 § 1). `config` regular comprobado antes de tocar la clave (no el inodo, que Git cambia en cada escritura); clave previa restaurada con una operación tipada nueva (`Restore`, admite un valor relativo y nunca uno que empiece por `-`); recuperación de `uninstalling` al arrancar. Puntos de corte tras la feature `chaos` del arnés de caos (INF-TMC-001), solo en los tests | § 4, Validación 1 y 3 |
 
 **Pendiente**: la instalación huérfana (retirar o adoptar) y la Validación 9 siguen con US-GRD-003 (segunda entrega) y US-GRD-004.
+
+## Enmienda (2026-10-08, Windows)
+
+Guardrails en Windows ([DS-US-GRD-001](../../requirements/features/guardrails/dev-specs/US-GRD-001-proteger-repo-force-push.md), Enmienda 2026-10-08). **Decisión del orquestador (2026-10-08), validada por el Arquitecto.** El `status` sigue en `accepted`.
+
+| Cambio | Resolución | Dónde |
+|---|---|---|
+| Excepción con nombre (§ 7), en Windows | Los `Command::new` del stub son tres: el `raptor` de sus constantes, el hook previo y, cuando el hook previo es un script (`ERROR_BAD_EXE_FORMAT`), el `sh` de Git for Windows con un `-c` **constante** (`exec "$0" "$@"`) y el hook previo como `$0`. Ese `sh` es la constante `git_sh` de `dispatch.conf`, derivada al instalar desde el `git.exe` validado y con hash en el diario; el stub no lee `GIT_EXEC_PATH` ni `PATH` (M-04). En Unix sigue siendo `/bin/sh` sin `-c` y solo ante `ENOEXEC`. `guard_boundary` y la Validación 12 listan la excepción | § 7, Validación 12 |
+| DACL (§ 1, M-07) | La carpeta se crea con DACL protegida (usuario, SYSTEM, Administrators) y la instalación y la actualización en el sitio verifican lo escrito | § 1, Validación 11 |
+| Plantilla | Sin cambio: `git_sh` es una línea opcional de `dispatch.conf` (solo Windows) | § 2, § 8 |
+
+**Pendiente**: comprobar la DACL también en la lectura de estado (ADR-GRD-005) y que `guard_boundary` cuente la excepción de Windows (riesgo residual declarado en el PR).

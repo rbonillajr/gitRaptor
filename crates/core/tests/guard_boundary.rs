@@ -77,21 +77,32 @@ mod repo_intact {
     /// ADR-GRD-001 § 7, Enmiendas 2026-10-05 and 2026-10-08: the dispatcher starts the `raptor`
     /// of its constants (with a cleared environment) and the prior hook of its `prior` constant
     /// (US-GRD-002), nothing else. A prior script without a `#!` line runs through `/bin/sh`
-    /// with the script as its argument, as Git does: never `-c`, never a command line.
+    /// with the script as its argument, as Git does: never `-c`, never a command line (Windows,
+    /// below: the `sh` of `dispatch.conf` with one constant `-c`).
     #[test]
     fn the_dispatcher_only_starts_the_raptor_of_its_constants_and_the_prior_hook() {
         let text =
             std::fs::read_to_string(workspace().join("apps/cli/src/bin/raptor-hook.rs")).unwrap();
-        assert_eq!(text.matches("Command::new(").count(), 3);
+        assert_eq!(text.matches("Command::new(").count(), 4);
         assert!(text.contains("Command::new(raptor)"));
         assert!(text.contains("Command::new(&program)"));
         assert!(text.contains("Command::new(\"/bin/sh\")"));
         assert_eq!(text.matches("/bin/sh").count(), 1);
         assert!(text.contains("sh.arg(&program)"));
         assert!(text.contains(".env_clear()"));
+        // Windows (ADR-GRD-001, Enmienda 2026-10-08): a prior script runs through the `sh` the
+        // install recorded in `dispatch.conf`, with one constant `-c` script and the hook as
+        // `$0`; never one found in the environment or `PATH`.
+        assert!(text.contains("Command::new(sh)"));
+        assert_eq!(text.matches("\"-c\"").count(), 1);
+        assert!(text.contains(r##".arg(r#"exec "$0" "$@""#)"##));
+        assert!(text.contains("conf.get(\"git_sh\")"));
+        for word in ["GIT_EXEC_PATH", "\"PATH\""] {
+            assert!(!text.contains(word), "{word}");
+        }
         // The prior hook is only ever `<prior constant>/<fixed hook name>`.
         assert!(text.contains("let path = dir.join(hook.name());"));
-        for word in ["\"-c\"", "\"sh\"", "cmd.exe", "powershell"] {
+        for word in ["\"sh\"", "cmd.exe", "powershell"] {
             assert!(!text.contains(word), "{word}");
         }
     }
