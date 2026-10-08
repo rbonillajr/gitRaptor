@@ -6,12 +6,12 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-07
+updated: 2026-10-08
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
 related: [ADR-GRP-001, ADR-GRP-002, ADR-GRP-005, ADR-GRP-006, ADR-GRP-007, ADR-GRP-009, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, ADR-GRP-015, ADR-GRP-016, ADR-GRD-005, ADR-TMC-004, ADR-CKP-001, ADR-CKP-002, SPIKE-GRP-002, INF-GRP-002, TS-GRP-006, US-GRP-017, CTX-GRP-001, BR-GRP-001]
-tags: [watcher, notify, fsevents, inotify, readdirectorychangesw, debounce, reconciliacion, sondeo, worktrees, nfr-04, nfr-05, br-cons-005, br-edge-005, seguridad, niveles, dormido, descubrimiento, res-11, res-12]
+tags: [watcher, notify, fsevents, inotify, readdirectorychangesw, debounce, reconciliacion, sondeo, worktrees, nfr-04, nfr-05, br-cons-005, br-edge-005, seguridad, niveles, dormido, descubrimiento, res-11, res-12, res-01, exclusiones, macsys]
 ---
 
 # ADR-GRP-010 — Observación de cambios en worktrees
@@ -47,7 +47,7 @@ Recomendación aceptada por Rene Bonilla el 2026-10-03 (índice de ADRs, opción
   - **Un único stream sobre un ancestro estable**: descartada. Los worktrees enlazados viven en rutas arbitrarias, así que el ancestro común puede ser `$HOME` o `/`: el volumen de eventos y la observación de todo `$HOME` no son aceptables, y el ancestro cambia cuando se da de alta un worktree fuera de él.
   - **Otro backend**: descartada. Watchman choca con NFR-06; kqueue necesita un descriptor por archivo y no escala a 10 worktrees de 5.000 archivos; el sondeo ya es el modo degradado.
   - **Fijar la versión de `notify`**: como control (punto anterior), no como solución: ninguna versión publicada evita la recreación.
-  - **Integración propia con FSEvents que reanuda desde el último `FSEventStreamEventId`**: optimización posterior al MVP, solo si el dogfooding muestra que las reconciliaciones por recreación degradan la atribución o la CPU.
+  - **Integración propia con FSEvents que reanuda desde el último `FSEventStreamEventId`**: optimización posterior al MVP, solo si el dogfooding muestra que las reconciliaciones por recreación degradan la atribución o la CPU. **Activada por la CPU con churn en carpetas ignoradas** (Enmienda 2026-10-08, exclusiones de FSEvents).
 - El watcher solo abre handles de lectura o de notificación; nunca escribe ni crea archivos en el repo (ADR-GRP-009). En Windows, los handles de directorio se abren con borrado compartido.
 
 ### 2. Qué se vigila
@@ -483,3 +483,109 @@ Son las mismas redes que tienen los activos (§ 5), con menos frecuencia.
   - un cliente bajo un agente no puede declarar una raíz, ni aceptar ni descartar un candidato.
 - **Banco**: escenario `tiered-scale` de INF-GRP-002 (Dev Spec, Enmienda 2026-10-07).
 - **Linux y Windows**: **Pendiente: etapa de validación multiplataforma**. En macOS, kqueue para las raíces y el coste de los streams inactivos son supuestos (N6, Discrepancia).
+
+## Enmienda (2026-10-08, exclusiones de FSEvents)
+
+Aplicada desde la medición del banco `idle --churn` (RES-01): un `cargo build` escribiendo en un `target/` ignorado, con 10 worktrees y 10 sesiones, en macOS release. **Decisión del orquestador (2026-10-08), validada por el Arquitecto.** Activa el disparador de la optimización posterior al MVP del § 1 (integración propia con FSEvents). No cambia qué se vigila (§ 2) ni el reparto de frescura: **ADR-GRP-011 no se enmienda**. Se nombra a Rene porque retira `notify` en macOS y añade superficie `unsafe` en `gitraptor-macsys`. El `status` sigue en `accepted`.
+
+| Medición | CPU del daemon |
+|---|---|
+| Sin churn | 0,067 % |
+| 583 archivos/s | 3,03 % |
+| 2.337 archivos/s | 9,29 % |
+
+El router ya descarta los eventos de carpetas ignoradas conocidas (§ 2, Enmienda 2026-10-05). Lo que queda es el coste del callback de FSEvents, que el daemon paga por cada evento aunque se descarte.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| **Stream de FSEvents propio en macOS**, en `gitraptor-macsys`, con lista de exclusión y `since_when`. Sustituye a `notify` en el módulo de watchers de macOS. Linux y Windows siguen con `notify`, sin cambios | § 1, § 2 | Este apartado (E1, E2) |
+| **Exclusión de carpetas ignoradas con churn sostenido**, hasta 8 por stream, nunca de una carpeta con entradas rastreadas | § 2 (Filtros) | E3 |
+| **Cambio del conjunto excluido sin hueco**: el stream nuevo arranca antes de parar el viejo, y parte del último `FSEventStreamEventId` visto | § 1, § 6 | E4 |
+| **Una carpeta con entradas rastreadas deja de clasificarse como ignorada** (también en el router). Corrige un hueco previo: un archivo rastreado bajo una carpeta ignorada (`git add -f`) se descartaba y solo lo recuperaba la reconciliación de 5 min | § 2 (Filtros), § 6 | E3, E5 |
+
+### E1. Por qué hace falta un stream propio
+
+- `notify` 8.2 fija latencia 0 y los flags `FileEvents` y `NoDefer`, y no expone ni latencia ni rutas de exclusión.
+- Un watch `NonRecursive` suscribe igualmente el stream del SO a todo el subárbol y filtra en el callback. Partir el stream por hijo de primer nivel no quita el churn de las entradas de la raíz.
+- FSEvents permite excluir hasta 8 rutas por stream (`FSEventStreamSetExclusionPaths`, declarada en `fsevent-sys` pero sin usar en `notify`), solo antes de arrancar el stream. Cambiar las exclusiones es recrear el stream, y recrearlo con `notify` pierde eventos sin marca (§ 1).
+- Con la exclusión, `fseventsd` filtra antes de entregar el evento al daemon, así que el callback no se paga.
+
+### E2. Stream propio
+
+- API segura en `gitraptor-macsys`: raíz, lista de exclusión, `since_when` y callback que recibe rutas, flags y el id del evento. Sin punteros en la API pública.
+- Cola de `dispatch` (no un run loop). Mismos flags que `notify` 8.2; **latencia 0 se mantiene**. No hay ajuste de latencia: la frescura (ADR-GRP-011) no cambia.
+- Rutas del callback como bytes UTF-8 (sin `UseCFTypes`), para no convertir cadenas de CoreFoundation por evento.
+- El adaptador de `watchers.rs` entrega al manejador el mismo evento que hoy: `route` y la tarea del worktree no cambian. Las marcas de pérdida (`MustScanSubDirs`, `UserDropped`, `KernelDropped`, `EventIdsWrapped`, `RootChanged`, `Mount`, `Unmount`) llegan como el rescan de hoy (§ 6).
+- Todo el `unsafe` va en un módulo `ffi_fsevents` privado, como `ffi_kinfo` (ADR-GRP-002, Enmienda 2026-10-07). Las funciones de CoreServices y de `libdispatch` se declaran a mano, sin crate nuevo.
+- Un stream por raíz, como hoy (Enmienda 2026-10-05). Tras `stop` no puede ejecutarse ningún callback más: el contexto se libera solo cuando el stream está invalidado y su cola vaciada.
+
+### E3. Qué se excluye
+
+- **Candidato**: un prefijo de carpeta ignorada que ya validó `gix` (el conjunto que comparte la tarea con el router). El router cuenta lo que descarta por prefijo. Un prefijo entra cuando sostiene churn: ⚠️ **ASSUMPTION**: 200 eventos descartados en 2 s; lo calibra el banco.
+- **Tope**: 8 por stream, los de mayor cuenta. Los demás siguen solo con el router.
+- **Nunca**: una carpeta con entradas rastreadas en el índice del worktree, ni `.git`. Una carpeta con entradas rastreadas no se clasifica ignorada, así que su churn llega a la tarea (más caro, correcto, y raro). Sus subcarpetas sin rastreadas sí pueden ignorarse.
+- **Negaciones**: Git no desciende a una carpeta ignorada, así que ningún patrón de negación dentro de ella puede reincluir un archivo. Excluir la carpeta entera es seguro.
+- **Rutas canónicas** (`realpath`: `/var` es `/private/var`). Si una exclusión no coincide con lo que reporta el SO, solo se pierde el ahorro: el router sigue descartando. **La exclusión es una optimización; el router es la capa de corrección.** Lo que compromete NFR-01 es no dejar de excluir a tiempo (E5).
+- Un repo dormido conserva sus exclusiones. El centinela usa las mismas reglas.
+
+### E4. Cambiar el conjunto excluido sin perder eventos
+
+- **Alta de exclusiones**: agrupada, y como máximo una recreación por raíz cada 30 s (⚠️ **ASSUMPTION**; la calibra el banco).
+- **Baja de exclusiones**: inmediata, sin límite de ritmo. La seguridad va antes que el ahorro.
+- **Método (arrancar antes de parar)**: se vacía el stream viejo (`FlushSync`) y se toma el último `FSEventStreamEventId` entregado. El stream nuevo arranca con ese `since_when` y las exclusiones nuevas. Cuando llega su `HistoryDone` (⚠️ **ASSUMPTION**: tope de 2 s) se para el viejo. Los eventos duplicados del solape son inocuos: la tarea recomputa por ruta. Si el tope vence, o llega una marca de pérdida, se reconcilia por completo (§ 6).
+- **Alta de exclusiones: no reconcilia**, porque no hay hueco. **Baja: reconcilia** por completo, una vez arrancado el stream sin las exclusiones (§ 1). Los eventos del periodo excluido **no se reproducen**: no se confía en ellos.
+- **Reproducción del historial**: ⚠️ **ASSUMPTION** sin verificar de si la exclusión también filtra el historial que reproduce `since_when`. Ambos resultados son correctos, porque el router descarta lo ignorado. Solo cambia el coste del reemplazo, y la prueba del PR lo mide.
+- **Identidad del volumen**: se guarda el UUID del volumen al crear el stream. Si cambia o el id se reinicia (`EventIdsWrapped`), no se reanuda: stream "desde ahora" y reconciliación completa.
+
+### E5. Casos de NFR-01
+
+- **Cambio de las reglas de ignore** (`.gitignore` fuera de una carpeta excluida, `.git/info/exclude`, `core.excludesFile`): la caché de ignorados se vacía (ya ocurre), caen **todas** las exclusiones del worktree y el stream se recrea sin ellas, con reconciliación completa. Un `.gitignore` dentro de una carpeta excluida no puede cambiar su estado y no hace falta verlo. `core.excludesFile` vive fuera del repo: lo cubre la revalidación periódica (siguiente punto).
+- **Cambio del índice del worktree** (`git add -f`, `checkout`, `reset`): cada prefijo excluido se revalida contra el índice nuevo por búsqueda de prefijo. Solo cae el que ahora contiene entradas rastreadas, con baja inmediata y reconciliación. Un archivo escrito en esa carpeta entre el `git add -f` y la baja lo recupera esa reconciliación.
+- **Revalidación periódica**: la reconciliación de 5 min (§ 5) vuelve a comprobar el conjunto excluido contra las reglas y el índice actuales. Es la cota de un cambio que ningún evento señaló, la misma que la de un evento perdido sin marca.
+- **Marcas de pérdida y fallos** (`HistoryDone` que no llega, `MustScanSubDirs`, `UserDropped`, `KernelDropped`, `EventIdsWrapped`, `RootChanged`, `Mount`, `Unmount`): reconciliación existente del § 6. Si el SO rechaza la lista de exclusión, el stream arranca sin ella y el router sigue descartando.
+- **Atribución**: lo que encuentra una reconciliación tras una baja es "sin atribuir", como tras cualquier recreación del stream (BR-EDGE-005, ADR-GRP-013). No hay causa nueva.
+
+### Alternativas consideradas (de esta enmienda)
+
+| Alternativa | Por qué se descarta |
+|---|---|
+| Aceptar el coste actual | 3 % con 583 archivos/s y 9 % con 2.337 incumplen RES-01 (CPU < 1 %) durante un build, y una flota de agentes compila de forma continua |
+| Un stream por hijo de primer nivel | No quita el churn de las entradas de la raíz, y multiplica los streams |
+| Subir la latencia del stream | Agrupa eventos, no los elimina, y gasta frescura (ADR-GRP-011). Solo se plantea aparte, con ADR-GRP-011, si el churn en rutas no ignoradas lo exige |
+| Excluir todas las carpetas ignoradas desde el arranque | Deja ciegas más carpetas sin ahorro medible y obliga a elegir las 8 sin dato. El umbral de churn elige con dato |
+| Bifurcar `notify` | Mantener una bifurcación cuesta más que 12 funciones de FFI. Un PR a `notify` puede ir en paralelo, sin bloquear |
+| Parar el stream viejo antes de crear el nuevo | Es la recreación de `notify` que pierde eventos (§ 1) |
+| Persistir el último id para reanudar tras reiniciar el daemon | Fuera de alcance. El arranque reconcilia por completo (§ 6). Se reevalúa con el dogfooding |
+
+### Consecuencias (de esta enmienda)
+
+- ✅ **Con exclusión activa, el churn de una carpeta ignorada no llega al daemon.**
+- ⚠️ **Más superficie `unsafe`** (ciclo de vida del contexto del callback, `panic` a través de FFI, propiedad de objetos de CoreFoundation y de la cola). **Mitigación**: un solo módulo `ffi_fsevents`, `catch_unwind` en el callback, `tests/unsafe_boundary.rs` y los lints de `unsafe` de la crate.
+- ⚠️ **Se pierde la traducción de eventos de `notify`.** **Mitigación**: el adaptador entrega solo lo que usa `route` (rutas y rescan).
+- ⚠️ **El tope de 8 deja sin excluir las carpetas con churn menor.** **Mitigación**: siguen cubiertas por el router.
+- ⚠️ **Los primeros segundos de un build cuestan lo de hoy**, hasta que el churn supera el umbral y se recrea el stream.
+- ⚠️ **`fseventsd` sigue registrando esos eventos.** El banco mide el proceso del daemon, no `fseventsd`.
+- ⚠️ **Una carpeta con entradas rastreadas deja de ahorrar** su churn: es el precio de no perder un archivo rastreado.
+- **Pendiente**: Linux y Windows siguen sin excluir (en Linux, el § 2 ya no registra watches de directorios ignorados). **Pendiente: etapa de validación multiplataforma.**
+
+### Validación (de esta enmienda)
+
+Criterios de aceptación del PR:
+
+- **Banco** `idle --churn 583` y `--churn 2337` (10 worktrees, 10 sesiones, macOS release), antes y después en la misma tabla: ambos por debajo de 1 % (RES-01), y sin churn sin regresión sobre 0,067 % (⚠️ **ASSUMPTION**: hasta 0,10 %).
+- **Frescura**: el banco de INF-GRP-002 en macOS, verde con los mismos gates de NFR-04, con y sin exclusiones activas, y el escenario de recreación con cambios del conjunto excluido bajo escritura: 0 archivos perdidos, en la raíz y en las vecinas.
+- **Tests de `gitraptor-macsys`** con carpetas temporales, incluida una raíz bajo un enlace simbólico (`/var`) y un nombre no ASCII:
+  - una escritura en una carpeta excluida no produce callback, y una fuera de ella sí;
+  - más de 8 exclusiones devuelven un error tipado;
+  - `since_when` reproduce los eventos del intervalo y llega `HistoryDone`;
+  - tras `stop` no se ejecuta ningún callback más.
+- **Tests de `crates/core`** con repos temporales:
+  - una carpeta excluida que deja de ignorarse (cambio de `.gitignore`) muestra sus archivos nuevos tras la recreación y la reconciliación;
+  - un archivo rastreado con `git add -f` bajo una carpeta ignorada se ve modificado, sin esperar a los 5 min;
+  - un `git add -f` posterior a la exclusión hace caer la exclusión, y la modificación posterior se ve;
+  - una carpeta con entradas rastreadas no entra nunca en la lista de exclusión;
+  - las marcas de pérdida reconcilian;
+  - la revalidación periódica (con el intervalo reducido por el test) detecta una carpeta que ya no se ignora.
+- **Frontera de `unsafe`**: `tests/unsafe_boundary.rs` y clippy en verde. Ninguna otra crate con `unsafe`.
+- **El PR informa de** si la exclusión filtra el historial reproducido (E4), y de lo que no pudo verificar.
+- **Linux y Windows**: sin cambios. **Pendiente: etapa de validación multiplataforma.**
