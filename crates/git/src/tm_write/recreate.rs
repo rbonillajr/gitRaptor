@@ -51,14 +51,13 @@ pub fn recreate(
     let parent = path
         .parent()
         .ok_or_else(|| WriteError::InvalidInput("no parent".into()))?;
-    let parent = parent.canonicalize()?;
+    let parent = crate::paths::canonicalize(parent)?;
     let leaf = path
         .file_name()
         .ok_or_else(|| WriteError::InvalidInput("no name".into()))?;
     let path = parent.join(leaf);
-    let profile = profile_root
-        .canonicalize()
-        .unwrap_or_else(|_| profile_root.to_owned());
+    let profile =
+        crate::paths::canonicalize(profile_root).unwrap_or_else(|_| profile_root.to_owned());
     if path.starts_with(&profile) || path.starts_with(main.common_dir()) {
         return reject("path inside the profile or the Git folder");
     }

@@ -48,7 +48,8 @@ impl WriteWorktree {
     /// Validates `root` (absolute, canonical, no links on the way) and finds its Git folders.
     pub fn open(root: &Path) -> Result<Self> {
         crate::paths::validate(root)?;
-        let canonical = root.canonicalize()?;
+        // Drive form on Windows: the form the daemon keeps and the one Git can use.
+        let canonical = crate::paths::canonicalize(root)?;
         if canonical != root {
             return Err(WriteError::InvalidInput(
                 "worktree root must be canonical".into(),
@@ -70,7 +71,7 @@ impl WriteWorktree {
             } else {
                 root.join(target)
             };
-            target.canonicalize()?
+            crate::paths::canonicalize(&target)?
         } else {
             return Err(WriteError::Untrusted(".git is a link".into()));
         };
@@ -85,7 +86,7 @@ impl WriteWorktree {
                 } else {
                     git_dir.join(rel)
                 };
-                dir.canonicalize()?
+                crate::paths::canonicalize(&dir)?
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => git_dir.clone(),
             Err(e) => return Err(e.into()),
