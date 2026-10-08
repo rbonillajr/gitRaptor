@@ -332,9 +332,9 @@ pub struct Daemon {
     periodic_diffs: u64,
     #[cfg_attr(not(unix), allow(dead_code))]
     started_ms: i64,
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     bound: Option<crate::channel::BoundChannel>,
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     server: Option<crate::channel::Server>,
 }
 
@@ -462,7 +462,7 @@ impl Daemon {
         }
 
         // The channel is bound before the daemon creates any thread.
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         let bound = match config.dirs.runtime.as_deref() {
             Some(runtime) => {
                 for dir in config.dirs.owned_dirs() {
@@ -484,10 +484,9 @@ impl Daemon {
             }
             None => None,
         };
-        // Windows: no channel at all rather than one without access control
-        // (`channel::TRANSPORT_UNSUPPORTED`); the engine still observes.
-        // Pendiente: etapa de validación multiplataforma.
-        #[cfg(not(unix))]
+        // Another OS: no channel at all rather than one without access
+        // control (`channel::TRANSPORT_UNSUPPORTED`); the engine still observes.
+        #[cfg(not(any(unix, windows)))]
         logger.warn("channel_unsupported", &[]);
 
         // Full reconciliation of every observed repo before serving
@@ -592,9 +591,9 @@ impl Daemon {
             divergence_cache: observe::DivergenceCache::default(),
             periodic_diffs: 0,
             started_ms: now_ms(),
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             bound,
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             server: None,
         };
         let repo_ids: Vec<String> = daemon.stores.iter().map(|(id, _)| id.clone()).collect();
@@ -792,7 +791,7 @@ impl Daemon {
         );
         // Answers already queued (the stop command's included) are written,
         // then every connection closes.
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         if let Some(mut server) = self.server.take() {
             server.shutdown();
         }

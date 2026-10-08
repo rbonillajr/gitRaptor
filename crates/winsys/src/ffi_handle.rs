@@ -18,6 +18,12 @@ impl Handle {
     }
 }
 
+// SAFETY: a kernel handle is a process-wide value that the kernel lets any thread use, at the
+// same time too; `Handle` only closes it, once, on drop.
+unsafe impl Send for Handle {}
+// SAFETY: as above; `&Handle` only hands out the raw value for kernel calls.
+unsafe impl Sync for Handle {}
+
 impl Drop for Handle {
     fn drop(&mut self) {
         // SAFETY: `self.0` is a valid handle (not a sentinel, see `new`) owned

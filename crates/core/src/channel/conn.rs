@@ -1,7 +1,6 @@
 //! One client connection: accept checks, handshake, dispatch and output.
 
 use std::io::{BufReader, Write};
-use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -48,6 +47,7 @@ use super::authz::{AcceptedPeer, ChainLink, Verdict, check_reserved};
 use super::bus::{Outbox, Subscribed};
 use super::peer::{ProcInfo, peer_cred, process_cwd};
 use super::requester::{self, Resolution};
+use super::transport::Stream;
 use super::validate;
 use super::{ServerCtx, file_id};
 use crate::daemon::{
@@ -87,7 +87,7 @@ const REPLACE_AS_STOP: MethodSpec = MethodSpec {
 struct ConnEntry {
     id: u64,
     client: (u32, u64),
-    stream: UnixStream,
+    stream: Stream,
     outbox: Arc<Outbox>,
     writer: Option<std::thread::JoinHandle<()>>,
 }
@@ -107,7 +107,7 @@ fn now_us() -> u64 {
 
 /// Checks a freshly accepted socket and, if it passes, serves it on its own
 /// thread.
-pub(crate) fn accept(ctx: &Arc<ServerCtx>, stream: UnixStream) {
+pub(crate) fn accept(ctx: &Arc<ServerCtx>, stream: Stream) {
     let accepted_us = now_us();
     let Ok(cred) = peer_cred(&stream) else {
         ctx.logger
@@ -209,7 +209,7 @@ pub(crate) fn accept(ctx: &Arc<ServerCtx>, stream: UnixStream) {
     }
 }
 
-fn refuse_connection(stream: &UnixStream, timeout: Duration) {
+fn refuse_connection(stream: &Stream, timeout: Duration) {
     let _ = stream.set_write_timeout(Some(timeout));
     let error = Response::err(
         None,
@@ -223,7 +223,7 @@ fn refuse_connection(stream: &UnixStream, timeout: Duration) {
 }
 
 fn spawn_writer(
-    stream: &UnixStream,
+    stream: &Stream,
     outbox: Arc<Outbox>,
     timeout: Duration,
 ) -> Option<std::thread::JoinHandle<()>> {
@@ -363,7 +363,7 @@ enum After {
 }
 
 impl Connection<'_> {
-    fn serve(&mut self, stream: UnixStream) {
+    fn serve(&mut self, stream: Stream) {
         let limits = self.ctx.config.limits;
         // The whole handshake has one deadline, not one per read.
         let handshake_deadline = Instant::now() + limits.handshake_timeout;

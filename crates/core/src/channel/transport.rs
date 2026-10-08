@@ -7,10 +7,12 @@
 //! A path longer than the `sun_path` limit is reached relative to the
 //! runtime folder, changing the working folder under a process-wide mutex.
 //!
-//! Windows (named pipe with a DACL for the user's SID, first instance,
-//! remote clients refused, SQOS identification in the client) needs Win32
-//! calls that the workspace cannot make without `unsafe` or a vetted crate.
-//! Pendiente: etapa de validación multiplataforma.
+//! Windows: a named pipe per user and profile (`gitraptor-<SID>-<hash of the
+//! runtime folder>`) with a protected DACL that grants only the user's SID,
+//! created as the first instance (a taken name fails closed), refusing
+//! remote clients; the client opens it with SQOS identification and checks
+//! that the server runs as this same user (DS-TS-GRP-004 § 8). The Win32
+//! calls live in `gitraptor-winsys`.
 
 use std::path::{Path, PathBuf};
 #[cfg(unix)]
@@ -134,3 +136,123 @@ mod unix {
 
 #[cfg(unix)]
 pub use unix::{bind, connect};
+
+/// The connected stream of the channel.
+#[cfg(unix)]
+pub type Stream = std::os::unix::net::UnixStream;
+/// The connected stream of the channel.
+#[cfg(windows)]
+pub type Stream = gitraptor_winsys::pipe::PipeStream;
+
+/// FNV-1a, 64 bits: a stable fingerprint of the runtime folder for the pipe
+/// name. Not a secret: the DACL and the checks guard the pipe.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn fingerprint(text: &str) -> u64 {
+    text.bytes().fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
+        (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3)
+    })
+}
+
+/// The pipe name of the channel of `runtime` for the user `sid`: one per
+/// user and per profile, like the socket on Unix. The folder is compared
+/// without case, as Windows paths are.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn pipe_name(sid: &str, runtime: &Path) -> String {
+    let folder = runtime.to_string_lossy().to_lowercase();
+    format!(r"\\.\pipe\gitraptor-{sid}-{:016x}", fingerprint(&folder))
+}
+
+#[cfg(windows)]
+mod windows {
+    use super::*;
+    use gitraptor_winsys::pipe::{PipeListener, PipeStream};
+    use gitraptor_winsys::process::{self, Owner};
+    use std::io;
+    use std::time::Duration;
+
+    use crate::profile::ProfileError;
+
+    /// How long a client waits for a free instance while all are busy.
+    const BUSY_WAIT: Duration = Duration::from_secs(2);
+
+    fn user_sid() -> io::Result<String> {
+        Ok(gitraptor_winsys::acl::current_user_sid()?.to_string())
+    }
+
+    /// The pipe name of the channel of `runtime` for this user.
+    pub fn pipe_path(runtime: &Path) -> io::Result<String> {
+        Ok(pipe_name(&user_sid()?, runtime))
+    }
+
+    /// Creates the channel pipe: owner and only entry of a protected DACL,
+    /// the user's SID; first instance, so a name already taken (by anyone)
+    /// fails closed; at most `max_instances` instances.
+    pub fn bind(runtime: &Path, max_instances: u32) -> Result<PipeListener, ProfileError> {
+        let sid = user_sid()?;
+        let name = pipe_name(&sid, runtime);
+        let sddl = format!("O:{sid}D:P(A;;GA;;;{sid})");
+        PipeListener::bind(&name, &sddl, max_instances).map_err(|err| ProfileError::InsecureDir {
+            path: PathBuf::from(&name),
+            reason: format!("the channel pipe cannot be created as its first instance: {err}"),
+        })
+    }
+
+    /// Whether `pid` runs as this user. An unreadable owner is a refusal.
+    pub fn runs_as_this_user(pid: u32) -> bool {
+        matches!(process::owner_of(pid), Ok(Owner::Current))
+    }
+
+    /// Connects to the channel pipe of `runtime` and checks, before sending
+    /// anything, that its server runs as this same user. A refusal, or an
+    /// owner that cannot be read, is `PermissionDenied`.
+    pub fn connect(runtime: &Path) -> io::Result<PipeStream> {
+        let stream = PipeStream::connect(&pipe_path(runtime)?, BUSY_WAIT)?;
+        let server = stream.peer_pid()?;
+        if !runs_as_this_user(server) {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "the channel server runs as another user",
+            ));
+        }
+        Ok(stream)
+    }
+}
+
+#[cfg(windows)]
+pub use windows::{bind, connect, pipe_path, runs_as_this_user};
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_pipe_name_is_per_user_and_per_profile() {
+        let a = pipe_name(
+            "S-1-5-21-1-2-3-1001",
+            Path::new(r"C:\Users\a\AppData\gitraptor\run"),
+        );
+        assert!(
+            a.starts_with(r"\\.\pipe\gitraptor-S-1-5-21-1-2-3-1001-"),
+            "{a}"
+        );
+        assert_eq!(
+            a,
+            pipe_name(
+                "S-1-5-21-1-2-3-1001",
+                Path::new(r"c:\users\A\appdata\GitRaptor\RUN")
+            )
+        );
+        assert_ne!(
+            a,
+            pipe_name(
+                "S-1-5-21-1-2-3-1002",
+                Path::new(r"C:\Users\a\AppData\gitraptor\run")
+            )
+        );
+        assert_ne!(
+            a,
+            pipe_name("S-1-5-21-1-2-3-1001", Path::new(r"C:\Users\a\other\run"))
+        );
+        assert!(a.len() < 256);
+    }
+}

@@ -387,6 +387,21 @@ mod imp {
         }
     }
 
+    /// The process at the other end of a channel pipe: its pid as the kernel
+    /// reports it, and whether its token is this user's (W4). An owner that
+    /// cannot be read is an error, never "this user" (fail-closed).
+    pub fn peer_cred(stream: &gitraptor_winsys::pipe::PipeStream) -> std::io::Result<PeerCred> {
+        let pid = stream.peer_pid()?;
+        let uid = match process::owner_of(pid) {
+            Ok(Owner::Current) => current_uid(),
+            Ok(Owner::Other) | Err(Error::Denied) => FOREIGN_UID,
+            Ok(Owner::Unknown) | Err(Error::Gone | Error::Unavailable) => {
+                return Err(std::io::Error::other("the peer's owner cannot be read"));
+            }
+        };
+        Ok(PeerCred { uid, pid })
+    }
+
     /// Pendiente: the working folder of another process needs its PEB.
     pub fn process_cwd(_pid: u32) -> Option<PathBuf> {
         None
@@ -413,7 +428,7 @@ mod imp {
     }
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
 pub use imp::peer_cred;
 pub use imp::process_cwd;
 

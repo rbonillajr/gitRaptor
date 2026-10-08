@@ -224,3 +224,35 @@ Daemon y cliente reales sobre perfiles y repos temporales del testkit (NFR-01). 
 - Linux y Windows: *Pendiente: etapa de validación multiplataforma*. Las pruebas de `channel_scopes` son solo de macOS, como las de `channel.rs`. En Windows el canal sigue sin transporte (fail-closed). El clippy cruzado a `x86_64-pc-windows-msvc` no se pudo correr en este Mac (falta el compilador C de `libsqlite3-sys`); lo cubre el CI.
 - **INF-CKP-001**: sacar la biblioteca cliente de `crates/core` (A1, V5).
 - N8, N9, N10; emisores de `repo.attention`. El `autostart` real ya lo entrega US-GRP-004 ([Dev Spec](./US-GRP-004-dev-spec.md)).
+
+## 8. Enmienda (2026-10-07): transporte de Windows por named pipe (XP-01)
+
+Cierra el pendiente de transporte del § 5 y la decisión 8 de [ADR-GRP-005](../../../../architecture/decisions/ADR-GRP-005-forma-motor-proceso-segundo-plano.md) § 5, que ya fija la forma (DACL con el SID del usuario, primera instancia, rechazo de clientes remotos, identidad del servidor y SQOS). Esta enmienda solo decide cómo se implementa. Fila XP-01 de [`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md).
+
+### 8.1 Decisiones
+
+| # | Decisión | Motivo |
+|---|---|---|
+| P1 | **FFI en `crates/winsys`**: módulo público seguro `pipe` (`PipeListener`, `PipeStream`) y módulo privado `ffi_pipe` con el `unsafe`, con las mismas reglas que el resto del crate (una llamada por bloque, `SAFETY`, handles con dueño). `crates/core` no gana `unsafe` | ADR-GRP-002 (Enmienda 2026-10-05) |
+| P2 | **Nombre**: `\\.\pipe\gitraptor-<SID del usuario>-<huella de la carpeta runtime>`. La huella es FNV-1a de 64 bits sobre la ruta en minúsculas: un pipe por usuario y por perfil, como el socket de Unix. No es un secreto: lo que protege es P3 y P5 | El espacio de nombres de pipes es global a la máquina |
+| P3 | **DACL** `D:P(A;;GA;;;<SID>)`: protegida (sin herencia) y con una sola ACE, la del usuario. Ni `Everyone`, ni SYSTEM, ni Administradores, ni la DACL por defecto. Propietario, el usuario | SEC-01; ADR-GRP-005 § 5 no pide SYSTEM |
+| P4 | **Primera instancia y fallo cerrado**: la primera instancia se crea con `FILE_FLAG_FIRST_PIPE_INSTANCE`. Si el nombre ya existe (otro proceso lo ocupó), `bind` falla con `channel_bind_failed` y el daemon no arranca. El servidor **siempre** tiene una instancia libre esperando: crea la siguiente antes de entregar la conectada, así el nombre nunca queda libre mientras el daemon vive | Anti-squatting |
+| P5 | **Cliente**: abre con `SECURITY_SQOS_PRESENT \| SECURITY_IDENTIFICATION` (el servidor no puede suplantarlo) y, antes de enviar nada, lee `GetNamedPipeServerProcessId` y exige que el token de ese proceso sea de su mismo usuario; si no, `PermissionDenied` ("the channel server runs as another user"), como en Unix | ADR-GRP-005 § 5 |
+| P6 | **Servidor**: `PIPE_REJECT_REMOTE_CLIENTS`; identifica al cliente con `GetNamedPipeClientProcessId` y el dueño del token del proceso (`current_uid()` o `FOREIGN_UID`, W4). Un cliente de otro usuario se cierra sin leer nada, igual que en Unix | SEC-01; misma semántica que `channel::peer` |
+| P7 | **E/S solapada con plazo**: cada lectura y escritura es `OVERLAPPED` con su propio evento y espera con el plazo fijado (`set_read_timeout`/`set_write_timeout`, devuelve `TimedOut`); el `shutdown` de lectura o escritura despierta la espera y cancela solo esa operación (`CancelIoEx` con su `OVERLAPPED`). Una operación cancelada siempre se espera hasta el final antes de liberar su búfer. Así `conn.rs` usa el mismo código en los dos SO, con el tipo `channel::transport::Stream` | Plazos del handshake y de inactividad (SEC-08) y cierre ordenado |
+| P8 | **Integridad del canal**: no hay fichero que se pueda sustituir, así que `socket_intact` es siempre cierto en Windows. Un proceso del **mismo** usuario puede crear instancias adicionales del pipe; está fuera del modelo, igual que en Unix puede borrar el socket y crear el suyo (allí se detecta y se vuelve a enlazar) | Riesgo residual declarado |
+
+### 8.2 Plan de pruebas (criterio → test)
+
+| Criterio | Test |
+|---|---|
+| DACL solo con el SID del usuario, protegida | `winsys` `pipe::tests::the_pipe_dacl_names_only_the_user` (lee la DACL del pipe real y la evalúa con `acl::parse_acl`) |
+| Squatting: un pipe ya creado hace fallar `bind` | `pipe::tests::a_taken_name_fails_closed` |
+| Ida y vuelta, plazos y `shutdown` | `pipe::tests::round_trip_and_peer_pids`, `pipe::tests::a_read_times_out`, `pipe::tests::shutdown_wakes_a_blocked_read` |
+| Cliente de otro usuario o servidor ajeno | Verificado a mano en la máquina Windows (documentado en el PR); el código comprueba el dueño del token por PID en los dos lados |
+| Canal completo en Windows | `crates/core/tests/channel.rs` y `channel_scopes.rs` pasan a correr en Windows donde no dependen de Unix; humo `raptor daemon status`, `raptor status`, `raptor events` en la máquina real |
+
+### 8.3 Pendientes
+
+- Las pruebas con un segundo usuario de Windows real (cliente ajeno rechazado por la DACL) dependen de crear una cuenta en la máquina de pruebas.
+- El identificador por handle de ADR-GRP-005 § 6.1 sigue siendo `(pid, creación)` (W3/§ 6).

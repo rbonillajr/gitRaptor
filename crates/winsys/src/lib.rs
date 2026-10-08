@@ -13,6 +13,8 @@ pub mod file_id;
 #[cfg(windows)]
 pub mod file_lock;
 #[cfg(windows)]
+pub mod pipe;
+#[cfg(windows)]
 pub mod process;
 #[cfg(windows)]
 pub mod registry;
@@ -30,6 +32,9 @@ mod ffi_file;
 #[cfg(windows)]
 #[allow(unsafe_code)]
 mod ffi_handle;
+#[cfg(windows)]
+#[allow(unsafe_code)]
+mod ffi_pipe;
 #[cfg(windows)]
 #[allow(unsafe_code)]
 mod ffi_process;

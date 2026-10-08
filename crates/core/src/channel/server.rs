@@ -1,4 +1,5 @@
-//! The Unix-socket server of the channel (TS-GRP-004).
+//! The server of the channel (TS-GRP-004): a Unix socket, or a named pipe on
+//! Windows (DS-TS-GRP-004 § 8).
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -118,7 +119,15 @@ pub struct Server {
     socket: Option<(u64, u64)>,
     #[cfg(unix)]
     wake: Option<std::os::fd::OwnedFd>,
+    #[cfg(windows)]
+    wake: Option<gitraptor_winsys::pipe::PipeWaker>,
 }
+
+/// Instances of the channel pipe at most: the connection limits
+/// (`ChannelLimits`) refuse clients above theirs, and this caps the pipe
+/// handles a local flood can make the daemon hold.
+#[cfg(windows)]
+const PIPE_INSTANCES: u32 = 64;
 
 /// A bound but not yet serving channel. Binding happens in
 /// `Daemon::start`, before the daemon creates any thread (the long-path
@@ -126,6 +135,8 @@ pub struct Server {
 pub struct BoundChannel {
     #[cfg(unix)]
     listener: std::os::unix::net::UnixListener,
+    #[cfg(windows)]
+    listener: gitraptor_winsys::pipe::PipeListener,
     runtime: PathBuf,
 }
 
@@ -135,6 +146,15 @@ impl BoundChannel {
     pub fn bind(runtime: &std::path::Path) -> Result<Self, crate::profile::ProfileError> {
         Ok(Self {
             listener: transport::bind(runtime)?,
+            runtime: runtime.to_path_buf(),
+        })
+    }
+
+    /// Creates the channel pipe of `runtime` (SEC-01, DS-TS-GRP-004 § 8).
+    #[cfg(windows)]
+    pub fn bind(runtime: &std::path::Path) -> Result<Self, crate::profile::ProfileError> {
+        Ok(Self {
+            listener: transport::bind(runtime, PIPE_INSTANCES)?,
             runtime: runtime.to_path_buf(),
         })
     }
@@ -161,7 +181,6 @@ pub(crate) struct ServeArgs {
 }
 
 impl Server {
-    #[cfg(unix)]
     pub(crate) fn serve(bound: BoundChannel, args: ServeArgs) -> std::io::Result<Self> {
         let launch = LaunchIdentity::capture(
             args.config
@@ -201,7 +220,14 @@ impl Server {
             mcp_repos: args.mcp_repos,
             commit_decisions: Default::default(),
         });
-        let listener = bound.listener;
+        Self::listen(ctx, bound.listener)
+    }
+
+    #[cfg(unix)]
+    fn listen(
+        ctx: Arc<ServerCtx>,
+        listener: std::os::unix::net::UnixListener,
+    ) -> std::io::Result<Self> {
         let socket = socket_id(&transport::socket_path(&ctx.runtime));
         // The accept loop waits on the listener and on a wake-up pipe: the
         // socket path may belong to an impostor by the time we stop, so we
@@ -220,10 +246,34 @@ impl Server {
         })
     }
 
+    #[cfg(windows)]
+    fn listen(
+        ctx: Arc<ServerCtx>,
+        listener: gitraptor_winsys::pipe::PipeListener,
+    ) -> std::io::Result<Self> {
+        let wake = listener.waker();
+        let accept_ctx = Arc::clone(&ctx);
+        let accept = std::thread::Builder::new()
+            .name("raptor-accept".into())
+            .spawn(move || pipe_accept_loop(&accept_ctx, &listener))?;
+        Ok(Self {
+            ctx,
+            accept: Some(accept),
+            socket: None,
+            wake: Some(wake),
+        })
+    }
+
     /// Whether the socket file is still the one this server bound. Another
     /// process of the user can remove it and bind its own, cutting clients
     /// off from the real daemon without any crash being recorded.
+    ///
+    /// Windows: there is no file to replace, and the pipe name is never free
+    /// while the daemon serves (DS-TS-GRP-004 § 8, P4 and P8).
     pub fn socket_intact(&self) -> bool {
+        if cfg!(windows) {
+            return true;
+        }
         self.socket.is_some()
             && socket_id(&transport::socket_path(&self.ctx.runtime)) == self.socket
     }
@@ -241,11 +291,16 @@ impl Server {
         if let Some(wake) = self.wake.take() {
             let _ = rustix::io::write(&wake, &[1]);
         }
+        #[cfg(windows)]
+        if let Some(wake) = self.wake.take() {
+            wake.wake();
+        }
         if let Some(accept) = self.accept.take() {
             let _ = accept.join();
         }
         conn::close_all(&self.ctx, Duration::from_secs(1));
         // Only our own socket: a replaced one is not ours to remove.
+        #[cfg(unix)]
         if self.socket_intact() {
             let _ = std::fs::remove_file(transport::socket_path(&self.ctx.runtime));
         }
@@ -282,6 +337,23 @@ fn accept_loop(
                 Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => break,
                 Err(err) if err.kind() == std::io::ErrorKind::Interrupted => {}
                 Err(_) => break,
+            }
+        }
+    }
+}
+
+#[cfg(windows)]
+fn pipe_accept_loop(ctx: &Arc<ServerCtx>, listener: &gitraptor_winsys::pipe::PipeListener) {
+    loop {
+        if ctx.stopping.load(Ordering::SeqCst) {
+            return;
+        }
+        match listener.accept() {
+            Ok(Some(stream)) => conn::accept(ctx, stream),
+            Ok(None) => return,
+            Err(_) => {
+                ctx.logger.error("channel_accept_failed", &[]);
+                return;
             }
         }
     }

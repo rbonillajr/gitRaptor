@@ -1,7 +1,8 @@
 //! The local client channel of the daemon (TS-GRP-004, ADR-GRP-005 § 5 and
 //! § 6).
 //!
-//! A Unix socket only the user can open ([`transport`]); per connection, a
+//! A Unix socket, or a named pipe on Windows, only the user can open
+//! ([`transport`]); per connection, a
 //! versioned JSON-RPC handshake, queries served from memory, an event
 //! stream by subscription ([`bus`]) and reserved commands authorized only
 //! by the daemon ([`authz`]) and audited. Limits and a rate limit keep one
@@ -9,14 +10,14 @@
 
 pub mod authz;
 pub mod bus;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 mod conn;
 pub mod marks;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 mod mcp_scope;
 pub mod peer;
 pub mod requester;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 mod server;
 pub mod transport;
 pub mod validate;
@@ -28,17 +29,16 @@ use gitraptor_api::PROTOCOL_VERSION;
 
 pub use authz::{AgentMatcher, ExeClass};
 pub use bus::{EngineShared, EventBus};
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub use server::{BoundChannel, Server};
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub(crate) use server::{ServeArgs, ServerCtx, file_id};
 
-/// Why the channel cannot run on this platform yet. Windows needs a named
-/// pipe with a DACL for the user's SID, first-instance creation, remote
-/// clients refused and SQOS identification in the client (ADR-GRP-005 § 5).
-/// Until then there is no channel at all: never one without access control
-/// (fail-closed). Pendiente: etapa de validación multiplataforma.
-pub const TRANSPORT_UNSUPPORTED: &str = "the local channel is not supported on Windows yet (named pipe with an access-control list pending)";
+/// Why the channel cannot run on this platform: there is no transport with
+/// access control for it (neither a Unix socket nor a Windows named pipe).
+/// Never a channel without access control (fail-closed).
+pub const TRANSPORT_UNSUPPORTED: &str =
+    "the local channel is not supported on this platform (no transport with access control)";
 
 /// Limits of the channel (SEC-08, SEC-02).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
