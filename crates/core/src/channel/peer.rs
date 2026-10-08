@@ -9,12 +9,10 @@
 
 use std::path::PathBuf;
 
-/// Credentials of the peer of a connected socket.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PeerCred {
-    pub uid: u32,
-    pub pid: u32,
-}
+// What the client checks too lives once, in the client library (L-06).
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
+pub use gitraptor_api::client::peer::peer_cred;
+pub use gitraptor_api::client::peer::{FOREIGN_UID, PeerCred, current_uid};
 
 /// One process as the kernel reports it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -81,29 +79,9 @@ mod imp {
     use libproc::libproc::proc_pid::{pidinfo, pidpath};
     use libproc::libproc::task_info::TaskAllInfo;
     use libproc::processes::{ProcFilter, pids_by_type};
-    use std::os::unix::net::UnixStream;
 
     /// `PROC_FLAG_CONTROLT`: the process has a controlling terminal.
     const PROC_FLAG_CONTROLT: u32 = 0x80;
-
-    pub fn peer_cred(stream: &UnixStream) -> std::io::Result<PeerCred> {
-        use nix::sys::socket::{getsockopt, sockopt};
-        let cred = getsockopt(stream, sockopt::LocalPeerCred).map_err(std::io::Error::from)?;
-        let pid = getsockopt(stream, sockopt::LocalPeerPid).map_err(std::io::Error::from)?;
-        let pid = u32::try_from(pid).map_err(|_| std::io::Error::other("invalid peer pid"))?;
-        // The audit token carries the same pid and euid; a mismatch means the
-        // kernel views disagree, so nothing about the peer is trusted.
-        let token = getsockopt(stream, sockopt::LocalPeerToken).map_err(std::io::Error::from)?;
-        if token.val[5] != pid || token.val[1] != cred.uid() {
-            return Err(std::io::Error::other(
-                "peer token disagrees with credentials",
-            ));
-        }
-        Ok(PeerCred {
-            uid: cred.uid(),
-            pid,
-        })
-    }
 
     fn exists(pid: u32) -> bool {
         pids_by_type(ProcFilter::All).is_ok_and(|pids| pids.contains(&pid))
@@ -203,15 +181,6 @@ mod imp {
 mod imp {
     use super::*;
     use std::os::unix::fs::MetadataExt;
-    use std::os::unix::net::UnixStream;
-
-    pub fn peer_cred(stream: &UnixStream) -> std::io::Result<PeerCred> {
-        let cred = rustix::net::sockopt::socket_peercred(stream)?;
-        Ok(PeerCred {
-            uid: cred.uid.as_raw(),
-            pid: cred.pid.as_raw_nonzero().get().unsigned_abs(),
-        })
-    }
 
     /// Fields of `/proc/<pid>/stat` after the command name.
     fn stat_fields(pid: u32) -> Result<Vec<String>, ProcError> {
@@ -387,21 +356,6 @@ mod imp {
         }
     }
 
-    /// The process at the other end of a channel pipe: its pid as the kernel
-    /// reports it, and whether its token is this user's (W4). An owner that
-    /// cannot be read is an error, never "this user" (fail-closed).
-    pub fn peer_cred(stream: &gitraptor_winsys::pipe::PipeStream) -> std::io::Result<PeerCred> {
-        let pid = stream.peer_pid()?;
-        let uid = match process::owner_of(pid) {
-            Ok(Owner::Current) => current_uid(),
-            Ok(Owner::Other) | Err(Error::Denied) => FOREIGN_UID,
-            Ok(Owner::Unknown) | Err(Error::Gone | Error::Unavailable) => {
-                return Err(std::io::Error::other("the peer's owner cannot be read"));
-            }
-        };
-        Ok(PeerCred { uid, pid })
-    }
-
     /// Pendiente: the working folder of another process needs its PEB.
     pub fn process_cwd(_pid: u32) -> Option<PathBuf> {
         None
@@ -428,24 +382,7 @@ mod imp {
     }
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux", windows))]
-pub use imp::peer_cred;
 pub use imp::process_cwd;
-
-/// The uid of processes of another user on Windows, which has SIDs instead.
-pub const FOREIGN_UID: u32 = u32::MAX;
-
-/// Effective uid of this process. Windows: 0, the stand-in for "this user".
-pub fn current_uid() -> u32 {
-    #[cfg(unix)]
-    {
-        rustix::process::geteuid().as_raw()
-    }
-    #[cfg(not(unix))]
-    {
-        0
-    }
-}
 
 #[cfg(all(test, target_os = "macos"))]
 mod tests {

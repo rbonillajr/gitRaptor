@@ -7,6 +7,12 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[features]
+# The channel client library (TS-GRP-004, INF-CKP-001 Entrega 2b): connection, the L-06
+# checks before the handshake, and the on-demand start behind the `Launch` trait. Off for
+# whoever only consumes the contract (schemas, a future UI), so the OS crates stay out.
+client = ["rustix/fs", "rustix/net", "rustix/process", "dep:nix", "dep:gitraptor-winsys"]
+
 [dependencies]
 schemars = "1.2.2"
 serde = { version = "1.0.229", features = ["derive"] }
@@ -14,6 +20,21 @@ serde_json = "1.0.151"
 
 [target."cfg(unix)".dependencies]
 rustix = { version = "1.1.5", features = ["time"] }
+
+# Peer credentials of the channel socket (`LOCAL_PEERCRED`, `LOCAL_PEERTOKEN`): safe wrappers,
+# the workspace forbids `unsafe`. The same version as `crates/core`.
+[target."cfg(target_os = \"macos\")".dependencies]
+nix = { version = "=0.31.3", features = ["socket"], optional = true }
+
+# The channel's named pipe and its server's owner (the only crate allowed `unsafe`).
+[target."cfg(windows)".dependencies]
+gitraptor-winsys = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[target."cfg(unix)".dev-dependencies]
+rustix = { version = "1.1.5", features = ["process"] }
 
 [lints]
 workspace = true

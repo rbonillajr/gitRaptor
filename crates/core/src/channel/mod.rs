@@ -34,11 +34,8 @@ pub use server::{BoundChannel, Server};
 #[cfg(any(unix, windows))]
 pub(crate) use server::{ServeArgs, ServerCtx, file_id};
 
-/// Why the channel cannot run on this platform: there is no transport with
-/// access control for it (neither a Unix socket nor a Windows named pipe).
-/// Never a channel without access control (fail-closed).
-pub const TRANSPORT_UNSUPPORTED: &str =
-    "the local channel is not supported on this platform (no transport with access control)";
+/// Why the channel cannot run on this platform (fail-closed).
+pub use gitraptor_api::client::TRANSPORT_UNSUPPORTED;
 
 /// Limits of the channel (SEC-08, SEC-02).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
