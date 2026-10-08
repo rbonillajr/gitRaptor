@@ -72,7 +72,7 @@ pub use lock::{InstanceLock, LOCK_FILE, running_pid, wait_until_released};
 pub use log::{Field, LOG_FILE, Level, LogLimits, Logger};
 pub use mcp::McpMarkError;
 use shutdown::Control;
-pub(crate) use shutdown::{GuardReply, GuardRequest};
+pub(crate) use shutdown::{GuardLogReply, GuardReply, GuardRequest};
 pub(crate) use shutdown::{RegisterRequest, RepoAddRequest, WithdrawRequest};
 pub use shutdown::{
     RegistrationError, RepoCommandError, ShutdownHandle, StopCause, install_signal_handlers,
@@ -737,6 +737,15 @@ impl Daemon {
                     };
                     let _ = reply.send(answer);
                 }
+                Ok(Control::GuardRecord(entry)) => self.guard_record(*entry),
+                Ok(Control::GuardLog {
+                    common_dir,
+                    since_ms,
+                    limit,
+                    reply,
+                }) => {
+                    let _ = reply.send(self.guard_log(&common_dir, since_ms, limit));
+                }
                 Ok(Control::RawEvents {
                     repo_id,
                     worktree,
@@ -746,6 +755,7 @@ impl Daemon {
                 }
                 Err(RecvTimeoutError::Timeout) => {
                     self.persist_observed_until(now_ms());
+                    self.guard_log_maintenance(now_ms());
                     self.check_channel();
                     next_beat = Instant::now() + self.config.heartbeat;
                 }

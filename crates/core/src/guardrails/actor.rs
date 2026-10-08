@@ -29,3 +29,21 @@ pub fn resolve(
         Actor::Unattributed => None,
     }
 }
+
+/// [`resolve`] for the decision log (US-GRD-005): the agent, and whether the client runs under
+/// an operation of the executor, whose plan logs instead of the hook (ADR-GRD-006, Enmienda
+/// Cockpit).
+pub fn resolve_logged(
+    peer: AcceptedPeer,
+    checks: &Checks<'_>,
+    marks: Option<&ExecutorMarks>,
+) -> (Option<AgentKind>, bool) {
+    let Ok(resolution) = requester::resolve(peer, checks, marks) else {
+        return (None, false);
+    };
+    let agent = match resolution.who.actor {
+        Actor::Agent { kind, .. } => Some(kind),
+        Actor::Unattributed => None,
+    };
+    (agent, resolution.executor_operation.is_some())
+}

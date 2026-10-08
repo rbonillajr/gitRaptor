@@ -49,8 +49,8 @@ use super::requester::{self, Resolution};
 use super::validate;
 use super::{ServerCtx, file_id};
 use crate::daemon::{
-    CHANGE_LIST_BUDGET, Field, GuardReply, GuardRequest, RegisterRequest, RegistrationError,
-    RepoAddRequest, RepoCommandError, StopCause, WithdrawRequest, now_ms,
+    CHANGE_LIST_BUDGET, Field, GuardLogReply, GuardReply, GuardRequest, RegisterRequest,
+    RegistrationError, RepoAddRequest, RepoCommandError, StopCause, WithdrawRequest, now_ms,
 };
 use crate::executor::{
     Caller, ExecError, PrepareInput, RunEnv, RunInput, layer_for, oplog_channel,
@@ -771,8 +771,8 @@ impl Connection<'_> {
             methods::GUARD_EVALUATE => {
                 let result = request.params::<EvaluateParams>().map(|p| {
                     let caller = self.guard_caller(&p);
-                    let decision =
-                        crate::guardrails::evaluate::serve_as(&self.ctx.guard, &p, &caller);
+                    let (decision, policy) =
+                        crate::guardrails::evaluate::serve_logged(&self.ctx.guard, &p, &caller);
                     // One decision per operation (ADR-GRD-003 § 6): the second line of the
                     // same `git` reuses the one `commit-msg` gave.
                     if let (
@@ -786,8 +786,15 @@ impl Connection<'_> {
                     {
                         self.ctx.commit_decisions.record(git, facts);
                     }
+                    // Before the answer: the entry reaches the loop ahead of any later query,
+                    // and the actor is read while the hook client is alive (US-GRD-005, D3).
+                    self.log_decision(&p, &decision, &caller, policy);
                     decision
                 });
+                self.reply(&request.id, result);
+            }
+            methods::GUARD_LOG => {
+                let result = self.guard_log(request);
                 self.reply(&request.id, result);
             }
             methods::GUARD_PLAN
@@ -849,6 +856,54 @@ impl Connection<'_> {
             authorship,
             git,
             second_line_skip,
+        }
+    }
+
+    /// Hands the decision log entry of a decision to the loop, never waiting (US-GRD-005):
+    /// over the in-flight cap the occurrence is only counted (D4).
+    fn log_decision(
+        &self,
+        params: &EvaluateParams,
+        decision: &gitraptor_api::guard::Decision,
+        caller: &crate::guardrails::evaluate::Caller,
+        policy: Option<&'static str>,
+    ) {
+        use crate::guardrails::log;
+        if decision.applied_effect == gitraptor_api::guard::Effect::Allow
+            && decision.notices.is_empty()
+            && policy != Some("flexible")
+        {
+            return;
+        }
+        let checks = self.ctx.checks();
+        let (actor, under_executor) =
+            crate::guardrails::actor::resolve_logged(self.peer, &checks, Some(&self.ctx.marks));
+        let cwd = caller.cwd.clone().or_else(|| process_cwd(self.peer.pid));
+        let branch = cwd
+            .as_deref()
+            .and_then(|cwd| {
+                crate::guardrails::authorship::worktree_reader(cwd, Path::new(&params.common_dir))
+            })
+            .and_then(|reader| reader.head().ok())
+            .and_then(|head| head.branch);
+        let (at_ms, utc_offset_s) = crate::watch::wall_now();
+        let ctx = log::LogContext {
+            actor,
+            under_executor,
+            worktree: cwd.map(|p| p.to_string_lossy().into_owned()),
+            branch,
+            authorship_policy: policy.map(str::to_owned),
+            at_ms,
+            utc_offset_s,
+        };
+        let Some(entry) = log::entry(params, decision, &ctx) else {
+            return;
+        };
+        let sink = self.ctx.guard.log();
+        if !sink.try_reserve() {
+            sink.overflow(&entry);
+        } else if !self.ctx.control.guard_record(entry) {
+            sink.release();
         }
     }
 
@@ -915,6 +970,30 @@ impl Connection<'_> {
             }
         };
         value.map_err(|_| ErrorObject::new(code::INTERNAL, "encode"))
+    }
+
+    /// `guard.log` (US-GRD-005): read-only and not reserved; the loop answers, after
+    /// writing what the connections counted.
+    fn guard_log(
+        &self,
+        request: &Request,
+    ) -> Result<gitraptor_api::guard::GuardLogResult, ErrorObject> {
+        use gitraptor_api::guard::{GuardLogParams, MAX_LOG_PAGE};
+        let params: GuardLogParams = request.params()?;
+        let path = validate::client_path(&params.path).map_err(invalid)?;
+        let common_dir = crate::observe::locate(&path).map_err(rejected)?;
+        let limit = params.limit.unwrap_or(50).clamp(1, MAX_LOG_PAGE);
+        match self
+            .ctx
+            .control
+            .guard_log(common_dir, params.since_ms, limit)
+        {
+            GuardLogReply::Log(log) => Ok(*log),
+            GuardLogReply::NotObserved => Err(rejected(RepoRejection::NotObserved)),
+            GuardLogReply::Failed => {
+                Err(ErrorObject::new(code::INTERNAL, "guardrails unavailable"))
+            }
+        }
     }
 
     /// `repo.retire` (US-GRP-001): stops observing; the data is kept.

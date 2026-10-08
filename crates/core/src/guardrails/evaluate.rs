@@ -238,14 +238,24 @@ pub struct Caller {
 
 /// [`serve`] for a caller the channel resolved.
 pub fn serve_as(registry: &GuardRegistry, params: &EvaluateParams, caller: &Caller) -> Decision {
+    serve_logged(registry, params, caller).0
+}
+
+/// [`serve_as`], and the authorship policy applied to a commit (`flexible`, …) when one was:
+/// the decision log records an agent's `flexible` commit (US-GRD-005, BR-AUTH-005).
+pub fn serve_logged(
+    registry: &GuardRegistry,
+    params: &EvaluateParams,
+    caller: &Caller,
+) -> (Decision, Option<&'static str>) {
     if !valid(params) {
-        return system_deny(Rule::InputRejected);
+        return (system_deny(Rule::InputRejected), None);
     }
     let entry = registry
         .get(&params.repo_id)
         .filter(|e| e.common_dir == params.common_dir);
     let Some(reader) = open(Path::new(&params.common_dir)) else {
-        return system_deny(Rule::InternalError);
+        return (system_deny(Rule::InternalError), None);
     };
     let common = Path::new(&params.common_dir);
     let (bases, confirmed) = match entry {
@@ -273,6 +283,8 @@ pub fn serve_as(registry: &GuardRegistry, params: &EvaluateParams, caller: &Call
         }
         _ => CommitContext::default(),
     };
+    let applied =
+        (commit.actor.is_some() && commit.facts.is_some()).then(|| commit.authorship.policy.mode());
     let mut out = decision(evaluate_commit(
         &reader,
         common,
@@ -283,5 +295,5 @@ pub fn serve_as(registry: &GuardRegistry, params: &EvaluateParams, caller: &Call
     if !caller.authorship {
         out.notices.clear();
     }
-    out
+    (out, applied)
 }

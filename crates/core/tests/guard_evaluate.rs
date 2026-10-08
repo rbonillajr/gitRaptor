@@ -249,11 +249,28 @@ mod commit_authorship {
             floor: ConfirmedFloor::Blob(blob),
         };
         let d = serve_as(
-            &registry(&common, Some(confirmed)),
+            &registry(&common, Some(confirmed.clone())),
             &commit_params(&common, vec![]),
             &agent(repo.path()),
         );
         assert_eq!(d.applied_effect, Effect::Allow, "{d:?}");
+
+        // US-GRD-005: the agent's `flexible` commit is still recorded, as a notice.
+        let params = commit_params(&common, vec![]);
+        let (d, policy) = gitraptor_core::guardrails::evaluate::serve_logged(
+            &registry(&common, Some(confirmed)),
+            &params,
+            &agent(repo.path()),
+        );
+        assert_eq!(policy, Some("flexible"));
+        let ctx = gitraptor_core::guardrails::log::LogContext {
+            actor: Some(AgentKind::ClaudeCode),
+            authorship_policy: policy.map(str::to_owned),
+            ..Default::default()
+        };
+        let e = gitraptor_core::guardrails::log::entry(&params, &d, &ctx).expect("recorded");
+        assert_eq!(e.kind, gitraptor_api::guard::LogKind::Notice);
+        assert_eq!(e.authorship.unwrap().policy.as_deref(), Some("flexible"));
 
         // Unconfirmed: `agents-commit` rules.
         let d = serve_as(
