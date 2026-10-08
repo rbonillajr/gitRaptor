@@ -46,7 +46,7 @@ pub(crate) struct Cmd {
 
 impl Cmd {
     pub(crate) fn run(self, _: &Global) -> ExitCode {
-        let cwd = std::env::current_dir().and_then(std::fs::canonicalize).ok();
+        let cwd = std::env::current_dir().and_then(gitraptor_cli::paths::canonicalize).ok();
         let Some(anchor) = cwd.as_deref().and_then(undo::worktree_root) else {
             eprintln!("{CMD}: {}", t("timeline.not-in-worktree", &[]));
             return ExitCode::FAILURE;

@@ -128,23 +128,9 @@ pub(crate) fn confirm(question: &str) -> bool {
 /// that repo (US-GRP-001).
 pub(crate) fn command_path(path: Option<PathBuf>) -> PathBuf {
     let path = path.unwrap_or_else(|| PathBuf::from("."));
-    std::fs::canonicalize(&path)
-        .map(without_verbatim_drive)
+    gitraptor_cli::paths::canonicalize(&path)
         .or_else(|_| std::path::absolute(&path))
         .unwrap_or(path)
-}
-
-/// `canonicalize` on Windows answers `\\?\C:\…`, which the engine refuses as
-/// a device path (`channel::validate::client_path`): a drive path drops the
-/// prefix. Anything else (`\\?\UNC\…`, Unix paths) is kept as it is.
-fn without_verbatim_drive(path: PathBuf) -> PathBuf {
-    let plain = path.to_str().and_then(|text| {
-        let rest = text.strip_prefix(r"\\?\")?;
-        let b = rest.as_bytes();
-        (b.len() >= 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && b[2] == b'\\')
-            .then(|| PathBuf::from(rest))
-    });
-    plain.unwrap_or(path)
 }
 
 pub(crate) fn shown(path: &Path) -> String {
@@ -207,17 +193,6 @@ mod tests {
             }),
         );
         assert_ne!(error_text(err), "prior.no-space");
-    }
-
-    #[test]
-    fn a_verbatim_drive_path_loses_its_prefix() {
-        let plain = |p: &str| without_verbatim_drive(PathBuf::from(p));
-        assert_eq!(plain(r"\\?\C:\src\repo"), PathBuf::from(r"C:\src\repo"));
-        assert_eq!(
-            plain(r"\\?\UNC\host\share"),
-            PathBuf::from(r"\\?\UNC\host\share")
-        );
-        assert_eq!(plain("/Users/u/repo"), PathBuf::from("/Users/u/repo"));
     }
 
     /// C10: every console issue has its own message (en/es), and the generic

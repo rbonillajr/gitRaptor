@@ -28,7 +28,9 @@ pub fn worktree_root(dir: &Path) -> Option<PathBuf> {
 }
 
 pub fn run(json_out: bool) -> ExitCode {
-    let cwd = std::env::current_dir().and_then(std::fs::canonicalize).ok();
+    let cwd = std::env::current_dir()
+        .and_then(gitraptor_cli::paths::canonicalize)
+        .ok();
     let Some(worktree) = cwd.as_deref().and_then(worktree_root) else {
         eprintln!("{CMD}: {}", t("undo.not-in-worktree", &[]));
         return ExitCode::FAILURE;

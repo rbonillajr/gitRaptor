@@ -9,6 +9,7 @@
 
 pub mod client;
 pub mod model;
+pub mod paths;
 pub mod present;
 pub mod queue;
 pub mod tui;
