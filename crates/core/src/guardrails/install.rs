@@ -175,7 +175,25 @@ fn constants(ctx: &GuardCtx<'_>, repo_id: &str, common: &Path, prior: &str) -> O
         instance: ctx.instance.to_owned(),
         state: ctx.dirs.state.clone(),
         prior: prior.to_owned(),
+        git_sh: git_sh(&ctx.git.path),
     })
+}
+
+/// Windows: the `sh` of the Git for Windows at `git` (`<root>\usr\bin\sh.exe`, or `bin` for an
+/// older layout), found from the validated `git.exe` and nowhere else. It is a constant of the
+/// install so the dispatcher trusts the journal's hash, not its environment (ADR-GRD-001 § 2).
+fn git_sh(git: &Path) -> String {
+    if !cfg!(windows) {
+        return String::new();
+    }
+    git.ancestors()
+        .skip(1)
+        .take(3)
+        .flat_map(|root| ["usr/bin/sh.exe", "bin/sh.exe"].map(|rel| root.join(rel)))
+        .find(|sh| sh.is_file())
+        .map(gitraptor_policy::guard::fastpath::simplified)
+        .map(|sh| sh.to_string_lossy().into_owned())
+        .unwrap_or_default()
 }
 
 fn level_text(level: HooksPathLevel) -> &'static str {

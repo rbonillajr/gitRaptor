@@ -42,6 +42,10 @@ pub struct Constants {
     pub state: PathBuf,
     /// Previous `core.hooksPath`, as is; empty when there was none (US-GRD-002 chains it).
     pub prior: String,
+    /// Windows: the `sh` of the Git for Windows the install validated, the one that runs a prior
+    /// hook that is a script (the dispatcher never looks one up in the environment or `PATH`).
+    /// Empty elsewhere and when there is none; then the line is not written.
+    pub git_sh: String,
 }
 
 /// A constant that cannot be written as such.
@@ -82,6 +86,9 @@ impl Constants {
         line("instance", self.instance.clone())?;
         line("state", path_text("state", &self.state)?)?;
         line("prior", self.prior.clone())?;
+        if !self.git_sh.is_empty() {
+            line("git_sh", self.git_sh.clone())?;
+        }
         Ok(out)
     }
 
@@ -103,6 +110,9 @@ impl Constants {
             instance: (*get.get("instance")?).to_owned(),
             state: PathBuf::from(get.get("state")?),
             prior: (*get.get("prior")?).to_owned(),
+            git_sh: get
+                .get("git_sh")
+                .map_or_else(String::new, |v| (*v).to_owned()),
         })
     }
 }
@@ -121,6 +131,7 @@ mod tests {
             instance: "i-1".into(),
             state: "/s".into(),
             prior: String::new(),
+            git_sh: String::new(),
         }
     }
 
@@ -129,6 +140,19 @@ mod tests {
         // A `$(…)` is a literal constant: nothing interprets it (ADR-GRD-001 Validación 7).
         let c = sample();
         let text = c.render().unwrap();
+        assert_eq!(Constants::parse(&text), Some(c));
+    }
+
+    #[test]
+    fn the_git_sh_line_exists_only_when_there_is_one() {
+        let plain = sample().render().unwrap();
+        assert!(!plain.contains("git_sh"));
+        let c = Constants {
+            git_sh: r"C:\Program Files\Git\usr\bin\sh.exe".into(),
+            ..sample()
+        };
+        let text = c.render().unwrap();
+        assert!(text.ends_with("git_sh\tC:\\Program Files\\Git\\usr\\bin\\sh.exe\n"));
         assert_eq!(Constants::parse(&text), Some(c));
     }
 

@@ -16,7 +16,7 @@ use std::process::{Command, Output};
 
 use gitraptor_core::guardrails::GuardRegistry;
 use gitraptor_core::guardrails::install::{self, GuardCtx};
-use gitraptor_core::profile::{Profile, ProfileDirs};
+use gitraptor_core::profile::{Profile, ProfileDirs, RepoStore};
 use gitraptor_git::Invoker;
 use gitraptor_git::resolve::{self, Resolution, ResolveConfig};
 use gitraptor_winsys::acl;
@@ -96,8 +96,8 @@ impl Machine {
         }
     }
 
-    /// Observes the repo and installs the hooks as the daemon does; returns the common dir.
-    fn install(&self) -> PathBuf {
+    /// Runs `f` as the daemon would: the repo observed, its store open and the context built.
+    fn with_guard<T>(&self, f: impl FnOnce(&GuardCtx<'_>, &str, &Path, &mut RepoStore) -> T) -> T {
         let (mut profile, _) = Profile::open(ProfileDirs::under_root(&self.profile)).unwrap();
         let (entry, _) = profile.add_repo(&self.repo.join(".git"), None, 1).unwrap();
         let (mut store, _) = profile.open_store(&entry.repo_id).unwrap();
@@ -121,19 +121,18 @@ impl Machine {
             instance: &instance,
             raptor: Path::new(RAPTOR),
         };
-        let common = entry.canonical_path.clone();
-        let plan = install::plan(&ctx, &entry.repo_id, &common, &store);
-        assert!(plan.blockers.is_empty(), "{:?}", plan.blockers);
-        install::install(
-            &ctx,
-            &entry.repo_id,
-            &common,
-            &mut store,
-            &GuardRegistry::default(),
-            2,
-        )
-        .unwrap_or_else(|e| panic!("install: {e:?}"));
-        common
+        f(&ctx, &entry.repo_id, &entry.canonical_path, &mut store)
+    }
+
+    /// Installs the hooks as the daemon does; returns the common dir.
+    fn install(&self) -> PathBuf {
+        self.with_guard(|ctx, repo_id, common, store| {
+            let plan = install::plan(ctx, repo_id, common, store);
+            assert!(plan.blockers.is_empty(), "{:?}", plan.blockers);
+            install::install(ctx, repo_id, common, store, &GuardRegistry::default(), 2)
+                .unwrap_or_else(|e| panic!("install: {e:?}"));
+            common.to_path_buf()
+        })
     }
 }
 
@@ -225,4 +224,22 @@ fn a_prior_script_hook_is_chained_through_git_for_windows_sh() {
     let forced = git(&m.repo, &["push", "--force", "origin", "feat-x"]);
     assert!(!forced.status.success());
     assert!(stderr(&forced).contains("GitRaptor"), "{}", stderr(&forced));
+}
+
+/// The way back (US-GRD-003): the key and the folder go, the repo behaves as before the install.
+#[test]
+fn uninstall_leaves_the_repo_as_it_was() {
+    use gitraptor_core::guardrails::uninstall;
+    let m = Machine::new();
+    let common = m.install();
+    m.with_guard(|ctx, repo_id, common, store| {
+        // The window of D5 is imposed by the daemon; the layer under it is what is checked here.
+        uninstall::uninstall(ctx, repo_id, common, store, &GuardRegistry::default())
+            .unwrap_or_else(|e| panic!("uninstall: {e:?}"));
+    });
+    assert!(!common.join("gitraptor").exists());
+    let key = git(&m.repo, &["config", "--local", "core.hooksPath"]);
+    assert!(String::from_utf8_lossy(&key.stdout).trim().is_empty());
+    git_ok(&m.repo, &["commit", "-q", "--allow-empty", "-m", "three"]);
+    git_ok(&m.repo, &["push", "-q", "origin", "feat-x"]);
 }

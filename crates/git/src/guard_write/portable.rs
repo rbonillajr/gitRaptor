@@ -122,6 +122,10 @@ pub(super) fn replace_files(common: &Path, expected: FileId, files: &[NewFile<'_
     if id_of(&root)? != expected {
         return Err(GuardWriteError::Changed("the guardrails folder"));
     }
+    // An upgrade writes new dispatchers into the folder: its DACL is still the private one.
+    #[cfg(windows)]
+    gitraptor_winsys::acl::verify_private_dir(&root)
+        .map_err(|_| GuardWriteError::Changed("the DACL of the guardrails folder"))?;
     for f in files {
         let path = root.join(f.path);
         if let Some(parent) = path.parent()
