@@ -355,7 +355,7 @@ fn en(text: Text<'_>) -> String {
         Text::KeyLater => "later".into(),
         Text::DiscoveredTitle => "Discovered repo".into(),
         Text::DiscoveredWhy(root) => format!("In your code folder {root}"),
-        Text::DiscoveredQuestion(name) => format!("Observe {name}? [y/N]"),
+        Text::DiscoveredQuestion(name) => format!("Observe {name}?"),
         Text::Notice(Notice::DiscoveryFailed(_)) => {
             "the discovered repo was not handled: see `raptor repo discovered`".into()
         }
@@ -542,7 +542,7 @@ fn es(text: Text<'_>) -> String {
         Text::KeyLater => "luego".into(),
         Text::DiscoveredTitle => "Repo descubierto".into(),
         Text::DiscoveredWhy(root) => format!("En tu carpeta de código {root}"),
-        Text::DiscoveredQuestion(name) => format!("¿Observar {name}? [s/N]"),
+        Text::DiscoveredQuestion(name) => format!("¿Observar {name}?"),
         Text::Notice(Notice::DiscoveryFailed(_)) => {
             "el repo descubierto no se pudo atender: mira `raptor repo discovered`".into()
         }

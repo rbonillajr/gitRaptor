@@ -1565,14 +1565,14 @@ mod tests {
                 Lang::En,
                 "Discovered repo",
                 "In your code folder /code",
-                "Observe notes? [y/N]",
+                "Observe notes?",
                 ["y observe", "n no", "Esc later"],
             ),
             (
                 Lang::Es,
                 "Repo descubierto",
                 "En tu carpeta de código /code",
-                "¿Observar notes? [s/N]",
+                "¿Observar notes?",
                 ["s observar", "n no", "Esc luego"],
             ),
         ] {

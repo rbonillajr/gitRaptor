@@ -23,7 +23,7 @@ expression: snap
 ┃                                                                              ┃
 ┃ notes  /code/notes                                                           ┃
 ┃                                                                              ┃
-┃ Observe notes? [y/N]                                                         ┃
+┃ Observe notes?                                                               ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
  r retry  y observe  n no  Esc later                                     q quit
 === styles ===
@@ -109,7 +109,7 @@ expression: snap
 20:0-0 fg=#ffe066
 20:79-79 fg=#ffe066
 21:0-0 fg=#ffe066
-21:2-21 BOLD
+21:2-15 BOLD
 21:79-79 fg=#ffe066
 22:0-79 fg=#ffe066
 23:1-1 fg=#2dc2ad BOLD
