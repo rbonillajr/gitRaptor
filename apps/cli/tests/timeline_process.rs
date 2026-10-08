@@ -522,3 +522,23 @@ fn agent_unattributed_filters_what_nobody_attributed() {
     );
     m.stop();
 }
+
+/// Privacy: a path with ANSI and line breaks is printed sanitized, so it
+/// cannot rewrite the screen or fake a line of the timeline.
+#[test]
+fn paths_with_control_characters_are_printed_sanitized() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let m = Machine::observed();
+    let name = "evil\u{1b}[31mred\nforged line.txt";
+    let event = m.commit(name, "hostile path");
+
+    let shown = m.timeline("en_US.UTF-8", &[]);
+    assert!(!shown.contains('\u{1b}'), "{shown:?}");
+    assert!(!shown.contains("red\nforged"), "{shown:?}");
+    assert!(shown.contains('\u{FFFD}'), "{shown:?}");
+    // The wire keeps the raw text; only the screen is sanitized.
+    let timeline = m.timeline_json(&[]);
+    let entry = entry_of(&timeline, event["seq"].as_i64().unwrap());
+    assert_eq!(entry["files"]["paths"][0]["untrusted"], name, "{entry:#}");
+    m.stop();
+}
