@@ -342,3 +342,94 @@ fn the_slow_reconcile_finds_an_edit_the_sentinel_missed() {
     // At 0.1 % of a core, the same read would set the interval.
     assert!(w.observer.reconcile_interval() < Duration::from_secs(1));
 }
+
+/// N1: a worktree in degraded mode has no sentinel, so its repo never
+/// sleeps.
+#[test]
+fn a_degraded_worktree_keeps_the_repo_active() {
+    let f = demo();
+    let (tx, _rx) = channel();
+    let tx = Arc::new(Mutex::new(tx));
+    let observer = Observer::start(
+        WatchConfig::default(),
+        Arc::new(move |b| {
+            let _ = tx.lock().unwrap().send(b);
+        }),
+    );
+    observer.simulate_watch_failure(true);
+    let common = observe::locate(&f.repo).unwrap();
+    let read = reconcile(&common, &observe::base_branch(None)).unwrap();
+    observer.watch_repo("r", &common, &read);
+    assert_eq!(observer.sleep_repo("r"), Err(SleepRefused::Degraded));
+    assert_eq!(observer.tier("r"), Some(Tier::Active));
+}
+
+/// N3: the metadata sweep never launches `git` (ADR-GRP-009). The test runs
+/// itself again with a `git` shim first in the `PATH` that logs every call
+/// (`unsafe` is forbidden, so `set_var` is out), as INF-GRP-001 does: 100
+/// sweep cycles add no line to its log.
+#[cfg(unix)]
+#[test]
+fn the_sweep_spawns_no_git() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let real = git_from_path();
+    let log = dir.path().join("git.log");
+    let shim = dir.path().join("git");
+    std::fs::write(
+        &shim,
+        format!(
+            "#!/bin/sh\necho \"$@\" >> '{}'\nexec '{}' \"$@\"\n",
+            log.display(),
+            real.display()
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&shim, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let path = format!(
+        "{}:{}",
+        dir.path().display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    let out = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "sweep_cycles_under_a_git_shim",
+            "--ignored",
+            "--test-threads=1",
+        ])
+        .env("PATH", path)
+        .env("RAPTOR_TEST_GIT_LOG", &log)
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success() && stdout.contains("1 passed"),
+        "{stdout}{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+/// The child of [`the_sweep_spawns_no_git`]: the fixture's own `git` calls
+/// are logged before the count starts.
+#[test]
+#[ignore = "run by the_sweep_spawns_no_git under a git shim"]
+fn sweep_cycles_under_a_git_shim() {
+    let log = PathBuf::from(std::env::var_os("RAPTOR_TEST_GIT_LOG").expect("run by the parent"));
+    let f = demo();
+    let w = watch(&f);
+    w.sleep();
+    let lines = || {
+        std::fs::read_to_string(&log)
+            .unwrap_or_default()
+            .lines()
+            .count()
+    };
+    let before = lines();
+    assert!(before > 0, "the shim is not the git in the PATH");
+    for _ in 0..100 {
+        w.observer.sweep_now();
+    }
+    assert_eq!(w.observer.tier("r"), Some(Tier::Dormant));
+    assert_eq!(lines(), before, "the sweep launched git");
+}
