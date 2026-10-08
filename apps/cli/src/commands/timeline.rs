@@ -176,6 +176,10 @@ fn entry_text(out: &mut String, entry: &TimelineEntry, detection_available: bool
             ],
         )
     );
+    // The id `raptor restore` takes: only an entry that saved a state has one.
+    if let Some(id) = &entry.protection.snapshot_id {
+        let _ = writeln!(out, "    {}", t("timeline.point", &[("id", &sanitize(id))]));
+    }
     if let EntryOrigin::Operation { acted_on, .. } = &entry.origin
         && !acted_on.is_empty()
     {
@@ -389,6 +393,7 @@ mod tests {
     fn every_key_has_both_languages() {
         for key in [
             "timeline.line",
+            "timeline.point",
             "timeline.empty",
             "timeline.no-match",
             "timeline.incomplete",
@@ -560,6 +565,19 @@ mod tests {
             let shown = render(&result(vec![e], vec![]), false);
             assert!(shown.contains(&format!("[{}]", t(key, &[]))), "{shown}");
         }
+    }
+
+    #[test]
+    fn an_entry_with_a_saved_state_shows_the_id_restore_takes() {
+        let mut e = entry(Actor::Unattributed, Attribution::Current, files(&[], 0));
+        let none = render(&result(vec![e.clone()], vec![]), false);
+        assert!(!none.contains("raptor restore"), "{none}");
+        e.protection.snapshot_id = Some("0a1b2c3d-0000-4000-8000-000000000000".into());
+        let shown = render(&result(vec![e], vec![]), false);
+        assert!(
+            shown.contains("raptor restore 0a1b2c3d-0000-4000-8000-000000000000"),
+            "{shown}"
+        );
     }
 
     #[test]
