@@ -71,6 +71,14 @@ pub fn has_key(key: &str) -> bool {
     parse(EN).contains_key(key) && parse(ES).contains_key(key)
 }
 
+/// The text of `key` in one language, whatever the process language is (tests of the callers
+/// that must check both).
+#[cfg(test)]
+pub fn text_in(spanish: bool, key: &str) -> Option<&'static str> {
+    let catalog = parse(if spanish { ES } else { EN });
+    catalog.get(key).copied()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

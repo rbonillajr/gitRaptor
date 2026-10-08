@@ -97,6 +97,9 @@ impl Cmd {
 
 fn failure_text(err: ClientError, anchor: &std::path::Path) -> String {
     match err {
+        // An engine older than this raptor: it declares the method without serving it, or refuses
+        // a field it does not know. The remedy is the same as for a method it does not offer.
+        ClientError::Rpc(err) if is_old_engine(&err) => t("timeline.restart-engine", &[]),
         ClientError::Rpc(err) if err.code == code::SCOPE_REFUSED => {
             t("timeline.not-observed", &[("worktree", &shown(anchor))])
         }
@@ -105,6 +108,11 @@ fn failure_text(err: ClientError, anchor: &std::path::Path) -> String {
         }
         other => error_text(other),
     }
+}
+
+fn is_old_engine(err: &gitraptor_api::rpc::ErrorObject) -> bool {
+    err.code == code::NOT_IMPLEMENTED
+        || (err.code == code::INVALID_PARAMS && err.message.contains("unknown field"))
 }
 
 /// The text output: one block per entry, oldest first, then the notices.
@@ -463,6 +471,53 @@ mod tests {
         let shown = render(&result(vec![e], vec![]), false);
         assert!(!shown.contains('\x1b'), "{shown:?}");
         assert!(!shown.contains("red\nb"), "{shown:?}");
+    }
+
+    #[test]
+    fn an_old_engine_gets_the_restart_hint() {
+        use gitraptor_api::rpc::ErrorObject;
+        let hint = t("timeline.restart-engine", &[]);
+        let anchor = std::path::Path::new("/repo");
+        let not_implemented = ClientError::Rpc(ErrorObject::new(code::NOT_IMPLEMENTED, "x"));
+        assert_eq!(failure_text(not_implemented, anchor), hint);
+        let unknown = ClientError::Rpc(ErrorObject::new(
+            code::INVALID_PARAMS,
+            "invalid params: unknown field `only_worktree`",
+        ));
+        assert_eq!(failure_text(unknown, anchor), hint);
+        // A bad value on a current engine is still the filters' message.
+        let bad = ClientError::Rpc(ErrorObject::new(code::INVALID_PARAMS, "since: invalid"));
+        assert_eq!(
+            failure_text(bad, anchor),
+            t("timeline.invalid-params", &[])
+        );
+    }
+
+    /// The three levels of protection read the same in both languages: a prior snapshot (of
+    /// GitRaptor's own operation or a hook), a capture by observation, and none.
+    #[test]
+    fn the_three_protection_levels_read_right_in_es_and_en() {
+        use crate::i18n::text_in;
+        let want = [
+            (ProtectionLevel::GuaranteedPrior, "prior snapshot", "snapshot previo"),
+            (ProtectionLevel::HookPrior, "prior snapshot", "snapshot previo"),
+            (
+                ProtectionLevel::Observation,
+                "captured by observation",
+                "capturado por observación",
+            ),
+            (ProtectionLevel::None, "unprotected", "sin protección"),
+        ];
+        for (level, en, es) in want {
+            let key = protection_key(level);
+            assert_eq!(text_in(false, key), Some(en), "{level:?}");
+            assert_eq!(text_in(true, key), Some(es), "{level:?}");
+            // And it is what the entry's line carries, in the language of the process.
+            let mut e = entry(Actor::Unattributed, Attribution::Current, files(&[], 0));
+            e.protection.level = level;
+            let shown = render(&result(vec![e], vec![]), false);
+            assert!(shown.contains(&format!("[{}]", t(key, &[]))), "{shown}");
+        }
     }
 
     #[test]

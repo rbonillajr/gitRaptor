@@ -266,7 +266,12 @@ impl Machine {
     /// Waits until the history has the commit at `HEAD` of the worktree,
     /// with an actor that `ok` accepts; the event.
     fn event_when(&self, ok: impl Fn(&Value) -> bool) -> Value {
-        let head = self.f.git_in(&self.worktree, &["rev-parse", "HEAD"]);
+        self.event_in(&self.worktree, ok)
+    }
+
+    /// `event_when` for the `HEAD` of `dir`, any worktree of the repo.
+    fn event_in(&self, dir: &Path, ok: impl Fn(&Value) -> bool) -> Value {
+        let head = self.f.git_in(dir, &["rev-parse", "HEAD"]);
         let head = head.trim();
         let start = Instant::now();
         loop {
@@ -381,6 +386,9 @@ fn entry_of(timeline: &Value, seq: i64) -> &Value {
         .find(|e| e["id"] == id)
         .unwrap_or_else(|| panic!("no entry {id}: {timeline:#}"))
 }
+
+const SENTINEL_MESSAGE: &str = "SENTINEL-MESSAGE-5d2e8a40";
+const SENTINEL_CONTENT: &str = "SENTINEL-CONTENT-b71c93f6";
 
 // ----- Scenarios ----------------------------------------------------------------
 
@@ -540,5 +548,88 @@ fn paths_with_control_characters_are_printed_sanitized() {
     let timeline = m.timeline_json(&[]);
     let entry = entry_of(&timeline, event["seq"].as_i64().unwrap());
     assert_eq!(entry["files"]["paths"][0]["untrusted"], name, "{entry:#}");
+    m.stop();
+}
+
+/// Privacy: neither a commit message nor a file's content reaches the CLI, in text or in
+/// `--json`; the path does (that is what the timeline is for).
+#[test]
+fn no_commit_message_or_content_reaches_the_cli_output() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let m = Machine::observed();
+    std::fs::write(
+        m.worktree.join("private.txt"),
+        format!("{SENTINEL_CONTENT}\n"),
+    )
+    .unwrap();
+    m.f.git_in(&m.worktree, &["add", "private.txt"]);
+    m.f.git_in(&m.worktree, &["commit", "-q", "-m", SENTINEL_MESSAGE]);
+    let event = m.event_when(|_| true);
+
+    let raw = m.timeline("en_US.UTF-8", &["--json"]);
+    let shown_en = m.timeline("en_US.UTF-8", &[]);
+    let shown_es = m.timeline("es_ES.UTF-8", &[]);
+    for output in [&raw, &shown_en, &shown_es] {
+        assert!(!output.contains(SENTINEL_MESSAGE), "{output}");
+        assert!(!output.contains(SENTINEL_CONTENT), "{output}");
+        // Not vacuous: the commit is in it, with its path.
+        assert!(output.contains("private.txt"), "{output}");
+    }
+    let timeline = m.timeline_json(&[]);
+    let entry = entry_of(&timeline, event["seq"].as_i64().unwrap());
+    assert_eq!(
+        entry["files"]["paths"][0]["untrusted"], "private.txt",
+        "{entry:#}"
+    );
+    m.stop();
+}
+
+/// `--worktree <path>` keeps only the entries of that worktree.
+#[test]
+fn worktree_keeps_only_the_entries_of_that_worktree() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let m = Machine::observed();
+    let in_branch = m.commit("branch.txt", "in the branch worktree");
+    // A commit in the main worktree of the same repo.
+    std::fs::write(m.f.repo.join("main-only.txt"), "main\n").unwrap();
+    m.f.git(&["add", "main-only.txt"]);
+    m.f.git(&["commit", "-q", "-m", "in main"]);
+    let in_main = m.event_in(&m.f.repo, |e| e["details"]["new_commit"].is_string());
+    let main_root = m.f.repo.canonicalize().unwrap();
+    let branch_root = m.worktree.clone();
+
+    let both = m.timeline_json(&[]);
+    entry_of(&both, in_branch["seq"].as_i64().unwrap());
+    entry_of(&both, in_main["seq"].as_i64().unwrap());
+
+    let only_main = m.timeline_json(&["--worktree", main_root.to_str().unwrap()]);
+    entry_of(&only_main, in_main["seq"].as_i64().unwrap());
+    let branch_id = format!("event:{}", in_branch["seq"]);
+    assert!(
+        only_main["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|e| e["id"] != branch_id.as_str()),
+        "{only_main:#}"
+    );
+    for e in only_main["entries"].as_array().unwrap() {
+        assert_eq!(
+            e["worktrees"][0]["untrusted"],
+            main_root.to_str().unwrap(),
+            "{e:#}"
+        );
+    }
+    let only_branch = m.timeline_json(&["--worktree", branch_root.to_str().unwrap()]);
+    entry_of(&only_branch, in_branch["seq"].as_i64().unwrap());
+    let main_id = format!("event:{}", in_main["seq"]);
+    assert!(
+        only_branch["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|e| e["id"] != main_id.as_str()),
+        "{only_branch:#}"
+    );
     m.stop();
 }
