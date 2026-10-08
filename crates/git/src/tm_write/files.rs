@@ -272,6 +272,8 @@ mod unix {
         /// `(device, inode)` of what is at `name` in `dir`, never following a link.
         fn identity(dir: &OwnedFd, name: &[u8]) -> Result<Option<(u64, u64)>> {
             match rustix::fs::statat(dir, name, AtFlags::SYMLINK_NOFOLLOW) {
+                // `st_dev` is `i32` on macOS and `u64` on Linux: the cast is needed on one of them.
+                #[allow(clippy::unnecessary_cast)]
                 Ok(s) => Ok(Some((s.st_dev as u64, s.st_ino))),
                 Err(Errno::NOENT) => Ok(None),
                 Err(e) => Err(io(e)),
