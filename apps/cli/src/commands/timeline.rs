@@ -197,6 +197,7 @@ fn worktree_name(root: &str) -> String {
 
 fn what(origin: &EntryOrigin) -> String {
     match origin {
+        EntryOrigin::ManualSnapshot { .. } => todo!("US-MCP-008"),
         EntryOrigin::Operation {
             kind,
             subtype,
@@ -276,6 +277,7 @@ fn protection_key(level: ProtectionLevel) -> &'static str {
     match level {
         ProtectionLevel::GuaranteedPrior | ProtectionLevel::HookPrior => "timeline.level.prior",
         ProtectionLevel::Observation => "timeline.level.observation",
+        ProtectionLevel::Manual => todo!("US-MCP-008"),
         ProtectionLevel::None => "timeline.level.none",
     }
 }

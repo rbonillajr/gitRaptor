@@ -15,8 +15,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::Untrusted;
 use crate::timemachine::{Invalid, RequesterView, Surface};
+use crate::{Untrusted, UntrustedName};
 
 /// Version of the catalog. Adding an operation or an optional parameter
 /// bumps it by a minor step (here: the next integer kept compatible by
@@ -39,7 +39,12 @@ pub const MAX_COMMIT_PATHS: usize = 256;
 /// Longest literal path of a commit, in bytes.
 pub const MAX_PATH_BYTES: usize = 4096;
 /// Longest snapshot label, in characters.
-pub const MAX_LABEL_CHARS: usize = 80;
+pub const MAX_LABEL_CHARS: usize = 64;
+/// Longest snapshot label, in bytes: checked before the characters are walked, so
+/// a huge string never costs a pass over it.
+pub const MAX_LABEL_BYTES: usize = 256;
+/// Most combining marks in a row inside a snapshot label.
+const MAX_LABEL_MARK_RUN: usize = 4;
 /// Longest new branch name, in bytes.
 pub const MAX_BRANCH_BYTES: usize = 200;
 /// Most warning codes in a plan or in a run request.
@@ -144,7 +149,9 @@ const fn op(
         governed,
         cockpit,
         mcp,
-        protected: !matches!(id, OperationId::OpenInEditor),
+        // The editor and the manual snapshot run outside the protected operation: the
+        // snapshot is the recovery point itself, so it has no prior of its own.
+        protected: !matches!(id, OperationId::OpenInEditor | OperationId::Snapshot),
         owner,
     }
 }
@@ -357,16 +364,7 @@ impl OperationArgs {
                 }
                 Ok(())
             }
-            Self::Snapshot(a) => {
-                let chars = a.label.chars().count();
-                if chars == 0 || chars > MAX_LABEL_CHARS {
-                    return Err(Invalid::new("label", "must be 1 to 80 characters"));
-                }
-                if a.label.chars().any(is_forbidden_char) {
-                    return Err(Invalid::new("label", "contains control characters"));
-                }
-                Ok(())
-            }
+            Self::Snapshot(a) => check_snapshot_label(&a.label),
             Self::OpenInEditor(a) => check_absolute("path", &a.path),
             Self::MergeIntoBase
             | Self::RebaseOntoBase
@@ -404,10 +402,122 @@ fn message_sum(text: &str) -> String {
     format!("{h:016x}")
 }
 
-/// 1..=64 chars, none of `is_forbidden_char`. Shared by raptor-mcp and the daemon.
+/// Validates a manual snapshot label: 1 to [`MAX_LABEL_CHARS`] characters, none of
+/// [`is_forbidden_char`] nor of the hidden or odd characters of [`is_hidden_label_char`],
+/// no whitespace at either end, and no combining mark first or more than four in a row.
+/// Shared by `raptor-mcp` and the daemon; the daemon's check is the one that decides.
+///
+/// # Errors
+/// An [`Invalid`] naming the `label` field. The byte length is checked first, so an
+/// oversized string is refused without walking its characters.
 pub fn check_snapshot_label(label: &str) -> Result<(), Invalid> {
-    let _ = label;
-    todo!("US-MCP-008")
+    let bad = |why| Invalid::new("label", why);
+    if label.len() > MAX_LABEL_BYTES {
+        return Err(bad("must be 1 to 64 characters"));
+    }
+    let chars = label.chars().count();
+    if chars == 0 || chars > MAX_LABEL_CHARS {
+        return Err(bad("must be 1 to 64 characters"));
+    }
+    if label
+        .chars()
+        .any(|c| is_forbidden_char(c) || is_hidden_label_char(c))
+    {
+        return Err(bad("contains control, hidden or unusual characters"));
+    }
+    if label.trim() != label {
+        return Err(bad("must not start or end with spaces"));
+    }
+    let mut run = 0usize;
+    for c in label.chars() {
+        if is_combining_mark(c) {
+            run += 1;
+            if run > MAX_LABEL_MARK_RUN {
+                return Err(bad("has too many combining marks in a row"));
+            }
+        } else {
+            run = 0;
+        }
+    }
+    if label.chars().next().is_some_and(is_combining_mark) {
+        return Err(bad("must not start with a combining mark"));
+    }
+    Ok(())
+}
+
+/// Characters that render as nothing or as something other than what they are, beyond
+/// [`is_forbidden_char`]: fillers, soft hyphen, variation selectors, specials, private
+/// use and non-characters. Only labels are held to this list.
+fn is_hidden_label_char(c: char) -> bool {
+    let u = u32::from(c);
+    matches!(
+        c,
+        '\u{00ad}'
+            | '\u{034f}'
+            | '\u{115f}'
+            | '\u{1160}'
+            | '\u{17b4}'..='\u{17b5}'
+            | '\u{180b}'..='\u{180f}'
+            | '\u{3164}'
+            | '\u{ffa0}'
+            | '\u{fe00}'..='\u{fe0f}'
+            | '\u{e0100}'..='\u{e01ef}'
+            | '\u{fff0}'..='\u{fffb}'
+            | '\u{e000}'..='\u{f8ff}'
+            | '\u{f0000}'..='\u{10ffff}'
+            | '\u{fdd0}'..='\u{fdef}'
+    ) || u & 0xfffe == 0xfffe
+}
+
+/// Nonspacing and enclosing marks (Unicode Mn, Me) of the blocks in common use. The
+/// standard library has no general-category lookup and the workspace adds no crate for
+/// it, so this is a table of ranges: a script missing from it is simply not counted,
+/// which only loosens the run limit, never the hidden-character list above.
+fn is_combining_mark(c: char) -> bool {
+    matches!(
+        c,
+        '\u{0300}'..='\u{036f}'
+            | '\u{0483}'..='\u{0489}'
+            | '\u{0591}'..='\u{05bd}'
+            | '\u{05bf}'
+            | '\u{05c1}'..='\u{05c2}'
+            | '\u{05c4}'..='\u{05c5}'
+            | '\u{05c7}'
+            | '\u{0610}'..='\u{061a}'
+            | '\u{064b}'..='\u{065f}'
+            | '\u{0670}'
+            | '\u{06d6}'..='\u{06dc}'
+            | '\u{06df}'..='\u{06e4}'
+            | '\u{06e7}'..='\u{06e8}'
+            | '\u{06ea}'..='\u{06ed}'
+            | '\u{0711}'
+            | '\u{0730}'..='\u{074a}'
+            | '\u{07a6}'..='\u{07b0}'
+            | '\u{07eb}'..='\u{07f3}'
+            | '\u{0900}'..='\u{0902}'
+            | '\u{093a}'
+            | '\u{093c}'
+            | '\u{0941}'..='\u{0948}'
+            | '\u{094d}'
+            | '\u{0951}'..='\u{0957}'
+            | '\u{0962}'..='\u{0963}'
+            | '\u{0e31}'
+            | '\u{0e34}'..='\u{0e3a}'
+            | '\u{0e47}'..='\u{0e4e}'
+            | '\u{0eb1}'
+            | '\u{0eb4}'..='\u{0ebc}'
+            | '\u{0ec8}'..='\u{0ece}'
+            | '\u{1ab0}'..='\u{1aff}'
+            | '\u{1dc0}'..='\u{1dff}'
+            | '\u{20d0}'..='\u{20f0}'
+            | '\u{2cef}'..='\u{2cf1}'
+            | '\u{2de0}'..='\u{2dff}'
+            | '\u{302a}'..='\u{302d}'
+            | '\u{3099}'..='\u{309a}'
+            | '\u{a66f}'..='\u{a672}'
+            | '\u{a674}'..='\u{a67d}'
+            | '\u{fe20}'..='\u{fe2f}'
+    )
 }
 
 /// C0, DEL, C1, bidi, line and paragraph separators, zero-width and the
@@ -843,6 +953,23 @@ pub enum RejectReason {
     QueueFull,
     /// The daemon is stopping.
     DaemonStopping,
+    /// The same requester's previous manual snapshot has not finished. Only a
+    /// connection with `operation.snapshot` receives it.
+    WriteInProgress,
+}
+
+/// `operation.run` result of a `snapshot` plan (only with `operation.snapshot`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SnapshotRunResult {
+    pub snapshot_id: String,
+    /// Folder name of the worktree root, never its path.
+    pub worktree: UntrustedName,
+    pub label: UntrustedName,
+    pub requester: RequesterView,
+    pub layer: Layer,
+    /// Always `done` on success.
+    pub outcome: OperationOutcome,
 }
 
 /// `data` of an `OPERATION_REJECTED` error.
@@ -919,9 +1046,11 @@ mod tests {
                 "open-in-editor"
             ]
         );
-        // Every destructive operation is protected; only the editor is not.
+        // Every destructive operation is protected; the editor and the manual snapshot
+        // are not.
         for e in CATALOG {
-            assert_eq!(e.protected, e.id != OperationId::OpenInEditor, "{}", e.name);
+            let outside = matches!(e.id, OperationId::OpenInEditor | OperationId::Snapshot);
+            assert_eq!(e.protected, !outside, "{}", e.name);
         }
         assert_eq!(describe(true).operations.len(), 4);
         assert_eq!(describe(false).catalog_version, CATALOG_VERSION);
@@ -1022,11 +1151,72 @@ mod tests {
             )
             .is_ok()
         );
-        for bad in ["", "a\u{1b}[31m", &"x".repeat(81)] {
+        for bad in ["", "a\u{1b}[31m", &"x".repeat(65)] {
             assert!(
                 OperationArgs::parse(OperationId::Snapshot, &args(json!({ "label": bad })), true)
                     .is_err()
             );
         }
+    }
+
+    #[test]
+    fn a_label_over_256_bytes_is_refused_before_reading_chars() {
+        // 65 characters of 4 bytes are over both limits; 64 of them are exactly 256 bytes
+        // and pass the byte check, so the refusal below is the byte limit's alone.
+        let wide = "\u{1f600}".repeat(64);
+        assert_eq!(wide.len(), MAX_LABEL_BYTES);
+        assert!(check_snapshot_label(&wide).is_ok());
+        let over = format!("{wide}x");
+        assert!(over.len() > MAX_LABEL_BYTES);
+        let err = check_snapshot_label(&over).unwrap_err();
+        assert_eq!(err.field, "label");
+        // A huge string is refused by its length alone, even if every char is valid.
+        assert!(check_snapshot_label(&"a".repeat(10 * 1024 * 1024)).is_err());
+    }
+
+    #[test]
+    fn the_manual_snapshot_shapes_round_trip() {
+        use crate::methods::{QuotaWindow, SnapshotQuotaData};
+        let run = SnapshotRunResult {
+            snapshot_id: "snap-1".into(),
+            worktree: UntrustedName::new("app"),
+            label: UntrustedName::new("antes de migrar"),
+            requester: RequesterView {
+                actor: crate::Actor::Unattributed,
+                channel: crate::timemachine::RequestChannel::Mcp,
+                via: crate::timemachine::ResolvedVia::Ancestry,
+                confirmable: false,
+            },
+            layer: Layer::Mcp,
+            outcome: OperationOutcome::Done,
+        };
+        let wire = serde_json::to_value(&run).unwrap();
+        assert_eq!(wire["label"]["untrusted"], "antes de migrar");
+        assert_eq!(
+            serde_json::from_value::<SnapshotRunResult>(wire).unwrap(),
+            run
+        );
+
+        let quota = SnapshotQuotaData {
+            window: QuotaWindow::WorktreeDay,
+            retry_after_s: Some(3_600),
+            release_utc_ms: Some(1_700_000_000_000),
+        };
+        let wire = serde_json::to_value(&quota).unwrap();
+        assert_eq!(wire["window"], "worktree-day");
+        assert_eq!(
+            serde_json::from_value::<SnapshotQuotaData>(wire).unwrap(),
+            quota
+        );
+        let disk: SnapshotQuotaData = serde_json::from_value(json!({"window": "disk"})).unwrap();
+        assert_eq!((disk.retry_after_s, disk.release_utc_ms), (None, None));
+        assert!(
+            serde_json::from_value::<SnapshotQuotaData>(json!({"window":"day","x":1})).is_err()
+        );
+
+        assert_eq!(
+            serde_json::to_value(RejectReason::WriteInProgress).unwrap(),
+            "write-in-progress"
+        );
     }
 }

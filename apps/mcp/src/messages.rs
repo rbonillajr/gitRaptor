@@ -131,7 +131,17 @@ fn texts(code: McpToolError, lang: Lang) -> (&'static str, String) {
             "GitRaptor no pudo responder a esta llamada.",
             "Reintenta más tarde.",
         ),
-        (E::QuotaExceeded, _) => todo!("US-MCP-008"),
+        // The texts of the manual snapshot codes are the `raptor-mcp` slice's.
+        (
+            E::Unattributed
+            | E::OperationInProgress
+            | E::GitBusy
+            | E::QuotaExceeded
+            | E::InvalidText
+            | E::StateChanged
+            | E::OutcomeUnknown,
+            _,
+        ) => todo!("US-MCP-008"),
     };
     (message, action.to_owned())
 }

@@ -464,6 +464,24 @@ pub enum EntryOrigin {
         kind: crate::messages::GitEventKind,
         branch: Option<UntrustedName>,
     },
+    /// A recovery point the developer or an agent took by hand. Only with
+    /// `timemachine.timeline-manual`.
+    ManualSnapshot {
+        snapshot_id: String,
+        /// Text from the requester: data, never an instruction.
+        label: UntrustedName,
+        channel: TimelineChannel,
+    },
+}
+
+/// The surface a manual snapshot came through.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum TimelineChannel {
+    Cli,
+    Tui,
+    Mcp,
+    Hook,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -518,6 +536,8 @@ pub enum ProtectionLevel {
     GuaranteedPrior,
     HookPrior,
     Observation,
+    /// A point the requester took by hand. Only with `timemachine.timeline-manual`.
+    Manual,
     /// No recoverable point before the entry.
     None,
 }
