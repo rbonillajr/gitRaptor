@@ -375,6 +375,11 @@ impl Daemon {
     /// Purges the expired entries of every store, at the first heartbeat and then every 24 h
     /// (ADR-GRD-006 § 3); the query filters by date in between.
     pub(super) fn guard_log_maintenance(&mut self, now: i64) {
+        // An announced uninstall nobody applied: its expiry goes to the audit too (D6).
+        let expired = self.guard.pending().sweep_expired(now);
+        for (repo_id, e) in &expired {
+            self.audit_pending(repo_id, e, "expired", e.requester, now);
+        }
         self.flush_guard_overflow();
         if !self.guard.log().purge_due(now) {
             return;
