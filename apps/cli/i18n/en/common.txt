@@ -10,3 +10,5 @@ common.refused-terminal-no-console = refused: this process has no console; run i
 common.refused-terminal-session = refused: not from an SSH session or a service (session 0); run it from a local or Remote Desktop console
 common.refused-terminal-foreign-console = refused: this console was not opened by your shell (another process attached to it); run it from a console you opened
 common.refused-unverified = refused: the engine could not verify who is asking
+common.refused-unverified-console = refused: reserved commands are only accepted from an interactive console (PowerShell, cmd or Windows Terminal); this terminal does not let the engine verify who is asking
+common.refused-unverified-terminal = refused: reserved commands are only accepted from an interactive terminal; this one does not let the engine verify who is asking

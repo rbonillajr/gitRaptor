@@ -412,11 +412,15 @@ fn status_lines(status: &GuardStatus) -> Vec<String> {
         });
     }
     out.extend(protection_lines(status));
-    out.push(match status.permission {
-        Permission::NotAsked => t("guard.permission.not-asked", &[]),
-        Permission::Granted => t("guard.permission.granted", &[]),
-        Permission::Denied => t("guard.permission.denied", &[]),
-    });
+    // Granted but unprotected reads as a contradiction: the permission only
+    // matters once there is a protection to apply.
+    let unprotected = status.state == ProtectionState::Unprotected;
+    match status.permission {
+        Permission::NotAsked => out.push(t("guard.permission.not-asked", &[])),
+        Permission::Granted if unprotected => {}
+        Permission::Granted => out.push(t("guard.permission.granted", &[])),
+        Permission::Denied => out.push(t("guard.permission.denied", &[])),
+    }
     for b in &status.last_refusal {
         out.push(format!("  - {}", blocker_text(*b)));
     }
@@ -443,7 +447,15 @@ fn protection_lines(status: &GuardStatus) -> Vec<String> {
         && min.status == MinimumSetStatus::Active
         && status.hooks.is_some()
     {
-        out.push(t("guard.status.minimum-active", &[]));
+        // Nothing is denied until the hooks are installed: say what install will do.
+        out.push(t(
+            if status.state == ProtectionState::Unprotected {
+                "guard.status.minimum-on-install"
+            } else {
+                "guard.status.minimum-active"
+            },
+            &[],
+        ));
     }
     if status.hooks.is_some() {
         out.push(t("guard.status.not-checked", &[]));
@@ -1300,6 +1312,84 @@ mod tests {
             !status_lines(&clean)
                 .iter()
                 .any(|l| l.contains("settings.json"))
+        );
+    }
+
+    fn bare_status(state: ProtectionState, permission: Permission) -> GuardStatus {
+        GuardStatus {
+            repo_id: "r".into(),
+            state,
+            permission,
+            offer: true,
+            protected_bases: Vec::new(),
+            base_confirmed: false,
+            not_preventable: Vec::new(),
+            last_refusal: Vec::new(),
+            misnamed_settings: Vec::new(),
+            pending: None,
+            hooks: Some(gitraptor_api::guard::HooksLayer::of(
+                HooksStatus::NotInstalled,
+            )),
+            diagnostics: Vec::new(),
+            minimum_set: Some(gitraptor_api::guard::MinimumSet {
+                status: MinimumSetStatus::Active,
+            }),
+        }
+    }
+
+    #[test]
+    fn status_of_an_unprotected_repo_does_not_claim_anything_is_denied() {
+        let lines = status_lines(&bare_status(
+            ProtectionState::Unprotected,
+            Permission::Granted,
+        ))
+        .join("\n");
+        assert!(
+            lines.contains(&t("guard.status.minimum-on-install", &[])),
+            "{lines}"
+        );
+        assert!(
+            !lines.contains(&t("guard.status.minimum-active", &[])),
+            "{lines}"
+        );
+        assert!(
+            !lines.contains(&t("guard.permission.granted", &[])),
+            "{lines}"
+        );
+        for spanish in [false, true] {
+            let text = crate::i18n::text_in(spanish, "guard.status.minimum-on-install").unwrap();
+            assert!(text.contains("raptor guard install"), "{text}");
+            assert!(
+                !text.contains("are denied") && !text.contains("se deniegan"),
+                "{text}"
+            );
+        }
+        // Not asked / denied still say so.
+        let asked = status_lines(&bare_status(
+            ProtectionState::Unprotected,
+            Permission::NotAsked,
+        ));
+        assert!(asked.contains(&t("guard.permission.not-asked", &[])));
+    }
+
+    #[test]
+    fn status_of_a_protected_repo_keeps_the_minimum_and_the_permission() {
+        let lines = status_lines(&bare_status(
+            ProtectionState::HooksOnly,
+            Permission::Granted,
+        ))
+        .join("\n");
+        assert!(
+            lines.contains(&t("guard.status.minimum-active", &[])),
+            "{lines}"
+        );
+        assert!(
+            lines.contains(&t("guard.permission.granted", &[])),
+            "{lines}"
+        );
+        assert!(
+            !lines.contains(&t("guard.status.minimum-on-install", &[])),
+            "{lines}"
         );
     }
 }

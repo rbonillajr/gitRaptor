@@ -88,6 +88,16 @@ pub(crate) fn refusal_text(err: &ErrorObject, agent_key: &str) -> String {
     match reason {
         Some(RefusalReason::AgentAncestry | RefusalReason::SessionLeaderAgent) => t(agent_key, &[]),
         Some(RefusalReason::NoControllingTerminal) => t(terminal_key(own_console_issue()), &[]),
+        // The terminal cannot prove who is asking (mintty, a pipe, a relay):
+        // say what to do instead of only that the engine could not verify.
+        Some(RefusalReason::IdentityUnverified | RefusalReason::Unsupported) => t(
+            if cfg!(windows) {
+                "common.refused-unverified-console"
+            } else {
+                "common.refused-unverified-terminal"
+            },
+            &[],
+        ),
         _ => t("common.refused-unverified", &[]),
     }
 }
@@ -216,5 +226,39 @@ mod tests {
         assert_eq!(keys[3], "common.refused-terminal");
         let unique: std::collections::HashSet<_> = keys.iter().collect();
         assert_eq!(unique.len(), keys.len());
+    }
+
+    fn refused(reason: RefusalReason) -> ErrorObject {
+        ErrorObject::new(code::RESERVED_REFUSED, "refused").with_data(RefusedData { reason })
+    }
+
+    /// A terminal that cannot prove who asks (mintty) is told what to do, in
+    /// en/es; the other reasons keep the generic text.
+    #[test]
+    fn an_unverifiable_terminal_is_told_what_to_do() {
+        let key = if cfg!(windows) {
+            "common.refused-unverified-console"
+        } else {
+            "common.refused-unverified-terminal"
+        };
+        for reason in [
+            RefusalReason::IdentityUnverified,
+            RefusalReason::Unsupported,
+        ] {
+            assert_eq!(refusal_text(&refused(reason), "x"), t(key, &[]));
+        }
+        for spanish in [false, true] {
+            let windows = i18n::text_in(spanish, "common.refused-unverified-console").unwrap();
+            let unix = i18n::text_in(spanish, "common.refused-unverified-terminal").unwrap();
+            assert!(windows.contains("PowerShell") && windows.contains("Windows Terminal"));
+            assert!(!unix.contains("PowerShell"));
+            for text in [windows, unix] {
+                assert!(text.contains("interactiv"), "{text}");
+            }
+        }
+        assert_eq!(
+            refusal_text(&refused(RefusalReason::DaemonDescendant), "x"),
+            t("common.refused-unverified", &[])
+        );
     }
 }

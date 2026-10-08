@@ -157,6 +157,7 @@ guard.status.orphaned = aviso: los hooks están instalados pero se perdió su re
 guard.status.template-outdated = nota: los hooks vienen de una plantilla antigua; refréscalos con `raptor guard install`.
 guard.status.config-unreadable = nota: no se pudo leer la configuración de Git, así que el estado de la protección no se pudo comprobar del todo.
 guard.status.minimum-active = mínimo seguro: el force-push y borrar la rama base se deniegan; solo lo desactiva la configuración del equipo en la rama principal, una vez que la confirmas en tu máquina.
+guard.status.minimum-on-install = mínimo seguro: aún no se deniega nada; el force-push y borrar la rama base se denegarán cuando ejecutes `raptor guard install`.
 guard.status.not-checked = sin comprobar: un repo retirado de la observación y la firma del binario `raptor`.
 guard.log.protection = la protección cambió
 guard.log.op.protection = protección: {from} → {to}

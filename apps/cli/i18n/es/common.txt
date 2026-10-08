@@ -10,3 +10,5 @@ common.refused-terminal-no-console = rechazado: este proceso no tiene consola; e
 common.refused-terminal-session = rechazado: no desde una sesión SSH ni desde un servicio (sesión 0); ejecútalo desde una consola local o de Escritorio remoto
 common.refused-terminal-foreign-console = rechazado: esta consola no la abrió tu shell (otro proceso se unió a ella); ejecútalo desde una consola que hayas abierto tú
 common.refused-unverified = rechazado: el motor no pudo verificar quién lo pide
+common.refused-unverified-console = rechazado: los comandos reservados solo se aceptan desde una consola interactiva (PowerShell, cmd o Windows Terminal); esta terminal no permite al motor verificar quién los pide
+common.refused-unverified-terminal = rechazado: los comandos reservados solo se aceptan desde una terminal interactiva; esta no permite al motor verificar quién los pide
