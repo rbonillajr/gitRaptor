@@ -1,8 +1,10 @@
 //! File operations of the Guardrails write layer without descriptor-relative calls (Windows):
 //! every path is checked not to be a link right before it is used, and files are created
-//! exclusively. Weaker than the Unix variant (a check-then-use window); the DACL of
-//! ADR-GRD-001 § 1 (M-07) is pending with the Windows channel. Pendiente: etapa de validación
-//! multiplataforma.
+//! exclusively. Weaker than the Unix variant (a check-then-use window), which the identity of
+//! the folder (`winsys::file_id`, M-03) narrows. On Windows the folder is created with the
+//! protected DACL of ADR-GRD-001 § 1 (M-07): the user, SYSTEM and Administrators, inherited by
+//! everything written inside, so no ACE of write for `Everyone`, `Users` or `Authenticated
+//! Users` reaches the dispatchers.
 
 use std::io::Write;
 use std::path::Path;
@@ -13,6 +15,37 @@ use super::{FileId, GuardWriteError, NewFile, Result, is_temporary, temporary_na
 pub(super) enum Kind {
     File,
     Dir,
+}
+
+/// `(volume, index)` of `path` itself, never following a link; zeros where the platform has no
+/// such identity.
+fn id_of(path: &Path) -> Result<FileId> {
+    #[cfg(windows)]
+    {
+        let (dev, ino) = gitraptor_winsys::file_id::of_path(path)?;
+        Ok(FileId {
+            dev: u64::from(dev),
+            ino,
+        })
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = path;
+        Ok(FileId { dev: 0, ino: 0 })
+    }
+}
+
+/// A folder only the user (plus SYSTEM and Administrators) can write, where the platform has
+/// the rule (M-07); the plain folder elsewhere.
+fn create_private_dir(path: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        gitraptor_winsys::acl::create_private_dir(path)
+    }
+    #[cfg(not(windows))]
+    {
+        std::fs::create_dir(path)
+    }
 }
 
 fn not_link(path: &Path) -> Result<Option<std::fs::Metadata>> {
@@ -28,7 +61,7 @@ pub(super) fn entry_id(common: &Path, name: &str, kind: Kind) -> Result<Option<F
     not_link(common)?;
     match not_link(&common.join(name))? {
         None => Ok(None),
-        Some(m) if (kind == Kind::Dir) == m.is_dir() => Ok(Some(FileId { dev: 0, ino: 0 })),
+        Some(m) if (kind == Kind::Dir) == m.is_dir() => Ok(Some(id_of(&common.join(name))?)),
         Some(_) => Err(GuardWriteError::Changed("an entry of the common directory")),
     }
 }
@@ -40,7 +73,8 @@ pub(super) fn write_folder(common: &Path, files: &[NewFile<'_>]) -> Result<FileI
     }
     let temp = temporary_name();
     let root = common.join(&temp);
-    std::fs::create_dir(&root)?;
+    create_private_dir(&root)?;
+    let id = id_of(&root)?;
     let fill = || -> Result<()> {
         for f in files {
             let path = root.join(f.path);
@@ -75,15 +109,18 @@ pub(super) fn write_folder(common: &Path, files: &[NewFile<'_>]) -> Result<FileI
         return Err(GuardWriteError::Exists);
     }
     std::fs::rename(&root, common.join(super::FOLDER))?;
-    Ok(FileId { dev: 0, ino: 0 })
+    Ok(id)
 }
 
-pub(super) fn replace_files(common: &Path, _expected: FileId, files: &[NewFile<'_>]) -> Result<()> {
+pub(super) fn replace_files(common: &Path, expected: FileId, files: &[NewFile<'_>]) -> Result<()> {
     not_link(common)?;
     let root = common.join(super::FOLDER);
     match not_link(&root)? {
         Some(m) if m.is_dir() => {}
         _ => return Err(GuardWriteError::Changed("the guardrails folder")),
+    }
+    if id_of(&root)? != expected {
+        return Err(GuardWriteError::Changed("the guardrails folder"));
     }
     for f in files {
         let path = root.join(f.path);
@@ -126,12 +163,17 @@ pub(super) fn remove_folder(
     common: &Path,
     name: &str,
     listed: &[&str],
-    _expected: Option<FileId>,
+    expected: Option<FileId>,
 ) -> Result<()> {
     not_link(common)?;
     let root = common.join(name);
     if not_link(&root)?.is_none() {
         return Ok(());
+    }
+    if let Some(expected) = expected
+        && id_of(&root)? != expected
+    {
+        return Err(GuardWriteError::Changed("the guardrails folder"));
     }
     let mut subs = Vec::new();
     for path in listed {
