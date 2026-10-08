@@ -51,6 +51,16 @@ pub fn pids() -> Option<Vec<u32>> {
     snapshot().map(|s| s.into_iter().map(|(pid, _)| pid).collect())
 }
 
+/// Whose live process `pid` is, read through its handle. `Owner::Unknown`
+/// when its token cannot be read.
+pub fn owner_of(pid: u32) -> Result<Owner, Error> {
+    let handle = open(pid)?;
+    if ended(&handle) {
+        return Err(Error::Gone);
+    }
+    Ok(owner(&handle))
+}
+
 /// Reads one live process.
 pub fn process(pid: u32) -> Result<Process, Error> {
     // Opened first: the handle pins the process, so the pid is not reused

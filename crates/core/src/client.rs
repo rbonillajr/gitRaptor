@@ -21,7 +21,7 @@ use serde::de::DeserializeOwned;
 
 use crate::profile::ProfileDirs;
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use {
     crate::daemon::wait_until_released,
     gitraptor_api::clock::monotonic_ns,
@@ -36,7 +36,7 @@ use {
 };
 
 /// How long a call waits for its answer.
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 const CALL_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Why talking to the daemon failed.
@@ -167,12 +167,12 @@ impl ClientOptions {
 }
 
 /// A greeted connection to the daemon. On Windows it cannot be built.
-#[cfg_attr(not(unix), allow(dead_code))]
+#[cfg_attr(not(any(unix, windows)), allow(dead_code))]
 pub struct Client {
-    #[cfg(unix)]
-    stream: std::os::unix::net::UnixStream,
-    #[cfg(unix)]
-    reader: BufReader<std::os::unix::net::UnixStream>,
+    #[cfg(any(unix, windows))]
+    stream: crate::channel::transport::Stream,
+    #[cfg(any(unix, windows))]
+    reader: BufReader<crate::channel::transport::Stream>,
     next_id: u64,
     /// Notifications read while waiting for an answer, with the
     /// [`monotonic_ns`] reading taken when their frame was read.
@@ -194,7 +194,7 @@ pub enum Incoming {
 }
 
 /// Outcome of a handshake on an open connection.
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 enum Greeting {
     Ready(HelloResult),
     Incompatible(IncompatibleData),
@@ -202,7 +202,7 @@ enum Greeting {
 
 impl Client {
     /// Connects and greets. Does not start a daemon.
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub fn connect(
         dirs: &ProfileDirs,
         kind: ClientKind,
@@ -222,7 +222,7 @@ impl Client {
         }
     }
 
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     pub fn connect(
         _dirs: &ProfileDirs,
         _kind: ClientKind,
@@ -235,7 +235,7 @@ impl Client {
     /// Guardrails dispatcher, ADR-GRD-003 § 4). Before sending anything, `verify` gets the
     /// server's pid as the kernel reports it; if it refuses, nothing is sent
     /// ([`ClientError::NotAuthentic`]). Does not start a daemon.
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub fn connect_runtime(
         runtime: &std::path::Path,
         kind: ClientKind,
@@ -260,7 +260,7 @@ impl Client {
         }
     }
 
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     pub fn connect_runtime(
         _runtime: &std::path::Path,
         _kind: ClientKind,
@@ -270,7 +270,7 @@ impl Client {
         Err(ClientError::TransportUnsupported)
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     fn open(dirs: &ProfileDirs) -> Result<Self, ClientError> {
         let runtime = dirs
             .runtime
@@ -279,7 +279,7 @@ impl Client {
         Self::open_at(runtime)
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     fn open_at(runtime: &std::path::Path) -> Result<Self, ClientError> {
         let stream = crate::channel::transport::connect(runtime)?;
         let reader = BufReader::new(stream.try_clone()?);
@@ -302,7 +302,7 @@ impl Client {
         })
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     fn greet(&mut self, kind: ClientKind, protocol: u32) -> Result<Greeting, ClientError> {
         let hello = Hello {
             protocol,
@@ -344,7 +344,7 @@ impl Client {
     /// Asks the daemon for the capabilities added after protocol 9 that this
     /// binary understands and the daemon serves; the legacy ones come with
     /// the protocol. Nothing to ask, nothing sent.
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     fn accept_capabilities(&mut self, kind: ClientKind) -> Result<(), ClientError> {
         let Some(served) = &self.hello.capabilities else {
             return Ok(());
@@ -368,7 +368,7 @@ impl Client {
 
     /// Sends a request and waits for its answer. Notifications that arrive
     /// meanwhile are kept for [`Client::next_notification`].
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub fn call<P: Serialize, R: DeserializeOwned>(
         &mut self,
         method: &str,
@@ -406,21 +406,21 @@ impl Client {
     }
 
     /// Writes one raw line (tests use it to send malformed messages).
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub fn send_raw(&mut self, line: &[u8]) -> Result<(), ClientError> {
         self.stream.write_all(line)?;
         self.stream.write_all(b"\n")?;
         Ok(())
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     fn send_line(&mut self, message: &impl Serialize) -> Result<(), ClientError> {
         let line = serde_json::to_vec(message).map_err(|_| ClientError::Protocol("encode"))?;
         self.send_raw(&line)
     }
 
     /// The next message from the daemon; `None` at end of stream.
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub fn read_message(
         &mut self,
         timeout: Option<Duration>,
@@ -432,7 +432,7 @@ impl Client {
     }
 
     /// The next complete frame, not decoded; `None` at end of stream.
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     fn read_frame(&mut self, timeout: Option<Duration>) -> Result<Option<Vec<u8>>, ClientError> {
         self.reader.get_ref().set_read_timeout(timeout)?;
         let mut buf = Vec::new();
@@ -447,7 +447,7 @@ impl Client {
     /// The next message, stamped with [`monotonic_ns`] as soon as its frame
     /// is read, waiting up to `timeout`. `None` on timeout; the end of the
     /// stream is an `UnexpectedEof` error.
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub fn next_incoming(&mut self, timeout: Duration) -> Result<Option<Incoming>, ClientError> {
         if let Some((recv_ns, notification)) = self.notifications.pop_front() {
             return Ok(Some(Incoming::Buffered {
@@ -475,7 +475,7 @@ impl Client {
 
     /// The next notification, waiting up to `timeout`. `None` on timeout or
     /// end of stream.
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub fn next_notification(
         &mut self,
         timeout: Duration,
@@ -499,13 +499,13 @@ impl Client {
     }
 
     /// Asks the daemon to stop. A reserved command: the daemon decides.
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub fn stop_daemon(&mut self) -> Result<StopResult, ClientError> {
         self.call(methods::DAEMON_STOP, NoParams {})
     }
 
     /// Reads lines until the daemon closes the connection (after a stop).
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub fn wait_closed(&mut self, timeout: Duration) -> bool {
         let _ = self.reader.get_ref().set_read_timeout(Some(timeout));
         let mut line = String::new();
@@ -521,7 +521,7 @@ impl Client {
 }
 
 /// A frame as a message of the contract.
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn decode(bytes: &[u8]) -> Result<ServerMessage, ClientError> {
     serde_json::from_slice(bytes).map_err(|_| ClientError::Protocol("not a contract message"))
 }
@@ -535,7 +535,7 @@ pub fn ensure_daemon(options: &ClientOptions) -> Result<Client, ClientError> {
 /// [`ensure_daemon`], calling `on_launch` right before a daemon is started,
 /// so a client can say "starting the engine" apart from "connecting"
 /// (ADR-CKP-003 § 4).
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub fn ensure_daemon_with(
     options: &ClientOptions,
     on_launch: &mut dyn FnMut(),
@@ -577,7 +577,7 @@ pub fn ensure_daemon_with(
 
 /// Windows: no transport yet. Every operation of a [`Client`] (which
 /// cannot be constructed there) fails with [`ClientError::TransportUnsupported`].
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 impl Client {
     pub fn call<P: Serialize, R: DeserializeOwned>(
         &mut self,
@@ -618,7 +618,7 @@ impl Client {
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 pub fn ensure_daemon_with(
     options: &ClientOptions,
     _on_launch: &mut dyn FnMut(),
@@ -629,7 +629,7 @@ pub fn ensure_daemon_with(
 /// Asks a daemon of this protocol that lacks capabilities of this binary
 /// to step down for it (ADR-GRP-016 § 1). `Some(client)`: it refused, go on
 /// with that connection; `None`: it stopped and released its lock.
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn replace_same_protocol(
     options: &ClientOptions,
     mut old: Client,
@@ -655,7 +655,7 @@ fn replace_same_protocol(
 
 /// Asks an older daemon to step down for this (installed) binary and waits
 /// until it released the instance lock.
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn replace(options: &ClientOptions, data: &IncompatibleData) -> Result<(), ClientError> {
     let mut old = Client::open(&options.dirs)?;
     match old.greet(options.kind, options.protocol)? {
@@ -686,7 +686,7 @@ fn replace(options: &ClientOptions, data: &IncompatibleData) -> Result<(), Clien
 
 /// Starts `<raptor> daemon` detached, with a clean environment built by
 /// allowlist and the working folder in the profile (SEC-10).
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn launch(options: &ClientOptions) -> Result<(), ClientError> {
     let Launcher::Installed(exe) = &options.launcher else {
         return Err(ClientError::NotRunning);
@@ -698,10 +698,22 @@ fn launch(options: &ClientOptions) -> Result<(), ClientError> {
     }
     let cwd = if options.dirs.state.is_dir() {
         options.dirs.state.clone()
+    } else if cfg!(windows) {
+        std::env::temp_dir()
     } else {
         PathBuf::from("/")
     };
-    let mut child = Command::new(exe)
+    let mut command = Command::new(exe);
+    // Its own process group and no console: the client's Ctrl-C or closed
+    // window does not reach the daemon.
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const DETACHED_PROCESS: u32 = 0x0000_0008;
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
+    }
+    let mut child = command
         .arg("daemon")
         .env_clear()
         .envs(clean_env())
@@ -738,10 +750,27 @@ pub fn clean_env() -> Vec<(OsString, OsString)> {
     env
 }
 
+/// Environment of an on-demand daemon on Windows: the Windows folder read
+/// from the kernel, a `PATH` of only its system folders, and the test
+/// overrides of debug builds. The profile comes from the known-folder API,
+/// never from the environment, so nothing else is passed (SEC-10).
+#[cfg(windows)]
+pub fn clean_env() -> Vec<(OsString, OsString)> {
+    let mut env = Vec::new();
+    if let Some(windows) = gitraptor_winsys::system::windows_dir() {
+        let path =
+            std::env::join_paths([windows.join("System32"), windows.clone()]).unwrap_or_default();
+        env.push((OsString::from("SystemRoot"), windows.into_os_string()));
+        env.push((OsString::from("PATH"), path));
+    }
+    env.extend(debug_overrides());
+    env
+}
+
 /// The test overrides a daemon started for this client keeps: the
 /// profile, the agent classifier, the sessions' clock, the resource
 /// targets and the autostart folder and service tool. Empty in release builds (SEC-06).
-#[cfg_attr(not(unix), allow(dead_code))]
+#[cfg_attr(not(any(unix, windows)), allow(dead_code))]
 pub(crate) fn debug_overrides() -> Vec<(std::ffi::OsString, std::ffi::OsString)> {
     let mut env = Vec::new();
     if cfg!(debug_assertions) {

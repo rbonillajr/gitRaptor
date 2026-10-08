@@ -1,25 +1,25 @@
 //! The daemon's channel: serving it, the wiring of its protected operations
 //! and taking it back when its socket is replaced (ADR-GRP-005 § 5).
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use std::sync::Arc;
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use gitraptor_api::event::ENGINE_STATE;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use gitraptor_api::messages::DaemonView;
 
 use super::Daemon;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use super::profile_error_kind;
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use crate::timemachine::protected::{DaemonBackend, TimeMachineBackend};
 
 impl Daemon {
     /// The protected-operation wiring: the configured double, or the
     /// daemon's own repo layer when a catalog of operations is wired.
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub(super) fn protected_wiring(&self) -> Option<crate::channel::ProtectedWiring> {
         if let Some(wiring) = &self.config.protected {
             return Some(wiring.clone());
@@ -41,7 +41,7 @@ impl Daemon {
 
     /// The Time Machine's own commands over the daemon's repo layer
     /// (US-TMC-002), wired whether or not a catalog of operations is.
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub(super) fn time_machine_wiring(&self) -> crate::channel::TimeMachineWiring {
         let layer = self
             .config
@@ -61,7 +61,7 @@ impl Daemon {
         }
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub(super) fn serve_channel(&mut self) {
         let Some(bound) = self.bound.take() else {
             return;
@@ -96,12 +96,12 @@ impl Daemon {
         }
     }
 
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     pub(super) fn serve_channel(&mut self) {}
 
     /// If another process replaced the socket file, take the channel back:
     /// close every connection, bind again and serve.
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub(super) fn check_channel(&mut self) {
         let Some(server) = self.server.as_mut() else {
             return;
@@ -125,6 +125,6 @@ impl Daemon {
         }
     }
 
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     pub(super) fn check_channel(&mut self) {}
 }

@@ -13,7 +13,7 @@ use crate::ffi_handle::Handle;
 use windows_sys::Win32::Foundation::{ERROR_SUCCESS, HANDLE, INVALID_HANDLE_VALUE, LocalFree};
 use windows_sys::Win32::Security::Authorization::{
     ConvertStringSecurityDescriptorToSecurityDescriptorW, GetSecurityInfo, SDDL_REVISION_1,
-    SE_FILE_OBJECT,
+    SE_FILE_OBJECT, SE_KERNEL_OBJECT,
 };
 use windows_sys::Win32::Security::{
     ACL, DACL_SECURITY_INFORMATION, GetLengthSid, GetTokenInformation, IsValidSid,
@@ -208,30 +208,50 @@ pub(crate) fn current_user_sid() -> io::Result<Vec<u8>> {
     copy_sid(sid)
 }
 
+/// A security descriptor built from SDDL, owned and freed on drop.
+pub(crate) struct Descriptor(Local);
+
+// SAFETY: the descriptor is a block of memory owned only by this value, never written after
+// `from_sddl`; Windows reads it from whichever thread passes it.
+unsafe impl Send for Descriptor {}
+// SAFETY: as above: shared access only reads it.
+unsafe impl Sync for Descriptor {}
+
+impl Descriptor {
+    pub(crate) fn from_sddl(sddl: &str) -> io::Result<Self> {
+        let sddl: Vec<u16> = OsStr::new(sddl).encode_wide().chain(Some(0)).collect();
+        let mut descriptor: PSECURITY_DESCRIPTOR = ptr::null_mut();
+        // SAFETY: `sddl` is NUL-terminated and alive for the call; `descriptor` is a local out
+        // pointer; the size out pointer may be null.
+        let ok = unsafe {
+            ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                sddl.as_ptr(),
+                SDDL_REVISION_1,
+                &mut descriptor,
+                ptr::null_mut(),
+            )
+        };
+        if ok == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(Self(Local(descriptor)))
+    }
+
+    /// Non-inheritable attributes pointing to this descriptor, valid while `self` lives.
+    pub(crate) fn attributes(&self) -> SECURITY_ATTRIBUTES {
+        SECURITY_ATTRIBUTES {
+            nLength: size_of::<SECURITY_ATTRIBUTES>() as u32,
+            lpSecurityDescriptor: self.0.0,
+            bInheritHandle: 0,
+        }
+    }
+}
+
 /// Creates one folder with the security descriptor given in SDDL, so it never exists with
 /// other permissions.
 pub(crate) fn create_dir_with_sddl(path: &Path, sddl: &str) -> io::Result<()> {
-    let sddl: Vec<u16> = OsStr::new(sddl).encode_wide().chain(Some(0)).collect();
-    let mut descriptor: PSECURITY_DESCRIPTOR = ptr::null_mut();
-    // SAFETY: `sddl` is NUL-terminated and alive for the call; `descriptor` is a local out
-    // pointer; the size out pointer may be null.
-    let ok = unsafe {
-        ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            sddl.as_ptr(),
-            SDDL_REVISION_1,
-            &mut descriptor,
-            ptr::null_mut(),
-        )
-    };
-    if ok == 0 {
-        return Err(io::Error::last_os_error());
-    }
-    let descriptor = Local(descriptor);
-    let attributes = SECURITY_ATTRIBUTES {
-        nLength: size_of::<SECURITY_ATTRIBUTES>() as u32,
-        lpSecurityDescriptor: descriptor.0,
-        bInheritHandle: 0,
-    };
+    let descriptor = Descriptor::from_sddl(sddl)?;
+    let attributes = descriptor.attributes();
     let name = wide(path);
     // SAFETY: `name` is NUL-terminated and `attributes` points to a descriptor alive for the
     // call.
@@ -239,4 +259,32 @@ pub(crate) fn create_dir_with_sddl(path: &Path, sddl: &str) -> io::Result<()> {
         return Err(io::Error::last_os_error());
     }
     Ok(())
+}
+
+/// Owner and DACL of a kernel object through its open handle (a pipe instance, say).
+pub(crate) fn handle_security(handle: &Handle) -> io::Result<(Vec<u8>, Option<Vec<u8>>)> {
+    let mut owner: PSID = ptr::null_mut();
+    let mut dacl: *mut ACL = ptr::null_mut();
+    let mut descriptor: PSECURITY_DESCRIPTOR = ptr::null_mut();
+    // SAFETY: `handle.raw()` is open; every out pointer points to a local that lives through
+    // the call. `owner` and `dacl` point into `descriptor`.
+    let status = unsafe {
+        GetSecurityInfo(
+            handle.raw(),
+            SE_KERNEL_OBJECT,
+            OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+            &mut owner,
+            ptr::null_mut(),
+            &mut dacl,
+            ptr::null_mut(),
+            &mut descriptor,
+        )
+    };
+    if status != ERROR_SUCCESS {
+        return Err(io::Error::from_raw_os_error(status as i32));
+    }
+    let _descriptor = Local(descriptor);
+    let owner = copy_sid(owner)?;
+    let dacl = (!dacl.is_null()).then(|| copy_acl(dacl));
+    Ok((owner, dacl))
 }
