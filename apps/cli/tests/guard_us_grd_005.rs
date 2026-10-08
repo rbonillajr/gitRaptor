@@ -347,7 +347,7 @@ fn the_dogfooding_blocks_are_logged() {
     let en = m.log_text("en_US.UTF-8");
     assert!(en.contains("4 blocked actions in the last 7 days"), "{en}");
     assert!(en.contains("claude-code"), "{en}");
-    assert!(en.contains("unattributed"), "{en}");
+    assert!(en.contains("actor: no agent"), "{en}");
     assert!(
         en.contains("author not available: the commit was never created"),
         "{en}"
@@ -357,7 +357,7 @@ fn the_dogfooding_blocks_are_logged() {
         es.contains("4 acciones bloqueadas en los últimos 7 días"),
         "{es}"
     );
-    assert!(es.contains("sin atribuir"), "{es}");
+    assert!(es.contains("actor: sin agente"), "{es}");
     assert!(
         es.contains("autor no disponible: el commit no llegó a crearse"),
         "{es}"
