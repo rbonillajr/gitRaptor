@@ -731,6 +731,7 @@ impl Daemon {
                     let _ = reply.send(self.mcp_mark(&common_dir, enabled));
                 }
                 Ok(Control::Observed(batch)) => self.observed(*batch),
+                Ok(Control::Slept(repo_id)) => self.slept(&repo_id),
                 Ok(Control::Wake { repo_id, cause }) => {
                     self.wake_repo(&repo_id, cause);
                     if self.stores.iter().any(|(id, _)| *id == repo_id) {
@@ -739,12 +740,17 @@ impl Daemon {
                 }
                 Ok(Control::Sessions(changes)) => self.sessions_changed(changes),
                 Ok(Control::SessionsList { params, reply }) => {
+                    if let Some(repo_id) = &params.repo_id {
+                        self.wake_for_request(repo_id);
+                    }
                     let _ = reply.send(self.sessions_list(&params));
                 }
                 Ok(Control::Register { request, reply }) => {
+                    self.wake_for_folder(&request.folder);
                     let _ = reply.send(self.register(request));
                 }
                 Ok(Control::Withdraw { request, reply }) => {
+                    self.wake_for_folder(&request.folder);
                     let _ = reply.send(self.withdraw(request));
                 }
                 Ok(Control::EventHistory { params, reply }) => {

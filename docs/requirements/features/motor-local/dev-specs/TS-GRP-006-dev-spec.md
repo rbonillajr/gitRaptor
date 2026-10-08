@@ -2,7 +2,7 @@
 id: DS-TS-GRP-006
 title: "Dev Spec — Observación por niveles: activo, dormido con centinela y despertar"
 type: dev-spec
-status: in-progress
+status: implemented
 feature: motor-local
 domain: GRP
 created: 2026-10-07
@@ -94,18 +94,26 @@ Todo con repos y perfiles temporales; esperas por señal, sin `sleep` fijos. Las
 
 ## 5. Estado de la entrega (2026-10-07)
 
-**Interruptor**: `DaemonConfig.tiers.dormant_after` (`TierConfig`) es `None` por defecto, así que en producción ningún repo duerme todavía. Los tests lo activan con un umbral corto. **Decisión del coordinador (2026-10-07)**: nada puede dormir un repo en producción hasta que el test de NFR-01 esté en verde en el mismo PR; está en verde, y el interruptor se enciende cuando el tramo 3 lea `dormantAfterHours`.
+**Interruptor**: `DaemonConfig.tiers` (`TierConfig`). En los tests que no prueban niveles es `None` y ningún repo duerme. El daemon real lo lee del perfil con `TierConfig::for_profile`: 24 h sin actividad por defecto. **Decisión del coordinador (2026-10-07)**: nada puede dormir un repo en producción hasta que el test de NFR-01 esté en verde. Lo está desde el PR #164 (tramos 1 y 2, con el interruptor apagado), y el interruptor se enciende en el PR del tramo 3.
 
 | Tramo | Contenido | Estado |
 |---|---|---|
-| 1 · Observador | D1 a D6, D8: `Tier`, `sleep_repo`, `wake_repo`, centinela, huella y barrido, `GapCause::Dormant` | Hecho. `observe_tiers` (6 tests) |
-| 2 · Daemon | D9, D10: umbral sin sesión presente, almacén cerrado, despertar por centinela, barrido, sesión, `events.history`, `RawEvents` (undo de la Time Machine), `guard.*` | Hecho. `daemon_tiers` (3 tests, NFR-01 incluido, comprobado con una mutación que apaga el centinela) |
-| 3 · Resto | D7 (reconciliación lenta con presupuesto), D11 (contrato `tier` y bloque `observation`), D12 (claves `engine.observation.*`), D13 (arranque dormido), despertar por suscripción a un repo, tests de shim de `git` y de worktree degradado | Pendiente |
+| 1 · Observador | D1 a D6 y D8: `Tier`, `sleep_repo`, `wake_repo`, centinela, huella y barrido, `GapCause::Dormant` | Hecho (#164) |
+| 2 · Daemon | D9 y D10: umbral sin sesión presente, almacén cerrado y despertar por centinela, barrido, sesión, `events.history`, `RawEvents` (undo de la Time Machine) y `guard.*` | Hecho (#164). Test NFR-01 comprobado con una mutación que apaga el centinela |
+| 3 · Resto | D7, reconciliación lenta con presupuesto (`reconcile_budget_ppm`, 0,1 %) | Hecho |
+| | D11, contrato: capacidad `observation.tiers`, `RepoView.tier` y `checked_utc_ms`, `RepoSummaryView.tier`, evento global `repo.tier` y bloque `observation` de `engine.resources` (sin el sub-bloque `discovery`, que es de US-GRP-020) | Hecho |
+| | D12: claves `engine.observation.*` con niveles y rangos, y modo de ahorro como función pura (el motor todavía no tiene modo de ahorro: TS-GRP-005) | Hecho |
+| | D13: al arrancar, la última actividad sale del último evento persistido y el repo duerme en el primer chequeo. La reconciliación de arranque se mantiene: la variante sin reconciliar queda pendiente | Hecho, con esa salvedad |
+| | Despertar al abrir un repo (`scope.snapshot` o `scope.subscribe` de un repo) y al registrar una decisión de Guardrails. Una suscripción a ese repo lo mantiene activo; la de la flota no | Hecho |
+| | Tests de shim de `git` (100 ciclos, 0 invocaciones) y de worktree degradado | Hecho |
 
 ## 6. Pendientes
 
 - **Entrega por tramos.** Esta spec se implementa en más de un PR. Lo que queda fuera de cada uno se anota en su descripción.
 - **Arranque barato (D13)**: comparar la huella persistida sin reconciliar necesita persistirla; hasta entonces el arranque reconcilia una vez.
-- **Lectura de la configuración del motor** (US-GRP-013): hasta entonces, valores por defecto.
+- **Nivel local de `dormantAfterHours`** (US-GRP-013): hoy solo se lee el perfil, y al arrancar.
+- **`checked_utc_ms`** es la hora en que el repo se durmió. Que lo actualice cada pasada de una red de seguridad queda pendiente.
+- **Coste de las redes de seguridad**: se mide en tiempo de pared de su trabajo, una cota superior de la CPU.
+- **Presentación** del nivel en `raptor status --resources`, la CLI y la TUI: es de US-GRP-017 y del Cockpit, fuera de esta TS.
 - **Escenario `tiered-scale`** del banco (INF-GRP-002): fuera de alcance de la TS; queda declarado.
 - **Linux y Windows**: **Pendiente: etapa de validación multiplataforma**. En macOS, el coste de los streams de FSEvents inactivos es un supuesto (Discrepancia de la Enmienda).

@@ -169,6 +169,9 @@ impl Daemon {
     pub(super) fn guard_record(&mut self, entry: LogEntry) {
         self.guard.log().release();
         let common = std::path::PathBuf::from(&entry.common_dir);
+        // A hook ran in the repo: a dormant one wakes and opens its store
+        // before the entry is written (TS-GRP-006, N4).
+        self.wake_for_common_dir(&common);
         let written = match self.observed_store(&common) {
             Some(store) => store.record_guard_decision(&entry).is_ok(),
             None => {
