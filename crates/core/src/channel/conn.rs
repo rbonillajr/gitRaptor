@@ -2232,7 +2232,13 @@ fn undo_result(done: UndoDone, requester: RequesterView) -> UndoResult {
         written: done.report.written as u64,
         removed: done.report.removed as u64,
         not_restored,
-        warnings: done.report.warnings.iter().map(warning_code).collect(),
+        warnings: done
+            .report
+            .warnings
+            .iter()
+            .map(warning_code)
+            .chain(done.warnings)
+            .collect(),
     }
 }
 
