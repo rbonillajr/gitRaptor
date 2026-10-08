@@ -536,9 +536,13 @@ pub fn read_worktree(path: &Path, main: bool, admin_name: Option<&str>) -> Workt
     };
     let read = || -> Result<(HeadView, Option<String>, Status, bool), ReadError> {
         let reader = RepoReader::open(path, &ReaderOptions::default())?;
+        // A `git` creates its operation state before it detaches `HEAD` and reattaches `HEAD`
+        // before it removes the state: read the state on both sides, or an operation that ends
+        // during the status reads as a plain detached `HEAD`.
+        let started = reader.in_progress().is_some();
         let head = reader.head()?;
         let status = reader.status()?;
-        let in_progress = reader.in_progress().is_some();
+        let in_progress = started || reader.in_progress().is_some();
         let name = || UntrustedName::new(head.branch.clone().unwrap_or_default());
         let head_view = if head.detached {
             HeadView::Detached
