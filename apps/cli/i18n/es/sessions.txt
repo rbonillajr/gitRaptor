@@ -2,7 +2,7 @@
 # Una línea `clave = texto`. Los marcadores son `{nombre}`; el código los
 # rellena por nombre, nunca concatenando. Toda clave existe también en ../en/sessions.txt.
 
-actor.unattributed = sin atribuir
+actor.unattributed = sin agente
 actor.claude-code = Claude Code
 actor.other = otro agente
 actor.other-agent = otro agente: {name}

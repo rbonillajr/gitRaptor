@@ -393,7 +393,7 @@ fn en(text: Text<'_>) -> String {
             ScopeRefusal::NoWorkingFolder => "no readable working folder",
             ScopeRefusal::NotObserved => "the folder is not in an observed repo",
             ScopeRefusal::NotAllowlisted => "the repo is not in the MCP allowlist",
-            ScopeRefusal::UnattributedOverMcp => "an unattributed caller cannot use MCP",
+            ScopeRefusal::UnattributedOverMcp => "a caller with no agent cannot use MCP",
             ScopeRefusal::ForeignWorktree => "the worktree belongs to another repo",
         }
         .into(),
@@ -580,7 +580,7 @@ fn es(text: Text<'_>) -> String {
             ScopeRefusal::NoWorkingFolder => "no hay una carpeta de trabajo legible",
             ScopeRefusal::NotObserved => "la carpeta no está en un repo observado",
             ScopeRefusal::NotAllowlisted => "el repo no está en la lista permitida del MCP",
-            ScopeRefusal::UnattributedOverMcp => "quien no está atribuido no puede usar el MCP",
+            ScopeRefusal::UnattributedOverMcp => "quien no tiene agente no puede usar el MCP",
             ScopeRefusal::ForeignWorktree => "el worktree es de otro repo",
         }
         .into(),

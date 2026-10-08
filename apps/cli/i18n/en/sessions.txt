@@ -2,7 +2,7 @@
 # One `key = text` per line. Placeholders are `{name}`; the code fills them
 # by name, never by concatenating. Every key exists in ../es/sessions.txt too.
 
-actor.unattributed = unattributed
+actor.unattributed = no agent
 actor.claude-code = Claude Code
 actor.other = another agent
 actor.other-agent = another agent: {name}

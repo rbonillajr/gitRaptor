@@ -471,7 +471,7 @@ fn daemon_status_says_who_you_act_as() {
     let en = developer("en_US.UTF-8");
     assert!(en.status.success(), "{}", text(&en));
     assert!(
-        text(&en).contains("you act as: unattributed (layer cockpit)"),
+        text(&en).contains("you act as: no agent (layer cockpit)"),
         "{}",
         text(&en)
     );
@@ -482,7 +482,7 @@ fn daemon_status_says_who_you_act_as() {
     );
     let es = developer("es_ES.UTF-8");
     assert!(
-        text(&es).contains("actúas como: sin atribuir (capa cockpit)"),
+        text(&es).contains("actúas como: sin agente (capa cockpit)"),
         "{}",
         text(&es)
     );
