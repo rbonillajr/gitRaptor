@@ -514,6 +514,15 @@ impl EventBus {
         Subscribed::From(from)
     }
 
+    /// Whether a connection follows `scope` (TS-GRP-006: a repo with a
+    /// client subscribed to it stays active).
+    pub fn subscribed_to(&self, scope: &Scope) -> bool {
+        self.lock()
+            .subscribers
+            .iter()
+            .any(|s| s.scope.as_ref() == Some(scope))
+    }
+
     pub fn unsubscribe(&self, outbox: &Arc<Outbox>, id: u32) -> bool {
         let mut inner = self.lock();
         let before = inner.subscribers.len();

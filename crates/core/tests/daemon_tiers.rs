@@ -68,11 +68,24 @@ fn connect(tp: &TempProfile) -> Client {
 /// Observes `fx`'s repo in a fresh profile, with tiers on and a short
 /// threshold, and the continuous capture with a short quiet time.
 fn start(fx: Fixture) -> Running {
+    start_with(fx, Duration::from_millis(800), |_, _| {})
+}
+
+/// The same with a given threshold; `seed` writes to the repo's store
+/// before the daemon starts.
+fn start_with(
+    fx: Fixture,
+    dormant_after: Duration,
+    seed: impl FnOnce(&mut gitraptor_core::profile::RepoStore, &Path),
+) -> Running {
     let tp = TempProfile::new();
     let mut profile = tp.open();
     let (entry, _) = profile
         .add_repo(&canonical(&fx.repo.join(".git")), None, 1)
         .unwrap();
+    let (mut store, _) = profile.open_store(&entry.repo_id).unwrap();
+    seed(&mut store, &canonical(&fx.repo));
+    drop(store);
     drop(profile);
     let env = DaemonEnv::from_vars(std::env::vars_os());
     let config = DaemonConfig {
@@ -87,7 +100,7 @@ fn start(fx: Fixture) -> Running {
         operations: None,
         tm_prior_layer: None,
         tiers: TierConfig {
-            dormant_after: Some(Duration::from_millis(800)),
+            dormant_after: Some(dormant_after),
             check_every: Duration::from_millis(50),
             ..TierConfig::default()
         },
@@ -386,4 +399,85 @@ fn resources_count_the_tiers() {
     assert_eq!(o["active"]["repos"], 0, "{res:#}");
     assert_eq!(o["dormant"]["sweep_interval_s"], 120, "{res:#}");
     assert_eq!(o["degraded"]["worktrees"], 0, "{res:#}");
+}
+
+/// N1, N4: a client subscribed to one repo wakes it and keeps it active; a
+/// subscription to the fleet (the global scope) neither wakes it nor keeps
+/// it awake. The negative part waits a bounded time: three thresholds.
+#[test]
+fn a_subscription_to_the_repo_wakes_it_and_the_fleet_does_not() {
+    let (fx, _wt) = repo_with_login();
+    let r = start(fx);
+    r.logged("repo_dormant", 1);
+    let mut fleet = connect(&r.tp);
+    let _: serde_json::Value = fleet
+        .call(
+            methods::SCOPE_SUBSCRIBE,
+            json!({ "scope": { "scope": "global" } }),
+        )
+        .unwrap();
+    let mut tui = connect(&r.tp);
+    let _: serde_json::Value = tui
+        .call(
+            methods::SCOPE_SUBSCRIBE,
+            json!({ "scope": { "scope": "repo", "repo_id": r.repo_id } }),
+        )
+        .unwrap();
+    r.logged("repo_woken", 1);
+    let woken = r.log().matches("repo_woken").count();
+    let dormant = r.log().matches("repo_dormant").count();
+    let until = Instant::now() + Duration::from_millis(3 * 800);
+    while Instant::now() < until {
+        assert_eq!(
+            r.log().matches("repo_dormant").count(),
+            dormant,
+            "slept while subscribed:\n{}",
+            r.log()
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    assert_eq!(r.log().matches("repo_woken").count(), woken);
+    // Without the repo's subscriber it sleeps again, the fleet's still there.
+    drop(tui);
+    r.logged("repo_dormant", dormant + 1);
+    drop(fleet);
+}
+
+/// N1 at startup: a repo whose last Git event is older than the threshold
+/// sleeps at the first check, not a whole threshold after the start. With
+/// a threshold of one hour, only the persisted activity can explain it.
+#[test]
+fn an_idle_repo_sleeps_at_the_first_check_after_a_start() {
+    use gitraptor_core::profile::{NewEvent, Timestamp, WriteOp};
+    let (fx, _wt) = repo_with_login();
+    let two_hours_ago = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64
+        - 2 * 3600 * 1000;
+    let r = start_with(fx, Duration::from_secs(3600), |store, root| {
+        store
+            .write_batch(&[
+                WriteOp::UpsertWorktree {
+                    path: root.to_path_buf(),
+                    admin_name: None,
+                    seen_ms: two_hours_ago,
+                },
+                WriteOp::AppendEvent(NewEvent {
+                    worktree: root.to_path_buf(),
+                    kind: "commit".into(),
+                    metadata: "{}".into(),
+                    observed: Timestamp {
+                        utc_ms: two_hours_ago,
+                        offset_s: 0,
+                    },
+                    session_id: None,
+                    evidence: None,
+                    gap_id: None,
+                    authorship: None,
+                }),
+            ])
+            .unwrap();
+    });
+    r.logged("repo_dormant", 1);
 }
