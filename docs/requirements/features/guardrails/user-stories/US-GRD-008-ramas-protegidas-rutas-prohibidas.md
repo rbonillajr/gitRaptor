@@ -108,6 +108,6 @@ El detalle técnico vive en la [Dev Spec DS-US-GRD-008](../dev-specs/US-GRD-008-
 
 ## Estado de la implementación (2026-10-08)
 
-Implementado en: PR #<n>. Dev Spec: [DS-US-GRD-008](../dev-specs/US-GRD-008-ramas-protegidas-rutas-prohibidas.md).
+Implementado en: PR #197. Dev Spec: [DS-US-GRD-008](../dev-specs/US-GRD-008-ramas-protegidas-rutas-prohibidas.md).
 
 Los siete escenarios están cubiertos por `apps/cli/tests/guard_us_grd_008.rs` (verificado en macOS; Linux lo cubre el CI de ubuntu; Windows no tiene canal: **Pendiente: etapa de validación multiplataforma**). Límites declarados en la lista "lo que no se puede impedir" (`policy-actor`, `policy-reach`). Pendiente fuera de esta historia: push solo a tags ([TD-GRD-001](../technical-stories/TD-GRD-001-dispatcher-plantilla-3-pre-push-toda-ref.md)) y confirmación de Rene de Q-GRD-35.
