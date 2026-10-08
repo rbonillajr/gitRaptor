@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::Actor;
+use crate::catalog::SnapshotRunResult;
 use crate::methods::{McpStatus, McpStatusAction};
 use crate::untrusted::{UntrustedName, sanitize};
 
@@ -41,6 +42,17 @@ pub const MCP_RETRY_AFTER_S: u64 = 60u64.div_ceil(MCP_READS_PER_MINUTE as u64);
 /// Most time of a read, the start of the engine included (BR-MCP-TIME-001).
 pub const MCP_READ_TIME_LIMIT: Duration = Duration::from_secs(10);
 
+/// Writes per minute of one `mcp` connection, and their burst; checked after the snapshot
+/// quota, so a quota refusal carries its own wait and not this bucket's.
+pub const MCP_WRITES_PER_MINUTE: u32 = 20;
+pub const MCP_WRITE_BURST: u32 = 5;
+
+/// Seconds a caller over the write limit waits for its next call.
+pub const MCP_WRITE_RETRY_AFTER_S: u64 = 60u64.div_ceil(MCP_WRITES_PER_MINUTE as u64);
+
+/// Most time of a write call, the engine's start included.
+pub const MCP_WRITE_TIME_LIMIT: Duration = Duration::from_secs(30);
+
 /// Why a tool call gives no data: stable codes, in English. Adding one is
 /// compatible; removing or changing one is a major change of the contract.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -63,12 +75,25 @@ pub enum McpToolError {
     /// The answer did not fit its budget; nothing of it is sent.
     ResultTooLarge,
     Internal,
+    /// The caller is not an identified agent; a write needs one.
+    Unattributed,
+    /// Something else is running: `params.kind` is `git` (an operation of Git in the
+    /// worktree) or `write` (the caller's previous snapshot has not finished).
+    OperationInProgress,
+    /// A Git lock is held in the worktree; it is never removed.
+    GitBusy,
     /// The manual snapshot quota is full.
     QuotaExceeded,
+    /// A text argument is not valid (an addition to the families of ADR-MCP-001 § 5).
+    InvalidText,
+    /// The worktree changed during the call; nothing was saved.
+    StateChanged,
+    /// The call was sent and its outcome is not known (transport failure).
+    OutcomeUnknown,
 }
 
 impl McpToolError {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 16] = [
         Self::RepoNotEnabled,
         Self::NotInObservedWorktree,
         Self::RepoUnavailable,
@@ -78,6 +103,13 @@ impl McpToolError {
         Self::TimeLimit,
         Self::ResultTooLarge,
         Self::Internal,
+        Self::Unattributed,
+        Self::OperationInProgress,
+        Self::GitBusy,
+        Self::QuotaExceeded,
+        Self::InvalidText,
+        Self::StateChanged,
+        Self::OutcomeUnknown,
     ];
 
     pub const fn as_str(self) -> &'static str {
@@ -91,7 +123,13 @@ impl McpToolError {
             Self::TimeLimit => "time-limit",
             Self::ResultTooLarge => "result-too-large",
             Self::Internal => "internal",
+            Self::Unattributed => "unattributed",
+            Self::OperationInProgress => "operation-in-progress",
+            Self::GitBusy => "git-busy",
             Self::QuotaExceeded => "quota-exceeded",
+            Self::InvalidText => "invalid-text",
+            Self::StateChanged => "state-changed",
+            Self::OutcomeUnknown => "outcome-unknown",
         }
     }
 }
@@ -193,6 +231,27 @@ pub struct McpStatusView {
     pub requester: Actor,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action: Option<McpStatusAction>,
+}
+
+/// The `snapshot` tool's answer: the field allowlist (SEC-12). The worktree is its folder
+/// name, never a path; the label is the requester's text, so it travels as untrusted.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct McpSnapshotView {
+    pub worktree: UntrustedName,
+    pub snapshot_id: String,
+    pub label: UntrustedName,
+}
+
+impl From<&SnapshotRunResult> for McpSnapshotView {
+    /// Names cut at their MCP bound; escaping is [`for_mcp`].
+    fn from(run: &SnapshotRunResult) -> Self {
+        Self {
+            worktree: run.worktree.mcp_name(),
+            snapshot_id: run.snapshot_id.clone(),
+            label: run.label.mcp_name(),
+        }
+    }
 }
 
 fn is_false(b: &bool) -> bool {
@@ -539,5 +598,78 @@ mod tests {
         let view = McpStatusView::from(&long);
         assert_eq!(view.worktree.raw().len(), MAX_MCP_NAME_CHARS);
         assert!(view.worktree.is_truncated());
+    }
+
+    /// The codes are a closed, kebab-case set; the wire form is `as_str`.
+    #[test]
+    fn mcp_tool_codes_are_kebab_and_closed() {
+        let mut seen = std::collections::BTreeSet::new();
+        for code in McpToolError::ALL {
+            let s = code.as_str();
+            assert!(
+                !s.is_empty()
+                    && s.split('-')
+                        .all(|w| !w.is_empty() && w.bytes().all(|b| b.is_ascii_lowercase())),
+                "{s}"
+            );
+            assert_eq!(serde_json::to_value(code).unwrap(), s);
+            assert!(seen.insert(s), "duplicate {s}");
+        }
+        // Every variant is listed in ALL: this match stops compiling when one is added.
+        let listed = |c: McpToolError| match c {
+            McpToolError::RepoNotEnabled
+            | McpToolError::NotInObservedWorktree
+            | McpToolError::RepoUnavailable
+            | McpToolError::EngineUnavailable
+            | McpToolError::IdentityUnverified
+            | McpToolError::RateLimited
+            | McpToolError::TimeLimit
+            | McpToolError::ResultTooLarge
+            | McpToolError::Internal
+            | McpToolError::Unattributed
+            | McpToolError::OperationInProgress
+            | McpToolError::GitBusy
+            | McpToolError::QuotaExceeded
+            | McpToolError::InvalidText
+            | McpToolError::StateChanged
+            | McpToolError::OutcomeUnknown => McpToolError::ALL.contains(&c),
+        };
+        assert!(McpToolError::ALL.into_iter().all(listed));
+        for s in [
+            "unattributed",
+            "operation-in-progress",
+            "git-busy",
+            "quota-exceeded",
+            "invalid-text",
+            "state-changed",
+            "outcome-unknown",
+        ] {
+            assert!(seen.contains(s), "{s}");
+        }
+        assert_eq!(MCP_WRITE_RETRY_AFTER_S, 3);
+    }
+
+    /// SEC-12: the snapshot tool's answer is its three fields, the texts untrusted.
+    #[test]
+    fn the_snapshot_view_is_its_field_allowlist() {
+        use crate::catalog::{Layer, OperationOutcome};
+        use crate::timemachine::{RequestChannel, RequesterView, ResolvedVia};
+        let run = SnapshotRunResult {
+            snapshot_id: "s1".into(),
+            worktree: UntrustedName::new("shop-feat-a"),
+            label: UntrustedName::new("antes"),
+            requester: RequesterView {
+                actor: Actor::Unattributed,
+                channel: RequestChannel::Mcp,
+                via: ResolvedVia::Ancestry,
+                confirmable: false,
+            },
+            layer: Layer::Mcp,
+            outcome: OperationOutcome::Done,
+        };
+        assert_eq!(
+            serde_json::to_string(&McpSnapshotView::from(&run)).unwrap(),
+            r#"{"worktree":{"untrusted":"shop-feat-a"},"snapshot_id":"s1","label":{"untrusted":"antes"}}"#
+        );
     }
 }

@@ -13,6 +13,10 @@ pub const TM_TIMELINE: &str = "timemachine.timeline";
 /// (DS-TS-TMC-003, Enmienda T2).
 pub const CAP_TM_KEPT_TEMPS: Capability = Capability::new("timemachine.kept-temps");
 
+/// `timemachine.timeline` serves entries `manual-snapshot` and protection level `manual`.
+/// A connection without it never receives either (they are filtered out).
+pub const CAP_TM_TIMELINE_MANUAL: Capability = Capability::new("timemachine.timeline-manual");
+
 /// A Time Machine command: not reserved (an agent may undo its own work,
 /// ADR-TMC-005 § 2), declared with its parameters and validated, and
 /// implemented by its story.
@@ -42,6 +46,6 @@ pub(super) const GROUP: Group = Group {
         time_machine(TM_RESTORE, false, RepoWrite::TimeMachine, "US-TMC-009"),
         time_machine(TM_TIMELINE, false, RepoWrite::None, "US-TMC-006"),
     ],
-    capabilities: &[CAP_TM_KEPT_TEMPS],
+    capabilities: &[CAP_TM_KEPT_TEMPS, CAP_TM_TIMELINE_MANUAL],
     ..Group::new("timemachine")
 };
