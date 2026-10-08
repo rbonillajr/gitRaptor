@@ -95,7 +95,21 @@ fn start_tiers(
     tiers: TierConfig,
     seed: impl FnOnce(&mut gitraptor_core::profile::RepoStore, &Path),
 ) -> Running {
+    start_full(fx, tiers, seed, None)
+}
+
+/// The same with the profile's `settings.json` as given, written before the daemon starts.
+fn start_full(
+    fx: Fixture,
+    tiers: TierConfig,
+    seed: impl FnOnce(&mut gitraptor_core::profile::RepoStore, &Path),
+    settings: Option<&str>,
+) -> Running {
     let tp = TempProfile::new();
+    if let Some(text) = settings {
+        std::fs::create_dir_all(&tp.dirs().config).unwrap();
+        std::fs::write(tp.dirs().config.join("settings.json"), text).unwrap();
+    }
     let mut profile = tp.open();
     let (entry, _) = profile
         .add_repo(&canonical(&fx.repo.join(".git")), None, 1)
@@ -434,6 +448,30 @@ fn resources_count_the_tiers() {
     assert_eq!(o["active"]["repos"], 0, "{res:#}");
     assert_eq!(o["dormant"]["sweep_interval_s"], 120, "{res:#}");
     assert_eq!(o["degraded"]["worktrees"], 0, "{res:#}");
+}
+
+/// ADR-GRP-010, Enmienda 2026-10-08: `engine.resources` shows the watcher backend, and the
+/// profile key `engine.watcher.backend` changes it (macOS; elsewhere it is always `notify`).
+#[test]
+fn the_backend_key_changes_the_watcher_and_resources_show_it() {
+    let backend_of = |settings: Option<&str>| {
+        let (fx, _wt) = repo_with_login();
+        let r = start_full(fx, TierConfig::default(), |_, _| {}, settings);
+        let res: serde_json::Value = connect(&r.tp)
+            .call(methods::ENGINE_RESOURCES, json!({}))
+            .unwrap();
+        res["watches"]["backend"].as_str().map(str::to_owned)
+    };
+    let (default, notify) = (
+        backend_of(None),
+        backend_of(Some(r#"{"engine":{"watcher":{"backend":"notify"}}}"#)),
+    );
+    if cfg!(target_os = "macos") {
+        assert_eq!(default.as_deref(), Some("fsevents"));
+    } else {
+        assert_eq!(default.as_deref(), Some("notify"));
+    }
+    assert_eq!(notify.as_deref(), Some("notify"));
 }
 
 /// N1, N4: a client subscribed to one repo wakes it and keeps it active; a

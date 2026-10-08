@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 use gitraptor_api::clock::monotonic_ns;
 use gitraptor_api::resources::{
     CPU_WINDOW_S, CpuUsage, DiskUsage, ProcessUsage, ResourceTargets, ResourcesResult, TARGETS,
-    WatchUsage,
+    WatchBackendKind, WatchUsage,
 };
 
 use crate::profile::ProfileDirs;
@@ -121,6 +121,8 @@ struct Inner {
     roots: Arc<AtomicU64>,
     /// The observer's tiers (TS-GRP-006), once it runs.
     observation: Mutex<Option<ObservationSource>>,
+    /// The file watcher backend that runs, once the observer does.
+    backend: Mutex<Option<WatchBackendKind>>,
 }
 
 /// Reads the observation tiers when `engine.resources` is asked.
@@ -163,6 +165,7 @@ impl ResourceMonitor {
             disk: Mutex::new(None),
             roots,
             observation: Mutex::new(None),
+            backend: Mutex::new(None),
         });
         inner.record();
         Self {
@@ -174,6 +177,11 @@ impl ResourceMonitor {
     /// The counter the observer keeps of its watched roots.
     pub fn roots_counter(&self) -> Arc<AtomicU64> {
         Arc::clone(&self.inner.roots)
+    }
+
+    /// The file watcher backend in use (`engine.watcher.backend`).
+    pub fn set_backend(&self, backend: WatchBackendKind) {
+        *self.inner.backend.lock().unwrap_or_else(|e| e.into_inner()) = Some(backend);
     }
 
     /// Where the observation tiers are read from (TS-GRP-006).
@@ -255,6 +263,12 @@ impl ResourceMonitor {
             },
             watches: WatchUsage {
                 roots: self.inner.roots.load(Ordering::Relaxed),
+                backend: self
+                    .inner
+                    .backend
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .to_owned(),
                 inotify: meter::inotify(),
             },
             disk: self.disk(),

@@ -33,6 +33,7 @@ use crate::profile::GapCause;
 
 pub use repo::{EventPlace, RefsView, classify};
 pub use sweep::Print;
+pub use watchers::WatchBackend;
 use watchers::Watchers;
 
 /// Intervals of the observer. The defaults are those of ADR-GRP-010; reading
@@ -59,6 +60,9 @@ pub struct WatchConfig {
     /// Average share of one core the slow reconciliation may use, in parts
     /// per million (RES-11: 0.1 %, ⚠️ ASSUMPTION of the Enmienda).
     pub reconcile_budget_ppm: u32,
+    /// File watcher backend on macOS (`engine.watcher.backend`, ADR-GRP-010, Enmienda
+    /// 2026-10-08); no effect elsewhere.
+    pub backend: WatchBackend,
 }
 
 impl Default for WatchConfig {
@@ -79,6 +83,7 @@ impl Default for WatchConfig {
             dormant_poll: Duration::from_secs(120),
             dormant_reconcile: Duration::from_secs(60 * 60),
             reconcile_budget_ppm: 1_000,
+            backend: WatchBackend::default(),
         }
     }
 }
@@ -888,6 +893,7 @@ impl Observer {
                 }
             }),
             roots,
+            config.backend,
         );
         *shared.watchers.lock().unwrap_or_else(|e| e.into_inner()) = Some(watchers);
         Self { shared }
@@ -1217,6 +1223,29 @@ impl Observer {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .interval()
+    }
+
+    /// The watcher backend that runs: `fsevents` or `notify` on macOS (the setting
+    /// `engine.watcher.backend`), `notify` elsewhere.
+    pub fn backend_name(&self) -> &'static str {
+        self.backend().as_str()
+    }
+
+    /// The same, as the wire type of `engine.resources`.
+    pub fn backend(&self) -> gitraptor_api::resources::WatchBackendKind {
+        use gitraptor_api::resources::WatchBackendKind as Kind;
+        let name = self
+            .shared
+            .watchers
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .map_or("notify", Watchers::backend_name);
+        if name == "fsevents" {
+            Kind::Fsevents
+        } else {
+            Kind::Notify
+        }
     }
 
     /// What `engine.resources` shows of the tiers (N8), read when asked.

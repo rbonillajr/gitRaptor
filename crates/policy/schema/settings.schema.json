@@ -224,9 +224,24 @@
       },
       "type": "object"
     },
+    "WatchBackend": {
+      "description": "`engine.watcher.backend`.",
+      "enum": [
+        "fsevents",
+        "notify"
+      ],
+      "type": "string"
+    },
     "Watcher": {
       "description": "`engine.watcher` section.",
       "properties": {
+        "backend": {
+          "$ref": "#/$defs/WatchBackend",
+          "description": "Backend of the file watcher on macOS: `fsevents` (default, the engine's own FSEvents\nstream) or `notify` (the library, the behaviour before ADR-GRP-010 Enmienda 2026-10-08;\nfallback for one release). Read when the daemon starts. No effect on Linux or Windows.",
+          "x-gitraptor-levels": [
+            "profile"
+          ]
+        },
         "degradedPollSeconds": {
           "description": "Polling interval in degraded mode, in seconds.",
           "format": "uint32",

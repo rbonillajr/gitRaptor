@@ -346,7 +346,9 @@ fn json_output_has_fixed_units_and_no_presentation_text() {
         paths,
         [
             ".disk.time_machine.repos[].path",
-            ".disk.time_machine.repos[].repo_id"
+            ".disk.time_machine.repos[].repo_id",
+            // An enum (`fsevents` or `notify`), not text.
+            ".engine.watches.backend"
         ]
     );
     assert_eq!(found[0].1, folder(&m.f.repo.join(".git")));

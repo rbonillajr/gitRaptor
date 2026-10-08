@@ -480,6 +480,39 @@ mod tests {
         assert_eq!(at(&p), ["/engine/observation/dormantAfterHours"]);
     }
 
+    /// ADR-GRP-010, Enmienda 2026-10-08: the watcher backend is read from the profile only.
+    #[test]
+    fn the_watcher_backend_is_a_profile_key_with_two_values() {
+        let doc = br#"{"engine":{"watcher":{"backend":"notify"}}}"#;
+        let p = parse_document(doc, Level::Profile, SourceKind::Profile);
+        assert!(codes(&p).is_empty());
+        let backend = p
+            .applicable()
+            .unwrap()
+            .engine
+            .clone()
+            .unwrap()
+            .watcher
+            .unwrap()
+            .backend;
+        assert_eq!(backend, Some(crate::settings::WatchBackend::Notify));
+        for level in [Level::Team, Level::Local] {
+            let kind = if level == Level::Team {
+                SourceKind::Team
+            } else {
+                SourceKind::Local
+            };
+            let p = parse_document(doc, level, kind);
+            assert_eq!(at(&p), ["/engine/watcher/backend"]);
+        }
+        let p = parse_document(
+            br#"{"engine":{"watcher":{"backend":"kqueue"}}}"#,
+            Level::Profile,
+            SourceKind::Profile,
+        );
+        assert!(!codes(&p).is_empty());
+    }
+
     #[test]
     fn unknown_key_or_operation_in_permissions_or_policies_is_partial() {
         let p = team(r#"{"permissions":{"deny":["push","tag-delete"],"disableSafeMinimum":true}}"#);
