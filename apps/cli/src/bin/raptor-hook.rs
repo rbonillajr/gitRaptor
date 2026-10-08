@@ -322,6 +322,17 @@ fn chain(prior: Option<&Path>, args: &[OsString], input: Input<'_>) -> ExitCode 
             sh.arg(&program);
             start(sh)
         }
+        // Git for Windows runs a hook that is not a program (a script, with or without `#!`)
+        // through its own `sh`: so does the dispatcher, with the same `exec "$0" "$@"` shape.
+        #[cfg(windows)]
+        Err(e) if e.raw_os_error() == Some(ERROR_BAD_EXE_FORMAT) => match git_sh() {
+            Some(sh) => {
+                let mut command = Command::new(sh);
+                command.arg("-c").arg(r#"exec "$0" "$@""#).arg(&program);
+                start(command)
+            }
+            None => Err(e),
+        },
         other => other,
     };
     let Ok(mut child) = spawned else {
@@ -342,6 +353,24 @@ fn chain(prior: Option<&Path>, args: &[OsString], input: Input<'_>) -> ExitCode 
 
 #[cfg(unix)]
 const ENOEXEC: i32 = 8;
+
+/// `CreateProcess` on a file that is not a PE image.
+#[cfg(windows)]
+const ERROR_BAD_EXE_FORMAT: i32 = 193;
+
+/// The `sh` of the Git for Windows that runs this hook: next to the folder `GIT_EXEC_PATH` (which
+/// Git sets for its hooks) names, never one looked up in `PATH` first, so a `sh.exe` planted in
+/// the repo or the working folder is not what runs.
+#[cfg(windows)]
+fn git_sh() -> Option<PathBuf> {
+    let exec = PathBuf::from(std::env::var_os("GIT_EXEC_PATH")?);
+    exec.ancestors().skip(1).take(4).find_map(|root| {
+        ["usr/bin/sh.exe", "bin/sh.exe"]
+            .into_iter()
+            .map(|rel| root.join(rel))
+            .find(|sh| sh.is_file())
+    })
+}
 
 fn main() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().skip(1).collect();
