@@ -27,7 +27,10 @@ pub fn monotonic_ns() -> u64 {
     use std::time::Instant;
     static START: OnceLock<Instant> = OnceLock::new();
     let start = START.get_or_init(Instant::now);
-    u64::try_from(start.elapsed().as_nanos()).unwrap_or(u64::MAX)
+    // Never 0: a stamp of 0 means "never" to its readers.
+    u64::try_from(start.elapsed().as_nanos())
+        .unwrap_or(u64::MAX)
+        .saturating_add(1)
 }
 
 #[cfg(test)]
