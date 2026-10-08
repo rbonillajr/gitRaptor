@@ -133,6 +133,9 @@ pub const REPO_ATTENTION: &str = "repo.attention";
 /// An observed repo changed tier (TS-GRP-006), only for a connection with
 /// `observation.tiers`. Data: [`crate::messages::RepoTierData`].
 pub const REPO_TIER: &str = "repo.tier";
+/// Repos discovered in a code root (US-GRP-020), only for a connection with
+/// `discovery.events`. Data: [`crate::discovery::RepoDiscoveredData`].
+pub const REPO_DISCOVERED: &str = "repo.discovered";
 
 const fn engine(kind: &'static str) -> EventKind {
     EventKind {
@@ -172,6 +175,8 @@ pub const KINDS: &[EventKind] = &[
     engine(REPO_ATTENTION),
     // Global, like the list it qualifies: the fleet shows it.
     engine(REPO_TIER),
+    // Global: a candidate belongs to no observed repo.
+    engine(REPO_DISCOVERED),
     engine_repo(OPERATION_QUEUED),
     engine_repo(OPERATION_STARTED),
     engine_repo(OPERATION_FINISHED),

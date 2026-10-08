@@ -14,6 +14,7 @@ pub mod actor;
 pub mod capability;
 pub mod catalog;
 pub mod clock;
+pub mod discovery;
 pub mod event;
 pub mod framing;
 pub mod guard;
