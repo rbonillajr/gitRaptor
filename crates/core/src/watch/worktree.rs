@@ -111,9 +111,7 @@ pub(super) fn run(
         let wait = deadline.saturating_duration_since(Instant::now());
         match rx.recv_timeout(wait) {
             Ok(WtMsg::Paths(t_recv, paths)) => {
-                eprintln!("DBG wt paths {paths:?} root={:?}", task.root);
                 if !task.ignore.keep_any(&task.root, paths) {
-                    eprintln!("DBG wt ignored");
                     continue;
                 }
                 task.last_event_ms = wall_now().0;
@@ -257,7 +255,6 @@ impl Task {
 
     /// Tells the hooks the worktree changed, after its batch is handed over.
     fn changed(&self) {
-        eprintln!("DBG wt changed hooks={}", self.shared.hooks.is_some());
         if let Some(hooks) = &self.shared.hooks {
             hooks.worktree_changed(&self.repo_id, &self.root);
         }
@@ -411,7 +408,8 @@ impl IgnoredPrefixes {
 
     fn insert(&self, dir: &Path) {
         let mut prefix = dir.as_os_str().as_encoded_bytes().to_vec();
-        prefix.push(b'/');
+        // The separator of the event paths it is compared with.
+        prefix.push(std::path::MAIN_SEPARATOR as u8);
         let mut all = self.0.write().unwrap_or_else(|e| e.into_inner());
         if all.len() < MAX_IGNORED_PREFIXES && !all.contains(&prefix) {
             all.push(prefix);
@@ -508,7 +506,9 @@ impl IgnoreCache {
             if reader.is_ignored(&dir, true).unwrap_or(false) {
                 // Only a name read without loss names the same folder for the router.
                 if rel.to_str().is_some() {
-                    self.prefixes.insert(&root.join(&dir));
+                    // `dir` joins its parts with `/`: native parts, as the events name them.
+                    self.prefixes
+                        .insert(&root.join(dir.split('/').collect::<PathBuf>()));
                 }
                 self.ignored.insert(dir);
                 return true;

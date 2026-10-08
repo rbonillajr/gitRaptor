@@ -216,7 +216,6 @@ impl ObserverHooks for Hooks {
     }
 
     fn worktree_changed(&self, repo_id: &str, root: &Path) {
-        eprintln!("DBG worktree_changed {repo_id} {}", root.display());
         self.marks.bump_activity(repo_id);
         let _ = self
             .tx
@@ -415,7 +414,6 @@ fn run(config: CaptureConfig, deps: CaptureDeps, rx: Receiver<Signal>) {
                 continue;
             }
             let attempt = capture_one(&deps, &key.0, &key.1, p.event, p.give_way(&config));
-            eprintln!("DBG capture_one {:?} -> {:?}", key, attempt);
             if !p.after(attempt, Instant::now(), &config) {
                 if p.retries > MAX_RETRIES {
                     deps.logger
@@ -470,10 +468,9 @@ fn capture_one(
     give_way: bool,
 ) -> Attempt {
     if !worktree.is_dir() {
-        eprintln!("DBG not a dir {}", worktree.display());
         return Attempt::Done;
     }
-    let r = observe(
+    match observe(
         deps,
         repo_id,
         &[worktree.to_path_buf()],
@@ -481,9 +478,7 @@ fn capture_one(
         event,
         CAPTURE_SETTLE_LIMIT,
         give_way,
-    );
-    eprintln!("DBG observe result {:?}", r.as_ref().map(|_| ()));
-    match r {
+    ) {
         Ok(_) => Attempt::Done,
         Err(Failure::NotCalm | Failure::Busy) => Attempt::Again,
         Err(Failure::Capture(CaptureError::Yielded)) => Attempt::GaveWay,
