@@ -162,7 +162,7 @@ Cierra el pendiente de Windows de D3. **Decisión del orquestador (2026-10-08), 
 
 ## Estado de la implementación (2026-10-08)
 
-Implementado en: PR #80, #119, #124, #155, #169 y, para Windows, el PR de la rama `feat/windows-session-detection` (enmienda de 2026-10-08).
+Implementado en: PR #80, #119, #124, #155, #169 y, para Windows, el PR de la rama `feat/windows-session-detection-v2` (enmienda de 2026-10-08).
 
 Notas (fuera del alcance de esta ficha o sin bloquearla):
 - La medición en el dogfooding real es de SPIKE-GRP-001 (criterio 2 de M1).
