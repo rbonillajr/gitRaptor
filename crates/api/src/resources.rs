@@ -123,12 +123,33 @@ pub struct CpuUsage {
     pub window_s: u64,
 }
 
-/// What the observer watches (RES-04).
+/// The file watcher backend (ADR-GRP-010, Enmienda 2026-10-08).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum WatchBackendKind {
+    Fsevents,
+    Notify,
+}
+
+impl WatchBackendKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Fsevents => "fsevents",
+            Self::Notify => "notify",
+        }
+    }
+}
+
+/// What the observer watches (RES-04).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct WatchUsage {
     /// Roots watched recursively: worktrees and common directories.
     pub roots: u64,
+    /// The file watcher backend: `fsevents` or `notify` (macOS, `engine.watcher.backend`),
+    /// `notify` elsewhere. `None` until the observer starts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend: Option<WatchBackendKind>,
     /// Linux only: the inotify watches of the process.
     pub inotify: Option<InotifyUsage>,
 }
@@ -307,6 +328,7 @@ mod tests {
             },
             watches: WatchUsage {
                 roots: 3,
+                backend: Some(WatchBackendKind::Fsevents),
                 inotify: None,
             },
             disk: DiskUsage {
@@ -376,6 +398,8 @@ mod tests {
                 ".pools.class",
                 ".pools.pool",
                 ".power_saving.setting",
+                // An enum (`fsevents` or `notify`), not text.
+                ".watches.backend",
             ]
         );
     }
