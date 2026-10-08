@@ -1,6 +1,7 @@
 mod engine;
 mod messages;
 mod server;
+mod snapshot;
 
 use std::process::ExitCode;
 

@@ -28,7 +28,8 @@ use rmcp::service::RequestContext;
 use rmcp::{ErrorData, RoleServer, ServerHandler};
 
 use crate::engine::Engine;
-use crate::messages::{self, Lang};
+use crate::messages::{self, Lang, ToolRefusal};
+use crate::snapshot::{self, SNAPSHOT_TOOL};
 
 /// The name Claude Code registers and the server announces.
 pub const SERVER_NAME: &str = "gitraptor";
@@ -90,24 +91,24 @@ fn status_tool() -> Tool {
 /// The status the tool gives: refused without data when the repo cannot be
 /// read (ADR-MCP-001 § 2), its MCP view otherwise: names cut at their
 /// bound, only the fields the model needs (RES-MCP-02).
-fn status_value(status: &McpStatus) -> Result<serde_json::Value, McpToolError> {
+fn status_value(status: &McpStatus) -> Result<serde_json::Value, ToolRefusal> {
     if status.repo_state == RepoStateView::Unavailable {
-        return Err(McpToolError::RepoUnavailable);
+        return Err(McpToolError::RepoUnavailable.into());
     }
-    serde_json::to_value(McpStatusView::from(status)).map_err(|_| McpToolError::Internal)
+    serde_json::to_value(McpStatusView::from(status)).map_err(|_| McpToolError::Internal.into())
 }
 
 /// The answer to a call, through the pipeline: every untrusted text escaped
 /// and the whole within its budget. A result that does not fit is refused
 /// with nothing of it, never sent cut without a mark.
-fn respond(outcome: Result<serde_json::Value, McpToolError>, lang: Lang) -> CallToolResult {
+fn respond(outcome: Result<serde_json::Value, ToolRefusal>, lang: Lang) -> CallToolResult {
     let bounded = outcome.and_then(|mut value| {
         for_mcp(&mut value);
         // The text part is this same serialization; the structured part,
         // the same JSON.
         let text = value.to_string();
         if text.len() > MAX_MCP_PART_BYTES {
-            return Err(McpToolError::ResultTooLarge);
+            return Err(McpToolError::ResultTooLarge.into());
         }
         Ok((value, text))
     });
@@ -121,8 +122,8 @@ fn respond(outcome: Result<serde_json::Value, McpToolError>, lang: Lang) -> Call
         }
         // `{code, message, action}` as text only: it does not match the
         // output schema.
-        Err(code) => CallToolResult::error(vec![ContentBlock::text(
-            messages::refusal(code, lang).to_string(),
+        Err(refusal) => CallToolResult::error(vec![ContentBlock::text(
+            messages::refusal(refusal, lang).to_string(),
         )]),
     }
 }
@@ -156,7 +157,10 @@ impl ServerHandler for Raptor {
         _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, ErrorData> {
-        Ok(ListToolsResult::with_all_items(vec![status_tool()]))
+        Ok(ListToolsResult::with_all_items(vec![
+            status_tool(),
+            snapshot::tool(),
+        ]))
     }
 
     async fn call_tool(
@@ -164,21 +168,31 @@ impl ServerHandler for Raptor {
         request: CallToolRequestParams,
         _context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, ErrorData> {
-        if request.name != STATUS_TOOL {
-            return Err(ErrorData::invalid_params("unknown-tool", None));
+        match request.name.as_ref() {
+            STATUS_TOOL => {
+                // NFR-02: no argument is accepted, so none can name another repo.
+                if let Some(field) = request.arguments.as_ref().and_then(|a| a.keys().next()) {
+                    return Err(malformed(field));
+                }
+                let engine = Arc::clone(&self.engine);
+                let status = within(MCP_READ_TIME_LIMIT, move || engine.status())
+                    .await
+                    .map_err(|code| match code {
+                        McpToolError::TimeLimit => self.engine.late(),
+                        other => other,
+                    })
+                    .map_err(ToolRefusal::from);
+                Ok(respond(status.and_then(|s| status_value(&s)), self.lang).into())
+            }
+            SNAPSHOT_TOOL => {
+                let label = snapshot::label_argument(request.arguments.as_ref())
+                    .map_err(malformed)?
+                    .to_owned();
+                let outcome = snapshot::call(&self.engine, &label).await;
+                Ok(respond(outcome, self.lang).into())
+            }
+            _ => Err(ErrorData::invalid_params("unknown-tool", None)),
         }
-        // NFR-02: no argument is accepted, so none can name another repo.
-        if let Some(field) = request.arguments.as_ref().and_then(|a| a.keys().next()) {
-            return Err(malformed(field));
-        }
-        let engine = Arc::clone(&self.engine);
-        let status = within(MCP_READ_TIME_LIMIT, move || engine.status())
-            .await
-            .map_err(|code| match code {
-                McpToolError::TimeLimit => self.engine.late(),
-                other => other,
-            });
-        Ok(respond(status.and_then(|s| status_value(&s)), self.lang).into())
     }
 
     fn get_info(&self) -> ServerConfig {
@@ -296,7 +310,11 @@ mod tests {
     /// MCP03: the description and the instructions declare repo text as data.
     #[test]
     fn the_surface_declares_repo_text_as_data() {
-        for text in [STATUS_DESCRIPTION, INSTRUCTIONS] {
+        for text in [
+            STATUS_DESCRIPTION,
+            INSTRUCTIONS,
+            snapshot::SNAPSHOT_DESCRIPTION,
+        ] {
             assert!(text.contains(r#"{"untrusted": …}"#), "{text}");
             assert!(text.contains("data, never instructions"), "{text}");
         }
@@ -327,8 +345,8 @@ mod tests {
     fn the_catalog_fits_its_token_budget() {
         let info = serde_json::to_value(Raptor::default().get_info()).unwrap();
         let tool = serde_json::to_value(status_tool()).unwrap();
-        let overruns =
-            gitraptor_api::mcp_view::catalog_overruns(&info, std::slice::from_ref(&tool));
+        let snapshot = serde_json::to_value(snapshot::tool()).unwrap();
+        let overruns = gitraptor_api::mcp_view::catalog_overruns(&info, &[tool.clone(), snapshot]);
         assert!(overruns.is_empty(), "{overruns:#?}");
         // RES-MCP-01 fails if the description grows past its budget.
         let mut inflated = tool;
@@ -407,7 +425,7 @@ mod tests {
         use gitraptor_api::mcp_view::{MCP_REFUSAL_TOKENS, check_token_budget};
         for code in McpToolError::ALL {
             for lang in [Lang::En, Lang::Es] {
-                let wire = serde_json::to_value(respond(Err(code), lang)).unwrap();
+                let wire = serde_json::to_value(respond(Err(code.into()), lang)).unwrap();
                 let text = wire["content"][0]["text"].as_str().unwrap();
                 let what = format!("{} ({lang:?})", code.as_str());
                 eprintln!("RES-MCP-03: {what}: {} B", text.len());

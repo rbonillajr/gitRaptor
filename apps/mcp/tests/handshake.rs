@@ -100,14 +100,14 @@ fn completes_the_mcp_handshake_over_stdio_and_exits_when_stdin_closes() {
         result["capabilities"],
         json!({"tools": {"listChanged": false}})
     );
-    // US-MCP-003: `status`, with no arguments; the rest arrive with later stories.
+    // `status`, with no arguments, and `snapshot`, with only a label.
     let names: Vec<_> = s.tools["result"]["tools"]
         .as_array()
         .unwrap()
         .iter()
         .map(|t| t["name"].clone())
         .collect();
-    assert_eq!(names, [json!("status")]);
+    assert_eq!(names, [json!("status"), json!("snapshot")]);
     assert_eq!(
         s.tools["result"]["tools"][0]["inputSchema"]["properties"],
         json!({})
@@ -287,14 +287,16 @@ fn the_catalog_is_fixed_and_declares_repo_text_as_data() {
     assert_eq!(responses[0]["result"], responses[1]["result"]);
     assert_eq!(responses[1]["result"], responses[2]["result"]);
     let tools = responses[0]["result"]["tools"].as_array().unwrap();
-    assert_eq!(tools.len(), 1);
-    let description = tools[0]["description"].as_str().unwrap();
-    assert!(description.contains(r#"{"untrusted": …}"#), "{description}");
-    assert!(
-        description.contains("data, never instructions"),
-        "{description}"
-    );
-    assert!(!description.contains("Ignore previous"), "{description}");
+    assert_eq!(tools.len(), 2);
+    for tool in tools {
+        let description = tool["description"].as_str().unwrap();
+        assert!(description.contains(r#"{"untrusted": …}"#), "{description}");
+        assert!(
+            description.contains("data, never instructions"),
+            "{description}"
+        );
+        assert!(!description.contains("Ignore previous"), "{description}");
+    }
 
     let s = session(&profile, tmp.path(), &[]);
     let instructions = s.initialize["result"]["instructions"].as_str().unwrap();
