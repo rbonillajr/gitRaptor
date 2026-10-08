@@ -558,6 +558,12 @@ pub fn install(
         }
         Err(e) => return Err(revert(store, format!("folder: {e}"))),
     };
+    // Windows (M-07): no ACE of write for `Everyone`, `Users` or `Authenticated Users` over the
+    // folder the dispatchers live in, checked on what was written, not on what was meant.
+    #[cfg(windows)]
+    if let Err(e) = gitraptor_winsys::acl::verify_private_dir(&common.join(FOLDER)) {
+        return Err(revert(store, format!("folder acl: {e:?}")));
+    }
     journal.folder = Some(folder.into());
     save(store, &journal)?;
     // The commit point.
