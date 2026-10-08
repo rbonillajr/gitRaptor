@@ -23,7 +23,9 @@ use common::TempProfile;
 use gitraptor_api::catalog::{Layer, OperationArgs, OperationId, PrepareResult};
 use gitraptor_api::messages::ClientKind;
 use gitraptor_api::rpc::code;
-use gitraptor_api::timemachine::{OperationRunResult, TmRejectReason, TmRejectedData};
+use gitraptor_api::timemachine::{
+    OperationRunResult, RestoreResult, TmRejectReason, TmRejectedData, UndoResult,
+};
 use gitraptor_api::{PROTOCOL_VERSION, methods};
 use gitraptor_core::channel::ChannelConfig;
 use gitraptor_core::client::{Client, ClientError};
@@ -40,6 +42,9 @@ use gitraptor_core::timemachine::oplog::{
 use gitraptor_core::timemachine::protected::{
     OperationCatalog, OperationsWiring, ProtectedStep, RepoHandle, StepCtx, StepError, StepOutput,
     StepScope,
+};
+use gitraptor_core::timemachine::restore::{
+    KEPT_REF_IN_RECREATED_WORKTREE, RECREATED_WORKTREE_ROOT_WARNING,
 };
 use gitraptor_testkit::{Fixture, diff};
 use serde_json::{Value, json};
@@ -69,6 +74,17 @@ fn script(subtype: &'static str, commands: &[&[&str]]) -> Script {
             .map(|c| c.iter().map(|a| (*a).to_owned()).collect())
             .collect(),
         scope: StepScope::default(),
+    }
+}
+
+impl Script {
+    /// Declares other worktrees and the refs the operation moves or deletes.
+    fn declaring(mut self, worktrees: &[&Path], refs: &[&str]) -> Self {
+        self.scope = StepScope {
+            worktrees: worktrees.iter().map(|p| p.to_path_buf()).collect(),
+            refs: refs.iter().map(|r| (*r).to_owned()).collect(),
+        };
+        self
     }
 }
 
@@ -267,6 +283,23 @@ impl Running {
         )
     }
 
+    fn restore_ok(&self, worktree: &Path, snapshot_id: &str) -> RestoreResult {
+        match self.restore(worktree, snapshot_id) {
+            Ok(v) => serde_json::from_value(v).unwrap(),
+            Err(e) => panic!("the restore failed: {e:?}"),
+        }
+    }
+
+    fn undo_ok(&self, worktree: &Path) -> UndoResult {
+        match connect(&self.tp).call(
+            methods::TM_UNDO,
+            json!({ "worktree": worktree.to_str().unwrap(), "surface": "cli" }),
+        ) {
+            Ok(v) => serde_json::from_value(v).unwrap(),
+            Err(e) => panic!("the undo failed: {e:?}"),
+        }
+    }
+
     fn op(&self, id: &str) -> OperationView {
         self.oplog.lock().unwrap().operation(id).unwrap().unwrap()
     }
@@ -371,4 +404,54 @@ fn a_tampered_operation_after_the_point_refuses_the_restore() {
     let changes = diff(&before, &r.fx.fingerprint());
     assert!(changes.is_empty(), "{changes:#?}");
     assert_recorded_rejected(&r, &refusal, &point);
+}
+
+/// The undo of a restore that recreated a worktree names each branch it
+/// leaves as it is, and the restore recorded the recreated worktree's root
+/// along with its key.
+#[test]
+fn the_undo_of_a_restore_names_each_kept_branch() {
+    let (fx, wt) = repo_with_login();
+    fx.git(&["branch", "feat-x"]);
+    let x = canonical(&fx.add_worktree("feat-x", "feat-x"));
+    let r = start(fx);
+    let first = r.operation(
+        &wt,
+        script(
+            "worktree-remove",
+            &[
+                &[
+                    "-C",
+                    x.to_str().unwrap(),
+                    "commit",
+                    "--allow-empty",
+                    "-q",
+                    "-m",
+                    "x",
+                ],
+                &["worktree", "remove", "--force", x.to_str().unwrap()],
+            ],
+        )
+        .declaring(&[&x], &["refs/heads/feat-x"]),
+    );
+    let point = first.prior_snapshot_id.clone();
+    assert!(!x.exists());
+
+    let restore = r.restore_ok(&wt, &point);
+    assert!(x.exists());
+    let root = format!("{RECREATED_WORKTREE_ROOT_WARNING}:{}", x.display());
+    let recorded = r.op(&restore.operation_id).record.warnings;
+    assert!(recorded.contains(&root), "{recorded:?}");
+
+    let undo = r.undo_ok(&wt);
+
+    assert_eq!(undo.undone_operation_id, restore.operation_id);
+    let kept = format!("{KEPT_REF_IN_RECREATED_WORKTREE}:refs/heads/feat-x");
+    assert!(undo.warnings.contains(&kept), "{:?}", undo.warnings);
+    assert!(
+        r.op(&undo.operation_id).record.warnings.contains(&kept),
+        "{:?}",
+        r.op(&undo.operation_id).record.warnings
+    );
+    assert!(x.exists());
 }
