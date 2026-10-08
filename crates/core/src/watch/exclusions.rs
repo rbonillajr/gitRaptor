@@ -134,13 +134,24 @@ fn apply(
     }
     let Some(done) = replace(shared, root, &wanted) else {
         // The OS refused the new stream. A folder taken back must not stay out: reconcile what
-        // was missed and try again soon.
+        // was missed and try again soon. The ones to add start counting again.
+        for dir in &wanted {
+            if !current.contains(dir) {
+                ignored.cool(dir);
+            }
+        }
         if removed {
             let _ = pending.tx.send(WtMsg::Rescan(clock::monotonic_ns()));
             return Some(Instant::now() + RETRY_AFTER);
         }
         return again;
     };
+    // A folder that was gone when the stream started is not out of it: it counts from zero again.
+    for dir in &wanted {
+        if !done.applied.contains(dir) {
+            ignored.cool(dir);
+        }
+    }
     if add {
         last_addition.insert(root.to_path_buf(), Instant::now());
     }
@@ -154,6 +165,7 @@ fn apply(
 
 struct Replaced {
     complete: bool,
+    applied: Vec<PathBuf>,
 }
 
 /// Replaces `root`'s stream by one that leaves out `wanted`, without holding the watchers lock
@@ -161,15 +173,11 @@ struct Replaced {
 fn replace(shared: &Shared, root: &Path, wanted: &[PathBuf]) -> Option<Replaced> {
     let ticket = shared.stream_ticket(root)?;
     let rebuilt = mac::rebuild(&ticket, wanted)?;
-    let requested = if rebuilt.excluded {
-        wanted.to_vec()
-    } else {
-        Vec::new()
-    };
-    let complete = rebuilt.complete && (rebuilt.excluded || wanted.is_empty());
+    let complete = rebuilt.complete && !rebuilt.rejected;
+    let applied = rebuilt.applied.clone();
     // The stream that leaves is dropped here, outside the lock.
-    let _leaving = shared.commit_stream(&ticket, rebuilt.stream, requested);
-    Some(Replaced { complete })
+    let _leaving = shared.commit_stream(&ticket, rebuilt.stream, rebuilt.applied);
+    Some(Replaced { complete, applied })
 }
 
 /// The notifier a worktree installs on its [`IgnoredPrefixes`].

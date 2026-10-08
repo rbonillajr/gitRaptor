@@ -264,8 +264,11 @@ pub(crate) mod mac {
         pub stream: Stream,
         /// Its history was replayed in time.
         pub complete: bool,
-        /// The OS took the exclusions.
-        pub excluded: bool,
+        /// The OS rejected the exclusions: the stream runs without them.
+        pub rejected: bool,
+        /// The folders of `wanted` the stream really leaves out: one that no longer exists, or
+        /// is a symlink, is not.
+        pub applied: Vec<PathBuf>,
     }
 
     /// Starts the stream that takes over from `ticket.old`, leaving out `wanted`, and waits for
@@ -275,11 +278,13 @@ pub(crate) mod mac {
     /// exclusions, the stream starts without them: the router still drops what is ignored.
     /// Takes no lock: it waits for the old stream's callbacks.
     pub(crate) fn rebuild(ticket: &Ticket, wanted: &[PathBuf]) -> Option<Rebuilt> {
-        ticket.old.flush_sync();
-        let from = match ticket.old.last_event_id() {
+        // Taken before the flush: whatever the OS records from here on, the new stream replays
+        // and the old one may or may not have delivered (duplicates are harmless).
+        let from = match fsevents::current_event_id() {
             0 => SINCE_NOW,
             id => id,
         };
+        ticket.old.flush_sync();
         let (tx, rx) = channel();
         let start = |excluded: &[PathBuf]| {
             Stream::start(
@@ -289,18 +294,25 @@ pub(crate) mod mac {
                 adapter(Arc::clone(&ticket.handler), Some(tx.clone())),
             )
         };
-        let (stream, excluded) = match start(wanted) {
-            Ok(s) => (s, true),
+        let (stream, rejected) = match start(wanted) {
+            Ok(s) => (s, false),
             Err(StreamError::Exclusions | StreamError::TooManyExclusions) => {
-                (start(&[]).ok()?, false)
+                (start(&[]).ok()?, true)
             }
             Err(_) => return None,
         };
         let complete = from == SINCE_NOW || rx.recv_timeout(HISTORY_WAIT).is_ok();
+        let kept = stream.exclusions();
+        let applied = wanted
+            .iter()
+            .filter(|w| w.canonicalize().is_ok_and(|c| kept.contains(&c)))
+            .cloned()
+            .collect();
         Some(Rebuilt {
             stream,
             complete,
-            excluded,
+            rejected,
+            applied,
         })
     }
 }

@@ -107,6 +107,12 @@ fn canonical(path: &Path) -> Result<PathBuf, StreamError> {
     path.canonicalize().map_err(|_| StreamError::InvalidPath)
 }
 
+/// The id of the latest event the OS has recorded: a stream started from it, after the stream it
+/// replaces flushed, misses nothing and replays next to nothing.
+pub fn current_event_id() -> u64 {
+    crate::ffi_fsevents::current_event_id()
+}
+
 impl Stream {
     /// Starts a stream over `root` (recursive), skipping `exclusions`, from `since_when`
     /// ([`SINCE_NOW`] or the id of an earlier event). Paths are made canonical (`/var` is

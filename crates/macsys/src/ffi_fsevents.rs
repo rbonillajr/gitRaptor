@@ -220,6 +220,12 @@ extern "C" fn trampoline(
 
 extern "C" fn barrier(_: *mut c_void) {}
 
+/// The id of the latest event the OS has recorded.
+pub(crate) fn current_event_id() -> u64 {
+    // SAFETY: a plain query.
+    unsafe { FSEventsGetCurrentEventId() }
+}
+
 /// Creates and starts a stream over `root` that skips `exclusions`.
 pub(crate) fn create(
     root: &str,
