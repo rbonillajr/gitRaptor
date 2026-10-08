@@ -167,6 +167,7 @@ enum Msg<'a> {
     InternalPassed,
     Moved,
     PriorFailed,
+    PriorUnknown,
 }
 
 fn say(msg: Msg<'_>) {
@@ -209,6 +210,12 @@ fn say(msg: Msg<'_>) {
         }
         Msg::PriorFailed => {
             "GitRaptor: the hook this repository already had could not be run. The operation did not run.".to_owned()
+        }
+        Msg::PriorUnknown if es => {
+            "GitRaptor: los hooks de este repositorio están dañados: los hooks que ya tenía no se ejecutaron.".to_owned()
+        }
+        Msg::PriorUnknown => {
+            "GitRaptor: the hooks of this repository are damaged: the hooks it already had did not run.".to_owned()
         }
     };
     let _ = writeln!(std::io::stderr(), "{text}");
@@ -356,14 +363,19 @@ fn main() -> ExitCode {
     // L-01: outside `prepared` there is nothing to evaluate; only the prior hook, if any, runs
     // (with the input it would have had). The same for a hook Guardrails does not govern.
     if (hook == Hook::ReferenceTransaction && !prepared) || matches!(hook, Hook::Chain(_)) {
-        let Some(conf) = conf.as_ref() else {
+        let common = conf
+            .as_ref()
+            .map(|c| PathBuf::from(c.get("common").unwrap_or_default()));
+        let Some((conf, common)) = conf
+            .as_ref()
+            .zip(common)
+            .filter(|(_, common)| common_here.as_deref() == Some(common.as_path()))
+        else {
+            // No constants, or another repo's: the prior hook cannot be found, and that is
+            // said, never skipped in silence.
+            say(Msg::PriorUnknown);
             return ExitCode::SUCCESS;
         };
-        let common = PathBuf::from(conf.get("common").unwrap_or_default());
-        if common_here.as_deref() != Some(common.as_path()) {
-            // Constants of another repo: chain nothing of it.
-            return ExitCode::SUCCESS;
-        }
         return chain(
             prior_hook(conf, &common, hook).as_deref(),
             &args,
@@ -393,9 +405,11 @@ fn main() -> ExitCode {
         }
     };
     let Some(conf) = conf else {
-        // Without constants there is no prior hook to find: the fallback alone decides.
+        // Without constants there is no prior hook to find: the fallback alone decides, and
+        // when it lets the operation go ahead it says the prior hooks did not run.
         let common = common_here.as_deref().unwrap_or(Path::new(""));
         return if fallback(hook, &input, common, "", true) {
+            say(Msg::PriorUnknown);
             ExitCode::SUCCESS
         } else {
             ExitCode::FAILURE

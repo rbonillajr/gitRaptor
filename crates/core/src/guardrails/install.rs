@@ -336,8 +336,9 @@ fn manifest(
     let config = constants.common.join("config");
     let restore_key = match (prior.level.as_str(), &prior.value) {
         ("local", Some(value)) => format!(
-            "git config --file {} core.hooksPath {value}",
-            config.display()
+            "git config --file {} core.hooksPath '{}'",
+            config.display(),
+            value.replace('\'', r"'\''")
         ),
         _ => format!(
             "git config --file {} --unset core.hooksPath",
@@ -699,16 +700,28 @@ pub(super) fn rollback(
     listed: &[&str],
     store: &mut RepoStore,
 ) {
+    let keys = store.guard_keys().unwrap_or_default();
+    let recorded = journal(&keys);
     if writer
         .local_hooks_path(common)
         .ok()
         .flatten()
         .is_some_and(|v| Path::new(&v) == hooks_dir)
     {
-        let _ = writer.unset_hooks_path(common);
+        // The key goes back to what the repo had (US-GRD-002): the prior local value, or none.
+        let restored = match recorded
+            .as_ref()
+            .map(|j| (j.prior.level.as_str(), j.prior.value.as_deref()))
+        {
+            Some(("local", Some(value))) => writer.restore_hooks_path(common, value),
+            _ => writer.unset_hooks_path(common),
+        };
+        if restored.is_err() {
+            // Never lose the prior key (NFR-01): the journal stays, the next start retries.
+            return;
+        }
     }
-    let keys = store.guard_keys().unwrap_or_default();
-    if let Some(j) = journal(&keys) {
+    if let Some(j) = recorded {
         // A cut between the rename and the journal leaves no recorded identity: the folder is
         // ours only if every listed file is there with the hash the journal recorded.
         let folder = j.folder.map(Into::into).or_else(|| {

@@ -239,6 +239,35 @@ mod repo_intact {
         assert!(!log.exists(), "the prior hook ran on a deny");
     }
 
+    // Como Git: un hook previo sin `#!` corre con `sh`; uno cuyo intérprete no existe hace
+    // fallar la operación, nunca la deja pasar como si hubiera corrido.
+    #[test]
+    fn a_prior_hook_without_shebang_runs_and_a_broken_one_fails_the_operation() {
+        let m = Machine::new();
+        let log = m.f.root.join("plain-log");
+        m.script(
+            &m.common().join("hooks/pre-commit"),
+            &format!("echo plain >> '{}'\n", log.display()),
+        );
+        m.add(&m.f.repo);
+        let out = m.protect(&m.f.repo);
+        assert!(out.status.success(), "{}", text(&out));
+        let clean = commit(&m, &m.f.repo, "fine\n");
+        assert!(clean.status.success(), "{}", text(&clean));
+        assert_eq!(std::fs::read_to_string(&log).unwrap_or_default(), "plain\n");
+        m.script(
+            &m.common().join("hooks/pre-commit"),
+            "#!/nonexistent/interpreter\nexit 0\n",
+        );
+        let broken = commit(&m, &m.f.repo, "again\n");
+        assert!(!broken.status.success(), "{}", text(&broken));
+        assert!(
+            text(&broken).contains("could not be run"),
+            "{}",
+            text(&broken)
+        );
+    }
+
     // E4 · Si no se puede encadenar, no se instala nada: las rutas operativas quedan idénticas
     // y el intento queda guardado como `chain-impossible`.
     #[test]
