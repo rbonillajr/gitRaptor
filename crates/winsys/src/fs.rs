@@ -21,15 +21,11 @@ pub fn rename_no_replace(from: &Path, to: &Path) -> io::Result<()> {
     })
 }
 
-/// Renames the file of `file` (opened with `DELETE` access) to `name` in the folder `dir` (an open
-/// handle), never replacing ([`io::ErrorKind::AlreadyExists`] if it is taken). The entry renamed
+/// Renames the file of `file` (opened with `DELETE` access) to the full path `to` on the same
+/// volume, never replacing ([`io::ErrorKind::AlreadyExists`] if it is taken). The entry renamed
 /// is the one opened: nobody can swap it between a check through the handle and the rename.
-pub fn rename_through(
-    file: &std::fs::File,
-    dir: &std::fs::File,
-    name: &std::ffi::OsStr,
-) -> io::Result<()> {
-    crate::ffi_file::rename_handle(file, dir, name).map_err(|e| {
+pub fn rename_through(file: &std::fs::File, to: &Path) -> io::Result<()> {
+    crate::ffi_file::rename_handle(file, to).map_err(|e| {
         if e.raw_os_error().is_some_and(|c| EXISTS.contains(&c)) {
             io::Error::new(io::ErrorKind::AlreadyExists, e)
         } else {
@@ -75,27 +71,28 @@ mod tests {
     #[test]
     fn renames_the_entry_opened_and_never_replaces() {
         let dir = tempfile::tempdir().unwrap();
-        let (a, b) = (dir.path().join("a"), dir.path().join("b"));
+        let (a, b, c) = (
+            dir.path().join("a"),
+            dir.path().join("b"),
+            dir.path().join("c"),
+        );
         std::fs::write(&a, "a").unwrap();
         std::fs::write(&b, "b").unwrap();
-        let folder = std::fs::OpenOptions::new()
-            .access_mode(0x80)
-            .share_mode(0x1 | 0x2)
-            .custom_flags(0x0200_0000)
-            .open(dir.path())
-            .unwrap();
         // GENERIC_READ | DELETE, sharing only reading.
         let held = std::fs::OpenOptions::new()
             .access_mode(0x8000_0000 | 0x0001_0000)
             .share_mode(0x1)
             .open(&a)
             .unwrap();
-        let err = rename_through(&held, &folder, std::ffi::OsStr::new("b")).unwrap_err();
+        let err = rename_through(&held, &b).unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::AlreadyExists, "{err:?}");
         assert_eq!(std::fs::read(&b).unwrap(), b"b");
-        rename_through(&held, &folder, std::ffi::OsStr::new("c")).unwrap();
+        // Nobody else can take the name while it is held.
+        std::fs::write(dir.path().join("x"), "x").unwrap();
+        assert!(std::fs::rename(dir.path().join("x"), &a).is_err());
+        rename_through(&held, &c).unwrap();
         drop(held);
-        assert_eq!(std::fs::read(dir.path().join("c")).unwrap(), b"a");
+        assert_eq!(std::fs::read(&c).unwrap(), b"a");
         assert!(!a.exists());
     }
 
