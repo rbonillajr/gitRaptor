@@ -15,7 +15,7 @@ use windows_sys::Win32::Foundation::{
 use windows_sys::Win32::Security::{
     EqualSid, GetTokenInformation, TOKEN_QUERY, TOKEN_USER, TokenUser,
 };
-use windows_sys::Win32::Storage::FileSystem::{DRIVE_FIXED, GetDriveTypeW};
+use windows_sys::Win32::Storage::FileSystem::GetDriveTypeW;
 use windows_sys::Win32::System::Console::{
     GetStdHandle, STD_ERROR_HANDLE, STD_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
 };
@@ -407,6 +407,10 @@ pub(crate) fn current_directory(process: &Handle) -> Option<Vec<u16>> {
             .collect(),
     )
 }
+
+/// `GetDriveTypeW` answer for a local fixed disk (`DRIVE_FIXED`, in a feature the crate does not
+/// otherwise need).
+const DRIVE_FIXED: u32 = 3;
 
 /// Whether the drive `letter` is a local fixed disk (`GetDriveTypeW`): not a network share, a
 /// removable or a RAM disk, nor a letter that points nowhere. Asked only for the root `X:\`.
