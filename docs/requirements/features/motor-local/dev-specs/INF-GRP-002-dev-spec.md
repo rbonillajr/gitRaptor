@@ -333,17 +333,30 @@ Las *wakeups* no se midieron. El intervalo del escaneo no cambia, así que el n�
 **Para el registro de dogfooding.** Su "reposo" es "ningún evento Git desde la muestra anterior". Con agentes que editan archivos, la Time Machine captura por actividad (quieto 1 s, máximo 5 s), así que una muestra "en reposo" puede incluir trabajo real. Tras este cambio, el criterio 5 se vuelve a medir con 9 o 10 sesiones reales: el banco no basta para cerrarlo.
 
 **Pendiente**:
-- **Churn en carpetas ignoradas (macOS)**: el coste que queda depende de la configuración del stream de FSEvents, no de nuestro código. Hay dos vías, y las dos son decisiones de arquitectura sobre ADR-GRP-010, porque exigen sustituir o ampliar notify 8.2:
-  - *Rutas de exclusión* (`FSEventStreamSetExclusionPaths`, hasta 8 por stream) para las carpetas ignoradas conocidas. No afecta a la frescura.
-  - *Una latencia del stream de algunos ms* que agrupe los eventos. Suma esa latencia a `t_recv`, así que habría que justificarla con el presupuesto de ADR-GRP-011.
-  
-  No se hace en este cambio.
+- **Churn en carpetas ignoradas (macOS)**: resuelto en la enmienda siguiente (PR #195, ADR-GRP-010 Enmienda 2026-10-08, exclusiones de FSEvents).
 - Linux: el escaneo lee `/proc/<pid>/stat`, `/proc/stat` y el enlace `exe` por proceso (`SystemProcs::read`). Allí solo se aplica la nueva comprobación de la ruta, sin la mejora de coste: **Pendiente: etapa de validación multiplataforma**.
 - Windows: sin detector.
 
+## Enmienda (2026-10-08): churn en carpetas ignoradas, exclusiones de FSEvents
+
+Implementado en: PR #195.
+
+Resuelve el pendiente de la enmienda anterior con la vía de las rutas de exclusión (ADR-GRP-010, Enmienda 2026-10-08): un flujo de FSEvents propio en `gitraptor-macsys` que deja fuera del stream, hasta 8 por raíz, las carpetas ignoradas con churn sostenido. La latencia del stream no cambia (0), así que la frescura tampoco.
+
+| D26 | **Banco**: sin cambios en `idle.rs`. Se repite `--churn` con las cifras de la tabla de abajo, y `engine --quick` comprueba que la frescura de una sola escritura no se mueve |
+|---|---|
+
+| Escenario (10 sesiones, 10 worktrees, release, 30 s) | Antes (#192) | Después |
+|---|---|---|
+| Sin churn (120 s) | 0,100 % | 0,092 % |
+| Churn ~583 archivos/s | 3,03 % | 0,067 % |
+| Churn ~2.337 archivos/s | 9,29 % | 0,100 % |
+
+Los cuatro casos de NFR-01 tienen test (`crates/core/tests/watch.rs`): una carpeta excluida que deja de ignorarse, un `git add -f` antes y después de la exclusión, una carpeta con rastreados que nunca se excluye y la revalidación periódica (`core.excludesFile`). El reemplazo del stream bajo escrituras no pierde ninguna (1.500 archivos). Cifras de frescura y lo que no se verificó: registro de implementación de ADR-GRP-010.
+
 ## Estado de la implementación (2026-10-08)
 
-Implementado en: PR #76, #98, #133.
+Implementado en: PR #76, #98, #133, #192, #195.
 
 Estado: implementación parcial. Pendiente:
 - ADR-GRP-015: ventana de 10 min con la Time Machine activa (RES-01), RES-03, gate de inotify (RES-04), RES-05 y RES-07.

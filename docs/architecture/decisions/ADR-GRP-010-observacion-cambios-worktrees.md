@@ -521,7 +521,7 @@ El router ya descarta los eventos de carpetas ignoradas conocidas (§ 2, Enmiend
 
 ### E3. Qué se excluye
 
-- **Candidato**: un prefijo de carpeta ignorada que ya validó `gix` (el conjunto que comparte la tarea con el router). El router cuenta lo que descarta por prefijo. Un prefijo entra cuando sostiene churn: ⚠️ **ASSUMPTION**: 200 eventos descartados en 2 s; lo calibra el banco.
+- **Candidato**: un prefijo de carpeta ignorada que ya validó `gix` (el conjunto que comparte la tarea con el router). El router cuenta lo que descarta por prefijo. Un prefijo entra cuando sostiene churn: **100 eventos descartados en una ventana de 5 s**, calibrado con el banco (ver el registro de implementación). La primera cifra propuesta, 200 en 2 s, no se alcanzaba con 583 archivos/s repartidos en 10 worktrees (unos 58/s en cada uno), y la CPU seguía en 3,7 %.
 - **Tope**: 8 por stream, los de mayor cuenta. Los demás siguen solo con el router.
 - **Nunca**: una carpeta con entradas rastreadas en el índice del worktree, ni `.git`. Una carpeta con entradas rastreadas no se clasifica ignorada, así que su churn llega a la tarea (más caro, correcto, y raro). Sus subcarpetas sin rastreadas sí pueden ignorarse.
 - **Negaciones**: Git no desciende a una carpeta ignorada, así que ningún patrón de negación dentro de ella puede reincluir un archivo. Excluir la carpeta entera es seguro.
@@ -534,7 +534,7 @@ El router ya descarta los eventos de carpetas ignoradas conocidas (§ 2, Enmiend
 - **Baja de exclusiones**: inmediata, sin límite de ritmo. La seguridad va antes que el ahorro.
 - **Método (arrancar antes de parar)**: se vacía el stream viejo (`FlushSync`) y se toma el último `FSEventStreamEventId` entregado. El stream nuevo arranca con ese `since_when` y las exclusiones nuevas. Cuando llega su `HistoryDone` (⚠️ **ASSUMPTION**: tope de 2 s) se para el viejo. Los eventos duplicados del solape son inocuos: la tarea recomputa por ruta. Si el tope vence, o llega una marca de pérdida, se reconcilia por completo (§ 6).
 - **Alta de exclusiones: no reconcilia**, porque no hay hueco. **Baja: reconcilia** por completo, una vez arrancado el stream sin las exclusiones (§ 1). Los eventos del periodo excluido **no se reproducen**: no se confía en ellos.
-- **Reproducción del historial**: ⚠️ **ASSUMPTION** sin verificar de si la exclusión también filtra el historial que reproduce `since_when`. Ambos resultados son correctos, porque el router descarta lo ignorado. Solo cambia el coste del reemplazo, y la prueba del PR lo mide.
+- **Reproducción del historial**: medido en macOS 26, la exclusión **también filtra** el historial que reproduce `since_when` (test `exclusions_also_filter_the_replayed_history` de `gitraptor-macsys`). El reemplazo no paga el churn de las carpetas excluidas.
 - **Identidad del volumen**: se guarda el UUID del volumen al crear el stream. Si cambia o el id se reinicia (`EventIdsWrapped`), no se reanuda: stream "desde ahora" y reconciliación completa.
 
 ### E5. Casos de NFR-01
@@ -589,3 +589,32 @@ Criterios de aceptación del PR:
 - **Frontera de `unsafe`**: `tests/unsafe_boundary.rs` y clippy en verde. Ninguna otra crate con `unsafe`.
 - **El PR informa de** si la exclusión filtra el historial reproducido (E4), y de lo que no pudo verificar.
 - **Linux y Windows**: sin cambios. **Pendiente: etapa de validación multiplataforma.**
+
+### Registro de implementación (2026-10-08)
+
+Implementado en: PR #195 (rama `perf/fsevents-ignored-churn`). **Decisión del orquestador (2026-10-08), validada por el Arquitecto.**
+
+| Pieza | Dónde |
+|---|---|
+| Flujo de FSEvents propio: API segura `gitraptor_macsys::fsevents` y módulo FFI privado `ffi_fsevents` (cola de `dispatch`, `FSEventStreamSetExclusionPaths`, `since_when`, `FlushSync`) | `crates/macsys` |
+| Adaptador, reemplazo del stream (arrancar antes de parar, hasta `HistoryDone` con tope de 2 s) y hilo gestor de exclusiones (duerme hasta que un worktree avisa; sin sondeo) | `crates/core/src/watch/{watchers,exclusions}.rs` |
+| Conteo de eventos descartados por prefijo, aviso al gestor y revalidación contra el índice y las reglas (cambio del índice y reconciliación periódica) | `crates/core/src/watch/worktree.rs`, `crates/git/src/reader.rs` (`has_tracked_under`) |
+
+**Desviaciones respecto a lo decidido arriba**:
+
+- **Identidad del volumen (E4)**: no se guarda el UUID del volumen. Un stream solo se reanuda dentro de la vida del daemon, y las marcas `Mount`, `Unmount`, `RootChanged` y `EventIdsWrapped` ya reconcilian por completo (§ 6). Tras reiniciar el daemon no se reanuda (ya estaba fuera de alcance).
+- **Umbral de churn**: 100 eventos en 5 s por carpeta, en vez de 200 en 2 s (E3).
+- **Actividad del detector**: `worktree_touched` (ObserverHooks) deja de dispararse por escrituras dentro de una carpeta excluida, porque el stream ya no las entrega. Antes, una compilación en `target/` contaba como actividad del worktree para el detector de sesiones (ADR-GRP-012); ahora cuentan las escrituras fuera de las carpetas excluidas. No se midió su efecto sobre la atribución: queda para el dogfooding.
+- **Rutas del callback**: el adaptador agrupa cada lote en un solo evento con todas sus rutas (antes, `notify` entregaba un evento por ruta y bandera).
+
+**Medición** (Mac de referencia, release, `idle --idle-secs 30`, 10 sesiones, 10 worktrees, carga alta de la máquina; la CPU del banco tiene una resolución de 0,033 %):
+
+| Escenario | Antes (#192) | Después |
+|---|---|---|
+| Sin churn (120 s) | 0,100 % | 0,092 % |
+| Churn ~583 archivos/s | 3,03 % | 0,067 % |
+| Churn ~2.337 archivos/s | 9,29 % | 0,100 % |
+
+Frescura de una escritura fuera de la carpeta excluida, con la exclusión activa (test `a_folder_with_sustained_churn_leaves_the_stream`, build de debug): detección 10 ms, estado calculado 81-83 ms. El banco `engine --quick` no cambia en los escenarios de una sola escritura (`modify` p95 92 ms frente a 94, `commit` 84 frente a 85; con la máquina cargada, load average 30, los escenarios de ráfaga superan su techo con y sin este cambio). El escenario de recreación del stream perdió 0 archivos (832/832).
+
+**Sin verificar**: Linux y Windows (sin cambios: **Pendiente: etapa de validación multiplataforma**); el efecto de la exclusión sobre `fseventsd` (el banco mide el proceso del daemon); la atribución del detector bajo exclusiones.
