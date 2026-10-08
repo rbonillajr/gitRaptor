@@ -11,8 +11,8 @@ use std::path::PathBuf;
 
 use crate::ffi_handle::Handle;
 use crate::ffi_process::{
-    console_host_raw, created, current_directory, ended, image, open, open_reading, owner,
-    session_id, snapshot,
+    console_host_raw, created, current_directory, drive_is_fixed, ended, image, open, open_reading,
+    owner, session_id, snapshot,
 };
 
 /// Whose a process is.
@@ -162,29 +162,45 @@ pub fn cwd(pid: u32, created_100ns: u64) -> Result<PathBuf, Error> {
     if !is_still(&handle, created_100ns) {
         return Err(Error::Gone);
     }
-    folder_from(&units).ok_or(Error::Denied)
+    let folder = folder_from(&units).ok_or(Error::Denied)?;
+    // Callers open this path to resolve its links: only a local fixed disk, never a network
+    // share, a mapped drive or a letter a process redefined for itself.
+    let letter = folder.to_string_lossy().as_bytes()[0];
+    if !drive_is_fixed(letter) {
+        return Err(Error::Denied);
+    }
+    Ok(folder)
 }
 
-/// A drive-absolute (`C:\…`) or UNC (`\\server\share\…`) folder, without a NUL and without the
-/// trailing separator Windows keeps on it (a drive root keeps its own).
+/// A drive-absolute folder (`C:\\work\\repo`) of plain components, without the trailing separator
+/// Windows keeps on it (a drive root keeps its own). Whatever else a process could write in its
+/// own PEB is refused: a UNC or device path, a `/`, a `.` or `..`, a component that ends in a
+/// dot or a space (Win32 would read another folder) or has a character no folder name has.
+/// The text is only ever compared with the paths of the worktrees; a caller that opens it asks
+/// first for [`cwd`]'s own guarantee that its drive is a local fixed disk.
 fn folder_from(units: &[u16]) -> Option<PathBuf> {
     use std::os::windows::ffi::OsStringExt;
-    if units.contains(&0) {
-        return None;
-    }
     let mut text = std::ffi::OsString::from_wide(units).into_string().ok()?;
     let b = text.as_bytes();
-    let drive = b.len() >= 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && b[2] == b'\\';
-    let unc =
-        text.starts_with("\\\\") && !text.starts_with("\\\\?\\") && !text.starts_with("\\\\.\\");
-    if !(drive || unc) {
+    if !(b.len() >= 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && b[2] == b'\\') {
         return None;
     }
-    let root_len = if drive { 3 } else { 0 };
-    if text.len() > root_len && text.ends_with('\\') {
+    if text.len() > 3 && text.ends_with('\\') {
         text.pop();
     }
-    Some(PathBuf::from(text))
+    let plain = |c: &str| {
+        !c.is_empty()
+            && c != "."
+            && c != ".."
+            && !c.ends_with(['.', ' '])
+            && !c
+                .chars()
+                .any(|ch| ch.is_control() || "<>:\"|?*/".contains(ch))
+    };
+    text[3..]
+        .split('\\')
+        .all(|c| plain(c) || text.len() == 3)
+        .then(|| PathBuf::from(text))
 }
 
 /// Reads one live process.
@@ -434,16 +450,39 @@ mod tests {
         assert_eq!(ok(r"C:\work\repo\").as_deref(), Some(r"C:\work\repo"));
         assert_eq!(ok(r"C:\work").as_deref(), Some(r"C:\work"));
         assert_eq!(ok(r"C:\").as_deref(), Some(r"C:\"));
-        assert_eq!(ok(r"\\srv\share\x\").as_deref(), Some(r"\\srv\share\x"));
+        assert_eq!(
+            ok(r"C:\path with spaces\a.b").as_deref(),
+            Some(r"C:\path with spaces\a.b")
+        );
         for bad in [
             r"relative\x",
+            r"\\srv\share\x",
             r"\\?\C:\x",
-            r"\\.\pipe",
+            r"\\.\pipe\x",
+            r"\\./pipe/x",
             "C:x",
             "",
             "C:\\a\0b",
+            r"C:\w\repo ",
+            r"C:\w\repo.",
+            r"C:\w\..\x",
+            r"C:\w\.\x",
+            r"C:\w\a|b",
+            "C:/w/x",
+            r"C:\w\\x",
         ] {
             assert_eq!(ok(bad), None, "{bad:?}");
+        }
+    }
+
+    /// Only a local fixed disk is a drive whose folders may be opened.
+    #[test]
+    fn a_drive_that_is_not_a_fixed_disk_is_refused() {
+        assert!(drive_is_fixed(b'C'));
+        // A letter that points nowhere (the last one, `Z`, is not assigned on a test machine
+        // unless someone mapped it: then the test is not about it).
+        if !std::path::Path::new(r"Z:\").exists() {
+            assert!(!drive_is_fixed(b'Z'));
         }
     }
 
