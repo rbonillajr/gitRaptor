@@ -543,6 +543,9 @@ impl Daemon {
                 base: observe::base_view(&base),
                 worktrees,
                 fetched_utc_ms: observe::fetched_utc_ms(&entry.canonical_path, now_ms()),
+                tier: (state == RepoStateView::Observed)
+                    .then_some(gitraptor_api::messages::RepoTier::Active),
+                checked_utc_ms: None,
             });
         }
         let bus = Arc::new(EventBus::new(

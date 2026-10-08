@@ -130,6 +130,9 @@ pub const OPERATION_FINISHED: &str = "operation.finished";
 /// [`crate::scope::RepoAttentionData`]. Declared ahead of its publishers
 /// (the predictor, Guardrails, US-GRP-005).
 pub const REPO_ATTENTION: &str = "repo.attention";
+/// An observed repo changed tier (TS-GRP-006), only for a connection with
+/// `observation.tiers`. Data: [`crate::messages::RepoTierData`].
+pub const REPO_TIER: &str = "repo.tier";
 
 const fn engine(kind: &'static str) -> EventKind {
     EventKind {
@@ -167,6 +170,8 @@ pub const KINDS: &[EventKind] = &[
     // Global: it changes the list of observed repos.
     engine(REPO_OBSERVATION),
     engine(REPO_ATTENTION),
+    // Global, like the list it qualifies: the fleet shows it.
+    engine(REPO_TIER),
     engine_repo(OPERATION_QUEUED),
     engine_repo(OPERATION_STARTED),
     engine_repo(OPERATION_FINISHED),

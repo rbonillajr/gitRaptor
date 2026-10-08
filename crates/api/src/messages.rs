@@ -157,9 +157,46 @@ pub struct RepoView {
     /// never fetched, and for a connection without `scope.activity`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fetched_utc_ms: Option<i64>,
+    /// Observation tier (TS-GRP-006). Absent for a connection without
+    /// `observation.tiers`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tier: Option<RepoTier>,
+    /// A dormant repo: when it went dormant or a safety net last checked
+    /// it, so a client shows "dormant, checked X ago" without waking it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checked_utc_ms: Option<i64>,
+}
+
+/// How an observed repo is observed (TS-GRP-006, ADR-GRP-010, Enmienda
+/// 2026-10-07, N1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum RepoTier {
+    /// Every change is published within NFR-04.
+    Active,
+    /// Being reconciled after a trigger: shown as "reconciling".
+    Waking,
+    /// Only its sentinel and safety nets run; outside NFR-04 (RES-12).
+    Dormant,
+}
+
+/// Data of `repo.tier`: an observed repo changed tier (TS-GRP-006).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RepoTierData {
+    pub repo_id: String,
+    pub tier: RepoTier,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checked_utc_ms: Option<i64>,
 }
 
 impl RepoView {
+    /// The repo in the shapes of a connection without `observation.tiers`.
+    pub fn without_tier(&mut self) {
+        self.tier = None;
+        self.checked_utc_ms = None;
+    }
+
     /// The repo in the shapes of a connection without `scope.activity`.
     pub fn without_activity(&mut self) {
         self.fetched_utc_ms = None;

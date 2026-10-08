@@ -24,6 +24,7 @@ mod engine;
 mod events;
 mod guard;
 mod mcp;
+mod observation;
 mod operation;
 mod registration;
 mod repo;
@@ -40,6 +41,7 @@ pub use engine::*;
 pub use events::*;
 pub use guard::*;
 pub use mcp::*;
+pub use observation::*;
 pub use operation::*;
 pub use registration::*;
 pub use repo::*;
@@ -66,6 +68,7 @@ pub const GROUPS: &[&Group] = &[
     &scope::GROUP,
     &guard::GROUP,
     &mcp::GROUP,
+    &observation::GROUP,
 ];
 
 /// What one contract module declares, in its own file.

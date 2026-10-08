@@ -171,6 +171,8 @@ fn repo_snapshot() -> ScopeSnapshot {
                 status: BaseStatusView::Invalid,
             },
             worktrees: Vec::new(),
+            tier: None,
+            checked_utc_ms: None,
         },
     })
 }

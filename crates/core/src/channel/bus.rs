@@ -42,6 +42,8 @@ pub struct Outbox {
     without_activity: std::sync::atomic::AtomicBool,
     /// Without `events.authorship` (see [`Outbox::set_without_authorship`]).
     without_authorship: std::sync::atomic::AtomicBool,
+    /// Without `observation.tiers` (see [`Outbox::set_without_tiers`]).
+    without_tiers: std::sync::atomic::AtomicBool,
 }
 
 #[derive(Debug, Default)]
@@ -62,6 +64,7 @@ impl Outbox {
             before_reset: std::sync::atomic::AtomicBool::new(false),
             without_activity: std::sync::atomic::AtomicBool::new(true),
             without_authorship: std::sync::atomic::AtomicBool::new(true),
+            without_tiers: std::sync::atomic::AtomicBool::new(true),
         })
     }
 
@@ -77,6 +80,13 @@ impl Outbox {
     /// reaches it without the last activity and fetch, which it cannot read.
     pub fn set_without_activity(&self, without: bool) {
         self.without_activity
+            .store(without, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// The connection lacks `observation.tiers` (TS-GRP-006): `repo.tier`
+    /// never reaches it.
+    pub fn set_without_tiers(&self, without: bool) {
+        self.without_tiers
             .store(without, std::sync::atomic::Ordering::Relaxed);
     }
 
@@ -132,6 +142,11 @@ impl Outbox {
     }
 
     fn skips(&self, event: &Event) -> bool {
+        if event.kind == gitraptor_api::event::REPO_TIER {
+            return self
+                .without_tiers
+                .load(std::sync::atomic::Ordering::Relaxed);
+        }
         self.before_reset.load(std::sync::atomic::Ordering::Relaxed)
             && event.kind == gitraptor_api::event::GIT_EVENT
             && event.data.get("kind").and_then(|k| k.as_str()) == Some("reset")
