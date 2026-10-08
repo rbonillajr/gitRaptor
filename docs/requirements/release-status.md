@@ -14,9 +14,9 @@
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 13 |
 | Listo (`ready`) | 3 |
-| Borrador (`draft`) | 89 |
+| Borrador (`draft`) | 90 |
 | Bloqueado (`blocked`) | 1 |
-| **Total** | **141** |
+| **Total** | **142** |
 
 ## Por feature
 
@@ -25,7 +25,7 @@
 | [cockpit](#cockpit) | 6 | 0 | 1 | 0 | 25 | 1 | 33 |
 | [guardrails](#guardrails) | 4 | 0 | 3 | 0 | 16 | 0 | 23 |
 | [mcp](#mcp) | 4 | 0 | 0 | 0 | 16 | 0 | 20 |
-| [motor-local](#motor-local) | 11 | 2 | 8 | 3 | 13 | 0 | 37 |
+| [motor-local](#motor-local) | 11 | 2 | 8 | 3 | 14 | 0 | 38 |
 | [time-machine](#time-machine) | 7 | 1 | 1 | 0 | 19 | 0 | 28 |
 
 ### cockpit
@@ -127,7 +127,7 @@
 
 ### motor-local
 
-37 fichas: 11 implementado, 2 hecho, 8 implementado en parte, 3 listo, 13 borrador.
+38 fichas: 11 implementado, 2 hecho, 8 implementado en parte, 3 listo, 14 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -155,6 +155,7 @@
 | [TD-GRP-002](features/motor-local/technical-stories/TD-GRP-002-motor-bajo-rafaga.md) | Frescura y memoria del motor bajo una ráfaga de archivos | Listo (`ready`) | — | — |
 | [TD-GRP-003](features/motor-local/technical-stories/TD-GRP-003-nfr04-maquina-referencia.md) | Presupuesto de NFR-04 sin gate automático: medirlo en una máquina de referencia | Listo (`ready`) | — | — |
 | [TS-GRP-005](features/motor-local/technical-stories/TS-GRP-005-clases-trabajo-ahorro-energia.md) | Clases de trabajo del daemon y mecanismo de ahorro de energía | Listo (`ready`) | — | — |
+| [TS-GRP-007](features/motor-local/technical-stories/TS-GRP-007-factor-so-reservados-windows.md) | Factor del SO (Windows Hello) para los comandos reservados de alto riesgo en Windows | Borrador (`draft`) | — | — |
 | [US-GRP-003](features/motor-local/user-stories/US-GRP-003-estados-especiales-no-disponible.md) | El desarrollador sabe qué worktree está en un estado especial o ya no existe | Borrador (`draft`) | — | — |
 | [US-GRP-005](features/motor-local/user-stories/US-GRP-005-hueco-sin-atribuir.md) | El desarrollador distingue lo que el motor no vio ocurrir | Borrador (`draft`) | — | — |
 | [US-GRP-006](features/motor-local/user-stories/US-GRP-006-retirar-y-volver-a-anadir.md) | El desarrollador recupera el historial de un repo que retiró y volvió a añadir | Borrador (`draft`) | — | — |
@@ -374,7 +375,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### Sin hito
 
-5 fichas sin hito asignado.
+6 fichas sin hito asignado.
 
 ## Implementadas en parte: lo que falta
 
