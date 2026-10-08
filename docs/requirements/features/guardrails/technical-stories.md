@@ -6,8 +6,8 @@ updated: 2026-10-04
 generator: architect
 domain: GRP
 feature: guardrails
-total_artifacts: 4
-expanded: 4
+total_artifacts: 5
+expanded: 5
 approved: 0
 related:
   context: [CTX-GRD-001]
@@ -19,7 +19,7 @@ related:
 
 > Índice. Cada historia vive en su archivo, dentro de [`technical-stories/`](./technical-stories/), con `status: draft` en el frontmatter. La columna Status de esta tabla indica el siguiente paso: `Dev Spec Pending` para los INF y los TS (la Dev Spec se genera con `/aadd-devspec <id>`) y `Research Pending` para el SPIKE, que lleva un Research Brief y no una Dev Spec.
 >
-> **Criterio de inclusión (Enabler Decision Gate)**: solo entra el trabajo técnico **sin historia de usuario dueña y sin resultado observable** por el usuario. Hay 4 enablers para 17 historias. El resto del trabajo técnico (instalador, motor de decisión, estado de protección, registro, token de excepción) tiene una historia dueña y va en su Dev Spec, siguiendo ADR-GRD-001..008.
+> **Criterio de inclusión (Enabler Decision Gate)**: solo entra el trabajo técnico **sin historia de usuario dueña y sin resultado observable** por el usuario. Hay 5 fichas técnicas (4 enablers y 1 deuda, TD-GRD-001) para 17 historias. El resto del trabajo técnico (instalador, motor de decisión, estado de protección, registro, token de excepción) tiene una historia dueña y va en su Dev Spec, siguiendo ADR-GRD-001..008.
 
 ## Índice
 
@@ -29,6 +29,7 @@ related:
 | [INF-GRD-001](./technical-stories/INF-GRD-001-arnes-hooks.md) | INF | Arnés de la capa de hooks: repos con hooks previos, huella, interrupción y matriz de CI | Gate de CI de NFR-01 y NFR-12 de la capa de hooks y de la fidelidad de la lista publicada | ADR-GRD-001, ADR-GRD-002, ADR-GRD-005 | US-GRD-001..006 (suites); regresión para US-GRD-007 en adelante | Núcleo de INF-GRP-001; SPIKE-GRD-001 | Medium | implemented (PR #65, #121 (job con Git 2.38.5 en #116)) |
 | [TS-GRD-001](./technical-stories/TS-GRD-001-configuracion-commiteada.md) | TS | Lectura commiteada de la configuración del equipo y de la rama principal | Un solo cargador y un solo criterio para Guardrails y el motor, con el suelo en la rama principal (Q-GRD-17 refinada por D6, Q-GRD-18, R-GRD-8) | ADR-GRD-004 | US-GRD-007, 011, 014; US-GRP-016 | US-GRP-013 (reutiliza su cargador de tres niveles). Desbloqueada el 2026-10-04: ADR-GRP-007 `accepted` con sus enmiendas (PQ-9, `permissions`/`policies`, estado por fuente) | High | implemented (PR #27) |
 | [SPIKE-GRD-002](./technical-stories/SPIKE-GRD-002-factor-so-daemon.md) | SPIKE | Factor de autenticación del SO invocado desde el daemon en los tres SO | Confirmar que el daemon obtiene una prueba de presencia que un proceso del mismo usuario no fabrica, y elegir el binding compatible con `unsafe_code = "forbid"`, antes de las Dev Specs de US-GRD-013 y US-GRD-015 | ADR-GRD-008 (valida) | US-GRD-013, US-GRD-015 | — (prototipo aislado). Linux y Windows: Pendiente: etapa de validación multiplataforma | M | Research Pending |
+| [TD-GRD-001](./technical-stories/TD-GRD-001-dispatcher-plantilla-3-pre-push-toda-ref.md) | TD | Dispatcher plantilla 3: evaluar el pre-push de toda ref empujada (tags, notes y demás refs no gobernadas) | Cierra el residuo `policy-reach` de DS-US-GRD-008: un push solo a tags sube un commit con una ruta prohibida sin evaluación (nota B1 del Arquitecto, 2026-10-08) | ADR-GRD-001, ADR-GRD-002 | US-GRD-008 (residuo declarado); toca la instalación de US-GRD-001 y la ruta de actualización de US-GRD-018 | US-GRD-008, DS-US-GRD-018 § 11 (S8) | High | Dev Spec Pending (draft; prioridad alta) |
 
 ## Encaje con el DAG de historias
 
