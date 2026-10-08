@@ -1,10 +1,9 @@
 //! `repack` and `prune` of the snapshot store through the write profile (ADR-TMC-007 § 4,
 //! ADR-TMC-002 § 2): on a temporary store, never the real profile (NFR-01).
-#![cfg(unix)]
 
 mod common;
 
-use std::os::unix::fs::DirBuilderExt;
+use std::path::Path;
 
 use gitraptor_git::Invoker;
 use gitraptor_git::tm_write::WriteContext;
@@ -16,11 +15,8 @@ const REPO_ID: &str = "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0";
 fn repack_and_prune_run_on_the_store_and_keep_referenced_objects() {
     let tmp = tempfile::tempdir().unwrap();
     let tm = tmp.path().canonicalize().unwrap().join("tm");
-    std::fs::DirBuilder::new().mode(0o700).create(&tm).unwrap();
-    std::fs::DirBuilder::new()
-        .mode(0o700)
-        .create(tm.join(REPO_ID))
-        .unwrap();
+    private_dir(&tm);
+    private_dir(&tm.join(REPO_ID));
     let store = StoreRepo::create(&tm, REPO_ID).unwrap();
     let handle = store.handle();
     let (blob, _) = handle.write_blob(b"kept by a snapshot ref\n").unwrap();
@@ -64,4 +60,15 @@ fn repack_and_prune_run_on_the_store_and_keep_referenced_objects() {
             .count(),
         0
     );
+}
+
+/// A folder only the current user can reach, as the profile creates them.
+fn private_dir(path: &Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        std::fs::DirBuilder::new().mode(0o700).create(path).unwrap();
+    }
+    #[cfg(windows)]
+    gitraptor_winsys::acl::create_private_dir(path).unwrap();
 }
