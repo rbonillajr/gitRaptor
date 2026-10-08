@@ -130,3 +130,27 @@ guard.uninstall.failed = not removed: a step failed; the protection stays or the
 guard.cancel.done = cancelled: the protection of {path} stays
 guard.cancel.none = nothing is waiting in this repository
 guard.status.pending = a removal of the protection is waiting: it applies in {seconds} s unless cancelled (raptor guard cancel)
+
+# The protection stopped being active, or is not what it was (US-GRD-004).
+guard.hooks.active = active
+guard.hooks.inactive = inactive
+guard.hooks.not-installed = not installed
+guard.hooks.orphaned = orphaned
+guard.cause.hookspath-changed = another tool changed `core.hooksPath`
+guard.cause.repo-moved = the repo moved and its hooks still point to the old folder
+guard.cause.folder-missing = the GitRaptor hooks folder is gone
+guard.cause.dispatcher-missing = a GitRaptor hook is gone
+guard.cause.dispatcher-altered = a GitRaptor hook was edited or replaced
+guard.cause.dispatcher-not-executable = a GitRaptor hook lost its execute permission, so Git skips it
+guard.cause.binary-missing = the installed `raptor` the hooks start is gone
+guard.status.lost = warning: the protection is no longer active here, and GitRaptor did not do it: {cause}. Restore it with `raptor guard install`.
+guard.status.lost-worktree = warning: the protection is no longer active in {worktree}, and GitRaptor did not do it: {cause}. Restore it with `raptor guard install`.
+guard.status.orphaned = warning: the hooks are installed but their record was lost (profile deleted). Git is protected in degraded mode only; adopting or removing them comes with a later release.
+guard.status.template-outdated = note: the hooks come from an older template; refresh them with `raptor guard install`.
+guard.status.config-unreadable = note: Git's configuration could not be read, so the state of the protection could not be fully checked.
+guard.status.minimum-active = safe minimum: force-push and deleting the base branch are denied; only the team configuration on the main branch can turn it off, once you confirm it on your machine.
+guard.status.not-checked = not checked: a repo removed from observation, and the signature of the `raptor` binary.
+guard.log.protection = protection changed
+guard.log.op.protection = protection: {from} → {to}
+guard.log.op.protection-cause = protection: {from} → {to} ({cause})
+guard.log.op.protection-own = protection: {from} → {to} (done by GitRaptor)

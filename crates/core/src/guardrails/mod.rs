@@ -12,6 +12,7 @@ pub mod authorship;
 pub mod constants;
 pub mod cut;
 pub mod evaluate;
+pub mod health;
 #[cfg(test)]
 mod health_tests;
 pub mod hook;

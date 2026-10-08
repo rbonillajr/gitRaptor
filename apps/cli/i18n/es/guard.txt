@@ -130,3 +130,27 @@ guard.uninstall.failed = no se retiró: falló un paso; la protección sigue o e
 guard.cancel.done = cancelado: la protección de {path} sigue
 guard.cancel.none = no hay nada esperando en este repositorio
 guard.status.pending = hay una retirada de la protección esperando: se aplica en {seconds} s si nadie la cancela (raptor guard cancel)
+
+# La protección dejó de estar activa, o no es la de antes (US-GRD-004).
+guard.hooks.active = activa
+guard.hooks.inactive = inactiva
+guard.hooks.not-installed = no instalada
+guard.hooks.orphaned = huérfana
+guard.cause.hookspath-changed = otra herramienta cambió `core.hooksPath`
+guard.cause.repo-moved = el repo se movió y sus hooks apuntan a la carpeta antigua
+guard.cause.folder-missing = la carpeta de hooks de GitRaptor ya no está
+guard.cause.dispatcher-missing = falta un hook de GitRaptor
+guard.cause.dispatcher-altered = un hook de GitRaptor se editó o se reemplazó
+guard.cause.dispatcher-not-executable = un hook de GitRaptor perdió el permiso de ejecución, así que Git lo salta
+guard.cause.binary-missing = ya no está el `raptor` instalado que arrancan los hooks
+guard.status.lost = aviso: la protección ya no está activa aquí y GitRaptor no lo hizo: {cause}. Restáurala con `raptor guard install`.
+guard.status.lost-worktree = aviso: la protección ya no está activa en {worktree} y GitRaptor no lo hizo: {cause}. Restáurala con `raptor guard install`.
+guard.status.orphaned = aviso: los hooks están instalados pero se perdió su registro (perfil borrado). Git queda protegido solo en modo degradado; adoptarlos o retirarlos llega en una versión posterior.
+guard.status.template-outdated = nota: los hooks vienen de una plantilla antigua; refréscalos con `raptor guard install`.
+guard.status.config-unreadable = nota: no se pudo leer la configuración de Git, así que el estado de la protección no se pudo comprobar del todo.
+guard.status.minimum-active = mínimo seguro: el force-push y borrar la rama base se deniegan; solo lo desactiva la configuración del equipo en la rama principal, una vez que la confirmas en tu máquina.
+guard.status.not-checked = sin comprobar: un repo retirado de la observación y la firma del binario `raptor`.
+guard.log.protection = la protección cambió
+guard.log.op.protection = protección: {from} → {to}
+guard.log.op.protection-cause = protección: {from} → {to} ({cause})
+guard.log.op.protection-own = protección: {from} → {to} (lo hizo GitRaptor)
