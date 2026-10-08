@@ -184,6 +184,54 @@ fn unfinish_uninstall(m: &Machine) {
 mod recovery {
     use super::*;
 
+    // ADR-GRD-001 § 4, NFR-01: an install undone at startup with the key ours puts back the
+    // `core.hooksPath` the repo had (husky), never leaves the repo without it.
+    #[test]
+    fn repo_intact_an_install_undone_at_startup_restores_the_prior_local_key() {
+        let m = Machine::new();
+        m.script(&m.f.repo.join(".husky/_/pre-commit"), LINTER);
+        std::fs::write(m.f.repo.join(".husky/.gitignore"), "_\n").unwrap();
+        m.git_ok(&m.f.repo, &["config", "core.hooksPath", ".husky/_"]);
+        m.add(&m.f.repo);
+        let exceptions = uninstalled_exceptions();
+        let before = m.f.snapshot(&exceptions);
+        let config = std::fs::read(m.common().join("config")).unwrap();
+        let out = m.protect(&m.f.repo);
+        assert!(out.status.success(), "{}", text(&out));
+        m.stop();
+        // An install that never recorded its folder: the next start undoes it.
+        use gitraptor_core::profile::Profile;
+        let (profile, _) = Profile::open(m.dirs()).unwrap();
+        let entry = profile.repo_by_common_dir(&m.common()).unwrap().unwrap();
+        let (mut store, _) = profile.open_store(&entry.repo_id).unwrap();
+        let journal: serde_json::Value =
+            serde_json::from_str(&store.guard_keys().unwrap().journal.unwrap()).unwrap();
+        let mut journal = journal;
+        journal["stage"] = "installing".into();
+        journal["folder"] = serde_json::Value::Null;
+        store
+            .set_guard_keys(
+                Some(Some(&journal.to_string())),
+                Some("not-asked"),
+                None,
+                None,
+            )
+            .unwrap();
+        drop(store);
+        drop(profile);
+        let out = m.raptor(&["daemon", "status"]);
+        assert!(out.status.success(), "{}", text(&out));
+        assert_eq!(m.status(&m.f.repo).state, ProtectionState::Unprotected);
+        assert_eq!(
+            m.git_ok(&m.f.repo, &["config", "--local", "core.hooksPath"]),
+            ".husky/_"
+        );
+        assert_eq!(std::fs::read(m.common().join("config")).unwrap(), config);
+        let after = m.f.snapshot(&exceptions);
+        let changes = exceptions.filter(&gitraptor_testkit::diff(&before, &after), &before, &after);
+        assert!(changes.is_empty(), "{changes:#?}");
+    }
+
     // ADR-GRD-001 § 4 · La clave ya estaba restaurada: al arrancar se borra la carpeta y el
     // repo queda como antes de instalar.
     #[test]
