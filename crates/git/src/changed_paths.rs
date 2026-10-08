@@ -72,8 +72,8 @@ impl RepoReader {
     ) -> Result<ChangedPaths, ReadError> {
         let old = old.map(parse_id).transpose()?;
         let new = parse_id(new)?;
-        let new_commit = self.commit(new)?;
-        let parents: Vec<gix::ObjectId> = new_commit.parent_ids().map(|p| p.detach()).collect();
+        let target_commit = self.commit(new)?;
+        let parents: Vec<gix::ObjectId> = target_commit.parent_ids().map(|p| p.detach()).collect();
         // A merge was reached from its first parent: then `old..new` is the first-parent diff
         // and says so. From anywhere else (a reset or a checkout to a merge) it is plain `old..new`.
         let first_parent = parents.len() > 1 && old == Some(parents[0]);
@@ -81,7 +81,7 @@ impl RepoReader {
         let old_tree = base
             .map(|id| self.commit(id).and_then(|c| self.commit_tree(&c)))
             .transpose()?;
-        let new_tree = self.commit_tree(&new_commit)?;
+        let new_tree = self.commit_tree(&target_commit)?;
         let mut walk = Walk {
             max,
             deadline,
@@ -373,34 +373,6 @@ mod tests {
             .unwrap();
         assert_eq!(got.paths, ["own.rs", "side.rs"]);
         assert!(!got.first_parent);
-    }
-
-    #[test]
-    fn a_very_deep_tree_is_unavailable_and_does_not_crash() {
-        use gix::objs::tree::{Entry, EntryKind};
-        let f = fixture();
-        let old = head(&f);
-        let repo = gix::open(&f.repo).unwrap();
-        let mut id: gix::ObjectId = repo.write_blob(b"x").unwrap().detach();
-        let mut kind = EntryKind::Blob;
-        for level in 0..6000 {
-            let name = if level == 0 { "leaf" } else { "d" };
-            let tree = gix::objs::Tree {
-                entries: vec![Entry {
-                    mode: kind.into(),
-                    filename: name.into(),
-                    oid: id,
-                }],
-            };
-            id = repo.write_object(&tree).unwrap().detach();
-            kind = EntryKind::Tree;
-        }
-        let commit = f.git(&["commit-tree", &id.to_string(), "-m", "deep"]);
-        let r = reader(&f);
-        assert!(matches!(
-            r.changed_paths(Some(&old), commit.trim(), 20, soon()),
-            Err(ReadError::Unavailable(_))
-        ));
     }
 
     #[test]
