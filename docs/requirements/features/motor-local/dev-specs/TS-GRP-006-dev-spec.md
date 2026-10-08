@@ -92,7 +92,17 @@ Todo con repos y perfiles temporales; esperas por señal, sin `sleep` fijos. Las
 | Configuración: claves en el nivel de equipo ignoradas; ahorro alarga intervalos | `crates/policy` (validador de niveles) y unidad de `TierConfig` |
 | Rendimiento RES-11/RES-12 | Banco `tiered-scale` (INF-GRP-002), nunca en tests de debug |
 
-## 5. Pendientes
+## 5. Estado de la entrega (2026-10-07)
+
+**Interruptor**: `DaemonConfig.tiers.dormant_after` (`TierConfig`) es `None` por defecto, así que en producción ningún repo duerme todavía. Los tests lo activan con un umbral corto. **Decisión del coordinador (2026-10-07)**: nada puede dormir un repo en producción hasta que el test de NFR-01 esté en verde en el mismo PR; está en verde, y el interruptor se enciende cuando el tramo 3 lea `dormantAfterHours`.
+
+| Tramo | Contenido | Estado |
+|---|---|---|
+| 1 · Observador | D1 a D6, D8: `Tier`, `sleep_repo`, `wake_repo`, centinela, huella y barrido, `GapCause::Dormant` | Hecho. `observe_tiers` (6 tests) |
+| 2 · Daemon | D9, D10: umbral sin sesión presente, almacén cerrado, despertar por centinela, barrido, sesión, `events.history`, `RawEvents` (undo de la Time Machine), `guard.*` | Hecho. `daemon_tiers` (3 tests, NFR-01 incluido, comprobado con una mutación que apaga el centinela) |
+| 3 · Resto | D7 (reconciliación lenta con presupuesto), D11 (contrato `tier` y bloque `observation`), D12 (claves `engine.observation.*`), D13 (arranque dormido), despertar por suscripción a un repo, tests de shim de `git` y de worktree degradado | Pendiente |
+
+## 6. Pendientes
 
 - **Entrega por tramos.** Esta spec se implementa en más de un PR. Lo que queda fuera de cada uno se anota en su descripción.
 - **Arranque barato (D13)**: comparar la huella persistida sin reconciliar necesita persistirla; hasta entonces el arranque reconcilia una vez.
