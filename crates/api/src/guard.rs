@@ -382,8 +382,16 @@ pub enum Permission {
 #[serde(rename_all = "kebab-case")]
 pub enum InstallBlocker {
     /// Hooks to chain (own hooks, husky, lefthook, pre-commit or any
-    /// `core.hooksPath`): US-GRD-002.
+    /// `core.hooksPath`). Only US-GRD-001 refused them; since US-GRD-002 they are chained, and
+    /// this is what a connection without `guard.prior-hooks` reads for [`Self::ChainImpossible`]
+    /// and what an old stored refusal says.
     PriorHooks,
+    /// The prior hooks cannot be chained without altering them (`encadenado-imposible`,
+    /// BR-EDGE-002): a prior `core.hooksPath` that is not representable, that points into the
+    /// Guardrails folder, that Git cannot resolve the same way for every run (`~user`,
+    /// `%(prefix)`, a `~/` under another `HOME`), defined more than once at local level, or a
+    /// configuration that could not be read. Needs `guard.prior-hooks` (US-GRD-002).
+    ChainImpossible,
     /// `extensions.worktreeConfig` with `core.hooksPath` in a worktree.
     WorktreeConfig,
     /// An `include`/`includeIf` that defines `core.hooksPath`.
@@ -437,6 +445,98 @@ pub struct GuardRepoParams {
     pub path: String,
 }
 
+/// Level of the `core.hooksPath` a repo had before the install (ADR-GRD-001 § 1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum HooksPathLevel {
+    /// No `core.hooksPath`: Git ran the hooks of `<common>/hooks`.
+    None,
+    Local,
+    Global,
+    System,
+}
+
+/// The hooks a repo already had, which the install keeps and chains (US-GRD-002, BR-AUTH-002).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PriorHooks {
+    /// The prior `core.hooksPath`, as Git had it (`None` without one).
+    pub hooks_path: Option<Untrusted>,
+    pub level: HooksPathLevel,
+    /// Where Git ran them from (relative to each worktree when the value is relative).
+    pub dir: Untrusted,
+    /// Names of the executable hooks found there (githooks(5) names only), sorted.
+    pub hooks: Vec<Untrusted>,
+}
+
+/// A reserved action that relaxes, announced and waiting for its window to close (ADR-GRD-007
+/// § 1, D5). Only the requester can apply it; anyone can cancel it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PendingAction {
+    /// Opaque, random: names this announcement only.
+    pub action_id: String,
+    pub action: PendingKind,
+    /// When the window closes (Unix ms): the requester may apply it from then on.
+    pub applies_at_ms: i64,
+    /// Length of the window.
+    pub window_ms: u64,
+}
+
+/// What a [`PendingAction`] does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum PendingKind {
+    /// Remove the hook layer (US-GRD-003).
+    Uninstall,
+}
+
+/// `guard.uninstall` parameters. Without `confirm`, announces the uninstall and opens the
+/// window; with the `action_id` of that announcement, once the window closed, applies it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GuardUninstallParams {
+    pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confirm: Option<String>,
+}
+
+/// `guard.uninstall` result: the window that opened, or the status once applied.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GuardUninstallResult {
+    /// Set while the window is open (the first call); `None` once applied.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending: Option<PendingAction>,
+    pub status: GuardStatus,
+}
+
+/// Why `guard.uninstall` or `guard.cancel` did nothing (`data` of `GUARD_UNINSTALL_REFUSED`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum UninstallRefusal {
+    /// The repo has no confirmed install of this profile.
+    NotInstalled,
+    /// Another reserved action is already waiting in this repo.
+    AlreadyPending,
+    /// The window has not closed yet.
+    WindowOpen,
+    /// No such announcement: cancelled, expired, already applied or never made.
+    NoPending,
+    /// The announcement is someone else's: only its requester applies it.
+    NotTheRequester,
+}
+
+/// `data` of a `GUARD_UNINSTALL_REFUSED` error.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GuardUninstallRefusedData {
+    pub reason: UninstallRefusal,
+    /// With `window-open`: how long until it closes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remaining_ms: Option<u64>,
+}
+
 /// `guard.plan` result: everything the explanation needs (BR-AUTH-002).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -460,6 +560,10 @@ pub struct GuardPlan {
     /// Why it cannot be installed; empty when it can.
     pub blockers: Vec<InstallBlocker>,
     pub status: GuardStatus,
+    /// The hooks the repo already has, kept and chained (US-GRD-002). Only with
+    /// `guard.prior-hooks`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prior: Option<PriorHooks>,
 }
 
 /// `guard.status` result.
@@ -483,6 +587,10 @@ pub struct GuardStatus {
     /// `HEAD`: never read, likely a misnamed settings file (ADR-GRP-007). Informational.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub misnamed_settings: Vec<Untrusted>,
+    /// A reserved action announced and waiting for its window (US-GRD-003, D5). Only with
+    /// `guard.pending-action`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending: Option<PendingAction>,
 }
 
 /// `data` of a `GUARD_REJECTED` error: the install did not happen.

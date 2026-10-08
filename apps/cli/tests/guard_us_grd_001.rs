@@ -882,15 +882,13 @@ mod criteria {
         }
     }
 
-    // D3, BR-EDGE-002: with hooks to chain, nothing is installed, the reason is recorded, and a
-    // refusal is not a denial of the permission.
+    // D3, BR-EDGE-002 (since US-GRD-002, the hooks that cannot be chained): nothing is
+    // installed, the reason is recorded, and a refusal is not a denial of the permission. Prior
+    // hooks that can be chained are installed and kept: `guard_us_grd_002`.
     #[test]
     fn repo_intact_prior_hooks_refuse_the_install_without_changes() {
-        use std::os::unix::fs::PermissionsExt;
         let m = Machine::new();
-        let hook = common(&m).join("hooks/pre-commit");
-        std::fs::write(&hook, "#!/bin/sh\nexit 0\n").unwrap();
-        std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+        m.git_ok(&m.f.repo, &["config", "core.hooksPath", "hooks\tdir"]);
         m.add(&m.f.repo);
         let report = check(
             "prior-hooks",
@@ -899,11 +897,7 @@ mod criteria {
             || {
                 let out = m.protect(&m.f.repo);
                 assert!(!out.status.success(), "{}", text(&out));
-                assert!(
-                    text(&out).contains("already has Git hooks"),
-                    "{}",
-                    text(&out)
-                );
+                assert!(text(&out).contains("cannot be chained"), "{}", text(&out));
             },
         );
         report.assert_intact();

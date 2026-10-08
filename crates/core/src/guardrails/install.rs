@@ -6,7 +6,8 @@ use std::path::{Path, PathBuf};
 
 use gitraptor_api::Untrusted;
 use gitraptor_api::guard::{
-    GuardPlan, GuardStatus, Hook, InstallBlocker, Permission, ProtectionState, RefBackend,
+    GuardPlan, GuardStatus, Hook, HooksPathLevel, InstallBlocker, Permission, PriorHooks,
+    ProtectionState, RefBackend,
 };
 use gitraptor_git::cli::GitCli;
 use gitraptor_git::guard_write::{FOLDER, GuardWriteError, GuardWriter, NewFile};
@@ -18,41 +19,9 @@ use sha2::{Digest, Sha256};
 use super::constants::{Constants, DISPATCH_CONF, MANIFEST, STUB_FILE, TEMPLATE_VERSION};
 use super::evaluate;
 use super::journal::{FileHash, Journal, Prior, Snapshot, Stage, snapshot_path};
+use super::prior::{self as prior_hooks, ChainImpossible};
 use super::registry::{GuardEntry, GuardRegistry};
 use crate::profile::{GuardKeys, ProfileDirs, RepoStore};
-
-/// Every hook name of githooks(5): a prior hook with one of these names would stop running
-/// once `core.hooksPath` points to the Guardrails folder.
-const GIT_HOOKS: &[&str] = &[
-    "applypatch-msg",
-    "pre-applypatch",
-    "post-applypatch",
-    "pre-commit",
-    "pre-merge-commit",
-    "prepare-commit-msg",
-    "commit-msg",
-    "post-commit",
-    "pre-rebase",
-    "post-checkout",
-    "post-merge",
-    "pre-push",
-    "pre-receive",
-    "update",
-    "proc-receive",
-    "post-receive",
-    "post-update",
-    "reference-transaction",
-    "push-to-checkout",
-    "pre-auto-gc",
-    "post-rewrite",
-    "sendemail-validate",
-    "fsmonitor-watchman",
-    "p4-changelist",
-    "p4-prepare-changelist",
-    "p4-post-changelist",
-    "p4-pre-submit",
-    "post-index-change",
-];
 
 /// What the install needs from the daemon.
 pub struct GuardCtx<'a> {
@@ -87,7 +56,7 @@ fn permission(keys: &GuardKeys) -> Permission {
     }
 }
 
-fn journal(keys: &GuardKeys) -> Option<Journal> {
+pub(super) fn journal(keys: &GuardKeys) -> Option<Journal> {
     keys.journal.as_deref().and_then(Journal::from_json)
 }
 
@@ -133,6 +102,8 @@ pub fn status(repo_id: &str, common: &Path, store: &RepoStore) -> GuardStatus {
             .and_then(|r| serde_json::from_str(r).ok())
             .unwrap_or_default(),
         misnamed_settings: reader.as_ref().map(misnamed_settings).unwrap_or_default(),
+        // The daemon loop adds the pending action it holds (US-GRD-003).
+        pending: None,
     }
 }
 
@@ -175,28 +146,6 @@ fn worktrees(ctx: &GuardCtx<'_>, common: &Path) -> Result<Vec<PathBuf>, String> 
         .collect())
 }
 
-fn is_executable(path: &Path) -> bool {
-    match std::fs::metadata(path) {
-        #[cfg(unix)]
-        Ok(m) => {
-            use std::os::unix::fs::PermissionsExt;
-            m.is_file() && m.permissions().mode() & 0o111 != 0
-        }
-        #[cfg(not(unix))]
-        Ok(m) => m.is_file(),
-        Err(_) => false,
-    }
-}
-
-/// A hook of Git's in `<common>/hooks` (with `.exe` on Windows; `.sample` never counts).
-fn has_prior_hook_files(common: &Path) -> bool {
-    let hooks = common.join("hooks");
-    GIT_HOOKS.iter().any(|name| {
-        is_executable(&hooks.join(name))
-            || (cfg!(windows) && is_executable(&hooks.join(format!("{name}.exe"))))
-    })
-}
-
 /// The base branch the install confirms and the bases the minimum protects (Q-GRD-23,
 /// ADR-GRD-004 § 3.5): without a team configuration in the copy of the main branch, `main`;
 /// with one, nothing confirmed and the union {`main`, main branch}.
@@ -219,7 +168,7 @@ fn bases(common: &Path) -> (Option<String>, Vec<String>) {
     }
 }
 
-fn constants(ctx: &GuardCtx<'_>, repo_id: &str, common: &Path) -> Option<Constants> {
+fn constants(ctx: &GuardCtx<'_>, repo_id: &str, common: &Path, prior: &str) -> Option<Constants> {
     Some(Constants {
         template: TEMPLATE_VERSION,
         raptor: ctx.raptor.to_path_buf(),
@@ -228,8 +177,48 @@ fn constants(ctx: &GuardCtx<'_>, repo_id: &str, common: &Path) -> Option<Constan
         channel: ctx.dirs.runtime.clone()?,
         instance: ctx.instance.to_owned(),
         state: ctx.dirs.state.clone(),
-        prior: String::new(),
+        prior: prior.to_owned(),
     })
+}
+
+fn level_text(level: HooksPathLevel) -> &'static str {
+    match level {
+        HooksPathLevel::None => "none",
+        HooksPathLevel::Local => "local",
+        HooksPathLevel::Global => "global",
+        HooksPathLevel::System => "system",
+    }
+}
+
+/// The `prior` constant of an install: the journal's, or `<common>/hooks` for an install of
+/// US-GRD-001 that recorded none.
+fn prior_dir(prior: &Prior, common: &Path) -> String {
+    if prior.dir.is_empty() {
+        common.join("hooks").to_string_lossy().into_owned()
+    } else {
+        prior.dir.clone()
+    }
+}
+
+/// The dispatchers of an install: the governed ones of the template, then one chain-only
+/// dispatcher per other prior hook (ADR-GRD-001 § 2, conjunto mínimo + hooks previos).
+fn dispatcher_names(chained: &[String]) -> Vec<String> {
+    let mut names: Vec<String> = Hook::ALL.iter().map(|h| h.git_name().to_owned()).collect();
+    for name in chained {
+        if !names.contains(name) {
+            names.push(name.clone());
+        }
+    }
+    names
+}
+
+/// Prior hooks that need a dispatcher of their own: every one outside the governed set.
+fn chain_only(hooks: &[String]) -> Vec<String> {
+    hooks
+        .iter()
+        .filter(|h| !Hook::ALL.iter().any(|g| g.git_name() == h.as_str()))
+        .cloned()
+        .collect()
 }
 
 /// Checks that write nothing (ADR-GRD-001 § 4 paso 1).
@@ -268,7 +257,6 @@ pub fn plan(ctx: &GuardCtx<'_>, repo_id: &str, common: &Path, store: &RepoStore)
         match writer.hooks_path_entries(tree) {
             Ok(entries) => {
                 for e in &entries {
-                    add(InstallBlocker::PriorHooks);
                     if e.scope == "worktree" {
                         add(InstallBlocker::WorktreeConfig);
                     }
@@ -280,16 +268,27 @@ pub fn plan(ctx: &GuardCtx<'_>, repo_id: &str, common: &Path, store: &RepoStore)
                 }
             }
             // Unknown: never install blind.
-            Err(_) => add(InstallBlocker::PriorHooks),
+            Err(_) => add(InstallBlocker::ChainImpossible),
         }
         if writer.has_onbranch_include(tree).unwrap_or(true) {
             add(InstallBlocker::IncludeIfOnbranch);
         }
     }
-    if !upgrade && has_prior_hook_files(common) {
-        add(InstallBlocker::PriorHooks);
-    }
-    if constants(ctx, repo_id, common).is_some_and(|c| c.render().is_err()) {
+    // The hooks the repo already had: kept and chained (US-GRD-002), or nothing installed.
+    // An installed repo's own key is ours: there is nothing prior to read (US-GRD-002).
+    let prior = if status.state == ProtectionState::HooksOnly {
+        None
+    } else {
+        match prior_hooks::detect(&writer, common, &trees) {
+            Ok(prior) => Some(prior),
+            Err(ChainImpossible) => {
+                add(InstallBlocker::ChainImpossible);
+                None
+            }
+        }
+    };
+    let prior_dir = prior.as_ref().map_or(String::new(), |p| p.dir.clone());
+    if constants(ctx, repo_id, common, &prior_dir).is_some_and(|c| c.render().is_err()) {
         add(InstallBlocker::NotRepresentable);
     }
     let storage = reader
@@ -311,6 +310,12 @@ pub fn plan(ctx: &GuardCtx<'_>, repo_id: &str, common: &Path, store: &RepoStore)
         protected_bases: protected.into_iter().map(Untrusted::new).collect(),
         blockers,
         status,
+        prior: prior.map(|p| PriorHooks {
+            hooks_path: p.value.map(Untrusted::new),
+            level: p.level,
+            dir: Untrusted::new(p.dir),
+            hooks: p.hooks.into_iter().map(Untrusted::new).collect(),
+        }),
     }
 }
 
@@ -321,21 +326,111 @@ fn sha256(bytes: &[u8]) -> String {
         .collect()
 }
 
-fn manifest(constants: &Constants, hooks_dir: &Path, files: &[String]) -> String {
+fn manifest(
+    constants: &Constants,
+    hooks_dir: &Path,
+    files: &[String],
+    prior: &Prior,
+    chained: &[String],
+) -> String {
     let config = constants.common.join("config");
+    let restore_key = match (prior.level.as_str(), &prior.value) {
+        ("local", Some(value)) => format!(
+            "git config --file {} core.hooksPath {value}",
+            config.display()
+        ),
+        _ => format!(
+            "git config --file {} --unset core.hooksPath",
+            config.display()
+        ),
+    };
     serde_json::to_string_pretty(&serde_json::json!({
         "note": "GitRaptor Guardrails: recovery data only. The authoritative record is in the GitRaptor profile.",
         "template": constants.template,
         "raptor": constants.raptor,
         "hooks_dir": hooks_dir,
         "files": files,
-        "prior_hooks_path": { "value": null, "level": "none" },
+        "prior_hooks_path": { "value": prior.value, "level": prior.level },
+        "prior_hooks_dir": constants.prior,
+        "chained": chained,
         "manual_revert": [
-            format!("git config --file {} --unset core.hooksPath", config.display()),
+            restore_key,
             format!("remove the folder {}", constants.common.join(FOLDER).display()),
         ],
     }))
     .unwrap_or_default()
+}
+
+/// Everything the folder holds: the paths in writing order, and their content.
+struct Folder {
+    paths: Vec<String>,
+    conf: String,
+    manifest: String,
+    stub: Vec<u8>,
+}
+
+impl Folder {
+    fn build(
+        ctx: &GuardCtx<'_>,
+        repo_id: &str,
+        common: &Path,
+        prior: &Prior,
+        chained: &[String],
+    ) -> Result<Self, InstallError> {
+        let constants = constants(ctx, repo_id, common, &prior_dir(prior, common))
+            .ok_or_else(|| InstallError::Rejected(vec![InstallBlocker::PlatformUnsupported]))?;
+        let conf = constants
+            .render()
+            .map_err(|_| InstallError::Rejected(vec![InstallBlocker::NotRepresentable]))?;
+        let stub_path = ctx
+            .stub()
+            .ok_or_else(|| InstallError::Rejected(vec![InstallBlocker::DispatcherMissing]))?;
+        let stub =
+            std::fs::read(&stub_path).map_err(|e| InstallError::Failed(format!("stub: {e}")))?;
+        let hooks_dir = common.join(FOLDER).join("hooks");
+        let mut paths: Vec<String> = dispatcher_names(chained)
+            .iter()
+            .map(|h| format!("hooks/{h}"))
+            .collect();
+        paths.push(DISPATCH_CONF.to_owned());
+        paths.push(MANIFEST.to_owned());
+        let manifest = manifest(&constants, &hooks_dir, &paths, prior, chained);
+        Ok(Self {
+            paths,
+            conf,
+            manifest,
+            stub,
+        })
+    }
+
+    fn content(&self, path: &str) -> &[u8] {
+        match path {
+            DISPATCH_CONF => self.conf.as_bytes(),
+            MANIFEST => self.manifest.as_bytes(),
+            _ => &self.stub,
+        }
+    }
+
+    fn hashes(&self) -> Vec<FileHash> {
+        self.paths
+            .iter()
+            .map(|p| FileHash {
+                path: p.clone(),
+                sha256: sha256(self.content(p)),
+            })
+            .collect()
+    }
+
+    fn files(&self) -> Vec<NewFile<'_>> {
+        self.paths
+            .iter()
+            .map(|p| NewFile {
+                path: p,
+                bytes: self.content(p),
+                executable: p.starts_with("hooks/"),
+            })
+            .collect()
+    }
 }
 
 /// Installs the hook layer in an observed repo. The permission is granted by the call itself
@@ -357,30 +452,19 @@ pub fn install(
         let _ = store.set_guard_keys(None, None, Some(Some(&refusal)), None);
         return Err(InstallError::Rejected(plan.blockers));
     }
-    let constants = constants(ctx, repo_id, common)
-        .ok_or_else(|| InstallError::Rejected(vec![InstallBlocker::PlatformUnsupported]))?;
-    let conf = constants
-        .render()
-        .map_err(|_| InstallError::Rejected(vec![InstallBlocker::NotRepresentable]))?;
-    let stub_path = ctx
-        .stub()
-        .ok_or_else(|| InstallError::Rejected(vec![InstallBlocker::DispatcherMissing]))?;
-    let stub = std::fs::read(&stub_path).map_err(|e| InstallError::Failed(format!("stub: {e}")))?;
-    let hooks_dir = common.join(FOLDER).join("hooks");
-    let mut paths: Vec<String> = Hook::ALL
-        .iter()
-        .map(|h| format!("hooks/{}", h.git_name()))
-        .collect();
-    paths.push(DISPATCH_CONF.to_owned());
-    paths.push(MANIFEST.to_owned());
-    let manifest = manifest(&constants, &hooks_dir, &paths);
-    let content = |p: &str| -> &[u8] {
-        match p {
-            DISPATCH_CONF => conf.as_bytes(),
-            MANIFEST => manifest.as_bytes(),
-            _ => &stub,
-        }
+    // The plan found them; read once more from the same place for the journal.
+    let trees = worktrees(ctx, common).map_err(InstallError::Failed)?;
+    let writer = GuardWriter::new(ctx.git, ctx.invoker);
+    let found = prior_hooks::detect(&writer, common, &trees)
+        .map_err(|_| InstallError::Rejected(vec![InstallBlocker::ChainImpossible]))?;
+    let prior = Prior {
+        value: found.value.clone(),
+        level: level_text(found.level).to_owned(),
+        dir: found.dir.clone(),
     };
+    let chained = chain_only(&found.hooks);
+    let folder_files = Folder::build(ctx, repo_id, common, &prior, &chained)?;
+    let hooks_dir = common.join(FOLDER).join("hooks");
     let (confirms_base, protected_bases) = bases(common);
     let mut journal = Journal {
         version: Journal::VERSION,
@@ -388,22 +472,14 @@ pub fn install(
         at_ms: now_ms,
         common_dir: common.to_string_lossy().into_owned(),
         hooks_dir: hooks_dir.to_string_lossy().into_owned(),
-        files: paths
-            .iter()
-            .map(|p| FileHash {
-                path: p.clone(),
-                sha256: sha256(content(p)),
-            })
-            .collect(),
+        files: folder_files.hashes(),
         folder: None,
         config: None,
-        raptor: constants.raptor.to_string_lossy().into_owned(),
+        raptor: ctx.raptor.to_string_lossy().into_owned(),
         template: TEMPLATE_VERSION,
         instance: ctx.instance.to_owned(),
-        prior: Prior {
-            value: None,
-            level: "none".into(),
-        },
+        prior,
+        chained,
         confirms_base: confirms_base.clone(),
         protected_bases: protected_bases.clone(),
     };
@@ -414,15 +490,8 @@ pub fn install(
     };
     // Before any write: the journal says what may exist.
     save(store, &journal)?;
-    let writer = GuardWriter::new(ctx.git, ctx.invoker);
-    let files: Vec<NewFile<'_>> = paths
-        .iter()
-        .map(|p| NewFile {
-            path: p,
-            bytes: content(p),
-            executable: p.starts_with("hooks/"),
-        })
-        .collect();
+    let files = folder_files.files();
+    let paths = &folder_files.paths;
     let revert = |store: &mut RepoStore, why: String| -> InstallError {
         let listed: Vec<&str> = paths.iter().map(String::as_str).collect();
         rollback(&writer, common, &hooks_dir, &listed, store);
@@ -485,9 +554,10 @@ fn outdated(common: &Path, recorded: Option<u32>) -> bool {
 
 /// Upgrades a confirmed install of an older template in place (ADR-GRD-001 § 8): every file of
 /// the current template is replaced atomically inside the folder the journal recorded, so the
-/// repo is never without a working dispatcher, and the key is not touched. The journal lists
-/// the new files before the writes; an interrupted upgrade leaves a working mix that the next
-/// `raptor guard install` completes (it is idempotent).
+/// repo is never without a working dispatcher, and the key is not touched. The chained prior
+/// hooks and their folder are the journal's. The journal lists the new files before the writes;
+/// an interrupted upgrade leaves a working mix that the next `raptor guard install` completes
+/// (it is idempotent).
 fn upgrade(
     ctx: &GuardCtx<'_>,
     repo_id: &str,
@@ -502,40 +572,12 @@ fn upgrade(
     let folder = journal
         .folder
         .ok_or_else(|| InstallError::Failed("journal without the folder".into()))?;
-    let constants = constants(ctx, repo_id, common)
-        .ok_or_else(|| InstallError::Rejected(vec![InstallBlocker::PlatformUnsupported]))?;
-    let conf = constants
-        .render()
-        .map_err(|_| InstallError::Rejected(vec![InstallBlocker::NotRepresentable]))?;
-    let stub_path = ctx
-        .stub()
-        .ok_or_else(|| InstallError::Rejected(vec![InstallBlocker::DispatcherMissing]))?;
-    let stub = std::fs::read(&stub_path).map_err(|e| InstallError::Failed(format!("stub: {e}")))?;
+    let folder_files = Folder::build(ctx, repo_id, common, &journal.prior, &journal.chained)?;
     let hooks_dir = common.join(FOLDER).join("hooks");
-    let mut paths: Vec<String> = Hook::ALL
-        .iter()
-        .map(|h| format!("hooks/{}", h.git_name()))
-        .collect();
-    paths.push(DISPATCH_CONF.to_owned());
-    paths.push(MANIFEST.to_owned());
-    let manifest = manifest(&constants, &hooks_dir, &paths);
-    let content = |p: &str| -> &[u8] {
-        match p {
-            DISPATCH_CONF => conf.as_bytes(),
-            MANIFEST => manifest.as_bytes(),
-            _ => &stub,
-        }
-    };
     // Before any write: the journal lists every file that may exist afterwards.
-    journal.files = paths
-        .iter()
-        .map(|p| FileHash {
-            path: p.clone(),
-            sha256: sha256(content(p)),
-        })
-        .collect();
+    journal.files = folder_files.hashes();
     journal.at_ms = now_ms;
-    journal.raptor = constants.raptor.to_string_lossy().into_owned();
+    journal.raptor = ctx.raptor.to_string_lossy().into_owned();
     let save = |store: &mut RepoStore, j: &Journal| {
         store
             .set_guard_keys(Some(Some(&j.to_json())), None, None, None)
@@ -543,14 +585,7 @@ fn upgrade(
     };
     save(store, &journal)?;
     // `dispatch.conf` and the manifest last: until then the old template's constants rule.
-    let mut files: Vec<NewFile<'_>> = paths
-        .iter()
-        .map(|p| NewFile {
-            path: p,
-            bytes: content(p),
-            executable: p.starts_with("hooks/"),
-        })
-        .collect();
+    let mut files = folder_files.files();
     files.sort_by_key(|f| !f.executable);
     GuardWriter::new(ctx.git, ctx.invoker)
         .replace_files(common, folder.into(), &files)
@@ -657,7 +692,7 @@ fn export_snapshot(state: &Path, snapshot: &Snapshot) -> std::io::Result<()> {
 
 /// Undoes an install that did not reach its confirmation: the key only if it is ours, then
 /// the listed files, then the journal.
-fn rollback(
+pub(super) fn rollback(
     writer: &GuardWriter<'_>,
     common: &Path,
     hooks_dir: &Path,
@@ -707,6 +742,10 @@ pub enum Recovery {
     RolledBack,
     /// The key was ours and every worktree saw it: confirmed.
     Confirmed,
+    /// An uninstall had put the key back: it was finished; the repo is as before the install.
+    UninstallCompleted,
+    /// An uninstall stopped before the key: the protection is complete and stays.
+    UninstallKept,
 }
 
 /// Startup: an install left in `installing` is completed or undone (ADR-GRD-001 § 4,
@@ -726,6 +765,12 @@ pub fn recover(
         let confirmed = store.confirmed_team_baseline().ok().flatten();
         publish(ctx.dirs, repo_id, &journal, registry, confirmed);
         return Recovery::Nothing;
+    }
+    if journal.stage == Stage::Uninstalling {
+        return match super::uninstall::recover(ctx, repo_id, common, store, registry, journal) {
+            super::uninstall::Recovered::Completed => Recovery::UninstallCompleted,
+            super::uninstall::Recovered::Kept => Recovery::UninstallKept,
+        };
     }
     let writer = GuardWriter::new(ctx.git, ctx.invoker);
     let hooks_dir = PathBuf::from(&journal.hooks_dir);

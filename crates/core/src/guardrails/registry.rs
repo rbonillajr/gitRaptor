@@ -4,7 +4,7 @@
 //! operation of the executor whose own `git` runs the hook).
 
 use std::collections::HashMap;
-use std::sync::RwLock;
+use std::sync::{Mutex, RwLock};
 
 /// What the evaluation needs of one protected repo.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -26,6 +26,8 @@ pub struct GuardRegistry {
     profile: RwLock<Option<crate::profile::ProfileDirs>>,
     /// The decision log entries in flight to the loop (US-GRD-005, D4).
     log: super::log::LogSink,
+    /// The reserved actions waiting for their window (US-GRD-003, D5). Only the loop uses it.
+    pending: Mutex<super::pending::PendingActions>,
 }
 
 impl GuardRegistry {
@@ -35,6 +37,7 @@ impl GuardRegistry {
             repos: RwLock::default(),
             profile: RwLock::new(Some(dirs)),
             log: super::log::LogSink::default(),
+            pending: Mutex::default(),
         }
     }
 
@@ -57,6 +60,13 @@ impl GuardRegistry {
     /// The decision log's sink, shared by the connections and the loop.
     pub fn log(&self) -> &super::log::LogSink {
         &self.log
+    }
+
+    /// The reserved actions waiting for their window.
+    pub fn pending(&self) -> std::sync::MutexGuard<'_, super::pending::PendingActions> {
+        self.pending
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     /// The profile's folders, when the daemon set them.

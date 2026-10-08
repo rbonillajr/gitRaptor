@@ -265,6 +265,7 @@ mod tests {
             writers,
             [
                 (GUARD_INSTALL, RepoWrite::Guardrails),
+                (GUARD_UNINSTALL, RepoWrite::Guardrails),
                 (OPERATION_RUN, RepoWrite::Protected),
                 (TM_REDO, RepoWrite::TimeMachine),
                 (TM_RESTORE, RepoWrite::TimeMachine),
@@ -273,8 +274,8 @@ mod tests {
         );
         // A writer is never a reserved command: reserved commands do not go
         // through the prior snapshot. The one exception is the Guardrails
-        // install, recovered by its own journal (ADR-GRD-001 § 4); only it
-        // may declare that kind of write.
+        // install and uninstall, recovered by their own journal (ADR-GRD-001
+        // § 4); only they may declare that kind of write.
         assert!(METHODS.iter().all(|m| !(m.reserved
             && m.writes != RepoWrite::None
             && m.writes != RepoWrite::Guardrails)));
@@ -282,7 +283,7 @@ mod tests {
             METHODS
                 .iter()
                 .filter(|m| m.writes == RepoWrite::Guardrails)
-                .all(|m| m.name == GUARD_INSTALL && m.reserved)
+                .all(|m| (m.name == GUARD_INSTALL || m.name == GUARD_UNINSTALL) && m.reserved)
         );
     }
 

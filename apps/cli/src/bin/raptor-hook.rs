@@ -10,10 +10,16 @@
 //!   error.
 //! - Without `raptor` (or on an internal error): fail-closed for `pre-push`, `pre-rebase` and the
 //!   deletion of a branch; anything else passes with a warning (decision 4 of Rene Bonilla).
+//! - Whenever the operation goes ahead (allowed, fast path, or the fallback that passes), the
+//!   hook the repo had before is chained (US-GRD-002): `<prior>/<hook>`, without a shell, with
+//!   the same arguments, the same input, Git's own environment and working folder, and its exit
+//!   code is the result. A denial never runs it. A dispatcher of a hook Guardrails does not
+//!   govern only chains.
 //!
 //! Plain `std` on purpose: it runs on every Git operation of a protected repo. This is the one
-//! named exception to "no own process launch" of the hook layer (ADR-GRD-001 § 7, Enmienda
-//! 2026-10-05): it only ever starts the `raptor` of its constants.
+//! named exception to "no own process launch" of the hook layer (ADR-GRD-001 § 7, Enmiendas
+//! 2026-10-05 and 2026-10-08): it only ever starts the `raptor` of its constants and the prior
+//! hook of its `prior` constant plus a fixed hook name.
 
 #[path = "../../../../crates/policy/src/guard/fastpath.rs"]
 #[allow(dead_code)]
@@ -31,6 +37,34 @@ const MAX_INPUT: u64 = 256 * 1024 * 1024;
 /// Template versions this dispatcher understands (ADR-GRD-001 § 8).
 const TEMPLATES: &[&str] = &["1", "2"];
 
+/// The other hooks of githooks(5): their dispatcher only chains the prior hook (US-GRD-002).
+/// A name outside this list never chains anything.
+const CHAIN_ONLY: &[&str] = &[
+    "applypatch-msg",
+    "pre-applypatch",
+    "post-applypatch",
+    "pre-merge-commit",
+    "prepare-commit-msg",
+    "post-commit",
+    "post-checkout",
+    "post-merge",
+    "pre-receive",
+    "update",
+    "proc-receive",
+    "post-receive",
+    "post-update",
+    "push-to-checkout",
+    "pre-auto-gc",
+    "post-rewrite",
+    "sendemail-validate",
+    "fsmonitor-watchman",
+    "p4-changelist",
+    "p4-prepare-changelist",
+    "p4-post-changelist",
+    "p4-pre-submit",
+    "post-index-change",
+];
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Hook {
     PrePush,
@@ -39,6 +73,8 @@ enum Hook {
     /// Commit authorship (US-GRD-018, template 2).
     PreCommit,
     CommitMsg,
+    /// A hook Guardrails does not govern: only the prior hook runs.
+    Chain(&'static str),
 }
 
 impl Hook {
@@ -49,7 +85,10 @@ impl Hook {
             "reference-transaction" => Some(Self::ReferenceTransaction),
             "pre-commit" => Some(Self::PreCommit),
             "commit-msg" => Some(Self::CommitMsg),
-            _ => None,
+            other => CHAIN_ONLY
+                .iter()
+                .find(|name| **name == other)
+                .map(|name| Self::Chain(name)),
         }
     }
 
@@ -60,6 +99,7 @@ impl Hook {
             Self::ReferenceTransaction => "reference-transaction",
             Self::PreCommit => "pre-commit",
             Self::CommitMsg => "commit-msg",
+            Self::Chain(name) => name,
         }
     }
 }
@@ -126,6 +166,7 @@ enum Msg<'a> {
     Internal,
     InternalPassed,
     Moved,
+    PriorFailed,
 }
 
 fn say(msg: Msg<'_>) {
@@ -163,18 +204,25 @@ fn say(msg: Msg<'_>) {
         Msg::Moved => {
             "GitRaptor: the hooks of this repository were moved or altered. The operation did not run.".to_owned()
         }
+        Msg::PriorFailed if es => {
+            "GitRaptor: no se pudo ejecutar el hook que el repositorio ya tenía. La operación no se ejecuta.".to_owned()
+        }
+        Msg::PriorFailed => {
+            "GitRaptor: the hook this repository already had could not be run. The operation did not run.".to_owned()
+        }
     };
     let _ = writeln!(std::io::stderr(), "{text}");
 }
 
 /// ADR-GRD-001 § 3: without a decision from `raptor`, fail-closed only where the operation is
-/// risky; `missing` says whether `raptor` is absent (or an internal error happened).
-fn fallback(hook: Hook, input: &[u8], common: &Path, raptor: &str, missing: bool) -> ExitCode {
+/// risky; `missing` says whether `raptor` is absent (or an internal error happened). `true` when
+/// the operation goes ahead.
+fn fallback(hook: Hook, input: &[u8], common: &Path, raptor: &str, missing: bool) -> bool {
     let deny = match hook {
         Hook::PrePush | Hook::PreRebase => true,
         Hook::ReferenceTransaction => fastpath::deletes_a_branch(input, common, MAX_LINE),
         // A commit is not risky by itself: it passes with the warning (decision 4).
-        Hook::PreCommit | Hook::CommitMsg => false,
+        Hook::PreCommit | Hook::CommitMsg | Hook::Chain(_) => false,
     };
     match (deny, missing) {
         (true, true) => say(Msg::Missing(raptor)),
@@ -182,11 +230,7 @@ fn fallback(hook: Hook, input: &[u8], common: &Path, raptor: &str, missing: bool
         (false, true) => say(Msg::Inactive(raptor)),
         (false, false) => say(Msg::InternalPassed),
     }
-    if deny {
-        ExitCode::FAILURE
-    } else {
-        ExitCode::SUCCESS
-    }
+    !deny
 }
 
 fn is_executable(path: &Path) -> bool {
@@ -215,23 +259,121 @@ fn allowlisted_env() -> Vec<(OsString, OsString)> {
         .collect()
 }
 
+/// The hook the repo had before (US-GRD-002): `<prior>/<hook>` from the `prior` constant (empty:
+/// `<common>/hooks`). A relative constant stays relative: Git runs hooks from the root of the
+/// worktree, so it resolves the same way Git did (ADR-GRD-001 § 2).
+fn prior_hook(conf: &Conf, common: &Path, hook: Hook) -> Option<PathBuf> {
+    let dir = match conf.get("prior").unwrap_or_default() {
+        "" => common.join("hooks"),
+        dir => PathBuf::from(dir),
+    };
+    let path = dir.join(hook.name());
+    if is_executable(&path) {
+        return Some(path);
+    }
+    let exe = dir.join(format!("{}.exe", hook.name()));
+    (cfg!(windows) && is_executable(&exe)).then_some(exe)
+}
+
+/// Where the prior hook's standard input comes from.
+enum Input<'a> {
+    /// What this dispatcher already read (`pre-push`, `reference-transaction` in `prepared`).
+    Read(&'a [u8]),
+    /// Not read: the prior hook inherits it.
+    Inherited,
+}
+
+/// Runs the prior hook as Git would have: same arguments, same input, Git's own environment and
+/// working folder, its output straight through. Its exit code is the result. Without a prior
+/// hook the operation simply goes ahead.
+fn chain(prior: Option<&Path>, args: &[OsString], input: Input<'_>) -> ExitCode {
+    let Some(prior) = prior else {
+        return ExitCode::SUCCESS;
+    };
+    // A relative path must not be looked up in `PATH`.
+    let program = if prior.is_relative() {
+        Path::new(".").join(prior)
+    } else {
+        prior.to_path_buf()
+    };
+    let start = |mut command: Command| {
+        command
+            .args(args)
+            .stdin(match input {
+                Input::Read(_) => Stdio::piped(),
+                Input::Inherited => Stdio::inherit(),
+            })
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit());
+        command.spawn()
+    };
+    let spawned = match start(Command::new(&program)) {
+        // Git runs a script without a `#!` line with `sh`: so does the dispatcher.
+        #[cfg(unix)]
+        Err(e) if e.raw_os_error() == Some(ENOEXEC) => {
+            let mut sh = Command::new("/bin/sh");
+            sh.arg(&program);
+            start(sh)
+        }
+        other => other,
+    };
+    let Ok(mut child) = spawned else {
+        say(Msg::PriorFailed);
+        return ExitCode::FAILURE;
+    };
+    if let (Input::Read(bytes), Some(mut stdin)) = (input, child.stdin.take()) {
+        // A prior hook that stops reading closes the pipe: its exit code still decides.
+        let _ = stdin.write_all(bytes);
+    }
+    match child.wait().ok().and_then(|s| s.code()) {
+        Some(0) => ExitCode::SUCCESS,
+        Some(code) => ExitCode::from(u8::try_from(code).unwrap_or(1)),
+        // Killed by a signal: the operation does not go ahead, as with Git.
+        None => ExitCode::FAILURE,
+    }
+}
+
+#[cfg(unix)]
+const ENOEXEC: i32 = 8;
+
 fn main() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().skip(1).collect();
     let Some(exe) = std::env::current_exe().ok() else {
         return ExitCode::FAILURE;
     };
     let Some(hook) = Hook::from_exe(&exe) else {
-        // A copy under a name this dispatcher does not serve: nothing to decide.
+        // A copy under a name this dispatcher does not serve: nothing to decide or chain.
         return ExitCode::SUCCESS;
     };
+    // <common>/gitraptor/hooks/<hook>
+    let folder = exe.parent().and_then(Path::parent);
+    let common_here = folder
+        .and_then(Path::parent)
+        .and_then(|c| c.canonicalize().ok())
+        .map(fastpath::simplified);
+    let conf = folder.and_then(|f| Conf::read(&f.join("dispatch.conf")));
     let prepared = args.first().map(OsString::as_os_str) == Some(OsStr::new("prepared"));
-    // L-01: outside `prepared`, nothing to evaluate and (US-GRD-001) no prior hook to chain.
-    if hook == Hook::ReferenceTransaction && !prepared {
-        return ExitCode::SUCCESS;
+    // L-01: outside `prepared` there is nothing to evaluate; only the prior hook, if any, runs
+    // (with the input it would have had). The same for a hook Guardrails does not govern.
+    if (hook == Hook::ReferenceTransaction && !prepared) || matches!(hook, Hook::Chain(_)) {
+        let Some(conf) = conf.as_ref() else {
+            return ExitCode::SUCCESS;
+        };
+        let common = PathBuf::from(conf.get("common").unwrap_or_default());
+        if common_here.as_deref() != Some(common.as_path()) {
+            // Constants of another repo: chain nothing of it.
+            return ExitCode::SUCCESS;
+        }
+        return chain(
+            prior_hook(conf, &common, hook).as_deref(),
+            &args,
+            Input::Inherited,
+        );
     }
     let mut input = Vec::new();
     // `pre-rebase`, `pre-commit` and `commit-msg` take no input.
-    if matches!(hook, Hook::PrePush | Hook::ReferenceTransaction) {
+    let reads_input = matches!(hook, Hook::PrePush | Hook::ReferenceTransaction);
+    if reads_input {
         // One byte past the bound means the input was cut: never decide on a prefix (Git
         // ignores a hook that stops reading).
         let read = std::io::stdin()
@@ -243,21 +385,21 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     }
-    // <common>/gitraptor/hooks/<hook>
-    let folder = exe.parent().and_then(Path::parent);
-    let common_here = folder
-        .and_then(Path::parent)
-        .and_then(|c| c.canonicalize().ok())
-        .map(fastpath::simplified);
-    let conf = folder.and_then(|f| Conf::read(&f.join("dispatch.conf")));
+    let input_for_prior = || {
+        if reads_input {
+            Input::Read(&input)
+        } else {
+            Input::Inherited
+        }
+    };
     let Some(conf) = conf else {
-        return fallback(
-            hook,
-            &input,
-            common_here.as_deref().unwrap_or(Path::new("")),
-            "",
-            true,
-        );
+        // Without constants there is no prior hook to find: the fallback alone decides.
+        let common = common_here.as_deref().unwrap_or(Path::new(""));
+        return if fallback(hook, &input, common, "", true) {
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::FAILURE
+        };
     };
     let common = PathBuf::from(conf.get("common").unwrap_or_default());
     let raptor = conf.get("raptor").unwrap_or_default();
@@ -266,18 +408,26 @@ fn main() -> ExitCode {
         say(Msg::Moved);
         return ExitCode::FAILURE;
     }
+    let prior = prior_hook(&conf, &common, hook);
     let skippable = match hook {
         Hook::ReferenceTransaction => {
             fastpath::skippable_ref_transaction(&input, &common, MAX_LINE)
         }
         Hook::PrePush => fastpath::skippable_push(&input, MAX_LINE),
-        Hook::PreRebase | Hook::PreCommit | Hook::CommitMsg => false,
+        Hook::PreRebase | Hook::PreCommit | Hook::CommitMsg | Hook::Chain(_) => false,
     };
     if skippable {
-        return ExitCode::SUCCESS;
+        return chain(prior.as_deref(), &args, input_for_prior());
     }
+    let passes = |missing: bool| {
+        if fallback(hook, &input, &common, raptor, missing) {
+            chain(prior.as_deref(), &args, input_for_prior())
+        } else {
+            ExitCode::FAILURE
+        }
+    };
     if !is_executable(Path::new(raptor)) {
-        return fallback(hook, &input, &common, raptor, true);
+        return passes(true);
     }
     let mut command = Command::new(raptor);
     command.arg("hook");
@@ -297,16 +447,18 @@ fn main() -> ExitCode {
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
     let Ok(mut child) = command.spawn() else {
-        return fallback(hook, &input, &common, raptor, false);
+        return passes(false);
     };
     if let Some(mut stdin) = child.stdin.take() {
         // A `raptor` that exits early closes the pipe: its exit code still decides.
         let _ = stdin.write_all(&input);
     }
     match child.wait().ok().and_then(|s| s.code()) {
-        Some(0) => ExitCode::SUCCESS,
+        // GitRaptor allows: the prior hook runs and may still fail the operation.
+        Some(0) => chain(prior.as_deref(), &args, input_for_prior()),
+        // GitRaptor denies: the operation will not happen, so the prior hook does not run.
         Some(1) => ExitCode::FAILURE,
         // A signal, a panic or an unexpected code: an internal error (ADR-GRD-001 § 3).
-        _ => fallback(hook, &input, &common, raptor, false),
+        _ => passes(false),
     }
 }

@@ -15,9 +15,11 @@ use gitraptor_api::AgentKind;
 use gitraptor_api::Untrusted;
 use gitraptor_api::guard::{
     Cause, CommitStage, Decision, Effect, GuardLogEntry, GuardLogParams, GuardLogResult, GuardPlan,
-    GuardRejectedData, GuardRepoParams, GuardStatus, InstallBlocker, Level, LogDetail, LogKind,
-    LoggedOperation, LoggedReason, LoggedRef, MAX_LOG_PAGE, NotPreventable, Param, ParamKind,
-    Permission, ProtectionState, Reason, RefBackend, RefChange, Rule,
+    GuardRejectedData, GuardRepoParams, GuardStatus, GuardUninstallParams,
+    GuardUninstallRefusedData, GuardUninstallResult, HooksPathLevel, InstallBlocker, Level,
+    LogDetail, LogKind, LoggedOperation, LoggedReason, LoggedRef, MAX_LOG_PAGE, NotPreventable,
+    Param, ParamKind, Permission, ProtectionState, Reason, RefBackend, RefChange, Rule,
+    UninstallRefusal,
 };
 use gitraptor_api::methods;
 use gitraptor_api::rpc::code;
@@ -209,6 +211,7 @@ fn blocker_text(b: InstallBlocker) -> String {
     t(
         match b {
             InstallBlocker::PriorHooks => "guard.blocker.prior-hooks",
+            InstallBlocker::ChainImpossible => "guard.blocker.chain-impossible",
             InstallBlocker::WorktreeConfig => "guard.blocker.worktree-config",
             InstallBlocker::IncludeDefinesHooksPath => "guard.blocker.include",
             InstallBlocker::IncludeIfOnbranch => "guard.blocker.onbranch",
@@ -262,8 +265,20 @@ fn explain(plan: &GuardPlan) -> String {
                 &[("bases", &names(&plan.protected_bases))],
             ),
         },
-        t("guard.install.cannot-prevent", &[]),
     ];
+    // The hooks the repo already has: kept and chained (US-GRD-002, BR-AUTH-002).
+    let prior = plan.prior.as_ref().filter(|p| !p.hooks.is_empty());
+    if let Some(prior) = prior {
+        out.push(t(
+            "guard.install.prior",
+            &[
+                ("hooks", &names(&prior.hooks)),
+                ("dir", &prior.dir.sanitized()),
+            ],
+        ));
+        out.push(t("guard.install.prior-kept", &[]));
+    }
+    out.push(t("guard.install.cannot-prevent", &[]));
     for n in &plan.not_preventable {
         out.push(format!("  - {}", not_preventable_text(*n)));
     }
@@ -273,10 +288,24 @@ fn explain(plan: &GuardPlan) -> String {
     out.push(t("guard.install.cost", &[]));
     out.push(t("guard.install.unavailable", &[]));
     out.push(t("guard.install.revert", &[]));
-    out.push(format!(
-        "  git config --file {} --unset core.hooksPath",
-        shell_quote(&format!("{common}/config"))
-    ));
+    let config = shell_quote(&format!("{common}/config"));
+    match plan
+        .prior
+        .as_ref()
+        .filter(|p| p.level == HooksPathLevel::Local)
+        .and_then(|p| p.hooks_path.as_ref())
+    {
+        Some(value) => out.push(t(
+            "guard.install.revert-restore",
+            &[
+                ("config", &config),
+                ("value", &shell_quote(&value.sanitized())),
+            ],
+        )),
+        None => out.push(format!(
+            "  git config --file {config} --unset core.hooksPath"
+        )),
+    }
     out.push(t(
         "guard.install.revert-folder",
         &[("dir", &format!("{common}/gitraptor"))],
@@ -341,6 +370,12 @@ fn status_lines(status: &GuardStatus) -> Vec<String> {
     });
     for b in &status.last_refusal {
         out.push(format!("  - {}", blocker_text(*b)));
+    }
+    if let Some(pending) = &status.pending {
+        out.push(t(
+            "guard.status.pending",
+            &[("seconds", &seconds_left(pending.applies_at_ms))],
+        ));
     }
     for file in &status.misnamed_settings {
         out.push(t(
@@ -486,6 +521,201 @@ pub fn status(path: Option<PathBuf>, json: bool) -> ExitCode {
                 );
             }
             ExitCode::SUCCESS
+        }
+        Err(err) => guard_error(CMD, &path, err),
+    }
+}
+
+/// Whole seconds until `at_ms`, rounded up.
+fn seconds_left(at_ms: i64) -> String {
+    let left = (at_ms - now_ms()).max(0);
+    ((left + 999) / 1000).to_string()
+}
+
+fn uninstall_refusal(err: &gitraptor_api::rpc::ErrorObject) -> Option<GuardUninstallRefusedData> {
+    (err.code == methods::GUARD_UNINSTALL_REFUSED.code)
+        .then(|| err.data.clone())
+        .flatten()
+        .and_then(|d| serde_json::from_value(d).ok())
+}
+
+fn uninstall_refusal_text(reason: UninstallRefusal) -> String {
+    t(
+        match reason {
+            UninstallRefusal::NotInstalled => "guard.uninstall.not-installed",
+            UninstallRefusal::AlreadyPending => "guard.uninstall.already-pending",
+            UninstallRefusal::NotTheRequester => "guard.uninstall.not-the-requester",
+            UninstallRefusal::WindowOpen | UninstallRefusal::NoPending => {
+                "guard.uninstall.cancelled"
+            }
+        },
+        &[],
+    )
+}
+
+/// How often the requester looks whether its announcement was cancelled.
+const WINDOW_POLL: std::time::Duration = std::time::Duration::from_millis(200);
+
+/// `raptor guard uninstall [path] [--yes]` (US-GRD-003): explains, asks, announces the removal
+/// and opens the window (ADR-GRD-007 § 1, D5), then applies it when the window closes unless
+/// someone cancelled it. `--yes` answers the question, never the window. Ctrl-C ends this
+/// command before it applies anything: the announcement then expires on its own.
+pub fn uninstall(path: Option<PathBuf>, yes: bool) -> ExitCode {
+    const CMD: &str = "raptor guard uninstall";
+    if cfg!(windows) {
+        eprintln!("{CMD}: {}", t("guard.unsupported-platform", &[]));
+        return ExitCode::FAILURE;
+    }
+    let path = command_path(path);
+    let mut client = match engine(CMD) {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+    let repo = GuardRepoParams {
+        path: path.to_string_lossy().into_owned(),
+    };
+    let status = match client.call::<_, GuardStatus>(methods::GUARD_STATUS, &repo) {
+        Ok(status) => status,
+        Err(err) => return guard_error(CMD, &path, err),
+    };
+    if status.state != ProtectionState::HooksOnly {
+        eprintln!("{CMD}: {}", t("guard.uninstall.not-installed", &[]));
+        return ExitCode::FAILURE;
+    }
+    let common = crate::shown(&path);
+    println!("{}", t("guard.uninstall.header", &[("repo", &common)]));
+    println!();
+    println!(
+        "{}",
+        t(
+            "guard.uninstall.what",
+            &[("dir", &"gitraptor/hooks".to_owned())]
+        )
+    );
+    println!("{}", t("guard.uninstall.after", &[]));
+    let answer = if yes {
+        Answer::Yes
+    } else {
+        ask(&t("guard.uninstall.confirm", &[]))
+    };
+    match answer {
+        Answer::None => {
+            eprintln!("{CMD}: {}", t("guard.uninstall.no-answer", &[]));
+            return ExitCode::FAILURE;
+        }
+        Answer::No => {
+            println!("{}", t("guard.uninstall.kept", &[]));
+            return ExitCode::SUCCESS;
+        }
+        Answer::Yes => {}
+    }
+    let refused = |err: ClientError| match &err {
+        ClientError::Rpc(e) if uninstall_refusal(e).is_some() => {
+            let data = uninstall_refusal(e).expect("checked");
+            eprintln!("{CMD}: {}", uninstall_refusal_text(data.reason));
+            ExitCode::FAILURE
+        }
+        _ => guard_error(CMD, &path, err),
+    };
+    let announce = GuardUninstallParams {
+        path: repo.path.clone(),
+        confirm: None,
+    };
+    let pending = match client.call::<_, GuardUninstallResult>(methods::GUARD_UNINSTALL, &announce)
+    {
+        Ok(GuardUninstallResult {
+            pending: Some(pending),
+            ..
+        }) => pending,
+        Ok(_) => {
+            eprintln!("{CMD}: {}", t("guard.uninstall.failed", &[]));
+            return ExitCode::FAILURE;
+        }
+        Err(err) => return refused(err),
+    };
+    println!(
+        "{}",
+        t(
+            "guard.uninstall.window",
+            &[("seconds", &pending.window_ms.div_ceil(1000).to_string())]
+        )
+    );
+    let _ = std::io::stdout().flush();
+    // Until the window closes: anyone may cancel it meanwhile.
+    while now_ms() < pending.applies_at_ms {
+        std::thread::sleep(
+            WINDOW_POLL.min(std::time::Duration::from_millis(
+                u64::try_from(pending.applies_at_ms - now_ms())
+                    .unwrap_or(0)
+                    .max(1),
+            )),
+        );
+        match client.call::<_, GuardStatus>(methods::GUARD_STATUS, &repo) {
+            Ok(status)
+                if status
+                    .pending
+                    .as_ref()
+                    .is_some_and(|p| p.action_id == pending.action_id) => {}
+            Ok(_) => {
+                eprintln!("{CMD}: {}", t("guard.uninstall.cancelled", &[]));
+                return ExitCode::FAILURE;
+            }
+            Err(err) => return guard_error(CMD, &path, err),
+        }
+    }
+    let apply = GuardUninstallParams {
+        path: repo.path.clone(),
+        confirm: Some(pending.action_id.clone()),
+    };
+    loop {
+        match client.call::<_, GuardUninstallResult>(methods::GUARD_UNINSTALL, &apply) {
+            Ok(result) => {
+                println!("{}", t("guard.uninstall.done", &[("path", &shown(&path))]));
+                for line in status_lines(&result.status) {
+                    println!("{line}");
+                }
+                return ExitCode::SUCCESS;
+            }
+            // The daemon's clock decides: wait what it says is left.
+            Err(ClientError::Rpc(e))
+                if uninstall_refusal(&e)
+                    .is_some_and(|d| d.reason == UninstallRefusal::WindowOpen) =>
+            {
+                let left = uninstall_refusal(&e)
+                    .and_then(|d| d.remaining_ms)
+                    .unwrap_or(100)
+                    .max(1);
+                std::thread::sleep(std::time::Duration::from_millis(left));
+            }
+            Err(err) => return refused(err),
+        }
+    }
+}
+
+/// `raptor guard cancel [path]`: cancels the removal waiting in a repo (not reserved: it only
+/// keeps the protection).
+pub fn cancel(path: Option<PathBuf>) -> ExitCode {
+    const CMD: &str = "raptor guard cancel";
+    if cfg!(windows) {
+        eprintln!("{CMD}: {}", t("guard.unsupported-platform", &[]));
+        return ExitCode::FAILURE;
+    }
+    let path = command_path(path);
+    let mut client = match engine(CMD) {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+    let params = GuardRepoParams {
+        path: path.to_string_lossy().into_owned(),
+    };
+    match client.call::<_, GuardStatus>(methods::GUARD_CANCEL, &params) {
+        Ok(_) => {
+            println!("{}", t("guard.cancel.done", &[("path", &shown(&path))]));
+            ExitCode::SUCCESS
+        }
+        Err(ClientError::Rpc(e)) if uninstall_refusal(&e).is_some() => {
+            eprintln!("{CMD}: {}", t("guard.cancel.none", &[]));
+            ExitCode::FAILURE
         }
         Err(err) => guard_error(CMD, &path, err),
     }
@@ -893,6 +1123,7 @@ mod tests {
             not_preventable: Vec::new(),
             last_refusal: Vec::new(),
             misnamed_settings: vec![Untrusted::new(".gitraptor/config\u{1b}[31m.json")],
+            pending: None,
         };
         let lines = status_lines(&status);
         let last = lines.last().unwrap();

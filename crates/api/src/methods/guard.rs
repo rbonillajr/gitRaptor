@@ -1,7 +1,8 @@
 //! Guardrails (US-GRD-001, ADR-GRD-007 § 1), protocol 7.
 
-use super::{Group, RepoWrite, method};
+use super::{ERROR_BLOCK_LEN, FIRST_ERROR_BLOCK, Group, RepoWrite, method};
 use crate::capability::{CAPABILITIES_PROTOCOL, Capability};
+use crate::rpc::ErrorSpec;
 
 /// What installing the hook layer in a repo means, before the developer
 /// grants the permission (ADR-GRD-007 § 1). Read-only.
@@ -18,6 +19,27 @@ pub const GUARD_EVALUATE: &str = "guard.evaluate";
 /// What Guardrails blocked in a repo and the KPI (US-GRD-005, ADR-GRD-006 § 6). Read-only, not
 /// reserved and not offered to `raptor-mcp`.
 pub const GUARD_LOG: &str = "guard.log";
+
+/// Removes the hook layer and leaves the repo as it was (US-GRD-003; reserved, and it relaxes:
+/// announced, with a cancellable window enforced by the daemon, ADR-GRD-007 § 1, D5). The
+/// first call opens the window; the requester applies it once it closed.
+pub const GUARD_UNINSTALL: &str = "guard.uninstall";
+/// Cancels the reserved action waiting in a repo (not reserved: it only keeps the protection).
+/// Never for `raptor-mcp`.
+pub const GUARD_CANCEL: &str = "guard.cancel";
+
+/// `GuardPlan.prior` and the `chain-impossible` blocker (US-GRD-002). Without it the daemon
+/// leaves the field out and says `prior-hooks` instead.
+pub const CAP_GUARD_PRIOR_HOOKS: Capability = Capability::new("guard.prior-hooks");
+/// `GuardStatus.pending` (US-GRD-003): the reserved action waiting for its window.
+pub const CAP_GUARD_PENDING_ACTION: Capability = Capability::new("guard.pending-action");
+
+// Two blocks after `FIRST_ERROR_BLOCK` (ADR-GRP-016 § 3; discovery has the first).
+const BLOCK: i64 = FIRST_ERROR_BLOCK - 2 * ERROR_BLOCK_LEN;
+
+/// `guard.uninstall` or `guard.cancel` did nothing: `data` is
+/// [`crate::guard::GuardUninstallRefusedData`].
+pub const GUARD_UNINSTALL_REFUSED: ErrorSpec = ErrorSpec::new(BLOCK, "guard-uninstall-refused");
 
 /// Commit authorship (US-GRD-018, D11): `EvaluateParams.authorship`, the `commit` operation,
 /// the `pre-commit` and `commit-msg` hooks and `Decision.notices`. The hook client sends them
@@ -41,7 +63,18 @@ pub(super) const GROUP: Group = Group {
         method(GUARD_STATUS, false, false).since(7),
         method(GUARD_EVALUATE, false, false).since(7),
         method(GUARD_LOG, false, false).since(CAPABILITIES_PROTOCOL),
+        method(GUARD_UNINSTALL, true, false)
+            .writes(RepoWrite::Guardrails)
+            .since(CAPABILITIES_PROTOCOL),
+        method(GUARD_CANCEL, false, false).since(CAPABILITIES_PROTOCOL),
     ],
-    capabilities: &[CAP_GUARD_AUTHORSHIP, CAP_GUARD_AUTHORSHIP_SECOND_LINE],
+    capabilities: &[
+        CAP_GUARD_AUTHORSHIP,
+        CAP_GUARD_AUTHORSHIP_SECOND_LINE,
+        CAP_GUARD_PRIOR_HOOKS,
+        CAP_GUARD_PENDING_ACTION,
+    ],
+    error_block: Some(BLOCK),
+    errors: &[GUARD_UNINSTALL_REFUSED],
     ..Group::new("guard")
 };
