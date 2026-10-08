@@ -673,7 +673,11 @@ impl Inner {
     }
 
     fn is_claude(&self, entry: &ProcEntry) -> bool {
-        entry.exe.as_deref().is_some_and(|exe| {
+        let exe = match &entry.exe {
+            Some(exe) => Some(exe.clone()),
+            None => self.procs.exe(entry),
+        };
+        exe.as_deref().is_some_and(|exe| {
             // Linux: a binary replaced while running (the native installer
             // updates itself) shows as `<path> (deleted)`.
             let text = exe.to_string_lossy();
@@ -684,7 +688,8 @@ impl Inner {
 
     /// One S1 scan: sessions that appeared, ended or went idle.
     fn scan(&self) {
-        let table = self.procs.list();
+        // Without paths: `is_claude` reads the path of the processes not classified yet.
+        let table = self.procs.list_bare();
         let now = (self.clock)();
         let mut st = self.lock();
         let mut changes = Vec::new();
