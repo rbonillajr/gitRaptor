@@ -358,7 +358,8 @@ impl UndoBackend for TimeMachineBackend {
 }
 
 fn canonical(path: &Path) -> PathBuf {
-    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+    // Drive form on Windows, as the observed roots are kept and the applier requires.
+    gitraptor_git::paths::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 #[cfg(test)]
