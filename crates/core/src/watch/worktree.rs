@@ -125,6 +125,15 @@ pub(super) fn run(
             }
             Ok(WtMsg::Reconcile(t_recv)) => task.open_window(t_recv, Duration::ZERO),
             Ok(WtMsg::IgnoreRules) => task.ignore.clear(),
+            // Going dormant: what is in the window is handed over first
+            // (ADR-GRP-010, Enmienda 2026-10-07, N1 step 1).
+            Ok(WtMsg::Sleep(done)) => {
+                if let Some(window) = task.window.take() {
+                    task.flush(window);
+                }
+                let _ = done.send(());
+                return;
+            }
             Ok(WtMsg::Stop) | Err(RecvTimeoutError::Disconnected) => return,
             Err(RecvTimeoutError::Timeout) => {}
         }
@@ -373,19 +382,19 @@ fn stagger(root: &Path, period: Duration) -> Duration {
 /// 2026-10-05): events under them are dropped before the debounce, so a
 /// build writing to an ignored `target/` costs no recompute.
 #[derive(Default)]
-struct IgnoreCache {
+pub(super) struct IgnoreCache {
     ignored: HashSet<String>,
     kept: HashSet<String>,
 }
 
 impl IgnoreCache {
-    fn clear(&mut self) {
+    pub(super) fn clear(&mut self) {
         self.ignored.clear();
         self.kept.clear();
     }
 
     /// Whether any path is outside every ignored directory.
-    fn keep_any(&mut self, root: &Path, paths: Vec<PathBuf>) -> bool {
+    pub(super) fn keep_any(&mut self, root: &Path, paths: Vec<PathBuf>) -> bool {
         if paths
             .iter()
             .any(|p| p.file_name().is_some_and(|n| n == ".gitignore"))

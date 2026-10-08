@@ -13,13 +13,15 @@
 //! Nothing here writes to a repo, and the router never reads Git.
 
 mod repo;
+mod sweep;
 mod watchers;
 mod worktree;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::mpsc::{Sender, channel};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex, RwLock, Weak};
 use std::time::Duration;
 
 use gitraptor_api::messages::{GitEventDetails, GitEventKind};
@@ -28,6 +30,7 @@ use crate::observe::{RepoRead, WorktreeRead};
 use crate::profile::GapCause;
 
 pub use repo::{EventPlace, RefsView, classify};
+pub use sweep::Print;
 use watchers::Watchers;
 
 /// Intervals of the observer. The defaults are those of ADR-GRP-010; reading
@@ -46,6 +49,8 @@ pub struct WatchConfig {
     pub periodic: Duration,
     /// Full poll of a worktree that cannot be watched (§ 5).
     pub degraded_poll: Duration,
+    /// Metadata sweep of the dormant repos (Enmienda 2026-10-07, N3).
+    pub dormant_poll: Duration,
 }
 
 impl Default for WatchConfig {
@@ -63,8 +68,63 @@ impl Default for WatchConfig {
             backup_poll: Duration::from_secs(30),
             periodic: Duration::from_secs(5 * 60),
             degraded_poll: Duration::from_secs(2),
+            dormant_poll: Duration::from_secs(120),
         }
     }
+}
+
+/// The observation tier of a repo (ADR-GRP-010, Enmienda 2026-10-07, N1).
+/// It is per repo, not per worktree: they share the common `.git`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tier {
+    /// Everything of § 1 to § 6 runs.
+    Active,
+    /// A trigger fired and the repo is being reconciled.
+    Waking,
+    /// Only the sentinel and the safety nets run.
+    Dormant,
+}
+
+impl Tier {
+    fn from_u8(v: u8) -> Self {
+        match v {
+            1 => Self::Waking,
+            2 => Self::Dormant,
+            _ => Self::Active,
+        }
+    }
+
+    fn as_u8(self) -> u8 {
+        match self {
+            Self::Active => 0,
+            Self::Waking => 1,
+            Self::Dormant => 2,
+        }
+    }
+}
+
+/// What woke a dormant repo (N4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WakeCause {
+    /// Its watches saw a change that passed the ignore filter (N2): not a
+    /// gap, the repo never stopped being watched (N5).
+    Sentinel,
+    /// The metadata sweep found a change the sentinel did not signal: a
+    /// `dormant` gap from the previous check until now (N5).
+    SafetyNet { since_ms: i64 },
+}
+
+/// Why a repo could not go dormant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SleepRefused {
+    /// Not observed.
+    Unknown,
+    /// Already dormant or waking.
+    NotActive,
+    /// A worktree in degraded mode has no sentinel (N1).
+    Degraded,
+    /// A task did not hand its window over in time.
+    Busy,
 }
 
 /// Monotonic marks of one window (ADR-GRP-011 § 3).
@@ -158,6 +218,10 @@ pub trait ObserverHooks: Send + Sync {
     /// or with a new state: after its batch is handed over, outside the
     /// budget (US-TMC-004, the Time Machine's continuous capture).
     fn worktree_changed(&self, _repo_id: &str, _root: &Path) {}
+    /// A dormant repo must wake (N2, N3). Called once per sleep, from the
+    /// sentinel or the sweep task; the daemon reconciles the repo and calls
+    /// [`Observer::wake_repo`].
+    fn repo_wake(&self, _repo_id: &str, _cause: WakeCause) {}
 }
 
 /// Several hooks, called in order.
@@ -181,6 +245,12 @@ impl ObserverHooks for FanoutHooks {
             h.worktree_changed(repo_id, root);
         }
     }
+
+    fn repo_wake(&self, repo_id: &str, cause: WakeCause) {
+        for h in &self.0 {
+            h.repo_wake(repo_id, cause);
+        }
+    }
 }
 
 /// Message to a worktree task.
@@ -193,6 +263,8 @@ pub(crate) enum WtMsg {
     Reconcile(u64),
     /// An ignore rule file outside the worktree changed.
     IgnoreRules,
+    /// Flush the window, answer and end (the repo goes dormant).
+    Sleep(Sender<()>),
     Stop,
 }
 
@@ -201,6 +273,8 @@ pub(crate) enum WtMsg {
 pub(crate) enum RepoMsg {
     Paths(u64),
     Rescan(u64),
+    /// Flush the window, answer with the view and end (going dormant).
+    Sleep(Sender<RefsView>),
     Stop,
 }
 
@@ -211,6 +285,8 @@ pub(crate) struct WtHandle {
     /// Its private Git directory (the common one for the main worktree).
     pub git_dir: PathBuf,
     pub tx: Sender<WtMsg>,
+    /// Polled instead of watched: it has no sentinel (N1).
+    pub degraded: bool,
 }
 
 /// Files of a worktree's Git directory its own task recomputes on.
@@ -231,6 +307,52 @@ struct RepoEntry {
     common: PathBuf,
     tx: Sender<RepoMsg>,
     worktrees: Vec<WtHandle>,
+    /// [`Tier`], changed with a compare-and-set under the read lock so a
+    /// burst wakes the repo once (N2).
+    tier: AtomicU8,
+    /// What a dormant repo keeps; `None` while active.
+    asleep: Option<Asleep>,
+}
+
+impl RepoEntry {
+    fn tier(&self) -> Tier {
+        Tier::from_u8(self.tier.load(Ordering::Acquire))
+    }
+
+    /// Dormant to waking, once.
+    fn start_waking(&self) -> bool {
+        self.tier
+            .compare_exchange(
+                Tier::Dormant.as_u8(),
+                Tier::Waking.as_u8(),
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            )
+            .is_ok()
+    }
+}
+
+/// What a dormant repo keeps (N1): its watches stay registered, its tasks
+/// are gone.
+struct Asleep {
+    /// The refs view of its last batch: the "processed up to" mark the wake
+    /// classifies from, so commits made while dormant are one event each.
+    refs: RefsView,
+    /// Root of each worktree: where the sentinel applies the ignore filter.
+    roots: Vec<PathBuf>,
+    /// Private Git directory of each worktree, for the sweep.
+    git_dirs: Vec<PathBuf>,
+    /// Metadata print as of the last check (N3).
+    print: Print,
+    /// Wall time of the last check: where a `dormant` gap starts.
+    checked_ms: i64,
+}
+
+/// Paths of a dormant repo, for the sentinel task.
+struct SentinelMsg {
+    repo_id: String,
+    root: Option<PathBuf>,
+    paths: Vec<PathBuf>,
 }
 
 /// State shared by the router, the tasks and the [`Observer`].
@@ -246,6 +368,14 @@ pub(crate) struct Shared {
     /// without a mark.
     drop_events: std::sync::atomic::AtomicBool,
     hooks: Option<Arc<dyn ObserverHooks>>,
+    /// The sentinel task of the dormant repos (N2).
+    sentinel: Mutex<Option<Sender<SentinelMsg>>>,
+    /// Ends the sweep task when dropped.
+    sweep_stop: Mutex<Option<Sender<()>>>,
+    /// Sweep cycles run (diagnostics and tests).
+    sweeps: std::sync::atomic::AtomicU64,
+    /// Messages the sentinel task decided on (tests).
+    sentinel_seen: std::sync::atomic::AtomicU64,
 }
 
 impl Shared {
@@ -280,6 +410,7 @@ impl Shared {
             }
             return;
         }
+        let paths = self.route_dormant(&repos, paths);
         let mut per_wt: HashMap<PathBuf, (Sender<WtMsg>, Vec<PathBuf>)> = HashMap::new();
         let mut repo_hit: Vec<&Sender<RepoMsg>> = Vec::new();
         let mut ignore_rules: Vec<&RepoEntry> = Vec::new();
@@ -287,7 +418,7 @@ impl Shared {
         let mut probed: Vec<String> = Vec::new();
         for path in paths {
             let mut best: Option<(usize, Target)> = None;
-            for repo in repos.values() {
+            for repo in repos.values().filter(|r| r.tier() == Tier::Active) {
                 if path.starts_with(&repo.common) {
                     let len = repo.common.as_os_str().len();
                     if best.as_ref().is_none_or(|(l, _)| len > *l) {
@@ -379,6 +510,90 @@ impl Shared {
         }
     }
 
+    /// Takes the paths of dormant and waking repos out of an event (N2).
+    /// A dormant repo's worktree paths go to the sentinel task, which
+    /// filters them; a write to its Git directory, `objects/` aside, wakes
+    /// it here. A waking repo drops them: its tasks read everything once
+    /// they are registered (N4).
+    fn route_dormant(
+        &self,
+        repos: &HashMap<String, RepoEntry>,
+        paths: Vec<PathBuf>,
+    ) -> Vec<PathBuf> {
+        if repos.values().all(|r| r.tier() == Tier::Active) {
+            return paths;
+        }
+        let mut keep = Vec::with_capacity(paths.len());
+        let mut sentinel: HashMap<(String, Option<PathBuf>), Vec<PathBuf>> = HashMap::new();
+        for path in paths {
+            // The repo of the longest prefix, active ones included.
+            let mut best: Option<(usize, &RepoEntry, Option<&PathBuf>)> = None;
+            for repo in repos.values() {
+                let dormant_roots = repo.asleep.as_ref().map(|a| a.roots.as_slice());
+                let roots = repo
+                    .worktrees
+                    .iter()
+                    .map(|w| &w.root)
+                    .chain(dormant_roots.unwrap_or_default());
+                for root in roots {
+                    if path.starts_with(root) {
+                        let len = root.as_os_str().len();
+                        if best.as_ref().is_none_or(|(l, _, _)| len > *l) {
+                            best = Some((len, repo, Some(root)));
+                        }
+                    }
+                }
+                if path.starts_with(&repo.common) {
+                    let len = repo.common.as_os_str().len();
+                    if best.as_ref().is_none_or(|(l, _, _)| len > *l) {
+                        best = Some((len, repo, None));
+                    }
+                }
+            }
+            match best {
+                Some((_, repo, root)) if repo.tier() != Tier::Active => {
+                    if repo.tier() != Tier::Dormant {
+                        continue;
+                    }
+                    match root {
+                        Some(root) => sentinel
+                            .entry((repo.id.clone(), Some(root.clone())))
+                            .or_default()
+                            .push(path),
+                        None => {
+                            let objects = path
+                                .strip_prefix(&repo.common)
+                                .is_ok_and(|rel| rel.starts_with("objects"));
+                            if !objects && repo.start_waking() {
+                                self.wake(&repo.id, WakeCause::Sentinel);
+                            }
+                        }
+                    }
+                }
+                _ => keep.push(path),
+            }
+        }
+        if !sentinel.is_empty() {
+            let tx = self.sentinel.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(tx) = tx.as_ref() {
+                for ((repo_id, root), paths) in sentinel {
+                    let _ = tx.send(SentinelMsg {
+                        repo_id,
+                        root,
+                        paths,
+                    });
+                }
+            }
+        }
+        keep
+    }
+
+    fn wake(&self, repo_id: &str, cause: WakeCause) {
+        if let Some(hooks) = &self.hooks {
+            hooks.repo_wake(repo_id, cause);
+        }
+    }
+
     /// Starts the task of one worktree and its watch. A worktree that cannot
     /// be watched is polled instead (degraded mode).
     /// Returns the worktree's `HEAD` as the task starts from it.
@@ -390,10 +605,13 @@ impl Shared {
     ) -> Option<(PathBuf, Vec<u8>)> {
         let root = PathBuf::from(initial.view.path.raw());
         let (tx, rx) = channel();
+        // A woken repo's roots are still watched: adding them is a no-op.
+        let degraded = !self.watch(std::slice::from_ref(&root));
         let handle = WtHandle {
             root: root.clone(),
             git_dir: git_dir.clone(),
             tx,
+            degraded,
         };
         {
             let mut repos = self.repos.write().unwrap_or_else(|e| e.into_inner());
@@ -404,7 +622,6 @@ impl Shared {
             repo.worktrees.push(handle);
         }
         let head = std::fs::read(git_dir.join("HEAD")).unwrap_or_default();
-        let degraded = !self.watch(std::slice::from_ref(&root));
         let shared = Arc::clone(self);
         let repo_id = repo_id.to_owned();
         let sent = head.clone();
@@ -495,7 +712,13 @@ impl Observer {
             recomputes: std::sync::atomic::AtomicU64::new(0),
             drop_events: std::sync::atomic::AtomicBool::new(false),
             hooks,
+            sentinel: Mutex::new(None),
+            sweep_stop: Mutex::new(None),
+            sweeps: std::sync::atomic::AtomicU64::new(0),
+            sentinel_seen: std::sync::atomic::AtomicU64::new(0),
         });
+        start_sentinel(&shared);
+        start_sweep(&shared);
         let weak = Arc::downgrade(&shared);
         let watchers = Watchers::new(
             Arc::new(move |result: notify::Result<notify::Event>| {
@@ -548,6 +771,8 @@ impl Observer {
                     common: common.clone(),
                     tx,
                     worktrees: Vec::new(),
+                    tier: AtomicU8::new(Tier::Active.as_u8()),
+                    asleep: None,
                 },
             );
         }
@@ -591,12 +816,201 @@ impl Observer {
         if let Some(entry) = entry {
             let _ = entry.tx.send(RepoMsg::Stop);
             let mut roots = vec![entry.common];
+            roots.extend(entry.asleep.into_iter().flat_map(|a| a.roots));
             for wt in entry.worktrees {
                 let _ = wt.tx.send(WtMsg::Stop);
                 roots.push(wt.root);
             }
             self.shared.unwatch(&roots);
         }
+    }
+
+    /// The tier of an observed repo.
+    pub fn tier(&self, repo_id: &str) -> Option<Tier> {
+        let repos = self.shared.repos.read().unwrap_or_else(|e| e.into_inner());
+        repos.get(repo_id).map(RepoEntry::tier)
+    }
+
+    /// Puts an active repo to sleep (ADR-GRP-010, Enmienda 2026-10-07, N1):
+    /// its tasks hand their windows over and end, its watches stay as the
+    /// sentinel, and it keeps only its refs view and its metadata print.
+    /// The caller has already checked the threshold, sessions and clients;
+    /// a repo with a degraded worktree is refused here.
+    pub fn sleep_repo(&self, repo_id: &str) -> Result<(), SleepRefused> {
+        // From now on its events go to the sentinel: a change that arrives
+        // while the tasks flush wakes it again, it is never lost.
+        let (repo_tx, worktrees) = {
+            let repos = self.shared.repos.read().unwrap_or_else(|e| e.into_inner());
+            let repo = repos.get(repo_id).ok_or(SleepRefused::Unknown)?;
+            if repo.tier() != Tier::Active {
+                return Err(SleepRefused::NotActive);
+            }
+            if repo.worktrees.iter().any(|w| w.degraded) {
+                return Err(SleepRefused::Degraded);
+            }
+            repo.tier.store(Tier::Dormant.as_u8(), Ordering::Release);
+            (repo.tx.clone(), repo.worktrees.clone())
+        };
+        // The worktree tasks flush while still followed, so their last
+        // batch is not discarded; then the repo task gives its view.
+        let mut acks = Vec::new();
+        for wt in &worktrees {
+            let (done, ack) = channel();
+            if wt.tx.send(WtMsg::Sleep(done)).is_ok() {
+                acks.push(ack);
+            }
+        }
+        let wait = Duration::from_secs(10);
+        let flushed = acks.iter().all(|ack| ack.recv_timeout(wait).is_ok());
+        let (done, ack) = channel();
+        let refs = if repo_tx.send(RepoMsg::Sleep(done)).is_ok() {
+            ack.recv_timeout(wait).ok()
+        } else {
+            None
+        };
+        let mut repos = self.shared.repos.write().unwrap_or_else(|e| e.into_inner());
+        let Some(repo) = repos.get_mut(repo_id) else {
+            return Err(SleepRefused::Unknown);
+        };
+        let Some(refs) = refs.filter(|_| flushed) else {
+            // A task did not answer: back to active, and the daemon
+            // reconciles it as after any wake.
+            repo.tier.store(Tier::Waking.as_u8(), Ordering::Release);
+            drop(repos);
+            self.shared.wake(repo_id, WakeCause::Sentinel);
+            return Err(SleepRefused::Busy);
+        };
+        let roots: Vec<PathBuf> = repo.worktrees.drain(..).map(|w| w.root).collect();
+        let git_dirs: Vec<PathBuf> = worktrees.iter().map(|w| w.git_dir.clone()).collect();
+        let print = Print::read(&repo.common, &git_dirs);
+        repo.asleep = Some(Asleep {
+            refs,
+            roots,
+            git_dirs,
+            print,
+            checked_ms: wall_now().0,
+        });
+        Ok(())
+    }
+
+    /// Wakes a dormant or waking repo from the reconciliation `read` of its
+    /// common directory (N4). The repo is active before its tasks are
+    /// registered, so no event is dropped: those before a task exists are
+    /// in the read each task makes once it runs. The reconciled worktrees
+    /// are handed over as one batch, with a `dormant` gap when a safety net
+    /// woke it (N5), and the repo task classifies from the refs view it
+    /// slept with, one event per reflog entry. Returns what its tasks start
+    /// from, as [`Observer::watch_repo`] does.
+    pub fn wake_repo(&self, repo_id: &str, read: &RepoRead, cause: WakeCause) -> WatchStart {
+        let (asleep, common) = {
+            let mut repos = self.shared.repos.write().unwrap_or_else(|e| e.into_inner());
+            let Some(repo) = repos.get_mut(repo_id) else {
+                return WatchStart::default();
+            };
+            let Some(asleep) = repo.asleep.take() else {
+                return WatchStart::default();
+            };
+            repo.tier.store(Tier::Active.as_u8(), Ordering::Release);
+            (asleep, repo.common.clone())
+        };
+        let (now_ms, offset_s) = wall_now();
+        let t = gitraptor_api::clock::monotonic_ns();
+        let gap = match cause {
+            WakeCause::Sentinel => None,
+            WakeCause::SafetyNet { since_ms } => Some(GapMark {
+                cause: GapCause::Dormant,
+                started_ms: since_ms.min(now_ms),
+                ended_ms: now_ms,
+            }),
+        };
+        let ready: Vec<WorktreeRead> = read
+            .worktrees
+            .iter()
+            .filter(|w| w.view.status.is_watchable())
+            .cloned()
+            .collect();
+        let events = if gap.is_some() {
+            ready
+                .iter()
+                .map(|w| RawEvent {
+                    worktree: PathBuf::from(w.view.path.raw()),
+                    kind: GitEventKind::Reconciled,
+                    details: GitEventDetails::default(),
+                    observed_ms: now_ms,
+                    offset_s,
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        self.shared.send(ObservedBatch {
+            repo_id: repo_id.to_owned(),
+            worktrees: ready.clone(),
+            gone: Vec::new(),
+            events,
+            gap,
+            refs: None,
+            head_logs: Vec::new(),
+            heads: Vec::new(),
+            marks: Marks {
+                t_recv: t,
+                t_flush: t,
+                t_computed: t,
+            },
+        });
+        // The repo task starts from the view it slept with and flushes at
+        // once: what moved while dormant is classified now.
+        let (tx, rx) = channel();
+        let _ = tx.send(RepoMsg::Paths(t));
+        if let Some(repo) = self
+            .shared
+            .repos
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .get_mut(repo_id)
+        {
+            repo.tx = tx;
+        }
+        let head_logs = asleep.refs.head_logs();
+        let mut heads = Vec::new();
+        for w in &ready {
+            let git_dir = worktree_git_dir(&common, w);
+            heads.extend(self.shared.start_worktree(repo_id, w.clone(), git_dir));
+        }
+        let shared = Arc::clone(&self.shared);
+        let id = repo_id.to_owned();
+        let refs = asleep.refs;
+        let _ = std::thread::Builder::new()
+            .name("raptor-watch-repo".into())
+            .spawn(move || repo::run(shared, id, common, refs, rx));
+        if let Some(hooks) = &self.shared.hooks {
+            for w in &ready {
+                hooks.worktree_changed(repo_id, Path::new(w.view.path.raw()));
+            }
+        }
+        WatchStart { head_logs, heads }
+    }
+
+    /// Runs one cycle of the dormant sweep now (tests: the cycle the task
+    /// would run at its next interval).
+    #[doc(hidden)]
+    pub fn sweep_now(&self) {
+        sweep_once(&self.shared);
+    }
+
+    /// Messages of dormant repos the sentinel has decided on (tests).
+    #[doc(hidden)]
+    pub fn sentinel_seen(&self) -> u64 {
+        self.shared
+            .sentinel_seen
+            .load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    /// Sweep cycles run so far.
+    pub fn sweeps(&self) -> u64 {
+        self.shared
+            .sweeps
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Test hook: lose every file event, without a mark, while `lost`.
@@ -645,12 +1059,146 @@ impl Drop for Observer {
         for id in ids {
             self.forget_repo(&id);
         }
+        self.shared
+            .sentinel
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take();
+        self.shared
+            .sweep_stop
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take();
         // Dropping the watchers ends the OS streams.
         self.shared
             .watchers
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .take();
+    }
+}
+
+/// Starts the sentinel task of the dormant repos (N2): it applies the
+/// ignore filter of § 2 to their worktree paths, and the first path that
+/// passes wakes the repo. It never recomputes and never opens a store.
+fn start_sentinel(shared: &Arc<Shared>) {
+    let (tx, rx) = channel::<SentinelMsg>();
+    *shared.sentinel.lock().unwrap_or_else(|e| e.into_inner()) = Some(tx);
+    let weak: Weak<Shared> = Arc::downgrade(shared);
+    let _ = std::thread::Builder::new()
+        .name("raptor-sentinel".into())
+        .spawn(move || {
+            let mut caches: HashMap<PathBuf, worktree::IgnoreCache> = HashMap::new();
+            while let Ok(msg) = rx.recv() {
+                let Some(shared) = weak.upgrade() else {
+                    return;
+                };
+                sentinel_check(&shared, &mut caches, msg);
+                shared
+                    .sentinel_seen
+                    .fetch_add(1, std::sync::atomic::Ordering::Release);
+            }
+        });
+}
+
+/// The sentinel's decision on one message: wake its repo or not.
+fn sentinel_check(
+    shared: &Shared,
+    caches: &mut HashMap<PathBuf, worktree::IgnoreCache>,
+    msg: SentinelMsg,
+) {
+    let dormant = {
+        let repos = shared.repos.read().unwrap_or_else(|e| e.into_inner());
+        repos
+            .get(&msg.repo_id)
+            .is_some_and(|r| r.tier() == Tier::Dormant)
+    };
+    if !dormant {
+        return;
+    }
+    let keep = match &msg.root {
+        Some(root) => caches
+            .entry(root.clone())
+            .or_default()
+            .keep_any(root, msg.paths),
+        None => true,
+    };
+    if !keep {
+        return;
+    }
+    let woke = {
+        let repos = shared.repos.read().unwrap_or_else(|e| e.into_inner());
+        repos.get(&msg.repo_id).is_some_and(RepoEntry::start_waking)
+    };
+    if woke {
+        // A woken repo's tasks have their own cache; the rest is cheap to
+        // ask again.
+        caches.clear();
+        shared.wake(&msg.repo_id, WakeCause::Sentinel);
+    }
+}
+
+/// Starts the sweep task of the dormant repos (N3): one task for all of
+/// them, one wake per interval.
+fn start_sweep(shared: &Arc<Shared>) {
+    let (tx, rx) = channel::<()>();
+    *shared.sweep_stop.lock().unwrap_or_else(|e| e.into_inner()) = Some(tx);
+    let weak: Weak<Shared> = Arc::downgrade(shared);
+    let every = shared.config.dormant_poll;
+    let _ = std::thread::Builder::new()
+        .name("raptor-dormant-sweep".into())
+        .spawn(move || {
+            while let Err(std::sync::mpsc::RecvTimeoutError::Timeout) = rx.recv_timeout(every) {
+                let Some(shared) = weak.upgrade() else {
+                    return;
+                };
+                sweep_once(&shared);
+            }
+        });
+}
+
+/// One cycle of the sweep: the print of every dormant repo against the one
+/// it slept with. Metadata only: no `git`, no read-only layer.
+fn sweep_once(shared: &Shared) {
+    shared
+        .sweeps
+        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let dormant: Vec<(String, PathBuf, Vec<PathBuf>)> = {
+        let repos = shared.repos.read().unwrap_or_else(|e| e.into_inner());
+        repos
+            .values()
+            .filter(|r| r.tier() == Tier::Dormant)
+            .filter_map(|r| {
+                let a = r.asleep.as_ref()?;
+                Some((r.id.clone(), r.common.clone(), a.git_dirs.clone()))
+            })
+            .collect()
+    };
+    for (repo_id, common, git_dirs) in dormant {
+        let print = Print::read(&common, &git_dirs);
+        let now = wall_now().0;
+        let since = {
+            let mut repos = shared.repos.write().unwrap_or_else(|e| e.into_inner());
+            let Some(repo) = repos.get_mut(&repo_id) else {
+                continue;
+            };
+            if repo.tier() != Tier::Dormant {
+                continue;
+            }
+            let Some(asleep) = repo.asleep.as_mut() else {
+                continue;
+            };
+            let since = std::mem::replace(&mut asleep.checked_ms, now);
+            if asleep.print == print {
+                continue;
+            }
+            asleep.print = print;
+            if !repo.start_waking() {
+                continue;
+            }
+            since
+        };
+        shared.wake(&repo_id, WakeCause::SafetyNet { since_ms: since });
     }
 }
 

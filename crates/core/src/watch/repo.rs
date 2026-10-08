@@ -547,6 +547,19 @@ pub(super) fn run(
                     .get_or_insert((Instant::now() + len, t_recv, false));
                 w.2 = true;
             }
+            // Going dormant: the window is flushed and the view it ends with
+            // is the "processed up to" mark the wake starts from (N1, N4).
+            Ok(RepoMsg::Sleep(done)) => {
+                if let Some((_, t_recv, overflow)) = task.window.take() {
+                    task.flush(t_recv, overflow);
+                    // A `HEAD` reflog that grew alone defers once: send it.
+                    if let Some((_, t_recv, overflow)) = task.window.take() {
+                        task.flush(t_recv, overflow);
+                    }
+                }
+                let _ = done.send(task.view.clone());
+                return;
+            }
             Ok(RepoMsg::Stop) | Err(RecvTimeoutError::Disconnected) => return,
             Err(RecvTimeoutError::Timeout) => {}
         }
