@@ -28,6 +28,7 @@ pub const SUPPORTED_KEYWORDS: &[&str] = &[
     "maximum",
     "format",
     "x-gitraptor-levels",
+    "x-gitraptor-patterns",
 ];
 
 /// The schema generated from the types now.

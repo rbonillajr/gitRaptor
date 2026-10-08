@@ -20,6 +20,7 @@ mod capture;
 mod changed_paths;
 pub mod cli;
 mod committed;
+mod guard_paths;
 mod guard_read;
 pub mod guard_write;
 mod invoke;
@@ -38,6 +39,7 @@ pub use capture::{
 };
 pub use changed_paths::{ChangedPaths, MAX_PATH_BYTES, PATH_CUT_MARK};
 pub use committed::{BlobRead, CommittedFile, NotRegular};
+pub use guard_paths::{Hide, NewCommitPaths, PathLimits};
 pub use guard_read::{Ancestry, CommitShape, MAX_ANCESTRY_WALK, RefStorage};
 pub use invoke::{ArgvSink, Invoker, MemoryArgvLog};
 pub use reader::{

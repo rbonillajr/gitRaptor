@@ -696,7 +696,12 @@ fn degraded(args: &HookArgs, op: &Operation, cause: Degraded) -> HookOutcome {
             }
         }
     }
-    let mut eval = evaluate::evaluate(&reader, &args.common, op, bases);
+    // The rules for everyone of the floor still apply without the daemon (D11).
+    let commit = evaluate::CommitContext {
+        policies: super::policies::degraded(&reader),
+        ..evaluate::CommitContext::default()
+    };
+    let mut eval = evaluate::evaluate_commit(&reader, &args.common, op, bases, commit);
     if eval.effect != Effect::Allow {
         eval.reasons.push(Reason {
             rule: Rule::Degraded,

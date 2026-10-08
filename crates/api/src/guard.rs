@@ -66,6 +66,12 @@ pub enum Rule {
     /// Commits are made by the person (`human-author`, US-GRD-018).
     #[serde(rename = "authorship.human-author")]
     AuthorshipHumanAuthor,
+    /// A protected branch is moved (`policies.protectedBranches`, US-GRD-008).
+    #[serde(rename = "policy.protected-branch")]
+    ProtectedBranch,
+    /// A commit touches a forbidden path (`policies.forbiddenPaths`, US-GRD-008).
+    #[serde(rename = "policy.forbidden-path")]
+    ForbiddenPath,
 }
 
 /// Why a rule matched (ADR-GRD-003 § 3 and its 2026-10-04 amendment).
@@ -95,6 +101,9 @@ pub enum Cause {
     MessageUnreadable,
     /// The second line saw a shape it cannot classify as one commit (US-GRD-018, § 5.3).
     AuthorshipUnclassified,
+    /// The commits of the movement could not be read within the bounds, or a name could not be
+    /// compared: nothing can be said, so it is denied (US-GRD-008, D5).
+    Unverifiable,
 }
 
 /// Kind of a labelled parameter.
@@ -110,6 +119,10 @@ pub enum ParamKind {
     Agent,
     /// The example trailer of the agents' table.
     Example,
+    /// The pattern of a protected branch or forbidden path that was not met (US-GRD-008).
+    Pattern,
+    /// A path a commit touches (US-GRD-008).
+    Path,
 }
 
 /// One labelled, untrusted parameter of a reason.
@@ -427,6 +440,14 @@ pub enum NotPreventable {
     /// Voluntary skips: `--no-verify`, `-c core.hooksPath`, `GIT_CONFIG_*`,
     /// `send-pack`, hand edits of `refs/`.
     VoluntarySkips,
+    /// The protected branches and forbidden paths tell an agent from the person by its process:
+    /// an agent the daemon does not detect or know counts as the person, and without the daemon
+    /// only the rules for everyone apply (US-GRD-008).
+    PolicyActor,
+    /// A forbidden path is checked in the commits that reach a branch or are pushed to one: not
+    /// in a push to tags, in a commit nobody moves to a branch, nor in what is not committed
+    /// (US-GRD-008).
+    PolicyReach,
 }
 
 /// Refs backend of the repo (`extensions.refStorage`).

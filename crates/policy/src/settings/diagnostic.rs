@@ -82,6 +82,10 @@ pub enum Code {
     /// A key that only applies with another value of its section (`onAgentCommit` without
     /// `human-author`). Ignored.
     KeyOutOfPlace,
+    /// A pattern of `protectedBranches` or `forbiddenPaths` that is not valid (empty, control
+    /// bytes, `!` or `#` first, `refs/heads/…`, too long). Only that pattern is dropped; the
+    /// source is partial (US-GRD-008, D1).
+    PolicyInvalid,
     /// A key that only the floor can set (base branch, safe minimum) in the worktree. No effect.
     FloorOnlyKey,
     /// `engine.baseBranch` is not a valid branch name (SEC-11). Never passed to Git.
@@ -123,6 +127,7 @@ impl Code {
             Self::KeyNotAllowedAtLevel => "key-not-allowed-at-level",
             Self::RelaxationNotAllowed => "relaxation-not-allowed",
             Self::KeyOutOfPlace => "key-out-of-place",
+            Self::PolicyInvalid => "policy-invalid",
             Self::FloorOnlyKey => "floor-only-key",
             Self::InvalidBaseBranch => "invalid-base-branch",
             Self::BaseUnconfirmed => "base-unconfirmed",
