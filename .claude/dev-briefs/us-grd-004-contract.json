@@ -1,0 +1,18 @@
+{
+  "source": { "kind": "devspec", "ref": "docs/requirements/features/guardrails/dev-specs/US-GRD-004-aviso-proteccion-inactiva.md" },
+  "criteria": [
+    { "id": "LOSS", "statement": "Cuando se rompe la protección de cada forma típica (clave, carpeta, dispatcher borrado o editado, permiso de ejecución, binario), guard.status da hooks inactive con su causa, se registra y se publica protection-lost",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_004 loss::", "layer": "runtime", "tests": ["apps/cli/tests/guard_us_grd_004.rs"] },
+    { "id": "OWN", "statement": "Instalar o desinstalar desde Guardrails no avisa y queda registrado como esperado",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_004 expected::", "layer": "runtime", "tests": ["apps/cli/tests/guard_us_grd_004.rs"] },
+    { "id": "REPAIR", "statement": "Reinstalar con raptor guard install tras cada causa deja la capa activa y borra el aviso, sin tocar archivos ajenos",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_004 repair::", "layer": "runtime", "tests": ["apps/cli/tests/guard_us_grd_004.rs"] },
+    { "id": "NOISE", "statement": "Una causa persistente da un aviso con rebote y una entrada agregada; plantilla antigua es aviso y no pérdida; la huérfana se muestra como orphaned",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_004 debounce::", "layer": "runtime", "tests": ["apps/cli/tests/guard_us_grd_004.rs"] },
+    { "id": "DETECT", "statement": "El detector de solo lectura distingue manifiesto, error de lectura y cada causa",
+      "verify": "cargo test -p gitraptor-core guardrails::health::", "layer": "runtime", "tests": ["crates/core/src/guardrails/health.rs"] }
+  ],
+  "constraints": { "deny_paths": ["Cargo.lock", "docs/ARTIFACTS.md", "docs/architecture/decisions/ADR-GRD-008-factor-autenticacion-fuera-de-banda.md"], "allow_dependency_changes": false },
+  "scope": { "projects": [] },
+  "budget": { "maxRounds": 3, "verifyTimeoutMs": 600000, "suiteTimeoutMs": 1800000 }
+}
