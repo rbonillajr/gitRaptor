@@ -390,6 +390,8 @@ pub(crate) struct Shared {
     /// Test hook: the router drops every event, as an OS that lost them
     /// without a mark.
     drop_events: std::sync::atomic::AtomicBool,
+    /// Test hook: new watches fail, as when the OS runs out of them.
+    fail_watches: std::sync::atomic::AtomicBool,
     hooks: Option<Arc<dyn ObserverHooks>>,
     /// The sentinel task of the dormant repos (N2).
     sentinel: Mutex<Option<Sender<SentinelMsg>>>,
@@ -676,6 +678,9 @@ impl Shared {
 
     /// Adds watches; `false` if any failed.
     fn watch(&self, roots: &[PathBuf]) -> bool {
+        if self.fail_watches.load(std::sync::atomic::Ordering::Relaxed) {
+            return false;
+        }
         let mut guard = self.watchers.lock().unwrap_or_else(|e| e.into_inner());
         match guard.as_mut() {
             Some(w) => w.add(roots),
@@ -740,6 +745,7 @@ impl Observer {
             watchers: Mutex::new(None),
             recomputes: std::sync::atomic::AtomicU64::new(0),
             drop_events: std::sync::atomic::AtomicBool::new(false),
+            fail_watches: std::sync::atomic::AtomicBool::new(false),
             hooks,
             sentinel: Mutex::new(None),
             sweep_stop: Mutex::new(None),
@@ -1082,6 +1088,15 @@ impl Observer {
         self.shared
             .sweeps
             .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Test hook: every new watch fails while `fail` (the worktrees it
+    /// starts are polled, in degraded mode).
+    #[doc(hidden)]
+    pub fn simulate_watch_failure(&self, fail: bool) {
+        self.shared
+            .fail_watches
+            .store(fail, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Test hook: lose every file event, without a mark, while `lost`.
