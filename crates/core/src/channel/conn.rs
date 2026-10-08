@@ -1003,7 +1003,9 @@ impl Connection<'_> {
             .cwd
             .clone()
             .or_else(|| process_cwd(self.peer.pid))
+            // The drive form on Windows (no `\\?\` prefix) in what the log shows and compares.
             .and_then(|cwd| cwd.canonicalize().ok())
+            .map(gitraptor_policy::guard::fastpath::simplified)
         else {
             return;
         };
