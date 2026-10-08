@@ -12,6 +12,12 @@
 # Path filter: a pull request that touches no Rust input still reports every required check, in
 # success, on a Linux runner and without building. `push` to main and manual runs always run all.
 #
+# Affected (ADR-GRP-002, Enmienda 2026-10-07): on a pull request with Rust changes, the general
+# tests run only for the Cargo packages the Nx graph marks as affected and their dependents, in
+# one cargo invocation. fmt, clippy and the `repo_intact` suites stay on the whole workspace.
+# Every doubt runs the whole workspace: main, a global input, an Nx step that failed, or a
+# selection that would recompile (`tools/ci/cargo-test-selection.sh`).
+#
 # Actions are pinned by commit SHA.
 name: repo-intact
 
@@ -45,6 +51,11 @@ jobs:
       # 'false' only on a pull request whose filter succeeded and found no Rust input; anything
       # else runs everything. The API lists at most 3000 files, so a larger PR always runs.
       rust: ${{ github.event_name != 'pull_request' || steps.filter.outcome != 'success' || github.event.pull_request.changed_files >= 3000 || steps.filter.outputs.rust == 'true' }}
+      # The general tests: `affected` (with `test_projects`) or `full`. Anything but a successful
+      # Nx step on a pull request is `full`.
+      test_scope: ${{ steps.affected.outcome == 'success' && steps.affected.outputs.scope || 'full' }}
+      test_projects: ${{ steps.affected.outcome == 'success' && steps.affected.outputs.projects || '' }}
+      graph_ok: ${{ steps.affected.outputs.graph_ok != 'false' }}
     steps:
       # On pull requests the filter reads the changed files from the API: no checkout needed.
       - id: filter
@@ -66,6 +77,36 @@ jobs:
               - '.clippy.toml'
               - '.gitattributes'
               - '.github/workflows/repo-intact.yml'
+      # Nx on a pull request with Rust changes: the merge commit and its first parent (the base)
+      # are enough to diff. None of these steps can fail the job: without a list, everything runs.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: steps.filter.outputs.rust == 'true'
+        continue-on-error: true
+        with:
+          fetch-depth: 2
+      # Version from `packageManager` in package.json.
+      - uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # v4.2.0
+        if: steps.filter.outputs.rust == 'true'
+        continue-on-error: true
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: steps.filter.outputs.rust == 'true'
+        continue-on-error: true
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        if: steps.filter.outputs.rust == 'true'
+        continue-on-error: true
+        timeout-minutes: 5
+      - id: affected
+        if: steps.filter.outputs.rust == 'true'
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          # Only `cargo metadata` runs here: the runner's stable toolchain answers it without
+          # installing the pinned one.
+          RUSTUP_TOOLCHAIN: stable
+        run: BASE=$(git rev-parse HEAD^1) HEAD=$(git rev-parse HEAD) node tools/ci/affected-tests.mjs
 
   lint-and-test:
     name: lint and test (${{ matrix.os }})
@@ -178,6 +219,20 @@ jobs:
           retention-days: 1
           # A re-run of the job replaces the record, so the gate reads the latest attempt.
           overwrite: true
+      # A test that launches another package's binary must reach it in the Nx graph, or a change to
+      # that package would skip the test (`tools/ci/affected-tests.mjs`). Blocking, once.
+      - name: Nx graph covers the binaries the tests launch
+        if: ${{ env.BUILD_RUST != 'false' && matrix.os == 'ubuntu-latest' && needs.changes.outputs.graph_ok == 'false' }}
+        run: "echo '::error::the Nx graph misses a dependency a test needs: see the changes job'; exit 1"
+      - name: Select the general tests
+        id: select
+        if: ${{ !cancelled() && steps.fmt.outcome == 'success' && steps.clippy.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash
+        env:
+          SCOPE: ${{ github.event_name == 'pull_request' && needs.changes.outputs.test_scope || 'full' }}
+          PROJECTS: ${{ needs.changes.outputs.test_projects }}
+        run: bash tools/ci/cargo-test-selection.sh
       # Windows: TS-GRP-002 rejects every Git candidate on Windows (fail-closed until the ACE
       # check exists) and the canary uses /bin/sh scripts, so the tests cannot pass there yet.
       # Pendiente: etapa de validación multiplataforma. The step never fails the job on Windows;
@@ -185,7 +240,7 @@ jobs:
       # failing suite does not hide the other tests' results.
       - id: test
         if: ${{ !cancelled() && steps.fmt.outcome == 'success' && steps.clippy.outcome == 'success' }}
-        run: cargo test --workspace -- --skip repo_intact
+        run: cargo test ${{ steps.select.outputs.args || '--workspace' }} -- --skip repo_intact
         continue-on-error: ${{ matrix.os == 'windows-latest' }}
       - name: Pending on Windows
         if: steps.test.outcome == 'failure'
