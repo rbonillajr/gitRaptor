@@ -401,6 +401,16 @@ jobs:
           if ($out -ne "raptor $env:VERSION") { throw "unexpected version: $out" }
           if (-not (Test-Path (Join-Path $dir 'raptor-mcp.exe'))) { throw 'raptor-mcp.exe missing' }
           if (-not (Test-Path (Join-Path $dir 'raptor-hook.exe'))) { throw 'raptor-hook.exe missing' }
+          # The release binary resolves the real profile (no GITRAPTOR_PROFILE_DIR: it is debug-only).
+          # A throwaway LOCALAPPDATA keeps it off the runner's profile. The daemon is not running,
+          # so a non-zero exit is fine; "not supported" would be the missing runtime folder.
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'localappdata'
+          New-Item -ItemType Directory $env:LOCALAPPDATA | Out-Null
+          foreach ($cmd in @(@('daemon', 'status'), @('status'))) {
+            $text = (& (Join-Path $dir 'raptor.exe') @cmd 2>&1 | Out-String)
+            Write-Output "raptor $cmd => $text"
+            if ($text -match 'not supported') { throw "raptor $cmd reported an unsupported platform" }
+          }
           $bad = Join-Path $env:RUNNER_TEMP 'bad'
           New-Item -ItemType Directory $bad | Out-Null
           Copy-Item dist/* $bad
