@@ -236,6 +236,9 @@ pub struct ApplyHooks {
     /// Behave as a file system without atomic exchange (tests of "not restorable with
     /// guarantee").
     pub simulate_no_exchange: bool,
+    /// Stop each file write right after the current entry went aside, as if the process died
+    /// there (tests of the sweep after a crash, DS-TS-TMC-003 Enmienda T).
+    pub simulate_crash_between_moves: bool,
 }
 
 impl std::fmt::Debug for ApplyHooks {
@@ -751,6 +754,9 @@ impl<'a> Applier<'a> {
         let mut root = RootDir::open(&w.root)?;
         if self.hooks.simulate_no_exchange {
             root = root.simulating_no_exchange();
+        }
+        if self.hooks.simulate_crash_between_moves {
+            root = root.simulating_crash_between_moves();
         }
         let issue = |report: &mut ApplyReport, path: &str, outcome: Outcome| match outcome {
             Outcome::Written => report.written += 1,
