@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
-updated: 2026-10-06
+updated: 2026-10-08
 deciders: [Orquestador (delegación de Rene Bonilla, 2026-10-04)]
 domain: GRP
 feature: cockpit
@@ -298,6 +298,17 @@ Decisión del orquestador (2026-10-06), validada por el Arquitecto. Detalle en [
 |---|---|
 | **N7, códigos por módulo.** La lista compartida (`rpc::code`, `ErrorCode`) se congela en `-32016` con sus 21 códigos. Un código nuevo lo declara su módulo como `ErrorSpec` dentro de su bloque de 20, desde `-33000` hacia abajo, fuera del rango reservado de JSON-RPC. El cliente lo presenta igual, por código y `data` con la clave `error.<name>` (`rpc::error_name`), nunca por `message`. V8 cubre también los códigos de los módulos. Un código nuevo de un método que ya existe es un cambio de forma y pide una capacidad | § 4 (N7) |
 | **i18n por feature.** Los catálogos de cadenas de la CLI pasan a `apps/cli/i18n/<idioma>/<feature>.txt`, que `build.rs` registra por su presencia. La garantía de "ninguna traducción ausente" la dan los tests: paridad en/es por archivo, mismas claves y marcadores, ninguna clave duplicada y cada grupo de claves en un solo archivo. El catálogo tipado de la TUI (`present::i18n`) sigue con su `match` exhaustivo | § 10 |
+
+## Enmienda (2026-10-08): INF-CKP-001 Entrega 2b, el cliente en `crates/api` y el lanzador en `crates/core`
+
+Decisión del orquestador (2026-10-08), validada por el Arquitecto con ajustes. La biblioteca cliente se extrae a `crates/api`, como pedía este ADR, pero **por inversión de dependencias**: el ciclo de vida del daemon (lock de instancia, servicio de inicio de sesión, entorno limpio) es conocimiento del motor, y `crates/api` sigue siendo el crate ligero del contrato. Detalle en [DS-INF-CKP-001](../../requirements/features/cockpit/dev-specs/INF-CKP-001-esqueleto-tui.md) § 11.
+
+| Cambio | Dónde |
+|---|---|
+| **El cliente vive en `gitraptor_api::client`**, detrás de la feature `client`, que activan core, cli y mcp. Contiene `Client`, `ClientError`, `Incoming`, `Connect`, `ensure_daemon_with`, el transporte del lado cliente (`client::transport`) y las credenciales del par (`client::peer`). Las dependencias del SO son opcionales: `nix` en macOS, `rustix` en Unix y `gitraptor-winsys` en Windows. No depende de core, de `directories` ni del autoarranque. La comprobación L-06 (carpeta del socket de este uid y en 0700, y servidor de este uid, o el dueño del pipe en Windows) está en su `connect`, antes de enviar nada, y existe **una sola vez**: el `bind` y el `verify_private_dir` de `crates/core` delegan en ella | § 4 |
+| **Arranque bajo demanda.** `crates/api` define el contrato de lanzamiento (`trait Launch: Send`: `launch` y `wait_released`) y **`crates/core` lo implementa** (`InstalledLauncher`: autoarranque registrado, `raptor daemon` con entorno limpio por allowlist SEC-10 y espera a que se libere el lock). Lo inyecta la raíz de composición (el binario, `commands/tui.rs`). Un fallo al lanzar es `ClientError::Launch` y se muestra como "Motor no disponible", nunca como canal rechazado | § 5 |
+| **V5.** Ningún módulo de la lib de `apps/cli` importa `gitraptor_core`, sin excepción con nombre: el módulo `link` desaparece y `client::engine` usa solo `gitraptor_api`. Solo el binario construye el lanzador. Lo comprueban `apps/cli/tests/tui_boundaries.rs` y `crates/api/tests/client_boundary.rs` (api sin core ni procesos; core sin una segunda copia de las comprobaciones) | V5 |
+| **E3.** Los puntos autorizados a lanzar procesos fuera de `crates/git` son `tui::editor` y **el lanzador de `crates/core`** (no la biblioteca cliente de `crates/api`) | E3 |
 
 ## Referencias
 

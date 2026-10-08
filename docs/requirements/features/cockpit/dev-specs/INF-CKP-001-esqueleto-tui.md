@@ -7,7 +7,7 @@ feature: cockpit
 domain: GRP
 story: INF-CKP-001
 created: 2026-10-05
-updated: 2026-10-07
+updated: 2026-10-08
 related:
   adrs: [ADR-CKP-003, ADR-GRP-011, ADR-GRP-005, ADR-GRP-004, ADR-GRP-002]
   nfrs: [NFR-04, NFR-10, SEC-01, SEC-08, SEC-12]
@@ -38,7 +38,7 @@ Blueprint compacto de [INF-CKP-001](../technical-stories/INF-CKP-001-esqueleto-t
 | `tui::input` | Hilo de entrada con crossterm. Teclas, pegado y resize; en Unix, crossterm convierte SIGWINCH en resize |
 | `tui::term` | `ratatui::try_init()`: modo raw, pantalla alternativa y hook de pánico que restaura. Un guard restaura al salir o ante un error. El primer frame se pinta antes de arrancar el hilo del canal |
 | `tui::metrics` | Histograma local en memoria por etapa (decodificar, aplicar, pintar, total) y por tecla. Nunca sale de la máquina |
-| `link` | **Única excepción con nombre** a la frontera: implementa `Connector`/`Link` con el cliente de `crates/core` (`ensure_daemon`, comprobación L-06 del par) |
+| `client::engine` | Implementa `Connector`/`Link` con la biblioteca cliente de `crates/api` (comprobación L-06 del par incluida); el arranque bajo demanda llega inyectado como `Launch`. Sustituye a la antigua excepción `link` (Entrega 2b, § 11) |
 
 En el binario, `raptor` sin subcomando y `raptor tui` abren la TUI si stdin y stdout son TTY. Si no, salen con código 2 y sugieren `raptor status`.
 
@@ -93,7 +93,7 @@ Los widgets son puros, viven en `apps/cli/src/tui/widgets/<nombre>.rs` y cada un
 ## 8. Decisiones (orquestador, 2026-10-05, validadas por Arquitecto)
 
 1. **Partición.** La Entrega 1 incluye bucle, cliente, `SafeText` y saneado, la ingesta mínima, el catálogo tipado mínimo, keymap, terminal, métricas, microbanco y fronteras. Ajuste del Arquitecto: `SafeText` entra ya para que TS-CKP-005 no invente un sustituto y el modelo no guarde texto en bruto.
-2. **Frontera por trait.** `client::Link`/`Connector` y el módulo `link` como excepción con nombre hasta extraer el cliente a `crates/api`.
+2. **Frontera por trait.** `client::Link`/`Connector` y el módulo `link` como excepción con nombre hasta extraer el cliente a `crates/api` (hecho en la Entrega 2b, § 11: `link` ya no existe).
 3. **`t_client_recv`** se estampa al leer el frame, también para las notificaciones guardadas durante un `call`. Ajuste del Arquitecto: estamparlas al sacarlas subestimaba la latencia.
 4. **Microbanco en `cargo test`**, que corre en el check obligatorio "lint and test". No es el gate E2 con el daemon real. Lo deterministas, frames y entrada primero, es lo que falla de forma estable; el umbral de pared de 100 ms también falla, pero informa de la etapa. "Aplicar" es trivial hoy: **US-CKP-001 recalibra** el microbanco cuando llegue la flota.
 5. **Pánico.** Se usa el hook de `ratatui::init()` y no uno propio, para no duplicar la restauración.
@@ -101,7 +101,7 @@ Los widgets son puros, viven en `apps/cli/src/tui/widgets/<nombre>.rs` y cada un
 
 ## 9. Pendiente: Entrega 2 de INF-CKP-001
 
-La Entrega 2 se parte en dos. La **2a** (UX) está hecha: ver la enmienda de abajo. Queda para la **2b**:
+La Entrega 2 se parte en dos. La **2a** (UX) y la **2b** están hechas: ver las enmiendas de § 10 y § 11. Lo que pedía la 2b:
 
 - Gate con el daemon real en el banco de INF-GRP-002 (E2 de ADR-GRP-011): la `App` sobre `TestBackend` como suscriptor del banco.
 - Extraer el cliente del canal de `crates/core` a `crates/api` y retirar la excepción `link` (§ 5, V5).
@@ -121,3 +121,19 @@ Implementada en la rama `feat/INF-CKP-001-delivery-2-ux`. Sigue ADR-CKP-003 § 4
 | Elipsis | El recorte por anchura con elipsis ya lo hacían `style::put` y `Pen` (TS-CKP-005) en todos los widgets: ninguno escribe sin pasar por ellos. Se añaden snapshots en y es con nombres largos y caracteres anchos, en Unicode (`…`) y ASCII (`...`) | `tui::view::tests::long_names_end_in_an_ellipsis`; snapshots `fleet_ellipsis_80x24_{en,es}` |
 
 Fuera de la 2a, además de la 2b: el **lanzador del editor** (historia de Q-CKP-9, que reutiliza `term::suspended`) y **mostrar en la vista** un error RPC concreto, que hará la historia que lo provoque (el catálogo ya lo traduce). Con `script`, la TUI encabeza un grupo de procesos huérfano y el sistema descarta el `SIGTSTP`: la prueba de pty comprueba la salida y la vuelta de la terminal, no la parada en sí, que es control de trabajos del shell.
+
+## 11. Enmienda (2026-10-08): Entrega 2b
+
+Implementada en la rama `feat/INF-CKP-001-delivery-2b`. Cierra lo que § 9 dejaba para la 2b, salvo Linux y Windows reales.
+
+> **Decisión del orquestador (2026-10-08), validada por Arquitecto con ajustes**: el cliente se extrae a `crates/api` **por inversión de dependencias**. `crates/api` define `trait Launch` y `crates/core` lo implementa. El autoarranque, el entorno limpio y el lock del daemon no pasan a api. Los ajustes del Arquitecto, ya aplicados: la feature `client` con las dependencias del SO opcionales; una sola implementación de lo que comparten cliente y servidor (ruta del socket, carpeta privada, nombre del pipe); `Connect.runtime` obligatorio; `Launch: Send`, con su error propio `ClientError::Launch`; y la enmienda fechada en ADR-CKP-003, porque el ADR decía que el lanzamiento vivía en api. El coordinador aprobó el plan y añadió tres notas: las comprobaciones L-06 existen una sola vez; `crates/api` mantiene `forbid(unsafe_code)` y la frontera de `unsafe` no cambia; y hay que probar en el Windows real.
+
+| Punto | Qué se hizo | Prueba |
+|---|---|---|
+| (1) Gate E2 con el daemon real | Ya lo cubre el escenario `tui-modify` del banco INF-GRP-002, que entregó US-CKP-001 (D4): la `App` real sobre `TestBackend`, conectada al daemon aislado por el canal real. La etapa del Cockpit (`t_client_recv` → `t_render`, 100 ms p95) **falla en los dos modos**. No hace falta código nuevo: se verificó con el `EngineConnector` nuevo | `cargo bench -p gitraptor-cli --bench engine -- --quick --only tui-modify` (resultado en el PR) |
+| (2) Cliente en `crates/api` | `gitraptor_api::client` (feature `client`): `Client`, `ClientError` (más `Launch`), `Incoming`, `Connect`, `Launch`/`NeverLaunch` y `ensure_daemon_with` (reemplazo SEC-13 y espera del handshake). Además, `client::transport` (`socket_path`, `MAX_SOCKET_PATH`, `in_dir`, `verify_private_dir`, `connect` con L-06, el nombre del pipe y `runs_as_this_user`) y `client::peer` (`PeerCred`, `peer_cred`, `current_uid`). `crates/core::client` queda como fachada: `Client` es un *newtype* con `Deref` que se abre desde `ProfileDirs`, junto con `ClientOptions::{connect, launcher}` e `InstalledLauncher`. Ningún llamador de core, cli ni mcp cambia. `channel::transport`, `channel::peer` y `profile::fsperm::verify_private_dir` delegan en api. El módulo `link` se sustituye por `client::engine::EngineConnector`, que solo usa `gitraptor_api` y recibe `Connect` y `Box<dyn Launch>` desde `commands/tui.rs` | `apps/cli/tests/tui_boundaries.rs` (sin excepción; `link.rs` no vuelve; solo el binario construye el lanzador); `crates/api/tests/client_boundary.rs` (feature, dependencias opcionales, sin core ni `directories` ni procesos, core sin segunda copia); `crates/api/tests/architecture.rs` sigue en verde |
+| (3) L-06 desde la TUI | Con la carpeta del socket en 0755 y un servidor falso dentro, la TUI pasa a "Canal rechazado" y el servidor no recibe ni un byte. Con una carpeta de otro uid (`/`, de root), también "Canal rechazado". Como control, con una carpeta privada sin servidor el estado es "Motor no disponible", no "rechazado". El servidor de otro uid no se puede crear sin root: se prueba la misma comprobación con el uid esperado como parámetro (`transport::connect_expecting`), y el cliente cierra sin enviar nada | `apps/cli/tests/tui_channel_peer.rs`; `crates/api/tests/client_peer.rs` |
+| (4) Suite "TUI sin perfil" | Suite `repo_intact` de INF-GRP-001 (§ 8). Con el daemon real en marcha y `data/` y `config/` del perfil en 000, una `App` sin pantalla llega a "En vivo" con la réplica global. La máquina falsa queda intacta: solo pueden cambiar los datos y el estado del motor, y las fechas de `config/`, cuyo modo cambia la prueba. Sube `repo_intact_min` en Linux (97) y macOS (104) | `apps/cli/tests/tui_without_profile.rs::repo_intact::repo_intact_the_tui_works_without_reading_the_profile` |
+
+Siguen fuera: el **lanzador del editor** (Q-CKP-9) y Linux y Windows en máquina real (**Pendiente: etapa de validación multiplataforma**, salvo lo que diga el PR). La suite "TUI sin perfil" es solo de Unix porque Windows no tiene bits de modo que quitar.
+
