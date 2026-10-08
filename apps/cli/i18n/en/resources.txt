@@ -33,10 +33,10 @@ res.power = power saving: {value}
 res.power-on = on
 res.power-off = off
 # Observation tiers (US-GRP-017, Enmienda 2026-10-07; TS-GRP-006)
-res.tiers = observed repos: {active} active · {dormant} dormant · {waking} waking up
+res.tiers = observed repos: active {active} · dormant {dormant} · waking up {waking}
 res.tiers-na = observed repos by tier: not available
-res.tier-active = active: {repos} repos, {worktrees} worktrees, {watches} watches
-res.tier-dormant = dormant: {repos} repos, {worktrees} worktrees, {watches} watches (sentinels)
+res.tier-active = active — worktrees: {worktrees}, watches: {watches}
+res.tier-dormant = dormant — worktrees: {worktrees}, watches (sentinels): {watches}
 res.tier-safety = dormant safety nets: sweep every {sweep}, reconciliation every {reconcile}, CPU {cpu}
 res.tier-degraded = polled worktrees (no watch): {n}
 res.discovered = discovered repos, not observed: {n} (0 resources until accepted)
