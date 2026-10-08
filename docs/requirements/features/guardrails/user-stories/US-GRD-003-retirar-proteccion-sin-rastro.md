@@ -2,10 +2,10 @@
 id: US-GRD-003
 title: "El desarrollador retira la protección y el repo queda exactamente como estaba"
 type: us
-status: draft
+status: partially-implemented
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 feature: guardrails
 related:
   context:
@@ -103,4 +103,8 @@ Entonces cada cambio queda registrado con qué se hizo, en qué repo, cuándo y 
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica.
-- **Dev Spec:** pendiente (`/aadd-devspec US-GRD-003`).
+- **Dev Spec:** [DS-US-GRD-003](../dev-specs/US-GRD-003-retirar-proteccion-sin-rastro.md).
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #191 (parcial): E1 a E4 y la ventana cancelable de D5. **Falta**: E5 (instalación huérfana: retirar o adoptar, tras US-GRD-004) y E6 (entradas `protection-state` en el registro de decisiones; hoy queda en la auditoría permanente). Dev Spec: [DS-US-GRD-003](../dev-specs/US-GRD-003-retirar-proteccion-sin-rastro.md).

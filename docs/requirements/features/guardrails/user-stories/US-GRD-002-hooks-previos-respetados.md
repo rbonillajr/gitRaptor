@@ -2,10 +2,10 @@
 id: US-GRD-002
 title: "Los hooks que el repo ya tenía siguen funcionando al protegerlo"
 type: us
-status: draft
+status: implemented
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 feature: guardrails
 related:
   context:
@@ -83,4 +83,8 @@ Entonces GitRaptor no instala nada y explica el motivo
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica.
-- **Dev Spec:** pendiente (`/aadd-devspec US-GRD-002`).
+- **Dev Spec:** [DS-US-GRD-002](../dev-specs/US-GRD-002-hooks-previos-respetados.md).
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #191. Dev Spec: [DS-US-GRD-002](../dev-specs/US-GRD-002-hooks-previos-respetados.md).
