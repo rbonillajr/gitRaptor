@@ -25,8 +25,9 @@ use gitraptor_api::{Actor, AgentKind, AgentOrigin, Untrusted, UntrustedName};
 use gitraptor_git::{ChangedPaths, ReadError, RepoReader};
 
 use super::oplog::{
-    CurrentAttribution, OpRef, OperationFilter, OperationKind, OperationState, OperationView, Oplog,
-    Requester, RequesterOrigin, SnapshotFilter, SnapshotLevel, SnapshotRefs, SnapshotView, Target,
+    CurrentAttribution, OpRef, OperationFilter, OperationKind, OperationState, OperationView,
+    Oplog, Requester, RequesterOrigin, SnapshotFilter, SnapshotLevel, SnapshotRefs, SnapshotView,
+    Target,
 };
 use super::undo::{RawSide, external_events_in};
 
@@ -449,10 +450,10 @@ fn echoes(read: &OplogRead, engine: &EngineSide) -> HashMap<String, HashSet<i64>
             root,
             snapshot_key,
         )
-            .into_iter()
-            .filter(|e| e.caused_by.is_some())
-            .map(|e| e.seq)
-            .collect();
+        .into_iter()
+        .filter(|e| e.caused_by.is_some())
+        .map(|e| e.seq)
+        .collect();
         out.insert(root.clone(), caused);
     }
     out
@@ -1305,7 +1306,8 @@ mod tests {
             if self.fail.contains(new) {
                 return Err(ReadError::Unavailable("gone".into()));
             }
-            let all: Vec<String> = (0..25).map(|i| format!("{new}/f{i:02}{}", "p".repeat(self.width)))
+            let all: Vec<String> = (0..25)
+                .map(|i| format!("{new}/f{i:02}{}", "p".repeat(self.width)))
                 .collect();
             Ok(ChangedPaths {
                 total: 25,
@@ -1572,7 +1574,12 @@ mod tests {
         let e = EngineSide {
             history_full: true,
             history_oldest_ms: Some(1),
-            ..engine(vec![event(1, GitEventKind::Commit, 100, Actor::Unattributed)])
+            ..engine(vec![event(
+                1,
+                GitEventKind::Commit,
+                100,
+                Actor::Unattributed,
+            )])
         };
         assert!(
             w.timeline(&query(), Some(&e), &SessionActors::default())
