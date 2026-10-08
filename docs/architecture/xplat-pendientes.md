@@ -61,6 +61,7 @@ Las rutas cortas de la columna Origen van bajo `docs/requirements/features/`. La
 | XP-32 | Windows | US-GRD-001, SPIKE-GRD-001 § 11 y § 14, ADR-GRD-001 (Enmienda 2026-10-05) | Coste del dispatcher (`sh` frente a nativo) y dispatcher nativo en modo degradado; la instalación espera al canal (XP-01) y la DACL de la carpeta (M-07) | Máquina Windows | parcial: coste medido (2026-10-05, § 14 de los resultados del spike); ver el PR de US-GRD-001 para el humo funcional |
 | XP-33 | Windows | INF-TMC-001, US-TMC-019, ADR-TMC-003 § 6 | Arnés de caos (`apps/cli/tests/tm_chaos.rs`): muerte del daemon en cada punto de fallo de un undo y escenarios hostiles de Git, con `raptor undo` real. Solo macOS y Linux: el CI de Windows no corre tests con Git (TS-GRP-002) y no hay `SIGKILL` (los puntos usan `abort`) | Máquina Windows + CI | pendiente |
 | XP-34 | Windows | TS-GRP-004 (DS § 9, TQ-14), ADR-GRP-005 § 6 (Enmienda 2026-10-08), TS-GRP-007 | Prueba de presencia por consola interactiva para los comandos reservados (opción A de TQ-14) | Máquina Windows | **hecho** (2026-10-08, ver "TQ-14 en Windows"). Falta Windows 11 con Windows Terminal como terminal por defecto y la terminal de VS Code (ConPTY), que pueden quedar rechazados (fail-closed), y que Rene lo confirme tecleando en su propia consola |
+| XP-35 | Linux y Windows | US-TMC-006, DS-US-TMC-006 § 9.5 | `raptor timeline`: `us_tmc_006` (canal) y `timeline_process` (e2e) en Linux; en Windows, rutas con `\` solo en pantalla, ancla del cwd sin prefijo verbatim y `detection_available` falso → "agente no disponible" | Contenedor + CI; máquina Windows | **pendiente** (macOS verificado el 2026-10-08) |
 
 ## Contenedor Linux: resultados del 2026-10-05
 
@@ -356,3 +357,4 @@ Rutas de `docs/requirements/features/` abreviadas (`motor-local/`, `time-machine
 - **XP-28**: INF-GRP-003-pipeline-release.md:86; docs/architecture/decisions/ADR-GRP-014-pipeline-release-distribucion.md:81
 - **XP-29**: motor-local/technical-stories/INF-GRP-004-canales-distribucion.md:83; ADR-GRP-014-pipeline-release-distribucion.md:96
 - **XP-30**: crates/testkit/tests/interceptability.rs (sin marca en el código: los tests fallan en rojo a propósito, ver la segunda ronda)
+- **XP-35**: time-machine/dev-specs/US-TMC-006-timeline-que-cuando-quien.md (§ 9.5)
