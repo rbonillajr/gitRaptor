@@ -2,7 +2,7 @@
 id: DS-US-GRD-008
 title: "Dev Spec — US-GRD-008: ramas protegidas y rutas prohibidas por actor"
 type: dev-spec
-status: draft
+status: implemented
 created: 2026-10-08
 updated: 2026-10-08
 story: US-GRD-008
@@ -62,11 +62,11 @@ Cada fila es una **Decisión del orquestador (2026-10-08), validada por Arquitec
 
 | # | Decisión |
 |---|---|
-| D1 | **Claves** `policies.protectedBranches` y `policies.forbiddenPaths`, las dos con la misma forma: `{ "patterns": ["…"], "appliesTo": "agents" \| "everyone" }`. `appliesTo` por defecto `agents`. Niveles admitidos (`x-gitraptor-levels`): equipo (suelo y worktree), perfil y local, como `commitAuthorship`. Dejan de producir `policy-not-supported`. Límites: 64 patrones por clave, 256 bytes por patrón. Un patrón vacío, con bytes de control, que empieza por `!` o `#` (negación y comentario no existen) o que empieza por `refs/heads/` es **inválido**: se descarta **solo ese patrón**, los demás se aplican y la fuente queda `parcial` (diagnóstico `policy-invalid`), lo que ya fuerza el mínimo seguro (D12 de ADR-GRD-004). Una clave con el tipo equivocado no se aplica, con el mismo diagnóstico. `[` y `\` son literales. El estado `parcial` viaja en `configStatus` de cada decisión, porque la vista en `status` queda diferida |
+| D1 | **Claves** `policies.protectedBranches` y `policies.forbiddenPaths`, las dos con la misma forma: `{ "patterns": ["…"], "appliesTo": "agents" \| "everyone" }`. `appliesTo` por defecto `agents`. Niveles admitidos (`x-gitraptor-levels`): equipo (suelo y worktree), perfil y local, como `commitAuthorship`. Dejan de producir `policy-not-supported`. Límites: 64 patrones por clave, 256 bytes por patrón. Un patrón vacío, con bytes de control, que empieza por `!` o `#` (negación y comentario no existen) o que empieza por `refs/heads/` es **inválido**: se descarta **solo ese patrón**, los demás se aplican y la fuente queda `parcial` (diagnóstico `policy-invalid`), lo que ya fuerza el mínimo seguro (D12 de ADR-GRD-004). Más de 64 patrones o un tipo equivocado es un valor fuera de límites como cualquier otro (PQ-8): la fuente entera se ignora con su diagnóstico (`out-of-range`, `wrong-type`). `[` y `\` son literales. El estado `parcial` viaja en `configStatus` de cada decisión, porque la vista en `status` queda diferida |
 | D2 | **Combinación** (BR-CONS-001): solo endurecen. El valor efectivo es la **unión** de las reglas de todas las fuentes legibles (suelo, worktree, perfil); cada regla conserva el nivel que la declara y su `appliesTo`. Ninguna fuente puede quitar el patrón de otra. No existe forma de relajar. Si dos niveles declaran el mismo patrón con distinto `appliesTo`, se aplican las dos reglas y gana la más estricta (`everyone`) |
 | D3 | **El actor entra en la condición** (enmienda de ADR-GRD-003 § 1, igual que US-GRD-018 D4). Con `appliesTo: agents`, la regla deniega solo si el actor es un agente (detectado o registrado, resuelto por el daemon, D5 de US-GRD-018); con "sin atribuir" (la persona en su terminal) pasa. Con `appliesTo: everyone` deniega a todos. Así "la persona sí, salvo que la política diga otra cosa". Un agente que el daemon no detecta ni tiene registrado cuenta como persona: residuo declarado (§ 8, `policy-actor`). La regla de negocio que lo permite (excepción consciente al "toda operación, sea cual sea el actor" de Q-GRD-1, como hizo BR-AUTH-005 con la autoría) la registra el PO como Q-GRD-35 en `context.md` y en BR-VAL-003 (§ 9) |
 | D4 | **Rama protegida = cualquier movimiento de `refs/heads/<patrón>`**, por un agente: crear, actualizar (commit, merge, `branch -f`, `update-ref`, `reset`) y borrar. Se decide en `reference-transaction prepared` (cubre `commit` con y sin `--no-verify`, `merge`, `branch -d/-f`, `update-ref`) y en `pre-push` (la ref remota `refs/heads/<patrón>`: push, force-push y borrado remoto). No hay dispatcher nuevo ni etapa nueva: son las dos operaciones que la capa ya evalúa. La regla de rama protegida se evalúa en **una pasada propia** sobre todas las líneas (no cuelga de los `return` tempranos del mínimo). Los nombres se comparan **siempre** con NFC y minúsculas, aunque el sistema de archivos local distinga: el del remoto es desconocido y un alias solo da falsos positivos entre ramas que difieren en mayúsculas |
-| D5 | **Ruta prohibida = un commit nuevo que modifica, crea o borra la ruta**. El **daemon** lee los commits nuevos del movimiento con el lector aislado (el cliente no envía rutas: al daemon no llega nada nuevo): los commits alcanzables desde `new` que ni `old` ni otra rama o rama remota alcanzan, hasta 256, y de cada uno su diferencia de árbol contra su primer padre (contra todos los padres en una fusión: una ruta cuenta solo si difiere de **todos**, así traer lo que ya existía no cuenta, pero una resolución de conflicto sí). Se evalúa en `reference-transaction prepared` (rango `old..new`, cubre commits, `--amend`, `--no-verify`, `commit-tree` + `update-ref` y varios commits) y en `pre-push` (rango: el commit local menos el remoto y las ramas remotas conocidas, cierra un commit hecho con `HEAD` separado). Solo se lee cuando hay una regla de rutas aplicable al actor. Si Git envía `old` en ceros (`update-ref <ref> <nuevo>` sin valor esperado, igual que en una creación), el daemon toma el valor actual de la ref, que en `prepared` todavía es el anterior. **Topes de trabajo**: 256 commits nuevos y 100 000 commits visitados por línea, 2 000 puntas de ramas, y un agregado de 4 096 commits nuevos y 100 000 rutas por evaluación. Pasar un tope, un árbol ilegible, objetos ausentes (clon parcial) o un repo superficial que no permite probar el rango no se pueden verificar: se deniega con causa `unverifiable` (fail-closed) **solo cuando hay una regla aplicable**. La asimetría es deliberada: en `pre-push` no se esconde nada por ramas locales (lo que sale se revisa entero) y solo las ramas remotas conocidas cuentan como "ya existía" |
+| D5 | **Ruta prohibida = un commit nuevo que modifica, crea o borra la ruta**. El **daemon** lee los commits nuevos del movimiento con el lector aislado (el cliente no envía rutas: al daemon no llega nada nuevo): los commits alcanzables desde `new` que ni `old` ni otra rama o rama remota alcanzan, hasta 256, y de cada uno su diferencia de árbol contra su primer padre (contra todos los padres en una fusión: una ruta cuenta solo si difiere de **todos**, así traer lo que ya existía no cuenta, pero una resolución de conflicto sí). Se evalúa en `reference-transaction prepared` (rango `old..new`, cubre commits, `--amend`, `--no-verify`, `commit-tree` + `update-ref` y varios commits) y en `pre-push` (rango: el commit local menos el remoto y las ramas remotas conocidas, cierra un commit hecho con `HEAD` separado). Solo se lee cuando hay una regla de rutas aplicable al actor, y en dos pasadas: primero una mirada barata que solo esconde `old` (trae un superconjunto de los commits nuevos, así que si nada es prohibido la respuesta es final) y, solo ante un golpe, la confirmación que esconde también lo que ya tienen las demás ramas. Si Git envía `old` en ceros (`update-ref <ref> <nuevo>` sin valor esperado, igual que en una creación), el daemon toma el valor actual de la ref, que en `prepared` todavía es el anterior. **Topes de trabajo**: 256 commits nuevos y 100 000 commits visitados por línea, un agregado de 4 096 commits nuevos, 256 movimientos y 100 000 rutas por evaluación, y 4 096 puntas de ramas escondidas (pasadas esas, el resto no esconde nada: se leen commits **de más**, nunca de menos, así que la cota es de coste y no de seguridad). Pasar un tope, un árbol ilegible, objetos ausentes (clon parcial) o un repo superficial que no permite probar el rango no se pueden verificar: se deniega con causa `unverifiable` (fail-closed) **solo cuando hay una regla aplicable**. La asimetría es deliberada: en `pre-push` no se esconde nada por ramas locales (lo que sale se revisa entero) y solo las ramas remotas conocidas cuentan como "ya existía" |
 | D6 | **Patrones** (un solo matcher, lineal en el tamaño del patrón por el de la ruta, con topes): `/` separa segmentos; `*` y `?` no cruzan `/`; `**` como segmento completo cruza segmentos. **Ramas**: el patrón completo contra el nombre corto (`release/*` no cubre `release/1.0/x`; `release/**` sí). **Rutas** (semántica de `.gitignore` reducida, sin negaciones): un patrón sin `/` salvo el final se busca a cualquier profundidad (`*.pem`, `secrets/`); con `/` en medio o al principio está anclado a la raíz (`config/prod.yml`, `/secrets`); `/` final = solo directorio; un patrón que cubre un directorio cubre todo lo que hay debajo. Se compara siempre normalizado (NFC y minúsculas): el contenido es portable entre sistemas de archivos. Los nombres se comparan como bytes y las rutas no UTF-8 se convierten con pérdida solo para el mensaje (saneado). `.github/workflows/` queda anclado a la raíz y no cubre `a/.github/workflows/` (use `**/.github/workflows/`) |
 | D7 | **Todas las reglas incumplidas, juntas** (BR-CALC-001): `Evaluation::add` ya acumula las razones del efecto máximo. Una transacción que mueve una rama protegida con un commit que toca una ruta prohibida devuelve las dos razones en una sola decisión. Por patrón incumplido hay una razón, con la **primera** ruta que lo cumple (el máximo son los patrones declarados, 64 por clave y fuente: no hay truncado que ocultar) |
 | D8 | **Razones y causas** (contrato, `crates/api/src/guard.rs`): reglas `policy.protected-branch` y `policy.forbidden-path`; causa `unverifiable` (D5); parámetros nuevos `pattern` y `path` (no confiables, como los demás). Los parámetros llevan la rama (`branch`) o la ruta y el patrón que se incumplió, para que el mensaje nombre la regla. Ningún código de error nuevo |
@@ -139,10 +139,12 @@ Repos, remotos, perfiles y daemons temporales (NFR-01); Git, `raptor` y `raptor-
 | Dos reglas incumplidas se nombran juntas | `two_broken_rules_are_named_together` |
 | Cada denegación aparece en `raptor guard log` con su regla | `denials_reach_the_decision_log` |
 | Un nivel personal solo endurece; el suelo no se relaja; el mínimo sigue | `levels_only_harden` |
-| Sin daemon (degradado) no se aplican y el mínimo sigue; un daemon sin `guard.policies` no cambia | `degraded_mode_applies_no_policy_rule` |
+| Sin daemon (degradado) no se aplican las reglas para agentes, sí las `everyone` del suelo, y el mínimo sigue | `degraded_mode_applies_no_policy_rule`, `degraded_mode_applies_the_rules_for_everyone_of_the_floor` |
+| Un daemon o un hook sin `guard.policies` no cambia nada; lo que no se puede verificar (objeto ausente, más commits que el tope) se deniega con `unverifiable`, nunca se permite | `crates/core/tests/guard_evaluate.rs` `protected_branches_and_forbidden_paths::*` |
+| Rama protegida y rutas en la función pura: crear, actualizar, borrar, push, persona, `everyone`, dos reglas juntas con el mínimo | `crates/policy` `guard::tests::policies_in_the_function::*` |
 | Matcher: ramas, rutas, normalización, topes | `crates/policy` `guard::glob::tests::*`, `guard::policies::tests::*` |
 | Configuración: formas, límites, `policy-invalid` | `crates/policy` `settings::document::tests::*` |
-| Commits nuevos y rutas: commit, fusión (diferencia con todos los padres), rango, tope | `crates/git/tests/fresh_commit_paths.rs` |
+| Commits nuevos y rutas: commit, fusión (diferencia con todos los padres), rango, amend, raíz, push, objeto ausente, ruta no UTF-8, cada tope | `crates/git/tests/fresh_commit_paths.rs` |
 
 ## 7. Orden de implementación
 
@@ -214,7 +216,7 @@ Una denegación es un `Decision` con `reasons[]` (`policy.protected-branch`, `po
 
 ### 7.3 Valores numéricos
 
-64 patrones por clave; 256 bytes por patrón; 256 commits nuevos y 100 000 commits visitados por línea; 2 000 puntas de ramas; 4 096 commits nuevos y 100 000 rutas por evaluación; parámetros truncados a 120 caracteres al mostrarse (M-05).
+64 patrones por clave; 256 bytes por patrón; 256 commits nuevos y 100 000 commits visitados por línea; 4 096 puntas escondidas; 4 096 commits nuevos, 256 movimientos y 100 000 rutas por evaluación; parámetros truncados a 120 caracteres al mostrarse (M-05).
 
 ### 8. Modelo de datos
 
@@ -364,3 +366,29 @@ _No gaps. Ready to implement._ Lo diferido tiene dueño en § 8. Las decisiones 
 - **Depende:** T001, T007
 - **Refs:** D12
 - **Aceptación:** `cargo test --workspace`
+
+
+## 10. Estado de la implementación (2026-10-08)
+
+Implementado en: PR #<n> (rama `feat/US-GRD-008-protected-branches-paths`).
+
+**Hecho** (verificado en macOS; Linux lo cubre el CI de ubuntu; Windows no tiene canal): D1 a D12, los cinco escenarios de la historia y los dos nuevos del PO. Suite e2e `apps/cli/tests/guard_us_grd_008.rs` (11 pruebas, tabla de § 6), pruebas unitarias de `crates/policy` (matcher, combinación, reglas, configuración), `crates/git/tests/fresh_commit_paths.rs` (10) y `crates/core/tests/guard_evaluate.rs` (capacidad y topes).
+
+**Cambios sobre el plan**:
+
+- La lectura de commits pasó a dos pasadas (D5): la mirada barata esconde solo `old`. La primera versión escondía las puntas de todas las ramas siempre y con 2 000 ramas costaba p50 207 ms / p95 391 ms; con la mirada barata cuesta lo que se mide abajo.
+- El tope de puntas (4 096) ya no deniega: esconde menos y lee de más.
+- La función de `crates/git` se llama `fresh_commit_paths` (la prueba estática de escrituras de gitoxide prohíbe `new_commit` en cualquier nombre fuera del almacén de la Time Machine).
+- El suelo confirmado se une al suelo actual (`crates/core/src/guardrails/policies.rs`): quitar un patrón del suelo no relaja nada hasta que se confirme, como cualquier relajación (Q-GRD-21).
+
+**Medición de D12** (release, `crates/core/tests/guard_evaluate.rs` `policies_cost`, sin canal ni procesos: solo la evaluación; 2 000 ramas; 21 repeticiones): la persona (nada que leer) p50 0,8 ms / p95 0,9 ms; un agente con 1 commit nuevo p50 0,9 ms / p95 1,0 ms; un agente con un rango de 256 commits p50 32,5 ms / p95 42,2 ms, bajo los 100 ms p95 de ADR-GRD-002 § 5. Tras un golpe (la confirmación escondiendo las 2 000 ramas) la evaluación cuesta del orden de 0,2 a 0,4 s: solo ocurre al deniegar o con un commit prohibido ya existente en otra rama. No se midió el coste por proceso de hook (Windows y portátil cargado quedan fuera).
+
+**Pendiente**:
+
+| Pendiente | Dueño |
+|---|---|
+| Push solo a tags u otras refs no gobernadas (plantilla 3 del dispatcher) | [TD-GRD-001](../technical-stories/TD-GRD-001-dispatcher-plantilla-3-pre-push-toda-ref.md) |
+| Validación en Linux y Windows reales | **Pendiente: etapa de validación multiplataforma** |
+| Confirmación de Rene: valor por defecto `agents`, reglas `agents` sobre "sin atribuir" en degradado, plantilla 3 | PR, "Para Rene" |
+| Test e2e de un daemon sin `guard.policies` por el canal (hoy lo cubre `Caller { policies: false }` en `guard_evaluate.rs`) | seguimiento |
+| Mostrar las políticas efectivas en `raptor guard status` | historia de estado por escribir |

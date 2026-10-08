@@ -55,7 +55,7 @@ Sin E/S, sin reloj y sin aleatoriedad:
   - Las expresiones del formato de commit usan un motor de **tiempo lineal** con tope de tamaño.
   - Los globs de rutas se evalúan en tiempo lineal.
   - Los límites del documento JSON están en ADR-GRD-004 § 1.
-- **El actor no cambia la decisión** (Q-GRD-1). Solo entra en el registro y en las excepciones. (Enmienda 2026-10-06, US-GRD-018: salvo las reglas de autoría de BR-AUTH-005, que solo endurecen y solo con un actor agente; ver la sección final.)
+- **El actor no cambia la decisión** (Q-GRD-1). Solo entra en el registro y en las excepciones. (Enmienda 2026-10-06, US-GRD-018: salvo las reglas de autoría de BR-AUTH-005, que solo endurecen y solo con un actor agente; ver la sección final.) (Enmienda 2026-10-08, US-GRD-008: también las reglas `policy.protected-branch` y `policy.forbidden-path`, que solo añaden denegaciones; ver la sección final.)
 
 ### 2. Mínimo seguro (BR-EDGE-001, Q-GRD-5)
 
@@ -121,7 +121,7 @@ Sin E/S, sin reloj y sin aleatoriedad:
   - **Sin excepciones**: no hay excepción posible y el actor es "sin atribuir".
   - **Registro**: la entrada va al spool (ADR-GRD-006 § 4).
   - **Trazabilidad**: el estado registra la causa (`daemon-unreachable`, `instance-mismatch` o, para el deny, `channel-not-authentic`) con aviso, y el daemon guarda la **ventana degradada** (inicio y fin) cuando vuelve, no solo las entradas del spool (ADR-GRD-005, ADR-GRD-006).
-  - **Garantía**: el modo degradado nunca es menos restrictivo que el mínimo más el suelo legible. Solo pierde los endurecimientos personales, las excepciones y las reglas de autoría, porque el actor es "sin atribuir" (Enmienda 2026-10-06, US-GRD-018).
+  - **Garantía**: el modo degradado nunca es menos restrictivo que el mínimo más el suelo legible. Solo pierde los endurecimientos personales, las excepciones y las reglas de autoría, porque el actor es "sin atribuir" (Enmienda 2026-10-06, US-GRD-018). Tampoco aplica las reglas `agents` de ramas protegidas y rutas prohibidas, pero sí las `everyone` del suelo (Enmienda 2026-10-08, US-GRD-008).
 
 ### 5. Contrato para F-001-05 (solo interfaz)
 
@@ -299,6 +299,24 @@ Origen: BR-26 y D6 del BRD (Rene Bonilla, 2026-10-06), BR-AUTH-005 y ADR-GRP-012
 | **Garantía del modo degradado** | El actor es siempre "sin atribuir", así que el modo degradado **pierde las reglas de autoría** aunque estén en el suelo legible. Residuo declarado: no relaja nada del mínimo ni de las demás reglas | § 4 |
 
 **Validación añadida**: con un actor agente, `agents-commit` deniega sin su trailer y `human-author` deniega o avisa; con "sin atribuir" (incluido el modo degradado) ninguna regla de autoría deniega; un aviso nunca cambia `effect`; un cliente frente a un daemon sin `guard.authorship` no envía los hechos de autoría y no recibe avisos; el daemon nunca recibe el mensaje de commit.
+
+## Enmienda (2026-10-08, US-GRD-008)
+
+Origen: BR-VAL-003 (filas "Rama protegida" y "Ruta prohibida") con BR-CALC-001, y la Dev Spec de US-GRD-008 ([DS-US-GRD-008](../../requirements/features/guardrails/dev-specs/US-GRD-008-ramas-protegidas-rutas-prohibidas.md), D1 a D12), que pedía enmendar el § 1 y el § 4. **Decisión del orquestador (2026-10-08), validada por el Arquitecto y el PO.** No cambia el mínimo seguro, el orden `deny > ask > allow` ni el canal, y solo añade denegaciones. Añade un residuo declarado al modo degradado. El `status` sigue en `accepted`.
+
+| Cambio | Resolución | Dónde |
+|---|---|---|
+| **El actor entra en la condición de `policy.protected-branch` y `policy.forbidden-path`** | Con `appliesTo: agents` (valor por defecto) la regla deniega solo si el actor es un agente, detectado o registrado; con "sin atribuir" pasa. Con `appliesTo: everyone` (opt-in) deniega a todos. Solo añaden denegaciones y no eximen de ninguna otra regla. **Precisa** la frase "El actor no cambia la decisión" del § 1: tras US-GRD-018 las reglas de autoría y ahora estas dos son las únicas que leen el actor. Es una excepción consciente al "toda operación, sea cual sea el actor" de Q-GRD-1, que refina Q-GRD-35 de `context.md` | § 1 |
+| **Configuración combinada por unión** | `policies.protectedBranches` y `policies.forbiddenPaths` son la unión de las reglas del suelo, el suelo confirmado, el worktree y el perfil. Cada regla conserva su nivel y su `appliesTo`. Ninguna fuente quita el patrón de otra; si dos niveles declaran el mismo patrón con distinto `appliesTo`, gana `everyone`. Un patrón inválido se descarta solo él y deja la fuente en `parcial`, que fuerza el mínimo seguro (ADR-GRD-004 § 1) | § 1; ADR-GRD-004 |
+| **Hechos de contenido: las rutas del movimiento** | El daemon lee los commits nuevos del movimiento con el lector aislado, y solo si hay una regla de rutas aplicable al actor. Primera pasada: oculta solo `old`. Si no hay un hit, no se hace más. Si lo hay, confirma ocultando también las demás ramas y ramas remotas, para no denegar lo que ya existía. Topes: 256 commits nuevos y 100 000 visitados por línea, 4 096 puntas de ramas, y 4 096 commits nuevos y 100 000 rutas por evaluación. Pasar un tope, un árbol ilegible, objetos ausentes o un repo superficial que no permite probar el rango es `unverifiable`: deny con fail-closed, **solo cuando hay una regla aplicable**. Al daemon y al cliente no viaja nada nuevo: el cliente no envía rutas | § 1 |
+| **Capacidad `guard.policies`** | El daemon aplica estas reglas y resuelve el actor de `RefTransaction` y `Push` solo si la conexión la pidió (ADR-GRP-016). Es una puerta de compatibilidad, no de seguridad: un daemon anterior o un hook anterior no cambian de comportamiento, y las dos direcciones tienen prueba | § 3 |
+| **Garantía del modo degradado** | Se enmienda: se aplican las reglas `everyone` del suelo, con el mismo código. Las reglas `agents` no, porque el actor es "sin atribuir". **Residuo declarado**: un agente puede forzar el modo degradado borrando el perfil (`instance-mismatch`) o impidiendo que arranque el daemon, y entonces las reglas `agents` no actúan. El modo degradado no pierde nada del mínimo ni del suelo `everyone`. **Pregunta abierta para Rene** (va en el PR): aplicar también las `agents` a "sin atribuir" en degradado sería más seguro, pero bloquearía a la persona mientras el daemon esté caído | § 4 |
+| **Razones, causa y parámetros nuevos** | Reglas `policy.protected-branch` y `policy.forbidden-path`; causa `unverifiable`; parámetros `pattern` y `path`, no confiables como los demás y saneados. Todas las reglas incumplidas se nombran juntas en una decisión (BR-CALC-001), una razón por patrón con la primera ruta que lo cumple. Ningún código de error nuevo | § 3 |
+| **Lista "no se puede impedir"** | Dos entradas nuevas: `policy-actor` (un agente que el daemon no detecta ni tiene registrado cuenta como persona; en degradado solo rigen las `everyone`) y `policy-reach` (lo que ningún hook ve: un objeto suelto, `stash`, el servidor, `reftable` con `branch -m/-M`, una rama remota escrita a mano y **un push solo a tags u otras refs no gobernadas**, que el dispatcher deja salir sin evaluar y cuyo cierre exige una plantilla nueva: [TD-GRD-001](../../requirements/features/guardrails/technical-stories/TD-GRD-001-dispatcher-plantilla-3-pre-push-toda-ref.md)) | § 3; ADR-GRD-002 § 3 |
+
+**Validación añadida**: un agente no mueve (crea, actualiza ni borra, ni local ni en el remoto) una rama protegida, ni con `--no-verify`, y la persona sí salvo con `everyone`. Un agente no commitea una ruta prohibida (modificar, crear, borrar) por ninguna vía que cree un commit nuevo, y la ruta tampoco sale por `push` desde un `HEAD` separado. Dos reglas incumplidas se nombran juntas. Un nivel personal solo endurece. Sin daemon rigen las `everyone` del suelo y no las `agents`. Un tope superado deniega con `unverifiable` solo si hay regla aplicable. Al daemon no llega ninguna ruta del cliente, y cliente y daemon sin `guard.policies` se comportan como antes.
+
+**Decisión del orquestador (2026-10-08), validada por el Arquitecto.** Del Arquitecto, B2 (garantía del modo degradado), B3 (decisión de negocio nueva, Q-GRD-35) y D4/D5 (pasada propia de la rama protegida, topes de trabajo). Su B1 pedía cerrar el push solo a tags; el orquestador lo declaró como `policy-reach` y lo derivó a TD-GRD-001, porque exige cambiar la instalación del dispatcher, fuera de esta historia.
 
 ## Nota (2026-10-08, XP-15): identidad del ejecutable en Windows
 
