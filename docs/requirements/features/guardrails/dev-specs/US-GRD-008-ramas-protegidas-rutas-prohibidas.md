@@ -370,7 +370,7 @@ _No gaps. Ready to implement._ Lo diferido tiene dueño en § 8. Las decisiones 
 
 ## 10. Estado de la implementación (2026-10-08)
 
-Implementado en: PR #<n> (rama `feat/US-GRD-008-protected-branches-paths`).
+Implementado en: PR #197 (rama `feat/US-GRD-008-protected-branches-paths`).
 
 **Hecho** (verificado en macOS; Linux lo cubre el CI de ubuntu; Windows no tiene canal): D1 a D12, los cinco escenarios de la historia y los dos nuevos del PO. Suite e2e `apps/cli/tests/guard_us_grd_008.rs` (11 pruebas, tabla de § 6), pruebas unitarias de `crates/policy` (matcher, combinación, reglas, configuración), `crates/git/tests/fresh_commit_paths.rs` (10) y `crates/core/tests/guard_evaluate.rs` (capacidad y topes).
 
