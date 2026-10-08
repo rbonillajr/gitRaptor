@@ -368,6 +368,8 @@ fn an_object_missing_from_the_repo_cannot_be_verified() {
     assert!(found.unverifiable, "{found:?}");
 }
 
+// File names are bytes only on Unix.
+#[cfg(unix)]
 #[test]
 fn a_path_that_is_not_utf8_is_reported_lossy() {
     use std::os::unix::ffi::OsStrExt;
