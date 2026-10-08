@@ -79,4 +79,4 @@ Cada fila es una **Decisión del orquestador (2026-10-08), validada por el Arqui
 
 ## Estado de la implementación (2026-10-08)
 
-Implementado en: PR #191 (parcial): E1 a E4 y la ventana; faltan E5 y E6.
+Implementado en: PR #193 (parcial): E1 a E4 y la ventana; faltan E5 y E6.

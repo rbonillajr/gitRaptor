@@ -87,4 +87,4 @@ Entonces GitRaptor no instala nada y explica el motivo
 
 ## Estado de la implementación (2026-10-08)
 
-Implementado en: PR #191. Dev Spec: [DS-US-GRD-002](../dev-specs/US-GRD-002-hooks-previos-respetados.md).
+Implementado en: PR #193. Dev Spec: [DS-US-GRD-002](../dev-specs/US-GRD-002-hooks-previos-respetados.md).
