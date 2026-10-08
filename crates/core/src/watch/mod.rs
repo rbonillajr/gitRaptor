@@ -367,8 +367,11 @@ struct Asleep {
     checked_ms: i64,
     /// Each worktree as its task left it, for the slow reconciliation.
     slept: Vec<Slept>,
-    /// When the slow reconciliation last read it.
+    /// When the slow reconciliation last read it (or it went dormant).
     reconciled: Instant,
+    /// The same in wall time: where a gap the slow reconciliation finds
+    /// starts.
+    reconciled_ms: i64,
 }
 
 /// Paths of a dormant repo, for the sentinel task.
@@ -432,8 +435,20 @@ impl Shared {
     fn route(&self, t_recv: u64, paths: Vec<PathBuf>, rescan: bool) {
         let repos = self.repos.read().unwrap_or_else(|e| e.into_inner());
         if rescan {
-            // The OS does not say what was lost: every task reconciles.
+            // The OS does not say what was lost: every task reconciles, and
+            // every dormant repo wakes with a gap from its last check.
             for repo in repos.values() {
+                if let Some(asleep) = &repo.asleep
+                    && repo.start_waking()
+                {
+                    self.wake(
+                        &repo.id,
+                        WakeCause::SafetyNet {
+                            since_ms: asleep.checked_ms,
+                        },
+                    );
+                    continue;
+                }
                 let _ = repo.tx.send(RepoMsg::Rescan(t_recv));
                 for wt in &repo.worktrees {
                     let _ = wt.tx.send(WtMsg::Rescan(t_recv));
@@ -879,9 +894,13 @@ impl Observer {
     /// a repo with a degraded worktree is refused here.
     pub fn sleep_repo(&self, repo_id: &str) -> Result<(), SleepRefused> {
         // From now on its events go to the sentinel: a change that arrives
-        // while the tasks flush wakes it again, it is never lost.
-        let (repo_tx, worktrees) = {
-            let repos = self.shared.repos.read().unwrap_or_else(|e| e.into_inner());
+        // while the tasks flush wakes it again, it is never lost. The tier
+        // changes under the write lock: a `route` in progress (read lock)
+        // queues its paths to the tasks before their `Sleep`, and the next
+        // one sees the repo dormant.
+        let began_ms = wall_now().0;
+        let (repo_tx, worktrees, print) = {
+            let repos = self.shared.repos.write().unwrap_or_else(|e| e.into_inner());
             let repo = repos.get(repo_id).ok_or(SleepRefused::Unknown)?;
             if repo.tier() != Tier::Active {
                 return Err(SleepRefused::NotActive);
@@ -889,8 +908,12 @@ impl Observer {
             if repo.worktrees.iter().any(|w| w.degraded) {
                 return Err(SleepRefused::Degraded);
             }
+            // The sweep's baseline is read before the switch, so it sees
+            // anything written from now on.
+            let git_dirs: Vec<PathBuf> = repo.worktrees.iter().map(|w| w.git_dir.clone()).collect();
+            let print = Print::read(&repo.common, &git_dirs);
             repo.tier.store(Tier::Dormant.as_u8(), Ordering::Release);
-            (repo.tx.clone(), repo.worktrees.clone())
+            (repo.tx.clone(), repo.worktrees.clone(), print)
         };
         // The worktree tasks flush while still followed, so their last
         // batch is not discarded; then the repo task gives its view.
@@ -919,7 +942,6 @@ impl Observer {
         };
         let roots: Vec<PathBuf> = repo.worktrees.drain(..).map(|w| w.root).collect();
         let git_dirs: Vec<PathBuf> = worktrees.iter().map(|w| w.git_dir.clone()).collect();
-        let print = Print::read(&repo.common, &git_dirs);
         let now = wall_now().0;
         let busy = refs.is_none() || !flushed;
         // A task that did not answer may have lost its window: the refs are
@@ -936,6 +958,7 @@ impl Observer {
             checked_ms: now,
             slept,
             reconciled: Instant::now(),
+            reconciled_ms: now,
         });
         if busy {
             for wt in &worktrees {
@@ -944,9 +967,12 @@ impl Observer {
             let _ = repo_tx.send(RepoMsg::Stop);
             let woke = repo.start_waking();
             drop(repos);
+            // The window a task did not hand over started at most one
+            // window before the sleep began.
+            let since_ms =
+                began_ms - i64::try_from(self.shared.config.window.as_millis()).unwrap_or(0);
             if woke {
-                self.shared
-                    .wake(repo_id, WakeCause::SafetyNet { since_ms: now });
+                self.shared.wake(repo_id, WakeCause::SafetyNet { since_ms });
             }
             return Err(SleepRefused::Busy);
         }
@@ -1031,6 +1057,18 @@ impl Observer {
         {
             repo.tx = tx;
         }
+        // Worktrees removed while it slept: their watches go.
+        let gone: Vec<PathBuf> = asleep
+            .roots
+            .iter()
+            .filter(|root| {
+                !ready
+                    .iter()
+                    .any(|w| Path::new(w.view.path.raw()) == root.as_path())
+            })
+            .cloned()
+            .collect();
+        self.shared.unwatch(&gone);
         let head_logs = asleep.refs.head_logs();
         let mut heads = Vec::new();
         for w in &ready {
@@ -1049,6 +1087,23 @@ impl Observer {
             }
         }
         WatchStart { head_logs, heads }
+    }
+
+    /// A wake the daemon could not complete (its store or its read failed):
+    /// the repo is dormant again, so the sentinel and the safety nets keep
+    /// watching it and the next trigger retries.
+    pub fn abort_wake(&self, repo_id: &str) {
+        let repos = self.shared.repos.read().unwrap_or_else(|e| e.into_inner());
+        if let Some(repo) = repos.get(repo_id)
+            && repo.asleep.is_some()
+        {
+            let _ = repo.tier.compare_exchange(
+                Tier::Waking.as_u8(),
+                Tier::Dormant.as_u8(),
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            );
+        }
     }
 
     /// Runs one cycle of the dormant sweep now (tests: the cycle the task
@@ -1418,7 +1473,9 @@ fn slow_reconcile(shared: &Shared, skip: &[String]) {
             return;
         };
         asleep.reconciled = Instant::now();
-        let since = std::mem::replace(&mut asleep.checked_ms, now);
+        asleep.checked_ms = now;
+        // What it found may be as old as its previous read.
+        let since = std::mem::replace(&mut asleep.reconciled_ms, now);
         if !changed || !repo.start_waking() {
             return;
         }

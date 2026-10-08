@@ -206,6 +206,9 @@ pub(crate) enum Control {
     /// What the observer saw in one window (US-GRP-002): persist, then
     /// publish.
     Observed(Box<ObservedBatch>),
+    /// A repo went dormant: the batches its tasks flushed are ahead of
+    /// this in the queue, so its store can close (TS-GRP-006).
+    Slept(String),
     /// A dormant repo must wake (TS-GRP-006).
     Wake {
         repo_id: String,
@@ -424,6 +427,11 @@ impl ShutdownHandle {
     /// Hands an observed batch to the loop. `false` if it already stopped.
     pub(crate) fn observed(&self, batch: ObservedBatch) -> bool {
         self.tx.send(Control::Observed(Box::new(batch))).is_ok()
+    }
+
+    /// Tells the loop a repo's sleep batches are all queued (TS-GRP-006).
+    pub(crate) fn slept(&self, repo_id: &str) -> bool {
+        self.tx.send(Control::Slept(repo_id.to_owned())).is_ok()
     }
 
     /// Asks the loop to wake a dormant repo (TS-GRP-006).
