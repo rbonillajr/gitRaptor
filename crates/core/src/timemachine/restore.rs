@@ -535,16 +535,6 @@ pub fn restore_to(
         })
         .collect();
     let scope = plan_scope(&existing, &refs);
-    // A branch checked out in a worktree outside the plan never moves: it
-    // would change that worktree's history under its files.
-    for (root, _) in &registered {
-        if !plan_roots.contains(&root.as_path())
-            && let Some(branch) = head_branch(root)
-            && refs.contains(&format!("refs/heads/{branch}"))
-        {
-            return Err(reject(scope, engine_mark, TmRejectReason::RefInUse));
-        }
-    }
     let kept_branches: Vec<String> = now
         .keys()
         .filter(|name| !meta.branches.contains_key(*name))
@@ -595,6 +585,17 @@ pub fn restore_to(
     }
     // Next, in this order: confirmation (US-TMC-013), Guardrails
     // (US-TMC-021) and overlap (US-TMC-012).
+
+    // A branch checked out in a worktree outside the plan never moves: it
+    // would change that worktree's history under its files.
+    for (root, _) in &registered {
+        if !plan_roots.contains(&root.as_path())
+            && let Some(branch) = head_branch(root)
+            && refs.contains(&format!("refs/heads/{branch}"))
+        {
+            return Err(reject(scope, engine_mark, TmRejectReason::RefInUse));
+        }
+    }
 
     let (Some(store), Some(main_root)) = (repo.store.as_deref(), repo.main_root.clone()) else {
         return Err(reject(scope, engine_mark, TmRejectReason::Unsupported));
