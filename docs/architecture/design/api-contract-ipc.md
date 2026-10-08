@@ -58,6 +58,8 @@ Una conexión de protocolo 9 recibe también `capabilities`: los nombres de toda
 |---|---|---|
 | `connection.requester` | protocolo 6 | `hello.requester` |
 | `events.git-reset` | protocolo 8 | Eventos Git de tipo `reset` en el stream y en `events.history` |
+| `operation.snapshot` | — (US-MCP-008) | La operación `snapshot` del catálogo, el rechazo `write-in-progress`, los errores `-33060` y `-33061` y el resultado `SnapshotRunResult` de `operation.run` (ver [Snapshot manual](#snapshot-manual-us-mcp-008)). Sin ella, la llamada sigue en `-32004` |
+| `timemachine.timeline-manual` | — (US-MCP-008) | `timemachine.timeline` sirve entradas `manual-snapshot` y el nivel de protección `manual`; sin la capacidad se filtran |
 
 Una conexión tiene las capacidades legadas de su protocolo (todas, si es de protocolo 9) y las que acepte con `connection.accept`. Si no llama a ese método, recibe las formas del protocolo 8. Desde el protocolo 9, `daemon.replace` con el **mismo** protocolo lo acepta el daemon solo si viene del binario instalado y actualizado; si no, responde `-32602` y la conexión sigue. El cliente lo pide cuando el daemon no anuncia una capacidad que él conoce.
 
@@ -119,9 +121,11 @@ Un cliente presenta cada error por su `code` y su `data`, nunca por `message`, q
 | `-32011` | La operación empezó tras su snapshot previo y falló: queda `interrupted` y se puede deshacer |
 | `-32012` | La identidad del llamante cambió desde que se aceptó la conexión |
 | `-32013` | Repo rechazado por lo que nombra (no por quién lo pide); `data.reason`: `not-a-repo`, `untrusted`, `unreadable`, `unknown-repo` o, desde el protocolo 7 y solo en `guard.*`, `not-observed`. (Hasta 2026-10-05 este documento lo listaba por error como `-32008`) |
-| `-32014` | Plan del catálogo rechazado antes de ejecutar nada, sin apunte en el oplog (TS-CKP-002). `data.reason`: `state-changed`, `plan-unknown`, `not-available-for-layer`, `unattributed-without-cockpit`, `executor-descendant`, `warnings-mismatch`, `confirmation-required`, `challenge-invalid`, `foreign-work`, `other-session-present`, `operation-in-progress`, `detached-head`, `git-busy`, `worktree-locked`, `branch-checked-out-elsewhere`, `grafts`, `repo-identity-changed`, `guardrails-denied`, `new-path-refused`, `queue-full` o `daemon-stopping` |
+| `-32014` | Plan del catálogo rechazado antes de ejecutar nada, sin apunte en el oplog (TS-CKP-002). `data.reason`: `state-changed`, `plan-unknown`, `not-available-for-layer`, `unattributed-without-cockpit`, `executor-descendant`, `warnings-mismatch`, `confirmation-required`, `challenge-invalid`, `foreign-work`, `other-session-present`, `operation-in-progress`, `detached-head`, `git-busy`, `worktree-locked`, `branch-checked-out-elsewhere`, `grafts`, `repo-identity-changed`, `guardrails-denied`, `new-path-refused`, `queue-full`, `daemon-stopping` o, solo con la capacidad `operation.snapshot`, `write-in-progress` (el mismo solicitante tiene un snapshot manual sin terminar) |
 | `-32015` | Registro de agente o su retiro rechazado (US-GRP-009). `data.reason`: `not-a-worktree`, `repo-not-observed`, `worktree-mismatch`, `agent-mismatch`, `no-working-folder` o `not-registered` |
 | `-32016` | Protocolo 7 (US-GRD-001): no se instaló la capa de hooks; `data.blockers`: `prior-hooks`, `worktree-config`, `include-defines-hooks-path`, `include-if-onbranch`, `not-representable`, `orphan-folder`, `already-installed`, `dispatcher-missing`, `bare` o `platform-unsupported` |
+| `-33060` | `OPERATION_SNAPSHOT_QUOTA` (`snapshot-quota-exceeded`, US-MCP-008): una ventana de la cuota del snapshot manual está llena. `data` es `SnapshotQuotaData {window, retry_after_s?, release_utc_ms?}`; `window`: `minute`, `day`, `worktree-day`, `repo-day` o `disk`. Los dos últimos campos faltan con `disk`. Solo con la capacidad `operation.snapshot` |
+| `-33061` | `OPERATION_SNAPSHOT_TIME_LIMIT` (`snapshot-time-limit`, US-MCP-008): se agotó el presupuesto de tiempo del daemon para el snapshot manual; no se guardó nada. Solo con la capacidad `operation.snapshot` |
 
 ## Eventos
 
@@ -158,6 +162,14 @@ Notificación `events.event` con `{ subscription, event }`. El evento lleva:
   - **Arranque coherente**: `scope.snapshot` en `N` y `scope.subscribe { from_seq: N + 1, run_id }`. Llegan notificaciones `scope.event { subscription, scope, scope_seq, event }`, y la del ámbito anterior siempre tiene `scope_seq - 1`. Un salto es un hueco: pide otra instantánea.
   - **`scope.resync { scope, reason }`**: llega si `N + 1` salió del buffer (`replay-unavailable`), si el daemon se reinició (`daemon-restarted`) o si el repo dejó de observarse (`scope-closed`; la suscripción termina y la secuencia del repo no se reinicia).
   - El cliente lento sigue siendo de conexión: `events.resync { slow-consumer }` vale para todos sus ámbitos.
+
+## Snapshot manual (US-MCP-008)
+
+La operación `snapshot` del catálogo guarda un punto de recuperación a petición del desarrollador o de un agente. Se ejecuta con `operation.prepare` y `operation.run`, **fuera** de la operación protegida (no deja `prior_snapshot_id`), y solo la ve una conexión con la capacidad `operation.snapshot`.
+
+- `operation.run` de un plan `snapshot` devuelve `SnapshotRunResult`: `{snapshot_id, worktree, label, requester, layer, outcome}`. `worktree` es el nombre de la carpeta de la raíz, nunca su ruta; `worktree` y `label` son texto no confiable (`UntrustedName`) y `outcome` es siempre `done`.
+- Rechazos: `-32014` con `data.reason = write-in-progress` si el mismo solicitante tiene otro snapshot manual sin terminar; `-33060` con `SnapshotQuotaData` si una ventana de la cuota está llena; `-33061` si se agota el presupuesto de tiempo.
+- `timemachine.timeline`, con la capacidad `timemachine.timeline-manual`, añade entradas `manual-snapshot` `{snapshot_id, label, channel}` (`EntryOrigin::ManualSnapshot`; `label` es texto no confiable y `channel`, `cli`, `tui`, `mcp` o `hook`) y el nivel de protección `manual`. Una conexión sin la capacidad no recibe ni una ni otro.
 
 ## Estado de un worktree (US-GRP-001)
 

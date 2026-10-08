@@ -974,6 +974,10 @@ Ajustes transversales aplicados: prueba "con el disco en el suelo, un previo gar
 - `apps/mcp/src/server.rs` tiene el despacho de herramientas en un `if`; con tres o más herramientas conviene un registro por archivo, como el de ADR-GRP-016.
 - `DaemonConfig` sigue siendo un punto de conflicto (pendiente de ADR-GRP-016); T005 añade una línea.
 
+## Estado de la implementación
+
+Implementada en la rama `feat/US-MCP-008-mcp-snapshot` (PR pendiente de número) y validada en macOS. Los pendientes multiplataforma (Linux y Windows) están en [`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md), fila XP-37.
+
 ## Enmiendas
 
 | Fecha | Origen | Qué cambia | Ids |
