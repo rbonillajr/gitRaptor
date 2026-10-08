@@ -206,6 +206,11 @@ pub(crate) enum Control {
     /// What the observer saw in one window (US-GRP-002): persist, then
     /// publish.
     Observed(Box<ObservedBatch>),
+    /// A dormant repo must wake (TS-GRP-006).
+    Wake {
+        repo_id: String,
+        cause: crate::watch::WakeCause,
+    },
     /// What the session detector saw (US-GRP-007): persist, then publish.
     Sessions(Vec<crate::detect::SessionChange>),
     /// The sessions of the observed repos (US-GRP-007).
@@ -419,6 +424,16 @@ impl ShutdownHandle {
     /// Hands an observed batch to the loop. `false` if it already stopped.
     pub(crate) fn observed(&self, batch: ObservedBatch) -> bool {
         self.tx.send(Control::Observed(Box::new(batch))).is_ok()
+    }
+
+    /// Asks the loop to wake a dormant repo (TS-GRP-006).
+    pub(crate) fn wake(&self, repo_id: &str, cause: crate::watch::WakeCause) -> bool {
+        self.tx
+            .send(Control::Wake {
+                repo_id: repo_id.to_owned(),
+                cause,
+            })
+            .is_ok()
     }
 
     /// Hands session changes to the loop. `false` if it already stopped.
