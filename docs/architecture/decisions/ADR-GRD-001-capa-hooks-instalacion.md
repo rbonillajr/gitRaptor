@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
-updated: 2026-10-06
+updated: 2026-10-08
 deciders: [Rene Bonilla]
 domain: GRP
 feature: guardrails
@@ -358,3 +358,18 @@ Dispatchers de la política de autoría de los commits (BR-AUTH-005; [DS-US-GRD-
 | Conjunto de dispatchers | Se añaden `pre-commit` y `commit-msg` al conjunto instalado (`pre-push`, `pre-rebase`, `reference-transaction`). El stub nativo los reconoce y su respaldo sin `raptor` es **dejar pasar con aviso** (un commit no es una operación de riesgo del mínimo) | § 1, § 2, § 3 |
 | Plantilla | `TEMPLATE_VERSION = 2`; `raptor hook` acepta la 1 y la 2. Una instalación con la plantilla 1 sigue protegida por el mínimo y gana los dos dispatchers al reinstalar | § 2 |
 | Hooks previos | Sin cambio: `pre-commit` y `commit-msg` ya cuentan como hooks previos que impiden instalar (US-GRD-001, D3) | § 4 |
+
+## Enmienda (2026-10-08, US-GRD-002 y US-GRD-003)
+
+Encadenado de los hooks previos y desinstalación ([DS-US-GRD-002](../../requirements/features/guardrails/dev-specs/US-GRD-002-hooks-previos-respetados.md), [DS-US-GRD-003](../../requirements/features/guardrails/dev-specs/US-GRD-003-retirar-proteccion-sin-rastro.md)). **Decisión del orquestador (2026-10-08), validada por el Arquitecto.** El `status` sigue en `accepted`.
+
+| Cambio | Resolución | Dónde |
+|---|---|---|
+| Quién encadena (§ 2, § 7) | **El stub nativo**, no `raptor hook`: `raptor hook` corre con un entorno por allowlist y no tiene el entorno original de Git que el hook previo necesita. Tras el "permite", la vía rápida o el respaldo que deja pasar, el stub ejecuta `<prior>/<hook>` sin shell, con los argumentos, la entrada (reenviada si ya la leyó, heredada si no), el entorno y el cwd de Git; devuelve el código del hook previo. Si `raptor` deniega, no lo ejecuta. Sustituye al "módulo de invocación del encadenado" de la capa de escritura | § 2, § 7 |
+| Excepción con nombre (§ 7) | El stub tiene exactamente tres `Command::new`: el `raptor` de sus constantes (`env_clear`), el hook previo (ruta = constante `prior` + nombre fijo de githooks(5)) y `/bin/sh` con el script como argumento cuando el hook previo no tiene `#!` (ENOEXEC, como Git; nunca `-c`). Lo comprueba `guard_boundary` | § 7, Validación 12 |
+| Directorio previo (§ 2) | El valor **efectivo** de `core.hooksPath` antes de instalar (cualquier nivel) o `<común>/hooks`; relativo se queda relativo; `~/` solo bajo el home de la cuenta. Con un valor previo, `.git/hooks` no se encadena (Git tampoco lo ejecutaba) | § 2 |
+| Conjunto de dispatchers (§ 2) | Los de la plantilla 2 más uno de **solo encadenado** por cada hook previo de githooks(5) (unión de los worktrees si es relativo); el diario guarda la lista y la actualización en el sitio la conserva. Sin cambio de plantilla | § 2 |
+| `encadenado-imposible` (§ 4 paso 1, § 6) | `chain-impossible`: valor no representable, vacío o que empieza por `-`, `~usuario`, `%(prefix)`, `~/` con otro home, dentro de `gitraptor/`, definido más de una vez a nivel local o por un `include`, o configuración ilegible. El bloqueo `prior-hooks` de US-GRD-001 queda solo para clientes sin la capacidad `guard.prior-hooks` y rechazos guardados | § 4, § 6 |
+| Desinstalación (§ 4) | Comando reservado en dos llamadas con la ventana de D5 impuesta por el daemon (ADR-GRD-007 § 1). `config` regular comprobado antes de tocar la clave (no el inodo, que Git cambia en cada escritura); clave previa restaurada con una operación tipada nueva (`Restore`, admite un valor relativo y nunca uno que empiece por `-`); recuperación de `uninstalling` al arrancar. Puntos de corte con la feature `test-cuts` | § 4, Validación 1 y 3 |
+
+**Pendiente**: la instalación huérfana (retirar o adoptar) y la Validación 9 siguen con US-GRD-003 (segunda entrega) y US-GRD-004.
