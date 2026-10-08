@@ -12,6 +12,8 @@ const NEW: &str = "2222222222222222222222222222222222222222";
 struct Table {
     procs: Mutex<Vec<ProcEntry>>,
     cwds: Mutex<HashMap<u32, PathBuf>>,
+    /// `(pid, start)` of every executable path read, in order.
+    exe_reads: Mutex<Vec<(u32, u64)>>,
 }
 
 impl Table {
@@ -36,6 +38,26 @@ impl Table {
 impl ProcLister for Arc<Table> {
     fn list(&self) -> Option<Vec<ProcEntry>> {
         Some(self.procs.lock().unwrap().clone())
+    }
+    /// As the system lister: no paths, read one by one through `exe`.
+    fn list_bare(&self) -> Option<Vec<ProcEntry>> {
+        let mut table = self.list()?;
+        for e in &mut table {
+            e.exe = None;
+        }
+        Some(table)
+    }
+    fn exe(&self, entry: &ProcEntry) -> Option<PathBuf> {
+        self.exe_reads
+            .lock()
+            .unwrap()
+            .push((entry.pid, entry.start_us));
+        let procs = self.procs.lock().unwrap();
+        let now = procs.iter().find(|p| p.pid == entry.pid)?;
+        // Gone, or the pid now names another process.
+        (now.start_us == entry.start_us)
+            .then(|| now.exe.clone())
+            .flatten()
     }
     fn cwd(&self, pid: u32) -> Option<PathBuf> {
         self.cwds.lock().unwrap().get(&pid).cloned()
@@ -161,6 +183,85 @@ fn started(changes: &[SessionChange]) -> Vec<(String, PathBuf)> {
             _ => None,
         })
         .collect()
+}
+
+/// RES-01: the S1 scan reads the table every second, but the executable path only of the
+/// processes it has not classified yet, once per `(pid, start)`.
+#[test]
+fn the_scan_reads_each_executable_path_once() {
+    let rig = Rig::new();
+    rig.claude(20, 2_000, "/wt/feat-login");
+    assert_eq!(started(&rig.scan()).len(), 1);
+    for _ in 0..5 {
+        assert!(rig.scan().is_empty());
+    }
+    let mut reads = rig.table.exe_reads.lock().unwrap().clone();
+    reads.sort_unstable();
+    assert_eq!(reads, [(10, 100), (20, 2_000)], "one read per process");
+    // A new process with a reused pid is a new identity: its path is read again.
+    rig.table.kill(20);
+    rig.claude(20, 3_000, "/wt/feat-login");
+    let changes = rig.scan();
+    assert_eq!(
+        started(&changes),
+        [("20:3000".to_owned(), PathBuf::from("/wt/feat-login"))]
+    );
+    assert_eq!(
+        rig.table.exe_reads.lock().unwrap().last(),
+        Some(&(20, 3_000))
+    );
+}
+
+/// The path of a pid reused between the table and the path read belongs to the new process:
+/// the old one is not classified with it.
+#[test]
+fn a_pid_reused_before_its_path_is_read_lends_no_path() {
+    struct Reused(Arc<Table>);
+    impl ProcLister for Reused {
+        fn list(&self) -> Option<Vec<ProcEntry>> {
+            self.0.list()
+        }
+        fn list_bare(&self) -> Option<Vec<ProcEntry>> {
+            let table = self.0.list_bare();
+            // Between the two reads, the shell 30 ends and a Claude Code takes its pid.
+            self.0.kill(30);
+            self.0
+                .add(30, 10, 9_000, &format!("/opt/bin/{AGENT}"), Some("/r"));
+            table
+        }
+        fn exe(&self, entry: &ProcEntry) -> Option<PathBuf> {
+            self.0.exe(entry)
+        }
+        fn cwd(&self, pid: u32) -> Option<PathBuf> {
+            self.0.cwd(pid)
+        }
+    }
+    let table = Arc::new(Table::default());
+    table.add(30, 1, 100, "/bin/zsh", Some("/r"));
+    let changes = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::clone(&changes);
+    let detector = Detector::start(
+        SessionConfig {
+            scan_interval: Duration::from_secs(3600),
+            ..SessionConfig::default()
+        },
+        AgentMatcher::only(vec![AGENT.into()]),
+        Arc::new(Reused(Arc::clone(&table))),
+        Arc::new(HookClaims::default()),
+        Arc::new(|| 1_000_000),
+        Arc::new(move |c| sink.lock().unwrap().extend(c)),
+    );
+    let _ = detector.watch_repo(
+        "r",
+        Path::new("/r/.git"),
+        vec![PathBuf::from("/r")],
+        Vec::new(),
+    );
+    detector.scan_now();
+    assert!(
+        started(&changes.lock().unwrap()).is_empty(),
+        "the shell `(30, 100)` is not a session"
+    );
 }
 
 #[test]
