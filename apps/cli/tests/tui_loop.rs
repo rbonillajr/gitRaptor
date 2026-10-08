@@ -531,6 +531,7 @@ fn starting_the_engine_is_not_connecting() {
 
 /// `Ctrl-Z` runs the suspension once, after the input of its iteration, and the loop then
 /// repaints the whole screen.
+#[cfg(unix)]
 #[test]
 fn ctrl_z_suspends_and_repaints() {
     let mut h = Harness::new(1);
@@ -561,4 +562,34 @@ fn ctrl_z_suspends_and_repaints() {
     // Back from it, nothing is pending: another iteration does not suspend again.
     h.app.step(Duration::ZERO).unwrap();
     assert_eq!(suspended.load(Ordering::SeqCst), 1);
+}
+
+/// Without job control (Windows), `Ctrl-Z` never hands the terminal over: it only says so, and
+/// the cockpit stays as it was.
+#[cfg(not(unix))]
+#[test]
+fn ctrl_z_without_job_control_only_says_so() {
+    let mut h = Harness::new(1);
+    h.live();
+    let suspended = Arc::new(AtomicU32::new(0));
+    let count = Arc::clone(&suspended);
+    h.app.on_suspend(Box::new(move || {
+        count.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }));
+    h.input
+        .send(Msg::Key(KeyEvent::new(
+            KeyCode::Char('z'),
+            KeyModifiers::CONTROL,
+        )))
+        .unwrap();
+    h.app.step(Duration::ZERO).unwrap();
+    assert_eq!(suspended.load(Ordering::SeqCst), 0);
+    assert_eq!(
+        h.app.model.ui.notice,
+        Some(gitraptor_cli::model::Notice::SuspendUnsupported)
+    );
+    let text = screen(&h.app);
+    assert!(text.contains("live"), "{text}");
+    assert!(!h.app.model.ui.quit);
 }
