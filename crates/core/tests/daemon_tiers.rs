@@ -26,7 +26,7 @@ use gitraptor_core::channel::ChannelConfig;
 use gitraptor_core::client::Client;
 use gitraptor_core::daemon::{
     Daemon, DaemonConfig, DaemonEnv, LOG_FILE, LogLimits, ShutdownHandle, StopCause, StopReport,
-    TierConfig, TmCapture,
+    TierConfig, TierTestOp, TmCapture,
 };
 use gitraptor_core::timemachine::continuous::CaptureConfig;
 use gitraptor_core::timemachine::store::{SnapshotStore, snapshot_refs};
@@ -78,6 +78,23 @@ fn start_with(
     dormant_after: Duration,
     seed: impl FnOnce(&mut gitraptor_core::profile::RepoStore, &Path),
 ) -> Running {
+    start_tiers(
+        fx,
+        TierConfig {
+            dormant_after: Some(dormant_after),
+            check_every: Duration::from_millis(50),
+            ..TierConfig::default()
+        },
+        seed,
+    )
+}
+
+/// The same with the tiers as given.
+fn start_tiers(
+    fx: Fixture,
+    tiers: TierConfig,
+    seed: impl FnOnce(&mut gitraptor_core::profile::RepoStore, &Path),
+) -> Running {
     let tp = TempProfile::new();
     let mut profile = tp.open();
     let (entry, _) = profile
@@ -99,11 +116,7 @@ fn start_with(
         protected: None,
         operations: None,
         tm_prior_layer: None,
-        tiers: TierConfig {
-            dormant_after: Some(dormant_after),
-            check_every: Duration::from_millis(50),
-            ..TierConfig::default()
-        },
+        tiers,
         tm_capture: TmCapture {
             config: CaptureConfig {
                 enabled: true,
@@ -480,4 +493,78 @@ fn an_idle_repo_sleeps_at_the_first_check_after_a_start() {
             .unwrap();
     });
     r.logged("repo_dormant", 1);
+}
+
+/// NFR-01, the race the review found: changes in flight while the repo goes
+/// dormant. The tasks hand their open windows over as they stop, and those
+/// batches are still queued in the loop when the sleep finishes; the store
+/// must close after they are persisted, never before, or the commits are
+/// lost for good (the wake classifies from the view the flush ended with).
+///
+/// Deterministic, with no timing: the observer loses the file events, so
+/// the commits only reach the tasks through an overflow, which every task
+/// queues before the `Sleep` of the threshold check that follows (one FIFO
+/// per task, both sent by the loop in that order). The threshold is zero
+/// and only the test runs the check. Fails with the fix reverted (closing
+/// the store right after `sleep_repo`).
+#[test]
+fn changes_in_flight_when_the_repo_sleeps_are_persisted() {
+    let (fx, wt) = repo_with_login();
+    let r = start_tiers(
+        fx,
+        TierConfig {
+            dormant_after: Some(Duration::ZERO),
+            check_every: Duration::from_secs(3600),
+            ..TierConfig::default()
+        },
+        |_, _| {},
+    );
+    assert!(r.handle.tier_test(TierTestOp::LoseEvents(true)));
+    let mut commits = Vec::new();
+    for i in 0..3 {
+        r.fx.write(&format!("c{i}.txt"), "c\n");
+        r.fx.git(&["add", "."]);
+        r.fx.git(&["commit", "-q", "-m", &format!("c{i}")]);
+        commits.push(r.fx.git(&["rev-parse", "HEAD"]).trim().to_owned());
+    }
+    std::fs::write(wt.join("api.rs"), EDITED).unwrap();
+    // Every task opens a window; the sleep that follows flushes them.
+    assert!(r.handle.tier_test(TierTestOp::Overflow));
+    assert!(r.handle.tier_test(TierTestOp::CheckTiers));
+    assert!(r.handle.tier_test(TierTestOp::LoseEvents(false)));
+    r.logged("repo_dormant", 1);
+    // Reading the history wakes the repo; the commits must be there, once
+    // each and in order, from the batches flushed on the way to sleep.
+    let page: serde_json::Value = connect(&r.tp)
+        .call(
+            methods::EVENTS_HISTORY,
+            json!({ "repo_id": r.repo_id, "limit": 100 }),
+        )
+        .unwrap();
+    let events = page
+        .as_array()
+        .or_else(|| page.get("events").and_then(|e| e.as_array()))
+        .cloned()
+        .unwrap_or_default();
+    let seen: Vec<String> = events
+        .iter()
+        .filter(|e| e["kind"] == "commit")
+        .filter_map(|e| e["details"]["new_commit"].as_str().map(str::to_owned))
+        .collect();
+    assert_eq!(seen, commits, "{events:#?}\n{}", r.log());
+    // The edit of the linked worktree was persisted by the same flush: its
+    // state shows it once the repo is awake (recoverable by the Time
+    // Machine's capture, which follows the published state).
+    r.logged("repo_woken", 1);
+    let snap: serde_json::Value = connect(&r.tp)
+        .call(methods::ENGINE_SNAPSHOT, json!({}))
+        .unwrap();
+    let linked = snap["repos"][0]["worktrees"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|w| w["main"] == false)
+        .cloned()
+        .unwrap();
+    assert_eq!(linked["status"]["counts"]["unstaged"], 1, "{linked:#}");
 }
