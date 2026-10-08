@@ -393,6 +393,61 @@ mod tests {
         assert_eq!(s.engine.as_ref().unwrap().base_branch, None);
     }
 
+    /// TS-GRP-006 (ADR-GRP-010, Enmienda 2026-10-07, N7): the observation
+    /// tiers are never read from the team level; the threshold is also local,
+    /// the two intervals only profile.
+    #[test]
+    fn observation_keys_follow_their_levels() {
+        let doc = br#"{"engine":{"observation":{"dormantAfterHours":2,"dormantPollSeconds":60,"dormantReconcileMinutes":30}}}"#;
+        let p = parse_document(doc, Level::Team, SourceKind::Team);
+        assert_eq!(
+            at(&p),
+            [
+                "/engine/observation/dormantAfterHours",
+                "/engine/observation/dormantPollSeconds",
+                "/engine/observation/dormantReconcileMinutes"
+            ]
+        );
+        let p = parse_document(doc, Level::Local, SourceKind::Local);
+        assert_eq!(
+            at(&p),
+            [
+                "/engine/observation/dormantPollSeconds",
+                "/engine/observation/dormantReconcileMinutes"
+            ]
+        );
+        let o = p
+            .applicable()
+            .unwrap()
+            .engine
+            .clone()
+            .unwrap()
+            .observation
+            .unwrap();
+        assert_eq!(o.dormant_after_hours, Some(2));
+        let p = parse_document(doc, Level::Profile, SourceKind::Profile);
+        assert!(codes(&p).is_empty());
+        let o = p
+            .applicable()
+            .unwrap()
+            .engine
+            .clone()
+            .unwrap()
+            .observation
+            .unwrap();
+        assert_eq!(
+            (o.dormant_poll_seconds, o.dormant_reconcile_minutes),
+            (Some(60), Some(30))
+        );
+        // Out of range: 0 hours never sleeps a repo by accident.
+        let p = parse_document(
+            br#"{"engine":{"observation":{"dormantAfterHours":0}}}"#,
+            Level::Profile,
+            SourceKind::Profile,
+        );
+        assert_eq!(at(&p), ["/engine/observation/dormantAfterHours"]);
+    }
+
     #[test]
     fn unknown_key_or_operation_in_permissions_or_policies_is_partial() {
         let p = team(r#"{"permissions":{"deny":["push","tag-delete"],"disableSafeMinimum":true}}"#);

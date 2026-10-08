@@ -16,15 +16,21 @@ use crate::observe;
 use crate::profile::WriteOp;
 use crate::watch::{ObserverHooks, SleepRefused, Tier, WakeCause};
 
-/// When repos go dormant. Off by default: nothing sleeps until the switch
-/// is set (TS-GRP-006, delivered in parts; see its Dev Spec).
+/// When repos go dormant (TS-GRP-006). The default sleeps nothing: tests
+/// that do not test tiers keep every repo active; the real daemon reads its
+/// values from the profile ([`TierConfig::for_profile`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TierConfig {
     /// Time without activity after which a repo sleeps
     /// (`engine.observation.dormantAfterHours`); `None` never sleeps one.
     pub dormant_after: Option<Duration>,
-    /// How often the threshold is checked.
+    /// How often the threshold is checked: each sweep cycle (N1).
     pub check_every: Duration,
+    /// Metadata sweep of the dormant repos (`dormantPollSeconds`).
+    pub sweep_every: Duration,
+    /// Shortest interval of the slow reconciliation
+    /// (`dormantReconcileMinutes`).
+    pub reconcile_every: Duration,
 }
 
 impl Default for TierConfig {
@@ -32,7 +38,49 @@ impl Default for TierConfig {
         Self {
             dormant_after: None,
             check_every: Duration::from_secs(120),
+            sweep_every: Duration::from_secs(120),
+            reconcile_every: Duration::from_secs(60 * 60),
         }
+    }
+}
+
+/// Defaults of `engine.observation` (N7, ⚠️ ASSUMPTION of the Enmienda).
+const DORMANT_AFTER_HOURS: u32 = 24;
+const SWEEP_SECONDS: u32 = 120;
+const RECONCILE_MINUTES: u32 = 60;
+/// Power saving (ADR-GRP-015, Enmienda 2026-10-07): 300 s and 180 min.
+const SAVING_SWEEP_SECONDS: u32 = 300;
+const SAVING_RECONCILE_MINUTES: u32 = 180;
+
+impl TierConfig {
+    /// The values of `engine.observation`, with their defaults. Power
+    /// saving lengthens both intervals; the engine has no power saving yet
+    /// (TS-GRP-005), so the daemon passes `false`.
+    pub fn from_settings(
+        settings: &gitraptor_policy::settings::Observation,
+        power_saving: bool,
+    ) -> Self {
+        let hours = settings.dormant_after_hours.unwrap_or(DORMANT_AFTER_HOURS);
+        let mut sweep = settings.dormant_poll_seconds.unwrap_or(SWEEP_SECONDS);
+        let mut reconcile = settings
+            .dormant_reconcile_minutes
+            .unwrap_or(RECONCILE_MINUTES);
+        if power_saving {
+            sweep = sweep.max(SAVING_SWEEP_SECONDS);
+            reconcile = reconcile.max(SAVING_RECONCILE_MINUTES);
+        }
+        let sweep = Duration::from_secs(u64::from(sweep));
+        Self {
+            dormant_after: Some(Duration::from_secs(u64::from(hours) * 3600)),
+            check_every: sweep,
+            sweep_every: sweep,
+            reconcile_every: Duration::from_secs(u64::from(reconcile) * 60),
+        }
+    }
+
+    /// The profile's values.
+    pub fn for_profile(dirs: &crate::profile::ProfileDirs) -> Self {
+        Self::from_settings(&crate::profile::settings::observation(dirs), false)
     }
 }
 
@@ -236,5 +284,33 @@ fn refused_reason(refused: SleepRefused) -> &'static str {
         SleepRefused::NotActive => "not-active",
         SleepRefused::Degraded => "degraded",
         SleepRefused::Busy => "busy",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gitraptor_policy::settings::Observation;
+
+    #[test]
+    fn defaults_and_power_saving() {
+        let c = TierConfig::from_settings(&Observation::default(), false);
+        assert_eq!(c.dormant_after, Some(Duration::from_secs(24 * 3600)));
+        assert_eq!(c.sweep_every, Duration::from_secs(120));
+        assert_eq!(c.reconcile_every, Duration::from_secs(3600));
+        let saving = TierConfig::from_settings(&Observation::default(), true);
+        assert_eq!(saving.sweep_every, Duration::from_secs(300));
+        assert_eq!(saving.reconcile_every, Duration::from_secs(180 * 60));
+        assert_eq!(saving.dormant_after, c.dormant_after);
+        let set = Observation {
+            dormant_after_hours: Some(2),
+            dormant_poll_seconds: Some(600),
+            dormant_reconcile_minutes: Some(15),
+        };
+        let c = TierConfig::from_settings(&set, true);
+        assert_eq!(c.dormant_after, Some(Duration::from_secs(2 * 3600)));
+        // A longer interval than the saving one is kept.
+        assert_eq!(c.sweep_every, Duration::from_secs(600));
+        assert_eq!(c.reconcile_every, Duration::from_secs(180 * 60));
     }
 }

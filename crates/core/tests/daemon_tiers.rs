@@ -89,6 +89,7 @@ fn start(fx: Fixture) -> Running {
         tiers: TierConfig {
             dormant_after: Some(Duration::from_millis(800)),
             check_every: Duration::from_millis(50),
+            ..TierConfig::default()
         },
         tm_capture: TmCapture {
             config: CaptureConfig {

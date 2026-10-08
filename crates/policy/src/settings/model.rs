@@ -43,6 +43,28 @@ pub struct Engine {
     pub git_path: Option<String>,
     /// Watcher intervals (ADR-GRP-010 § 5).
     pub watcher: Option<Watcher>,
+    /// Observation tiers (ADR-GRP-010, Enmienda 2026-10-07, N7).
+    pub observation: Option<Observation>,
+}
+
+/// `engine.observation` section: when an observed repo goes dormant and how
+/// its safety nets run. Never at the team level.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Observation {
+    /// Hours without activity before a repo goes dormant.
+    #[schemars(range(min = 1, max = 720))]
+    #[schemars(extend("x-gitraptor-levels" = ["profile", "local"]))]
+    pub dormant_after_hours: Option<u32>,
+    /// Interval of the metadata sweep of the dormant repos, in seconds.
+    #[schemars(range(min = 30, max = 900))]
+    #[schemars(extend("x-gitraptor-levels" = ["profile"]))]
+    pub dormant_poll_seconds: Option<u32>,
+    /// Shortest interval of the slow reconciliation of a dormant repo, in
+    /// minutes; the CPU budget may make it longer.
+    #[schemars(range(min = 15, max = 1440))]
+    #[schemars(extend("x-gitraptor-levels" = ["profile"]))]
+    pub dormant_reconcile_minutes: Option<u32>,
 }
 
 /// `engine.watcher` section.
