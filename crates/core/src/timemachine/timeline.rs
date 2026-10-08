@@ -15,7 +15,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use gitraptor_api::messages::{GitEventKind, GitEventView, MAX_HISTORY_PAGE, SessionView};
+use gitraptor_api::messages::{GitEventKind, GitEventView, SessionView};
 use gitraptor_api::timemachine::{
     ActedOn, Attribution, ChangedFiles, EntryOrigin, Protection, ProtectionLevel,
     TIMELINE_MAX_FILES, TimelineEntry, TimelineOperationKind, TimelineOperationState,
@@ -25,10 +25,10 @@ use gitraptor_api::{Actor, AgentKind, AgentOrigin, Untrusted, UntrustedName};
 use gitraptor_git::{ChangedPaths, ReadError, RepoReader};
 
 use super::oplog::{
-    CurrentAttribution, OpRef, OperationFilter, OperationKind, OperationState, Oplog, Requester,
-    RequesterOrigin, SnapshotFilter, SnapshotLevel, SnapshotRefs, SnapshotView, Target,
+    CurrentAttribution, OpRef, OperationFilter, OperationKind, OperationState, OperationView, Oplog,
+    Requester, RequesterOrigin, SnapshotFilter, SnapshotLevel, SnapshotRefs, SnapshotView, Target,
 };
-use super::undo::{RawSide, external_events};
+use super::undo::{RawSide, external_events_in};
 
 /// Total time a request may spend reading the paths of its entries (DS-US-TMC-006 D2, D10).
 pub const FILES_BUDGET: Duration = Duration::from_millis(750);
@@ -82,12 +82,22 @@ impl AgentFilter {
         match (self, actor) {
             (Self::Unattributed, Actor::Unattributed) => true,
             (Self::Named(wanted), Actor::Agent { kind, name, .. }) => {
-                name.as_ref().is_some_and(|n| n.raw() == wanted)
-                    || (*kind == AgentKind::ClaudeCode && wanted == "claude-code")
+                name.as_ref().is_some_and(|n| {
+                    n.raw() == wanted || (wanted == "claude-code" && is_claude_code_name(n.raw()))
+                }) || (*kind == AgentKind::ClaudeCode && wanted == "claude-code")
             }
             _ => false,
         }
     }
+}
+
+/// The names a recorded requester can carry for Claude Code: its kind (`claude-code`, what the
+/// daemon records) or its display name, in any case (`Claude Code`). The recorded requester keeps
+/// no kind (G4), so the name is all `--agent claude-code` has to match an undo, redo or restore.
+fn is_claude_code_name(name: &str) -> bool {
+    name.eq_ignore_ascii_case("claude-code")
+        || name.eq_ignore_ascii_case("claude code")
+        || name.eq_ignore_ascii_case("claude_code")
 }
 
 /// What a timeline request asks for, already validated.
@@ -112,29 +122,92 @@ pub struct EngineSide {
     pub snapshot_keys: HashMap<String, String>,
     /// From `sessions.list`: `false` is "unknown", not "no agents".
     pub detection_available: bool,
+    /// The page of `events.history` came back full, before anything was filtered out of it:
+    /// older events may exist that it did not carry.
+    pub history_full: bool,
+    /// When the oldest event of that page was observed, before any filtering.
+    pub history_oldest_ms: Option<i64>,
 }
 
-/// The oplog's reads once: its offerable points, by id.
-struct Points {
-    all: Vec<SnapshotView>,
+/// The oplog's reads once: what a timeline needs, taken under the oplog's lock and used after
+/// it is let go (the work on it is proportional to operations x snapshots).
+pub struct OplogRead {
+    repo_id: String,
+    /// The operations of the query's window; `None` when they could not be read.
+    operations: Option<Vec<OperationView>>,
+    /// Every operation and snapshot, for the echo of GitRaptor's own operations.
+    all_operations: Vec<OperationView>,
+    all_snapshots: Vec<SnapshotView>,
+    /// The offerable points; `None` when they could not be read.
+    points: Option<Vec<SnapshotView>>,
 }
 
-impl Points {
+impl OplogRead {
+    /// The only reads of the oplog a timeline makes.
+    pub fn read(oplog: &Oplog, refs: &dyn SnapshotRefs, query: &TimelineQuery) -> Self {
+        let filter = OperationFilter {
+            from_ms: query.since_ms,
+            worktree: query.only_worktree.clone(),
+            ..OperationFilter::default()
+        };
+        Self {
+            repo_id: oplog.repo_id().to_owned(),
+            operations: oplog.operations(&filter).ok(),
+            all_operations: oplog.operations(&Default::default()).unwrap_or_default(),
+            all_snapshots: oplog
+                .snapshots(&SnapshotFilter::default())
+                .unwrap_or_default(),
+            points: oplog
+                .offerable_snapshots(&SnapshotFilter::default(), refs)
+                .ok(),
+        }
+    }
+}
+
+/// The offerable points, indexed: by id and, by worktree key, in the order the "before an event"
+/// rule picks from.
+struct Points<'a> {
+    all: &'a [SnapshotView],
+    by_id: HashMap<String, usize>,
+    /// Per worktree key: `(engine_mark, seq, index)` ascending, of the points with a mark.
+    by_key: HashMap<String, Vec<(i64, i64, usize)>>,
+}
+
+impl<'a> Points<'a> {
+    fn new(all: &'a [SnapshotView]) -> Self {
+        let mut by_id = HashMap::new();
+        let mut by_key: HashMap<String, Vec<(i64, i64, usize)>> = HashMap::new();
+        for (i, s) in all.iter().enumerate() {
+            by_id.entry(s.record.snapshot_id.clone()).or_insert(i);
+            if let Some(mark) = s.record.engine_mark {
+                for key in &s.record.worktrees {
+                    by_key
+                        .entry(key.clone())
+                        .or_default()
+                        .push((mark, s.record.seq, i));
+                }
+            }
+        }
+        for list in by_key.values_mut() {
+            list.sort();
+        }
+        Self { all, by_id, by_key }
+    }
+
     fn get(&self, id: &str) -> Option<&SnapshotView> {
-        self.all.iter().find(|s| s.record.snapshot_id == id)
+        self.by_id.get(id).map(|i| &self.all[*i])
     }
 
     /// The latest point of the worktree `key` before the event `seq`, in the current generation
     /// of the engine (the rule of the undo's target, without `store.verify`, D9).
     fn before_event(&self, key: &str, seq: i64, floor: i64) -> Option<&SnapshotView> {
-        self.all
+        let list = self.by_key.get(key)?;
+        let end = list.partition_point(|(mark, _, _)| *mark < seq);
+        list[..end]
             .iter()
-            .filter(|s| {
-                s.record.seq >= floor
-                    && s.record.worktrees.iter().any(|w| w == key)
-                    && s.record.engine_mark.is_some_and(|m| m < seq)
-            })
-            .max_by_key(|s| (s.record.engine_mark, s.record.seq))
+            .rev()
+            .map(|(_, _, i)| &self.all[*i])
+            .find(|s| s.record.seq >= floor)
     }
 }
 
@@ -219,24 +292,44 @@ pub fn build_timeline(
     actors: &SessionActors,
     now: (i64, i32),
 ) -> TimelineResult {
+    let read = OplogRead::read(oplog, refs, query);
+    build_timeline_from(&read, query, engine, actors, now)
+}
+
+/// [`build_timeline`] over an [`OplogRead`]: no oplog, no lock.
+pub fn build_timeline_from(
+    read: &OplogRead,
+    query: &TimelineQuery,
+    engine: Option<&EngineSide>,
+    actors: &SessionActors,
+    now: (i64, i32),
+) -> TimelineResult {
     let mut unavailable = Vec::new();
-    let points = match oplog.offerable_snapshots(&SnapshotFilter::default(), refs) {
-        Ok(all) => Points { all },
-        Err(_) => {
+    let points = match &read.points {
+        Some(all) => Points::new(all),
+        None => {
             unavailable.push(TimelineSource::Operations);
-            Points { all: Vec::new() }
+            Points::new(&[])
         }
     };
     let mut entries: Vec<(Order, TimelineEntry)> = Vec::new();
 
-    let filter = OperationFilter {
-        from_ms: query.since_ms,
-        worktree: query.only_worktree.clone(),
-        ..OperationFilter::default()
-    };
-    match oplog.operations(&filter) {
-        Ok(operations) => {
+    // A full page of events leaves older ones unseen: the operations older than the oldest event
+    // shown would leave a silent gap, so they are dropped and the result says it is cut.
+    let events_full_page = engine.is_some_and(|e| {
+        e.history_full
+            && e.history_oldest_ms
+                .is_some_and(|oldest| query.since_ms.is_none_or(|since| oldest >= since))
+    });
+    let operations_floor = engine
+        .filter(|_| events_full_page)
+        .and_then(|e| e.history_oldest_ms);
+    match &read.operations {
+        Some(operations) => {
             for op in operations {
+                if operations_floor.is_some_and(|floor| op.record.recorded_ms < floor) {
+                    continue;
+                }
                 if op.tampered
                     || !matches!(
                         op.state,
@@ -282,22 +375,13 @@ pub fn build_timeline(
                 entries.push(((r.recorded_ms, 0, r.seq), entry));
             }
         }
-        Err(_) => unavailable.push(TimelineSource::Operations),
+        None => unavailable.push(TimelineSource::Operations),
     }
 
-    let mut events_full_page = false;
     match engine {
         None => unavailable.push(TimelineSource::Events),
         Some(engine) => {
-            let echoes = echoes(oplog, engine);
-            events_full_page = engine.events.len()
-                >= usize::try_from(MAX_HISTORY_PAGE).unwrap_or(0)
-                && engine
-                    .events
-                    .iter()
-                    .map(|e| e.observed_utc_ms)
-                    .min()
-                    .is_some_and(|oldest| query.since_ms.is_none_or(|since| oldest >= since));
+            let echoes = echoes(read, engine);
             for ev in &engine.events {
                 let root = ev.worktree.raw();
                 if ev.kind == GitEventKind::Reconciled
@@ -342,7 +426,7 @@ pub fn build_timeline(
     let over = entries.len().saturating_sub(query.limit);
     entries.drain(..over);
     TimelineResult {
-        repo_id: oplog.repo_id().to_owned(),
+        repo_id: read.repo_id.clone(),
         entries: entries.into_iter().map(|(_, e)| e).collect(),
         truncated: over > 0 || events_full_page,
         unavailable,
@@ -352,13 +436,19 @@ pub fn build_timeline(
 
 /// The events each worktree root has that an operation of GitRaptor caused. A worktree whose raw
 /// events could not be read has none marked: its events show.
-fn echoes(oplog: &Oplog, engine: &EngineSide) -> HashMap<String, HashSet<i64>> {
+fn echoes(read: &OplogRead, engine: &EngineSide) -> HashMap<String, HashSet<i64>> {
     let mut out = HashMap::new();
     for (root, raw) in &engine.raw {
         let Some(snapshot_key) = engine.snapshot_keys.get(root) else {
             continue;
         };
-        let caused = external_events(oplog, raw, root, snapshot_key)
+        let caused = external_events_in(
+            &read.all_operations,
+            &read.all_snapshots,
+            raw,
+            root,
+            snapshot_key,
+        )
             .into_iter()
             .filter(|e| e.caused_by.is_some())
             .map(|e| e.seq)
@@ -443,9 +533,23 @@ fn commit_pair(ev: &GitEventView) -> Option<(Option<&str>, &str)> {
     }
 }
 
+/// Most bytes of paths (as they travel, JSON-escaped) one response carries (M-01). Well under
+/// half of a frame ([`gitraptor_api::framing::MAX_MESSAGE_BYTES`]) so the entries around them
+/// fit: what goes beyond it degrades to `Unavailable`, like what goes beyond the time budget.
+pub const FILES_BYTES_BUDGET: usize = 384 * 1024;
+
+/// What an entry's `files` weigh on the wire: its paths escaped, plus a fixed overhead.
+fn wire_bytes(paths: &[String]) -> usize {
+    32 + paths
+        .iter()
+        .map(|p| serde_json::to_string(p).map_or(p.len() * 6 + 2, |j| j.len()) + 1)
+        .sum::<usize>()
+}
+
 /// Fills `files` of the entries from the newest to the oldest within `budget` for the whole
-/// request. An entry whose paths could not be read, or that the budget did not reach, stays
-/// `Unavailable`: never a zero (D2). Paths come from trees only, and nothing but them is kept.
+/// request, and within [`FILES_BYTES_BUDGET`] of paths. An entry whose paths could not be read, or
+/// that a budget did not reach, stays `Unavailable`: never a zero (D2). Paths come from trees
+/// only, and nothing but them is kept.
 pub fn fill_files(
     result: &mut TimelineResult,
     events: &[GitEventView],
@@ -453,40 +557,75 @@ pub fn fill_files(
     cache: &PathsCache,
     budget: Duration,
 ) {
+    let deadline = Instant::now() + budget;
+    fill_files_with(
+        result,
+        events,
+        source,
+        cache,
+        deadline,
+        &mut || Instant::now() >= deadline,
+        FILES_BYTES_BUDGET,
+    );
+}
+
+/// [`fill_files`] with its clock and its byte budget explicit: `expired` says whether the time
+/// budget is gone (a test drives it by calls, not by time).
+fn fill_files_with(
+    result: &mut TimelineResult,
+    events: &[GitEventView],
+    source: Option<&dyn PathsSource>,
+    cache: &PathsCache,
+    deadline: Instant,
+    expired: &mut dyn FnMut() -> bool,
+    mut bytes_left: usize,
+) {
     let Some(source) = source else {
         return;
     };
     let by_seq: HashMap<i64, &GitEventView> = events.iter().map(|e| (e.seq, e)).collect();
-    let deadline = Instant::now() + budget;
     for entry in result.entries.iter_mut().rev() {
-        let EntryOrigin::GitEvent { seq, .. } = &entry.origin else {
+        let EntryOrigin::GitEvent { seq, kind, .. } = &entry.origin else {
             continue;
         };
+        let kind = *kind;
         let Some((old, new)) = by_seq.get(seq).and_then(|ev| commit_pair(ev)) else {
             continue;
         };
-        if Instant::now() >= deadline {
-            break;
-        }
         let key = (
             result.repo_id.clone(),
             old.unwrap_or_default().to_owned(),
             new.to_owned(),
         );
+        // A hit costs no Git read: it is used even after the time budget is gone.
         let paths = match cache.get(&key) {
             Some(hit) => hit,
-            None => match source.changed_paths(old, new, TIMELINE_MAX_FILES, deadline) {
-                Ok(read) => {
-                    cache.put(key, read.clone());
-                    read
+            None => {
+                if expired() {
+                    continue;
                 }
-                Err(_) => continue,
-            },
+                match source.changed_paths(old, new, TIMELINE_MAX_FILES, deadline) {
+                    Ok(read) => {
+                        cache.put(key, read.clone());
+                        read
+                    }
+                    Err(_) => continue,
+                }
+            }
         };
+        let cost = wire_bytes(&paths.paths);
+        if cost > bytes_left {
+            // The older entries are the ones that degrade.
+            break;
+        }
+        bytes_left -= cost;
         entry.files = ChangedFiles::Available {
             paths: paths.paths.into_iter().map(Untrusted::new).collect(),
             total: paths.total,
-            first_parent: paths.first_parent,
+            // Only a commit or a merge was reached from its first parent; a reset or a checkout
+            // to a merge is plain `old..new`.
+            first_parent: paths.first_parent
+                && matches!(kind, GitEventKind::Commit | GitEventKind::Merge),
         };
     }
 }
@@ -495,7 +634,7 @@ pub fn fill_files(
 mod tests {
     use std::io;
 
-    use gitraptor_api::messages::GitEventDetails;
+    use gitraptor_api::messages::{GitEventDetails, MAX_HISTORY_PAGE};
 
     use super::super::oplog::{
         Channel, CompleteInfo, NewOperation, NewSnapshot, OperationTransition, Scope,
@@ -675,6 +814,8 @@ mod tests {
         EngineSide {
             raw: HashMap::from([(WT.to_owned(), RawSide::default())]),
             snapshot_keys: HashMap::from([(WT.to_owned(), KEY.to_owned())]),
+            history_full: events.len() >= usize::try_from(MAX_HISTORY_PAGE).unwrap(),
+            history_oldest_ms: events.iter().map(|e| e.observed_utc_ms).min(),
             events,
             detection_available: true,
         }
@@ -1126,6 +1267,8 @@ mod tests {
         calls: Mutex<Vec<String>>,
         fail: HashSet<String>,
         sleep: Duration,
+        /// Bytes of each path's last component.
+        width: usize,
     }
 
     impl Fake {
@@ -1134,6 +1277,14 @@ mod tests {
                 calls: Mutex::new(Vec::new()),
                 fail: fail.iter().map(|s| (*s).to_owned()).collect(),
                 sleep,
+                width: 0,
+            }
+        }
+
+        fn wide(width: usize) -> Self {
+            Self {
+                width,
+                ..Self::new(&[], Duration::ZERO)
             }
         }
     }
@@ -1154,7 +1305,8 @@ mod tests {
             if self.fail.contains(new) {
                 return Err(ReadError::Unavailable("gone".into()));
             }
-            let all: Vec<String> = (0..25).map(|i| format!("{new}/f{i:02}")).collect();
+            let all: Vec<String> = (0..25).map(|i| format!("{new}/f{i:02}{}", "p".repeat(self.width)))
+                .collect();
             Ok(ChangedPaths {
                 total: 25,
                 paths: all.into_iter().take(max).collect(),
@@ -1242,30 +1394,242 @@ mod tests {
             .map(|i| commit_event(i, "o", &format!("c{i}")))
             .collect();
         let mut t = timeline_of(&events);
-        // Each read takes longer than the share of the budget left for the oldest.
-        let fake = Fake::new(&[], Duration::from_millis(30));
-        fill_files(
+        // The budget lasts for three reads: counted, not timed.
+        let fake = Fake::new(&[], Duration::ZERO);
+        let mut checks = 0;
+        fill_files_with(
             &mut t,
             &events,
             Some(&fake),
             &PathsCache::default(),
-            Duration::from_millis(70),
+            Instant::now() + Duration::from_secs(60),
+            &mut || {
+                checks += 1;
+                checks > 3
+            },
+            FILES_BYTES_BUDGET,
         );
         let available: Vec<bool> = t
             .entries
             .iter()
             .map(|e| matches!(e.files, ChangedFiles::Available { .. }))
             .collect();
-        assert!(available[5], "the newest is read first");
-        assert!(
-            !available[0],
-            "the oldest is left without paths: {available:?}"
-        );
+        assert_eq!(available, [false, false, false, true, true, true]);
+        assert_eq!(fake.calls.lock().unwrap().len(), 3);
         // Never partial: what is not available says so.
         assert!(t.entries.iter().all(|e| matches!(
             e.files,
             ChangedFiles::Available { total: 25, .. } | ChangedFiles::Unavailable
         )));
+    }
+
+    #[test]
+    fn cache_hits_are_used_after_the_time_budget_is_gone() {
+        let events: Vec<_> = (1..=3)
+            .map(|i| commit_event(i, "o", &format!("c{i}")))
+            .collect();
+        let cache = PathsCache::default();
+        let fake = Fake::new(&[], Duration::ZERO);
+        let mut warm = timeline_of(&events);
+        fill_files(&mut warm, &events, Some(&fake), &cache, FILES_BUDGET);
+        assert_eq!(fake.calls.lock().unwrap().len(), 3);
+        let mut t = timeline_of(&events);
+        fill_files_with(
+            &mut t,
+            &events,
+            Some(&fake),
+            &cache,
+            Instant::now(),
+            &mut || true,
+            FILES_BYTES_BUDGET,
+        );
+        assert!(
+            t.entries
+                .iter()
+                .all(|e| matches!(e.files, ChangedFiles::Available { .. }))
+        );
+        assert_eq!(fake.calls.lock().unwrap().len(), 3, "no new read");
+    }
+
+    #[test]
+    fn the_paths_of_a_response_have_a_byte_budget_and_the_frame_fits() {
+        use gitraptor_api::framing::MAX_MESSAGE_BYTES;
+        let page = usize::try_from(MAX_HISTORY_PAGE).unwrap();
+        let events: Vec<_> = (1..=page as i64)
+            .map(|i| commit_event(i, "o", &format!("c{i}")))
+            .collect();
+        let mut t = World::timeline(
+            &world(),
+            &TimelineQuery {
+                limit: page,
+                ..query()
+            },
+            Some(&engine(events.clone())),
+            &SessionActors::default(),
+        );
+        assert_eq!(t.entries.len(), page);
+        // Each path at the longest the git layer lets through.
+        let fake = Fake::wide(gitraptor_git::MAX_PATH_BYTES - 10);
+        fill_files(
+            &mut t,
+            &events,
+            Some(&fake),
+            &PathsCache::default(),
+            Duration::from_secs(60),
+        );
+        let bytes = serde_json::to_vec(&t).unwrap().len();
+        assert!(bytes < MAX_MESSAGE_BYTES, "{bytes} bytes");
+        let available = t
+            .entries
+            .iter()
+            .filter(|e| matches!(e.files, ChangedFiles::Available { .. }))
+            .count();
+        assert!(available > 0 && available < page, "{available}");
+        // The newest ones kept their paths, the oldest degraded.
+        assert!(matches!(
+            t.entries.last().unwrap().files,
+            ChangedFiles::Available { .. }
+        ));
+        assert_eq!(t.entries[0].files, ChangedFiles::Unavailable);
+        const _: () = assert!(FILES_BYTES_BUDGET < MAX_MESSAGE_BYTES / 2);
+    }
+
+    #[test]
+    fn first_parent_is_only_said_for_a_commit_or_a_merge() {
+        let mut reset = commit_event(1, "a", "merge");
+        reset.kind = GitEventKind::BranchUpdate;
+        let mut merge = commit_event(2, "a", "merge");
+        merge.kind = GitEventKind::Merge;
+        let events = [reset, merge];
+        let mut t = timeline_of(&events);
+        fill_files(
+            &mut t,
+            &events,
+            Some(&Fake::new(&[], Duration::ZERO)),
+            &PathsCache::default(),
+            FILES_BUDGET,
+        );
+        let flags: Vec<bool> = t
+            .entries
+            .iter()
+            .map(|e| match &e.files {
+                ChangedFiles::Available { first_parent, .. } => *first_parent,
+                other => panic!("{other:?}"),
+            })
+            .collect();
+        assert_eq!(flags, [false, true]);
+    }
+
+    #[test]
+    fn a_full_history_page_drops_the_operations_older_than_its_oldest_event() {
+        let mut w = world();
+        let old = w.operation(
+            &new_op(
+                OperationKind::Protected,
+                Requester::Unattributed,
+                Target::None,
+                1,
+            ),
+            OperationState::Finished,
+            50,
+        );
+        let recent = w.operation(
+            &new_op(
+                OperationKind::Protected,
+                Requester::Unattributed,
+                Target::None,
+                1,
+            ),
+            OperationState::Finished,
+            500,
+        );
+        let page = usize::try_from(MAX_HISTORY_PAGE).unwrap();
+        let events: Vec<_> = (1..=page as i64)
+            .map(|i| event(i, GitEventKind::Commit, 100 + i, Actor::Unattributed))
+            .collect();
+        let mut e = engine(events);
+        let q = TimelineQuery {
+            limit: 500,
+            ..query()
+        };
+        let t = w.timeline(&q, Some(&e), &SessionActors::default());
+        assert!(t.truncated);
+        let got = ids(&t);
+        assert!(!got.contains(&format!("operation:{old}").as_str()), "a gap");
+        assert!(got.contains(&format!("operation:{recent}").as_str()));
+        // A page that is not full leaves nothing unseen: the old operation shows.
+        e.history_full = false;
+        let t = w.timeline(&q, Some(&e), &SessionActors::default());
+        assert!(ids(&t).contains(&format!("operation:{old}").as_str()));
+        assert!(!t.truncated);
+    }
+
+    #[test]
+    fn a_full_page_stays_full_when_events_were_filtered_out_of_it() {
+        // `history_full` is the page's, not the shown events': a client that cannot read resets
+        // still sees a truncated list.
+        let w = world();
+        let e = EngineSide {
+            history_full: true,
+            history_oldest_ms: Some(1),
+            ..engine(vec![event(1, GitEventKind::Commit, 100, Actor::Unattributed)])
+        };
+        assert!(
+            w.timeline(&query(), Some(&e), &SessionActors::default())
+                .truncated
+        );
+    }
+
+    #[test]
+    fn claude_code_also_matches_a_recorded_requester_by_its_display_name() {
+        let mut w = world();
+        let mut recorded = Vec::new();
+        for (name, at) in [
+            ("claude-code", 10),
+            ("Claude Code", 11),
+            ("CLAUDE CODE", 12),
+            ("codex", 13),
+        ] {
+            recorded.push(w.operation(
+                &new_op(
+                    OperationKind::Undo,
+                    agent(name, "s"),
+                    Target::Undo(vec![OpRef::GitEvent(1)]),
+                    1,
+                ),
+                OperationState::Finished,
+                at,
+            ));
+        }
+        let q = TimelineQuery {
+            agent: Some(AgentFilter::parse("claude-code")),
+            ..query()
+        };
+        let t = w.timeline(&q, Some(&engine(vec![])), &SessionActors::default());
+        let want: Vec<String> = recorded[..3]
+            .iter()
+            .map(|id| format!("operation:{id}"))
+            .collect();
+        assert_eq!(ids_owned(&t), want);
+    }
+
+    #[test]
+    fn the_point_before_an_event_is_the_latest_one_of_its_generation() {
+        let mut w = world();
+        let early = w.snapshot(SnapshotLevel::Observation, 5, None, 10);
+        let late = w.snapshot(SnapshotLevel::HookPrior, 9, None, 20);
+        let after = w.snapshot(SnapshotLevel::Observation, 20, None, 30);
+        let read = OplogRead::read(&w.log, &w.refs, &query());
+        let points = Points::new(read.points.as_deref().unwrap());
+        let id = |p: Option<&SnapshotView>| p.map(|s| s.record.snapshot_id.clone());
+        assert_eq!(id(points.before_event(KEY, 7, 0)), Some(early.clone()));
+        assert_eq!(id(points.before_event(KEY, 10, 0)), Some(late.clone()));
+        assert_eq!(id(points.before_event(KEY, 21, 0)), Some(after));
+        assert_eq!(id(points.before_event(KEY, 5, 0)), None);
+        assert_eq!(id(points.before_event("other", 21, 0)), None);
+        // A floor past the points leaves none.
+        assert_eq!(id(points.before_event(KEY, 21, i64::MAX)), None);
+        assert_eq!(id(points.get(&early)), Some(early));
     }
 
     #[test]

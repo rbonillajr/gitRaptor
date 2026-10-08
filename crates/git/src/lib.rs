@@ -36,7 +36,7 @@ pub use capture::{
     Conversions, EntryKind, FileKind, FileStat, HistoryGap, IgnoreCheck, IndexEntry, IndexView,
     Untracked, UntrackedKind,
 };
-pub use changed_paths::ChangedPaths;
+pub use changed_paths::{ChangedPaths, MAX_PATH_BYTES, PATH_CUT_MARK};
 pub use committed::{BlobRead, CommittedFile, NotRegular};
 pub use guard_read::{Ancestry, CommitShape, MAX_ANCESTRY_WALK, RefStorage};
 pub use invoke::{ArgvSink, Invoker, MemoryArgvLog};

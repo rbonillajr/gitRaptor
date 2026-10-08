@@ -32,7 +32,7 @@ use super::engine::{RawGitEvent, is_undoable};
 use super::oplog::ExternalEvent;
 use super::oplog::{
     Channel, NewOperation, OpRef, OperationKind, OperationTransition, OperationView, Oplog,
-    Requester, Scope, StackScope, Target,
+    Requester, Scope, SnapshotView, StackScope, Target,
 };
 use super::protected::{
     McpAllowlist, ProtectedError, ProtectedOperation, ProtectedRequest, ProtectedStep, RepoHandle,
@@ -247,11 +247,35 @@ pub(crate) fn external_events(
     key: &str,
     wt_key: &str,
 ) -> Vec<ExternalEvent> {
-    use super::oplog::{OperationState, SnapshotFilter, SnapshotLevel};
+    use super::oplog::SnapshotFilter;
     let ops = oplog.operations(&Default::default()).unwrap_or_default();
     let snaps = oplog
         .snapshots(&SnapshotFilter::default())
         .unwrap_or_default();
+    external_events_in(&ops, &snaps, raw, key, wt_key)
+}
+
+/// [`external_events`] over what the oplog already answered: it reads nothing, so a caller that
+/// asks for many worktrees reads the oplog once and holds its lock only for that.
+pub(crate) fn external_events_in(
+    ops: &[OperationView],
+    snaps: &[SnapshotView],
+    raw: &RawSide,
+    key: &str,
+    wt_key: &str,
+) -> Vec<ExternalEvent> {
+    use super::oplog::{OperationState, SnapshotLevel};
+    // The mark of the capture each operation left, by operation: one pass over the snapshots.
+    let mut anchors: std::collections::HashMap<&str, i64> = std::collections::HashMap::new();
+    for s in snaps {
+        if s.record.level == SnapshotLevel::Observation
+            && let (Some(cause), Some(mark)) =
+                (s.record.cause_operation.as_deref(), s.record.engine_mark)
+        {
+            let slot = anchors.entry(cause).or_insert(mark);
+            *slot = (*slot).max(mark);
+        }
+    }
     let ran: Vec<(&OperationView, i64)> = ops
         .iter()
         .filter(|o| {
@@ -265,14 +289,7 @@ pub(crate) fn external_events(
                 )
         })
         .map(|o| {
-            let anchor = snaps
-                .iter()
-                .filter(|s| {
-                    s.record.level == SnapshotLevel::Observation
-                        && s.record.cause_operation.as_deref() == Some(&o.record.operation_id)
-                })
-                .filter_map(|s| s.record.engine_mark)
-                .max();
+            let anchor = anchors.get(o.record.operation_id.as_str()).copied();
             let next = || {
                 snaps
                     .iter()
