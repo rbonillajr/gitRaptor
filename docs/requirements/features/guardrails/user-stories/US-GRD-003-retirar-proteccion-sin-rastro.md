@@ -107,4 +107,4 @@ Entonces cada cambio queda registrado con qué se hizo, en qué repo, cuándo y 
 
 ## Estado de la implementación (2026-10-08)
 
-Implementado en: PR #193 (parcial): E1 a E4 y la ventana cancelable de D5. **Falta**: E5 (instalación huérfana: retirar o adoptar, tras US-GRD-004) y E6 (entradas `protection-state` en el registro de decisiones; hoy queda en la auditoría permanente). Dev Spec: [DS-US-GRD-003](../dev-specs/US-GRD-003-retirar-proteccion-sin-rastro.md).
+Implementado en: PR #193 (parcial): E1 a E4 y la ventana cancelable de D5. E6 (entradas `protection-state` en el registro de decisiones) lo cierra el PR #201 (US-GRD-004). **Falta**: E5 (instalación huérfana: retirar o adoptar; US-GRD-004 ya la detecta y la muestra como `orphaned`). Dev Spec: [DS-US-GRD-003](../dev-specs/US-GRD-003-retirar-proteccion-sin-rastro.md).

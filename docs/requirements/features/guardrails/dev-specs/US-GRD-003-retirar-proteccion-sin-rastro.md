@@ -70,7 +70,7 @@ Cada fila es una **Decisión del orquestador (2026-10-08), validada por el Arqui
 | Pendiente | Dueño |
 |---|---|
 | **E5 · Instalación huérfana: retirarla o adoptarla** (manifiesto mostrado antes, constantes regeneradas al adoptar, sin confirmar la rama base) | Segunda entrega de US-GRD-003, tras la detección `instalacion-huerfana` de US-GRD-004 |
-| **E6 · Registro `protection-state`** de instalar y desinstalar en el registro de decisiones (ADR-GRD-006). Hoy queda en la auditoría permanente (quién, cuándo, en qué repo, aceptación del riesgo) | US-GRD-005 / US-GRD-004 |
+| ~~**E6 · Registro `protection-state`** de instalar y desinstalar en el registro de decisiones (ADR-GRD-006)~~ **Cerrado por el PR #201 (US-GRD-004)**: instalar, desinstalar y reparar quedan como transición esperada en el registro; además siguen en la auditoría permanente | — |
 | Mostrar la acción pendiente (anuncio con la ventana) en la TUI; hoy el anuncio es la entrada `reserved.audit` de todos los clientes, y la CLI la muestra en el `status` | Cockpit (US-CKP) |
 | Exponer en `audit.list` los resultados `applied`, `cancelled`, `failed` y `expired` (hoy solo en la tabla permanente; `AuditOutcome` cambiaría de forma) | Historia del contrato de auditoría |
 | Ctrl-C que llama a `guard.cancel` (necesita un manejador de señales) | Declarado (D8) |
@@ -79,4 +79,4 @@ Cada fila es una **Decisión del orquestador (2026-10-08), validada por el Arqui
 
 ## Estado de la implementación (2026-10-08)
 
-Implementado en: PR #193 (parcial): E1 a E4 y la ventana; faltan E5 y E6.
+Implementado en: PR #193 (parcial): E1 a E4 y la ventana; E6 cerrado por el PR #201 (US-GRD-004); falta E5.

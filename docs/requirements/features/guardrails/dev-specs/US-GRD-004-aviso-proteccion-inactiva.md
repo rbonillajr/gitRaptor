@@ -104,4 +104,4 @@ Línea base (B1) y verificación final: `cargo test --workspace`; durante el des
 
 ## Estado de la implementación (2026-10-08)
 
-Implementado en: PR #PRNUM (parcial). Cumple D1 a D15. Pendiente lo del § 5, con su dueño. Desviación declarada de ADR-GRD-005 § 4: en un repo observado la pérdida se detecta en 60 s o con el siguiente evento de Git (limitado a uno cada 5 s), no en ≤ 5 s; el sondeo de `stat` o el vigilante de `config` y `gitraptor/` es la segunda entrega.
+Implementado en: PR #201 (parcial). Cumple D1 a D15. Pendiente lo del § 5, con su dueño. Desviación declarada de ADR-GRD-005 § 4: en un repo observado la pérdida se detecta en 60 s o con el siguiente evento de Git (limitado a uno cada 5 s), no en ≤ 5 s; el sondeo de `stat` o el vigilante de `config` y `gitraptor/` es la segunda entrega.
