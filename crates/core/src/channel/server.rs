@@ -45,14 +45,21 @@ fn socket_id(path: &std::path::Path) -> Option<(u64, u64)> {
     }
 }
 
-/// `(device, inode)` of the file at `path`, following symlinks.
+/// `(device, inode)` of the file at `path`, following symlinks. Windows: `(volume serial
+/// number, file index)`, the same for every spelling of the path (case, 8.3 name).
 pub(crate) fn file_id(path: &std::path::Path) -> Option<(u64, u64)> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
         std::fs::metadata(path).ok().map(|m| (m.dev(), m.ino()))
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        gitraptor_winsys::file_id::of_target(path)
+            .ok()
+            .map(|(volume, index)| (u64::from(volume), index))
+    }
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = path;
         None
