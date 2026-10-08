@@ -21,6 +21,8 @@ mod migration_tests;
 mod model;
 mod query;
 mod recovery;
+#[cfg(test)]
+mod recovery_tests;
 mod schema;
 mod stack;
 #[cfg(test)]
@@ -158,6 +160,7 @@ impl Oplog {
         fsperm::ensure_private_dir(&dir)?;
         let path = dir.join(OPLOG_FILE);
         let head_path = dir.join(HEAD_FILE);
+        restore_interrupted(&path)?;
         let existed = path.exists();
         let opened = open_guarded(&path, &dirs.quarantine_dir(), &|conn| {
             chain::verify(conn, repo_id)
@@ -780,11 +783,33 @@ impl PreMigrationCopy {
 
     /// Puts the copy back in place of the migrated file.
     fn restore(self, original: &Path) -> Result<()> {
-        remove_with_companions(original);
-        fs::rename(&self.path, original)?;
-        fsperm::set_private_file_mode(original)?;
-        Ok(())
+        put_back(&self.path, original)
     }
+}
+
+/// A restore that stopped after the oplog was gone but before the copy was back leaves only the
+/// copy, which is the oplog as it was before the migration: put it back before anything opens.
+fn restore_interrupted(path: &Path) -> Result<()> {
+    let mut leftover = path.as_os_str().to_owned();
+    leftover.push(COPY_SUFFIX);
+    let leftover = PathBuf::from(leftover);
+    if !path.exists() && leftover.exists() {
+        put_back(&leftover, path)?;
+    }
+    Ok(())
+}
+
+/// Renames `copy` over `original` in one step, so there is no moment without an oplog. Only the
+/// side files of the migrated database go first: they belong to it, not to the copy.
+fn put_back(copy: &Path, original: &Path) -> Result<()> {
+    for suffix in ["-wal", "-shm", "-journal"] {
+        let mut companion = original.as_os_str().to_owned();
+        companion.push(suffix);
+        let _ = fs::remove_file(PathBuf::from(companion));
+    }
+    fs::rename(copy, original)?;
+    fsperm::set_private_file_mode(original)?;
+    Ok(())
 }
 
 /// Removes a database file and the `-wal`, `-shm` and `-journal` files SQLite keeps beside it.
