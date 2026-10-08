@@ -363,3 +363,27 @@ fn the_snapshot_shows_the_tier() {
         std::thread::sleep(Duration::from_millis(20));
     }
 }
+
+/// `engine.resources` counts the repos, worktrees and watches per tier
+/// (`observation.tiers`, N8).
+#[test]
+fn resources_count_the_tiers() {
+    let (fx, _wt) = repo_with_login();
+    let r = start(fx);
+    r.logged("repo_dormant", 1);
+    let res: serde_json::Value = connect(&r.tp)
+        .call(methods::ENGINE_RESOURCES, json!({}))
+        .unwrap();
+    let o = &res["observation"];
+    if r.log().contains("repo_woken") {
+        // Something woke it in between: then it is active or waking.
+        assert_eq!(o["dormant"]["repos"], 0, "{res:#}");
+        return;
+    }
+    assert_eq!(o["dormant"]["repos"], 1, "{res:#}");
+    assert_eq!(o["dormant"]["worktrees"], 2, "{res:#}");
+    assert!(o["dormant"]["watches"].as_u64().unwrap() >= 2, "{res:#}");
+    assert_eq!(o["active"]["repos"], 0, "{res:#}");
+    assert_eq!(o["dormant"]["sweep_interval_s"], 120, "{res:#}");
+    assert_eq!(o["degraded"]["worktrees"], 0, "{res:#}");
+}

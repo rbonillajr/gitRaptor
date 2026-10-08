@@ -39,8 +39,66 @@ pub struct ResourcesResult {
     pub pools: Option<Vec<PoolClass>>,
     /// Power saving mode (US-GRP-019). `None` until it exists.
     pub power_saving: Option<PowerSavingView>,
+    /// Repos, worktrees and watches by observation tier (TS-GRP-006, N8).
+    /// Absent before the observer starts and for a connection without
+    /// `observation.tiers`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub observation: Option<ObservationUsage>,
     /// What each value is measured against.
     pub targets: ResourceTargets,
+}
+
+/// The observation tiers (TS-GRP-006, ADR-GRP-010, Enmienda 2026-10-07,
+/// N8). The CPU of the active repos cannot be told apart from the rest of
+/// the process, and the memory per tier is measured by the bench (RES-11).
+/// The discovery block arrives with US-GRP-020.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ObservationUsage {
+    pub active: TierUsage,
+    pub waking: WakingUsage,
+    pub dormant: DormantUsage,
+    pub degraded: DegradedUsage,
+}
+
+/// Repos of one tier, their worktrees and the roots they keep watched.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TierUsage {
+    pub repos: u64,
+    pub worktrees: u64,
+    pub watches: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct WakingUsage {
+    pub repos: u64,
+}
+
+/// The dormant repos and their safety nets (N3).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DormantUsage {
+    pub repos: u64,
+    pub worktrees: u64,
+    /// Kept as their sentinel.
+    pub watches: u64,
+    /// Interval of the metadata sweep.
+    pub sweep_interval_s: u64,
+    /// Effective interval of the slow reconciliation: the configured minimum
+    /// or longer, when the dormant repos do not fit in its CPU budget.
+    pub reconcile_interval_s: u64,
+    /// Time of the sweep and the slow reconciliation over the daemon's
+    /// life, in % of one core (wall time of their work: an upper bound).
+    pub safety_net_cpu_pct: Option<f64>,
+}
+
+/// Worktrees polled instead of watched: their repo never sleeps (N1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DegradedUsage {
+    pub worktrees: u64,
 }
 
 /// The daemon process.
@@ -261,6 +319,7 @@ mod tests {
             },
             pools: None,
             power_saving: None,
+            observation: None,
             targets: TARGETS,
         }
     }
@@ -289,6 +348,24 @@ mod tests {
         result.power_saving = Some(PowerSavingView {
             setting: PowerSavingSetting::Auto,
             active: false,
+        });
+        let tier = TierUsage {
+            repos: 5,
+            worktrees: 12,
+            watches: 17,
+        };
+        result.observation = Some(ObservationUsage {
+            active: tier,
+            waking: WakingUsage { repos: 0 },
+            dormant: DormantUsage {
+                repos: 95,
+                worktrees: 120,
+                watches: 215,
+                sweep_interval_s: 120,
+                reconcile_interval_s: 3600,
+                safety_net_cpu_pct: Some(0.01),
+            },
+            degraded: DegradedUsage { worktrees: 0 },
         });
         let mut found = Vec::new();
         strings(&serde_json::to_value(&result).unwrap(), "", &mut found);

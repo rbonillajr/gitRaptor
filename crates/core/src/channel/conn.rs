@@ -730,9 +730,13 @@ impl Connection<'_> {
                 self.reply(&request.id, result);
             }
             methods::ENGINE_RESOURCES => {
-                let result = request
-                    .params::<NoParams>()
-                    .map(|_| self.ctx.resources.read());
+                let result = request.params::<NoParams>().map(|_| {
+                    let mut result = self.ctx.resources.read();
+                    if !self.has(methods::CAP_OBSERVATION_TIERS.name) {
+                        result.observation = None;
+                    }
+                    result
+                });
                 self.reply(&request.id, result);
             }
             methods::EVENTS_SUBSCRIBE => {

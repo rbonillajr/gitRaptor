@@ -401,6 +401,10 @@ pub(crate) struct Shared {
     sentinel_seen: std::sync::atomic::AtomicU64,
     /// CPU budget of the slow reconciliation (N3).
     budget: Mutex<sweep::Budget>,
+    /// Wall time spent in the safety nets of the dormant repos, and since
+    /// when (`engine.resources`).
+    net_ns: std::sync::atomic::AtomicU64,
+    started: Instant,
 }
 
 impl Shared {
@@ -741,6 +745,8 @@ impl Observer {
             sweep_stop: Mutex::new(None),
             sweeps: std::sync::atomic::AtomicU64::new(0),
             sentinel_seen: std::sync::atomic::AtomicU64::new(0),
+            net_ns: std::sync::atomic::AtomicU64::new(0),
+            started: Instant::now(),
             budget: Mutex::new(sweep::Budget::new(
                 config.dormant_reconcile,
                 config.reconcile_budget_ppm,
@@ -1065,6 +1071,12 @@ impl Observer {
             .interval()
     }
 
+    /// What `engine.resources` shows of the tiers (N8), read when asked.
+    pub fn usage_source(&self) -> crate::resources::ObservationSource {
+        let weak = Arc::downgrade(&self.shared);
+        Arc::new(move || weak.upgrade().map(|shared| usage(&shared)))
+    }
+
     /// Sweep cycles run so far.
     pub fn sweeps(&self) -> u64 {
         self.shared
@@ -1134,6 +1146,69 @@ impl Drop for Observer {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .take();
+    }
+}
+
+/// Repos, worktrees and watches per tier, and the cost of the safety nets.
+fn usage(shared: &Shared) -> gitraptor_api::resources::ObservationUsage {
+    use gitraptor_api::resources::{
+        DegradedUsage, DormantUsage, ObservationUsage, TierUsage, WakingUsage,
+    };
+    let mut active = TierUsage {
+        repos: 0,
+        worktrees: 0,
+        watches: 0,
+    };
+    let mut waking = 0;
+    let mut dormant = active;
+    let mut degraded = 0;
+    {
+        let repos = shared.repos.read().unwrap_or_else(|e| e.into_inner());
+        for repo in repos.values() {
+            let roots: Vec<&PathBuf> = match &repo.asleep {
+                Some(a) => a.roots.iter().collect(),
+                None => repo.worktrees.iter().map(|w| &w.root).collect(),
+            };
+            let common = u64::from(!roots.iter().any(|r| repo.common.starts_with(r)));
+            let worktrees = roots.len() as u64;
+            let watched = repo.worktrees.iter().filter(|w| !w.degraded).count() as u64;
+            degraded += repo.worktrees.iter().filter(|w| w.degraded).count() as u64;
+            match repo.tier() {
+                Tier::Active => {
+                    active.repos += 1;
+                    active.worktrees += worktrees;
+                    active.watches += watched + common;
+                }
+                Tier::Waking => waking += 1,
+                Tier::Dormant => {
+                    dormant.repos += 1;
+                    dormant.worktrees += worktrees;
+                    dormant.watches += worktrees + common;
+                }
+            }
+        }
+    }
+    let life = shared.started.elapsed().as_nanos() as f64;
+    let net = shared.net_ns.load(std::sync::atomic::Ordering::Relaxed) as f64;
+    let reconcile = shared
+        .budget
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .interval();
+    ObservationUsage {
+        active,
+        waking: WakingUsage { repos: waking },
+        dormant: DormantUsage {
+            repos: dormant.repos,
+            worktrees: dormant.worktrees,
+            watches: dormant.watches,
+            sweep_interval_s: shared.config.dormant_poll.as_secs(),
+            reconcile_interval_s: reconcile.as_secs(),
+            safety_net_cpu_pct: (life > 0.0).then(|| net / life * 100.0),
+        },
+        degraded: DegradedUsage {
+            worktrees: degraded,
+        },
     }
 }
 
@@ -1219,6 +1294,15 @@ fn start_sweep(shared: &Arc<Shared>) {
 /// One cycle of the sweep: the print of every dormant repo against the one
 /// it slept with. Metadata only: no `git`, no read-only layer.
 fn sweep_once(shared: &Shared) {
+    let started = Instant::now();
+    sweep_and_reconcile(shared);
+    let spent = u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX);
+    shared
+        .net_ns
+        .fetch_add(spent, std::sync::atomic::Ordering::Relaxed);
+}
+
+fn sweep_and_reconcile(shared: &Shared) {
     shared
         .sweeps
         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);

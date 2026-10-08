@@ -119,7 +119,13 @@ struct Inner {
     window: Mutex<CpuWindow>,
     disk: Mutex<Option<(Instant, DiskUsage)>>,
     roots: Arc<AtomicU64>,
+    /// The observer's tiers (TS-GRP-006), once it runs.
+    observation: Mutex<Option<ObservationSource>>,
 }
+
+/// Reads the observation tiers when `engine.resources` is asked.
+pub type ObservationSource =
+    Arc<dyn Fn() -> Option<gitraptor_api::resources::ObservationUsage> + Send + Sync>;
 
 impl Inner {
     fn point() -> Option<CpuPoint> {
@@ -156,6 +162,7 @@ impl ResourceMonitor {
             dirs,
             disk: Mutex::new(None),
             roots,
+            observation: Mutex::new(None),
         });
         inner.record();
         Self {
@@ -167,6 +174,15 @@ impl ResourceMonitor {
     /// The counter the observer keeps of its watched roots.
     pub fn roots_counter(&self) -> Arc<AtomicU64> {
         Arc::clone(&self.inner.roots)
+    }
+
+    /// Where the observation tiers are read from (TS-GRP-006).
+    pub fn set_observation(&self, source: ObservationSource) {
+        *self
+            .inner
+            .observation
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Some(source);
     }
 
     /// Starts the sampling thread. It wakes once per interval and ends as
@@ -244,6 +260,13 @@ impl ResourceMonitor {
             disk: self.disk(),
             pools: None,
             power_saving: None,
+            observation: self
+                .inner
+                .observation
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .as_ref()
+                .and_then(|read| read()),
             targets: self.inner.config.targets,
         }
     }

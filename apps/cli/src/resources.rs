@@ -367,6 +367,7 @@ mod tests {
             },
             pools: None,
             power_saving: None,
+            observation: None,
             targets: TARGETS,
         }
     }
