@@ -1614,6 +1614,47 @@ mod tests {
     }
 
     #[test]
+    fn since_leaves_out_what_is_older_in_operations_and_events() {
+        // Unit level: the integration clock is the wall clock, and a test must not sleep to age
+        // an entry; here the entries carry their own times.
+        let mut w = world();
+        let old_op = w.operation(
+            &new_op(
+                OperationKind::Protected,
+                Requester::Unattributed,
+                Target::None,
+                1,
+            ),
+            OperationState::Finished,
+            100,
+        );
+        let new_op_id = w.operation(
+            &new_op(
+                OperationKind::Protected,
+                Requester::Unattributed,
+                Target::None,
+                1,
+            ),
+            OperationState::Finished,
+            300,
+        );
+        let e = engine(vec![
+            event(1, GitEventKind::Commit, 150, Actor::Unattributed),
+            event(2, GitEventKind::Commit, 350, Actor::Unattributed),
+        ]);
+        let q = TimelineQuery {
+            since_ms: Some(200),
+            ..query()
+        };
+        let t = w.timeline(&q, Some(&e), &SessionActors::default());
+        assert_eq!(
+            ids_owned(&t),
+            [format!("operation:{new_op_id}"), "event:2".to_owned()]
+        );
+        assert!(!ids_owned(&t).contains(&format!("operation:{old_op}")));
+    }
+
+    #[test]
     fn the_point_before_an_event_is_the_latest_one_of_its_generation() {
         let mut w = world();
         let early = w.snapshot(SnapshotLevel::Observation, 5, None, 10);
