@@ -903,6 +903,24 @@ impl Connection<'_> {
     /// resolved only for a commit, the one operation whose rules read them.
     fn guard_caller(&self, params: &EvaluateParams) -> crate::guardrails::evaluate::Caller {
         let authorship = self.has(methods::CAP_GUARD_AUTHORSHIP.name);
+        // US-GRD-008: the actor of a branch movement or a push, for the rules that tell an agent
+        // from the person. Resolved only for a connection that asked for it.
+        if self.has(methods::CAP_GUARD_POLICIES.name)
+            && matches!(
+                params.operation,
+                gitraptor_api::guard::Operation::RefTransaction { .. }
+                    | gitraptor_api::guard::Operation::Push { .. }
+            )
+        {
+            let checks = self.ctx.checks();
+            return crate::guardrails::evaluate::Caller {
+                actor: crate::guardrails::actor::resolve(self.peer, &checks, Some(&self.ctx.marks)),
+                cwd: process_cwd(self.peer.pid),
+                authorship,
+                policies: true,
+                ..Default::default()
+            };
+        }
         if !authorship
             || !matches!(
                 params.operation,
@@ -938,6 +956,7 @@ impl Connection<'_> {
             authorship,
             git,
             second_line_skip,
+            policies: false,
         }
     }
 

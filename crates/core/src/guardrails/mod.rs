@@ -17,6 +17,7 @@ pub mod install;
 pub mod journal;
 pub mod log;
 pub mod pending;
+pub mod policies;
 pub mod prior;
 pub mod registry;
 pub mod second_line;
