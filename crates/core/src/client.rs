@@ -760,7 +760,7 @@ pub fn clean_env() -> Vec<(OsString, OsString)> {
     if let Some(windows) = gitraptor_winsys::system::windows_dir() {
         let path =
             std::env::join_paths([windows.join("System32"), windows.clone()]).unwrap_or_default();
-        env.push((OsString::from("SystemRoot"), windows.into_os_string()));
+        env.push((OsString::from("SystemRoot"), windows.clone().into_os_string()));
         env.push((OsString::from("PATH"), path));
     }
     env.extend(debug_overrides());
