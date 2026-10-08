@@ -1,13 +1,14 @@
 //! Manual snapshots: the point a Time Machine takes when an agent asks for one, with its own
 //! quota. Compile stubs only: the signatures of the contract, no behaviour.
 
-use std::path::PathBuf;
+use std::io;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use gitraptor_api::methods::QuotaWindow;
 
-use super::continuous::CaptureDeps;
+use super::continuous::{CaptureDeps, FreeSpaceFloor};
 use super::oplog::{Channel, Oplog, Requester};
 use super::store::{CaptureError, SnapshotStore};
 
@@ -83,13 +84,27 @@ pub fn precheck(
     todo!("US-MCP-008")
 }
 
+/// Free space seen by the manual capture: injectable so tests cross the floor.
+pub trait FreeSpaceProbe: Send + Sync {
+    fn available_bytes(&self, path: &Path) -> io::Result<u64>;
+}
+
+/// The manual floor: the continuous floor plus a reserve for the guaranteed prior.
+pub struct ManualFloor<'a> {
+    pub floor: FreeSpaceFloor,
+    pub reserve_bytes: u64,
+    pub probe: &'a dyn FreeSpaceProbe,
+}
+
 /// In flight, recording lock within `deadline`; count, check, capture and record under it.
+#[allow(clippy::too_many_arguments)]
 pub fn capture_in_store(
     store: &SnapshotStore,
     oplog: &Mutex<Oplog>,
     ask: &ManualAsk,
     engine_mark: Option<i64>,
     include_credentials: bool,
+    floor: Option<&ManualFloor<'_>>,
     now_ms: i64,
     deadline: Instant,
 ) -> Result<ManualCaptured, ManualError> {
@@ -99,6 +114,7 @@ pub fn capture_in_store(
         ask,
         engine_mark,
         include_credentials,
+        floor,
         now_ms,
         deadline,
     );

@@ -23,8 +23,8 @@ use gitraptor_core::profile::ProfileDirs;
 use gitraptor_core::timemachine::continuous::{CaptureDeps, FreeSpaceFloor};
 use gitraptor_core::timemachine::engine::{EngineLink, RawGitEvent};
 use gitraptor_core::timemachine::manual::{
-    self, DAY_MS, MINUTE_MS, ManualAsk, ManualCaptured, ManualError, PER_DAY, PER_MINUTE,
-    PER_REPO_DAY, PER_WORKTREE_DAY, QuotaHit, QuotaInput,
+    self, DAY_MS, FreeSpaceProbe, MINUTE_MS, ManualAsk, ManualCaptured, ManualError, ManualFloor,
+    PER_DAY, PER_MINUTE, PER_REPO_DAY, PER_WORKTREE_DAY, QuotaHit, QuotaInput,
 };
 use gitraptor_core::timemachine::oplog::{
     Channel, Oplog, Requester, RequesterOrigin, SnapshotLevel,
@@ -66,7 +66,16 @@ fn budget() -> Instant {
 
 /// One manual capture at the instant `now_ms` of the test's clock.
 fn take(env: &Env, ask: &ManualAsk, now_ms: i64) -> Result<ManualCaptured, ManualError> {
-    manual::capture_in_store(&env.store, &env.oplog, ask, None, false, now_ms, budget())
+    manual::capture_in_store(
+        &env.store,
+        &env.oplog,
+        ask,
+        None,
+        false,
+        None,
+        now_ms,
+        budget(),
+    )
 }
 
 fn ok(result: Result<ManualCaptured, ManualError>, what: &str) -> ManualCaptured {
@@ -353,8 +362,16 @@ fn expired() -> Instant {
 }
 
 fn discard(env: &Env, ask: &ManualAsk, now_ms: i64) {
-    let result =
-        manual::capture_in_store(&env.store, &env.oplog, ask, None, false, now_ms, expired());
+    let result = manual::capture_in_store(
+        &env.store,
+        &env.oplog,
+        ask,
+        None,
+        false,
+        None,
+        now_ms,
+        expired(),
+    );
     assert!(
         matches!(result, Err(ManualError::Discarded)),
         "expected a discarded capture, got {result:?}"
@@ -634,22 +651,103 @@ fn a_manual_capture_never_delays_a_prior() {
     });
 }
 
-// ------------------------------------------------------------ blocked: no space probe to inject
+// ------------------------------------------------------------ the floor, with a scripted probe
 
-/// BLOQUEO (S1): the floor must be read again under the manual lock, after the pre-check. The
-/// contract's `capture_in_store` takes neither a floor nor a probe of the volume, and
-/// `manual::capture` reads the static `CaptureDeps.free_space_floor` once, so no test can make
-/// the space fall below the floor between the two readings without filling a real volume. This
-/// test fails on purpose until the design names an injectable probe of free space.
-#[test]
-fn the_floor_is_checked_again_under_the_lock() {
-    panic!("BLOQUEO · no injectable free-space probe in the contract of capture_in_store (S1)");
+/// Free space that is above the floor for the first `above` readings and zero after.
+struct Scripted {
+    above: usize,
+    calls: std::sync::atomic::AtomicUsize,
 }
 
-/// BLOQUEO (S2): crossing the manual floor in the middle of a capture aborts it as `discarded`
-/// and deletes nothing. Same missing probe as above: the validity guard reads the volume
-/// itself, and a test cannot move the volume's free space deterministically.
+impl Scripted {
+    fn new(above: usize) -> Self {
+        Self {
+            above,
+            calls: std::sync::atomic::AtomicUsize::new(0),
+        }
+    }
+}
+
+impl FreeSpaceProbe for Scripted {
+    fn available_bytes(&self, _path: &Path) -> std::io::Result<u64> {
+        let n = self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Ok(if n < self.above { 1_000_000_000 } else { 0 })
+    }
+}
+
+fn manual_floor(probe: &Scripted) -> ManualFloor<'_> {
+    ManualFloor {
+        floor: FreeSpaceFloor {
+            bytes: 1_000,
+            percent: 0,
+        },
+        reserve_bytes: 0,
+        probe,
+    }
+}
+
+/// S1: the pre-check saw room; under the manual lock the space is below the floor, so nothing
+/// is captured and nothing is recorded.
+#[test]
+fn the_floor_is_checked_again_under_the_lock() {
+    let env = env();
+    let wt = env.f.repo.clone();
+    let existing = prior(&env);
+    // The pre-check (no probe: it reads the oplog only) lets the request through.
+    let session = "s1";
+    manual::precheck(&env.oplog, &env.store, session, "any-key", T0).unwrap();
+
+    let probe = Scripted::new(0);
+    let floor = manual_floor(&probe);
+    let result = manual::capture_in_store(
+        &env.store,
+        &env.oplog,
+        &ask(&wt, session),
+        None,
+        false,
+        Some(&floor),
+        T0,
+        budget(),
+    );
+
+    assert!(matches!(result, Err(ManualError::NoSpace)), "{result:?}");
+    assert_eq!(
+        manual_rows(&env),
+        0,
+        "refused before capturing: no attempt recorded"
+    );
+    assert_eq!(refs(&env).len(), 1, "no point added");
+    assert!(
+        refs(&env).iter().any(|r| r.ends_with(&existing)),
+        "nothing deleted"
+    );
+}
+
+/// S2: room at the start, the floor is crossed while files are written: the attempt is
+/// discarded (it counts, C1), no point exists and nothing is deleted.
 #[test]
 fn crossing_the_manual_floor_mid_capture_discards_and_deletes_nothing() {
-    panic!("BLOQUEO · no injectable free-space probe in the contract of capture_in_store (S2)");
+    let env = env();
+    let wt = env.f.repo.clone();
+    let existing = prior(&env);
+    let before = refs(&env);
+
+    // Above for the check under the lock and the first file; below after.
+    let probe = Scripted::new(2);
+    let floor = manual_floor(&probe);
+    let result = manual::capture_in_store(
+        &env.store,
+        &env.oplog,
+        &ask(&wt, "s1"),
+        None,
+        false,
+        Some(&floor),
+        T0,
+        budget(),
+    );
+
+    assert!(matches!(result, Err(ManualError::Discarded)), "{result:?}");
+    assert_eq!(manual_rows(&env), 1, "the discarded attempt counts");
+    assert_eq!(refs(&env), before, "no point, nothing deleted");
+    assert!(refs(&env).iter().any(|r| r.ends_with(&existing)));
 }
