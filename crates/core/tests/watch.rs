@@ -359,6 +359,33 @@ fn a_burst_in_an_ignored_directory_costs_no_recompute() {
     w.until(|bs| bs.iter().any(|b| !b.worktrees.is_empty()));
 }
 
+/// RES-01: the router drops the events of a folder its task already found ignored. NFR-01: once
+/// `.gitignore` stops ignoring it, the files written while it was dropped are seen.
+#[test]
+fn a_folder_dropped_by_the_router_is_seen_once_no_longer_ignored() {
+    let (f, wt) = demo();
+    std::fs::write(wt.join(".gitignore"), "target/\n").unwrap();
+    std::fs::create_dir_all(wt.join("target/debug")).unwrap();
+    let w = watch(&f, fast());
+    // The task learns the folder is ignored; from then on the router drops it.
+    std::fs::write(wt.join("target/debug/warm"), "x").unwrap();
+    w.drain(Duration::from_millis(500));
+    let before = w.observer.recomputes();
+    for i in 0..50 {
+        std::fs::write(wt.join(format!("target/debug/o{i}")), "o").unwrap();
+    }
+    w.drain(Duration::from_millis(500));
+    assert_eq!(w.observer.recomputes(), before);
+    std::fs::write(wt.join(".gitignore"), "").unwrap();
+    let untracked = |b: &ObservedBatch| {
+        b.worktrees.iter().any(|r| {
+            r.view.path.raw() == wt.to_str().unwrap()
+                && matches!(&r.view.status, WorktreeStatus::Ready { counts, .. } if counts.untracked >= 2)
+        })
+    };
+    w.until(|bs| bs.iter().any(untracked));
+}
+
 /// A change whose event was lost without a mark is recovered by the
 /// periodic reconciliation, in a gap of its own (ADR-GRP-010 § 5).
 #[test]

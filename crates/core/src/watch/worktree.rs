@@ -9,8 +9,8 @@
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
+use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
 use gitraptor_api::UntrustedName;
@@ -55,6 +55,7 @@ struct Task {
     touched: bool,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn run(
     shared: Arc<Shared>,
     repo_id: String,
@@ -62,6 +63,7 @@ pub(super) fn run(
     git_dir: PathBuf,
     head: Vec<u8>,
     degraded: bool,
+    ignored: Arc<IgnoredPrefixes>,
     rx: Receiver<WtMsg>,
 ) {
     let config = shared.config;
@@ -90,7 +92,7 @@ pub(super) fn run(
         window: None,
         last_event_ms: wall_now().0,
         overflow_from_ms: None,
-        ignore: IgnoreCache::default(),
+        ignore: IgnoreCache::with_prefixes(ignored),
         next_periodic: now + config.periodic.min(stagger + config.periodic / 2),
         last_periodic_ms: wall_now().0,
         degraded,
@@ -383,6 +385,41 @@ fn stagger(root: &Path, period: Duration) -> Duration {
     Duration::from_millis(h.finish() % millis)
 }
 
+/// Most prefixes the router checks per path; past them it leaves the rest to the task.
+const MAX_IGNORED_PREFIXES: usize = 32;
+
+/// The ignored directories a worktree task found, as absolute byte prefixes ending in `/`,
+/// shared with the router so it drops their events before they reach the task (RES-01: a build
+/// writes thousands of files per second under `target/`). Only directories the task asked Git
+/// about, and cleared with its cache: the router never drops a path the task would keep.
+#[derive(Debug, Default)]
+pub(crate) struct IgnoredPrefixes(RwLock<Vec<Vec<u8>>>);
+
+impl IgnoredPrefixes {
+    /// Whether `path` is under one of the ignored directories.
+    pub(super) fn covers(&self, path: &Path) -> bool {
+        let path = path.as_os_str().as_encoded_bytes();
+        self.0
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .any(|p| path.starts_with(p))
+    }
+
+    fn insert(&self, dir: &Path) {
+        let mut prefix = dir.as_os_str().as_encoded_bytes().to_vec();
+        prefix.push(b'/');
+        let mut all = self.0.write().unwrap_or_else(|e| e.into_inner());
+        if all.len() < MAX_IGNORED_PREFIXES && !all.contains(&prefix) {
+            all.push(prefix);
+        }
+    }
+
+    fn clear(&self) {
+        self.0.write().unwrap_or_else(|e| e.into_inner()).clear();
+    }
+}
+
 /// Directories ignored by Git, asked once each (ADR-GRP-010 § 2, Enmienda
 /// 2026-10-05): events under them are dropped before the debounce, so a
 /// build writing to an ignored `target/` costs no recompute.
@@ -390,10 +427,21 @@ fn stagger(root: &Path, period: Duration) -> Duration {
 pub(super) struct IgnoreCache {
     ignored: HashSet<String>,
     kept: HashSet<String>,
+    /// What the router learns from it.
+    prefixes: Arc<IgnoredPrefixes>,
 }
 
 impl IgnoreCache {
+    pub(super) fn with_prefixes(prefixes: Arc<IgnoredPrefixes>) -> Self {
+        Self {
+            prefixes,
+            ..Self::default()
+        }
+    }
+
     pub(super) fn clear(&mut self) {
+        // The router first: from now on it hands every path over again.
+        self.prefixes.clear();
         self.ignored.clear();
         self.kept.clear();
     }
@@ -455,6 +503,10 @@ impl IgnoreCache {
                 return false;
             };
             if reader.is_ignored(&dir, true).unwrap_or(false) {
+                // Only a name read without loss names the same folder for the router.
+                if rel.to_str().is_some() {
+                    self.prefixes.insert(&root.join(&dir));
+                }
                 self.ignored.insert(dir);
                 return true;
             }
