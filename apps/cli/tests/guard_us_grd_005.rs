@@ -227,9 +227,16 @@ impl Drop for Machine {
 
 /// Whether any file under `dir` contains `needle`.
 fn profile_contains(dir: &std::path::Path, needle: &[u8]) -> bool {
-    std::fs::read_dir(dir).unwrap().any(|entry| {
-        let path = entry.unwrap().path();
-        let meta = std::fs::symlink_metadata(&path).unwrap();
+    // The daemon creates and removes temporary files while the test scans the profile: an entry
+    // that vanished between the listing and the read held nothing that can matter.
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    entries.flatten().any(|entry| {
+        let path = entry.path();
+        let Ok(meta) = std::fs::symlink_metadata(&path) else {
+            return false;
+        };
         if meta.is_dir() {
             profile_contains(&path, needle)
         } else if meta.is_file() {
