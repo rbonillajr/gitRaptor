@@ -11,7 +11,7 @@ related:
   stories: [US-MCP-003, US-MCP-002, US-MCP-004]
   adrs: [ADR-MCP-001, ADR-GRP-005, ADR-TMC-005, ADR-GRP-016]
   rules: [BR-MCP-CALC-001, BR-MCP-ELIG-006, BR-MCP-ELIG-001, BR-MCP-EDGE-004, BR-MCP-CONS-001, BR-MCP-TIME-003, BR-MCP-EDGE-001]
-  nfrs: [NFR-02, SEC-12, SEC-MCP-07]
+  nfrs: [NFR-02, SEC-12, SEC-MCP-07, RES-MCP-01, RES-MCP-02, RES-MCP-03, RES-MCP-04]
 tags: [mcp, status, ambito, esqueleto-andante, ola-1]
 ---
 
@@ -67,3 +67,11 @@ Todas en `apps/cli/tests/mcp_allowlist.rs` salvo indicación.
 - `cargo-deny` de las features de red de `rmcp` (SEC-07, SEC-MCP-09), heredado de DS-US-MCP-001: sigue pendiente, fuera del alcance de esta tarea.
 - Leer el cwd de otro proceso en Linux y Windows (DEP-MCP-9). **Pendiente: etapa de validación multiplataforma.**
   - **Windows (2026-10-07, tercera ronda de Windows)**: hoy no hay canal (XP-01) y `process_cwd` es `None`, así que `status` rechaza sin datos. El cwd del par ya se canonicaliza en la misma forma que las raíces observadas (`gitraptor_git::paths::canonicalize`, forma de unidad), no con `std::fs::canonicalize` (`\\?\C:\…`), que nunca coincidiría con ellas. Cuando se lea el cwd del PEB hay que probar el ámbito con rutas reales de Windows (XP-24).
+
+## Enmienda (2026-10-07, presupuesto de tokens, RES-MCP-02)
+
+**Decisión de Rene (2026-10-07)**: el MCP no debe consumir muchos tokens. **Decisión del orquestador (2026-10-07), validada por el PO y el Arquitecto**, con [RES-MCP-01 a RES-MCP-04](../../../../architecture/non-functional.md#enmienda-2026-10-07-presupuesto-de-tokens-del-mcp) y la [Enmienda de ADR-MCP-001](../../../../architecture/decisions/ADR-MCP-001-servidor-mcp-cliente-daemon.md#enmienda-2026-10-07-presupuesto-de-tokens).
+
+- **D4, enmendada**: la herramienta `status` responde con `McpStatusView`: `worktree`, `branch` (si la hay), `main` (solo cuando es true), `requester` y `action` (si la hay). `repo_id` y `repo_state` salen de la respuesta de la herramienta y se quedan en el método `mcp.status` del canal. Ninguna historia del MCP (003 a 019) pide `repo_id` en una respuesta ni lo acepta como entrada; si alguna herramienta llega a necesitarlo, se añade entonces. Lo que US-MCP-004 exige ("no disponible", hueco de observación, estado del motor) son declaraciones propias, no `repo_state`. La descripción de la herramienta dice que, si falta `main`, no es el worktree principal.
+- **D7 se mantiene**: un repo no habilitado sigue sin dar ni `repo_id`, ni rama, ni ruta. Ahora un repo habilitado tampoco da `repo_id`.
+- **Pruebas**: `status_from_a_subfolder_names_the_repo_and_the_worktree` comprueba las claves exactas de la vista y su presupuesto. `assert_refused` comprueba el presupuesto de cada rechazo (RES-MCP-03).
