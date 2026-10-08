@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-05
 date: 2026-10-05
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-07
 deciders: [Orquestador (delegación de Rene Bonilla, 2026-10-04)]
 domain: MCP
 feature: mcp
@@ -376,3 +376,12 @@ Decisión del orquestador (2026-10-07), validada por Arquitecto y PO. Origen: [D
 - **§ 5, escape**: el tope por clase (100 caracteres en nombres, 1.024 bytes en rutas) lo aplica el tipo de `crates/api`. Encima, un paso genérico sanea todo objeto `{"untrusted": …}` del resultado y le quita el userinfo, la query y el fragmento de las URLs, como red de seguridad para los campos futuros. El tope anterior de 256 bytes (`MAX_MCP_UNTRUSTED_BYTES`) se retira. El escape amplía las categorías de L-03 con los selectores de variación, U+034F y los rellenos Hangul (revisión de seguridad de US-MCP-005).
 - **§ 6, tiempo de una lectura**: si vence sin una conexión abierta con el motor (arranque o reemplazo en curso), el código es `engine-unavailable`; con conexión, `time-limit`. Una llamada nueva no espera detrás de una vencida.
 - **§ 5, códigos**: la lista de hoy es `repo-not-enabled`, `not-in-observed-worktree`, `repo-unavailable`, `engine-unavailable`, `identity-unverified`, `rate-limited`, `time-limit`, `result-too-large` (el resultado no cabe en el presupuesto; nunca se envía recortado sin marca) e `internal` (los dos últimos son adiciones a las familias). Las demás familias las añade su historia dueña.
+
+## Enmienda (2026-10-07, presupuesto de tokens)
+
+**Decisión de Rene (2026-10-07)**: el MCP no debe consumir muchos tokens. **Decisión del orquestador (2026-10-07), validada por el Arquitecto y el PO.** Las cifras son [RES-MCP-01 a RES-MCP-04](../non-functional.md#enmienda-2026-10-07-presupuesto-de-tokens-del-mcp).
+
+- **§ 4, fila `status`, y § 5, resultado estructurado**: la herramienta responde con una **vista MCP propia**, `McpStatusView` (`crates/api/src/mcp_view.rs`), y no con `McpStatus`. La vista lleva la allowlist de campos sin `repo_id` (ninguna herramienta acepta un repo, porque siempre es el de la sesión) ni `repo_state` (un repo ilegible ya se rechaza con `repo-unavailable`), y `main` solo cuando es true. El método del canal `mcp.status` no cambia de forma (ADR-GRP-016; test `mcp_status_is_the_field_allowlist`). El `outputSchema` sale de `schema_for!(McpStatusView)`.
+- **§ 5, `outputSchema` compacto**: se mantiene `outputSchema` más `structuredContent` más el bloque de texto, pero el esquema pasa por `compact_schema`. Ese paso quita `$schema`, `title`, `description` y los `format` no estándar, y convierte un `anyOf` de un esquema con `null` en ese esquema (las respuestas no llevan nulos). Recorre solo las posiciones de esquema: no toca nombres de propiedades, `enum`, `const`, `required`, `maxLength` ni `additionalProperties`. Un test valida cada `structuredContent` de referencia contra el esquema compacto.
+- **§ 5, texto no confiable**: el envoltorio `{"untrusted": …}` y su saneamiento no cambian (RES-MCP-04). La descripción de la herramienta y las `instructions` se recortan, y siguen declarando ese texto como dato, nunca instrucción.
+- **§ 6**: el ⚠️ ASSUMPTION sobre si Claude Code pasa al modelo una parte o las dos sigue abierto. RES-MCP-02 mide cada parte por separado.
