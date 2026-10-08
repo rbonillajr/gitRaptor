@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{Group, method};
 use crate::Actor;
-use crate::capability::CAPABILITIES_PROTOCOL;
+use crate::capability::{CAPABILITIES_PROTOCOL, Capability};
 use crate::messages::RepoStateView;
 use crate::untrusted::UntrustedName;
 
@@ -25,6 +25,9 @@ pub const MCP_ALLOWLIST: &str = "mcp.allowlist";
 /// The caller's repo and worktree, only if the repo is enabled.
 pub const MCP_STATUS: &str = "mcp.status";
 
+/// `mcp.status` carries the branch of the caller's worktree (US-MCP-005).
+pub const CAP_MCP_STATUS_BRANCH: Capability = Capability::new("mcp.status-branch");
+
 pub(super) const GROUP: Group = Group {
     methods: &[
         // New after the freeze: protocol 9 and later (clients of 5 to 8
@@ -34,6 +37,7 @@ pub(super) const GROUP: Group = Group {
         method(MCP_ALLOWLIST, false, false).since(CAPABILITIES_PROTOCOL),
         method(MCP_STATUS, false, true).since(CAPABILITIES_PROTOCOL),
     ],
+    capabilities: &[CAP_MCP_STATUS_BRANCH],
     ..Group::new("mcp")
 };
 
@@ -70,12 +74,38 @@ pub struct McpStatus {
     pub repo_state: RepoStateView,
     /// Name of the folder of the worktree the caller acts in, never its path.
     pub worktree: UntrustedName,
+    /// The branch of that worktree; absent with a detached `HEAD`, a
+    /// worktree that cannot be read, and for a connection without
+    /// [`CAP_MCP_STATUS_BRANCH`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<UntrustedName>,
     /// Whether it is the repo's main worktree.
     pub main: bool,
     pub requester: Actor,
     /// What the caller can do next; absent for an attributed agent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action: Option<McpStatusAction>,
+}
+
+impl McpStatus {
+    /// The status as the `status` tool gives it: names cut at their MCP
+    /// bound (ADR-MCP-001 § 6). Escaping is `mcp_view::for_mcp`.
+    pub fn for_mcp(&self) -> Self {
+        let requester = match &self.requester {
+            Actor::Agent { kind, name, origin } => Actor::Agent {
+                kind: *kind,
+                name: name.as_ref().map(UntrustedName::mcp_name),
+                origin: *origin,
+            },
+            Actor::Unattributed => Actor::Unattributed,
+        };
+        Self {
+            worktree: self.worktree.mcp_name(),
+            branch: self.branch.as_ref().map(UntrustedName::mcp_name),
+            requester,
+            ..self.clone()
+        }
+    }
 }
 
 /// What an `mcp.status` caller can do next.
@@ -98,6 +128,7 @@ mod tests {
             repo_id: "abc".into(),
             repo_state: RepoStateView::Observed,
             worktree: UntrustedName::new("shop-feat-a"),
+            branch: None,
             main: false,
             requester: Actor::Agent {
                 kind: AgentKind::ClaudeCode,
@@ -120,6 +151,46 @@ mod tests {
         };
         let value = serde_json::to_value(&unattributed).unwrap();
         assert_eq!(value["action"], "register-to-write");
+        let with_branch = McpStatus {
+            branch: Some(UntrustedName::new("feat-a")),
+            ..unattributed
+        };
+        let value = serde_json::to_value(&with_branch).unwrap();
+        assert_eq!(value["branch"], serde_json::json!({"untrusted": "feat-a"}));
+    }
+
+    /// ADR-MCP-001 § 6: every name of the tool's status is cut at 100
+    /// characters, marked `truncated`.
+    #[test]
+    fn the_mcp_status_cuts_every_name() {
+        let long = UntrustedName::new("n".repeat(1024));
+        let status = McpStatus {
+            repo_id: "abc".into(),
+            repo_state: RepoStateView::Observed,
+            worktree: long.clone(),
+            branch: Some(long.clone()),
+            main: true,
+            requester: Actor::Agent {
+                kind: AgentKind::Other,
+                name: Some(long),
+                origin: AgentOrigin::Registered,
+            },
+            action: None,
+        }
+        .for_mcp();
+        let Actor::Agent {
+            name: Some(name), ..
+        } = &status.requester
+        else {
+            panic!("an agent");
+        };
+        for text in [&status.worktree, status.branch.as_ref().unwrap(), name] {
+            assert_eq!(
+                text.raw().chars().count(),
+                crate::mcp_view::MAX_MCP_NAME_CHARS
+            );
+            assert!(text.is_truncated());
+        }
     }
 
     /// Reserved commands are never offered over MCP; the read of the

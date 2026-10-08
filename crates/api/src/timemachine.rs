@@ -12,7 +12,6 @@ use serde::{Deserialize, Serialize};
 use crate::Untrusted;
 use crate::actor::Actor;
 use crate::catalog::{Layer, OperationOutcome};
-use crate::untrusted::MAX_MCP_UNTRUSTED_BYTES;
 
 /// Most keys in `operation.prepare` arguments.
 pub const MAX_ARGS_KEYS: usize = 32;
@@ -167,7 +166,7 @@ impl OperationRunResult {
                 .changed_refs
                 .iter()
                 .take(MAX_REPORTED_REFS)
-                .map(|r| r.capped(MAX_MCP_UNTRUSTED_BYTES))
+                .map(|r| r.mcp_name())
                 .collect(),
             outcome: self.outcome,
         }
@@ -295,7 +294,7 @@ fn cap_actor(actor: &Actor) -> Actor {
     match actor {
         Actor::Agent { kind, name, origin } => Actor::Agent {
             kind: *kind,
-            name: name.as_ref().map(|n| n.capped(MAX_MCP_UNTRUSTED_BYTES)),
+            name: name.as_ref().map(|n| n.mcp_name()),
             origin: *origin,
         },
         Actor::Unattributed => Actor::Unattributed,
@@ -522,6 +521,7 @@ impl TimelineParams {
 mod tests {
     use super::*;
     use crate::actor::{AgentKind, AgentOrigin};
+    use crate::mcp_view::MAX_MCP_NAME_CHARS;
     use serde_json::{Map, Value};
 
     const ID: &str = "0f8e2b7a-1c3d-4e5f-8a9b-0c1d2e3f4a5b";
@@ -712,7 +712,7 @@ mod tests {
         // M-03 and SEC-12: never Git's output over MCP.
         assert!(!mcp.to_string().contains("hook said hi"));
         let r = &mcp["changed_refs"][0];
-        assert!(r["untrusted"].as_str().unwrap().len() <= MAX_MCP_UNTRUSTED_BYTES);
+        assert!(r["untrusted"].as_str().unwrap().chars().count() <= MAX_MCP_NAME_CHARS);
         assert_eq!(r["truncated"], true);
     }
 }
