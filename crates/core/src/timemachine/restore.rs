@@ -126,7 +126,7 @@ pub enum RestoreError {
     Internal(String),
 }
 
-/// The base permission rule (ADR-TMC-005 § 2) over every actor whose work
+/// The base permission rule over every actor whose work
 /// the restore takes back. An unattributed requester over MCP is always
 /// `OtherActor`, owners or not; otherwise `Ok` with no owners. Any owner that yields
 /// `OtherActor` makes the result `OtherActor`; otherwise any
@@ -137,7 +137,8 @@ pub fn restore_permission(
     channel: Channel,
     owners: &[Requester],
 ) -> Result<(), TmRejectReason> {
-    // Unattributed over MCP never gets here (TQ-7 → a); refuse anyway.
+    // Unattributed over MCP never gets here (the channel refuses it first);
+    // refuse anyway.
     if matches!(who, Requester::Unattributed) && channel == Channel::Mcp {
         return Err(TmRejectReason::OtherActor);
     }
@@ -156,7 +157,7 @@ pub fn restore_permission(
     }
 }
 
-/// Records a rejected restore (ADR-TMC-005 § 4): `intent → rejected`.
+/// Records a rejected restore: `intent → rejected`.
 fn record_restore_rejection(
     oplog: &Mutex<Oplog>,
     scope: Scope,
@@ -198,7 +199,7 @@ fn root_key(root: &Path) -> String {
 }
 
 /// The point's meta if it is still a point of the timeline, intact in the
-/// store, and it holds `worktree` (ADR-TMC-003 § 3).
+/// store, and it holds `worktree`.
 fn valid_point(
     store: Option<&SnapshotStore>,
     point: &SnapshotView,
@@ -300,7 +301,7 @@ pub fn restore_to(
     };
 
     // The repo is held from planning to the close, with the key the executor
-    // queues on (ADR-CKP-002 § 5): a busy repo costs no prior snapshot.
+    // queues on: a busy repo costs no prior snapshot.
     let give_up = || env.stopping.load(std::sync::atomic::Ordering::SeqCst);
     let Ok(guard) =
         repo_lock::lock_queued(&repo.write_lock_key, MAX_QUEUED_PER_REPO, &give_up, |_| {})
@@ -334,7 +335,7 @@ pub fn restore_to(
         return Err(RestoreError::Internal("oplog unavailable".into()));
     };
 
-    // A valid point (ADR-TMC-003 § 3): complete, intact, holding this worktree.
+    // A valid point: complete, intact, holding this worktree.
     let point = snaps
         .iter()
         .find(|s| s.record.snapshot_id == snapshot_id)
@@ -352,7 +353,8 @@ pub fn restore_to(
     let (after, tampered_after) = operations_after(&ops, &snaps, &point);
 
     // The worktrees of the plan, by their roots in the repo's validated
-    // state (SEC-TMC-09): the oplog's scopes and the meta only intersect it.
+    // state: the oplog's scopes and the meta are untrusted and only
+    // intersect it.
     let Ok(registered) = registered_worktrees(worktree) else {
         return Err(reject(
             own_scope,
@@ -579,12 +581,12 @@ pub fn restore_to(
         }
     }
 
-    // Base permission rule (ADR-TMC-005 § 2), over every owner.
+    // Base permission rule, over every owner.
     if let Err(reason) = restore_permission(&who.requester, channel, &owners) {
         return Err(reject(scope, engine_mark, reason));
     }
-    // Next, in this order: confirmation (US-TMC-013), Guardrails
-    // (US-TMC-021) and overlap (US-TMC-012).
+    // Next, in this order: the interactive confirmation, Guardrails and the
+    // overlap with other work, once each exists.
 
     // A branch checked out in a worktree outside the plan never moves: it
     // would change that worktree's history under its files.
@@ -612,7 +614,7 @@ pub fn restore_to(
         worktrees: existing.iter().chain(&recreate).cloned().collect(),
         refs: RefScope::Only(refs.clone()),
     };
-    // Git preconditions before the restore's prior (ADR-TMC-005 § 4); the
+    // Git preconditions before the restore's prior; the
     // applier runs them again under its locks.
     {
         let applier = Applier::new(
