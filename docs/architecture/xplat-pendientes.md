@@ -29,8 +29,8 @@ Las rutas cortas de la columna Origen van bajo `docs/requirements/features/`. La
 |---|---|---|---|---|---|
 | XP-01 | Windows | TS-GRP-004, ADR-GRP-005 § 5, ADR-CKP-003, SEC-08 | Canal local por named pipe: DACL con el SID del usuario, primera instancia, rechazo de clientes remotos, SQOS e identidad del servidor | Máquina Windows | hecho (2026-10-07, ver "Canal por named pipe" y DS-TS-GRP-004 § 8); falta probar un cliente de otra cuenta real de Windows y los comandos reservados siguen rechazados por TQ-14 |
 | XP-02 | Windows | TS-GRP-004 | Reloj monotónico con QPC comparable entre procesos | Máquina Windows | pendiente |
-| XP-03 | Linux | TS-GRP-004 | Identidad del par con `SO_PEERCRED` y `/proc` (inicio calculado a 100 Hz; falta `SO_PEERPIDFD`) | Contenedor | parcial: el código Linux compila y sus tests unitarios pasan (2026-10-05); no hay tests de proceso del canal en Linux (ver XP-04) |
-| XP-04 | Linux | US-GRP-001, US-GRP-002, US-GRP-012, TS-GRP-004, INF-GRP-001 | Llevar a Linux los e2e de proceso que hoy son `cfg(target_os = "macos")` (`script`, `nc -U`, `lsof`) | Contenedor | parcial: `apps/cli/tests/daemon_process.rs` pasa (2026-10-05); `channel_process`, `protected_process`, `repo_state`, `base_branch`, `live_changes`, `mcp/on_demand`, `core/channel` y `core/channel_protected` están sin portar |
+| XP-03 | Linux | TS-GRP-004 | Identidad del par con `SO_PEERCRED` y `/proc` (inicio calculado a 100 Hz; falta `SO_PEERPIDFD`) | Contenedor | parcial: los tests del canal con daemon en proceso pasan en Linux (2026-10-08, "Ronda Linux"). Se corrigió que el inicio de `/proc` se comparaba con el reloj de pared. Falta `SO_PEERPIDFD` |
+| XP-04 | Linux | US-GRP-001, US-GRP-002, US-GRP-012, TS-GRP-004, INF-GRP-001 | Llevar a Linux los e2e de proceso que hoy son `cfg(target_os = "macos")` (`script`, `nc -U`, `lsof`) | Contenedor | parcial: `apps/cli/tests/daemon_process.rs` pasa (2026-10-05). Desde el 2026-10-08 ("Ronda Linux") también corren y pasan en Linux los de daemon en proceso de `crates/core/tests`: `channel`, `channel_protected`, `channel_scopes`, `channel_capabilities`, `us_tmc_001`, `us_tmc_002`, `us_tmc_004`, `daemon_tiers` y `discovery`. Siguen sin portar `channel_process`, `protected_process`, `repo_state`, `base_branch`, `live_changes` y `mcp/on_demand` |
 | XP-05 | Linux + Windows | US-GRP-002 (D2) | Watcher compartido: `max_user_instances`, agotamiento de `max_user_watches` y handles de Windows al borrar un worktree | VM Linux (Lima) + máquina Windows | parcial: `crates/core/tests/watch.rs` pasa en el contenedor (2026-10-05); los límites del kernel quedan para Lima |
 | XP-06 | Linux + Windows | ADR-GRP-011, INF-GRP-002, SPIKE-GRP-002, NFR-04 | Presupuesto de frescura (≤ 300 ms p95), `timer_slack` y tiempos del observador. **Decisión de Rene (2026-10-07)**: en los runners compartidos el banco solo avisa; el presupuesto absoluto se mide en una máquina de referencia | VM Linux (Lima, como referencia) + máquina Windows | pendiente |
 | XP-07 | Linux | INF-GRP-001, ADR-GRP-009 (Validación 7), NFR-01 | Auditoría de `exec` con `strace -f` sin root y suites `repo_intact` en verde | Contenedor + CI `ubuntu-latest` | **pasa** en el contenedor (2026-10-05): 72 tests `repo_intact` con `GITRAPTOR_EXEC_AUDIT=strace`, incluido `kernel_tracer` |
@@ -95,6 +95,60 @@ Los 2 ignorados lo están por diseño: `m1_child_reads` lo lanza `gitoxide_never
 No apareció ningún bug real de Linux en el código de producto (clase a) ni ningún límite del contenedor en las suites automáticas (clase b). Los límites conocidos de antemano ya están asignados a VM en la tabla.
 
 **Cobertura de arquitectura**: el contenedor solo prueba **arm64**. En x86_64, el CI (`ubuntu-latest`) prueba solo el Git de la distro, así que el mínimo 2.38.5 está validado únicamente en arm64. El comportamiento de Git no depende de la arquitectura.
+
+## Ronda Linux (2026-10-08)
+
+Validación en el contenedor de todo lo mergeado desde el 2026-10-06 con código específico por plataforma. Hasta ahora, en Linux solo lo había probado el CI de ubuntu. Incluye la observación por niveles con centinela (TS-GRP-006, #164 y #167), los repos descubiertos con watcher inotify no recursivo (US-GRP-020, #170), la segunda línea frente a `--no-verify` con `/proc/<pid>/cmdline` (#141), el barrido de temporales (#172), la atribución S4 (#155), el registro de bloqueos (#154), el MCP (#140, #157 y #159) y el cliente del canal en `crates/api` (#174).
+
+Entorno: Ubuntu 24.04 arm64, kernel 6.12.76-linuxkit, rustc 1.99.0, strace 6.8, `fs.inotify.max_user_watches` = 1048576. Docker Desktop con 7,6 GB. Rama `fix/linux-validation-round`.
+
+| Pasada | Commit | Etapa | Pasan | Fallan | Ignorados |
+|---|---|---|---|---|---|
+| Línea base (`main`) | `42b7d1d` | Git 2.43.0 (distro) | 1074 | 0 | 6 |
+| Línea base (`main`) | `42b7d1d` | Git 2.38.5 | 1074 | 0 | 6 |
+| Línea base (`main`) | `42b7d1d` | Git 2.56.0 | 1074 | 0 | 6 |
+| Línea base (`main`) | `42b7d1d` | `repo_intact` con `GITRAPTOR_EXEC_AUDIT=strace` | 129 | 0 | 0 |
+| Tests de daemon en proceso habilitados en Linux, sin arreglos | `42b7d1d` + 9 `cfg` | Git 2.43.0 | 1167 | 4 | 6 |
+| Después de esta rama | esta rama | Git 2.43.0 (distro) | 1174 | 0 | 7 |
+| Después de esta rama | esta rama | Git 2.38.5 | 1174 | 0 | 7 |
+| Después de esta rama | esta rama | Git 2.56.0 | 1174 | 0 | 7 |
+| Después de esta rama | esta rama | `repo_intact` con `GITRAPTOR_EXEC_AUDIT=strace` | 130 | 0 | 0 |
+
+Los 7 ignorados lo están por diseño:
+
+- `m1_child_reads`, `sweep_cycles_under_a_git_shim` y el nuevo `raw_child_asks_to_stop`: los lanza otro test.
+- `budget_warm_load_p95` y `latency_report`: son de tiempos y se corren a mano.
+- `a_user_scope_server_starts_in_the_session_folder` e `install_and_uninstall_with_the_real_claude_code`: necesitan la CLI de Claude Code.
+
+Además se pasó `cargo clippy --workspace --all-targets -- -D warnings` dentro del contenedor, porque el código `cfg(target_os = "linux")` no se lintea en macOS. Salió limpio. Los tests de esta rama se repitieron 20 veces en el contenedor sin ningún fallo: los de `channel_protected` y `channel` con un hijo del daemon, `discovery_*`, los de dormidos de `daemon_tiers` y `channel::peer::linux_tests`.
+
+**Hallazgo principal**: la línea base salía en verde, pero no cubría lo que se pedía validar. `crates/core/tests/discovery.rs`, `daemon_tiers.rs`, los cuatro `channel*.rs` y los tres `us_tmc_00*.rs` eran `#![cfg(target_os = "macos")]`. En Linux no se ejercitaba el inotify de discovery, el centinela de los dormidos ni la identidad del par en el canal. Esta rama los habilita en Linux, y en total pasan a correr 93 tests más. Al habilitarlos salieron 4 fallos:
+
+| Fallo | Clase | Causa | Arreglo |
+|---|---|---|---|
+| `channel_protected::a_child_of_the_operation_cannot_use_a_reserved_command` (`via: None` en lugar de `Executor`) | (a) | En Linux, `ProcInfo.start_us` se calcula con `btime` (segundos enteros) más los ticks de 100 Hz desde el arranque, pero se comparaba con instantes del reloj de pared: `opened_us` de la marca del ejecutor y `accepted_us` del par. El truncado de `btime` adelanta hasta 1 s el inicio calculado, así que un nieto de la operación, con doble fork, salía "anterior" a la marca y perdía su atribución al ejecutor (DEP-MCP-3, H-01). | `channel::peer::proc_clock_us()` da el "ahora" en el mismo reloj que `start_us`: en Linux, `btime` más `/proc/uptime` en ticks enteros, y en el resto de SO el reloj de pared. Lo usan la apertura de la marca (`timemachine::protected`) y el `accepted_us` del canal. El test unitario nuevo `a_child_started_after_the_clock_is_not_older` (20 hijos) fija la propiedad. |
+| `daemon_tiers::a_dormant_repo_has_its_store_closed` (`NotFound`) | (d) | El test usaba `lsof`, que no hay en la imagen ni en una instalación mínima. | En Linux lee `/proc/self/fd` y `/proc/self/maps`, igual que lo que lista `lsof`. La aserción no cambia. |
+| `discovery::discovery_the_home_root_skips_hidden_and_excluded_folders` | (d) | El test esperaba las exclusiones de macOS (`Documents`). En Linux, la exclusión de la carpeta personal es `snap`. | El test crea también `~/snap` y espera las exclusiones de cada plataforma: en macOS se excluye `Documents` y se propone `snap`; en Linux al revés. Así se valida la exclusión `snap`. |
+| `channel::a_child_of_the_daemon_cannot_use_reserved_commands` (salida vacía) | (d) | El hijo del daemon era `sh` con `/usr/bin/nc -U`, y `nc` no está en la imagen. | El hijo es una copia del binario de test (`raw_child_asks_to_stop`, ignorado y lanzado por el test), que habla JSON-RPC por el socket sin la librería cliente. Las aserciones no cambian, y en macOS también pasa. |
+
+**Comprobaciones pedidas**:
+
+- **Inotify no recursivo de discovery**: hay un test nuevo, `discovery_a_normal_root_is_listed_on_a_change_of_its_first_level` (Linux y Windows), con todos los intervalos a 1 h menos el `settle`. Un repo creado después del primer listado solo puede llegar por el watch, y llega. La raíz amplia nunca se vigila: no hay watch y se lista cada `broad_poll`, lo que cubren los tests de raíz `home`. La exclusión `snap` queda validada (ver la tabla).
+  - **Observación, no es un fallo**: una carpeta creada primero y convertida en repo después (`mkdir x` y, pasados unos segundos, `git init` dentro) no genera ningún evento en la raíz, porque el watch no es recursivo. Se propone en el listado de seguridad de 5 min. Lo comprobó un experimento en el contenedor, que no se conserva como test. Está dentro de lo que acepta ADR-GRP-010 N6 ("el listado de seguridad … cubre los eventos perdidos y los clones en curso"). En macOS el sondeo es de 30 s. Si molesta en el dogfooding, se puede vigilar un rato las carpetas nuevas del primer nivel.
+- **Centinela de los dormidos con inotify**: `daemon_tiers` pasa 8 de 8 en Linux, con las tres versiones de Git. Incluye `edit_then_reset_hard_in_a_dormant_repo_is_recoverable` (la condición NFR-01 del PO, Q49), `commits_while_dormant_reach_the_history_in_order` y `a_dormant_repo_has_its_store_closed`. También pasan `observe_tiers` (`the_sweep_finds_a_commit_the_sentinel_missed` y `the_slow_reconcile_finds_an_edit_the_sentinel_missed`).
+- **`/proc/<pid>/cmdline` en la segunda línea (#141)**: los tests de `second_line` y el e2e `guard_us_grd_018` pasan en Linux con las tres versiones de Git.
+- **`ETXTBSY`**: ninguno en 5 pasadas completas (unas 5.800 ejecuciones de test). Aun así, `testkit::canary::script` escribía el script con un descriptor propio, el patrón que corrigió #152, y lo usan las suites `repo_intact`, con muchos hilos lanzando Git. Ahora lo escribe un `sh` hijo. Hay otros sitios con el mismo patrón que no se tocan en esta rama (riesgo latente, sin fallo observado):
+  - `crates/core/tests/watch.rs:471`, `observe_tiers.rs:394` y `channel_protected.rs:1219`.
+  - `apps/cli/tests/` (`daemon_process`, `raw_git_undo`, `live_fleet`, `continuous_observation`, `events_us_grd_019`, `claude_sessions`, `repo_state` y `guard_us_grd_001`).
+- **Atribución S4 (#155)**: pasa. `detect` compara el inicio de `/proc` con el reloj de pared con 1 s de tolerancia (`start_tolerance`), así que es inclusivo por diseño. No se cambia aquí, pero ahora podría usar `proc_clock_us` y quitar la tolerancia.
+- **Barrido de temporales (#172), registro de bloqueos (#154), MCP (#140, #157 y #159) y cliente del canal en `crates/api` (#174)**: sus tests pasan en Linux con las tres versiones de Git, y no hubo fallos.
+
+**Arreglos del arnés** (clase (e)):
+
+- `xplat/run-linux.sh --dirty` en macOS metía archivos AppleDouble (`._<nombre>.rs`) por los atributos extendidos, y los tests de frontera, que leen todos los `.rs`, fallaban con UTF-8 inválido. Ahora el script usa `COPYFILE_DISABLE=1`.
+- Con 7,6 GB en Docker, `ld` moría por memoria (`signal 9`) al reenlazar todos los binarios de test. El script ahora pasa `CARGO_BUILD_JOBS` al contenedor cuando está definido; esta ronda usó 3.
+
+**Sigue pendiente**: los límites del kernel (`max_user_watches` y `max_user_instances`, XP-05) en Lima; `SO_PEERPIDFD` (XP-03); los e2e de proceso que siguen siendo solo de macOS (XP-04); y x86_64, que solo cubre el CI de ubuntu.
 
 ## Máquina Windows real
 
