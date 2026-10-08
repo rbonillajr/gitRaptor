@@ -561,6 +561,26 @@ mod repo_intact {
         assert_eq!(t.files(), before);
     }
 
+    /// M1 exit criterion 3 at the engine's level, on every OS: uncommitted work thrown away by
+    /// a real `git reset --hard` comes back by applying the snapshot that captured it.
+    #[test]
+    fn work_thrown_away_by_a_raw_reset_hard_comes_back() {
+        let t = Apply::busy();
+        t.f().write("a.txt", "uncommitted work\n");
+        let captured = t.snapshot();
+        let files = t.files();
+        t.f().git(&["reset", "-q", "--hard"]);
+        assert_ne!(
+            std::fs::read(t.f().repo.join("a.txt")).unwrap(),
+            b"uncommitted work\n"
+        );
+        let (op, result) = t.apply(&captured, ApplyHooks::default());
+        let report = result.unwrap();
+        assert!(report.paths.is_empty(), "{report:?}");
+        assert_eq!(t.state_of(&op), OperationState::Finished);
+        assert_eq!(t.files(), files);
+    }
+
     #[test]
     fn a_link_planted_while_applying_never_leads_outside() {
         let t = Apply::busy();
