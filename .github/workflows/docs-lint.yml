@@ -40,6 +40,7 @@ jobs:
               - 'docs/**'
               - 'tools/docs-lint/**'
               - 'tools/status/**'
+              - 'tools/dogfooding/**'
               - '.github/workflows/docs-lint.yml'
       - name: Nothing to check
         if: steps.filter.outputs.changed == 'false' && github.event.pull_request.changed_files < 3000
@@ -56,6 +57,9 @@ jobs:
       - name: Test the release status generator
         if: steps.filter.outputs.changed != 'false' || github.event.pull_request.changed_files >= 3000
         run: node --test tools/status/release-status.test.mjs
+      - name: Test the dogfooding log
+        if: steps.filter.outputs.changed != 'false' || github.event.pull_request.changed_files >= 3000
+        run: node --test tools/dogfooding/dogfooding.test.mjs
       - name: Release status is up to date
         if: steps.filter.outputs.changed != 'false' || github.event.pull_request.changed_files >= 3000
         run: node tools/status/release-status.mjs --check
