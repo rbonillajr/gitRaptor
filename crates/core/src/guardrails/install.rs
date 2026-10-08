@@ -189,7 +189,9 @@ fn git_sh(git: &Path) -> String {
     if !cfg!(windows) {
         return String::new();
     }
-    let Some(root) = git_root(git) else {
+    // The resolved path may carry the verbatim prefix, which the checks below refuse.
+    let git = gitraptor_policy::guard::fastpath::simplified(git.to_path_buf());
+    let Some(root) = git_root(&git) else {
         return String::new();
     };
     ["usr/bin/sh.exe", "bin/sh.exe"]
