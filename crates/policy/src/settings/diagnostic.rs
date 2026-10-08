@@ -66,6 +66,10 @@ pub enum Code {
     OutOfRange,
     /// A key the schema does not know. Only that key is ignored.
     UnknownKey,
+    /// Discovery roots declared in a settings file (`discovery`, `codeRoots`, `roots`, at the
+    /// top or in `engine`). Ignored: roots are profile state that only `raptor repo roots add`
+    /// changes, because an agent can write a settings file (BR-AUTH-003, ADR-GRP-010 N7).
+    DiscoveryRootsIgnored,
     /// An operation outside the catalog in `permissions`. The source is partial (D12).
     UnknownOperation,
     /// A policy this version does not apply yet. The source is partial (D12).
@@ -113,6 +117,7 @@ impl Code {
             Self::WrongType => "wrong-type",
             Self::OutOfRange => "out-of-range",
             Self::UnknownKey => "unknown-key",
+            Self::DiscoveryRootsIgnored => "discovery-roots-ignored",
             Self::UnknownOperation => "unknown-operation",
             Self::PolicyNotSupported => "policy-not-supported",
             Self::KeyNotAllowedAtLevel => "key-not-allowed-at-level",
