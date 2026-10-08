@@ -2,12 +2,14 @@
 //! the real `App`, channel thread and queues on `TestBackend`, over a fake
 //! channel that serves raw frames. No daemon, no profile, no repo.
 //!
-//! - Synthetic microbench (Validation V3): a burst of 1,000 `worktree.state`
-//!   events of 10 worktrees goes through the channel thread (decode
-//!   included). It fails when the p95 of `t_client_recv` → `t_render` goes
-//!   over 100 ms, naming the slowest stage. Apply ingests the fleet rows
-//!   (US-CKP-001). The gate with the real daemon, end to end, is the
-//!   `tui-modify` scenario of the engine bench (INF-GRP-002).
+//! - Synthetic burst (Validation V3): 1,000 `worktree.state` events of 10
+//!   worktrees go through the channel thread (decode included): all are
+//!   applied, the burst is coalesced, and the timings are printed. The p95
+//!   of `t_client_recv` → `t_render` (100 ms, naming the slowest stage) is CPU
+//!   time, so it is not asserted in a debug test, where load alone breaks it
+//!   (INF-TMC-001): the gate is the `tui-modify` scenario of the engine
+//!   bench, in release (INF-GRP-002). Apply ingests the fleet rows
+//!   (US-CKP-001).
 //! - Coalescing and input first: deterministic, no clock thresholds.
 //! - Resync and reconnection redo the snapshot.
 
@@ -36,7 +38,7 @@ use gitraptor_cli::model::{ConnState, EngineMsg, Model, Msg, Size, Stamped};
 use gitraptor_cli::present::i18n::Lang;
 use gitraptor_cli::queue::{self, Outlet};
 use gitraptor_cli::tui::app::App;
-use gitraptor_cli::tui::metrics::{COCKPIT_P95_NS, KEY_FEEDBACK_P95_NS};
+use gitraptor_cli::tui::metrics::KEY_FEEDBACK_P95_NS;
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -308,10 +310,10 @@ impl Drop for Harness {
     }
 }
 
-/// The microbench: the Cockpit p95 gate (ADR-GRP-011 E2) and the key
-/// feedback, under a burst of 1,000 events.
+/// A burst of 1,000 events is applied whole and coalesced. The Cockpit p95
+/// gate (ADR-GRP-011 E2) is the engine bench's, not a debug test's.
 #[test]
-fn a_burst_of_1000_events_is_painted_within_the_cockpit_budget() {
+fn a_burst_of_1000_events_is_applied_whole_and_coalesced() {
     let mut h = Harness::new(1);
     h.live();
     let frames: Vec<Vec<u8>> = (1..=BURST).map(event_frame).collect();
@@ -346,13 +348,6 @@ fn a_burst_of_1000_events_is_painted_within_the_cockpit_budget() {
             .and_then(|r| r.data.as_ref())
             .map(|d| d.worktrees.len()),
         Some(WORKTREES)
-    );
-    let p95 = metrics.total.p95().unwrap();
-    assert!(
-        p95 <= COCKPIT_P95_NS,
-        "Cockpit p95 {:.1} ms > 100 ms; slowest stage: {:?}; {metrics}",
-        p95 as f64 / 1e6,
-        metrics.slowest_stage()
     );
     assert!(
         metrics.frames < BURST / 2,
