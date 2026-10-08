@@ -12,6 +12,7 @@ use gitraptor_api::methods;
 use gitraptor_api::rpc::{ErrorObject, code};
 use gitraptor_api::timemachine::{PriorFailedData, PriorFailure};
 use gitraptor_api::untrusted::sanitize;
+use gitraptor_core::channel::authz::{ConsoleIssue, own_console_issue};
 use gitraptor_core::client::{Client, ClientError, ClientOptions, ensure_daemon};
 use gitraptor_core::profile::ProfileDirs;
 
@@ -86,8 +87,20 @@ pub(crate) fn refusal_text(err: &ErrorObject, agent_key: &str) -> String {
         .map(|d| d.reason);
     match reason {
         Some(RefusalReason::AgentAncestry | RefusalReason::SessionLeaderAgent) => t(agent_key, &[]),
-        Some(RefusalReason::NoControllingTerminal) => t("common.refused-terminal", &[]),
+        Some(RefusalReason::NoControllingTerminal) => t(terminal_key(own_console_issue()), &[]),
         _ => t("common.refused-unverified", &[]),
+    }
+}
+
+/// The message for `no-controlling-terminal`: on Windows this process
+/// diagnoses its own console to say why and what to do (DS-TS-GRP-004 § 9,
+/// C10). The daemon decided; this only explains.
+fn terminal_key(issue: Option<ConsoleIssue>) -> &'static str {
+    match issue {
+        None => "common.refused-terminal",
+        Some(ConsoleIssue::NoConsole) => "common.refused-terminal-no-console",
+        Some(ConsoleIssue::NotInteractive) => "common.refused-terminal-session",
+        Some(ConsoleIssue::NotYours) => "common.refused-terminal-foreign-console",
     }
 }
 
@@ -180,5 +193,29 @@ mod tests {
             }),
         );
         assert_ne!(error_text(err), "prior.no-space");
+    }
+
+    /// C10: every console issue has its own message (en/es), and the generic
+    /// one stays for Unix.
+    #[test]
+    fn a_terminal_refusal_explains_the_console_issue() {
+        let issues = [
+            ConsoleIssue::NoConsole,
+            ConsoleIssue::NotInteractive,
+            ConsoleIssue::NotYours,
+        ];
+        let keys: Vec<_> = issues
+            .into_iter()
+            .map(Some)
+            .chain([None])
+            .map(terminal_key)
+            .collect();
+        for key in &keys {
+            assert!(i18n::has_key(key), "{key}");
+        }
+        assert_eq!(keys[3], "common.refused-terminal");
+        let mut unique = keys.clone();
+        unique.dedup();
+        assert_eq!(unique.len(), keys.len());
     }
 }
