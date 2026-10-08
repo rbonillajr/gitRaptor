@@ -174,9 +174,13 @@ impl RepoMarks {
             return false;
         }
         let on_disk = head_log_len(&git_dir);
+        // A repo never touched is quiet: on Windows the clock counts from this process's first
+        // reading, so "long ago" cannot be told from the time alone (XP-02).
         let quiet = || {
+            let touched = self.touched(repo_id);
             let settle_ns = u64::try_from(SETTLE.as_nanos()).unwrap_or(u64::MAX);
-            gitraptor_api::clock::monotonic_ns().saturating_sub(self.touched(repo_id)) >= settle_ns
+            touched == 0
+                || gitraptor_api::clock::monotonic_ns().saturating_sub(touched) >= settle_ns
         };
         match self.head_log(repo_id, worktree) {
             Some(persisted) if on_disk > 0 => persisted == on_disk,
