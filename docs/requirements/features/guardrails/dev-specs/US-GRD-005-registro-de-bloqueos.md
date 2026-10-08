@@ -576,3 +576,16 @@ El coordinador aprobó el plan con cuatro ajustes, ya incorporados:
 ## Estado de la implementación (2026-10-07)
 
 Implementado en la rama `feat/US-GRD-005-guard-log`, de T001 a T007. Verificado solo en macOS. Linux queda para la CI. Windows no tiene transporte del canal: la etapa de validación multiplataforma queda pendiente.
+
+**Revisión (2026-10-07)**: la hizo un revisor con contexto limpio y no encontró nada Critical. Hubo una ronda de arreglos:
+
+| Hallazgo | Resolución |
+|---|---|
+| M1 · `sanitize_remote` dejaba la contraseña con `:`, `?`, `/` o `#` | Arreglado: se quita todo hasta el último `@` antes de cortar query y fragmento, con tests |
+| M2 · un proceso local podía escribir en el registro de otro repo mandando su `commonDir` | Arreglado: solo se anota si el directorio del cliente, canonicalizado, está en ese repo |
+| M3 · el e2e de ráfaga dependía de la velocidad de la máquina | Arreglado: exige el recuento exacto; el tope se prueba en el almacén |
+| L5 · el rebase guardaba argv, que puede ser un oid | Arreglado: no se guarda |
+| L6 · la normalización recorría todas las actualizaciones | Arreglado: se toman como mucho 16 |
+| L7 · la ventana de agregación deslizaba | Arreglado: cuenta desde la primera ocurrencia |
+| L4 · en un commit el actor se resuelve dos veces | Aceptado: solo pasa con deny o aviso, y `resolve_logged` es el único que dice si hay ejecutor |
+| L8 · `daemon/mod.rs` recibe una llamada de la feature en el latido | Deuda: `DaemonModule` no tiene un punto de latido; queda en el PR |
