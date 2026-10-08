@@ -2,6 +2,7 @@
 
 > Índice maestro de GitRaptor. Agrupa las Épicas y, dentro de ellas, las Features. Cada Feature enlaza a su `context.md` en `docs/requirements/features/<feature>/`.
 > Fuente del alcance: [BRD-GRP-001](../business/gitraptor-documento-de-negocio.md) § 6.
+> Estado de cada ficha, por feature y por hito: [release-status.md](release-status.md), generado con `node tools/status/release-status.mjs` desde el frontmatter de las fichas (no se edita a mano; docs-lint falla si está desactualizado).
 
 ---
 
