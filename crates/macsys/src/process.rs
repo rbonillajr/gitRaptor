@@ -44,6 +44,82 @@ pub fn parse_procargs2(area: &[u8]) -> Option<Vec<OsString>> {
     Some(out)
 }
 
+/// A process as the detector's table needs it: identity `(pid, start_us)` and parent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProcBrief {
+    pub pid: u32,
+    pub ppid: u32,
+    /// Start time, microseconds since the epoch (the `pbi_start_tv*` of `proc_pidinfo`).
+    pub start_us: u64,
+}
+
+/// `sizeof(struct kinfo_proc)`, the same on arm64 and x86_64 (both LP64).
+pub(crate) const KINFO_PROC_SIZE: usize = 648;
+/// Offsets in `struct kinfo_proc` (`<sys/sysctl.h>`), checked with `offsetof` on both
+/// architectures: `kp_proc.p_un.__p_starttime` (`tv_sec` i64, `tv_usec` i32), `kp_proc.p_stat`,
+/// `kp_proc.p_pid` and `kp_eproc.e_ppid`.
+const START_SEC: usize = 0;
+const START_USEC: usize = 8;
+const STAT: usize = 36;
+const PID: usize = 40;
+const PPID: usize = 560;
+/// `p_stat` of a zombie: it ended and waits for its parent, so it is not listed.
+const SZOMB: u8 = 5;
+
+/// Every live process whose effective uid is `uid` (as `proc_listpids(PROC_UID_ONLY)` filters),
+/// with one `sysctl(KERN_PROC_UID)` instead of one `proc_pidinfo` per process (RES-01: the
+/// detector reads this table every second). `None` when it cannot be read, and outside macOS on
+/// arm64 or x86_64, the two layouts the offsets were checked on: callers fall back to
+/// `proc_pidinfo`.
+pub fn user_processes(uid: u32) -> Option<Vec<ProcBrief>> {
+    #[cfg(all(
+        target_os = "macos",
+        any(target_arch = "aarch64", target_arch = "x86_64")
+    ))]
+    {
+        parse_kinfo(&crate::ffi_kinfo::kinfo_by_uid(uid)?)
+    }
+    #[cfg(not(all(
+        target_os = "macos",
+        any(target_arch = "aarch64", target_arch = "x86_64")
+    )))]
+    {
+        let _ = uid;
+        None
+    }
+}
+
+/// Parses an array of `struct kinfo_proc` records, skipping zombies. `None` when its length is
+/// not a whole number of records.
+pub fn parse_kinfo(table: &[u8]) -> Option<Vec<ProcBrief>> {
+    if !table.len().is_multiple_of(KINFO_PROC_SIZE) {
+        return None;
+    }
+    let i32_at = |r: &[u8], at: usize| {
+        r.get(at..at + 4)
+            .map(|b| i32::from_ne_bytes(b.try_into().unwrap()))
+    };
+    let i64_at = |r: &[u8], at: usize| {
+        r.get(at..at + 8)
+            .map(|b| i64::from_ne_bytes(b.try_into().unwrap()))
+    };
+    table
+        .as_chunks::<KINFO_PROC_SIZE>()
+        .0
+        .iter()
+        .filter(|r| r[STAT] != SZOMB)
+        .map(|r| {
+            let sec = u64::try_from(i64_at(r, START_SEC)?).ok()?;
+            let usec = u64::try_from(i32_at(r, START_USEC)?).ok()?;
+            Some(ProcBrief {
+                pid: u32::try_from(i32_at(r, PID)?).ok()?,
+                ppid: u32::try_from(i32_at(r, PPID)?).ok()?,
+                start_us: sec.saturating_mul(1_000_000).saturating_add(usec),
+            })
+        })
+        .collect()
+}
+
 #[cfg(unix)]
 fn os(bytes: &[u8]) -> OsString {
     use std::os::unix::ffi::OsStrExt;
@@ -92,6 +168,78 @@ mod tests {
         let args = process_args(std::process::id()).unwrap();
         let me: Vec<OsString> = std::env::args_os().collect();
         assert_eq!(args, me);
+    }
+
+    fn record(pid: i32, ppid: i32, sec: i64, usec: i32, stat: u8) -> Vec<u8> {
+        let mut r = vec![0u8; KINFO_PROC_SIZE];
+        r[START_SEC..START_SEC + 8].copy_from_slice(&sec.to_ne_bytes());
+        r[START_USEC..START_USEC + 4].copy_from_slice(&usec.to_ne_bytes());
+        r[STAT] = stat;
+        r[PID..PID + 4].copy_from_slice(&pid.to_ne_bytes());
+        r[PPID..PPID + 4].copy_from_slice(&ppid.to_ne_bytes());
+        r
+    }
+
+    #[test]
+    fn parses_records_and_skips_zombies() {
+        let mut t = record(42, 1, 1_700_000_000, 250_000, 2);
+        t.extend(record(43, 42, 1_700_000_001, 0, SZOMB));
+        t.extend(record(44, 42, 1_700_000_002, 7, 3));
+        assert_eq!(
+            parse_kinfo(&t).unwrap(),
+            [
+                ProcBrief {
+                    pid: 42,
+                    ppid: 1,
+                    start_us: 1_700_000_000_250_000
+                },
+                ProcBrief {
+                    pid: 44,
+                    ppid: 42,
+                    start_us: 1_700_000_002_000_007
+                },
+            ]
+        );
+        assert_eq!(parse_kinfo(&[]).unwrap(), []);
+        // A partial record, or a negative pid, is unreadable.
+        assert_eq!(parse_kinfo(&t[..KINFO_PROC_SIZE + 1]), None);
+        assert_eq!(parse_kinfo(&record(-1, 1, 0, 0, 2)), None);
+    }
+
+    /// The table agrees with `ps`, which reads the same records, for this process and a child.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn lists_this_process_and_a_child() {
+        let mut child = std::process::Command::new("sleep")
+            .arg("5")
+            .spawn()
+            .unwrap();
+        let uid = String::from_utf8(
+            std::process::Command::new("/usr/bin/id")
+                .arg("-u")
+                .output()
+                .unwrap()
+                .stdout,
+        )
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+        let table = user_processes(uid).unwrap();
+        child.kill().unwrap();
+        child.wait().unwrap();
+        let me = table.iter().find(|p| p.pid == std::process::id()).unwrap();
+        let kid = table.iter().find(|p| p.pid == child.id()).unwrap();
+        assert_eq!(kid.ppid, std::process::id());
+        assert!(me.start_us <= kid.start_us);
+        // Within a minute of now: the start is read from the right offset.
+        let now_us = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_micros() as u64;
+        assert!(now_us - kid.start_us < 60_000_000, "{kid:?}");
+        // Another user's process (launchd, uid 0) is not listed.
+        assert!(table.iter().all(|p| p.pid != 1));
     }
 
     #[cfg(target_os = "macos")]
