@@ -1,7 +1,7 @@
 //! ADR-GRP-016 § 1: capabilities in the handshake, `connection.accept` and
 //! the replacement of a daemon of the same protocol, with a real daemon
 //! (in-process) over a temporary profile (NFR-01).
-#![cfg(target_os = "macos")]
+#![cfg(any(target_os = "macos", target_os = "linux"))]
 
 mod common;
 

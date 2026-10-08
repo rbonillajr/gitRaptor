@@ -8,9 +8,9 @@
 //! protection. An edit in a dormant repo followed by a raw `reset --hard`
 //! leaves the edit recoverable from the Time Machine.
 //!
-//! macOS only, like the other channel tests. Linux: Pendiente: etapa de
-//! validación multiplataforma.
-#![cfg(target_os = "macos")]
+//! macOS and Linux, like the other channel tests (Linux validated in the
+//! container, 2026-10-08).
+#![cfg(any(target_os = "macos", target_os = "linux"))]
 
 mod common;
 
@@ -305,6 +305,7 @@ fn commits_while_dormant_reach_the_history_in_order() {
 }
 
 /// Files of this process whose path has `needle` (`lsof`, macOS).
+#[cfg(target_os = "macos")]
 fn open_files_with(needle: &str) -> usize {
     let out = std::process::Command::new("lsof")
         .args(["-n", "-P", "-Fn", "-p", &std::process::id().to_string()])
@@ -314,6 +315,23 @@ fn open_files_with(needle: &str) -> usize {
         .lines()
         .filter(|l| l.starts_with('n') && l.contains(needle))
         .count()
+}
+
+/// Files of this process whose path has `needle`, open or mapped like `lsof`
+/// lists them (`/proc/self/fd` and `/proc/self/maps`, Linux).
+#[cfg(target_os = "linux")]
+fn open_files_with(needle: &str) -> usize {
+    let open = std::fs::read_dir("/proc/self/fd")
+        .unwrap()
+        .filter_map(|e| std::fs::read_link(e.ok()?.path()).ok())
+        .filter(|target| target.to_string_lossy().contains(needle))
+        .count();
+    let mapped = std::fs::read_to_string("/proc/self/maps")
+        .unwrap()
+        .lines()
+        .filter(|l| l.contains(needle))
+        .count();
+    open + mapped
 }
 
 /// N1 step 4: a dormant repo has no file of its store open, and a wake
@@ -326,7 +344,10 @@ fn a_dormant_repo_has_its_store_closed() {
     // Active: its store is open (the threshold has not passed yet).
     let open = open_files_with(&store);
     if !r.log().contains("repo_dormant") {
-        assert!(open > 0, "the active store is not open: lsof sees nothing");
+        assert!(
+            open > 0,
+            "the active store is not open: no open file has its name"
+        );
     }
     r.logged("repo_dormant", 1);
     // The log line is written once the store is closed.

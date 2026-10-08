@@ -4,7 +4,7 @@
 //!
 //! No fixed waits: every test waits for the notification or answer that
 //! proves the fact, with a deadline only as a ceiling.
-#![cfg(target_os = "macos")]
+#![cfg(any(target_os = "macos", target_os = "linux"))]
 
 mod common;
 

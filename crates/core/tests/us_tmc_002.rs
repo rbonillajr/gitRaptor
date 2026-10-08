@@ -11,9 +11,9 @@
 //! scenarios. No test waits on time: each step waits for the daemon's
 //! answer.
 //!
-//! macOS only, like the other channel tests. Linux: Pendiente: etapa de
-//! validación multiplataforma.
-#![cfg(target_os = "macos")]
+//! macOS and Linux, like the other channel tests (Linux validated in the
+//! container, 2026-10-08).
+#![cfg(any(target_os = "macos", target_os = "linux"))]
 
 mod common;
 
