@@ -14,16 +14,16 @@
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 14 |
 | Listo (`ready`) | 3 |
-| Borrador (`draft`) | 87 |
+| Borrador (`draft`) | 88 |
 | Bloqueado (`blocked`) | 1 |
-| **Total** | **142** |
+| **Total** | **143** |
 
 ## Por feature
 
 | Feature | Implementado | Hecho | Implementado en parte | Listo | Borrador | Bloqueado | Total |
 |---|---|---|---|---|---|---|---|
 | [cockpit](#cockpit) | 6 | 0 | 1 | 0 | 25 | 1 | 33 |
-| [guardrails](#guardrails) | 5 | 0 | 4 | 0 | 14 | 0 | 23 |
+| [guardrails](#guardrails) | 5 | 0 | 4 | 0 | 15 | 0 | 24 |
 | [mcp](#mcp) | 4 | 0 | 0 | 0 | 16 | 0 | 20 |
 | [motor-local](#motor-local) | 11 | 2 | 8 | 3 | 14 | 0 | 38 |
 | [time-machine](#time-machine) | 8 | 1 | 1 | 0 | 18 | 0 | 28 |
@@ -70,7 +70,7 @@
 
 ### guardrails
 
-23 fichas: 5 implementado, 4 implementado en parte, 14 borrador.
+24 fichas: 5 implementado, 4 implementado en parte, 15 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -84,6 +84,7 @@
 | [US-GRD-005](features/guardrails/user-stories/US-GRD-005-registro-de-bloqueos.md) | El desarrollador cuenta las acciones peligrosas que Guardrails bloqueó en cada repo | Implementado en parte (`partially-implemented`) | #154, #168 | 3 |
 | [US-GRD-018](features/guardrails/user-stories/US-GRD-018-autoria-commits-persona-y-agente.md) | Cada commit entra a nombre de la persona y deja constancia del agente que lo hizo, con la exigencia que fija el equipo | Implementado en parte (`partially-implemented`) | #137, #141, #150, #152, #153, #154 | 3 |
 | [SPIKE-GRD-002](features/guardrails/technical-stories/SPIKE-GRD-002-factor-so-daemon.md) | Factor de autenticación del SO invocado desde el daemon en los tres SO | Borrador (`draft`) | — | — |
+| [TD-GRD-001](features/guardrails/technical-stories/TD-GRD-001-dispatcher-plantilla-3-pre-push-toda-ref.md) | Dispatcher plantilla 3: evaluar el pre-push de toda ref empujada (tags, notes y demás refs no gobernadas) | Borrador (`draft`) | — | — |
 | [US-GRD-004](features/guardrails/user-stories/US-GRD-004-aviso-proteccion-inactiva.md) | El desarrollador se entera de que la protección de un repo dejó de estar activa | Borrador (`draft`) | — | — |
 | [US-GRD-006](features/guardrails/user-stories/US-GRD-006-excepcion-consciente.md) | El desarrollador hace a conciencia una operación prohibida y queda constancia | Borrador (`draft`) | — | — |
 | [US-GRD-007](features/guardrails/user-stories/US-GRD-007-permisos-por-operacion.md) | El equipo decide qué operaciones de Git se permiten, se deniegan o piden confirmación | Borrador (`draft`) | — | — |
@@ -375,7 +376,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### Sin hito
 
-6 fichas sin hito asignado.
+7 fichas sin hito asignado.
 
 ## Implementadas en parte: lo que falta
 

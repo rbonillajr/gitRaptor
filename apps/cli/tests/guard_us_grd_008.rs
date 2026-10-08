@@ -27,7 +27,8 @@ const AGENT_CMD: &str = "RAPTOR_FAKE_AGENT_CMD";
 /// it, so only the policies under test can deny.
 const CLAUDE: &str = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>";
 
-const PROTECT_MAIN: &str = r#"{"policies":{"protectedBranches":{"patterns":["main","release/*"]}}}"#;
+const PROTECT_MAIN: &str =
+    r#"{"policies":{"protectedBranches":{"patterns":["main","release/*"]}}}"#;
 const PROTECT_MAIN_EVERYONE: &str =
     r#"{"policies":{"protectedBranches":{"patterns":["main"],"appliesTo":"everyone"}}}"#;
 const FORBID_SECRETS: &str = r#"{"policies":{"forbiddenPaths":{"patterns":["secrets/"]}}}"#;
@@ -347,7 +348,11 @@ fn protected_branch_blocks_an_agent() {
     let out = m.agent("branch release/1.0");
     assert!(!out.status.success(), "{}", text(&out));
     assert!(text(&out).contains("«release/1.0»"), "{}", text(&out));
-    assert!(m.human("rev-parse --verify -q release/1.0").stdout.is_empty());
+    assert!(
+        m.human("rev-parse --verify -q release/1.0")
+            .stdout
+            .is_empty()
+    );
     // …and the person creates it
     m.ok(m.human("branch release/1.0"));
 }
