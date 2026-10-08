@@ -100,7 +100,7 @@ fn status_resources(json: bool) -> ExitCode {
             }
             let pid = client.hello().daemon_pid;
             // US-GRP-020: discovered repos are not observed, so they cost
-            // nothing; only their count is shown.
+            // nothing; only their count is shown, when it can be read.
             let discovered = if client
                 .hello()
                 .methods
@@ -112,10 +112,8 @@ fn status_resources(json: bool) -> ExitCode {
                     serde_json::json!({}),
                 ) {
                     Ok(found) => Some(found.candidates.len() as u64),
-                    Err(err) => {
-                        eprintln!("{CMD}: {}", error_text(err));
-                        return ExitCode::FAILURE;
-                    }
+                    // Informational: the readings that worked still show.
+                    Err(_) => None,
                 }
             } else {
                 None
