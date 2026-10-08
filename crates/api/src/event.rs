@@ -137,6 +137,11 @@ pub const REPO_TIER: &str = "repo.tier";
 /// `discovery.events`. Data: [`crate::discovery::RepoDiscoveredData`].
 pub const REPO_DISCOVERED: &str = "repo.discovered";
 
+/// The hook layer of a repo stopped being active and Guardrails did not do it (US-GRD-004,
+/// ADR-GRD-005 § 5), only for a connection with `guard.protection`. Data:
+/// [`crate::guard::ProtectionLostData`].
+pub const GUARD_PROTECTION_LOST: &str = "guard.protection-lost";
+
 const fn engine(kind: &'static str) -> EventKind {
     EventKind {
         kind,
@@ -177,6 +182,7 @@ pub const KINDS: &[EventKind] = &[
     engine(REPO_TIER),
     // Global: a candidate belongs to no observed repo.
     engine(REPO_DISCOVERED),
+    engine_repo(GUARD_PROTECTION_LOST),
     engine_repo(OPERATION_QUEUED),
     engine_repo(OPERATION_STARTED),
     engine_repo(OPERATION_FINISHED),

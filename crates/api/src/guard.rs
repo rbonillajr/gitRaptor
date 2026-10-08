@@ -591,6 +591,120 @@ pub struct GuardStatus {
     /// `guard.pending-action`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pending: Option<PendingAction>,
+    /// Whether the hook layer is still active and, if not, why (ADR-GRD-005 § 3, US-GRD-004).
+    /// Only with `guard.protection`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hooks: Option<HooksLayer>,
+    /// What is worth the developer's attention without changing the state. Only with
+    /// `guard.protection`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<Diagnostic>,
+    /// The safe minimum (BR-EDGE-001). Only with `guard.protection`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub minimum_set: Option<MinimumSet>,
+}
+
+/// State of the hook layer of a repo (ADR-GRD-005 § 3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum HooksStatus {
+    /// Installed and in place: every condition of ADR-GRD-005 § 1 holds.
+    Active,
+    /// Installed by Guardrails and no longer working; `cause` says why.
+    Inactive,
+    /// Never installed, or removed from Guardrails.
+    NotInstalled,
+    /// The profile was deleted but the repo still carries the key and the manifest.
+    Orphaned,
+}
+
+/// Why the hook layer stopped being active (ADR-GRD-005 § 1, H2 to H4). English codes of the
+/// ADR's names; the client puts the text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum LossCause {
+    /// `core.hooksPath` is not Guardrails' folder any more (`hookspath-cambiado`).
+    HookspathChanged,
+    /// The repo moved: the key still names the old folder (`repo-movido`).
+    RepoMoved,
+    /// `<common>/gitraptor/hooks` is gone (`carpeta-ausente`).
+    FolderMissing,
+    /// A dispatcher is gone.
+    DispatcherMissing,
+    /// A dispatcher differs from the integrity reference of the journal (`dispatcher-alterado`).
+    DispatcherAltered,
+    /// A dispatcher lost its execute permission: Git skips it.
+    DispatcherNotExecutable,
+    /// The installed `raptor` the dispatchers start is gone (`binario-ausente`).
+    BinaryMissing,
+}
+
+/// `hooks` of the status: the state, the cause when it is not active, and the worktree when the
+/// cause is its own.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct HooksLayer {
+    pub status: HooksStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cause: Option<LossCause>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worktree: Option<Untrusted>,
+}
+
+impl HooksLayer {
+    pub fn of(status: HooksStatus) -> Self {
+        Self {
+            status,
+            cause: None,
+            worktree: None,
+        }
+    }
+
+    pub fn lost(cause: LossCause) -> Self {
+        Self {
+            status: HooksStatus::Inactive,
+            cause: Some(cause),
+            worktree: None,
+        }
+    }
+}
+
+/// A diagnostic that does not change the state (ADR-GRD-005 § 1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum Diagnostic {
+    /// The dispatchers come from an older template: still active, refreshed by installing again.
+    TemplateOutdated,
+    /// The base branch was not confirmed (a team configuration without a confirmation).
+    BaseUnconfirmed,
+    /// Git's configuration could not be read: the check could not tell, and says so instead of
+    /// reporting a loss.
+    ConfigUnreadable,
+}
+
+/// Whether the safe minimum applies (ADR-GRD-005 § 3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum MinimumSetStatus {
+    Active,
+    /// Only with TS-GRD-001 and the developer's confirmation (Q-GRD-21).
+    DisabledByTeam,
+}
+
+/// `minimum_set` of the status.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MinimumSet {
+    pub status: MinimumSetStatus,
+}
+
+/// Data of the `guard.protection-lost` event: the layer of a repo stopped being active without
+/// Guardrails having done it (ADR-GRD-005 § 5).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ProtectionLostData {
+    pub repo_id: String,
+    pub hooks: HooksLayer,
 }
 
 /// `data` of a `GUARD_REJECTED` error: the install did not happen.
@@ -609,6 +723,8 @@ pub enum LogKind {
     Denial,
     /// An agent's commit went in with a warning, or under `flexible` (BR-AUTH-005).
     Notice,
+    /// The hook layer changed state (ADR-GRD-005 § 5). Only with `guard.protection`.
+    ProtectionState,
 }
 
 /// Whether an entry carries every field or only the counters over the insert cap.
@@ -674,6 +790,15 @@ pub enum LoggedOperation {
     },
     Commit {
         stage: CommitStage,
+    },
+    /// The hook layer went from one state to another (US-GRD-004). `expected` is true when
+    /// Guardrails did it (install, uninstall): no alert. Only with `guard.protection`.
+    ProtectionState {
+        from: HooksStatus,
+        to: HooksStatus,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cause: Option<LossCause>,
+        expected: bool,
     },
 }
 
