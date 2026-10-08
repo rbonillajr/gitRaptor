@@ -249,4 +249,6 @@ fn json_has_the_tier_counts() {
     assert_eq!(o["dormant"]["sweep_interval_s"], 120, "{v:#}");
     assert_eq!(o["dormant"]["reconcile_interval_s"], 3600, "{v:#}");
     assert_eq!(o["degraded"]["worktrees"], 0, "{v:#}");
+    // US-GRP-020: no discovery root, so no discovered repo; they cost nothing.
+    assert_eq!(v["engine"]["discovered_repos"], 0, "{v:#}");
 }

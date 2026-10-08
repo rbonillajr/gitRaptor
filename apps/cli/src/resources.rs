@@ -30,6 +30,10 @@ pub struct View {
 pub struct EngineReading {
     pub pid: u32,
     pub result: ResourcesResult,
+    /// Repos discovered and waiting for the developer's decision
+    /// (US-GRP-020): not observed, so they cost nothing. `None` when the
+    /// engine does not offer `discovery.candidates`.
+    pub discovered: Option<u64>,
 }
 
 impl View {
@@ -37,9 +41,21 @@ impl View {
         Self {
             disk: result.disk.clone(),
             targets: result.targets,
-            engine: Some(EngineReading { pid, result }),
+            engine: Some(EngineReading {
+                pid,
+                result,
+                discovered: None,
+            }),
             repos,
         }
+    }
+
+    /// The count of discovered repos the engine reported.
+    pub fn with_discovered(mut self, discovered: Option<u64>) -> Self {
+        if let Some(engine) = &mut self.engine {
+            engine.discovered = discovered;
+        }
+        self
     }
 
     pub fn stopped(
@@ -193,6 +209,9 @@ pub fn text(view: &View) -> String {
                 );
             }
             tiers_text(&mut out, r.observation.as_ref());
+            if let Some(n) = engine.discovered {
+                let _ = writeln!(out, "{}", t("res.discovered", &[("n", &n)]));
+            }
         }
         None => {
             let _ = writeln!(out, "{}", t("res.engine-stopped", &[]));
@@ -368,6 +387,7 @@ pub fn json(view: &View) -> Value {
             "pools": r.pools,
             "power_saving": r.power_saving,
             "observation": r.observation,
+            "discovered_repos": engine.discovered,
         })
     });
     let repos: Vec<Value> = disk
@@ -481,6 +501,16 @@ mod tests {
         assert!(engine["observation"].is_null());
     }
 
+    /// US-GRP-020: the discovered repos are counted and cost nothing.
+    #[test]
+    fn discovered_repos_are_shown_at_zero_cost() {
+        let view = View::running(7, result(1), repos()).with_discovered(Some(4));
+        assert!(text(&view).contains(&t("res.discovered", &[("n", &4)])));
+        assert_eq!(json(&view)["engine"]["discovered_repos"], 4);
+        let older = View::running(7, result(1), repos());
+        assert!(json(&older)["engine"]["discovered_repos"].is_null());
+    }
+
     /// Every key this view uses exists in both catalogs.
     #[test]
     fn every_key_has_its_messages() {
@@ -520,6 +550,7 @@ mod tests {
             "res.tier-dormant",
             "res.tier-safety",
             "res.tier-degraded",
+            "res.discovered",
         ] {
             assert!(crate::i18n::has_key(key), "{key}");
         }
