@@ -110,9 +110,11 @@ const graphOk = missing.length === 0;
 
 const changed = run('git', ['diff', '--name-only', '--no-renames', base, head]).split('\n').filter(Boolean);
 const global = changed.filter((f) => GLOBAL.some((re) => re.test(f)));
-const affected = JSON.parse(nx('show', 'projects', '--affected', `--base=${base}`, `--head=${head}`, '-t', 'test', '--json'))
-  .filter((p) => members.has(p))
-  .sort();
+// Plus the packages whose binaries the affected tests launch (`implicitDependencies`): their own
+// tests cost little, and with them the selection resolves the same features as the workspace build.
+const marked = JSON.parse(nx('show', 'projects', '--affected', `--base=${base}`, `--head=${head}`, '-t', 'test', '--json'));
+const launched = marked.flatMap((p) => (graph.dependencies[p] ?? []).filter((d) => d.type === 'implicit').map((d) => d.target));
+const affected = [...new Set([...marked, ...launched])].filter((p) => members.has(p)).sort();
 
 let scope = 'affected';
 if (!graphOk) scope = 'full';
