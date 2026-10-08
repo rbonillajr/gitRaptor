@@ -12,9 +12,9 @@
 |---|---|
 | Implementado (`implemented`) | 34 |
 | Hecho (`done`) | 3 |
-| Implementado en parte (`partially-implemented`) | 14 |
+| Implementado en parte (`partially-implemented`) | 15 |
 | Listo (`ready`) | 3 |
-| Borrador (`draft`) | 87 |
+| Borrador (`draft`) | 86 |
 | Bloqueado (`blocked`) | 1 |
 | **Total** | **142** |
 
@@ -23,7 +23,7 @@
 | Feature | Implementado | Hecho | Implementado en parte | Listo | Borrador | Bloqueado | Total |
 |---|---|---|---|---|---|---|---|
 | [cockpit](#cockpit) | 6 | 0 | 1 | 0 | 25 | 1 | 33 |
-| [guardrails](#guardrails) | 5 | 0 | 4 | 0 | 14 | 0 | 23 |
+| [guardrails](#guardrails) | 5 | 0 | 5 | 0 | 13 | 0 | 23 |
 | [mcp](#mcp) | 4 | 0 | 0 | 0 | 16 | 0 | 20 |
 | [motor-local](#motor-local) | 11 | 2 | 8 | 3 | 14 | 0 | 38 |
 | [time-machine](#time-machine) | 8 | 1 | 1 | 0 | 18 | 0 | 28 |
@@ -70,7 +70,7 @@
 
 ### guardrails
 
-23 fichas: 5 implementado, 4 implementado en parte, 14 borrador.
+23 fichas: 5 implementado, 5 implementado en parte, 13 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -80,11 +80,11 @@
 | [US-GRD-002](features/guardrails/user-stories/US-GRD-002-hooks-previos-respetados.md) | Los hooks que el repo ya tenía siguen funcionando al protegerlo | Implementado (`implemented`) | #193 | — |
 | [US-GRD-019](features/guardrails/user-stories/US-GRD-019-quien-ejecuto-y-a-nombre-de-quien.md) | El desarrollador ve quién ejecutó cada commit y a nombre de quién entró cuando no coinciden | Implementado (`implemented`) | #144, #147, #151, #175 | — |
 | [SPIKE-GRD-001](features/guardrails/technical-stories/SPIKE-GRD-001-interceptabilidad-hooks.md) | Interceptabilidad, coexistencia y coste de la capa de hooks en los tres SO | Implementado en parte (`partially-implemented`) | #22, #25, #121 | 2 |
-| [US-GRD-003](features/guardrails/user-stories/US-GRD-003-retirar-proteccion-sin-rastro.md) | El desarrollador retira la protección y el repo queda exactamente como estaba | Implementado en parte (`partially-implemented`) | #193 | — |
+| [US-GRD-003](features/guardrails/user-stories/US-GRD-003-retirar-proteccion-sin-rastro.md) | El desarrollador retira la protección y el repo queda exactamente como estaba | Implementado en parte (`partially-implemented`) | #193, #201 | — |
+| [US-GRD-004](features/guardrails/user-stories/US-GRD-004-aviso-proteccion-inactiva.md) | El desarrollador se entera de que la protección de un repo dejó de estar activa | Implementado en parte (`partially-implemented`) | #201 | — |
 | [US-GRD-005](features/guardrails/user-stories/US-GRD-005-registro-de-bloqueos.md) | El desarrollador cuenta las acciones peligrosas que Guardrails bloqueó en cada repo | Implementado en parte (`partially-implemented`) | #154, #168 | 3 |
 | [US-GRD-018](features/guardrails/user-stories/US-GRD-018-autoria-commits-persona-y-agente.md) | Cada commit entra a nombre de la persona y deja constancia del agente que lo hizo, con la exigencia que fija el equipo | Implementado en parte (`partially-implemented`) | #137, #141, #150, #152, #153, #154 | 3 |
 | [SPIKE-GRD-002](features/guardrails/technical-stories/SPIKE-GRD-002-factor-so-daemon.md) | Factor de autenticación del SO invocado desde el daemon en los tres SO | Borrador (`draft`) | — | — |
-| [US-GRD-004](features/guardrails/user-stories/US-GRD-004-aviso-proteccion-inactiva.md) | El desarrollador se entera de que la protección de un repo dejó de estar activa | Borrador (`draft`) | — | — |
 | [US-GRD-006](features/guardrails/user-stories/US-GRD-006-excepcion-consciente.md) | El desarrollador hace a conciencia una operación prohibida y queda constancia | Borrador (`draft`) | — | — |
 | [US-GRD-007](features/guardrails/user-stories/US-GRD-007-permisos-por-operacion.md) | El equipo decide qué operaciones de Git se permiten, se deniegan o piden confirmación | Borrador (`draft`) | — | — |
 | [US-GRD-008](features/guardrails/user-stories/US-GRD-008-ramas-protegidas-rutas-prohibidas.md) | Ningún agente cambia una rama protegida ni toca una ruta prohibida | Borrador (`draft`) | — | — |
@@ -237,7 +237,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2
 
-110 fichas: 16 implementado, 3 hecho, 8 implementado en parte, 3 listo, 79 borrador, 1 bloqueado.
+110 fichas: 16 implementado, 3 hecho, 9 implementado en parte, 3 listo, 78 borrador, 1 bloqueado.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -265,7 +265,8 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [INF-TMC-001](features/time-machine/technical-stories/INF-TMC-001-arnes-caos-recuperable.md) | Arnés de caos y de garantías de los snapshots en los tres SO | Implementado en parte (`partially-implemented`) | — | — |
 | [TS-GRP-004](features/motor-local/technical-stories/TS-GRP-004-canal-clientes.md) | Canal local de clientes y contrato de mensajes | Implementado en parte (`partially-implemented`) | #36, #87, #123, #133, #158 | 3 |
 | [US-CKP-025](features/cockpit/user-stories/US-CKP-025-tui-repo-no-observado.md) | La TUI ofrece observar el repo en el que se abre y, fuera de un repo, lleva a los ya observados | Implementado en parte (`partially-implemented`) | #165, #170 | 2 |
-| [US-GRD-003](features/guardrails/user-stories/US-GRD-003-retirar-proteccion-sin-rastro.md) | El desarrollador retira la protección y el repo queda exactamente como estaba | Implementado en parte (`partially-implemented`) | #193 | — |
+| [US-GRD-003](features/guardrails/user-stories/US-GRD-003-retirar-proteccion-sin-rastro.md) | El desarrollador retira la protección y el repo queda exactamente como estaba | Implementado en parte (`partially-implemented`) | #193, #201 | — |
+| [US-GRD-004](features/guardrails/user-stories/US-GRD-004-aviso-proteccion-inactiva.md) | El desarrollador se entera de que la protección de un repo dejó de estar activa | Implementado en parte (`partially-implemented`) | #201 | — |
 | [US-GRD-005](features/guardrails/user-stories/US-GRD-005-registro-de-bloqueos.md) | El desarrollador cuenta las acciones peligrosas que Guardrails bloqueó en cada repo | Implementado en parte (`partially-implemented`) | #154, #168 | 3 |
 | [US-GRD-018](features/guardrails/user-stories/US-GRD-018-autoria-commits-persona-y-agente.md) | Cada commit entra a nombre de la persona y deja constancia del agente que lo hizo, con la exigencia que fija el equipo | Implementado en parte (`partially-implemented`) | #137, #141, #150, #152, #153, #154 | 3 |
 | [TD-GRP-002](features/motor-local/technical-stories/TD-GRP-002-motor-bajo-rafaga.md) | Frescura y memoria del motor bajo una ráfaga de archivos | Listo (`ready`) | — | — |
@@ -298,7 +299,6 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-CKP-021](features/cockpit/user-stories/US-CKP-021-historial-aviso-purga.md) | El desarrollador ve en la TUI el historial de operaciones y el aviso de purga | Borrador (`draft`) | — | — |
 | [US-CKP-022](features/cockpit/user-stories/US-CKP-022-grafo-carriles.md) | El desarrollador ve crecer la rama de cada agente sobre la base | Borrador (`draft`) | — | — |
 | [US-CKP-024](features/cockpit/user-stories/US-CKP-024-integrar-casos-limite.md) | Integrar sigue siendo seguro cuando el estado cambia, choca o la base no está sacada | Borrador (`draft`) | — | — |
-| [US-GRD-004](features/guardrails/user-stories/US-GRD-004-aviso-proteccion-inactiva.md) | El desarrollador se entera de que la protección de un repo dejó de estar activa | Borrador (`draft`) | — | — |
 | [US-GRD-006](features/guardrails/user-stories/US-GRD-006-excepcion-consciente.md) | El desarrollador hace a conciencia una operación prohibida y queda constancia | Borrador (`draft`) | — | — |
 | [US-GRD-007](features/guardrails/user-stories/US-GRD-007-permisos-por-operacion.md) | El equipo decide qué operaciones de Git se permiten, se deniegan o piden confirmación | Borrador (`draft`) | — | — |
 | [US-GRD-008](features/guardrails/user-stories/US-GRD-008-ramas-protegidas-rutas-prohibidas.md) | Ningún agente cambia una rama protegida ni toca una ruta prohibida | Borrador (`draft`) | — | — |
@@ -393,9 +393,15 @@ Interceptabilidad, coexistencia y coste de la capa de hooks en los tres SO
 - Matriz en Linux y Windows (incluido el coste con el dispatcher nativo) y los casos sin verificar del § 11 de los resultados.
 - Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../architecture/xplat-pendientes.md)).
 
-### [US-GRD-003](features/guardrails/user-stories/US-GRD-003-retirar-proteccion-sin-rastro.md) — #193
+### [US-GRD-003](features/guardrails/user-stories/US-GRD-003-retirar-proteccion-sin-rastro.md) — #193, #201
 
 El desarrollador retira la protección y el repo queda exactamente como estaba
+
+- *La ficha no lista los pendientes en "Estado de la implementación".*
+
+### [US-GRD-004](features/guardrails/user-stories/US-GRD-004-aviso-proteccion-inactiva.md) — #201
+
+El desarrollador se entera de que la protección de un repo dejó de estar activa
 
 - *La ficha no lista los pendientes en "Estado de la implementación".*
 
