@@ -17,6 +17,7 @@
 //! (ADR-GRD-001 § 7).
 
 mod capture;
+mod changed_paths;
 pub mod cli;
 mod committed;
 mod guard_read;
@@ -35,6 +36,7 @@ pub use capture::{
     Conversions, EntryKind, FileKind, FileStat, HistoryGap, IgnoreCheck, IndexEntry, IndexView,
     Untracked, UntrackedKind,
 };
+pub use changed_paths::ChangedPaths;
 pub use committed::{BlobRead, CommittedFile, NotRegular};
 pub use guard_read::{Ancestry, CommitShape, MAX_ANCESTRY_WALK, RefStorage};
 pub use invoke::{ArgvSink, Invoker, MemoryArgvLog};
