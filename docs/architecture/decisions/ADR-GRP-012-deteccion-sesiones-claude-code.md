@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-06
+updated: 2026-10-07
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
@@ -273,3 +273,15 @@ Historia dueña: US-GRD-019. Para un evento que crea un commit, la línea junta 
 - La clave de configuración, sus niveles (suelo de equipo, personal) y el efecto por defecto de cada variante (ADR-GRP-007, ADR-GRD-004).
 - La forma del aviso, las cadenas en/es, el JSON de `raptor events` y la presentación en el Cockpit.
 - Las enmiendas de ADR-GRD-003 § 1 (actor como condición de las reglas de autoría) y § 4 (garantía del modo degradado).
+
+## Enmienda (2026-10-07, S4: la resolución del hook atribuye el evento)
+
+Origen: hallazgo del dogfooding de Guardrails (2026-10-07). El hook resolvía bien que un commit rápido lo hacía Claude Code, pero el evento de ese commit salía "sin atribuir", porque S3 perdía la carrera. **Decisión del orquestador (2026-10-07), validada por el Arquitecto.** S4 ya era una señal de este ADR; la enmienda fija cómo se obtiene. No cambia la regla de combinación, el ciclo de vida ni los valores del actor. El `status` sigue en `accepted`. El detalle está en DS-US-GRP-007 § 7.
+
+- **De dónde sale**: del `reference-transaction` `prepared` que Guardrails deja pasar (`allow`), porque es el único punto del hook que conoce la rama, el oid anterior y el oid nuevo. El daemon resuelve al solicitante del cliente del hook mientras el `git` sigue vivo, sin carrera.
+- **Solo cuenta `via: ancestry`**: hace falta una sesión detectada de Claude Code entre los ancestros del `git`. La pista del multiplexor y la marca del ejecutor no generan S4, porque son co-ubicación y no prueban que ese `git` descienda de esa sesión. Aquí **S4 se aparta del actor de ADR-GRD-003 § 4**, que acepta el multiplexor: para decidir una política basta con un actor probable, pero para atribuir un evento hace falta prueba (BR-EDGE-004). El recorrido no usa las marcas del ejecutor, así que el hook del `git` del propio daemon nunca espera.
+- **Correspondencia exacta**: el evento tiene que ser **ese** movimiento. Coinciden repo, worktree del `git`, rama, oid anterior y oid nuevo, dentro de la ventana del lote. Además, la reclamación se consume con el primer evento que coincide.
+- **Precedencia**: S4 se evalúa antes que S3 y gana aunque S3 vea a la vez un `git` ajeno en el repo (regla 2: evidencia positiva que apunta a esa sesión). Si dos sesiones reclaman el mismo movimiento, se vuelve a S3 y, ante la duda, "sin atribuir" (reglas 4 y 6).
+- **Solo en memoria**: las reclamaciones viven en el daemon, con un máximo de 256 y una caducidad de 60 s. No se persisten ni se publican; del proceso solo se leen su identidad y su carpeta (SEC-04). La evidencia guardada del evento es `{"signals":["s4"]}`.
+- **Sin hooks no cambia nada**: no hay reclamaciones, y S3, el registro y la pista siguen como estaban. Con S4, el caso `NoSighting` desaparece en los commits que gobierna Guardrails (Enmienda del 2026-10-06, último punto).
+- **Medición** (SPIKE-GRP-001, suite guionizada en macOS, 2026-10-07): de 20 commits rápidos del agente simulado, sin hooks salieron 5 atribuidos (S3) y 15 "sin atribuir"; con Guardrails, 20 de 20 salieron atribuidos con `s4`.

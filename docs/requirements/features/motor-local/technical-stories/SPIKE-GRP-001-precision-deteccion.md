@@ -8,11 +8,11 @@ domain: GRP
 priority: high
 complexity: medium
 created: 2026-10-03
-updated: 2026-10-06
+updated: 2026-10-07
 related:
   adrs: [ADR-GRP-012, ADR-GRP-013, ADR-GRP-005]
   stories: [US-GRP-007, US-GRP-008, US-GRP-009]
-  specs: []
+  specs: [DS-US-GRP-007]
 ado:
   id: null
   url: null
@@ -75,3 +75,22 @@ tags: [motor-local, spike, deteccion, atribucion, claude-code, dogfooding, preci
   - **Pistas correctas**: las que Rene confirma en la revisión diaria como de esa sesión.
   - **Pistas sobre trabajo humano**: el riesgo residual de la enmienda. No es un error humano → Claude Code de BR-EDGE-004, porque el actor sigue "sin atribuir", pero se cuenta para decidir si S4 o S5 son urgentes.
 - **Pendiente**: repetir la medición con la regla desplegada, con N real y la tasa de carreras perdidas de S3 (eventos `s3_evidence` con `outcome=no-sighting` del log del daemon).
+
+#### 2026-10-07 — S4: el hook de Guardrails atribuye los commits rápidos (suite guionizada, macOS)
+
+- **Hallazgo del dogfooding**: en la prueba de Guardrails, el hook detectó que los commits los hacía un agente (y bloqueó los que incumplían la política), pero en `raptor events` los commits rápidos del agente que sí entraron salieron "sin atribuir". Guardrails resuelve el actor con el cliente vivo que le habla; S3 mira el árbol de procesos después y pierde la carrera.
+- **Cambio**: S4 según la [enmienda del 2026-10-07 de ADR-GRP-012](../../../../architecture/decisions/ADR-GRP-012-deteccion-sesiones-claude-code.md) y [DS-US-GRP-007 § 7](../dev-specs/US-GRP-007-dev-spec.md). La resolución del hook en el `reference-transaction` `prepared` se asocia al evento del mismo movimiento de rama, y el evento queda atribuido con evidencia `{"signals":["s4"]}`.
+- **Medición**: `measure_quick_commit_attribution` en `apps/cli/tests/events_s4_hook_attribution.rs` (`#[ignore]`; se ejecuta con `RAPTOR_S4_RUNS=20 cargo test -p gitraptor-cli --test events_s4_hook_attribution measure_quick_commit_attribution -- --ignored --nocapture`). Usa el binario real como daemon y hook, el Claude Code simulado de larga vida y 20 `git commit -qm` sin hook lento, con un repo y un perfil temporales. Una sola ejecución en el Mac de desarrollo:
+
+  | Hooks | Commits rápidos del agente | Atribuidos | Sin atribuir |
+  |---|---|---|---|
+  | Sin Guardrails | 20 | 5 (S3, 25 %) | 15 (75 %) |
+  | Guardrails instalado | 20 | 20 (S4, 100 %) | 0 |
+
+- **Lectura**: con los hooks instalados, la carrera de S3 deja de pesar en los commits gobernados. Sin hooks no cambia nada: la tasa de carreras perdidas de S3 en esta suite es del 75 % de los commits rápidos.
+- **Errores humano → Claude Code**: 0 en los e2e. El commit del desarrollador con la sesión del agente viva sigue "sin atribuir", con y sin hooks.
+- **Observación sin investigar**: en esta suite, los 15 commits sin atribuir no llevaban la pista `single-session` (evidencia vacía). Puede ser una condición de la pista (sesión activa, actividad) o del montaje. Queda anotado para la revisión diaria; no se tocó en esta rama.
+- **Pendiente**:
+  - repetir en el dogfooding real con N de eventos del día (log `s3_evidence`, con el resultado nuevo `outcome=s4`);
+  - medir el p95 que añade la resolución en el hilo de conexión por cada `reference-transaction` (lo pidió el Arquitecto, con un presupuesto supuesto de ≤ 5 ms sin multiplexor);
+  - validar en Linux y Windows (etapa multiplataforma).
