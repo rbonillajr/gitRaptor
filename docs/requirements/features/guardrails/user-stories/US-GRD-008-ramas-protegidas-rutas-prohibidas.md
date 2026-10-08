@@ -31,7 +31,7 @@ tags:
 
 ## Reglas cubiertas
 
-BR-VAL-003 (rama protegida y ruta prohibida; force-push y `reset --hard` prohibidos ya los cubre el permiso, US-GRD-007) · BR-CALC-001 (varias reglas incumplidas: se nombran todas) — ver [business-rules.md](../business-rules.md)
+BR-VAL-003 (rama protegida y ruta prohibida; force-push y `reset --hard` prohibidos ya los cubre el permiso, US-GRD-007) · BR-CALC-001 (varias reglas incumplidas: se nombran todas) · Q-GRD-35 (actor al que aplican) — ver [business-rules.md](../business-rules.md)
 
 ## Dependencias
 
@@ -41,10 +41,12 @@ BR-VAL-003 (rama protegida y ruta prohibida; force-push y `reset --hard` prohibi
 
 ## Criterios de Aceptación
 
+Las ramas protegidas y las rutas prohibidas aplican por defecto solo a los agentes detectados o registrados (Q-GRD-35). Force-push y `reset --hard` sobre la rama protegida los cubre además el permiso (US-GRD-007).
+
 **Esquema del escenario: Una rama protegida no cambia por un agente**
 
 Dado el repo "demo" protegido, con "main" como rama protegida en la configuración del equipo
-Cuando un proceso hace "<operación>" sobre "main" con Git directo
+Cuando un agente detectado hace "<operación>" sobre "main" con Git directo
 Entonces la operación no se ejecuta y el motivo nombra la rama protegida "main"
 
 Ejemplos:
@@ -52,37 +54,54 @@ Ejemplos:
 | commit |
 | push |
 | borrar la rama |
+| crear la rama |
+
+**Escenario: La persona en su terminal sí puede**
+
+Dado el repo "demo" con "main" protegida para agentes
+Cuando la persona, sin agente, hace un commit en "main" desde su terminal
+Entonces la operación se ejecuta
+
+**Escenario: Con la protección para todos también se deniega a la persona**
+
+Dado el repo "demo" con "main" protegida con `appliesTo: everyone`
+Cuando la persona, sin agente, hace un commit en "main" desde su terminal
+Entonces el commit no se ejecuta y el motivo nombra la rama protegida "main"
 
 **Escenario: Las ramas no protegidas siguen libres**
 
 Dado el repo "demo" con "main" protegida
-Cuando un proceso hace commit y push en "feat-x"
+Cuando un agente detectado hace commit y push en "feat-x"
 Entonces las dos operaciones se ejecutan
 
 **Escenario: Un commit que toca una ruta prohibida se deniega**
 
 Dado el repo "demo" con la ruta prohibida "secrets/"
-Cuando un proceso hace un commit que modifica "secrets/api.txt"
+Cuando un agente detectado hace un commit que modifica "secrets/api.txt"
 Entonces el commit no se ejecuta y el motivo nombra la ruta prohibida
   Y los cambios siguen en el working tree, sin perderse
 
 **Escenario: Crear o borrar en una ruta prohibida también se deniega**
 
 Dado el repo "demo" con la ruta prohibida "secrets/"
-Cuando un proceso hace un commit que crea "secrets/nuevo.txt" o borra "secrets/viejo.txt"
+Cuando un agente detectado hace un commit que crea "secrets/nuevo.txt" o borra "secrets/viejo.txt"
 Entonces el commit no se ejecuta
 
 **Escenario: Dos reglas incumplidas se nombran juntas**
 
 Dado el repo "demo" con "main" protegida y la ruta prohibida "secrets/"
-Cuando un proceso hace commit en "main" de un cambio en "secrets/api.txt"
+Cuando un agente detectado hace commit en "main" de un cambio en "secrets/api.txt"
 Entonces el commit no se ejecuta y el motivo nombra las dos reglas
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+El detalle técnico vive en la [Dev Spec DS-US-GRD-008](../dev-specs/US-GRD-008-ramas-protegidas-rutas-prohibidas.md); el Arquitecto la mantiene.
+
+- Las dos políticas se evalúan con el actor de la operación y el valor `appliesTo` (Q-GRD-35); la Dev Spec fija cómo se obtiene y cómo se degrada.
+- Misma decisión y motivo en las dos capas (BR-CONS-002) y en modo degradado solo rigen las reglas `everyone` del suelo.
+- Crear, mover o borrar una rama que casa con un patrón protegido cuenta como cambiarla.
 
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica.
-- **Dev Spec:** pendiente (Arquitecto).
+- **Dev Spec:** [DS-US-GRD-008](../dev-specs/US-GRD-008-ramas-protegidas-rutas-prohibidas.md).
