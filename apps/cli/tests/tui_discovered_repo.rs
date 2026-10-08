@@ -259,7 +259,10 @@ fn text(out: &Output) -> String {
 #[test]
 fn a_repo_created_in_the_code_folder_is_offered_and_yes_observes_it() {
     let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
-    for (lang, question, key) in [("en", "Observe fresh?", b"y"), ("es", "¿Observar fresh?", b"s")] {
+    for (lang, question, key) in [
+        ("en", "Observe fresh?", b"y"),
+        ("es", "¿Observar fresh?", b"s"),
+    ] {
         let m = Machine::new();
         let mut tui = m.tui(lang);
         // The fleet of the only observed repo, outside every repo.
