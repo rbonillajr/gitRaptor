@@ -28,7 +28,19 @@ use crate::tui::keymap::{self, Action};
 pub fn update(model: &mut Model, msg: Msg) -> Vec<Cmd> {
     match msg {
         Msg::Key(key) if key.kind == KeyEventKind::Release => Vec::new(),
-        Msg::Key(key) => on_action(model, keymap::action(&key)),
+        Msg::Key(key) => {
+            let action = keymap::action(&key);
+            if action == Some(Action::Quit) {
+                model.ui.quit_key = Some(format!("{:?} {:?}", key.code, key.modifiers));
+            }
+            on_action(model, action)
+        }
+        Msg::InputLost => {
+            model.ui.input_lost = true;
+            model.ui.quit = true;
+            model.dirty = true;
+            vec![Cmd::Quit]
+        }
         // Paste has no target yet: it still answers.
         Msg::Paste(_) => on_action(model, None),
         Msg::Resize(size) => {
@@ -715,6 +727,29 @@ mod tests {
         });
         assert!(update(&mut m, other).is_empty());
         assert_eq!(m.engine.repo.as_ref().unwrap().applied, 0);
+    }
+
+    /// A cockpit that quits names the key that asked (so an early exit is never silent), and a
+    /// terminal that can no longer be read makes it leave with a reason.
+    #[test]
+    fn quitting_remembers_its_key_and_a_lost_input_quits() {
+        let mut m = model();
+        update(
+            &mut m,
+            Msg::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE)),
+        );
+        assert_eq!(m.ui.quit_key, None);
+        update(
+            &mut m,
+            Msg::Key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL)),
+        );
+        assert!(m.ui.quit);
+        assert!(m.ui.quit_key.as_deref().is_some_and(|k| k.contains("'c'")));
+
+        let mut m = model();
+        let cmds = update(&mut m, Msg::InputLost);
+        assert_eq!(cmds, vec![Cmd::Quit]);
+        assert!(m.ui.quit && m.ui.input_lost);
     }
 
     #[test]

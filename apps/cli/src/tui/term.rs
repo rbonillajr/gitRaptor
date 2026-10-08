@@ -9,7 +9,7 @@ use gitraptor_theme::Theme;
 
 use crate::client::{self, Connector};
 use crate::model::{Model, Size};
-use crate::present::i18n::Lang;
+use crate::present::i18n::{Lang, Text};
 use crate::queue;
 use crate::tui::app::App;
 use crate::tui::input::{InputThread, Pause};
@@ -80,6 +80,8 @@ fn stop_until_resumed() -> io::Result<()> {
 pub fn run(connector: impl Connector, cwd: Option<PathBuf>, theme: Theme) -> io::Result<()> {
     let terminal = ratatui::try_init()?;
     let _restore = Restore;
+    drain_pending_input();
+    let opened = std::time::Instant::now();
     let area = terminal.size()?;
     let size = Size {
         width: area.width,
@@ -101,5 +103,32 @@ pub fn run(connector: impl Connector, cwd: Option<PathBuf>, theme: Theme) -> io:
     let result = app.run();
     input.stop();
     channel.shutdown();
+    let lang = app.model.ui.lang;
+    if app.model.ui.input_lost {
+        return Err(io::Error::other(Text::InputLost.render(lang)));
+    }
+    // Never a silent exit: a cockpit that closes within moments says which key closed it.
+    if result.is_ok()
+        && opened.elapsed() < EARLY_EXIT
+        && let Some(key) = &app.model.ui.quit_key
+    {
+        // After the terminal is restored, or the alternate screen would swallow it.
+        drop(_restore);
+        eprintln!("raptor: {}", Text::ClosedEarly(key).render(lang));
+    }
     result
+}
+
+/// A cockpit that ends sooner than this after opening is explained to the user.
+const EARLY_EXIT: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Discards what the console already holds when the cockpit opens (a paste or typing ahead
+/// while the shell was still running the previous line), so it is never read as commands.
+fn drain_pending_input() {
+    use ratatui::crossterm::event;
+    while event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+        if event::read().is_err() {
+            break;
+        }
+    }
 }

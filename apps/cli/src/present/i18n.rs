@@ -235,6 +235,11 @@ pub enum Text<'a> {
         height: u16,
     },
     NeedsTerminal,
+    /// The cockpit closed within moments of opening, by a key it received (typed ahead, or
+    /// left in the console's input).
+    ClosedEarly(&'a str),
+    /// The terminal input failed and the cockpit left.
+    InputLost,
 }
 
 impl Text<'_> {
@@ -442,6 +447,12 @@ fn en(text: Text<'_>) -> String {
         Text::NeedsTerminal => {
             "the cockpit needs a terminal; for plain output use `raptor status`".into()
         }
+        Text::ClosedEarly(key) => format!(
+            "the cockpit closed right after opening: it received the key {key}, which quits. If you did not press it, input was already waiting in the console; run `raptor` again"
+        ),
+        Text::InputLost => {
+            "the cockpit closed: it can no longer read the terminal's input; for plain output use `raptor status`".into()
+        }
     }
 }
 
@@ -642,6 +653,12 @@ fn es(text: Text<'_>) -> String {
         }
         Text::NeedsTerminal => {
             "el cockpit necesita una terminal; para salida de texto usa `raptor status`".into()
+        }
+        Text::ClosedEarly(key) => format!(
+            "el cockpit se cerró nada más abrirse: recibió la tecla {key}, que sale. Si no la pulsaste, había entrada pendiente en la consola; vuelve a ejecutar `raptor`"
+        ),
+        Text::InputLost => {
+            "el cockpit se cerró: ya no puede leer la entrada de la terminal; para salida de texto usa `raptor status`".into()
         }
     }
 }
