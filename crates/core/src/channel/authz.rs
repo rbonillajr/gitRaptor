@@ -894,12 +894,10 @@ mod tests {
         assert_eq!(console_issue(&developer_terminal(), UID, 30), None);
     }
 
+    /// Windows has a terminal proof (the console) but no group marks
+    /// (DS-TS-GRP-004 § 9, C4): checked when the tests build.
     #[cfg(windows)]
-    #[test]
-    fn windows_has_a_terminal_proof() {
-        assert!(TERMINAL_PROOF);
-        assert!(!ORPHANS_MARKED);
-    }
+    const _: () = assert!(TERMINAL_PROOF && !ORPHANS_MARKED);
 
     #[test]
     fn interpreters_are_refused_until_argv_can_be_read() {
