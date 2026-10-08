@@ -252,7 +252,7 @@ fn probe_git(entry: &Path) -> Option<(bool, PathBuf)> {
     if !meta.is_file() || meta.len() > GITDIR_FILE_MAX {
         return None;
     }
-    let text = fs::read_to_string(&dot_git).ok()?;
+    let text = read_gitdir_file(&dot_git)?;
     let target = text.lines().next()?.strip_prefix("gitdir:")?.trim();
     if target.is_empty() {
         return None;
@@ -267,6 +267,67 @@ fn probe_git(entry: &Path) -> Option<(bool, PathBuf)> {
         _ => gitdir,
     };
     Some((false, common))
+}
+
+/// Reads a `.git` file without following a link and without blocking on a
+/// FIFO swapped in after the check, and never more than [`GITDIR_FILE_MAX`]
+/// bytes: whoever can write the folder could have replaced it.
+fn read_gitdir_file(path: &Path) -> Option<String> {
+    use std::io::Read;
+    let file = open_no_follow(path)?;
+    if !file.metadata().ok()?.is_file() {
+        return None;
+    }
+    let mut text = String::new();
+    file.take(GITDIR_FILE_MAX + 1)
+        .read_to_string(&mut text)
+        .ok()?;
+    (text.len() as u64 <= GITDIR_FILE_MAX).then_some(text)
+}
+
+#[cfg(unix)]
+fn open_no_follow(path: &Path) -> Option<fs::File> {
+    use rustix::fs::{Mode, OFlags};
+    let fd = rustix::fs::open(
+        path,
+        OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::NONBLOCK | OFlags::CLOEXEC,
+        Mode::empty(),
+    )
+    .ok()?;
+    Some(fs::File::from(fd))
+}
+
+#[cfg(windows)]
+fn open_no_follow(path: &Path) -> Option<fs::File> {
+    use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
+    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    const REPARSE_POINT: u32 = 0x400;
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)
+        .ok()?;
+    (file.metadata().ok()?.file_attributes() & REPARSE_POINT == 0).then_some(file)
+}
+
+/// The canonical form of a path a client sends, even when it no longer
+/// exists: the deepest existing ancestor is resolved and the rest appended,
+/// so `/tmp/code` deleted still names the stored `/private/tmp/code`.
+pub fn canonical_lookup(path: &Path) -> PathBuf {
+    let mut rest = Vec::new();
+    let mut base = path;
+    loop {
+        if let Ok(canonical) = gitraptor_git::paths::canonicalize(base) {
+            return rest.iter().rev().fold(canonical, |p, name| p.join(name));
+        }
+        match (base.parent(), base.file_name()) {
+            (Some(parent), Some(name)) => {
+                rest.push(name.to_os_string());
+                base = parent;
+            }
+            _ => return path.to_path_buf(),
+        }
+    }
 }
 
 fn is_unc(path: &Path) -> bool {

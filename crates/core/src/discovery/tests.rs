@@ -239,3 +239,38 @@ fn discovery_reads_nothing_but_the_git_marker() {
     assert_eq!(names(&list_first_level(root, false).unwrap()), ["canary"]);
     assert!(!marker.exists());
 }
+
+#[cfg(unix)]
+#[test]
+fn discovery_a_gitdir_link_or_fifo_is_never_read() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let outside = tempfile::tempdir().unwrap();
+    let other = repo(&outside.path().join("other"));
+    let target = outside.path().join("gitfile");
+    fs::write(
+        &target,
+        format!("gitdir: {}\n", other.join(".git/worktrees/w").display()),
+    )
+    .unwrap();
+    fs::create_dir_all(other.join(".git/worktrees/w")).unwrap();
+    fs::create_dir_all(root.join("linked")).unwrap();
+    std::os::unix::fs::symlink(&target, root.join("linked/.git")).unwrap();
+    fs::create_dir_all(root.join("fifo")).unwrap();
+    let made = std::process::Command::new("mkfifo")
+        .arg(root.join("fifo/.git"))
+        .status()
+        .unwrap();
+    assert!(made.success());
+    assert!(list_first_level(root, false).unwrap().found.is_empty());
+}
+
+#[test]
+fn discovery_a_deleted_path_is_looked_up_by_its_canonical_ancestor() {
+    let tmp = tempfile::tempdir().unwrap();
+    let gone = tmp.path().join("code/gone");
+    assert_eq!(
+        canonical_lookup(&gone),
+        canonical(tmp.path()).join("code").join("gone")
+    );
+}
