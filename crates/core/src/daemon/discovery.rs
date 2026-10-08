@@ -87,10 +87,17 @@ impl DiscoveryConfig {
     }
 
     pub(crate) fn home(&self) -> Option<PathBuf> {
+        // On Windows `HOME` may be a Git Bash path: the profile folder is
+        // `USERPROFILE`.
+        let names: &[&str] = if cfg!(windows) {
+            &["USERPROFILE", "HOME"]
+        } else {
+            &["HOME"]
+        };
         self.home.clone().or_else(|| {
-            std::env::var_os("HOME")
-                .or_else(|| std::env::var_os("USERPROFILE"))
-                .filter(|h| !h.is_empty())
+            names
+                .iter()
+                .find_map(|n| std::env::var_os(n).filter(|h| !h.is_empty()))
                 .map(PathBuf::from)
         })
     }
@@ -168,8 +175,7 @@ fn found_pairs(listing: &Listing) -> Vec<(String, String)> {
 /// The canonical form of a path the developer typed, for lookups; the path
 /// itself when it no longer exists.
 fn lookup_path(path: &Path) -> String {
-    gitraptor_git::paths::canonicalize(path)
-        .unwrap_or_else(|_| path.to_path_buf())
+    discovery::canonical_lookup(path)
         .to_string_lossy()
         .into_owned()
 }
@@ -222,18 +228,9 @@ impl Daemon {
                 }
             }
             DiscoveryRequest::Forget(path) => {
-                // The folder is gone: its parent gives the canonical form.
-                let canonical = path
-                    .parent()
-                    .zip(path.file_name())
-                    .and_then(|(parent, name)| {
-                        Some(gitraptor_git::paths::canonicalize(parent).ok()?.join(name))
-                    });
-                for path in [Some(path), canonical].into_iter().flatten() {
-                    let _ = self
-                        .profile
-                        .forget_discovery_candidate(&path.to_string_lossy());
-                }
+                let _ = self
+                    .profile
+                    .forget_discovery_candidate(&lookup_path(&path));
             }
         }
     }
