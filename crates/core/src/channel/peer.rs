@@ -200,6 +200,23 @@ mod imp {
             .and_then(|v| v.trim().parse().ok())
     }
 
+    /// [`super::proc_clock_us`]: `/proc/uptime` counts the same boot clock as `starttime`, in
+    /// hundredths rounded down, so both share the boot second and the tick.
+    pub(super) fn clock_us() -> Option<u64> {
+        let boot = boot_time_s()?;
+        let uptime = std::fs::read_to_string("/proc/uptime").ok()?;
+        let (secs, hundredths) = uptime.split_whitespace().next()?.split_once('.')?;
+        let ticks = secs
+            .parse::<u64>()
+            .ok()?
+            .checked_mul(100)?
+            .checked_add(hundredths.parse::<u64>().ok()?)?;
+        Some(
+            boot.saturating_mul(1_000_000)
+                .saturating_add(ticks.saturating_mul(10_000)),
+        )
+    }
+
     impl ProcSource for SystemProcs {
         fn args(&self, pid: u32) -> Option<Vec<std::ffi::OsString>> {
             use std::os::unix::ffi::OsStrExt;
@@ -383,6 +400,57 @@ mod imp {
 }
 
 pub use imp::process_cwd;
+
+/// Now, on the clock of [`ProcInfo::start_us`]: a process started at or after this call reads a
+/// `start_us` not below it. Linux derives start times from the boot second and 100 Hz ticks, so
+/// a wall-clock instant compares wrongly with them (the boot second alone is up to 1 s off);
+/// there this is the boot second plus the uptime in whole ticks. Elsewhere, the wall clock.
+pub fn proc_clock_us() -> u64 {
+    #[cfg(target_os = "linux")]
+    if let Some(us) = imp::clock_us() {
+        return us;
+    }
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| u64::try_from(d.as_micros()).unwrap_or(u64::MAX))
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod linux_tests {
+    use super::*;
+
+    #[test]
+    fn reads_this_process_and_its_parent() {
+        let me = SystemProcs.read(std::process::id()).unwrap();
+        assert_eq!(me.uid, current_uid());
+        assert!(me.start_us > 1_600_000_000_000_000, "after 2020");
+        let parent = SystemProcs.read(me.ppid).unwrap();
+        assert!(parent.start_us <= me.start_us);
+        assert_eq!(SystemProcs.foreign_to(me.pid, me.uid), Some(false));
+        assert!(SystemProcs.pids_of(me.uid).unwrap().contains(&me.pid));
+        assert!(me.pgid > 0);
+    }
+
+    /// The executor's marks and the accepted peer compare start times with this clock: a child
+    /// started after it must never read as older, whatever the fraction of the boot second.
+    #[test]
+    fn a_child_started_after_the_clock_is_not_older() {
+        assert!(proc_clock_us() >= SystemProcs.read(std::process::id()).unwrap().start_us);
+        for _ in 0..20 {
+            let before = proc_clock_us();
+            let mut child = std::process::Command::new("/bin/sleep")
+                .arg("5")
+                .spawn()
+                .unwrap();
+            let read = SystemProcs.read(child.id());
+            child.kill().unwrap();
+            child.wait().unwrap();
+            let start = read.unwrap().start_us;
+            assert!(start >= before, "child {start} before the clock {before}");
+            assert!(start <= proc_clock_us());
+        }
+    }
+}
 
 #[cfg(all(test, target_os = "macos"))]
 mod tests {

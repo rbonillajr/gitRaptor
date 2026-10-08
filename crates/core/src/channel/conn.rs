@@ -99,16 +99,11 @@ pub(crate) struct ConnTable {
     entries: Vec<ConnEntry>,
 }
 
-fn now_us() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| u64::try_from(d.as_micros()).unwrap_or(u64::MAX))
-}
-
 /// Checks a freshly accepted socket and, if it passes, serves it on its own
 /// thread.
 pub(crate) fn accept(ctx: &Arc<ServerCtx>, stream: Stream) {
-    let accepted_us = now_us();
+    // On the clock of the start times it is compared with.
+    let accepted_us = super::peer::proc_clock_us();
     let Ok(cred) = peer_cred(&stream) else {
         ctx.logger
             .warn("client_rejected", &[("reason", "peer-unreadable".into())]);

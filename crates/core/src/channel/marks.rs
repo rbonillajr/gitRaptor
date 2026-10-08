@@ -32,7 +32,8 @@ use super::requester::Who;
 struct Mark {
     operation_id: String,
     who: Who,
-    /// Wall clock when the operation opened, microseconds since the epoch.
+    /// When the operation opened, on the clock of the start times
+    /// ([`super::peer::proc_clock_us`]), microseconds since the epoch.
     /// A process group only matches processes started after it, so a
     /// reused group id of an older process never matches.
     opened_us: u64,
