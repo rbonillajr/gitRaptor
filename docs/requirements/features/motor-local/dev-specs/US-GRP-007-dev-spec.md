@@ -141,13 +141,30 @@ Todas son **Decisión del orquestador (2026-10-07), validada por el Arquitecto**
 - **Coste**: con una sesión presente en el repo, una transacción del desarrollador bajo un multiplexor recorre los procesos del usuario (`presence()` del solicitante) mientras el `git` espera. Sin sesión presente no se hace el recorrido. Medir el p95 queda pendiente (SPIKE-GRP-001).
 - **Hooks de plantilla 1**: también dejan S4 (el `reference-transaction` es obligatorio desde la plantilla 1); la segunda línea (revocación) solo existe en la 2.
 
+## Enmienda 2026-10-08 — Detección de sesiones en Windows
+
+Cierra el pendiente de Windows de D3. **Decisión del orquestador (2026-10-08), validada por el coordinador** (lectura del cwd por el PEB con derechos mínimos, solo procesos del mismo usuario, WOW64 rechazado, fail-closed).
+
+| Tema | Resolución |
+|---|---|
+| Lista de procesos (S1) | `SystemProcLister` en Windows sobre `gitraptor-winsys`: una sola instantánea de ToolHelp por escaneo (`current_user_processes`), solo procesos del usuario actual, sin SYSTEM; `exe` solo bajo demanda (`image_of`, `QueryFullProcessImageNameW`). Identidad `(pid, hora de creación)`: la hora de creación (100 ns) se guarda en microsegundos como en las otras plataformas y se compara al microsegundo mientras se lee cada dato |
+| Identificar a Claude Code | **La ruta de la imagen resuelta por el kernel**, nunca la línea de comandos (SEC-04): `AgentMatcher::classify` es el mismo en los tres SO (`claude`/`claude.exe` por nombre de archivo, carpeta `claude\versions\<versión>`, paquete npm `@anthropic-ai\claude-code`; el nombre sin distinguir mayúsculas). Un binario copiado y llamado `claude.exe` se acepta igual que en macOS y Linux: es el hueco declarado de S1 (la identidad por ruta no es una firma) |
+| cwd de otro proceso | `winsys::process::cwd(pid, creación)`: `NtQueryInformationProcess(ProcessBasicInformation)` → PEB → `RTL_USER_PROCESS_PARAMETERS.CurrentDirectory.DosPath`, con `ReadProcessMemory` de **tres trozos pequeños** (el puntero a los parámetros, el `UNICODE_STRING` y el texto, con tope de 32 768 unidades), **nunca `CommandLine` ni `Environment`**. Derechos mínimos (`PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ`, solo para esa llamada); el proceso debe ser del usuario actual, comprobado en su token antes de leer memoria; un proceso de 32 bits (WOW64) se **rechaza**, no se adivina; la hora de creación se comprueba antes y después. **No legible = desconocido, nunca "no es un agente"**: todo fallo (elevado, protegido, otro usuario) es `Denied` y el llamante deja al proceso en duda. El resultado solo se **compara** con las rutas de los worktrees (forma de unidad, sin `\\?\`); nada lo abre |
+| Mismo cwd para el log de Guardrails | `channel::peer::process_cwd` lo usa en Windows: sin él `raptor guard log` salía vacío porque el demonio no sabía en qué repo corría el hook |
+| `detection_supported()` | Verdadero en Windows: `sessions.list` ya no devuelve `detection_available: false`, y `raptor status`/`sessions`/`timeline` dejan de decir "no se puede detectar" |
+| Intérpretes | Sin cambio: Claude Code instalado por npm (`node …\cli.js`) no se detecta (no hay lectura acotada de `argv[1]`); no da falsos positivos |
+
+**Pruebas** (Windows): `winsys` (`process::tests`: cwd de un hijo, de este proceso, hora de creación distinta → `Gone`, 32 bits rechazado, otro usuario y System nunca leídos, la lista y `image_of`, formas de ruta), `core` (`detect::procs::windows_tests`, `channel::authz::classifier_table_on_windows_paths`) y `apps/cli/tests/claude_sessions_windows.rs` (el `raptor` real como demonio y cliente: un `cmd.exe` copiado como agente conocido, en un worktree de una ruta con espacios, aparece como "Claude Code · Active · detected" y al terminar queda `ended` con `process-gone`; un proceso con otro nombre no es sesión; un agente fuera de todo worktree observado tampoco). Con el binario release y un `claude.exe` copiado, en la máquina real: `raptor status` lo muestra activo y luego terminado.
+
+**Pendiente**: medir el coste del escaneo por segundo en Windows (RES-01 en la etapa de validación); S3 (atribución de commits por ascendencia) sigue la misma regla que en macOS pero no tiene su e2e en Windows; Windows 11.
+
 ## Estado de la implementación (2026-10-08)
 
-Implementado en: PR #80, #119, #124, #155, #169.
+Implementado en: PR #80, #119, #124, #155, #169 y, para Windows, el PR de la rama `feat/windows-session-detection` (enmienda de 2026-10-08).
 
 Notas (fuera del alcance de esta ficha o sin bloquearla):
 - La medición en el dogfooding real es de SPIKE-GRP-001 (criterio 2 de M1).
 - Claude Code instalado con npm (`node …/cli.js`) no se detecta: lo registra el desarrollador (US-GRP-009).
-- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+- Windows: detección de procesos y cwd portados y verificados en la máquina real (enmienda de 2026-10-08). Linux: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
 
 Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).
