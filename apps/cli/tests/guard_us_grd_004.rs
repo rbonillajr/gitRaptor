@@ -150,7 +150,11 @@ mod loss {
         text.push('\n');
         std::fs::write(&manifest, text).unwrap();
         assert_eq!(hooks(&m)["status"], "active");
-        assert!(transitions(&m).is_empty(), "{:#}", log(&m));
+        // Only the install's own transition (E6), expected; editing the manifest adds none.
+        let seen = transitions(&m);
+        assert_eq!(seen.len(), 1, "{:#}", log(&m));
+        assert_eq!(seen[0]["operation"]["to"], "active", "{seen:#?}");
+        assert_eq!(seen[0]["operation"]["expected"], true, "{seen:#?}");
         m.script(&dispatcher(&m), "#!/bin/sh\nexit 0\n");
         assert_lost(&m, "dispatcher-altered");
     }

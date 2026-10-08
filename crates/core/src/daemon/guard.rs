@@ -220,8 +220,17 @@ impl Daemon {
     }
 
     /// A check found the hook layer in this state (US-GRD-004).
+    ///
+    /// The thread that checked did so while the loop may have been installing or removing the
+    /// protection: the loop is the one place where nothing else changes it, so what it found is
+    /// read again here, against the install published now (none, and the report is stale).
     pub(super) fn guard_health(&mut self, report: HealthReport) {
-        self.protection_changed(&report.repo_id, None, report.layer, false);
+        let watched = self.guard.protection().get(&report.repo_id);
+        let Some(watched) = watched else {
+            return;
+        };
+        let layer = crate::guardrails::health::check(&watched.common, Some(&watched.journal)).hooks;
+        self.protection_changed(&report.repo_id, None, layer, false);
     }
 
     /// Records the state of the hook layer: a change is a transition in the decision log and,
