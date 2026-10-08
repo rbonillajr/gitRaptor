@@ -196,8 +196,12 @@ impl DaemonConfig {
             channel.agents = crate::channel::AgentMatcher::only(names);
         }
         channel.autostart = crate::autostart::Autostart::for_current_user();
+        let dirs = ProfileDirs::resolve()?;
+        // Observation tiers from the profile (TS-GRP-006): read once, at
+        // start; a change applies on the next start.
+        let tiers = TierConfig::for_profile(&dirs);
         Ok(Self {
-            dirs: ProfileDirs::resolve()?,
+            dirs,
             git: env::test_git().map_or_else(|| env.git_resolve_config(None), env::only_git),
             env,
             heartbeat: Duration::from_secs(60),
@@ -211,7 +215,7 @@ impl DaemonConfig {
                 no_free_space_floor: env::tm_no_free_space_floor(),
                 ..TmCapture::default()
             },
-            tiers: TierConfig::default(),
+            tiers,
         })
     }
 }
