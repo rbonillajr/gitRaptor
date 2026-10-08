@@ -6,7 +6,7 @@ status: approved
 feature: motor-local
 domain: GRP
 created: 2026-10-04
-updated: 2026-10-06
+updated: 2026-10-07
 related:
   stories: [INF-GRP-001, TS-GRP-002, TS-GRP-003, TS-GRP-004, US-GRP-002, US-GRP-004, US-GRP-007, INF-GRD-001, INF-TMC-001]
   adrs: [ADR-GRP-009, ADR-GRP-002, ADR-GRP-005, ADR-GRP-006, ADR-GRD-001]
@@ -200,6 +200,22 @@ En los dos primeros, Windows va con `continue-on-error` hasta que TS-GRP-002 imp
 - `gc.auto=0`, `gc.autoPackLimit=0` y `gc.autoDetach=false`.
 
 Cubre de Git 2.38 a 2.56: cada versión ignora las claves que no conoce. Los controles de gc del arnés no cambian lo que miden. Los `gc` explícitos (`tm_store_safety`, `tm_apply`, `repo_intact::concurrent_user_gc`) no dependen de la config automática. El control `control_gc_auto_by_agent_commit_is_not_imputed`, que provoca `gc --auto` a propósito, reactiva `maintenance.auto=true` en la config del repo, que tiene prioridad sobre la global. Se verificó que sin esa línea falla con "gc --auto did not run". El test `repo_intact::fixture_turns_automatic_maintenance_off` fija la configuración.
+
+### Enmienda 2026-10-07: CI con affected y nx sobre el target compartido
+
+> Decisión del orquestador (2026-10-04), validada por Arquitecto. Rama `ci/nx-affected-and-sccache`. La pide Rene (2026-10-07): que el CI corra solo lo nuevo o lo modificado. El cambio de arquitectura está en [ADR-GRP-002, Enmienda 2026-10-07](../../../../architecture/decisions/ADR-GRP-002-monorepo-nx.md#enmienda-2026-10-07-nx-sobre-cargo-y-ci-con-affected).
+
+**D9 no cambia.** Las suites `repo_intact` corren siempre sobre todo el workspace, con su mínimo (`repo_intact_min`) y sus pasos intactos. Tampoco cambian los nombres de los 9 checks, el filtro por ruta, Guardrails con Git mínimo, `deep exec audit` ni el banco de rendimiento. En `push` a `main` siempre se ejecuta todo.
+
+**Paso 1: `nx` compila donde compila `cargo`.** `@monodon/rust` 3.0.0 forzaba `RUSTC_WRAPPER=''` y un `--target-dir dist/target/<proyecto>` por proyecto. Ahora los targets son `nx:run-commands` sobre `cargo … -p {projectName}`, sin `--target-dir`. Verificado en local (macOS): `pnpm exec nx run-many -t test --skip-nx-cache` pasa en los 11 proyectos, no crea `dist/` y usa el `target/` de la raíz. Después, `cargo test --workspace --no-run` no recompila nada (0 `Compiling`), y `sccache --show-stats` cuenta las peticiones de compilación que lanza `nx` (antes el wrapper quedaba vacío y no contaba ninguna). Una observación: cada `cargo test -p <paquete>` resuelve las features solo con ese paquete, así que la primera vez algunos crates se compilan con otras features. Esas variantes conviven en `target/` y `sccache` las sirve después.
+
+**Paso 2: tests generales de los paquetes afectados.** Solo cambia el paso `cargo test … -- --skip repo_intact` de `lint and test (<so>)`:
+- **`changes` (ubuntu).** Si el filtro detecta cambios de Rust, hace checkout con `fetch-depth: 2` (el commit de merge y su primer padre, la base del PR), `pnpm install` y `tools/ci/affected-tests.mjs`. El script corre `nx show projects --affected --base=HEAD^1 --head=HEAD -t test`, se queda con los paquetes del Cargo workspace y publica `test_scope` (`affected` o `full`) y `test_projects`. Para `cargo metadata` usa el toolchain estable del runner (`RUSTUP_TOOLCHAIN`, que no es una variable `RUST_*` ni `CARGO_*` y además está en un job sin `rust-cache`), así no instala el fijado. Ninguno de esos pasos puede fallar el job: sin lista, corre todo. Un PR solo de docs no instala nada.
+- **Siempre `full`** en estos casos: `push` a `main`, ejecución manual, un paso de Nx que falla, una lista vacía, o un cambio en un archivo global (`Cargo.toml`, `Cargo.lock`, toolchain, `.cargo/**`, rustfmt, clippy, `.gitattributes`, `nx.json`, `package.json`, `pnpm-*.yaml`, este workflow o `tools/ci/**`).
+- **`lint and test (<so>)`.** `tools/ci/cargo-test-selection.sh` convierte la lista en `--workspace --exclude <no afectados>`, una sola invocación de cargo. Cargo unifica features sobre lo seleccionado. Medido en local: tras el build del workspace, `cargo test -p gitraptor-cli` recompila 99 unidades, porque `serde_core` pierde `rc`, `thiserror` pierde `default` y, por encima de ellos, se recompilan gix y todos los crates del workspace. Por eso, antes de usar la selección, el script comprueba con `cargo tree -e normal,build,dev -f '{p} {f}'` que cada paquete con sus features ya esté en la resolución del workspace. Tarda alrededor de un segundo y corre en cada SO, por las dependencias `cfg`. Si no se cumple, corre `--workspace`. La comprobación coincidió con el build real en las 7 selecciones medidas: cero divergencias cuando la selección es un subconjunto y recompilación cuando no lo es. Hoy reutilizan el build las selecciones que incluyen `gitraptor-cli`. Las de `gitraptor-mcp` solo, `gitraptor-git` solo o `gitraptor-policy` solo vuelven al workspace entero.
+- **Fitness del grafo.** Si un test lanza el binario de otro paquete (`sibling_bin`) que su proyecto no alcanza en el grafo de Nx, el script lo marca, el alcance pasa a `full` y `lint and test (ubuntu-latest)` falla. `gitraptor-cli` declara `implicitDependencies: ["gitraptor-mcp"]` por `raptor-mcp`.
+- **`fmt` y `clippy` siguen sobre todo el workspace.** Los datos de CI de 4 runs (2026-10-08) son: fmt 1-3 s y clippy 10-12 s en Linux, 17-29 s en macOS y 25-59 s en Windows, con la caché de `main`. Además, `clippy --workspace --exclude gitraptor-core` también recompila (24 s en local con `sccache`).
+- **Dónde se ahorra.** Las suites `repo_intact` ya compilan todos los binarios de test, así que lo que se ahorra es tiempo de ejecución. En local, los tests generales tardan 141 s en `gitraptor-cli`, 40 s en `gitraptor-core`, 12 s en `gitraptor-git`, 2,5 s en `gitraptor-policy` y menos de 0,2 s en el resto. Un PR que solo toca `apps/cli` se ahorra core, git y policy. Uno que toca `crates/core` corre core, cli y mcp, y se ahorra git y policy. Los tiempos medidos en CI, antes y después, están en el PR de esta rama.
 
 ## 10. Verificación realizada
 
