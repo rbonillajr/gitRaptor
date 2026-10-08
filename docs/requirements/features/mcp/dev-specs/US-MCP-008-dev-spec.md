@@ -640,8 +640,16 @@ pub fn precheck(oplog: &Mutex<Oplog>, store: &SnapshotStore, session_id: &str, w
 /// In flight → InFlight at once; recording lock within `deadline`; count, check, capture
 /// and record under it. Writes nothing in the repo.
 pub fn capture_in_store(store: &SnapshotStore, oplog: &Mutex<Oplog>, ask: &ManualAsk,
-                        engine_mark: Option<i64>, include_credentials: bool, now_ms: i64,
+                        engine_mark: Option<i64>, include_credentials: bool,
+                        floor: Option<&ManualFloor<'_>>, now_ms: i64,
                         deadline: Instant) -> Result<ManualCaptured, ManualError>;
+/// Free space seen by the manual capture (S1, S2): injectable so tests cross the floor
+/// deterministically. Production reads the volume of the store.
+pub trait FreeSpaceProbe: Send + Sync { fn available_bytes(&self, path: &Path) -> io::Result<u64>; }
+/// The manual floor: SEC-TMC-12 floor + reserve for the guaranteed prior. Checked under the
+/// recording lock right before capturing (S1) and after each file written (S2): crossing it
+/// discards the attempt (counted, C1) and deletes nothing.
+pub struct ManualFloor<'a> { pub floor: FreeSpaceFloor, pub reserve_bytes: u64, pub probe: &'a dyn FreeSpaceProbe }
 /// The daemon's path: settle, busy index, free-space floor, then `capture_in_store`.
 pub fn capture(deps: &CaptureDeps, ask: &ManualAsk, now_ms: i64) -> Result<ManualCaptured, ManualError>;
 pub fn wall_now_ms() -> i64;
@@ -965,3 +973,9 @@ Ajustes transversales aplicados: prueba "con el disco en el suelo, un previo gar
 - `crates/api/src/clock.rs` no es inyectable; las ventanas largas dependen de `now_ms` por parámetro. Un `Clock` de crate sería útil si otra historia necesita ventanas en el canal.
 - `apps/mcp/src/server.rs` tiene el despacho de herramientas en un `if`; con tres o más herramientas conviene un registro por archivo, como el de ADR-GRP-016.
 - `DaemonConfig` sigue siendo un punto de conflicto (pendiente de ADR-GRP-016); T005 añade una línea.
+
+## Enmiendas
+
+| Fecha | Origen | Qué cambia | Ids |
+|---|---|---|---|
+| 2026-10-08 | BLOQUEO del `rust-expert` al escribir SNAP20 y SNAP21: § Firmas no daba forma determinista de cruzar el suelo de espacio entre la precomprobación y la captura | `capture_in_store` recibe `floor: Option<&ManualFloor>` con una sonda `FreeSpaceProbe` inyectable; el suelo se comprueba bajo el cerrojo antes de capturar (S1) y tras cada fichero escrito (S2). `manual::capture` construye el `ManualFloor` de producción con `CaptureDeps.free_space_floor` y una sonda del volumen del almacén. **Decisión del orquestador (2026-10-08)**: costura de testeabilidad que no cambia el diseño validado; no requiere nueva validación | SNAP20, SNAP21, S1, S2 |
