@@ -109,7 +109,8 @@ fn machine() -> Machine {
         tiers: TierConfig {
             dormant_after: Some(Duration::from_secs(3600)),
             check_every: Duration::from_millis(50),
-            ..TierConfig::default()
+            sweep_every: Duration::from_secs(120),
+            reconcile_every: Duration::from_secs(3600),
         },
         tm_capture: Default::default(),
         discovery: Default::default(),
@@ -197,18 +198,20 @@ fn text_in_english_shows_the_tiers() {
     assert!(out.status.success(), "{}", text(&out));
     let shown = String::from_utf8(out.stdout).unwrap();
     let tiers = line(&shown, "observed repos:");
-    assert!(tiers.contains("1 active"), "{shown}");
-    assert!(tiers.contains("1 dormant"), "{shown}");
-    let active = line(&shown, "active:");
-    assert!(active.contains("1 repos"), "{shown}");
-    assert!(active.contains("watches"), "{shown}");
-    let dormant = line(&shown, "dormant:");
-    assert!(dormant.contains("1 repos"), "{shown}");
-    assert!(dormant.contains("watches"), "{shown}");
+    assert!(tiers.contains("active 1"), "{shown}");
+    assert!(tiers.contains("dormant 1"), "{shown}");
+    assert!(tiers.contains("waking up 0"), "{shown}");
+    let active = line(&shown, "active —");
+    assert!(active.contains("worktrees: 1"), "{shown}");
+    assert!(active.contains("watches: "), "{shown}");
+    let dormant = line(&shown, "dormant —");
+    assert!(dormant.contains("worktrees: 1"), "{shown}");
+    assert!(dormant.contains("watches (sentinels): "), "{shown}");
     let nets = line(&shown, "dormant safety nets:");
     assert!(nets.contains("sweep every 2 min"), "{shown}");
     assert!(nets.contains("reconciliation every 60 min"), "{shown}");
     line(&shown, "polled worktrees");
+    assert!(line(&shown, "discovered repos").contains(": 0"), "{shown}");
 }
 
 /// Lo mismo en español.
@@ -219,18 +222,23 @@ fn text_in_spanish_shows_the_tiers() {
     assert!(out.status.success(), "{}", text(&out));
     let shown = String::from_utf8(out.stdout).unwrap();
     let tiers = line(&shown, "repos observados:");
-    assert!(tiers.contains("1 activos"), "{shown}");
-    assert!(tiers.contains("1 dormidos"), "{shown}");
-    let active = line(&shown, "activos:");
-    assert!(active.contains("1 repos"), "{shown}");
-    assert!(active.contains("vigilancias"), "{shown}");
-    let dormant = line(&shown, "dormidos:");
-    assert!(dormant.contains("1 repos"), "{shown}");
-    assert!(dormant.contains("vigilancias"), "{shown}");
+    assert!(tiers.contains("activos 1"), "{shown}");
+    assert!(tiers.contains("dormidos 1"), "{shown}");
+    assert!(tiers.contains("despertando 0"), "{shown}");
+    let active = line(&shown, "activos —");
+    assert!(active.contains("worktrees: 1"), "{shown}");
+    assert!(active.contains("vigilancias: "), "{shown}");
+    let dormant = line(&shown, "dormidos —");
+    assert!(dormant.contains("worktrees: 1"), "{shown}");
+    assert!(dormant.contains("vigilancias (centinelas): "), "{shown}");
     let nets = line(&shown, "redes de seguridad de los dormidos:");
     assert!(nets.contains("barrido cada 2 min"), "{shown}");
     assert!(nets.contains("reconciliación cada 60 min"), "{shown}");
     line(&shown, "worktrees sondeados");
+    assert!(
+        line(&shown, "repos descubiertos").contains(": 0"),
+        "{shown}"
+    );
 }
 
 /// `--json` trae los mismos recuentos en unidades fijas.

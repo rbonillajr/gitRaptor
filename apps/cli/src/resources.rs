@@ -261,7 +261,6 @@ fn tiers_text(out: &mut String, observation: Option<&ObservationUsage>) {
         t(
             "res.tier-active",
             &[
-                ("repos", &o.active.repos),
                 ("worktrees", &o.active.worktrees),
                 ("watches", &o.active.watches),
             ],
@@ -273,7 +272,6 @@ fn tiers_text(out: &mut String, observation: Option<&ObservationUsage>) {
         t(
             "res.tier-dormant",
             &[
-                ("repos", &o.dormant.repos),
                 ("worktrees", &o.dormant.worktrees),
                 ("watches", &o.dormant.watches),
             ],

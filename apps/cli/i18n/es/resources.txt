@@ -33,10 +33,10 @@ res.power = ahorro de energía: {value}
 res.power-on = activo
 res.power-off = inactivo
 # Niveles de observación (US-GRP-017, Enmienda 2026-10-07; TS-GRP-006)
-res.tiers = repos observados: {active} activos · {dormant} dormidos · {waking} despertando
+res.tiers = repos observados: activos {active} · dormidos {dormant} · despertando {waking}
 res.tiers-na = repos observados por nivel: no disponible
-res.tier-active = activos: {repos} repos, {worktrees} worktrees, {watches} vigilancias
-res.tier-dormant = dormidos: {repos} repos, {worktrees} worktrees, {watches} vigilancias (centinelas)
+res.tier-active = activos — worktrees: {worktrees}, vigilancias: {watches}
+res.tier-dormant = dormidos — worktrees: {worktrees}, vigilancias (centinelas): {watches}
 res.tier-safety = redes de seguridad de los dormidos: barrido cada {sweep}, reconciliación cada {reconcile}, CPU {cpu}
 res.tier-degraded = worktrees sondeados (sin vigilancia): {n}
 res.discovered = repos descubiertos, sin observar: {n} (0 recursos hasta aceptarlos)
