@@ -178,3 +178,51 @@ fn install_protects_a_repo_under_a_path_with_spaces() {
     git_ok(&m.repo, &["commit", "-q", "--allow-empty", "-m", "four"]);
     git_ok(&m.repo, &["push", "-q", "origin", "feat-x"]);
 }
+
+/// A hook the repo already had is chained by the native dispatcher through Git's own `sh`, as
+/// Git itself would run it (US-GRD-002, #193): a script with `#!`, with the same arguments and
+/// input, whose exit code decides, and a denial of GitRaptor never reaches it.
+#[test]
+fn a_prior_script_hook_is_chained_through_git_for_windows_sh() {
+    let m = Machine::new();
+    let hooks = m.repo.join(".git").join("hooks");
+    let marker = m.repo.parent().unwrap().join("prior ran.txt");
+    let deny = m.repo.parent().unwrap().join("deny push");
+    let unix = |p: &Path| p.to_string_lossy().replace('\\', "/");
+    std::fs::write(
+        hooks.join("pre-commit"),
+        format!("#!/bin/sh\necho \"pre-commit $#\" >> '{}'\n", unix(&marker)),
+    )
+    .unwrap();
+    std::fs::write(
+        hooks.join("pre-push"),
+        format!(
+            "#!/bin/sh\ncat > /dev/null\nif [ -e '{}' ]; then echo 'prior says no' >&2; exit 1; fi\n",
+            unix(&deny)
+        ),
+    )
+    .unwrap();
+    m.install();
+
+    git_ok(&m.repo, &["commit", "-q", "--allow-empty", "-m", "three"]);
+    let ran = std::fs::read_to_string(&marker).expect("the prior pre-commit ran");
+    assert!(ran.contains("pre-commit 0"), "{ran}");
+    git_ok(&m.repo, &["push", "-q", "origin", "feat-x"]);
+
+    std::fs::write(&deny, "").unwrap();
+    git_ok(&m.repo, &["commit", "-q", "--allow-empty", "-m", "four"]);
+    let refused = git(&m.repo, &["push", "origin", "feat-x"]);
+    assert!(!refused.status.success());
+    assert!(
+        stderr(&refused).contains("prior says no"),
+        "{}",
+        stderr(&refused)
+    );
+
+    // GitRaptor's own denial comes first and the prior hook never sees it.
+    std::fs::remove_file(&deny).unwrap();
+    git_ok(&m.repo, &["reset", "-q", "--hard", "HEAD~1"]);
+    let forced = git(&m.repo, &["push", "--force", "origin", "feat-x"]);
+    assert!(!forced.status.success());
+    assert!(stderr(&forced).contains("GitRaptor"), "{}", stderr(&forced));
+}
