@@ -23,6 +23,14 @@ pub fn is_worktree_id(id: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
 }
 
+/// Points of [`recreate_with`] where a test can act, as a concurrent process would.
+#[doc(hidden)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Stage {
+    TargetChecked,
+    BeforeCommit,
+}
+
 /// Recreates worktree `id` of `main` (the main worktree) at `path`, with `HEAD` set to `head`.
 pub fn recreate(
     main: &WriteWorktree,
@@ -30,6 +38,18 @@ pub fn recreate(
     path: &Path,
     head: &HeadValue,
     profile_root: &Path,
+) -> Result<WriteWorktree> {
+    recreate_with(main, id, path, head, profile_root, &|_| {})
+}
+
+#[doc(hidden)]
+pub fn recreate_with(
+    main: &WriteWorktree,
+    id: &str,
+    path: &Path,
+    head: &HeadValue,
+    profile_root: &Path,
+    hook: &dyn Fn(Stage),
 ) -> Result<WriteWorktree> {
     let reject = |why: &str| {
         Err(WriteError::InvalidInput(format!(
@@ -71,6 +91,7 @@ pub fn recreate(
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
         Err(e) => return Err(e.into()),
     }
+    hook(Stage::TargetChecked);
     let config = std::fs::read_to_string(main.common_dir().join("config")).unwrap_or_default();
     if config.to_ascii_lowercase().contains("relativeworktrees") {
         return reject("extensions.relativeWorktrees is not supported");
@@ -95,6 +116,7 @@ pub fn recreate(
         &admin.join("gitdir"),
         format!("{}\n", dot_git.display()).as_bytes(),
     )?;
+    hook(Stage::BeforeCommit);
     if path.symlink_metadata().is_err() {
         std::fs::create_dir(&path)?;
     }
