@@ -492,6 +492,188 @@ pub struct GuardRejectedData {
     pub blockers: Vec<InstallBlocker>,
 }
 
+/// Kind of a decision log entry (ADR-GRD-006 § 1; `notice`: Enmienda 2026-10-07). Only
+/// `denial` counts as a blocked action.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum LogKind {
+    /// The applied effect was not `allow`.
+    Denial,
+    /// An agent's commit went in with a warning, or under `flexible` (BR-AUTH-005).
+    Notice,
+}
+
+/// Whether an entry carries every field or only the counters over the insert cap.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum LogDetail {
+    Full,
+    /// Occurrences over the cap, aggregated by kind, operation and rule (ADR-GRD-006 § 2).
+    RateLimited,
+}
+
+/// Layer that took the decision. Until the MCP and the Cockpit decide, only `hooks`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum LogLayer {
+    Hooks,
+}
+
+/// Who wrote the entry. Until the degraded-mode spool, only the daemon.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum LogOrigin {
+    Daemon,
+}
+
+/// What an operation did to one ref.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum RefChange {
+    Create,
+    Update,
+    /// Not a fast-forward.
+    Force,
+    Delete,
+}
+
+/// One ref of a logged operation, by its short name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct LoggedRef {
+    pub name: Untrusted,
+    pub change: RefChange,
+}
+
+/// The normalized operation of an entry: never argv, oids or a message (M-06).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case", tag = "kind")]
+pub enum LoggedOperation {
+    Push {
+        /// Remote name, or the URL without userinfo, query or fragment.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        remote: Option<Untrusted>,
+        refs: Vec<LoggedRef>,
+    },
+    RefTransaction {
+        refs: Vec<LoggedRef>,
+    },
+    Rebase {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        upstream: Option<Untrusted>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        branch: Option<Untrusted>,
+    },
+    Commit {
+        stage: CommitStage,
+    },
+}
+
+/// A reason as logged: the rule, its level and its cause, without parameters.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct LoggedReason {
+    pub rule: Rule,
+    pub level: Level,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cause: Option<Cause>,
+}
+
+/// What a commit entry says about authorship (DS-US-GRD-018 D12): agent kinds, never names or
+/// emails. The author and the committer are shown by joining the event, not copied here.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct LoggedAuthorship {
+    /// One entry per `Co-Authored-By`; `None` = not recognised by the table.
+    pub coauthors: Vec<Option<AgentKind>>,
+    /// At least one trailer identifies an agent.
+    pub agent_trailer: bool,
+    /// The message could not be read.
+    pub unreadable: bool,
+    /// The policy in force when it was applied (`agents-commit`, `human-author`, `flexible`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub policy: Option<String>,
+}
+
+/// One entry of the decision log (ADR-GRD-006 § 1). The repo is the one asked for.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct GuardLogEntry {
+    /// First occurrence (UTC) and the local offset then.
+    pub at_ms: i64,
+    pub utc_offset_s: i32,
+    /// Last occurrence aggregated here.
+    pub last_ms: i64,
+    pub count: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worktree: Option<Untrusted>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<Untrusted>,
+    /// The agent behind the operation; `None` = unattributed.
+    pub actor: Option<AgentKind>,
+    pub operation: LoggedOperation,
+    pub kind: LogKind,
+    pub detail: LogDetail,
+    pub effect: Effect,
+    pub applied_effect: Effect,
+    pub reasons: Vec<LoggedReason>,
+    pub layer: LogLayer,
+    pub origin: LogOrigin,
+    pub decision_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authorship: Option<LoggedAuthorship>,
+}
+
+/// `guard.log` parameters (US-GRD-005).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct GuardLogParams {
+    pub path: String,
+    /// Start of the period; never earlier than the retention (90 days).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub since_ms: Option<i64>,
+    /// Entries returned, most recent first (default 50, at most 500).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+}
+
+/// Occurrences of the period, summing `count` (ADR-GRD-006 § 6).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct GuardLogSummary {
+    /// The KPI: denials, rows over the cap included.
+    pub blocked: u64,
+    /// Warnings and `flexible` commits: outside the KPI.
+    pub notices: u64,
+    /// Of the above, how many are counted only in the rows over the cap.
+    pub rate_limited: u64,
+}
+
+/// A period the engine was not running: the hooks decided alone and nothing was logged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct UnloggedPeriod {
+    pub from_ms: i64,
+    /// `None`: still open.
+    pub to_ms: Option<i64>,
+}
+
+/// `guard.log` result.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct GuardLogResult {
+    /// The start of the period actually read.
+    pub since_ms: i64,
+    pub summary: GuardLogSummary,
+    pub entries: Vec<GuardLogEntry>,
+    pub unlogged_periods: Vec<UnloggedPeriod>,
+}
+
+/// Longest page of `guard.log`.
+pub const MAX_LOG_PAGE: u32 = 500;
+/// Days an entry is kept, from its last occurrence (BR-TIME-002).
+pub const LOG_RETENTION_DAYS: i64 = 90;
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -87,8 +87,14 @@ fn every_legacy_protocol_keeps_its_methods() {
 }
 
 /// Methods added after the freeze: a client of protocol 9 finds them in the
-/// handshake's `methods` (ADR-GRP-016 § 1). US-MCP-002 and US-MCP-003.
-const AFTER_FREEZE_FULL: &[&str] = &["mcp.enable", "mcp.disable", "mcp.allowlist", "mcp.status"];
+/// handshake's `methods` (ADR-GRP-016 § 1). US-MCP-002, US-MCP-003 and US-GRD-005.
+const AFTER_FREEZE_FULL: &[&str] = &[
+    "mcp.enable",
+    "mcp.disable",
+    "mcp.allowlist",
+    "mcp.status",
+    "guard.log",
+];
 const AFTER_FREEZE_MCP: &[&str] = &["mcp.status"];
 
 /// Protocol 9 adds `connection.accept`, for every profile, and nothing else
