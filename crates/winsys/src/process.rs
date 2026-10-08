@@ -68,6 +68,17 @@ pub fn owner_of(pid: u32) -> Result<Owner, Error> {
     Ok(owner(&handle))
 }
 
+/// Creation time of the live process `pid`, 100 ns intervals since 1601-01-01 UTC: with the pid,
+/// its identity. A process that ended but is still pinned by some handle counts as gone.
+pub fn created_100ns(pid: u32) -> Result<u64, Error> {
+    let handle = open(pid)?;
+    let created_100ns = created(&handle).ok_or(Error::Gone)?;
+    if ended(&handle) {
+        return Err(Error::Gone);
+    }
+    Ok(created_100ns)
+}
+
 /// Reads one live process.
 pub fn process(pid: u32) -> Result<Process, Error> {
     // Opened first: the handle pins the process, so the pid is not reused
@@ -125,10 +136,12 @@ mod tests {
         assert_eq!(info.ppid, std::process::id());
         assert_eq!(info.owner, Owner::Current);
         assert!(info.created_100ns >= process(std::process::id()).unwrap().created_100ns);
+        assert_eq!(created_100ns(pid), Ok(info.created_100ns));
         // Still pinned by `child`'s handle, but no longer in the list.
         child.kill().unwrap();
         child.wait().unwrap();
         assert_eq!(process(pid), Err(Error::Gone));
+        assert_eq!(created_100ns(pid), Err(Error::Gone));
     }
 
     #[test]
