@@ -3,7 +3,7 @@
 //! (NFR-01). Declaring a root for real needs a developer in a terminal: that
 //! path is in `apps/cli/tests/discovery_roots.rs`; here the roots are seeded
 //! in the profile, as `discovery.root.add` leaves them.
-#![cfg(target_os = "macos")]
+#![cfg(any(target_os = "macos", target_os = "linux"))]
 
 mod common;
 
@@ -273,8 +273,40 @@ fn discovery_a_root_proposes_its_first_level_repos_without_observing_them() {
     assert!(changed.is_empty(), "discovery wrote {changed:?}");
 }
 
-/// The home folder as a broad root: hidden folders and the macOS exclusions
-/// are never proposed.
+/// Linux and Windows: a normal root has a first-level watch (inotify,
+/// ReadDirectoryChangesW). Every interval but the settle is an hour, so a
+/// repo created after the first listing can only be announced by the watch.
+#[cfg(not(target_os = "macos"))]
+#[test]
+fn discovery_a_normal_root_is_listed_on_a_change_of_its_first_level() {
+    let tp = TempProfile::new();
+    let tmp = tempfile::tempdir().unwrap();
+    let home = tmp.path().join("home");
+    let code = home.join("code");
+    std::fs::create_dir_all(&code).unwrap();
+    init_repo(&code, "api", false);
+    tp.open()
+        .add_discovery_root(&text(&code), false, 1)
+        .unwrap();
+    let hour = Duration::from_secs(3600);
+    let config = DiscoveryConfig {
+        home: Some(home.clone()),
+        settle: Duration::from_millis(20),
+        poll: hour,
+        broad_poll: hour,
+        safety: hour,
+    };
+
+    let r = Running::start(tp.dirs(), ChannelConfig::default(), config);
+    let mut client = r.client(ClientKind::Cli);
+    wait_for(&mut client, &["api"]);
+    init_repo(&code, "billing", false);
+    wait_for(&mut client, &["api", "billing"]);
+}
+
+/// The home folder as a broad root: hidden folders and the exclusions of the
+/// platform (macOS: `Library` and the TCC folders; Linux: `snap`) are never
+/// proposed. On Linux the macOS folders are ordinary ones.
 #[test]
 fn discovery_the_home_root_skips_hidden_and_excluded_folders() {
     let tp = TempProfile::new();
@@ -285,11 +317,16 @@ fn discovery_the_home_root_skips_hidden_and_excluded_folders() {
     init_repo(&home, ".oh-my-zsh", false);
     init_repo(&home.join("Library"), "x", false);
     init_repo(&home, "Documents", false);
+    init_repo(&home, "snap", false);
     tp.open().add_discovery_root(&text(&home), true, 1).unwrap();
 
     let r = Running::start(tp.dirs(), ChannelConfig::default(), fast(&home));
     let mut client = r.client(ClientKind::Cli);
-    wait_for(&mut client, &["dotlab"]);
+    if cfg!(target_os = "macos") {
+        wait_for(&mut client, &["dotlab", "snap"]);
+    } else {
+        wait_for(&mut client, &["Documents", "dotlab"]);
+    }
 }
 
 /// Dismissing is for good, by path: it survives a restart, and adding the

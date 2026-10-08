@@ -9,7 +9,7 @@
 //! `test_layer_override` (never applied to a descendant of the executor). The layer the daemon
 //! derives itself is covered by unit tests of `executor` and by
 //! `layer_comes_from_the_daemon_without_the_override`.
-#![cfg(target_os = "macos")]
+#![cfg(any(target_os = "macos", target_os = "linux"))]
 
 mod common;
 

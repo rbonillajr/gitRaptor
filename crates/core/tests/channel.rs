@@ -2,7 +2,7 @@
 //! client library, over a temporary profile (NFR-01). The process-level
 //! scenarios (on-demand start, simulated agent, pty, permissions, network)
 //! are in `apps/cli/tests/channel_process.rs`.
-#![cfg(target_os = "macos")]
+#![cfg(any(target_os = "macos", target_os = "linux"))]
 
 mod common;
 
@@ -822,7 +822,7 @@ fn engine_state_is_the_first_event_of_a_run() {
 // ---------------------------------------------------------------- DEP-MCP-3
 
 /// A process the daemon spawned (here: the in-process daemon is this test
-/// process, and `sh`/`nc` are its children, as a hook run by the future
+/// process, and a copy of the test binary is its child, as a hook run by the
 /// operation executor would be) cannot use a reserved command.
 #[test]
 fn a_child_of_the_daemon_cannot_use_reserved_commands() {
@@ -835,12 +835,15 @@ fn a_child_of_the_daemon_cannot_use_reserved_commands() {
         },
     );
     drop(r.client());
-    let script = format!(
-        "(printf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"hello\",\"params\":{{\"protocol\":{PROTOCOL_VERSION},\"client\":\"cli\",\"client_version\":\"x\"}}}}' '{{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"daemon.stop\"}}'; sleep 1) | /usr/bin/nc -U {}",
-        r.socket().display()
-    );
-    let out = std::process::Command::new("/bin/sh")
-        .args(["-c", &script])
+    let out = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "raw_child_asks_to_stop",
+            "--ignored",
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .env(CHILD_SOCKET, r.socket())
         .output()
         .unwrap();
     let text = String::from_utf8_lossy(&out.stdout);
@@ -852,6 +855,33 @@ fn a_child_of_the_daemon_cannot_use_reserved_commands() {
     assert!(entries[0].client.daemon_descendant);
     let pong: String = client.call(methods::PING, json!({})).unwrap();
     assert_eq!(pong, "pong");
+}
+
+const CHILD_SOCKET: &str = "GITRAPTOR_TEST_CHILD_SOCKET";
+
+/// Run by `a_child_of_the_daemon_cannot_use_reserved_commands` as a child of
+/// the daemon: over a raw socket (no client library, no `nc`), says hello,
+/// asks for `daemon.stop` and prints both answers.
+#[test]
+#[ignore = "run by a_child_of_the_daemon_cannot_use_reserved_commands"]
+fn raw_child_asks_to_stop() {
+    let socket = std::env::var_os(CHILD_SOCKET).expect("run by its parent test");
+    let mut stream = UnixStream::connect(socket).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(10)))
+        .unwrap();
+    let hello = json!({"jsonrpc": "2.0", "id": 1, "method": "hello", "params": {
+        "protocol": PROTOCOL_VERSION, "client": "cli", "client_version": "x"}});
+    let stop = json!({"jsonrpc": "2.0", "id": 2, "method": methods::DAEMON_STOP});
+    writeln!(stream, "{hello}\n{stop}").unwrap();
+    let mut answers = BufReader::new(stream);
+    for _ in 0..2 {
+        let mut line = String::new();
+        if answers.read_line(&mut line).unwrap() == 0 {
+            break;
+        }
+        print!("{line}");
+    }
 }
 
 /// Another process of the user removes the socket and binds its own: on its
