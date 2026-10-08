@@ -569,8 +569,11 @@ impl Connection<'_> {
                 || !self.has(methods::CAP_DISCOVERY_EVENTS.name),
         );
         // Nor the loss of the protection without `guard.protection` (US-GRD-004).
-        self.outbox
-            .set_without_protection(!self.has(methods::CAP_GUARD_PROTECTION.name));
+        // Never to `raptor-mcp` either (BR-AUTH-004).
+        self.outbox.set_without_protection(
+            self.profile != ConnectionProfile::Full
+                || !self.has(methods::CAP_GUARD_PROTECTION.name),
+        );
         // Nor the declared authorship of commits without `events.authorship`
         // (US-GRD-019): `raptor-mcp` never asks for it.
         self.outbox

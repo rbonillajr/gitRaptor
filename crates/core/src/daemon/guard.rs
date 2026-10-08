@@ -236,6 +236,9 @@ impl Daemon {
         };
         // An install or an uninstall of ours that did not finish (it fails half way, or waits
         // for the next start to be completed) is not somebody else's doing.
+        // A dormant repo has no open store (ADR-GRP-015): it wakes for a change of state, which
+        // is rare, and never for a check that finds nothing.
+        self.wake_for_request(&report.repo_id);
         let confirmed = self
             .stores
             .iter()

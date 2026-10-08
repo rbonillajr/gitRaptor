@@ -38,6 +38,41 @@ impl Health {
 /// configuration could not be read (that is not "no key": the check says it could not tell).
 pub type Key = Result<Option<String>, ()>;
 
+/// The largest file the check reads (the dispatchers are a few KB and the native one under a
+/// MB): a file over it is not what the journal recorded.
+const MAX_FILE: u64 = 32 * 1024 * 1024;
+
+/// Reads a regular file for the integrity check, the way a file somebody else can swap may be
+/// read: never through a link, never blocking on a pipe (a FIFO put where a dispatcher was would
+/// freeze the loop), never more than [`MAX_FILE`]. `Ok(None)`: not a regular file, or too big.
+pub(crate) fn read_regular(path: &Path) -> std::io::Result<Option<Vec<u8>>> {
+    use std::io::Read;
+    #[cfg(unix)]
+    let file = {
+        use std::os::unix::fs::OpenOptionsExt;
+        std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(
+                (rustix::fs::OFlags::NOFOLLOW | rustix::fs::OFlags::NONBLOCK).bits() as i32,
+            )
+            .open(path)?
+    };
+    #[cfg(not(unix))]
+    let file = {
+        if !std::fs::symlink_metadata(path)?.is_file() {
+            return Ok(None);
+        }
+        std::fs::File::open(path)?
+    };
+    let meta = file.metadata()?;
+    if !meta.is_file() || meta.len() > MAX_FILE {
+        return Ok(None);
+    }
+    let mut bytes = Vec::with_capacity(usize::try_from(meta.len()).unwrap_or(0));
+    file.take(MAX_FILE + 1).read_to_end(&mut bytes)?;
+    Ok((bytes.len() as u64 <= MAX_FILE).then_some(bytes))
+}
+
 /// Reads the key from the repo (no global or system level).
 #[allow(clippy::result_unit_err)]
 pub fn read_key(common: &Path) -> Key {
@@ -150,10 +185,14 @@ fn integrity(common: &Path, journal: &Journal) -> Option<LossCause> {
             altered = true;
             continue;
         }
-        match std::fs::read(&path) {
-            Ok(bytes) if sha256(&bytes) == file.sha256 => {}
+        match read_regular(&path) {
+            Ok(Some(bytes)) if sha256(&bytes) == file.sha256 => {}
             Ok(_) => altered = true,
-            Err(_) => return Some(LossCause::DispatcherMissing),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Some(LossCause::DispatcherMissing);
+            }
+            // A link swapped in after the check above, or anything else that cannot be read.
+            Err(_) => altered = true,
         }
         if file.path.starts_with("hooks/") && !executable(&meta) {
             not_executable = true;
@@ -208,6 +247,10 @@ pub fn fingerprint(common: &Path, journal: &Journal) -> u64 {
                     use std::os::unix::fs::MetadataExt;
                     m.mode().hash(&mut h);
                     m.ino().hash(&mut h);
+                    // The change time cannot be set back by an ordinary user, unlike the
+                    // modification time (`touch -r`).
+                    m.ctime().hash(&mut h);
+                    m.ctime_nsec().hash(&mut h);
                 }
             }
             Err(_) => 0u8.hash(&mut h),
@@ -231,5 +274,33 @@ mod tests {
         // Another tool's folder is not ours to call moved.
         let h = check_with(&common, None, Ok(Some(".husky/_".into())));
         assert_eq!(h.hooks.status, HooksStatus::NotInstalled);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_pipe_a_link_or_a_huge_file_is_never_read_blocking() {
+        let tmp = tempfile::tempdir().unwrap();
+        let fifo = tmp.path().join("fifo");
+        assert!(
+            std::process::Command::new("mkfifo")
+                .arg(&fifo)
+                .status()
+                .unwrap()
+                .success()
+        );
+        // Opened without blocking and refused: it is not a regular file.
+        assert_eq!(read_regular(&fifo).unwrap(), None);
+        let target = tmp.path().join("target");
+        std::fs::write(&target, b"x").unwrap();
+        let link = tmp.path().join("link");
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+        assert!(read_regular(&link).is_err());
+        let huge = tmp.path().join("huge");
+        std::fs::File::create(&huge)
+            .unwrap()
+            .set_len(MAX_FILE + 1)
+            .unwrap();
+        assert_eq!(read_regular(&huge).unwrap(), None);
+        assert_eq!(read_regular(&target).unwrap().as_deref(), Some(&b"x"[..]));
     }
 }

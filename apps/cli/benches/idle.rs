@@ -430,6 +430,17 @@ mod unix {
             eprintln!("idle: --protected needs GITRAPTOR_BENCH_RAPTOR (a debug build of raptor)");
             return 1;
         }
+        // Only a debug build honors the temporary profile; a release one would use the real one
+        // (NFR-01).
+        if let Some(path) = raptor.as_ref().filter(|_| o.protected)
+            && !path.components().any(|c| c.as_os_str() == "debug")
+        {
+            eprintln!(
+                "idle: {} is not a debug build: refused (NFR-01)",
+                path.display()
+            );
+            return 1;
+        }
         let daemon = Daemon::start(&root.join("profile"), &worktrees[0].join(".git"));
         if o.protected {
             let raptor = raptor.unwrap_or_default();
