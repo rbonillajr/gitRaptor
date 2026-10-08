@@ -781,9 +781,14 @@ impl Shared {
         ticket: &watchers::mac::Ticket,
         new: gitraptor_macsys::fsevents::Stream,
         requested: Vec<PathBuf>,
-    ) -> Option<Arc<gitraptor_macsys::fsevents::Stream>> {
+    ) -> Arc<gitraptor_macsys::fsevents::Stream> {
         let mut guard = self.watchers.lock().unwrap_or_else(|e| e.into_inner());
-        guard.as_mut().map(|w| w.commit(ticket, new, requested))
+        let leaving = match guard.as_mut() {
+            Some(w) => w.commit(ticket, new, requested),
+            None => Arc::new(new),
+        };
+        drop(guard);
+        leaving
     }
 
     fn worktrees_of(&self, repo_id: &str) -> Vec<WtHandle> {
@@ -1307,12 +1312,15 @@ impl Drop for Observer {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .take();
-        // Dropping the watchers ends the OS streams.
-        self.shared
+        // Dropping the watchers ends the OS streams, outside the lock: a stream waits for its
+        // callback when dropped.
+        let watchers = self
+            .shared
             .watchers
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .take();
+        drop(watchers);
     }
 }
 

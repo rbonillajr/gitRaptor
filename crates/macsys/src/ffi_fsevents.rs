@@ -189,6 +189,9 @@ extern "C" fn trampoline(
         // SAFETY: `info` is the `Context` `create` passed, alive until `Raw::drop` drained the
         // queue this runs on.
         let ctx = unsafe { &*info.cast::<Context>() };
+        if num_events == 0 {
+            return;
+        }
         let paths = event_paths.cast::<*const c_char>();
         // SAFETY: FSEvents passes `num_events` valid entries in each of the three arrays.
         let paths = unsafe { std::slice::from_raw_parts(paths, num_events) };
@@ -206,11 +209,12 @@ extern "C" fn trampoline(
                 flags: flags[i],
                 id: ids[i],
             });
-            if ids[i] != 0 {
-                ctx.last_id.fetch_max(ids[i], Ordering::Relaxed);
-            }
         }
         (ctx.handler)(&events);
+        // After the handler: if it panics, a stream that resumes from this id replays the batch.
+        if let Some(max) = ids.iter().copied().max().filter(|id| *id != 0) {
+            ctx.last_id.fetch_max(max, Ordering::Relaxed);
+        }
     }));
 }
 
@@ -281,6 +285,12 @@ pub(crate) fn create(
     let label = CString::new("gitraptor.fsevents").unwrap_or_default();
     // SAFETY: `label` is a live C string, copied by the call; a null attribute is a serial queue.
     let queue = unsafe { dispatch_queue_create(label.as_ptr(), null()) };
+    if queue.is_null() {
+        // SAFETY: an owned stream, never used after this.
+        unsafe { FSEventStreamRelease(stream) };
+        free(context);
+        return Err(StreamError::Create);
+    }
     // SAFETY: a live, not yet started stream and a live queue, which the stream retains.
     unsafe { FSEventStreamSetDispatchQueue(stream, queue) };
     // SAFETY: a live stream with a queue.
