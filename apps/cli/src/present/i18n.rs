@@ -690,6 +690,16 @@ fn module_error(name: &str, lang: Lang) -> Option<&'static str> {
 /// `(name, en, es)` of each module's own code.
 const MODULE_ERRORS: &[(&str, &str, &str)] = &[
     (
+        "snapshot-quota-exceeded",
+        "too many manual snapshots for now; try again later",
+        "demasiados snapshots manuales por ahora; inténtalo más tarde",
+    ),
+    (
+        "snapshot-time-limit",
+        "the snapshot took too long; nothing was saved",
+        "el snapshot tardó demasiado; no se guardó nada",
+    ),
+    (
         "guard-uninstall-refused",
         "the protection was not removed",
         "la protección no se retiró",

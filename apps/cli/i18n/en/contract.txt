@@ -59,3 +59,5 @@ error.root-rejected = the folder cannot be a code folder
 error.root-broad = the folder is broad: confirm it from your own terminal
 error.root-unknown = that folder is not a declared code folder
 error.not-a-candidate = that repo is not waiting for a decision
+error.snapshot-quota-exceeded = too many manual snapshots for now; try again later
+error.snapshot-time-limit = the snapshot took too long; nothing was saved
