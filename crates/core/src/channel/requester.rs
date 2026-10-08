@@ -18,8 +18,9 @@
 //!    with any live agent around, the caller cannot confirm.
 //! 6. Otherwise, unattributed.
 //!
-//! Where nothing proves the caller is the developer at a terminal (Windows,
-//! TQ-14), "unattributed" is the most a caller can be, and it may still undo
+//! Where nothing proves the caller is the developer at a terminal, or where
+//! the marks of an operation miss the orphans of a marked child (Windows, no
+//! Job Objects yet: DS-TS-GRP-004 § 9, C4), "unattributed" may still undo
 //! unattributed work without a confirmation. So there it also has to be
 //! verified: an ancestry that breaks (a gone or reused parent), crosses an
 //! interpreter, reaches the daemon unmarked or meets a multiplexer with a
@@ -193,9 +194,11 @@ pub fn resolve(
         confirmable,
     };
     // An unattributed caller the ancestry could not vouch for: where no
-    // terminal proof exists, refused instead (C-01).
+    // terminal proof exists or orphans escape the marks, refused instead
+    // (C-01).
+    let trusted = checks.terminal_proof && checks.orphans_marked;
     let verified = |vouched: bool, r: Resolution| {
-        if vouched || checks.terminal_proof {
+        if vouched || trusted {
             Ok(r)
         } else {
             Err(Unverified)
@@ -285,7 +288,8 @@ pub fn resolve(
 
 /// Second walk, once the pending registration completed: a mark found now
 /// wins; otherwise the caller stays an unmarked descendant of the daemon,
-/// unverified where no terminal proof exists (C-01).
+/// unverified where no terminal proof exists or orphans escape the marks
+/// (C-01).
 fn resolve_after_barrier(
     peer: AcceptedPeer,
     checks: &Checks<'_>,
@@ -309,7 +313,7 @@ fn resolve_after_barrier(
             None => break,
         }
     }
-    if !checks.terminal_proof {
+    if !(checks.terminal_proof && checks.orphans_marked) {
         return Err(Unverified);
     }
     Ok(Resolution {
@@ -375,6 +379,7 @@ mod tests {
                     controlling_terminal: tty,
                     session,
                     pgid: pid,
+                    desktop_session: None,
                 },
             );
         }
@@ -419,13 +424,25 @@ mod tests {
         resolve_on(t, pid, start, marks, true).unwrap()
     }
 
-    /// Resolves with or without a terminal proof (Unix or Windows).
+    /// Resolves with or without a terminal proof (Unix, or no proof at all).
     fn resolve_on(
         t: &Tree,
         pid: u32,
         start: u64,
         marks: Option<&ExecutorMarks>,
         terminal_proof: bool,
+    ) -> Result<Resolution, Unverified> {
+        resolve_with(t, pid, start, marks, terminal_proof, terminal_proof)
+    }
+
+    /// Windows: a terminal proof (the console) without group marks.
+    fn resolve_with(
+        t: &Tree,
+        pid: u32,
+        start: u64,
+        marks: Option<&ExecutorMarks>,
+        terminal_proof: bool,
+        orphans_marked: bool,
     ) -> Result<Resolution, Unverified> {
         let matcher = AgentMatcher::default();
         let checks = Checks {
@@ -435,6 +452,7 @@ mod tests {
             daemon: Some(DAEMON),
             marks,
             terminal_proof,
+            orphans_marked,
         };
         resolve(peer(pid, start), &checks, marks)
     }
@@ -452,6 +470,7 @@ mod tests {
             daemon: Some(DAEMON),
             marks: None,
             terminal_proof,
+            orphans_marked: terminal_proof,
         };
         confirmation_refusal(peer(pid, start), &checks, None)
     }
@@ -573,6 +592,7 @@ mod tests {
             daemon: Some(DAEMON),
             marks: None,
             terminal_proof: true,
+            orphans_marked: true,
         };
         assert_eq!(resolve(peer(30, 299), &checks, None), Err(Unverified));
     }
@@ -618,6 +638,7 @@ mod tests {
             daemon: Some(DAEMON),
             marks: Some(&marks),
             terminal_proof: true,
+            orphans_marked: true,
         };
         assert_eq!(
             check_reserved(peer(74, 740), &checks).refused,
@@ -685,6 +706,29 @@ mod tests {
         t.add(90, 80, "/bin/zsh", 900, true, 90);
         t.add(91, 90, "/usr/local/bin/raptor", 910, true, 90);
         assert_eq!(resolve_on(&t, 91, 910, None, false), Err(Unverified));
+    }
+
+    /// Windows (DS-TS-GRP-004 § 9, C4): the console proves a terminal, but
+    /// the marks have no process groups, so an orphan of a marked child is
+    /// still refused (W5) while a clean chain may confirm.
+    #[test]
+    fn with_a_console_but_no_group_marks_an_orphan_is_refused() {
+        let mut t = terminal();
+        t.add(31, 29, "/usr/local/bin/raptor", 310, false, 10);
+        assert_eq!(
+            resolve_with(&t, 31, 310, None, true, false),
+            Err(Unverified)
+        );
+        let mut t = terminal();
+        t.add(26, 20, "C:/Program Files/nodejs/node.exe", 260, true, 10);
+        t.add(32, 26, "/usr/local/bin/raptor", 320, true, 10);
+        assert_eq!(
+            resolve_with(&t, 32, 320, None, true, false),
+            Err(Unverified)
+        );
+        let r = resolve_with(&terminal(), 30, 300, None, true, false).unwrap();
+        assert_eq!(r.who, Who::unattributed());
+        assert!(r.confirmable);
     }
 
     /// Windows desktop: `explorer.exe`'s parent (`userinit`) has exited, so
@@ -782,7 +826,7 @@ mod tests {
 mod real_processes {
     use super::*;
     use crate::channel::AgentMatcher;
-    use crate::channel::authz::TERMINAL_PROOF;
+    use crate::channel::authz::{ORPHANS_MARKED, TERMINAL_PROOF};
     use crate::channel::peer::{ProcSource, SystemProcs, current_uid};
     use std::io::{BufRead, BufReader, Read, Write};
     use std::path::Path;
@@ -874,6 +918,7 @@ mod real_processes {
             daemon: None,
             marks: None,
             terminal_proof: TERMINAL_PROOF,
+            orphans_marked: ORPHANS_MARKED,
         };
         (peer, resolve(peer, &checks, None))
     }
@@ -899,6 +944,7 @@ mod real_processes {
             daemon: None,
             marks: None,
             terminal_proof: TERMINAL_PROOF,
+            orphans_marked: ORPHANS_MARKED,
         };
         assert_eq!(
             confirmation_refusal(peer, &checks, None),
