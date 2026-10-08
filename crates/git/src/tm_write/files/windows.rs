@@ -19,13 +19,15 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use gitraptor_winsys::fs::{is_in_use, rename_no_replace};
+use gitraptor_winsys::fs::{delete_through, is_in_use, rename_no_replace};
 
 use super::*;
 
 const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
 const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
 const FILE_READ_ATTRIBUTES: u32 = 0x80;
+const GENERIC_READ: u32 = 0x8000_0000;
+const DELETE: u32 = 0x0001_0000;
 const FILE_SHARE_READ: u32 = 0x1;
 const FILE_SHARE_WRITE: u32 = 0x2;
 const FILE_SHARE_DELETE: u32 = 0x4;
@@ -43,6 +45,9 @@ pub struct RootDir {
     _handle: File,
     volume: u32,
     path: PathBuf,
+    /// `\\?\` form of `path`: every operation takes names as they are, so the open, the
+    /// comparison and the rename all reach the same entry.
+    verbatim: PathBuf,
     no_exchange: bool,
     crash_between_moves: bool,
     wait_left_ms: AtomicU64,
@@ -93,21 +98,70 @@ fn reinterpreted(name: &str) -> bool {
     if name.ends_with('.') || name.ends_with(' ') {
         return true;
     }
-    let stem = name.split('.').next().unwrap_or("").to_ascii_uppercase();
+    // Windows drops spaces before the extension of a device name: `CON .txt` is the console.
+    let stem = name
+        .split('.')
+        .next()
+        .unwrap_or("")
+        .trim_end()
+        .to_uppercase();
+    let numbered = |prefix: &str| {
+        stem.strip_prefix(prefix).is_some_and(|rest| {
+            let mut chars = rest.chars();
+            matches!(
+                (chars.next(), chars.next()),
+                (Some('0'..='9' | '\u{b9}' | '\u{b2}' | '\u{b3}'), None)
+            )
+        })
+    };
     let device = matches!(
         stem.as_str(),
         "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$"
-    ) || ((stem.starts_with("COM") || stem.starts_with("LPT"))
-        && stem.len() == 4
-        && stem.as_bytes()[3].is_ascii_digit());
+    ) || numbered("COM")
+        || numbered("LPT");
     let short_alias = name
-        .split_once('~')
-        .is_some_and(|(_, rest)| rest.starts_with(|c: char| c.is_ascii_digit()));
+        .match_indices('~')
+        .any(|(i, _)| name[i + 1..].starts_with(|c: char| c.is_ascii_digit()));
     device || short_alias
 }
 
+/// The `\\?\` form of an absolute drive path.
+fn verbatim(path: &Path) -> PathBuf {
+    let text = path.as_os_str().to_string_lossy();
+    if text.starts_with(r"\\?\") {
+        return path.to_owned();
+    }
+    let bytes = text.as_bytes();
+    if bytes.len() > 2 && bytes[1] == b':' && (bytes[2] == b'\\' || bytes[2] == b'/') {
+        PathBuf::from(format!(r"\\?\{}", text.replace('/', "\\")))
+    } else {
+        path.to_owned()
+    }
+}
+
+/// The form shown to people and returned to callers: without the `\\?\` prefix.
+fn shown(path: &Path) -> PathBuf {
+    match path
+        .as_os_str()
+        .to_str()
+        .and_then(|t| t.strip_prefix(r"\\?\"))
+    {
+        Some(rest) if !rest.starts_with("UNC") => PathBuf::from(rest),
+        _ => path.to_owned(),
+    }
+}
+
+/// A displaced entry, held open so nobody else can write to it, rename it or delete it while it
+/// is compared, and so the entry deleted is the one compared.
+enum Held {
+    Gone,
+    /// Another program has it open for writing.
+    InUse,
+    Open(File, std::result::Result<(Kind, Oid), ()>),
+}
+
 fn locked(path: &Path) -> WriteError {
-    WriteError::Locked(path.to_owned())
+    WriteError::Locked(shown(path))
 }
 
 impl RootDir {
@@ -126,6 +180,7 @@ impl RootDir {
             _handle: handle,
             volume,
             path: root.to_owned(),
+            verbatim: verbatim(root),
             no_exchange: false,
             crash_between_moves: false,
             wait_left_ms: AtomicU64::new(WAIT_BUDGET_MS),
@@ -175,12 +230,12 @@ impl RootDir {
     /// Probes how the file system compares names, with a temporary file at the root.
     pub fn probe_folding(&self) -> Result<Folding> {
         let base = temp_name();
-        let name = self.path.join(format!("{base}-A\u{e9}"));
+        let name = self.verbatim.join(format!("{base}-A\u{e9}"));
         OpenOptions::new()
             .write(true)
             .create_new(true)
             .open(&name)?;
-        let exists = |n: String| self.path.join(n).symlink_metadata().is_ok();
+        let exists = |n: String| self.verbatim.join(n).symlink_metadata().is_ok();
         let folding = Folding {
             case_insensitive: exists(format!("{base}-a\u{e9}")),
             normalizing: exists(format!("{base}-Ae\u{301}")),
@@ -211,7 +266,7 @@ impl RootDir {
             return Ok(Err(Outcome::Blocked("a name Windows would reinterpret")));
         }
         let mut pins = Vec::with_capacity(parts.len());
-        let mut dir = self.path.clone();
+        let mut dir = self.verbatim.clone();
         for part in parts {
             dir.push(part);
             let pinned = match pin_dir(&dir) {
@@ -270,7 +325,10 @@ impl RootDir {
         // data that only reads right when opened normally; it redirects no name.
         let mut file = if entry.is_reparse() {
             let normal = self.retry(path, || open(0))?;
-            if Entry::of(&normal)?.surrogate {
+            // Swapped for a link between the two opens: the new handle would describe its target.
+            let same = gitraptor_winsys::file_id::of_file(&normal)?
+                == gitraptor_winsys::file_id::of_file(&file)?;
+            if !same || Entry::of(&normal)?.surrogate {
                 return Ok(Some(Err(())));
             }
             normal
@@ -280,6 +338,43 @@ impl RootDir {
         let mut bytes = Vec::new();
         file.read_to_end(&mut bytes)?;
         Ok(Some(Ok((Kind::File, blob_id(&bytes)))))
+    }
+
+    /// Opens the displaced entry at `path` for reading and deleting, sharing only reading: if
+    /// someone else has it open for writing (with `FILE_SHARE_DELETE`, which let the rename
+    /// through), it is [`Held::InUse`]. A folder or any reparse point reads as someone else's.
+    fn hold(&self, path: &Path) -> Result<Held> {
+        let open = || {
+            OpenOptions::new()
+                .access_mode(GENERIC_READ | DELETE)
+                .share_mode(FILE_SHARE_READ)
+                .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+                .open(path)
+        };
+        let mut file = match self.retry(path, open) {
+            Ok(f) => f,
+            Err(WriteError::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(Held::Gone);
+            }
+            Err(WriteError::Locked(_)) => return Ok(Held::InUse),
+            Err(e) => return Err(e),
+        };
+        let entry = Entry::of(&file)?;
+        if entry.is_dir() || entry.is_reparse() {
+            return Ok(Held::Open(file, Err(())));
+        }
+        let mut bytes = Vec::new();
+        file.read_to_end(&mut bytes)?;
+        Ok(Held::Open(file, Ok((Kind::File, blob_id(&bytes)))))
+    }
+
+    /// Deletes a held entry through its handle; if the handle refuses (a read-only file), by
+    /// its temporary name.
+    fn delete_held(&self, file: File, path: &Path) -> Result<()> {
+        if delete_through(file).is_err() {
+            self.remove_temp(path)?;
+        }
+        Ok(())
     }
 
     /// Whether an observation is the content `(kind, id)` of the store. The executable bit does
@@ -373,29 +468,49 @@ impl RootDir {
                 "simulated crash between the two renames",
             )));
         }
-        if !Self::same(self.observe(&aside)?, prior) {
+        let (held, seen) = match self.hold(&aside)? {
+            Held::Open(file, seen) => (file, seen),
+            // Someone removed our temporary name: nothing of theirs is lost, ours is dropped.
+            Held::Gone => {
+                self.remove_temp(&tmp)?;
+                return Ok(Outcome::Overlap { kept_at: None });
+            }
+            // Another program is writing to it: it goes back untouched and the write fails.
+            Held::InUse => {
+                self.remove_temp(&tmp)?;
+                return match rename_no_replace(&aside, &path) {
+                    Ok(()) => Err(locked(&path)),
+                    Err(_) => Ok(Outcome::Overlap {
+                        kept_at: Some(shown(&aside)),
+                    }),
+                };
+            }
+        };
+        if !matches!(seen, Ok((_, found)) if found == prior) {
             // Someone else's content: it goes back, ours is dropped.
+            drop(held);
             self.remove_temp(&tmp)?;
             return Ok(match rename_no_replace(&aside, &path) {
                 Ok(()) => Outcome::Overlap { kept_at: None },
                 Err(_) => Outcome::Overlap {
-                    kept_at: Some(aside),
+                    kept_at: Some(shown(&aside)),
                 },
             });
         }
         match rename_no_replace(&tmp, &path) {
             Ok(()) => {
                 // The displaced entry is the prior snapshot: it is in the store.
-                self.remove_temp(&aside)?;
+                self.delete_held(held, &aside)?;
                 Ok(Outcome::Written)
             }
             // Someone took the path between the two renames: theirs stays.
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
                 self.remove_temp(&tmp)?;
-                self.remove_temp(&aside)?;
+                self.delete_held(held, &aside)?;
                 Ok(Outcome::Overlap { kept_at: None })
             }
             Err(e) => {
+                drop(held);
                 let _ = rename_no_replace(&aside, &path);
                 self.remove_temp(&tmp)?;
                 Err(e.into())
@@ -421,13 +536,26 @@ impl RootDir {
             }
             Err(e) => return Err(e),
         }
-        if Self::same(self.observe(&aside)?, id) {
-            self.remove_temp(&aside)?;
+        let (held, seen) = match self.hold(&aside)? {
+            Held::Open(file, seen) => (file, seen),
+            Held::Gone => return Ok(Outcome::Overlap { kept_at: None }),
+            Held::InUse => {
+                return match rename_no_replace(&aside, &path) {
+                    Ok(()) => Err(locked(&path)),
+                    Err(_) => Ok(Outcome::Overlap {
+                        kept_at: Some(shown(&aside)),
+                    }),
+                };
+            }
+        };
+        if matches!(seen, Ok((_, found)) if found == id) {
+            self.delete_held(held, &aside)?;
             return Ok(Outcome::Removed);
         }
+        drop(held);
         let back = rename_no_replace(&aside, &path);
         Ok(Outcome::Overlap {
-            kept_at: back.is_err().then_some(aside),
+            kept_at: back.is_err().then(|| shown(&aside)),
         })
     }
 
@@ -546,6 +674,30 @@ mod tests {
         assert_eq!(std::fs::read(&path).unwrap(), b"new");
     }
 
+    /// A program that shares delete (as Node does) lets the first rename through; it still holds
+    /// the file for writing, so it goes back untouched and the write fails as locked (M-02).
+    #[test]
+    fn a_writer_that_shares_delete_keeps_its_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("a");
+        std::fs::write(&path, b"old").unwrap();
+        let root = RootDir::open(tmp.path()).unwrap();
+        let mut writer = OpenOptions::new()
+            .append(true)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+            .open(&path)
+            .unwrap();
+        let err = root
+            .replace(b"a", &content(b"new"), &present(b"old"), &|_| {})
+            .unwrap_err();
+        assert!(matches!(err, WriteError::Locked(_)), "{err:?}");
+        // Its handle still writes to the file at its path.
+        writer.write_all(b" and more").unwrap();
+        drop(writer);
+        assert_eq!(std::fs::read(&path).unwrap(), b"old and more");
+        assert!(temps(tmp.path()).is_empty());
+    }
+
     #[test]
     fn someone_elses_content_is_kept() {
         let tmp = tempfile::tempdir().unwrap();
@@ -640,7 +792,17 @@ mod tests {
 
     #[test]
     fn names_windows_reinterprets_are_blocked() {
-        for name in ["CON", "nul.txt", "a.", "a ", "PROGRA~1", "com1"] {
+        for name in [
+            "CON",
+            "nul.txt",
+            "a.",
+            "a ",
+            "PROGRA~1",
+            "com1",
+            "CON .txt",
+            "COM\u{b9}",
+            "A~BCDE~1.TXT",
+        ] {
             assert!(reinterpreted(name), "{name}");
         }
         for name in ["CONTRIBUTING.md", "a.b", "~tmp", "com10", "a~b"] {

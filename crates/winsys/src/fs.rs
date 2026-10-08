@@ -21,6 +21,14 @@ pub fn rename_no_replace(from: &Path, to: &Path) -> io::Result<()> {
     })
 }
 
+/// Deletes the file of `file` (opened with `DELETE` access) when this handle closes, and closes
+/// it: the entry deleted is the one read through the handle, whatever the path names now.
+pub fn delete_through(file: std::fs::File) -> io::Result<()> {
+    crate::ffi_file::delete_on_close(&file)?;
+    drop(file);
+    Ok(())
+}
+
 /// Whether `err` means another process holds the file open in a way that forbids the operation
 /// (an editor without `FILE_SHARE_DELETE`, an antivirus scan): the file was not touched.
 pub fn is_in_use(err: &io::Error) -> bool {

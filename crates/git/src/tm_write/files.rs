@@ -21,8 +21,10 @@
 //! another program holds open is retried for a bounded time and then fails as
 //! [`WriteError::Locked`], untouched.
 //!
-//! Temporary names start with [`TEMP_PREFIX`]. One left behind by a crash holds either the target
-//! content or the displaced content, and both are in the store (NFR-01).
+//! Temporary names start with [`TEMP_PREFIX`]. One left behind by a crash holds the target
+//! content (in the store), the prior snapshot's content (in the store) or, before the comparison
+//! ended, someone else's content, which is not in the store and is kept there, never deleted
+//! (NFR-01). Sweeping and reporting them after a crash is pending (INF-TMC-001).
 
 use crate::Oid;
 
