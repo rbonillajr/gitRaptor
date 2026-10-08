@@ -676,7 +676,7 @@ rechazo de dominio → resultado {isError, código, plantilla(código, params no
 llamada mal formada → error de protocolo
 ```
 
-**Ejemplo**: `MCP_REPO_NOT_ALLOWED`: "Este repo no está habilitado para el MCP. El desarrollador lo habilita con el comando de allowlist." (el comando exacto lo fija la Dev Spec).
+**Ejemplo**: `repo-not-enabled`: "Este repo no está habilitado para el MCP de GitRaptor." Acción: "Pide al desarrollador que ejecute `raptor mcp enable` en este repo." (DS-US-MCP-005).
 
 **Fuentes**: Q-MCP-17; ADR-GRD-003 (M-05); NFR-10.
 

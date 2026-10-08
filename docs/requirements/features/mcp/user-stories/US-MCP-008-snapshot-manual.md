@@ -53,6 +53,7 @@ BR-MCP-ELIG-005 (parte: `snapshot` manual con cuota y rate limit propios) · BR-
 - **Habilitadores**: TS-CKP-002 (catálogo y ejecutor) y TS-CKP-003 (decisión única heredada por los hooks), en propuesta, rama docs/arch-cockpit.
 - **Dueña de la operación del catálogo**: esta historia es dueña de `snapshot`.
 - **Externas**: ADR-MCP-001 (DEP-MCP-1, no existe). ADR-CKP-002 (**propuesto**, en docs/arch-cockpit): `snapshot` → operación `snapshot` del catálogo; DEP-MCP-2 y DEP-MCP-5 se resuelven vía ADR-CKP-002. `snapshot` **no es una operación gobernada** (D-17, BR-MCP-001 v0.3): no hay escenario de decisión de Guardrails. La **API de captura manual** (nivel `manual`, etiqueta, cuota y rate limit) la fija ADR-TMC-004, Enmienda (2026-10-05, MCP) (D-21); con la cuota llena se rechaza y nunca se borra un snapshot manual. Bloqueo de arquitectura que queda: ADR-CKP-002 vía TS-CKP-002.
+- **Límites por solicitante** (S-03, condición de entrada): cupo de rate limit compartido entre las conexiones del mismo solicitante y ≤ 8 conexiones por solicitante, diferidos por US-MCP-005 (Enmienda (2026-10-07, US-MCP-005) de ADR-MCP-001).
 - **Transversal**: cifras de ADR-MCP-001 § 6 (D-22): ≤ 20 snapshots por solicitante y worktree en una ventana de 24 h, 5 por minuto y la cuota de disco general por encima.
 
 ## Criterios de Aceptación

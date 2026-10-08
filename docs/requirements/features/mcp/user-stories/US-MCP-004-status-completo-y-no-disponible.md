@@ -29,7 +29,7 @@ related:
 ado:
   id: null
   url: null
-covers: [BR-MCP-CALC-003, BR-MCP-EDGE-005, BR-MCP-EDGE-002]
+covers: [BR-MCP-CALC-003, BR-MCP-EDGE-005, BR-MCP-EDGE-002, BR-MCP-CALC-002]
 blocked_by: []
 tags: [mcp, status, no-disponible, rama-base, ola-1]
 ---
@@ -44,15 +44,22 @@ tags: [mcp, status, no-disponible, rama-base, ola-1]
 
 ## Reglas cubiertas
 
-BR-MCP-CALC-003 (contenido de `status`) · BR-MCP-EDGE-005 (repo o worktree no disponible, evaluado en cada llamada, después de la allowlist) · BR-MCP-EDGE-002 (parte lectura: la base no confirmada o pendiente se declara) — ver [business-rules.md](../business-rules.md)
+BR-MCP-CALC-003 (contenido de `status`) · BR-MCP-EDGE-005 (repo o worktree no disponible, evaluado en cada llamada, después de la allowlist) · BR-MCP-EDGE-002 (parte lectura: la base no confirmada o pendiente se declara) · BR-MCP-CALC-002 (parte: paginación de las rutas modificadas) — ver [business-rules.md](../business-rules.md)
 
 ## Dependencias
 
 - **Historias**: US-MCP-003. De otras features: US-GRP-011 (worktree compartido), US-GRP-012 (ahead/behind contra la base), US-GRP-003 (estados especiales y no disponible), US-GRP-005 (huecos de observación), US-GRD-004 (estado de protección y diagnósticos), US-GRD-014 (rama base confirmada).
 - **Externas**: ADR-MCP-001 (DEP-MCP-1, no existe): allowlist de campos de `status`; bloqueo de arquitectura. Criterios de worktree no disponible: SEC-11, ADR-GRP-009.
-- **Transversal**: los topes y la paginación de las rutas modificadas son de US-MCP-005.
+- **Transversal**: los topes (200 rutas por worktree, 32 worktrees, 24 KiB por parte) y el escape del texto no confiable salen de US-MCP-005 ([DS-US-MCP-005](../dev-specs/US-MCP-005-dev-spec.md)); la paginación de las rutas modificadas es de esta historia (ajuste del PO, 2026-10-07). La rama del worktree del llamante (`branch`) ya llegó con US-MCP-005.
 
 ## Criterios de Aceptación
+
+**Escenario: Una lista grande de rutas modificadas se recorta y lo dice**
+
+Dado el worktree "shop-feat-a" con 3.000 archivos modificados
+Cuando el agente pide `status`
+Entonces la respuesta trae como máximo el tope de rutas por página
+  Y declara "3.000 en total, truncado" con un cursor para la página siguiente
 
 **Escenario: El agente ve a los demás y su propia situación**
 

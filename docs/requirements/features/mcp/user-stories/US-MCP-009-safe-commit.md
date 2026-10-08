@@ -55,6 +55,7 @@ BR-MCP-WF-001 (flujo de una escritura) · BR-MCP-ELIG-002 (`safe_commit`: nunca 
 - **Habilitadores**: TS-CKP-002 (catálogo y ejecutor) y TS-CKP-003 (decisión única heredada por los hooks), en propuesta, rama docs/arch-cockpit.
 - **Dueña de la operación del catálogo**: esta historia es dueña de `commit` y fija en su Dev Spec el flujo de escritura que reutilizan US-MCP-008, 018 y 019.
 - **Externas**: ADR-MCP-001 (DEP-MCP-1, no existe). ADR-CKP-002 (**propuesto**, en docs/arch-cockpit): `safe_commit` → operación `commit` del catálogo; el ejecutor respeta hooks y config del usuario. DEP-MCP-2 y DEP-MCP-5 (correspondencia herramienta → operación normalizada) se resuelven vía ADR-CKP-002. ADR-MCP-001 y ADR-CKP-002 son bloqueos de arquitectura.
+- **Límites por solicitante** (S-03, condición de entrada): cupo de rate limit compartido entre las conexiones del mismo solicitante y ≤ 8 conexiones por solicitante, diferidos por US-MCP-005 (Enmienda (2026-10-07, US-MCP-005) de ADR-MCP-001).
 - **Desbloquea**: US-GRD-016 (Guardrails), junto con US-MCP-002 y US-MCP-003.
 - **Transversal**: ⚠️ **ASSUMPTION**: tiempo máximo de una escritura en la capa `mcp` de 300 s (supuesto de ADR-CKP-002, S-MCP-1); al vencer, la respuesta declara el estado y el id de la operación.
 
