@@ -819,6 +819,7 @@ dependencies = [
 name = "gitraptor-api"
 version = "0.0.0"
 dependencies = [
+ "gitraptor-api",
  "gitraptor-winsys",
  "nix",
  "rustix",
