@@ -190,18 +190,18 @@ pub fn refusal_reason(refusal: &Refusal) -> TmRejectReason {
     }
 }
 
-fn reason_code(reason: TmRejectReason) -> String {
+pub(super) fn reason_code(reason: TmRejectReason) -> String {
     serde_json::to_value(reason)
         .ok()
         .and_then(|v| v.as_str().map(str::to_owned))
         .unwrap_or_else(|| "rejected".into())
 }
 
-fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+pub(super) fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-fn now_ms() -> i64 {
+pub(super) fn now_ms() -> i64 {
     crate::daemon::now_ms()
 }
 
@@ -508,7 +508,7 @@ fn plan(
 }
 
 /// The branch `HEAD` names in the worktree at `root`, if symbolic.
-fn head_branch(root: &Path) -> Option<String> {
+pub(super) fn head_branch(root: &Path) -> Option<String> {
     RepoReader::open(root, &ReaderOptions::default())
         .ok()?
         .head()
@@ -554,16 +554,16 @@ fn record_rejection(
 }
 
 /// The applier as the step of the undo's protected operation.
-struct UndoStep<'a> {
-    store: &'a SnapshotStore,
-    write: &'a WriteContext,
+pub(super) struct UndoStep<'a> {
+    pub(super) store: &'a SnapshotStore,
+    pub(super) write: &'a WriteContext,
     /// The repo, held by the undo since it chose its target.
-    guard: &'a repo_lock::RepoGuard,
-    main_root: PathBuf,
-    profile_root: PathBuf,
-    plan: ApplyPlan,
-    declared: StepScope,
-    result: Option<Result<ApplyReport, ApplyError>>,
+    pub(super) guard: &'a repo_lock::RepoGuard,
+    pub(super) main_root: PathBuf,
+    pub(super) profile_root: PathBuf,
+    pub(super) plan: ApplyPlan,
+    pub(super) declared: StepScope,
+    pub(super) result: Option<Result<ApplyReport, ApplyError>>,
 }
 
 impl ProtectedStep for UndoStep<'_> {
