@@ -9,6 +9,8 @@
 #   --dirty     also send uncommitted and untracked (non-ignored) files
 #   --stages    subset of: setup test repo-intact git-<version> (default: all)
 #   --no-build  reuse the existing image
+# CARGO_BUILD_JOBS, when set, reaches the container (fewer parallel links when Docker is short
+# of memory: `ld` killed with signal 9).
 #
 # Results land in xplat/linux/results/ (ignored by Git): summary.md and one log per stage.
 # Cargo's registry and target dir live in named Docker volumes, so reruns are incremental.
@@ -25,7 +27,7 @@ while [ $# -gt 0 ]; do
     --dirty) dirty=1 ;;
     --no-build) build=0 ;;
     --stages) stages=$2; shift ;;
-    -h | --help) sed -n '2,15p' "$0"; exit 0 ;;
+    -h | --help) sed -n '2,17p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
     esac
     shift
@@ -41,9 +43,11 @@ container="$image-$$"
 trap 'rm -rf "$stage_dir"; docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
 git -C "$root" bundle create "$stage_dir/repo.bundle" HEAD 2>/dev/null
 if [ "$dirty" = 1 ]; then
+    # COPYFILE_DISABLE: macOS tar would add an AppleDouble `._<name>` for every file with
+    # extended attributes, and the boundary tests read every `.rs` under the sources.
     (cd "$root" && git ls-files -z --modified --others --exclude-standard |
         while IFS= read -r -d '' f; do [ -e "$f" ] && printf '%s\0' "$f"; done |
-        tar --null -T - -cf "$stage_dir/overlay.tar")
+        COPYFILE_DISABLE=1 tar --null -T - -cf "$stage_dir/overlay.tar")
     git -C "$root" ls-files -z --deleted >"$stage_dir/deleted.txt"
 fi
 
@@ -53,6 +57,7 @@ rc=0
 tar -C "$stage_dir" -cf - . |
     docker run -i --name "$container" \
         -e "XPLAT_STAGES=$stages" \
+        ${CARGO_BUILD_JOBS:+-e "CARGO_BUILD_JOBS=$CARGO_BUILD_JOBS"} \
         -v gitraptor-xplat-cargo-registry:/home/raptor/.cargo/registry \
         -v gitraptor-xplat-target:/cache/target \
         "$image" || rc=$?
