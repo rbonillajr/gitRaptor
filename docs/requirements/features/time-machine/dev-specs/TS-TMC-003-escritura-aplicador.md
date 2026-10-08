@@ -209,3 +209,31 @@ En `files/windows.rs` hay además un test del hueco entre los dos renombrados de
 > - La línea en `raptor status` necesita una capacidad nueva, un campo en `RepoView` e i18n. Es un cambio de contrato y se anota como continuación de L-02. Mientras tanto se informa con el evento del log y con el aviso `interruption`.
 > - Falta un test de que `raptor undo` limpia los temporales conservados (suposición del Arquitecto, sin verificar).
 > - Comprobar la identidad del temporal antes y después del renombrado (mitigación del TOCTOU que propuso el Arquitecto). Es el mismo residuo que ya se aceptó en `remove`: el renombrado exclusivo nunca sobrescribe y no se borra nada.
+>
+> Los tres pendientes quedan cerrados en la Enmienda T2.
+
+## Enmienda 2026-10-08 — Pendientes del barrido (T2)
+
+Cierra los tres pendientes de la Enmienda T (#172). Rama `fix/TS-TMC-003-sweep-followups`.
+
+| # | Decisión |
+|---|---|
+| K1 | **Capacidad y forma.** Capacidad `timemachine.kept-temps` (`CAP_TM_KEPT_TEMPS`, en `methods/timemachine.rs`, ADR-GRP-016). Con ella, `RepoView.kept_temps` lleva `KeptTempsView { count, foreign, operation_id, undo_next }` (en `crates/api/src/timemachine.rs`): solo contadores y el id de la operación, nunca rutas. `foreign` cuenta los que no están en el almacén: solo existen ahí y `raptor undo` no los devuelve. Sin la capacidad el campo no existe. |
+| K2 | **Estado.** El barrido de `recover_repo` (al arrancar y al volver a observar un repo) registra lo conservado en `TmRepos.kept` (`timemachine/kept.rs`), y al retirar un repo se olvida. No se persiste: el siguiente arranque barre otra vez y lo vuelve a encontrar. |
+| K3 | **Frescura.** Solo en snapshots (`engine.snapshot`, `scope.snapshot` de un repo y el resultado de `repo.add`); los eventos `repo.*` no lo llevan. Al servir se cuentan solo los temporales que **siguen ahí** (un `lstat` por entrada, sin seguir enlaces, con el nombre exacto del aplicador y dentro de un worktree que el repo todavía tiene). Cuando `raptor undo` (o cualquiera) los quita, la línea desaparece sin más señal. |
+| K4 | **Acción sugerida.** `undo_next` es verdadero mientras ninguna operación posterior del oplog llegó a `applying`. Solo entonces la CLI sugiere `raptor undo`; si no, un texto neutro dice que el snapshot previo a esas operaciones guarda los archivos. Si el oplog está ocupado al servir, se toma como falso. Residuo: un comando Git directo posterior puede ir antes en la pila del undo. |
+| K5 | **CLI.** `raptor status` añade una línea por repo bajo la rama base, y otra si hay `foreign`. `raptor status --json` lleva `kept_temps` con la misma forma. Mensajes `status.kept-temps*` en en/es. La TUI y `raptor-mcp` piden la capacidad de forma automática y la deserializan, pero no la muestran (fuera de alcance). |
+| K6 | **TOCTOU al restaurar.** En Unix, `restore_temp` toma `(dev, inode)` del temporal antes de comparar, lo vuelve a comprobar justo antes del renombrado exclusivo (si cambió: `Mismatch`, no se toca nada y se informa `changed`) y lo comprueba en la ruta después. Si otra entrada se coló en la ventana que queda entre el último `stat` y `renameat` (no hay renombrado por descriptor en Unix), el resultado es `Swapped`: se queda en la ruta, no se vuelve a mover (no se sabe de quién es) y se informa aparte, en `SweepReport.moved_unverified` y en el evento `tm_temps_moved_unverified` (solo con contadores), fuera de `kept_temps`. Nada se sobrescribe ni se borra. En Windows la ventana desaparece: se renombra **a través del mismo handle** que comparó (`SetFileInformationByHandle(FileRenameInfo)`, sin `ReplaceIfExists`), que no comparte escritura ni borrado, hacia la ruta completa bajo las carpetas fijadas. `Swapped` no ocurre en Windows. |
+
+**Hallazgos en la máquina Windows real** (no se veían desde macOS ni en el CI):
+- `FileRenameInfo` con un `RootDirectory` relativo devuelve `ERROR_INVALID_PARAMETER`, y con un nombre suelto y `RootDirectory` nulo renombra **relativo al directorio actual del proceso** (el archivo salió de su carpeta). Solo se usa la ruta completa.
+- Windows lee el nombre nuevo hasta el NUL, diga lo que diga `FileNameLength`: un nombre de una letra se leía con la basura que lo seguía y el archivo acababa con un nombre basura. El búfer lleva el nombre con su NUL y la unión completa a cero (`Flags: 0`).
+
+**Verificación.**
+- `crates/git` (`tm_write::files`): en Unix, un intercambio después de comparar termina en `Mismatch` sin tocar nada, y uno justo antes del renombrado en `Swapped`, con la entrada en la ruta byte a byte. En Windows, los dos intentos de intercambio se rechazan mientras se sostiene el handle y la entrada restaurada es la comparada (mismo índice de archivo).
+- `crates/winsys` (`fs`): el renombrado por handle nunca reemplaza y nadie toma el nombre mientras se sostiene.
+- `crates/core/tests/tm_kept_temps.rs` (macOS, de punta a punta con daemon y cliente reales): un daemon sin la capacidad no muestra nada; con ella, `kept_temps = {1, 0, op, true}`; `timemachine.undo` deshace la operación interrumpida, el temporal desaparece del worktree, su contenido queda en el previo del undo y la línea desaparece.
+- `crates/core` (`timemachine::kept`): `undo_next` y el filtro de lo que sigue ahí.
+- `apps/cli` (`status`): texto y JSON.
+
+> **Decisión del orquestador (2026-10-08), validada por el Arquitecto** (aprobó con ajustes, incorporados: `KeptTempsView` con `foreign` en vez de un contador suelto, registro en su propio archivo, frescura con `lstat` al servir y sin evento, `undo_next` atado al `operation_id`, `Swapped` fuera de `kept`, y en Windows renombrado por el handle).
