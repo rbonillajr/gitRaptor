@@ -240,7 +240,8 @@ impl SnapshotStore {
             rest.push(name.to_owned());
             existing = parent;
         }
-        let mut out = std::fs::canonicalize(existing)?;
+        // The same form `StoreRepo::open` reports (drive form on Windows).
+        let mut out = gitraptor_git::paths::canonicalize(existing)?;
         out.extend(rest.iter().rev());
         Ok(out)
     }

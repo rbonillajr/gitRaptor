@@ -152,3 +152,16 @@ pub(super) fn check_private_dir(path: &Path) -> Result<()> {
     gitraptor_winsys::acl::verify_private_dir(path)
         .map_err(|e| StoreError::Untrusted(format!("{} is not private: {e:?}", path.display())))
 }
+
+/// Renames the new store folder into place; never replaces one that appeared meanwhile.
+#[cfg(unix)]
+pub(super) fn rename_dir(from: &Path, to: &Path) -> io::Result<()> {
+    std::fs::rename(from, to)
+}
+
+/// Renames the new store folder into place; never replaces one that appeared meanwhile.
+#[cfg(windows)]
+pub(super) fn rename_dir(from: &Path, to: &Path) -> io::Result<()> {
+    gitraptor_winsys::fs::rename_no_replace(from, to)
+        .map_err(|e| io::Error::new(e.kind(), format!("rename {}: {e}", from.display())))
+}

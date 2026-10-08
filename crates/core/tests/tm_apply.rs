@@ -21,6 +21,7 @@ use gitraptor_git::resolve::{self, Resolution, ResolveConfig};
 use gitraptor_git::tm_write::WriteContext;
 use gitraptor_git::{Invoker, SystemGit};
 use gitraptor_testkit::Fixture;
+#[cfg(unix)]
 use gitraptor_testkit::canary::Canary;
 use tm_common::{Env, REPO_ID, git};
 
@@ -512,6 +513,52 @@ mod repo_intact {
         assert_eq!(t.state_of(&op), OperationState::Finished);
     }
 
+    /// Windows (DS-TS-TMC-003 W5): an editor holds the second of three files open without
+    /// `FILE_SHARE_DELETE`. The application stops as interrupted, naming the file, which keeps
+    /// its content; once the editor closes, undo (back to the prior snapshot) restores
+    /// everything as it was before the application.
+    #[cfg(windows)]
+    #[test]
+    fn a_file_open_in_an_editor_interrupts_and_undo_recovers_once_closed() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let t = Apply::busy();
+        for name in ["w1.txt", "w2.txt", "w3.txt"] {
+            t.f().write(name, &format!("{name} at the target\n"));
+        }
+        let target = t.snapshot();
+        for name in ["w1.txt", "w2.txt", "w3.txt"] {
+            t.f().write(name, &format!("{name} after the target\n"));
+        }
+        let before = t.files();
+        let editor = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0x1 | 0x2)
+            .open(t.f().repo.join("w2.txt"))
+            .unwrap();
+        let (op, prior) = t.ready(&target);
+        let result = t
+            .applier(ApplyHooks::default())
+            .apply(&op, &t.plan(&target, &prior));
+        match result {
+            Err(ApplyError::Interrupted { reason, .. }) => {
+                assert!(reason.contains("w2.txt"), "{reason}");
+            }
+            other => panic!("not interrupted: {other:?}"),
+        }
+        assert_eq!(t.state_of(&op), OperationState::Interrupted);
+        assert_eq!(
+            std::fs::read(t.f().repo.join("w2.txt")).unwrap(),
+            b"w2.txt after the target\n"
+        );
+        assert!(t.files().keys().all(|p| !p.contains(".gitraptor-tm-")));
+        drop(editor);
+
+        let (undo, result) = t.apply(&prior, ApplyHooks::default());
+        result.unwrap();
+        assert_eq!(t.state_of(&undo), OperationState::Finished);
+        assert_eq!(t.files(), before);
+    }
+
     #[test]
     fn a_link_planted_while_applying_never_leads_outside() {
         let t = Apply::busy();
@@ -568,6 +615,8 @@ mod repo_intact {
         );
     }
 
+    /// Unix only: the testkit canary (SEC-09) is not ported to Windows yet (XP-08).
+    #[cfg(unix)]
     #[test]
     fn internal_writes_run_no_configurable_program() {
         let c = Canary::arm(Fixture::busy(&git()));
