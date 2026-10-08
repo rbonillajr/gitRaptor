@@ -520,6 +520,7 @@ mod tests {
 
     struct World {
         _tmp: tempfile::TempDir,
+        dirs: ProfileDirs,
         log: Oplog,
         refs: Refs,
     }
@@ -530,6 +531,7 @@ mod tests {
         let (log, _) = Oplog::open(&dirs, REPO, 1_000).unwrap();
         World {
             _tmp: tmp,
+            dirs,
             log,
             refs: Refs(Vec::new()),
         }
@@ -907,6 +909,53 @@ mod tests {
             .unwrap();
         assert_eq!(p.attribution, Attribution::Recorded);
         assert!(matches!(p.actor, Actor::Agent { .. }));
+    }
+
+    /// SEC-TMC-09: a row edited outside the daemon is neither an entry nor a point.
+    #[test]
+    fn a_tampered_operation_is_not_an_entry() {
+        let mut w = world();
+        let requester = || agent("claude-1", "s1");
+        let honest = w.operation(
+            &new_op(OperationKind::Protected, requester(), Target::None, 1),
+            OperationState::Finished,
+            10,
+        );
+        let edited = w.operation(
+            &new_op(OperationKind::Protected, requester(), Target::None, 1),
+            OperationState::Finished,
+            20,
+        );
+        let World {
+            _tmp, dirs, log, ..
+        } = w;
+        drop(log);
+        let file = super::super::oplog::repo_dir(&dirs, REPO)
+            .unwrap()
+            .join(super::super::oplog::OPLOG_FILE);
+        let conn = rusqlite::Connection::open(file).unwrap();
+        for t in ["snapshots", "operations", "journal", "notices", "chain"] {
+            for k in ["update", "delete"] {
+                conn.execute_batch(&["DROP TRIGGER ", t, "_no_", k].concat())
+                    .unwrap();
+            }
+        }
+        conn.execute(
+            "UPDATE operations SET requester = '{\"variant\":\"unattributed\"}' WHERE operation_id = ?1",
+            [&edited],
+        )
+        .unwrap();
+        drop(conn);
+        let (log, _) = Oplog::open(&dirs, REPO, 2_000).unwrap();
+        let t = build_timeline(
+            &log,
+            &Refs(Vec::new()),
+            &query(),
+            Some(&engine(vec![])),
+            &SessionActors::default(),
+            (0, 0),
+        );
+        assert_eq!(ids_owned(&t), [format!("operation:{honest}")]);
     }
 
     #[test]
