@@ -56,6 +56,7 @@ Repos, remotos, perfiles y daemons temporales (NFR-01); `raptor`, `raptor-hook` 
 | Misma entrada (`reference-transaction` en `prepared` y `committed`) y resultado respetado (`pre-push` previo que rechaza) | `…::a_chained_hook_gets_the_same_input_and_its_result_is_respected` |
 | Argumentos, entrada y cwd de `pre-push`; la edición del mensaje por `commit-msg` se conserva (nota 1 del coordinador) | `…::a_chained_hook_gets_argv_stdin_cwd_and_its_edits_survive` |
 | GitRaptor decide primero: si deniega, el hook previo no corre y se ve el motivo (nota 2) | `…::guardrails_decides_first_and_a_deny_never_runs_the_prior_hook` |
+| Un hook previo sin `#!` corre con `sh` (como Git); uno con un intérprete que no existe hace fallar la operación | `…::a_prior_hook_without_shebang_runs_and_a_broken_one_fails_the_operation` |
 | E4 · Si no se puede encadenar, no se instala nada (huella intacta, `chain-impossible`) | `…::e4_a_prior_hook_that_cannot_be_chained_installs_nothing`; también `guard_us_grd_001::criteria::repo_intact_prior_hooks_refuse_the_install_without_changes` |
 | Causas de `chain-impossible`, unión de worktrees, nivel global, `~/` | `crates/core` `guardrails::prior::tests::*` |
 | Frontera del stub (tres `Command::new`, sin `-c`) | `crates/core/tests/guard_boundary.rs` |
