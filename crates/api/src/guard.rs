@@ -448,6 +448,10 @@ pub enum NotPreventable {
     /// in a push to tags, in a commit nobody moves to a branch, nor in what is not committed
     /// (US-GRD-008).
     PolicyReach,
+    /// The rules of the team are read from the copy of the main branch the repo holds of the
+    /// remote, which an agent can rewrite by hand; the high-water mark that closes it waits for
+    /// the confirmation command (US-GRD-008).
+    PolicyFloor,
 }
 
 /// Refs backend of the repo (`extensions.refStorage`).
