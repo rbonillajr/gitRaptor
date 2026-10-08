@@ -262,28 +262,171 @@ fn a_push_hides_only_the_remote_tracking_branches() {
 }
 
 #[test]
-fn a_tag_object_or_a_missing_commit_is_not_a_commit_to_read() {
+fn an_annotated_tag_is_read_as_its_commit_and_anything_else_cannot_be_verified() {
     let f = Fixture::with_commit();
+    let c0 = rev(&f, "HEAD");
+    f.write("secrets/a.txt", "s\n");
+    let c1 = commit(&f, "secret");
+    f.git(&["tag", "-a", "-m", "release", "v1", &c1]);
+    let tag = rev(&f, "v1");
+    assert_ne!(tag, c1);
+    // A push of the tag object to a ref that is not a branch brings the commit it peels to.
+    let found = read(
+        &f,
+        Some(&c0),
+        &tag,
+        &[],
+        Hide::OldOnly,
+        &PathLimits::default(),
+    );
+    assert_eq!(paths(&found), ["secrets/a.txt"]);
+    // A blob, or an object the repo does not have, cannot be verified, never "nothing".
     let blob = f.git(&["hash-object", "-w", "a.txt"]).trim().to_owned();
+    for what in [blob, "e".repeat(40)] {
+        let found = read(
+            &f,
+            None,
+            &what,
+            MAIN,
+            Hide::OtherBranches,
+            &PathLimits::default(),
+        );
+        assert!(found.unverifiable, "{what}");
+    }
+}
+
+/// `git mktree` of `lines` (`<mode> <type> <id>\t<name>`).
+fn mktree(f: &Fixture, lines: &str) -> String {
+    use std::io::Write;
+    let mut child = f
+        .git_command(&f.repo, &["mktree"])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(lines.as_bytes())
+        .unwrap();
+    let out = child.wait_with_output().unwrap();
+    assert!(out.status.success());
+    String::from_utf8(out.stdout).unwrap().trim().to_owned()
+}
+
+/// A commit of `tree` on top of `parent`, reached by no ref.
+fn commit_of(f: &Fixture, tree: &str, parent: &str) -> String {
+    f.git(&["commit-tree", tree, "-p", parent, "-m", "x"])
+        .trim()
+        .to_owned()
+}
+
+#[test]
+fn a_tree_too_deep_or_a_path_too_long_cannot_be_verified() {
+    let f = Fixture::with_commit();
+    let c0 = rev(&f, "HEAD");
+    let blob = f.git(&["hash-object", "-w", "a.txt"]).trim().to_owned();
+    let mut tree = mktree(&f, &format!("100644 blob {blob}\tleaf\n"));
+    for _ in 0..6 {
+        tree = mktree(&f, &format!("040000 tree {tree}\td\n"));
+    }
+    let c1 = commit_of(&f, &tree, &c0);
+    let default = PathLimits::default();
+    let found = read(&f, Some(&c0), &c1, MAIN, Hide::OtherBranches, &default);
+    assert_eq!(paths(&found), ["a.txt", "b.txt", "d/d/d/d/d/d/leaf"]);
+    // The same commit past the depth bound, and past the path bound.
+    let shallow = PathLimits {
+        depth: 3,
+        ..default
+    };
+    assert!(read(&f, Some(&c0), &c1, MAIN, Hide::OtherBranches, &shallow).unverifiable);
+    let short = PathLimits {
+        path_bytes: 8,
+        ..default
+    };
+    assert!(read(&f, Some(&c0), &c1, MAIN, Hide::OtherBranches, &short).unverifiable);
+}
+
+#[test]
+fn a_submodule_is_reported_as_a_directory_and_a_malformed_tree_cannot_be_verified() {
+    let f = Fixture::with_commit();
+    let c0 = rev(&f, "HEAD");
+    // A submodule pointer at `vendor/keys`.
+    f.git(&[
+        "update-index",
+        "--add",
+        "--cacheinfo",
+        &format!("160000,{c0},vendor/keys"),
+    ]);
+    f.git(&["commit", "-q", "-m", "submodule"]);
+    let c1 = rev(&f, "HEAD");
     let found = read(
         &f,
-        None,
-        &blob,
+        Some(&c0),
+        &c1,
         MAIN,
         Hide::OtherBranches,
         &PathLimits::default(),
     );
-    assert_eq!(found, NewCommitPaths::default());
-    // An object the repo does not have cannot be verified, never "nothing".
+    assert_eq!(paths(&found), ["vendor/keys/"]);
+
+    // Two entries with one name: one could hide the other.
+    let blob = f.git(&["hash-object", "-w", "a.txt"]).trim().to_owned();
+    let other = f.git(&["hash-object", "-w", "b.txt"]).trim().to_owned();
+    let mut raw = Vec::new();
+    for id in [&blob, &other] {
+        raw.extend_from_slice(b"100644 secrets\0");
+        for pair in id.as_bytes().chunks(2) {
+            raw.push(u8::from_str_radix(std::str::from_utf8(pair).unwrap(), 16).unwrap());
+        }
+    }
+    use std::io::Write;
+    let mut child = f
+        .git_command(
+            &f.repo,
+            &["hash-object", "-w", "-t", "tree", "--literally", "--stdin"],
+        )
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(&raw).unwrap();
+    let out = child.wait_with_output().unwrap();
+    assert!(out.status.success());
+    let tree = String::from_utf8(out.stdout).unwrap().trim().to_owned();
+    let c2 = commit_of(&f, &tree, &c1);
     let found = read(
         &f,
-        None,
-        &"e".repeat(40),
+        Some(&c1),
+        &c2,
         MAIN,
         Hide::OtherBranches,
         &PathLimits::default(),
     );
-    assert!(found.unverifiable);
+    assert!(found.unverifiable, "{found:?}");
+}
+
+#[test]
+fn a_symbolic_ref_hides_nothing() {
+    let f = Fixture::with_commit();
+    let c0 = rev(&f, "HEAD");
+    f.write("secrets/a.txt", "s\n");
+    let c1 = commit(&f, "secret");
+    // The commit is parked under a tag (not a hider) and a branch points at the tag.
+    f.git(&["tag", "parked", &c1]);
+    f.git(&["reset", "-q", "--hard", &c0]);
+    f.git(&["symbolic-ref", "refs/heads/alias", "refs/tags/parked"]);
+    let found = read(
+        &f,
+        Some(&c0),
+        &c1,
+        MAIN,
+        Hide::OtherBranches,
+        &PathLimits::default(),
+    );
+    assert_eq!(paths(&found), ["secrets/a.txt"]);
+    assert_eq!(found.commits, 1);
 }
 
 #[test]

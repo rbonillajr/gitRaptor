@@ -422,6 +422,35 @@ mod protected_branches_and_forbidden_paths {
     }
 
     #[test]
+    fn a_symbolic_branch_cannot_be_read_so_it_is_denied_to_the_agent() {
+        let (repo, common) = repo();
+        let mut params = update(
+            &common,
+            "refs/heads/alias",
+            &"0".repeat(40),
+            &"0".repeat(40),
+        );
+        let Operation::RefTransaction { updates, .. } = &mut params.operation else {
+            unreachable!()
+        };
+        updates[0].old = RefValue::Zero;
+        updates[0].new = RefValue::Symbolic("refs/tags/parked".into());
+        let d = serve_as(
+            &registry(&common),
+            &params,
+            &caller(repo.path(), true, true),
+        );
+        assert_eq!(d.applied_effect, Effect::Deny, "{d:?}");
+        assert_eq!(d.reasons[0].cause, Some(Cause::Unverifiable));
+        let d = serve_as(
+            &registry(&common),
+            &params,
+            &caller(repo.path(), false, true),
+        );
+        assert_eq!(d.applied_effect, Effect::Allow, "{d:?}");
+    }
+
+    #[test]
     fn what_cannot_be_verified_is_denied_never_allowed() {
         let (repo, common) = repo();
         let base = rev(repo.path(), "HEAD");
