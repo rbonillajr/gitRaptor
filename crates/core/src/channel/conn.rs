@@ -2904,7 +2904,11 @@ impl Connection<'_> {
         if matches!(spec.name, methods::TM_UNDO | methods::TM_RESTORE) {
             require_attributed(channel, r.who.is_agent()).map_err(scope_refused)?;
         }
-        if let Some(repo) = self.repo_for(channel, named.as_deref()) {
+        // Only a request that names an id has a repo to look it up in; the selectors stay with
+        // their stories and are not scoped here.
+        if (snapshot_id.is_some() || operation_id.is_some())
+            && let Some(repo) = self.repo_for(channel, named.as_deref())
+        {
             let repo = repo?;
             if let Some(id) = &snapshot_id
                 && snapshot_in(&repo, id).is_none()
