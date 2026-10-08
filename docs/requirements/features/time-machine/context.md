@@ -4,7 +4,7 @@ title: "Contexto — Time Machine"
 type: context
 status: draft
 created: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-08
 domain: GRP
 epic: E-001
 feature: time-machine
@@ -289,7 +289,7 @@ Impacto de no resolverlo: una sola pérdida de trabajo rompe la confianza en el 
 | D-TMC-17 | (P8) Un solicitante atribuido a un agente solo deshace sus propias operaciones; deshacer trabajo de otro actor exige confirmación interactiva del desarrollador (D-TMC-23). Guardrails puede restringir más. | P8 | 2026-10-03 | Rene Bonilla | BR-TMC-AUTH-001 |
 | D-TMC-18 | (P9) El registro de un undo (solicitante y sobre qué actuó) no se reescribe; el timeline muestra la atribución vigente. | P9 | 2026-10-03 | Rene Bonilla | BR-TMC-CONS-005 |
 | D-TMC-19 | (P10) Timeline por repo, con filtros por worktree, agente y tiempo. | P10 | 2026-10-03 | Rene Bonilla | BR-TMC-CONS-005, BR-TMC-EDGE-002, BR-TMC-WF-001 |
-| D-TMC-20 | (P11) Una restauración alcanza el worktree donde se pide y las ramas y worktrees que cambiaron después del punto; nada más. | P11 | 2026-10-03 | Rene Bonilla | BR-TMC-WF-003, BR-TMC-WF-001 |
+| D-TMC-20 | (P11) Una restauración alcanza el worktree donde se pide y las ramas y worktrees que cambiaron después del punto; nada más. **Precisión (2026-10-08, US-TMC-009; decisión del orquestador validada por Arquitecto y PO, abierta a veto de Rene)**: "cambiaron después del punto" se lee como lo que tocó el trabajo hecho en ese worktree desde el punto; el trabajo independiente de otro agente en otro worktree no entra. Caso límite: una rama borrada con Git crudo desde otro worktree no vuelve y la restauración la nombra como no devuelta. Ver ADR-TMC-005, Enmienda (2026-10-08). | P11 | 2026-10-03 | Rene Bonilla | BR-TMC-WF-003, BR-TMC-WF-001 |
 | D-TMC-21 | (P12; **cerrada por SPIKE-TMC-001 el 2026-10-04**) El "repo mediano" de referencia de NFR-04 es el **perfil `M`** del generador reproducible del spike: 10.000 archivos con seguimiento, ~300 MB de working tree, 50.000 commits, 3 % de binarios y 3.000 archivos ignorados. El perfil `L` (40.000 archivos, 1 GB, 150.000 commits) queda fuera de referencia (US-TMC-020, escenario 3). Ver [resultados](./research/SPIKE-TMC-001-resultados.md). | P12, SPIKE-TMC-001 | 2026-10-04 | Rene Bonilla | — (NFR-04) |
 | D-TMC-22 | (P13) Las historias de undo por agente quedan bloqueadas hasta que se cierre P17 de motor-local. | P13 | 2026-10-03 | Rene Bonilla | BR-TMC-WF-002 |
 | D-TMC-23 | (P14) El solicitante de un undo, redo o restauración se atribuye como un evento ("agente X" o "sin atribuir", nunca "humano"). Atribuido a un agente, solo deshace lo suyo. "Sin atribuir": deshacer trabajo de otro actor exige una confirmación interactiva del desarrollador en ese momento, que un agente no puede dar. **Actualizada por TQ-14**: en el MVP esa confirmación solo se ofrece en macOS y Linux; en Windows, hasta que exista una forma fiable de probar que no la da un agente, la petición "sin atribuir" que toca trabajo de otro actor se rechaza con su motivo. En la Fase 2 se planea la presencia verificada por el SO (Touch ID, Windows Hello, polkit). Por MCP una petición "sin atribuir" se rechaza siempre (TQ-7). El mecanismo de identificación lo decide el Arquitecto. | P14, TQ-14, TQ-7 | 2026-10-03 | Rene Bonilla | BR-TMC-AUTH-001, BR-TMC-WF-001 |

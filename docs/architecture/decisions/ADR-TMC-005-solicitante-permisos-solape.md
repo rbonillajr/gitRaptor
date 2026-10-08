@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-05
+updated: 2026-10-08
 date: 2026-10-03
 domain: GRP
 feature: time-machine
@@ -143,3 +143,14 @@ Aplicada desde DEP-CKP-7 de [CTX-CKP-001](../../requirements/features/cockpit/co
 - En Windows, un solicitante cuya ascendencia no se puede verificar (padre terminado o reutilizado, intérprete, descendiente del daemon sin marca, multiplexor con un agente vivo) se rechaza como no verificado en vez de quedar "sin atribuir". Si quedara "sin atribuir", la fila "solo trabajo sin atribuir" del § 2 le dejaría deshacer trabajo del desarrollador sin confirmación (C-01 de la revisión de seguridad del 2026-10-05).
 - **Riesgo residual de Windows (M-01)**: un proceso del mismo usuario puede elegir padre (`PROC_THREAD_ATTRIBUTE_PARENT_PROCESS`) y colgarse de otro `claude.exe` o de un hijo marcado. Así **suplanta a otro agente o al solicitante de una operación**, no solo evade la atribución. Queda fuera del modelo del agente confundido y lo compensa el snapshot previo, como el resto del riesgo residual del § 3.
 - **Riesgo residual de Windows (M-04)**: la cadena termina limpia en `explorer.exe` de la carpeta de Windows, y un agente puede relanzar un programa bajo el explorer sin escribir código (`explorer.exe x.bat`, o un `.lnk`; es un LOLBin conocido). El programa queda como "sin atribuir" verificado y puede deshacer trabajo "sin atribuir" sin confirmación. Hoy no se puede alcanzar, porque Windows no tiene transporte. **Es criterio de entrada de la historia del transporte de Windows**: antes de abrir el canal hay que cerrar este hueco (por ejemplo, exigir prueba de presencia para lo "sin atribuir") o aceptarlo de forma explícita. Lo compensa el snapshot previo de cada operación (NFR-01).
+
+## Enmienda (2026-10-08, US-TMC-009)
+
+Decisión del orquestador (2026-10-08), validada por Arquitecto y PO. Precisa qué es el "conjunto a restaurar" del § 2 y no cambia la tabla.
+
+- **Conjunto a restaurar**: el worktree donde se pide (W), más los worktrees y las ramas que **tocó el trabajo hecho en W después del punto** (los ámbitos de las operaciones cuyo ámbito incluye W y los eventos de Git crudo de W), filtrado por la diferencia entre el snapshot destino y el estado actual. Los worktrees del punto que ya no existen se recrean sin checkout (ADR-TMC-002 § 3). Es la lectura de D-TMC-20 que respeta "un agente por worktree": el trabajo independiente de otro agente en otro worktree no entra y no bloquea la restauración.
+- **Dueños**: la regla base del § 2 se aplica a todos los actores de ese conjunto: los solicitantes congelados de las operaciones posteriores al punto y los actores de los eventos crudos que no son eco de una operación propia.
+- **Límite conocido**: una rama del punto borrada con Git crudo **desde otro worktree** no vuelve. La restauración la nombra como "no devuelta" con el motivo, para que no se lea como un fallo.
+- **Ramas creadas después del punto**: no se borran (NFR-01); la restauración las lista como dejadas en su sitio.
+- **Deshacer una restauración que recreó un worktree** siempre termina: la ref que solo usa ese worktree recreado se deja como está y se avisa, en vez de rechazar con `ref-in-use`. El worktree recreado se queda (quitar un worktree no está en la lista cerrada de ADR-TMC-002 § 2).
+- **Sin cubrir hasta US-TMC-012**: las ediciones sin commitear de otro agente en un worktree del conjunto distinto de W se sobrescriben sin pasar la regla de permisos, porque una edición no es un evento con dueño. Se recuperan con `raptor undo` porque el snapshot previo cubre todas las raíces existentes del conjunto.
