@@ -326,7 +326,15 @@ pub(crate) fn debug_overrides() -> Vec<(std::ffi::OsString, std::ffi::OsString)>
             crate::resources::RESOURCE_TARGETS_ENV,
             crate::autostart::AUTOSTART_DIR_ENV,
             crate::autostart::SERVICE_TOOL_ENV,
+            crate::guardrails::pending::WINDOW_ENV,
         ] {
+            if let Some(value) = std::env::var_os(name) {
+                env.push((name.into(), value));
+            }
+        }
+        // The cut points of the Guardrails transactions (NFR-12 sweeps), only with `test-cuts`.
+        #[cfg(feature = "test-cuts")]
+        for name in ["GITRAPTOR_TEST_CUT", "GITRAPTOR_TEST_CUT_TRACE"] {
             if let Some(value) = std::env::var_os(name) {
                 env.push((name.into(), value));
             }

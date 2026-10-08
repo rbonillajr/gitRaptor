@@ -69,13 +69,22 @@ pub(crate) struct WithdrawRequest {
 }
 
 /// A Guardrails request to the loop, for a repo the channel already located.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(not(unix), allow(dead_code))]
 pub(crate) enum GuardRequest {
     Plan,
     Status,
     Install,
     Decline,
+    /// Announces the uninstall and opens its window (US-GRD-003, D5).
+    UninstallRequest(crate::guardrails::pending::Requester),
+    /// Applies the announced uninstall once its window closed.
+    UninstallApply {
+        action_id: String,
+        requester: crate::guardrails::pending::Requester,
+    },
+    /// Cancels the action waiting in the repo.
+    Cancel(crate::guardrails::pending::Requester),
 }
 
 /// What the loop answers to a [`GuardRequest`].
@@ -90,6 +99,10 @@ pub(crate) enum GuardReply {
     Rejected(Vec<InstallBlocker>),
     /// A step failed and was reverted, or the profile is unavailable.
     Failed,
+    /// The uninstall was announced, or applied (US-GRD-003).
+    Uninstall(Box<gitraptor_api::guard::GuardUninstallResult>),
+    /// `guard.uninstall` or `guard.cancel` did nothing.
+    UninstallRefused(crate::guardrails::pending::Refused),
 }
 
 /// What the loop answers to a `guard.log` (US-GRD-005).

@@ -193,6 +193,9 @@ impl WriteSubcommand {
 pub(crate) enum GuardSubcommand {
     /// Writes the absolute path of the dispatchers folder (the commit point of the install).
     Set,
+    /// Writes back the value the repo had at local level before the install (uninstall): the
+    /// recorded value as is, which may be relative (`.husky/_`).
+    Restore,
     /// Removes the key (a revert, or an uninstall with no previous local value).
     Unset,
     /// Reads the value in that one file, without includes.
@@ -202,7 +205,7 @@ pub(crate) enum GuardSubcommand {
 impl GuardSubcommand {
     pub(crate) fn words(self) -> &'static [&'static str] {
         match self {
-            Self::Set => &["config", "--no-includes"],
+            Self::Set | Self::Restore => &["config", "--no-includes"],
             Self::Unset => &["config", "--no-includes", "--unset"],
             Self::Get => &["config", "--no-includes", "--get"],
         }
@@ -459,12 +462,18 @@ impl Invoker {
         subcommand: GuardSubcommand,
         value: Option<&Path>,
     ) -> Result<Output, ReadError> {
-        if !git.is_absolute() || !config.is_absolute() || value.is_some_and(|v| !v.is_absolute()) {
+        let relative_ok = subcommand == GuardSubcommand::Restore;
+        if !git.is_absolute()
+            || !config.is_absolute()
+            || value.is_some_and(|v| !relative_ok && !v.is_absolute())
+            || value.is_some_and(|v| v.as_os_str().to_string_lossy().starts_with('-'))
+        {
             return Err(ReadError::InvalidInput(
                 "guard write layer paths must be absolute".into(),
             ));
         }
-        if (subcommand == GuardSubcommand::Set) != value.is_some() {
+        let takes_value = matches!(subcommand, GuardSubcommand::Set | GuardSubcommand::Restore);
+        if takes_value != value.is_some() {
             return Err(ReadError::InvalidInput("hooksPath value mismatch".into()));
         }
         let cwd = config
@@ -775,5 +784,32 @@ mod tests {
             .run(Path::new("git"), None, Subcommand::Version, &[])
             .unwrap_err();
         assert!(matches!(err, ReadError::InvalidInput(_)));
+    }
+
+    /// The guard key accepts only an absolute value, except the restore of the value the repo
+    /// had (US-GRD-003), which may be relative; never one Git would read as an option.
+    #[test]
+    fn the_guard_key_takes_only_the_values_it_may() {
+        let inv = Invoker::default();
+        let git = Path::new("/usr/bin/git");
+        let config = Path::new("/r/.git/config");
+        let rejected = |sub, value: &str| {
+            matches!(
+                inv.run_guard(git, config, sub, Some(Path::new(value))),
+                Err(ReadError::InvalidInput(_))
+            )
+        };
+        assert!(rejected(GuardSubcommand::Set, ".husky/_"));
+        assert!(rejected(GuardSubcommand::Set, "-x"));
+        assert!(rejected(GuardSubcommand::Restore, "-x"));
+        assert!(rejected(GuardSubcommand::Restore, "--file=/etc/x"));
+        assert!(matches!(
+            inv.run_guard(git, config, GuardSubcommand::Restore, None),
+            Err(ReadError::InvalidInput(_))
+        ));
+        assert!(matches!(
+            inv.run_guard(git, config, GuardSubcommand::Unset, Some(Path::new("/a"))),
+            Err(ReadError::InvalidInput(_))
+        ));
     }
 }

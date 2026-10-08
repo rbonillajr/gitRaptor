@@ -640,6 +640,11 @@ fn module_error(name: &str, lang: Lang) -> Option<&'static str> {
 /// `(name, en, es)` of each module's own code.
 const MODULE_ERRORS: &[(&str, &str, &str)] = &[
     (
+        "guard-uninstall-refused",
+        "the protection was not removed",
+        "la protección no se retiró",
+    ),
+    (
         "root-rejected",
         "that folder cannot be a code folder",
         "esa carpeta no puede ser una carpeta de código",

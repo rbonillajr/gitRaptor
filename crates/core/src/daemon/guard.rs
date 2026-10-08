@@ -7,10 +7,23 @@ use gitraptor_git::SystemGit;
 use super::{Daemon, DaemonConfig, Field, Logger, now_ms, raptor_path};
 use super::{GuardLogReply, GuardReply, GuardRequest};
 
+use gitraptor_api::guard::{GuardUninstallResult, PendingKind, UninstallRefusal};
+
 use crate::guardrails::install::{GuardCtx, InstallError};
 use crate::guardrails::log::LogEntry;
+use crate::guardrails::pending::{self, Entry, Refused, Requester};
+use crate::guardrails::uninstall::{self as guard_uninstall, UninstallError};
 use crate::guardrails::{GuardRegistry, install as guard_install};
-use crate::profile::{Profile, RepoState, RepoStore};
+use crate::profile::{AuditRow, Profile, RepoState, RepoStore};
+
+/// What every applied, cancelled or expired uninstall records with it (ADR-GRD-007 § 2,
+/// aceptación del riesgo por acción): the version of the vector table and what the controls of
+/// the reserved commands do not cover today.
+const RISK_ACCEPTED: &str = "risk-accepted: ADR-GRD-007 § 2 (2026-10-04); uncovered: detached-tree (setsid, launchctl, systemd-run), pty-injection (tmux send-keys), ui-automation (osascript, SendKeys), planted-code";
+
+fn requester_text(r: Requester) -> String {
+    serde_json::json!({ "pid": r.pid, "start_us": r.start_us }).to_string()
+}
 
 impl Daemon {
     /// A Guardrails request for an observed repo (US-GRD-001). The loop is the only writer
@@ -29,6 +42,12 @@ impl Daemon {
         let (Some(git), Some(raptor)) = (self.report.git.clone(), self.raptor_path()) else {
             return GuardReply::Failed;
         };
+        let now = now_ms();
+        // Expired windows go to the audit before anything reads them (D6).
+        let expired = self.guard.pending().sweep_expired(now);
+        for (repo_id, e) in &expired {
+            self.audit_pending(repo_id, e, "expired", e.requester, now);
+        }
         let invoker = self.config.env.invoker();
         let instance = self.profile.instance_id().to_owned();
         let Some((_, store)) = self.stores.iter_mut().find(|(id, _)| *id == entry.repo_id) else {
@@ -42,60 +61,162 @@ impl Daemon {
             raptor: &raptor,
         };
         let common = entry.canonical_path.as_path();
-        match request {
-            GuardRequest::Plan => GuardReply::Plan(Box::new(guard_install::plan(
-                &ctx,
-                &entry.repo_id,
-                common,
-                store,
-            ))),
-            GuardRequest::Status => GuardReply::Status(Box::new(guard_install::status(
-                &entry.repo_id,
-                common,
-                store,
+        let repo_id = entry.repo_id.as_str();
+        let with_pending = |mut status: gitraptor_api::guard::GuardStatus| {
+            status.pending = self.guard.pending().get(repo_id, now);
+            status
+        };
+        // An audit row to write once the store is released: (action, outcome, requester).
+        let mut audit: Option<(Entry, &'static str, Requester)> = None;
+        let reply = match request {
+            GuardRequest::Plan => {
+                let mut plan = guard_install::plan(&ctx, repo_id, common, store);
+                plan.status = with_pending(plan.status);
+                GuardReply::Plan(Box::new(plan))
+            }
+            GuardRequest::Status => GuardReply::Status(Box::new(with_pending(
+                guard_install::status(repo_id, common, store),
             ))),
             GuardRequest::Decline => {
                 self.logger
-                    .info("guard_declined", &[("repo", Field::id(&entry.repo_id))]);
-                GuardReply::Status(Box::new(guard_install::decline(
-                    &entry.repo_id,
-                    common,
-                    store,
-                )))
+                    .info("guard_declined", &[("repo", Field::id(repo_id))]);
+                GuardReply::Status(Box::new(guard_install::decline(repo_id, common, store)))
             }
             GuardRequest::Install => {
-                match guard_install::install(
-                    &ctx,
-                    &entry.repo_id,
-                    common,
-                    store,
-                    &self.guard,
-                    now_ms(),
-                ) {
+                match guard_install::install(&ctx, repo_id, common, store, &self.guard, now) {
                     Ok(status) => {
                         self.logger
-                            .info("guard_installed", &[("repo", Field::id(&entry.repo_id))]);
+                            .info("guard_installed", &[("repo", Field::id(repo_id))]);
                         GuardReply::Status(Box::new(status))
                     }
                     Err(InstallError::Rejected(blockers)) => {
                         self.logger.info(
                             "guard_install_refused",
                             &[
-                                ("repo", Field::id(&entry.repo_id)),
+                                ("repo", Field::id(repo_id)),
                                 ("blockers", blockers.len().into()),
                             ],
                         );
                         GuardReply::Rejected(blockers)
                     }
                     Err(InstallError::Failed(_)) => {
-                        self.logger.error(
-                            "guard_install_failed",
-                            &[("repo", Field::id(&entry.repo_id))],
-                        );
+                        self.logger
+                            .error("guard_install_failed", &[("repo", Field::id(repo_id))]);
                         GuardReply::Failed
                     }
                 }
             }
+            GuardRequest::UninstallRequest(requester) => {
+                let status = guard_install::status(repo_id, common, store);
+                if status.state != gitraptor_api::guard::ProtectionState::HooksOnly {
+                    GuardReply::UninstallRefused(UninstallRefusal::NotInstalled.into())
+                } else {
+                    let announced = self.guard.pending().announce(
+                        repo_id,
+                        PendingKind::Uninstall,
+                        requester,
+                        now,
+                        pending::window(),
+                        pending::new_action_id(),
+                    );
+                    match announced {
+                        Ok(action) => {
+                            self.logger
+                                .info("guard_uninstall_announced", &[("repo", Field::id(repo_id))]);
+                            GuardReply::Uninstall(Box::new(GuardUninstallResult {
+                                status: with_pending(status),
+                                pending: Some(action),
+                            }))
+                        }
+                        Err(reason) => GuardReply::UninstallRefused(reason.into()),
+                    }
+                }
+            }
+            GuardRequest::UninstallApply {
+                action_id,
+                requester,
+            } => {
+                let due = self
+                    .guard
+                    .pending()
+                    .take_due(repo_id, &action_id, requester, now);
+                match due {
+                    Err(refused) => GuardReply::UninstallRefused(refused),
+                    Ok(action) => {
+                        match guard_uninstall::uninstall(&ctx, repo_id, common, store, &self.guard)
+                        {
+                            Ok(status) => {
+                                self.logger
+                                    .info("guard_uninstalled", &[("repo", Field::id(repo_id))]);
+                                audit = Some((action, "applied", requester));
+                                GuardReply::Uninstall(Box::new(GuardUninstallResult {
+                                    status,
+                                    pending: None,
+                                }))
+                            }
+                            Err(UninstallError::NotInstalled) => {
+                                GuardReply::UninstallRefused(UninstallRefusal::NotInstalled.into())
+                            }
+                            Err(UninstallError::Failed(_)) => {
+                                self.logger.error(
+                                    "guard_uninstall_failed",
+                                    &[("repo", Field::id(repo_id))],
+                                );
+                                audit = Some((action, "failed", requester));
+                                GuardReply::Failed
+                            }
+                        }
+                    }
+                }
+            }
+            GuardRequest::Cancel(requester) => {
+                let cancelled = self.guard.pending().cancel(repo_id, now);
+                match cancelled {
+                    Some(action) => {
+                        self.logger
+                            .info("guard_uninstall_cancelled", &[("repo", Field::id(repo_id))]);
+                        audit = Some((action, "cancelled", requester));
+                        GuardReply::Status(Box::new(with_pending(guard_install::status(
+                            repo_id, common, store,
+                        ))))
+                    }
+                    None => {
+                        GuardReply::UninstallRefused(Refused::from(UninstallRefusal::NoPending))
+                    }
+                }
+            }
+        };
+        if let Some((action, outcome, requester)) = audit {
+            self.audit_pending(&entry.repo_id, &action, outcome, requester, now);
+        }
+        reply
+    }
+
+    /// The permanent audit of an announced action that was applied, cancelled, failed or
+    /// expired, with the risk it accepted (ADR-GRD-007 § 2). The announcement itself is the
+    /// accepted `guard.uninstall` audited by the channel, with the full ancestry.
+    fn audit_pending(
+        &mut self,
+        repo_id: &str,
+        action: &Entry,
+        outcome: &'static str,
+        who: Requester,
+        now: i64,
+    ) {
+        let row = AuditRow {
+            at_ms: now,
+            operation: gitraptor_api::methods::GUARD_UNINSTALL.to_owned(),
+            repo_id: Some(repo_id.to_owned()),
+            outcome: outcome.to_owned(),
+            reason: Some(format!("{RISK_ACCEPTED}; action {}", action.action_id)),
+            client: requester_text(who),
+            chain: requester_text(action.requester),
+        };
+        if self.profile.append_audit(&row).is_err() {
+            self.logger.error(
+                "audit_write_failed",
+                &[("op", Field::Text("guard.uninstall"))],
+            );
         }
     }
 }
@@ -145,6 +266,16 @@ pub(super) fn recover_guardrails(
             }
             guard_install::Recovery::RolledBack => {
                 logger.info("guard_install_rolled_back", &[("repo", Field::id(repo_id))]);
+            }
+            guard_install::Recovery::UninstallCompleted => {
+                logger.info("guard_uninstall_recovered", &[("repo", Field::id(repo_id))]);
+            }
+            guard_install::Recovery::UninstallKept => {
+                // `no completada`: the protection stays, and the developer is told on status.
+                logger.warn(
+                    "guard_uninstall_incomplete",
+                    &[("repo", Field::id(repo_id))],
+                );
             }
         }
     }

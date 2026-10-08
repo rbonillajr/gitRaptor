@@ -12,6 +12,9 @@ pub enum Stage {
     Installing,
     /// Verified and confirmed.
     Confirmed,
+    /// The uninstall started (after its window): the key may or may not be back. Recovered at
+    /// startup (ADR-GRD-001 § 4, Recuperación).
+    Uninstalling,
 }
 
 /// `(dev, inode)` as recorded.
@@ -46,12 +49,16 @@ pub struct FileHash {
     pub sha256: String,
 }
 
-/// The previous `core.hooksPath` and its level (ADR-GRD-001 § 1). US-GRD-001 only installs
-/// without one, so it is always `none` here; US-GRD-002 fills it.
+/// The previous `core.hooksPath` and its level (ADR-GRD-001 § 1): `none`, `local`, `global` or
+/// `system`. The uninstall writes `value` back only when it was `local`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Prior {
     pub value: Option<String>,
     pub level: String,
+    /// The folder the dispatchers chain (the `prior` constant); empty in an install of
+    /// US-GRD-001, which means `<common>/hooks`.
+    #[serde(default)]
+    pub dir: String,
 }
 
 /// The journal entry of one repo.
@@ -75,6 +82,9 @@ pub struct Journal {
     pub template: u32,
     pub instance: String,
     pub prior: Prior,
+    /// Prior hooks with a chain-only dispatcher (names outside the governed set; US-GRD-002).
+    #[serde(default)]
+    pub chained: Vec<String>,
     /// Branch the install confirms (`main`), or `None` when the repo has a team configuration
     /// and the base stays unconfirmed (Q-GRD-23).
     pub confirms_base: Option<String>,

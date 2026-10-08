@@ -161,6 +161,18 @@ impl<'a> GuardWriter<'a> {
         self.key(common, GuardSubcommand::Set, Some(hooks_dir))
     }
 
+    /// Writes back the `core.hooksPath` the repo had at local level before the install
+    /// (uninstall, ADR-GRD-001 § 4): the value recorded in the journal, as is. Git rewrites the
+    /// line in place, with its lock and an atomic rename.
+    pub fn restore_hooks_path(&self, common: &Path, value: &str) -> Result<()> {
+        if value.is_empty() || value.starts_with('-') || value.chars().any(char::is_control) {
+            return Err(GuardWriteError::InvalidInput(
+                "prior hooks path is not restorable".into(),
+            ));
+        }
+        self.key(common, GuardSubcommand::Restore, Some(Path::new(value)))
+    }
+
     /// Removes the key from the common `config`.
     pub fn unset_hooks_path(&self, common: &Path) -> Result<()> {
         self.key(common, GuardSubcommand::Unset, None)

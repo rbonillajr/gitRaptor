@@ -846,7 +846,9 @@ impl Connection<'_> {
             methods::GUARD_PLAN
             | methods::GUARD_STATUS
             | methods::GUARD_INSTALL
-            | methods::GUARD_DECLINE => {
+            | methods::GUARD_DECLINE
+            | methods::GUARD_UNINSTALL
+            | methods::GUARD_CANCEL => {
                 let result = self.guard(spec, request);
                 self.reply(&request.id, result);
             }
@@ -1129,38 +1131,121 @@ impl Connection<'_> {
         value.map_err(|_| unavailable())
     }
 
-    /// `guard.*` (US-GRD-001): the reserved ones are authorized and audited before the path
-    /// is read, like `repo.add`; the loop then acts on an observed repo only.
+    /// `guard.*` (US-GRD-001, US-GRD-003): the reserved ones are authorized and audited before
+    /// the path is read, like `repo.add`; the loop then acts on an observed repo only. The
+    /// accepted `guard.uninstall` audit is the announcement every client receives (D5).
     fn guard(
         &self,
         spec: &MethodSpec,
         request: &Request,
     ) -> Result<serde_json::Value, ErrorObject> {
-        let params: GuardRepoParams = request.params()?;
-        let path = validate::client_path(&params.path).map_err(invalid)?;
+        use gitraptor_api::guard::{GuardUninstallParams, GuardUninstallRefusedData};
+        let (path, confirm) = if spec.name == methods::GUARD_UNINSTALL {
+            let params: GuardUninstallParams = request.params()?;
+            (params.path, params.confirm)
+        } else {
+            let params: GuardRepoParams = request.params()?;
+            (params.path, None)
+        };
+        let path = validate::client_path(&path).map_err(invalid)?;
         if spec.reserved {
             self.reserved(spec, None)?;
         }
         let common_dir = crate::observe::locate(&path).map_err(rejected)?;
+        let requester = crate::guardrails::pending::Requester {
+            pid: self.peer.pid,
+            start_us: self.peer.start_us,
+        };
         let kind = match spec.name {
             methods::GUARD_PLAN => GuardRequest::Plan,
             methods::GUARD_INSTALL => GuardRequest::Install,
             methods::GUARD_DECLINE => GuardRequest::Decline,
+            methods::GUARD_UNINSTALL => match confirm {
+                None => GuardRequest::UninstallRequest(requester),
+                Some(action_id) => GuardRequest::UninstallApply {
+                    action_id,
+                    requester,
+                },
+            },
+            methods::GUARD_CANCEL => GuardRequest::Cancel(requester),
             _ => GuardRequest::Status,
         };
-        let value = match self.ctx.control.guard(common_dir, kind) {
-            GuardReply::Plan(plan) => serde_json::to_value(*plan),
-            GuardReply::Status(status) => serde_json::to_value(*status),
-            GuardReply::NotObserved => return Err(rejected(RepoRejection::NotObserved)),
-            GuardReply::Rejected(blockers) => {
-                return Err(ErrorObject::new(code::GUARD_REJECTED, "install refused")
-                    .with_data(GuardRejectedData { blockers }));
-            }
-            GuardReply::Failed => {
-                return Err(ErrorObject::new(code::INTERNAL, "guardrails unavailable"));
-            }
-        };
+        let value =
+            match self.ctx.control.guard(common_dir, kind) {
+                GuardReply::Plan(mut plan) => {
+                    self.guard_shape_plan(&mut plan);
+                    serde_json::to_value(*plan)
+                }
+                GuardReply::Status(mut status) => {
+                    self.guard_shape_status(&mut status);
+                    serde_json::to_value(*status)
+                }
+                GuardReply::Uninstall(mut result) => {
+                    self.guard_shape_status(&mut result.status);
+                    serde_json::to_value(*result)
+                }
+                GuardReply::NotObserved => return Err(rejected(RepoRejection::NotObserved)),
+                GuardReply::Rejected(blockers) => {
+                    return Err(ErrorObject::new(code::GUARD_REJECTED, "install refused")
+                        .with_data(GuardRejectedData {
+                            blockers: self.guard_blockers(blockers),
+                        }));
+                }
+                GuardReply::UninstallRefused(refused) => {
+                    return Err(ErrorObject::new(
+                        methods::GUARD_UNINSTALL_REFUSED.code,
+                        "uninstall refused",
+                    )
+                    .with_data(GuardUninstallRefusedData {
+                        reason: refused.reason,
+                        remaining_ms: refused.remaining_ms,
+                    }));
+                }
+                GuardReply::Failed => {
+                    return Err(ErrorObject::new(code::INTERNAL, "guardrails unavailable"));
+                }
+            };
         value.map_err(|_| ErrorObject::new(code::INTERNAL, "encode"))
+    }
+
+    /// `chain-impossible` reads `prior-hooks` for a connection without `guard.prior-hooks`.
+    fn guard_blockers(
+        &self,
+        blockers: Vec<gitraptor_api::guard::InstallBlocker>,
+    ) -> Vec<gitraptor_api::guard::InstallBlocker> {
+        use gitraptor_api::guard::InstallBlocker;
+        if self.has(methods::CAP_GUARD_PRIOR_HOOKS.name) {
+            return blockers;
+        }
+        let mut out: Vec<InstallBlocker> = Vec::new();
+        for b in blockers {
+            let b = if b == InstallBlocker::ChainImpossible {
+                InstallBlocker::PriorHooks
+            } else {
+                b
+            };
+            if !out.contains(&b) {
+                out.push(b);
+            }
+        }
+        out
+    }
+
+    /// The fields of `guard.status` a connection has the capability for.
+    fn guard_shape_status(&self, status: &mut gitraptor_api::guard::GuardStatus) {
+        if !self.has(methods::CAP_GUARD_PENDING_ACTION.name) {
+            status.pending = None;
+        }
+        status.last_refusal = self.guard_blockers(std::mem::take(&mut status.last_refusal));
+    }
+
+    /// The fields of `guard.plan` a connection has the capability for.
+    fn guard_shape_plan(&self, plan: &mut gitraptor_api::guard::GuardPlan) {
+        if !self.has(methods::CAP_GUARD_PRIOR_HOOKS.name) {
+            plan.prior = None;
+        }
+        plan.blockers = self.guard_blockers(std::mem::take(&mut plan.blockers));
+        self.guard_shape_status(&mut plan.status);
     }
 
     /// `guard.log` (US-GRD-005): read-only and not reserved; the loop answers, after
