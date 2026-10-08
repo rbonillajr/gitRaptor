@@ -252,6 +252,15 @@ pub fn fingerprint(common: &Path, journal: &Journal) -> u64 {
                     m.ctime().hash(&mut h);
                     m.ctime_nsec().hash(&mut h);
                 }
+                // Windows: the identity of the entry and its `ChangeTime`, which moves on every
+                // write and cannot be set back either (the modification time can).
+                #[cfg(windows)]
+                {
+                    gitraptor_winsys::file_id::of_path(&p).ok().hash(&mut h);
+                    gitraptor_winsys::file_id::change_time_of_path(&p)
+                        .ok()
+                        .hash(&mut h);
+                }
             }
             Err(_) => 0u8.hash(&mut h),
         }
