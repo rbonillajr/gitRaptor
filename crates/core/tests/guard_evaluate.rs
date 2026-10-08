@@ -473,12 +473,15 @@ mod protected_branches_and_forbidden_paths {
         let tree = rev(repo.path(), "HEAD^{tree}");
         let mut tip = base.clone();
         for n in 0..300 {
-            let out = std::process::Command::new("git")
-                .args(["commit-tree", &tree, "-p", &tip, "-m", &format!("c{n}")])
-                .current_dir(repo.path())
-                .output()
-                .unwrap();
-            tip = String::from_utf8(out.stdout).unwrap().trim().to_owned();
+            // With the identity of the helper: a CI runner has none, and `commit-tree` without it
+            // prints nothing (an empty id is then rejected as input, not judged).
+            tip = git(
+                repo.path(),
+                &["commit-tree", &tree, "-p", &tip, "-m", &format!("c{n}")],
+            )
+            .trim()
+            .to_owned();
+            assert_eq!(tip.len(), 40, "commit-tree failed: {tip:?}");
         }
         check(denied(&tip), "more commits than the bound");
         // The same chain by the person: nothing to verify, nothing denied.
@@ -541,12 +544,15 @@ mod policies_cost {
         let mut tip = base.clone();
         let mut one = String::new();
         for n in 0..256 {
-            let out = std::process::Command::new("git")
-                .args(["commit-tree", &tree, "-p", &tip, "-m", &format!("c{n}")])
-                .current_dir(path)
-                .output()
-                .unwrap();
-            tip = String::from_utf8(out.stdout).unwrap().trim().to_owned();
+            // With the identity of the helper: a CI runner has none, and `commit-tree` without it
+            // prints nothing (an empty id is then rejected as input, not judged).
+            tip = git(
+                path,
+                &["commit-tree", &tree, "-p", &tip, "-m", &format!("c{n}")],
+            )
+            .trim()
+            .to_owned();
+            assert_eq!(tip.len(), 40, "commit-tree failed: {tip:?}");
             if n == 0 {
                 one = tip.clone();
             }
