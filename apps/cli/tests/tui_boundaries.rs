@@ -19,7 +19,9 @@ use std::path::{Path, PathBuf};
 const SRC: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src");
 
 /// Modules of the TUI, relative to `src`.
-const TUI_MODULES: &[&str] = &["tui", "model.rs", "client", "present", "queue.rs"];
+const TUI_MODULES: &[&str] = &[
+    "tui", "model.rs", "client", "present", "queue.rs", "paths.rs",
+];
 
 const FORBIDDEN_CRATES: &[&str] = &["gitraptor_core", "gitraptor_git", "gitraptor_policy"];
 
