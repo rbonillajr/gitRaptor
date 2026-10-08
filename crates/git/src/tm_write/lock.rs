@@ -73,8 +73,8 @@ impl GitLock {
     /// Whether the file at the lock path is still the one this process created.
     pub fn is_ours(&self) -> bool {
         match (self.identity, std::fs::symlink_metadata(&self.lock)) {
-            (Some(id), Ok(meta)) => meta_identity(&meta) == Some(id),
-            // Without an identity (Windows, pending) only presence can be checked.
+            (Some(id), Ok(meta)) => path_identity(&self.lock, &meta) == Some(id),
+            // Without an identity only presence can be checked.
             (None, Ok(meta)) => meta.is_file(),
             _ => false,
         }
@@ -126,9 +126,43 @@ fn identity_of(file: &File) -> Option<LockIdentity> {
     file.metadata().ok().and_then(|m| meta_identity(&m))
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn identity_of(file: &File) -> Option<LockIdentity> {
+    gitraptor_winsys::file_id::of_file(file)
+        .ok()
+        .map(|(volume, index)| LockIdentity {
+            dev: u64::from(volume),
+            inode: index,
+        })
+}
+
+#[cfg(not(any(unix, windows)))]
 fn identity_of(_file: &File) -> Option<LockIdentity> {
     None
+}
+
+/// Identity of the file at `path` itself, never following a link.
+#[cfg(unix)]
+fn path_identity(_path: &Path, meta: &std::fs::Metadata) -> Option<LockIdentity> {
+    meta_identity(meta)
+}
+
+#[cfg(windows)]
+fn path_identity(path: &Path, meta: &std::fs::Metadata) -> Option<LockIdentity> {
+    if !meta.is_file() {
+        return None;
+    }
+    gitraptor_winsys::file_id::of_path(path)
+        .ok()
+        .map(|(volume, index)| LockIdentity {
+            dev: u64::from(volume),
+            inode: index,
+        })
+}
+
+#[cfg(not(any(unix, windows)))]
+fn path_identity(_path: &Path, meta: &std::fs::Metadata) -> Option<LockIdentity> {
+    meta_identity(meta)
 }
 
 #[cfg(unix)]
@@ -140,7 +174,7 @@ fn meta_identity(meta: &std::fs::Metadata) -> Option<LockIdentity> {
     })
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 fn meta_identity(_meta: &std::fs::Metadata) -> Option<LockIdentity> {
     None
 }
@@ -190,7 +224,6 @@ mod tests {
         assert_eq!(std::fs::read(&target).unwrap(), b"new");
     }
 
-    #[cfg(unix)]
     #[test]
     fn a_replaced_lock_is_never_removed_or_committed() {
         let dir = tempfile::tempdir().unwrap();
