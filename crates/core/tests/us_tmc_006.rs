@@ -539,8 +539,16 @@ fn a_reset_to_a_merge_from_elsewhere_shows_old_to_new() {
     let back = r.event_of_kind("branch-update", &[]);
     r.fx.git_in(&wt, &["reset", "-q", "--hard", &merge]);
     let forward = r.event_of_kind("branch-update", &[seq_of(&back)]);
-    assert_eq!(forward["details"]["old_commit"], base.as_str(), "{forward:#}");
-    assert_eq!(forward["details"]["new_commit"], merge.as_str(), "{forward:#}");
+    assert_eq!(
+        forward["details"]["old_commit"],
+        base.as_str(),
+        "{forward:#}"
+    );
+    assert_eq!(
+        forward["details"]["new_commit"],
+        merge.as_str(),
+        "{forward:#}"
+    );
 
     let timeline = r.timeline(&wt);
     let entry = event_entry(&timeline, seq_of(&forward));
@@ -736,10 +744,18 @@ fn the_echo_of_a_gitraptor_operation_is_not_a_second_entry() {
     assert_eq!(ids[0], format!("event:{}", seq_of(&committed)), "{ids:?}");
     // The undo is exactly one entry, with its requester as recorded.
     let operation = format!("operation:{}", undo["operation_id"].as_str().unwrap());
-    assert_eq!(ids.iter().filter(|id| **id == operation).count(), 1, "{ids:?}");
+    assert_eq!(
+        ids.iter().filter(|id| **id == operation).count(),
+        1,
+        "{ids:?}"
+    );
     // The commit it undid is one entry, not two.
     let commit_id = format!("event:{}", seq_of(&committed));
-    assert_eq!(ids.iter().filter(|id| **id == commit_id).count(), 1, "{ids:?}");
+    assert_eq!(
+        ids.iter().filter(|id| **id == commit_id).count(),
+        1,
+        "{ids:?}"
+    );
 }
 
 // ----- Files, filters and sources -------------------------------------------------------
