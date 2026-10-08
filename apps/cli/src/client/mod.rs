@@ -613,7 +613,7 @@ fn observe_failure(code: i64, data: Option<Value>) -> ObserveFailure {
 /// without leaving the folder's file system. Nothing of Git is read but the `.git` file of a
 /// linked worktree, to name the repo it belongs to. The engine checks it again on `repo.add`.
 pub fn candidate(cwd: &Path) -> Option<Candidate> {
-    let real = std::fs::canonicalize(cwd).ok()?;
+    let real = crate::paths::canonicalize(cwd).ok()?;
     let device = device(&real);
     let root = real
         .ancestors()
@@ -640,7 +640,7 @@ fn main_worktree(root: &Path) -> Option<PathBuf> {
     let file = std::fs::read_to_string(root.join(".git")).ok()?;
     let gitdir = root.join(file.strip_prefix("gitdir:")?.trim());
     let common = std::fs::read_to_string(gitdir.join("commondir")).ok()?;
-    let common = std::fs::canonicalize(gitdir.join(common.trim())).ok()?;
+    let common = crate::paths::canonicalize(gitdir.join(common.trim())).ok()?;
     if common.file_name()? != ".git" {
         return None;
     }
@@ -717,7 +717,7 @@ mod tests {
 
     fn dir(path: &Path) -> PathBuf {
         std::fs::create_dir_all(path).unwrap();
-        std::fs::canonicalize(path).unwrap()
+        crate::paths::canonicalize(path).unwrap()
     }
 
     /// US-CKP-025: from a folder inside a repo, upwards, the first folder with `.git`.
