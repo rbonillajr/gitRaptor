@@ -134,8 +134,13 @@ pub fn recreate_with(
         )?;
         dot_git_written = true;
         target.sync();
+        // `open` goes by path: what it found must be this target and this administrative
+        // folder, or the files and the index would be written somewhere else.
         let wt = WriteWorktree::open(&path)?;
-        if !target.is_at(&parent_dir, leaf)? {
+        if !target.is_at_path(&path)?
+            || wt.git_dir() != crate::paths::canonicalize(&admin_path)?
+            || wt.common_dir() != main.common_dir()
+        {
             return reject("the target folder moved");
         }
         Ok(wt)
@@ -204,6 +209,9 @@ mod sys {
             Err(WriteError::Unsupported("recreating a worktree"))
         }
         pub fn is_at(&self, _parent: &Self, _name: &str) -> Result<bool> {
+            Ok(false)
+        }
+        pub fn is_at_path(&self, _path: &Path) -> Result<bool> {
             Ok(false)
         }
         pub fn remove_file(&self, _name: &str) -> std::io::Result<()> {

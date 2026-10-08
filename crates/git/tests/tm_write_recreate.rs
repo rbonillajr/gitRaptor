@@ -169,6 +169,10 @@ fn a_target_moved_away_before_the_commit_point_writes_nothing_outside() {
         }
     });
     assert!(entries(home.path()).is_empty(), "a .git landed outside");
+    assert!(
+        !(cfg!(windows) && swapped.get()),
+        "a pinned folder was moved"
+    );
     if swapped.get() {
         refused(&result, "moved");
         assert!(r.admin().symlink_metadata().is_err(), "admin entry left");

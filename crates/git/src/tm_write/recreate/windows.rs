@@ -2,7 +2,8 @@
 //! `FILE_FLAG_OPEN_REPARSE_POINT` (a link or a junction is opened itself, never followed, and then
 //! refused) and without `FILE_SHARE_DELETE`, and stays open while the recreation runs: nobody can
 //! rename, remove or swap it for a junction meanwhile, so the paths beneath it keep naming what
-//! was checked (the pattern of `files/windows.rs`, DS-TS-TMC-003 Enmienda 2026-10-08).
+//! was checked. The handle asks for `FILE_LIST_DIRECTORY`: an open for attributes only takes no
+//! part in share access, and would not keep a `DELETE` open (a rename) out.
 
 use std::fs::{File, OpenOptions};
 use std::io::Write;
@@ -15,7 +16,9 @@ use super::super::{Result, WriteError};
 
 const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
 const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+const FILE_LIST_DIRECTORY: u32 = 0x1;
 const FILE_READ_ATTRIBUTES: u32 = 0x80;
+const SYNCHRONIZE: u32 = 0x0010_0000;
 const FILE_SHARE_READ: u32 = 0x1;
 const FILE_SHARE_WRITE: u32 = 0x2;
 const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
@@ -31,7 +34,7 @@ pub struct Dir {
 /// while the handle lives.
 fn pin(path: &Path) -> std::io::Result<File> {
     OpenOptions::new()
-        .access_mode(FILE_READ_ATTRIBUTES)
+        .access_mode(FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES | SYNCHRONIZE)
         .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
         .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
         .open(path)
@@ -103,7 +106,12 @@ impl Dir {
 
     /// Whether `name` in `parent` is still this folder.
     pub fn is_at(&self, parent: &Self, name: &str) -> Result<bool> {
-        match file_id::of_path(&parent.path.join(name)) {
+        self.is_at_path(&parent.path.join(name))
+    }
+
+    /// Whether `path` names this folder now, itself and not through a link.
+    pub fn is_at_path(&self, path: &Path) -> Result<bool> {
+        match file_id::of_path(path) {
             Ok(id) => Ok(id == file_id::of_file(&self.handle)?),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
             Err(e) => Err(e.into()),
