@@ -11,7 +11,8 @@ use std::path::PathBuf;
 
 use crate::ffi_handle::Handle;
 use crate::ffi_process::{
-    console_host_raw, created, ended, image, open, owner, session_id, snapshot,
+    console_host_raw, created, current_directory, ended, image, open, open_reading, owner,
+    session_id, snapshot,
 };
 
 /// Whose a process is.
@@ -87,6 +88,97 @@ pub fn created_100ns(pid: u32) -> Result<u64, Error> {
         return Err(Error::Gone);
     }
     Ok(created_100ns)
+}
+
+/// A live process of the current user, as little as the detector's scan needs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Brief {
+    pub pid: u32,
+    /// Parent pid at creation (see [`Process::ppid`]).
+    pub ppid: u32,
+    /// Creation time, 100 ns intervals since 1601-01-01 UTC.
+    pub created_100ns: u64,
+}
+
+/// The live processes of the current user from one snapshot: pid, parent and creation time of
+/// each, without reading their image paths. Another user's, SYSTEM's and the ones whose token
+/// cannot be read are left out. `None` if the list cannot be read.
+pub fn current_user_processes() -> Option<Vec<Brief>> {
+    Some(
+        snapshot()?
+            .into_iter()
+            .filter(|(pid, _)| *pid != 0 && *pid != 4)
+            .filter_map(|(pid, ppid)| {
+                let handle = open(pid).ok()?;
+                let created_100ns = created(&handle)?;
+                (!ended(&handle) && owner(&handle) == Owner::Current).then_some(Brief {
+                    pid,
+                    ppid,
+                    created_100ns,
+                })
+            })
+            .collect(),
+    )
+}
+
+/// The image path of `pid`, only while it is still the process created at `created_100ns`: a
+/// pid reused meanwhile never lends its executable to the old one.
+pub fn image_of(pid: u32, created_100ns: u64) -> Option<PathBuf> {
+    let handle = open(pid).ok()?;
+    if created(&handle)? != created_100ns || ended(&handle) {
+        return None;
+    }
+    let path = image(&handle)?;
+    // Read once more: still the same process after the path was read.
+    (created(&handle)? == created_100ns && !ended(&handle)).then_some(path)
+}
+
+/// The working folder of `pid`, only while it is still the process created at `created_100ns`,
+/// as the process set it (`C:\work\repo`, never with a trailing separator but at a drive root).
+///
+/// Reads another process's memory, so it asks for as little as it can: the handle has the right
+/// to read memory only for this call; the process must be the current user's (checked on its
+/// token before anything is read: another user's is [`Error::Denied`]); a 32-bit process is
+/// refused, not guessed at; and only the folder is read, never its command line or environment
+/// (SEC-04). **Unreadable is unknown, never "not an agent"**: every failure to read, an
+/// elevated process included, is [`Error::Denied`], and the caller keeps the process in doubt.
+pub fn cwd(pid: u32, created_100ns: u64) -> Result<PathBuf, Error> {
+    let handle = open_reading(pid)?;
+    let still = |h: &Handle| created(h) == Some(created_100ns) && !ended(h);
+    if !still(&handle) {
+        return Err(Error::Gone);
+    }
+    if owner(&handle) != Owner::Current {
+        return Err(Error::Denied);
+    }
+    let units = current_directory(&handle).ok_or(Error::Denied)?;
+    // The folder belongs to the process that was checked, not to a pid reused during the read.
+    if !still(&handle) {
+        return Err(Error::Gone);
+    }
+    folder_from(&units).ok_or(Error::Denied)
+}
+
+/// A drive-absolute (`C:\…`) or UNC (`\\server\share\…`) folder, without a NUL and without the
+/// trailing separator Windows keeps on it (a drive root keeps its own).
+fn folder_from(units: &[u16]) -> Option<PathBuf> {
+    use std::os::windows::ffi::OsStringExt;
+    if units.contains(&0) {
+        return None;
+    }
+    let mut text = std::ffi::OsString::from_wide(units).into_string().ok()?;
+    let b = text.as_bytes();
+    let drive = b.len() >= 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && b[2] == b'\\';
+    let unc =
+        text.starts_with("\\\\") && !text.starts_with("\\\\?\\") && !text.starts_with("\\\\.\\");
+    if !(drive || unc) {
+        return None;
+    }
+    let root_len = if drive { 3 } else { 0 };
+    if text.len() > root_len && text.ends_with('\\') {
+        text.pop();
+    }
+    Some(PathBuf::from(text))
 }
 
 /// Reads one live process.
@@ -235,6 +327,118 @@ mod tests {
         assert!(!is_console_host(std::path::Path::new(
             "C:\\tmp\\conhost.exe"
         )));
+    }
+
+    /// The folder as the kernel keeps it, in drive form, for comparing with another path.
+    fn plain(path: &std::path::Path) -> String {
+        let text = std::fs::canonicalize(path)
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        text.strip_prefix(r"\\?\").unwrap_or(&text).to_lowercase()
+    }
+
+    fn sleeper(dir: &std::path::Path, program: &str) -> std::process::Child {
+        Command::new(program)
+            .args(["/C", "ping -n 30 127.0.0.1 >NUL"])
+            .current_dir(dir)
+            .spawn()
+            .unwrap()
+    }
+
+    /// The working folder of a child of this user, read while it lives and refused once it ends
+    /// or when the creation time is not the one the caller saw.
+    #[test]
+    fn the_working_folder_of_a_child_is_read_only_for_the_process_that_was_seen() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut child = sleeper(dir.path(), "cmd");
+        let created = process(child.id()).unwrap().created_100ns;
+        let folder = cwd(child.id(), created).unwrap();
+        assert_eq!(plain(&folder), plain(dir.path()));
+        assert!(!folder.to_string_lossy().ends_with('\\'));
+        // Another creation time under the same pid is another process.
+        assert_eq!(cwd(child.id(), created + 1), Err(Error::Gone));
+        // This process too.
+        let me = process(std::process::id()).unwrap();
+        assert_eq!(
+            plain(&cwd(me.pid, me.created_100ns).unwrap()),
+            plain(&std::env::current_dir().unwrap())
+        );
+        child.kill().unwrap();
+        child.wait().unwrap();
+        assert_eq!(cwd(child.id(), created), Err(Error::Gone));
+    }
+
+    /// A 32-bit process keeps its folder in another structure: refused, never guessed.
+    #[test]
+    fn a_32_bit_process_is_refused() {
+        let wow = std::path::Path::new(r"C:\Windows\SysWOW64\cmd.exe");
+        if !wow.is_file() {
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let mut child = sleeper(dir.path(), wow.to_str().unwrap());
+        let created = process(child.id()).unwrap().created_100ns;
+        assert_eq!(cwd(child.id(), created), Err(Error::Denied));
+        child.kill().unwrap();
+        child.wait().unwrap();
+    }
+
+    /// Another user's process and System are never read: unknown, not "not an agent".
+    #[test]
+    fn processes_of_other_users_are_never_read() {
+        assert!(matches!(cwd(4, 1), Err(Error::Denied | Error::Gone)));
+        let foreign = pids().unwrap().into_iter().find_map(|pid| {
+            let p = process(pid).ok()?;
+            (p.owner == Owner::Other).then_some(p)
+        });
+        if let Some(p) = foreign {
+            assert_eq!(cwd(p.pid, p.created_100ns), Err(Error::Denied));
+        }
+    }
+
+    #[test]
+    fn the_listing_has_this_user_with_parent_and_creation_and_never_system() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut child = sleeper(dir.path(), "cmd");
+        let table = current_user_processes().unwrap();
+        let me = table.iter().find(|b| b.pid == std::process::id()).unwrap();
+        let kid = table.iter().find(|b| b.pid == child.id()).unwrap();
+        assert_eq!(kid.ppid, me.pid);
+        assert_eq!(
+            Some(kid.created_100ns),
+            process(child.id()).ok().map(|p| p.created_100ns)
+        );
+        assert!(table.iter().all(|b| b.pid != 0 && b.pid != 4));
+        let exe = image_of(me.pid, me.created_100ns).unwrap();
+        assert_eq!(
+            exe.file_name(),
+            std::env::current_exe().unwrap().file_name()
+        );
+        assert_eq!(image_of(me.pid, me.created_100ns + 1), None);
+        child.kill().unwrap();
+        child.wait().unwrap();
+        assert_eq!(image_of(child.id(), kid.created_100ns), None);
+    }
+
+    #[test]
+    fn a_folder_has_the_shape_of_a_path_or_is_refused() {
+        let wide = |s: &str| s.encode_utf16().collect::<Vec<u16>>();
+        let ok = |s: &str| folder_from(&wide(s)).map(|p| p.to_string_lossy().into_owned());
+        assert_eq!(ok(r"C:\work\repo\").as_deref(), Some(r"C:\work\repo"));
+        assert_eq!(ok(r"C:\work").as_deref(), Some(r"C:\work"));
+        assert_eq!(ok(r"C:\").as_deref(), Some(r"C:\"));
+        assert_eq!(ok(r"\\srv\share\x\").as_deref(), Some(r"\\srv\share\x"));
+        for bad in [
+            r"relative\x",
+            r"\\?\C:\x",
+            r"\\.\pipe",
+            "C:x",
+            "",
+            "C:\\a\0b",
+        ] {
+            assert_eq!(ok(bad), None, "{bad:?}");
+        }
     }
 
     #[test]
