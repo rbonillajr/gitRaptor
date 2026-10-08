@@ -372,6 +372,21 @@ impl RepoReader {
         Ok(out)
     }
 
+    /// Whether the index has an entry under the worktree-relative directory `rela_dir`: Git
+    /// keeps tracking a file there even when the ignore rules cover the directory.
+    pub fn has_tracked_under(&self, rela_dir: &str) -> Result<bool, ReadError> {
+        if rela_dir.starts_with('/') || rela_dir.split('/').any(|c| c == "..") {
+            return Err(ReadError::InvalidInput(
+                "path must be relative to the worktree".into(),
+            ));
+        }
+        let index = self.repo.index_or_empty().map_err(unavailable("index"))?;
+        let prefix = format!("{}/", rela_dir.trim_end_matches('/'));
+        Ok(index
+            .prefixed_entries(gix::bstr::BStr::new(prefix.as_bytes()))
+            .is_some_and(|entries| !entries.is_empty()))
+    }
+
     /// Whether a worktree-relative path is ignored by the repository and user ignore rules.
     pub fn is_ignored(&self, rela_path: &str, is_dir: bool) -> Result<bool, ReadError> {
         if rela_path.starts_with('/') || rela_path.split('/').any(|c| c == "..") {

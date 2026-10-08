@@ -688,3 +688,211 @@ fn a_reset_that_moves_no_branch_is_a_reset_event() {
         "{all:#?}"
     );
 }
+
+// --- Ignored folders and the OS stream (ADR-GRP-010, Enmienda 2026-10-08) ---
+
+/// Polls `cond` until it holds, or 10 s.
+fn wait_until(what: &str, cond: impl Fn() -> bool) {
+    let end = Instant::now() + Duration::from_secs(10);
+    while !cond() {
+        assert!(Instant::now() < end, "timed out waiting for {what}");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+fn counts_of(b: &ObservedBatch, wt: &Path) -> Option<(u32, u32)> {
+    b.worktrees.iter().find_map(|r| match &r.view.status {
+        WorktreeStatus::Ready { counts, .. } if r.view.path.raw() == wt.to_str().unwrap() => {
+            Some((counts.unstaged, counts.untracked))
+        }
+        _ => None,
+    })
+}
+
+fn burst(dir: &Path, files: usize) {
+    std::fs::create_dir_all(dir).unwrap();
+    for i in 0..files {
+        std::fs::write(dir.join(format!("o{i}")), "o").unwrap();
+    }
+}
+
+/// Learns that `target/` is ignored and has the router count a sustained burst under it.
+fn heat(wt: &Path) {
+    std::fs::create_dir_all(wt.join("target/debug")).unwrap();
+    std::fs::write(wt.join("target/debug/warm"), "x").unwrap();
+    std::thread::sleep(Duration::from_millis(300));
+    burst(&wt.join("target/debug"), 600);
+}
+
+/// NFR-01 (E3): Git keeps following a tracked file under an ignored folder, so a change to it is
+/// seen even when the router already dropped the folder's other events.
+#[test]
+fn a_tracked_file_under_an_ignored_folder_is_seen() {
+    let (f, wt) = demo();
+    std::fs::write(wt.join(".gitignore"), "target/\n").unwrap();
+    std::fs::create_dir_all(wt.join("target/debug")).unwrap();
+    std::fs::write(wt.join("target/debug/keep"), "v1\n").unwrap();
+    f.git_in(&wt, &["add", "-f", "target/debug/keep", ".gitignore"]);
+    f.git_in(&wt, &["commit", "-q", "-m", "track a file under target"]);
+    let w = watch(&f, fast());
+    std::fs::write(wt.join("target/debug/warm"), "x").unwrap();
+    w.drain(Duration::from_millis(500));
+    std::fs::write(wt.join("target/debug/keep"), "v2\n").unwrap();
+    w.until(|bs| {
+        bs.iter()
+            .any(|b| counts_of(b, &wt).is_some_and(|c| c.0 >= 1))
+    });
+}
+
+/// NFR-01 (E5): `git add -f` of a file under a folder the router already drops makes the folder
+/// followed again, and the next change to the file is seen.
+#[test]
+fn a_file_added_with_force_under_a_dropped_folder_is_seen() {
+    let (f, wt) = demo();
+    std::fs::write(wt.join(".gitignore"), "target/\n").unwrap();
+    std::fs::create_dir_all(wt.join("target/debug")).unwrap();
+    let w = watch(&f, fast());
+    std::fs::write(wt.join("target/debug/warm"), "x").unwrap();
+    w.drain(Duration::from_millis(500));
+    std::fs::write(wt.join("target/debug/late"), "v1\n").unwrap();
+    f.git_in(&wt, &["add", "-f", "target/debug/late"]);
+    w.drain(Duration::from_millis(500));
+    std::fs::write(wt.join("target/debug/late"), "v2\n").unwrap();
+    w.until(|bs| {
+        bs.iter()
+            .any(|b| counts_of(b, &wt).is_some_and(|c| c.0 >= 1))
+    });
+}
+
+/// E3: a folder with tracked entries is never a candidate to leave the stream.
+#[cfg(target_os = "macos")]
+#[test]
+fn a_folder_with_tracked_entries_never_leaves_the_stream() {
+    let (f, wt) = demo();
+    std::fs::write(wt.join(".gitignore"), "target/\n").unwrap();
+    std::fs::create_dir_all(wt.join("target/debug")).unwrap();
+    std::fs::write(wt.join("target/debug/keep"), "v1\n").unwrap();
+    f.git_in(&wt, &["add", "-f", "target/debug/keep", ".gitignore"]);
+    f.git_in(&wt, &["commit", "-q", "-m", "track a file under target"]);
+    let w = watch(&f, fast());
+    heat(&wt);
+    w.drain(Duration::from_secs(1));
+    assert_eq!(w.observer.excluded_folders(&wt), Vec::<PathBuf>::new());
+    std::fs::write(wt.join("target/debug/keep"), "v2\n").unwrap();
+    w.until(|bs| {
+        bs.iter()
+            .any(|b| counts_of(b, &wt).is_some_and(|c| c.0 >= 1))
+    });
+}
+
+/// E3: an ignored folder under sustained churn leaves the root's stream.
+#[cfg(target_os = "macos")]
+#[test]
+fn a_folder_with_sustained_churn_leaves_the_stream() {
+    let (f, wt) = demo();
+    std::fs::write(wt.join(".gitignore"), "target/\n").unwrap();
+    let w = watch(&f, fast());
+    heat(&wt);
+    wait_until("the exclusion", || {
+        w.observer.excluded_folders(&wt) == vec![wt.join("target")]
+    });
+    // A change outside it still arrives, through the new stream.
+    std::fs::write(wt.join("login.txt"), "changed\n").unwrap();
+    w.until(|bs| {
+        bs.iter()
+            .any(|b| counts_of(b, &wt).is_some_and(|c| c.0 >= 1))
+    });
+}
+
+/// NFR-01 (E5): a folder that stops being ignored while left out of the stream is followed again,
+/// and what was written while it was out is seen.
+#[cfg(target_os = "macos")]
+#[test]
+fn a_left_out_folder_that_stops_being_ignored_is_seen_again() {
+    let (f, wt) = demo();
+    std::fs::write(wt.join(".gitignore"), "target/\n").unwrap();
+    let w = watch(&f, fast());
+    heat(&wt);
+    wait_until("the exclusion", || {
+        !w.observer.excluded_folders(&wt).is_empty()
+    });
+    // Written while the folder is out of the stream: no event of it was delivered.
+    burst(&wt.join("target/out"), 5);
+    std::fs::write(wt.join(".gitignore"), "").unwrap();
+    wait_until("the exclusion to end", || {
+        w.observer.excluded_folders(&wt).is_empty()
+    });
+    w.until(|bs| {
+        bs.iter()
+            .any(|b| counts_of(b, &wt).is_some_and(|c| c.1 >= 600))
+    });
+    // The stream without the exclusion delivers the folder again.
+    std::fs::write(wt.join("target/debug/after"), "x").unwrap();
+    std::fs::write(wt.join("login.txt"), "changed\n").unwrap();
+    w.until(|bs| {
+        bs.iter()
+            .any(|b| counts_of(b, &wt).is_some_and(|c| c.1 >= 607))
+    });
+}
+
+/// NFR-01 (E5): `git add -f` under a folder left out of the stream takes it back, and the next
+/// change to the file is seen.
+#[cfg(target_os = "macos")]
+#[test]
+fn a_file_added_with_force_under_a_left_out_folder_is_seen() {
+    let (f, wt) = demo();
+    std::fs::write(wt.join(".gitignore"), "target/\n").unwrap();
+    let w = watch(&f, fast());
+    heat(&wt);
+    wait_until("the exclusion", || {
+        !w.observer.excluded_folders(&wt).is_empty()
+    });
+    f.git_in(&wt, &["add", "-f", "target/debug/o1"]);
+    wait_until("the exclusion to end", || {
+        w.observer.excluded_folders(&wt).is_empty()
+    });
+    w.drain(Duration::from_millis(500));
+    std::fs::write(wt.join("target/debug/o1"), "changed\n").unwrap();
+    w.until(|bs| {
+        bs.iter()
+            .any(|b| counts_of(b, &wt).is_some_and(|c| c.0 >= 1))
+    });
+}
+
+/// NFR-01 (E5): a rule that changes outside the repo (`core.excludesFile`) reaches no event; the
+/// periodic reconciliation checks the left-out folders again and takes the folder back.
+#[test]
+fn the_periodic_reconciliation_takes_back_a_folder_no_longer_ignored() {
+    let (f, wt) = demo();
+    let rules = f.root.join("global-ignore");
+    std::fs::write(&rules, "target/\n").unwrap();
+    f.git_in(
+        &wt,
+        &["config", "core.excludesFile", rules.to_str().unwrap()],
+    );
+    let config = WatchConfig {
+        periodic: Duration::from_secs(1),
+        ..WatchConfig::default()
+    };
+    let w = watch(&f, config);
+    heat(&wt);
+    #[cfg(target_os = "macos")]
+    wait_until("the exclusion", || {
+        !w.observer.excluded_folders(&wt).is_empty()
+    });
+    w.drain(Duration::from_millis(500));
+    std::fs::write(&rules, "").unwrap();
+    #[cfg(target_os = "macos")]
+    wait_until("the exclusion to end", || {
+        w.observer.excluded_folders(&wt).is_empty()
+    });
+    w.until(|bs| {
+        bs.iter()
+            .any(|b| counts_of(b, &wt).is_some_and(|c| c.1 >= 600))
+    });
+    std::fs::write(wt.join("target/debug/after"), "x").unwrap();
+    w.until(|bs| {
+        bs.iter()
+            .any(|b| counts_of(b, &wt).is_some_and(|c| c.1 >= 602))
+    });
+}

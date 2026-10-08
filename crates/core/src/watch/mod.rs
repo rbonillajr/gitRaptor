@@ -12,6 +12,8 @@
 //!
 //! Nothing here writes to a repo, and the router never reads Git.
 
+#[cfg(target_os = "macos")]
+mod exclusions;
 mod repo;
 mod sweep;
 mod watchers;
@@ -422,6 +424,9 @@ pub(crate) struct Shared {
     /// when (`engine.resources`).
     net_ns: std::sync::atomic::AtomicU64,
     started: Instant,
+    /// Where the worktrees tell the exclusion manager their ignored folders changed.
+    #[cfg(target_os = "macos")]
+    exclusions: Sender<exclusions::Recheck>,
 }
 
 impl Shared {
@@ -509,7 +514,7 @@ impl Shared {
                     // Under a folder its task already found ignored: dropped here, not one by
                     // one in the task. A `.gitignore` always reaches it (it clears the cache).
                     if path.file_name().is_none_or(|n| n != ".gitignore")
-                        && wt.ignored.covers(&path)
+                        && wt.ignored.hit(&path, t_recv)
                     {
                         continue;
                     }
@@ -673,6 +678,13 @@ impl Shared {
         // A woken repo's roots are still watched: adding them is a no-op.
         let degraded = !self.watch(std::slice::from_ref(&root));
         let ignored = Arc::new(worktree::IgnoredPrefixes::default());
+        #[cfg(target_os = "macos")]
+        ignored.set_on_change(exclusions::notifier(
+            self.exclusions.clone(),
+            root.clone(),
+            &ignored,
+            tx.clone(),
+        ));
         let handle = WtHandle {
             root: root.clone(),
             git_dir: git_dir.clone(),
@@ -730,9 +742,43 @@ impl Shared {
 
     fn unwatch(&self, roots: &[PathBuf]) {
         let mut guard = self.watchers.lock().unwrap_or_else(|e| e.into_inner());
+        #[cfg(target_os = "macos")]
+        {
+            let leaving = guard.as_mut().map(|w| w.remove(roots));
+            // A stream waits for its callback when dropped, and the callback may need this
+            // lock: it goes after the guard.
+            drop(guard);
+            drop(leaving);
+        }
+        #[cfg(not(target_os = "macos"))]
         if let Some(w) = guard.as_mut() {
             w.remove(roots);
         }
+    }
+
+    /// The folders `root`'s stream leaves out, as the exclusion manager asked.
+    #[cfg(target_os = "macos")]
+    fn exclusions_of(&self, root: &Path) -> Option<Vec<PathBuf>> {
+        let guard = self.watchers.lock().unwrap_or_else(|e| e.into_inner());
+        guard.as_ref()?.requested(root)
+    }
+
+    #[cfg(target_os = "macos")]
+    fn stream_ticket(&self, root: &Path) -> Option<watchers::mac::Ticket> {
+        let guard = self.watchers.lock().unwrap_or_else(|e| e.into_inner());
+        guard.as_ref()?.ticket(root)
+    }
+
+    /// The stream that leaves is returned, to be dropped outside the lock.
+    #[cfg(target_os = "macos")]
+    fn commit_stream(
+        &self,
+        ticket: &watchers::mac::Ticket,
+        new: gitraptor_macsys::fsevents::Stream,
+        requested: Vec<PathBuf>,
+    ) -> Option<Arc<gitraptor_macsys::fsevents::Stream>> {
+        let mut guard = self.watchers.lock().unwrap_or_else(|e| e.into_inner());
+        guard.as_mut().map(|w| w.commit(ticket, new, requested))
     }
 
     fn worktrees_of(&self, repo_id: &str) -> Vec<WtHandle> {
@@ -778,6 +824,8 @@ impl Observer {
         hooks: Option<Arc<dyn ObserverHooks>>,
         roots: Arc<std::sync::atomic::AtomicU64>,
     ) -> Self {
+        #[cfg(target_os = "macos")]
+        let (exclusions_tx, exclusions_rx) = channel();
         let shared = Arc::new(Shared {
             config,
             sink,
@@ -797,7 +845,11 @@ impl Observer {
                 config.dormant_reconcile,
                 config.reconcile_budget_ppm,
             )),
+            #[cfg(target_os = "macos")]
+            exclusions: exclusions_tx,
         });
+        #[cfg(target_os = "macos")]
+        exclusions::start(Arc::downgrade(&shared), exclusions_rx);
         start_sentinel(&shared);
         start_sweep(&shared);
         let weak = Arc::downgrade(&shared);
@@ -1193,6 +1245,21 @@ impl Observer {
     pub fn simulate_overflow(&self) {
         self.shared
             .route(gitraptor_api::clock::monotonic_ns(), Vec::new(), true);
+    }
+
+    /// The folders the stream of `root` leaves out (ADR-GRP-010, Enmienda 2026-10-08). Always
+    /// empty off macOS, where the watcher cannot exclude.
+    #[doc(hidden)]
+    pub fn excluded_folders(&self, root: &Path) -> Vec<PathBuf> {
+        #[cfg(target_os = "macos")]
+        {
+            self.shared.exclusions_of(root).unwrap_or_default()
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = root;
+            Vec::new()
+        }
     }
 
     /// Worktree reads done so far by every task.
