@@ -402,8 +402,17 @@ pub fn restore_to(
     let mut recreate: Vec<PlanWorktree> = Vec::new();
     for mw in &meta.worktrees {
         let root = PathBuf::from(&mw.path);
-        if is_registered(&root) || std::fs::symlink_metadata(&root).is_ok() {
+        if is_registered(&root) {
             continue;
+        }
+        // Something else took the path: the worktree cannot come back there,
+        // and moving its branch alone would leave the point half-restored.
+        if std::fs::symlink_metadata(&root).is_ok() {
+            return Err(reject(
+                plan_scope(&existing, &BTreeSet::new()),
+                engine_mark,
+                TmRejectReason::WorktreeUnavailable,
+            ));
         }
         let id = meta
             .registered

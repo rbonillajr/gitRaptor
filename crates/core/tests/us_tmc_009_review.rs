@@ -37,7 +37,7 @@ use gitraptor_core::executor::{
     StepPlan,
 };
 use gitraptor_core::timemachine::oplog::{
-    OPLOG_FILE, OperationKind, OperationState, OperationView, Oplog, Target, repo_dir,
+    OPLOG_FILE, OperationKind, OperationState, OperationView, Oplog, SnapshotRefs, Target, repo_dir,
 };
 use gitraptor_core::timemachine::protected::{
     OperationCatalog, OperationsWiring, ProtectedStep, RepoHandle, StepCtx, StepError, StepOutput,
@@ -46,6 +46,7 @@ use gitraptor_core::timemachine::protected::{
 use gitraptor_core::timemachine::restore::{
     KEPT_REF_IN_RECREATED_WORKTREE, RECREATED_WORKTREE_ROOT_WARNING,
 };
+use gitraptor_core::timemachine::store::SnapshotStore;
 use gitraptor_testkit::{Fixture, diff};
 use serde_json::{Value, json};
 
@@ -300,6 +301,16 @@ impl Running {
         }
     }
 
+    fn snapshot_count(&self) -> usize {
+        SnapshotStore::open_existing(&self.tp.dirs(), &self.repo_id)
+            .unwrap()
+            .unwrap()
+            .snapshot_ids()
+            .unwrap()
+            .unwrap()
+            .len()
+    }
+
     fn op(&self, id: &str) -> OperationView {
         self.oplog.lock().unwrap().operation(id).unwrap().unwrap()
     }
@@ -454,4 +465,53 @@ fn the_undo_of_a_restore_names_each_kept_branch() {
         r.op(&undo.operation_id).record.warnings
     );
     assert!(x.exists());
+}
+
+/// A worktree of the point whose path something else took (it exists and
+/// is not a worktree of the repo) cannot be recreated: the restore is
+/// refused (`worktree-unavailable`, recorded) before its prior, instead of
+/// skipping that worktree while its branch moves.
+#[test]
+fn a_worktree_whose_path_is_occupied_is_refused_before_the_prior() {
+    let (fx, wt) = repo_with_login();
+    fx.git(&["branch", "feat-x"]);
+    let x = canonical(&fx.add_worktree("feat-x", "feat-x"));
+    let x_tip_at_point = fx.git(&["rev-parse", "feat-x"]);
+    let r = start(fx);
+    let first = r.operation(
+        &wt,
+        script(
+            "worktree-remove",
+            &[
+                &[
+                    "-C",
+                    x.to_str().unwrap(),
+                    "commit",
+                    "--allow-empty",
+                    "-q",
+                    "-m",
+                    "x",
+                ],
+                &["worktree", "remove", "--force", x.to_str().unwrap()],
+            ],
+        )
+        .declaring(&[&x], &["refs/heads/feat-x"]),
+    );
+    let point = first.prior_snapshot_id.clone();
+    assert!(!x.exists());
+    std::fs::create_dir_all(&x).unwrap();
+    std::fs::write(x.join("otra-cosa.txt"), "no es un worktree\n").unwrap();
+    let x_tip = r.fx.git(&["rev-parse", "feat-x"]);
+    assert_ne!(x_tip, x_tip_at_point);
+    let before = r.fx.fingerprint();
+    let points = r.snapshot_count();
+
+    let refusal = reject_reason(r.restore(&wt, &point));
+
+    assert_eq!(refusal.reason, TmRejectReason::WorktreeUnavailable);
+    assert_eq!(r.fx.git(&["rev-parse", "feat-x"]), x_tip);
+    let changes = diff(&before, &r.fx.fingerprint());
+    assert!(changes.is_empty(), "{changes:#?}");
+    assert_eq!(r.snapshot_count(), points);
+    assert_recorded_rejected(&r, &refusal, &point);
 }
