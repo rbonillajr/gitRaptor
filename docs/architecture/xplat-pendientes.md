@@ -27,7 +27,7 @@ Las rutas cortas de la columna Origen van bajo `docs/requirements/features/`. La
 
 | ID | SO | Origen | Qué validar | Canal | Estado |
 |---|---|---|---|---|---|
-| XP-01 | Windows | TS-GRP-004, ADR-GRP-005 § 5, ADR-CKP-003, SEC-08 | Canal local por named pipe: DACL con el SID del usuario, primera instancia, rechazo de clientes remotos, SQOS e identidad del servidor (hoy `TRANSPORT_UNSUPPORTED`) | Máquina Windows | pendiente |
+| XP-01 | Windows | TS-GRP-004, ADR-GRP-005 § 5, ADR-CKP-003, SEC-08 | Canal local por named pipe: DACL con el SID del usuario, primera instancia, rechazo de clientes remotos, SQOS e identidad del servidor | Máquina Windows | hecho (2026-10-07, ver "Canal por named pipe" y DS-TS-GRP-004 § 8); falta probar un cliente de otra cuenta real de Windows y los comandos reservados siguen rechazados por TQ-14 |
 | XP-02 | Windows | TS-GRP-004 | Reloj monotónico con QPC comparable entre procesos | Máquina Windows | pendiente |
 | XP-03 | Linux | TS-GRP-004 | Identidad del par con `SO_PEERCRED` y `/proc` (inicio calculado a 100 Hz; falta `SO_PEERPIDFD`) | Contenedor | parcial: el código Linux compila y sus tests unitarios pasan (2026-10-05); no hay tests de proceso del canal en Linux (ver XP-04) |
 | XP-04 | Linux | US-GRP-001, US-GRP-002, US-GRP-012, TS-GRP-004, INF-GRP-001 | Llevar a Linux los e2e de proceso que hoy son `cfg(target_os = "macos")` (`script`, `nc -U`, `lsof`) | Contenedor | parcial: `apps/cli/tests/daemon_process.rs` pasa (2026-10-05); `channel_process`, `protected_process`, `repo_state`, `base_branch`, `live_changes`, `mcp/on_demand`, `core/channel` y `core/channel_protected` están sin portar |
@@ -165,6 +165,15 @@ No apareció ningún bug real de Linux en el código de producto (clase a) ni ni
 - **`Ctrl-Z` de la TUI (PR #139)**: en Windows no se pide la suspensión, no se restaura ni se toma la terminal y se muestra el aviso. Verificado con el test de bucle (`TestBackend`). La TUI en una consola real de Windows sigue en XP-21.
 - **MCP `status` (PR #140)**: el daemon canonicalizaba el cwd del par con `std::fs::canonicalize` (`\\?\C:\…` en Windows) y lo comparaba con raíces de worktree en forma de unidad (`observe.rs` usa `gitraptor_git::paths::canonicalize`): en Windows no habría coincidido nunca. Corregido en `mcp.status`, en el ámbito del snapshot por MCP y en `repo.locate`, que ahora usan la misma forma que las raíces (sin cambios en Unix). Es la regla de la segunda ronda, una sola forma en los dos lados de una comparación de contención; aquí manda la forma en que ya se guardan las raíces observadas. Hoy no se puede ejercitar en Windows: no hay canal (XP-01) y `process_cwd` es `None` (XP-24), así que el MCP rechaza sin datos.
 - **Exclusiones de las raíces de descubrimiento (PR #145)**: solo están en documentos; el `$HOME` de la máquina se anota en el PR.
+
+### Canal por named pipe (XP-01, 2026-10-07)
+
+El canal ya existe en Windows (DS-TS-GRP-004 § 8). Verificado en la máquina real con un perfil temporal (`GITRAPTOR_PROFILE_DIR`):
+
+- `raptor daemon status` arranca el motor bajo demanda y responde por `\\.\pipe\gitraptor-<SID>-<huella>` (Git 2.56 encontrado); `raptor status` y `raptor events` responden por el pipe.
+- Tests nuevos en verde: `winsys` `pipe::tests` (8: DACL real con una sola ACE del usuario, nombre ocupado falla cerrado, ida y vuelta con PIDs, plazo de lectura, `shutdown`, waker, pipe inexistente, tope de instancias) y `crates/core/tests/channel_windows.rs` (5: saludo, llamadas y eventos; squatting hace fallar cerrado al daemon; un pipe con DACL ajena se rechaza con `ChannelRejected`; sin daemon es `NotRunning`; las conexiones por encima del límite reciben `LIMIT_REACHED` y el pipe sigue usable).
+- Encontrado al probar: el daemon lanzado bajo demanda heredaba las tuberías estándar del cliente (`raptor daemon status | Out-String` no terminaba nunca) y no encontraba Git porque su entorno limpio no tenía `ProgramFiles`. Corregidos: los handles estándar del cliente dejan de ser heredables antes del lanzamiento, y el entorno lleva `ProgramFiles`, `USERPROFILE` y `LOCALAPPDATA` leídos del sistema, nunca del cliente.
+- Sigue pendiente: `raptor daemon stop` se rechaza (`unsupported`) porque en Windows todo comando reservado se rechaza sin prueba de terminal (TQ-14, W1); un cliente de otra cuenta real de Windows no se probó (no hay segunda cuenta en la máquina); `file_id` sigue sin implementarse en Windows, así que `daemon.replace` y la identidad del ejecutable del hook quedan como desconocidas.
 
 ## Mantenimiento del índice
 
