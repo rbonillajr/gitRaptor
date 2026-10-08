@@ -31,6 +31,10 @@ pub const GUARD_CANCEL: &str = "guard.cancel";
 /// `GuardPlan.prior` and the `chain-impossible` blocker (US-GRD-002). Without it the daemon
 /// leaves the field out and says `prior-hooks` instead.
 pub const CAP_GUARD_PRIOR_HOOKS: Capability = Capability::new("guard.prior-hooks");
+/// The protection health of US-GRD-004: `GuardStatus.hooks`, `.diagnostics` and `.minimum_set`,
+/// the `protection-state` kind of `guard.log` and the `guard.protection-lost` event. A
+/// connection without it never receives any of them.
+pub const CAP_GUARD_PROTECTION: Capability = Capability::new("guard.protection");
 /// `GuardStatus.pending` (US-GRD-003): the reserved action waiting for its window.
 pub const CAP_GUARD_PENDING_ACTION: Capability = Capability::new("guard.pending-action");
 
@@ -73,6 +77,7 @@ pub(super) const GROUP: Group = Group {
         CAP_GUARD_AUTHORSHIP_SECOND_LINE,
         CAP_GUARD_PRIOR_HOOKS,
         CAP_GUARD_PENDING_ACTION,
+        CAP_GUARD_PROTECTION,
     ],
     error_block: Some(BLOCK),
     errors: &[GUARD_UNINSTALL_REFUSED],
