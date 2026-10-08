@@ -10,6 +10,7 @@ use gitraptor_api::methods;
 
 use super::Global;
 use crate::i18n::t;
+use crate::discovery;
 use crate::{command_path, engine, repo_error, shown, snapshot, status};
 
 /// Add or retire the repos the engine observes (reserved to the developer).
@@ -31,6 +32,26 @@ enum RepoAction {
         /// The repo's Git directory or any of its worktrees; defaults to the current folder.
         path: Option<PathBuf>,
     },
+    /// The code folders watched for repos: list them, or add or remove one (US-GRP-020).
+    Roots {
+        #[command(subcommand)]
+        action: Option<RootsAction>,
+    },
+    /// The repos found in the code folders that nobody observes yet.
+    Discovered,
+    /// Never propose a discovered repo again (`raptor repo add` still observes it by hand).
+    Dismiss {
+        /// The repo's folder, as `raptor repo discovered` shows it.
+        path: PathBuf,
+    },
+}
+
+#[derive(clap::Subcommand)]
+enum RootsAction {
+    /// Declare a code folder: the repos in its first level are proposed, never observed alone.
+    Add { path: PathBuf },
+    /// Stop watching a code folder; the repos already observed stay.
+    Remove { path: PathBuf },
 }
 
 impl Cmd {
@@ -38,6 +59,15 @@ impl Cmd {
         match self.action {
             RepoAction::Add { path } => repo_add(path),
             RepoAction::Retire { path } => repo_retire(path),
+            RepoAction::Roots { action: None } => discovery::roots_list(),
+            RepoAction::Roots {
+                action: Some(RootsAction::Add { path }),
+            } => discovery::roots_add(path),
+            RepoAction::Roots {
+                action: Some(RootsAction::Remove { path }),
+            } => discovery::roots_remove(path),
+            RepoAction::Discovered => discovery::discovered(),
+            RepoAction::Dismiss { path } => discovery::dismiss(path),
         }
     }
 }

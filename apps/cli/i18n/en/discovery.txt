@@ -1,0 +1,39 @@
+# User-facing messages of `raptor`, English (NFR-10, ADR-GRP-003): discovery (US-GRP-020).
+# One `key = text` per line. Placeholders are `{name}`; the code fills them
+# by name, never by concatenating. Every key exists in ../es/discovery.txt too.
+
+discovery.refused-agent = refused: only the developer can change the code folders or dismiss discovered repos, not an agent or a process started by one
+discovery.roots-empty = no code folders declared; declare one with `raptor repo roots add <path>`
+discovery.roots-header = code folders watched for repos:
+discovery.root-line = {path}
+discovery.root-line-broad = {path} (broad: not watched, its first level is listed every 60 s)
+discovery.root-added = watching the code folder {path}
+discovery.root-already = the code folder {path} was already declared
+discovery.found = {count} repos discovered
+discovery.found-one = 1 repo discovered
+discovery.found-hint = see them with `raptor repo discovered`
+discovery.broad-home = it is your home folder
+discovery.broad-volume = it is the root of a volume
+discovery.broad-entries = it has {entries} entries in its first level
+discovery.broad-warning = {path} is a broad folder ({why}). Cost: it is not watched; its first level is listed every 60 s.
+discovery.broad-question = Declare {path} as a code folder anyway? [y/N]
+discovery.broad-declined = nothing was declared
+discovery.rejected-not-absolute = {path} is not an absolute path; give the full path of the folder
+discovery.rejected-missing = {path} does not exist; check the path
+discovery.rejected-not-a-directory = {path} is not a folder; give the folder that holds your repos
+discovery.rejected-symlink = {path} is a symbolic link; declare its real path instead: raptor repo roots add {real}
+discovery.rejected-symlink-plain = {path} is a symbolic link; declare the real path of the folder instead
+discovery.rejected-filesystem-root = {path} is the root of the file system; choose the folder that holds your repos
+discovery.rejected-home-ancestor = {path} holds other users' folders; choose your own code folder inside your home
+discovery.rejected-inside-repo = {path} is a repo or inside one; to observe it use `raptor repo add {path}`, or declare the folder that holds your repos
+discovery.rejected-profile = {path} is inside GitRaptor's own data; choose another folder
+discovery.rejected-network = {path} is on the network; choose a folder on a local disk
+discovery.rejected-too-many = there are too many code folders; remove one with `raptor repo roots remove <path>` first
+discovery.rejected-unreadable = {path} cannot be read; check its permissions
+discovery.root-removed = no longer watching {path}; {count} pending repos removed (the observed ones are kept)
+discovery.none = no discovered repos waiting for a decision
+discovery.candidate-line = {name}  {path}  (in {root})
+discovery.ask = Observe {name}?
+discovery.cmd-add = observe: raptor repo add {path}
+discovery.cmd-dismiss = never ask again: raptor repo dismiss {path}
+discovery.dismissed = dismissed {path}; it will not be proposed again (`raptor repo add` still observes it by hand)
