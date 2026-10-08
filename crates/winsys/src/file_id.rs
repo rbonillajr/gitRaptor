@@ -19,6 +19,11 @@ pub fn of_path(path: &Path) -> io::Result<(u32, u64)> {
     crate::ffi_file::file_index(&file)
 }
 
+/// `(volume serial number, file index)` of an already open file or folder.
+pub fn of_file(file: &std::fs::File) -> io::Result<(u32, u64)> {
+    crate::ffi_file::file_index(file)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

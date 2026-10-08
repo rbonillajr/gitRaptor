@@ -1,15 +1,18 @@
-//! Byte-range locks (`LockFileEx`, `UnlockFileEx`) and the identity of an open file
-//! (`GetFileInformationByHandle`), one call per `unsafe` block. Nothing here is public outside
-//! the crate.
+//! Byte-range locks (`LockFileEx`, `UnlockFileEx`), the identity of an open file
+//! (`GetFileInformationByHandle`) and renames that never replace (`MoveFileExW`), one call per
+//! `unsafe` block. Nothing here is public outside the crate.
 
+use std::ffi::OsStr;
 use std::fs::File;
 use std::io;
+use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::AsRawHandle;
+use std::path::Path;
 
 use windows_sys::Win32::Foundation::{ERROR_LOCK_VIOLATION, HANDLE};
 use windows_sys::Win32::Storage::FileSystem::{
     BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle, LOCKFILE_EXCLUSIVE_LOCK,
-    LOCKFILE_FAIL_IMMEDIATELY, LockFileEx, UnlockFileEx,
+    LOCKFILE_FAIL_IMMEDIATELY, LockFileEx, MOVEFILE_WRITE_THROUGH, MoveFileExW, UnlockFileEx,
 };
 use windows_sys::Win32::System::IO::OVERLAPPED;
 
@@ -70,4 +73,45 @@ pub(crate) fn file_index(file: &File) -> io::Result<(u32, u64)> {
     }
     let index = (u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow);
     Ok((info.dwVolumeSerialNumber, index))
+}
+
+/// UTF-16 with NUL. An absolute drive path gets the `\\?\` prefix, so Windows takes every name
+/// as is (no trailing dots or spaces dropped, no device names, no 260-character limit).
+fn wide(path: &Path) -> Vec<u16> {
+    let raw = OsStr::new(path);
+    let bytes = raw.as_encoded_bytes();
+    let drive = bytes.len() > 2 && bytes[1] == b':' && (bytes[2] == b'\\' || bytes[2] == b'/');
+    let prefix: &[u16] = if drive {
+        &[b'\\' as u16, b'\\' as u16, b'?' as u16, b'\\' as u16]
+    } else {
+        &[]
+    };
+    prefix
+        .iter()
+        .copied()
+        .chain(raw.encode_wide().map(|c| {
+            if drive && c == u16::from(b'/') {
+                u16::from(b'\\')
+            } else {
+                c
+            }
+        }))
+        .chain(Some(0))
+        .collect()
+}
+
+/// Renames the entry `from` to `to` on the same volume, flushed before returning. Never replaces:
+/// fails with `ERROR_ALREADY_EXISTS` or `ERROR_FILE_EXISTS` if `to` exists. A link or junction at
+/// `from` is renamed itself, never followed.
+pub(crate) fn move_no_replace(from: &Path, to: &Path) -> io::Result<()> {
+    let from = wide(from);
+    let to = wide(to);
+    // SAFETY: both buffers are NUL-terminated UTF-16 strings alive for the call. Without
+    // `MOVEFILE_COPY_ALLOWED` the call is a rename on one volume and never copies.
+    let ok = unsafe { MoveFileExW(from.as_ptr(), to.as_ptr(), MOVEFILE_WRITE_THROUGH) } != 0;
+    if ok {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
 }
