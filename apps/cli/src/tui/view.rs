@@ -643,6 +643,7 @@ mod tests {
                         worktrees,
                         tier: None,
                         checked_utc_ms: None,
+                        kept_temps: None,
                     },
                 },
             )))),

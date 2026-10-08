@@ -29,3 +29,6 @@ status.no-divergence-base-missing = no ahead/behind: base branch "{base}" does n
 status.no-divergence-no-base = no ahead/behind: the repo has no base branch
 status.no-divergence-no-commits = no ahead/behind: the branch has no commits yet
 status.no-divergence-unreadable = no ahead/behind: could not read the worktree's commits
+status.kept-temps = {count} Time Machine temporary files kept after operation {operation} was interrupted: raptor undo takes it back
+status.kept-temps-not-next = {count} Time Machine temporary files kept after operation {operation} was interrupted; later operations ran, and the snapshot before them holds these files
+status.kept-temps-foreign = {foreign} of them are not GitRaptor's copies and exist only there: review them before deleting anything

@@ -548,6 +548,7 @@ mod tests {
                     worktrees: Vec::new(),
                     tier: None,
                     checked_utc_ms: None,
+                    kept_temps: None,
                 },
             },
         ))))

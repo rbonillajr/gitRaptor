@@ -29,3 +29,6 @@ status.no-divergence-base-missing = sin ahead/behind: la rama base "{base}" no e
 status.no-divergence-no-base = sin ahead/behind: el repo no tiene rama base
 status.no-divergence-no-commits = sin ahead/behind: la rama aún no tiene commits
 status.no-divergence-unreadable = sin ahead/behind: no se pudieron leer los commits del worktree
+status.kept-temps = {count} temporales de Time Machine conservados tras interrumpirse la operación {operation}: raptor undo la deshace
+status.kept-temps-not-next = {count} temporales de Time Machine conservados tras interrumpirse la operación {operation}; después corrieron otras operaciones, y el snapshot previo a ellas guarda estos archivos
+status.kept-temps-foreign = {foreign} de ellos no son copias de GitRaptor y solo existen ahí: revísalos antes de borrar nada
