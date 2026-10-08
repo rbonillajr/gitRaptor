@@ -18,6 +18,7 @@ Se entrega como **CLI/TUI (`raptor`) + servidor MCP**. Estado actual: **pre-MVP*
 | [`docs/business/gitraptor-documento-de-negocio.md`](docs/business/gitraptor-documento-de-negocio.md) | Alcance (BR-xx), NFRs, decisiones (D1–D3) y preguntas abiertas |
 | [`docs/architecture/decisions/`](docs/architecture/decisions/) | ADRs: stack (001), monorepo Nx (002), design system (003), estado del frontend y UX (004) |
 | [`docs/design-system/README.md`](docs/design-system/README.md) | Design system v0 (TUI, CLI, tokens, contenido) |
+| [`docs/requirements/release-plan.md`](docs/requirements/release-plan.md) | Plan de releases y control de estado: hitos (M1, M2, M3, v0.1.0), criterio de salida, avance y fecha estimada por velocidad real |
 | [`docs/architecture/extender-sin-archivos-compartidos.md`](docs/architecture/extender-sin-archivos-compartidos.md) | Cómo añadir un método, un error, un mensaje, un subcomando o un módulo del daemon tocando solo archivos propios (ADR-GRP-016) |
 
 Si una tarea contradice estos documentos, **detente y pregunta**; no improvises una decisión de arquitectura.
