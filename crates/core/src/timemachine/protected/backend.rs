@@ -96,6 +96,8 @@ struct TmRepo {
 pub struct TmRepos {
     dirs: ProfileDirs,
     repos: Mutex<Vec<TmRepo>>,
+    /// What the sweep after a crash kept, for `raptor status` (DS-TS-TMC-003, Enmienda T2).
+    pub kept: crate::timemachine::kept::KeptTemps,
 }
 
 impl TmRepos {
@@ -103,6 +105,7 @@ impl TmRepos {
         Self {
             dirs,
             repos: Mutex::new(Vec::new()),
+            kept: Default::default(),
         }
     }
 
@@ -130,6 +133,7 @@ impl TmRepos {
     /// handle until they end.
     pub fn remove(&self, repo_id: &str) {
         self.lock().retain(|r| r.repo_id != repo_id);
+        self.kept.forget(repo_id);
     }
 
     /// Drops every repo (orderly stop).
