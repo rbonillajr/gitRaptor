@@ -4,7 +4,7 @@ title: "Reglas de Negocio — Servidor MCP"
 type: business-rules
 status: draft
 created: 2026-10-04
-updated: 2026-10-05
+updated: 2026-10-08
 domain: GRP
 epic: E-001
 feature: mcp
@@ -118,7 +118,7 @@ mensaje se entrega al ejecutor fuera de argv
 
 **Regla formal**:
 ```
-IF longitud > tope OR caracteres de control → rechazo "texto no válido"
+IF longitud > tope OR caracteres de control OR texto vacío → rechazo "texto no válido" (código `invalid-text`)
 IF herramienta = register_agent AND (nombre reservado OR nombre de otro agente con sesión presente)
    → rechazo "nombre no permitido"
 ```
@@ -704,7 +704,7 @@ bloqueos contados por capa; undos por MCP cuentan en el KPI de undos
 
 ### BR-MCP-TIME-001: Tiempo por llamada y rate limit
 
-**Descripción**: cada llamada tiene un tiempo máximo; cada conexión, un rate limit; los snapshots manuales, una cuota y un rate limit propios. Una escritura que tarda por el snapshot declara su estado en la respuesta, y su resultado se puede consultar después por el id de operación. Las cifras las fija ADR-MCP-001 § 6 (antes supuesto S-MCP-1): lectura ≤ 10 s; una escritura vuelve a los 30 s con su estado; 120 lecturas y 20 escrituras por minuto por conexión; 5 snapshots manuales por minuto y 20 vivos por worktree. La Dev Spec solo puede endurecerlas.
+**Descripción**: cada llamada tiene un tiempo máximo; cada conexión, un rate limit; los snapshots manuales, una cuota y un rate limit propios. Una escritura que tarda por el snapshot declara su estado en la respuesta, y su resultado se puede consultar después por el id de operación. Las cifras las fija ADR-MCP-001 § 6 (antes supuesto S-MCP-1): lectura ≤ 10 s; una escritura vuelve a los 30 s con su estado; 120 lecturas y 20 escrituras por minuto por conexión; 5 snapshots manuales por minuto y 20 en 24 h por (solicitante, worktree), con techos de 60 en 24 h por worktree y de 200 en 24 h por repo (⚠️ **ASSUMPTION**; los descartes también cuentan). La Dev Spec solo puede endurecerlas.
 
 **Criticidad**: Media
 
@@ -713,7 +713,13 @@ bloqueos contados por capa; undos por MCP cuentan en el KPI de undos
 IF llamadas por conexión > límite → rechazo "demasiadas llamadas; espera N s"
 IF tiempo > máximo AND lectura → error con acción
 IF escritura en curso al vencer el tiempo → respuesta con estado + id de operación
+IF herramienta = snapshot AND el daemon agota su tiempo → rechazo "tiempo agotado" sin punto (`time-limit`); sin id de operación
+IF herramienta = snapshot AND fallo de transporte → `outcome-unknown` sin id: "revisa `raptor timeline`"
 ```
+
+**Excepción de `snapshot` (v0.4)**: el id del punto no existe hasta grabarlo, así que la respuesta no es "con estado + id". `outcome-unknown` sin id solo se da en `snapshot` y por fallo de transporte; la acción que se ofrece es revisar `raptor timeline`. Cuando exista US-MCP-017 la excepción desaparece.
+
+**Nota (N1)**: antes decía "20 vivos por worktree"; manda ADR-MCP-001 § 6: 20 por (solicitante, worktree) en una ventana móvil de 24 h.
 
 **Ejemplo**: un agente en bucle pide 200 snapshots en un minuto → los que pasan del límite se rechazan con el tiempo de espera.
 
@@ -918,3 +924,4 @@ Cada regla tendrá al menos un escenario Gherkin, incluido uno negativo, en su h
 | 0.1 | 2026-10-04 | PO (AADD) | Versión inicial: 48 reglas a partir de Q-MCP-1 a Q-MCP-31 (decisión del orquestador, validada por PO y Arquitecto) y de las decisiones heredadas de motor-local, Cockpit, Time Machine y Guardrails. |
 | 0.2 | 2026-10-04 | PO (AADD) | Enmienda mínima, fuente ADR-CKP-002 (propuesto; hallazgo de seguridad H-02). BR-MCP-VAL-001 y BR-MCP-ELIG-004: `create_worktree` no acepta ruta por MCP, solo la plantilla del desarrollador (estrecha Q-MCP-7). BR-MCP-ELIG-001: la decisión de Guardrails para `snapshot` queda "Pendiente" (sin operación normalizada; ADR-CKP-002 Pendientes). Sin reglas nuevas: siguen 48. Decisión del orquestador (2026-10-04), validada por Arquitecto/PO. |
 | 0.3 | 2026-10-05 | PO (AADD) | Enmienda por ADR-MCP-001, decisión del orquestador (2026-10-05), validada por Arquitecto/PO. BR-MCP-ELIG-001: `snapshot` no gobernada (no está en BR-VAL-002) y `undo` sin decisión de Guardrails en el MVP (US-TMC-021, Fase 2). BR-MCP-WF-001: avisos del plan reconocidos en una segunda llamada, sin efectos si faltan. BR-MCP-EDGE-007: el aviso de upstream divergente se reconoce y la respuesta final vuelve a avisar. BR-MCP-TIME-001: cifras de ADR-MCP-001 § 6 y consulta del resultado por id de operación. BR-MCP-ELIG-005: cupo de 20 snapshots por solicitante y worktree en 24 h, con la cuota llena se rechaza sin borrar nada, y un `undo` por MCP que movería la base o una ref protegida se rechaza (S-04). BR-MCP-WF-001: orden alineado con ADR-MCP-001 (ámbito → allowlist → disponible → solicitante → … → Guardrails → avisos). Sin reglas nuevas: siguen 48. |
+| 0.4 | 2026-10-08 | PO (AADD) | Enmienda por DS-US-MCP-008, decisión del orquestador (2026-10-08), validada por Arquitecto/PO. BR-MCP-TIME-001: excepción de `snapshot` (sin id; `time-limit` si el daemon agota su tiempo; `outcome-unknown` sin id solo por fallo de transporte, con la acción "revisa `raptor timeline`") y cifras alineadas con ADR-MCP-001 (N1: 20 en 24 h por (solicitante, worktree), techos de 60 por worktree y 200 por repo). BR-MCP-VAL-004: el rechazo "texto no válido" es el código `invalid-text` y cubre también el texto vacío. Sin reglas nuevas: siguen 48. |

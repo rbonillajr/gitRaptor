@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 domain: GRP
 epic: E-001
 feature: mcp
@@ -55,7 +55,8 @@ BR-MCP-WF-001 (flujo de una escritura) · BR-MCP-ELIG-002 (`safe_commit`: nunca 
 - **Habilitadores**: TS-CKP-002 (catálogo y ejecutor) y TS-CKP-003 (decisión única heredada por los hooks), en propuesta, rama docs/arch-cockpit.
 - **Dueña de la operación del catálogo**: esta historia es dueña de `commit` y fija en su Dev Spec el flujo de escritura que reutilizan US-MCP-008, 018 y 019.
 - **Externas**: ADR-MCP-001 (DEP-MCP-1, no existe). ADR-CKP-002 (**propuesto**, en docs/arch-cockpit): `safe_commit` → operación `commit` del catálogo; el ejecutor respeta hooks y config del usuario. DEP-MCP-2 y DEP-MCP-5 (correspondencia herramienta → operación normalizada) se resuelven vía ADR-CKP-002. ADR-MCP-001 y ADR-CKP-002 son bloqueos de arquitectura.
-- **Límites por solicitante** (S-03, condición de entrada): cupo de rate limit compartido entre las conexiones del mismo solicitante y ≤ 8 conexiones por solicitante, diferidos por US-MCP-005 (Enmienda (2026-10-07, US-MCP-005) de ADR-MCP-001).
+- **Límites por solicitante** (S-03 completo, **condición de entrada dura**): cupo de rate limit compartido entre las conexiones del mismo solicitante y ≤ 8 conexiones por solicitante. US-MCP-008 solo cubre la cuota durable del snapshot; el resto pasa a esta historia (Enmienda (2026-10-08, US-MCP-008) de ADR-MCP-001) y es criterio de salida de M4 (v0.1.0).
+- **Flujo heredado**: hereda de US-MCP-008 el cubo de escrituras, el mapeo de errores y la resolución del ámbito. No hereda la llamada única: `safe_commit` necesita una segunda llamada para reconocer avisos (BR-MCP-WF-001; D-3 de `user-stories.md`).
 - **Desbloquea**: US-GRD-016 (Guardrails), junto con US-MCP-002 y US-MCP-003.
 - **Transversal**: ⚠️ **ASSUMPTION**: tiempo máximo de una escritura en la capa `mcp` de 300 s (supuesto de ADR-CKP-002, S-MCP-1); al vencer, la respuesta declara el estado y el id de la operación.
 
