@@ -155,4 +155,34 @@ ALTER TABLE gaps_v2 RENAME TO gaps;
 -- ADR-GRP-013): author, committer and co-authors as JSON, never the message.
 ALTER TABLE events ADD COLUMN authorship TEXT;
 ",
+    r"
+-- US-GRD-005: the Guardrails decision log (ADR-GRD-006 § 1, Enmienda 2026-10-07). Not an
+-- event table: occurrences aggregate (count, last_ms) and rows expire after 90 days. The
+-- repo is the store's; nothing of a commit message, argv or oids is kept.
+CREATE TABLE guardrails_decisions (
+    id             INTEGER PRIMARY KEY,
+    at_ms          INTEGER NOT NULL,
+    utc_offset_s   INTEGER NOT NULL,
+    last_ms        INTEGER NOT NULL,
+    count          INTEGER NOT NULL CHECK (count >= 1),
+    worktree       TEXT,
+    branch         TEXT,
+    actor          TEXT CHECK (actor IN ('claude-code', 'other')),
+    operation      TEXT NOT NULL,
+    kind           TEXT NOT NULL CHECK (kind IN ('denial', 'notice', 'request', 'exception',
+                       'exception-rejected', 'exception-cancelled', 'protection-state')),
+    detail         TEXT NOT NULL CHECK (detail IN ('full', 'rate-limited')),
+    effect         TEXT NOT NULL,
+    applied_effect TEXT NOT NULL,
+    reasons        TEXT NOT NULL,
+    layer          TEXT NOT NULL CHECK (layer IN ('hooks', 'mcp', 'guardrails', 'cockpit')),
+    request_state  TEXT,
+    decision_id    TEXT NOT NULL,
+    origin         TEXT NOT NULL CHECK (origin IN ('daemon', 'spool-unverified')),
+    authorship     TEXT,
+    agg_key        TEXT NOT NULL
+) STRICT;
+CREATE INDEX guardrails_decisions_by_last ON guardrails_decisions(last_ms);
+CREATE INDEX guardrails_decisions_by_key ON guardrails_decisions(agg_key, last_ms);
+",
 ];
