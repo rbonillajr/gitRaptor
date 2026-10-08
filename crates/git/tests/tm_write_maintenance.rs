@@ -14,7 +14,10 @@ const REPO_ID: &str = "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0";
 #[test]
 fn repack_and_prune_run_on_the_store_and_keep_referenced_objects() {
     let tmp = tempfile::tempdir().unwrap();
-    let tm = tmp.path().canonicalize().unwrap().join("tm");
+    // Drive form on Windows: Git cannot read a configuration at a `\\?\` path.
+    let tm = gitraptor_git::paths::canonicalize(tmp.path())
+        .unwrap()
+        .join("tm");
     private_dir(&tm);
     private_dir(&tm.join(REPO_ID));
     let store = StoreRepo::create(&tm, REPO_ID).unwrap();
