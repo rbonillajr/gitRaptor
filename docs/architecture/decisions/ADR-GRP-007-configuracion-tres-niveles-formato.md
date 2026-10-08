@@ -63,6 +63,7 @@ Claves de la sección `engine`:
 | `engine.gitPath` | string (ruta absoluta al ejecutable de Git) | Solo perfil | sin valor (resolución automática) | ADR-GRP-009 § 4, Q28 |
 | `engine.watcher.fallbackPollSeconds` | entero, de 5 a 3600 | Perfil y local | `30` | ADR-GRP-010 § 5 (sondeo de respaldo) |
 | `engine.watcher.degradedPollSeconds` | entero, de 1 a 60 | Perfil y local | `2` | ADR-GRP-010 § 5 (modo degradado) |
+| `engine.watcher.backend` | `"fsevents"` o `"notify"` | Solo perfil | `"fsevents"` | ADR-GRP-010, Enmienda 2026-10-08 (respaldo con `notify` en macOS durante una release; se lee al arrancar el daemon; sin efecto en Linux y Windows) |
 
 Criterio de niveles de los valores nuevos:
 
@@ -121,6 +122,7 @@ Valor efectivo de una clave = el del nivel **más específico, entre los que la 
 | `gitPath` | **la usa** | ignorada, con diagnóstico | ignorada, con diagnóstico | perfil, si no resolución automática |
 | `watcher.fallbackPollSeconds` | la usa | ignorada, con diagnóstico | **la usa y gana** | local, si no perfil, si no `30` |
 | `watcher.degradedPollSeconds` | la usa | ignorada, con diagnóstico | **la usa y gana** | local, si no perfil, si no `2` |
+| `watcher.backend` | **la usa** | ignorada, con diagnóstico | ignorada, con diagnóstico | perfil, si no `fsevents` |
 
 Las claves de la sección `cockpit` siguen la misma tabla con perfil y local, y equipo ignorado (Enmienda 2026-10-04, Cockpit; ver la sección final).
 
