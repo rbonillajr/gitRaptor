@@ -2,7 +2,7 @@
 title: Cómo extender sin tocar archivos compartidos
 status: expanded
 generated: 2026-10-06
-updated: 2026-10-06
+updated: 2026-10-08
 generator: orquestador
 domain: GRP
 tags: [flota-de-agentes, conflictos, registro, capacidades, codigos-de-error, i18n, cli, daemon]
@@ -106,6 +106,14 @@ La TUI tiene su propio catálogo tipado en `apps/cli/src/present/i18n.rs`, con u
   ```
 
   Luego añade **una línea** en `commands!` de `commands/mod.rs`, en el lugar que debe ocupar en `--help`. Las utilidades compartidas (`engine`, `error_text`, `refusal_text`, …) están en `support.rs`, reexportadas en la raíz del crate.
+
+## Añadir una operación del catálogo
+
+Para que el ejecutor sirva una operación nueva (`snapshot` fue la primera, US-MCP-008; ADR-CKP-002, Enmienda (2026-10-08, US-MCP-008)):
+
+1. Crea `crates/core/src/executor/ops/<op>.rs` con su brazo: la parte propia de la operación (`plan_op`) y lo que ejecuta.
+2. Añade **una línea** en `ops/mod.rs`, en el orden de `OperationId`, para cablear ese brazo en `OperationsWiring::production()`.
+3. Una operación **gobernada** (con decisión de Guardrails) no se cablea con `NoGuardrails`: `production()` rechaza al construirse un brazo gobernado mientras la puerta sea `NoGuardrails`. Una no gobernada, como `snapshot`, declara `governed == None`.
 
 ## Añadir un módulo del daemon
 

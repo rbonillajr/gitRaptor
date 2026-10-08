@@ -306,6 +306,7 @@ M3 se solapa con M2 y ya avanza: las rondas de Linux y Windows siguen a lo que s
 9. **Rendimiento:** el informe NFR-04 de la máquina de referencia, adjunto a la release (INF-GRP-003, TD-GRP-003).
 10. **Pasos humanos** hechos y anotados en INF-GRP-003 e INF-GRP-004: secretos, releases inmutables, tags de prueba `v0.0.0*` borrados, versión subida a `0.1.0`, y `winget validate` y `brew audit` en verde para los canales que se activen.
 11. M3 está cerrado.
+12. **Límites y perfil del MCP** (decisión del orquestador (2026-10-08), validada por Arquitecto, PO y security-expert; Enmienda (2026-10-08, US-MCP-008) de ADR-MCP-001): **S-03 completo** (cupo de rate limit compartido entre las conexiones del mismo solicitante y ≤ 8 conexiones por solicitante, condición de entrada de US-MCP-009) y **S-01** (perfil `mcp` por solicitante) implementados. Con S-01 caducan los dos riesgos residuales de US-MCP-008: el salto del cubo de escrituras de la conexión `mcp` (Medio) y la etiqueta sin el envoltorio `{"untrusted": …}` en `raptor timeline --json` (Bajo).
 
 ### Canales: qué existe y qué falta
 

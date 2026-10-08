@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-06
+updated: 2026-10-08
 date: 2026-10-03
 domain: GRP
 feature: time-machine
@@ -153,3 +153,11 @@ Aplicada desde la [Dev Spec de US-TMC-004](../../requirements/features/time-mach
 **Límites declarados**: sin reflog de `HEAD` (`core.logAllRefUpdates=false` o el backend reftable) no hay evento `reset` y la calma es por tiempo; `git checkout -- .`, `git restore` y `git clean` no escriben reflog ni índice y no son eventos (su efecto queda en la siguiente captura y lo anterior sigue restaurable desde el almacén); R2 se mantiene.
 
 **Validación añadida**: los escenarios de US-TMC-004 y el e2e del criterio 3 de M1 (un agente simulado hace `git reset --hard` y lo recupera con `raptor undo`); el banco del motor (INF-GRP-002) con la captura continua activa.
+
+## Enmienda (2026-10-08, US-MCP-008)
+
+**Decisión del orquestador (2026-10-08), validada por Arquitecto y PO** (etiqueta y suelo por security-expert, L1, L2 y S2). Origen: [DS-US-MCP-008](../../requirements/features/mcp/dev-specs/US-MCP-008-dev-spec.md), nota N2.
+
+- **Validación de la etiqueta (corrige la Validación añadida de la Enmienda (2026-10-05, MCP))**: la prueba "una etiqueta con U+202E sale escapada en el timeline" no se sostiene, porque U+202E es un control bidi y la etiqueta se **rechaza** (`invalid-text`). La prueba equivalente usa una etiqueta con un selector de variación (U+FE0F) o U+034F, que la validación admite y que el escape sustituye al mostrarla. La validación del daemon manda (`check_snapshot_label`): 1 a 64 caracteres, longitud en bytes (≤ 256) comprobada antes de recorrer caracteres, sin controles ni caracteres invisibles o de uso privado, sin espacios al principio o al final.
+- **Suelo de espacio de la captura manual**: suelo de SEC-TMC-12 más una reserva para el previo garantizado, máx(1 GB, tamaño estimado del worktree) (⚠️ **ASSUMPTION**); se comprueba bajo el cerrojo manual justo antes de capturar y cruzarlo a mitad de captura la aborta (`discarded`, nada borrado). Un previo garantizado posterior nunca espera al cerrojo manual.
+- **Prioridad**: una captura manual cede ante un previo y termina dentro de `DEFAULT_PRIOR_DEADLINE`; usa el tope de 50 MB por archivo y los hilos de observación (§ 2).

@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-04
 created: 2026-10-04
-updated: 2026-10-05
+updated: 2026-10-08
 date: 2026-10-04
 domain: GRP
 feature: cockpit
@@ -428,3 +428,10 @@ Decisión del orquestador (2026-10-05), validada por Arquitecto, PO y security-e
 | **Avisos por MCP**: parámetro `acknowledge` que nombra exactamente los avisos del plan; sin él, rechazo sin efectos `warnings-not-acknowledged` y la segunda llamada vuelve a preparar (ADR-MCP-001 § 4.3) | § 12 | D-16 |
 | **Propiedades que el contrato de ejecución debe cumplir para el MCP** (sin fijar su forma, que unifica TS-CKP-002 con `operation.run`): preparar y ejecutar en la misma conexión dentro de una llamada de herramienta; la operación sobrevive a la cancelación, al vencimiento de la llamada y al cierre de la conexión; el resultado se puede consultar por id de operación | Pendientes, "Contrato del canal" | ADR-MCP-001 § 4.3 y § 7 |
 | Captura manual: aplicada en ADR-TMC-004 § 4 (nivel `manual`) | Tabla de enmiendas | DEP-MCP-2, D-14 |
+
+## Enmienda (2026-10-08, US-MCP-008)
+
+**Decisión del orquestador (2026-10-08), validada por Arquitecto y PO.** Origen: [DS-US-MCP-008](../../requirements/features/mcp/dev-specs/US-MCP-008-dev-spec.md), D1 y D12.
+
+- **§ 11, nota**: `snapshot` corre en el ejecutor **sin el cerrojo de escritura ni la operación protegida** (`entry.protected = false`, `Executor::run_any`); la captura va por `RunEnv.capture`. La comprobación estática de este apartado sigue verde: `executor` no importa la capa de escritura de la Time Machine.
+- **Catálogo de producción**: un brazo y un archivo por operación (`crates/core/src/executor/ops/<op>.rs`), cableado con `NoGuardrails`; `OperationsWiring::production()` rechaza un brazo de una operación gobernada mientras la puerta sea `NoGuardrails`. Ver [la guía de extensión](../extender-sin-archivos-compartidos.md).

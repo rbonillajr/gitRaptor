@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-05
 date: 2026-10-05
 created: 2026-10-05
-updated: 2026-10-07
+updated: 2026-10-08
 deciders: [Orquestador (delegación de Rene Bonilla, 2026-10-04)]
 domain: MCP
 feature: mcp
@@ -385,3 +385,17 @@ Decisión del orquestador (2026-10-07), validada por Arquitecto y PO. Origen: [D
 - **§ 5, `outputSchema` compacto**: se mantiene `outputSchema` más `structuredContent` más el bloque de texto, pero el esquema pasa por `compact_schema`. Ese paso quita `$schema`, `title`, `description` y los `format` no estándar, y convierte un `anyOf` de un esquema con `null` en ese esquema (las respuestas no llevan nulos). Recorre solo las posiciones de esquema: no toca nombres de propiedades, `enum`, `const`, `required`, `maxLength` ni `additionalProperties`. Un test valida cada `structuredContent` de referencia contra el esquema compacto.
 - **§ 5, texto no confiable**: el envoltorio `{"untrusted": …}` y su saneamiento no cambian (RES-MCP-04). La descripción de la herramienta y las `instructions` se recortan, y siguen declarando ese texto como dato, nunca instrucción.
 - **§ 6**: el ⚠️ ASSUMPTION sobre si Claude Code pasa al modelo una parte o las dos sigue abierto. RES-MCP-02 mide cada parte por separado.
+
+## Enmienda (2026-10-08, US-MCP-008)
+
+**Decisión del orquestador (2026-10-08), validada por Arquitecto y PO** (D5 y D8, también por security-expert, firmadas con condiciones). Origen: [DS-US-MCP-008](../../requirements/features/mcp/dev-specs/US-MCP-008-dev-spec.md), la primera escritura por MCP (`snapshot`).
+
+- **§ 6, S-03 estrechado (D8)**: US-MCP-008 implementa el cubo de escrituras por conexión `mcp` más la **cuota durable** del snapshot manual en el oplog, que cubre S-03 para esta herramienta. El cupo de rate limit compartido entre las conexiones del mismo solicitante y el tope de ≤ 8 conexiones por solicitante **pasan a US-MCP-009**. Siguen siendo **condición de entrada dura de US-MCP-009** (aunque herede el flujo de US-MCP-008, D14) y **criterio de salida de M4 (v0.1.0)** en el [plan de releases](../../requirements/release-plan.md), junto con S-01 (perfil `mcp` por solicitante). Corrige la Enmienda (2026-10-07, US-MCP-005), que lo ponía como condición de US-MCP-008 y US-MCP-009 (DEP-MCP-8).
+- **§ 6, clave y techos de la cuota (D5)**: la clave es (`session_id`, worktree), con el solicitante que el daemon resuelve por ascendencia, nunca el canal que declara el cliente (C2). Se añade un **techo por worktree entre todos los solicitantes** de 60 en 24 h (⚠️ **ASSUMPTION**) contra la rotación de sesiones y un **techo por repo, entre todos los worktrees, de 200 en 24 h** (K2, ⚠️ **ASSUMPTION**, igual que el de 60). Las ventanas y los techos cuentan todo intento que llegó a capturar, descartes incluidos (C1); los rechazos previos no cuentan. Un techo lleno bloquea solo los snapshots manuales (K4).
+- **§ 6, orden de las cuotas (D7)**: la cuota de snapshot responde **antes** que el cubo de escrituras (el cubo de lecturas sigue primero, como manda § 2): el 6.º snapshot del minuto recibe `quota-exceeded` con su espera, no `rate-limited` con 3 s.
+- **§ 4.2 y § 5, `invalid-text` y `operation-in-progress`**: `invalid-text` es un rechazo de dominio para la longitud o el contenido de un texto libre (la etiqueta de `snapshot`: 1 a 64 caracteres, con parámetros `field` y `max_chars`); `maxLength: 64` se mantiene en el `inputSchema` como excepción documentada a "los límites de valor no se validan por esquema". `operation-in-progress` lleva `params.kind` (`git` o `write`).
+- **§ 5 y § 6, excepción de `snapshot` (D11)**: la llamada no devuelve `running` con id, porque el id del punto no existe hasta grabarlo. El daemon acota su trabajo a ⚠️ **ASSUMPTION** 25 s y, al vencer, descarta sin punto y responde `time-limit`. `outcome-unknown` sin id solo por fallo de transporte (BR-MCP-TIME-001 v0.4). **Disparador**: cuando exista US-MCP-017, el `snapshot_id` se crea al empezar `run` y se devuelve `running` con id.
+- **Riesgos residuales** (security-expert, condición C4; ambos caducan con S-01 en M4, v0.1.0):
+  - **Medio**: sin S-01, un agente que habla directo con el socket o usa la CLI esquiva el cubo de escrituras de la conexión `mcp`. Cotas: los descartes contados (C1), la cuota durable de 5 por minuto y 20 en 24 h por (sesión, worktree), los techos de 60 en 24 h por worktree y de 200 en 24 h por repo, y el suelo de espacio libre; el daemon las aplica a cualquier cliente.
+  - **Bajo**: `raptor timeline --json` emite la etiqueta sin el envoltorio `{"untrusted": …}` a un agente con perfil completo. El agente ya puede leer el perfil con su shell (§ 9, I-01).
+- **DEP-MCP-8**: S-03 completo y S-01 entran en la puerta de M4 (v0.1.0); ver [release-plan.md](../../requirements/release-plan.md).

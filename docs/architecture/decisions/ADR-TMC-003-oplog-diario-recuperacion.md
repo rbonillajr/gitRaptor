@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-06
+updated: 2026-10-08
 date: 2026-10-03
 domain: GRP
 feature: time-machine
@@ -171,3 +171,12 @@ Aplicada desde la [Dev Spec de US-TMC-004](../../requirements/features/time-mach
 | **`caused_by` por ancla**: al terminar una operación protegida o un undo, el daemon toma un **ancla**: una captura `observation` de su ámbito con `cause_operation` = la operación y una marca en calma. Los eventos del ámbito con `marca de la operación < seq ≤ marca del ancla` son su eco. Sin ancla, hasta la siguiente captura del worktree | § 4 | D5; ajuste 1 |
 
 **Validación añadida**: el eco de un undo no entra en la pila (un segundo undo responde `nothing-to-undo`); dos operaciones del catálogo y dos undos siguen retrocediendo una a una con la captura continua activa (tests de US-TMC-002 en verde).
+
+## Enmienda (2026-10-08, US-MCP-008)
+
+**Decisión del orquestador (2026-10-08), validada por Arquitecto y PO** (cuota y claves por security-expert, K1 y O1). Origen: [DS-US-MCP-008](../../requirements/features/mcp/dev-specs/US-MCP-008-dev-spec.md), D3 y D4.
+
+- **§ 2, Snapshot**: un nuevo nivel `manual` con las columnas `label`, `requester` (JSON, como `operations.requester`), `requester_session`, `worktree_key` (clave canónica del daemon: raíz resuelta y `(dev, inode)`, comparada por igualdad exacta, nunca con LIKE ni `instr` sobre `worktrees`) y `channel`. Un CHECK obliga a que estén todas presentes si y solo si el nivel es `manual`.
+- **Migración 3 del oplog**: reconstruye `snapshots` y recrea los triggers append-only (UPDATE y DELETE siguen fallando). Copia previa con la API de backup, `verify_chain` después; una rotura nueva restaura la copia y cierra la Time Machine de ese repo con error tipado; una migración que falla se deshace entera. Un binario anterior ve `SchemaTooNew` y no pierde datos.
+- **Cadena**: `FORMAT = 3`, global. Toda fila nueva se hashea con el formato 3 (para `snapshot` añade las cinco columnas); las filas de los formatos 1 y 2 conservan su `SELECT` y verifican igual.
+- **Cuota contada en el oplog**: las ventanas y los techos cuentan toda fila `manual`, también las `discarded`, y la purga no devuelve cupo de 24 h (ADR-MCP-001, Enmienda (2026-10-08, US-MCP-008)).
