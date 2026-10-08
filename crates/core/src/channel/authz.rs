@@ -337,6 +337,11 @@ pub fn check_reserved(peer: AcceptedPeer, checks: &Checks<'_>) -> Verdict {
     let own_len = chain.len();
     // The leader read here, pinned by `(pid, start)` for the last check.
     let mut leader_pinned = None;
+    // A console host already in the caller's chain (`conhost.exe raptor.exe`)
+    // was walked with it, and so was its creator: only mark it for the audit.
+    if consoles && let Some(host) = chain.iter_mut().find(|l| l.pid == caller.session) {
+        host.console_host = true;
+    }
     if caller.session != caller.pid && !chain.iter().any(|l| l.pid == caller.session) {
         match procs.read(caller.session) {
             // A console hosted by another user, or that cannot be read, is
@@ -441,7 +446,8 @@ pub fn console_issue(procs: &dyn ProcSource, uid: u32, pid: u32) -> Option<Conso
     if !me.controlling_terminal {
         return Some(ConsoleIssue::NotInteractive);
     }
-    let creator = procs.read(me.session).ok().and_then(|host| {
+    let host = procs.read(me.session).ok().filter(|h| h.uid == uid);
+    let creator = host.and_then(|host| {
         procs
             .read(host.ppid)
             .ok()
@@ -857,6 +863,13 @@ mod tests {
         assert!(v.chain.iter().all(|l| l.desktop_session == Some(2)));
         let json = serde_json::to_string(&v.chain).unwrap();
         assert!(json.contains("\"console_host\":true") && json.contains("\"desktop_session\":2"));
+        // `conhost.exe raptor.exe`: the host is in the caller's own chain.
+        let mut t = windows_console();
+        t.add(22, 20, "C:/Windows/System32/conhost.exe", 220, false, 22);
+        t.add(33, 22, "C:/Users/u/.cargo/bin/raptor.exe", 330, true, 22);
+        let v = verdict(&t, 33, 330);
+        assert_eq!(v.refused, None);
+        assert!(v.chain.iter().any(|l| l.pid == 22 && l.console_host));
         let unix = serde_json::to_string(&verdict(&developer_terminal(), 30, 300).chain).unwrap();
         assert!(!unix.contains("console_host") && !unix.contains("desktop_session"));
     }

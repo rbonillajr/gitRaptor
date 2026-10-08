@@ -214,8 +214,7 @@ mod tests {
             assert!(i18n::has_key(key), "{key}");
         }
         assert_eq!(keys[3], "common.refused-terminal");
-        let mut unique = keys.clone();
-        unique.dedup();
+        let unique: std::collections::HashSet<_> = keys.iter().collect();
         assert_eq!(unique.len(), keys.len());
     }
 }
