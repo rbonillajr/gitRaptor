@@ -873,7 +873,14 @@ mod real_processes {
 
     /// Starts `parent` in `spawn` mode and returns it with its child's pid.
     fn launch(parent: &Path) -> (Child, u32) {
+        launch_with(parent, 0)
+    }
+
+    /// As [`launch`], with Windows creation flags for the parent.
+    fn launch_with(parent: &Path, flags: u32) -> (Child, u32) {
+        use std::os::windows::process::CommandExt;
         let mut proc = Command::new(parent)
+            .creation_flags(flags)
             .args(["--exact", ENTRY, "--nocapture"])
             .env(MODE, "spawn")
             .stdin(Stdio::piped())
@@ -955,14 +962,42 @@ mod real_processes {
         assert_eq!(resolve(peer, &checks, None), Err(Unverified));
     }
 
-    /// The same tree without `claude.exe` is never an agent, and without a
-    /// terminal proof it never confirms.
+    /// The same tree without `claude.exe` is never an agent. Whether it may
+    /// confirm is what the console of TQ-14 says about the process: an
+    /// interactive console of an active session may, session 0 (SSH) or no
+    /// console may not. Which one applies depends on where the tests run.
     #[test]
     fn a_client_without_an_agent_is_not_one() {
         let dir = tempfile::tempdir().unwrap();
         copies(dir.path(), &["helper.exe"]);
         let (parent, child) = launch(&dir.path().join("helper.exe"));
         // Unverified is fine too: the walk may not reach a clean end here.
+        if let Ok(r) = resolve_pid(child).1 {
+            assert_eq!(r.who, Who::unattributed());
+            let issue = crate::channel::authz::console_issue(&SystemProcs, current_uid(), child);
+            if issue.is_some() {
+                assert!(!r.confirmable, "{issue:?}");
+            }
+            if r.confirmable {
+                assert_eq!(issue, None);
+            }
+        }
+        stop(parent);
+    }
+
+    /// A client without a console (`DETACHED_PROCESS`) is never confirmable,
+    /// wherever the tests run.
+    #[test]
+    fn a_client_without_a_console_never_confirms() {
+        const DETACHED_PROCESS: u32 = 0x08;
+        let dir = tempfile::tempdir().unwrap();
+        copies(dir.path(), &["helper.exe"]);
+        let (parent, child) = launch_with(&dir.path().join("helper.exe"), DETACHED_PROCESS);
+        let me = SystemProcs.read(child).unwrap();
+        assert!(
+            !me.controlling_terminal,
+            "a detached parent has no console to share"
+        );
         if let Ok(r) = resolve_pid(child).1 {
             assert_eq!(r.who, Who::unattributed());
             assert!(!r.confirmable);
