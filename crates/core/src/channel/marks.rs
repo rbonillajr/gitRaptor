@@ -187,6 +187,7 @@ mod tests {
             start_us: start,
             exe: None,
             controlling_terminal: false,
+            desktop_session: None,
             session: pid,
             pgid,
         }

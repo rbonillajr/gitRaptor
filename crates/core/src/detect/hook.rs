@@ -249,7 +249,7 @@ mod tests {
 
     use super::*;
     use crate::channel::AgentMatcher;
-    use crate::channel::authz::TERMINAL_PROOF;
+    use crate::channel::authz::{ORPHANS_MARKED, TERMINAL_PROOF};
     use crate::channel::peer::{ProcError, ProcInfo, ProcSource};
 
     const OLD: &str = "1111111111111111111111111111111111111111";
@@ -269,6 +269,7 @@ mod tests {
                     start_us: start,
                     exe: Some(PathBuf::from(exe)),
                     controlling_terminal: true,
+                    desktop_session: None,
                     session: 1,
                     pgid: pid,
                 },
@@ -300,6 +301,7 @@ mod tests {
             daemon,
             marks: None,
             terminal_proof: TERMINAL_PROOF,
+            orphans_marked: ORPHANS_MARKED,
         }
     }
 

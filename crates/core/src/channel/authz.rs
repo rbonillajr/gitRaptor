@@ -12,9 +12,16 @@
 //! operation executor runs) is refused too: it would act with the authority
 //! of whoever requested the operation (confused deputy, DEP-MCP-3).
 //!
+//! On Windows the terminal is the console (TQ-14, DS-TS-GRP-004 § 9): the
+//! process hosting it stands for the session leader, it must be in an
+//! interactive Windows session, and its creator must be the caller or one of
+//! the caller's ancestors.
+//!
 //! Accepted residual risk (ADR-GRP-005 § 6): an agent that detaches from its
-//! process tree (double fork with `setsid`, `launchctl submit`) evades the
-//! ancestry check; the audit still records the attempt.
+//! process tree (double fork with `setsid`, `launchctl submit`, a scheduled
+//! task) evades the ancestry check, and on Windows a process may choose its
+//! parent (`PROC_THREAD_ATTRIBUTE_PARENT_PROCESS`); the audit still records
+//! the attempt.
 
 use std::path::{Component, Path};
 
@@ -117,6 +124,12 @@ pub struct ChainLink {
     pub start_us: u64,
     pub exe: Option<String>,
     pub agent: bool,
+    /// Windows session of the process (absent on Unix).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub desktop_session: Option<u32>,
+    /// This link is the process hosting the caller's console (Windows).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub console_host: bool,
 }
 
 /// The daemon's verdict on one reserved command attempt.
@@ -159,6 +172,8 @@ fn link(info: &ProcInfo, matcher: &AgentMatcher) -> (ChainLink, bool) {
             start_us: info.start_us,
             exe: info.exe.as_ref().map(|p| p.to_string_lossy().into_owned()),
             agent,
+            desktop_session: info.desktop_session,
+            console_host: false,
         },
         agent,
     )
@@ -242,11 +257,22 @@ pub struct Checks<'a> {
     /// after the ancestry is walked (TQ-14). [`TERMINAL_PROOF`] in
     /// production; injected by tests so both branches run on every OS.
     pub terminal_proof: bool,
+    /// Whether the marks of a running operation also cover the descendants
+    /// of a marked child whose parent ended (Unix: its process group).
+    /// Without it, an unattributed caller whose ancestry cannot vouch for it
+    /// is refused even with a terminal proof (C-01, DS-TS-GRP-004 § 9 C4).
+    /// [`ORPHANS_MARKED`] in production; injected by tests.
+    pub orphans_marked: bool,
 }
 
-/// Unix has a controlling terminal and session leaders; Windows has no
-/// equivalent proof yet (TQ-14 → a; OS-verified presence in Phase 2).
-pub const TERMINAL_PROOF: bool = cfg!(unix);
+/// Unix has a controlling terminal and session leaders; Windows has the
+/// console of an interactive session (TQ-14 → A, DS-TS-GRP-004 § 9). An
+/// OS-verified presence for high-risk commands is TS-GRP-007.
+pub const TERMINAL_PROOF: bool = cfg!(any(unix, windows));
+
+/// Process groups mark a whole operation on Unix; Windows has no Job
+/// Objects for it yet (W6).
+pub const ORPHANS_MARKED: bool = cfg!(unix);
 
 /// Runs the checks of ADR-GRP-005 § 6 (points 1 to 3) on the peer of a
 /// connection, now.
@@ -302,17 +328,39 @@ pub fn check_reserved(peer: AcceptedPeer, checks: &Checks<'_>) -> Verdict {
         return refuse(client, chain, RefusalReason::Unsupported);
     }
 
-    // The session leader, unless it is the caller (already walked).
+    // The session leader, unless it is the caller (already walked). On
+    // Windows, the process hosting the console.
     if caller.session == 0 {
         return refuse(client, chain, RefusalReason::IdentityUnverified);
     }
+    let consoles = procs.console_hosts();
+    let own_len = chain.len();
+    // The leader read here, pinned by `(pid, start)` for the last check.
+    let mut leader_pinned = None;
     if caller.session != caller.pid && !chain.iter().any(|l| l.pid == caller.session) {
         match procs.read(caller.session) {
+            // A console hosted by another user, or that cannot be read, is
+            // not the developer's (fail-closed).
+            Ok(leader) if consoles && leader.uid != uid => {
+                return refuse(client, chain, RefusalReason::NoControllingTerminal);
+            }
             // Another user's leader (`login` in Terminal.app): not an agent
             // of this user, and its ancestry is not this user's either.
             Ok(leader) if leader.uid != uid => client.chain_truncated = true,
             Ok(leader) => {
-                let lw = walk(&leader, checks);
+                leader_pinned = Some((leader.pid, leader.start_us));
+                let mut lw = walk(&leader, checks);
+                if consoles && let Some(host) = lw.chain.first_mut() {
+                    host.console_host = true;
+                }
+                // C8: the console's creator (the host's parent, if the walk
+                // could read it) is the caller or one of its ancestors;
+                // otherwise the caller attached to another's console.
+                let creator_ours = lw.chain.get(1).is_some_and(|creator| {
+                    chain[..own_len]
+                        .iter()
+                        .any(|l| (l.pid, l.start_us) == (creator.pid, creator.start_us))
+                });
                 chain.extend(lw.chain);
                 if lw.agent {
                     client.agent_ancestor = true;
@@ -325,6 +373,12 @@ pub fn check_reserved(peer: AcceptedPeer, checks: &Checks<'_>) -> Verdict {
                 if lw.broken {
                     return refuse(client, chain, RefusalReason::IdentityUnverified);
                 }
+                if consoles && !creator_ours {
+                    return refuse(client, chain, RefusalReason::NoControllingTerminal);
+                }
+            }
+            Err(_) if consoles => {
+                return refuse(client, chain, RefusalReason::NoControllingTerminal);
             }
             Err(ProcError::Denied) if procs.foreign_to(caller.session, uid) == Some(true) => {
                 client.chain_truncated = true;
@@ -336,16 +390,89 @@ pub fn check_reserved(peer: AcceptedPeer, checks: &Checks<'_>) -> Verdict {
     if !caller.controlling_terminal {
         return refuse(client, chain, RefusalReason::NoControllingTerminal);
     }
-    // Still the same process after the walk.
+    // Still the same process after the walk, with the same terminal (C5).
     match procs.read(peer.pid) {
-        Ok(again) if again.start_us == caller.start_us && again.ppid == caller.ppid => {}
+        Ok(again)
+            if again.start_us == caller.start_us
+                && again.ppid == caller.ppid
+                && again.session == caller.session
+                && again.controlling_terminal == caller.controlling_terminal => {}
         _ => return refuse(client, chain, RefusalReason::IdentityUnverified),
+    }
+    // And the leader (the console host) walked is still the same process.
+    if let Some((pid, start)) = leader_pinned {
+        match procs.read(pid) {
+            Ok(again) if again.start_us == start => {}
+            _ => return refuse(client, chain, RefusalReason::IdentityUnverified),
+        }
     }
     Verdict {
         client,
         chain,
         refused: None,
     }
+}
+
+/// Why a process's console does not count as the developer's terminal
+/// (Windows, DS-TS-GRP-004 § 9). Only for explaining a refusal: the daemon
+/// decides with [`check_reserved`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConsoleIssue {
+    /// Not attached to a console.
+    NoConsole,
+    /// A console in session 0 (a service, OpenSSH) or a session with no
+    /// user connected.
+    NotInteractive,
+    /// Another process's console: its creator is not in the ancestry (C8).
+    NotYours,
+}
+
+/// The [`ConsoleIssue`] of `pid`, read with `procs`; `None` where consoles
+/// are not the terminal (Unix), when the console counts, or when `pid`
+/// cannot be read.
+pub fn console_issue(procs: &dyn ProcSource, uid: u32, pid: u32) -> Option<ConsoleIssue> {
+    if !procs.console_hosts() {
+        return None;
+    }
+    let me = procs.read(pid).ok()?;
+    if me.session == me.pid {
+        return Some(ConsoleIssue::NoConsole);
+    }
+    if !me.controlling_terminal {
+        return Some(ConsoleIssue::NotInteractive);
+    }
+    let creator = procs.read(me.session).ok().and_then(|host| {
+        procs
+            .read(host.ppid)
+            .ok()
+            .filter(|c| c.start_us <= host.start_us)
+    });
+    let Some(creator) = creator else {
+        return Some(ConsoleIssue::NotYours);
+    };
+    let mut current = me;
+    for _ in 0..MAX_DEPTH {
+        if (current.pid, current.start_us) == (creator.pid, creator.start_us) {
+            return None;
+        }
+        match procs.read(current.ppid) {
+            Ok(parent) if parent.uid == uid && parent.start_us <= current.start_us => {
+                current = parent;
+            }
+            _ => break,
+        }
+    }
+    Some(ConsoleIssue::NotYours)
+}
+
+/// The [`ConsoleIssue`] of this process: a client explains the daemon's
+/// `no-controlling-terminal` with it (C10).
+pub fn own_console_issue() -> Option<ConsoleIssue> {
+    console_issue(
+        &super::peer::SystemProcs,
+        super::peer::current_uid(),
+        std::process::id(),
+    )
 }
 
 #[cfg(test)]
@@ -360,6 +487,39 @@ mod tests {
     struct Tree {
         procs: HashMap<u32, ProcInfo>,
         denied: HashMap<u32, bool>,
+        /// The desktop root (Windows `explorer.exe`).
+        root: Option<u32>,
+        /// `session` names a console host (Windows).
+        consoles: bool,
+    }
+
+    /// `tree`, except that `pid` reads as `after` from its second read on.
+    struct Flip {
+        tree: Tree,
+        pid: u32,
+        after: ProcInfo,
+        reads: std::cell::Cell<u32>,
+    }
+
+    impl ProcSource for Flip {
+        fn read(&self, pid: u32) -> Result<ProcInfo, ProcError> {
+            if pid == self.pid {
+                self.reads.set(self.reads.get() + 1);
+                if self.reads.get() > 1 {
+                    return Ok(self.after.clone());
+                }
+            }
+            self.tree.read(pid)
+        }
+        fn foreign_to(&self, pid: u32, uid: u32) -> Option<bool> {
+            self.tree.foreign_to(pid, uid)
+        }
+        fn is_session_root(&self, info: &ProcInfo) -> bool {
+            self.tree.is_session_root(info)
+        }
+        fn console_hosts(&self) -> bool {
+            self.tree.console_hosts()
+        }
     }
 
     impl Tree {
@@ -375,6 +535,7 @@ mod tests {
                     controlling_terminal: tty,
                     session,
                     pgid: pid,
+                    desktop_session: None,
                 },
             );
         }
@@ -393,6 +554,12 @@ mod tests {
         }
         fn foreign_to(&self, pid: u32, _uid: u32) -> Option<bool> {
             self.denied.get(&pid).copied()
+        }
+        fn is_session_root(&self, info: &ProcInfo) -> bool {
+            self.root == Some(info.pid)
+        }
+        fn console_hosts(&self) -> bool {
+            self.consoles
         }
     }
 
@@ -416,7 +583,7 @@ mod tests {
     /// The daemon in the synthetic trees.
     const DAEMON: (u32, u64) = (70, 700);
 
-    fn verdict(t: &Tree, pid: u32, start: u64) -> Verdict {
+    fn verdict(t: &dyn ProcSource, pid: u32, start: u64) -> Verdict {
         let matcher = AgentMatcher::default();
         let checks = Checks {
             uid: UID,
@@ -425,6 +592,7 @@ mod tests {
             daemon: Some(DAEMON),
             marks: None,
             terminal_proof: true,
+            orphans_marked: true,
         };
         check_reserved(peer(pid, start), &checks)
     }
@@ -553,6 +721,171 @@ mod tests {
             verdict(&t, 99, 1).refused,
             Some(RefusalReason::IdentityUnverified)
         );
+    }
+
+    /// Windows (TQ-14, DS-TS-GRP-004 § 9): explorer (the desktop root, its
+    /// parent gone) → powershell → raptor, the console hosted by a
+    /// `conhost.exe` that powershell started. `session` is the console host.
+    fn windows_console() -> Tree {
+        let mut t = Tree::default();
+        t.add(10, 5, "C:/Windows/explorer.exe", 100, false, 10);
+        t.add(20, 10, "C:/Windows/System32/powershell.exe", 200, true, 21);
+        t.add(21, 20, "C:/Windows/System32/conhost.exe", 210, false, 21);
+        t.add(30, 20, "C:/Users/u/.cargo/bin/raptor.exe", 300, true, 21);
+        t.root = Some(10);
+        t.consoles = true;
+        t
+    }
+
+    #[test]
+    fn a_windows_console_is_accepted() {
+        let v = verdict(&windows_console(), 30, 300);
+        assert_eq!(v.refused, None);
+        assert!(v.client.controlling_terminal);
+        assert!(v.client.chain_truncated);
+        // raptor, powershell, explorer, then the console host (its parent
+        // already walked ends the second walk at the desktop root).
+        assert!(v.chain.iter().any(|l| l.pid == 21));
+    }
+
+    /// The agent opened a pseudoconsole (ConPTY) and a process that
+    /// reached the developer's desktop by a clean path attached to it.
+    #[test]
+    fn a_console_hosted_under_an_agent_is_refused() {
+        let mut t = windows_console();
+        t.add(40, 20, "C:/Users/u/.local/bin/claude.exe", 400, true, 21);
+        t.add(41, 40, "C:/Windows/System32/conhost.exe", 410, false, 41);
+        t.add(42, 10, "C:/Users/u/.cargo/bin/raptor.exe", 420, true, 41);
+        let v = verdict(&t, 42, 420);
+        assert_eq!(v.refused, Some(RefusalReason::SessionLeaderAgent));
+        assert!(v.client.agent_ancestor);
+    }
+
+    /// No console (`DETACHED_PROCESS`, a GUI process): `session` is the
+    /// caller itself. A console in session 0 (a service, OpenSSH) reads as
+    /// no controlling terminal too.
+    #[test]
+    fn without_a_console_or_an_interactive_session_it_is_refused() {
+        let mut t = windows_console();
+        t.add(31, 10, "C:/Users/u/.cargo/bin/raptor.exe", 310, false, 31);
+        assert_eq!(
+            verdict(&t, 31, 310).refused,
+            Some(RefusalReason::NoControllingTerminal)
+        );
+        t.add(32, 20, "C:/Users/u/.cargo/bin/raptor.exe", 320, false, 21);
+        assert_eq!(
+            verdict(&t, 32, 320).refused,
+            Some(RefusalReason::NoControllingTerminal)
+        );
+    }
+
+    /// C5: the caller detached from its console and attached to another
+    /// (`FreeConsole` + `AttachConsole`) while the daemon walked.
+    #[test]
+    fn a_caller_that_changes_console_during_the_checks_is_refused() {
+        let t = windows_console();
+        let mut after = t.procs[&30].clone();
+        after.session = 99;
+        let flip = Flip {
+            tree: t,
+            pid: 30,
+            after: after.clone(),
+            reads: std::cell::Cell::new(0),
+        };
+        assert_eq!(
+            verdict(&flip, 30, 300).refused,
+            Some(RefusalReason::IdentityUnverified)
+        );
+        // Losing the terminal is a change too.
+        let t = developer_terminal();
+        let mut after = t.procs[&30].clone();
+        after.controlling_terminal = false;
+        let flip = Flip {
+            tree: t,
+            pid: 30,
+            after,
+            reads: std::cell::Cell::new(0),
+        };
+        assert_eq!(
+            verdict(&flip, 30, 300).refused,
+            Some(RefusalReason::IdentityUnverified)
+        );
+        // The console host is pinned by (pid, start) too.
+        let t = windows_console();
+        let mut after = t.procs[&21].clone();
+        after.start_us = 999;
+        let flip = Flip {
+            tree: t,
+            pid: 21,
+            after,
+            reads: std::cell::Cell::new(0),
+        };
+        assert_eq!(
+            verdict(&flip, 30, 300).refused,
+            Some(RefusalReason::IdentityUnverified)
+        );
+    }
+
+    /// The caller reached the desktop through a broker (its chain ends
+    /// cleanly at another user's process, WMI say) and attached to the
+    /// developer's console (`AttachConsole`): the console's creator, the
+    /// host's parent, is not in its chain.
+    #[test]
+    fn attaching_to_someone_elses_console_is_refused() {
+        let mut t = windows_console();
+        t.deny(50, true);
+        t.add(51, 50, "C:/Users/u/.cargo/bin/raptor.exe", 510, true, 21);
+        let v = verdict(&t, 51, 510);
+        assert_eq!(v.refused, Some(RefusalReason::NoControllingTerminal));
+        // Where `session` is a session leader (Unix) nothing changes.
+        t.consoles = false;
+        assert_eq!(verdict(&t, 51, 510).refused, None);
+    }
+
+    /// C9: the audit records the Windows session and marks the console
+    /// host; a Unix chain serializes as before.
+    #[test]
+    fn the_audit_chain_marks_the_console_host() {
+        let mut t = windows_console();
+        for p in t.procs.values_mut() {
+            p.desktop_session = Some(2);
+        }
+        let v = verdict(&t, 30, 300);
+        assert_eq!(v.refused, None);
+        let host = v.chain.iter().find(|l| l.console_host).unwrap();
+        assert_eq!((host.pid, host.start_us), (21, 210));
+        assert!(v.chain.iter().all(|l| l.desktop_session == Some(2)));
+        let json = serde_json::to_string(&v.chain).unwrap();
+        assert!(json.contains("\"console_host\":true") && json.contains("\"desktop_session\":2"));
+        let unix = serde_json::to_string(&verdict(&developer_terminal(), 30, 300).chain).unwrap();
+        assert!(!unix.contains("console_host") && !unix.contains("desktop_session"));
+    }
+
+    /// C10: what the CLI tells the developer, from the same reading.
+    #[test]
+    fn the_console_issue_explains_the_refusal() {
+        let t = windows_console();
+        assert_eq!(console_issue(&t, UID, 30), None);
+        let mut t = windows_console();
+        t.add(31, 10, "C:/Users/u/.cargo/bin/raptor.exe", 310, false, 31);
+        t.add(32, 20, "C:/Users/u/.cargo/bin/raptor.exe", 320, false, 21);
+        t.deny(50, true);
+        t.add(51, 50, "C:/Users/u/.cargo/bin/raptor.exe", 510, true, 21);
+        assert_eq!(console_issue(&t, UID, 31), Some(ConsoleIssue::NoConsole));
+        assert_eq!(
+            console_issue(&t, UID, 32),
+            Some(ConsoleIssue::NotInteractive)
+        );
+        assert_eq!(console_issue(&t, UID, 51), Some(ConsoleIssue::NotYours));
+        // Unix: never a console issue.
+        assert_eq!(console_issue(&developer_terminal(), UID, 30), None);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_has_a_terminal_proof() {
+        assert!(TERMINAL_PROOF);
+        assert!(!ORPHANS_MARKED);
     }
 
     #[test]

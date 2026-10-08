@@ -98,7 +98,7 @@ mod tests {
 
     use super::*;
     use crate::channel::AgentMatcher;
-    use crate::channel::authz::TERMINAL_PROOF;
+    use crate::channel::authz::{ORPHANS_MARKED, TERMINAL_PROOF};
     use crate::channel::peer::{ProcError, ProcInfo, ProcSource};
 
     /// A process tree; `args` are the readable command lines, `restart` pids that come back
@@ -121,6 +121,7 @@ mod tests {
                     start_us: start,
                     exe: Some(PathBuf::from(exe)),
                     controlling_terminal: true,
+                    desktop_session: None,
                     session: 1,
                     pgid: pid,
                 },
@@ -156,6 +157,7 @@ mod tests {
             daemon: None,
             marks: None,
             terminal_proof: TERMINAL_PROOF,
+            orphans_marked: ORPHANS_MARKED,
         }
     }
 
@@ -237,6 +239,7 @@ mod tests {
             daemon: None,
             marks: None,
             terminal_proof: TERMINAL_PROOF,
+            orphans_marked: ORPHANS_MARKED,
         };
         assert!(evaluates(Some((me.pid, me.start_us)), &checks));
     }
