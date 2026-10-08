@@ -4,6 +4,7 @@ pub mod autostart;
 pub mod channel;
 pub mod client;
 pub mod daemon;
+pub mod discovery;
 pub mod detect;
 pub mod executor;
 pub mod guardrails;
