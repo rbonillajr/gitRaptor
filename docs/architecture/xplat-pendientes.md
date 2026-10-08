@@ -182,7 +182,7 @@ El canal ya existe en Windows (DS-TS-GRP-004 § 8). Verificado en la máquina re
 | Pasada | Commit | Pasan | Fallan | Ignorados |
 |---|---|---|---|---|
 | Línea base (`main`) | `fc2f515` | 897 | 0 | 3 |
-| Después de esta rama | ver PR | ver PR | ver PR | ver PR |
+| Después de esta rama | `ab841ce` (lo que viene después solo cambia imports de tests y documentos; `cargo clippy --all-targets -- -D warnings` limpio en la máquina) | 956 | 0 | 3 |
 
 Antes de esta rama se saltaban en Windows estos tests, que ahora corren y pasan: `tm_store_capture` (19), `tm_store_safety` (9, incluido el nuevo de la junction), `tm_apply` (17) y `tm_write_maintenance` (1). También pasan `protected::backend::tests::the_lock_key_is_the_appliers` y los tests nuevos `cfg(windows)`: `files::windows::tests` (7), `tm_write_windows` (1), `winsys` `fs::tests` (2) y `file_id` (1).
 
