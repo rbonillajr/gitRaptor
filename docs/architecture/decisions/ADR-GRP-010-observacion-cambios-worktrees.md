@@ -592,7 +592,7 @@ Criterios de aceptación del PR:
 
 ### Registro de implementación (2026-10-08)
 
-Implementado en: PR #195 (rama `perf/fsevents-ignored-churn`). **Decisión del orquestador (2026-10-08), validada por el Arquitecto.**
+Implementado en: PR #206 (rama `perf/fsevents-ignored-churn`). **Decisión del orquestador (2026-10-08), validada por el Arquitecto.**
 
 | Pieza | Dónde |
 |---|---|
@@ -624,7 +624,7 @@ Frescura de una escritura fuera de la carpeta excluida, con la exclusión activa
 **Decisión del coordinador (2026-10-08).** El stream propio reemplaza el observador del que dependen la Time Machine, los eventos y NFR-01, y Rene lo usa a diario en el dogfooding de M1. Por eso `notify` se conserva como respaldo en macOS durante, al menos, una release.
 
 - **Clave**: `engine.watcher.backend`, `"fsevents"` (por defecto) o `"notify"`. Solo en el perfil (ADR-GRP-007: no es de equipo ni local, porque depende de la máquina). Se lee **al arrancar el daemon**; cambiarla exige reiniciarlo. Un valor que no sea uno de los dos invalida el documento (como cualquier valor fuera de rango) y queda el valor por defecto. En Linux y Windows no aplica: el backend es siempre `notify`.
-- **Con `notify`**: el comportamiento es el de antes del PR #195: un watcher de `notify` por raíz, sin exclusiones en el stream y sin gestor de exclusiones. Se mantienen el filtro del router por carpetas ignoradas (§ 2, Enmienda 2026-10-05) y la regla de que una carpeta con entradas rastreadas no se clasifica ignorada, que no dependen del backend.
+- **Con `notify`**: el comportamiento es el de antes del PR #206: un watcher de `notify` por raíz, sin exclusiones en el stream y sin gestor de exclusiones. Se mantienen el filtro del router por carpetas ignoradas (§ 2, Enmienda 2026-10-05) y la regla de que una carpeta con entradas rastreadas no se clasifica ignorada, que no dependen del backend.
 - **Visibilidad**: `engine.resources` devuelve `watches.backend` y `raptor status --resources` lo muestra en la línea "observador de archivos".
 - **Pruebas**: las suites `watch` y `observe_tiers` corren con **los dos** backends en macOS (un módulo por backend), y `daemon_tiers` comprueba que la clave cambia el backend. Las pruebas de exclusión solo corren con `fsevents`; con `notify`, una prueba comprueba que ninguna carpeta sale del stream.
-- **Retirada**: el respaldo se mantiene en la release que incluya el PR #195 y en la siguiente (⚠️ **ASSUMPTION**: v0.1.0 y la posterior). Se retira, con la clave, cuando el dogfooding de M1 no haya mostrado huecos atribuibles al stream propio. La retirada es un cambio de este ADR.
+- **Retirada**: el respaldo se mantiene en la release que incluya el PR #206 y en la siguiente (⚠️ **ASSUMPTION**: v0.1.0 y la posterior). Se retira, con la clave, cuando el dogfooding de M1 no haya mostrado huecos atribuibles al stream propio. La retirada es un cambio de este ADR.

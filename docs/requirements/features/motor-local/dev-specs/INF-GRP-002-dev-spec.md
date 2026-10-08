@@ -333,13 +333,13 @@ Las *wakeups* no se midieron. El intervalo del escaneo no cambia, así que el n�
 **Para el registro de dogfooding.** Su "reposo" es "ningún evento Git desde la muestra anterior". Con agentes que editan archivos, la Time Machine captura por actividad (quieto 1 s, máximo 5 s), así que una muestra "en reposo" puede incluir trabajo real. Tras este cambio, el criterio 5 se vuelve a medir con 9 o 10 sesiones reales: el banco no basta para cerrarlo.
 
 **Pendiente**:
-- **Churn en carpetas ignoradas (macOS)**: resuelto en la enmienda siguiente (PR #195, ADR-GRP-010 Enmienda 2026-10-08, exclusiones de FSEvents).
+- **Churn en carpetas ignoradas (macOS)**: resuelto en la enmienda siguiente (PR #206, ADR-GRP-010 Enmienda 2026-10-08, exclusiones de FSEvents).
 - Linux: el escaneo lee `/proc/<pid>/stat`, `/proc/stat` y el enlace `exe` por proceso (`SystemProcs::read`). Allí solo se aplica la nueva comprobación de la ruta, sin la mejora de coste: **Pendiente: etapa de validación multiplataforma**.
 - Windows: sin detector.
 
 ## Enmienda (2026-10-08): churn en carpetas ignoradas, exclusiones de FSEvents
 
-Implementado en: PR #195.
+Implementado en: PR #206.
 
 Resuelve el pendiente de la enmienda anterior con la vía de las rutas de exclusión (ADR-GRP-010, Enmienda 2026-10-08): un flujo de FSEvents propio en `gitraptor-macsys` que deja fuera del stream, hasta 8 por raíz, las carpetas ignoradas con churn sostenido. La latencia del stream no cambia (0), así que la frescura tampoco.
 
@@ -356,7 +356,7 @@ Los cuatro casos de NFR-01 tienen test (`crates/core/tests/watch.rs`): una carpe
 
 ## Estado de la implementación (2026-10-08)
 
-Implementado en: PR #76, #98, #133, #192, #195.
+Implementado en: PR #76, #98, #133, #192, #206.
 
 Estado: implementación parcial. Pendiente:
 - ADR-GRP-015: ventana de 10 min con la Time Machine activa (RES-01), RES-03, gate de inotify (RES-04), RES-05 y RES-07.
