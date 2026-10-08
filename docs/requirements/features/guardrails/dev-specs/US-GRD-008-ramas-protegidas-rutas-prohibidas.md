@@ -82,7 +82,7 @@ Cada fila es una **Decisión del orquestador (2026-10-08), validada por Arquitec
 | Claves y límites (`policies.protectedBranches`, `forbiddenPaths`), esquema | `crates/policy/src/settings/{model,document,diagnostic}.rs`, `crates/policy/schema/settings.schema.json` |
 | Matcher de patrones (puro) | `crates/policy/src/guard/glob.rs` (nuevo) |
 | Reglas y combinación (puro) | `crates/policy/src/guard/policies.rs` (nuevo); `guard/mod.rs` gana `Context.policies`, `Facts.touched` y dos llamadas |
-| Lectura de los commits nuevos y sus rutas | `crates/git/src/guard_read.rs` (`new_commit_paths`) |
+| Lectura de los commits nuevos y sus rutas | `crates/git/src/guard_read.rs` (`fresh_commit_paths`) |
 | Contrato: reglas, causa, parámetros, `NotPreventable`, capacidad | `crates/api/src/guard.rs`, `crates/api/src/methods/guard.rs` |
 | Configuración efectiva de las políticas, actor para `RefTransaction`/`Push`, hechos | `crates/core/src/guardrails/policies.rs` (nuevo), `crates/core/src/guardrails/evaluate.rs`, `crates/core/src/channel/conn.rs` |
 | Mensajes y lista "no se puede impedir" | `apps/cli/src/guard.rs`, `apps/cli/i18n/{en,es}/guard.txt` |
@@ -127,7 +127,7 @@ Mensajes (`guard.txt`, plantillas fijas, parámetros etiquetados y saneados, sin
 
 ## 6. Criterios de aceptación verificables
 
-Repos, remotos, perfiles y daemons temporales (NFR-01); Git, `raptor` y `raptor-hook` reales; el agente es `raptor-fake-agent` como Claude Code (patrón de `apps/cli/tests/guard_us_grd_018.rs`). Suite nueva: `apps/cli/tests/guard_us_grd_008.rs` (se niega a correr sin *debug assertions*). Pruebas unitarias en `crates/policy` (matcher, combinación, reglas, configuración) y `crates/git/tests/new_commit_paths.rs`.
+Repos, remotos, perfiles y daemons temporales (NFR-01); Git, `raptor` y `raptor-hook` reales; el agente es `raptor-fake-agent` como Claude Code (patrón de `apps/cli/tests/guard_us_grd_018.rs`). Suite nueva: `apps/cli/tests/guard_us_grd_008.rs` (se niega a correr sin *debug assertions*). Pruebas unitarias en `crates/policy` (matcher, combinación, reglas, configuración) y `crates/git/tests/fresh_commit_paths.rs`.
 
 | Criterio | Test |
 |---|---|
@@ -142,7 +142,7 @@ Repos, remotos, perfiles y daemons temporales (NFR-01); Git, `raptor` y `raptor-
 | Sin daemon (degradado) no se aplican y el mínimo sigue; un daemon sin `guard.policies` no cambia | `degraded_mode_applies_no_policy_rule` |
 | Matcher: ramas, rutas, normalización, topes | `crates/policy` `guard::glob::tests::*`, `guard::policies::tests::*` |
 | Configuración: formas, límites, `policy-invalid` | `crates/policy` `settings::document::tests::*` |
-| Commits nuevos y rutas: commit, fusión (diferencia con todos los padres), rango, tope | `crates/git/tests/new_commit_paths.rs` |
+| Commits nuevos y rutas: commit, fusión (diferencia con todos los padres), rango, tope | `crates/git/tests/fresh_commit_paths.rs` |
 
 ## 7. Orden de implementación
 
@@ -194,7 +194,7 @@ Repos, remotos, perfiles y daemons temporales (NFR-01); Git, `raptor` y `raptor-
 
 ### 6.1 Tipos compartidos
 
-Los de § 5: `Rule::{ProtectedBranch, ForbiddenPath}`, `Cause::Unverifiable`, `ParamKind::{Pattern, Path}`, `NotPreventable::{PolicyActor, PolicyReach}` y la capacidad `guard.policies`, todos en `crates/api/src/guard.rs` y `crates/api/src/methods/guard.rs`. Del lado de `crates/policy`: `settings::model::{Policies, PatternPolicy, AppliesTo}`, `guard::policies::{Rules, Scope, Touched}` y `guard::glob::{Pattern, Kind}`. De `crates/git`: `RepoReader::new_commit_paths` y `NewCommits`.
+Los de § 5: `Rule::{ProtectedBranch, ForbiddenPath}`, `Cause::Unverifiable`, `ParamKind::{Pattern, Path}`, `NotPreventable::{PolicyActor, PolicyReach}` y la capacidad `guard.policies`, todos en `crates/api/src/guard.rs` y `crates/api/src/methods/guard.rs`. Del lado de `crates/policy`: `settings::model::{Policies, PatternPolicy, AppliesTo}`, `guard::policies::{Rules, Scope, Touched}` y `guard::glob::{Pattern, Kind}`. De `crates/git`: `RepoReader::fresh_commit_paths` y `NewCommits`.
 
 ### 6.2 Ciclos de vida (DI)
 
@@ -202,7 +202,7 @@ _No aplica — no hay contenedor de dependencias ni servicios con ciclo de vida:
 
 ### 6.3 Firmas del stack
 
-`policy::guard::evaluate(&Operation, &Facts, &Context) -> Evaluation` (sin cambiar la firma: `Context` gana `policies` y `Facts` gana `touched`); `evaluate::evaluate_commit(reader, common, op, bases, CommitContext)` (el `CommitContext` gana `policies`); `RepoReader::new_commit_paths(&self, hidden: &[&str], new: &str, limits: Limits) -> Result<Touched, ReadError>`.
+`policy::guard::evaluate(&Operation, &Facts, &Context) -> Evaluation` (sin cambiar la firma: `Context` gana `policies` y `Facts` gana `touched`); `evaluate::evaluate_commit(reader, common, op, bases, CommitContext)` (el `CommitContext` gana `policies`); `RepoReader::fresh_commit_paths(&self, hidden: &[&str], new: &str, limits: Limits) -> Result<Touched, ReadError>`.
 
 ### 7.1 Forma del error
 
@@ -222,7 +222,7 @@ _No aplica — no se crea ningún almacén ni columna: el registro de decisiones
 
 ### 9. Estrategia de pruebas
 
-§ 6: suite e2e `apps/cli/tests/guard_us_grd_008.rs` con Git, `raptor` y `raptor-hook` reales sobre repos y perfiles temporales; unitarias del matcher, la combinación y las reglas en `crates/policy`; `crates/git/tests/new_commit_paths.rs` para la lectura de commits nuevos (commit, fusión, rango, superficial, clon parcial, rutas no UTF-8 y NFD, topes); un test de `crates/core` por cada sentido de la capacidad `guard.policies`.
+§ 6: suite e2e `apps/cli/tests/guard_us_grd_008.rs` con Git, `raptor` y `raptor-hook` reales sobre repos y perfiles temporales; unitarias del matcher, la combinación y las reglas en `crates/policy`; `crates/git/tests/fresh_commit_paths.rs` para la lectura de commits nuevos (commit, fusión, rango, superficial, clon parcial, rutas no UTF-8 y NFD, topes); un test de `crates/core` por cada sentido de la capacidad `guard.policies`.
 
 
 ## Gaps y violaciones de la constitución
@@ -290,18 +290,18 @@ _No gaps. Ready to implement._ Lo diferido tiene dueño en § 8. Las decisiones 
 
 ### T004 — Leer los commits nuevos y sus rutas
 
-**Objetivo.** `RepoReader::new_commit_paths`: commits nuevos de un movimiento (ocultando `old` y las demás ramas), diferencia de árbol contra todos los padres, topes y `unverifiable`.
+**Objetivo.** `RepoReader::fresh_commit_paths`: commits nuevos de un movimiento (ocultando `old` y las demás ramas), diferencia de árbol contra todos los padres, topes y `unverifiable`.
 
 **Ubicación.**
 - `crates/git/src/guard_read.rs` (**MODIFY**)
-- `crates/git/tests/new_commit_paths.rs` (**CREATE**)
+- `crates/git/tests/fresh_commit_paths.rs` (**CREATE**)
 
 **Reglas**
 - Lector aislado, sin objetos de reemplazo ni commit-graph; ocultar `old` y las ramas locales y remotas salvo las que se actualizan; `old` en ceros se resuelve fuera, en el llamador; fail-closed ante cualquier límite.
 
 - **Depende:** —
 - **Refs:** D5
-- **Aceptación:** `cargo test -p gitraptor-git --test new_commit_paths`
+- **Aceptación:** `cargo test -p gitraptor-git --test fresh_commit_paths`
 
 ### T005 — Contrato y capacidad `guard.policies`
 

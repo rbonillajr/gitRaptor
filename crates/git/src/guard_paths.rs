@@ -20,7 +20,8 @@ pub struct PathLimits {
     pub commits: usize,
     /// Commits the walk may visit.
     pub visited: usize,
-    /// Branch tips that may be hidden from the walk.
+    /// Branch tips hidden from the walk. Past it the rest hide nothing, so more commits count as
+    /// new, never fewer: it bounds the cost, not the safety.
     pub tips: usize,
     /// Changed paths one update may report.
     pub paths: usize,
@@ -33,7 +34,7 @@ impl Default for PathLimits {
         Self {
             commits: 256,
             visited: 100_000,
-            tips: 2_000,
+            tips: 4_096,
             paths: 100_000,
             entries: 2_000_000,
         }
@@ -43,6 +44,9 @@ impl Default for PathLimits {
 /// Which refs already hold the commits they reach.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Hide {
+    /// Nothing but `old`: a cheap first look whose commits are a superset of the new ones, so a
+    /// clean answer is final and a hit is confirmed with one of the others.
+    OldOnly,
     /// Every other local and remote-tracking branch (a ref update: what the repo already holds).
     OtherBranches,
     /// Only remote-tracking branches (a push: what leaves is judged whole, whatever the local
@@ -69,7 +73,7 @@ impl RepoReader {
     /// held (`None` for a new ref); `updated` are the refs of the same transaction, which never
     /// hide anything. `Err` is a repo that cannot be opened for the read: the caller treats it
     /// as unverifiable too.
-    pub fn new_commit_paths(
+    pub fn fresh_commit_paths(
         &self,
         old: Option<&str>,
         new: &str,
@@ -96,10 +100,9 @@ impl RepoReader {
             Ok(Some(_)) => return Ok(NewCommitPaths::default()),
             Ok(None) | Err(_) => return Ok(unverifiable),
         }
-        let Some(tips) = self.hidden_tips(updated, hide, limits.tips)? else {
-            return Ok(unverifiable);
-        };
-        hidden.extend(tips);
+        if hide != Hide::OldOnly {
+            hidden.extend(self.hidden_tips(updated, hide, limits.tips)?);
+        }
         let walk = self
             .repo
             .rev_walk([new])
@@ -135,13 +138,13 @@ impl RepoReader {
         })
     }
 
-    /// The tips of the branches that already hold commits. `None` when there are more than `max`.
+    /// The tips of the branches that already hold commits, at most `max` of them.
     fn hidden_tips(
         &self,
         updated: &[&str],
         hide: Hide,
         max: usize,
-    ) -> Result<Option<Vec<gix::ObjectId>>, ReadError> {
+    ) -> Result<Vec<gix::ObjectId>, ReadError> {
         let unavailable = |e: &dyn std::fmt::Display| ReadError::Unavailable(format!("refs: {e}"));
         let platform = self.repo.references().map_err(|e| unavailable(&e))?;
         let mut tips = Vec::new();
@@ -150,6 +153,7 @@ impl RepoReader {
             let name = reference.name().as_bstr().to_string();
             let trusted = name.starts_with("refs/remotes/")
                 || (hide == Hide::OtherBranches && name.starts_with("refs/heads/"));
+            debug_assert!(hide != Hide::OldOnly);
             if !trusted || updated.contains(&name.as_str()) {
                 continue;
             }
@@ -165,12 +169,12 @@ impl RepoReader {
                 .is_some_and(|o| o.kind == gix::object::Kind::Commit)
             {
                 if tips.len() >= max {
-                    return Ok(None);
+                    break;
                 }
                 tips.push(id);
             }
         }
-        Ok(Some(tips))
+        Ok(tips)
     }
 }
 

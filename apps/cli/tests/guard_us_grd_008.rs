@@ -555,3 +555,19 @@ fn degraded_mode_applies_no_policy_rule() {
         text(&out)
     );
 }
+
+/// DS-US-GRD-008 D11: without the daemon the client still reads the floor and applies its rules
+/// for everyone, so forcing degraded mode (deleting the profile, stopping the daemon) never
+/// leaves less than the minimum plus the readable floor.
+#[test]
+fn degraded_mode_applies_the_rules_for_everyone_of_the_floor() {
+    let m = Machine::new(PROTECT_MAIN_EVERYONE);
+    m.stop();
+    let out = m.commit(false, &[("person.txt", Some("p\n"))], "commit -q");
+    assert!(!out.status.success(), "{}", text(&out));
+    assert!(text(&out).contains("«main»"), "{}", text(&out));
+    // The rules for agents need the actor, which only the daemon resolves.
+    m.ok(m.human("restore -q --staged ."));
+    m.ok(m.human("switch -q feat-x"));
+    m.ok(m.commit(true, &[("agent.txt", Some("a\n"))], "commit -q"));
+}
