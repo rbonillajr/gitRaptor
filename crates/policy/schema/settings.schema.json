@@ -51,9 +51,50 @@
             "local"
           ]
         },
+        "observation": {
+          "$ref": "#/$defs/Observation",
+          "description": "Observation tiers (ADR-GRP-010, Enmienda 2026-10-07, N7)."
+        },
         "watcher": {
           "$ref": "#/$defs/Watcher",
           "description": "Watcher intervals (ADR-GRP-010 § 5)."
+        }
+      },
+      "type": "object"
+    },
+    "Observation": {
+      "description": "`engine.observation` section: when an observed repo goes dormant and how\nits safety nets run. Never at the team level.",
+      "properties": {
+        "dormantAfterHours": {
+          "description": "Hours without activity before a repo goes dormant.",
+          "format": "uint32",
+          "maximum": 720,
+          "minimum": 1,
+          "type": "integer",
+          "x-gitraptor-levels": [
+            "profile",
+            "local"
+          ]
+        },
+        "dormantPollSeconds": {
+          "description": "Interval of the metadata sweep of the dormant repos, in seconds.",
+          "format": "uint32",
+          "maximum": 900,
+          "minimum": 30,
+          "type": "integer",
+          "x-gitraptor-levels": [
+            "profile"
+          ]
+        },
+        "dormantReconcileMinutes": {
+          "description": "Shortest interval of the slow reconciliation of a dormant repo, in\nminutes; the CPU budget may make it longer.",
+          "format": "uint32",
+          "maximum": 1440,
+          "minimum": 15,
+          "type": "integer",
+          "x-gitraptor-levels": [
+            "profile"
+          ]
         }
       },
       "type": "object"
