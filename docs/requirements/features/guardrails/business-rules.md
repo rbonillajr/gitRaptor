@@ -180,6 +180,8 @@ orden de restricción: denegar > pedir confirmación > permitir
 | **Formato de commit** | Un commit cuyo mensaje no cumple el formato fijado. El MVP ofrece al menos Conventional Commits (confirmado por Rene Bonilla, 2026-10-04) | "arreglos varios" con Conventional Commits exigido → denegado, con un ejemplo válido |
 | **Ruta prohibida** | Un commit que modifica, crea o borra una ruta prohibida | Ruta prohibida `secrets/`; un commit que toca `secrets/api.txt` → denegado |
 
+**Nota (Q-GRD-35)**: las ramas protegidas y las rutas prohibidas aplican por defecto solo a los agentes detectados o registrados (`appliesTo: agents`); la persona en su terminal pasa mientras no exista la excepción consciente (BR-AUTH-003). Con `appliesTo: everyone`, opt-in, bloquean también a la persona, sin excepción en el MVP. Si se incumplen varias reglas, el motivo las nombra todas (BR-CALC-001). Crear, mover o borrar una rama que casa con un patrón protegido cuenta como cambiarla.
+
 **Aplicabilidad**: Toda operación gobernada a la que la política se refiere.
 
 **Criticidad**: Alta
