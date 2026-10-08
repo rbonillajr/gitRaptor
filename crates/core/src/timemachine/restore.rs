@@ -81,7 +81,8 @@ pub enum RestoreError {
 }
 
 /// The base permission rule (ADR-TMC-005 § 2) over every actor whose work
-/// the restore takes back. `Ok` with no owners. Any owner that yields
+/// the restore takes back. An unattributed requester over MCP is always
+/// `OtherActor`, owners or not; otherwise `Ok` with no owners. Any owner that yields
 /// `OtherActor` makes the result `OtherActor`; otherwise any
 /// `ConfirmationRequired` makes it `ConfirmationRequired`. Each owner is
 /// checked with [`super::undo::permission`].
