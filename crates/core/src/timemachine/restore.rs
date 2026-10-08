@@ -201,29 +201,40 @@ fn valid_point(
 
 /// The operations done after the point: finished or cut, with a prior
 /// snapshot taken at the point or later (the one whose prior is the point
-/// included).
+/// included). The second list holds the tampered ones that may be after the
+/// point (recorded after it, or with a prior at it or later): their owner
+/// cannot be told, so they are never folded silently.
 fn operations_after<'a>(
     ops: &'a [OperationView],
     snaps: &[SnapshotView],
     point: &SnapshotView,
-) -> Vec<&'a OperationView> {
+) -> (Vec<&'a OperationView>, Vec<&'a OperationView>) {
     let seq_of: HashMap<&str, i64> = snaps
         .iter()
         .map(|s| (s.record.snapshot_id.as_str(), s.record.seq))
         .collect();
-    ops.iter()
+    let prior_after = |o: &OperationView| {
+        o.prior_snapshot
+            .as_deref()
+            .and_then(|p| seq_of.get(p))
+            .is_some_and(|seq| *seq >= point.record.seq)
+    };
+    let (tampered, intact): (Vec<&OperationView>, Vec<&OperationView>) =
+        ops.iter().partition(|o| o.tampered);
+    let after = intact
+        .into_iter()
         .filter(|o| {
-            !o.tampered
-                && matches!(
-                    o.state,
-                    OperationState::Finished | OperationState::Interrupted
-                )
-                && o.prior_snapshot
-                    .as_deref()
-                    .and_then(|p| seq_of.get(p))
-                    .is_some_and(|seq| *seq >= point.record.seq)
+            matches!(
+                o.state,
+                OperationState::Finished | OperationState::Interrupted
+            ) && prior_after(o)
         })
-        .collect()
+        .collect();
+    let tampered = tampered
+        .into_iter()
+        .filter(|o| o.record.seq > point.record.seq || prior_after(o))
+        .collect();
+    (after, tampered)
 }
 
 /// A raw Git event of a registered worktree, after the point.
@@ -321,7 +332,7 @@ pub fn restore_to(
             TmRejectReason::TargetUnavailable,
         ));
     };
-    let after = operations_after(&ops, &snaps, &point);
+    let (after, tampered_after) = operations_after(&ops, &snaps, &point);
 
     // The worktrees of the plan, by their roots in the repo's validated
     // state (SEC-TMC-09): the oplog's scopes and the meta only intersect it.
@@ -405,7 +416,8 @@ pub fn restore_to(
     let roots: Vec<PathBuf> = existing.iter().map(|w| w.root.clone()).collect();
 
     // The engine again, over every worktree of the plan, before their raw
-    // events are read.
+    // events are read. Without an engine (a daemon whose engine store is not
+    // open, or tests) there are no raw events: only the oplog counts.
     let mut raw_after: Vec<RawAfter> = Vec::new();
     if let Some(deps) = env.engine {
         match deps.engine.settle(repo_id, &roots, ANCHOR_SETTLE_LIMIT) {
@@ -425,10 +437,16 @@ pub fn restore_to(
             _ => true,
         };
         for (root, _) in registered.iter().filter(|(r, _)| is_dir(r)) {
-            let raw = RawSide {
-                events: deps.engine.raw_events(repo_id, root).unwrap_or_default(),
-                floor,
+            // Events the engine cannot answer for are not "no events": whose
+            // work they are is unknown, so the restore waits for it.
+            let Some(events) = deps.engine.raw_events(repo_id, root) else {
+                return Err(reject(
+                    plan_scope(&existing, &BTreeSet::new()),
+                    engine_mark,
+                    TmRejectReason::RepoBusy,
+                ));
             };
+            let raw = RawSide { events, floor };
             let wt_key = worktree_key(&registered, root, 0);
             let external = external_events_in(&ops, &snaps, &raw, &root_key(root), &wt_key);
             for (event, ext) in raw.events.into_iter().zip(external) {
@@ -525,13 +543,22 @@ pub fn restore_to(
     // Whose work the restore takes back: the requester of each operation
     // after the point on the plan, and the actor of each raw Git event after
     // it that no operation of ours caused.
+    let op_touches = |op: &OperationView| {
+        op.record.scope.worktrees.iter().any(|r| touches_plan(r))
+            || op.record.scope.refs.iter().any(|r| refs.contains(r))
+    };
+    // A tampered record on the plan hides whose work it is: the history
+    // after the point cannot be trusted, so the point is not restorable.
+    if tampered_after.iter().any(|op| op_touches(op)) {
+        return Err(reject(
+            scope,
+            engine_mark,
+            TmRejectReason::TargetUnavailable,
+        ));
+    }
     let mut owners: Vec<Requester> = Vec::new();
-    for op in &after {
-        let touches = op.record.scope.worktrees.iter().any(|r| touches_plan(r))
-            || op.record.scope.refs.iter().any(|r| refs.contains(r));
-        if touches {
-            owners.push(op.record.requester.clone());
-        }
+    for op in after.iter().filter(|op| op_touches(op)) {
+        owners.push(op.record.requester.clone());
     }
     for raw in raw_after.iter().filter(|r| !r.echo) {
         let touches = plan_roots.contains(&raw.root.as_path())
