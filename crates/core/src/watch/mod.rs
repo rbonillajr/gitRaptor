@@ -317,7 +317,12 @@ fn under(path: &Path, root: &Path) -> bool {
         path.as_os_str().as_encoded_bytes(),
         root.as_os_str().as_encoded_bytes(),
     );
-    p.starts_with(r) && (p.len() == r.len() || r.ends_with(b"/") || p[r.len()] == b'/')
+    // On Windows the separator is `\`: with only `/` no event path was ever under a root and
+    // the observer saw nothing but its periodic reconciliation. On Unix `\` is a file name
+    // character, so it never separates.
+    let separator = |b: u8| b == b'/' || (cfg!(windows) && b == b'\\');
+    p.starts_with(r)
+        && (p.len() == r.len() || r.last().is_some_and(|b| separator(*b)) || separator(p[r.len()]))
 }
 
 /// Files of a worktree's Git directory its own task recomputes on.
@@ -446,7 +451,6 @@ impl Shared {
     /// Routes the paths of one file event. Longest watched prefix first.
     fn route(&self, t_recv: u64, paths: Vec<PathBuf>, rescan: bool) {
         let repos = self.repos.read().unwrap_or_else(|e| e.into_inner());
-        eprintln!("DBG route rescan={rescan} paths={paths:?} roots={:?}", repos.values().flat_map(|r| r.worktrees.iter().map(|w| (w.root.clone(), r.common.clone(), r.tier()))).collect::<Vec<_>>());
         if rescan {
             // The OS does not say what was lost: every task reconciles, and
             // every dormant repo wakes with a gap from its last check.
@@ -1562,6 +1566,28 @@ mod tests {
         assert!(!under(Path::new("/w/repo2/a.rs"), root));
         assert!(!under(Path::new("/w/rep"), root));
         assert!(under(Path::new("/w/repo/x"), Path::new("/w/repo/")));
+    }
+
+    /// The router found no event under any root on Windows: its separator is `\\`.
+    #[cfg(windows)]
+    #[test]
+    fn under_follows_the_windows_separator() {
+        let root = Path::new(r"C:\src\repo");
+        assert!(under(Path::new(r"C:\src\repo"), root));
+        assert!(under(Path::new(r"C:\src\repo\a.rs"), root));
+        assert!(under(Path::new(r"C:\src\repo\sub\a.rs"), root));
+        assert!(!under(Path::new(r"C:\src\repo2\a.rs"), root));
+        assert!(under(
+            Path::new(r"C:\src\repo\x"),
+            Path::new(r"C:\src\repo\")
+        ));
+    }
+
+    /// On Unix a backslash is part of a name, never a separator.
+    #[cfg(unix)]
+    #[test]
+    fn under_does_not_treat_a_backslash_as_a_separator_on_unix() {
+        assert!(!under(Path::new("/w/repo\\a.rs"), Path::new("/w/repo")));
     }
 
     /// Reads never wake a task; writes and their close do.

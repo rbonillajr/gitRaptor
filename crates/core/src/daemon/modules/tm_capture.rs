@@ -34,7 +34,6 @@ impl DaemonModule for TmCapture {
     }
 
     fn observer_hooks(&self) -> Option<Arc<dyn ObserverHooks>> {
-        eprintln!("DBG tm_capture observer_hooks");
         Some(self.capture.observer_hooks(Arc::clone(&self.marks)))
     }
 
