@@ -521,10 +521,6 @@ fn guard_error(command: &str, path: &std::path::Path, err: ClientError) -> ExitC
 /// `raptor guard install [path] [--yes]` (US-GRD-001 E1 and E5).
 pub fn install(path: Option<PathBuf>, yes: bool) -> ExitCode {
     const CMD: &str = "raptor guard install";
-    if cfg!(windows) {
-        eprintln!("{CMD}: {}", t("guard.unsupported-platform", &[]));
-        return ExitCode::FAILURE;
-    }
     let path = command_path(path);
     let mut client = match engine(CMD) {
         Ok(client) => client,
@@ -609,10 +605,6 @@ pub fn install(path: Option<PathBuf>, yes: bool) -> ExitCode {
 /// `raptor guard status [path] [--json]`.
 pub fn status(path: Option<PathBuf>, json: bool) -> ExitCode {
     const CMD: &str = "raptor guard status";
-    if cfg!(windows) {
-        eprintln!("{CMD}: {}", t("guard.unsupported-platform", &[]));
-        return ExitCode::FAILURE;
-    }
     let path = command_path(path);
     let mut client = match engine(CMD) {
         Ok(client) => client,
@@ -688,10 +680,6 @@ const WINDOW_POLL: std::time::Duration = std::time::Duration::from_millis(200);
 /// command before it applies anything: the announcement then expires on its own.
 pub fn uninstall(path: Option<PathBuf>, yes: bool) -> ExitCode {
     const CMD: &str = "raptor guard uninstall";
-    if cfg!(windows) {
-        eprintln!("{CMD}: {}", t("guard.unsupported-platform", &[]));
-        return ExitCode::FAILURE;
-    }
     let path = command_path(path);
     let mut client = match engine(CMD) {
         Ok(client) => client,
@@ -827,10 +815,6 @@ pub fn uninstall(path: Option<PathBuf>, yes: bool) -> ExitCode {
 /// keeps the protection).
 pub fn cancel(path: Option<PathBuf>) -> ExitCode {
     const CMD: &str = "raptor guard cancel";
-    if cfg!(windows) {
-        eprintln!("{CMD}: {}", t("guard.unsupported-platform", &[]));
-        return ExitCode::FAILURE;
-    }
     let path = command_path(path);
     let mut client = match engine(CMD) {
         Ok(client) => client,
@@ -1095,10 +1079,6 @@ fn log_params(path: &std::path::Path, days: u32, limit: Option<u32>) -> GuardLog
 /// `raptor guard log [path] [--days N] [--limit N] [--json]` (US-GRD-005).
 pub fn log(path: Option<PathBuf>, days: u32, limit: u32, json: bool) -> ExitCode {
     const CMD: &str = "raptor guard log";
-    if cfg!(windows) {
-        eprintln!("{CMD}: {}", t("guard.unsupported-platform", &[]));
-        return ExitCode::FAILURE;
-    }
     let path = command_path(path);
     let days = days.clamp(1, gitraptor_api::guard::LOG_RETENTION_DAYS as u32);
     let mut client = match engine(CMD) {
