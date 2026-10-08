@@ -4,6 +4,7 @@
 
 mod tm_common;
 
+#[cfg(unix)]
 use std::path::{Path, PathBuf};
 
 use gitraptor_core::timemachine::oplog::SnapshotLevel;
