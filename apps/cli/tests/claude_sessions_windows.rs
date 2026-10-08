@@ -210,9 +210,10 @@ fn a_claude_code_process_in_a_worktree_is_a_detected_session_until_it_ends() {
         "detection is available on Windows now: {text}"
     );
 
-    // The process ends: the session ends with it.
+    // The process ends: the session ends with it, because its process is gone.
     m.end(pid);
-    m.sessions_when(|s| s.is_empty());
+    let ended = m.sessions_when(|s| s.len() == 1 && s[0]["state"] == "ended");
+    assert_eq!(ended[0]["end_cause"], "process-gone");
 }
 
 #[test]
