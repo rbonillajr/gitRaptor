@@ -2,6 +2,7 @@ mod agent;
 mod autostart;
 mod codes;
 mod commands;
+mod discovery;
 mod events;
 mod guard;
 mod i18n;

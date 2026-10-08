@@ -54,3 +54,7 @@ error.repo-rejected = the repo was rejected
 error.operation-rejected = the operation was refused before running
 error.registration-rejected = the registration was refused
 error.guard-rejected = the protection was not installed
+error.root-rejected = the folder cannot be a code folder
+error.root-broad = the folder is broad: confirm it from your own terminal
+error.root-unknown = that folder is not a declared code folder
+error.not-a-candidate = that repo is not waiting for a decision

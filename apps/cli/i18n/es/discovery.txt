@@ -1,0 +1,39 @@
+# Mensajes de `raptor` para el usuario, en español (NFR-10, ADR-GRP-003): descubrimiento (US-GRP-020).
+# Una línea `clave = texto`. Los marcadores son `{nombre}`; el código los
+# rellena por nombre, nunca concatenando. Toda clave existe también en ../en/discovery.txt.
+
+discovery.refused-agent = rechazado: solo el desarrollador puede cambiar las carpetas de código o descartar repos descubiertos, no un agente ni un proceso lanzado por él
+discovery.roots-empty = no hay carpetas de código declaradas; declara una con `raptor repo roots add <ruta>`
+discovery.roots-header = carpetas de código vigiladas para encontrar repos:
+discovery.root-line = {path}
+discovery.root-line-broad = {path} (amplia: no se vigila, su primer nivel se lista cada 60 s)
+discovery.root-added = vigilando la carpeta de código {path}
+discovery.root-already = la carpeta de código {path} ya estaba declarada
+discovery.found = {count} repos descubiertos
+discovery.found-one = 1 repo descubierto
+discovery.found-hint = míralos con `raptor repo discovered`
+discovery.broad-home = es tu carpeta personal
+discovery.broad-volume = es la raíz de un volumen
+discovery.broad-entries = tiene {entries} entradas en su primer nivel
+discovery.broad-warning = {path} es una carpeta amplia ({why}). Coste: no se vigila; su primer nivel se lista cada 60 s.
+discovery.broad-question = ¿Declarar {path} como carpeta de código de todos modos? [s/N]
+discovery.broad-declined = no se declaró nada
+discovery.rejected-not-absolute = {path} no es una ruta absoluta; indica la ruta completa de la carpeta
+discovery.rejected-missing = {path} no existe; revisa la ruta
+discovery.rejected-not-a-directory = {path} no es una carpeta; indica la carpeta que contiene tus repos
+discovery.rejected-symlink = {path} es un enlace simbólico; declara su ruta real: raptor repo roots add {real}
+discovery.rejected-symlink-plain = {path} es un enlace simbólico; declara la ruta real de la carpeta
+discovery.rejected-filesystem-root = {path} es la raíz del sistema de archivos; elige la carpeta que contiene tus repos
+discovery.rejected-home-ancestor = {path} contiene carpetas de otros usuarios; elige tu propia carpeta de código dentro de tu carpeta personal
+discovery.rejected-inside-repo = {path} es un repo o está dentro de uno; para observarlo usa `raptor repo add {path}`, o declara la carpeta que contiene tus repos
+discovery.rejected-profile = {path} está dentro de los datos propios de GitRaptor; elige otra carpeta
+discovery.rejected-network = {path} está en la red; elige una carpeta de un disco local
+discovery.rejected-too-many = hay demasiadas carpetas de código; retira una antes con `raptor repo roots remove <ruta>`
+discovery.rejected-unreadable = {path} no se puede leer; revisa sus permisos
+discovery.root-removed = ya no se vigila {path}; {count} repos pendientes retirados (los observados se mantienen)
+discovery.none = no hay repos descubiertos pendientes de decisión
+discovery.candidate-line = {name}  {path}  (en {root})
+discovery.ask = ¿Observar {name}?
+discovery.cmd-add = observar: raptor repo add {path}
+discovery.cmd-dismiss = no volver a preguntar: raptor repo dismiss {path}
+discovery.dismissed = descartado {path}; no se volverá a proponer (`raptor repo add` aún lo observa a mano)
