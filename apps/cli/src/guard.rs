@@ -223,6 +223,7 @@ fn not_preventable_text(n: NotPreventable) -> String {
             NotPreventable::VoluntarySkips => "guard.np.voluntary-skips",
             NotPreventable::PolicyActor => "guard.np.policy-actor",
             NotPreventable::PolicyReach => "guard.np.policy-reach",
+            NotPreventable::PolicyFloor => "guard.np.policy-floor",
         },
         &[],
     )

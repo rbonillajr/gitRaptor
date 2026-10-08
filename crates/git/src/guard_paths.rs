@@ -27,6 +27,10 @@ pub struct PathLimits {
     pub paths: usize,
     /// Tree entries that may be compared.
     pub entries: usize,
+    /// Directories deep a tree may be read (Git's own `core.maxTreeDepth` is 2 048).
+    pub depth: usize,
+    /// Bytes of one reported path.
+    pub path_bytes: usize,
 }
 
 impl Default for PathLimits {
@@ -37,6 +41,8 @@ impl Default for PathLimits {
             tips: 4_096,
             paths: 100_000,
             entries: 2_000_000,
+            depth: 512,
+            path_bytes: 4_096,
         }
     }
 }
@@ -94,12 +100,18 @@ impl RepoReader {
             unverifiable: true,
             ..NewCommitPaths::default()
         };
-        // Not a commit (a tag object of a push, a deleted ref): nothing to read.
-        match self.repo.try_find_object(new) {
-            Ok(Some(object)) if object.kind == gix::object::Kind::Commit => {}
-            Ok(Some(_)) => return Ok(NewCommitPaths::default()),
-            Ok(None) | Err(_) => return Ok(unverifiable),
-        }
+        // An annotated tag (a push to a ref that is not a branch) is read as the commit it
+        // peels to; any other object is not something to read: it cannot be verified.
+        let new = match self.repo.try_find_object(new) {
+            Ok(Some(object)) if object.kind == gix::object::Kind::Commit => new,
+            Ok(Some(object)) if object.kind == gix::object::Kind::Tag => {
+                match object.peel_to_kind(gix::object::Kind::Commit) {
+                    Ok(commit) => commit.id,
+                    Err(_) => return Ok(unverifiable),
+                }
+            }
+            Ok(_) | Err(_) => return Ok(unverifiable),
+        };
         if hide != Hide::OldOnly {
             hidden.extend(self.hidden_tips(updated, hide, limits.tips)?);
         }
@@ -150,6 +162,11 @@ impl RepoReader {
         let mut tips = Vec::new();
         for reference in platform.all().map_err(|e| unavailable(&e))? {
             let mut reference = reference.map_err(|e| unavailable(&e))?;
+            // A symbolic ref holds nothing of its own: it follows another ref, which an agent
+            // can point at a tag that hides nothing.
+            if matches!(reference.target(), gix::refs::TargetRef::Symbolic(_)) {
+                continue;
+            }
             let name = reference.name().as_bstr().to_string();
             let trusted = name.starts_with("refs/remotes/")
                 || (hide == Hide::OtherBranches && name.starts_with("refs/heads/"));
@@ -187,6 +204,8 @@ struct Reader<'a> {
 /// One entry of a tree: a directory or a leaf (a file, a link, a submodule).
 struct Entry {
     tree: bool,
+    /// A submodule: reported as a directory, since what it holds changes with it.
+    gitlink: bool,
     mode: gix::objs::tree::EntryMode,
     id: gix::ObjectId,
 }
@@ -204,7 +223,7 @@ impl Reader<'_> {
         for parent in parents {
             let parent_tree = self.tree_of(*parent)?;
             let mut diff = BTreeSet::new();
-            self.diff(Some(parent_tree), Some(tree), "", &mut diff)?;
+            self.diff(Some(parent_tree), Some(tree), "", 0, &mut diff)?;
             mine = Some(match mine {
                 None => diff,
                 Some(previous) => previous.intersection(&diff).cloned().collect(),
@@ -215,7 +234,7 @@ impl Reader<'_> {
             // A root commit touches everything it holds.
             None => {
                 let mut all = BTreeSet::new();
-                self.diff(None, Some(tree), "", &mut all)?;
+                self.diff(None, Some(tree), "", 0, &mut all)?;
                 all
             }
         };
@@ -241,20 +260,21 @@ impl Reader<'_> {
         if self.entries > self.limits.entries {
             return Err(Stop);
         }
-        Ok(decoded
-            .entries
-            .iter()
-            .map(|e| {
-                (
-                    e.filename.to_vec(),
-                    Entry {
-                        tree: e.mode.is_tree(),
-                        mode: e.mode,
-                        id: e.oid.to_owned(),
-                    },
-                )
-            })
-            .collect())
+        let mut entries = HashMap::with_capacity(decoded.entries.len());
+        for e in &decoded.entries {
+            let entry = Entry {
+                tree: e.mode.is_tree(),
+                gitlink: e.mode.is_commit(),
+                mode: e.mode,
+                id: e.oid.to_owned(),
+            };
+            // Two entries with one name is a malformed tree (`fsck` flags it): one could hide
+            // the other, so nothing can be said.
+            if entries.insert(e.filename.to_vec(), entry).is_some() {
+                return Err(Stop);
+            }
+        }
+        Ok(entries)
     }
 
     /// The paths in which the tree `b` differs from `a` (either may be absent: everything is
@@ -264,10 +284,14 @@ impl Reader<'_> {
         a: Option<gix::ObjectId>,
         b: Option<gix::ObjectId>,
         prefix: &str,
+        depth: usize,
         out: &mut BTreeSet<String>,
     ) -> Result<(), Stop> {
         if a == b {
             return Ok(());
+        }
+        if depth > self.limits.depth || prefix.len() > self.limits.path_bytes {
+            return Err(Stop);
         }
         let left = self.entries(a)?;
         let right = self.entries(b)?;
@@ -276,23 +300,26 @@ impl Reader<'_> {
         names.dedup();
         for name in names {
             let path = format!("{prefix}{}", String::from_utf8_lossy(name));
+            if path.len() > self.limits.path_bytes {
+                return Err(Stop);
+            }
             let (x, y) = (left.get(name), right.get(name));
             match (x, y) {
                 (Some(x), Some(y)) if x.tree && y.tree => {
-                    self.diff(Some(x.id), Some(y.id), &format!("{path}/"), out)?;
+                    self.diff(Some(x.id), Some(y.id), &format!("{path}/"), depth + 1, out)?;
                 }
                 (Some(x), Some(y)) if !x.tree && !y.tree => {
                     if x.id != y.id || x.mode != y.mode {
-                        out.insert(path);
+                        out.insert(leaf(&path, x.gitlink || y.gitlink));
                     }
                 }
                 // A directory became a file or the other way round: both sides changed.
                 (x, y) => {
                     for entry in [x, y].into_iter().flatten() {
                         if entry.tree {
-                            self.leaves(entry.id, &format!("{path}/"), out)?;
+                            self.leaves(entry.id, &format!("{path}/"), depth + 1, out)?;
                         } else {
-                            out.insert(path.clone());
+                            out.insert(leaf(&path, entry.gitlink));
                         }
                     }
                 }
@@ -309,20 +336,36 @@ impl Reader<'_> {
         &mut self,
         tree: gix::ObjectId,
         prefix: &str,
+        depth: usize,
         out: &mut BTreeSet<String>,
     ) -> Result<(), Stop> {
+        if depth > self.limits.depth || prefix.len() > self.limits.path_bytes {
+            return Err(Stop);
+        }
         let entries = self.entries(Some(tree))?;
         for (name, entry) in entries {
             let path = format!("{prefix}{}", String::from_utf8_lossy(&name));
+            if path.len() > self.limits.path_bytes {
+                return Err(Stop);
+            }
             if entry.tree {
-                self.leaves(entry.id, &format!("{path}/"), out)?;
+                self.leaves(entry.id, &format!("{path}/"), depth + 1, out)?;
             } else {
-                out.insert(path);
+                out.insert(leaf(&path, entry.gitlink));
             }
             if out.len() > self.limits.paths {
                 return Err(Stop);
             }
         }
         Ok(())
+    }
+}
+
+/// The path of a leaf as reported: a submodule ends in `/`, so a directory pattern covers it.
+fn leaf(path: &str, gitlink: bool) -> String {
+    if gitlink {
+        format!("{path}/")
+    } else {
+        path.to_owned()
     }
 }

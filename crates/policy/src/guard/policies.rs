@@ -49,6 +49,10 @@ pub struct Rules {
 pub struct Policies {
     pub branches: Vec<Rules>,
     pub paths: Vec<Rules>,
+    /// The team configuration could not be read at all (an I/O error, a repo whose main branch
+    /// cannot be resolved): an agent's movement of a branch cannot be judged and is denied, as
+    /// anything that cannot be read never reads as "no rules" (SEC-GRD-17).
+    pub unreadable: bool,
 }
 
 /// One level that may declare the keys.
@@ -101,7 +105,15 @@ pub fn combine(sources: &[Source<'_>]) -> Policies {
 
 impl Policies {
     pub fn is_empty(&self) -> bool {
-        self.branches.is_empty() && self.paths.is_empty()
+        self.branches.is_empty() && self.paths.is_empty() && !self.unreadable
+    }
+
+    /// The rules of a configuration that could not be read.
+    pub fn unreadable() -> Self {
+        Self {
+            unreadable: true,
+            ..Self::default()
+        }
     }
 
     /// Whether a forbidden-path rule governs an operation of `actor`: the only case in which
@@ -123,6 +135,9 @@ impl Policies {
         Self {
             branches: keep(&self.branches),
             paths: keep(&self.paths),
+            // Without an actor the person and the agent are told apart by nothing: a client
+            // that cannot read the configuration does not guess.
+            unreadable: false,
         }
     }
 }
@@ -147,6 +162,17 @@ pub fn protected_branch(
     let Some(branch) = refname.strip_prefix("refs/heads/") else {
         return;
     };
+    if policies.unreadable && actor.is_some() {
+        out.add(
+            Effect::Deny,
+            Reason {
+                rule: Rule::ProtectedBranch,
+                level: Level::System,
+                cause: Some(Cause::Unverifiable),
+                params: vec![Param::new(ParamKind::Branch, branch)],
+            },
+        );
+    }
     for rules in policies.branches.iter().filter(|r| r.scope.governs(actor)) {
         for pattern in &rules.patterns {
             match pattern.matches_branch(branch, budget) {

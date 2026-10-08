@@ -284,7 +284,17 @@ impl Walk {
                 if allowed.iter().any(|a| a == s.as_str()) {
                     return Keep::Yes;
                 }
-                if Self::open_section(path).is_some() {
+                if Self::open_section(path) == Some("policies")
+                    && path.last().is_some_and(|k| k == "appliesTo")
+                {
+                    // Who a rule applies to: a value this version does not know is read as the
+                    // stricter one, never as the default that would silently let the person
+                    // through (US-GRD-008, D1).
+                    *s = "everyone".to_owned();
+                    self.partial = true;
+                    self.note(Code::PolicyInvalid, path);
+                    Keep::Yes
+                } else if Self::open_section(path).is_some() {
                     // An operation a newer binary knows: drop it, keep the rest (D12).
                     self.partial = true;
                     self.note(Code::UnknownOperation, path);
@@ -666,10 +676,20 @@ mod tests {
             let p = team(bad);
             assert_eq!(p.status, SourceStatus::Ignored, "{bad}");
         }
-        // A value of `appliesTo` this version does not know is dropped like an unknown
-        // operation (D12): the source is partial and the safe minimum is forced.
-        let p = team(r#"{"policies":{"forbiddenPaths":{"appliesTo":"robots"}}}"#);
-        assert_eq!(p.status, SourceStatus::Partial);
+        // A value of `appliesTo` this version does not know is read as the stricter one
+        // (`everyone`), never as the default: the source is partial and the minimum is forced.
+        for typo in ["robots", "Everyone", "all"] {
+            let p = team(&format!(
+                r#"{{"policies":{{"forbiddenPaths":{{"appliesTo":"{typo}"}}}}}}"#
+            ));
+            assert_eq!(p.status, SourceStatus::Partial, "{typo}");
+            assert_eq!(codes(&p), ["policy-invalid"]);
+            let paths = p.applicable().unwrap().policies.clone().unwrap();
+            assert_eq!(
+                paths.forbidden_paths.unwrap().applies_to,
+                Some(crate::settings::model::AppliesTo::Everyone)
+            );
+        }
     }
 
     #[test]
