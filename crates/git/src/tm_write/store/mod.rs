@@ -140,7 +140,7 @@ impl StoreRepo {
             durable::check_private_dir(&nohooks)?;
             let tmp = repo_dir.join(format!("{STORE_DIR}.tmp-{}", durable::nanos()));
             layout(&tmp, &nohooks)?;
-            std::fs::rename(&tmp, &path)?;
+            durable::rename_dir(&tmp, &path)?;
             durable::fsync_dir(&repo_dir)?;
             Self::open(tm_root, repo_id)
         }
