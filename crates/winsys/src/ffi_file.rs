@@ -11,10 +11,11 @@ use std::path::Path;
 
 use windows_sys::Win32::Foundation::{ERROR_LOCK_VIOLATION, HANDLE};
 use windows_sys::Win32::Storage::FileSystem::{
-    BY_HANDLE_FILE_INFORMATION, FILE_BASIC_INFO, FILE_DISPOSITION_INFO, FileBasicInfo,
-    FileDispositionInfo, GetFileInformationByHandle, GetFileInformationByHandleEx,
-    LOCKFILE_EXCLUSIVE_LOCK, LOCKFILE_FAIL_IMMEDIATELY, LockFileEx, MOVEFILE_WRITE_THROUGH,
-    MoveFileExW, SetFileInformationByHandle, UnlockFileEx,
+    BY_HANDLE_FILE_INFORMATION, FILE_BASIC_INFO, FILE_DISPOSITION_INFO, FILE_RENAME_INFO,
+    FILE_RENAME_INFO_0, FileBasicInfo, FileDispositionInfo, FileRenameInfo,
+    GetFileInformationByHandle, GetFileInformationByHandleEx, LOCKFILE_EXCLUSIVE_LOCK,
+    LOCKFILE_FAIL_IMMEDIATELY, LockFileEx, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+    SetFileInformationByHandle, UnlockFileEx,
 };
 use windows_sys::Win32::System::IO::OVERLAPPED;
 
@@ -114,6 +115,54 @@ pub(crate) fn delete_on_close(file: &File) -> io::Result<()> {
             size_of::<FILE_DISPOSITION_INFO>() as u32,
         )
     } != 0;
+    if ok {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+/// Renames the file of an open handle (opened with `DELETE` access) to `name` inside the folder
+/// of the open handle `dir`, never replacing (`ReplaceIfExists` false): the entry renamed is the
+/// one opened, whatever its old name holds now.
+pub(crate) fn rename_handle(file: &File, dir: &File, name: &OsStr) -> io::Result<()> {
+    let wide: Vec<u16> = name.encode_wide().collect();
+    let name_bytes = wide.len() * size_of::<u16>();
+    let offset = std::mem::offset_of!(FILE_RENAME_INFO, FileName);
+    let size = (offset + name_bytes).max(size_of::<FILE_RENAME_INFO>());
+    let len = u32::try_from(name_bytes).map_err(|_| io::Error::other("name too long"))?;
+    let header = FILE_RENAME_INFO {
+        Anonymous: FILE_RENAME_INFO_0 {
+            ReplaceIfExists: false,
+        },
+        RootDirectory: dir.as_raw_handle() as HANDLE,
+        FileNameLength: len,
+        FileName: [0],
+    };
+    // A zeroed buffer aligned for `FILE_RENAME_INFO` (8 bytes), long enough for the name.
+    let mut buf = vec![0u64; size.div_ceil(size_of::<u64>())];
+    let info = buf.as_mut_ptr().cast::<FILE_RENAME_INFO>();
+    // SAFETY: `info` points at the start of `buf`, aligned to 8 and at least
+    // `size_of::<FILE_RENAME_INFO>()` bytes long, owned for the whole function.
+    unsafe { info.write(header) };
+    let name_at = buf
+        .as_mut_ptr()
+        .cast::<u8>()
+        .wrapping_add(offset)
+        .cast::<u16>();
+    // SAFETY: `buf` holds `offset + name_bytes` bytes or more, so the `wide.len()` code units
+    // written from `name_at` stay inside it; `offset` is even, so `name_at` is aligned for
+    // `u16`; `wide` and `buf` do not overlap.
+    unsafe { std::ptr::copy_nonoverlapping(wide.as_ptr(), name_at, wide.len()) };
+    let handle = file.as_raw_handle() as HANDLE;
+    let bytes = u32::try_from(buf.len() * size_of::<u64>())
+        .map_err(|_| io::Error::other("name too long"))?;
+    // SAFETY: `handle` is the open handle of `file` and `dir` stays open, both borrowed for the
+    // call; `buf` is an initialized `FILE_RENAME_INFO` followed by its name, `bytes` long,
+    // borrowed only for the call.
+    let ok =
+        unsafe { SetFileInformationByHandle(handle, FileRenameInfo, buf.as_ptr().cast(), bytes) }
+            != 0;
     if ok {
         Ok(())
     } else {
