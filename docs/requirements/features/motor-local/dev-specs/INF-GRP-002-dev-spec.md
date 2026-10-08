@@ -301,6 +301,8 @@ Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
 
 ## Enmienda (2026-10-08): banco `idle`, CPU en reposo con sesiones de agente
 
+Implementado en: PR #192.
+
 **Origen.** El registro de dogfooding (PR #188) midió una CPU en reposo de **1,59 %** con 9 sesiones de Claude Code. El objetivo de RES-01 es < 1 %, y es el criterio 5 de M1. La huella de D7 mide el reposo sin ninguna sesión, así que no veía este coste.
 
 **Causa, medida con `sample` en macOS**: el escaneo S1 del detector (ADR-GRP-012, cada 1 s) leía la tabla entera de procesos del usuario. Por cada proceso hacía un `proc_pidinfo` y un `proc_pidpath`, entre 700 y 1.200 procesos por segundo. Era el 97 % de la CPU del daemon en reposo, y el 89 % de ese escaneo eran esas syscalls. En el daemon real, con 9 agentes trabajando, otro 50 % aproximado era la captura de la Time Machine por la actividad de archivos. Esa captura es trabajo, no reposo: ver "Para el registro de dogfooding" más abajo.
