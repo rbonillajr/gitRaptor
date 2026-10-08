@@ -14,7 +14,8 @@ use super::Result;
 use super::store::RepoStore;
 use crate::guardrails::log::{LogEntry, OverflowRow};
 
-/// Window in which identical occurrences aggregate into one row (ASSUMPTION of § 2).
+/// Window from an entry's first occurrence in which identical ones aggregate into it
+/// (ASSUMPTION of § 2). Fixed, not sliding: a retry every minute does not hide in one row.
 pub const AGGREGATION_WINDOW_MS: i64 = 60_000;
 /// New rows a minute per repo before occurrences go to the rows over the cap (§ 2).
 pub const NEW_ROWS_PER_MINUTE: i64 = 100;
@@ -68,8 +69,8 @@ impl RepoStore {
         let same: Option<i64> = tx
             .query_row(
                 "SELECT id FROM guardrails_decisions
-                 WHERE agg_key = ?1 AND detail = 'full' AND last_ms >= ?2
-                 ORDER BY last_ms DESC LIMIT 1",
+                 WHERE agg_key = ?1 AND detail = 'full' AND at_ms >= ?2
+                 ORDER BY at_ms DESC LIMIT 1",
                 params![key, now - AGGREGATION_WINDOW_MS],
                 |row| row.get(0),
             )

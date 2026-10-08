@@ -875,22 +875,30 @@ impl Connection<'_> {
         {
             return;
         }
+        // Git runs the hook in the repo it acts on: a client whose working directory is not in
+        // the repo of `commonDir` does not write to that repo's log.
+        let Some(cwd) = caller
+            .cwd
+            .clone()
+            .or_else(|| process_cwd(self.peer.pid))
+            .and_then(|cwd| cwd.canonicalize().ok())
+        else {
+            return;
+        };
+        let Some(reader) =
+            crate::guardrails::authorship::worktree_reader(&cwd, Path::new(&params.common_dir))
+        else {
+            return;
+        };
+        let branch = reader.head().ok().and_then(|head| head.branch);
         let checks = self.ctx.checks();
         let (actor, under_executor) =
             crate::guardrails::actor::resolve_logged(self.peer, &checks, Some(&self.ctx.marks));
-        let cwd = caller.cwd.clone().or_else(|| process_cwd(self.peer.pid));
-        let branch = cwd
-            .as_deref()
-            .and_then(|cwd| {
-                crate::guardrails::authorship::worktree_reader(cwd, Path::new(&params.common_dir))
-            })
-            .and_then(|reader| reader.head().ok())
-            .and_then(|head| head.branch);
         let (at_ms, utc_offset_s) = crate::watch::wall_now();
         let ctx = log::LogContext {
             actor,
             under_executor,
-            worktree: cwd.map(|p| p.to_string_lossy().into_owned()),
+            worktree: Some(cwd.to_string_lossy().into_owned()),
             branch,
             authorship_policy: policy.map(str::to_owned),
             at_ms,
