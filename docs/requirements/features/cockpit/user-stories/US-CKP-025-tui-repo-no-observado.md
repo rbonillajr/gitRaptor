@@ -2,7 +2,7 @@
 id: US-CKP-025
 title: "La TUI ofrece observar el repo en el que se abre y, fuera de un repo, lleva a los ya observados"
 type: us
-status: draft
+status: in-progress
 priority: medium
 created: 2026-10-07
 updated: 2026-10-07
@@ -106,4 +106,9 @@ Entonces la TUI avisa "¿Observar billing?" y permite aceptarlo o descartarlo
 ## Diseño y Dev Spec
 
 - **Diseño:** DSYS-GRP-001 (estados vacíos, preguntas con valor por defecto); ADR-GRP-004 § 3.
-- **Dev Spec:** pendiente.
+- **Dev Spec:** [DS-US-CKP-025](../dev-specs/US-CKP-025-tui-repo-no-observado.md).
+
+## Estado de la implementación (2026-10-07)
+
+- **Hechos**: escenarios 1, 2 y 3 (la pregunta en un repo no observado, solo para la persona, con su valor por defecto). Los escenarios 4 y 5 ya los cubría el PR #126.
+- **Diferido**: escenario 6 (repos descubiertos) y los niveles, que dependen de US-GRP-020/022 y de ADR-GRP-010 N4. Decisión del orquestador (2026-10-07), validada por el PO.
