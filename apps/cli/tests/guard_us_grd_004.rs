@@ -188,7 +188,11 @@ mod expected {
             log(&m)
         );
         let text_out = m.raptor(&["guard", "status", m.f.repo.to_str().unwrap()]);
-        assert!(!text(&text_out).contains("no longer active"), "{}", text(&text_out));
+        assert!(
+            !text(&text_out).contains("no longer active"),
+            "{}",
+            text(&text_out)
+        );
     }
 }
 
@@ -199,7 +203,12 @@ mod repair {
     fn reinstall_clears(m: &Machine) {
         let out = m.protect(&m.f.repo);
         assert!(out.status.success(), "{}", text(&out));
-        assert_eq!(hooks(m)["status"], "active", "{:#}", m.status_json(&m.f.repo));
+        assert_eq!(
+            hooks(m)["status"],
+            "active",
+            "{:#}",
+            m.status_json(&m.f.repo)
+        );
         assert_eq!(m.status(&m.f.repo).state, ProtectionState::HooksOnly);
         let back = wait_transition(m, "active");
         assert_eq!(back["operation"]["cause"], Value::Null, "{back:#}");

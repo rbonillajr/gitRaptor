@@ -12,6 +12,7 @@ pub mod authorship;
 pub mod constants;
 pub mod cut;
 pub mod evaluate;
+pub mod health;
 pub mod hook;
 pub mod install;
 pub mod journal;
