@@ -96,6 +96,8 @@ pub(crate) struct ServerCtx {
     pub mcp_repos: Arc<crate::timemachine::protected::McpRepos>,
     /// `git` processes whose commit already had its authorship decision (DS-US-GRD-018 D6).
     pub commit_decisions: crate::guardrails::second_line::Decided,
+    /// The claims of the hooks for the detector (S4, DS-US-GRP-007 § 7).
+    pub hook_claims: Arc<crate::detect::HookClaims>,
 }
 
 impl ServerCtx {
@@ -178,6 +180,7 @@ pub(crate) struct ServeArgs {
     pub resources: Arc<crate::resources::ResourceMonitor>,
     pub guard: Arc<crate::guardrails::GuardRegistry>,
     pub mcp_repos: Arc<crate::timemachine::protected::McpRepos>,
+    pub hook_claims: Arc<crate::detect::HookClaims>,
 }
 
 impl Server {
@@ -219,6 +222,7 @@ impl Server {
             guard: args.guard,
             mcp_repos: args.mcp_repos,
             commit_decisions: Default::default(),
+            hook_claims: args.hook_claims,
         });
         Self::listen(ctx, bound.listener)
     }

@@ -312,6 +312,9 @@ pub struct Daemon {
     marks: Arc<crate::timemachine::engine::RepoMarks>,
     /// The MCP allowlist, shared with the channel (US-MCP-002).
     mcp_repos: Arc<crate::timemachine::protected::McpRepos>,
+    /// The claims of Guardrails hooks (S4): the channel writes them, the
+    /// detector consumes them (DS-US-GRP-007 § 7).
+    hook_claims: Arc<crate::detect::HookClaims>,
     /// The feature modules: the Time Machine's continuous capture
     /// (US-TMC-004) and the ones after it (ADR-GRP-016 § 5).
     modules: modules::Modules,
@@ -576,6 +579,7 @@ impl Daemon {
             guard,
             marks: Arc::default(),
             mcp_repos,
+            hook_claims: Arc::default(),
             modules: modules::Modules::default(),
             report,
             handle,

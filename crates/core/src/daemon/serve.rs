@@ -84,6 +84,7 @@ impl Daemon {
             resources: Arc::clone(&self.resources),
             guard: Arc::clone(&self.guard),
             mcp_repos: Arc::clone(&self.mcp_repos),
+            hook_claims: Arc::clone(&self.hook_claims),
         };
         match crate::channel::Server::serve(bound, args) {
             Ok(server) => {

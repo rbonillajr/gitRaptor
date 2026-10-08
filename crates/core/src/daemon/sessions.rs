@@ -25,7 +25,7 @@ use super::{
     now_ms, profile_error_kind,
 };
 use crate::detect::{
-    Detector, OpenSession, PresentSession, RegisteredSession, S3Outcome, SessionChange,
+    Detector, OpenSession, PresentSession, RefMove, RegisteredSession, S3Outcome, SessionChange,
     SessionConfig, SystemProcLister, detection_supported,
 };
 use crate::observe::RepoRead;
@@ -37,6 +37,10 @@ use crate::watch::{ObservedBatch, ObserverHooks, RawEvent};
 
 /// Evidence stored with an event that S3 attributed (ADR-GRP-013 § 1).
 const S3_EVIDENCE: &str = r#"{"signals":["s3"]}"#;
+
+/// Evidence stored with an event a Guardrails hook proved (S4,
+/// DS-US-GRP-007 § 7).
+const S4_EVIDENCE: &str = r#"{"signals":["s4"]}"#;
 
 /// Evidence stored with an event attributed by a registration: the only
 /// present session of its worktree, a registered "other agent"
@@ -104,6 +108,23 @@ pub(super) fn inferred_agent(
     })
 }
 
+/// The branch move of an event, as S4 matches it: only the kinds that move a
+/// local branch to a new commit (DS-US-GRP-007 § 7).
+fn branch_move(event: &RawEvent) -> Option<RefMove<'_>> {
+    match event.kind {
+        GitEventKind::Commit
+        | GitEventKind::Merge
+        | GitEventKind::Rebase
+        | GitEventKind::BranchUpdate
+        | GitEventKind::BranchCreate => Some(RefMove {
+            branch: event.details.branch.as_ref()?.raw(),
+            old: event.details.old_commit.as_deref(),
+            new: event.details.new_commit.as_deref()?,
+        }),
+        _ => None,
+    }
+}
+
 impl Daemon {
     /// Starts the detector on first use; the observer gets its hooks.
     pub(super) fn detector_hooks(&mut self) -> Arc<dyn ObserverHooks> {
@@ -116,6 +137,7 @@ impl Daemon {
                 SessionConfig::default(),
                 self.config.channel.agents.clone(),
                 Arc::new(SystemProcLister),
+                Arc::clone(&self.hook_claims),
                 clock,
                 Arc::new(move |changes| {
                     handle.sessions(changes);
@@ -366,6 +388,7 @@ impl Daemon {
         let outcome = detector.evidence(
             &batch.repo_id,
             &event.worktree,
+            branch_move(event),
             batch.marks.t_recv,
             batch.marks.t_flush,
         );
@@ -399,6 +422,7 @@ impl Daemon {
             S3Outcome::NoSighting => "no-sighting",
             S3Outcome::Ambiguous => "ambiguous",
             S3Outcome::Attributed(_) => "attributed",
+            S3Outcome::Hook(_) => "s4",
         };
         let diag = detector.diagnostics();
         let count = |n: u64| Field::from(i64::try_from(n).unwrap_or(i64::MAX));
@@ -417,6 +441,12 @@ impl Daemon {
             S3Outcome::Attributed(session) => Some(Attribution {
                 session,
                 evidence: S3_EVIDENCE,
+                inferred: false,
+                trailer: None,
+            }),
+            S3Outcome::Hook(session) => Some(Attribution {
+                session,
+                evidence: S4_EVIDENCE,
                 inferred: false,
                 trailer: None,
             }),
