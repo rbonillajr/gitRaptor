@@ -13,6 +13,7 @@ prior.capture-failed = no se ejecutó: no se pudo guardar antes el trabajo; nada
 undo.done = deshecha {operation} ({id}) en {worktree}
 undo.saved = el estado justo antes de este undo queda guardado como {snapshot}; no se perdió nada
 undo.not-restored = se dejó como estaba ({reason}): {path}
+undo.kept-ref = {ref} se dejó donde la puso la restauración: el worktree que la tiene sacada lo recreó esa restauración y sigue ahí
 undo.path.overlap = alguien más lo cambió mientras tanto
 undo.path.not-guaranteed = este sistema de archivos no permite restaurarlo con garantía
 undo.path.blocked = una carpeta del camino es un enlace o está en otro disco
