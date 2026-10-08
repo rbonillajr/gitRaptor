@@ -121,9 +121,11 @@ pub(crate) enum DiscoveryError {
 pub(crate) enum DiscoveryRequest {
     Roots(SyncSender<Option<Vec<RootView>>>),
     Candidates(SyncSender<Option<Vec<CandidateView>>>),
+    /// What a root is checked against: the channel validates and lists
+    /// it on its own thread, never on the loop's (SEC-15).
+    Context(SyncSender<RootContext>),
     RootAdd {
-        path: PathBuf,
-        confirm_broad: bool,
+        root: Box<PreparedRoot>,
         reply: SyncSender<Result<RootAddResult, DiscoveryError>>,
     },
     RootRemove {
@@ -141,6 +143,59 @@ pub(crate) enum DiscoveryRequest {
     },
     /// The path of a candidate is no longer a repo.
     Forget(PathBuf),
+}
+
+/// A root validated and listed once, ready for the loop to persist.
+#[derive(Debug)]
+pub(crate) struct PreparedRoot {
+    /// Canonical.
+    pub path: String,
+    pub broad: Option<gitraptor_api::discovery::BroadReason>,
+    pub listing: Listing,
+}
+
+/// Validates a root (SEC-15), answers `root-broad` until it is confirmed and
+/// lists its first level. Runs on the requesting connection's thread, after
+/// the requester was authorized: a slow or hung file system never stalls
+/// the loop.
+#[cfg_attr(not(unix), allow(dead_code))]
+pub(crate) fn prepare_root(
+    path: &Path,
+    ctx: &RootContext,
+    confirm_broad: bool,
+) -> Result<PreparedRoot, DiscoveryError> {
+    let ValidRoot {
+        path: root,
+        broad,
+        entries,
+    } = discovery::validate_root(path, ctx).map_err(DiscoveryError::Rejected)?;
+    let text = root
+        .to_str()
+        .ok_or(DiscoveryError::Rejected(RootRejectedData {
+            reason: RootRejection::Unreadable,
+            real_path: None,
+        }))?
+        .to_owned();
+    if let Some(reason) = broad
+        && !confirm_broad
+    {
+        return Err(DiscoveryError::Broad(RootBroadData {
+            reason,
+            path: text,
+            entries,
+        }));
+    }
+    let home_root = ctx
+        .home
+        .as_deref()
+        .and_then(|h| gitraptor_git::paths::canonicalize(h).ok())
+        == Some(root.clone());
+    let listing = discovery::list_first_level(&root, home_root).unwrap_or_default();
+    Ok(PreparedRoot {
+        path: text,
+        broad,
+        listing,
+    })
 }
 
 pub(crate) fn root_view(root: &DiscoveryRoot) -> RootView {
@@ -191,12 +246,11 @@ impl Daemon {
                 let candidates = self.profile.discovery_candidates().ok();
                 let _ = reply.send(candidates.map(|c| c.iter().map(candidate_view).collect()));
             }
-            DiscoveryRequest::RootAdd {
-                path,
-                confirm_broad,
-                reply,
-            } => {
-                let _ = reply.send(self.discovery_root_add(&path, confirm_broad));
+            DiscoveryRequest::Context(reply) => {
+                let _ = reply.send(self.root_context());
+            }
+            DiscoveryRequest::RootAdd { root, reply } => {
+                let _ = reply.send(self.discovery_root_add(*root));
             }
             DiscoveryRequest::RootRemove { path, reply } => {
                 let _ = reply.send(self.discovery_root_remove(&path));
@@ -248,22 +302,13 @@ impl Daemon {
 
     fn discovery_root_add(
         &mut self,
-        path: &Path,
-        confirm_broad: bool,
+        prepared: PreparedRoot,
     ) -> Result<RootAddResult, DiscoveryError> {
-        let ctx = self.root_context();
-        let ValidRoot {
-            path: root,
+        let PreparedRoot {
+            path: text,
             broad,
-            entries,
-        } = discovery::validate_root(path, &ctx).map_err(DiscoveryError::Rejected)?;
-        let text = root
-            .to_str()
-            .ok_or(DiscoveryError::Rejected(RootRejectedData {
-                reason: RootRejection::Unreadable,
-                real_path: None,
-            }))?
-            .to_owned();
+            listing,
+        } = prepared;
         let roots = self
             .profile
             .discovery_roots()
@@ -288,21 +333,6 @@ impl Daemon {
                 real_path: None,
             }));
         }
-        if let Some(reason) = broad
-            && !confirm_broad
-        {
-            return Err(DiscoveryError::Broad(RootBroadData {
-                reason,
-                path: text,
-                entries,
-            }));
-        }
-        let home_root = ctx
-            .home
-            .as_deref()
-            .and_then(|h| gitraptor_git::paths::canonicalize(h).ok())
-            == Some(root.clone());
-        let listing = discovery::list_first_level(&root, home_root).unwrap_or_default();
         let now = now_ms();
         self.profile
             .add_discovery_root(&text, broad.is_some(), now)

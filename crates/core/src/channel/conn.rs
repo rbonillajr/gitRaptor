@@ -1012,8 +1012,11 @@ impl Connection<'_> {
             Ok(common_dir) => common_dir,
             Err(reason) => {
                 // A discovered repo deleted before it was accepted stops
-                // being proposed (US-GRP-022).
-                self.ctx.control.discovery_forget(path);
+                // being proposed (US-GRP-022); one that is only unreadable
+                // or untrusted stays.
+                if reason == RepoRejection::NotARepo {
+                    self.ctx.control.discovery_forget(path);
+                }
                 return Err(rejected(reason));
             }
         };
@@ -1093,10 +1096,14 @@ impl Connection<'_> {
                 let params: RootAddParams = request.params()?;
                 let path = validate::client_path(&params.path).map_err(invalid)?;
                 self.reserved(spec, None)?;
+                let ctx = control
+                    .discovery(DiscoveryRequest::Context)
+                    .ok_or_else(unavailable)?;
+                let root = crate::daemon::prepare_root(&path, &ctx, params.confirm_broad)
+                    .map_err(failed)?;
                 let result = control
                     .discovery(|reply| DiscoveryRequest::RootAdd {
-                        path,
-                        confirm_broad: params.confirm_broad,
+                        root: Box::new(root),
                         reply,
                     })
                     .ok_or_else(unavailable)?
