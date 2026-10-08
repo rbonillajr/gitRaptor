@@ -9,6 +9,7 @@
 mod guard_machine;
 
 use gitraptor_api::guard::{Permission, ProtectionState};
+use gitraptor_core::profile::Profile;
 use guard_machine::{Machine, text, uninstalled_exceptions};
 
 #[test]
@@ -42,6 +43,26 @@ fn round_trip(m: &Machine) {
     assert_eq!(status.state, ProtectionState::Unprotected);
 }
 
+/// The outcomes of the uninstall in the audit of reserved commands (US-GRD-003 E6, ADR-GRD-007
+/// § 2), read from the temporary profile once the daemon is stopped.
+fn uninstall_audit(m: &Machine) -> Vec<String> {
+    m.stop();
+    let (profile, _) = Profile::open(m.dirs()).unwrap();
+    profile
+        .audit(0, 1000)
+        .unwrap()
+        .into_iter()
+        .filter(|(_, row)| row.operation == "guard.uninstall")
+        .map(|(_, row)| {
+            if row.outcome != "accepted" {
+                let reason = row.reason.unwrap_or_default();
+                assert!(reason.starts_with("risk-accepted"), "{reason}");
+            }
+            row.outcome
+        })
+        .collect()
+}
+
 fn commit(m: &Machine, lint: &str) -> std::process::Output {
     std::fs::write(m.f.repo.join("lint.txt"), lint).unwrap();
     m.git_ok(&m.f.repo, &["add", "lint.txt"]);
@@ -56,6 +77,8 @@ mod repo_intact {
     fn e1_uninstall_restores_the_exact_state() {
         let m = Machine::new();
         round_trip(&m);
+        // E6 · The applied uninstall stays in the audit, with the risk it accepted.
+        assert!(uninstall_audit(&m).contains(&"applied".to_owned()));
     }
 
     // E1 · …con un hook propio de linter, que sigue funcionando.
@@ -143,6 +166,10 @@ mod repo_intact {
         assert!(m.common().join("gitraptor/hooks/pre-push").is_file());
         let out = m.git(&m.f.repo, &["branch", "-D", "main"]);
         assert!(!out.status.success(), "{}", text(&out));
+        // E6 · The cancelled announcement stays in the audit too.
+        let outcomes = uninstall_audit(&m);
+        assert!(outcomes.contains(&"cancelled".to_owned()), "{outcomes:?}");
+        assert!(!outcomes.contains(&"applied".to_owned()), "{outcomes:?}");
     }
 
     // BR-AUTH-001 · Un agente no puede desinstalar.
