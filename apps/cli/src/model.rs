@@ -298,6 +298,10 @@ pub struct RepoView {
     /// `events.history` and then `git.event`. Empty after every snapshot until the history
     /// arrives again.
     pub commits: Vec<LastCommit>,
+    /// The hook layer of the repo when it is not as it should be (US-GRD-004): from
+    /// `guard.status` after the snapshot, then the protection events. `None`: active, never
+    /// installed, or the engine does not publish it.
+    pub protection: Option<gitraptor_api::guard::HooksLayer>,
 }
 
 impl RepoView {
@@ -498,6 +502,11 @@ pub enum EngineMsg {
     History {
         repo_id: String,
         events: Vec<GitEventView>,
+    },
+    /// The hook layer of a repo, asked after its history (US-GRD-004).
+    Protection {
+        repo_id: String,
+        hooks: Option<gitraptor_api::guard::HooksLayer>,
     },
 }
 

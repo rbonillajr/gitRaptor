@@ -1,11 +1,11 @@
 //! The Guardrails requests the daemon serves and the recovery of their
 //! installs at start (US-GRD-001).
 
-use gitraptor_api::guard::UnloggedPeriod;
+use gitraptor_api::guard::{HooksLayer, HooksStatus, ProtectionLostData, UnloggedPeriod};
 use gitraptor_git::SystemGit;
 
 use super::{Daemon, DaemonConfig, Field, Logger, now_ms, raptor_path};
-use super::{GuardLogReply, GuardReply, GuardRequest};
+use super::{GuardLogReply, GuardReply, GuardRequest, HealthReport};
 
 use gitraptor_api::guard::{GuardUninstallResult, PendingKind, UninstallRefusal};
 
@@ -68,6 +68,13 @@ impl Daemon {
         };
         // An audit row to write once the store is released: (action, outcome, requester).
         let mut audit: Option<(Entry, &'static str, Requester)> = None;
+        // What Guardrails itself changes is an expected transition (US-GRD-004).
+        let own = matches!(
+            request,
+            GuardRequest::Install | GuardRequest::UninstallApply { .. }
+        );
+        // The state before a change of ours: the install and the uninstall move the watch.
+        let before = self.guard.protection().current(&entry.repo_id);
         let reply = match request {
             GuardRequest::Plan => {
                 let mut plan = guard_install::plan(&ctx, repo_id, common, store);
@@ -189,7 +196,105 @@ impl Daemon {
         if let Some((action, outcome, requester)) = audit {
             self.audit_pending(&entry.repo_id, &action, outcome, requester, now);
         }
+        self.protection_after(&entry.repo_id, &reply, own.then_some(before));
         reply
+    }
+
+    /// Follows the hook layer after a request (US-GRD-004): what Guardrails itself did (install,
+    /// uninstall) is an expected change, logged and never alerted; what a status finds is a
+    /// change nobody on our side made.
+    fn protection_after(&mut self, repo_id: &str, reply: &GuardReply, own: Option<HooksLayer>) {
+        let status = match reply {
+            GuardReply::Status(status) => status.as_ref(),
+            GuardReply::Plan(plan) => &plan.status,
+            GuardReply::Uninstall(result) => &result.status,
+            _ => return,
+        };
+        let Some(layer) = status.hooks.clone() else {
+            return;
+        };
+        match own {
+            Some(before) => self.protection_changed(repo_id, Some(before), layer, true),
+            None => self.protection_changed(repo_id, None, layer, false),
+        }
+    }
+
+    /// A check found the hook layer in this state (US-GRD-004).
+    pub(super) fn guard_health(&mut self, report: HealthReport) {
+        self.protection_changed(&report.repo_id, None, report.layer, false);
+    }
+
+    /// Records the state of the hook layer: a change is a transition in the decision log and,
+    /// when nobody on our side made it and the debounce lets it through, an alert on the event
+    /// stream (ADR-GRD-005 § 5). Nothing is repaired here: the developer is told, and
+    /// `raptor guard install` is theirs to run.
+    fn protection_changed(
+        &mut self,
+        repo_id: &str,
+        before: Option<HooksLayer>,
+        layer: HooksLayer,
+        expected: bool,
+    ) {
+        let (now, offset) = crate::watch::wall_now();
+        let seen = {
+            let mut protection = self.guard.protection();
+            match before {
+                Some(from) => protection.observe_from(repo_id, from, layer, now, expected),
+                None => protection.observe(repo_id, layer, now, expected),
+            }
+        };
+        let Some(transition) = seen else {
+            return;
+        };
+        let Ok(Some(repo)) = self.profile.repo(repo_id) else {
+            return;
+        };
+        self.wake_for_request(repo_id);
+        let entry = guard_protection_entry(
+            &repo.canonical_path.to_string_lossy(),
+            now,
+            offset,
+            &transition,
+        );
+        let written = self
+            .stores
+            .iter_mut()
+            .find(|(id, _)| id == repo_id)
+            .is_some_and(|(_, store)| store.record_guard_decision(&entry).is_ok());
+        if !written {
+            self.logger.error(
+                "guard_protection_log_failed",
+                &[("repo", Field::id(repo_id))],
+            );
+        }
+        if matches!(
+            transition.from,
+            HooksStatus::Inactive | HooksStatus::Orphaned
+        ) && transition.to.status == HooksStatus::Active
+        {
+            self.bus.publish(
+                gitraptor_api::event::GUARD_PROTECTION_RESTORED,
+                ProtectionLostData {
+                    repo_id: repo_id.to_owned(),
+                    hooks: transition.to.clone(),
+                },
+                None,
+                |_| {},
+            );
+        }
+        if transition.alert {
+            self.logger
+                .warn("guard_protection_lost", &[("repo", Field::id(repo_id))]);
+            self.bus.publish(
+                gitraptor_api::event::GUARD_PROTECTION_LOST,
+                ProtectionLostData {
+                    repo_id: repo_id.to_owned(),
+                    hooks: transition.to,
+                },
+                None,
+                |_| {},
+            );
+        }
     }
 
     /// The permanent audit of an announced action that was applied, cancelled, failed or
@@ -219,6 +324,22 @@ impl Daemon {
             );
         }
     }
+}
+
+fn guard_protection_entry(
+    common_dir: &str,
+    at_ms: i64,
+    utc_offset_s: i32,
+    t: &crate::guardrails::protection::Transition,
+) -> LogEntry {
+    crate::guardrails::log::protection_entry(
+        common_dir,
+        at_ms,
+        utc_offset_s,
+        t.from,
+        &t.to,
+        t.expected,
+    )
 }
 
 /// Startup recovery of the Guardrails installs of every observed repo.

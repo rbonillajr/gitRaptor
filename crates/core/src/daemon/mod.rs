@@ -77,7 +77,7 @@ pub use lock::{InstanceLock, LOCK_FILE, running_pid, wait_until_released};
 pub use log::{Field, LOG_FILE, Level, LogLimits, Logger};
 pub use mcp::McpMarkError;
 use shutdown::Control;
-pub(crate) use shutdown::{GuardLogReply, GuardReply, GuardRequest};
+pub(crate) use shutdown::{GuardLogReply, GuardReply, GuardRequest, HealthReport};
 pub(crate) use shutdown::{RegisterRequest, RepoAddRequest, WithdrawRequest};
 pub use shutdown::{
     RegistrationError, RepoCommandError, ShutdownHandle, StopCause, TierTestOp,
@@ -795,6 +795,7 @@ impl Daemon {
                 }
                 Ok(Control::Discovery(request)) => self.discovery(request),
                 Ok(Control::GuardRecord(entry)) => self.guard_record(*entry),
+                Ok(Control::GuardHealth(report)) => self.guard_health(*report),
                 Ok(Control::GuardLog {
                     common_dir,
                     since_ms,

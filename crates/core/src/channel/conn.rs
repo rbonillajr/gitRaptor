@@ -568,6 +568,9 @@ impl Connection<'_> {
             self.profile != ConnectionProfile::Full
                 || !self.has(methods::CAP_DISCOVERY_EVENTS.name),
         );
+        // Nor the loss of the protection without `guard.protection` (US-GRD-004).
+        self.outbox
+            .set_without_protection(!self.has(methods::CAP_GUARD_PROTECTION.name));
         // Nor the declared authorship of commits without `events.authorship`
         // (US-GRD-019): `raptor-mcp` never asks for it.
         self.outbox
@@ -1252,6 +1255,11 @@ impl Connection<'_> {
         if !self.has(methods::CAP_GUARD_PENDING_ACTION.name) {
             status.pending = None;
         }
+        if !self.has(methods::CAP_GUARD_PROTECTION.name) {
+            status.hooks = None;
+            status.diagnostics.clear();
+            status.minimum_set = None;
+        }
         status.last_refusal = self.guard_blockers(std::mem::take(&mut status.last_refusal));
     }
 
@@ -1259,6 +1267,9 @@ impl Connection<'_> {
     fn guard_shape_plan(&self, plan: &mut gitraptor_api::guard::GuardPlan) {
         if !self.has(methods::CAP_GUARD_PRIOR_HOOKS.name) {
             plan.prior = None;
+        }
+        if !self.has(methods::CAP_GUARD_PROTECTION.name) {
+            plan.repair = None;
         }
         plan.blockers = self.guard_blockers(std::mem::take(&mut plan.blockers));
         self.guard_shape_status(&mut plan.status);
@@ -1280,7 +1291,15 @@ impl Connection<'_> {
             .control
             .guard_log(common_dir, params.since_ms, limit)
         {
-            GuardLogReply::Log(log) => Ok(*log),
+            GuardLogReply::Log(log) => {
+                let mut log = *log;
+                // A connection without `guard.protection` never sees the changes of state.
+                if !self.has(methods::CAP_GUARD_PROTECTION.name) {
+                    log.entries
+                        .retain(|e| e.kind != gitraptor_api::guard::LogKind::ProtectionState);
+                }
+                Ok(log)
+            }
             GuardLogReply::NotObserved => Err(rejected(RepoRejection::NotObserved)),
             GuardLogReply::Failed => {
                 Err(ErrorObject::new(code::INTERNAL, "guardrails unavailable"))

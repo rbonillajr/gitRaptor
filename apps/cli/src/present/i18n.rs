@@ -5,6 +5,7 @@
 
 use std::sync::OnceLock;
 
+use gitraptor_api::guard::LossCause;
 use gitraptor_api::messages::{EngineStateView, ResyncReason, UnavailableReason};
 use gitraptor_api::rpc::{ErrorCode, InvalidReason, ScopeRefusal};
 
@@ -184,6 +185,10 @@ pub enum Text<'a> {
     Conn(ConnState),
     Stale,
     ActingAsYourself,
+    /// The hook layer stopped being active (US-GRD-004): why, in a few words.
+    ProtectionLost(Option<LossCause>),
+    /// The hook layer's record was lost (US-GRD-004).
+    ProtectionOrphaned,
     ActingAsAgent(Option<&'a SafeText>),
     Unverified,
     Notice(Notice),
@@ -338,6 +343,20 @@ fn en(text: Text<'_>) -> String {
         }
         Text::Conn(ConnState::Unsupported) => "no engine channel on this platform yet".into(),
         Text::Stale => "out of date".into(),
+        Text::ProtectionLost(cause) => format!(
+            "protection lost: {}",
+            match cause {
+                Some(LossCause::HookspathChanged) => "hooks path changed",
+                Some(LossCause::RepoMoved) => "repo moved",
+                Some(LossCause::FolderMissing) => "hooks folder gone",
+                Some(LossCause::DispatcherMissing) => "a hook is gone",
+                Some(LossCause::DispatcherAltered) => "a hook was edited",
+                Some(LossCause::DispatcherNotExecutable) => "a hook is not executable",
+                Some(LossCause::BinaryMissing) => "raptor is gone",
+                None => "unknown cause",
+            }
+        ),
+        Text::ProtectionOrphaned => "protection without a record".into(),
         Text::ActingAsYourself => "acting as you".into(),
         Text::ActingAsAgent(Some(name)) => format!("acting as {name}"),
         Text::ActingAsAgent(None) => "acting as an agent".into(),
@@ -525,6 +544,20 @@ fn es(text: Text<'_>) -> String {
             "todavía no hay canal del motor en esta plataforma".into()
         }
         Text::Stale => "desactualizado".into(),
+        Text::ProtectionLost(cause) => format!(
+            "protección perdida: {}",
+            match cause {
+                Some(LossCause::HookspathChanged) => "cambió la ruta de hooks",
+                Some(LossCause::RepoMoved) => "el repo se movió",
+                Some(LossCause::FolderMissing) => "falta la carpeta de hooks",
+                Some(LossCause::DispatcherMissing) => "falta un hook",
+                Some(LossCause::DispatcherAltered) => "un hook se editó",
+                Some(LossCause::DispatcherNotExecutable) => "un hook no es ejecutable",
+                Some(LossCause::BinaryMissing) => "falta raptor",
+                None => "causa desconocida",
+            }
+        ),
+        Text::ProtectionOrphaned => "protección sin registro".into(),
         Text::ActingAsYourself => "actúas como tú".into(),
         Text::ActingAsAgent(Some(name)) => format!("actúas como {name}"),
         Text::ActingAsAgent(None) => "actúas como un agente".into(),

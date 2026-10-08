@@ -390,6 +390,23 @@ fn status_lines(status: &GuardStatus) -> Vec<String> {
 /// What `guard.status` says about the hook layer, the diagnostics and the safe minimum
 /// (US-GRD-004); nothing when the daemon predates `guard.protection`.
 fn protection_lines(status: &GuardStatus) -> Vec<String> {
+    let mut out = notice_lines(status);
+    if let Some(min) = &status.minimum_set
+        && min.status == MinimumSetStatus::Active
+        && status.hooks.is_some()
+    {
+        out.push(t("guard.status.minimum-active", &[]));
+    }
+    if status.hooks.is_some() {
+        out.push(t("guard.status.not-checked", &[]));
+    }
+    out
+}
+
+/// What is worth the developer's attention about the protection of a repo: it stopped being
+/// active, its record was lost, its hooks are of an older template, or Git's configuration
+/// could not be read (US-GRD-004). Empty when there is nothing: `raptor status` shows only this.
+pub fn notice_lines(status: &GuardStatus) -> Vec<String> {
     let mut out = Vec::new();
     match &status.hooks {
         Some(hooks) if hooks.status == HooksStatus::Inactive => {
@@ -414,15 +431,6 @@ fn protection_lines(status: &GuardStatus) -> Vec<String> {
             // Said by the base branch line.
             Diagnostic::BaseUnconfirmed => {}
         }
-    }
-    if let Some(min) = &status.minimum_set
-        && min.status == MinimumSetStatus::Active
-        && status.hooks.is_some()
-    {
-        out.push(t("guard.status.minimum-active", &[]));
-    }
-    if status.hooks.is_some() {
-        out.push(t("guard.status.not-checked", &[]));
     }
     out
 }

@@ -46,6 +46,8 @@ pub struct Outbox {
     without_tiers: std::sync::atomic::AtomicBool,
     /// Without `discovery.events` (see [`Outbox::set_without_discovery`]).
     without_discovery: std::sync::atomic::AtomicBool,
+    /// Without `guard.protection` (see [`Outbox::set_without_protection`]).
+    without_protection: std::sync::atomic::AtomicBool,
 }
 
 #[derive(Debug, Default)]
@@ -68,6 +70,7 @@ impl Outbox {
             without_authorship: std::sync::atomic::AtomicBool::new(true),
             without_tiers: std::sync::atomic::AtomicBool::new(true),
             without_discovery: std::sync::atomic::AtomicBool::new(true),
+            without_protection: std::sync::atomic::AtomicBool::new(true),
         })
     }
 
@@ -97,6 +100,13 @@ impl Outbox {
     /// `repo.discovered` never reaches it (`raptor-mcp` never gets it).
     pub fn set_without_discovery(&self, without: bool) {
         self.without_discovery
+            .store(without, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// The connection lacks `guard.protection` (US-GRD-004): `guard.protection-lost` never
+    /// reaches it.
+    pub fn set_without_protection(&self, without: bool) {
+        self.without_protection
             .store(without, std::sync::atomic::Ordering::Relaxed);
     }
 
@@ -155,6 +165,13 @@ impl Outbox {
         if event.kind == gitraptor_api::event::REPO_TIER {
             return self
                 .without_tiers
+                .load(std::sync::atomic::Ordering::Relaxed);
+        }
+        if event.kind == gitraptor_api::event::GUARD_PROTECTION_LOST
+            || event.kind == gitraptor_api::event::GUARD_PROTECTION_RESTORED
+        {
+            return self
+                .without_protection
                 .load(std::sync::atomic::Ordering::Relaxed);
         }
         if event.kind == gitraptor_api::event::REPO_DISCOVERED {

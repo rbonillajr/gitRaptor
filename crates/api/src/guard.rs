@@ -564,6 +564,24 @@ pub struct GuardPlan {
     /// `guard.prior-hooks`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prior: Option<PriorHooks>,
+    /// Present when installing again would repair a protection that stopped being active
+    /// (US-GRD-004): what changes, shown before the developer grants it. Only with
+    /// `guard.protection`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repair: Option<RepairPlan>,
+}
+
+/// What a repair rewrites (US-GRD-004, D9): the files of Guardrails' folder and, when another
+/// tool changed `core.hooksPath`, the value that becomes the chained prior hooks folder.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RepairPlan {
+    pub cause: LossCause,
+    /// Files of `<common>/gitraptor/` that are written again, relative to it.
+    pub files: Vec<Untrusted>,
+    /// The current `core.hooksPath` that the dispatchers chain from now on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chains: Option<Untrusted>,
 }
 
 /// `guard.status` result.

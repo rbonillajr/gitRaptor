@@ -9,6 +9,7 @@
 //! it does not publish is "not available" (BR-CKP-CALC-001).
 
 use gitraptor_api::AgentKind;
+use gitraptor_api::guard::HooksStatus;
 use gitraptor_api::messages::{DivergenceView, SessionStateView};
 use ratatui::Frame;
 
@@ -151,8 +152,16 @@ pub fn status_bar(model: &Model, styles: &Styles) -> StatusBarModel {
         },
         connection,
         connection_label: SafeText::text(&label.join(styles.glyphs.separator)),
-        // Protection is published by Guardrails (TS-GRD); not shown until then.
-        protection: None,
+        // Only what the developer must know: the hook layer stopped being active or lost its
+        // record (US-GRD-004). A healthy or absent protection takes no room in the bar.
+        protection: repo
+            .and_then(|r| r.protection.as_ref())
+            .and_then(|hooks| match hooks.status {
+                HooksStatus::Inactive => Some(Text::ProtectionLost(hooks.cause)),
+                HooksStatus::Orphaned => Some(Text::ProtectionOrphaned),
+                HooksStatus::Active | HooksStatus::NotInstalled => None,
+            })
+            .map(|text| catalog(text, lang)),
         requester: catalog(requester, lang),
         conflicts: attention.and_then(|a| a.conflicts),
         blocked: attention.and_then(|a| a.denials),

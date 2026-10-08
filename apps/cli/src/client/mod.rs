@@ -20,6 +20,7 @@ use std::time::Duration;
 
 use gitraptor_api::clock::monotonic_ns;
 use gitraptor_api::discovery::{CandidatesResult, PathParams};
+use gitraptor_api::guard::{GuardRepoParams, GuardStatus};
 use gitraptor_api::messages::{
     EventsHistoryParams, EventsHistoryResult, MAX_HISTORY_PAGE, RepoAddParams, RepoAddResult,
     RepoRejectedData, RepoRejection, SessionsListParams, SessionsListResult,
@@ -420,6 +421,10 @@ fn sync(
     let Ok(snapshot) = serde_json::from_value::<ScopeSnapshot>(value) else {
         return Ok(Err(LinkError::Lost));
     };
+    let repo_path = match &snapshot {
+        ScopeSnapshot::Repo(repo) => repo.repo.path.raw().to_owned(),
+        ScopeSnapshot::Global(_) => String::new(),
+    };
     let next = ScopeSubscribeParams {
         scope: scope.clone(),
         from_seq: Some(snapshot.scope_seq() + 1),
@@ -437,8 +442,44 @@ fn sync(
         if let Err(err) = sessions(link, repo_id, out)? {
             return Ok(Err(err));
         }
-        return history(link, repo_id, out);
+        if let Err(err) = history(link, repo_id, out)? {
+            return Ok(Err(err));
+        }
+        return protection(link, repo_id, &repo_path, out);
     }
+    Ok(Ok(()))
+}
+
+/// The hook layer of the repo, asked after its history (US-GRD-004): a loss that happened while
+/// no client was open is told now, since the event went by. A refusal (an engine without
+/// `guard.status`, or one that is not in the Guardrails platform) leaves none.
+fn protection(
+    link: &mut dyn Link,
+    repo_id: &str,
+    path: &str,
+    out: &Outlet,
+) -> Result<Result<(), LinkError>, Closed> {
+    let params = GuardRepoParams {
+        path: path.to_owned(),
+    };
+    let value = match link.call(methods::GUARD_STATUS, to_value(&params)) {
+        Ok(value) => value,
+        Err(LinkError::Refused) => return Ok(Ok(())),
+        Err(err) => return Ok(Err(err)),
+    };
+    let recv_ns = monotonic_ns();
+    // An optional notice: a status this client cannot read leaves none, never a reconnection.
+    let Ok(status) = serde_json::from_value::<GuardStatus>(value) else {
+        return Ok(Ok(()));
+    };
+    out.send(Msg::Engine(Stamped {
+        recv_ns,
+        decoded_ns: monotonic_ns(),
+        msg: EngineMsg::Protection {
+            repo_id: repo_id.to_owned(),
+            hooks: status.hooks,
+        },
+    }))?;
     Ok(Ok(()))
 }
 

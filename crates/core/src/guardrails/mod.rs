@@ -21,6 +21,7 @@ pub mod journal;
 pub mod log;
 pub mod pending;
 pub mod prior;
+pub mod protection;
 pub mod registry;
 pub mod second_line;
 pub mod uninstall;
