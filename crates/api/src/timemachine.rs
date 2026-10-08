@@ -191,7 +191,7 @@ impl OperationRunResult {
     }
 }
 
-/// Why a Time Machine command (undo, and later redo and restore) was
+/// Why a Time Machine command (undo, redo and restore) was
 /// rejected: the repo did not change (BR-TMC-VAL-001). Stable codes, the
 /// client renders them (NFR-TMC-14).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -306,6 +306,42 @@ impl UndoResult {
             not_restored: self.not_restored.len() as u64,
         }
     }
+}
+
+/// `timemachine.restore` result (US-TMC-009). Not offered over MCP.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RestoreResult {
+    /// The restore itself, as recorded.
+    pub operation_id: String,
+    /// The point taken right before the restore: what `raptor undo` returns to.
+    pub prior_snapshot_id: String,
+    /// The point the worktree returned to.
+    pub target_snapshot_id: String,
+    pub requester: RequesterView,
+    /// Roots of the worktrees brought to the point, the requested one first
+    /// (text from the repo).
+    pub worktrees: Vec<Untrusted>,
+    /// Roots of worktrees the point had and that were recreated, without
+    /// checkout.
+    pub recreated: Vec<Untrusted>,
+    /// Branches brought to the point (full names), at most
+    /// [`MAX_REPORTED_REFS`].
+    pub refs: Vec<Untrusted>,
+    /// Local branches that exist now and not at the point: never deleted,
+    /// left where they are. At most [`MAX_REPORTED_REFS`].
+    pub kept_branches: Vec<Untrusted>,
+    /// Branches of the point that are gone now and were not brought back:
+    /// nothing done from this worktree after the point touched them. At
+    /// most [`MAX_REPORTED_REFS`].
+    pub not_returned_branches: Vec<Untrusted>,
+    pub written: u64,
+    pub removed: u64,
+    /// At most [`MAX_REPORTED_PATHS`].
+    pub not_restored: Vec<NotRestored>,
+    /// Applier warnings as stable codes (same codes as
+    /// [`UndoResult::warnings`]).
+    pub warnings: Vec<String>,
 }
 
 fn cap_actor(actor: &Actor) -> Actor {
@@ -1067,5 +1103,47 @@ mod tests {
         let r = &mcp["changed_refs"][0];
         assert!(r["untrusted"].as_str().unwrap().chars().count() <= MAX_MCP_NAME_CHARS);
         assert_eq!(r["truncated"], true);
+    }
+
+    /// A restore result travels and comes back intact; a field the client
+    /// does not know is refused.
+    #[test]
+    fn restore_result_round_trip() {
+        let result = RestoreResult {
+            operation_id: ID.into(),
+            prior_snapshot_id: ID.into(),
+            target_snapshot_id: ID.into(),
+            requester: RequesterView {
+                actor: Actor::Unattributed,
+                channel: RequestChannel::Cli,
+                via: ResolvedVia::None,
+                confirmable: false,
+            },
+            worktrees: vec![Untrusted::new("/r/feat-login")],
+            recreated: vec![Untrusted::new("/r/feat-x")],
+            refs: vec![Untrusted::new("refs/heads/feat-login")],
+            kept_branches: vec![Untrusted::new("refs/heads/later")],
+            not_returned_branches: vec![Untrusted::new("refs/heads/gone")],
+            written: 3,
+            removed: 1,
+            not_restored: vec![NotRestored {
+                path: Untrusted::new("a.rs"),
+                reason: NotRestoredReason::Overlap,
+                kept_at: None,
+            }],
+            warnings: vec!["stash-kept".into()],
+        };
+        let mut v = serde_json::to_value(&result).unwrap();
+        assert_eq!(v["kept_branches"][0]["untrusted"], "refs/heads/later");
+        assert_eq!(
+            v["not_returned_branches"][0]["untrusted"],
+            "refs/heads/gone"
+        );
+        let back: RestoreResult = serde_json::from_value(v.clone()).unwrap();
+        assert_eq!(back, result);
+        v.as_object_mut()
+            .unwrap()
+            .insert("extra".into(), json!(true));
+        assert!(serde_json::from_value::<RestoreResult>(v).is_err());
     }
 }
