@@ -276,20 +276,12 @@ mod tests {
         assert_eq!(h.hooks.status, HooksStatus::NotInstalled);
     }
 
+    // A pipe in place of a dispatcher is covered end to end (`guard_us_grd_004_review.rs`): there
+    // is no portable way to make one here without a process.
     #[cfg(unix)]
     #[test]
-    fn a_pipe_a_link_or_a_huge_file_is_never_read_blocking() {
+    fn a_link_or_a_huge_file_is_never_read() {
         let tmp = tempfile::tempdir().unwrap();
-        let fifo = tmp.path().join("fifo");
-        assert!(
-            std::process::Command::new("mkfifo")
-                .arg(&fifo)
-                .status()
-                .unwrap()
-                .success()
-        );
-        // Opened without blocking and refused: it is not a regular file.
-        assert_eq!(read_regular(&fifo).unwrap(), None);
         let target = tmp.path().join("target");
         std::fs::write(&target, b"x").unwrap();
         let link = tmp.path().join("link");
