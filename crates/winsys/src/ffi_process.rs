@@ -18,6 +18,7 @@ use windows_sys::Win32::Security::{
 use windows_sys::Win32::System::Console::{
     GetStdHandle, STD_ERROR_HANDLE, STD_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
 };
+use windows_sys::Win32::System::Diagnostics::Debug::ReadProcessMemory;
 use windows_sys::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
 };
@@ -28,7 +29,8 @@ use windows_sys::Win32::System::RemoteDesktop::{
 use windows_sys::Win32::System::SystemInformation::GetSystemWindowsDirectoryW;
 use windows_sys::Win32::System::Threading::{
     GetCurrentProcess, GetExitCodeProcess, GetProcessTimes, OpenProcess, OpenProcessToken,
-    PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
+    PROCESS_BASIC_INFORMATION, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+    PROCESS_VM_READ, QueryFullProcessImageNameW,
 };
 
 use crate::ffi_handle::Handle;
@@ -71,6 +73,18 @@ pub(crate) fn snapshot() -> Option<Vec<(u32, u32)>> {
 pub(crate) fn open(pid: u32) -> Result<Handle, Error> {
     // SAFETY: plain values; the result is checked by `Handle::new`.
     let raw = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+    // The last error is read right after the failed call.
+    Handle::new(raw).ok_or_else(|| match last_error() {
+        Some(ERROR_ACCESS_DENIED) => Error::Denied,
+        _ => Error::Gone,
+    })
+}
+
+/// Like [`open`], with the right to read the process's memory: only to read its working folder
+/// ([`current_directory`]), and only after the caller checked the owner.
+pub(crate) fn open_reading(pid: u32) -> Result<Handle, Error> {
+    // SAFETY: plain values; the result is checked by `Handle::new`.
+    let raw = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ, 0, pid) };
     // The last error is read right after the failed call.
     Handle::new(raw).ok_or_else(|| match last_error() {
         Some(ERROR_ACCESS_DENIED) => Error::Denied,
@@ -274,4 +288,120 @@ fn clear_inherit(which: STD_HANDLE) {
     // SAFETY: `handle` is a standard handle of this process, open while it runs; only its
     // inherit flag changes.
     unsafe { SetHandleInformation(handle, HANDLE_FLAG_INHERIT, 0) };
+}
+
+/// `ProcessBasicInformation` of `NtQueryInformationProcess`.
+const PROCESS_BASIC_INFORMATION_CLASS: PROCESSINFOCLASS = 0;
+
+/// `ProcessWow64Information`: not zero for a 32-bit process on 64-bit Windows.
+const PROCESS_WOW64_INFORMATION: PROCESSINFOCLASS = 26;
+
+/// Offset of `ProcessParameters` in the 64-bit `PEB` (stable since Windows Vista).
+const PEB_PROCESS_PARAMETERS: usize = 0x20;
+
+/// Offset of `CurrentDirectory.DosPath`, a `UNICODE_STRING`, in the 64-bit
+/// `RTL_USER_PROCESS_PARAMETERS` (stable since Windows Vista).
+const PARAMETERS_CURRENT_DIRECTORY: usize = 0x38;
+
+/// Reads exactly `out.len()` bytes of the memory of `process` at `address`.
+fn read_memory(process: &Handle, address: usize, out: &mut [u8]) -> bool {
+    let mut read = 0usize;
+    // SAFETY: `process` is a valid handle with the right to read memory; `out` is a writable
+    // buffer of the length passed and `read` a writable out pointer, both outliving the call.
+    // Whatever address of the other process is bad, the call fails instead of faulting here.
+    let ok = unsafe {
+        ReadProcessMemory(
+            process.raw(),
+            address as *const _,
+            out.as_mut_ptr().cast(),
+            out.len(),
+            &mut read,
+        )
+    };
+    ok != 0 && read == out.len()
+}
+
+fn read_usize(process: &Handle, address: usize) -> Option<usize> {
+    let mut bytes = [0u8; std::mem::size_of::<usize>()];
+    read_memory(process, address, &mut bytes).then(|| usize::from_le_bytes(bytes))
+}
+
+/// The working folder of a 64-bit process as UTF-16 units (`DosPath` of its current directory),
+/// at most [`MAX_PATH_UNITS`]. It reads three small pieces of the process's memory and nothing
+/// else: the pointer to its parameters, the `UNICODE_STRING` of the folder and the folder text.
+/// Never its command line or its environment (SEC-04). `None` for a 32-bit process (its folder
+/// lives in another structure: refused, not guessed), when the memory cannot be read, or when
+/// what is read does not have the shape of a path. Only for a 64-bit reader, whose offsets these
+/// are.
+pub(crate) fn current_directory(process: &Handle) -> Option<Vec<u16>> {
+    if !cfg!(target_pointer_width = "64") {
+        return None;
+    }
+    let mut wow64 = 0usize;
+    let mut len = 0u32;
+    // SAFETY: `process` is a valid handle with query rights; `wow64` is a writable `usize` whose
+    // size is the length passed, and `len` a writable out pointer, both outliving the call.
+    let status = unsafe {
+        NtQueryInformationProcess(
+            process.raw(),
+            PROCESS_WOW64_INFORMATION,
+            (&raw mut wow64).cast(),
+            std::mem::size_of::<usize>() as u32,
+            &mut len,
+        )
+    };
+    if status < 0 || wow64 != 0 {
+        return None;
+    }
+    let mut basic = PROCESS_BASIC_INFORMATION::default();
+    // SAFETY: `process` is a valid handle with query rights; `basic` is a writable
+    // `PROCESS_BASIC_INFORMATION` whose size is the length passed, and `len` a writable out
+    // pointer, both outliving the call.
+    let status = unsafe {
+        NtQueryInformationProcess(
+            process.raw(),
+            PROCESS_BASIC_INFORMATION_CLASS,
+            (&raw mut basic).cast(),
+            std::mem::size_of::<PROCESS_BASIC_INFORMATION>() as u32,
+            &mut len,
+        )
+    };
+    let peb = basic.PebBaseAddress as usize;
+    if status < 0 || peb == 0 {
+        return None;
+    }
+    let parameters = read_usize(process, peb.checked_add(PEB_PROCESS_PARAMETERS)?)?;
+    if parameters == 0 {
+        return None;
+    }
+    // `UNICODE_STRING`: `Length` and `MaximumLength` (bytes), padding, then `Buffer`.
+    let mut string = [0u8; 16];
+    if !read_memory(
+        process,
+        parameters.checked_add(PARAMETERS_CURRENT_DIRECTORY)?,
+        &mut string,
+    ) {
+        return None;
+    }
+    let length = usize::from(u16::from_le_bytes([string[0], string[1]]));
+    let maximum = usize::from(u16::from_le_bytes([string[2], string[3]]));
+    let buffer = usize::from_le_bytes(string[8..16].try_into().ok()?);
+    if length == 0
+        || length % 2 != 0
+        || length > maximum
+        || length > MAX_PATH_UNITS * 2
+        || buffer == 0
+    {
+        return None;
+    }
+    let mut bytes = vec![0u8; length];
+    if !read_memory(process, buffer, &mut bytes) {
+        return None;
+    }
+    Some(
+        bytes
+            .chunks_exact(2)
+            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .collect(),
+    )
 }
