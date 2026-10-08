@@ -24,7 +24,8 @@
 //! Temporary names start with [`TEMP_PREFIX`]. One left behind by a crash holds the target
 //! content (in the store), the prior snapshot's content (in the store) or, before the comparison
 //! ended, someone else's content, which is not in the store and is kept there, never deleted
-//! (NFR-01). Sweeping and reporting them after a crash is pending (INF-TMC-001).
+//! (NFR-01). [`RootDir::temps`] lists them and [`RootDir::restore_temp`] puts one back at its
+//! path, exclusively; the start of the daemon decides which (DS-TS-TMC-003, Enmienda T).
 
 use crate::Oid;
 
@@ -103,6 +104,51 @@ pub enum Outcome {
     Blocked(&'static str),
 }
 
+/// A temporary entry of the applier found in a folder: a file or a link, never followed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TempEntry {
+    /// Its name in the folder (starts with [`TEMP_PREFIX`]).
+    pub name: String,
+    pub kind: Kind,
+    pub id: Oid,
+}
+
+/// What putting a temporary entry back at its path did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Restore {
+    /// The entry is at its path again, byte for byte.
+    Restored,
+    /// Something is at the path: nothing was touched.
+    Occupied,
+    /// The temporary entry is gone or no longer holds the expected content: nothing was touched.
+    Mismatch,
+    /// Another program holds the temporary entry open: nothing was touched.
+    Busy,
+    /// A folder on the way is missing, a link or on another device: nothing was touched.
+    Blocked,
+    /// The file system has no exclusive rename: nothing was touched.
+    NotGuaranteed,
+}
+
+/// Whether `name` is a temporary name of the applier, as found in one folder.
+/// Only the exact form the applier writes counts (`.gitraptor-tm-<digits>`): a user's
+/// `.gitraptor-tm-notes` is not one.
+pub fn is_temp_name(name: &str) -> bool {
+    name.strip_prefix(TEMP_PREFIX)
+        .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+}
+
+/// The path of a probe entry inside `folder` (`""` for the root), to reach the folder itself
+/// through the same checks as a path.
+#[cfg(any(unix, windows))]
+fn in_folder(folder: &[u8]) -> Vec<u8> {
+    if folder.is_empty() {
+        b"x".to_vec()
+    } else {
+        [folder, b"/x"].concat()
+    }
+}
+
 /// How the target file system compares names, probed at the root.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Folding {
@@ -145,6 +191,7 @@ mod unix {
         dev: u64,
         path: PathBuf,
         no_exchange: bool,
+        crash_between_moves: bool,
     }
 
     fn io(e: Errno) -> WriteError {
@@ -170,7 +217,16 @@ mod unix {
                 dev,
                 path: root.to_owned(),
                 no_exchange: false,
+                crash_between_moves: false,
             })
+        }
+
+        /// Stops `remove` right after the current entry went aside, as if the process died there
+        /// (tests of the sweep after a crash, DS-TS-TMC-003 Enmienda T).
+        #[doc(hidden)]
+        pub fn simulating_crash_between_moves(mut self) -> Self {
+            self.crash_between_moves = true;
+            self
         }
 
         /// Behaves as a file system without atomic exchange or exclusive rename: every such
@@ -435,6 +491,11 @@ mod unix {
                 }
                 Err(e) => return Err(io(e)),
             }
+            if self.crash_between_moves {
+                return Err(WriteError::Io(std::io::Error::other(
+                    "simulated crash between the two renames",
+                )));
+            }
             if Self::observe(&dir, tmp.as_bytes())? == Some(Ok((kind, id))) {
                 Self::unlink(&dir, &tmp)?;
                 let _ = rustix::fs::fsync(&dir);
@@ -471,6 +532,66 @@ mod unix {
             };
             Ok(Self::observe(&dir, &name)?.and_then(|r| r.ok()))
         }
+
+        /// Temporary entries of the applier in `folder` (`""` for the root): files and links,
+        /// never followed. Folders and special files are left out; a folder on the way that is a
+        /// link or on another device gives none.
+        pub fn temps(&self, folder: &[u8]) -> Result<Vec<TempEntry>> {
+            let dir = match self.parent(&in_folder(folder), false)? {
+                Ok((dir, _)) => dir,
+                Err(_) => return Ok(Vec::new()),
+            };
+            let mut found = Vec::new();
+            for entry in rustix::fs::Dir::read_from(&dir).map_err(io)? {
+                let entry = entry.map_err(io)?;
+                let Ok(name) = std::str::from_utf8(entry.file_name().to_bytes()) else {
+                    continue;
+                };
+                if !is_temp_name(name) {
+                    continue;
+                }
+                if let Some(Ok((kind, id))) = Self::observe(&dir, name.as_bytes())? {
+                    found.push(TempEntry {
+                        name: name.to_owned(),
+                        kind,
+                        id,
+                    });
+                }
+            }
+            found.sort_by(|a, b| a.name.cmp(&b.name));
+            Ok(found)
+        }
+
+        /// Puts the temporary entry `temp`, in the folder of `rel`, back at `rel` if it still
+        /// holds `expected` and nothing is at `rel`: one exclusive rename, never following a
+        /// link. Anything else leaves both untouched.
+        pub fn restore_temp(
+            &self,
+            rel: &[u8],
+            temp: &str,
+            expected: (Kind, Oid),
+        ) -> Result<Restore> {
+            if !is_temp_name(temp) {
+                return Err(WriteError::InvalidInput("not a temporary name".into()));
+            }
+            let (dir, name) = match self.parent(rel, false)? {
+                Ok(found) => found,
+                Err(_) => return Ok(Restore::Blocked),
+            };
+            if Self::observe(&dir, temp.as_bytes())? != Some(Ok(expected)) {
+                return Ok(Restore::Mismatch);
+            }
+            match self.rename(&dir, temp.as_bytes(), &name, RenameFlags::NOREPLACE) {
+                Ok(()) => {
+                    let _ = rustix::fs::fsync(&dir);
+                    Ok(Restore::Restored)
+                }
+                Err(Errno::EXIST | Errno::NOTEMPTY | Errno::ISDIR) => Ok(Restore::Occupied),
+                Err(Errno::NOENT) => Ok(Restore::Mismatch),
+                Err(Errno::INVAL | Errno::NOTSUP | Errno::NOSYS) => Ok(Restore::NotGuaranteed),
+                Err(e) => Err(io(e)),
+            }
+        }
     }
 }
 
@@ -504,6 +625,11 @@ mod other {
             self
         }
 
+        #[doc(hidden)]
+        pub fn simulating_crash_between_moves(self) -> Self {
+            self
+        }
+
         pub fn probe_folding(&self) -> Result<Folding> {
             Err(WriteError::Unsupported(
                 "atomic exchange in the working tree",
@@ -530,6 +656,19 @@ mod other {
 
         pub fn current(&self, _rel: &[u8]) -> Result<Option<(Kind, Oid)>> {
             Ok(None)
+        }
+
+        pub fn temps(&self, _folder: &[u8]) -> Result<Vec<TempEntry>> {
+            Ok(Vec::new())
+        }
+
+        pub fn restore_temp(
+            &self,
+            _rel: &[u8],
+            _temp: &str,
+            _expected: (Kind, Oid),
+        ) -> Result<Restore> {
+            Ok(Restore::NotGuaranteed)
         }
     }
 }

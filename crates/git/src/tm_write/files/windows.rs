@@ -194,7 +194,7 @@ impl RootDir {
         self
     }
 
-    /// Stops `replace` right after the current entry went aside, as if the process died there
+    /// Stops `replace` and `remove` right after the current entry went aside, as if the process died there
     /// (test of the window between the two renames, W1).
     #[doc(hidden)]
     pub fn simulating_crash_between_moves(mut self) -> Self {
@@ -536,6 +536,11 @@ impl RootDir {
             }
             Err(e) => return Err(e),
         }
+        if self.crash_between_moves {
+            return Err(WriteError::Io(std::io::Error::other(
+                "simulated crash between the two renames",
+            )));
+        }
         let (held, seen) = match self.hold(&aside)? {
             Held::Open(file, seen) => (file, seen),
             Held::Gone => return Ok(Outcome::Overlap { kept_at: None }),
@@ -585,6 +590,66 @@ impl RootDir {
             Err(_) => return Ok(None),
         };
         Ok(self.observe(&dir.join(&name))?.and_then(|r| r.ok()))
+    }
+
+    /// Temporary entries of the applier in `folder` (`""` for the root), never following a link
+    /// or junction. Folders and reparse points are left out; a folder on the way that is a link,
+    /// a junction or on another volume gives none.
+    pub fn temps(&self, folder: &[u8]) -> Result<Vec<TempEntry>> {
+        let (_pins, dir, _) = match self.parent(&super::in_folder(folder), false)? {
+            Ok(found) => found,
+            Err(_) => return Ok(Vec::new()),
+        };
+        let mut found = Vec::new();
+        for entry in std::fs::read_dir(&dir)? {
+            let entry = entry?;
+            let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
+                continue;
+            };
+            if !is_temp_name(&name) {
+                continue;
+            }
+            if let Some(Ok((kind, id))) = self.observe(&dir.join(&name))? {
+                found.push(TempEntry { name, kind, id });
+            }
+        }
+        found.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(found)
+    }
+
+    /// Puts the temporary entry `temp`, in the folder of `rel`, back at `rel` if it still holds
+    /// `expected` and nothing is at `rel`: compared through a handle that shares only reading,
+    /// then one exclusive rename (`MoveFileExW` without `MOVEFILE_REPLACE_EXISTING`), which never
+    /// follows a link or junction. Anything else leaves both untouched.
+    pub fn restore_temp(&self, rel: &[u8], temp: &str, expected: (Kind, Oid)) -> Result<Restore> {
+        if !is_temp_name(temp) {
+            return Err(WriteError::InvalidInput("not a temporary name".into()));
+        }
+        let (_pins, dir, name) = match self.parent(rel, false)? {
+            Ok(found) => found,
+            Err(_) => return Ok(Restore::Blocked),
+        };
+        if self.no_exchange {
+            return Ok(Restore::NotGuaranteed);
+        }
+        let aside = dir.join(temp);
+        match self.hold(&aside)? {
+            Held::Open(file, seen) => {
+                drop(file);
+                if !Self::same(Some(seen), expected.1) {
+                    return Ok(Restore::Mismatch);
+                }
+            }
+            Held::Gone => return Ok(Restore::Mismatch),
+            Held::InUse => return Ok(Restore::Busy),
+        }
+        match rename_no_replace(&aside, &dir.join(&name)) {
+            Ok(()) => Ok(Restore::Restored),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(Restore::Occupied),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Restore::Mismatch),
+            Err(e) if is_in_use(&e) => Ok(Restore::Busy),
+            Err(e) => Err(e.into()),
+        }
     }
 }
 
@@ -753,6 +818,48 @@ mod tests {
             .replace(b"a", &content(b"agent work"), &Expected::Absent, &|_| {})
             .unwrap();
         assert_eq!(out, Outcome::Written);
+    }
+
+    #[test]
+    fn after_a_crash_between_the_two_renames_the_prior_goes_back_only_to_a_free_path() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("a");
+        std::fs::write(&path, b"agent work").unwrap();
+        let root = RootDir::open(tmp.path())
+            .unwrap()
+            .simulating_crash_between_moves();
+        assert!(
+            root.replace(
+                b"a",
+                &content(b"agent work 2"),
+                &present(b"agent work"),
+                &|_| {}
+            )
+            .is_err()
+        );
+        let root = RootDir::open(tmp.path()).unwrap();
+        let found = root.temps(b"").unwrap();
+        assert_eq!(found.len(), 2);
+        let prior = found
+            .iter()
+            .find(|t| t.id == blob_id(b"agent work"))
+            .unwrap();
+        // Taken meanwhile: nothing moves.
+        std::fs::write(&path, b"someone else").unwrap();
+        let expected = (Kind::File, blob_id(b"agent work"));
+        assert_eq!(
+            root.restore_temp(b"a", &prior.name, expected).unwrap(),
+            Restore::Occupied
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), b"someone else");
+        // Free again: the prior is back, byte for byte, and the new content stays aside.
+        std::fs::remove_file(&path).unwrap();
+        assert_eq!(
+            root.restore_temp(b"a", &prior.name, expected).unwrap(),
+            Restore::Restored
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), b"agent work");
+        assert_eq!(temps(tmp.path()).len(), 1);
     }
 
     #[test]
