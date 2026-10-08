@@ -128,16 +128,16 @@ pub(crate) fn delete_on_close(file: &File) -> io::Result<()> {
 /// through `SetFileInformationByHandle` a relative root is refused (`ERROR_INVALID_PARAMETER`)
 /// and a bare name is taken relative to the current directory, so only a full path is safe.
 pub(crate) fn rename_handle(file: &File, to: &Path) -> io::Result<()> {
-    let mut wide = wide(to);
-    wide.pop(); // The length is given: no NUL.
-    let name_bytes = wide.len() * size_of::<u16>();
+    // With its NUL: Windows reads the name up to it, whatever `FileNameLength` says (found on
+    // the real machine: a one-letter name was read on into the bytes after it).
+    let wide = wide(to);
+    let name_bytes = (wide.len() - 1) * size_of::<u16>();
     let offset = std::mem::offset_of!(FILE_RENAME_INFO, FileName);
-    let size = (offset + name_bytes).max(size_of::<FILE_RENAME_INFO>());
+    let size = (offset + wide.len() * size_of::<u16>()).max(size_of::<FILE_RENAME_INFO>());
     let len = u32::try_from(name_bytes).map_err(|_| io::Error::other("name too long"))?;
     let header = FILE_RENAME_INFO {
-        Anonymous: FILE_RENAME_INFO_0 {
-            ReplaceIfExists: false,
-        },
+        // Every byte of the union zeroed: `ReplaceIfExists` false and no other flag.
+        Anonymous: FILE_RENAME_INFO_0 { Flags: 0 },
         RootDirectory: std::ptr::null_mut(),
         FileNameLength: len,
         FileName: [0],
@@ -153,15 +153,15 @@ pub(crate) fn rename_handle(file: &File, to: &Path) -> io::Result<()> {
         .cast::<u8>()
         .wrapping_add(offset)
         .cast::<u16>();
-    // SAFETY: `buf` holds `offset + name_bytes` bytes or more, so the `wide.len()` code units
-    // written from `name_at` stay inside it; `offset` is even, so `name_at` is aligned for
+    // SAFETY: `buf` holds `offset` plus `wide.len()` code units or more, so the units written
+    // from `name_at` (the name and its NUL, over the padding of the header) stay inside it; `offset` is even, so `name_at` is aligned for
     // `u16`; `wide` and `buf` do not overlap.
     unsafe { std::ptr::copy_nonoverlapping(wide.as_ptr(), name_at, wide.len()) };
     let handle = file.as_raw_handle() as HANDLE;
     let bytes = u32::try_from(buf.len() * size_of::<u64>())
         .map_err(|_| io::Error::other("name too long"))?;
-    // SAFETY: `handle` is the open handle of `file`, borrowed for the call; `buf` is an initialized `FILE_RENAME_INFO` followed by its name, `bytes` long,
-    // borrowed only for the call.
+    // SAFETY: `handle` is the open handle of `file`, borrowed for the call; `buf` is an
+    // initialized `FILE_RENAME_INFO` followed by its name, `bytes` long, borrowed only for the call.
     let ok =
         unsafe { SetFileInformationByHandle(handle, FileRenameInfo, buf.as_ptr().cast(), bytes) }
             != 0;
