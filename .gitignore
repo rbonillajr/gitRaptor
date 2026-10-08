@@ -2,6 +2,7 @@
 .claude/runs/
 .claude/.cc-writes/
 .claude/settings.local.json
+.claude/nassa-prefs.local.json
 .claude/agent-memory/
 
 # Node / pnpm
