@@ -9,6 +9,12 @@
 
 pub mod process;
 
+#[cfg(target_os = "macos")]
+pub mod fsevents;
+
+#[cfg(target_os = "macos")]
+#[allow(unsafe_code)]
+mod ffi_fsevents;
 #[cfg(all(
     target_os = "macos",
     any(target_arch = "aarch64", target_arch = "x86_64")
