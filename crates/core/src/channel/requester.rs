@@ -836,12 +836,21 @@ mod real_processes {
             .stdout(Stdio::piped())
             .spawn()
             .unwrap();
-        let stdout = proc.stdout.take().unwrap();
-        let pid = BufReader::new(stdout)
-            .lines()
-            .map_while(Result::ok)
-            .find_map(|l| l.strip_prefix("CHILD=").and_then(|p| p.trim().parse().ok()))
-            .expect("the child's pid");
+        let mut stdout = BufReader::new(proc.stdout.take().unwrap());
+        let mut line = String::new();
+        let pid = loop {
+            line.clear();
+            assert!(stdout.read_line(&mut line).unwrap() > 0, "the child's pid");
+            if let Some(pid) = line
+                .strip_prefix("CHILD=")
+                .and_then(|p| p.trim().parse().ok())
+            {
+                break pid;
+            }
+        };
+        // The copy still prints libtest's summary when it ends: keep its pipe open (closed, the
+        // copy fails with `BrokenPipe`).
+        std::thread::spawn(move || std::io::copy(&mut stdout, &mut std::io::sink()));
         (proc, pid)
     }
 
