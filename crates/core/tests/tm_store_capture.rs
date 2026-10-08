@@ -380,8 +380,7 @@ fn stale_untracked_cache_does_not_hide_new_files() {
     let dir_mtime = f.repo.join("d").metadata().unwrap().modified().unwrap();
     write(&f.repo, "d/new.txt", b"new\n");
     // The folder looks unchanged to the untracked cache.
-    std::fs::File::open(f.repo.join("d"))
-        .unwrap()
+    open_dir_for_times(&f.repo.join("d"))
         .set_modified(dir_mtime)
         .unwrap();
     let env = Env::new(f);
@@ -750,4 +749,19 @@ fn an_observation_gives_way_when_asked_and_a_prior_never_does() {
         env.file(&out.snapshot_id, "api.rs").unwrap(),
         b"fn api() {}\n"
     );
+}
+
+/// A folder opened so its times can be set (Windows needs write access and backup semantics).
+fn open_dir_for_times(path: &std::path::Path) -> std::fs::File {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        std::fs::OpenOptions::new()
+            .write(true)
+            .custom_flags(0x0200_0000)
+            .open(path)
+            .unwrap()
+    }
+    #[cfg(not(windows))]
+    std::fs::File::open(path).unwrap()
 }
