@@ -7,7 +7,7 @@ feature: time-machine
 domain: GRP
 story: TS-TMC-002
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 related:
   adrs: [ADR-TMC-003, ADR-TMC-007, ADR-TMC-001, ADR-GRP-006, ADR-GRP-013, ADR-GRP-005]
   nfrs: [NFR-01, NFR-12, NFR-TMC-06, SEC-TMC-01, SEC-TMC-04, SEC-TMC-09, SEC-06]
@@ -152,7 +152,22 @@ Decisión propia, sin cambio de ADR: las operaciones `interrupted` siguen siendo
 
 ## 11. Pendientes multiplataforma
 
-- **Pendiente: etapa de validación multiplataforma.** Windows no tiene identidad estable de archivo con `std`, así que la recuperación nunca borra un lock allí: lo informa como `unsupported`. Además, `SystemProbe` da por vivo cualquier proceso.
+- ~~Windows no tiene identidad estable de archivo con `std`, así que la recuperación nunca borra un lock allí: lo informa como `unsupported`. Además, `SystemProbe` da por vivo cualquier proceso.~~ Resuelto en XP-15 (2026-10-08) solo en NTFS: ver la Enmienda 2026-10-08.
 - **Pendiente: etapa de validación multiplataforma.** Linux: el código es el mismo que en macOS (rustix), pero no se ejecutó.
 - Verificado solo en macOS.
-- Si un PID se reutiliza, el lock se conserva (es la dirección segura). Comprobar la hora de arranque del hijo requiere APIs por SO y queda para INF-TMC-001.
+- Si un PID se reutiliza, el lock se conserva (es la dirección segura). En Windows ya se compara la hora de inicio del hijo (Enmienda 2026-10-08); en Unix queda para INF-TMC-001.
+
+## Enmienda (2026-10-08, XP-15)
+
+Locks y procesos en Windows. **Decisión del orquestador (2026-10-08), validada por Arquitecto**, que pidió la hora de inicio exacta en lugar de una holgura de reloj y limitar la liberación a NTFS. No cambia el esquema ni el formato de la cadena de hash: `detail` y las columnas ya existían y ya entraban en el hash.
+
+| Cambio | Resolución |
+|---|---|
+| Identidad del lock en Windows | `inode` = índice de archivo de NTFS (lleva el número de secuencia del registro MFT); `birth_ns` = `CreationTime` (resolución de 100 ns). Se lee por handle, sin seguir enlaces. La hora sola no basta: el *tunneling* de NTFS da a un archivo recién creado la hora de creación del que se borró con el mismo nombre |
+| Columna `inode` | u64 guardado bit a bit en el `INTEGER` con signo (complemento a dos). Las filas antiguas eran positivas y se leen igual. En Unix, un inodo mayor que `i64::MAX` ya no hace fallar la anotación |
+| Liberación en Windows | Se abre la ruta del lock sin seguir reparse points, con `DELETE` y compartiendo todo. Si es un archivo regular en NTFS con el índice y la hora anotados, se borra por ese mismo handle (`FileDispositionInfo`). Si otro proceso lo tiene abierto con `FILE_SHARE_DELETE`, el nombre queda pendiente de borrado hasta que lo cierre: `released` es optimista en ese caso |
+| `unsupported` | Cubre también "el sistema de archivos no es NTFS" (FAT y exFAT reutilizan el índice; en ReFS no es único) |
+| `child-started.detail` | `{"start_us": N}`: hora de inicio del hijo en µs desde la época, la misma que lee el canal (`ProcInfo::start_us`) al marcarlo |
+| Contrato de `ProcessProbe` | Nuevo método `is_same(pid, start_us)`, que por defecto llama a `is_alive(pid)`. `SystemProbe` en Windows: vivo solo si existe un proceso con ese PID y esa hora exacta; `Gone` u otra hora (PID reutilizado), muerto; acceso denegado o lista ilegible, vivo (fail-closed). Sin `start_us` (filas antiguas), como `is_alive`. En Unix sigue `kill(0)` |
+
+Tests: sección "Locks y procesos en Windows (XP-15)" de [xplat-pendientes.md](../../../../architecture/xplat-pendientes.md).

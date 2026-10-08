@@ -299,3 +299,7 @@ Origen: BR-26 y D6 del BRD (Rene Bonilla, 2026-10-06), BR-AUTH-005 y ADR-GRP-012
 | **Garantía del modo degradado** | El actor es siempre "sin atribuir", así que el modo degradado **pierde las reglas de autoría** aunque estén en el suelo legible. Residuo declarado: no relaja nada del mínimo ni de las demás reglas | § 4 |
 
 **Validación añadida**: con un actor agente, `agents-commit` deniega sin su trailer y `human-author` deniega o avisa; con "sin atribuir" (incluido el modo degradado) ninguna regla de autoría deniega; un aviso nunca cambia `effect`; un cliente frente a un daemon sin `guard.authorship` no envía los hechos de autoría y no recibe avisos; el daemon nunca recibe el mensaje de commit.
+
+## Nota (2026-10-08, XP-15): identidad del ejecutable en Windows
+
+La comprobación "servidor = binario instalado" de la Enmienda (2026-10-05, US-GRD-001) funciona también en Windows: la identidad del archivo es `(número de serie del volumen, índice de archivo)`, leída siguiendo enlaces, y es la misma para cualquier grafía de la ruta (mayúsculas o nombre 8.3). Antes el ejecutable del par quedaba como desconocido y el hook pasaba al modo degradado. No cambia el contrato. **Decisión del orquestador (2026-10-08), validada por Arquitecto.**
