@@ -2,11 +2,11 @@
 id: DS-US-MCP-001
 title: "Dev Spec — US-MCP-001: servidor MCP por stdio e instalación en Claude Code"
 type: dev-spec
-status: approved
+status: implemented
 feature: mcp
 domain: MCP
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-08
 related:
   stories: [US-MCP-001]
   adrs: [ADR-MCP-001, ADR-GRP-001, ADR-GRP-005]
@@ -82,3 +82,13 @@ Las respuestas reales están en `apps/cli/tests/fixtures/claude-2.1.284/` y el p
 - `cargo-deny` que prohíba las features de red de `rmcp` (SEC-07, SEC-MCP-09): US-MCP-003, junto con la comprobación estática de la frontera de `apps/mcp`.
 - Conexión perezosa al canal con perfil `mcp` y su prueba de arranque bajo demanda: US-MCP-003.
 - Linux y Windows: CLI `claude` (en Windows puede ser `claude.cmd`, que pasa por `cmd.exe`), permisos por ACL y carpetas temporales. **Pendiente: etapa de validación multiplataforma** (S-MCP-4, DEP-MCP-9). Las pruebas de `mcp_install.rs` son solo Unix.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #70.
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- La parte de `raptor doctor` (SEC-MCP-10) espera a la historia que cree `doctor`; `cargo-deny` sobre `rmcp` (SEC-07) sigue pendiente.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

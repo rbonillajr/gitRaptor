@@ -2,11 +2,11 @@
 id: DS-US-MCP-003
 title: "Dev Spec — US-MCP-003: herramienta status del MCP, con el ámbito del repo del agente"
 type: dev-spec
-status: approved
+status: implemented
 feature: mcp
 domain: MCP
 created: 2026-10-07
-updated: 2026-10-07
+updated: 2026-10-08
 related:
   stories: [US-MCP-003, US-MCP-002, US-MCP-004]
   adrs: [ADR-MCP-001, ADR-GRP-005, ADR-TMC-005, ADR-GRP-016]
@@ -75,3 +75,11 @@ Todas en `apps/cli/tests/mcp_allowlist.rs` salvo indicación.
 - **D4, enmendada**: la herramienta `status` responde con `McpStatusView`: `worktree`, `branch` (si la hay), `main` (solo cuando es true), `requester` y `action` (si la hay). `repo_id` y `repo_state` salen de la respuesta de la herramienta y se quedan en el método `mcp.status` del canal. Ninguna historia del MCP (003 a 019) pide `repo_id` en una respuesta ni lo acepta como entrada; si alguna herramienta llega a necesitarlo, se añade entonces. Lo que US-MCP-004 exige ("no disponible", hueco de observación, estado del motor) son declaraciones propias, no `repo_state`. La descripción de la herramienta dice que, si falta `main`, no es el worktree principal.
 - **D7 se mantiene**: un repo no habilitado sigue sin dar ni `repo_id`, ni rama, ni ruta. Ahora un repo habilitado tampoco da `repo_id`.
 - **Pruebas**: `status_from_a_subfolder_names_the_repo_and_the_worktree` comprueba las claves exactas de la vista y su presupuesto. `assert_refused` comprueba el presupuesto de cada rechazo (RES-MCP-03).
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #140, #159 (ajuste en #153).
+
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

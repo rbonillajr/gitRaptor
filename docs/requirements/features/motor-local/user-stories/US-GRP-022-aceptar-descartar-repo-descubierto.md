@@ -2,10 +2,10 @@
 id: US-GRP-022
 title: "El desarrollador decide qué repos descubiertos se observan y los que descarta no vuelven a aparecer"
 type: us
-status: draft
+status: implemented
 priority: medium
 created: 2026-10-07
-updated: 2026-10-07
+updated: 2026-10-08
 feature: motor-local
 source: inline
 related:
@@ -103,3 +103,13 @@ Entonces "billing" deja de figurar como descubierto
 
 - **Diseño:** presentación en la CLI según DSYS-GRP-001; la decisión en la TUI es de US-CKP-025.
 - **Dev Spec:** pendiente.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #170.
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- El PR #170 se titula por US-GRP-020, pero implementa aceptar (`repo.add` de un candidato), descartar, añadir a mano un descartado, el rechazo a un agente, el candidato borrado y retirar una raíz, en la CLI y en la TUI.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

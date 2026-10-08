@@ -2,13 +2,13 @@
 id: TS-TMC-004
 title: "Operación protegida y resolución del solicitante en el canal"
 type: ts
-status: draft
+status: implemented
 feature: time-machine
 domain: GRP
 priority: critical
 complexity: high
 created: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-08
 related:
   adrs: [ADR-TMC-004, ADR-TMC-005, ADR-TMC-002, ADR-GRP-005, ADR-GRP-012, ADR-GRP-013]
   stories: [US-TMC-001, US-TMC-002, US-TMC-003, US-TMC-005, US-TMC-009, US-TMC-010, US-TMC-011, US-TMC-013, TS-GRP-004, TS-TMC-001, TS-TMC-002]
@@ -63,3 +63,11 @@ tags: [time-machine, canal, contrato, solicitante, snapshot-previo, mcp, br-tmc-
 #### Verificación Manual / Sandbox
 
 - Lanzar `raptor undo` desde la shell de un Claude Code real en dogfooding y comprobar el solicitante registrado.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #40.
+
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

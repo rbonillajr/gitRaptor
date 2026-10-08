@@ -2,10 +2,10 @@
 id: US-MCP-001
 title: "El desarrollador conecta Claude Code a GitRaptor con un solo comando y lo retira igual de fácil"
 type: us
-status: draft
+status: implemented
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 domain: GRP
 epic: E-001
 feature: mcp
@@ -101,3 +101,13 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 
 - **Diseño:** no aplica (sin superficie visual; los mensajes siguen la guía de contenido del design system, DSYS-GRP-001).
 - **Dev Spec:** [DS-US-MCP-001](../dev-specs/US-MCP-001-dev-spec.md).
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #70.
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- La parte de `raptor doctor` (SEC-MCP-10) espera a la historia que cree `doctor`; `cargo-deny` sobre `rmcp` (SEC-07) sigue pendiente.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

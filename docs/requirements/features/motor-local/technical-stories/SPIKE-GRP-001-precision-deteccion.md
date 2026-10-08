@@ -2,13 +2,13 @@
 id: SPIKE-GRP-001
 title: "Precisión de la detección de Claude Code en dogfooding"
 type: spike
-status: ready
+status: partially-implemented
 feature: motor-local
 domain: GRP
 priority: high
 complexity: medium
 created: 2026-10-03
-updated: 2026-10-07
+updated: 2026-10-08
 related:
   adrs: [ADR-GRP-012, ADR-GRP-013, ADR-GRP-005]
   stories: [US-GRP-007, US-GRP-008, US-GRP-009]
@@ -109,3 +109,14 @@ tags: [motor-local, spike, deteccion, atribucion, claude-code, dogfooding, preci
 
 - **Lectura**: en esta suite, sin hooks, S3 pierde la carrera en ~5 % de los commits rápidos y no en el 75 %, y la pista cubre esos casos. La ventaja de S4 sigue siendo la misma: elimina la carrera.
 - **Riesgo real que deja ver (sin cambio en esta rama)**: un `git` de solo lectura de otro proceso en el repo justo después del commit del agente (la extensión de Git de un editor o el prompt de la terminal) produce el mismo `ambiguous`: el commit queda sin atribuir y sin pista. Cuántas veces pasa se medirá en el dogfooding real (log `s3_evidence` con `outcome=ambiguous`). Relajar la regla es una decisión del PO o de Rene.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #80, #155, #169.
+
+Estado: implementación parcial. Pendiente:
+- Validación parcial: señales S1, S3 y S4 con suites guionizadas en macOS.
+- Medición en el dogfooding real (2 semanas, al menos 50 sesiones) y Research Brief: criterio 2 de M1.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

@@ -2,13 +2,13 @@
 id: TD-GRP-001
 title: "Verificación de ACL en Windows: git.exe (SEC-10) y perfil (SEC-06)"
 type: td
-status: in-progress
+status: partially-implemented
 feature: motor-local
 domain: GRP
 priority: high
 complexity: medium
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-08
 related:
   adrs: [ADR-GRP-006, ADR-GRP-009, ADR-GRP-002]
   stories: [TS-GRP-001, TS-GRP-002]
@@ -60,3 +60,13 @@ Ambos son requisito antes de cualquier release en Windows (INF-GRP-003).
 
 - Conteo de passed/failed de `cargo test` en la Windows real antes y después; los fallos por `AclUnverified`/`AclNotVerified` desaparecen.
 - Revisión de `nassa-security:security-expert` sobre el crate `winsys` y las reglas de DACL.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #72.
+
+Estado: implementación parcial. Pendiente:
+- Ruta de instalación de Git leída del registro (ADR-GRP-009 § 4).
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

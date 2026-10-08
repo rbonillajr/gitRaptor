@@ -2,12 +2,12 @@
 id: DS-TS-TMC-004
 title: "Dev Spec — Operación protegida y resolución del solicitante en el canal"
 type: dev-spec
-status: review
+status: implemented
 feature: time-machine
 domain: GRP
 story: TS-TMC-004
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 related:
   adrs: [ADR-TMC-004, ADR-TMC-005, ADR-TMC-002, ADR-TMC-003, ADR-GRP-005, ADR-GRP-012, ADR-GRP-013]
   nfrs: [NFR-01, NFR-02, SEC-TMC-03, SEC-TMC-07, SEC-TMC-12, SEC-TMC-15, SEC-12, SEC-14]
@@ -144,3 +144,11 @@ Decisión del orquestador (2026-10-04), validada por el Arquitecto, que pidió a
 - Lista de procesos del usuario para el multiplexor en Linux (`/proc`): implementada, sin verificar. Pendiente: etapa de validación multiplataforma.
 - Windows: sin canal (TS-GRP-004) ni reto (ADR-TMC-005 § 3); todo compila con `cfg`. Pendiente: etapa de validación multiplataforma.
 - `process_cwd` en macOS devuelve `None`: el ámbito por MCP queda en fail-closed hasta tener una lectura segura (US-GRP-009).
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #40.
+
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

@@ -2,12 +2,12 @@
 id: DS-TS-CKP-005
 title: "Dev Spec — Biblioteca de componentes TUI v0"
 type: dev-spec
-status: approved
+status: implemented
 feature: cockpit
 domain: GRP
 story: TS-CKP-005
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-08
 related:
   adrs: [ADR-CKP-003, ADR-GRP-003, ADR-GRP-002]
   nfrs: [NFR-09, NFR-10]
@@ -103,3 +103,11 @@ Los tests no usan motor, canal, repos ni perfil.
 - Caducidad de 5 s del toast y su historial: update de **INF-CKP-001**.
 - Acento y paleta finales (DSYS-GRP-001 § 8): siguen abiertos. Los snapshots se regeneran cuando se cierren.
 - Linux y Windows (anchura de símbolos, consola de Windows, la galería en vivo): **Pendiente: etapa de validación multiplataforma**.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #111, #115.
+
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

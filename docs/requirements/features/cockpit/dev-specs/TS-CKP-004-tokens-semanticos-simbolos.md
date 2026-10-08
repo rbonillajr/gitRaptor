@@ -2,12 +2,12 @@
 id: DS-TS-CKP-004
 title: "Dev Spec — Tokens semánticos y símbolos con fallback en el tema de la TUI"
 type: dev-spec
-status: approved
+status: implemented
 feature: cockpit
 domain: GRP
 story: TS-CKP-004
 created: 2026-10-05
-updated: 2026-10-07
+updated: 2026-10-08
 related:
   adrs: [ADR-GRP-003, ADR-CKP-003, ADR-GRP-002, ADR-GRP-001]
   nfrs: [NFR-09]
@@ -172,3 +172,10 @@ Precedencia: `--theme` > `GITRAPTOR_THEME` > OSC 11 > `COLORFGBG` > oscura. `aut
 - ~~Cablear `--theme` en clap y llamar a `term::detect_theme` al arrancar la TUI~~: hecho en US-CKP-001 (2026-10-06), antes del lector de eventos de crossterm, junto con `--no-color`, `--ascii` y la profundidad de color ([DS-US-CKP-001](./US-CKP-001-flota-en-vivo.md) D3). Snapshots de widgets en las dos variantes: TS-CKP-005.
 - Detección en Linux (probada solo en macOS) y en Windows (stub): **Pendiente: etapa de validación multiplataforma**.
 
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #50, #115.
+
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

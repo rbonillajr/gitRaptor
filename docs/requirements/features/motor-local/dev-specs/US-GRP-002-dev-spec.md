@@ -2,11 +2,11 @@
 id: DS-US-GRP-002
 title: "Dev Spec — El desarrollador ve los cambios y eventos de Git de sus worktrees casi al instante"
 type: dev-spec
-status: approved
+status: implemented
 feature: motor-local
 domain: GRP
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-08
 related:
   stories: [US-GRP-002, US-GRP-001]
   enablers: [TS-GRP-001, TS-GRP-002, TS-GRP-003, TS-GRP-004, INF-GRP-001, INF-GRP-002, SPIKE-GRP-002]
@@ -119,3 +119,11 @@ Pruebas de `crates/core` (`tests/watch.rs`, en todos los SO del CI, sin daemon):
 - **Interfaces preparadas**: sesión y actor por evento (US-GRP-007/009/010), `gap.recorded` y hueco de arranque (US-GRP-005), "observación degradada" en el contrato (US-GRP-003/014), intervalos desde la configuración (US-GRP-013), ahead/behind en segunda fase (US-GRP-012), estado en conflicto (US-GRP-003), proyección MCP de los eventos (F-001-05).
 - **Optimizaciones medibles** (D4): caché de stat incremental y reanudar FSEvents desde el último `FSEventStreamEventId`.
 - **Commits con `HEAD` separado** (fuera de un rebase): no se registran como evento; el estado del worktree sí se actualiza.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #57, #75.
+
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

@@ -2,11 +2,11 @@
 id: DS-INF-GRP-001
 title: "Dev Spec — Arnés de verificación \"repo intacto\" (núcleo)"
 type: dev-spec
-status: approved
+status: partially-implemented
 feature: motor-local
 domain: GRP
 created: 2026-10-04
-updated: 2026-10-07
+updated: 2026-10-08
 related:
   stories: [INF-GRP-001, TS-GRP-002, TS-GRP-003, TS-GRP-004, US-GRP-002, US-GRP-004, US-GRP-007, INF-GRD-001, INF-TMC-001]
   adrs: [ADR-GRP-009, ADR-GRP-002, ADR-GRP-005, ADR-GRP-006, ADR-GRD-001]
@@ -235,3 +235,14 @@ No verificado: Linux, Windows, strace y el workflow de GitHub Actions (**Pendien
 - **Medir los falsos positivos de LFS**: archivos con filtro y stat sucio (consecuencia de ADR-GRP-009). El escenario `lfs_filters` ya existe; falta la métrica.
 - **Migrar la huella de `crates/git/tests/common`** (la de TS-GRP-002) al testkit. Se dejó intacta para no reescribir los tests de TS-GRP-002 en este PR.
 - **`AGENTS.md`** lista los crates del MVP sin `testkit`. Se anota en el PR; no se toca aquí.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #30, #34, #68, #97, #109, #113, #163.
+
+Estado: implementación parcial. Pendiente:
+- Auditoría dinámica de `exec` parcial: ETW (Windows) sin implementar y eslogger (macOS) sin verificar; la Validación 7 de ADR-GRP-009 sigue abierta.
+- Canario en Windows y repo de otro uid real.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

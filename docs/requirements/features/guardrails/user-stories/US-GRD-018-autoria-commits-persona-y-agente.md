@@ -2,10 +2,10 @@
 id: US-GRD-018
 title: "Cada commit entra a nombre de la persona y deja constancia del agente que lo hizo, con la exigencia que fija el equipo"
 type: us
-status: draft
+status: partially-implemented
 priority: medium
 created: 2026-10-06
-updated: 2026-10-06
+updated: 2026-10-08
 feature: guardrails
 related:
   context:
@@ -106,3 +106,14 @@ Entonces el commit no se ejecuta
 
 - **Diseño:** no aplica.
 - **Dev Spec:** [DS-US-GRD-018](../dev-specs/US-GRD-018-autoria-commits-persona-y-agente.md) (2026-10-06; compartida por US-GRD-018 y US-GRD-019, esta historia es su PR-A).
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #137, #141, #150 (ajustes en #152 y #153); D12 en el registro con #154.
+
+Estado: implementación parcial. Pendiente:
+- `detected_and_registered_agents_are_the_actor`: solo se cubre el agente detectado, no el registrado (DS § 7).
+- Nivel local (`settings.local.json`): US-GRP-013. `flexible` de extremo a extremo con un suelo de equipo: US-GRD-014.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

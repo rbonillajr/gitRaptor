@@ -2,11 +2,11 @@
 id: DS-US-GRP-004
 title: "Dev Spec — El desarrollador encuentra lo ocurrido aunque no tuviera GitRaptor abierto"
 type: dev-spec
-status: approved
+status: implemented
 feature: motor-local
 domain: GRP
 created: 2026-10-06
-updated: 2026-10-06
+updated: 2026-10-08
 related:
   stories: [US-GRP-004, US-GRP-002, US-GRP-007, US-GRP-009]
   enablers: [INF-GRP-001, TS-GRP-003, TS-GRP-004, TS-GRP-005]
@@ -88,3 +88,11 @@ Escenarios de punta a punta en `apps/cli/tests/continuous_observation.rs` (macOS
 ## 5. Validación
 
 - **Arquitecto** (2026-10-06): aprobada con ajustes (tabla del § 1), todos incorporados. Pidió una enmienda corta de ADR-GRP-005 (salida de `--autostart`, `disable` sin parada, comprobación del binario antes de `kickstart`, carpetas frente a la Validación 11), ya aplicada. Ninguna decisión contradice un ADR aceptado; D6 se corrigió para cumplir ADR-GRP-014.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #112.
+
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

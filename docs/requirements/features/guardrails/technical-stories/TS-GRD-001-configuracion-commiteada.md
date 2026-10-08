@@ -2,13 +2,13 @@
 id: TS-GRD-001
 title: "Lectura commiteada de la configuración del equipo y de la rama principal"
 type: ts
-status: draft
+status: implemented
 feature: guardrails
 domain: GRP
 priority: high
 complexity: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 related:
   adrs: [ADR-GRD-004, ADR-GRD-003, ADR-GRD-005]
   stories: [US-GRD-007, US-GRD-011, US-GRD-014, US-GRP-016, US-GRP-013]
@@ -80,3 +80,11 @@ tags: [guardrails, configuracion, q-grd-17, q-grd-18, rama-base, rama-principal,
 | La verificación manual por CLI pasa a US-GRP-016 / US-GRD-014 | Todavía no hay CLI que muestre la rama base |
 
 Detalle y resto de decisiones en la [Dev Spec](../dev-specs/TS-GRD-001-configuracion-commiteada.md) § 5.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #27.
+
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

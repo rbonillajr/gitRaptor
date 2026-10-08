@@ -2,13 +2,13 @@
 id: TS-CKP-005
 title: "Biblioteca de componentes TUI v0: los 10 widgets del design system, con snapshots y galería"
 type: ts
-status: draft
+status: implemented
 feature: cockpit
 domain: GRP
 priority: high
 complexity: medium
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-08
 related:
   adrs: [ADR-CKP-003, ADR-GRP-003, ADR-GRP-002]
   stories: [TS-CKP-004, INF-CKP-001, US-CKP-001, US-CKP-002, US-CKP-003, US-CKP-004, US-CKP-005, US-CKP-006, US-CKP-007, US-CKP-008, US-CKP-009, US-CKP-012, US-CKP-013, US-CKP-014, US-CKP-015, US-CKP-016, US-CKP-017, US-CKP-018, US-CKP-019, US-CKP-020, US-CKP-021, US-CKP-022, US-CKP-023, US-CKP-024]
@@ -75,3 +75,11 @@ Mapeo validado por el PO (2026-10-05). TS-CKP-005 es dependencia de todas estas 
 
 - `raptor ui gallery` en los emuladores de terminal de macOS, recorriendo los componentes y los modos con `m`.
 - Anchura real de `⚡`, `⛔`, `⚠` y `ℹ` y la galería en las consolas de Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #111, #115.
+
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

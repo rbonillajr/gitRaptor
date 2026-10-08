@@ -2,13 +2,13 @@
 id: TS-GRP-006
 title: "Observación por niveles: activo, dormido con centinela y despertar"
 type: ts
-status: ready
+status: implemented
 feature: motor-local
 domain: GRP
 priority: high
 complexity: high
 created: 2026-10-07
-updated: 2026-10-07
+updated: 2026-10-08
 related:
   adrs: [ADR-GRP-010, ADR-GRP-011, ADR-GRP-013, ADR-GRP-015, ADR-GRP-006, ADR-GRP-007, ADR-GRP-016, ADR-TMC-004]
   stories: [US-GRP-002, US-GRP-004, US-GRP-005, US-GRP-017, US-GRP-020, US-CKP-001, TS-GRP-003, TS-GRP-004, TS-GRP-005, INF-GRP-002]
@@ -71,3 +71,13 @@ tags: [motor-local, recursos, escala, niveles, dormido, centinela, despertar, re
 
 - **macOS, dogfooding**: dejar 20 o más repos sin tocar durante el umbral y comprobar en `raptor status --resources` que pasan a dormidos y que el consumo en reposo no crece. Abrir la TUI en uno de ellos y ver "reconciliando" y después el estado activo.
 - **Linux y Windows**: **Pendiente: etapa de validación multiplataforma**.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #164, #167, #173 (ajuste en #178).
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- Nivel local de `dormantAfterHours` (US-GRP-013) y el escenario `tiered-scale` del banco (INF-GRP-002).
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

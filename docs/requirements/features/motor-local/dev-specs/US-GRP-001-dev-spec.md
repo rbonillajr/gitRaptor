@@ -2,11 +2,11 @@
 id: DS-US-GRP-001
 title: "Dev Spec — El desarrollador ve el estado de cada worktree del repo que añadió"
 type: dev-spec
-status: approved
+status: implemented
 feature: motor-local
 domain: GRP
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 related:
   stories: [US-GRP-001]
   enablers: [TS-GRP-001, TS-GRP-002, TS-GRP-003, TS-GRP-004, INF-GRP-001]
@@ -80,3 +80,11 @@ Además: `crates/core/tests/observe.rs`, que corre en todos los SO. `repo_intact
 - **Ahead/behind contra la rama base**: US-GRP-012 / US-GRP-016. **Estados especiales y "ya no existe"**: US-GRP-003. **Historial y hueco al volver a añadir**: US-GRP-006. **Proyección MCP del estado de worktrees**: F-001-05.
 - **Linux y Windows**: los escenarios de proceso usan `script` y el canal Unix, así que solo corren en macOS. En Windows no hay canal todavía (`TRANSPORT_UNSUPPORTED`). `crates/core/tests/observe.rs` corre en todos los SO del CI. Pendiente: etapa de validación multiplataforma.
 - **Interfaces preparadas**: `WorktreeStatus` admite estados nuevos (US-GRP-003); `RepoView` / `WorktreeView` pueden crecer con una subida de protocolo (ahead/behind, sesiones de US-GRP-007); `KnownState.operation` espera a US-GRP-003; y la configuración por repo (US-GRP-013) se leerá en `Daemon::add_repo` y en `reconcile_all`.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #46.
+
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

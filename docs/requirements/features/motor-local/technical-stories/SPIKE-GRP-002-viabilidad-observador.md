@@ -2,13 +2,13 @@
 id: SPIKE-GRP-002
 title: "Viabilidad del observador de cambios a escala en los tres SO"
 type: spike
-status: ready
+status: partially-implemented
 feature: motor-local
 domain: GRP
 priority: high
 complexity: medium
 created: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-08
 related:
   adrs: [ADR-GRP-010, ADR-GRP-011, ADR-GRP-009, ADR-GRP-006]
   stories: [US-GRP-002, US-GRP-003, US-GRP-004, US-GRP-005]
@@ -61,3 +61,13 @@ tags: [motor-local, spike, watcher, latencia, escala, debounce, windows, inotify
 ### Time-box
 
 ⚠️ **ASSUMPTION**: 2 semanas, repartidas entre los tres SO.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #17, #23.
+
+Estado: implementación parcial. Pendiente:
+- Medición en Linux y Windows.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

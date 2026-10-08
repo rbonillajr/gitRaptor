@@ -2,10 +2,10 @@
 id: US-CKP-025
 title: "La TUI ofrece observar el repo en el que se abre y, fuera de un repo, lleva a los ya observados"
 type: us
-status: in-progress
+status: partially-implemented
 priority: medium
 created: 2026-10-07
-updated: 2026-10-07
+updated: 2026-10-08
 feature: cockpit
 source: inline
 related:
@@ -112,3 +112,13 @@ Entonces la TUI avisa "¿Observar billing?" y permite aceptarlo o descartarlo
 
 - **Hechos**: escenarios 1, 2 y 3 (la pregunta en un repo no observado, solo para la persona, con su valor por defecto). Los escenarios 4 y 5 ya los cubría el PR #126.
 - **Diferido**: escenario 6 (repos descubiertos) y los niveles, que dependen de US-GRP-020/022 y de ADR-GRP-010 N4. Decisión del orquestador (2026-10-07), validada por el PO.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #165, #170.
+
+Estado: implementación parcial. Pendiente:
+- Niveles en la TUI: mostrar el `tier` de cada repo y "reconciliando" al abrir un repo dormido (ADR-GRP-010 N4, RES-12). El escenario 6 (repos descubiertos) lo cerró el #170.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

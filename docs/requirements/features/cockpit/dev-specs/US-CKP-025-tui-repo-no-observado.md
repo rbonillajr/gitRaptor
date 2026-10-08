@@ -2,9 +2,9 @@
 id: DS-US-CKP-025
 title: "Dev Spec — US-CKP-025: la TUI ofrece observar el repo en el que se abre"
 type: dev-spec
-status: approved
+status: partially-implemented
 created: 2026-10-07
-updated: 2026-10-07
+updated: 2026-10-08
 story: US-CKP-025
 feature: cockpit
 domain: GRP
@@ -395,3 +395,13 @@ _No aplica — no hay límites ni plazos nuevos._ La búsqueda de `.git` sube po
   - `here` se limpia al llegar la instantánea del repo.
 - **Pendiente**: si se pierde la respuesta de un `repo.add` que sí se aplicó, aparece el aviso "el motor se desconectó" y, tras reconectar, `repo.locate` abre el repo. Es aceptable: el estado final es correcto.
 - **Sin verificar**: Linux y Windows (G2).
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #165, #170.
+
+Estado: implementación parcial. Pendiente:
+- Niveles en la TUI: mostrar el `tier` de cada repo y "reconciliando" al abrir un repo dormido (ADR-GRP-010 N4, RES-12). El escenario 6 (repos descubiertos) lo cerró el #170.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

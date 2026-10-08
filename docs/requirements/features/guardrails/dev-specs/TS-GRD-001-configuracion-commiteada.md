@@ -2,12 +2,12 @@
 id: DS-TS-GRD-001
 title: "Dev Spec — Lectura commiteada de la configuración del equipo y de la rama principal"
 type: dev-spec
-status: approved
+status: implemented
 feature: guardrails
 domain: GRP
 story: TS-GRD-001
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 related:
   adrs: [ADR-GRP-007, ADR-GRD-004, ADR-GRD-003, ADR-GRP-009, ADR-GRP-006]
   nfrs: [NFR-01, NFR-03, NFR-GRD-04, NFR-GRD-15, SEC-11, SEC-GRD-13, SEC-GRD-17]
@@ -112,3 +112,11 @@ Blueprint compacto de [TS-GRD-001](../technical-stories/TS-GRD-001-configuracion
 - Suscripción al observador y verificación manual por CLI: TS-GRP-003 y US-GRP-016 / US-GRD-014.
 - Arnés INF-GRP-001: no está en `main`. Se sustituye por una huella propia del repo; la ausencia de red se cumple por diseño (gix sin transporte de red), comprobado por un test del manifiesto.
 - Windows y Linux: sin verificar desde este Mac.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #27.
+
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

@@ -2,10 +2,10 @@
 id: US-CKP-026
 title: "El desarrollador ve en la flota de quién es el último commit de cada worktree y con qué agente"
 type: us
-status: expanded
+status: implemented
 priority: should
 created: 2026-10-07
-updated: 2026-10-07
+updated: 2026-10-08
 feature: cockpit
 source: inline
 related:
@@ -105,3 +105,11 @@ Rama `feat/US-CKP-026-authorship-in-cockpit`. Notas del coordinador al aprobar e
 - Un worktree cuyo último commit queda fuera de la ventana de 200 eventos no tiene sublínea, sin texto de relleno.
 
 Verificación: snapshots `fleet_authorship_100x24_{en,es}`, prueba ASCII sin color y pruebas de `update` y `view`. macOS; Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #147.
+
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

@@ -2,13 +2,13 @@
 id: TS-GRP-004
 title: "Canal local de clientes y contrato de mensajes"
 type: ts
-status: ready
+status: partially-implemented
 feature: motor-local
 domain: GRP
 priority: high
 complexity: high
 created: 2026-10-03
-updated: 2026-10-05
+updated: 2026-10-08
 related:
   adrs: [ADR-GRP-005, ADR-GRP-011, ADR-GRP-013, ADR-GRP-012]
   stories: [US-GRP-001, US-GRP-002, US-GRP-003, US-GRP-004, US-GRP-005, US-GRP-006, US-GRP-007, US-GRP-008, US-GRP-009, US-GRP-010, US-GRP-011, US-GRP-012, US-GRP-013, US-GRP-014, US-GRP-015, US-GRP-016, TS-GRP-003]
@@ -108,3 +108,14 @@ tags: [motor-local, ipc, json-rpc, socket, named-pipe, contrato, seguridad, coma
 - **L-06**: el cliente comprueba la carpeta del socket.
 - **Criterios añadidos**: los de la tabla § 7.2 de la Dev Spec, cada uno con su prueba.
 - **Fuera**: N8 a N10 (Should, sin dueño en M1). N11 ya lo cubre TS-CKP-002.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #36, #87, #123, #133, #158.
+
+Estado: implementación parcial. Pendiente:
+- N8 a N11 de ADR-CKP-003 § 4 (Should).
+- Retención de la auditoría de comandos reservados.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

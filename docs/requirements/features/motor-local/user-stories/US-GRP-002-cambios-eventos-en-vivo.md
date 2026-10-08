@@ -2,10 +2,10 @@
 id: US-GRP-002
 title: "El desarrollador ve los cambios y eventos de Git de sus worktrees casi al instante"
 type: us
-status: draft
+status: implemented
 priority: high
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-08
 feature: motor-local
 related:
   context:
@@ -79,3 +79,11 @@ Dado el repo "demo" observado con 10 worktrees
 Cuando se hace un commit en cada uno de los 10 worktrees en el mismo minuto
 Entonces el historial de eventos contiene los 10 commits, cada uno en su worktree
   Y cada cambio se refleja dentro de la parte del motor del presupuesto de frescura de NFR-04 (< 500 ms de extremo a extremo; el reparto con el Cockpit lo fija el plan técnico)
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #57, #75.
+
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

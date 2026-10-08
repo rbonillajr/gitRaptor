@@ -2,11 +2,11 @@
 id: DS-US-GRP-009
 title: "Dev Spec — El desarrollador o el agente declaran qué agente trabaja en un worktree"
 type: dev-spec
-status: approved
+status: implemented
 feature: motor-local
 domain: GRP
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-08
 related:
   stories: [US-GRP-009, US-GRP-007, US-GRP-002, US-GRP-004, US-GRP-008, US-GRP-010, US-GRP-011]
   enablers: [TS-GRP-001, TS-GRP-004, INF-GRP-001]
@@ -84,3 +84,14 @@ Además, en el mismo archivo: `a_registration_survives_an_engine_restart` (parar
 
 - **Arquitecto** (2026-10-05): aprobada con ajustes (tabla del § 1), incorporados. Pidió las enmiendas de ADR-GRP-005 § 6.6 (parámetro del desarrollador, anti-suplantación, auditoría de los rechazos), ADR-GRP-013 § 1 y § 2 (auditoría, P16, evidencia guardada, identidad del proceso como columna anulable futura) y ADR-MCP-001 (`register_agent` sin allowlist; S-01 como dependencia futura), aplicadas.
 - **PO** (2026-10-05): aprobada con ajustes (tabla del § 1 y § 4), incorporados. P16 queda adoptada con el supuesto "sí" y pendiente de ratificar por Rene en BR-CONS-004. **Decisión de Rene (2026-10-07)**: P16 = sí, ratificada.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #106.
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- Las herramientas MCP `register_agent`/`unregister_agent` son de US-MCP-006.
+- Perfil `mcp` por solicitante (S-01): sin implementar.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

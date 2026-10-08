@@ -2,11 +2,11 @@
 id: DS-US-MCP-002
 title: "Dev Spec — US-MCP-002: el desarrollador habilita y retira repos de la allowlist del MCP"
 type: dev-spec
-status: approved
+status: implemented
 feature: mcp
 domain: MCP
 created: 2026-10-07
-updated: 2026-10-07
+updated: 2026-10-08
 related:
   stories: [US-MCP-002, US-MCP-003]
   adrs: [ADR-MCP-001, ADR-GRP-005, ADR-GRP-006, ADR-GRP-016, ADR-GRD-007]
@@ -63,3 +63,11 @@ Las marcadas con † son **Decisión del orquestador (2026-10-07), validada por 
 
 - Diagnóstico "MCP no instalado" y evento del estado de protección: US-GRD-016 (D7).
 - Linux y Windows: las pruebas de proceso son de macOS (pty con `script`). **Pendiente: etapa de validación multiplataforma.**
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #140, #159.
+
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

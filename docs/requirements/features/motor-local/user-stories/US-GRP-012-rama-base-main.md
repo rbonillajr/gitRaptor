@@ -2,10 +2,10 @@
 id: US-GRP-012
 title: "El desarrollador ve el ahead/behind de cada worktree contra la rama base del repo"
 type: us
-status: draft
+status: implemented
 priority: medium
 created: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-08
 feature: motor-local
 related:
   context:
@@ -66,3 +66,13 @@ Dado el repo "otro" observado sin rama "main" y sin configuración del equipo
 Cuando se consulta el estado del motor
 Entonces el estado indica para cada worktree de "otro" que no se puede calcular el ahead/behind porque la rama base "main" no existe
   Y no se usa ninguna otra rama como base
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #55.
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- Rama base del equipo (`base-change-pending`, `invalid`): US-GRP-016; confirmarla: US-GRD-001/014.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

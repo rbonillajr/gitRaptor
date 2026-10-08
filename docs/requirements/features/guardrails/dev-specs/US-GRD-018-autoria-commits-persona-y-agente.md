@@ -2,12 +2,12 @@
 id: DS-US-GRD-018
 title: "Dev Spec — US-GRD-018 y US-GRD-019: política de autoría de los commits y quién ejecutó frente a a nombre de quién entra"
 type: dev-spec
-status: approved
+status: partially-implemented
 feature: guardrails
 domain: GRP
 story: US-GRD-018
 created: 2026-10-06
-updated: 2026-10-07
+updated: 2026-10-08
 related:
   stories: [US-GRD-018, US-GRD-019, US-GRD-001, US-GRD-005, US-GRD-007, US-GRD-009, US-GRD-010, US-GRP-002, US-GRP-007, US-GRP-009]
   adrs: [ADR-GRD-001, ADR-GRD-002, ADR-GRD-003, ADR-GRD-004, ADR-GRD-006, ADR-GRP-005, ADR-GRP-007, ADR-GRP-012, ADR-GRP-013, ADR-GRP-016]
@@ -389,3 +389,14 @@ D12 queda cubierto por [DS-US-GRD-005](./US-GRD-005-registro-de-bloqueos.md):
 - **Sigue pendiente** la unión por oid para mostrar el autor y el committer de un aviso: el contrato `commit` no lleva el oid del commit nuevo. Mientras, el aviso muestra "autor: ver `raptor events`".
 
 `authorship_entries_in_the_decision_log` queda cubierto por `apps/cli/tests/guard_us_grd_005.rs`.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #137, #141, #150 (ajustes en #152 y #153); D12 en el registro con #154.
+
+Estado: implementación parcial. Pendiente:
+- `detected_and_registered_agents_are_the_actor`: solo se cubre el agente detectado, no el registrado (DS § 7).
+- Nivel local (`settings.local.json`): US-GRP-013. `flexible` de extremo a extremo con un suelo de equipo: US-GRD-014.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

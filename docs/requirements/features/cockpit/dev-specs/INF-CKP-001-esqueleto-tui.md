@@ -2,7 +2,7 @@
 id: DS-INF-CKP-001
 title: "Dev Spec — Esqueleto de la TUI: bucle TEA, cliente del canal, saneado único y microbanco de 100 ms"
 type: dev-spec
-status: approved
+status: implemented
 feature: cockpit
 domain: GRP
 story: INF-CKP-001
@@ -137,3 +137,12 @@ Implementada en la rama `feat/INF-CKP-001-delivery-2b`. Cierra lo que § 9 dejab
 
 Siguen fuera: el **lanzador del editor** (Q-CKP-9) y Linux y Windows en máquina real (**Pendiente: etapa de validación multiplataforma**, salvo lo que diga el PR). La suite "TUI sin perfil" es solo de Unix porque Windows no tiene bits de modo que quitar.
 
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #100, #139, #174 (ajuste en #153).
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- El lanzador del editor es de la historia de Q-CKP-9.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

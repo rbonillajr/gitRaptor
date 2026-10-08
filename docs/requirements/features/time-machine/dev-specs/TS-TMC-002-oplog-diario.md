@@ -2,7 +2,7 @@
 id: DS-TS-TMC-002
 title: "Dev Spec — Oplog de la Time Machine con diario de intención y recuperación"
 type: dev-spec
-status: review
+status: implemented
 feature: time-machine
 domain: GRP
 story: TS-TMC-002
@@ -171,3 +171,14 @@ Locks y procesos en Windows. **Decisión del orquestador (2026-10-08), validada 
 | Contrato de `ProcessProbe` | Nuevo método `is_same(pid, start_us)`, que por defecto llama a `is_alive(pid)`. `SystemProbe` en Windows: vivo solo si existe un proceso con ese PID y esa hora exacta; `Gone` u otra hora (PID reutilizado), muerto; acceso denegado o lista ilegible, vivo (fail-closed). Sin `start_us` (filas antiguas), como `is_alive`. En Unix sigue `kill(0)` |
 
 Tests: sección "Locks y procesos en Windows (XP-15)" de [xplat-pendientes.md](../../../../architecture/xplat-pendientes.md).
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #32, #176.
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- Revisión manual con Rene del modelo de estados frente a US-TMC-019 (la DS sigue en `review`).
+- PID reutilizado en Unix: INF-TMC-001.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

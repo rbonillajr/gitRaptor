@@ -2,11 +2,11 @@
 id: DS-TS-GRP-004
 title: "Dev Spec — Canal local de clientes y contrato de mensajes"
 type: dev-spec
-status: approved
+status: partially-implemented
 feature: motor-local
 domain: GRP
 created: 2026-10-04
-updated: 2026-10-07
+updated: 2026-10-08
 related:
   stories: [TS-GRP-004]
   adrs: [ADR-GRP-002, ADR-GRP-005, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, ADR-TMC-005]
@@ -258,3 +258,14 @@ Cierra el pendiente de transporte del § 5 y la decisión 8 de [ADR-GRP-005](../
 
 - Las pruebas con un segundo usuario de Windows real (cliente ajeno rechazado por la DACL) dependen de crear una cuenta en la máquina de pruebas.
 - El identificador por handle de ADR-GRP-005 § 6.1 sigue siendo `(pid, creación)` (W3/§ 6).
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #36, #87, #123, #133, #158.
+
+Estado: implementación parcial. Pendiente:
+- N8 a N11 de ADR-CKP-003 § 4 (Should).
+- Retención de la auditoría de comandos reservados.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).

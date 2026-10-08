@@ -2,13 +2,13 @@
 id: INF-GRP-001
 title: "Arnés de verificación \"repo intacto\" en los tres SO"
 type: inf
-status: ready
+status: partially-implemented
 feature: motor-local
 domain: GRP
 priority: critical
 complexity: medium
 created: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-08
 related:
   adrs: [ADR-GRP-009, ADR-GRP-006, ADR-GRP-005, ADR-GRP-012, ADR-GRP-010, ADR-GRP-007, ADR-GRD-001]
   stories: [US-GRP-001, US-GRP-002, US-GRP-003, US-GRP-004, US-GRP-005, US-GRP-006, US-GRP-007, US-GRP-008, US-GRP-009, US-GRP-010, US-GRP-011, US-GRP-012, US-GRP-013, US-GRP-014, US-GRP-015, US-GRP-016, TS-GRP-002, TS-GRP-003, TS-GRP-004]
@@ -95,3 +95,14 @@ Las del núcleo se cumplen al cerrar este INF; las marcadas con la suite se cump
 ### Notas de integración
 
 Nota de integración (Time Machine, INF-TMC-001): la huella 'repo intacto' y el repo canario se reutilizan desde INF-TMC-001. El canario se amplía con los casos de SEC-TMC-02: `core.fsmonitor`, `core.worktree` hacia fuera del repo, `includeIf` hostil, `filter.*`, `commit.gpgSign` global e `init.templateDir` con hooks.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #30, #34, #68, #97, #109, #113, #163.
+
+Estado: implementación parcial. Pendiente:
+- Auditoría dinámica de `exec` parcial: ETW (Windows) sin implementar y eslogger (macOS) sin verificar; la Validación 7 de ADR-GRP-009 sigue abierta.
+- Canario en Windows y repo de otro uid real.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
+
+Sincronizado con los PR mergeados por la tarea `docs/sync-story-status` (2026-10-08).
