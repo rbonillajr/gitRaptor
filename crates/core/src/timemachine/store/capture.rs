@@ -29,6 +29,7 @@ use gitraptor_git::{
 
 use super::meta::{ConflictEntry, META_FORMAT, Meta, MetaWorktree, RegisteredWorktree};
 use super::{CaptureError, OBSERVATION_MAX_FILE_BYTES, SnapshotStore, StageTimings, now_ms};
+use crate::timemachine::chaos;
 use crate::timemachine::oplog::{
     CompleteInfo, Exclusion, NewSnapshot, Oplog, SnapshotLevel, SnapshotState,
 };
@@ -1325,9 +1326,16 @@ fn record(
         },
         now_ms(),
     )?;
+    let prior = req.level == SnapshotLevel::GuaranteedPrior;
+    if prior {
+        chaos::crash_point(chaos::PRIOR_PENDING);
+    }
     if let Err(e) = handle.create_ref(&id, commit) {
         let _ = log.set_snapshot_state(&id, SnapshotState::Discarded, now_ms());
         return Err(e.into());
+    }
+    if prior {
+        chaos::crash_point(chaos::PRIOR_REF);
     }
     log.complete_snapshot(
         &id,

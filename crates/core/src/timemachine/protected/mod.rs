@@ -29,6 +29,7 @@ use crate::channel::marks::ExecutorMarks;
 use crate::channel::peer::ProcSource;
 use crate::channel::requester::Who;
 use crate::profile::ProfileDirs;
+use crate::timemachine::chaos;
 use crate::timemachine::oplog::{
     Channel, NewOperation, OperationKind, OperationTransition, Oplog, Scope, Target,
 };
@@ -493,6 +494,7 @@ impl ProtectedOperation<'_> {
         let operation_id = lock(self.oplog)
             .record_operation(&new, now_ms())
             .map_err(|e| ProtectedError::Oplog(e.to_string()))?;
+        chaos::crash_point(chaos::OPERATION_INTENT);
         let abort = |reason: PriorFailure, detail: Option<String>| {
             let text = match &detail {
                 Some(d) => format!("{}: {d}", failure_text(reason)),
@@ -562,12 +564,14 @@ impl ProtectedOperation<'_> {
         if let Err(e) = advanced {
             return Err(abort(PriorFailure::CaptureFailed, Some(e.to_string())));
         }
+        chaos::crash_point(chaos::OPERATION_PRIOR);
         if self.stopping.load(Ordering::SeqCst) {
             return Err(abort(PriorFailure::DaemonStopping, None));
         }
         lock(self.oplog)
             .advance_operation(&operation_id, OperationTransition::Ready, now_ms())
             .map_err(|e| abort(PriorFailure::CaptureFailed, Some(e.to_string())))?;
+        chaos::crash_point(chaos::OPERATION_READY);
 
         // (4) The step, with its children marked until the operation closes. The opening is on
         // the clock of the start times the marks compare it with.

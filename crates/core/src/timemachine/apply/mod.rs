@@ -38,6 +38,7 @@ use gitraptor_git::tm_write::worktree::{Precondition, WriteWorktree};
 use gitraptor_git::tm_write::{WriteError, index, objects, recreate, refs, tree_path};
 use gitraptor_git::{ReadError, ReaderOptions, RepoReader};
 
+use super::chaos;
 use super::oplog::{OperationTransition, Oplog, file_identity};
 use super::repo_lock;
 use super::store::SnapshotStore;
@@ -468,6 +469,7 @@ impl<'a> Applier<'a> {
         let result = self.run_steps(operation_id, &main, &mut loaded, &mut locks, &mut report);
         match result {
             Ok(()) => {
+                chaos::crash_point(chaos::OPERATION_APPLIED);
                 // ---- 8. close ------------------------------------------------------------
                 self.release_all(operation_id, locks)?;
                 drop(repo_guard);
@@ -607,6 +609,7 @@ impl<'a> Applier<'a> {
         if let Some(hook) = &self.hooks.at_step {
             hook(step);
         }
+        chaos::crash_point(chaos::apply_step(step));
         Ok(())
     }
 
@@ -828,7 +831,10 @@ impl<'a> Applier<'a> {
                 hook(&w.root, rel);
             }
         };
-        for (path, (kind, id)) in writes {
+        for (n, (path, (kind, id))) in writes.into_iter().enumerate() {
+            if n == 1 {
+                chaos::crash_point(chaos::APPLY_MID_FILES);
+            }
             let bytes = self.store.read_blob(*id).map_err(|e| StepError {
                 reason: e.to_string(),
                 changed: true,

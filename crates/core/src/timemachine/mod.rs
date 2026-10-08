@@ -3,6 +3,7 @@
 //! user's repo lives in `crates/git` (ADR-TMC-002).
 
 pub mod apply;
+pub mod chaos;
 pub mod continuous;
 pub mod engine;
 pub mod kept;
