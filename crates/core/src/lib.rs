@@ -30,3 +30,5 @@ mod tests {
         assert_eq!(version(), env!("CARGO_PKG_VERSION"));
     }
 }
+
+// CI probe (ci/nx-affected-and-sccache): never merged.
