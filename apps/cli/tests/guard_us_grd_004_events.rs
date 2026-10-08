@@ -117,3 +117,107 @@ fn guardrails_own_removal_publishes_no_loss() {
         }
     }
 }
+
+/// A raw connection: a line out, a line in.
+struct Raw {
+    stream: std::os::unix::net::UnixStream,
+    reader: std::io::BufReader<std::os::unix::net::UnixStream>,
+    next: u64,
+}
+
+impl Raw {
+    fn open(m: &Machine) -> Self {
+        let path = gitraptor_core::client::socket_path(&m.dirs()).unwrap();
+        let stream = std::os::unix::net::UnixStream::connect(path).unwrap();
+        stream.set_read_timeout(Some(DEADLINE)).unwrap();
+        let reader = std::io::BufReader::new(stream.try_clone().unwrap());
+        let mut raw = Self {
+            stream,
+            reader,
+            next: 0,
+        };
+        let hello = raw.call(
+            methods::HELLO,
+            json!({"protocol": PROTOCOL_VERSION, "client": "cli", "client_version": "t"}),
+        );
+        assert!(hello.get("result").is_some(), "{hello}");
+        raw
+    }
+
+    fn call(&mut self, method: &str, params: serde_json::Value) -> serde_json::Value {
+        use std::io::{BufRead, Write};
+        self.next += 1;
+        let id = self.next;
+        let line = json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params});
+        self.stream.write_all(line.to_string().as_bytes()).unwrap();
+        self.stream.write_all(b"\n").unwrap();
+        loop {
+            let mut answer = String::new();
+            self.reader.read_line(&mut answer).unwrap();
+            let answer: serde_json::Value = serde_json::from_str(&answer).unwrap();
+            if answer["id"] == id {
+                return answer;
+            }
+        }
+    }
+}
+
+// A client that does not know `guard.protection` is never sent what it would not understand:
+// not the new fields of the status and not the entries of the new kind of the log.
+#[test]
+fn a_client_without_the_capability_gets_none_of_it() {
+    let m = Machine::new();
+    m.add(&m.f.repo);
+    let out = m.protect(&m.f.repo);
+    assert!(out.status.success(), "{}", text(&out));
+    std::fs::remove_file(m.common().join("gitraptor/hooks/pre-push")).unwrap();
+    // The loss is in the log once the daemon has seen it.
+    let repo = m.f.repo.to_str().unwrap().to_owned();
+    let params = json!({ "path": repo });
+    let start = Instant::now();
+    let mut new = Raw::open(&m);
+    let granted = new.call(
+        methods::CONNECTION_ACCEPT,
+        json!({"capabilities": ["guard.protection"]}),
+    );
+    assert!(
+        granted["result"]["capabilities"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c == "guard.protection"),
+        "{granted}"
+    );
+    loop {
+        let log = new.call(methods::GUARD_LOG, params.clone());
+        let seen = log["result"]["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["kind"] == "protection-state");
+        if seen {
+            break;
+        }
+        assert!(start.elapsed() < DEADLINE, "no transition: {log}");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    let status = new.call(methods::GUARD_STATUS, params.clone());
+    assert_eq!(status["result"]["hooks"]["status"], "inactive", "{status}");
+    assert!(status["result"].get("minimum_set").is_some(), "{status}");
+
+    // Without it: neither the fields nor the entry.
+    let mut old = Raw::open(&m);
+    let status = old.call(methods::GUARD_STATUS, params.clone());
+    for field in ["hooks", "diagnostics", "minimum_set"] {
+        assert!(status["result"].get(field).is_none(), "{field}: {status}");
+    }
+    let log = old.call(methods::GUARD_LOG, params);
+    assert!(
+        log["result"]["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|e| e["kind"] != "protection-state"),
+        "{log}"
+    );
+}

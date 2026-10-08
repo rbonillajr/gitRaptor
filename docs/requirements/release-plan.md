@@ -167,7 +167,8 @@ Estados: **I** = implemented, **P** = partially-implemented, **Pend** = draft, r
 | US-GRD-002, US-GRD-003, US-GRD-006, US-GRD-007, US-GRD-008, US-GRD-010, US-GRD-011, US-GRD-012 | Hooks previos; retirar sin rastro; excepción consciente; políticas; ramas y rutas; endurecer; fail-safe; un agente no relaja | Must | Pend | — |
 | US-GRD-016 | La misma decisión por MCP y por hooks | Must | Pend | Las escrituras del MCP |
 | US-GRD-017 | Destructiva permitida con punto previo | Must | Pend | US-TMC-005 |
-| US-GRD-004, US-GRD-009, US-GRD-014 | Aviso de protección caída; tamaño de diff y formato; rama base del equipo | Should | Pend | — |
+| US-GRD-004 | Aviso de protección caída | Should | P | Escenario 3 (repo retirado de la observación, con US-GRP-006); vigilante de `config` para el ≤ 5 s de los repos observados; H2 por worktree (`config.worktree`) |
+| US-GRD-009, US-GRD-014 | Tamaño de diff y formato; rama base del equipo | Should | Pend | — |
 | US-GRD-013, US-GRD-015 | Configuración por comando; cola de confirmación | Should | Pend | Dev Spec tras SPIKE-GRD-002; US-GRD-013 espera además Q-GRD-32 |
 | TS-GRD-001 | Configuración commiteada | Must | I | — |
 | SPIKE-GRD-002 | Factor de autenticación del SO (la parte de macOS) | Must | Pend | — |

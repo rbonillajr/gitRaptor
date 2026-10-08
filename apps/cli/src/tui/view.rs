@@ -692,6 +692,38 @@ mod tests {
             .unwrap_or_else(|| panic!("no row with {needle}: {screen:#?}"))
     }
 
+    /// US-GRD-004: the status bar tells that the protection stopped being active, in both
+    /// languages, from the answer to `guard.status` and from the events; it says nothing while
+    /// the protection is fine, and clears when it is back.
+    #[test]
+    fn the_status_bar_tells_that_the_protection_was_lost() {
+        use gitraptor_api::guard::{HooksLayer, HooksStatus, LossCause};
+        for (lang, lost) in [
+            (Lang::En, "protection lost: a hook is gone"),
+            (Lang::Es, "protección perdida: falta un hook"),
+        ] {
+            let mut model = shop_model(lang);
+            assert!(!screen(&model, 120, 30).contains("protect"));
+            update(
+                &mut model,
+                engine(EngineMsg::Protection {
+                    repo_id: "r1".into(),
+                    hooks: Some(HooksLayer::lost(LossCause::DispatcherMissing)),
+                }),
+            );
+            let shown = screen(&model, 120, 30);
+            assert!(shown.contains(lost), "{shown}");
+            update(
+                &mut model,
+                engine(EngineMsg::Protection {
+                    repo_id: "r1".into(),
+                    hooks: Some(HooksLayer::of(HooksStatus::Active)),
+                }),
+            );
+            assert!(!screen(&model, 120, 30).contains("protect"));
+        }
+    }
+
     /// Scenario 1: one row per worktree, the main one first and the agent first in the row.
     #[test]
     fn one_row_per_worktree_with_the_agent_first() {

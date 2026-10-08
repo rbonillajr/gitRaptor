@@ -332,6 +332,8 @@ Acción si los hooks dejan de estar activos sin que el desarrollador los desinst
 
 Un diagnóstico no es un estado: no cambia qué capas están activas. Desaparece cuando el desarrollador confirma.
 
+**Aviso de pérdida** (ADR-GRD-005 § 5; US-GRD-004): cuando los hooks dejan de estar activos sin que el desarrollador los desinstale desde Guardrails, el aviso dice la causa y la acción sugerida (`raptor guard install`, que es un comando reservado y nunca se ejecuta solo). Para no saturar al desarrollador, el aviso de una misma causa en un repo se repite como máximo cada **10 minutos** (⚠️ **ASSUMPTION** de ADR-GRD-005 § 5, L-01, a confirmar con el uso); la primera transición siempre avisa y siempre se registra. Si no hay ningún cliente abierto, el aviso queda pendiente: el estado de protección lo muestra al abrir la CLI o la TUI.
+
 **Criticidad**: Media
 
 **Ejemplos**:
