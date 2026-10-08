@@ -2,7 +2,7 @@
 title: Pendientes de la etapa de validación multiplataforma
 status: expanded
 generated: 2026-10-05
-updated: 2026-10-07
+updated: 2026-10-08
 generator: orquestador
 domain: GRP
 tags: [xplat, validacion-multiplataforma, linux, windows, contenedor, vm, lima, utm, ssh, repo-intact, strace]
@@ -38,7 +38,7 @@ Las rutas cortas de la columna Origen van bajo `docs/requirements/features/`. La
 | XP-09 | Linux | INF-GRP-001 | Repo de otro uid real (segundo usuario) | Contenedor (con un usuario más) | pendiente |
 | XP-10 | Varios | INF-GRP-001 (D11) | `repo-intact.yml` ejecutado en los tres SO | CI | pendiente: se verifica con el CI de este PR |
 | XP-11 | Linux | TS-TMC-001 | Almacén de Time Machine: `FICLONE`, respaldo por copia y `fsync` | Contenedor; reflink real en VM (btrfs o xfs) | parcial: los tests `tm_store_*` pasan en overlayfs (2026-10-05), donde `FICLONE` cae al respaldo por copia; el reflink sigue sin probar |
-| XP-12 | Windows | TS-TMC-001, TS-TMC-003, ADR-TMC-001 | Almacén y escritura (hoy `Unsupported`): `ReplaceFileW`, `FILE_FLAG_OPEN_REPARSE_POINT`, archivo abierto en un editor | Máquina Windows | pendiente |
+| XP-12 | Windows | TS-TMC-001, TS-TMC-003, ADR-TMC-001 | Almacén y escritura (hoy `Unsupported`): `ReplaceFileW`, `FILE_FLAG_OPEN_REPARSE_POINT`, archivo abierto en un editor | Máquina Windows | **hecho** (2026-10-08, ver "Time Machine en Windows" y DS-TS-TMC-003, Enmienda 2026-10-08). Queda pendiente el e2e con el binario real (`raptor undo` por el canal), que en Windows rechaza al solicitante sin identidad verificable (XP-19 y TQ-14). También quedan las anotaciones de locks para la recuperación (XP-15) y el suelo de espacio libre. |
 | XP-13 | Linux | TS-TMC-003 | Aplicador con `renameat2` (`EXCHANGE` y `NOREPLACE`) | Contenedor | **pasa** (2026-10-05): `tm_apply` en verde con Git 2.38.5, 2.43.0 y 2.56.0 |
 | XP-14 | Linux | TS-TMC-002 | Oplog con rustix | Contenedor | **pasa** (2026-10-05) |
 | XP-15 | Windows | TS-TMC-002 | Identidad estable de archivo para los locks y `SystemProbe` (hoy da por vivo cualquier proceso) | Máquina Windows | pendiente |
@@ -174,6 +174,41 @@ El canal ya existe en Windows (DS-TS-GRP-004 § 8). Verificado en la máquina re
 - Tests nuevos en verde: `winsys` `pipe::tests` (8: DACL real con una sola ACE del usuario, nombre ocupado falla cerrado, ida y vuelta con PIDs, plazo de lectura, `shutdown`, waker, pipe inexistente, tope de instancias) y `crates/core/tests/channel_windows.rs` (5: saludo, llamadas y eventos; squatting hace fallar cerrado al daemon; un pipe con DACL ajena se rechaza con `ChannelRejected`; sin daemon es `NotRunning`; las conexiones por encima del límite reciben `LIMIT_REACHED` y el pipe sigue usable).
 - Encontrado al probar: el daemon lanzado bajo demanda heredaba las tuberías estándar del cliente (`raptor daemon status | Out-String` no terminaba nunca) y no encontraba Git porque su entorno limpio no tenía `ProgramFiles`. Corregidos: los handles estándar del cliente dejan de ser heredables antes del lanzamiento, y el entorno lleva `ProgramFiles`, `USERPROFILE` y `LOCALAPPDATA` leídos del sistema, nunca del cliente.
 - Sigue pendiente: `raptor daemon stop` se rechaza (`unsupported`) porque en Windows todo comando reservado se rechaza sin prueba de terminal (TQ-14, W1); un cliente de otra cuenta real de Windows no se probó (no hay segunda cuenta en la máquina); `file_id` sigue sin implementarse en Windows, así que `daemon.replace` y la identidad del ejecutable del hook quedan como desconocidas.
+
+### Time Machine en Windows (XP-12, 2026-10-08)
+
+`cargo test --workspace --no-fail-fast` en la máquina real, en un clon nuevo de la rama `feat/XP-12-windows-snapshot-store` (`C:\src\xp12`, `CARGO_BUILD_JOBS=2`, con otros workers compilando a la vez).
+
+| Pasada | Commit | Pasan | Fallan | Ignorados |
+|---|---|---|---|---|
+| Línea base (`main`) | `fc2f515` | 897 | 0 | 3 |
+| Después de esta rama | ver PR | ver PR | ver PR | ver PR |
+
+Antes de esta rama se saltaban en Windows estos tests, que ahora corren y pasan: `tm_store_capture` (19), `tm_store_safety` (9, incluido el nuevo de la junction), `tm_apply` (17) y `tm_write_maintenance` (1). También pasan `protected::backend::tests::the_lock_key_is_the_appliers` y los tests nuevos `cfg(windows)`: `files::windows::tests` (7), `tm_write_windows` (1), `winsys` `fs::tests` (2) y `file_id` (1).
+
+**Decisiones (DS-TS-TMC-003, Enmienda 2026-10-08, W1–W8)**:
+
+- El reemplazo hace dos renombrados exclusivos (`MoveFileExW` sin `REPLACE_EXISTING`) y compara antes de entrar. No se usa `ReplaceFileW`.
+- Las carpetas del camino quedan fijadas con handles abiertos sin `FILE_SHARE_DELETE`.
+- Lo desplazado se mantiene abierto, compartido solo para lectura, mientras se compara y se borra por ese mismo handle.
+- Todos los nombres se toman en forma `\\?\`.
+- Los reparse points nunca se siguen.
+- El bit ejecutable se ignora, y los enlaces se escriben como archivos, igual que Git for Windows con `core.symlinks=false`.
+- Un archivo abierto por otro programa se reintenta durante unos 1,5 s y después da `Locked`: la operación queda interrumpida y se recupera con undo.
+
+**Encontrado al probar**:
+
+- `FlushFileBuffers` necesita un handle con escritura: con un handle de solo lectura daba "acceso denegado" en cada objeto del almacén.
+- Git no lee una configuración en una ruta `\\?\`, así que las raíces van siempre en forma de unidad.
+- El caché de stat de la captura no veía una escritura que conservaba el tamaño y la fecha de modificación (NTFS no tiene inodo). Ahora usa el `ChangeTime` de NTFS, que ninguna herramienta puede retrasar.
+
+**Sigue pendiente**:
+
+- El e2e del binario real (`undo_process`, `raw_git_undo`): el daemon de Windows rechaza al cliente con "the caller's identity could not be verified" (TQ-14, XP-19). El mismo flujo se verifica a nivel de motor con `work_thrown_away_by_a_raw_reset_hard_comes_back` y `a_file_open_in_an_editor_interrupts_and_undo_recovers_once_closed`.
+- El barrido de temporales `.gitraptor-tm-*` tras un crash (INF-TMC-001).
+- Los marcadores de la nube (OneDrive), que no se rechazan en las precondiciones.
+- Los archivos comprimidos con `compact.exe` dan solape al restaurarlos.
+- Medir el coste de `FlushFileBuffers` por objeto (ADR-TMC-006).
 
 ## Mantenimiento del índice
 
