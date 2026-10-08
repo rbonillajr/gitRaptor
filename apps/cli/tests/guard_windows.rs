@@ -65,7 +65,8 @@ impl Machine {
         let root = tempfile::tempdir().unwrap();
         let parent = root.path().join("path with spaces");
         let repo = parent.join("demo");
-        let remote = root.path().join("remote.git");
+        // Characters the MSYS2 runtime would expand or unquote if an argument reached `sh` raw.
+        let remote = root.path().join("remote {a,b} it's.git");
         std::fs::create_dir_all(&repo).unwrap();
         git_ok(
             root.path(),
@@ -187,6 +188,7 @@ fn a_prior_script_hook_is_chained_through_git_for_windows_sh() {
     let hooks = m.repo.join(".git").join("hooks");
     let marker = m.repo.parent().unwrap().join("prior ran.txt");
     let deny = m.repo.parent().unwrap().join("deny push");
+    let url = m.repo.parent().unwrap().join("pushed url.txt");
     let unix = |p: &Path| p.to_string_lossy().replace('\\', "/");
     std::fs::write(
         hooks.join("pre-commit"),
@@ -196,7 +198,8 @@ fn a_prior_script_hook_is_chained_through_git_for_windows_sh() {
     std::fs::write(
         hooks.join("pre-push"),
         format!(
-            "#!/bin/sh\ncat > /dev/null\nif [ -e '{}' ]; then echo 'prior says no' >&2; exit 1; fi\n",
+            "#!/bin/sh\ncat > /dev/null\nprintf '%s' \"$2\" > '{}'\nif [ -e '{}' ]; then echo 'prior says no' >&2; exit 1; fi\n",
+            unix(&url),
             unix(&deny)
         ),
     )
@@ -207,6 +210,12 @@ fn a_prior_script_hook_is_chained_through_git_for_windows_sh() {
     let ran = std::fs::read_to_string(&marker).expect("the prior pre-commit ran");
     assert!(ran.contains("pre-commit 0"), "{ran}");
     git_ok(&m.repo, &["push", "-q", "origin", "feat-x"]);
+    // The arguments reach the prior hook as Git passed them: `{a,b}` and `'` are not expanded.
+    let seen = std::fs::read_to_string(&url).expect("the prior pre-push ran");
+    assert!(
+        seen.replace('\\', "/").ends_with("remote {a,b} it's.git"),
+        "{seen}"
+    );
 
     std::fs::write(&deny, "").unwrap();
     git_ok(&m.repo, &["commit", "-q", "--allow-empty", "-m", "four"]);

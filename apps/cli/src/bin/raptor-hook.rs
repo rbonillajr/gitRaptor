@@ -317,15 +317,18 @@ fn chain(
     } else {
         prior.to_path_buf()
     };
-    let start = |mut command: Command| {
+    let stdio = |command: &mut Command| {
         command
-            .args(args)
             .stdin(match input {
                 Input::Read(_) => Stdio::piped(),
                 Input::Inherited => Stdio::inherit(),
             })
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit());
+    };
+    let start = |mut command: Command| {
+        command.args(args);
+        stdio(&mut command);
         command.spawn()
     };
     let spawned = match start(Command::new(&program)) {
@@ -338,12 +341,23 @@ fn chain(
         }
         // Git for Windows runs a hook that is not a program (a script, with or without `#!`)
         // through its own `sh`: so does the dispatcher, with the same `exec "$0" "$@"` shape.
+        // Every argument is quoted the way the MSYS2 runtime reads a command line (as Git's
+        // `quote_arg_msys2` does): `*`, `?`, `{a,b}`, `~` and `'` of a branch name or a path must
+        // reach the hook as typed, not be expanded.
         #[cfg(windows)]
         Err(e) if e.raw_os_error() == Some(ERROR_BAD_EXE_FORMAT) => match git_sh {
             Some(sh) => {
+                use std::os::windows::process::CommandExt;
                 let mut command = Command::new(sh);
-                command.arg("-c").arg(r#"exec "$0" "$@""#).arg(&program);
-                start(command)
+                command
+                    .raw_arg("-c")
+                    .raw_arg(msys_quote(OsStr::new(r#"exec "$0" "$@""#)))
+                    .raw_arg(msys_quote(program.as_os_str()));
+                for arg in args {
+                    command.raw_arg(msys_quote(arg));
+                }
+                stdio(&mut command);
+                command.spawn()
             }
             None => Err(e),
         },
@@ -371,6 +385,36 @@ const ENOEXEC: i32 = 8;
 /// `CreateProcess` on a file that is not a PE image.
 #[cfg(windows)]
 const ERROR_BAD_EXE_FORMAT: i32 = 193;
+
+/// `arg` between double quotes for the command line of an MSYS2 program: a `"` is escaped and the
+/// backslashes before it (or before the closing quote) are doubled, so nothing inside is a
+/// wildcard, a brace, a tilde or a quote of the shell's own.
+#[cfg(windows)]
+fn msys_quote(arg: &OsStr) -> OsString {
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+    const QUOTE: u16 = b'"' as u16;
+    const BACKSLASH: u16 = b'\\' as u16;
+    let mut out = vec![QUOTE];
+    let mut backslashes = 0usize;
+    for unit in arg.encode_wide() {
+        match unit {
+            BACKSLASH => backslashes += 1,
+            QUOTE => {
+                out.extend(std::iter::repeat_n(BACKSLASH, backslashes * 2 + 1));
+                out.push(QUOTE);
+                backslashes = 0;
+            }
+            other => {
+                out.extend(std::iter::repeat_n(BACKSLASH, backslashes));
+                out.push(other);
+                backslashes = 0;
+            }
+        }
+    }
+    out.extend(std::iter::repeat_n(BACKSLASH, backslashes * 2));
+    out.push(QUOTE);
+    OsString::from_wide(&out)
+}
 
 fn main() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().skip(1).collect();

@@ -179,21 +179,42 @@ fn constants(ctx: &GuardCtx<'_>, repo_id: &str, common: &Path, prior: &str) -> O
     })
 }
 
-/// Windows: the `sh` of the Git for Windows at `git` (`<root>\usr\bin\sh.exe`, or `bin` for an
-/// older layout), found from the validated `git.exe` and nowhere else. It is a constant of the
-/// install so the dispatcher trusts the journal's hash, not its environment (ADR-GRD-001 § 2).
+/// Windows: the `sh` of the Git for Windows the validated `git.exe` belongs to
+/// (`<root>\usr\bin\sh.exe`, or `<root>\bin\sh.exe`). The root is read from the layouts of
+/// Git for Windows (`<root>\cmd`, `<root>\<mingw64|ucrt64|clangarm64|mingw32>\bin`,
+/// `<root>\bin`), never from folders above it, and the `sh` must pass the same owner and DACL
+/// checks as `git.exe` (SEC-10). It is a constant of the install, so the dispatcher trusts a file
+/// written once and not its environment (ADR-GRD-001 § 2). Empty when there is none.
 fn git_sh(git: &Path) -> String {
     if !cfg!(windows) {
         return String::new();
     }
-    git.ancestors()
-        .skip(1)
-        .take(3)
-        .flat_map(|root| ["usr/bin/sh.exe", "bin/sh.exe"].map(|rel| root.join(rel)))
-        .find(|sh| sh.is_file())
+    let Some(root) = git_root(git) else {
+        return String::new();
+    };
+    ["usr/bin/sh.exe", "bin/sh.exe"]
+        .into_iter()
+        .find_map(|rel| gitraptor_git::resolve::check_executable(&root.join(rel)).ok())
         .map(gitraptor_policy::guard::fastpath::simplified)
         .map(|sh| sh.to_string_lossy().into_owned())
         .unwrap_or_default()
+}
+
+/// The root of a Git for Windows from the path of its `git.exe`, by its known layouts.
+fn git_root(git: &Path) -> Option<&Path> {
+    let dir = git.parent()?;
+    let name = |p: &Path| p.file_name()?.to_str().map(str::to_ascii_lowercase);
+    match name(dir)?.as_str() {
+        "cmd" => dir.parent(),
+        "bin" => {
+            let up = dir.parent()?;
+            match name(up)?.as_str() {
+                "mingw64" | "ucrt64" | "clangarm64" | "mingw32" => up.parent(),
+                _ => Some(up),
+            }
+        }
+        _ => None,
+    }
 }
 
 fn level_text(level: HooksPathLevel) -> &'static str {
@@ -581,6 +602,11 @@ pub fn install(
     #[cfg(windows)]
     if let Err(e) = gitraptor_winsys::acl::verify_private_dir(&common.join(FOLDER)) {
         return Err(revert(store, format!("folder acl: {e:?}")));
+    }
+    // What was verified is the folder this install wrote, not another one put in its place.
+    #[cfg(windows)]
+    if !matches!(writer.folder_id(common), Ok(Some(id)) if id == folder) {
+        return Err(revert(store, "folder changed after it was written".into()));
     }
     journal.folder = Some(folder.into());
     save(store, &journal)?;
@@ -1039,4 +1065,23 @@ pub fn recover(
     let listed: Vec<&str> = listed.iter().map(String::as_str).collect();
     rollback(&writer, common, &hooks_dir, &listed, store);
     Recovery::RolledBack
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_git_root_comes_from_the_known_layouts_only() {
+        let root = |p: &str| git_root(Path::new(p)).map(|r| r.to_string_lossy().replace('\\', "/"));
+        assert_eq!(root("/g/Git/cmd/git.exe").as_deref(), Some("/g/Git"));
+        assert_eq!(
+            root("/g/Git/mingw64/bin/git.exe").as_deref(),
+            Some("/g/Git")
+        );
+        assert_eq!(root("/g/Git/bin/git.exe").as_deref(), Some("/g/Git"));
+        // A shim folder is not a Git for Windows: nothing above it is searched.
+        assert_eq!(root("/ProgramData/chocolatey/lib/x/git.exe"), None);
+        assert_eq!(root("/g/shims/git.exe"), None);
+    }
 }
