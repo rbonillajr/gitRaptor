@@ -13,6 +13,7 @@ pub mod protected;
 /// The repo write lock lives in a neutral module shared with the executor
 /// (ADR-CKP-002 § 5); re-exported for the applier.
 pub use crate::repo_lock;
+pub mod restore;
 pub mod store;
 pub mod sweep;
 pub mod timeline;
