@@ -507,6 +507,15 @@ impl IgnoredPrefixes {
         }
     }
 
+    /// A folder that was due to leave the stream but did not: it counts from zero again.
+    pub(crate) fn cool(&self, dir: &Path) {
+        let all = self.list.read().unwrap_or_else(|e| e.into_inner());
+        if let Some(p) = all.iter().find(|p| p.dir == dir) {
+            p.hot.store(false, Ordering::Relaxed);
+            p.hits.store(0, Ordering::Relaxed);
+        }
+    }
+
     /// Takes one folder out. The watcher is told, since it may have left it out of its stream.
     fn remove(&self, dir: &Path) {
         let removed = {
@@ -728,5 +737,21 @@ mod tests {
         assert!(p.snapshot().is_empty());
         p.clear();
         assert_eq!(told.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn a_cooled_folder_counts_from_zero_and_can_become_hot_again() {
+        let (p, told) = counted();
+        let path = Path::new("/w/target/debug/a");
+        for i in 0..u64::from(HOT_EVENTS) {
+            p.hit(path, 1_000 + i);
+        }
+        assert_eq!(told.load(Ordering::Relaxed), 1);
+        p.cool(Path::new("/w/target"));
+        assert!(!p.snapshot()[0].hot);
+        for i in 0..u64::from(HOT_EVENTS) {
+            p.hit(path, 2_000 + i);
+        }
+        assert_eq!(told.load(Ordering::Relaxed), 2);
     }
 }
