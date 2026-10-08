@@ -507,7 +507,7 @@ Cambios propuestos a [US-TMC-006](../user-stories/US-TMC-006-timeline-que-cuando
 
 ## Estado de la implementación (2026-10-08)
 
-Implementado en: PR #TBD.
+Implementado en: PR #198.
 
 Notas (fuera del alcance de esta ficha o sin bloquearla):
 - Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md), XP-35).
