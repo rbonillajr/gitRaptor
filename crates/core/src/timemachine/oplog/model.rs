@@ -33,6 +33,9 @@ text_enum!(
         GuaranteedPrior => "guaranteed-prior",
         Observation => "observation",
         HookPrior => "hook-prior",
+        /// A point an agent asked for (ADR-TMC-004 § 4): covered like an observation, never a
+        /// protected operation.
+        Manual => "manual",
     }
 );
 
@@ -294,6 +297,22 @@ pub struct SnapshotRecord {
     pub cause_operation: Option<String>,
     pub cause_event_seq: Option<i64>,
     pub recorded_ms: i64,
+    /// Who asked and what for, for a `manual` snapshot only.
+    pub manual: Option<ManualMeta>,
+}
+
+/// What a `manual` snapshot records about its request, frozen in its row.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ManualMeta {
+    /// Free text of the requester: untrusted, never a ref, path, argument or log field.
+    pub label: String,
+    pub requester: Requester,
+    pub channel: Channel,
+    /// The daemon's canonical key of the worktree: resolved root and `(dev, inode)`. The quota
+    /// compares it by exact equality.
+    pub worktree_key: String,
+    /// The instant the request was made: the mark of every row of the attempt.
+    pub requested_ms: i64,
 }
 
 /// What is known once a capture completes.

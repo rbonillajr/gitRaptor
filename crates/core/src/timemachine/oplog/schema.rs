@@ -101,4 +101,47 @@ CREATE TRIGGER notices_no_delete BEFORE DELETE ON notices
 -- identity of the file (ADR-TMC-003 § 4). Hashed from chain format 2.
 ALTER TABLE journal ADD COLUMN birth_ns INTEGER;
 ",
+    r"
+-- The `manual` level and the columns of a manual snapshot, at the end of the table: the old
+-- columns are copied as they are, so the hash of every row written before verifies with its own
+-- format. The append-only triggers are dropped first (the table is rebuilt) and recreated with
+-- the text of migration 1.
+DROP TRIGGER snapshots_no_update;
+DROP TRIGGER snapshots_no_delete;
+CREATE TABLE snapshots_v3 (
+    snapshot_id       TEXT PRIMARY KEY,
+    seq               INTEGER NOT NULL UNIQUE,
+    level             TEXT NOT NULL CHECK (level IN ('guaranteed-prior', 'observation',
+                          'hook-prior', 'manual')),
+    worktrees         TEXT NOT NULL,
+    store_ref         TEXT NOT NULL,
+    engine_mark       INTEGER,
+    cause_operation   TEXT,
+    cause_event_seq   INTEGER,
+    recorded_ms       INTEGER NOT NULL,
+    label             TEXT,
+    requester         TEXT,
+    requester_session TEXT,
+    worktree_key      TEXT,
+    channel           TEXT CHECK (channel IS NULL OR channel IN ('cli', 'tui', 'mcp', 'hook')),
+    CHECK ((level = 'manual') = (label IS NOT NULL AND requester IS NOT NULL
+        AND requester_session IS NOT NULL AND worktree_key IS NOT NULL AND channel IS NOT NULL))
+) STRICT;
+INSERT INTO snapshots_v3 (snapshot_id, seq, level, worktrees, store_ref, engine_mark,
+        cause_operation, cause_event_seq, recorded_ms)
+    SELECT snapshot_id, seq, level, worktrees, store_ref, engine_mark,
+        cause_operation, cause_event_seq, recorded_ms
+    FROM snapshots;
+DROP TABLE snapshots;
+ALTER TABLE snapshots_v3 RENAME TO snapshots;
+CREATE INDEX snapshots_manual ON snapshots(requester_session, recorded_ms)
+    WHERE level = 'manual';
+CREATE INDEX snapshots_manual_worktree ON snapshots(worktree_key, recorded_ms)
+    WHERE level = 'manual';
+CREATE INDEX snapshots_manual_time ON snapshots(recorded_ms) WHERE level = 'manual';
+CREATE TRIGGER snapshots_no_update BEFORE UPDATE ON snapshots
+    BEGIN SELECT RAISE(ABORT, 'the oplog is append-only'); END;
+CREATE TRIGGER snapshots_no_delete BEFORE DELETE ON snapshots
+    BEGIN SELECT RAISE(ABORT, 'the oplog is append-only'); END;
+",
 ];

@@ -31,7 +31,7 @@ use super::meta::{ConflictEntry, META_FORMAT, Meta, MetaWorktree, RegisteredWork
 use super::{CaptureError, OBSERVATION_MAX_FILE_BYTES, SnapshotStore, StageTimings, now_ms};
 use crate::timemachine::chaos;
 use crate::timemachine::oplog::{
-    CompleteInfo, Exclusion, NewSnapshot, Oplog, SnapshotLevel, SnapshotState,
+    CompleteInfo, Exclusion, ManualMeta, NewSnapshot, Oplog, SnapshotLevel, SnapshotState,
 };
 
 /// A request for one snapshot.
@@ -337,16 +337,90 @@ impl SnapshotStore {
         oplog: &Mutex<Oplog>,
         req: &CaptureRequest,
     ) -> Result<CaptureOutcome, CaptureError> {
+        self.run_capture(oplog, req, None, &|| false)
+    }
+
+    /// Takes a `manual` snapshot. Unlike [`SnapshotStore::capture`], its `pending` row is written
+    /// first, before the worktree is read, so the attempt counts for the quota whatever happens
+    /// next; a capture that fails, gives way or is discarded leaves that row `discarded` and
+    /// never a point. It gives way to a guaranteed prior like an observation does, reads files
+    /// up to the observation limit and never takes the prior's reserve of threads.
+    pub fn capture_manual(
+        &self,
+        oplog: &Mutex<Oplog>,
+        req: &CaptureRequest,
+        meta: &ManualMeta,
+    ) -> Result<CaptureOutcome, CaptureError> {
+        self.capture_manual_until(oplog, req, meta, &|| false)
+    }
+
+    /// [`SnapshotStore::capture_manual`] that also gives up, like a yield, when `abort` says so.
+    /// It is asked at every point where the capture may give way and before the validity point.
+    /// The manual capture uses it for the free-space floor, which borrows the caller's probe and
+    /// so cannot travel in the request's `'static` guards.
+    pub fn capture_manual_until(
+        &self,
+        oplog: &Mutex<Oplog>,
+        req: &CaptureRequest,
+        meta: &ManualMeta,
+        abort: &(dyn Fn() -> bool + Sync),
+    ) -> Result<CaptureOutcome, CaptureError> {
+        if req.level != SnapshotLevel::Manual {
+            return Err(CaptureError::InvalidInput(
+                "a manual capture takes a manual request".into(),
+            ));
+        }
+        self.run_capture(oplog, req, Some(meta), abort)
+    }
+
+    fn run_capture(
+        &self,
+        oplog: &Mutex<Oplog>,
+        req: &CaptureRequest,
+        manual: Option<&ManualMeta>,
+        abort: &(dyn Fn() -> bool + Sync),
+    ) -> Result<CaptureOutcome, CaptureError> {
         validate(req)?;
         let t_all = Instant::now();
-        let prior = req.level != SnapshotLevel::Observation;
+        let prior = matches!(
+            req.level,
+            SnapshotLevel::GuaranteedPrior | SnapshotLevel::HookPrior
+        );
         let (mut state, _ticket) = self.writer(prior);
         let timings = StageTimings {
             queue: t_all.elapsed(),
             ..StageTimings::default()
         };
+        // The attempt exists from here: before the worktree is read.
+        let begun = match manual {
+            Some(meta) => {
+                let mut log = oplog.lock().unwrap_or_else(|p| p.into_inner());
+                let id = log.begin_manual_snapshot(
+                    &NewSnapshot {
+                        level: req.level,
+                        worktrees: req.worktrees.iter().map(|w| w.key.clone()).collect(),
+                        engine_mark: req.engine_mark,
+                        cause_operation: req.cause_operation.clone(),
+                        cause_event_seq: req.cause_event_seq,
+                    },
+                    meta,
+                )?;
+                Some((id, meta))
+            }
+            None => None,
+        };
         let mut works = Vec::with_capacity(req.worktrees.len());
-        let result = self.capture_locked(&mut state, &mut works, oplog, req, prior, t_all, timings);
+        let result = self.capture_locked(
+            &mut state,
+            &mut works,
+            oplog,
+            req,
+            prior,
+            t_all,
+            timings,
+            begun.as_ref().map(|(id, meta)| (id.as_str(), *meta)),
+            abort,
+        );
         if result.is_err() {
             // What was read stays true (the stat cache names blobs the store has, the `index`
             // tree matches its index signature), so it is kept; but the next capture of these
@@ -355,6 +429,11 @@ impl SnapshotStore {
                 let mut st = w.state;
                 st.mark = None;
                 state.worktrees.insert(w.key, st);
+            }
+            // The attempt did not make a point: its row says so. Nothing is deleted.
+            if let Some((id, meta)) = &begun {
+                let mut log = oplog.lock().unwrap_or_else(|p| p.into_inner());
+                let _ = log.set_snapshot_state(id, SnapshotState::Discarded, meta.requested_ms);
             }
         }
         result
@@ -372,9 +451,15 @@ impl SnapshotStore {
         prior: bool,
         t_all: Instant,
         mut timings: StageTimings,
+        begun: Option<(&str, &ManualMeta)>,
+        abort: &(dyn Fn() -> bool + Sync),
     ) -> Result<CaptureOutcome, CaptureError> {
-        let yield_now =
-            || !prior && (self.prior_waiting() || req.give_way.as_ref().is_some_and(|g| (g.0)()));
+        let yield_now = || {
+            !prior
+                && (self.prior_waiting()
+                    || req.give_way.as_ref().is_some_and(|g| (g.0)())
+                    || abort())
+        };
         if yield_now() {
             return Err(CaptureError::Yielded);
         }
@@ -588,7 +673,18 @@ impl SnapshotStore {
         // with `fullfsync` (macOS) and `synchronous=FULL`, and that flush empties the drive
         // cache, so every object synced above is on stable storage before the ref exists. No
         // separate barrier is paid.
-        let snapshot_id = record(oplog, &handle, req, commit, unique_bytes, &exclusions)?;
+        let snapshot_id = match begun {
+            Some((id, meta)) => finish_manual(
+                oplog,
+                &handle,
+                id,
+                meta.requested_ms,
+                commit,
+                unique_bytes,
+                &exclusions,
+            )?,
+            None => record(oplog, &handle, req, commit, unique_bytes, &exclusions)?,
+        };
         timings.ref_oplog = laps.lap();
 
         let detection = works.iter().map(|w| (w.key.clone(), w.detection)).collect();
@@ -964,6 +1060,8 @@ impl SnapshotStore {
             return Ok(Vec::new());
         }
         let started = wall_now();
+        // `prior` here is what a capture of a guaranteed prior or a hook prior is: everything,
+        // with the machine's threads. A manual capture is bounded like an observation.
         let limit = if prior {
             None
         } else {
@@ -1302,6 +1400,30 @@ fn validate(req: &CaptureRequest) -> Result<(), CaptureError> {
         }
     }
     Ok(())
+}
+
+/// The validity point of a manual capture, whose `pending` row exists already: the ref, then
+/// `complete`. A failure leaves the row to the caller, which marks it `discarded`.
+fn finish_manual(
+    oplog: &Mutex<Oplog>,
+    handle: &StoreHandle,
+    id: &str,
+    now_ms: i64,
+    commit: Oid,
+    unique_bytes: u64,
+    exclusions: &[Exclusion],
+) -> Result<String, CaptureError> {
+    let mut log = oplog.lock().unwrap_or_else(|p| p.into_inner());
+    handle.create_ref(id, commit)?;
+    log.complete_snapshot(
+        id,
+        &CompleteInfo {
+            unique_size_bytes: unique_bytes,
+            exclusions: exclusions.to_vec(),
+        },
+        now_ms,
+    )?;
+    Ok(id.to_owned())
 }
 
 /// The validity point: `pending` before the ref, the ref, then `complete`. If the ref cannot be

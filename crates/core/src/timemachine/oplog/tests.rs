@@ -1309,3 +1309,217 @@ fn a_start_time_tells_a_reused_pid_apart() {
     assert!(same_start(child, child + 3_000_000, StartRule::SubSecond));
     assert!(same_start(child, child - 7_000_000, StartRule::SubSecond));
 }
+
+// ----- Migration 3 and the manual rows ---------------------------------------------------------
+
+/// An oplog of the previous version (schema 2) with one guaranteed prior, written by the
+/// current code before the columns existed: its rows verify with the format they were hashed
+/// with. Built with the first two migrations only.
+fn oplog_at_version_2(dirs: &ProfileDirs) -> PathBuf {
+    let dir = repo_dir(dirs, REPO).unwrap();
+    fsperm::ensure_private_dir(&dirs.data.join(TM_DIR)).unwrap();
+    fsperm::ensure_private_dir(&dir).unwrap();
+    let path = dir.join(OPLOG_FILE);
+    let conn = Connection::open(&path).unwrap();
+    for migration in &schema::OPLOG_MIGRATIONS[..2] {
+        conn.execute_batch(migration).unwrap();
+    }
+    conn.pragma_update(None, "user_version", 2).unwrap();
+    path
+}
+
+fn schema_version(path: &Path) -> i64 {
+    Connection::open(path)
+        .unwrap()
+        .query_row("PRAGMA user_version", [], |r| r.get(0))
+        .unwrap()
+}
+
+fn copy_of(path: &Path) -> PathBuf {
+    let mut copy = path.as_os_str().to_owned();
+    copy.push(COPY_SUFFIX);
+    PathBuf::from(copy)
+}
+
+#[test]
+fn a_new_break_after_migrating_restores_the_copy() {
+    let (_tmp, dirs) = profile();
+    let path = oplog_at_version_2(&dirs);
+    let bytes = fs::read(&path).unwrap();
+    let new_break = ChainBreak {
+        seq: 1,
+        cause: BreakCause::RowAltered,
+    };
+
+    // The chain held before; after migrating it does not.
+    let calls = std::cell::Cell::new(0);
+    let verify = |_: &Connection| -> Result<Vec<ChainBreak>> {
+        calls.set(calls.get() + 1);
+        Ok(if calls.get() == 1 {
+            Vec::new()
+        } else {
+            vec![new_break.clone()]
+        })
+    };
+    let err = match open_guarded(&path, &dirs.quarantine_dir(), &verify) {
+        Ok(_) => panic!("a migration that breaks the chain must fail the open"),
+        Err(err) => err,
+    };
+
+    let broke = migration_broke(&err).expect("the error is the typed MigrationBroke");
+    assert_eq!(broke.new_breaks, vec![new_break]);
+    assert_eq!(calls.get(), 2, "walked before and after migrating");
+    // The oplog is as the previous version left it, and the copy is gone.
+    assert_eq!(schema_version(&path), 2);
+    let conn = Connection::open(&path).unwrap();
+    assert!(conn.prepare("SELECT label FROM snapshots LIMIT 0").is_err());
+    assert!(
+        !copy_of(&path).exists(),
+        "the copy took the place of the file"
+    );
+    assert!(fs::read(&path).unwrap().len().abs_diff(bytes.len()) < 64 * 1024);
+}
+
+#[test]
+fn a_break_that_was_there_before_migrating_does_not_stop_the_migration() {
+    let (_tmp, dirs) = profile();
+    let path = oplog_at_version_2(&dirs);
+    let old = ChainBreak {
+        seq: 1,
+        cause: BreakCause::RowAltered,
+    };
+    let verify = |_: &Connection| -> Result<Vec<ChainBreak>> { Ok(vec![old.clone()]) };
+    let opened = open_guarded(&path, &dirs.quarantine_dir(), &verify).unwrap();
+    drop(opened);
+    assert_eq!(schema_version(&path), 3);
+    assert!(!copy_of(&path).exists(), "no copy is left behind");
+}
+
+#[test]
+fn an_oplog_that_is_already_migrated_gets_no_copy() {
+    let (_tmp, dirs) = profile();
+    let (log, _) = open(&dirs);
+    drop(log);
+    let path = repo_dir(&dirs, REPO).unwrap().join(OPLOG_FILE);
+    let verify = |_: &Connection| -> Result<Vec<ChainBreak>> {
+        panic!("nothing is walked when nothing migrates")
+    };
+    drop(open_guarded(&path, &dirs.quarantine_dir(), &verify).unwrap());
+    assert!(!copy_of(&path).exists());
+}
+
+#[test]
+fn a_manual_snapshot_is_chained_with_format_3_and_verifies() {
+    let (_tmp, dirs) = profile();
+    let (mut log, _) = open(&dirs);
+    let meta = ManualMeta {
+        label: "before the migration".into(),
+        requester: agent("s1"),
+        channel: Channel::Mcp,
+        worktree_key: "1:2:/repo/main".into(),
+        requested_ms: 7_000,
+    };
+    let new = NewSnapshot {
+        level: SnapshotLevel::Manual,
+        worktrees: vec!["main".into()],
+        engine_mark: Some(3),
+        cause_operation: None,
+        cause_event_seq: None,
+    };
+    let id = log.begin_manual_snapshot(&new, &meta).unwrap();
+    log.complete_snapshot(&id, &CompleteInfo::default(), 7_000)
+        .unwrap();
+    assert_eq!(log.verify_chain().unwrap(), vec![]);
+
+    let view = log.snapshot(&id).unwrap().unwrap();
+    assert_eq!(view.record.level, SnapshotLevel::Manual);
+    assert_eq!(view.record.recorded_ms, 7_000);
+    assert_eq!(view.record.manual, Some(meta.clone()));
+    assert_eq!(view.state, SnapshotState::Complete);
+    assert!(!view.tampered);
+
+    // The row is hashed with its manual columns: editing the label is a break.
+    let format: i64 = log
+        .conn()
+        .query_row(
+            "SELECT format FROM chain WHERE seq = (SELECT seq FROM snapshots)",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(format, 3);
+    log.conn()
+        .execute_batch("DROP TRIGGER snapshots_no_update")
+        .unwrap();
+    log.conn()
+        .execute("UPDATE snapshots SET label = 'edited'", [])
+        .unwrap();
+    assert_eq!(log.verify_chain().unwrap().len(), 1);
+}
+
+#[test]
+fn only_a_manual_snapshot_with_a_session_can_begin() {
+    let (_tmp, dirs) = profile();
+    let (mut log, _) = open(&dirs);
+    let mut meta = ManualMeta {
+        label: "x".into(),
+        requester: Requester::Unattributed,
+        channel: Channel::Mcp,
+        worktree_key: "1:2:/repo/main".into(),
+        requested_ms: 1,
+    };
+    let manual = NewSnapshot {
+        level: SnapshotLevel::Manual,
+        worktrees: vec!["main".into()],
+        engine_mark: None,
+        cause_operation: None,
+        cause_event_seq: None,
+    };
+    assert!(log.begin_manual_snapshot(&manual, &meta).is_err());
+    meta.requester = agent("s1");
+    assert!(
+        log.begin_manual_snapshot(&prior(&["main"], None), &meta)
+            .is_err(),
+        "a prior is not begun as a manual snapshot"
+    );
+    assert_eq!(log.last_seq().unwrap(), 0, "nothing was written");
+}
+
+#[test]
+fn the_quota_reads_have_no_upper_bound_and_match_the_key_exactly() {
+    let (_tmp, dirs) = profile();
+    let (mut log, _) = open(&dirs);
+    let mut manual = |session: &str, key: &str, at: i64| {
+        let meta = ManualMeta {
+            label: "x".into(),
+            requester: agent(session),
+            channel: Channel::Mcp,
+            worktree_key: key.into(),
+            requested_ms: at,
+        };
+        let new = NewSnapshot {
+            level: SnapshotLevel::Manual,
+            worktrees: vec!["main".into()],
+            engine_mark: None,
+            cause_operation: None,
+            cause_event_seq: None,
+        };
+        log.begin_manual_snapshot(&new, &meta).unwrap();
+    };
+    manual("s1", "1:2:/r/feat_a", 10_000);
+    manual("s1", "1:3:/r/featxa", 20_000);
+    manual("s2", "1:2:/r/feat_a", 30_000);
+    // A stamp "in the future" of the reader is still counted.
+    let input = log
+        .manual_quota_input("s1", "1:2:/r/feat_a", 5_000)
+        .unwrap();
+    assert_eq!(input.requester_ms, vec![10_000]);
+    assert_eq!(input.worktree_ms, vec![10_000, 30_000]);
+    assert_eq!(input.repo_ms, vec![10_000, 20_000, 30_000]);
+    // Older than a day: gone from every window.
+    let input = log
+        .manual_quota_input("s1", "1:2:/r/feat_a", 10_000 + 86_400_000)
+        .unwrap();
+    assert_eq!(input.requester_ms, Vec::<i64>::new());
+    assert_eq!(input.repo_ms, vec![20_000, 30_000]);
+}

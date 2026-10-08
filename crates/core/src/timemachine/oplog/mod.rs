@@ -31,17 +31,19 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
+use rusqlite::{
+    Connection, ErrorCode, OpenFlags, OptionalExtension, Transaction, TransactionBehavior, params,
+};
 
 use crate::profile::{ProfileDirs, ProfileError, Result, fsperm, sqlite};
 
 use chain::{Hash, RowKind};
 
 pub use model::{
-    BreakCause, ChainBreak, Channel, CompleteInfo, Exclusion, JournalEntry, NewOperation,
-    NewSnapshot, Notice, NoticeKind, OpRef, OperationKind, OperationRecord, OperationState,
-    OperationView, Requester, RequesterOrigin, Scope, SnapshotLevel, SnapshotRecord, SnapshotState,
-    SnapshotView, Target,
+    BreakCause, ChainBreak, Channel, CompleteInfo, Exclusion, JournalEntry, ManualMeta,
+    NewOperation, NewSnapshot, Notice, NoticeKind, OpRef, OperationKind, OperationRecord,
+    OperationState, OperationView, Requester, RequesterOrigin, Scope, SnapshotLevel,
+    SnapshotRecord, SnapshotState, SnapshotView, Target,
 };
 pub use query::{CurrentAttribution, OperationFilter, SnapshotFilter};
 pub use recovery::{
@@ -157,7 +159,9 @@ impl Oplog {
         let path = dir.join(OPLOG_FILE);
         let head_path = dir.join(HEAD_FILE);
         let existed = path.exists();
-        let opened = sqlite::open_db(&path, schema::OPLOG_MIGRATIONS, &dirs.quarantine_dir())?;
+        let opened = open_guarded(&path, &dirs.quarantine_dir(), &|conn| {
+            chain::verify(conn, repo_id)
+        })?;
         // On macOS a plain fsync does not flush the drive cache: a `complete` row could be lost
         // to a power cut after the protected operation ran (NFR-01). No effect elsewhere.
         opened.conn.pragma_update(None, "fullfsync", true)?;
@@ -338,6 +342,68 @@ impl Oplog {
                         new.cause_operation,
                         new.cause_event_seq,
                         now_ms
+                    ],
+                )
+            })?;
+            batch.journal(
+                &Entry {
+                    entry: "snapshot-state",
+                    subject_id: Some(&id),
+                    state: Some(SnapshotState::Pending.as_str()),
+                    ..Entry::default()
+                },
+                now_ms,
+            )?;
+            Ok(id)
+        })
+    }
+
+    /// Records a `manual` snapshot whose capture is starting, in state `pending`, with who asked
+    /// for it and what for. Every row of the attempt is marked with `meta.requested_ms`. The
+    /// request must have a session (an unattributed one never gets a point) and the snapshot
+    /// must be of level `manual`; anything else fails without writing.
+    pub fn begin_manual_snapshot(
+        &mut self,
+        new: &NewSnapshot,
+        meta: &ManualMeta,
+    ) -> Result<String> {
+        let Some(session) = meta.requester.session_id() else {
+            return Err(ProfileError::InvalidWrite(
+                "a manual snapshot needs a requester with a session".into(),
+            ));
+        };
+        if new.level != SnapshotLevel::Manual {
+            return Err(ProfileError::InvalidWrite(
+                "begin_manual_snapshot takes a manual snapshot".into(),
+            ));
+        }
+        let worktrees = to_json(&new.worktrees)?;
+        let requester = to_json(&meta.requester)?;
+        let now_ms = meta.requested_ms;
+        self.write(|batch| {
+            let id = sqlite::new_uuid(&batch.tx)?;
+            let store_ref = [SNAPSHOT_REF_PREFIX, &id].concat();
+            batch.append(RowKind::Snapshot, |tx, seq| {
+                tx.execute(
+                    "INSERT INTO snapshots (snapshot_id, seq, level, worktrees, store_ref,
+                         engine_mark, cause_operation, cause_event_seq, recorded_ms,
+                         label, requester, requester_session, worktree_key, channel)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+                    params![
+                        id,
+                        seq,
+                        new.level.as_str(),
+                        worktrees,
+                        store_ref,
+                        new.engine_mark,
+                        new.cause_operation,
+                        new.cause_event_seq,
+                        now_ms,
+                        meta.label,
+                        requester,
+                        session,
+                        meta.worktree_key,
+                        meta.channel.as_str()
                     ],
                 )
             })?;
@@ -619,6 +685,160 @@ impl Oplog {
     #[cfg(test)]
     pub(crate) fn conn(&self) -> &Connection {
         &self.conn
+    }
+}
+
+/// Migration 3 broke the hash chain where it held before: the oplog was put back as it was and
+/// the Time Machine of the repo stays closed (the open fails with this as its source, see
+/// [`migration_broke`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MigrationBroke {
+    /// The breaks the migration introduced.
+    pub new_breaks: Vec<ChainBreak>,
+}
+
+impl std::fmt::Display for MigrationBroke {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "the oplog migration broke the hash chain at {} row(s); the previous oplog was restored",
+            self.new_breaks.len()
+        )
+    }
+}
+
+impl std::error::Error for MigrationBroke {}
+
+/// The [`MigrationBroke`] an open failed with, if it is that error.
+pub fn migration_broke(err: &ProfileError) -> Option<&MigrationBroke> {
+    match err {
+        ProfileError::Io(io) => io.get_ref()?.downcast_ref::<MigrationBroke>(),
+        _ => None,
+    }
+}
+
+/// How a migration checks the chain: the walk of [`chain::verify`] in production.
+type Verify<'a> = &'a dyn Fn(&Connection) -> Result<Vec<ChainBreak>>;
+
+/// Suffix of the copy of the oplog taken before a migration.
+const COPY_SUFFIX: &str = ".pre-migration";
+
+/// Opens the oplog migrating it. Before a migration of an existing file, a copy is taken with
+/// SQLite's own `VACUUM INTO` (consistent whatever the WAL holds), and after it the chain is
+/// walked again: a break that was not there before restores the copy and fails the open
+/// (NFR-01). A migration that fails rolls back inside its transaction, so the file is untouched.
+fn open_guarded(
+    path: &Path,
+    quarantine_dir: &Path,
+    verify: Verify<'_>,
+) -> Result<sqlite::OpenedDb> {
+    let Some(copy) = take_copy(path, verify)? else {
+        return sqlite::open_db(path, schema::OPLOG_MIGRATIONS, quarantine_dir);
+    };
+    let opened = match sqlite::open_db(path, schema::OPLOG_MIGRATIONS, quarantine_dir) {
+        Ok(opened) => opened,
+        Err(err) => {
+            copy.discard();
+            return Err(err);
+        }
+    };
+    let after = match verify(&opened.conn) {
+        Ok(after) => after,
+        Err(err) => {
+            drop(opened);
+            copy.restore(path)?;
+            return Err(err);
+        }
+    };
+    let new_breaks: Vec<ChainBreak> = after
+        .into_iter()
+        .filter(|b| !copy.before.contains(b))
+        .collect();
+    if new_breaks.is_empty() {
+        copy.discard();
+        return Ok(opened);
+    }
+    drop(opened);
+    copy.restore(path)?;
+    Err(ProfileError::Io(io::Error::new(
+        io::ErrorKind::InvalidData,
+        MigrationBroke { new_breaks },
+    )))
+}
+
+/// The copy of an oplog taken before migrating it, and the breaks the chain had then.
+struct PreMigrationCopy {
+    path: PathBuf,
+    before: Vec<ChainBreak>,
+}
+
+impl PreMigrationCopy {
+    /// The migration went well: the copy is not needed.
+    fn discard(self) {
+        remove_with_companions(&self.path);
+    }
+
+    /// Puts the copy back in place of the migrated file.
+    fn restore(self, original: &Path) -> Result<()> {
+        remove_with_companions(original);
+        fs::rename(&self.path, original)?;
+        fsperm::set_private_file_mode(original)?;
+        Ok(())
+    }
+}
+
+/// Removes a database file and the `-wal`, `-shm` and `-journal` files SQLite keeps beside it.
+fn remove_with_companions(path: &Path) {
+    let _ = fs::remove_file(path);
+    for suffix in ["-wal", "-shm", "-journal"] {
+        let mut companion = path.as_os_str().to_owned();
+        companion.push(suffix);
+        let _ = fs::remove_file(PathBuf::from(companion));
+    }
+}
+
+/// Takes the copy when `path` is an oplog of an older version that a migration will change.
+/// `None` when there is nothing to protect: no file, a new file, one already migrated, one this
+/// build cannot open (the open decides: newer schema, corrupt) or an unreadable one.
+fn take_copy(path: &Path, verify: Verify<'_>) -> Result<Option<PreMigrationCopy>> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    let flags = OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+    let Ok(source) = Connection::open_with_flags(path, flags) else {
+        return Ok(None);
+    };
+    let version = source
+        .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
+        .unwrap_or(0);
+    let current = i64::try_from(schema::OPLOG_MIGRATIONS.len()).unwrap_or(i64::MAX);
+    if version <= 0 || version >= current {
+        return Ok(None);
+    }
+    let mut copy = path.as_os_str().to_owned();
+    copy.push(COPY_SUFFIX);
+    let copy = PathBuf::from(copy);
+    remove_with_companions(&copy);
+    // Created private and empty first: `VACUUM INTO` accepts an empty file.
+    fsperm::create_private_file(&copy)?;
+    if let Err(err) = source.execute("VACUUM INTO ?1", params![path_text(&copy)?]) {
+        remove_with_companions(&copy);
+        return match err.sqlite_error_code() {
+            // A damaged file is the open's to set aside, as it always was.
+            Some(ErrorCode::DatabaseCorrupt | ErrorCode::NotADatabase) => Ok(None),
+            _ => Err(err.into()),
+        };
+    }
+    drop(source);
+    let before = Connection::open_with_flags(&copy, flags)
+        .map_err(ProfileError::from)
+        .and_then(|conn| verify(&conn));
+    match before {
+        Ok(before) => Ok(Some(PreMigrationCopy { path: copy, before })),
+        Err(err) => {
+            remove_with_companions(&copy);
+            Err(err)
+        }
     }
 }
 

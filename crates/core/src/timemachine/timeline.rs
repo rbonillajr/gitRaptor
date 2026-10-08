@@ -219,6 +219,7 @@ fn protection(point: Option<&SnapshotView>) -> Protection {
                 SnapshotLevel::GuaranteedPrior => ProtectionLevel::GuaranteedPrior,
                 SnapshotLevel::HookPrior => ProtectionLevel::HookPrior,
                 SnapshotLevel::Observation => ProtectionLevel::Observation,
+                SnapshotLevel::Manual => ProtectionLevel::Manual,
             },
             snapshot_id: Some(s.record.snapshot_id.clone()),
         },
