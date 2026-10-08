@@ -1,0 +1,17 @@
+{
+  "name": "gitraptor-release-status",
+  "version": "0.0.0",
+  "license": "FSL-1.1-ALv2",
+  "private": true,
+  "description": "Generates docs/requirements/release-status.md from the story cards; no dependencies",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "generate": "node release-status.mjs",
+    "check": "node release-status.mjs --check",
+    "json": "node release-status.mjs --json",
+    "test": "node --test release-status.test.mjs"
+  }
+}
