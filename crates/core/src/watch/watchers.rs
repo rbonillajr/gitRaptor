@@ -99,6 +99,10 @@ impl Watchers {
         let mut ok = true;
         let mut added = Vec::new();
         for root in roots {
+            // A woken repo's roots were never unwatched (N1).
+            if self.watched.contains(root) {
+                continue;
+            }
             if paths.add(root, RecursiveMode::Recursive).is_ok() {
                 added.push(root.clone());
             } else {
