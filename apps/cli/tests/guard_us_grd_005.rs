@@ -15,7 +15,7 @@ use std::process::{Command, Output, Stdio};
 use gitraptor_core::daemon::running_pid;
 use gitraptor_core::profile::ProfileDirs;
 use gitraptor_testkit::Fixture;
-use gitraptor_testkit::fixture::git_from_path;
+use gitraptor_testkit::fixture::{copy_executable, git_from_path};
 use serde_json::Value;
 
 const RAPTOR: &str = env!("CARGO_BIN_EXE_raptor");
@@ -158,7 +158,7 @@ impl Machine {
     fn agent(&self, args: &str) -> Output {
         let agent = self.outside.path().join("bin").join(FAKE_AGENT);
         if !agent.exists() {
-            std::fs::copy(std::env::current_exe().unwrap(), &agent).unwrap();
+            copy_executable(&std::env::current_exe().unwrap(), &agent);
         }
         Command::new(agent)
             .args([
