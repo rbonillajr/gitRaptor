@@ -29,7 +29,7 @@ tags: [motor-local, recursos, escala, niveles, dormido, centinela, despertar, re
 **Quiero** que el motor observe cada repo en un nivel (activo, despertando o dormido) y que un repo dormido conserve solo un centinela y unas redes de seguridad baratas
 **Para** cumplir RES-11 y RES-12 con 100 repos observados sin romper NFR-04 en los activos ni la condición Q49 del PO, según la que dormir no reduce la protección (ADR-GRP-010, Enmienda 2026-10-07)
 
-> Dev Spec: `dev-specs/TS-GRP-006-dev-spec.md` | Pendiente (se genera cuando se planifique la implementación)
+> Dev Spec: [`dev-specs/TS-GRP-006-dev-spec.md`](../dev-specs/TS-GRP-006-dev-spec.md) | En curso: se entrega por tramos (tramo 1, el observador)
 >
 > **Estado**: `ready`. **Decisión de Rene (2026-10-07)**: acepta la Enmienda (2026-10-07) de ADR-GRP-010 y ADR-GRP-011, incluido el diseño de centinela (Q49).
 >
