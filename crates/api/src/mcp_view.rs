@@ -63,6 +63,8 @@ pub enum McpToolError {
     /// The answer did not fit its budget; nothing of it is sent.
     ResultTooLarge,
     Internal,
+    /// The manual snapshot quota is full.
+    QuotaExceeded,
 }
 
 impl McpToolError {
@@ -89,6 +91,7 @@ impl McpToolError {
             Self::TimeLimit => "time-limit",
             Self::ResultTooLarge => "result-too-large",
             Self::Internal => "internal",
+            Self::QuotaExceeded => "quota-exceeded",
         }
     }
 }

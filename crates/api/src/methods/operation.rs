@@ -1,5 +1,8 @@
 //! The catalog of user operations (ADR-CKP-002).
 
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+
 use super::{Group, RepoWrite, method};
 
 /// The catalog of user operations, filtered for the connection
@@ -29,3 +32,15 @@ pub(super) const GROUP: Group = Group {
     ],
     ..Group::new("operation")
 };
+
+/// Which window of the manual snapshot quota refused a request (stub of the
+/// contract of the manual snapshot; see `SnapshotQuotaData`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum QuotaWindow {
+    Minute,
+    Day,
+    WorktreeDay,
+    RepoDay,
+    Disk,
+}

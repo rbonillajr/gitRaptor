@@ -15,6 +15,9 @@
 //! resolved at query time, never copied.
 
 mod chain;
+#[cfg(test)]
+#[path = "migration_tests.rs"]
+mod migration_tests;
 mod model;
 mod query;
 mod recovery;

@@ -30,9 +30,30 @@ impl Lang {
     }
 }
 
+/// A refused call as the engine layer hands it over: the stable code and the typed
+/// `params` the template needs.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolRefusal {
+    pub code: McpToolError,
+    pub params: Option<Value>,
+}
+
+impl From<McpToolError> for ToolRefusal {
+    fn from(code: McpToolError) -> Self {
+        Self { code, params: None }
+    }
+}
+
+impl From<&ToolRefusal> for ToolRefusal {
+    fn from(r: &ToolRefusal) -> Self {
+        r.clone()
+    }
+}
+
 /// The body of a refused call: `{code, message, action}`, plus `params`
 /// when the code has any.
-pub fn refusal(code: McpToolError, lang: Lang) -> Value {
+pub fn refusal(r: impl Into<ToolRefusal>, lang: Lang) -> Value {
+    let ToolRefusal { code, params: _ } = r.into();
     let (message, action) = texts(code, lang);
     let mut body = json!({"code": code.as_str(), "message": message, "action": action});
     if code == McpToolError::RateLimited {
@@ -110,9 +131,14 @@ fn texts(code: McpToolError, lang: Lang) -> (&'static str, String) {
             "GitRaptor no pudo responder a esta llamada.",
             "Reintenta más tarde.",
         ),
+        (E::QuotaExceeded, _) => todo!("US-MCP-008"),
     };
     (message, action.to_owned())
 }
+
+#[cfg(test)]
+#[path = "messages_snapshot_tests.rs"]
+mod snapshot_tests;
 
 #[cfg(test)]
 mod tests {

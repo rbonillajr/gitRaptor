@@ -53,6 +53,7 @@ use crate::channel::marks::ExecutorMarks;
 use crate::channel::peer::ProcSource;
 use crate::channel::requester::{Resolution, Who};
 use crate::repo_lock::{self, QueueError};
+use crate::timemachine::manual::{ManualAsk, ManualCaptured, ManualError};
 use crate::timemachine::oplog::Channel;
 use crate::timemachine::protected::{
     Binding, ChallengeBook, ChallengeError, ProtectedBackend, ProtectedError, ProtectedOperation,
@@ -291,6 +292,8 @@ pub struct RunEnv<'a> {
     /// operation as cause (US-TMC-004).
     pub after_step: &'a (dyn Fn(&str, &[std::path::PathBuf], &str) + Sync),
     pub publish: &'a (dyn Fn(&str, OperationEventData) + Sync),
+    /// Takes a manual snapshot (no repo write lock, no protected operation).
+    pub capture: &'a (dyn Fn(&ManualAsk) -> Result<ManualCaptured, ManualError> + Sync),
 }
 
 /// What run needs from the channel.
@@ -303,6 +306,25 @@ pub struct RunInput<'a> {
     /// checks run now.
     pub resolve_again:
         &'a dyn Fn() -> Result<(Resolution, Layer, Option<RefusalReason>), ExecError>,
+    /// Scope by cwd again, with the double identity check and the allowlist.
+    pub rescope: &'a dyn Fn(&RepoHandle) -> Result<(), ExecError>,
+}
+
+/// What an operation that is not protected did: a manual snapshot.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Captured {
+    pub snapshot: ManualCaptured,
+    pub label: String,
+    pub who: Who,
+    pub layer: Layer,
+    pub channel: RequestChannel,
+}
+
+/// How a run ended: the protected operation, or a capture outside it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RunDone {
+    Protected(Executed),
+    Captured(Captured),
 }
 
 /// An executed plan.
@@ -571,6 +593,18 @@ impl Executor {
         plans
             .remove(plan_id)
             .ok_or(ExecError::Rejected(RejectReason::PlanUnknown))
+    }
+
+    /// The second phase for any operation of the catalog: the protected ones through
+    /// [`Executor::run`], the others (`snapshot`) outside the repo write lock.
+    pub fn run_any(
+        &self,
+        backend: &dyn ProtectedBackend,
+        input: RunInput<'_>,
+        env: &RunEnv<'_>,
+    ) -> Result<RunDone, ExecError> {
+        let _ = (backend, input, env);
+        todo!("US-MCP-008")
     }
 
     /// The second phase.
