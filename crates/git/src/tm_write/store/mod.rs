@@ -34,7 +34,7 @@ pub const NOHOOKS_DIR: &str = "nohooks";
 /// Prefix of the snapshot refs (ADR-TMC-001 § 1).
 pub const SNAPSHOT_REF_PREFIX: &str = "refs/tm/snap/";
 /// Configuration key that marks a folder as a GitRaptor store.
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 const STORE_MARK: &str = "gitraptor.store";
 
 /// Why the store could not do what was asked. Nothing is ever repaired in place.
@@ -125,7 +125,7 @@ impl StoreRepo {
     /// store is built in a temporary folder and renamed into place, so a half-made store never
     /// appears.
     pub fn create(tm_root: &Path, repo_id: &str) -> Result<Self> {
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         {
             let path = Self::location(tm_root, repo_id)?;
             let repo_dir = path.parent().expect("store has a parent").to_owned();
@@ -144,7 +144,7 @@ impl StoreRepo {
             durable::fsync_dir(&repo_dir)?;
             Self::open(tm_root, repo_id)
         }
-        #[cfg(not(unix))]
+        #[cfg(not(any(unix, windows)))]
         {
             let _ = (tm_root, repo_id);
             Err(StoreError::Unsupported("snapshot store"))
@@ -153,16 +153,16 @@ impl StoreRepo {
 
     /// Opens the store of `repo_id` after checking it can be trusted.
     pub fn open(tm_root: &Path, repo_id: &str) -> Result<Self> {
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         {
             let path = Self::location(tm_root, repo_id)?;
-            let root = tm_root
-                .canonicalize()
+            // One form on both sides of the containment check (drive form on Windows).
+            let root = crate::paths::canonicalize(tm_root)
                 .map_err(|e| StoreError::Untrusted(format!("tm folder: {e}")))?;
             durable::check_private_dir(&root)?;
             durable::check_private_dir(path.parent().expect("store has a parent"))?;
             durable::check_private_dir(&path)?;
-            let real = path.canonicalize()?;
+            let real = crate::paths::canonicalize(&path)?;
             if !real.starts_with(&root) {
                 return Err(StoreError::Untrusted("store outside the tm folder".into()));
             }
@@ -184,7 +184,7 @@ impl StoreRepo {
             }
             Ok(Self { sync, path: real })
         }
-        #[cfg(not(unix))]
+        #[cfg(not(any(unix, windows)))]
         {
             let _ = (tm_root, repo_id);
             Err(StoreError::Unsupported("snapshot store"))
@@ -238,8 +238,8 @@ impl StoreRepo {
 }
 
 /// Writes the layout of an empty bare store into `dir`, with the configuration of
-/// ADR-TMC-001 § 4. Folders 0700, files 0600, everything synced.
-#[cfg(unix)]
+/// ADR-TMC-001 § 4. Folders 0700, files 0600 (on Windows, the private DACL), everything synced.
+#[cfg(any(unix, windows))]
 fn layout(dir: &Path, nohooks: &Path) -> Result<()> {
     durable::create_private_dir(dir)?;
     for sub in [

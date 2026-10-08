@@ -7,7 +7,7 @@
 use std::io;
 use std::path::Path;
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use super::{Result, StoreError};
 
 /// Plain `fsync` of a file, opened read-only.
@@ -24,7 +24,8 @@ pub(super) fn fsync_file(path: &Path) -> io::Result<()> {
     Ok(())
 }
 
-/// `fsync` of a folder, so new entries in it survive a power loss (needed on Linux).
+/// `fsync` of a folder, so new entries in it survive a power loss (needed on Linux). Windows
+/// has no such call: NTFS logs metadata in its journal, and the barrier is `FlushFileBuffers`.
 pub(super) fn fsync_dir(path: &Path) -> io::Result<()> {
     #[cfg(unix)]
     {
@@ -57,7 +58,7 @@ pub(super) fn full_barrier(path: &Path) -> io::Result<()> {
 }
 
 /// Nanoseconds of the wall clock, to name temporary folders.
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub(super) fn nanos() -> u128 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -113,4 +114,41 @@ pub(super) fn check_private_dir(path: &Path) -> Result<()> {
         )));
     }
     Ok(())
+}
+
+/// Creates a folder owned by the user with a protected DACL inherited by everything inside
+/// (SEC-TMC-01; DS-TS-TMC-003 W6).
+#[cfg(windows)]
+pub(super) fn create_private_dir(path: &Path) -> io::Result<()> {
+    gitraptor_winsys::acl::create_private_dir(path)
+}
+
+/// Writes a new file, synced. It inherits the private DACL of its folder.
+#[cfg(windows)]
+pub(super) fn write_private_file(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    use std::io::Write;
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)?;
+    file.write_all(bytes)?;
+    file.sync_all()?;
+    Ok(())
+}
+
+/// A folder of the store must be a real folder (not a link or junction) owned by the user and
+/// closed to everyone but SYSTEM and Administrators. Never fixed in place.
+#[cfg(windows)]
+pub(super) fn check_private_dir(path: &Path) -> Result<()> {
+    let meta = path
+        .symlink_metadata()
+        .map_err(|e| StoreError::Untrusted(format!("{}: {e}", path.display())))?;
+    if !meta.is_dir() {
+        return Err(StoreError::Untrusted(format!(
+            "{} is not a folder",
+            path.display()
+        )));
+    }
+    gitraptor_winsys::acl::verify_private_dir(path)
+        .map_err(|e| StoreError::Untrusted(format!("{} is not private: {e:?}", path.display())))
 }

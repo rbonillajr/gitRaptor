@@ -14,9 +14,9 @@
 //!
 //! A pack that fails any check is skipped and reported; the store stays valid without it.
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use std::io;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use std::path::{Path, PathBuf};
 
 use super::{Result, StoreError, StoreRepo};
@@ -60,8 +60,9 @@ impl Default for SeedLimits {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 enum Copied {
+    #[cfg_attr(windows, allow(dead_code))]
     Cloned,
     Copied,
 }
@@ -69,7 +70,7 @@ enum Copied {
 impl StoreRepo {
     /// Seeds the store with the packs of `user` (its common Git directory).
     pub fn seed_from(&self, user: &RepoReader, limits: SeedLimits) -> Result<SeedReport> {
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         {
             let src_dir = user.common_dir().join("objects").join("pack");
             let dst_dir = self.path.join("objects").join("pack");
@@ -134,7 +135,7 @@ impl StoreRepo {
             super::durable::fsync_dir(&dst_dir)?;
             Ok(report)
         }
-        #[cfg(not(unix))]
+        #[cfg(not(any(unix, windows)))]
         {
             let _ = (user, limits);
             Err(StoreError::Unsupported("seeding"))
@@ -143,7 +144,7 @@ impl StoreRepo {
 }
 
 /// `pack-<40 hex>.pack` → the hex.
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn pack_hash(name: &str) -> Option<String> {
     let hex = name.strip_prefix("pack-")?.strip_suffix(".pack")?;
     (hex.len() == 40 && hex.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')))
@@ -211,6 +212,30 @@ fn clone_or_copy(src: &Path, dst: &Path) -> io::Result<Copied> {
     })
 }
 
+/// Copies the bytes of `src` into a new `dst`, never following a link or junction at `src`
+/// (Windows: no block cloning on NTFS; the copy inherits the store's private DACL).
+#[cfg(windows)]
+fn clone_or_copy(src: &Path, dst: &Path) -> io::Result<Copied> {
+    use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
+    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+    let mut src_file = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(src)?;
+    let meta = src_file.metadata()?;
+    if !meta.is_file() || meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+        return Err(io::Error::other("not a regular file"));
+    }
+    let mut dst_file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(dst)?;
+    io::copy(&mut src_file, &mut dst_file)?;
+    dst_file.sync_all()?;
+    Ok(Copied::Copied)
+}
+
 /// Removes every extended attribute a clone carried over from the user's file.
 #[cfg(unix)]
 fn strip_xattrs(file: &std::fs::File) -> io::Result<()> {
@@ -228,14 +253,14 @@ fn strip_xattrs(file: &std::fs::File) -> io::Result<()> {
 }
 
 /// Bytes of one entry of the pack being indexed.
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn resolve(range: gix_pack::data::EntryRange, pack: &gix_pack::data::File) -> Option<&[u8]> {
     pack.entry_slice(range)
 }
 
 /// Checks the pack trailer against its name, writes its index next to it (re-hashing every
 /// object) and moves both into place. Returns objects and bytes.
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn index_pack(tmp: &Path, hash: &str, dst_dir: &Path, limits: SeedLimits) -> Result<(u64, u64)> {
     use std::io::{Read, Seek, SeekFrom};
     use std::sync::atomic::AtomicBool;
@@ -270,12 +295,14 @@ fn index_pack(tmp: &Path, hash: &str, dst_dir: &Path, limits: SeedLimits) -> Res
     let version = entries.version();
     let tmp_idx: PathBuf = tmp.with_extension("idx");
     let mut idx = {
-        use std::os::unix::fs::OpenOptionsExt;
-        std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .mode(0o600)
-            .open(&tmp_idx)?
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        options.open(&tmp_idx)?
     };
     let interrupt = AtomicBool::new(false);
     let outcome = gix_pack::index::write_data_iter_to_stream(
@@ -296,8 +323,13 @@ fn index_pack(tmp: &Path, hash: &str, dst_dir: &Path, limits: SeedLimits) -> Res
             "pack checksum does not match its name".into(),
         ));
     }
+    #[cfg(unix)]
     rustix::fs::fsync(&idx).map_err(io::Error::from)?;
+    #[cfg(windows)]
+    idx.sync_all()?;
     drop(idx);
+    // Windows: the pack must not be open while it is renamed.
+    drop(entries);
     let final_pack = dst_dir.join(format!("pack-{hash}.pack"));
     std::fs::rename(tmp, &final_pack)?;
     std::fs::rename(&tmp_idx, final_pack.with_extension("idx"))?;
