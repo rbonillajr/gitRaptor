@@ -49,7 +49,7 @@ fn git() -> PathBuf {
 }
 
 fn canonical(p: &Path) -> PathBuf {
-    p.canonicalize().unwrap()
+    gitraptor_git::paths::canonicalize(p).unwrap()
 }
 
 struct Running {
