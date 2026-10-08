@@ -243,6 +243,7 @@ impl Daemon {
         if let Some(observer) = &self.observer {
             observer.forget_repo(repo_id);
         }
+        self.forget_tiers(repo_id);
         if let Some(detector) = &self.detector {
             detector.forget_repo(repo_id);
         }
@@ -295,6 +296,7 @@ impl Daemon {
     /// batches come back to this loop as [`Control::Observed`].
     pub(super) fn observe(&mut self, repo_id: &str, common_dir: &std::path::Path, read: &RepoRead) {
         let mut hooks = vec![self.detector_hooks()];
+        hooks.push(Arc::new(super::tiers::WakeHooks(self.handle.clone())));
         hooks.extend(self.modules.observer_hooks());
         let hooks: Arc<dyn crate::watch::ObserverHooks> =
             Arc::new(crate::watch::FanoutHooks(hooks));
@@ -311,6 +313,7 @@ impl Daemon {
             )
         });
         let start = observer.watch_repo(repo_id, common_dir, read);
+        self.note_activity(repo_id);
         self.marks.set_head_logs(repo_id, &start.head_logs);
         self.marks.set_heads(repo_id, &start.heads);
         self.detect_repo(repo_id, common_dir, read);
@@ -323,6 +326,7 @@ impl Daemon {
         if !self.stores.iter().any(|(id, _)| *id == batch.repo_id) {
             return;
         }
+        self.note_activity(&batch.repo_id);
         // S3 (US-GRP-007): the session each event points to, if any.
         let attributed = self.attribute(&batch);
         // US-GRD-019: who the commit went in under, and the hint checked against it.

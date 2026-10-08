@@ -30,6 +30,7 @@ mod serve;
 mod sessions;
 mod shutdown;
 mod state;
+mod tiers;
 mod tm;
 
 use std::collections::BTreeMap;
@@ -78,6 +79,7 @@ pub use shutdown::{
     RegistrationError, RepoCommandError, ShutdownHandle, StopCause, install_signal_handlers,
 };
 pub use state::{EngineState, InvalidTransition, Trigger};
+pub use tiers::TierConfig;
 pub use tm::TmCapture;
 
 /// Exit code of a second `raptor daemon` that found another one running.
@@ -171,6 +173,8 @@ pub struct DaemonConfig {
     pub tm_prior_layer: Option<TmPriorLayer>,
     /// The Time Machine's continuous capture (US-TMC-004).
     pub tm_capture: TmCapture,
+    /// Observation tiers (TS-GRP-006); off by default.
+    pub tiers: TierConfig,
 }
 
 /// A layer over the snapshotter of the Time Machine's own commands (tests).
@@ -207,6 +211,7 @@ impl DaemonConfig {
                 no_free_space_floor: env::tm_no_free_space_floor(),
                 ..TmCapture::default()
             },
+            tiers: TierConfig::default(),
         })
     }
 }
@@ -333,6 +338,8 @@ pub struct Daemon {
     /// Periodic reconciliations that found differences: a value above 0 in
     /// dogfooding points to an unidentified cause of loss (ADR-GRP-010 § 5).
     periodic_diffs: u64,
+    /// Observation tiers (TS-GRP-006).
+    tiers: tiers::Tiers,
     #[cfg_attr(not(unix), allow(dead_code))]
     started_ms: i64,
     #[cfg(any(unix, windows))]
@@ -594,6 +601,7 @@ impl Daemon {
             )),
             divergence_cache: observe::DivergenceCache::default(),
             periodic_diffs: 0,
+            tiers: tiers::Tiers::default(),
             started_ms: now_ms(),
             #[cfg(any(unix, windows))]
             bound,
@@ -676,7 +684,9 @@ impl Daemon {
         self.serve_channel();
         let mut next_beat = Instant::now() + self.config.heartbeat;
         loop {
-            let wait = next_beat.saturating_duration_since(Instant::now());
+            let tier_check = self.next_tier_check();
+            let due = tier_check.map_or(next_beat, |t| t.min(next_beat));
+            let wait = due.saturating_duration_since(Instant::now());
             match self.control_rx.recv_timeout(wait) {
                 Ok(Control::Stop(cause)) => return self.stop(cause),
                 Ok(Control::Audit(row, reply)) => {
@@ -713,6 +723,7 @@ impl Daemon {
                     let _ = reply.send(self.mcp_mark(&common_dir, enabled));
                 }
                 Ok(Control::Observed(batch)) => self.observed(*batch),
+                Ok(Control::Wake { repo_id, cause }) => self.wake_repo(&repo_id, cause),
                 Ok(Control::Sessions(changes)) => self.sessions_changed(changes),
                 Ok(Control::SessionsList { params, reply }) => {
                     let _ = reply.send(self.sessions_list(&params));
@@ -724,6 +735,7 @@ impl Daemon {
                     let _ = reply.send(self.withdraw(request));
                 }
                 Ok(Control::EventHistory { params, reply }) => {
+                    self.wake_for_request(&params.repo_id);
                     let _ = reply.send(self.event_history(&params));
                 }
                 Ok(Control::Guard {
@@ -736,6 +748,7 @@ impl Daemon {
                     let answer = if Instant::now() >= deadline {
                         GuardReply::Failed
                     } else {
+                        self.wake_for_common_dir(&common_dir);
                         self.guard(&common_dir, request)
                     };
                     let _ = reply.send(answer);
@@ -747,6 +760,7 @@ impl Daemon {
                     limit,
                     reply,
                 }) => {
+                    self.wake_for_common_dir(&common_dir);
                     let _ = reply.send(self.guard_log(&common_dir, since_ms, limit));
                 }
                 Ok(Control::RawEvents {
@@ -754,13 +768,19 @@ impl Daemon {
                     worktree,
                     reply,
                 }) => {
+                    self.wake_for_request(&repo_id);
                     let _ = reply.send(self.raw_events(&repo_id, &worktree));
                 }
                 Err(RecvTimeoutError::Timeout) => {
-                    self.persist_observed_until(now_ms());
-                    self.guard_log_maintenance(now_ms());
-                    self.check_channel();
-                    next_beat = Instant::now() + self.config.heartbeat;
+                    if tier_check.is_some_and(|t| t <= Instant::now()) {
+                        self.check_tiers();
+                    }
+                    if next_beat <= Instant::now() {
+                        self.persist_observed_until(now_ms());
+                        self.guard_log_maintenance(now_ms());
+                        self.check_channel();
+                        next_beat = Instant::now() + self.config.heartbeat;
+                    }
                 }
                 // The daemon holds a sender, so this cannot happen; stop
                 // rather than spin.

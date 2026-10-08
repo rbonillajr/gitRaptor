@@ -232,6 +232,7 @@ fn start_with(fx: Fixture, undo_no_space: bool, capture: CaptureConfig) -> Runni
                 Arc::new(NoSpace) as Arc<dyn PriorSnapshotter>
             }))
         }),
+        tiers: Default::default(),
         tm_capture: TmCapture {
             config: capture,
             ..Default::default()
