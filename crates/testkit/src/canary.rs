@@ -152,8 +152,22 @@ impl Canary {
 }
 
 /// Write an executable `/bin/sh` script with mode 0755.
+///
+/// A child shell writes it, so this process never holds a writable descriptor on it: on Linux
+/// one held here while another test thread forks is inherited by that child until its `execve`,
+/// and running the script in that window fails with `ETXTBSY` (see
+/// [`crate::fixture::copy_executable`]).
 pub fn script(path: &Path, body: &str) {
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::write(path, format!("#!/bin/sh\n{body}\n")).unwrap();
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let status = std::process::Command::new("/bin/sh")
+        .args([
+            "-c",
+            r#"printf '%s\n' '#!/bin/sh' "$2" > "$1" && chmod 0755 "$1""#,
+            "sh",
+        ])
+        .arg(path)
+        .arg(body)
+        .env_clear()
+        .status()
+        .expect("run /bin/sh");
+    assert!(status.success(), "writing {} failed", path.display());
 }
