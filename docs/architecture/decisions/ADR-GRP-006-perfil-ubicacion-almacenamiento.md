@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-05
+updated: 2026-10-08
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
@@ -43,7 +43,7 @@ Se usa el crate `directories` para resolver las carpetas estándar del usuario (
 | Datos (almacén) | `~/Library/Application Support/<app>/data` | `~/.local/share/<app>` (no `$XDG_DATA_HOME`, ver enmienda) | `%LOCALAPPDATA%\<app>\data` |
 | Configuración de nivel perfil (solo lectura para el motor) | `~/Library/Application Support/<app>/config` | `~/.config/<app>` (no `$XDG_CONFIG_HOME`) | `%LOCALAPPDATA%\<app>\config` |
 | Estado (bloqueo de instancia, logs) | `~/Library/Application Support/<app>/state` | `~/.local/state/<app>` (no `$XDG_STATE_HOME`) | `%LOCALAPPDATA%\<app>\state` |
-| Ejecución (socket del canal) | `~/Library/Application Support/<app>/state` | `$XDG_RUNTIME_DIR/<app>` (si no existe, la de estado) | No aplica (named pipe) |
+| Ejecución (socket del canal) | `~/Library/Application Support/<app>/state` | `$XDG_RUNTIME_DIR/<app>` (si no existe, la de estado) | `%LOCALAPPDATA%\<app>\state` (la de estado; siembra el nombre del named pipe, Enmienda 2026-10-08) |
 
 - **Datos y configuración nunca comparten carpeta**: en macOS, donde el SO ofrece una sola carpeta de la app, se separan en las subcarpetas `data/`, `config/` y `state/`, igual que en Windows. Así un borrado o una cuarentena de los datos del motor no alcanza la configuración del usuario (ADR-GRP-008).
 - **Windows siempre en `%LOCALAPPDATA%`**, nunca en `%APPDATA%` (roaming), ni para datos ni para configuración (decisión de Rene Bonilla, 2026-10-03, PQ-7). Se usan explícitamente las variantes locales del crate, porque la carpeta de configuración por defecto de Windows es la roaming.
@@ -229,3 +229,11 @@ Decisión del orquestador (2026-10-05), validada por Arquitecto y security-exper
 - **Carpetas superiores**: `%LOCALAPPDATA%` y las de encima no se comprueban, como en Unix.
 
 **Validación añadida**: una carpeta con lectura para `Users`, o con un ACE `(OI)(IO)` para `Users`, hace fallar la apertura sin cambiar su ACL; una carpeta creada no tiene entradas heredadas.
+
+## Enmienda (2026-10-08, carpeta de ejecución en Windows)
+
+Decisión del orquestador (2026-10-08). Origen: la prueba a mano de Rene con la instalación real en Windows (`raptor daemon status` → `not supported: no runtime folder`). No cambia la clave de repo ni el almacenamiento. El `status` sigue en `accepted`.
+
+- **Causa**: la tabla del § 1 decía "No aplica (named pipe)" y el código dejaba la carpeta de ejecución en `None`. Desde XP-01 el arranque del daemon y el nombre del pipe (`\\.\pipe\gitraptor-<SID>-<fnv(carpeta de ejecución)>`, TS-GRP-004 § 8) dependen de esa carpeta. Las pruebas pasaban porque usaban `GITRAPTOR_PROFILE_DIR` (solo en debug), que sí define `run/`.
+- **Decisión**: en Windows la carpeta de ejecución es la de estado, `%LOCALAPPDATA%\<app>\state`, igual que en macOS. No crea carpeta nueva: ya es exclusiva, se crea con la DACL protegida y se verifica al arrancar (Enmienda TD-GRP-001). El pipe sigue protegido por su propia DACL (solo el SID del usuario); la carpeta solo siembra el nombre.
+- **Validación añadida**: un test sin variable de perfil comprueba que la resolución real da carpeta de ejecución en todos los SO; el job `test-installers` de Windows ejecuta el binario release (sin `GITRAPTOR_PROFILE_DIR`, con `LOCALAPPDATA` temporal) y falla si responde "not supported".

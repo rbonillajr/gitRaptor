@@ -27,7 +27,8 @@ pub struct ProfileDirs {
     pub config: PathBuf,
     /// Instance lock and logs.
     pub state: PathBuf,
-    /// Channel socket. `None` on Windows, where the channel is a named pipe.
+    /// Channel folder: the socket on Unix, the seed of the named-pipe name on
+    /// Windows (where it is the state folder, as on macOS).
     pub runtime: Option<PathBuf>,
     /// Every folder exclusive to GitRaptor, parents first. These are created
     /// with mode 0700 and verified on open.
@@ -142,10 +143,10 @@ impl ProfileDirs {
                     &data,
                 );
                 Self {
+                    runtime: Some(state.clone()),
                     data,
                     config,
                     state,
-                    runtime: None,
                     owned,
                 }
             }
@@ -270,7 +271,7 @@ mod tests {
         assert_eq!(dirs.data, root.join("data"));
         assert_eq!(dirs.config, root.join("config"));
         assert_eq!(dirs.state, root.join("state"));
-        assert_eq!(dirs.runtime, None);
+        assert_eq!(dirs.runtime, Some(root.join("state")));
         for dir in dirs.owned_dirs() {
             assert!(
                 dir.starts_with(&local),
@@ -316,6 +317,16 @@ mod tests {
         // Resolution only computes paths; it must never touch the real profile.
         let dirs = ProfileDirs::from_base(&base_inputs().unwrap());
         assert!(dirs.data.ends_with("data") || dirs.data.ends_with(APP_DIR));
+    }
+
+    #[test]
+    fn production_layout_always_has_a_runtime_folder() {
+        // The release path never goes through `GITRAPTOR_PROFILE_DIR`: the folder the channel
+        // (socket or pipe name) hangs from must exist on every OS, or the client reports
+        // "not supported: no runtime folder" on a real install.
+        let dirs = ProfileDirs::from_base(&base_inputs().unwrap());
+        let runtime = dirs.runtime.clone().expect("no runtime folder on this OS");
+        assert!(dirs.owned_dirs().iter().any(|d| runtime.starts_with(d)));
     }
 
     #[test]
