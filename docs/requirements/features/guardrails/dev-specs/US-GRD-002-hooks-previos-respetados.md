@@ -73,4 +73,4 @@ Repos, remotos, perfiles y daemons temporales (NFR-01); `raptor`, `raptor-hook` 
 
 ## Estado de la implementación (2026-10-08)
 
-Implementado en: PR #191. Verificado en macOS arm64 (Apple Git 2.50.1); en CI, también con Git 2.38.5 en Linux.
+Implementado en: PR #193. Verificado en macOS arm64 (Apple Git 2.50.1); en CI, también con Git 2.38.5 en Linux.
