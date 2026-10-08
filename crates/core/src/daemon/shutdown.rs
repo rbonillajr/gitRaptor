@@ -92,6 +92,17 @@ pub(crate) enum GuardReply {
     Failed,
 }
 
+/// What the loop answers to a `guard.log` (US-GRD-005).
+#[derive(Debug)]
+#[cfg_attr(not(unix), allow(dead_code))]
+pub(crate) enum GuardLogReply {
+    Log(Box<gitraptor_api::guard::GuardLogResult>),
+    /// The repo is not observed.
+    NotObserved,
+    /// The profile is unavailable.
+    Failed,
+}
+
 /// How long a channel thread waits for the loop to install the hook layer.
 #[cfg_attr(not(unix), allow(dead_code))]
 const GUARD_TIMEOUT: Duration = Duration::from_secs(60);
@@ -223,6 +234,17 @@ pub(crate) enum Control {
         deadline: std::time::Instant,
         reply: SyncSender<GuardReply>,
     },
+    /// One decision log entry (US-GRD-005). No reply: the hook never waits on the log.
+    #[cfg_attr(not(unix), allow(dead_code))]
+    GuardRecord(Box<crate::guardrails::log::LogEntry>),
+    /// The decision log of a repo the channel already located (US-GRD-005).
+    #[cfg_attr(not(unix), allow(dead_code))]
+    GuardLog {
+        common_dir: std::path::PathBuf,
+        since_ms: Option<i64>,
+        limit: u32,
+        reply: SyncSender<GuardLogReply>,
+    },
     /// One page of a repo's Git events (US-GRP-002).
     #[cfg_attr(not(unix), allow(dead_code))]
     EventHistory {
@@ -337,6 +359,38 @@ impl ShutdownHandle {
 }
 
 impl ShutdownHandle {
+    /// Hands a decision log entry to the loop without waiting (US-GRD-005). `false` when the
+    /// daemon is stopping.
+    #[cfg_attr(not(unix), allow(dead_code))]
+    pub(crate) fn guard_record(&self, entry: crate::guardrails::log::LogEntry) -> bool {
+        self.tx.send(Control::GuardRecord(Box::new(entry))).is_ok()
+    }
+
+    /// The decision log of a repo, through the loop that writes it.
+    #[cfg_attr(not(unix), allow(dead_code))]
+    pub(crate) fn guard_log(
+        &self,
+        common_dir: std::path::PathBuf,
+        since_ms: Option<i64>,
+        limit: u32,
+    ) -> GuardLogReply {
+        let (reply, rx) = sync_channel(1);
+        if self
+            .tx
+            .send(Control::GuardLog {
+                common_dir,
+                since_ms,
+                limit,
+                reply,
+            })
+            .is_err()
+        {
+            return GuardLogReply::Failed;
+        }
+        rx.recv_timeout(REPO_TIMEOUT)
+            .unwrap_or(GuardLogReply::Failed)
+    }
+
     /// A Guardrails request through the loop, which owns the stores (US-GRD-001).
     #[cfg_attr(not(unix), allow(dead_code))]
     pub(crate) fn guard(
