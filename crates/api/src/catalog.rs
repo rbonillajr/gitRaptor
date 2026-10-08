@@ -404,6 +404,12 @@ fn message_sum(text: &str) -> String {
     format!("{h:016x}")
 }
 
+/// 1..=64 chars, none of `is_forbidden_char`. Shared by raptor-mcp and the daemon.
+pub fn check_snapshot_label(label: &str) -> Result<(), Invalid> {
+    let _ = label;
+    todo!("US-MCP-008")
+}
+
 /// C0, DEL, C1, bidi, line and paragraph separators, zero-width and the
 /// Tags block (SEC-12, L-03).
 pub fn is_forbidden_char(c: char) -> bool {

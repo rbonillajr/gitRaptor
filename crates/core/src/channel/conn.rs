@@ -2427,6 +2427,9 @@ impl Connection<'_> {
             engine_mark: &engine_mark,
             after_step: &after_step,
             publish: &publish,
+            capture: &|_ask: &crate::timemachine::manual::ManualAsk| {
+                Err(crate::timemachine::manual::ManualError::Unavailable)
+            },
         };
         let done = wiring
             .executor
@@ -2437,6 +2440,7 @@ impl Connection<'_> {
                     resolution: &r,
                     params: &p,
                     resolve_again: &checks_again,
+                    rescope: &|_repo| Ok(()),
                 },
                 &env,
             )
