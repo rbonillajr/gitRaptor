@@ -23,6 +23,11 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 sha2 = "0.11.0"
 
+[features]
+# Crash points of the chaos harness (INF-TMC-001): test builds only. Never in `default` and
+# never from a normal dependency; `tm_chaos_gate` checks both.
+chaos = []
+
 [lints]
 workspace = true
 
