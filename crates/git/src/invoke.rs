@@ -244,8 +244,10 @@ impl GuardRead {
     }
 }
 
-/// The null device: the global configuration of a Guardrails write-layer child.
-const NULL_DEVICE: &str = if cfg!(windows) { "NUL" } else { "/dev/null" };
+/// The null device: the global configuration of a Guardrails write-layer child. Also on Windows:
+/// Git for Windows maps `/dev/null` itself, while `NUL` in `GIT_CONFIG_GLOBAL` makes Git fail
+/// with "unable to access 'NUL'" (measured with Git 2.56.0.windows.1).
+const NULL_DEVICE: &str = "/dev/null";
 
 /// Where a write-layer invocation acts. Every path is absolute and comes from the validated
 /// state of the daemon, never from repository configuration (ADR-TMC-002 § 2).
