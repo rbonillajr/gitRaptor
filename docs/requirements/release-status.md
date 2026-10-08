@@ -12,9 +12,9 @@
 |---|---|
 | Implementado (`implemented`) | 32 |
 | Hecho (`done`) | 3 |
-| Implementado en parte (`partially-implemented`) | 12 |
+| Implementado en parte (`partially-implemented`) | 13 |
 | Listo (`ready`) | 3 |
-| Borrador (`draft`) | 90 |
+| Borrador (`draft`) | 89 |
 | Bloqueado (`blocked`) | 1 |
 | **Total** | **141** |
 
@@ -26,7 +26,7 @@
 | [guardrails](#guardrails) | 4 | 0 | 3 | 0 | 16 | 0 | 23 |
 | [mcp](#mcp) | 4 | 0 | 0 | 0 | 16 | 0 | 20 |
 | [motor-local](#motor-local) | 11 | 2 | 8 | 3 | 13 | 0 | 37 |
-| [time-machine](#time-machine) | 7 | 1 | 0 | 0 | 20 | 0 | 28 |
+| [time-machine](#time-machine) | 7 | 1 | 1 | 0 | 19 | 0 | 28 |
 
 ### cockpit
 
@@ -171,7 +171,7 @@
 
 ### time-machine
 
-28 fichas: 7 implementado, 1 hecho, 20 borrador.
+28 fichas: 7 implementado, 1 hecho, 1 implementado en parte, 19 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -183,7 +183,7 @@
 | [US-TMC-002](features/time-machine/user-stories/US-TMC-002-undo-ultima-operacion.md) | El desarrollador deshace con un comando la última operación de su worktree | Implementado (`implemented`) | #90, #127, #146, #156 | — |
 | [US-TMC-004](features/time-machine/user-stories/US-TMC-004-captura-continua-git-crudo.md) | El trabajo hecho fuera de GitRaptor queda capturado como punto recuperable | Implementado (`implemented`) | #120, #127, #146 | — |
 | [SPIKE-TMC-001](features/time-machine/technical-stories/SPIKE-TMC-001-repo-mediano-overhead.md) | Repo mediano de referencia y viabilidad del snapshot en menos de 200 ms | Hecho (`done`) | — | — |
-| [INF-TMC-001](features/time-machine/technical-stories/INF-TMC-001-arnes-caos-recuperable.md) | Arnés de caos y de garantías de los snapshots en los tres SO | Borrador (`draft`) | — | — |
+| [INF-TMC-001](features/time-machine/technical-stories/INF-TMC-001-arnes-caos-recuperable.md) | Arnés de caos y de garantías de los snapshots en los tres SO | Implementado en parte (`partially-implemented`) | — | — |
 | [US-TMC-003](features/time-machine/user-stories/US-TMC-003-redo.md) | El desarrollador rehace lo que deshizo por error | Borrador (`draft`) | — | — |
 | [US-TMC-005](features/time-machine/user-stories/US-TMC-005-snapshot-previo-hooks-guardrails.md) | Las operaciones de Git crudo tienen punto previo cuando el repo usa los hooks de Guardrails | Borrador (`draft`) | — | — |
 | [US-TMC-006](features/time-machine/user-stories/US-TMC-006-timeline-que-cuando-quien.md) | El desarrollador sabe qué cambió en su repo, cuándo y quién lo hizo | Borrador (`draft`) | — | — |
@@ -236,7 +236,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2
 
-110 fichas: 14 implementado, 3 hecho, 6 implementado en parte, 3 listo, 83 borrador, 1 bloqueado.
+110 fichas: 14 implementado, 3 hecho, 7 implementado en parte, 3 listo, 82 borrador, 1 bloqueado.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -259,6 +259,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [TS-GRP-002](features/motor-local/technical-stories/TS-GRP-002-lectura-git.md) | Capa de lectura de Git sin escrituras | Hecho (`done`) | — | — |
 | [INF-GRP-001](features/motor-local/technical-stories/INF-GRP-001-arnes-repo-intacto.md) | Arnés de verificación "repo intacto" en los tres SO | Implementado en parte (`partially-implemented`) | #30, #34, #68, #97, #109, #113, #163 | 3 |
 | [INF-GRP-002](features/motor-local/technical-stories/INF-GRP-002-banco-frescura-escala.md) | Banco de medición de frescura y escala | Implementado en parte (`partially-implemented`) | #76, #98, #133 | 3 |
+| [INF-TMC-001](features/time-machine/technical-stories/INF-TMC-001-arnes-caos-recuperable.md) | Arnés de caos y de garantías de los snapshots en los tres SO | Implementado en parte (`partially-implemented`) | — | — |
 | [TS-GRP-004](features/motor-local/technical-stories/TS-GRP-004-canal-clientes.md) | Canal local de clientes y contrato de mensajes | Implementado en parte (`partially-implemented`) | #36, #87, #123, #133, #158 | 3 |
 | [US-CKP-025](features/cockpit/user-stories/US-CKP-025-tui-repo-no-observado.md) | La TUI ofrece observar el repo en el que se abre y, fuera de un repo, lleva a los ya observados | Implementado en parte (`partially-implemented`) | #165, #170 | 2 |
 | [US-GRD-005](features/guardrails/user-stories/US-GRD-005-registro-de-bloqueos.md) | El desarrollador cuenta las acciones peligrosas que Guardrails bloqueó en cada repo | Implementado en parte (`partially-implemented`) | #154, #168 | 3 |
@@ -267,7 +268,6 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [TD-GRP-003](features/motor-local/technical-stories/TD-GRP-003-nfr04-maquina-referencia.md) | Presupuesto de NFR-04 sin gate automático: medirlo en una máquina de referencia | Listo (`ready`) | — | — |
 | [TS-GRP-005](features/motor-local/technical-stories/TS-GRP-005-clases-trabajo-ahorro-energia.md) | Clases de trabajo del daemon y mecanismo de ahorro de energía | Listo (`ready`) | — | — |
 | [INF-MCP-001](features/mcp/technical-stories/INF-MCP-001-corpus-seguridad-mcp.md) | Corpus de seguridad del MCP como suite de CI que bloquea el merge | Borrador (`draft`) | — | — |
-| [INF-TMC-001](features/time-machine/technical-stories/INF-TMC-001-arnes-caos-recuperable.md) | Arnés de caos y de garantías de los snapshots en los tres SO | Borrador (`draft`) | — | — |
 | [SPIKE-CKP-001](features/cockpit/technical-stories/SPIKE-CKP-001-prediccion-5s.md) | Predicción de conflictos en ≤ 5 s p95 sin escribir en el repo: merge en memoria frente a almacén en el perfil | Borrador (`draft`) | — | — |
 | [SPIKE-GRD-002](features/guardrails/technical-stories/SPIKE-GRD-002-factor-so-daemon.md) | Factor de autenticación del SO invocado desde el daemon en los tres SO | Borrador (`draft`) | — | — |
 | [TS-CKP-001](features/cockpit/technical-stories/TS-CKP-001-predictor-conflictos.md) | Predictor de conflictos en el daemon: solape y conflicto previsto publicados para todos los clientes | Borrador (`draft`) | — | — |
@@ -468,3 +468,9 @@ Canal local de clientes y contrato de mensajes
 - N8 a N11 de ADR-CKP-003 § 4 (Should).
 - Retención de la auditoría de comandos reservados.
 - Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../architecture/xplat-pendientes.md)).
+
+### [INF-TMC-001](features/time-machine/technical-stories/INF-TMC-001-arnes-caos-recuperable.md)
+
+Arnés de caos y de garantías de los snapshots en los tres SO
+
+- *La ficha no lista los pendientes en "Estado de la implementación".*
