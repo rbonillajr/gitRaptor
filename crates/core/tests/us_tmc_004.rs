@@ -13,7 +13,7 @@
 //!
 //! macOS and Linux, like the other channel tests (Linux validated in the
 //! container, 2026-10-08).
-#![cfg(any(target_os = "macos", target_os = "linux"))]
+#![cfg(any(target_os = "macos", target_os = "linux", windows))]
 
 mod common;
 
