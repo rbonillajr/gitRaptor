@@ -56,7 +56,9 @@ pub const fn detection_supported() -> bool {
 /// caught by comparing the creation time while each piece is read.
 #[cfg(windows)]
 mod win {
+    use std::collections::HashMap;
     use std::path::PathBuf;
+    use std::sync::{Mutex, OnceLock};
 
     use gitraptor_winsys::process;
 
@@ -75,9 +77,19 @@ mod win {
         start_us.saturating_mul(10).saturating_add(EPOCH_DIFF_100NS)
     }
 
+    /// The creation time of each process of the last scan: the working folder of a pid is read
+    /// only while it is still the process that scan saw, even if Windows reused the pid since.
+    fn seen() -> &'static Mutex<HashMap<u32, u64>> {
+        static SEEN: OnceLock<Mutex<HashMap<u32, u64>>> = OnceLock::new();
+        SEEN.get_or_init(Mutex::default)
+    }
+
     pub(super) fn table() -> Option<Vec<ProcEntry>> {
+        let table = process::current_user_processes()?;
+        *seen().lock().unwrap_or_else(|e| e.into_inner()) =
+            table.iter().map(|p| (p.pid, p.created_100ns)).collect();
         Some(
-            process::current_user_processes()?
+            table
                 .into_iter()
                 .map(|p| ProcEntry {
                     pid: p.pid,
@@ -96,7 +108,16 @@ mod win {
     /// The working folder of `pid` in the drive form the detector compares worktrees in, with
     /// the links of the path resolved as on the other platforms. `None` when it cannot be read.
     pub(super) fn cwd(pid: u32) -> Option<PathBuf> {
-        let created = process::created_100ns(pid).ok()?;
+        // The one the last scan saw; a process born since (a short `git`) is read as it is now.
+        let seen = seen()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&pid)
+            .copied();
+        let created = match seen {
+            Some(created) => created,
+            None => process::created_100ns(pid).ok()?,
+        };
         let folder = process::cwd(pid, created).ok()?;
         let resolved = std::fs::canonicalize(folder).ok()?;
         Some(gitraptor_policy::guard::fastpath::simplified(resolved))

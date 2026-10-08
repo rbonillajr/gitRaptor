@@ -15,6 +15,7 @@ use windows_sys::Win32::Foundation::{
 use windows_sys::Win32::Security::{
     EqualSid, GetTokenInformation, TOKEN_QUERY, TOKEN_USER, TokenUser,
 };
+use windows_sys::Win32::Storage::FileSystem::{DRIVE_FIXED, GetDriveTypeW};
 use windows_sys::Win32::System::Console::{
     GetStdHandle, STD_ERROR_HANDLE, STD_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
 };
@@ -405,4 +406,12 @@ pub(crate) fn current_directory(process: &Handle) -> Option<Vec<u16>> {
             .map(|c| u16::from_le_bytes([c[0], c[1]]))
             .collect(),
     )
+}
+
+/// Whether the drive `letter` is a local fixed disk (`GetDriveTypeW`): not a network share, a
+/// removable or a RAM disk, nor a letter that points nowhere. Asked only for the root `X:\`.
+pub(crate) fn drive_is_fixed(letter: u8) -> bool {
+    let root = [u16::from(letter), u16::from(b':'), u16::from(b'\\'), 0];
+    // SAFETY: `root` is a NUL-terminated UTF-16 string that outlives the call.
+    unsafe { GetDriveTypeW(root.as_ptr()) == DRIVE_FIXED }
 }
