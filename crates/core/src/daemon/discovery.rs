@@ -128,7 +128,10 @@ pub(crate) enum DiscoveryRequest {
         reply: SyncSender<Result<String, DiscoveryError>>,
     },
     /// A listing of the discovery module.
-    Listed { root: String, listing: Listing },
+    Listed {
+        root: String,
+        listing: Listing,
+    },
     /// The path of a candidate is no longer a repo.
     Forget(PathBuf),
 }
@@ -220,9 +223,12 @@ impl Daemon {
             }
             DiscoveryRequest::Forget(path) => {
                 // The folder is gone: its parent gives the canonical form.
-                let canonical = path.parent().zip(path.file_name()).and_then(|(parent, name)| {
-                    Some(gitraptor_git::paths::canonicalize(parent).ok()?.join(name))
-                });
+                let canonical = path
+                    .parent()
+                    .zip(path.file_name())
+                    .and_then(|(parent, name)| {
+                        Some(gitraptor_git::paths::canonicalize(parent).ok()?.join(name))
+                    });
                 for path in [Some(path), canonical].into_iter().flatten() {
                     let _ = self
                         .profile
@@ -294,7 +300,10 @@ impl Daemon {
                 entries,
             }));
         }
-        let home_root = ctx.home.as_deref().and_then(|h| gitraptor_git::paths::canonicalize(h).ok())
+        let home_root = ctx
+            .home
+            .as_deref()
+            .and_then(|h| gitraptor_git::paths::canonicalize(h).ok())
             == Some(root.clone());
         let listing = discovery::list_first_level(&root, home_root).unwrap_or_default();
         let now = now_ms();
@@ -353,7 +362,8 @@ impl Daemon {
     /// Tells the discovery module the roots it watches.
     pub(super) fn discovery_roots_changed(&self) {
         if let Ok(roots) = self.profile.discovery_roots() {
-            self.modules.discovery_roots_changed(&roots, self.home_key());
+            self.modules
+                .discovery_roots_changed(&roots, self.home_key());
         }
     }
 

@@ -104,8 +104,8 @@ pub fn validate_root(raw: &Path, ctx: &RootContext) -> Result<ValidRoot, RootRej
     if !meta.is_dir() {
         return Err(rejected(RootRejection::NotADirectory));
     }
-    let path = gitraptor_git::paths::canonicalize(raw)
-        .map_err(|_| rejected(RootRejection::Unreadable))?;
+    let path =
+        gitraptor_git::paths::canonicalize(raw).map_err(|_| rejected(RootRejection::Unreadable))?;
     let volume = match volume_kind(&path) {
         VolumeKind::SystemRoot => return Err(rejected(RootRejection::FilesystemRoot)),
         VolumeKind::OtherVolume => true,

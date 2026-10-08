@@ -392,7 +392,12 @@ impl Index {
     }
 
     /// `false`: already declared, nothing changed.
-    pub(crate) fn add_discovery_root(&mut self, path: &str, broad: bool, now_ms: i64) -> Result<bool> {
+    pub(crate) fn add_discovery_root(
+        &mut self,
+        path: &str,
+        broad: bool,
+        now_ms: i64,
+    ) -> Result<bool> {
         let added = self.conn.execute(
             "INSERT INTO discovery_roots (path, broad, added_ms) VALUES (?1, ?2, ?3)
              ON CONFLICT (path) DO NOTHING",
@@ -440,9 +445,11 @@ impl Index {
     ) -> Result<Vec<DiscoveryCandidate>> {
         let tx = self.conn.transaction()?;
         let declared: Option<i64> = tx
-            .query_row("SELECT 1 FROM discovery_roots WHERE path = ?1", [root], |r| {
-                r.get(0)
-            })
+            .query_row(
+                "SELECT 1 FROM discovery_roots WHERE path = ?1",
+                [root],
+                |r| r.get(0),
+            )
             .optional()?;
         if declared.is_none() {
             return Ok(Vec::new());
@@ -521,8 +528,14 @@ impl Index {
     /// and no longer dismissed.
     pub(crate) fn forget_discovered_key(&mut self, key_path: &str) -> Result<()> {
         let tx = self.conn.transaction()?;
-        tx.execute("DELETE FROM discovery_candidates WHERE key_path = ?1", [key_path])?;
-        tx.execute("DELETE FROM discovery_dismissed WHERE key_path = ?1", [key_path])?;
+        tx.execute(
+            "DELETE FROM discovery_candidates WHERE key_path = ?1",
+            [key_path],
+        )?;
+        tx.execute(
+            "DELETE FROM discovery_dismissed WHERE key_path = ?1",
+            [key_path],
+        )?;
         tx.commit()?;
         Ok(())
     }
