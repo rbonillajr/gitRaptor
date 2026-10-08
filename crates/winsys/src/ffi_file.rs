@@ -122,11 +122,14 @@ pub(crate) fn delete_on_close(file: &File) -> io::Result<()> {
     }
 }
 
-/// Renames the file of an open handle (opened with `DELETE` access) to `name` inside the folder
-/// of the open handle `dir`, never replacing (`ReplaceIfExists` false): the entry renamed is the
-/// one opened, whatever its old name holds now.
-pub(crate) fn rename_handle(file: &File, dir: &File, name: &OsStr) -> io::Result<()> {
-    let wide: Vec<u16> = name.encode_wide().collect();
+/// Renames the file of an open handle (opened with `DELETE` access) to `to` (a full path; an
+/// absolute drive path gets the `\\?\` prefix), never replacing (`ReplaceIfExists` false): the
+/// entry renamed is the one opened, whatever its old name holds now. `RootDirectory` stays null:
+/// through `SetFileInformationByHandle` a relative root is refused (`ERROR_INVALID_PARAMETER`)
+/// and a bare name is taken relative to the current directory, so only a full path is safe.
+pub(crate) fn rename_handle(file: &File, to: &Path) -> io::Result<()> {
+    let mut wide = wide(to);
+    wide.pop(); // The length is given: no NUL.
     let name_bytes = wide.len() * size_of::<u16>();
     let offset = std::mem::offset_of!(FILE_RENAME_INFO, FileName);
     let size = (offset + name_bytes).max(size_of::<FILE_RENAME_INFO>());
@@ -135,7 +138,7 @@ pub(crate) fn rename_handle(file: &File, dir: &File, name: &OsStr) -> io::Result
         Anonymous: FILE_RENAME_INFO_0 {
             ReplaceIfExists: false,
         },
-        RootDirectory: dir.as_raw_handle() as HANDLE,
+        RootDirectory: std::ptr::null_mut(),
         FileNameLength: len,
         FileName: [0],
     };
@@ -157,8 +160,7 @@ pub(crate) fn rename_handle(file: &File, dir: &File, name: &OsStr) -> io::Result
     let handle = file.as_raw_handle() as HANDLE;
     let bytes = u32::try_from(buf.len() * size_of::<u64>())
         .map_err(|_| io::Error::other("name too long"))?;
-    // SAFETY: `handle` is the open handle of `file` and `dir` stays open, both borrowed for the
-    // call; `buf` is an initialized `FILE_RENAME_INFO` followed by its name, `bytes` long,
+    // SAFETY: `handle` is the open handle of `file`, borrowed for the call; `buf` is an initialized `FILE_RENAME_INFO` followed by its name, `bytes` long,
     // borrowed only for the call.
     let ok =
         unsafe { SetFileInformationByHandle(handle, FileRenameInfo, buf.as_ptr().cast(), bytes) }
