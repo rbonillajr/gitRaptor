@@ -14,6 +14,7 @@ use gitraptor_api::messages::{
     FileChangeView, HeadView, RepoStateView, RepoView, SessionStateView, SessionView, Snapshot,
     UnavailableReason, WorktreeStatus, WorktreeView,
 };
+use gitraptor_api::timemachine::KeptTempsView;
 use serde::Serialize;
 
 use crate::i18n::t;
@@ -98,6 +99,9 @@ pub fn text(snapshot: &Snapshot, sessions: &SessionsInfo) -> String {
         };
         let _ = writeln!(out, "{}", t(key, &[("path", &folder)]));
         let _ = writeln!(out, "  {}", base_text(&repo.base));
+        if let Some(kept) = &repo.kept_temps {
+            kept_temps_text(&mut out, kept);
+        }
         let base = base_name(&repo.base);
         for w in &repo.worktrees {
             worktree_text(&mut out, w, &base);
@@ -107,6 +111,31 @@ pub fn text(snapshot: &Snapshot, sessions: &SessionsInfo) -> String {
         }
     }
     out
+}
+
+/// Temporary files the sweep after a crash kept (DS-TS-TMC-003, Enmienda T2): `raptor undo` is
+/// offered only while the interrupted operation is still the last one.
+fn kept_temps_text(out: &mut String, kept: &KeptTempsView) {
+    let count = kept.count.to_string();
+    let operation = sanitize(&kept.operation_id);
+    let key = if kept.undo_next {
+        "status.kept-temps"
+    } else {
+        "status.kept-temps-not-next"
+    };
+    let _ = writeln!(
+        out,
+        "  {}",
+        t(key, &[("count", &count), ("operation", &operation)])
+    );
+    if kept.foreign > 0 {
+        let foreign = kept.foreign.to_string();
+        let _ = writeln!(
+            out,
+            "    {}",
+            t("status.kept-temps-foreign", &[("foreign", &foreign)])
+        );
+    }
 }
 
 fn sanitize(text: &str) -> String {
@@ -251,6 +280,9 @@ struct RepoJson {
     /// `None` if the repo has no base branch.
     base_branch: Option<String>,
     base_confirmed: bool,
+    /// Temporary files kept by the sweep after a crash; absent when there are none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    kept_temps: Option<KeptTempsView>,
     worktrees: Vec<WorktreeJson>,
 }
 
@@ -336,6 +368,7 @@ pub fn json(snapshot: &Snapshot, sessions: &SessionsInfo) -> StatusJson {
                 state: wire(&repo.state),
                 base_branch: repo.base.name.as_ref().map(|n| n.raw().to_owned()),
                 base_confirmed: repo.base.status == BaseStatusView::Confirmed,
+                kept_temps: repo.kept_temps.clone(),
                 worktrees: repo
                     .worktrees
                     .iter()
@@ -494,6 +527,7 @@ mod tests {
                 ],
                 tier: None,
                 checked_utc_ms: None,
+                kept_temps: None,
             }],
         }
     }
@@ -528,6 +562,54 @@ mod tests {
         assert!(
             out.contains("base branch \"main\" does not exist in the repo"),
             "{out}"
+        );
+    }
+
+    fn kept(count: u32, foreign: u32, undo_next: bool) -> KeptTempsView {
+        KeptTempsView {
+            count,
+            foreign,
+            operation_id: "op-1".into(),
+            undo_next,
+        }
+    }
+
+    #[test]
+    fn kept_temporary_files_get_a_line_with_the_way_back() {
+        let out = text(&snapshot(), &SessionsInfo::default());
+        assert!(!out.contains("temporary files"), "{out}");
+        let mut s = snapshot();
+        s.repos[0].kept_temps = Some(kept(2, 0, true));
+        let out = text(&s, &SessionsInfo::default());
+        assert!(
+            out.contains(
+                "2 Time Machine temporary files kept after operation op-1 was interrupted: \
+                 raptor undo takes it back"
+            ),
+            "{out}"
+        );
+        assert!(!out.contains("not GitRaptor's copies"), "{out}");
+        // Someone else's files, and a later operation: no undo offered, a warning instead.
+        s.repos[0].kept_temps = Some(kept(3, 1, false));
+        let out = text(&s, &SessionsInfo::default());
+        assert!(out.contains("later operations ran"), "{out}");
+        assert!(!out.contains("raptor undo"), "{out}");
+        assert!(
+            out.contains("1 of them are not GitRaptor's copies"),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn json_has_the_kept_temporary_files_only_when_there_are_some() {
+        let value = serde_json::to_value(json(&snapshot(), &SessionsInfo::default())).unwrap();
+        assert!(value["repos"][0].get("kept_temps").is_none(), "{value}");
+        let mut s = snapshot();
+        s.repos[0].kept_temps = Some(kept(2, 1, true));
+        let value = serde_json::to_value(json(&s, &SessionsInfo::default())).unwrap();
+        assert_eq!(
+            value["repos"][0]["kept_temps"],
+            serde_json::json!({"count": 2, "foreign": 1, "operation_id": "op-1", "undo_next": true})
         );
     }
 
