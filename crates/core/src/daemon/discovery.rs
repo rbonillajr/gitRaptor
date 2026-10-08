@@ -282,9 +282,7 @@ impl Daemon {
                 }
             }
             DiscoveryRequest::Forget(path) => {
-                let _ = self
-                    .profile
-                    .forget_discovery_candidate(&lookup_path(&path));
+                let _ = self.profile.forget_discovery_candidate(&lookup_path(&path));
             }
         }
     }
