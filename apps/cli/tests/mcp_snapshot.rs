@@ -60,22 +60,33 @@ fn fake_agent_entry() {
     std::process::exit(status.code().unwrap_or(1));
 }
 
-/// Entry point of a direct JSON-RPC client (no `raptor-mcp`): with `RAPTOR_DIRECT_KIND`
-/// (`cli`, `mcp` or `other`) it connects declaring that kind from its working folder, prepares
-/// a `snapshot` plan and runs it, and prints how far it got as one JSON line. As a normal test
-/// it does nothing.
+/// Entry point of a direct JSON-RPC client (no `raptor-mcp`): with `RAPTOR_DIRECT_KIND`, a
+/// comma-separated list of kinds (`cli`, `mcp` or `other`), it makes one attempt per kind FROM
+/// THIS SAME PROCESS: it connects declaring that kind from its working folder, prepares a
+/// `snapshot` plan and runs it, and prints how far it got as one JSON line per attempt. One
+/// process is one requester, so the attempts share its quota whatever kind they declare. As a
+/// normal test it does nothing.
 #[test]
 fn direct_snapshot_entry() {
-    let Some(kind) = std::env::var_os(DIRECT_KIND) else {
+    let Some(kinds) = std::env::var_os(DIRECT_KIND) else {
         return;
     };
-    let kind = match kind.to_str() {
-        Some("cli") => ClientKind::Cli,
-        Some("mcp") => ClientKind::Mcp,
+    let dirs = ProfileDirs::resolve().unwrap();
+    // Each answer starts a line of its own: libtest prints "test … ... " without a newline.
+    println!();
+    for kind in kinds.to_str().unwrap().split(',') {
+        println!("{}", direct_attempt(&dirs, kind));
+    }
+}
+
+/// One attempt of [`direct_snapshot_entry`]: how far a `snapshot` declared as `kind` got.
+fn direct_attempt(dirs: &ProfileDirs, kind: &str) -> Value {
+    let kind = match kind {
+        "cli" => ClientKind::Cli,
+        "mcp" => ClientKind::Mcp,
         _ => ClientKind::Other,
     };
-    let dirs = ProfileDirs::resolve().unwrap();
-    let mut client = Client::connect(&dirs, kind, PROTOCOL_VERSION).unwrap();
+    let mut client = Client::connect(dirs, kind, PROTOCOL_VERSION).unwrap();
     let mut params = json!({"operation": "snapshot", "args": {"label": "direct client"}});
     if kind != ClientKind::Mcp {
         params["surface"] = json!("cli");
@@ -85,7 +96,7 @@ fn direct_snapshot_entry() {
         ClientError::Rpc(e) => json!({"stage": stage, "code": e.code, "data": e.data}),
         other => json!({"stage": stage, "other": other.to_string()}),
     };
-    let answer = match client.call::<_, Value>(methods::OPERATION_PREPARE, params) {
+    match client.call::<_, Value>(methods::OPERATION_PREPARE, params) {
         Err(e) => failed("prepare", e),
         Ok(prepared) => {
             let run = json!({"plan_id": prepared["plan_id"]});
@@ -94,8 +105,7 @@ fn direct_snapshot_entry() {
                 Err(e) => failed("run", e),
             }
         }
-    };
-    println!("{answer}");
+    }
 }
 
 /// `raptor-mcp` next to `raptor`; built there if this package was tested alone.
@@ -218,9 +228,10 @@ impl Machine {
         Mcp::start(cmd)
     }
 
-    /// A direct JSON-RPC client declaring `kind`, as a child of the agent or on its own: how
-    /// far it got (see `direct_snapshot_entry`).
-    fn direct_client(&self, kind: &str, under_agent: bool) -> Value {
+    /// One direct JSON-RPC client process, as a child of a fake agent of its own or with no
+    /// agent above it, making one attempt per kind of the comma-separated `kinds`: how far each
+    /// got, in order (see `direct_snapshot_entry`).
+    fn direct_client(&self, kinds: &str, under_agent: bool) -> Vec<Value> {
         let exe = std::env::current_exe().unwrap();
         let entry = [
             "direct_snapshot_entry",
@@ -228,7 +239,7 @@ impl Machine {
             "--nocapture",
             "--test-threads=1",
         ];
-        let extra = [(DIRECT_KIND, kind), (DIRECT_WORKTREE, path(&self.wt))];
+        let extra = [(DIRECT_KIND, kinds), (DIRECT_WORKTREE, path(&self.wt))];
         let out = if under_agent {
             let mut argv = vec![exe.to_str().unwrap().to_owned()];
             argv.extend(entry.iter().map(|a| (*a).to_owned()));
@@ -247,15 +258,23 @@ impl Machine {
                 .output()
                 .unwrap()
         };
-        String::from_utf8_lossy(&out.stdout)
+        let answers: Vec<Value> = String::from_utf8_lossy(&out.stdout)
             .lines()
-            .rev()
-            .find_map(|l| {
-                serde_json::from_str::<Value>(l)
+            .filter_map(|l| {
+                // Parse from the first brace, as the reader of `Mcp` does.
+                let json = l.find('{').map_or("", |at| &l[at..]);
+                serde_json::from_str::<Value>(json)
                     .ok()
                     .filter(|v| v.get("stage").is_some())
             })
-            .unwrap_or_else(|| panic!("the direct client printed no answer: {}", text(&out)))
+            .collect();
+        assert_eq!(
+            answers.len(),
+            kinds.split(',').count(),
+            "one answer per attempt: {}",
+            text(&out)
+        );
+        answers
     }
 }
 
@@ -549,21 +568,23 @@ fn a_looping_agent_gets_the_real_wait_and_keeps_its_snapshots() {
 #[test]
 fn a_direct_client_under_the_agent_shares_the_quota() {
     let m = Machine::new();
-    let mut agent = m.agent_session(&[]);
-    for n in 1..=5 {
-        let result = agent.snapshot(&format!("point {n}"));
-        assert_eq!(result["isError"], false, "attempt {n}: {result}");
-    }
 
-    // Under the agent, declaring `cli`: the same requester, the same quota.
-    let direct = m.direct_client("cli", true);
+    // One process under one agent is one requester: five attempts declaring `mcp` and `other`
+    // fill its minute, and a sixth declaring `cli` meets the same quota (C2: the daemon keys it
+    // on the requester it resolves, never on the declared channel).
+    let answers = m.direct_client("mcp,other,mcp,other,mcp,cli", true);
+    for (n, done) in answers[..5].iter().enumerate() {
+        assert_eq!(done["stage"], "run", "attempt {}: {done}", n + 1);
+        assert_eq!(done["ok"]["outcome"], "done", "attempt {}: {done}", n + 1);
+    }
+    let direct = &answers[5];
     assert_eq!(direct["code"], -33060, "{direct}");
     assert_eq!(direct["data"]["window"], "minute", "{direct}");
-    assert_eq!(m.points().len(), 5, "the direct client added nothing");
+    assert_eq!(m.points().len(), 5, "the sixth attempt added nothing");
 
     // Without an agent above it, whatever channel it declares, it is refused before capture.
     for kind in ["cli", "mcp", "other"] {
-        let alone = m.direct_client(kind, false);
+        let alone = m.direct_client(kind, false).remove(0);
         assert_eq!(alone["stage"], "prepare", "{kind}: {alone}");
         assert_eq!(alone["code"], -32014, "{kind}: {alone}");
         assert_eq!(
@@ -572,4 +593,18 @@ fn a_direct_client_under_the_agent_shares_the_quota() {
         );
     }
     assert_eq!(m.points().len(), 5);
+}
+
+/// D5's limit, written down: the quota is per agent session, so a new agent process gets a new
+/// one; the worktree ceiling is what stops the rotation (ADR-MCP-001, Enmienda 2026-10-08).
+#[test]
+fn rotating_agent_processes_hit_the_worktree_ceiling() {
+    let m = Machine::new();
+    for n in 1..=gitraptor_core::timemachine::manual::PER_WORKTREE_DAY {
+        let done = m.direct_client("mcp", true).remove(0);
+        assert_eq!(done["ok"]["outcome"], "done", "process {n}: {done}");
+    }
+    let refused = m.direct_client("mcp", true).remove(0);
+    assert_eq!(refused["code"], -33060, "{refused}");
+    assert_eq!(refused["data"]["window"], "worktree-day", "{refused}");
 }
