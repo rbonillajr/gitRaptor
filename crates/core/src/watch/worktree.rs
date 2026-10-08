@@ -415,7 +415,9 @@ struct Prefix {
     hot: AtomicBool,
 }
 
-/// An ignored folder as the exclusion manager sees it.
+/// An ignored folder as the exclusion manager sees it (macOS only: no other backend leaves
+/// folders out of its stream).
+#[cfg(any(target_os = "macos", test))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct IgnoredDir {
     pub dir: PathBuf,
@@ -468,6 +470,7 @@ impl IgnoredPrefixes {
     }
 
     /// Tells the watcher something changed. Set once, by whoever watches this worktree.
+    #[cfg(any(target_os = "macos", test))]
     pub(super) fn set_on_change(&self, f: Box<dyn Fn() + Send + Sync>) {
         let _ = self.on_change.set(f);
     }
@@ -479,6 +482,7 @@ impl IgnoredPrefixes {
     }
 
     /// The folders now, with what the router counted under each.
+    #[cfg(any(target_os = "macos", test))]
     pub(crate) fn snapshot(&self) -> Vec<IgnoredDir> {
         self.list
             .read()
@@ -508,6 +512,7 @@ impl IgnoredPrefixes {
     }
 
     /// A folder that was due to leave the stream but did not: it counts from zero again.
+    #[cfg(any(target_os = "macos", test))]
     pub(crate) fn cool(&self, dir: &Path) {
         let all = self.list.read().unwrap_or_else(|e| e.into_inner());
         if let Some(p) = all.iter().find(|p| p.dir == dir) {
