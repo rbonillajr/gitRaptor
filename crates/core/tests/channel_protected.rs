@@ -749,7 +749,7 @@ fn an_id_of_another_repo_does_not_exist() {
         restore(&mut c, "0f8e2b7a-1c3d-4e5f-8a9b-0c1d2e3f4a5b"),
         code::NOT_FOUND
     );
-    assert_eq!(restore(&mut c, &in_a), code::NOT_IMPLEMENTED);
+    assert_eq!(restore(&mut c, &in_a), code::SCOPE_REFUSED);
     // Nothing was recorded by a command its story has not implemented.
     assert_eq!(r.operations(), 0);
 }
