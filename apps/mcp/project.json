@@ -10,43 +10,38 @@
   "targets": {
     "build": {
       "cache": true,
-      "executor": "@monodon/rust:build",
-      "outputs": [
-        "{options.target-dir}"
-      ],
+      "executor": "nx:run-commands",
+      "parallelism": false,
       "options": {
-        "target-dir": "dist/target/gitraptor-mcp"
+        "command": "cargo build -p {projectName}"
       },
       "configurations": {
         "production": {
-          "release": true
+          "command": "cargo build --release -p {projectName}"
         }
       }
     },
     "test": {
-      "cache": true,
-      "executor": "@monodon/rust:test",
-      "outputs": [
-        "{options.target-dir}"
-      ],
+      "cache": false,
+      "executor": "nx:run-commands",
+      "parallelism": false,
       "options": {
-        "target-dir": "dist/target/gitraptor-mcp"
+        "command": "cargo test -p {projectName}"
       }
     },
     "lint": {
       "cache": true,
-      "executor": "@monodon/rust:lint",
-      "outputs": [
-        "{options.target-dir}"
-      ],
+      "executor": "nx:run-commands",
+      "parallelism": false,
       "options": {
-        "target-dir": "dist/target/gitraptor-mcp"
+        "command": "cargo clippy -p {projectName} --all-targets -- -D warnings"
       }
     },
     "run": {
-      "executor": "@monodon/rust:run",
+      "executor": "nx:run-commands",
+      "parallelism": false,
       "options": {
-        "target-dir": "dist/target/gitraptor-mcp"
+        "command": "cargo run -p {projectName}"
       }
     }
   }

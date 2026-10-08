@@ -10,32 +10,26 @@
   "targets": {
     "build": {
       "cache": true,
-      "executor": "@monodon/rust:check",
-      "outputs": [
-        "{options.target-dir}"
-      ],
+      "executor": "nx:run-commands",
+      "parallelism": false,
       "options": {
-        "target-dir": "dist/target/gitraptor-macsys"
+        "command": "cargo check -p {projectName}"
       }
     },
     "test": {
-      "cache": true,
-      "executor": "@monodon/rust:test",
-      "outputs": [
-        "{options.target-dir}"
-      ],
+      "cache": false,
+      "executor": "nx:run-commands",
+      "parallelism": false,
       "options": {
-        "target-dir": "dist/target/gitraptor-macsys"
+        "command": "cargo test -p {projectName}"
       }
     },
     "lint": {
       "cache": true,
-      "executor": "@monodon/rust:lint",
-      "outputs": [
-        "{options.target-dir}"
-      ],
+      "executor": "nx:run-commands",
+      "parallelism": false,
       "options": {
-        "target-dir": "dist/target/gitraptor-macsys"
+        "command": "cargo clippy -p {projectName} --all-targets -- -D warnings"
       }
     }
   }

@@ -3,10 +3,10 @@
 //! An integration test only gets `CARGO_BIN_EXE_*` for its own package's binaries. When it also
 //! needs one from another package (`raptor-mcp` for the `raptor` tests), the binary must be in
 //! the same target directory and profile, or the test runs a stale one or none at all. `cargo
-//! test --workspace` builds it there already; `nx` runs `cargo test -p <package>` with
-//! `--target-dir dist/target/<project>` while exporting a different `CARGO_TARGET_DIR`, so a bare
-//! nested `cargo build` would put it somewhere else. Here the target directory, the profile and
-//! the target triple are read from the path of the reference binary instead.
+//! test --workspace` builds it there already; `cargo test -p <package>` (what `nx` runs) does not,
+//! and a bare nested `cargo build` could put it somewhere else (a `--target-dir` the environment
+//! does not show). Here the target directory, the profile and the target triple are read from the
+//! path of the reference binary instead.
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
