@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 deciders: [Rene Bonilla]
 domain: GRP
 feature: guardrails
@@ -90,6 +90,9 @@ ADR-GRP-005 § 6 (aceptado el 2026-10-04) define los **comandos reservados**, au
 | `setsid` + `script`, doble fork, `launchctl submit`, `systemd-run --user` (desacople del árbol) | **No** | Anuncio, ventana, auditoría completa | Factor fuera de banda |
 | `tmux send-keys` o escritura en la pty de la terminal del humano | **No** (el proceso es hijo de la shell del humano) | Anuncio, ventana, auditoría (el líder de sesión y la terminal quedan registrados) | Factor fuera de banda |
 | `osascript` / AppleScript, o automatización de la terminal en Windows (`SendKeys`, UI Automation) | **No** | Anuncio, ventana, auditoría | Factor fuera de banda (el prompt del SO no se puede automatizar sin permisos de accesibilidad que el usuario concede aparte) |
+| **Windows: padre elegido** con `PROC_THREAD_ATTRIBUTE_PARENT_PROCESS` (la PowerShell del desarrollador como padre): hereda su consola y una ascendencia limpia (Enmienda 2026-10-08 de ADR-GRP-005, M-01). **Mayor que en Unix**, donde no hay una primitiva equivalente | **No** | Anuncio, ventana, auditoría (la cadena guarda el host de la consola y la sesión de Windows) | Factor del SO en Windows ([TS-GRP-007](../../requirements/features/motor-local/technical-stories/TS-GRP-007-factor-so-reservados-windows.md), prioridad alta) |
+| **Windows: intermediario del SO** que abre una consola nueva en la sesión del usuario (tarea programada con `/IT`, `explorer.exe <programa>`, WMI) | **No** (equivale a `launchctl submit`) | Anuncio, ventana, auditoría | Factor fuera de banda |
+| **Windows: `AttachConsole`** a la consola del desarrollador desde un proceso de otro árbol | **Sí** (el creador de la consola no está en la cadena del llamante) | — | ADR-GRP-005, Enmienda 2026-10-08 |
 | **Código plantado que el humano ejecuta sin saberlo** | **No** (corre dentro del árbol del humano) | Bajo `raptor guard exec` **se neutralizan** con `-c`: `core.fsmonitor`, `core.pager`, `core.editor`, `sequence.editor`, el diff externo y `textconv`. **No se neutralizan**, porque la operación los necesita o porque son del usuario: `credential.helper` y `core.sshCommand` (autenticación del push), los filtros `clean`/`smudge`/`process` (contenido de un rebase), `gpg.program` cuando la firma está activa, y los **hooks previos encadenados** (NFR-07). Fuera de `guard exec` no se neutraliza nada: el humano usa su Git. Lo no neutralizado es un **riesgo aceptado por D5**, limitado por el anuncio, la ventana y la auditoría. Código plantado que, por ejemplo, lanza `raptor guard uninstall` desde el árbol del humano pasa los controles 1 a 3, pero se anuncia y se puede cancelar. Un `git` lanzado por ese código **no hereda el token**, porque su padre directo no es el `raptor` solicitante | Factor fuera de banda |
 
 - **Aceptación por acción**: cada desinstalación y cada excepción guardan en la auditoría:
