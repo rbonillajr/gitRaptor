@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Dogfooding log of GitRaptor (M1): one sample every __INTERVAL__ seconds and today's report.
+  Template: install.sh fills the __PLACEHOLDERS__ and copies it to ~/Library/LaunchAgents/.
+  It runs only the public CLI with read-only commands and never starts the engine.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.gitraptor.dogfooding</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__NODE__</string>
+    <string>__SCRIPT__</string>
+    <string>--raptor</string>
+    <string>__RAPTOR__</string>
+    <string>--dir</string>
+    <string>__DATA_DIR__</string>
+    <string>--out</string>
+    <string>__REPORTS_DIR__</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>__PATH__</string>
+  </dict>
+  <key>StartInterval</key>
+  <integer>__INTERVAL__</integer>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>LowPriorityIO</key>
+  <true/>
+  <key>Nice</key>
+  <integer>10</integer>
+  <key>StandardOutPath</key>
+  <string>__DATA_DIR__/sampler.log</string>
+  <key>StandardErrorPath</key>
+  <string>__DATA_DIR__/sampler.log</string>
+</dict>
+</plist>
