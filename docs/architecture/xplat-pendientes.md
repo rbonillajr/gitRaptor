@@ -41,7 +41,7 @@ Las rutas cortas de la columna Origen van bajo `docs/requirements/features/`. La
 | XP-12 | Windows | TS-TMC-001, TS-TMC-003, ADR-TMC-001 | Almacén y escritura (hoy `Unsupported`): `ReplaceFileW`, `FILE_FLAG_OPEN_REPARSE_POINT`, archivo abierto en un editor | Máquina Windows | **hecho** (2026-10-08, ver "Time Machine en Windows" y DS-TS-TMC-003, Enmienda 2026-10-08). Queda pendiente el e2e con el binario real (`raptor undo` por el canal), que en Windows rechaza al solicitante sin identidad verificable (XP-19 y TQ-14). También quedan las anotaciones de locks para la recuperación (XP-15) y el suelo de espacio libre. |
 | XP-13 | Linux | TS-TMC-003 | Aplicador con `renameat2` (`EXCHANGE` y `NOREPLACE`) | Contenedor | **pasa** (2026-10-05): `tm_apply` en verde con Git 2.38.5, 2.43.0 y 2.56.0 |
 | XP-14 | Linux | TS-TMC-002 | Oplog con rustix | Contenedor | **pasa** (2026-10-05) |
-| XP-15 | Windows | TS-TMC-002 | Identidad estable de archivo para los locks y `SystemProbe` (hoy da por vivo cualquier proceso) | Máquina Windows | pendiente |
+| XP-15 | Windows | TS-TMC-002 | Identidad estable de archivo para los locks y `SystemProbe` (hoy da por vivo cualquier proceso) | Máquina Windows | **hecho** (2026-10-08, ver "Locks y procesos en Windows (XP-15)" y DS-TS-TMC-002, Enmienda 2026-10-08). Solo en NTFS: en FAT, exFAT y ReFS el lock se conserva como `unsupported`. |
 | XP-16 | Linux | TS-TMC-004 | Procesos del usuario leídos de `/proc` para el multiplexor | Contenedor | pendiente: no lo ejercita ningún test actual |
 | XP-17 | Linux | TS-TMC-004, ADR-GRP-005 § 6, ADR-CKP-002, TS-CKP-002, ADR-MCP-001, ADR-GRD-007 | Daemon como subreaper (`PR_SET_CHILD_SUBREAPER`) frente a un descendiente con doble fork | Contenedor (el daemon no es PID 1) | pendiente: no lo ejercita ningún test actual |
 | XP-18 | Linux | ADR-CKP-002, TS-CKP-002, TS-CKP-003 | Ejecutor: el hijo muere con el daemon, identidad del hijo antes del `exec` y variables de sesión | VM Linux (UTM, sesión gráfica) | pendiente |
@@ -173,7 +173,7 @@ El canal ya existe en Windows (DS-TS-GRP-004 § 8). Verificado en la máquina re
 - `raptor daemon status` arranca el motor bajo demanda y responde por `\\.\pipe\gitraptor-<SID>-<huella>` (Git 2.56 encontrado); `raptor status` y `raptor events` responden por el pipe.
 - Tests nuevos en verde: `winsys` `pipe::tests` (8: DACL real con una sola ACE del usuario, nombre ocupado falla cerrado, ida y vuelta con PIDs, plazo de lectura, `shutdown`, waker, pipe inexistente, tope de instancias) y `crates/core/tests/channel_windows.rs` (5: saludo, llamadas y eventos; squatting hace fallar cerrado al daemon; un pipe con DACL ajena se rechaza con `ChannelRejected`; sin daemon es `NotRunning`; las conexiones por encima del límite reciben `LIMIT_REACHED` y el pipe sigue usable).
 - Encontrado al probar: el daemon lanzado bajo demanda heredaba las tuberías estándar del cliente (`raptor daemon status | Out-String` no terminaba nunca) y no encontraba Git porque su entorno limpio no tenía `ProgramFiles`. Corregidos: los handles estándar del cliente dejan de ser heredables antes del lanzamiento, y el entorno lleva `ProgramFiles`, `USERPROFILE` y `LOCALAPPDATA` leídos del sistema, nunca del cliente.
-- Sigue pendiente: `raptor daemon stop` se rechaza (`unsupported`) porque en Windows todo comando reservado se rechaza sin prueba de terminal (TQ-14, W1); un cliente de otra cuenta real de Windows no se probó (no hay segunda cuenta en la máquina); `file_id` sigue sin implementarse en Windows, así que `daemon.replace` y la identidad del ejecutable del hook quedan como desconocidas.
+- Sigue pendiente: `raptor daemon stop` se rechaza (`unsupported`) porque en Windows todo comando reservado se rechaza sin prueba de terminal (TQ-14, W1); un cliente de otra cuenta real de Windows no se probó (no hay segunda cuenta en la máquina); `file_id` sigue sin implementarse en Windows, así que `daemon.replace` y la identidad del ejecutable del hook quedan como desconocidas (resuelto en XP-15, 2026-10-08).
 
 ### Time Machine en Windows (XP-12, 2026-10-08)
 
@@ -210,6 +210,28 @@ Antes de esta rama se saltaban en Windows estos tests, que ahora corren y pasan:
 - Los archivos comprimidos con `compact.exe` dan solape al restaurarlos.
 - Medir el coste de `FlushFileBuffers` por objeto (ADR-TMC-006).
 
+### Locks y procesos en Windows (XP-15, 2026-10-08)
+
+**Qué cambia** (DS-TS-TMC-002, Enmienda 2026-10-08):
+
+- **Identidad de los locks del oplog**: índice de archivo de NTFS (incluye el número de secuencia del registro MFT, así que un registro reutilizado da otro índice) y `CreationTime`. La identidad se lee siempre por handle, sin seguir enlaces ni junctions.
+- **Liberación**: se abre el lock por su ruta, sin seguir reparse points y con acceso `DELETE`. Solo se borra si es un archivo regular en NTFS con el índice y la hora anotados, y se borra por ese mismo handle.
+- **Otros sistemas de archivos**: en FAT y exFAT el índice es la posición de la entrada en la carpeta y se reutiliza; en ReFS el índice de 64 bits no es único. En esos casos el lock se conserva como `unsupported`.
+- **`SystemProbe` en Windows**: la entrada `child-started` guarda la hora de inicio del hijo (`start_us`, la misma que lee el canal). Se toma por vivo solo el proceso con ese PID y esa hora exacta: un PID muerto o reutilizado no retiene el lock. Si no se puede leer el proceso (acceso denegado, lista ilegible), se considera vivo y el lock se conserva (fail-closed).
+- **Identidad de ejecutables**: `channel::file_id` da en Windows `(número de serie del volumen, índice de archivo)`. Con eso funcionan `daemon.replace` y la comprobación "servidor = binario instalado" del hook (ADR-GRD-003 § 4).
+- **Columna `inode`**: guarda el u64 bit a bit (complemento a dos), así que cabe un índice NTFS con el bit alto puesto. En Unix, un inodo mayor que `i64::MAX` ya no hace fallar la anotación.
+
+**Tests nuevos en la máquina real**:
+
+- `winsys`: `file_id::tests` (la entrada lee su identidad y borra exactamente lo que fijó; dos grafías de la misma ruta, en mayúsculas o con el nombre 8.3, son el mismo archivo) y `process::tests` (hora de creación de un hijo vivo y `Gone` al terminar).
+- `oplog`: el lock de un hijo muerto se libera con el `SystemProbe` real; un PID reutilizado (vivo, con otra hora de inicio) no hereda el lock, y con su hora de inicio exacta el lock espera y se conserva; un lock anotado con otra grafía de sus carpetas se libera igual; una carpeta con nombre de lock nunca se borra; un índice con el bit alto puesto se conserva bit a bit. Los tests de locks que solo corrían en Unix corren ahora también en Windows.
+
+**Sigue pendiente**:
+
+- En Unix, `SystemProbe` sigue usando `kill(0)` y no distingue un PID reutilizado: se conserva el lock, que es la dirección segura. Comparar la hora de inicio también allí queda para INF-TMC-001.
+- Las filas `child-started` anteriores a este cambio no llevan hora de inicio: con ellas, el proceso se considera vivo si el PID existe.
+- Que el sistema de archivos no sea NTFS se comprueba al liberar, no al anotar. No se probó en un volumen FAT, exFAT ni ReFS (la máquina solo tiene NTFS).
+
 ## Mantenimiento del índice
 
 - Al añadir o cerrar una marca "Pendiente: etapa de validación multiplataforma" en un artefacto, se actualiza la fila de su XP y el conteo.
@@ -234,7 +256,7 @@ Rutas de `docs/requirements/features/` abreviadas (`motor-local/`, `time-machine
 - **XP-12**: crates/core/src/timemachine/protected/backend.rs:271; crates/core/tests/tm_store_capture.rs:5; crates/core/tests/tm_store_safety.rs:6; crates/git/src/tm_write/store/mod.rs:52; crates/git/src/tm_write/mod.rs:57; crates/git/src/tm_write/files.rs:15, :472; TS-TMC-001-almacen-captura-snapshots.md:153 (Windows); time-machine/dev-specs/TS-TMC-003-escritura-aplicador.md:133
 - **XP-13**: TS-TMC-003-escritura-aplicador.md:134
 - **XP-14**: time-machine/dev-specs/TS-TMC-002-oplog-diario.md:156
-- **XP-15**: TS-TMC-002-oplog-diario.md:155
+- **XP-15** (cerrado 2026-10-08): TS-TMC-002-oplog-diario.md § 11 y Enmienda 2026-10-08
 - **XP-16**: time-machine/dev-specs/TS-TMC-004-operacion-protegida-solicitante.md:144
 - **XP-17**: TS-TMC-004-operacion-protegida-solicitante.md:102; docs/architecture/decisions/ADR-CKP-002-catalogo-operaciones-ejecutor.md:110, :310; cockpit/technical-stories/TS-CKP-002-catalogo-ejecutor.md:69; docs/architecture/decisions/ADR-MCP-001-servidor-mcp-cliente-daemon.md:243
 - **XP-18**: ADR-CKP-002-catalogo-operaciones-ejecutor.md:166 (Linux), :358 (Linux); TS-CKP-002-catalogo-ejecutor.md:79 (Linux); cockpit/technical-stories/TS-CKP-003-capa-cockpit-guardrails.md:66 (Linux); docs/architecture/diagrams/seq-ckp-operacion-usuario.md:115 (Linux)
