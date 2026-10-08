@@ -70,6 +70,7 @@ impl Running {
             operations: None,
             tm_prior_layer: None,
             tiers: Default::default(),
+            discovery: Default::default(),
             tm_capture: Default::default(),
         };
         let daemon = Daemon::start(config).unwrap();
@@ -257,6 +258,7 @@ fn a_precreated_open_runtime_folder_stops_the_start() {
         operations: None,
         tm_prior_layer: None,
         tiers: Default::default(),
+        discovery: Default::default(),
         tm_capture: Default::default(),
     };
     assert!(Daemon::start(config).is_err());
@@ -870,6 +872,7 @@ fn a_replaced_socket_is_taken_back() {
         operations: None,
         tm_prior_layer: None,
         tiers: Default::default(),
+        discovery: Default::default(),
         tm_capture: Default::default(),
     };
     let daemon = Daemon::start(config).unwrap();

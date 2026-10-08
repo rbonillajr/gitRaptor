@@ -181,6 +181,7 @@ fn machine() -> Machine {
         }),
         tm_prior_layer: None,
         tiers: Default::default(),
+        discovery: Default::default(),
         tm_capture: Default::default(),
     })
     .unwrap();

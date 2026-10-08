@@ -117,6 +117,7 @@ fn start_tiers(
         operations: None,
         tm_prior_layer: None,
         tiers,
+        discovery: Default::default(),
         tm_capture: TmCapture {
             config: CaptureConfig {
                 enabled: true,

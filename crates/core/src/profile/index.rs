@@ -97,6 +97,23 @@ pub struct AuditRow {
     pub chain: String,
 }
 
+/// A declared discovery root (US-GRP-020).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DiscoveryRoot {
+    pub path: String,
+    pub broad: bool,
+    pub added_ms: i64,
+}
+
+/// A discovered repo waiting for the developer's decision (US-GRP-020).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DiscoveryCandidate {
+    pub path: String,
+    pub root: String,
+    pub key_path: String,
+    pub found_ms: i64,
+}
+
 pub(crate) struct Index {
     conn: Connection,
     instance_id: String,
@@ -358,6 +375,164 @@ impl Index {
         )?;
         let rows = stmt.query_map([], entry_from_row)?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    pub(crate) fn discovery_roots(&self) -> Result<Vec<DiscoveryRoot>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT path, broad, added_ms FROM discovery_roots ORDER BY path")?;
+        let rows = stmt.query_map([], |row| {
+            Ok(DiscoveryRoot {
+                path: row.get(0)?,
+                broad: row.get::<_, i64>(1)? != 0,
+                added_ms: row.get(2)?,
+            })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// `false`: already declared, nothing changed.
+    pub(crate) fn add_discovery_root(&mut self, path: &str, broad: bool, now_ms: i64) -> Result<bool> {
+        let added = self.conn.execute(
+            "INSERT INTO discovery_roots (path, broad, added_ms) VALUES (?1, ?2, ?3)
+             ON CONFLICT (path) DO NOTHING",
+            params![path, i64::from(broad), now_ms],
+        )?;
+        Ok(added == 1)
+    }
+
+    /// Removes a root and its pending candidates; `None` if it was not
+    /// declared. Dismissals and observed repos stay.
+    pub(crate) fn remove_discovery_root(&mut self, path: &str) -> Result<Option<u32>> {
+        let tx = self.conn.transaction()?;
+        if tx.execute("DELETE FROM discovery_roots WHERE path = ?1", [path])? == 0 {
+            return Ok(None);
+        }
+        let removed = tx.execute("DELETE FROM discovery_candidates WHERE root = ?1", [path])?;
+        tx.commit()?;
+        Ok(Some(u32::try_from(removed).unwrap_or(u32::MAX)))
+    }
+
+    pub(crate) fn discovery_candidates(&self) -> Result<Vec<DiscoveryCandidate>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT path, root, key_path, found_ms FROM discovery_candidates ORDER BY path",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(DiscoveryCandidate {
+                path: row.get(0)?,
+                root: row.get(1)?,
+                key_path: row.get(2)?,
+                found_ms: row.get(3)?,
+            })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Replaces the candidates of `root` with the repos of a listing,
+    /// `(path, key_path)`, leaving out the observed repos (by key), the
+    /// dismissed paths and the repos already proposed by another root.
+    /// Returns the new candidates. A root removed meanwhile changes nothing.
+    pub(crate) fn sync_candidates(
+        &mut self,
+        root: &str,
+        found: &[(String, String)],
+        now_ms: i64,
+    ) -> Result<Vec<DiscoveryCandidate>> {
+        let tx = self.conn.transaction()?;
+        let declared: Option<i64> = tx
+            .query_row("SELECT 1 FROM discovery_roots WHERE path = ?1", [root], |r| {
+                r.get(0)
+            })
+            .optional()?;
+        if declared.is_none() {
+            return Ok(Vec::new());
+        }
+        let current: Vec<(String, String)> = {
+            let mut stmt =
+                tx.prepare("SELECT path, key_path FROM discovery_candidates WHERE root = ?1")?;
+            let rows = stmt.query_map([root], |r| Ok((r.get(0)?, r.get(1)?)))?;
+            rows.collect::<rusqlite::Result<_>>()?
+        };
+        let observed = |key: &str| -> rusqlite::Result<bool> {
+            tx.query_row(
+                "SELECT EXISTS (SELECT 1 FROM repos WHERE key_path = ?1 AND state = 'observed')",
+                [key],
+                |r| r.get(0),
+            )
+        };
+        for (path, key) in &current {
+            if !found.iter().any(|(p, k)| p == path && k == key) || observed(key)? {
+                tx.execute("DELETE FROM discovery_candidates WHERE path = ?1", [path])?;
+            }
+        }
+        let mut new = Vec::new();
+        for (path, key) in found {
+            let skip: bool = observed(key)?
+                || tx.query_row(
+                    "SELECT EXISTS (SELECT 1 FROM discovery_dismissed WHERE path = ?1)
+                         OR EXISTS (SELECT 1 FROM discovery_candidates
+                                    WHERE path = ?1 OR key_path = ?2)",
+                    params![path, key],
+                    |r| r.get(0),
+                )?;
+            if skip {
+                continue;
+            }
+            tx.execute(
+                "INSERT INTO discovery_candidates (path, root, key_path, found_ms)
+                 VALUES (?1, ?2, ?3, ?4)",
+                params![path, root, key, now_ms],
+            )?;
+            new.push(DiscoveryCandidate {
+                path: path.clone(),
+                root: root.to_owned(),
+                key_path: key.clone(),
+                found_ms: now_ms,
+            });
+        }
+        tx.commit()?;
+        Ok(new)
+    }
+
+    /// Dismisses a candidate by its path: `false` if it is not one.
+    pub(crate) fn dismiss_candidate(&mut self, path: &str, now_ms: i64) -> Result<bool> {
+        let tx = self.conn.transaction()?;
+        let key: Option<String> = tx
+            .query_row(
+                "SELECT key_path FROM discovery_candidates WHERE path = ?1",
+                [path],
+                |r| r.get(0),
+            )
+            .optional()?;
+        let Some(key) = key else {
+            return Ok(false);
+        };
+        tx.execute("DELETE FROM discovery_candidates WHERE path = ?1", [path])?;
+        tx.execute(
+            "INSERT INTO discovery_dismissed (path, key_path, dismissed_ms) VALUES (?1, ?2, ?3)
+             ON CONFLICT (path) DO UPDATE SET key_path = ?2, dismissed_ms = ?3",
+            params![path, key, now_ms],
+        )?;
+        tx.commit()?;
+        Ok(true)
+    }
+
+    /// A repo was added by hand or accepted: it is no longer a candidate
+    /// and no longer dismissed.
+    pub(crate) fn forget_discovered_key(&mut self, key_path: &str) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        tx.execute("DELETE FROM discovery_candidates WHERE key_path = ?1", [key_path])?;
+        tx.execute("DELETE FROM discovery_dismissed WHERE key_path = ?1", [key_path])?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Removes the candidate at `path`; `false` if there was none.
+    pub(crate) fn forget_candidate(&mut self, path: &str) -> Result<bool> {
+        Ok(self
+            .conn
+            .execute("DELETE FROM discovery_candidates WHERE path = ?1", [path])?
+            == 1)
     }
 }
 

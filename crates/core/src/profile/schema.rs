@@ -45,6 +45,29 @@ CREATE TRIGGER reserved_audit_no_delete BEFORE DELETE ON reserved_audit
 ALTER TABLE repos ADD COLUMN mcp_enabled_ms INTEGER;
 ALTER TABLE repos ADD COLUMN mcp_enabled_by TEXT;
 ",
+    r"
+-- US-GRP-020 and US-GRP-022: discovery roots, the repos found in them waiting
+-- for the developer's decision and the dismissals, by path (ADR-GRP-010,
+-- Enmienda 2026-10-07, N6). Profile state, never settings: only reserved
+-- commands change the roots.
+CREATE TABLE discovery_roots (
+    path     TEXT PRIMARY KEY,
+    broad    INTEGER NOT NULL CHECK (broad IN (0, 1)),
+    added_ms INTEGER NOT NULL
+) STRICT;
+CREATE TABLE discovery_candidates (
+    path     TEXT PRIMARY KEY,
+    root     TEXT NOT NULL,
+    key_path TEXT NOT NULL,
+    found_ms INTEGER NOT NULL
+) STRICT;
+CREATE INDEX discovery_candidates_by_root ON discovery_candidates(root);
+CREATE TABLE discovery_dismissed (
+    path         TEXT PRIMARY KEY,
+    key_path     TEXT NOT NULL,
+    dismissed_ms INTEGER NOT NULL
+) STRICT;
+",
 ];
 
 /// Migrations of each per-repo store (`data/repos/<repo_id>.sqlite`), with

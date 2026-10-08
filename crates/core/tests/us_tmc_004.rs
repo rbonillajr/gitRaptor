@@ -95,6 +95,7 @@ fn start(fx: Fixture, layer: Option<CaptureLayer>) -> Running {
         operations: None,
         tm_prior_layer: None,
         tiers: Default::default(),
+        discovery: Default::default(),
         tm_capture: TmCapture {
             config: CaptureConfig {
                 enabled: true,

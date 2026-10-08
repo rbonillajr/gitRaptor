@@ -500,6 +500,7 @@ fn start_with(setup: Setup) -> Running {
         operations: None,
         tm_prior_layer: None,
         tiers: Default::default(),
+        discovery: Default::default(),
         tm_capture: Default::default(),
     };
     let daemon = Daemon::start(config).unwrap();

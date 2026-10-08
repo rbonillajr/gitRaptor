@@ -19,6 +19,7 @@
 //! engine store cannot be opened still recovers its oplog (Q26).
 
 mod authorship;
+mod discovery;
 mod env;
 mod guard;
 mod lock;
@@ -70,6 +71,8 @@ pub use env::{
 };
 use guard::recover_guardrails;
 pub use lock::{InstanceLock, LOCK_FILE, running_pid, wait_until_released};
+pub(crate) use discovery::{DiscoveryError, DiscoveryRequest};
+pub use discovery::{DISCOVERY_HOME_ENV, DISCOVERY_POLL_ENV, DiscoveryConfig};
 pub use log::{Field, LOG_FILE, Level, LogLimits, Logger};
 pub use mcp::McpMarkError;
 use shutdown::Control;
@@ -176,6 +179,8 @@ pub struct DaemonConfig {
     pub tm_capture: TmCapture,
     /// Observation tiers (TS-GRP-006); off by default.
     pub tiers: TierConfig,
+    /// Discovery roots (US-GRP-020).
+    pub discovery: DiscoveryConfig,
 }
 
 /// A layer over the snapshotter of the Time Machine's own commands (tests).
@@ -217,6 +222,7 @@ impl DaemonConfig {
                 ..TmCapture::default()
             },
             tiers,
+            discovery: DiscoveryConfig::from_env(),
         })
     }
 }
@@ -779,6 +785,7 @@ impl Daemon {
                     };
                     let _ = reply.send(answer);
                 }
+                Ok(Control::Discovery(request)) => self.discovery(request),
                 Ok(Control::GuardRecord(entry)) => self.guard_record(*entry),
                 Ok(Control::GuardLog {
                     common_dir,
