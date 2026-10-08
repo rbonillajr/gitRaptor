@@ -28,8 +28,9 @@ use crate::profile::{Result, create_private_file};
 
 /// Encoding format of the hashed rows. A future change of encoding bumps
 /// it, and rows keep verifying with the format they were written with.
-/// 1: journal rows without `birth_ns`. 2: journal rows with `birth_ns`.
-pub(crate) const FORMAT: i64 = 2;
+/// 1: journal rows without `birth_ns`. 2: journal rows with `birth_ns`. 3: snapshot rows with the
+/// manual columns; every other kind reads as in 2.
+pub(crate) const FORMAT: i64 = 3;
 
 /// Format of the head file, independent of the row encoding.
 const HEAD_FORMAT: &str = "1";
@@ -72,9 +73,15 @@ impl RowKind {
             return None;
         }
         Some(match self {
-            Self::Snapshot => {
+            Self::Snapshot if format < 3 => {
                 "SELECT snapshot_id, seq, level, worktrees, store_ref, engine_mark,
                         cause_operation, cause_event_seq, recorded_ms
+                 FROM snapshots WHERE seq = ?1"
+            }
+            Self::Snapshot => {
+                "SELECT snapshot_id, seq, level, worktrees, store_ref, engine_mark,
+                        cause_operation, cause_event_seq, recorded_ms,
+                        label, requester, requester_session, worktree_key, channel
                  FROM snapshots WHERE seq = ?1"
             }
             Self::Operation => {

@@ -12,12 +12,12 @@
 mod capture;
 mod meta;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::Duration;
+use std::sync::{Condvar, Mutex};
+use std::time::{Duration, Instant};
 
 use gitraptor_git::tm_write::store::{
     SeedLimits, SeedReport, StoreError, StoreHandle, StoreRepo, VerifyReport,
@@ -135,6 +135,83 @@ pub struct SnapshotStore {
     /// Guaranteed priors waiting for the writer: an observation capture gives way to them.
     priors_waiting: AtomicUsize,
     seed_limits: SeedLimits,
+    /// Manual snapshots in flight and the lock under which their quota is counted and their
+    /// attempt recorded. Apart from `writer`: a guaranteed prior never waits for it.
+    manual: ManualState,
+}
+
+/// The state manual snapshots share in one store (one per repo): the sessions with a capture in
+/// flight and the recording lock. It is lost on a restart: the quota windows are durable in the
+/// oplog.
+#[derive(Default)]
+pub(crate) struct ManualState {
+    inner: Mutex<ManualInner>,
+    released: Condvar,
+}
+
+#[derive(Default)]
+struct ManualInner {
+    in_flight: HashSet<String>,
+    recording: bool,
+}
+
+/// A session with a manual capture in flight. Dropped (also on panic), it is free again.
+pub(crate) struct InFlight<'a> {
+    state: &'a ManualState,
+    session: String,
+}
+
+impl Drop for InFlight<'_> {
+    fn drop(&mut self) {
+        let mut inner = self.state.inner.lock().unwrap_or_else(|p| p.into_inner());
+        inner.in_flight.remove(&self.session);
+    }
+}
+
+/// The recording lock of manual snapshots. Dropped (also on panic), the next one goes in.
+pub(crate) struct Recording<'a>(&'a ManualState);
+
+impl Drop for Recording<'_> {
+    fn drop(&mut self) {
+        let mut inner = self.0.inner.lock().unwrap_or_else(|p| p.into_inner());
+        inner.recording = false;
+        self.0.released.notify_one();
+    }
+}
+
+impl ManualState {
+    /// Marks `session` as having a capture in flight; `None` if it already has one.
+    pub(crate) fn enter(&self, session: &str) -> Option<InFlight<'_>> {
+        let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+        inner
+            .in_flight
+            .insert(session.to_owned())
+            .then(|| InFlight {
+                state: self,
+                session: session.to_owned(),
+            })
+    }
+
+    /// Takes the recording lock, waiting for it at most until `deadline`. It is tried before the
+    /// clock is looked at, so a free lock is never refused for a deadline already past.
+    pub(crate) fn lock_recording(&self, deadline: Instant) -> Option<Recording<'_>> {
+        let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+        loop {
+            if !inner.recording {
+                inner.recording = true;
+                return Some(Recording(self));
+            }
+            let left = deadline.checked_duration_since(Instant::now())?;
+            if left.is_zero() {
+                return None;
+            }
+            inner = self
+                .released
+                .wait_timeout(inner, left)
+                .unwrap_or_else(|p| p.into_inner())
+                .0;
+        }
+    }
 }
 
 impl std::fmt::Debug for SnapshotStore {
@@ -268,7 +345,13 @@ impl SnapshotStore {
             writer: Mutex::new(capture::State::default()),
             priors_waiting: AtomicUsize::new(0),
             seed_limits: SeedLimits::default(),
+            manual: ManualState::default(),
         }
+    }
+
+    /// The state manual snapshots share in this store.
+    pub(crate) fn manual(&self) -> &ManualState {
+        &self.manual
     }
 
     pub fn repo_id(&self) -> &str {

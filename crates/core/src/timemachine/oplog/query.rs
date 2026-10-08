@@ -9,13 +9,14 @@
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use super::model::{
-    CompleteInfo, JournalEntry, Notice, NoticeKind, OperationKind, OperationRecord, OperationState,
-    OperationView, Requester, Scope, SnapshotLevel, SnapshotRecord, SnapshotState, SnapshotView,
-    Target,
+    CompleteInfo, JournalEntry, ManualMeta, Notice, NoticeKind, OperationKind, OperationRecord,
+    OperationState, OperationView, Requester, Scope, SnapshotLevel, SnapshotRecord, SnapshotState,
+    SnapshotView, Target,
 };
 use super::recovery::SnapshotRefs;
 use super::{Channel, Oplog};
 use crate::profile::Result;
+use crate::timemachine::manual::{DAY_MS, QuotaInput};
 
 /// Resolves the current actor of a session at query time. Implemented by
 /// the engine; tests use a fake that applies a correction.
@@ -55,7 +56,8 @@ pub struct OperationFilter {
 }
 
 const SNAPSHOT_COLUMNS: &str = "SELECT s.snapshot_id, s.seq, s.level, s.worktrees, s.store_ref,
-        s.engine_mark, s.cause_operation, s.cause_event_seq, s.recorded_ms
+        s.engine_mark, s.cause_operation, s.cause_event_seq, s.recorded_ms,
+        s.label, s.requester, s.requester_session, s.worktree_key, s.channel
     FROM snapshots s
     WHERE (?1 IS NULL OR s.snapshot_id = ?1)
       AND (?2 IS NULL OR s.level = ?2)
@@ -309,6 +311,46 @@ impl Oplog {
             .collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
+    /// The instants of every `manual` row of the requester in the worktree, of the worktree and
+    /// of the repo that fall in the last 24 h, discarded attempts included (the quota counts
+    /// every attempt that reached capture). A stamp is in a window when it is after
+    /// `now_ms - window`, with no upper bound: a clock that goes back never empties a window.
+    /// Each read is an indexed range over the partial indexes of the `manual` level; the
+    /// worktree is compared by its exact key, never by its text inside the `worktrees` JSON.
+    pub fn manual_quota_input(
+        &self,
+        session_id: &str,
+        worktree_key: &str,
+        now_ms: i64,
+    ) -> Result<QuotaInput> {
+        let since = now_ms.saturating_sub(DAY_MS);
+        let stamps = |sql: &str, args: &[&dyn rusqlite::ToSql]| -> Result<Vec<i64>> {
+            let mut stmt = self.conn.prepare_cached(sql)?;
+            let rows = stmt.query_map(args, |r| r.get::<_, i64>(0))?;
+            Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+        };
+        Ok(QuotaInput {
+            requester_ms: stamps(
+                "SELECT recorded_ms FROM snapshots
+                 WHERE level = 'manual' AND requester_session = ?1 AND worktree_key = ?2
+                   AND recorded_ms > ?3
+                 ORDER BY recorded_ms",
+                &[&session_id, &worktree_key, &since],
+            )?,
+            worktree_ms: stamps(
+                "SELECT recorded_ms FROM snapshots
+                 WHERE level = 'manual' AND worktree_key = ?1 AND recorded_ms > ?2
+                 ORDER BY recorded_ms",
+                &[&worktree_key, &since],
+            )?,
+            repo_ms: stamps(
+                "SELECT recorded_ms FROM snapshots
+                 WHERE level = 'manual' AND recorded_ms > ?1 ORDER BY recorded_ms",
+                &[&since],
+            )?,
+        })
+    }
+
     /// Notices no client has received yet that concern `worktree` (or the
     /// whole repo). A client connecting from that worktree shows them and
     /// marks them delivered, so each is shown once (US-TMC-019).
@@ -344,20 +386,56 @@ fn snapshot_row(row: &Row<'_>) -> rusqlite::Result<(SnapshotRecord, bool)> {
     let worktrees: String = row.get(3)?;
     let parsed_worktrees = serde_json::from_str::<Vec<String>>(&worktrees).ok();
     let parsed = parsed_worktrees.is_some();
+    let level = SnapshotLevel::parse(&row.get::<_, String>(2)?)?;
+    let (manual, manual_parsed) = manual_columns(row, level)?;
     Ok((
         SnapshotRecord {
             snapshot_id: row.get(0)?,
             seq: row.get(1)?,
-            level: SnapshotLevel::parse(&row.get::<_, String>(2)?)?,
+            level,
             worktrees: parsed_worktrees.unwrap_or_default(),
             store_ref: row.get(4)?,
             engine_mark: row.get(5)?,
             cause_operation: row.get(6)?,
             cause_event_seq: row.get(7)?,
             recorded_ms: row.get(8)?,
+            manual,
         },
-        parsed,
+        parsed && manual_parsed,
     ))
+}
+
+/// The `manual` columns of a snapshot row. The flag is `false` when the row is of level
+/// `manual` and a column does not parse (an edited row).
+fn manual_columns(
+    row: &Row<'_>,
+    level: SnapshotLevel,
+) -> rusqlite::Result<(Option<ManualMeta>, bool)> {
+    if level != SnapshotLevel::Manual {
+        return Ok((None, true));
+    }
+    let label: Option<String> = row.get(9)?;
+    let requester = row
+        .get::<_, Option<String>>(10)?
+        .and_then(|t| serde_json::from_str::<Requester>(&t).ok());
+    let worktree_key: Option<String> = row.get(12)?;
+    let channel = row
+        .get::<_, Option<String>>(13)?
+        .and_then(|t| Channel::parse(&t).ok());
+    let recorded_ms: i64 = row.get(8)?;
+    Ok(match (label, requester, worktree_key, channel) {
+        (Some(label), Some(requester), Some(worktree_key), Some(channel)) => (
+            Some(ManualMeta {
+                label,
+                requester,
+                channel,
+                worktree_key,
+                requested_ms: recorded_ms,
+            }),
+            true,
+        ),
+        _ => (None, false),
+    })
 }
 
 fn operation_row(row: &Row<'_>) -> rusqlite::Result<(OperationRecord, bool)> {
