@@ -626,6 +626,7 @@ impl Daemon {
             };
             daemon.observe(repo_id, &entry.canonical_path, read);
         }
+        daemon.seed_tiers();
         // Logged once everything runs: observing, detecting sessions
         // (US-GRP-007). Clients and tests take it as "started".
         daemon.logger.info("daemon_started", &fields);
@@ -726,7 +727,12 @@ impl Daemon {
                     let _ = reply.send(self.mcp_mark(&common_dir, enabled));
                 }
                 Ok(Control::Observed(batch)) => self.observed(*batch),
-                Ok(Control::Wake { repo_id, cause }) => self.wake_repo(&repo_id, cause),
+                Ok(Control::Wake { repo_id, cause }) => {
+                    self.wake_repo(&repo_id, cause);
+                    if self.stores.iter().any(|(id, _)| *id == repo_id) {
+                        self.note_activity(&repo_id);
+                    }
+                }
                 Ok(Control::Sessions(changes)) => self.sessions_changed(changes),
                 Ok(Control::SessionsList { params, reply }) => {
                     let _ = reply.send(self.sessions_list(&params));

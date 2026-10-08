@@ -121,6 +121,32 @@ impl Daemon {
         )
     }
 
+    /// At startup (N1, D13 of the Dev Spec): each repo's last activity is
+    /// the latest Git event of its worktrees, as seeded into the snapshot
+    /// from its store. A repo idle past the threshold then sleeps at the
+    /// first check instead of staying active for a whole threshold. One
+    /// with no event at all counts from now: a repo just added starts
+    /// active.
+    pub(super) fn seed_tiers(&mut self) {
+        let now_ms = super::now_ms();
+        let now = Instant::now();
+        let repos = self.bus.snapshot().1.repos;
+        for repo in repos {
+            let last = repo
+                .worktrees
+                .iter()
+                .filter_map(|w| w.last_activity_utc_ms)
+                .max();
+            let Some(last) = last else {
+                continue;
+            };
+            let ago = Duration::from_millis(u64::try_from(now_ms - last).unwrap_or(0));
+            if let Some(at) = now.checked_sub(ago) {
+                self.tiers.last_activity.insert(repo.repo_id, at);
+            }
+        }
+    }
+
     /// Something happened in the repo: it stays active.
     pub(super) fn note_activity(&mut self, repo_id: &str) {
         self.tiers
@@ -143,6 +169,14 @@ impl Daemon {
                 .get(&repo_id)
                 .is_none_or(|t| t.elapsed() >= after);
             if !idle || self.tiers.dormant.contains(&repo_id) {
+                continue;
+            }
+            // A client subscribed to this repo keeps it active; the fleet
+            // does not (N1).
+            let scope = gitraptor_api::scope::Scope::Repo {
+                repo_id: repo_id.clone(),
+            };
+            if self.bus.subscribed_to(&scope) {
                 continue;
             }
             // A repo with a session present never sleeps.

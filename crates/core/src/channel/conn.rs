@@ -1340,6 +1340,7 @@ impl Connection<'_> {
     /// under the lock events are published with.
     fn scope_snapshot(&self, params: ScopeSnapshotParams) -> Result<ScopeSnapshot, ErrorObject> {
         valid_scope(&params.scope)?;
+        self.wake_scope(&params.scope);
         let (scope_seq, shared) = self
             .ctx
             .bus
@@ -1409,6 +1410,7 @@ impl Connection<'_> {
         params: ScopeSubscribeParams,
     ) -> Result<ScopeSubscribeResult, ErrorObject> {
         valid_scope(&params.scope)?;
+        self.wake_scope(&params.scope);
         if self.subscriptions.len() >= self.ctx.config.limits.subscriptions_per_connection {
             return Err(ErrorObject::new(
                 code::LIMIT_REACHED,
@@ -1444,6 +1446,16 @@ impl Connection<'_> {
     /// then the canonical path against the observed worktrees; the deepest
     /// root wins (a linked worktree inside the main one). Anything else is
     /// "not found", whether the path exists or not.
+    /// A client that opens one repo (the TUI there, `raptor status` inside
+    /// it) wakes it if it is dormant (TS-GRP-006, N4); the fleet does not.
+    fn wake_scope(&self, scope: &Scope) {
+        if let Scope::Repo { repo_id } = scope {
+            self.ctx
+                .control
+                .wake(repo_id, crate::watch::WakeCause::Sentinel);
+        }
+    }
+
     fn repo_locate(&self, params: RepoLocateParams) -> Result<RepoLocateResult, ErrorObject> {
         let path = validate::client_path(&params.path).map_err(invalid)?;
         // The form of the observed worktree roots (on Windows, the drive form).
