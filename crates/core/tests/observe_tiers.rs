@@ -43,12 +43,16 @@ struct Watched {
 const WAIT: Duration = Duration::from_secs(10);
 
 fn watch(f: &Fixture) -> Watched {
+    watch_with(f, WatchConfig::default())
+}
+
+fn watch_with(f: &Fixture, config: WatchConfig) -> Watched {
     let (tx, rx) = channel();
     let tx = Arc::new(Mutex::new(tx));
     let (wake_tx, wakes) = channel();
     let roots = Arc::new(AtomicU64::new(0));
     let observer = Observer::start_counted(
-        WatchConfig::default(),
+        config,
         Arc::new(move |b| {
             let _ = tx.lock().unwrap().send(b);
         }),
@@ -297,4 +301,44 @@ fn repo_intact_tiers_write_nothing() {
         w.drain(Duration::from_millis(300));
     });
     report.assert_intact();
+}
+
+/// N3: the slow reconciliation reads a dormant repo in full. Unchanged, it
+/// wakes nothing; an edit without `git add` the sentinel missed (the
+/// metadata print cannot see it) wakes the repo in a `dormant` gap.
+#[test]
+fn the_slow_reconcile_finds_an_edit_the_sentinel_missed() {
+    let f = demo();
+    let w = watch_with(
+        &f,
+        WatchConfig {
+            dormant_reconcile: Duration::ZERO,
+            // The budget would stretch the interval to 1 000 times a read.
+            reconcile_budget_ppm: u32::MAX,
+            ..WatchConfig::default()
+        },
+    );
+    w.sleep();
+    let reads = w.observer.recomputes();
+    w.observer.sweep_now();
+    assert!(
+        w.observer.recomputes() > reads,
+        "no slow reconciliation ran"
+    );
+    assert_eq!(w.observer.tier("r"), Some(Tier::Dormant));
+    assert!(w.wakes.try_recv().is_err());
+
+    w.observer.simulate_lost_events(true);
+    let root = observe::canonical(&f.repo);
+    std::fs::write(root.join("login.txt"), "user\npassword\n").unwrap();
+    w.observer.sweep_now();
+    let cause = w.next_wake();
+    assert!(matches!(cause, WakeCause::SafetyNet { .. }), "{cause:?}");
+    w.observer.simulate_lost_events(false);
+    w.wake(cause);
+    let batches = w.until(|bs| bs.iter().any(|b| unstaged(b, &root) == Some(1)));
+    let gap = batches.iter().find_map(|b| b.gap).expect("no gap");
+    assert_eq!(gap.cause, GapCause::Dormant);
+    // At 0.1 % of a core, the same read would set the interval.
+    assert!(w.observer.reconcile_interval() < Duration::from_secs(1));
 }

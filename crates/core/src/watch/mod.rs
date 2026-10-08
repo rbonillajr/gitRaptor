@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::mpsc::{Sender, channel};
 use std::sync::{Arc, Mutex, RwLock, Weak};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use gitraptor_api::messages::{GitEventDetails, GitEventKind};
 
@@ -51,6 +51,12 @@ pub struct WatchConfig {
     pub degraded_poll: Duration,
     /// Metadata sweep of the dormant repos (Enmienda 2026-10-07, N3).
     pub dormant_poll: Duration,
+    /// Shortest interval of the slow reconciliation of a dormant repo (N3);
+    /// the CPU budget may make it longer.
+    pub dormant_reconcile: Duration,
+    /// Average share of one core the slow reconciliation may use, in parts
+    /// per million (RES-11: 0.1 %, ⚠️ ASSUMPTION of the Enmienda).
+    pub reconcile_budget_ppm: u32,
 }
 
 impl Default for WatchConfig {
@@ -69,6 +75,8 @@ impl Default for WatchConfig {
             periodic: Duration::from_secs(5 * 60),
             degraded_poll: Duration::from_secs(2),
             dormant_poll: Duration::from_secs(120),
+            dormant_reconcile: Duration::from_secs(60 * 60),
+            reconcile_budget_ppm: 1_000,
         }
     }
 }
@@ -264,8 +272,19 @@ pub(crate) enum WtMsg {
     /// An ignore rule file outside the worktree changed.
     IgnoreRules,
     /// Flush the window, answer and end (the repo goes dormant).
-    Sleep(Sender<()>),
+    Sleep(Sender<Slept>),
     Stop,
+}
+
+/// What a worktree task leaves when its repo goes dormant: enough for the
+/// slow reconciliation to read it again and compare (N3).
+#[derive(Debug, Clone)]
+pub(crate) struct Slept {
+    pub root: PathBuf,
+    pub main: bool,
+    pub admin: Option<String>,
+    /// Digest of its full status as last published.
+    pub fingerprint: Option<String>,
 }
 
 /// Message to a repo task.
@@ -346,6 +365,10 @@ struct Asleep {
     print: Print,
     /// Wall time of the last check: where a `dormant` gap starts.
     checked_ms: i64,
+    /// Each worktree as its task left it, for the slow reconciliation.
+    slept: Vec<Slept>,
+    /// When the slow reconciliation last read it.
+    reconciled: Instant,
 }
 
 /// Paths of a dormant repo, for the sentinel task.
@@ -376,6 +399,8 @@ pub(crate) struct Shared {
     sweeps: std::sync::atomic::AtomicU64,
     /// Messages the sentinel task decided on (tests).
     sentinel_seen: std::sync::atomic::AtomicU64,
+    /// CPU budget of the slow reconciliation (N3).
+    budget: Mutex<sweep::Budget>,
 }
 
 impl Shared {
@@ -716,6 +741,10 @@ impl Observer {
             sweep_stop: Mutex::new(None),
             sweeps: std::sync::atomic::AtomicU64::new(0),
             sentinel_seen: std::sync::atomic::AtomicU64::new(0),
+            budget: Mutex::new(sweep::Budget::new(
+                config.dormant_reconcile,
+                config.reconcile_budget_ppm,
+            )),
         });
         start_sentinel(&shared);
         start_sweep(&shared);
@@ -861,7 +890,11 @@ impl Observer {
             }
         }
         let wait = Duration::from_secs(10);
-        let flushed = acks.iter().all(|ack| ack.recv_timeout(wait).is_ok());
+        let slept: Vec<Slept> = acks
+            .iter()
+            .filter_map(|ack| ack.recv_timeout(wait).ok())
+            .collect();
+        let flushed = slept.len() == acks.len();
         let (done, ack) = channel();
         let refs = if repo_tx.send(RepoMsg::Sleep(done)).is_ok() {
             ack.recv_timeout(wait).ok()
@@ -889,6 +922,8 @@ impl Observer {
             git_dirs,
             print,
             checked_ms: now,
+            slept,
+            reconciled: Instant::now(),
         });
         if busy {
             for wt in &worktrees {
@@ -1017,6 +1052,17 @@ impl Observer {
         self.shared
             .sentinel_seen
             .load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    /// The effective interval of the slow reconciliation: the configured
+    /// minimum, or longer when the dormant repos do not fit in the CPU
+    /// budget (N3, exposed by `engine.resources`).
+    pub fn reconcile_interval(&self) -> Duration {
+        self.shared
+            .budget
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .interval()
     }
 
     /// Sweep cycles run so far.
@@ -1187,6 +1233,7 @@ fn sweep_once(shared: &Shared) {
             })
             .collect()
     };
+    let mut woken = Vec::new();
     for (repo_id, common, git_dirs) in dormant {
         let print = Print::read(&common, &git_dirs);
         let now = wall_now().0;
@@ -1211,8 +1258,74 @@ fn sweep_once(shared: &Shared) {
             }
             since
         };
+        woken.push(repo_id.clone());
         shared.wake(&repo_id, WakeCause::SafetyNet { since_ms: since });
     }
+    slow_reconcile(shared, &woken);
+}
+
+/// The slow reconciliation (N3): at most one dormant repo per sweep cycle,
+/// the one that waited longest, once its effective interval has passed. It
+/// reads every worktree in full, by stat, and compares with what its task
+/// last published; a difference wakes the repo in a `dormant` gap. The time
+/// it takes feeds the CPU budget, which stretches the interval when the
+/// dormant repos do not fit.
+fn slow_reconcile(shared: &Shared, skip: &[String]) {
+    let interval = shared
+        .budget
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .interval();
+    let due = {
+        let repos = shared.repos.read().unwrap_or_else(|e| e.into_inner());
+        repos
+            .values()
+            .filter(|r| r.tier() == Tier::Dormant && !skip.contains(&r.id))
+            .filter_map(|r| {
+                let a = r.asleep.as_ref()?;
+                (a.reconciled.elapsed() >= interval)
+                    .then(|| (a.reconciled, r.id.clone(), a.slept.clone()))
+            })
+            .min_by_key(|(at, _, _)| *at)
+    };
+    let Some((_, repo_id, slept)) = due else {
+        return;
+    };
+    let started = Instant::now();
+    let changed = slept.iter().any(|w| {
+        shared
+            .recomputes
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let read = crate::observe::read_worktree(&w.root, w.main, w.admin.as_deref());
+        read.fingerprint != w.fingerprint
+    });
+    let cost = started.elapsed();
+    let dormant = {
+        let repos = shared.repos.read().unwrap_or_else(|e| e.into_inner());
+        repos.values().filter(|r| r.tier() == Tier::Dormant).count()
+    };
+    shared
+        .budget
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .record(&repo_id, cost, dormant);
+    let now = wall_now().0;
+    let since = {
+        let mut repos = shared.repos.write().unwrap_or_else(|e| e.into_inner());
+        let Some(repo) = repos.get_mut(&repo_id) else {
+            return;
+        };
+        let Some(asleep) = repo.asleep.as_mut() else {
+            return;
+        };
+        asleep.reconciled = Instant::now();
+        let since = std::mem::replace(&mut asleep.checked_ms, now);
+        if !changed || !repo.start_waking() {
+            return;
+        }
+        since
+    };
+    shared.wake(&repo_id, WakeCause::SafetyNet { since_ms: since });
 }
 
 /// Whether an event can mean a change. inotify also reports opens (its

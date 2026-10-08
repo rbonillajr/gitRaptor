@@ -81,6 +81,50 @@ impl Print {
     }
 }
 
+/// The CPU budget of the slow reconciliation (N3). Each dormant repo is
+/// read once per interval, so over one interval the reads cost the sum of
+/// their last costs; the interval is the configured minimum, or that sum
+/// divided by the budget when it is longer.
+#[derive(Debug, Clone)]
+pub struct Budget {
+    minimum: std::time::Duration,
+    /// Share of one core, in parts per million.
+    ppm: u32,
+    costs: BTreeMap<String, std::time::Duration>,
+    dormant: usize,
+}
+
+impl Budget {
+    pub fn new(minimum: std::time::Duration, ppm: u32) -> Self {
+        Self {
+            minimum,
+            ppm: ppm.max(1),
+            costs: BTreeMap::new(),
+            dormant: 0,
+        }
+    }
+
+    /// The cost of one repo's last reconciliation, with how many repos are
+    /// dormant now: the repos never measured count as the average.
+    pub fn record(&mut self, repo_id: &str, cost: std::time::Duration, dormant: usize) {
+        self.costs.insert(repo_id.to_owned(), cost);
+        self.dormant = dormant;
+    }
+
+    /// The effective interval.
+    pub fn interval(&self) -> std::time::Duration {
+        if self.costs.is_empty() {
+            return self.minimum;
+        }
+        let measured: std::time::Duration = self.costs.values().sum();
+        let n = u32::try_from(self.costs.len()).unwrap_or(u32::MAX);
+        let all = u32::try_from(self.dormant.max(self.costs.len())).unwrap_or(u32::MAX);
+        let total = measured / n * all;
+        self.minimum
+            .max(total.div_f64(f64::from(self.ppm) / 1_000_000.0))
+    }
+}
+
 /// Size and mtime of a path, without following links; empty if absent.
 fn stat(path: &Path) -> String {
     match std::fs::symlink_metadata(path) {
@@ -125,6 +169,21 @@ mod tests {
         std::fs::create_dir_all(dir.join("refs/heads/feat")).unwrap();
         std::fs::write(dir.join("HEAD"), "ref: refs/heads/main\n").unwrap();
         dir
+    }
+
+    /// The interval stays at the minimum while the reads fit in 0.1 % of a
+    /// core, and stretches when they do not.
+    #[test]
+    fn the_budget_stretches_the_interval_only_when_needed() {
+        use std::time::Duration;
+        let mut b = Budget::new(Duration::from_secs(3600), 1_000);
+        assert_eq!(b.interval(), Duration::from_secs(3600));
+        // 100 repos at 18 ms: 1.8 s per round, 1 800 s at 0.1 %: fits.
+        b.record("a", Duration::from_millis(18), 100);
+        assert_eq!(b.interval(), Duration::from_secs(3600));
+        // 100 repos at 100 ms: 10 s per round needs 10 000 s.
+        b.record("a", Duration::from_millis(100), 100);
+        assert_eq!(b.interval(), Duration::from_secs(10_000));
     }
 
     /// The print follows `HEAD`, the reflog, a new branch folder and a new
