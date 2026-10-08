@@ -45,10 +45,62 @@ pub trait ProcLister: Send + Sync {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SystemProcLister;
 
-/// Whether this platform can list processes for the detector. Windows:
-/// Pendiente: etapa de validación multiplataforma.
+/// Whether this platform can list processes for the detector.
 pub const fn detection_supported() -> bool {
-    cfg!(any(target_os = "macos", target_os = "linux"))
+    cfg!(any(target_os = "macos", target_os = "linux", windows))
+}
+
+/// Windows: processes of the current user from one snapshot, the image path read per process
+/// only when asked, and the working folder through the PEB (`gitraptor-winsys`, SEC-04: only
+/// that folder, never a command line). The identity is `(pid, creation time)`; pid reuse is
+/// caught by comparing the creation time while each piece is read.
+#[cfg(windows)]
+mod win {
+    use std::path::PathBuf;
+
+    use gitraptor_winsys::process;
+
+    use super::ProcEntry;
+
+    /// 100 ns intervals between 1601-01-01 and 1970-01-01.
+    const EPOCH_DIFF_100NS: u64 = 116_444_736_000_000_000;
+
+    /// Microseconds since the epoch, as the other platforms keep it.
+    fn to_epoch_us(created_100ns: u64) -> u64 {
+        created_100ns.saturating_sub(EPOCH_DIFF_100NS) / 10
+    }
+
+    /// Back to the clock of the kernel, to the microsecond (see `winsys::process`).
+    fn to_created_100ns(start_us: u64) -> u64 {
+        start_us.saturating_mul(10).saturating_add(EPOCH_DIFF_100NS)
+    }
+
+    pub(super) fn table() -> Option<Vec<ProcEntry>> {
+        Some(
+            process::current_user_processes()?
+                .into_iter()
+                .map(|p| ProcEntry {
+                    pid: p.pid,
+                    ppid: p.ppid,
+                    start_us: to_epoch_us(p.created_100ns),
+                    exe: None,
+                })
+                .collect(),
+        )
+    }
+
+    pub(super) fn exe(entry: &ProcEntry) -> Option<PathBuf> {
+        process::image_of(entry.pid, to_created_100ns(entry.start_us))
+    }
+
+    /// The working folder of `pid` in the drive form the detector compares worktrees in, with
+    /// the links of the path resolved as on the other platforms. `None` when it cannot be read.
+    pub(super) fn cwd(pid: u32) -> Option<PathBuf> {
+        let created = process::created_100ns(pid).ok()?;
+        let folder = process::cwd(pid, created).ok()?;
+        let resolved = std::fs::canonicalize(folder).ok()?;
+        Some(gitraptor_policy::guard::fastpath::simplified(resolved))
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -177,7 +229,30 @@ impl ProcLister for SystemProcLister {
     }
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(windows)]
+impl ProcLister for SystemProcLister {
+    fn list(&self) -> Option<Vec<ProcEntry>> {
+        let mut table = win::table()?;
+        for e in &mut table {
+            e.exe = win::exe(e);
+        }
+        Some(table)
+    }
+
+    fn list_bare(&self) -> Option<Vec<ProcEntry>> {
+        win::table()
+    }
+
+    fn exe(&self, entry: &ProcEntry) -> Option<PathBuf> {
+        win::exe(entry)
+    }
+
+    fn cwd(&self, pid: u32) -> Option<PathBuf> {
+        win::cwd(pid)
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
 impl ProcLister for SystemProcLister {
     fn list(&self) -> Option<Vec<ProcEntry>> {
         None
@@ -264,5 +339,56 @@ mod tests {
         child.kill().unwrap();
         child.wait().unwrap();
         zombie.wait().unwrap();
+    }
+}
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    use super::*;
+
+    fn plain(path: &std::path::Path) -> String {
+        let text = std::fs::canonicalize(path)
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        text.strip_prefix(r"\\?\").unwrap_or(&text).to_lowercase()
+    }
+
+    /// A child with its own working folder is listed with its parent, start and path, its
+    /// folder is read, and once it ends none of that is read for it.
+    #[test]
+    fn lists_a_child_with_its_parent_path_and_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut child = std::process::Command::new("cmd")
+            .args(["/C", "ping -n 30 127.0.0.1 >NUL"])
+            .current_dir(dir.path())
+            .spawn()
+            .unwrap();
+        let bare = SystemProcLister.list_bare().unwrap();
+        let found = bare.iter().find(|e| e.pid == child.id()).unwrap().clone();
+        assert_eq!(found.ppid, std::process::id());
+        assert_eq!(found.exe, None);
+        let exe = SystemProcLister.exe(&found).unwrap();
+        assert!(exe.to_string_lossy().to_lowercase().ends_with("cmd.exe"));
+        let table = SystemProcLister.list().unwrap();
+        let entry = table.iter().find(|e| e.pid == child.id()).unwrap();
+        assert_eq!((entry.ppid, entry.start_us), (found.ppid, found.start_us));
+        assert_eq!(entry.exe.as_deref(), Some(exe.as_path()));
+        let cwd = SystemProcLister.cwd(child.id());
+        assert_eq!(cwd.as_deref().map(plain), Some(plain(dir.path())));
+        // Another start under the same pid is another process.
+        let other = ProcEntry {
+            start_us: found.start_us + 1_000,
+            ..found.clone()
+        };
+        assert_eq!(SystemProcLister.exe(&other), None);
+        // This process is in the table too, with a start before its child's.
+        let me = table.iter().find(|e| e.pid == std::process::id()).unwrap();
+        assert!(me.start_us <= entry.start_us);
+        child.kill().unwrap();
+        child.wait().unwrap();
+        assert_eq!(SystemProcLister.exe(&found), None);
+        assert_eq!(SystemProcLister.cwd(child.id()), None);
+        assert!(detection_supported());
     }
 }

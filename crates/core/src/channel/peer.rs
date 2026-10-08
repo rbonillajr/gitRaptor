@@ -402,9 +402,14 @@ mod imp {
         }
     }
 
-    /// Pendiente: the working folder of another process needs its PEB.
-    pub fn process_cwd(_pid: u32) -> Option<PathBuf> {
-        None
+    /// The working folder of `pid` in drive form, links resolved (the other platforms ask the
+    /// kernel for the resolved path). Read through the PEB of a process of this user only; any
+    /// failure is `None`, which callers treat as unknown (`gitraptor-winsys`, SEC-04).
+    pub fn process_cwd(pid: u32) -> Option<PathBuf> {
+        let created = process::created_100ns(pid).ok()?;
+        let folder = process::cwd(pid, created).ok()?;
+        let resolved = std::fs::canonicalize(folder).ok()?;
+        Some(gitraptor_policy::guard::fastpath::simplified(resolved))
     }
 }
 
