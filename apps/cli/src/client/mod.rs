@@ -12,26 +12,27 @@
 
 pub mod sequence;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
 use gitraptor_api::clock::monotonic_ns;
 use gitraptor_api::messages::{
-    EventsHistoryParams, EventsHistoryResult, MAX_HISTORY_PAGE, SessionsListParams,
-    SessionsListResult,
+    EventsHistoryParams, EventsHistoryResult, MAX_HISTORY_PAGE, RepoAddParams, RepoAddResult,
+    RepoRejectedData, RepoRejection, SessionsListParams, SessionsListResult,
 };
 use gitraptor_api::methods;
-use gitraptor_api::rpc::{Notification, ServerMessage};
+use gitraptor_api::rpc::{Notification, ServerMessage, code};
 use gitraptor_api::scope::{
     ConnectionRequester, RepoLocateParams, RepoLocateResult, Scope, ScopeEventNotification,
     ScopeResyncNotification, ScopeSnapshot, ScopeSnapshotParams, ScopeSubscribeParams,
 };
 use serde_json::Value;
 
-use crate::model::{ConnEvent, ConnState, EngineMsg, Msg, Stamped};
+use crate::model::{Candidate, ConnEvent, ConnState, EngineMsg, Msg, ObserveFailure, Stamped};
 use crate::present;
+use crate::present::SafeText;
 use crate::queue::{Closed, Outlet};
 
 /// First wait before reconnecting (⚠️ ASSUMPTION of ADR-CKP-003 § 4).
@@ -65,6 +66,17 @@ pub trait Link: Send {
     }
     /// A request and its answer.
     fn call(&mut self, method: &str, params: Value) -> Result<Value, LinkError>;
+    /// [`Link::call`] keeping the engine's typed refusal (its code and data, never its
+    /// message). A link that cannot tell says only "refused".
+    fn call_refusal(&mut self, method: &str, params: Value) -> Result<Value, Refusal> {
+        self.call(method, params).map_err(|err| match err {
+            LinkError::Refused => Refusal::Engine {
+                code: 0,
+                data: None,
+            },
+            other => Refusal::Link(other),
+        })
+    }
     /// The next message, waiting up to `timeout`; `None` on timeout.
     fn next(&mut self, timeout: Duration) -> Result<Option<Incoming>, LinkError>;
 }
@@ -97,6 +109,17 @@ pub enum LinkError {
     Lost,
 }
 
+/// Why a request of [`Link::call_refusal`] failed.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Refusal {
+    /// The engine answered with an error: its code and data.
+    Engine {
+        code: i64,
+        data: Option<Value>,
+    },
+    Link(LinkError),
+}
+
 /// Commands for the channel thread.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LinkCmd {
@@ -107,6 +130,10 @@ pub enum LinkCmd {
     /// Show this repo, chosen because the folder is in none (kept across reconnections).
     Open {
         repo_id: String,
+    },
+    /// Observe the repo of the folder (`repo.add`) and show it (US-CKP-025).
+    Observe {
+        root: PathBuf,
     },
     Reconnect,
     Shutdown,
@@ -205,6 +232,12 @@ fn run(
             Ok(LinkCmd::Shutdown) | Err(RecvTimeoutError::Disconnected) => return,
             Ok(LinkCmd::Reconnect) => attempt = 0,
             Ok(LinkCmd::Open { repo_id }) => chosen = Some(repo_id),
+            Ok(LinkCmd::Observe { .. }) => {
+                let event = ConnEvent::ObserveFailed(ObserveFailure::Disconnected);
+                if out.send(Msg::Conn(event)).is_err() {
+                    return;
+                }
+            }
             Ok(LinkCmd::Resync { .. }) | Err(RecvTimeoutError::Timeout) => {}
         }
     }
@@ -239,17 +272,22 @@ fn session(
     if sync(link, &Scope::Global, true, out)?.is_err() {
         return Ok(End::Reconnect);
     }
-    match cwd
-        .and_then(|path| locate(link, path))
-        .or_else(|| chosen.clone())
-    {
+    let located = match cwd.map(|path| locate(link, path)).transpose() {
+        Ok(located) => located.flatten(),
+        Err(_) => return Ok(End::Reconnect),
+    };
+    match located.or_else(|| chosen.clone()) {
         Some(repo_id) => {
             if sync(link, &Scope::Repo { repo_id }, true, out)?.is_err() {
                 return Ok(End::Reconnect);
             }
         }
-        // `update` opens the only observed repo or lets the developer choose one.
-        None => out.send(Msg::Conn(ConnEvent::Unlocated))?,
+        // In a repo the engine does not observe, `update` may offer to observe it (US-CKP-025);
+        // otherwise it opens the only observed repo or lets the developer choose one.
+        None => match cwd.and_then(|path| candidate(path)) {
+            Some(here) => out.send(Msg::Conn(ConnEvent::Unobserved(here)))?,
+            None => out.send(Msg::Conn(ConnEvent::Unlocated))?,
+        },
     }
     send_state(out, ConnState::Live)?;
     loop {
@@ -268,6 +306,23 @@ fn session(
                         return Ok(End::Reconnect);
                     }
                 }
+                LinkCmd::Observe { root } => match observe(link, &root) {
+                    Ok(repo_id) => {
+                        *chosen = Some(repo_id.clone());
+                        if sync(link, &Scope::Repo { repo_id }, true, out)?.is_err() {
+                            return Ok(End::Reconnect);
+                        }
+                    }
+                    Err(Refusal::Engine { code, data }) => {
+                        let failure = observe_failure(code, data);
+                        out.send(Msg::Conn(ConnEvent::ObserveFailed(failure)))?;
+                    }
+                    Err(Refusal::Link(_)) => {
+                        let failure = ObserveFailure::Disconnected;
+                        out.send(Msg::Conn(ConnEvent::ObserveFailed(failure)))?;
+                        return Ok(End::Reconnect);
+                    }
+                },
             }
         }
         match link.next(READ_SLICE) {
@@ -396,15 +451,108 @@ fn sessions(
     Ok(Ok(()))
 }
 
-/// The observed repo that contains `path`, as the daemon canonicalizes it.
-fn locate(link: &mut dyn Link, path: &std::path::Path) -> Option<String> {
+/// The observed repo that contains `path`, as the daemon canonicalizes it. `None` when the
+/// engine says it is in none (any refusal); a broken connection is an error, never "in none".
+fn locate(link: &mut dyn Link, path: &Path) -> Result<Option<String>, LinkError> {
     let params = RepoLocateParams {
         path: path.to_string_lossy().into_owned(),
     };
-    let value = link.call(methods::REPO_LOCATE, to_value(&params)).ok()?;
-    serde_json::from_value::<RepoLocateResult>(value)
-        .ok()
-        .map(|r| r.repo_id)
+    match link.call(methods::REPO_LOCATE, to_value(&params)) {
+        Ok(value) => Ok(serde_json::from_value::<RepoLocateResult>(value)
+            .ok()
+            .map(|r| r.repo_id)),
+        Err(LinkError::Refused) => Ok(None),
+        Err(err) => Err(err),
+    }
+}
+
+/// `repo.add` of the worktree root (reserved: the engine authorizes the caller again,
+/// BR-AUTH-001). An already observed repo is a success too: someone added it meanwhile.
+fn observe(link: &mut dyn Link, root: &Path) -> Result<String, Refusal> {
+    let params = RepoAddParams {
+        path: root.to_string_lossy().into_owned(),
+    };
+    let value = link.call_refusal(methods::REPO_ADD, to_value(&params))?;
+    // An answer this client cannot read is the engine's, not a broken connection.
+    serde_json::from_value::<RepoAddResult>(value)
+        .map(|r| r.repo.repo_id)
+        .map_err(|_| Refusal::Engine {
+            code: 0,
+            data: None,
+        })
+}
+
+/// The typed reason of a refused `repo.add`; the engine's message is never shown (SEC-12).
+fn observe_failure(code: i64, data: Option<Value>) -> ObserveFailure {
+    match code {
+        code::RESERVED_REFUSED => ObserveFailure::Refused,
+        code::REPO_REJECTED => {
+            // As `raptor repo add` reads them (`support::repo_error`).
+            match data
+                .and_then(|d| serde_json::from_value::<RepoRejectedData>(d).ok())
+                .map(|d| d.reason)
+            {
+                Some(RepoRejection::NotARepo) => ObserveFailure::NotARepo,
+                Some(RepoRejection::Untrusted) => ObserveFailure::NotTrusted,
+                Some(RepoRejection::Unreadable) | None => ObserveFailure::Unreadable,
+                Some(RepoRejection::UnknownRepo | RepoRejection::NotObserved) => {
+                    ObserveFailure::Unknown
+                }
+            }
+        }
+        _ => ObserveFailure::Unknown,
+    }
+}
+
+/// The repo the folder `cwd` is in, when it may be one the engine does not observe
+/// (US-CKP-025): from the folder's real path, upwards, the first folder with a `.git` entry,
+/// without leaving the folder's file system. Nothing of Git is read but the `.git` file of a
+/// linked worktree, to name the repo it belongs to. The engine checks it again on `repo.add`.
+pub fn candidate(cwd: &Path) -> Option<Candidate> {
+    let real = std::fs::canonicalize(cwd).ok()?;
+    let device = device(&real);
+    let root = real
+        .ancestors()
+        .take_while(|dir| device.is_none() || device == self::device(dir))
+        .find(|dir| std::fs::symlink_metadata(dir.join(".git")).is_ok())?
+        .to_path_buf();
+    // A linked worktree names the repo it belongs to: its main worktree.
+    let main = main_worktree(&root).unwrap_or_else(|| root.clone());
+    let name = main
+        .file_name()
+        .map_or_else(|| main.to_string_lossy(), |n| n.to_string_lossy());
+    Some(Candidate {
+        name: SafeText::name(&name),
+        path: SafeText::text(&root.to_string_lossy()),
+        root,
+    })
+}
+
+/// The main worktree of the linked worktree at `root`: its `.git` file says
+/// `gitdir: <common>/worktrees/<id>`, and that folder's `commondir` leads to the common Git
+/// directory, whose parent is the main worktree. `None` for anything else (a submodule, a
+/// main worktree, a bare repo).
+fn main_worktree(root: &Path) -> Option<PathBuf> {
+    let file = std::fs::read_to_string(root.join(".git")).ok()?;
+    let gitdir = root.join(file.strip_prefix("gitdir:")?.trim());
+    let common = std::fs::read_to_string(gitdir.join("commondir")).ok()?;
+    let common = std::fs::canonicalize(gitdir.join(common.trim())).ok()?;
+    if common.file_name()? != ".git" {
+        return None;
+    }
+    common.parent().map(Path::to_path_buf)
+}
+
+/// The file system of `path`, to stop at its boundary; `None` where it cannot be told.
+#[cfg(unix)]
+fn device(path: &Path) -> Option<u64> {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::metadata(path).ok().map(|m| m.dev())
+}
+
+#[cfg(not(unix))]
+fn device(_: &Path) -> Option<u64> {
+    None
 }
 
 fn to_value(params: &impl serde::Serialize) -> Value {
@@ -461,5 +609,74 @@ mod tests {
         assert_eq!(backoff(5), Duration::from_secs(4));
         assert_eq!(backoff(6), BACKOFF_MAX);
         assert_eq!(backoff(60), BACKOFF_MAX);
+    }
+
+    fn dir(path: &Path) -> PathBuf {
+        std::fs::create_dir_all(path).unwrap();
+        std::fs::canonicalize(path).unwrap()
+    }
+
+    /// US-CKP-025: from a folder inside a repo, upwards, the first folder with `.git`.
+    #[test]
+    fn candidate_root_is_the_first_folder_with_git_upwards() {
+        let tmp = tempfile::tempdir().unwrap();
+        let notes = dir(&tmp.path().join("notes"));
+        dir(&notes.join(".git"));
+        let deep = dir(&notes.join("src/deep"));
+        let here = candidate(&deep).unwrap();
+        assert_eq!(here.root, notes);
+        assert_eq!(here.name.as_str(), "notes");
+        assert_eq!(here.path.as_str(), notes.to_string_lossy());
+        assert_eq!(candidate(&notes).unwrap().root, notes);
+        // A folder in no repo: nothing to offer.
+        let plain = dir(&tmp.path().join("plain"));
+        assert_eq!(candidate(&plain), None);
+        // A folder that does not exist: nothing either.
+        assert_eq!(candidate(&tmp.path().join("gone")), None);
+    }
+
+    /// The real path: a folder reached through a symlink is offered where it really is.
+    #[cfg(unix)]
+    #[test]
+    fn candidate_root_follows_the_real_path() {
+        let tmp = tempfile::tempdir().unwrap();
+        let notes = dir(&tmp.path().join("notes"));
+        dir(&notes.join(".git"));
+        let src = dir(&notes.join("src"));
+        let link = tmp.path().join("link");
+        std::os::unix::fs::symlink(&src, &link).unwrap();
+        assert_eq!(candidate(&link).unwrap().root, notes);
+    }
+
+    /// A linked worktree (its `.git` is a file) is offered at its own root, which `repo.add`
+    /// takes, and named after the repo it belongs to. A submodule-like `.git` file without
+    /// `commondir` keeps its own name.
+    #[test]
+    fn candidate_root_of_a_linked_worktree_names_its_repo() {
+        let tmp = tempfile::tempdir().unwrap();
+        let notes = dir(&tmp.path().join("notes"));
+        let admin = dir(&notes.join(".git/worktrees/wt"));
+        std::fs::write(admin.join("commondir"), "../..\n").unwrap();
+        let wt = dir(&tmp.path().join("notes-wt"));
+        std::fs::write(
+            wt.join(".git"),
+            format!("gitdir: {}\n", admin.to_string_lossy()),
+        )
+        .unwrap();
+        let here = candidate(&dir(&wt.join("sub"))).unwrap();
+        assert_eq!(here.root, wt);
+        assert_eq!(here.name.as_str(), "notes");
+        assert_eq!(here.path.as_str(), wt.to_string_lossy());
+
+        let module = dir(&tmp.path().join("lib"));
+        let modules = dir(&notes.join(".git/modules/lib"));
+        std::fs::write(
+            module.join(".git"),
+            format!("gitdir: {}\n", modules.to_string_lossy()),
+        )
+        .unwrap();
+        let here = candidate(&module).unwrap();
+        assert_eq!(here.root, module);
+        assert_eq!(here.name.as_str(), "lib");
     }
 }

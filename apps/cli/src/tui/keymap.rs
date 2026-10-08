@@ -17,6 +17,11 @@ pub enum Action {
     Open,
     /// Hand the terminal back to the shell until `fg` (job control).
     Suspend,
+    /// Answer yes to the question on screen ("Observe this repo? [y/N]"): `y`, or `s` for
+    /// "sí", in both languages.
+    Yes,
+    /// Answer no (the default; Enter says no too).
+    No,
 }
 
 /// A key as the table names it.
@@ -27,6 +32,7 @@ pub enum Key {
     Up,
     Down,
     Enter,
+    Esc,
 }
 
 impl Key {
@@ -37,6 +43,7 @@ impl Key {
             Self::Up => "↑".into(),
             Self::Down => "↓".into(),
             Self::Enter => "Enter".into(),
+            Self::Esc => "Esc".into(),
         }
     }
 
@@ -47,7 +54,8 @@ impl Key {
             (Self::Ctrl(k), KeyCode::Char(c)) => ctrl && k.eq_ignore_ascii_case(&c),
             (Self::Up, KeyCode::Up)
             | (Self::Down, KeyCode::Down)
-            | (Self::Enter, KeyCode::Enter) => !ctrl,
+            | (Self::Enter, KeyCode::Enter)
+            | (Self::Esc, KeyCode::Esc) => !ctrl,
             _ => false,
         }
     }
@@ -92,6 +100,16 @@ pub const BINDINGS: &[Binding] = &[
         keys: &[Key::Ctrl('z')],
         hint: Text::KeySuspend,
     },
+    Binding {
+        action: Action::Yes,
+        keys: &[Key::Char('y'), Key::Char('s')],
+        hint: Text::KeyObserve,
+    },
+    Binding {
+        action: Action::No,
+        keys: &[Key::Char('n'), Key::Esc],
+        hint: Text::KeyNo,
+    },
 ];
 
 impl Action {
@@ -103,6 +121,11 @@ impl Action {
     /// Moves within a list: hinted only while there is one to move in.
     pub fn is_list(self) -> bool {
         matches!(self, Self::Up | Self::Down | Self::Open)
+    }
+
+    /// Answers a question: hinted only while one is on screen.
+    pub fn is_answer(self) -> bool {
+        matches!(self, Self::Yes | Self::No)
     }
 }
 
@@ -136,7 +159,20 @@ mod tests {
             action(&key(KeyCode::Char('r'), KeyModifiers::NONE)),
             Some(Action::Retry)
         );
-        assert_eq!(action(&key(KeyCode::Esc, KeyModifiers::NONE)), None);
+        assert_eq!(
+            action(&key(KeyCode::Esc, KeyModifiers::NONE)),
+            Some(Action::No)
+        );
+        for c in ['y', 's'] {
+            assert_eq!(
+                action(&key(KeyCode::Char(c), KeyModifiers::NONE)),
+                Some(Action::Yes)
+            );
+        }
+        assert_eq!(
+            action(&key(KeyCode::Char('n'), KeyModifiers::NONE)),
+            Some(Action::No)
+        );
         assert_eq!(Key::Ctrl('c').label(), "Ctrl-C");
         assert_eq!(
             action(&key(KeyCode::Down, KeyModifiers::NONE)),

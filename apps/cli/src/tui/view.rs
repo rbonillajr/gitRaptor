@@ -13,17 +13,18 @@ use gitraptor_api::messages::{DivergenceView, SessionStateView};
 use ratatui::Frame;
 
 use crate::model::{
-    ConnState, Head, LastCommit, Model, Pick, RepoView, Requester, SafeText, SessionRow,
+    ConnState, Head, LastCommit, Model, Notice, Pick, RepoView, Requester, SafeText, SessionRow,
     WorktreeRow, WorktreeState,
 };
 use crate::present::i18n::{Fetched, Lang, Text};
-use crate::tui::keymap::{Action, BINDINGS};
+use crate::tui::keymap::{Action, BINDINGS, Key};
 use crate::tui::style::{Styles, follow};
 use crate::tui::widgets::agent_list::{
     AgentColumns, AgentListModel, AgentRowModel, AgentState, Branch, CommitLine, Sync,
 };
 use crate::tui::widgets::key_hints::{KeyHint, KeyHintsModel};
 use crate::tui::widgets::layout::{self, BodyPlan, Connection, StatusBarModel, TooSmallModel};
+use crate::tui::widgets::observe_prompt::ObservePromptModel;
 use crate::tui::widgets::repo_picker::{RepoChoiceModel, RepoPickerModel};
 use crate::tui::widgets::themed;
 
@@ -52,6 +53,11 @@ pub fn view(model: &Model, frame: &mut Frame) {
     };
     frame.render_widget(themed(&status_bar(model, &styles), &styles), regions.header);
     let mut hints = key_hints(model);
+    if let Some(prompt) = observe_prompt(model) {
+        frame.render_widget(themed(&prompt, &styles), regions.list);
+        frame.render_widget(themed(&hints, &styles), regions.hints);
+        return;
+    }
     match picker(model, regions.list.height) {
         Some(picker) => frame.render_widget(themed(&picker, &styles), regions.list),
         None => {
@@ -100,8 +106,17 @@ pub fn status_bar(model: &Model, styles: &Styles) -> StatusBarModel {
     if stale {
         label.push(Text::Stale.render(lang));
     }
-    if let Some(notice) = model.ui.notice {
-        label.push(Text::Notice(notice).render(lang));
+    match (model.ui.notice, &model.ui.here) {
+        (Some(Notice::ObserveFailed(reason)), Some(here)) => label.push(
+            Text::ObserveFailed {
+                name: &here.name,
+                path: &here.path,
+                reason,
+            }
+            .render(lang),
+        ),
+        (Some(notice), _) => label.push(Text::Notice(notice).render(lang)),
+        (None, _) => {}
     }
     let requester = match &model.engine.requester {
         None => Text::RequesterUnknown,
@@ -175,6 +190,25 @@ pub fn fleet(model: &Model, styles: &Styles) -> AgentListModel {
         focused: true,
         empty: catalog(empty, lang),
     }
+}
+
+/// "Observe this repo? [y/N]" while it is asked, and "Observing notes…" once answered yes
+/// (US-CKP-025).
+pub fn observe_prompt(model: &Model) -> Option<ObservePromptModel> {
+    let here = model.ui.here.as_ref()?;
+    let lang = model.ui.lang;
+    let question = match model.ui.pick {
+        Pick::Asking => Text::ObserveQuestion,
+        Pick::Observing => Text::Observing(&here.name),
+        _ => return None,
+    };
+    Some(ObservePromptModel {
+        title: catalog(Text::ObserveTitle, lang),
+        why: catalog(Text::ObserveWhy, lang),
+        name: here.name.clone(),
+        path: here.path.clone(),
+        question: catalog(question, lang),
+    })
 }
 
 /// The observed repos to choose from, while the developer chooses one.
@@ -388,11 +422,13 @@ fn row(
 fn key_hints(model: &Model) -> KeyHintsModel {
     let lang = model.ui.lang;
     let list = matches!(model.ui.pick, Pick::Choosing { .. });
+    let asking = model.ui.pick == Pick::Asking;
     KeyHintsModel {
         hints: BINDINGS
             .iter()
             .filter(|b| b.action.is_hinted())
             .filter(|b| list || !b.action.is_list())
+            .filter(|b| asking || !b.action.is_answer())
             .filter_map(|b| hint(b.action, lang))
             .collect(),
         help: hint(Action::Quit, lang)
@@ -403,7 +439,11 @@ fn key_hints(model: &Model) -> KeyHintsModel {
 
 fn hint(action: Action, lang: Lang) -> Option<KeyHint> {
     let binding = BINDINGS.iter().find(|b| b.action == action)?;
-    let key = binding.keys.first()?;
+    // "[s/N]" in Spanish: the yes key shown is the one of the language.
+    let key = match (action, lang) {
+        (Action::Yes, Lang::Es) => binding.keys.iter().find(|k| **k == Key::Char('s'))?,
+        _ => binding.keys.first()?,
+    };
     Some(KeyHint::new(
         SafeText::text(&key.label()),
         catalog(binding.hint, lang),
@@ -1381,5 +1421,116 @@ mod tests {
         }
         // With room for both, the lines are back.
         assert!(screen(&model, 80, 40).contains("commit by Ana"));
+    }
+
+    /// "notes" not observed, asked as the developer (US-CKP-025), with "shop" observed.
+    fn asking(lang: Lang) -> Model {
+        let mut model = outside(lang, &["shop"]);
+        model.engine.requester = Some(Requester::Unattributed {
+            layer: gitraptor_api::catalog::Layer::Cockpit,
+        });
+        update(
+            &mut model,
+            Msg::Conn(crate::model::ConnEvent::Unobserved(
+                crate::model::Candidate {
+                    root: "/w/notes".into(),
+                    name: SafeText::name("notes"),
+                    path: SafeText::text("/w/notes"),
+                },
+            )),
+        );
+        model
+    }
+
+    /// The question with its default, the repo by name and path, and its keys, in both
+    /// languages; no list keys and no "add it with raptor repo add" while it is asked.
+    #[test]
+    fn observe_prompt_in_english_and_spanish() {
+        for (lang, question, keys) in [
+            (Lang::En, "Observe this repo? [y/N]", ["y observe", "n no"]),
+            (
+                Lang::Es,
+                "¿Observar este repo? [s/N]",
+                ["s observar", "n no"],
+            ),
+        ] {
+            let model = asking(lang);
+            let painted = screen(&model, 80, 24);
+            assert!(painted.contains(question), "{painted}");
+            assert!(painted.contains("notes  /w/notes"), "{painted}");
+            for key in keys {
+                assert!(painted.contains(key), "{painted}");
+            }
+            assert!(!painted.contains("Enter"), "{painted}");
+            assert!(!painted.contains("raptor repo add"), "{painted}");
+        }
+        let mut settings = insta::Settings::clone_current();
+        settings.set_prepend_module_to_snapshot(false);
+        settings.set_snapshot_path("snapshots");
+        settings.bind(|| {
+            for (lang, name) in [
+                (Lang::En, "observe_prompt_80x24_en"),
+                (Lang::Es, "observe_prompt_80x24_es"),
+            ] {
+                let buffer = render(&asking(lang), 80, 24);
+                let snap = format!(
+                    "{}\n=== styles ===\n{}",
+                    lines(&buffer).join("\n"),
+                    style_runs(&buffer)
+                );
+                insta::assert_snapshot!(name, snap);
+            }
+        });
+    }
+
+    /// Once answered yes, the panel says it is observing until the repo's snapshot arrives.
+    #[test]
+    fn observe_prompt_says_it_is_observing() {
+        use ratatui::crossterm::event::KeyCode;
+        let mut model = asking(Lang::Es);
+        update(&mut model, key(KeyCode::Char('s')));
+        let painted = screen(&model, 80, 24);
+        assert!(painted.contains("Observando notes…"), "{painted}");
+        assert!(!painted.contains("[s/N]"), "{painted}");
+    }
+
+    /// A failed `repo.add`: what happened, why and how to retry, and the observed repos.
+    #[test]
+    fn observe_failure_says_what_why_and_how_to_retry() {
+        use crate::model::ObserveFailure;
+        use ratatui::crossterm::event::KeyCode;
+        for (lang, failure, text) in [
+            (
+                Lang::En,
+                ObserveFailure::NotTrusted,
+                "notes not observed: Git does not trust it",
+            ),
+            (
+                Lang::Es,
+                ObserveFailure::Refused,
+                "notes sin observar: solo tú puedes observarlo",
+            ),
+        ] {
+            let mut model = asking(lang);
+            update(&mut model, key(KeyCode::Char('y')));
+            update(
+                &mut model,
+                Msg::Conn(crate::model::ConnEvent::ObserveFailed(failure)),
+            );
+            let notice = status_bar(&model, &Styles::new(model.ui.theme));
+            let label = notice.connection_label.as_str();
+            assert!(label.contains(text), "{label}");
+            assert!(label.contains("→ raptor repo add /w/notes"), "{label}");
+        }
+        // A path with a space is quoted, so the command can be copied as it is.
+        assert_eq!(
+            Text::ObserveFailed {
+                name: &SafeText::name("my notes"),
+                path: &SafeText::text("/w/my notes"),
+                reason: ObserveFailure::Unknown,
+            }
+            .render(Lang::En),
+            "my notes not observed: the engine refused it → raptor repo add '/w/my notes'"
+        );
     }
 }

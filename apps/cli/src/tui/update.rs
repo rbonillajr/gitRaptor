@@ -11,7 +11,12 @@ use gitraptor_api::scope::{Scope, ScopeSnapshot};
 use ratatui::crossterm::event::KeyEventKind;
 
 use crate::client::sequence::Verdict;
-use crate::model::{Cmd, ConnEvent, ConnState, EngineMsg, Model, Msg, Notice, Pick, ScopeReplica};
+use gitraptor_api::catalog::Layer;
+
+use crate::model::{
+    Candidate, Cmd, ConnEvent, ConnState, EngineMsg, Model, Msg, Notice, ObserveFailure, Pick,
+    Requester, ScopeReplica,
+};
 use crate::present::{SafeText, ingest};
 use crate::tui::keymap::{self, Action};
 
@@ -43,6 +48,22 @@ pub fn update(model: &mut Model, msg: Msg) -> Vec<Cmd> {
 /// Every key changes something visible (feedback < 100 ms, § 3).
 fn on_action(model: &mut Model, action: Option<Action>) -> Vec<Cmd> {
     model.dirty = true;
+    if model.ui.pick == Pick::Asking {
+        match action {
+            Some(Action::Yes) => return observe(model),
+            // Enter takes the default, which is no.
+            Some(Action::No | Action::Open) => {
+                model.ui.asked = true;
+                model.ui.here = None;
+                return on_unlocated(model);
+            }
+            Some(Action::Up | Action::Down) => {
+                model.ui.notice = Some(Notice::UnknownKey);
+                return Vec::new();
+            }
+            _ => {}
+        }
+    }
     match action {
         Some(Action::Quit) => {
             model.ui.quit = true;
@@ -67,7 +88,8 @@ fn on_action(model: &mut Model, action: Option<Action>) -> Vec<Cmd> {
             Vec::new()
         }
         Some(action @ (Action::Up | Action::Down | Action::Open)) => on_pick(model, action),
-        None => {
+        // No question on screen.
+        Some(Action::Yes | Action::No) | None => {
             model.ui.notice = Some(Notice::UnknownKey);
             Vec::new()
         }
@@ -110,6 +132,48 @@ fn on_pick(model: &mut Model, action: Action) -> Vec<Cmd> {
     Vec::new()
 }
 
+/// The developer said yes: observe the repo of the folder (`repo.add`; the engine authorizes
+/// it again) and show it when its snapshot arrives.
+fn observe(model: &mut Model) -> Vec<Cmd> {
+    model.ui.asked = true;
+    let Some(here) = &model.ui.here else {
+        return on_unlocated(model);
+    };
+    let root = here.root.clone();
+    model.ui.pick = Pick::Observing;
+    vec![Cmd::Observe { root }]
+}
+
+/// The folder is in a repo the engine does not observe (US-CKP-025): ask the developer once
+/// per run, and never anyone else. Only a connection the engine resolved as the developer
+/// (unattributed, Cockpit layer) is asked: an agent, an unverified caller or an unknown one
+/// goes on as outside any repo. The engine authorizes `repo.add` again either way.
+fn on_unobserved(model: &mut Model, candidate: Candidate) -> Vec<Cmd> {
+    let developer = matches!(
+        model.engine.requester,
+        Some(Requester::Unattributed {
+            layer: Layer::Cockpit
+        })
+    );
+    if !developer || model.ui.asked {
+        return on_unlocated(model);
+    }
+    // A reconnection while the question is on screen keeps it.
+    if model.ui.pick != Pick::Asking {
+        model.ui.pick = Pick::Asking;
+        model.ui.here = Some(candidate);
+    }
+    Vec::new()
+}
+
+/// `repo.add` failed: say what happened, why and how to retry, and go on as outside any
+/// repo. Not asked again in this run.
+fn on_observe_failed(model: &mut Model, failure: ObserveFailure) -> Vec<Cmd> {
+    model.ui.asked = true;
+    model.ui.notice = Some(Notice::ObserveFailed(failure));
+    on_unlocated(model)
+}
+
 /// The folder is in no observed repo: the only one opens by itself; with several, the
 /// developer chooses; with none, the fleet says how to add one.
 fn on_unlocated(model: &mut Model) -> Vec<Cmd> {
@@ -143,6 +207,8 @@ fn on_conn(model: &mut Model, event: ConnEvent) -> Vec<Cmd> {
     model.dirty = true;
     match event {
         ConnEvent::Unlocated => return on_unlocated(model),
+        ConnEvent::Unobserved(candidate) => return on_unobserved(model, candidate),
+        ConnEvent::ObserveFailed(failure) => return on_observe_failed(model, failure),
         ConnEvent::Activity(activity) => model.engine.activity = activity,
         ConnEvent::Requester(requester) => model.engine.requester = requester,
         ConnEvent::State(state) => {
@@ -155,7 +221,10 @@ fn on_conn(model: &mut Model, event: ConnEvent) -> Vec<Cmd> {
             ) {
                 model.engine.mark_all_stale();
             }
-            if state == ConnState::Live {
+            // A failed observation keeps saying why and how to retry until the next key.
+            if state == ConnState::Live
+                && !matches!(model.ui.notice, Some(Notice::ObserveFailed(_)))
+            {
                 model.ui.notice = None;
             }
             model.conn = state;
@@ -223,6 +292,11 @@ fn on_snapshot(model: &mut Model, snapshot: ScopeSnapshot) {
         ScopeSnapshot::Repo(repo) => {
             let replica = model.engine.repo.get_or_insert_with(ScopeReplica::default);
             replica.data = Some(ingest::repo(&repo));
+            // The repo that was being observed is shown: the question is over.
+            if matches!(model.ui.pick, Pick::Asking | Pick::Observing) {
+                model.ui.asked = true;
+                model.ui.here = None;
+            }
             model.ui.pick = Pick::None;
             synced(replica, &repo.run_id, repo.scope_seq);
         }
@@ -889,5 +963,128 @@ mod tests {
             }),
         );
         assert_eq!(authors(&m), ["Eva"]);
+    }
+
+    fn notes() -> Candidate {
+        Candidate {
+            root: "/w/notes".into(),
+            name: SafeText::name("notes"),
+            path: SafeText::text("/w/notes"),
+        }
+    }
+
+    fn developer() -> Option<Requester> {
+        Some(Requester::Unattributed {
+            layer: Layer::Cockpit,
+        })
+    }
+
+    fn press(m: &mut Model, code: KeyCode) -> Vec<Cmd> {
+        update(m, Msg::Key(KeyEvent::new(code, KeyModifiers::NONE)))
+    }
+
+    /// US-CKP-025: only a connection the engine resolved as the developer is asked; an agent,
+    /// an unverified or unknown caller, or the MCP layer go on as outside any repo.
+    #[test]
+    fn observe_asks_only_the_developer() {
+        let others = [
+            None,
+            Some(Requester::Unverified),
+            Some(Requester::Agent {
+                name: None,
+                layer: Layer::Mcp,
+            }),
+            Some(Requester::Unattributed { layer: Layer::Mcp }),
+        ];
+        for requester in others {
+            let mut m = model();
+            m.engine.requester = requester.clone();
+            let cmds = update(&mut m, Msg::Conn(ConnEvent::Unobserved(notes())));
+            assert!(cmds.is_empty(), "{requester:?}");
+            assert_eq!(m.ui.pick, Pick::None, "{requester:?}");
+            assert_eq!(m.ui.here, None, "{requester:?}");
+            // A yes key does nothing but say so.
+            assert!(press(&mut m, KeyCode::Char('y')).is_empty());
+            assert_eq!(m.ui.notice, Some(Notice::UnknownKey));
+        }
+        let mut m = model();
+        m.engine.requester = developer();
+        assert!(update(&mut m, Msg::Conn(ConnEvent::Unobserved(notes()))).is_empty());
+        assert_eq!(m.ui.pick, Pick::Asking);
+        assert_eq!(m.ui.here, Some(notes()));
+    }
+
+    /// `y` and `s` observe the repo of the folder; `n`, Esc and Enter (the default) do not.
+    #[test]
+    fn observe_yes_observes_and_no_goes_on() {
+        for key in [KeyCode::Char('y'), KeyCode::Char('s')] {
+            let mut m = model();
+            m.engine.requester = developer();
+            update(&mut m, Msg::Conn(ConnEvent::Unobserved(notes())));
+            assert_eq!(
+                press(&mut m, key),
+                vec![Cmd::Observe {
+                    root: "/w/notes".into()
+                }]
+            );
+            assert_eq!(m.ui.pick, Pick::Observing);
+            assert!(m.ui.asked);
+        }
+        for key in [KeyCode::Char('n'), KeyCode::Esc, KeyCode::Enter] {
+            let mut m = model();
+            m.engine.requester = developer();
+            update(&mut m, Msg::Conn(ConnEvent::Unobserved(notes())));
+            // The arrows do not answer.
+            assert!(press(&mut m, KeyCode::Down).is_empty());
+            assert_eq!(m.ui.pick, Pick::Asking);
+            assert!(press(&mut m, key).is_empty(), "{key:?}");
+            assert_eq!(m.ui.pick, Pick::None, "{key:?}");
+            assert!(m.ui.asked);
+        }
+    }
+
+    /// Asked once per run: after a no, a reconnection does not ask again; while the question
+    /// is on screen, a reconnection keeps it.
+    #[test]
+    fn observe_is_asked_once_per_run() {
+        let mut m = model();
+        m.engine.requester = developer();
+        update(&mut m, Msg::Conn(ConnEvent::Unobserved(notes())));
+        update(&mut m, Msg::Conn(ConnEvent::Unobserved(notes())));
+        assert_eq!(m.ui.pick, Pick::Asking);
+        press(&mut m, KeyCode::Char('n'));
+        update(&mut m, Msg::Conn(ConnEvent::Unobserved(notes())));
+        assert_eq!(m.ui.pick, Pick::None);
+    }
+
+    /// A failed `repo.add` says why, is not asked again and goes on as outside any repo.
+    #[test]
+    fn observe_failure_says_why_and_goes_on() {
+        let mut m = model();
+        m.engine.requester = developer();
+        update(&mut m, Msg::Conn(ConnEvent::Unobserved(notes())));
+        press(&mut m, KeyCode::Char('y'));
+        let cmds = update(
+            &mut m,
+            Msg::Conn(ConnEvent::ObserveFailed(ObserveFailure::NotTrusted)),
+        );
+        assert!(cmds.is_empty());
+        assert_eq!(
+            m.ui.notice,
+            Some(Notice::ObserveFailed(ObserveFailure::NotTrusted))
+        );
+        assert_eq!(m.ui.pick, Pick::None);
+        update(&mut m, Msg::Conn(ConnEvent::Unobserved(notes())));
+        assert_eq!(m.ui.pick, Pick::None);
+        // The reconnection after a dropped `repo.add` does not erase why.
+        update(
+            &mut m,
+            Msg::Conn(ConnEvent::ObserveFailed(ObserveFailure::Disconnected)),
+        );
+        update(&mut m, Msg::Conn(ConnEvent::State(ConnState::Live)));
+        assert_eq!(
+            m.ui.notice,
+            Some(Notice::ObserveFailed(ObserveFailure::Disconnected))
+        );
     }
 }
