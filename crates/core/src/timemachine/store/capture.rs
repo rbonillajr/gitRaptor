@@ -258,6 +258,15 @@ fn wall_now() -> (i64, u32) {
 
 fn lstat(path: &Path) -> std::io::Result<Option<FileStat>> {
     match path.symlink_metadata() {
+        #[cfg(windows)]
+        Ok(m) => {
+            // NTFS keeps no inode in the stat: the change time, which no tool sets back, stands
+            // in for it, so a write that keeps size and write time is still seen.
+            let mut stat = FileStat::of(&m);
+            stat.ino = gitraptor_winsys::file_id::change_time_of_path(path).map_or(0, |t| t as u64);
+            Ok(Some(stat))
+        }
+        #[cfg(not(windows))]
         Ok(m) => Ok(Some(FileStat::of(&m))),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(e) if e.raw_os_error() == Some(20) => Ok(None), // ENOTDIR: a parent became a file
@@ -1083,7 +1092,12 @@ fn write_one(
     if !meta.is_file() {
         return Ok(gone());
     }
-    let stat = FileStat::of(&meta);
+    #[cfg_attr(not(windows), allow(unused_mut))]
+    let mut stat = FileStat::of(&meta);
+    #[cfg(windows)]
+    {
+        stat.ino = gitraptor_winsys::file_id::change_time(&file).map_or(0, |t| t as u64);
+    }
     let Some(kind) = EntryKind::of_file(stat.kind) else {
         return Ok(gone());
     };
@@ -1152,13 +1166,16 @@ fn open_nofollow(path: &Path) -> std::io::Result<std::fs::File> {
         if meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT == 0 {
             return Ok(file);
         }
-        let file = options.open(path)?;
-        if file.metadata()?.file_type().is_symlink() {
+        let normal = options.open(path)?;
+        // Swapped for a link between the two opens: the new handle would describe its target.
+        let same = gitraptor_winsys::file_id::of_file(&normal)?
+            == gitraptor_winsys::file_id::of_file(&file)?;
+        if !same || normal.metadata()?.file_type().is_symlink() {
             return Err(std::io::Error::other(
                 "a link or junction is never followed",
             ));
         }
-        return Ok(file);
+        return Ok(normal);
     }
     #[allow(unreachable_code)]
     options.open(path)

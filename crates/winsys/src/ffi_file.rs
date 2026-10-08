@@ -11,8 +11,10 @@ use std::path::Path;
 
 use windows_sys::Win32::Foundation::{ERROR_LOCK_VIOLATION, HANDLE};
 use windows_sys::Win32::Storage::FileSystem::{
-    BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle, LOCKFILE_EXCLUSIVE_LOCK,
-    LOCKFILE_FAIL_IMMEDIATELY, LockFileEx, MOVEFILE_WRITE_THROUGH, MoveFileExW, UnlockFileEx,
+    BY_HANDLE_FILE_INFORMATION, FILE_BASIC_INFO, FILE_DISPOSITION_INFO, FileBasicInfo,
+    FileDispositionInfo, GetFileInformationByHandle, GetFileInformationByHandleEx,
+    LOCKFILE_EXCLUSIVE_LOCK, LOCKFILE_FAIL_IMMEDIATELY, LockFileEx, MOVEFILE_WRITE_THROUGH,
+    MoveFileExW, SetFileInformationByHandle, UnlockFileEx,
 };
 use windows_sys::Win32::System::IO::OVERLAPPED;
 
@@ -73,6 +75,50 @@ pub(crate) fn file_index(file: &File) -> io::Result<(u32, u64)> {
     }
     let index = (u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow);
     Ok((info.dwVolumeSerialNumber, index))
+}
+
+/// `ChangeTime` of an open file (100 ns since 1601): it moves on every write, rename or
+/// attribute change, and nobody can set it back, unlike the write time.
+pub(crate) fn change_time(file: &File) -> io::Result<i64> {
+    let handle = file.as_raw_handle() as HANDLE;
+    let mut info = FILE_BASIC_INFO::default();
+    // SAFETY: `handle` is the open handle of `file`, borrowed for the call; `info` is an
+    // initialized `FILE_BASIC_INFO` whose exact size is passed, borrowed only for the call.
+    let ok = unsafe {
+        GetFileInformationByHandleEx(
+            handle,
+            FileBasicInfo,
+            (&raw mut info).cast(),
+            size_of::<FILE_BASIC_INFO>() as u32,
+        )
+    } != 0;
+    if ok {
+        Ok(info.ChangeTime)
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+/// Marks the file of an open handle (opened with `DELETE` access) to be deleted when the last
+/// handle closes: the entry deleted is exactly the one that was read through this handle.
+pub(crate) fn delete_on_close(file: &File) -> io::Result<()> {
+    let handle = file.as_raw_handle() as HANDLE;
+    let info = FILE_DISPOSITION_INFO { DeleteFile: true };
+    // SAFETY: `handle` is the open handle of `file`, borrowed for the call; `info` is an
+    // initialized `FILE_DISPOSITION_INFO` whose exact size is passed, borrowed only for the call.
+    let ok = unsafe {
+        SetFileInformationByHandle(
+            handle,
+            FileDispositionInfo,
+            (&raw const info).cast(),
+            size_of::<FILE_DISPOSITION_INFO>() as u32,
+        )
+    } != 0;
+    if ok {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
 }
 
 /// UTF-16 with NUL. An absolute drive path gets the `\\?\` prefix, so Windows takes every name
