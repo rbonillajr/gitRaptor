@@ -299,6 +299,46 @@ No se consultó al Arquitecto: el presupuesto (ADR-GRP-011) y la regla de dónde
 
 Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
 
+## Enmienda (2026-10-08): banco `idle`, CPU en reposo con sesiones de agente
+
+**Origen.** El registro de dogfooding (PR #188) midió una CPU en reposo de **1,59 %** con 9 sesiones de Claude Code. El objetivo de RES-01 es < 1 %, y es el criterio 5 de M1. La huella de D7 mide el reposo sin ninguna sesión, así que no veía este coste.
+
+**Causa, medida con `sample` en macOS**: el escaneo S1 del detector (ADR-GRP-012, cada 1 s) leía la tabla entera de procesos del usuario. Por cada proceso hacía un `proc_pidinfo` y un `proc_pidpath`, entre 700 y 1.200 procesos por segundo. Era el 97 % de la CPU del daemon en reposo, y el 89 % de ese escaneo eran esas syscalls. En el daemon real, con 9 agentes trabajando, otro 50 % aproximado era la captura de la Time Machine por la actividad de archivos. Esa captura es trabajo, no reposo: ver "Para el registro de dogfooding" más abajo.
+
+| # | Decisión |
+|---|---|
+| D22 | **Banco `apps/cli/benches/idle.rs`** (`cargo bench -p gitraptor-cli --bench idle`). Usa el daemon aislado de D1 sobre un perfil temporal (NFR-01) y un repo pequeño con `M` worktrees (10 por defecto). Arranca `N` sesiones simuladas (10 por defecto): copias del propio binario del banco con el nombre del agente simulado, cada una en un worktree. Opcionalmente suma `P` procesos extra (`--extra-procs`). Espera a que `sessions.list` muestre las `N` sesiones, deja 5 s de asentamiento y mide la CPU del daemon durante `--idle-secs` (60 s). Informa también del tamaño de la tabla de procesos del usuario, porque el coste del escaneo depende de ella |
+| D23 | **Gate del banco**: falla si la CPU en reposo llega al `FOOTPRINT_LIMITS.idle_cpu_pct` (RES-01, < 1 %) o si alguna sesión no se detecta. No entra en el CI, porque el coste depende de la tabla de procesos de la máquina y los runners no tienen sesiones. Es el instrumento local con el que se reproduce el criterio 5 |
+| D24 | **Optimización sin tocar intervalos ni presupuestos.** El escaneo S1 sigue cada 1 s y la frescura (< 500 ms p95) no cambia, porque el escaneo no está en el camino de los eventos.<br>1. La ruta del ejecutable solo se lee de los `(pid, inicio)` que aún no se han clasificado (`ProcLister::list_bare` y `ProcLister::exe`), y se vuelve a comprobar el inicio después de leerla, para que un pid reutilizado no preste su ruta.<br>2. En macOS, la tabla sale de una sola llamada `sysctl(KERN_PROC_UID)` (`gitraptor_macsys::process::user_processes`; registro en la Enmienda de ADR-GRP-002). Si no se puede leer o no pasa la comprobación con el propio pid, se vuelve a `proc_pidinfo`.<br>**Decisión del orquestador (2026-10-08), validada por el Arquitecto** |
+
+| D25 | **Churn de compilación en carpetas ignoradas** (`--churn F`, sin gate; lo pidió el coordinador a partir de la lectura real de Rene: 2,15 % de media con workers compilando en 4 worktrees). El banco escribe `F` archivos/s en el `target/` ignorado de los worktrees. Git no ve ningún cambio, pero cada evento llegaba al hilo de su worktree, que lo filtraba uno a uno. Optimización: la tarea del worktree comparte con el enrutador las carpetas que ya sabe ignoradas (`IgnoredPrefixes`, como mucho 32 prefijos), y el enrutador descarta sus eventos antes de enviarlos. Además, compara las raíces por bytes y no por componentes. Un cambio de `.gitignore` o de `info/exclude` vacía las dos cachés, y la lectura completa de esa ventana ve lo que se descartó mientras tanto (NFR-01, test `a_folder_dropped_by_the_router_is_seen_once_no_longer_ignored`). Es el filtro de ADR-GRP-010 § 2 (Enmienda 2026-10-05), adelantado: no cambia lo que se descarta |
+
+**Medición** (Mac de referencia, release, 10 sesiones, 10 worktrees, ventana de 60 s, CPU con `ps`, con una resolución de 10 ms):
+
+| Escenario | Antes | Paso 1 (ruta solo de procesos nuevos) | Paso 2 (+ `sysctl`) |
+|---|---|---|---|
+| ~690 procesos del usuario (3 corridas) | 0,38 / 0,38 / 0,50 % (mediana 0,38 %) | 0,17 / 0,22 / 0,25 % (mediana 0,22 %) | 0,07 / 0,08 / 0,12 % (mediana 0,08 %) |
+| +500 procesos extra (~1.180 procesos) | 0,60 % | 0,30 % | 0,17 % |
+| Muestras del hilo `raptor-sessions` en `sample` (20 s) | 68 | 48 | 10 |
+
+| Churn en `target/` ignorado, ~540 archivos/s | 4,65 % | — | 3,37 % (con D25) |
+| Churn en `target/` ignorado, ~2.170 archivos/s | 12,3 % | — | 8,9 % (con D25) |
+
+Bajo churn, después de D25, el 98 % de la CPU está en los hilos de FSEvents. Unas dos terceras partes de esa CPU son coste del framework y del kernel por cada *callback* (`mach_vm_deallocate`). notify 8.2, anclado por ADR-GRP-010, crea cada stream con latencia 0 y `kFSEventStreamCreateFlagNoDefer`, así que cada escritura llega en su propio *callback*, y no expone ninguna forma de cambiarlo.
+
+Las *wakeups* no se midieron. El intervalo del escaneo no cambia, así que el número de despertares del hilo es el mismo: lo que baja es el trabajo de cada despertar.
+
+**Para el registro de dogfooding.** Su "reposo" es "ningún evento Git desde la muestra anterior". Con agentes que editan archivos, la Time Machine captura por actividad (quieto 1 s, máximo 5 s), así que una muestra "en reposo" puede incluir trabajo real. Tras este cambio, el criterio 5 se vuelve a medir con 9 o 10 sesiones reales: el banco no basta para cerrarlo.
+
+**Pendiente**:
+- **Churn en carpetas ignoradas (macOS)**: el coste que queda depende de la configuración del stream de FSEvents, no de nuestro código. Hay dos vías, y las dos son decisiones de arquitectura sobre ADR-GRP-010, porque exigen sustituir o ampliar notify 8.2:
+  - *Rutas de exclusión* (`FSEventStreamSetExclusionPaths`, hasta 8 por stream) para las carpetas ignoradas conocidas. No afecta a la frescura.
+  - *Una latencia del stream de algunos ms* que agrupe los eventos. Suma esa latencia a `t_recv`, así que habría que justificarla con el presupuesto de ADR-GRP-011.
+  
+  No se hace en este cambio.
+- Linux: el escaneo lee `/proc/<pid>/stat`, `/proc/stat` y el enlace `exe` por proceso (`SystemProcs::read`). Allí solo se aplica la nueva comprobación de la ruta, sin la mejora de coste: **Pendiente: etapa de validación multiplataforma**.
+- Windows: sin detector.
+
 ## Estado de la implementación (2026-10-08)
 
 Implementado en: PR #76, #98, #133.
