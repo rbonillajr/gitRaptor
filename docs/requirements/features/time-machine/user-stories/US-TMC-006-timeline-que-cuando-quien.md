@@ -40,7 +40,7 @@ BR-TMC-CONS-005 (presentación del actor) · BR-TMC-CONS-003 (nivel de cobertura
 
 Dado que el agente "claude-1", detectado, hizo un commit en "feat-login" a las 10:00
 Cuando el desarrollador consulta el timeline del repo
-Entonces el timeline incluye ese commit con su momento, el worktree "feat-login", los archivos cambiados y el actor "claude-1 (detectado)"
+Entonces el timeline incluye ese commit con su momento, el worktree "feat-login", las rutas de los archivos cambiados (hasta un máximo) y el actor "Claude Code (detectado)"
 
 **Escenario: Un agente registrado indica su origen**
 
@@ -50,9 +50,9 @@ Entonces el actor de ese commit figura como "codex-1 (registrado)"
 
 **Escenario: Lo no atribuido nunca figura como humano**
 
-Dado un cambio en "feat-login" que el motor dejó "sin atribuir"
+Dado un cambio en "feat-login" que el motor no atribuye a ningún agente (valor `unattributed`)
 Cuando el desarrollador consulta el timeline
-Entonces el actor de ese cambio figura como "Tú u otro (sin atribuir)"
+Entonces el actor de ese cambio figura como "sin agente"
   Y ningún evento del timeline figura con el actor "humano"
 
 **Escenario: Cada punto declara su nivel de protección**
@@ -61,6 +61,18 @@ Dado una operación lanzada desde GitRaptor y un cambio hecho con Git crudo sin 
 Cuando el desarrollador consulta el timeline
 Entonces la primera figura con "snapshot previo"
   Y el segundo figura con "capturado por observación"
+
+**Escenario: Un commit con muchos archivos**
+
+Dado un commit que cambió 25 archivos
+Cuando el desarrollador consulta el timeline
+Entonces figuran 20 rutas, "+5 más" y el total real, sin contenido ni mensajes
+
+**Escenario: Un undo figura en el timeline**
+
+Dado un undo hecho por un agente
+Cuando el desarrollador consulta el timeline
+Entonces la entrada del undo figura con su solicitante tal como se registró y con lo que deshizo, aunque la atribución cambie después
 
 **Escenario: Repo sin actividad registrada**
 
@@ -72,12 +84,12 @@ Entonces el desarrollador recibe un timeline vacío con el aviso de que aún no 
 
 - Consulta del timeline por repo sobre el oplog (TS-TMC-002) cruzada con los eventos del motor; el actor se resuelve con la atribución vigente en cada consulta (ADR-TMC-003 § 5).
 - Cada punto muestra su nivel (`previo_garantizado`, `previo_hook`, `observacion`) y los eventos sin punto se muestran sin protección (ADR-TMC-004 § 4).
-- El texto "Tú u otro (sin atribuir)" lo pone el cliente; el contrato solo tiene agente o sin atribuir.
+- El texto de actor sin atribuir lo pone el cliente ("sin agente"/"no agent", i18n; enmienda 2026-10-08 validada por PO); el contrato solo tiene agente o `unattributed`.
 
 ## Diseño y Dev Spec
 
 - **Diseño (flujo/UX):** Pendiente de diseño.
-- **Dev Spec:** pendiente (lo genera el Arquitecto).
+- **Dev Spec:** [DS-US-TMC-006](../dev-specs/US-TMC-006-timeline-que-cuando-quien.md).
 
 ## Dependencias
 

@@ -263,13 +263,13 @@ Constraint: push / gc / trabajo de un agente no exponen ni alteran snapshots
 
 ### BR-TMC-CONS-005: Atribución vigente, presentación y solape
 
-**Descripción**: el timeline y el undo por agente usan la atribución vigente (Q37). "Sin atribuir" se presenta como "Tú u otro (sin atribuir)" y nunca como "humano" (Q34, D-TMC-12). Si deshacer lo de un actor tocaría cambios posteriores de otro actor en los mismos archivos o fragmentos, la Time Machine no sobrescribe: se detiene, muestra el solape y deja decidir al desarrollador (D-TMC-13). El registro de un undo (el solicitante, atribuido según BR-TMC-AUTH-001, y sobre qué actuó) no se reescribe si después cambia la atribución (D-TMC-18).
+**Descripción**: el timeline y el undo por agente usan la atribución vigente (Q37). "Sin atribuir" es la categoría del modelo y el valor del cable; al usuario se le presenta como "sin agente" ("cambios tuyos o de otra herramienta") y nunca como "humano" (Q34, D-TMC-12; enmienda 2026-10-08 validada por PO, alineada con el design system). Si deshacer lo de un actor tocaría cambios posteriores de otro actor en los mismos archivos o fragmentos, la Time Machine no sobrescribe: se detiene, muestra el solape y deja decidir al desarrollador (D-TMC-13). El registro de un undo (el solicitante, atribuido según BR-TMC-AUTH-001, y sobre qué actuó) no se reescribe si después cambia la atribución (D-TMC-18).
 
 **Criticidad**: Alta
 
 **Regla formal**:
 ```
-actor mostrado ∈ {"agente X (detectado|registrado)", "Tú u otro (sin atribuir)"}
+actor mostrado ∈ {"agente X (detectado|registrado)", "sin agente"}
 IF solape con otro actor THEN detener + mostrar solape; el repo no cambia
 registro de undo = inmutable; atribución mostrada = vigente
 ```
