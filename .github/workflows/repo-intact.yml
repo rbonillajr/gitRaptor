@@ -335,6 +335,9 @@ jobs:
           export PATH="$HOME/git-min/bin:$PATH"
           git version
           cargo test -p gitraptor-cli --test guard_us_grd_001
+          cargo test -p gitraptor-cli --test guard_us_grd_002 --test guard_us_grd_003
+          # NFR-12: the uninstall killed at each of its cut points (US-GRD-003).
+          cargo test -p gitraptor-cli --features test-cuts --test guard_us_grd_003 -- cuts::
           cargo test -p gitraptor-policy guard
           cargo test -p gitraptor-core --test guard_evaluate --test guard_boundary
 
