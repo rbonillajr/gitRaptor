@@ -956,4 +956,33 @@ mod tests {
         assert_eq!(only.classify(Path::new("/x/claude")), ExeClass::Other);
         assert_eq!(only.classify(Path::new("/usr/bin/node")), ExeClass::Other);
     }
+
+    /// The same rule on Windows paths (S1 of ADR-GRP-012, DS-US-GRP-007 Enmienda 2026-10-08): the
+    /// resolved image path of the process, never its command line; `claude.exe` anywhere, a
+    /// version folder or the npm package, as on the other platforms.
+    #[cfg(windows)]
+    #[test]
+    fn classifier_table_on_windows_paths() {
+        let m = AgentMatcher::default();
+        for (path, class) in [
+            (r"C:\Users\u\.local\bin\claude.exe", ExeClass::ClaudeCode),
+            (r"C:\Users\u\CLAUDE.EXE", ExeClass::ClaudeCode),
+            (
+                r"C:\Users\u\.local\share\claude\versions\2.1.3",
+                ExeClass::ClaudeCode,
+            ),
+            (
+                r"C:\Users\u\AppData\Roaming\npm\node_modules\@anthropic-ai\claude-code\bin\claude.exe",
+                ExeClass::ClaudeCode,
+            ),
+            (r"C:\Program Files\nodejs\node.exe", ExeClass::Interpreter),
+            (r"C:\Windows\System32\cmd.exe", ExeClass::Other),
+            (r"C:\Users\u\claude-helper.exe", ExeClass::Other),
+            (r"C:\Users\u\notclaude.exe", ExeClass::Other),
+            (r"C:\Users\u\claude.exe.bak", ExeClass::Other),
+            (r"C:\Users\u\versions\2.1.3", ExeClass::Other),
+        ] {
+            assert_eq!(m.classify(Path::new(path)), class, "{path}");
+        }
+    }
 }

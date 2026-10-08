@@ -121,16 +121,23 @@ pub fn current_user_processes() -> Option<Vec<Brief>> {
     )
 }
 
+/// Whether the process behind `handle` is the one created at `created_100ns` and still runs.
+/// Compared at the microsecond: a caller that keeps the time in microseconds (the detector)
+/// loses the last digit, and two processes of one pid never start within one microsecond.
+fn is_still(handle: &Handle, created_100ns: u64) -> bool {
+    created(handle).is_some_and(|c| c / 10 == created_100ns / 10) && !ended(handle)
+}
+
 /// The image path of `pid`, only while it is still the process created at `created_100ns`: a
 /// pid reused meanwhile never lends its executable to the old one.
 pub fn image_of(pid: u32, created_100ns: u64) -> Option<PathBuf> {
     let handle = open(pid).ok()?;
-    if created(&handle)? != created_100ns || ended(&handle) {
+    if !is_still(&handle, created_100ns) {
         return None;
     }
     let path = image(&handle)?;
     // Read once more: still the same process after the path was read.
-    (created(&handle)? == created_100ns && !ended(&handle)).then_some(path)
+    is_still(&handle, created_100ns).then_some(path)
 }
 
 /// The working folder of `pid`, only while it is still the process created at `created_100ns`,
@@ -144,8 +151,7 @@ pub fn image_of(pid: u32, created_100ns: u64) -> Option<PathBuf> {
 /// elevated process included, is [`Error::Denied`], and the caller keeps the process in doubt.
 pub fn cwd(pid: u32, created_100ns: u64) -> Result<PathBuf, Error> {
     let handle = open_reading(pid)?;
-    let still = |h: &Handle| created(h) == Some(created_100ns) && !ended(h);
-    if !still(&handle) {
+    if !is_still(&handle, created_100ns) {
         return Err(Error::Gone);
     }
     if owner(&handle) != Owner::Current {
@@ -153,7 +159,7 @@ pub fn cwd(pid: u32, created_100ns: u64) -> Result<PathBuf, Error> {
     }
     let units = current_directory(&handle).ok_or(Error::Denied)?;
     // The folder belongs to the process that was checked, not to a pid reused during the read.
-    if !still(&handle) {
+    if !is_still(&handle, created_100ns) {
         return Err(Error::Gone);
     }
     folder_from(&units).ok_or(Error::Denied)
@@ -357,7 +363,7 @@ mod tests {
         assert_eq!(plain(&folder), plain(dir.path()));
         assert!(!folder.to_string_lossy().ends_with('\\'));
         // Another creation time under the same pid is another process.
-        assert_eq!(cwd(child.id(), created + 1), Err(Error::Gone));
+        assert_eq!(cwd(child.id(), created + 20), Err(Error::Gone));
         // This process too.
         let me = process(std::process::id()).unwrap();
         assert_eq!(
@@ -415,7 +421,7 @@ mod tests {
             exe.file_name(),
             std::env::current_exe().unwrap().file_name()
         );
-        assert_eq!(image_of(me.pid, me.created_100ns + 1), None);
+        assert_eq!(image_of(me.pid, me.created_100ns + 20), None);
         child.kill().unwrap();
         child.wait().unwrap();
         assert_eq!(image_of(child.id(), kid.created_100ns), None);
