@@ -130,8 +130,16 @@ impl Machine {
         self.with_guard(|ctx, repo_id, common, store| {
             let plan = install::plan(ctx, repo_id, common, store);
             assert!(plan.blockers.is_empty(), "{:?}", plan.blockers);
-            install::install(ctx, repo_id, common, store, &GuardRegistry::default(), 2)
-                .unwrap_or_else(|e| panic!("install: {e:?}"));
+            install::install(
+                ctx,
+                repo_id,
+                common,
+                store,
+                &GuardRegistry::default(),
+                2,
+                false,
+            )
+            .unwrap_or_else(|e| panic!("install: {e:?}"));
             common.to_path_buf()
         })
     }
