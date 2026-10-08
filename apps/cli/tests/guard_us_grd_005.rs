@@ -387,10 +387,8 @@ fn a_burst_of_denials_keeps_its_count() {
     }
     let log = m.log();
     assert_eq!(log["summary"]["blocked"], N, "{log:#}");
-    assert!(
-        log["summary"]["rateLimited"].as_u64().unwrap() > 0,
-        "{log:#}"
-    );
+    // Whether some of them went over the cap depends on the machine's speed; the cap itself is
+    // tested in the store (`crates/core/tests/guard_log.rs`).
     let out = m.developer(
         &["guard", "status", m.f.repo.to_str().unwrap()],
         "en_US.UTF-8",

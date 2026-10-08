@@ -207,15 +207,25 @@ fn named(reasons: &[Reason]) -> Vec<String> {
         .collect()
 }
 
-fn keep(refs: Vec<LoggedRef>, named: &[String]) -> Vec<LoggedRef> {
-    let wanted: Vec<LoggedRef> = refs
+/// The refs the reasons name, or the first ones when they name none; never more than
+/// [`MAX_REFS`], and never a walk over every update of a huge operation.
+fn keep<T>(
+    items: &[T],
+    name: impl Fn(&T) -> &str,
+    to_ref: impl Fn(&T) -> LoggedRef,
+    named: &[String],
+) -> Vec<LoggedRef> {
+    let wanted: Vec<LoggedRef> = items
         .iter()
-        .filter(|r| named.iter().any(|n| n == r.name.raw()))
-        .cloned()
+        .filter(|i| named.iter().any(|n| n == short(name(i))))
+        .take(MAX_REFS)
+        .map(&to_ref)
         .collect();
-    let mut out = if wanted.is_empty() { refs } else { wanted };
-    out.truncate(MAX_REFS);
-    out
+    if wanted.is_empty() {
+        items.iter().take(MAX_REFS).map(to_ref).collect()
+    } else {
+        wanted
+    }
 }
 
 fn normalize(op: &Operation, reasons: &[Reason]) -> LoggedOperation {
@@ -223,50 +233,45 @@ fn normalize(op: &Operation, reasons: &[Reason]) -> LoggedOperation {
     let forced = reasons.iter().any(|r| r.rule == Rule::MinimumForcePush);
     match op {
         Operation::Push { remote, updates } => {
-            let refs = updates
-                .iter()
-                .map(|u| {
-                    let name = short(&u.remote_ref);
-                    let change = if u.local.is_zero() {
-                        RefChange::Delete
-                    } else if u.remote.is_zero() {
-                        RefChange::Create
-                    } else if forced && named.iter().any(|n| n == name) {
-                        RefChange::Force
-                    } else {
-                        RefChange::Update
-                    };
-                    LoggedRef {
-                        name: Untrusted::new(name),
-                        change,
-                    }
-                })
-                .collect();
+            let to_ref = |u: &gitraptor_api::guard::PushUpdate| {
+                let name = short(&u.remote_ref);
+                let change = if u.local.is_zero() {
+                    RefChange::Delete
+                } else if u.remote.is_zero() {
+                    RefChange::Create
+                } else if forced && named.iter().any(|n| n == name) {
+                    RefChange::Force
+                } else {
+                    RefChange::Update
+                };
+                LoggedRef {
+                    name: Untrusted::new(name),
+                    change,
+                }
+            };
             let remote = sanitize_remote(remote.raw());
             LoggedOperation::Push {
                 remote: (!remote.is_empty()).then(|| Untrusted::new(remote)),
-                refs: keep(refs, &named),
+                refs: keep(updates, |u| &u.remote_ref, to_ref, &named),
             }
         }
         Operation::RefTransaction { updates, .. } => {
-            let refs = updates
-                .iter()
-                .map(|u| LoggedRef {
-                    name: Untrusted::new(short(&u.refname)),
-                    change: match (&u.old, &u.new) {
-                        (_, RefValue::Zero) => RefChange::Delete,
-                        (RefValue::Zero, _) => RefChange::Create,
-                        _ => RefChange::Update,
-                    },
-                })
-                .collect();
+            let to_ref = |u: &gitraptor_api::guard::RefUpdate| LoggedRef {
+                name: Untrusted::new(short(&u.refname)),
+                change: match (&u.old, &u.new) {
+                    (_, RefValue::Zero) => RefChange::Delete,
+                    (RefValue::Zero, _) => RefChange::Create,
+                    _ => RefChange::Update,
+                },
+            };
             LoggedOperation::RefTransaction {
-                refs: keep(refs, &named),
+                refs: keep(updates, |u| &u.refname, to_ref, &named),
             }
         }
-        Operation::Rebase { upstream, branch } => LoggedOperation::Rebase {
-            upstream: upstream.clone(),
-            branch: branch.clone(),
+        // Its upstream and branch come from argv and may be oids (M-06): not kept.
+        Operation::Rebase { .. } => LoggedOperation::Rebase {
+            upstream: None,
+            branch: None,
         },
         Operation::Commit { stage } => LoggedOperation::Commit { stage: *stage },
     }
@@ -275,17 +280,16 @@ fn normalize(op: &Operation, reasons: &[Reason]) -> LoggedOperation {
 /// A remote as it may be logged: the name, or the URL without userinfo, query or fragment
 /// (M-06). A token in any of the three never reaches the profile.
 pub fn sanitize_remote(remote: &str) -> String {
-    let end = remote.find(['?', '#']).unwrap_or(remote.len());
-    let remote = &remote[..end];
-    if let Some((scheme, rest)) = remote.split_once("://") {
-        let (authority, path) = rest.split_at(rest.find('/').unwrap_or(rest.len()));
-        let host = authority.rsplit_once('@').map_or(authority, |(_, h)| h);
-        return format!("{scheme}://{host}{path}");
-    }
-    // `user@host:path` (scp-like): the user goes too.
-    match (remote.find('@'), remote.find(':')) {
-        (Some(at), Some(colon)) if at < colon => remote[at + 1..].to_owned(),
-        _ => remote.to_owned(),
+    // Userinfo first, up to the last `@`: a password may hold `:`, `/`, `?` or `#`.
+    let (scheme, rest) = match remote.split_once("://") {
+        Some((scheme, rest)) => (Some(scheme), rest),
+        None => (None, remote),
+    };
+    let rest = rest.rsplit_once('@').map_or(rest, |(_, host)| host);
+    let rest = &rest[..rest.find(['?', '#']).unwrap_or(rest.len())];
+    match scheme {
+        Some(scheme) => format!("{scheme}://{rest}"),
+        None => rest.to_owned(),
     }
 }
 
