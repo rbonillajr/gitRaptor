@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::ptr::null_mut;
 use std::sync::OnceLock;
 
+use windows_sys::Wdk::System::Threading::{NtQueryInformationProcess, PROCESSINFOCLASS};
 use windows_sys::Win32::Foundation::{
     ERROR_ACCESS_DENIED, ERROR_NO_MORE_FILES, FILETIME, HANDLE, HANDLE_FLAG_INHERIT,
     INVALID_HANDLE_VALUE, STILL_ACTIVE, SetHandleInformation,
@@ -19,6 +20,10 @@ use windows_sys::Win32::System::Console::{
 };
 use windows_sys::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
+};
+use windows_sys::Win32::System::RemoteDesktop::{
+    ProcessIdToSessionId, WTS_CONNECTSTATE_CLASS, WTS_CURRENT_SERVER_HANDLE, WTSActive,
+    WTSConnectState, WTSFreeMemory, WTSQuerySessionInformationW,
 };
 use windows_sys::Win32::System::SystemInformation::GetSystemWindowsDirectoryW;
 use windows_sys::Win32::System::Threading::{
@@ -157,6 +162,66 @@ impl TokenUserBuf {
         // SAFETY: both SIDs are valid (see above) and only read.
         unsafe { EqualSid(a.User.Sid, b.User.Sid) != 0 }
     }
+}
+
+/// `ProcessConsoleHostProcess`: not in the SDK headers, stable since Windows 8 (Process
+/// Explorer, System Informer and Task Manager read it).
+const PROCESS_CONSOLE_HOST_PROCESS: PROCESSINFOCLASS = 49;
+
+/// The raw `ProcessConsoleHostProcess` value of a process: for a console client, the pid of
+/// the process hosting its console with bit 0 set. `None` if the kernel refuses the query.
+pub(crate) fn console_host_raw(process: &Handle) -> Option<usize> {
+    let mut value = 0usize;
+    let mut len = 0u32;
+    // SAFETY: `process` is a valid handle with query rights; `value` is a writable `usize`
+    // whose size is the length passed, and `len` a writable out pointer, both outliving the call.
+    let status = unsafe {
+        NtQueryInformationProcess(
+            process.raw(),
+            PROCESS_CONSOLE_HOST_PROCESS,
+            (&raw mut value).cast(),
+            std::mem::size_of::<usize>() as u32,
+            &mut len,
+        )
+    };
+    (status >= 0 && len as usize == std::mem::size_of::<usize>()).then_some(value)
+}
+
+/// The Windows session of a live process. `None` if it cannot be read.
+pub(crate) fn session_id(pid: u32) -> Option<u32> {
+    let mut id = 0u32;
+    // SAFETY: plain value and a writable out pointer that outlives the call.
+    let ok = unsafe { ProcessIdToSessionId(pid, &mut id) };
+    (ok != 0).then_some(id)
+}
+
+/// Whether the Windows session `id` has a user connected (`WTSActive`): the physical console
+/// or a connected Remote Desktop session. Any failure answers no.
+pub(crate) fn session_active(id: u32) -> bool {
+    let mut buf = null_mut();
+    let mut bytes = 0u32;
+    // SAFETY: the local server's pseudo-handle, plain values and two writable out pointers that
+    // outlive the call; on success `buf` is a buffer the API allocated, freed below.
+    let ok = unsafe {
+        WTSQuerySessionInformationW(
+            WTS_CURRENT_SERVER_HANDLE,
+            id,
+            WTSConnectState,
+            &mut buf,
+            &mut bytes,
+        )
+    };
+    if ok == 0 || buf.is_null() {
+        return false;
+    }
+    let state = (bytes as usize >= std::mem::size_of::<WTS_CONNECTSTATE_CLASS>()).then(|| {
+        // SAFETY: `buf` holds at least `bytes` readable bytes, enough for one
+        // `WTS_CONNECTSTATE_CLASS`, and stays allocated until the free below.
+        unsafe { buf.cast::<WTS_CONNECTSTATE_CLASS>().read_unaligned() }
+    });
+    // SAFETY: `buf` was allocated by `WTSQuerySessionInformationW` and is freed once.
+    unsafe { WTSFreeMemory(buf.cast()) };
+    state == Some(WTSActive)
 }
 
 /// The current user's `TOKEN_USER`, read once.

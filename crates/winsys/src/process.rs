@@ -1,5 +1,6 @@
 //! Processes as the Windows kernel reports them: parent, creation time,
-//! image path and whether the owner is the current user.
+//! image path, whether the owner is the current user, Windows session and
+//! the process hosting their console.
 //!
 //! The identity of a process is `(pid, creation time)`. A process is opened
 //! before anything else is read, and the handle pins it: while it is open
@@ -8,7 +9,10 @@
 
 use std::path::PathBuf;
 
-use crate::ffi_process::{created, ended, image, open, owner, snapshot};
+use crate::ffi_handle::Handle;
+use crate::ffi_process::{
+    console_host_raw, created, ended, image, open, owner, session_id, snapshot,
+};
 
 /// Whose a process is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -33,6 +37,12 @@ pub struct Process {
     /// Win32 path of the image.
     pub exe: Option<PathBuf>,
     pub owner: Owner,
+    /// Windows session (`ProcessIdToSessionId`); `None` when it cannot be read.
+    pub session_id: Option<u32>,
+    /// The live process hosting its console (`conhost.exe` of the Windows folder, or
+    /// `OpenConsole.exe` of Windows Terminal and ConPTY), when it is attached to one. `None`
+    /// without a console or when the host cannot be read or is not one of those (fail-closed).
+    pub console_host: Option<u32>,
 }
 
 /// Why a process could not be read.
@@ -102,7 +112,47 @@ pub fn process(pid: u32) -> Result<Process, Error> {
         created_100ns,
         exe: image(&handle),
         owner: owner(&handle),
+        // The open handle pins the pid, so these read this same process.
+        session_id: session_id(pid),
+        console_host: console_host(pid, &handle),
     })
+}
+
+/// The pid of the process hosting the console of `process`, checked to be a console host.
+fn console_host(pid: u32, process: &Handle) -> Option<u32> {
+    let raw = console_host_raw(process)?;
+    // Bit 0 marks a console client; without it the value is something else (for a GUI
+    // process, the pid of its creator).
+    if raw & 1 == 0 {
+        return None;
+    }
+    let host = u32::try_from(raw & !3).ok()?;
+    if host == 0 || host == pid {
+        return None;
+    }
+    let handle = open(host).ok()?;
+    if ended(&handle) {
+        return None;
+    }
+    is_console_host(&image(&handle)?).then_some(host)
+}
+
+/// `conhost.exe` of the Windows folder (read from the kernel), or `OpenConsole.exe`, which
+/// Windows Terminal and VS Code ship in their own folders.
+fn is_console_host(exe: &std::path::Path) -> bool {
+    let name = exe
+        .file_name()
+        .map(|n| n.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    if name == "openconsole.exe" {
+        return true;
+    }
+    let Some(windows) = crate::system::windows_dir() else {
+        return false;
+    };
+    let conhost = windows.join("System32").join("conhost.exe");
+    exe.to_string_lossy()
+        .eq_ignore_ascii_case(&conhost.to_string_lossy())
 }
 
 #[cfg(test)]
@@ -142,6 +192,49 @@ mod tests {
         child.wait().unwrap();
         assert_eq!(process(pid), Err(Error::Gone));
         assert_eq!(created_100ns(pid), Err(Error::Gone));
+    }
+
+    /// A child given its own console (`CREATE_NEW_CONSOLE`) is hosted by a `conhost.exe` of
+    /// the Windows folder that it created; a detached one (`DETACHED_PROCESS`) has none.
+    #[test]
+    fn console_hosts_are_read_from_the_kernel() {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NEW_CONSOLE: u32 = 0x10;
+        const DETACHED_PROCESS: u32 = 0x08;
+        let spawn = |flags| {
+            Command::new("cmd")
+                .args(["/C", "ping -n 30 127.0.0.1 >NUL"])
+                .creation_flags(flags)
+                .spawn()
+                .unwrap()
+        };
+        let mut with = spawn(CREATE_NEW_CONSOLE);
+        let mut without = spawn(DETACHED_PROCESS);
+        // The console is attached while the child initializes: wait for it, bounded.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        let host = loop {
+            if let Some(host) = process(with.id()).unwrap().console_host {
+                break host;
+            }
+            assert!(std::time::Instant::now() < deadline, "no console host");
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        };
+        let info = process(host).unwrap();
+        assert_eq!(info.owner, Owner::Current);
+        let exe = info.exe.unwrap();
+        assert!(is_console_host(&exe), "{exe:?}");
+        // Its creator is the child, as C8 of DS-TS-GRP-004 § 9 relies on.
+        assert_eq!(info.ppid, with.id());
+        let me = process(std::process::id()).unwrap();
+        assert_eq!(process(with.id()).unwrap().session_id, me.session_id);
+        assert_eq!(process(without.id()).unwrap().console_host, None);
+        for child in [&mut with, &mut without] {
+            child.kill().unwrap();
+            child.wait().unwrap();
+        }
+        assert!(!is_console_host(std::path::Path::new(
+            "C:\\tmp\\conhost.exe"
+        )));
     }
 
     #[test]
