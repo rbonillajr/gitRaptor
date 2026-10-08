@@ -408,41 +408,113 @@ fn reject_reason(result: Result<Value, ClientError>) -> TmRejectedData {
     serde_json::from_value(data.unwrap()).unwrap()
 }
 
-/// What a worktree holds that a user sees: its files (outside `.git`),
-/// `HEAD`, the branch and the status.
+/// One path of a worktree as Git can see it: a regular file (its exec bits
+/// and its bytes) or a symlink (its target).
+#[derive(Debug, PartialEq, Eq)]
+enum Entry {
+    File { exec: u32, content: Vec<u8> },
+    Symlink(PathBuf),
+    Other,
+}
+
+/// The exact state of a worktree: every file outside its own `.git`
+/// (tracked, untracked and ignored) with its type, exec bits and bytes;
+/// `HEAD` (symbolic and resolved), the branch and the status; the index
+/// content (`ls-files -s`, so staged and unstaged work with the same status
+/// differ); `refs/stash` and the per-worktree refs; and its own entry of the
+/// worktree list. Refs and worktrees of the rest of the repo are left out:
+/// several scenarios compare one worktree while another one changes by
+/// design. Times, inodes, the index stat cache and object packs are left out
+/// too: a restore and its undo may rewrite them without changing what the
+/// user has.
 #[derive(Debug, PartialEq, Eq)]
 struct State {
-    files: BTreeMap<PathBuf, Vec<u8>>,
+    files: BTreeMap<PathBuf, Entry>,
     head: String,
+    symbolic_head: String,
     branch: String,
     status: String,
+    index: String,
+    own_refs: String,
+    listed: String,
 }
 
 fn state(fx: &Fixture, root: &Path) -> State {
-    fn walk(root: &Path, dir: &Path, out: &mut BTreeMap<PathBuf, Vec<u8>>) {
-        for entry in std::fs::read_dir(dir).unwrap().flatten() {
+    use std::os::unix::fs::PermissionsExt;
+
+    fn walk(root: &Path, dir: &Path, out: &mut BTreeMap<PathBuf, Entry>) {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let entry = entry.unwrap();
             let path = entry.path();
-            if entry.file_name() == ".git" {
+            if dir == root && entry.file_name() == ".git" {
                 continue;
             }
-            if path.is_dir() {
+            let meta = std::fs::symlink_metadata(&path).unwrap();
+            let rel = path.strip_prefix(root).unwrap().to_owned();
+            let kind = meta.file_type();
+            if kind.is_dir() {
                 walk(root, &path, out);
+            } else if kind.is_symlink() {
+                out.insert(rel, Entry::Symlink(std::fs::read_link(&path).unwrap()));
+            } else if kind.is_file() {
+                let exec = meta.permissions().mode() & 0o111;
+                out.insert(
+                    rel,
+                    Entry::File {
+                        exec,
+                        content: std::fs::read(&path).unwrap(),
+                    },
+                );
             } else {
-                let rel = path.strip_prefix(root).unwrap().to_owned();
-                out.insert(rel, std::fs::read(&path).unwrap());
+                out.insert(rel, Entry::Other);
             }
         }
     }
     let mut files = BTreeMap::new();
     walk(root, root, &mut files);
+    // `symbolic-ref` fails on a detached `HEAD`, which is a state too.
+    let symbolic = fx
+        .git_command(root, &["symbolic-ref", "-q", "HEAD"])
+        .output()
+        .unwrap();
+    let me = canonical(root);
+    let listed = fx
+        .git_in(root, &["worktree", "list", "--porcelain"])
+        .split("\n\n")
+        .find(|block| {
+            block
+                .lines()
+                .next()
+                .and_then(|l| l.strip_prefix("worktree "))
+                .is_some_and(|p| Path::new(p).canonicalize().ok().as_deref() == Some(&me))
+        })
+        .unwrap_or_default()
+        .to_owned();
     State {
         files,
         head: fx.git_in(root, &["rev-parse", "HEAD"]).trim().to_owned(),
+        symbolic_head: format!(
+            "{:?} {}",
+            symbolic.status.code(),
+            String::from_utf8_lossy(&symbolic.stdout).trim()
+        ),
         branch: fx
             .git_in(root, &["symbolic-ref", "-q", "--short", "HEAD"])
             .trim()
             .to_owned(),
         status: fx.git_in(root, &["status", "--porcelain=v1"]),
+        index: fx.git_in(root, &["ls-files", "-s"]),
+        own_refs: fx.git_in(
+            root,
+            &[
+                "for-each-ref",
+                "--format=%(refname) %(objectname)",
+                "refs/stash",
+                "refs/worktree",
+                "refs/bisect",
+            ],
+        ),
+        listed,
     }
 }
 
