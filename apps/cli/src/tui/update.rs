@@ -3,7 +3,10 @@
 //! of the engine; a gap or a `resync` stops applying and asks for a new
 //! snapshot.
 
-use gitraptor_api::event::{ENGINE_STATE, GIT_EVENT, SESSION_STATE, WORKTREE_STATE};
+use gitraptor_api::discovery::RepoDiscoveredData;
+use gitraptor_api::event::{
+    ENGINE_STATE, GIT_EVENT, REPO_DISCOVERED, SESSION_STATE, WORKTREE_STATE,
+};
 use gitraptor_api::messages::{
     EngineView, GitEventView, ResyncReason, SessionView, SessionsListResult, WorktreeStateData,
 };
@@ -14,8 +17,8 @@ use crate::client::sequence::Verdict;
 use gitraptor_api::catalog::Layer;
 
 use crate::model::{
-    Candidate, Cmd, ConnEvent, ConnState, EngineMsg, Model, Msg, Notice, ObserveFailure, Pick,
-    Requester, ScopeReplica,
+    Candidate, Cmd, ConnEvent, ConnState, EngineMsg, Found, Model, Msg, Notice, ObserveFailure,
+    Pick, Requester, ScopeReplica,
 };
 use crate::present::{SafeText, ingest};
 use crate::tui::keymap::{self, Action};
@@ -48,11 +51,23 @@ pub fn update(model: &mut Model, msg: Msg) -> Vec<Cmd> {
 /// Every key changes something visible (feedback < 100 ms, § 3).
 fn on_action(model: &mut Model, action: Option<Action>) -> Vec<Cmd> {
     model.dirty = true;
+    if model.discovery_prompt().is_some() {
+        match action {
+            Some(Action::Yes) => return answer_discovered(model, true),
+            Some(Action::No) => return answer_discovered(model, false),
+            // Later: still pending in the engine, not asked again in this run.
+            Some(Action::Later) => {
+                model.ui.discovered.pop_front();
+                return Vec::new();
+            }
+            _ => {}
+        }
+    }
     if model.ui.pick == Pick::Asking {
         match action {
             Some(Action::Yes) => return observe(model),
             // Enter takes the default, which is no.
-            Some(Action::No | Action::Open) => {
+            Some(Action::No | Action::Open | Action::Later) => {
                 model.ui.asked = true;
                 model.ui.here = None;
                 return on_unlocated(model);
@@ -89,7 +104,7 @@ fn on_action(model: &mut Model, action: Option<Action>) -> Vec<Cmd> {
         }
         Some(action @ (Action::Up | Action::Down | Action::Open)) => on_pick(model, action),
         // No question on screen.
-        Some(Action::Yes | Action::No) | None => {
+        Some(Action::Yes | Action::No | Action::Later) | None => {
             model.ui.notice = Some(Notice::UnknownKey);
             Vec::new()
         }
@@ -166,6 +181,29 @@ fn on_unobserved(model: &mut Model, candidate: Candidate) -> Vec<Cmd> {
     Vec::new()
 }
 
+/// The developer answered the discovered repo on screen: `s` observes it (`repo.add`, without
+/// leaving the fleet) and `n` dismisses it for good (`discovery.dismiss`).
+fn answer_discovered(model: &mut Model, observe: bool) -> Vec<Cmd> {
+    let Some(found) = model.ui.discovered.pop_front() else {
+        return Vec::new();
+    };
+    let path = found.path;
+    vec![if observe {
+        Cmd::AcceptDiscovered { path }
+    } else {
+        Cmd::DismissDiscovered { path }
+    }]
+}
+
+/// Queue discovered repos: once per path in a run, and never behind another being asked.
+fn enqueue_discovered(model: &mut Model, found: impl IntoIterator<Item = Found>) {
+    for repo in found {
+        if model.ui.seen.insert(repo.path.clone()) {
+            model.ui.discovered.push_back(repo);
+        }
+    }
+}
+
 /// `repo.add` failed: say what happened, why and how to retry, and go on as outside any
 /// repo. Not asked again in this run.
 fn on_observe_failed(model: &mut Model, failure: ObserveFailure) -> Vec<Cmd> {
@@ -209,6 +247,10 @@ fn on_conn(model: &mut Model, event: ConnEvent) -> Vec<Cmd> {
         ConnEvent::Unlocated => return on_unlocated(model),
         ConnEvent::Unobserved(candidate) => return on_unobserved(model, candidate),
         ConnEvent::ObserveFailed(failure) => return on_observe_failed(model, failure),
+        ConnEvent::Discovered(found) => enqueue_discovered(model, found),
+        ConnEvent::DiscoveryFailed(failure) => {
+            model.ui.notice = Some(Notice::DiscoveryFailed(failure));
+        }
         ConnEvent::Activity(activity) => model.engine.activity = activity,
         ConnEvent::Requester(requester) => model.engine.requester = requester,
         ConnEvent::State(state) => {
@@ -353,6 +395,15 @@ fn apply(model: &mut Model, scope: &Scope, event: &gitraptor_api::Event) {
     model.dirty = true;
     match scope {
         Scope::Global => {
+            if event.kind == REPO_DISCOVERED {
+                model.engine.global.applied += 1;
+                if let Ok(found) = serde_json::from_value::<RepoDiscoveredData>(event.data.clone())
+                {
+                    let found: Vec<Found> = found.candidates.iter().map(ingest::found).collect();
+                    enqueue_discovered(model, found);
+                }
+                return;
+            }
             let replica = &mut model.engine.global;
             replica.applied += 1;
             if event.kind == ENGINE_STATE
@@ -983,6 +1034,149 @@ mod tests {
 
     fn press(m: &mut Model, code: KeyCode) -> Vec<Cmd> {
         update(m, Msg::Key(KeyEvent::new(code, KeyModifiers::NONE)))
+    }
+
+    fn found(name: &str) -> Found {
+        Found {
+            path: format!("/code/{name}").into(),
+            name: SafeText::name(name),
+            shown: SafeText::text(&format!("/code/{name}")),
+            root: SafeText::text("/code"),
+        }
+    }
+
+    fn discovering(names: &[&str]) -> Model {
+        let mut m = model();
+        m.engine.requester = developer();
+        let found = names.iter().map(|n| found(n)).collect();
+        update(&mut m, Msg::Conn(ConnEvent::Discovered(found)));
+        m
+    }
+
+    fn front(m: &Model) -> Option<String> {
+        m.discovery_prompt().map(|f| f.name.as_str().to_owned())
+    }
+
+    /// US-GRP-020: one prompt at a time, in order; `s` observes without leaving, `n` dismisses.
+    #[test]
+    fn discovered_repos_are_asked_one_at_a_time() {
+        let mut m = discovering(&["a", "b"]);
+        assert_eq!(front(&m).as_deref(), Some("a"));
+        assert_eq!(
+            press(&mut m, KeyCode::Char('s')),
+            vec![Cmd::AcceptDiscovered {
+                path: "/code/a".into()
+            }]
+        );
+        assert_eq!(front(&m).as_deref(), Some("b"));
+        assert_eq!(
+            press(&mut m, KeyCode::Char('n')),
+            vec![Cmd::DismissDiscovered {
+                path: "/code/b".into()
+            }]
+        );
+        assert_eq!(front(&m), None);
+        // Nothing left: the keys are the plain ones again.
+        assert!(press(&mut m, KeyCode::Char('s')).is_empty());
+    }
+
+    /// `Esc` is later: nothing is sent, and the same repo is not asked again in this run, not
+    /// even when the engine lists it again after a reconnection.
+    #[test]
+    fn discovered_later_decides_nothing_and_does_not_nag() {
+        let mut m = discovering(&["a", "b"]);
+        assert!(press(&mut m, KeyCode::Esc).is_empty());
+        assert_eq!(front(&m).as_deref(), Some("b"));
+        update(
+            &mut m,
+            Msg::Conn(ConnEvent::Discovered(vec![found("a"), found("b")])),
+        );
+        assert_eq!(m.ui.discovered.len(), 1);
+        assert!(press(&mut m, KeyCode::Esc).is_empty());
+        assert_eq!(front(&m), None);
+    }
+
+    /// Only the developer is asked, never while a repo is being picked or opened, and the
+    /// answer keys keep their old meaning (none) when nothing is asked.
+    #[test]
+    fn discovered_never_takes_focus_and_never_asks_others() {
+        let mut m = model();
+        update(&mut m, Msg::Conn(ConnEvent::Discovered(vec![found("a")])));
+        assert_eq!(front(&m), None, "requester unknown");
+        assert!(press(&mut m, KeyCode::Char('s')).is_empty());
+        m.engine.requester = Some(Requester::Unverified);
+        assert_eq!(front(&m), None);
+        m.engine.requester = developer();
+        assert_eq!(front(&m).as_deref(), Some("a"));
+        for pick in [
+            Pick::Choosing { selected: 0 },
+            Pick::Opening,
+            Pick::Asking,
+            Pick::Observing,
+        ] {
+            m.ui.pick = pick;
+            assert_eq!(front(&m), None, "{pick:?}");
+        }
+        // A pick of the folder is answered by its own question.
+        m.ui.pick = Pick::Asking;
+        m.ui.here = Some(notes());
+        assert_eq!(
+            press(&mut m, KeyCode::Char('s')),
+            vec![Cmd::Observe {
+                root: "/w/notes".into()
+            }]
+        );
+    }
+
+    /// The same path from the event and from the list is queued once.
+    #[test]
+    fn discovered_event_and_list_are_deduplicated() {
+        use gitraptor_api::discovery::{CandidateView, RepoDiscoveredData};
+        let mut m = model();
+        update(&mut m, global_snapshot(1, EngineStateView::Observing));
+        let data = RepoDiscoveredData {
+            root: "/code".into(),
+            candidates: vec![CandidateView {
+                path: "/code/a".into(),
+                name: "a".into(),
+                root: "/code".into(),
+                found_utc_ms: 0,
+            }],
+            count: 1,
+        };
+        let event = Event {
+            seq: 2,
+            kind: REPO_DISCOVERED.into(),
+            version: 1,
+            wall_ms: 0,
+            timings: None,
+            data: serde_json::to_value(data).unwrap(),
+        };
+        update(
+            &mut m,
+            engine(EngineMsg::Event {
+                scope: Scope::Global,
+                scope_seq: 2,
+                event: Box::new(event),
+            }),
+        );
+        update(&mut m, Msg::Conn(ConnEvent::Discovered(vec![found("a")])));
+        assert_eq!(m.ui.discovered.len(), 1);
+        assert_eq!(m.ui.discovered[0].root.as_str(), "/code");
+    }
+
+    /// A failed answer says so and goes on.
+    #[test]
+    fn discovered_failure_shows_a_notice() {
+        let mut m = model();
+        update(
+            &mut m,
+            Msg::Conn(ConnEvent::DiscoveryFailed(ObserveFailure::Refused)),
+        );
+        assert_eq!(
+            m.ui.notice,
+            Some(Notice::DiscoveryFailed(ObserveFailure::Refused))
+        );
     }
 
     /// US-CKP-025: only a connection the engine resolved as the developer is asked; an agent,

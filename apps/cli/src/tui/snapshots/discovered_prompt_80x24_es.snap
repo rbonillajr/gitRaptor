@@ -1,0 +1,119 @@
+---
+source: apps/cli/src/tui/view.rs
+expression: snap
+---
+ shop · ✔ en vivo · motor observando · actúas como tú                ⚡ –  ⛔ –
+┏━ › Flota · ↑↓ respecto a main (copia local, antigüedad no disponible) ━━━━━━━┓
+┃     Agente                  Rama             Arch. ↑↓          Actividad     ┃
+┃  ○  Sin agente · shop       main             ~0    ↑0 ↓0       no disponible ┃
+┃  ●  claude-1 · feat-pagos   feat-pagos       ~2    ↑3 ↓1       no disponible ┃
+┃  ○  Sin agente · feat-docs  feat-docs        ~0    ↑1 ↓0       no disponible ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+┏━ › ℹ  Repo descubierto ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ En tu carpeta de código /code                                                ┃
+┃                                                                              ┃
+┃ notes  /code/notes                                                           ┃
+┃                                                                              ┃
+┃ ¿Observar notes? [s/N]                                                       ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ r reintentar  s observar  n no  Esc luego                              q salir
+=== styles ===
+0:0-0 bg=#3a3a3a
+0:1-4 bg=#3a3a3a BOLD
+0:5-7 fg=#949494 bg=#3a3a3a
+0:8-8 fg=#3fb950 bg=#3a3a3a
+0:9-9 bg=#3a3a3a
+0:10-35 fg=#3fb950 bg=#3a3a3a
+0:36-38 fg=#949494 bg=#3a3a3a
+0:39-68 bg=#3a3a3a
+0:69-69 fg=#d29922 bg=#3a3a3a
+0:71-71 bg=#3a3a3a
+0:72-72 fg=#d29922 bg=#3a3a3a BOLD
+0:73-74 bg=#3a3a3a
+0:75-75 fg=#f85149 bg=#3a3a3a
+0:77-77 bg=#3a3a3a
+0:78-78 fg=#f85149 bg=#3a3a3a BOLD
+0:79-79 bg=#3a3a3a
+1:0-4 fg=#ffe066
+1:5-70 fg=#ffe066 BOLD
+1:71-79 fg=#ffe066
+2:0-0 fg=#ffe066
+2:6-11 fg=#949494 BOLD
+2:30-33 fg=#949494 BOLD
+2:47-51 fg=#949494 BOLD
+2:53-54 fg=#949494 BOLD
+2:65-73 fg=#949494 BOLD
+2:79-79 fg=#ffe066
+3:0-0 fg=#ffe066
+3:3-3 fg=#949494
+3:6-22 fg=#949494
+3:30-33 fg=#949494
+3:47-48 fg=#949494
+3:53-57 fg=#949494
+3:65-77 fg=#949494
+3:79-79 fg=#ffe066
+4:0-0 fg=#ffe066
+4:3-3 fg=#3fb950
+4:6-26 fg=#e69f00 BOLD
+4:47-48 fg=#d29922
+4:65-77 fg=#949494
+4:79-79 fg=#ffe066
+5:0-0 fg=#ffe066
+5:3-3 fg=#949494
+5:6-27 fg=#949494
+5:30-38 fg=#949494
+5:47-48 fg=#949494
+5:53-57 fg=#949494
+5:65-77 fg=#949494
+5:79-79 fg=#ffe066
+6:0-0 fg=#ffe066
+6:79-79 fg=#ffe066
+7:0-0 fg=#ffe066
+7:79-79 fg=#ffe066
+8:0-0 fg=#ffe066
+8:79-79 fg=#ffe066
+9:0-0 fg=#ffe066
+9:79-79 fg=#ffe066
+10:0-0 fg=#ffe066
+10:79-79 fg=#ffe066
+11:0-0 fg=#ffe066
+11:79-79 fg=#ffe066
+12:0-0 fg=#ffe066
+12:79-79 fg=#ffe066
+13:0-0 fg=#ffe066
+13:79-79 fg=#ffe066
+14:0-0 fg=#ffe066
+14:79-79 fg=#ffe066
+15:0-79 fg=#ffe066
+16:0-7 fg=#ffe066
+16:8-23 fg=#ffe066 BOLD
+16:24-79 fg=#ffe066
+17:0-0 fg=#ffe066
+17:2-30 fg=#949494
+17:79-79 fg=#ffe066
+18:0-0 fg=#ffe066
+18:79-79 fg=#ffe066
+19:0-0 fg=#ffe066
+19:2-6 BOLD
+19:9-19 fg=#949494
+19:79-79 fg=#ffe066
+20:0-0 fg=#ffe066
+20:79-79 fg=#ffe066
+21:0-0 fg=#ffe066
+21:2-23 BOLD
+21:79-79 fg=#ffe066
+22:0-79 fg=#ffe066
+23:1-1 fg=#2dc2ad BOLD
+23:15-15 fg=#2dc2ad BOLD
+23:27-27 fg=#2dc2ad BOLD
+23:33-35 fg=#2dc2ad BOLD
+23:72-72 fg=#2dc2ad BOLD
