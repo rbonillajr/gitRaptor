@@ -126,6 +126,12 @@ Decisión del orquestador (2026-10-07), validada por el Arquitecto (`nassa-archi
 - **Con él, las excepciones a `unsafe_code = "forbid"` son dos**: `winsys` y `macsys`, con las mismas reglas: `unsafe_code = "deny"`, `unsafe` solo en módulos privados `ffi_*` (un `#[allow(unsafe_code)]` sobre cada uno, en `lib.rs`), `unsafe_op_in_unsafe_fn`, `clippy::undocumented_unsafe_blocks` y `clippy::multiple_unsafe_ops_per_block` en deny, un bloque por llamada con su comentario `SAFETY`, y revisión de seguridad en todo cambio de un módulo `ffi*`.
 - **Una sola lista de excepciones**: `crates/winsys/tests/unsafe_boundary.rs` la declara (`EXCEPTIONS`) y comprueba, para cada una, sus lints, que `lib.rs` niega `unsafe` y que fuera de sus `ffi_*` no hay `unsafe`; y, para el resto del workspace, que hereda `[lints] workspace = true`.
 - Linux no necesita crate: lee `/proc/<pid>/cmdline` sin `unsafe` (`crates/core/src/channel/peer.rs`). Windows queda sin leer (`None`, se evalúa): **Pendiente: etapa de validación multiplataforma** (`NtQueryInformationProcess`, en `winsys`).
+- **Registro (2026-10-08, CPU en reposo, RES-01):** `macsys` suma `process::user_processes(uid)` y el módulo FFI privado `ffi_kinfo`, con `sysctl(KERN_PROC_UID)`. Es una sola llamada para toda la tabla de procesos del usuario, en lugar de un `proc_pidinfo` por proceso en cada escaneo S1 del detector (ADR-GRP-012). Filtra por uid efectivo, igual que `proc_listpids(PROC_UID_ONLY)`.
+  - **Offsets de `struct kinfo_proc` escritos a mano**, porque `libc` no la declara: pid, ppid, inicio y `p_stat`, con un registro de 648 bytes. Se comprobaron con `offsetof` en arm64 y x86_64, y el módulo solo compila en esas dos arquitecturas.
+  - **Parseo en una función pura** (`parse_kinfo`), probada en todos los SO. Descarta los zombis.
+  - **Búfer acotado**: como mucho 16 MiB y 3 reintentos ante `ENOMEM`.
+  - **Comprobación en ejecución**: el propio proceso debe aparecer con su padre. Si falla, el detector vuelve a `proc_pidinfo`, de modo que un fallo cuesta CPU pero no deja ciega la detección.
+  - Decisión del orquestador (2026-10-08), validada por el Arquitecto (una consulta; sus ajustes están incorporados). Requiere la revisión de seguridad que esta Enmienda exige.
 
 ## Enmienda (2026-10-07, nx sobre cargo y CI con affected)
 
