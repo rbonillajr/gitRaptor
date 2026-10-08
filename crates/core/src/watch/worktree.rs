@@ -399,8 +399,8 @@ const MAX_IGNORED_PREFIXES: usize = 32;
 /// Events dropped under one ignored folder within [`HOT_WINDOW_NS`] that make it a candidate to
 /// leave the OS stream (ADR-GRP-010, Enmienda 2026-10-08, E3). ⚠️ **ASSUMPTION**: calibrated by
 /// the idle bench.
-const HOT_EVENTS: u32 = 200;
-const HOT_WINDOW_NS: u64 = 2_000_000_000;
+const HOT_EVENTS: u32 = 100;
+const HOT_WINDOW_NS: u64 = 5_000_000_000;
 
 /// One ignored folder the router drops events under.
 #[derive(Debug)]
