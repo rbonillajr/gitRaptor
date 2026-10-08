@@ -10,16 +10,20 @@ use std::path::Path;
 #[cfg(any(unix, windows))]
 use super::{Result, StoreError};
 
-/// Plain `fsync` of a file, opened read-only.
+/// Plain `fsync` of a file, opened read-only. Windows: `FlushFileBuffers` needs a handle with
+/// write access, which a file of the store always grants its owner.
 pub(super) fn fsync_file(path: &Path) -> io::Result<()> {
-    let file = std::fs::File::open(path)?;
     #[cfg(unix)]
     {
+        let file = std::fs::File::open(path)?;
         rustix::fs::fsync(&file)?;
     }
     #[cfg(not(unix))]
     {
-        file.sync_all()?;
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(path)?
+            .sync_all()?;
     }
     Ok(())
 }
@@ -40,7 +44,10 @@ pub(super) fn fsync_dir(path: &Path) -> io::Result<()> {
 }
 
 /// One barrier that flushes the drive cache: `F_FULLFSYNC` on Apple systems, `fsync` on others.
+/// Windows: `FlushFileBuffers` on the folder, opened for writing with
+/// `FILE_FLAG_BACKUP_SEMANTICS` (a folder cannot be opened otherwise).
 pub(super) fn full_barrier(path: &Path) -> io::Result<()> {
+    #[cfg(unix)]
     let file = std::fs::File::open(path)?;
     #[cfg(target_vendor = "apple")]
     {
@@ -50,9 +57,19 @@ pub(super) fn full_barrier(path: &Path) -> io::Result<()> {
     {
         rustix::fs::fsync(&file)?;
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
     {
-        file.sync_all()?;
+        use std::os::windows::fs::OpenOptionsExt;
+        const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+        std::fs::OpenOptions::new()
+            .write(true)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+            .open(path)?
+            .sync_all()?;
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        std::fs::File::open(path)?.sync_all()?;
     }
     Ok(())
 }
