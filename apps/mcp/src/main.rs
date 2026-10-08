@@ -1,4 +1,5 @@
 mod engine;
+mod messages;
 mod server;
 
 use std::process::ExitCode;
@@ -22,14 +23,18 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    runtime.block_on(async {
-        let service = match server::Raptor::default().serve(stdio()).await {
-            Ok(service) => service,
-            Err(_) => {
-                eprintln!("raptor-mcp: handshake-failed");
-                return ExitCode::FAILURE;
-            }
-        };
+    let code = runtime.block_on(async {
+        let service =
+            match server::Raptor::new(messages::Lang::from_env(|key| std::env::var(key).ok()))
+                .serve(stdio())
+                .await
+            {
+                Ok(service) => service,
+                Err(_) => {
+                    eprintln!("raptor-mcp: handshake-failed");
+                    return ExitCode::FAILURE;
+                }
+            };
         // Ends when Claude Code closes stdin.
         match service.waiting().await {
             Ok(_) => ExitCode::SUCCESS,
@@ -38,5 +43,9 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         }
-    })
+    });
+    // A call still running past its time limit must not keep the process
+    // alive once Claude Code is gone.
+    runtime.shutdown_timeout(std::time::Duration::from_secs(1));
+    code
 }
