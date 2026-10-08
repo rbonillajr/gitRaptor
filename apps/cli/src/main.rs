@@ -96,3 +96,5 @@ mod tests {
         Cli::command().debug_assert();
     }
 }
+
+// CI probe (ci/nx-affected-and-sccache): never merged.
