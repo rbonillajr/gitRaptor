@@ -42,8 +42,8 @@ use gitraptor_api::timemachine::EntryOrigin;
 use gitraptor_api::timemachine::{
     Invalid as TmInvalid, MAX_REPORTED_PATHS, MAX_REPORTED_REFS, McpRequesterView, NotRestored,
     NotRestoredReason, OperationRunResult, PriorFailedData, RedoParams, RequestChannel,
-    RequesterView, ResolveParams, RestoreParams, SnapshotParams, Surface, TIMELINE_DEFAULT_LIMIT,
-    TimelineParams, TmRejectedData, UndoParams, UndoResult, parse_since,
+    RequesterView, ResolveParams, RestoreParams, RestoreResult, SnapshotParams, Surface,
+    TIMELINE_DEFAULT_LIMIT, TimelineParams, TmRejectedData, UndoParams, UndoResult, parse_since,
 };
 use gitraptor_git::{ReaderOptions, RepoReader};
 
@@ -62,6 +62,7 @@ use crate::executor::{
     Caller, ExecError, PrepareInput, RunEnv, RunInput, layer_for, oplog_channel,
 };
 use crate::profile::{Agent, AgentKind, AuditRow, Author};
+use crate::timemachine::apply::ApplyReport;
 use crate::timemachine::apply::{ApplyWarning, PathIssue};
 use crate::timemachine::manual::{self, ManualError, QuotaHit};
 use crate::timemachine::oplog::Requester;
@@ -72,6 +73,7 @@ use crate::timemachine::protected::scope::{
 use crate::timemachine::protected::{
     ProtectedError, RepoHandle, ScopeError, failure_text, registered_worktrees, worktree_key,
 };
+use crate::timemachine::restore::{RestoreDone, RestoreError, restore_to};
 use crate::timemachine::timeline::{
     AgentFilter, EngineSide, FILES_BUDGET, OplogRead, PathsCache, PathsSource, SessionActors,
     TimelineQuery, build_timeline_from, fill_files,
@@ -704,6 +706,9 @@ impl Connection<'_> {
                 WriteRoute::Protected => self.operation_run(request),
                 WriteRoute::TimeMachine(_) if spec.name == methods::TM_UNDO => {
                     self.tm_undo(spec, request)
+                }
+                WriteRoute::TimeMachine(_) if spec.name == methods::TM_RESTORE => {
+                    self.tm_restore(spec, request)
                 }
                 WriteRoute::TimeMachine(story) => self.tm_command(spec, request, story),
             };
@@ -2197,10 +2202,71 @@ fn undo_error(e: UndoError) -> ErrorObject {
     }
 }
 
-/// What the client sees of a finished undo. Paths are untrusted text.
-fn undo_result(done: UndoDone, requester: RequesterView) -> UndoResult {
-    let not_restored = done
-        .report
+/// A restore's failures as contract errors.
+fn restore_error(e: RestoreError) -> ErrorObject {
+    match e {
+        RestoreError::NotFound => not_found_id(),
+        RestoreError::Rejected {
+            reason,
+            operation_id,
+        } => ErrorObject::new(code::OPERATION_REJECTED, "restore rejected").with_data(
+            TmRejectedData {
+                reason,
+                operation_id,
+            },
+        ),
+        RestoreError::Prior {
+            reason,
+            operation_id,
+        } => ErrorObject::new(code::PRIOR_SNAPSHOT_FAILED, failure_text(reason)).with_data(
+            PriorFailedData {
+                reason,
+                operation_id,
+            },
+        ),
+        RestoreError::Interrupted { operation_id, .. } => {
+            ErrorObject::new(code::OPERATION_FAILED, "the restore was interrupted")
+                .with_data(serde_json::json!({ "operation_id": operation_id }))
+        }
+        RestoreError::Internal(_) => ErrorObject::new(code::INTERNAL, "time machine unavailable"),
+    }
+}
+
+/// What the client sees of a finished restore. Paths and branch names are
+/// untrusted text, capped.
+fn restore_result(done: RestoreDone, requester: RequesterView) -> RestoreResult {
+    let paths = |list: &[PathBuf]| -> Vec<Untrusted> {
+        list.iter()
+            .take(MAX_REPORTED_PATHS)
+            .map(|p| Untrusted::from_os(p.as_os_str()))
+            .collect()
+    };
+    let names = |list: &[String]| -> Vec<Untrusted> {
+        list.iter()
+            .take(MAX_REPORTED_REFS)
+            .map(|n| Untrusted::new(n.clone()))
+            .collect()
+    };
+    RestoreResult {
+        operation_id: done.operation_id,
+        prior_snapshot_id: done.prior_snapshot_id,
+        target_snapshot_id: done.target_snapshot_id,
+        requester,
+        worktrees: paths(&done.worktrees),
+        recreated: paths(&done.recreated),
+        refs: names(&done.refs),
+        kept_branches: names(&done.kept_branches),
+        not_returned_branches: names(&done.not_returned_branches),
+        written: done.report.written as u64,
+        removed: done.report.removed as u64,
+        not_restored: not_restored_of(&done.report),
+        warnings: done.report.warnings.iter().map(warning_code).collect(),
+    }
+}
+
+/// The paths an application left as they were, capped.
+fn not_restored_of(report: &ApplyReport) -> Vec<NotRestored> {
+    report
         .paths
         .iter()
         .take(MAX_REPORTED_PATHS)
@@ -2221,7 +2287,12 @@ fn undo_result(done: UndoDone, requester: RequesterView) -> UndoResult {
                 kept_at,
             }
         })
-        .collect();
+        .collect()
+}
+
+/// What the client sees of a finished undo. Paths are untrusted text.
+fn undo_result(done: UndoDone, requester: RequesterView) -> UndoResult {
+    let not_restored = not_restored_of(&done.report);
     UndoResult {
         operation_id: done.operation_id,
         prior_snapshot_id: done.prior_snapshot_id,
@@ -2721,6 +2792,48 @@ impl Connection<'_> {
             serde_json::to_value(result)
         };
         value.map_err(|_| ErrorObject::new(code::INTERNAL, "serialization"))
+    }
+
+    /// `timemachine.restore` (US-TMC-009): the named worktree back to a
+    /// point of the timeline, as a protected operation of the Time Machine.
+    /// Not offered over MCP.
+    fn tm_restore(
+        &self,
+        _spec: &MethodSpec,
+        request: &Request,
+    ) -> Result<serde_json::Value, ErrorObject> {
+        let p: RestoreParams = request.params()?;
+        p.validate().map_err(tm_invalid)?;
+        let channel = self.request_channel(p.surface)?;
+        let named = self.named_worktree(p.worktree.as_deref())?;
+        let r = self.resolve()?;
+        require_attributed(channel, r.who.is_agent()).map_err(scope_refused)?;
+        // An id of another repo is "not found", like an unknown one.
+        if let Some(Ok(repo)) = self.repo_for(channel, named.as_deref())
+            && snapshot_in(&repo, &p.snapshot_id).is_none()
+        {
+            return Err(not_found_id());
+        }
+        let Some(tm) = &self.ctx.time_machine else {
+            return Err(ErrorObject::new(code::NOT_IMPLEMENTED, "no repo layer")
+                .with_data(serde_json::json!({ "implemented_by": "US-TMC-009" })));
+        };
+        let repo = tm_scope_for(tm.backend.as_ref(), false, named.as_deref(), None)
+            .map_err(scope_refused)?;
+        let env = UndoEnv {
+            marks: &self.ctx.marks,
+            procs: self.ctx.procs.as_ref(),
+            stopping: &self.ctx.stopping,
+            prior_deadline: tm.prior_deadline,
+            git: tm.git.as_ref(),
+            invoker: &tm.invoker,
+            engine: self.ctx.tm_engine.as_ref(),
+            fallback_mark: i64::try_from(self.ctx.bus.snapshot().0).unwrap_or(i64::MAX),
+        };
+        let done = restore_to(&repo, &p.snapshot_id, &r.who, oplog_channel(channel), &env)
+            .map_err(restore_error)?;
+        serde_json::to_value(restore_result(done, self.requester_view(&r, channel)))
+            .map_err(|_| ErrorObject::new(code::INTERNAL, "serialization"))
     }
 
     /// `timemachine.timeline` (US-TMC-006): the whole repo's operations and Git events, oldest
