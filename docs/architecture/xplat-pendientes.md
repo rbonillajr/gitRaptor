@@ -2,7 +2,7 @@
 title: Pendientes de la etapa de validación multiplataforma
 status: expanded
 generated: 2026-10-05
-updated: 2026-10-06
+updated: 2026-10-07
 generator: orquestador
 domain: GRP
 tags: [xplat, validacion-multiplataforma, linux, windows, contenedor, vm, lima, utm, ssh, repo-intact, strace]
@@ -139,6 +139,32 @@ No apareció ningún bug real de Linux en el código de producto (clase a) ni ni
 > - El almacén de Time Machine no se porta en esta ronda (XP-12).
 > - Las tablas de INF-GRD-001 no se tocan aquí: `cfg(not(windows))` escondería una discrepancia medida y no hay dimensión de SO. Hay que corregir los datos de la versión 2.56.0 para todos los SO.
 > - Cuando se use el PID del lock en Windows para terminar un proceso, antes hay que verificar su identidad (imagen y SID) (SEC-06, XP-19).
+
+### Tercera ronda (2026-10-07)
+
+`cargo test --workspace --no-fail-fast` en la misma máquina, en un clon nuevo de la rama `fix/windows-round3` (`C:\src\win-round3`, `CARGO_BUILD_JOBS=2`, con otros dos workers compilando a la vez). Sin `--skip`.
+
+| Pasada | Commit | Pasan | Fallan | Ignorados |
+|---|---|---|---|---|
+| Línea base (`main`) | `ddc3cfe` | 797 | 4 | 2 |
+| Después de esta rama | `dba9607` (lo que viene después en la rama solo cambia código Unix y documentos) | 802 | 0 | 2 |
+
+| Fallo | Clase | Causa | Resolución |
+|---|---|---|---|
+| `settings::schema::tests::schema_has_not_drifted` (pasadas anteriores) | (e) | Como en la segunda ronda: un checkout anterior a `.gitattributes` (`* text=auto eol=lf`) tenía CRLF. | Ninguna: pasa en el clon nuevo. `.gitattributes` ya fija LF para el schema y los snapshots. |
+| `channel::peer::windows_tests::system_is_foreign_and_a_dead_pid_is_gone` (intermitente) | (a) | Un proceso recién terminado que el `Child` del padre aún retiene puede seguir un instante en la lista de Toolhelp: se leía vivo, con `exe: None`. | Corregido en `gitraptor-winsys::process`: si el código de salida ya no es `STILL_ACTIVE`, el proceso es `Gone`. |
+| `timemachine::engine::tests::without_a_reflog_the_calm_is_time` | (a) | En Windows el reloj monotónico cuenta desde la primera lectura del proceso (XP-02): justo después del arranque, "nunca tocado" (0) parecía reciente. | Corregido: un repo nunca tocado está en calma, y el reloj de Windows nunca devuelve 0. |
+| `clock::tests::never_goes_backwards` | (a) | La primera lectura del reloj de Windows podía ser 0. | La misma corrección. |
+| `ctrl_z_suspends_and_repaints` (PR #139) | (d) | El test daba por hecho el control de trabajos de Unix. En Windows `Ctrl-Z` solo avisa (`SuspendUnsupported`) y no toca la terminal: es el diseño (DS INF-CKP-001). | El test pasa a `cfg(unix)`, y `ctrl_z_without_job_control_only_says_so` fija el comportamiento de Windows. |
+| `watch::commit_merge_rebase_and_push_are_named_by_the_reflog` (segunda vez bajo carga) | (a) | `read_worktree` leía `HEAD`, luego el status y por último el estado de la operación. Un `rebase` que acaba durante el status se leía como un `HEAD` separado sin operación: la tarea olvidaba su rama y después publicaba un `BranchSwitch` a la misma rama. No es exclusivo de Windows, pero su status lento lo hace visible. | Corregido: el estado de la operación se lee antes y después de `HEAD` (Git crea el estado antes de separar `HEAD` y lo borra después de volver a unirlo). |
+| `BrokenPipe` (`io error when listing tests`, os error 232) | (d) | Los tests `requester::real_processes` leían la salida de su copia hasta `CHILD=` y cerraban la tubería; la copia fallaba al imprimir su resumen de libtest. | La tubería se drena hasta el final. |
+
+**Verificación de lo nuevo**:
+
+- **Segunda línea frente a `--no-verify` (PR #141)**: en Windows `SystemProcs::args` es `None` y `evaluates` devuelve `true`: cada commit se evalúa, nunca se salta (fail-closed). Lo fija `second_line::tests::on_windows_the_real_command_line_is_unreadable_and_evaluated` con los procesos reales. El e2e `guard_us_grd_018` es `cfg(unix)` y lo declara (no hay canal en Windows, XP-01); DS-US-GRD-018 ya documenta Windows en § 8 y S2.
+- **`Ctrl-Z` de la TUI (PR #139)**: en Windows no se pide la suspensión, no se restaura ni se toma la terminal y se muestra el aviso. Verificado con el test de bucle (`TestBackend`). La TUI en una consola real de Windows sigue en XP-21.
+- **MCP `status` (PR #140)**: el daemon canonicalizaba el cwd del par con `std::fs::canonicalize` (`\\?\C:\…` en Windows) y lo comparaba con raíces de worktree en forma de unidad (`observe.rs` usa `gitraptor_git::paths::canonicalize`): en Windows no habría coincidido nunca. Corregido en `mcp.status`, en el ámbito del snapshot por MCP y en `repo.locate`, que ahora usan la misma forma que las raíces (sin cambios en Unix). Es la regla de la segunda ronda, una sola forma en los dos lados de una comparación de contención; aquí manda la forma en que ya se guardan las raíces observadas. Hoy no se puede ejercitar en Windows: no hay canal (XP-01) y `process_cwd` es `None` (XP-24), así que el MCP rechaza sin datos.
+- **Exclusiones de las raíces de descubrimiento (PR #145)**: solo están en documentos; el `$HOME` de la máquina se anota en el PR.
 
 ## Mantenimiento del índice
 
