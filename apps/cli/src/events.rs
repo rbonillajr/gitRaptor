@@ -136,7 +136,7 @@ fn actor_of(e: &GitEventView) -> String {
 /// The actor with its origin (US-GRP-007): "Claude Code, detected", or
 /// "no agent" (the wire value stays `unattributed`; the text says what the
 /// Cockpit says, so a person's own commit does not read as a failure).
-fn actor(actor: &Actor) -> String {
+pub(crate) fn actor(actor: &Actor) -> String {
     match actor {
         Actor::Unattributed => t("events.no_agent", &[]),
         Actor::Agent { origin, .. } => t(
