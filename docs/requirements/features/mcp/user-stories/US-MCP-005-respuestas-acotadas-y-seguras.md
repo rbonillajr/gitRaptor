@@ -24,7 +24,7 @@ related:
 ado:
   id: null
   url: null
-covers: [BR-MCP-CALC-002, BR-MCP-VAL-006, BR-MCP-CONS-004, BR-MCP-CONS-005, BR-MCP-VAL-005, BR-MCP-TIME-001]
+covers: [BR-MCP-CALC-002 (parte), BR-MCP-VAL-006, BR-MCP-CONS-004, BR-MCP-CONS-005, BR-MCP-VAL-005, BR-MCP-TIME-001]
 blocked_by: []
 tags: [mcp, seguridad, respuesta-acotada, texto-no-confiable, errores, ola-1]
 ---
@@ -39,7 +39,7 @@ tags: [mcp, seguridad, respuesta-acotada, texto-no-confiable, errores, ola-1]
 
 ## Reglas cubiertas
 
-BR-MCP-CALC-002 (respuesta acotada y paginada, sin diff ni secretos) · BR-MCP-VAL-006 (texto no confiable) · BR-MCP-CONS-004 (solo herramientas, lista fija) · BR-MCP-CONS-005 (errores estables con motivo y acción, en/es) · BR-MCP-VAL-005 (parte: parámetros cerrados y ninguno de repo) · BR-MCP-TIME-001 (parte: tiempo por llamada y rate limit por conexión) — ver [business-rules.md](../business-rules.md)
+BR-MCP-CALC-002 (parte: respuesta acotada, sin diff ni secretos; la paginación de las rutas modificadas es de US-MCP-004) · BR-MCP-VAL-006 (texto no confiable) · BR-MCP-CONS-004 (solo herramientas, lista fija) · BR-MCP-CONS-005 (errores estables con motivo y acción, en/es) · BR-MCP-VAL-005 (parte: parámetros cerrados y ninguno de repo) · BR-MCP-TIME-001 (parte: tiempo por llamada y rate limit por conexión) — ver [business-rules.md](../business-rules.md)
 
 ## Dependencias
 
@@ -49,13 +49,14 @@ BR-MCP-CALC-002 (respuesta acotada y paginada, sin diff ni secretos) · BR-MCP-V
 
 ## Criterios de Aceptación
 
-**Escenario: Una respuesta grande se recorta y lo dice**
+**Escenario: Una respuesta no supera su tope ni lleva secretos**
 
-Dado el worktree "shop-feat-a" con 3.000 archivos modificados
+Dado el repo "shop" con un remoto cuya URL lleva usuario y token
 Cuando el agente pide `status`
-Entonces la respuesta trae como máximo el tope de rutas por página
-  Y declara "3.000 en total, truncado" con un cursor para la página siguiente
+Entonces cada parte de la respuesta cabe en el tope de tamaño
   Y no contiene diff, mensajes de commit, contenido de archivos, valores de configuración, entorno ni URLs de remotos con usuario o contraseña
+
+> La paginación de las rutas modificadas ("3.000 en total, truncado", con cursor) pasó a US-MCP-004 (ajuste del PO, 2026-10-07).
 
 **Escenario: El texto del repo llega como dato, nunca como instrucción**
 
@@ -82,7 +83,7 @@ Entonces la llamada se rechaza como mal formada
 
 Dado un usuario con el idioma "es" y el repo "shop" fuera de la allowlist
 Cuando el agente pide `status`
-Entonces el resultado se marca como error con el código estable "MCP_REPO_NOT_ALLOWED", el motivo y la acción en español
+Entonces el resultado se marca como error con el código estable "repo-not-enabled", el motivo y la acción en español
   Y no contiene trazas internas ni rutas de fuera del repo
 
 **Escenario: Un agente en bucle choca con el límite de su conexión**
@@ -99,4 +100,4 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica (contrato de respuestas; mensajes en/es según la guía de contenido del design system, DSYS-GRP-001).
-- **Dev Spec:** pendiente (Arquitecto, tras ADR-MCP-001 y DEP-MCP-8).
+- **Dev Spec:** [DS-US-MCP-005](../dev-specs/US-MCP-005-dev-spec.md).
