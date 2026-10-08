@@ -400,12 +400,8 @@ pub(crate) fn current_directory(process: &Handle) -> Option<Vec<u16>> {
     if !read_memory(process, buffer, &mut bytes) {
         return None;
     }
-    Some(
-        bytes
-            .chunks_exact(2)
-            .map(|c| u16::from_le_bytes([c[0], c[1]]))
-            .collect(),
-    )
+    let (units, _) = bytes.as_chunks::<2>();
+    Some(units.iter().map(|c| u16::from_le_bytes(*c)).collect())
 }
 
 /// `GetDriveTypeW` answer for a local fixed disk (`DRIVE_FIXED`, in a feature the crate does not
