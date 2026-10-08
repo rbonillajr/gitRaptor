@@ -165,3 +165,8 @@ pub(super) fn rename_dir(from: &Path, to: &Path) -> io::Result<()> {
     gitraptor_winsys::fs::rename_no_replace(from, to)
         .map_err(|e| io::Error::new(e.kind(), format!("rename {}: {e}", from.display())))
 }
+
+/// Names the step of an I/O error of the store, keeping its kind.
+pub(super) fn context(what: &str) -> impl Fn(io::Error) -> io::Error + '_ {
+    move |e| io::Error::new(e.kind(), format!("{what}: {e}"))
+}

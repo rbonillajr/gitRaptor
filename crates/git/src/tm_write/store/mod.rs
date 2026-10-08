@@ -135,13 +135,13 @@ impl StoreRepo {
             }
             let nohooks = repo_dir.join(NOHOOKS_DIR);
             if nohooks.symlink_metadata().is_err() {
-                durable::create_private_dir(&nohooks)?;
+                durable::create_private_dir(&nohooks).map_err(durable::context("nohooks"))?;
             }
             durable::check_private_dir(&nohooks)?;
             let tmp = repo_dir.join(format!("{STORE_DIR}.tmp-{}", durable::nanos()));
             layout(&tmp, &nohooks)?;
             durable::rename_dir(&tmp, &path)?;
-            durable::fsync_dir(&repo_dir)?;
+            durable::fsync_dir(&repo_dir).map_err(durable::context("sync"))?;
             Self::open(tm_root, repo_id)
         }
         #[cfg(not(any(unix, windows)))]
@@ -162,7 +162,8 @@ impl StoreRepo {
             durable::check_private_dir(&root)?;
             durable::check_private_dir(path.parent().expect("store has a parent"))?;
             durable::check_private_dir(&path)?;
-            let real = crate::paths::canonicalize(&path)?;
+            let real =
+                crate::paths::canonicalize(&path).map_err(durable::context("canonicalize"))?;
             if !real.starts_with(&root) {
                 return Err(StoreError::Untrusted("store outside the tm folder".into()));
             }
@@ -241,7 +242,7 @@ impl StoreRepo {
 /// ADR-TMC-001 § 4. Folders 0700, files 0600 (on Windows, the private DACL), everything synced.
 #[cfg(any(unix, windows))]
 fn layout(dir: &Path, nohooks: &Path) -> Result<()> {
-    durable::create_private_dir(dir)?;
+    durable::create_private_dir(dir).map_err(durable::context("store folder"))?;
     for sub in [
         "objects",
         "objects/info",
@@ -251,7 +252,7 @@ fn layout(dir: &Path, nohooks: &Path) -> Result<()> {
         "refs/tags",
         "info",
     ] {
-        durable::create_private_dir(&dir.join(sub))?;
+        durable::create_private_dir(&dir.join(sub)).map_err(durable::context(sub))?;
     }
     let hooks = nohooks
         .to_str()
@@ -280,8 +281,10 @@ fn layout(dir: &Path, nohooks: &Path) -> Result<()> {
          [gitraptor]\n\
          \tstore = 1\n"
     );
-    durable::write_private_file(&dir.join("config"), config.as_bytes())?;
-    durable::write_private_file(&dir.join("HEAD"), b"ref: refs/heads/main\n")?;
+    durable::write_private_file(&dir.join("config"), config.as_bytes())
+        .map_err(durable::context("config"))?;
+    durable::write_private_file(&dir.join("HEAD"), b"ref: refs/heads/main\n")
+        .map_err(durable::context("HEAD"))?;
     for sub in [
         "objects/info",
         "objects/pack",
