@@ -171,3 +171,15 @@ fn exclusions_also_filter_the_replayed_history() {
     assert!(outside, "the history was not replayed");
     assert!(!excluded, "the excluded folder was replayed");
 }
+
+/// A symlink is never an exclusion: repointed, it would leave out another folder.
+#[test]
+fn a_symlink_is_not_taken_as_an_exclusion() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().join("r");
+    fs::create_dir_all(root.join("real")).unwrap();
+    std::os::unix::fs::symlink(root.join("real"), root.join("link")).unwrap();
+    let (stream, _rx) = start(&root, &[root.join("link"), root.join("real")], SINCE_NOW);
+    assert_eq!(stream.exclusions().len(), 1);
+    assert!(stream.exclusions()[0].ends_with("real"));
+}
