@@ -671,7 +671,7 @@ fn the_lock_of_a_dead_child_is_abandoned_and_released() {
     assert!(!lock.exists());
 }
 
-#[cfg(windows)]
+#[cfg(any(unix, windows))]
 #[test]
 fn a_reused_pid_does_not_inherit_the_lock() {
     let (_tmp, dirs) = profile();
@@ -1293,4 +1293,19 @@ fn oplog_folder_and_files_are_private() {
     assert_eq!(mode(&dir), 0o700);
     assert_eq!(mode(&dir.join(OPLOG_FILE)), 0o600);
     assert_eq!(mode(&dir.join(HEAD_FILE)), 0o600);
+}
+
+#[test]
+fn a_start_time_tells_a_reused_pid_apart() {
+    use super::recovery::{StartRule, same_start};
+    let child = 1_760_000_000_120_000;
+    assert!(same_start(child, child, StartRule::Exact));
+    assert!(!same_start(child, child + 10_000, StartRule::Exact));
+    assert!(!same_start(child, child + 3_000_000, StartRule::Exact));
+    assert!(same_start(child, child, StartRule::SubSecond));
+    assert!(!same_start(child, child + 10_000, StartRule::SubSecond));
+    // Linux: the boot time moved by whole seconds (the clock was stepped):
+    // it may be the child, so the lock is kept.
+    assert!(same_start(child, child + 3_000_000, StartRule::SubSecond));
+    assert!(same_start(child, child - 7_000_000, StartRule::SubSecond));
 }
