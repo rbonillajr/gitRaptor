@@ -94,8 +94,9 @@ mod repo_intact {
         // install recorded in `dispatch.conf`, with one constant `-c` script and the hook as
         // `$0`; never one found in the environment or `PATH`.
         assert!(text.contains("Command::new(sh)"));
+        assert!(text.contains(".raw_arg(\"-c\")"));
         assert_eq!(text.matches("\"-c\"").count(), 1);
-        assert!(text.contains(r##".arg(r#"exec "$0" "$@""#)"##));
+        assert!(text.contains(r##"OsStr::new(r#"exec "$0" "$@""#)"##));
         assert!(text.contains("conf.get(\"git_sh\")"));
         for word in ["GIT_EXEC_PATH", "\"PATH\""] {
             assert!(!text.contains(word), "{word}");
