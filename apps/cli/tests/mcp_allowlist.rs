@@ -21,6 +21,7 @@ use std::process::{Command, Output, Stdio};
 use std::time::{Duration, Instant};
 
 use gitraptor_api::PROTOCOL_VERSION;
+use gitraptor_api::mcp_view::{MCP_REFUSAL_TOKENS, MCP_STATUS_TOKENS, check_token_budget};
 use gitraptor_api::messages::{ClientKind, RefusalReason, RefusedData};
 use gitraptor_api::methods;
 use gitraptor_api::rpc::code;
@@ -329,6 +330,8 @@ fn assert_refused(result: &Value, code: &str, action_says: &str, secrets: &[&str
         "{result}"
     );
     assert!(result.get("structuredContent").is_none(), "{result}");
+    let text = result["content"][0]["text"].as_str().unwrap();
+    check_token_budget("RES-MCP-03", code, text, MCP_REFUSAL_TOKENS).unwrap();
     let wire = result.to_string();
     for secret in secrets {
         assert!(!wire.contains(secret), "{secret} leaked: {wire}");
@@ -521,16 +524,25 @@ fn status_from_a_subfolder_names_the_repo_and_the_worktree() {
     let result = m.mcp_status(&src);
     assert_eq!(result["isError"], false, "{result}");
     let status = &result["structuredContent"];
-    assert_eq!(status["repo_id"], id.as_str());
-    assert_eq!(status["repo_state"], "observed");
     assert_eq!(status["worktree"]["untrusted"], name.as_str());
     assert_eq!(status["branch"]["untrusted"], "feat-a");
-    assert_eq!(status["main"], false);
     assert_eq!(status["requester"], json!({"actor": "unattributed"}));
     assert_eq!(status["action"], "register-to-write");
-    // The text block carries the same JSON.
-    let text: Value = serde_json::from_str(result["content"][0]["text"].as_str().unwrap()).unwrap();
-    assert_eq!(&text, status);
+    // RES-MCP-02: only what the agent needs. No key of the repo (the repo is
+    // always the session's), no state (an unreadable one is refused) and
+    // `main` only when true.
+    let mut keys: Vec<_> = status.as_object().unwrap().keys().cloned().collect();
+    keys.sort();
+    assert_eq!(
+        keys,
+        ["action", "branch", "requester", "worktree"],
+        "{result}"
+    );
+    assert!(!result.to_string().contains(&id), "{result}");
+    // The text block carries the same JSON, within its token budget.
+    let text = result["content"][0]["text"].as_str().unwrap();
+    assert_eq!(&serde_json::from_str::<Value>(text).unwrap(), status);
+    check_token_budget("RES-MCP-02", "status", text, MCP_STATUS_TOKENS).unwrap();
     // No path in the answer (SEC-12).
     assert!(!result.to_string().contains(path(&m.f.root)), "{result}");
 
