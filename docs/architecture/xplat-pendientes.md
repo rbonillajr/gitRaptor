@@ -292,7 +292,7 @@ Antes de esta rama se saltaban en Windows estos tests, que ahora corren y pasan:
 
 **Sigue pendiente**:
 
-- En Unix, `SystemProbe` sigue usando `kill(0)` y no distingue un PID reutilizado: se conserva el lock, que es la dirección segura. Comparar la hora de inicio también allí queda para INF-TMC-001.
+- ~~En Unix, `SystemProbe` sigue usando `kill(0)` y no distingue un PID reutilizado.~~ Resuelto (2026-10-08): en Unix también compara la hora de inicio (macOS exacta; Linux por la parte de menos de un segundo, inmune a los ajustes de reloj). Ver DS-TS-TMC-002, Enmienda 2026-10-08 (Unix).
 - Las filas `child-started` anteriores a este cambio no llevan hora de inicio: con ellas, el proceso se considera vivo si el PID existe.
 - Que el sistema de archivos no sea NTFS se comprueba al liberar, no al anotar. No se probó en un volumen FAT, exFAT ni ReFS (la máquina solo tiene NTFS).
 
