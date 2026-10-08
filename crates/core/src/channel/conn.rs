@@ -16,6 +16,7 @@ use gitraptor_api::catalog::{
 use gitraptor_api::event::RESERVED_AUDIT;
 use gitraptor_api::framing::{FrameError, MAX_MESSAGE_BYTES, decode_request, read_frame};
 use gitraptor_api::guard::{EvaluateParams, GuardRejectedData, GuardRepoParams};
+use gitraptor_api::mcp_view::{MCP_READ_BURST, MCP_READS_PER_MINUTE};
 use gitraptor_api::messages::{
     AuditEntry, AuditListParams, AuditListResult, AuditOutcome, ClientIdentity, ClientKind,
     ConnectionProfile, DeclaredAgent, EventsHistoryParams, EventsHistoryResult, Hello, HelloResult,
@@ -25,6 +26,7 @@ use gitraptor_api::messages::{
     RepoAddParams, RepoAddResult, RepoRejectedData, RepoRejection, RepoRetireParams,
     RepoRetireResult, Snapshot, StopResult, SubscribeParams, SubscribeResult, UnsubscribeParams,
 };
+use gitraptor_api::messages::{HeadView, WorktreeStatus};
 use gitraptor_api::methods::{self, METHODS, MethodSpec};
 use gitraptor_api::rpc::{
     ErrorObject, Id, InvalidData, InvalidReason, Request, Response, ScopeRefusal, ScopeRefusedData,
@@ -192,6 +194,7 @@ pub(crate) fn accept(ctx: &Arc<ServerCtx>, stream: UnixStream) {
                     thread_ctx.config.limits.burst,
                 ),
                 reserved_bucket: Bucket::new(1, RESERVED_BURST),
+                mcp_read_bucket: Bucket::per_minute(MCP_READS_PER_MINUTE, MCP_READ_BURST),
             };
             conn.serve(reader_stream);
             if let Some(wiring) = &thread_ctx.protected {
@@ -298,6 +301,13 @@ impl Bucket {
         }
     }
 
+    fn per_minute(rate_per_min: u32, burst: u32) -> Self {
+        Self {
+            rate: f64::from(rate_per_min) / 60.0,
+            ..Self::new(0, burst)
+        }
+    }
+
     fn take(&mut self) -> bool {
         let now = Instant::now();
         let elapsed = now.duration_since(self.last).as_secs_f64();
@@ -341,6 +351,9 @@ struct Connection<'a> {
     next_subscription: u32,
     bucket: Bucket,
     reserved_bucket: Bucket,
+    /// Reads of an `mcp` connection (US-MCP-005, ADR-MCP-001 § 6): its own
+    /// budget, so an agent in a loop cannot starve the other connections.
+    mcp_read_bucket: Bucket,
 }
 
 /// What a handled request leads to.
@@ -635,6 +648,20 @@ impl Connection<'_> {
             self.ctx
                 .logger
                 .warn("reserved_rate_limited", &[("op", Field::Text(spec.name))]);
+            self.reply::<()>(
+                &request.id,
+                Err(ErrorObject::new(code::RATE_LIMITED, "rate limited")),
+            );
+            return After::Continue;
+        }
+        // An agent in a loop hits its connection's read limit before any
+        // check of its scope (US-MCP-005). The daemon counts per connection;
+        // per requester arrives with the first MCP writes (S-03).
+        if self.is_mcp()
+            && !reserved_like
+            && write_route(spec.name).is_none()
+            && !self.mcp_read_bucket.take()
+        {
             self.reply::<()>(
                 &request.id,
                 Err(ErrorObject::new(code::RATE_LIMITED, "rate limited")),
@@ -1072,10 +1099,18 @@ impl Connection<'_> {
             .unwrap_or_default();
         let action = matches!(who.actor, gitraptor_api::Actor::Unattributed)
             .then_some(methods::McpStatusAction::RegisterToWrite);
+        let branch = match &worktree.status {
+            WorktreeStatus::Ready {
+                head: HeadView::Branch { name } | HeadView::Unborn { name },
+                ..
+            } if self.has(methods::CAP_MCP_STATUS_BRANCH.name) => Some(name.clone()),
+            _ => None,
+        };
         Ok(methods::McpStatus {
             repo_id: repo.repo_id.clone(),
             repo_state: repo.state,
             worktree: gitraptor_api::UntrustedName::new(name),
+            branch,
             main: worktree.main,
             requester: who.actor,
             action,
