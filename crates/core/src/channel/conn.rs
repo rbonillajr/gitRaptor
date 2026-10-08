@@ -63,6 +63,7 @@ use crate::executor::{
 };
 use crate::profile::{Agent, AgentKind, AuditRow, Author};
 use crate::timemachine::apply::{ApplyWarning, PathIssue};
+use crate::timemachine::manual::{self, ManualError, QuotaHit};
 use crate::timemachine::oplog::Requester;
 use crate::timemachine::oplog::{AbsentStore, SnapshotRefs};
 use crate::timemachine::protected::scope::{
@@ -201,6 +202,10 @@ pub(crate) fn accept(ctx: &Arc<ServerCtx>, stream: Stream) {
                 ),
                 reserved_bucket: Bucket::new(1, RESERVED_BURST),
                 mcp_read_bucket: Bucket::per_minute(MCP_READS_PER_MINUTE, MCP_READ_BURST),
+                mcp_write_bucket: std::sync::Mutex::new(Bucket::per_minute(
+                    gitraptor_api::mcp_view::MCP_WRITES_PER_MINUTE,
+                    gitraptor_api::mcp_view::MCP_WRITE_BURST,
+                )),
             };
             conn.serve(reader_stream);
             if let Some(wiring) = &thread_ctx.protected {
@@ -360,6 +365,9 @@ struct Connection<'a> {
     /// Reads of an `mcp` connection (US-MCP-005, ADR-MCP-001 § 6): its own
     /// budget, so an agent in a loop cannot starve the other connections.
     mcp_read_bucket: Bucket,
+    /// Writes of an `mcp` connection (ADR-MCP-001 § 6): spent after the snapshot quota answered,
+    /// so a looping agent gets its real wait. A lock only because `prepare` takes `&self`.
+    mcp_write_bucket: std::sync::Mutex<Bucket>,
 }
 
 /// What a handled request leads to.
@@ -2104,7 +2112,60 @@ fn exec_error(e: ExecError) -> ErrorObject {
             ErrorObject::new(code::OPERATION_FAILED, "the operation failed")
                 .with_data(serde_json::json!({ "operation_id": operation_id }))
         }
+        ExecError::Capture(why) => capture_error(why),
     }
+}
+
+/// A manual snapshot that was not taken, as a contract error. None of them leaves a point.
+fn capture_error(why: ManualError) -> ErrorObject {
+    use catalog::RejectReason as R;
+    let rejected = |reason| {
+        ErrorObject::new(code::OPERATION_REJECTED, "operation rejected")
+            .with_data(RejectedData { reason })
+    };
+    match why {
+        ManualError::Quota(hit) => quota_error(&hit, now_ms()),
+        ManualError::NoSpace => ErrorObject::new(
+            methods::OPERATION_SNAPSHOT_QUOTA.code,
+            "snapshot quota exceeded",
+        )
+        .with_data(methods::SnapshotQuotaData {
+            window: methods::QuotaWindow::Disk,
+            retry_after_s: None,
+            release_utc_ms: None,
+        }),
+        ManualError::TimeLimit => ErrorObject::new(
+            methods::OPERATION_SNAPSHOT_TIME_LIMIT.code,
+            "snapshot time limit",
+        ),
+        ManualError::InProgress => rejected(R::OperationInProgress),
+        ManualError::InFlight => rejected(R::WriteInProgress),
+        ManualError::Busy => rejected(R::GitBusy),
+        ManualError::Discarded => rejected(R::StateChanged),
+        ManualError::Unavailable | ManualError::Capture(_) => {
+            ErrorObject::new(code::INTERNAL, "capture failed")
+        }
+    }
+}
+
+/// The `-33060` error of a full window, with the real wait.
+fn quota_error(hit: &QuotaHit, now: i64) -> ErrorObject {
+    let wait_ms = hit.release_at_ms.saturating_sub(now).max(0);
+    ErrorObject::new(
+        methods::OPERATION_SNAPSHOT_QUOTA.code,
+        "snapshot quota exceeded",
+    )
+    .with_data(methods::SnapshotQuotaData {
+        window: hit.window,
+        retry_after_s: Some(u64::try_from(wait_ms).unwrap_or(0).div_ceil(1000)),
+        release_utc_ms: Some(hit.release_at_ms),
+    })
+}
+
+/// Why the MCP scope of a request was refused.
+enum McpScopeError {
+    Scope(ScopeError),
+    Identity,
 }
 
 /// An undo's failures as contract errors.
@@ -2289,15 +2350,49 @@ impl Connection<'_> {
         named: Option<&Path>,
     ) -> Option<Result<RepoHandle, ErrorObject>> {
         let wiring = self.ctx.protected.as_ref()?;
-        let cwd = if channel == RequestChannel::Mcp {
-            process_cwd(self.peer.pid)
-        } else {
-            None
-        };
-        Some(
-            scope_for(wiring.backend.as_ref(), channel, named, cwd.as_deref())
-                .map_err(scope_refused),
-        )
+        if channel == RequestChannel::Mcp {
+            return Some(self.mcp_repo(wiring.backend.as_ref()).map_err(|e| match e {
+                McpScopeError::Scope(why) => scope_refused(why),
+                McpScopeError::Identity => ErrorObject::new(
+                    code::IDENTITY_UNVERIFIED,
+                    "the caller's identity could not be verified",
+                ),
+            }));
+        }
+        Some(scope_for(wiring.backend.as_ref(), channel, named, None).map_err(scope_refused))
+    }
+
+    /// The repo and worktree of an MCP request (ADR-MCP-001 § 2): the deepest observed
+    /// worktree that contains the caller's working folder, read between two checks of the
+    /// caller's identity; then the allowlist and the repo's availability.
+    fn mcp_repo(
+        &self,
+        backend: &dyn crate::timemachine::protected::ProtectedBackend,
+    ) -> Result<RepoHandle, McpScopeError> {
+        let first = self.resolve().map_err(|_| McpScopeError::Identity)?;
+        let cwd =
+            process_cwd(self.peer.pid).and_then(|p| gitraptor_git::paths::canonicalize(&p).ok());
+        let second = self.resolve().map_err(|_| McpScopeError::Identity)?;
+        if first.who != second.who {
+            return Err(McpScopeError::Identity);
+        }
+        let cwd = cwd.ok_or(McpScopeError::Scope(ScopeError::NoWorkingFolder))?;
+        let (_, shared) = self.ctx.bus.snapshot();
+        let (r, w) = super::mcp_scope::locate(&cwd, &shared.repos)
+            .ok_or(McpScopeError::Scope(ScopeError::NotObserved))?;
+        let view = &shared.repos[r];
+        if !backend.allowlist().allows(&view.repo_id) {
+            return Err(McpScopeError::Scope(ScopeError::NotAllowlisted));
+        }
+        if view.state == gitraptor_api::messages::RepoStateView::Unavailable {
+            return Err(McpScopeError::Scope(ScopeError::NotObserved));
+        }
+        let root = PathBuf::from(view.worktrees[w].path.raw());
+        let repo = backend.repo_of(&root).map_err(McpScopeError::Scope)?;
+        if repo.repo_id != view.repo_id {
+            return Err(McpScopeError::Scope(ScopeError::NotObserved));
+        }
+        Ok(repo)
     }
 
     fn caller(&self) -> Caller {
@@ -2327,18 +2422,54 @@ impl Connection<'_> {
         })
     }
 
+    /// What a `snapshot` request passes before anything of the repo is read: the quota as the
+    /// oplog stands (so a looping agent gets the real wait, before the write bucket answers a
+    /// bare rate limit), then the connection's write budget. The capture counts again under its
+    /// lock; this is the early answer.
+    fn snapshot_admission(&self, r: &Resolution, repo: &RepoHandle) -> Result<(), ErrorObject> {
+        if let (Requester::Agent { session_id, .. }, Some(deps)) =
+            (&r.who.requester, &self.ctx.tm_engine)
+            && let Some((oplog, Some(store))) = deps.repos.repo(&repo.repo_id)
+            && let Ok((_, key)) = manual::resolve_worktree(&repo.worktree)
+        {
+            let now = manual::wall_now_ms();
+            manual::precheck(&oplog, &store, session_id, &key, now)
+                .map_err(|hit| quota_error(&hit, now))?;
+        }
+        if self.is_mcp()
+            && !self
+                .mcp_write_bucket
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .take()
+        {
+            return Err(ErrorObject::new(code::RATE_LIMITED, "rate limited"));
+        }
+        Ok(())
+    }
+
     /// `operation.prepare`: the plan, without effects (ADR-CKP-002 § 2).
     fn operation_prepare(&self, request: &Request) -> Result<serde_json::Value, ErrorObject> {
         let p: PrepareParams = request.params()?;
         p.validate().map_err(tm_invalid)?;
         let channel = self.request_channel(p.surface)?;
         let named = self.named_worktree(p.worktree.as_deref())?;
+        let snapshot = p.operation == catalog::OperationId::Snapshot;
+        if snapshot && !self.has(methods::CAP_OPERATION_SNAPSHOT.name) {
+            return Err(
+                ErrorObject::new(code::NOT_IMPLEMENTED, "not implemented yet")
+                    .with_data(serde_json::json!({ "implemented_by": "US-MCP-008" })),
+            );
+        }
         let r = self.resolve()?;
         let wiring = self.wiring()?;
         let layer = self.layer(&r);
         let repo = self
             .repo_for(channel, named.as_deref())
             .expect("wiring checked above")?;
+        if snapshot {
+            self.snapshot_admission(&r, &repo)?;
+        }
         let refusal = super::requester::confirmation_refusal(
             self.peer,
             &self.ctx.checks(),
@@ -2427,24 +2558,64 @@ impl Connection<'_> {
             engine_mark: &engine_mark,
             after_step: &after_step,
             publish: &publish,
-            capture: &|_ask: &crate::timemachine::manual::ManualAsk| {
-                Err(crate::timemachine::manual::ManualError::Unavailable)
+            capture: &|ask: &manual::ManualAsk| match &tm_engine {
+                Some(deps) => manual::capture(deps, ask, manual::wall_now_ms()),
+                None => Err(ManualError::Unavailable),
             },
+        };
+        let rescope = |repo: &RepoHandle| -> Result<(), ExecError> {
+            if !self.is_mcp() {
+                return Ok(());
+            }
+            match self.mcp_repo(wiring.backend.as_ref()) {
+                Ok(now) if now.repo_id == repo.repo_id && now.worktree == repo.worktree => Ok(()),
+                Ok(_) | Err(McpScopeError::Identity) => Err(ExecError::Rejected(
+                    catalog::RejectReason::RepoIdentityChanged,
+                )),
+                Err(McpScopeError::Scope(why)) => Err(ExecError::Scope(why)),
+            }
         };
         let done = wiring
             .executor
-            .run(
+            .run_any(
                 wiring.backend.as_ref(),
                 RunInput {
                     caller: self.caller(),
                     resolution: &r,
                     params: &p,
                     resolve_again: &checks_again,
-                    rescope: &|_repo| Ok(()),
+                    rescope: &rescope,
                 },
                 &env,
             )
             .map_err(exec_error)?;
+        let done = match done {
+            crate::executor::RunDone::Protected(done) => done,
+            crate::executor::RunDone::Captured(c) => {
+                let name = c
+                    .snapshot
+                    .worktree
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                let mut requester = self.requester_view(&r, c.channel);
+                if self.is_mcp() {
+                    // Over MCP, only who: how it was found is an oracle for evasion.
+                    requester.via = gitraptor_api::timemachine::ResolvedVia::None;
+                    requester.confirmable = false;
+                }
+                let result = catalog::SnapshotRunResult {
+                    snapshot_id: c.snapshot.snapshot_id,
+                    worktree: gitraptor_api::UntrustedName::new(name),
+                    label: gitraptor_api::UntrustedName::new(c.label),
+                    requester,
+                    layer: c.layer,
+                    outcome: catalog::OperationOutcome::Done,
+                };
+                return serde_json::to_value(result)
+                    .map_err(|_| ErrorObject::new(code::INTERNAL, "serialization"));
+            }
+        };
         let result = OperationRunResult {
             operation_id: done.outcome.operation_id,
             prior_snapshot_id: done.outcome.prior.snapshot_id,
@@ -2683,6 +2854,10 @@ impl Connection<'_> {
                 PathsCache::shared(),
                 FILES_BUDGET,
             );
+        }
+        // The manual points exist only for a connection that declared it understands them.
+        if !self.has(methods::CAP_TM_TIMELINE_MANUAL.name) {
+            crate::timemachine::timeline::without_manual(&mut result);
         }
         serde_json::to_value(result).map_err(|_| ErrorObject::new(code::INTERNAL, "serialization"))
     }

@@ -16,7 +16,6 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use gitraptor_api::catalog::check_snapshot_label;
 use gitraptor_api::methods::QuotaWindow;
-use gitraptor_git::preflight::preflight;
 use gitraptor_git::{ReaderOptions, RepoReader};
 
 use super::continuous::{CaptureDeps, FreeSpaceFloor};
@@ -106,6 +105,20 @@ pub enum ManualError {
     Capture(CaptureError),
 }
 
+/// Two errors are equal when they are the same refusal; a failure of the capture itself is
+/// compared by what it says (its sources are not comparable).
+impl PartialEq for ManualError {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Quota(a), Self::Quota(b)) => a == b,
+            (Self::Capture(a), Self::Capture(b)) => a.to_string() == b.to_string(),
+            _ => std::mem::discriminant(self) == std::mem::discriminant(other),
+        }
+    }
+}
+
+impl Eq for ManualError {}
+
 /// A window's stamps in `(now - window, ∞)` (no upper bound: a clock that goes back never empties
 /// a window), and, if it is full, when its oldest leaves.
 fn full(stamps: &[i64], now_ms: i64, window_ms: i64, limit: usize) -> Option<i64> {
@@ -155,6 +168,37 @@ pub fn quota(input: &QuotaInput, now_ms: i64) -> Result<(), QuotaHit> {
 pub fn worktree_identity_key(root: &Path, id: Option<(u64, u64)>) -> String {
     let (dev, ino) = id.unwrap_or((0, 0));
     format!("{dev}:{ino}:{}", root.to_string_lossy())
+}
+
+/// `(device, inode)` of the folder, without following a link; `None` where the OS gives none.
+fn folder_id(path: &Path) -> Option<(u64, u64)> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        std::fs::symlink_metadata(path)
+            .ok()
+            .map(|m| (m.dev(), m.ino()))
+    }
+    #[cfg(windows)]
+    {
+        gitraptor_winsys::file_id::of_path(path)
+            .ok()
+            .map(|(volume, index)| (u64::from(volume), index))
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = path;
+        None
+    }
+}
+
+/// The canonical root of `worktree` and its identity key, as the daemon reads them. The quota
+/// of a request and the precheck of `prepare` must derive the key the same way: this is the
+/// only place that does.
+pub fn resolve_worktree(worktree: &Path) -> io::Result<(PathBuf, String)> {
+    let root = gitraptor_git::paths::canonicalize(worktree)?;
+    let key = worktree_identity_key(&root, folder_id(&root));
+    Ok((root, key))
 }
 
 /// The root a [`worktree_identity_key`] was made from.
@@ -290,9 +334,8 @@ pub fn capture_in_store(
     let Some(_in_flight) = store.manual().enter(session) else {
         return Err(ManualError::InFlight);
     };
-    let identity = preflight(&ask.worktree).map_err(|e| ManualError::Capture(e.into()))?;
-    let root = identity.root;
-    let key = worktree_identity_key(&root, identity.root_id.map(|f| (f.dev, f.ino)));
+    let (root, key) =
+        resolve_worktree(&ask.worktree).map_err(|e| ManualError::Capture(e.into()))?;
     let registered = registered_worktrees(&root).unwrap_or_default();
     let store_key = worktree_key(&registered, &root, 0);
 

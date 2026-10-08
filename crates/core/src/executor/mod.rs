@@ -24,6 +24,7 @@ pub mod facts;
 pub mod gate;
 pub mod git;
 pub mod new_path;
+pub mod ops;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -119,7 +120,7 @@ pub struct Caller {
 }
 
 /// Why the executor did not do what was asked.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ExecError {
     Rejected(RejectReason),
     /// The operation's story is not built yet: `implemented_by`.
@@ -130,6 +131,8 @@ pub enum ExecError {
     /// The step declared a scope outside its repo.
     Scope(ScopeError),
     Protected(ProtectedError),
+    /// A manual snapshot was not taken (it leaves no point, and deletes none).
+    Capture(ManualError),
 }
 
 impl From<RejectReason> for ExecError {
@@ -595,16 +598,119 @@ impl Executor {
             .ok_or(ExecError::Rejected(RejectReason::PlanUnknown))
     }
 
+    /// The operation a plan of this connection is for, without consuming it.
+    fn operation_of(&self, caller: Caller, plan_id: &str) -> Result<OperationId, ExecError> {
+        self.purge();
+        match lock(&self.plans).get(plan_id) {
+            Some(p) if p.caller.connection == caller.connection => Ok(p.operation),
+            _ => Err(RejectReason::PlanUnknown.into()),
+        }
+    }
+
     /// The second phase for any operation of the catalog: the protected ones through
-    /// [`Executor::run`], the others (`snapshot`) outside the repo write lock.
+    /// [`Executor::run`], the others (`snapshot`) outside the repo write lock and outside the
+    /// protected operation, so a later undo never takes them for its own.
     pub fn run_any(
         &self,
         backend: &dyn ProtectedBackend,
         input: RunInput<'_>,
         env: &RunEnv<'_>,
     ) -> Result<RunDone, ExecError> {
-        let _ = (backend, input, env);
-        todo!("US-MCP-008")
+        if input.resolution.via == ResolvedVia::Executor {
+            return Err(RejectReason::ExecutorDescendant.into());
+        }
+        let operation = self.operation_of(input.caller, &input.params.plan_id)?;
+        if entry(operation).protected {
+            return self.run(backend, input, env).map(RunDone::Protected);
+        }
+        // Used once: taken atomically before anything is captured.
+        let plan = self.take(input.caller, &input.params.plan_id)?;
+        let refuse = |plan: &StoredPlan, r: RejectReason| {
+            self.close(plan, PlanClose::Rejected);
+            Err(ExecError::Rejected(r))
+        };
+        if env.stopping.load(std::sync::atomic::Ordering::SeqCst) {
+            return refuse(&plan, RejectReason::DaemonStopping);
+        }
+        let mut accepted = input.params.accepted_warnings.clone();
+        accepted.sort();
+        accepted.dedup();
+        if accepted != plan.warnings {
+            return refuse(&plan, RejectReason::WarningsMismatch);
+        }
+        // The allowlist mark, read again: a repo disabled since `prepare` records nothing.
+        if plan.caller.mcp && !backend.allowlist().allows(&plan.repo.repo_id) {
+            self.close(&plan, PlanClose::Rejected);
+            return Err(ExecError::Scope(ScopeError::NotAllowlisted));
+        }
+        if let Err(e) = (input.rescope)(&plan.repo) {
+            self.close(&plan, PlanClose::Rejected);
+            return Err(e);
+        }
+        let (again, layer_now, _) = match (input.resolve_again)() {
+            Ok(r) => r,
+            Err(e) => {
+                self.close(&plan, PlanClose::Rejected);
+                return Err(e);
+            }
+        };
+        if again.via == ResolvedVia::Executor {
+            return refuse(&plan, RejectReason::ExecutorDescendant);
+        }
+        if again.who != plan.who || layer_now != plan.layer {
+            return refuse(&plan, RejectReason::StateChanged);
+        }
+        let now_facts = match backend.facts(&plan.repo) {
+            Ok(f) => f,
+            Err(r) => return refuse(&plan, r),
+        };
+        // Includes the `(dev, inode)` of the worktree root.
+        if !plan.facts.same_identity(&now_facts) {
+            return refuse(&plan, RejectReason::RepoIdentityChanged);
+        }
+        let fp = match self.plan(
+            backend,
+            plan.operation,
+            &plan.args,
+            &plan.repo,
+            &plan.who,
+            plan.layer,
+            &plan.session_env,
+        ) {
+            Ok((_, _, _, fp)) => fp,
+            Err(ExecError::Rejected(RejectReason::OperationInProgress)) => {
+                return refuse(&plan, RejectReason::OperationInProgress);
+            }
+            Err(ExecError::Rejected(_)) => return refuse(&plan, RejectReason::StateChanged),
+            Err(e) => {
+                self.close(&plan, PlanClose::Rejected);
+                return Err(e);
+            }
+        };
+        if fp != plan.fingerprint {
+            return refuse(&plan, RejectReason::StateChanged);
+        }
+        let label = match &plan.args {
+            OperationArgs::Snapshot(a) => a.label.clone(),
+            _ => return refuse(&plan, RejectReason::StateChanged),
+        };
+        let ask = ManualAsk {
+            repo_id: plan.repo.repo_id.clone(),
+            worktree: now_facts.root.clone(),
+            label: label.clone(),
+            requester: plan.who.requester.clone(),
+            channel: oplog_channel(plan.channel),
+        };
+        let taken = (env.capture)(&ask);
+        self.close(&plan, PlanClose::Ran(OperationOutcome::Done));
+        let snapshot = taken.map_err(ExecError::Capture)?;
+        Ok(RunDone::Captured(Captured {
+            snapshot,
+            label,
+            who: plan.who,
+            layer: plan.layer,
+            channel: plan.channel,
+        }))
     }
 
     /// The second phase.

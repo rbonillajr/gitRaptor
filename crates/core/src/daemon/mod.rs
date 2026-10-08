@@ -216,7 +216,7 @@ impl DaemonConfig {
             stop_deadline: Some(Duration::from_secs(5)),
             channel,
             protected: None,
-            operations: None,
+            operations: Some(OperationsWiring::production()),
             tm_prior_layer: None,
             tm_capture: TmCapture {
                 no_free_space_floor: env::tm_no_free_space_floor(),
@@ -1320,6 +1320,9 @@ fn profile_error_kind(err: &ProfileError) -> &'static str {
         ProfileError::SchemaTooNew { .. } => "schema-too-new",
         ProfileError::UnknownRepo(_) => "unknown-repo",
         ProfileError::InvalidWrite(_) => "invalid-write",
+        ProfileError::Io(_) if crate::timemachine::oplog::migration_broke(err).is_some() => {
+            "oplog-migration-broke"
+        }
         ProfileError::Io(_) => "io",
         ProfileError::Sqlite(_) => "sqlite",
     }
