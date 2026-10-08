@@ -65,6 +65,7 @@ fn repo_intact_evaluation_never_waits_and_fails_closed() {
         protected: None,
         operations: None,
         tm_prior_layer: None,
+        tiers: Default::default(),
         tm_capture: Default::default(),
     };
     let daemon = Daemon::start(config).unwrap();

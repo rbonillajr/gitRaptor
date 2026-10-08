@@ -208,6 +208,15 @@ impl Daemon {
         let t_recv = clock::monotonic_ns();
         let offset = crate::watch::wall_now().1;
         let mut published: Vec<(String, String)> = Vec::new();
+        // A session present wakes its repo (TS-GRP-006, N4) before its
+        // change is persisted in the store the wake opens.
+        for change in &changes {
+            if let SessionChange::Started { repo_id, .. } | SessionChange::State { repo_id, .. } =
+                change
+            {
+                self.wake_for_request(repo_id);
+            }
+        }
         for change in changes {
             let (repo_id, session_id) = match &change {
                 SessionChange::Started {
