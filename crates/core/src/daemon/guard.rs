@@ -71,7 +71,7 @@ impl Daemon {
         // What Guardrails itself changes is an expected transition (US-GRD-004).
         let own = matches!(
             request,
-            GuardRequest::Install | GuardRequest::UninstallApply { .. }
+            GuardRequest::Install { .. } | GuardRequest::UninstallApply { .. }
         );
         // The state before a change of ours: the install and the uninstall move the watch.
         let before = self.guard.protection().current(&entry.repo_id);
@@ -89,8 +89,9 @@ impl Daemon {
                     .info("guard_declined", &[("repo", Field::id(repo_id))]);
                 GuardReply::Status(Box::new(guard_install::decline(repo_id, common, store)))
             }
-            GuardRequest::Install => {
-                match guard_install::install(&ctx, repo_id, common, store, &self.guard, now) {
+            GuardRequest::Install { repair } => {
+                match guard_install::install(&ctx, repo_id, common, store, &self.guard, now, repair)
+                {
                     Ok(status) => {
                         self.logger
                             .info("guard_installed", &[("repo", Field::id(repo_id))]);
@@ -115,7 +116,11 @@ impl Daemon {
             }
             GuardRequest::UninstallRequest(requester) => {
                 let status = guard_install::status(repo_id, common, store);
-                if status.state != gitraptor_api::guard::ProtectionState::HooksOnly {
+                // An install of ours that stopped being active can be removed too: otherwise
+                // the developer would be stuck with a folder and a journal they cannot clear.
+                let removable = status.state == gitraptor_api::guard::ProtectionState::HooksOnly
+                    || guard_install::stale_install(store, &status).is_some();
+                if !removable {
                     GuardReply::UninstallRefused(UninstallRefusal::NotInstalled.into())
                 } else {
                     let announced = self.guard.pending().announce(
@@ -229,6 +234,19 @@ impl Daemon {
         let Some(watched) = watched else {
             return;
         };
+        // An install or an uninstall of ours that did not finish (it fails half way, or waits
+        // for the next start to be completed) is not somebody else's doing.
+        let confirmed = self
+            .stores
+            .iter()
+            .find(|(id, _)| *id == report.repo_id)
+            .and_then(|(_, store)| store.guard_keys().ok())
+            .and_then(|keys| keys.journal)
+            .and_then(|j| crate::guardrails::journal::Journal::from_json(&j))
+            .is_some_and(|j| j.stage == crate::guardrails::journal::Stage::Confirmed);
+        if !confirmed {
+            return;
+        }
         let layer = crate::guardrails::health::check(&watched.common, Some(&watched.journal)).hooks;
         self.protection_changed(&report.repo_id, None, layer, false);
     }

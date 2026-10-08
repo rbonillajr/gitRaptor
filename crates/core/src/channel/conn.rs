@@ -1177,7 +1177,9 @@ impl Connection<'_> {
         };
         let kind = match spec.name {
             methods::GUARD_PLAN => GuardRequest::Plan,
-            methods::GUARD_INSTALL => GuardRequest::Install,
+            methods::GUARD_INSTALL => GuardRequest::Install {
+                repair: self.has(methods::CAP_GUARD_PROTECTION.name),
+            },
             methods::GUARD_DECLINE => GuardRequest::Decline,
             methods::GUARD_UNINSTALL => match confirm {
                 None => GuardRequest::UninstallRequest(requester),

@@ -74,7 +74,10 @@ pub(crate) struct WithdrawRequest {
 pub(crate) enum GuardRequest {
     Plan,
     Status,
-    Install,
+    /// `repair`: the connection can read the plan of a repair (`guard.protection`).
+    Install {
+        repair: bool,
+    },
     Decline,
     /// Announces the uninstall and opens its window (US-GRD-003, D5).
     UninstallRequest(crate::guardrails::pending::Requester),
