@@ -1070,6 +1070,15 @@ fn log_temps(logger: &Logger, repo_id: &str, temps: &SweepReport) {
             ],
         );
     }
+    if !temps.moved_unverified.is_empty() {
+        logger.warn(
+            "tm_temps_moved_unverified",
+            &[
+                ("repo", Field::id(repo_id)),
+                ("moved", temps.moved_unverified.len().into()),
+            ],
+        );
+    }
     if !temps.kept.is_empty() || temps.unreadable > 0 {
         let in_store = temps.kept.iter().filter(|k| k.in_store).count();
         logger.warn(

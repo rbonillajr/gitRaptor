@@ -120,14 +120,27 @@ pub enum Restore {
     Restored,
     /// Something is at the path: nothing was touched.
     Occupied,
-    /// The temporary entry is gone or no longer holds the expected content: nothing was touched.
+    /// The temporary entry is gone, no longer holds the expected content or is no longer the
+    /// entry compared (another one took its name): nothing was touched.
     Mismatch,
+    /// The entry renamed is not the one compared: another one took the temporary name between
+    /// the last check and the rename. It is at the path now; nothing was overwritten or deleted.
+    Swapped,
     /// Another program holds the temporary entry open: nothing was touched.
     Busy,
     /// A folder on the way is missing, a link or on another device: nothing was touched.
     Blocked,
     /// The file system has no exclusive rename: nothing was touched.
     NotGuaranteed,
+}
+
+/// Where a test makes another entry take the temporary name while it is put back (the race of
+/// DS-TS-TMC-003, Enmienda T2): after the comparison, or after the last check.
+#[doc(hidden)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SwapPoint {
+    AfterCompare,
+    BeforeRename,
 }
 
 /// Whether `name` is a temporary name of the applier, as found in one folder.
@@ -192,6 +205,7 @@ mod unix {
         path: PathBuf,
         no_exchange: bool,
         crash_between_moves: bool,
+        swap_at: Option<SwapPoint>,
     }
 
     fn io(e: Errno) -> WriteError {
@@ -218,7 +232,50 @@ mod unix {
                 path: root.to_owned(),
                 no_exchange: false,
                 crash_between_moves: false,
+                swap_at: None,
             })
+        }
+
+        /// Makes another entry, with the same content, take the temporary name at `at` while
+        /// [`Self::restore_temp`] runs (tests of the race of DS-TS-TMC-003, Enmienda T2).
+        #[doc(hidden)]
+        pub fn simulating_swap_during_restore(mut self, at: SwapPoint) -> Self {
+            self.swap_at = Some(at);
+            self
+        }
+
+        fn swap_if(&self, at: SwapPoint, dir: &OwnedFd, temp: &str) -> Result<()> {
+            if self.swap_at != Some(at) {
+                return Ok(());
+            }
+            let bytes = {
+                let fd =
+                    rustix::fs::openat(dir, temp, OFlags::RDONLY | OFlags::NOFOLLOW, Mode::empty())
+                        .map_err(io)?;
+                let mut bytes = Vec::new();
+                std::fs::File::from(fd).read_to_end(&mut bytes)?;
+                bytes
+            };
+            let other = format!("{temp}-swap");
+            let fd = rustix::fs::openat(
+                dir,
+                other.as_str(),
+                OFlags::WRONLY | OFlags::CREATE | OFlags::EXCL | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+                Mode::from_raw_mode(0o644),
+            )
+            .map_err(io)?;
+            std::fs::File::from(fd).write_all(&bytes)?;
+            rustix::fs::renameat(dir, other.as_str(), dir, temp).map_err(io)?;
+            Ok(())
+        }
+
+        /// `(device, inode)` of what is at `name` in `dir`, never following a link.
+        fn identity(dir: &OwnedFd, name: &[u8]) -> Result<Option<(u64, u64)>> {
+            match rustix::fs::statat(dir, name, AtFlags::SYMLINK_NOFOLLOW) {
+                Ok(s) => Ok(Some((s.st_dev as u64, s.st_ino))),
+                Err(Errno::NOENT) => Ok(None),
+                Err(e) => Err(io(e)),
+            }
         }
 
         /// Stops `remove` right after the current entry went aside, as if the process died there
@@ -564,7 +621,10 @@ mod unix {
 
         /// Puts the temporary entry `temp`, in the folder of `rel`, back at `rel` if it still
         /// holds `expected` and nothing is at `rel`: one exclusive rename, never following a
-        /// link. Anything else leaves both untouched.
+        /// link. Anything else leaves both untouched. The entry renamed must be the entry
+        /// compared, by `(device, inode)`: checked again right before the rename (another entry
+        /// there: [`Restore::Mismatch`], untouched) and at the path after it
+        /// ([`Restore::Swapped`] if another one slipped into the window left between the two).
         pub fn restore_temp(
             &self,
             rel: &[u8],
@@ -578,12 +638,28 @@ mod unix {
                 Ok(found) => found,
                 Err(_) => return Ok(Restore::Blocked),
             };
+            // The entry compared is the one renamed (Enmienda T2): its identity before the
+            // comparison, again right before the rename, and at the path after it.
+            let Some(compared) = Self::identity(&dir, temp.as_bytes())? else {
+                return Ok(Restore::Mismatch);
+            };
             if Self::observe(&dir, temp.as_bytes())? != Some(Ok(expected)) {
                 return Ok(Restore::Mismatch);
             }
+            self.swap_if(SwapPoint::AfterCompare, &dir, temp)?;
+            if Self::identity(&dir, temp.as_bytes())? != Some(compared) {
+                return Ok(Restore::Mismatch);
+            }
+            self.swap_if(SwapPoint::BeforeRename, &dir, temp)?;
             match self.rename(&dir, temp.as_bytes(), &name, RenameFlags::NOREPLACE) {
                 Ok(()) => {
                     let _ = rustix::fs::fsync(&dir);
+                    // Another entry took the name between the last check and the rename: there
+                    // is no rename by descriptor on Unix. It stays at the path, never moved again:
+                    // whose it is cannot be told, and nothing was overwritten or deleted.
+                    if Self::identity(&dir, &name)? != Some(compared) {
+                        return Ok(Restore::Swapped);
+                    }
                     Ok(Restore::Restored)
                 }
                 Err(Errno::EXIST | Errno::NOTEMPTY | Errno::ISDIR) => Ok(Restore::Occupied),
@@ -591,6 +667,69 @@ mod unix {
                 Err(Errno::INVAL | Errno::NOTSUP | Errno::NOSYS) => Ok(Restore::NotGuaranteed),
                 Err(e) => Err(io(e)),
             }
+        }
+    }
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        fn temp_with(dir: &Path, bytes: &[u8]) -> (String, (Kind, Oid)) {
+            let name = format!("{TEMP_PREFIX}123");
+            std::fs::write(dir.join(&name), bytes).unwrap();
+            (name, (Kind::File, blob_id(bytes)))
+        }
+
+        fn inode(path: &Path) -> u64 {
+            use std::os::unix::fs::MetadataExt;
+            std::fs::symlink_metadata(path).unwrap().ino()
+        }
+
+        #[test]
+        fn the_entry_compared_goes_back() {
+            let tmp = tempfile::tempdir().unwrap();
+            let (temp, expected) = temp_with(tmp.path(), b"prior");
+            let before = inode(&tmp.path().join(&temp));
+            let root = RootDir::open(tmp.path()).unwrap();
+            assert_eq!(
+                root.restore_temp(b"a", &temp, expected).unwrap(),
+                Restore::Restored
+            );
+            assert_eq!(std::fs::read(tmp.path().join("a")).unwrap(), b"prior");
+            assert_eq!(inode(&tmp.path().join("a")), before);
+            assert!(!tmp.path().join(&temp).exists());
+        }
+
+        #[test]
+        fn another_entry_after_the_comparison_is_never_moved() {
+            let tmp = tempfile::tempdir().unwrap();
+            let (temp, expected) = temp_with(tmp.path(), b"prior");
+            let root = RootDir::open(tmp.path())
+                .unwrap()
+                .simulating_swap_during_restore(SwapPoint::AfterCompare);
+            assert_eq!(
+                root.restore_temp(b"a", &temp, expected).unwrap(),
+                Restore::Mismatch
+            );
+            // Same content, another entry: it stays under its name and the path stays free.
+            assert!(!tmp.path().join("a").exists());
+            assert_eq!(std::fs::read(tmp.path().join(&temp)).unwrap(), b"prior");
+        }
+
+        #[test]
+        fn another_entry_right_before_the_rename_is_reported_and_left_at_the_path() {
+            let tmp = tempfile::tempdir().unwrap();
+            let (temp, expected) = temp_with(tmp.path(), b"prior");
+            let root = RootDir::open(tmp.path())
+                .unwrap()
+                .simulating_swap_during_restore(SwapPoint::BeforeRename);
+            assert_eq!(
+                root.restore_temp(b"a", &temp, expected).unwrap(),
+                Restore::Swapped
+            );
+            // Nothing overwritten or deleted by the restore: the entry that slipped in is at the
+            // path, byte for byte, and is not moved again.
+            assert_eq!(std::fs::read(tmp.path().join("a")).unwrap(), b"prior");
+            assert!(!tmp.path().join(&temp).exists());
         }
     }
 }
@@ -627,6 +766,11 @@ mod other {
 
         #[doc(hidden)]
         pub fn simulating_crash_between_moves(self) -> Self {
+            self
+        }
+
+        #[doc(hidden)]
+        pub fn simulating_swap_during_restore(self, _at: SwapPoint) -> Self {
             self
         }
 
