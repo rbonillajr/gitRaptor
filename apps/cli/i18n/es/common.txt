@@ -6,4 +6,7 @@ common.not-running = no está en marcha
 common.cancelled = cancelado
 common.confirm-needs-terminal = la confirmación necesita una terminal (o usa --yes)
 common.refused-terminal = rechazado: ejecútalo desde tu propia terminal
+common.refused-terminal-no-console = rechazado: este proceso no tiene consola; ejecútalo desde una ventana de consola (PowerShell, cmd o Windows Terminal)
+common.refused-terminal-session = rechazado: no desde una sesión SSH ni desde un servicio (sesión 0); ejecútalo desde una consola local o de Escritorio remoto
+common.refused-terminal-foreign-console = rechazado: esta consola no la abrió tu shell (otro proceso se unió a ella); ejecútalo desde una consola que hayas abierto tú
 common.refused-unverified = rechazado: el motor no pudo verificar quién lo pide
