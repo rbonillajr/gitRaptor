@@ -963,7 +963,9 @@ impl Connection<'_> {
     /// carries no data of any repo.
     fn mcp_status(&self) -> Result<methods::McpStatus, ErrorObject> {
         self.resolve()?;
-        let cwd = process_cwd(self.peer.pid).and_then(|p| p.canonicalize().ok());
+        // The form of the observed worktree roots (on Windows, the drive form, not `\\?\C:\…`).
+        let cwd =
+            process_cwd(self.peer.pid).and_then(|p| gitraptor_git::paths::canonicalize(&p).ok());
         let who = self.resolve()?.who;
         let cwd = cwd.ok_or_else(|| scope_refused(ScopeError::NotObserved))?;
         let (_, shared) = self.ctx.bus.snapshot();
@@ -1137,7 +1139,7 @@ impl Connection<'_> {
                 // worktree of the canonical cwd, and outside the allowlist
                 // not even its key (US-MCP-003).
                 let caller_repo = process_cwd(self.peer.pid)
-                    .and_then(|cwd| cwd.canonicalize().ok())
+                    .and_then(|cwd| gitraptor_git::paths::canonicalize(&cwd).ok())
                     .and_then(|cwd| super::mcp_scope::locate(&cwd, &shared.repos))
                     .map(|(r, _)| &shared.repos[r])
                     .filter(|r| {
@@ -1266,7 +1268,8 @@ impl Connection<'_> {
     /// "not found", whether the path exists or not.
     fn repo_locate(&self, params: RepoLocateParams) -> Result<RepoLocateResult, ErrorObject> {
         let path = validate::client_path(&params.path).map_err(invalid)?;
-        let canonical = std::fs::canonicalize(&path).map_err(|_| not_found_id())?;
+        // The form of the observed worktree roots (on Windows, the drive form).
+        let canonical = gitraptor_git::paths::canonicalize(&path).map_err(|_| not_found_id())?;
         let (_, shared) = self.ctx.bus.snapshot();
         shared
             .repos
