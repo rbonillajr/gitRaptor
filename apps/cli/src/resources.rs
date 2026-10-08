@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::fmt::Write as _;
 
 use gitraptor_api::Untrusted;
-use gitraptor_api::resources::{DiskUsage, ResourceTargets, ResourcesResult};
+use gitraptor_api::resources::{DiskUsage, ObservationUsage, ResourceTargets, ResourcesResult};
 use serde_json::{Value, json};
 
 use crate::i18n::t;
@@ -192,6 +192,7 @@ pub fn text(view: &View) -> String {
                     )
                 );
             }
+            tiers_text(&mut out, r.observation.as_ref());
         }
         None => {
             let _ = writeln!(out, "{}", t("res.engine-stopped", &[]));
@@ -213,6 +214,69 @@ pub fn text(view: &View) -> String {
         let _ = writeln!(out, "{}", t("res.power", &[("value", &power)]));
     }
     out
+}
+
+/// The observation tiers (TS-GRP-006, N8): how many repos are active and
+/// how many dormant, and what each tier keeps watched. Descriptors are the
+/// process's, shown once above: they cannot be split by tier.
+fn tiers_text(out: &mut String, observation: Option<&ObservationUsage>) {
+    let Some(o) = observation else {
+        let _ = writeln!(out, "{}", t("res.tiers-na", &[]));
+        return;
+    };
+    let _ = writeln!(
+        out,
+        "{}",
+        t(
+            "res.tiers",
+            &[
+                ("active", &o.active.repos),
+                ("dormant", &o.dormant.repos),
+                ("waking", &o.waking.repos),
+            ],
+        )
+    );
+    let _ = writeln!(
+        out,
+        "  {}",
+        t(
+            "res.tier-active",
+            &[
+                ("repos", &o.active.repos),
+                ("worktrees", &o.active.worktrees),
+                ("watches", &o.active.watches),
+            ],
+        )
+    );
+    let _ = writeln!(
+        out,
+        "  {}",
+        t(
+            "res.tier-dormant",
+            &[
+                ("repos", &o.dormant.repos),
+                ("worktrees", &o.dormant.worktrees),
+                ("watches", &o.dormant.watches),
+            ],
+        )
+    );
+    let _ = writeln!(
+        out,
+        "  {}",
+        t(
+            "res.tier-safety",
+            &[
+                ("sweep", &window(o.dormant.sweep_interval_s)),
+                ("reconcile", &window(o.dormant.reconcile_interval_s)),
+                ("cpu", &o.dormant.safety_net_cpu_pct.map_or_else(na, pct)),
+            ],
+        )
+    );
+    let _ = writeln!(
+        out,
+        "  {}",
+        t("res.tier-degraded", &[("n", &o.degraded.worktrees)])
+    );
 }
 
 fn disk_text(out: &mut String, view: &View) {
@@ -303,6 +367,7 @@ pub fn json(view: &View) -> Value {
             },
             "pools": r.pools,
             "power_saving": r.power_saving,
+            "observation": r.observation,
         })
     });
     let repos: Vec<Value> = disk
@@ -404,6 +469,18 @@ mod tests {
         assert!(text(&view).contains("abc"));
     }
 
+    /// A daemon without the tiers (or before its observer starts): the
+    /// text says "not available" and the JSON carries `null`.
+    #[test]
+    fn without_tiers_they_are_not_available() {
+        let view = View::running(7, result(1), repos());
+        assert!(text(&view).contains(&t("res.tiers-na", &[])));
+        let v = json(&view);
+        let engine = v["engine"].as_object().unwrap();
+        assert!(engine.contains_key("observation"));
+        assert!(engine["observation"].is_null());
+    }
+
     /// Every key this view uses exists in both catalogs.
     #[test]
     fn every_key_has_its_messages() {
@@ -437,6 +514,12 @@ mod tests {
             "res.power-on",
             "res.power-off",
             "res.restart-engine",
+            "res.tiers",
+            "res.tiers-na",
+            "res.tier-active",
+            "res.tier-dormant",
+            "res.tier-safety",
+            "res.tier-degraded",
         ] {
             assert!(crate::i18n::has_key(key), "{key}");
         }
