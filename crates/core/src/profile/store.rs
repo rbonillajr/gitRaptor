@@ -79,6 +79,9 @@ text_enum!(
         WatcherOverflow => "watcher-overflow",
         StreamRecreated => "stream-recreated",
         PeriodicReconciliation => "periodic-reconciliation",
+        // A safety net of a dormant repo found what its sentinel did not
+        // signal (ADR-GRP-013, Enmienda 2026-10-07).
+        Dormant => "dormant",
     }
 );
 
