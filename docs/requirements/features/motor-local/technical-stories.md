@@ -2,7 +2,7 @@
 mode: draft
 status: expanded
 generated: 2026-10-03
-updated: 2026-10-07
+updated: 2026-10-08
 generator: architect
 domain: GRP
 feature: motor-local
@@ -38,6 +38,7 @@ related:
 | [INF-GRP-002](./technical-stories/INF-GRP-002-banco-frescura-escala.md) | INF | Banco de medición de frescura y escala | Gate de CI de NFR-04 y NFR-05 que nombra la etapa que se pasó | ADR-GRP-011, ADR-GRP-010 | US-GRP-001, 002, 012 | TS-GRP-004, US-GRP-002 | Medium | partially-implemented (PR #76, #98, #133) |
 | [TD-GRP-002](./technical-stories/TD-GRP-002-motor-bajo-rafaga.md) | TD | Frescura y memoria del motor bajo una ráfaga de archivos | Una ráfaga en un worktree no frena a los demás ni deja memoria retenida | ADR-GRP-010, ADR-GRP-011 | US-GRP-001, 002 | INF-GRP-002 | Medium | Ready (Must antes del MVP) |
 | [TD-GRP-003](./technical-stories/TD-GRP-003-nfr04-maquina-referencia.md) | TD | Presupuesto de NFR-04 sin gate automático: medirlo en una máquina de referencia | El p95 de 300 ms vuelve a bloquear de forma automática, sin los falsos positivos de los runners compartidos | ADR-GRP-011, ADR-GRP-014 | — | INF-GRP-002 | Medium | Ready (antes de cerrar el MVP) |
+| [TS-GRP-007](./technical-stories/TS-GRP-007-factor-so-reservados-windows.md) | TS | Factor del SO (Windows Hello) para los comandos reservados de alto riesgo en Windows | Cierra en Windows el riesgo residual M-01 (padre suplantado), mayor que en Unix, que la prueba por consola de TQ-14 no detecta | ADR-GRP-005, ADR-GRD-008 | — | SPIKE-GRD-002 (Windows), DS-TS-GRP-004 § 9 | Medium | Dev Spec Pending (prioridad alta; opción B de TQ-14, 2026-10-08) |
 | [INF-GRP-003](./technical-stories/INF-GRP-003-pipeline-release.md) | INF | Pipeline de release: 6 targets, firma, checksums, SBOM y borrador de GitHub Release | Un tag `v*` produce los binarios de NFR-06 verificables y un borrador; nada se publica sin un paso humano | ADR-GRP-014 | — (NFR-06, transversal) | — (release real en Windows: pendientes de TS-GRP-001 y TS-GRP-002) | Medium | partially-implemented (PR #51) |
 | [INF-GRP-004](./technical-stories/INF-GRP-004-canales-distribucion.md) | INF | Canales de distribución: Homebrew, winget, npm y scripts verificados | Canales generados y probados en cada release; publicar solo depende de secretos y un paso humano | ADR-GRP-014 | — (NFR-06; US de instalación pendiente para el PO) | INF-GRP-003 | Medium | partially-implemented (PR #51) |
 | [SPIKE-GRP-001](./technical-stories/SPIKE-GRP-001-precision-deteccion.md) | SPIKE | Precisión de la detección de Claude Code en dogfooding | Medir el 90% sin atribuir trabajo humano; S2a frente a S2b; TTY de la shell de Claude Code | ADR-GRP-012 (valida) | US-GRP-007, 008 | — (prototipo aislado) | Medium | partially-implemented (PR #80, #155, #169) |
