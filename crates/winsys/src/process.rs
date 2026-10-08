@@ -51,6 +51,13 @@ pub fn pids() -> Option<Vec<u32>> {
     snapshot().map(|s| s.into_iter().map(|(pid, _)| pid).collect())
 }
 
+/// Makes this process's standard handles non-inheritable, so a detached child (the daemon)
+/// does not keep the caller's pipes open. Children that inherit their stdio through
+/// `std::process::Command` get fresh duplicates and are unaffected.
+pub fn keep_std_handles_private() {
+    crate::ffi_process::keep_std_handles_private();
+}
+
 /// Whose live process `pid` is, read through its handle. `Owner::Unknown`
 /// when its token cannot be read.
 pub fn owner_of(pid: u32) -> Result<Owner, Error> {
