@@ -306,6 +306,18 @@ pub(crate) struct WtHandle {
     pub tx: Sender<WtMsg>,
     /// Polled instead of watched: it has no sentinel (N1).
     pub degraded: bool,
+    /// Ignored folders its task found: the router drops their events.
+    pub ignored: Arc<worktree::IgnoredPrefixes>,
+}
+
+/// Whether `path` is `root` or under it: [`Path::starts_with`] on the bytes, which the router
+/// runs for every path of every event against every root (RES-01, build churn).
+fn under(path: &Path, root: &Path) -> bool {
+    let (p, r) = (
+        path.as_os_str().as_encoded_bytes(),
+        root.as_os_str().as_encoded_bytes(),
+    );
+    p.starts_with(r) && (p.len() == r.len() || r.ends_with(b"/") || p[r.len()] == b'/')
 }
 
 /// Files of a worktree's Git directory its own task recomputes on.
@@ -465,14 +477,14 @@ impl Shared {
         for path in paths {
             let mut best: Option<(usize, Target)> = None;
             for repo in repos.values().filter(|r| r.tier() == Tier::Active) {
-                if path.starts_with(&repo.common) {
+                if under(&path, &repo.common) {
                     let len = repo.common.as_os_str().len();
                     if best.as_ref().is_none_or(|(l, _)| len > *l) {
                         best = Some((len, Target::Common(repo)));
                     }
                 }
                 for wt in &repo.worktrees {
-                    if path.starts_with(&wt.root) {
+                    if under(&path, &wt.root) {
                         let len = wt.root.as_os_str().len();
                         if best.as_ref().is_none_or(|(l, _)| len > *l) {
                             best = Some((len, Target::Worktree(wt)));
@@ -493,6 +505,13 @@ impl Shared {
                         {
                             hooks.worktree_touched(&repo.id, &wt.root);
                         }
+                    }
+                    // Under a folder its task already found ignored: dropped here, not one by
+                    // one in the task. A `.gitignore` always reaches it (it clears the cache).
+                    if path.file_name().is_none_or(|n| n != ".gitignore")
+                        && wt.ignored.covers(&path)
+                    {
+                        continue;
                     }
                     per_wt
                         .entry(wt.root.clone())
@@ -522,7 +541,7 @@ impl Shared {
                     if let Some(wt) = repo
                         .worktrees
                         .iter()
-                        .filter(|w| path.starts_with(&w.git_dir))
+                        .filter(|w| under(&path, &w.git_dir))
                         .max_by_key(|w| w.git_dir.as_os_str().len())
                         && let Ok(own) = path.strip_prefix(&wt.git_dir)
                         && own
@@ -653,11 +672,13 @@ impl Shared {
         let (tx, rx) = channel();
         // A woken repo's roots are still watched: adding them is a no-op.
         let degraded = !self.watch(std::slice::from_ref(&root));
+        let ignored = Arc::new(worktree::IgnoredPrefixes::default());
         let handle = WtHandle {
             root: root.clone(),
             git_dir: git_dir.clone(),
             tx,
             degraded,
+            ignored: Arc::clone(&ignored),
         };
         {
             let mut repos = self.repos.write().unwrap_or_else(|e| e.into_inner());
@@ -673,7 +694,11 @@ impl Shared {
         let sent = head.clone();
         let _ = std::thread::Builder::new()
             .name("raptor-watch-worktree".into())
-            .spawn(move || worktree::run(shared, repo_id, initial, git_dir, sent, degraded, rx));
+            .spawn(move || {
+                worktree::run(
+                    shared, repo_id, initial, git_dir, sent, degraded, ignored, rx,
+                )
+            });
         Some((root, head))
     }
 
@@ -1527,6 +1552,16 @@ mod tests {
     use super::*;
     use notify::EventKind;
     use notify::event::{AccessKind, AccessMode, CreateKind, ModifyKind};
+
+    #[test]
+    fn under_is_a_prefix_of_whole_components() {
+        let root = Path::new("/w/repo");
+        assert!(under(Path::new("/w/repo"), root));
+        assert!(under(Path::new("/w/repo/src/a.rs"), root));
+        assert!(!under(Path::new("/w/repo2/a.rs"), root));
+        assert!(!under(Path::new("/w/rep"), root));
+        assert!(under(Path::new("/w/repo/x"), Path::new("/w/repo/")));
+    }
 
     /// Reads never wake a task; writes and their close do.
     #[test]
