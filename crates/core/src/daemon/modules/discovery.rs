@@ -9,7 +9,7 @@
 //! root is listed again every `safety`. Each listing goes to the loop, which
 //! filters and persists it: this thread never touches the profile.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -143,7 +143,7 @@ impl Worker {
         let now = Instant::now();
         let old = std::mem::take(&mut self.roots);
         for root in &old {
-            if root.watched && !roots.iter().any(|r| PathBuf::from(&r.path) == root.path) {
+            if root.watched && !roots.iter().any(|r| root.path == Path::new(&r.path)) {
                 self.watcher.unwatch(&root.path);
             }
         }
