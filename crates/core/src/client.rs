@@ -754,10 +754,12 @@ pub fn clean_env() -> Vec<(OsString, OsString)> {
     env
 }
 
-/// Environment of an on-demand daemon on Windows: the Windows folder read
-/// from the kernel, a `PATH` of only its system folders, and the test
-/// overrides of debug builds. The profile comes from the known-folder API,
-/// never from the environment, so nothing else is passed (SEC-10).
+/// Environment of an on-demand daemon on Windows, never taken from the
+/// client's (SEC-10): the Windows folder read from the kernel, a `PATH` of
+/// only its system folders, the user and local-data folders from the
+/// known-folder API (as the profile resolves them) and the Program Files
+/// folder of the Windows drive, where the daemon looks for Git. Debug builds
+/// also pass the test overrides.
 #[cfg(windows)]
 pub fn clean_env() -> Vec<(OsString, OsString)> {
     let mut env = Vec::new();
@@ -769,6 +771,19 @@ pub fn clean_env() -> Vec<(OsString, OsString)> {
             windows.clone().into_os_string(),
         ));
         env.push((OsString::from("PATH"), path));
+        if let Some(drive) = windows.parent() {
+            env.push((
+                OsString::from("ProgramFiles"),
+                drive.join("Program Files").into_os_string(),
+            ));
+        }
+    }
+    if let Some(base) = directories::BaseDirs::new() {
+        env.push(("USERPROFILE".into(), base.home_dir().as_os_str().to_owned()));
+        env.push((
+            "LOCALAPPDATA".into(),
+            base.data_local_dir().as_os_str().to_owned(),
+        ));
     }
     env.extend(debug_overrides());
     env
