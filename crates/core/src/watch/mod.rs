@@ -446,6 +446,7 @@ impl Shared {
     /// Routes the paths of one file event. Longest watched prefix first.
     fn route(&self, t_recv: u64, paths: Vec<PathBuf>, rescan: bool) {
         let repos = self.repos.read().unwrap_or_else(|e| e.into_inner());
+        eprintln!("DBG route rescan={rescan} paths={paths:?} roots={:?}", repos.values().flat_map(|r| r.worktrees.iter().map(|w| (w.root.clone(), r.common.clone(), r.tier()))).collect::<Vec<_>>());
         if rescan {
             // The OS does not say what was lost: every task reconciles, and
             // every dormant repo wakes with a gap from its last check.
