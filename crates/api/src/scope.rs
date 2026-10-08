@@ -296,6 +296,7 @@ mod tests {
                 worktrees: Vec::new(),
                 tier: None,
                 checked_utc_ms: None,
+                kept_temps: None,
             },
         });
         let value = serde_json::to_value(&snapshot).unwrap();

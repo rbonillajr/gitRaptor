@@ -24,6 +24,24 @@ pub const MAX_REPORTED_REFS: usize = 64;
 /// Most paths an undo reports as not restored.
 pub const MAX_REPORTED_PATHS: usize = 256;
 
+/// Temporary entries of an interrupted application that the sweep after a crash left where they
+/// are (DS-TS-TMC-003, Enmienda T2): counts only, never paths. Served in snapshots to a
+/// connection with `timemachine.kept-temps`, counting the ones still there at that moment; the
+/// `repo.*` events never carry it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct KeptTempsView {
+    pub count: u32,
+    /// Not in the store (someone else's content, or one it cannot tell): only there, and
+    /// `raptor undo` does not bring it back.
+    pub foreign: u32,
+    /// The interrupted operation that left them.
+    pub operation_id: String,
+    /// No later Time Machine operation ran: `raptor undo` takes that one back next (a later raw
+    /// Git command may still come first).
+    pub undo_next: bool,
+}
+
 /// The surface a full connection says it is. A label for the oplog, never a
 /// grant: an MCP connection is always `mcp` and cannot send it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
