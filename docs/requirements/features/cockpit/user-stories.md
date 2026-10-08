@@ -66,8 +66,8 @@ blocked:
 | [US-CKP-022](./user-stories/US-CKP-022-grafo-carriles.md) | El desarrollador ve crecer la rama de cada agente sobre la base | 2 | Must | DEP-CKP-2, TS-CKP-005 | expanded |
 | [US-CKP-023](./user-stories/US-CKP-023-cola-confirmacion.md) | El desarrollador aprueba o rechaza desde la TUI las acciones que un agente deja en espera | — | Should | ⛔ US-GRD-015 + factor de Q-GRD-19, TS-CKP-005 | blocked |
 | [US-CKP-024](./user-stories/US-CKP-024-integrar-casos-limite.md) | Integrar sigue siendo seguro cuando el estado cambia, choca o la base no está sacada | 3 | Must | TS-CKP-002, TS-CKP-005 | expanded |
-| [US-CKP-025](./user-stories/US-CKP-025-tui-repo-no-observado.md) | La TUI ofrece observar el repo en el que se abre y, fuera de un repo, lleva a los ya observados | 1 | Should | TS-CKP-005; US-GRP-020 y US-GRP-022 (solo el escenario de descubiertos) | in-progress (escenarios 1–5; el 6 diferido) |
-| [US-CKP-026](./user-stories/US-CKP-026-autoria-en-la-flota.md) | El desarrollador ve en la flota de quién es el último commit de cada worktree y con qué agente | 1 | Should | US-GRD-019, TS-CKP-005 | expanded |
+| [US-CKP-025](./user-stories/US-CKP-025-tui-repo-no-observado.md) | La TUI ofrece observar el repo en el que se abre y, fuera de un repo, lleva a los ya observados | 1 | Should | TS-CKP-005; US-GRP-020 y US-GRP-022 (solo el escenario de descubiertos) | partially-implemented (PR #165, #170) |
+| [US-CKP-026](./user-stories/US-CKP-026-autoria-en-la-flota.md) | El desarrollador ve en la flota de quién es el último commit de cada worktree y con qué agente | 1 | Should | US-GRD-019, TS-CKP-005 | implemented (PR #147) |
 
 ---
 
