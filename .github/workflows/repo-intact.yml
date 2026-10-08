@@ -73,6 +73,9 @@ jobs:
     # Without Rust changes the check still reports, from a Linux runner, so a docs-only pull
     # request never waits for a macOS or Windows runner.
     runs-on: ${{ needs.changes.outputs.rust == 'false' && 'ubuntu-latest' || matrix.os }}
+    # A normal run takes 3-7 minutes; the ceiling leaves room for a cold cache and stops a hung
+    # runner long before GitHub's 6-hour default.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -104,6 +107,8 @@ jobs:
         if: env.BUILD_RUST != 'false'
       - name: Install strace
         if: env.BUILD_RUST != 'false' && matrix.exec_audit == 'strace'
+        # apt mirrors have hung this step for hours (2026-10-07); it normally takes seconds.
+        timeout-minutes: 5
         run: sudo apt-get update && sudo apt-get install -y strace
       - name: Toolchain from rust-toolchain.toml
         if: env.BUILD_RUST != 'false'
@@ -245,6 +250,8 @@ jobs:
   guardrails-git-min:
     name: guardrails (Git 2.38.5, Linux)
     runs-on: ubuntu-latest
+    # A normal run takes 1-2 minutes; a cache miss also builds Git from source.
+    timeout-minutes: 30
     env:
       GIT_MIN_VERSION: 2.38.5
       GIT_MIN_SHA256: f1b3d39684545a1954a3ab6e11972405c8eb2cf16ae069e96d0502d97843aea5
