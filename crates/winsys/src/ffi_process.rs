@@ -9,8 +9,8 @@ use std::sync::OnceLock;
 
 use windows_sys::Wdk::System::Threading::{NtQueryInformationProcess, PROCESSINFOCLASS};
 use windows_sys::Win32::Foundation::{
-    ERROR_ACCESS_DENIED, ERROR_NO_MORE_FILES, FILETIME, HANDLE, HANDLE_FLAG_INHERIT,
-    INVALID_HANDLE_VALUE, STILL_ACTIVE, SetHandleInformation,
+    ERROR_ACCESS_DENIED, ERROR_INVALID_PARAMETER, ERROR_NO_MORE_FILES, FILETIME, HANDLE,
+    HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE, STILL_ACTIVE, SetHandleInformation,
 };
 use windows_sys::Win32::Security::{
     EqualSid, GetTokenInformation, TOKEN_QUERY, TOKEN_USER, TokenUser,
@@ -85,10 +85,11 @@ pub(crate) fn open(pid: u32) -> Result<Handle, Error> {
 pub(crate) fn open_reading(pid: u32) -> Result<Handle, Error> {
     // SAFETY: plain values; the result is checked by `Handle::new`.
     let raw = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ, 0, pid) };
-    // The last error is read right after the failed call.
+    // The last error is read right after the failed call. Only "no such process" is gone: any
+    // other refusal (a protected process, another session) leaves the process in doubt.
     Handle::new(raw).ok_or_else(|| match last_error() {
-        Some(ERROR_ACCESS_DENIED) => Error::Denied,
-        _ => Error::Gone,
+        Some(ERROR_INVALID_PARAMETER) => Error::Gone,
+        _ => Error::Denied,
     })
 }
 
