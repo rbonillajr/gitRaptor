@@ -386,8 +386,9 @@ pub const TIMELINE_MAX_FILES: usize = 20;
 pub struct TimelineParams {
     #[serde(default)]
     pub worktree: Option<String>,
-    /// Only the entries of this worktree root.
-    #[serde(default)]
+    /// Only the entries of this worktree root. Absent, not `null`, when unused: a daemon that
+    /// predates the field refuses unknown fields, and the CLI must not send it one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub only_worktree: Option<String>,
     /// Duration such as `30m`, `2h` or `1d`.
     #[serde(default)]
@@ -977,6 +978,29 @@ mod tests {
             "only_worktree"
         );
         assert!(serde_json::from_str::<TimelineParams>(r#"{"human":true}"#).is_err());
+    }
+
+    /// A daemon that predates `only_worktree` refuses unknown fields: without the filter the
+    /// field is not sent at all, not even as `null`.
+    #[test]
+    fn only_worktree_is_absent_from_the_wire_when_unused() {
+        let none = TimelineParams {
+            worktree: Some("/r".into()),
+            only_worktree: None,
+            since: None,
+            agent: None,
+            limit: None,
+        };
+        let wire = serde_json::to_value(&none).unwrap();
+        assert!(wire.get("only_worktree").is_none(), "{wire}");
+        let some = TimelineParams {
+            only_worktree: Some("/r/wt".into()),
+            ..none
+        };
+        assert_eq!(
+            serde_json::to_value(&some).unwrap()["only_worktree"],
+            "/r/wt"
+        );
     }
 
     /// SEC-12: a branch with escapes travels marked, prints clean and is
