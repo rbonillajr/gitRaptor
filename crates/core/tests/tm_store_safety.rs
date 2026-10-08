@@ -1,10 +1,6 @@
 //! TS-TMC-001: the four guarantees of D-TMC-11 (ADR-TMC-001), the intact repo with the testkit
 //! harness (INF-GRP-001), seeding without effect on the user's packs and the hostile cases of
 //! SEC-TMC-01, 06 and 09.
-//!
-//! Unix only for now: on Windows the store is not supported yet and `open_or_create` fails
-//! with `Unsupported` (Pendiente: etapa de validación multiplataforma).
-#![cfg(unix)]
 
 mod tm_common;
 
@@ -386,6 +382,13 @@ fn a_corrupt_object_is_caught_before_restoring() {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
     }
+    #[cfg(windows)]
+    {
+        let mut perms = std::fs::metadata(&path).unwrap().permissions();
+        #[allow(clippy::permissions_set_readonly_false)]
+        perms.set_readonly(false);
+        std::fs::set_permissions(&path, perms).unwrap();
+    }
     std::fs::write(&path, b"not a zlib stream").unwrap();
     assert!(env.store.verify(&out.snapshot_id).is_err());
 }
@@ -433,6 +436,37 @@ fn store_folders_are_private_and_an_untrusted_store_is_set_aside() {
     );
     // A repo key that could escape the folder is refused.
     assert!(SnapshotStore::open_or_create(&env.dirs, "../x").is_err());
+}
+
+#[test]
+#[cfg(windows)]
+fn store_folders_are_private_and_a_junction_store_is_not_trusted() {
+    let env = Env::busy();
+    for dir in [
+        env.tm_root(),
+        env.tm_root().join(REPO_ID),
+        env.store_path(),
+        env.store_path().join("objects"),
+    ] {
+        gitraptor_winsys::acl::verify_private_dir(&dir)
+            .unwrap_or_else(|e| panic!("{} is not private: {e:?}", dir.display()));
+    }
+    env.prior();
+    // A store that is a junction to a folder elsewhere is not trusted.
+    let elsewhere = env.f.root.join("elsewhere.git");
+    std::fs::rename(env.store_path(), &elsewhere).unwrap();
+    let out = std::process::Command::new("cmd")
+        .args(["/C", "mklink", "/J"])
+        .arg(env.store_path())
+        .arg(&elsewhere)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{out:?}");
+    assert!(
+        SnapshotStore::open_existing(&env.dirs, REPO_ID)
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[test]

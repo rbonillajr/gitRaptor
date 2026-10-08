@@ -1,9 +1,5 @@
 //! TS-TMC-001: capture of a snapshot — round trip of raw content, ignored and excluded paths,
 //! continuity, incremental capture, fast path, validity point and priority of the prior.
-//!
-//! Unix only for now: on Windows the store is not supported yet and `open_or_create` fails
-//! with `Unsupported` (Pendiente: etapa de validación multiplataforma).
-#![cfg(unix)]
 
 mod tm_common;
 

@@ -361,9 +361,7 @@ fn canonical(path: &Path) -> PathBuf {
     std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
-/// Unix only: on Windows the store fails with `Unsupported`.
-/// Pendiente: etapa de validación multiplataforma (XP-12).
-#[cfg(all(test, unix))]
+#[cfg(test)]
 mod tests {
     use super::*;
 
