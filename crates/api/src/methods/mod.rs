@@ -20,6 +20,7 @@ mod attribution;
 mod audit;
 mod connection;
 mod daemon;
+mod discovery;
 mod engine;
 mod events;
 mod guard;
@@ -37,6 +38,7 @@ pub use attribution::*;
 pub use audit::*;
 pub use connection::*;
 pub use daemon::*;
+pub use discovery::*;
 pub use engine::*;
 pub use events::*;
 pub use guard::*;
@@ -69,6 +71,7 @@ pub const GROUPS: &[&Group] = &[
     &guard::GROUP,
     &mcp::GROUP,
     &observation::GROUP,
+    &discovery::GROUP,
 ];
 
 /// What one contract module declares, in its own file.
