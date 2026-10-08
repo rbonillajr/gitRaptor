@@ -173,6 +173,8 @@ pub struct Listing {
     pub found: Vec<Found>,
     /// More than [`MAX_ENTRIES`] entries: the rest was not looked at.
     pub truncated: bool,
+    /// First-level entries seen, up to [`MAX_ENTRIES`].
+    pub entries: usize,
 }
 
 /// Lists the first level of `root` and keeps the entries that are Git repos,
@@ -181,11 +183,13 @@ pub struct Listing {
 pub fn list_first_level(root: &Path, home_root: bool) -> io::Result<Listing> {
     let mut entries = Vec::new();
     let mut truncated = false;
-    for (n, entry) in fs::read_dir(root)?.enumerate() {
-        if n >= MAX_ENTRIES {
+    let mut seen = 0;
+    for entry in fs::read_dir(root)? {
+        if seen >= MAX_ENTRIES {
             truncated = true;
             break;
         }
+        seen += 1;
         let Ok(entry) = entry else { continue };
         let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
             continue;
@@ -226,6 +230,7 @@ pub fn list_first_level(root: &Path, home_root: bool) -> io::Result<Listing> {
     Ok(Listing {
         found: found.into_iter().map(|(_, f)| f).collect(),
         truncated,
+        entries: seen,
     })
 }
 

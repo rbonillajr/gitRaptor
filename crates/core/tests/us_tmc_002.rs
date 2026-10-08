@@ -233,6 +233,7 @@ fn start_with(fx: Fixture, undo_no_space: bool, capture: CaptureConfig) -> Runni
             }))
         }),
         tiers: Default::default(),
+        discovery: Default::default(),
         tm_capture: TmCapture {
             config: capture,
             ..Default::default()

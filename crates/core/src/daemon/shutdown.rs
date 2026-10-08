@@ -250,6 +250,8 @@ pub(crate) enum Control {
         request: WithdrawRequest,
         reply: SyncSender<Result<RegistrationWithdrawResult, RegistrationError>>,
     },
+    /// Discovery roots and candidates (US-GRP-020).
+    Discovery(super::discovery::DiscoveryRequest),
     /// Guardrails (US-GRD-001): plan, status, install or decline.
     Guard {
         common_dir: std::path::PathBuf,
@@ -330,6 +332,38 @@ impl ShutdownHandle {
 }
 
 impl ShutdownHandle {
+    /// A discovery request answered by the loop (US-GRP-020): `None` when
+    /// the loop does not answer in time.
+    #[cfg_attr(not(unix), allow(dead_code))]
+    pub(crate) fn discovery<T>(
+        &self,
+        request: impl FnOnce(SyncSender<T>) -> super::discovery::DiscoveryRequest,
+    ) -> Option<T> {
+        let (reply, rx) = sync_channel(1);
+        self.tx.send(Control::Discovery(request(reply))).ok()?;
+        rx.recv_timeout(REPO_TIMEOUT).ok()
+    }
+
+    /// A listing of a discovery root, for the loop to filter and persist.
+    pub(crate) fn discovery_listed(&self, root: &std::path::Path, listing: crate::discovery::Listing) {
+        if let Some(root) = root.to_str() {
+            let _ = self.tx.send(Control::Discovery(
+                super::discovery::DiscoveryRequest::Listed {
+                    root: root.to_owned(),
+                    listing,
+                },
+            ));
+        }
+    }
+
+    /// A candidate's folder is no longer a repo.
+    #[cfg_attr(not(unix), allow(dead_code))]
+    pub(crate) fn discovery_forget(&self, path: std::path::PathBuf) {
+        let _ = self
+            .tx
+            .send(Control::Discovery(super::discovery::DiscoveryRequest::Forget(path)));
+    }
+
     /// Adds a located and read repo through the loop, which owns the
     /// profile (US-GRP-001).
     #[cfg_attr(not(unix), allow(dead_code))]

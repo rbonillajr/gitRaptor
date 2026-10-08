@@ -24,7 +24,10 @@ pub use dirs::{APP_DIR, PROFILE_DIR_ENV, ProfileDirs};
 pub use error::{ProfileError, Result};
 pub use fsperm::{create_private_file, set_restrictive_umask};
 pub use guard_store::GuardKeys;
-pub use index::{AddOutcome, AuditRow, DaemonRun, RepoEntry, RepoState, read_only_repos};
+pub use index::{
+    AddOutcome, AuditRow, DaemonRun, DiscoveryCandidate, DiscoveryRoot, RepoEntry, RepoState,
+    read_only_repos,
+};
 pub use repo_key::{NormalizedPath, normalize_common_dir, validate_input_path};
 pub use store::{
     Agent, AgentKind, AttributionRecord, Author, BatchResult, EndCause, Event, Gap, GapCause,
@@ -183,6 +186,54 @@ impl Profile {
     pub fn repo_by_common_dir(&self, common_dir: &Path) -> Result<Option<RepoEntry>> {
         let normalized = normalize_common_dir(common_dir)?;
         self.index.by_key(&normalized.key_path)
+    }
+
+    /// The declared discovery roots (US-GRP-020).
+    pub fn discovery_roots(&self) -> Result<Vec<DiscoveryRoot>> {
+        self.index.discovery_roots()
+    }
+
+    /// Declares a discovery root, canonical; `false` if it already was.
+    pub fn add_discovery_root(&mut self, path: &str, broad: bool, now_ms: i64) -> Result<bool> {
+        self.index.add_discovery_root(path, broad, now_ms)
+    }
+
+    /// Removes a root and its pending candidates; `None` if it was not
+    /// declared (US-GRP-022).
+    pub fn remove_discovery_root(&mut self, path: &str) -> Result<Option<u32>> {
+        self.index.remove_discovery_root(path)
+    }
+
+    /// The discovered repos waiting for the developer's decision.
+    pub fn discovery_candidates(&self) -> Result<Vec<DiscoveryCandidate>> {
+        self.index.discovery_candidates()
+    }
+
+    /// Replaces the candidates of `root` with a listing's repos, `(path,
+    /// key_path)`, and returns the new ones (see [`DiscoveryCandidate`]).
+    pub fn sync_discovery_candidates(
+        &mut self,
+        root: &str,
+        found: &[(String, String)],
+        now_ms: i64,
+    ) -> Result<Vec<DiscoveryCandidate>> {
+        self.index.sync_candidates(root, found, now_ms)
+    }
+
+    /// Dismisses a candidate by its path, for good (US-GRP-022); `false` if
+    /// it is not a candidate.
+    pub fn dismiss_discovery_candidate(&mut self, path: &str, now_ms: i64) -> Result<bool> {
+        self.index.dismiss_candidate(path, now_ms)
+    }
+
+    /// The repo with this key was added: no longer a candidate nor dismissed.
+    pub fn forget_discovered_key(&mut self, key_path: &str) -> Result<()> {
+        self.index.forget_discovered_key(key_path)
+    }
+
+    /// Removes the candidate at `path` (it no longer exists).
+    pub fn forget_discovery_candidate(&mut self, path: &str) -> Result<bool> {
+        self.index.forget_candidate(path)
     }
 
     /// Path of the SQLite store of a repo.

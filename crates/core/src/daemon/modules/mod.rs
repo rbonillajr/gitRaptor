@@ -8,12 +8,14 @@
 //! close. A new module is a file here and one line in [`MODULES`]. The
 //! engine's own parts (observer, session detector, stores) are not modules.
 
+mod discovery;
 mod tm_capture;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use super::Daemon;
+use crate::profile::DiscoveryRoot;
 use crate::watch::ObserverHooks;
 
 /// One feature the daemon runs. Every point has a default: a module
@@ -30,6 +32,10 @@ pub(super) trait DaemonModule: Send {
     /// The engine persisted and published a Git event of a worktree.
     fn git_event(&self, _repo_id: &str, _worktree: &Path, _seq: i64) {}
 
+    /// The declared discovery roots changed (US-GRP-020), with the
+    /// canonical home folder.
+    fn discovery_roots_changed(&self, _roots: &[DiscoveryRoot], _home: Option<PathBuf>) {}
+
     /// The daemon stops: end before the stores close.
     fn stop(self: Box<Self>) {}
 }
@@ -39,7 +45,10 @@ pub(super) trait DaemonModule: Send {
 type Start = fn(&Daemon) -> Option<Box<dyn DaemonModule>>;
 
 /// Every module, in the order the daemon starts them and calls them.
-const MODULES: &[(&str, Start)] = &[("tm-capture", tm_capture::start)];
+const MODULES: &[(&str, Start)] = &[
+    ("tm-capture", tm_capture::start),
+    ("discovery", discovery::start),
+];
 
 /// The running modules, in the order of [`MODULES`].
 #[derive(Default)]
@@ -68,6 +77,12 @@ impl Modules {
     pub(super) fn git_event(&self, repo_id: &str, worktree: &Path, seq: i64) {
         for module in &self.0 {
             module.git_event(repo_id, worktree, seq);
+        }
+    }
+
+    pub(super) fn discovery_roots_changed(&self, roots: &[DiscoveryRoot], home: Option<PathBuf>) {
+        for module in &self.0 {
+            module.discovery_roots_changed(roots, home.clone());
         }
     }
 
@@ -157,6 +172,6 @@ mod tests {
     #[test]
     fn the_registered_modules() {
         let names: Vec<_> = MODULES.iter().map(|(name, _)| *name).collect();
-        assert_eq!(names, ["tm-capture"]);
+        assert_eq!(names, ["tm-capture", "discovery"]);
     }
 }

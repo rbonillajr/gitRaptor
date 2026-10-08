@@ -556,6 +556,13 @@ impl Connection<'_> {
         // Nor the observation tiers without `observation.tiers` (TS-GRP-006).
         self.outbox
             .set_without_tiers(!self.has(methods::CAP_OBSERVATION_TIERS.name));
+        // Nor the discovered repos without `discovery.events`, and never to
+        // `raptor-mcp` (US-GRP-020, SEC-MCP-01).
+        self.outbox
+            .set_without_discovery(
+                self.profile != ConnectionProfile::Full
+                    || !self.has(methods::CAP_DISCOVERY_EVENTS.name),
+            );
         // Nor the declared authorship of commits without `events.authorship`
         // (US-GRD-019): `raptor-mcp` never asks for it.
         self.outbox
@@ -776,6 +783,16 @@ impl Connection<'_> {
                 let result = self.repo_retire(spec, request);
                 self.reply(&request.id, result);
             }
+            // US-GRP-020 and US-GRP-022: with `repo`, because accepting a
+            // discovered repo is `repo.add`.
+            methods::DISCOVERY_ROOTS
+            | methods::DISCOVERY_CANDIDATES
+            | methods::DISCOVERY_ROOT_ADD
+            | methods::DISCOVERY_ROOT_REMOVE
+            | methods::DISCOVERY_DISMISS => {
+                let result = self.discovery(spec, request);
+                self.reply(&request.id, result);
+            }
             methods::MCP_ENABLE | methods::MCP_DISABLE => {
                 let result = self.mcp_mark(spec, request);
                 self.reply(&request.id, result);
@@ -992,7 +1009,15 @@ impl Connection<'_> {
         let path = validate::client_path(&params.path).map_err(invalid)?;
         self.reserved(spec, None)?;
         let t_recv = gitraptor_api::clock::monotonic_ns();
-        let common_dir = crate::observe::locate(&path).map_err(rejected)?;
+        let common_dir = match crate::observe::locate(&path) {
+            Ok(common_dir) => common_dir,
+            Err(reason) => {
+                // A discovered repo deleted before it was accepted stops
+                // being proposed (US-GRP-022).
+                self.ctx.control.discovery_forget(path);
+                return Err(rejected(reason));
+            }
+        };
         // Against the base branch without the profile; the daemon loop
         // counts again if the repo's store keeps a confirmed one.
         let read = crate::observe::reconcile(&common_dir, &crate::observe::base_branch(None))
@@ -1016,6 +1041,91 @@ impl Connection<'_> {
                 result
             })
             .map_err(repo_command_error)
+    }
+
+    /// `discovery.*` (US-GRP-020, US-GRP-022). The reserved ones are
+    /// authorized and audited before the daemon reads anything at the path,
+    /// like `repo.add`; the loop validates the root (SEC-15) and owns the
+    /// profile.
+    fn discovery(
+        &self,
+        spec: &MethodSpec,
+        request: &Request,
+    ) -> Result<serde_json::Value, ErrorObject> {
+        use crate::daemon::{DiscoveryError, DiscoveryRequest};
+        use gitraptor_api::discovery::{
+            CandidatesResult, DismissResult, PathParams, RootAddParams, RootsResult,
+        };
+        fn unavailable() -> ErrorObject {
+            ErrorObject::new(code::INTERNAL, "discovery unavailable")
+        }
+        let failed = |err: DiscoveryError| match err {
+            DiscoveryError::Rejected(data) => {
+                ErrorObject::new(methods::ROOT_REJECTED.code, "root rejected").with_data(data)
+            }
+            DiscoveryError::Broad(data) => {
+                ErrorObject::new(methods::ROOT_BROAD.code, "broad root").with_data(data)
+            }
+            DiscoveryError::UnknownRoot => {
+                ErrorObject::new(methods::ROOT_UNKNOWN.code, "not a declared root")
+            }
+            DiscoveryError::NotACandidate => {
+                ErrorObject::new(methods::NOT_A_CANDIDATE.code, "not a discovered repo")
+            }
+            DiscoveryError::Failed => unavailable(),
+        };
+        let control = &self.ctx.control;
+        let value = match spec.name {
+            methods::DISCOVERY_ROOTS => {
+                let roots = control
+                    .discovery(DiscoveryRequest::Roots)
+                    .flatten()
+                    .ok_or_else(unavailable)?;
+                serde_json::to_value(RootsResult { roots })
+            }
+            methods::DISCOVERY_CANDIDATES => {
+                let candidates = control
+                    .discovery(DiscoveryRequest::Candidates)
+                    .flatten()
+                    .ok_or_else(unavailable)?;
+                serde_json::to_value(CandidatesResult { candidates })
+            }
+            methods::DISCOVERY_ROOT_ADD => {
+                let params: RootAddParams = request.params()?;
+                let path = validate::client_path(&params.path).map_err(invalid)?;
+                self.reserved(spec, None)?;
+                let result = control
+                    .discovery(|reply| DiscoveryRequest::RootAdd {
+                        path,
+                        confirm_broad: params.confirm_broad,
+                        reply,
+                    })
+                    .ok_or_else(unavailable)?
+                    .map_err(failed)?;
+                serde_json::to_value(result)
+            }
+            methods::DISCOVERY_ROOT_REMOVE => {
+                let params: PathParams = request.params()?;
+                let path = validate::client_path(&params.path).map_err(invalid)?;
+                self.reserved(spec, None)?;
+                let result = control
+                    .discovery(|reply| DiscoveryRequest::RootRemove { path, reply })
+                    .ok_or_else(unavailable)?
+                    .map_err(failed)?;
+                serde_json::to_value(result)
+            }
+            _ => {
+                let params: PathParams = request.params()?;
+                let path = validate::client_path(&params.path).map_err(invalid)?;
+                self.reserved(spec, None)?;
+                let path = control
+                    .discovery(|reply| DiscoveryRequest::Dismiss { path, reply })
+                    .ok_or_else(unavailable)?
+                    .map_err(failed)?;
+                serde_json::to_value(DismissResult { path })
+            }
+        };
+        value.map_err(|_| unavailable())
     }
 
     /// `guard.*` (US-GRD-001): the reserved ones are authorized and audited before the path

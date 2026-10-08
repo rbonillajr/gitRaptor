@@ -47,6 +47,9 @@ impl Daemon {
             AddOutcome::Reactivated { .. } => RepoAddOutcome::Reactivated,
         };
         let repo_id = entry.repo_id.clone();
+        // Accepting a discovered repo, or adding a dismissed one by hand
+        // (US-GRP-022).
+        self.discovered_repo_added(&entry.canonical_path);
         let path = Untrusted::from_os(entry.canonical_path.as_os_str());
         self.logger.info(
             "repo_added",

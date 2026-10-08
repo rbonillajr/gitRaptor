@@ -44,6 +44,8 @@ pub struct Outbox {
     without_authorship: std::sync::atomic::AtomicBool,
     /// Without `observation.tiers` (see [`Outbox::set_without_tiers`]).
     without_tiers: std::sync::atomic::AtomicBool,
+    /// Without `discovery.events` (see [`Outbox::set_without_discovery`]).
+    without_discovery: std::sync::atomic::AtomicBool,
 }
 
 #[derive(Debug, Default)]
@@ -65,6 +67,7 @@ impl Outbox {
             without_activity: std::sync::atomic::AtomicBool::new(true),
             without_authorship: std::sync::atomic::AtomicBool::new(true),
             without_tiers: std::sync::atomic::AtomicBool::new(true),
+            without_discovery: std::sync::atomic::AtomicBool::new(true),
         })
     }
 
@@ -87,6 +90,13 @@ impl Outbox {
     /// never reaches it.
     pub fn set_without_tiers(&self, without: bool) {
         self.without_tiers
+            .store(without, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// The connection lacks `discovery.events` (US-GRP-020):
+    /// `repo.discovered` never reaches it (`raptor-mcp` never gets it).
+    pub fn set_without_discovery(&self, without: bool) {
+        self.without_discovery
             .store(without, std::sync::atomic::Ordering::Relaxed);
     }
 
@@ -145,6 +155,11 @@ impl Outbox {
         if event.kind == gitraptor_api::event::REPO_TIER {
             return self
                 .without_tiers
+                .load(std::sync::atomic::Ordering::Relaxed);
+        }
+        if event.kind == gitraptor_api::event::REPO_DISCOVERED {
+            return self
+                .without_discovery
                 .load(std::sync::atomic::Ordering::Relaxed);
         }
         self.before_reset.load(std::sync::atomic::Ordering::Relaxed)
