@@ -730,7 +730,8 @@ fn invalid_parameters_touch_nothing() {
 }
 
 /// SEC-TMC-07: a snapshot id of another repo is "not found", like an
-/// unknown one; a valid one reaches its story ("not implemented").
+/// unknown one; a valid one reaches the scope check, and `/repos/a` is not
+/// observed here.
 #[test]
 fn an_id_of_another_repo_does_not_exist() {
     let r = start(None, Behavior::MoveEvilRef, true);
@@ -750,7 +751,7 @@ fn an_id_of_another_repo_does_not_exist() {
         code::NOT_FOUND
     );
     assert_eq!(restore(&mut c, &in_a), code::SCOPE_REFUSED);
-    // Nothing was recorded by a command its story has not implemented.
+    // A refused scope records nothing.
     assert_eq!(r.operations(), 0);
 }
 
