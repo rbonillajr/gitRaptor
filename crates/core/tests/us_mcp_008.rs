@@ -447,9 +447,10 @@ fn a_manual_snapshot_never_modifies_the_worktree() {
         Scope::new("main", env.f.repo.clone()),
         Scope::new("side", linked.clone()),
     ];
-    let before = Snapshot::take(&scopes, &BTreeSet::new());
     let head = env.f.git(&["rev-parse", "HEAD"]);
     let status = env.f.git(&["status", "--porcelain=v2", "--branch"]);
+    // After the reads: `git status` refreshes the stat of a dirty `.git/index`, which is Git's write, not ours.
+    let before = Snapshot::take(&scopes, &BTreeSet::new());
 
     ok(
         take(&env, &ask(&env.f.repo, "s1"), T0),
