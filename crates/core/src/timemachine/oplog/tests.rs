@@ -693,6 +693,7 @@ fn a_reused_pid_does_not_inherit_the_lock() {
     assert!(!lock.exists());
 
     // With its own start time it is the child: the lock waits and stays.
+    let op = op_in_state(&mut log, &protected(&[WT], 2), OperationState::Applying, 2);
     take_lock(&mut log, &op, &lock);
     log.record_child_started(&op, pid, Some(start_us(pid)), 11)
         .unwrap();
@@ -718,7 +719,8 @@ fn two_spellings_of_a_lock_path_are_the_same_lock() {
         file_identity(&repo.git_dir.join("INDEX.LOCK")).unwrap(),
         Some(ours)
     );
-    // Annotated under another spelling, released all the same.
+    // Annotated under another spelling of its folders, released all the same
+    // (Git always names its locks `*.lock`).
     let op2 = op_in_state(&mut log, &protected(&[WT], 2), OperationState::Applying, 2);
     let worktree_lock = repo.git_dir.join("worktrees/feature/index.lock");
     fs::write(&worktree_lock, b"").unwrap();
@@ -727,7 +729,7 @@ fn two_spellings_of_a_lock_path_are_the_same_lock() {
         .git_dir
         .join("WORKTREES")
         .join("Feature")
-        .join("Index.Lock");
+        .join("index.lock");
     log.record_lock_taken(&op2, &upper, identity, 5).unwrap();
     let probe = Probe(HashSet::new());
     let report = log
