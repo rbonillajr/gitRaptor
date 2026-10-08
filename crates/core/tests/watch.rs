@@ -796,12 +796,26 @@ fn a_folder_with_sustained_churn_leaves_the_stream() {
     wait_until("the exclusion", || {
         w.observer.excluded_folders(&wt) == vec![wt.join("target")]
     });
-    // A change outside it still arrives, through the new stream.
+    // A change outside it still arrives, through the new stream, as fresh as before: from the
+    // write to the stream's callback (`t_recv`) and to the computed state (ADR-GRP-011).
+    w.drain(Duration::from_millis(500));
+    let t0 = gitraptor_api::clock::monotonic_ns();
     std::fs::write(wt.join("login.txt"), "changed\n").unwrap();
-    w.until(|bs| {
+    let batches = w.until(|bs| {
         bs.iter()
             .any(|b| counts_of(b, &wt).is_some_and(|c| c.0 >= 1))
     });
+    let b = batches
+        .iter()
+        .find(|b| counts_of(b, &wt).is_some_and(|c| c.0 >= 1))
+        .unwrap();
+    let detection_ms = b.marks.t_recv.saturating_sub(t0) / 1_000_000;
+    let state_ms = b.marks.t_computed.saturating_sub(t0) / 1_000_000;
+    eprintln!(
+        "freshness with the folder left out: detection {detection_ms} ms, state {state_ms} ms"
+    );
+    // Debug build on a shared machine: a loose bound; the gate is the engine bench.
+    assert!(state_ms < 500, "state {state_ms} ms after the write");
 }
 
 /// NFR-01 (E5): a folder that stops being ignored while left out of the stream is followed again,
@@ -894,5 +908,34 @@ fn the_periodic_reconciliation_takes_back_a_folder_no_longer_ignored() {
     w.until(|bs| {
         bs.iter()
             .any(|b| counts_of(b, &wt).is_some_and(|c| c.1 >= 602))
+    });
+}
+
+/// E4: the stream that takes over from another starts where the old one stopped, so writes outside
+/// the folder during the replacement are all seen (0 lost).
+#[cfg(target_os = "macos")]
+#[test]
+fn replacing_the_stream_under_writes_loses_nothing() {
+    let (f, wt) = demo();
+    std::fs::write(wt.join(".gitignore"), "target/\n").unwrap();
+    std::fs::create_dir_all(wt.join("gen")).unwrap();
+    let w = watch(&f, fast());
+    let writer = {
+        let dir = wt.join("gen");
+        std::thread::spawn(move || {
+            for i in 0..1_500 {
+                std::fs::write(dir.join(format!("g{i}")), "g").unwrap();
+                std::thread::sleep(Duration::from_millis(1));
+            }
+        })
+    };
+    heat(&wt);
+    wait_until("the exclusion", || {
+        !w.observer.excluded_folders(&wt).is_empty()
+    });
+    writer.join().unwrap();
+    w.until(|bs| {
+        bs.iter()
+            .any(|b| counts_of(b, &wt).is_some_and(|c| c.1 == 1_501))
     });
 }

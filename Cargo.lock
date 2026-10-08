@@ -892,6 +892,7 @@ name = "gitraptor-macsys"
 version = "0.0.0"
 dependencies = [
  "libc",
+ "tempfile",
 ]
 
 [[package]]
