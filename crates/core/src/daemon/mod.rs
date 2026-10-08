@@ -76,7 +76,8 @@ use shutdown::Control;
 pub(crate) use shutdown::{GuardLogReply, GuardReply, GuardRequest};
 pub(crate) use shutdown::{RegisterRequest, RepoAddRequest, WithdrawRequest};
 pub use shutdown::{
-    RegistrationError, RepoCommandError, ShutdownHandle, StopCause, install_signal_handlers,
+    RegistrationError, RepoCommandError, ShutdownHandle, StopCause, TierTestOp,
+    install_signal_handlers,
 };
 pub use state::{EngineState, InvalidTransition, Trigger};
 pub use tiers::TierConfig;
@@ -732,6 +733,12 @@ impl Daemon {
                 }
                 Ok(Control::Observed(batch)) => self.observed(*batch),
                 Ok(Control::Slept(repo_id)) => self.slept(&repo_id),
+                Ok(Control::Test(op, reply)) => {
+                    if cfg!(debug_assertions) {
+                        self.tier_test(op);
+                    }
+                    let _ = reply.send(());
+                }
                 Ok(Control::Wake { repo_id, cause }) => {
                     self.wake_repo(&repo_id, cause);
                     if self.stores.iter().any(|(id, _)| *id == repo_id) {

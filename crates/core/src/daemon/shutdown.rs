@@ -176,6 +176,19 @@ impl StopCause {
     }
 }
 
+/// A step of a tier test (TS-GRP-006), run by the loop in order with the
+/// rest of its queue. Honored only in debug builds.
+#[doc(hidden)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TierTestOp {
+    /// The observer loses every file event, without a mark, while `true`.
+    LoseEvents(bool),
+    /// The watcher reports an overflow: every task opens a window.
+    Overflow,
+    /// The threshold check runs now.
+    CheckTiers,
+}
+
 /// A request to the daemon loop.
 #[derive(Debug)]
 #[cfg_attr(not(unix), allow(dead_code))]
@@ -209,6 +222,9 @@ pub(crate) enum Control {
     /// A repo went dormant: the batches its tasks flushed are ahead of
     /// this in the queue, so its store can close (TS-GRP-006).
     Slept(String),
+    /// Tests only (debug builds): drives the observer and the tiers step by
+    /// step, so a race can be reproduced without timing.
+    Test(TierTestOp, SyncSender<()>),
     /// A dormant repo must wake (TS-GRP-006).
     Wake {
         repo_id: String,
@@ -432,6 +448,14 @@ impl ShutdownHandle {
     /// Tells the loop a repo's sleep batches are all queued (TS-GRP-006).
     pub(crate) fn slept(&self, repo_id: &str) -> bool {
         self.tx.send(Control::Slept(repo_id.to_owned())).is_ok()
+    }
+
+    /// Tests only: runs `op` in the loop and waits until it is done. Does
+    /// nothing in release builds.
+    #[doc(hidden)]
+    pub fn tier_test(&self, op: TierTestOp) -> bool {
+        let (reply, rx) = sync_channel(1);
+        self.tx.send(Control::Test(op, reply)).is_ok() && rx.recv().is_ok()
     }
 
     /// Asks the loop to wake a dormant repo (TS-GRP-006).

@@ -236,6 +236,23 @@ impl Daemon {
         }
     }
 
+    /// A step of a tier test (debug builds only, see `TierTestOp`).
+    pub(super) fn tier_test(&mut self, op: super::TierTestOp) {
+        match op {
+            super::TierTestOp::LoseEvents(lost) => {
+                if let Some(observer) = &self.observer {
+                    observer.simulate_lost_events(lost);
+                }
+            }
+            super::TierTestOp::Overflow => {
+                if let Some(observer) = &self.observer {
+                    observer.simulate_overflow();
+                }
+            }
+            super::TierTestOp::CheckTiers => self.check_tiers(),
+        }
+    }
+
     /// The batches a repo flushed while going dormant are persisted: its
     /// store closes now, unless something woke it in between.
     pub(super) fn slept(&mut self, repo_id: &str) {
