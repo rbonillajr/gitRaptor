@@ -14,12 +14,12 @@ use std::process::ExitCode;
 use gitraptor_api::AgentKind;
 use gitraptor_api::Untrusted;
 use gitraptor_api::guard::{
-    Cause, CommitStage, Decision, Effect, GuardLogEntry, GuardLogParams, GuardLogResult, GuardPlan,
-    GuardRejectedData, GuardRepoParams, GuardStatus, GuardUninstallParams,
-    GuardUninstallRefusedData, GuardUninstallResult, HooksPathLevel, InstallBlocker, Level,
-    LogDetail, LogKind, LoggedOperation, LoggedReason, LoggedRef, MAX_LOG_PAGE, NotPreventable,
-    Param, ParamKind, Permission, ProtectionState, Reason, RefBackend, RefChange, Rule,
-    UninstallRefusal,
+    Cause, CommitStage, Decision, Diagnostic, Effect, GuardLogEntry, GuardLogParams,
+    GuardLogResult, GuardPlan, GuardRejectedData, GuardRepoParams, GuardStatus,
+    GuardUninstallParams, GuardUninstallRefusedData, GuardUninstallResult, HooksPathLevel,
+    HooksStatus, InstallBlocker, Level, LogDetail, LogKind, LoggedOperation, LoggedReason,
+    LoggedRef, LossCause, MAX_LOG_PAGE, MinimumSetStatus, NotPreventable, Param, ParamKind,
+    Permission, ProtectionState, Reason, RefBackend, RefChange, Rule, UninstallRefusal,
 };
 use gitraptor_api::methods;
 use gitraptor_api::rpc::code;
@@ -363,6 +363,7 @@ fn status_lines(status: &GuardStatus) -> Vec<String> {
             )
         });
     }
+    out.extend(protection_lines(status));
     out.push(match status.permission {
         Permission::NotAsked => t("guard.permission.not-asked", &[]),
         Permission::Granted => t("guard.permission.granted", &[]),
@@ -384,6 +385,74 @@ fn status_lines(status: &GuardStatus) -> Vec<String> {
         ));
     }
     out
+}
+
+/// What `guard.status` says about the hook layer, the diagnostics and the safe minimum
+/// (US-GRD-004); nothing when the daemon predates `guard.protection`.
+fn protection_lines(status: &GuardStatus) -> Vec<String> {
+    let mut out = Vec::new();
+    match &status.hooks {
+        Some(hooks) if hooks.status == HooksStatus::Inactive => {
+            let cause = hooks.cause.map_or_else(String::new, cause_text);
+            out.push(match &hooks.worktree {
+                Some(worktree) => t(
+                    "guard.status.lost-worktree",
+                    &[("cause", &cause), ("worktree", &param(worktree))],
+                ),
+                None => t("guard.status.lost", &[("cause", &cause)]),
+            });
+        }
+        Some(hooks) if hooks.status == HooksStatus::Orphaned => {
+            out.push(t("guard.status.orphaned", &[]));
+        }
+        _ => {}
+    }
+    for d in &status.diagnostics {
+        match d {
+            Diagnostic::TemplateOutdated => out.push(t("guard.status.template-outdated", &[])),
+            Diagnostic::ConfigUnreadable => out.push(t("guard.status.config-unreadable", &[])),
+            // Said by the base branch line.
+            Diagnostic::BaseUnconfirmed => {}
+        }
+    }
+    if let Some(min) = &status.minimum_set
+        && min.status == MinimumSetStatus::Active
+        && status.hooks.is_some()
+    {
+        out.push(t("guard.status.minimum-active", &[]));
+    }
+    if status.hooks.is_some() {
+        out.push(t("guard.status.not-checked", &[]));
+    }
+    out
+}
+
+/// The text of a cause of loss.
+pub fn cause_text(cause: LossCause) -> String {
+    t(
+        match cause {
+            LossCause::HookspathChanged => "guard.cause.hookspath-changed",
+            LossCause::RepoMoved => "guard.cause.repo-moved",
+            LossCause::FolderMissing => "guard.cause.folder-missing",
+            LossCause::DispatcherMissing => "guard.cause.dispatcher-missing",
+            LossCause::DispatcherAltered => "guard.cause.dispatcher-altered",
+            LossCause::DispatcherNotExecutable => "guard.cause.dispatcher-not-executable",
+            LossCause::BinaryMissing => "guard.cause.binary-missing",
+        },
+        &[],
+    )
+}
+
+fn hooks_status_text(status: HooksStatus) -> String {
+    t(
+        match status {
+            HooksStatus::Active => "guard.hooks.active",
+            HooksStatus::Inactive => "guard.hooks.inactive",
+            HooksStatus::NotInstalled => "guard.hooks.not-installed",
+            HooksStatus::Orphaned => "guard.hooks.orphaned",
+        },
+        &[],
+    )
 }
 
 fn rejected_text(err: &gitraptor_api::rpc::ErrorObject) -> Vec<String> {
@@ -790,6 +859,23 @@ fn operation_text(op: &LoggedOperation) -> String {
             stage: CommitStage::SecondLine,
         } => t("guard.log.op.commit-second-line", &[]),
         LoggedOperation::Commit { .. } => t("guard.log.op.commit", &[]),
+        LoggedOperation::ProtectionState {
+            from,
+            to,
+            cause,
+            expected,
+        } => {
+            let (from, to) = (hooks_status_text(*from), hooks_status_text(*to));
+            let args: [(&str, &dyn std::fmt::Display); 2] = [("from", &from), ("to", &to)];
+            match (expected, cause) {
+                (true, _) => t("guard.log.op.protection-own", &args),
+                (false, Some(c)) => t(
+                    "guard.log.op.protection-cause",
+                    &[("from", &from), ("to", &to), ("cause", &cause_text(*c))],
+                ),
+                (false, None) => t("guard.log.op.protection", &args),
+            }
+        }
     }
 }
 
@@ -807,6 +893,7 @@ pub fn log_entry_lines(e: &GuardLogEntry) -> Vec<String> {
     let decided = match e.kind {
         LogKind::Denial => t("guard.log.denied", &[]),
         LogKind::Notice => t("guard.log.notice", &[]),
+        LogKind::ProtectionState => t("guard.log.protection", &[]),
     };
     let mut first = format!(
         "{} · {decided} · {}",
@@ -829,6 +916,9 @@ pub fn log_entry_lines(e: &GuardLogEntry) -> Vec<String> {
         ));
     }
     let mut out = vec![first];
+    if e.kind == LogKind::ProtectionState {
+        return out;
+    }
     for reason in &e.reasons {
         out.push(format!("  {}", log_rule_text(reason)));
     }
@@ -862,7 +952,9 @@ pub fn log_entry_lines(e: &GuardLogEntry) -> Vec<String> {
             "  {}",
             match e.kind {
                 LogKind::Denial => t("guard.log.author-not-created", &[]),
-                LogKind::Notice => t("guard.log.author-see-events", &[]),
+                LogKind::Notice | LogKind::ProtectionState => {
+                    t("guard.log.author-see-events", &[])
+                }
             }
         ));
         if let Some(a) = &e.authorship {
@@ -1124,6 +1216,9 @@ mod tests {
             last_refusal: Vec::new(),
             misnamed_settings: vec![Untrusted::new(".gitraptor/config\u{1b}[31m.json")],
             pending: None,
+            hooks: None,
+            diagnostics: Vec::new(),
+            minimum_set: None,
         };
         let lines = status_lines(&status);
         let last = lines.last().unwrap();

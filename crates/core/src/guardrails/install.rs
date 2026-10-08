@@ -104,6 +104,9 @@ pub fn status(repo_id: &str, common: &Path, store: &RepoStore) -> GuardStatus {
         misnamed_settings: reader.as_ref().map(misnamed_settings).unwrap_or_default(),
         // The daemon loop adds the pending action it holds (US-GRD-003).
         pending: None,
+        hooks: None,
+        diagnostics: Vec::new(),
+        minimum_set: None,
     }
 }
 
@@ -319,7 +322,7 @@ pub fn plan(ctx: &GuardCtx<'_>, repo_id: &str, common: &Path, store: &RepoStore)
     }
 }
 
-fn sha256(bytes: &[u8]) -> String {
+pub(crate) fn sha256(bytes: &[u8]) -> String {
     Sha256::digest(bytes)
         .iter()
         .map(|b| format!("{b:02x}"))

@@ -132,6 +132,8 @@ fn stripped(op: &LoggedOperation) -> LoggedOperation {
             branch: None,
         },
         LoggedOperation::Commit { stage } => LoggedOperation::Commit { stage: *stage },
+        // Nothing in it is a ref, a remote or an oid.
+        LoggedOperation::ProtectionState { .. } => op.clone(),
     }
 }
 
