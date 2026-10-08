@@ -13,7 +13,13 @@
     "rust": [
       "{workspaceRoot}/Cargo.toml",
       "{workspaceRoot}/Cargo.lock",
-      "{workspaceRoot}/rust-toolchain.toml"
+      "{workspaceRoot}/rust-toolchain.toml",
+      "{workspaceRoot}/rust-toolchain",
+      "{workspaceRoot}/.cargo/**/*",
+      "{workspaceRoot}/rustfmt.toml",
+      "{workspaceRoot}/.rustfmt.toml",
+      "{workspaceRoot}/clippy.toml",
+      "{workspaceRoot}/.clippy.toml"
     ]
   },
   "targetDefaults": {
