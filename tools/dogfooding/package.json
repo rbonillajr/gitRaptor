@@ -1,0 +1,16 @@
+{
+  "name": "gitraptor-dogfooding",
+  "version": "0.0.0",
+  "license": "FSL-1.1-ALv2",
+  "private": true,
+  "description": "Daily dogfooding log of M1: samples the public CLI and writes the daily report; no dependencies",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "sample": "node sample.mjs",
+    "daily": "node daily.mjs",
+    "test": "node --test dogfooding.test.mjs"
+  }
+}
