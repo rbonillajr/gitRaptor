@@ -17,6 +17,7 @@ pub mod clock;
 pub mod event;
 pub mod framing;
 pub mod guard;
+pub mod mcp_view;
 pub mod messages;
 pub mod methods;
 pub mod resources;

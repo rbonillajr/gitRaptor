@@ -25,9 +25,6 @@ pub type Untrusted = UntrustedText<MAX_UNTRUSTED_BYTES>;
 /// Untrusted names, bounded at [`MAX_UNTRUSTED_NAME_BYTES`].
 pub type UntrustedName = UntrustedText<MAX_UNTRUSTED_NAME_BYTES>;
 
-/// Bound of untrusted text in responses for `raptor-mcp` (SEC-12).
-pub const MAX_MCP_UNTRUSTED_BYTES: usize = 256;
-
 /// Untrusted text bounded at `MAX` bytes, its own type per field class so a
 /// widget cannot take it as a plain string (N6). Longer text is cut at `MAX`
 /// and marked `truncated`, when built and when decoded, so a client never
@@ -137,6 +134,30 @@ impl<const MAX: usize> UntrustedText<MAX> {
         }
     }
 
+    /// The same text cut to `max` characters.
+    pub fn capped_chars(&self, max: usize) -> Self {
+        let mut text = self.untrusted.clone();
+        let cut = match text.char_indices().nth(max) {
+            Some((end, _)) => {
+                text.truncate(end);
+                true
+            }
+            None => false,
+        };
+        Self {
+            untrusted: text,
+            truncated: self.truncated || cut,
+            lossy: self.lossy,
+        }
+    }
+
+    /// The text as a name in an MCP response: at most
+    /// [`MAX_MCP_NAME_CHARS`](crate::mcp_view::MAX_MCP_NAME_CHARS)
+    /// characters (ADR-MCP-001 § 6). Escaping is [`crate::mcp_view::for_mcp`].
+    pub fn mcp_name(&self) -> Self {
+        self.capped_chars(crate::mcp_view::MAX_MCP_NAME_CHARS)
+    }
+
     pub fn is_truncated(&self) -> bool {
         self.truncated
     }
@@ -223,7 +244,9 @@ fn skip_string(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) {
 /// Bidi overrides and isolates, marks, zero-width and other format characters
 /// (Unicode category Cf) and the line and paragraph separators (Zl, Zp): they
 /// make a terminal show text different from what it is, or break a line where
-/// the reader does not expect it (M-05).
+/// the reader does not expect it (M-05). Also the variation selectors, the
+/// combining grapheme joiner and the Hangul fillers: invisible, they can
+/// carry hidden bytes to a model (US-MCP-005).
 fn is_invisible_control(c: char) -> bool {
     matches!(
         c,
@@ -238,6 +261,13 @@ fn is_invisible_control(c: char) -> bool {
             | '\u{2060}'..='\u{2064}'
             | '\u{2066}'..='\u{206f}'
             | '\u{feff}'
+            | '\u{34f}'
+            | '\u{115f}'
+            | '\u{1160}'
+            | '\u{3164}'
+            | '\u{fe00}'..='\u{fe0f}'
+            | '\u{ffa0}'
+            | '\u{e0100}'..='\u{e01ef}'
             | '\u{fff9}'..='\u{fffb}'
             | '\u{110bd}'
             | '\u{1bca0}'..='\u{1bca3}'
@@ -289,9 +319,17 @@ mod tests {
         let text = Untrusted::new(long);
         assert!(text.raw().len() <= MAX_UNTRUSTED_BYTES);
         assert!(text.is_truncated());
-        let mcp = text.capped(MAX_MCP_UNTRUSTED_BYTES);
-        assert!(mcp.raw().len() <= MAX_MCP_UNTRUSTED_BYTES);
+        let mcp = text.mcp_name();
+        assert_eq!(
+            mcp.raw().chars().count(),
+            crate::mcp_view::MAX_MCP_NAME_CHARS
+        );
         assert!(mcp.raw().chars().all(|c| c == 'é'));
+        assert!(
+            !UntrustedName::new("é".repeat(100))
+                .mcp_name()
+                .is_truncated()
+        );
         assert!(
             serde_json::to_string(&mcp)
                 .unwrap()
@@ -355,5 +393,9 @@ mod tests {
         let clean = sanitize("a\u{2028}b\u{2029}c\u{61c}d\u{ad}e\u{e0041}f");
         assert_eq!(clean, "a\u{FFFD}b\u{FFFD}c\u{FFFD}d\u{FFFD}e\u{FFFD}f");
         assert_eq!(sanitize("caf\u{e9} \u{4e2d}"), "caf\u{e9} \u{4e2d}");
+        // US-MCP-005: variation selectors, the grapheme joiner and the Hangul
+        // fillers hide bytes inside visible text.
+        let hidden = sanitize("a\u{fe0f}b\u{e0100}c\u{34f}d\u{3164}e\u{ffa0}f\u{115f}g");
+        assert_eq!(hidden.chars().filter(|&c| c == '\u{FFFD}').count(), 6);
     }
 }
