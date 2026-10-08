@@ -65,5 +65,14 @@
     "maxRounds": 3,
     "verifyTimeoutMs": 600000,
     "suiteTimeoutMs": 1800000
-  }
+  },
+  "amendments": [
+    {
+      "date": "2026-10-08",
+      "authorized_by": "coordinador (orca ask, 2026-10-08)",
+      "what": "apps/cli/tests/guard_us_grd_004.rs::loss::the_manifest_is_not_the_reference corregida tras la revisi\u00f3n: contradec\u00eda la Dev Spec (E6, la instalaci\u00f3n propia queda registrada como transici\u00f3n esperada).",
+      "before": "assert!(transitions(&m).is_empty())",
+      "after": "las transiciones son exactamente una, a 'active' y expected = true; una transici\u00f3n de m\u00e1s sigue fallando"
+    }
+  ]
 }
