@@ -12,7 +12,14 @@
 //!
 //! Removing follows the same idea: rename to a temporary name, compare, delete or put back. On a
 //! file system without exchange the path is reported as "not restorable with guarantee" and left
-//! as it is. Windows is not supported yet (Pendiente: etapa de validación multiplataforma).
+//! as it is.
+//!
+//! Windows has no atomic exchange (DS-TS-TMC-003, Enmienda 2026-10-08, W1–W5): the current entry
+//! is renamed aside, compared, and the new content renamed in, every rename exclusive and never
+//! following a link or junction. The folders on the way stay open without `FILE_SHARE_DELETE`
+//! while a path is written, so none of them can be swapped for a junction meanwhile. A file
+//! another program holds open is retried for a bounded time and then fails as
+//! [`WriteError::Locked`], untouched.
 //!
 //! Temporary names start with [`TEMP_PREFIX`]. One left behind by a crash holds either the target
 //! content or the displaced content, and both are in the store (NFR-01).
@@ -20,7 +27,7 @@
 use crate::Oid;
 
 use super::Result;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use super::WriteError;
 
 /// Prefix of every temporary name the applier creates in a worktree.
@@ -112,7 +119,10 @@ pub fn blob_id(bytes: &[u8]) -> Oid {
 #[cfg(unix)]
 pub use unix::RootDir;
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+pub use windows::RootDir;
+
+#[cfg(not(any(unix, windows)))]
 pub use other::RootDir;
 
 #[cfg(unix)]
@@ -462,7 +472,10 @@ mod unix {
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+mod windows;
+
+#[cfg(not(any(unix, windows)))]
 mod other {
     use std::path::Path;
 

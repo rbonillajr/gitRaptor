@@ -56,6 +56,9 @@ pub enum WriteError {
     RefMoved(String),
     /// Not available on this OS yet (Pendiente: etapa de validación multiplataforma).
     Unsupported(&'static str),
+    /// Another program holds this file open (an editor, an antivirus scan) and kept it past the
+    /// bounded wait: the path was left untouched (Windows, DS-TS-TMC-003 W5).
+    Locked(PathBuf),
     /// A Git command did not finish in time.
     TimedOut(String),
     Io(io::Error),
@@ -77,6 +80,11 @@ impl std::fmt::Display for WriteError {
             Self::Untrusted(m) => write!(f, "not trusted: {m}"),
             Self::RefMoved(m) => write!(f, "ref moved since planning: {m}"),
             Self::Unsupported(m) => write!(f, "not supported on this OS: {m}"),
+            Self::Locked(p) => write!(
+                f,
+                "{} is open in another program; close it and try again",
+                p.display()
+            ),
             Self::TimedOut(m) => write!(f, "timed out: {m}"),
             Self::Io(e) => write!(f, "i/o: {e}"),
             Self::Git(m) => write!(f, "git: {m}"),
@@ -211,7 +219,9 @@ mod private {
                 use std::os::unix::fs::DirBuilderExt;
                 std::fs::DirBuilder::new().mode(0o700).create(path)?;
             }
-            #[cfg(not(unix))]
+            #[cfg(windows)]
+            gitraptor_winsys::acl::create_private_dir(path)?;
+            #[cfg(not(any(unix, windows)))]
             std::fs::create_dir(path)?;
         }
         check_dir(path)
@@ -250,7 +260,22 @@ mod private {
         Ok(())
     }
 
-    #[cfg(not(unix))]
+    /// Windows: a folder must have the private DACL (owner, no access for others). A file
+    /// inherits it from its folder, which was checked first.
+    #[cfg(windows)]
+    fn check_owner(meta: &std::fs::Metadata, path: &Path) -> Result<()> {
+        if !meta.is_dir() {
+            return Ok(());
+        }
+        gitraptor_winsys::acl::verify_private_dir(path).map_err(|e| {
+            WriteError::Untrusted(format!(
+                "{} is not private to the current user: {e:?}",
+                path.display()
+            ))
+        })
+    }
+
+    #[cfg(not(any(unix, windows)))]
     fn check_owner(_meta: &std::fs::Metadata, _path: &Path) -> Result<()> {
         Ok(())
     }
