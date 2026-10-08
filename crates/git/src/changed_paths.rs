@@ -18,7 +18,7 @@ pub struct ChangedPaths {
     pub paths: Vec<String>,
     /// The real number of paths that differ.
     pub total: u32,
-    /// `new` is a merge: it was compared with its first parent, whatever `old` said.
+    /// `new` is a merge and `old` is its first parent: the paths are against its first parent.
     pub first_parent: bool,
 }
 
@@ -32,6 +32,25 @@ struct Walk {
     total: u64,
 }
 
+/// Deepest directory nesting the walk follows (H-01): a real tree is far shallower.
+pub const MAX_TREE_DEPTH: usize = 1024;
+/// Longest path kept whole (M-01); a longer one is cut and ends with [`PATH_CUT_MARK`].
+pub const MAX_PATH_BYTES: usize = 1024;
+/// What a cut path ends with: the path is incomplete, never silently shortened.
+pub const PATH_CUT_MARK: &str = "\u{2026}";
+
+fn cap_path(path: &[u8]) -> String {
+    let text = path.to_str_lossy();
+    if text.len() <= MAX_PATH_BYTES {
+        return text.into_owned();
+    }
+    let mut end = MAX_PATH_BYTES - PATH_CUT_MARK.len();
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}{PATH_CUT_MARK}", &text[..end])
+}
+
 fn parse_id(id: &str) -> Result<gix::ObjectId, ReadError> {
     gix::ObjectId::from_hex(id.as_bytes())
         .map_err(|_| ReadError::InvalidInput("invalid object id".into()))
@@ -40,7 +59,7 @@ fn parse_id(id: &str) -> Result<gix::ObjectId, ReadError> {
 impl RepoReader {
     /// The paths that differ between the trees of `old` (absent: the empty tree, for a first
     /// commit) and `new` (hex ids): at most `max`, sorted, and how many differ in all. If `new`
-    /// is a merge it is compared with its first parent instead of `old`.
+    /// is a merge and `old` is its first parent, the result says so (`first_parent`).
     ///
     /// If `deadline` passes or an object is missing it fails: never a partial total, never a
     /// made-up zero.
@@ -55,8 +74,10 @@ impl RepoReader {
         let new = parse_id(new)?;
         let new_commit = self.commit(new)?;
         let parents: Vec<gix::ObjectId> = new_commit.parent_ids().map(|p| p.detach()).collect();
-        let first_parent = parents.len() > 1;
-        let base = if first_parent { Some(parents[0]) } else { old };
+        // A merge was reached from its first parent: then `old..new` is the first-parent diff
+        // and says so. From anywhere else (a reset or a checkout to a merge) it is plain `old..new`.
+        let first_parent = parents.len() > 1 && old == Some(parents[0]);
+        let base = old;
         let old_tree = base
             .map(|id| self.commit(id).and_then(|c| self.commit_tree(&c)))
             .transpose()?;
@@ -123,7 +144,37 @@ impl RepoReader {
             .collect())
     }
 
-    /// Compares two trees; `prefix` is the directory they are, with its trailing `/`.
+    /// The entries of `old` and `new` that differ, in Git's order (a directory sorts as `name/`).
+    fn changed_items(
+        &self,
+        old: Option<gix::ObjectId>,
+        new: Option<gix::ObjectId>,
+        deadline: Instant,
+    ) -> Result<Vec<Item>, ReadError> {
+        if old == new {
+            return Ok(Vec::new());
+        }
+        let old = self.entries(old, deadline)?;
+        let new = self.entries(new, deadline)?;
+        let mut keys: Vec<&BString> = old.keys().chain(new.keys()).collect();
+        keys.sort();
+        keys.dedup();
+        Ok(keys
+            .into_iter()
+            .filter_map(|key| {
+                let (before, after) = (old.get(key), new.get(key));
+                (before != after).then(|| Item {
+                    key: key.clone(),
+                    before: before.map(|b| b.1),
+                    after: after.map(|a| a.1),
+                })
+            })
+            .collect())
+    }
+
+    /// Compares two trees without recursion: an explicit stack of one frame per directory level,
+    /// so a hostile tree of any depth cannot exhaust the thread's stack (H-01). Past
+    /// [`MAX_TREE_DEPTH`] levels it fails: never a partial total.
     fn diff_trees(
         &self,
         old: Option<gix::ObjectId>,
@@ -131,38 +182,54 @@ impl RepoReader {
         prefix: &mut Vec<u8>,
         walk: &mut Walk,
     ) -> Result<(), ReadError> {
-        if old == new {
-            return Ok(());
-        }
-        let old = self.entries(old, walk.deadline)?;
-        let new = self.entries(new, walk.deadline)?;
-        let mut keys: Vec<&BString> = old.keys().chain(new.keys()).collect();
-        keys.sort();
-        keys.dedup();
-        for key in keys {
-            let (before, after) = (old.get(key), new.get(key));
-            if before == after {
+        let root = self.changed_items(old, new, walk.deadline)?;
+        let mut stack = vec![Frame {
+            items: root.into_iter(),
+            mark: prefix.len(),
+        }];
+        while let Some(frame) = stack.last_mut() {
+            let mark = frame.mark;
+            let Some(item) = frame.items.next() else {
+                stack.pop();
                 continue;
-            }
-            let is_tree = key.last() == Some(&b'/');
-            let mark = prefix.len();
-            prefix.extend_from_slice(key);
-            if is_tree {
-                self.diff_trees(before.map(|b| b.1), after.map(|a| a.1), prefix, walk)?;
+            };
+            prefix.truncate(mark);
+            prefix.extend_from_slice(&item.key);
+            if item.key.last() == Some(&b'/') {
+                if stack.len() >= MAX_TREE_DEPTH {
+                    return Err(ReadError::Unavailable("changed paths: tree too deep".into()));
+                }
+                let items = self.changed_items(item.before, item.after, walk.deadline)?;
+                stack.push(Frame {
+                    items: items.into_iter(),
+                    mark: prefix.len(),
+                });
             } else {
                 walk.leaf(prefix);
             }
-            prefix.truncate(mark);
         }
         Ok(())
     }
+}
+
+/// One entry that differs between two trees.
+struct Item {
+    key: BString,
+    before: Option<gix::ObjectId>,
+    after: Option<gix::ObjectId>,
+}
+
+/// A directory level being walked: what is left to visit and the prefix that is its own.
+struct Frame {
+    items: std::vec::IntoIter<Item>,
+    mark: usize,
 }
 
 impl Walk {
     fn leaf(&mut self, path: &[u8]) {
         self.total += 1;
         if self.paths.len() < self.max {
-            self.paths.push(path.to_str_lossy().into_owned());
+            self.paths.push(cap_path(path));
         }
     }
 }
@@ -267,7 +334,7 @@ mod tests {
     }
 
     #[test]
-    fn a_merge_is_compared_with_its_first_parent() {
+    fn a_merge_reached_from_its_first_parent_says_so() {
         let f = fixture();
         let base = head(&f);
         f.git(&["checkout", "-q", "-b", "side"]);
@@ -276,9 +343,8 @@ mod tests {
         let own = commit(&f, &[("own.rs", "1")], "own");
         f.git(&["merge", "--no-ff", "-q", "-m", "merge", "side"]);
         let merge = head(&f);
-        // `old` is the fork point: a merge ignores it for its first parent.
         let got = reader(&f)
-            .changed_paths(Some(&base), &merge, 20, soon())
+            .changed_paths(Some(&own), &merge, 20, soon())
             .unwrap();
         assert_eq!(got.paths, ["side.rs"]);
         assert!(got.first_parent);
@@ -287,6 +353,65 @@ mod tests {
             .unwrap();
         assert_eq!(got.paths, ["own.rs"]);
         assert!(!got.first_parent);
+    }
+
+    #[test]
+    fn a_move_to_a_merge_from_elsewhere_compares_old_with_new() {
+        let f = fixture();
+        let base = head(&f);
+        f.git(&["checkout", "-q", "-b", "side"]);
+        commit(&f, &[("side.rs", "1")], "side");
+        f.git(&["checkout", "-q", "-"]);
+        commit(&f, &[("own.rs", "1")], "own");
+        f.git(&["merge", "--no-ff", "-q", "-m", "merge", "side"]);
+        let merge = head(&f);
+        // A reset or checkout from the fork point: everything the merge brings, both sides.
+        let got = reader(&f)
+            .changed_paths(Some(&base), &merge, 20, soon())
+            .unwrap();
+        assert_eq!(got.paths, ["own.rs", "side.rs"]);
+        assert!(!got.first_parent);
+    }
+
+    #[test]
+    fn a_very_deep_tree_is_unavailable_and_does_not_crash() {
+        use gix::objs::tree::{Entry, EntryKind};
+        let f = fixture();
+        let old = head(&f);
+        let repo = gix::open(&f.repo).unwrap();
+        let mut id: gix::ObjectId = repo.write_blob(b"x").unwrap().detach();
+        let mut kind = EntryKind::Blob;
+        for level in 0..6000 {
+            let name = if level == 0 { "leaf" } else { "d" };
+            let tree = gix::objs::Tree {
+                entries: vec![Entry {
+                    mode: kind.into(),
+                    filename: name.into(),
+                    oid: id,
+                }],
+            };
+            id = repo.write_object(&tree).unwrap().detach();
+            kind = EntryKind::Tree;
+        }
+        let commit = f.git(&["commit-tree", &id.to_string(), "-m", "deep"]);
+        let r = reader(&f);
+        assert!(matches!(
+            r.changed_paths(Some(&old), commit.trim(), 20, soon()),
+            Err(ReadError::Unavailable(_))
+        ));
+    }
+
+    #[test]
+    fn a_long_path_is_cut_with_a_mark_on_a_char_boundary() {
+        let long = format!("{}.rs", "n".repeat(5_000));
+        let got = cap_path(long.as_bytes());
+        assert_eq!(got.len(), MAX_PATH_BYTES);
+        assert!(got.ends_with(PATH_CUT_MARK));
+        // Multi-byte characters are never split.
+        let wide = "\u{e9}".repeat(2_000);
+        let got = cap_path(wide.as_bytes());
+        assert!(got.len() <= MAX_PATH_BYTES && got.ends_with(PATH_CUT_MARK));
+        assert_eq!(cap_path(b"a/b.rs"), "a/b.rs");
     }
 
     #[test]
