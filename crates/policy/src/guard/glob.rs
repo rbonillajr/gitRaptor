@@ -32,6 +32,9 @@ pub enum Invalid {
     RefsPrefix,
     /// `a//b`.
     EmptySegment,
+    /// Leading or trailing whitespace (never matches what it looks like), or a branch pattern
+    /// ending in `/` (it would name no branch).
+    Padded,
 }
 
 /// The work spent matching, bounded: past it nothing can be verified (fail-closed).
@@ -59,9 +62,25 @@ impl Budget {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Exceeded;
 
-/// The form two names are compared in.
+/// The form two names are compared in: NFC and lowercase, without what some file systems ignore
+/// (the code points HFS+ skips) and without the trailing dots and spaces of a segment that NTFS
+/// drops, so `Secrets./k` and `sec\u{200c}rets/k` are `secrets/k`.
 pub fn fold(name: &str) -> String {
-    name.nfc().collect::<String>().to_lowercase()
+    let ignorable = |c: char| matches!(c, '\u{200c}'..='\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{206a}'..='\u{206f}' | '\u{feff}');
+    let folded: String = name
+        .nfc()
+        .filter(|c| !ignorable(*c))
+        .collect::<String>()
+        .to_lowercase();
+    folded
+        .split('/')
+        .map(|segment| {
+            // Never empty a segment that is only dots: `..` stays itself.
+            let trimmed = segment.trim_end_matches(['.', ' ']);
+            if trimmed.is_empty() { segment } else { trimmed }
+        })
+        .collect::<Vec<_>>()
+        .join("/")
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -101,6 +120,12 @@ pub fn validate(raw: &str, kind: Kind) -> Result<(), Invalid> {
     }
     if raw.starts_with(['!', '#']) {
         return Err(Invalid::Reserved);
+    }
+    if raw.starts_with(char::is_whitespace)
+        || raw.ends_with(char::is_whitespace)
+        || (kind == Kind::Branch && raw.ends_with('/'))
+    {
+        return Err(Invalid::Padded);
     }
     if kind == Kind::Branch && raw.starts_with("refs/heads/") {
         return Err(Invalid::RefsPrefix);
@@ -163,6 +188,8 @@ impl Pattern {
             return Err(Exceeded);
         }
         let folded = fold(path);
+        // A path that ends in `/` is a directory (a submodule): a directory pattern covers it.
+        let is_dir = folded.ends_with('/');
         let parts: Vec<Vec<char>> = folded
             .split('/')
             .filter(|s| !s.is_empty())
@@ -174,7 +201,7 @@ impl Pattern {
         let table = self.table(&parts, self.floating, budget)?;
         let last = self.segs.len() + usize::from(self.floating);
         let n = parts.len();
-        let upto = if self.dir_only { n - 1 } else { n };
+        let upto = if self.dir_only && !is_dir { n - 1 } else { n };
         Ok((1..=upto).any(|k| table[last][k]))
     }
 
@@ -312,6 +339,26 @@ mod tests {
     }
 
     #[test]
+    fn what_some_file_systems_ignore_does_not_hide_a_path() {
+        // NTFS drops trailing dots and spaces; HFS+ skips some code points.
+        assert!(path("secrets/", "secrets./key"));
+        assert!(path("secrets/", "secrets /key"));
+        assert!(path("secrets/", "sec\u{200c}rets/key"));
+        assert!(path("*.pem", "key.pem."));
+        // A segment of dots is not emptied.
+        assert!(!path("secrets/", "../key"));
+    }
+
+    #[test]
+    fn a_submodule_path_ends_in_a_slash_and_a_directory_pattern_covers_it() {
+        assert!(path("vendor/keys/", "vendor/keys/"));
+        assert!(path("vendor/keys", "vendor/keys/"));
+        assert!(path("keys/", "vendor/keys/"));
+        // A plain file at the same path is not a directory.
+        assert!(!path("vendor/keys/", "vendor/keys"));
+    }
+
+    #[test]
     fn invalid_patterns_are_named() {
         let bad = |raw: &str, kind| validate(raw, kind).unwrap_err();
         assert_eq!(bad("", Kind::Path), Invalid::Empty);
@@ -323,6 +370,11 @@ mod tests {
         assert_eq!(bad("refs/heads/main", Kind::Branch), Invalid::RefsPrefix);
         assert_eq!(bad("a//b", Kind::Path), Invalid::EmptySegment);
         assert_eq!(bad("/", Kind::Path), Invalid::EmptySegment);
+        assert_eq!(bad(" secrets/", Kind::Path), Invalid::Padded);
+        assert_eq!(bad("secrets/ ", Kind::Path), Invalid::Padded);
+        assert_eq!(bad("release/", Kind::Branch), Invalid::Padded);
+        // A trailing slash is how a path pattern names a directory.
+        assert!(validate("release/", Kind::Path).is_ok());
         // Brackets and backslashes are literals.
         assert!(validate("[a]\\b", Kind::Path).is_ok());
         assert!(path("[a]", "[a]/x"));

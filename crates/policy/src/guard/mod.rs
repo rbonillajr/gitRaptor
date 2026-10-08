@@ -295,6 +295,7 @@ pub fn not_preventable(backend: RefBackend) -> Vec<NotPreventable> {
         NotPreventable::VoluntarySkips,
         NotPreventable::PolicyActor,
         NotPreventable::PolicyReach,
+        NotPreventable::PolicyFloor,
     ];
     if backend == RefBackend::Reftable {
         list.push(NotPreventable::RenameBaseReftable);

@@ -584,7 +584,19 @@ fn decide(args: &HookArgs, op: Operation) -> HookOutcome {
         authorship: None,
     };
     match ask_daemon(args, &params) {
-        Asked::Decision(decision) => HookOutcome::decided(decision),
+        Asked::Decision(decision, policies_granted) => {
+            let outcome = HookOutcome::decided(decision);
+            // A daemon that does not know `guard.policies` (a version apart) must not leave less
+            // than degraded mode does: the rules for everyone of the floor still apply.
+            let governed = matches!(
+                params.operation,
+                Operation::RefTransaction { .. } | Operation::Push { .. }
+            );
+            if outcome.allowed() && governed && !policies_granted {
+                return floor_rules_for_everyone(args, &params.operation).unwrap_or(outcome);
+            }
+            outcome
+        }
         Asked::NotAuthentic => HookOutcome::deny(Rule::ChannelNotAuthentic),
         Asked::Failed => HookOutcome::deny(Rule::InternalError),
         Asked::Degraded(cause) => degraded(args, &params.operation, cause),
@@ -592,7 +604,8 @@ fn decide(args: &HookArgs, op: Operation) -> HookOutcome {
 }
 
 enum Asked {
-    Decision(Decision),
+    /// The decision, and whether the daemon granted `guard.policies`.
+    Decision(Decision, bool),
     NotAuthentic,
     Failed,
     Degraded(Degraded),
@@ -605,10 +618,32 @@ fn ask_daemon(args: &HookArgs, params: &EvaluateParams) -> Asked {
         Err(Unusable::Failed) => return Asked::Failed,
         Err(Unusable::Degraded(cause)) => return Asked::Degraded(cause),
     };
+    let granted = client
+        .hello()
+        .capabilities
+        .as_ref()
+        .is_some_and(|served| served.iter().any(|c| c == methods::CAP_GUARD_POLICIES.name));
     match client.call::<_, Decision>(methods::GUARD_EVALUATE, params) {
-        Ok(decision) => Asked::Decision(decision),
+        Ok(decision) => Asked::Decision(decision, granted),
         Err(_) => Asked::Failed,
     }
+}
+
+/// The rules for everyone of the floor, evaluated here (US-GRD-008, D11): what degraded mode
+/// applies without the daemon and what a daemon that does not grant `guard.policies` leaves out.
+/// `Some` only when they deny.
+fn floor_rules_for_everyone(args: &HookArgs, op: &Operation) -> Option<HookOutcome> {
+    let reader = evaluate::open(&args.common)?;
+    let commit = evaluate::CommitContext {
+        policies: super::policies::degraded(&reader),
+        ..evaluate::CommitContext::default()
+    };
+    let eval = evaluate::evaluate_commit(&reader, &args.common, op, Vec::new(), commit);
+    (eval.effect != Effect::Allow).then(|| HookOutcome {
+        decision: Some(evaluate::decision(eval)),
+        degraded: None,
+        authorship_unavailable: false,
+    })
 }
 
 /// Why there is no daemon to ask.

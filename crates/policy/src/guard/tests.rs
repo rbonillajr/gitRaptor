@@ -299,6 +299,7 @@ mod policies_in_the_function {
             policies: Policies {
                 branches: rules(scope, Kind::Branch, &["main", "release/*"]),
                 paths: rules(scope, Kind::Path, &["secrets/"]),
+                unreadable: false,
             },
             ..ctx()
         }
@@ -410,6 +411,23 @@ mod policies_in_the_function {
             &ctx,
         );
         assert_eq!(rules_of(&e), [Rule::ForbiddenPath]);
+    }
+
+    #[test]
+    fn a_configuration_that_cannot_be_read_denies_the_agents_branch_moves_only() {
+        let ctx = |actor| Context {
+            actor,
+            policies: Policies::unreadable(),
+            ..ctx()
+        };
+        let update = tx(vec![("refs/heads/feat-x", oid(A), oid(B))]);
+        let e = evaluate(&update, &Facts::default(), &ctx(AGENT));
+        assert_eq!(e.effect, Effect::Deny);
+        assert_eq!(e.reasons[0].cause, Some(Cause::Unverifiable));
+        assert_eq!(
+            evaluate(&update, &Facts::default(), &ctx(None)).effect,
+            Effect::Allow
+        );
     }
 
     #[test]

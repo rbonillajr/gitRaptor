@@ -32,7 +32,8 @@ pub fn policies(
     profile: Option<&Settings>,
 ) -> Policies {
     let Ok(team) = LOADER.load(reader, confirmed) else {
-        return Policies::default();
+        // Never "no rules": an agent's movement of a branch cannot be judged (SEC-GRD-17).
+        return Policies::unreadable();
     };
     combine(&[
         Source {
@@ -100,14 +101,17 @@ pub fn touched(
     let mut reads = 0;
     let mut budget = Budget::default();
     let mut read = |old: Option<&str>, new: &RefValue, updated: &[&str], hide: Hide| {
-        let RefValue::Oid(new) = new else {
-            return None;
-        };
-        reads += 1;
         let unverifiable = Touched {
             paths: Vec::new(),
             unverifiable: true,
         };
+        let new = match new {
+            RefValue::Oid(new) => new,
+            // A symbolic ref follows another ref: what it will hold cannot be read here.
+            RefValue::Symbolic(_) => return Some(unverifiable),
+            RefValue::Zero => return None,
+        };
+        reads += 1;
         if reads > MAX_READS || left_commits == 0 {
             return Some(unverifiable);
         }
