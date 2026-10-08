@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 
 use gitraptor_api::Untrusted;
 use gitraptor_api::guard::{
-    GuardPlan, GuardStatus, Hook, HooksPathLevel, InstallBlocker, Permission, PriorHooks,
-    ProtectionState, RefBackend,
+    GuardPlan, GuardStatus, Hook, HooksPathLevel, HooksStatus, InstallBlocker, LossCause,
+    MinimumSet, MinimumSetStatus, Permission, PriorHooks, ProtectionState, RefBackend, RepairPlan,
 };
 use gitraptor_git::cli::GitCli;
 use gitraptor_git::guard_write::{FOLDER, GuardWriteError, GuardWriter, NewFile};
@@ -18,6 +18,7 @@ use sha2::{Digest, Sha256};
 
 use super::constants::{Constants, DISPATCH_CONF, MANIFEST, STUB_FILE, TEMPLATE_VERSION};
 use super::evaluate;
+use super::health;
 use super::journal::{FileHash, Journal, Prior, Snapshot, Stage, snapshot_path};
 use super::prior::{self as prior_hooks, ChainImpossible};
 use super::registry::{GuardEntry, GuardRegistry};
@@ -71,11 +72,11 @@ fn backend(storage: RefStorage) -> RefBackend {
 pub fn status(repo_id: &str, common: &Path, store: &RepoStore) -> GuardStatus {
     let keys = store.guard_keys().unwrap_or_default();
     let reader = evaluate::open(common);
-    // "Hooks only" needs the confirmed install still in place: the key is ours and the folder
-    // is there. Anything else is unprotected here; telling why is US-GRD-004 (ADR-GRD-005).
-    let journal = journal(&keys)
-        .filter(|j| j.stage == Stage::Confirmed)
-        .filter(|j| in_place(j, reader.as_ref(), common));
+    // "Hooks only" needs the confirmed install still active (ADR-GRD-005 § 1: key, folder,
+    // dispatchers and binary as the journal recorded them); the check says why it is not.
+    let journal = journal(&keys).filter(|j| j.stage == Stage::Confirmed);
+    let health = health::check(common, journal.as_ref());
+    let journal = journal.filter(|_| health.hooks.status == HooksStatus::Active);
     let storage = reader
         .as_ref()
         .map_or(RefStorage::Files, |r| r.ref_storage());
@@ -104,9 +105,11 @@ pub fn status(repo_id: &str, common: &Path, store: &RepoStore) -> GuardStatus {
         misnamed_settings: reader.as_ref().map(misnamed_settings).unwrap_or_default(),
         // The daemon loop adds the pending action it holds (US-GRD-003).
         pending: None,
-        hooks: None,
-        diagnostics: Vec::new(),
-        minimum_set: None,
+        hooks: Some(health.hooks),
+        diagnostics: health.diagnostics,
+        minimum_set: Some(MinimumSet {
+            status: MinimumSetStatus::Active,
+        }),
     }
 }
 
@@ -126,15 +129,6 @@ fn misnamed_settings(reader: &RepoReader) -> Vec<Untrusted> {
     files.sort();
     files.dedup();
     files.into_iter().map(Untrusted::new).collect()
-}
-
-/// The confirmed install is still where it was: the repo's own `core.hooksPath` is the
-/// journal's and the dispatchers folder exists.
-fn in_place(journal: &Journal, reader: Option<&gitraptor_git::RepoReader>, common: &Path) -> bool {
-    reader
-        .and_then(gitraptor_git::RepoReader::hooks_path)
-        .is_some_and(|v| v == journal.hooks_dir)
-        && common.join(FOLDER).join("hooks").is_dir()
 }
 
 /// The worktrees of the repo, the main one first (`git worktree list`).
@@ -235,9 +229,11 @@ pub fn plan(ctx: &GuardCtx<'_>, repo_id: &str, common: &Path, store: &RepoStore)
     };
     let recorded = journal(&store.guard_keys().unwrap_or_default()).map(|j| j.template);
     let upgrade = status.state == ProtectionState::HooksOnly && outdated(common, recorded);
+    // An install of ours that stopped being active: installing again repairs it (US-GRD-004).
+    let stale = stale_install(store, &status);
     if status.state == ProtectionState::HooksOnly && !upgrade {
         add(InstallBlocker::AlreadyInstalled);
-    } else if upgrade {
+    } else if upgrade || stale.is_some() {
         // An older template of our own install (ADR-GRD-001 § 8): the key and the folder are
         // ours, so only what the files themselves need is checked.
     } else if std::fs::symlink_metadata(common.join(FOLDER)).is_ok() {
@@ -279,7 +275,10 @@ pub fn plan(ctx: &GuardCtx<'_>, repo_id: &str, common: &Path, store: &RepoStore)
     }
     // The hooks the repo already had: kept and chained (US-GRD-002), or nothing installed.
     // An installed repo's own key is ours: there is nothing prior to read (US-GRD-002).
-    let prior = if status.state == ProtectionState::HooksOnly {
+    let key_changed = stale
+        .as_ref()
+        .is_some_and(|(_, cause)| *cause == LossCause::HookspathChanged);
+    let prior = if status.state == ProtectionState::HooksOnly || (stale.is_some() && !key_changed) {
         None
     } else {
         match prior_hooks::detect(&writer, common, &trees) {
@@ -298,7 +297,20 @@ pub fn plan(ctx: &GuardCtx<'_>, repo_id: &str, common: &Path, store: &RepoStore)
         .as_ref()
         .map_or(RefStorage::Files, |r| r.ref_storage());
     let (confirms, protected) = bases(common);
+    let repair = stale.as_ref().map(|(journal, cause)| RepairPlan {
+        cause: *cause,
+        files: journal
+            .files
+            .iter()
+            .map(|f| Untrusted::new(f.path.clone()))
+            .collect(),
+        chains: key_changed
+            .then(|| reader.as_ref().and_then(RepoReader::hooks_path))
+            .flatten()
+            .map(Untrusted::new),
+    });
     GuardPlan {
+        repair,
         repo_id: repo_id.to_owned(),
         common_dir: Untrusted::from_os(common.as_os_str()),
         worktrees: trees
@@ -451,6 +463,13 @@ pub fn install(
     if plan.blockers.is_empty() && plan.status.state == ProtectionState::HooksOnly {
         return upgrade(ctx, repo_id, common, store, now_ms);
     }
+    if plan.blockers.is_empty()
+        && let Some((journal, cause)) = stale_install(store, &plan.status)
+    {
+        return repair(
+            ctx, repo_id, common, store, registry, now_ms, journal, cause,
+        );
+    }
     if !plan.blockers.is_empty() {
         let refusal = serde_json::to_string(&plan.blockers).unwrap_or_default();
         let _ = store.set_guard_keys(None, None, Some(Some(&refusal)), None);
@@ -529,6 +548,103 @@ pub fn install(
     if let Err(why) = confirm(ctx, repo_id, store, registry, journal) {
         return Err(revert(store, why));
     }
+    Ok(status(repo_id, common, store))
+}
+
+/// The confirmed install of ours whose layer stopped being active, with why (US-GRD-004): what
+/// installing again repairs.
+fn stale_install(store: &RepoStore, status: &GuardStatus) -> Option<(Journal, LossCause)> {
+    let cause = status
+        .hooks
+        .as_ref()
+        .filter(|h| h.status == HooksStatus::Inactive)
+        .and_then(|h| h.cause)?;
+    let journal =
+        journal(&store.guard_keys().unwrap_or_default()).filter(|j| j.stage == Stage::Confirmed)?;
+    Some((journal, cause))
+}
+
+/// Installs again over an install of ours that stopped being active (US-GRD-004, D9): the
+/// same installation, not a second one. The journal lists the files before they are written
+/// and stays `confirmed`, so an interruption leaves the protection as inactive as it was (and
+/// the next `raptor guard install` completes it, idempotently) instead of being undone at
+/// startup. When another tool changed `core.hooksPath`, its value is read like any prior one:
+/// chained, and restored if the protection is removed later. A file of the folder that someone
+/// edited is written again: that is what the developer asked for after seeing the plan.
+#[allow(clippy::too_many_arguments)]
+fn repair(
+    ctx: &GuardCtx<'_>,
+    repo_id: &str,
+    common: &Path,
+    store: &mut RepoStore,
+    registry: &GuardRegistry,
+    now_ms: i64,
+    mut journal: Journal,
+    cause: LossCause,
+) -> Result<GuardStatus, InstallError> {
+    use super::cut::{When, trip};
+    let writer = GuardWriter::new(ctx.git, ctx.invoker);
+    let key_changed = cause == LossCause::HookspathChanged;
+    if key_changed {
+        let trees = worktrees(ctx, common).map_err(InstallError::Failed)?;
+        let found = prior_hooks::detect(&writer, common, &trees)
+            .map_err(|_| InstallError::Rejected(vec![InstallBlocker::ChainImpossible]))?;
+        journal.prior = Prior {
+            value: found.value.clone(),
+            level: level_text(found.level).to_owned(),
+            dir: found.dir.clone(),
+        };
+        journal.chained = chain_only(&found.hooks);
+    }
+    let folder_files = Folder::build(ctx, repo_id, common, &journal.prior, &journal.chained)?;
+    let hooks_dir = common.join(FOLDER).join("hooks");
+    let save = |store: &mut RepoStore, j: &Journal| {
+        store
+            .set_guard_keys(Some(Some(&j.to_json())), None, None, None)
+            .map_err(|e| InstallError::Failed(format!("journal: {e:?}")))
+    };
+    // Before any write: the journal lists every file that may exist afterwards.
+    journal.files = folder_files.hashes();
+    journal.at_ms = now_ms;
+    journal.raptor = ctx.raptor.to_string_lossy().into_owned();
+    journal.template = TEMPLATE_VERSION;
+    save(store, &journal)?;
+    let mut files = folder_files.files();
+    files.sort_by_key(|f| !f.executable);
+    trip("repair-files", When::Before);
+    if hooks_dir.is_dir()
+        && let Some(folder) = journal.folder
+    {
+        writer
+            .replace_files(common, folder.into(), &files)
+            .map_err(|e| InstallError::Failed(format!("repair: {e}")))?;
+    } else {
+        match writer.write_folder(common, &files) {
+            Ok(id) => journal.folder = Some(id.into()),
+            Err(GuardWriteError::Exists) => {
+                return Err(InstallError::Rejected(vec![InstallBlocker::OrphanFolder]));
+            }
+            Err(e) => return Err(InstallError::Failed(format!("repair folder: {e}"))),
+        }
+        save(store, &journal)?;
+    }
+    trip("repair-files", When::After);
+    if key_changed {
+        trip("repair-key", When::Before);
+        writer
+            .set_hooks_path(common, &hooks_dir)
+            .map_err(|e| InstallError::Failed(format!("repair key: {e}")))?;
+        trip("repair-key", When::After);
+    }
+    match writer.config_id(common) {
+        Ok(Some(id)) => journal.config = Some(id.into()),
+        Ok(None) | Err(_) => {
+            return Err(InstallError::Failed("config is not a regular file".into()));
+        }
+    }
+    save(store, &journal)?;
+    verify(ctx, common, &hooks_dir).map_err(InstallError::Failed)?;
+    confirm(ctx, repo_id, store, registry, journal).map_err(InstallError::Failed)?;
     Ok(status(repo_id, common, store))
 }
 
@@ -657,6 +773,13 @@ pub fn publish(
     registry: &GuardRegistry,
     confirmed: Option<Confirmed>,
 ) {
+    registry.protection().watch(
+        repo_id,
+        super::protection::Watched {
+            common: std::path::PathBuf::from(&journal.common_dir),
+            journal: journal.clone(),
+        },
+    );
     registry.set(
         repo_id,
         GuardEntry {

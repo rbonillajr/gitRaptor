@@ -65,6 +65,7 @@ pub fn repo(snapshot: &RepoSnapshot) -> RepoView {
         sessions: Vec::new(),
         detection: None,
         commits: Vec::new(),
+        protection: None,
     }
 }
 

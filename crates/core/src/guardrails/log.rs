@@ -137,6 +137,39 @@ fn stripped(op: &LoggedOperation) -> LoggedOperation {
     }
 }
 
+/// The entry of a change of state of the hook layer (US-GRD-004, ADR-GRD-005 § 5): no actor,
+/// no operation of Git, nothing but the two states and the cause. Repeats of the same
+/// transition aggregate like any entry.
+pub fn protection_entry(
+    common_dir: &str,
+    at_ms: i64,
+    utc_offset_s: i32,
+    from: gitraptor_api::guard::HooksStatus,
+    to: &gitraptor_api::guard::HooksLayer,
+    expected: bool,
+) -> LogEntry {
+    LogEntry {
+        common_dir: common_dir.to_owned(),
+        at_ms,
+        utc_offset_s,
+        worktree: None,
+        branch: None,
+        actor: None,
+        operation: LoggedOperation::ProtectionState {
+            from,
+            to: to.status,
+            cause: to.cause,
+            expected,
+        },
+        kind: LogKind::ProtectionState,
+        effect: Effect::Allow,
+        applied_effect: Effect::Allow,
+        reasons: Vec::new(),
+        decision_id: super::evaluate::decision_id(),
+        authorship: None,
+    }
+}
+
 /// The entry of a decision, or `None` when nothing is logged.
 pub fn entry(params: &EvaluateParams, decision: &Decision, ctx: &LogContext) -> Option<LogEntry> {
     if ctx.under_executor {

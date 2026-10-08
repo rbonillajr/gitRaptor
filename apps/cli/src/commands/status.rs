@@ -65,6 +65,20 @@ fn status(json: bool) -> ExitCode {
             }
         }
     }
+    // The protection of each repo (US-GRD-004), when the engine offers it.
+    if offers(&client, methods::GUARD_STATUS) {
+        for repo in &snapshot.repos {
+            let params = gitraptor_api::guard::GuardRepoParams {
+                path: status::folder_of(repo.path.raw()),
+            };
+            if let Ok(guard) = client.call::<_, gitraptor_api::guard::GuardStatus>(
+                methods::GUARD_STATUS,
+                &params,
+            ) {
+                sessions.protection.insert(repo.repo_id.clone(), guard);
+            }
+        }
+    }
     if json {
         match serde_json::to_string_pretty(&status::json(&snapshot, &sessions)) {
             Ok(text) => println!("{text}"),

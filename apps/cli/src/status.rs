@@ -27,6 +27,9 @@ pub struct SessionsInfo {
     /// `None`: the engine does not offer `sessions.list` (an older daemon).
     pub available: Option<bool>,
     pub sessions: Vec<SessionView>,
+    /// The protection of each observed repo by id (US-GRD-004), from `guard.status`; empty
+    /// when the engine does not offer it.
+    pub protection: std::collections::HashMap<String, gitraptor_api::guard::GuardStatus>,
 }
 
 impl SessionsInfo {
@@ -99,6 +102,11 @@ pub fn text(snapshot: &Snapshot, sessions: &SessionsInfo) -> String {
         };
         let _ = writeln!(out, "{}", t(key, &[("path", &folder)]));
         let _ = writeln!(out, "  {}", base_text(&repo.base));
+        if let Some(status) = sessions.protection.get(&repo.repo_id) {
+            for line in crate::guard::notice_lines(status) {
+                let _ = writeln!(out, "  {line}");
+            }
+        }
         if let Some(kept) = &repo.kept_temps {
             kept_temps_text(&mut out, kept);
         }

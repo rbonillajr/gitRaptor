@@ -9,6 +9,7 @@
 //! engine's own parts (observer, session detector, stores) are not modules.
 
 mod discovery;
+mod guard_health;
 mod tm_capture;
 
 use std::path::{Path, PathBuf};
@@ -48,6 +49,7 @@ type Start = fn(&Daemon) -> Option<Box<dyn DaemonModule>>;
 const MODULES: &[(&str, Start)] = &[
     ("tm-capture", tm_capture::start),
     ("discovery", discovery::start),
+    ("guard-health", guard_health::start),
 ];
 
 /// The running modules, in the order of [`MODULES`].

@@ -5,8 +5,10 @@
 
 use gitraptor_api::discovery::RepoDiscoveredData;
 use gitraptor_api::event::{
-    ENGINE_STATE, GIT_EVENT, REPO_DISCOVERED, SESSION_STATE, WORKTREE_STATE,
+    ENGINE_STATE, GIT_EVENT, GUARD_PROTECTION_LOST, GUARD_PROTECTION_RESTORED, REPO_DISCOVERED,
+    SESSION_STATE, WORKTREE_STATE,
 };
+use gitraptor_api::guard::{HooksStatus, ProtectionLostData};
 use gitraptor_api::messages::{
     EngineView, GitEventView, ResyncReason, SessionView, SessionsListResult, WorktreeStateData,
 };
@@ -295,6 +297,13 @@ fn on_engine(model: &mut Model, msg: EngineMsg) -> Vec<Cmd> {
             on_history(model, &repo_id, &events);
             Vec::new()
         }
+        EngineMsg::Protection { repo_id, hooks } => {
+            if let Some(data) = selected(model, &repo_id).and_then(|r| r.data.as_mut()) {
+                data.protection = hooks.filter(|h| !matches!(h.status, HooksStatus::Active));
+                model.dirty = true;
+            }
+            Vec::new()
+        }
     }
 }
 
@@ -434,6 +443,12 @@ fn apply(model: &mut Model, scope: &Scope, event: &gitraptor_api::Event) {
                 && view.repo_id == data.repo_id
             {
                 data.upsert(ingest::session(&view));
+            } else if (event.kind == GUARD_PROTECTION_LOST
+                || event.kind == GUARD_PROTECTION_RESTORED)
+                && let Ok(lost) = serde_json::from_value::<ProtectionLostData>(event.data.clone())
+                && lost.repo_id == data.repo_id
+            {
+                data.protection = Some(lost.hooks).filter(|h| h.status != HooksStatus::Active);
             } else if event.kind == GIT_EVENT
                 && let Ok(view) = serde_json::from_value::<GitEventView>(event.data.clone())
                 && view.repo_id == data.repo_id

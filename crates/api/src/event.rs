@@ -142,6 +142,10 @@ pub const REPO_DISCOVERED: &str = "repo.discovered";
 /// [`crate::guard::ProtectionLostData`].
 pub const GUARD_PROTECTION_LOST: &str = "guard.protection-lost";
 
+/// The hook layer of a repo is active again (US-GRD-004): the developer installed it again
+/// or fixed it by hand. Same capability and data as [`GUARD_PROTECTION_LOST`].
+pub const GUARD_PROTECTION_RESTORED: &str = "guard.protection-restored";
+
 const fn engine(kind: &'static str) -> EventKind {
     EventKind {
         kind,
@@ -183,6 +187,7 @@ pub const KINDS: &[EventKind] = &[
     // Global: a candidate belongs to no observed repo.
     engine(REPO_DISCOVERED),
     engine_repo(GUARD_PROTECTION_LOST),
+    engine_repo(GUARD_PROTECTION_RESTORED),
     engine_repo(OPERATION_QUEUED),
     engine_repo(OPERATION_STARTED),
     engine_repo(OPERATION_FINISHED),

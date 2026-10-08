@@ -276,6 +276,8 @@ pub(crate) enum Control {
     /// One decision log entry (US-GRD-005). No reply: the hook never waits on the log.
     #[cfg_attr(not(unix), allow(dead_code))]
     GuardRecord(Box<crate::guardrails::log::LogEntry>),
+    /// The check of the hook layer of a protected repo found a different state (US-GRD-004).
+    GuardHealth(Box<HealthReport>),
     /// The decision log of a repo the channel already located (US-GRD-005).
     #[cfg_attr(not(unix), allow(dead_code))]
     GuardLog {
@@ -433,7 +435,20 @@ impl ShutdownHandle {
     }
 }
 
+/// What the check thread found for one repo.
+#[derive(Debug)]
+pub(crate) struct HealthReport {
+    pub repo_id: String,
+    pub layer: gitraptor_api::guard::HooksLayer,
+}
+
 impl ShutdownHandle {
+    /// Hands the state the check found to the loop, which logs and alerts (US-GRD-004).
+    #[cfg_attr(not(unix), allow(dead_code))]
+    pub(crate) fn guard_health(&self, report: HealthReport) -> bool {
+        self.tx.send(Control::GuardHealth(Box::new(report))).is_ok()
+    }
+
     /// Hands a decision log entry to the loop without waiting (US-GRD-005). `false` when the
     /// daemon is stopping.
     #[cfg_attr(not(unix), allow(dead_code))]

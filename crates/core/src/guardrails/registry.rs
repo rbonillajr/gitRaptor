@@ -28,6 +28,8 @@ pub struct GuardRegistry {
     log: super::log::LogSink,
     /// The reserved actions waiting for their window (US-GRD-003, D5). Only the loop uses it.
     pending: Mutex<super::pending::PendingActions>,
+    /// The installs to check and the state seen of each (US-GRD-004).
+    protection: Mutex<super::protection::Protection>,
 }
 
 impl GuardRegistry {
@@ -38,6 +40,7 @@ impl GuardRegistry {
             profile: RwLock::new(Some(dirs)),
             log: super::log::LogSink::default(),
             pending: Mutex::default(),
+            protection: Mutex::default(),
         }
     }
 
@@ -55,6 +58,14 @@ impl GuardRegistry {
         if let Ok(mut map) = self.repos.write() {
             map.remove(repo_id);
         }
+        self.protection().unwatch(repo_id);
+    }
+
+    /// The installs to check and the state seen of each (US-GRD-004).
+    pub fn protection(&self) -> std::sync::MutexGuard<'_, super::protection::Protection> {
+        self.protection
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     /// The decision log's sink, shared by the connections and the loop.
