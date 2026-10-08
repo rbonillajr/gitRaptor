@@ -221,6 +221,26 @@ mod tests {
         assert!(evaluates(Some((30, 3)), &checks(&t, &m)));
     }
 
+    /// Windows reads no command line of another process yet: the real system's `git` is always
+    /// evaluated, never skipped (fail-closed).
+    #[cfg(windows)]
+    #[test]
+    fn on_windows_the_real_command_line_is_unreadable_and_evaluated() {
+        use crate::channel::peer::{SystemProcs, current_uid};
+        let me = SystemProcs.read(std::process::id()).unwrap();
+        assert_eq!(SystemProcs.args(me.pid), None);
+        let m = AgentMatcher::default();
+        let checks = Checks {
+            uid: current_uid(),
+            procs: &SystemProcs,
+            matcher: &m,
+            daemon: None,
+            marks: None,
+            terminal_proof: TERMINAL_PROOF,
+        };
+        assert!(evaluates(Some((me.pid, me.start_us)), &checks));
+    }
+
     #[test]
     fn decided_is_bounded_and_keyed_by_the_start_time_and_the_facts() {
         use gitraptor_api::AgentKind;
