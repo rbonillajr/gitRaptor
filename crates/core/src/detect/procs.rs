@@ -98,10 +98,16 @@ mod mac {
     }
 
     /// The offsets of `kinfo_proc` are written by hand (`libc` does not declare it): the table
-    /// must hold this very process with its parent, or its layout is not the one checked.
+    /// must hold this very process with its parent and the start `proc_pidinfo` gives, or its
+    /// layout is not the one checked (a wrong start would make every path read refuse).
     fn sane(table: &[gitraptor_macsys::process::ProcBrief]) -> bool {
         let (me, parent) = (std::process::id(), std::os::unix::process::parent_id());
-        table.iter().any(|p| p.pid == me && p.ppid == parent)
+        let Some(start) = entry(me).map(|e| e.start_us) else {
+            return false;
+        };
+        table
+            .iter()
+            .any(|p| p.pid == me && p.ppid == parent && p.start_us == start)
     }
 
     /// The path first and the start after it: a pid reused between the two reads never lends

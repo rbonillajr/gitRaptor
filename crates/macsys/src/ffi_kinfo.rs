@@ -46,7 +46,10 @@ pub(crate) fn kinfo_by_uid(uid: u32) -> Option<Vec<u8>> {
                 0,
             )
         };
-        if rc == 0 && size <= cap {
+        if rc == 0 {
+            if size > cap {
+                return None;
+            }
             buf.truncate(size);
             return Some(buf);
         }
