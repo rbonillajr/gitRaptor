@@ -11,8 +11,8 @@ use gitraptor_api::messages::GitEventKind;
 use gitraptor_api::methods;
 use gitraptor_api::rpc::code;
 use gitraptor_api::timemachine::{
-    ActedOn, ChangedFiles, EntryOrigin, ProtectionLevel, TimelineEntry, TimelineOperationKind,
-    TimelineOperationState, TimelineParams, TimelineResult, TimelineSource,
+    ActedOn, ChangedFiles, EntryOrigin, ProtectionLevel, TimelineChannel, TimelineEntry,
+    TimelineOperationKind, TimelineOperationState, TimelineParams, TimelineResult, TimelineSource,
 };
 use gitraptor_api::untrusted::sanitize;
 use gitraptor_api::{Actor, AgentKind, AgentOrigin};
@@ -197,7 +197,13 @@ fn worktree_name(root: &str) -> String {
 
 fn what(origin: &EntryOrigin) -> String {
     match origin {
-        EntryOrigin::ManualSnapshot { .. } => todo!("US-MCP-008"),
+        EntryOrigin::ManualSnapshot { label, channel, .. } => t(
+            "timeline.manual",
+            &[
+                ("label", &label.sanitized()),
+                ("channel", &channel_text(*channel)),
+            ],
+        ),
         EntryOrigin::Operation {
             kind,
             subtype,
@@ -235,6 +241,16 @@ fn what(origin: &EntryOrigin) -> String {
                 kind => t(&format!("event.{}", kind.as_str()), &[("branch", &branch)]),
             }
         }
+    }
+}
+
+/// The wire name of the surface; it is a fixed set, so it is not translated.
+fn channel_text(channel: TimelineChannel) -> &'static str {
+    match channel {
+        TimelineChannel::Cli => "cli",
+        TimelineChannel::Tui => "tui",
+        TimelineChannel::Mcp => "mcp",
+        TimelineChannel::Hook => "hook",
     }
 }
 
@@ -277,7 +293,7 @@ fn protection_key(level: ProtectionLevel) -> &'static str {
     match level {
         ProtectionLevel::GuaranteedPrior | ProtectionLevel::HookPrior => "timeline.level.prior",
         ProtectionLevel::Observation => "timeline.level.observation",
-        ProtectionLevel::Manual => todo!("US-MCP-008"),
+        ProtectionLevel::Manual => "timeline.level.manual",
         ProtectionLevel::None => "timeline.level.none",
     }
 }
@@ -386,6 +402,8 @@ mod tests {
             "timeline.level.prior",
             "timeline.level.observation",
             "timeline.level.none",
+            "timeline.level.manual",
+            "timeline.manual",
             "timeline.op.protected",
             "timeline.op.protected-unnamed",
             "timeline.op.undo",
@@ -476,6 +494,27 @@ mod tests {
     }
 
     #[test]
+    fn a_manual_snapshot_row_is_sanitized() {
+        use gitraptor_api::untrusted::UntrustedName;
+        let label: UntrustedName =
+            serde_json::from_value(serde_json::json!({ "untrusted": "done\x1b[31m red\u{202e}\nx" }))
+                .unwrap();
+        let mut e = entry(Actor::Unattributed, Attribution::Recorded, files(&[], 0));
+        e.origin = EntryOrigin::ManualSnapshot {
+            snapshot_id: "s1".into(),
+            label,
+            channel: TimelineChannel::Mcp,
+        };
+        e.protection.level = ProtectionLevel::Manual;
+        let shown = render(&result(vec![e], vec![]), false);
+        assert!(!shown.contains('\x1b'), "{shown:?}");
+        assert!(!shown.contains('\u{202e}'), "{shown:?}");
+        assert!(!shown.contains("red\nx"), "{shown:?}");
+        assert!(shown.contains("mcp"), "{shown:?}");
+        assert!(shown.contains(&format!("[{}]", t("timeline.level.manual", &[]))), "{shown:?}");
+    }
+
+    #[test]
     fn an_old_engine_gets_the_restart_hint() {
         use gitraptor_api::rpc::ErrorObject;
         let hint = t("timeline.restart-engine", &[]);
@@ -509,6 +548,7 @@ mod tests {
                 "capturado por observación",
             ),
             (ProtectionLevel::None, "unprotected", "sin protección"),
+            (ProtectionLevel::Manual, "manual point", "punto manual"),
         ];
         for (level, en, es) in want {
             let key = protection_key(level);

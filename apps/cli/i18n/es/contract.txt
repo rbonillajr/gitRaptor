@@ -59,3 +59,5 @@ error.root-rejected = la carpeta no puede ser una carpeta de código
 error.root-broad = la carpeta es amplia: confírmala desde tu propia terminal
 error.root-unknown = esa carpeta no es una carpeta de código declarada
 error.not-a-candidate = ese repo no está pendiente de decisión
+error.snapshot-quota-exceeded = demasiados snapshots manuales por ahora; inténtalo más tarde
+error.snapshot-time-limit = el snapshot tardó demasiado; no se guardó nada
