@@ -464,13 +464,13 @@ fn a_clean_stop_leaves_nothing_to_recover() {
 
 // ----- Locks --------------------------------------------------------------
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 struct Repo {
     _tmp: tempfile::TempDir,
     git_dir: PathBuf,
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn repo() -> Repo {
     let tmp = tempfile::tempdir().unwrap();
     let git_dir = tmp.path().join("work").join(".git");
@@ -479,7 +479,7 @@ fn repo() -> Repo {
     Repo { _tmp: tmp, git_dir }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn take_lock(log: &mut Oplog, op: &str, path: &Path) -> FileIdentity {
     fs::write(path, b"").unwrap();
     let identity = file_identity(path).unwrap().unwrap();
@@ -487,7 +487,7 @@ fn take_lock(log: &mut Oplog, op: &str, path: &Path) -> FileIdentity {
     identity
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 #[test]
 fn an_own_annotated_lock_is_released_and_a_foreign_one_stays() {
     let (_tmp, dirs) = profile();
@@ -516,7 +516,7 @@ fn an_own_annotated_lock_is_released_and_a_foreign_one_stays() {
     assert!(report.kept_locks.is_empty());
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 #[test]
 fn a_lock_replaced_since_it_was_annotated_stays() {
     let (_tmp, dirs) = profile();
@@ -545,7 +545,7 @@ fn a_lock_replaced_since_it_was_annotated_stays() {
     assert_eq!(report.kept_locks[0].reason, KeptLockReason::InodeChanged);
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 #[test]
 fn a_reused_inode_with_another_birth_time_stays() {
     let (_tmp, dirs) = profile();
@@ -569,7 +569,7 @@ fn a_reused_inode_with_another_birth_time_stays() {
     assert_eq!(report.kept_locks[0].reason, KeptLockReason::InodeChanged);
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 #[test]
 fn a_lock_annotated_without_a_birth_time_stays() {
     let (_tmp, dirs) = profile();
@@ -594,7 +594,7 @@ fn a_lock_annotated_without_a_birth_time_stays() {
     assert_eq!(report.kept_locks[0].reason, KeptLockReason::Unsupported);
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 #[test]
 fn a_lock_held_by_a_live_child_waits_and_stays() {
     let (_tmp, dirs) = profile();
@@ -603,8 +603,8 @@ fn a_lock_held_by_a_live_child_waits_and_stays() {
     let op = op_in_state(&mut log, &protected(&[WT], 1), OperationState::Applying, 1);
     let lock = repo.git_dir.join("index.lock");
     take_lock(&mut log, &op, &lock);
-    log.record_child_started(&op, 4242, 6).unwrap();
-    log.record_child_started(&op, 4343, 6).unwrap();
+    log.record_child_started(&op, 4242, None, 6).unwrap();
+    log.record_child_started(&op, 4343, None, 6).unwrap();
     log.record_child_ended(&op, 4343, 7).unwrap();
     let probe = Probe(HashSet::from([4242]));
     let started = Instant::now();
@@ -625,6 +625,168 @@ fn a_lock_held_by_a_live_child_waits_and_stays() {
         .unwrap();
     assert_eq!(report.released_locks, vec![lock.clone()]);
     assert!(!lock.exists());
+}
+
+#[cfg(any(unix, windows))]
+fn long_child() -> std::process::Child {
+    #[cfg(unix)]
+    let mut cmd = std::process::Command::new("sleep");
+    #[cfg(unix)]
+    cmd.arg("30");
+    #[cfg(windows)]
+    let mut cmd = std::process::Command::new("cmd");
+    #[cfg(windows)]
+    cmd.args(["/C", "ping -n 30 127.0.0.1 >NUL"]);
+    cmd.stdout(std::process::Stdio::null()).spawn().unwrap()
+}
+
+#[cfg(any(unix, windows))]
+fn start_us(pid: u32) -> u64 {
+    use crate::channel::peer::{ProcSource, SystemProcs};
+    SystemProcs.read(pid).unwrap().start_us
+}
+
+#[cfg(any(unix, windows))]
+#[test]
+fn the_lock_of_a_dead_child_is_abandoned_and_released() {
+    let (_tmp, dirs) = profile();
+    let repo = repo();
+    let (mut log, _) = open(&dirs);
+    let op = op_in_state(&mut log, &protected(&[WT], 1), OperationState::Applying, 1);
+    let lock = repo.git_dir.join("index.lock");
+    take_lock(&mut log, &op, &lock);
+    let mut child = long_child();
+    let pid = child.id();
+    log.record_child_started(&op, pid, Some(start_us(pid)), 6)
+        .unwrap();
+    // The daemon died with the child still running; the child dies later.
+    child.kill().unwrap();
+    child.wait().unwrap();
+    drop(child);
+
+    let report = log
+        .recover(&mut AbsentStore, &options(&repo.git_dir, &SystemProbe), 10)
+        .unwrap();
+    assert_eq!(report.released_locks, vec![lock.clone()], "{report:?}");
+    assert!(!lock.exists());
+}
+
+#[cfg(windows)]
+#[test]
+fn a_reused_pid_does_not_inherit_the_lock() {
+    let (_tmp, dirs) = profile();
+    let repo = repo();
+    let (mut log, _) = open(&dirs);
+    let op = op_in_state(&mut log, &protected(&[WT], 1), OperationState::Applying, 1);
+    let lock = repo.git_dir.join("index.lock");
+    take_lock(&mut log, &op, &lock);
+    // A live process has the annotated pid, but another start time: the pid
+    // was reused after the child ended.
+    let mut other = long_child();
+    let pid = other.id();
+    log.record_child_started(&op, pid, Some(start_us(pid) - 1), 6)
+        .unwrap();
+    let report = log
+        .recover(&mut AbsentStore, &options(&repo.git_dir, &SystemProbe), 10)
+        .unwrap();
+    assert_eq!(report.released_locks, vec![lock.clone()], "{report:?}");
+    assert!(!lock.exists());
+
+    // With its own start time it is the child: the lock waits and stays.
+    take_lock(&mut log, &op, &lock);
+    log.record_child_started(&op, pid, Some(start_us(pid)), 11)
+        .unwrap();
+    let report = log
+        .recover(&mut AbsentStore, &options(&repo.git_dir, &SystemProbe), 20)
+        .unwrap();
+    assert!(lock.exists());
+    assert_eq!(report.kept_locks[0].reason, KeptLockReason::ChildAlive);
+    other.kill().unwrap();
+    other.wait().unwrap();
+}
+
+#[cfg(windows)]
+#[test]
+fn two_spellings_of_a_lock_path_are_the_same_lock() {
+    let (_tmp, dirs) = profile();
+    let repo = repo();
+    let (mut log, _) = open(&dirs);
+    let op = op_in_state(&mut log, &protected(&[WT], 1), OperationState::Applying, 1);
+    let lock = repo.git_dir.join("index.lock");
+    let ours = take_lock(&mut log, &op, &lock);
+    assert_eq!(
+        file_identity(&repo.git_dir.join("INDEX.LOCK")).unwrap(),
+        Some(ours)
+    );
+    // Annotated under another spelling, released all the same.
+    let op2 = op_in_state(&mut log, &protected(&[WT], 2), OperationState::Applying, 2);
+    let worktree_lock = repo.git_dir.join("worktrees/feature/index.lock");
+    fs::write(&worktree_lock, b"").unwrap();
+    let identity = file_identity(&worktree_lock).unwrap().unwrap();
+    let upper = repo
+        .git_dir
+        .join("WORKTREES")
+        .join("Feature")
+        .join("Index.Lock");
+    log.record_lock_taken(&op2, &upper, identity, 5).unwrap();
+    let probe = Probe(HashSet::new());
+    let report = log
+        .recover(&mut AbsentStore, &options(&repo.git_dir, &probe), 10)
+        .unwrap();
+    assert!(!lock.exists() && !worktree_lock.exists(), "{report:?}");
+    assert!(report.kept_locks.is_empty(), "{report:?}");
+}
+
+#[cfg(any(unix, windows))]
+#[test]
+fn an_identity_with_the_high_bit_set_is_kept_bit_for_bit() {
+    let (_tmp, dirs) = profile();
+    let repo = repo();
+    let (mut log, _) = open(&dirs);
+    let op = op_in_state(&mut log, &protected(&[WT], 1), OperationState::Applying, 1);
+    let lock = repo.git_dir.join("index.lock");
+    fs::write(&lock, b"").unwrap();
+    let real = file_identity(&lock).unwrap().unwrap();
+    // An NTFS index whose sequence number is 0x8000 or more.
+    let high = FileIdentity {
+        inode: real.inode | (1 << 63),
+        ..real
+    };
+    log.record_lock_taken(&op, &lock, high, 5).unwrap();
+    let column: i64 = log
+        .conn
+        .query_row(
+            "SELECT inode FROM journal WHERE entry = 'lock-taken'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(recovery::inode_from_column(column), high.inode);
+    let probe = Probe(HashSet::new());
+    let report = log
+        .recover(&mut AbsentStore, &options(&repo.git_dir, &probe), 10)
+        .unwrap();
+    assert!(lock.exists());
+    assert_eq!(report.kept_locks[0].reason, KeptLockReason::InodeChanged);
+}
+
+#[cfg(windows)]
+#[test]
+fn a_folder_named_like_a_lock_is_never_deleted() {
+    let (_tmp, dirs) = profile();
+    let repo = repo();
+    let (mut log, _) = open(&dirs);
+    let op = op_in_state(&mut log, &protected(&[WT], 1), OperationState::Applying, 1);
+    let folder = repo.git_dir.join("packed-refs.lock");
+    fs::create_dir(&folder).unwrap();
+    let identity = file_identity(&folder).unwrap().unwrap();
+    log.record_lock_taken(&op, &folder, identity, 5).unwrap();
+    let probe = Probe(HashSet::new());
+    let report = log
+        .recover(&mut AbsentStore, &options(&repo.git_dir, &probe), 10)
+        .unwrap();
+    assert!(folder.is_dir());
+    assert_eq!(report.kept_locks[0].reason, KeptLockReason::NotALockFile);
 }
 
 #[cfg(unix)]

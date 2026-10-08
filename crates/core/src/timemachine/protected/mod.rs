@@ -331,18 +331,21 @@ impl StepCtx<'_> {
         let pending = self.marks.begin_spawn();
         let mut child = launch()?;
         let pid = child.id();
-        match self.procs.read(pid) {
-            Ok(info) => self
-                .marks
-                .add_child(self.operation_id, pid, info.start_us, info.pgid),
+        let start_us = match self.procs.read(pid) {
+            Ok(info) => {
+                self.marks
+                    .add_child(self.operation_id, pid, info.start_us, info.pgid);
+                info.start_us
+            }
             Err(_) => {
                 let _ = child.kill();
                 let _ = child.wait();
                 return Err(std::io::Error::other("child identity unreadable"));
             }
-        }
+        };
         drop(pending);
-        let _ = lock(self.oplog).record_child_started(self.operation_id, pid, now_ms());
+        let _ =
+            lock(self.oplog).record_child_started(self.operation_id, pid, Some(start_us), now_ms());
         Ok(MarkedChild { child, pid })
     }
 
