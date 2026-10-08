@@ -370,12 +370,6 @@ fn now_ms() -> i64 {
     crate::daemon::now_ms()
 }
 
-fn now_us() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| u64::try_from(d.as_micros()).unwrap_or(u64::MAX))
-}
-
 /// A protected operation to run.
 #[derive(Debug, Clone)]
 pub struct ProtectedRequest {
@@ -575,8 +569,13 @@ impl ProtectedOperation<'_> {
             .advance_operation(&operation_id, OperationTransition::Ready, now_ms())
             .map_err(|e| abort(PriorFailure::CaptureFailed, Some(e.to_string())))?;
 
-        // (4) The step, with its children marked until the operation closes.
-        let _marks = self.marks.open(&operation_id, &req.who, now_us());
+        // (4) The step, with its children marked until the operation closes. The opening is on
+        // the clock of the start times the marks compare it with.
+        let _marks = self.marks.open(
+            &operation_id,
+            &req.who,
+            crate::channel::peer::proc_clock_us(),
+        );
         let mut ctx = StepCtx {
             operation_id: &operation_id,
             prior_snapshot_id: &prior.snapshot_id,

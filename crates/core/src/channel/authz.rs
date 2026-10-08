@@ -133,7 +133,8 @@ pub struct Verdict {
 pub struct AcceptedPeer {
     pub pid: u32,
     pub start_us: u64,
-    /// Wall clock of the accept, microseconds since the epoch.
+    /// The accept, on the clock of the start times ([`super::peer::proc_clock_us`]),
+    /// microseconds since the epoch.
     pub accepted_us: u64,
 }
 
