@@ -25,6 +25,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use common::TempProfile;
 use gitraptor_api::messages::ClientKind;
+use gitraptor_api::rpc::code;
 use gitraptor_api::{PROTOCOL_VERSION, methods};
 use gitraptor_core::channel::ChannelConfig;
 use gitraptor_core::client::{Client, ClientError};
@@ -231,6 +232,25 @@ impl Running {
         }
     }
 
+    /// Waits until `events.history` has an event of `kind` that is not in `seen`; the event.
+    fn event_of_kind(&self, kind: &str, seen: &[i64]) -> Value {
+        let start = Instant::now();
+        loop {
+            let page: Value = connect(&self.tp)
+                .call(methods::EVENTS_HISTORY, json!({ "repo_id": self.repo_id }))
+                .unwrap();
+            let events = page["events"].as_array().cloned().unwrap_or_default();
+            if let Some(e) = events
+                .iter()
+                .find(|e| e["kind"] == kind && !seen.contains(&seq_of(e)))
+            {
+                return e.clone();
+            }
+            assert!(start.elapsed() < DEADLINE, "no {kind} event: {events:#?}");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
     /// Commits `files` (path → content) in `worktree` with `message`, raw
     /// Git, and waits for the engine to see it; its history event.
     fn commit(&self, worktree: &Path, files: &[(String, String)], message: &str) -> Value {
@@ -352,6 +372,7 @@ fn a_raw_commit_shows_when_where_and_which_files() {
     // Which files: the paths of the commit, with their real total.
     assert_eq!(paths(entry), vec!["login.rs", "util.rs"]);
     assert_eq!(entry["files"]["total"], 2);
+    assert_eq!(entry["files"]["first_parent"], false, "{entry:#}");
     // Never a human: nobody was detected or registered.
     assert_eq!(entry["actor"]["actor"], "unattributed", "{entry:#}");
     assert_eq!(entry["attribution"], "current", "{entry:#}");
@@ -473,6 +494,8 @@ fn a_merge_commit_uses_first_parent_diff() {
     // already had (main.rs).
     assert_eq!(paths(entry), vec!["side.rs"], "{entry:#}");
     assert_eq!(entry["files"]["total"], 1, "{entry:#}");
+    // The output says so: the paths are against the first parent.
+    assert_eq!(entry["files"]["first_parent"], true, "{entry:#}");
 }
 
 // ----- Undo -----------------------------------------------------------------------
@@ -552,4 +575,242 @@ fn no_commit_message_or_file_content_leaves_the_daemon() {
     assert!(!log.contains(SENTINEL_MESSAGE), "message in the log");
     assert!(!log.contains(SENTINEL_CONTENT), "content in the log");
     assert!(!log.contains("secret.rs"), "paths do not enter the log");
+}
+
+// ----- Protection ---------------------------------------------------------------------
+
+/// Escenario 4: what GitRaptor itself did shows the snapshot it took before (level
+/// `guaranteed-prior`, the point a redo returns to).
+#[test]
+fn a_gitraptor_operation_shows_its_prior_snapshot_level() {
+    let (fx, wt) = repo_with_login();
+    let r = start(fx, None);
+    let edited = "fn api() { login(); }\n";
+    std::fs::write(wt.join("api.rs"), edited).unwrap();
+    r.captured(KEY, "api.rs", edited.as_bytes());
+    r.fx.git_in(&wt, &["reset", "-q", "--hard"]);
+    let undo = r.undo(&wt);
+
+    let timeline = r.timeline(&wt);
+    let id = format!("operation:{}", undo["operation_id"].as_str().unwrap());
+    let entry = entries(&timeline).iter().find(|e| e["id"] == id).unwrap();
+    assert_eq!(
+        entry["protection"]["level"], "guaranteed-prior",
+        "{entry:#}"
+    );
+    assert_eq!(
+        entry["protection"]["snapshot_id"],
+        undo["prior_snapshot_id"]
+    );
+    // An operation's files are not read here: never a made-up zero.
+    assert_eq!(entry["files"]["state"], "unavailable", "{entry:#}");
+}
+
+/// Escenario 4: a raw Git change shows the observation taken before it.
+#[test]
+fn a_raw_git_change_shows_observation() {
+    let (fx, wt) = repo_with_login();
+    let r = start(fx, None);
+    let edited = "fn api() { login(); }\n";
+    std::fs::write(wt.join("api.rs"), edited).unwrap();
+    let point = r.captured(KEY, "api.rs", edited.as_bytes());
+    let event = r.commit(&wt, &[], "api");
+
+    let timeline = r.timeline(&wt);
+    let entry = event_entry(&timeline, seq_of(&event));
+    assert_eq!(entry["protection"]["level"], "observation", "{entry:#}");
+    let shown = entry["protection"]["snapshot_id"].as_str().unwrap();
+    // The point holds the work before the commit, whichever capture it was.
+    let store = r.store().unwrap();
+    assert!(
+        shown == point
+            || r.files(&store, shown, KEY)
+                .iter()
+                .any(|(p, b)| p == "api.rs" && b == edited.as_bytes()),
+        "{entry:#}"
+    );
+}
+
+/// ADR-TMC-003 § 4: the protection of an event is what an undo of it returns to.
+#[test]
+fn the_protection_of_an_event_is_the_undo_target() {
+    let (fx, wt) = repo_with_login();
+    let r = start(fx, None);
+    let edited = "fn api() { login(); }\n";
+    std::fs::write(wt.join("api.rs"), edited).unwrap();
+    r.captured(KEY, "api.rs", edited.as_bytes());
+    r.fx.git_in(&wt, &["reset", "-q", "--hard"]);
+    let reset = r.event_of_kind("reset", &[]);
+    let before = r.timeline(&wt);
+    let protection = event_entry(&before, seq_of(&reset))["protection"].clone();
+
+    let undo = r.undo(&wt);
+    assert_eq!(protection["snapshot_id"], undo["target_snapshot_id"]);
+    assert_ne!(protection["level"], "none", "{protection:#}");
+}
+
+/// The echo of an operation of GitRaptor is the operation, not a second entry: a raw reset
+/// and its undo are two entries, nothing else.
+#[test]
+fn the_echo_of_a_gitraptor_operation_is_not_a_second_entry() {
+    let (fx, wt) = repo_with_login();
+    let r = start(fx, None);
+    let edited = "fn api() { login(); }\n";
+    std::fs::write(wt.join("api.rs"), edited).unwrap();
+    r.captured(KEY, "api.rs", edited.as_bytes());
+    r.fx.git_in(&wt, &["reset", "-q", "--hard"]);
+    let undo = r.undo(&wt);
+
+    let timeline = r.timeline(&wt);
+    let ids: Vec<&str> = entries(&timeline)
+        .iter()
+        .map(|e| e["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids.len(), 2, "{timeline:#}");
+    assert!(ids[0].starts_with("event:"), "{ids:?}");
+    assert_eq!(
+        ids[1],
+        format!("operation:{}", undo["operation_id"].as_str().unwrap())
+    );
+}
+
+// ----- Files, filters and sources -------------------------------------------------------
+
+/// D2: commits that cannot be read give "unavailable", never a zero.
+#[test]
+fn files_are_unavailable_when_commits_cannot_be_read() {
+    let (fx, wt) = repo_with_login();
+    let r = start(fx, None);
+    let event = r.commit(&wt, &files_of(&["lost.rs"]), "lost");
+    let new = event["details"]["new_commit"].as_str().unwrap().to_owned();
+    // Loose object of the commit: gone, as after a damaged repo.
+    let loose =
+        r.fx.repo
+            .join(".git/objects")
+            .join(&new[..2])
+            .join(&new[2..]);
+    std::fs::remove_file(&loose).unwrap();
+
+    let timeline = r.timeline(&wt);
+    let entry = event_entry(&timeline, seq_of(&event));
+    assert_eq!(
+        entry["files"],
+        json!({ "state": "unavailable" }),
+        "{entry:#}"
+    );
+    // The rest of the entry is there: when, who, protection.
+    assert_eq!(entry["origin"]["kind"], "commit");
+    assert!(entry["occurred_utc_ms"].is_i64());
+}
+
+/// `only_worktree`, `since` and `agent` narrow the answer; the whole repo is the default.
+#[test]
+fn the_filters_narrow_by_worktree_period_and_agent() {
+    let (fx, wt) = repo_with_login();
+    fx.git(&["branch", "feat-pagos"]);
+    let wt2 = canonical(&fx.add_worktree("feat-pagos", "feat-pagos"));
+    let r = start(fx, None);
+    let login = r.commit(&wt, &files_of(&["login.rs"]), "login");
+    let pagos = r.commit(&wt2, &files_of(&["pagos.rs"]), "pagos");
+    let wt_arg = |w: &Path| w.to_str().unwrap().to_owned();
+    let ids_of = |t: &Value| -> Vec<String> {
+        entries(t)
+            .iter()
+            .map(|e| e["id"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    let login_id = format!("event:{}", seq_of(&login));
+    let pagos_id = format!("event:{}", seq_of(&pagos));
+
+    // The whole repo from either anchor.
+    let whole = r.timeline(&wt);
+    assert!(ids_of(&whole).contains(&login_id) && ids_of(&whole).contains(&pagos_id));
+    assert_eq!(ids_of(&r.timeline(&wt2)), ids_of(&whole));
+    // One worktree.
+    let only = r.timeline_with(json!({ "worktree": wt_arg(&wt), "only_worktree": wt_arg(&wt2) }));
+    assert_eq!(ids_of(&only), vec![pagos_id.clone()]);
+    // Nobody was detected: unattributed keeps all, a named agent none.
+    let un = r.timeline_with(json!({ "worktree": wt_arg(&wt), "agent": "unattributed" }));
+    assert_eq!(ids_of(&un), ids_of(&whole));
+    let named = r.timeline_with(json!({ "worktree": wt_arg(&wt), "agent": "claude-code" }));
+    assert_eq!(ids_of(&named), Vec::<String>::new());
+    // A period.
+    let since = r.timeline_with(json!({ "worktree": wt_arg(&wt), "since": "1h" }));
+    assert_eq!(ids_of(&since), ids_of(&whole));
+    // Bad parameters are refused before anything is read.
+    for bad in [
+        json!({ "since": "0m" }),
+        json!({ "agent": "a b" }),
+        json!({ "limit": 0 }),
+        json!({ "limit": 201 }),
+    ] {
+        let mut params = bad.clone();
+        params["worktree"] = json!(wt_arg(&wt));
+        match r.timeline_raw(params) {
+            Err(ClientError::Rpc(e)) => assert_eq!(e.code, code::INVALID_PARAMS, "{bad}"),
+            other => panic!("{bad}: {other:?}"),
+        }
+    }
+}
+
+/// `limit` keeps the latest entries, still oldest first, and says it cut.
+#[test]
+fn limit_keeps_the_latest_entries_in_order() {
+    let (fx, wt) = repo_with_login();
+    let r = start(fx, None);
+    let first = r.commit(&wt, &files_of(&["one.rs"]), "one");
+    let second = r.commit(&wt, &files_of(&["two.rs"]), "two");
+    let third = r.commit(&wt, &files_of(&["three.rs"]), "three");
+    let _ = first;
+
+    let t = r.timeline_with(json!({ "worktree": wt.to_str().unwrap(), "limit": 2 }));
+    let ids: Vec<&str> = entries(&t)
+        .iter()
+        .map(|e| e["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        ids,
+        [
+            format!("event:{}", seq_of(&second)),
+            format!("event:{}", seq_of(&third))
+        ]
+    );
+    assert_eq!(t["truncated"], true);
+}
+
+/// A folder no repo observes is refused, as an anchor and as `only_worktree`.
+#[test]
+fn an_unobserved_folder_is_refused() {
+    let (fx, wt) = repo_with_login();
+    let outside = canonical(&fx.other_repo);
+    let r = start(fx, None);
+    for params in [
+        json!({ "worktree": outside.to_str().unwrap() }),
+        json!({ "worktree": wt.to_str().unwrap(), "only_worktree": outside.to_str().unwrap() }),
+    ] {
+        match r.timeline_raw(params.clone()) {
+            Err(ClientError::Rpc(e)) => assert_eq!(e.code, code::SCOPE_REFUSED, "{params}"),
+            other => panic!("{params}: {other:?}"),
+        }
+    }
+}
+
+/// A client of a protocol that predates `events.git-reset` is not sent `reset` entries.
+#[test]
+fn a_reset_entry_is_not_sent_without_the_capability() {
+    let (fx, wt) = repo_with_login();
+    let r = start(fx, None);
+    let edited = "fn api() { login(); }\n";
+    std::fs::write(wt.join("api.rs"), edited).unwrap();
+    r.captured(KEY, "api.rs", edited.as_bytes());
+    r.fx.git_in(&wt, &["reset", "-q", "--hard"]);
+    let reset = r.event_of_kind("reset", &[]);
+    let params = json!({ "worktree": wt.to_str().unwrap() });
+
+    let current = r.timeline(&wt);
+    event_entry(&current, seq_of(&reset));
+    let mut older = Client::connect(&r.tp.dirs(), ClientKind::Cli, 7).unwrap();
+    let t: Value = older.call(TIMELINE, params).unwrap();
+    let kinds: Vec<&Value> = entries(&t).iter().map(|e| &e["origin"]["kind"]).collect();
+    assert!(!kinds.contains(&&json!("reset")), "{t:#}");
 }
