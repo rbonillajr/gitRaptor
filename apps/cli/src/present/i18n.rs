@@ -195,11 +195,16 @@ pub enum Text<'a> {
     KeySuspend,
     KeyObserve,
     KeyNo,
+    KeyLater,
     /// "Observe this repo?" (US-CKP-025): the panel's title, what it means and the question
     /// with its default.
     ObserveTitle,
     ObserveWhy,
     ObserveQuestion,
+    /// "Discovered repo" (US-GRP-020): the title, where it was found and the question.
+    DiscoveredTitle,
+    DiscoveredWhy(&'a SafeText),
+    DiscoveredQuestion(&'a SafeText),
     /// The developer said yes; `repo.add` is on its way.
     Observing(&'a SafeText),
     /// What happened, why and what to do (DSYS-GRP-001 § 4).
@@ -347,6 +352,13 @@ fn en(text: Text<'_>) -> String {
         Text::Notice(Notice::ObserveFailed(_)) => "the repo was not observed".into(),
         Text::KeyObserve => "observe".into(),
         Text::KeyNo => "no".into(),
+        Text::KeyLater => "later".into(),
+        Text::DiscoveredTitle => "Discovered repo".into(),
+        Text::DiscoveredWhy(root) => format!("In your code folder {root}"),
+        Text::DiscoveredQuestion(name) => format!("Observe {name}? [y/N]"),
+        Text::Notice(Notice::DiscoveryFailed(_)) => {
+            "the discovered repo was not handled: see `raptor repo discovered`".into()
+        }
         Text::ObserveTitle => "Repo not observed".into(),
         Text::ObserveWhy => "GitRaptor does not observe the repo of this folder yet.".into(),
         Text::ObserveQuestion => "Observe this repo? [y/N]".into(),
@@ -527,6 +539,13 @@ fn es(text: Text<'_>) -> String {
         Text::Notice(Notice::ObserveFailed(_)) => "el repo no quedó observado".into(),
         Text::KeyObserve => "observar".into(),
         Text::KeyNo => "no".into(),
+        Text::KeyLater => "luego".into(),
+        Text::DiscoveredTitle => "Repo descubierto".into(),
+        Text::DiscoveredWhy(root) => format!("En tu carpeta de código {root}"),
+        Text::DiscoveredQuestion(name) => format!("¿Observar {name}? [s/N]"),
+        Text::Notice(Notice::DiscoveryFailed(_)) => {
+            "el repo descubierto no se pudo atender: mira `raptor repo discovered`".into()
+        }
         Text::ObserveTitle => "Repo sin observar".into(),
         Text::ObserveWhy => "GitRaptor aún no observa el repo de esta carpeta.".into(),
         Text::ObserveQuestion => "¿Observar este repo? [s/N]".into(),
@@ -618,8 +637,29 @@ fn module_error(name: &str, lang: Lang) -> Option<&'static str> {
         })
 }
 
-/// `(name, en, es)` of each module's own code. None has declared one yet.
-const MODULE_ERRORS: &[(&str, &str, &str)] = &[];
+/// `(name, en, es)` of each module's own code.
+const MODULE_ERRORS: &[(&str, &str, &str)] = &[
+    (
+        "root-rejected",
+        "that folder cannot be a code folder",
+        "esa carpeta no puede ser una carpeta de código",
+    ),
+    (
+        "root-broad",
+        "that folder is broad: confirm it with raptor repo roots add",
+        "esa carpeta es amplia: confírmala con raptor repo roots add",
+    ),
+    (
+        "root-unknown",
+        "that folder is not a declared code folder",
+        "esa carpeta no es una carpeta de código declarada",
+    ),
+    (
+        "not-a-candidate",
+        "that repo is not waiting for a decision",
+        "ese repo no está pendiente de decisión",
+    ),
+];
 
 fn en_error(code: ErrorCode) -> &'static str {
     match code {

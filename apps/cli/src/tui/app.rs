@@ -200,6 +200,8 @@ impl<B: Backend> App<B> {
                 Cmd::Reconnect => LinkCmd::Reconnect,
                 Cmd::Open { repo_id } => LinkCmd::Open { repo_id },
                 Cmd::Observe { root } => LinkCmd::Observe { root },
+                Cmd::AcceptDiscovered { path } => LinkCmd::Accept { path },
+                Cmd::DismissDiscovered { path } => LinkCmd::Dismiss { path },
                 // The model already says quit; the loop ends after this iteration.
                 Cmd::Quit => continue,
                 // After the input of this iteration, outside `update`.

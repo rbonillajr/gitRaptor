@@ -27,6 +27,7 @@ use crate::tui::widgets::layout::{self, BodyPlan, Connection, StatusBarModel, To
 use crate::tui::widgets::observe_prompt::ObservePromptModel;
 use crate::tui::widgets::repo_picker::{RepoChoiceModel, RepoPickerModel};
 use crate::tui::widgets::themed;
+use ratatui::layout::Rect;
 
 /// Smallest size with the full layout (Q-CKP-18).
 pub const MIN_WIDTH: u16 = layout::MIN_WIDTH;
@@ -65,7 +66,16 @@ pub fn view(model: &Model, frame: &mut Frame) {
             if fleet.rows.iter().any(|r| r.state == AgentState::NoAgent) {
                 hints.legend = Some(catalog(Text::NoAgentLegend, lang));
             }
-            frame.render_widget(themed(&fleet, &styles), regions.list);
+            // A discovered repo is asked under the fleet, which stays where it is.
+            match discovered_prompt(model) {
+                Some(prompt) => {
+                    let panel = DISCOVERED_PANEL_HEIGHT.min(regions.list.height);
+                    let (above, below) = split_bottom(regions.list, panel);
+                    frame.render_widget(themed(&fleet, &styles), above);
+                    frame.render_widget(themed(&prompt, &styles), below);
+                }
+                None => frame.render_widget(themed(&fleet, &styles), regions.list),
+            }
         }
     }
     frame.render_widget(themed(&hints, &styles), regions.hints);
@@ -208,6 +218,33 @@ pub fn observe_prompt(model: &Model) -> Option<ObservePromptModel> {
         name: here.name.clone(),
         path: here.path.clone(),
         question: catalog(question, lang),
+    })
+}
+
+/// Rows of the discovered repo's panel: border, where, name, question and border, with the
+/// blank lines of the panel.
+const DISCOVERED_PANEL_HEIGHT: u16 = 7;
+
+/// `area` without its last `bottom` rows, and those rows.
+fn split_bottom(area: Rect, bottom: u16) -> (Rect, Rect) {
+    let top = area.height.saturating_sub(bottom);
+    (
+        Rect::new(area.x, area.y, area.width, top),
+        Rect::new(area.x, area.y + top, area.width, area.height - top),
+    )
+}
+
+/// "Discovered repo: Observe notes?" for the developer, when nothing else is being asked
+/// (US-GRP-020).
+pub fn discovered_prompt(model: &Model) -> Option<ObservePromptModel> {
+    let found = model.discovery_prompt()?;
+    let lang = model.ui.lang;
+    Some(ObservePromptModel {
+        title: catalog(Text::DiscoveredTitle, lang),
+        why: catalog(Text::DiscoveredWhy(&found.root), lang),
+        name: found.name.clone(),
+        path: found.shown.clone(),
+        question: catalog(Text::DiscoveredQuestion(&found.name), lang),
     })
 }
 
@@ -422,13 +459,16 @@ fn row(
 fn key_hints(model: &Model) -> KeyHintsModel {
     let lang = model.ui.lang;
     let list = matches!(model.ui.pick, Pick::Choosing { .. });
-    let asking = model.ui.pick == Pick::Asking;
+    let discovering = model.discovery_prompt().is_some();
+    let asking = model.ui.pick == Pick::Asking || discovering;
     KeyHintsModel {
         hints: BINDINGS
             .iter()
             .filter(|b| b.action.is_hinted())
             .filter(|b| list || !b.action.is_list())
             .filter(|b| asking || !b.action.is_answer())
+            // Later is only for the discovered repo: the folder's question has no later.
+            .filter(|b| discovering || b.action != Action::Later)
             .filter_map(|b| hint(b.action, lang))
             .collect(),
         help: hint(Action::Quit, lang)
@@ -1494,6 +1534,88 @@ mod tests {
         let painted = screen(&model, 80, 24);
         assert!(painted.contains("Observando notes…"), "{painted}");
         assert!(!painted.contains("[s/N]"), "{painted}");
+    }
+
+    /// A repo found in a code folder, asked as the developer, with the fleet of "shop" open.
+    fn discovering(lang: Lang) -> Model {
+        let mut model = shop_model(lang);
+        model.engine.requester = Some(Requester::Unattributed {
+            layer: gitraptor_api::catalog::Layer::Cockpit,
+        });
+        update(
+            &mut model,
+            Msg::Conn(crate::model::ConnEvent::Discovered(vec![
+                crate::model::Found {
+                    path: "/code/notes".into(),
+                    name: SafeText::name("notes"),
+                    shown: SafeText::text("/code/notes"),
+                    root: SafeText::text("/code"),
+                },
+            ])),
+        );
+        model
+    }
+
+    /// US-GRP-020: the discovered repo is asked under the fleet, which stays on screen, with
+    /// its title, where it was found and the question, in both languages.
+    #[test]
+    fn discovered_prompt_in_english_and_spanish() {
+        for (lang, title, why, question, keys) in [
+            (
+                Lang::En,
+                "Discovered repo",
+                "In your code folder /code",
+                "Observe notes? [y/N]",
+                ["y observe", "n no", "Esc later"],
+            ),
+            (
+                Lang::Es,
+                "Repo descubierto",
+                "En tu carpeta de código /code",
+                "¿Observar notes? [s/N]",
+                ["s observar", "n no", "Esc luego"],
+            ),
+        ] {
+            let painted = screen(&discovering(lang), 80, 24);
+            for text in [title, why, question, "notes  /code/notes"] {
+                assert!(painted.contains(text), "{text}\n{painted}");
+            }
+            for key in keys {
+                assert!(painted.contains(key), "{key}\n{painted}");
+            }
+            // The fleet is still there.
+            assert!(painted.contains("shop"), "{painted}");
+        }
+        let mut settings = insta::Settings::clone_current();
+        settings.set_prepend_module_to_snapshot(false);
+        settings.set_snapshot_path("snapshots");
+        settings.bind(|| {
+            for (lang, name) in [
+                (Lang::En, "discovered_prompt_80x24_en"),
+                (Lang::Es, "discovered_prompt_80x24_es"),
+            ] {
+                let buffer = render(&discovering(lang), 80, 24);
+                let snap = format!(
+                    "{}\n=== styles ===\n{}",
+                    lines(&buffer).join("\n"),
+                    style_runs(&buffer)
+                );
+                insta::assert_snapshot!(name, snap);
+            }
+        });
+    }
+
+    /// Not human, or a screen without room: no panel (it stays pending).
+    #[test]
+    fn discovered_prompt_only_with_room_and_for_the_developer() {
+        let mut agent = discovering(Lang::En);
+        agent.engine.requester = Some(Requester::Agent {
+            name: None,
+            layer: gitraptor_api::catalog::Layer::Mcp,
+        });
+        assert!(!screen(&agent, 80, 24).contains("Discovered repo"));
+        let painted = screen(&discovering(Lang::En), 80, 16);
+        assert!(!painted.contains("Discovered repo"), "{painted}");
     }
 
     /// A failed `repo.add`: what happened, why and how to retry, and the observed repos.

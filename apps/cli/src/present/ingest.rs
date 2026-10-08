@@ -2,6 +2,7 @@
 //! untrusted text goes through [`SafeText`] here and nowhere else; the
 //! model never keeps it raw.
 
+use gitraptor_api::discovery::CandidateView;
 use gitraptor_api::messages::{
     GitEventKind, GitEventView, HeadView, SessionView, TrailerCheck, WorktreeStatus, WorktreeView,
 };
@@ -9,8 +10,8 @@ use gitraptor_api::scope::{AttentionCount, ConnectionRequester, GlobalSnapshot, 
 use gitraptor_api::{Actor, AgentKind};
 
 use crate::model::{
-    GlobalView, Head, LastCommit, RepoAttention, RepoChoice, RepoView, Requester, SessionRow,
-    WorktreeRow, WorktreeState,
+    Found, GlobalView, Head, LastCommit, RepoAttention, RepoChoice, RepoView, Requester,
+    SessionRow, WorktreeRow, WorktreeState,
 };
 use crate::present::SafeText;
 
@@ -235,6 +236,17 @@ pub fn requester(requester: &ConnectionRequester) -> Requester {
             layer: *layer,
         },
         ConnectionRequester::Unverified => Requester::Unverified,
+    }
+}
+
+/// A discovered repo as the panel shows it; its text comes from the folder names of the
+/// developer's disk, so it is untrusted.
+pub fn found(view: &CandidateView) -> Found {
+    Found {
+        path: std::path::PathBuf::from(&view.path),
+        name: SafeText::name(&view.name),
+        shown: SafeText::text(&view.path),
+        root: SafeText::text(&view.root),
     }
 }
 

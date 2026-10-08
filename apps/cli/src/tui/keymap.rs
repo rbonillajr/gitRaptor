@@ -22,6 +22,8 @@ pub enum Action {
     Yes,
     /// Answer no (the default; Enter says no too).
     No,
+    /// Leave the question for later: nothing is decided (`Esc`).
+    Later,
 }
 
 /// A key as the table names it.
@@ -107,8 +109,13 @@ pub const BINDINGS: &[Binding] = &[
     },
     Binding {
         action: Action::No,
-        keys: &[Key::Char('n'), Key::Esc],
+        keys: &[Key::Char('n')],
         hint: Text::KeyNo,
+    },
+    Binding {
+        action: Action::Later,
+        keys: &[Key::Esc],
+        hint: Text::KeyLater,
     },
 ];
 
@@ -125,7 +132,7 @@ impl Action {
 
     /// Answers a question: hinted only while one is on screen.
     pub fn is_answer(self) -> bool {
-        matches!(self, Self::Yes | Self::No)
+        matches!(self, Self::Yes | Self::No | Self::Later)
     }
 }
 
@@ -161,7 +168,7 @@ mod tests {
         );
         assert_eq!(
             action(&key(KeyCode::Esc, KeyModifiers::NONE)),
-            Some(Action::No)
+            Some(Action::Later)
         );
         for c in ['y', 's'] {
             assert_eq!(

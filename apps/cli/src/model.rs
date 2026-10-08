@@ -49,6 +49,8 @@ impl Model {
                 pick: Pick::None,
                 asked: false,
                 here: None,
+                discovered: std::collections::VecDeque::new(),
+                seen: std::collections::BTreeSet::new(),
             },
             conn: ConnState::Connecting,
             now_ms: 0,
@@ -79,6 +81,44 @@ pub struct Ui {
     pub asked: bool,
     /// The unobserved repo the folder is in, while it is offered or being observed.
     pub here: Option<Candidate>,
+    /// Repos found in the developer's code folders, waiting to be asked about one at a time
+    /// (US-GRP-020). Never a [`Pick`]: it must not take focus from the fleet.
+    pub discovered: std::collections::VecDeque<Found>,
+    /// Every discovered path of this run, asked, answered or left for later: it is not queued
+    /// twice. A restart asks again about what was left pending, because the engine lists it.
+    pub seen: std::collections::BTreeSet<std::path::PathBuf>,
+}
+
+/// The fewest rows with room for the discovery panel under the fleet.
+pub const DISCOVERY_MIN_HEIGHT: u16 = 20;
+
+impl Model {
+    /// The discovered repo to ask about now, and only when it takes nothing from anyone: the
+    /// developer is the requester (an agent or an unverified caller is never asked), no repo
+    /// is being chosen or opened, and the screen has room for the panel under the fleet.
+    pub fn discovery_prompt(&self) -> Option<&Found> {
+        let developer = matches!(
+            self.engine.requester,
+            Some(Requester::Unattributed {
+                layer: gitraptor_api::catalog::Layer::Cockpit
+            })
+        );
+        (developer && self.ui.pick == Pick::None && self.ui.size.height >= DISCOVERY_MIN_HEIGHT)
+            .then(|| self.ui.discovered.front())
+            .flatten()
+    }
+}
+
+/// A repo found in a code folder of the developer (US-GRP-020).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Found {
+    /// The repo's folder, to hand to `repo.add` or `discovery.dismiss`.
+    pub path: std::path::PathBuf,
+    pub name: SafeText,
+    /// The folder shown.
+    pub shown: SafeText,
+    /// The code folder it was found in.
+    pub root: SafeText,
 }
 
 /// The repo the folder is in when the engine does not observe it (US-CKP-025): the root of
@@ -145,6 +185,8 @@ pub enum Notice {
     SuspendUnsupported,
     /// The repo of the folder could not be observed ([`Ui::here`] names it).
     ObserveFailed(ObserveFailure),
+    /// `repo.add` or `discovery.dismiss` of a discovered repo failed.
+    DiscoveryFailed(ObserveFailure),
 }
 
 /// The replica of the engine: the global scope and the selected repo's.
@@ -474,6 +516,10 @@ pub enum ConnEvent {
     Unobserved(Candidate),
     /// `repo.add` of [`Cmd::Observe`] failed.
     ObserveFailed(ObserveFailure),
+    /// The repos the engine lists as discovered, fetched when the link connects.
+    Discovered(Vec<Found>),
+    /// Accepting or dismissing a discovered repo failed.
+    DiscoveryFailed(ObserveFailure),
 }
 
 /// Effects that `update` asks for; they run outside it.
@@ -495,6 +541,14 @@ pub enum Cmd {
     /// and show it.
     Observe {
         root: std::path::PathBuf,
+    },
+    /// Observe a discovered repo (`repo.add`) without showing it: the fleet is not left.
+    AcceptDiscovered {
+        path: std::path::PathBuf,
+    },
+    /// Never propose a discovered repo again (`discovery.dismiss`).
+    DismissDiscovered {
+        path: std::path::PathBuf,
     },
     /// Hand the terminal back to the shell (`Ctrl-Z`) and take it again when resumed.
     Suspend,

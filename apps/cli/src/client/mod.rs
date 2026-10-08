@@ -18,6 +18,7 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use gitraptor_api::clock::monotonic_ns;
+use gitraptor_api::discovery::{CandidatesResult, PathParams};
 use gitraptor_api::messages::{
     EventsHistoryParams, EventsHistoryResult, MAX_HISTORY_PAGE, RepoAddParams, RepoAddResult,
     RepoRejectedData, RepoRejection, SessionsListParams, SessionsListResult,
@@ -135,6 +136,14 @@ pub enum LinkCmd {
     Observe {
         root: PathBuf,
     },
+    /// Observe a discovered repo (`repo.add`) without opening it.
+    Accept {
+        path: PathBuf,
+    },
+    /// Dismiss a discovered repo (`discovery.dismiss`).
+    Dismiss {
+        path: PathBuf,
+    },
     Reconnect,
     Shutdown,
 }
@@ -238,6 +247,12 @@ fn run(
                     return;
                 }
             }
+            Ok(LinkCmd::Accept { .. } | LinkCmd::Dismiss { .. }) => {
+                let event = ConnEvent::DiscoveryFailed(ObserveFailure::Disconnected);
+                if out.send(Msg::Conn(event)).is_err() {
+                    return;
+                }
+            }
             Ok(LinkCmd::Resync { .. }) | Err(RecvTimeoutError::Timeout) => {}
         }
     }
@@ -290,6 +305,24 @@ fn session(
         },
     }
     send_state(out, ConnState::Live)?;
+    // The repos found while the TUI was closed, offered once per start (US-GRP-020). An engine
+    // without discovery has none to list.
+    if link.has(methods::CAP_DISCOVERY_EVENTS.name) {
+        match link.call(methods::DISCOVERY_CANDIDATES, serde_json::json!({})) {
+            Ok(value) => {
+                if let Ok(result) = serde_json::from_value::<CandidatesResult>(value) {
+                    let found = result
+                        .candidates
+                        .iter()
+                        .map(present::ingest::found)
+                        .collect();
+                    out.send(Msg::Conn(ConnEvent::Discovered(found)))?;
+                }
+            }
+            Err(LinkError::Refused) => {}
+            Err(_) => return Ok(End::Reconnect),
+        }
+    }
     loop {
         while let Ok(cmd) = cmds.try_recv() {
             match cmd {
@@ -304,6 +337,35 @@ fn session(
                     *chosen = Some(repo_id.clone());
                     if sync(link, &Scope::Repo { repo_id }, true, out)?.is_err() {
                         return Ok(End::Reconnect);
+                    }
+                }
+                LinkCmd::Accept { path } => match observe(link, &path) {
+                    Ok(_) => {}
+                    Err(Refusal::Engine { code, data }) => {
+                        let failure = observe_failure(code, data);
+                        out.send(Msg::Conn(ConnEvent::DiscoveryFailed(failure)))?;
+                    }
+                    Err(Refusal::Link(_)) => {
+                        let failure = ObserveFailure::Disconnected;
+                        out.send(Msg::Conn(ConnEvent::DiscoveryFailed(failure)))?;
+                        return Ok(End::Reconnect);
+                    }
+                },
+                LinkCmd::Dismiss { path } => {
+                    let params = PathParams {
+                        path: path.to_string_lossy().into_owned(),
+                    };
+                    match link.call_refusal(methods::DISCOVERY_DISMISS, to_value(&params)) {
+                        Ok(_) => {}
+                        Err(Refusal::Engine { code, .. }) => {
+                            let failure = observe_failure(code, None);
+                            out.send(Msg::Conn(ConnEvent::DiscoveryFailed(failure)))?;
+                        }
+                        Err(Refusal::Link(_)) => {
+                            let failure = ObserveFailure::Disconnected;
+                            out.send(Msg::Conn(ConnEvent::DiscoveryFailed(failure)))?;
+                            return Ok(End::Reconnect);
+                        }
                     }
                 }
                 LinkCmd::Observe { root } => match observe(link, &root) {
