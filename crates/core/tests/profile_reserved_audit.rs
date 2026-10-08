@@ -64,6 +64,10 @@ fn an_unknown_outcome_is_still_refused() {
             .append_audit(&row(1, "approved", None, None))
             .is_err()
     );
+    // The outcomes of an announced uninstall belong to `guard.uninstall` only.
+    let mut stop = row(2, "applied", None, None);
+    stop.operation = "daemon.stop".into();
+    assert!(profile.append_audit(&stop).is_err());
     assert!(profile.audit(0, 10).unwrap().is_empty());
 }
 
