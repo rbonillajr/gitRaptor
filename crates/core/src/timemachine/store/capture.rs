@@ -1131,6 +1131,36 @@ fn open_nofollow(path: &Path) -> std::io::Result<std::fs::File> {
         use std::os::unix::fs::OpenOptionsExt;
         options.custom_flags(rustix::fs::OFlags::NOFOLLOW.bits() as i32);
     }
+    #[cfg(windows)]
+    {
+        // `FILE_FLAG_OPEN_REPARSE_POINT`: a link or junction is opened itself and refused, never
+        // followed (DS-TS-TMC-003 W3). Another reparse point (compressed, deduplicated) is data
+        // that only reads right when opened normally, and it redirects no name.
+        use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
+        const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+        let file = options
+            .clone()
+            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(path)?;
+        let meta = file.metadata()?;
+        if meta.file_type().is_symlink() {
+            return Err(std::io::Error::other(
+                "a link or junction is never followed",
+            ));
+        }
+        if meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT == 0 {
+            return Ok(file);
+        }
+        let file = options.open(path)?;
+        if file.metadata()?.file_type().is_symlink() {
+            return Err(std::io::Error::other(
+                "a link or junction is never followed",
+            ));
+        }
+        return Ok(file);
+    }
+    #[allow(unreachable_code)]
     options.open(path)
 }
 

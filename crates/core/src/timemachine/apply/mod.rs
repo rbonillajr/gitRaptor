@@ -335,7 +335,7 @@ impl<'a> Applier<'a> {
     /// start. The protected operation runs it before its prior snapshot; the applier runs it
     /// again under its locks.
     pub fn check_preconditions(&self, plan: &ApplyPlan) -> Vec<Refusal> {
-        if cfg!(not(unix)) {
+        if cfg!(not(any(unix, windows))) {
             return vec![Refusal::Unsupported("applier")];
         }
         let mut refusals = Vec::new();

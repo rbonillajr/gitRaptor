@@ -1,7 +1,8 @@
 //! The applier of TS-TMC-003 (ADR-TMC-002 § 3) on temporary repos of the testkit, never this
 //! repo or the real profile (NFR-01). Each test plays the protected operation (TS-TMC-004) by
-//! hand: an operation recorded and `ready` with its guaranteed prior snapshot.
-#![cfg(unix)]
+//! hand: an operation recorded and `ready` with its guaranteed prior snapshot. On Windows the
+//! executable bit and symbolic links are left out (NTFS has no such bit; links need a
+//! privilege): junctions play the link that must never be followed (DS-TS-TMC-003 W1–W5).
 
 mod tm_common;
 
@@ -210,6 +211,7 @@ fn steps(env: &Env, op: &str) -> Vec<String> {
         .collect()
 }
 
+#[cfg(unix)]
 fn mode(path: &Path) -> u32 {
     use std::os::unix::fs::PermissionsExt;
     path.symlink_metadata().unwrap().permissions().mode()
@@ -223,16 +225,36 @@ fn change_everything(f: &Fixture) {
     f.write("new/deep/file.txt", "new\n");
     std::fs::remove_file(f.repo.join("untracked.txt")).unwrap();
     f.write("untracked.txt/inner", "the file became a folder\n");
-    std::fs::set_permissions(
-        f.repo.join("staged.txt"),
-        std::os::unix::fs::PermissionsExt::from_mode(0o755),
-    )
-    .unwrap();
-    std::os::unix::fs::symlink("a.txt", f.repo.join("link")).unwrap();
+    #[cfg(unix)]
+    {
+        std::fs::set_permissions(
+            f.repo.join("staged.txt"),
+            std::os::unix::fs::PermissionsExt::from_mode(0o755),
+        )
+        .unwrap();
+        std::os::unix::fs::symlink("a.txt", f.repo.join("link")).unwrap();
+    }
     f.git(&["add", "-A"]);
     f.git(&["commit", "-q", "-m", "after the target"]);
     f.git(&["branch", "extra"]);
     f.write("a.txt", "dirty again\n");
+}
+
+/// A link to a folder at `at`: a symbolic link on Unix, a junction (no privilege needed) on
+/// Windows.
+fn plant_link(target: &Path, at: &Path) {
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(target, at).unwrap();
+    #[cfg(windows)]
+    {
+        let out = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(at)
+            .arg(target)
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{out:?}");
+    }
 }
 
 mod repo_intact {
@@ -241,6 +263,7 @@ mod repo_intact {
     #[test]
     fn restores_working_tree_index_and_refs_exactly() {
         let t = Apply::busy();
+        #[cfg(unix)]
         std::fs::set_permissions(
             t.f().repo.join("b.txt"),
             std::os::unix::fs::PermissionsExt::from_mode(0o755),
@@ -259,8 +282,11 @@ mod repo_intact {
         assert!(report.paths.is_empty(), "{report:?}");
         assert_eq!(t.files(), files_before);
         assert_eq!(t.git_state(), git_before);
-        assert_eq!(mode(&t.f().repo.join("b.txt")) & 0o111, 0o111);
-        assert_eq!(mode(&t.f().repo.join("staged.txt")) & 0o100, 0);
+        #[cfg(unix)]
+        {
+            assert_eq!(mode(&t.f().repo.join("b.txt")) & 0o111, 0o111);
+            assert_eq!(mode(&t.f().repo.join("staged.txt")) & 0o100, 0);
+        }
         // Ignored content is never touched; no temporary is left behind.
         assert_eq!(
             std::fs::read(t.f().repo.join("target/out.bin")).unwrap(),
@@ -499,7 +525,7 @@ mod repo_intact {
         let hooks = ApplyHooks {
             at_step: Some(Box::new(move |step| {
                 if step == 6 {
-                    std::os::unix::fs::symlink(&outside_link, repo.join("dir")).unwrap();
+                    plant_link(&outside_link, &repo.join("dir"));
                 }
             })),
             ..ApplyHooks::default()
