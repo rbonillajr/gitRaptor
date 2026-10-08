@@ -49,8 +49,9 @@ use serde_json::{Value, json};
 
 const RAPTOR: &str = env!("CARGO_BIN_EXE_raptor");
 
+/// Drive form on Windows, the form the daemon keeps (a `\\?\` path is refused).
 fn canonical(p: &Path) -> PathBuf {
-    p.canonicalize().unwrap()
+    gitraptor_git::paths::canonicalize(p).unwrap()
 }
 
 /// The test catalog: `abort-in-progress` stands for an operation that runs
