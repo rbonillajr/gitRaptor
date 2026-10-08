@@ -25,7 +25,9 @@ use gitraptor_api::messages::{
     RepoAddParams, RepoAddResult, RepoRejectedData, RepoRejection, RepoRetireParams,
     RepoRetireResult, Snapshot, StopResult, SubscribeParams, SubscribeResult, UnsubscribeParams,
 };
-use gitraptor_api::messages::{HeadView, WorktreeStatus};
+use gitraptor_api::messages::{
+    GitEventKind, HeadView, MAX_HISTORY_PAGE, MAX_SESSIONS_PAGE, SessionsListParams, WorktreeStatus,
+};
 use gitraptor_api::methods::{self, METHODS, MethodSpec};
 use gitraptor_api::rpc::{
     ErrorObject, Id, InvalidData, InvalidReason, Request, Response, ScopeRefusal, ScopeRefusedData,
@@ -36,12 +38,14 @@ use gitraptor_api::scope::{
     RepoLocateResult, RepoSnapshot, RepoSummaryView, Scope, ScopeSnapshot, ScopeSnapshotParams,
     ScopeSubscribeParams, ScopeSubscribeResult,
 };
+use gitraptor_api::timemachine::EntryOrigin;
 use gitraptor_api::timemachine::{
     Invalid as TmInvalid, MAX_REPORTED_PATHS, MAX_REPORTED_REFS, McpRequesterView, NotRestored,
     NotRestoredReason, OperationRunResult, PriorFailedData, RedoParams, RequestChannel,
-    RequesterView, ResolveParams, RestoreParams, SnapshotParams, Surface, TimelineParams,
-    TmRejectedData, UndoParams, UndoResult,
+    RequesterView, ResolveParams, RestoreParams, SnapshotParams, Surface, TIMELINE_DEFAULT_LIMIT,
+    TimelineParams, TmRejectedData, UndoParams, UndoResult, parse_since,
 };
+use gitraptor_git::{ReaderOptions, RepoReader};
 
 use super::authz::{AcceptedPeer, ChainLink, Verdict, check_reserved};
 use super::bus::{Outbox, Subscribed};
@@ -60,11 +64,18 @@ use crate::executor::{
 use crate::profile::{Agent, AgentKind, AuditRow, Author};
 use crate::timemachine::apply::{ApplyWarning, PathIssue};
 use crate::timemachine::oplog::Requester;
+use crate::timemachine::oplog::{AbsentStore, SnapshotRefs};
 use crate::timemachine::protected::scope::{
     operation_in, require_attributed, scope_for, snapshot_in,
 };
-use crate::timemachine::protected::{ProtectedError, RepoHandle, ScopeError, failure_text};
-use crate::timemachine::undo::{UndoDone, UndoEnv, UndoError, tm_scope_for, undo_last};
+use crate::timemachine::protected::{
+    ProtectedError, RepoHandle, ScopeError, failure_text, registered_worktrees, worktree_key,
+};
+use crate::timemachine::timeline::{
+    AgentFilter, EngineSide, FILES_BUDGET, PathsCache, PathsSource, SessionActors, TimelineQuery,
+    build_timeline, fill_files,
+};
+use crate::timemachine::undo::{RawSide, UndoDone, UndoEnv, UndoError, tm_scope_for, undo_last};
 
 /// Longest audit page.
 const MAX_AUDIT_PAGE: u32 = 500;
@@ -704,9 +715,13 @@ impl Connection<'_> {
                 let result = self.requester_resolve(request);
                 self.reply(&request.id, result);
             }
-            methods::TM_SNAPSHOT | methods::TM_TIMELINE => {
+            methods::TM_SNAPSHOT => {
                 let story = spec.implemented_by.unwrap_or("US-TMC-006");
                 let result = self.tm_command(spec, request, story);
+                self.reply(&request.id, result);
+            }
+            methods::TM_TIMELINE => {
+                let result = self.tm_timeline(request);
                 self.reply(&request.id, result);
             }
             methods::PING => self.reply(&request.id, request.params::<NoParams>().map(|_| "pong")),
@@ -2480,6 +2495,138 @@ impl Connection<'_> {
             serde_json::to_value(result)
         };
         value.map_err(|_| ErrorObject::new(code::INTERNAL, "serialization"))
+    }
+
+    /// `timemachine.timeline` (US-TMC-006): the whole repo's operations and Git events, oldest
+    /// first, with their actor, protection and changed paths. A read: nothing is written, and
+    /// neither commit messages nor contents are read (DS-US-TMC-006 T004). Not offered over MCP.
+    fn tm_timeline(&self, request: &Request) -> Result<serde_json::Value, ErrorObject> {
+        let p: TimelineParams = request.params()?;
+        p.validate().map_err(tm_invalid)?;
+        let named = self.named_worktree(p.worktree.as_deref())?;
+        let Some(tm) = &self.ctx.time_machine else {
+            return Err(ErrorObject::new(code::NOT_IMPLEMENTED, "no repo layer")
+                .with_data(serde_json::json!({ "implemented_by": "US-TMC-006" })));
+        };
+        let repo = tm_scope_for(tm.backend.as_ref(), false, named.as_deref(), None)
+            .map_err(scope_refused)?;
+        let only_worktree = match &p.only_worktree {
+            None => None,
+            Some(raw) => {
+                let folder = validate::client_path(raw).map_err(invalid)?;
+                let other = tm.backend.repo_of(&folder).map_err(scope_refused)?;
+                if other.repo.repo_id != repo.repo.repo_id {
+                    return Err(scope_refused(ScopeError::ForeignWorktree));
+                }
+                Some(other.repo.worktree.to_string_lossy().into_owned())
+            }
+        };
+        let now = now_ms();
+        let since_ms =
+            match p.since.as_deref() {
+                None => None,
+                Some(text) => {
+                    let secs = parse_since(text).map_err(tm_invalid)?;
+                    Some(now.saturating_sub(
+                        i64::try_from(secs.saturating_mul(1000)).unwrap_or(i64::MAX),
+                    ))
+                }
+            };
+        let query = TimelineQuery {
+            since_ms,
+            agent: p.agent.as_deref().map(AgentFilter::parse),
+            only_worktree,
+            limit: usize::try_from(p.limit.unwrap_or(TIMELINE_DEFAULT_LIMIT)).unwrap_or(usize::MAX),
+        };
+
+        // The engine's side first: its history of the repo, the sessions that say who is who now
+        // and, for the echo of GitRaptor's own operations, the raw events of each worktree.
+        let history = self
+            .ctx
+            .control
+            .event_history(EventsHistoryParams {
+                repo_id: repo.repo.repo_id.clone(),
+                worktree: None,
+                after_seq: None,
+                limit: Some(MAX_HISTORY_PAGE),
+            })
+            .ok();
+        let sessions = self
+            .ctx
+            .control
+            .sessions_list(SessionsListParams {
+                repo_id: Some(repo.repo.repo_id.clone()),
+                include_ended: true,
+                limit: Some(MAX_SESSIONS_PAGE),
+            })
+            .ok();
+        let actors = sessions
+            .as_ref()
+            .map(|(_, s)| SessionActors::from_sessions(s))
+            .unwrap_or_default();
+        let engine = history.map(|mut events| {
+            // A client without the capability cannot read `reset` (US-TMC-004).
+            if !self.has(methods::CAP_GIT_RESET.name) {
+                events.retain(|e| e.kind != GitEventKind::Reset);
+            }
+            let mut side = EngineSide {
+                detection_available: sessions.as_ref().is_some_and(|(d, _)| *d),
+                ..EngineSide::default()
+            };
+            if let Some(deps) = &self.ctx.tm_engine {
+                let registered = registered_worktrees(&repo.repo.worktree).unwrap_or_default();
+                let floor = deps.engine.generation_floor(&repo.repo.repo_id);
+                for root in events.iter().map(|e| e.worktree.raw()) {
+                    if side.raw.contains_key(root) {
+                        continue;
+                    }
+                    let path = Path::new(root);
+                    let Some(raw) = deps.engine.raw_events(&repo.repo.repo_id, path) else {
+                        continue;
+                    };
+                    side.snapshot_keys
+                        .insert(root.to_owned(), worktree_key(&registered, path, 0));
+                    side.raw
+                        .insert(root.to_owned(), RawSide { events: raw, floor });
+                }
+            }
+            side.events = events;
+            side
+        });
+
+        // The oplog only while the list is assembled: Git is read after it is let go.
+        let mut result = {
+            let oplog = repo.repo.oplog.lock().unwrap_or_else(|e| e.into_inner());
+            let refs: &dyn SnapshotRefs = match repo.store.as_deref() {
+                Some(store) => store,
+                None => &AbsentStore,
+            };
+            build_timeline(
+                &oplog,
+                refs,
+                &query,
+                engine.as_ref(),
+                &actors,
+                (now, gitraptor_git::local_utc_offset_s()),
+            )
+        };
+        if let Some(engine) = &engine
+            && result
+                .entries
+                .iter()
+                .any(|e| matches!(e.origin, EntryOrigin::GitEvent { .. }))
+        {
+            let root = repo.main_root.as_deref().unwrap_or(&repo.repo.worktree);
+            let reader = RepoReader::open(root, &ReaderOptions::default()).ok();
+            fill_files(
+                &mut result,
+                &engine.events,
+                reader.as_ref().map(|r| r as &dyn PathsSource),
+                PathsCache::shared(),
+                FILES_BUDGET,
+            );
+        }
+        serde_json::to_value(result).map_err(|_| ErrorObject::new(code::INTERNAL, "serialization"))
     }
 
     /// A Time Machine command declared ahead of its story: strict
