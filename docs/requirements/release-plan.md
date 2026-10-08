@@ -339,6 +339,18 @@ La pista B (cuentas, firma, tap, nombres de npm, runbook, CHANGELOG, `SECURITY.m
 - **Conservadora: 2026-12-15.** Si la firma de Windows empieza tarde, pasa a ser la ruta crítica: fecha de inicio más 2 a 6 semanas.
 - **Riesgo de ruta crítica:** la firma de Windows (identidad y elegibilidad) y la máquina con Windows 11, no el código: el pipeline ya existe y tiene un ensayo en verde.
 
+## Decisiones de Rene (2026-10-08)
+
+| # | Decisión | Respuesta de Rene | Efecto en el plan |
+|---|---|---|---|
+| 1 | D1: v0.1.0 interna o pública | **Interna** | v0.1.0 = piloto interno (canales internos: script y tap) |
+| 2 | Fecha objetivo del MVP | **Sin fecha fija: lo antes posible.** Disponibilidad de Rene: **8:00-17:00 dedicadas al 100 %**; las noches, la flota trabaja en **modo autónomo** | El plan usa como capacidad las jornadas de Rene más la flota nocturna; se revisa con la velocidad real de la primera semana de M2 |
+| 3 | Partir M2 | **Se acepta la recomendación**: M2a (Time Machine, Guardrails y escrituras del MCP) y M2b (predictor y acciones del Cockpit) | M2 se divide en M2a y M2b |
+| 4 | Cuentas y firma | **Betas sin firmar** para ir probando; la firma (Apple Developer, Windows) se resuelve más tarde para la versión firmada. Tema a revisar con Rene | Las `v0.1.0-beta.N` salen sin firmar con el aviso de Gatekeeper o SmartScreen documentado; la firma pasa a criterio de la release final firmada |
+| 5 | Máquina con Windows 11 | **Rene valorará VM en AWS** para Windows 11 (y Linux) | Ruta crítica de M3 condicionada a esas VM |
+
+Las decisiones 6 a 15 siguen abiertas (tabla siguiente); hasta que Rene decida, el plan aplica la recomendación.
+
 ## Decisiones para Rene
 
 Ninguna se ha tomado en su nombre. Hasta que decida, el plan aplica la recomendación indicada.
