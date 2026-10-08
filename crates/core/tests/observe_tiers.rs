@@ -99,11 +99,26 @@ impl Watched {
         panic!("timed out: {seen:#?}");
     }
 
+    /// Puts the repo to sleep and checks it stays asleep: a late FSEvents
+    /// notice of the fixture's own writes can wake it at once, and then it
+    /// is woken and put to sleep again before the test starts.
     fn sleep(&self) {
-        self.observer.sleep_repo("r").unwrap();
-        assert_eq!(self.observer.tier("r"), Some(Tier::Dormant));
-        // Whatever the tasks flushed on their way out.
-        self.drain(Duration::from_millis(200));
+        for _ in 0..5 {
+            self.observer.sleep_repo("r").unwrap();
+            // Whatever the tasks flushed on their way out.
+            self.drain(Duration::from_millis(200));
+            match self.wakes.try_recv() {
+                Ok((_, cause)) => {
+                    self.wake(cause);
+                    self.drain(Duration::from_millis(300));
+                }
+                Err(_) => {
+                    assert_eq!(self.observer.tier("r"), Some(Tier::Dormant));
+                    return;
+                }
+            }
+        }
+        panic!("the repo never stayed asleep");
     }
 
     fn next_wake(&self) -> WakeCause {
@@ -432,4 +447,18 @@ fn sweep_cycles_under_a_git_shim() {
     }
     assert_eq!(w.observer.tier("r"), Some(Tier::Dormant));
     assert_eq!(lines(), before, "the sweep launched git");
+}
+
+/// An overflow of the watcher (events lost with a mark) wakes every dormant
+/// repo with a `dormant` gap from its last check: what the sentinel lost
+/// is not left to the slow reconciliation.
+#[test]
+fn an_overflow_wakes_a_dormant_repo_in_a_gap() {
+    let f = demo();
+    let w = watch(&f);
+    w.sleep();
+    w.observer.simulate_overflow();
+    let cause = w.next_wake();
+    assert!(matches!(cause, WakeCause::SafetyNet { .. }), "{cause:?}");
+    assert_eq!(w.observer.tier("r"), Some(Tier::Waking));
 }

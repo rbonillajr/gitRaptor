@@ -95,8 +95,18 @@ pub(super) struct Tiers {
     last_activity: HashMap<String, Instant>,
     /// Repos asleep with their store closed.
     dormant: HashSet<String>,
+    /// Repos asleep whose store closes once the batches their tasks flushed
+    /// on the way out are persisted (`Control::Slept`).
+    closing: HashSet<String>,
+    /// Why each repo last refused to sleep: logged only when it changes.
+    refused: HashMap<String, SleepRefused>,
     next_check: Option<Instant>,
 }
+
+/// Most repos put to sleep in one check: each blocks the loop while its
+/// tasks hand their windows over, so a start with many idle repos spreads
+/// them over several checks.
+const MAX_SLEEPS_PER_CHECK: usize = 8;
 
 /// Tells the loop a dormant repo must wake.
 pub(super) struct WakeHooks(pub ShutdownHandle);
@@ -163,13 +173,20 @@ impl Daemon {
             return;
         };
         let ids: Vec<String> = self.stores.iter().map(|(id, _)| id.clone()).collect();
+        let mut slept = 0;
         for repo_id in ids {
+            if slept >= MAX_SLEEPS_PER_CHECK {
+                break;
+            }
             let idle = self
                 .tiers
                 .last_activity
                 .get(&repo_id)
                 .is_none_or(|t| t.elapsed() >= after);
-            if !idle || self.tiers.dormant.contains(&repo_id) {
+            if !idle
+                || self.tiers.dormant.contains(&repo_id)
+                || self.tiers.closing.contains(&repo_id)
+            {
                 continue;
             }
             // A client subscribed to this repo keeps it active; the fleet
@@ -196,15 +213,38 @@ impl Daemon {
                 continue;
             }
             match observer.sleep_repo(&repo_id) {
-                Ok(()) => self.close_dormant(&repo_id),
-                Err(refused) => self.logger.info(
-                    "repo_stays_active",
-                    &[
-                        ("repo", Field::id(&repo_id)),
-                        ("reason", refused_reason(refused).into()),
-                    ],
-                ),
+                Ok(()) => {
+                    slept += 1;
+                    self.tiers.refused.remove(&repo_id);
+                    // The batches its tasks flushed are queued in this loop:
+                    // the store closes after them (FIFO), never before.
+                    self.tiers.closing.insert(repo_id.clone());
+                    self.handle.slept(&repo_id);
+                }
+                Err(refused) => {
+                    if self.tiers.refused.insert(repo_id.clone(), refused) != Some(refused) {
+                        self.logger.info(
+                            "repo_stays_active",
+                            &[
+                                ("repo", Field::id(&repo_id)),
+                                ("reason", refused_reason(refused).into()),
+                            ],
+                        );
+                    }
+                }
             }
+        }
+    }
+
+    /// The batches a repo flushed while going dormant are persisted: its
+    /// store closes now, unless something woke it in between.
+    pub(super) fn slept(&mut self, repo_id: &str) {
+        if !self.tiers.closing.remove(repo_id) {
+            return;
+        }
+        let tier = self.observer.as_ref().and_then(|o| o.tier(repo_id));
+        if matches!(tier, Some(Tier::Dormant | Tier::Waking)) {
+            self.close_dormant(repo_id);
         }
     }
 
@@ -242,15 +282,22 @@ impl Daemon {
         if !asleep {
             return;
         }
+        // Its store is still open while the batches of its sleep are
+        // persisted: it wakes with it.
+        self.tiers.closing.remove(repo_id);
         let Some(entry) = self.profile.repo(repo_id).ok().flatten() else {
+            self.fail_wake(repo_id);
             return;
         };
         if !self.stores.iter().any(|(id, _)| id == repo_id) {
             match self.profile.open_store(repo_id) {
-                Ok((store, _)) => self.stores.push((repo_id.to_owned(), store)),
+                Ok((store, _)) => {
+                    self.stores.push((repo_id.to_owned(), store));
+                    self.link_marks(repo_id);
+                }
                 Err(err) => {
                     // Without its store nothing could be persisted: it stays
-                    // as it is and the next trigger tries again.
+                    // dormant and the next trigger tries again.
                     self.logger.warn(
                         "repo_unavailable",
                         &[
@@ -258,6 +305,7 @@ impl Daemon {
                             ("kind", profile_error_kind(&err).into()),
                         ],
                     );
+                    self.fail_wake(repo_id);
                     return;
                 }
             }
@@ -270,6 +318,7 @@ impl Daemon {
         let Ok(read) = observe::reconcile(&entry.canonical_path, &base) else {
             self.logger
                 .warn("repo_wake_unreadable", &[("repo", Field::id(repo_id))]);
+            self.fail_wake(repo_id);
             return;
         };
         let Some(observer) = &self.observer else {
@@ -287,6 +336,27 @@ impl Daemon {
             "repo_woken",
             &[("repo", Field::id(repo_id)), ("cause", cause_field.into())],
         );
+    }
+
+    /// A wake that could not complete: the repo is dormant again, with its
+    /// store closed, and its sentinel and safety nets keep running.
+    fn fail_wake(&mut self, repo_id: &str) {
+        if let Some(observer) = &self.observer {
+            observer.abort_wake(repo_id);
+        }
+        if let Some(pos) = self.stores.iter().position(|(id, _)| id == repo_id) {
+            self.stores.remove(pos);
+        }
+        self.tiers.dormant.insert(repo_id.to_owned());
+        self.publish_tier(repo_id, RepoTier::Dormant, Some(super::now_ms()));
+    }
+
+    /// An agent registers or withdraws from a folder: its repo wakes first
+    /// (a session is present there).
+    pub(super) fn wake_for_folder(&mut self, folder: &std::path::Path) {
+        if let Ok(common) = observe::locate(folder) {
+            self.wake_for_common_dir(&common);
+        }
     }
 
     /// A request about a repo wakes it first (N4): the TUI, `raptor status`
@@ -337,6 +407,8 @@ impl Daemon {
     /// A retired repo leaves the tiers.
     pub(super) fn forget_tiers(&mut self, repo_id: &str) {
         self.tiers.dormant.remove(repo_id);
+        self.tiers.closing.remove(repo_id);
+        self.tiers.refused.remove(repo_id);
         self.tiers.last_activity.remove(repo_id);
     }
 }
