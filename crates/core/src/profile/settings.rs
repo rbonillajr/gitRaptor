@@ -76,6 +76,16 @@ pub fn include_credential_files(dirs: &ProfileDirs) -> bool {
         .unwrap_or(false)
 }
 
+/// `engine.observation` of the profile (TS-GRP-006, N7); the local level
+/// of `dormantAfterHours` arrives with US-GRP-013.
+pub fn observation(dirs: &ProfileDirs) -> gitraptor_policy::settings::Observation {
+    profile_settings(dirs)
+        .applicable()
+        .and_then(|s| s.engine.as_ref())
+        .and_then(|e| e.observation.clone())
+        .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

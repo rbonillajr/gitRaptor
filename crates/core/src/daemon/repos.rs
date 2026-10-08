@@ -301,10 +301,15 @@ impl Daemon {
         let hooks: Arc<dyn crate::watch::ObserverHooks> =
             Arc::new(crate::watch::FanoutHooks(hooks));
         let roots = self.resources.roots_counter();
+        let tiers = self.config.tiers;
         let observer = self.observer.get_or_insert_with(|| {
             let handle = self.handle.clone();
             Observer::start_counted(
-                WatchConfig::default(),
+                WatchConfig {
+                    dormant_poll: tiers.sweep_every,
+                    dormant_reconcile: tiers.reconcile_every,
+                    ..WatchConfig::default()
+                },
                 Arc::new(move |batch| {
                     handle.observed(batch);
                 }),
