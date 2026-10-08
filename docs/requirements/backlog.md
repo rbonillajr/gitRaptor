@@ -3,6 +3,7 @@
 > Índice maestro de GitRaptor. Agrupa las Épicas y, dentro de ellas, las Features. Cada Feature enlaza a su `context.md` en `docs/requirements/features/<feature>/`.
 > Fuente del alcance: [BRD-GRP-001](../business/gitraptor-documento-de-negocio.md) § 6.
 > Estado de cada ficha, por feature y por hito: [release-status.md](release-status.md), generado con `node tools/status/release-status.mjs` desde el frontmatter de las fichas (no se edita a mano; docs-lint falla si está desactualizado).
+> Hitos y control de estado: [plan de releases](release-plan.md) (M1, M2, M3 y M4 = v0.1.0, con criterio de salida, avance y fecha estimada por velocidad real; propuesto el 2026-10-08, pendiente de la aprobación de Rene Bonilla).
 
 ---
 
@@ -47,6 +48,7 @@
 ## Hito M1 — Dogfooding
 
 **Status**: En curso — en validación (dogfooding) (2026-10-08) | **Valor**: High
+> Hitos siguientes (M2, M3 y v0.1.0) y fecha estimada de cada uno: [plan de releases](release-plan.md).
 > **Decisión de Rene Bonilla (2026-10-05)**: las próximas tandas se orientan a M1, el mínimo para usar GitRaptor a diario mientras se desarrolla GitRaptor con agentes. Le preocupa también que GitRaptor consuma los recursos del equipo del usuario. El alcance, el criterio de salida y el DAG son **decisión del orquestador (2026-10-05), validada por el PO y el Arquitecto** (ajustes al final). Las NFRs de recursos están en [non-functional.md](../architecture/non-functional.md) § Consumo de recursos y en [ADR-GRP-015](../architecture/decisions/ADR-GRP-015-consumo-recursos.md).
 
 ### Objetivo
