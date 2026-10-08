@@ -13,8 +13,8 @@ use windows_sys::Win32::Foundation::{ERROR_LOCK_VIOLATION, HANDLE};
 use windows_sys::Win32::Storage::FileSystem::{
     BY_HANDLE_FILE_INFORMATION, FILE_BASIC_INFO, FILE_DISPOSITION_INFO, FileBasicInfo,
     FileDispositionInfo, GetFileInformationByHandle, GetFileInformationByHandleEx,
-    LOCKFILE_EXCLUSIVE_LOCK, LOCKFILE_FAIL_IMMEDIATELY, LockFileEx, MOVEFILE_WRITE_THROUGH,
-    MoveFileExW, SetFileInformationByHandle, UnlockFileEx,
+    GetVolumeInformationByHandleW, LOCKFILE_EXCLUSIVE_LOCK, LOCKFILE_FAIL_IMMEDIATELY, LockFileEx,
+    MOVEFILE_WRITE_THROUGH, MoveFileExW, SetFileInformationByHandle, UnlockFileEx,
 };
 use windows_sys::Win32::System::IO::OVERLAPPED;
 
@@ -77,9 +77,8 @@ pub(crate) fn file_index(file: &File) -> io::Result<(u32, u64)> {
     Ok((info.dwVolumeSerialNumber, index))
 }
 
-/// `ChangeTime` of an open file (100 ns since 1601): it moves on every write, rename or
-/// attribute change, and nobody can set it back, unlike the write time.
-pub(crate) fn change_time(file: &File) -> io::Result<i64> {
+/// `FILE_BASIC_INFO` of an open file: its times and attributes.
+fn basic_info(file: &File) -> io::Result<FILE_BASIC_INFO> {
     let handle = file.as_raw_handle() as HANDLE;
     let mut info = FILE_BASIC_INFO::default();
     // SAFETY: `handle` is the open handle of `file`, borrowed for the call; `info` is an
@@ -93,10 +92,50 @@ pub(crate) fn change_time(file: &File) -> io::Result<i64> {
         )
     } != 0;
     if ok {
-        Ok(info.ChangeTime)
+        Ok(info)
     } else {
         Err(io::Error::last_os_error())
     }
+}
+
+/// `ChangeTime` of an open file (100 ns since 1601): it moves on every write, rename or
+/// attribute change, and nobody can set it back, unlike the write time.
+pub(crate) fn change_time(file: &File) -> io::Result<i64> {
+    basic_info(file).map(|info| info.ChangeTime)
+}
+
+/// `(CreationTime, FileAttributes)` of an open file, the time in 100 ns since 1601.
+pub(crate) fn creation_and_attributes(file: &File) -> io::Result<(i64, u32)> {
+    basic_info(file).map(|info| (info.CreationTime, info.FileAttributes))
+}
+
+/// Longest file system name read, in UTF-16 units (`MAX_PATH + 1`, what the API documents).
+const FS_NAME_UNITS: usize = 261;
+
+/// Name of the file system of the volume an open file lives on (`NTFS`, `ReFS`, `FAT32`…).
+pub(crate) fn file_system_name(file: &File) -> io::Result<String> {
+    let handle = file.as_raw_handle() as HANDLE;
+    let mut name = [0u16; FS_NAME_UNITS];
+    // SAFETY: `handle` is the open handle of `file`, borrowed for the call; `name` holds
+    // `FS_NAME_UNITS` writable UTF-16 units and that length is passed. Every other buffer is
+    // null with size 0, which the API documents as "not requested".
+    let ok = unsafe {
+        GetVolumeInformationByHandleW(
+            handle,
+            std::ptr::null_mut(),
+            0,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            name.as_mut_ptr(),
+            FS_NAME_UNITS as u32,
+        )
+    } != 0;
+    if !ok {
+        return Err(io::Error::last_os_error());
+    }
+    let len = name.iter().position(|&c| c == 0).unwrap_or(name.len());
+    Ok(String::from_utf16_lossy(&name[..len]))
 }
 
 /// Marks the file of an open handle (opened with `DELETE` access) to be deleted when the last
