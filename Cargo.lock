@@ -819,10 +819,13 @@ dependencies = [
 name = "gitraptor-api"
 version = "0.0.0"
 dependencies = [
+ "gitraptor-winsys",
+ "nix",
  "rustix",
  "schemars",
  "serde",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]

@@ -41,35 +41,15 @@ pub fn ensure_private_dir(path: &Path) -> Result<()> {
 /// exactly 0700 (Unix), or owned by and accessible only to the user, SYSTEM
 /// and Administrators (Windows, counting what children would inherit).
 pub fn verify_private_dir(path: &Path) -> Result<()> {
-    let meta = fs::symlink_metadata(path)?;
-    let insecure = |reason: String| ProfileError::InsecureDir {
-        path: path.to_path_buf(),
-        reason,
-    };
-    if meta.file_type().is_symlink() {
-        return Err(insecure("is a symbolic link".into()));
-    }
-    if !meta.is_dir() {
-        return Err(insecure("is not a directory".into()));
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-        let euid = rustix::process::geteuid().as_raw();
-        if meta.uid() != euid {
-            return Err(insecure(format!(
-                "owned by uid {}, expected {euid}",
-                meta.uid()
-            )));
-        }
-        let mode = meta.mode() & 0o777;
-        if mode != 0o700 {
-            return Err(insecure(format!("mode is {mode:o}, expected 700")));
-        }
-    }
-    #[cfg(windows)]
-    gitraptor_winsys::acl::verify_private_dir(path).map_err(|e| insecure(e.to_string()))?;
-    Ok(())
+    // One implementation, shared with the channel client's L-06 check.
+    use gitraptor_api::client::transport::{PrivateDirError, verify_private_dir};
+    verify_private_dir(path).map_err(|err| match err {
+        PrivateDirError::Io(err) => err.into(),
+        PrivateDirError::Insecure(reason) => ProfileError::InsecureDir {
+            path: path.to_path_buf(),
+            reason,
+        },
+    })
 }
 
 /// Creates a new file with mode 0600, failing if it already exists and

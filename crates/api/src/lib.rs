@@ -13,6 +13,8 @@
 pub mod actor;
 pub mod capability;
 pub mod catalog;
+#[cfg(feature = "client")]
+pub mod client;
 pub mod clock;
 pub mod discovery;
 pub mod event;

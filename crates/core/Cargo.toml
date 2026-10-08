@@ -15,7 +15,7 @@ getrandom = "0.4.3"
 # stream recreation of 8.2 loses events without a mark, and a new version
 # must pass the recreation scenario before it is taken (US-GRP-002, D2).
 notify = "=8.2.0"
-gitraptor-api.workspace = true
+gitraptor-api = { workspace = true, features = ["client"] }
 gitraptor-git.workspace = true
 gitraptor-policy.workspace = true
 rusqlite = { version = "0.40.2", features = ["bundled"] }

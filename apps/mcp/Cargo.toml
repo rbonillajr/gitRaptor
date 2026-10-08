@@ -12,7 +12,7 @@ name = "raptor-mcp"
 path = "src/main.rs"
 
 [dependencies]
-gitraptor-api.workspace = true
+gitraptor-api = { workspace = true, features = ["client"] }
 gitraptor-core.workspace = true
 schemars = "1.2.2"
 serde = { version = "1.0.229", features = ["derive"] }
