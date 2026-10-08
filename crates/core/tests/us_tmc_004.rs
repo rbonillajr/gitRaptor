@@ -11,8 +11,9 @@
 //! simulated Claude Code, is the end-to-end test of the CLI
 //! (`apps/cli/tests/raw_git_undo.rs`).
 //!
-//! macOS and Linux, like the other channel tests (Linux validated in the
-//! container, 2026-10-08).
+//! macOS, Linux and Windows (2026-10-08). On Windows the tests that undo are ignored: a
+//! reserved command needs the console of a person (TQ-14), which neither a test run from SSH
+//! nor CI has. The capture ones run, and caught that the watcher routed no event there.
 #![cfg(any(target_os = "macos", target_os = "linux", windows))]
 
 mod common;
@@ -296,6 +297,10 @@ fn an_edit_outside_gitraptor_is_captured() {
 /// estado capturado. Then the undo of the raw reset recovers it, and its
 /// own echo in the engine is not raw Git: a second undo has nothing left.
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "a reserved command needs a person's console (TQ-14): not from SSH or CI"
+)]
 fn a_raw_reset_leaves_the_last_capture_restorable() {
     let (fx, wt) = repo_with_login();
     let r = start(fx, None);
@@ -419,6 +424,10 @@ fn a_file_over_the_cap_makes_the_capture_partial() {
 
 /// Escenario: Una captura que falla no se presenta como protegida.
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "a reserved command needs a person's console (TQ-14): not from SSH or CI"
+)]
 fn a_failed_capture_is_not_presented_as_protected() {
     let (fx, wt) = repo_with_login();
     // Dado que guardar una captura de "feat-login" falla.

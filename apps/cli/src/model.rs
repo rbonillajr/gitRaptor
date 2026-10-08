@@ -46,6 +46,8 @@ impl Model {
                 ),
                 notice: None,
                 quit: false,
+                quit_key: None,
+                input_lost: false,
                 pick: Pick::None,
                 asked: false,
                 here: None,
@@ -74,6 +76,10 @@ pub struct Ui {
     /// The answer to the last key, so every key changes something visible.
     pub notice: Option<Notice>,
     pub quit: bool,
+    /// The key that asked to quit, for a cockpit that closes by itself (`quit_note`).
+    pub quit_key: Option<String>,
+    /// The terminal input failed: the cockpit leaves and says so.
+    pub input_lost: bool,
     /// Choosing the repo when the folder is in none of the observed ones.
     pub pick: Pick,
     /// "Observe this repo?" was already answered in this run (US-CKP-025, D5): a reconnection
@@ -462,6 +468,8 @@ pub enum Msg {
     Key(KeyEvent),
     Paste(String),
     Resize(Size),
+    /// The input thread cannot read the terminal any more: the cockpit would be deaf.
+    InputLost,
     /// A message of the engine, stamped by the channel thread.
     Engine(Stamped<EngineMsg>),
     Conn(ConnEvent),

@@ -144,17 +144,23 @@ fn read(stop: &AtomicBool, pause: &Pause, out: &Outlet) {
         match event::poll(POLL) {
             Ok(false) => continue,
             Ok(true) => {}
-            Err(_) => return,
+            Err(_) => return lost(out),
         }
         let msg = match event::read() {
             Ok(Event::Key(key)) => Msg::Key(key),
             Ok(Event::Paste(text)) => Msg::Paste(text),
             Ok(Event::Resize(width, height)) => Msg::Resize(Size { width, height }),
             Ok(_) => continue,
-            Err(_) => return,
+            Err(_) => return lost(out),
         };
         if out.send(msg).is_err() {
             return;
         }
     }
+}
+
+/// The terminal cannot be read: tell the loop, so the cockpit leaves with a reason instead of
+/// staying on screen deaf to every key.
+fn lost(out: &Outlet) {
+    let _ = out.send(Msg::InputLost);
 }
