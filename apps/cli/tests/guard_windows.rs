@@ -221,7 +221,7 @@ fn a_prior_script_hook_is_chained_through_git_for_windows_sh() {
 
     // GitRaptor's own denial comes first and the prior hook never sees it.
     std::fs::remove_file(&deny).unwrap();
-    git_ok(&m.repo, &["reset", "-q", "--hard", "HEAD~1"]);
+    git_ok(&m.repo, &["reset", "-q", "--hard", "HEAD~2"]);
     let forced = git(&m.repo, &["push", "--force", "origin", "feat-x"]);
     assert!(!forced.status.success());
     assert!(stderr(&forced).contains("GitRaptor"), "{}", stderr(&forced));
