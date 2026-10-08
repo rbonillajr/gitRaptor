@@ -39,3 +39,4 @@ res.tier-active = active: {repos} repos, {worktrees} worktrees, {watches} watche
 res.tier-dormant = dormant: {repos} repos, {worktrees} worktrees, {watches} watches (sentinels)
 res.tier-safety = dormant safety nets: sweep every {sweep}, reconciliation every {reconcile}, CPU {cpu}
 res.tier-degraded = polled worktrees (no watch): {n}
+res.discovered = discovered repos, not observed: {n} (0 resources until accepted)

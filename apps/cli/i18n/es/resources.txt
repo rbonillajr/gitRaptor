@@ -39,3 +39,4 @@ res.tier-active = activos: {repos} repos, {worktrees} worktrees, {watches} vigil
 res.tier-dormant = dormidos: {repos} repos, {worktrees} worktrees, {watches} vigilancias (centinelas)
 res.tier-safety = redes de seguridad de los dormidos: barrido cada {sweep}, reconciliación cada {reconcile}, CPU {cpu}
 res.tier-degraded = worktrees sondeados (sin vigilancia): {n}
+res.discovered = repos descubiertos, sin observar: {n} (0 recursos hasta aceptarlos)

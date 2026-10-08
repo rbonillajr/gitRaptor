@@ -3,6 +3,7 @@
 
 use std::process::ExitCode;
 
+use gitraptor_api::discovery::CandidatesResult;
 use gitraptor_api::messages::{ClientKind, SessionsListParams, SessionsListResult};
 use gitraptor_api::methods;
 use gitraptor_api::resources::ResourcesResult;
@@ -98,6 +99,27 @@ fn status_resources(json: bool) -> ExitCode {
                 return ExitCode::FAILURE;
             }
             let pid = client.hello().daemon_pid;
+            // US-GRP-020: discovered repos are not observed, so they cost
+            // nothing; only their count is shown.
+            let discovered = if client
+                .hello()
+                .methods
+                .iter()
+                .any(|m| m == methods::DISCOVERY_CANDIDATES)
+            {
+                match client.call::<_, CandidatesResult>(
+                    methods::DISCOVERY_CANDIDATES,
+                    serde_json::json!({}),
+                ) {
+                    Ok(found) => Some(found.candidates.len() as u64),
+                    Err(err) => {
+                        eprintln!("{CMD}: {}", error_text(err));
+                        return ExitCode::FAILURE;
+                    }
+                }
+            } else {
+                None
+            };
             let result: ResourcesResult =
                 match client.call(methods::ENGINE_RESOURCES, serde_json::json!({})) {
                     Ok(result) => result,
@@ -115,7 +137,7 @@ fn status_resources(json: bool) -> ExitCode {
                 .iter()
                 .map(|r| (r.repo_id.clone(), r.path.raw().to_owned()))
                 .collect();
-            resources::View::running(pid, result, repos)
+            resources::View::running(pid, result, repos).with_discovered(discovered)
         }
         Err(ClientError::NotRunning) => {
             let disk = gitraptor_core::resources::disk::measure(
