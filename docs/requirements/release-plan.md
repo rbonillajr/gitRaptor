@@ -5,26 +5,26 @@ generated: 2026-10-08
 updated: 2026-10-08
 generator: orquestador
 domain: GRP
-tags: [release-plan, hitos, m1, m2, m3, v0-1-0, velocidad, estimacion, control-de-estado]
+tags: [release-plan, hitos, m1, m2, m3, m4, v0-1-0, velocidad, estimacion, control-de-estado]
 related: [BRD-GRP-001, INF-GRP-003, INF-GRP-004, ADR-GRP-005, ADR-GRP-014]
 ---
 
 # Plan de releases y control de estado
 
-> **Estado: propuesto (2026-10-08). Pendiente de la aprobación de Rene Bonilla.** Las decisiones que solo él puede tomar están en [§ 7](#7-decisiones-para-rene).
+> **Estado: propuesto (2026-10-08). Pendiente de la aprobación de Rene Bonilla.** Las decisiones que solo él puede tomar están en [Decisiones para Rene](#decisiones-para-rene).
 >
 > GitRaptor no usa board. Este documento es el **control de estado** del proyecto: los hitos después de M1, el criterio de salida de cada uno, las fichas que lo componen, su avance y una fecha estimada a partir de la velocidad real. No hay sprints: cada hito termina cuando se cumple su criterio de salida (mejora 3.3 del informe AADD).
 >
 > Fuentes: [documento de negocio](../business/gitraptor-documento-de-negocio.md) (§ 6, 7, 8, 11 y 12), [backlog](backlog.md) (hito M1), los índices de cada feature, [xplat-pendientes.md](../architecture/xplat-pendientes.md) y `.github/workflows/release*.yml`. Composición propuesta por el PO, criterios de M3 y v0.1.0 por el Arquitecto y estimación por el Scrum Master, todos el 2026-10-08.
 
-## 1. Resumen
+## Resumen
 
 | Hito | Criterio de salida (resumen) | % completado | Fecha estimada (días naturales) | Depende de |
 |---|---|---|---|---|
 | **M1** Dogfooding | 6 criterios del [backlog](backlog.md#hito-m1--dogfooding): 10 días de uso real, detección ≥ 90 %, un `undo` real, force-push bloqueado, recursos y frescura | Construido 100 %; criterios 50 % (2 cumplidos, 2 en parte, 1 en curso, 1 sin cumplir) | 2026-10-22 a 2026-11-06 | Rene: racha de 10 días con registro diario |
-| **M2** MVP completo en macOS | Las 128 fichas Must y Should del MVP implementadas, gates del MVP obligatorios en CI, rendimiento medido en la máquina de referencia y la demo del BRD § 13 en macOS | 29,7 % (35 implementadas y 6 en parte de 128) | 2026-10-26 a 2026-11-12 | La flota y las ventanas de revisión; cierre de M1; la cola de confirmación |
+| **M2** MVP completo en macOS | Las 110 fichas Must y Should del MVP que no son de M1, implementadas; gates del MVP obligatorios en CI, rendimiento medido en la máquina de referencia y la demo del BRD § 13 en macOS | 18,2 % (17 implementadas y 6 en parte de 110) | 2026-10-26 a 2026-11-12 | La flota y las ventanas de revisión; cierre de M1; la cola de confirmación |
 | **M3** Beta multiplataforma | Sobre un tag `v0.1.0-beta.N`: los XP Must de `xplat-pendientes.md` cerrados, `cargo test` y "repo intacto" en verde en Linux y Windows reales, humo de punta a punta instalado | 37,5 % (8 hechos y 8 en parte de 32) | 2026-11-02 a 2026-12-01 | Cierre de M2; rondas manuales de Rene; una máquina con Windows 11 |
-| **v0.1.0** Primera release instalable (piloto interno) | Release firmada en macOS y Windows, instalación y actualización verificadas en los tres SO, primera experiencia en una máquina nueva | 14,3 % (2 en parte de 7) | 2026-11-09 a 2026-12-15 | Cierre de M3; cuentas de firma (externos); decisión D1 |
+| **M4** v0.1.0: primera release instalable (piloto interno) | Release firmada en macOS y Windows, instalación y actualización verificadas en los tres SO, primera experiencia en una máquina nueva | 14,3 % (2 en parte de 7) | 2026-11-09 a 2026-12-15 | Cierre de M3; cuentas de firma (externos); decisión D1 |
 
 Los rangos salen de 4,5 días de datos y son amplios a propósito. **El optimista no es un compromiso**: exige empezar esta semana el dogfooding y la pista de firma, y que no haya días sin revisión como el 2026-10-07.
 
@@ -38,7 +38,7 @@ flowchart LR
   M2["M2 MVP completo<br/>en macOS"]:::now
   BETA["tag v0.1.0-beta.N"]:::next
   M3["M3 Beta<br/>multiplataforma"]:::next
-  V01["v0.1.0<br/>piloto interno"]:::next
+  V01["M4 v0.1.0<br/>piloto interno"]:::next
   XP["Rondas xplat por ola<br/>Linux y Windows"]:::now
   B["Pista B: cuentas Apple y Windows,<br/>tap, npm, runbook, CHANGELOG"]:::human
   PUB(["Publicación externa<br/>solo si Rene revisa D1"]):::human
@@ -49,7 +49,7 @@ flowchart LR
   B --> V01
 ```
 
-## 2. Velocidad observada y método de estimación
+## Velocidad observada y método de estimación
 
 Medida por el Scrum Master el 2026-10-08, del 2026-10-04 00:00Z al 2026-10-08 12:37Z (unos 4,5 días naturales). Los días del 1 al 3 se excluyen: hubo 5 PR en total y aún no había flota. La flota trabaja también en fin de semana, así que todo se mide en **días naturales**.
 
@@ -90,7 +90,7 @@ La fecha del primer PR de cada ficha se obtiene cruzando los PR citados en su se
 
 **Cuándo revisar:** al cerrar cada ola del DAG y, como mínimo, una vez por semana con una ventana móvil de 7 días. Además, enseguida si la velocidad cae por debajo de 3 fichas equivalentes por día dos días seguidos, o si un spike de la ruta crítica (SPIKE-CKP-001, SPIKE-GRD-002) cambia el diseño.
 
-## 3. M1: Dogfooding
+## M1: Dogfooding
 
 El objetivo, el criterio de salida, el alcance, el DAG y el estado de cada criterio están en el [backlog](backlog.md#hito-m1--dogfooding). Todo lo que hay que construir está en `main`: lo que falta es **evidencia de uso real**, y eso depende de Rene, no de la flota.
 
@@ -99,15 +99,29 @@ El objetivo, el criterio de salida, el alcance, el DAG y el estado de cada crite
 | Optimista: **2026-10-22** | El registro diario de dogfooding empieza el 2026-10-09 y no falla ningún día laborable |
 | Conservadora: **2026-11-06** | Arranque tardío o un día perdido que reinicia la racha. Riesgo propio: el dogfooding se hace sobre un `main` que recibe unos 25 PR al día, y una regresión puede cortar la racha |
 
-Lo primero que necesita M1 es el **registro diario de dogfooding**: fecha, sesiones, daemon encendido, lectura de `raptor status --resources` e incidentes. Hoy no existe (hueco 1 de [§ 8](#8-huecos-y-limpieza)) y es la evidencia de los criterios 1, 2, 3 y 5. El primer uso del 2026-10-06 no cuenta para la racha porque no hubo registro ni continuidad.
+### Fichas de M1
 
-## 4. M2: MVP funcionalmente completo en macOS
+Las fichas del alcance de M1 que siguen en este hito. INF-GRP-001, INF-GRP-002 y TS-GRP-004 tienen hecha la parte que exige M1 y se siguen en M2, donde está lo que les falta. Los Should de M1 sin empezar (TS-GRP-005 y US-TMC-005) pasan a M2.
+
+| Ids | Qué | Estado |
+|---|---|---|
+| US-GRP-001, US-GRP-002, US-GRP-004, US-GRP-007, US-GRP-009 | Repo observado, eventos en vivo, observación continua, sesiones de Claude Code, registro explícito | I |
+| US-GRP-012, US-GRP-017 | Rama base `main`; `raptor status --resources` | I |
+| INF-CKP-001, US-CKP-001 | Esqueleto de la TUI; flota en vivo | I |
+| TS-TMC-004, US-TMC-001, US-TMC-002, US-TMC-004 | Operación protegida; snapshot previo; `raptor undo`; captura del Git crudo | I |
+| INF-GRD-001, US-GRD-001 | Arnés de hooks; force-push bloqueado | I |
+| US-MCP-001, US-MCP-002, US-MCP-003 | MCP mínimo (Should) | I |
+| SPIKE-GRP-001 | Precisión de la detección: falta la medición en el dogfooding (criterio 2) | P |
+
+Lo primero que necesita M1 es el **registro diario de dogfooding**: fecha, sesiones, daemon encendido, lectura de `raptor status --resources` e incidentes. Hoy no existe (hueco 1 de [Huecos y limpieza](#huecos-y-limpieza)) y es la evidencia de los criterios 1, 2, 3 y 5. El primer uso del 2026-10-06 no cuenta para la racha porque no hubo registro ni continuidad.
+
+## M2: MVP funcionalmente completo en macOS
 
 **Objetivo.** En macOS, las cinco features del MVP cumplen todos sus Must y Should, la demo del BRD § 13 funciona de punta a punta y los gates del MVP bloquean el merge.
 
 ### Criterio de salida
 
-1. Las 128 fichas de M2 están en `implemented` (frontmatter e índice), cada una con su PR. Un Should bloqueado está implementado o Rene lo sacó del MVP, con la decisión anotada en el backlog.
+1. Las 110 fichas de M2 están en `implemented` (frontmatter e índice), cada una con su PR. Un Should bloqueado está implementado o Rene lo sacó del MVP, con la decisión anotada en el backlog.
 2. La demo del BRD § 13 se ejecuta en macOS y queda anotada en el registro de dogfooding: 4 sesiones de Claude Code, un conflicto previsto antes del merge (US-CKP-006), un force-push bloqueado y `raptor undo --agent <id> --since` restaurando (US-TMC-011).
 3. Estos gates están en verde y son obligatorios en CI:
    - "repo intacto", con la auditoría dinámica de `exec` en macOS (INF-GRP-001);
@@ -125,72 +139,70 @@ Lo primero que necesita M1 es el **registro diario de dogfooding**: fecha, sesio
 
 ### Composición
 
-Estados: **I** = implemented, **P** = partially-implemented, **Pend** = draft, ready o blocked. El MoSCoW sale de los índices de cada feature. Time Machine no tiene MoSCoW en su índice: se tomó del frontmatter (high = Must, medium = Should, low = Could) y es un ⚠️ **ASSUMPTION** que Rene debe confirmar ([§ 7](#7-decisiones-para-rene), decisión 7).
+Estados: **I** = implemented, **P** = partially-implemented, **Pend** = draft, ready o blocked. El MoSCoW sale de los índices de cada feature. Time Machine no tiene MoSCoW en su índice: se tomó del frontmatter (high = Must, medium = Should, low = Could) y es un ⚠️ **ASSUMPTION** que Rene debe confirmar ([Decisiones para Rene](#decisiones-para-rene), decisión 7).
 
-**Cockpit** (26 US y 7 enablers)
+**Cockpit** (25 US y 6 enablers)
 
 | Ids | Qué | MoSCoW | Estado | Bloqueo |
 |---|---|---|---|---|
-| US-CKP-001, US-CKP-026 | Flota en vivo; autoría del último commit | Must; Should | I | — |
+| US-CKP-026 | Autoría del último commit | Should | I | — |
 | US-CKP-025 | TUI en un repo no observado | Should | P | Falta el escenario 6 y los niveles |
-| US-CKP-002, 003, 005 | Prioriza lo que pide atención; estado del motor; terminal pequeña o ASCII | Must | Pend | — |
-| US-CKP-006, 007, 008, 009, 010 | Predicción de conflictos: choque, vigencia, aviso, base sin confirmar y KPI | Must | Pend | SPIKE-CKP-001 → TS-CKP-001 |
-| US-CKP-012, 014, 015, 016, 017, 018, 024 | Revisar, integrar, poner al día, choque detenido, descartar, crear worktree, integrar con seguridad | Must | Pend | TS-CKP-003 |
-| US-CKP-019, 020, 021, 022 | Por qué frena Guardrails; confirmar un plan sobre trabajo ajeno; historial; grafo | Must | Pend | — |
-| US-CKP-004, 011, 013 | Recordar la vista; consulta por CLI; abrir en el editor | Should | Pend | — |
+| US-CKP-002, US-CKP-003, US-CKP-005 | Prioriza lo que pide atención; estado del motor; terminal pequeña o ASCII | Must | Pend | — |
+| US-CKP-006, US-CKP-007, US-CKP-008, US-CKP-009, US-CKP-010 | Predicción de conflictos: choque, vigencia, aviso, base sin confirmar y KPI | Must | Pend | SPIKE-CKP-001 → TS-CKP-001 |
+| US-CKP-012, US-CKP-014, US-CKP-015, US-CKP-016, US-CKP-017, US-CKP-018, US-CKP-024 | Revisar, integrar, poner al día, choque detenido, descartar, crear worktree, integrar con seguridad | Must | Pend | TS-CKP-003 |
+| US-CKP-019, US-CKP-020, US-CKP-021, US-CKP-022 | Por qué frena Guardrails; confirmar un plan sobre trabajo ajeno; historial; grafo | Must | Pend | — |
+| US-CKP-004, US-CKP-011, US-CKP-013 | Recordar la vista; consulta por CLI; abrir en el editor | Should | Pend | — |
 | US-CKP-023 | Cola de confirmación en la TUI | Should | Pend (blocked) | US-GRD-015 |
-| INF-CKP-001, TS-CKP-002, 004, 005 | Esqueleto de la TUI; catálogo y ejecutor; tokens; widgets | Must | I | — |
+| TS-CKP-002, TS-CKP-004, TS-CKP-005 | Catálogo y ejecutor; tokens; widgets | Must | I | — |
 | SPIKE-CKP-001, TS-CKP-001 | Predicción en ≤ 5 s; predictor en el daemon | Must | Pend | — |
 | TS-CKP-003 | Capa del Cockpit en la decisión de Guardrails | Must | Pend | — |
 
-**Guardrails** (19 US y 3 enablers)
+**Guardrails** (18 US y 2 enablers)
 
 | Ids | Qué | MoSCoW | Estado | Bloqueo |
 |---|---|---|---|---|
-| US-GRD-001, US-GRD-019 | Force-push bloqueado; quién ejecutó y a nombre de quién | Must; Should | I | — |
+| US-GRD-019 | Quién ejecutó y a nombre de quién | Should | I | — |
 | US-GRD-005 | Registro de bloqueos (KPI) | Must | P | El spool en modo degradado (TS sin crear) y las entradas `request` y `exception` |
 | US-GRD-018 | Política de autoría | Should | P | Agente registrado; nivel local (US-GRP-013) |
-| US-GRD-002, 003, 006, 007, 008, 010, 011, 012 | Hooks previos; retirar sin rastro; excepción consciente; políticas; ramas y rutas; endurecer; fail-safe; un agente no relaja | Must | Pend | — |
+| US-GRD-002, US-GRD-003, US-GRD-006, US-GRD-007, US-GRD-008, US-GRD-010, US-GRD-011, US-GRD-012 | Hooks previos; retirar sin rastro; excepción consciente; políticas; ramas y rutas; endurecer; fail-safe; un agente no relaja | Must | Pend | — |
 | US-GRD-016 | La misma decisión por MCP y por hooks | Must | Pend | Las escrituras del MCP |
 | US-GRD-017 | Destructiva permitida con punto previo | Must | Pend | US-TMC-005 |
-| US-GRD-004, 009, 014 | Aviso de protección caída; tamaño de diff y formato; rama base del equipo | Should | Pend | — |
-| US-GRD-013, 015 | Configuración por comando; cola de confirmación | Should | Pend | Dev Spec tras SPIKE-GRD-002; US-GRD-013 espera además Q-GRD-32 |
-| INF-GRD-001, TS-GRD-001 | Arnés de hooks; configuración commiteada | Must | I | — |
+| US-GRD-004, US-GRD-009, US-GRD-014 | Aviso de protección caída; tamaño de diff y formato; rama base del equipo | Should | Pend | — |
+| US-GRD-013, US-GRD-015 | Configuración por comando; cola de confirmación | Should | Pend | Dev Spec tras SPIKE-GRD-002; US-GRD-013 espera además Q-GRD-32 |
+| TS-GRD-001 | Configuración commiteada | Must | I | — |
 | SPIKE-GRD-002 | Factor de autenticación del SO (la parte de macOS) | Must | Pend | — |
 
-**Time Machine** (20 US y 6 enablers; MoSCoW supuesto)
+**Time Machine** (17 US y 5 enablers; MoSCoW supuesto)
 
 | Ids | Qué | MoSCoW | Estado | Bloqueo |
 |---|---|---|---|---|
-| US-TMC-001, 002, 004 | Snapshot previo; undo; captura del Git crudo | Must | I | — |
-| US-TMC-006, 009, 012, 013, 018, 019 | Timeline; restaurar a un punto; no pisar a otro; un agente no deshace lo ajeno; los snapshots no se publican; recuperable si el proceso muere | Must | Pend | — |
+| US-TMC-006, US-TMC-009, US-TMC-012, US-TMC-013, US-TMC-018, US-TMC-019 | Timeline; restaurar a un punto; no pisar a otro; un agente no deshace lo ajeno; los snapshots no se publican; recuperable si el proceso muere | Must | Pend | — |
 | US-TMC-011 | Undo por agente y periodo | Must | Pend (blocked) | P17 (producto) |
-| US-TMC-003, 005, 007, 008, 010, 014, 015, 016, 022 | Redo; previo por hooks; filtros; correcciones; últimos N minutos; aviso del remoto; rebase a medias; disco; tope | Should | Pend | — |
+| US-TMC-003, US-TMC-005, US-TMC-007, US-TMC-008, US-TMC-010, US-TMC-014, US-TMC-015, US-TMC-016, US-TMC-022 | Redo; previo por hooks; filtros; correcciones; últimos N minutos; aviso del remoto; rebase a medias; disco; tope | Should | Pend | — |
 | US-TMC-020 | Overhead < 200 ms | Should | Pend | — (SPIKE-TMC-001 ya está hecho) |
-| TS-TMC-001 a 004, SPIKE-TMC-001 | Almacén, oplog, aplicador, operación protegida; spike | Must | I | — |
+| TS-TMC-001, TS-TMC-002, TS-TMC-003, SPIKE-TMC-001 | Almacén, oplog, aplicador; spike | Must | I | — |
 | INF-TMC-001 | Arnés de caos | Must | Pend | — |
 
-**MCP** (19 US y 1 enabler)
+**MCP** (16 US y 1 enabler)
 
 | Ids | Qué | MoSCoW | Estado | Bloqueo |
 |---|---|---|---|---|
-| US-MCP-001, 002, 003, 005 | Instalar; allowlist; `status`; respuestas acotadas | Must | I | — |
-| US-MCP-004, 006, 007, 013, 017 | Quién más trabaja; agente sin soporte; hook sin poderes; "necesita al humano"; `explain_history` | Must | Pend | US-MCP-017 espera US-TMC-006 y 007 |
-| US-MCP-008, 009, 010, 011, 012, 018, 019 | `snapshot`, `safe_commit`, archivos nombrados, worktree esperado, `undo`, `safe_rebase`, `create_worktree` | Must | Pend | TS-CKP-003 |
+| US-MCP-005 | Respuestas acotadas | Must | I | — |
+| US-MCP-004, US-MCP-006, US-MCP-007, US-MCP-013, US-MCP-017 | Quién más trabaja; agente sin soporte; hook sin poderes; "necesita al humano"; `explain_history` | Must | Pend | US-MCP-017 espera US-TMC-006, US-TMC-007 |
+| US-MCP-008, US-MCP-009, US-MCP-010, US-MCP-011, US-MCP-012, US-MCP-018, US-MCP-019 | `snapshot`, `safe_commit`, archivos nombrados, worktree esperado, `undo`, `safe_rebase`, `create_worktree` | Must | Pend | TS-CKP-003 |
 | US-MCP-016 | `check_conflicts` | Must | Pend | TS-CKP-001 |
 | US-MCP-014 | Acción en espera del humano | Should | Pend | US-GRD-015 |
 | US-MCP-015 | Métricas del MCP | Should | Pend | — |
 | INF-MCP-001 | Corpus de seguridad en CI | Must | Pend | — |
 
-**Motor local** (17 US y 10 enablers)
+**Motor local** (10 US y 10 enablers)
 
 | Ids | Qué | MoSCoW | Estado | Bloqueo |
 |---|---|---|---|---|
-| US-GRP-001, 002, 004, 007, 009, 017 | La base de M1 | Must | I | — |
-| US-GRP-012, 020, 022 | Ahead/behind; repos descubiertos | Should | I | — |
-| US-GRP-003, 005, 008, 010 | Estado especial; lo que no se vio; el editor nunca se atribuye; corregir la atribución | Must | Pend | — |
-| US-GRP-006, 011, 013, 016 | Historial de un repo retirado; sesiones compartidas; umbral por repo; rama base del equipo | Should | Pend | — |
-| TS-GRP-001, 002, 003, 006 | Almacén, lectura, daemon, niveles | Must | I | — |
+| US-GRP-020, US-GRP-022 | Repos descubiertos | Should | I | — |
+| US-GRP-003, US-GRP-005, US-GRP-008, US-GRP-010 | Estado especial; lo que no se vio; el editor nunca se atribuye; corregir la atribución | Must | Pend | — |
+| US-GRP-006, US-GRP-011, US-GRP-013, US-GRP-016 | Historial de un repo retirado; sesiones compartidas; umbral por repo; rama base del equipo | Should | Pend | — |
+| TS-GRP-001, TS-GRP-002, TS-GRP-003, TS-GRP-006 | Almacén, lectura, daemon, niveles | Must | I | — |
 | TS-GRP-004 | Canal: N8 a N11 y retención de la auditoría | Should | P | — |
 | INF-GRP-001 | Parte de M2: auditoría de `exec` en macOS (eslogger) | Must | P | — |
 | INF-GRP-002 | Parte de M2: RES-01 de 10 min, RES-03, RES-05, RES-07 y `tiered-scale` | Must | P | — |
@@ -200,11 +212,11 @@ Estados: **I** = implemented, **P** = partially-implemented, **Pend** = draft, r
 
 ### Avance
 
-128 fichas (101 US y 27 enablers): 35 implementadas (20 US y 15 enablers) y 6 en parte (3 y 3).
+M2 son **todos los Must y Should del MVP que no son de M1**: 110 fichas (86 US y 24 enablers), con 17 implementadas (5 US y 12 enablers) y 6 en parte (3 y 3). Las fichas de M1 cuentan en M1 aunque también sean del MVP.
 
-- Hito completo: (35 + 0,5 × 6) / 128 = **29,7 %**.
-- Solo historias: (20 + 0,5 × 3) / 101 = **21,3 %**. Refleja mejor el valor entregado.
-- Por esfuerzo, el Scrum Master lo estima entre un 20 y un 25 %: lo que falta es lo más complejo.
+- Hito completo: (17 + 0,5 × 6) / 110 = **18,2 %**.
+- Solo historias: (5 + 0,5 × 3) / 86 = **7,6 %**. Refleja mejor el valor que falta por entregar.
+- Con M1 incluido (el MVP en macOS completo): (35 + 0,5 × 7) / 129 = **29,8 %**.
 
 ### Ruta crítica y fecha
 
@@ -215,7 +227,7 @@ Quedan unas **90 fichas equivalentes** (87 sin empezar y 6 en parte).
 - **Otras cadenas:** TS-CKP-003 → US-CKP-012 a 024 y las escrituras del MCP (US-MCP-008 a 019); US-TMC-006 → 007 → US-MCP-017; SPIKE-GRD-002 → US-GRD-013 y 015 → US-CKP-023 y US-MCP-014 (la cola de confirmación: si se queda en M2 suma de 3 a 6 días al optimista).
 - **Cierre:** lo que llegue más tarde entre la flota y M1, más 1 o 2 días de demo. **Optimista: 2026-10-26. Conservadora: 2026-11-12.**
 
-## 5. M3: Beta multiplataforma
+## M3: Beta multiplataforma
 
 **Objetivo.** Lo que M2 entrega en macOS funciona igual en Linux y Windows, validado sobre un binario de release, en máquina real, contenedor o VM según lo que exija cada pendiente.
 
@@ -254,7 +266,7 @@ Propuesto por el Arquitecto y aceptado por el orquestador:
 - **Según lo que entre en M2**: XP-18, 19 y 20 (ejecutor y predictor). Si no entran, basta el *fail-closed* documentado. XP-26 se verifica como *fail-closed*; el factor del SO completo puede ir después.
 - **Van a v0.1.0**: XP-28 y XP-29.
 
-**Avance.** 32 ítems (29 XP y 3 fichas): 8 hechos y 8 en parte → (8 + 0,5 × 8) / 32 = **37,5 %**.
+**Avance.** 32 ítems (29 XP y 3 fichas): 8 hechos y 8 en parte → (8 + 0,5 × 8) / 32 = **37,5 %**. El [estado de release](release-status.md) solo cuenta las 3 fichas de este hito; el avance de los XP sale de la columna Estado de `xplat-pendientes.md`.
 
 ### Dónde se valida
 
@@ -270,9 +282,9 @@ M3 se solapa con M2 y ya avanza: las rondas de Linux y Windows siguen a lo que s
 - **Conservadora: 2026-12-01.** Dos o tres rondas y la espera de la máquina con Windows 11.
 - **Factor dominante:** las rondas manuales de Rene y el hardware, no la flota.
 
-## 6. v0.1.0: primera release instalable (piloto interno)
+## M4: v0.1.0, primera release instalable (piloto interno)
 
-**Decisión del orquestador (2026-10-08), validada por el PO y el Arquitecto:** la propuesta de partida llamaba a v0.1.0 "primera release pública". **D1 sigue vigente** (herramienta interna al inicio; se publica fuera cuando el MVP esté estable internamente) y ADR-GRP-014 e INF-GRP-004 se diseñaron sin publicar nada. Por eso v0.1.0 es la **primera release versionada, firmada e instalable para el piloto interno** (KPI del BRD § 9: 5 desarrolladores en 2 equipos). Publicarla en los canales externos es una decisión aparte de Rene (decisión 1 de [§ 7](#7-decisiones-para-rene)).
+**Decisión del orquestador (2026-10-08), validada por el PO y el Arquitecto:** la propuesta de partida llamaba a v0.1.0 "primera release pública". **D1 sigue vigente** (herramienta interna al inicio; se publica fuera cuando el MVP esté estable internamente) y ADR-GRP-014 e INF-GRP-004 se diseñaron sin publicar nada. Por eso v0.1.0 es la **primera release versionada, firmada e instalable para el piloto interno** (KPI del BRD § 9: 5 desarrolladores en 2 equipos). Publicarla en los canales externos es una decisión aparte de Rene (decisión 1 de [Decisiones para Rene](#decisiones-para-rene)).
 
 **Objetivo.** Una persona que no es Rene instala, arranca y actualiza GitRaptor en macOS, Linux o Windows desde una release firmada y verificable.
 
@@ -317,7 +329,7 @@ Todos los canales dependen además de `RELEASE_PUBLISH_CHANNELS=true`. Las prere
 
 Relacionadas, sin contar en el avance: TS-GRP-003 (I: SEC-14 ya rechaza `npx` y `node_modules`, y el autoarranque usa la ruta estable), TD-GRP-001 (P, en M3), TD-GRP-003 (ready, en M2), INF-MCP-001 (draft, en M2) y US-GRP-018 (`raptor doctor`, Could; candidata a entrar aquí como herramienta de soporte del piloto).
 
-**Avance.** (0 + 0,5 × 2) / 7 = **14,3 %**.
+**Avance.** (0 + 0,5 × 2) / 7 = **14,3 %**, contando las 4 fichas y los 3 XP. El [estado de release](release-status.md) solo cuenta las 4 fichas.
 
 ### Fecha
 
@@ -327,7 +339,7 @@ La pista B (cuentas, firma, tap, nombres de npm, runbook, CHANGELOG, `SECURITY.m
 - **Conservadora: 2026-12-15.** Si la firma de Windows empieza tarde, pasa a ser la ruta crítica: fecha de inicio más 2 a 6 semanas.
 - **Riesgo de ruta crítica:** la firma de Windows (identidad y elegibilidad) y la máquina con Windows 11, no el código: el pipeline ya existe y tiene un ensayo en verde.
 
-## 7. Decisiones para Rene
+## Decisiones para Rene
 
 Ninguna se ha tomado en su nombre. Hasta que decida, el plan aplica la recomendación indicada.
 
@@ -338,7 +350,7 @@ Ninguna se ha tomado en su nombre. Hasta que decida, el plan aplica la recomenda
 | 3 | **Pregunta abierta 1: qué pesa más.** Si gana "proteger y deshacer", partir M2 en **M2a** (Time Machine, Guardrails y escrituras del MCP) y **M2b** (predictor y acciones del Cockpit) | Partir M2 si confirma la propuesta v0.7 | Adelanta lo diferencial de seguridad |
 | 4 | **BR-13, la cola de confirmación** (US-GRD-015, US-CKP-023, US-MCP-014; Should) | Sacarla de M2: S-GRD-9 trata "pedir confirmación" como "denegar", así que es seguro | Si se queda, suma de 3 a 6 días al optimista de M2 |
 | 5 | **P17** (US-TMC-011, BR-09 Must, parte de la demo) | Aceptar el supuesto: al retirar una corrección, los eventos vuelven a su atribución detectada | Desbloquea US-TMC-011 y el criterio 2 de M2 |
-| 6 | **Los Could** (US-GRP-018, 019, 021 y US-TMC-017) | Fuera de M2; US-GRP-018 podría entrar en v0.1.0 | — |
+| 6 | **Los Could** (US-GRP-018, US-GRP-019, US-GRP-021 y US-TMC-017) | Fuera de M2; US-GRP-018 podría entrar en v0.1.0 | — |
 | 7 | **MoSCoW de Time Machine**, sobre todo US-TMC-016 (disco) y US-TMC-020 (overhead), hoy Should por supuesto | Confirmar o subir a Must | Cambia el total de M2 |
 | 8 | **Cifras de RES-01 y RES-02** (CPU < 1 %, RSS < 150 MB con 10 worktrees), abiertas desde M1 | Confirmarlas | Cierra el criterio 5 de M1 |
 | 9 | **Cuentas y firma:** Apple Developer Program (individual u organización; si es organización, D-U-N-S) y firma de Windows (Artifact Signing, certificado OV o sin firmar con el aviso de SmartScreen). ⚠️ **ASSUMPTION**: Artifact Signing para personas solo existe en EE. UU. y Canadá | Empezar esta semana | Ruta crítica de v0.1.0 |
@@ -349,7 +361,7 @@ Ninguna se ha tomado en su nombre. Hasta que decida, el plan aplica la recomenda
 | 14 | **TD-GRP-002** (NFR-04 y NFR-05 no se cumplen bajo ráfaga en macOS): ¿bloquea v0.1.0 o sale como limitación conocida? | Bloquea M2 (criterio 4) | — |
 | 15 | **Pendientes de Guardrails:** Q-GRD-32 (relajación personal pendiente), adopción del factor por D8, desinstalar y la excepción de OQ-GRD-008-3: ¿entran al MVP? | Decidir antes de la ola de Guardrails de M2 | Pueden añadir historias a M2 |
 
-## 8. Huecos y limpieza
+## Huecos y limpieza
 
 **Huecos sin ficha.** No se les asigna id aquí: cada uno se crea con el siguiente número libre cuando se tome.
 
@@ -376,11 +388,12 @@ Ninguna se ha tomado en su nombre. Hasta que decida, el plan aplica la recomenda
 - TS-GRP-001, TS-GRP-002 y SPIKE-TMC-001 dicen `done` en lugar de `implemented`.
 - US-GRP-006 dice Must en el cuerpo y Should en el índice.
 
-## 9. Cómo se mantiene este documento
+## Cómo se mantiene este documento
 
-- **Cada PR que cierra una ficha** actualiza su frontmatter y su fila en el backlog (regla del 2026-10-08). Este plan no repite el estado ficha a ficha: los porcentajes y las fechas se recalculan con el método de [§ 2](#2-velocidad-observada-y-método-de-estimación) al cerrar cada ola y al menos una vez por semana.
+- **Contrato con el generador de estado** (`node tools/status/release-status.mjs`, que escribe [release-status.md](release-status.md)): cada hito es un encabezado `## M<n>` y una ficha pertenece al **primer** hito que la lista con su id completo en una fila de tabla (un campo `milestone` en el frontmatter de la ficha manda sobre el plan). Por eso las tablas de composición usan ids completos y no rangos, y las fichas de M1 solo aparecen en la tabla de M1. Si se cambia una tabla de este plan, hay que regenerar `release-status.md` en el mismo PR: docs-lint compara el archivo byte a byte.
+- **Cada PR que cierra una ficha** actualiza su frontmatter y su fila en el backlog (regla del 2026-10-08) y regenera `release-status.md`. Este plan no repite el estado ficha a ficha: los porcentajes y las fechas se recalculan con el método de [Velocidad observada](#velocidad-observada-y-método-de-estimación) al cerrar cada ola y al menos una vez por semana.
 - **Al cerrar un hito**, su fila del resumen pasa a "Cerrado (fecha)" con la evidencia, y el hito siguiente recibe su DAG en olas (como el de M1 en el backlog).
-- **Al aprobarlo Rene**, `status` pasa de `proposed` a `approved` y cada decisión de [§ 7](#7-decisiones-para-rene) se anota con "Decisión de Rene (fecha)".
+- **Al aprobarlo Rene**, `status` pasa de `proposed` a `approved` y cada decisión de [Decisiones para Rene](#decisiones-para-rene) se anota con "Decisión de Rene (fecha)".
 
 ## Decisiones registradas
 
@@ -393,3 +406,5 @@ Ninguna se ha tomado en su nombre. Hasta que decida, el plan aplica la recomenda
 | Estimación por velocidad real en días naturales, por fecha del primer PR de cada ficha, con factor de complejidad para M2 | Scrum Master (2026-10-08) |
 | Porcentaje de M1 por criterios de salida (2 cumplidos, 2 en parte, 1 en curso y 1 sin cumplir = 50 %), no por fichas: todo lo construible ya está en `main` | Decisión del orquestador (2026-10-08). El SM estimaba la evidencia en torno al 5 %: los dos números miden cosas distintas |
 | Este documento no lleva id canónico: el esquema de AADD no tiene un tipo "plan" y sigue el patrón de `xplat-pendientes.md` | Decisión del orquestador (2026-10-08) |
+| La v0.1.0 es el hito **M4**: el generador de estado (#184) solo reconoce hitos `M<n>`. El tag sigue siendo `v0.1.0` | Decisión del orquestador (2026-10-08), por el contrato del generador |
+| M2 son los Must y Should del MVP **que no son de M1** (110 fichas). Las fichas de M1 cuentan en M1; INF-GRP-001, INF-GRP-002 y TS-GRP-004, con la parte de M1 hecha, se siguen en M2. US-GRP-018, US-GRP-019, US-GRP-021, US-TMC-017 (Could) y US-TMC-021 (Fase 2) quedan sin hito | Decisión del orquestador (2026-10-08). El PO contaba M2 con las de M1 (128 fichas, 29,7 %); con el contrato del generador cada ficha va a un solo hito |
