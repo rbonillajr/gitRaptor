@@ -11,6 +11,7 @@ use gitraptor_api::rpc::code;
 use gitraptor_api::timemachine::{NotRestoredReason, TmRejectReason, TmRejectedData, UndoResult};
 use gitraptor_api::untrusted::sanitize;
 use gitraptor_core::client::ClientError;
+use gitraptor_core::timemachine::restore::KEPT_REF_IN_RECREATED_WORKTREE;
 use serde_json::json;
 
 use crate::i18n::t;
@@ -87,6 +88,14 @@ fn print_done(result: &UndoResult, worktree: &Path) {
         "{CMD}: {}",
         t("undo.saved", &[("snapshot", &result.prior_snapshot_id)])
     );
+    // A branch the undo of a restore left as it is: only a worktree that
+    // restore recreated has it out. The ref name is untrusted repo text.
+    for kept in result.warnings.iter().filter_map(|w| {
+        w.strip_prefix(KEPT_REF_IN_RECREATED_WORKTREE)?
+            .strip_prefix(':')
+    }) {
+        println!("{CMD}: {}", t("undo.kept-ref", &[("ref", &sanitize(kept))]));
+    }
     for path in &result.not_restored {
         let reason = t(path_reason_key(path.reason), &[]);
         println!(
@@ -202,6 +211,7 @@ mod tests {
             "undo.done",
             "undo.saved",
             "undo.not-restored",
+            "undo.kept-ref",
             "undo.operation-unnamed",
             "undo.not-in-worktree",
             "undo.not-observed",

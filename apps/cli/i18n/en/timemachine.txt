@@ -13,6 +13,7 @@ prior.capture-failed = not run: the work could not be saved first; nothing chang
 undo.done = undone {operation} ({id}) in {worktree}
 undo.saved = the state right before this undo is saved as {snapshot}; nothing was lost
 undo.not-restored = left as it was ({reason}): {path}
+undo.kept-ref = {ref} was left where the restore put it: the worktree that has it checked out was recreated by that restore and is still there
 undo.path.overlap = someone else changed it meanwhile
 undo.path.not-guaranteed = this file system cannot restore it safely
 undo.path.blocked = a folder on the way is a link or on another disk
