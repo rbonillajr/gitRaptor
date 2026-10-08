@@ -155,7 +155,7 @@ Decisión propia, sin cambio de ADR: las operaciones `interrupted` siguen siendo
 - ~~Windows no tiene identidad estable de archivo con `std`, así que la recuperación nunca borra un lock allí: lo informa como `unsupported`. Además, `SystemProbe` da por vivo cualquier proceso.~~ Resuelto en XP-15 (2026-10-08) solo en NTFS: ver la Enmienda 2026-10-08.
 - **Pendiente: etapa de validación multiplataforma.** Linux: el código es el mismo que en macOS (rustix), pero no se ejecutó.
 - Verificado solo en macOS.
-- Si un PID se reutiliza, el lock se conserva (es la dirección segura). En Windows ya se compara la hora de inicio del hijo (Enmienda 2026-10-08); en Unix queda para INF-TMC-001.
+- ~~Si un PID se reutiliza, el lock se conserva (es la dirección segura). En Windows ya se compara la hora de inicio del hijo (Enmienda 2026-10-08); en Unix queda para INF-TMC-001.~~ Resuelto también en Unix: ver la Enmienda 2026-10-08 (Unix).
 
 ## Enmienda (2026-10-08, XP-15)
 
@@ -171,3 +171,21 @@ Locks y procesos en Windows. **Decisión del orquestador (2026-10-08), validada 
 | Contrato de `ProcessProbe` | Nuevo método `is_same(pid, start_us)`, que por defecto llama a `is_alive(pid)`. `SystemProbe` en Windows: vivo solo si existe un proceso con ese PID y esa hora exacta; `Gone` u otra hora (PID reutilizado), muerto; acceso denegado o lista ilegible, vivo (fail-closed). Sin `start_us` (filas antiguas), como `is_alive`. En Unix sigue `kill(0)` |
 
 Tests: sección "Locks y procesos en Windows (XP-15)" de [xplat-pendientes.md](../../../../architecture/xplat-pendientes.md).
+
+## Enmienda (2026-10-08, Unix): `SystemProbe` reconoce los PID reutilizados
+
+**Decisión del orquestador (2026-10-04), validada por Arquitecto** el 2026-10-08. El Arquitecto pidió dos ajustes: confirmar con `kill(0)` un `Gone` de Linux y pasar la regla de comparación como parámetro para que se pruebe en macOS. No cambia el esquema, el formato de `detail` ni la cadena de hash.
+
+| Cambio | Resolución |
+|---|---|
+| Lectura | `SystemProbe::is_same` en Unix lee el proceso con `SystemProcs::read`, el mismo lector del canal que escribió `start_us` al marcar el hijo (`protected`). No se duplica el parseo de `libproc` ni de `/proc` |
+| macOS | Regla `Exact`: `pbi_start_tvsec`/`tvusec` se fija al crear el proceso, así que otra hora significa otro proceso (muerto) |
+| Linux | Regla `SubSecond`: `start_us` = `btime` (segundos enteros, que el kernel recalcula desde el reloj de pared y que se mueve si se ajusta la hora) + ticks desde el arranque. Solo la parte de menos de un segundo, que sale únicamente de los ticks, separa dos procesos. Si difiere, es muerto. Si coincide y solo cambian los segundos, puede ser el mismo hijo tras un ajuste de reloj, así que se considera vivo (fail-closed). Coste: un reuso dentro de la misma centésima no se detecta (~1 %), y el lock se conserva como antes |
+| `Gone` | macOS ya lo distingue de `Denied` con la lista de PIDs. En Linux, `read` da `Gone` ante cualquier fallo de `/proc` (EMFILE, `hidepid`, parseo), así que antes de declararlo muerto se confirma con `kill(pid, 0)`: si existe, se considera vivo |
+| `Denied` / `Unsupported` | Vivo: el lock se conserva (fail-closed). No se infiere "otro uid, no es nuestro hijo" por las suposiciones de sandbox y SIP |
+| Filas sin `start_us` | Igual que antes: `kill(0)` |
+| Zombi en Linux | Conserva su `starttime`: se ve vivo y el lock se conserva (seguro) |
+
+Llamadores: `ProcessProbe::is_same` solo lo usa `Oplog::release_locks` en la recuperación. Si sale vivo, el lock se conserva (`ChildAlive`) al llegar al plazo. Si sale muerto, se anota `child-ended` y el lock se libera solo si además coincide la identidad del archivo. Ningún otro llamador libera nada con esta respuesta.
+
+Tests (deterministas): `a_reused_pid_does_not_inherit_the_lock` corre ahora en Unix y en Windows (un proceso vivo con otra hora no hereda el lock y, con su hora exacta, lo retiene); `the_lock_of_a_dead_child_is_abandoned_and_released` (hijo muerto y esperado); `a_start_time_tells_a_reused_pid_apart` prueba las dos reglas en cualquier SO, incluido un salto de reloj de segundos enteros.
