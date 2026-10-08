@@ -66,6 +66,34 @@ pub fn without_verbatim_drive(path: &Path) -> PathBuf {
     }
 }
 
+/// Copy the executable `from` to `to`, ready to run.
+///
+/// On Unix a child `cp` writes it, so this process never holds a writable descriptor on it. On
+/// Linux, a descriptor held here while another test thread forks is inherited by that child until
+/// its `execve` closes it (`O_CLOEXEC` only acts at exec), and executing the copy in that window
+/// fails with `ETXTBSY`. Renaming a temporary does not help: the inherited descriptor still
+/// points at the same inode.
+pub fn copy_executable(from: &Path, to: &Path) {
+    #[cfg(unix)]
+    {
+        let status = Command::new("/bin/cp")
+            .arg("--")
+            .arg(from)
+            .arg(to)
+            .env_clear()
+            .status()
+            .expect("run /bin/cp");
+        assert!(
+            status.success(),
+            "copying {} to {} failed",
+            from.display(),
+            to.display()
+        );
+    }
+    #[cfg(not(unix))]
+    std::fs::copy(from, to).expect("copy executable");
+}
+
 /// mtime of the `n`-th file written by [`Fixture::write`]: 2026-09-21 plus `n` seconds.
 pub fn fixed_mtime(n: u64) -> SystemTime {
     UNIX_EPOCH + Duration::from_secs(1_790_000_000 + n)

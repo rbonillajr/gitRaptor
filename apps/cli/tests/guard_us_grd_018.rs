@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 use gitraptor_core::daemon::running_pid;
 use gitraptor_core::profile::ProfileDirs;
 use gitraptor_testkit::Fixture;
-use gitraptor_testkit::fixture::git_from_path;
+use gitraptor_testkit::fixture::{copy_executable, git_from_path};
 
 const RAPTOR: &str = env!("CARGO_BIN_EXE_raptor");
 const FAKE_AGENT: &str = "raptor-fake-agent";
@@ -154,7 +154,7 @@ impl Machine {
     fn agent_sh(&self, line: &str) -> Output {
         let agent = self.outside.path().join("bin").join(FAKE_AGENT);
         if !agent.exists() {
-            std::fs::copy(std::env::current_exe().unwrap(), &agent).unwrap();
+            copy_executable(&std::env::current_exe().unwrap(), &agent);
         }
         Command::new(agent)
             .args([
