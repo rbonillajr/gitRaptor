@@ -60,6 +60,15 @@ pub fn check(common: &Path, journal: Option<&Journal>) -> Health {
 /// install (`None` when there is none) and the key as read.
 pub fn check_with(common: &Path, journal: Option<&Journal>, key: Key) -> Health {
     let Some(journal) = journal else {
+        // The repo moved with Guardrails' key in its config: it names a folder that is not this
+        // repo's. Nothing records an install here (a moved repo is another entry of the
+        // profile), but the key does not lie: the hooks it points to are not this repo's.
+        if let Ok(Some(value)) = &key
+            && Path::new(value).ends_with(Path::new(FOLDER).join("hooks"))
+            && Path::new(value) != hooks_folder(common)
+        {
+            return lost(LossCause::RepoMoved, Vec::new());
+        }
         return Health::of(HooksLayer::of(orphaned(common, &key)));
     };
     let mut diagnostics = Vec::new();
@@ -67,7 +76,8 @@ pub fn check_with(common: &Path, journal: Option<&Journal>, key: Key) -> Health 
     match &key {
         Err(()) => diagnostics.push(Diagnostic::ConfigUnreadable),
         Ok(value) => {
-            if value.as_deref() != Some(journal.hooks_dir.as_str()) {
+            // As paths, like the uninstall compares them: a trailing slash is the same key.
+            if value.as_deref().map(Path::new) != Some(Path::new(&journal.hooks_dir)) {
                 return lost(LossCause::HookspathChanged, diagnostics);
             }
             if Path::new(&journal.hooks_dir) != hooks_folder(common) {
@@ -204,4 +214,22 @@ pub fn fingerprint(common: &Path, journal: &Journal) -> u64 {
         }
     }
     h.finish()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_key_naming_the_hooks_of_another_folder_is_a_moved_repo() {
+        let tmp = tempfile::tempdir().unwrap();
+        let common = tmp.path().join(".git");
+        std::fs::create_dir_all(common.join(FOLDER).join("hooks")).unwrap();
+        let elsewhere = "/old/place/.git/gitraptor/hooks".to_owned();
+        let h = check_with(&common, None, Ok(Some(elsewhere)));
+        assert_eq!(h.hooks.cause, Some(LossCause::RepoMoved));
+        // Another tool's folder is not ours to call moved.
+        let h = check_with(&common, None, Ok(Some(".husky/_".into())));
+        assert_eq!(h.hooks.status, HooksStatus::NotInstalled);
+    }
 }

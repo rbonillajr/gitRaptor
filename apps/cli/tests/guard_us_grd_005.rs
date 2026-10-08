@@ -469,7 +469,14 @@ fn allowed_operations_leave_no_entries() {
     }
     let log = m.log();
     assert_eq!(log["summary"]["blocked"], 0);
-    assert_eq!(log["entries"].as_array().unwrap().len(), 0, "{log:#}");
+    // The install's own change of state is logged (US-GRD-004, E6); it is not a decision.
+    let decisions = log["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|e| e["kind"] != "protection-state")
+        .count();
+    assert_eq!(decisions, 0, "{log:#}");
 }
 
 /// A warning with the hooks is one entry, never one per hook (ADR-GRD-003 § 6), and does not
@@ -482,7 +489,13 @@ fn a_warning_is_logged_once_outside_the_kpi() {
     let log = m.log();
     assert_eq!(log["summary"]["blocked"], 0, "{log:#}");
     assert_eq!(log["summary"]["notices"], 1, "{log:#}");
-    let entries = log["entries"].as_array().unwrap();
+    // Without the install's own change of state (US-GRD-004, E6).
+    let entries: Vec<&Value> = log["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|e| e["kind"] != "protection-state")
+        .collect();
     assert_eq!(entries.len(), 1, "{log:#}");
     assert_eq!(entries[0]["kind"], "notice");
     assert_eq!(entries[0]["count"], 1);

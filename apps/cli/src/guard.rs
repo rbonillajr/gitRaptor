@@ -704,7 +704,12 @@ pub fn uninstall(path: Option<PathBuf>, yes: bool) -> ExitCode {
         Ok(status) => status,
         Err(err) => return guard_error(CMD, &path, err),
     };
-    if status.state != ProtectionState::HooksOnly {
+    // A protection that stopped being active can be removed too (US-GRD-004).
+    let inactive = status
+        .hooks
+        .as_ref()
+        .is_some_and(|h| h.status == HooksStatus::Inactive);
+    if status.state != ProtectionState::HooksOnly && !inactive {
         eprintln!("{CMD}: {}", t("guard.uninstall.not-installed", &[]));
         return ExitCode::FAILURE;
     }

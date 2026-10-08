@@ -297,17 +297,34 @@ pub fn plan(ctx: &GuardCtx<'_>, repo_id: &str, common: &Path, store: &RepoStore)
         .as_ref()
         .map_or(RefStorage::Files, |r| r.ref_storage());
     let (confirms, protected) = bases(common);
-    let repair = stale.as_ref().map(|(journal, cause)| RepairPlan {
-        cause: *cause,
-        files: journal
-            .files
-            .iter()
-            .map(|f| Untrusted::new(f.path.clone()))
-            .collect(),
-        chains: key_changed
-            .then(|| reader.as_ref().and_then(RepoReader::hooks_path))
-            .flatten()
-            .map(Untrusted::new),
+    // What a repair writes: the files of the folder as it will be (with the hooks the other
+    // tool's key chains), never only the old list.
+    let repair = stale.as_ref().map(|(journal, cause)| {
+        let (next_prior, next_chained) = match (&prior, key_changed) {
+            (Some(found), true) => (
+                Prior {
+                    value: found.value.clone(),
+                    level: level_text(found.level).to_owned(),
+                    dir: found.dir.clone(),
+                },
+                chain_only(&found.hooks),
+            ),
+            _ => (journal.prior.clone(), journal.chained.clone()),
+        };
+        let paths = Folder::build(ctx, repo_id, common, &next_prior, &next_chained)
+            .map(|f| f.paths)
+            .unwrap_or_else(|_| journal.files.iter().map(|f| f.path.clone()).collect());
+        if repair_conflicts(common, journal, &paths) {
+            add(InstallBlocker::OrphanFolder);
+        }
+        RepairPlan {
+            cause: *cause,
+            files: paths.into_iter().map(Untrusted::new).collect(),
+            chains: key_changed
+                .then(|| reader.as_ref().and_then(RepoReader::hooks_path))
+                .flatten()
+                .map(Untrusted::new),
+        }
     });
     GuardPlan {
         repair,
@@ -451,6 +468,10 @@ impl Folder {
 
 /// Installs the hook layer in an observed repo. The permission is granted by the call itself
 /// (the reserved command, ADR-GRD-007 § 1).
+///
+/// `may_repair` is whether the caller was shown the repair of a protection that stopped being
+/// active (`guard.protection`): without it, installing over one is refused as it always was,
+/// never done without the screen that says what changes (US-GRD-004, D9).
 pub fn install(
     ctx: &GuardCtx<'_>,
     repo_id: &str,
@@ -458,8 +479,15 @@ pub fn install(
     store: &mut RepoStore,
     registry: &GuardRegistry,
     now_ms: i64,
+    may_repair: bool,
 ) -> Result<GuardStatus, InstallError> {
     let plan = plan(ctx, repo_id, common, store);
+    if !may_repair && plan.repair.is_some() {
+        let blockers = vec![InstallBlocker::OrphanFolder];
+        let refusal = serde_json::to_string(&blockers).unwrap_or_default();
+        let _ = store.set_guard_keys(None, None, Some(Some(&refusal)), None);
+        return Err(InstallError::Rejected(blockers));
+    }
     if plan.blockers.is_empty() && plan.status.state == ProtectionState::HooksOnly {
         return upgrade(ctx, repo_id, common, store, now_ms);
     }
@@ -553,15 +581,31 @@ pub fn install(
 
 /// The confirmed install of ours whose layer stopped being active, with why (US-GRD-004): what
 /// installing again repairs.
-fn stale_install(store: &RepoStore, status: &GuardStatus) -> Option<(Journal, LossCause)> {
+pub(crate) fn stale_install(
+    store: &RepoStore,
+    status: &GuardStatus,
+) -> Option<(Journal, LossCause)> {
+    // A repo that moved is not repaired here: its profile entry is another one (adopting or
+    // removing it is US-GRD-003, E5).
     let cause = status
         .hooks
         .as_ref()
         .filter(|h| h.status == HooksStatus::Inactive)
-        .and_then(|h| h.cause)?;
+        .and_then(|h| h.cause)
+        .filter(|c| *c != LossCause::RepoMoved)?;
     let journal =
         journal(&store.guard_keys().unwrap_or_default()).filter(|j| j.stage == Stage::Confirmed)?;
     Some((journal, cause))
+}
+
+/// Whether a file the repair would write already exists in the folder and is not one the
+/// journal lists: someone else's, which a repair never replaces.
+fn repair_conflicts(common: &Path, journal: &Journal, paths: &[String]) -> bool {
+    let folder = common.join(FOLDER);
+    paths.iter().any(|p| {
+        !journal.files.iter().any(|f| f.path == *p)
+            && std::fs::symlink_metadata(folder.join(p)).is_ok()
+    })
 }
 
 /// Installs again over an install of ours that stopped being active (US-GRD-004, D9): the
@@ -603,8 +647,19 @@ fn repair(
             .set_guard_keys(Some(Some(&j.to_json())), None, None, None)
             .map_err(|e| InstallError::Failed(format!("journal: {e:?}")))
     };
-    // Before any write: the journal lists every file that may exist afterwards.
+    // A file of the new folder that already exists and is not ours is never replaced.
+    if repair_conflicts(common, &journal, &folder_files.paths) {
+        return Err(InstallError::Rejected(vec![InstallBlocker::OrphanFolder]));
+    }
+    // Before any write: the journal lists every file that may exist afterwards, the ones of the
+    // old install that the new folder does not have included (removed below, only if untouched).
+    let old_files = std::mem::take(&mut journal.files);
+    let leftovers: Vec<FileHash> = old_files
+        .into_iter()
+        .filter(|f| !folder_files.paths.contains(&f.path))
+        .collect();
     journal.files = folder_files.hashes();
+    journal.files.extend(leftovers.iter().cloned());
     journal.at_ms = now_ms;
     journal.raptor = ctx.raptor.to_string_lossy().into_owned();
     journal.template = TEMPLATE_VERSION;
@@ -612,7 +667,7 @@ fn repair(
     let mut files = folder_files.files();
     files.sort_by_key(|f| !f.executable);
     trip("repair-files", When::Before);
-    if hooks_dir.is_dir()
+    if common.join(FOLDER).is_dir()
         && let Some(folder) = journal.folder
     {
         writer
@@ -626,6 +681,27 @@ fn repair(
             }
             Err(e) => return Err(InstallError::Failed(format!("repair folder: {e}"))),
         }
+        save(store, &journal)?;
+    }
+    // The dispatchers the old install had and the new folder does not (the hooks the other
+    // tool's key chained before): ours and untouched, they go; an edited one stays listed.
+    let removable: Vec<&str> = leftovers
+        .iter()
+        .filter(|f| {
+            std::fs::read(common.join(FOLDER).join(&f.path))
+                .is_ok_and(|bytes| sha256(&bytes) == f.sha256)
+        })
+        .map(|f| f.path.as_str())
+        .collect();
+    if !removable.is_empty()
+        && let Some(folder) = journal.folder
+    {
+        writer
+            .remove_folder(common, &removable, folder.into())
+            .map_err(|e| InstallError::Failed(format!("repair leftovers: {e}")))?;
+        journal
+            .files
+            .retain(|f| !removable.contains(&f.path.as_str()));
         save(store, &journal)?;
     }
     trip("repair-files", When::After);

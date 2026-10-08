@@ -76,9 +76,12 @@ impl Protection {
         self.seen.remove(repo_id);
     }
 
+    /// The install is gone: what was followed of it goes too, so a later install starts clean.
     pub fn unwatch(&mut self, repo_id: &str) {
         self.watched.remove(repo_id);
         self.seen.remove(repo_id);
+        self.tracked.remove(repo_id);
+        self.alerted.retain(|(id, _), _| id != repo_id);
     }
 
     pub fn watched(&self) -> Vec<(String, Watched)> {
