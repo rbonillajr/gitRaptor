@@ -3,12 +3,11 @@
 //! screen. Not published.
 //!
 //! Boundary (Validation V5): `tui`, `model`, `client`, `present` and
-//! `queue` never import the engine, the Git layer or the policy layer.
-//! `link` is the named exception: it plugs in the channel client library,
-//! which still lives in `crates/core` until it moves to `crates/api`.
+//! `queue` never import the engine, the Git layer or the policy layer, with
+//! no exception: the channel client library lives in `crates/api`, and the
+//! binary injects how a daemon is started (INF-CKP-001 Entrega 2b).
 
 pub mod client;
-pub mod link;
 pub mod model;
 pub mod present;
 pub mod queue;

@@ -253,7 +253,7 @@ fn two_headless_tuis_see_the_same_engine() {
 
     use gitraptor_api::messages::ClientKind;
     use gitraptor_cli::client;
-    use gitraptor_cli::link::EngineConnector;
+    use gitraptor_cli::client::engine::EngineConnector;
     use gitraptor_cli::model::{ConnState, Model, Size};
     use gitraptor_cli::present::i18n::Lang;
     use gitraptor_cli::queue;
@@ -285,7 +285,11 @@ fn two_headless_tuis_see_the_same_engine() {
             model,
             inbox,
         );
-        let channel = client::spawn(EngineConnector::new(options), None, engine);
+        let channel = client::spawn(
+            EngineConnector::new(options.connect().unwrap(), Box::new(options.launcher())),
+            None,
+            engine,
+        );
         app.attach(channel.cmds.clone());
         apps.push((app, channel));
     }
