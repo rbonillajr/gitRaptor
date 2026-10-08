@@ -150,7 +150,7 @@ Decisión del orquestador (2026-10-04), validada por el PO y el Arquitecto: la T
 | **Gate de 10 worktrees bajo carga** y una sola barrera por snapshot (en `complete`): en el banco final, ref + oplog son 42–58 ms p95 y el gate de 10 worktrees falla con la máquina cargada (§ 8) | Ajustar la tolerancia de la cabeza del oplog (TS-TMC-002) con su test de corte, y enmendar ADR-TMC-001 § 4, ADR-TMC-003 y ADR-TMC-006 § 2 (§ 7) |
 | Escribir los árboles de un snapshot en un pack en lugar de objetos sueltos (con 100 archivos dispersos se reescriben unos 250 árboles) | Optimización si el gate de CI lo pide |
 | Progreso en CLI/TUI para un previo con archivos grandes (US-TMC-020, escenario 3) | US-TMC-020; no es de esta TS |
-| Linux y Windows | **Pendiente: etapa de validación multiplataforma**. Linux compila con `FICLONE`, copia y `fsync`, sin ejecutar aquí. En Windows, `StoreRepo` devuelve `Unsupported` |
+| Linux y Windows | **Pendiente: etapa de validación multiplataforma**. Linux compila con `FICLONE`, copia y `fsync`, sin ejecutar aquí. Windows: portado y verificado en máquina real en la [Enmienda 2026-10-08 de DS-TS-TMC-003](TS-TMC-003-escritura-aplicador.md#enmienda-2026-10-08--windows-xp-12) (XP-12): DACL privada, siembra por copia (NTFS no clona) y apertura sin seguir reparse points |
 
 ## 10. Verificación
 
