@@ -7,10 +7,13 @@ mod tm_common;
 use std::path::{Path, PathBuf};
 
 use gitraptor_core::timemachine::oplog::SnapshotLevel;
-use gitraptor_core::timemachine::store::{SnapshotStore, StoreStatus};
+use gitraptor_core::timemachine::store::SnapshotStore;
+#[cfg(unix)]
+use gitraptor_core::timemachine::store::StoreStatus;
 use gitraptor_testkit::{Exceptions, Fixture};
 use tm_common::{Env, REPO_ID, git, hint};
 
+#[cfg(unix)]
 fn packs(git_dir: &Path) -> Vec<PathBuf> {
     let mut v: Vec<PathBuf> = std::fs::read_dir(git_dir.join("objects/pack"))
         .unwrap()
@@ -351,6 +354,7 @@ fn hostile_seeding_does_not_contaminate_the_store() {
     }
 }
 
+#[cfg(unix)]
 fn real_pack_in(store: &Path) -> PathBuf {
     packs(store)
         .into_iter()
