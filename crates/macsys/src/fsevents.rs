@@ -111,7 +111,7 @@ impl Stream {
     /// Starts a stream over `root` (recursive), skipping `exclusions`, from `since_when`
     /// ([`SINCE_NOW`] or the id of an earlier event). Paths are made canonical (`/var` is
     /// `/private/var`), which is how the OS reports them, and the exclusions must exist and be
-    /// under `root`: the ones that are not are skipped.
+    /// under `root`: the ones that are not, and symlinks, are skipped.
     pub fn start(
         root: &Path,
         exclusions: &[PathBuf],
@@ -124,6 +124,11 @@ impl Stream {
         let root = canonical(root)?;
         let mut kept = Vec::with_capacity(exclusions.len());
         for e in exclusions {
+            // A symlink is no folder to leave out: it may be repointed at one that holds
+            // tracked files, and the stream would leave that one out instead.
+            if std::fs::symlink_metadata(e).is_ok_and(|m| m.file_type().is_symlink()) {
+                continue;
+            }
             if let Ok(e) = canonical(e)
                 && e != root
                 && e.starts_with(&root)

@@ -27,6 +27,9 @@ use super::{Shared, WtMsg};
 /// is never delayed. ⚠️ **ASSUMPTION**: calibrated by the idle bench.
 const MIN_BETWEEN_ADDITIONS: Duration = Duration::from_secs(30);
 
+/// When to try again after the OS refused a replacement stream.
+const RETRY_AFTER: Duration = Duration::from_secs(5);
+
 /// A worktree says its ignored folders changed.
 pub(super) struct Recheck {
     pub root: PathBuf,
@@ -130,6 +133,12 @@ fn apply(
         return again;
     }
     let Some(done) = replace(shared, root, &wanted) else {
+        // The OS refused the new stream. A folder taken back must not stay out: reconcile what
+        // was missed and try again soon.
+        if removed {
+            let _ = pending.tx.send(WtMsg::Rescan(clock::monotonic_ns()));
+            return Some(Instant::now() + RETRY_AFTER);
+        }
         return again;
     };
     if add {
