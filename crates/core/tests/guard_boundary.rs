@@ -74,16 +74,50 @@ mod repo_intact {
         }
     }
 
+    /// ADR-GRD-001 § 7, Enmiendas 2026-10-05 and 2026-10-08: the dispatcher starts the `raptor`
+    /// of its constants (with a cleared environment) and the prior hook of its `prior` constant
+    /// (US-GRD-002), nothing else. A prior script without a `#!` line runs through `/bin/sh`
+    /// with the script as its argument, as Git does: never `-c`, never a command line.
     #[test]
-    fn the_dispatcher_only_starts_the_raptor_of_its_constants() {
+    fn the_dispatcher_only_starts_the_raptor_of_its_constants_and_the_prior_hook() {
         let text =
             std::fs::read_to_string(workspace().join("apps/cli/src/bin/raptor-hook.rs")).unwrap();
-        assert_eq!(text.matches("Command::new(").count(), 1);
+        assert_eq!(text.matches("Command::new(").count(), 3);
         assert!(text.contains("Command::new(raptor)"));
+        assert!(text.contains("Command::new(&program)"));
+        assert!(text.contains("Command::new(\"/bin/sh\")"));
+        assert_eq!(text.matches("/bin/sh").count(), 1);
+        assert!(text.contains("sh.arg(&program)"));
         assert!(text.contains(".env_clear()"));
-        // No shell anywhere.
-        for word in ["\"sh\"", "/bin/sh", "cmd.exe", "powershell"] {
+        // The prior hook is only ever `<prior constant>/<fixed hook name>`.
+        assert!(text.contains("let path = dir.join(hook.name());"));
+        for word in ["\"-c\"", "\"sh\"", "cmd.exe", "powershell"] {
             assert!(!text.contains(word), "{word}");
+        }
+    }
+
+    /// NFR-12 cut points of the Guardrails transactions (US-GRD-003): behind the `chaos` feature
+    /// of the chaos harness, so a build for users compiles an empty `trip` that reads nothing
+    /// and never exits (SEC-06; `tm_chaos_gate` keeps the feature out of those builds).
+    #[test]
+    fn without_the_chaos_feature_the_cut_points_are_empty() {
+        let source =
+            std::fs::read_to_string(workspace().join("crates/core/src/guardrails/cut.rs")).unwrap();
+        assert!(source.contains(
+            "#[cfg(not(feature = \"chaos\"))]\n#[inline(always)]\npub fn trip(_step: &str, _when: When) {}"
+        ));
+        let gated = source
+            .split("#[cfg(feature = \"chaos\")]")
+            .nth(1)
+            .and_then(|s| s.split("#[cfg(not(feature").next())
+            .unwrap();
+        for needle in ["std::env::var", "process::exit"] {
+            assert!(gated.contains(needle), "{needle}");
+            assert_eq!(
+                source.matches(needle).count(),
+                gated.matches(needle).count(),
+                "{needle}"
+            );
         }
     }
 }

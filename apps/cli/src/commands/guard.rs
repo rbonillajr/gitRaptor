@@ -1,4 +1,4 @@
-//! `raptor guard`: the Guardrails hook layer (US-GRD-001).
+//! `raptor guard`: the Guardrails hook layer (US-GRD-001, US-GRD-003).
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -23,6 +23,20 @@ enum GuardAction {
         /// Grant the permission without asking.
         #[arg(long)]
         yes: bool,
+    },
+    /// Remove the protection and leave the repo exactly as it was (reserved to the developer).
+    /// Announced to every client, it applies after a window in which anyone can cancel it.
+    Uninstall {
+        /// The repo's Git directory or any of its worktrees; defaults to the current folder.
+        path: Option<PathBuf>,
+        /// Answer the question without asking (the window still applies).
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Cancel a removal of the protection that is waiting for its window.
+    Cancel {
+        /// The repo's Git directory or any of its worktrees; defaults to the current folder.
+        path: Option<PathBuf>,
     },
     /// Show the protection status of a repo.
     Status {
@@ -52,6 +66,8 @@ impl Cmd {
     pub(crate) fn run(self, _: &Global) -> ExitCode {
         match self.action {
             GuardAction::Install { path, yes } => guard::install(path, yes),
+            GuardAction::Uninstall { path, yes } => guard::uninstall(path, yes),
+            GuardAction::Cancel { path } => guard::cancel(path),
             GuardAction::Status { path, json } => guard::status(path, json),
             GuardAction::Log {
                 path,

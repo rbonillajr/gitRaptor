@@ -10,12 +10,16 @@
 pub mod actor;
 pub mod authorship;
 pub mod constants;
+pub mod cut;
 pub mod evaluate;
 pub mod hook;
 pub mod install;
 pub mod journal;
 pub mod log;
+pub mod pending;
+pub mod prior;
 pub mod registry;
 pub mod second_line;
+pub mod uninstall;
 
 pub use registry::{GuardEntry, GuardRegistry};
