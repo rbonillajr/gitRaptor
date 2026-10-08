@@ -9,6 +9,12 @@
 
 pub mod process;
 
+#[cfg(all(
+    target_os = "macos",
+    any(target_arch = "aarch64", target_arch = "x86_64")
+))]
+#[allow(unsafe_code)]
+mod ffi_kinfo;
 #[cfg(target_os = "macos")]
 #[allow(unsafe_code)]
 mod ffi_procargs;
