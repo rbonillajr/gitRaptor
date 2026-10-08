@@ -111,6 +111,16 @@ impl Dir {
         }
     }
 
+    /// Whether `path` names this folder now, itself and not through a link.
+    pub fn is_at_path(&self, path: &Path) -> Result<bool> {
+        let here = identity(&rustix::fs::fstat(&self.fd).map_err(io)?);
+        match rustix::fs::lstat(path) {
+            Ok(stat) => Ok(identity(&stat) == here),
+            Err(Errno::NOENT) => Ok(false),
+            Err(e) => Err(io(e)),
+        }
+    }
+
     /// Removes file `name`; a link is removed itself, never followed.
     pub fn remove_file(&self, name: &str) -> std::io::Result<()> {
         rustix::fs::unlinkat(&self.fd, name, AtFlags::empty()).map_err(Into::into)
