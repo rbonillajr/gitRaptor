@@ -37,18 +37,9 @@ esac
 exit 2
 "#;
 
-/// `raptor-mcp` next to `raptor`; build it if this package was tested alone.
+/// `raptor-mcp` next to `raptor`; built there if this package was tested alone.
 fn server() -> PathBuf {
-    let server = PathBuf::from(RAPTOR).with_file_name("raptor-mcp");
-    if !server.exists() {
-        let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
-        let status = Command::new(cargo)
-            .args(["build", "-q", "-p", "gitraptor-mcp", "--bin", "raptor-mcp"])
-            .status()
-            .unwrap();
-        assert!(status.success());
-    }
-    server
+    gitraptor_testkit::sibling_bin(Path::new(RAPTOR), "gitraptor-mcp", "raptor-mcp")
 }
 
 struct Env {

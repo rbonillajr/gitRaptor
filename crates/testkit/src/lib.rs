@@ -21,6 +21,7 @@
 //! - [`repogen`]: deterministic reference repos of SPIKE-TMC-001 (profile `M`, D-TMC-21) and of
 //!   INF-GRP-002 (profile `H`, 100K commits).
 //! - [`freshness`]: statistics and gates of the freshness and footprint bench (INF-GRP-002).
+//! - [`sibling`]: binaries of another workspace package, next to the binary under test.
 
 #[cfg(unix)]
 pub mod canary;
@@ -35,8 +36,10 @@ pub mod guard;
 pub mod hooks;
 pub mod interceptability;
 pub mod repogen;
+pub mod sibling;
 
 pub use control::{Mode, Report, Scenario, Step, check};
 pub use exceptions::{Exception, Exceptions};
 pub use fingerprint::{Change, ChangeKind, Field, Scope, Snapshot, diff};
 pub use fixture::Fixture;
+pub use sibling::sibling_bin;

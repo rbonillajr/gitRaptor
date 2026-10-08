@@ -18,17 +18,9 @@ use std::process::{Command, Output, Stdio};
 
 const RAPTOR: &str = env!("CARGO_BIN_EXE_raptor");
 
+/// `raptor-mcp` next to `raptor`; built there if this package was tested alone.
 fn server() -> PathBuf {
-    let server = PathBuf::from(RAPTOR).with_file_name("raptor-mcp");
-    if !server.exists() {
-        let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
-        let status = Command::new(cargo)
-            .args(["build", "-q", "-p", "gitraptor-mcp", "--bin", "raptor-mcp"])
-            .status()
-            .unwrap();
-        assert!(status.success());
-    }
-    server
+    gitraptor_testkit::sibling_bin(Path::new(RAPTOR), "gitraptor-mcp", "raptor-mcp")
 }
 
 fn real_claude() -> PathBuf {
