@@ -11,7 +11,9 @@ use std::sync::LazyLock;
 use gitraptor_api::AgentKind;
 use gitraptor_api::guard::{Level, Operation, RefValue};
 use gitraptor_git::{Hide, PathLimits, RefName, RepoReader};
-use gitraptor_policy::guard::policies::{Policies, Source, Touched, combine};
+use gitraptor_policy::guard::Evaluation;
+use gitraptor_policy::guard::glob::Budget;
+use gitraptor_policy::guard::policies::{Policies, Source, Touched, combine, forbidden_paths};
 use gitraptor_policy::settings::model::Settings;
 use gitraptor_policy::team::{Confirmed, TeamLoader};
 
@@ -96,6 +98,7 @@ pub fn touched(
     }
     let mut left_commits = MAX_COMMITS;
     let mut reads = 0;
+    let mut budget = Budget::default();
     let mut read = |old: Option<&str>, new: &RefValue, updated: &[&str], hide: Hide| {
         let RefValue::Oid(new) = new else {
             return None;
@@ -112,7 +115,19 @@ pub fn touched(
             commits: left_commits.min(PathLimits::default().commits),
             ..PathLimits::default()
         };
-        match reader.new_commit_paths(old, new, updated, hide, &limits) {
+        // First a cheap look that hides only the old value: it brings a superset of the new
+        // commits, so when nothing in it is forbidden the answer is final. Only a hit (or a
+        // look that does not fit the bounds) pays for hiding what the other branches hold.
+        let first = reader.fresh_commit_paths(old, new, updated, Hide::OldOnly, &limits);
+        let found = match first {
+            Ok(found)
+                if !found.unverifiable && !hits(policies, actor, &found.paths, &mut budget) =>
+            {
+                Ok(found)
+            }
+            _ => reader.fresh_commit_paths(old, new, updated, hide, &limits),
+        };
+        match found {
             Ok(found) if !found.unverifiable => {
                 left_commits = left_commits.saturating_sub(found.commits);
                 Some(Touched {
@@ -151,4 +166,21 @@ pub fn touched(
             .collect(),
         Operation::Rebase { .. } | Operation::Commit { .. } => Vec::new(),
     }
+}
+
+/// Whether any of `paths` is forbidden for `actor`. Running out of work counts as a hit, so it
+/// is looked at again with the exact set.
+fn hits(
+    policies: &Policies,
+    actor: Option<AgentKind>,
+    paths: &[String],
+    budget: &mut Budget,
+) -> bool {
+    let mut scratch = Evaluation::allow();
+    let touched = Touched {
+        paths: paths.to_vec(),
+        unverifiable: false,
+    };
+    forbidden_paths(&mut scratch, &touched, actor, policies, budget);
+    scratch.effect != gitraptor_api::guard::Effect::Allow
 }
