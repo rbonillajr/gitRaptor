@@ -6,7 +6,7 @@ status: approved
 feature: motor-local
 domain: GRP
 created: 2026-10-04
-updated: 2026-10-05
+updated: 2026-10-07
 related:
   stories: [TS-GRP-004]
   adrs: [ADR-GRP-002, ADR-GRP-005, ADR-GRP-011, ADR-GRP-012, ADR-GRP-013, ADR-TMC-005]
@@ -241,6 +241,8 @@ Cierra el pendiente de transporte del § 5 y la decisión 8 de [ADR-GRP-005](../
 | P6 | **Servidor**: `PIPE_REJECT_REMOTE_CLIENTS`; identifica al cliente con `GetNamedPipeClientProcessId` y el dueño del token del proceso (`current_uid()` o `FOREIGN_UID`, W4). Un cliente de otro usuario se cierra sin leer nada, igual que en Unix | SEC-01; misma semántica que `channel::peer` |
 | P7 | **E/S solapada con plazo**: cada lectura y escritura es `OVERLAPPED` con su propio evento y espera con el plazo fijado (`set_read_timeout`/`set_write_timeout`, devuelve `TimedOut`); el `shutdown` de lectura o escritura despierta la espera y cancela solo esa operación (`CancelIoEx` con su `OVERLAPPED`). Una operación cancelada siempre se espera hasta el final antes de liberar su búfer. Así `conn.rs` usa el mismo código en los dos SO, con el tipo `channel::transport::Stream` | Plazos del handshake y de inactividad (SEC-08) y cierre ordenado |
 | P8 | **Integridad del canal**: no hay fichero que se pueda sustituir, así que `socket_intact` es siempre cierto en Windows. Un proceso del **mismo** usuario puede crear instancias adicionales del pipe; está fuera del modelo, igual que en Unix puede borrar el socket y crear el suyo (allí se detecta y se vuelve a enlazar) | Riesgo residual declarado |
+| P9 | **Arranque bajo demanda en Windows**: el daemon se lanza con `DETACHED_PROCESS \| CREATE_NEW_PROCESS_GROUP` y los handles estándar del cliente dejan de ser heredables antes del lanzamiento (si no, el daemon mantenía abiertas las tuberías del llamante). Su entorno limpio lleva `SystemRoot`, un `PATH` de System32, `ProgramFiles` (unidad de Windows), `USERPROFILE` y `LOCALAPPDATA` (API de carpetas conocidas), nunca valores del cliente (SEC-10) | Hallado en la máquina real; sin `ProgramFiles` no se encontraba Git |
+| P10 | **Revisiones (2026-10-07)**: un revisor independiente propuso no dejar nunca el nombre libre y reintentar el `accept`; se aplicó: la instancia siguiente se crea antes de soltar la conectada o la fallida, cada instancia nueva debe tener el propietario y la DACL de la primera, y el bucle reintenta con espera; tras 20 fallos seguidos `socket_intact` pasa a falso y el daemon vuelve a enlazar. `/security-review`: sin hallazgos Critical/High | Decisión del orquestador (2026-10-07), aprobada por el coordinador |
 
 ### 8.2 Plan de pruebas (criterio → test)
 
