@@ -712,6 +712,10 @@ fn launch(options: &ClientOptions) -> Result<(), ClientError> {
         const DETACHED_PROCESS: u32 = 0x0000_0008;
         const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
         command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
+        // Nothing of the client reaches the daemon: an inherited pipe of the
+        // caller's (`raptor status | more`, the MCP's stdio) would stay open
+        // for the daemon's whole life.
+        gitraptor_winsys::process::keep_std_handles_private();
     }
     let mut child = command
         .arg("daemon")

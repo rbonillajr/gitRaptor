@@ -8,10 +8,14 @@ use std::ptr::null_mut;
 use std::sync::OnceLock;
 
 use windows_sys::Win32::Foundation::{
-    ERROR_ACCESS_DENIED, ERROR_NO_MORE_FILES, FILETIME, HANDLE, STILL_ACTIVE,
+    ERROR_ACCESS_DENIED, ERROR_NO_MORE_FILES, FILETIME, HANDLE, HANDLE_FLAG_INHERIT,
+    INVALID_HANDLE_VALUE, STILL_ACTIVE, SetHandleInformation,
 };
 use windows_sys::Win32::Security::{
     EqualSid, GetTokenInformation, TOKEN_QUERY, TOKEN_USER, TokenUser,
+};
+use windows_sys::Win32::System::Console::{
+    GetStdHandle, STD_ERROR_HANDLE, STD_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
 };
 use windows_sys::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
@@ -183,4 +187,26 @@ pub(crate) fn windows_dir() -> Option<PathBuf> {
     let len =
         unsafe { GetSystemWindowsDirectoryW(buf.as_mut_ptr(), MAX_PATH_UNITS as u32) } as usize;
     (len > 0 && len < MAX_PATH_UNITS).then(|| PathBuf::from(OsString::from_wide(&buf[..len])))
+}
+
+/// Makes this process's standard handles non-inheritable. A detached child (the daemon) would
+/// otherwise inherit them and keep the caller's pipes open after this process exits.
+/// `std::process::Command` duplicates them anew for children that inherit their stdio, so
+/// those are unaffected.
+pub(crate) fn keep_std_handles_private() {
+    for which in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
+        clear_inherit(which);
+    }
+}
+
+fn clear_inherit(which: STD_HANDLE) {
+    // SAFETY: plain value; returns a borrowed handle of this process, or null or
+    // `INVALID_HANDLE_VALUE`, which are skipped.
+    let handle = unsafe { GetStdHandle(which) };
+    if handle.is_null() || handle == INVALID_HANDLE_VALUE {
+        return;
+    }
+    // SAFETY: `handle` is a standard handle of this process, open while it runs; only its
+    // inherit flag changes.
+    unsafe { SetHandleInformation(handle, HANDLE_FLAG_INHERIT, 0) };
 }
