@@ -345,7 +345,11 @@ impl ShutdownHandle {
     }
 
     /// A listing of a discovery root, for the loop to filter and persist.
-    pub(crate) fn discovery_listed(&self, root: &std::path::Path, listing: crate::discovery::Listing) {
+    pub(crate) fn discovery_listed(
+        &self,
+        root: &std::path::Path,
+        listing: crate::discovery::Listing,
+    ) {
         if let Some(root) = root.to_str() {
             let _ = self.tx.send(Control::Discovery(
                 super::discovery::DiscoveryRequest::Listed {
@@ -359,9 +363,9 @@ impl ShutdownHandle {
     /// A candidate's folder is no longer a repo.
     #[cfg_attr(not(unix), allow(dead_code))]
     pub(crate) fn discovery_forget(&self, path: std::path::PathBuf) {
-        let _ = self
-            .tx
-            .send(Control::Discovery(super::discovery::DiscoveryRequest::Forget(path)));
+        let _ = self.tx.send(Control::Discovery(
+            super::discovery::DiscoveryRequest::Forget(path),
+        ));
     }
 
     /// Adds a located and read repo through the loop, which owns the

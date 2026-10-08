@@ -558,11 +558,10 @@ impl Connection<'_> {
             .set_without_tiers(!self.has(methods::CAP_OBSERVATION_TIERS.name));
         // Nor the discovered repos without `discovery.events`, and never to
         // `raptor-mcp` (US-GRP-020, SEC-MCP-01).
-        self.outbox
-            .set_without_discovery(
-                self.profile != ConnectionProfile::Full
-                    || !self.has(methods::CAP_DISCOVERY_EVENTS.name),
-            );
+        self.outbox.set_without_discovery(
+            self.profile != ConnectionProfile::Full
+                || !self.has(methods::CAP_DISCOVERY_EVENTS.name),
+        );
         // Nor the declared authorship of commits without `events.authorship`
         // (US-GRD-019): `raptor-mcp` never asks for it.
         self.outbox

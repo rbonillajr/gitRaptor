@@ -91,7 +91,11 @@ fn discovery_skips_hidden_entries_links_and_oversized_gitdir_files() {
     fs::create_dir_all(root.join("big")).unwrap();
     fs::write(
         root.join("big/.git"),
-        format!("gitdir: {}{}", elsewhere.join(".git").display(), " ".repeat(5000)),
+        format!(
+            "gitdir: {}{}",
+            elsewhere.join(".git").display(),
+            " ".repeat(5000)
+        ),
     )
     .unwrap();
 
@@ -158,14 +162,17 @@ fn discovery_invalid_roots_are_rejected_with_their_reason() {
         RootRejection::NotAbsolute
     );
     assert_eq!(reason(&base.join("missing"), &ctx), RootRejection::Missing);
-    assert_eq!(reason(&base.join("file"), &ctx), RootRejection::NotADirectory);
-    assert_eq!(reason(&base.join("users"), &ctx), RootRejection::HomeAncestor);
+    assert_eq!(
+        reason(&base.join("file"), &ctx),
+        RootRejection::NotADirectory
+    );
+    assert_eq!(
+        reason(&base.join("users"), &ctx),
+        RootRejection::HomeAncestor
+    );
     assert_eq!(reason(&shop, &ctx), RootRejection::InsideRepo);
     assert_eq!(reason(&shop.join("src"), &ctx), RootRejection::InsideRepo);
-    assert_eq!(
-        reason(&profile.join("data"), &ctx),
-        RootRejection::Profile
-    );
+    assert_eq!(reason(&profile.join("data"), &ctx), RootRejection::Profile);
     #[cfg(unix)]
     assert_eq!(reason(Path::new("/"), &ctx), RootRejection::FilesystemRoot);
 }
@@ -180,10 +187,7 @@ fn discovery_a_symlinked_root_is_rejected_with_its_real_path() {
     std::os::unix::fs::symlink(&real, &link).unwrap();
     let err = validate_root(&link, &RootContext::default()).unwrap_err();
     assert_eq!(err.reason, RootRejection::Symlink);
-    assert_eq!(
-        err.real_path.as_deref(),
-        canonical(&real).to_str()
-    );
+    assert_eq!(err.real_path.as_deref(), canonical(&real).to_str());
 }
 
 #[test]
@@ -229,10 +233,7 @@ fn discovery_reads_nothing_but_the_git_marker() {
     let marker = tmp.path().join("marker");
     fs::write(
         canary.join(".git/config"),
-        format!(
-            "[core]\n\tfsmonitor = touch {}\n",
-            marker.display()
-        ),
+        format!("[core]\n\tfsmonitor = touch {}\n", marker.display()),
     )
     .unwrap();
     assert_eq!(names(&list_first_level(root, false).unwrap()), ["canary"]);

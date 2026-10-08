@@ -146,7 +146,10 @@ fn wait_for(client: &mut Client, want: &[&str]) -> Vec<CandidateView> {
         if names == want {
             return found;
         }
-        assert!(start.elapsed() < DEADLINE, "candidates {names:?}, want {want:?}");
+        assert!(
+            start.elapsed() < DEADLINE,
+            "candidates {names:?}, want {want:?}"
+        );
         std::thread::sleep(Duration::from_millis(20));
     }
 }
@@ -282,9 +285,7 @@ fn discovery_the_home_root_skips_hidden_and_excluded_folders() {
     init_repo(&home, ".oh-my-zsh", false);
     init_repo(&home.join("Library"), "x", false);
     init_repo(&home, "Documents", false);
-    tp.open()
-        .add_discovery_root(&text(&home), true, 1)
-        .unwrap();
+    tp.open().add_discovery_root(&text(&home), true, 1).unwrap();
 
     let r = Running::start(tp.dirs(), ChannelConfig::default(), fast(&home));
     let mut client = r.client(ClientKind::Cli);
@@ -317,8 +318,16 @@ fn discovery_dismissals_last_and_removing_a_root_keeps_what_is_observed() {
         profile.add_discovery_root(&root, false, 1).unwrap();
         let new = profile.sync_discovery_candidates(&root, &found, 2).unwrap();
         assert_eq!(new.len(), 2);
-        assert!(profile.dismiss_discovery_candidate(&text(&legacy), 3).unwrap());
-        assert!(!profile.dismiss_discovery_candidate(&text(&shop), 3).unwrap());
+        assert!(
+            profile
+                .dismiss_discovery_candidate(&text(&legacy), 3)
+                .unwrap()
+        );
+        assert!(
+            !profile
+                .dismiss_discovery_candidate(&text(&shop), 3)
+                .unwrap()
+        );
     }
     {
         // After a restart: a new listing does not propose it again.
@@ -334,9 +343,7 @@ fn discovery_dismissals_last_and_removing_a_root_keeps_what_is_observed() {
         assert_eq!(paths, [text(&billing)]);
         // Adding it by hand observes it and forgets the dismissal.
         profile.add_repo(&common_dir(&legacy), None, 5).unwrap();
-        profile
-            .forget_discovered_key(&pair(&legacy).1)
-            .unwrap();
+        profile.forget_discovered_key(&pair(&legacy).1).unwrap();
         // An observed repo is never proposed.
         let new = profile
             .sync_discovery_candidates(&root, &[pair(&legacy), pair(&billing)], 6)
