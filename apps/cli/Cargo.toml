@@ -48,6 +48,10 @@ gitraptor-testkit.workspace = true
 tempfile.workspace = true
 insta.workspace = true
 
+# The DACL of the guardrails folder, read back by the Windows install test (M-07).
+[target.'cfg(windows)'.dev-dependencies]
+gitraptor-winsys.workspace = true
+
 # A pseudo-terminal plays the emulator in the OSC 11 tests.
 [target.'cfg(unix)'.dev-dependencies]
 rustix = { version = "1.1.5", features = ["termios", "pty"] }
