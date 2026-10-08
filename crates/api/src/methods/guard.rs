@@ -55,6 +55,12 @@ pub const CAP_GUARD_AUTHORSHIP: Capability = Capability::new("guard.authorship")
 pub const CAP_GUARD_AUTHORSHIP_SECOND_LINE: Capability =
     Capability::new("guard.authorship.second-line");
 
+/// Protected branches and forbidden paths (US-GRD-008, D9): the daemon resolves the actor of
+/// `ref-transaction` and `push` operations and applies `policies.protectedBranches` and
+/// `policies.forbiddenPaths` only to a connection that asked for it; without it a daemon, or a
+/// hook, evaluates as before.
+pub const CAP_GUARD_POLICIES: Capability = Capability::new("guard.policies");
+
 pub(super) const GROUP: Group = Group {
     // None is offered to `raptor-mcp` (BR-AUTH-004): it neither installs nor
     // evaluates. A connection of protocol 5 or 6 sees none.
@@ -75,6 +81,7 @@ pub(super) const GROUP: Group = Group {
     capabilities: &[
         CAP_GUARD_AUTHORSHIP,
         CAP_GUARD_AUTHORSHIP_SECOND_LINE,
+        CAP_GUARD_POLICIES,
         CAP_GUARD_PRIOR_HOOKS,
         CAP_GUARD_PENDING_ACTION,
         CAP_GUARD_PROTECTION,

@@ -150,6 +150,40 @@ pub struct Policies {
     /// `flexible` (Q-GRD-20).
     #[schemars(extend("x-gitraptor-levels" = ["profile", "team", "local"]))]
     pub commit_authorship: Option<CommitAuthorship>,
+    /// Branches that cannot be moved (US-GRD-008, BR-VAL-003). Only adds protection: every
+    /// level's patterns apply.
+    #[schemars(extend("x-gitraptor-levels" = ["profile", "team", "local"]))]
+    pub protected_branches: Option<PatternPolicy>,
+    /// Paths a commit cannot touch (US-GRD-008, BR-VAL-003). Only adds protection.
+    #[schemars(extend("x-gitraptor-levels" = ["profile", "team", "local"]))]
+    pub forbidden_paths: Option<PatternPolicy>,
+}
+
+/// `policies.protectedBranches` and `policies.forbiddenPaths`: a list of patterns and who they
+/// apply to. A branch pattern matches the whole short name (`release/*` does not cover
+/// `release/1.0/x`; `release/**` does). A path pattern follows `.gitignore`, reduced: with no
+/// `/` apart from a trailing one it is found at any depth (`secrets/`, `*.pem`), with a `/`
+/// in the middle or at the start it is anchored to the root (`config/prod.yml`, `/secrets`),
+/// and a directory covers what is below it. No negations (`!`) and no comments (`#`). With
+/// `appliesTo: everyone` the person is held too and, with no conscious exception in the MVP,
+/// a protected branch is frozen for local pulls and fast-forwards as well.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PatternPolicy {
+    /// At most 64 patterns of at most 256 bytes. An invalid one (empty, with control bytes,
+    /// starting with `!` or `#`, or a branch written as `refs/heads/…`) is dropped alone.
+    #[schemars(extend("x-gitraptor-patterns" = true))]
+    pub patterns: Option<Vec<String>>,
+    /// `agents` (default): only detected or registered agents; `everyone`: also the person.
+    pub applies_to: Option<AppliesTo>,
+}
+
+/// Who a `protectedBranches` or `forbiddenPaths` rule applies to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum AppliesTo {
+    Agents,
+    Everyone,
 }
 
 /// `policies.commitAuthorship`.

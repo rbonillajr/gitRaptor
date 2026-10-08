@@ -16,6 +16,7 @@ use super::diagnostic::{Code, Diagnostic, Location, SourceKind, pointer};
 use super::model::{Level, Settings};
 use super::schema::SCHEMA;
 use super::strict;
+use crate::guard::glob::{Kind, MAX_PATTERNS, validate};
 
 /// State of one source (ADR-GRP-007, "Estado por fuente del cargador").
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -141,6 +142,13 @@ fn resolve(mut schema: &Value) -> &Value {
     schema
 }
 
+/// Whether the array is a list of patterns (`x-gitraptor-patterns`).
+fn declared_patterns(declared: &Value, schema: &Value) -> bool {
+    [declared, schema]
+        .iter()
+        .any(|n| n.get("x-gitraptor-patterns").and_then(Value::as_bool) == Some(true))
+}
+
 fn levels(schema: &Value) -> Option<Vec<&str>> {
     schema
         .get("x-gitraptor-levels")
@@ -224,6 +232,36 @@ impl Walk {
                         map.remove(&key);
                     }
                 }
+                Keep::Yes
+            }
+            ("array", Value::Array(items)) if declared_patterns(declared, schema) => {
+                // A list of patterns: more than the limit is a limit exceeded (PQ-8); an invalid
+                // one is dropped alone, the others still apply (US-GRD-008, D1).
+                if items.len() > MAX_PATTERNS {
+                    return self.fail(Code::OutOfRange, path);
+                }
+                let kind = if path.iter().any(|p| p == "protectedBranches") {
+                    Kind::Branch
+                } else {
+                    Kind::Path
+                };
+                let mut kept = Vec::with_capacity(items.len());
+                for (i, item) in std::mem::take(items).into_iter().enumerate() {
+                    path.push(i.to_string());
+                    match &item {
+                        Value::String(raw) if validate(raw, kind).is_ok() => kept.push(item),
+                        Value::String(_) => {
+                            self.partial = true;
+                            self.note(Code::PolicyInvalid, path);
+                        }
+                        _ => {
+                            path.pop();
+                            return self.fail(Code::WrongType, path);
+                        }
+                    }
+                    path.pop();
+                }
+                *items = kept;
                 Keep::Yes
             }
             ("array", Value::Array(items)) => {
@@ -526,7 +564,7 @@ mod tests {
         assert_eq!(p.status, SourceStatus::Partial);
         assert_eq!(codes(&p), ["unknown-key"]);
 
-        let p = team(r#"{"policies":{"protectedBranches":["release"]}}"#);
+        let p = team(r#"{"policies":{"diffSizeLimit":400}}"#);
         assert_eq!(p.status, SourceStatus::Partial);
         assert_eq!(codes(&p), ["policy-not-supported"]);
 
@@ -535,6 +573,105 @@ mod tests {
     }
 
     /// US-GRD-018 § 4: `commitAuthorship` is a supported key in every level.
+    #[test]
+    fn protected_branches_and_forbidden_paths_are_supported_policies() {
+        let json = r#"{"policies":{
+            "protectedBranches":{"patterns":["main","release/*"],"appliesTo":"everyone"},
+            "forbiddenPaths":{"patterns":["secrets/","*.pem"]}}}"#;
+        let p = team(json);
+        assert_eq!(p.status, SourceStatus::Readable, "{:?}", p.diagnostics);
+        assert!(p.diagnostics.is_empty(), "{:?}", p.diagnostics);
+        let policies = p.applicable().unwrap().policies.clone().unwrap();
+        let branches = policies.protected_branches.unwrap();
+        assert_eq!(
+            branches.patterns.as_deref(),
+            Some(&["main".to_owned(), "release/*".to_owned()][..])
+        );
+        assert_eq!(
+            branches.applies_to,
+            Some(crate::settings::model::AppliesTo::Everyone)
+        );
+        let paths = policies.forbidden_paths.unwrap();
+        assert_eq!(paths.applies_to, None);
+        assert_eq!(paths.patterns.unwrap().len(), 2);
+        // The three personal and team levels admit them.
+        for level in [Level::Profile, Level::Local] {
+            let p = parse_document(json.as_bytes(), level, SourceKind::Profile);
+            assert!(p.diagnostics.is_empty(), "{level:?} {:?}", p.diagnostics);
+        }
+    }
+
+    #[test]
+    fn an_invalid_pattern_is_dropped_alone_and_the_source_is_partial() {
+        let p = team(
+            r##"{"policies":{
+                "protectedBranches":{"patterns":["main","refs/heads/x","","!y"]},
+                "forbiddenPaths":{"patterns":["#c","secrets/","a\u0007b",
+                                              "a//b"]}}}"##,
+        );
+        assert_eq!(p.status, SourceStatus::Partial);
+        assert_eq!(
+            codes(&p),
+            ["policy-invalid"; 6].to_vec(),
+            "{:?}",
+            p.diagnostics
+        );
+        assert_eq!(
+            at(&p),
+            [
+                "/policies/forbiddenPaths/patterns/0",
+                "/policies/forbiddenPaths/patterns/2",
+                "/policies/forbiddenPaths/patterns/3",
+                "/policies/protectedBranches/patterns/1",
+                "/policies/protectedBranches/patterns/2",
+                "/policies/protectedBranches/patterns/3",
+            ]
+        );
+        let policies = p.applicable().unwrap().policies.clone().unwrap();
+        assert_eq!(
+            policies.protected_branches.unwrap().patterns.unwrap(),
+            ["main"]
+        );
+        // `a//b` is invalid as well: the one that is left is `secrets/`.
+        assert!(
+            policies
+                .forbidden_paths
+                .unwrap()
+                .patterns
+                .unwrap()
+                .contains(&"secrets/".to_owned())
+        );
+    }
+
+    #[test]
+    fn limits_and_wrong_types_ignore_the_source_like_any_other_value() {
+        let many: Vec<String> = (0..65).map(|i| format!("\"b{i}\"")).collect();
+        let p = team(&format!(
+            r#"{{"policies":{{"protectedBranches":{{"patterns":[{}]}}}}}}"#,
+            many.join(",")
+        ));
+        assert_eq!(p.status, SourceStatus::Ignored);
+        assert_eq!(codes(&p), ["out-of-range"]);
+        let long = "a".repeat(257);
+        let p = team(&format!(
+            r#"{{"policies":{{"forbiddenPaths":{{"patterns":["{long}"]}}}}}}"#
+        ));
+        assert_eq!(p.status, SourceStatus::Partial);
+        assert_eq!(codes(&p), ["policy-invalid"]);
+        for bad in [
+            r#"{"policies":{"forbiddenPaths":{"patterns":"secrets/"}}}"#,
+            r#"{"policies":{"forbiddenPaths":{"patterns":[1]}}}"#,
+            r#"{"policies":{"protectedBranches":["main"]}}"#,
+        ] {
+            let p = team(bad);
+            assert_eq!(p.status, SourceStatus::Ignored, "{bad}");
+        }
+        // A value of `appliesTo` this version does not know is dropped like an unknown
+        // operation (D12): the source is partial and the safe minimum is forced.
+        let p = team(r#"{"policies":{"forbiddenPaths":{"appliesTo":"robots"}}}"#);
+        assert_eq!(p.status, SourceStatus::Partial);
+    }
+
     #[test]
     fn commit_authorship_is_a_supported_policy() {
         use crate::settings::model::{AuthorshipMode, OnAgentCommit};

@@ -116,6 +116,25 @@ fn reason_text(reason: &Reason) -> String {
             "guard.reason.authorship-human-author",
             &[("level", &level_text(reason.level))],
         ),
+        (Rule::ProtectedBranch | Rule::ForbiddenPath, Some(Cause::Unverifiable)) => {
+            t("guard.reason.policy-unverifiable", &[])
+        }
+        (Rule::ProtectedBranch, _) => t(
+            "guard.reason.protected-branch",
+            &[
+                ("branch", &find(p, ParamKind::Branch)),
+                ("pattern", &find(p, ParamKind::Pattern)),
+                ("level", &level_text(reason.level)),
+            ],
+        ),
+        (Rule::ForbiddenPath, _) => t(
+            "guard.reason.forbidden-path",
+            &[
+                ("path", &find(p, ParamKind::Path)),
+                ("pattern", &find(p, ParamKind::Pattern)),
+                ("level", &level_text(reason.level)),
+            ],
+        ),
     }
 }
 
@@ -202,6 +221,8 @@ fn not_preventable_text(n: NotPreventable) -> String {
             NotPreventable::CreateWorktreeUnrecognized => "guard.np.create-worktree",
             NotPreventable::RenameBaseReftable => "guard.np.rename-base-reftable",
             NotPreventable::VoluntarySkips => "guard.np.voluntary-skips",
+            NotPreventable::PolicyActor => "guard.np.policy-actor",
+            NotPreventable::PolicyReach => "guard.np.policy-reach",
         },
         &[],
     )
@@ -869,6 +890,8 @@ fn log_rule_text(reason: &LoggedReason) -> String {
         Rule::MinimumBaseBranchDelete => "guard.log.rule.base-branch-delete",
         Rule::AuthorshipTrailerRequired => "guard.log.rule.trailer-required",
         Rule::AuthorshipHumanAuthor => "guard.log.rule.human-author",
+        Rule::ProtectedBranch => "guard.log.rule.protected-branch",
+        Rule::ForbiddenPath => "guard.log.rule.forbidden-path",
         Rule::Degraded
         | Rule::ChannelNotAuthentic
         | Rule::RepoMismatch
