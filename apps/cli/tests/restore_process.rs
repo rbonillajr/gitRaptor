@@ -12,6 +12,7 @@
 //! validación multiplataforma.
 #![cfg(target_os = "macos")]
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::sync::{Arc, Mutex};
@@ -253,6 +254,99 @@ fn text(out: &[u8]) -> String {
     String::from_utf8_lossy(out).into_owned()
 }
 
+/// One path of a worktree as Git can see it: a regular file (its exec bits
+/// and its bytes) or a symlink (its target).
+#[derive(Debug, PartialEq, Eq)]
+enum Entry {
+    File { exec: u32, content: Vec<u8> },
+    Symlink(PathBuf),
+    Other,
+}
+
+/// What a worktree holds: every file outside its own `.git` (tracked,
+/// untracked and ignored), `HEAD` (symbolic and resolved) and the index
+/// content (`ls-files -s`, so staged and unstaged work with the same status
+/// differ).
+#[derive(Debug, PartialEq, Eq)]
+struct WorktreeState {
+    files: BTreeMap<PathBuf, Entry>,
+    symbolic_head: String,
+    head: String,
+    index: String,
+}
+
+/// The exact state of the repo for a user: each worktree, every ref
+/// (`refs/stash` included) and the worktree list. Times, inodes, the index
+/// stat cache and object packs are left out on purpose: a restore and its
+/// undo may rewrite them without changing what the user has.
+#[derive(Debug, PartialEq, Eq)]
+struct ExactState {
+    worktrees: BTreeMap<PathBuf, WorktreeState>,
+    refs: String,
+    listed: String,
+}
+
+fn exact_state(fx: &Fixture, worktrees: &[&Path]) -> ExactState {
+    use std::os::unix::fs::PermissionsExt;
+
+    fn walk(root: &Path, dir: &Path, out: &mut BTreeMap<PathBuf, Entry>) {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            if dir == root && entry.file_name() == ".git" {
+                continue;
+            }
+            let meta = std::fs::symlink_metadata(&path).unwrap();
+            let rel = path.strip_prefix(root).unwrap().to_owned();
+            let kind = meta.file_type();
+            if kind.is_dir() {
+                walk(root, &path, out);
+            } else if kind.is_symlink() {
+                out.insert(rel, Entry::Symlink(std::fs::read_link(&path).unwrap()));
+            } else if kind.is_file() {
+                let exec = meta.permissions().mode() & 0o111;
+                out.insert(
+                    rel,
+                    Entry::File {
+                        exec,
+                        content: std::fs::read(&path).unwrap(),
+                    },
+                );
+            } else {
+                out.insert(rel, Entry::Other);
+            }
+        }
+    }
+    let worktrees = worktrees
+        .iter()
+        .map(|root| {
+            let mut files = BTreeMap::new();
+            walk(root, root, &mut files);
+            // `symbolic-ref` fails on a detached `HEAD`, which is a state too.
+            let symbolic = fx
+                .git_command(root, &["symbolic-ref", "-q", "HEAD"])
+                .output()
+                .unwrap();
+            let state = WorktreeState {
+                files,
+                symbolic_head: format!(
+                    "{:?} {}",
+                    symbolic.status.code(),
+                    String::from_utf8_lossy(&symbolic.stdout).trim()
+                ),
+                head: fx.git_in(root, &["rev-parse", "HEAD"]).trim().to_owned(),
+                index: fx.git_in(root, &["ls-files", "-s"]),
+            };
+            (root.to_path_buf(), state)
+        })
+        .collect();
+    ExactState {
+        worktrees,
+        refs: fx.git(&["for-each-ref", "--format=%(refname) %(objectname)"]),
+        listed: fx.git(&["worktree", "list", "--porcelain"]),
+    }
+}
+
 /// Message fragments of `apps/cli/i18n/{en,es}/timemachine.txt` that the
 /// subcommand must produce.
 const EN_POINT: &str = "raptor restore ";
@@ -283,7 +377,8 @@ fn raptor_restore_returns_to_a_timeline_point_and_undo_takes_it_back() {
     let op = m.reset_hard();
     let point = op.prior_snapshot_id.clone();
     assert_eq!(std::fs::read_to_string(&login).unwrap(), "fn login() {}\n");
-    let after_reset = m.fx.fingerprint();
+    let worktrees = [m.fx.repo.as_path(), m.worktree.as_path()];
+    let after_reset = exact_state(&m.fx, &worktrees);
 
     let timeline = m.raptor(&m.worktree.join("src"), &["timeline"], "en_US.UTF-8");
     assert!(timeline.status.success(), "{}", text(&timeline.stderr));
@@ -314,8 +409,7 @@ fn raptor_restore_returns_to_a_timeline_point_and_undo_takes_it_back() {
         text(&undone.stdout),
         text(&undone.stderr)
     );
-    let changes = diff(&after_reset, &m.fx.fingerprint());
-    assert!(changes.is_empty(), "{changes:#?}");
+    assert_eq!(exact_state(&m.fx, &worktrees), after_reset);
 
     let json = m.raptor(&m.worktree, &["restore", &point, "--json"], "en_US.UTF-8");
     assert!(json.status.success(), "{}", text(&json.stderr));
@@ -325,8 +419,7 @@ fn raptor_restore_returns_to_a_timeline_point_and_undo_takes_it_back() {
 
     let undone = m.raptor(&m.worktree, &["undo"], "en_US.UTF-8");
     assert!(undone.status.success(), "{}", text(&undone.stderr));
-    let changes = diff(&after_reset, &m.fx.fingerprint());
-    assert!(changes.is_empty(), "{changes:#?}");
+    assert_eq!(exact_state(&m.fx, &worktrees), after_reset);
 }
 
 /// A rejection says why, in English and Spanish, exits with an error and
