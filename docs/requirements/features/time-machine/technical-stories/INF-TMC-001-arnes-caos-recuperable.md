@@ -2,17 +2,17 @@
 id: INF-TMC-001
 title: "Arnés de caos y de garantías de los snapshots en los tres SO"
 type: inf
-status: draft
+status: partially-implemented
 feature: time-machine
 domain: GRP
 priority: critical
 complexity: medium
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-08
 related:
   adrs: [ADR-TMC-001, ADR-TMC-002, ADR-TMC-003, ADR-TMC-005, ADR-TMC-007, ADR-GRP-009]
   stories: [US-TMC-001, US-TMC-002, US-TMC-009, US-TMC-016, US-TMC-018, US-TMC-019, INF-GRP-001, TS-TMC-001, TS-TMC-003]
-  specs: []
+  specs: [DS-INF-TMC-001]
 ado:
   id: null
   url: null
@@ -29,7 +29,7 @@ tags: [time-machine, ci, caos, nfr-12, nfr-01, garantias, d-tmc-11]
 **Quiero** un arnés con inyección de fallos en cada paso de la Time Machine y escenarios hostiles de Git, convertido en gate de CI
 **Para** verificar NFR-12 y las garantías de D-TMC-11 con el mismo criterio en Windows, macOS y Linux
 
-> Dev Spec: `dev-specs/INF-TMC-001-arnes-caos-recuperable.md` | Pendiente
+> Dev Spec: [`dev-specs/INF-TMC-001-arnes-caos-recuperable.md`](../dev-specs/INF-TMC-001-arnes-caos-recuperable.md) | Primer corte implementado
 >
 > **Depende de**: INF-GRP-001 (huella "repo intacto" y repo canario, que se reutilizan), TS-TMC-001 (almacén) y TS-TMC-003 (aplicador). **ADRs**: ADR-TMC-003 § 6 (estados esperados tras recuperar), ADR-TMC-001 (garantías), ADR-TMC-002 § 3 (pasos), ADR-TMC-007 § 4 (purga).
 
@@ -57,3 +57,18 @@ tags: [time-machine, ci, caos, nfr-12, nfr-01, garantias, d-tmc-11]
 #### Verificación Manual / Sandbox
 
 - Repetir en la máquina de dogfooding el escenario de muerte durante una restauración con 10 worktrees activos y anotar los tiempos de recuperación.
+
+### Estado de la implementación (2026-10-08)
+
+Implementado en: PR #189 (primer corte, [DS-INF-TMC-001](../dev-specs/INF-TMC-001-arnes-caos-recuperable.md)).
+
+**Hecho**: puntos de fallo con nombre en la captura del previo, en las transiciones de la operación protegida y en cada paso del aplicador (feature `chaos`, solo en builds de test). El daemon real muere con `SIGKILL` en cada uno; la recuperación cierra los estados y `raptor undo` devuelve el worktree byte a byte (archivos, índice, `HEAD` y ramas). Escenarios hostiles con `raptor undo`: envío de todas las refs a un remoto, mantenimiento agresivo tras un reset destructivo, agente que limpia y resetea, locks de Git ajenos y merge a medias. Suite `apps/cli/tests/tm_chaos.rs`, en el CI de macOS y Linux.
+
+**Pendiente**:
+
+- Canario de SEC-TMC-02 sobre las escrituras internas.
+- Casos de seguridad SEC-TMC-04, 09, 11, 12 y 14 (escritura concurrente durante el intercambio, disco lleno, almacén u oplog editados fuera del daemon, rutas hostiles y refs con opciones) como escenarios del arnés. Hoy, en parte, en `tm_apply` y `tm_store_safety`, en proceso.
+- Puntos de la purga (ADR-TMC-007; la purga no está construida) y de la restauración a un punto del timeline (US-TMC-009).
+- Sensibilidad (defecto sembrado) e informe de cobertura como artefacto del CI.
+- Windows: *Pendiente: etapa de validación multiplataforma* (XP-33).
+- Verificación manual con 10 worktrees en la máquina de dogfooding.
