@@ -19,9 +19,10 @@ use crate::observe;
 use crate::profile::WriteOp;
 use crate::watch::{ObserverHooks, SleepRefused, Tier, WakeCause};
 
-/// When repos go dormant (TS-GRP-006). The default sleeps nothing: tests
-/// that do not test tiers keep every repo active; the real daemon reads its
-/// values from the profile ([`TierConfig::for_profile`]).
+/// When repos go dormant (TS-GRP-006). The default sleeps nothing, so the
+/// tests that do not test tiers keep every repo active; the real daemon
+/// reads its values from the profile ([`TierConfig::for_profile`]) and
+/// sleeps a repo after 24 h without activity by default.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TierConfig {
     /// Time without activity after which a repo sleeps
