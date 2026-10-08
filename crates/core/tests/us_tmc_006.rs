@@ -251,6 +251,29 @@ impl Running {
         }
     }
 
+    /// Waits until `events.history` has an event after `seq` (not a reconciliation); the first.
+    /// It is what an operation's echo is: the proof it exists before a test says it is not shown.
+    fn event_after(&self, seq: i64) -> Value {
+        let start = Instant::now();
+        loop {
+            let page: Value = connect(&self.tp)
+                .call(methods::EVENTS_HISTORY, json!({ "repo_id": self.repo_id }))
+                .unwrap();
+            let events = page["events"].as_array().cloned().unwrap_or_default();
+            if let Some(e) = events
+                .iter()
+                .find(|e| seq_of(e) > seq && e["kind"] != "reconciled")
+            {
+                return e.clone();
+            }
+            assert!(
+                start.elapsed() < DEADLINE,
+                "no event after {seq}: {events:#?}"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
     /// Commits `files` (path → content) in `worktree` with `message`, raw
     /// Git, and waits for the engine to see it; its history event.
     fn commit(&self, worktree: &Path, files: &[(String, String)], message: &str) -> Value {
@@ -498,6 +521,36 @@ fn a_merge_commit_uses_first_parent_diff() {
     assert_eq!(entry["files"]["first_parent"], true, "{entry:#}");
 }
 
+/// A reset to a merge from somewhere else is `old..new`, not the merge's first-parent diff: only
+/// a commit or a merge reached from its first parent says "first parent".
+#[test]
+fn a_reset_to_a_merge_from_elsewhere_shows_old_to_new() {
+    let (fx, wt) = repo_with_login();
+    let r = start(fx, None);
+    let base = r.fx.git_in(&wt, &["rev-parse", "HEAD"]).trim().to_owned();
+    r.fx.git_in(&wt, &["checkout", "-q", "-b", "side"]);
+    r.commit(&wt, &files_of(&["side.rs"]), "side");
+    r.fx.git_in(&wt, &["checkout", "-q", "feat-login"]);
+    r.commit(&wt, &files_of(&["main.rs"]), "main");
+    r.fx.git_in(&wt, &["merge", "--no-ff", "-q", "-m", "merge side", "side"]);
+    let merge = r.fx.git_in(&wt, &["rev-parse", "HEAD"]).trim().to_owned();
+    let merged = r.event_at_head(&wt);
+    r.fx.git_in(&wt, &["reset", "-q", "--hard", &base]);
+    let back = r.event_of_kind("branch-update", &[]);
+    r.fx.git_in(&wt, &["reset", "-q", "--hard", &merge]);
+    let forward = r.event_of_kind("branch-update", &[seq_of(&back)]);
+    assert_eq!(forward["details"]["old_commit"], base.as_str(), "{forward:#}");
+    assert_eq!(forward["details"]["new_commit"], merge.as_str(), "{forward:#}");
+
+    let timeline = r.timeline(&wt);
+    let entry = event_entry(&timeline, seq_of(&forward));
+    assert_eq!(paths(entry), ["main.rs", "side.rs"], "{entry:#}");
+    assert_eq!(entry["files"]["first_parent"], false, "{entry:#}");
+    // The merge itself, reached from its first parent, still says so.
+    let entry = event_entry(&timeline, seq_of(&merged));
+    assert_eq!(entry["files"]["first_parent"], true, "{entry:#}");
+}
+
 // ----- Undo -----------------------------------------------------------------------
 
 /// Entrada de un undo: the undo is an entry with the requester as recorded
@@ -509,8 +562,11 @@ fn an_undo_is_an_entry_with_what_it_acted_on() {
     let edited = "fn api() { login(); }\n";
     std::fs::write(wt.join("api.rs"), edited).unwrap();
     r.captured(KEY, "api.rs", edited.as_bytes());
-    r.fx.git_in(&wt, &["reset", "-q", "--hard"]);
+    let committed = r.commit(&wt, &[("api.rs".to_owned(), edited.to_owned())], "api");
     let undo = r.undo(&wt);
+    // The undo's echo is in the history before the timeline is read: not shown is not "not yet".
+    let echo = r.event_after(seq_of(&committed));
+    assert_eq!(echo["kind"], "branch-update", "{echo:#}");
     let operation_id = undo["operation_id"].as_str().unwrap().to_owned();
     let undone_seq: i64 = undo["undone_operation_id"]
         .as_str()
@@ -539,13 +595,13 @@ fn an_undo_is_an_entry_with_what_it_acted_on() {
     // The requester as recorded (D-TMC-18), not the current attribution.
     assert_eq!(entry["attribution"], "recorded", "{entry:#}");
     assert_eq!(entry["actor"]["actor"], "unattributed", "{entry:#}");
-    // The undo's own echo is not a second entry: the reset is one entry and
-    // the undo another.
-    let resets = entries(&timeline)
+    // The commit it undid is one entry (the echo's fold is covered on controlled marks in the
+    // unit tests of the timeline: see `the_echo_of_an_operation_is_not_a_second_entry`).
+    let commits = entries(&timeline)
         .iter()
-        .filter(|e| e["origin"]["entry"] == "git-event" && e["origin"]["kind"] == "reset")
+        .filter(|e| e["origin"]["entry"] == "git-event" && e["origin"]["kind"] == "commit")
         .count();
-    assert_eq!(resets, 1, "{timeline:#}");
+    assert_eq!(commits, 1, "{timeline:#}");
 }
 
 // ----- Privacy (Security) ----------------------------------------------------------
@@ -649,8 +705,16 @@ fn the_protection_of_an_event_is_the_undo_target() {
     assert_ne!(protection["level"], "none", "{protection:#}");
 }
 
-/// The echo of an operation of GitRaptor is the operation, not a second entry: a raw reset
-/// and its undo are two entries, nothing else.
+/// The echo of an operation of GitRaptor is the operation, not a second entry. Here the echo is
+/// real: undoing a raw commit moves the branch back and the engine records that move as an event,
+/// which the test waits for before it reads the timeline.
+///
+/// Whether the echo is folded into the operation depends on the mark of the capture the undo
+/// anchored on (ADR-TMC-003 § 4), which the engine settles on its own clock: when that capture is
+/// taken before the engine saw the move, the move is outside the window. That is the undo stack's
+/// rule too and not something this read decides, so the fold itself is asserted on controlled
+/// marks in `timemachine::timeline` (`the_echo_of_an_operation_is_not_a_second_entry`); this test
+/// asserts what does not depend on that race.
 #[test]
 fn the_echo_of_a_gitraptor_operation_is_not_a_second_entry() {
     let (fx, wt) = repo_with_login();
@@ -658,20 +722,24 @@ fn the_echo_of_a_gitraptor_operation_is_not_a_second_entry() {
     let edited = "fn api() { login(); }\n";
     std::fs::write(wt.join("api.rs"), edited).unwrap();
     r.captured(KEY, "api.rs", edited.as_bytes());
-    r.fx.git_in(&wt, &["reset", "-q", "--hard"]);
+    let committed = r.commit(&wt, &[("api.rs".to_owned(), edited.to_owned())], "api");
     let undo = r.undo(&wt);
+    // The echo exists in the history before the timeline is read.
+    let echo = r.event_after(seq_of(&committed));
+    assert_eq!(echo["kind"], "branch-update", "{echo:#}");
 
     let timeline = r.timeline(&wt);
     let ids: Vec<&str> = entries(&timeline)
         .iter()
         .map(|e| e["id"].as_str().unwrap())
         .collect();
-    assert_eq!(ids.len(), 2, "{timeline:#}");
-    assert!(ids[0].starts_with("event:"), "{ids:?}");
-    assert_eq!(
-        ids[1],
-        format!("operation:{}", undo["operation_id"].as_str().unwrap())
-    );
+    assert_eq!(ids[0], format!("event:{}", seq_of(&committed)), "{ids:?}");
+    // The undo is exactly one entry, with its requester as recorded.
+    let operation = format!("operation:{}", undo["operation_id"].as_str().unwrap());
+    assert_eq!(ids.iter().filter(|id| **id == operation).count(), 1, "{ids:?}");
+    // The commit it undid is one entry, not two.
+    let commit_id = format!("event:{}", seq_of(&committed));
+    assert_eq!(ids.iter().filter(|id| **id == commit_id).count(), 1, "{ids:?}");
 }
 
 // ----- Files, filters and sources -------------------------------------------------------
