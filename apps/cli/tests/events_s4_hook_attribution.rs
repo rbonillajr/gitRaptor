@@ -36,6 +36,7 @@ const FAKE_CLAUDE: &str = "RAPTOR_FAKE_CLAUDE";
 const DONE: &str = "<<raptor-fake-claude-done>>";
 const TRAILER: &str = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>";
 const S4: &str = r#"{"signals":["s4"]}"#;
+const S3: &str = r#"{"signals":["s3"]}"#;
 
 /// One scenario at a time: each runs its own engine.
 static SERIAL: Mutex<()> = Mutex::new(());
@@ -173,10 +174,24 @@ impl Machine {
             .unwrap()
     }
 
+    /// Read from the files of `.git`, never with a `git`: a `git` of the developer in the repo
+    /// right after an agent commit is a foreign `git` in its S3 window, which makes S3 ambiguous
+    /// and, by ADR-GRP-012, leaves the event without the single-session hint.
     fn head(&self) -> String {
-        let out = self.human("rev-parse HEAD");
-        assert!(out.status.success(), "{}", text(&out));
-        String::from_utf8_lossy(&out.stdout).trim().to_owned()
+        let git_dir = self.f.repo.join(".git");
+        let head = std::fs::read_to_string(git_dir.join("HEAD")).unwrap();
+        let Some(name) = head.trim().strip_prefix("ref: ") else {
+            return head.trim().to_owned();
+        };
+        if let Ok(oid) = std::fs::read_to_string(git_dir.join(name)) {
+            return oid.trim().to_owned();
+        }
+        let packed = std::fs::read_to_string(git_dir.join("packed-refs")).unwrap();
+        packed
+            .lines()
+            .find_map(|l| l.strip_suffix(name)?.strip_suffix(' '))
+            .unwrap_or_else(|| panic!("no {name} in {}", git_dir.display()))
+            .to_owned()
     }
 
     /// The developer launches Claude Code in the main worktree and it is detected.
@@ -431,6 +446,40 @@ fn without_guardrails_a_quick_agent_commit_never_carries_s4() {
     assert_ne!(evidence.as_deref(), Some(S4));
     let (_, evidence) = m.stored_evidence(&repo_id, &guarded);
     assert_eq!(evidence.as_deref(), Some(S4));
+}
+
+/// Without Guardrails, each quick commit of Claude Code with its only active session in the
+/// worktree comes out attributed by S3 or, when S3 lost the race (`NoSighting`), with the
+/// single-session hint (amendment of ADR-GRP-012), confirmed by its trailer. Never bare
+/// "unattributed": the measurement of PR #155 showed it was the harness's own `git rev-parse`
+/// that made S3 ambiguous.
+#[test]
+fn without_guardrails_every_quick_agent_commit_is_attributed_or_hinted() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let m = Machine::new(false);
+    let mut claude = m.launch_claude();
+    let oids: Vec<String> = (0..10)
+        .map(|n| {
+            let oid = m.agent_commit(&mut claude, n);
+            m.event(&oid);
+            oid
+        })
+        .collect();
+
+    let repo_id = m.repo_id();
+    drop(claude);
+    m.stop();
+    for oid in &oids {
+        match m.stored_evidence(&repo_id, oid) {
+            (Some(_), evidence) => assert_eq!(evidence.as_deref(), Some(S3), "{oid}"),
+            (None, evidence) => {
+                let evidence: Value = serde_json::from_str(&evidence.unwrap_or_default())
+                    .unwrap_or_else(|_| panic!("{oid}: unattributed without the hint"));
+                assert_eq!(evidence["signals"], json!(["single-session"]), "{oid}");
+                assert_eq!(evidence["trailer"], "confirmed", "{oid}");
+            }
+        }
+    }
 }
 
 /// SPIKE-GRP-001: how many quick commits of Claude Code come out attributed, without and with
