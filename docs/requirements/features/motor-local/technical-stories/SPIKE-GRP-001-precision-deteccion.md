@@ -89,8 +89,23 @@ tags: [motor-local, spike, deteccion, atribucion, claude-code, dogfooding, preci
 
 - **Lectura**: con los hooks instalados, la carrera de S3 deja de pesar en los commits gobernados. Sin hooks no cambia nada: la tasa de carreras perdidas de S3 en esta suite es del 75 % de los commits rápidos.
 - **Errores humano → Claude Code**: 0 en los e2e. El commit del desarrollador con la sesión del agente viva sigue "sin atribuir", con y sin hooks.
-- **Observación sin investigar**: en esta suite, los 15 commits sin atribuir no llevaban la pista `single-session` (evidencia vacía). Puede ser una condición de la pista (sesión activa, actividad) o del montaje. Queda anotado para la revisión diaria; no se tocó en esta rama.
+- **Observación sin investigar**: en esta suite, los 15 commits sin atribuir no llevaban la pista `single-session` (evidencia vacía). Puede ser una condición de la pista (sesión activa, actividad) o del montaje. Queda anotado para la revisión diaria; no se tocó en esta rama. **Investigada el 2026-10-08** (entrada siguiente): era el montaje, y la fila "Sin Guardrails" de la tabla está sesgada.
 - **Pendiente**:
   - repetir en el dogfooding real con N de eventos del día (log `s3_evidence`, con el resultado nuevo `outcome=s4`);
   - medir el p95 que añade la resolución en el hilo de conexión por cada `reference-transaction` (lo pidió el Arquitecto, con un presupuesto supuesto de ≤ 5 ms sin multiplexor);
   - validar en Linux y Windows (etapa multiplataforma).
+
+#### 2026-10-08 — La pista de sesión única que faltaba sin hooks: la ponía en duda el propio arnés
+
+- **Causa raíz**: tras cada commit, el arnés leía el oid nuevo con `git rev-parse HEAD`, lanzado por el test (sin el agente entre sus ancestros) dentro del repo. Ese `git` caía en la ventana S3 del mismo evento. Con el log `s3_evidence` y un volcado temporal de las muestras se vio que los 17 commits sin atribuir de una repetición daban `outcome=ambiguous`, nunca `no-sighting`: S3 **sí veía** el `git` de la sesión y, además, ese `git` ajeno en el repo. Por la regla de ADR-GRP-012 (enmienda del 2026-10-06, "Ambigüedad"), con un `git` ajeno no hay atribución ni pista. El motor cumplía la regla. Se descartaron la sesión inactiva, el worktree distinto y el trailer (#144): no intervenían.
+- **Arreglo**: el arnés lee `HEAD` de los archivos de `.git`, sin lanzar un `git`. La regla de la pista no cambia (solo con exactamente una sesión activa, sin `git` ajeno, nunca con `human-author`).
+- **Test**: `without_guardrails_every_quick_agent_commit_is_attributed_or_hinted` (mismo archivo, no ignorado). Con 10 commits rápidos sin hooks, cada uno sale atribuido por S3 o, sin atribuir, con la pista `single-session` confirmada por su trailer. Falla con el `head()` anterior.
+- **Medición corregida** (una ejecución, Mac de desarrollo):
+
+  | Hooks | Commits rápidos del agente | Atribuidos | Sin atribuir con pista | Sin atribuir sin pista |
+  |---|---|---|---|---|
+  | Sin Guardrails | 20 | 19 (S3) | 1 | 0 |
+  | Guardrails instalado | 20 | 20 (S4) | 0 | 0 |
+
+- **Lectura**: en esta suite, sin hooks, S3 pierde la carrera en ~5 % de los commits rápidos y no en el 75 %, y la pista cubre esos casos. La ventaja de S4 sigue siendo la misma: elimina la carrera.
+- **Riesgo real que deja ver (sin cambio en esta rama)**: un `git` de solo lectura de otro proceso en el repo justo después del commit del agente (la extensión de Git de un editor o el prompt de la terminal) produce el mismo `ambiguous`: el commit queda sin atribuir y sin pista. Cuántas veces pasa se medirá en el dogfooding real (log `s3_evidence` con `outcome=ambiguous`). Relajar la regla es una decisión del PO o de Rene.
