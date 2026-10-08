@@ -11,11 +11,13 @@ use std::io::{BufRead, IsTerminal, Read, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use gitraptor_api::AgentKind;
 use gitraptor_api::Untrusted;
 use gitraptor_api::guard::{
-    Cause, Decision, Effect, GuardPlan, GuardRejectedData, GuardRepoParams, GuardStatus,
-    InstallBlocker, Level, NotPreventable, Param, ParamKind, Permission, ProtectionState, Reason,
-    RefBackend, Rule,
+    Cause, CommitStage, Decision, Effect, GuardLogEntry, GuardLogParams, GuardLogResult, GuardPlan,
+    GuardRejectedData, GuardRepoParams, GuardStatus, InstallBlocker, Level, LogDetail, LogKind,
+    LoggedOperation, LoggedReason, LoggedRef, MAX_LOG_PAGE, NotPreventable, Param, ParamKind,
+    Permission, ProtectionState, Reason, RefBackend, RefChange, Rule,
 };
 use gitraptor_api::methods;
 use gitraptor_api::rpc::code;
@@ -467,6 +469,272 @@ pub fn status(path: Option<PathBuf>, json: bool) -> ExitCode {
             for line in status_lines(&status) {
                 println!("{line}");
             }
+            // Where to see what was blocked (US-GRD-005, D1): only from an engine that has it.
+            if status.state == ProtectionState::HooksOnly
+                && crate::offers(&client, methods::GUARD_LOG)
+                && let Ok(log) = client.call::<_, GuardLogResult>(
+                    methods::GUARD_LOG,
+                    &log_params(&path, LOG_DEFAULT_DAYS, Some(1)),
+                )
+            {
+                println!(
+                    "{}",
+                    t(
+                        "guard.status.blocked",
+                        &[("count", &log.summary.blocked.to_string())]
+                    )
+                );
+            }
+            ExitCode::SUCCESS
+        }
+        Err(err) => guard_error(CMD, &path, err),
+    }
+}
+
+/// `--days` of `raptor guard log`: the default window and the retention (BR-TIME-002).
+pub const LOG_DEFAULT_DAYS: u32 = 7;
+const DAY_MS: i64 = 24 * 60 * 60 * 1000;
+
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
+}
+
+/// The fixed name of a logged rule.
+fn log_rule_text(reason: &LoggedReason) -> String {
+    let rule = match reason.rule {
+        Rule::MinimumForcePush => "guard.log.rule.force-push",
+        Rule::MinimumBaseBranchDelete => "guard.log.rule.base-branch-delete",
+        Rule::AuthorshipTrailerRequired => "guard.log.rule.trailer-required",
+        Rule::AuthorshipHumanAuthor => "guard.log.rule.human-author",
+        Rule::Degraded
+        | Rule::ChannelNotAuthentic
+        | Rule::RepoMismatch
+        | Rule::InputRejected
+        | Rule::InternalError => "guard.log.rule.system",
+    };
+    let level = match reason.level {
+        Level::Minimum => t("guard.log.level-minimum", &[]),
+        other => level_text(other),
+    };
+    t(
+        "guard.log.rule",
+        &[("rule", &t(rule, &[])), ("level", &level)],
+    )
+}
+
+fn change_text(r: &LoggedRef) -> String {
+    let key = match r.change {
+        RefChange::Create => "guard.log.change.create",
+        RefChange::Update => "guard.log.change.update",
+        RefChange::Force => "guard.log.change.force",
+        RefChange::Delete => "guard.log.change.delete",
+    };
+    t(key, &[("name", &param(&r.name))])
+}
+
+fn refs_text(refs: &[LoggedRef]) -> String {
+    refs.iter().map(change_text).collect::<Vec<_>>().join(", ")
+}
+
+fn operation_text(op: &LoggedOperation) -> String {
+    match op {
+        LoggedOperation::Push { remote, refs } => t(
+            "guard.log.op.push",
+            &[
+                (
+                    "remote",
+                    &remote
+                        .as_ref()
+                        .map_or_else(|| t("guard.log.unknown", &[]), param),
+                ),
+                ("refs", &refs_text(refs)),
+            ],
+        ),
+        LoggedOperation::RefTransaction { refs } => {
+            t("guard.log.op.refs", &[("refs", &refs_text(refs))])
+        }
+        LoggedOperation::Rebase { .. } => t("guard.log.op.rebase", &[]),
+        LoggedOperation::Commit {
+            stage: CommitStage::SecondLine,
+        } => t("guard.log.op.commit-second-line", &[]),
+        LoggedOperation::Commit { .. } => t("guard.log.op.commit", &[]),
+    }
+}
+
+fn agent_text(agent: Option<AgentKind>) -> String {
+    match agent {
+        Some(AgentKind::ClaudeCode) => "claude-code".into(),
+        Some(AgentKind::Other) => "other".into(),
+        None => t("guard.log.unattributed", &[]),
+    }
+}
+
+/// The lines of one log entry: when, what was decided on which operation, why, who and
+/// where; for a commit, what is known of its authorship (DS-US-GRD-018 D12).
+pub fn log_entry_lines(e: &GuardLogEntry) -> Vec<String> {
+    let decided = match e.kind {
+        LogKind::Denial => t("guard.log.denied", &[]),
+        LogKind::Notice => t("guard.log.notice", &[]),
+    };
+    let mut first = format!(
+        "{} · {decided} · {}",
+        crate::events::local_time(e.at_ms, e.utc_offset_s),
+        operation_text(&e.operation)
+    );
+    if e.count > 1 {
+        first.push_str(&format!(
+            " ({})",
+            t(
+                "guard.log.times",
+                &[
+                    ("count", &e.count.to_string()),
+                    (
+                        "last",
+                        &crate::events::local_time(e.last_ms, e.utc_offset_s)
+                    ),
+                ],
+            )
+        ));
+    }
+    let mut out = vec![first];
+    for reason in &e.reasons {
+        out.push(format!("  {}", log_rule_text(reason)));
+    }
+    let policy = e.authorship.as_ref().and_then(|a| a.policy.as_deref());
+    if e.reasons.is_empty() && policy == Some("flexible") {
+        out.push(format!("  {}", t("guard.log.rule.flexible", &[])));
+    }
+    if e.detail == LogDetail::RateLimited {
+        out.push(format!("  {}", t("guard.log.over-cap", &[])));
+        return out;
+    }
+    out.push(format!(
+        "  {}",
+        t("guard.log.actor", &[("actor", &agent_text(e.actor))])
+    ));
+    if e.worktree.is_some() || e.branch.is_some() {
+        let unknown = || t("guard.log.unknown", &[]);
+        out.push(format!(
+            "  {}",
+            t(
+                "guard.log.where",
+                &[
+                    ("worktree", &e.worktree.as_ref().map_or_else(unknown, param)),
+                    ("branch", &e.branch.as_ref().map_or_else(unknown, param)),
+                ],
+            )
+        ));
+    }
+    if matches!(e.operation, LoggedOperation::Commit { .. }) {
+        out.push(format!(
+            "  {}",
+            match e.kind {
+                LogKind::Denial => t("guard.log.author-not-created", &[]),
+                LogKind::Notice => t("guard.log.author-see-events", &[]),
+            }
+        ));
+        if let Some(a) = &e.authorship {
+            let agents: Vec<String> = a
+                .coauthors
+                .iter()
+                .flatten()
+                .map(|k| agent_text(Some(*k)))
+                .collect();
+            out.push(format!(
+                "  {}",
+                if agents.is_empty() {
+                    t("guard.log.no-agent-trailer", &[])
+                } else {
+                    t("guard.log.coauthors", &[("agents", &agents.join(", "))])
+                }
+            ));
+        }
+    }
+    out
+}
+
+/// The whole text of `raptor guard log`: the count, what was not logged, then the entries.
+pub fn log_lines(log: &GuardLogResult, days: u32) -> Vec<String> {
+    let mut out = vec![t(
+        "guard.log.summary",
+        &[
+            ("count", &log.summary.blocked.to_string()),
+            ("days", &days.to_string()),
+        ],
+    )];
+    if log.summary.notices > 0 {
+        out.push(t(
+            "guard.log.notices",
+            &[("count", &log.summary.notices.to_string())],
+        ));
+    }
+    if log.summary.rate_limited > 0 {
+        out.push(t(
+            "guard.log.rate-limited",
+            &[("count", &log.summary.rate_limited.to_string())],
+        ));
+    }
+    let offset = log.entries.first().map_or(0, |e| e.utc_offset_s);
+    for gap in &log.unlogged_periods {
+        let from = crate::events::local_time(gap.from_ms, offset);
+        out.push(match gap.to_ms {
+            Some(to) => t(
+                "guard.log.unlogged",
+                &[
+                    ("from", &from),
+                    ("to", &crate::events::local_time(to, offset)),
+                ],
+            ),
+            None => t("guard.log.unlogged-open", &[("from", &from)]),
+        });
+    }
+    if log.entries.is_empty() {
+        out.push(t("guard.log.empty", &[]));
+    }
+    for entry in &log.entries {
+        out.push(String::new());
+        out.extend(log_entry_lines(entry));
+    }
+    out
+}
+
+fn log_params(path: &std::path::Path, days: u32, limit: Option<u32>) -> GuardLogParams {
+    GuardLogParams {
+        path: path.to_string_lossy().into_owned(),
+        since_ms: Some(now_ms() - i64::from(days) * DAY_MS),
+        limit,
+    }
+}
+
+/// `raptor guard log [path] [--days N] [--limit N] [--json]` (US-GRD-005).
+pub fn log(path: Option<PathBuf>, days: u32, limit: u32, json: bool) -> ExitCode {
+    const CMD: &str = "raptor guard log";
+    if cfg!(windows) {
+        eprintln!("{CMD}: {}", t("guard.unsupported-platform", &[]));
+        return ExitCode::FAILURE;
+    }
+    let path = command_path(path);
+    let days = days.clamp(1, gitraptor_api::guard::LOG_RETENTION_DAYS as u32);
+    let mut client = match engine(CMD) {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+    if !crate::offers(&client, methods::GUARD_LOG) {
+        eprintln!("{CMD}: {}", t("guard.restart-engine", &[]));
+        return ExitCode::FAILURE;
+    }
+    let params = log_params(&path, days, Some(limit.clamp(1, MAX_LOG_PAGE)));
+    match client.call::<_, GuardLogResult>(methods::GUARD_LOG, &params) {
+        Ok(log) if json => {
+            println!("{}", serde_json::to_string(&log).unwrap_or_default());
+            ExitCode::SUCCESS
+        }
+        Ok(log) => {
+            for line in log_lines(&log, days) {
+                println!("{line}");
+            }
             ExitCode::SUCCESS
         }
         Err(err) => guard_error(CMD, &path, err),
@@ -477,6 +745,81 @@ pub fn status(path: Option<PathBuf>, json: bool) -> ExitCode {
 mod tests {
     use super::*;
     use crate::i18n::has_key;
+
+    fn log_entry(kind: LogKind, operation: LoggedOperation) -> GuardLogEntry {
+        GuardLogEntry {
+            at_ms: 1_800_000_000_000,
+            utc_offset_s: 0,
+            last_ms: 1_800_000_060_000,
+            count: 3,
+            worktree: Some(Untrusted::new("/w/\u{1b}[31mdemo")),
+            branch: Some(Untrusted::new("feat-\u{7}x")),
+            actor: None,
+            operation,
+            kind,
+            detail: LogDetail::Full,
+            effect: Effect::Deny,
+            applied_effect: Effect::Deny,
+            reasons: vec![LoggedReason {
+                rule: Rule::MinimumForcePush,
+                level: Level::Minimum,
+                cause: None,
+            }],
+            layer: gitraptor_api::guard::LogLayer::Hooks,
+            origin: gitraptor_api::guard::LogOrigin::Daemon,
+            decision_id: "d".into(),
+            authorship: None,
+        }
+    }
+
+    /// Every message the log can print exists in both languages (US-GRD-005).
+    #[test]
+    fn entry_lines_in_both_languages() {
+        let source = include_str!("guard.rs");
+        let keys: Vec<&str> = source
+            .split('"')
+            .filter(|s| {
+                (s.starts_with("guard.log.") && !s.ends_with('.')) || *s == "guard.status.blocked"
+            })
+            .collect();
+        assert!(keys.len() > 20, "{keys:?}");
+        for key in keys {
+            assert!(has_key(key), "{key}");
+        }
+        assert!(has_key("guard.restart-engine"));
+    }
+
+    /// Paths, branches, refs and remotes come from the repo: shown sanitized, inside «» (M-05).
+    #[test]
+    fn untrusted_fields_are_sanitized() {
+        let push = LoggedOperation::Push {
+            remote: Some(Untrusted::new("orig\u{1b}]0;x\u{7}in")),
+            refs: vec![LoggedRef {
+                name: Untrusted::new("ma\u{1b}[2Jin"),
+                change: RefChange::Force,
+            }],
+        };
+        let lines = log_entry_lines(&log_entry(LogKind::Denial, push)).join("\n");
+        assert!(
+            !lines.contains('\u{1b}') && !lines.contains('\u{7}'),
+            "{lines:?}"
+        );
+        assert!(lines.contains('«'), "{lines}");
+        // A commit denial says the author is not available; a notice points to the events.
+        let commit = LoggedOperation::Commit {
+            stage: CommitStage::CommitMsg,
+        };
+        let denied = log_entry_lines(&log_entry(LogKind::Denial, commit.clone())).join("\n");
+        assert!(
+            denied.contains(&t("guard.log.author-not-created", &[])),
+            "{denied}"
+        );
+        let noticed = log_entry_lines(&log_entry(LogKind::Notice, commit)).join("\n");
+        assert!(
+            noticed.contains(&t("guard.log.author-see-events", &[])),
+            "{noticed}"
+        );
+    }
 
     #[test]
     fn every_code_has_a_message_in_both_languages() {

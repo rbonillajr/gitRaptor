@@ -32,6 +32,20 @@ enum GuardAction {
         #[arg(long)]
         json: bool,
     },
+    /// Show what Guardrails blocked in a repo, why and to whom, and how many blocked actions.
+    Log {
+        /// The repo's Git directory or any of its worktrees; defaults to the current folder.
+        path: Option<PathBuf>,
+        /// Days to show, counting back from now (1 to 90).
+        #[arg(long, default_value_t = guard::LOG_DEFAULT_DAYS)]
+        days: u32,
+        /// Most recent entries to show (at most 500).
+        #[arg(long, default_value_t = 50)]
+        limit: u32,
+        /// Print JSON instead of text.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 impl Cmd {
@@ -39,6 +53,12 @@ impl Cmd {
         match self.action {
             GuardAction::Install { path, yes } => guard::install(path, yes),
             GuardAction::Status { path, json } => guard::status(path, json),
+            GuardAction::Log {
+                path,
+                days,
+                limit,
+                json,
+            } => guard::log(path, days, limit, json),
         }
     }
 }
