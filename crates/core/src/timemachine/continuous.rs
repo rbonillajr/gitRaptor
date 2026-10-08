@@ -16,8 +16,10 @@
 //! After an operation of GitRaptor (an undo too) [`anchor`] takes the state it left, with the
 //! operation as cause: the raw events up to the anchor's mark are its echo, not raw Git.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
+
+use gitraptor_git::{ReaderOptions, RepoReader};
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
 use std::thread::JoinHandle;
@@ -639,6 +641,63 @@ pub fn anchor(
     );
     None
 }
+
+/// Local branches of the repo of `root` and the commit each one points to, by short name; empty
+/// if the repo cannot be read.
+pub fn branch_tips(root: &Path) -> BTreeMap<String, String> {
+    RepoReader::open(root, &ReaderOptions::default())
+        .and_then(|r| r.local_branches())
+        .map(|list| list.into_iter().map(|b| (b.name, b.commit)).collect())
+        .unwrap_or_default()
+}
+
+/// Waits, up to [`ANCHOR_SETTLE_LIMIT`], until the engine persisted the move of every branch an
+/// operation moved under a worktree in `worktrees`, so the [`anchor`] taken next covers it.
+///
+/// The applier moves branches from the common Git folder: a branch checked out in a linked
+/// worktree then moves without an entry in that worktree's `HEAD` reflog, which is what the
+/// engine's calm compares, so `settle` does not wait for it. An anchor taken before the engine
+/// persists that move would leave it outside the operation's echo, as raw Git on top of the
+/// worktree's stack. A branch is waited for when it is checked out in one of `worktrees` and
+/// points elsewhere than in `before`; the wait ends when that worktree has an event past
+/// `since` naming the branch. Past the limit it returns anyway: the anchor is then taken as
+/// before.
+pub fn await_moved_branches(
+    deps: &CaptureDeps,
+    repo_id: &str,
+    worktrees: &[PathBuf],
+    before: &BTreeMap<String, String>,
+    since: i64,
+) {
+    let Some(first) = worktrees.first() else {
+        return;
+    };
+    let after = branch_tips(first);
+    let mut pending: Vec<(&PathBuf, String)> = worktrees
+        .iter()
+        .filter_map(|root| {
+            let branch = super::undo::head_branch(root)?;
+            (before.get(&branch) != after.get(&branch)).then_some((root, branch))
+        })
+        .collect();
+    let end = Instant::now() + ANCHOR_SETTLE_LIMIT;
+    while !pending.is_empty() {
+        pending.retain(|(root, branch)| {
+            !deps.engine.raw_events(repo_id, root).is_some_and(|events| {
+                events
+                    .iter()
+                    .any(|e| e.seq > since && e.branch.as_deref() == Some(branch.as_str()))
+            })
+        });
+        if pending.is_empty() || Instant::now() + ECHO_POLL > end {
+            return;
+        }
+        std::thread::sleep(ECHO_POLL);
+    }
+}
+
+/// How often [`await_moved_branches`] reads the engine again while waiting.
+const ECHO_POLL: Duration = Duration::from_millis(10);
 
 fn failure_kind(e: &CaptureError) -> &'static str {
     match e {

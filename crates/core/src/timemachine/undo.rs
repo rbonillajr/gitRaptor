@@ -27,7 +27,9 @@ use gitraptor_git::tm_write::WriteContext;
 use gitraptor_git::{Invoker, ReaderOptions, RepoReader, SystemGit};
 
 use super::apply::{Applier, ApplyError, ApplyPlan, ApplyReport, PlanWorktree, RefScope, Refusal};
-use super::continuous::{ANCHOR_SETTLE_LIMIT, CaptureDeps, anchor};
+use super::continuous::{
+    ANCHOR_SETTLE_LIMIT, CaptureDeps, anchor, await_moved_branches, branch_tips,
+};
 use super::engine::{RawGitEvent, is_undoable};
 use super::oplog::ExternalEvent;
 use super::oplog::{
@@ -796,6 +798,10 @@ pub fn undo_last(
         stopping: env.stopping,
         deadline: env.prior_deadline,
     };
+    let tips_before = env
+        .engine
+        .map(|_| branch_tips(worktree))
+        .unwrap_or_default();
     let ran = protected.run(&req, &mut step);
     // The state the undo left, while the repo is still held: its echo in the
     // engine is never taken for raw Git (US-TMC-004).
@@ -807,6 +813,7 @@ pub fn undo_last(
         };
         if let Some(id) = id {
             let worktrees: Vec<PathBuf> = req.worktree_paths.clone();
+            await_moved_branches(deps, repo_id, &worktrees, &tips_before, engine_mark);
             anchor(deps, repo_id, &worktrees, id);
         }
     }

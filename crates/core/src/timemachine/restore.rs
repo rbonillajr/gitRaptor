@@ -34,7 +34,7 @@ use gitraptor_git::tm_write::WriteContext;
 use gitraptor_git::{ReaderOptions, RepoReader};
 
 use super::apply::{Applier, ApplyError, ApplyPlan, ApplyReport, PlanWorktree, RefScope};
-use super::continuous::{ANCHOR_SETTLE_LIMIT, anchor};
+use super::continuous::{ANCHOR_SETTLE_LIMIT, anchor, await_moved_branches};
 use super::engine::RawGitEvent;
 use super::oplog::{
     Channel, NewOperation, OperationKind, OperationState, OperationTransition, OperationView,
@@ -637,6 +637,7 @@ pub fn restore_to(
                 .map(|w| w.root.clone())
                 .filter(|r| is_dir(r))
                 .collect();
+            await_moved_branches(deps, repo_id, &left, &now, engine_mark);
             anchor(deps, repo_id, &left, id);
         }
     }
