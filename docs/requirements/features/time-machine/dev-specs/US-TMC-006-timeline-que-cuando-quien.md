@@ -2,7 +2,7 @@
 id: DS-US-TMC-006
 title: "Dev Spec — Timeline del repo: qué cambió, cuándo y quién"
 type: dev-spec
-status: draft
+status: implemented
 created: 2026-10-08
 updated: 2026-10-08
 story: US-TMC-006
@@ -504,3 +504,12 @@ Cambios propuestos a [US-TMC-006](../user-stories/US-TMC-006-timeline-que-cuando
 | G2 | El rango de eventos y operaciones puede mezclar dos relojes (hora del motor y del oplog): una corrección del reloj puede ordenar mal entradas cercanas. Riesgo conocido, sin gate | Medir en uso real | Arquitecto |
 | G3 | Coste: el oplog se lee entero (N+1 por operación). Con la retención de 30 días es acotado; ⚠️ **ASSUMPTION**: aceptable hasta ~1.000 operaciones. Si se mide peor, filtrar por `from_ms` en el oplog | Medir con un repo de referencia | Arquitecto |
 | G4 | `kind` del agente se pierde en el solicitante registrado (solo guarda nombre y origen): por eso el actor `recorded` se muestra por nombre | Ninguna | — |
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #TBD.
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md), XP-35).
+- La vista navegable del timeline en la TUI: F-001-02 (Cockpit). Los huecos (`reconciled`) y los filtros adicionales: US-TMC-007.
+- La pista "(sin agente; inferido: X)" no está en el contrato actual de `TimelineEntry`: queda como mejora cuando el contrato lo lleve.

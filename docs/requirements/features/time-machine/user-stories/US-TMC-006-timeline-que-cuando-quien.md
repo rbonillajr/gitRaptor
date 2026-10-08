@@ -2,10 +2,10 @@
 id: US-TMC-006
 title: "El desarrollador sabe qué cambió en su repo, cuándo y quién lo hizo"
 type: us
-status: draft
+status: implemented
 priority: high
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-08
 domain: GRP
 epic: E-001
 feature: time-machine
@@ -96,3 +96,12 @@ Entonces el desarrollador recibe un timeline vacío con el aviso de que aún no 
 - **Historias**: US-TMC-001, US-TMC-004; US-GRP-002, US-GRP-007 y US-GRP-009 de motor-local (eventos y atribución).
 - **Externas**: la vista navegable en la TUI se coordina con F-001-02 Cockpit y el design system; esta historia entrega el contenido.
 - **Transversal**: transversal (lo define el Arquitecto): verificación en repos temporales, nunca en un repo real; mismo comportamiento en Windows, macOS y Linux; mensajes en inglés y español.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #TBD.
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md), XP-35).
+- La vista navegable del timeline en la TUI: F-001-02 (Cockpit). Los huecos (`reconciled`) y los filtros adicionales: US-TMC-007.
+- La pista "(sin agente; inferido: X)" no está en el contrato actual de `TimelineEntry`: queda como mejora cuando el contrato lo lleve.
