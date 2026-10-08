@@ -124,4 +124,13 @@ Entonces ninguna herramienta permite declarar o retirar raíces
 ## Diseño y Dev Spec
 
 - **Diseño:** presentación en la CLI según DSYS-GRP-001; el aviso en la TUI es de US-CKP-025.
-- **Dev Spec:** pendiente.
+- **Dev Spec:** no hay; se implementó con un brief compacto sobre ADR-GRP-010 N6–N8 y SEC-15 (proceso AADD ligero).
+
+## Decisiones de implementación (2026-10-08)
+
+- **Vigilancia en macOS**: las raíces normales se listan cada 30 s, la alternativa que prevé N6. El backend de `notify` 8.2 en macOS es FSEvents, que es recursivo. En Linux y Windows hay una vigilancia no recursiva de `notify` con una espera de 2 s. Decisión del orquestador (2026-10-08), dentro de lo validado por el Arquitecto en N6.
+- **Raíz que es un enlace simbólico**: se rechaza con el motivo `symlink` y la ruta real como alternativa, según el corpus de SEC-15. Un candidato que es un enlace a un repo de fuera de la raíz no se propone. Decisión del coordinador (2026-10-08).
+- **Códigos de error**: el módulo `discovery` usa el bloque `-33020` (ADR-GRP-016 § 3). Decisión del coordinador (2026-10-08).
+- **Aviso en la TUI**: un solo aviso pendiente a la vez y el resto en cola. Nunca quita el foco a la vista de la flota. Esc lo deja para más tarde y no lo descarta. Decisión del coordinador (2026-10-08).
+- **Clave de raíces en configuración**: `discovery`, `codeRoots` o `roots`, arriba o en `engine`, se ignora con el diagnóstico `discovery-roots-ignored`. Ese diagnóstico todavía no tiene texto en la CLI, igual que el resto de diagnósticos de configuración.
+- **Diferido**: kqueue en macOS, el bloque `discovery` de `engine.resources` (US-GRP-017) y las unidades de red mapeadas en Windows (solo se detecta UNC). Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
