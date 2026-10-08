@@ -226,7 +226,6 @@ impl Watcher {
 #[cfg(not(target_os = "macos"))]
 impl Watcher {
     fn new(tx: Sender<Msg>) -> Self {
-        use notify::Watcher as _;
         let inner = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
             let Ok(event) = event else { return };
             // Only the root is watched: an entry's parent is its root.

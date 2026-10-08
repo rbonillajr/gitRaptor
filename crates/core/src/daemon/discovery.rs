@@ -98,6 +98,7 @@ impl DiscoveryConfig {
 
 /// Why the loop refused a discovery request.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(not(unix), allow(dead_code))]
 pub(crate) enum DiscoveryError {
     Rejected(RootRejectedData),
     Broad(RootBroadData),
@@ -109,6 +110,7 @@ pub(crate) enum DiscoveryError {
 
 /// A discovery request to the loop.
 #[derive(Debug)]
+#[cfg_attr(not(unix), allow(dead_code))]
 pub(crate) enum DiscoveryRequest {
     Roots(SyncSender<Option<Vec<RootView>>>),
     Candidates(SyncSender<Option<Vec<CandidateView>>>),
