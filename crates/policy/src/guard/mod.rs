@@ -8,7 +8,9 @@
 
 pub mod authorship;
 pub mod fastpath;
+pub mod glob;
 pub mod input;
+pub mod policies;
 pub mod refs;
 
 use gitraptor_api::AgentKind;
@@ -37,6 +39,10 @@ pub struct Facts {
     pub push: Vec<Option<FastForward>>,
     /// What the hook client derived from the commit message (US-GRD-018, D7).
     pub authorship: Option<AuthorshipFacts>,
+    /// What the commits of each update bring (US-GRD-008, D5), aligned with the updates of a
+    /// `pre-push` or a `reference-transaction`; `None` where nothing was read (no forbidden-path
+    /// rule governs the actor, or the update brings no commit).
+    pub touched: Vec<Option<policies::Touched>>,
 }
 
 /// The context of an evaluation.
@@ -51,6 +57,8 @@ pub struct Context {
     pub actor: Option<AgentKind>,
     /// `policies.commitAuthorship` in force (D2).
     pub authorship: authorship::Effective,
+    /// The protected branches and forbidden paths in force (US-GRD-008).
+    pub policies: policies::Policies,
 }
 
 /// The effect and every rule that produces it (BR-CALC-001).
@@ -94,11 +102,24 @@ impl Evaluation {
 /// Evaluates an operation against the safe minimum.
 pub fn evaluate(operation: &Operation, facts: &Facts, ctx: &Context) -> Evaluation {
     let mut out = Evaluation::allow();
+    // One budget for everything matched in this evaluation (US-GRD-008, D5).
+    let mut budget = glob::Budget::default();
     match operation {
         Operation::Push { remote, updates } => {
             for (i, update) in updates.iter().enumerate() {
                 let fact = facts.push.get(i).copied().flatten();
                 push_update(&mut out, remote.raw(), update, fact, ctx);
+            }
+            // The policies are their own pass: the minimum returns early on creations,
+            // deletions and fast-forwards (Architect, D4).
+            for (i, update) in updates.iter().enumerate() {
+                policies_of(
+                    &mut out,
+                    &update.remote_ref,
+                    facts.touched.get(i).and_then(Option::as_ref),
+                    ctx,
+                    &mut budget,
+                );
             }
         }
         Operation::RefTransaction {
@@ -107,6 +128,15 @@ pub fn evaluate(operation: &Operation, facts: &Facts, ctx: &Context) -> Evaluati
         } => {
             for update in updates {
                 ref_update(&mut out, update, orphan_head.as_ref(), ctx);
+            }
+            for (i, update) in updates.iter().enumerate() {
+                policies_of(
+                    &mut out,
+                    &update.refname,
+                    facts.touched.get(i).and_then(Option::as_ref),
+                    ctx,
+                    &mut budget,
+                );
             }
         }
         // Nothing of the minimum governs a rebase (US-GRD-007 adds rules).
@@ -120,6 +150,23 @@ pub fn evaluate(operation: &Operation, facts: &Facts, ctx: &Context) -> Evaluati
         ),
     }
     out
+}
+
+/// The protected branches and forbidden paths of one moved ref.
+fn policies_of(
+    out: &mut Evaluation,
+    refname: &str,
+    touched: Option<&policies::Touched>,
+    ctx: &Context,
+    budget: &mut glob::Budget,
+) {
+    if ctx.policies.is_empty() || !refs::is_governed(refname) {
+        return;
+    }
+    policies::protected_branch(out, refname, ctx.actor, &ctx.policies, budget);
+    if let Some(touched) = touched {
+        policies::forbidden_paths(out, touched, ctx.actor, &ctx.policies, budget);
+    }
 }
 
 fn base_delete(cause: Cause, params: Vec<Param>) -> Reason {
@@ -246,6 +293,8 @@ pub fn not_preventable(backend: RefBackend) -> Vec<NotPreventable> {
         NotPreventable::RemoveWorktree,
         NotPreventable::CreateWorktreeUnrecognized,
         NotPreventable::VoluntarySkips,
+        NotPreventable::PolicyActor,
+        NotPreventable::PolicyReach,
     ];
     if backend == RefBackend::Reftable {
         list.push(NotPreventable::RenameBaseReftable);

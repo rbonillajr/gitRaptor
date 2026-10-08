@@ -322,6 +322,7 @@ fn protected_branch_blocks_an_agent() {
     // push (the commit is the person's: the agent only pushes)
     m.ok(m.human("reset -q"));
     m.ok(m.human("switch -q -c side"));
+    m.ok(m.commit(false, &[("side.txt", Some("s\n"))], "commit -q"));
     let out = m.agent("push -q origin side:main");
     assert!(!out.status.success(), "{}", text(&out));
     assert!(text(&out).contains("«main»"), "{}", text(&out));
@@ -383,8 +384,9 @@ fn everyone_applies_to_the_person_too() {
     let out = m.commit(false, &[("person.txt", Some("p\n"))], "commit -q");
     assert!(!out.status.success(), "{}", text(&out));
     assert!(text(&out).contains("«main»"), "{}", text(&out));
-    // The other branches stay free.
-    m.ok(m.human("reset -q"));
+    // The branch is frozen for the person as well, even for a `reset`; the other branches stay
+    // free.
+    m.ok(m.human("restore -q --staged ."));
     m.ok(m.human("switch -q feat-x"));
     m.ok(m.commit(false, &[("person.txt", Some("p\n"))], "commit -q"));
 }

@@ -16,6 +16,7 @@ fn ctx() -> Context {
         fold_case: true,
         actor: None,
         authorship: authorship::Effective::default(),
+        policies: policies::Policies::default(),
     }
 }
 
@@ -272,6 +273,157 @@ fn the_function_is_deterministic() {
 fn reftable_adds_the_rename_of_the_base() {
     assert!(!not_preventable(RefBackend::Files).contains(&NotPreventable::RenameBaseReftable));
     assert!(not_preventable(RefBackend::Reftable).contains(&NotPreventable::RenameBaseReftable));
+}
+
+mod policies_in_the_function {
+    use super::*;
+    use crate::guard::glob::{Kind, Pattern};
+    use crate::guard::policies::{Policies, Rules, Scope, Touched};
+    use gitraptor_api::AgentKind;
+    use gitraptor_api::guard::Level;
+
+    fn rules(scope: Scope, kind: Kind, patterns: &[&str]) -> Vec<Rules> {
+        vec![Rules {
+            level: Level::Floor,
+            scope,
+            patterns: patterns
+                .iter()
+                .map(|p| Pattern::new(p, kind).unwrap())
+                .collect(),
+        }]
+    }
+
+    fn with_policies(actor: Option<AgentKind>, scope: Scope) -> Context {
+        Context {
+            actor,
+            policies: Policies {
+                branches: rules(scope, Kind::Branch, &["main", "release/*"]),
+                paths: rules(scope, Kind::Path, &["secrets/"]),
+            },
+            ..ctx()
+        }
+    }
+
+    const AGENT: Option<AgentKind> = Some(AgentKind::ClaudeCode);
+
+    fn touched(paths: &[&str]) -> Facts {
+        Facts {
+            touched: vec![Some(Touched {
+                paths: paths.iter().map(|s| (*s).to_owned()).collect(),
+                unverifiable: false,
+            })],
+            ..Facts::default()
+        }
+    }
+
+    fn rules_of(e: &Evaluation) -> Vec<Rule> {
+        e.reasons.iter().map(|r| r.rule).collect()
+    }
+
+    #[test]
+    fn an_agent_moving_a_protected_branch_is_denied_in_every_way_it_can_move_it() {
+        let ctx = with_policies(AGENT, Scope::Agents);
+        // Commit (update), creation, deletion.
+        for (old, new, branch) in [
+            (oid(A), oid(B), "refs/heads/main"),
+            (RefValue::Zero, oid(B), "refs/heads/release/1.0"),
+            (oid(A), RefValue::Zero, "refs/heads/main"),
+        ] {
+            let e = evaluate(&tx(vec![(branch, old, new)]), &Facts::default(), &ctx);
+            assert_eq!(e.effect, Effect::Deny, "{branch}");
+            assert!(rules_of(&e).contains(&Rule::ProtectedBranch), "{branch}");
+        }
+        // Push: update, creation and deletion of the remote ref.
+        for (local, remote) in [
+            (oid(B), oid(A)),
+            (oid(A), RefValue::Zero),
+            (RefValue::Zero, oid(A)),
+        ] {
+            let e = evaluate(
+                &push(vec![pu("refs/heads/main", local, remote)]),
+                &Facts {
+                    push: vec![Some(FastForward::Yes)],
+                    ..Facts::default()
+                },
+                &ctx,
+            );
+            assert_eq!(e.effect, Effect::Deny);
+            assert!(rules_of(&e).contains(&Rule::ProtectedBranch));
+        }
+        // Another branch and a tag are free.
+        for refname in ["refs/heads/feat-x", "refs/tags/main"] {
+            let e = evaluate(
+                &tx(vec![(refname, oid(A), oid(B))]),
+                &Facts::default(),
+                &ctx,
+            );
+            assert_eq!(e.effect, Effect::Allow, "{refname}");
+        }
+    }
+
+    #[test]
+    fn the_person_passes_unless_the_rule_is_for_everyone() {
+        let update = tx(vec![("refs/heads/main", oid(A), oid(B))]);
+        let person = with_policies(None, Scope::Agents);
+        assert_eq!(
+            evaluate(&update, &touched(&["secrets/a"]), &person).effect,
+            Effect::Allow
+        );
+        let everyone = with_policies(None, Scope::Everyone);
+        let e = evaluate(&update, &touched(&["secrets/a"]), &everyone);
+        assert_eq!(e.effect, Effect::Deny);
+        assert_eq!(rules_of(&e), [Rule::ProtectedBranch, Rule::ForbiddenPath]);
+    }
+
+    #[test]
+    fn two_broken_rules_are_named_together_with_the_minimum() {
+        let ctx = with_policies(AGENT, Scope::Agents);
+        // Deleting the base branch that is also protected: the minimum and the policy.
+        let e = evaluate(
+            &tx(vec![("refs/heads/main", oid(A), RefValue::Zero)]),
+            &Facts::default(),
+            &ctx,
+        );
+        assert_eq!(
+            rules_of(&e),
+            [Rule::MinimumBaseBranchDelete, Rule::ProtectedBranch]
+        );
+        // A commit on a protected branch touching a forbidden path.
+        let e = evaluate(
+            &tx(vec![("refs/heads/main", oid(A), oid(B))]),
+            &touched(&["src/a", "secrets/api.txt"]),
+            &ctx,
+        );
+        assert_eq!(rules_of(&e), [Rule::ProtectedBranch, Rule::ForbiddenPath]);
+    }
+
+    #[test]
+    fn a_forbidden_path_denies_a_push_of_any_branch() {
+        let ctx = with_policies(AGENT, Scope::Agents);
+        let facts = Facts {
+            push: vec![Some(FastForward::Yes)],
+            ..touched(&["secrets/api.txt"])
+        };
+        let e = evaluate(
+            &push(vec![pu("refs/heads/feat-x", oid(B), oid(A))]),
+            &facts,
+            &ctx,
+        );
+        assert_eq!(rules_of(&e), [Rule::ForbiddenPath]);
+    }
+
+    #[test]
+    fn no_policies_change_nothing() {
+        let e = evaluate(
+            &tx(vec![("refs/heads/main", oid(A), oid(B))]),
+            &touched(&["secrets/a"]),
+            &Context {
+                actor: AGENT,
+                ..ctx()
+            },
+        );
+        assert_eq!(e.effect, Effect::Allow);
+    }
 }
 
 mod fast_path {

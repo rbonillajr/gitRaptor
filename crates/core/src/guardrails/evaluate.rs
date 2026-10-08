@@ -37,6 +37,7 @@ pub fn facts(reader: &RepoReader, op: &Operation) -> Facts {
     };
     Facts {
         authorship: None,
+        touched: Vec::new(),
         push: updates
             .iter()
             .map(|u| {
@@ -80,6 +81,8 @@ pub struct CommitContext {
     pub actor: Option<AgentKind>,
     pub authorship: Effective,
     pub facts: Option<gitraptor_api::guard::AuthorshipFacts>,
+    /// The protected branches and forbidden paths in force (US-GRD-008).
+    pub policies: gitraptor_policy::guard::policies::Policies,
 }
 
 /// Evaluates with the repo's own facts and case folding: `core.ignoreCase` or a file system
@@ -106,9 +109,12 @@ pub fn evaluate_commit(
         fold_case: reader.ignores_case() || folds_case(common),
         actor: commit.actor,
         authorship: commit.authorship,
+        policies: commit.policies,
     };
     let mut facts = facts(reader, op);
     facts.authorship = commit.facts;
+    // The commits of the movement are read only when a forbidden-path rule governs the actor.
+    facts.touched = super::policies::touched(reader, op, &ctx.policies, ctx.actor);
     policy::evaluate(op, &facts, &ctx)
 }
 
@@ -229,6 +235,9 @@ pub struct Caller {
     pub cwd: Option<std::path::PathBuf>,
     /// The connection was granted `guard.authorship`.
     pub authorship: bool,
+    /// The connection was granted `guard.policies`: the actor of a `ref-transaction` or a
+    /// `push` is resolved and the protected branches and forbidden paths apply (US-GRD-008).
+    pub policies: bool,
     /// The `git` process that ran the hook, for an agent's commit (DS-US-GRD-018 D6).
     pub git: Option<super::second_line::GitProcess>,
     /// The second line does not evaluate this commit: the same `git` already had its decision,
@@ -279,6 +288,22 @@ pub fn serve_logged(
                     registry.profile().as_ref(),
                 ),
                 facts: params.authorship.clone(),
+                policies: gitraptor_policy::guard::policies::Policies::default(),
+            }
+        }
+        Operation::RefTransaction { .. } | Operation::Push { .. } if caller.policies => {
+            let worktree = caller
+                .cwd
+                .as_deref()
+                .and_then(|cwd| super::authorship::worktree_reader(cwd, common));
+            CommitContext {
+                actor: caller.actor,
+                policies: super::policies::policies_for(
+                    worktree.as_ref().unwrap_or(&reader),
+                    confirmed.as_ref(),
+                    registry.profile().as_ref(),
+                ),
+                ..CommitContext::default()
             }
         }
         _ => CommitContext::default(),

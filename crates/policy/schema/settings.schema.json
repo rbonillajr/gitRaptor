@@ -1,5 +1,13 @@
 {
   "$defs": {
+    "AppliesTo": {
+      "description": "Who a `protectedBranches` or `forbiddenPaths` rule applies to.",
+      "enum": [
+        "agents",
+        "everyone"
+      ],
+      "type": "string"
+    },
     "AuthorshipMode": {
       "description": "The authorship mode of a repo.",
       "enum": [
@@ -122,6 +130,24 @@
       ],
       "type": "string"
     },
+    "PatternPolicy": {
+      "description": "`policies.protectedBranches` and `policies.forbiddenPaths`: a list of patterns and who they\napply to. A branch pattern matches the whole short name (`release/*` does not cover\n`release/1.0/x`; `release/**` does). A path pattern follows `.gitignore`, reduced: with no\n`/` apart from a trailing one it is found at any depth (`secrets/`, `*.pem`), with a `/`\nin the middle or at the start it is anchored to the root (`config/prod.yml`, `/secrets`),\nand a directory covers what is below it. No negations (`!`) and no comments (`#`). With\n`appliesTo: everyone` the person is held too and, with no conscious exception in the MVP,\na protected branch is frozen for local pulls and fast-forwards as well.",
+      "properties": {
+        "appliesTo": {
+          "$ref": "#/$defs/AppliesTo",
+          "description": "`agents` (default): only detected or registered agents; `everyone`: also the person."
+        },
+        "patterns": {
+          "description": "At most 64 patterns of at most 256 bytes. An invalid one (empty, with control bytes,\nstarting with `!` or `#`, or a branch written as `refs/heads/…`) is dropped alone.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-gitraptor-patterns": true
+        }
+      },
+      "type": "object"
+    },
     "Permissions": {
       "description": "`permissions` section: a permission for each governed operation.",
       "properties": {
@@ -177,6 +203,24 @@
         "commitAuthorship": {
           "$ref": "#/$defs/CommitAuthorship",
           "description": "Who makes the commits (US-GRD-018, BR-AUTH-005). Only the floor relaxes it to\n`flexible` (Q-GRD-20).",
+          "x-gitraptor-levels": [
+            "profile",
+            "team",
+            "local"
+          ]
+        },
+        "forbiddenPaths": {
+          "$ref": "#/$defs/PatternPolicy",
+          "description": "Paths a commit cannot touch (US-GRD-008, BR-VAL-003). Only adds protection.",
+          "x-gitraptor-levels": [
+            "profile",
+            "team",
+            "local"
+          ]
+        },
+        "protectedBranches": {
+          "$ref": "#/$defs/PatternPolicy",
+          "description": "Branches that cannot be moved (US-GRD-008, BR-VAL-003). Only adds protection: every\nlevel's patterns apply.",
           "x-gitraptor-levels": [
             "profile",
             "team",
