@@ -88,13 +88,30 @@ fn live_tui(dirs: &ProfileDirs, cwd: &Path) -> bool {
 mod repo_intact {
     use super::*;
 
+    /// Stops the daemon of the temporary profile however the test ends.
+    struct StopDaemon<'a>(&'a ProfileDirs);
+
+    impl Drop for StopDaemon<'_> {
+        fn drop(&mut self) {
+            if let Ok(Some(pid)) = gitraptor_core::daemon::running_pid(&self.0.state) {
+                let _ = Command::new("/bin/kill").arg(pid.to_string()).status();
+            }
+        }
+    }
+
     #[test]
     fn repo_intact_the_tui_works_without_reading_the_profile() {
+        // Root reads a folder without permissions: the scenario would prove nothing.
+        assert!(
+            !rustix::process::geteuid().is_root(),
+            "run this suite as a regular user"
+        );
         let f = Fixture::with_commit(&git_from_path());
         for dir in ["", "data", "config", "state"] {
             set_mode(&f.profile.join(dir), 0o700);
         }
         let dirs = ProfileDirs::under_root(&f.profile);
+        let _stop = StopDaemon(&dirs);
         // The daemon starts in the temporary profile, outside the checked window.
         let status = raptor(&f, &["daemon", "status"]);
         assert!(status.status.success(), "{status:?}");
@@ -113,9 +130,6 @@ mod repo_intact {
             set_mode(&dirs.config, 0o700);
             without_profile = seen.expect("the TUI needs the profile");
         });
-        if let Ok(Some(pid)) = gitraptor_core::daemon::running_pid(&dirs.state) {
-            let _ = Command::new("/bin/kill").arg(pid.to_string()).status();
-        }
         report.assert_intact();
         assert!(with_profile, "no global replica with the profile readable");
         assert!(without_profile, "no global replica without the profile");

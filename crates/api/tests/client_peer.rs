@@ -5,7 +5,7 @@
 //! A server of another uid needs a second account, which an unprivileged test cannot create.
 //! The check is the same code with the uid it expects as a parameter: here the client expects
 //! a uid other than the one the fake server runs as.
-#![cfg(all(unix, feature = "client"))]
+#![cfg(unix)]
 
 use std::io::{ErrorKind, Read};
 use std::os::unix::fs::PermissionsExt;

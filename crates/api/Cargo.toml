@@ -12,6 +12,8 @@ publish.workspace = true
 # checks before the handshake, and the on-demand start behind the `Launch` trait. Off for
 # whoever only consumes the contract (schemas, a future UI), so the OS crates stay out.
 client = ["rustix/fs", "rustix/net", "rustix/process", "dep:nix", "dep:gitraptor-winsys"]
+# Seams of the client's tests (a server of another uid): never on in a binary.
+test-support = ["client"]
 
 [dependencies]
 schemars = "1.2.2"
@@ -31,6 +33,8 @@ nix = { version = "=0.31.3", features = ["socket"], optional = true }
 gitraptor-winsys = { workspace = true, optional = true }
 
 [dev-dependencies]
+# Its own tests always build the client, so `cargo test -p gitraptor-api` runs them.
+gitraptor-api = { path = ".", features = ["test-support"] }
 tempfile.workspace = true
 
 [target."cfg(unix)".dev-dependencies]

@@ -16,14 +16,25 @@ use crate::client::{Connector, Incoming, Link, LinkError, Refusal};
 
 /// Connects through the client library of `crates/api`.
 pub struct EngineConnector {
-    connect: Connect,
+    /// Where the channel is, or why this profile has none (Windows today: no runtime
+    /// folder, so the TUI says "unsupported" instead of not opening).
+    connect: Result<Connect, LinkError>,
     launch: Box<dyn Launch>,
 }
 
 impl EngineConnector {
     /// `connect` says where the channel is; `launch` starts a daemon that is not running.
     pub fn new(connect: Connect, launch: Box<dyn Launch>) -> Self {
-        Self { connect, launch }
+        Self::resolved(Ok(connect), launch)
+    }
+
+    /// [`EngineConnector::new`] from the outcome of resolving the channel: a failure is
+    /// what every connection attempt reports.
+    pub fn resolved(connect: Result<Connect, ClientError>, launch: Box<dyn Launch>) -> Self {
+        Self {
+            connect: connect.map_err(link_error),
+            launch,
+        }
     }
 }
 
@@ -33,7 +44,8 @@ impl Connector for EngineConnector {
     }
 
     fn connect_starting(&mut self, starting: &mut dyn FnMut()) -> Result<Box<dyn Link>, LinkError> {
-        ensure_daemon_with(&self.connect, self.launch.as_mut(), starting)
+        let connect = self.connect.as_ref().map_err(Clone::clone)?;
+        ensure_daemon_with(connect, self.launch.as_mut(), starting)
             .map(|client| Box::new(EngineLink(client)) as Box<dyn Link>)
             .map_err(link_error)
     }

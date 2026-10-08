@@ -116,15 +116,20 @@ pub type Stream = gitraptor_winsys::pipe::PipeStream;
 /// sending anything. Both refusals are `PermissionDenied`.
 #[cfg(unix)]
 pub fn connect(runtime: &Path) -> io::Result<Stream> {
-    connect_expecting(runtime, rustix::process::geteuid().as_raw())
+    connect_checked(runtime, rustix::process::geteuid().as_raw())
 }
 
 /// [`connect`], with the uid the server must run as given instead of this process's
 /// effective uid. The check is the same; tests use it to play a server of another user,
-/// which an unprivileged test cannot create.
-#[cfg(unix)]
-#[doc(hidden)]
+/// which an unprivileged test cannot create. Only with the `test-support` feature.
+#[cfg(all(unix, feature = "test-support"))]
 pub fn connect_expecting(runtime: &Path, server_uid: u32) -> io::Result<Stream> {
+    connect_checked(runtime, server_uid)
+}
+
+/// The L-06 checks of [`connect`], against the uid the server must run as.
+#[cfg(unix)]
+fn connect_checked(runtime: &Path, server_uid: u32) -> io::Result<Stream> {
     use std::os::unix::net::UnixStream;
     // L-06: the socket's folder must be this user's and private (0700,
     // not a symbolic link) before anything is sent; a missing folder

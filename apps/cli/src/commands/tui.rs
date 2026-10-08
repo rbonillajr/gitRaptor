@@ -61,9 +61,8 @@ fn engine_connector() -> Result<gitraptor_cli::client::engine::EngineConnector, 
     use gitraptor_core::profile::ProfileDirs;
     let dirs = ProfileDirs::resolve().map_err(|err| err.to_string())?;
     let options = ClientOptions::new(dirs, ClientKind::Cli);
-    let connect = options.connect().map_err(|err| err.to_string())?;
-    Ok(gitraptor_cli::client::engine::EngineConnector::new(
-        connect,
+    Ok(gitraptor_cli::client::engine::EngineConnector::resolved(
+        options.connect(),
         Box::new(options.launcher()),
     ))
 }
