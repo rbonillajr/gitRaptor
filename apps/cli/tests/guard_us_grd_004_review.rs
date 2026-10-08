@@ -115,3 +115,56 @@ fn a_repair_never_replaces_a_file_that_is_not_ours() {
     assert_eq!(std::fs::read_to_string(&foreign).unwrap(), "not ours\n");
     assert_eq!(hooks(&m)["status"], "inactive");
 }
+
+// A pipe put where a dispatcher was is a loss, found at once: reading it would block the loop.
+#[test]
+fn a_pipe_in_place_of_a_dispatcher_is_altered_not_a_hang() {
+    let m = Machine::new();
+    protected(&m);
+    let dispatcher = m.common().join("gitraptor/hooks/pre-push");
+    std::fs::remove_file(&dispatcher).unwrap();
+    let made = std::process::Command::new("mkfifo")
+        .arg(&dispatcher)
+        .status()
+        .unwrap();
+    assert!(made.success());
+    let status = hooks(&m);
+    assert_eq!(status["status"], "inactive", "{status:#}");
+    assert_eq!(status["cause"], "dispatcher-altered", "{status:#}");
+    // The repair replaces it with the real one.
+    std::fs::remove_file(&dispatcher).unwrap();
+    std::fs::write(&dispatcher, "x").unwrap();
+    let out = m.protect(&m.f.repo);
+    assert!(out.status.success(), "{}", text(&out));
+    assert_eq!(hooks(&m)["status"], "active");
+}
+
+// The folder replaced by an identical copy (a restore, a `cp`) keeps the protection active, and a
+// repair after an edit still works: it adopts the folder as it is now.
+#[test]
+fn a_repair_adopts_a_folder_that_was_copied_over() {
+    let m = Machine::new();
+    protected(&m);
+    let folder = m.common().join("gitraptor");
+    let copy = m.common().join("gitraptor-copy");
+    let cp = std::process::Command::new("cp")
+        .arg("-R")
+        .arg(&folder)
+        .arg(&copy)
+        .status()
+        .unwrap();
+    assert!(cp.success());
+    std::fs::remove_dir_all(&folder).unwrap();
+    std::fs::rename(&copy, &folder).unwrap();
+    // The same content, another folder: not a loss.
+    assert_eq!(hooks(&m)["status"], "active");
+    m.script(&folder.join("hooks/pre-push"), HOOK);
+    assert_eq!(hooks(&m)["cause"], "dispatcher-altered");
+    let out = m.protect(&m.f.repo);
+    assert!(out.status.success(), "{}", text(&out));
+    assert_eq!(hooks(&m)["status"], "active");
+    // And it can be removed afterwards.
+    let out = m.uninstall(&m.f.repo);
+    assert!(out.status.success(), "{}", text(&out));
+    assert!(!folder.exists());
+}

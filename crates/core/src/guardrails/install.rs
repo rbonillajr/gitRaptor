@@ -320,9 +320,11 @@ pub fn plan(ctx: &GuardCtx<'_>, repo_id: &str, common: &Path, store: &RepoStore)
         RepairPlan {
             cause: *cause,
             files: paths.into_iter().map(Untrusted::new).collect(),
-            chains: key_changed
-                .then(|| reader.as_ref().and_then(RepoReader::hooks_path))
-                .flatten()
+            // What the repair will chain: the value the same detection finds, at any level.
+            chains: prior
+                .as_ref()
+                .filter(|_| key_changed)
+                .and_then(|found| found.value.clone())
                 .map(Untrusted::new),
         }
     });
@@ -667,6 +669,12 @@ fn repair(
     let mut files = folder_files.files();
     files.sort_by_key(|f| !f.executable);
     trip("repair-files", When::Before);
+    // The folder may have been replaced by an identical copy (an archive restored, a `cp`): the
+    // developer confirmed this repair after seeing its plan, so the folder as it is now is the
+    // one the journal follows from here (a link or a non-folder is never adopted).
+    if let Ok(Some(now)) = writer.folder_id(common) {
+        journal.folder = Some(now.into());
+    }
     if common.join(FOLDER).is_dir()
         && let Some(folder) = journal.folder
     {
@@ -688,8 +696,10 @@ fn repair(
     let removable: Vec<&str> = leftovers
         .iter()
         .filter(|f| {
-            std::fs::read(common.join(FOLDER).join(&f.path))
-                .is_ok_and(|bytes| sha256(&bytes) == f.sha256)
+            health::read_regular(&common.join(FOLDER).join(&f.path))
+                .ok()
+                .flatten()
+                .is_some_and(|bytes| sha256(&bytes) == f.sha256)
         })
         .map(|f| f.path.as_str())
         .collect();
@@ -732,10 +742,10 @@ fn outdated(common: &Path, recorded: Option<u32>) -> bool {
         return true;
     }
     let folder = common.join(FOLDER);
-    let template = std::fs::symlink_metadata(folder.join(DISPATCH_CONF))
+    let template = health::read_regular(&folder.join(DISPATCH_CONF))
         .ok()
-        .filter(std::fs::Metadata::is_file)
-        .and_then(|_| std::fs::read_to_string(folder.join(DISPATCH_CONF)).ok())
+        .flatten()
+        .and_then(|bytes| String::from_utf8(bytes).ok())
         .and_then(|conf| {
             conf.lines()
                 .find_map(|l| l.strip_prefix("template\t"))
