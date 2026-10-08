@@ -275,3 +275,43 @@ fn commits_while_dormant_reach_the_history_in_order() {
         std::thread::sleep(Duration::from_millis(50));
     }
 }
+
+/// Files of this process whose path has `needle` (`lsof`, macOS).
+fn open_files_with(needle: &str) -> usize {
+    let out = std::process::Command::new("lsof")
+        .args(["-n", "-P", "-Fn", "-p", &std::process::id().to_string()])
+        .output()
+        .unwrap();
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .filter(|l| l.starts_with('n') && l.contains(needle))
+        .count()
+}
+
+/// N1 step 4: a dormant repo has no file of its store open, and a wake
+/// opens it again.
+#[test]
+fn a_dormant_repo_has_its_store_closed() {
+    let (fx, wt) = repo_with_login();
+    let r = start(fx);
+    let store = format!("{}.sqlite", r.repo_id);
+    // Active: its store is open (the threshold has not passed yet).
+    let open = open_files_with(&store);
+    if !r.log().contains("repo_dormant") {
+        assert!(open > 0, "the active store is not open: lsof sees nothing");
+    }
+    r.logged("repo_dormant", 1);
+    // The log line is written once the store is closed.
+    assert_eq!(open_files_with(&store), 0, "{}", r.log());
+    std::fs::write(wt.join("api.rs"), EDITED).unwrap();
+    r.logged("repo_woken", 1);
+    let start = Instant::now();
+    while open_files_with(&store) == 0 {
+        // It may already sleep again: then it was opened and closed.
+        if r.log().matches("repo_dormant").count() > 1 {
+            break;
+        }
+        assert!(start.elapsed() < DEADLINE, "{}", r.log());
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
