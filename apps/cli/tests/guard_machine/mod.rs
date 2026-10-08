@@ -201,6 +201,9 @@ impl Machine {
                 "GITRAPTOR_TEST_GUARD_WINDOW_MS",
                 self.window_ms.to_string().into(),
             ),
+            // Debug builds only: how often the daemon checks that the protection is still in
+            // place (US-GRD-004), instead of every minute.
+            ("GITRAPTOR_TEST_GUARD_HEALTH_MS", "100".into()),
             ("HOME", self.f.home.clone().into_os_string()),
             ("LANG", "en_US.UTF-8".into()),
         ]
