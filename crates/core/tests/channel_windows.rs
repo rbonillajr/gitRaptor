@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use common::*;
 use gitraptor_api::messages::{ClientKind, Snapshot, SubscribeResult};
 use gitraptor_api::rpc::code;
-use gitraptor_api::{PROTOCOL_VERSION, methods};
+use gitraptor_api::{PROTOCOL_VERSION, Timings, clock, methods};
 use gitraptor_core::channel::{ChannelConfig, ChannelLimits, EventBus, transport};
 use gitraptor_core::client::{Client, ClientError};
 use gitraptor_core::daemon::{
@@ -98,6 +98,18 @@ impl Drop for Running {
     }
 }
 
+fn change_timings(batch: u64) -> Timings {
+    let now = clock::monotonic_ns();
+    Timings {
+        batch_id: batch,
+        t_recv: now,
+        t_flush: now,
+        t_computed: now,
+        t_persisted: now,
+        t_published: 0,
+    }
+}
+
 #[test]
 fn a_client_greets_calls_and_receives_events_over_the_pipe() {
     let tp = TempProfile::new();
@@ -115,7 +127,12 @@ fn a_client_greets_calls_and_receives_events_over_the_pipe() {
         )
         .unwrap();
     for n in 0..20 {
-        r.bus.publish("git.event", json!({"n": n}), None, |_| {});
+        r.bus.publish(
+            "git.event",
+            json!({"n": n}),
+            Some(change_timings(n)),
+            |_| {},
+        );
     }
     let mut seqs = Vec::new();
     while seqs.len() < 20 {
