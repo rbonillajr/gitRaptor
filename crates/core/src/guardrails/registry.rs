@@ -24,6 +24,8 @@ pub struct GuardRegistry {
     /// The profile's folders: its `settings.json` sets `policies.commitAuthorship` too
     /// (US-GRD-018). Read on every commit evaluation, never cached.
     profile: RwLock<Option<crate::profile::ProfileDirs>>,
+    /// The decision log entries in flight to the loop (US-GRD-005, D4).
+    log: super::log::LogSink,
 }
 
 impl GuardRegistry {
@@ -32,6 +34,7 @@ impl GuardRegistry {
         Self {
             repos: RwLock::default(),
             profile: RwLock::new(Some(dirs)),
+            log: super::log::LogSink::default(),
         }
     }
 
@@ -49,6 +52,11 @@ impl GuardRegistry {
         if let Ok(mut map) = self.repos.write() {
             map.remove(repo_id);
         }
+    }
+
+    /// The decision log's sink, shared by the connections and the loop.
+    pub fn log(&self) -> &super::log::LogSink {
+        &self.log
     }
 
     /// The profile's folders, when the daemon set them.

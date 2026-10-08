@@ -279,7 +279,7 @@ fn newer_schema_is_rejected_and_file_untouched() {
             found, supported, ..
         } => {
             assert_eq!(*found, 99);
-            assert_eq!(*supported, 3);
+            assert_eq!(*supported, 4);
         }
         other => panic!("unexpected {other}"),
     }
@@ -415,6 +415,7 @@ fn a_v1_store_with_linked_events_migrates_to_the_observer_gap_causes() {
              DROP TABLE gaps;
              ALTER TABLE gaps_v1 RENAME TO gaps;
              ALTER TABLE events DROP COLUMN authorship;
+             DROP TABLE guardrails_decisions;
              PRAGMA user_version = 1;
              COMMIT;",
         )

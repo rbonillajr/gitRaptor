@@ -14,6 +14,7 @@ pub mod evaluate;
 pub mod hook;
 pub mod install;
 pub mod journal;
+pub mod log;
 pub mod registry;
 pub mod second_line;
 

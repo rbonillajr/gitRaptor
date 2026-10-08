@@ -8,6 +8,7 @@
 mod dirs;
 mod error;
 pub(crate) mod fsperm;
+mod guard_log;
 mod guard_store;
 mod index;
 mod repo_key;
