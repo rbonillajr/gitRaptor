@@ -111,7 +111,9 @@ pub(super) fn run(
         let wait = deadline.saturating_duration_since(Instant::now());
         match rx.recv_timeout(wait) {
             Ok(WtMsg::Paths(t_recv, paths)) => {
+                eprintln!("DBG wt paths {paths:?} root={:?}", task.root);
                 if !task.ignore.keep_any(&task.root, paths) {
+                    eprintln!("DBG wt ignored");
                     continue;
                 }
                 task.last_event_ms = wall_now().0;
@@ -255,6 +257,7 @@ impl Task {
 
     /// Tells the hooks the worktree changed, after its batch is handed over.
     fn changed(&self) {
+        eprintln!("DBG wt changed hooks={}", self.shared.hooks.is_some());
         if let Some(hooks) = &self.shared.hooks {
             hooks.worktree_changed(&self.repo_id, &self.root);
         }
