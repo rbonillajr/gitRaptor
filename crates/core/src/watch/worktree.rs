@@ -9,8 +9,9 @@
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, OnceLock, RwLock};
 use std::time::{Duration, Instant};
 
 use gitraptor_api::UntrustedName;
@@ -111,6 +112,10 @@ pub(super) fn run(
         let wait = deadline.saturating_duration_since(Instant::now());
         match rx.recv_timeout(wait) {
             Ok(WtMsg::Paths(t_recv, paths)) => {
+                let index = task.git_dir.join("index");
+                if paths.contains(&index) {
+                    task.ignore.revalidate(&task.root);
+                }
                 if !task.ignore.keep_any(&task.root, paths) {
                     continue;
                 }
@@ -271,6 +276,9 @@ impl Task {
         if self.degraded {
             return;
         }
+        // What the ignore cache decided may have changed with nobody noticing, e.g. a global
+        // `core.excludesFile`: this is the bound (ADR-GRP-010, Enmienda 2026-10-08, E5).
+        self.ignore.revalidate(&self.root);
         let t_flush = clock::monotonic_ns();
         let head = self.head();
         let read = self.read();
@@ -388,42 +396,149 @@ fn stagger(root: &Path, period: Duration) -> Duration {
 /// Most prefixes the router checks per path; past them it leaves the rest to the task.
 const MAX_IGNORED_PREFIXES: usize = 32;
 
+/// Events dropped under one ignored folder within [`HOT_WINDOW_NS`] that make it a candidate to
+/// leave the OS stream (ADR-GRP-010, Enmienda 2026-10-08, E3). ⚠️ **ASSUMPTION**: calibrated by
+/// the idle bench.
+const HOT_EVENTS: u32 = 200;
+const HOT_WINDOW_NS: u64 = 2_000_000_000;
+
+/// One ignored folder the router drops events under.
+#[derive(Debug)]
+struct Prefix {
+    /// Absolute, ending in `/`.
+    bytes: Vec<u8>,
+    dir: PathBuf,
+    /// Events dropped in the window that began at `window_ns`.
+    hits: AtomicU32,
+    window_ns: AtomicU64,
+    /// It reached [`HOT_EVENTS`]: sustained churn.
+    hot: AtomicBool,
+}
+
+/// An ignored folder as the exclusion manager sees it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct IgnoredDir {
+    pub dir: PathBuf,
+    pub hot: bool,
+    pub hits: u32,
+}
+
 /// The ignored directories a worktree task found, as absolute byte prefixes ending in `/`,
 /// shared with the router so it drops their events before they reach the task (RES-01: a build
 /// writes thousands of files per second under `target/`). Only directories the task asked Git
 /// about, and cleared with its cache: the router never drops a path the task would keep.
-#[derive(Debug, Default)]
-pub(crate) struct IgnoredPrefixes(RwLock<Vec<Vec<u8>>>);
+///
+/// It also counts what the router drops, and tells its watcher (`on_change`) when a folder
+/// sustains churn or stops being ignored, so the OS stream can leave it out or take it back
+/// (ADR-GRP-010, Enmienda 2026-10-08).
+#[derive(Default)]
+pub(crate) struct IgnoredPrefixes {
+    list: RwLock<Vec<Prefix>>,
+    on_change: OnceLock<Box<dyn Fn() + Send + Sync>>,
+}
+
+impl std::fmt::Debug for IgnoredPrefixes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IgnoredPrefixes")
+            .field("list", &self.list)
+            .finish_non_exhaustive()
+    }
+}
 
 impl IgnoredPrefixes {
-    /// Whether `path` is under one of the ignored directories.
-    pub(super) fn covers(&self, path: &Path) -> bool {
+    /// The router's check: whether `path` is under an ignored directory, counting it. `t_ns` is
+    /// the monotonic time the event was received.
+    pub(super) fn hit(&self, path: &Path, t_ns: u64) -> bool {
         let path = path.as_os_str().as_encoded_bytes();
-        self.0
+        let list = self.list.read().unwrap_or_else(|e| e.into_inner());
+        let Some(prefix) = list.iter().find(|p| path.starts_with(&p.bytes)) else {
+            return false;
+        };
+        let began = prefix.window_ns.load(Ordering::Relaxed);
+        if t_ns.saturating_sub(began) > HOT_WINDOW_NS {
+            prefix.window_ns.store(t_ns, Ordering::Relaxed);
+            prefix.hits.store(1, Ordering::Relaxed);
+        } else if prefix.hits.fetch_add(1, Ordering::Relaxed) + 1 == HOT_EVENTS
+            && !prefix.hot.swap(true, Ordering::Relaxed)
+        {
+            drop(list);
+            self.changed();
+        }
+        true
+    }
+
+    /// Tells the watcher something changed. Set once, by whoever watches this worktree.
+    pub(super) fn set_on_change(&self, f: Box<dyn Fn() + Send + Sync>) {
+        let _ = self.on_change.set(f);
+    }
+
+    fn changed(&self) {
+        if let Some(f) = self.on_change.get() {
+            f();
+        }
+    }
+
+    /// The folders now, with what the router counted under each.
+    pub(crate) fn snapshot(&self) -> Vec<IgnoredDir> {
+        self.list
             .read()
             .unwrap_or_else(|e| e.into_inner())
             .iter()
-            .any(|p| path.starts_with(p))
+            .map(|p| IgnoredDir {
+                dir: p.dir.clone(),
+                hot: p.hot.load(Ordering::Relaxed),
+                hits: p.hits.load(Ordering::Relaxed),
+            })
+            .collect()
     }
 
     fn insert(&self, dir: &Path) {
-        let mut prefix = dir.as_os_str().as_encoded_bytes().to_vec();
+        let mut bytes = dir.as_os_str().as_encoded_bytes().to_vec();
         // The separator of the event paths it is compared with.
-        prefix.push(std::path::MAIN_SEPARATOR as u8);
-        let mut all = self.0.write().unwrap_or_else(|e| e.into_inner());
-        if all.len() < MAX_IGNORED_PREFIXES && !all.contains(&prefix) {
-            all.push(prefix);
+        bytes.push(std::path::MAIN_SEPARATOR as u8);
+        let mut all = self.list.write().unwrap_or_else(|e| e.into_inner());
+        if all.len() < MAX_IGNORED_PREFIXES && !all.iter().any(|p| p.bytes == bytes) {
+            all.push(Prefix {
+                bytes,
+                dir: dir.to_path_buf(),
+                hits: AtomicU32::new(0),
+                window_ns: AtomicU64::new(0),
+                hot: AtomicBool::new(false),
+            });
+        }
+    }
+
+    /// Takes one folder out. The watcher is told, since it may have left it out of its stream.
+    fn remove(&self, dir: &Path) {
+        let removed = {
+            let mut all = self.list.write().unwrap_or_else(|e| e.into_inner());
+            let before = all.len();
+            all.retain(|p| p.dir != dir);
+            all.len() != before
+        };
+        if removed {
+            self.changed();
         }
     }
 
     fn clear(&self) {
-        self.0.write().unwrap_or_else(|e| e.into_inner()).clear();
+        let had = {
+            let mut all = self.list.write().unwrap_or_else(|e| e.into_inner());
+            let had = !all.is_empty();
+            all.clear();
+            had
+        };
+        if had {
+            self.changed();
+        }
     }
 }
 
 /// Directories ignored by Git, asked once each (ADR-GRP-010 § 2, Enmienda
 /// 2026-10-05): events under them are dropped before the debounce, so a
-/// build writing to an ignored `target/` costs no recompute.
+/// build writing to an ignored `target/` costs no recompute. A directory with
+/// tracked entries in the index is not ignored here: Git keeps following those
+/// files (Enmienda 2026-10-08, E3).
 #[derive(Default)]
 pub(super) struct IgnoreCache {
     ignored: HashSet<String>,
@@ -445,6 +560,34 @@ impl IgnoreCache {
         self.prefixes.clear();
         self.ignored.clear();
         self.kept.clear();
+    }
+
+    /// Checks again what the cache decided, against the rules and the index as they are now:
+    /// a folder that holds a tracked entry, or that the rules no longer ignore, is dropped from
+    /// the cache and from the router, and the watcher is told (E5). Called when the index
+    /// changed and by the periodic reconciliation, which also covers `core.excludesFile`.
+    pub(super) fn revalidate(&mut self, root: &Path) {
+        if self.ignored.is_empty() {
+            return;
+        }
+        let Some(reader) = RepoReader::open(root, &ReaderOptions::default()).ok() else {
+            return;
+        };
+        let stale: Vec<String> = self
+            .ignored
+            .iter()
+            .filter(|dir| {
+                !reader.is_ignored(dir, true).unwrap_or(false)
+                    || reader.has_tracked_under(dir).unwrap_or(true)
+            })
+            .cloned()
+            .collect();
+        for dir in stale {
+            self.ignored.remove(&dir);
+            // What was decided about the ones below may rest on this one.
+            self.kept.clear();
+            self.prefixes.remove(&root.join(&dir));
+        }
     }
 
     /// Whether any path is outside every ignored directory.
@@ -503,7 +646,11 @@ impl IgnoreCache {
             let Some(reader) = reader.as_ref() else {
                 return false;
             };
-            if reader.is_ignored(&dir, true).unwrap_or(false) {
+            // A tracked entry below keeps the folder in sight; when the index cannot be read,
+            // it is not ignored.
+            if reader.is_ignored(&dir, true).unwrap_or(false)
+                && !reader.has_tracked_under(&dir).unwrap_or(true)
+            {
                 // Only a name read without loss names the same folder for the router.
                 if rel.to_str().is_some() {
                     // `dir` joins its parts with `/`: native parts, as the events name them.
@@ -516,5 +663,73 @@ impl IgnoreCache {
             self.kept.insert(dir.clone());
         }
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::AtomicUsize;
+
+    fn counted() -> (IgnoredPrefixes, Arc<AtomicUsize>) {
+        let p = IgnoredPrefixes::default();
+        p.insert(Path::new("/w/target"));
+        let told = Arc::new(AtomicUsize::new(0));
+        let t = Arc::clone(&told);
+        p.set_on_change(Box::new(move || {
+            t.fetch_add(1, Ordering::Relaxed);
+        }));
+        (p, told)
+    }
+
+    #[test]
+    fn a_folder_becomes_hot_once_its_events_reach_the_threshold_in_the_window() {
+        let (p, told) = counted();
+        let path = Path::new("/w/target/debug/a");
+        for i in 0..u64::from(HOT_EVENTS) - 1 {
+            assert!(p.hit(path, 1_000 + i));
+        }
+        assert!(!p.snapshot()[0].hot);
+        assert_eq!(told.load(Ordering::Relaxed), 0);
+        assert!(p.hit(path, 2_000));
+        assert!(p.snapshot()[0].hot);
+        assert_eq!(told.load(Ordering::Relaxed), 1);
+        // Told once, not for each event after it.
+        for i in 0..50 {
+            assert!(p.hit(path, 3_000 + i));
+        }
+        assert_eq!(told.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn a_slow_trickle_never_makes_a_folder_hot() {
+        let (p, told) = counted();
+        let path = Path::new("/w/target/debug/a");
+        // One event per window: the count restarts each time.
+        for i in 0..u64::from(HOT_EVENTS) * 2 {
+            assert!(p.hit(path, i * (HOT_WINDOW_NS + 1)));
+        }
+        assert!(!p.snapshot()[0].hot);
+        assert_eq!(told.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn paths_outside_the_folder_are_not_dropped_or_counted() {
+        let (p, _) = counted();
+        assert!(!p.hit(Path::new("/w/src/a.rs"), 1));
+        assert!(!p.hit(Path::new("/w/target2/a"), 1));
+        assert_eq!(p.snapshot()[0].hits, 0);
+    }
+
+    #[test]
+    fn taking_a_folder_out_tells_the_watcher_once() {
+        let (p, told) = counted();
+        p.remove(Path::new("/w/other"));
+        assert_eq!(told.load(Ordering::Relaxed), 0);
+        p.remove(Path::new("/w/target"));
+        assert_eq!(told.load(Ordering::Relaxed), 1);
+        assert!(p.snapshot().is_empty());
+        p.clear();
+        assert_eq!(told.load(Ordering::Relaxed), 1);
     }
 }
