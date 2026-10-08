@@ -39,6 +39,7 @@ use super::protected::{
     ScopeError, StepCtx, StepError, StepOutput, StepScope, registered_worktrees,
 };
 use super::repo_lock;
+use super::restore::{KEPT_REF_IN_RECREATED_WORKTREE, RECREATED_WORKTREE_WARNING};
 use super::store::SnapshotStore;
 use crate::channel::marks::ExecutorMarks;
 use crate::channel::peer::ProcSource;
@@ -122,6 +123,9 @@ pub struct UndoDone {
     pub undone: Undone,
     pub target_snapshot_id: String,
     pub report: ApplyReport,
+    /// The undo's own warnings as stable codes, also recorded in the oplog
+    /// (e.g. [`super::restore::KEPT_REF_IN_RECREATED_WORKTREE`]).
+    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -226,6 +230,7 @@ struct Planned {
     scope: Scope,
     worktrees: Vec<PlanWorktree>,
     refs: BTreeSet<String>,
+    warnings: Vec<String>,
 }
 
 /// The engine's side of an undo's plan (US-TMC-004): the worktree's raw Git
@@ -374,6 +379,9 @@ fn plan(
     let stack = oplog
         .undo_stack_in(&StackScope::Worktree(key), &external, raw.floor)
         .map_err(|_| reject(TmRejectReason::TargetUnavailable, &own_scope, vec![]))?;
+    // Keys of the worktrees the undone operation recreated, if it is a
+    // restore: their branches are kept rather than refused (NFR-01).
+    let mut recreated: Vec<String> = Vec::new();
     let (undone, scope, target) = match stack.last_operation() {
         None => return Err(reject(TmRejectReason::NothingToUndo, &own_scope, vec![])),
         Some(op @ OpRef::GitEvent(seq)) => {
@@ -415,6 +423,18 @@ fn plan(
                 ));
             };
             let scope = view.record.scope.clone();
+            if view.record.kind == OperationKind::Restore {
+                recreated = view
+                    .record
+                    .warnings
+                    .iter()
+                    .filter_map(|w| {
+                        w.strip_prefix(RECREATED_WORKTREE_WARNING)?
+                            .strip_prefix(':')
+                    })
+                    .map(str::to_owned)
+                    .collect();
+            }
             let op = OpRef::Oplog(view.record.operation_id.clone());
             // The target: the operation's guaranteed prior snapshot.
             let target = view.prior_snapshot.clone().ok_or_else(|| {
@@ -482,16 +502,37 @@ fn plan(
         });
     }
     // A branch checked out in a worktree outside the scope never moves: it
-    // would change that worktree's history under its files.
-    for (root, _) in &registered {
+    // would change that worktree's history under its files. Undoing a
+    // restore keeps, instead, a branch only a worktree it recreated has out:
+    // that worktree stays, so the undo always completes.
+    let mut kept: BTreeSet<String> = BTreeSet::new();
+    let mut in_use: BTreeSet<String> = BTreeSet::new();
+    for (i, (root, _)) in registered.iter().enumerate() {
         let outside = !scope.worktrees.iter().any(|w| Path::new(w) == root);
         if outside
             && let Some(branch) = head_branch(root)
             && refs.contains(&format!("refs/heads/{branch}"))
         {
-            return Err(refuse(TmRejectReason::RefInUse));
+            let full = format!("refs/heads/{branch}");
+            let key = super::protected::worktree_key(&registered, root, i);
+            if recreated.contains(&key) {
+                kept.insert(full);
+            } else {
+                in_use.insert(full);
+            }
         }
     }
+    if !in_use.is_empty() {
+        return Err(refuse(TmRejectReason::RefInUse));
+    }
+    for full in &kept {
+        refs.remove(full);
+    }
+    let warnings = if kept.is_empty() {
+        Vec::new()
+    } else {
+        vec![KEPT_REF_IN_RECREATED_WORKTREE.to_owned()]
+    };
     // The undo records the refs it may move, so undoing it (or redoing)
     // keeps the same scope.
     let scope = Scope {
@@ -504,6 +545,7 @@ fn plan(
         scope,
         worktrees,
         refs,
+        warnings,
     })
 }
 
@@ -733,7 +775,7 @@ pub fn undo_last(
         channel,
         confirmed: false,
         target: Target::Undo(target_ref),
-        warnings: Vec::new(),
+        warnings: planned.warnings.clone(),
         engine_mark,
     };
     let mut step = UndoStep {
@@ -778,6 +820,7 @@ pub fn undo_last(
                 Some(Ok(report)) => report,
                 _ => ApplyReport::default(),
             },
+            warnings: planned.warnings,
         }),
         Err(ProtectedError::Prior {
             reason,
