@@ -71,9 +71,10 @@ pub trait ProcessProbe {
 }
 
 /// The OS answer. When it cannot tell (no permission, the list cannot be
-/// read) it says alive: the lock is then kept, never wrongly deleted. Unix
-/// cannot tell a reused pid from the child; Windows can, by the process's
-/// creation time.
+/// read) it says alive: the lock is then kept, never wrongly deleted. A
+/// reused pid is told apart from the child by its start time: Windows by
+/// the creation time, Unix by the start time the channel reads
+/// ([`crate::channel::peer::SystemProcs`]), compared with [`same_start`].
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SystemProbe;
 
@@ -90,6 +91,21 @@ impl ProcessProbe for SystemProbe {
             rustix::process::test_kill_process(pid),
             Err(rustix::io::Errno::SRCH)
         )
+    }
+
+    #[cfg(unix)]
+    fn is_same(&self, pid: u32, start_us: Option<u64>) -> bool {
+        use crate::channel::peer::{ProcError, ProcSource, SystemProcs};
+        let Some(start_us) = start_us else {
+            return self.is_alive(pid);
+        };
+        match SystemProcs.read(pid) {
+            Ok(info) => same_start(start_us, info.start_us, UNIX_START_RULE),
+            // Linux reports any unreadable `/proc` entry as gone (too many
+            // open files, `hidepid`): only `kill(0)` confirms it.
+            Err(ProcError::Gone) => self.is_alive(pid),
+            Err(_) => true,
+        }
     }
 
     #[cfg(windows)]
@@ -115,6 +131,37 @@ impl ProcessProbe for SystemProbe {
     #[cfg(not(any(unix, windows)))]
     fn is_alive(&self, _pid: u32) -> bool {
         true
+    }
+}
+
+/// How a stored start time is compared with the one read now.
+#[cfg(any(unix, test))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum StartRule {
+    /// The start time is fixed when the process is created (macOS).
+    Exact,
+    /// Linux: the start time is the boot time (whole seconds, recomputed
+    /// from the wall clock, so it moves when the clock is stepped) plus the
+    /// ticks since boot. Only the sub-second part, which comes from the
+    /// ticks alone, tells two processes apart; equal sub-seconds with other
+    /// seconds may be the same child after a clock step, so it is the same
+    /// (fail-closed: a reuse within the same hundredth is not detected).
+    #[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
+    SubSecond,
+}
+
+#[cfg(target_os = "linux")]
+const UNIX_START_RULE: StartRule = StartRule::SubSecond;
+#[cfg(all(unix, not(target_os = "linux")))]
+const UNIX_START_RULE: StartRule = StartRule::Exact;
+
+/// Whether a process that started at `current` µs may be the one annotated
+/// with `stored`; `false` only when it is surely another process.
+#[cfg(any(unix, test))]
+pub(crate) fn same_start(stored: u64, current: u64, rule: StartRule) -> bool {
+    match rule {
+        StartRule::Exact => stored == current,
+        StartRule::SubSecond => stored % 1_000_000 == current % 1_000_000,
     }
 }
 
