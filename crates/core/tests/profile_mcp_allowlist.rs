@@ -81,11 +81,15 @@ fn a_profile_from_before_the_mark_migrates_and_keeps_its_repos() {
             .0
             .repo_id
     };
-    // Back to the previous schema (user_version 2, no mark columns).
+    // Back to the previous schema (user_version 2: no mark columns, nor the
+    // discovery tables of the later migration 4).
     {
         let conn = rusqlite::Connection::open(tp.dirs().data.join(INDEX_FILE)).unwrap();
         conn.execute_batch(
-            "ALTER TABLE repos DROP COLUMN mcp_enabled_ms;
+            "DROP TABLE discovery_roots;
+             DROP TABLE discovery_candidates;
+             DROP TABLE discovery_dismissed;
+             ALTER TABLE repos DROP COLUMN mcp_enabled_ms;
              ALTER TABLE repos DROP COLUMN mcp_enabled_by;
              PRAGMA user_version = 2;",
         )
