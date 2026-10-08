@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-05
-updated: 2026-10-07
+updated: 2026-10-08
 feature: motor-local
 source: inline
 related:
@@ -90,6 +90,8 @@ Entonces ninguna expone el consumo de recursos del motor
 
 > **Origen**: Decisión del orquestador (2026-10-07), validada por el PO: observación por niveles (propuesta B, aceptada por Rene Bonilla el 2026-10-06). Con más de 100 repos, el desarrollador tiene que poder comprobar que el consumo escala con los repos activos y no con los observados.
 
+> **Ajuste (2026-10-08)**: Decisión del orquestador (2026-10-08), validada por el PO. Los descriptores no se reparten por nivel porque no se pueden medir con honestidad: en macOS un stream de FSEvents por raíz no consume un descriptor por vigilancia, y en Linux todas las vigilancias de inotify comparten un descriptor. Por nivel se muestran los repos, worktrees y vigilancias, y para los dormidos el coste de sus redes de seguridad; los descriptores se muestran una vez, los del proceso. El contrato (ADR-GRP-010 N8) no cambia.
+
 - **Dependencia nueva, no bloqueante**: TS-GRP-005 sigue igual; los niveles los da TS-GRP-006 (observación por niveles, del Arquitecto). Sin TS-GRP-006, los niveles se muestran como "no disponible" y el resto del escenario no cambia.
 - **Regla**: RES-10 (visibilidad), con la enmienda de NFRs del Arquitecto para la observación por niveles.
 
@@ -98,7 +100,7 @@ Entonces ninguna expone el consumo de recursos del motor
 Dado el motor observando 12 repos, 3 con actividad reciente y 9 sin actividad desde hace más que el umbral de reposo
 Cuando el desarrollador ejecuta `raptor status --resources`
 Entonces ve cuántos repos están activos y cuántos dormidos
-  Y ve, por nivel, las vigilancias y los descriptores que usa
+  Y ve, por nivel, los repos, worktrees y vigilancias que usa, y los descriptores del proceso en total
   Y la salida con `--json` trae los mismos recuentos y valores en unidades fijas
 
 ## Requisitos Técnicos (para la Dev Spec)

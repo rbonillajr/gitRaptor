@@ -6,7 +6,7 @@ status: approved
 feature: motor-local
 domain: GRP
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-08
 related:
   stories: [US-GRP-017, US-GRP-001, US-GRP-002, US-GRP-018, US-GRP-019]
   enablers: [TS-GRP-004, TS-GRP-005, INF-GRP-001, INF-GRP-002]
@@ -76,3 +76,17 @@ Con el `raptor` real como daemon y como cliente, sobre la máquina temporal del 
 - **TS-GRP-005** rellena `pools` y **US-GRP-019** rellena `power_saving`; los tipos ya están en el contrato.
 - **US-GRP-018** (`raptor doctor`) reutiliza `resources::disk` y `TARGETS` con el motor parado.
 - **US-TMC-022**: si la Time Machine de Rene pasa de 2 GiB durante el dogfooding, sube a M1 (backlog § Hito M1).
+
+## Enmienda (2026-10-08): niveles de observación en la vista
+
+Cubre el escenario de la Enmienda (2026-10-07) de la historia ("repos activos y dormidos y lo que cuesta cada nivel"). TS-GRP-006 ya publica el bloque `observation` de `engine.resources` (ADR-GRP-010 N8, capacidad `observation.tiers`) y `Client::connect` acepta todas las capacidades, así que la CLI ya lo recibe: **falta solo la presentación**. Sin cambio de contrato ni del perfil `mcp`.
+
+| # | Decisión |
+|---|---|
+| D10 | **Decisión del orquestador (2026-10-08), validada por el PO.** Por nivel se muestran los repos, worktrees y vigilancias; para los dormidos, el coste de sus redes de seguridad (intervalo del barrido, intervalo efectivo de la reconciliación y CPU de las redes, si el daemon la da); y los worktrees sondeados sin vigilancia (degradados). Los descriptores **no** se reparten por nivel: en macOS un stream de FSEvents por raíz no consume un descriptor por vigilancia y en Linux las vigilancias de inotify comparten uno; se muestran una vez, los del proceso. Ajuste del PO: el criterio de la historia se corrige para decir eso |
+| D11 | **Texto**: una línea `repos observados: N activos · N dormidos · N despertando` y, debajo, una por nivel. Sin bloque `observation` (daemon anterior o el observador aún no arrancó): `repos observados por nivel: no disponible`. Con el motor parado no se muestra nada de niveles. **JSON**: `engine.observation` es el bloque del contrato tal cual (recuentos, segundos y %), `null` si el daemon no lo da |
+| D12 | **Test de punta a punta** (`apps/cli/tests/resources_tiers.rs`): el `raptor` real como cliente y el daemon **en proceso** con un `TierConfig` corto (comprobación cada 50 ms, umbral de 1 h), porque el binario real tiene como mínimo un umbral de 1 h y un barrido de 30 s. El repo dormido se siembra con actividad de hace 2 h. **No se añade ningún hook** para acortar los umbrales del binario: los mínimos del producto solo se saltan dentro del test (nota del coordinador) |
+
+**Tests**: `text_in_english_shows_the_tiers`, `text_in_spanish_shows_the_tiers` y `json_has_the_tier_counts` (1 repo activo y 1 dormido, perfil temporal); `resources::tests::without_tiers_they_are_not_available` (unit).
+
+**Pendiente**: los repos descubiertos de US-GRP-020 ("descubiertos (0 recursos)") se añaden cuando el bloque de descubrimiento esté en `main`; hoy (PR #170) aún no lo está.
