@@ -11,10 +11,9 @@
 //! use and raw Git in the stack (US-TMC-004). Temporary repo, worktrees and
 //! profile only (NFR-01).
 //!
-//! macOS and Windows (the channel is a named pipe there, XP-01; the store
-//! and the applier, XP-12). Linux: Pendiente: etapa de validación
-//! multiplataforma.
-#![cfg(any(target_os = "macos", windows))]
+//! macOS only, like the other channel tests. Linux: Pendiente: etapa de
+//! validación multiplataforma.
+#![cfg(target_os = "macos")]
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
@@ -49,9 +48,8 @@ use serde_json::{Value, json};
 
 const RAPTOR: &str = env!("CARGO_BIN_EXE_raptor");
 
-/// Drive form on Windows, the form the daemon keeps (a `\\?\` path is refused).
 fn canonical(p: &Path) -> PathBuf {
-    gitraptor_git::paths::canonicalize(p).unwrap()
+    p.canonicalize().unwrap()
 }
 
 /// The test catalog: `abort-in-progress` stands for an operation that runs
@@ -240,24 +238,17 @@ impl Machine {
 
     /// `raptor <args>` in `dir`, in language `lang`, without a terminal.
     fn raptor(&self, dir: &Path, args: &[&str], lang: &str) -> Output {
-        let mut cmd = Command::new(RAPTOR);
-        cmd.args(args)
+        Command::new(RAPTOR)
+            .args(args)
             .env_clear()
             .env("GITRAPTOR_PROFILE_DIR", &self.profile)
             .env("HOME", &self.fx.home)
+            .env("PATH", "/usr/bin:/bin")
             .env("LANG", lang)
             .current_dir(dir)
-            .stdin(Stdio::null());
-        #[cfg(unix)]
-        cmd.env("PATH", "/usr/bin:/bin");
-        // Windows needs its system folder; nothing of the user's profile is passed.
-        #[cfg(windows)]
-        for key in ["SystemRoot", "PATH"] {
-            if let Some(value) = std::env::var_os(key) {
-                cmd.env(key, value);
-            }
-        }
-        cmd.output().unwrap()
+            .stdin(Stdio::null())
+            .output()
+            .unwrap()
     }
 }
 
