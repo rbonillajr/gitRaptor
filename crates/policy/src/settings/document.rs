@@ -166,6 +166,16 @@ impl Walk {
             .filter(|s| OPEN_SECTIONS.contains(s))
     }
 
+    /// A key that declares discovery roots, at the top or in `engine` (ADR-GRP-010 N7).
+    fn roots_key(path: &[String]) -> bool {
+        const KEYS: &[&str] = &["discovery", "codeRoots", "roots"];
+        match path {
+            [key] => KEYS.contains(&key.as_str()),
+            [section, key] => section == "engine" && KEYS.contains(&key.as_str()),
+            _ => false,
+        }
+    }
+
     fn node(&mut self, declared: &Value, value: &mut Value, path: &mut Vec<String>) -> Keep {
         if self.invalid.is_some() {
             return Keep::Drop;
@@ -200,6 +210,9 @@ impl Walk {
                                 Some(_) => {
                                     self.partial = true;
                                     self.note(Code::UnknownKey, path);
+                                }
+                                None if Self::roots_key(path) => {
+                                    self.note(Code::DiscoveryRootsIgnored, path);
                                 }
                                 None => self.note(Code::UnknownKey, path),
                             }
@@ -341,6 +354,25 @@ mod tests {
             SourceKind::Local,
         );
         assert_eq!(codes(&p), ["wrong-type"]);
+    }
+
+    #[test]
+    fn discovery_roots_ignored_in_any_settings_file() {
+        let p = team(
+            r#"{"discovery":{"roots":["~/proyectos"]},"codeRoots":["/x"],
+               "engine":{"roots":["/y"],"baseBranch":"dev"}}"#,
+        );
+        assert_eq!(p.status, SourceStatus::Readable);
+        assert_eq!(
+            codes(&p),
+            [
+                "discovery-roots-ignored",
+                "discovery-roots-ignored",
+                "discovery-roots-ignored"
+            ]
+        );
+        let engine = p.applicable().unwrap().engine.clone().unwrap();
+        assert_eq!(engine.base_branch.as_deref(), Some("dev"));
     }
 
     #[test]
