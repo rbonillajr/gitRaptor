@@ -2,10 +2,10 @@
 id: US-GRD-004
 title: "El desarrollador se entera de que la protección de un repo dejó de estar activa"
 type: us
-status: draft
+status: partially-implemented
 priority: medium
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 feature: guardrails
 related:
   context:
@@ -101,4 +101,8 @@ Entonces la lista incluye renombrar la rama base y renombrar otra rama sobre ell
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica (presentación del Cockpit y la CLI).
-- **Dev Spec:** pendiente (`/aadd-devspec US-GRD-004`).
+- **Dev Spec:** [DS-US-GRD-004](../dev-specs/US-GRD-004-aviso-proteccion-inactiva.md).
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #PRNUM (parcial). **Cumple** el escenario 1 (otro gestor reemplaza la protección: estado, causa, registro y aviso), el escenario 2 (una retirada propia no avisa), el 4 en lo ya expuesto (el mínimo seguro y el estado) y el 5 en lo que ya existía (`notPreventable` por backend de refs). **Falta**, con su dueño en la Dev Spec: el escenario 3 (repo retirado de la observación, con US-GRP-006), el vigilante de `config` y de `gitraptor/` para el ≤ 5 s de los repos observados (hoy 60 s o el siguiente evento de Git), H2 por worktree (`config.worktree`), la firma del binario y Linux y Windows. No cuenta como `implemented` para el criterio 1 de M2 mientras falte el escenario 3. Dev Spec: [DS-US-GRD-004](../dev-specs/US-GRD-004-aviso-proteccion-inactiva.md).

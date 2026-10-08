@@ -174,6 +174,6 @@ mod tests {
     #[test]
     fn the_registered_modules() {
         let names: Vec<_> = MODULES.iter().map(|(name, _)| *name).collect();
-        assert_eq!(names, ["tm-capture", "discovery"]);
+        assert_eq!(names, ["tm-capture", "discovery", "guard-health"]);
     }
 }

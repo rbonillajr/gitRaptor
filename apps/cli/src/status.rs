@@ -540,6 +540,44 @@ mod tests {
         }
     }
 
+    /// US-GRD-004: a repo whose protection stopped being active says so under its name, with
+    /// the action; a healthy one says nothing.
+    #[test]
+    fn a_repo_with_a_lost_protection_says_so() {
+        use gitraptor_api::guard::{
+            GuardStatus, HooksLayer, LossCause, Permission, ProtectionState,
+        };
+        let status = |hooks: HooksLayer| GuardStatus {
+            repo_id: "ab-01".into(),
+            state: ProtectionState::Unprotected,
+            permission: Permission::Granted,
+            offer: false,
+            protected_bases: Vec::new(),
+            base_confirmed: false,
+            not_preventable: Vec::new(),
+            last_refusal: Vec::new(),
+            misnamed_settings: Vec::new(),
+            pending: None,
+            hooks: Some(hooks),
+            diagnostics: Vec::new(),
+            minimum_set: None,
+        };
+        let mut info = SessionsInfo::default();
+        info.protection.insert(
+            "ab-01".into(),
+            status(HooksLayer::lost(LossCause::FolderMissing)),
+        );
+        let out = text(&snapshot(), &info);
+        assert!(out.contains("no longer active"), "{out}");
+        assert!(out.contains("raptor guard install"), "{out}");
+        let mut info = SessionsInfo::default();
+        info.protection.insert(
+            "ab-01".into(),
+            status(HooksLayer::of(gitraptor_api::guard::HooksStatus::Active)),
+        );
+        assert!(!text(&snapshot(), &info).contains("no longer active"));
+    }
+
     #[test]
     fn text_lists_every_worktree_sanitized() {
         let out = text(&snapshot(), &SessionsInfo::default());

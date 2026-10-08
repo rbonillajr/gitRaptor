@@ -17,12 +17,27 @@
 //! cargo bench -p gitraptor-cli --bench idle -- --sessions 10 --worktrees 10 --extra-procs 500
 //! cargo bench -p gitraptor-cli --bench idle -- --idle-secs 600 --json idle.json
 //! cargo bench -p gitraptor-cli --bench idle -- --churn 2000                  # build churn
+//! cargo bench -p gitraptor-cli --bench idle -- --protected                   # hooks installed
 //! ```
 //!
 //! `--churn F` writes `F` files per second, spread over the worktrees, under their ignored
 //! `target/` (what a `cargo build` of an agent does): Git sees no change, so the daemon is still
 //! at rest by RES-01, but its watchers receive every event. Without a CPU gate: it reports the
 //! cost of discarding ignored events (ADR-GRP-010 § 2) next to the true rest.
+//!
+//! `--protected` installs the Guardrails hook layer in the repo before the window (a temporary
+//! repo and profile, like everything here), so the periodic check that the protection is still
+//! active (US-GRD-004: the fingerprint of a few `stat`s every minute, the full check only when it
+//! moves) is part of the rest that is measured. Compare it with the same run without the flag.
+//! The install is a reserved command: it runs through `raptor guard install --yes` in a terminal
+//! (a pty through `script`), with the **debug** `raptor` named by `GITRAPTOR_BENCH_RAPTOR`, the
+//! only build that honors the temporary profile (`GITRAPTOR_PROFILE_DIR`, NFR-01; a release one
+//! would install in the real profile, so the bench refuses it).
+//!
+//! ```sh
+//! cargo build -p gitraptor-cli --bin raptor --bin raptor-hook
+//! GITRAPTOR_BENCH_RAPTOR=$PWD/target/debug/raptor cargo bench -p gitraptor-cli --bench idle -- --protected
+//! ```
 //!
 //! **Fails** (exit code 1) when the mean CPU over the window reaches the idle limit of the
 //! footprint (`FOOTPRINT_LIMITS.idle_cpu_pct`, RES-01) or a session is not detected.
@@ -80,6 +95,8 @@ mod unix {
         extra_procs: usize,
         idle_secs: u64,
         churn: u32,
+        /// Install the hook layer in the repo before the window (US-GRD-004).
+        protected: bool,
         json: Option<PathBuf>,
     }
 
@@ -90,6 +107,7 @@ mod unix {
             extra_procs: 0,
             idle_secs: 60,
             churn: 0,
+            protected: false,
             json: None,
         };
         let mut args = std::env::args().skip(1);
@@ -101,6 +119,7 @@ mod unix {
                 "--extra-procs" => o.extra_procs = next().parse().expect("--extra-procs P"),
                 "--idle-secs" => o.idle_secs = next().parse().expect("--idle-secs S"),
                 "--churn" => o.churn = next().parse().expect("--churn F"),
+                "--protected" => o.protected = true,
                 "--json" => o.json = Some(PathBuf::from(next())),
                 // `cargo bench` passes `--bench`.
                 _ => {}
@@ -195,6 +214,10 @@ mod unix {
                     .env_clear()
                     .env("HOME", profile_root)
                     .env("PATH", "/usr/bin:/bin:/usr/local/bin")
+                    .envs(
+                        std::env::var_os("GITRAPTOR_BENCH_RAPTOR")
+                            .map(|v| ("GITRAPTOR_BENCH_RAPTOR", v)),
+                    )
                     .stdin(Stdio::null())
                     .stdout(Stdio::null())
                     .stderr(Stdio::inherit())
@@ -265,6 +288,10 @@ mod unix {
         };
         config.dirs = ProfileDirs::under_root(root);
         config.channel.agents = AgentMatcher::only(vec![AGENT.into()]);
+        if let Some(raptor) = std::env::var_os("GITRAPTOR_BENCH_RAPTOR") {
+            // The installed `raptor` the dispatchers start (`--protected`).
+            config.channel.launch_exe = Some(PathBuf::from(raptor));
+        }
         match daemon::run_process(config) {
             Ok(_) => 0,
             Err(e) => {
@@ -335,6 +362,28 @@ mod unix {
         }
     }
 
+    /// `raptor guard install --yes` of the repo, in a terminal (the command is reserved to the
+    /// developer), against the temporary profile of the bench.
+    fn install_hooks(raptor: &Path, profile: &Path, repo: &Path) -> Result<(), String> {
+        let out = Command::new("/usr/bin/script")
+            .args(["-q", "/dev/null"])
+            .arg(raptor)
+            .args(["guard", "install", "--yes"])
+            .arg(repo)
+            .env_clear()
+            .env("GITRAPTOR_PROFILE_DIR", profile)
+            .env("HOME", profile)
+            .env("PATH", "/usr/bin:/bin:/usr/local/bin")
+            .stdin(Stdio::null())
+            .output()
+            .map_err(|e| e.to_string())?;
+        if out.status.success() {
+            Ok(())
+        } else {
+            Err(String::from_utf8_lossy(&out.stdout).into_owned())
+        }
+    }
+
     /// CPU time of `pid` in seconds, from `ps` (no `unsafe`; 10 ms resolution).
     fn cpu_s(pid: u32) -> Option<f64> {
         let out = Command::new("/bin/ps")
@@ -376,7 +425,19 @@ mod unix {
             .unwrap();
         let root = tmp.path().canonicalize().unwrap();
         let worktrees = repo(&root, o.worktrees);
+        let raptor = std::env::var_os("GITRAPTOR_BENCH_RAPTOR").map(PathBuf::from);
+        if o.protected && raptor.is_none() {
+            eprintln!("idle: --protected needs GITRAPTOR_BENCH_RAPTOR (a debug build of raptor)");
+            return 1;
+        }
         let daemon = Daemon::start(&root.join("profile"), &worktrees[0].join(".git"));
+        if o.protected {
+            let raptor = raptor.unwrap_or_default();
+            if let Err(why) = install_hooks(&raptor, &root.join("profile"), &worktrees[0]) {
+                eprintln!("idle: the hook layer was not installed: {why}");
+                return 1;
+            }
+        }
 
         let bin = root.join("bin");
         std::fs::create_dir_all(&bin).unwrap();
@@ -427,6 +488,11 @@ mod unix {
             _ => f64::NAN,
         };
         let limit = FOOTPRINT_LIMITS.idle_cpu_pct;
+        let protected = if o.protected {
+            " · hooks installed"
+        } else {
+            ""
+        };
         let mode = if o.churn > 0 {
             format!(
                 " · churn {churned} files in ignored target/ (asked {} /s)",
@@ -436,7 +502,7 @@ mod unix {
             String::new()
         };
         println!(
-            "idle: CPU {cpu_pct:.3} % over {window:.0} s · {seen}/{} sessions · {} worktrees · {table} processes of the user ({} extra){mode} · limit < {limit} %",
+            "idle: CPU {cpu_pct:.3} % over {window:.0} s · {seen}/{} sessions · {} worktrees · {table} processes of the user ({} extra){protected}{mode} · limit < {limit} %",
             o.sessions,
             worktrees.len(),
             o.extra_procs,
@@ -451,6 +517,7 @@ mod unix {
                 "worktrees": worktrees.len(),
                 "extra_procs": o.extra_procs,
                 "user_procs": table,
+                "protected": o.protected,
                 "churn_per_s": o.churn,
                 "churn_files": churned,
                 "limit_idle_cpu_pct": limit,
