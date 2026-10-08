@@ -173,6 +173,7 @@ fn repo_snapshot() -> ScopeSnapshot {
             worktrees: Vec::new(),
             tier: None,
             checked_utc_ms: None,
+            kept_temps: None,
         },
     })
 }
