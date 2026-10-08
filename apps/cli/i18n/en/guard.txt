@@ -154,3 +154,14 @@ guard.log.protection = protection changed
 guard.log.op.protection = protection: {from} → {to}
 guard.log.op.protection-cause = protection: {from} → {to} ({cause})
 guard.log.op.protection-own = protection: {from} → {to} (done by GitRaptor)
+
+# Installing again over a protection that stopped being active (US-GRD-004, D9).
+guard.repair.header = Repair the protection of {repo}
+guard.repair.cause = Why: {cause}.
+guard.repair.files = What is written again in {dir}: {files}.
+guard.repair.chains = `core.hooksPath` currently points to {value}: those hooks are kept and chained, and restored if you remove the protection later; GitRaptor's hooks in {dir} become the active ones again.
+guard.repair.edited = A hook of GitRaptor that someone edited is replaced by GitRaptor's own.
+guard.repair.nothing-else = Nothing else changes: no other file of the repository and nothing outside it.
+guard.repair.confirm = Repair the protection? [y/N]
+guard.repair.declined = nothing changed; the protection stays inactive (run raptor guard install to repair it)
+guard.repair.done = protection repaired: {path}

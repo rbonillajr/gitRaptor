@@ -435,11 +435,11 @@ impl ShutdownHandle {
     }
 }
 
-/// What the check thread found for one repo.
+/// The check thread found the hook layer of this repo in a state other than the followed one:
+/// the loop reads it again and decides (US-GRD-004).
 #[derive(Debug)]
 pub(crate) struct HealthReport {
     pub repo_id: String,
-    pub layer: gitraptor_api::guard::HooksLayer,
 }
 
 impl ShutdownHandle {

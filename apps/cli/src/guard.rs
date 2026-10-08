@@ -237,7 +237,33 @@ fn names(list: &[Untrusted]) -> String {
 fn explain(plan: &GuardPlan) -> String {
     let common = plan.common_dir.sanitized();
     let hooks_dir = plan.hooks_dir.sanitized();
-    let mut out = vec![
+    let mut out = Vec::new();
+    // A protection that stopped being active: say it is a repair and exactly what changes
+    // (US-GRD-004, D9) before the usual explanation.
+    if let Some(repair) = &plan.repair {
+        out.push(t("guard.repair.header", &[("repo", &common)]));
+        out.push(t(
+            "guard.repair.cause",
+            &[("cause", &cause_text(repair.cause))],
+        ));
+        out.push(t(
+            "guard.repair.files",
+            &[
+                ("dir", &format!("{common}/gitraptor")),
+                ("files", &names(&repair.files)),
+            ],
+        ));
+        if let Some(value) = &repair.chains {
+            out.push(t(
+                "guard.repair.chains",
+                &[("value", &value.sanitized()), ("dir", &hooks_dir)],
+            ));
+        }
+        out.push(t("guard.repair.edited", &[]));
+        out.push(t("guard.repair.nothing-else", &[]));
+        out.push(String::new());
+    }
+    out.extend([
         t("guard.install.header", &[("repo", &common)]),
         String::new(),
         t(
@@ -265,7 +291,7 @@ fn explain(plan: &GuardPlan) -> String {
                 &[("bases", &names(&plan.protected_bases))],
             ),
         },
-    ];
+    ]);
     // The hooks the repo already has: kept and chained (US-GRD-002, BR-AUTH-002).
     let prior = plan.prior.as_ref().filter(|p| !p.hooks.is_empty());
     if let Some(prior) = prior {
@@ -527,15 +553,28 @@ pub fn install(path: Option<PathBuf>, yes: bool) -> ExitCode {
             }
         };
     }
+    let repair = plan.repair.is_some();
     let answer = if yes {
         Answer::Yes
     } else {
-        ask(&t("guard.install.confirm", &[]))
+        ask(&t(
+            if repair {
+                "guard.repair.confirm"
+            } else {
+                "guard.install.confirm"
+            },
+            &[],
+        ))
     };
     match answer {
         Answer::None => {
             eprintln!("{CMD}: {}", t("guard.install.no-answer", &[]));
             ExitCode::FAILURE
+        }
+        // Not repairing is not denying the permission: nothing is recorded.
+        Answer::No if repair => {
+            println!("{}", t("guard.repair.declined", &[]));
+            ExitCode::SUCCESS
         }
         Answer::No => match client.call::<_, GuardStatus>(methods::GUARD_DECLINE, &params) {
             Ok(_) => {
@@ -546,7 +585,17 @@ pub fn install(path: Option<PathBuf>, yes: bool) -> ExitCode {
         },
         Answer::Yes => match client.call::<_, GuardStatus>(methods::GUARD_INSTALL, &params) {
             Ok(status) => {
-                println!("{}", t("guard.install.done", &[("path", &shown(&path))]));
+                println!(
+                    "{}",
+                    t(
+                        if repair {
+                            "guard.repair.done"
+                        } else {
+                            "guard.install.done"
+                        },
+                        &[("path", &shown(&path))]
+                    )
+                );
                 for line in status_lines(&status) {
                     println!("{line}");
                 }

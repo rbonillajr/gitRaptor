@@ -150,7 +150,6 @@ impl Worker {
         if self.registry.protection().current(repo_id) != layer {
             let _ = self.handle.guard_health(HealthReport {
                 repo_id: repo_id.to_owned(),
-                layer,
             });
         }
     }
