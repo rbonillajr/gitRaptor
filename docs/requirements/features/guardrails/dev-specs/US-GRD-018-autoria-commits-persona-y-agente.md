@@ -378,3 +378,14 @@ Implementado en la rama `feat/US-GRD-019-who-ran-and-whose-name` (D10, § 6.2). 
 5. Texto de `raptor events`: "commit de {autor}[ con {agentes}] · {worktree} ({rama})[ · ejecutado por {agente}[ · sin trailer]]", con {worktree} = nombre de la carpeta del worktree y la rama entre paréntesis para no perder el dato de la línea anterior; la pista añade "(confirmado por el trailer)" o "(no confirmado por el trailer)". Claves nuevas: `events.commit_by`, `events.merge_by`, `events.commit_with`, `events.run_by`, `events.no_trailer`, `events.inferred_confirmed`, `events.inferred_unconfirmed`.
 
 **Criterios del § 7 cubiertos por PR-B**: `agent_commit_shows_both` (también: ni el almacén ni `--json` llevan el texto del mensaje), `an_unattributed_commit_does_not_repeat_the_author`, `the_inferred_hint_is_checked_against_the_trailer` (`confirmed` y `unconfirmed` de extremo a extremo; `contradicted` en `daemon::authorship::tests`, porque la tabla de identidades tiene hoy un solo agente), `human_author_records_no_hint`, `an_agent_commit_without_trailer_shows_the_difference` (mide la presentación; la política `flexible` de extremo a extremo depende de US-GRD-014, § 8), `an_mcp_connection_gets_no_authorship`, `channel::bus::tests::git_events_carry_authorship_only_with_the_capability`, `events::tests::an_older_event_reads_as_before`. **Sin cubrir**: la fila de ADR-GRP-013 "sobrevive a un reinicio; una corrección cambia el actor y no la autoría; prueba de propiedades con autores y trailers aleatorios" (la autoría vive en la fila append-only y no depende del actor, pero no hay prueba dedicada). Verificado solo en macOS (la suite usa `script` y `raptor-fake-agent` de macOS); Linux y Windows: pendiente de la etapa de validación multiplataforma.
+
+## 13. D12 en el registro (2026-10-07, US-GRD-005)
+
+D12 queda cubierto por [DS-US-GRD-005](./US-GRD-005-registro-de-bloqueos.md):
+
+- Toda denegación de autoría y todo aviso de `human-author` + `warn` dejan una entrada con estos datos: el actor, los tipos de agente de los co-autores, si había un trailer de agente, si el mensaje era ilegible y la política aplicada. No se guardan nombres, correos ni el mensaje.
+- Una denegación muestra "autor no disponible: el commit no llegó a crearse".
+- `flexible` deja un `notice`. Se prueba en `crates/core/tests/guard_evaluate.rs` porque el suelo confirmado no se puede fijar de extremo a extremo hasta US-GRD-014.
+- **Sigue pendiente** la unión por oid para mostrar el autor y el committer de un aviso: el contrato `commit` no lleva el oid del commit nuevo. Mientras, el aviso muestra "autor: ver `raptor events`".
+
+`authorship_entries_in_the_decision_log` queda cubierto por `apps/cli/tests/guard_us_grd_005.rs`.

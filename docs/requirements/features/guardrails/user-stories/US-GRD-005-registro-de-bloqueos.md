@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-07
 feature: guardrails
 related:
   context:
@@ -94,4 +94,4 @@ Entonces solo aparece la de hace 89 días
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica.
-- **Dev Spec:** pendiente (`/aadd-devspec US-GRD-005`).
+- **Dev Spec:** [DS-US-GRD-005](../dev-specs/US-GRD-005-registro-de-bloqueos.md) (2026-10-07). Primera entrega: escenarios 1, 2, 3 (el de los permitidos), 4, 5 y 6 con el daemon. Queda diferido el escenario de las entradas en modo degradado (el spool, `spool-unverified`), con dueño en la Dev Spec (Fuera de alcance).

@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-07
 deciders: [Rene Bonilla]
 domain: GRP
 feature: guardrails
@@ -182,3 +182,31 @@ Aplicada desde DEP-CKP-10 de [CTX-CKP-001](../../requirements/features/cockpit/c
 - **Una sola vez**: la vista previa al preparar y la evaluación al ejecutar son del mismo plan y dejan una sola entrada. Las evaluaciones de los hooks del `git` del ejecutor reutilizan la decisión y no crean entradas (ADR-GRD-003 § 6).
 - **KPI** (§ 6): las entradas con `layer = cockpit` cuentan igual que las de las demás capas; la consulta se puede filtrar por capa.
 - **Validación añadida**: una excepción aplicada desde el Cockpit deja una sola `exception` con `layer = cockpit`, aunque los hooks pregunten varias veces (ADR-CKP-002, Validación 5).
+
+## Enmienda (2026-10-07, US-GRD-005)
+
+Aplicada desde [DS-US-GRD-005](../../requirements/features/guardrails/dev-specs/US-GRD-005-registro-de-bloqueos.md), la primera entrega del registro. **Decisión del orquestador (2026-10-07), validada por Arquitecto y PO**; los ajustes del coordinador están incorporados. No cambia la ubicación, la retención, la auditoría ni el KPI. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Por qué |
+|---|---|---|
+| `kind` admite **`notice`**: un commit de agente que entra con aviso (`human-author` + `warn`) o con `flexible`. **No cuenta en el KPI** | § 1, § 6 | BR-AUTH-005 punto 4 (las entradas de autoría se registran y solo las denegaciones cuentan) |
+| `rate-limited` **no es un `kind`**: es la columna nueva **`detail`** (`full` \| `rate-limited`). La fila de exceso conserva el `kind` real y la operación sin refs ni remoto. El KPI la suma | § 1, § 2 | Si fuera un `kind`, se perdería el de la ocurrencia y el KPI tendría que sumar dos tipos de fila |
+| La operación guarda **solo las refs que nombran las razones**, hasta 16. El remoto va sin `userinfo`, **sin query y sin fragmento** | § 1 | Una operación de push admite 100 000 actualizaciones. Un token en `?query` sobrevive a quitar el `userinfo` (M-06) |
+| `reasons` guarda `{rule, level, cause}` **sin parámetros** | § 1 | Los parámetros repiten ramas y refs que ya están en la operación |
+| El actor es el **tipo de agente** (`claude-code` \| `other`) o "sin atribuir". **Sin nombre ni origen** | § 1 | El actor de ADR-GRD-003 § 4 solo resuelve el tipo. El agente registrado llega con US-GRP-009 |
+| **Nada bajo una operación del ejecutor**: su plan escribe la entrada | § 1, Enmienda Cockpit | Evitar la doble entrada |
+| El almacén se localiza por el **repo observado** del `common_dir` del dispatcher, nunca por el `repo_id` que manda el cliente. Si el repo no está observado, la entrada se descarta con un diagnóstico sin contenido | § 1 | No escribir en el almacén que diga un cliente |
+| La conexión **no espera**: entrega la entrada al loop antes de responder al hook. Pasado un tope de **1 024 en vuelo**, la ocurrencia no se encola y se suma a un contador compartido que el loop escribe como fila `rate-limited` | § 2 | Un aluvión no retrasa al loop ni al hook, y el KPI no pierde ocurrencias |
+| Purga al primer latido del daemon y luego cada 24 h | § 3 | El arranque no espera a la purga. La consulta filtra por fecha igualmente |
+| La consulta informa los **periodos con el motor parado** (huecos del almacén y el hueco del arranque en curso): sin spool, lo bloqueado entonces no está anotado y no se muestra un 0 silencioso | § 5, § 6 | Ajuste del coordinador (2026-10-07) |
+| `layer` hoy siempre es `hooks` | § 1 | El MCP no evalúa decisiones de Guardrails (`raptor-mcp` no tiene `guard.evaluate`) |
+| La consulta es el método **`guard.log`** (protocolo 9, no reservado, **no** ofrecido a `raptor-mcp`) y `raptor guard log`. `raptor guard status` añade el recuento de 7 días | § 6 | Decisión del PO: el MCP no expone el registro |
+
+**Diferido, con dueño en la Dev Spec**:
+
+- el spool del modo degradado y `spool-unverified` (§ 5);
+- las entradas `request` y `exception*` (US-GRD-015 y US-GRD-006);
+- `protection-state`;
+- la unión por oid para mostrar autor y committer en un aviso, porque el contrato `commit` no lleva el oid del commit nuevo.
+
+Los eventos no caducan, así que se cumple la restricción de BR-AUTH-005: la retención de los eventos nunca es más corta que la del registro.
