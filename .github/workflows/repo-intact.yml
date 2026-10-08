@@ -127,11 +127,11 @@ jobs:
           # matching it, never passes green. Raise it when a suite lands; lower it only on purpose.
           - os: ubuntu-latest
             exec_audit: strace
-            repo_intact_min: 96
+            repo_intact_min: 97
           # macOS: the trap gate is blocking; eslogger runs in `deep-exec-audit-macos`.
           - os: macos-latest
             exec_audit: auto
-            repo_intact_min: 103
+            repo_intact_min: 104
           # Windows: trap gate only; ETW is pending (Dev Spec § 6).
           - os: windows-latest
             exec_audit: auto
