@@ -98,7 +98,7 @@ Todo lo que el criterio de salida necesita construir está en `main`. Lo que fal
 | Deshacer | US-TMC-001 | Must | Implementada (#61) | Snapshot previo de las operaciones de GitRaptor |
 | Deshacer | US-TMC-002 | Must | Implementada (#90) | `raptor undo` |
 | Deshacer | US-TMC-004 | Must | Implementada (#120) | **Añadida por el PO**: Claude Code usa Git crudo y `operation.run` aún no existe; sin captura continua el undo no protege nada en el dogfooding |
-| Deshacer | US-TMC-006 | Must | Implementada (#TBD) | `raptor timeline`: qué cambió, cuándo y quién |
+| Deshacer | US-TMC-006 | Must | Implementada (#198) | `raptor timeline`: qué cambió, cuándo y quién |
 | Proteger | US-GRP-012 | Must | Implementada (#55) | Dependencia de US-GRD-001 (rama base `main`) |
 | Proteger | INF-GRD-001 | Must | Implementada (#65, #121) | Arnés de la capa de hooks |
 | Proteger | US-GRD-001 | Must | Implementada (#116, #121) | Force-push de un agente bloqueado |
