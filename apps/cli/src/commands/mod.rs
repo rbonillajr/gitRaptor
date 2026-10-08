@@ -42,6 +42,7 @@ commands! {
     Sessions(sessions),
     Agent(agent),
     Undo(undo),
+    Timeline(timeline),
     Mcp(mcp),
     #[command(hide = true)]
     Ui(ui),
