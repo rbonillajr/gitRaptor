@@ -839,6 +839,7 @@ dependencies = [
  "gitraptor-git",
  "gitraptor-testkit",
  "gitraptor-theme",
+ "gitraptor-winsys",
  "insta",
  "nix",
  "ratatui",
