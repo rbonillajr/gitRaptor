@@ -41,6 +41,8 @@ rustix = { version = "1.1.5", features = ["termios", "process"] }
 workspace = true
 
 [dev-dependencies]
+# The chaos harness kills the daemon at its crash points (INF-TMC-001): test builds only.
+gitraptor-core = { workspace = true, features = ["chaos"] }
 gitraptor-git.workspace = true
 gitraptor-testkit.workspace = true
 tempfile.workspace = true
