@@ -33,6 +33,8 @@ pub struct PipeListener {
     name: Vec<u16>,
     descriptor: Descriptor,
     max_instances: u32,
+    /// Owner and DACL bytes of the first instance: every later one must carry the same.
+    security: (Vec<u8>, Option<Vec<u8>>),
     /// The free instance a client connects to next.
     pending: Mutex<Option<Handle>>,
     stop: Arc<Event>,
@@ -57,10 +59,12 @@ impl PipeListener {
         let descriptor = Descriptor::from_sddl(sddl)?;
         let max_instances = max_instances.clamp(1, 255);
         let first = ffi_pipe::create_instance(&name, &descriptor, true, max_instances)?;
+        let security = handle_security(&first)?;
         Ok(Self {
             name,
             descriptor,
             max_instances,
+            security,
             pending: Mutex::new(Some(first)),
             stop: Arc::new(Event::new()?),
         })
@@ -86,12 +90,48 @@ impl PipeListener {
         Ok((owner, dacl))
     }
 
+    /// Creates a further instance and checks that it carries the owner and DACL of the first:
+    /// if every instance of ours closed and someone else took the name meanwhile, the new
+    /// instance would join their pipe, and it is refused instead.
     fn new_instance(&self) -> io::Result<Handle> {
-        ffi_pipe::create_instance(&self.name, &self.descriptor, false, self.max_instances)
+        let instance =
+            ffi_pipe::create_instance(&self.name, &self.descriptor, false, self.max_instances)?;
+        if handle_security(&instance)? != self.security {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "the pipe instance does not carry this pipe's owner and DACL",
+            ));
+        }
+        Ok(instance)
+    }
+
+    /// A new free instance, waiting while every instance is in use. `None` once woken.
+    fn free_instance(&self) -> io::Result<Option<Handle>> {
+        loop {
+            match self.new_instance() {
+                Ok(instance) => return Ok(Some(instance)),
+                Err(err) if ffi_pipe::is_busy(&err) => {
+                    if self.stop.wait(RETRY_AT_CAP) {
+                        return Ok(None);
+                    }
+                }
+                Err(err) => return Err(err),
+            }
+        }
+    }
+
+    fn set_pending(&self, instance: Handle) {
+        *self.pending.lock().unwrap_or_else(|e| e.into_inner()) = Some(instance);
+    }
+
+    /// Waits up to `timeout` for a [`PipeWaker`]; `true` if woken.
+    pub fn wait_woken(&self, timeout: Duration) -> bool {
+        self.stop.wait(timeout)
     }
 
     /// Waits for the next client. `None` once woken by a [`PipeWaker`]. The next free instance
-    /// is created before the connected one is handed over, so the name is never free.
+    /// is created before the connected or spent one is let go, so the name is never free
+    /// while the listener holds an instance.
     pub fn accept(&self) -> io::Result<Option<PipeStream>> {
         let mut failures = 0;
         loop {
@@ -102,35 +142,35 @@ impl PipeListener {
                 .take();
             let instance = match taken {
                 Some(instance) => instance,
-                None => match self.new_instance() {
-                    Ok(instance) => instance,
-                    // Every instance is in use: wait for one to close, or for the waker.
-                    Err(err) if ffi_pipe::is_busy(&err) => {
-                        if self.stop.wait(RETRY_AT_CAP) {
-                            return Ok(None);
-                        }
-                        continue;
-                    }
-                    Err(err) => return Err(err),
+                None => match self.free_instance()? {
+                    Some(instance) => instance,
+                    None => return Ok(None),
                 },
             };
             match ffi_pipe::accept(&instance, &self.stop) {
                 Ok(Outcome::Done(_)) => {
-                    let next = self.new_instance().ok();
-                    *self.pending.lock().unwrap_or_else(|e| e.into_inner()) = next;
+                    let Some(next) = self.free_instance()? else {
+                        return Ok(None);
+                    };
+                    self.set_pending(next);
                     return Ok(Some(PipeStream::new(instance, Side::Server)?));
                 }
                 Ok(Outcome::Stopped | Outcome::TimedOut) => {
-                    *self.pending.lock().unwrap_or_else(|e| e.into_inner()) = Some(instance);
+                    self.set_pending(instance);
                     return Ok(None);
                 }
                 // A client that came and went before the connection completed: this instance
-                // is spent; a fresh one is created.
+                // is spent, and dropped once its replacement exists.
                 Err(err) => {
                     failures += 1;
                     if failures >= MAX_ACCEPT_FAILURES {
                         return Err(err);
                     }
+                    let Some(next) = self.free_instance()? else {
+                        return Ok(None);
+                    };
+                    self.set_pending(next);
+                    drop(instance);
                 }
             }
         }

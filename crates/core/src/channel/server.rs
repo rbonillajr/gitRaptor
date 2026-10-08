@@ -268,11 +268,15 @@ impl Server {
     /// process of the user can remove it and bind its own, cutting clients
     /// off from the real daemon without any crash being recorded.
     ///
-    /// Windows: there is no file to replace, and the pipe name is never free
-    /// while the daemon serves (DS-TS-GRP-004 § 8, P4 and P8).
+    /// Windows: there is no file to replace and the pipe name is never free
+    /// while the daemon serves (DS-TS-GRP-004 § 8, P4 and P8); the channel
+    /// is intact while its accept thread runs.
     pub fn socket_intact(&self) -> bool {
         if cfg!(windows) {
-            return true;
+            return self
+                .accept
+                .as_ref()
+                .is_some_and(|accept| !accept.is_finished());
         }
         self.socket.is_some()
             && socket_id(&transport::socket_path(&self.ctx.runtime)) == self.socket
@@ -342,18 +346,33 @@ fn accept_loop(
     }
 }
 
+/// Consecutive accept failures after which the pipe is given up: the
+/// accept thread ends, `socket_intact` turns false and the daemon binds
+/// again (as on Unix when the socket file is replaced).
+#[cfg(windows)]
+const MAX_ACCEPT_ERRORS: u32 = 20;
+
 #[cfg(windows)]
 fn pipe_accept_loop(ctx: &Arc<ServerCtx>, listener: &gitraptor_winsys::pipe::PipeListener) {
+    let mut errors = 0;
     loop {
         if ctx.stopping.load(Ordering::SeqCst) {
             return;
         }
         match listener.accept() {
-            Ok(Some(stream)) => conn::accept(ctx, stream),
+            Ok(Some(stream)) => {
+                errors = 0;
+                conn::accept(ctx, stream);
+            }
             Ok(None) => return,
             Err(_) => {
-                ctx.logger.error("channel_accept_failed", &[]);
-                return;
+                errors += 1;
+                ctx.logger.warn("channel_accept_failed", &[]);
+                // Transient (out of resources, say): back off and retry,
+                // waking at once if the server stops.
+                if errors >= MAX_ACCEPT_ERRORS || listener.wait_woken(Duration::from_millis(100)) {
+                    return;
+                }
             }
         }
     }
