@@ -658,29 +658,21 @@ enum Identity {
 /// The executable of the channel server is the same file as this client's (ADR-GRD-003 § 4,
 /// Enmienda 2026-10-05: the identity of the file instead of a signature or fingerprint).
 fn same_executable(pid: u32) -> Identity {
-    #[cfg(unix)]
-    {
-        use crate::channel::peer::{ProcSource, SystemProcs};
-        let Ok(info) = SystemProcs.read(pid) else {
-            return Identity::Unknown;
-        };
-        let Some(server) = info.exe else {
-            return Identity::Unknown;
-        };
-        let Ok(own) = std::env::current_exe() else {
-            return Identity::Unknown;
-        };
-        let id = |p: &Path| crate::channel::file_id(p);
-        match (id(&server), id(&own)) {
-            (Some(a), Some(b)) if a == b => Identity::Same,
-            (Some(_), Some(_)) => Identity::Different,
-            _ => Identity::Unknown,
-        }
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = pid;
-        Identity::Unknown
+    use crate::channel::peer::{ProcSource, SystemProcs};
+    let Ok(info) = SystemProcs.read(pid) else {
+        return Identity::Unknown;
+    };
+    let Some(server) = info.exe else {
+        return Identity::Unknown;
+    };
+    let Ok(own) = std::env::current_exe() else {
+        return Identity::Unknown;
+    };
+    let id = |p: &Path| crate::channel::file_id(p);
+    match (id(&server), id(&own)) {
+        (Some(a), Some(b)) if a == b => Identity::Same,
+        (Some(_), Some(_)) => Identity::Different,
+        _ => Identity::Unknown,
     }
 }
 
