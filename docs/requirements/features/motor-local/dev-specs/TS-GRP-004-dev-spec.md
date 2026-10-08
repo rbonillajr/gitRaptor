@@ -296,7 +296,7 @@ Cierra el pendiente de transporte del § 5 y la decisión 8 de [ADR-GRP-005](../
 | `SystemProcs` en Windows: consola y sesión del proceso de test | `peer::windows_tests::reads_this_process_and_its_parent` (actualizado) |
 | La auditoría guarda la sesión de Windows y marca el host de la consola (C9); en Unix la cadena serializada no cambia | `authz::tests::the_audit_chain_marks_the_console_host` |
 | Mensajes del rechazo según el diagnóstico de la propia CLI (C10) | `support::tests::a_terminal_refusal_explains_the_console_issue` (CLI) y `peer::windows_tests::reads_this_process_and_its_parent` (diagnóstico real por SSH: sesión no interactiva) |
-| `TERMINAL_PROOF` es cierto y `ORPHANS_MARKED` falso en Windows | `authz::tests::windows_has_a_terminal_proof` (`cfg(windows)`) |
+| `TERMINAL_PROOF` es cierto y `ORPHANS_MARKED` falso en Windows | Aserción en tiempo de compilación en `authz::tests` (`cfg(windows)`) |
 | **Máquina Windows real** (`win-common.md`): desde la PowerShell de la persona (sesión interactiva), `raptor repo add` y `raptor daemon stop` se aceptan; desde un agente simulado (copia de PowerShell llamada `claude.exe`), `agent-ancestry`; desde la sesión 0 (SSH), `no-controlling-terminal` | Humo manual documentado en `xplat-pendientes.md` ("TQ-14 en Windows") y en el PR |
 
 ### 9.3 Pendientes
