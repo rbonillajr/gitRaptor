@@ -9,9 +9,9 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::Untrusted;
 use crate::actor::Actor;
 use crate::catalog::{Layer, OperationOutcome};
+use crate::{Untrusted, UntrustedName};
 
 /// Most keys in `operation.prepare` arguments.
 pub const MAX_ARGS_KEYS: usize = 32;
@@ -372,18 +372,171 @@ pub struct RestoreParams {
     pub surface: Option<Surface>,
 }
 
-/// `timemachine.timeline` parameters (US-TMC-006).
+/// Entries a timeline answers by default.
+pub const TIMELINE_DEFAULT_LIMIT: u32 = 50;
+/// Most entries one timeline answers: a page of `events.history`.
+pub const TIMELINE_MAX_LIMIT: u32 = crate::messages::MAX_HISTORY_PAGE;
+/// Most paths one timeline entry lists; the total says how many there are.
+pub const TIMELINE_MAX_FILES: usize = 20;
+
+/// `timemachine.timeline` parameters (US-TMC-006). `worktree` names the repo
+/// (as in `undo`); the result is the whole repo's unless `only_worktree`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TimelineParams {
     #[serde(default)]
     pub worktree: Option<String>,
+    /// Only the entries of this worktree root.
+    #[serde(default)]
+    pub only_worktree: Option<String>,
+    /// Duration such as `30m`, `2h` or `1d`.
     #[serde(default)]
     pub since: Option<String>,
+    /// An agent identifier, or the reserved word `unattributed`.
     #[serde(default)]
     pub agent: Option<String>,
+    /// 1 to [`TIMELINE_MAX_LIMIT`]; [`TIMELINE_DEFAULT_LIMIT`] without it.
     #[serde(default)]
     pub limit: Option<u32>,
+}
+
+/// A source the timeline reads that could not be read: never reported as
+/// "no activity".
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum TimelineSource {
+    Operations,
+    Events,
+}
+
+/// `timemachine.timeline` result (US-TMC-006): what changed in the repo,
+/// when and who did it. Never commit messages or file contents.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TimelineResult {
+    pub repo_id: String,
+    /// The oldest first.
+    pub entries: Vec<TimelineEntry>,
+    /// Older entries were left out (the limit or a full page of a source).
+    pub truncated: bool,
+    /// Sources that could not be read.
+    pub unavailable: Vec<TimelineSource>,
+    /// Whether this system can detect agents at all; `false` is "unknown".
+    pub detection_available: bool,
+}
+
+/// One row of the timeline.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TimelineEntry {
+    /// `operation:<id>` or `event:<seq>`.
+    pub id: String,
+    pub origin: EntryOrigin,
+    pub occurred_utc_ms: i64,
+    pub utc_offset_s: i32,
+    /// Roots of the worktrees it happened in.
+    pub worktrees: Vec<Untrusted>,
+    /// An agent or `unattributed`, nothing else.
+    pub actor: Actor,
+    pub attribution: Attribution,
+    pub protection: Protection,
+    pub files: ChangedFiles,
+}
+
+/// What an entry is.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "entry", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum EntryOrigin {
+    /// An operation of the Time Machine's oplog.
+    Operation {
+        operation_id: String,
+        kind: TimelineOperationKind,
+        /// Subtype of a protected operation (e.g. `reset-hard`).
+        subtype: Option<Untrusted>,
+        state: TimelineOperationState,
+        /// What an undo, redo or restore took back or returned to.
+        acted_on: Vec<ActedOn>,
+    },
+    /// A raw Git event the engine observed.
+    GitEvent {
+        seq: i64,
+        kind: crate::messages::GitEventKind,
+        branch: Option<UntrustedName>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum TimelineOperationKind {
+    Protected,
+    Undo,
+    Redo,
+    Restore,
+}
+
+/// Only operations that changed something are entries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum TimelineOperationState {
+    Applying,
+    Finished,
+    Interrupted,
+}
+
+/// What an operation acted on, by reference.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "target", content = "id", rename_all = "kebab-case")]
+pub enum ActedOn {
+    Operation(String),
+    GitEvent(i64),
+    Snapshot(String),
+}
+
+/// Where an entry's actor comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum Attribution {
+    /// Resolved now: a correction of the attribution shows.
+    Current,
+    /// As frozen when the operation was requested (D-TMC-18).
+    Recorded,
+}
+
+/// The state a Time Machine point protects an entry with.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Protection {
+    pub level: ProtectionLevel,
+    /// The point before the entry; absent at level `none`.
+    pub snapshot_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum ProtectionLevel {
+    GuaranteedPrior,
+    HookPrior,
+    Observation,
+    /// No recoverable point before the entry.
+    None,
+}
+
+/// The paths an entry changed, without contents.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "state", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum ChangedFiles {
+    Available {
+        /// At most [`TIMELINE_MAX_FILES`], sorted.
+        paths: Vec<Untrusted>,
+        /// The real number of paths, beyond what `paths` lists.
+        total: u32,
+        /// The commit merges: the paths are against its first parent.
+        #[serde(default)]
+        first_parent: bool,
+    },
+    /// Not readable (no commits, a missing object, the time budget): never a
+    /// zero.
+    Unavailable,
 }
 
 /// Why a parameter was refused. The message names the field, never echoes
@@ -528,8 +681,15 @@ impl TimelineParams {
         if let Some(agent) = &self.agent {
             check_agent_id(agent)?;
         }
-        if self.limit == Some(0) {
-            return Err(Invalid::new("limit", "must be positive"));
+        if self.limit.is_some_and(|l| l == 0 || l > TIMELINE_MAX_LIMIT) {
+            return Err(Invalid::new("limit", "out of range"));
+        }
+        if self
+            .only_worktree
+            .as_ref()
+            .is_some_and(|w| w.is_empty() || w.len() > 4096 || w.contains('\0'))
+        {
+            return Err(Invalid::new("only_worktree", "invalid path"));
         }
         Ok(())
     }
@@ -540,7 +700,7 @@ mod tests {
     use super::*;
     use crate::actor::{AgentKind, AgentOrigin};
     use crate::mcp_view::MAX_MCP_NAME_CHARS;
-    use serde_json::{Map, Value};
+    use serde_json::{Map, Value, json};
 
     const ID: &str = "0f8e2b7a-1c3d-4e5f-8a9b-0c1d2e3f4a5b";
 
@@ -681,11 +841,142 @@ mod tests {
         assert_eq!(run.validate().unwrap_err().field, "args");
         let timeline = TimelineParams {
             worktree: None,
+            only_worktree: None,
             since: None,
             agent: None,
             limit: Some(0),
         };
         assert!(timeline.validate().is_err());
+    }
+
+    /// Names of every property of a JSON schema.
+    fn collect_fields(node: &Value, out: &mut Vec<String>) {
+        match node {
+            Value::Object(map) => {
+                if let Some(Value::Object(props)) = map.get("properties") {
+                    out.extend(props.keys().map(|k| k.to_lowercase()));
+                }
+                map.values().for_each(|v| collect_fields(v, out));
+            }
+            Value::Array(items) => items.iter().for_each(|v| collect_fields(v, out)),
+            _ => {}
+        }
+    }
+
+    fn entry(origin: EntryOrigin, actor: Actor, attribution: Attribution) -> TimelineEntry {
+        TimelineEntry {
+            id: "event:7".into(),
+            origin,
+            occurred_utc_ms: 1,
+            utc_offset_s: 0,
+            worktrees: vec![Untrusted::new("/r")],
+            actor,
+            attribution,
+            protection: Protection {
+                level: ProtectionLevel::None,
+                snapshot_id: None,
+            },
+            files: ChangedFiles::Available {
+                paths: vec![Untrusted::new("a.rs")],
+                total: 1,
+                first_parent: false,
+            },
+        }
+    }
+
+    /// ADR-GRP-013 § 6: no "human" anywhere in the schema, and nowhere to put
+    /// a commit message or a file's content.
+    #[test]
+    fn timeline_schema_has_no_human_variant_and_no_message_field() {
+        let schema = serde_json::to_value(schemars::schema_for!(TimelineResult)).unwrap();
+        let mut fields = Vec::new();
+        collect_fields(&schema, &mut fields);
+        assert!(fields.contains(&"actor".to_owned()), "{fields:?}");
+        for forbidden in ["message", "content", "subject", "author", "email", "body"] {
+            assert!(
+                !fields.iter().any(|f| f.contains(forbidden)),
+                "{forbidden}: {fields:?}"
+            );
+        }
+        let text = schema.to_string().to_lowercase();
+        assert!(!text.contains("human"), "{text}");
+        assert!(text.contains("unattributed"));
+        assert!(serde_json::from_str::<Actor>(r#"{"actor":"human"}"#).is_err());
+    }
+
+    #[test]
+    fn timeline_wire_form() {
+        let git = entry(
+            EntryOrigin::GitEvent {
+                seq: 7,
+                kind: crate::messages::GitEventKind::Commit,
+                branch: Some(UntrustedName::new("feat-login")),
+            },
+            Actor::Unattributed,
+            Attribution::Current,
+        );
+        let v = serde_json::to_value(&git).unwrap();
+        assert_eq!(v["origin"]["entry"], "git-event");
+        assert_eq!(v["origin"]["kind"], "commit");
+        assert_eq!(v["origin"]["branch"]["untrusted"], "feat-login");
+        assert_eq!(v["actor"]["actor"], "unattributed");
+        assert_eq!(v["attribution"], "current");
+        assert_eq!(v["protection"]["level"], "none");
+        assert!(v["protection"]["snapshot_id"].is_null());
+        assert_eq!(v["worktrees"][0]["untrusted"], "/r");
+        assert_eq!(v["files"]["state"], "available");
+        assert_eq!(v["files"]["paths"][0]["untrusted"], "a.rs");
+        assert_eq!(v["files"]["first_parent"], false);
+        let op = entry(
+            EntryOrigin::Operation {
+                operation_id: ID.into(),
+                kind: TimelineOperationKind::Undo,
+                subtype: None,
+                state: TimelineOperationState::Finished,
+                acted_on: vec![ActedOn::GitEvent(3), ActedOn::Snapshot(ID.into())],
+            },
+            Actor::Unattributed,
+            Attribution::Recorded,
+        );
+        let v = serde_json::to_value(&op).unwrap();
+        assert_eq!(v["origin"]["entry"], "operation");
+        assert_eq!(v["origin"]["kind"], "undo");
+        assert_eq!(v["origin"]["state"], "finished");
+        assert_eq!(
+            v["origin"]["acted_on"][0],
+            json!({"target": "git-event", "id": 3})
+        );
+        assert_eq!(v["origin"]["acted_on"][1]["target"], "snapshot");
+        assert_eq!(v["attribution"], "recorded");
+        let back: TimelineEntry = serde_json::from_value(v).unwrap();
+        assert_eq!(back, op);
+        let none = serde_json::to_value(ChangedFiles::Unavailable).unwrap();
+        assert_eq!(none, json!({"state": "unavailable"}));
+        for (level, text) in [
+            (ProtectionLevel::GuaranteedPrior, "guaranteed-prior"),
+            (ProtectionLevel::HookPrior, "hook-prior"),
+            (ProtectionLevel::Observation, "observation"),
+            (ProtectionLevel::None, "none"),
+        ] {
+            assert_eq!(serde_json::to_value(level).unwrap(), text);
+        }
+    }
+
+    #[test]
+    fn timeline_params_validation() {
+        let p = |json: &str| {
+            serde_json::from_str::<TimelineParams>(json)
+                .unwrap()
+                .validate()
+        };
+        assert!(p(r#"{"agent":"unattributed"}"#).is_ok());
+        assert!(p(r#"{"limit":200,"only_worktree":"/r"}"#).is_ok());
+        assert!(p(r#"{"limit":201}"#).is_err());
+        assert_eq!(
+            p(r#"{"only_worktree":""}"#).unwrap_err().field,
+            "only_worktree"
+        );
+        assert!(serde_json::from_str::<TimelineParams>(r#"{"human":true}"#).is_err());
     }
 
     /// SEC-12: a branch with escapes travels marked, prints clean and is
