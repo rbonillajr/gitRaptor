@@ -52,6 +52,7 @@ Si una tarea contradice estos documentos, **detente y pregunta**; no improvises 
 - **Cero pérdida de datos (NFR-01):** toda operación que modifique un repo debe ser recuperable. Los tests usan repos temporales, nunca este repo.
 - **Seguridad del MCP (NFR-02):** sin shell (argv fijo), validación de entradas, allowlist de repos.
 - **Tests obligatorios** para todo cambio de comportamiento. `cargo clippy` y `cargo test` (o `nx affected -t lint test`) deben pasar antes del PR.
+- **cargo-nextest (opcional, para certificar):** `cargo install cargo-nextest --locked`. `cargo nextest run --workspace --profile ci` corre la misma suite que `cargo test --workspace` y escribe el informe JUnit en `target/nextest/ci/junit.xml` (lo que detecta `layer-detect` de nassa-core para la línea base de `/implement`). La config está en `.config/nextest.toml`: `slow-timeout` con `terminate-after` (un test colgado muere a los 240 s). El CI sigue con `cargo test`. Los doctests no los corre nextest: `cargo test --doc`. Un target con `harness = false` debe hablar el protocolo libtest (`--list --format terse`, `--exact`), como `crates/git/tests/repo_intact_exec.rs`.
 - **No inventes resultados:** si algo falla o no se pudo verificar, dilo en el PR.
 
 ## Pull requests

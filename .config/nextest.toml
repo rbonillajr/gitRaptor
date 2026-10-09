@@ -1,0 +1,16 @@
+# Configuración de cargo-nextest. Instalación: `cargo install cargo-nextest --locked`.
+# Uso local:  cargo nextest run --workspace
+# Uso CI/certificación (escribe JUnit):  cargo nextest run --workspace --profile ci
+
+[profile.default]
+# Un test se marca lento a los 60 s y se mata a los 4 períodos (240 s):
+# ningún test puede colgarse sin fin (lección del cuelgue de `q_quits`).
+slow-timeout = { period = "60s", terminate-after = 4 }
+
+[profile.ci]
+fail-fast = false
+slow-timeout = { period = "60s", terminate-after = 4 }
+
+[profile.ci.junit]
+# Ruta relativa a target/nextest/ci/
+path = "junit.xml"
