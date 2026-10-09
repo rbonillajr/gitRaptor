@@ -1,0 +1,215 @@
+{
+  "source": {
+    "kind": "devspec",
+    "ref": "docs/requirements/features/motor-local/dev-specs/TS-GRP-008-dev-spec.md"
+  },
+  "criteria": [
+    {
+      "id": "S3-WT1",
+      "statement": "Con ámbito worktree, un git ajeno de otro worktree (Orca) no impide atribuir el commit al git de la única sesión del worktree: Attributed, foreign_other_wt=1",
+      "verify": "cargo test -p gitraptor-core --lib detect::tests::s3_scope::s3_worktree_scope_ignores_a_foreign_git_of_another_worktree -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/detect/tests/s3_scope.rs"
+      ]
+    },
+    {
+      "id": "S3-WT2",
+      "statement": "El git de una persona en el worktree del agente (cwd legible o situado por su ancestro) es ajeno: Ambiguous (BR-EDGE-004)",
+      "verify": "cargo test -p gitraptor-core --lib detect::tests::s3_scope::s3_worktree_scope_a_person_in_the_agents_worktree_is_foreign -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/detect/tests/s3_scope.rs"
+      ]
+    },
+    {
+      "id": "S3-WT3",
+      "statement": "Un git ajeno situado por el cwd de su ancestro cuenta en todo el repo aunque el ancestro esté en otro worktree: Ambiguous",
+      "verify": "cargo test -p gitraptor-core --lib detect::tests::s3_scope::s3_worktree_scope_a_git_placed_by_its_ancestor_is_foreign_from_any_worktree -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/detect/tests/s3_scope.rs"
+      ]
+    },
+    {
+      "id": "S3-WT4",
+      "statement": "El git del daemon con cwd en .git/worktrees/A o en otro worktree cuenta en todo el repo: Ambiguous, foreign_daemon=1",
+      "verify": "cargo test -p gitraptor-core --lib detect::tests::s3_scope::s3_worktree_scope_counts_the_daemons_git_anywhere_in_the_repo -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/detect/tests/s3_scope.rs"
+      ]
+    },
+    {
+      "id": "S3-WT5",
+      "statement": "Un git ajeno con cwd en el directorio Git común cuenta en todo el repo: Ambiguous, foreign_gitdir=1",
+      "verify": "cargo test -p gitraptor-core --lib detect::tests::s3_scope::s3_worktree_scope_counts_a_foreign_git_in_the_common_dir -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/detect/tests/s3_scope.rs"
+      ]
+    },
+    {
+      "id": "S3-REPO",
+      "statement": "Con ámbito repo, un git ajeno de otro worktree sigue dejando el evento Ambiguous y lo cuenta en foreign_other_wt",
+      "verify": "cargo test -p gitraptor-core --lib detect::tests::s3_scope::s3_repo_scope_keeps_a_foreign_git_of_another_worktree_ambiguous -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/detect/tests/s3_scope.rs"
+      ]
+    },
+    {
+      "id": "S3-NEST",
+      "statement": "El worktree del cwd de un git de sesión es la raíz más larga: un git de sesión en un worktree anidado no es evidencia para el principal",
+      "verify": "cargo test -p gitraptor-core --lib detect::tests::s3_scope::s3_the_worktree_of_a_session_git_is_the_longest_root -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/detect/tests/s3_scope.rs"
+      ]
+    },
+    {
+      "id": "S3-TWO",
+      "statement": "Dos sesiones con git en el mismo worktree quedan Ambiguous y sin pista",
+      "verify": "cargo test -p gitraptor-core --lib detect::tests::s3_scope::s3_worktree_scope_two_sessions_stay_ambiguous_without_hint -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/detect/tests/s3_scope.rs"
+      ]
+    },
+    {
+      "id": "S3-NOSIGHT",
+      "statement": "Sin git de sesión visto y con git ajenos solo en otros worktrees, el resultado es NoSighting y la pista single-session sigue disponible",
+      "verify": "cargo test -p gitraptor-core --lib detect::tests::s3_scope::s3_no_sighting_keeps_the_hint_with_git_in_other_worktrees -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/detect/tests/s3_scope.rs"
+      ]
+    },
+    {
+      "id": "S3-AFTER",
+      "statement": "Un git que empezó después del aviso no es evidencia ni ajeno y se cuenta en gits_after_notice",
+      "verify": "cargo test -p gitraptor-core --lib detect::tests::s3_scope::s3_counts_gits_started_after_the_notice -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/detect/tests/s3_scope.rs"
+      ]
+    },
+    {
+      "id": "SCOPE-KIND",
+      "statement": "El ámbito sale del tipo de evento: Reset, BranchSwitch y Commit/Merge/Rebase con worktree no inferido → Worktree; el resto y los inferidos → Repo",
+      "verify": "cargo test -p gitraptor-core --lib daemon::sessions::s3_tests::s3_scope_follows_the_event_kind -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/daemon/sessions_s3_tests.rs"
+      ]
+    },
+    {
+      "id": "LOG-COUNTS",
+      "statement": "La línea s3_evidence lleva scope y los contadores enteros, sin rutas, nombres, pids ni canarios (SEC-04)",
+      "verify": "cargo test -p gitraptor-core --lib daemon::sessions::s3_tests::the_s3_log_line_carries_only_counters -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/daemon/sessions_s3_tests.rs"
+      ]
+    },
+    {
+      "id": "TL-API",
+      "statement": "TimelineEntry serializa inferred (confirmed/unconfirmed) solo cuando hay pista y omite la clave sin ella",
+      "verify": "cargo test -p gitraptor-api --lib timemachine_inferred_tests::a_timeline_entry_carries_the_hint_only_when_present -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/api/src/timemachine_inferred_tests.rs"
+      ]
+    },
+    {
+      "id": "TL-CORE",
+      "statement": "La entrada de un evento de Git sin agente copia su pista; with without_inferred (sin la capacidad) ninguna entrada la lleva",
+      "verify": "cargo test -p gitraptor-core --lib timemachine::timeline::inferred_tests::",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/timemachine/timeline_inferred_tests.rs"
+      ]
+    },
+    {
+      "id": "TL-CLI-HINT",
+      "statement": "raptor timeline muestra la pista como raptor events, en en y es, con el sufijo del trailer confirmado",
+      "verify": "cargo test -p gitraptor-cli --bin raptor commands::timeline::inferred_tests::an_inferred_entry_reads_like_raptor_events_in_en_and_es -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/commands/timeline_inferred_tests.rs"
+      ]
+    },
+    {
+      "id": "TL-CLI-NOHINT",
+      "statement": "Una entrada sin pista (contradicha o human-author) sigue diciendo no agent / sin agente",
+      "verify": "cargo test -p gitraptor-cli --bin raptor commands::timeline::inferred_tests::an_entry_without_hint_reads_no_agent -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/commands/timeline_inferred_tests.rs"
+      ]
+    },
+    {
+      "id": "S3-REDIR",
+      "statement": "Con ámbito worktree, un git ajeno de otro worktree que redirige su destino (-C, --git-dir, --work-tree o GIT_DIR/GIT_WORK_TREE/GIT_COMMON_DIR) cuenta en todo el repo: Ambiguous, foreign_redirected=1",
+      "verify": "cargo test -p gitraptor-core --lib detect::tests::s3_scope::s3_worktree_scope_a_redirected_foreign_git_counts_in_the_whole_repo -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/detect/tests/s3_scope.rs"
+      ]
+    },
+    {
+      "id": "S3-UNREAD",
+      "statement": "Con ámbito worktree, un git ajeno de otro worktree cuyo argv o entorno no se pudo leer cuenta en todo el repo (fail-safe): Ambiguous",
+      "verify": "cargo test -p gitraptor-core --lib detect::tests::s3_scope::s3_worktree_scope_an_unreadable_foreign_git_counts_in_the_whole_repo -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/detect/tests/s3_scope.rs"
+      ]
+    },
+    {
+      "id": "REDIR-PARSE",
+      "statement": "git_redirects detecta -C, --work-tree, --git-dir= y GIT_DIR en el entorno, y no confunde 'git log -C' ni '-c k=v' con una redirección",
+      "verify": "cargo test -p gitraptor-core --lib detect::procs::redirect_tests::",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/detect/procs_redirect_tests.rs"
+      ]
+    },
+    {
+      "id": "REDIR-MACSYS",
+      "statement": "parse_procargs2_git_redirect lee de un área KERN_PROCARGS2 sintética las opciones globales y los nombres del entorno sin devolver valores; un área mal formada da None",
+      "verify": "cargo test -p gitraptor-macsys --lib process::redirect_tests::",
+      "layer": "runtime",
+      "tests": [
+        "crates/macsys/src/process_redirect_tests.rs"
+      ]
+    }
+  ],
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "crates/git/src/tm_write/**",
+      "docs/architecture/decisions/ADR-GRD-008-factor-autenticacion-fuera-de-banda.md",
+      "crates/core/src/detect/procs.rs"
+    ],
+    "allow_dependency_changes": false
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-api",
+      "gitraptor-core",
+      "gitraptor-cli",
+      "gitraptor-macsys"
+    ]
+  },
+  "layers": {
+    "runtime": {
+      "report": "target/nextest/ci/junit.xml"
+    }
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 600000,
+    "suiteTimeoutMs": 1800000
+  }
+}

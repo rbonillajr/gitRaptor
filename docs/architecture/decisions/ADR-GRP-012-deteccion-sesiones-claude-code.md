@@ -298,15 +298,16 @@ Origen: dogfooding de Rene (2026-10-09). En `raptor timeline`, los commits de Cl
   - `Commit`, `Merge` y `Rebase` con el worktree no inferido (reflog de la rama activa en ese worktree; Git no deja tener la misma rama activa en dos worktrees).
 - **Ámbito repo**, como hasta ahora, para todos los demás: `BranchUpdate` (`branch -f`, `update-ref` y `fetch X:X` pueden venir de cualquier worktree), `BranchCreate`, `BranchDelete`, `Push`, `WorktreeCreate`, `WorktreeDelete`, y `Commit`, `Merge` y `Rebase` con worktree inferido.
 - **Siempre en todo el repo**:
-  - el `git` del daemon, sea cual sea su cwd: el escritor de la Time Machine corre en `<común>/.git/worktrees/<w>`, que por ruta cae en el worktree principal, y un restore nunca se atribuye a un agente;
+  - el `git` del daemon con el cwd en cualquier parte del repo o ilegible (con el cwd fuera del repo no cuenta, como hasta ahora): el escritor de la Time Machine corre en `<común>/.git/worktrees/<w>`, que por ruta cae en el worktree principal, y un restore nunca se atribuye a un agente;
   - el `git` ajeno situado por el cwd de su ancestro: su cwd real es desconocido, y `git -C A` desde una shell en B escribe en A;
   - el `git` ajeno con el cwd en el directorio Git común.
+  - el `git` ajeno que **redirige su destino** o del que no se puede saber. Lo redirige si lleva `-C`, `--git-dir` o `--work-tree` entre sus opciones globales, o `GIT_DIR`, `GIT_WORK_TREE` o `GIT_COMMON_DIR` en su entorno. No se puede saber si su argv o su entorno no se pudieron leer. **Decisión del orquestador (2026-10-09), ajuste del coordinador al aprobar el plan.** Ejemplo: `git -C ../wt-agente commit` desde el worktree principal, o un `GIT_DIR` que apunta al worktree del agente. Solo se calcula un booleano, nunca se guardan valores del argv ni del entorno, y el entorno se compara solo por nombre (SEC-04). Se lee en macOS (`KERN_PROCARGS2`, la misma área que lee la segunda línea de Guardrails) y en Linux (`/proc`). En Windows no se lee, así que cuenta siempre en todo el repo y el comportamiento es el de antes de esta enmienda;
 - **El worktree de un cwd es la raíz más larga que lo contiene** (worktrees anidados en `.claude/worktrees/`), también para los `git` de una sesión. Antes, un `git` de sesión en un worktree anidado era evidencia para el worktree principal.
-- **Diagnóstico** (SPIKE-GRP-001): `s3_evidence` añade solo contadores enteros: `scope`, `sessions_wt`, `foreign_wt`, `foreign_other_wt`, `foreign_daemon`, `foreign_by_ancestor`, `foreign_gitdir` y `gits_after_notice`. Nunca rutas, nombres, pids ni argv (SEC-04).
+- **Diagnóstico** (SPIKE-GRP-001): `s3_evidence` añade solo contadores enteros: `scope`, `sessions_wt`, `foreign_wt`, `foreign_other_wt`, `foreign_daemon`, `foreign_by_ancestor`, `foreign_gitdir`, `foreign_redirected` y `gits_after_notice`. Nunca rutas, nombres, pids ni argv (SEC-04).
 
 **BR-EDGE-004 no se relaja**: el `git` de una persona en el worktree A sigue siendo ajeno en A, y un `git` de otro worktree no puede escribir el HEAD de A. **Riesgos declarados**:
 
-- un `git --git-dir=<común>/.git/worktrees/A` sin chdir lanzado desde fuera de A;
+- un `git` que redirige su destino por una vía distinta de las opciones y variables de arriba (por ejemplo, `core.worktree` en la configuración);
 - una rama activa en dos worktrees (`--ignore-other-worktrees`).
 
 En los dos casos, un `git` ajeno de otro worktree podría crear un commit en la rama de A sin contar como ajeno en A. Si a la vez había un `git` de la sesión en A, el commit se atribuiría a la sesión.
