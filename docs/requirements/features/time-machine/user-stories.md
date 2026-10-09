@@ -1,7 +1,7 @@
 ---
 mode: bulk
 generated: 2026-10-03T00:00Z
-updated: 2026-10-05
+updated: 2026-10-08
 generator: product-owner
 total_artifacts: 22
 expanded: 22
@@ -56,7 +56,7 @@ deferred:
 | [US-TMC-006](./user-stories/US-TMC-006-timeline-que-cuando-quien.md) | El desarrollador sabe qué cambió en su repo, cuándo y quién lo hizo | Desarrollador quiere el timeline con actor, origen, "Tú u otro (sin atribuir)" y nivel de cobertura | 001, 004, US-GRP-002, US-GRP-007, US-GRP-009 | — | expanded |
 | [US-TMC-007](./user-stories/US-TMC-007-timeline-filtros-huecos.md) | El desarrollador filtra el timeline por worktree, agente o periodo y ve lo que no se observó | Desarrollador quiere filtros y huecos explícitos en el timeline | 006, US-GRP-005 | — | expanded |
 | [US-TMC-008](./user-stories/US-TMC-008-timeline-atribucion-vigente.md) | El timeline refleja las correcciones de atribución sin reescribir quién deshizo qué | Desarrollador quiere la atribución vigente y el registro de cada undo intacto | 002, 006, US-GRP-010 | — | expanded |
-| [US-TMC-009](./user-stories/US-TMC-009-restaurar-punto-timeline.md) | El desarrollador devuelve su worktree a cualquier punto del timeline | Desarrollador quiere restaurar un punto con el alcance de D-TMC-20, deshaciendo la restauración si quiere | 001, 002, 006, 013 | — | expanded |
+| [US-TMC-009](./user-stories/US-TMC-009-restaurar-punto-timeline.md) | El desarrollador devuelve su worktree a cualquier punto del timeline | Desarrollador quiere restaurar un punto con el alcance de D-TMC-20, deshaciendo la restauración si quiere | 001, 002, 006, 013 | — | partially-implemented (PR #__PR__; escenario 5 con US-TMC-013) |
 | [US-TMC-010](./user-stories/US-TMC-010-undo-since.md) | El desarrollador deshace todo lo ocurrido en su worktree en los últimos minutos | Desarrollador quiere `raptor undo --since` en el worktree actual | 002, 012, 013 | — | expanded |
 | [US-TMC-011](./user-stories/US-TMC-011-undo-por-agente.md) | El desarrollador deshace solo lo que hizo un agente en un periodo | Desarrollador quiere `raptor undo --agent --since` con atribución vigente, sin huecos ni trabajo ajeno | 002, 007, 012, 013, US-GRP-007, US-GRP-009, US-GRP-010 | P17 de motor-local (D-TMC-22) | expanded |
 | [US-TMC-012](./user-stories/US-TMC-012-solape-otro-actor.md) | Un undo nunca sobrescribe trabajo posterior de otro actor | Desarrollador quiere que el undo se detenga y muestre el solape | 002, 006 | — | expanded |

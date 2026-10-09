@@ -2,10 +2,10 @@
 id: US-TMC-009
 title: "El desarrollador devuelve su worktree a cualquier punto del timeline"
 type: us
-status: draft
+status: partially-implemented
 priority: high
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-08
 domain: GRP
 epic: E-001
 feature: time-machine
@@ -64,7 +64,7 @@ Cuando un solicitante sin atribuir intenta restaurar a ese punto
 Entonces la restauración se rechaza con el motivo
   Y el repo no cambia
 
-**Escenario: En macOS y Linux, restaurar sobre trabajo de otro actor exige confirmación**
+**Escenario: En macOS y Linux, restaurar sobre trabajo de otro actor exige confirmación** *(Pendiente: US-TMC-013. Hasta entonces se rechaza con `confirmation-required` y un texto que dice que el agente dueño puede restaurar él mismo.)*
 
 Dado que después del punto de las 10:00 "claude-1" hizo un commit en "feat-login"
   Y el solicitante de la restauración queda sin atribuir y pide desde macOS o Linux
@@ -96,10 +96,20 @@ Ejemplos:
 ## Diseño y Dev Spec
 
 - **Diseño (flujo/UX):** Pendiente de diseño.
-- **Dev Spec:** pendiente (lo genera el Arquitecto).
+- **Dev Spec:** no hay Dev Spec; se implementó con un Implementation Brief de `/nassa-core:implement --autonomous` (rust-architect), resumido en el PR. El alcance quedó fijado en [ADR-TMC-005, Enmienda (2026-10-08, US-TMC-009)](../../../../architecture/decisions/ADR-TMC-005-solicitante-permisos-solape.md).
 
 ## Dependencias
 
 - **Historias**: US-TMC-001, US-TMC-002, US-TMC-006, US-TMC-013.
 - **Externas**: ninguna.
 - **Transversal**: transversal (lo define el Arquitecto): verificación en repos temporales, nunca en un repo real; mismo comportamiento en Windows, macOS y Linux salvo la confirmación interactiva, que en el MVP no existe en Windows (D-TMC-23); mensajes en inglés y español.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #__PR__ (parcial).
+
+- **Hecho:** `raptor restore <id> [--json]`; `raptor timeline` muestra el id de cada punto; escenarios 1, 2, 3 y 4, y el esquema del escenario (otro agente y sin atribuir en Windows), como tests en repos temporales (`crates/core/tests/us_tmc_009*.rs`, `apps/cli/tests/restore_process.rs`). Restaurar y deshacer la restauración devuelve el estado exacto (contenido, modo, índice, HEAD y ramas).
+- **Pendiente:** escenario 5 (confirmación interactiva en macOS y Linux), con US-TMC-013 (ADR-TMC-005 § 3). Hoy se rechaza con `confirmation-required`.
+- **Decisiones del orquestador (2026-10-08), validadas por Arquitecto y PO:** D1 (alcance = el worktree pedido más lo que tocó el trabajo hecho en él después del punto; una rama borrada con Git crudo desde otro worktree no vuelve y la salida la nombra), D2 (sin confirmación hasta US-TMC-013), D3 (las ramas creadas después del punto no se borran y se listan), D4 (deshacer una restauración que recreó un worktree siempre termina; la rama de ese worktree se deja y se avisa). Ver ADR-TMC-005, Enmienda (2026-10-08) y la precisión de D-TMC-20 en `context.md`.
+- **Fuera de esta ficha:** la recreación de worktrees en `crates/git/src/tm_write/recreate.rs` sigue enlaces simbólicos (revisión de seguridad H-01; bloquea v0.1.0) y la capa de escritura deja los archivos en 0600 por el umask 077 del daemon (afecta también a `raptor undo`). Ambos van en ramas `fix/` aparte.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md), XP-38).
