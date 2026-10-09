@@ -360,7 +360,7 @@ pub struct Executor {
     gate: Arc<dyn GuardrailsGate>,
     plans: Mutex<HashMap<String, StoredPlan>>,
     running: Arc<Mutex<HashMap<String, RunningOp>>>,
-    challenges: ChallengeBook,
+    challenges: Arc<ChallengeBook>,
     plan_ttl: Duration,
     mcp_time_limit: Duration,
     /// [`FOREIGN_WORK_CONFIRMABLE`] in production.
@@ -381,12 +381,18 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 impl Executor {
+    /// The daemon's challenges, shared with the Time Machine's commands: one live challenge per
+    /// connection holds across both.
+    pub fn challenges(&self) -> Arc<ChallengeBook> {
+        Arc::clone(&self.challenges)
+    }
+
     pub fn new(gate: Arc<dyn GuardrailsGate>) -> Self {
         Self {
             gate,
             plans: Mutex::new(HashMap::new()),
             running: Arc::new(Mutex::new(HashMap::new())),
-            challenges: ChallengeBook::default(),
+            challenges: Arc::new(ChallengeBook::default()),
             plan_ttl: Duration::from_millis(PLAN_TTL_MS),
             mcp_time_limit: Duration::from_millis(MCP_TIME_LIMIT_MS),
             foreign_work_confirmable: FOREIGN_WORK_CONFIRMABLE,
