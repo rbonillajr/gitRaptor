@@ -145,9 +145,9 @@ impl From<RejectReason> for ExecError {
 ///
 /// On Windows a process may choose its parent, so the confirmation checks cannot prove the
 /// developer (ADR-TMC-005 § 3, M-01/M-04): the operation is refused with its reason (TQ-14,
-/// ADR-CKP-002 § 3). The same rule as `timemachine::confirm::FOREIGN_WORK_CONFIRMABLE` of
-/// US-TMC-013 for undo and restore; one should replace the other once both are in main.
-pub const FOREIGN_WORK_CONFIRMABLE: bool = cfg!(unix);
+/// ADR-CKP-002 § 3). One rule with undo and restore (US-TMC-013): it is
+/// [`crate::timemachine::confirm::FOREIGN_WORK_CONFIRMABLE`].
+pub const FOREIGN_WORK_CONFIRMABLE: bool = crate::timemachine::confirm::FOREIGN_WORK_CONFIRMABLE;
 
 /// The layer the daemon fixes for a requester (ADR-CKP-002 § 4, M-03): `cockpit` only for an
 /// unattributed caller that passes the reserved checks 1 to 3 (`confirmable`), never for a
