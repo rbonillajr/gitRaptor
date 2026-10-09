@@ -55,9 +55,10 @@ Ningún commit salió `no-sighting`: **no es la carrera de tiempo**. Los 273 son
      - `Commit`, `Merge` y `Rebase` con `worktree_inferred == false`: salen del reflog de la rama activa en ese worktree, y Git no deja tener la misma rama activa en dos worktrees.
    - **Ámbito repo**, el de hoy, para todos los demás tipos: `BranchUpdate` (puede venir de `branch -f`, `update-ref` o `fetch X:X` desde cualquier worktree), `BranchCreate`, `BranchDelete`, `Push`, `WorktreeCreate`, `WorktreeDelete`, y `Commit`, `Merge` o `Rebase` con worktree inferido. `Reconciled` nunca se atribuye.
    - **Siempre cuentan en todo el repo**, sea cual sea el ámbito:
-     - los `git` del daemon: el escritor de la Time Machine corre con el cwd en `<común>/.git/worktrees/<w>`, que por ruta cae en el worktree principal, y el restore nunca se atribuye a un agente;
+     - los `git` del daemon con el cwd en el repo o ilegible: el escritor de la Time Machine corre con el cwd en `<común>/.git/worktrees/<w>`, que por ruta cae en el worktree principal, y el restore nunca se atribuye a un agente;
      - un `git` ajeno situado por el cwd de su ancestro (`launched_from`): su cwd real es desconocido, y `git -C A` lanzado desde una shell en B escribe en A;
      - un `git` ajeno con el cwd dentro del directorio Git común.
+     - un `git` ajeno que redirige su destino (`-C`, `--git-dir` o `--work-tree` entre las opciones globales; `GIT_DIR`, `GIT_WORK_TREE` o `GIT_COMMON_DIR` en el entorno) o cuyo argv o entorno no se pudo leer (ajuste del coordinador, 2026-10-09; solo un booleano, nunca valores; en Windows no se lee y cuenta en todo el repo);
    - **El worktree de un cwd** se resuelve con `worktree_of` (la raíz más larga), también para los `git` de la sesión. Hoy, un `git` de una sesión en un worktree anidado (`.claude/worktrees/x`) cuenta como evidencia para el worktree principal.
 2. **Diagnóstico** (SPIKE-GRP-001): la línea `s3_evidence` añade solo contadores enteros:
    - `scope` (`worktree` o `repo`);
@@ -67,6 +68,7 @@ Ningún commit salió `no-sighting`: **no es la carrera de tiempo**. Los 273 son
    - `foreign_daemon`;
    - `foreign_by_ancestor`;
    - `foreign_gitdir`;
+   - `foreign_redirected`;
    - `gits_after_notice`.
 
    Nunca rutas, nombres de worktree o de rama, pids ni argv (SEC-04).
@@ -79,7 +81,7 @@ Ningún commit salió `no-sighting`: **no es la carrera de tiempo**. Los 273 son
 
 **Riesgos declarados** (enmienda de ADR-GRP-012):
 
-- Un `git --git-dir=<común>/.git/worktrees/A` lanzado sin chdir desde fuera de A.
+- Un `git` que redirige su destino por una vía distinta de esas opciones y variables, como `core.worktree` en la configuración.
 - Una rama activa en dos worktrees (`git worktree add --ignore-other-worktrees`, `checkout --ignore-other-worktrees`).
 
 En los dos casos, un `git` ajeno de otro worktree podría hacer un commit en la rama de A sin contar como ajeno en A.
