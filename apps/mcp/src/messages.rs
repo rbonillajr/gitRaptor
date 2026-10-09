@@ -288,9 +288,12 @@ fn texts(code: McpToolError, lang: Lang, params: Option<&Value>) -> (&'static st
             "No se sabe si el snapshot se guardó.",
             "Revisa `raptor timeline` antes de reintentar.",
         ),
-        // The texts of these codes come with the tool's work; empty until then.
-        (E::WorktreeMissing | E::RepoOtherOwner | E::WorktreeUntrusted | E::InvalidCursor, _) => {
-            ("", "")
+        // The texts of these codes come with the tool; until then they say what any failure says.
+        (
+            E::WorktreeMissing | E::RepoOtherOwner | E::WorktreeUntrusted | E::InvalidCursor,
+            lang,
+        ) => {
+            return texts(E::Internal, lang, None);
         }
     };
     (message, action.to_owned())
