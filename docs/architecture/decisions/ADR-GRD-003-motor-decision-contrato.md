@@ -321,3 +321,18 @@ Origen: BR-VAL-003 (filas "Rama protegida" y "Ruta prohibida") con BR-CALC-001, 
 ## Nota (2026-10-08, XP-15): identidad del ejecutable en Windows
 
 La comprobación "servidor = binario instalado" de la Enmienda (2026-10-05, US-GRD-001) funciona también en Windows: la identidad del archivo es `(número de serie del volumen, índice de archivo)`, leída siguiendo enlaces, y es la misma para cualquier grafía de la ruta (mayúsculas o nombre 8.3). Antes el ejecutable del par quedaba como desconocido y el hook pasaba al modo degradado. No cambia el contrato. **Decisión del orquestador (2026-10-08), validada por Arquitecto.**
+
+## Enmienda (2026-10-08, US-GRD-010 y US-GRD-012)
+
+Origen: BR-CONS-001, BR-VAL-001, BR-AUTH-004 y BR-AUTH-001, con la Dev Spec `docs/dev-briefs/layered-config.md`. **Decisión del orquestador (2026-10-08), validada por Arquitecto y PO; el coordinador ajustó D11.**
+
+| Cambio | Resolución | Dónde |
+|---|---|---|
+| **Regla `policy.config-protected`** | Regla de producto de nivel `minimum`, solo para agentes, sobre `/.gitraptor` (el directorio y la ruta exacta, sea archivo, enlace o submódulo). No es el mínimo de BR-EDGE-001: `disableSafeMinimum` no la apaga y ninguna configuración la quita. `raptor guard status` la muestra siempre | § 1, § 2 |
+| **Lo no verificable deniega al agente** | Con un actor agente, un movimiento cuyos commits no se pueden leer o pasan de 256 nuevos se deniega (causa `unverifiable`). Se enmienda "unverifiable solo con regla aplicable" de US-GRD-008: ya no vale para agentes. Casos: rebase largo, primer push de una rama local con más de 256 commits, clon superficial, repo sin ramas de seguimiento | § 6 |
+| **Niveles personales solo endurecen** | El permiso efectivo es el más restrictivo entre el equipo y el personal (local sobre perfil); un nivel personal ignorado o ilegible nunca relaja. Los niveles personales no se escriben desde el motor | § 1 |
+| **Quién confirma una relajación (D11)** | Se decide por el **actor** que ve el hook en el commit (ascendencia del proceso), nunca por el autor, el committer ni el trailer, porque el agente commitea con la identidad de la persona. Actor agente: la relajación se ignora y se avisa. "Sin atribuir": cuenta como la persona (**riesgo residual aceptado del MVP**, Q35 y R-GRD-3). Un commit sin hooks no confirma nada | § 4 |
+| **Aviso `config.relax-ignored`** | Una operación deja una entrada de decisión; los avisos de configuración con el mismo `decision_id` son aparte, no cuentan en el KPI de bloqueos ni aplican al ejecutor. Solo con actor agente y en `ref-transaction` o `push`. Lleva el nivel y nunca valores. Dice que se ignoró una relajación mientras actuaba el agente, sin afirmar quién la escribió | § 6 |
+| **Capacidad `guard.config-protection`** | Un cliente sin ella recibe la denegación como `policy.forbidden-path`, nunca como un permiso | § 4 |
+
+**Declarado, no cerrado**: R-GRD-4 (un agente puede borrar o corromper los endurecimientos de su propio perfil o local, nunca bajar del equipo; el cierre es el trinquete de Q-GRD-32). Las ediciones sin commitear no se registran (ADR-GRD-004, validación 4). Windows y Linux: XP-39.
