@@ -109,7 +109,7 @@ Entonces la petición se rechaza con el motivo
 
 ## Estado de la implementación (2026-10-09)
 
-Implementado en: PR #__PR__.
+Implementado en: PR #219.
 
 - **Hecho:** los seis escenarios como tests en repos y perfiles temporales: `crates/core/tests/us_tmc_013.rs`, `crates/core/tests/us_tmc_013_restore.rs`, `crates/core/src/timemachine/confirm/tests.rs`, `apps/cli/tests/us_tmc_013_process.rs` (confirmación real con una pty a través de `script`) y `crates/api/tests/tm_confirmation.rs`. Los escenarios 1 y 2 (un agente sobre lo suyo y sobre lo ajeno) ya los cumplía US-TMC-002; aquí quedan probados por MCP y por la CLI desde la shell del agente. `codex-1` no se reconoce todavía como agente registrado (depende de motor-local, ADR-TMC-005 § 1), así que hoy se rechaza como "sin atribuir" por MCP.
 - **Cómo funciona:** `timemachine.undo` y `timemachine.restore` se llaman dos veces en la misma conexión. La primera devuelve `confirmation-required` y un reto de un solo uso: 128 bits, válido 60 s y ligado a la conexión, al proceso y al hash del plan, que calcula el daemon con su propio plan. Solo lo recibe quien pasa la prueba de presencia de consola de los comandos reservados (`requester::confirmation_refusal`, ADR-GRP-005 § 6). La segunda llamada presenta el token: el daemon vuelve a planificar bajo el bloqueo del repo, comprueba otra vez la elegibilidad y lo canjea. La operación queda en el oplog con `confirmed = 1` y el solicitante "sin atribuir". La CLI pregunta solo si hay una terminal. `--json` nunca pregunta, y no existe `--yes`.
