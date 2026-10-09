@@ -14,6 +14,7 @@ use super::{ERROR_BLOCK_LEN, FIRST_ERROR_BLOCK, Group, method};
 use crate::Actor;
 use crate::capability::{CAPABILITIES_PROTOCOL, Capability};
 use crate::guard::{Diagnostic, LossCause};
+use crate::mcp_view::MAX_MCP_NAME_CHARS;
 use crate::messages::{RepoStateView, SessionStateView, UnavailableReason};
 use crate::rpc::ErrorSpec;
 use crate::untrusted::{Untrusted, UntrustedName};
@@ -47,8 +48,7 @@ pub const MCP_CURSOR_LEN: usize = 16;
 /// Whether `text` has the form of a cursor the daemon hands out: exactly
 /// [`MCP_CURSOR_LEN`] characters of `[0-9a-f]`.
 pub fn valid_cursor(text: &str) -> bool {
-    let _ = text;
-    todo!("US-MCP-004: the form of a cursor")
+    text.len() == MCP_CURSOR_LEN && text.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
 }
 
 pub(super) const GROUP: Group = Group {
@@ -60,7 +60,9 @@ pub(super) const GROUP: Group = Group {
         method(MCP_ALLOWLIST, false, false).since(CAPABILITIES_PROTOCOL),
         method(MCP_STATUS, false, true).since(CAPABILITIES_PROTOCOL),
     ],
-    capabilities: &[CAP_MCP_STATUS_BRANCH],
+    capabilities: &[CAP_MCP_STATUS_BRANCH, CAP_MCP_STATUS_FULL],
+    errors: &[MCP_UNAVAILABLE],
+    error_block: Some(BLOCK),
     ..Group::new("mcp")
 };
 
@@ -123,18 +125,76 @@ impl McpStatus {
     /// The status as the `status` tool gives it: names cut at their MCP
     /// bound (ADR-MCP-001 § 6). Escaping is `mcp_view::for_mcp`.
     pub fn for_mcp(&self) -> Self {
-        let requester = match &self.requester {
-            Actor::Agent { kind, name, origin } => Actor::Agent {
-                kind: *kind,
-                name: name.as_ref().map(UntrustedName::mcp_name),
-                origin: *origin,
-            },
-            Actor::Unattributed => Actor::Unattributed,
-        };
+        let max = MAX_MCP_NAME_CHARS;
         Self {
-            worktree: self.worktree.mcp_name(),
-            branch: self.branch.as_ref().map(UntrustedName::mcp_name),
-            requester,
+            worktree: self.worktree.capped_chars(max),
+            branch: self.branch.as_ref().map(|n| n.capped_chars(max)),
+            requester: cap_actor(&self.requester, max),
+            here: self.here.as_ref().map(|h| h.capped(max)),
+            repo: self.repo.as_ref().map(|r| r.capped(max)),
+            page: self.page.as_ref().map(|p| p.capped(max)),
+            ..self.clone()
+        }
+    }
+}
+
+/// The actor with its declared name cut to `max` characters.
+fn cap_actor(actor: &Actor, max: usize) -> Actor {
+    match actor {
+        Actor::Agent { kind, name, origin } => Actor::Agent {
+            kind: *kind,
+            name: name.as_ref().map(|n| n.capped_chars(max)),
+            origin: *origin,
+        },
+        Actor::Unattributed => Actor::Unattributed,
+    }
+}
+
+impl McpHere {
+    /// The same situation with every name cut to `max` characters.
+    pub fn capped(&self, max: usize) -> Self {
+        Self {
+            sessions: self
+                .sessions
+                .iter()
+                .map(|s| McpSession {
+                    actor: cap_actor(&s.actor, max),
+                    state: s.state,
+                })
+                .collect(),
+            ..self.clone()
+        }
+    }
+}
+
+impl McpRepo {
+    /// The same repo with every name cut to `max` characters.
+    pub fn capped(&self, max: usize) -> Self {
+        Self {
+            base: McpBase {
+                name: self.base.name.as_ref().map(|n| n.capped_chars(max)),
+                state: self.base.state,
+            },
+            ..self.clone()
+        }
+    }
+}
+
+impl McpPage {
+    /// The same page with every name cut to `max` characters.
+    pub fn capped(&self, max: usize) -> Self {
+        Self {
+            of: self.of.as_ref().map(|n| n.capped_chars(max)),
+            worktrees: self
+                .worktrees
+                .iter()
+                .map(|w| McpWorktree {
+                    name: w.name.capped_chars(max),
+                    branch: w.branch.as_ref().map(|n| n.capped_chars(max)),
+                    state: w.state.capped(max),
+                    ..w.clone()
+                })
+                .collect(),
             ..self.clone()
         }
     }

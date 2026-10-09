@@ -18,7 +18,7 @@ use serde_json::Value;
 
 use crate::Actor;
 use crate::catalog::SnapshotRunResult;
-use crate::methods::{McpStatus, McpStatusAction};
+use crate::methods::{McpHere, McpPage, McpRepo, McpStatus, McpStatusAction};
 use crate::untrusted::{UntrustedName, sanitize};
 
 /// Most bytes of each part of a tool result (structured and text), measured
@@ -27,6 +27,11 @@ pub const MAX_MCP_PART_BYTES: usize = 24 * 1024;
 
 /// Most characters of a name (branch, worktree, agent, ref) in a response.
 pub const MAX_MCP_NAME_CHARS: usize = 100;
+
+/// Most characters of a name nested in the default answer (`here` and `repo`): under
+/// [`MAX_MCP_NAME_CHARS`] so the default answer fits its token budget (RES-MCP-02) with the
+/// longest names; a page keeps the full bound.
+pub const MAX_MCP_DEFAULT_NAME_CHARS: usize = 64;
 
 /// Most bytes of a path, or of any untrusted text, in a response.
 pub const MAX_MCP_PATH_BYTES: usize = 1024;
@@ -206,16 +211,52 @@ pub const MCP_CURSOR_PLACEHOLDER: &str = "0000000000000000";
 /// The bytes of the status as the tool sends it: its [`McpStatusView`]
 /// after [`McpStatus::for_mcp`] and [`for_mcp`], compact JSON.
 pub fn wire_len(status: &McpStatus) -> usize {
-    let _ = status;
-    todo!("US-MCP-004: the measure of a status as it goes on the wire")
+    let mut value = serde_json::to_value(McpStatusView::from(status)).unwrap_or(Value::Null);
+    for_mcp(&mut value);
+    value.to_string().len()
 }
 
 /// Takes items off the end of the page of `status` until its
 /// [`wire_len`] is within `budget`, and leaves `truncated` and
 /// [`MCP_CURSOR_PLACEHOLDER`] when it did.
 pub fn fit_page(status: &mut McpStatus, budget: usize) {
-    let _ = (status, budget);
-    todo!("US-MCP-004: cut a page to its budget")
+    let Some(page) = status.page.as_ref() else {
+        return;
+    };
+    if wire_len(status) <= budget {
+        return;
+    }
+    let by_paths = page.worktrees.is_empty();
+    let items = if by_paths {
+        page.paths.len()
+    } else {
+        page.worktrees.len()
+    };
+    // The longest prefix that fits, by bisection: `keep` fits (or is 0, the floor), `keep + 1`
+    // may not. A cut page always carries `truncated` and the cursor, so measure it that way.
+    let with_len = |status: &McpStatus, keep: usize| {
+        let mut cut = status.clone();
+        if let Some(page) = cut.page.as_mut() {
+            if by_paths {
+                page.paths.truncate(keep);
+            } else {
+                page.worktrees.truncate(keep);
+            }
+            page.truncated = true;
+            page.cursor = Some(MCP_CURSOR_PLACEHOLDER.to_owned());
+        }
+        cut
+    };
+    let (mut low, mut high) = (0, items);
+    while low < high {
+        let mid = low + (high - low).div_ceil(2);
+        if wire_len(&with_len(status, mid)) <= budget {
+            low = mid;
+        } else {
+            high = mid - 1;
+        }
+    }
+    *status = with_len(status, low);
 }
 
 /// The estimated tokens of `text`: its UTF-8 bytes over
@@ -288,6 +329,23 @@ pub struct McpStatusView {
     pub requester: Actor,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action: Option<McpStatusAction>,
+    /// The caller's worktree; an opaque object in the output schema (RES-MCP-01).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(schema_with = "opaque_object")]
+    pub here: Option<McpHere>,
+    /// The repo; opaque in the output schema.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(schema_with = "opaque_object")]
+    pub repo: Option<McpRepo>,
+    /// A page asked for with a cursor; opaque in the output schema.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(schema_with = "opaque_object")]
+    pub page: Option<McpPage>,
+}
+
+/// `{"type":"object"}`: spelled out, the detail would cost three times the budget of the schema.
+fn opaque_object(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    schemars::json_schema!({"type": "object"})
 }
 
 /// The `snapshot` tool's answer: the field allowlist (SEC-12). The worktree is its folder
@@ -325,6 +383,9 @@ impl From<&McpStatus> for McpStatusView {
             main: status.main,
             requester: status.requester,
             action: status.action,
+            here: status.here.map(|h| h.capped(MAX_MCP_DEFAULT_NAME_CHARS)),
+            repo: status.repo.map(|r| r.capped(MAX_MCP_DEFAULT_NAME_CHARS)),
+            page: status.page,
         }
     }
 }
