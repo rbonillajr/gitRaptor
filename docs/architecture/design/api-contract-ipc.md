@@ -60,6 +60,7 @@ Una conexión de protocolo 9 recibe también `capabilities`: los nombres de toda
 | `events.git-reset` | protocolo 8 | Eventos Git de tipo `reset` en el stream y en `events.history` |
 | `operation.snapshot` | — (US-MCP-008) | La operación `snapshot` del catálogo, el rechazo `write-in-progress`, los errores `-33060` y `-33061` y el resultado `SnapshotRunResult` de `operation.run` (ver [Snapshot manual](#snapshot-manual-us-mcp-008)). Sin ella, la llamada sigue en `-32004` |
 | `timemachine.timeline-manual` | — (US-MCP-008) | `timemachine.timeline` sirve entradas `manual-snapshot` y el nivel de protección `manual`; sin la capacidad se filtran |
+| `timemachine.timeline-inferred` | — (TS-GRP-008) | `timemachine.timeline` lleva `inferred` (`{kind, session_id, trailer}`, la pista de ADR-GRP-012) en las entradas de eventos de Git sin agente; sin la capacidad el campo no se envía |
 
 Una conexión tiene las capacidades legadas de su protocolo (todas, si es de protocolo 9) y las que acepte con `connection.accept`. Si no llama a ese método, recibe las formas del protocolo 8. Desde el protocolo 9, `daemon.replace` con el **mismo** protocolo lo acepta el daemon solo si viene del binario instalado y actualizado; si no, responde `-32602` y la conexión sigue. El cliente lo pide cuando el daemon no anuncia una capacidad que él conoce.
 
@@ -170,6 +171,7 @@ La operación `snapshot` del catálogo guarda un punto de recuperación a petici
 - `operation.run` de un plan `snapshot` devuelve `SnapshotRunResult`: `{snapshot_id, worktree, label, requester, layer, outcome}`. `worktree` es el nombre de la carpeta de la raíz, nunca su ruta; `worktree` y `label` son texto no confiable (`UntrustedName`) y `outcome` es siempre `done`.
 - Rechazos: `-32014` con `data.reason = write-in-progress` si el mismo solicitante tiene otro snapshot manual sin terminar; `-33060` con `SnapshotQuotaData` si una ventana de la cuota está llena; `-33061` si se agota el presupuesto de tiempo.
 - `timemachine.timeline`, con la capacidad `timemachine.timeline-manual`, añade entradas `manual-snapshot` `{snapshot_id, label, channel}` (`EntryOrigin::ManualSnapshot`; `label` es texto no confiable y `channel`, `cli`, `tui`, `mcp` o `hook`) y el nivel de protección `manual`. Una conexión sin la capacidad no recibe ni una ni otro.
+- `timemachine.timeline`, con la capacidad `timemachine.timeline-inferred` (TS-GRP-008), añade a la entrada de un evento de Git **sin agente** el campo opcional `inferred`, con la misma forma que `GitEventView.inferred` de `engine.events` (US-GRD-019): `kind`, `session_id` y `trailer` (`confirmed` o `unconfirmed`). Es una pista, nunca cambia el actor. No aparece si la pista está `contradicted` o si el evento se observó con `human-author`. Una conexión sin la capacidad no recibe el campo.
 
 ## Estado de un worktree (US-GRP-001)
 

@@ -733,6 +733,7 @@ Deducciones del código que el spec sigue sin abrir gap. Las tareas que las apli
 
 | Fecha | Origen | Qué cambia | Ids |
 |---|---|---|---|
+| 2026-10-09 | Revisión (`rust-code-reviewer`, `security-expert`) | Un solo parser que falla cerrado; lectura de la redirección fuera del lock, con un máximo de 32 por muestra. M-01, L-03 y L-05 quedan declarados en ADR-GRP-012 y van a TD-GRP-004 | T008, TD-GRP-004 |
 | 2026-10-09 | Coordinador, al aprobar el plan (**Decisión del orquestador (2026-10-09)**) | Un `git` ajeno puede escribir en un worktree distinto del de su cwd. Con `--git-dir` o `GIT_DIR` no hace chdir; `-C` y `--work-tree` sí lo hacen, pero se tratan igual por prudencia. El ámbito worktree solo se fía del cwd si el `git` **no redirige su destino**. Ver § E1 | T001, T002, T008, ADR-GRP-012 (Enmienda 2026-10-09) |
 
 ### E1 — `git` ajeno que redirige su destino
@@ -751,7 +752,7 @@ Solo un `git` ajeno que se pudo leer y no redirige su destino sigue las filas 11
 - **Windows** y el resto: no se lee, el resultado es "no se puede saber" y el `git` cuenta en todo el repo. En Windows el comportamiento es el de antes de esta TS. *Pendiente: etapa de validación multiplataforma.*
 - **Coste**: solo para los `git` `Other` con cwd propio legible dentro del repo y fuera del directorio común, una vez por muestra.
 
-**Opciones globales con valor** (se salta su valor para encontrar el subcomando): `-C`, `-c`, `--git-dir`, `--work-tree`, `--namespace`, `--config-env`, `--exec-path` (solo la forma con `=`), `--super-prefix`. El primer argumento que no es opción es el subcomando, y lo que va detrás no se mira. Así `git log -C` (opción de `log`) no redirige, y `git -c core.x=1 status` tampoco.
+**Opciones globales con valor** (se salta su valor para encontrar el subcomando): `-C`, `-c`, `--git-dir`, `--work-tree`, `--namespace`, `--config-env`, `--attr-source`, `--shallow-file`, `--super-prefix`, y `--exec-path` y `--list-cmds` solo en la forma con `=`. **Una opción global desconocida, o un `--`, antes del subcomando cuenta como redirección** (falla cerrado). El parser es uno solo, en `gitraptor-macsys::process::git_redirects`; core lo llama desde macOS y desde Linux (revisión del 2026-10-09). El primer argumento que no es opción es el subcomando, y lo que va detrás no se mira. Así `git log -C` (opción de `log`) no redirige, y `git -c core.x=1 status` tampoco.
 
 **Clasificación.** Fila nueva entre la 10 y la 11:
 

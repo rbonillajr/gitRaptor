@@ -6,8 +6,8 @@ updated: 2026-10-09
 generator: architect
 domain: GRP
 feature: motor-local
-total_artifacts: 12
-expanded: 12
+total_artifacts: 13
+expanded: 13
 approved: 0
 related:
   context: [CTX-GRP-001]
@@ -40,6 +40,7 @@ related:
 | [TD-GRP-003](./technical-stories/TD-GRP-003-nfr04-maquina-referencia.md) | TD | Presupuesto de NFR-04 sin gate automático: medirlo en una máquina de referencia | El p95 de 300 ms vuelve a bloquear de forma automática, sin los falsos positivos de los runners compartidos | ADR-GRP-011, ADR-GRP-014 | — | INF-GRP-002 | Medium | Ready (antes de cerrar el MVP) |
 | [TS-GRP-007](./technical-stories/TS-GRP-007-factor-so-reservados-windows.md) | TS | Factor del SO (Windows Hello) para los comandos reservados de alto riesgo en Windows | Cierra en Windows el riesgo residual M-01 (padre suplantado), mayor que en Unix, que la prueba por consola de TQ-14 no detecta | ADR-GRP-005, ADR-GRD-008 | — | SPIKE-GRD-002 (Windows), DS-TS-GRP-004 § 9 | Medium | Dev Spec Pending (prioridad alta; opción B de TQ-14, 2026-10-08) |
 | [TS-GRP-008](./technical-stories/TS-GRP-008-ambito-git-ajeno-s3.md) | TS | S3 cuenta los `git` ajenos en el ámbito del evento, no en todo el repo | Los commits de Claude Code salen atribuidos (detectado) aunque haya Git activo en otros worktrees; hoy casi la mitad salen "(no agent)" en el dogfooding | ADR-GRP-012 | US-GRP-007 | — | Medium | En desarrollo (dogfooding del 2026-10-09) |
+| [TD-GRP-004](./technical-stories/TD-GRP-004-corroborar-ambito-worktree-s3.md) | TD | Corroborar con el reflog de HEAD el ámbito worktree de S3 y blindar la lectura de la redirección | Cierra M-01, L-03 y L-05 de la revisión de seguridad de TS-GRP-008: un reflog forjado desde otro worktree no puede atribuir un commit al agente | ADR-GRP-012 | US-GRP-007 | TS-GRP-008 | Medium | Dev Spec Pending (2026-10-09) |
 | [INF-GRP-003](./technical-stories/INF-GRP-003-pipeline-release.md) | INF | Pipeline de release: 6 targets, firma, checksums, SBOM y borrador de GitHub Release | Un tag `v*` produce los binarios de NFR-06 verificables y un borrador; nada se publica sin un paso humano | ADR-GRP-014 | — (NFR-06, transversal) | — (release real en Windows: pendientes de TS-GRP-001 y TS-GRP-002) | Medium | partially-implemented (PR #51) |
 | [INF-GRP-004](./technical-stories/INF-GRP-004-canales-distribucion.md) | INF | Canales de distribución: Homebrew, winget, npm y scripts verificados | Canales generados y probados en cada release; publicar solo depende de secretos y un paso humano | ADR-GRP-014 | — (NFR-06; US de instalación pendiente para el PO) | INF-GRP-003 | Medium | partially-implemented (PR #51) |
 | [SPIKE-GRP-001](./technical-stories/SPIKE-GRP-001-precision-deteccion.md) | SPIKE | Precisión de la detección de Claude Code en dogfooding | Medir el 90% sin atribuir trabajo humano; S2a frente a S2b; TTY de la shell de Claude Code | ADR-GRP-012 (valida) | US-GRP-007, 008 | — (prototipo aislado) | Medium | partially-implemented (PR #80, #155, #169) |
