@@ -246,16 +246,35 @@ fn allowed_programs(git: &Path, shim: &Path) -> Vec<PathBuf> {
     out
 }
 
-// --- Minimal runner, libtest-like output; honors name filters -----------------------------------
+// --- Minimal runner, libtest-like output; honors name filters ------------------------------------
+// Speaks enough of the libtest protocol for `cargo nextest`: `--list --format terse` (and the
+// `--ignored` listing, always empty), `--exact` and `--nocapture`.
 
 fn run_tests(tests: &[(&str, fn())]) -> ExitCode {
-    let filters: Vec<String> = std::env::args()
-        .skip(1)
-        .filter(|a| !a.starts_with('-'))
-        .collect();
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let flag = |name: &str| args.iter().any(|a| a == name);
+    if flag("--list") {
+        if !flag("--ignored") {
+            for (name, _) in tests {
+                println!("{name}: test");
+            }
+        }
+        return ExitCode::SUCCESS;
+    }
+    let exact = flag("--exact");
+    let filters: Vec<&String> = args.iter().filter(|a| !a.starts_with('-')).collect();
     let selected: Vec<_> = tests
         .iter()
-        .filter(|(name, _)| filters.is_empty() || filters.iter().any(|f| name.contains(f.as_str())))
+        .filter(|(name, _)| {
+            filters.is_empty()
+                || filters.iter().any(|f| {
+                    if exact {
+                        name == f
+                    } else {
+                        name.contains(f.as_str())
+                    }
+                })
+        })
         .collect();
     println!("\nrunning {} tests", selected.len());
     let mut failed = Vec::new();
