@@ -84,6 +84,13 @@ impl PlanFacts<'_> {
     /// SHA-256 of the canonical form of the plan: versioned, length-prefixed, with the lists
     /// sorted and without duplicates. Names and subtypes (text from agents) do not enter.
     pub fn hash(&self) -> [u8; 32] {
+        self.hash_over(&[])
+    }
+
+    /// [`Self::hash`] over the operations and raw Git events the plan takes back besides
+    /// `undone_id` (a restore takes back everything after its point): another one, by the same
+    /// owner, is another plan.
+    pub fn hash_over(&self, taken_back: &[&str]) -> [u8; 32] {
         let mut out = Vec::with_capacity(256);
         field(&mut out, b"gitraptor-confirm-plan/1");
         field(&mut out, self.kind.tag().as_bytes());
@@ -102,6 +109,7 @@ impl PlanFacts<'_> {
         set(&mut out, self.scope.refs.iter().map(String::as_str));
         let owners: Vec<String> = self.owners.iter().map(actor_key).collect();
         set(&mut out, owners.iter().map(String::as_str));
+        set(&mut out, taken_back.iter().copied());
         plan_hash(&out)
     }
 }
@@ -185,6 +193,7 @@ impl<'a> Confirmation<'a> {
 
     /// Overrides [`FOREIGN_WORK_CONFIRMABLE`]: production never calls it; tests and the channel's
     /// test seam do, so both branches of the rule run on every OS.
+    #[cfg(any(test, debug_assertions))]
     #[must_use]
     pub fn with_rule_allows(mut self, allows: bool) -> Self {
         self.rule_allows = allows;
@@ -202,7 +211,18 @@ impl<'a> Confirmation<'a> {
         base: Result<(), TmRejectReason>,
         plan: &PlanFacts<'_>,
     ) -> Result<bool, TmRejectReason> {
-        self.gate_at(base, plan, Instant::now())
+        self.gate_over(base, plan, &[])
+    }
+
+    /// [`Self::gate`] for a plan that takes back `taken_back` besides `plan.undone_id`; they
+    /// enter the plan hash (see [`PlanFacts::hash_over`]).
+    pub fn gate_over(
+        &self,
+        base: Result<(), TmRejectReason>,
+        plan: &PlanFacts<'_>,
+        taken_back: &[&str],
+    ) -> Result<bool, TmRejectReason> {
+        self.gate_at_over(base, plan, taken_back, Instant::now())
     }
 
     /// What `gate` left for the answer; `None` if it offered nothing.
@@ -211,10 +231,21 @@ impl<'a> Confirmation<'a> {
     }
 
     /// [`Self::gate`] on an injected clock, for the tests.
+    #[cfg(test)]
     fn gate_at(
         &self,
         base: Result<(), TmRejectReason>,
         plan: &PlanFacts<'_>,
+        now: Instant,
+    ) -> Result<bool, TmRejectReason> {
+        self.gate_at_over(base, plan, &[], now)
+    }
+
+    fn gate_at_over(
+        &self,
+        base: Result<(), TmRejectReason>,
+        plan: &PlanFacts<'_>,
+        taken_back: &[&str],
         now: Instant,
     ) -> Result<bool, TmRejectReason> {
         use TmRejectReason::{ChallengeInvalid, ConfirmationRequired, ConfirmationUnavailable};
@@ -225,7 +256,7 @@ impl<'a> Confirmation<'a> {
             connection: offering.connection,
             pid: offering.pid,
             start_us: offering.start_us,
-            plan_hash: plan.hash(),
+            plan_hash: plan.hash_over(taken_back),
         };
         if let Some(token) = offering.token {
             // A presented token is always redeemed: it is consumed however this ends. Where the
@@ -292,5 +323,7 @@ fn shown_owners(owners: &[Requester]) -> Vec<Actor> {
         .collect()
 }
 
+#[cfg(test)]
+mod review_tests;
 #[cfg(test)]
 mod tests;

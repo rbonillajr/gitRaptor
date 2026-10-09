@@ -577,8 +577,12 @@ pub fn restore_to(
         ));
     }
     let mut owners: Vec<Requester> = Vec::new();
+    // What the restore takes back, by id: it enters the plan hash with its owners, so one more
+    // operation of the same owner after the challenge is another plan.
+    let mut taken_back: Vec<String> = Vec::new();
     for op in after.iter().filter(|op| op_touches(op)) {
         owners.push(op.record.requester.clone());
+        taken_back.push(op.record.operation_id.clone());
     }
     for raw in raw_after.iter().filter(|r| !r.echo) {
         let touches = plan_roots.contains(&raw.root.as_path())
@@ -589,6 +593,7 @@ pub fn restore_to(
                 .is_some_and(|b| refs.contains(&format!("refs/heads/{b}")));
         if touches {
             owners.push(raw.event.actor.clone());
+            taken_back.push(format!("git-event-{}", raw.event.seq));
         }
     }
 
@@ -606,8 +611,12 @@ pub fn restore_to(
         scope: &scope,
         owners: &owners,
     };
-    let confirmed = match confirm.gate(restore_permission(&who.requester, channel, &owners), &facts)
-    {
+    let taken_back: Vec<&str> = taken_back.iter().map(String::as_str).collect();
+    let confirmed = match confirm.gate_over(
+        restore_permission(&who.requester, channel, &owners),
+        &facts,
+        &taken_back,
+    ) {
         Ok(confirmed) => confirmed,
         Err(reason) => return Err(reject(scope, engine_mark, reason)),
     };

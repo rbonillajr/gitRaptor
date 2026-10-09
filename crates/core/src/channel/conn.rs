@@ -40,11 +40,11 @@ use gitraptor_api::scope::{
 };
 use gitraptor_api::timemachine::EntryOrigin;
 use gitraptor_api::timemachine::{
-    Invalid as TmInvalid, MAX_REPORTED_PATHS, MAX_REPORTED_REFS, McpRequesterView, NotRestored,
-    NotRestoredReason, OperationRunResult, PriorFailedData, RedoParams, RequestChannel,
-    RequesterView, ResolveParams, RestoreParams, RestoreResult, SnapshotParams, Surface,
-    TIMELINE_DEFAULT_LIMIT, TimelineParams, TmConfirmData, TmRejectReason, TmRejectedData,
-    UndoParams, UndoResult, parse_since,
+    ConfirmationToken, Invalid as TmInvalid, MAX_REPORTED_PATHS, MAX_REPORTED_REFS,
+    McpRequesterView, NotRestored, NotRestoredReason, OperationRunResult, PriorFailedData,
+    RedoParams, RequestChannel, RequesterView, ResolveParams, RestoreParams, RestoreResult,
+    SnapshotParams, Surface, TIMELINE_DEFAULT_LIMIT, TimelineParams, TmConfirmData, TmRejectReason,
+    TmRejectedData, UndoParams, UndoResult, parse_since,
 };
 use gitraptor_git::{ReaderOptions, RepoReader};
 
@@ -3104,7 +3104,7 @@ impl Connection<'_> {
     ) -> Result<serde_json::Value, ErrorObject> {
         let p: UndoParams = request.params()?;
         p.validate().map_err(tm_invalid)?;
-        self.check_confirmation_param(p.confirmation.as_deref())?;
+        self.check_confirmation_param(p.confirmation.as_ref().map(ConfirmationToken::as_str))?;
         let selector = if p.since.is_some() {
             Some("US-TMC-010")
         } else if p.agent.is_some() {
@@ -3148,7 +3148,11 @@ impl Connection<'_> {
             fallback_mark: i64::try_from(self.ctx.bus.snapshot().0).unwrap_or(i64::MAX),
         };
         let eligibility = || self.tm_confirm_refusal();
-        let confirm = self.tm_confirmation(&tm.challenges, p.confirmation.as_deref(), &eligibility);
+        let confirm = self.tm_confirmation(
+            &tm.challenges,
+            p.confirmation.as_ref().map(ConfirmationToken::as_str),
+            &eligibility,
+        );
         let done = undo_last(&repo, &r.who, oplog_channel(channel), &confirm, &env)
             .map_err(|e| undo_error(e, &confirm))?;
         let result = undo_result(done, self.requester_view(&r, channel));
@@ -3170,7 +3174,7 @@ impl Connection<'_> {
     ) -> Result<serde_json::Value, ErrorObject> {
         let p: RestoreParams = request.params()?;
         p.validate().map_err(tm_invalid)?;
-        self.check_confirmation_param(p.confirmation.as_deref())?;
+        self.check_confirmation_param(p.confirmation.as_ref().map(ConfirmationToken::as_str))?;
         let channel = self.request_channel(p.surface)?;
         let named = self.named_worktree(p.worktree.as_deref())?;
         let r = self.resolve()?;
@@ -3198,7 +3202,11 @@ impl Connection<'_> {
             fallback_mark: i64::try_from(self.ctx.bus.snapshot().0).unwrap_or(i64::MAX),
         };
         let eligibility = || self.tm_confirm_refusal();
-        let confirm = self.tm_confirmation(&tm.challenges, p.confirmation.as_deref(), &eligibility);
+        let confirm = self.tm_confirmation(
+            &tm.challenges,
+            p.confirmation.as_ref().map(ConfirmationToken::as_str),
+            &eligibility,
+        );
         let done = restore_to(
             &repo,
             &p.snapshot_id,

@@ -366,7 +366,7 @@ fn raw_target(
 /// Steps 4–6 of ADR-TMC-005 § 4 (set, target, base rule). A refusal
 /// carries the scope to record it under.
 fn plan(
-    oplog: &Oplog,
+    oplog_lock: &Mutex<Oplog>,
     store: Option<&SnapshotStore>,
     worktree: &Path,
     who: &Who,
@@ -374,6 +374,11 @@ fn plan(
     confirm: &Confirmation<'_>,
     raw: &RawSide,
 ) -> Result<Planned, (TmRejectReason, Scope, Vec<OpRef>)> {
+    // The oplog is held while the stack and the target are read, and released before the
+    // confirmation gate: that walks the caller's process tree. The repo's write lock (held by
+    // the caller) is what keeps the plan from changing under it.
+    let log = lock(oplog_lock);
+    let oplog: &Oplog = &log;
     let key = worktree.to_string_lossy().into_owned();
     let requested = key.clone();
     let own_scope = Scope {
@@ -482,6 +487,8 @@ fn plan(
     let meta = store
         .meta(&target)
         .map_err(|_| refuse(TmRejectReason::TargetUnavailable))?;
+
+    drop(log);
 
     // Base permission rule (ADR-TMC-005 § 2), then the interactive confirmation of what it
     // asks to confirm (ADR-TMC-005 § 3).
@@ -747,18 +754,15 @@ pub fn undo_last(
         record_rejection(oplog, scope, target, who, channel, engine_mark, reason)
     };
 
-    let planned = {
-        let log = lock(oplog);
-        plan(
-            &log,
-            repo.store.as_deref(),
-            worktree,
-            who,
-            channel,
-            confirm,
-            &raw,
-        )
-    };
+    let planned = plan(
+        oplog,
+        repo.store.as_deref(),
+        worktree,
+        who,
+        channel,
+        confirm,
+        &raw,
+    );
     let planned = match planned {
         Ok(p) => p,
         Err((reason, scope, target)) => return Err(rejected(scope, target, reason)),
