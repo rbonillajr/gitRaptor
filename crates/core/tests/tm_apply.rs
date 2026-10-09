@@ -653,7 +653,9 @@ mod repo_intact {
         t.f().git(&["branch", "extra"]);
         let before_files = t.files();
         let (op, prior) = t.ready(&target);
-        // Armed after the captures, which read with gix: a hostile `core.worktree`.
+        // Armed after the captures, which read with gix: a hostile `core.worktree` moves the main
+        // worktree off its root, so the repo no longer owns what its `.git` names (#223 I-03):
+        // refused before anything is written or run.
         let elsewhere = t.f().root.join("elsewhere");
         std::fs::create_dir_all(&elsewhere).unwrap();
         t.f()
@@ -662,10 +664,23 @@ mod repo_intact {
         for m in std::fs::read_dir(&markers).unwrap() {
             std::fs::remove_file(m.unwrap().path()).unwrap();
         }
-        let result = t
+        let refused = t
             .applier(ApplyHooks::default())
             .apply(&op, &t.plan(&target, &prior));
         t.f().git(&["config", "--unset", "core.worktree"]);
+        assert!(
+            matches!(&refused, Err(ApplyError::Rejected(r)) if matches!(r.first(), Some(Refusal::Untrusted { .. }))),
+            "{refused:?}"
+        );
+        assert_eq!(t.files(), before_files);
+        // Without it, the application runs and still no configurable program does.
+        let (op, prior) = t.ready(&target);
+        for m in std::fs::read_dir(&markers).unwrap() {
+            std::fs::remove_file(m.unwrap().path()).unwrap();
+        }
+        let result = t
+            .applier(ApplyHooks::default())
+            .apply(&op, &t.plan(&target, &prior));
         let report = result.unwrap();
         assert!(report.paths.is_empty(), "{report:?}");
         assert_ne!(t.files(), before_files);
