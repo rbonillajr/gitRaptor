@@ -47,6 +47,7 @@ tags: [motor-local, deuda-tecnica, deteccion, atribucion, s3, seguridad, reflog,
   - macOS: volver a leer `pbi_start_tv*` después de `KERN_PROCARGS2`.
   - Si no coinciden, `None`.
 - **L-05**: decidir con el Arquitecto si se amplía la lectura a los `git` con cwd fuera del repo (más lectura bajo SEC-04) o se mantiene como hueco declarado.
+- **Coste del fail-safe** (medición de TS-GRP-008, 2026-10-09): con 25 `git status` por segundo en otro worktree, entre 3 y 11 de 20 commits del agente quedan sin atribuir. La causa es `foreign_redirected`: el `git` ajeno termina entre la lectura de su cwd y la de su argv, y "no se puede saber" cuenta en todo el repo. Hay que valorar con el Arquitecto si un `git` que ya no existe al leer su argv se trata como uno que termina (sin cwd legible), sin relajar el ajuste del coordinador.
 - **Fuera de alcance**: el origen `active-session` (diferido en TS-GRP-008) y separar `BranchUpdate` por su mensaje.
 
 ### Plan de Verificación
