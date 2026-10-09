@@ -101,6 +101,25 @@ pub struct ChannelConfig {
     /// The capabilities this daemon serves (ADR-GRP-016 § 1): every one of
     /// the contract. Tests play an older daemon with fewer.
     pub capabilities: Vec<&'static str>,
+    /// Tests only: replaces the confirmation checks of the Time Machine's
+    /// commands. It does not exist in a release build and is `None` in
+    /// production.
+    #[cfg(debug_assertions)]
+    #[doc(hidden)]
+    pub test_confirmation: Option<TestConfirmation>,
+}
+
+/// What a test makes the confirmation eligibility answer (debug builds only).
+#[cfg(debug_assertions)]
+#[doc(hidden)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TestConfirmation {
+    /// The caller passes every check.
+    Eligible,
+    /// The caller is refused for this reason.
+    Refused(gitraptor_api::messages::RefusalReason),
+    /// The business rule does not offer confirming another actor's work.
+    RuleForbids,
 }
 
 impl Default for ChannelConfig {
@@ -114,6 +133,8 @@ impl Default for ChannelConfig {
             min_protocol: gitraptor_api::MIN_COMPATIBLE_PROTOCOL,
             autostart: None,
             capabilities: gitraptor_api::capability::all().map(|c| c.name).collect(),
+            #[cfg(debug_assertions)]
+            test_confirmation: None,
         }
     }
 }

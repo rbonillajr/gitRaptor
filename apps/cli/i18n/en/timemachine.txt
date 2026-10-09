@@ -105,3 +105,5 @@ restore.reason.ref-moved = a branch moved meanwhile; nothing changed
 restore.reason.ref-in-use = a branch it would move is checked out in another worktree; nothing changed
 restore.reason.unsupported = restore is not supported here yet; nothing changed
 restore.reason.git-unavailable = the engine found no usable Git; nothing changed
+undo.reason.confirmation-unavailable-windows = that work belongs to an agent, and on Windows confirming another actor's work is not available yet: ask the agent to run raptor undo itself; nothing changed
+undo.reason.challenge-invalid = the confirmation expired or the work changed meanwhile; run raptor undo again; nothing changed

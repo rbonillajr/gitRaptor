@@ -17,6 +17,11 @@ pub const CAP_TM_KEPT_TEMPS: Capability = Capability::new("timemachine.kept-temp
 /// A connection without it never receives either (they are filtered out).
 pub const CAP_TM_TIMELINE_MANUAL: Capability = Capability::new("timemachine.timeline-manual");
 
+/// `timemachine.undo` and `timemachine.restore` accept `confirmation` and answer a
+/// `confirmation-required` rejection with `TmConfirmData`: the one-use challenge or why one
+/// cannot be given, and whose work it is; a bad token is `challenge-invalid`. Never over MCP.
+pub const CAP_TM_CONFIRMATION: Capability = Capability::new("timemachine.confirmation");
+
 /// A Time Machine command: not reserved (an agent may undo its own work,
 /// ADR-TMC-005 § 2), declared with its parameters and validated, and
 /// implemented by its story.
@@ -46,6 +51,10 @@ pub(super) const GROUP: Group = Group {
         time_machine(TM_RESTORE, false, RepoWrite::TimeMachine, "US-TMC-009"),
         time_machine(TM_TIMELINE, false, RepoWrite::None, "US-TMC-006"),
     ],
-    capabilities: &[CAP_TM_KEPT_TEMPS, CAP_TM_TIMELINE_MANUAL],
+    capabilities: &[
+        CAP_TM_KEPT_TEMPS,
+        CAP_TM_TIMELINE_MANUAL,
+        CAP_TM_CONFIRMATION,
+    ],
     ..Group::new("timemachine")
 };

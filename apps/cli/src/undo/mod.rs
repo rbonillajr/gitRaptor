@@ -14,6 +14,8 @@ use gitraptor_core::client::ClientError;
 use gitraptor_core::timemachine::restore::KEPT_REF_IN_RECREATED_WORKTREE;
 use serde_json::json;
 
+pub(crate) mod confirm;
+
 use crate::i18n::t;
 use crate::{engine, error_text, shown};
 
@@ -157,6 +159,8 @@ fn reason_key(reason: TmRejectReason) -> &'static str {
         TmRejectReason::RefInUse => "undo.reason.ref-in-use",
         TmRejectReason::Unsupported => "undo.reason.unsupported",
         TmRejectReason::GitUnavailable => "undo.reason.git-unavailable",
+        TmRejectReason::ChallengeInvalid => "undo.reason.challenge-invalid",
+        TmRejectReason::ConfirmationUnavailable => "undo.reason.confirmation-unavailable-windows",
     }
 }
 
