@@ -76,12 +76,22 @@ pub fn secrets_in(text: &str, secrets: &Secrets) -> Vec<String> {
                     .map(str::to_owned)
             })
             .unwrap_or_default();
-        if text.contains(value.as_str()) || (!escaped.is_empty() && text.contains(&escaped)) {
+        // A part of an answer is cut at its bound, so a canary cut in the middle still counts:
+        // its first characters are enough (long values only, or a short one would match noise).
+        let head: String = value.chars().take(CUT_PREFIX_CHARS).collect();
+        let cut = value.chars().count() >= CUT_PREFIX_MIN_CHARS && text.contains(&head);
+        if text.contains(value.as_str()) || (!escaped.is_empty() && text.contains(&escaped)) || cut
+        {
             names.push(name.clone());
         }
     }
     names
 }
+
+/// How much of a long canary identifies it when the answer cut it, and how long a canary must be
+/// for that to apply.
+const CUT_PREFIX_CHARS: usize = 12;
+const CUT_PREFIX_MIN_CHARS: usize = 20;
 
 /// Prefixes that must be followed by at least 16 characters of `[A-Za-z0-9_-]`.
 const PREFIXED: [&str; 10] = [
@@ -132,6 +142,20 @@ pub fn token_shapes(text: &str) -> Vec<&'static str> {
     if pem {
         shapes.push("-----BEGIN PRIVATE KEY");
     }
+    // A password in a URL (SEC-05 forbids userinfo): `scheme://user:password@host`.
+    let userinfo = text.match_indices("://").any(|(at, _)| {
+        let rest = &text[at + 3..];
+        let authority = rest
+            .split(|c: char| matches!(c, '/' | '?' | '#' | '"' | '\\') || c.is_whitespace())
+            .next()
+            .unwrap_or_default();
+        authority
+            .split_once('@')
+            .is_some_and(|(info, _)| info.split_once(':').is_some_and(|(_, pw)| !pw.is_empty()))
+    });
+    if userinfo {
+        shapes.push("://user:password@");
+    }
     shapes
 }
 
@@ -154,4 +178,30 @@ pub fn stderr_fixed_codes(stderr: &str) -> Result<(), usize> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod shape_tests {
+    use super::*;
+
+    #[test]
+    fn a_password_in_a_url_is_a_token_shape() {
+        assert_eq!(
+            token_shapes(r#"{"remote":"https://bot:hunter2@example.com/x.git"}"#),
+            ["://user:password@"]
+        );
+        assert!(token_shapes("https://example.com/a@b:c").is_empty());
+        assert!(token_shapes("https://user@example.com/x.git").is_empty());
+    }
+
+    #[test]
+    fn a_canary_cut_by_a_bound_is_still_found() {
+        let secrets = Secrets(vec![(
+            "c".into(),
+            "ghp_0123456789abcdefghijABCDEFGHIJ0123".into(),
+        )]);
+        assert_eq!(secrets_in("text ghp_0123456789abc", &secrets), ["c"]);
+        let short = Secrets(vec![("s".into(), "short-value".into())]);
+        assert!(secrets_in("short-val", &short).is_empty());
+    }
 }
