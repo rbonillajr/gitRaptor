@@ -105,3 +105,5 @@ restore.reason.ref-moved = una rama se movió mientras tanto; nada cambió
 restore.reason.ref-in-use = una rama que movería está en uso en otro worktree; nada cambió
 restore.reason.unsupported = la restauración todavía no está soportada aquí; nada cambió
 restore.reason.git-unavailable = el motor no encontró un Git utilizable; nada cambió
+undo.reason.confirmation-unavailable-windows = ese trabajo es de un agente y en Windows todavía no se puede confirmar trabajo de otro actor: pide al agente que ejecute él mismo raptor undo; nada cambió
+undo.reason.challenge-invalid = la confirmación caducó o el trabajo cambió mientras tanto; ejecuta raptor undo otra vez; nada cambió

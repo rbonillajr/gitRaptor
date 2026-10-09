@@ -39,7 +39,7 @@ pub use backend::{
     DaemonBackend, OperationCatalog, OperationsWiring, SnapshotterLayer, TimeMachineBackend,
     TmRepos,
 };
-pub use challenge::{Binding, ChallengeBook, ChallengeError, plan_hash};
+pub use challenge::{Binding, CHALLENGE_TTL, ChallengeBook, ChallengeError, plan_hash};
 pub use scope::{McpAllowlist, McpRepos, NoMcpRepos, ProtectedBackend, RepoHandle, ScopeError};
 
 /// Default deadline of the prior snapshot.

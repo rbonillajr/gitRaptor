@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::actor::Actor;
 use crate::catalog::{Layer, OperationOutcome};
+use crate::messages::RefusalReason;
 use crate::{Untrusted, UntrustedName};
 
 /// Most keys in `operation.prepare` arguments.
@@ -226,6 +227,12 @@ pub enum TmRejectReason {
     Unsupported,
     /// The daemon found no usable Git.
     GitUnavailable,
+    /// The confirmation token was unknown, reused, expired, of another connection or
+    /// process, or of another plan (only with `CAP_TM_CONFIRMATION`).
+    ChallengeInvalid,
+    /// Confirming another actor's work is not offered on this platform yet
+    /// (BR-TMC-AUTH-001, MVP).
+    ConfirmationUnavailable,
 }
 
 /// `data` of an `OPERATION_REJECTED` error of a Time Machine command.
@@ -236,6 +243,64 @@ pub struct TmRejectedData {
     /// The rejected request as recorded in the oplog, when it was.
     #[serde(default)]
     pub operation_id: Option<String>,
+}
+
+/// Most agents a confirmation lists.
+pub const MAX_CONFIRM_OWNERS: usize = 8;
+
+/// A one-use confirmation challenge (ADR-TMC-005 § 3): send `token` back as `confirmation`
+/// in the same request, on the same connection, within `expires_in_ms`.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TmChallenge {
+    /// 32 lowercase hex characters.
+    pub token: String,
+    pub expires_in_ms: u64,
+}
+
+// The token is a one-use credential: it never reaches a log through `{:?}`.
+impl std::fmt::Debug for TmChallenge {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TmChallenge")
+            .field("token", &"<hidden>")
+            .field("expires_in_ms", &self.expires_in_ms)
+            .finish()
+    }
+}
+
+/// `data` of an `OPERATION_REJECTED` of `timemachine.undo`/`restore` for a full connection
+/// with `CAP_TM_CONFIRMATION`, when the reason is `confirmation-required` or
+/// `challenge-invalid`. A superset of [`TmRejectedData`]: any rejection of these methods
+/// parses as this type.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TmConfirmData {
+    pub reason: TmRejectReason,
+    #[serde(default)]
+    pub operation_id: Option<String>,
+    /// Issued only to a caller that passed the daemon's checks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub challenge: Option<TmChallenge>,
+    /// Why no challenge: `unsupported`, `no-controlling-terminal`, `agent-ancestry`,
+    /// `daemon-descendant`, ...
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cannot_confirm: Option<RefusalReason>,
+    /// Agents whose work needs the confirmation, once each, at most `MAX_CONFIRM_OWNERS`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub owners: Vec<Actor>,
+    /// Undo only: what it would take back.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub undone_operation_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub undone_subtype: Option<Untrusted>,
+}
+
+impl TmConfirmData {
+    /// Only `reason` and `operation_id`: serializes exactly like [`TmRejectedData`].
+    pub fn rejected(reason: TmRejectReason, operation_id: Option<String>) -> Self {
+        let _ = (reason, operation_id);
+        todo!("phase B: build the reason-only form")
+    }
 }
 
 /// Why a path does not hold the state the undo returned to.
@@ -382,6 +447,9 @@ pub struct UndoParams {
     pub agent: Option<String>,
     #[serde(default)]
     pub surface: Option<Surface>,
+    /// The token of a challenge this connection received (`CAP_TM_CONFIRMATION`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confirmation: Option<String>,
 }
 
 /// `timemachine.redo` parameters (US-TMC-003).
@@ -406,6 +474,9 @@ pub struct RestoreParams {
     pub snapshot_id: String,
     #[serde(default)]
     pub surface: Option<Surface>,
+    /// The token of a challenge this connection received (`CAP_TM_CONFIRMATION`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confirmation: Option<String>,
 }
 
 /// Entries a timeline answers by default.
@@ -880,6 +951,7 @@ mod tests {
             worktree: None,
             snapshot_id: "../x".into(),
             surface: None,
+            confirmation: None,
         };
         assert_eq!(restore.validate().unwrap_err().field, "snapshot_id");
         let mut run = crate::catalog::PrepareParams {

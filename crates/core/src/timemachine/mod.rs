@@ -4,6 +4,7 @@
 
 pub mod apply;
 pub mod chaos;
+pub mod confirm;
 pub mod continuous;
 pub mod engine;
 pub mod kept;

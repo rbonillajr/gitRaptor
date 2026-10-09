@@ -232,7 +232,7 @@ fn protection(point: Option<&SnapshotView>) -> Protection {
 }
 
 /// A requester as it was recorded: by its name. The kind is not kept with it (G4).
-fn recorded_actor(requester: &Requester) -> Actor {
+pub(crate) fn recorded_actor(requester: &Requester) -> Actor {
     match requester {
         Requester::Agent { name, origin, .. } => Actor::Agent {
             kind: AgentKind::Other,
