@@ -93,7 +93,7 @@ Ver el Brief y la Enmienda (2026-10-08) de ADR-GRD-003: regla `policy.config-pro
 
 Implementado en: PR #217. Brief: [Brief de implementación](../../../../dev-briefs/layered-config.md).
 
-Los seis escenarios y el escenario de la configuración local (un agente que la edita para relajar una regla: la regla efectiva no cambia y queda un aviso con su actor) están cubiertos por `apps/cli/tests/guard_us_grd_012.rs`, `crates/core/tests/us_grd_012_config_guard.rs` y `us_grd_012_config_bypass.rs` (verificado en macOS; Linux lo cubre el CI de ubuntu; Windows: **Pendiente: etapa de validación multiplataforma**, XP-39).
+Los seis escenarios y el escenario de la configuración local (un agente que la edita para relajar una regla: la regla efectiva no cambia y queda un aviso con su actor) están cubiertos por `apps/cli/tests/guard_us_grd_012.rs`, `crates/core/tests/us_grd_012_config_guard.rs` y `us_grd_012_config_bypass.rs` (verificado en macOS; Linux lo cubre el CI de ubuntu; Windows: **Pendiente: etapa de validación multiplataforma**, XP-40).
 
 Decisiones y límites declarados:
 
