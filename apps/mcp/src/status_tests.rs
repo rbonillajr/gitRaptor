@@ -658,7 +658,16 @@ fn every_repo_text_in_the_status_is_marked() {
         };
         for at in names {
             let (text, body) = marked(at);
-            assert_eq!(body.chars().count(), 100, "{what}: {at}");
+            // The names nested in `here` and `repo` of the default answer are cut shorter so it
+            // fits RES-MCP-02 (MAX_MCP_DEFAULT_NAME_CHARS); everything else keeps the 100 bound.
+            let want = if what == "the default status"
+                && (at.starts_with("/here") || at.starts_with("/repo"))
+            {
+                gitraptor_api::mcp_view::MAX_MCP_DEFAULT_NAME_CHARS
+            } else {
+                100
+            };
+            assert_eq!(body.chars().count(), want, "{what}: {at}");
             assert_eq!(text["truncated"], true, "{what}: {at}");
         }
         for at in paths {
