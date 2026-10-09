@@ -245,6 +245,28 @@ pub struct TmRejectedData {
     pub operation_id: Option<String>,
 }
 
+/// The token a client sends back to confirm (`confirmation`). A one-use credential: its `Debug`
+/// hides it, so a request logged with `{:?}` never carries it. On the wire it is a plain string.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(transparent)]
+pub struct ConfirmationToken(String);
+
+impl ConfirmationToken {
+    pub fn new(token: impl Into<String>) -> Self {
+        Self(token.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Debug for ConfirmationToken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ConfirmationToken(<hidden>)")
+    }
+}
+
 /// Most agents a confirmation lists.
 pub const MAX_CONFIRM_OWNERS: usize = 8;
 
@@ -456,7 +478,7 @@ pub struct UndoParams {
     pub surface: Option<Surface>,
     /// The token of a challenge this connection received (`CAP_TM_CONFIRMATION`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub confirmation: Option<String>,
+    pub confirmation: Option<ConfirmationToken>,
 }
 
 /// `timemachine.redo` parameters (US-TMC-003).
@@ -483,7 +505,7 @@ pub struct RestoreParams {
     pub surface: Option<Surface>,
     /// The token of a challenge this connection received (`CAP_TM_CONFIRMATION`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub confirmation: Option<String>,
+    pub confirmation: Option<ConfirmationToken>,
 }
 
 /// Entries a timeline answers by default.
@@ -779,7 +801,7 @@ fn check_confirmation(token: Option<&str>) -> Result<(), Invalid> {
 
 impl UndoParams {
     pub fn validate(&self) -> Result<(), Invalid> {
-        check_confirmation(self.confirmation.as_deref())?;
+        check_confirmation(self.confirmation.as_ref().map(ConfirmationToken::as_str))?;
         let selectors = [
             self.operation_id.is_some(),
             self.since.is_some(),
@@ -816,7 +838,7 @@ impl RedoParams {
 impl RestoreParams {
     pub fn validate(&self) -> Result<(), Invalid> {
         check_oplog_id("snapshot_id", &self.snapshot_id)?;
-        check_confirmation(self.confirmation.as_deref())
+        check_confirmation(self.confirmation.as_ref().map(ConfirmationToken::as_str))
     }
 }
 
@@ -1236,5 +1258,32 @@ mod tests {
             .unwrap()
             .insert("extra".into(), json!(true));
         assert!(serde_json::from_value::<RestoreResult>(v).is_err());
+    }
+}
+
+#[cfg(test)]
+mod confirmation_token_tests {
+    use super::*;
+
+    const TOKEN: &str = "0123456789abcdef0123456789abcdef";
+
+    #[test]
+    fn the_params_debug_never_shows_the_token() {
+        let undo: UndoParams =
+            serde_json::from_value(serde_json::json!({ "confirmation": TOKEN })).unwrap();
+        let restore: RestoreParams = serde_json::from_value(serde_json::json!({
+            "snapshot_id": "00000000-0000-0000-0000-000000000001",
+            "confirmation": TOKEN,
+        }))
+        .unwrap();
+        for shown in [format!("{undo:?}"), format!("{restore:?}")] {
+            assert!(!shown.contains(TOKEN), "{shown}");
+            assert!(shown.contains("<hidden>"), "{shown}");
+        }
+        // The wire format is the plain string.
+        assert_eq!(
+            serde_json::to_value(&undo).unwrap()["confirmation"],
+            serde_json::json!(TOKEN)
+        );
     }
 }
