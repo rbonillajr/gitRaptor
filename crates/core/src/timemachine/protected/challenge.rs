@@ -53,14 +53,14 @@ pub enum ChallengeError {
     NoRandomness,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct Live {
     token: [u8; 16],
     binding: Binding,
     issued: Instant,
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 struct Book {
     /// At most one per connection.
     live: HashMap<u64, Live>,
@@ -68,9 +68,20 @@ struct Book {
 }
 
 /// The challenges of the daemon.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct ChallengeBook {
     book: Mutex<Book>,
+}
+
+/// Counts only: a token never reaches a log through `{:?}`.
+impl std::fmt::Debug for ChallengeBook {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let book = self.lock();
+        f.debug_struct("ChallengeBook")
+            .field("live", &book.live.len())
+            .field("spent", &book.spent.len())
+            .finish()
+    }
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -86,6 +97,12 @@ fn unhex(text: &str) -> Option<[u8; 16]> {
         *byte = u8::from_str_radix(&text[2 * i..2 * i + 2], 16).ok()?;
     }
     Some(out)
+}
+
+/// Compares two tokens without stopping at the first difference, so the time taken does not
+/// tell a guesser how much of a token was right.
+fn ct_eq(a: &[u8; 16], b: &[u8; 16]) -> bool {
+    a.iter().zip(b).fold(0u8, |diff, (x, y)| diff | (x ^ y)) == 0
 }
 
 impl ChallengeBook {
@@ -129,14 +146,14 @@ impl ChallengeBook {
     ) -> Result<(), ChallengeError> {
         let token = unhex(&token.to_ascii_lowercase()).ok_or(ChallengeError::Unknown)?;
         let mut book = self.lock();
-        if book.spent.contains(&token) {
+        if book.spent.iter().any(|spent| ct_eq(spent, &token)) {
             return Err(ChallengeError::Reused);
         }
         // Issued to another connection: consume it there too.
         let owner = book
             .live
             .iter()
-            .find(|(_, l)| l.token == token)
+            .find(|(_, l)| ct_eq(&l.token, &token))
             .map(|(c, _)| *c);
         let Some(owner) = owner else {
             return Err(ChallengeError::Unknown);
@@ -181,6 +198,17 @@ mod tests {
             pid: 30,
             start_us: 300,
             plan_hash: plan_hash(plan),
+        }
+    }
+
+    #[test]
+    fn tokens_compare_by_every_byte() {
+        let a = [7u8; 16];
+        assert!(ct_eq(&a, &a));
+        for i in 0..16 {
+            let mut b = a;
+            b[i] ^= 0x80;
+            assert!(!ct_eq(&a, &b), "a difference at byte {i} went unseen");
         }
     }
 
