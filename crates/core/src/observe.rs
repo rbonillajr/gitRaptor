@@ -493,7 +493,7 @@ pub fn linked_is_trusted_in(common_dir: &Path, id: &str, root: &Path, home: Opti
     {
         return false;
     }
-    let Ok(text) = std::fs::read_to_string(root.join(".git")) else {
+    let Some(text) = read_link_file(&root.join(".git")) else {
         return false;
     };
     let Some(target) = text.trim().strip_prefix("gitdir:") else {
@@ -506,6 +506,23 @@ pub fn linked_is_trusted_in(common_dir: &Path, id: &str, root: &Path, home: Opti
         root.join(target)
     };
     canonical(&target) == canonical(&common_dir.join("worktrees").join(id))
+}
+
+/// The text of a `.git` link file: a regular file (never a symlink) of at most 4 KiB.
+fn read_link_file(path: &Path) -> Option<String> {
+    use std::io::Read;
+    const MAX: u64 = 4096;
+    let meta = std::fs::symlink_metadata(path).ok()?;
+    if !meta.file_type().is_file() || meta.len() > MAX {
+        return None;
+    }
+    let mut text = String::new();
+    std::fs::File::open(path)
+        .ok()?
+        .take(MAX)
+        .read_to_string(&mut text)
+        .ok()?;
+    Some(text)
 }
 
 fn untrusted_link(path: &Path, id: &str) -> WorktreeRead {
@@ -604,7 +621,29 @@ pub fn read_worktree(path: &Path, main: bool, admin_name: Option<&str>) -> Workt
 /// The full list of changes of the worktree at `path`, sorted by path and area, with the counts
 /// by area: what [`read_worktree`] keeps bounded. Read only; a page of paths re-reads it because
 /// the published list is cut at [`MAX_WORKTREE_CHANGES`].
-pub fn all_changes(path: &Path) -> Result<(ChangeCounts, Vec<FileChangeView>), ReadError> {
+///
+/// Unlike [`read_worktree`], which opens whatever the root holds, this refuses a root whose
+/// `.git` is not what the allowlisted repo has: a symlink, or for a main worktree anything but a
+/// real directory, would make the engine open a repo the allowlist never named. A linked
+/// worktree's `.git` is a regular file, and its link back to the repo is checked by the caller
+/// through [`linked_is_trusted_in`]. `read_worktree` shares that class of gap; it is left as is
+/// here and reported apart.
+pub fn all_changes(
+    path: &Path,
+    main: bool,
+) -> Result<(ChangeCounts, Vec<FileChangeView>), ReadError> {
+    let kind = std::fs::symlink_metadata(path.join(".git")).map(|m| m.file_type());
+    let real = match &kind {
+        Ok(kind) if kind.is_symlink() => false,
+        Ok(kind) if main => kind.is_dir(),
+        Ok(kind) => kind.is_file(),
+        Err(_) => true,
+    };
+    if !real {
+        return Err(ReadError::Untrusted(
+            ".git is not what the repo of this worktree has".into(),
+        ));
+    }
     let reader = RepoReader::open(path, &ReaderOptions::default())?;
     Ok(changes(&reader.status()?))
 }
