@@ -578,8 +578,7 @@ pub struct TimelineEntry {
     /// For a Git event without an agent, the agent it is inferred to come from,
     /// checked against the commit's trailer: a hint shown as "inferred", never an
     /// attribution. Only with the capability `timemachine.timeline-inferred`.
-    // Stub: still serialized when absent; the wire rule lands with the feature.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub inferred: Option<crate::messages::InferredAgent>,
     pub attribution: Attribution,
     pub protection: Protection,

@@ -58,6 +58,7 @@ pub(super) const GROUP: Group = Group {
         CAP_TM_KEPT_TEMPS,
         CAP_TM_TIMELINE_MANUAL,
         CAP_TM_CONFIRMATION,
+        CAP_TM_TIMELINE_INFERRED,
     ],
     ..Group::new("timemachine")
 };
