@@ -21,6 +21,9 @@ pub const CAP_TM_TIMELINE_MANUAL: Capability = Capability::new("timemachine.time
 /// `confirmation-required` rejection with `TmConfirmData`: the one-use challenge or why one
 /// cannot be given, and whose work it is; a bad token is `challenge-invalid`. Never over MCP.
 pub const CAP_TM_CONFIRMATION: Capability = Capability::new("timemachine.confirmation");
+/// `timemachine.timeline` serves `inferred` on the entries of Git events
+/// without an agent. A connection without it never receives the field.
+pub const CAP_TM_TIMELINE_INFERRED: Capability = Capability::new("timemachine.timeline-inferred");
 
 /// A Time Machine command: not reserved (an agent may undo its own work,
 /// ADR-TMC-005 § 2), declared with its parameters and validated, and

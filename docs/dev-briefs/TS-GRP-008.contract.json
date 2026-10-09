@@ -189,8 +189,7 @@
     "deny_paths": [
       "docs/ARTIFACTS.md",
       "crates/git/src/tm_write/**",
-      "docs/architecture/decisions/ADR-GRD-008-factor-autenticacion-fuera-de-banda.md",
-      "crates/core/src/detect/procs.rs"
+      "docs/architecture/decisions/ADR-GRD-008-factor-autenticacion-fuera-de-banda.md"
     ],
     "allow_dependency_changes": false
   },

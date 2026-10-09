@@ -371,6 +371,7 @@ pub fn build_timeline_from(
                     utc_offset_s: now.1,
                     worktrees: r.scope.worktrees.iter().map(Untrusted::new).collect(),
                     actor,
+                    inferred: None,
                     attribution,
                     protection: protection(point),
                     files: ChangedFiles::Unavailable,
@@ -426,6 +427,7 @@ pub fn build_timeline_from(
                 utc_offset_s: now.1,
                 worktrees: root.map(Untrusted::new).into_iter().collect(),
                 actor,
+                inferred: None,
                 attribution: Attribution::Recorded,
                 protection: Protection {
                     level: ProtectionLevel::Manual,
@@ -476,6 +478,8 @@ pub fn build_timeline_from(
                     utc_offset_s: ev.utc_offset_s,
                     worktrees: vec![ev.worktree.clone()],
                     actor: ev.actor.clone(),
+                    // Stub: the event's hint is not carried yet.
+                    inferred: None,
                     attribution: Attribution::Current,
                     protection: protection(point),
                     files: ChangedFiles::Unavailable,
@@ -508,6 +512,13 @@ pub fn without_manual(result: &mut TimelineResult) {
             entry.protection.level = ProtectionLevel::Observation;
         }
     }
+}
+
+/// Removes the inferred hint from every entry: for a connection without
+/// `timemachine.timeline-inferred`.
+pub fn without_inferred(result: &mut TimelineResult) {
+    // Stub: the hint is not removed yet.
+    let _ = result;
 }
 
 /// The events each worktree root has that an operation of GitRaptor caused. A worktree whose raw
@@ -705,6 +716,10 @@ fn fill_files_with(
         };
     }
 }
+
+#[cfg(test)]
+#[path = "timeline_inferred_tests.rs"]
+mod inferred_tests;
 
 #[cfg(test)]
 mod tests {

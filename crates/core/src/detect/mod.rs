@@ -179,6 +179,60 @@ pub enum S3Outcome {
     Hook(PresentSession),
 }
 
+/// Where a foreign `git` counts for one Git event.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum S3Scope {
+    /// Only a foreign `git` whose folder is in the event's worktree, plus the
+    /// daemon's, the ones placed by an ancestor, the ones in the common dir
+    /// and the ones that redirect their target or cannot be read.
+    Worktree,
+    /// A foreign `git` whose folder is anywhere in the repo.
+    Repo,
+}
+
+impl S3Scope {
+    /// Stable text of the `scope` field of `s3_evidence`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Worktree => "worktree",
+            Self::Repo => "repo",
+        }
+    }
+}
+
+/// What one S3 evaluation counted, for the dogfooding review. Integers only:
+/// never a path, a name, a pid or an argv. Each counts (sample, `git`) pairs
+/// of the window, so a `git` seen in two samples counts twice.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct S3Counts {
+    /// `git`s of a session whose folder is in the event's worktree (evidence).
+    pub sessions_wt: u32,
+    /// Foreign `git`s whose readable folder is in the event's worktree.
+    pub foreign_wt: u32,
+    /// Foreign `git`s whose readable folder is in another worktree of the
+    /// repo: foreign only with `S3Scope::Repo`.
+    pub foreign_other_wt: u32,
+    /// The daemon's own `git`s in the repo or exiting.
+    pub foreign_daemon: u32,
+    /// Foreign `git`s placed by the folder of a live ancestor, in the repo.
+    pub foreign_by_ancestor: u32,
+    /// Foreign `git`s whose folder is in the common Git dir.
+    pub foreign_gitdir: u32,
+    /// Foreign `git`s in the repo that redirect their target, or whose argv
+    /// or environment could not be read.
+    pub foreign_redirected: u32,
+    /// `git`s that started after the write: not evidence and not foreign.
+    pub gits_after_notice: u32,
+}
+
+/// The S3 (or S4) outcome of one event and what it counted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct S3Evidence {
+    pub outcome: S3Outcome,
+    /// Zero for `NoSession` and `Hook`: the S3 loop did not run.
+    pub counts: S3Counts,
+}
+
 /// Counters for the dogfooding review (SPIKE-GRP-001).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Diagnostics {
@@ -570,8 +624,25 @@ impl Detector {
     /// The S4 and S3 rules for a Git event of `worktree` observed in the
     /// window that opened at `t_recv` and flushed at `t_flush` (monotonic
     /// marks of the batch). `moved` is the branch move of the event, which
-    /// only S4 reads.
+    /// only S4 reads. `scope` says where a foreign `git` counts.
     pub fn evidence(
+        &self,
+        repo_id: &str,
+        worktree: &Path,
+        scope: S3Scope,
+        moved: Option<RefMove<'_>>,
+        t_recv: u64,
+        t_flush: u64,
+    ) -> S3Evidence {
+        // Stub: the scope and the counters are not applied yet.
+        let _ = scope;
+        S3Evidence {
+            outcome: self.outcome(repo_id, worktree, moved, t_recv, t_flush),
+            counts: S3Counts::default(),
+        }
+    }
+
+    fn outcome(
         &self,
         repo_id: &str,
         worktree: &Path,

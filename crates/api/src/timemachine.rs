@@ -575,6 +575,12 @@ pub struct TimelineEntry {
     pub worktrees: Vec<Untrusted>,
     /// An agent or `unattributed`, nothing else.
     pub actor: Actor,
+    /// For a Git event without an agent, the agent it is inferred to come from,
+    /// checked against the commit's trailer: a hint shown as "inferred", never an
+    /// attribution. Only with the capability `timemachine.timeline-inferred`.
+    // Stub: still serialized when absent; the wire rule lands with the feature.
+    #[serde(default)]
+    pub inferred: Option<crate::messages::InferredAgent>,
     pub attribution: Attribution,
     pub protection: Protection,
     pub files: ChangedFiles,
@@ -1041,6 +1047,7 @@ mod tests {
             utc_offset_s: 0,
             worktrees: vec![Untrusted::new("/r")],
             actor,
+            inferred: None,
             attribution,
             protection: Protection {
                 level: ProtectionLevel::None,

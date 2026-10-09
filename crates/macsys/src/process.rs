@@ -44,6 +44,23 @@ pub fn parse_procargs2(area: &[u8]) -> Option<Vec<OsString>> {
     Some(out)
 }
 
+/// Whether the `git` `pid` redirects its target (`-C`, `--git-dir`, `--work-tree` before the
+/// subcommand, or `GIT_DIR`, `GIT_WORK_TREE`, `GIT_COMMON_DIR` in its environment). `None` when
+/// its area cannot be read. Only this boolean leaves: never an argument nor a variable's value.
+pub fn process_git_redirect(pid: u32) -> Option<bool> {
+    // Stub: not read yet.
+    let _ = pid;
+    None
+}
+
+/// [`process_git_redirect`] over a `KERN_PROCARGS2` area: the global options of the argv (after
+/// `argv[0]`), then the names of the environment that follows it. Anything malformed is `None`.
+pub fn parse_procargs2_git_redirect(area: &[u8]) -> Option<bool> {
+    // Stub: the rule is not written yet.
+    let _ = area;
+    None
+}
+
 /// A process as the detector's table needs it: identity `(pid, start_us)` and parent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProcBrief {
@@ -130,6 +147,10 @@ fn os(bytes: &[u8]) -> OsString {
 fn os(bytes: &[u8]) -> OsString {
     String::from_utf8_lossy(bytes).into_owned().into()
 }
+
+#[cfg(test)]
+#[path = "process_redirect_tests.rs"]
+mod redirect_tests;
 
 #[cfg(test)]
 mod tests {
