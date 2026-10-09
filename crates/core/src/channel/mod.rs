@@ -15,6 +15,8 @@ mod conn;
 pub mod marks;
 #[cfg(any(unix, windows))]
 mod mcp_scope;
+#[cfg(any(unix, windows))]
+mod mcp_status;
 pub mod peer;
 pub mod requester;
 #[cfg(any(unix, windows))]
