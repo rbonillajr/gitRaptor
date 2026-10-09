@@ -268,7 +268,9 @@ impl Machine {
         person("add -- person.txt");
         person("commit -q -m 'person: change'");
         person("push -q origin feat-x");
-        person("commit -q --amend --no-edit");
+        // A new message: amended in the same second with the same message the hash would not change
+        // and there would be nothing to force-push (it happened on a fast CI runner).
+        person("commit -q --amend -m 'person: change, amended'");
     }
 
     /// A JSON line printed by `raptor <args>` ("demo"), through the pty of `script`.
