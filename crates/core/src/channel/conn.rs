@@ -43,7 +43,8 @@ use gitraptor_api::timemachine::{
     Invalid as TmInvalid, MAX_REPORTED_PATHS, MAX_REPORTED_REFS, McpRequesterView, NotRestored,
     NotRestoredReason, OperationRunResult, PriorFailedData, RedoParams, RequestChannel,
     RequesterView, ResolveParams, RestoreParams, RestoreResult, SnapshotParams, Surface,
-    TIMELINE_DEFAULT_LIMIT, TimelineParams, TmRejectedData, UndoParams, UndoResult, parse_since,
+    TIMELINE_DEFAULT_LIMIT, TimelineParams, TmConfirmData, TmRejectReason, TmRejectedData,
+    UndoParams, UndoResult, parse_since,
 };
 use gitraptor_git::{ReaderOptions, RepoReader};
 
@@ -65,6 +66,7 @@ use crate::executor::{
 use crate::profile::{Agent, AgentKind, AuditRow, Author};
 use crate::timemachine::apply::ApplyReport;
 use crate::timemachine::apply::{ApplyWarning, PathIssue};
+use crate::timemachine::confirm::Confirmation;
 use crate::timemachine::manual::{self, ManualError, QuotaHit};
 use crate::timemachine::oplog::Requester;
 use crate::timemachine::oplog::{AbsentStore, SnapshotRefs};
@@ -265,6 +267,10 @@ fn remove(ctx: &ServerCtx, id: u64) {
         let pos = table.entries.iter().position(|c| c.id == id);
         pos.map(|p| table.entries.remove(p))
     };
+    // A closed connection forgets its challenge: they would pile up otherwise.
+    if let Some(tm) = &ctx.time_machine {
+        tm.challenges.forget(id);
+    }
     if let Some(mut entry) = entry {
         entry.outbox.close();
         if let Some(writer) = entry.writer.take() {
@@ -2442,18 +2448,44 @@ enum McpScopeError {
     Identity,
 }
 
+/// The `data` of a Time Machine rejection: the confirmation's shape for a connection that was
+/// offered one and a reason that belongs to it, the plain one otherwise.
+fn rejection_data(
+    reason: TmRejectReason,
+    operation_id: Option<String>,
+    confirm: &Confirmation<'_>,
+) -> serde_json::Value {
+    let confirming = confirm.is_offered()
+        && matches!(
+            reason,
+            TmRejectReason::ConfirmationRequired | TmRejectReason::ChallengeInvalid
+        );
+    let value = if confirming {
+        serde_json::to_value(confirm.take_offer().map_or_else(
+            || TmConfirmData::rejected(reason, operation_id.clone()),
+            |offer| offer.into_data(reason, operation_id.clone()),
+        ))
+    } else {
+        serde_json::to_value(TmRejectedData {
+            reason,
+            operation_id: operation_id.clone(),
+        })
+    };
+    // Plain data cannot fail to serialize; the reason alone is the fail-closed answer.
+    value.unwrap_or_else(|_| serde_json::json!({ "reason": reason }))
+}
+
 /// An undo's failures as contract errors.
-fn undo_error(e: UndoError) -> ErrorObject {
+fn undo_error(e: UndoError, confirm: &Confirmation<'_>) -> ErrorObject {
     match e {
         UndoError::Rejected {
             reason,
             operation_id,
-        } => {
-            ErrorObject::new(code::OPERATION_REJECTED, "undo rejected").with_data(TmRejectedData {
-                reason,
-                operation_id,
-            })
-        }
+        } => ErrorObject::new(code::OPERATION_REJECTED, "undo rejected").with_data(rejection_data(
+            reason,
+            operation_id,
+            confirm,
+        )),
         UndoError::Prior {
             reason,
             operation_id,
@@ -2472,18 +2504,14 @@ fn undo_error(e: UndoError) -> ErrorObject {
 }
 
 /// A restore's failures as contract errors.
-fn restore_error(e: RestoreError) -> ErrorObject {
+fn restore_error(e: RestoreError, confirm: &Confirmation<'_>) -> ErrorObject {
     match e {
         RestoreError::NotFound => not_found_id(),
         RestoreError::Rejected {
             reason,
             operation_id,
-        } => ErrorObject::new(code::OPERATION_REJECTED, "restore rejected").with_data(
-            TmRejectedData {
-                reason,
-                operation_id,
-            },
-        ),
+        } => ErrorObject::new(code::OPERATION_REJECTED, "restore rejected")
+            .with_data(rejection_data(reason, operation_id, confirm)),
         RestoreError::Prior {
             reason,
             operation_id,
@@ -2749,6 +2777,61 @@ impl Connection<'_> {
             return Err(McpScopeError::Scope(ScopeError::NotObserved));
         }
         Ok(repo)
+    }
+
+    /// Whether this connection may be offered a confirmation challenge: a full connection that
+    /// asked for the capability. Never MCP (ADR-TMC-005 § 1).
+    fn confirmation_offered(&self) -> bool {
+        self.profile == ConnectionProfile::Full && self.has(methods::CAP_TM_CONFIRMATION.name)
+    }
+
+    /// `confirmation` without the capability, or over MCP, is a bad parameter: nothing is
+    /// resolved and nothing is recorded.
+    fn check_confirmation_param(&self, token: Option<&str>) -> Result<(), ErrorObject> {
+        if token.is_some() && !self.confirmation_offered() {
+            return Err(ErrorObject::new(
+                code::INVALID_PARAMS,
+                "confirmation: needs the timemachine.confirmation capability on a full connection",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Why this caller cannot confirm now, or `None`. Debug builds let a test replace the answer.
+    fn tm_confirm_refusal(&self) -> Option<RefusalReason> {
+        #[cfg(debug_assertions)]
+        if let Some(seam) = self.ctx.config.test_confirmation {
+            return match seam {
+                super::TestConfirmation::Eligible | super::TestConfirmation::RuleForbids => None,
+                super::TestConfirmation::Refused(why) => Some(why),
+            };
+        }
+        super::requester::confirmation_refusal(self.peer, &self.ctx.checks(), Some(&self.ctx.marks))
+    }
+
+    /// The confirmation side of a Time Machine request.
+    fn tm_confirmation<'a>(
+        &'a self,
+        challenges: &'a crate::timemachine::protected::ChallengeBook,
+        token: Option<&'a str>,
+        eligibility: &'a dyn Fn() -> Option<RefusalReason>,
+    ) -> Confirmation<'a> {
+        if !self.confirmation_offered() {
+            return Confirmation::unavailable();
+        }
+        let confirm = Confirmation::offered(
+            challenges,
+            self.id,
+            self.peer.pid,
+            self.peer.start_us,
+            token,
+            eligibility,
+        );
+        #[cfg(debug_assertions)]
+        if self.ctx.config.test_confirmation == Some(super::TestConfirmation::RuleForbids) {
+            return confirm.with_rule_allows(false);
+        }
+        confirm
     }
 
     fn caller(&self) -> Caller {
@@ -3021,6 +3104,7 @@ impl Connection<'_> {
     ) -> Result<serde_json::Value, ErrorObject> {
         let p: UndoParams = request.params()?;
         p.validate().map_err(tm_invalid)?;
+        self.check_confirmation_param(p.confirmation.as_deref())?;
         let selector = if p.since.is_some() {
             Some("US-TMC-010")
         } else if p.agent.is_some() {
@@ -3063,7 +3147,10 @@ impl Connection<'_> {
             engine: self.ctx.tm_engine.as_ref(),
             fallback_mark: i64::try_from(self.ctx.bus.snapshot().0).unwrap_or(i64::MAX),
         };
-        let done = undo_last(&repo, &r.who, oplog_channel(channel), &env).map_err(undo_error)?;
+        let eligibility = || self.tm_confirm_refusal();
+        let confirm = self.tm_confirmation(&tm.challenges, p.confirmation.as_deref(), &eligibility);
+        let done = undo_last(&repo, &r.who, oplog_channel(channel), &confirm, &env)
+            .map_err(|e| undo_error(e, &confirm))?;
         let result = undo_result(done, self.requester_view(&r, channel));
         let value = if self.is_mcp() {
             serde_json::to_value(result.for_mcp())
@@ -3083,6 +3170,7 @@ impl Connection<'_> {
     ) -> Result<serde_json::Value, ErrorObject> {
         let p: RestoreParams = request.params()?;
         p.validate().map_err(tm_invalid)?;
+        self.check_confirmation_param(p.confirmation.as_deref())?;
         let channel = self.request_channel(p.surface)?;
         let named = self.named_worktree(p.worktree.as_deref())?;
         let r = self.resolve()?;
@@ -3109,8 +3197,17 @@ impl Connection<'_> {
             engine: self.ctx.tm_engine.as_ref(),
             fallback_mark: i64::try_from(self.ctx.bus.snapshot().0).unwrap_or(i64::MAX),
         };
-        let done = restore_to(&repo, &p.snapshot_id, &r.who, oplog_channel(channel), &env)
-            .map_err(restore_error)?;
+        let eligibility = || self.tm_confirm_refusal();
+        let confirm = self.tm_confirmation(&tm.challenges, p.confirmation.as_deref(), &eligibility);
+        let done = restore_to(
+            &repo,
+            &p.snapshot_id,
+            &r.who,
+            oplog_channel(channel),
+            &confirm,
+            &env,
+        )
+        .map_err(|e| restore_error(e, &confirm))?;
         serde_json::to_value(restore_result(done, self.requester_view(&r, channel)))
             .map_err(|_| ErrorObject::new(code::INTERNAL, "serialization"))
     }
