@@ -1,0 +1,33 @@
+{
+  "id": "status-param-repo",
+  "title": "A repo parameter naming another repo is malformed and never echoed",
+  "threats": [
+    "MCP02",
+    "SEC-MCP-02",
+    "BR-MCP-VAL-005"
+  ],
+  "tier": "server",
+  "platforms": [
+    "macos",
+    "linux",
+    "windows"
+  ],
+  "send": [
+    {
+      "call": "status",
+      "arguments": {
+        "repo": "{other_repo}"
+      }
+    }
+  ],
+  "expect": {
+    "protocol_error": {
+      "code": -32602,
+      "message": "invalid-params",
+      "field": "repo"
+    }
+  },
+  "forbidden": [
+    "{other_repo}"
+  ]
+}
