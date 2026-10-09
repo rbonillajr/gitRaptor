@@ -405,7 +405,13 @@ fn rejected(result: Result<Value, ClientError>) -> (i64, Option<Value>) {
 fn reject_reason(result: Result<Value, ClientError>) -> TmRejectedData {
     let (code, data) = rejected(result);
     assert_eq!(code, code::OPERATION_REJECTED, "{data:?}");
-    serde_json::from_value(data.unwrap()).unwrap()
+    // With the confirmation capability a refusal to confirm carries more than the reason.
+    let data: gitraptor_api::timemachine::TmConfirmData =
+        serde_json::from_value(data.unwrap()).unwrap();
+    TmRejectedData {
+        reason: data.reason,
+        operation_id: data.operation_id,
+    }
 }
 
 /// One path of a worktree as Git can see it: a regular file (its exec bits

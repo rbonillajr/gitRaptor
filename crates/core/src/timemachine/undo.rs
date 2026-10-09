@@ -12,8 +12,9 @@
 //!
 //! Raw Git events of the engine are in the stack too (US-TMC-004): their
 //! target is the latest capture before them, and their owner the session the
-//! engine attributed them to. Prepared for later stories: redo (US-TMC-003), overlap (US-TMC-012), confirmation (US-TMC-013) and
-//! Guardrails (US-TMC-021) plug in at the marked points.
+//! engine attributed them to. Prepared for later stories: redo (US-TMC-003), overlap (US-TMC-012)
+//! and Guardrails (US-TMC-021) plug in at the marked points; the confirmation of US-TMC-013 is
+//! the gate right after the base rule.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -27,6 +28,7 @@ use gitraptor_git::tm_write::WriteContext;
 use gitraptor_git::{Invoker, ReaderOptions, RepoReader, SystemGit};
 
 use super::apply::{Applier, ApplyError, ApplyPlan, ApplyReport, PlanWorktree, RefScope, Refusal};
+use super::confirm::{Confirmation, PlanFacts, PlanKind};
 use super::continuous::{
     ANCHOR_SETTLE_LIMIT, CaptureDeps, anchor, await_moved_branches, branch_tips,
 };
@@ -236,6 +238,8 @@ struct Planned {
     worktrees: Vec<PlanWorktree>,
     refs: BTreeSet<String>,
     warnings: Vec<String>,
+    /// A confirmation challenge of this very plan was redeemed.
+    confirmed: bool,
 }
 
 /// The engine's side of an undo's plan (US-TMC-004): the worktree's raw Git
@@ -367,9 +371,11 @@ fn plan(
     worktree: &Path,
     who: &Who,
     channel: Channel,
+    confirm: &Confirmation<'_>,
     raw: &RawSide,
 ) -> Result<Planned, (TmRejectReason, Scope, Vec<OpRef>)> {
     let key = worktree.to_string_lossy().into_owned();
+    let requested = key.clone();
     let own_scope = Scope {
         worktrees: vec![key.clone()],
         refs: Vec::new(),
@@ -477,10 +483,26 @@ fn plan(
         .meta(&target)
         .map_err(|_| refuse(TmRejectReason::TargetUnavailable))?;
 
-    // Base permission rule (ADR-TMC-005 § 2).
-    permission(&who.requester, channel, &undone.requester).map_err(refuse)?;
-    // Next, in this order: confirmation (US-TMC-013), Guardrails
-    // (US-TMC-021) and overlap (US-TMC-012).
+    // Base permission rule (ADR-TMC-005 § 2), then the interactive confirmation of what it
+    // asks to confirm (ADR-TMC-005 § 3).
+    let facts = PlanFacts {
+        kind: PlanKind::Undo,
+        worktree: &requested,
+        requester: &who.requester,
+        channel,
+        target_snapshot: &target,
+        undone_id: Some(&undone.id),
+        undone_subtype: undone.subtype.as_deref(),
+        scope: &scope,
+        owners: std::slice::from_ref(&undone.requester),
+    };
+    let confirmed = confirm
+        .gate(
+            permission(&who.requester, channel, &undone.requester),
+            &facts,
+        )
+        .map_err(refuse)?;
+    // Next, in this order: Guardrails (US-TMC-021) and overlap (US-TMC-012).
 
     // Each worktree of the scope by its canonical root, as the daemon
     // recorded it, and still a worktree of this repo (the oplog is
@@ -554,6 +576,7 @@ fn plan(
         worktrees,
         refs,
         warnings,
+        confirmed,
     })
 }
 
@@ -654,6 +677,7 @@ pub fn undo_last(
     repo: &TmRepoHandle,
     who: &Who,
     channel: Channel,
+    confirm: &Confirmation<'_>,
     env: &UndoEnv<'_>,
 ) -> Result<UndoDone, UndoError> {
     let oplog = &repo.repo.oplog;
@@ -725,7 +749,15 @@ pub fn undo_last(
 
     let planned = {
         let log = lock(oplog);
-        plan(&log, repo.store.as_deref(), worktree, who, channel, &raw)
+        plan(
+            &log,
+            repo.store.as_deref(),
+            worktree,
+            who,
+            channel,
+            confirm,
+            &raw,
+        )
     };
     let planned = match planned {
         Ok(p) => p,
@@ -781,7 +813,7 @@ pub fn undo_last(
         worktree_paths,
         who: who.clone(),
         channel,
-        confirmed: false,
+        confirmed: planned.confirmed,
         target: Target::Undo(target_ref),
         warnings: planned.warnings.clone(),
         engine_mark,

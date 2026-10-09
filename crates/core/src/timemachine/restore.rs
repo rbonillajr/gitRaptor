@@ -36,6 +36,7 @@ use gitraptor_git::tm_write::WriteContext;
 use gitraptor_git::{ReaderOptions, RepoReader};
 
 use super::apply::{Applier, ApplyError, ApplyPlan, ApplyReport, PlanWorktree, RefScope};
+use super::confirm::{Confirmation, PlanFacts, PlanKind};
 use super::continuous::{ANCHOR_SETTLE_LIMIT, anchor, await_moved_branches};
 use super::engine::RawGitEvent;
 use super::oplog::{
@@ -279,6 +280,7 @@ pub fn restore_to(
     snapshot_id: &str,
     who: &Who,
     channel: Channel,
+    confirm: &Confirmation<'_>,
     env: &UndoEnv<'_>,
 ) -> Result<RestoreDone, RestoreError> {
     let oplog = &repo.repo.oplog;
@@ -590,12 +592,26 @@ pub fn restore_to(
         }
     }
 
-    // Base permission rule, over every owner.
-    if let Err(reason) = restore_permission(&who.requester, channel, &owners) {
-        return Err(reject(scope, engine_mark, reason));
-    }
-    // Next, in this order: the interactive confirmation, Guardrails and the
-    // overlap with other work, once each exists.
+    // Base permission rule, over every owner, then the interactive confirmation of what it asks
+    // to confirm (ADR-TMC-005 § 3).
+    let requested_root = root_key(worktree);
+    let facts = PlanFacts {
+        kind: PlanKind::Restore,
+        worktree: &requested_root,
+        requester: &who.requester,
+        channel,
+        target_snapshot: snapshot_id,
+        undone_id: None,
+        undone_subtype: None,
+        scope: &scope,
+        owners: &owners,
+    };
+    let confirmed = match confirm.gate(restore_permission(&who.requester, channel, &owners), &facts)
+    {
+        Ok(confirmed) => confirmed,
+        Err(reason) => return Err(reject(scope, engine_mark, reason)),
+    };
+    // Next, in this order: Guardrails and the overlap with other work, once each exists.
 
     // A branch checked out in a worktree outside the plan never moves: it
     // would change that worktree's history under its files.
@@ -651,7 +667,7 @@ pub fn restore_to(
         worktree_paths: roots.clone(),
         who: who.clone(),
         channel,
-        confirmed: false,
+        confirmed,
         target: Target::Snapshot(snapshot_id.to_owned()),
         warnings: recreate
             .iter()
