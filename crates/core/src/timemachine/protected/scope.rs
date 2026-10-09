@@ -30,6 +30,10 @@ pub enum ScopeError {
     UnattributedOverMcp,
     /// The operation declared a worktree that is not one of its repo's.
     ForeignWorktree,
+    /// The repo registers the folder, but its `.git` is not the repo's own (#223 I-03): a
+    /// swapped link, an unregistered admin entry or a symlink to outside. On the wire it is
+    /// `not-observed`, the frozen code for a folder of no observed repo (ADR-GRP-016).
+    Untrusted,
 }
 
 impl ScopeError {
@@ -40,6 +44,7 @@ impl ScopeError {
             Self::NotAllowlisted => "the repo is not in the MCP allowlist",
             Self::UnattributedOverMcp => "an unattributed requester cannot do this over MCP",
             Self::ForeignWorktree => "the operation's scope is outside its repo",
+            Self::Untrusted => "the worktree's .git is not the repo's own",
         }
     }
 }
@@ -101,6 +106,10 @@ pub struct RepoHandle {
     pub repo_id: String,
     /// The worktree the request resolved to.
     pub worktree: PathBuf,
+    /// The repo's canonical Git common directory, from the registry and never from a
+    /// worktree's `.git`: refs and objects are read from it, and a worktree is opened only
+    /// through it (`observe::open_registered_worktree`, #223 I-03).
+    pub common_dir: PathBuf,
     pub oplog: Arc<Mutex<Oplog>>,
     pub snapshotter: Arc<dyn PriorSnapshotter>,
 }
@@ -248,6 +257,7 @@ mod tests {
         let handle = |id: &str, wt: &str| RepoHandle {
             repo_id: id.into(),
             worktree: PathBuf::from(wt),
+            common_dir: PathBuf::from(wt).join(".git"),
             oplog: Arc::new(Mutex::new(Oplog::open(dirs, id, 1_000).unwrap().0)),
             snapshotter: Arc::new(NoSnap),
         };

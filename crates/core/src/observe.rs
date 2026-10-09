@@ -589,6 +589,59 @@ pub fn open_worktree(
     Ok(reader)
 }
 
+/// Every worktree the repo whose common directory is `common_dir` registers, read from that
+/// directory only: canonical root and, for a linked one, its name under `<common>/worktrees`
+/// (`None` for the main one, first; none for a bare repo). Nothing behind a worktree's `.git` is
+/// read: which roots belong to the repo is the repo's own word, never a worktree's.
+pub fn registered_worktrees(
+    common_dir: &Path,
+) -> Result<Vec<(PathBuf, Option<String>)>, ReadError> {
+    registered_in(&RepoReader::open(common_dir, &ReaderOptions::default())?)
+}
+
+/// [`registered_worktrees`] from a reader the caller already opened on the common directory.
+pub fn registered_in(reader: &RepoReader) -> Result<Vec<(PathBuf, Option<String>)>, ReadError> {
+    let mut out = Vec::new();
+    if !reader.is_bare()
+        && let Some(main) = reader.workdir()
+    {
+        out.push((canonical(&main), None));
+    }
+    for wt in reader.worktrees()? {
+        out.push((canonical(&wt.path), Some(wt.id)));
+    }
+    Ok(out)
+}
+
+/// Opens `root` only if it is one of the worktrees the repo at `common_dir` registers
+/// ([`registered_worktrees`]), through [`open_worktree`]: the one way the Time Machine opens a
+/// worktree (#223 I-03, NFR-01, NFR-02). A root the repo does not register, or whose `.git` the
+/// repo does not own, is `Untrusted` and nothing behind it is read; one that is not there is
+/// `Unavailable`.
+pub fn open_registered_worktree(common_dir: &Path, root: &Path) -> Result<RepoReader, ReadError> {
+    let registered = registered_worktrees(common_dir)?;
+    open_registered_in(common_dir, &registered, root)
+}
+
+/// [`open_registered_worktree`] against a list of [`registered_worktrees`] already read, so a
+/// caller opening several worktrees of one repo reads the list once.
+pub fn open_registered_in(
+    common_dir: &Path,
+    registered: &[(PathBuf, Option<String>)],
+    root: &Path,
+) -> Result<RepoReader, ReadError> {
+    if std::fs::symlink_metadata(root).is_err() {
+        return Err(ReadError::Unavailable("the worktree is not there".into()));
+    }
+    let root = canonical(root);
+    let Some((path, admin)) = registered.iter().find(|(p, _)| *p == root) else {
+        return Err(ReadError::Untrusted(
+            "the repo does not register this worktree".into(),
+        ));
+    };
+    open_worktree(common_dir, path, admin.is_none(), admin.as_deref())
+}
+
 /// The text of a `.git` link file: a regular file (never a symlink) of at most 4 KiB.
 fn read_link_file(path: &Path) -> Option<String> {
     use std::io::Read;

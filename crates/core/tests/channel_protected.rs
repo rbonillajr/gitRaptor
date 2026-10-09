@@ -443,6 +443,7 @@ fn start_with(setup: Setup) -> Running {
     let handle = |id: &str, oplog: &Arc<Mutex<Oplog>>, wt: &Path| RepoHandle {
         repo_id: id.into(),
         worktree: wt.to_owned(),
+        common_dir: wt.join(".git"),
         oplog: Arc::clone(oplog),
         snapshotter: Arc::new(Snap {
             oplog: Arc::clone(oplog),

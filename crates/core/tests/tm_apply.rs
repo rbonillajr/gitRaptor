@@ -129,6 +129,7 @@ impl Apply {
             &self.write,
             &self.env.oplog,
             self.f().repo.clone(),
+            gitraptor_core::observe::locate(&self.f().repo).unwrap(),
             self.f().profile.clone(),
         )
         .with_clock(|| 20)

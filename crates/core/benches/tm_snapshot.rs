@@ -203,7 +203,7 @@ impl Wt {
         self.mark += 1;
         CaptureRequest {
             level,
-            repo: repo.to_path_buf(),
+            common_dir: gitraptor_core::observe::locate(repo).unwrap(),
             worktrees: vec![WorktreeScope {
                 key: self.key.clone(),
                 path: self.path.clone(),

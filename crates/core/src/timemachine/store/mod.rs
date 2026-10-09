@@ -385,8 +385,9 @@ impl SnapshotStore {
         self.store.size_bytes()
     }
 
-    /// Seeds the store from the packs of the repo at `repo` (ADR-TMC-001 § 3). Runs in the
-    /// background; until it ends, a capture copies what it lacks.
+    /// Seeds the store from the packs of the repo at `repo` (ADR-TMC-001 § 3): the daemon passes
+    /// its common Git directory, from the registry. Runs in the background; until it ends, a
+    /// capture copies what it lacks.
     pub fn seed(&self, repo: &Path) -> Result<SeedReport, CaptureError> {
         let reader = RepoReader::open(repo, &ReaderOptions::default())?;
         Ok(self.store.seed_from(&reader, self.seed_limits)?)
@@ -405,9 +406,10 @@ impl SnapshotStore {
 
     /// Whether the store has the commit `HEAD` of `worktree` points to: once it does, a capture
     /// of it copies only what is new (ADR-TMC-001 § 3). An unborn or unreadable `HEAD` counts as
-    /// had: there is nothing to copy.
-    pub fn has_head_of(&self, worktree: &Path) -> bool {
-        let Ok(reader) = RepoReader::open(worktree, &ReaderOptions::default()) else {
+    /// had: there is nothing to copy. So does a worktree the repo at `common_dir` does not
+    /// register or own: nothing behind its `.git` is read (#223 I-03), and the capture refuses it.
+    pub fn has_head_of(&self, common_dir: &Path, worktree: &Path) -> bool {
+        let Ok(reader) = crate::observe::open_registered_worktree(common_dir, worktree) else {
             return true;
         };
         match reader.head().ok().and_then(|h| h.commit) {

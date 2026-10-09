@@ -17,7 +17,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use gitraptor_api::catalog::check_snapshot_label;
 use gitraptor_api::methods::QuotaWindow;
-use gitraptor_git::{ReaderOptions, RepoReader};
+use gitraptor_git::ReadError;
 
 use super::continuous::{CaptureDeps, FreeSpaceFloor};
 use super::engine::GitState;
@@ -73,6 +73,9 @@ pub fn expecting_root<R>(id: Option<(u64, u64)>, f: impl FnOnce() -> R) -> R {
 pub struct ManualAsk {
     pub repo_id: String,
     pub worktree: PathBuf,
+    /// The repo's common Git directory, from the registry: the worktree is read only if the repo
+    /// registers it and owns its `.git` (#223 I-03).
+    pub common_dir: PathBuf,
     /// Untrusted text: it is data, never a ref, a path, an argument or a log field.
     pub label: String,
     pub requester: Requester,
@@ -319,10 +322,11 @@ impl FreeSpaceProbe for VolumeProbe {
     }
 }
 
-/// Whether a Git operation is in progress in `worktree`. A worktree that cannot be read counts as
-/// in progress: the capture is refused rather than taken blind.
-fn operation_in_progress(worktree: &Path) -> bool {
-    RepoReader::open(worktree, &ReaderOptions::default())
+/// Whether a Git operation is in progress in `worktree` of the repo at `common_dir`. A worktree
+/// that cannot be read, or that the repo does not own, counts as in progress: the capture is
+/// refused rather than taken blind.
+fn operation_in_progress(common_dir: &Path, worktree: &Path) -> bool {
+    crate::observe::open_registered_worktree(common_dir, worktree)
         .map_or(true, |reader| reader.in_progress().is_some())
 }
 
@@ -390,7 +394,14 @@ fn capture_guarded(
     };
     let (root, key) =
         resolve_worktree(&ask.worktree).map_err(|e| ManualError::Capture(e.into()))?;
-    let registered = registered_worktrees(&root).unwrap_or_default();
+    // A worktree whose `.git` the repo does not own is refused before anything is recorded or
+    // read behind it (#223 I-03, NFR-01).
+    if let Err(e @ ReadError::Untrusted(_)) =
+        crate::observe::open_registered_worktree(&ask.common_dir, &root)
+    {
+        return Err(ManualError::Capture(e.into()));
+    }
+    let registered = registered_worktrees(&ask.common_dir).unwrap_or_default();
     let store_key = worktree_key(&registered, &root, 0);
 
     let Some(_recording) = store.manual().lock_recording(deadline) else {
@@ -413,15 +424,16 @@ fn capture_guarded(
     if floor.is_some_and(|f| f.crossed(store.path())) {
         return Err(ManualError::NoSpace);
     }
-    if operation_in_progress(&root) {
+    if operation_in_progress(&ask.common_dir, &root) {
         return Err(ManualError::InProgress);
     }
 
     let at_start = GitState::read(&root);
     let guarded = root.clone();
+    let common = ask.common_dir.clone();
     let req = CaptureRequest {
         level: SnapshotLevel::Manual,
-        repo: root.clone(),
+        common_dir: ask.common_dir.clone(),
         worktrees: vec![WorktreeScope {
             key: store_key,
             path: root.clone(),
@@ -434,7 +446,7 @@ fn capture_guarded(
         still_valid: Some(ValidityGuard(std::sync::Arc::new(move || {
             Instant::now() < deadline
                 && GitState::read(&guarded) == at_start
-                && !operation_in_progress(&guarded)
+                && !operation_in_progress(&common, &guarded)
         }))),
         give_way: None,
     };

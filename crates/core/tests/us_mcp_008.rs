@@ -54,6 +54,7 @@ fn ask(worktree: &Path, session: &str) -> ManualAsk {
     ManualAsk {
         repo_id: REPO_ID.into(),
         worktree: worktree.to_path_buf(),
+        common_dir: gitraptor_core::observe::locate(worktree).unwrap(),
         label: "before the migration".into(),
         requester: agent(session),
         channel: Channel::Mcp,
@@ -536,7 +537,7 @@ impl Daemon {
     fn prior(&self) -> String {
         let req = CaptureRequest {
             level: SnapshotLevel::GuaranteedPrior,
-            repo: self.f.repo.clone(),
+            common_dir: gitraptor_core::observe::locate(&self.f.repo).unwrap(),
             worktrees: vec![WorktreeScope {
                 key: "main".into(),
                 path: self.f.repo.clone(),

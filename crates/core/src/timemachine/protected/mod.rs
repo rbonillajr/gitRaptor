@@ -23,7 +23,6 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use gitraptor_api::timemachine::PriorFailure;
-use gitraptor_git::{ReaderOptions, RepoReader};
 
 use crate::channel::marks::ExecutorMarks;
 use crate::channel::peer::ProcSource;
@@ -111,11 +110,14 @@ pub struct StoreSnapshotter {
     pub store: Arc<SnapshotStore>,
     pub oplog: Arc<Mutex<Oplog>>,
     pub profile: ProfileDirs,
+    /// The repo's canonical common directory, from the registry: the capture reads refs from it
+    /// and opens a worktree only if the repo registers and owns it (#223 I-03).
+    pub common_dir: PathBuf,
 }
 
 impl PriorSnapshotter for StoreSnapshotter {
     fn prior(&self, req: &PriorRequest) -> Result<PriorSnapshot, PriorError> {
-        let registered = registered_worktrees(&req.repo).unwrap_or_default();
+        let registered = registered_worktrees(&self.common_dir).unwrap_or_default();
         let worktrees = req
             .worktrees
             .iter()
@@ -128,7 +130,7 @@ impl PriorSnapshotter for StoreSnapshotter {
             .collect();
         let capture = CaptureRequest {
             level: crate::timemachine::oplog::SnapshotLevel::GuaranteedPrior,
-            repo: req.repo.clone(),
+            common_dir: self.common_dir.clone(),
             worktrees,
             engine_mark: req.engine_mark,
             cause_operation: Some(req.operation_id.clone()),
@@ -145,22 +147,13 @@ impl PriorSnapshotter for StoreSnapshotter {
     }
 }
 
-/// Every worktree of the repo of `any_worktree`: canonical root and, for a
-/// linked one, its name under `.git/worktrees/`.
+/// Every worktree of the repo whose common directory is `common_dir`: canonical root and, for a
+/// linked one, its name under `.git/worktrees/`. Read from the common directory only, never
+/// from a worktree's `.git` ([`crate::observe::registered_worktrees`], #223 I-03).
 pub(crate) fn registered_worktrees(
-    any_worktree: &Path,
+    common_dir: &Path,
 ) -> Result<Vec<(PathBuf, Option<String>)>, gitraptor_git::ReadError> {
-    let reader = RepoReader::open(any_worktree, &ReaderOptions::default())?;
-    // Canonical: from a linked worktree gix reports `.git/worktrees/<id>/../..`.
-    let common = canonical(reader.common_dir());
-    let mut out = Vec::new();
-    if let Some(main) = common.parent().filter(|_| common.ends_with(".git")) {
-        out.push((canonical(main), None));
-    }
-    for wt in reader.worktrees()? {
-        out.push((canonical(&wt.path), Some(wt.id)));
-    }
-    Ok(out)
+    crate::observe::registered_worktrees(common_dir)
 }
 
 pub(crate) fn canonical(path: &Path) -> PathBuf {
@@ -402,7 +395,7 @@ impl ProtectedRequest {
         let mut worktree_paths = vec![repo.worktree.clone()];
         if !declared.worktrees.is_empty() {
             let registered =
-                registered_worktrees(&repo.worktree).map_err(|_| ScopeError::ForeignWorktree)?;
+                registered_worktrees(&repo.common_dir).map_err(|_| ScopeError::ForeignWorktree)?;
             for wt in declared.worktrees {
                 let wt = canonical(&wt);
                 if !registered.iter().any(|(p, _)| *p == wt) {

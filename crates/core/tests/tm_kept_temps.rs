@@ -80,7 +80,7 @@ fn interrupted(fx: &Fixture) -> (TempProfile, PathBuf, String, String, String) {
     let oplog = Mutex::new(Oplog::open(&dirs, &entry.repo_id, 1).unwrap().0);
     let request = |level| CaptureRequest {
         level,
-        repo: root.clone(),
+        common_dir: gitraptor_core::observe::locate(&root).unwrap(),
         worktrees: vec![WorktreeScope {
             key: "main".into(),
             path: root.clone(),
@@ -156,6 +156,7 @@ fn interrupted(fx: &Fixture) -> (TempProfile, PathBuf, String, String, String) {
         &write,
         &oplog,
         root.clone(),
+        gitraptor_core::observe::locate(&root).unwrap(),
         tp.root.path().join("profile"),
     )
     .with_clock(|| 20)

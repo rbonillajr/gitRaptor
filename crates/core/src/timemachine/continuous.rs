@@ -288,11 +288,13 @@ fn seeded(
         }
         None => {}
     }
-    let Some((_, Some(store))) = deps.repos.repo(repo_id) else {
+    let (Some((_, Some(store))), Some(common)) =
+        (deps.repos.repo(repo_id), deps.repos.common_dir(repo_id))
+    else {
         // No store: the capture says so itself.
         return true;
     };
-    if store.has_head_of(worktree) {
+    if store.has_head_of(&common, worktree) {
         seeds.insert(repo_id.to_owned(), Seed::Done);
         return true;
     }
@@ -300,7 +302,8 @@ fn seeded(
     let flag = Arc::clone(&done);
     let logger = deps.logger.clone();
     let repo = repo_id.to_owned();
-    let path = worktree.to_path_buf();
+    // The packs are read from the repo's own Git folder, never through a worktree's `.git`.
+    let path = common;
     let spawned = std::thread::Builder::new()
         .name("raptor-tm-seed".into())
         .spawn(move || {
@@ -534,9 +537,19 @@ pub fn observe(
 ) -> Result<CaptureOutcome, Failure> {
     let (oplog, store) = deps.repos.repo(repo_id).ok_or(Failure::Unavailable)?;
     let store = store.ok_or(Failure::Unavailable)?;
-    let Some(first) = worktrees.first() else {
+    let common = deps.repos.common_dir(repo_id).ok_or(Failure::Unavailable)?;
+    if worktrees.is_empty() {
         return Err(Failure::Unavailable);
-    };
+    }
+    // Nothing behind a `.git` the repo does not own is read, not even its state (#223 I-03).
+    let registered = registered_worktrees(&common).map_err(|e| Failure::Capture(e.into()))?;
+    for w in worktrees {
+        if let Err(e @ gitraptor_git::ReadError::Untrusted(_)) =
+            crate::observe::open_registered_in(&common, &registered, w)
+        {
+            return Err(Failure::Capture(e.into()));
+        }
+    }
     let mark = deps
         .engine
         .settle(repo_id, worktrees, settle)
@@ -550,7 +563,6 @@ pub fn observe(
     {
         return Err(Failure::NoSpace);
     }
-    let registered = registered_worktrees(first).unwrap_or_default();
     let scopes = worktrees
         .iter()
         .enumerate()
@@ -566,7 +578,7 @@ pub fn observe(
     let repo = repo_id.to_owned();
     let req = CaptureRequest {
         level: SnapshotLevel::Observation,
-        repo: first.clone(),
+        common_dir: common,
         worktrees: scopes,
         engine_mark: Some(mark),
         cause_operation: cause_operation.map(str::to_owned),
@@ -642,10 +654,11 @@ pub fn anchor(
     None
 }
 
-/// Local branches of the repo of `root` and the commit each one points to, by short name; empty
-/// if the repo cannot be read.
-pub fn branch_tips(root: &Path) -> BTreeMap<String, String> {
-    RepoReader::open(root, &ReaderOptions::default())
+/// Local branches of the repo whose common Git directory is `common_dir` and the commit each one
+/// points to, by short name; empty if the repo cannot be read. Read from that directory, never
+/// through a worktree's `.git` (#223 I-03).
+pub fn branch_tips(common_dir: &Path) -> BTreeMap<String, String> {
+    RepoReader::open(common_dir, &ReaderOptions::default())
         .and_then(|r| r.local_branches())
         .map(|list| list.into_iter().map(|b| (b.name, b.commit)).collect())
         .unwrap_or_default()
@@ -669,14 +682,14 @@ pub fn await_moved_branches(
     before: &BTreeMap<String, String>,
     since: i64,
 ) {
-    let Some(first) = worktrees.first() else {
+    let Some(common) = deps.repos.common_dir(repo_id) else {
         return;
     };
-    let after = branch_tips(first);
+    let after = branch_tips(&common);
     let mut pending: Vec<(&PathBuf, String)> = worktrees
         .iter()
         .filter_map(|root| {
-            let branch = super::undo::head_branch(root)?;
+            let branch = super::undo::head_branch(&common, root)?;
             (before.get(&branch) != after.get(&branch)).then_some((root, branch))
         })
         .collect();
@@ -704,6 +717,7 @@ fn failure_kind(e: &CaptureError) -> &'static str {
         CaptureError::InvalidInput(_) => "invalid-input",
         CaptureError::Yielded => "yielded",
         CaptureError::Discarded => "discarded",
+        CaptureError::Read(gitraptor_git::ReadError::Untrusted(_)) => "worktree-untrusted",
         CaptureError::Read(_) => "read",
         CaptureError::Store(_) => "store",
         CaptureError::Oplog(_) => "oplog",
