@@ -108,7 +108,9 @@ fn identical_denials_aggregate_into_one_row() {
             .record_guard_decision(&denial_at(NOW + i * 30, "main"))
             .unwrap();
     }
-    let log = store.guard_log(NOW - DAY, 500, NOW + MINUTE).unwrap();
+    let log = store
+        .guard_log(NOW - DAY, 500, NOW + MINUTE, false)
+        .unwrap();
     assert_eq!(log.entries.len(), 1);
     assert_eq!(log.entries[0].count, 1000);
     assert_eq!(log.entries[0].at_ms, NOW);
@@ -123,7 +125,9 @@ fn excess_goes_to_rate_limited_rows_and_still_counts() {
             .record_guard_decision(&denial_at(NOW + i, &format!("b{i}")))
             .unwrap();
     }
-    let log = store.guard_log(NOW - DAY, 500, NOW + MINUTE).unwrap();
+    let log = store
+        .guard_log(NOW - DAY, 500, NOW + MINUTE, false)
+        .unwrap();
     let full = log
         .entries
         .iter()
@@ -148,11 +152,14 @@ fn entries_expire_after_90_days() {
     store
         .record_guard_decision(&denial_at(NOW - 89 * DAY, "recent"))
         .unwrap();
-    let log = store.guard_log(0, 500, NOW).unwrap();
+    let log = store.guard_log(0, 500, NOW, false).unwrap();
     assert_eq!(log.entries.len(), 1, "the query filters before the purge");
     assert_eq!(log.entries[0].branch.as_ref().unwrap().raw(), "recent");
     assert_eq!(store.purge_guard_log(NOW).unwrap(), 1);
-    assert_eq!(store.guard_log(0, 500, NOW).unwrap().entries.len(), 1);
+    assert_eq!(
+        store.guard_log(0, 500, NOW, false).unwrap().entries.len(),
+        1
+    );
 }
 
 #[test]
@@ -166,7 +173,7 @@ fn kpi_counts_the_period_only() {
             .record_guard_decision(&denial_at(at, &format!("b{i}")))
             .unwrap();
     }
-    let week = store.guard_log(NOW - 7 * DAY, 500, NOW).unwrap();
+    let week = store.guard_log(NOW - 7 * DAY, 500, NOW, false).unwrap();
     assert_eq!(week.summary.blocked, 3);
     assert_eq!(week.entries.len(), 3);
 }
@@ -199,7 +206,7 @@ fn notices_do_not_count() {
     );
     assert!(authorship.agent_trailer);
     store.record_guard_decision(&e).unwrap();
-    let log = store.guard_log(NOW - DAY, 500, NOW).unwrap();
+    let log = store.guard_log(NOW - DAY, 500, NOW, false).unwrap();
     assert_eq!(log.summary.blocked, 0);
     assert_eq!(log.summary.notices, 1);
 
@@ -310,7 +317,9 @@ fn a_full_sink_never_blocks_and_keeps_the_count() {
     for row in &rows {
         store.record_guard_overflow(row).unwrap();
     }
-    let log = store.guard_log(NOW - DAY, 500, NOW + MINUTE).unwrap();
+    let log = store
+        .guard_log(NOW - DAY, 500, NOW + MINUTE, false)
+        .unwrap();
     assert_eq!(log.summary.blocked, 500);
     assert_eq!(log.summary.rate_limited, 500);
 }
@@ -344,8 +353,52 @@ fn engine_down_periods_are_reported() {
             },
         ])
         .unwrap();
-    let log = store.guard_log(NOW - 7 * DAY, 500, NOW).unwrap();
+    let log = store.guard_log(NOW - 7 * DAY, 500, NOW, false).unwrap();
     assert_eq!(log.unlogged_periods.len(), 1, "{:?}", log.unlogged_periods);
     assert_eq!(log.unlogged_periods[0].from_ms, NOW - 2 * DAY);
     assert_eq!(log.unlogged_periods[0].to_ms, Some(NOW - DAY));
+}
+
+#[test]
+fn hiding_the_relax_notices_fills_the_page_and_keeps_the_totals_of_the_same_set() {
+    use gitraptor_core::guardrails::config_guard::relax_entry;
+    use gitraptor_policy::layers::{IgnoredRelaxation, RelaxKey};
+
+    let (_tp, _repos, mut store) = store();
+    // Three older denials, then more notices than the page holds, each its own entry.
+    for (i, branch) in ["a", "b", "c"].into_iter().enumerate() {
+        store
+            .record_guard_decision(&denial_at(NOW + i as i64, branch))
+            .unwrap();
+    }
+    let ignored = [IgnoredRelaxation {
+        level: Level::Local,
+        key: RelaxKey::BaseBranch,
+    }];
+    for (i, branch) in ["n1", "n2", "n3", "n4", "n5", "n6"].into_iter().enumerate() {
+        let params = force_push(branch, "origin");
+        let decision = denied(Rule::MinimumForcePush, vec![]);
+        let notice = relax_entry(
+            &params,
+            &decision,
+            &ignored,
+            &ctx(NOW + 10 + i as i64, branch),
+        )
+        .expect("a notice");
+        store.record_guard_decision(&notice).unwrap();
+    }
+    let all = store.guard_log(NOW - DAY, 3, NOW + MINUTE, false).unwrap();
+    assert_eq!(all.entries.len(), 3);
+    assert!(all.entries.iter().all(|e| e.kind == LogKind::Notice));
+    assert_eq!(all.summary.notices, 6);
+
+    let page = store.guard_log(NOW - DAY, 3, NOW + MINUTE, true).unwrap();
+    assert_eq!(page.entries.len(), 3, "the page fills to the limit");
+    assert!(
+        page.entries
+            .iter()
+            .all(|e| e.reasons.iter().all(|r| r.rule != Rule::RelaxIgnored))
+    );
+    assert_eq!(page.summary.notices, 0);
+    assert_eq!(page.summary.blocked, 3);
 }

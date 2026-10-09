@@ -116,9 +116,10 @@ fn reason_text(reason: &Reason) -> String {
             "guard.reason.authorship-human-author",
             &[("level", &level_text(reason.level))],
         ),
-        (Rule::ProtectedBranch | Rule::ForbiddenPath, Some(Cause::Unverifiable)) => {
-            t("guard.reason.policy-unverifiable", &[])
-        }
+        (
+            Rule::ProtectedBranch | Rule::ForbiddenPath | Rule::ConfigProtected,
+            Some(Cause::Unverifiable),
+        ) => t("guard.reason.policy-unverifiable", &[]),
         (Rule::ProtectedBranch, _) => t(
             "guard.reason.protected-branch",
             &[
@@ -1181,6 +1182,22 @@ mod tests {
             decision_id: "d".into(),
             authorship: None,
         }
+    }
+
+    /// A configuration denial that could not be verified reads as "could not be checked", not
+    /// as a path the agent touched.
+    #[test]
+    fn an_unverifiable_config_denial_says_it_could_not_be_checked() {
+        let unverifiable = Reason {
+            rule: Rule::ConfigProtected,
+            level: Level::Minimum,
+            cause: Some(Cause::Unverifiable),
+            params: Vec::new(),
+        };
+        let text = reason_text(&unverifiable);
+        assert_eq!(text, t("guard.reason.policy-unverifiable", &[]));
+        assert_ne!(text, t("guard.reason.config-protected", &[("path", &"")]));
+        assert!(has_key("guard.reason.policy-unverifiable"));
     }
 
     /// Every message the log can print exists in both languages (US-GRD-005).

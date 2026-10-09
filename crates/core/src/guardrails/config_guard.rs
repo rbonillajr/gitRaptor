@@ -8,8 +8,8 @@
 //! file: the level's file is not attributed.
 
 use gitraptor_api::guard::{
-    Cause, Decision, EvaluateParams, GuardLogResult, Level, LogDetail, LogKind, LoggedReason,
-    Operation, Param, ParamKind, Reason, Rule,
+    Cause, Decision, EvaluateParams, GuardLogResult, Level, LogKind, LoggedReason, Operation,
+    Param, ParamKind, Reason, Rule,
 };
 use gitraptor_policy::guard::config::CONFIG_PATTERN;
 use gitraptor_policy::layers::IgnoredRelaxation;
@@ -93,25 +93,12 @@ pub fn legacy_decision(decision: &mut Decision) {
 }
 
 /// A `guard.log` page for a connection without `guard.config-protection`: the reasons read as a
-/// forbidden path and the `relax-ignored` notices are left out. The summary drops what it counted
-/// for them, so the page and its totals still agree.
+/// forbidden path. The `relax-ignored` notices were already left out by the query (page and
+/// totals alike, `Store::guard_log`); dropping them here again is defense in depth and leaves the
+/// totals alone, since they never counted them.
 pub fn legacy_log(log: &mut GuardLogResult) {
-    let mut dropped_notices: u64 = 0;
-    let mut dropped_over_cap: u64 = 0;
-    log.entries.retain(|e| {
-        let relax = e.reasons.iter().any(|r| r.rule == Rule::RelaxIgnored);
-        if relax {
-            if e.kind == LogKind::Notice {
-                dropped_notices = dropped_notices.saturating_add(e.count);
-            }
-            if e.detail == LogDetail::RateLimited {
-                dropped_over_cap = dropped_over_cap.saturating_add(e.count);
-            }
-        }
-        !relax
-    });
-    log.summary.notices = log.summary.notices.saturating_sub(dropped_notices);
-    log.summary.rate_limited = log.summary.rate_limited.saturating_sub(dropped_over_cap);
+    log.entries
+        .retain(|e| e.reasons.iter().all(|r| r.rule != Rule::RelaxIgnored));
     for reason in log.entries.iter_mut().flat_map(|e| &mut e.reasons) {
         if reason.rule == Rule::ConfigProtected {
             reason.rule = Rule::ForbiddenPath;
@@ -122,7 +109,7 @@ pub fn legacy_log(log: &mut GuardLogResult) {
 #[cfg(test)]
 mod tests {
     use gitraptor_api::AgentKind;
-    use gitraptor_api::guard::{Effect, ExceptionState, Hook, RefUpdate, RefValue};
+    use gitraptor_api::guard::{Effect, ExceptionState, Hook, LogDetail, RefUpdate, RefValue};
     use gitraptor_policy::layers::RelaxKey;
 
     use super::*;
@@ -203,7 +190,7 @@ mod tests {
     }
 
     #[test]
-    fn legacy_log_keeps_the_summary_consistent_with_the_page() {
+    fn legacy_log_rewrites_the_config_denials_and_leaves_the_totals_alone() {
         let e = |kind, rule| gitraptor_api::guard::GuardLogEntry {
             at_ms: 1,
             utc_offset_s: 0,
@@ -242,7 +229,9 @@ mod tests {
         };
         legacy_log(&mut log);
         assert_eq!(log.entries.len(), 1);
+        assert_eq!(log.entries[0].reasons[0].rule, Rule::ForbiddenPath);
+        // The totals are the query's: the rewrite leaves them alone.
         assert_eq!(log.summary.blocked, 3);
-        assert_eq!(log.summary.notices, 2);
+        assert_eq!(log.summary.notices, 5);
     }
 }

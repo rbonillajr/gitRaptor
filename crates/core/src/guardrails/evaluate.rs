@@ -40,6 +40,7 @@ pub fn facts(reader: &RepoReader, op: &Operation) -> Facts {
     Facts {
         authorship: None,
         touched: Vec::new(),
+        config_touched: Vec::new(),
         push: updates
             .iter()
             .map(|u| {
@@ -115,8 +116,10 @@ pub fn evaluate_commit(
     };
     let mut facts = facts(reader, op);
     facts.authorship = commit.facts;
-    // The commits of the movement are read only when a forbidden-path rule governs the actor.
+    // The commits of the movement are read for the forbidden paths only when a rule governs the
+    // actor; the protected configuration has its own read, for every agent's movement.
     facts.touched = super::policies::touched(reader, op, &ctx.policies, ctx.actor);
+    facts.config_touched = super::policies::config_touched(reader, op, ctx.actor);
     policy::evaluate(op, &facts, &ctx)
 }
 

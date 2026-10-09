@@ -308,11 +308,13 @@ mod policies_in_the_function {
     const AGENT: Option<AgentKind> = Some(AgentKind::ClaudeCode);
 
     fn touched(paths: &[&str]) -> Facts {
+        let what = Touched {
+            paths: paths.iter().map(|s| (*s).to_owned()).collect(),
+            unverifiable: false,
+        };
         Facts {
-            touched: vec![Some(Touched {
-                paths: paths.iter().map(|s| (*s).to_owned()).collect(),
-                unverifiable: false,
-            })],
+            touched: vec![Some(what.clone())],
+            config_touched: vec![Some(what)],
             ..Facts::default()
         }
     }
@@ -409,7 +411,7 @@ mod policies_in_the_function {
         );
         // An agent's movement whose commits cannot be read is denied with no rules at all.
         let unreadable = Facts {
-            touched: vec![Some(Touched {
+            config_touched: vec![Some(Touched {
                 paths: Vec::new(),
                 unverifiable: true,
             })],

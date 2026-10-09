@@ -8,11 +8,11 @@
 
 use gitraptor_api::AgentKind;
 use gitraptor_api::guard::{Level, Operation, RefValue};
-use gitraptor_git::{Hide, PathLimits, RefName, RepoReader};
-use gitraptor_policy::guard::Evaluation;
+use gitraptor_git::{Hide, PathLimits, RefName, RepoReader, RootEntry};
+use gitraptor_policy::guard::config::{RootMatcher, protect_config};
 use gitraptor_policy::guard::glob::Budget;
 use gitraptor_policy::guard::policies::{Policies, Source, Touched, combine, forbidden_paths};
-use gitraptor_policy::team::Confirmed;
+use gitraptor_policy::guard::{Evaluation, refs};
 
 use super::layers;
 
@@ -20,21 +20,6 @@ use super::layers;
 const MAX_COMMITS: usize = 4_096;
 /// Updates one evaluation may read the commits of.
 const MAX_READS: usize = 256;
-
-/// The rules in force for an operation in the worktree `reader` was opened on: every level, from
-/// the one loader of the evaluation. `repo_id` is the registry key (never the client's text).
-pub fn policies_for(
-    reader: &RepoReader,
-    confirmed: Option<&Confirmed>,
-    profile: Option<&crate::profile::ProfileDirs>,
-    repo_id: Option<&str>,
-) -> Policies {
-    match layers::load(reader, confirmed, profile, repo_id) {
-        Ok(layers) => layers.policies(),
-        // Never "no rules": an agent's movement of a branch cannot be judged (SEC-GRD-17).
-        Err(_) => Policies::unreadable(),
-    }
-}
 
 /// What a client that cannot tell the actor evaluates in degraded mode (D11): the floor alone,
 /// and only its rules for everyone.
@@ -47,6 +32,156 @@ pub fn degraded(reader: &RepoReader) -> Policies {
         settings: team.floor.parsed.applicable(),
     }])
     .everyone_only()
+}
+
+/// What each update of an agent's movement does to the protected configuration (BR-AUTH-004),
+/// aligned with the updates of the operation. Read once per governed update, whatever the rules
+/// say; empty for the person.
+///
+/// The commits the repo does not already hold are read, hiding only local branches: a commit
+/// parked under `refs/remotes/*` is still new. When the root entries of the configuration (name,
+/// mode, id) of the new and the old value are equal, nothing changed whatever those commits did
+/// in between, and none of their paths counts. Whatever cannot be read or counted within the
+/// bounds is `unverifiable`.
+pub fn config_touched(
+    reader: &RepoReader,
+    operation: &Operation,
+    actor: Option<AgentKind>,
+) -> Vec<Option<Touched>> {
+    let Some(actor) = actor else {
+        return Vec::new();
+    };
+    let mut check = ConfigCheck {
+        reader,
+        actor,
+        matcher: RootMatcher::new(),
+        left_commits: MAX_COMMITS,
+        reads: 0,
+        budget: Budget::default(),
+    };
+    match operation {
+        Operation::RefTransaction { updates, .. } => {
+            let names: Vec<&str> = updates.iter().map(|u| u.refname.as_str()).collect();
+            updates
+                .iter()
+                .map(|u| {
+                    if !refs::is_governed(&u.refname) {
+                        return None;
+                    }
+                    // Zero is also what Git sends when the writer gave no expected old value.
+                    let old = match &u.old {
+                        RefValue::Oid(old) => Some(old.clone()),
+                        RefValue::Zero => RefName::new(&u.refname)
+                            .ok()
+                            .and_then(|name| reader.resolve_ref(&name).ok().flatten()),
+                        RefValue::Symbolic(_) => None,
+                    };
+                    check.run(old.as_deref(), &u.new, &names)
+                })
+                .collect()
+        }
+        Operation::Push { updates, .. } => updates
+            .iter()
+            .map(|u| {
+                // A ref that is not governed (a tag) is never evaluated: nothing to read.
+                if !refs::is_governed(&u.remote_ref) {
+                    return None;
+                }
+                check.run(u.remote.oid(), &u.local, &[])
+            })
+            .collect(),
+        Operation::Rebase { .. } | Operation::Commit { .. } => Vec::new(),
+    }
+}
+
+struct ConfigCheck<'a> {
+    reader: &'a RepoReader,
+    actor: AgentKind,
+    /// `None` only when the matcher cannot be built: everything is unverifiable.
+    matcher: Option<RootMatcher>,
+    left_commits: usize,
+    reads: usize,
+    budget: Budget,
+}
+
+impl ConfigCheck<'_> {
+    /// The root entries of `commit` that are the configuration, `None` when they cannot be told.
+    fn entries(&mut self, commit: &str, limits: &PathLimits) -> Option<Vec<RootEntry>> {
+        let matcher = self.matcher.as_ref()?;
+        let mut found = Vec::new();
+        for entry in self.reader.root_entries(commit, limits).ok()? {
+            if matcher.is_config(&entry.name, &mut self.budget)? {
+                found.push(entry);
+            }
+        }
+        Some(found)
+    }
+
+    /// Whether any of `paths` is the configuration. Running out of work counts as a hit, so it
+    /// is looked at again with the exact set.
+    fn hits(&mut self, paths: &[String]) -> bool {
+        let mut scratch = Evaluation::allow();
+        let touched = Touched {
+            paths: paths.to_vec(),
+            unverifiable: false,
+        };
+        protect_config(&mut scratch, &touched, Some(self.actor), &mut self.budget);
+        scratch.effect != gitraptor_api::guard::Effect::Allow
+    }
+
+    fn run(&mut self, old: Option<&str>, new: &RefValue, updated: &[&str]) -> Option<Touched> {
+        let unverifiable = Touched {
+            paths: Vec::new(),
+            unverifiable: true,
+        };
+        let new = match new {
+            RefValue::Oid(new) => new,
+            // A symbolic ref follows another ref: what it will hold cannot be read here.
+            RefValue::Symbolic(_) => return Some(unverifiable),
+            RefValue::Zero => return None,
+        };
+        self.reads += 1;
+        if self.reads > MAX_READS || self.left_commits == 0 {
+            return Some(unverifiable);
+        }
+        let limits = PathLimits {
+            commits: self.left_commits.min(PathLimits::default().commits),
+            ..PathLimits::default()
+        };
+        let Some(entries) = self.entries(new, &limits) else {
+            return Some(unverifiable);
+        };
+        // Equal entries: the configuration did not change, whatever the commits in between did
+        // (a change that a later commit reverted). The commits are still counted, so more than
+        // the bound stays unverifiable, as it always was.
+        let unchanged =
+            old.is_some_and(|old| self.entries(old, &limits).as_ref() == Some(&entries));
+        // First a cheap look that hides only the old value: it brings a superset of the new
+        // commits, so when nothing in it touches the configuration (or the configuration did
+        // not change) the answer is final. Only a hit (or a look that does not fit the bounds)
+        // pays for hiding what the local branches hold.
+        let first = self
+            .reader
+            .fresh_commit_paths(old, new, updated, Hide::OldOnly, &limits);
+        let found = match first {
+            Ok(found) if !found.unverifiable && (unchanged || !self.hits(&found.paths)) => {
+                Ok(found)
+            }
+            _ => self
+                .reader
+                .fresh_commit_paths(old, new, updated, Hide::LocalBranches, &limits),
+        };
+        match found {
+            Ok(found) if !found.unverifiable => {
+                self.left_commits = self.left_commits.saturating_sub(found.commits);
+                Some(Touched {
+                    paths: if unchanged { Vec::new() } else { found.paths },
+                    unverifiable: false,
+                })
+            }
+            _ => Some(unverifiable),
+        }
+    }
 }
 
 /// What the commits of each update bring (D5), aligned with the updates of the operation; only
@@ -130,7 +265,13 @@ pub fn touched(
         }
         Operation::Push { updates, .. } => updates
             .iter()
-            .map(|u| read(u.remote.oid(), &u.local, &[], Hide::RemoteTracking))
+            .map(|u| {
+                // A ref that is not governed (a tag) is never evaluated: nothing to read.
+                if !refs::is_governed(&u.remote_ref) {
+                    return None;
+                }
+                read(u.remote.oid(), &u.local, &[], Hide::RemoteTracking)
+            })
             .collect(),
         Operation::Rebase { .. } | Operation::Commit { .. } => Vec::new(),
     }

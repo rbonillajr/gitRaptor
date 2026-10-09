@@ -293,6 +293,8 @@ pub(crate) enum Control {
         common_dir: std::path::PathBuf,
         since_ms: Option<i64>,
         limit: u32,
+        /// The connection cannot see the notices of the configuration.
+        hide_relax_ignored: bool,
         reply: SyncSender<GuardLogReply>,
     },
     /// One page of a repo's Git events (US-GRP-002).
@@ -483,6 +485,7 @@ impl ShutdownHandle {
         common_dir: std::path::PathBuf,
         since_ms: Option<i64>,
         limit: u32,
+        hide_relax_ignored: bool,
     ) -> GuardLogReply {
         let (reply, rx) = sync_channel(1);
         if self
@@ -491,6 +494,7 @@ impl ShutdownHandle {
                 common_dir,
                 since_ms,
                 limit,
+                hide_relax_ignored,
                 reply,
             })
             .is_err()
