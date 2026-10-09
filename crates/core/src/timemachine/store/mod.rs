@@ -147,6 +147,9 @@ pub struct SnapshotStore {
 pub(crate) struct ManualState {
     inner: Mutex<ManualInner>,
     released: Condvar,
+    /// Estimated reserve per worktree key, with when it was measured: the walk that makes it is
+    /// not repeated for every request.
+    reserves: Mutex<std::collections::HashMap<String, (Instant, u64)>>,
 }
 
 #[derive(Default)]
@@ -180,6 +183,21 @@ impl Drop for Recording<'_> {
 }
 
 impl ManualState {
+    /// The last reserve measured for `key` and how long ago.
+    pub(crate) fn last_reserve(&self, key: &str) -> Option<(Duration, u64)> {
+        let map = self.reserves.lock().unwrap_or_else(|p| p.into_inner());
+        map.get(key).map(|(at, bytes)| (at.elapsed(), *bytes))
+    }
+
+    /// Remembers the reserve measured for `key` now. Bounded: a full cache is emptied first.
+    pub(crate) fn remember_reserve(&self, key: &str, bytes: u64) {
+        let mut map = self.reserves.lock().unwrap_or_else(|p| p.into_inner());
+        if map.len() >= 256 {
+            map.clear();
+        }
+        map.insert(key.to_owned(), (Instant::now(), bytes));
+    }
+
     /// Marks `session` as having a capture in flight; `None` if it already has one.
     pub(crate) fn enter(&self, session: &str) -> Option<InFlight<'_>> {
         let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());

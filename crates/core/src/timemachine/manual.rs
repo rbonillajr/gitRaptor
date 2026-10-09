@@ -8,6 +8,7 @@
 //! discarded ones included. Nothing is ever deleted to make room: a full quota or a full disk is
 //! a refusal.
 
+use std::cell::Cell;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -22,7 +23,9 @@ use super::continuous::{CaptureDeps, FreeSpaceFloor};
 use super::engine::GitState;
 use super::oplog::{Channel, ManualMeta, Oplog, Requester, SnapshotLevel};
 use super::protected::{registered_worktrees, worktree_key};
-use super::store::{CaptureError, CaptureRequest, SnapshotStore, ValidityGuard, WorktreeScope};
+use super::store::{
+    CaptureError, CaptureRequest, InFlight, SnapshotStore, ValidityGuard, WorktreeScope,
+};
 use crate::profile::settings::include_credential_files;
 
 pub const PER_MINUTE: usize = 5;
@@ -42,6 +45,28 @@ pub const MANUAL_BUDGET: Duration = Duration::from_secs(25);
 const MIN_RESERVE_BYTES: u64 = 1024 * 1024 * 1024;
 /// Entries the estimate of a worktree's size looks at before it stops.
 const ESTIMATE_MAX_ENTRIES: usize = 200_000;
+/// How long the estimate of a worktree's size is reused.
+const RESERVE_TTL: Duration = Duration::from_secs(300);
+
+thread_local! {
+    /// The `(dev, inode)` the capture running on this thread must find at the worktree's root.
+    static EXPECTED_ROOT: Cell<Option<(u64, u64)>> = const { Cell::new(None) };
+}
+
+/// Runs `f` (a manual capture) holding it to the worktree root the caller verified: under the
+/// recording lock the root is read again and a capture whose root is another folder is
+/// discarded. Scoped to the calling thread and restored afterwards, so the capture entry points
+/// keep their signatures.
+pub fn expecting_root<R>(id: Option<(u64, u64)>, f: impl FnOnce() -> R) -> R {
+    struct Restore(Option<(u64, u64)>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            EXPECTED_ROOT.with(|c| c.set(self.0));
+        }
+    }
+    let _restore = Restore(EXPECTED_ROOT.with(|c| c.replace(id)));
+    f()
+}
 
 /// What a manual snapshot is asked for.
 #[derive(Debug, Clone)]
@@ -331,8 +356,37 @@ pub fn capture_in_store(
     let Some(session) = ask.requester.session_id() else {
         return Err(invalid("requester"));
     };
-    let Some(_in_flight) = store.manual().enter(session) else {
+    let Some(in_flight) = store.manual().enter(session) else {
         return Err(ManualError::InFlight);
+    };
+    capture_guarded(
+        store,
+        oplog,
+        ask,
+        engine_mark,
+        include_credentials,
+        floor,
+        now_ms,
+        deadline,
+        &in_flight,
+    )
+}
+
+/// [`capture_in_store`] once the session's in-flight guard is held (the proof is the borrow).
+#[allow(clippy::too_many_arguments)]
+fn capture_guarded(
+    store: &SnapshotStore,
+    oplog: &Mutex<Oplog>,
+    ask: &ManualAsk,
+    engine_mark: Option<i64>,
+    include_credentials: bool,
+    floor: Option<&ManualFloor<'_>>,
+    now_ms: i64,
+    deadline: Instant,
+    _in_flight: &InFlight<'_>,
+) -> Result<ManualCaptured, ManualError> {
+    let Some(session) = ask.requester.session_id() else {
+        return Err(invalid("requester"));
     };
     let (root, key) =
         resolve_worktree(&ask.worktree).map_err(|e| ManualError::Capture(e.into()))?;
@@ -342,6 +396,13 @@ pub fn capture_in_store(
     let Some(_recording) = store.manual().lock_recording(deadline) else {
         return Err(ManualError::TimeLimit);
     };
+    // The root the caller verified must still be the folder at this path: a swap between the
+    // verification and here discards the attempt before anything is recorded.
+    if let Some(expected) = EXPECTED_ROOT.with(Cell::get)
+        && folder_id(&root) != Some(expected)
+    {
+        return Err(ManualError::Discarded);
+    }
     {
         let log = oplog.lock().unwrap_or_else(|p| p.into_inner());
         let input = log
@@ -413,11 +474,15 @@ fn invalid(what: &str) -> ManualError {
 }
 
 /// What the volume must keep for the guaranteed prior of the worktree: the larger of 1 GiB and
-/// the worktree's estimated size (regular files outside `.git`, the first
-/// [`ESTIMATE_MAX_ENTRIES`] entries).
-fn reserve_for(worktree: &Path) -> u64 {
+/// the worktree's estimated size (regular files outside `.git`).
+///
+/// The walk stops at [`ESTIMATE_MAX_ENTRIES`] entries or at `deadline`. A walk cut short only saw
+/// part of the tree, so it answers conservatively: the larger of what it summed, the last
+/// estimate of this worktree (`last`) and the minimum.
+fn reserve_for(worktree: &Path, deadline: Instant, last: Option<u64>) -> u64 {
     let mut bytes = 0u64;
     let mut seen = 0usize;
+    let mut complete = true;
     let mut stack = vec![worktree.to_path_buf()];
     'walk: while let Some(dir) = stack.pop() {
         let Ok(entries) = std::fs::read_dir(&dir) else {
@@ -425,7 +490,8 @@ fn reserve_for(worktree: &Path) -> u64 {
         };
         for entry in entries.flatten() {
             seen += 1;
-            if seen > ESTIMATE_MAX_ENTRIES {
+            if seen > ESTIMATE_MAX_ENTRIES || (seen % 256 == 0 && Instant::now() >= deadline) {
+                complete = false;
                 break 'walk;
             }
             let Ok(kind) = entry.file_type() else {
@@ -440,7 +506,24 @@ fn reserve_for(worktree: &Path) -> u64 {
             }
         }
     }
+    if !complete {
+        bytes = bytes.max(last.unwrap_or(0));
+    }
     bytes.max(MIN_RESERVE_BYTES)
+}
+
+/// [`reserve_for`] through the store's cache: one walk per worktree per [`RESERVE_TTL`], however
+/// many requests arrive.
+fn cached_reserve(store: &SnapshotStore, key: &str, worktree: &Path, deadline: Instant) -> u64 {
+    let last = store.manual().last_reserve(key);
+    if let Some((age, bytes)) = last
+        && age < RESERVE_TTL
+    {
+        return bytes;
+    }
+    let bytes = reserve_for(worktree, deadline, last.map(|(_, b)| b));
+    store.manual().remember_reserve(key, bytes);
+    bytes
 }
 
 /// The daemon's path: waits for a calm engine within the budget, refuses an index a `git` holds,
@@ -458,6 +541,16 @@ pub fn capture(
         .repo(&ask.repo_id)
         .ok_or(ManualError::Unavailable)?;
     let store = store.ok_or(ManualError::Unavailable)?;
+    let session = ask
+        .requester
+        .session_id()
+        .ok_or_else(|| invalid("requester"))?;
+    // Before anything that costs I/O (the wait for the engine, the walk of the worktree): a
+    // session with a capture in flight, or over its quota, is refused here, so concurrent
+    // requests cannot multiply that work.
+    let in_flight = store.manual().enter(session).ok_or(ManualError::InFlight)?;
+    let (_, key) = resolve_worktree(&ask.worktree).map_err(|e| ManualError::Capture(e.into()))?;
+    precheck(&oplog, &store, session, &key, now_ms).map_err(ManualError::Quota)?;
     let mark = deps
         .engine
         .settle(
@@ -472,10 +565,13 @@ pub fn capture(
     let probe = VolumeProbe;
     let floor = deps.free_space_floor.map(|floor| ManualFloor {
         floor,
-        reserve_bytes: reserve_for(&ask.worktree),
+        reserve_bytes: cached_reserve(&store, &key, &ask.worktree, deadline),
         probe: &probe,
     });
-    capture_in_store(
+    if check_snapshot_label(&ask.label).is_err() {
+        return Err(invalid("label"));
+    }
+    capture_guarded(
         &store,
         &oplog,
         ask,
@@ -484,6 +580,7 @@ pub fn capture(
         floor.as_ref(),
         now_ms,
         deadline,
+        &in_flight,
     )
 }
 

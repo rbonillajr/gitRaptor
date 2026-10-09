@@ -2904,6 +2904,9 @@ impl Connection<'_> {
         if matches!(spec.name, methods::TM_UNDO | methods::TM_RESTORE) {
             require_attributed(channel, r.who.is_agent()).map_err(scope_refused)?;
         }
+        // SECURITY: a command that names no id skips scope resolution only because every branch
+        // below answers NOT_IMPLEMENTED and touches nothing. The story that implements the
+        // selectors must restore the scope, the allowlist and the requester's identity first.
         // Only a request that names an id has a repo to look it up in; the selectors stay with
         // their stories and are not scoped here.
         if (snapshot_id.is_some() || operation_id.is_some())

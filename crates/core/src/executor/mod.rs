@@ -476,6 +476,15 @@ impl Executor {
         }
         let op = input.params.operation;
         admit(op, input.layer, &r.who)?;
+        // A snapshot is the one operation an agent takes outside the repo write lock, so the
+        // allowlist follows the requester, not the channel it declared: a direct client running
+        // under an agent is held to it too.
+        if op == OperationId::Snapshot
+            && (input.caller.mcp || r.who.is_agent())
+            && !backend.allowlist().allows(&input.repo.repo_id)
+        {
+            return Err(ExecError::Scope(ScopeError::NotAllowlisted));
+        }
         let args = OperationArgs::parse(op, &input.params.args, input.caller.mcp)
             .map_err(|e| ExecError::Invalid(e.message()))?;
         let declared: Vec<(String, String)> = input
@@ -639,7 +648,9 @@ impl Executor {
             return refuse(&plan, RejectReason::WarningsMismatch);
         }
         // The allowlist mark, read again: a repo disabled since `prepare` records nothing.
-        if plan.caller.mcp && !backend.allowlist().allows(&plan.repo.repo_id) {
+        if (plan.caller.mcp || plan.who.is_agent())
+            && !backend.allowlist().allows(&plan.repo.repo_id)
+        {
             self.close(&plan, PlanClose::Rejected);
             return Err(ExecError::Scope(ScopeError::NotAllowlisted));
         }
@@ -701,7 +712,9 @@ impl Executor {
             requester: plan.who.requester.clone(),
             channel: oplog_channel(plan.channel),
         };
-        let taken = (env.capture)(&ask);
+        // The identity verified above is the one the capture must find under its lock.
+        let taken =
+            crate::timemachine::manual::expecting_root(now_facts.root_id, || (env.capture)(&ask));
         self.close(&plan, PlanClose::Ran(OperationOutcome::Done));
         let snapshot = taken.map_err(ExecError::Capture)?;
         Ok(RunDone::Captured(Captured {
