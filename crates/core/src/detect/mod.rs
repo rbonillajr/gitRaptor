@@ -10,7 +10,8 @@
 //! - **S3**: the ancestry of the live `git` processes, sampled as soon as
 //!   the router sees a write in the repo's Git directory. A Git event points
 //!   to a session only when the samples of its window show a `git` of
-//!   exactly one session and no other `git` in the repo (rules 2, 4 and 6).
+//!   exactly one session in its worktree and no foreign `git` in the event's
+//!   [`S3Scope`] (rules 2, 4 and 6).
 //! - **S4**: the claims Guardrails hooks leave ([`HookClaims`]): a hook that ran inside an
 //!   agent's `git` names the branch move that `git` made, without the S3 race.
 //! - **Registered sessions** (US-GRP-009): present until their registration
@@ -21,7 +22,9 @@
 //!
 //! The detector never writes: it hands [`SessionChange`]s to the daemon
 //! loop, the single writer (ADR-GRP-005). It reads processes only through
-//! [`ProcLister`], never their command line nor their environment (SEC-04).
+//! [`ProcLister`]. Of a foreign `git` it reads one boolean from its command
+//! line and the names of its environment (whether it redirects its target);
+//! no argument nor value is ever kept or logged (SEC-04).
 
 pub mod hook;
 pub mod procs;
@@ -317,6 +320,85 @@ impl RepoPaths {
             .filter(|w| path.starts_with(w))
             .max_by_key(|w| w.as_os_str().len())
     }
+
+    /// `path` is in the common Git dir, which by path alone would fall in
+    /// the main worktree.
+    fn in_common(&self, path: &Path) -> bool {
+        path.starts_with(&self.common)
+    }
+}
+
+/// What one `git` of an S3 window means for the event.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Class<'a> {
+    /// A `git` of this session in the event's worktree.
+    Evidence(&'a str),
+    /// A `git` that may have made the event and is of no session.
+    Foreign,
+    Ignored,
+}
+
+/// Classifies one `git` of the window of an event of `worktree`: the first
+/// rule that holds decides, and names the only counter that goes up.
+///
+/// The common dir is checked before the worktree: `<repo>/.git/worktrees/x`
+/// starts with the main worktree's root.
+fn classify<'g, 'c>(
+    git: &'g GitSeen,
+    repo: &RepoPaths,
+    worktree: &Path,
+    scope: S3Scope,
+    counts: &'c mut S3Counts,
+) -> (Class<'g>, Option<&'c mut u32>) {
+    if !git.started_before {
+        return (Class::Ignored, Some(&mut counts.gits_after_notice));
+    }
+    match (&git.owner, &git.cwd) {
+        (Owner::Session(id), Some(cwd))
+            if !repo.in_common(cwd) && repo.worktree_of(cwd).is_some_and(|w| w == worktree) =>
+        {
+            (Class::Evidence(id), Some(&mut counts.sessions_wt))
+        }
+        // A `git` of the session in another worktree, in the common dir, or
+        // exiting, is no evidence and not foreign.
+        (Owner::Session(_), _) => (Class::Ignored, None),
+        // The daemon's own `git` in this repo, or exiting: the Time
+        // Machine's writer runs in the common dir, with any scope.
+        (Owner::Daemon, None) => (Class::Foreign, Some(&mut counts.foreign_daemon)),
+        (Owner::Daemon, Some(cwd)) if repo.contains(cwd) => {
+            (Class::Foreign, Some(&mut counts.foreign_daemon))
+        }
+        (Owner::Daemon, Some(_)) => (Class::Ignored, None),
+        // Exiting and launched from nowhere readable: like a `git` that
+        // already ended, it is not seen (the S3 race accepted by
+        // ADR-GRP-012; an editor such as GitKraken falls here, a declared
+        // gap of SPIKE-GRP-001).
+        (Owner::Other, None) => (Class::Ignored, None),
+        (Owner::Other, Some(cwd)) if !repo.contains(cwd) => (Class::Ignored, None),
+        (Owner::Other, Some(cwd)) if repo.in_common(cwd) => {
+            (Class::Foreign, Some(&mut counts.foreign_gitdir))
+        }
+        // The ancestor's folder says where the shell is, not where its
+        // `git` wrote.
+        (Owner::Other, Some(_)) if git.placed_by_ancestor => {
+            (Class::Foreign, Some(&mut counts.foreign_by_ancestor))
+        }
+        // Its folder is only trusted when it does not redirect its target
+        // and that could be read.
+        (Owner::Other, Some(_)) if git.redirect != Some(false) => {
+            (Class::Foreign, Some(&mut counts.foreign_redirected))
+        }
+        (Owner::Other, Some(cwd)) if repo.worktree_of(cwd).is_some_and(|w| w == worktree) => {
+            (Class::Foreign, Some(&mut counts.foreign_wt))
+        }
+        (Owner::Other, Some(_)) => {
+            let class = match scope {
+                S3Scope::Repo => Class::Foreign,
+                S3Scope::Worktree => Class::Ignored,
+            };
+            (class, Some(&mut counts.foreign_other_wt))
+        }
+    }
 }
 
 /// One `git` process of a sample.
@@ -330,6 +412,12 @@ struct GitSeen {
     /// It existed before the write that triggered the sample, so it may
     /// have made it.
     started_before: bool,
+    /// `cwd` is the folder of the nearest live ancestor, not its own.
+    placed_by_ancestor: bool,
+    /// For a foreign `git` with its own readable folder in the repo, outside
+    /// the common dir: whether it redirects its target (`None`: its argv or
+    /// environment could not be read). `None` for every other `git`.
+    redirect: Option<bool>,
 }
 
 /// Whose a `git` is, by its ancestry.
@@ -634,22 +722,10 @@ impl Detector {
         t_recv: u64,
         t_flush: u64,
     ) -> S3Evidence {
-        // Stub: the scope and the counters are not applied yet.
-        let _ = scope;
-        S3Evidence {
-            outcome: self.outcome(repo_id, worktree, moved, t_recv, t_flush),
+        let uncounted = |outcome| S3Evidence {
+            outcome,
             counts: S3Counts::default(),
-        }
-    }
-
-    fn outcome(
-        &self,
-        repo_id: &str,
-        worktree: &Path,
-        moved: Option<RefMove<'_>>,
-        t_recv: u64,
-        t_flush: u64,
-    ) -> S3Outcome {
+        };
         let st = self.inner.lock();
         let present = |id: &str| {
             st.live
@@ -662,10 +738,10 @@ impl Detector {
                 })
         };
         if !st.live.values().any(|l| l.repo_id == repo_id) {
-            return S3Outcome::NoSession;
+            return uncounted(S3Outcome::NoSession);
         }
         let Some(repo) = st.repos.get(repo_id) else {
-            return S3Outcome::NoSession;
+            return uncounted(S3Outcome::NoSession);
         };
         // S4 first: it proves which `git` made this move, even with a foreign
         // `git` in the repo at the same time (DS-US-GRP-007 § 7).
@@ -677,40 +753,37 @@ impl Detector {
             if let [id] = sessions.as_slice()
                 && let Some(p) = present(id)
             {
-                return S3Outcome::Hook(p);
+                return uncounted(S3Outcome::Hook(p));
             }
         }
         let from = t_recv.saturating_sub(ns(self.inner.config.s3_lead));
         let mut sessions: Vec<&str> = Vec::new();
         let mut foreign = false;
+        let mut counts = S3Counts::default();
         let samples = st.sightings.get(repo_id).into_iter().flatten();
         for sighting in samples.filter(|s| s.t_recv >= from && s.t_recv <= t_flush) {
-            for git in sighting.gits.iter().filter(|g| g.started_before) {
-                match (&git.owner, &git.cwd) {
-                    (Owner::Session(id), Some(cwd)) if cwd.starts_with(worktree) => {
-                        if !sessions.contains(&id.as_str()) {
+            for git in &sighting.gits {
+                let (class, counter) = classify(git, repo, worktree, scope, &mut counts);
+                if let Some(counter) = counter {
+                    *counter = counter.saturating_add(1);
+                }
+                match class {
+                    Class::Evidence(id) => {
+                        if !sessions.contains(&id) {
                             sessions.push(id);
                         }
                     }
-                    // A `git` of the session in another worktree, or one
-                    // that is exiting, is no evidence and not foreign.
-                    (Owner::Session(_), _) => {}
-                    // The daemon's own `git` in this repo, or exiting.
-                    (Owner::Daemon, None) => foreign = true,
-                    (Owner::Daemon | Owner::Other, Some(cwd)) => foreign |= repo.contains(cwd),
-                    // Exiting and launched from nowhere readable: like a
-                    // `git` that already ended, it is not seen (the S3 race
-                    // accepted by ADR-GRP-012; an editor such as GitKraken
-                    // falls here, a declared gap of SPIKE-GRP-001).
-                    (Owner::Other, None) => {}
+                    Class::Foreign => foreign = true,
+                    Class::Ignored => {}
                 }
             }
         }
-        match (sessions.as_slice(), foreign) {
+        let outcome = match (sessions.as_slice(), foreign) {
             ([], false) => S3Outcome::NoSighting,
             ([id], false) => present(id).map_or(S3Outcome::NoSighting, S3Outcome::Attributed),
             _ => S3Outcome::Ambiguous,
-        }
+        };
+        S3Evidence { outcome, counts }
     }
 
     pub fn diagnostics(&self) -> Diagnostics {
@@ -941,6 +1014,9 @@ impl Inner {
         let unreadable = cwds.values().filter(|c| c.is_none()).count() as u64;
         self.cwd_unreadable.fetch_add(unreadable, Ordering::Relaxed);
         let tolerance = u64::try_from(self.config.start_tolerance.as_micros()).unwrap_or(0);
+        // Whether each foreign `git` redirects its target: one boolean per
+        // pid, never a value of its argv or environment (SEC-04).
+        let mut redirects: HashMap<u32, Option<bool>> = HashMap::new();
         let mut st = self.lock();
         for notice in notices {
             let sessions: HashMap<(u32, u64), String> = st
@@ -949,21 +1025,41 @@ impl Inner {
                 .filter(|(_, l)| l.repo_id == notice.repo_id)
                 .map(|(k, l)| (*k, l.session_id.clone()))
                 .collect();
+            let repo = st.repos.get(&notice.repo_id);
             let seen: Vec<GitSeen> = gits
                 .iter()
                 .map(|g| {
                     let owner = self.owner(g, &by_pid, &sessions);
                     let mut cwd = cwds.get(&g.pid).cloned().flatten();
-                    if cwd.is_none() && owner == Owner::Other {
-                        cwd = self.launched_from(g, &by_pid);
-                        if cwd.is_some() {
-                            self.placed_by_ancestor.fetch_add(1, Ordering::Relaxed);
+                    let mut placed_by_ancestor = false;
+                    let mut redirect = None;
+                    if owner == Owner::Other {
+                        match &cwd {
+                            None => {
+                                cwd = self.launched_from(g, &by_pid);
+                                if cwd.is_some() {
+                                    placed_by_ancestor = true;
+                                    self.placed_by_ancestor.fetch_add(1, Ordering::Relaxed);
+                                }
+                            }
+                            // Only where the answer can change the outcome:
+                            // its own folder, in the repo, outside the
+                            // common dir. Read once per sample.
+                            Some(own) => {
+                                if repo.is_some_and(|r| r.contains(own) && !r.in_common(own)) {
+                                    redirect = *redirects
+                                        .entry(g.pid)
+                                        .or_insert_with(|| self.procs.git_redirect(g.pid));
+                                }
+                            }
                         }
                     }
                     GitSeen {
                         owner,
                         cwd,
                         started_before: g.start_us <= notice.wall_us.saturating_add(tolerance),
+                        placed_by_ancestor,
+                        redirect,
                     }
                 })
                 .collect();

@@ -1,10 +1,12 @@
 //! The process table the detector reads (S1 and S3 of ADR-GRP-012).
 //!
 //! Only what identifies a process and places it: pid, parent, start time,
-//! executable path and, on request, the working folder. Never the command
-//! line nor the environment (SEC-04): `claude -p "..."` carries the prompt
-//! in its arguments, so not even the platform APIs that would load them are
-//! called.
+//! executable path and, on request, the working folder. The command line
+//! and the environment are read for one thing only: whether a foreign `git`
+//! redirects its target ([`ProcLister::git_redirect`]), and only that
+//! boolean leaves the reader; an argument or a variable's value is never
+//! kept, logged nor returned (SEC-04: `claude -p "..."` carries the prompt
+//! in its arguments). The agent's own command line is never read.
 
 use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
@@ -54,10 +56,85 @@ pub trait ProcLister: Send + Sync {
 /// environment variable names redirects its target: a global option `-C`,
 /// `--git-dir` or `--work-tree` before the subcommand, or `GIT_DIR`,
 /// `GIT_WORK_TREE` or `GIT_COMMON_DIR` in the environment.
-pub fn git_redirects<'a>(args: &[OsString], env_names: impl Iterator<Item = &'a OsStr>) -> bool {
-    // Stub: the rule is not written yet.
-    let _ = (args, env_names.count());
+///
+/// The first argument that is not an option is the subcommand and nothing
+/// after it is read: `git log -C` (copy detection) does not redirect. The
+/// value of a global option that takes one (`-c k=v`) is skipped.
+pub fn git_redirects<'a>(
+    args: &[OsString],
+    mut env_names: impl Iterator<Item = &'a OsStr>,
+) -> bool {
+    global_options_redirect(args.iter().map(|a| a.as_encoded_bytes()))
+        || env_names.any(|n| REDIRECT_ENV.contains(&n.as_encoded_bytes()))
+}
+
+/// The environment variables that move a `git`'s repository or worktree.
+const REDIRECT_ENV: [&[u8]; 3] = [b"GIT_DIR", b"GIT_WORK_TREE", b"GIT_COMMON_DIR"];
+
+/// The global options of `git` whose value is the next argument (in the `=`
+/// form they are one argument). `--exec-path` only takes one with `=`.
+const GLOBAL_WITH_VALUE: [&[u8]; 7] = [
+    b"-C",
+    b"-c",
+    b"--git-dir",
+    b"--work-tree",
+    b"--namespace",
+    b"--config-env",
+    b"--super-prefix",
+];
+
+/// Whether the global options (before the subcommand, program name
+/// excluded) hold `-C`, `--git-dir` or `--work-tree`, separate or with `=`.
+fn global_options_redirect<'a>(mut args: impl Iterator<Item = &'a [u8]>) -> bool {
+    while let Some(arg) = args.next() {
+        if !arg.starts_with(b"-") || arg == b"--" {
+            return false;
+        }
+        let name = arg.split(|b| *b == b'=').next().unwrap_or_default();
+        if matches!(name, b"-C" | b"--git-dir" | b"--work-tree") {
+            return true;
+        }
+        if name.len() == arg.len() && GLOBAL_WITH_VALUE.contains(&arg) {
+            // Its value, which may itself start with `-`.
+            args.next();
+        }
+    }
     false
+}
+
+/// Most bytes read from `/proc/<pid>/cmdline` or `/proc/<pid>/environ`; a
+/// longer one is unreadable.
+#[cfg(target_os = "linux")]
+const PROC_TEXT_CAP: u64 = 256 * 1024;
+
+/// Linux: [`git_redirects`] over `/proc/<pid>/cmdline` (without `argv[0]`)
+/// and the names of `/proc/<pid>/environ`. `None` when either cannot be read,
+/// is empty (the process is exiting) or exceeds [`PROC_TEXT_CAP`].
+#[cfg(target_os = "linux")]
+fn linux_git_redirect(pid: u32) -> Option<bool> {
+    use std::io::Read as _;
+    use std::os::unix::ffi::OsStrExt as _;
+
+    let read = |name: &str| -> Option<Vec<u8>> {
+        let file = std::fs::File::open(format!("/proc/{pid}/{name}")).ok()?;
+        let mut buf = Vec::new();
+        file.take(PROC_TEXT_CAP + 1).read_to_end(&mut buf).ok()?;
+        (u64::try_from(buf.len()).ok()? <= PROC_TEXT_CAP).then_some(buf)
+    };
+    let cmdline = read("cmdline").filter(|c| !c.is_empty())?;
+    let environ = read("environ")?;
+    let args: Vec<OsString> = cmdline
+        .strip_suffix(b"\0")
+        .unwrap_or(&cmdline[..])
+        .split(|b| *b == 0)
+        .skip(1)
+        .map(|a| OsStr::from_bytes(a).to_owned())
+        .collect();
+    let names = environ
+        .split(|b| *b == 0)
+        .filter(|kv| !kv.is_empty())
+        .map(|kv| OsStr::from_bytes(kv.split(|b| *b == b'=').next().unwrap_or_default()));
+    Some(git_redirects(&args, names))
 }
 
 /// The running OS.
@@ -233,6 +310,10 @@ impl ProcLister for SystemProcLister {
     fn cwd(&self, pid: u32) -> Option<PathBuf> {
         crate::channel::peer::process_cwd(pid)
     }
+
+    fn git_redirect(&self, pid: u32) -> Option<bool> {
+        gitraptor_macsys::process::process_git_redirect(pid)
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -267,8 +348,15 @@ impl ProcLister for SystemProcLister {
     fn cwd(&self, pid: u32) -> Option<PathBuf> {
         crate::channel::peer::process_cwd(pid)
     }
+
+    fn git_redirect(&self, pid: u32) -> Option<bool> {
+        linux_git_redirect(pid)
+    }
 }
 
+// Windows and the rest keep the default `git_redirect` (`None`, unknown): a
+// foreign `git` counts in the whole repo, as before. Pendiente: etapa de
+// validación multiplataforma.
 #[cfg(windows)]
 impl ProcLister for SystemProcLister {
     fn list(&self) -> Option<Vec<ProcEntry>> {
