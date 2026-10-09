@@ -1,0 +1,32 @@
+{
+  "id": "snapshot-label-too-long",
+  "title": "A snapshot label over the limit is refused as invalid text before the engine",
+  "threats": [
+    "MCP05",
+    "SEC-MCP-05",
+    "BR-MCP-VAL-005"
+  ],
+  "tier": "server",
+  "platforms": [
+    "macos",
+    "linux",
+    "windows"
+  ],
+  "send": [
+    {
+      "call": "snapshot",
+      "arguments": {
+        "label": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      }
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "invalid-text",
+      "params": [
+        "field",
+        "max_chars"
+      ]
+    }
+  }
+}
