@@ -382,6 +382,12 @@ impl Executor {
         }
     }
 
+    /// Stub (red contract tests).
+    #[must_use]
+    pub fn with_foreign_work_confirmable(self, _confirmable: bool) -> Self {
+        self
+    }
+
     /// Shorter lifetimes, for tests.
     pub fn with_limits(mut self, plan_ttl: Duration, mcp_time_limit: Duration) -> Self {
         self.plan_ttl = plan_ttl;
