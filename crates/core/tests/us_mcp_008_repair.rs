@@ -225,6 +225,7 @@ fn a_root_swapped_after_the_verification_is_discarded_without_a_row() {
     assert_eq!(manual_rows_in(&env), 1);
 }
 
+#[cfg(unix)]
 fn manual_rows_in(env: &Env) -> i64 {
     manual_rows(&env.dirs)
 }
