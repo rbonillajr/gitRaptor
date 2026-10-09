@@ -665,8 +665,16 @@ fn three_thousand_changes_page_with_a_cursor() {
         cursors.push(cursor);
     }
     // Each page starts where the last one stopped: ascending and without repeats.
-    assert_eq!(walked.len(), 32 * (pages - 1));
+    // `a[1..]` holds one answer per page requested; together they are exactly the first paths of
+    // the fixture, in order and without repeats.
+    assert_eq!(walked.len(), 32 * (a.len() - 1));
     assert!(walked.windows(2).all(|w| w[0] < w[1]), "{walked:?}");
+    let mut fixture: Vec<String> = (0..3000)
+        .map(|i| format!("bulk/d{:02}/f{i:04}.txt", i % 30))
+        .collect();
+    fixture.sort();
+    fixture.truncate(walked.len());
+    assert_eq!(walked, fixture);
 }
 
 /// S-08: a cursor means something only on the connection that was given it and for its repo; any
