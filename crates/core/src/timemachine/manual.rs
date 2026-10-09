@@ -490,7 +490,9 @@ fn reserve_for(worktree: &Path, deadline: Instant, last: Option<u64>) -> u64 {
         };
         for entry in entries.flatten() {
             seen += 1;
-            if seen > ESTIMATE_MAX_ENTRIES || (seen % 256 == 0 && Instant::now() >= deadline) {
+            if seen > ESTIMATE_MAX_ENTRIES
+                || (seen.is_multiple_of(256) && Instant::now() >= deadline)
+            {
                 complete = false;
                 break 'walk;
             }
