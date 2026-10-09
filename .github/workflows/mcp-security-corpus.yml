@@ -12,14 +12,20 @@ on:
   pull_request:
     paths:
       - 'apps/mcp/**'
+      # The `engine` tier starts the real daemon (`raptor`): the engine crates and the CLI too.
+      - 'apps/cli/src/**'
       - 'crates/api/**'
-      - 'crates/core/src/channel/**'
+      - 'crates/core/src/**'
+      - 'crates/git/**'
+      - 'crates/policy/**'
       - 'crates/testkit/**'
       - 'apps/cli/tests/mcp_security_corpus.rs'
       - 'apps/cli/tests/mcp_corpus/**'
       - '.github/workflows/mcp-security-corpus.yml'
+      - 'Cargo.toml'
       - 'Cargo.lock'
       - 'rust-toolchain.toml'
+      - '.cargo/**'
   push:
     branches: [main]
   workflow_dispatch:
@@ -40,6 +46,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # The job runs the pull request's own code and never needs authenticated Git.
+          persist-credentials: false
       - name: Toolchain from rust-toolchain.toml
         run: rustup show
       # Only main saves: pull request caches used to push the repo past the 10 GB limit.
