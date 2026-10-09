@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use gitraptor_api::catalog::{Layer, OperationArgs, OperationId, RejectReason};
-use gitraptor_git::{ReaderOptions, RepoReader};
+use gitraptor_git::ReadError;
 
 use super::scope::{McpAllowlist, McpRepos, ProtectedBackend, RepoHandle, ScopeError};
 use super::{
@@ -20,6 +20,7 @@ use super::{
     StoreSnapshotter,
 };
 use crate::executor::{GuardrailsGate, OpPlan, PlanError, RepoFacts, StepPlan};
+use crate::observe;
 use crate::profile::ProfileDirs;
 use crate::timemachine::oplog::Oplog;
 use crate::timemachine::store::SnapshotStore;
@@ -173,6 +174,15 @@ impl TmRepos {
         Some((Arc::clone(&repo.oplog), repo.store.clone()))
     }
 
+    /// The canonical common Git directory of an observed repo, as the registry has it: where its
+    /// refs and objects are read from, never through a worktree's `.git` (#223 I-03).
+    pub(crate) fn common_dir(&self, repo_id: &str) -> Option<PathBuf> {
+        self.lock()
+            .iter()
+            .find(|r| r.repo_id == repo_id)
+            .map(|r| r.common_dir.clone())
+    }
+
     /// The repo whose canonical common directory is `common_dir`, with its
     /// oplog and its store (`None` if the store cannot be opened).
     fn by_common_dir(&self, common_dir: &Path) -> Option<FoundRepo> {
@@ -193,19 +203,30 @@ impl TmRepos {
     /// The observed repo whose worktree root is `folder`, with the
     /// production snapshotter wrapped by `layer` in debug builds. Nothing
     /// is searched upwards, like `repo.add`.
+    ///
+    /// Which repo that is comes from the repos' own word, never from the folder's `.git` (#223
+    /// I-03, NFR-02): the observed repo that registers `folder` as one of its worktrees. Its
+    /// `.git` must then be that repo's own ([`observe::open_registered_worktree`]); otherwise
+    /// nothing is read and nothing runs.
     fn open_worktree(
         &self,
         folder: &Path,
         layer: Option<&SnapshotterLayer>,
     ) -> Result<Opened, ScopeError> {
-        let reader = RepoReader::open(folder, &ReaderOptions::default())
-            .map_err(|_| ScopeError::NotObserved)?;
-        let worktree = canonical(&reader.workdir().ok_or(ScopeError::NotObserved)?);
-        if worktree != canonical(folder) {
-            return Err(ScopeError::NotObserved);
+        let worktree = canonical(folder);
+        let commons: Vec<PathBuf> = self.lock().iter().map(|r| r.common_dir.clone()).collect();
+        let common_dir = commons
+            .into_iter()
+            .find(|common| {
+                observe::registered_worktrees(common)
+                    .is_ok_and(|list| list.iter().any(|(root, _)| *root == worktree))
+            })
+            .ok_or(ScopeError::NotObserved)?;
+        match observe::open_registered_worktree(&common_dir, &worktree) {
+            Ok(_) => {}
+            Err(ReadError::Untrusted(_)) => return Err(ScopeError::Untrusted),
+            Err(_) => return Err(ScopeError::NotObserved),
         }
-        let common_dir = canonical(reader.common_dir());
-        drop(reader);
         let (repo_id, oplog, store) = self
             .by_common_dir(&common_dir)
             .ok_or(ScopeError::NotObserved)?;
@@ -214,6 +235,7 @@ impl TmRepos {
                 store: Arc::clone(store),
                 oplog: Arc::clone(&oplog),
                 profile: self.dirs.clone(),
+                common_dir: common_dir.clone(),
             }),
             None => Arc::new(UnavailableStore),
         };
@@ -226,6 +248,7 @@ impl TmRepos {
             handle: RepoHandle {
                 repo_id,
                 worktree,
+                common_dir: common_dir.clone(),
                 oplog,
                 snapshotter,
             },
@@ -284,8 +307,17 @@ impl ProtectedBackend for DaemonBackend {
         self.repos.lock_key(&repo.repo_id)
     }
 
+    /// Read only while the repo registers the worktree and owns its `.git` (#223 I-03): the
+    /// executor reads the facts again under the write lock before it runs, so a `.git` swapped
+    /// after the plan is refused there too, before anything is written (NFR-01).
     fn facts(&self, repo: &RepoHandle) -> Result<RepoFacts, RejectReason> {
-        RepoFacts::read(&repo.worktree)
+        observe::open_registered_worktree(&repo.common_dir, &repo.worktree)
+            .map_err(|_| RejectReason::RepoIdentityChanged)?;
+        let facts = RepoFacts::read(&repo.worktree)?;
+        if facts.common_dir != repo.common_dir {
+            return Err(RejectReason::RepoIdentityChanged);
+        }
+        Ok(facts)
     }
 
     fn plan_op(

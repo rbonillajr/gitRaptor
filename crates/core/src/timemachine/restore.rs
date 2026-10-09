@@ -357,7 +357,8 @@ pub fn restore_to(
     // The worktrees of the plan, by their roots in the repo's validated
     // state: the oplog's scopes and the meta are untrusted and only
     // intersect it.
-    let Ok(registered) = registered_worktrees(worktree) else {
+    let common_dir = repo.repo.common_dir.as_path();
+    let Ok(registered) = registered_worktrees(common_dir) else {
         return Err(reject(
             own_scope,
             engine_mark,
@@ -507,7 +508,7 @@ pub fn restore_to(
         }
     }
     for w in &existing {
-        if let Some(branch) = head_branch(&w.root) {
+        if let Some(branch) = head_branch(common_dir, &w.root) {
             candidates.insert(format!("refs/heads/{branch}"));
         }
     }
@@ -523,18 +524,19 @@ pub fn restore_to(
             candidates.insert(format!("refs/heads/{branch}"));
         }
     }
-    let now: BTreeMap<String, String> = match RepoReader::open(worktree, &ReaderOptions::default())
-        .and_then(|r| r.local_branches())
-    {
-        Ok(list) => list.into_iter().map(|b| (b.name, b.commit)).collect(),
-        Err(_) => {
-            return Err(reject(
-                plan_scope(&existing, &BTreeSet::new()),
-                engine_mark,
-                TmRejectReason::WorktreeUnavailable,
-            ));
-        }
-    };
+    let now: BTreeMap<String, String> =
+        match RepoReader::open(common_dir, &ReaderOptions::default())
+            .and_then(|r| r.local_branches())
+        {
+            Ok(list) => list.into_iter().map(|b| (b.name, b.commit)).collect(),
+            Err(_) => {
+                return Err(reject(
+                    plan_scope(&existing, &BTreeSet::new()),
+                    engine_mark,
+                    TmRejectReason::WorktreeUnavailable,
+                ));
+            }
+        };
     // Only branches the point has, and only those that differ: one the
     // point does not have is never deleted, and `refs/stash` never moves.
     let refs: BTreeSet<String> = candidates
@@ -626,7 +628,7 @@ pub fn restore_to(
     // would change that worktree's history under its files.
     for (root, _) in &registered {
         if !plan_roots.contains(&root.as_path())
-            && let Some(branch) = head_branch(root)
+            && let Some(branch) = head_branch(common_dir, root)
             && refs.contains(&format!("refs/heads/{branch}"))
         {
             return Err(reject(scope, engine_mark, TmRejectReason::RefInUse));
@@ -656,6 +658,7 @@ pub fn restore_to(
             &write,
             oplog,
             main_root.clone(),
+            repo.repo.common_dir.clone(),
             repo.profile_root.clone(),
         );
         if let Some(first) = applier.check_preconditions(&apply_plan).first() {
@@ -694,6 +697,7 @@ pub fn restore_to(
         write: &write,
         guard: &guard,
         main_root,
+        common_dir: repo.repo.common_dir.clone(),
         profile_root: repo.profile_root.clone(),
         plan: apply_plan,
         declared,

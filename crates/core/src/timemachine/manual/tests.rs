@@ -93,6 +93,7 @@ fn a_time_limit_leaves_no_row_nor_ref() {
     let ask = ManualAsk {
         repo_id: REPO.into(),
         worktree: tree.clone(),
+        common_dir: crate::observe::locate(&tree).unwrap(),
         label: "before".into(),
         requester,
         channel: Channel::Mcp,

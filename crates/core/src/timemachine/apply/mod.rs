@@ -104,7 +104,8 @@ pub enum Refusal {
     },
     /// Another application holds the repo.
     RepoBusy,
-    /// The repo is not trusted (`safe.directory`).
+    /// The repo is not trusted (`safe.directory`), or a worktree's `.git` is not the repo's own
+    /// (#223 I-03): nothing is read behind it and nothing is written.
     Untrusted {
         worktree: PathBuf,
     },
@@ -254,6 +255,9 @@ pub struct Applier<'a> {
     write: &'a WriteContext,
     oplog: &'a Mutex<Oplog>,
     main_root: PathBuf,
+    /// The repo's common Git directory, from the registry: refs are read from it and a worktree
+    /// is opened only if the repo registers it and owns its `.git`.
+    common_dir: PathBuf,
     profile_root: PathBuf,
     now_ms: Box<dyn Fn() -> i64 + 'a>,
     hooks: ApplyHooks,
@@ -290,13 +294,15 @@ impl From<WriteError> for StepError {
 }
 
 impl<'a> Applier<'a> {
-    /// `main_root` is the main worktree of the repo (its Git folder holds refs and objects);
-    /// `profile_root` is the profile, where no worktree may be recreated.
+    /// `main_root` is the main worktree of the repo (its Git folder holds refs and objects) and
+    /// `common_dir` that Git folder, as the registry has it (#223 I-03); `profile_root` is the
+    /// profile, where no worktree may be recreated.
     pub fn new(
         store: &'a SnapshotStore,
         write: &'a WriteContext,
         oplog: &'a Mutex<Oplog>,
         main_root: PathBuf,
+        common_dir: PathBuf,
         profile_root: PathBuf,
     ) -> Self {
         Self {
@@ -304,6 +310,7 @@ impl<'a> Applier<'a> {
             write,
             oplog,
             main_root,
+            common_dir,
             profile_root,
             now_ms: Box::new(wall_ms),
             hooks: ApplyHooks::default(),
@@ -341,6 +348,17 @@ impl<'a> Applier<'a> {
     pub fn check_preconditions(&self, plan: &ApplyPlan) -> Vec<Refusal> {
         if cfg!(not(any(unix, windows))) {
             return vec![Refusal::Unsupported("applier")];
+        }
+        // Before anything behind a `.git` is opened: every worktree of the plan is one the repo
+        // registers and owns (#223 I-03, NFR-01).
+        let roots = std::iter::once(&self.main_root).chain(
+            plan.worktrees
+                .iter()
+                .filter(|w| w.recreate_id.is_none() || w.root.exists())
+                .map(|w| &w.root),
+        );
+        if let Some(r) = self.untrusted_among(roots) {
+            return vec![r];
         }
         let mut refusals = Vec::new();
         let main = match self.main() {
@@ -448,6 +466,11 @@ impl<'a> Applier<'a> {
         let mut present = vec![main.clone()];
         present.extend(loaded.worktrees.iter().filter_map(|w| w.worktree.clone()));
         let mut refusals = preconditions_of(&present, &ours);
+        // Once more under the locks, right before the first write: a `.git` swapped since the
+        // checks above is refused here and nothing is written (NFR-01).
+        if let Some(r) = self.untrusted(&loaded) {
+            refusals.insert(0, r);
+        }
         for w in &loaded.worktrees {
             // A worktree to recreate is checked against the file system of the main root now,
             // and against its own once it exists.
@@ -494,15 +517,37 @@ impl<'a> Applier<'a> {
     }
 
     fn untrusted(&self, loaded: &Loaded) -> Option<Refusal> {
-        let roots = std::iter::once(&self.main_root).chain(
-            loaded
-                .worktrees
-                .iter()
-                .filter(|w| w.worktree.is_some())
-                .map(|w| &w.root),
-        );
+        self.untrusted_among(
+            std::iter::once(&self.main_root).chain(
+                loaded
+                    .worktrees
+                    .iter()
+                    .filter(|w| w.worktree.is_some())
+                    .map(|w| &w.root),
+            ),
+        )
+    }
+
+    /// The first of `roots` that Git does not trust, or whose `.git` the repo does not own
+    /// ([`crate::observe::open_registered_worktree`]).
+    fn untrusted_among<'r>(&self, roots: impl Iterator<Item = &'r PathBuf>) -> Option<Refusal> {
+        let registered = match crate::observe::registered_worktrees(&self.common_dir) {
+            Ok(list) => list,
+            Err(ReadError::Untrusted(_)) => {
+                return Some(Refusal::Untrusted {
+                    worktree: self.main_root.clone(),
+                });
+            }
+            Err(e) => {
+                return Some(Refusal::WorktreeUnavailable {
+                    worktree: self.main_root.clone(),
+                    reason: e.to_string(),
+                });
+            }
+        };
         for root in roots {
-            if let Err(ReadError::Untrusted(_)) = RepoReader::open(root, &ReaderOptions::default())
+            if let Err(ReadError::Untrusted(_)) =
+                crate::observe::open_registered_in(&self.common_dir, &registered, root)
             {
                 return Some(Refusal::Untrusted {
                     worktree: root.clone(),
@@ -514,12 +559,13 @@ impl<'a> Applier<'a> {
 
     /// Branches and every `HEAD` hold what the prior snapshot says, before starting.
     fn refs_as_expected(&self, main: &WriteWorktree, loaded: &Loaded) -> Result<(), Refusal> {
-        let reader = RepoReader::open(main.root(), &ReaderOptions::default()).map_err(|e| {
-            Refusal::WorktreeUnavailable {
-                worktree: main.root().to_owned(),
-                reason: e.to_string(),
-            }
-        })?;
+        let reader =
+            RepoReader::open(&self.common_dir, &ReaderOptions::default()).map_err(|e| {
+                Refusal::WorktreeUnavailable {
+                    worktree: main.root().to_owned(),
+                    reason: e.to_string(),
+                }
+            })?;
         let tips = reader
             .branch_tips()
             .map_err(|e| Refusal::WorktreeUnavailable {

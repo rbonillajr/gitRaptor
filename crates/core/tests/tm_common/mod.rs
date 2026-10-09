@@ -53,7 +53,7 @@ impl Env {
     pub fn request(&self, level: SnapshotLevel, hint: Option<ChangeHint>) -> CaptureRequest {
         CaptureRequest {
             level,
-            repo: self.f.repo.clone(),
+            common_dir: gitraptor_core::observe::locate(&self.f.repo).unwrap(),
             worktrees: vec![WorktreeScope {
                 key: "main".into(),
                 path: self.f.repo.clone(),

@@ -42,6 +42,7 @@ fn ask(worktree: &Path, session: &str) -> ManualAsk {
     ManualAsk {
         repo_id: REPO_ID.into(),
         worktree: worktree.to_path_buf(),
+        common_dir: gitraptor_core::observe::locate(worktree).unwrap(),
         label: "before the migration".into(),
         requester: agent(session),
         channel: Channel::Mcp,

@@ -25,7 +25,7 @@ use std::time::Duration;
 use gitraptor_api::catalog::MAX_QUEUED_PER_REPO;
 use gitraptor_api::timemachine::{PriorFailure, TmRejectReason};
 use gitraptor_git::tm_write::WriteContext;
-use gitraptor_git::{Invoker, ReaderOptions, RepoReader, SystemGit};
+use gitraptor_git::{Invoker, SystemGit};
 
 use super::apply::{Applier, ApplyError, ApplyPlan, ApplyReport, PlanWorktree, RefScope, Refusal};
 use super::confirm::{Confirmation, PlanFacts, PlanKind};
@@ -368,6 +368,7 @@ fn raw_target(
 fn plan(
     oplog_lock: &Mutex<Oplog>,
     store: Option<&SnapshotStore>,
+    common_dir: &Path,
     worktree: &Path,
     who: &Who,
     channel: Channel,
@@ -387,7 +388,7 @@ fn plan(
     };
     let reject = |reason, scope: &Scope, target: Vec<OpRef>| (reason, scope.clone(), target);
     let wt_key = super::protected::worktree_key(
-        &registered_worktrees(worktree).unwrap_or_default(),
+        &registered_worktrees(common_dir).unwrap_or_default(),
         worktree,
         0,
     );
@@ -515,8 +516,8 @@ fn plan(
     // recorded it, and still a worktree of this repo (the oplog is
     // untrusted input when read back, SEC-TMC-09); its key and branch from
     // the target's meta.
-    let registered =
-        registered_worktrees(worktree).map_err(|_| refuse(TmRejectReason::WorktreeUnavailable))?;
+    let registered = registered_worktrees(common_dir)
+        .map_err(|_| refuse(TmRejectReason::WorktreeUnavailable))?;
     let mut worktrees = Vec::new();
     let mut refs: BTreeSet<String> = scope.refs.iter().cloned().collect();
     for root in &scope.worktrees {
@@ -532,7 +533,7 @@ fn plan(
         if let Some(branch) = &in_meta.head_branch {
             refs.insert(format!("refs/heads/{branch}"));
         }
-        if let Some(branch) = head_branch(Path::new(root)) {
+        if let Some(branch) = head_branch(common_dir, Path::new(root)) {
             refs.insert(format!("refs/heads/{branch}"));
         }
         worktrees.push(PlanWorktree {
@@ -550,7 +551,7 @@ fn plan(
     for (i, (root, _)) in registered.iter().enumerate() {
         let outside = !scope.worktrees.iter().any(|w| Path::new(w) == root);
         if outside
-            && let Some(branch) = head_branch(root)
+            && let Some(branch) = head_branch(common_dir, root)
             && refs.contains(&format!("refs/heads/{branch}"))
         {
             let full = format!("refs/heads/{branch}");
@@ -587,9 +588,10 @@ fn plan(
     })
 }
 
-/// The branch `HEAD` names in the worktree at `root`, if symbolic.
-pub(super) fn head_branch(root: &Path) -> Option<String> {
-    RepoReader::open(root, &ReaderOptions::default())
+/// The branch `HEAD` names in the worktree at `root`, if symbolic; `None` too if the repo at
+/// `common_dir` does not register it or own its `.git` (#223 I-03): nothing behind it is read.
+pub(super) fn head_branch(common_dir: &Path, root: &Path) -> Option<String> {
+    crate::observe::open_registered_worktree(common_dir, root)
         .ok()?
         .head()
         .ok()?
@@ -640,6 +642,7 @@ pub(super) struct UndoStep<'a> {
     /// The repo, held by the undo since it chose its target.
     pub(super) guard: &'a repo_lock::RepoGuard,
     pub(super) main_root: PathBuf,
+    pub(super) common_dir: PathBuf,
     pub(super) profile_root: PathBuf,
     pub(super) plan: ApplyPlan,
     pub(super) declared: StepScope,
@@ -666,6 +669,7 @@ impl ProtectedStep for UndoStep<'_> {
             self.write,
             ctx.oplog(),
             self.main_root.clone(),
+            self.common_dir.clone(),
             self.profile_root.clone(),
         );
         let result = applier.apply_holding(ctx.operation_id(), &self.plan, self.guard);
@@ -757,6 +761,7 @@ pub fn undo_last(
     let planned = plan(
         oplog,
         repo.store.as_deref(),
+        &repo.repo.common_dir,
         worktree,
         who,
         channel,
@@ -799,6 +804,7 @@ pub fn undo_last(
             &write,
             oplog,
             main_root.clone(),
+            repo.repo.common_dir.clone(),
             repo.profile_root.clone(),
         );
         if let Some(first) = applier.check_preconditions(&apply_plan).first() {
@@ -827,6 +833,7 @@ pub fn undo_last(
         write: &write,
         guard: &guard,
         main_root,
+        common_dir: repo.repo.common_dir.clone(),
         profile_root: repo.profile_root.clone(),
         plan: apply_plan,
         declared,
@@ -842,7 +849,7 @@ pub fn undo_last(
     };
     let tips_before = env
         .engine
-        .map(|_| branch_tips(worktree))
+        .map(|_| branch_tips(&repo.repo.common_dir))
         .unwrap_or_default();
     let ran = protected.run(&req, &mut step);
     // The state the undo left, while the repo is still held: its echo in the

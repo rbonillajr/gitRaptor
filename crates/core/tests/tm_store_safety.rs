@@ -58,7 +58,7 @@ mod repo_intact {
                 let wt = f.root.join("wt-feature");
                 let mut req = gitraptor_core::timemachine::store::CaptureRequest {
                     level: SnapshotLevel::GuaranteedPrior,
-                    repo: f.repo.clone(),
+                    common_dir: gitraptor_core::observe::locate(&f.repo).unwrap(),
                     worktrees: vec![
                         gitraptor_core::timemachine::store::WorktreeScope {
                             key: "main".into(),

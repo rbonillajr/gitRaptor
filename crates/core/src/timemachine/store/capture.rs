@@ -38,8 +38,11 @@ use crate::timemachine::oplog::{
 #[derive(Debug, Clone)]
 pub struct CaptureRequest {
     pub level: SnapshotLevel,
-    /// Any worktree of the repo: refs and the worktree list are read from it.
-    pub repo: PathBuf,
+    /// The repo's common Git directory, from the registry and never from a worktree's `.git`:
+    /// refs and the worktree list are read from it, and a worktree of the snapshot is opened
+    /// only if the repo registers it and owns its `.git` (#223 I-03, NFR-01): otherwise the
+    /// capture fails before anything is recorded.
+    pub common_dir: PathBuf,
     /// The worktrees in the snapshot. A guaranteed prior includes every worktree of the
     /// operation's scope; an observation, the one that changed (ADR-TMC-001 § 1).
     pub worktrees: Vec<WorktreeScope>,
@@ -468,7 +471,8 @@ impl SnapshotStore {
         let handle = self.store.handle();
 
         // ---- detection -------------------------------------------------------------------
-        let main = RepoReader::open(&req.repo, &ReaderOptions::default())?;
+        let main = RepoReader::open(&req.common_dir, &ReaderOptions::default())?;
+        let listed = crate::observe::registered_in(&main)?;
         let branches: BTreeMap<String, String> = main
             .branch_tips()?
             .into_iter()
@@ -486,16 +490,10 @@ impl SnapshotStore {
         for (i, scope) in req.worktrees.iter().enumerate() {
             let prev = state.worktrees.remove(&scope.key);
             let mut anchor_lap = Duration::ZERO;
-            let own;
-            let reader = if scope.path == req.repo {
-                &main
-            } else {
-                own = RepoReader::open(&scope.path, &ReaderOptions::default())?;
-                &own
-            };
+            let reader = crate::observe::open_registered_in(&req.common_dir, &listed, &scope.path)?;
             let work = self.detect(
                 &handle,
-                reader,
+                &reader,
                 i,
                 scope,
                 req.include_credentials,

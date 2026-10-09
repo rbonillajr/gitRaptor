@@ -2422,6 +2422,10 @@ fn capture_error(why: ManualError) -> ErrorObject {
         ManualError::InFlight => rejected(R::WriteInProgress),
         ManualError::Busy => rejected(R::GitBusy),
         ManualError::Discarded => rejected(R::StateChanged),
+        // The worktree's `.git` is not the repo's own (#223 I-03): the frozen identity code.
+        ManualError::Capture(crate::timemachine::store::CaptureError::Read(
+            gitraptor_git::ReadError::Untrusted(_),
+        )) => rejected(R::RepoIdentityChanged),
         ManualError::Unavailable | ManualError::Capture(_) => {
             ErrorObject::new(code::INTERNAL, "capture failed")
         }
@@ -2632,6 +2636,7 @@ fn scope_refused(why: ScopeError) -> ErrorObject {
         ScopeError::NotAllowlisted => ScopeRefusal::NotAllowlisted,
         ScopeError::UnattributedOverMcp => ScopeRefusal::UnattributedOverMcp,
         ScopeError::ForeignWorktree => ScopeRefusal::ForeignWorktree,
+        ScopeError::Untrusted => ScopeRefusal::NotObserved,
     };
     ErrorObject::new(code::SCOPE_REFUSED, why.as_str()).with_data(ScopeRefusedData { reason })
 }
@@ -3305,7 +3310,7 @@ impl Connection<'_> {
                 ..EngineSide::default()
             };
             if let Some(deps) = &self.ctx.tm_engine {
-                let registered = registered_worktrees(&repo.repo.worktree).unwrap_or_default();
+                let registered = registered_worktrees(&repo.repo.common_dir).unwrap_or_default();
                 let floor = deps.engine.generation_floor(&repo.repo.repo_id);
                 for root in events.iter().map(|e| e.worktree.raw()) {
                     if side.raw.contains_key(root) {
@@ -3348,8 +3353,9 @@ impl Connection<'_> {
                 .iter()
                 .any(|e| matches!(e.origin, EntryOrigin::GitEvent { .. }))
         {
-            let root = repo.main_root.as_deref().unwrap_or(&repo.repo.worktree);
-            let reader = RepoReader::open(root, &ReaderOptions::default()).ok();
+            // Trees and commits only: read from the repo's own Git folder, as the registry has it,
+            // never through a worktree's `.git` (#223 I-02).
+            let reader = RepoReader::open(&repo.repo.common_dir, &ReaderOptions::default()).ok();
             fill_files(
                 &mut result,
                 &engine.events,

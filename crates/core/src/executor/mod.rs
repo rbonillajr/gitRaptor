@@ -739,6 +739,7 @@ impl Executor {
         let ask = ManualAsk {
             repo_id: plan.repo.repo_id.clone(),
             worktree: now_facts.root.clone(),
+            common_dir: plan.repo.common_dir.clone(),
             label: label.clone(),
             requester: plan.who.requester.clone(),
             channel: oplog_channel(plan.channel),
