@@ -2,10 +2,10 @@
 id: US-GRD-012
 title: "Un agente no puede relajar las reglas del equipo cambiando su configuración"
 type: us
-status: draft
+status: implemented
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-09
 feature: guardrails
 related:
   context:
@@ -82,9 +82,23 @@ Entonces el commit se ejecuta y el cambio queda en su rama para revisión
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+Ver el Brief y la Enmienda (2026-10-08) de ADR-GRD-003: regla `policy.config-protected`, aviso `config.relax-ignored` y capacidad `guard.config-protection`.
 
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica.
-- **Dev Spec:** pendiente (Arquitecto).
+- **Dev Spec:** [Brief de implementación](../../../../dev-briefs/layered-config.md) (ADR-GRD-003, Enmienda 2026-10-08, US-GRD-010 y US-GRD-012).
+
+## Estado de la implementación (2026-10-09)
+
+Implementado en: PR #__PR__. Brief: [Brief de implementación](../../../../dev-briefs/layered-config.md).
+
+Los seis escenarios y el escenario de la configuración local (un agente que la edita para relajar una regla: la regla efectiva no cambia y queda un aviso con su actor) están cubiertos por `apps/cli/tests/guard_us_grd_012.rs`, `crates/core/tests/us_grd_012_config_guard.rs` y `us_grd_012_config_bypass.rs` (verificado en macOS; Linux lo cubre el CI de ubuntu; Windows: **Pendiente: etapa de validación multiplataforma**, XP-39).
+
+Decisiones y límites declarados:
+
+- **Confirmación consciente (escenario 6).** Se lee como el commit propio de la persona, decidido por el **actor** que ve el hook (ascendencia del proceso), nunca por el autor, el committer ni el trailer, porque el agente commitea con la identidad de la persona. Con actor «sin atribuir» cuenta como la persona (riesgo residual aceptado del MVP, Q35 y R-GRD-3). Un commit sin hooks no confirma nada.
+- **Alcance de la protección.** Solo la configuración del equipo (`.gitraptor/`) es ruta prohibida. Perfil y local no están protegidos contra escritura del agente (**R-GRD-4**; el cierre es el trinquete de Q-GRD-32): un agente puede quitar endurecimientos de su propio perfil o local, nunca bajar del equipo.
+- **Cambio de comportamiento.** Un agente cuyo movimiento no se puede verificar (más de 256 commits nuevos, objetos que faltan) se deniega aunque no haya reglas de rutas.
+- **Residuo M-01.** Retroceder la rama base o forjar `refs/remotes/<r>/main` no crea commits nuevos y no pasa por esta regla; lo compensa el suelo confirmado, y el cierre es la marca de agua de US-GRD-014 (`policy-floor`, `policy-reach`).
+- Las ediciones sin commitear no se registran (Q-GRD-17, ADR-GRD-004).
