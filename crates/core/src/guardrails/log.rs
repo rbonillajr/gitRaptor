@@ -263,7 +263,7 @@ fn keep<T>(
     }
 }
 
-fn normalize(op: &Operation, reasons: &[Reason]) -> LoggedOperation {
+pub(crate) fn normalize(op: &Operation, reasons: &[Reason]) -> LoggedOperation {
     let named = named(reasons);
     let forced = reasons.iter().any(|r| r.rule == Rule::MinimumForcePush);
     match op {

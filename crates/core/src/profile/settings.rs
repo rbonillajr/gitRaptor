@@ -18,15 +18,25 @@ use super::ProfileDirs;
 pub const PROFILE_SETTINGS_FILE: &str = "settings.json";
 
 /// Largest settings document read (L-03).
-const MAX_BYTES: u64 = 64 * 1024;
+const MAX_BYTES: u64 = gitraptor_policy::settings::strict::MAX_BYTES as u64;
 
 /// The profile settings document. Absent when there is no file; ignored as
 /// a whole when it is not a regular file, is too large or cannot be read.
 /// A link is never followed.
 pub fn profile_settings(dirs: &ProfileDirs) -> Parsed {
-    let path = dirs.config.join(PROFILE_SETTINGS_FILE);
-    let ignored = |code| Parsed::ignored(Diagnostic::new(code, SourceKind::Profile));
-    let meta = match std::fs::symlink_metadata(&path) {
+    read_settings(
+        &dirs.config.join(PROFILE_SETTINGS_FILE),
+        Level::Profile,
+        SourceKind::Profile,
+    )
+}
+
+/// Reads one settings file without following links, bounded to [`MAX_BYTES`]. Never creates
+/// anything. Absent only when the file does not exist; every other failure ignores the whole
+/// document (a diagnostic without content), so a problem never relaxes a rule.
+fn read_settings(path: &std::path::Path, level: Level, kind: SourceKind) -> Parsed {
+    let ignored = |code| Parsed::ignored(Diagnostic::new(code, kind));
+    let meta = match std::fs::symlink_metadata(path) {
         Ok(meta) => meta,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Parsed::absent(),
         Err(_) => return ignored(Code::Unreadable),
@@ -41,14 +51,14 @@ pub fn profile_settings(dirs: &ProfileDirs) -> Parsed {
         return ignored(Code::LimitExceeded(Limit::Size));
     }
     let mut bytes = Vec::new();
-    let read = open_no_follow(&path).and_then(|f| f.take(MAX_BYTES + 1).read_to_end(&mut bytes));
+    let read = open_no_follow(path).and_then(|f| f.take(MAX_BYTES + 1).read_to_end(&mut bytes));
     if read.is_err() {
         return ignored(Code::Unreadable);
     }
     if bytes.len() as u64 > MAX_BYTES {
         return ignored(Code::LimitExceeded(Limit::Size));
     }
-    parse_document(&bytes, Level::Profile, SourceKind::Profile)
+    parse_document(&bytes, level, kind)
 }
 
 /// File name of the local settings of a repo, in `<config>/repos/<repo_id>/`.
@@ -67,11 +77,21 @@ pub fn local_settings_path(dirs: &ProfileDirs, repo_id: &str) -> Option<std::pat
     })
 }
 
-/// The local document of a repo, read like the profile one. Absent when the id is invalid or
-/// there is no file.
-pub fn local_settings(_dirs: &ProfileDirs, _repo_id: &str) -> Parsed {
-    // stub: replaced by the implementation slice
-    Parsed::absent()
+/// The local document of a repo, read like the profile one (no link followed, regular file,
+/// 64 KiB, `Level::Local`: keys the local level does not admit are dropped by the schema, so
+/// `baseBranch` is ignored). Absent when the id is invalid or there is no file; ignored when
+/// the repo folder is a link. Never creates the file or the folder.
+pub fn local_settings(dirs: &ProfileDirs, repo_id: &str) -> Parsed {
+    let Some(path) = local_settings_path(dirs, repo_id) else {
+        return Parsed::absent();
+    };
+    // The repo folder must not be a link either: it could point the read outside the profile.
+    if let Some(folder) = path.parent()
+        && std::fs::symlink_metadata(folder).is_ok_and(|m| m.file_type().is_symlink())
+    {
+        return Parsed::ignored(Diagnostic::new(Code::Symlink, SourceKind::Local));
+    }
+    read_settings(&path, Level::Local, SourceKind::Local)
 }
 
 #[cfg(unix)]
@@ -201,5 +221,92 @@ mod tests {
         // A value that is not one of the two: the document is not applied, the default stays.
         write(&dirs, r#"{"engine": {"watcher": {"backend": "kqueue"}}}"#);
         assert_eq!(watch_backend(&dirs), WatchBackend::Fsevents);
+    }
+
+    fn local_write(dirs: &ProfileDirs, id: &str, text: &str) {
+        let path = local_settings_path(dirs, id).unwrap();
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    }
+
+    const ID: &str = "0123abcd-ef01";
+
+    #[test]
+    fn local_is_absent_without_file_or_with_a_bad_id_and_creates_nothing() {
+        let (_tmp, dirs) = dirs();
+        assert!(local_settings(&dirs, ID).applicable().is_none());
+        assert!(local_settings(&dirs, "../etc").applicable().is_none());
+        assert!(local_settings(&dirs, "").applicable().is_none());
+        assert!(!dirs.config.join("repos").exists());
+    }
+
+    #[test]
+    fn local_reads_permissions_and_drops_keys_the_level_does_not_admit() {
+        let (_tmp, dirs) = dirs();
+        local_write(
+            &dirs,
+            ID,
+            r#"{"permissions":{"deny":["push"]},"engine":{"baseBranch":"develop"}}"#,
+        );
+        let parsed = local_settings(&dirs, ID);
+        let s = parsed.applicable().expect("applicable");
+        assert!(s.permissions.is_some());
+        assert!(
+            s.engine.as_ref().is_none_or(|e| e.base_branch.is_none()),
+            "baseBranch must be ignored at the local level"
+        );
+        assert!(!parsed.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn local_invalid_or_oversized_is_ignored() {
+        let (_tmp, dirs) = dirs();
+        local_write(&dirs, ID, "{not json");
+        assert!(local_settings(&dirs, ID).applicable().is_none());
+        let pad = " ".repeat(usize::try_from(MAX_BYTES).unwrap());
+        local_write(
+            &dirs,
+            ID,
+            &format!(r#"{{"permissions":{{"deny":["push"]}}}}{pad}"#),
+        );
+        let parsed = local_settings(&dirs, ID);
+        assert!(parsed.applicable().is_none());
+        assert!(!parsed.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn local_that_is_a_directory_is_ignored() {
+        let (_tmp, dirs) = dirs();
+        let path = local_settings_path(&dirs, ID).unwrap();
+        std::fs::create_dir_all(&path).unwrap();
+        let parsed = local_settings(&dirs, ID);
+        assert!(parsed.applicable().is_none());
+        assert!(!parsed.diagnostics.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn local_links_are_not_followed() {
+        let (tmp, dirs) = dirs();
+        let target = tmp.path().join("elsewhere.json");
+        std::fs::write(&target, r#"{"permissions":{"deny":["push"]}}"#).unwrap();
+        let path = local_settings_path(&dirs, ID).unwrap();
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::os::unix::fs::symlink(&target, &path).unwrap();
+        assert!(local_settings(&dirs, ID).applicable().is_none());
+
+        // The repo folder as a link.
+        let other = "feed";
+        let real = tmp.path().join("real-folder");
+        std::fs::create_dir_all(&real).unwrap();
+        std::fs::write(
+            real.join(LOCAL_SETTINGS_FILE),
+            r#"{"permissions":{"deny":["push"]}}"#,
+        )
+        .unwrap();
+        let folder = local_settings_path(&dirs, other).unwrap();
+        std::fs::create_dir_all(folder.parent().unwrap().parent().unwrap()).unwrap();
+        std::os::unix::fs::symlink(&real, folder.parent().unwrap()).unwrap();
+        assert!(local_settings(&dirs, other).applicable().is_none());
     }
 }

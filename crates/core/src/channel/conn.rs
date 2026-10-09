@@ -861,8 +861,10 @@ impl Connection<'_> {
             methods::GUARD_EVALUATE => {
                 let result = request.params::<EvaluateParams>().map(|p| {
                     let caller = self.guard_caller(&p);
-                    let (decision, policy) =
-                        crate::guardrails::evaluate::serve_logged(&self.ctx.guard, &p, &caller);
+                    let served =
+                        crate::guardrails::evaluate::serve_audited(&self.ctx.guard, &p, &caller);
+                    let policy = served.authorship_policy;
+                    let mut decision = served.decision;
                     // One decision per operation (ADR-GRD-003 § 6): the second line of the
                     // same `git` reuses the one `commit-msg` gave.
                     if let (
@@ -878,8 +880,13 @@ impl Connection<'_> {
                     }
                     // Before the answer: the entry reaches the loop ahead of any later query,
                     // and the actor is read while the hook client is alive (US-GRD-005, D3).
-                    self.log_decision(&p, &decision, &caller, policy);
+                    self.log_decision(&p, &decision, &caller, policy, &served.ignored);
                     self.hook_claims(&p, &caller, &decision);
+                    // After logging: the log keeps the product's own rule names, and the
+                    // protection applies the same for a client that does not know them.
+                    if !self.has(methods::CAP_GUARD_CONFIG_PROTECTION.name) {
+                        crate::guardrails::config_guard::legacy_decision(&mut decision);
+                    }
                     decision
                 });
                 self.reply(&request.id, result);
@@ -1013,11 +1020,13 @@ impl Connection<'_> {
         decision: &gitraptor_api::guard::Decision,
         caller: &crate::guardrails::evaluate::Caller,
         policy: Option<&'static str>,
+        ignored: &[gitraptor_policy::layers::IgnoredRelaxation],
     ) {
         use crate::guardrails::log;
         if decision.applied_effect == gitraptor_api::guard::Effect::Allow
             && decision.notices.is_empty()
             && policy != Some("flexible")
+            && ignored.is_empty()
         {
             return;
         }
@@ -1052,14 +1061,21 @@ impl Connection<'_> {
             at_ms,
             utc_offset_s,
         };
-        let Some(entry) = log::entry(params, decision, &ctx) else {
-            return;
-        };
         let sink = self.ctx.guard.log();
-        if !sink.try_reserve() {
-            sink.overflow(&entry);
-        } else if !self.ctx.control.guard_record(entry) {
-            sink.release();
+        // The decision's own entry, then the notice of an ignored relaxation (same decision
+        // id): both take the same road, never waiting.
+        for entry in [
+            log::entry(params, decision, &ctx),
+            crate::guardrails::config_guard::relax_entry(params, decision, ignored, &ctx),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            if !sink.try_reserve() {
+                sink.overflow(&entry);
+            } else if !self.ctx.control.guard_record(entry) {
+                sink.release();
+            }
         }
     }
 
@@ -1347,6 +1363,10 @@ impl Connection<'_> {
                 if !self.has(methods::CAP_GUARD_PROTECTION.name) {
                     log.entries
                         .retain(|e| e.kind != gitraptor_api::guard::LogKind::ProtectionState);
+                }
+                // Nor the notices of the configuration, and its denials read as a path.
+                if !self.has(methods::CAP_GUARD_CONFIG_PROTECTION.name) {
+                    crate::guardrails::config_guard::legacy_log(&mut log);
                 }
                 Ok(log)
             }
