@@ -805,10 +805,16 @@ impl Daemon {
                     common_dir,
                     since_ms,
                     limit,
+                    hide_relax_ignored,
                     reply,
                 }) => {
                     self.wake_for_common_dir(&common_dir);
-                    let _ = reply.send(self.guard_log(&common_dir, since_ms, limit));
+                    let _ = reply.send(self.guard_log(
+                        &common_dir,
+                        since_ms,
+                        limit,
+                        hide_relax_ignored,
+                    ));
                 }
                 Ok(Control::RawEvents {
                     repo_id,

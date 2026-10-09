@@ -142,17 +142,27 @@ impl RepoStore {
 
     /// The entries of the period, most recent first, its KPI and the periods nothing was
     /// logged. The period never starts before the retention, purged or not.
-    pub fn guard_log(&self, since_ms: i64, limit: u32, now_ms: i64) -> Result<GuardLogResult> {
+    /// `hide_relax_ignored` leaves the `config.relax-ignored` notices out of the page and of the
+    /// totals alike, so the page still fills to `limit` and the two come from the same set.
+    pub fn guard_log(
+        &self,
+        since_ms: i64,
+        limit: u32,
+        now_ms: i64,
+        hide_relax_ignored: bool,
+    ) -> Result<GuardLogResult> {
         let since = since_ms.max(retention_floor(now_ms));
+        let hide = i64::from(hide_relax_ignored);
         let entries = self
             .conn
             .prepare(
                 "SELECT at_ms, utc_offset_s, last_ms, count, worktree, branch, actor, operation,
                      kind, detail, effect, applied_effect, reasons, decision_id, authorship
-                 FROM guardrails_decisions WHERE last_ms >= ?1
+                 FROM guardrails_decisions
+                 WHERE last_ms >= ?1 AND (?3 = 0 OR reasons NOT LIKE '%\"config.relax-ignored\"%')
                  ORDER BY last_ms DESC, id DESC LIMIT ?2",
             )?
-            .query_map(params![since, limit], entry_row)?
+            .query_map(params![since, limit, hide], entry_row)?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         let summary = self.conn.query_row(
             "SELECT
@@ -160,8 +170,9 @@ impl RepoStore {
                      THEN count END), 0),
                  COALESCE(SUM(CASE WHEN kind = 'notice' THEN count END), 0),
                  COALESCE(SUM(CASE WHEN detail = 'rate-limited' THEN count END), 0)
-             FROM guardrails_decisions WHERE last_ms >= ?1",
-            params![since],
+             FROM guardrails_decisions
+             WHERE last_ms >= ?1 AND (?2 = 0 OR reasons NOT LIKE '%\"config.relax-ignored\"%')",
+            params![since, hide],
             |row| {
                 Ok(GuardLogSummary {
                     blocked: row.get::<_, i64>(0)?.max(0) as u64,

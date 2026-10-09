@@ -28,6 +28,24 @@ fn denied(cause: Option<Cause>, params: Vec<Param>) -> Reason {
     }
 }
 
+/// Decides which names of a root tree are the configuration directory, with the same matcher
+/// (and the same folding of case, Unicode and NTFS names) `protect_config` uses.
+pub struct RootMatcher(Pattern);
+
+impl RootMatcher {
+    /// `None` only when the pattern cannot be built: a bug, never "nothing matches".
+    pub fn new() -> Option<Self> {
+        Pattern::new(MATCHED, Kind::Path).ok().map(Self)
+    }
+
+    /// Whether the root entry `name` is the configuration (a file, a link, a submodule or the
+    /// directory). `None` when the budget ran out or the name is too long to compare: the caller
+    /// treats it as unverifiable.
+    pub fn is_config(&self, name: &str, budget: &mut Budget) -> Option<bool> {
+        self.0.matches_path(name, budget).ok()
+    }
+}
+
 /// An agent's movement whose new commits touch `/.gitraptor/` is denied with
 /// `policy.config-protected` (level `minimum`, params `path` = first such path, `pattern`);
 /// `touched.unverifiable` with an agent denies with `Cause::Unverifiable`, no params. The

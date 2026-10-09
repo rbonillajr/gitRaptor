@@ -46,6 +46,10 @@ pub struct Facts {
     /// `pre-push` or a `reference-transaction`; `None` where nothing was read (no forbidden-path
     /// rule governs the actor, or the update brings no commit).
     pub touched: Vec<Option<policies::Touched>>,
+    /// What each update does to the protected configuration directory (BR-AUTH-004), aligned
+    /// like `touched` and read for an agent's movement of a governed ref whatever the rules
+    /// say: `None` where nothing was read (the person, an ungoverned ref, no commit).
+    pub config_touched: Vec<Option<policies::Touched>>,
 }
 
 /// The context of an evaluation.
@@ -120,6 +124,7 @@ pub fn evaluate(operation: &Operation, facts: &Facts, ctx: &Context) -> Evaluati
                     &mut out,
                     &update.remote_ref,
                     facts.touched.get(i).and_then(Option::as_ref),
+                    facts.config_touched.get(i).and_then(Option::as_ref),
                     ctx,
                     &mut budget,
                 );
@@ -137,6 +142,7 @@ pub fn evaluate(operation: &Operation, facts: &Facts, ctx: &Context) -> Evaluati
                     &mut out,
                     &update.refname,
                     facts.touched.get(i).and_then(Option::as_ref),
+                    facts.config_touched.get(i).and_then(Option::as_ref),
                     ctx,
                     &mut budget,
                 );
@@ -160,6 +166,7 @@ fn policies_of(
     out: &mut Evaluation,
     refname: &str,
     touched: Option<&policies::Touched>,
+    config_touched: Option<&policies::Touched>,
     ctx: &Context,
     budget: &mut glob::Budget,
 ) {
@@ -167,8 +174,8 @@ fn policies_of(
         return;
     }
     // A product rule: it holds whatever the configuration says, even with no policies at all.
-    if let Some(touched) = touched {
-        config::protect_config(out, touched, ctx.actor, budget);
+    if let Some(config_touched) = config_touched {
+        config::protect_config(out, config_touched, ctx.actor, budget);
     }
     if ctx.policies.is_empty() {
         return;

@@ -1352,10 +1352,13 @@ impl Connection<'_> {
         let path = validate::client_path(&params.path).map_err(invalid)?;
         let common_dir = crate::observe::locate(&path).map_err(rejected)?;
         let limit = params.limit.unwrap_or(50).clamp(1, MAX_LOG_PAGE);
+        // Without `guard.config-protection` the notices of the configuration are left out in
+        // the query, so the page fills to `limit` and the totals come from the same set.
+        let legacy = !self.has(methods::CAP_GUARD_CONFIG_PROTECTION.name);
         match self
             .ctx
             .control
-            .guard_log(common_dir, params.since_ms, limit)
+            .guard_log(common_dir, params.since_ms, limit, legacy)
         {
             GuardLogReply::Log(log) => {
                 let mut log = *log;
@@ -1364,8 +1367,8 @@ impl Connection<'_> {
                     log.entries
                         .retain(|e| e.kind != gitraptor_api::guard::LogKind::ProtectionState);
                 }
-                // Nor the notices of the configuration, and its denials read as a path.
-                if !self.has(methods::CAP_GUARD_CONFIG_PROTECTION.name) {
+                // The denials of the configuration read as a path.
+                if legacy {
                     crate::guardrails::config_guard::legacy_log(&mut log);
                 }
                 Ok(log)

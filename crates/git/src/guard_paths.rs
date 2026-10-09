@@ -58,6 +58,21 @@ pub enum Hide {
     /// Only remote-tracking branches (a push: what leaves is judged whole, whatever the local
     /// branches hold).
     RemoteTracking,
+    /// Only local branches (`refs/heads/*`) that are not part of the update: a commit parked
+    /// under `refs/remotes/*` (which an agent writes without any evaluation) is still new.
+    LocalBranches,
+}
+
+/// One entry of the root tree of a commit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RootEntry {
+    /// The entry name (lossy UTF-8, the same form the changed paths are reported in).
+    pub name: String,
+    /// The raw tree-entry mode: it tells a file, an executable, a link, a directory and a
+    /// submodule apart.
+    pub mode: u32,
+    /// The object id in hex.
+    pub oid: String,
 }
 
 /// What the new commits of an update touch.
@@ -150,6 +165,44 @@ impl RepoReader {
         })
     }
 
+    /// The entries of the root tree of `commit` (an annotated tag is read as the commit it
+    /// peels to), sorted by name. `Err` when it is not a commit, cannot be read or holds more
+    /// entries than `limits.entries`: the caller treats it as unverifiable.
+    pub fn root_entries(
+        &self,
+        commit: &str,
+        limits: &PathLimits,
+    ) -> Result<Vec<RootEntry>, ReadError> {
+        let unavailable = |what: &str| ReadError::Unavailable(format!("root tree: {what}"));
+        let id = gix::ObjectId::from_hex(commit.as_bytes())
+            .map_err(|_| ReadError::InvalidInput("invalid object id".into()))?;
+        let object = self
+            .repo
+            .try_find_object(id)
+            .map_err(|_| unavailable("object"))?
+            .ok_or_else(|| unavailable("missing"))?;
+        let commit = object
+            .peel_to_kind(gix::object::Kind::Commit)
+            .map_err(|_| unavailable("not a commit"))?
+            .into_commit();
+        let tree = commit.tree().map_err(|_| unavailable("tree"))?;
+        let decoded = tree.decode().map_err(|_| unavailable("decode"))?;
+        if decoded.entries.len() > limits.entries {
+            return Err(unavailable("too many entries"));
+        }
+        let mut entries: Vec<RootEntry> = decoded
+            .entries
+            .iter()
+            .map(|e| RootEntry {
+                name: String::from_utf8_lossy(e.filename).into_owned(),
+                mode: u32::from(e.mode.value()),
+                oid: e.oid.to_hex().to_string(),
+            })
+            .collect();
+        entries.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(entries)
+    }
+
     /// The tips of the branches that already hold commits, at most `max` of them.
     fn hidden_tips(
         &self,
@@ -168,8 +221,15 @@ impl RepoReader {
                 continue;
             }
             let name = reference.name().as_bstr().to_string();
-            let trusted = name.starts_with("refs/remotes/")
-                || (hide == Hide::OtherBranches && name.starts_with("refs/heads/"));
+            let trusted = match hide {
+                Hide::OtherBranches => {
+                    name.starts_with("refs/remotes/") || name.starts_with("refs/heads/")
+                }
+                Hide::RemoteTracking => name.starts_with("refs/remotes/"),
+                // Never a remote-tracking branch: an agent forges those without a check.
+                Hide::LocalBranches => name.starts_with("refs/heads/"),
+                Hide::OldOnly => false,
+            };
             debug_assert!(hide != Hide::OldOnly);
             if !trusted || updated.contains(&name.as_str()) {
                 continue;

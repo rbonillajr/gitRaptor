@@ -538,3 +538,75 @@ fn a_path_that_is_not_utf8_is_reported_lossy() {
     );
     assert_eq!(paths(&found), ["secrets/x\u{fffd}y.txt"]);
 }
+
+#[test]
+fn a_commit_parked_under_remote_tracking_is_still_new_for_local_branches_only() {
+    let f = Fixture::with_commit();
+    let c0 = rev(&f, "HEAD");
+    f.write(".gitraptor/settings.json", "{}\n");
+    let bad = commit(&f, "config");
+    f.git(&["reset", "-q", "--hard", &c0]);
+    f.git(&["update-ref", "refs/remotes/origin/x", &bad]);
+    f.git(&["branch", "keeps", &bad]);
+    // Remote-tracking branches hide it (a ref update before the change), local ones do not hide
+    // what only a remote-tracking branch holds.
+    let hidden = read(
+        &f,
+        Some(&c0),
+        &bad,
+        MAIN,
+        Hide::OtherBranches,
+        &PathLimits::default(),
+    );
+    assert_eq!(hidden.commits, 0);
+    // `keeps` is a local branch outside the update: it hides the commit...
+    let local = read(
+        &f,
+        Some(&c0),
+        &bad,
+        MAIN,
+        Hide::LocalBranches,
+        &PathLimits::default(),
+    );
+    assert_eq!(local.commits, 0);
+    // ...but once only the remote-tracking branch holds it, it is new.
+    f.git(&["branch", "-D", "keeps"]);
+    let local = read(
+        &f,
+        Some(&c0),
+        &bad,
+        MAIN,
+        Hide::LocalBranches,
+        &PathLimits::default(),
+    );
+    assert_eq!(paths(&local), [".gitraptor/settings.json"]);
+    assert_eq!(local.commits, 1);
+}
+
+#[test]
+fn the_root_entries_carry_name_mode_and_id_and_are_bounded() {
+    let f = Fixture::with_commit();
+    f.write(".gitraptor/settings.json", "{}\n");
+    f.write("run.sh", "#!/bin/sh\n");
+    f.git(&["add", "-A"]);
+    f.git(&["update-index", "--chmod=+x", "run.sh"]);
+    f.git(&["commit", "-q", "-m", "more"]);
+    let c = rev(&f, "HEAD");
+    let entries = reader(&f).root_entries(&c, &PathLimits::default()).unwrap();
+    let names: Vec<&str> = entries.iter().map(|e| e.name.as_str()).collect();
+    assert_eq!(names, [".gitraptor", "a.txt", "b.txt", "run.sh"]);
+    assert_eq!(entries[0].mode, 0o040000);
+    assert_eq!(entries[3].mode, 0o100755);
+    assert_eq!(entries[0].oid, rev(&f, "HEAD:.gitraptor"));
+    // More entries than the bound, and an object that is not a commit, are errors.
+    let tight = PathLimits {
+        entries: 2,
+        ..PathLimits::default()
+    };
+    assert!(reader(&f).root_entries(&c, &tight).is_err());
+    assert!(
+        reader(&f)
+            .root_entries(&rev(&f, "HEAD:a.txt"), &PathLimits::default())
+            .is_err()
+    );
+}
