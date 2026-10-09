@@ -357,8 +357,10 @@ fn what_does_not_touch_the_configuration_is_free() {
     allowed(&r.push(&changed, "refs/heads/newer", None));
 }
 
+/// A then B (B restores what A emptied): moving a branch to B must not launder A, or A could
+/// then be reached with no new commit (a branch created at A, a push of A, a reset to A).
 #[test]
-fn a_change_that_a_later_commit_reverts_is_no_change() {
+fn a_change_that_a_later_commit_reverts_is_still_denied_and_cannot_be_laundered() {
     let r = Repo::new();
     let main = r.rev("main");
     let bad = r.bad(&main);
@@ -366,7 +368,14 @@ fn a_change_that_a_later_commit_reverts_is_no_change() {
         std::fs::write(r.path().join(".gitraptor/settings.json"), SETTINGS).unwrap();
     });
     assert_eq!(tree_of(&r, &reverted), tree_of(&r, &main));
-    allowed(&r.tx("refs/heads/main", Some(&main), &reverted));
+    // The movement to B is denied, so A never becomes "already on a local branch".
+    denied_config(&r.tx("refs/heads/main", Some(&main), &reverted));
+    denied_config(&r.tx("refs/heads/feat", None, &reverted));
+    // Even if a hook-less write put B on a branch, creating a branch at A or pushing A is read
+    // against what the local branches hold now: A is reachable from B, so only the walk of
+    // new commits can be wrong, and it must not be.
+    denied_config(&r.tx("refs/heads/evil", None, &bad));
+    denied_config(&r.push(&bad, "refs/heads/evil", None));
 }
 
 #[test]

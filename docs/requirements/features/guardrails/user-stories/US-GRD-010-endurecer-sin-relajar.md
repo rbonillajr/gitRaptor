@@ -2,10 +2,10 @@
 id: US-GRD-010
 title: "El desarrollador endurece las reglas en su máquina sin poder relajar las del equipo"
 type: us
-status: draft
+status: partially-implemented
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-09
 feature: guardrails
 related:
   context:
@@ -71,9 +71,21 @@ Entonces la rama base protegida es "main"
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+Ver el Brief y la Enmienda (2026-10-08) de ADR-GRD-003: el permiso efectivo es el más restrictivo entre el equipo y el personal (local sobre perfil) y un nivel personal ignorado nunca relaja.
 
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica.
-- **Dev Spec:** pendiente (Arquitecto).
+- **Dev Spec:** [Brief de implementación](../../../../dev-briefs/layered-config.md).
+
+## Estado de la implementación (2026-10-09)
+
+Implementado en parte en: PR #__PR__. Brief: [Brief de implementación](../../../../dev-briefs/layered-config.md).
+
+Cubiertos por `crates/core/tests/us_grd_010.rs` (verificado en macOS; Linux lo cubre el CI; Windows: **Pendiente: etapa de validación multiplataforma**, XP-39): las filas 1 a 4 y 7 de la precedencia, «un endurecimiento local no afecta a otro clon» y «la rama base en un nivel personal no se tiene en cuenta».
+
+**Falta:**
+
+- Las filas 5 y 6 (límite de diff): la clave es de US-GRD-009, que sigue en borrador.
+- La decisión real con los permisos: US-GRD-007 sigue en borrador y el guard aún aplica solo el mínimo y las políticas. Las filas de permisos y «no afecta a otro clon» se verifican sobre el valor efectivo (`Layers::permissions()`), no sobre un `push → Deny`. La decisión real es hoy más estricta, que es la dirección segura.
+- Los niveles personales no están protegidos contra escritura del agente (R-GRD-4, trinquete de Q-GRD-32).

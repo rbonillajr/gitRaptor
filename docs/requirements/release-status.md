@@ -4,17 +4,17 @@
 
 > **Archivo generado, no editar a mano.** Sale del frontmatter (`status`) y de la sección "Estado de la implementación" de cada ficha (US, TS, INF, SPIKE y TD) de `docs/requirements/features/`. Para cambiar un estado, edita la ficha y regenera con `node tools/status/release-status.mjs`. El CI (docs-lint) falla si este archivo no coincide con lo que genera el script.
 
-Última actualización de una ficha: 2026-10-08.
+Última actualización de una ficha: 2026-10-09.
 
 ## Totales por estado
 
 | Estado | Fichas |
 |---|---|
-| Implementado (`implemented`) | 36 |
+| Implementado (`implemented`) | 37 |
 | Hecho (`done`) | 3 |
-| Implementado en parte (`partially-implemented`) | 17 |
+| Implementado en parte (`partially-implemented`) | 18 |
 | Listo (`ready`) | 3 |
-| Borrador (`draft`) | 83 |
+| Borrador (`draft`) | 81 |
 | Bloqueado (`blocked`) | 1 |
 | **Total** | **143** |
 
@@ -23,7 +23,7 @@
 | Feature | Implementado | Hecho | Implementado en parte | Listo | Borrador | Bloqueado | Total |
 |---|---|---|---|---|---|---|---|
 | [cockpit](#cockpit) | 6 | 0 | 1 | 0 | 25 | 1 | 33 |
-| [guardrails](#guardrails) | 6 | 0 | 5 | 0 | 13 | 0 | 24 |
+| [guardrails](#guardrails) | 7 | 0 | 6 | 0 | 11 | 0 | 24 |
 | [mcp](#mcp) | 5 | 0 | 1 | 0 | 14 | 0 | 20 |
 | [motor-local](#motor-local) | 11 | 2 | 8 | 3 | 14 | 0 | 38 |
 | [time-machine](#time-machine) | 8 | 1 | 2 | 0 | 17 | 0 | 28 |
@@ -70,7 +70,7 @@
 
 ### guardrails
 
-24 fichas: 6 implementado, 5 implementado en parte, 13 borrador.
+24 fichas: 7 implementado, 6 implementado en parte, 11 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -79,20 +79,20 @@
 | [US-GRD-001](features/guardrails/user-stories/US-GRD-001-proteger-repo-force-push-bloqueado.md) | Un agente que intenta hacer force-push en un repo protegido queda bloqueado | Implementado (`implemented`) | #116, #121 | — |
 | [US-GRD-002](features/guardrails/user-stories/US-GRD-002-hooks-previos-respetados.md) | Los hooks que el repo ya tenía siguen funcionando al protegerlo | Implementado (`implemented`) | #193 | — |
 | [US-GRD-008](features/guardrails/user-stories/US-GRD-008-ramas-protegidas-rutas-prohibidas.md) | Ningún agente cambia una rama protegida ni toca una ruta prohibida | Implementado (`implemented`) | #197 | — |
+| [US-GRD-012](features/guardrails/user-stories/US-GRD-012-agente-no-relaja-configuracion.md) | Un agente no puede relajar las reglas del equipo cambiando su configuración | Implementado (`implemented`) | — | — |
 | [US-GRD-019](features/guardrails/user-stories/US-GRD-019-quien-ejecuto-y-a-nombre-de-quien.md) | El desarrollador ve quién ejecutó cada commit y a nombre de quién entró cuando no coinciden | Implementado (`implemented`) | #144, #147, #151, #175 | — |
 | [SPIKE-GRD-001](features/guardrails/technical-stories/SPIKE-GRD-001-interceptabilidad-hooks.md) | Interceptabilidad, coexistencia y coste de la capa de hooks en los tres SO | Implementado en parte (`partially-implemented`) | #22, #25, #121 | 2 |
 | [US-GRD-003](features/guardrails/user-stories/US-GRD-003-retirar-proteccion-sin-rastro.md) | El desarrollador retira la protección y el repo queda exactamente como estaba | Implementado en parte (`partially-implemented`) | #193, #201 | — |
 | [US-GRD-004](features/guardrails/user-stories/US-GRD-004-aviso-proteccion-inactiva.md) | El desarrollador se entera de que la protección de un repo dejó de estar activa | Implementado en parte (`partially-implemented`) | #201 | — |
 | [US-GRD-005](features/guardrails/user-stories/US-GRD-005-registro-de-bloqueos.md) | El desarrollador cuenta las acciones peligrosas que Guardrails bloqueó en cada repo | Implementado en parte (`partially-implemented`) | #154, #168 | 3 |
+| [US-GRD-010](features/guardrails/user-stories/US-GRD-010-endurecer-sin-relajar.md) | El desarrollador endurece las reglas en su máquina sin poder relajar las del equipo | Implementado en parte (`partially-implemented`) | — | — |
 | [US-GRD-018](features/guardrails/user-stories/US-GRD-018-autoria-commits-persona-y-agente.md) | Cada commit entra a nombre de la persona y deja constancia del agente que lo hizo, con la exigencia que fija el equipo | Implementado en parte (`partially-implemented`) | #137, #141, #150, #152, #153, #154 | 3 |
 | [SPIKE-GRD-002](features/guardrails/technical-stories/SPIKE-GRD-002-factor-so-daemon.md) | Factor de autenticación del SO invocado desde el daemon en los tres SO | Borrador (`draft`) | — | — |
 | [TD-GRD-001](features/guardrails/technical-stories/TD-GRD-001-dispatcher-plantilla-3-pre-push-toda-ref.md) | Dispatcher plantilla 3: evaluar el pre-push de toda ref empujada (tags, notes y demás refs no gobernadas) | Borrador (`draft`) | — | — |
 | [US-GRD-006](features/guardrails/user-stories/US-GRD-006-excepcion-consciente.md) | El desarrollador hace a conciencia una operación prohibida y queda constancia | Borrador (`draft`) | — | — |
 | [US-GRD-007](features/guardrails/user-stories/US-GRD-007-permisos-por-operacion.md) | El equipo decide qué operaciones de Git se permiten, se deniegan o piden confirmación | Borrador (`draft`) | — | — |
 | [US-GRD-009](features/guardrails/user-stories/US-GRD-009-tamano-diff-formato-commit.md) | Los agentes entregan commits pequeños y con el formato que exige el equipo | Borrador (`draft`) | — | — |
-| [US-GRD-010](features/guardrails/user-stories/US-GRD-010-endurecer-sin-relajar.md) | El desarrollador endurece las reglas en su máquina sin poder relajar las del equipo | Borrador (`draft`) | — | — |
 | [US-GRD-011](features/guardrails/user-stories/US-GRD-011-configuracion-ilegible.md) | Una configuración rota no deja pasar las operaciones peligrosas | Borrador (`draft`) | — | — |
-| [US-GRD-012](features/guardrails/user-stories/US-GRD-012-agente-no-relaja-configuracion.md) | Un agente no puede relajar las reglas del equipo cambiando su configuración | Borrador (`draft`) | — | — |
 | [US-GRD-013](features/guardrails/user-stories/US-GRD-013-comando-edicion-configuracion.md) | El desarrollador cambia la configuración con un comando sin perder lo que editó a mano | Borrador (`draft`) | — | — |
 | [US-GRD-014](features/guardrails/user-stories/US-GRD-014-rama-base-del-equipo.md) | El equipo fija la rama base del repo y Guardrails la protege | Borrador (`draft`) | — | — |
 | [US-GRD-015](features/guardrails/user-stories/US-GRD-015-cola-de-confirmacion.md) | El desarrollador aprueba o rechaza las acciones de riesgo que un agente deja en espera | Borrador (`draft`) | — | — |
@@ -238,7 +238,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2
 
-110 fichas: 18 implementado, 3 hecho, 11 implementado en parte, 3 listo, 74 borrador, 1 bloqueado.
+110 fichas: 19 implementado, 3 hecho, 12 implementado en parte, 3 listo, 72 borrador, 1 bloqueado.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -254,6 +254,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-CKP-026](features/cockpit/user-stories/US-CKP-026-autoria-en-la-flota.md) | El desarrollador ve en la flota de quién es el último commit de cada worktree y con qué agente | Implementado (`implemented`) | #147 | — |
 | [US-GRD-002](features/guardrails/user-stories/US-GRD-002-hooks-previos-respetados.md) | Los hooks que el repo ya tenía siguen funcionando al protegerlo | Implementado (`implemented`) | #193 | — |
 | [US-GRD-008](features/guardrails/user-stories/US-GRD-008-ramas-protegidas-rutas-prohibidas.md) | Ningún agente cambia una rama protegida ni toca una ruta prohibida | Implementado (`implemented`) | #197 | — |
+| [US-GRD-012](features/guardrails/user-stories/US-GRD-012-agente-no-relaja-configuracion.md) | Un agente no puede relajar las reglas del equipo cambiando su configuración | Implementado (`implemented`) | — | — |
 | [US-GRD-019](features/guardrails/user-stories/US-GRD-019-quien-ejecuto-y-a-nombre-de-quien.md) | El desarrollador ve quién ejecutó cada commit y a nombre de quién entró cuando no coinciden | Implementado (`implemented`) | #144, #147, #151, #175 | — |
 | [US-GRP-020](features/motor-local/user-stories/US-GRP-020-carpetas-codigo-repos-descubiertos.md) | El desarrollador ve los repos que aparecen en sus carpetas de código sin tener que añadirlos uno a uno | Implementado (`implemented`) | #170, #153, #178 | — |
 | [US-GRP-022](features/motor-local/user-stories/US-GRP-022-aceptar-descartar-repo-descubierto.md) | El desarrollador decide qué repos descubiertos se observan y los que descarta no vuelven a aparecer | Implementado (`implemented`) | #170 | — |
@@ -271,6 +272,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-GRD-003](features/guardrails/user-stories/US-GRD-003-retirar-proteccion-sin-rastro.md) | El desarrollador retira la protección y el repo queda exactamente como estaba | Implementado en parte (`partially-implemented`) | #193, #201 | — |
 | [US-GRD-004](features/guardrails/user-stories/US-GRD-004-aviso-proteccion-inactiva.md) | El desarrollador se entera de que la protección de un repo dejó de estar activa | Implementado en parte (`partially-implemented`) | #201 | — |
 | [US-GRD-005](features/guardrails/user-stories/US-GRD-005-registro-de-bloqueos.md) | El desarrollador cuenta las acciones peligrosas que Guardrails bloqueó en cada repo | Implementado en parte (`partially-implemented`) | #154, #168 | 3 |
+| [US-GRD-010](features/guardrails/user-stories/US-GRD-010-endurecer-sin-relajar.md) | El desarrollador endurece las reglas en su máquina sin poder relajar las del equipo | Implementado en parte (`partially-implemented`) | — | — |
 | [US-GRD-018](features/guardrails/user-stories/US-GRD-018-autoria-commits-persona-y-agente.md) | Cada commit entra a nombre de la persona y deja constancia del agente que lo hizo, con la exigencia que fija el equipo | Implementado en parte (`partially-implemented`) | #137, #141, #150, #152, #153, #154 | 3 |
 | [US-MCP-004](features/mcp/user-stories/US-MCP-004-status-completo-y-no-disponible.md) | Un agente sabe por MCP quién más trabaja en su repo, contra qué base y con qué protección | Implementado en parte (`partially-implemented`) | — | — |
 | [US-TMC-009](features/time-machine/user-stories/US-TMC-009-restaurar-punto-timeline.md) | El desarrollador devuelve su worktree a cualquier punto del timeline | Implementado en parte (`partially-implemented`) | #212 | — |
@@ -307,9 +309,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-GRD-006](features/guardrails/user-stories/US-GRD-006-excepcion-consciente.md) | El desarrollador hace a conciencia una operación prohibida y queda constancia | Borrador (`draft`) | — | — |
 | [US-GRD-007](features/guardrails/user-stories/US-GRD-007-permisos-por-operacion.md) | El equipo decide qué operaciones de Git se permiten, se deniegan o piden confirmación | Borrador (`draft`) | — | — |
 | [US-GRD-009](features/guardrails/user-stories/US-GRD-009-tamano-diff-formato-commit.md) | Los agentes entregan commits pequeños y con el formato que exige el equipo | Borrador (`draft`) | — | — |
-| [US-GRD-010](features/guardrails/user-stories/US-GRD-010-endurecer-sin-relajar.md) | El desarrollador endurece las reglas en su máquina sin poder relajar las del equipo | Borrador (`draft`) | — | — |
 | [US-GRD-011](features/guardrails/user-stories/US-GRD-011-configuracion-ilegible.md) | Una configuración rota no deja pasar las operaciones peligrosas | Borrador (`draft`) | — | — |
-| [US-GRD-012](features/guardrails/user-stories/US-GRD-012-agente-no-relaja-configuracion.md) | Un agente no puede relajar las reglas del equipo cambiando su configuración | Borrador (`draft`) | — | — |
 | [US-GRD-013](features/guardrails/user-stories/US-GRD-013-comando-edicion-configuracion.md) | El desarrollador cambia la configuración con un comando sin perder lo que editó a mano | Borrador (`draft`) | — | — |
 | [US-GRD-014](features/guardrails/user-stories/US-GRD-014-rama-base-del-equipo.md) | El equipo fija la rama base del repo y Guardrails la protege | Borrador (`draft`) | — | — |
 | [US-GRD-015](features/guardrails/user-stories/US-GRD-015-cola-de-confirmacion.md) | El desarrollador aprueba o rechaza las acciones de riesgo que un agente deja en espera | Borrador (`draft`) | — | — |
@@ -414,6 +414,12 @@ El desarrollador cuenta las acciones peligrosas que Guardrails bloqueó en cada 
 - Entradas `request` y `exception*` (US-GRD-015 y US-GRD-006) y `protection-state` (US-GRD-003).
 - Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../architecture/xplat-pendientes.md)).
 
+### [US-GRD-010](features/guardrails/user-stories/US-GRD-010-endurecer-sin-relajar.md)
+
+El desarrollador endurece las reglas en su máquina sin poder relajar las del equipo
+
+- *La ficha no lista los pendientes en "Estado de la implementación".*
+
 ### [US-GRD-018](features/guardrails/user-stories/US-GRD-018-autoria-commits-persona-y-agente.md) — #137, #141, #150, #152, #153, #154
 
 Cada commit entra a nombre de la persona y deja constancia del agente que lo hizo, con la exigencia que fija el equipo
@@ -500,3 +506,7 @@ Arnés de caos y de garantías de los snapshots en los tres SO
 El desarrollador devuelve su worktree a cualquier punto del timeline
 
 - *La ficha no lista los pendientes en "Estado de la implementación".*
+
+## Avisos
+
+- features/guardrails/user-stories/US-GRD-010-endurecer-sin-relajar.md: la sección "Estado de la implementación" no tiene la línea "Implementado en:"

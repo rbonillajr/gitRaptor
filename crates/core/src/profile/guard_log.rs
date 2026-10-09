@@ -159,7 +159,7 @@ impl RepoStore {
                 "SELECT at_ms, utc_offset_s, last_ms, count, worktree, branch, actor, operation,
                      kind, detail, effect, applied_effect, reasons, decision_id, authorship
                  FROM guardrails_decisions
-                 WHERE last_ms >= ?1 AND (?3 = 0 OR reasons NOT LIKE '%\"config.relax-ignored\"%')
+                 WHERE last_ms >= ?1 AND (?3 = 0 OR NOT EXISTS (SELECT 1 FROM json_each(reasons) WHERE json_extract(value, '$.rule') = 'config.relax-ignored'))
                  ORDER BY last_ms DESC, id DESC LIMIT ?2",
             )?
             .query_map(params![since, limit, hide], entry_row)?
@@ -171,7 +171,7 @@ impl RepoStore {
                  COALESCE(SUM(CASE WHEN kind = 'notice' THEN count END), 0),
                  COALESCE(SUM(CASE WHEN detail = 'rate-limited' THEN count END), 0)
              FROM guardrails_decisions
-             WHERE last_ms >= ?1 AND (?2 = 0 OR reasons NOT LIKE '%\"config.relax-ignored\"%')",
+             WHERE last_ms >= ?1 AND (?2 = 0 OR NOT EXISTS (SELECT 1 FROM json_each(reasons) WHERE json_extract(value, '$.rule') = 'config.relax-ignored'))",
             params![since, hide],
             |row| {
                 Ok(GuardLogSummary {
