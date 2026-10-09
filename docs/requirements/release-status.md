@@ -10,11 +10,11 @@
 
 | Estado | Fichas |
 |---|---|
-| Implementado (`implemented`) | 35 |
+| Implementado (`implemented`) | 36 |
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 15 |
 | Listo (`ready`) | 3 |
-| Borrador (`draft`) | 86 |
+| Borrador (`draft`) | 85 |
 | Bloqueado (`blocked`) | 1 |
 | **Total** | **143** |
 
@@ -24,7 +24,7 @@
 |---|---|---|---|---|---|---|---|
 | [cockpit](#cockpit) | 6 | 0 | 1 | 0 | 25 | 1 | 33 |
 | [guardrails](#guardrails) | 6 | 0 | 5 | 0 | 13 | 0 | 24 |
-| [mcp](#mcp) | 4 | 0 | 0 | 0 | 16 | 0 | 20 |
+| [mcp](#mcp) | 5 | 0 | 0 | 0 | 15 | 0 | 20 |
 | [motor-local](#motor-local) | 11 | 2 | 8 | 3 | 14 | 0 | 38 |
 | [time-machine](#time-machine) | 8 | 1 | 1 | 0 | 18 | 0 | 28 |
 
@@ -101,7 +101,7 @@
 
 ### mcp
 
-20 fichas: 4 implementado, 16 borrador.
+20 fichas: 5 implementado, 15 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -109,11 +109,11 @@
 | [US-MCP-002](features/mcp/user-stories/US-MCP-002-habilitar-repo-allowlist.md) | El desarrollador decide qué repos pueden usar los agentes por el MCP | Implementado (`implemented`) | #140, #159 | — |
 | [US-MCP-003](features/mcp/user-stories/US-MCP-003-status-del-repo-del-agente.md) | Un agente consulta por MCP el estado del repo en el que trabaja, y de ningún otro | Implementado (`implemented`) | #140, #159, #153 | — |
 | [US-MCP-005](features/mcp/user-stories/US-MCP-005-respuestas-acotadas-y-seguras.md) | Un agente recibe respuestas acotadas que no pueden darle órdenes ni filtrar secretos | Implementado (`implemented`) | #157, #159 | — |
+| [US-MCP-008](features/mcp/user-stories/US-MCP-008-snapshot-manual.md) | Un agente guarda por MCP un punto de recuperación antes de un cambio arriesgado | Implementado (`implemented`) | #213 | — |
 | [INF-MCP-001](features/mcp/technical-stories/INF-MCP-001-corpus-seguridad-mcp.md) | Corpus de seguridad del MCP como suite de CI que bloquea el merge | Borrador (`draft`) | — | — |
 | [US-MCP-004](features/mcp/user-stories/US-MCP-004-status-completo-y-no-disponible.md) | Un agente sabe por MCP quién más trabaja en su repo, contra qué base y con qué protección | Borrador (`draft`) | — | — |
 | [US-MCP-006](features/mcp/user-stories/US-MCP-006-registrar-agente.md) | Un agente sin soporte completo se declara por MCP y su trabajo queda a su nombre | Borrador (`draft`) | — | — |
 | [US-MCP-007](features/mcp/user-stories/US-MCP-007-confused-deputy.md) | Un hook lanzado por una escritura de un agente no puede usar los poderes del desarrollador | Borrador (`draft`) | — | — |
-| [US-MCP-008](features/mcp/user-stories/US-MCP-008-snapshot-manual.md) | Un agente guarda por MCP un punto de recuperación antes de un cambio arriesgado | Borrador (`draft`) | — | — |
 | [US-MCP-009](features/mcp/user-stories/US-MCP-009-safe-commit.md) | Un agente commitea por MCP con las reglas del repo y con un punto de recuperación previo | Borrador (`draft`) | — | — |
 | [US-MCP-010](features/mcp/user-stories/US-MCP-010-safe-commit-rutas.md) | Un agente commitea solo los archivos que nombra y nunca fuera de su worktree | Borrador (`draft`) | — | — |
 | [US-MCP-011](features/mcp/user-stories/US-MCP-011-escritura-en-el-worktree-correcto.md) | La escritura de un agente cae en el worktree que espera, o no ocurre | Borrador (`draft`) | — | — |
@@ -238,7 +238,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2
 
-110 fichas: 17 implementado, 3 hecho, 9 implementado en parte, 3 listo, 77 borrador, 1 bloqueado.
+110 fichas: 18 implementado, 3 hecho, 9 implementado en parte, 3 listo, 76 borrador, 1 bloqueado.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -258,6 +258,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-GRP-020](features/motor-local/user-stories/US-GRP-020-carpetas-codigo-repos-descubiertos.md) | El desarrollador ve los repos que aparecen en sus carpetas de código sin tener que añadirlos uno a uno | Implementado (`implemented`) | #170, #153, #178 | — |
 | [US-GRP-022](features/motor-local/user-stories/US-GRP-022-aceptar-descartar-repo-descubierto.md) | El desarrollador decide qué repos descubiertos se observan y los que descarta no vuelven a aparecer | Implementado (`implemented`) | #170 | — |
 | [US-MCP-005](features/mcp/user-stories/US-MCP-005-respuestas-acotadas-y-seguras.md) | Un agente recibe respuestas acotadas que no pueden darle órdenes ni filtrar secretos | Implementado (`implemented`) | #157, #159 | — |
+| [US-MCP-008](features/mcp/user-stories/US-MCP-008-snapshot-manual.md) | Un agente guarda por MCP un punto de recuperación antes de un cambio arriesgado | Implementado (`implemented`) | #213 | — |
 | [US-TMC-006](features/time-machine/user-stories/US-TMC-006-timeline-que-cuando-quien.md) | El desarrollador sabe qué cambió en su repo, cuándo y quién lo hizo | Implementado (`implemented`) | #198 | — |
 | [SPIKE-TMC-001](features/time-machine/technical-stories/SPIKE-TMC-001-repo-mediano-overhead.md) | Repo mediano de referencia y viabilidad del snapshot en menos de 200 ms | Hecho (`done`) | — | — |
 | [TS-GRP-001](features/motor-local/technical-stories/TS-GRP-001-almacen-perfil.md) | Almacén de datos del motor en el perfil | Hecho (`done`) | — | — |
@@ -323,7 +324,6 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-MCP-004](features/mcp/user-stories/US-MCP-004-status-completo-y-no-disponible.md) | Un agente sabe por MCP quién más trabaja en su repo, contra qué base y con qué protección | Borrador (`draft`) | — | — |
 | [US-MCP-006](features/mcp/user-stories/US-MCP-006-registrar-agente.md) | Un agente sin soporte completo se declara por MCP y su trabajo queda a su nombre | Borrador (`draft`) | — | — |
 | [US-MCP-007](features/mcp/user-stories/US-MCP-007-confused-deputy.md) | Un hook lanzado por una escritura de un agente no puede usar los poderes del desarrollador | Borrador (`draft`) | — | — |
-| [US-MCP-008](features/mcp/user-stories/US-MCP-008-snapshot-manual.md) | Un agente guarda por MCP un punto de recuperación antes de un cambio arriesgado | Borrador (`draft`) | — | — |
 | [US-MCP-009](features/mcp/user-stories/US-MCP-009-safe-commit.md) | Un agente commitea por MCP con las reglas del repo y con un punto de recuperación previo | Borrador (`draft`) | — | — |
 | [US-MCP-010](features/mcp/user-stories/US-MCP-010-safe-commit-rutas.md) | Un agente commitea solo los archivos que nombra y nunca fuera de su worktree | Borrador (`draft`) | — | — |
 | [US-MCP-011](features/mcp/user-stories/US-MCP-011-escritura-en-el-worktree-correcto.md) | La escritura de un agente cae en el worktree que espera, o no ocurre | Borrador (`draft`) | — | — |
