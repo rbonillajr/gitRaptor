@@ -100,7 +100,7 @@ fn completes_the_mcp_handshake_over_stdio_and_exits_when_stdin_closes() {
         result["capabilities"],
         json!({"tools": {"listChanged": false}})
     );
-    // `status`, with no arguments, and `snapshot`, with only a label.
+    // `status`, with only a cursor, and `snapshot`, with only a label.
     let names: Vec<_> = s.tools["result"]["tools"]
         .as_array()
         .unwrap()
@@ -110,7 +110,7 @@ fn completes_the_mcp_handshake_over_stdio_and_exits_when_stdin_closes() {
     assert_eq!(names, [json!("status"), json!("snapshot")]);
     assert_eq!(
         s.tools["result"]["tools"][0]["inputSchema"]["properties"],
-        json!({})
+        json!({"cursor": {"type": "string"}})
     );
     // US-GRP-017, escenario 5: no tool exposes the engine's consumption.
     let tools = s.tools["result"]["tools"].as_array().unwrap();
