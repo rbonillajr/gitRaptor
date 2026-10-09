@@ -12,9 +12,9 @@
 |---|---|
 | Implementado (`implemented`) | 37 |
 | Hecho (`done`) | 3 |
-| Implementado en parte (`partially-implemented`) | 18 |
+| Implementado en parte (`partially-implemented`) | 19 |
 | Listo (`ready`) | 3 |
-| Borrador (`draft`) | 81 |
+| Borrador (`draft`) | 80 |
 | Bloqueado (`blocked`) | 1 |
 | **Total** | **143** |
 
@@ -22,7 +22,7 @@
 
 | Feature | Implementado | Hecho | Implementado en parte | Listo | Borrador | Bloqueado | Total |
 |---|---|---|---|---|---|---|---|
-| [cockpit](#cockpit) | 6 | 0 | 1 | 0 | 25 | 1 | 33 |
+| [cockpit](#cockpit) | 6 | 0 | 2 | 0 | 24 | 1 | 33 |
 | [guardrails](#guardrails) | 7 | 0 | 6 | 0 | 11 | 0 | 24 |
 | [mcp](#mcp) | 5 | 0 | 1 | 0 | 14 | 0 | 20 |
 | [motor-local](#motor-local) | 11 | 2 | 8 | 3 | 14 | 0 | 38 |
@@ -30,7 +30,7 @@
 
 ### cockpit
 
-33 fichas: 6 implementado, 1 implementado en parte, 25 borrador, 1 bloqueado.
+33 fichas: 6 implementado, 2 implementado en parte, 24 borrador, 1 bloqueado.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -40,6 +40,7 @@
 | [TS-CKP-005](features/cockpit/technical-stories/TS-CKP-005-biblioteca-componentes-tui.md) | Biblioteca de componentes TUI v0: los 10 widgets del design system, con snapshots y galería | Implementado (`implemented`) | #111, #115 | — |
 | [US-CKP-001](features/cockpit/user-stories/US-CKP-001-flota-en-vivo.md) | El desarrollador ve en vivo qué agente trabaja en cada worktree de un repo | Implementado (`implemented`) | #118, #126, #129, #130, #131, #136, #175 | — |
 | [US-CKP-026](features/cockpit/user-stories/US-CKP-026-autoria-en-la-flota.md) | El desarrollador ve en la flota de quién es el último commit de cada worktree y con qué agente | Implementado (`implemented`) | #147 | — |
+| [US-CKP-020](features/cockpit/user-stories/US-CKP-020-trabajo-de-otro-actor.md) | Tocar el trabajo de otro actor exige confirmar el plan concreto | Implementado en parte (`partially-implemented`) | #220 | 3 |
 | [US-CKP-025](features/cockpit/user-stories/US-CKP-025-tui-repo-no-observado.md) | La TUI ofrece observar el repo en el que se abre y, fuera de un repo, lleva a los ya observados | Implementado en parte (`partially-implemented`) | #165, #170 | 2 |
 | [SPIKE-CKP-001](features/cockpit/technical-stories/SPIKE-CKP-001-prediccion-5s.md) | Predicción de conflictos en ≤ 5 s p95 sin escribir en el repo: merge en memoria frente a almacén en el perfil | Borrador (`draft`) | — | — |
 | [TS-CKP-001](features/cockpit/technical-stories/TS-CKP-001-predictor-conflictos.md) | Predictor de conflictos en el daemon: solape y conflicto previsto publicados para todos los clientes | Borrador (`draft`) | — | — |
@@ -62,7 +63,6 @@
 | [US-CKP-017](features/cockpit/user-stories/US-CKP-017-descartar-worktree.md) | El desarrollador descarta el trabajo de un agente sin miedo a perderlo | Borrador (`draft`) | — | — |
 | [US-CKP-018](features/cockpit/user-stories/US-CKP-018-crear-worktree.md) | El desarrollador prepara un worktree para un agente nuevo | Borrador (`draft`) | — | — |
 | [US-CKP-019](features/cockpit/user-stories/US-CKP-019-denegada-excepcion-consciente.md) | El desarrollador entiende por qué Guardrails frena una acción y puede hacer una excepción consciente | Borrador (`draft`) | — | — |
-| [US-CKP-020](features/cockpit/user-stories/US-CKP-020-trabajo-de-otro-actor.md) | Tocar el trabajo de otro actor exige confirmar el plan concreto | Borrador (`draft`) | — | — |
 | [US-CKP-021](features/cockpit/user-stories/US-CKP-021-historial-aviso-purga.md) | El desarrollador ve en la TUI el historial de operaciones y el aviso de purga | Borrador (`draft`) | — | — |
 | [US-CKP-022](features/cockpit/user-stories/US-CKP-022-grafo-carriles.md) | El desarrollador ve crecer la rama de cada agente sobre la base | Borrador (`draft`) | — | — |
 | [US-CKP-024](features/cockpit/user-stories/US-CKP-024-integrar-casos-limite.md) | Integrar sigue siendo seguro cuando el estado cambia, choca o la base no está sacada | Borrador (`draft`) | — | — |
@@ -238,7 +238,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2
 
-110 fichas: 19 implementado, 3 hecho, 12 implementado en parte, 3 listo, 72 borrador, 1 bloqueado.
+110 fichas: 19 implementado, 3 hecho, 13 implementado en parte, 3 listo, 71 borrador, 1 bloqueado.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -268,6 +268,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [INF-GRP-002](features/motor-local/technical-stories/INF-GRP-002-banco-frescura-escala.md) | Banco de medición de frescura y escala | Implementado en parte (`partially-implemented`) | #76, #98, #133 | 3 |
 | [INF-TMC-001](features/time-machine/technical-stories/INF-TMC-001-arnes-caos-recuperable.md) | Arnés de caos y de garantías de los snapshots en los tres SO | Implementado en parte (`partially-implemented`) | — | — |
 | [TS-GRP-004](features/motor-local/technical-stories/TS-GRP-004-canal-clientes.md) | Canal local de clientes y contrato de mensajes | Implementado en parte (`partially-implemented`) | #36, #87, #123, #133, #158 | 3 |
+| [US-CKP-020](features/cockpit/user-stories/US-CKP-020-trabajo-de-otro-actor.md) | Tocar el trabajo de otro actor exige confirmar el plan concreto | Implementado en parte (`partially-implemented`) | #220 | 3 |
 | [US-CKP-025](features/cockpit/user-stories/US-CKP-025-tui-repo-no-observado.md) | La TUI ofrece observar el repo en el que se abre y, fuera de un repo, lleva a los ya observados | Implementado en parte (`partially-implemented`) | #165, #170 | 2 |
 | [US-GRD-003](features/guardrails/user-stories/US-GRD-003-retirar-proteccion-sin-rastro.md) | El desarrollador retira la protección y el repo queda exactamente como estaba | Implementado en parte (`partially-implemented`) | #193, #201 | — |
 | [US-GRD-004](features/guardrails/user-stories/US-GRD-004-aviso-proteccion-inactiva.md) | El desarrollador se entera de que la protección de un repo dejó de estar activa | Implementado en parte (`partially-implemented`) | #201 | — |
@@ -302,7 +303,6 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-CKP-017](features/cockpit/user-stories/US-CKP-017-descartar-worktree.md) | El desarrollador descarta el trabajo de un agente sin miedo a perderlo | Borrador (`draft`) | — | — |
 | [US-CKP-018](features/cockpit/user-stories/US-CKP-018-crear-worktree.md) | El desarrollador prepara un worktree para un agente nuevo | Borrador (`draft`) | — | — |
 | [US-CKP-019](features/cockpit/user-stories/US-CKP-019-denegada-excepcion-consciente.md) | El desarrollador entiende por qué Guardrails frena una acción y puede hacer una excepción consciente | Borrador (`draft`) | — | — |
-| [US-CKP-020](features/cockpit/user-stories/US-CKP-020-trabajo-de-otro-actor.md) | Tocar el trabajo de otro actor exige confirmar el plan concreto | Borrador (`draft`) | — | — |
 | [US-CKP-021](features/cockpit/user-stories/US-CKP-021-historial-aviso-purga.md) | El desarrollador ve en la TUI el historial de operaciones y el aviso de purga | Borrador (`draft`) | — | — |
 | [US-CKP-022](features/cockpit/user-stories/US-CKP-022-grafo-carriles.md) | El desarrollador ve crecer la rama de cada agente sobre la base | Borrador (`draft`) | — | — |
 | [US-CKP-024](features/cockpit/user-stories/US-CKP-024-integrar-casos-limite.md) | Integrar sigue siendo seguro cuando el estado cambia, choca o la base no está sacada | Borrador (`draft`) | — | — |
@@ -379,6 +379,14 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 7 fichas sin hito asignado.
 
 ## Implementadas en parte: lo que falta
+
+### [US-CKP-020](features/cockpit/user-stories/US-CKP-020-trabajo-de-otro-actor.md) — #220
+
+Tocar el trabajo de otro actor exige confirmar el plan concreto
+
+- El resto de la historia: el ConfirmPrompt de la TUI y la confirmación ligada al plan en macOS y Linux, con su Dev Spec.
+- El texto en/es "no se puede confirmar trabajo de otro actor en Windows todavía" en la TUI.
+- Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../architecture/xplat-pendientes.md)).
 
 ### [US-CKP-025](features/cockpit/user-stories/US-CKP-025-tui-repo-no-observado.md) — #165, #170
 
