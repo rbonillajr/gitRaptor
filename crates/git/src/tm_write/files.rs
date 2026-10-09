@@ -21,6 +21,12 @@
 //! another program holds open is retried for a bounded time and then fails as
 //! [`WriteError::Locked`], untouched.
 //!
+//! Modes: on Unix a written file gets exactly `0o644` or `0o755` (the git modes 100644/100755 the
+//! snapshot records), set with `fchmod` on the descriptor right after creating it, so the umask of
+//! the process never changes the result. Windows has no POSIX mode: the new file takes the default
+//! attributes of its folder, so the read-only attribute and the executable bit are not carried
+//! over (nothing in the snapshot records them).
+//!
 //! Temporary names start with [`TEMP_PREFIX`]. One left behind by a crash holds the target
 //! content (in the store), the prior snapshot's content (in the store) or, before the comparison
 //! ended, someone else's content, which is not in the store and is kept there, never deleted
@@ -426,7 +432,10 @@ mod unix {
             let tmp = temp_name();
             match content {
                 Content::File { bytes, executable } => {
-                    let mode = if *executable { 0o777 } else { 0o666 };
+                    let open_mode = if *executable { 0o777 } else { 0o666 };
+                    // The mode git records (100644 / 100755), set by descriptor below: the
+                    // umask of the process must not change it.
+                    let final_mode = if *executable { 0o755 } else { 0o644 };
                     let fd = rustix::fs::openat(
                         dir,
                         tmp.as_str(),
@@ -435,9 +444,10 @@ mod unix {
                             | OFlags::EXCL
                             | OFlags::NOFOLLOW
                             | OFlags::CLOEXEC,
-                        Mode::from_raw_mode(mode),
+                        Mode::from_raw_mode(open_mode),
                     )
                     .map_err(io)?;
+                    rustix::fs::fchmod(&fd, Mode::from_raw_mode(final_mode)).map_err(io)?;
                     let mut file = std::fs::File::from(fd);
                     file.write_all(bytes)?;
                     rustix::fs::fsync(&file).map_err(io)?;
