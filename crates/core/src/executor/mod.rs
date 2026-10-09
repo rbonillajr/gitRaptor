@@ -141,6 +141,14 @@ impl From<RejectReason> for ExecError {
     }
 }
 
+/// Whether BR-CKP-AUTH-003 offers confirming another actor's work on this platform: Unix only.
+///
+/// On Windows a process may choose its parent, so the confirmation checks cannot prove the
+/// developer (ADR-TMC-005 § 3, M-01/M-04): the operation is refused with its reason (TQ-14,
+/// ADR-CKP-002 § 3). The same rule as `timemachine::confirm::FOREIGN_WORK_CONFIRMABLE` of
+/// US-TMC-013 for undo and restore; one should replace the other once both are in main.
+pub const FOREIGN_WORK_CONFIRMABLE: bool = cfg!(unix);
+
 /// The layer the daemon fixes for a requester (ADR-CKP-002 § 4, M-03): `cockpit` only for an
 /// unattributed caller that passes the reserved checks 1 to 3 (`confirmable`), never for a
 /// descendant of the executor; `mcp` for everyone else.
@@ -355,6 +363,8 @@ pub struct Executor {
     challenges: ChallengeBook,
     plan_ttl: Duration,
     mcp_time_limit: Duration,
+    /// [`FOREIGN_WORK_CONFIRMABLE`] in production.
+    foreign_work_confirmable: bool,
 }
 
 impl std::fmt::Debug for Executor {
@@ -379,12 +389,15 @@ impl Executor {
             challenges: ChallengeBook::default(),
             plan_ttl: Duration::from_millis(PLAN_TTL_MS),
             mcp_time_limit: Duration::from_millis(MCP_TIME_LIMIT_MS),
+            foreign_work_confirmable: FOREIGN_WORK_CONFIRMABLE,
         }
     }
 
-    /// Stub (red contract tests).
+    /// Overrides [`FOREIGN_WORK_CONFIRMABLE`]: production never calls it; tests do, so both
+    /// branches of the rule run on every OS.
     #[must_use]
-    pub fn with_foreign_work_confirmable(self, _confirmable: bool) -> Self {
+    pub fn with_foreign_work_confirmable(mut self, confirmable: bool) -> Self {
+        self.foreign_work_confirmable = confirmable;
         self
     }
 
@@ -466,6 +479,11 @@ impl Executor {
             return Err(RejectReason::OtherSessionPresent.into());
         }
         let confirm = permission(who, layer, &op_plan.affected)?;
+        // BR-CKP-AUTH-003: where the platform cannot confirm, another actor's work is refused
+        // before any challenge (fail-closed, at prepare and again under the lock at run).
+        if confirm && !self.foreign_work_confirmable {
+            return Err(RejectReason::ConfirmationUnavailable.into());
+        }
         let fp = fingerprint(op, args, layer, who, repo, &facts, &op_plan, session_env);
         Ok((facts, op_plan, confirm, fp))
     }
@@ -1152,6 +1170,14 @@ mod tests {
             permission(&human, Layer::Mcp, &Affected::Other),
             Err(RejectReason::ForeignWork)
         );
+    }
+
+    /// BR-CKP-AUTH-003: no confirmation of another actor's work on Windows (TQ-14).
+    #[test]
+    fn foreign_work_is_confirmable_on_unix_only() {
+        assert_eq!(FOREIGN_WORK_CONFIRMABLE, cfg!(unix));
+        #[cfg(windows)]
+        assert!(!FOREIGN_WORK_CONFIRMABLE);
     }
 
     #[test]
