@@ -2,7 +2,7 @@
 id: DS-TS-GRP-008
 title: "Dev Spec — Ámbito del `git` ajeno en S3 y la pista en `raptor timeline`"
 type: dev-spec
-status: draft
+status: implemented
 feature: motor-local
 domain: GRP
 created: 2026-10-09
@@ -728,6 +728,8 @@ Deducciones del código que el spec sigue sin abrir gap. Las tareas que las apli
 | N4 | Con `Hook` (S4) los contadores salen a cero: S4 decide antes del bucle de S3 (`detect/mod.rs:600-610`) | Ninguna | — |
 | N5 | La línea de `conn.rs` que filtra la pista no tiene test de proceso: un evento con pista exige una sesión detectada real. La cubren `without_inferred_removes_every_hint` y la revisión, igual que `without_manual` | Ninguna | — |
 | N6 | `raptor timeline` muestra la pista aunque el motor diga ahora "agente no disponible": la pista es un dato guardado cuando la detección funcionaba (T006, paso 2) | Ninguna | — |
+
+Implementado en: PR #228.
 
 ## Enmiendas
 

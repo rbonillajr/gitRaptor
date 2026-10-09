@@ -2,7 +2,7 @@
 id: TS-GRP-008
 title: "S3 cuenta los `git` ajenos en el ámbito del evento, no en todo el repo"
 type: ts
-status: draft
+status: implemented
 feature: motor-local
 domain: GRP
 priority: high
@@ -44,7 +44,7 @@ Ningún commit salió `no-sighting`: **no es la carrera de tiempo**. Los 273 son
 - **Se hace**: acotar el `git` ajeno al **ámbito del evento**. El commit del agente sale con origen "detectado", con evidencia real del proceso, que es lo que ya promete US-GRP-007.
 - **Criterio del encargo reformulado (PO)**: el encargo pedía "un origen que se distinga de detected". Ahora el commit sale atribuido con origen "detectado" aunque haya actividad de Git en otros worktrees.
 
-> Dev Spec: Pendiente (la genera `/nassa-core:implement --autonomous TS-GRP-008` como brief de implementación). Los escenarios observables están en [US-GRP-007](../user-stories/US-GRP-007-sesiones-claude-code.md) (añadidos el 2026-10-09).
+> Dev Spec: [DS-TS-GRP-008](../dev-specs/TS-GRP-008-dev-spec.md). Los escenarios observables están en [US-GRP-007](../user-stories/US-GRP-007-sesiones-claude-code.md) (añadidos el 2026-10-09).
 
 ### Alcance Técnico
 
@@ -105,3 +105,11 @@ Los escenarios observables están en US-GRP-007: varios worktrees vivos, el huma
 - **BR-CONS-001**: el arnés de repo intacto existente (INF-GRP-001) sigue en verde; los tests nuevos son de tabla de procesos y no tocan ningún repo.
 - **Dogfooding** (fuera de CI): tras instalar el binario, la proporción `ambiguous`/`attributed` de los commits en `s3_evidence` baja, y los contadores nuevos dicen qué ajenos quedan. Va a SPIKE-GRP-001.
 - Linux y Windows: la regla es independiente del SO, porque usa la misma tabla de procesos; *Pendiente: etapa de validación multiplataforma* para el dogfooding.
+
+### Estado de la implementación (2026-10-09)
+
+Implementado en: PR #228.
+
+- Pendiente: medir de nuevo `s3_evidence` en el dogfooding real con el binario instalado (SPIKE-GRP-001).
+- Deuda de la revisión de seguridad: [TD-GRP-004](./TD-GRP-004-corroborar-ambito-worktree-s3.md).
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma*.

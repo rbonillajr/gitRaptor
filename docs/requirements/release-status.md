@@ -10,13 +10,13 @@
 
 | Estado | Fichas |
 |---|---|
-| Implementado (`implemented`) | 39 |
+| Implementado (`implemented`) | 40 |
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 19 |
 | Listo (`ready`) | 3 |
-| Borrador (`draft`) | 78 |
+| Borrador (`draft`) | 79 |
 | Bloqueado (`blocked`) | 1 |
-| **Total** | **143** |
+| **Total** | **145** |
 
 ## Por feature
 
@@ -25,7 +25,7 @@
 | [cockpit](#cockpit) | 6 | 0 | 2 | 0 | 24 | 1 | 33 |
 | [guardrails](#guardrails) | 7 | 0 | 6 | 0 | 11 | 0 | 24 |
 | [mcp](#mcp) | 5 | 0 | 2 | 0 | 13 | 0 | 20 |
-| [motor-local](#motor-local) | 11 | 2 | 8 | 3 | 14 | 0 | 38 |
+| [motor-local](#motor-local) | 12 | 2 | 8 | 3 | 15 | 0 | 40 |
 | [time-machine](#time-machine) | 10 | 1 | 1 | 0 | 16 | 0 | 28 |
 
 ### cockpit
@@ -128,16 +128,17 @@
 
 ### motor-local
 
-38 fichas: 11 implementado, 2 hecho, 8 implementado en parte, 3 listo, 14 borrador.
+40 fichas: 12 implementado, 2 hecho, 8 implementado en parte, 3 listo, 15 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
 | [TS-GRP-003](features/motor-local/technical-stories/TS-GRP-003-proceso-motor.md) | Proceso del motor en segundo plano por usuario | Implementado (`implemented`) | #26 | — |
 | [TS-GRP-006](features/motor-local/technical-stories/TS-GRP-006-observacion-por-niveles.md) | Observación por niveles: activo, dormido con centinela y despertar | Implementado (`implemented`) | #164, #167, #173, #178 | — |
+| [TS-GRP-008](features/motor-local/technical-stories/TS-GRP-008-ambito-git-ajeno-s3.md) | S3 cuenta los `git` ajenos en el ámbito del evento, no en todo el repo | Implementado (`implemented`) | — | — |
 | [US-GRP-001](features/motor-local/user-stories/US-GRP-001-estado-worktrees-repo-anadido.md) | El desarrollador ve el estado de cada worktree del repo que añadió | Implementado (`implemented`) | #46 | — |
 | [US-GRP-002](features/motor-local/user-stories/US-GRP-002-cambios-eventos-en-vivo.md) | El desarrollador ve los cambios y eventos de Git de sus worktrees casi al instante | Implementado (`implemented`) | #57, #75 | — |
 | [US-GRP-004](features/motor-local/user-stories/US-GRP-004-observacion-continua.md) | El desarrollador encuentra lo ocurrido aunque no tuviera GitRaptor abierto | Implementado (`implemented`) | #112 | — |
-| [US-GRP-007](features/motor-local/user-stories/US-GRP-007-sesiones-claude-code.md) | El desarrollador sabe qué sesión de Claude Code trabaja en cada worktree y si sigue activa | Implementado (`implemented`) | #80, #119, #124, #155, #169 | — |
+| [US-GRP-007](features/motor-local/user-stories/US-GRP-007-sesiones-claude-code.md) | El desarrollador sabe qué sesión de Claude Code trabaja en cada worktree y si sigue activa | Implementado (`implemented`) | #80, #119, #124, #155, #169, #228 | — |
 | [US-GRP-009](features/motor-local/user-stories/US-GRP-009-registro-explicito-agente.md) | El desarrollador o el agente declaran qué agente trabaja en un worktree | Implementado (`implemented`) | #106 | — |
 | [US-GRP-012](features/motor-local/user-stories/US-GRP-012-rama-base-main.md) | El desarrollador ve el ahead/behind de cada worktree contra la rama base del repo | Implementado (`implemented`) | #55 | — |
 | [US-GRP-017](features/motor-local/user-stories/US-GRP-017-consumo-recursos-status.md) | El desarrollador ve cuánto consume GitRaptor en su máquina | Implementado (`implemented`) | #93, #173 | — |
@@ -156,6 +157,7 @@
 | [TD-GRP-002](features/motor-local/technical-stories/TD-GRP-002-motor-bajo-rafaga.md) | Frescura y memoria del motor bajo una ráfaga de archivos | Listo (`ready`) | — | — |
 | [TD-GRP-003](features/motor-local/technical-stories/TD-GRP-003-nfr04-maquina-referencia.md) | Presupuesto de NFR-04 sin gate automático: medirlo en una máquina de referencia | Listo (`ready`) | — | — |
 | [TS-GRP-005](features/motor-local/technical-stories/TS-GRP-005-clases-trabajo-ahorro-energia.md) | Clases de trabajo del daemon y mecanismo de ahorro de energía | Listo (`ready`) | — | — |
+| [TD-GRP-004](features/motor-local/technical-stories/TD-GRP-004-corroborar-ambito-worktree-s3.md) | Corroborar con el reflog de HEAD el ámbito worktree de S3 y blindar la lectura de la redirección | Borrador (`draft`) | — | — |
 | [TS-GRP-007](features/motor-local/technical-stories/TS-GRP-007-factor-so-reservados-windows.md) | Factor del SO (Windows Hello) para los comandos reservados de alto riesgo en Windows | Borrador (`draft`) | — | — |
 | [US-GRP-003](features/motor-local/user-stories/US-GRP-003-estados-especiales-no-disponible.md) | El desarrollador sabe qué worktree está en un estado especial o ya no existe | Borrador (`draft`) | — | — |
 | [US-GRP-005](features/motor-local/user-stories/US-GRP-005-hueco-sin-atribuir.md) | El desarrollador distingue lo que el motor no vio ocurrir | Borrador (`draft`) | — | — |
@@ -224,7 +226,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-GRP-001](features/motor-local/user-stories/US-GRP-001-estado-worktrees-repo-anadido.md) | El desarrollador ve el estado de cada worktree del repo que añadió | Implementado (`implemented`) | #46 | — |
 | [US-GRP-002](features/motor-local/user-stories/US-GRP-002-cambios-eventos-en-vivo.md) | El desarrollador ve los cambios y eventos de Git de sus worktrees casi al instante | Implementado (`implemented`) | #57, #75 | — |
 | [US-GRP-004](features/motor-local/user-stories/US-GRP-004-observacion-continua.md) | El desarrollador encuentra lo ocurrido aunque no tuviera GitRaptor abierto | Implementado (`implemented`) | #112 | — |
-| [US-GRP-007](features/motor-local/user-stories/US-GRP-007-sesiones-claude-code.md) | El desarrollador sabe qué sesión de Claude Code trabaja en cada worktree y si sigue activa | Implementado (`implemented`) | #80, #119, #124, #155, #169 | — |
+| [US-GRP-007](features/motor-local/user-stories/US-GRP-007-sesiones-claude-code.md) | El desarrollador sabe qué sesión de Claude Code trabaja en cada worktree y si sigue activa | Implementado (`implemented`) | #80, #119, #124, #155, #169, #228 | — |
 | [US-GRP-009](features/motor-local/user-stories/US-GRP-009-registro-explicito-agente.md) | El desarrollador o el agente declaran qué agente trabaja en un worktree | Implementado (`implemented`) | #106 | — |
 | [US-GRP-012](features/motor-local/user-stories/US-GRP-012-rama-base-main.md) | El desarrollador ve el ahead/behind de cada worktree contra la rama base del repo | Implementado (`implemented`) | #55 | — |
 | [US-GRP-017](features/motor-local/user-stories/US-GRP-017-consumo-recursos-status.md) | El desarrollador ve cuánto consume GitRaptor en su máquina | Implementado (`implemented`) | #93, #173 | — |
@@ -376,7 +378,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### Sin hito
 
-7 fichas sin hito asignado.
+9 fichas sin hito asignado.
 
 ## Implementadas en parte: lo que falta
 
