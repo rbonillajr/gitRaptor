@@ -2,10 +2,10 @@
 id: US-CKP-020
 title: "Tocar el trabajo de otro actor exige confirmar el plan concreto"
 type: us
-status: draft
+status: partially-implemented
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-09
 feature: cockpit
 related:
   context:
@@ -80,3 +80,12 @@ _Pendiente — lo completa el Arquitecto (Dev Spec). ADR-TMC-005 § 2-3; ADR-CKP
 
 - **Diseño:** DSYS-GRP-001 (ConfirmPrompt).
 - **Dev Spec:** pendiente. Escenario de Windows: Pendiente: etapa de validación multiplataforma.
+
+## Estado de la implementación (2026-10-09)
+
+Implementado en: PR #220.
+
+Estado: implementación parcial. Hecho: la regla del daemon del escenario "En Windows, rechazo". El ejecutor rechaza merge, rebase y descarte de trabajo de otro actor con `confirmation-unavailable`, antes de emitir el reto y sin apunte en el oplog (H-01). Pendiente:
+- El resto de la historia: el ConfirmPrompt de la TUI y la confirmación ligada al plan en macOS y Linux, con su Dev Spec.
+- El texto en/es "no se puede confirmar trabajo de otro actor en Windows todavía" en la TUI.
+- Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
