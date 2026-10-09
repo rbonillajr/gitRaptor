@@ -178,3 +178,53 @@ fn a_worktree_that_is_gone_is_still_missing_not_untrusted() {
         }
     );
 }
+
+#[test]
+fn a_core_worktree_set_after_the_root_was_trusted_is_not_followed() {
+    let p = pair();
+    let main = canonical(&p.ours.repo);
+    assert!(is_ready(&read_worktree(&p.common, &main, true, None).view));
+
+    // The root the watcher and the MCP keep is the same; the repo now says its tree is theirs.
+    let theirs_main = canonical(&p.theirs.repo);
+    p.ours
+        .git(&["config", "core.worktree", theirs_main.to_str().unwrap()]);
+    let read = read_worktree(&p.common, &main, true, None);
+    assert_eq!(read.view.status, untrusted());
+    assert!(all_changes(&p.common, &main, true, None).is_err());
+}
+
+#[test]
+fn a_submodule_checkout_whose_git_is_a_link_file_to_its_repo_is_read() {
+    let p = pair();
+    let theirs = p.theirs.repo.to_str().unwrap().to_owned();
+    p.ours.git(&[
+        "-c",
+        "protocol.file.allow=always",
+        "submodule",
+        "add",
+        "-q",
+        &theirs,
+        "sub",
+    ]);
+    let sub = canonical(&p.ours.repo.join("sub"));
+    assert!(sub.join(".git").is_file());
+    let common = locate(&sub).unwrap();
+
+    let read = reconcile(&common, &base_branch(None)).unwrap();
+    let views = read.views();
+    let main = views.iter().find(|w| w.main).unwrap();
+    assert_eq!(Path::new(main.path.raw()), sub);
+    assert!(is_ready(main), "{main:?}");
+
+    // The same link file in a folder of our own repo is not that submodule's checkout.
+    let decoy = canonical(&p.ours.root.join("decoy"));
+    std::fs::create_dir_all(&decoy).unwrap();
+    std::fs::write(
+        decoy.join(".git"),
+        format!("gitdir: {}\n", common.display()),
+    )
+    .unwrap();
+    let read = read_worktree(&common, &decoy, true, None);
+    assert_eq!(read.view.status, untrusted());
+}

@@ -481,39 +481,43 @@ pub fn linked_is_trusted(common_dir: &Path, id: &str, root: &Path) -> bool {
 /// environment, so a caller (and a test) states which folder is refused as a root.
 /// The `id` is one name the repo registers: a folder of `<common>/worktrees`, never a path.
 pub fn linked_is_trusted_in(common_dir: &Path, id: &str, root: &Path, home: Option<&Path>) -> bool {
-    if root.parent().is_none() || common_dir.starts_with(root) {
-        return false;
-    }
+    let mut parts = Path::new(id).components();
+    let one_name =
+        matches!(parts.next(), Some(std::path::Component::Normal(_))) && parts.next().is_none();
     let admin = common_dir.join("worktrees").join(id);
-    let one_name = !matches!(id, "" | "." | "..") && !id.contains(['/', '\\']);
     if !one_name || !std::fs::symlink_metadata(&admin).is_ok_and(|m| m.is_dir()) {
         return false;
     }
-    if let Some(home) = home
-        && canonical(home) == root
-    {
+    root_is_bounded(common_dir, root, home)
+        && gitdir_of(root).is_some_and(|target| canonical(&target) == canonical(&admin))
+}
+
+/// A root the engine may be pointed at: not `/`, a drive root, the home folder or an ancestor
+/// of the repo.
+fn root_is_bounded(common_dir: &Path, root: &Path, home: Option<&Path>) -> bool {
+    if root.parent().is_none() || common_dir.starts_with(root) {
         return false;
     }
-    let Some(text) = read_link_file(&root.join(".git")) else {
-        return false;
-    };
-    let Some(target) = text.trim().strip_prefix("gitdir:") else {
-        return false;
-    };
-    let target = Path::new(target.trim());
-    let target = if target.is_absolute() {
+    !home.is_some_and(|home| canonical(home) == root)
+}
+
+/// Where the `.git` link file of `root` points, resolved against `root`; `None` if `.git` is
+/// not a link file ([`read_link_file`]).
+fn gitdir_of(root: &Path) -> Option<PathBuf> {
+    let text = read_link_file(&root.join(".git"))?;
+    let target = Path::new(text.lines().next()?.strip_prefix("gitdir:")?.trim());
+    Some(if target.is_absolute() {
         target.to_path_buf()
     } else {
         root.join(target)
-    };
-    canonical(&target) == canonical(&admin)
+    })
 }
 
 /// Whether the worktree at `root` may be read as one of the repo whose common directory is
 /// `common_dir` (#216 M-01, NFR-02): the root is a real folder, not a symlink; a linked one is
 /// [`linked_is_trusted_in`] under its `admin_name`; the main one has a real `.git` directory
-/// that is the common directory itself, so neither `core.worktree` nor a swapped `.git` can make
-/// the engine read another repo through it.
+/// that is the common directory itself, or (a submodule's checkout) a `.git` link file to it
+/// from a bounded root, so a swapped `.git` cannot make the engine read another repo.
 pub fn worktree_is_trusted_in(
     common_dir: &Path,
     root: &Path,
@@ -527,8 +531,15 @@ pub fn worktree_is_trusted_in(
     match (main, admin_name) {
         (true, _) => {
             let git = root.join(".git");
-            std::fs::symlink_metadata(&git).is_ok_and(|m| m.is_dir())
-                && canonical(&git) == canonical(common_dir)
+            match std::fs::symlink_metadata(&git) {
+                Ok(m) if m.is_dir() => canonical(&git) == canonical(common_dir),
+                Ok(m) if m.is_file() => {
+                    root_is_bounded(common_dir, root, home)
+                        && gitdir_of(root)
+                            .is_some_and(|target| canonical(&target) == canonical(common_dir))
+                }
+                _ => false,
+            }
         }
         (false, Some(id)) => linked_is_trusted_in(common_dir, id, root, home),
         (false, None) => false,
@@ -537,9 +548,10 @@ pub fn worktree_is_trusted_in(
 
 /// Opens the worktree at `root` of the repo whose common directory is `common_dir`, only if the
 /// repo owns it ([`worktree_is_trusted_in`]): the one way the observer opens a worktree. What
-/// was opened is checked again, so a `.git` swapped between the check and the open is refused
-/// too. A root that is not there is `Unavailable`; one the repo does not own is `Untrusted` and
-/// nothing behind it is read.
+/// was opened is checked again: its common directory, its own Git directory and its working
+/// tree must be the ones the repo has for `root`, so a `.git` swapped between the check and the
+/// open, or a `core.worktree` set since, is refused too. A root that is not there is
+/// `Unavailable`; one the repo does not own is `Untrusted` and nothing behind it is read.
 pub fn open_worktree(
     common_dir: &Path,
     root: &Path,
@@ -561,7 +573,17 @@ pub fn open_worktree(
         return Err(refused());
     }
     let reader = RepoReader::open(root, &ReaderOptions::default())?;
-    if canonical(reader.common_dir()) != canonical(common_dir) {
+    let common = canonical(common_dir);
+    let git_dir = match admin_name.filter(|_| !main) {
+        Some(id) => canonical(&common.join("worktrees").join(id)),
+        None => common.clone(),
+    };
+    let owned = canonical(reader.common_dir()) == common
+        && canonical(reader.git_dir()) == git_dir
+        && reader
+            .workdir()
+            .is_some_and(|w| canonical(&w) == canonical(root));
+    if !owned {
         return Err(refused());
     }
     Ok(reader)
