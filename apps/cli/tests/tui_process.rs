@@ -57,10 +57,26 @@ impl Fixture {
 #[cfg(unix)]
 impl Drop for Fixture {
     fn drop(&mut self) {
-        // A daemon started on demand is detached: never leave it behind.
+        // A daemon started on demand is detached: never leave it behind. Ask it to end, and
+        // if it is still there after a grace period, kill it.
         let dirs = gitraptor_core::profile::ProfileDirs::under_root(self.root());
-        if let Ok(Some(pid)) = gitraptor_core::daemon::running_pid(&dirs.state) {
-            let _ = Command::new("/bin/kill").arg(pid.to_string()).status();
+        let Ok(Some(pid)) = gitraptor_core::daemon::running_pid(&dirs.state) else {
+            return;
+        };
+        let pid = pid.to_string();
+        let alive = || {
+            Command::new("/bin/kill")
+                .args(["-0", &pid])
+                .status()
+                .is_ok_and(|s| s.success())
+        };
+        let _ = Command::new("/bin/kill").arg(&pid).status();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while alive() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        if alive() {
+            let _ = Command::new("/bin/kill").args(["-KILL", &pid]).status();
         }
     }
 }
@@ -87,44 +103,125 @@ fn without_a_terminal_raptor_exits_2_and_suggests_status() {
 #[cfg(all(target_os = "macos", debug_assertions))]
 mod pty {
     use super::*;
+    use std::io::{Read, Write};
+    use std::process::{Child, ChildStdin, ExitStatus};
+    use std::sync::mpsc::{self, Receiver};
+    use std::time::{Duration, Instant};
 
     const ENTER_ALT: &str = "\u{1b}[?1049h";
     const LEAVE_ALT: &str = "\u{1b}[?1049l";
 
-    fn script(fx: &Fixture, args: &[&str], extra: &[(&str, &str)], input: &str) -> Output {
-        let mut child = Command::new("/usr/bin/script")
-            .args(["-q", "/dev/null", RAPTOR])
-            .args(args)
-            .env_clear()
-            .envs(fx.env())
-            .envs(extra.iter().map(|(k, v)| (*k, *v)))
-            .current_dir(fx.tmp.path())
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .unwrap();
-        let mut stdin = child.stdin.take().unwrap();
-        let input = input.to_owned();
-        let writer = std::thread::spawn(move || {
-            use std::io::Write;
-            // Let the TUI enter raw mode first.
-            std::thread::sleep(std::time::Duration::from_millis(1500));
-            let _ = stdin.write_all(input.as_bytes());
-        });
-        let out = child.wait_with_output().unwrap();
-        writer.join().unwrap();
-        out
+    /// Longest any step waits for the child before the test fails (never forever).
+    const STEP: Duration = Duration::from_secs(30);
+
+    /// `raptor` under `script` (a pty). Everything it does is bounded by a deadline and the
+    /// child is killed when the session ends, however the test ends.
+    struct Session {
+        child: Child,
+        stdin: Option<ChildStdin>,
+        rx: Receiver<Vec<u8>>,
+        seen: String,
+    }
+
+    impl Session {
+        fn start(fx: &Fixture, args: &[&str], extra: &[(&str, &str)]) -> Self {
+            let mut child = Command::new("/usr/bin/script")
+                .args(["-q", "/dev/null", RAPTOR])
+                .args(args)
+                .env_clear()
+                .envs(fx.env())
+                .envs(extra.iter().map(|(k, v)| (*k, *v)))
+                .current_dir(fx.tmp.path())
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap();
+            let stdin = child.stdin.take();
+            let mut stdout = child.stdout.take().unwrap();
+            let (tx, rx) = mpsc::channel::<Vec<u8>>();
+            std::thread::spawn(move || {
+                let mut chunk = [0u8; 4096];
+                while let Ok(n) = stdout.read(&mut chunk) {
+                    if n == 0 || tx.send(chunk[..n].to_vec()).is_err() {
+                        break;
+                    }
+                }
+            });
+            Self {
+                child,
+                stdin,
+                rx,
+                seen: String::new(),
+            }
+        }
+
+        fn send(&mut self, bytes: &[u8]) {
+            let stdin = self.stdin.as_mut().expect("stdin open");
+            stdin.write_all(bytes).unwrap();
+            stdin.flush().unwrap();
+        }
+
+        /// Reads until `what` has been seen `count` times; fails with everything read so far.
+        fn wait_for(&mut self, what: &str, count: usize) {
+            let deadline = Instant::now() + STEP;
+            while self.seen.matches(what).count() < count {
+                let left = deadline.saturating_duration_since(Instant::now());
+                match self.rx.recv_timeout(left) {
+                    Ok(bytes) => self.seen.push_str(&String::from_utf8_lossy(&bytes)),
+                    Err(e) => panic!("waiting for {what:?} x{count} ({e}): {:?}", self.seen),
+                }
+            }
+        }
+
+        /// Waits for the child to end (output closed, then exit status) within the deadline.
+        fn finish(&mut self) -> ExitStatus {
+            let deadline = Instant::now() + STEP;
+            loop {
+                let left = deadline.saturating_duration_since(Instant::now());
+                match self.rx.recv_timeout(left) {
+                    Ok(bytes) => self.seen.push_str(&String::from_utf8_lossy(&bytes)),
+                    Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                    Err(mpsc::RecvTimeoutError::Timeout) => {
+                        panic!("the child did not close its output: {:?}", self.seen)
+                    }
+                }
+            }
+            while Instant::now() < deadline {
+                if let Some(status) = self.child.try_wait().unwrap() {
+                    return status;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            panic!("the child did not exit: {:?}", self.seen)
+        }
+    }
+
+    impl Drop for Session {
+        fn drop(&mut self) {
+            // `script` leads its own pty session: take its child down first, then it.
+            let pid = self.child.id().to_string();
+            let _ = Command::new("/usr/bin/pkill")
+                .args(["-KILL", "-P", &pid])
+                .status();
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+        }
     }
 
     /// `raptor` in a terminal opens the TUI on the alternate screen and
-    /// `q` leaves it restored.
+    /// `q` leaves it restored. `q` goes in once the alternate screen is up: raw mode is on
+    /// by then, so the key is not lost in the line discipline when the machine is slow.
     #[test]
     fn q_quits_and_restores_the_terminal() {
         let fx = Fixture::new();
-        let out = script(&fx, &[], &[], "q");
-        let text = String::from_utf8_lossy(&out.stdout);
-        assert!(out.status.success(), "{text}");
+        let mut s = Session::start(&fx, &[], &[]);
+        s.wait_for(ENTER_ALT, 1);
+        s.send(b"q");
+        s.wait_for(LEAVE_ALT, 1);
+        let status = s.finish();
+        let text = &s.seen;
+        assert!(status.success(), "{status:?}: {text:?}");
         let enter = text.find(ENTER_ALT).expect("alternate screen entered");
         let leave = text.rfind(LEAVE_ALT).expect("alternate screen left");
         assert!(enter < leave);
@@ -137,58 +234,22 @@ mod pty {
     /// the stop itself is the shell's job control. Waits on the output, never on a clock.
     #[test]
     fn ctrl_z_restores_and_reenters() {
-        use std::io::{Read, Write};
-        use std::sync::mpsc;
-
         let fx = Fixture::new();
-        let mut child = Command::new("/usr/bin/script")
-            .args(["-q", "/dev/null", RAPTOR, "tui"])
-            .env_clear()
-            .envs(fx.env())
-            .current_dir(fx.tmp.path())
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()
-            .unwrap();
-        let mut stdin = child.stdin.take().unwrap();
-        let mut stdout = child.stdout.take().unwrap();
-        let (tx, rx) = mpsc::channel::<Vec<u8>>();
-        let reader = std::thread::spawn(move || {
-            let mut chunk = [0u8; 4096];
-            while let Ok(n) = stdout.read(&mut chunk) {
-                if n == 0 || tx.send(chunk[..n].to_vec()).is_err() {
-                    break;
-                }
-            }
-        });
-        let mut seen = String::new();
-        let wait_for = |seen: &mut String, what: &str, count: usize| {
-            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
-            while seen.matches(what).count() < count {
-                let left = deadline.saturating_duration_since(std::time::Instant::now());
-                let bytes = rx
-                    .recv_timeout(left)
-                    .unwrap_or_else(|_| panic!("waiting for {what:?} x{count}: {seen:?}"));
-                seen.push_str(&String::from_utf8_lossy(&bytes));
-            }
-        };
+        let mut s = Session::start(&fx, &["tui"], &[]);
         // Raw mode is on before the alternate screen: from here the byte is a key, kept by
         // the terminal until the input thread reads it (not a SIGTSTP of the line discipline).
-        wait_for(&mut seen, ENTER_ALT, 1);
-        stdin.write_all(b"\x1a").unwrap();
-        wait_for(&mut seen, LEAVE_ALT, 1);
-        wait_for(&mut seen, ENTER_ALT, 2);
+        s.wait_for(ENTER_ALT, 1);
+        s.send(b"\x1a");
+        s.wait_for(LEAVE_ALT, 1);
+        s.wait_for(ENTER_ALT, 2);
         // The shell gets its cursor back while the TUI is suspended.
-        let handed = seen.find(LEAVE_ALT).unwrap();
-        let back = handed + seen[handed..].find(ENTER_ALT).unwrap();
-        assert!(seen[handed..back].contains("\u{1b}[?25h"), "{seen:?}");
-        stdin.write_all(b"q").unwrap();
-        wait_for(&mut seen, LEAVE_ALT, 2);
-        let status = child.wait().unwrap();
-        drop(rx);
-        reader.join().unwrap();
-        assert!(status.success(), "{status:?}: {seen:?}");
+        let handed = s.seen.find(LEAVE_ALT).unwrap();
+        let back = handed + s.seen[handed..].find(ENTER_ALT).unwrap();
+        assert!(s.seen[handed..back].contains("\u{1b}[?25h"), "{:?}", s.seen);
+        s.send(b"q");
+        s.wait_for(LEAVE_ALT, 2);
+        let status = s.finish();
+        assert!(status.success(), "{status:?}: {:?}", s.seen);
     }
 
     /// A panic in the view leaves the terminal restored: the panic hook of
@@ -196,9 +257,10 @@ mod pty {
     #[test]
     fn a_panic_in_the_view_restores_the_terminal() {
         let fx = Fixture::new();
-        let out = script(&fx, &["tui"], &[("GITRAPTOR_TUI_PANIC_IN_VIEW", "1")], "");
-        let text = String::from_utf8_lossy(&out.stdout);
-        assert!(!out.status.success());
+        let mut s = Session::start(&fx, &["tui"], &[("GITRAPTOR_TUI_PANIC_IN_VIEW", "1")]);
+        let status = s.finish();
+        let text = &s.seen;
+        assert!(!status.success());
         let enter = text.find(ENTER_ALT).expect("alternate screen entered");
         let leave = text[enter..].find(LEAVE_ALT).expect("restored") + enter;
         let panic = text
