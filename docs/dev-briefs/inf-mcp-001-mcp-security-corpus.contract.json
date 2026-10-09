@@ -134,7 +134,7 @@
     ]
   },
   "suite": {
-    "command": "cargo nextest run --profile ci -p gitraptor-testkit -p gitraptor-cli -E 'package(gitraptor-testkit) | binary(mcp_security_corpus)'"
+    "command": "cargo nextest run --profile ci -p gitraptor-testkit -p gitraptor-mcp -E 'not (binary(mcp_corpus) | binary(mcp_security_corpus))'"
   },
   "layers": {
     "runtime": {
