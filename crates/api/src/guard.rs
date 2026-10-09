@@ -451,7 +451,8 @@ pub enum NotPreventable {
     VoluntarySkips,
     /// The protected branches and forbidden paths tell an agent from the person by its process:
     /// an agent the daemon does not detect or know counts as the person, and without the daemon
-    /// only the rules for everyone apply (US-GRD-008).
+    /// only the rules for everyone apply (US-GRD-008). The same holds for the protection of the
+    /// Guardrails configuration.
     PolicyActor,
     /// A forbidden path is checked in the commits that reach a branch or are pushed to one: not
     /// in a push to tags, in a commit nobody moves to a branch, nor in what is not committed

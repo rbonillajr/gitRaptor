@@ -3,8 +3,10 @@
 //! hook layer and the hook client runs the same function in degraded mode, so
 //! both layers decide alike (BR-CONS-002).
 //!
-//! US-GRD-001 evaluates the safe minimum only (BR-EDGE-001): no configuration
-//! is read, so nothing can turn it off.
+//! The safe minimum (BR-EDGE-001) is evaluated from the context alone and nothing can turn it
+//! off; the protected branches, the forbidden paths and the authorship policy come from the
+//! configuration the caller resolved, and the protection of the Guardrails configuration
+//! (BR-AUTH-004) from no configuration at all.
 
 pub mod authorship;
 pub mod config;
@@ -161,7 +163,14 @@ fn policies_of(
     ctx: &Context,
     budget: &mut glob::Budget,
 ) {
-    if ctx.policies.is_empty() || !refs::is_governed(refname) {
+    if !refs::is_governed(refname) {
+        return;
+    }
+    // A product rule: it holds whatever the configuration says, even with no policies at all.
+    if let Some(touched) = touched {
+        config::protect_config(out, touched, ctx.actor, budget);
+    }
+    if ctx.policies.is_empty() {
         return;
     }
     policies::protected_branch(out, refname, ctx.actor, &ctx.policies, budget);

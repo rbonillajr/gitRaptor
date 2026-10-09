@@ -377,6 +377,68 @@ mod policies_in_the_function {
     }
 
     #[test]
+    fn the_configuration_directory_is_protected_with_no_policies_at_all() {
+        let update = tx(vec![("refs/heads/feat-x", oid(A), oid(B))]);
+        let agent = Context {
+            actor: AGENT,
+            ..ctx()
+        };
+        for path in [".gitraptor/settings.json", ".gitraptor"] {
+            let e = evaluate(&update, &touched(&[path]), &agent);
+            assert_eq!(e.effect, Effect::Deny, "{path}");
+            assert_eq!(rules_of(&e), [Rule::ConfigProtected]);
+            assert_eq!(e.reasons[0].level, Level::Minimum);
+        }
+        // Outside the directory, on another ref kind, or by the person: free.
+        assert_eq!(
+            evaluate(&update, &touched(&["src/a"]), &agent).effect,
+            Effect::Allow
+        );
+        let tag = tx(vec![("refs/tags/v1", oid(A), oid(B))]);
+        assert_eq!(
+            evaluate(&tag, &touched(&[".gitraptor/settings.json"]), &agent).effect,
+            Effect::Allow
+        );
+        let person = Context {
+            actor: None,
+            ..ctx()
+        };
+        assert_eq!(
+            evaluate(&update, &touched(&[".gitraptor/settings.json"]), &person).effect,
+            Effect::Allow
+        );
+        // An agent's movement whose commits cannot be read is denied with no rules at all.
+        let unreadable = Facts {
+            touched: vec![Some(Touched {
+                paths: Vec::new(),
+                unverifiable: true,
+            })],
+            ..Facts::default()
+        };
+        let e = evaluate(&update, &unreadable, &agent);
+        assert_eq!(e.effect, Effect::Deny);
+        assert_eq!(e.reasons[0].cause, Some(Cause::Unverifiable));
+        // It names itself next to the other rules that stop the movement.
+        let both = Context {
+            actor: AGENT,
+            ..with_policies(AGENT, Scope::Agents)
+        };
+        let e = evaluate(
+            &tx(vec![("refs/heads/main", oid(A), oid(B))]),
+            &touched(&[".gitraptor/x", "secrets/k"]),
+            &both,
+        );
+        assert_eq!(
+            rules_of(&e),
+            [
+                Rule::ConfigProtected,
+                Rule::ProtectedBranch,
+                Rule::ForbiddenPath
+            ]
+        );
+    }
+
+    #[test]
     fn two_broken_rules_are_named_together_with_the_minimum() {
         let ctx = with_policies(AGENT, Scope::Agents);
         // Deleting the base branch that is also protected: the minimum and the policy.

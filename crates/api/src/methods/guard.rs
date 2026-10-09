@@ -63,7 +63,6 @@ pub const CAP_GUARD_POLICIES: Capability = Capability::new("guard.policies");
 
 /// The configuration protection: `policy.config-protected` in decisions and
 /// `config.relax-ignored` notices in `guard.log`.
-// stub: replaced by the implementation slice (not yet listed in `GROUP.capabilities`)
 pub const CAP_GUARD_CONFIG_PROTECTION: Capability = Capability::new("guard.config-protection");
 
 pub(super) const GROUP: Group = Group {
@@ -87,6 +86,7 @@ pub(super) const GROUP: Group = Group {
         CAP_GUARD_AUTHORSHIP,
         CAP_GUARD_AUTHORSHIP_SECOND_LINE,
         CAP_GUARD_POLICIES,
+        CAP_GUARD_CONFIG_PROTECTION,
         CAP_GUARD_PRIOR_HOOKS,
         CAP_GUARD_PENDING_ACTION,
         CAP_GUARD_PROTECTION,
