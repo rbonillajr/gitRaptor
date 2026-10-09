@@ -1,0 +1,4 @@
+# La confirmación de un solicitante que deshace trabajo de un agente (US-TMC-013).
+tmconfirm.ask = ¿Deshacer este trabajo de otro actor? [y/N]
+tmconfirm.declined = no confirmado; nada cambió
+tmconfirm.needs-terminal = ese trabajo es de un agente y confirmarlo necesita una terminal para leer tu respuesta; nada cambió

@@ -8,7 +8,7 @@ use std::process::ExitCode;
 
 use gitraptor_api::methods;
 use gitraptor_api::rpc::code;
-use gitraptor_api::timemachine::{NotRestoredReason, TmRejectReason, TmRejectedData, UndoResult};
+use gitraptor_api::timemachine::{NotRestoredReason, TmConfirmData, TmRejectReason, UndoResult};
 use gitraptor_api::untrusted::sanitize;
 use gitraptor_core::client::ClientError;
 use gitraptor_core::timemachine::restore::KEPT_REF_IN_RECREATED_WORKTREE;
@@ -42,10 +42,16 @@ pub fn run(json_out: bool) -> ExitCode {
         Ok(client) => client,
         Err(code) => return code,
     };
-    let answer: Result<serde_json::Value, ClientError> = client.call(
+    let answer = match confirm::call(
+        &mut client,
         methods::TM_UNDO,
         json!({ "worktree": worktree.to_string_lossy(), "surface": "cli" }),
-    );
+        !json_out,
+        &show_undo_plan,
+    ) {
+        Ok(answer) => answer,
+        Err(code) => return code,
+    };
     match answer {
         Ok(value) => {
             if json_out {
@@ -68,6 +74,32 @@ pub fn run(json_out: bool) -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// What the confirmation is about: the operation, its id and whose work it is.
+fn show_undo_plan(data: &TmConfirmData) {
+    let operation = data
+        .undone_subtype
+        .as_ref()
+        .map_or_else(|| t("undo.operation-unnamed", &[]), |s| s.sanitized());
+    let id = data
+        .undone_operation_id
+        .as_deref()
+        .map(sanitize)
+        .unwrap_or_default();
+    let owners = data
+        .owners
+        .iter()
+        .map(crate::events::actor)
+        .collect::<Vec<_>>()
+        .join(", ");
+    eprintln!(
+        "{CMD}: {}",
+        t(
+            "undo.confirm-plan",
+            &[("operation", &operation), ("id", &id), ("owners", &owners)],
+        )
+    );
 }
 
 fn print_done(result: &UndoResult, worktree: &Path) {
@@ -115,12 +147,14 @@ fn print_done(result: &UndoResult, worktree: &Path) {
 fn failure_text(err: ClientError, worktree: &Path) -> String {
     match err {
         ClientError::Rpc(err) if err.code == code::OPERATION_REJECTED => {
-            let reason = err
+            let data = err
                 .data
-                .and_then(|d| serde_json::from_value::<TmRejectedData>(d).ok())
-                .map(|d| d.reason);
-            match reason {
-                Some(reason) => t(reason_key(reason), &[]),
+                .and_then(|d| serde_json::from_value::<TmConfirmData>(d).ok());
+            match data {
+                Some(d) if d.reason == TmRejectReason::ConfirmationRequired => {
+                    t(&confirm::required_key("undo", Some(&d)), &[])
+                }
+                Some(d) => t(reason_key(d.reason), &[]),
                 None => t("undo.reason.unsupported", &[]),
             }
         }
@@ -197,12 +231,17 @@ mod tests {
             TmRejectReason::RefInUse,
             TmRejectReason::Unsupported,
             TmRejectReason::GitUnavailable,
+            TmRejectReason::ChallengeInvalid,
+            TmRejectReason::ConfirmationUnavailable,
         ] {
             let key = reason_key(reason);
             assert!(has_key(key), "{key}");
-            // The key is the wire code: one place to keep in step.
+            // The key is the wire code: one place to keep in step. The one exception is the
+            // rule that forbids confirming (BR-TMC-AUTH-001), told as the Windows case.
             let wire = serde_json::to_value(reason).unwrap();
-            assert_eq!(key, format!("undo.reason.{}", wire.as_str().unwrap()));
+            if reason != TmRejectReason::ConfirmationUnavailable {
+                assert_eq!(key, format!("undo.reason.{}", wire.as_str().unwrap()));
+            }
         }
         for reason in [
             NotRestoredReason::Overlap,

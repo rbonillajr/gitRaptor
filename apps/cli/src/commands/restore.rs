@@ -8,13 +8,14 @@ use std::process::ExitCode;
 
 use gitraptor_api::methods;
 use gitraptor_api::rpc::code;
-use gitraptor_api::timemachine::{NotRestoredReason, RestoreResult, TmRejectReason, TmRejectedData};
+use gitraptor_api::timemachine::{NotRestoredReason, RestoreResult, TmConfirmData, TmRejectReason};
 use gitraptor_api::untrusted::sanitize;
 use gitraptor_core::client::ClientError;
 use serde_json::json;
 
 use super::Global;
 use crate::i18n::t;
+use crate::undo::confirm;
 use crate::{engine, error_text, shown, undo};
 
 const CMD: &str = "raptor restore";
@@ -42,14 +43,21 @@ impl Cmd {
             Ok(client) => client,
             Err(code) => return code,
         };
-        let answer: Result<serde_json::Value, ClientError> = client.call(
+        let show_plan = |data: &TmConfirmData| show_restore_plan(data, &self.snapshot_id);
+        let answer = match confirm::call(
+            &mut client,
             methods::TM_RESTORE,
             json!({
                 "worktree": worktree.to_string_lossy(),
                 "snapshot_id": self.snapshot_id,
                 "surface": "cli",
             }),
-        );
+            !self.json,
+            &show_plan,
+        ) {
+            Ok(answer) => answer,
+            Err(code) => return code,
+        };
         match answer {
             Ok(value) => {
                 if self.json {
@@ -73,6 +81,20 @@ impl Cmd {
             }
         }
     }
+}
+
+/// What the confirmation is about: the point and whose work it takes back.
+fn show_restore_plan(data: &TmConfirmData, id: &str) {
+    let owners = data
+        .owners
+        .iter()
+        .map(crate::events::actor)
+        .collect::<Vec<_>>()
+        .join(", ");
+    eprintln!(
+        "{CMD}: {}",
+        t("restore.confirm-plan", &[("id", &sanitize(id)), ("owners", &owners)])
+    );
 }
 
 fn print_done(result: &RestoreResult, worktree: &Path) {
@@ -132,12 +154,14 @@ fn print_done(result: &RestoreResult, worktree: &Path) {
 fn failure_text(err: ClientError, worktree: &Path, id: &str) -> String {
     match err {
         ClientError::Rpc(err) if err.code == code::OPERATION_REJECTED => {
-            let reason = err
+            let data = err
                 .data
-                .and_then(|d| serde_json::from_value::<TmRejectedData>(d).ok())
-                .map(|d| d.reason);
-            match reason {
-                Some(reason) => t(reason_key(reason), &[]),
+                .and_then(|d| serde_json::from_value::<TmConfirmData>(d).ok());
+            match data {
+                Some(d) if d.reason == TmRejectReason::ConfirmationRequired => {
+                    t(&confirm::required_key("restore", Some(&d)), &[])
+                }
+                Some(d) => t(reason_key(d.reason), &[]),
                 None => t("restore.reason.unsupported", &[]),
             }
         }
@@ -176,21 +200,13 @@ fn path_reason_key(reason: NotRestoredReason) -> &'static str {
     }
 }
 
-/// Both keys of the confirmation exist on every platform; the platform picks
-/// which one is told.
 fn reason_key(reason: TmRejectReason) -> &'static str {
     match reason {
         TmRejectReason::NothingToUndo => "restore.reason.nothing-to-undo",
         TmRejectReason::RawGitNotCovered => "restore.reason.raw-git-not-covered",
         TmRejectReason::TargetUnavailable => "restore.reason.target-unavailable",
         TmRejectReason::OtherActor => "restore.reason.other-actor",
-        TmRejectReason::ConfirmationRequired => {
-            if cfg!(windows) {
-                "restore.reason.confirmation-unavailable-windows"
-            } else {
-                "restore.reason.confirmation-required"
-            }
-        }
+        TmRejectReason::ConfirmationRequired => "restore.reason.confirmation-required",
         TmRejectReason::ConfirmationUnavailable => "restore.reason.confirmation-unavailable-windows",
         TmRejectReason::ChallengeInvalid => "restore.reason.challenge-invalid",
         TmRejectReason::GitOperationInProgress => "restore.reason.git-operation-in-progress",
@@ -231,6 +247,8 @@ mod tests {
             TmRejectReason::RefInUse,
             TmRejectReason::Unsupported,
             TmRejectReason::GitUnavailable,
+            TmRejectReason::ChallengeInvalid,
+            TmRejectReason::ConfirmationUnavailable,
         ] {
             let key = reason_key(reason);
             assert!(has_key(key), "{key}");
