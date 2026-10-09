@@ -61,3 +61,4 @@ error.root-unknown = esa carpeta no es una carpeta de código declarada
 error.not-a-candidate = ese repo no está pendiente de decisión
 error.snapshot-quota-exceeded = demasiados snapshots manuales por ahora; inténtalo más tarde
 error.snapshot-time-limit = el snapshot tardó demasiado; no se guardó nada
+error.mcp-unavailable = el repo o el worktree no se pueden leer ahora
