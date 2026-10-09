@@ -1,0 +1,4 @@
+# The confirmation of a requester that takes back an agent's work (US-TMC-013).
+tmconfirm.ask = Take back this work of another actor? [y/N]
+tmconfirm.declined = not confirmed; nothing changed
+tmconfirm.needs-terminal = that work belongs to an agent and confirming it needs a terminal to read your answer; nothing changed
