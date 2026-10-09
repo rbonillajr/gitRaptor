@@ -1,0 +1,34 @@
+{
+  "id": "status-rate-limited",
+  "title": "A burst of 80 status calls is rate limited",
+  "threats": [
+    "MCP10",
+    "SEC-MCP-05"
+  ],
+  "tier": "engine",
+  "platforms": [
+    "macos",
+    "linux"
+  ],
+  "pending": "XP-42",
+  "setup": {
+    "repo": "enabled"
+  },
+  "session": {
+    "cwd": "repo"
+  },
+  "send": [
+    {
+      "call": "status",
+      "repeat": 80
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "rate-limited",
+      "params": [
+        "retry_after_s"
+      ]
+    }
+  }
+}

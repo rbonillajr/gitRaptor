@@ -1,0 +1,40 @@
+{
+  "id": "scope-linked-worktree-of-not-enabled",
+  "title": "A linked worktree of a not enabled repo is refused",
+  "threats": [
+    "MCP02",
+    "SEC-MCP-02"
+  ],
+  "tier": "engine",
+  "platforms": [
+    "macos",
+    "linux"
+  ],
+  "pending": "XP-42",
+  "setup": {
+    "repo": "observed",
+    "other_repo": "enabled",
+    "worktrees": [
+      {
+        "name": "feat-a",
+        "branch": "feat-a"
+      }
+    ]
+  },
+  "session": {
+    "cwd": "wt-feat-a"
+  },
+  "send": [
+    {
+      "call": "status"
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "repo-not-enabled"
+    }
+  },
+  "forbidden": [
+    "{repo_id:repo}"
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "id": "env-home-and-xdg",
+  "title": "HOME and XDG variables do not redirect the scope",
+  "threats": [
+    "MCP02",
+    "SEC-MCP-02"
+  ],
+  "tier": "engine",
+  "platforms": [
+    "macos",
+    "linux"
+  ],
+  "pending": "XP-42",
+  "setup": {
+    "repo": "enabled",
+    "dirs": [
+      "root/downloads"
+    ]
+  },
+  "session": {
+    "cwd": "root/downloads",
+    "env": {
+      "HOME": "{repo}",
+      "XDG_CONFIG_HOME": "{repo}",
+      "XDG_DATA_HOME": "{repo}",
+      "XDG_STATE_HOME": "{repo}"
+    }
+  },
+  "send": [
+    {
+      "call": "status"
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "not-in-observed-worktree"
+    }
+  },
+  "forbidden": [
+    "{repo_id:repo}"
+  ]
+}

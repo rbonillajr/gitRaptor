@@ -1,0 +1,32 @@
+{
+  "id": "snapshot-label-osc52",
+  "title": "A snapshot label with an OSC 52 sequence is refused as invalid text",
+  "threats": [
+    "MCP05",
+    "SEC-MCP-05",
+    "BR-MCP-VAL-005"
+  ],
+  "tier": "server",
+  "platforms": [
+    "macos",
+    "linux",
+    "windows"
+  ],
+  "send": [
+    {
+      "call": "snapshot",
+      "arguments": {
+        "label": "a\u001b]52;c;cHduZWQ=\u0007b"
+      }
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "invalid-text",
+      "params": [
+        "field",
+        "max_chars"
+      ]
+    }
+  }
+}

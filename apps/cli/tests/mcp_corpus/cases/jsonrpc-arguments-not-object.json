@@ -1,0 +1,30 @@
+{
+  "id": "jsonrpc-arguments-not-object",
+  "title": "A tools/call whose arguments are not an object is an invalid request",
+  "threats": [
+    "MCP05",
+    "SEC-MCP-05"
+  ],
+  "tier": "server",
+  "platforms": [
+    "macos",
+    "linux",
+    "windows"
+  ],
+  "send": [
+    {
+      "message": {
+        "method": "tools/call",
+        "params": {
+          "name": "status",
+          "arguments": "x"
+        }
+      }
+    }
+  ],
+  "expect": {
+    "protocol_error": {
+      "code": -32601
+    }
+  }
+}

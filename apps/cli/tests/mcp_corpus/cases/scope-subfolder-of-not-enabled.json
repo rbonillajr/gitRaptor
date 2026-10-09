@@ -1,0 +1,38 @@
+{
+  "id": "scope-subfolder-of-not-enabled",
+  "title": "A subfolder of a not enabled repo is refused",
+  "threats": [
+    "MCP02",
+    "SEC-MCP-02"
+  ],
+  "tier": "engine",
+  "platforms": [
+    "macos",
+    "linux"
+  ],
+  "pending": "XP-42",
+  "setup": {
+    "repo": "enabled",
+    "other_repo": "observed",
+    "dirs": [
+      "other_repo/src"
+    ]
+  },
+  "session": {
+    "cwd": "other_repo/src"
+  },
+  "send": [
+    {
+      "call": "status"
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "repo-not-enabled"
+    }
+  },
+  "forbidden": [
+    "{other_repo}",
+    "{repo_id:other_repo}"
+  ]
+}

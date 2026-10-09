@@ -1,0 +1,33 @@
+{
+  "id": "status-cursor-unknown-to-engine",
+  "title": "A well formed cursor the engine does not know is refused",
+  "threats": [
+    "MCP05",
+    "SEC-MCP-05"
+  ],
+  "tier": "engine",
+  "platforms": [
+    "macos",
+    "linux"
+  ],
+  "pending": "XP-42",
+  "setup": {
+    "repo": "enabled"
+  },
+  "session": {
+    "cwd": "repo"
+  },
+  "send": [
+    {
+      "call": "status",
+      "arguments": {
+        "cursor": "0123456789abcdef"
+      }
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "invalid-cursor"
+    }
+  }
+}

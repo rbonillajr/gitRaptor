@@ -1,0 +1,33 @@
+{
+  "id": "snapshot-repo-not-enabled",
+  "title": "A snapshot in a not enabled repo is refused",
+  "threats": [
+    "MCP02",
+    "SEC-MCP-02"
+  ],
+  "tier": "engine",
+  "platforms": [
+    "macos",
+    "linux"
+  ],
+  "pending": "XP-42",
+  "setup": {
+    "repo": "observed"
+  },
+  "session": {
+    "cwd": "repo"
+  },
+  "send": [
+    {
+      "call": "snapshot",
+      "arguments": {
+        "label": "probe"
+      }
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "repo-not-enabled"
+    }
+  }
+}

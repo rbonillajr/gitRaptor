@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use gitraptor_core::daemon::running_pid;
 use gitraptor_core::profile::ProfileDirs;
 use gitraptor_testkit::Fixture;
-use gitraptor_testkit::exceptions::Exceptions;
+use gitraptor_testkit::exceptions::{Exception, Exceptions};
 use gitraptor_testkit::fixture::{copy_executable, git_from_path};
 use gitraptor_testkit::mcp_corpus::case::{CANARY_NAMES, Parent, RepoState, Roots};
 use gitraptor_testkit::mcp_corpus::{Case, Secrets, Tier};
@@ -405,7 +405,18 @@ impl Machine {
     pub fn exceptions(&self) -> Exceptions {
         match self.tier {
             Tier::Server => Exceptions::none(),
-            Tier::Engine => Exceptions::engine_profile("profile"),
+            // The daemon's runtime folder (its socket) appears with the first connection, and the
+            // profile root's times change with it: the case that observes nothing starts the
+            // daemon itself.
+            Tier::Engine => Exceptions::engine_profile("profile")
+                .with(Exception::Subtree {
+                    scope: "profile".into(),
+                    prefix: "run".into(),
+                })
+                .with(Exception::DirTimes {
+                    scope: "profile".into(),
+                    path: PathBuf::new(),
+                }),
         }
     }
 

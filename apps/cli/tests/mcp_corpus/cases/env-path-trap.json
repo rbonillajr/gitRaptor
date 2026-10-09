@@ -1,0 +1,35 @@
+{
+  "id": "env-path-trap",
+  "title": "A hostile PATH never runs a planted binary",
+  "threats": [
+    "MCP02",
+    "SEC-MCP-02"
+  ],
+  "tier": "engine",
+  "platforms": [
+    "macos",
+    "linux"
+  ],
+  "pending": "XP-42",
+  "setup": {
+    "repo": "enabled",
+    "other_repo": "observed",
+    "path_trap": true
+  },
+  "session": {
+    "cwd": "other_repo",
+    "env": {
+      "PATH": "{root}/trap-bin"
+    }
+  },
+  "send": [
+    {
+      "call": "status"
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "repo-not-enabled"
+    }
+  }
+}

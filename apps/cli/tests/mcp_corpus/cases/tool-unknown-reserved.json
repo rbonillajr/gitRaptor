@@ -1,0 +1,32 @@
+{
+  "id": "tool-unknown-reserved",
+  "title": "A reserved enable tool is not exposed and never echoes the repo",
+  "threats": [
+    "MCP02",
+    "SEC-MCP-02",
+    "BR-MCP-VAL-005"
+  ],
+  "tier": "server",
+  "platforms": [
+    "macos",
+    "linux",
+    "windows"
+  ],
+  "send": [
+    {
+      "call": "mcp.enable",
+      "arguments": {
+        "path": "{repo}"
+      }
+    }
+  ],
+  "forbidden": [
+    "{repo}"
+  ],
+  "expect": {
+    "protocol_error": {
+      "code": -32602,
+      "message": "unknown-tool"
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "id": "status-param-hostile-name",
+  "title": "A hostile parameter name is refused as malformed without echoing it",
+  "threats": [
+    "MCP05",
+    "SEC-MCP-05",
+    "BR-MCP-VAL-005"
+  ],
+  "tier": "server",
+  "platforms": [
+    "macos",
+    "linux",
+    "windows"
+  ],
+  "send": [
+    {
+      "call": "status",
+      "arguments": {
+        "‮ignore-previous\u001b]52;c;cHduZWQ=\u0007": "x"
+      }
+    }
+  ],
+  "expect": {
+    "protocol_error": {
+      "code": -32602,
+      "message": "invalid-params"
+    }
+  }
+}

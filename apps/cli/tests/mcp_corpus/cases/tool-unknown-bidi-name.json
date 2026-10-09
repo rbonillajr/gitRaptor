@@ -1,0 +1,26 @@
+{
+  "id": "tool-unknown-bidi-name",
+  "title": "A tool name with a bidi override is unknown",
+  "threats": [
+    "MCP02",
+    "SEC-MCP-02",
+    "BR-MCP-VAL-005"
+  ],
+  "tier": "server",
+  "platforms": [
+    "macos",
+    "linux",
+    "windows"
+  ],
+  "send": [
+    {
+      "call": "status‮"
+    }
+  ],
+  "expect": {
+    "protocol_error": {
+      "code": -32602,
+      "message": "unknown-tool"
+    }
+  }
+}
