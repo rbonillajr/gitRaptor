@@ -298,8 +298,15 @@ pub struct TmConfirmData {
 impl TmConfirmData {
     /// Only `reason` and `operation_id`: serializes exactly like [`TmRejectedData`].
     pub fn rejected(reason: TmRejectReason, operation_id: Option<String>) -> Self {
-        let _ = (reason, operation_id);
-        todo!("phase B: build the reason-only form")
+        Self {
+            reason,
+            operation_id,
+            challenge: None,
+            cannot_confirm: None,
+            owners: Vec::new(),
+            undone_operation_id: None,
+            undone_subtype: None,
+        }
     }
 }
 
@@ -760,8 +767,19 @@ pub fn check_operation_name(text: &str) -> Result<(), Invalid> {
     }
 }
 
+/// A confirmation token: exactly 32 ASCII hex digits, either case.
+fn check_confirmation(token: Option<&str>) -> Result<(), Invalid> {
+    match token {
+        Some(t) if t.len() != 32 || !t.bytes().all(|b| b.is_ascii_hexdigit()) => {
+            Err(Invalid::new("confirmation", "a 32-character hex token"))
+        }
+        _ => Ok(()),
+    }
+}
+
 impl UndoParams {
     pub fn validate(&self) -> Result<(), Invalid> {
+        check_confirmation(self.confirmation.as_deref())?;
         let selectors = [
             self.operation_id.is_some(),
             self.since.is_some(),
@@ -797,7 +815,8 @@ impl RedoParams {
 
 impl RestoreParams {
     pub fn validate(&self) -> Result<(), Invalid> {
-        check_oplog_id("snapshot_id", &self.snapshot_id)
+        check_oplog_id("snapshot_id", &self.snapshot_id)?;
+        check_confirmation(self.confirmation.as_deref())
     }
 }
 
