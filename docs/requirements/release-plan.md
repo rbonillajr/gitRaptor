@@ -178,7 +178,7 @@ Estados: **I** = implemented, **P** = partially-implemented, **Pend** = draft, r
 | Ids | Qué | MoSCoW | Estado | Bloqueo |
 |---|---|---|---|---|
 | US-TMC-006 | Timeline: qué cambió, cuándo y quién | Must | I | — |
-| US-TMC-009, US-TMC-012, US-TMC-013, US-TMC-018, US-TMC-019 | Restaurar a un punto; no pisar a otro; un agente no deshace lo ajeno; los snapshots no se publican; recuperable si el proceso muere | Must | US-TMC-009 (PR #212 y #__PR__) y US-TMC-013 (PR #__PR__) implementadas; el resto Pend | — |
+| US-TMC-009, US-TMC-012, US-TMC-013, US-TMC-018, US-TMC-019 | Restaurar a un punto; no pisar a otro; un agente no deshace lo ajeno; los snapshots no se publican; recuperable si el proceso muere | Must | US-TMC-009 (PR #212 y #219) y US-TMC-013 (PR #219) implementadas; el resto Pend | — |
 | US-TMC-011 | Undo por agente y periodo | Must | Pend (blocked) | P17 (producto) |
 | US-TMC-003, US-TMC-005, US-TMC-007, US-TMC-008, US-TMC-010, US-TMC-014, US-TMC-015, US-TMC-016, US-TMC-022 | Redo; previo por hooks; filtros; correcciones; últimos N minutos; aviso del remoto; rebase a medias; disco; tope | Should | Pend | — |
 | US-TMC-020 | Overhead < 200 ms | Should | Pend | — (SPIKE-TMC-001 ya está hecho) |
