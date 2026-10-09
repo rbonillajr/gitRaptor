@@ -190,7 +190,8 @@ Estados: **I** = implemented, **P** = partially-implemented, **Pend** = draft, r
 | Ids | Qué | MoSCoW | Estado | Bloqueo |
 |---|---|---|---|---|
 | US-MCP-005 | Respuestas acotadas | Must | I | — |
-| US-MCP-004, US-MCP-006, US-MCP-007, US-MCP-013, US-MCP-017 | Quién más trabaja; agente sin soporte; hook sin poderes; "necesita al humano"; `explain_history` | Must | Pend | US-MCP-017 espera US-TMC-006, US-TMC-007 |
+| US-MCP-004 | Quién más trabaja (`status` completo y "no disponible") | Must | P (#216) | Falta la base "pendiente de confirmar" (US-GRD-014) |
+| US-MCP-006, US-MCP-007, US-MCP-013, US-MCP-017 | Agente sin soporte; hook sin poderes; "necesita al humano"; `explain_history` | Must | Pend | US-MCP-017 espera US-TMC-006, US-TMC-007 |
 | US-MCP-008, US-MCP-009, US-MCP-010, US-MCP-011, US-MCP-012, US-MCP-018, US-MCP-019 | `snapshot`, `safe_commit`, archivos nombrados, worktree esperado, `undo`, `safe_rebase`, `create_worktree` | Must | Pend | TS-CKP-003 |
 | US-MCP-016 | `check_conflicts` | Must | Pend | TS-CKP-001 |
 | US-MCP-014 | Acción en espera del humano | Should | Pend | US-GRD-015 |
