@@ -468,10 +468,6 @@ fn secrets_of(s: &Scenario, repo_id: &str) -> Vec<String> {
 
 // ----- Tests ----------------------------------------------------------------------------------
 
-/// BR-MCP-CALC-003: the default answer tells the caller's worktree and the repo; what is a list
-
-// ----- Tests ----------------------------------------------------------------------------------
-
 /// A cursor to the paths of another worktree that was deleted after the page that gave it is a
 /// cursor that does not exist: "mcp-unavailable" would tell the agent its own worktree is gone.
 #[test]
