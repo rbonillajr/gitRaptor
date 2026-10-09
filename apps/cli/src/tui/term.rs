@@ -78,9 +78,13 @@ fn stop_until_resumed() -> io::Result<()> {
 /// Opens the TUI and runs it until the user quits. `theme` is resolved before, while no
 /// event reader is running (`term::theme` of the binary).
 pub fn run(connector: impl Connector, cwd: Option<PathBuf>, theme: Theme) -> io::Result<()> {
-    let terminal = ratatui::try_init()?;
+    // Raw mode first, the drain, and only then the alternate screen: the alternate screen is
+    // the signal that the cockpit is reading keys, so a key sent after it must never be
+    // taken for typed-ahead input and discarded.
+    ratatui::crossterm::terminal::enable_raw_mode()?;
     let _restore = Restore;
     drain_pending_input();
+    let terminal = ratatui::try_init()?;
     let opened = std::time::Instant::now();
     let area = terminal.size()?;
     let size = Size {
