@@ -126,10 +126,30 @@ fn branch_move(event: &RawEvent) -> Option<RefMove<'_>> {
 }
 
 /// Where a foreign `git` counts for this event, by its kind.
+///
+/// The worktree scope only for what writes in one worktree and was placed
+/// there by Git itself; shared refs, worktree changes and a worktree placed
+/// by a fallback keep the repo scope. No wildcard arm: a new kind must
+/// choose its scope.
 fn s3_scope(event: &RawEvent) -> S3Scope {
-    // Stub: every kind keeps the repo scope until the rule lands.
-    let _ = event;
-    S3Scope::Repo
+    match event.kind {
+        GitEventKind::Reset | GitEventKind::BranchSwitch => S3Scope::Worktree,
+        GitEventKind::Commit | GitEventKind::Merge | GitEventKind::Rebase => {
+            if event.details.worktree_inferred {
+                S3Scope::Repo
+            } else {
+                S3Scope::Worktree
+            }
+        }
+        GitEventKind::BranchUpdate
+        | GitEventKind::BranchCreate
+        | GitEventKind::BranchDelete
+        | GitEventKind::Push
+        | GitEventKind::WorktreeCreate
+        | GitEventKind::WorktreeDelete
+        // Never reaches the detector: `attribute_one` returns before.
+        | GitEventKind::Reconciled => S3Scope::Repo,
+    }
 }
 
 /// The fields of the `s3_evidence` log line: integers, fixed texts and the
@@ -142,9 +162,8 @@ fn s3_log_fields(
     scope: S3Scope,
     counts: S3Counts,
 ) -> Vec<(&'static str, Field)> {
-    // Stub: the scope and the counters are not written yet.
-    let _ = (scope, counts);
     let count = |n: u64| Field::from(i64::try_from(n).unwrap_or(i64::MAX));
+    let counter = |n: u32| Field::from(i64::from(n));
     vec![
         ("repo", Field::id(repo_id)),
         ("event", kind.as_str().into()),
@@ -152,6 +171,15 @@ fn s3_log_fields(
         ("samples", count(diag.samples)),
         ("s3_cwd_unreadable", count(diag.cwd_unreadable)),
         ("s3_placed_by_ancestor", count(diag.placed_by_ancestor)),
+        ("scope", scope.as_str().into()),
+        ("sessions_wt", counter(counts.sessions_wt)),
+        ("foreign_wt", counter(counts.foreign_wt)),
+        ("foreign_other_wt", counter(counts.foreign_other_wt)),
+        ("foreign_daemon", counter(counts.foreign_daemon)),
+        ("foreign_by_ancestor", counter(counts.foreign_by_ancestor)),
+        ("foreign_gitdir", counter(counts.foreign_gitdir)),
+        ("foreign_redirected", counter(counts.foreign_redirected)),
+        ("gits_after_notice", counter(counts.gits_after_notice)),
     ]
 }
 
