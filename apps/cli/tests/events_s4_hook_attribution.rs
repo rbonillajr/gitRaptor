@@ -521,3 +521,105 @@ fn measure_quick_commit_attribution() {
         );
     }
 }
+
+/// TS-GRP-008 measurement (SPIKE-GRP-001): quick commits of the simulated Claude Code in the
+/// main worktree while a foreign process (no session above it, like Orca's polling) runs
+/// `git status` in a loop from another worktree of the same repo. Before TS-GRP-008 that foreign
+/// `git` made S3 ambiguous for every commit it overlapped; with the worktree scope it no longer
+/// counts. Run by hand on both sides to compare.
+#[test]
+#[ignore = "measurement for TS-GRP-008 and SPIKE-GRP-001, run by hand"]
+fn measure_quick_commits_with_a_foreign_git_in_another_worktree() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let runs: usize = std::env::var("RAPTOR_S4_RUNS")
+        .ok()
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(20);
+    let m = Machine::new(false);
+    let other = m.outside.path().join("other");
+    let out = m.human(&format!("worktree add -q -b other '{}'", other.display()));
+    assert!(out.status.success(), "{}", text(&out));
+    let other = other.canonicalize().unwrap();
+    // The engine knows the second worktree before any agent commit.
+    let start = Instant::now();
+    loop {
+        let out = Command::new(RAPTOR)
+            .args(["status", "--json"])
+            .env_clear()
+            .envs(m.env())
+            .current_dir(&m.f.root)
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        let status: Value = serde_json::from_slice(&out.stdout).unwrap_or_default();
+        if status["repos"][0]["worktrees"]
+            .as_array()
+            .is_some_and(|w| w.len() == 2)
+        {
+            break;
+        }
+        assert!(start.elapsed() < Duration::from_secs(10), "{status:#?}");
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let mut claude = m.launch_claude();
+    let stop = Arc::new(AtomicBool::new(false));
+    let poller = {
+        let stop = Arc::clone(&stop);
+        let git = m.f.git.clone();
+        let env = m.env();
+        let other = other.clone();
+        std::thread::spawn(move || {
+            let mut n = 0usize;
+            while !stop.load(Ordering::SeqCst) {
+                let _ = Command::new(&git)
+                    .arg("status")
+                    .env_clear()
+                    .envs(env.clone())
+                    .current_dir(&other)
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status();
+                n += 1;
+            }
+            n
+        })
+    };
+    let oids: Vec<String> = (0..runs)
+        .map(|n| {
+            let oid = m.agent_commit(&mut claude, n);
+            m.event(&oid);
+            oid
+        })
+        .collect();
+    stop.store(true, Ordering::SeqCst);
+    let polls = poller.join().unwrap();
+    let repo_id = m.repo_id();
+    drop(claude);
+    m.stop();
+    let mut counts = std::collections::BTreeMap::<String, usize>::new();
+    for oid in &oids {
+        let (session, evidence) = m.stored_evidence(&repo_id, oid);
+        let key = match (session, evidence) {
+            (Some(_), Some(e)) => format!("attributed {e}"),
+            (None, Some(e)) if e.contains("single-session") => "unattributed (hint)".into(),
+            _ => "unattributed".into(),
+        };
+        *counts.entry(key).or_default() += 1;
+    }
+    // The diagnostic line of each commit (integers only, SEC-04): why S3 decided.
+    let log = std::fs::read_to_string(m.dirs().state.join("daemon.log")).unwrap_or_default();
+    for line in log
+        .lines()
+        .filter(|l| l.contains("s3_evidence") && l.contains("event=commit"))
+    {
+        println!(
+            "{}",
+            line.split_once("event=").map_or(line, |(_, rest)| rest)
+        );
+    }
+    println!(
+        "TS-GRP-008 measurement · foreign `git status` in another worktree ({polls} runs) · quick agent commits: {runs} · {counts:?}"
+    );
+}
