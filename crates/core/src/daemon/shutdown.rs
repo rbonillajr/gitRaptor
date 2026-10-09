@@ -254,6 +254,12 @@ pub(crate) enum Control {
         params: gitraptor_api::messages::SessionsListParams,
         reply: SyncSender<SessionsListReply>,
     },
+    /// What the full `mcp.status` reads of one repo (US-MCP-004).
+    #[cfg_attr(not(unix), allow(dead_code))]
+    McpContext {
+        repo_id: String,
+        reply: SyncSender<Option<McpContext>>,
+    },
     /// Registers an agent (US-GRP-009).
     #[cfg_attr(not(unix), allow(dead_code))]
     Register {
@@ -308,6 +314,17 @@ pub(crate) enum Control {
 /// sessions.
 pub(crate) type SessionsListReply =
     Result<(bool, Vec<gitraptor_api::messages::SessionView>), RepoCommandError>;
+
+/// What the daemon reads for the full `mcp.status` of one repo: the sessions present, every
+/// observation gap and the protection status. Read only.
+#[derive(Debug, Clone)]
+pub(crate) struct McpContext {
+    /// Whether this system detects agent sessions; without it the sessions are not known.
+    pub detection_available: bool,
+    pub sessions: Vec<gitraptor_api::messages::SessionView>,
+    pub gaps: Vec<crate::profile::Gap>,
+    pub guard: gitraptor_api::guard::GuardStatus,
+}
 
 /// Sends requests to the running daemon. Cheap to clone.
 #[derive(Debug, Clone)]
@@ -555,6 +572,20 @@ impl ShutdownHandle {
             .map_err(|_| RepoCommandError::Internal)?;
         rx.recv_timeout(AUDIT_TIMEOUT)
             .map_err(|_| RepoCommandError::Internal)?
+    }
+
+    /// Reads what the full `mcp.status` needs of `repo_id` through the loop, which owns the
+    /// stores; `None` if the repo is not observed or the loop did not answer.
+    #[cfg_attr(not(unix), allow(dead_code))]
+    pub(crate) fn mcp_context(&self, repo_id: &str) -> Option<McpContext> {
+        let (reply, rx) = sync_channel(1);
+        self.tx
+            .send(Control::McpContext {
+                repo_id: repo_id.to_owned(),
+                reply,
+            })
+            .ok()?;
+        rx.recv_timeout(AUDIT_TIMEOUT).ok().flatten()
     }
 
     /// Registers an agent through the loop, which owns the stores

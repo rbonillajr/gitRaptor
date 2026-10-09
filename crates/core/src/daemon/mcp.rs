@@ -4,9 +4,11 @@
 
 use std::path::Path;
 
+use gitraptor_api::messages::SessionsListParams;
 use gitraptor_api::methods::McpRepoResult;
 
-use super::{Daemon, Field, now_ms, profile_error_kind};
+use super::{Daemon, Field, McpContext, now_ms, profile_error_kind};
+use crate::guardrails::install as guard_install;
 use crate::profile::RepoState;
 
 /// Why the loop did not change the mark.
@@ -63,6 +65,31 @@ impl Daemon {
             repo_id: entry.repo_id,
             enabled,
             changed,
+        })
+    }
+
+    /// What the full `mcp.status` reads of an observed repo: its present sessions, its gaps and
+    /// its protection status. Read only; `None` if the repo or its store is not there.
+    pub(super) fn mcp_context(&self, repo_id: &str) -> Option<McpContext> {
+        let entry = self
+            .profile
+            .repo(repo_id)
+            .ok()
+            .flatten()
+            .filter(|e| e.state == RepoState::Observed)?;
+        let (_, store) = self.stores.iter().find(|(id, _)| id == repo_id)?;
+        let (detection_available, sessions) = self
+            .sessions_list(&SessionsListParams {
+                repo_id: Some(repo_id.to_owned()),
+                include_ended: false,
+                limit: None,
+            })
+            .ok()?;
+        Some(McpContext {
+            detection_available,
+            sessions,
+            gaps: store.gaps().ok()?,
+            guard: guard_install::status(repo_id, entry.canonical_path.as_path(), store),
         })
     }
 }

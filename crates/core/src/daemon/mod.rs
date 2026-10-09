@@ -77,6 +77,7 @@ pub use lock::{InstanceLock, LOCK_FILE, running_pid, wait_until_released};
 pub use log::{Field, LOG_FILE, Level, LogLimits, Logger};
 pub use mcp::McpMarkError;
 use shutdown::Control;
+pub(crate) use shutdown::McpContext;
 pub(crate) use shutdown::{GuardLogReply, GuardReply, GuardRequest, HealthReport};
 pub(crate) use shutdown::{RegisterRequest, RepoAddRequest, WithdrawRequest};
 pub use shutdown::{
@@ -765,6 +766,10 @@ impl Daemon {
                         self.wake_for_request(repo_id);
                     }
                     let _ = reply.send(self.sessions_list(&params));
+                }
+                Ok(Control::McpContext { repo_id, reply }) => {
+                    self.wake_for_request(&repo_id);
+                    let _ = reply.send(self.mcp_context(&repo_id));
                 }
                 Ok(Control::Register { request, reply }) => {
                     self.wake_for_folder(&request.folder);
