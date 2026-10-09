@@ -208,8 +208,9 @@ pub const MCP_MAX_CURSORS: usize = 64;
 /// so the measure holds when the daemon puts the real cursor in.
 pub const MCP_CURSOR_PLACEHOLDER: &str = "0000000000000000";
 
-/// The bytes of the status as the tool sends it: its [`McpStatusView`]
-/// after [`McpStatus::for_mcp`] and [`for_mcp`], compact JSON.
+/// The bytes of the uncapped status as the tool would send it: its [`McpStatusView`]
+/// after [`for_mcp`], compact JSON. The tool may cap or drop parts afterwards, so this is an
+/// upper bound of what goes out, which is what fitting a page to a budget needs.
 pub fn wire_len(status: &McpStatus) -> usize {
     let mut value = serde_json::to_value(McpStatusView::from(status)).unwrap_or(Value::Null);
     for_mcp(&mut value);
