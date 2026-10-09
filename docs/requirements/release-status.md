@@ -85,7 +85,7 @@
 | [US-GRD-003](features/guardrails/user-stories/US-GRD-003-retirar-proteccion-sin-rastro.md) | El desarrollador retira la protección y el repo queda exactamente como estaba | Implementado en parte (`partially-implemented`) | #193, #201 | — |
 | [US-GRD-004](features/guardrails/user-stories/US-GRD-004-aviso-proteccion-inactiva.md) | El desarrollador se entera de que la protección de un repo dejó de estar activa | Implementado en parte (`partially-implemented`) | #201 | — |
 | [US-GRD-005](features/guardrails/user-stories/US-GRD-005-registro-de-bloqueos.md) | El desarrollador cuenta las acciones peligrosas que Guardrails bloqueó en cada repo | Implementado en parte (`partially-implemented`) | #154, #168 | 3 |
-| [US-GRD-010](features/guardrails/user-stories/US-GRD-010-endurecer-sin-relajar.md) | El desarrollador endurece las reglas en su máquina sin poder relajar las del equipo | Implementado en parte (`partially-implemented`) | — | — |
+| [US-GRD-010](features/guardrails/user-stories/US-GRD-010-endurecer-sin-relajar.md) | El desarrollador endurece las reglas en su máquina sin poder relajar las del equipo | Implementado en parte (`partially-implemented`) | #217 | — |
 | [US-GRD-018](features/guardrails/user-stories/US-GRD-018-autoria-commits-persona-y-agente.md) | Cada commit entra a nombre de la persona y deja constancia del agente que lo hizo, con la exigencia que fija el equipo | Implementado en parte (`partially-implemented`) | #137, #141, #150, #152, #153, #154 | 3 |
 | [SPIKE-GRD-002](features/guardrails/technical-stories/SPIKE-GRD-002-factor-so-daemon.md) | Factor de autenticación del SO invocado desde el daemon en los tres SO | Borrador (`draft`) | — | — |
 | [TD-GRD-001](features/guardrails/technical-stories/TD-GRD-001-dispatcher-plantilla-3-pre-push-toda-ref.md) | Dispatcher plantilla 3: evaluar el pre-push de toda ref empujada (tags, notes y demás refs no gobernadas) | Borrador (`draft`) | — | — |
@@ -272,7 +272,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-GRD-003](features/guardrails/user-stories/US-GRD-003-retirar-proteccion-sin-rastro.md) | El desarrollador retira la protección y el repo queda exactamente como estaba | Implementado en parte (`partially-implemented`) | #193, #201 | — |
 | [US-GRD-004](features/guardrails/user-stories/US-GRD-004-aviso-proteccion-inactiva.md) | El desarrollador se entera de que la protección de un repo dejó de estar activa | Implementado en parte (`partially-implemented`) | #201 | — |
 | [US-GRD-005](features/guardrails/user-stories/US-GRD-005-registro-de-bloqueos.md) | El desarrollador cuenta las acciones peligrosas que Guardrails bloqueó en cada repo | Implementado en parte (`partially-implemented`) | #154, #168 | 3 |
-| [US-GRD-010](features/guardrails/user-stories/US-GRD-010-endurecer-sin-relajar.md) | El desarrollador endurece las reglas en su máquina sin poder relajar las del equipo | Implementado en parte (`partially-implemented`) | — | — |
+| [US-GRD-010](features/guardrails/user-stories/US-GRD-010-endurecer-sin-relajar.md) | El desarrollador endurece las reglas en su máquina sin poder relajar las del equipo | Implementado en parte (`partially-implemented`) | #217 | — |
 | [US-GRD-018](features/guardrails/user-stories/US-GRD-018-autoria-commits-persona-y-agente.md) | Cada commit entra a nombre de la persona y deja constancia del agente que lo hizo, con la exigencia que fija el equipo | Implementado en parte (`partially-implemented`) | #137, #141, #150, #152, #153, #154 | 3 |
 | [US-MCP-004](features/mcp/user-stories/US-MCP-004-status-completo-y-no-disponible.md) | Un agente sabe por MCP quién más trabaja en su repo, contra qué base y con qué protección | Implementado en parte (`partially-implemented`) | — | — |
 | [US-TMC-009](features/time-machine/user-stories/US-TMC-009-restaurar-punto-timeline.md) | El desarrollador devuelve su worktree a cualquier punto del timeline | Implementado en parte (`partially-implemented`) | #212 | — |
@@ -414,7 +414,7 @@ El desarrollador cuenta las acciones peligrosas que Guardrails bloqueó en cada 
 - Entradas `request` y `exception*` (US-GRD-015 y US-GRD-006) y `protection-state` (US-GRD-003).
 - Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../architecture/xplat-pendientes.md)).
 
-### [US-GRD-010](features/guardrails/user-stories/US-GRD-010-endurecer-sin-relajar.md)
+### [US-GRD-010](features/guardrails/user-stories/US-GRD-010-endurecer-sin-relajar.md) — #217
 
 El desarrollador endurece las reglas en su máquina sin poder relajar las del equipo
 
@@ -506,7 +506,3 @@ Arnés de caos y de garantías de los snapshots en los tres SO
 El desarrollador devuelve su worktree a cualquier punto del timeline
 
 - *La ficha no lista los pendientes en "Estado de la implementación".*
-
-## Avisos
-
-- features/guardrails/user-stories/US-GRD-010-endurecer-sin-relajar.md: la sección "Estado de la implementación" no tiene la línea "Implementado en:"
