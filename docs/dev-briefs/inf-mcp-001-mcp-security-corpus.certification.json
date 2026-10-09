@@ -1,0 +1,137 @@
+{
+  "schema": "nassa.certification.v1",
+  "certifiedAt": "2026-10-09T19:54:06.110Z",
+  "dir": "/Users/rbonilla/orca/workspaces/gitRaptor/infmcp",
+  "contract_sha256": "6d3eb735bdc69f4bba6b14310134e31e40dcaff7307545c319483cbcfe872b24",
+  "source": {
+    "kind": "brief",
+    "ref": "docs/dev-briefs/inf-mcp-001-mcp-security-corpus.md"
+  },
+  "verdict": "CERTIFIED WITH RESERVATIONS",
+  "status": "con-reservas",
+  "reservations": [
+    {
+      "why": "revision-sin-verificar",
+      "note": "X3 no comprobado: sin ledger de escrituras de esta corrida, nada acredita que la superficie sensible se revisara"
+    }
+  ],
+  "totals": {
+    "total": 10,
+    "passed": 10,
+    "failed": 0,
+    "notRun": 0
+  },
+  "integrity": {
+    "status": "ÍNTEGRA",
+    "note": "ningún test desapareció, se saltó ni se estrechó la suite",
+    "findings": []
+  },
+  "phases": {
+    "ok": true,
+    "missing": [],
+    "at": "2026-10-09T19:37:52.893Z",
+    "note": "las tres capas constan pasadas · último gate 2026-10-09T19:37:52.893Z. Acredita que corrieron, no CONTRA QUÉ árbol"
+  },
+  "criteria": [
+    {
+      "id": "C1",
+      "statement": "Un caso es un archivo JSON con esquema cerrado: un campo desconocido, una ubicación que escapa de la máquina temporal, un marcador desconocido, GITRAPTOR_PROFILE_DIR en el entorno o una regla de nivel o plataforma rota dan un error de carga tipado; cada archivo del corpus carga, su id es el nombre del archivo y hay al menos 40 casos con los dos niveles",
+      "command": "cargo test -p gitraptor-testkit --test mcp_corpus -- --exact a_case_file_parses_into_its_model 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-testkit --test mcp_corpus -- --exact a_case_with_an_unknown_field_or_an_escaping_location_is_rejected 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-testkit --test mcp_corpus -- --exact a_server_tier_case_with_engine_setup_is_rejected 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-cli --test mcp_security_corpus -- --exact every_case_file_is_valid_unique_and_named_after_its_id 2>&1 | grep -q 'test result: ok. 1 passed'",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 1848
+    },
+    {
+      "id": "C2",
+      "statement": "Contra los binarios reales raptor y raptor-mcp, con repos y perfil temporales, el 100 % de los casos que corren en este SO se rechaza con su código esperado y pasa todas las comprobaciones comunes, y el informe con el KPI queda escrito en CARGO_TARGET_TMPDIR/mcp-security-corpus.md",
+      "command": "cargo build -q -p gitraptor-cli -p gitraptor-mcp --bins && cargo test -p gitraptor-cli --test mcp_security_corpus -- --exact the_corpus_is_fully_rejected 2>&1 | grep -q 'test result: ok. 1 passed'",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 6531
+    },
+    {
+      "id": "C3",
+      "statement": "Un fallo inyectado que deja pasar un caso de traversal (un éxito donde se esperaba invalid-params) produce NotRejected, baja el KPI de 100 % y hace fallar el gate, tanto con una observación fabricada como con la observación real del caso alterada",
+      "command": "cargo test -p gitraptor-testkit --test mcp_corpus -- --exact a_traversal_case_that_gets_through_is_not_rejected 2>&1 | grep -q 'test result: ok. 1 passed' && cargo build -q -p gitraptor-cli -p gitraptor-mcp --bins && cargo test -p gitraptor-cli --test mcp_security_corpus -- --exact an_injected_pass_of_a_traversal_case_fails_the_suite 2>&1 | grep -q 'test result: ok. 1 passed'",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 909
+    },
+    {
+      "id": "C4",
+      "statement": "Una respuesta con un campo no declarado rompe la allowlist: una clave extra en un rechazo, un params no declarado, una clave extra en error.data, o una propiedad de structuredContent fuera del outputSchema de la herramienta; una palabra clave de esquema no soportada falla cerrada",
+      "command": "cargo test -p gitraptor-testkit --test mcp_corpus -- --exact a_refusal_with_an_undeclared_field_breaks_the_allowlist 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-testkit --test mcp_corpus -- --exact a_success_with_a_field_outside_its_output_schema_breaks_the_allowlist 2>&1 | grep -q 'test result: ok. 1 passed' && cargo build -q -p gitraptor-cli -p gitraptor-mcp --bins && cargo test -p gitraptor-cli --test mcp_security_corpus -- --exact an_undeclared_field_in_a_real_refusal_breaks_the_allowlist 2>&1 | grep -q 'test result: ok. 1 passed'",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 1096
+    },
+    {
+      "id": "C5",
+      "statement": "Un secreto plantado (canario) que aparece en stdout o en stderr, o una forma de token conocida, hace fallar el caso nombrando el canario sin imprimir su valor; una línea de stderr que no es un código fijo raptor-mcp: <código> hace fallar el caso",
+      "command": "cargo test -p gitraptor-testkit --test mcp_corpus -- --exact a_planted_secret_in_an_answer_or_in_stderr_is_found_without_printing_it 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-testkit --test mcp_corpus -- --exact stderr_with_anything_but_fixed_codes_fails_the_case 2>&1 | grep -q 'test result: ok. 1 passed'",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 154
+    },
+    {
+      "id": "C6",
+      "statement": "Una parte de una respuesta por encima de 24 KiB, un rechazo por encima de su presupuesto de tokens o un carácter oculto de L-03 (bidi, Tags, anchura cero, controles) en un valor o en una clave hacen fallar el caso",
+      "command": "cargo test -p gitraptor-testkit --test mcp_corpus -- --exact a_part_over_its_budget_fails_the_case 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-testkit --test mcp_corpus -- --exact hidden_characters_in_an_answer_fail_the_case 2>&1 | grep -q 'test result: ok. 1 passed'",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 132
+    },
+    {
+      "id": "C7",
+      "statement": "Un cambio en la huella del repo después de las excepciones del caso, una trampa de PATH disparada o una sesión que no responde al centinela hacen fallar el caso",
+      "command": "cargo test -p gitraptor-testkit --test mcp_corpus -- --exact a_repo_change_or_a_fired_trap_fails_the_case 2>&1 | grep -q 'test result: ok. 1 passed'",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 75
+    },
+    {
+      "id": "C8",
+      "statement": "El informe imprime el KPI de Q-MCP-18 (rechazados sobre ejecutados, redondeado hacia abajo) con una primera línea legible por máquina; el gate falla por debajo del 100 % y con un corpus sin casos ejecutados; un caso pendiente en este SO se cuenta aparte y nunca como rechazado; un caso marcado known_gap (hueco conocido con referencia) se cuenta aparte, nunca como rechazado ni en el denominador del KPI maquillado: el informe lo lista y el gate falla si un known_gap resulta rechazado sin quitar la marca (el hueco se cerró) o si pasa a un éxito no esperado",
+      "command": "cargo test -p gitraptor-testkit --test mcp_corpus -- --exact the_report_prints_the_kpi_and_the_gate_fails_below_100_percent 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-testkit --test mcp_corpus -- --exact an_empty_corpus_fails_the_gate 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-testkit --test mcp_corpus -- --exact a_pending_case_is_counted_apart_and_never_as_rejected 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-testkit --test mcp_corpus -- --exact a_known_gap_case_is_counted_apart_and_never_as_rejected 2>&1 | grep -q 'test result: ok. 1 passed'",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 278
+    },
+    {
+      "id": "C9",
+      "statement": "El workflow mcp-security-corpus.yml corre en Ubuntu, compila raptor y raptor-mcp juntos, ejecuta el corpus, lleva el KPI al job summary, exige un mínimo de casos ejecutados, solo guarda caché en main y no añade variables RUST_* ni CARGO_* ni runners de macOS",
+      "command": "grep -q 'cargo build -p gitraptor-cli -p gitraptor-mcp --bins' .github/workflows/mcp-security-corpus.yml && grep -q 'cargo test -p gitraptor-cli --test mcp_security_corpus' .github/workflows/mcp-security-corpus.yml && grep -q 'GITHUB_STEP_SUMMARY' .github/workflows/mcp-security-corpus.yml && grep -q 'MIN_EXECUTED' .github/workflows/mcp-security-corpus.yml && grep -q 'save-if:' .github/workflows/mcp-security-corpus.yml && ! grep -q 'macos-latest' .github/workflows/mcp-security-corpus.yml && ! grep -qE '^[[:space:]]*(RUST|CARGO)_[A-Z_]+:' .github/workflows/mcp-security-corpus.yml",
+      "layer": "static",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 30
+    },
+    {
+      "id": "C10",
+      "statement": "La historia queda en partially-implemented con su línea Implementado en: PR y su Dev Spec DS-INF-MCP-001; el backlog la nombra y el pendiente multiplataforma XP-42 queda registrado",
+      "command": "grep -q '^status: partially-implemented' docs/requirements/features/mcp/technical-stories/INF-MCP-001-corpus-seguridad-mcp.md && grep -q 'Implementado en: PR #' docs/requirements/features/mcp/technical-stories/INF-MCP-001-corpus-seguridad-mcp.md && test -f docs/requirements/features/mcp/dev-specs/INF-MCP-001-dev-spec.md && grep -q 'INF-MCP-001' docs/requirements/backlog.md && grep -q 'XP-42' docs/architecture/xplat-pendientes.md",
+      "layer": "static",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 20
+    }
+  ]
+}

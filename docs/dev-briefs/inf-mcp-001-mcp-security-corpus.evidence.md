@@ -1,0 +1,7 @@
+# Evidencia: INF-MCP-001
+
+- Certificación: `inf-mcp-001-mcp-security-corpus.certification.json`, CERTIFICADO CON RESERVAS, 10 de 10 criterios, `contract_sha256: 6d3eb735bdc69f4bba6b14310134e31e40dcaff7307545c319483cbcfe872b24`.
+- Reserva: `revision-sin-verificar` (X3). La corrida usó un id de sesión propio (`infmcp-r2`) tras abortar la primera por B1, así que el ledger de escrituras no la enlaza con las revisiones. Las revisiones sí ocurrieron: `rust-code-reviewer` (APPROVED WITH COMMENTS, 0 Critical/High, 1 Medium, 4 Low) y `security-expert` (0 Critical/High, 3 Medium, 5 Low, 6 Info), ambos con Opus, después de la última escritura de código de las partes A, B y D.
+- Corpus, macOS: `60/60 rejected (100.0 %); 0 pending; 3 known gap`.
+- Pendiente tras la revisión (no corregido en este PR): M-02/L1 (el pliegue `known_gap` admite `FieldNotAllowed` junto a `NotRejected`), M-03 (el esquema de éxito sale del propio servidor), L-01 (`HOME`, `TMPDIR` y `GIT_CONFIG_NOSYSTEM` en el entorno de la máquina), L-05 (huérfanos del agente simulado y buffers sin tope), L-03 (doble escape y base64 en el escáner), L-04 (prefijo `GITRAPTOR_` en `session.env`), M1 (`status-rate-limited` depende del tiempo; se subió a 200 repeticiones y queda como riesgo residual en carga).
+- Sin verificar: Linux y Windows (el nivel `engine` nunca corrió en Linux; Windows pendiente, XP-42).
