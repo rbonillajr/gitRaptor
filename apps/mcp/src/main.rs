@@ -2,6 +2,7 @@ mod engine;
 mod messages;
 mod server;
 mod snapshot;
+mod status;
 
 use std::process::ExitCode;
 

@@ -50,7 +50,7 @@ impl std::fmt::Debug for Engine {
 impl Engine {
     /// `mcp.status`: the caller's repo, resolved by the engine. A broken
     /// connection (the engine restarted) is opened again once.
-    pub fn status(&self) -> Result<McpStatus, McpToolError> {
+    pub fn status(&self, _cursor: Option<String>) -> Result<McpStatus, McpToolError> {
         // A call still running past its time limit holds the connection:
         // this one answers at once rather than queue behind it, spending
         // the connection's read budget on an answer nobody reads.
@@ -315,6 +315,10 @@ mod tests {
         engine.connected.store(true, Ordering::Relaxed);
         assert_eq!(engine.late(), McpToolError::TimeLimit);
         let _held = engine.client.lock().unwrap();
-        assert_eq!(engine.status(), Err(McpToolError::TimeLimit));
+        assert_eq!(engine.status(None), Err(McpToolError::TimeLimit));
     }
 }
+
+#[cfg(test)]
+#[path = "engine_status_tests.rs"]
+mod status_tests;

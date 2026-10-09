@@ -175,7 +175,7 @@ impl ServerHandler for Raptor {
                     return Err(malformed(field));
                 }
                 let engine = Arc::clone(&self.engine);
-                let status = within(MCP_READ_TIME_LIMIT, move || engine.status())
+                let status = within(MCP_READ_TIME_LIMIT, move || engine.status(None))
                     .await
                     .map_err(|code| match code {
                         McpToolError::TimeLimit => self.engine.late(),
@@ -323,25 +323,6 @@ mod tests {
         }
     }
 
-    /// One tool, with no arguments and the status as its output schema.
-    #[test]
-    fn the_status_tool_takes_no_arguments() {
-        let tool = serde_json::to_value(status_tool()).unwrap();
-        assert_eq!(tool["name"], STATUS_TOOL);
-        assert_eq!(
-            tool["inputSchema"],
-            serde_json::json!({"type": "object", "properties": {}, "additionalProperties": false})
-        );
-        let required = tool["outputSchema"]["required"].as_array().unwrap();
-        assert!(required.iter().any(|f| f == "worktree"), "{tool}");
-        assert!(
-            !tool["outputSchema"]["properties"]
-                .as_object()
-                .unwrap()
-                .contains_key("repo_id")
-        );
-    }
-
     /// RES-MCP-01 and SEC-MCP-07: the catalog the binary announces fits its
     /// budget (the wire is measured too, in `tests/token_budget.rs`).
     #[test]
@@ -465,7 +446,7 @@ mod tests {
     }
 
     /// A check of the JSON Schema keywords the compact schemas keep.
-    fn conforms(
+    pub(super) fn conforms(
         root: &serde_json::Value,
         schema: &serde_json::Value,
         value: &serde_json::Value,
@@ -548,3 +529,7 @@ mod tests {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "status_tests.rs"]
+mod status_tests;
