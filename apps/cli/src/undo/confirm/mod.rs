@@ -2,7 +2,7 @@
 //! Machine write with a one-use challenge, show what would be undone, ask on the terminal and send
 //! the same request once more, with the token, on the same connection. The asking is UX; the
 //! checks are the engine's. The token travels only in the engine's answer and in the repeated
-//! request: it is never printed, and it is stripped from every error this module hands back.
+//! request: it is never printed, and it is blanked in every error this module hands back.
 
 use std::io::IsTerminal;
 use std::process::ExitCode;
@@ -82,12 +82,18 @@ pub(crate) fn confirm_data(err: &ClientError) -> Option<TmConfirmData> {
     }
 }
 
-/// The error without the challenge: the token must not reach a log, a message or a pipe.
+/// The error with the token blanked: the token must not reach a log, a message or a pipe. The
+/// challenge itself stays, so the commands still know one was issued.
 fn without_token(err: ClientError) -> ClientError {
     match err {
         ClientError::Rpc(mut rpc) => {
-            if let Some(object) = rpc.data.as_mut().and_then(|d| d.as_object_mut()) {
-                object.remove("challenge");
+            let challenge = rpc
+                .data
+                .as_mut()
+                .and_then(|d| d.get_mut("challenge"))
+                .and_then(|c| c.as_object_mut());
+            if let Some(challenge) = challenge {
+                challenge.insert("token".into(), "".into());
             }
             ClientError::Rpc(rpc)
         }
