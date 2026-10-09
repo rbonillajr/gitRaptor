@@ -2,10 +2,10 @@
 id: US-MCP-004
 title: "Un agente sabe por MCP quién más trabaja en su repo, contra qué base y con qué protección"
 type: us
-status: draft
+status: partially-implemented
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-08
 domain: GRP
 epic: E-001
 feature: mcp
@@ -117,4 +117,8 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica (respuesta de herramienta; mensajes según la guía de contenido del design system, DSYS-GRP-001).
-- **Dev Spec:** pendiente (Arquitecto, tras ADR-MCP-001).
+- **Dev Spec:** [DS-US-MCP-004](../dev-specs/US-MCP-004-dev-spec.md).
+
+Implementado en: PR #216.
+
+**Falta**: la base "pendiente de confirmar" existe en el contrato y se prueba ahí, pero el motor no la emite hasta US-GRD-014 (G1 de la Dev Spec). Linux y Windows: *Pendiente: etapa de validación multiplataforma* (XP-39).

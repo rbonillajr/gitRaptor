@@ -2,7 +2,7 @@
 id: DS-US-MCP-004
 title: "Dev Spec — US-MCP-004: status completo del MCP, paginado, y repo o worktree no disponible"
 type: dev-spec
-status: draft
+status: partially-implemented
 feature: mcp
 domain: MCP
 created: 2026-10-08
@@ -441,3 +441,7 @@ Decisión del orquestador (2026-10-08), validada por Arquitecto: D1-D7, D9, D10 
 3. i18n en `apps/cli` y la aserción de `mcp_allowlist.rs`.
 4. Enmienda de ADR-MCP-001 con el porqué del asa sin MAC.
 5. G1 como `partially-implemented`.
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #216. Falta lo de G1 (base "pendiente de confirmar", US-GRD-014) y la validación en Linux y Windows (XP-39). Recorte de nombres de `here`/`repo` a 64 caracteres en la vista por defecto (Decisión del orquestador, 2026-10-08): con 100 la respuesta medía 323 tokens.
