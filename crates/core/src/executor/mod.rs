@@ -395,6 +395,7 @@ impl Executor {
 
     /// Overrides [`FOREIGN_WORK_CONFIRMABLE`]: production never calls it; tests do, so both
     /// branches of the rule run on every OS.
+    #[doc(hidden)]
     #[must_use]
     pub fn with_foreign_work_confirmable(mut self, confirmable: bool) -> Self {
         self.foreign_work_confirmable = confirmable;
