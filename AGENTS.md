@@ -53,6 +53,14 @@ Si una tarea contradice estos documentos, **detente y pregunta**; no improvises 
 - **Seguridad del MCP (NFR-02):** sin shell (argv fijo), validación de entradas, allowlist de repos.
 - **Tests obligatorios** para todo cambio de comportamiento. `cargo clippy` y `cargo test` (o `nx affected -t lint test`) deben pasar antes del PR.
 - **cargo-nextest (opcional, para certificar):** `cargo install cargo-nextest --locked`. `cargo nextest run --workspace --profile ci` corre la misma suite que `cargo test --workspace` y escribe el informe JUnit en `target/nextest/ci/junit.xml` (lo que detecta `layer-detect` de nassa-core para la línea base de `/implement`). La config está en `.config/nextest.toml`: `slow-timeout` con `terminate-after` (un test colgado muere a los 240 s). El CI sigue con `cargo test`. Los doctests no los corre nextest: `cargo test --doc`. Un target con `harness = false` debe hablar el protocolo libtest (`--list --format terse`, `--exact`), como `crates/git/tests/repo_intact_exec.rs`.
+- **Adaptador de JUnit para `/implement` (`tools/test/nextest-junit.mjs`):** nextest nombra cada `<testsuite>` por el binario (`gitraptor-core::us_tmc_013`) y el plugin nassa-core solo reconoce un test del contrato por la ruta del archivo, así que la línea base B1 salía en rojo. `node tools/test/nextest-junit.mjs [args de nextest]` (por defecto `--workspace`) corre `cargo nextest run --profile ci`, devuelve su mismo código de salida y escribe `target/nextest/ci/junit-paths.xml` con un `<testsuite>` por archivo fuente (ruta relativa a la raíz; los archivos salen de `cargo metadata`). Los contratos de Rust de `/implement` lo declaran así (la fijación de la suite es `suite.command`; `layers.runtime.report` es el informe que lee el plugin):
+
+  ```json
+  "suite": { "command": "node tools/test/nextest-junit.mjs" },
+  "layers": { "runtime": { "commands": [{ "id": "suite", "cmd": "node tools/test/nextest-junit.mjs" }], "report": "target/nextest/ci/junit-paths.xml" } }
+  ```
+
+  Pruebas del adaptador: `node --test tools/test/nextest-junit.test.mjs`. Un test unitario se asigna al archivo más profundo que exista para su módulo; si un binario no se resuelve, conserva el nombre original y el adaptador avisa por stderr. El arreglo nativo corresponde al plugin (soportar los nombres de binario de nextest con `cargo metadata`); cuando exista, este adaptador sobra.
 - **No inventes resultados:** si algo falla o no se pudo verificar, dilo en el PR.
 
 ## Pull requests
