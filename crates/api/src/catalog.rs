@@ -934,6 +934,9 @@ pub enum RejectReason {
     ChallengeInvalid,
     /// Another actor's work, and the caller may not confirm (ADR-TMC-005 § 2).
     ForeignWork,
+    /// Another actor's work, and this platform does not offer its confirmation yet: Windows
+    /// (BR-CKP-AUTH-003, TQ-14, ADR-CKP-002 § 3). Additive: an older client ignores it.
+    ConfirmationUnavailable,
     /// Another agent session is present in the worktree (Q-MCP-21).
     OtherSessionPresent,
     OperationInProgress,
