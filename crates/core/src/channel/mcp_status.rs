@@ -504,3 +504,7 @@ impl McpCursors {
 #[cfg(test)]
 #[path = "mcp_status_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "mcp_status_more_tests.rs"]
+mod more_tests;
