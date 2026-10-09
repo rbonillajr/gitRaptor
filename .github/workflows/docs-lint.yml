@@ -41,6 +41,7 @@ jobs:
               - 'tools/docs-lint/**'
               - 'tools/status/**'
               - 'tools/dogfooding/**'
+              - 'tools/test/**'
               - '.github/workflows/docs-lint.yml'
       - name: Nothing to check
         if: steps.filter.outputs.changed == 'false' && github.event.pull_request.changed_files < 3000
@@ -60,6 +61,9 @@ jobs:
       - name: Test the dogfooding log
         if: steps.filter.outputs.changed != 'false' || github.event.pull_request.changed_files >= 3000
         run: node --test tools/dogfooding/dogfooding.test.mjs
+      - name: Test the nextest JUnit adapter
+        if: steps.filter.outputs.changed != 'false' || github.event.pull_request.changed_files >= 3000
+        run: node --test tools/test/nextest-junit.test.mjs
       - name: Release status is up to date
         if: steps.filter.outputs.changed != 'false' || github.event.pull_request.changed_files >= 3000
         run: node tools/status/release-status.mjs --check
