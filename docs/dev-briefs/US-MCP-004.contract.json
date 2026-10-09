@@ -1,0 +1,162 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "devspec",
+    "ref": "docs/requirements/features/mcp/dev-specs/US-MCP-004-dev-spec.md"
+  },
+  "criteria": [
+    {
+      "id": "C1",
+      "statement": "Con mcp.status-full, status sin cursor declara tu worktree, rama y solicitante, `here` y `repo` (base, protección, total y cursor de los otros worktrees), y la página de worktrees lista cada uno con rama, sesiones con actor y estado, cambios {total, cursor} y ahead/behind",
+      "verify": "cargo test -p gitraptor-core --test mcp_status_full -- --exact status_declares_the_whole_picture 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-api --test mcp_status_contract -- --exact the_default_status_view_is_its_field_allowlist 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-api --test mcp_status_contract -- --exact a_worktrees_page_is_its_field_allowlist 2>&1 | grep -q 'test result: ok. 1 passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/api/tests/mcp_status_contract.rs",
+        "crates/core/tests/mcp_status_full.rs"
+      ]
+    },
+    {
+      "id": "C2",
+      "statement": "Una base no confirmada o pendiente se declara en repo.base.state y la lectura responde igual, sin rechazo; confirmada se omite el estado",
+      "verify": "cargo test -p gitraptor-core --test mcp_status_full -- --exact an_unconfirmed_base_is_declared_and_answered 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-api --test mcp_status_contract -- --exact every_base_state_is_declared 2>&1 | grep -q 'test result: ok. 1 passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/api/tests/mcp_status_contract.rs",
+        "crates/core/tests/mcp_status_full.rs"
+      ]
+    },
+    {
+      "id": "C3",
+      "statement": "Un periodo que el motor no observó en las últimas 24 h aparece en repo.gaps con from_s_ago y to_s_ago",
+      "verify": "cargo test -p gitraptor-core --test mcp_status_full -- --exact an_observation_gap_is_declared 2>&1 | grep -q 'test result: ok. 1 passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/mcp_status_full.rs"
+      ]
+    },
+    {
+      "id": "C4",
+      "statement": "Con 3.000 archivos modificados, status da here.changes {total: 3000, cursor}; cada página de rutas trae como máximo 32 rutas únicas, total, truncated y cursor, y recorrerlas da cada ruta exactamente una vez",
+      "verify": "cargo test -p gitraptor-core --test mcp_status_full -- --exact three_thousand_changes_page_with_a_cursor 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-core --lib -- --exact channel::mcp_status::tests::a_paths_page_continues_after_its_key_with_unique_paths 2>&1 | grep -q 'test result: ok. 1 passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/channel/mcp_status_tests.rs",
+        "crates/core/tests/mcp_status_full.rs"
+      ]
+    },
+    {
+      "id": "C5",
+      "statement": "Un cursor mal formado se rechaza con -32602 sin llamar al motor y con INVALID_PARAMS en el daemon; uno de otra conexión, de otro repo o desconocido responde como inexistente (invalid-cursor); la tabla está acotada a 64",
+      "verify": "cargo test -p gitraptor-core --test mcp_status_full -- --exact a_cursor_from_another_connection_does_not_exist 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-core --test mcp_status_full -- --exact a_malformed_cursor_is_invalid_params 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-core --lib -- --exact channel::mcp_status::tests::cursors_belong_to_their_table_and_are_bounded 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-mcp --bin raptor-mcp -- --exact server::status_tests::a_malformed_cursor_is_refused_before_the_engine 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-mcp --bin raptor-mcp -- --exact engine::status_tests::an_unknown_cursor_is_invalid_cursor 2>&1 | grep -q 'test result: ok. 1 passed'",
+      "layer": "runtime",
+      "tests": [
+        "apps/mcp/src/engine_status_tests.rs",
+        "apps/mcp/src/status_tests.rs",
+        "crates/core/src/channel/mcp_status_tests.rs",
+        "crates/core/tests/mcp_status_full.rs"
+      ]
+    },
+    {
+      "id": "C6",
+      "statement": "Un worktree borrado durante la sesión, un repo de otro usuario o un worktree que incumple SEC-11 (raíz en $HOME, gitdir alterado) se rechazan con su motivo y sin rutas, ramas ni otros datos del repo",
+      "verify": "cargo test -p gitraptor-core --test mcp_status_full -- --exact a_worktree_deleted_during_the_session_is_missing 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-core --lib -- --exact channel::mcp_status::tests::a_deleted_cwd_with_a_previous_scope_is_missing 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-core --lib -- --exact channel::mcp_status::tests::another_owner_makes_the_repo_unavailable 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-core --lib -- --exact channel::mcp_status::tests::a_worktree_rooted_at_home_is_unavailable 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-core --test mcp_status_full -- --exact a_worktree_that_fails_sec11_is_refused_without_data 2>&1 | grep -q 'test result: ok. 1 passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/channel/mcp_status_tests.rs",
+        "crates/core/tests/mcp_status_full.rs"
+      ]
+    },
+    {
+      "id": "C7",
+      "statement": "Un repo fuera de la allowlist y no disponible se rechaza como no habilitado, sin ningún dato del repo: la allowlist se comprueba antes que la disponibilidad",
+      "verify": "cargo test -p gitraptor-core --test mcp_status_full -- --exact not_enabled_is_checked_before_unavailable 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-core --lib -- --exact channel::mcp_status::tests::the_allowlist_is_checked_before_availability 2>&1 | grep -q 'test result: ok. 1 passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/channel/mcp_status_tests.rs",
+        "crates/core/tests/mcp_status_full.rs"
+      ]
+    },
+    {
+      "id": "C8",
+      "statement": "Ningún rechazo de status escribe en la configuración global de Git ni en el HOME del daemon",
+      "verify": "cargo test -p gitraptor-core --test mcp_status_full -- --exact refusals_write_nothing_in_the_global_git_config 2>&1 | grep -q 'test result: ok. 1 passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/mcp_status_full.rs"
+      ]
+    },
+    {
+      "id": "C9",
+      "statement": "Los rechazos worktree-missing, repo-other-owner, worktree-untrusted, repo-unavailable e invalid-cursor son {code, message, action} sin datos del repo y caben en 80 tokens en en y es; un motivo ilegible falla cerrado a repo-unavailable",
+      "verify": "cargo test -p gitraptor-mcp --bin raptor-mcp -- --exact server::status_tests::every_unavailable_refusal_fits_and_carries_no_repo_data 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-mcp --bin raptor-mcp -- --exact engine::status_tests::unavailable_reasons_map_to_their_tool_codes 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-mcp --bin raptor-mcp -- --exact engine::status_tests::an_unknown_unavailable_reason_fails_closed 2>&1 | grep -q 'test result: ok. 1 passed'",
+      "layer": "runtime",
+      "tests": [
+        "apps/mcp/src/engine_status_tests.rs",
+        "apps/mcp/src/status_tests.rs"
+      ]
+    },
+    {
+      "id": "C10",
+      "statement": "status sin cursor cabe en 300 tokens por parte en el repo típico, también con los tres nombres a 100 caracteres ASCII y con tilde; cada página cabe en 800; el caso hostil cabe en 24 KiB por parte con truncated y cursor",
+      "verify": "cargo test -p gitraptor-mcp --bin raptor-mcp -- --exact server::status_tests::the_default_status_fits_its_token_budget 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-mcp --bin raptor-mcp -- --exact server::status_tests::every_page_fits_its_token_budget 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-mcp --bin raptor-mcp -- --exact server::status_tests::a_hostile_status_and_page_fit_each_part 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-api --test mcp_status_contract -- --exact fit_page_cuts_items_and_marks_them 2>&1 | grep -q 'test result: ok. 1 passed'",
+      "layer": "runtime",
+      "tests": [
+        "apps/mcp/src/status_tests.rs",
+        "crates/api/tests/mcp_status_contract.rs"
+      ]
+    },
+    {
+      "id": "C11",
+      "statement": "La herramienta status con su inputSchema de cursor cabe en 150 tokens (RES-MCP-01) y su outputSchema compacto valida cada referencia y deja here, repo y page como objetos opacos",
+      "verify": "cargo test -p gitraptor-mcp --bin raptor-mcp -- --exact server::status_tests::the_status_tool_with_its_cursor_fits_its_token_budget 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-mcp --bin raptor-mcp -- --exact server::status_tests::the_compact_output_schema_validates_every_reference 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-api --test mcp_status_contract -- --exact the_output_schema_keeps_the_detail_opaque 2>&1 | grep -q 'test result: ok. 1 passed'",
+      "layer": "runtime",
+      "tests": [
+        "apps/mcp/src/status_tests.rs",
+        "crates/api/tests/mcp_status_contract.rs"
+      ]
+    },
+    {
+      "id": "C12",
+      "statement": "Todo texto del repo o de otro agente (worktrees, ramas, base, nombres de agente, rutas) va como {\"untrusted\": …}, cortado a su tope y escapado; el resto son literales del binario",
+      "verify": "cargo test -p gitraptor-mcp --bin raptor-mcp -- --exact server::status_tests::every_repo_text_in_the_status_is_marked 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-api --test mcp_status_contract -- --exact names_in_here_repo_and_page_are_cut_at_their_bound 2>&1 | grep -q 'test result: ok. 1 passed'",
+      "layer": "runtime",
+      "tests": [
+        "apps/mcp/src/status_tests.rs",
+        "crates/api/tests/mcp_status_contract.rs"
+      ]
+    },
+    {
+      "id": "C13",
+      "statement": "Una conexión sin la capacidad mcp.status-full recibe la forma de status de hoy y un cursor se rechaza como parámetro inválido",
+      "verify": "cargo test -p gitraptor-core --test mcp_status_full -- --exact without_the_capability_status_keeps_its_shape 2>&1 | grep -q 'test result: ok. 1 passed' && cargo test -p gitraptor-api --test mcp_status_contract -- --exact the_full_status_needs_its_capability 2>&1 | grep -q 'test result: ok. 1 passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/api/tests/mcp_status_contract.rs",
+        "crates/core/tests/mcp_status_full.rs"
+      ]
+    }
+  ],
+  "constraints": {
+    "deny_paths": [
+      "package.json",
+      "pnpm-lock.yaml",
+      "packages/",
+      "docs/ARTIFACTS.md",
+      "docs/architecture/decisions/ADR-GRD-008-factor-autenticacion-fuera-de-banda.md",
+      ".github/",
+      "crates/policy/",
+      "crates/git/",
+      "crates/theme/",
+      "crates/api/src/lib.rs",
+      "crates/api/src/rpc.rs",
+      "crates/api/src/methods/mod.rs",
+      "apps/cli/src/"
+    ],
+    "allow_dependency_changes": false
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 600000,
+    "suiteTimeoutMs": 1800000
+  }
+}
