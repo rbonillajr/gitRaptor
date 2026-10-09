@@ -478,11 +478,18 @@ pub(crate) fn set_divergence(view: &mut WorktreeView, found: DivergenceView) {
 /// repo. Its `gitdir` is writable by an agent; this keeps the engine from
 /// being pointed at the whole disk.
 pub fn linked_is_trusted(common_dir: &Path, id: &str, root: &Path) -> bool {
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
+    linked_is_trusted_in(common_dir, id, root, home.as_deref().map(Path::new))
+}
+
+/// [`linked_is_trusted`] with the home folder given instead of read from the process
+/// environment, so a caller (and a test) states which folder is refused as a root.
+pub fn linked_is_trusted_in(common_dir: &Path, id: &str, root: &Path, home: Option<&Path>) -> bool {
     if root.parent().is_none() || common_dir.starts_with(root) {
         return false;
     }
-    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))
-        && canonical(Path::new(&home)) == root
+    if let Some(home) = home
+        && canonical(home) == root
     {
         return false;
     }
@@ -592,6 +599,14 @@ pub fn read_worktree(path: &Path, main: bool, admin_name: Option<&str>) -> Workt
             in_progress: false,
         },
     }
+}
+
+/// The full list of changes of the worktree at `path`, sorted by path and area, with the counts
+/// by area: what [`read_worktree`] keeps bounded. Read only; a page of paths re-reads it because
+/// the published list is cut at [`MAX_WORKTREE_CHANGES`].
+pub fn all_changes(path: &Path) -> Result<(ChangeCounts, Vec<FileChangeView>), ReadError> {
+    let reader = RepoReader::open(path, &ReaderOptions::default())?;
+    Ok(changes(&reader.status()?))
 }
 
 /// Every change, sorted by path and area, and the counts by area.
