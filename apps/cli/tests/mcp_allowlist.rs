@@ -530,12 +530,14 @@ fn status_from_a_subfolder_names_the_repo_and_the_worktree() {
     assert_eq!(status["action"], "register-to-write");
     // RES-MCP-02: only what the agent needs. No key of the repo (the repo is
     // always the session's), no state (an unreadable one is refused) and
-    // `main` only when true.
+    // `main` only when true. With `mcp.status-full` the answer adds `repo` (the
+    // engine, base and protection of the repo, and the other worktrees); `here`
+    // is absent because this worktree has nothing to say.
     let mut keys: Vec<_> = status.as_object().unwrap().keys().cloned().collect();
     keys.sort();
     assert_eq!(
         keys,
-        ["action", "branch", "requester", "worktree"],
+        ["action", "branch", "repo", "requester", "worktree"],
         "{result}"
     );
     assert!(!result.to_string().contains(&id), "{result}");
