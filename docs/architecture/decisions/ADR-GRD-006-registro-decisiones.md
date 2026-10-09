@@ -210,3 +210,7 @@ Aplicada desde [DS-US-GRD-005](../../requirements/features/guardrails/dev-specs/
 - la unión por oid para mostrar autor y committer en un aviso, porque el contrato `commit` no lleva el oid del commit nuevo.
 
 Los eventos no caducan, así que se cumple la restricción de BR-AUTH-005: la retención de los eventos nunca es más corta que la del registro.
+
+## Nota (2026-10-08, US-GRD-012): aviso `config.relax-ignored`
+
+Una operación de un agente puede dejar, además de su entrada de decisión, un aviso (`kind: notice`) con regla `config.relax-ignored` y el mismo `decision_id`. Lleva el nivel (worktree, perfil o local), nunca valores; la clave de agregación incluye el `kind`, no cuenta en `blocked` y no llega al cliente del hook. Ver la Enmienda (2026-10-08, US-GRD-010 y US-GRD-012) de ADR-GRD-003.
