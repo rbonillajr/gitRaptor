@@ -1,0 +1,88 @@
+# INF-MCP-001 (D11): MCP security corpus gate. Builds `raptor` and `raptor-mcp` together, runs the
+# corpus (testkit and CLI levels), carries the KPI to the job summary and requires a minimum of
+# executed cases, so a corpus that stops running never passes green.
+#
+# NOT a required check: Rene decides whether it becomes one. Cheap on purpose: Ubuntu only, no
+# macOS or Windows runner, a path filter, and only main saves the cache.
+#
+# Actions are pinned by commit SHA, the same ones as `repo-intact.yml`.
+name: mcp-security-corpus
+
+on:
+  pull_request:
+    paths:
+      - 'apps/mcp/**'
+      - 'crates/api/**'
+      - 'crates/core/src/channel/**'
+      - 'crates/testkit/**'
+      - 'apps/cli/tests/mcp_security_corpus.rs'
+      - 'apps/cli/tests/mcp_corpus/**'
+      - '.github/workflows/mcp-security-corpus.yml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Pull requests: one run per PR, a new push cancels the previous one. main and manual runs get a
+# group of their own, so they are never cancelled.
+concurrency:
+  group: mcp-security-corpus-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  corpus:
+    name: mcp security corpus (ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Toolchain from rust-toolchain.toml
+        run: rustup show
+      # Only main saves: pull request caches used to push the repo past the 10 GB limit.
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      # Never read an old report that came from the cache.
+      - name: Remove any stale report
+        run: rm -f target/tmp/mcp-security-corpus.md
+      # `raptor` and `raptor-mcp` fresh and together: the CLI-level corpus launches both.
+      - name: Build raptor and raptor-mcp
+        run: cargo build -p gitraptor-cli -p gitraptor-mcp --bins
+      - name: Corpus, testkit level
+        run: cargo test -p gitraptor-testkit --test mcp_corpus -- --nocapture
+      - name: Corpus, CLI level
+        run: cargo test -p gitraptor-cli --test mcp_security_corpus -- --nocapture
+      - name: KPI to the job summary
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          # Placeholder: the coordinator adjusts it to the real Ubuntu count at the end.
+          MIN_EXECUTED: "60"
+          REPORT: target/tmp/mcp-security-corpus.md
+        run: |
+          if [ ! -f "$REPORT" ]; then
+            echo "::error::the corpus report $REPORT does not exist: the corpus did not run"
+            exit 1
+          fi
+          cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"
+          # First line: <!-- mcp-corpus os=… executed=N rejected=M pending=P known_gap=G -->
+          # key=value pairs; extra keys are ignored. pending and known_gap stay out of the KPI.
+          first=$(head -n 1 "$REPORT" | tr -d '\r')
+          kv() { printf '%s\n' "$first" | tr ' ' '\n' | sed -n "s/^$1=//p" | head -n 1; }
+          executed=$(kv executed)
+          rejected=$(kv rejected)
+          echo "mcp corpus: executed=${executed:-?} rejected=${rejected:-?} (minimum $MIN_EXECUTED)"
+          case "$executed" in ''|*[!0-9]*) echo "::error::cannot read executed from the report's first line: $first"; exit 1 ;; esac
+          case "$rejected" in ''|*[!0-9]*) echo "::error::cannot read rejected from the report's first line: $first"; exit 1 ;; esac
+          if [ "$executed" -lt "$MIN_EXECUTED" ]; then
+            echo "::error::the corpus executed $executed cases, fewer than the $MIN_EXECUTED required: a filter or a suite stopped selecting them"
+            exit 1
+          fi
+          if [ "$rejected" -ne "$executed" ]; then
+            echo "::error::the corpus rejected $rejected of $executed executed cases: every executed case must be rejected"
+            exit 1
+          fi
