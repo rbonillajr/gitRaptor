@@ -106,7 +106,7 @@ Ejemplos:
 
 ## Estado de la implementación (2026-10-08)
 
-Implementado en: PR #__PR__ (parcial).
+Implementado en: PR #212 (parcial).
 
 - **Hecho:** `raptor restore <id> [--json]`; `raptor timeline` muestra el id de cada punto; escenarios 1, 2, 3 y 4, y el esquema del escenario (otro agente y sin atribuir en Windows), como tests en repos temporales (`crates/core/tests/us_tmc_009*.rs`, `apps/cli/tests/restore_process.rs`). Restaurar y deshacer la restauración devuelve el estado exacto (contenido, modo, índice, HEAD y ramas).
 - **Pendiente:** escenario 5 (confirmación interactiva en macOS y Linux), con US-TMC-013 (ADR-TMC-005 § 3). Hoy se rechaza con `confirmation-required`.
