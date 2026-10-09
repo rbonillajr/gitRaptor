@@ -246,6 +246,9 @@ mod tests {
                 origin: gitraptor_api::AgentOrigin::Registered,
             },
             action: Some(gitraptor_api::methods::McpStatusAction::RegisterToWrite),
+            here: None,
+            repo: None,
+            page: None,
         }
     }
 
@@ -372,6 +375,9 @@ mod tests {
                 origin: gitraptor_api::AgentOrigin::Detected,
             },
             action: None,
+            here: None,
+            repo: None,
+            page: None,
         };
         let main = McpStatus {
             worktree: UntrustedName::new("shop"),

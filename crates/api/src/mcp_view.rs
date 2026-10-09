@@ -90,10 +90,18 @@ pub enum McpToolError {
     StateChanged,
     /// The call was sent and its outcome is not known (transport failure).
     OutcomeUnknown,
+    /// The worktree of the session was deleted during the session.
+    WorktreeMissing,
+    /// The repo belongs to another system user.
+    RepoOtherOwner,
+    /// The worktree does not pass the checks of an observed worktree.
+    WorktreeUntrusted,
+    /// The cursor is not valid for this session.
+    InvalidCursor,
 }
 
 impl McpToolError {
-    pub const ALL: [Self; 16] = [
+    pub const ALL: [Self; 20] = [
         Self::RepoNotEnabled,
         Self::NotInObservedWorktree,
         Self::RepoUnavailable,
@@ -110,6 +118,10 @@ impl McpToolError {
         Self::InvalidText,
         Self::StateChanged,
         Self::OutcomeUnknown,
+        Self::WorktreeMissing,
+        Self::RepoOtherOwner,
+        Self::WorktreeUntrusted,
+        Self::InvalidCursor,
     ];
 
     pub const fn as_str(self) -> &'static str {
@@ -130,6 +142,10 @@ impl McpToolError {
             Self::InvalidText => "invalid-text",
             Self::StateChanged => "state-changed",
             Self::OutcomeUnknown => "outcome-unknown",
+            Self::WorktreeMissing => "worktree-missing",
+            Self::RepoOtherOwner => "repo-other-owner",
+            Self::WorktreeUntrusted => "worktree-untrusted",
+            Self::InvalidCursor => "invalid-cursor",
         }
     }
 }
@@ -160,6 +176,47 @@ pub const MCP_STATUS_TOKENS: usize = 300;
 
 /// Most estimated tokens of a refusal, in en and es (RES-MCP-03).
 pub const MCP_REFUSAL_TOKENS: usize = 80;
+
+/// Most estimated tokens of each part of a page of `status`; a target, the
+/// figure is fixed after measuring (RES-MCP-02, amended).
+pub const MCP_PAGE_TOKENS: usize = 800;
+
+/// Worktrees and paths in one page.
+pub const MCP_WORKTREES_PAGE: usize = 8;
+pub const MCP_PATHS_PAGE: usize = 32;
+
+/// Present sessions listed per worktree.
+pub const MCP_MAX_SESSIONS: usize = 8;
+
+/// Gaps listed, the most recent ones, and the window they must touch.
+pub const MCP_MAX_GAPS: usize = 3;
+pub const MCP_GAP_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
+
+/// Bytes a page is cut to by [`fit_page`]: a safety bound under
+/// [`MAX_MCP_PART_BYTES`], not a target.
+pub const MCP_FIT_BYTES: usize = MAX_MCP_PART_BYTES - 1024;
+
+/// Cursors one connection keeps.
+pub const MCP_MAX_CURSORS: usize = 64;
+
+/// The cursor [`fit_page`] leaves in a page it cut, as long as a real one
+/// so the measure holds when the daemon puts the real cursor in.
+pub const MCP_CURSOR_PLACEHOLDER: &str = "0000000000000000";
+
+/// The bytes of the status as the tool sends it: its [`McpStatusView`]
+/// after [`McpStatus::for_mcp`] and [`for_mcp`], compact JSON.
+pub fn wire_len(status: &McpStatus) -> usize {
+    let _ = status;
+    todo!("US-MCP-004: the measure of a status as it goes on the wire")
+}
+
+/// Takes items off the end of the page of `status` until its
+/// [`wire_len`] is within `budget`, and leaves `truncated` and
+/// [`MCP_CURSOR_PLACEHOLDER`] when it did.
+pub fn fit_page(status: &mut McpStatus, budget: usize) {
+    let _ = (status, budget);
+    todo!("US-MCP-004: cut a page to its budget")
+}
 
 /// The estimated tokens of `text`: its UTF-8 bytes over
 /// [`MCP_BYTES_PER_TOKEN`], rounded up.
@@ -574,6 +631,9 @@ mod tests {
             main,
             requester: Actor::Unattributed,
             action: Some(McpStatusAction::RegisterToWrite),
+            here: None,
+            repo: None,
+            page: None,
         }
     }
 
@@ -632,7 +692,11 @@ mod tests {
             | McpToolError::QuotaExceeded
             | McpToolError::InvalidText
             | McpToolError::StateChanged
-            | McpToolError::OutcomeUnknown => McpToolError::ALL.contains(&c),
+            | McpToolError::OutcomeUnknown
+            | McpToolError::WorktreeMissing
+            | McpToolError::RepoOtherOwner
+            | McpToolError::WorktreeUntrusted
+            | McpToolError::InvalidCursor => McpToolError::ALL.contains(&c),
         };
         assert!(McpToolError::ALL.into_iter().all(listed));
         for s in [
@@ -643,6 +707,10 @@ mod tests {
             "invalid-text",
             "state-changed",
             "outcome-unknown",
+            "worktree-missing",
+            "repo-other-owner",
+            "worktree-untrusted",
+            "invalid-cursor",
         ] {
             assert!(seen.contains(s), "{s}");
         }

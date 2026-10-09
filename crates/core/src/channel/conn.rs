@@ -1429,6 +1429,9 @@ impl Connection<'_> {
             main: worktree.main,
             requester: who.actor,
             action,
+            here: None,
+            repo: None,
+            page: None,
         })
     }
 

@@ -10,11 +10,13 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use super::{Group, method};
+use super::{ERROR_BLOCK_LEN, FIRST_ERROR_BLOCK, Group, method};
 use crate::Actor;
 use crate::capability::{CAPABILITIES_PROTOCOL, Capability};
-use crate::messages::RepoStateView;
-use crate::untrusted::UntrustedName;
+use crate::guard::{Diagnostic, LossCause};
+use crate::messages::{RepoStateView, SessionStateView, UnavailableReason};
+use crate::rpc::ErrorSpec;
+use crate::untrusted::{Untrusted, UntrustedName};
 
 /// Enables a repo for the MCP (reserved).
 pub const MCP_ENABLE: &str = "mcp.enable";
@@ -27,6 +29,27 @@ pub const MCP_STATUS: &str = "mcp.status";
 
 /// `mcp.status` carries the branch of the caller's worktree (US-MCP-005).
 pub const CAP_MCP_STATUS_BRANCH: Capability = Capability::new("mcp.status-branch");
+
+/// `mcp.status` carries the caller's situation and the repo's, and pages of
+/// worktrees and paths by cursor.
+pub const CAP_MCP_STATUS_FULL: Capability = Capability::new("mcp.status-full");
+
+/// The module's error block (ADR-GRP-016).
+const BLOCK: i64 = FIRST_ERROR_BLOCK - 4 * ERROR_BLOCK_LEN;
+
+/// The repo or the worktree of the caller cannot be read now; `data` is a
+/// [`McpUnavailableData`].
+pub const MCP_UNAVAILABLE: ErrorSpec = ErrorSpec::new(BLOCK, "mcp-unavailable");
+
+/// Characters of a cursor: lowercase hexadecimal.
+pub const MCP_CURSOR_LEN: usize = 16;
+
+/// Whether `text` has the form of a cursor the daemon hands out: exactly
+/// [`MCP_CURSOR_LEN`] characters of `[0-9a-f]`.
+pub fn valid_cursor(text: &str) -> bool {
+    let _ = text;
+    todo!("US-MCP-004: the form of a cursor")
+}
 
 pub(super) const GROUP: Group = Group {
     methods: &[
@@ -85,6 +108,15 @@ pub struct McpStatus {
     /// What the caller can do next; absent for an attributed agent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action: Option<McpStatusAction>,
+    /// The caller's worktree; absent when there is nothing to say.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub here: Option<McpHere>,
+    /// The repo.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repo: Option<McpRepo>,
+    /// A page asked for with a cursor.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page: Option<McpPage>,
 }
 
 impl McpStatus {
@@ -106,6 +138,196 @@ impl McpStatus {
             ..self.clone()
         }
     }
+}
+
+/// `mcp.status` parameters: the cursor of a list the last answer did not
+/// include.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct McpStatusParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<String>,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
+/// A list the answer does not include: how many there are and the cursor to
+/// ask for them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct McpListRef {
+    pub total: u64,
+    pub cursor: String,
+}
+
+/// A present session of a worktree; never an ended one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct McpSession {
+    pub actor: Actor,
+    pub state: SessionStateView,
+}
+
+/// Why a worktree's ahead/behind is not given.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum McpUncounted {
+    BaseMissing,
+    NoBase,
+    NoCommits,
+    Unreadable,
+}
+
+/// The situation of one worktree. `ahead` and `behind` are left out at 0.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct McpHere {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sessions: Vec<McpSession>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sessions_total: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub changes: Option<McpListRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ahead: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub behind: Option<u64>,
+    /// The counts are lower bounds.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub at_least: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uncounted: Option<McpUncounted>,
+}
+
+/// Whether the base branch is the one the developer confirmed.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum McpBaseState {
+    /// Left out of the answer.
+    #[default]
+    Confirmed,
+    Unconfirmed,
+    Pending,
+    Invalid,
+}
+
+impl McpBaseState {
+    pub fn is_confirmed(&self) -> bool {
+        matches!(self, Self::Confirmed)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct McpBase {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<UntrustedName>,
+    #[serde(default, skip_serializing_if = "McpBaseState::is_confirmed")]
+    pub state: McpBaseState,
+}
+
+/// The protection of the repo as the MCP layer sees it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum McpProtectionState {
+    McpOnly,
+    Full,
+}
+
+/// What the engine is doing with the repo; absent means observing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum McpEngineState {
+    Reconciling,
+    Dormant,
+    WaitingForGit,
+}
+
+/// A period the engine did not observe, in seconds before the answer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct McpGap {
+    pub from_s_ago: u64,
+    /// Absent: the gap is still open.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to_s_ago: Option<u64>,
+}
+
+/// The repo as a whole.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct McpRepo {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub engine: Option<McpEngineState>,
+    pub base: McpBase,
+    pub protection: McpProtectionState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub protection_lost: Option<LossCause>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<Diagnostic>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fetch_age_s: Option<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub gaps: Vec<McpGap>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gaps_total: Option<u32>,
+    /// Sessions cannot be detected on this system: "unknown", not "none".
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub sessions_unknown: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worktrees: Option<McpListRef>,
+}
+
+/// Another worktree of the repo, in a page.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct McpWorktree {
+    pub name: UntrustedName,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<UntrustedName>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub main: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unavailable: Option<UnavailableReason>,
+    #[serde(flatten)]
+    pub state: McpHere,
+}
+
+/// One page of a list: other worktrees, or the paths of one worktree.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct McpPage {
+    /// The worktree whose paths these are; only in a page of paths.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub of: Option<UntrustedName>,
+    pub total: u64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub worktrees: Vec<McpWorktree>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub paths: Vec<Untrusted>,
+    /// There is more after this page.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub truncated: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<String>,
+}
+
+/// Why the caller's repo or worktree cannot be read, as the channel says it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum McpUnavailable {
+    WorktreeMissing,
+    OtherOwner,
+    WorktreeUntrusted,
+    RepoUnreadable,
+}
+
+/// `data` of [`MCP_UNAVAILABLE`]: the reason and nothing of the repo.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct McpUnavailableData {
+    pub reason: McpUnavailable,
 }
 
 /// What an `mcp.status` caller can do next.
@@ -136,6 +358,9 @@ mod tests {
                 origin: AgentOrigin::Detected,
             },
             action: None,
+            here: None,
+            repo: None,
+            page: None,
         };
         let value = serde_json::to_value(&status).unwrap();
         let mut keys: Vec<_> = value.as_object().unwrap().keys().cloned().collect();
@@ -176,6 +401,9 @@ mod tests {
                 origin: AgentOrigin::Registered,
             },
             action: None,
+            here: None,
+            repo: None,
+            page: None,
         }
         .for_mcp();
         let Actor::Agent {
