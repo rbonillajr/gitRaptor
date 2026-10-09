@@ -1,5 +1,7 @@
 //! The command line of another process of the user (DS-US-GRD-018 § 5.3): read only to classify
-//! a Git subcommand, never stored.
+//! a Git subcommand, never stored. Of a `git` the detector also reads whether it redirects its
+//! target, from its global options and the *names* of its environment: one boolean leaves, never
+//! an argument nor a variable's value.
 
 use std::ffi::OsString;
 
@@ -24,6 +26,82 @@ pub fn process_args(pid: u32) -> Option<Vec<OsString>> {
 /// then `argc` NUL-terminated strings. The environment that follows is never read. Anything
 /// malformed is `None`.
 pub fn parse_procargs2(area: &[u8]) -> Option<Vec<OsString>> {
+    let (args, _env) = split_procargs2(area)?;
+    Some(args.into_iter().map(os).collect())
+}
+
+/// Whether the `git` `pid` redirects its target (`-C`, `--git-dir`, `--work-tree` before the
+/// subcommand, or `GIT_DIR`, `GIT_WORK_TREE`, `GIT_COMMON_DIR` in its environment). `None` when
+/// its area cannot be read. Only this boolean leaves: never an argument nor a variable's value.
+/// macOS only; elsewhere always `None`.
+pub fn process_git_redirect(pid: u32) -> Option<bool> {
+    #[cfg(target_os = "macos")]
+    {
+        parse_procargs2_git_redirect(&crate::ffi_procargs::procargs2(pid)?)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = pid;
+        None
+    }
+}
+
+/// [`process_git_redirect`] over a `KERN_PROCARGS2` area: the global options of the argv (after
+/// `argv[0]`), then the names of the environment that follows it. Anything malformed is `None`.
+pub fn parse_procargs2_git_redirect(area: &[u8]) -> Option<bool> {
+    let (args, env) = split_procargs2(area)?;
+    if global_options_redirect(args.get(1..).unwrap_or_default()) {
+        return Some(true);
+    }
+    // The environment ends at the first empty string (its NUL padding, then the loader's own
+    // strings); a last string cut by the end of the area still names a variable.
+    let mut names = env
+        .split(|b| *b == 0)
+        .take_while(|s| !s.is_empty())
+        .map(|kv| kv.split(|b| *b == b'=').next().unwrap_or_default());
+    Some(names.any(|name| REDIRECT_ENV.contains(&name)))
+}
+
+/// The environment variables that move a `git`'s repository or worktree.
+const REDIRECT_ENV: [&[u8]; 3] = [b"GIT_DIR", b"GIT_WORK_TREE", b"GIT_COMMON_DIR"];
+
+/// The global options of `git` that take their value as the next argument (in the `=` form they
+/// are one argument). `--exec-path` only takes one in the `=` form.
+const GLOBAL_WITH_VALUE: [&[u8]; 7] = [
+    b"-C",
+    b"-c",
+    b"--git-dir",
+    b"--work-tree",
+    b"--namespace",
+    b"--config-env",
+    b"--super-prefix",
+];
+
+/// Whether the global options (the arguments before the subcommand, program name excluded)
+/// redirect the target: `-C`, `--git-dir` or `--work-tree`, separate or with `=`. The first
+/// argument that is not an option is the subcommand; what follows it is never read.
+fn global_options_redirect(args: &[&[u8]]) -> bool {
+    let mut args = args.iter();
+    while let Some(arg) = args.next() {
+        if !arg.starts_with(b"-") || *arg == b"--" {
+            return false;
+        }
+        let name = arg.split(|b| *b == b'=').next().unwrap_or_default();
+        if matches!(name, b"-C" | b"--git-dir" | b"--work-tree") {
+            return true;
+        }
+        let has_value = name.len() < arg.len();
+        if !has_value && GLOBAL_WITH_VALUE.contains(arg) {
+            // Its value, which may itself start with `-`.
+            args.next();
+        }
+    }
+    false
+}
+
+/// Splits a `KERN_PROCARGS2` area into its `argc` arguments and what follows them (the
+/// environment). Anything malformed is `None`.
+fn split_procargs2(area: &[u8]) -> Option<(Vec<&[u8]>, &[u8])> {
     let (count, rest) = area.split_first_chunk::<4>()?;
     let argc = usize::try_from(i32::from_ne_bytes(*count)).ok()?;
     if argc == 0 || argc > MAX_ARGS {
@@ -38,27 +116,10 @@ pub fn parse_procargs2(area: &[u8]) -> Option<Vec<OsString>> {
     let mut out = Vec::with_capacity(argc);
     for _ in 0..argc {
         let end = rest.iter().position(|b| *b == 0)?;
-        out.push(os(&rest[..end]));
+        out.push(&rest[..end]);
         rest = &rest[end + 1..];
     }
-    Some(out)
-}
-
-/// Whether the `git` `pid` redirects its target (`-C`, `--git-dir`, `--work-tree` before the
-/// subcommand, or `GIT_DIR`, `GIT_WORK_TREE`, `GIT_COMMON_DIR` in its environment). `None` when
-/// its area cannot be read. Only this boolean leaves: never an argument nor a variable's value.
-pub fn process_git_redirect(pid: u32) -> Option<bool> {
-    // Stub: not read yet.
-    let _ = pid;
-    None
-}
-
-/// [`process_git_redirect`] over a `KERN_PROCARGS2` area: the global options of the argv (after
-/// `argv[0]`), then the names of the environment that follows it. Anything malformed is `None`.
-pub fn parse_procargs2_git_redirect(area: &[u8]) -> Option<bool> {
-    // Stub: the rule is not written yet.
-    let _ = area;
-    None
+    Some((out, rest))
 }
 
 /// A process as the detector's table needs it: identity `(pid, start_us)` and parent.
