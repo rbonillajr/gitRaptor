@@ -37,7 +37,8 @@ use gitraptor_core::executor::{
     StepPlan,
 };
 use gitraptor_core::timemachine::oplog::{
-    OPLOG_FILE, OperationKind, OperationState, OperationView, Oplog, SnapshotRefs, Target, repo_dir,
+    OPLOG_FILE, OperationKind, OperationState, OperationView, Oplog, SnapshotFilter, SnapshotLevel,
+    Target, repo_dir,
 };
 use gitraptor_core::timemachine::protected::{
     OperationCatalog, OperationsWiring, ProtectedStep, RepoHandle, StepCtx, StepError, StepOutput,
@@ -46,7 +47,6 @@ use gitraptor_core::timemachine::protected::{
 use gitraptor_core::timemachine::restore::{
     KEPT_REF_IN_RECREATED_WORKTREE, RECREATED_WORKTREE_ROOT_WARNING,
 };
-use gitraptor_core::timemachine::store::SnapshotStore;
 use gitraptor_testkit::{Fixture, diff};
 use serde_json::{Value, json};
 
@@ -301,14 +301,20 @@ impl Running {
         }
     }
 
-    fn snapshot_count(&self) -> usize {
-        SnapshotStore::open_existing(&self.tp.dirs(), &self.repo_id)
+    /// Ids of the guaranteed priors in the oplog. Only priors: the engine also
+    /// captures on its own (`Observation`, with a `cause_event_seq` and no
+    /// operation) whenever its watcher sees a change, at a time the test does
+    /// not control, so counting every snapshot races with it.
+    fn prior_ids(&self) -> Vec<String> {
+        self.oplog
+            .lock()
             .unwrap()
+            .snapshots(&SnapshotFilter::default())
             .unwrap()
-            .snapshot_ids()
-            .unwrap()
-            .unwrap()
-            .len()
+            .into_iter()
+            .filter(|s| s.record.level == SnapshotLevel::GuaranteedPrior)
+            .map(|s| s.record.snapshot_id)
+            .collect()
     }
 
     fn op(&self, id: &str) -> OperationView {
@@ -504,7 +510,7 @@ fn a_worktree_whose_path_is_occupied_is_refused_before_the_prior() {
     let x_tip = r.fx.git(&["rev-parse", "feat-x"]);
     assert_ne!(x_tip, x_tip_at_point);
     let before = r.fx.fingerprint();
-    let points = r.snapshot_count();
+    let priors = r.prior_ids();
 
     let refusal = reject_reason(r.restore(&wt, &point));
 
@@ -512,6 +518,6 @@ fn a_worktree_whose_path_is_occupied_is_refused_before_the_prior() {
     assert_eq!(r.fx.git(&["rev-parse", "feat-x"]), x_tip);
     let changes = diff(&before, &r.fx.fingerprint());
     assert!(changes.is_empty(), "{changes:#?}");
-    assert_eq!(r.snapshot_count(), points);
+    assert_eq!(r.prior_ids(), priors, "a prior was taken");
     assert_recorded_rejected(&r, &refusal, &point);
 }
