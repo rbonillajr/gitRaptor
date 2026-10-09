@@ -1178,7 +1178,9 @@ mod tests {
     fn foreign_work_is_confirmable_on_unix_only() {
         assert_eq!(FOREIGN_WORK_CONFIRMABLE, cfg!(unix));
         #[cfg(windows)]
-        assert!(!FOREIGN_WORK_CONFIRMABLE);
+        const {
+            assert!(!FOREIGN_WORK_CONFIRMABLE)
+        };
     }
 
     #[test]
