@@ -93,6 +93,6 @@ tags: [mcp, seguridad, corpus, ci, owasp-mcp-top-10, nfr-02, br-16, dep-mcp-8, s
 | `undo` y `acknowledge` | US-MCP-018 | Pendiente |
 | Ramas maliciosas y `path` de `create_worktree` | US-MCP-019 | Pendiente |
 
-Implementado en: PR #TBD.
+Implementado en: PR #224.
 
 **Falta**: los casos de las herramientas futuras (filas pendientes de la tabla) y el tope de entrada, que `raptor-mcp` aún no aplica. Linux y Windows: *Pendiente: etapa de validación multiplataforma* (XP-42).

@@ -141,7 +141,7 @@ Si el primer run de Ubuntu muestra un fallo del daemon en Linux (no del arnés),
 
 ## Estado de la implementación
 
-Implementado en: PR #TBD.
+Implementado en: PR #224.
 
 Parcial. Implementados el arnés, el formato del caso, el gate de CI y los casos transversales de `status` y `snapshot`, ámbito, entorno, JSON-RPC y rate limit. Pendientes los casos de las herramientas futuras y los huecos listados en el estado del corpus de la historia. Los pendientes de Linux y Windows están en [`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md), fila XP-42.
 
