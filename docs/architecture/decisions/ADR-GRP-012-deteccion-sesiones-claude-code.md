@@ -312,6 +312,20 @@ Origen: dogfooding de Rene (2026-10-09). En `raptor timeline`, los commits de Cl
 
 En los dos casos, un `git` ajeno de otro worktree podría crear un commit en la rama de A sin contar como ajeno en A. Si a la vez había un `git` de la sesión en A, el commit se atribuiría a la sesión.
 
+**Revisión de seguridad (2026-10-09, `security-expert` y `rust-code-reviewer`)**: sin hallazgos Critical ni High. **Corregido en TS-GRP-008:**
+
+- Hay un solo parser, en `gitraptor-macsys`, y **falla cerrado**:
+  - una opción global desconocida antes del subcomando, o un `--`, cuenta como redirección;
+  - `--attr-source` y `--shallow-file` consumen su valor;
+  - el entorno se recorre entero.
+- La lectura de la redirección se hace **fuera del lock** del detector, con un máximo de 32 por muestra. Por encima del máximo, "no se puede saber".
+
+**Riesgos declarados, que cierra [TD-GRP-004](../../requirements/features/motor-local/technical-stories/TD-GRP-004-corroborar-ambito-worktree-s3.md)** (**Decisión del orquestador (2026-10-09)**, por la vía que ofrecía la revisión):
+
+- **M-01**: el tipo `Commit`, `Merge` o `Rebase` sale del texto libre del reflog de la rama, y el paso `names_branch` de `place()` es heurístico. Un `git update-ref -m "commit: x" refs/heads/<rama de A>` lanzado desde B, coincidiendo con un `git` del agente en A, se atribuiría a la sesión. Requiere forjar el mensaje y que coincidan los dos. **Control compensatorio**: todo lo que el agente pueda deshacer queda en un snapshot de la Time Machine (NFR-01). El arreglo, corroborar con el `logs/HEAD` del worktree, choca con el contrato de TS-GRP-008 y necesita su propio diseño.
+- **L-03**: un pid reutilizado entre el listado y la lectura del argv o del entorno. La ventana es de microsegundos y la lectura del cwd ya tenía el mismo patrón.
+- **L-05**: un `git` ajeno con el cwd fuera del repo se ignora sin mirar si redirige su destino (`--git-dir` de plumbing).
+
 **Opción descartada (diferida): atribuir a la única sesión activa con un origen nuevo (`active-session`).** La evidencia de proceso disponible (un descendiente vivo de la sesión con el cwd en el worktree) se cumple casi siempre (servidores MCP, shells de herramienta), así que es co-ubicación, que la regla 3 prohíbe. El trailer `Co-Authored-By` lo escribe quien hace el commit. Y la atribución tiene efectos de permisos en la Time Machine (ADR-TMC-005). Cambiarlo exige enmendar BR-EDGE-004, BR-AUTH-005 y la regla 3, y lo ratifica Rene. Se reabre si, con esta enmienda, los contadores muestran un número relevante de commits `no-sighting`. La ratificación de Rene del 2026-10-07 ("confirmada no es atribuida") sigue vigente.
 
 **Presentación**: `raptor timeline` muestra la pista `inferred` igual que `raptor events` (US-GRD-019, § 2 y § 3 de la Enmienda de autoría).
