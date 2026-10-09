@@ -12,7 +12,9 @@ use gitraptor_api::guard::{
 };
 use gitraptor_git::{Ancestry, ReaderOptions, RefName, RepoReader};
 use gitraptor_policy::guard::authorship::Effective;
+use gitraptor_policy::guard::policies::Policies;
 use gitraptor_policy::guard::{self as policy, Context, Evaluation, Facts, FastForward};
+use gitraptor_policy::layers::IgnoredRelaxation;
 use gitraptor_policy::team::{DEFAULT_BRANCH, resolve_main_branch};
 
 use super::registry::GuardRegistry;
@@ -82,7 +84,7 @@ pub struct CommitContext {
     pub authorship: Effective,
     pub facts: Option<gitraptor_api::guard::AuthorshipFacts>,
     /// The protected branches and forbidden paths in force (US-GRD-008).
-    pub policies: gitraptor_policy::guard::policies::Policies,
+    pub policies: Policies,
 }
 
 /// Evaluates with the repo's own facts and case folding: `core.ignoreCase` or a file system
@@ -250,27 +252,56 @@ pub fn serve_as(registry: &GuardRegistry, params: &EvaluateParams, caller: &Call
     serve_logged(registry, params, caller).0
 }
 
-/// [`serve_as`], and the authorship policy applied to a commit (`flexible`, …) when one was:
+/// What `guard.evaluate` decided, and what only the decision log needs.
+#[derive(Debug, Clone)]
+pub struct Served {
+    pub decision: Decision,
+    /// The authorship policy applied to a commit (`flexible`, ...), when one was.
+    pub authorship_policy: Option<&'static str>,
+    /// Relaxations the levels that only harden declared and that were ignored. Only for an
+    /// agent's branch movement or push: never a reason of the decision.
+    pub ignored: Vec<IgnoredRelaxation>,
+}
+
+/// [`serve_as`], and the authorship policy applied to a commit (`flexible`, ...) when one was:
 /// the decision log records an agent's `flexible` commit (US-GRD-005, BR-AUTH-005).
 pub fn serve_logged(
     registry: &GuardRegistry,
     params: &EvaluateParams,
     caller: &Caller,
 ) -> (Decision, Option<&'static str>) {
+    let served = serve_audited(registry, params, caller);
+    (served.decision, served.authorship_policy)
+}
+
+fn plain(decision: Decision) -> Served {
+    Served {
+        decision,
+        authorship_policy: None,
+        ignored: Vec::new(),
+    }
+}
+
+/// [`serve_logged`], and what the levels that only harden tried to relax (for the decision log).
+pub fn serve_audited(registry: &GuardRegistry, params: &EvaluateParams, caller: &Caller) -> Served {
     if !valid(params) {
-        return (system_deny(Rule::InputRejected), None);
+        return plain(system_deny(Rule::InputRejected));
     }
     let entry = registry
         .get(&params.repo_id)
         .filter(|e| e.common_dir == params.common_dir);
     let Some(reader) = open(Path::new(&params.common_dir)) else {
-        return (system_deny(Rule::InternalError), None);
+        return plain(system_deny(Rule::InternalError));
     };
     let common = Path::new(&params.common_dir);
+    // The local level is keyed by the registry's id, found through its `common_dir`: never by
+    // the client's text alone.
+    let repo_id = entry.is_some().then_some(params.repo_id.as_str());
     let (bases, confirmed) = match entry {
         Some(e) => (e.bases, e.confirmed),
         None => (default_bases(&reader), None),
     };
+    let mut ignored = Vec::new();
     let commit = match &params.operation {
         Operation::Commit {
             stage: CommitStage::SecondLine,
@@ -286,9 +317,10 @@ pub fn serve_logged(
                     worktree.as_ref().unwrap_or(&reader),
                     confirmed.as_ref(),
                     registry.profile().as_ref(),
+                    repo_id,
                 ),
                 facts: params.authorship.clone(),
-                policies: gitraptor_policy::guard::policies::Policies::default(),
+                policies: Policies::default(),
             }
         }
         Operation::RefTransaction { .. } | Operation::Push { .. } if caller.policies => {
@@ -296,13 +328,25 @@ pub fn serve_logged(
                 .cwd
                 .as_deref()
                 .and_then(|cwd| super::authorship::worktree_reader(cwd, common));
+            // One read of every level: the rules and the ignored relaxations come from it.
+            let policies = match super::layers::load(
+                worktree.as_ref().unwrap_or(&reader),
+                confirmed.as_ref(),
+                registry.profile().as_ref(),
+                repo_id,
+            ) {
+                Ok(layers) => {
+                    if caller.actor.is_some() {
+                        ignored = layers.ignored();
+                    }
+                    layers.policies()
+                }
+                // Never "no rules": an agent's movement cannot be judged (SEC-GRD-17).
+                Err(_) => Policies::unreadable(),
+            };
             CommitContext {
                 actor: caller.actor,
-                policies: super::policies::policies_for(
-                    worktree.as_ref().unwrap_or(&reader),
-                    confirmed.as_ref(),
-                    registry.profile().as_ref(),
-                ),
+                policies,
                 ..CommitContext::default()
             }
         }
@@ -320,5 +364,9 @@ pub fn serve_logged(
     if !caller.authorship {
         out.notices.clear();
     }
-    (out, applied)
+    Served {
+        decision: out,
+        authorship_policy: applied,
+        ignored,
+    }
 }

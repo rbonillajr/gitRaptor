@@ -464,8 +464,21 @@ mod protected_branches_and_forbidden_paths {
         };
         let check = |d: gitraptor_api::guard::Decision, why: &str| {
             assert_eq!(d.applied_effect, Effect::Deny, "{why}: {d:?}");
-            assert_eq!(d.reasons[0].rule, Rule::ForbiddenPath, "{why}");
-            assert_eq!(d.reasons[0].cause, Some(Cause::Unverifiable), "{why}");
+            // The configuration protection speaks first for an agent (it needs no path rule),
+            // and the forbidden-path rule that governs the agent says the same.
+            assert_eq!(d.reasons[0].rule, Rule::ConfigProtected, "{why}: {d:?}");
+            assert!(
+                d.reasons
+                    .iter()
+                    .any(|r| r.rule == Rule::ForbiddenPath && r.cause == Some(Cause::Unverifiable)),
+                "{why}: {d:?}"
+            );
+            assert!(
+                d.reasons
+                    .iter()
+                    .all(|r| r.cause == Some(Cause::Unverifiable)),
+                "{why}: {d:?}"
+            );
         };
         // An object the repo does not have.
         check(denied(&"e".repeat(40)), "missing object");

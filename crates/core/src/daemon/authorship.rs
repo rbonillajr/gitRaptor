@@ -56,6 +56,7 @@ impl Daemon {
                 worktree.as_ref().unwrap_or(reader),
                 confirmed.as_ref(),
                 self.guard.profile().as_ref(),
+                Some(&batch.repo_id),
             )
             .policy
         };

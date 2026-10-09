@@ -127,8 +127,7 @@ fn reason_text(reason: &Reason) -> String {
                 ("level", &level_text(reason.level)),
             ],
         ),
-        // stub: replaced by the implementation slice (own templates for the two new rules)
-        (Rule::ForbiddenPath | Rule::ConfigProtected, _) => t(
+        (Rule::ForbiddenPath, _) => t(
             "guard.reason.forbidden-path",
             &[
                 ("path", &find(p, ParamKind::Path)),
@@ -136,7 +135,12 @@ fn reason_text(reason: &Reason) -> String {
                 ("level", &level_text(reason.level)),
             ],
         ),
-        // stub: replaced by the implementation slice
+        (Rule::ConfigProtected, _) => t(
+            "guard.reason.config-protected",
+            &[("path", &find(p, ParamKind::Path))],
+        ),
+        // A relaxation notice is never a denial reason; if one is rendered as such, say only
+        // that the operation could not be verified.
         (Rule::RelaxIgnored, _) => t("guard.deny.internal", &[]),
     }
 }
@@ -461,6 +465,8 @@ fn protection_lines(status: &GuardStatus) -> Vec<String> {
         ));
     }
     if status.hooks.is_some() {
+        // The agent protection of the configuration is part of the minimum: no setting turns it off.
+        out.push(t("guard.status.config-protected", &[]));
         out.push(t("guard.status.not-checked", &[]));
     }
     out
@@ -892,10 +898,9 @@ fn log_rule_text(reason: &LoggedReason) -> String {
         Rule::AuthorshipHumanAuthor => "guard.log.rule.human-author",
         Rule::ProtectedBranch => "guard.log.rule.protected-branch",
         Rule::ForbiddenPath => "guard.log.rule.forbidden-path",
-        // stub: replaced by the implementation slice (own names for the two new rules)
-        Rule::ConfigProtected
-        | Rule::RelaxIgnored
-        | Rule::Degraded
+        Rule::ConfigProtected => "guard.log.rule.config-protected",
+        Rule::RelaxIgnored => "guard.log.rule.relax-ignored",
+        Rule::Degraded
         | Rule::ChannelNotAuthentic
         | Rule::RepoMismatch
         | Rule::InputRejected
@@ -1376,6 +1381,28 @@ mod tests {
             Permission::NotAsked,
         ));
         assert!(asked.contains(&t("guard.permission.not-asked", &[])));
+    }
+
+    #[test]
+    fn config_protection_and_relax_ignored_have_their_own_texts_in_both_languages() {
+        for spanish in [false, true] {
+            for key in [
+                "guard.reason.config-protected",
+                "guard.log.rule.config-protected",
+                "guard.log.rule.relax-ignored",
+                "guard.status.config-protected",
+            ] {
+                let text = crate::i18n::text_in(spanish, key).unwrap();
+                assert!(!text.is_empty(), "{key}");
+            }
+        }
+        let denial = crate::i18n::text_in(false, "guard.reason.config-protected").unwrap();
+        assert!(denial.contains("Guardrails configuration"), "{denial}");
+        let relax = crate::i18n::text_in(false, "guard.log.rule.relax-ignored").unwrap();
+        assert!(
+            relax.contains("relaxation was ignored while the agent acted"),
+            "{relax}"
+        );
     }
 
     #[test]

@@ -4,9 +4,7 @@
 //! `settings.json`, from committed objects (TS-GRD-001). They only harden: the effective rules
 //! are the union. What cannot be read adds nothing, and never removes anything.
 //!
-//! The local level (`settings.local.json`, US-GRP-013) has no reader yet.
-
-use std::sync::LazyLock;
+//! The local level (`settings.local.json`) joins them through `layers`.
 
 use gitraptor_api::AgentKind;
 use gitraptor_api::guard::{Level, Operation, RefValue};
@@ -14,68 +12,34 @@ use gitraptor_git::{Hide, PathLimits, RefName, RepoReader};
 use gitraptor_policy::guard::Evaluation;
 use gitraptor_policy::guard::glob::Budget;
 use gitraptor_policy::guard::policies::{Policies, Source, Touched, combine, forbidden_paths};
-use gitraptor_policy::settings::model::Settings;
-use gitraptor_policy::team::{Confirmed, TeamLoader};
+use gitraptor_policy::team::Confirmed;
 
-/// The one team loader of this evaluation (bounded cache, shared by the connection threads).
-static LOADER: LazyLock<TeamLoader> = LazyLock::new(TeamLoader::default);
+use super::layers;
 
 /// New commits one evaluation may read in all, across the updates of a transaction or a push.
 const MAX_COMMITS: usize = 4_096;
 /// Updates one evaluation may read the commits of.
 const MAX_READS: usize = 256;
 
-/// The rules in force for an operation in the worktree `reader` was opened on.
-pub fn policies(
-    reader: &RepoReader,
-    confirmed: Option<&Confirmed>,
-    profile: Option<&Settings>,
-) -> Policies {
-    let Ok(team) = LOADER.load(reader, confirmed) else {
-        // Never "no rules": an agent's movement of a branch cannot be judged (SEC-GRD-17).
-        return Policies::unreadable();
-    };
-    combine(&[
-        Source {
-            level: Level::Floor,
-            settings: team.floor.parsed.applicable(),
-        },
-        Source {
-            level: Level::Floor,
-            settings: team
-                .confirmed_floor
-                .as_ref()
-                .and_then(|f| f.parsed.applicable()),
-        },
-        Source {
-            level: Level::Worktree,
-            settings: team.worktree.parsed.applicable(),
-        },
-        Source {
-            level: Level::Profile,
-            settings: profile,
-        },
-    ])
-}
-
-/// [`policies`] with the profile of the daemon.
+/// The rules in force for an operation in the worktree `reader` was opened on: every level, from
+/// the one loader of the evaluation. `repo_id` is the registry key (never the client's text).
 pub fn policies_for(
     reader: &RepoReader,
     confirmed: Option<&Confirmed>,
     profile: Option<&crate::profile::ProfileDirs>,
+    repo_id: Option<&str>,
 ) -> Policies {
-    let parsed = profile.map(crate::profile::settings::profile_settings);
-    policies(
-        reader,
-        confirmed,
-        parsed.as_ref().and_then(|p| p.applicable()),
-    )
+    match layers::load(reader, confirmed, profile, repo_id) {
+        Ok(layers) => layers.policies(),
+        // Never "no rules": an agent's movement of a branch cannot be judged (SEC-GRD-17).
+        Err(_) => Policies::unreadable(),
+    }
 }
 
 /// What a client that cannot tell the actor evaluates in degraded mode (D11): the floor alone,
 /// and only its rules for everyone.
 pub fn degraded(reader: &RepoReader) -> Policies {
-    let Ok(team) = LOADER.load(reader, None) else {
+    let Ok(team) = layers::LOADER.load(reader, None) else {
         return Policies::default();
     };
     combine(&[Source {
