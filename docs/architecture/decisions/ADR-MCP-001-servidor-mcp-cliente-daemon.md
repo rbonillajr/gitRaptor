@@ -177,7 +177,7 @@ Decisión del orquestador (2026-10-05), validada por PO y Arquitecto. Son cifras
 | Límite | Valor | Motivo |
 |---|---|---|
 | Resultado completo de una herramienta | Cada parte (estructurada y texto) ≤ 24 KiB, medida **después** del escape; manda este presupuesto: las listas se recortan hasta caber, con `truncated` y el total. Ninguna herramienta declara `anthropic/maxResultSizeChars`. ⚠️ **ASSUMPTION**: no se sabe si Claude Code pasa al modelo las dos partes o solo una; se mide en la ola 1 (US-MCP-005) | Claude Code guarda en un archivo los resultados de más de 50.000 caracteres y avisa a partir de 10.000 tokens (`MAX_MCP_OUTPUT_TOKENS`, por defecto 25.000); 24 KiB de JSON quedan por debajo del aviso |
-| Mensaje de entrada (JSON-RPC por stdio) | ≤ 1 MiB, profundidad ≤ 32 | Igual que el canal |
+| Mensaje de entrada (JSON-RPC por stdio) | ≤ 1 MiB, profundidad ≤ 32 | Igual que el canal. Se aplica **antes** de que rmcp parsee (`apps/mcp/src/input.rs`, constantes y `depth_within` de `gitraptor_api::framing`). Fuera de tope: error JSON-RPC `-32600` con `id: null` y `data.reason` = `message-too-large` o `message-too-deep`; la línea se descarta hasta el siguiente `\n` sin guardarla y el servidor sigue vivo (implementado, INF-MCP-001) |
 | Nombres (rama, worktree, agente, etiqueta) en la respuesta | ≤ 100 caracteres, con `truncated` | L-03 |
 | Ruta en la respuesta | ≤ 1.024 bytes, con `truncated` | — |
 | Rutas modificadas en `status` | ≤ 200 por worktree, con el total, y siempre dentro del presupuesto de 24 KiB | Igual que el canal (US-GRP-001) |
