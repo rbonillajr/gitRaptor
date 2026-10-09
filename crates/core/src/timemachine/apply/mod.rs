@@ -430,7 +430,10 @@ impl<'a> Applier<'a> {
             Ok(m) => m,
             Err(r) => return reject(vec![r]),
         };
-        if let Some(r) = self.untrusted(&loaded) {
+        if let Some(r) = self
+            .untrusted(&loaded)
+            .or_else(|| self.opened_elsewhere(&main, &loaded))
+        {
             return reject(vec![r]);
         }
         if let Err(r) = self.refs_as_expected(&main, &loaded) {
@@ -468,7 +471,10 @@ impl<'a> Applier<'a> {
         let mut refusals = preconditions_of(&present, &ours);
         // Once more under the locks, right before the first write: a `.git` swapped since the
         // checks above is refused here and nothing is written (NFR-01).
-        if let Some(r) = self.untrusted(&loaded) {
+        if let Some(r) = self
+            .untrusted(&loaded)
+            .or_else(|| self.opened_elsewhere(&main, &loaded))
+        {
             refusals.insert(0, r);
         }
         for w in &loaded.worktrees {
@@ -526,6 +532,46 @@ impl<'a> Applier<'a> {
                     .map(|w| &w.root),
             ),
         )
+    }
+
+    /// A worktree whose write handle was opened on a Git folder other than the one the repo has
+    /// for it (#223 I-03, M-01 of its review): the handles fix where the index, its lock and the
+    /// refs are written when they are opened, so a `.git` swapped before that and put back after
+    /// the gate passed is caught here, before the locks are taken and before the first write.
+    fn opened_elsewhere(&self, main: &WriteWorktree, loaded: &Loaded) -> Option<Refusal> {
+        let common = crate::observe::canonical(&self.common_dir);
+        let registered = match crate::observe::registered_worktrees(&common) {
+            Ok(list) => list,
+            Err(e) => {
+                return Some(Refusal::WorktreeUnavailable {
+                    worktree: self.main_root.clone(),
+                    reason: e.to_string(),
+                });
+            }
+        };
+        let handles = std::iter::once(main)
+            .chain(loaded.worktrees.iter().filter_map(|w| w.worktree.as_ref()));
+        for wt in handles {
+            let root = crate::observe::canonical(wt.root());
+            let expected =
+                registered
+                    .iter()
+                    .find(|(p, _)| *p == root)
+                    .map(|(_, admin)| match admin {
+                        Some(id) => crate::observe::canonical(&common.join("worktrees").join(id)),
+                        None => common.clone(),
+                    });
+            let owned = expected.is_some_and(|git_dir| {
+                crate::observe::canonical(wt.git_dir()) == git_dir
+                    && crate::observe::canonical(wt.common_dir()) == common
+            });
+            if !owned {
+                return Some(Refusal::Untrusted {
+                    worktree: wt.root().to_owned(),
+                });
+            }
+        }
+        None
     }
 
     /// The first of `roots` that Git does not trust, or whose `.git` the repo does not own
