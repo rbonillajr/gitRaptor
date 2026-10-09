@@ -20,7 +20,6 @@ use gitraptor_api::rpc::{ScopeRefusal, ScopeRefusedData, code};
 use gitraptor_api::timemachine::{TmRejectReason, TmRejectedData, UndoResult};
 use gitraptor_api::{capability, methods};
 use gitraptor_core::channel::{ChannelConfig, TestConfirmation};
-use gitraptor_core::daemon::DaemonConfig;
 use gitraptor_core::timemachine::oplog::{Channel, OperationKind, OperationState, Requester};
 use gitraptor_testkit::diff;
 use serde_json::{Value, json};
@@ -343,15 +342,10 @@ fn cap_a_connection_without_the_capability_keeps_the_old_shape() {
     assert_intact(&r, &before);
 }
 
-/// The seam does not exist in production: the daemon the CLI starts leaves it off.
+/// The seam does not exist in production: release builds compile it out, and the default
+/// channel config (which `DaemonConfig::for_current_user` starts from) leaves it off. Not
+/// read through `for_current_user` here: that resolves the real profile (NFR-01).
 #[test]
 fn a3_the_production_config_leaves_the_test_seam_off() {
     assert_eq!(ChannelConfig::default().test_confirmation, None);
-    assert_eq!(
-        DaemonConfig::for_current_user()
-            .unwrap()
-            .channel
-            .test_confirmation,
-        None
-    );
 }
