@@ -748,6 +748,32 @@ fn s5_on_windows_the_cli_explains_without_asking() {
     }
 }
 
+/// `--json` never asks: it fails telling the developer to confirm from a terminal, changes nothing
+/// and prints no token, although the engine did issue one.
+#[test]
+fn s4_json_never_asks_and_never_prints_the_token() {
+    let m = machine(Some(TestConfirmation::Eligible));
+    m.agent_work_on_top();
+    let before = m.fx.fingerprint();
+
+    let out = m.on_terminal(&["undo", "--json"], "en_US.UTF-8", Some("y"));
+
+    let shown = format!("{}{}", text(&out.stdout), text(&out.stderr));
+    assert!(!out.status.success(), "{shown}");
+    assert!(shown.contains("without --json"), "{shown}");
+    assert!(!shown.contains("[y/N]"), "{shown}");
+    // No run of 32 hex digits: the token of the challenge is nowhere in the output.
+    let hex_run = shown
+        .as_bytes()
+        .split(|b| !b.is_ascii_hexdigit())
+        .any(|run| run.len() >= 32);
+    assert!(!hex_run, "{shown}");
+    unchanged(&m, &before);
+    let undone = undos(&m);
+    assert_eq!(undone.len(), 1, "{undone:#?}");
+    assert_eq!(undone[0].state, OperationState::Rejected);
+}
+
 // ---- restore ----------------------------------------------------------------------------------
 
 /// Like scenario 3 with `raptor restore <id>`: the developer confirms on a terminal and the
