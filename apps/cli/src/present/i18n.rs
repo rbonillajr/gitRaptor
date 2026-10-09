@@ -690,6 +690,11 @@ fn module_error(name: &str, lang: Lang) -> Option<&'static str> {
 /// `(name, en, es)` of each module's own code.
 const MODULE_ERRORS: &[(&str, &str, &str)] = &[
     (
+        "mcp-unavailable",
+        "the repo or the worktree cannot be read right now",
+        "el repo o el worktree no se pueden leer ahora",
+    ),
+    (
         "snapshot-quota-exceeded",
         "too many manual snapshots for now; try again later",
         "demasiados snapshots manuales por ahora; inténtalo más tarde",
