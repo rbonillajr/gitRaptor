@@ -114,22 +114,29 @@ fn s4_without_the_token_there_is_no_undo() {
 }
 
 /// Escenario 4: a caller that cannot confirm is told why and gets no challenge. Without the
-/// seam the in-process client is the daemon's own process: its ancestry resolves as
-/// unattributed and not confirmable, so `confirmation_refusal` answers through its
-/// `!confirmable` arm (`agent-ancestry`).
+/// seam the in-process client is the daemon's own process, and which refusal it gets depends on
+/// what is above the test: with no agent among its ancestors (CI) it is `daemon-descendant`;
+/// under an agent session (a developer running the tests from Claude Code) the walk meets the
+/// agent first and it is `agent-ancestry`. Either way it is refused and gets no challenge.
 #[test]
 fn s4_a_caller_that_cannot_confirm_gets_no_challenge() {
-    let cases = [
-        (None, RefusalReason::AgentAncestry),
+    let cases: [(Option<TestConfirmation>, &[RefusalReason]); 3] = [
+        (
+            None,
+            &[
+                RefusalReason::DaemonDescendant,
+                RefusalReason::AgentAncestry,
+            ],
+        ),
         (
             Some(TestConfirmation::Refused(
                 RefusalReason::NoControllingTerminal,
             )),
-            RefusalReason::NoControllingTerminal,
+            &[RefusalReason::NoControllingTerminal],
         ),
         (
             Some(TestConfirmation::Refused(RefusalReason::AgentAncestry)),
-            RefusalReason::AgentAncestry,
+            &[RefusalReason::AgentAncestry],
         ),
     ];
     for (seam, why) in cases {
@@ -140,7 +147,11 @@ fn s4_a_caller_that_cannot_confirm_gets_no_challenge() {
         let data = confirm_data(undo(&mut c, &r.worktree, None));
 
         assert_eq!(data.reason, TmRejectReason::ConfirmationRequired, "{why:?}");
-        assert_eq!(data.cannot_confirm, Some(why));
+        assert!(
+            data.cannot_confirm.is_some_and(|r| why.contains(&r)),
+            "{:?} not in {why:?}",
+            data.cannot_confirm
+        );
         assert_eq!(data.challenge, None, "{why:?}");
         assert!(
             !data.owners.is_empty(),
