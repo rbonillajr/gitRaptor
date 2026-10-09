@@ -7,7 +7,7 @@ use std::collections::hash_map::RandomState;
 use std::ffi::OsString;
 use std::hash::{BuildHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output, Stdio};
+use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use gitraptor_core::daemon::running_pid;
@@ -24,6 +24,9 @@ pub const FAKE_AGENT: &str = "raptor-fake-agent";
 
 /// How long the daemon has to show the repos the setup registered.
 const SETUP_DEADLINE: Duration = Duration::from_secs(15);
+/// Pause between polls of the daemon: starts short and doubles up to the cap.
+const POLL_FIRST: Duration = Duration::from_millis(20);
+const POLL_LAST: Duration = Duration::from_millis(250);
 
 /// An environment as `(name, value)` pairs.
 pub type Env = Vec<(String, OsString)>;
@@ -301,17 +304,6 @@ impl Machine {
         env
     }
 
-    fn raptor(&self, args: &[&str]) -> Output {
-        Command::new(RAPTOR)
-            .args(args)
-            .env_clear()
-            .envs(self.env())
-            .current_dir(&self.f.root)
-            .stdin(Stdio::null())
-            .output()
-            .unwrap_or_else(|e| panic!("cannot run raptor: {e}"))
-    }
-
     /// The developer, from their own terminal (a pty, not under an agent).
     fn developer_ok(&self, args: &[&str]) {
         let out = pty_command(args)
@@ -330,30 +322,80 @@ impl Machine {
     }
 
     /// The repos `raptor status --json` lists, or `None` while it does not answer yet.
-    fn observed_repos(&self) -> Option<Vec<Value>> {
-        let out = self.raptor(&["status", "--json"]);
-        let status: Value = serde_json::from_slice(&out.stdout).ok()?;
+    fn observed_repos(&self, deadline: Instant) -> Option<Vec<Value>> {
+        let stdout = self.raptor_until(&["status", "--json"], deadline)?;
+        let status: Value = serde_json::from_slice(&stdout).ok()?;
         status["repos"].as_array().cloned()
+    }
+
+    /// Stdout of `raptor args` if it ends successfully before `deadline`; the process is killed
+    /// when the deadline comes first.
+    fn raptor_until(&self, args: &[&str], deadline: Instant) -> Option<Vec<u8>> {
+        let mut child = Command::new(RAPTOR)
+            .args(args)
+            .env_clear()
+            .envs(self.env())
+            .current_dir(&self.f.root)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap_or_else(|e| panic!("cannot run raptor: {e}"));
+        // Drained on its own thread so a full pipe cannot keep the child from ending.
+        let Some(mut pipe) = child.stdout.take() else {
+            let _ = child.kill();
+            let _ = child.wait();
+            return None;
+        };
+        let reader = std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            let _ = std::io::Read::read_to_end(&mut pipe, &mut buf);
+            buf
+        });
+        let mut pause = POLL_FIRST;
+        let ended = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break status.success(),
+                Ok(None) if Instant::now() < deadline => {
+                    std::thread::sleep(
+                        pause.min(deadline.saturating_duration_since(Instant::now())),
+                    );
+                    pause = (pause * 2).min(POLL_LAST);
+                }
+                _ => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    break false;
+                }
+            }
+        };
+        let stdout = reader.join().unwrap_or_default();
+        ended.then_some(stdout)
     }
 
     fn wait_observed(&self, expected: usize) {
         let deadline = Instant::now() + SETUP_DEADLINE;
+        let mut pause = POLL_FIRST;
         loop {
-            let seen = self.observed_repos().map(|repos| repos.len());
+            let seen = self.observed_repos(deadline).map(|repos| repos.len());
             if seen == Some(expected) {
                 return;
             }
+            let left = deadline.saturating_duration_since(Instant::now());
             assert!(
-                Instant::now() < deadline,
+                !left.is_zero(),
                 "the daemon lists {seen:?} repos, the setup made {expected}"
             );
+            // A growing pause between polls, never past the deadline.
+            std::thread::sleep(pause.min(left));
+            pause = (pause * 2).min(POLL_LAST);
         }
     }
 
     fn repo_id(&self, path: &Path) -> String {
         let want = gitraptor_core::observe::canonical(path);
         let repos = self
-            .observed_repos()
+            .observed_repos(Instant::now() + SETUP_DEADLINE)
             .unwrap_or_else(|| panic!("raptor status gave no repos"));
         repos
             .iter()

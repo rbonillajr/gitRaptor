@@ -60,7 +60,8 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         env:
-          # Placeholder: the coordinator adjusts it to the real Ubuntu count at the end.
+          # Executed on ubuntu today: 63 case files minus 3 known_gap. Raise it when cases land;
+          # lower it only on purpose.
           MIN_EXECUTED: "60"
           REPORT: target/tmp/mcp-security-corpus.md
         run: |
@@ -71,6 +72,8 @@ jobs:
           cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"
           # First line: <!-- mcp-corpus os=… executed=N rejected=M pending=P known_gap=G -->
           # key=value pairs; extra keys are ignored. pending and known_gap stay out of the KPI.
+          # The report writer does not print known_gap= in the header yet (the header format is
+          # fixed by a contract test), so this step never reads it; a missing key is fine.
           first=$(head -n 1 "$REPORT" | tr -d '\r')
           kv() { printf '%s\n' "$first" | tr ' ' '\n' | sed -n "s/^$1=//p" | head -n 1; }
           executed=$(kv executed)

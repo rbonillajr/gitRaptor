@@ -16,8 +16,8 @@ use gitraptor_api::mcp_view::{
 use gitraptor_testkit::diff;
 use gitraptor_testkit::mcp_corpus::case::Send as Step;
 use gitraptor_testkit::mcp_corpus::{
-    Case, Failure, Limits, Observation, Outcome, Platform, Report, Row, Secrets, Verdict, expand,
-    judge, load_dir,
+    Case, Failure, Limits, Observation, Outcome, Platform, Report, Row, Secrets, Tier, Verdict,
+    expand, judge, load_dir,
 };
 use gitraptor_testkit::sibling_bin;
 use serde_json::{Map, Value};
@@ -217,12 +217,42 @@ pub fn run_corpus(cases: &[Case]) -> Report {
         .into_inner()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     rows.sort_by_key(|(at, _)| *at);
-    Report {
+    let report = Report {
         os: Platform::current()
             .map_or("other", Platform::as_str)
             .to_owned(),
         rows: rows.into_iter().map(|(_, row)| row).collect(),
+    };
+    assert_floor(&report);
+    report
+}
+
+/// Floors a run must clear, so a filter or a mass `pending`/`known_gap` mark cannot empty the
+/// mandatory path. Raise them when cases land; lower them only on purpose.
+const MIN_EXECUTED_SERVER: usize = 40;
+const MIN_EXECUTED_ENGINE: usize = 15;
+const MAX_KNOWN_GAP: usize = 5;
+
+/// # Panics
+/// When the run executed fewer cases than the floors above, or carries too many known gaps.
+fn assert_floor(report: &Report) {
+    let server = report.executed_in(Tier::Server);
+    assert!(
+        server >= MIN_EXECUTED_SERVER,
+        "only {server} server-tier cases executed, the floor is {MIN_EXECUTED_SERVER}"
+    );
+    if matches!(Platform::current(), Some(Platform::Macos | Platform::Linux)) {
+        let engine = report.executed_in(Tier::Engine);
+        assert!(
+            engine >= MIN_EXECUTED_ENGINE,
+            "only {engine} engine-tier cases executed, the floor is {MIN_EXECUTED_ENGINE}"
+        );
     }
+    let gaps = report.known_gap();
+    assert!(
+        gaps <= MAX_KNOWN_GAP,
+        "{gaps} known_gap cases, the ceiling is {MAX_KNOWN_GAP}"
+    );
 }
 
 /// Writes the markdown report and returns its path.

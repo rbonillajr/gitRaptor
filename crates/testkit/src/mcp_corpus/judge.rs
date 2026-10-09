@@ -273,7 +273,34 @@ pub fn judge(
     if failures.is_empty() {
         Verdict::Rejected
     } else {
-        Verdict::Failed(failures)
+        Verdict::Failed(failures.into_iter().map(|f| sanitize(f, secrets)).collect())
+    }
+}
+
+/// The failure with every text that came from the server (or a case) stripped of the planted
+/// secrets, so a canary the server echoed cannot reach a report or the job summary through
+/// `got`, a JSON key or a message. Redaction comes before any cut, so a bound cannot leave half
+/// a canary in view.
+fn sanitize(failure: Failure, secrets: &Secrets) -> Failure {
+    let red = |text: String| scan::redact(&text, secrets);
+    match failure {
+        Failure::WrongRejection { expected, got } => Failure::WrongRejection {
+            expected: clip(&red(expected), GOT_CHARS),
+            got: clip(&red(got), GOT_CHARS),
+        },
+        Failure::FieldNotAllowed { at } => Failure::FieldNotAllowed { at: red(at) },
+        Failure::OverBudget { what, bytes, limit } => Failure::OverBudget {
+            what: red(what),
+            bytes,
+            limit,
+        },
+        Failure::HiddenCharacter { at } => Failure::HiddenCharacter { at: red(at) },
+        Failure::RepoChanged(changes) => {
+            Failure::RepoChanged(changes.into_iter().map(red).collect())
+        }
+        Failure::TrapFired(traps) => Failure::TrapFired(traps.into_iter().map(red).collect()),
+        Failure::Harness(message) => Failure::Harness(red(message)),
+        other => other,
     }
 }
 
@@ -590,7 +617,7 @@ fn kind(message: &Value) -> Kind {
 }
 
 fn describe(kind: &Kind) -> String {
-    let text = match kind {
+    match kind {
         Kind::Success => "success".to_owned(),
         Kind::Refusal(code) => format!("refusal:{}", code.as_deref().unwrap_or("?")),
         Kind::ProtocolError {
@@ -605,8 +632,7 @@ fn describe(kind: &Kind) -> String {
                 None => format!("protocol_error:{code}"),
             }
         }
-    };
-    clip(&text, GOT_CHARS)
+    }
 }
 
 fn matches_expect(expect: &Expect, kind: &Kind) -> bool {
@@ -673,8 +699,38 @@ fn check_expectation(case: &Case, observation: &Observation, failures: &mut Vec<
             Expect::Ignored => "ignored".to_owned(),
         };
         failures.push(Failure::WrongRejection {
-            expected: clip(&expected, GOT_CHARS),
+            expected,
             got: describe(first),
         });
+    }
+}
+
+#[cfg(test)]
+mod redaction_tests {
+    use super::*;
+
+    #[test]
+    fn server_text_in_a_failure_never_carries_a_planted_secret() {
+        let value = ["canary-", "0123456789abcdefghij\"KLMNOP"].concat();
+        let secrets = Secrets(vec![("c".into(), value.clone())]);
+        let escaped = value.replace('"', "\\\"");
+        let wrong = sanitize(
+            Failure::WrongRejection {
+                expected: "refusal:x".into(),
+                got: format!("protocol_error:-1:{value} and {escaped}"),
+            },
+            &secrets,
+        );
+        let at = sanitize(
+            Failure::FieldNotAllowed {
+                at: format!("#0/{value}"),
+            },
+            &secrets,
+        );
+        for failure in [wrong, at] {
+            let shown = failure.to_string();
+            assert!(!shown.contains("0123456789abcdefghij"), "{shown}");
+            assert!(shown.contains("<c>"), "{shown}");
+        }
     }
 }
