@@ -191,6 +191,8 @@ fn reason_key(reason: TmRejectReason) -> &'static str {
                 "restore.reason.confirmation-required"
             }
         }
+        TmRejectReason::ConfirmationUnavailable => "restore.reason.confirmation-unavailable-windows",
+        TmRejectReason::ChallengeInvalid => "restore.reason.challenge-invalid",
         TmRejectReason::GitOperationInProgress => "restore.reason.git-operation-in-progress",
         TmRejectReason::GitBusy => "restore.reason.git-busy",
         TmRejectReason::RepoBusy => "restore.reason.repo-busy",

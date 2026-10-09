@@ -94,6 +94,7 @@ restore.reason.target-unavailable = that point is incomplete, purged or does not
 restore.reason.other-actor = the work since that point belongs to another actor; nothing changed
 restore.reason.confirmation-required = that work belongs to an agent: confirming it from your terminal is not available yet; ask the agent to restore it itself; nothing changed
 restore.reason.confirmation-unavailable-windows = on Windows, confirming another actor's work is not available yet; nothing changed
+restore.reason.challenge-invalid = the confirmation expired or the work changed meanwhile; run raptor restore again; nothing changed
 restore.reason.git-operation-in-progress = a Git operation is in progress (merge, rebase, cherry-pick...); finish or abort it first; nothing changed
 restore.reason.git-busy = Git is busy (a lock file is present); nothing changed
 restore.reason.repo-busy = another operation is running on this repo; try again; nothing changed
