@@ -16,7 +16,8 @@ use gitraptor_api::catalog::{
 use gitraptor_api::mcp_view::{MCP_WRITE_RETRY_AFTER_S, MCP_WRITE_TIME_LIMIT, McpToolError};
 use gitraptor_api::messages::ClientKind;
 use gitraptor_api::methods::{
-    self, McpStatus, OPERATION_SNAPSHOT_QUOTA, OPERATION_SNAPSHOT_TIME_LIMIT,
+    self, MCP_UNAVAILABLE, McpStatus, McpStatusParams, McpUnavailable, McpUnavailableData,
+    OPERATION_SNAPSHOT_QUOTA, OPERATION_SNAPSHOT_TIME_LIMIT,
 };
 use gitraptor_api::rpc::{Id, Request, ScopeRefusal, ScopeRefusedData, ServerMessage, code};
 use gitraptor_core::client::{Client, ClientError, ClientOptions, ensure_daemon};
@@ -50,7 +51,7 @@ impl std::fmt::Debug for Engine {
 impl Engine {
     /// `mcp.status`: the caller's repo, resolved by the engine. A broken
     /// connection (the engine restarted) is opened again once.
-    pub fn status(&self, _cursor: Option<String>) -> Result<McpStatus, McpToolError> {
+    pub fn status(&self, cursor: Option<String>) -> Result<McpStatus, McpToolError> {
         // A call still running past its time limit holds the connection:
         // this one answers at once rather than queue behind it, spending
         // the connection's read budget on an answer nobody reads.
@@ -60,8 +61,10 @@ impl Engine {
             Err(TryLockError::WouldBlock) => return Err(self.late()),
         };
         let reused = slot.is_some();
-        let result = match call_status(&mut slot) {
-            Err(ClientError::Io(_) | ClientError::Protocol(_)) if reused => call_status(&mut slot),
+        let result = match call_status(&mut slot, cursor.as_deref()) {
+            Err(ClientError::Io(_) | ClientError::Protocol(_)) if reused => {
+                call_status(&mut slot, cursor.as_deref())
+            }
             other => other,
         };
         self.connected.store(slot.is_some(), Ordering::Relaxed);
@@ -129,13 +132,16 @@ impl Engine {
 
 /// One `mcp.status`, connecting first when there is no connection; a
 /// connection that breaks is dropped.
-fn call_status(slot: &mut Option<Client>) -> Result<McpStatus, ClientError> {
+fn call_status(slot: &mut Option<Client>, cursor: Option<&str>) -> Result<McpStatus, ClientError> {
     if slot.is_none() {
         let dirs = ProfileDirs::resolve().map_err(|_| ClientError::NotRunning)?;
         *slot = Some(ensure_daemon(&ClientOptions::new(dirs, ClientKind::Mcp))?);
     }
     let client = slot.as_mut().ok_or(ClientError::NotRunning)?;
-    let result = client.call::<_, McpStatus>(methods::MCP_STATUS, serde_json::json!({}));
+    let params = McpStatusParams {
+        cursor: cursor.map(str::to_owned),
+    };
+    let result = client.call::<_, McpStatus>(methods::MCP_STATUS, params);
     if matches!(result, Err(ClientError::Io(_) | ClientError::Protocol(_))) {
         *slot = None;
     }
@@ -268,6 +274,25 @@ fn refusal(err: &ClientError) -> McpToolError {
                 Some(ScopeRefusal::NotAllowlisted) => McpToolError::RepoNotEnabled,
                 _ => McpToolError::NotInObservedWorktree,
             }
+        }
+        // A repo or worktree the engine cannot read says why and nothing else. A reason this
+        // binary does not know, or none, is a repo that cannot be read: it fails closed.
+        ClientError::Rpc(e) if e.code == MCP_UNAVAILABLE.code => {
+            let reason = e
+                .data
+                .clone()
+                .and_then(|d| serde_json::from_value::<McpUnavailableData>(d).ok())
+                .map(|d| d.reason);
+            match reason {
+                Some(McpUnavailable::WorktreeMissing) => McpToolError::WorktreeMissing,
+                Some(McpUnavailable::OtherOwner) => McpToolError::RepoOtherOwner,
+                Some(McpUnavailable::WorktreeUntrusted) => McpToolError::WorktreeUntrusted,
+                Some(McpUnavailable::RepoUnreadable) | None => McpToolError::RepoUnavailable,
+            }
+        }
+        // A cursor the daemon does not know, or finds malformed.
+        ClientError::Rpc(e) if e.code == code::NOT_FOUND || e.code == code::INVALID_PARAMS => {
+            McpToolError::InvalidCursor
         }
         ClientError::Rpc(e) if e.code == code::IDENTITY_UNVERIFIED => {
             McpToolError::IdentityUnverified
