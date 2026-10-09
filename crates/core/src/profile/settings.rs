@@ -51,6 +51,29 @@ pub fn profile_settings(dirs: &ProfileDirs) -> Parsed {
     parse_document(&bytes, Level::Profile, SourceKind::Profile)
 }
 
+/// File name of the local settings of a repo, in `<config>/repos/<repo_id>/`.
+pub const LOCAL_SETTINGS_FILE: &str = "settings.local.json";
+
+/// `<config>/repos/<repo_id>/settings.local.json`; `None` when `repo_id` is not 1..=64 of
+/// `[0-9a-fA-F-]`.
+pub fn local_settings_path(dirs: &ProfileDirs, repo_id: &str) -> Option<std::path::PathBuf> {
+    let valid = (1..=64).contains(&repo_id.len())
+        && repo_id.chars().all(|c| c.is_ascii_hexdigit() || c == '-');
+    valid.then(|| {
+        dirs.config
+            .join("repos")
+            .join(repo_id)
+            .join(LOCAL_SETTINGS_FILE)
+    })
+}
+
+/// The local document of a repo, read like the profile one. Absent when the id is invalid or
+/// there is no file.
+pub fn local_settings(_dirs: &ProfileDirs, _repo_id: &str) -> Parsed {
+    // stub: replaced by the implementation slice
+    Parsed::absent()
+}
+
 #[cfg(unix)]
 fn open_no_follow(path: &std::path::Path) -> std::io::Result<std::fs::File> {
     use std::os::unix::fs::OpenOptionsExt;

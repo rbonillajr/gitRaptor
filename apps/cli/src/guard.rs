@@ -127,7 +127,8 @@ fn reason_text(reason: &Reason) -> String {
                 ("level", &level_text(reason.level)),
             ],
         ),
-        (Rule::ForbiddenPath, _) => t(
+        // stub: replaced by the implementation slice (own templates for the two new rules)
+        (Rule::ForbiddenPath | Rule::ConfigProtected, _) => t(
             "guard.reason.forbidden-path",
             &[
                 ("path", &find(p, ParamKind::Path)),
@@ -135,6 +136,8 @@ fn reason_text(reason: &Reason) -> String {
                 ("level", &level_text(reason.level)),
             ],
         ),
+        // stub: replaced by the implementation slice
+        (Rule::RelaxIgnored, _) => t("guard.deny.internal", &[]),
     }
 }
 
@@ -889,7 +892,10 @@ fn log_rule_text(reason: &LoggedReason) -> String {
         Rule::AuthorshipHumanAuthor => "guard.log.rule.human-author",
         Rule::ProtectedBranch => "guard.log.rule.protected-branch",
         Rule::ForbiddenPath => "guard.log.rule.forbidden-path",
-        Rule::Degraded
+        // stub: replaced by the implementation slice (own names for the two new rules)
+        Rule::ConfigProtected
+        | Rule::RelaxIgnored
+        | Rule::Degraded
         | Rule::ChannelNotAuthentic
         | Rule::RepoMismatch
         | Rule::InputRejected

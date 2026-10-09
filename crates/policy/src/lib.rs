@@ -2,6 +2,7 @@
 
 pub mod authorship;
 pub mod guard;
+pub mod layers;
 pub mod settings;
 pub mod team;
 
