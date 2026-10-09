@@ -220,7 +220,7 @@ El rate limit lo aplica el **daemon**, no `raptor-mcp`, y se cuenta **por solici
 
 | Riesgo | Amenaza en GitRaptor | Control | Dónde se verifica |
 |---|---|---|---|
-| MCP01 Token Mismanagement & Secret Exposure | Fuga de tokens de URLs, `.env` o config en respuestas o logs | Sin secretos ni userinfo (SEC-05); allowlist de campos; stderr sin datos; `raptor-mcp` no tiene credenciales propias | INF-MCP-001 (secretos plantados + gitleaks sobre respuestas) |
+| MCP01 Token Mismanagement & Secret Exposure | Fuga de tokens de URLs, `.env` o config en respuestas o logs | Sin secretos ni userinfo (SEC-05); allowlist de campos; stderr sin datos; `raptor-mcp` no tiene credenciales propias | INF-MCP-001 (canarios con forma de secreto real y detector de formas de token sobre respuestas y stderr; gitleaks diferido a SEC-MCP-12, Enmienda 2026-10-09) |
 | MCP02 Privilege Escalation via Scope Creep | El agente actúa en otro repo o worktree, o usa poderes del humano | Ámbito por cwd en el daemon; allowlist opt-in reservada; capa fijada por el daemon; sin comandos reservados por MCP; catálogo fijo | US-MCP-003, 007, 011; INF-MCP-001 |
 | MCP03 Tool Poisoning | Descripciones o resultados que dan órdenes al modelo; *rug pull* | Descripciones constantes del binario, sin texto del repo, `listChanged: false`; texto no confiable marcado y escapado | US-MCP-005 (instantánea de `initialize` y `tools/list`) |
 | MCP04 Supply Chain & Dependency Tampering | `rmcp` u otra dependencia comprometida | `Cargo.lock`, `cargo-deny`, `cargo-audit` (SEC-07); `rmcp` sin features de red; frontera de dependencias de § 1; binario instalado por ruta absoluta | CI (SEC-07); US-MCP-003 (frontera) |
@@ -410,3 +410,9 @@ Decisión del orquestador (2026-10-07), validada por Arquitecto y PO. Origen: [D
 - **Presupuesto (RES-MCP-02)**: la respuesta por defecto sigue en ≤ 300 tokens aunque esté la capacidad `mcp.status-full`; los nombres anidados en `here`/`repo` se cortan a 64 caracteres para cumplirlo (medido: con 100 pasaba de 300). Las listas (otros worktrees, rutas) van por página bajo demanda, con un objetivo ≤ 800 tokens por página (medido: 774 y 621). Los 24 KiB siguen siendo el tope de seguridad.
 - **Riesgos residuales** (security-expert): la lectura de la página de rutas se ata ahora a un `.git` real del worktree principal; `read_worktree` del motor comparte la clase y queda fuera de esta historia. La base "pendiente de confirmar" existe en el contrato pero el motor no la emite hasta US-GRD-014.
 
+## Enmienda (2026-10-09, INF-MCP-001)
+
+Decisión del orquestador (2026-10-09), validada por Arquitecto y aprobada por el coordinador de Orca.
+
+- § 9 MCP01 y SEC-MCP-08: la verificación usa un escáner propio de canarios. Prueba que no se filtra lo plantado ni una forma de token conocida. No prueba la ausencia de secretos no plantados; eso queda para la revisión por release (SEC-MCP-12, gitleaks diferido).
+- § 6, entrada ≤ 1 MiB y profundidad 32: `raptor-mcp` no la aplica todavía. Las cifras no cambian. El corpus lo registra como `known_gap` (dueña US-MCP-005), que no es riesgo aceptado, y lo cierra una historia de `apps/mcp` antes de M4.

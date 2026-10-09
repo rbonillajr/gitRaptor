@@ -196,7 +196,7 @@ Estados: **I** = implemented, **P** = partially-implemented, **Pend** = draft, r
 | US-MCP-016 | `check_conflicts` | Must | Pend | TS-CKP-001 |
 | US-MCP-014 | Acción en espera del humano | Should | Pend | US-GRD-015 |
 | US-MCP-015 | Métricas del MCP | Should | Pend | — |
-| INF-MCP-001 | Corpus de seguridad en CI | Must | Pend | — |
+| INF-MCP-001 | Corpus de seguridad en CI | Must | P | Casos de las herramientas futuras; Linux y Windows (XP-42) |
 
 **Motor local** (10 US y 10 enablers)
 
