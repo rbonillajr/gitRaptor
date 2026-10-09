@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-08
+updated: 2026-10-09
 date: 2026-10-03
 domain: GRP
 feature: time-machine
@@ -154,3 +154,12 @@ Decisión del orquestador (2026-10-08), validada por Arquitecto y PO. Precisa qu
 - **Ramas creadas después del punto**: no se borran (NFR-01); la restauración las lista como dejadas en su sitio.
 - **Deshacer una restauración que recreó un worktree** siempre termina: la ref que solo usa ese worktree recreado se deja como está y se avisa, en vez de rechazar con `ref-in-use`. El worktree recreado se queda (quitar un worktree no está en la lista cerrada de ADR-TMC-002 § 2).
 - **Sin cubrir hasta US-TMC-012**: las ediciones sin commitear de otro agente en un worktree del conjunto distinto de W se sobrescriben sin pasar la regla de permisos, porque una edición no es un evento con dueño. Se recuperan con `raptor undo` porque el snapshot previo cubre todas las raíces existentes del conjunto.
+
+## Nota (2026-10-09, US-TMC-013)
+
+No cambia ninguna decisión. Cómo se aplica el § 3:
+
+- **Dónde vive la regla de Windows**: desde la Enmienda 2026-10-05 de ADR-GRP-005, `authz::TERMINAL_PROOF` es verdadera también en Windows (consola interactiva, TQ-14 → A para los comandos reservados). Por eso `requester::confirmation_refusal` puede aceptar a un "sin atribuir" en una consola de Windows. La prohibición de confirmar trabajo ajeno en Windows (BR-TMC-AUTH-001, M-01, M-04) es una regla de negocio y no una falta de prueba. Vive en `timemachine::confirm::FOREIGN_WORK_CONFIRMABLE = cfg!(unix)`: en Windows, undo y restore responden `confirmation-unavailable` sin emitir reto. Habilitarla en Windows exige enmendar BR-TMC-AUTH-001 y este ADR, y antes cerrar M-01.
+- **Catálogo del Cockpit**: la revisión de seguridad de US-TMC-013 (H-01) encontró que el ejecutor no aplica esa regla y ofrece el reto en Windows, en contra de BR-CKP-AUTH-003 y de la Enmienda (2026-10-04, Cockpit). Se corrige en una rama `fix/` aparte que reutiliza la misma constante. Bloquea v0.1.0.
+- **Reto** (§ 3, SEC-TMC-03): es el mismo `ChallengeBook` del ejecutor, compartido. El hash del plan sale solo del plan del daemon: tipo, worktree, solicitante, canal, destino, lo que se deshace, ámbito y dueños, sin texto de agentes. El token presentado siempre se consume, se compara en tiempo constante y nunca se guarda en el oplog. La primera llamada queda registrada como `rejected` con `confirmation-required`, y la segunda como `confirmed = 1` con el solicitante "sin atribuir".
+
