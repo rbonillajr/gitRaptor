@@ -42,7 +42,10 @@ impl Daemon {
     /// The Time Machine's own commands over the daemon's repo layer
     /// (US-TMC-002), wired whether or not a catalog of operations is.
     #[cfg(any(unix, windows))]
-    pub(super) fn time_machine_wiring(&self) -> crate::channel::TimeMachineWiring {
+    pub(super) fn time_machine_wiring(
+        &self,
+        challenges: Arc<crate::timemachine::protected::ChallengeBook>,
+    ) -> crate::channel::TimeMachineWiring {
         let layer = self
             .config
             .tm_prior_layer
@@ -58,6 +61,7 @@ impl Daemon {
             git: self.report.git.clone(),
             invoker: self.config.env.invoker(),
             prior_deadline: crate::timemachine::protected::DEFAULT_PRIOR_DEADLINE,
+            challenges,
         }
     }
 
@@ -66,6 +70,12 @@ impl Daemon {
         let Some(bound) = self.bound.take() else {
             return;
         };
+        let protected = self.protected_wiring();
+        // The executor's book when one is wired, so "one live challenge per connection" holds
+        // for the whole daemon.
+        let challenges = protected
+            .as_ref()
+            .map_or_else(Default::default, |p| p.executor.challenges());
         let args = crate::channel::ServeArgs {
             config: self.config.channel.clone(),
             bus: Arc::clone(&self.bus),
@@ -78,8 +88,8 @@ impl Daemon {
                 binary_version: crate::version().to_owned(),
                 started_wall_ms: self.started_ms,
             },
-            protected: self.protected_wiring(),
-            time_machine: Some(self.time_machine_wiring()),
+            protected,
+            time_machine: Some(self.time_machine_wiring(challenges)),
             tm_engine: Some(self.capture_deps()),
             resources: Arc::clone(&self.resources),
             guard: Arc::clone(&self.guard),

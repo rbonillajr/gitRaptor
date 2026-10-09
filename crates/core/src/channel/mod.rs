@@ -182,6 +182,8 @@ pub struct TimeMachineWiring {
     pub invoker: gitraptor_git::Invoker,
     /// Deadline of the prior snapshot.
     pub prior_deadline: Duration,
+    /// The daemon's confirmation challenges: the executor's when one is wired.
+    pub challenges: std::sync::Arc<crate::timemachine::protected::ChallengeBook>,
 }
 
 impl std::fmt::Debug for TimeMachineWiring {

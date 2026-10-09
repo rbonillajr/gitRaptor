@@ -6,14 +6,17 @@
 //! back. Nothing the client says enters the hash.
 
 use std::cell::RefCell;
+use std::collections::BTreeSet;
 use std::time::Instant;
 
 use gitraptor_api::Actor;
+use gitraptor_api::Untrusted;
 use gitraptor_api::messages::RefusalReason;
-use gitraptor_api::timemachine::{TmChallenge, TmConfirmData, TmRejectReason};
+use gitraptor_api::timemachine::{MAX_CONFIRM_OWNERS, TmChallenge, TmConfirmData, TmRejectReason};
 
 use super::oplog::{Channel, Requester, Scope};
-use super::protected::ChallengeBook;
+use super::protected::{Binding, CHALLENGE_TTL, ChallengeBook, plan_hash};
+use super::timeline::recorded_actor;
 
 /// Whether the business rule offers confirming another actor's work on this platform: Unix only.
 ///
@@ -26,6 +29,15 @@ pub const FOREIGN_WORK_CONFIRMABLE: bool = cfg!(unix);
 pub enum PlanKind {
     Undo,
     Restore,
+}
+
+impl PlanKind {
+    fn tag(self) -> &'static str {
+        match self {
+            Self::Undo => "undo",
+            Self::Restore => "restore",
+        }
+    }
 }
 
 /// What the daemon is about to do, as built by undo or restore from its own plan.
@@ -46,10 +58,51 @@ pub struct PlanFacts<'a> {
     pub owners: &'a [Requester],
 }
 
+/// How an actor enters the hash and the owners list: by session, never by display name.
+fn actor_key(requester: &Requester) -> String {
+    match requester {
+        Requester::Agent { session_id, .. } => format!("agent:{session_id}"),
+        Requester::Unattributed => "unattributed".to_owned(),
+    }
+}
+
+/// Appends a length-prefixed field, so no two plans share an encoding.
+fn field(out: &mut Vec<u8>, bytes: &[u8]) {
+    out.extend_from_slice(&(bytes.len() as u64).to_be_bytes());
+    out.extend_from_slice(bytes);
+}
+
+fn set<'a>(out: &mut Vec<u8>, items: impl Iterator<Item = &'a str>) {
+    let sorted: BTreeSet<&str> = items.collect();
+    out.extend_from_slice(&(sorted.len() as u64).to_be_bytes());
+    for item in sorted {
+        field(out, item.as_bytes());
+    }
+}
+
 impl PlanFacts<'_> {
-    /// SHA-256 of the canonical form of the plan.
+    /// SHA-256 of the canonical form of the plan: versioned, length-prefixed, with the lists
+    /// sorted and without duplicates. Names and subtypes (text from agents) do not enter.
     pub fn hash(&self) -> [u8; 32] {
-        todo!("canonical plan hash")
+        let mut out = Vec::with_capacity(256);
+        field(&mut out, b"gitraptor-confirm-plan/1");
+        field(&mut out, self.kind.tag().as_bytes());
+        field(&mut out, self.worktree.as_bytes());
+        field(&mut out, actor_key(self.requester).as_bytes());
+        field(&mut out, self.channel.as_str().as_bytes());
+        field(&mut out, self.target_snapshot.as_bytes());
+        match self.undone_id {
+            Some(id) => {
+                out.push(1);
+                field(&mut out, id.as_bytes());
+            }
+            None => out.push(0),
+        }
+        set(&mut out, self.scope.worktrees.iter().map(String::as_str));
+        set(&mut out, self.scope.refs.iter().map(String::as_str));
+        let owners: Vec<String> = self.owners.iter().map(actor_key).collect();
+        set(&mut out, owners.iter().map(String::as_str));
+        plan_hash(&out)
     }
 }
 
@@ -66,17 +119,19 @@ pub struct Offer {
 
 impl Offer {
     /// The answer's `data`.
-    pub fn into_data(
-        self,
-        _reason: TmRejectReason,
-        _operation_id: Option<String>,
-    ) -> TmConfirmData {
-        todo!("offer to wire data")
+    pub fn into_data(self, reason: TmRejectReason, operation_id: Option<String>) -> TmConfirmData {
+        TmConfirmData {
+            challenge: self.challenge,
+            cannot_confirm: self.cannot_confirm,
+            owners: self.owners,
+            undone_operation_id: self.undone_operation_id,
+            undone_subtype: self.undone_subtype.map(Untrusted::new),
+            ..TmConfirmData::rejected(reason, operation_id)
+        }
     }
 }
 
 /// How a request may confirm: the book and the caller it binds a challenge to.
-#[expect(dead_code, reason = "stub until the gate is built")]
 struct Offering<'a> {
     book: &'a ChallengeBook,
     connection: u64,
@@ -87,7 +142,6 @@ struct Offering<'a> {
 }
 
 /// The confirmation side of one Time Machine request, built by the channel.
-#[expect(dead_code, reason = "stub until the gate is built")]
 pub struct Confirmation<'a> {
     offering: Option<Offering<'a>>,
     /// Whether the business rule allows confirming foreign work here.
@@ -96,34 +150,49 @@ pub struct Confirmation<'a> {
 }
 
 impl<'a> Confirmation<'a> {
-    /// Never offered: MCP, a connection without the capability. The gate is the base rule alone
-    /// (a token, if any, is `ChallengeInvalid`).
+    /// Never offered: MCP, a connection without the capability. The gate is the base rule alone.
     pub fn unavailable() -> Confirmation<'static> {
-        todo!("a confirmation that is never offered")
+        Confirmation {
+            offering: None,
+            rule_allows: FOREIGN_WORK_CONFIRMABLE,
+            offer: RefCell::new(None),
+        }
     }
 
     /// A full connection with the capability. `eligibility` runs the confirmation checks *now*;
     /// the gate calls it only when it issues or redeems.
     pub fn offered(
-        _book: &'a ChallengeBook,
-        _connection: u64,
-        _pid: u32,
-        _start_us: u64,
-        _token: Option<&'a str>,
-        _eligibility: &'a dyn Fn() -> Option<RefusalReason>,
+        book: &'a ChallengeBook,
+        connection: u64,
+        pid: u32,
+        start_us: u64,
+        token: Option<&'a str>,
+        eligibility: &'a dyn Fn() -> Option<RefusalReason>,
     ) -> Self {
-        todo!("a confirmation that may be offered")
+        Self {
+            offering: Some(Offering {
+                book,
+                connection,
+                pid,
+                start_us,
+                token,
+                eligibility,
+            }),
+            rule_allows: FOREIGN_WORK_CONFIRMABLE,
+            offer: RefCell::new(None),
+        }
     }
 
     /// Overrides [`FOREIGN_WORK_CONFIRMABLE`]: production never calls it; tests and the channel's
     /// test seam do, so both branches of the rule run on every OS.
     #[must_use]
-    pub fn with_rule_allows(self, _allows: bool) -> Self {
-        todo!("injectable business rule")
+    pub fn with_rule_allows(mut self, allows: bool) -> Self {
+        self.rule_allows = allows;
+        self
     }
 
     pub fn is_offered(&self) -> bool {
-        todo!("whether the request may confirm")
+        self.offering.is_some()
     }
 
     /// The confirmation step, right after the base rule. `Ok(true)`: a challenge of this very
@@ -138,18 +207,89 @@ impl<'a> Confirmation<'a> {
 
     /// What `gate` left for the answer; `None` if it offered nothing.
     pub fn take_offer(&self) -> Option<Offer> {
-        todo!("the offer of the last gate")
+        self.offer.borrow_mut().take()
     }
 
     /// [`Self::gate`] on an injected clock, for the tests.
     fn gate_at(
         &self,
-        _base: Result<(), TmRejectReason>,
-        _plan: &PlanFacts<'_>,
-        _now: Instant,
+        base: Result<(), TmRejectReason>,
+        plan: &PlanFacts<'_>,
+        now: Instant,
     ) -> Result<bool, TmRejectReason> {
-        todo!("the gate table")
+        use TmRejectReason::{ChallengeInvalid, ConfirmationRequired, ConfirmationUnavailable};
+        let Some(offering) = &self.offering else {
+            return base.map(|()| false);
+        };
+        let binding = Binding {
+            connection: offering.connection,
+            pid: offering.pid,
+            start_us: offering.start_us,
+            plan_hash: plan.hash(),
+        };
+        if let Some(token) = offering.token {
+            // A presented token is always redeemed: it is consumed however this ends. Where the
+            // rule does not offer confirmation it never validates.
+            let refusal = if self.rule_allows {
+                (offering.eligibility)()
+            } else {
+                Some(RefusalReason::Unsupported)
+            };
+            let redeemed = offering.book.redeem(binding, token, refusal, now);
+            if let Err(reason) = base
+                && reason != ConfirmationRequired
+            {
+                return Err(reason);
+            }
+            return match redeemed {
+                Ok(()) => Ok(base.is_err()),
+                Err(_) => Err(ChallengeInvalid),
+            };
+        }
+        match base {
+            Ok(()) => Ok(false),
+            Err(reason) if reason != ConfirmationRequired => Err(reason),
+            Err(_) => {
+                if !self.rule_allows {
+                    return Err(ConfirmationUnavailable);
+                }
+                let mut offer = Offer {
+                    challenge: None,
+                    cannot_confirm: None,
+                    owners: shown_owners(plan.owners),
+                    undone_operation_id: plan.undone_id.map(str::to_owned),
+                    undone_subtype: plan.undone_subtype.map(str::to_owned),
+                };
+                match (offering.eligibility)() {
+                    Some(why) => offer.cannot_confirm = Some(why),
+                    None => {
+                        // No randomness: no challenge and no reason (fail closed).
+                        if let Ok(token) = offering.book.issue(binding, None, now) {
+                            offer.challenge = Some(TmChallenge {
+                                token,
+                                expires_in_ms: u64::try_from(CHALLENGE_TTL.as_millis())
+                                    .unwrap_or(u64::MAX),
+                            });
+                        }
+                    }
+                }
+                *self.offer.borrow_mut() = Some(offer);
+                Err(ConfirmationRequired)
+            }
+        }
     }
+}
+
+/// The agents whose work needs the confirmation, once per session, in plan order.
+fn shown_owners(owners: &[Requester]) -> Vec<Actor> {
+    let mut seen = BTreeSet::new();
+    owners
+        .iter()
+        .filter(|o| matches!(o, Requester::Agent { .. }))
+        .filter(|o| seen.insert(actor_key(o)))
+        .take(MAX_CONFIRM_OWNERS)
+        .map(recorded_actor)
+        .collect()
 }
 
 #[cfg(test)]
