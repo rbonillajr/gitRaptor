@@ -42,8 +42,9 @@ pub(crate) struct WorktreeFacts {
     pub trusted_link: bool,
 }
 
-/// Whether every one of `paths` belongs to the user running the daemon. A path whose owner
-/// cannot be read is not theirs: the check fails closed.
+/// Whether every one of `paths` belongs to the user running the daemon. The owner is the one of
+/// the path itself, never of what a symlink points at. A path whose owner cannot be read is not
+/// theirs: the check fails closed.
 #[cfg(unix)]
 fn owned_by_me(paths: &[&Path]) -> Option<bool> {
     use std::os::unix::fs::MetadataExt;
@@ -51,7 +52,7 @@ fn owned_by_me(paths: &[&Path]) -> Option<bool> {
     Some(
         paths
             .iter()
-            .all(|p| std::fs::metadata(p).is_ok_and(|m| m.uid() == me)),
+            .all(|p| std::fs::symlink_metadata(p).is_ok_and(|m| m.uid() == me)),
     )
 }
 
@@ -73,18 +74,23 @@ pub(crate) fn facts(repo: &RepoView, w: usize, home: Option<&Path>) -> WorktreeF
     };
     let root = Path::new(view.path.raw());
     let common = Path::new(repo.path.raw());
-    let exists = root.try_exists().unwrap_or(false);
+    // The root itself, not what a symlink there points at.
+    let root_meta = std::fs::symlink_metadata(root).ok();
+    let exists = root_meta.is_some();
+    let root_is_link = root_meta.is_some_and(|m| m.file_type().is_symlink());
     // A root that is not there has no owner: the common dir still has.
     let owners: Vec<&Path> = if exists {
         vec![root, common]
     } else {
         vec![common]
     };
-    let trusted_link = view.main
-        || view
-            .admin_name
-            .as_ref()
-            .is_some_and(|id| observe::linked_is_trusted_in(common, id.raw(), root, home));
+    // A root that is a symlink is not the folder the repo was observed in.
+    let trusted_link = !root_is_link
+        && (view.main
+            || view
+                .admin_name
+                .as_ref()
+                .is_some_and(|id| observe::linked_is_trusted_in(common, id.raw(), root, home)));
     WorktreeFacts {
         exists,
         owned_by_me: owned_by_me(&owners),

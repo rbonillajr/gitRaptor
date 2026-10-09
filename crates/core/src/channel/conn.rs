@@ -1446,6 +1446,10 @@ impl Connection<'_> {
         let home = std::env::var_os("HOME")
             .or_else(|| std::env::var_os("USERPROFILE"))
             .map(PathBuf::from);
+        // The allowlist answers before anything is read from the disk for this repo.
+        if !allowed {
+            return Err(scope_refused(ScopeError::NotAllowlisted));
+        }
         let facts = mcp_status::facts(repo, w, home.as_deref());
         match mcp_status::admit(allowed, repo, w, &facts) {
             Err(mcp_status::Refusal::NotAllowlisted) => {
@@ -1487,7 +1491,8 @@ impl Connection<'_> {
             return Ok(status);
         }
         if let Some(mcp_status::CursorEntry::Paths { root, after, .. }) = entry {
-            self.mcp_paths_page(&mut status, repo, &root, after, home.as_deref())?;
+            let own = Path::new(worktree.path.raw());
+            self.mcp_paths_page(&mut status, repo, (&root, own), after, home.as_deref())?;
             return Ok(status);
         }
         // The ahead/behind as of now, as in the snapshot (US-GRP-012, D5).
@@ -1612,32 +1617,40 @@ impl Connection<'_> {
 
     /// The page of paths of the worktree at `root` after `after`: the worktree is read again,
     /// because the published list is cut. The worktree must be one of the repo and readable.
+    /// `scope` is `(root, own)`, `own` being the caller's worktree: only when that one cannot be
+    /// read the caller is told so; a cursor to another worktree that is gone is a cursor that no
+    /// longer exists.
     fn mcp_paths_page(
         &self,
         status: &mut methods::McpStatus,
         repo: &gitraptor_api::messages::RepoView,
-        root: &Path,
+        scope: (&Path, &Path),
         after: Option<String>,
         home: Option<&Path>,
     ) -> Result<(), ErrorObject> {
+        let (root, own) = scope;
         let not_found = || ErrorObject::new(code::NOT_FOUND, "cursor not found");
+        let refuse = |reason: McpUnavailable| {
+            if root == own {
+                mcp_unavailable(true, reason)
+            } else {
+                not_found()
+            }
+        };
         let index = repo
             .worktrees
             .iter()
             .position(|v| Path::new(v.path.raw()) == root)
             .ok_or_else(not_found)?;
         let facts = mcp_status::facts(repo, index, home);
-        mcp_status::availability(repo, index, &facts)
-            .map_err(|reason| mcp_unavailable(true, reason))?;
-        let (counts, changes) = crate::observe::all_changes(root).map_err(|err| {
-            mcp_unavailable(
-                true,
-                match err {
-                    gitraptor_git::ReadError::Untrusted(_) => McpUnavailable::WorktreeUntrusted,
-                    _ if !root.exists() => McpUnavailable::WorktreeMissing,
-                    _ => McpUnavailable::RepoUnreadable,
-                },
-            )
+        mcp_status::availability(repo, index, &facts).map_err(refuse)?;
+        let main = repo.worktrees.get(index).is_some_and(|v| v.main);
+        let (counts, changes) = crate::observe::all_changes(root, main).map_err(|err| {
+            refuse(match err {
+                gitraptor_git::ReadError::Untrusted(_) => McpUnavailable::WorktreeUntrusted,
+                _ if !root.exists() => McpUnavailable::WorktreeMissing,
+                _ => McpUnavailable::RepoUnreadable,
+            })
         })?;
         let name = mcp_status::worktree_name(&root.to_string_lossy());
         status.page = Some(mcp_status::paths_page(
