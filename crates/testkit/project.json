@@ -32,5 +32,8 @@
         "command": "cargo clippy -p {projectName} --all-targets -- -D warnings"
       }
     }
-  }
+  },
+  "implicitDependencies": [
+    "gitraptor-mcp"
+  ]
 }
