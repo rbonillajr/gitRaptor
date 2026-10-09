@@ -327,9 +327,9 @@ const WORK: &[u8] = b"user\npassword\n";
 const UTIL: &[u8] = b"fn util() {}\n";
 
 /// Criterio de salida 3 de M1: un agente hace `git reset --hard` con trabajo
-/// sin commitear y lo recupera con `raptor undo` desde su shell. Before
-/// that, the developer cannot undo the agent's work (the limit accepted for
-/// M1: US-TMC-013).
+/// sin commitear y lo recupera con `raptor undo` desde su shell, without being
+/// asked. Before that, the developer at a terminal is asked to confirm taking
+/// back the agent's work (US-TMC-013) and, without an answer, nothing changes.
 #[test]
 fn an_agent_recovers_its_work_after_a_raw_reset_hard() {
     let m = Machine::new();
@@ -366,12 +366,15 @@ fn an_agent_recovers_its_work_after_a_raw_reset_hard() {
         "{reset:#?}"
     );
 
-    // The developer cannot undo the agent's work in M1; nothing changes.
+    // The developer, at a terminal, is asked to confirm taking back the
+    // agent's work (US-TMC-013); with no answer it is not confirmed and
+    // nothing changes.
     let before = m.state();
     let out = m.developer(&m.worktree, &["undo"], "en_US.UTF-8");
     assert!(!out.status.success());
     assert!(
-        text(&out).contains("ask the agent to run raptor undo"),
+        text(&out).contains("work of another agent")
+            && text(&out).contains("not confirmed; nothing changed"),
         "{}",
         text(&out)
     );
