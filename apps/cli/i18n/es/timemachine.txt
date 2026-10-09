@@ -94,6 +94,7 @@ restore.reason.target-unavailable = ese punto está incompleto, purgado o no inc
 restore.reason.other-actor = el trabajo desde ese punto es de otro actor; nada cambió
 restore.reason.confirmation-required = ese trabajo es de un agente: confirmarlo desde tu terminal aún no está disponible; pídele al agente que restaure él mismo; nada cambió
 restore.reason.confirmation-unavailable-windows = en Windows todavía no se puede confirmar trabajo de otro actor; nada cambió
+restore.reason.challenge-invalid = la confirmación caducó o el trabajo cambió mientras tanto; ejecuta raptor restore otra vez; nada cambió
 restore.reason.git-operation-in-progress = hay una operación de Git en curso (merge, rebase, cherry-pick...); termínala o abórtala antes; nada cambió
 restore.reason.git-busy = Git está ocupado (hay un archivo de lock); nada cambió
 restore.reason.repo-busy = hay otra operación en curso en este repo; inténtalo de nuevo; nada cambió
