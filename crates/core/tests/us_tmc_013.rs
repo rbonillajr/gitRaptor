@@ -115,11 +115,13 @@ fn s4_without_the_token_there_is_no_undo() {
 }
 
 /// Escenario 4: a caller that cannot confirm is told why and gets no challenge. Without the
-/// seam the in-process client descends from the daemon (`daemon-descendant`).
+/// seam the in-process client is the daemon's own process: its ancestry resolves as
+/// unattributed and not confirmable, so `confirmation_refusal` answers through its
+/// `!confirmable` arm (`agent-ancestry`).
 #[test]
 fn s4_a_caller_that_cannot_confirm_gets_no_challenge() {
     let cases = [
-        (None, RefusalReason::DaemonDescendant),
+        (None, RefusalReason::AgentAncestry),
         (
             Some(TestConfirmation::Refused(
                 RefusalReason::NoControllingTerminal,
