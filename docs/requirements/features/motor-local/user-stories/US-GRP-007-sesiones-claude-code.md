@@ -5,7 +5,7 @@ type: us
 status: implemented
 priority: high
 created: 2026-10-03
-updated: 2026-10-08
+updated: 2026-10-09
 feature: motor-local
 related:
   context:
@@ -80,6 +80,36 @@ Dado el repo "demo" observado en una máquina sin Claude Code instalado
   Y el estado de "demo" muestra sus worktrees sin ninguna sesión de agente
 Cuando el desarrollador instala Claude Code y lo lanza en "feat-login"
 Entonces el motor detecta la sesión de "Claude Code" en "feat-login" sin reinstalar ni reconfigurar GitRaptor
+
+**Escenario: Un commit del agente se atribuye aunque haya Git activo en otros worktrees**
+
+Dado una sola sesión de "Claude Code" activa en "feat-login"
+  Y actividad de Git ajena en "feat-pagos", del mismo repo
+Cuando Claude Code hace un commit en "feat-login"
+Entonces el evento del commit tiene como actor "Claude Code" con origen "detectado"
+  Y no se escribe nada en el repo observado
+
+**Escenario: Un commit del desarrollador en el worktree del agente no se atribuye**
+
+Dado una sesión de "Claude Code" activa en "feat-login"
+Cuando el desarrollador hace un commit en "feat-login" desde su terminal o su editor
+Entonces el evento del commit queda "sin atribuir", lleve o no el trailer del agente
+
+**Escenario: Dos sesiones en el mismo worktree no se resuelven solas**
+
+Dado dos sesiones activas en "feat-login" y ninguna evidencia del proceso que hizo el commit
+Cuando se crea un commit en "feat-login"
+Entonces el evento queda "sin atribuir" y sin pista
+
+**Escenario: Un commit que nadie vio solo lleva la pista**
+
+Dado una sola sesión de "Claude Code" activa en "feat-login"
+  Y ningún `git` visto en la ventana del commit
+Cuando se crea un commit en "feat-login"
+Entonces el evento queda "sin atribuir" con la pista "inferido: Claude Code"
+  Y `raptor events` y `raptor timeline` muestran esa pista
+
+> **Nota (2026-10-09, TS-GRP-008)**: escenarios añadidos tras el dogfooding del 2026-10-09: los commits del agente salían "(no agent)" porque S3 contaba como ajeno cualquier `git` de **otro** worktree. **Decisión del orquestador (2026-10-09), validada por Arquitecto/PO.** El ámbito del `git` ajeno está en la Enmienda (2026-10-09) de ADR-GRP-012.
 
 > **Nota (2026-10-05, INF-GRP-002)**: el coste de resolver el actor de un evento (ADR-GRP-013) se mide en el banco de INF-GRP-002 (`cargo bench -p gitraptor-cli --bench engine`) cuando esta historia detecte sesiones reales. Hoy el banco fija el detector de agentes en un nombre ficticio y no lo mide (Dev Spec de INF-GRP-002, § 8).
 

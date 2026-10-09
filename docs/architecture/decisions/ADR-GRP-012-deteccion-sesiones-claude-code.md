@@ -6,11 +6,11 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-07
+updated: 2026-10-09
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
-related: [ADR-GRP-005, ADR-GRP-006, ADR-GRP-007, ADR-GRP-009, ADR-GRP-010, ADR-GRP-013, ADR-GRD-001, ADR-GRD-002, ADR-GRD-003, ADR-GRD-004, SPIKE-GRP-001, US-GRD-018, US-GRD-019]
+related: [TS-GRP-008, ADR-GRP-005, ADR-GRP-006, ADR-GRP-007, ADR-GRP-009, ADR-GRP-010, ADR-GRP-013, ADR-GRD-001, ADR-GRD-002, ADR-GRD-003, ADR-GRD-004, SPIKE-GRP-001, US-GRD-018, US-GRD-019]
 tags: [deteccion, atribucion, claude-code, sesiones, procesos, transcripts, privacidad, nfr-08, seguridad, autoria, co-authored-by, br-26]
 ---
 
@@ -285,3 +285,34 @@ Origen: hallazgo del dogfooding de Guardrails (2026-10-07). El hook resolvía bi
 - **Solo en memoria**: las reclamaciones viven en el daemon, con un máximo de 256 y una caducidad de 60 s. No se persisten ni se publican; del proceso solo se leen su identidad y su carpeta (SEC-04). La evidencia guardada del evento es `{"signals":["s4"]}`.
 - **Sin hooks no cambia nada**: no hay reclamaciones, y S3, el registro y la pista siguen como estaban. Con S4, el caso `NoSighting` desaparece en los commits que gobierna Guardrails (Enmienda del 2026-10-06, último punto).
 - **Medición** (SPIKE-GRP-001, suite guionizada en macOS, 2026-10-07): de 20 commits rápidos del agente simulado, sin hooks salieron 5 atribuidos (S3) y 15 "sin atribuir"; con Guardrails, 20 de 20 salieron atribuidos con `s4`. **Corrección (2026-10-08)**: la fila sin hooks estaba sesgada por el `git rev-parse` del arnés, que S3 veía como `git` ajeno (resultado `ambiguous`, sin pista). Con el arnés corregido salieron 19 atribuidos (S3) y 1 sin atribuir con la pista `single-session`. Detalle en SPIKE-GRP-001.
+
+## Enmienda (2026-10-09, ámbito del `git` ajeno en S3: TS-GRP-008)
+
+Origen: dogfooding de Rene (2026-10-09). En `raptor timeline`, los commits de Claude Code en el worktree `infmcp` salían "(no agent)" con la sesión activa todo el rato. Según el log del daemon, de 572 commits, 299 salieron `attributed`, 273 `ambiguous` y **ninguno** `no-sighting`. **No es la carrera de tiempo**: la regla de S3 (Enmienda 2026-10-05) declara ambiguo el evento si hay **un `git` ajeno con cwd en cualquier worktree del repo**. Con unos 20 worktrees vivos, casi siempre hay alguno: el sondeo de Orca, el daemon de nx, los scripts del coordinador o el propio daemon. **Decisión del orquestador (2026-10-09), validada por Arquitecto/PO.** No cambia las señales, la regla de combinación, la pista `single-session`, S4, el registro ni los valores del actor. ADR-GRP-013 no cambia. El `status` sigue en `accepted`.
+
+**Regla: el `git` ajeno cuenta en el ámbito del evento.**
+
+- **Ámbito worktree** (solo cuenta el `git` ajeno cuyo cwd está en el worktree del evento):
+  - `Reset` (reflog de HEAD del worktree);
+  - `BranchSwitch` (el archivo HEAD del worktree);
+  - `Commit`, `Merge` y `Rebase` con el worktree no inferido (reflog de la rama activa en ese worktree; Git no deja tener la misma rama activa en dos worktrees).
+- **Ámbito repo**, como hasta ahora, para todos los demás: `BranchUpdate` (`branch -f`, `update-ref` y `fetch X:X` pueden venir de cualquier worktree), `BranchCreate`, `BranchDelete`, `Push`, `WorktreeCreate`, `WorktreeDelete`, y `Commit`, `Merge` y `Rebase` con worktree inferido.
+- **Siempre en todo el repo**:
+  - el `git` del daemon, sea cual sea su cwd: el escritor de la Time Machine corre en `<común>/.git/worktrees/<w>`, que por ruta cae en el worktree principal, y un restore nunca se atribuye a un agente;
+  - el `git` ajeno situado por el cwd de su ancestro: su cwd real es desconocido, y `git -C A` desde una shell en B escribe en A;
+  - el `git` ajeno con el cwd en el directorio Git común.
+- **El worktree de un cwd es la raíz más larga que lo contiene** (worktrees anidados en `.claude/worktrees/`), también para los `git` de una sesión. Antes, un `git` de sesión en un worktree anidado era evidencia para el worktree principal.
+- **Diagnóstico** (SPIKE-GRP-001): `s3_evidence` añade solo contadores enteros: `scope`, `sessions_wt`, `foreign_wt`, `foreign_other_wt`, `foreign_daemon`, `foreign_by_ancestor`, `foreign_gitdir` y `gits_after_notice`. Nunca rutas, nombres, pids ni argv (SEC-04).
+
+**BR-EDGE-004 no se relaja**: el `git` de una persona en el worktree A sigue siendo ajeno en A, y un `git` de otro worktree no puede escribir el HEAD de A. **Riesgos declarados**:
+
+- un `git --git-dir=<común>/.git/worktrees/A` sin chdir lanzado desde fuera de A;
+- una rama activa en dos worktrees (`--ignore-other-worktrees`).
+
+En los dos casos, un `git` ajeno de otro worktree podría crear un commit en la rama de A sin contar como ajeno en A. Si a la vez había un `git` de la sesión en A, el commit se atribuiría a la sesión.
+
+**Opción descartada (diferida): atribuir a la única sesión activa con un origen nuevo (`active-session`).** La evidencia de proceso disponible (un descendiente vivo de la sesión con el cwd en el worktree) se cumple casi siempre (servidores MCP, shells de herramienta), así que es co-ubicación, que la regla 3 prohíbe. El trailer `Co-Authored-By` lo escribe quien hace el commit. Y la atribución tiene efectos de permisos en la Time Machine (ADR-TMC-005). Cambiarlo exige enmendar BR-EDGE-004, BR-AUTH-005 y la regla 3, y lo ratifica Rene. Se reabre si, con esta enmienda, los contadores muestran un número relevante de commits `no-sighting`. La ratificación de Rene del 2026-10-07 ("confirmada no es atribuida") sigue vigente.
+
+**Presentación**: `raptor timeline` muestra la pista `inferred` igual que `raptor events` (US-GRD-019, § 2 y § 3 de la Enmienda de autoría).
+
+Implementación y tests: TS-GRP-008.
