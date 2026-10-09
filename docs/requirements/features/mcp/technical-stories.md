@@ -25,7 +25,7 @@ related:
 
 | ID | Tipo | Título | Valor (1 línea) | ADR | Habilita | Depende de | Complejidad | Status |
 |----|------|--------|-----------------|-----|----------|-----------|-------------|--------|
-| [INF-MCP-001](./technical-stories/INF-MCP-001-corpus-seguridad-mcp.md) | INF | Corpus de seguridad del MCP como suite de CI | El KPI "100 % del corpus rechazado" se mide en cada PR y una regresión de seguridad rompe el CI | ADR-MCP-001 § 9 | BR-16, NFR-02, SEC-MCP-01 a 11 (DEP-MCP-8); KPI de Q-MCP-18 | US-MCP-003 (nace con el primer servidor); INF-GRP-001 (huella) | Medium | Parcialmente implementada (#TBD) |
+| [INF-MCP-001](./technical-stories/INF-MCP-001-corpus-seguridad-mcp.md) | INF | Corpus de seguridad del MCP como suite de CI | El KPI "100 % del corpus rechazado" se mide en cada PR y una regresión de seguridad rompe el CI | ADR-MCP-001 § 9 | BR-16, NFR-02, SEC-MCP-01 a 11 (DEP-MCP-8); KPI de Q-MCP-18 | US-MCP-003 (nace con el primer servidor); INF-GRP-001 (huella) | Medium | Parcialmente implementada (#224) |
 
 ## DAG
 
