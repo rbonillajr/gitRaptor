@@ -12,9 +12,9 @@
 |---|---|
 | Implementado (`implemented`) | 39 |
 | Hecho (`done`) | 3 |
-| Implementado en parte (`partially-implemented`) | 18 |
+| Implementado en parte (`partially-implemented`) | 19 |
 | Listo (`ready`) | 3 |
-| Borrador (`draft`) | 79 |
+| Borrador (`draft`) | 78 |
 | Bloqueado (`blocked`) | 1 |
 | **Total** | **143** |
 
@@ -24,7 +24,7 @@
 |---|---|---|---|---|---|---|---|
 | [cockpit](#cockpit) | 6 | 0 | 2 | 0 | 24 | 1 | 33 |
 | [guardrails](#guardrails) | 7 | 0 | 6 | 0 | 11 | 0 | 24 |
-| [mcp](#mcp) | 5 | 0 | 1 | 0 | 14 | 0 | 20 |
+| [mcp](#mcp) | 5 | 0 | 2 | 0 | 13 | 0 | 20 |
 | [motor-local](#motor-local) | 11 | 2 | 8 | 3 | 14 | 0 | 38 |
 | [time-machine](#time-machine) | 10 | 1 | 1 | 0 | 16 | 0 | 28 |
 
@@ -101,7 +101,7 @@
 
 ### mcp
 
-20 fichas: 5 implementado, 1 implementado en parte, 14 borrador.
+20 fichas: 5 implementado, 2 implementado en parte, 13 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -110,8 +110,8 @@
 | [US-MCP-003](features/mcp/user-stories/US-MCP-003-status-del-repo-del-agente.md) | Un agente consulta por MCP el estado del repo en el que trabaja, y de ningún otro | Implementado (`implemented`) | #140, #159, #153 | — |
 | [US-MCP-005](features/mcp/user-stories/US-MCP-005-respuestas-acotadas-y-seguras.md) | Un agente recibe respuestas acotadas que no pueden darle órdenes ni filtrar secretos | Implementado (`implemented`) | #157, #159 | — |
 | [US-MCP-008](features/mcp/user-stories/US-MCP-008-snapshot-manual.md) | Un agente guarda por MCP un punto de recuperación antes de un cambio arriesgado | Implementado (`implemented`) | #213 | — |
+| [INF-MCP-001](features/mcp/technical-stories/INF-MCP-001-corpus-seguridad-mcp.md) | Corpus de seguridad del MCP como suite de CI que bloquea el merge | Implementado en parte (`partially-implemented`) | — | — |
 | [US-MCP-004](features/mcp/user-stories/US-MCP-004-status-completo-y-no-disponible.md) | Un agente sabe por MCP quién más trabaja en su repo, contra qué base y con qué protección | Implementado en parte (`partially-implemented`) | — | — |
-| [INF-MCP-001](features/mcp/technical-stories/INF-MCP-001-corpus-seguridad-mcp.md) | Corpus de seguridad del MCP como suite de CI que bloquea el merge | Borrador (`draft`) | — | — |
 | [US-MCP-006](features/mcp/user-stories/US-MCP-006-registrar-agente.md) | Un agente sin soporte completo se declara por MCP y su trabajo queda a su nombre | Borrador (`draft`) | — | — |
 | [US-MCP-007](features/mcp/user-stories/US-MCP-007-confused-deputy.md) | Un hook lanzado por una escritura de un agente no puede usar los poderes del desarrollador | Borrador (`draft`) | — | — |
 | [US-MCP-009](features/mcp/user-stories/US-MCP-009-safe-commit.md) | Un agente commitea por MCP con las reglas del repo y con un punto de recuperación previo | Borrador (`draft`) | — | — |
@@ -238,7 +238,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2
 
-110 fichas: 21 implementado, 3 hecho, 12 implementado en parte, 3 listo, 70 borrador, 1 bloqueado.
+110 fichas: 21 implementado, 3 hecho, 13 implementado en parte, 3 listo, 69 borrador, 1 bloqueado.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -268,6 +268,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [TS-GRP-002](features/motor-local/technical-stories/TS-GRP-002-lectura-git.md) | Capa de lectura de Git sin escrituras | Hecho (`done`) | — | — |
 | [INF-GRP-001](features/motor-local/technical-stories/INF-GRP-001-arnes-repo-intacto.md) | Arnés de verificación "repo intacto" en los tres SO | Implementado en parte (`partially-implemented`) | #30, #34, #68, #97, #109, #113, #163 | 3 |
 | [INF-GRP-002](features/motor-local/technical-stories/INF-GRP-002-banco-frescura-escala.md) | Banco de medición de frescura y escala | Implementado en parte (`partially-implemented`) | #76, #98, #133 | 3 |
+| [INF-MCP-001](features/mcp/technical-stories/INF-MCP-001-corpus-seguridad-mcp.md) | Corpus de seguridad del MCP como suite de CI que bloquea el merge | Implementado en parte (`partially-implemented`) | — | — |
 | [INF-TMC-001](features/time-machine/technical-stories/INF-TMC-001-arnes-caos-recuperable.md) | Arnés de caos y de garantías de los snapshots en los tres SO | Implementado en parte (`partially-implemented`) | — | — |
 | [TS-GRP-004](features/motor-local/technical-stories/TS-GRP-004-canal-clientes.md) | Canal local de clientes y contrato de mensajes | Implementado en parte (`partially-implemented`) | #36, #87, #123, #133, #158 | 3 |
 | [US-CKP-020](features/cockpit/user-stories/US-CKP-020-trabajo-de-otro-actor.md) | Tocar el trabajo de otro actor exige confirmar el plan concreto | Implementado en parte (`partially-implemented`) | #220 | 3 |
@@ -281,7 +282,6 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [TD-GRP-002](features/motor-local/technical-stories/TD-GRP-002-motor-bajo-rafaga.md) | Frescura y memoria del motor bajo una ráfaga de archivos | Listo (`ready`) | — | — |
 | [TD-GRP-003](features/motor-local/technical-stories/TD-GRP-003-nfr04-maquina-referencia.md) | Presupuesto de NFR-04 sin gate automático: medirlo en una máquina de referencia | Listo (`ready`) | — | — |
 | [TS-GRP-005](features/motor-local/technical-stories/TS-GRP-005-clases-trabajo-ahorro-energia.md) | Clases de trabajo del daemon y mecanismo de ahorro de energía | Listo (`ready`) | — | — |
-| [INF-MCP-001](features/mcp/technical-stories/INF-MCP-001-corpus-seguridad-mcp.md) | Corpus de seguridad del MCP como suite de CI que bloquea el merge | Borrador (`draft`) | — | — |
 | [SPIKE-CKP-001](features/cockpit/technical-stories/SPIKE-CKP-001-prediccion-5s.md) | Predicción de conflictos en ≤ 5 s p95 sin escribir en el repo: merge en memoria frente a almacén en el perfil | Borrador (`draft`) | — | — |
 | [SPIKE-GRD-002](features/guardrails/technical-stories/SPIKE-GRD-002-factor-so-daemon.md) | Factor de autenticación del SO invocado desde el daemon en los tres SO | Borrador (`draft`) | — | — |
 | [TS-CKP-001](features/cockpit/technical-stories/TS-CKP-001-predictor-conflictos.md) | Predictor de conflictos en el daemon: solape y conflicto previsto publicados para todos los clientes | Borrador (`draft`) | — | — |
@@ -435,6 +435,12 @@ Cada commit entra a nombre de la persona y deja constancia del agente que lo hiz
 - `detected_and_registered_agents_are_the_actor`: solo se cubre el agente detectado, no el registrado (DS § 7).
 - Nivel local (`settings.local.json`): US-GRP-013. `flexible` de extremo a extremo con un suelo de equipo: US-GRD-014.
 - Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../architecture/xplat-pendientes.md)).
+
+### [INF-MCP-001](features/mcp/technical-stories/INF-MCP-001-corpus-seguridad-mcp.md)
+
+Corpus de seguridad del MCP como suite de CI que bloquea el merge
+
+- *La ficha no lista los pendientes en "Estado de la implementación".*
 
 ### [US-MCP-004](features/mcp/user-stories/US-MCP-004-status-completo-y-no-disponible.md)
 
