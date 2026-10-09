@@ -5,23 +5,29 @@
 //! the same target directory and profile, or the test runs a stale one or none at all. `cargo
 //! test --workspace` builds it there already; `cargo test -p <package>` (what `nx` runs) does not,
 //! and a bare nested `cargo build` could put it somewhere else (a `--target-dir` the environment
-//! does not show). Here the target directory, the profile and the target triple are read from the
+//! does not show. Here the target directory, the profile and the target triple are read from the
 //! path of the reference binary instead.
+//!
+//! Having the file is not enough: after a rebase or an edit under the sibling's sources, the one
+//! in `target/` is stale, and a test that runs it fails for a reason that is not the code under
+//! test. So the helper asks cargo to build it once per test process (a no-op when it is fresh)
+//! and lets cargo's own fingerprints decide.
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Mutex;
 
-/// One nested build at a time within a test binary; cargo's own lock covers other processes.
-static BUILD: Mutex<()> = Mutex::new(());
+/// The binaries already brought up to date by this process. The lock also serializes the nested
+/// builds within a test binary; cargo's own lock covers other processes.
+static BUILT: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
 
-/// `bin` of `package`, next to `next_to` (a `CARGO_BIN_EXE_*` path); built there first, with
-/// the same target directory, profile and target triple, if it is not there yet.
+/// `bin` of `package`, next to `next_to` (a `CARGO_BIN_EXE_*` path); brought up to date there
+/// first, once per process, with the same target directory, profile and target triple.
 pub fn sibling_bin(next_to: &Path, package: &str, bin: &str) -> PathBuf {
     let exe = next_to.with_file_name(format!("{bin}{}", std::env::consts::EXE_SUFFIX));
-    let _build = BUILD.lock().unwrap_or_else(|e| e.into_inner());
-    if exe.exists() {
+    let mut built = BUILT.lock().unwrap_or_else(|e| e.into_inner());
+    if built.contains(&exe) {
         return exe;
     }
     let profile_dir = next_to
@@ -58,5 +64,6 @@ pub fn sibling_bin(next_to: &Path, package: &str, bin: &str) -> PathBuf {
         "cargo {args:?} did not leave {}",
         exe.display()
     );
+    built.push(exe.clone());
     exe
 }
