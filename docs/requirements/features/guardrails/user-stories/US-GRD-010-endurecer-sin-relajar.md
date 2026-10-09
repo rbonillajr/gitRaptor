@@ -80,7 +80,7 @@ Ver el Brief y la Enmienda (2026-10-08) de ADR-GRD-003: el permiso efectivo es e
 
 ## Estado de la implementación (2026-10-09)
 
-Implementado en parte en: PR #__PR__. Brief: [Brief de implementación](../../../../dev-briefs/layered-config.md).
+Implementado en parte en: PR #217. Brief: [Brief de implementación](../../../../dev-briefs/layered-config.md).
 
 Cubiertos por `crates/core/tests/us_grd_010.rs` (verificado en macOS; Linux lo cubre el CI; Windows: **Pendiente: etapa de validación multiplataforma**, XP-39): las filas 1 a 4 y 7 de la precedencia, «un endurecimiento local no afecta a otro clon» y «la rama base en un nivel personal no se tiene en cuenta».
 
