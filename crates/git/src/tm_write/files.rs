@@ -23,9 +23,10 @@
 //!
 //! Modes: on Unix a written file gets exactly `0o644` or `0o755` (the git modes 100644/100755 the
 //! snapshot records), set with `fchmod` on the descriptor right after creating it, so the umask of
-//! the process never changes the result. Windows has no POSIX mode: the new file takes the default
-//! attributes of its folder, so the read-only attribute and the executable bit are not carried
-//! over (nothing in the snapshot records them).
+//! the process never changes the result. Windows has no POSIX mode: the new file inherits the
+//! ACL of its folder and the default attributes. The executable bit the snapshot records has no
+//! NTFS counterpart and is dropped; the read-only attribute is not recorded and not set. Unlike
+//! `git checkout`, the result does not follow the umask (a 0664 under umask 002 is 0644 here).
 //!
 //! Temporary names start with [`TEMP_PREFIX`]. One left behind by a crash holds the target
 //! content (in the store), the prior snapshot's content (in the store) or, before the comparison
@@ -432,10 +433,10 @@ mod unix {
             let tmp = temp_name();
             match content {
                 Content::File { bytes, executable } => {
-                    let open_mode = if *executable { 0o777 } else { 0o666 };
-                    // The mode git records (100644 / 100755), set by descriptor below: the
-                    // umask of the process must not change it.
-                    let final_mode = if *executable { 0o755 } else { 0o644 };
+                    // The mode git records (100644 / 100755). The umask can only narrow it
+                    // on creation; `fchmod` below restores it, so the file never has more
+                    // permissions than the final mode.
+                    let mode = Mode::from_raw_mode(if *executable { 0o755 } else { 0o644 });
                     let fd = rustix::fs::openat(
                         dir,
                         tmp.as_str(),
@@ -444,10 +445,14 @@ mod unix {
                             | OFlags::EXCL
                             | OFlags::NOFOLLOW
                             | OFlags::CLOEXEC,
-                        Mode::from_raw_mode(open_mode),
+                        mode,
                     )
                     .map_err(io)?;
-                    rustix::fs::fchmod(&fd, Mode::from_raw_mode(final_mode)).map_err(io)?;
+                    if let Err(e) = rustix::fs::fchmod(&fd, mode) {
+                        // A volume that refuses chmod: fail without leaving the empty temporary.
+                        let _ = Self::unlink(dir, &tmp);
+                        return Err(io(e));
+                    }
                     let mut file = std::fs::File::from(fd);
                     file.write_all(bytes)?;
                     rustix::fs::fsync(&file).map_err(io)?;
