@@ -18,17 +18,17 @@ use gitraptor_api::guard::{EvaluateParams, GuardRejectedData, GuardRepoParams};
 use gitraptor_api::mcp_view::{MCP_READ_BURST, MCP_READS_PER_MINUTE};
 use gitraptor_api::messages::{
     AuditEntry, AuditListParams, AuditListResult, AuditOutcome, ClientIdentity, ClientKind,
-    ConnectionProfile, DeclaredAgent, EventsHistoryParams, EventsHistoryResult, Hello, HelloResult,
-    IncompatibleData, McpRepoView, McpSnapshot, NoParams, RefusalReason, RefusedData,
-    RegistrationRegisterParams, RegistrationRegisterResult, RegistrationRejectedData,
+    ConnectionProfile, DeclaredAgent, EngineStateView, EventsHistoryParams, EventsHistoryResult,
+    Hello, HelloResult, IncompatibleData, McpRepoView, McpSnapshot, NoParams, RefusalReason,
+    RefusedData, RegistrationRegisterParams, RegistrationRegisterResult, RegistrationRejectedData,
     RegistrationRejection, RegistrationWithdrawParams, RegistrationWithdrawResult, ReplaceParams,
     RepoAddParams, RepoAddResult, RepoRejectedData, RepoRejection, RepoRetireParams,
     RepoRetireResult, Snapshot, StopResult, SubscribeParams, SubscribeResult, UnsubscribeParams,
 };
 use gitraptor_api::messages::{
-    GitEventKind, HeadView, MAX_HISTORY_PAGE, MAX_SESSIONS_PAGE, SessionsListParams, WorktreeStatus,
+    GitEventKind, MAX_HISTORY_PAGE, MAX_SESSIONS_PAGE, SessionsListParams,
 };
-use gitraptor_api::methods::{self, METHODS, MethodSpec};
+use gitraptor_api::methods::{self, METHODS, McpUnavailable, McpUnavailableData, MethodSpec};
 use gitraptor_api::rpc::{
     ErrorObject, Id, InvalidData, InvalidReason, Request, Response, ScopeRefusal, ScopeRefusedData,
     code,
@@ -49,6 +49,7 @@ use gitraptor_git::{ReaderOptions, RepoReader};
 
 use super::authz::{AcceptedPeer, ChainLink, Verdict, check_reserved};
 use super::bus::{Outbox, Subscribed};
+use super::mcp_status;
 use super::peer::{ProcInfo, peer_cred, process_cwd};
 use super::requester::{self, Resolution};
 use super::transport::Stream;
@@ -208,6 +209,8 @@ pub(crate) fn accept(ctx: &Arc<ServerCtx>, stream: Stream) {
                     gitraptor_api::mcp_view::MCP_WRITES_PER_MINUTE,
                     gitraptor_api::mcp_view::MCP_WRITE_BURST,
                 )),
+                mcp_last: std::sync::Mutex::new(None),
+                mcp_cursors: std::sync::Mutex::new(super::mcp_status::McpCursors::default()),
             };
             conn.serve(reader_stream);
             if let Some(wiring) = &thread_ctx.protected {
@@ -370,6 +373,12 @@ struct Connection<'a> {
     /// Writes of an `mcp` connection (ADR-MCP-001 § 6): spent after the snapshot quota answered,
     /// so a looping agent gets its real wait. A lock only because `prepare` takes `&self`.
     mcp_write_bucket: std::sync::Mutex<Bucket>,
+    /// The repo id and root of the last scope `mcp.status` served: where a caller whose worktree
+    /// was deleted still is (US-MCP-004). Dies with the connection.
+    mcp_last: std::sync::Mutex<Option<(String, PathBuf)>>,
+    /// The cursors this connection was given by `mcp.status`: opaque handles into this table,
+    /// valid for no other connection.
+    mcp_cursors: std::sync::Mutex<super::mcp_status::McpCursors>,
 }
 
 /// What a handled request leads to.
@@ -834,7 +843,9 @@ impl Connection<'_> {
                 self.reply(&request.id, result);
             }
             methods::MCP_STATUS => {
-                let result = request.params::<NoParams>().and_then(|_| self.mcp_status());
+                let result = request
+                    .params::<methods::McpStatusParams>()
+                    .and_then(|params| self.mcp_status(params));
                 self.reply(&request.id, result);
             }
             methods::REGISTRATION_REGISTER => {
@@ -1386,45 +1397,84 @@ impl Connection<'_> {
             })
     }
 
-    /// `mcp.status` (US-MCP-003, ADR-MCP-001 § 2): the repo and the worktree
-    /// come from the caller's working folder, read by the daemon between two
-    /// checks of the caller's identity. Outside an enabled repo the refusal
-    /// carries no data of any repo.
-    fn mcp_status(&self) -> Result<methods::McpStatus, ErrorObject> {
+    /// `mcp.status` (US-MCP-003, US-MCP-004, ADR-MCP-001 § 2): the repo and the worktree come
+    /// from the caller's working folder, read by the daemon between two checks of the caller's
+    /// identity. The checks go in this order: identity, scope, allowlist, availability, cursor.
+    /// Every refusal before the answer carries no data of any repo. Without
+    /// `mcp.status-full` the answer is the short one, and what cannot be read is "not observed".
+    fn mcp_status(
+        &self,
+        params: methods::McpStatusParams,
+    ) -> Result<methods::McpStatus, ErrorObject> {
+        let full = self.has(methods::CAP_MCP_STATUS_FULL.name);
+        if !full && params.cursor.is_some() {
+            return Err(ErrorObject::new(code::INVALID_PARAMS, "invalid params"));
+        }
         self.resolve()?;
         // The form of the observed worktree roots (on Windows, the drive form, not `\\?\C:\…`).
         let cwd =
             process_cwd(self.peer.pid).and_then(|p| gitraptor_git::paths::canonicalize(&p).ok());
         let who = self.resolve()?.who;
-        let cwd = cwd.ok_or_else(|| scope_refused(ScopeError::NotObserved))?;
         let (_, shared) = self.ctx.bus.snapshot();
-        let (r, w) = super::mcp_scope::locate(&cwd, &shared.repos)
+        let last = self.mcp_last.lock().ok().and_then(|last| last.clone());
+        let (r, located) =
+            match mcp_status::locate_with_last(cwd.as_deref(), &shared.repos, last.as_ref()) {
+                mcp_status::Located::Outside => return Err(scope_refused(ScopeError::NotObserved)),
+                mcp_status::Located::Missing { repo } => (repo, None),
+                mcp_status::Located::Worktree { repo, worktree } => (repo, Some(worktree)),
+            };
+        let repo = shared
+            .repos
+            .get(r)
             .ok_or_else(|| scope_refused(ScopeError::NotObserved))?;
-        let repo = &shared.repos[r];
-        if !crate::timemachine::protected::McpAllowlist::allows(
+        let allowed = crate::timemachine::protected::McpAllowlist::allows(
             self.ctx.mcp_repos.as_ref(),
             &repo.repo_id,
-        ) {
-            return Err(scope_refused(ScopeError::NotAllowlisted));
+        );
+        let Some(w) = located else {
+            // The worktree was deleted: the allowlist still comes first.
+            return Err(if allowed {
+                mcp_unavailable(full, McpUnavailable::WorktreeMissing)
+            } else {
+                scope_refused(ScopeError::NotAllowlisted)
+            });
+        };
+        let worktree = repo
+            .worktrees
+            .get(w)
+            .ok_or_else(|| scope_refused(ScopeError::NotObserved))?;
+        let home = std::env::var_os("HOME")
+            .or_else(|| std::env::var_os("USERPROFILE"))
+            .map(PathBuf::from);
+        let facts = mcp_status::facts(repo, w, home.as_deref());
+        match mcp_status::admit(allowed, repo, w, &facts) {
+            Err(mcp_status::Refusal::NotAllowlisted) => {
+                return Err(scope_refused(ScopeError::NotAllowlisted));
+            }
+            Err(mcp_status::Refusal::Unavailable(reason)) => {
+                self.remember_scope(repo, worktree);
+                return Err(mcp_unavailable(full, reason));
+            }
+            Ok(()) => self.remember_scope(repo, worktree),
         }
-        let worktree = &repo.worktrees[w];
-        let name = Path::new(worktree.path.raw())
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default();
+        let entry = params
+            .cursor
+            .as_deref()
+            .map(|cursor| self.cursor_entry(cursor, &repo.repo_id))
+            .transpose()?;
+
         let action = matches!(who.actor, gitraptor_api::Actor::Unattributed)
             .then_some(methods::McpStatusAction::RegisterToWrite);
-        let branch = match &worktree.status {
-            WorktreeStatus::Ready {
-                head: HeadView::Branch { name } | HeadView::Unborn { name },
-                ..
-            } if self.has(methods::CAP_MCP_STATUS_BRANCH.name) => Some(name.clone()),
-            _ => None,
+        let branch = mcp_status::branch_of(worktree)
+            .filter(|_| self.has(methods::CAP_MCP_STATUS_BRANCH.name));
+        let own_session = match &who.requester {
+            Requester::Agent { session_id, .. } => Some(session_id.clone()),
+            Requester::Unattributed => None,
         };
-        Ok(methods::McpStatus {
+        let mut status = methods::McpStatus {
             repo_id: repo.repo_id.clone(),
             repo_state: repo.state,
-            worktree: gitraptor_api::UntrustedName::new(name),
+            worktree: mcp_status::worktree_name(worktree.path.raw()),
             branch,
             main: worktree.main,
             requester: who.actor,
@@ -1432,7 +1482,183 @@ impl Connection<'_> {
             here: None,
             repo: None,
             page: None,
-        })
+        };
+        if !full {
+            return Ok(status);
+        }
+        if let Some(mcp_status::CursorEntry::Paths { root, after, .. }) = entry {
+            self.mcp_paths_page(&mut status, repo, &root, after, home.as_deref())?;
+            return Ok(status);
+        }
+        // The ahead/behind as of now, as in the snapshot (US-GRP-012, D5).
+        let mut fresh = [repo.clone()];
+        crate::observe::refresh_divergence(&mut fresh, &shared.divergence, &self.ctx.divergence);
+        let [fresh] = fresh;
+        let context = self
+            .ctx
+            .control
+            .mcp_context(&repo.repo_id)
+            .ok_or_else(|| ErrorObject::new(code::INTERNAL, "status unavailable"))?;
+        if let Some(mcp_status::CursorEntry::Worktrees { after, .. }) = entry {
+            self.mcp_worktrees_page(&mut status, &fresh, w, &context, after.as_deref())?;
+            return Ok(status);
+        }
+        let (here, mut repo_part) =
+            mcp_status::default_status(&fresh, w, &context, own_session.as_deref(), now_ms());
+        if shared.engine.state == EngineStateView::WaitingForGit {
+            repo_part.engine = Some(methods::McpEngineState::WaitingForGit);
+        }
+        status.here = here;
+        if let Some(changes) = status.here.as_mut().and_then(|h| h.changes.as_mut()) {
+            changes.cursor = self.mint_cursor(mcp_status::CursorEntry::Paths {
+                repo_id: repo.repo_id.clone(),
+                root: PathBuf::from(worktree.path.raw()),
+                after: None,
+            })?;
+        }
+        if let Some(others) = repo_part.worktrees.as_mut() {
+            others.cursor = self.mint_cursor(mcp_status::CursorEntry::Worktrees {
+                repo_id: repo.repo_id.clone(),
+                after: None,
+            })?;
+        }
+        status.repo = Some(repo_part);
+        Ok(status)
+    }
+
+    /// Remembers the scope an `mcp.status` was served for (see `mcp_last`).
+    fn remember_scope(
+        &self,
+        repo: &gitraptor_api::messages::RepoView,
+        worktree: &gitraptor_api::messages::WorktreeView,
+    ) {
+        if let Ok(mut last) = self.mcp_last.lock() {
+            *last = Some((repo.repo_id.clone(), PathBuf::from(worktree.path.raw())));
+        }
+    }
+
+    /// A new cursor of this connection for `entry`.
+    fn mint_cursor(&self, entry: mcp_status::CursorEntry) -> Result<String, ErrorObject> {
+        self.mcp_cursors
+            .lock()
+            .ok()
+            .and_then(|mut table| table.mint(entry))
+            .ok_or_else(|| ErrorObject::new(code::INTERNAL, "cursor unavailable"))
+    }
+
+    /// The entry of `cursor` in this connection's table, for a caller in `repo_id`. A cursor
+    /// without the form of one is a bad parameter; one this connection was never given, or for
+    /// another repo, does not exist (S-08).
+    fn cursor_entry(
+        &self,
+        cursor: &str,
+        repo_id: &str,
+    ) -> Result<mcp_status::CursorEntry, ErrorObject> {
+        if !methods::valid_cursor(cursor) {
+            return Err(ErrorObject::new(code::INVALID_PARAMS, "invalid cursor"));
+        }
+        let table = self
+            .mcp_cursors
+            .lock()
+            .map_err(|_| ErrorObject::new(code::INTERNAL, "cursor unavailable"))?;
+        table
+            .get(cursor)
+            .filter(|entry| entry.repo_id() == repo_id)
+            .cloned()
+            .ok_or_else(|| ErrorObject::new(code::NOT_FOUND, "cursor not found"))
+    }
+
+    /// The page of the other worktrees after `after`, cut to fit and with its real cursors.
+    fn mcp_worktrees_page(
+        &self,
+        status: &mut methods::McpStatus,
+        repo: &gitraptor_api::messages::RepoView,
+        w: usize,
+        context: &crate::daemon::McpContext,
+        after: Option<&Path>,
+    ) -> Result<(), ErrorObject> {
+        status.page = Some(mcp_status::worktrees_page(repo, w, context, after));
+        let listed = mcp_status::page_indexes(repo, w, after);
+        gitraptor_api::mcp_view::fit_page(status, gitraptor_api::mcp_view::MCP_FIT_BYTES);
+        let root_of = |i: &usize| repo.worktrees.get(*i).map(|v| PathBuf::from(v.path.raw()));
+        let Some(page) = status.page.as_mut() else {
+            return Ok(());
+        };
+        for (item, root) in page.worktrees.iter_mut().zip(listed.iter().map(root_of)) {
+            if let (Some(changes), Some(root)) = (item.state.changes.as_mut(), root) {
+                changes.cursor = self.mint_cursor(mcp_status::CursorEntry::Paths {
+                    repo_id: repo.repo_id.clone(),
+                    root,
+                    after: None,
+                })?;
+            }
+        }
+        if page.truncated {
+            // Where the page stopped: the last worktree it kept, or where it started.
+            let stopped = page
+                .worktrees
+                .len()
+                .checked_sub(1)
+                .and_then(|last| listed.get(last))
+                .and_then(root_of)
+                .or_else(|| after.map(Path::to_path_buf));
+            page.cursor = Some(self.mint_cursor(mcp_status::CursorEntry::Worktrees {
+                repo_id: repo.repo_id.clone(),
+                after: stopped,
+            })?);
+        }
+        Ok(())
+    }
+
+    /// The page of paths of the worktree at `root` after `after`: the worktree is read again,
+    /// because the published list is cut. The worktree must be one of the repo and readable.
+    fn mcp_paths_page(
+        &self,
+        status: &mut methods::McpStatus,
+        repo: &gitraptor_api::messages::RepoView,
+        root: &Path,
+        after: Option<String>,
+        home: Option<&Path>,
+    ) -> Result<(), ErrorObject> {
+        let not_found = || ErrorObject::new(code::NOT_FOUND, "cursor not found");
+        let index = repo
+            .worktrees
+            .iter()
+            .position(|v| Path::new(v.path.raw()) == root)
+            .ok_or_else(not_found)?;
+        let facts = mcp_status::facts(repo, index, home);
+        mcp_status::availability(repo, index, &facts)
+            .map_err(|reason| mcp_unavailable(true, reason))?;
+        let (counts, changes) = crate::observe::all_changes(root).map_err(|err| {
+            mcp_unavailable(
+                true,
+                match err {
+                    gitraptor_git::ReadError::Untrusted(_) => McpUnavailable::WorktreeUntrusted,
+                    _ if !root.exists() => McpUnavailable::WorktreeMissing,
+                    _ => McpUnavailable::RepoUnreadable,
+                },
+            )
+        })?;
+        let name = mcp_status::worktree_name(&root.to_string_lossy());
+        status.page = Some(mcp_status::paths_page(
+            name,
+            counts,
+            &changes,
+            after.as_deref(),
+        ));
+        gitraptor_api::mcp_view::fit_page(status, gitraptor_api::mcp_view::MCP_FIT_BYTES);
+        let Some(page) = status.page.as_mut() else {
+            return Ok(());
+        };
+        if page.truncated {
+            let stopped = page.paths.last().map(|p| p.raw().to_owned()).or(after);
+            page.cursor = Some(self.mint_cursor(mcp_status::CursorEntry::Paths {
+                repo_id: repo.repo_id.clone(),
+                root: root.to_path_buf(),
+                after: stopped,
+            })?);
+        }
+        Ok(())
     }
 
     /// `registration.register` (US-GRP-009, ADR-GRP-005 § 6.6). Not
@@ -2340,6 +2566,16 @@ fn scope_refused(why: ScopeError) -> ErrorObject {
         ScopeError::ForeignWorktree => ScopeRefusal::ForeignWorktree,
     };
     ErrorObject::new(code::SCOPE_REFUSED, why.as_str()).with_data(ScopeRefusedData { reason })
+}
+
+/// The repo or the worktree cannot be read: its reason and nothing of the repo. A connection
+/// without `mcp.status-full` does not know the error and is told "not observed" (ADR-GRP-016).
+fn mcp_unavailable(full: bool, reason: McpUnavailable) -> ErrorObject {
+    if !full {
+        return scope_refused(ScopeError::NotObserved);
+    }
+    ErrorObject::new(methods::MCP_UNAVAILABLE.code, methods::MCP_UNAVAILABLE.name)
+        .with_data(McpUnavailableData { reason })
 }
 
 /// A scope's repo id is checked like any other before it is looked up.
