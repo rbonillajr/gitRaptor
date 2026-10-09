@@ -17,6 +17,11 @@ getrandom = "0.4.3"
 notify = "=8.2.0"
 gitraptor-api = { workspace = true, features = ["client"] }
 gitraptor-git.workspace = true
+# Every OS: the pure parser of whether a `git` redirects its target (also over `/proc` on
+# Linux). On macOS also the command line of the nearest `git` ancestor (`KERN_PROCARGS2`,
+# DS-US-GRD-018 § 5.3, ADR-GRP-002 Enmienda 2026-10-07) and FSEvents. Elsewhere only its
+# pure parts build.
+gitraptor-macsys.workspace = true
 gitraptor-policy.workspace = true
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 serde = { version = "1.0.229", features = ["derive"] }
@@ -49,9 +54,6 @@ gitraptor-winsys.workspace = true
 # `proc_pidinfo` of other processes (ancestry, controlling terminal, start
 # time). Builds its bindings with bindgen (needs the Command Line Tools SDK).
 libproc = "=0.14.11"
-# Command line of the nearest `git` ancestor (`KERN_PROCARGS2`), read only to classify the
-# subcommand of the second line (DS-US-GRD-018 § 5.3, ADR-GRP-002 Enmienda 2026-10-07).
-gitraptor-macsys.workspace = true
 
 [dev-dependencies]
 gitraptor-testkit.workspace = true

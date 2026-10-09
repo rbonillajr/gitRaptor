@@ -52,6 +52,11 @@ const MAX_DEPTH: usize = 64;
 /// Samples kept per repo; older ones can no longer match a batch.
 const MAX_SIGHTINGS: usize = 256;
 
+/// Most foreign `git`s whose argv and environment are read per sample; past
+/// it a `git` is unreadable (`None`), so it counts as foreign in the whole
+/// repo: a flood of `git`s costs no more than this, and gains nothing.
+const MAX_REDIRECT_READS: usize = 32;
+
 /// Id of the session of the Claude Code process `(pid, start)`. The same
 /// text identifies the requester of a Time Machine operation
 /// (`requester.rs`), so a later correction of the session reaches it
@@ -302,6 +307,7 @@ struct Registered {
     registration_evidence: bool,
 }
 
+#[derive(Clone)]
 struct RepoPaths {
     common: PathBuf,
     worktrees: Vec<PathBuf>,
@@ -327,6 +333,9 @@ impl RepoPaths {
         path.starts_with(&self.common)
     }
 }
+
+/// The present sessions of a repo, by the `(pid, start)` of their process.
+type Sessions = HashMap<(u32, u64), String>;
 
 /// What one `git` of an S3 window means for the event.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1014,22 +1023,47 @@ impl Inner {
         let unreadable = cwds.values().filter(|c| c.is_none()).count() as u64;
         self.cwd_unreadable.fetch_add(unreadable, Ordering::Relaxed);
         let tolerance = u64::try_from(self.config.start_tolerance.as_micros()).unwrap_or(0);
-        // Whether each foreign `git` redirects its target: one boolean per
-        // pid, never a value of its argv or environment (SEC-04).
-        let mut redirects: HashMap<u32, Option<bool>> = HashMap::new();
-        let mut st = self.lock();
-        for notice in notices {
-            let sessions: HashMap<(u32, u64), String> = st
-                .live
+        // What each notice needs from the state, copied so the reads below
+        // (folders of ancestors, argv and environment) never hold the lock
+        // the scan and the router wait on.
+        let snapshots: Vec<(Sessions, Option<RepoPaths>)> = {
+            let st = self.lock();
+            notices
                 .iter()
-                .filter(|(_, l)| l.repo_id == notice.repo_id)
-                .map(|(k, l)| (*k, l.session_id.clone()))
-                .collect();
-            let repo = st.repos.get(&notice.repo_id);
+                .map(|notice| {
+                    let sessions = st
+                        .live
+                        .iter()
+                        .filter(|(_, l)| l.repo_id == notice.repo_id)
+                        .map(|(k, l)| (*k, l.session_id.clone()))
+                        .collect();
+                    (sessions, st.repos.get(&notice.repo_id).cloned())
+                })
+                .collect()
+        };
+        // Whether each foreign `git` redirects its target: one boolean per
+        // pid, never a value of its argv or environment (SEC-04), and at most
+        // [`MAX_REDIRECT_READS`] reads.
+        let mut redirects: HashMap<u32, Option<bool>> = HashMap::new();
+        let mut redirect_of = |pid: u32| -> Option<bool> {
+            if let Some(known) = redirects.get(&pid) {
+                return *known;
+            }
+            let read = if redirects.len() < MAX_REDIRECT_READS {
+                self.procs.git_redirect(pid)
+            } else {
+                None
+            };
+            redirects.insert(pid, read);
+            read
+        };
+        let mut sightings = Vec::with_capacity(notices.len());
+        for (notice, (sessions, repo)) in notices.iter().zip(&snapshots) {
+            let repo = repo.as_ref();
             let seen: Vec<GitSeen> = gits
                 .iter()
                 .map(|g| {
-                    let owner = self.owner(g, &by_pid, &sessions);
+                    let owner = self.owner(g, &by_pid, sessions);
                     let mut cwd = cwds.get(&g.pid).cloned().flatten();
                     let mut placed_by_ancestor = false;
                     let mut redirect = None;
@@ -1044,12 +1078,13 @@ impl Inner {
                             }
                             // Only where the answer can change the outcome:
                             // its own folder, in the repo, outside the
-                            // common dir. Read once per sample.
+                            // common dir. Read once per sample. A foreign
+                            // `git` whose own folder is outside the repo is
+                            // not read and never counts here, even if `-C`
+                            // points it into the repo: a declared gap.
                             Some(own) => {
                                 if repo.is_some_and(|r| r.contains(own) && !r.in_common(own)) {
-                                    redirect = *redirects
-                                        .entry(g.pid)
-                                        .or_insert_with(|| self.procs.git_redirect(g.pid));
+                                    redirect = redirect_of(g.pid);
                                 }
                             }
                         }
@@ -1063,6 +1098,10 @@ impl Inner {
                     }
                 })
                 .collect();
+            sightings.push((notice, seen));
+        }
+        let mut st = self.lock();
+        for (notice, seen) in sightings {
             let ring = st.sightings.entry(notice.repo_id.clone()).or_default();
             ring.push_back(Sighting {
                 t_recv: notice.t_recv,

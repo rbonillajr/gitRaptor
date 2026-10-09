@@ -46,54 +46,120 @@ pub fn process_git_redirect(pid: u32) -> Option<bool> {
     }
 }
 
-/// [`process_git_redirect`] over a `KERN_PROCARGS2` area: the global options of the argv (after
-/// `argv[0]`), then the names of the environment that follows it. Anything malformed is `None`.
+/// [`process_git_redirect`] over a `KERN_PROCARGS2` area: [`git_redirects`] over the argv (after
+/// `argv[0]`) and every non-empty string that follows it, the environment and the loader's own
+/// `key=value` strings alike. Anything malformed is `None`.
 pub fn parse_procargs2_git_redirect(area: &[u8]) -> Option<bool> {
     let (args, env) = split_procargs2(area)?;
-    if global_options_redirect(args.get(1..).unwrap_or_default()) {
-        return Some(true);
-    }
-    // The environment ends at the first empty string (its NUL padding, then the loader's own
-    // strings); a last string cut by the end of the area still names a variable.
-    let mut names = env
-        .split(|b| *b == 0)
-        .take_while(|s| !s.is_empty())
-        .map(|kv| kv.split(|b| *b == b'=').next().unwrap_or_default());
-    Some(names.any(|name| REDIRECT_ENV.contains(&name)))
+    let args = args.get(1..).unwrap_or_default().iter().copied();
+    // The whole tail, not up to the first empty string: an empty entry must
+    // not hide a `GIT_DIR` after it. A last string cut by the end of the area
+    // still names a variable.
+    Some(git_redirects(args, env.split(|b| *b == 0)))
+}
+
+/// Whether a `git` with these arguments (program name excluded) and this environment redirects
+/// its target: `-C`, `--git-dir` or `--work-tree` among its global options, or `GIT_DIR`,
+/// `GIT_WORK_TREE` or `GIT_COMMON_DIR` in its environment.
+///
+/// `env` holds names or `NAME=value` entries: only what goes before the first `=` is compared,
+/// and empty entries are skipped. Fails closed: a global option this parser does not know, or a
+/// `--` before the subcommand, counts as a redirect. The first argument that is not an option is
+/// the subcommand and nothing after it is read, so `git log -C` (copy detection) does not
+/// redirect. Only the boolean leaves: never an argument nor a variable's value (SEC-04).
+pub fn git_redirects<'a, 'b>(
+    args: impl IntoIterator<Item = &'a [u8]>,
+    env: impl IntoIterator<Item = &'b [u8]>,
+) -> bool {
+    global_options_redirect(args.into_iter())
+        || env
+            .into_iter()
+            .filter(|entry| !entry.is_empty())
+            .any(|entry| REDIRECT_ENV.contains(&before_equals(entry)))
 }
 
 /// The environment variables that move a `git`'s repository or worktree.
 const REDIRECT_ENV: [&[u8]; 3] = [b"GIT_DIR", b"GIT_WORK_TREE", b"GIT_COMMON_DIR"];
 
-/// The global options of `git` that take their value as the next argument (in the `=` form they
-/// are one argument). `--exec-path` only takes one in the `=` form.
-const GLOBAL_WITH_VALUE: [&[u8]; 7] = [
+/// The global options that move a `git`'s repository or worktree. `-C` and `--work-tree` change
+/// directory, `--git-dir` does not, but all three are treated alike.
+const REDIRECT_OPTIONS: [&[u8]; 3] = [b"-C", b"--git-dir", b"--work-tree"];
+
+/// The global options of `git` (`handle_options()` in `git.c`) whose value is the next argument;
+/// the long ones also take it after `=`, as one argument. `--super-prefix` is gone from current
+/// Git and stays for older ones.
+const GLOBAL_WITH_VALUE: [&[u8]; 9] = [
     b"-C",
     b"-c",
     b"--git-dir",
     b"--work-tree",
     b"--namespace",
     b"--config-env",
+    b"--attr-source",
+    b"--shallow-file",
     b"--super-prefix",
 ];
 
+/// The global options of `git` that take no value.
+const GLOBAL_FLAGS: [&[u8]; 21] = [
+    b"-p",
+    b"-P",
+    b"--paginate",
+    b"--no-pager",
+    b"--bare",
+    b"--no-replace-objects",
+    b"--no-lazy-fetch",
+    b"--no-optional-locks",
+    b"--no-advice",
+    b"--literal-pathspecs",
+    b"--glob-pathspecs",
+    b"--noglob-pathspecs",
+    b"--icase-pathspecs",
+    b"--exec-path",
+    b"--html-path",
+    b"--man-path",
+    b"--info-path",
+    b"--version",
+    b"-v",
+    b"--help",
+    b"-h",
+];
+
+/// The global options of `git` that take a value only after `=`.
+const GLOBAL_EQUALS_ONLY: [&[u8]; 2] = [b"--list-cmds", b"--exec-path"];
+
+/// What goes before the first `=` of `entry`, or all of it.
+fn before_equals(entry: &[u8]) -> &[u8] {
+    entry.split(|b| *b == b'=').next().unwrap_or_default()
+}
+
 /// Whether the global options (the arguments before the subcommand, program name excluded)
-/// redirect the target: `-C`, `--git-dir` or `--work-tree`, separate or with `=`. The first
-/// argument that is not an option is the subcommand; what follows it is never read.
-fn global_options_redirect(args: &[&[u8]]) -> bool {
-    let mut args = args.iter();
+/// redirect the target, or cannot be told apart from options that might.
+fn global_options_redirect<'a>(mut args: impl Iterator<Item = &'a [u8]>) -> bool {
     while let Some(arg) = args.next() {
-        if !arg.starts_with(b"-") || *arg == b"--" {
+        if !arg.starts_with(b"-") {
+            // The subcommand: what follows is its own.
             return false;
         }
-        let name = arg.split(|b| *b == b'=').next().unwrap_or_default();
-        if matches!(name, b"-C" | b"--git-dir" | b"--work-tree") {
+        let name = before_equals(arg);
+        if REDIRECT_OPTIONS.contains(&name) {
             return true;
         }
-        let has_value = name.len() < arg.len();
-        if !has_value && GLOBAL_WITH_VALUE.contains(arg) {
+        let known = if name.len() < arg.len() {
+            // Only the long options take their value after `=`.
+            name.starts_with(b"--")
+                && (GLOBAL_WITH_VALUE.contains(&name) || GLOBAL_EQUALS_ONLY.contains(&name))
+        } else if GLOBAL_WITH_VALUE.contains(&name) {
             // Its value, which may itself start with `-`.
             args.next();
+            true
+        } else {
+            GLOBAL_FLAGS.contains(&name)
+        };
+        if !known {
+            // An option this parser does not know, `--` included: it might
+            // move the target, so it counts.
+            return true;
         }
     }
     false
@@ -322,6 +388,60 @@ mod tests {
         assert!(now_us - kid.start_us < 60_000_000, "{kid:?}");
         // Another user's process (launchd, uid 0) is not listed.
         assert!(table.iter().all(|p| p.pid != 1));
+    }
+
+    fn redirects(line: &str) -> bool {
+        git_redirects(line.split_whitespace().map(str::as_bytes), [])
+    }
+
+    #[test]
+    fn options_with_a_value_are_skipped_before_a_redirect() {
+        assert!(redirects("--attr-source HEAD -C x commit"));
+        assert!(redirects("--shallow-file x -C y commit"));
+        assert!(redirects(
+            "--attr-source=HEAD --config-env=k=E --work-tree=/w status"
+        ));
+    }
+
+    #[test]
+    fn an_unknown_global_option_counts_as_a_redirect() {
+        assert!(redirects("--unknown-global status"));
+        assert!(redirects("-x status"));
+        // Glued or `=` forms git does not take are unknown too.
+        assert!(redirects("-Cx status"));
+        assert!(redirects("-c=k=v status"));
+        assert!(redirects("--list-cmds status"));
+        // `--` before the subcommand: fail closed.
+        assert!(redirects("-- status"));
+    }
+
+    #[test]
+    fn known_flags_do_not_redirect() {
+        assert!(!redirects("--no-pager log -C"));
+        assert!(!redirects("-p status"));
+        assert!(!redirects(
+            "-P --paginate --bare --no-replace-objects --no-lazy-fetch --no-optional-locks \
+             --no-advice --literal-pathspecs --glob-pathspecs --noglob-pathspecs \
+             --icase-pathspecs --html-path --man-path --info-path -v -h --version --help status"
+        ));
+        assert!(!redirects(
+            "--exec-path --exec-path=/x --list-cmds=main status"
+        ));
+        assert!(!redirects(
+            "--namespace ns --shallow-file f --super-prefix p/ status"
+        ));
+    }
+
+    #[test]
+    fn the_whole_environment_is_read_past_an_empty_entry() {
+        let a = area(
+            2,
+            b"/usr/bin/git\0\0\0\0git\0status\0HOME=/u\0\0\0GIT_DIR=/r/.git\0\0",
+        );
+        assert_eq!(parse_procargs2_git_redirect(&a), Some(true));
+        let names: [&[u8]; 3] = [b"", b"GIT_DIR", b"PATH"];
+        assert!(git_redirects([], names));
+        assert!(!git_redirects([], [&b""[..], b"=x", b"PATH=GIT_DIR"]));
     }
 
     #[cfg(target_os = "macos")]

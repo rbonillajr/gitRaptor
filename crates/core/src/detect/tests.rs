@@ -555,6 +555,33 @@ fn s3_ignores_exiting_gits_launched_outside_the_repo() {
     ));
 }
 
+/// A flood of foreign `git`s costs at most `MAX_REDIRECT_READS` reads of
+/// argv and environment per sample: the ones past it are unreadable, so they
+/// count in the whole repo.
+#[test]
+fn s3_reads_at_most_the_capped_number_of_redirects_per_sample() {
+    let rig = Rig::new();
+    rig.claude(20, 2_000, "/wt/feat-login");
+    rig.scan();
+    git(&rig, 31, 20, Some("/wt/feat-login"));
+    let flood = u32::try_from(MAX_REDIRECT_READS).unwrap() + 1;
+    for pid in 100..100 + flood {
+        git(&rig, pid, 10, Some("/r"));
+    }
+    rig.detector.sample_now("r", 1_000);
+    let e = rig.evidence_in("/wt/feat-login", S3Scope::Worktree, 1_000);
+    assert_eq!(e.outcome, S3Outcome::Ambiguous);
+    assert_eq!(
+        e.counts,
+        S3Counts {
+            sessions_wt: 1,
+            foreign_other_wt: flood - 1,
+            foreign_redirected: 1,
+            ..S3Counts::default()
+        }
+    );
+}
+
 #[test]
 fn s3_with_two_sessions_in_the_worktree_is_ambiguous() {
     let rig = Rig::new();

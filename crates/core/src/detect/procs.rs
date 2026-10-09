@@ -53,53 +53,14 @@ pub trait ProcLister: Send + Sync {
 }
 
 /// Whether a `git` with these arguments (after the program name) and these
-/// environment variable names redirects its target: a global option `-C`,
-/// `--git-dir` or `--work-tree` before the subcommand, or `GIT_DIR`,
-/// `GIT_WORK_TREE` or `GIT_COMMON_DIR` in the environment.
-///
-/// The first argument that is not an option is the subcommand and nothing
-/// after it is read: `git log -C` (copy detection) does not redirect. The
-/// value of a global option that takes one (`-c k=v`) is skipped.
-pub fn git_redirects<'a>(
-    args: &[OsString],
-    mut env_names: impl Iterator<Item = &'a OsStr>,
-) -> bool {
-    global_options_redirect(args.iter().map(|a| a.as_encoded_bytes()))
-        || env_names.any(|n| REDIRECT_ENV.contains(&n.as_encoded_bytes()))
-}
-
-/// The environment variables that move a `git`'s repository or worktree.
-const REDIRECT_ENV: [&[u8]; 3] = [b"GIT_DIR", b"GIT_WORK_TREE", b"GIT_COMMON_DIR"];
-
-/// The global options of `git` whose value is the next argument (in the `=`
-/// form they are one argument). `--exec-path` only takes one with `=`.
-const GLOBAL_WITH_VALUE: [&[u8]; 7] = [
-    b"-C",
-    b"-c",
-    b"--git-dir",
-    b"--work-tree",
-    b"--namespace",
-    b"--config-env",
-    b"--super-prefix",
-];
-
-/// Whether the global options (before the subcommand, program name
-/// excluded) hold `-C`, `--git-dir` or `--work-tree`, separate or with `=`.
-fn global_options_redirect<'a>(mut args: impl Iterator<Item = &'a [u8]>) -> bool {
-    while let Some(arg) = args.next() {
-        if !arg.starts_with(b"-") || arg == b"--" {
-            return false;
-        }
-        let name = arg.split(|b| *b == b'=').next().unwrap_or_default();
-        if matches!(name, b"-C" | b"--git-dir" | b"--work-tree") {
-            return true;
-        }
-        if name.len() == arg.len() && GLOBAL_WITH_VALUE.contains(&arg) {
-            // Its value, which may itself start with `-`.
-            args.next();
-        }
-    }
-    false
+/// environment variable names redirects its target: the one parser of
+/// [`gitraptor_macsys::process::git_redirects`], which fails closed on a
+/// global option it does not know.
+pub fn git_redirects<'a>(args: &[OsString], env_names: impl Iterator<Item = &'a OsStr>) -> bool {
+    gitraptor_macsys::process::git_redirects(
+        args.iter().map(|a| a.as_encoded_bytes()),
+        env_names.map(OsStr::as_encoded_bytes),
+    )
 }
 
 /// Most bytes read from `/proc/<pid>/cmdline` or `/proc/<pid>/environ`; a
@@ -108,12 +69,13 @@ fn global_options_redirect<'a>(mut args: impl Iterator<Item = &'a [u8]>) -> bool
 const PROC_TEXT_CAP: u64 = 256 * 1024;
 
 /// Linux: [`git_redirects`] over `/proc/<pid>/cmdline` (without `argv[0]`)
-/// and the names of `/proc/<pid>/environ`. `None` when either cannot be read,
-/// is empty (the process is exiting) or exceeds [`PROC_TEXT_CAP`].
+/// and `/proc/<pid>/environ`, walked in place as bytes: no argument or
+/// variable is copied out of the buffers read. `None` when either cannot be
+/// read, the command line is empty (the process is exiting) or either
+/// exceeds [`PROC_TEXT_CAP`].
 #[cfg(target_os = "linux")]
 fn linux_git_redirect(pid: u32) -> Option<bool> {
     use std::io::Read as _;
-    use std::os::unix::ffi::OsStrExt as _;
 
     let read = |name: &str| -> Option<Vec<u8>> {
         let file = std::fs::File::open(format!("/proc/{pid}/{name}")).ok()?;
@@ -123,18 +85,15 @@ fn linux_git_redirect(pid: u32) -> Option<bool> {
     };
     let cmdline = read("cmdline").filter(|c| !c.is_empty())?;
     let environ = read("environ")?;
-    let args: Vec<OsString> = cmdline
+    let args = cmdline
         .strip_suffix(b"\0")
         .unwrap_or(&cmdline[..])
         .split(|b| *b == 0)
-        .skip(1)
-        .map(|a| OsStr::from_bytes(a).to_owned())
-        .collect();
-    let names = environ
-        .split(|b| *b == 0)
-        .filter(|kv| !kv.is_empty())
-        .map(|kv| OsStr::from_bytes(kv.split(|b| *b == b'=').next().unwrap_or_default()));
-    Some(git_redirects(&args, names))
+        .skip(1);
+    Some(gitraptor_macsys::process::git_redirects(
+        args,
+        environ.split(|b| *b == 0),
+    ))
 }
 
 /// The running OS.
