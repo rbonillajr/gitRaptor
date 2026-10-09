@@ -25,8 +25,8 @@ use super::{
     now_ms, profile_error_kind,
 };
 use crate::detect::{
-    Detector, OpenSession, PresentSession, RefMove, RegisteredSession, S3Outcome, SessionChange,
-    SessionConfig, SystemProcLister, detection_supported,
+    Detector, Diagnostics, OpenSession, PresentSession, RefMove, RegisteredSession, S3Counts,
+    S3Outcome, S3Scope, SessionChange, SessionConfig, SystemProcLister, detection_supported,
 };
 use crate::observe::RepoRead;
 use crate::profile::{
@@ -123,6 +123,36 @@ fn branch_move(event: &RawEvent) -> Option<RefMove<'_>> {
         }),
         _ => None,
     }
+}
+
+/// Where a foreign `git` counts for this event, by its kind.
+fn s3_scope(event: &RawEvent) -> S3Scope {
+    // Stub: every kind keeps the repo scope until the rule lands.
+    let _ = event;
+    S3Scope::Repo
+}
+
+/// The fields of the `s3_evidence` log line: integers, fixed texts and the
+/// filtered repo id, never a path, a name, a pid or an argv (SEC-04).
+fn s3_log_fields(
+    repo_id: &str,
+    kind: GitEventKind,
+    outcome: &'static str,
+    diag: Diagnostics,
+    scope: S3Scope,
+    counts: S3Counts,
+) -> Vec<(&'static str, Field)> {
+    // Stub: the scope and the counters are not written yet.
+    let _ = (scope, counts);
+    let count = |n: u64| Field::from(i64::try_from(n).unwrap_or(i64::MAX));
+    vec![
+        ("repo", Field::id(repo_id)),
+        ("event", kind.as_str().into()),
+        ("outcome", outcome.into()),
+        ("samples", count(diag.samples)),
+        ("s3_cwd_unreadable", count(diag.cwd_unreadable)),
+        ("s3_placed_by_ancestor", count(diag.placed_by_ancestor)),
+    ]
 }
 
 impl Daemon {
@@ -394,9 +424,11 @@ impl Daemon {
         if event.kind == GitEventKind::Reconciled {
             return None;
         }
-        let outcome = detector.evidence(
+        let scope = s3_scope(event);
+        let evidence = detector.evidence(
             &batch.repo_id,
             &event.worktree,
+            scope,
             branch_move(event),
             batch.marks.t_recv,
             batch.marks.t_flush,
@@ -426,6 +458,7 @@ impl Daemon {
                     })
             })
         };
+        let outcome = evidence.outcome;
         let label = match &outcome {
             S3Outcome::NoSession => return by_registration(),
             S3Outcome::NoSighting => "no-sighting",
@@ -433,19 +466,15 @@ impl Daemon {
             S3Outcome::Attributed(_) => "attributed",
             S3Outcome::Hook(_) => "s4",
         };
-        let diag = detector.diagnostics();
-        let count = |n: u64| Field::from(i64::try_from(n).unwrap_or(i64::MAX));
-        self.logger.info(
-            "s3_evidence",
-            &[
-                ("repo", Field::id(&batch.repo_id)),
-                ("event", event.kind.as_str().into()),
-                ("outcome", label.into()),
-                ("samples", count(diag.samples)),
-                ("s3_cwd_unreadable", count(diag.cwd_unreadable)),
-                ("s3_placed_by_ancestor", count(diag.placed_by_ancestor)),
-            ],
+        let fields = s3_log_fields(
+            &batch.repo_id,
+            event.kind,
+            label,
+            detector.diagnostics(),
+            scope,
+            evidence.counts,
         );
+        self.logger.info("s3_evidence", &fields);
         match outcome {
             S3Outcome::Attributed(session) => Some(Attribution {
                 session,
@@ -930,6 +959,10 @@ fn session_view(
         }),
     }
 }
+
+#[cfg(test)]
+#[path = "sessions_s3_tests.rs"]
+mod s3_tests;
 
 #[cfg(test)]
 mod tests {

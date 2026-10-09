@@ -6,6 +6,7 @@
 //! in its arguments, so not even the platform APIs that would load them are
 //! called.
 
+use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
 
 /// One process of the user, as the kernel reports it.
@@ -39,6 +40,24 @@ pub trait ProcLister: Send + Sync {
     }
     /// Working folder of `pid`, without symbolic links.
     fn cwd(&self, pid: u32) -> Option<PathBuf>;
+    /// Whether the `git` `pid` redirects its target (`-C`, `--git-dir`,
+    /// `--work-tree` or `GIT_DIR`, `GIT_WORK_TREE`, `GIT_COMMON_DIR` in its
+    /// environment). `None` when its arguments or environment cannot be
+    /// read. Only this boolean leaves the reader (SEC-04).
+    fn git_redirect(&self, pid: u32) -> Option<bool> {
+        let _ = pid;
+        None
+    }
+}
+
+/// Whether a `git` with these arguments (after the program name) and these
+/// environment variable names redirects its target: a global option `-C`,
+/// `--git-dir` or `--work-tree` before the subcommand, or `GIT_DIR`,
+/// `GIT_WORK_TREE` or `GIT_COMMON_DIR` in the environment.
+pub fn git_redirects<'a>(args: &[OsString], env_names: impl Iterator<Item = &'a OsStr>) -> bool {
+    // Stub: the rule is not written yet.
+    let _ = (args, env_names.count());
+    false
 }
 
 /// The running OS.
@@ -283,6 +302,10 @@ impl ProcLister for SystemProcLister {
         None
     }
 }
+
+#[cfg(test)]
+#[path = "procs_redirect_tests.rs"]
+mod redirect_tests;
 
 #[cfg(all(test, any(target_os = "macos", target_os = "linux")))]
 mod tests {

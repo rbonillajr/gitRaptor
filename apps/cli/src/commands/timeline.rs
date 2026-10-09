@@ -341,6 +341,10 @@ fn files_text(files: &ChangedFiles) -> String {
 }
 
 #[cfg(test)]
+#[path = "timeline_inferred_tests.rs"]
+mod inferred_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use gitraptor_api::timemachine::Attribution;
@@ -362,6 +366,7 @@ mod tests {
             utc_offset_s: 0,
             worktrees: vec![untrusted("/repo/wt-a")],
             actor,
+            inferred: None,
             attribution,
             protection: gitraptor_api::timemachine::Protection {
                 level: ProtectionLevel::None,

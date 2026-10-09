@@ -7,7 +7,7 @@
 
 use std::fmt::Write as _;
 
-use gitraptor_api::messages::{GitEventKind, GitEventView, TrailerCheck};
+use gitraptor_api::messages::{GitEventKind, GitEventView, InferredAgent, TrailerCheck};
 use gitraptor_api::{Actor, UntrustedName};
 use serde_json::{Value, json};
 
@@ -116,21 +116,26 @@ fn authored(e: &GitEventView) -> Option<String> {
 /// commit's trailers when the engine did (US-GRD-019).
 fn actor_of(e: &GitEventView) -> String {
     match (&e.actor, &e.inferred) {
-        (Actor::Unattributed, Some(hint)) => {
-            let agent = t(&format!("actor.{}", wire(&hint.kind)), &[]);
-            let agent = match hint.trailer {
-                Some(TrailerCheck::Confirmed) => {
-                    format!("{agent} ({})", t("events.inferred_confirmed", &[]))
-                }
-                Some(TrailerCheck::Unconfirmed) => {
-                    format!("{agent} ({})", t("events.inferred_unconfirmed", &[]))
-                }
-                None => agent,
-            };
-            t("events.no_agent_inferred", &[("agent", &agent)])
-        }
+        (Actor::Unattributed, Some(hint)) => inferred_actor(hint),
         (actor_, _) => actor(actor_),
     }
+}
+
+/// "no agent; inferred: Claude Code (confirmed by the trailer)": an event
+/// without an agent and the agent it is inferred to come from. The same text
+/// in `raptor events` and `raptor timeline`.
+pub(crate) fn inferred_actor(hint: &InferredAgent) -> String {
+    let agent = t(&format!("actor.{}", wire(&hint.kind)), &[]);
+    let agent = match hint.trailer {
+        Some(TrailerCheck::Confirmed) => {
+            format!("{agent} ({})", t("events.inferred_confirmed", &[]))
+        }
+        Some(TrailerCheck::Unconfirmed) => {
+            format!("{agent} ({})", t("events.inferred_unconfirmed", &[]))
+        }
+        None => agent,
+    };
+    t("events.no_agent_inferred", &[("agent", &agent)])
 }
 
 /// The actor with its origin (US-GRP-007): "Claude Code, detected", or

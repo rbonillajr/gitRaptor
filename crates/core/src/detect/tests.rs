@@ -4,6 +4,8 @@ use std::sync::atomic::AtomicI64;
 
 use super::*;
 
+mod s3_scope;
+
 const AGENT: &str = "fake-claude";
 const OLD: &str = "1111111111111111111111111111111111111111";
 const NEW: &str = "2222222222222222222222222222222222222222";
@@ -14,6 +16,8 @@ struct Table {
     cwds: Mutex<HashMap<u32, PathBuf>>,
     /// `(pid, start)` of every executable path read, in order.
     exe_reads: Mutex<Vec<(u32, u64)>>,
+    /// What `git_redirect` answers per pid; `Some(false)` when absent.
+    redirects: Mutex<HashMap<u32, Option<bool>>>,
 }
 
 impl Table {
@@ -27,6 +31,11 @@ impl Table {
         if let Some(cwd) = cwd {
             self.cwds.lock().unwrap().insert(pid, PathBuf::from(cwd));
         }
+    }
+
+    /// Whether the `git` `pid` redirects its target; `None`: unreadable.
+    fn redirect(&self, pid: u32, redirect: Option<bool>) {
+        self.redirects.lock().unwrap().insert(pid, redirect);
     }
 
     fn kill(&self, pid: u32) {
@@ -61,6 +70,14 @@ impl ProcLister for Arc<Table> {
     }
     fn cwd(&self, pid: u32) -> Option<PathBuf> {
         self.cwds.lock().unwrap().get(&pid).cloned()
+    }
+    fn git_redirect(&self, pid: u32) -> Option<bool> {
+        self.redirects
+            .lock()
+            .unwrap()
+            .get(&pid)
+            .copied()
+            .unwrap_or(Some(false))
     }
 }
 
@@ -137,8 +154,19 @@ impl Rig {
     }
 
     fn evidence(&self, worktree: &str, t_recv: u64) -> S3Outcome {
-        self.detector
-            .evidence("r", Path::new(worktree), None, t_recv, t_recv + 75_000_000)
+        self.evidence_in(worktree, S3Scope::Repo, t_recv).outcome
+    }
+
+    /// The S3 rule for an event of `worktree` with `scope`, and its counters.
+    fn evidence_in(&self, worktree: &str, scope: S3Scope, t_recv: u64) -> S3Evidence {
+        self.detector.evidence(
+            "r",
+            Path::new(worktree),
+            scope,
+            None,
+            t_recv,
+            t_recv + 75_000_000,
+        )
     }
 
     /// The S4 rule for the move of `feat-login` from [`OLD`] to [`NEW`].
@@ -148,13 +176,16 @@ impl Rig {
             old: Some(OLD),
             new: NEW,
         };
-        self.detector.evidence(
-            "r",
-            Path::new(worktree),
-            Some(moved),
-            t_recv,
-            t_recv + 75_000_000,
-        )
+        self.detector
+            .evidence(
+                "r",
+                Path::new(worktree),
+                S3Scope::Repo,
+                Some(moved),
+                t_recv,
+                t_recv + 75_000_000,
+            )
+            .outcome
     }
 
     /// A hook claim of `session` for that move, from `cwd`, at `t`.

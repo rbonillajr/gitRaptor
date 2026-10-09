@@ -27,6 +27,9 @@ pub mod resources;
 pub mod rpc;
 pub mod scope;
 pub mod timemachine;
+#[cfg(test)]
+#[path = "timemachine_inferred_tests.rs"]
+mod timemachine_inferred_tests;
 pub mod untrusted;
 
 pub use actor::{Actor, AgentKind, AgentOrigin};
