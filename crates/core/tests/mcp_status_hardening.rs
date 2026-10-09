@@ -557,38 +557,67 @@ fn refused(
     }
 }
 
+/// The common directory of the repo of the worktree at `root` and the name it has for it,
+/// read before the `.git` is swapped.
+fn named(root: &Path) -> (PathBuf, Option<String>) {
+    let common = gitraptor_core::observe::locate(root).unwrap();
+    let link = std::fs::read_to_string(root.join(".git")).ok();
+    let id = link.and_then(|text| {
+        let target = PathBuf::from(text.trim().strip_prefix("gitdir:")?.trim());
+        Some(target.file_name()?.to_string_lossy().into_owned())
+    });
+    (common, id)
+}
+
+fn all_changes(
+    (common, id): &(PathBuf, Option<String>),
+    root: &Path,
+) -> Result<
+    (
+        gitraptor_api::messages::ChangeCounts,
+        Vec<gitraptor_api::messages::FileChangeView>,
+    ),
+    gitraptor_git::ReadError,
+> {
+    let main = id.is_none();
+    let root = gitraptor_core::observe::canonical(root);
+    gitraptor_core::observe::all_changes(common, &root, main, id.as_deref())
+}
+
 #[test]
 fn a_main_git_that_is_a_file_pointing_elsewhere_is_refused() {
     let fx = plain();
     let other = other_repo_with_a_secret();
-    gitraptor_core::observe::all_changes(&fx.repo, true).unwrap();
+    let named = named(&fx.repo);
+    all_changes(&named, &fx.repo).unwrap();
     move_git_aside(&fx.repo);
     std::fs::write(
         fx.repo.join(".git"),
         format!("gitdir: {}\n", other.repo.join(".git").display()),
     )
     .unwrap();
-    refused(gitraptor_core::observe::all_changes(&fx.repo, true));
+    refused(all_changes(&named, &fx.repo));
 }
 
 #[test]
 fn a_main_git_that_is_a_symlink_is_refused() {
     let fx = plain();
     let other = other_repo_with_a_secret();
+    let named = named(&fx.repo);
     move_git_aside(&fx.repo);
     std::os::unix::fs::symlink(other.repo.join(".git"), fx.repo.join(".git")).unwrap();
-    refused(gitraptor_core::observe::all_changes(&fx.repo, true));
+    refused(all_changes(&named, &fx.repo));
 }
 
 #[test]
 fn a_linked_git_that_is_a_symlink_is_refused_and_a_real_one_is_read() {
     let s = scenario();
-    let counts = gitraptor_core::observe::all_changes(&s.wt_b, false)
-        .unwrap()
-        .0;
+    let named = named(&s.wt_b);
+    assert!(named.1.is_some());
+    let counts = all_changes(&named, &s.wt_b).unwrap().0;
     assert_eq!(counts.total(), 4);
     let other = other_repo_with_a_secret();
     move_git_aside(&s.wt_b);
     std::os::unix::fs::symlink(other.repo.join(".git"), s.wt_b.join(".git")).unwrap();
-    refused(gitraptor_core::observe::all_changes(&s.wt_b, false));
+    refused(all_changes(&named, &s.wt_b));
 }

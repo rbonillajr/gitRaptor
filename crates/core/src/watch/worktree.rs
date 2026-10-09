@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 use gitraptor_api::UntrustedName;
 use gitraptor_api::clock;
 use gitraptor_api::messages::{GitEventDetails, GitEventKind, HeadView, WorktreeStatus};
-use gitraptor_git::{ReaderOptions, RepoReader};
+use gitraptor_git::RepoReader;
 
 use super::{GapMark, Marks, ObservedBatch, RawEvent, Shared, WtMsg, wall_now};
 use crate::observe::{self, WorktreeRead};
@@ -34,6 +34,8 @@ struct Task {
     shared: Arc<Shared>,
     repo_id: String,
     root: PathBuf,
+    /// The repo's Git common directory: only a worktree it owns is opened (#216 M-01).
+    common: PathBuf,
     /// Its Git directory: `HEAD` is read from it before each batch.
     git_dir: PathBuf,
     /// The `HEAD` of the last batch handed over (or read at the start).
@@ -61,6 +63,7 @@ pub(super) fn run(
     shared: Arc<Shared>,
     repo_id: String,
     initial: WorktreeRead,
+    common: PathBuf,
     git_dir: PathBuf,
     head: Vec<u8>,
     degraded: bool,
@@ -101,6 +104,7 @@ pub(super) fn run(
         touched: false,
         shared,
         root,
+        common,
         git_dir,
         sent_head: head,
     };
@@ -114,9 +118,9 @@ pub(super) fn run(
             Ok(WtMsg::Paths(t_recv, paths)) => {
                 let index = task.git_dir.join("index");
                 if paths.contains(&index) {
-                    task.ignore.revalidate(&task.root);
+                    task.revalidate_ignore();
                 }
-                if !task.ignore.keep_any(&task.root, paths) {
+                if !task.keep_any(paths) {
                     continue;
                 }
                 task.last_event_ms = wall_now().0;
@@ -167,7 +171,43 @@ pub(super) fn run(
     }
 }
 
+/// Opens the worktree for the ignore cache, only if its repo owns it (#216 M-01).
+fn opener<'a>(
+    common: &'a Path,
+    root: &'a Path,
+    main: bool,
+    admin: Option<&'a str>,
+) -> impl Fn() -> Option<RepoReader> + 'a {
+    move || observe::open_worktree(common, root, main, admin).ok()
+}
+
 impl Task {
+    /// [`IgnoreCache::revalidate`] on this worktree.
+    fn revalidate_ignore(&mut self) {
+        let Self {
+            ignore,
+            common,
+            root,
+            main,
+            admin,
+            ..
+        } = self;
+        ignore.revalidate(root, &opener(common, root, *main, admin.as_deref()));
+    }
+
+    /// [`IgnoreCache::keep_any`] on this worktree.
+    fn keep_any(&mut self, paths: Vec<PathBuf>) -> bool {
+        let Self {
+            ignore,
+            common,
+            root,
+            main,
+            admin,
+            ..
+        } = self;
+        ignore.keep_any(root, paths, &opener(common, root, *main, admin.as_deref()))
+    }
+
     fn window_len(&self) -> Duration {
         let c = self.shared.config;
         c.window.saturating_sub(c.timer_slack)
@@ -198,7 +238,7 @@ impl Task {
         self.shared
             .recomputes
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        observe::read_worktree(&self.root, self.main, self.admin.as_deref())
+        observe::read_worktree(&self.common, &self.root, self.main, self.admin.as_deref())
     }
 
     fn flush(&mut self, window: Window) {
@@ -278,7 +318,7 @@ impl Task {
         }
         // What the ignore cache decided may have changed with nobody noticing, e.g. a global
         // `core.excludesFile`: this is the bound (ADR-GRP-010, Enmienda 2026-10-08, E5).
-        self.ignore.revalidate(&self.root);
+        self.revalidate_ignore();
         let t_flush = clock::monotonic_ns();
         let head = self.head();
         let read = self.read();
@@ -580,11 +620,11 @@ impl IgnoreCache {
     /// a folder that holds a tracked entry, or that the rules no longer ignore, is dropped from
     /// the cache and from the router, and the watcher is told (E5). Called when the index
     /// changed and by the periodic reconciliation, which also covers `core.excludesFile`.
-    pub(super) fn revalidate(&mut self, root: &Path) {
+    pub(super) fn revalidate(&mut self, root: &Path, open: &dyn Fn() -> Option<RepoReader>) {
         if self.ignored.is_empty() {
             return;
         }
-        let Some(reader) = RepoReader::open(root, &ReaderOptions::default()).ok() else {
+        let Some(reader) = open() else {
             return;
         };
         let stale: Vec<String> = self
@@ -605,7 +645,12 @@ impl IgnoreCache {
     }
 
     /// Whether any path is outside every ignored directory.
-    pub(super) fn keep_any(&mut self, root: &Path, paths: Vec<PathBuf>) -> bool {
+    pub(super) fn keep_any(
+        &mut self,
+        root: &Path,
+        paths: Vec<PathBuf>,
+        open: &dyn Fn() -> Option<RepoReader>,
+    ) -> bool {
         if paths
             .iter()
             .any(|p| p.file_name().is_some_and(|n| n == ".gitignore"))
@@ -620,7 +665,7 @@ impl IgnoreCache {
                 keep = true;
                 continue;
             };
-            if self.is_ignored(root, rel, &mut reader) {
+            if self.is_ignored((root, rel), &mut reader, open) {
                 continue;
             }
             keep = true;
@@ -631,9 +676,9 @@ impl IgnoreCache {
 
     fn is_ignored(
         &mut self,
-        root: &Path,
-        rel: &Path,
+        (root, rel): (&Path, &Path),
         reader: &mut Option<Option<RepoReader>>,
+        open: &dyn Fn() -> Option<RepoReader>,
     ) -> bool {
         let parts: Vec<String> = rel
             .components()
@@ -655,8 +700,7 @@ impl IgnoreCache {
             if self.kept.contains(&dir) {
                 continue;
             }
-            let reader = reader
-                .get_or_insert_with(|| RepoReader::open(root, &ReaderOptions::default()).ok());
+            let reader = reader.get_or_insert_with(open);
             let Some(reader) = reader.as_ref() else {
                 return false;
             };

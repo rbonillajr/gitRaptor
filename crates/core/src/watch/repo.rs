@@ -82,18 +82,14 @@ impl RefsView {
             && let Some(main) = reader.workdir()
         {
             let root = observe::canonical(&main);
-            view.worktrees
-                .insert(root.clone(), worktree_refs(&root, common, true, None));
+            let refs = worktree_refs(common, (&root, common), true, None);
+            view.worktrees.insert(root.clone(), refs);
         }
         for w in reader.worktrees().unwrap_or_default() {
             let root = observe::canonical(&w.path);
             if linked_is_trusted(common, &w.id, &root) {
-                let refs = worktree_refs(
-                    &root,
-                    &common.join("worktrees").join(&w.id),
-                    false,
-                    Some(w.id),
-                );
+                let git_dir = common.join("worktrees").join(&w.id);
+                let refs = worktree_refs(common, (&root, &git_dir), false, Some(w.id));
                 view.worktrees.insert(root, refs);
             }
         }
@@ -155,9 +151,16 @@ pub struct EventPlace {
     pub inferred: bool,
 }
 
-fn worktree_refs(root: &Path, git_dir: &Path, main: bool, admin: Option<String>) -> WorktreeRefs {
+/// `at` is the worktree's `(root, git_dir)`. Its `HEAD` is read only if the repo at `common`
+/// owns it (#216 M-01).
+fn worktree_refs(
+    common: &Path,
+    (root, git_dir): (&Path, &Path),
+    main: bool,
+    admin: Option<String>,
+) -> WorktreeRefs {
     let (branch, commit, head_reflog, operating_on) =
-        match RepoReader::open(root, &ReaderOptions::default()) {
+        match observe::open_worktree(common, root, main, admin.as_deref()) {
             Ok(r) => {
                 let head = r.head().ok();
                 let in_progress = r.in_progress().is_some();
@@ -632,7 +635,7 @@ impl Task {
         let mut created = Vec::new();
         for (root, w) in &new.worktrees {
             if !self.view.worktrees.contains_key(root) {
-                let read = observe::read_worktree(root, w.main, w.admin.as_deref());
+                let read = observe::read_worktree(&self.common, root, w.main, w.admin.as_deref());
                 created.push((read, w.admin.clone()));
             }
         }

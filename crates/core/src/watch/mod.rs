@@ -702,14 +702,15 @@ impl Shared {
             degraded,
             ignored: Arc::clone(&ignored),
         };
-        {
+        let common = {
             let mut repos = self.repos.write().unwrap_or_else(|e| e.into_inner());
             let repo = repos.get_mut(repo_id)?;
             if repo.worktrees.iter().any(|w| w.root == root) {
                 return None;
             }
             repo.worktrees.push(handle);
-        }
+            repo.common.clone()
+        };
         let head = std::fs::read(git_dir.join("HEAD")).unwrap_or_default();
         let shared = Arc::clone(self);
         let repo_id = repo_id.to_owned();
@@ -718,7 +719,7 @@ impl Shared {
             .name("raptor-watch-worktree".into())
             .spawn(move || {
                 worktree::run(
-                    shared, repo_id, initial, git_dir, sent, degraded, ignored, rx,
+                    shared, repo_id, initial, common, git_dir, sent, degraded, ignored, rx,
                 )
             });
         Some((root, head))
@@ -1445,21 +1446,34 @@ fn sentinel_check(
     caches: &mut HashMap<PathBuf, worktree::IgnoreCache>,
     msg: SentinelMsg,
 ) {
+    // The repo's common directory and, for the root, how the repo names it: the ignore filter
+    // opens only a worktree the repo owns (#216 M-01).
     let dormant = {
         let repos = shared.repos.read().unwrap_or_else(|e| e.into_inner());
         repos
             .get(&msg.repo_id)
-            .is_some_and(|r| r.tier() == Tier::Dormant)
+            .filter(|r| r.tier() == Tier::Dormant)
+            .map(|r| {
+                let slept = msg.root.as_ref().and_then(|root| {
+                    let slept = r.asleep.as_ref()?.slept.iter();
+                    slept.into_iter().find(|w| &w.root == root)
+                });
+                (r.common.clone(), slept.map(|w| (w.main, w.admin.clone())))
+            })
     };
-    if !dormant {
+    let Some((common, named)) = dormant else {
         return;
-    }
-    let keep = match &msg.root {
-        Some(root) => caches
-            .entry(root.clone())
-            .or_default()
-            .keep_any(root, msg.paths),
-        None => true,
+    };
+    let keep = match (&msg.root, named) {
+        (Some(root), Some((main, admin))) => {
+            let open = || crate::observe::open_worktree(&common, root, main, admin.as_deref()).ok();
+            caches
+                .entry(root.clone())
+                .or_default()
+                .keep_any(root, msg.paths, &open)
+        }
+        // A root the repo does not name: nothing is opened, the repo wakes and reads it.
+        _ => true,
     };
     if !keep {
         return;
@@ -1571,12 +1585,18 @@ fn slow_reconcile(shared: &Shared, skip: &[String]) {
             .filter(|r| r.tier() == Tier::Dormant && !skip.contains(&r.id))
             .filter_map(|r| {
                 let a = r.asleep.as_ref()?;
-                (a.reconciled.elapsed() >= interval)
-                    .then(|| (a.reconciled, r.id.clone(), a.slept.clone()))
+                (a.reconciled.elapsed() >= interval).then(|| {
+                    (
+                        a.reconciled,
+                        r.id.clone(),
+                        r.common.clone(),
+                        a.slept.clone(),
+                    )
+                })
             })
-            .min_by_key(|(at, _, _)| *at)
+            .min_by_key(|(at, ..)| *at)
     };
-    let Some((_, repo_id, slept)) = due else {
+    let Some((_, repo_id, common, slept)) = due else {
         return;
     };
     let started = Instant::now();
@@ -1584,7 +1604,7 @@ fn slow_reconcile(shared: &Shared, skip: &[String]) {
         shared
             .recomputes
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let read = crate::observe::read_worktree(&w.root, w.main, w.admin.as_deref());
+        let read = crate::observe::read_worktree(&common, &w.root, w.main, w.admin.as_deref());
         read.fingerprint != w.fingerprint
     });
     let cost = started.elapsed();
