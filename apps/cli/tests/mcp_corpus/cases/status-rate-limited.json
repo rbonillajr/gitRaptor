@@ -20,7 +20,7 @@
   "send": [
     {
       "call": "status",
-      "repeat": 80
+      "repeat": 200
     }
   ],
   "expect": {

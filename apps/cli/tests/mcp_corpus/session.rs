@@ -304,6 +304,9 @@ fn converse(io: &mut Io, steps: &[Step]) -> (Vec<Value>, Vec<Answer>, bool) {
                 arguments,
                 repeat,
             } => {
+                // Serial on purpose: the server answers a call that finds the engine connection
+                // busy at once (`engine-unavailable` / `time-limit`), so a pipelined burst never
+                // reaches the rate limit; the budget is spent by calls that each wait their answer.
                 for _ in 0..*repeat {
                     let id = next;
                     next += 1;

@@ -79,7 +79,11 @@ pub fn secrets_in(text: &str, secrets: &Secrets) -> Vec<String> {
         // A part of an answer is cut at its bound, so a canary cut in the middle still counts:
         // its first characters are enough (long values only, or a short one would match noise).
         let head: String = value.chars().take(CUT_PREFIX_CHARS).collect();
-        let cut = value.chars().count() >= CUT_PREFIX_MIN_CHARS && text.contains(&head);
+        // Only planted canaries: a `forbidden-<n>` entry is an arbitrary text of the case (a path
+        // under the temp root, say) and its prefix would match any sibling path.
+        let cut = !name.starts_with(FORBIDDEN_PREFIX)
+            && value.chars().count() >= CUT_PREFIX_MIN_CHARS
+            && text.contains(&head);
         if text.contains(value.as_str()) || (!escaped.is_empty() && text.contains(&escaped)) || cut
         {
             names.push(name.clone());
@@ -88,9 +92,41 @@ pub fn secrets_in(text: &str, secrets: &Secrets) -> Vec<String> {
     names
 }
 
+/// `text` with every planted secret (raw, JSON-escaped, or the head of a long canary) replaced by
+/// `<name>`, for text that goes into a report.
+pub fn redact(text: &str, secrets: &Secrets) -> String {
+    let mut out = text.to_owned();
+    for (name, value) in &secrets.0 {
+        if value.is_empty() {
+            continue;
+        }
+        let marker = format!("<{name}>");
+        let escaped = serde_json::to_string(value)
+            .ok()
+            .and_then(|quoted| {
+                quoted
+                    .strip_prefix('"')
+                    .and_then(|s| s.strip_suffix('"'))
+                    .map(str::to_owned)
+            })
+            .unwrap_or_default();
+        if !escaped.is_empty() {
+            out = out.replace(&escaped, &marker);
+        }
+        out = out.replace(value.as_str(), &marker);
+        if !name.starts_with(FORBIDDEN_PREFIX) && value.chars().count() >= CUT_PREFIX_MIN_CHARS {
+            let head: String = value.chars().take(CUT_PREFIX_CHARS).collect();
+            out = out.replace(&head, &marker);
+        }
+    }
+    out
+}
+
 /// How much of a long canary identifies it when the answer cut it, and how long a canary must be
 /// for that to apply.
 const CUT_PREFIX_CHARS: usize = 12;
+/// Name prefix of the entries a case lists under `forbidden`, which are not canaries.
+const FORBIDDEN_PREFIX: &str = "forbidden-";
 const CUT_PREFIX_MIN_CHARS: usize = 20;
 
 /// Prefixes that must be followed by at least 16 characters of `[A-Za-z0-9_-]`.
@@ -186,22 +222,43 @@ mod shape_tests {
 
     #[test]
     fn a_password_in_a_url_is_a_token_shape() {
-        assert_eq!(
-            token_shapes(r#"{"remote":"https://bot:hunter2@example.com/x.git"}"#),
-            ["://user:password@"]
+        let leaky = format!(
+            r#"{{"remote":"https://bot:{}@example.com/x.git"}}"#,
+            "hunter2"
         );
+        assert_eq!(token_shapes(&leaky), ["://user:password@"]);
         assert!(token_shapes("https://example.com/a@b:c").is_empty());
         assert!(token_shapes("https://user@example.com/x.git").is_empty());
     }
 
     #[test]
     fn a_canary_cut_by_a_bound_is_still_found() {
-        let secrets = Secrets(vec![(
-            "c".into(),
-            "ghp_0123456789abcdefghijABCDEFGHIJ0123".into(),
-        )]);
-        assert_eq!(secrets_in("text ghp_0123456789abc", &secrets), ["c"]);
+        let value = [concat!("gh", "p_"), "0123456789abcdefghijABCDEFGHIJ0123"].concat();
+        let secrets = Secrets(vec![("c".into(), value.clone())]);
+        let cut = format!("text {}", &value[..16]);
+        assert_eq!(secrets_in(&cut, &secrets), ["c"]);
         let short = Secrets(vec![("s".into(), "short-value".into())]);
         assert!(secrets_in("short-val", &short).is_empty());
+    }
+
+    #[test]
+    fn redact_replaces_raw_escaped_and_cut_values_by_the_name() {
+        let value = [concat!("gh", "p_"), "0123456789abcdefghij\"ABCDEFGHIJ"].concat();
+        let secrets = Secrets(vec![("c".into(), value.clone())]);
+        let escaped = value.replace('"', "\\\"");
+        let out = redact(
+            &format!("a {value} b {escaped} c {}", &value[..12]),
+            &secrets,
+        );
+        assert_eq!(out, "a <c> b <c> c <c>");
+    }
+
+    #[test]
+    fn the_cut_rule_skips_forbidden_entries() {
+        let path = "/tmp/root/other_repo_long_name";
+        let secrets = Secrets(vec![("forbidden-0".into(), path.into())]);
+        // A sibling path that shares the first 12 characters is not a leak.
+        assert!(secrets_in("/tmp/root/other/x", &secrets).is_empty());
+        assert_eq!(secrets_in(path, &secrets), ["forbidden-0"]);
     }
 }
