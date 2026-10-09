@@ -116,10 +116,12 @@ impl Policies {
         }
     }
 
-    /// Whether a forbidden-path rule governs an operation of `actor`: the only case in which
-    /// the commits of a movement are worth reading.
+    /// Whether the commits of a movement by `actor` are worth reading: always for an agent (the
+    /// protected configuration), and for the person only when a forbidden-path rule governs it.
     pub fn needs_paths(&self, actor: Option<AgentKind>) -> bool {
-        self.paths.iter().any(|r| r.scope.governs(actor))
+        // An agent's commits are always read: the configuration directory is protected whatever
+        // the rules say (BR-AUTH-004).
+        actor.is_some() || self.paths.iter().any(|r| r.scope.governs(actor))
     }
 
     /// The same rules keeping only the ones that do not need an actor (`everyone`): what a
