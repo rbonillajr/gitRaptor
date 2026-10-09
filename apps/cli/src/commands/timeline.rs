@@ -268,6 +268,11 @@ fn branch_known(origin: &EntryOrigin) -> bool {
 fn actor_text(entry: &TimelineEntry, detection_available: bool) -> String {
     use gitraptor_api::timemachine::Attribution;
     match (&entry.attribution, &entry.actor) {
+        // The hint is data stored when detection worked: shown even if the
+        // engine cannot detect now, with the same text as `raptor events`.
+        (Attribution::Current, Actor::Unattributed) if let Some(hint) = &entry.inferred => {
+            events::inferred_actor(hint)
+        }
         (Attribution::Current, Actor::Unattributed) if !detection_available => {
             t("timeline.actor-unavailable", &[])
         }

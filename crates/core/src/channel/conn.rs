@@ -3368,6 +3368,10 @@ impl Connection<'_> {
         if !self.has(methods::CAP_TM_TIMELINE_MANUAL.name) {
             crate::timemachine::timeline::without_manual(&mut result);
         }
+        // The inferred hint likewise (an unknown field breaks today's clients).
+        if !self.has(methods::CAP_TM_TIMELINE_INFERRED.name) {
+            crate::timemachine::timeline::without_inferred(&mut result);
+        }
         serde_json::to_value(result).map_err(|_| ErrorObject::new(code::INTERNAL, "serialization"))
     }
 

@@ -478,8 +478,11 @@ pub fn build_timeline_from(
                     utc_offset_s: ev.utc_offset_s,
                     worktrees: vec![ev.worktree.clone()],
                     actor: ev.actor.clone(),
-                    // Stub: the event's hint is not carried yet.
-                    inferred: None,
+                    // A hint, never an attribution: only on an entry
+                    // without an agent.
+                    inferred: (ev.actor == Actor::Unattributed)
+                        .then(|| ev.inferred.clone())
+                        .flatten(),
                     attribution: Attribution::Current,
                     protection: protection(point),
                     files: ChangedFiles::Unavailable,
@@ -517,8 +520,9 @@ pub fn without_manual(result: &mut TimelineResult) {
 /// Removes the inferred hint from every entry: for a connection without
 /// `timemachine.timeline-inferred`.
 pub fn without_inferred(result: &mut TimelineResult) {
-    // Stub: the hint is not removed yet.
-    let _ = result;
+    for entry in &mut result.entries {
+        entry.inferred = None;
+    }
 }
 
 /// The events each worktree root has that an operation of GitRaptor caused. A worktree whose raw
