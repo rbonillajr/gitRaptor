@@ -2,7 +2,7 @@
 id: DS-US-MCP-008
 title: "Dev Spec — Herramienta MCP snapshot: punto de recuperación manual del worktree del agente"
 type: dev-spec
-status: reviewed
+status: implemented
 feature: mcp
 domain: MCP
 created: 2026-10-08
@@ -976,7 +976,9 @@ Ajustes transversales aplicados: prueba "con el disco en el suelo, un previo gar
 
 ## Estado de la implementación
 
-Implementada en la rama `feat/US-MCP-008-mcp-snapshot` (PR pendiente de número) y validada en macOS. Los pendientes multiplataforma (Linux y Windows) están en [`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md), fila XP-37.
+Implementado en: PR #213.
+
+Validada en macOS. Los pendientes multiplataforma (Linux y Windows) están en [`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md), fila XP-37.
 
 ## Enmiendas
 

@@ -2,7 +2,7 @@
 id: US-MCP-008
 title: "Un agente guarda por MCP un punto de recuperación antes de un cambio arriesgado"
 type: us
-status: draft
+status: implemented
 priority: high
 created: 2026-10-04
 updated: 2026-10-08
@@ -119,4 +119,12 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica.
-- **Dev Spec:** pendiente (Arquitecto, tras ADR-MCP-001 y ADR-CKP-002).
+- **Dev Spec:** [DS-US-MCP-008](../dev-specs/US-MCP-008-dev-spec.md).
+
+## Estado de la implementación (2026-10-08)
+
+Implementado en: PR #213.
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- S-03 completo (cupo compartido por solicitante y ≤ 8 conexiones) y S-01 son condición de entrada de US-MCP-009 y criterio de salida de M4, por la Enmienda (2026-10-08, US-MCP-008) de ADR-MCP-001.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* (XP-37 en [`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
