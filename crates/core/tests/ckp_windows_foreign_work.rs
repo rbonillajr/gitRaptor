@@ -135,6 +135,7 @@ fn rig(affected: Affected, executor: Executor) -> Rig {
     let repo = RepoHandle {
         repo_id: REPO.into(),
         worktree: "/w/shop-feat".into(),
+        common_dir: "/w/shop/.git".into(),
         oplog: Arc::clone(&oplog),
         snapshotter: Arc::new(NoPrior),
     };
