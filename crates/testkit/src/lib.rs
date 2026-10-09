@@ -21,6 +21,7 @@
 //! - [`repogen`]: deterministic reference repos of SPIKE-TMC-001 (profile `M`, D-TMC-21) and of
 //!   INF-GRP-002 (profile `H`, 100K commits).
 //! - [`freshness`]: statistics and gates of the freshness and footprint bench (INF-GRP-002).
+//! - [`mcp_corpus`]: declarative MCP attack corpus: case model, judge, scanners and KPI report.
 //! - [`sibling`]: binaries of another workspace package, next to the binary under test.
 
 #[cfg(unix)]
@@ -35,6 +36,7 @@ pub mod freshness;
 pub mod guard;
 pub mod hooks;
 pub mod interceptability;
+pub mod mcp_corpus;
 pub mod repogen;
 pub mod sibling;
 
