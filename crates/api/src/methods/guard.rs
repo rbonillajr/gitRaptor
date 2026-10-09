@@ -61,6 +61,11 @@ pub const CAP_GUARD_AUTHORSHIP_SECOND_LINE: Capability =
 /// hook, evaluates as before.
 pub const CAP_GUARD_POLICIES: Capability = Capability::new("guard.policies");
 
+/// The configuration protection: `policy.config-protected` in decisions and
+/// `config.relax-ignored` notices in `guard.log`.
+// stub: replaced by the implementation slice (not yet listed in `GROUP.capabilities`)
+pub const CAP_GUARD_CONFIG_PROTECTION: Capability = Capability::new("guard.config-protection");
+
 pub(super) const GROUP: Group = Group {
     // None is offered to `raptor-mcp` (BR-AUTH-004): it neither installs nor
     // evaluates. A connection of protocol 5 or 6 sees none.

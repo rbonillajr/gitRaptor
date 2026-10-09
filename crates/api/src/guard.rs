@@ -72,6 +72,15 @@ pub enum Rule {
     /// A commit touches a forbidden path (`policies.forbiddenPaths`, US-GRD-008).
     #[serde(rename = "policy.forbidden-path")]
     ForbiddenPath,
+    /// An agent's commit changes the Guardrails configuration (`.gitraptor/`). A product rule:
+    /// no key turns it off. Only with `guard.config-protection`; without it the daemon sends it
+    /// as `policy.forbidden-path`.
+    #[serde(rename = "policy.config-protected")]
+    ConfigProtected,
+    /// A level that only hardens (worktree, profile, local) tried to relax a team rule; it was
+    /// ignored. Only in decision-log notices, never in a decision sent to a hook.
+    #[serde(rename = "config.relax-ignored")]
+    RelaxIgnored,
 }
 
 /// Why a rule matched (ADR-GRD-003 § 3 and its 2026-10-04 amendment).

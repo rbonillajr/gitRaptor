@@ -1,0 +1,159 @@
+{
+  "source": {
+    "kind": "brief",
+    "ref": "docs/dev-briefs/layered-config.md"
+  },
+  "criteria": [
+    {
+      "id": "GRD010-ROW1",
+      "statement": "US-GRD-010 fila 1: equipo deniega force-push y el local lo permite; el permiso efectivo es denegar y la relajación del local queda como ignorada",
+      "verify": "cargo test -p gitraptor-core --test us_grd_010 precedence_row1_",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grd_010.rs"
+      ]
+    },
+    {
+      "id": "GRD010-ROW2",
+      "statement": "US-GRD-010 fila 2: equipo confirmado permite force-push y el perfil lo deniega; el permiso efectivo es denegar con fuente perfil",
+      "verify": "cargo test -p gitraptor-core --test us_grd_010 precedence_row2_",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grd_010.rs"
+      ]
+    },
+    {
+      "id": "GRD010-ROW3",
+      "statement": "US-GRD-010 fila 3: equipo permite, perfil deniega y local permite force-push; gana el local entre personales y el efectivo es permitir, sin relajación ignorada",
+      "verify": "cargo test -p gitraptor-core --test us_grd_010 precedence_row3_",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grd_010.rs"
+      ]
+    },
+    {
+      "id": "GRD010-ROW4",
+      "statement": "US-GRD-010 fila 4: equipo pide confirmación para rebase y el local lo permite; el efectivo es pedir confirmación y la relajación del local queda como ignorada",
+      "verify": "cargo test -p gitraptor-core --test us_grd_010 precedence_row4_",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grd_010.rs"
+      ]
+    },
+    {
+      "id": "GRD010-ROW7",
+      "statement": "US-GRD-010 fila 7: equipo protege main y el perfil release; las ramas protegidas efectivas son main y release y un agente no puede mover release",
+      "verify": "cargo test -p gitraptor-core --test us_grd_010 precedence_row7_",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grd_010.rs"
+      ]
+    },
+    {
+      "id": "GRD010-CLONE",
+      "statement": "US-GRD-010: un endurecimiento en el settings.local.json de un clon no afecta a otro clon del mismo repo (el nivel local va por repo_id)",
+      "verify": "cargo test -p gitraptor-core --test us_grd_010 a_local_hardening_does_not_reach_another_clone",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grd_010.rs"
+      ]
+    },
+    {
+      "id": "GRD010-BASE",
+      "statement": "US-GRD-010: una rama base en un nivel personal no se tiene en cuenta; la rama base protegida sigue siendo main y el intento queda como relajación ignorada",
+      "verify": "cargo test -p gitraptor-core --test us_grd_010 a_base_branch_in_a_personal_level_is_ignored",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grd_010.rs"
+      ]
+    },
+    {
+      "id": "GRD012-S1",
+      "statement": "US-GRD-012 escenario 1: el commit de un agente que cambia la configuración del equipo no se ejecuta, el motivo nombra la protección de la configuración y el registro lo guarda con el actor del agente",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_012 an_agent_commit_relaxing_the_team_config_is_denied_and_logged",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_012.rs"
+      ]
+    },
+    {
+      "id": "GRD012-S4",
+      "statement": "US-GRD-012 escenario 4: el commit de un agente que borra la configuración del equipo no se ejecuta y la configuración sigue en la rama",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_012 an_agent_cannot_delete_the_team_config",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_012.rs"
+      ]
+    },
+    {
+      "id": "GRD012-S3",
+      "statement": "US-GRD-012 escenario 3: una configuración laxa commiteada solo en el worktree del agente no relaja nada y queda el aviso worktree",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_012 a_lax_config_committed_in_the_agent_worktree_relaxes_nothing",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_012.rs"
+      ]
+    },
+    {
+      "id": "GRD012-LOCAL",
+      "statement": "Un agente que escribe en el settings.local.json del repo para permitir force-push no cambia la regla efectiva (sigue denegado) y el registro guarda un aviso config.relax-ignored de nivel local con su actor",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_012 an_agent_relaxing_the_local_config_changes_nothing_and_is_logged",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_012.rs"
+      ]
+    },
+    {
+      "id": "GRD012-COMPAT",
+      "statement": "Sin la capacidad guard.config-protection la denegación se mantiene y viaja como policy.forbidden-path con el patrón /.gitraptor/, y guard.log no muestra avisos config.relax-ignored",
+      "verify": "cargo test -p gitraptor-core --test us_grd_012_config_guard without_the_capability_the_reason_reads_as_a_forbidden_path",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grd_012_config_guard.rs"
+      ]
+    },
+    {
+      "id": "GRD012-UNVERIFIABLE",
+      "statement": "Un movimiento de un agente cuyos commits nuevos no se pueden verificar dentro de los topes se deniega con policy.config-protected unverifiable aunque no haya reglas de rutas; la persona pasa",
+      "verify": "cargo test -p gitraptor-core --test us_grd_012_config_guard an_unverifiable_movement_by_an_agent_is_denied",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grd_012_config_guard.rs"
+      ]
+    },
+    {
+      "id": "GRD012-IDENTITY",
+      "statement": "Cuando un agente (actor visto por el hook) commitea un cambio de configuración laxa con la identidad de la persona y sin trailer, la regla efectiva no se relaja y el aviso queda registrado con actor agente",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_012 an_agent_commit_with_the_person_identity_and_no_trailer_does_not_relax",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_012.rs"
+      ]
+    }
+  ],
+  "constraints": {
+    "deny_paths": [
+      "crates/git/src/tm_write",
+      "crates/git/src/tm_write/**",
+      "docs/ARTIFACTS.md",
+      "docs/architecture/decisions/ADR-GRD-004-configuracion-efectiva.md",
+      "docs/architecture/decisions/ADR-GRD-008-factor-autenticacion-fuera-de-banda.md",
+      "crates/policy/schema/settings.schema.json"
+    ],
+    "allow_dependency_changes": false,
+    "cargo_lock": "Solo cambios mínimos (resolver un rebase); este brief no añade ninguna dependencia, así que no debe haber versiones nuevas en Cargo.lock"
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-api",
+      "gitraptor-policy",
+      "gitraptor-core",
+      "gitraptor-cli"
+    ]
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 600000,
+    "suiteTimeoutMs": 1800000
+  }
+}

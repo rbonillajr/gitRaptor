@@ -7,6 +7,7 @@
 //! is read, so nothing can turn it off.
 
 pub mod authorship;
+pub mod config;
 pub mod fastpath;
 pub mod glob;
 pub mod input;

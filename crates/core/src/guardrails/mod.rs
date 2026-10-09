@@ -9,6 +9,7 @@
 
 pub mod actor;
 pub mod authorship;
+pub mod config_guard;
 pub mod constants;
 pub mod cut;
 pub mod evaluate;
@@ -18,6 +19,7 @@ mod health_tests;
 pub mod hook;
 pub mod install;
 pub mod journal;
+pub mod layers;
 pub mod log;
 pub mod pending;
 pub mod policies;
