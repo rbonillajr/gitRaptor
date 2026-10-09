@@ -1,0 +1,41 @@
+{
+  "id": "scope-symlink-into-not-enabled",
+  "title": "A cwd reached through a symlink resolves to the real, not enabled repo",
+  "threats": [
+    "MCP02",
+    "SEC-MCP-02"
+  ],
+  "tier": "engine",
+  "platforms": [
+    "macos",
+    "linux"
+  ],
+  "pending": "XP-42",
+  "setup": {
+    "repo": "enabled",
+    "other_repo": "observed",
+    "symlinks": [
+      {
+        "at": "repo/into-other",
+        "to": "other_repo"
+      }
+    ]
+  },
+  "session": {
+    "cwd": "repo/into-other"
+  },
+  "send": [
+    {
+      "call": "status"
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "repo-not-enabled"
+    }
+  },
+  "forbidden": [
+    "{other_repo}",
+    "{repo_id:other_repo}"
+  ]
+}

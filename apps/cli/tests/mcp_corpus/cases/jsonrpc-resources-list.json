@@ -1,0 +1,27 @@
+{
+  "id": "jsonrpc-resources-list",
+  "title": "An undeclared resources/list method should be refused as method not found",
+  "threats": [
+    "MCP05",
+    "SEC-MCP-05"
+  ],
+  "tier": "server",
+  "platforms": [
+    "macos",
+    "linux",
+    "windows"
+  ],
+  "known_gap": "US-MCP-005 seguimiento: raptor-mcp answers resources/list with an empty list although it declares only tools (SEC-MCP-07, catalogo fijo); no data is exposed",
+  "send": [
+    {
+      "message": {
+        "method": "resources/list"
+      }
+    }
+  ],
+  "expect": {
+    "protocol_error": {
+      "code": -32601
+    }
+  }
+}

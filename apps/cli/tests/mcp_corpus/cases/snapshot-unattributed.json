@@ -1,0 +1,33 @@
+{
+  "id": "snapshot-unattributed",
+  "title": "A snapshot from an unattributed client is refused",
+  "threats": [
+    "MCP02",
+    "SEC-MCP-02"
+  ],
+  "tier": "engine",
+  "platforms": [
+    "macos",
+    "linux"
+  ],
+  "pending": "XP-42",
+  "setup": {
+    "repo": "enabled"
+  },
+  "session": {
+    "cwd": "repo"
+  },
+  "send": [
+    {
+      "call": "snapshot",
+      "arguments": {
+        "label": "probe"
+      }
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "unattributed"
+    }
+  }
+}

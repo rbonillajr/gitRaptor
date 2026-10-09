@@ -1,0 +1,30 @@
+{
+  "id": "scope-nothing-observed",
+  "title": "With nothing observed the cwd is refused",
+  "threats": [
+    "MCP02",
+    "SEC-MCP-02"
+  ],
+  "tier": "engine",
+  "platforms": [
+    "macos",
+    "linux"
+  ],
+  "pending": "XP-42",
+  "session": {
+    "cwd": "repo"
+  },
+  "send": [
+    {
+      "call": "status"
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "not-in-observed-worktree"
+    }
+  },
+  "forbidden": [
+    "{repo}"
+  ]
+}

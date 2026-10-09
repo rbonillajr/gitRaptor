@@ -1,0 +1,36 @@
+{
+  "id": "snapshot-outside-observed",
+  "title": "A snapshot outside any observed worktree is refused",
+  "threats": [
+    "MCP02",
+    "SEC-MCP-02"
+  ],
+  "tier": "engine",
+  "platforms": [
+    "macos",
+    "linux"
+  ],
+  "pending": "XP-42",
+  "setup": {
+    "repo": "enabled",
+    "dirs": [
+      "root/downloads"
+    ]
+  },
+  "session": {
+    "cwd": "root/downloads"
+  },
+  "send": [
+    {
+      "call": "snapshot",
+      "arguments": {
+        "label": "probe"
+      }
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "not-in-observed-worktree"
+    }
+  }
+}

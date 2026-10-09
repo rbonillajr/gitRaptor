@@ -1,0 +1,36 @@
+{
+  "id": "scope-sibling-prefix",
+  "title": "A sibling directory sharing a repo name prefix is refused",
+  "threats": [
+    "MCP02",
+    "SEC-MCP-02"
+  ],
+  "tier": "engine",
+  "platforms": [
+    "macos",
+    "linux"
+  ],
+  "pending": "XP-42",
+  "setup": {
+    "repo": "enabled",
+    "dirs": [
+      "root/repo-x"
+    ]
+  },
+  "session": {
+    "cwd": "root/repo-x"
+  },
+  "send": [
+    {
+      "call": "status"
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "not-in-observed-worktree"
+    }
+  },
+  "forbidden": [
+    "{repo_id:repo}"
+  ]
+}

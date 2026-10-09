@@ -1,0 +1,26 @@
+{
+  "id": "tool-unknown-push",
+  "title": "A push tool does not exist",
+  "threats": [
+    "MCP02",
+    "SEC-MCP-02",
+    "BR-MCP-VAL-005"
+  ],
+  "tier": "server",
+  "platforms": [
+    "macos",
+    "linux",
+    "windows"
+  ],
+  "send": [
+    {
+      "call": "push"
+    }
+  ],
+  "expect": {
+    "protocol_error": {
+      "code": -32602,
+      "message": "unknown-tool"
+    }
+  }
+}

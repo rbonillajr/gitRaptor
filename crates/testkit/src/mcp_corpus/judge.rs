@@ -259,9 +259,13 @@ pub fn judge(
         if failures.is_empty() {
             return Verdict::Failed(vec![Failure::KnownGapClosed]);
         }
-        let only_expectation = failures
-            .iter()
-            .all(|f| matches!(f, Failure::NotRejected | Failure::WrongRejection { .. }));
+        // The answer of a case that got through is outside the allowlist by definition (it is
+        // not a tool result), so `FieldNotAllowed` folds in only next to `NotRejected`.
+        let got_through = failures.contains(&Failure::NotRejected);
+        let only_expectation = failures.iter().all(|f| {
+            matches!(f, Failure::NotRejected | Failure::WrongRejection { .. })
+                || (got_through && matches!(f, Failure::FieldNotAllowed { .. }))
+        });
         if only_expectation {
             return Verdict::KnownGap(gap.clone());
         }

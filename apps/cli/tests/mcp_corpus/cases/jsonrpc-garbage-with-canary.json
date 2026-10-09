@@ -1,0 +1,22 @@
+{
+  "id": "jsonrpc-garbage-with-canary",
+  "title": "A non-JSON line is ignored and its content never echoed",
+  "threats": [
+    "MCP10",
+    "SEC-MCP-05"
+  ],
+  "tier": "server",
+  "platforms": [
+    "macos",
+    "linux",
+    "windows"
+  ],
+  "send": [
+    {
+      "raw": "{canary:env-github-token} not json"
+    }
+  ],
+  "expect": {
+    "ignored": {}
+  }
+}

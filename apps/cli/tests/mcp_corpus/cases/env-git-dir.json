@@ -1,0 +1,39 @@
+{
+  "id": "env-git-dir",
+  "title": "GIT_DIR and GIT_WORK_TREE do not redirect the scope",
+  "threats": [
+    "MCP02",
+    "SEC-MCP-02"
+  ],
+  "tier": "engine",
+  "platforms": [
+    "macos",
+    "linux"
+  ],
+  "pending": "XP-42",
+  "setup": {
+    "repo": "enabled",
+    "other_repo": "observed"
+  },
+  "session": {
+    "cwd": "other_repo",
+    "env": {
+      "GIT_DIR": "{repo}/.git",
+      "GIT_WORK_TREE": "{repo}"
+    }
+  },
+  "send": [
+    {
+      "call": "status"
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "repo-not-enabled"
+    }
+  },
+  "forbidden": [
+    "{repo_id:repo}",
+    "{repo_id:other_repo}"
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "id": "snapshot-label-zalgo",
+  "title": "A snapshot label stacked with combining marks is refused as invalid text",
+  "threats": [
+    "MCP05",
+    "SEC-MCP-05",
+    "BR-MCP-VAL-005"
+  ],
+  "tier": "server",
+  "platforms": [
+    "macos",
+    "linux",
+    "windows"
+  ],
+  "send": [
+    {
+      "call": "snapshot",
+      "arguments": {
+        "label": "á́́́́́́́"
+      }
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "invalid-text",
+      "params": [
+        "field",
+        "max_chars"
+      ]
+    }
+  }
+}

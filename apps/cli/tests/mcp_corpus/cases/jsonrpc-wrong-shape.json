@@ -1,0 +1,24 @@
+{
+  "id": "jsonrpc-wrong-shape",
+  "title": "A request whose method is not a string is an invalid request",
+  "threats": [
+    "MCP05",
+    "SEC-MCP-05"
+  ],
+  "tier": "server",
+  "platforms": [
+    "macos",
+    "linux",
+    "windows"
+  ],
+  "send": [
+    {
+      "message": {
+        "method": 7
+      }
+    }
+  ],
+  "expect": {
+    "invalid_request": {}
+  }
+}
