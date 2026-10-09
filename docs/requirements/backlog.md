@@ -28,7 +28,7 @@
 *   **F-001-03**: Time Machine (BR-08, BR-09, BR-10)
     -   **Contexto**: [context.md](features/time-machine/context.md)
     -   **Historias**: [user-stories.md](features/time-machine/user-stories.md) (21 historias expandidas en `features/time-machine/user-stories/`, 2026-10-03; desde el 2026-10-04, 2 bloqueadas (US-TMC-011 por P17, US-TMC-020 por SPIKE-TMC-001) y 1 fuera del MVP (US-TMC-021, Fase 2), por decisiones de Rene Bonilla)
-    -   **Implementación (2026-10-08)**: US-TMC-001, 002 y 004 y TS-TMC-001 a 004 implementadas; SPIKE-TMC-001 hecho. Detalle y PR en la sección "Estado de la implementación" de cada ficha.
+    -   **Implementación (2026-10-08)**: US-TMC-001, 002, 004 y 006 y TS-TMC-001 a 004 implementadas; US-TMC-009 en parte (PR #__PR__; falta el escenario 5, con US-TMC-013); SPIKE-TMC-001 hecho. Detalle y PR en la sección "Estado de la implementación" de cada ficha.
     -   **Status**: In Progress
 
 *   **F-001-04**: Guardrails (BR-11, BR-12, BR-13, BR-26)
