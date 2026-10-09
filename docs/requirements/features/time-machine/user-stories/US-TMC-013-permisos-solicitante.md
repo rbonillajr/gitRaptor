@@ -2,10 +2,10 @@
 id: US-TMC-013
 title: "Un agente no puede deshacer trabajo ajeno, aunque lance la CLI desde su propia shell"
 type: us
-status: draft
+status: implemented
 priority: high
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-09
 domain: GRP
 epic: E-001
 feature: time-machine
@@ -99,10 +99,33 @@ Entonces la petición se rechaza con el motivo
 ## Diseño y Dev Spec
 
 - **Diseño (flujo/UX):** Pendiente de diseño.
-- **Dev Spec:** pendiente (lo genera el Arquitecto).
+- **Dev Spec:** no se escribió: la historia se implementó con un Implementation Brief del `rust-architect`, aprobado por el coordinador (flujo ligero de AADD). Las decisiones están abajo.
 
 ## Dependencias
 
 - **Historias**: US-TMC-002; US-GRP-007 y US-GRP-009 de motor-local.
 - **Externas**: F-001-05 Servidor MCP (canal `undo` para agentes). Las restricciones adicionales de Guardrails están en US-TMC-021. Cómo se identifica al solicitante lo decide el Arquitecto (D-TMC-23).
 - **Transversal**: transversal (lo define el Arquitecto): verificación en repos temporales, nunca en un repo real; mismo comportamiento en Windows, macOS y Linux salvo la confirmación interactiva, que en el MVP no existe en Windows (D-TMC-23); mensajes en inglés y español.
+
+## Estado de la implementación (2026-10-09)
+
+Implementado en: PR #__PR__.
+
+- **Hecho:** los seis escenarios como tests en repos y perfiles temporales: `crates/core/tests/us_tmc_013.rs`, `crates/core/tests/us_tmc_013_restore.rs`, `crates/core/src/timemachine/confirm/tests.rs`, `apps/cli/tests/us_tmc_013_process.rs` (confirmación real con una pty a través de `script`) y `crates/api/tests/tm_confirmation.rs`. Los escenarios 1 y 2 (un agente sobre lo suyo y sobre lo ajeno) ya los cumplía US-TMC-002; aquí quedan probados por MCP y por la CLI desde la shell del agente. `codex-1` no se reconoce todavía como agente registrado (depende de motor-local, ADR-TMC-005 § 1), así que hoy se rechaza como "sin atribuir" por MCP.
+- **Cómo funciona:** `timemachine.undo` y `timemachine.restore` se llaman dos veces en la misma conexión. La primera devuelve `confirmation-required` y un reto de un solo uso: 128 bits, válido 60 s y ligado a la conexión, al proceso y al hash del plan, que calcula el daemon con su propio plan. Solo lo recibe quien pasa la prueba de presencia de consola de los comandos reservados (`requester::confirmation_refusal`, ADR-GRP-005 § 6). La segunda llamada presenta el token: el daemon vuelve a planificar bajo el bloqueo del repo, comprueba otra vez la elegibilidad y lo canjea. La operación queda en el oplog con `confirmed = 1` y el solicitante "sin atribuir". La CLI pregunta solo si hay una terminal. `--json` nunca pregunta, y no existe `--yes`.
+- **Decisiones del orquestador (2026-10-08), validadas por Arquitecto y el coordinador:**
+  - **D1:** dos llamadas en la misma conexión, sin un método nuevo.
+  - **D2:** una sola puerta en el core (`timemachine::confirm`) para undo y restore, justo después de la regla base.
+  - **D3:** el mismo `ChallengeBook` que el ejecutor del Cockpit, con un solo reto vivo por conexión.
+  - **D4:** el hash es canónico y sale solo del plan del daemon, nunca del cliente.
+  - **D5:** un token presentado siempre se consume, y si no casa con el plan da `challenge-invalid`.
+  - **D8:** el MCP nunca ofrece el reto.
+  - **D9 y D10:** capacidad `timemachine.confirmation` y tipo `TmConfirmData`.
+  - **D11:** la primera llamada también queda en el oplog como rechazada.
+  - **D12:** no hay `--yes`.
+  - **D13:** una costura de test que solo existe en builds de debug.
+  - **D14:** al cerrar una conexión se olvida su reto.
+- **Windows (decisión A del coordinador, 2026-10-08):** la prueba de terminal también existe en Windows (`authz::TERMINAL_PROOF`), pero BR-TMC-AUTH-001 y ADR-TMC-005 § 3 prohíben confirmar trabajo ajeno ahí en el MVP, por M-01 y M-04. La regla es `confirm::FOREIGN_WORK_CONFIRMABLE = cfg!(unix)`: en Windows la petición se rechaza con `confirmation-unavailable`, sin emitir reto. Habilitarla es una decisión de producto pendiente: hay que enmendar BR-TMC-AUTH-001 y ADR-TMC-005, y antes cerrar M-01.
+- **Seguridad:** el token se compara en tiempo constante y nunca aparece en el oplog, en los logs, en `Debug` ni en la salida de la CLI.
+- **Fuera de esta ficha:** el ejecutor del Cockpit ofrece en Windows la confirmación de trabajo ajeno, en contra de BR-CKP-AUTH-003 (revisión de seguridad H-01, ya existía). Va en una rama `fix/` aparte y bloquea v0.1.0. La confirmación en la TUI se hará cuando la TUI ofrezca undo o restore.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md), XP-41).
