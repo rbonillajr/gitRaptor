@@ -12,7 +12,6 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use gitraptor_api::catalog::{Layer, OperationArgs, OperationId, RejectReason};
-use gitraptor_git::ReadError;
 
 use super::scope::{McpAllowlist, McpRepos, ProtectedBackend, RepoHandle, ScopeError};
 use super::{
@@ -215,18 +214,28 @@ impl TmRepos {
     ) -> Result<Opened, ScopeError> {
         let worktree = canonical(folder);
         let commons: Vec<PathBuf> = self.lock().iter().map(|r| r.common_dir.clone()).collect();
-        let common_dir = commons
+        // Every observed repo that claims the folder, and of those the ones that own its `.git`:
+        // another repo's claim (a `gitdir` or `core.worktree` an agent wrote there) can neither
+        // take the folder nor lock its real repo out (M-02 of the review).
+        let claiming: Vec<PathBuf> = commons
             .into_iter()
-            .find(|common| {
+            .filter(|common| {
                 observe::registered_worktrees(common)
                     .is_ok_and(|list| list.iter().any(|(root, _)| *root == worktree))
             })
-            .ok_or(ScopeError::NotObserved)?;
-        match observe::open_registered_worktree(&common_dir, &worktree) {
-            Ok(_) => {}
-            Err(ReadError::Untrusted(_)) => return Err(ScopeError::Untrusted),
-            Err(_) => return Err(ScopeError::NotObserved),
+            .collect();
+        if claiming.is_empty() {
+            return Err(ScopeError::NotObserved);
         }
+        let owning: Vec<&PathBuf> = claiming
+            .iter()
+            .filter(|common| observe::open_registered_worktree(common, &worktree).is_ok())
+            .collect();
+        let common_dir = match owning.as_slice() {
+            [one] => (*one).clone(),
+            [] => return Err(ScopeError::Untrusted),
+            _ => return Err(ScopeError::NotObserved),
+        };
         let (repo_id, oplog, store) = self
             .by_common_dir(&common_dir)
             .ok_or(ScopeError::NotObserved)?;
@@ -311,10 +320,15 @@ impl ProtectedBackend for DaemonBackend {
     /// executor reads the facts again under the write lock before it runs, so a `.git` swapped
     /// after the plan is refused there too, before anything is written (NFR-01).
     fn facts(&self, repo: &RepoHandle) -> Result<RepoFacts, RejectReason> {
-        observe::open_registered_worktree(&repo.common_dir, &repo.worktree)
+        let opened = observe::open_registered_worktree(&repo.common_dir, &repo.worktree)
             .map_err(|_| RejectReason::RepoIdentityChanged)?;
+        let git_dir = canonical(opened.git_dir());
+        drop(opened);
         let facts = RepoFacts::read(&repo.worktree)?;
-        if facts.common_dir != repo.common_dir {
+        // Both Git folders the facts were read from must be the ones the gate opened (L-01 of the
+        // review). Git itself resolves the `.git` again when it runs: that last window is the
+        // write layer's, which checks the identity under its own locks.
+        if facts.common_dir != repo.common_dir || canonical(&facts.git_dir) != git_dir {
             return Err(RejectReason::RepoIdentityChanged);
         }
         Ok(facts)

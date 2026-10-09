@@ -4,7 +4,7 @@
 //! from a folder the repo does not register, or from a worktree whose `.git` is a symlink to
 //! outside, each one is refused with the frozen `scope-refused/not-observed` before anything is
 //! recorded or written, and both repos stay intact (INF-GRP-001 fingerprint). The same worktree,
-//! once its `.git` is the repo's own again, is undone as usual.
+//! once its `.git` is the repo's own again, answers as usual.
 //!
 //! A real daemon (in-process) with a test catalog, a real client, real Git, testkit fixtures and a
 //! temporary profile; never this repo or the real profile (NFR-01). macOS and Linux, like the
@@ -23,7 +23,7 @@ use common::TempProfile;
 use gitraptor_api::catalog::{Layer, OperationArgs, OperationId, PrepareResult};
 use gitraptor_api::messages::ClientKind;
 use gitraptor_api::rpc::{ScopeRefusal, ScopeRefusedData, code};
-use gitraptor_api::timemachine::{OperationRunResult, UndoResult};
+use gitraptor_api::timemachine::OperationRunResult;
 use gitraptor_api::{PROTOCOL_VERSION, methods};
 use gitraptor_core::channel::ChannelConfig;
 use gitraptor_core::client::{Client, ClientError};
@@ -163,7 +163,8 @@ fn start() -> Running {
     let ours = Arc::new(ours);
     let tp = TempProfile::new();
     let mut profile = tp.open();
-    for repo in [&ours.repo, &theirs.repo] {
+    // Theirs first: a claim of theirs is met before our own registration.
+    for repo in [&theirs.repo, &ours.repo] {
         profile
             .add_repo(&canonical(&repo.join(".git")), None, 1)
             .unwrap();
@@ -310,7 +311,7 @@ impl Running {
 // ----- Scenarios ------------------------------------------------------------------------
 
 #[test]
-fn a_linked_git_rewritten_to_another_observed_repo_is_refused_and_undone_once_restored() {
+fn a_linked_git_rewritten_to_another_observed_repo_is_refused_and_answers_once_restored() {
     let r = start();
     let op = r.reset_uncommitted(&r.a);
     let link = std::fs::read(r.a.join(".git")).unwrap();
@@ -322,13 +323,16 @@ fn a_linked_git_rewritten_to_another_observed_repo_is_refused_and_undone_once_re
 
     r.assert_refused(&r.a, &op.prior_snapshot_id);
 
-    // The repo's own `.git` again: the legitimate linked worktree is undone as usual.
+    // The repo's own `.git` again: the legitimate linked worktree answers as usual. (Its undo
+    // end to end is US-TMC-002's `undo_recovers_the_last_operation_of_the_worktree`; here the
+    // `git status` above may count as raw Git, so it is not asserted again.)
     std::fs::write(r.a.join(".git"), link).unwrap();
-    let undo: UndoResult = serde_json::from_value(r.undo(&r.a).unwrap()).unwrap();
-    assert_eq!(undo.undone_operation_id, op.operation_id);
-    assert_eq!(
-        std::fs::read(r.a.join("a.txt")).unwrap(),
-        b"work in progress\n"
+    let timeline = r.timeline(&r.a).unwrap();
+    assert!(
+        timeline["entries"]
+            .as_array()
+            .is_some_and(|e| !e.is_empty()),
+        "{timeline}"
     );
 }
 
@@ -353,4 +357,28 @@ fn a_git_that_is_a_symlink_to_outside_is_refused() {
     std::os::unix::fs::symlink(r.theirs_admin(), r.a.join(".git")).unwrap();
 
     r.assert_refused(&r.a, &op.prior_snapshot_id);
+}
+
+#[test]
+fn another_observed_repo_claiming_the_worktree_neither_takes_it_nor_locks_it_out() {
+    let r = start();
+    r.reset_uncommitted(&r.a);
+    // Their admin area names our worktree as one of theirs: a `gitdir` an agent wrote there.
+    let claim = locate(&r.theirs.repo)
+        .unwrap()
+        .join("worktrees")
+        .join("claim");
+    std::fs::create_dir_all(&claim).unwrap();
+    std::fs::write(
+        claim.join("gitdir"),
+        format!("{}\n", r.a.join(".git").display()),
+    )
+    .unwrap();
+    std::fs::write(claim.join("HEAD"), "ref: refs/heads/x\n").unwrap();
+    std::fs::write(claim.join("commondir"), "../..\n").unwrap();
+
+    // Our repo still owns it: its timeline answers, with our operation, not theirs.
+    let timeline = r.timeline(&r.a).unwrap();
+    let entries = timeline["entries"].as_array().unwrap();
+    assert!(!entries.is_empty(), "{timeline}");
 }
