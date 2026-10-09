@@ -1667,8 +1667,12 @@ impl Connection<'_> {
             .ok_or_else(not_found)?;
         let facts = mcp_status::facts(repo, index, home);
         mcp_status::availability(repo, index, &facts).map_err(refuse)?;
-        let main = repo.worktrees.get(index).is_some_and(|v| v.main);
-        let (counts, changes) = crate::observe::all_changes(root, main).map_err(|err| {
+        let view = repo.worktrees.get(index);
+        let main = view.is_some_and(|v| v.main);
+        let admin = view.and_then(|v| v.admin_name.as_ref()).map(|n| n.raw());
+        let common = Path::new(repo.path.raw());
+        let read = crate::observe::all_changes(common, root, main, admin);
+        let (counts, changes) = read.map_err(|err| {
             refuse(match err {
                 gitraptor_git::ReadError::Untrusted(_) => McpUnavailable::WorktreeUntrusted,
                 _ if !root.exists() => McpUnavailable::WorktreeMissing,

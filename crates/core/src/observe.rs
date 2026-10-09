@@ -251,11 +251,12 @@ impl RepoRead {
 /// cannot be read.
 pub fn reconcile(common_dir: &Path, base: &BaseBranch) -> Result<RepoRead, ReadError> {
     let reader = RepoReader::open(common_dir, &ReaderOptions::default())?;
+    let common = canonical(common_dir);
     let mut worktrees = Vec::new();
     if !reader.is_bare()
         && let Some(main) = reader.workdir()
     {
-        worktrees.push(read_worktree(&canonical(&main), true, None));
+        worktrees.push(read_worktree(&common, &canonical(&main), true, None));
     }
     let mut linked: Vec<(PathBuf, String)> = reader
         .worktrees()?
@@ -263,14 +264,8 @@ pub fn reconcile(common_dir: &Path, base: &BaseBranch) -> Result<RepoRead, ReadE
         .map(|w| (canonical(&w.path), w.id))
         .collect();
     linked.sort();
-    let common = canonical(common_dir);
     for (path, id) in &linked {
-        // A missing folder is reported missing, not untrusted.
-        if !path.exists() || linked_is_trusted(&common, id, path) {
-            worktrees.push(read_worktree(path, false, Some(id)));
-        } else {
-            worktrees.push(untrusted_link(path, id));
-        }
+        worktrees.push(read_worktree(&common, path, false, Some(id)));
     }
     let mut tips: Vec<String> = reader
         .local_branches()?
@@ -484,8 +479,14 @@ pub fn linked_is_trusted(common_dir: &Path, id: &str, root: &Path) -> bool {
 
 /// [`linked_is_trusted`] with the home folder given instead of read from the process
 /// environment, so a caller (and a test) states which folder is refused as a root.
+/// The `id` is one name the repo registers: a folder of `<common>/worktrees`, never a path.
 pub fn linked_is_trusted_in(common_dir: &Path, id: &str, root: &Path, home: Option<&Path>) -> bool {
     if root.parent().is_none() || common_dir.starts_with(root) {
+        return false;
+    }
+    let admin = common_dir.join("worktrees").join(id);
+    let one_name = !matches!(id, "" | "." | "..") && !id.contains(['/', '\\']);
+    if !one_name || !std::fs::symlink_metadata(&admin).is_ok_and(|m| m.is_dir()) {
         return false;
     }
     if let Some(home) = home
@@ -505,7 +506,65 @@ pub fn linked_is_trusted_in(common_dir: &Path, id: &str, root: &Path, home: Opti
     } else {
         root.join(target)
     };
-    canonical(&target) == canonical(&common_dir.join("worktrees").join(id))
+    canonical(&target) == canonical(&admin)
+}
+
+/// Whether the worktree at `root` may be read as one of the repo whose common directory is
+/// `common_dir` (#216 M-01, NFR-02): the root is a real folder, not a symlink; a linked one is
+/// [`linked_is_trusted_in`] under its `admin_name`; the main one has a real `.git` directory
+/// that is the common directory itself, so neither `core.worktree` nor a swapped `.git` can make
+/// the engine read another repo through it.
+pub fn worktree_is_trusted_in(
+    common_dir: &Path,
+    root: &Path,
+    main: bool,
+    admin_name: Option<&str>,
+    home: Option<&Path>,
+) -> bool {
+    if !std::fs::symlink_metadata(root).is_ok_and(|m| m.is_dir()) {
+        return false;
+    }
+    match (main, admin_name) {
+        (true, _) => {
+            let git = root.join(".git");
+            std::fs::symlink_metadata(&git).is_ok_and(|m| m.is_dir())
+                && canonical(&git) == canonical(common_dir)
+        }
+        (false, Some(id)) => linked_is_trusted_in(common_dir, id, root, home),
+        (false, None) => false,
+    }
+}
+
+/// Opens the worktree at `root` of the repo whose common directory is `common_dir`, only if the
+/// repo owns it ([`worktree_is_trusted_in`]): the one way the observer opens a worktree. What
+/// was opened is checked again, so a `.git` swapped between the check and the open is refused
+/// too. A root that is not there is `Unavailable`; one the repo does not own is `Untrusted` and
+/// nothing behind it is read.
+pub fn open_worktree(
+    common_dir: &Path,
+    root: &Path,
+    main: bool,
+    admin_name: Option<&str>,
+) -> Result<RepoReader, ReadError> {
+    if std::fs::symlink_metadata(root).is_err() {
+        return Err(ReadError::Unavailable("the worktree is not there".into()));
+    }
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
+    let refused = || ReadError::Untrusted("the repo does not own this worktree's .git".into());
+    if !worktree_is_trusted_in(
+        common_dir,
+        root,
+        main,
+        admin_name,
+        home.as_deref().map(Path::new),
+    ) {
+        return Err(refused());
+    }
+    let reader = RepoReader::open(root, &ReaderOptions::default())?;
+    if canonical(reader.common_dir()) != canonical(common_dir) {
+        return Err(refused());
+    }
+    Ok(reader)
 }
 
 /// The text of a `.git` link file: a regular file (never a symlink) of at most 4 KiB.
@@ -525,30 +584,19 @@ fn read_link_file(path: &Path) -> Option<String> {
     Some(text)
 }
 
-fn untrusted_link(path: &Path, id: &str) -> WorktreeRead {
-    WorktreeRead {
-        view: WorktreeView {
-            path: Untrusted::from_os(path.as_os_str()),
-            main: false,
-            admin_name: Some(UntrustedName::new(id)),
-            status: WorktreeStatus::Unavailable {
-                reason: UnavailableReason::Untrusted,
-            },
-            last_activity_utc_ms: None,
-            last_activity_in_gap: false,
-            detached_at: None,
-        },
-        head_commit: None,
-        fingerprint: None,
-        in_progress: false,
-    }
-}
-
 /// Reads one worktree from scratch: `HEAD`, the full status and whether an
 /// operation is in progress. Never fails: what cannot be read is reported
 /// unavailable with its reason. The ahead/behind is not counted here (it is
 /// left "unreadable"): the caller counts it for the whole repo.
-pub fn read_worktree(path: &Path, main: bool, admin_name: Option<&str>) -> WorktreeRead {
+///
+/// Only a worktree the repo at `common_dir` owns is read ([`open_worktree`]); any other reads
+/// unavailable and untrusted (#216 M-01).
+pub fn read_worktree(
+    common_dir: &Path,
+    path: &Path,
+    main: bool,
+    admin_name: Option<&str>,
+) -> WorktreeRead {
     let view = |status, detached_at| WorktreeView {
         path: Untrusted::from_os(path.as_os_str()),
         main,
@@ -559,7 +607,7 @@ pub fn read_worktree(path: &Path, main: bool, admin_name: Option<&str>) -> Workt
         detached_at,
     };
     let read = || -> Result<(HeadView, Option<String>, Status, bool), ReadError> {
-        let reader = RepoReader::open(path, &ReaderOptions::default())?;
+        let reader = open_worktree(common_dir, path, main, admin_name)?;
         // A `git` creates its operation state before it detaches `HEAD` and reattaches `HEAD`
         // before it removes the state: read the state on both sides, or an operation that ends
         // during the status reads as a plain detached `HEAD`.
@@ -620,31 +668,15 @@ pub fn read_worktree(path: &Path, main: bool, admin_name: Option<&str>) -> Workt
 
 /// The full list of changes of the worktree at `path`, sorted by path and area, with the counts
 /// by area: what [`read_worktree`] keeps bounded. Read only; a page of paths re-reads it because
-/// the published list is cut at [`MAX_WORKTREE_CHANGES`].
-///
-/// Unlike [`read_worktree`], which opens whatever the root holds, this refuses a root whose
-/// `.git` is not what the allowlisted repo has: a symlink, or for a main worktree anything but a
-/// real directory, would make the engine open a repo the allowlist never named. A linked
-/// worktree's `.git` is a regular file, and its link back to the repo is checked by the caller
-/// through [`linked_is_trusted_in`]. `read_worktree` shares that class of gap; it is left as is
-/// here and reported apart.
+/// the published list is cut at [`MAX_WORKTREE_CHANGES`]. Like [`read_worktree`], only a
+/// worktree the repo at `common_dir` owns is read ([`open_worktree`]).
 pub fn all_changes(
+    common_dir: &Path,
     path: &Path,
     main: bool,
+    admin_name: Option<&str>,
 ) -> Result<(ChangeCounts, Vec<FileChangeView>), ReadError> {
-    let kind = std::fs::symlink_metadata(path.join(".git")).map(|m| m.file_type());
-    let real = match &kind {
-        Ok(kind) if kind.is_symlink() => false,
-        Ok(kind) if main => kind.is_dir(),
-        Ok(kind) => kind.is_file(),
-        Err(_) => true,
-    };
-    if !real {
-        return Err(ReadError::Untrusted(
-            ".git is not what the repo of this worktree has".into(),
-        ));
-    }
-    let reader = RepoReader::open(path, &ReaderOptions::default())?;
+    let reader = open_worktree(common_dir, path, main, admin_name)?;
     Ok(changes(&reader.status()?))
 }
 
