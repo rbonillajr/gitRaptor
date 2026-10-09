@@ -365,6 +365,7 @@ fn raw_target(
 
 /// Steps 4–6 of ADR-TMC-005 § 4 (set, target, base rule). A refusal
 /// carries the scope to record it under.
+#[allow(clippy::too_many_arguments)]
 fn plan(
     oplog_lock: &Mutex<Oplog>,
     store: Option<&SnapshotStore>,
