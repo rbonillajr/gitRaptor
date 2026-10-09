@@ -288,13 +288,38 @@ fn texts(code: McpToolError, lang: Lang, params: Option<&Value>) -> (&'static st
             "No se sabe si el snapshot se guardó.",
             "Revisa `raptor timeline` antes de reintentar.",
         ),
-        // The texts of these codes come with the tool; until then they say what any failure says.
-        (
-            E::WorktreeMissing | E::RepoOtherOwner | E::WorktreeUntrusted | E::InvalidCursor,
-            lang,
-        ) => {
-            return texts(E::Internal, lang, None);
-        }
+        (E::WorktreeMissing, Lang::En) => (
+            "The worktree of this session no longer exists.",
+            "Start the session in an existing worktree of the repo.",
+        ),
+        (E::WorktreeMissing, Lang::Es) => (
+            "El worktree de esta sesión ya no existe.",
+            "Inicia la sesión en un worktree existente del repo.",
+        ),
+        (E::RepoOtherOwner, Lang::En) => (
+            "This repo belongs to another user, so GitRaptor does not read it.",
+            "Ask the developer to check the repo's owner.",
+        ),
+        (E::RepoOtherOwner, Lang::Es) => (
+            "Este repo pertenece a otro usuario, así que GitRaptor no lo lee.",
+            "Pide al desarrollador que revise el propietario del repo.",
+        ),
+        (E::WorktreeUntrusted, Lang::En) => (
+            "GitRaptor does not trust the folder of this worktree.",
+            "Ask the developer to check the worktree in GitRaptor.",
+        ),
+        (E::WorktreeUntrusted, Lang::Es) => (
+            "GitRaptor no confía en la carpeta de este worktree.",
+            "Pide al desarrollador que revise el worktree en GitRaptor.",
+        ),
+        (E::InvalidCursor, Lang::En) => (
+            "The cursor is not valid for this session.",
+            "Call status again without a cursor and use the ones it returns.",
+        ),
+        (E::InvalidCursor, Lang::Es) => (
+            "El cursor no es válido para esta sesión.",
+            "Llama a status sin cursor y usa los que devuelve.",
+        ),
     };
     (message, action.to_owned())
 }
