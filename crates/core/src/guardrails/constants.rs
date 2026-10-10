@@ -5,11 +5,12 @@
 
 use std::path::{Path, PathBuf};
 
-/// Version of the dispatcher template: `raptor hook` accepts this one and the previous one
+/// Version of the dispatcher template: `raptor hook` accepts it and every earlier one
 /// (ADR-GRD-001 § 8).
-/// 2 adds the `pre-commit` and `commit-msg` dispatchers (US-GRD-018); a repo installed with 1
-/// keeps working unchanged and gets them when it is installed again.
-pub const TEMPLATE_VERSION: u32 = 2;
+/// 2 adds the `pre-commit` and `commit-msg` dispatchers (US-GRD-018); 3 hands every pushed ref of
+/// a `pre-push` to `raptor hook` (no fast path for refs that are not governed). A repo installed
+/// with an earlier one keeps working unchanged and is upgraded when it is installed again.
+pub const TEMPLATE_VERSION: u32 = 3;
 
 /// The first template whose `pre-push` dispatcher hands over every pushed ref.
 pub const EVERY_PUSHED_REF: u32 = 3;
