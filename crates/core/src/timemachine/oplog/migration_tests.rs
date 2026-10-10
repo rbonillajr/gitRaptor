@@ -19,8 +19,9 @@ use super::{OPLOG_FILE, Oplog, OplogStatus, repo_dir};
 use crate::profile::{ProfileDirs, fsperm};
 
 const REPO: &str = "0a1b2c3d-0000-4000-8000-00000000abcd";
-/// Version of the oplog this change introduces.
-const MIGRATION: i64 = 3;
+/// Version of the oplog after every migration: the previous version's oplog is at 2, and the
+/// ones after migration 3 are appended behind it, so this follows the list.
+const MIGRATION: i64 = OPLOG_MIGRATIONS.len() as i64;
 /// Format of the hashed rows of the previous version.
 const OLD_FORMAT: i64 = 2;
 
@@ -271,7 +272,7 @@ fn running_migration_3_twice_changes_nothing_the_second_time() {
     drop(second);
 
     let conn = raw(&dirs);
-    assert_eq!(version(&conn), MIGRATION, "still version 3, not 4");
+    assert_eq!(version(&conn), MIGRATION, "still the last version");
     assert_eq!(snapshot_ids(&conn), ids);
     assert_eq!(
         (

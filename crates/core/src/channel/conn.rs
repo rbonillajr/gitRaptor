@@ -903,6 +903,9 @@ impl Connection<'_> {
                     }
                     // Before the answer: the entry reaches the loop ahead of any later query,
                     // and the actor is read while the hook client is alive (US-GRD-005, D3).
+                    // The prior snapshot goes before the log: a later change (US-GRD-017) can
+                    // turn a failed one into a denial that the log records.
+                    decision.prior_snapshot = self.hook_prior(&p, &decision);
                     self.log_decision(&p, &decision, &caller, policy, &served.ignored);
                     self.hook_claims(&p, &caller, &decision);
                     // After logging: the log keeps the product's own rule names, and the
@@ -972,6 +975,128 @@ impl Connection<'_> {
             cwd,
             gitraptor_api::clock::monotonic_ns(),
         );
+    }
+
+    /// The `hook-prior` snapshot of a destructive operation, taken inside the call while the
+    /// hook's `git` waits (ADR-TMC-004 § 3). Nothing the hook sent localizes anything: the repo
+    /// is the registry's, the worktree is the working directory of the hook process as the
+    /// daemon reads it, and it goes through the same gate as every Time Machine command
+    /// (`tm_scope_for`, then `observe::open_registered_worktree` in the capture).
+    ///
+    /// `None` (no field, no snapshot) when the connection did not ask for it, the operation is
+    /// not one that needs it, it is not allowed, or the `git` is the executor's own (which has
+    /// its guaranteed prior).
+    fn hook_prior(
+        &self,
+        params: &EvaluateParams,
+        decision: &gitraptor_api::guard::Decision,
+    ) -> Option<gitraptor_api::timemachine::HookPriorSnapshot> {
+        use crate::timemachine::hook_prior;
+        use gitraptor_api::guard::Effect;
+        use gitraptor_api::timemachine::HookPriorSnapshot;
+        if !self.has(methods::CAP_GUARD_PRIOR_SNAPSHOT.name)
+            || !hook_prior::wants_prior(&params.operation)
+            || decision.applied_effect != Effect::Allow
+        {
+            return None;
+        }
+        let checks = self.ctx.checks();
+        let resolution = requester::resolve(self.peer, &checks, Some(&self.ctx.marks));
+        if resolution
+            .as_ref()
+            .is_ok_and(|r| r.executor_operation.is_some())
+        {
+            return None;
+        }
+        // Attributing only names the row and picks the quota bucket: it grants nothing.
+        let requester = resolution.map_or(Requester::Unattributed, |r| r.who.requester);
+        let git = crate::guardrails::second_line::nearest_git(self.peer, &checks);
+        let started = Instant::now();
+        let taken = self.take_hook_prior(params, requester, git, started);
+        let (outcome, cause, reused) = match &taken {
+            Ok(t) => ("complete", "none", t.reused),
+            Err(cause) => ("failed", hook_prior_cause(*cause), false),
+        };
+        self.ctx.logger.info(
+            "hook_prior",
+            &[
+                ("repo", Field::id(&params.repo_id)),
+                ("outcome", Field::Text(outcome)),
+                ("cause", Field::Text(cause)),
+                (
+                    "ms",
+                    Field::Int(i64::try_from(started.elapsed().as_millis()).unwrap_or(i64::MAX)),
+                ),
+                ("reused", Field::Bool(reused)),
+            ],
+        );
+        Some(match taken {
+            Ok(t) => HookPriorSnapshot::Complete {
+                snapshot_id: t.snapshot_id,
+                reused: t.reused,
+            },
+            Err(cause) => HookPriorSnapshot::Failed { cause },
+        })
+    }
+
+    fn take_hook_prior(
+        &self,
+        params: &EvaluateParams,
+        requester: Requester,
+        git: Option<crate::guardrails::second_line::GitProcess>,
+        started: Instant,
+    ) -> Result<
+        crate::timemachine::hook_prior::HookPriorTaken,
+        gitraptor_api::timemachine::HookPriorFailure,
+    > {
+        use crate::timemachine::hook_prior::{self, HookPriorAsk, HookPriorError};
+        use crate::timemachine::store::CaptureError;
+        use gitraptor_api::timemachine::HookPriorFailure as Failure;
+        let (Some(deps), Some(tm)) = (&self.ctx.tm_engine, &self.ctx.time_machine) else {
+            return Err(Failure::Unavailable);
+        };
+        // The registry decides which repo and which directory; the hook's values are only
+        // compared with it.
+        let entry = self
+            .ctx
+            .guard
+            .get(&params.repo_id)
+            .filter(|e| e.common_dir == params.common_dir)
+            .ok_or(Failure::Unavailable)?;
+        let cwd = process_cwd(self.peer.pid)
+            .and_then(|p| gitraptor_git::paths::canonicalize(&p).ok())
+            .ok_or(Failure::NoWorktree)?;
+        // The gate of every Time Machine command: the folder must be a worktree of an observed
+        // repo, and that repo must be the one the registry names.
+        match tm_scope_for(tm.backend.as_ref(), false, Some(&cwd), None) {
+            Ok(repo) if repo.repo.repo_id == params.repo_id => {}
+            _ => return Err(Failure::NoWorktree),
+        }
+        let ask = HookPriorAsk {
+            repo_id: params.repo_id.clone(),
+            worktree: cwd,
+            common_dir: PathBuf::from(entry.common_dir),
+            requester,
+            git,
+        };
+        hook_prior::capture(
+            deps,
+            &ask,
+            manual::wall_now_ms(),
+            started + hook_prior::deadline(),
+        )
+        .map_err(|e| match e {
+            HookPriorError::Quota(_) => Failure::QuotaExceeded,
+            HookPriorError::NoSpace => Failure::NoSpace,
+            HookPriorError::TimeLimit => Failure::TimeLimit,
+            HookPriorError::Discarded => Failure::Discarded,
+            HookPriorError::NoWorktree
+            | HookPriorError::Capture(CaptureError::Read(gitraptor_git::ReadError::Untrusted(_))) => {
+                Failure::NoWorktree
+            }
+            HookPriorError::Unavailable => Failure::Unavailable,
+            HookPriorError::Capture(_) => Failure::Internal,
+        })
     }
 
     /// What the daemon knows of a hook client (US-GRD-018): the actor and the worktree are
@@ -3605,6 +3730,20 @@ fn reason_text(reason: RefusalReason) -> &'static str {
 /// A repo id as the profile makes them: short, hexadecimal and dashes.
 fn valid_repo_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
+}
+
+/// The stable name of a hook prior failure for the log (never a path or an argument).
+fn hook_prior_cause(cause: gitraptor_api::timemachine::HookPriorFailure) -> &'static str {
+    use gitraptor_api::timemachine::HookPriorFailure as F;
+    match cause {
+        F::TimeLimit => "time-limit",
+        F::NoSpace => "no-space",
+        F::QuotaExceeded => "quota-exceeded",
+        F::Discarded => "discarded",
+        F::NoWorktree => "no-worktree",
+        F::Unavailable => "unavailable",
+        F::Internal => "internal",
+    }
 }
 
 #[cfg(test)]

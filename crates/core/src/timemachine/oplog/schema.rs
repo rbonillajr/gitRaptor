@@ -144,4 +144,60 @@ CREATE TRIGGER snapshots_no_update BEFORE UPDATE ON snapshots
 CREATE TRIGGER snapshots_no_delete BEFORE DELETE ON snapshots
     BEGIN SELECT RAISE(ABORT, 'the oplog is append-only'); END;
 ",
+    r"-- migration: hook-prior requester
+-- A `hook-prior` row also carries who asked for it, its worktree and the `hook` channel (the
+-- requester's quota bucket is read from them), and its own partial indexes. The table is
+-- rebuilt with the same columns in the same order, so the hash of every row written before
+-- verifies as it did. The append-only triggers are dropped first and recreated with the text
+-- of migration 1.
+DROP TRIGGER snapshots_no_update;
+DROP TRIGGER snapshots_no_delete;
+CREATE TABLE snapshots_hook_prior (
+    snapshot_id       TEXT PRIMARY KEY,
+    seq               INTEGER NOT NULL UNIQUE,
+    level             TEXT NOT NULL CHECK (level IN ('guaranteed-prior', 'observation',
+                          'hook-prior', 'manual')),
+    worktrees         TEXT NOT NULL,
+    store_ref         TEXT NOT NULL,
+    engine_mark       INTEGER,
+    cause_operation   TEXT,
+    cause_event_seq   INTEGER,
+    recorded_ms       INTEGER NOT NULL,
+    label             TEXT,
+    requester         TEXT,
+    requester_session TEXT,
+    worktree_key      TEXT,
+    channel           TEXT CHECK (channel IS NULL OR channel IN ('cli', 'tui', 'mcp', 'hook')),
+    CHECK ((level = 'manual') = (label IS NOT NULL)),
+    CHECK (level <> 'manual' OR (requester IS NOT NULL AND requester_session IS NOT NULL
+        AND worktree_key IS NOT NULL AND channel IS NOT NULL)),
+    CHECK (level <> 'hook-prior' OR (requester IS NOT NULL AND worktree_key IS NOT NULL
+        AND channel = 'hook')),
+    CHECK (level IN ('manual', 'hook-prior') OR (requester IS NULL AND requester_session IS NULL
+        AND worktree_key IS NULL AND channel IS NULL))
+) STRICT;
+INSERT INTO snapshots_hook_prior (snapshot_id, seq, level, worktrees, store_ref, engine_mark,
+        cause_operation, cause_event_seq, recorded_ms,
+        label, requester, requester_session, worktree_key, channel)
+    SELECT snapshot_id, seq, level, worktrees, store_ref, engine_mark,
+        cause_operation, cause_event_seq, recorded_ms,
+        label, requester, requester_session, worktree_key, channel
+    FROM snapshots;
+DROP TABLE snapshots;
+ALTER TABLE snapshots_hook_prior RENAME TO snapshots;
+CREATE INDEX snapshots_manual ON snapshots(requester_session, recorded_ms)
+    WHERE level = 'manual';
+CREATE INDEX snapshots_manual_worktree ON snapshots(worktree_key, recorded_ms)
+    WHERE level = 'manual';
+CREATE INDEX snapshots_manual_time ON snapshots(recorded_ms) WHERE level = 'manual';
+CREATE INDEX snapshots_hook_prior_session ON snapshots(requester_session, recorded_ms)
+    WHERE level = 'hook-prior';
+CREATE INDEX snapshots_hook_prior_worktree ON snapshots(worktree_key, recorded_ms)
+    WHERE level = 'hook-prior';
+CREATE INDEX snapshots_hook_prior_time ON snapshots(recorded_ms) WHERE level = 'hook-prior';
+CREATE TRIGGER snapshots_no_update BEFORE UPDATE ON snapshots
+    BEGIN SELECT RAISE(ABORT, 'the oplog is append-only'); END;
+CREATE TRIGGER snapshots_no_delete BEFORE DELETE ON snapshots
+    BEGIN SELECT RAISE(ABORT, 'the oplog is append-only'); END;
+",
 ];

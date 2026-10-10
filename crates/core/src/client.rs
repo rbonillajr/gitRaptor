@@ -327,6 +327,7 @@ pub(crate) fn debug_overrides() -> Vec<(std::ffi::OsString, std::ffi::OsString)>
             crate::autostart::AUTOSTART_DIR_ENV,
             crate::autostart::SERVICE_TOOL_ENV,
             crate::guardrails::pending::WINDOW_ENV,
+            crate::timemachine::hook_prior::DEADLINE_ENV,
             crate::guardrails::protection::HEALTH_ENV,
         ] {
             if let Some(value) = std::env::var_os(name) {

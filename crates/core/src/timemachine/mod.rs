@@ -7,6 +7,7 @@ pub mod chaos;
 pub mod confirm;
 pub mod continuous;
 pub mod engine;
+pub mod hook_prior;
 pub mod kept;
 pub mod manual;
 pub mod notices;

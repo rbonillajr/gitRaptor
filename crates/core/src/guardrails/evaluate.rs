@@ -162,6 +162,7 @@ pub fn decision(eval: Evaluation) -> Decision {
             status: ConfigStatus::NotRead,
         }],
         config_ref: Vec::new(),
+        prior_snapshot: None,
     }
 }
 

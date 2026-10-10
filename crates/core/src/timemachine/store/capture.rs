@@ -31,8 +31,27 @@ use super::meta::{ConflictEntry, META_FORMAT, Meta, MetaWorktree, RegisteredWork
 use super::{CaptureError, OBSERVATION_MAX_FILE_BYTES, SnapshotStore, StageTimings, now_ms};
 use crate::timemachine::chaos;
 use crate::timemachine::oplog::{
-    CompleteInfo, Exclusion, ManualMeta, NewSnapshot, Oplog, SnapshotLevel, SnapshotState,
+    CompleteInfo, Exclusion, HookPriorMeta, ManualMeta, NewSnapshot, Oplog, SnapshotLevel,
+    SnapshotState,
 };
+
+/// The attempt a row is written for before the worktree is read: who asked for a `manual` or a
+/// `hook-prior` snapshot.
+#[derive(Clone, Copy)]
+enum Attempt<'a> {
+    Manual(&'a ManualMeta),
+    HookPrior(&'a HookPriorMeta),
+}
+
+impl Attempt<'_> {
+    /// The instant of the request: the mark of every row of the attempt.
+    fn requested_ms(self) -> i64 {
+        match self {
+            Self::Manual(m) => m.requested_ms,
+            Self::HookPrior(m) => m.requested_ms,
+        }
+    }
+}
 
 /// A request for one snapshot.
 #[derive(Debug, Clone)]
@@ -373,14 +392,34 @@ impl SnapshotStore {
                 "a manual capture takes a manual request".into(),
             ));
         }
-        self.run_capture(oplog, req, Some(meta), abort)
+        self.run_capture(oplog, req, Some(Attempt::Manual(meta)), abort)
+    }
+
+    /// Takes a `hook-prior` snapshot. Like a manual one, its `pending` row is written before the
+    /// worktree is read (the attempt counts for the quota whatever happens next, and a capture
+    /// that fails, is aborted or discarded leaves it `discarded`, never a point). It is a prior:
+    /// it does not give way and reads everything, but it stops, at every point where a capture
+    /// may stop, when `abort` says so (its deadline, the free-space floor).
+    pub fn capture_hook_prior_until(
+        &self,
+        oplog: &Mutex<Oplog>,
+        req: &CaptureRequest,
+        meta: &HookPriorMeta,
+        abort: &(dyn Fn() -> bool + Sync),
+    ) -> Result<CaptureOutcome, CaptureError> {
+        if req.level != SnapshotLevel::HookPrior {
+            return Err(CaptureError::InvalidInput(
+                "a hook-prior capture takes a hook-prior request".into(),
+            ));
+        }
+        self.run_capture(oplog, req, Some(Attempt::HookPrior(meta)), abort)
     }
 
     fn run_capture(
         &self,
         oplog: &Mutex<Oplog>,
         req: &CaptureRequest,
-        manual: Option<&ManualMeta>,
+        attempt: Option<Attempt<'_>>,
         abort: &(dyn Fn() -> bool + Sync),
     ) -> Result<CaptureOutcome, CaptureError> {
         validate(req)?;
@@ -395,20 +434,21 @@ impl SnapshotStore {
             ..StageTimings::default()
         };
         // The attempt exists from here: before the worktree is read.
-        let begun = match manual {
-            Some(meta) => {
+        let begun = match attempt {
+            Some(attempt) => {
                 let mut log = oplog.lock().unwrap_or_else(|p| p.into_inner());
-                let id = log.begin_manual_snapshot(
-                    &NewSnapshot {
-                        level: req.level,
-                        worktrees: req.worktrees.iter().map(|w| w.key.clone()).collect(),
-                        engine_mark: req.engine_mark,
-                        cause_operation: req.cause_operation.clone(),
-                        cause_event_seq: req.cause_event_seq,
-                    },
-                    meta,
-                )?;
-                Some((id, meta))
+                let new = NewSnapshot {
+                    level: req.level,
+                    worktrees: req.worktrees.iter().map(|w| w.key.clone()).collect(),
+                    engine_mark: req.engine_mark,
+                    cause_operation: req.cause_operation.clone(),
+                    cause_event_seq: req.cause_event_seq,
+                };
+                let id = match attempt {
+                    Attempt::Manual(meta) => log.begin_manual_snapshot(&new, meta)?,
+                    Attempt::HookPrior(meta) => log.begin_hook_prior_snapshot(&new, meta)?,
+                };
+                Some((id, attempt.requested_ms()))
             }
             None => None,
         };
@@ -421,7 +461,7 @@ impl SnapshotStore {
             prior,
             t_all,
             timings,
-            begun.as_ref().map(|(id, meta)| (id.as_str(), *meta)),
+            begun.as_ref().map(|(id, at)| (id.as_str(), *at)),
             abort,
         );
         if result.is_err() {
@@ -434,9 +474,9 @@ impl SnapshotStore {
                 state.worktrees.insert(w.key, st);
             }
             // The attempt did not make a point: its row says so. Nothing is deleted.
-            if let Some((id, meta)) = &begun {
+            if let Some((id, requested_ms)) = &begun {
                 let mut log = oplog.lock().unwrap_or_else(|p| p.into_inner());
-                let _ = log.set_snapshot_state(id, SnapshotState::Discarded, meta.requested_ms);
+                let _ = log.set_snapshot_state(id, SnapshotState::Discarded, *requested_ms);
             }
         }
         result
@@ -454,14 +494,14 @@ impl SnapshotStore {
         prior: bool,
         t_all: Instant,
         mut timings: StageTimings,
-        begun: Option<(&str, &ManualMeta)>,
+        begun: Option<(&str, i64)>,
         abort: &(dyn Fn() -> bool + Sync),
     ) -> Result<CaptureOutcome, CaptureError> {
+        // A prior never gives way to another capture, but `abort` stops every level: it carries
+        // a deadline or a floor the caller must be able to hold even a prior to.
         let yield_now = || {
-            !prior
-                && (self.prior_waiting()
-                    || req.give_way.as_ref().is_some_and(|g| (g.0)())
-                    || abort())
+            (!prior && (self.prior_waiting() || req.give_way.as_ref().is_some_and(|g| (g.0)())))
+                || abort()
         };
         if yield_now() {
             return Err(CaptureError::Yielded);
@@ -672,11 +712,11 @@ impl SnapshotStore {
         // cache, so every object synced above is on stable storage before the ref exists. No
         // separate barrier is paid.
         let snapshot_id = match begun {
-            Some((id, meta)) => finish_manual(
+            Some((id, requested_ms)) => finish_manual(
                 oplog,
                 &handle,
                 id,
-                meta.requested_ms,
+                requested_ms,
                 commit,
                 unique_bytes,
                 &exclusions,

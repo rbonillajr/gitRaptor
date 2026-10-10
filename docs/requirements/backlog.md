@@ -29,6 +29,7 @@
     -   **Contexto**: [context.md](features/time-machine/context.md)
     -   **Historias**: [user-stories.md](features/time-machine/user-stories.md) (21 historias expandidas en `features/time-machine/user-stories/`, 2026-10-03; desde el 2026-10-04, 2 bloqueadas (US-TMC-011 por P17, US-TMC-020 por SPIKE-TMC-001) y 1 fuera del MVP (US-TMC-021, Fase 2), por decisiones de Rene Bonilla)
     -   **Implementación (2026-10-08)**: US-TMC-001, 002, 004, 006, 009 (PR #212 y #219) 013 (PR #219) y 019 (PR #247; aviso de interrupción solo en la CLI, TUI y MCP pendientes en US-CKP-014 y US-MCP-012) y TS-TMC-001 a 004 implementadas; SPIKE-TMC-001 hecho. Detalle y PR en la sección "Estado de la implementación" de cada ficha.
+    -   **Deuda técnica (2026-10-09)**: [TD-TMC-001](features/time-machine/technical-stories/TD-TMC-001-previo-hook-plazo-y-cupo-sin-atribuir.md) (`draft`, prioridad media, Dev Spec pendiente): plazo real, cupo barato y cubo "sin atribuir" acotado del previo de hook. Origen: revisiones de código y de seguridad del PR de US-TMC-005 (sin Critical ni High); debe cerrarse antes o dentro de US-GRD-017, porque con ella un `failed` deniega.
     -   **Status**: In Progress
 
 *   **F-001-04**: Guardrails (BR-11, BR-12, BR-13, BR-26)
@@ -107,7 +108,7 @@ Todo lo que el criterio de salida necesita construir está en `main`. Lo que fal
 | Gates | INF-GRP-002 | Must | En parte; la parte de M1 (RES-01, RES-02 y frescura) está hecha (#76, #98, #133) | Frescura y huella (RES-01, RES-02) como gate |
 | Recursos | US-GRP-017 | Must | Implementada (#93, #173) | Mide el criterio 5 cada día |
 | Recursos | TS-GRP-005 | Should | Sin empezar (Dev Spec pendiente) | Prioridad de segundo plano del SO (RES-06, RES-07) |
-| Deshacer | US-TMC-005 | Should | Sin empezar | Previo por los hooks que M1 ya instala; poco coste extra |
+| Deshacer | US-TMC-005 | Should | Implementada (PR #248) | Previo por los hooks que M1 ya instala; poco coste extra. Deuda: TD-TMC-001 |
 | MCP mínimo | US-MCP-001, US-MCP-002, US-MCP-003 | Should | Implementadas (#70, #140, #159) | No bloquea la salida: la detección funciona por observación y US-MCP-002 arrastra US-GRP-006 y US-GRD-004. Si no entra, es lo primero de M2 |
 | Ver | TS-GRP-004: N8 a N11 | Should | Pendiente; pasan a M2 | Solo si una historia de M1 los usa |
 

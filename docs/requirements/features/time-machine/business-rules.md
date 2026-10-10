@@ -4,7 +4,7 @@ title: "Reglas de Negocio — Time Machine"
 type: business-rules
 status: draft
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-09
 domain: GRP
 epic: E-001
 feature: time-machine
@@ -240,6 +240,8 @@ restaurar → lo excluido no se escribe ni se borra
 
 **Límites de disco** (TQ-5, D-TMC-25; cifras propuestas 50 MB, 20 GB y máx(5 GB, 5 %), ajustadas por el spike): en la captura por observación, un archivo que supera el tope de tamaño no se copia y la captura queda **parcial**, con la lista de lo omitido. Si se alcanza la cuota del repo o el espacio libre mínimo, la captura por observación se detiene y el timeline muestra un **hueco "sin espacio"** (BR-TMC-EDGE-002). El snapshot previo garantizado (nivel a) no tiene tope por archivo.
 
+**Previo vía hooks de Guardrails** (US-TMC-005; Decisión del orquestador (2026-10-04), validada por Arquitecto/PO): con los hooks de Guardrails, el rebase y el borrado de una rama local con Git crudo tienen un punto `previo_hook` tomado antes de que Git toque nada. Si no se pudo guardar, la operación no figura como "snapshot previo" y, hasta US-GRD-017, el hook avisa y deja pasar. `checkout -f`, `restore` y `reset --hard` con Git crudo no tienen un hook previo (ADR-GRD-002) y siguen cubiertos por observación: R2 queda abierto para ellos. ⚠️ **ASSUMPTION** (cifras a revisar con uso real): cupo de `previo_hook` de 10 por minuto y 120 en 24 h por solicitante y worktree, 300 en 24 h por worktree y 1.000 en 24 h por repo; los cupos por worktree y por repo solo cuentan a los agentes (Q-GRD-37). Un cupo agotado se declara en el aviso como `quota-exceeded` y nunca borra un punto.
+
 **Criticidad**: Alta
 
 **Ejemplo**: un agente ejecuta `git reset --hard` con Git crudo sin hooks de Guardrails → el timeline muestra el último estado capturado antes del reset como "capturado por observación", no como "snapshot previo". Lo editado entre esa captura y el reset puede perderse (riesgo R2 del contexto).
@@ -362,3 +364,4 @@ Cada regla tendrá al menos un escenario Gherkin, incluido uno negativo, en su h
 | 0.3 | 2026-10-03 | PO (AADD) | Rene Bonilla cierra P1-P14 (D-TMC-10 a D-TMC-23): sin marcas de supuesto en AUTH-001, WF-001 (ámbito), WF-003, CONS-002, CONS-003 y TIME-001. Siguen como supuesto S5 (redo con solape, WF-001) y S6 (EDGE-004). |
 | 0.4 | 2026-10-03 | PO (AADD) | Rene Bonilla acepta S5 y S6: sin marcas de supuesto en WF-001 (redo) y EDGE-004. |
 | 0.5 | 2026-10-03 | PO (AADD) | Rene Bonilla acepta TQ-1 a TQ-17 del Arquitecto. CONS-002: lista cerrada de credenciales excluida por defecto, con opción en el perfil, y repos anidados excluidos; ambos declarados y no tocados al restaurar (TQ-16, TQ-15; D-TMC-16 actualizada). AUTH-001: en Windows, rechazo sin confirmación en el MVP (TQ-14; D-TMC-23 actualizada) y rechazo siempre por MCP (TQ-7). WF-001: pila de undo por worktree (TQ-9). CONS-003 y EDGE-002: tope por archivo, cuotas y hueco "sin espacio" (TQ-5). CONS-004: excepción de liberar el bloqueo propio al arrancar. TIME-001: aviso visto + 24 h (TQ-11); `forget` fuera del MVP (TQ-17, D-TMC-24). EDGE-003: fallo a mitad sin rollback automático (TQ-10). |
+| 0.6 | 2026-10-09 | Orquestador, validada por Arquitecto/PO | US-TMC-005: CONS-003 añade el previo vía hooks de Guardrails (rebase y borrado de rama local), R2 abierto para `checkout -f`/`restore`/`reset --hard`, y los cupos de `previo_hook` como ⚠️ ASSUMPTION (los globales solo cuentan agentes, Q-GRD-37). |

@@ -141,6 +141,7 @@ mod tests {
             exception: ExceptionState::None,
             config_status: Vec::new(),
             config_ref: Vec::new(),
+            prior_snapshot: None,
         }
     }
 
