@@ -1,0 +1,131 @@
+{
+  "schema": "nassa.certification.v1",
+  "certifiedAt": "2026-10-10T03:30:46.484Z",
+  "dir": "/Users/rbonilla/orca/workspaces/gitRaptor/tmc005",
+  "contract_sha256": "cb06fe007532b8a1262ab5238f975804e8b3dec68f3acf163c42ec9b9ecdd350",
+  "source": {
+    "kind": "brief",
+    "ref": "docs/dev-briefs/us-tmc-005-pre-hook-snapshot.md"
+  },
+  "verdict": "CERTIFIED WITH RESERVATIONS",
+  "status": "con-reservas",
+  "reservations": [
+    {
+      "why": "baseline-roja-explicada",
+      "note": "la suite base estaba en rojo y se dio por explicada con el informe `target/nextest/ci/junit-paths.xml`, cuya ruta controla el agente y que solo ata a la corrida su mtime"
+    },
+    {
+      "why": "integridad-sin-verificar",
+      "note": "integridad de pruebas: NO COMPROBADA — no hay informe registrado: falta el de la suite tras implementar (P3)"
+    }
+  ],
+  "totals": {
+    "total": 9,
+    "passed": 9,
+    "failed": 0,
+    "notRun": 0
+  },
+  "integrity": {
+    "status": "NO COMPROBADA",
+    "note": "no hay informe registrado: falta el de la suite tras implementar (P3)",
+    "findings": []
+  },
+  "phases": {
+    "ok": true,
+    "missing": [],
+    "at": "2026-10-10T03:29:20.114Z",
+    "note": "las tres capas constan pasadas · último gate 2026-10-10T03:29:20.114Z. Acredita que corrieron, no CONTRA QUÉ árbol"
+  },
+  "criteria": [
+    {
+      "id": "TMC005-S1",
+      "statement": "US-TMC-005 escenario 1 (reformulado, pendiente del PO): con los hooks de Guardrails, un agente que borra con Git crudo la rama feat-x deja un único punto previo_hook completo que conserva la punta de feat-x y su api.rs; tras un rebase con Git crudo, la entrada del timeline figura con nivel hook-prior (snapshot previo)",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test us_tmc_005_hook scenario_1_ -- --test-threads=4",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 14587
+    },
+    {
+      "id": "TMC005-S3",
+      "statement": "US-TMC-005 escenario 3: si el snapshot previo falla, el hook avisa y deja pasar la operación, la entrada del timeline no figura como hook-prior y no queda ninguna fila hook-prior completa",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test us_tmc_005_hook scenario_3_ -- --test-threads=4",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 5625
+    },
+    {
+      "id": "TMC005-S4",
+      "statement": "US-TMC-005 escenario 4: las consultas de Git crudo que no modifican el repo no generan ningún punto; el borrado de rama posterior (control) genera exactamente uno",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test us_tmc_005_hook scenario_4_ -- --test-threads=4",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 5131
+    },
+    {
+      "id": "TMC005-TRIGGERS",
+      "statement": "Solo piden previo_hook el rebase (pre-rebase) y un reference-transaction con borrado de refs/heads/*; creaciones, movimientos de rama, refs que no son ramas, push y commits no lo piden (D2)",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-core --test us_tmc_005 trigger_policy_ -- --test-threads=4",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 8868
+    },
+    {
+      "id": "TMC005-TIMEOUT",
+      "statement": "Un previo_hook cuyo plazo vence responde fallido por tiempo y no deja ninguna fila completa; el plazo por defecto es de 5 s y cabe dos veces en el tiempo de llamada del cliente (10 s) (D5)",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-core --test us_tmc_005 timeout_ -- --test-threads=4",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 490
+    },
+    {
+      "id": "TMC005-QUOTA",
+      "statement": "Cuota SEC-TMC-12 por cliente y por repo: el undécimo previo_hook del mismo solicitante en un worktree en un minuto se rechaza con la hora de liberación, otro solicitante no se ve afectado, nada se borra y el techo por repo se aplica a todos juntos (D6)",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-core --test us_tmc_005 quota_ -- --test-threads=4",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 905
+    },
+    {
+      "id": "TMC005-NORECURSION",
+      "statement": "Un solo punto por comando de Git (las invocaciones del mismo git lo reutilizan) y la captura no ejecuta ningún hook, filtro ni programa del repo del usuario, así que un snapshot nunca dispara otro (D3, ADR-TMC-002 § 2)",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-core --test us_tmc_005 one_point_per_git_command_ -- --test-threads=4",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 2488
+    },
+    {
+      "id": "TMC005-UNTRUSTED",
+      "statement": "Puerta .git de #226: el daemon resuelve el worktree del hook él mismo (cwd del proceso, repo del registro) y una carpeta que se hace pasar por un worktree o un worktree cuyo .git apunta a otro repo no toma ningún punto ni deja ninguna fila hook-prior; la operación de Git sigue adelante (el hook no se rompe) y el borrado desde el repo (control) toma exactamente uno",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-core --test us_tmc_005 untrusted_ -- --test-threads=4 && CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test us_tmc_005_hook untrusted_ -- --test-threads=4",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 7818
+    },
+    {
+      "id": "TMC005-MIGRATION",
+      "statement": "La migración del oplog que admite el solicitante en filas hook-prior se localiza por su marcador (renumerable, sin índice fijo): la secuencia completa se aplica sobre una base nueva y la migración se aplica desde la versión anterior conservando todas las filas; los CHECK exigen solicitante, worktree y canal hook en hook-prior y mantienen las reglas de manual; la tabla sigue siendo de solo añadir",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-core --lib hook_prior_migration_ -- --test-threads=4",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 5382
+    }
+  ]
+}
