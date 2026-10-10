@@ -1,6 +1,6 @@
 {
   "id": "status-cursor-oversized",
-  "title": "A 2 MiB string cursor is malformed",
+  "title": "A 2 MiB string cursor is refused by the input size cap",
   "threats": [
     "MCP05",
     "SEC-MCP-05",
@@ -21,10 +21,6 @@
     }
   ],
   "expect": {
-    "protocol_error": {
-      "code": -32602,
-      "message": "invalid-params",
-      "field": "cursor"
-    }
+    "invalid_request": {}
   }
 }

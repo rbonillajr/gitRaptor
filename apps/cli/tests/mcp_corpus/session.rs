@@ -164,6 +164,14 @@ fn has_id(inbox: &[Value], from: usize, id: u64) -> bool {
         .is_some_and(|tail| tail.iter().any(|m| m["id"] == id))
 }
 
+/// Whether an error without an id arrived since `from`.
+fn has_anonymous_error(inbox: &[Value], from: usize) -> bool {
+    inbox.get(from..).is_some_and(|tail| {
+        tail.iter()
+            .any(|m| m.get("error").is_some() && m["id"].is_null())
+    })
+}
+
 /// Starts the server, runs the whole script and closes it as the client does at the end.
 ///
 /// # Panics
@@ -316,7 +324,13 @@ fn converse(io: &mut Io, steps: &[Step]) -> (Vec<Value>, Vec<Answer>, bool) {
                     }
                     tool_of.insert(id, tool.clone());
                     let call = json!({"jsonrpc": "2.0", "id": id, "method": "tools/call", "params": params});
-                    alive = io.send(&call) && io.wait("a tool answer", |m| has_id(m, mark, id));
+                    // The input cap refuses a message before the server reads it, with an
+                    // answer that has no id: that is this call's answer too.
+                    let from = io.inbox.len();
+                    alive = io.send(&call)
+                        && io.wait("a tool answer", |m| {
+                            has_id(m, mark, id) || has_anonymous_error(m, from)
+                        });
                     if !alive {
                         break 'steps;
                     }

@@ -389,7 +389,13 @@ fn check_protocol_error(
         not_allowed(failures, at);
         return;
     };
-    only_keys(data, &["field"], &at, failures);
+    // `reason`: why the input cap refused a message (ADR-MCP-001 § 6), a stable kebab-case word.
+    only_keys(data, &["field", "reason"], &at, failures);
+    if let Some(reason) = data.get("reason")
+        && !reason.as_str().is_some_and(|r| r.len() <= 32)
+    {
+        not_allowed(failures, format!("{at}/reason"));
+    }
     let Some(field) = data.get("field") else {
         return;
     };
