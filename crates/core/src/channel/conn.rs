@@ -41,10 +41,10 @@ use gitraptor_api::scope::{
 use gitraptor_api::timemachine::EntryOrigin;
 use gitraptor_api::timemachine::{
     ConfirmationToken, Invalid as TmInvalid, MAX_REPORTED_PATHS, MAX_REPORTED_REFS,
-    McpRequesterView, NotRestored, NotRestoredReason, OperationRunResult, PriorFailedData,
-    RedoParams, RequestChannel, RequesterView, ResolveParams, RestoreParams, RestoreResult,
-    SnapshotParams, Surface, TIMELINE_DEFAULT_LIMIT, TimelineParams, TmConfirmData, TmRejectReason,
-    TmRejectedData, UndoParams, UndoResult, parse_since,
+    McpRequesterView, NotRestored, NotRestoredReason, NoticesParams, NoticesResult,
+    OperationRunResult, PriorFailedData, RedoParams, RequestChannel, RequesterView, ResolveParams,
+    RestoreParams, RestoreResult, SnapshotParams, Surface, TIMELINE_DEFAULT_LIMIT, TimelineParams,
+    TmConfirmData, TmRejectReason, TmRejectedData, UndoParams, UndoResult, parse_since,
 };
 use gitraptor_git::{ReaderOptions, RepoReader};
 
@@ -756,6 +756,10 @@ impl Connection<'_> {
             }
             methods::TM_TIMELINE => {
                 let result = self.tm_timeline(request);
+                self.reply(&request.id, result);
+            }
+            methods::TM_NOTICES => {
+                let result = self.tm_notices(request);
                 self.reply(&request.id, result);
             }
             methods::PING => self.reply(&request.id, request.params::<NoParams>().map(|_| "pong")),
@@ -3373,6 +3377,35 @@ impl Connection<'_> {
             crate::timemachine::timeline::without_inferred(&mut result);
         }
         serde_json::to_value(result).map_err(|_| ErrorObject::new(code::INTERNAL, "serialization"))
+    }
+
+    /// `timemachine.notices`: the interruption notices of the caller's worktree that no client
+    /// received, each marked delivered on this connection's surface. Only through the scope
+    /// gate (the worktree must be one the repo registers): an oplog is never opened by an id
+    /// the client gives. Read and marked under the oplog's lock. Not offered over MCP.
+    fn tm_notices(&self, request: &Request) -> Result<serde_json::Value, ErrorObject> {
+        let p: NoticesParams = request.params()?;
+        let channel = self.request_channel(p.surface)?;
+        let named = self.named_worktree(p.worktree.as_deref())?;
+        let Some(tm) = &self.ctx.time_machine else {
+            return Err(ErrorObject::new(code::NOT_IMPLEMENTED, "no repo layer")
+                .with_data(serde_json::json!({ "implemented_by": "US-TMC-019" })));
+        };
+        let repo = tm_scope_for(tm.backend.as_ref(), false, named.as_deref(), None)
+            .map_err(scope_refused)?;
+        let notices = {
+            let mut log = repo.repo.oplog.lock().unwrap_or_else(|e| e.into_inner());
+            crate::timemachine::notices::take_interruptions(
+                &mut log,
+                &repo.repo.worktree,
+                oplog_channel(channel),
+                now_ms(),
+                &self.ctx.logger,
+            )
+        }
+        .map_err(|_| ErrorObject::new(code::INTERNAL, "oplog unavailable"))?;
+        serde_json::to_value(NoticesResult { notices })
+            .map_err(|_| ErrorObject::new(code::INTERNAL, "serialization"))
     }
 
     /// A Time Machine command declared ahead of its story: strict
