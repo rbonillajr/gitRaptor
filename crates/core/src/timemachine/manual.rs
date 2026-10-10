@@ -199,7 +199,7 @@ pub fn worktree_identity_key(root: &Path, id: Option<(u64, u64)>) -> String {
 }
 
 /// `(device, inode)` of the folder, without following a link; `None` where the OS gives none.
-fn folder_id(path: &Path) -> Option<(u64, u64)> {
+pub(crate) fn folder_id(path: &Path) -> Option<(u64, u64)> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
@@ -284,7 +284,7 @@ pub struct ManualFloor<'a> {
 impl ManualFloor<'_> {
     /// Whether the volume of `path` has less than the floor and the reserve. A volume that cannot
     /// be read is below it: a manual snapshot is never taken blind.
-    fn crossed(&self, path: &Path) -> bool {
+    pub(crate) fn crossed(&self, path: &Path) -> bool {
         let Ok(available) = self.probe.available_bytes(path) else {
             return true;
         };
@@ -301,7 +301,7 @@ impl ManualFloor<'_> {
 
 /// The volume of the store, read from the OS. Outside Unix it reports plenty, as the floor of the
 /// continuous capture does there: the store's own write fails as no space if the disk is full.
-struct VolumeProbe;
+pub(crate) struct VolumeProbe;
 
 impl FreeSpaceProbe for VolumeProbe {
     #[cfg(unix)]
@@ -528,7 +528,12 @@ fn reserve_for(worktree: &Path, deadline: Instant, last: Option<u64>) -> u64 {
 
 /// [`reserve_for`] through the store's cache: one walk per worktree per [`RESERVE_TTL`], however
 /// many requests arrive.
-fn cached_reserve(store: &SnapshotStore, key: &str, worktree: &Path, deadline: Instant) -> u64 {
+pub(crate) fn cached_reserve(
+    store: &SnapshotStore,
+    key: &str,
+    worktree: &Path,
+    deadline: Instant,
+) -> u64 {
     let last = store.manual().last_reserve(key);
     if let Some((age, bytes)) = last
         && age < RESERVE_TTL

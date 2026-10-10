@@ -45,9 +45,9 @@ use chain::{Hash, RowKind};
 
 pub use model::{
     BreakCause, ChainBreak, Channel, CompleteInfo, Exclusion, HookPriorMeta, JournalEntry,
-    ManualMeta, NewOperation, NewSnapshot, Notice, NoticeKind, OpRef, OperationKind, OperationRecord,
-    OperationState, OperationView, Requester, RequesterOrigin, Scope, SnapshotLevel,
-    SnapshotRecord, SnapshotState, SnapshotView, Target,
+    ManualMeta, NewOperation, NewSnapshot, Notice, NoticeKind, OpRef, OperationKind,
+    OperationRecord, OperationState, OperationView, Requester, RequesterOrigin, Scope,
+    SnapshotLevel, SnapshotRecord, SnapshotState, SnapshotView, Target,
 };
 pub use query::{CurrentAttribution, OperationFilter, SnapshotFilter};
 pub use recovery::{
