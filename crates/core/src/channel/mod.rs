@@ -8,6 +8,7 @@
 //! by the daemon ([`authz`]) and audited. Limits and a rate limit keep one
 //! client from starving the others (SEC-08).
 
+pub(crate) mod audit_view;
 pub mod authz;
 pub mod bus;
 #[cfg(any(unix, windows))]

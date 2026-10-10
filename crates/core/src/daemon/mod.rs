@@ -729,9 +729,15 @@ impl Daemon {
                 Ok(Control::AuditList {
                     after_id,
                     limit,
+                    legacy_only,
                     reply,
                 }) => {
-                    let _ = reply.send(self.profile.audit(after_id, limit).ok());
+                    let rows = if legacy_only {
+                        self.profile.audit_legacy(after_id, limit)
+                    } else {
+                        self.profile.audit(after_id, limit)
+                    };
+                    let _ = reply.send(rows.ok());
                 }
                 Ok(Control::RepoAdd(request, reply)) => {
                     let _ = reply.send(self.add_repo(*request));

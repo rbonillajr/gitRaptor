@@ -149,3 +149,41 @@ fn a_profile_from_before_the_outcomes_migrates_every_row() {
     // Opening again migrates nothing and keeps every row.
     assert_eq!(tp.open().audit(0, 100).unwrap().len(), 5);
 }
+
+/// What a client without `audit.outcomes` reads is chosen before the limit, and it is exactly
+/// the outcomes that need no capability.
+#[test]
+fn the_legacy_audit_is_filtered_before_the_limit() {
+    use gitraptor_api::messages::AuditOutcome;
+    let tp = TempProfile::new();
+    let mut profile = tp.open();
+    for (at, outcome) in ["applied", "cancelled", "failed", "expired"]
+        .iter()
+        .enumerate()
+    {
+        profile
+            .append_audit(&row(at as i64, outcome, Some("risk-accepted"), Some("r1")))
+            .unwrap();
+    }
+    for (at, outcome) in ["accepted", "rejected", "not-implemented"]
+        .iter()
+        .enumerate()
+    {
+        profile
+            .append_audit(&row(10 + at as i64, outcome, None, None))
+            .unwrap();
+    }
+    let first = profile.audit_legacy(0, 2).unwrap();
+    assert_eq!(first.len(), 2);
+    let kept: Vec<String> = profile
+        .audit_legacy(0, 10)
+        .unwrap()
+        .into_iter()
+        .map(|(_, r)| r.outcome)
+        .collect();
+    assert_eq!(kept, ["accepted", "rejected", "not-implemented"]);
+    for outcome in kept {
+        let parsed: AuditOutcome = serde_json::from_value(outcome.into()).unwrap();
+        assert!(!parsed.needs_capability());
+    }
+}

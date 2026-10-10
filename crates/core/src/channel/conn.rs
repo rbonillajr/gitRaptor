@@ -17,10 +17,10 @@ use gitraptor_api::framing::{FrameError, MAX_MESSAGE_BYTES, decode_request, read
 use gitraptor_api::guard::{EvaluateParams, GuardRejectedData, GuardRepoParams};
 use gitraptor_api::mcp_view::{MCP_READ_BURST, MCP_READS_PER_MINUTE};
 use gitraptor_api::messages::{
-    AuditEntry, AuditListParams, AuditListResult, AuditOutcome, ClientIdentity, ClientKind,
-    ConnectionProfile, DeclaredAgent, EngineStateView, EventsHistoryParams, EventsHistoryResult,
-    Hello, HelloResult, IncompatibleData, McpRepoView, McpSnapshot, NoParams, RefusalReason,
-    RefusedData, RegistrationRegisterParams, RegistrationRegisterResult, RegistrationRejectedData,
+    AuditListParams, AuditListResult, AuditOutcome, ClientIdentity, ClientKind, ConnectionProfile,
+    DeclaredAgent, EngineStateView, EventsHistoryParams, EventsHistoryResult, Hello, HelloResult,
+    IncompatibleData, McpRepoView, McpSnapshot, NoParams, RefusalReason, RefusedData,
+    RegistrationRegisterParams, RegistrationRegisterResult, RegistrationRejectedData,
     RegistrationRejection, RegistrationWithdrawParams, RegistrationWithdrawResult, ReplaceParams,
     RepoAddParams, RepoAddResult, RepoRejectedData, RepoRejection, RepoRetireParams,
     RepoRetireResult, Snapshot, StopResult, SubscribeParams, SubscribeResult, UnsubscribeParams,
@@ -48,6 +48,7 @@ use gitraptor_api::timemachine::{
 };
 use gitraptor_git::{ReaderOptions, RepoReader};
 
+use super::audit_view;
 use super::authz::{AcceptedPeer, ChainLink, Verdict, check_reserved};
 use super::bus::{Outbox, Subscribed};
 use super::mcp_status;
@@ -85,6 +86,9 @@ use crate::timemachine::undo::{RawSide, UndoDone, UndoEnv, UndoError, tm_scope_f
 
 /// Longest audit page.
 const MAX_AUDIT_PAGE: u32 = 500;
+
+/// Reads of the audit to fill one page when rows cannot be read.
+const MAX_AUDIT_READS: u32 = 8;
 
 /// Reserved-command attempts per connection: one per second, bursts of
 /// this many. Each attempt writes an audit row, so the audit cannot be
@@ -574,8 +578,17 @@ impl Connection<'_> {
         self.profile == ConnectionProfile::Full && self.has(methods::CAP_EVENTS_AUTHORSHIP.name)
     }
 
+    /// Whether the connection reads the end of an announced action in the audit. Never
+    /// `raptor-mcp`: it has no audit.
+    fn audit_outcomes(&self) -> bool {
+        self.profile == ConnectionProfile::Full && self.has(methods::CAP_AUDIT_OUTCOMES.name)
+    }
+
     /// What the connection's capabilities change in what it is sent.
     fn apply_capabilities(&self) {
+        // Nor the end of an announced action in `reserved.audit` without `audit.outcomes`.
+        self.outbox
+            .set_without_audit_outcomes(!self.audit_outcomes());
         // A connection without it cannot read Git events of kind `reset`
         // (protocol 8, US-TMC-004).
         self.outbox
@@ -2132,17 +2145,41 @@ impl Connection<'_> {
 
     fn audit_list(&self, params: AuditListParams) -> Result<AuditListResult, ErrorObject> {
         let limit = params.limit.unwrap_or(100).min(MAX_AUDIT_PAGE);
-        let rows = self
-            .ctx
-            .control
-            .audit_list(params.after_id.unwrap_or(0), limit)
-            .ok_or_else(|| ErrorObject::new(code::INTERNAL, "audit unavailable"))?;
-        Ok(AuditListResult {
-            entries: rows
-                .into_iter()
-                .filter_map(|(id, row)| audit_entry(id, &row))
-                .collect(),
-        })
+        // Without `audit.outcomes` the profile hands over only the rows this client reads,
+        // before the limit: a page is full while rows remain (L-01 of #209).
+        let legacy_only = !self.audit_outcomes();
+        let mut after = params.after_id.unwrap_or(0);
+        let mut entries = Vec::new();
+        // A row that cannot be read (corrupt) is skipped; the page is filled from the next ones.
+        let mut filled = false;
+        for _ in 0..MAX_AUDIT_READS {
+            let want = limit - entries.len() as u32;
+            let rows = self
+                .ctx
+                .control
+                .audit_list(after, want, legacy_only)
+                .ok_or_else(|| ErrorObject::new(code::INTERNAL, "audit unavailable"))?;
+            let end = rows.len() < want as usize;
+            for (id, row) in rows {
+                after = id;
+                match audit_view::audit_entry(id, &row) {
+                    Some(entry) => entries.push(entry),
+                    None => self
+                        .ctx
+                        .logger
+                        .warn("audit_row_unreadable", &[("row", id.into())]),
+                }
+            }
+            if end || entries.len() as u32 >= limit {
+                filled = true;
+                break;
+            }
+        }
+        // Out of reads with rows left: a short page would read as the end of the audit.
+        if !filled {
+            return Err(ErrorObject::new(code::INTERNAL, "audit unreadable"));
+        }
+        Ok(AuditListResult { entries })
     }
 
     /// `daemon.replace`: accepted without the reserved checks only from the
@@ -2333,7 +2370,7 @@ impl Connection<'_> {
             return Err(ErrorObject::new(code::INTERNAL, "audit unavailable"));
         };
         self.ctx.logger.info("reserved_command", &fields);
-        if let Some(entry) = audit_entry(id, &row) {
+        if let Some(entry) = audit_view::audit_entry(id, &row) {
             self.ctx.bus.publish(RESERVED_AUDIT, entry, None, |_| {});
         }
         Ok(())
@@ -3544,6 +3581,10 @@ fn outcome_text(outcome: AuditOutcome) -> &'static str {
         AuditOutcome::Accepted => "accepted",
         AuditOutcome::Rejected => "rejected",
         AuditOutcome::NotImplemented => "not-implemented",
+        AuditOutcome::Applied => "applied",
+        AuditOutcome::Cancelled => "cancelled",
+        AuditOutcome::Failed => "failed",
+        AuditOutcome::Expired => "expired",
     }
 }
 
@@ -3561,23 +3602,6 @@ fn reason_text(reason: RefusalReason) -> &'static str {
     }
 }
 
-/// An audit row as the contract exposes it.
-fn audit_entry(id: i64, row: &AuditRow) -> Option<AuditEntry> {
-    let text = |s: &str| serde_json::Value::String(s.to_owned());
-    Some(AuditEntry {
-        id,
-        at_ms: row.at_ms,
-        operation: row.operation.clone(),
-        repo_id: row.repo_id.clone(),
-        outcome: serde_json::from_value(text(&row.outcome)).ok()?,
-        reason: match &row.reason {
-            Some(r) => Some(serde_json::from_value(text(r)).ok()?),
-            None => None,
-        },
-        client: serde_json::from_str(&row.client).ok()?,
-    })
-}
-
 /// A repo id as the profile makes them: short, hexadecimal and dashes.
 fn valid_repo_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
@@ -3593,6 +3617,10 @@ mod tests {
             AuditOutcome::Accepted,
             AuditOutcome::Rejected,
             AuditOutcome::NotImplemented,
+            AuditOutcome::Applied,
+            AuditOutcome::Cancelled,
+            AuditOutcome::Failed,
+            AuditOutcome::Expired,
         ] {
             assert_eq!(enum_text(&outcome), outcome_text(outcome));
         }

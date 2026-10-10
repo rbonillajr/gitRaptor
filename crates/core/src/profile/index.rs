@@ -206,12 +206,22 @@ impl Index {
         Ok(self.conn.last_insert_rowid())
     }
 
-    pub(crate) fn audit(&self, after_id: i64, limit: u32) -> Result<Vec<(i64, AuditRow)>> {
+    /// Rows after `after_id`, oldest first. With `legacy_only`, only those of the outcomes
+    /// that need no capability: the filter runs before the limit, so a page is full while
+    /// rows remain.
+    pub(crate) fn audit(
+        &self,
+        after_id: i64,
+        limit: u32,
+        legacy_only: bool,
+    ) -> Result<Vec<(i64, AuditRow)>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, at_ms, operation, repo_id, outcome, reason, client, chain
-             FROM reserved_audit WHERE id > ?1 ORDER BY id LIMIT ?2",
+             FROM reserved_audit
+             WHERE id > ?1 AND (?3 = 0 OR outcome IN ('accepted', 'rejected', 'not-implemented'))
+             ORDER BY id LIMIT ?2",
         )?;
-        let rows = stmt.query_map(params![after_id, limit], |row| {
+        let rows = stmt.query_map(params![after_id, limit, legacy_only], |row| {
             Ok((
                 row.get(0)?,
                 AuditRow {

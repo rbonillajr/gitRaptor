@@ -170,7 +170,13 @@ impl Profile {
 
     /// Audit entries with an id greater than `after_id`, oldest first.
     pub fn audit(&self, after_id: i64, limit: u32) -> Result<Vec<(i64, AuditRow)>> {
-        self.index.audit(after_id, limit)
+        self.index.audit(after_id, limit, false)
+    }
+
+    /// [`Profile::audit`] of only the outcomes `accepted`, `rejected` and `not-implemented`,
+    /// chosen before the `limit` applies: what a client without `audit.outcomes` reads.
+    pub fn audit_legacy(&self, after_id: i64, limit: u32) -> Result<Vec<(i64, AuditRow)>> {
+        self.index.audit(after_id, limit, true)
     }
 
     /// Every repo of the index, observed or retired.
