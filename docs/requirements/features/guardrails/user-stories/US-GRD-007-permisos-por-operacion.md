@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-09
 feature: guardrails
 related:
   context:
@@ -16,6 +16,8 @@ related:
     - US-GRD-001
     - US-GRD-004
     - US-GRP-013
+  specs:
+    - DS-US-GRD-007
 tags:
   - guardrails
   - permisos
@@ -32,7 +34,7 @@ tags:
 
 ## Reglas cubiertas
 
-BR-VAL-002 (catálogo de operaciones y sus tres permisos; "pedir confirmación" como denegar mientras no exista la cola, S-GRD-9) · BR-CALC-001 (decisión y motivo con su nivel) · BR-VAL-001 (el permiso se define en el nivel de equipo) · BR-EDGE-001 (el equipo puede desactivar el mínimo seguro desde la rama principal, con la confirmación del desarrollador, Q-GRD-21) · BR-AUTH-001 (confirmar una relajación del equipo está reservado al humano, también la inicial, explícita tras instalar, Q-GRD-22 y Q-GRD-23) · BR-WF-002 (diagnóstico de relajación pendiente, Q-GRD-25) — ver [business-rules.md](../business-rules.md)
+BR-VAL-002 (catálogo de operaciones, qué cuenta como cada una y sus tres permisos; "pedir confirmación" como denegar mientras no exista la cola, que cuenta en el KPI, S-GRD-9, Q-GRD-36 y Q-GRD-37) · BR-EDGE-003 (alcance de los permisos con Git directo, Q-GRD-38 y Q-GRD-39) · BR-CALC-001 (decisión y motivo con su nivel) · BR-VAL-001 (el permiso se define en el nivel de equipo) · BR-EDGE-001 (el equipo puede desactivar el mínimo seguro desde la rama principal, con la confirmación del desarrollador, Q-GRD-21) · BR-AUTH-001 (confirmar una relajación del equipo está reservado al humano, también la inicial, explícita tras instalar, Q-GRD-22 y Q-GRD-23) · BR-WF-002 (diagnóstico de relajación pendiente, Q-GRD-25) — ver [business-rules.md](../business-rules.md)
 
 ## Dependencias
 
@@ -60,7 +62,7 @@ Ejemplos:
 | crear worktree |
 | borrar worktree |
 
-> Las filas de operaciones que la lista de US-GRD-004 declare no interceptables con Git directo no se ejecutan aquí: pasan a US-GRD-016.
+> Las filas de operaciones que la lista de US-GRD-004 declare no interceptables con Git directo no se ejecutan aquí: pasan a US-GRD-016. Son "reset --hard", "borrar worktree", "crear worktree" sin rama nueva (Q-GRD-39) y "merge": con Git directo, un merge denegado deja la rama sin mover, pero el working tree puede quedar con la fusión a medias, así que la promesa completa la verifica la capa MCP (Q-GRD-38). Qué cuenta como cada operación está en BR-VAL-002 (Q-GRD-37).
 
 **Escenario: El permiso "permitir" deja pasar la operación**
 
@@ -104,4 +106,4 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica.
-- **Dev Spec:** pendiente (Arquitecto). Reutiliza la lectura de los tres niveles de US-GRP-013 (motor-local).
+- **Dev Spec:** [`dev-specs/US-GRD-007-permisos-por-operacion.md`](../dev-specs/US-GRD-007-permisos-por-operacion.md) — `DS-US-GRD-007` (status: draft).
