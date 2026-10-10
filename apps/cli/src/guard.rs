@@ -228,6 +228,10 @@ pub fn hook(args: &[OsString]) -> ExitCode {
     if outcome.allowed() {
         ExitCode::SUCCESS
     } else {
+        // Denied without the daemon: say how to go on (the person is told from the agent there).
+        if outcome.degraded.is_some() {
+            eprintln!("{}", t("guard.degraded.retry", &[]));
+        }
         ExitCode::FAILURE
     }
 }
@@ -1288,6 +1292,7 @@ mod tests {
             "guard.degraded",
             "guard.degraded.instance",
             "guard.degraded.unreachable",
+            "guard.degraded.retry",
             "guard.refused-agent",
             "guard.unsupported-platform",
             "guard.status.misnamed-settings",
