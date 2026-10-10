@@ -61,6 +61,16 @@ pub struct Prior {
     pub dir: String,
 }
 
+/// An upgrade of the dispatchers that started and was not confirmed: the files of the folder
+/// may hold the confirmed hash or one of these until it is.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Upgrade {
+    /// The template being installed.
+    pub template: u32,
+    /// The files of that template and their hashes.
+    pub files: Vec<FileHash>,
+}
+
 /// The journal entry of one repo.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Journal {
@@ -90,6 +100,9 @@ pub struct Journal {
     pub confirms_base: Option<String>,
     /// Base branches the minimum protects.
     pub protected_bases: Vec<String>,
+    /// An upgrade in progress; `None` once it is confirmed (or never started).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upgrade: Option<Upgrade>,
 }
 
 impl Journal {

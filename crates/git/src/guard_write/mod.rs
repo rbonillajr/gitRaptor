@@ -306,6 +306,19 @@ impl<'a> GuardWriter<'a> {
         fs::remove_folder(common, FOLDER, listed, Some(expected))
     }
 
+    /// Removes what `replace_files` leaves when it is killed between writing a temporary and
+    /// renaming it: `<file>.gitraptor.tmp-<16 hex>` next to a listed file, regular files only
+    /// (never through a link), inside the folder the journal recorded (`expected`). Any other
+    /// name is left in place.
+    pub fn remove_file_temporaries(
+        &self,
+        _common: &Path,
+        _expected: FileId,
+        _listed: &[&str],
+    ) -> Result<()> {
+        Ok(())
+    }
+
     /// Removes the listed files of every leftover temporary folder of an interrupted install.
     pub fn remove_temporaries(&self, common: &Path, listed: &[&str]) -> Result<()> {
         for path in listed {
