@@ -105,7 +105,7 @@ fn daemon(gate: bool) -> Daemon {
     let dirs = ProfileDirs::under_root(&f.profile);
     let repos = Arc::new(TmRepos::new(dirs.clone()));
     let (oplog, _) = Oplog::open(&dirs, REPO_ID, 1).unwrap();
-    let common = f.repo.join(".git").canonicalize().unwrap();
+    let common = gitraptor_git::paths::canonicalize(&f.repo.join(".git")).unwrap();
     repos.insert(REPO_ID, &common, oplog);
     let (entered_tx, entered) = channel();
     let (release, release_rx) = channel();

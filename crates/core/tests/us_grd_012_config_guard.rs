@@ -160,7 +160,7 @@ fn an_unverifiable_movement_by_an_agent_is_denied() {
         );
         assert_eq!(tip.len(), 40, "commit-tree failed: {tip:?}");
     }
-    let common = path.join(".git").canonicalize().unwrap();
+    let common = gitraptor_git::paths::canonicalize(&path.join(".git")).unwrap();
     let registry = GuardRegistry::default();
     registry.set(
         "0000-ffff",

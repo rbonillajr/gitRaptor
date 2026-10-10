@@ -158,6 +158,7 @@ pub fn run_case(case: &Case) -> CaseRun {
 fn row(case: &Case) -> Row {
     let outcome = match Platform::current() {
         Some(platform) if case.runs_on(platform) => {
+            record_panics();
             let judged = catch_unwind(AssertUnwindSafe(|| {
                 let run = run_case(case);
                 judge(case, &run.observation, &run.secrets, &limits())
@@ -182,13 +183,36 @@ fn row(case: &Case) -> Row {
     }
 }
 
+thread_local! {
+    /// What the panic hook saw on this thread: the message and where it happened.
+    static LAST_PANIC: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Records every panic's location and message on its own thread, then runs the hook that was
+/// there. The payload alone may not be text, and then it says nothing about where it came from.
+fn record_panics() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            let backtrace = std::backtrace::Backtrace::force_capture();
+            LAST_PANIC.with(|last| *last.borrow_mut() = Some(format!("{info}\n{backtrace}")));
+            previous(info);
+        }));
+    });
+}
+
 fn panic_message(panic: &(dyn std::any::Any + core::marker::Send)) -> String {
-    panic
+    let payload = panic
         .downcast_ref::<String>()
         .map(String::as_str)
-        .or_else(|| panic.downcast_ref::<&str>().copied())
-        .unwrap_or("the harness panicked")
-        .to_owned()
+        .or_else(|| panic.downcast_ref::<&str>().copied());
+    let seen = LAST_PANIC.with(|last| last.borrow_mut().take());
+    match (payload, seen) {
+        (Some(text), _) => text.to_owned(),
+        (None, Some(seen)) => format!("the harness panicked without a text payload: {seen}"),
+        (None, None) => "the harness panicked without a text payload".to_owned(),
+    }
 }
 
 /// Runs every case on a pool of at most four threads; rows keep the order of `cases`.

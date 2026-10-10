@@ -52,7 +52,9 @@ impl Removed {
     }
 
     fn admin(&self) -> PathBuf {
-        self.f.repo.join(".git/worktrees/w")
+        // One component at a time: this path is compared with text the product writes with the
+        // separators of the OS, and handed to `mklink`, which reads a `/` as a switch.
+        self.f.repo.join(".git").join("worktrees").join("w")
     }
 
     fn recreate(&self, hook: &dyn Fn(Stage)) -> Result<WriteWorktree, WriteError> {
@@ -123,7 +125,7 @@ fn a_removed_worktree_is_recreated_where_it_was() {
 fn a_worktrees_folder_that_is_a_link_is_refused() {
     let r = Removed::new();
     let elsewhere = tempfile::tempdir().unwrap();
-    link(&r.f.repo.join(".git/worktrees"), elsewhere.path());
+    link(&r.f.repo.join(".git").join("worktrees"), elsewhere.path());
     let result = r.recreate(&|_| {});
     refused(&result, "worktrees folder");
     assert!(

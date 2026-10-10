@@ -305,3 +305,34 @@ fn the_catalog_is_fixed_and_declares_repo_text_as_data() {
         "{instructions}"
     );
 }
+
+/// A request before `initialize` ends the session with `handshake-failed`, and its error answer
+/// still reaches the client: it is queued, not lost when the process exits (#233).
+#[test]
+fn a_failed_handshake_still_answers_before_the_process_exits() {
+    let profile = tempfile::tempdir().unwrap();
+    let mut child = Command::new(MCP)
+        .env_clear()
+        .env("GITRAPTOR_PROFILE_DIR", profile.path())
+        .current_dir(profile.path())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    writeln!(stdin, r#"{{"jsonrpc":"2.0","id":1,"method":"tools/list"}}"#).unwrap();
+    stdin.flush().unwrap();
+    let out = child.wait_with_output().unwrap();
+    drop(stdin);
+
+    assert!(!out.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&out.stderr).trim(),
+        "raptor-mcp: handshake-failed"
+    );
+    let line = String::from_utf8_lossy(&out.stdout);
+    let answer: Value = serde_json::from_str(line.trim()).expect("stdout carries only JSON-RPC");
+    assert_eq!(answer["id"], 1, "{answer}");
+    assert!(answer["error"].is_object(), "{answer}");
+}
