@@ -339,6 +339,10 @@ jobs:
           cargo test -p gitraptor-cli --test guard_us_grd_002 --test guard_us_grd_003
           cargo test -p gitraptor-policy guard
           cargo test -p gitraptor-core --test guard_evaluate --test guard_boundary
+          # TD-GRD-001: every pushed ref and the template 3 upgrade (cut at each point).
+          cargo test -p gitraptor-cli --test guard_td_grd_001_reach --test guard_td_grd_001_upgrade
+          cargo test -p gitraptor-core --test td_grd_001_evaluate --test td_grd_001_client --test td_grd_001_upgrade_health
+          cargo test -p gitraptor-git --test td_grd_001_file_temporaries
 
   deep-exec-audit-macos:
     name: deep exec audit (macOS, eslogger)
