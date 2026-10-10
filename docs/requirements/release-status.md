@@ -10,13 +10,13 @@
 
 | Estado | Fichas |
 |---|---|
-| Implementado (`implemented`) | 41 |
+| Implementado (`implemented`) | 42 |
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 19 |
 | Listo (`ready`) | 4 |
 | Borrador (`draft`) | 77 |
 | Bloqueado (`blocked`) | 1 |
-| **Total** | **145** |
+| **Total** | **146** |
 
 ## Por feature
 
@@ -26,7 +26,7 @@
 | [guardrails](#guardrails) | 7 | 0 | 6 | 1 | 10 | 0 | 24 |
 | [mcp](#mcp) | 5 | 0 | 2 | 0 | 13 | 0 | 20 |
 | [motor-local](#motor-local) | 12 | 2 | 8 | 3 | 15 | 0 | 40 |
-| [time-machine](#time-machine) | 11 | 1 | 1 | 0 | 15 | 0 | 28 |
+| [time-machine](#time-machine) | 12 | 1 | 1 | 0 | 15 | 0 | 29 |
 
 ### cockpit
 
@@ -175,7 +175,7 @@
 
 ### time-machine
 
-28 fichas: 11 implementado, 1 hecho, 1 implementado en parte, 15 borrador.
+29 fichas: 12 implementado, 1 hecho, 1 implementado en parte, 15 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -186,14 +186,15 @@
 | [US-TMC-001](features/time-machine/user-stories/US-TMC-001-snapshot-previo-operaciones-gitraptor.md) | El desarrollador recupera su trabajo sin commitear tras cualquier operación lanzada por GitRaptor | Implementado (`implemented`) | #61 | — |
 | [US-TMC-002](features/time-machine/user-stories/US-TMC-002-undo-ultima-operacion.md) | El desarrollador deshace con un comando la última operación de su worktree | Implementado (`implemented`) | #90, #127, #146, #156 | — |
 | [US-TMC-004](features/time-machine/user-stories/US-TMC-004-captura-continua-git-crudo.md) | El trabajo hecho fuera de GitRaptor queda capturado como punto recuperable | Implementado (`implemented`) | #120, #127, #146 | — |
+| [US-TMC-005](features/time-machine/user-stories/US-TMC-005-snapshot-previo-hooks-guardrails.md) | El borrado de ramas y el rebase con Git crudo tienen punto previo cuando el repo usa los hooks de Guardrails | Implementado (`implemented`) | #248 | — |
 | [US-TMC-006](features/time-machine/user-stories/US-TMC-006-timeline-que-cuando-quien.md) | El desarrollador sabe qué cambió en su repo, cuándo y quién lo hizo | Implementado (`implemented`) | #198 | — |
 | [US-TMC-009](features/time-machine/user-stories/US-TMC-009-restaurar-punto-timeline.md) | El desarrollador devuelve su worktree a cualquier punto del timeline | Implementado (`implemented`) | #212, #219 | — |
 | [US-TMC-013](features/time-machine/user-stories/US-TMC-013-permisos-solicitante.md) | Un agente no puede deshacer trabajo ajeno, aunque lance la CLI desde su propia shell | Implementado (`implemented`) | #219 | — |
 | [US-TMC-019](features/time-machine/user-stories/US-TMC-019-robustez-interrupcion.md) | El repo sigue recuperable aunque GitRaptor muera a mitad de un snapshot o de un undo | Implementado (`implemented`) | #247 | — |
 | [SPIKE-TMC-001](features/time-machine/technical-stories/SPIKE-TMC-001-repo-mediano-overhead.md) | Repo mediano de referencia y viabilidad del snapshot en menos de 200 ms | Hecho (`done`) | — | — |
 | [INF-TMC-001](features/time-machine/technical-stories/INF-TMC-001-arnes-caos-recuperable.md) | Arnés de caos y de garantías de los snapshots en los tres SO | Implementado en parte (`partially-implemented`) | — | — |
+| [TD-TMC-001](features/time-machine/technical-stories/TD-TMC-001-previo-hook-plazo-y-cupo-sin-atribuir.md) | Previo de hook: plazo real, cupo barato y cubo «sin atribuir» acotado, antes de que un fallo deniegue (US-GRD-017) | Borrador (`draft`) | — | — |
 | [US-TMC-003](features/time-machine/user-stories/US-TMC-003-redo.md) | El desarrollador rehace lo que deshizo por error | Borrador (`draft`) | — | — |
-| [US-TMC-005](features/time-machine/user-stories/US-TMC-005-snapshot-previo-hooks-guardrails.md) | Las operaciones de Git crudo tienen punto previo cuando el repo usa los hooks de Guardrails | Borrador (`draft`) | — | — |
 | [US-TMC-007](features/time-machine/user-stories/US-TMC-007-timeline-filtros-huecos.md) | El desarrollador filtra el timeline por worktree, agente o periodo y ve lo que no se observó | Borrador (`draft`) | — | — |
 | [US-TMC-008](features/time-machine/user-stories/US-TMC-008-timeline-atribucion-vigente.md) | El timeline refleja las correcciones de atribución sin reescribir quién deshizo qué | Borrador (`draft`) | — | — |
 | [US-TMC-010](features/time-machine/user-stories/US-TMC-010-undo-since.md) | El desarrollador deshace todo lo ocurrido en su worktree en los últimos minutos | Borrador (`draft`) | — | — |
@@ -240,7 +241,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2
 
-110 fichas: 22 implementado, 3 hecho, 13 implementado en parte, 4 listo, 67 borrador, 1 bloqueado.
+111 fichas: 23 implementado, 3 hecho, 13 implementado en parte, 4 listo, 67 borrador, 1 bloqueado.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -262,6 +263,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-GRP-022](features/motor-local/user-stories/US-GRP-022-aceptar-descartar-repo-descubierto.md) | El desarrollador decide qué repos descubiertos se observan y los que descarta no vuelven a aparecer | Implementado (`implemented`) | #170 | — |
 | [US-MCP-005](features/mcp/user-stories/US-MCP-005-respuestas-acotadas-y-seguras.md) | Un agente recibe respuestas acotadas que no pueden darle órdenes ni filtrar secretos | Implementado (`implemented`) | #157, #159 | — |
 | [US-MCP-008](features/mcp/user-stories/US-MCP-008-snapshot-manual.md) | Un agente guarda por MCP un punto de recuperación antes de un cambio arriesgado | Implementado (`implemented`) | #213 | — |
+| [US-TMC-005](features/time-machine/user-stories/US-TMC-005-snapshot-previo-hooks-guardrails.md) | El borrado de ramas y el rebase con Git crudo tienen punto previo cuando el repo usa los hooks de Guardrails | Implementado (`implemented`) | #248 | — |
 | [US-TMC-006](features/time-machine/user-stories/US-TMC-006-timeline-que-cuando-quien.md) | El desarrollador sabe qué cambió en su repo, cuándo y quién lo hizo | Implementado (`implemented`) | #198 | — |
 | [US-TMC-009](features/time-machine/user-stories/US-TMC-009-restaurar-punto-timeline.md) | El desarrollador devuelve su worktree a cualquier punto del timeline | Implementado (`implemented`) | #212, #219 | — |
 | [US-TMC-013](features/time-machine/user-stories/US-TMC-013-permisos-solicitante.md) | Un agente no puede deshacer trabajo ajeno, aunque lance la CLI desde su propia shell | Implementado (`implemented`) | #219 | — |
@@ -287,6 +289,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [TD-GRP-003](features/motor-local/technical-stories/TD-GRP-003-nfr04-maquina-referencia.md) | Presupuesto de NFR-04 sin gate automático: medirlo en una máquina de referencia | Listo (`ready`) | — | — |
 | [TS-GRP-005](features/motor-local/technical-stories/TS-GRP-005-clases-trabajo-ahorro-energia.md) | Clases de trabajo del daemon y mecanismo de ahorro de energía | Listo (`ready`) | — | — |
 | [SPIKE-CKP-001](features/cockpit/technical-stories/SPIKE-CKP-001-prediccion-5s.md) | Predicción de conflictos en ≤ 5 s p95 sin escribir en el repo: merge en memoria frente a almacén en el perfil | Borrador (`draft`) | — | — |
+| [TD-TMC-001](features/time-machine/technical-stories/TD-TMC-001-previo-hook-plazo-y-cupo-sin-atribuir.md) | Previo de hook: plazo real, cupo barato y cubo «sin atribuir» acotado, antes de que un fallo deniegue (US-GRD-017) | Borrador (`draft`) | — | — |
 | [TS-CKP-001](features/cockpit/technical-stories/TS-CKP-001-predictor-conflictos.md) | Predictor de conflictos en el daemon: solape y conflicto previsto publicados para todos los clientes | Borrador (`draft`) | — | — |
 | [TS-CKP-003](features/cockpit/technical-stories/TS-CKP-003-capa-cockpit-guardrails.md) | Capa cockpit en la decisión de Guardrails, ligada al git del ejecutor y registrada una sola vez | Borrador (`draft`) | — | — |
 | [US-CKP-002](features/cockpit/user-stories/US-CKP-002-orden-atencion-terminadas.md) | La lista pone primero lo que pide atención y no se llena de sesiones viejas | Borrador (`draft`) | — | — |
@@ -341,7 +344,6 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-MCP-018](features/mcp/user-stories/US-MCP-018-safe-rebase-atomico.md) | Un agente se pone al día con la rama base y, si choca, su rama queda como estaba | Borrador (`draft`) | — | — |
 | [US-MCP-019](features/mcp/user-stories/US-MCP-019-create-worktree.md) | Un agente prepara un worktree nuevo desde la rama base para otro trabajo | Borrador (`draft`) | — | — |
 | [US-TMC-003](features/time-machine/user-stories/US-TMC-003-redo.md) | El desarrollador rehace lo que deshizo por error | Borrador (`draft`) | — | — |
-| [US-TMC-005](features/time-machine/user-stories/US-TMC-005-snapshot-previo-hooks-guardrails.md) | Las operaciones de Git crudo tienen punto previo cuando el repo usa los hooks de Guardrails | Borrador (`draft`) | — | — |
 | [US-TMC-007](features/time-machine/user-stories/US-TMC-007-timeline-filtros-huecos.md) | El desarrollador filtra el timeline por worktree, agente o periodo y ve lo que no se observó | Borrador (`draft`) | — | — |
 | [US-TMC-008](features/time-machine/user-stories/US-TMC-008-timeline-atribucion-vigente.md) | El timeline refleja las correcciones de atribución sin reescribir quién deshizo qué | Borrador (`draft`) | — | — |
 | [US-TMC-010](features/time-machine/user-stories/US-TMC-010-undo-since.md) | El desarrollador deshace todo lo ocurrido en su worktree en los últimos minutos | Borrador (`draft`) | — | — |
