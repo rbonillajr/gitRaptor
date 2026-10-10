@@ -319,7 +319,12 @@ fn repo_intact_a_temporary_of_a_killed_write_is_cleaned_by_the_next_install() {
 #[test]
 fn repo_intact_an_upgrade_changes_only_the_dispatchers_and_the_journal() {
     let m = Td::new(Some(AGENT_PATHS), false);
-    let exceptions = install_exceptions();
+    // `downgrade_to` stops the daemon and the next `protect` starts it again: its channel
+    // socket under `profile/run` is runtime state, not footprint of the install.
+    let exceptions = install_exceptions().with(gitraptor_testkit::Exception::Subtree {
+        scope: "profile".into(),
+        prefix: "run".into(),
+    });
     let before = m.f.snapshot(&exceptions);
     let out = m.protect(&m.repo());
     assert!(out.status.success(), "{}", text(&out));
