@@ -92,9 +92,11 @@ Entonces el ahead/behind de cada fila dice "no calculable: develop no encontrada
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto (Dev Spec)._
+- El diseño está en [DS-US-CKP-003](../dev-specs/US-CKP-003-estados-motor-conexion.md): un panel de estado nuevo (`StatePanel`) para una conexión sin motor (no disponible, incompatible, rechazada), Esperando Git y Sin repos, con una precedencia fija (D1, D2).
+- La cabecera muestra "reconciliando" o "dormido" con el nivel del repo que publica el ámbito global (`observation.tiers`), y el motivo de cada resync, también el del cliente lento (D5, D6).
+- Las filas dicen "no disponible: …" y "no calculable", y el título nombra la base publicada (D7, D8). Lo que el motor aún no publica (versión de Git rechazada, observación degradada) queda con dueño en la Dev Spec (D9).
 
 ## Diseño y Dev Spec
 
 - **Diseño:** DSYS-GRP-001 (estados vacíos y avisos); ADR-GRP-004 § 3 (errores accionables, vacíos útiles).
-- **Dev Spec:** pendiente.
+- **Dev Spec:** [DS-US-CKP-003](../dev-specs/US-CKP-003-estados-motor-conexion.md).
