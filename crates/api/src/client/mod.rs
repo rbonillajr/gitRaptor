@@ -37,7 +37,7 @@ pub mod transport;
 
 /// How long a call waits for its answer.
 #[cfg(any(unix, windows))]
-const CALL_TIMEOUT: Duration = Duration::from_secs(10);
+pub const CALL_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Why the channel cannot run on this platform: there is no transport with
 /// access control for it (neither a Unix socket nor a Windows named pipe).

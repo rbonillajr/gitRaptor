@@ -73,6 +73,7 @@ fn denied(rule: Rule, params: Vec<Param>) -> Decision {
         config_status: vec![],
         config_ref: vec![],
         notices: vec![],
+        prior_snapshot: None,
     }
 }
 

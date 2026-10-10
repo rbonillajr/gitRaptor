@@ -25,6 +25,7 @@ fn denial(reasons: Vec<Reason>) -> Decision {
         config_status: Vec::new(),
         config_ref: Vec::new(),
         notices: Vec::new(),
+        prior_snapshot: None,
     }
 }
 

@@ -65,6 +65,11 @@ pub const CAP_GUARD_POLICIES: Capability = Capability::new("guard.policies");
 /// `config.relax-ignored` notices in `guard.log`.
 pub const CAP_GUARD_CONFIG_PROTECTION: Capability = Capability::new("guard.config-protection");
 
+/// `Decision.priorSnapshot`: the `hook-prior` snapshot the daemon takes inside `guard.evaluate`
+/// before a destructive operation. A connection without it never receives the field and the
+/// daemon takes no snapshot for it.
+pub const CAP_GUARD_PRIOR_SNAPSHOT: Capability = Capability::new("guard.prior-snapshot");
+
 pub(super) const GROUP: Group = Group {
     // None is offered to `raptor-mcp` (BR-AUTH-004): it neither installs nor
     // evaluates. A connection of protocol 5 or 6 sees none.
@@ -90,6 +95,7 @@ pub(super) const GROUP: Group = Group {
         CAP_GUARD_PRIOR_HOOKS,
         CAP_GUARD_PENDING_ACTION,
         CAP_GUARD_PROTECTION,
+        CAP_GUARD_PRIOR_SNAPSHOT,
     ],
     error_block: Some(BLOCK),
     errors: &[GUARD_UNINSTALL_REFUSED],
