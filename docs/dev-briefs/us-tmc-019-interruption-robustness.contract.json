@@ -1,0 +1,92 @@
+{
+  "source": {
+    "kind": "brief",
+    "ref": "docs/dev-briefs/us-tmc-019-interruption-robustness.md"
+  },
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "criteria": [
+    {
+      "id": "S1",
+      "statement": "Cuando el daemon muere durante una captura por observación de feat-login (capture:pending o capture:ref), el worktree no cambia (huella INF-GRP-001), al arrancar el snapshot queda descartado sin ref y no figura en el timeline ni se puede restaurar",
+      "verify": "cargo test -p gitraptor-cli --test tm_interruption s1_a_capture_cut",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tm_interruption.rs"
+      ]
+    },
+    {
+      "id": "S2",
+      "statement": "Cuando el daemon muere a mitad de un undo o de una restauración en feat-login, la operación queda interrumpida, el siguiente cliente de feat-login recibe por timemachine.notices un único aviso (tipo, operación, previo) que no recibe otro worktree ni se repite, y raptor undo sin atribuir devuelve S1 y luego S0",
+      "verify": "cargo test -p gitraptor-cli --test tm_interruption cut_half_way_is_recoverable_and_noticed_once",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tm_interruption.rs"
+      ]
+    },
+    {
+      "id": "S2-CLI",
+      "statement": "Cuando hay un aviso de interrupción pendiente, el siguiente raptor timeline desde feat-login lo muestra por stderr en inglés o en español con el id y la indicación de raptor undo, y el siguiente comando ya no lo muestra",
+      "verify": "cargo test -p gitraptor-cli --test tm_interruption the_cli_shows_the_notice_once",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tm_interruption.rs"
+      ]
+    },
+    {
+      "id": "S2-GATE",
+      "statement": "Cuando una carpeta que el repo no registra pide timemachine.notices con el admin de feat-login, se rechaza con scope-refused/not-observed sin cambiar nada y sin marcar el aviso, que sigue llegando al worktree real",
+      "verify": "cargo test -p gitraptor-cli --test tm_interruption s2_a_folder_the_repo_does_not_register_gets_no_notice",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tm_interruption.rs"
+      ]
+    },
+    {
+      "id": "S2-SCOPE",
+      "statement": "Cuando un cliente de otro repo observado por el mismo daemon pide timemachine.notices, no recibe el aviso de feat-login, no se marca como entregado y el repo no cambia: el aviso solo llega a un cliente que pasa tm_scope_for de ese worktree",
+      "verify": "cargo test -p gitraptor-cli --test tm_interruption s2_another_repo_gets_no_notice",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tm_interruption.rs"
+      ]
+    },
+    {
+      "id": "S6",
+      "statement": "Cuando GitRaptor se cierra sin operaciones a medias y vuelve a arrancar, timemachine.notices no devuelve ningún aviso, la CLI no muestra aviso, el repo no cambia y el timeline es el mismo que antes del cierre",
+      "verify": "cargo test -p gitraptor-cli --test tm_interruption s6_a_clean_restart_gives_no_notice_and_a_complete_history",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tm_interruption.rs"
+      ]
+    }
+  ],
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "crates/api/src/lib.rs",
+      "crates/api/src/rpc.rs",
+      "apps/cli/src/main.rs",
+      "apps/cli/tests/tm_chaos.rs",
+      "crates/core/tests/tm_chaos_gate.rs"
+    ],
+    "allow_dependency_changes": false
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 600000,
+    "suiteTimeoutMs": 1800000
+  }
+}
