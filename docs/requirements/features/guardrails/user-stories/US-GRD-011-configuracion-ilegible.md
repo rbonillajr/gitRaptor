@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-09
 feature: guardrails
 related:
   context:
@@ -14,6 +14,8 @@ related:
     - BR-GRD-001
   stories:
     - US-GRD-010
+  specs:
+    - DS-US-GRD-011
 tags:
   - guardrails
   - fail-safe
@@ -30,7 +32,7 @@ tags:
 
 ## Reglas cubiertas
 
-BR-EDGE-004 (aviso; mínimo seguro más lo legible; un nivel personal ilegible solo pierde sus endurecimientos; una clave desconocida deja el nivel parcial y fuerza el mínimo, Q-GRD-26) — ver [business-rules.md](../business-rules.md)
+BR-EDGE-004 (aviso; mínimo seguro más lo legible; un nivel personal ilegible solo pierde sus endurecimientos; una clave desconocida deja el nivel parcial y, si es del equipo, fuerza el mínimo, Q-GRD-26 y Q-GRD-43; un suelo roto no es una relajación pendiente, Q-GRD-44; el aviso lo recibe quien opera y lo muestra el estado de protección, sin entrar en el registro, Q-GRD-45) — ver [business-rules.md](../business-rules.md)
 
 ## Dependencias
 
@@ -59,8 +61,10 @@ Entonces el push se deniega por la versión commiteada
 **Escenario: Lo legible de otros niveles sigue aplicando**
 
 Dado el repo "demo" con la configuración del equipo ilegible y la ruta prohibida "secrets/" en la configuración local personal
-Cuando un proceso hace un commit que modifica "secrets/api.txt"
+Cuando un agente hace un commit que modifica "secrets/api.txt"
 Entonces el commit no se ejecuta
+
+> Es un agente porque las rutas prohibidas aplican por defecto solo a los agentes (Q-GRD-35).
 
 **Escenario: Un nivel personal ilegible solo pierde sus endurecimientos**
 
@@ -90,4 +94,4 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica.
-- **Dev Spec:** pendiente (Arquitecto).
+- **Dev Spec:** [`dev-specs/US-GRD-011-configuracion-ilegible.md`](../dev-specs/US-GRD-011-configuracion-ilegible.md) — `DS-US-GRD-011` (status: draft).
