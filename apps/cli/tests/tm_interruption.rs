@@ -516,19 +516,16 @@ fn capture_cut(point: &str) {
     m.start_armed(point);
     m.write("docs/a.txt", WORK_A);
     let before = m.fingerprint();
-    // The capture of that change kills the daemon; a capture that completes instead means the
-    // point never ran.
+    // The capture of that change kills the daemon; a daemon still alive at the deadline means
+    // the point never ran. At `capture:ref` the new ref exists a moment before the daemon dies,
+    // so a new ref alone proves nothing: the oplog after the restart is the proof.
     let start = Instant::now();
-    loop {
-        if m.daemon.as_mut().unwrap().try_wait().unwrap().is_some() {
-            break;
-        }
+    while m.daemon.as_mut().unwrap().try_wait().unwrap().is_none() {
         let new: Vec<_> = m.snapshot_ids().difference(&known).cloned().collect();
         assert!(
-            new.is_empty(),
-            "{point}: a capture completed and the daemon did not die there: {new:?}"
+            start.elapsed() < DEADLINE,
+            "{point}: the daemon did not die there (new refs: {new:?})"
         );
-        assert!(start.elapsed() < DEADLINE, "{point}: nothing was captured");
         std::thread::sleep(Duration::from_millis(20));
     }
     m.assert_killed(point);
