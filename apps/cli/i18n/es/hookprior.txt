@@ -1,0 +1,14 @@
+# Mensajes de `raptor` para el usuario, en español (NFR-10, ADR-GRP-003): el snapshot previo de un hook.
+# Una línea `clave = texto`. Los marcadores son `{nombre}`; el código los
+# rellena por nombre, nunca concatenando. Toda clave existe también en ../en/hookprior.txt.
+
+# `raptor hook` avisa por stderr de que la Time Machine no pudo guardar el punto antes de una
+# operación que dejó pasar. La causa es una de las claves de abajo.
+hookprior.failed = GitRaptor: no se guardó un snapshot previo antes de esta operación ({cause}); sigue adelante, cubierta solo por observación.
+hookprior.cause.time-limit = tardó demasiado
+hookprior.cause.no-space = no hay espacio en disco suficiente
+hookprior.cause.quota-exceeded = demasiados snapshots previos
+hookprior.cause.discarded = el repositorio cambió mientras se guardaba
+hookprior.cause.no-worktree = no hay árbol de trabajo
+hookprior.cause.unavailable = la Time Machine no está disponible para este repositorio
+hookprior.cause.internal = error interno
