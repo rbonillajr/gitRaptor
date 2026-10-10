@@ -16,6 +16,8 @@
 
 mod chain;
 #[cfg(test)]
+mod hook_prior_migration_tests;
+#[cfg(test)]
 #[path = "migration_tests.rs"]
 mod migration_tests;
 mod model;
