@@ -260,3 +260,11 @@ Derivada de la [Enmienda (2026-10-07) de ADR-GRP-010](./ADR-GRP-010-observacion-
 |---|---|---|
 | **Causa de hueco nueva: "observación en reposo"** (`dormant`). La abre una red de seguridad de un repo dormido (el barrido de metadatos o la reconciliación lenta) cuando encuentra diferencias que el centinela no señaló. Va desde la red de seguridad anterior hasta ahora y, como la reconciliación periódica, solo se abre si hay diferencias. Los cambios que señala el centinela **no** abren hueco: se publican al despertar con las reglas de atribución de siempre | § 1 (Hueco), § 5 | ADR-GRP-010, N5 |
 | **Eventos de Git reconstruidos del reflog** al reconciliar un despertar, en orden y con la hora del reflog. Su actor sale de las reglas de siempre, y en un hueco son "sin atribuir" (BR-EDGE-005) | § 5 | ADR-GRP-010, N4 |
+
+## Enmienda (2026-10-09, US-GRP-003)
+
+Derivada de la [Dev Spec de US-GRP-003](../../requirements/features/motor-local/dev-specs/US-GRP-003-dev-spec.md) (D5). **Decisión del orquestador (2026-10-09), validada por el Arquitecto y el PO.** Amplía la lista cerrada de causas de fin, como la Enmienda (2026-10-05, US-GRP-009); no cambia sesiones ni atribución. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| **Causa de fin nueva: "worktree retirado"** (`worktree-removed`): termina toda sesión abierta, detectada o registrada, de un worktree que Git ya no registra; al arrancar o despertar, sin hora de fin. No se aplica mientras el repo entero está "no disponible" ni mientras solo falta la carpeta. Solo afirma que el worktree no está, no que el proceso terminara ni que se retirara el registro. En el contrato, tras la capacidad `sessions.worktree-removed`; sin ella falta `end_cause` | § 1 (Sesión), § 6 | BR-EDGE-001, BR-WF-001; ADR-GRP-010 § 6 |

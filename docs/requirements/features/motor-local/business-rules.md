@@ -873,6 +873,8 @@ Acción al cumplirse: la sesión pasa a Inactivo
 
 **Regla**: la caída de uno no interrumpe a los demás. Un worktree borrado termina sus sesiones (BR-WF-001).
 
+> **Enmienda (2026-10-09, PO, origen US-GRP-003)**: un worktree cuya carpeta desaparece mientras Git lo sigue registrando figura como **no disponible** y sus sesiones siguen; uno retirado de Git (`git worktree remove` o `prune`) deja de figurar, queda su evento de retiro y sus sesiones pasan a "Terminado" con la causa "worktree retirado".
+
 **Ejemplo**: se borra `feat-login` mientras se observa; los otros 9 worktrees siguen reflejándose; las sesiones de `feat-login` pasan a "Terminado".
 
 **Referencias**:
