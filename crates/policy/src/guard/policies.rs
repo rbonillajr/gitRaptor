@@ -141,6 +141,27 @@ impl Policies {
             unreadable: false,
         }
     }
+
+    /// The same rules as if each governed whoever moves the ref (`everyone`): what a client that
+    /// cannot tell the actor applies to the refs Guardrails does not govern, so a rule for agents
+    /// is not skipped because the agent cannot be told apart. `unreadable` is dropped.
+    pub fn every_rule(&self) -> Self {
+        let widen = |rules: &[Rules]| -> Vec<Rules> {
+            rules
+                .iter()
+                .cloned()
+                .map(|mut r| {
+                    r.scope = Scope::Everyone;
+                    r
+                })
+                .collect()
+        };
+        Self {
+            branches: widen(&self.branches),
+            paths: widen(&self.paths),
+            unreadable: false,
+        }
+    }
 }
 
 /// What the I/O side proved about the commits a movement brings (DS-US-GRD-008 D5).

@@ -214,7 +214,9 @@ pub fn skippable_ref_transaction(input: &[u8], common: &Path, max_line: usize) -
     })
 }
 
-/// Whether every remote ref of a `pre-push` is not governed (tags, notes…).
+/// Whether every remote ref of a `pre-push` is not governed (tags, notes…). Only the dispatchers
+/// of templates 1 and 2 let such a push go without `raptor`; from template 3 on the dispatcher
+/// hands every pushed ref over and uses this only to tell the fallback apart.
 pub fn skippable_push(input: &[u8], max_line: usize) -> bool {
     let Some(lines) = lines(input, max_line) else {
         return false;
