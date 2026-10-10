@@ -498,7 +498,7 @@ fn root_is_bounded(common_dir: &Path, root: &Path, home: Option<&Path>) -> bool 
     if root.parent().is_none() || common_dir.starts_with(root) {
         return false;
     }
-    !home.is_some_and(|home| canonical(home) == root)
+    !home.is_some_and(|home| canonical(home) == canonical(root))
 }
 
 /// Where the `.git` link file of `root` points, resolved against `root`; `None` if `.git` is
