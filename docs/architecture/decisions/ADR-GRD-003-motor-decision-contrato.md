@@ -349,6 +349,7 @@ Origen: [DS-TS-CKP-003](../../requirements/features/cockpit/dev-specs/TS-CKP-003
 | **Solo el padre directo hereda** | Se confirma el "padre directo": un `git` interno de un hijo registrado o un `exec git` desde un hook es un nieto (evaluación nueva, capa `hooks`, actor del plan, entrada propia si corresponde). El daemon reconoce un `git` solo por el nombre del ejecutable, así que heredar por cadena de procesos `git` violaría H-01 y H-02 | § 4 |
 | **Repos sin la capa de hooks** | El ejecutor evalúa igual, como una instalación huérfana, y sin confirmación inicial protege la unión {`main`, rama principal, rama base leída} (Q-GRD-21, BR-CONS-003). Merge y borrar worktree no tienen otra protección. Que el estado de protección refleje esta cobertura es un pendiente de US-GRD-004 (BR-WF-002) | § 4 |
 
+
 ## Enmienda (2026-10-09, US-TMC-005)
 
 Contrato del snapshot previo pedido desde los hooks (ADR-TMC-004, Enmienda 2026-10-09). **Decisión del orquestador (2026-10-04), validada por Arquitecto/PO.** El `status` sigue en `accepted`.
@@ -358,3 +359,12 @@ Contrato del snapshot previo pedido desde los hooks (ADR-TMC-004, Enmienda 2026-
 | **Campo `Decision.priorSnapshot`** | `complete` o `failed` (con causa y si se reutilizó el del mismo `git`). Lo pone el daemon después de decidir y antes de escribir la entrada del registro, solo con `appliedEffect = allow`, fuera del ejecutor, en `pre-rebase` y en un `reference-transaction` `prepared` que borra `refs/heads/*`. Sin el campo, no se tomó | § 3, § 7 |
 | **Capacidad `guard.prior-snapshot`** | Un cliente sin ella no recibe el campo y el daemon no toma el snapshot. El cliente de `crates/core` la pide siempre | § 4 |
 | **Con `failed`** | En US-TMC-005 el hook avisa y deja pasar. US-GRD-017 convierte `failed` en `deny` con `snapshot-failed` en ese mismo punto | § 7 |
+
+## Nota (2026-10-09, TD-GRD-001): push solo a refs no gobernadas
+
+Sobre la Enmienda (2026-10-08, US-GRD-008). **Decisión del orquestador (2026-10-09), validada por el Arquitecto**, con una condición del coordinador. Detalle en el [brief de TD-GRD-001](../../dev-briefs/td-grd-001-dispatcher-template-3.md) (§ 4.5, § 4.5.1 y § 12).
+
+- La entrada `policy-reach` de la lista "no se puede impedir" **deja de incluir** "un push solo a tags u otras refs no gobernadas". Con la plantilla 3 del dispatcher (ADR-GRD-001, Enmienda 2026-10-09) la regla de rutas prohibidas se aplica a toda ref empujada.
+- Con la plantilla 3, `pre-push` también deniega por señales de ataque (§ 4) un push que solo lleva refs no gobernadas, **condicionado a que exista una regla de rutas prohibidas aplicable** que no se pueda verificar. Sin regla aplicable, el push pasa: una persona sin reglas nunca queda bloqueada.
+- Sin daemon, a esas refs se les aplican **todas** las reglas de rutas del suelo (también las `agents`), porque el actor no se puede verificar. Las refs gobernadas siguen con el modo degradado de la Enmienda (2026-10-08, US-GRD-008), sin cambios.
+- **Residuos declarados**: R-A (suelo ilegible sin daemon: pasa), R-B (sin `raptor` o si falla: pasa con aviso, sin evaluar), R-C (sin daemon no rigen las reglas del perfil ni del nivel local) y R-D (coste: sin daemon, la persona que sube a un tag un commit con una ruta prohibida a los agentes queda bloqueada hasta que arranca el servicio).

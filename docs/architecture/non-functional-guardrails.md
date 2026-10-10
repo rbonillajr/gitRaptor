@@ -33,6 +33,11 @@
 | NFR-GRD-14 | Actualización sin fricción | Una actualización del binario por el mismo canal de instalación no pide permiso nuevo y deja la protección activa | ADR-GRD-001 § 8 | INF-GRD-001: `brew upgrade` simulado y plantilla nueva | J4 |
 | NFR-GRD-15 | Suelo estable | Ninguna relajación ni cambio de rama base baja la protección sin la confirmación del humano (D6, D7), con el mecanismo MVP de D5 (D8). El motor y Guardrails usan la misma rama base **confirmada** | ADR-GRD-004 § 3 y § 4 | ADR-GRD-004 Validación 6 y 7 | D6 |
 
+> **Nota (2026-10-09, TD-GRD-001) sobre NFR-GRD-05.** Con la plantilla 3 del dispatcher (ADR-GRD-001, Enmienda 2026-10-09):
+> - las señales de ataque dan deny en `pre-push` también para las refs no gobernadas, **pero solo si existe una regla de rutas prohibidas aplicable** que no se puede verificar; una persona sin reglas nunca queda bloqueada;
+> - sin `raptor`, un push solo a refs no gobernadas pasa con aviso (las refs gobernadas siguen fallando cerradas);
+> - coste fail-closed declarado: lo no verificable deniega **solo** cuando una regla de rutas gobierna al actor, por ejemplo un push con más de 256 refs que se leen o un tag que apunta a un árbol o a un blob. El mensaje sugiere empujar por tandas.
+
 ## Security NFRs
 
 > **Modelo de amenaza**: el de motor-local (proceso del mismo usuario **no confiable**, incluido un agente comprometido por prompt injection, OWASP LLM01) con tres añadidos:
