@@ -13,6 +13,7 @@ use std::process::{Command, Output, Stdio};
 use std::time::{Duration, Instant};
 
 use gitraptor_core::daemon::running_pid;
+use gitraptor_core::guardrails::TEMPLATE_VERSION;
 use gitraptor_core::profile::ProfileDirs;
 use gitraptor_testkit::Fixture;
 use gitraptor_testkit::fixture::{copy_executable, git_from_path};
@@ -445,7 +446,7 @@ fn downgrade_to_template_1(m: &Machine) {
     let conf = std::fs::read_to_string(folder.join("dispatch.conf")).unwrap();
     std::fs::write(
         folder.join("dispatch.conf"),
-        conf.replace("template\t2\n", "template\t1\n"),
+        conf.replace(&format!("template\t{TEMPLATE_VERSION}\n"), "template\t1\n"),
     )
     .unwrap();
     for hook in ["pre-commit", "commit-msg"] {
@@ -623,7 +624,7 @@ fn aliases_and_plumbing_are_caught_by_the_second_line() {
 
 /// D6 (reinstall criterion): a repo protected with template 1 keeps working unchanged with the
 /// new engine (no commit dispatchers, no second line), and `raptor guard install` upgrades it
-/// cleanly to template 2, after which commits are evaluated, `--no-verify` included.
+/// cleanly to the current template, after which commits are evaluated, `--no-verify` included.
 #[test]
 fn a_template_1_install_is_upgraded_by_reinstalling() {
     let m = Machine::new(None);
@@ -635,7 +636,7 @@ fn a_template_1_install_is_upgraded_by_reinstalling() {
     assert!(out.status.success(), "{}", text(&out));
     let folder = m.f.repo.join(".git/gitraptor");
     let conf = std::fs::read_to_string(folder.join("dispatch.conf")).unwrap();
-    assert!(conf.contains("template\t2\n"), "{conf}");
+    assert!(conf.contains("template\t3\n"), "{conf}");
     for hook in [
         "pre-commit",
         "commit-msg",

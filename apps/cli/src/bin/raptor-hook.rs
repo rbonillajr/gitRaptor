@@ -5,11 +5,13 @@
 //!
 //! - `reference-transaction` outside `prepared`: exits 0 without reading anything else.
 //! - Fast path: refs that are not governed and prunes of `pack-refs` exit 0 here, without
-//!   starting `raptor` (the classification is the same file `crates/policy` compiles).
+//!   starting `raptor` (the classification is the same file `crates/policy` compiles). In
+//!   `pre-push` it only applies with template 1 or 2: from 3 on every pushed ref is handed over.
 //! - Otherwise `raptor hook` decides: exit 0 allows, 1 denies, anything else is an internal
 //!   error.
 //! - Without `raptor` (or on an internal error): fail-closed for `pre-push`, `pre-rebase` and the
-//!   deletion of a branch; anything else passes with a warning (decision 4 of Rene Bonilla).
+//!   deletion of a branch; anything else passes with a warning (decision 4 of Rene Bonilla). A
+//!   `pre-push` of template 3 that only carries ungoverned refs passes with the warning too.
 //! - Whenever the operation goes ahead (allowed, fast path, or the fallback that passes), the
 //!   hook the repo had before is chained (US-GRD-002): `<prior>/<hook>`, without a shell, with
 //!   the same arguments, the same input, Git's own environment and working folder, and its exit
@@ -35,7 +37,15 @@ const MAX_LINE: usize = 8 * 1024;
 const MAX_CONF: u64 = 64 * 1024;
 const MAX_INPUT: u64 = 256 * 1024 * 1024;
 /// Template versions this dispatcher understands (ADR-GRD-001 § 8).
-const TEMPLATES: &[&str] = &["1", "2"];
+const TEMPLATES: &[&str] = &["1", "2", "3"];
+
+/// Templates 1 and 2 let a push of refs Guardrails does not govern (tags, notes...) go without
+/// `raptor`. From 3 on every pushed ref is handed over, so the forbidden paths reach them: the
+/// behaviour follows the template of the constants, never the build, so a dispatcher copied
+/// before its `dispatch.conf` during an upgrade behaves as the template still in force.
+fn push_fast_path(conf: &Conf) -> bool {
+    matches!(conf.get("template"), Some("1" | "2"))
+}
 
 /// The other hooks of githooks(5): their dispatcher only chains the prior hook (US-GRD-002).
 /// A name outside this list never chains anything.
@@ -223,10 +233,20 @@ fn say(msg: Msg<'_>) {
 
 /// ADR-GRD-001 § 3: without a decision from `raptor`, fail-closed only where the operation is
 /// risky; `missing` says whether `raptor` is absent (or an internal error happened). `true` when
-/// the operation goes ahead.
-fn fallback(hook: Hook, input: &[u8], common: &Path, raptor: &str, missing: bool) -> bool {
+/// the operation goes ahead. `ungoverned_only` is a `pre-push` of template 3 or later whose refs
+/// are all ungoverned: without a decision it passes with the warning, because the dispatcher
+/// cannot tell cheaply whether a forbidden-path rule governs the actor (ADR-GRD-001 § 3).
+fn fallback(
+    hook: Hook,
+    input: &[u8],
+    common: &Path,
+    raptor: &str,
+    missing: bool,
+    ungoverned_only: bool,
+) -> bool {
     let deny = match hook {
-        Hook::PrePush | Hook::PreRebase => true,
+        Hook::PrePush => !ungoverned_only,
+        Hook::PreRebase => true,
         Hook::ReferenceTransaction => fastpath::deletes_a_branch(input, common, MAX_LINE),
         // A commit is not risky by itself: it passes with the warning (decision 4).
         Hook::PreCommit | Hook::CommitMsg | Hook::Chain(_) => false,
@@ -482,7 +502,7 @@ fn main() -> ExitCode {
         // Without constants there is no prior hook to find: the fallback alone decides, and
         // when it lets the operation go ahead it says the prior hooks did not run.
         let common = common_here.as_deref().unwrap_or(Path::new(""));
-        return if fallback(hook, &input, common, "", true) {
+        return if fallback(hook, &input, common, "", true, false) {
             say(Msg::PriorUnknown);
             ExitCode::SUCCESS
         } else {
@@ -502,14 +522,17 @@ fn main() -> ExitCode {
         Hook::ReferenceTransaction => {
             fastpath::skippable_ref_transaction(&input, &common, MAX_LINE)
         }
-        Hook::PrePush => fastpath::skippable_push(&input, MAX_LINE),
+        Hook::PrePush => push_fast_path(&conf) && fastpath::skippable_push(&input, MAX_LINE),
         Hook::PreRebase | Hook::PreCommit | Hook::CommitMsg | Hook::Chain(_) => false,
     };
     if skippable {
         return chain(prior.as_deref(), &args, input_for_prior(), sh.as_deref());
     }
+    let ungoverned_only = hook == Hook::PrePush
+        && !push_fast_path(&conf)
+        && fastpath::skippable_push(&input, MAX_LINE);
     let passes = |missing: bool| {
-        if fallback(hook, &input, &common, raptor, missing) {
+        if fallback(hook, &input, &common, raptor, missing, ungoverned_only) {
             chain(prior.as_deref(), &args, input_for_prior(), sh.as_deref())
         } else {
             ExitCode::FAILURE
