@@ -198,14 +198,16 @@ pub struct Case {
 }
 
 impl Case {
-    /// Answers the case's messages must get: one per `call` repetition and one per `message`.
+    /// Answers the case's messages must get: one per `call` repetition and one per `message`,
+    /// and one for a `raw` line unless the case expects it to be ignored.
     pub fn expected_answers(&self) -> usize {
+        let raw = usize::from(self.expect != Expect::Ignored);
         self.send
             .iter()
             .map(|send| match send {
                 Send::Call { repeat, .. } => usize::try_from(*repeat).unwrap_or(usize::MAX),
                 Send::Message(_) => 1,
-                Send::Raw(_) => 0,
+                Send::Raw(_) => raw,
             })
             .sum()
     }

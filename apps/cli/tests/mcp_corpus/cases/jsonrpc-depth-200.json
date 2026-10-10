@@ -1,6 +1,6 @@
 {
   "id": "jsonrpc-depth-200",
-  "title": "A 200 level nested message is ignored by the parser limit",
+  "title": "A 200 level nested message must be refused by the depth cap",
   "threats": [
     "MCP05",
     "SEC-MCP-05"
@@ -17,6 +17,6 @@
     }
   ],
   "expect": {
-    "ignored": {}
+    "invalid_request": {}
   }
 }

@@ -41,7 +41,7 @@ tags: [mcp, seguridad, corpus, ci, owasp-mcp-top-10, nfr-02, br-16, dep-mcp-8, s
 - **Casos transversales**: rutas maliciosas (traversal, absolutas, UNC, symlink hacia fuera, `:(glob)`), refs maliciosas (`--upload-pack=x`, `refs/heads/x`, hex de 40 y 64, `@{`, bidi y Tags), parámetros desconocidos y fuera de rango, `create_worktree` con `path`, cwd fuera de un worktree observado, repo fuera de la allowlist, repo de otro uid, entorno hostil (`HOME`, `PATH`, `GIT_DIR`), `acknowledge` con códigos de más y de menos, rate limit superado, respuesta de 3.000 archivos.
 - **Casos de entrada alternativa y agotamiento**: cliente JSON-RPC directo que se declara `cli` bajo un agente simulado (SEC-MCP-01); muchas conexiones de un agente (SEC-MCP-03).
 - **Gate**: la suite corre en CI en cada PR que toque `apps/mcp`, `crates/api` o el canal, y bloquea el merge. Informa el porcentaje del corpus rechazado (KPI de Q-MCP-18).
-- **Huecos conocidos**: un caso puede llevar la marca `known_gap` con la historia que lo cierra cuando `raptor-mcp` aún no cumple un tope de ADR-MCP-001 § 6 (hoy, el de entrada: 1 MiB y profundidad 32; dueña US-MCP-005). El informe los cuenta aparte y fuera del KPI, y lo muestra junto a él ('100 % de N; M huecos conocidos'). Si un caso marcado pasa a rechazarse, la suite falla hasta quitar la marca. No relaja el contrato. Bloquea el corte de v0.1.0 (DEP-MCP-8) salvo excepción con ADR.
+- **Huecos conocidos**: un caso puede llevar la marca `known_gap` con la historia que lo cierra cuando `raptor-mcp` aún no cumple un tope de ADR-MCP-001 § 6 (hoy solo `jsonrpc-resources-list`; el tope de entrada de 1 MiB y profundidad 32 se cerró en el PR #225). El informe los cuenta aparte y fuera del KPI, y lo muestra junto a él ('100 % de N; M huecos conocidos'). Si un caso marcado pasa a rechazarse, la suite falla hasta quitar la marca. No relaja el contrato. Bloquea el corte de v0.1.0 (DEP-MCP-8) salvo excepción con ADR.
 - **Fuera de alcance** (ajuste del Arquitecto): la instantánea de `initialize` y `tools/list` (dueña US-MCP-005); la comprobación estática de la frontera de dependencias de `apps/mcp` (dueña US-MCP-003, ampliando la Validación 5 de ADR-GRP-009); la revisión manual OWASP / MCP Top 10 por release (SEC-MCP-08, security-expert); los casos funcionales de cada herramienta (van en su historia); fuzzing del decodificador del canal (SEC-02, ya en motor-local).
 
 ### Casos que aporta cada historia
@@ -84,7 +84,7 @@ tags: [mcp, seguridad, corpus, ci, owasp-mcp-top-10, nfr-02, br-16, dep-mcp-8, s
 | Repo de otro uid | INF-MCP-001 | Pendiente |
 | Ruta UNC como cwd (XP-42) | INF-MCP-001 | Pendiente |
 | Respuesta de 3.000 archivos | INF-MCP-001 | Pendiente |
-| Tope de entrada, 1 MiB y 32 niveles (`known_gap`) | US-MCP-005 | Pendiente |
+| Tope de entrada, 1 MiB y 32 niveles | PR #225 | Implementado |
 | Confused deputy | US-MCP-007 | Pendiente |
 | Conexiones y cuotas | US-MCP-009 | Pendiente |
 | Rutas de `safe_commit` | US-MCP-010 | Pendiente |
@@ -93,6 +93,6 @@ tags: [mcp, seguridad, corpus, ci, owasp-mcp-top-10, nfr-02, br-16, dep-mcp-8, s
 | `undo` y `acknowledge` | US-MCP-018 | Pendiente |
 | Ramas maliciosas y `path` de `create_worktree` | US-MCP-019 | Pendiente |
 
-Implementado en: PR #224.
+Implementado en: PR #224. Tope de entrada (cierra tres `known_gap`): PR #225.
 
 **Falta**: los casos de las herramientas futuras (filas pendientes de la tabla) y el tope de entrada, que `raptor-mcp` aún no aplica. Linux y Windows: *Pendiente: etapa de validación multiplataforma* (XP-42).

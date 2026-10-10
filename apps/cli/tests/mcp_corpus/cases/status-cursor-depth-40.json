@@ -1,6 +1,6 @@
 {
   "id": "status-cursor-depth-40",
-  "title": "A cursor nested 40 levels deep is malformed",
+  "title": "A cursor nested 40 levels deep is refused by the input depth cap",
   "threats": [
     "MCP05",
     "SEC-MCP-05",
@@ -101,10 +101,6 @@
     }
   ],
   "expect": {
-    "protocol_error": {
-      "code": -32602,
-      "message": "invalid-params",
-      "field": "cursor"
-    }
+    "invalid_request": {}
   }
 }
