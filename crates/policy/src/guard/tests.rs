@@ -478,6 +478,57 @@ mod policies_in_the_function {
     }
 
     #[test]
+    fn only_the_forbidden_paths_reach_a_ref_that_is_not_governed() {
+        let ctx = with_policies(AGENT, Scope::Agents);
+        let facts = Facts {
+            push: vec![None],
+            ..touched(&["secrets/api.txt"])
+        };
+        // A tag named like a protected branch is not that branch: only the path rule applies.
+        for refname in ["refs/tags/main", "refs/notes/main", "refs/tags/v1"] {
+            let e = evaluate(
+                &push(vec![pu(refname, oid(B), RefValue::Zero)]),
+                &facts,
+                &ctx,
+            );
+            assert_eq!(rules_of(&e), [Rule::ForbiddenPath], "{refname}");
+        }
+        let clean = Facts {
+            push: vec![None],
+            ..touched(&["src/a.rs"])
+        };
+        let e = evaluate(
+            &push(vec![pu("refs/tags/main", oid(B), RefValue::Zero)]),
+            &clean,
+            &ctx,
+        );
+        assert_eq!(e.effect, Effect::Allow);
+        // The person is not governed by a rule for agents.
+        let person = with_policies(None, Scope::Agents);
+        let e = evaluate(
+            &push(vec![pu("refs/tags/v1", oid(B), RefValue::Zero)]),
+            &facts,
+            &person,
+        );
+        assert_eq!(e.effect, Effect::Allow);
+    }
+
+    #[test]
+    fn every_rule_governs_whoever_moves_the_ref() {
+        let agents = with_policies(None, Scope::Agents).policies;
+        let widened = Context {
+            policies: agents.every_rule(),
+            ..with_policies(None, Scope::Agents)
+        };
+        let facts = Facts {
+            push: vec![None],
+            ..touched(&["secrets/api.txt"])
+        };
+        let update = push(vec![pu("refs/tags/v1", oid(B), RefValue::Zero)]);
+        assert_eq!(evaluate(&update, &facts, &widened).effect, Effect::Deny);
+    }
+
+    #[test]
     fn a_configuration_that_cannot_be_read_denies_the_agents_branch_moves_only() {
         let ctx = |actor| Context {
             actor,
