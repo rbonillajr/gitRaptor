@@ -8,11 +8,11 @@ domain: GRP
 priority: critical
 complexity: medium
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-09
 related:
   adrs: [ADR-CKP-001, ADR-GRP-009, ADR-GRP-006, ADR-GRP-011, ADR-TMC-001]
   stories: [US-CKP-006, INF-GRP-001, INF-GRP-002]
-  specs: []
+  specs: [DS-TS-CKP-001]
 ado:
   id: null
   url: null
@@ -23,7 +23,9 @@ tags: [cockpit, spike, prediccion-conflictos, merge-en-seco, gitoxide, gix-merge
 
 **Valor**: decidir con mediciones el mecanismo del merge en seco de ADR-CKP-001 y confirmar o corregir el supuesto S-CKP-1 (≤ 5 s p95) antes de que la historia del predictor y las de BR-06 entren en desarrollo.
 
-> Un SPIKE no lleva Dev Spec: su entregable es un Research Brief en `research/SPIKE-CKP-001-resultados.md`. Es un prototipo aislado, sin código del daemon: un binario de prueba que usa `gix` (feature `merge`, versión fijada; en docs.rs, 0.88.0 con `gix-merge` 0.21.0) y el Git del sistema. Repos temporales, nunca este repo. **Depende de**: el núcleo del arnés de INF-GRP-001 (huella y ejecución de control) y el repo de 100K commits del banco de INF-GRP-002. **Valida**: ADR-CKP-001 (opción preferida, respaldo y cifras de § 3 a § 5). **Bloquea**: el paso de ADR-CKP-001 a `accepted` y la Dev Spec del predictor ([TS-CKP-001](./TS-CKP-001-predictor-conflictos.md)).
+> Un SPIKE no lleva Dev Spec: su entregable es un Research Brief en `research/SPIKE-CKP-001-resultados.md`. Es un prototipo aislado, sin código del daemon: un binario de prueba que usa `gix` (feature `merge`, versión fijada: 0.89.0 con `gix-merge` 0.22.0, del 2026-10-08, que corrige una pérdida de datos de 0.88.0; ver el plan, § 1, F1 y F2) y el Git del sistema. Repos temporales, nunca este repo. **Depende de**: el núcleo del arnés de INF-GRP-001 (huella y ejecución de control) y el repo de 100K commits del banco de INF-GRP-002. **Valida**: ADR-CKP-001 (opción preferida, respaldo y cifras de § 3 a § 5). **Bloquea**: la enmienda del mecanismo de ADR-CKP-001 (el ADR se aceptó el 2026-10-04 con el mecanismo condicionado a este SPIKE) y la implementación del predictor ([TS-CKP-001](./TS-CKP-001-predictor-conflictos.md)), cuya Dev Spec existe como borrador condicionado con una rama por salida del SPIKE.
+>
+> **Plan (2026-10-09)**: [`research/SPIKE-CKP-001-plan.md`](../research/SPIKE-CKP-001-plan.md), con el estado de `gix-merge` y `merge-tree` investigado en su [anexo](../research/SPIKE-CKP-001-anexo-estado-del-arte.md). Corrige dos supuestos de esta ficha: `gix-merge` no tiene bandera de interrupción (M-06 dentro del proceso solo con cotas previas; el proceso trabajador se mide siempre) y `merge-tree --stdin` llegó en Git 2.39, no en 2.42. La Dev Spec de TS-CKP-001 existe como borrador condicionado a este SPIKE.
 >
 > **Plataformas**: macOS ahora (máquina de dogfooding y runner de CI). Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
 
@@ -43,7 +45,7 @@ Las opciones son **(a)** merge en memoria con `gix` (`merge_trees` sobre una ins
 - **(a) deja el repo intacto por construcción**: ningún archivo creado ni modificado bajo `.git`, ningún proceso hijo y ninguna conexión, incluso con drivers de merge, procesos de filtro y `.gitattributes` hostiles, siempre que la lista de drivers esté vacía y la pila de atributos no lea el disco.
 - **(b) cambia el mtime** de packs u objetos sueltos del repo al refrescar (`freshen`) objetos que ya existen en el alternate. En un *partial clone* intenta descargar objetos del remoto *promisor*. Si se confirma cualquiera de las dos cosas, (b) no es viable sin una enmienda de ADR-GRP-009.
 - **Fidelidad de (a)**: coincide con `git merge` en el conjunto de archivos en conflicto en ≥ 95 % de los pares del corpus (⚠️ **ASSUMPTION**: umbral provisional). Las diferencias se concentran en renombrados de directorio y en historias cruzadas con merge-base virtual.
-- **Rendimiento**: un commit en un worktree recalcula sus ≤ 10 pares en ≤ 5 s p95 con (a). (a) es más rápido que (b) porque reutiliza las cachés de packs en un solo proceso, y (b) en Git 2.38 paga un proceso por par (sin `--stdin` ni `--merge-base`, que se suponen de 2.42 y 2.40).
+- **Rendimiento**: un commit en un worktree recalcula sus ≤ 10 pares en ≤ 5 s p95 con (a). (a) es más rápido que (b) porque reutiliza las cachés de packs en un solo proceso, y (b) en Git 2.38 paga un proceso por par (sin `--stdin` ni `--merge-base`, que llegaron en 2.39 y 2.40; corregido el 2026-10-09, plan § 1, F10).
 - **Prefiltro**: si las rutas commiteadas de un par no se cortan, ampliadas con los directorios padre y los orígenes de renombrado, no hay conflicto. El prefiltro ahorra la mayoría de los pares sin introducir falsos negativos.
 
 ### Experimento
