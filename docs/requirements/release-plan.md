@@ -171,7 +171,7 @@ Estados: **I** = implemented, **P** = partially-implemented, **Pend** = draft, r
 | US-GRD-009, US-GRD-014 | Tamaño de diff y formato; rama base del equipo | Should | Pend | — |
 | US-GRD-013, US-GRD-015 | Configuración por comando; cola de confirmación | Should | Pend | Dev Spec tras SPIKE-GRD-002; US-GRD-013 espera además Q-GRD-32 |
 | TS-GRD-001 | Configuración commiteada | Must | I | — |
-| SPIKE-GRD-002 | Factor de autenticación del SO (la parte de macOS) | Must | Pend | — |
+| SPIKE-GRD-002 | Factor de autenticación del SO (la parte de macOS) | Must | Pend | Plan validado (2026-10-09); falta ejecutar el prototipo y la matriz en el Mac |
 
 **Time Machine** (17 US y 5 enablers; MoSCoW supuesto)
 
