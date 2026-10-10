@@ -161,3 +161,19 @@ fn a_purge_notice_is_never_delivered() {
     assert_eq!(pending[0].notice_id, purge);
     assert_eq!(f.log.first_interactive_delivery_ms(&purge).unwrap(), None);
 }
+
+#[test]
+fn an_unreadable_operation_loses_no_notice() {
+    let mut f = fixture();
+    let (first, _) = interrupted_undo(&mut f.log, &[WT]);
+    let (second, _) = interrupted_undo(&mut f.log, &[WT]);
+    // Every operation lookup now fails (as an edited row or a SQLite error would).
+    f.log
+        .conn()
+        .execute_batch("ALTER TABLE operations RENAME TO operations_gone;")
+        .unwrap();
+    let taken = take(&mut f, WT);
+    let ids: Vec<_> = taken.iter().map(|n| n.operation_id.clone()).collect();
+    assert_eq!(ids, vec![Some(first), Some(second)]);
+    assert!(taken.iter().all(|n| n.operation_kind.is_none()));
+}
