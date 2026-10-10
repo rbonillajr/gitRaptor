@@ -55,6 +55,7 @@ impl Cmd {
             Ok(client) => client,
             Err(code) => return code,
         };
+        undo::notices::show_pending(&mut client, &anchor, CMD);
         if !offers(&client, methods::TM_TIMELINE) {
             eprintln!("{CMD}: {}", t("timeline.restart-engine", &[]));
             return ExitCode::FAILURE;

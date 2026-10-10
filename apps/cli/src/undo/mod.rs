@@ -15,6 +15,7 @@ use gitraptor_core::timemachine::restore::KEPT_REF_IN_RECREATED_WORKTREE;
 use serde_json::json;
 
 pub(crate) mod confirm;
+pub(crate) mod notices;
 
 use crate::i18n::t;
 use crate::{engine, error_text, shown};
@@ -42,6 +43,7 @@ pub fn run(json_out: bool) -> ExitCode {
         Ok(client) => client,
         Err(code) => return code,
     };
+    notices::show_pending(&mut client, &worktree, CMD);
     let answer = match confirm::call(
         &mut client,
         methods::TM_UNDO,

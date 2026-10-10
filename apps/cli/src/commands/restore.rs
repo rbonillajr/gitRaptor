@@ -43,6 +43,7 @@ impl Cmd {
             Ok(client) => client,
             Err(code) => return code,
         };
+        undo::notices::show_pending(&mut client, &worktree, CMD);
         let show_plan = |data: &TmConfirmData| show_restore_plan(data, &self.snapshot_id);
         let answer = match confirm::call(
             &mut client,
