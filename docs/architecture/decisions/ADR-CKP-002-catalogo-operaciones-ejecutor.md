@@ -435,3 +435,13 @@ Decisión del orquestador (2026-10-05), validada por Arquitecto, PO y security-e
 
 - **§ 11, nota**: `snapshot` corre en el ejecutor **sin el cerrojo de escritura ni la operación protegida** (`entry.protected = false`, `Executor::run_any`); la captura va por `RunEnv.capture`. La comprobación estática de este apartado sigue verde: `executor` no importa la capa de escritura de la Time Machine.
 - **Catálogo de producción**: un brazo y un archivo por operación (`crates/core/src/executor/ops/<op>.rs`), cableado con `NoGuardrails`; `OperationsWiring::production()` rechaza un brazo de una operación gobernada mientras la puerta sea `NoGuardrails`. Ver [la guía de extensión](../extender-sin-archivos-compartidos.md).
+
+## Enmienda (2026-10-09, TS-CKP-003)
+
+Origen: [DS-TS-CKP-003](../../requirements/features/cockpit/dev-specs/TS-CKP-003-capa-cockpit-guardrails.md), D6, D8, D10, D13 y D14. **Decisión del orquestador (2026-10-09), validada por Arquitecto; D10 también por PO.**
+
+- **§ 4, "Registro único"**: el `kind` de la entrada del plan admite también `notice` (permitido con avisos). Una denegación tardía (una transición distinta del hijo directo, reevaluada con el plan) se acumula con la decisión del plan y la entrada única lleva el máximo; nunca deja una segunda entrada.
+- **Implementación (TS-CKP-003)**:
+  - `OperationsWiring::production()` usa el motor de decisión real (`GuardrailsEngine`), que el daemon conecta al registro y al log al montar el canal. Sin esa conexión, deniega con `system.internal-error`. Cada historia dueña arma su operación gobernada con una línea.
+  - Capacidad `operation.guardrails`: la denegación viaja tipada (`decision_id`, `effect`, `applied_effect`, `reasons`) en `prepare` y en el rechazo `-32014`. Por MCP, la misma forma, sin campos de excepción, sin `configStatus`/`configRef` y con la plantilla que nunca nombra una vía de excepción (BR-AUTH-004). No sube `PROTOCOL_VERSION`.
+  - Brazos de prueba solo en builds de depuración, con `GITRAPTOR_TEST_EXECUTOR_ARMS=1` y `GITRAPTOR_PROFILE_DIR`, dentro de la operación protegida. No son la lógica de producto de esas operaciones.
