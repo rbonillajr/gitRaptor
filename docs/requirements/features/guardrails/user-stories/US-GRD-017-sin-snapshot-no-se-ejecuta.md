@@ -40,7 +40,7 @@ BR-EDGE-005 (sin snapshot previo, se deniega con motivo; el humano puede usar la
 
 - **Historias**: US-GRD-001 (decisión); US-TMC-005 (Time Machine: snapshot `previo_hook` pedido desde los hooks, ADR-TMC-004 § 3).
 - **Externas**: ninguna. Desbloqueada el 2026-10-04 por decisión de Rene Bonilla, 2026-10-04: la Time Machine (F-001-03) ya tiene historias y ADRs aceptados, y el contrato con Guardrails está en ADR-GRD-003 (con `allow` y una operación destructiva, el daemon pide el `previo_hook` en la misma llamada). El bloqueo por F-001-03 pasa a ser dependencia de US-TMC-005. Guardrails no toma el snapshot.
-- **Dependencia blanda**: US-GRD-006 (excepción consciente) debe cerrar en el mismo hito. Sin ella, el escenario 3 no tiene recurso y la persona no puede seguir sin punto de recuperación.
+- **Dependencia blanda**: US-GRD-006 (excepción consciente) debe cerrar en el mismo hito. Sin ella, el escenario "El humano decide seguir sin punto de recuperación" no tiene recurso y la persona no puede seguir sin punto de recuperación.
 - **Transversal**: Windows, macOS y Linux; pruebas de caos (NFR-12). Los escenarios usan una operación que la capa de hooks puede interceptar; `reset --hard` con Git directo no lo es (BR-EDGE-003) y por MCP se cubre cuando exista F-001-05.
 - **Límites declarados** (BR-EDGE-005):
   - Force-push y borrado de una rama remota: fuera de esta historia, porque la Time Machine no guarda el remoto. Se reabre cuando lo guarde; complementa US-TMC-014. El force-push ya lo deniega el mínimo seguro.
@@ -89,8 +89,9 @@ Entonces la operación se ejecuta y la excepción queda en el registro
 - **Alcance**: el de US-TMC-005: rebase (también `pull --rebase`) y borrado de una rama local. El force-push y el borrado remoto quedan fuera (la Time Machine no guarda el remoto). `reset --hard`, `checkout` y `branch -f` con Git crudo no tienen hook previo (BR-EDGE-003); ver "Límites declarados".
 - **Decisión**: en el daemon, entre el snapshot y el registro de decisiones, un `failed` (cualquier causa: plazo, disco, cuota, repo sin observar) convierte la decisión permitida en `deny` con `system.snapshot-failed` y la causa. Sin daemon, el cliente del hook deniega la misma operación (modo degradado). Un archivo enorme no tiene tope: el plazo vencido deniega, con una pista neutra en el mensaje.
 - **Contrato**: capacidad `guard.snapshot-required` (ADR-GRP-016). Un cliente sin ella recibe la misma denegación como `system.internal-error`, nunca un permiso.
-- **Excepción consciente** (escenario 3): con la excepción aplicada, el previo se intenta y, si falla, la operación sigue y el registro anota la regla saltada. Lo verifica US-GRD-006; hasta entonces la historia queda `partially-implemented`.
-- **Crates**: `crates/api` (regla, causas, capacidad), `crates/core` módulo `guardrails` (conversión, cliente del hook) y el canal, `apps/cli` (mensajes en un archivo i18n propio).
+- **Cupos** (Q-GRD-37): los cupos globales del snapshot previo (por worktree y por repo) solo cuentan las peticiones de agentes; la persona solo gasta su cupo por solicitante. Lo trae US-TMC-005 o, si no, la DS (T008).
+- **Excepción consciente** (escenario "El humano decide seguir sin punto de recuperación"): con la excepción aplicada, el previo se intenta y, si falla, la operación sigue y el registro anota la regla saltada. Lo verifica US-GRD-006; hasta entonces la historia queda `partially-implemented`.
+- **Crates**: `crates/api` (regla, causas, capacidad), `crates/core` módulos `guardrails` (conversión, cliente del hook) y `timemachine` (cupos, T008) y el canal, `apps/cli` (mensajes en un archivo i18n propio).
 - **Dependencia**: implementable solo cuando US-TMC-005 esté mergeada.
 
 ## Diseño y Dev Spec
