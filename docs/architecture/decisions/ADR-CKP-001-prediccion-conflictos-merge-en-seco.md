@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
-updated: 2026-10-05
+updated: 2026-10-09
 deciders: [Orquestador (delegación de Rene Bonilla, 2026-10-04)]
 domain: GRP
 feature: cockpit
@@ -19,6 +19,8 @@ tags: [cockpit, prediccion-conflictos, merge-en-seco, gitoxide, gix-merge, merge
 **Status**: Aceptado · **Fecha**: 2026-10-04 · **Decisores**: Orquestador (delegación de Rene Bonilla, 2026-10-04) · **Feature**: Cockpit (F-001-02)
 
 **Decisión del orquestador (2026-10-04), validada por Arquitecto, PO y security-expert** (pasada de endurecimiento del 2026-10-04: ver "Revisión de seguridad (2026-10-04)"). Se acepta con el **mecanismo condicionado a SPIKE-CKP-001**, igual que ADR-GRD-001 y ADR-GRD-002 se aceptaron antes de que SPIKE-GRD-001 los enmendara: quedan decididos los invariantes (nunca escribir en el repo ni ejecutar programas del usuario, dos niveles, estados con antigüedad, límites declarados, publicación por el motor) y el orden de preferencia de los mecanismos; SPIKE-CKP-001 elige entre ellos con los criterios de salida de M-02, M-06 y L-04 (§ 1 y § 5) y enmienda este ADR con sus resultados en macOS. La Dev Spec de TS-CKP-001 no se escribe antes. Linux y Windows: Pendiente: etapa de validación multiplataforma.
+
+> **Nota (2026-10-09)**: decisión del orquestador, validada por Arquitecto. La Dev Spec de TS-CKP-001 existe como **borrador condicionado** ([DS-TS-CKP-001](../../requirements/features/cockpit/dev-specs/TS-CKP-001-predictor-conflictos.md), `ready_to_implement: false`), con una rama por salida del SPIKE; no se implementa antes de sus resultados. El [plan de SPIKE-CKP-001](../../requirements/features/cockpit/research/SPIKE-CKP-001-plan.md) (§ 1) corrige hechos de este ADR que se aplicarán con la enmienda del SPIKE: la versión actual es `gix` 0.89.0 / `gix-merge` 0.22.0; `gix-merge` no tiene bandera de interrupción (§ 1 y § 5); `merge_trees` de alto nivel lee drivers, filtros y atributos del repo, así que la opción (a) se construye con `gix_merge::tree` directo; y `merge-tree --stdin` llegó en Git 2.39, no en 2.42 (§ 11).
 
 ## Contexto
 
