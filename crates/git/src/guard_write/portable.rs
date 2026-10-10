@@ -9,7 +9,9 @@
 use std::io::Write;
 use std::path::Path;
 
-use super::{FileId, GuardWriteError, NewFile, Result, is_temporary, temporary_name};
+use super::{
+    FileId, GuardWriteError, NewFile, Result, is_file_temporary, is_temporary, temporary_name,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Kind {
@@ -159,6 +161,51 @@ pub(super) fn replace_files(common: &Path, expected: FileId, files: &[NewFile<'_
             let _ = std::fs::remove_file(&temp);
         }
         written?;
+    }
+    Ok(())
+}
+
+pub(super) fn remove_file_temporaries(
+    common: &Path,
+    expected: FileId,
+    listed: &[&str],
+) -> Result<()> {
+    not_link(common)?;
+    let root = common.join(super::FOLDER);
+    match not_link(&root)? {
+        None => return Ok(()),
+        Some(m) if m.is_dir() => {}
+        Some(_) => return Err(GuardWriteError::Changed("the guardrails folder")),
+    }
+    if id_of(&root)? != expected {
+        return Err(GuardWriteError::Changed("the guardrails folder"));
+    }
+    for path in listed {
+        let (dir, name) = match path.split_once('/') {
+            None => (root.clone(), *path),
+            Some((sub, name)) => {
+                let dir = root.join(sub);
+                if not_link(&dir)?.is_none() {
+                    continue;
+                }
+                (dir, name)
+            }
+        };
+        for entry in std::fs::read_dir(&dir)? {
+            let entry = entry?;
+            let file_name = entry.file_name();
+            let Some(candidate) = file_name.to_str() else {
+                continue;
+            };
+            if !is_file_temporary(name, candidate) {
+                continue;
+            }
+            let file = dir.join(candidate);
+            // Regular files only: a link or a folder with the name is left in place.
+            if std::fs::symlink_metadata(&file).is_ok_and(|m| m.is_file()) {
+                std::fs::remove_file(&file)?;
+            }
+        }
     }
     Ok(())
 }

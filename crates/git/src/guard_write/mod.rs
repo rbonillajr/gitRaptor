@@ -310,13 +310,20 @@ impl<'a> GuardWriter<'a> {
     /// renaming it: `<file>.gitraptor.tmp-<16 hex>` next to a listed file, regular files only
     /// (never through a link), inside the folder the journal recorded (`expected`). Any other
     /// name is left in place.
+    ///
+    /// # Errors
+    /// `InvalidInput` for a listed path that is not a plain relative one; `Changed` when the
+    /// folder is not the recorded one or a link; `Io` otherwise. An absent folder is `Ok`.
     pub fn remove_file_temporaries(
         &self,
-        _common: &Path,
-        _expected: FileId,
-        _listed: &[&str],
+        common: &Path,
+        expected: FileId,
+        listed: &[&str],
     ) -> Result<()> {
-        Ok(())
+        for path in listed {
+            check_relative(path)?;
+        }
+        fs::remove_file_temporaries(common, expected, listed)
     }
 
     /// Removes the listed files of every leftover temporary folder of an interrupted install.
@@ -352,6 +359,15 @@ fn is_temporary(name: &str) -> bool {
         .is_some_and(|r| r.len() == 16 && r.bytes().all(|b| b.is_ascii_hexdigit()))
 }
 
+/// Whether `candidate` is `<file_name>.gitraptor.tmp-<16 hex>`: the exact name `replace_files`
+/// gives the temporary of `file_name`.
+fn is_file_temporary(file_name: &str, candidate: &str) -> bool {
+    candidate
+        .strip_prefix(file_name)
+        .and_then(|r| r.strip_prefix('.'))
+        .is_some_and(is_temporary)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -382,5 +398,16 @@ mod tests {
         assert_ne!(name, temporary_name());
         assert!(!is_temporary("gitraptor"));
         assert!(!is_temporary("gitraptor.tmp-x"));
+    }
+
+    #[test]
+    fn file_temporaries_have_the_exact_name() {
+        let t = "gitraptor.tmp-0123456789abcdef";
+        assert!(is_file_temporary("pre-push", &format!("pre-push.{t}")));
+        assert!(!is_file_temporary("pre-push", &format!("pre-commit.{t}")));
+        assert!(!is_file_temporary("pre-push", t));
+        assert!(!is_file_temporary("pre-push", &format!("pre-push{t}")));
+        assert!(!is_file_temporary("pre-push", &format!("pre-push.{t}0")));
+        assert!(!is_file_temporary("pre-push", "pre-push.gitraptor.tmp-xyz"));
     }
 }
