@@ -118,3 +118,9 @@ restore.reason.confirmation-not-asked = that work belongs to an agent: run rapto
 restore.reason.confirmation-needs-terminal = that work belongs to an agent and confirming it needs your own terminal: run raptor restore from a terminal; nothing changed
 restore.reason.confirmation-agent = that work belongs to an agent, and a command run by another agent cannot confirm it: ask the agent to restore it itself; nothing changed
 restore.reason.confirmation-unverified = that work belongs to an agent and the engine could not verify this terminal to confirm it: ask the agent to restore it itself; nothing changed
+
+# An operation cut half-way when GitRaptor stopped, told once to the next command of its worktree (US-TMC-019).
+tm-notice.interrupted-undo = the undo {id} of this worktree was interrupted when GitRaptor stopped; raptor undo returns to the state before it
+tm-notice.interrupted-restore = the restore {id} of this worktree was interrupted when GitRaptor stopped; raptor undo returns to the state before it
+tm-notice.interrupted-redo = the redo {id} of this worktree was interrupted when GitRaptor stopped; raptor undo returns to the state before it
+tm-notice.interrupted-operation = the operation {id} of this worktree was interrupted when GitRaptor stopped; raptor undo returns to the state before it

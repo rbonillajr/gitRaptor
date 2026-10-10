@@ -118,3 +118,9 @@ restore.reason.confirmation-not-asked = ese trabajo es de un agente: ejecuta rap
 restore.reason.confirmation-needs-terminal = ese trabajo es de un agente y confirmarlo necesita tu propia terminal: ejecuta raptor restore desde una terminal; nada cambió
 restore.reason.confirmation-agent = ese trabajo es de un agente, y un comando ejecutado por otro agente no puede confirmarlo: pídele al agente que restaure él mismo; nada cambió
 restore.reason.confirmation-unverified = ese trabajo es de un agente y el motor no pudo verificar esta terminal para confirmarlo: pídele al agente que restaure él mismo; nada cambió
+
+# Una operación cortada a medias al detenerse GitRaptor, avisada una vez al siguiente comando de su worktree (US-TMC-019).
+tm-notice.interrupted-undo = el undo {id} de este worktree se interrumpió al detenerse GitRaptor; raptor undo vuelve al estado anterior
+tm-notice.interrupted-restore = la restauración {id} de este worktree se interrumpió al detenerse GitRaptor; raptor undo vuelve al estado anterior
+tm-notice.interrupted-redo = el redo {id} de este worktree se interrumpió al detenerse GitRaptor; raptor undo vuelve al estado anterior
+tm-notice.interrupted-operation = la operación {id} de este worktree se interrumpió al detenerse GitRaptor; raptor undo vuelve al estado anterior
