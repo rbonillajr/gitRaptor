@@ -21,9 +21,9 @@ const MAX_COMMITS: usize = 4_096;
 /// Updates one evaluation may read the commits of.
 const MAX_READS: usize = 256;
 
-/// What a client that cannot tell the actor evaluates in degraded mode (D11): the floor alone,
-/// and only its rules for everyone.
-pub fn degraded(reader: &RepoReader) -> Policies {
+/// The floor alone, every scope: what the client reads without a daemon. Nothing readable gives
+/// no rules.
+pub fn floor(reader: &RepoReader) -> Policies {
     let Ok(team) = layers::LOADER.load(reader, None) else {
         return Policies::default();
     };
@@ -31,7 +31,12 @@ pub fn degraded(reader: &RepoReader) -> Policies {
         level: Level::Floor,
         settings: team.floor.parsed.applicable(),
     }])
-    .everyone_only()
+}
+
+/// What a client that cannot tell the actor evaluates in degraded mode (D11): the floor alone,
+/// and only its rules for everyone.
+pub fn degraded(reader: &RepoReader) -> Policies {
+    floor(reader).everyone_only()
 }
 
 /// What each update of an agent's movement does to the protected configuration (BR-AUTH-004),
@@ -239,13 +244,9 @@ pub fn touched(
         }
         Operation::Push { updates, .. } => updates
             .iter()
-            .map(|u| {
-                // A ref that is not governed (a tag) is never evaluated: nothing to read.
-                if !refs::is_governed(&u.remote_ref) {
-                    return None;
-                }
-                read(u.remote.oid(), &u.local, &[], Hide::RemoteTracking)
-            })
+            // Every pushed ref: a tag or a note uploads commits too, and the forbidden paths reach
+            // them. A deletion (`Zero`) reads nothing.
+            .map(|u| read(u.remote.oid(), &u.local, &[], Hide::RemoteTracking))
             .collect(),
         Operation::Rebase { .. } | Operation::Commit { .. } => Vec::new(),
     }
