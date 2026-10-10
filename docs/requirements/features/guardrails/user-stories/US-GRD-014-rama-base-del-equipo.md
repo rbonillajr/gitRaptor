@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: medium
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-09
 feature: guardrails
 related:
   context:
@@ -38,13 +38,14 @@ BR-CONS-003 (rama base solo del nivel de equipo; `main` por defecto; se lee de l
 - **Historias**: US-GRD-007 (permisos del equipo, que reutilizan la lectura de los tres niveles de US-GRP-013, motor-local). No depende del comando de edición (US-GRD-013): el valor se puede escribir a mano. La coherencia con la rama base que lee el motor (US-GRP-016, motor-local) es una prueba de integración posterior, anotada en el índice.
 - **Externas**: ninguna bloqueante. P8 (formato de la configuración, motor-local) quedó cerrada por ADR-GRP-007, aceptado por Rene Bonilla el 2026-10-04. La confirmación de la rama base usa el mismo mecanismo que las demás acciones reservadas del MVP y no espera al factor de autenticación del sistema operativo (Q-GRD-22). Distinguir al humano: transversal (lo define el Arquitecto; R-GRD-3).
 - **Transversal**: Windows, macOS y Linux.
+- **Adopción**: el mismo estado tras adoptar una protección huérfana se verifica en US-GRD-003 (escenario de adoptar). Tras perder el perfil y antes de adoptar, la rama base leída sigue protegida (DS-US-GRD-014, D12).
 
 ## Criterios de Aceptación
 
-**Escenario: Tras perder el perfil o adoptar la protección, la rama base queda sin confirmar y protegida**
+**Escenario: Sin confirmación inicial, la rama base del equipo y main quedan protegidas hasta que el desarrollador confirma**
 
 Dado el repo "demo" protegido, cuya configuración del equipo en la rama principal define la rama base "develop"
-  Y el perfil de GitRaptor se perdió y el desarrollador adoptó la protección que seguía instalada
+  Y la rama base de "demo" aún no está confirmada en esta máquina
 Cuando un proceso intenta borrar la rama "develop" y después la rama "main"
 Entonces las dos operaciones se deniegan y el motivo nombra la protección de la rama base
   Y el estado de protección de "demo" muestra la rama base como no confirmada, con la acción para confirmarla
@@ -96,4 +97,4 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica.
-- **Dev Spec:** pendiente (Arquitecto).
+- **Dev Spec:** [DS-US-GRD-014](../dev-specs/US-GRD-014-rama-base-del-equipo.md) (2026-10-09; decisiones del orquestador validadas por el Arquitecto y el PO).
