@@ -299,6 +299,21 @@ pub struct SnapshotRecord {
     pub recorded_ms: i64,
     /// Who asked and what for, for a `manual` snapshot only.
     pub manual: Option<ManualMeta>,
+    /// Who asked, for a `hook-prior` snapshot only.
+    pub hook_prior: Option<HookPriorMeta>,
+}
+
+/// What a `hook-prior` snapshot records about its request, frozen in its row. The channel is
+/// always the hook, so it has no field.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HookPriorMeta {
+    /// The requester resolved by ancestry; an unattributed one has no session and its own
+    /// quota bucket.
+    pub requester: Requester,
+    /// The daemon's canonical key of the worktree (resolved root and `(dev, inode)`).
+    pub worktree_key: String,
+    /// The instant the request was made: the mark of every row of the attempt.
+    pub requested_ms: i64,
 }
 
 /// What a `manual` snapshot records about its request, frozen in its row.

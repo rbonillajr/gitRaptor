@@ -9,7 +9,7 @@
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use super::model::{
-    CompleteInfo, JournalEntry, ManualMeta, Notice, NoticeKind, OperationKind, OperationRecord,
+    CompleteInfo, HookPriorMeta, JournalEntry, ManualMeta, Notice, NoticeKind, OperationKind, OperationRecord,
     OperationState, OperationView, Requester, Scope, SnapshotLevel, SnapshotRecord, SnapshotState,
     SnapshotView, Target,
 };
@@ -351,6 +351,48 @@ impl Oplog {
         })
     }
 
+    /// The instants of every `hook-prior` row of the requester's bucket in the worktree, of the
+    /// agents' worktree window and of the agents' repo window, in the last 24 h, discarded
+    /// attempts included. `session` is the requester's session, or `None` for the shared
+    /// unattributed bucket (`IS` is safe with `NULL`). The worktree and repo windows count
+    /// only rows with a session: an unattributed requester neither spends nor is measured
+    /// against the agents' global ceilings. Same window rule as [`Self::manual_quota_input`].
+    pub fn hook_prior_quota_input(
+        &self,
+        session: Option<&str>,
+        worktree_key: &str,
+        now_ms: i64,
+    ) -> Result<QuotaInput> {
+        let since = now_ms.saturating_sub(DAY_MS);
+        let stamps = |sql: &str, args: &[&dyn rusqlite::ToSql]| -> Result<Vec<i64>> {
+            let mut stmt = self.conn.prepare_cached(sql)?;
+            let rows = stmt.query_map(args, |r| r.get::<_, i64>(0))?;
+            Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+        };
+        Ok(QuotaInput {
+            requester_ms: stamps(
+                "SELECT recorded_ms FROM snapshots
+                 WHERE level = 'hook-prior' AND requester_session IS ?1 AND worktree_key = ?2
+                   AND recorded_ms > ?3
+                 ORDER BY recorded_ms",
+                &[&session, &worktree_key, &since],
+            )?,
+            worktree_ms: stamps(
+                "SELECT recorded_ms FROM snapshots
+                 WHERE level = 'hook-prior' AND requester_session IS NOT NULL
+                   AND worktree_key = ?1 AND recorded_ms > ?2
+                 ORDER BY recorded_ms",
+                &[&worktree_key, &since],
+            )?,
+            repo_ms: stamps(
+                "SELECT recorded_ms FROM snapshots
+                 WHERE level = 'hook-prior' AND requester_session IS NOT NULL
+                   AND recorded_ms > ?1 ORDER BY recorded_ms",
+                &[&since],
+            )?,
+        })
+    }
+
     /// Notices no client has received yet that concern `worktree` (or the
     /// whole repo). A client connecting from that worktree shows them and
     /// marks them delivered, so each is shown once (US-TMC-019).
@@ -388,6 +430,7 @@ fn snapshot_row(row: &Row<'_>) -> rusqlite::Result<(SnapshotRecord, bool)> {
     let parsed = parsed_worktrees.is_some();
     let level = SnapshotLevel::parse(&row.get::<_, String>(2)?)?;
     let (manual, manual_parsed) = manual_columns(row, level)?;
+    let (hook_prior, hook_prior_parsed) = hook_prior_columns(row, level)?;
     Ok((
         SnapshotRecord {
             snapshot_id: row.get(0)?,
@@ -400,8 +443,9 @@ fn snapshot_row(row: &Row<'_>) -> rusqlite::Result<(SnapshotRecord, bool)> {
             cause_event_seq: row.get(7)?,
             recorded_ms: row.get(8)?,
             manual,
+            hook_prior,
         },
-        parsed && manual_parsed,
+        parsed && manual_parsed && hook_prior_parsed,
     ))
 }
 
@@ -434,6 +478,35 @@ fn manual_columns(
             }),
             true,
         ),
+        _ => (None, false),
+    })
+}
+
+/// The `hook-prior` columns of a snapshot row. The flag is `false` when the row is of level
+/// `hook-prior` and a column does not parse (an edited row).
+fn hook_prior_columns(
+    row: &Row<'_>,
+    level: SnapshotLevel,
+) -> rusqlite::Result<(Option<HookPriorMeta>, bool)> {
+    if level != SnapshotLevel::HookPrior {
+        return Ok((None, true));
+    }
+    let requester = row
+        .get::<_, Option<String>>(10)?
+        .and_then(|t| serde_json::from_str::<Requester>(&t).ok());
+    let worktree_key: Option<String> = row.get(12)?;
+    let recorded_ms: i64 = row.get(8)?;
+    Ok(match (requester, worktree_key) {
+        (Some(requester), Some(worktree_key)) => (
+            Some(HookPriorMeta {
+                requester,
+                worktree_key,
+                requested_ms: recorded_ms,
+            }),
+            true,
+        ),
+        // Rows written before the migration carry no requester: they are not tampered.
+        (None, None) => (None, true),
         _ => (None, false),
     })
 }
