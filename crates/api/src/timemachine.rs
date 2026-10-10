@@ -869,6 +869,46 @@ impl TimelineParams {
     }
 }
 
+/// `timemachine.notices` parameters. `worktree` names the caller's worktree (as in `undo`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NoticesParams {
+    #[serde(default)]
+    pub worktree: Option<String>,
+    #[serde(default)]
+    pub surface: Option<Surface>,
+}
+
+/// `timemachine.notices` result: what the caller's worktree has not been told yet.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NoticesResult {
+    /// The oldest first.
+    pub notices: Vec<TmNotice>,
+}
+
+/// One notice, delivered once.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TmNotice {
+    pub notice_id: String,
+    pub kind: TmNoticeKind,
+    /// The operation the notice is about.
+    pub operation_id: Option<String>,
+    pub operation_kind: Option<TimelineOperationKind>,
+    /// Where `raptor undo` takes the worktree back to.
+    pub prior_snapshot_id: Option<String>,
+    pub recorded_utc_ms: i64,
+}
+
+/// What a notice tells.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum TmNoticeKind {
+    /// An operation was cut half-way; `raptor undo` returns to its prior snapshot.
+    Interruption,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

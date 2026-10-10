@@ -32,6 +32,19 @@ pub const POINTS: &[&str] = &[
     OPERATION_APPLIED,
 ];
 
+/// Crash points of a capture that is not a guaranteed prior (observation, hook prior), in the
+/// order it reaches them. Apart from [`POINTS`], which are an undo's.
+pub const CAPTURE_POINTS: &[&str] = &[CAPTURE_PENDING, CAPTURE_REF];
+/// Row `pending` of a capture, no ref yet.
+pub const CAPTURE_PENDING: &str = "capture:pending";
+/// Ref of a capture created, row still `pending`.
+pub const CAPTURE_REF: &str = "capture:ref";
+
+/// Whether `name` is a crash point of any list.
+pub fn is_point(name: &str) -> bool {
+    POINTS.contains(&name) || CAPTURE_POINTS.contains(&name)
+}
+
 /// Intent recorded, no prior snapshot yet.
 pub const OPERATION_INTENT: &str = "operation:intent";
 /// Row of the guaranteed prior `pending`, no ref yet.
@@ -66,13 +79,13 @@ pub fn apply_step(step: u32) -> &'static str {
 /// variable read nor the kill (SEC-06).
 #[cfg(feature = "chaos")]
 pub fn crash_point(name: &str) {
-    debug_assert!(POINTS.contains(&name), "unknown crash point {name}");
+    debug_assert!(is_point(name), "unknown crash point {name}");
     static ARMED: OnceLock<Option<String>> = OnceLock::new();
     let armed = ARMED.get_or_init(|| {
         let armed = std::env::var(CRASH_AT_ENV).ok().filter(|v| !v.is_empty());
         if let Some(point) = &armed {
             assert!(
-                POINTS.contains(&point.as_str()),
+                is_point(point),
                 "{CRASH_AT_ENV} names no crash point: {point}"
             );
         }
@@ -120,5 +133,20 @@ mod tests {
     fn points_are_unique() {
         let mut seen = std::collections::HashSet::new();
         assert!(POINTS.iter().all(|p| seen.insert(p)));
+    }
+
+    #[test]
+    fn points_are_unique_across_both_lists() {
+        let mut seen = std::collections::HashSet::new();
+        assert!(POINTS.iter().chain(CAPTURE_POINTS).all(|p| seen.insert(p)));
+    }
+
+    #[test]
+    fn every_name_of_both_lists_is_a_point() {
+        let all: Vec<&str> = POINTS.iter().chain(CAPTURE_POINTS).copied().collect();
+        assert_eq!(all.len(), 14);
+        assert!(all.iter().all(|p| is_point(p)));
+        assert!(!is_point("capture:other"));
+        assert!(!is_point(""));
     }
 }

@@ -1447,16 +1447,20 @@ fn record(
         now_ms(),
     )?;
     let prior = req.level == SnapshotLevel::GuaranteedPrior;
-    if prior {
-        chaos::crash_point(chaos::PRIOR_PENDING);
-    }
+    chaos::crash_point(if prior {
+        chaos::PRIOR_PENDING
+    } else {
+        chaos::CAPTURE_PENDING
+    });
     if let Err(e) = handle.create_ref(&id, commit) {
         let _ = log.set_snapshot_state(&id, SnapshotState::Discarded, now_ms());
         return Err(e.into());
     }
-    if prior {
-        chaos::crash_point(chaos::PRIOR_REF);
-    }
+    chaos::crash_point(if prior {
+        chaos::PRIOR_REF
+    } else {
+        chaos::CAPTURE_REF
+    });
     log.complete_snapshot(
         &id,
         &CompleteInfo {

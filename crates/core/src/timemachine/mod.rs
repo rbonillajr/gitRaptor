@@ -9,6 +9,7 @@ pub mod continuous;
 pub mod engine;
 pub mod kept;
 pub mod manual;
+pub mod notices;
 pub mod oplog;
 pub mod protected;
 /// The repo write lock lives in a neutral module shared with the executor

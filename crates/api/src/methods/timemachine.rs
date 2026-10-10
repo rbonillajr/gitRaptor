@@ -1,13 +1,16 @@
 //! The Time Machine's commands.
 
 use super::{BASE, Group, MethodSpec, RepoWrite};
-use crate::capability::Capability;
+use crate::capability::{CAPABILITIES_PROTOCOL, Capability};
 
 pub const TM_SNAPSHOT: &str = "timemachine.snapshot";
 pub const TM_UNDO: &str = "timemachine.undo";
 pub const TM_REDO: &str = "timemachine.redo";
 pub const TM_RESTORE: &str = "timemachine.restore";
 pub const TM_TIMELINE: &str = "timemachine.timeline";
+/// The pending notices of the caller's worktree: each one is answered once and marked
+/// delivered on the connection's surface.
+pub const TM_NOTICES: &str = "timemachine.notices";
 
 /// `RepoView.kept_temps` in snapshots: temporary entries the sweep after a crash kept
 /// (DS-TS-TMC-003, Enmienda T2).
@@ -53,6 +56,7 @@ pub(super) const GROUP: Group = Group {
         time_machine(TM_REDO, false, RepoWrite::TimeMachine, "US-TMC-003"),
         time_machine(TM_RESTORE, false, RepoWrite::TimeMachine, "US-TMC-009"),
         time_machine(TM_TIMELINE, false, RepoWrite::None, "US-TMC-006"),
+        time_machine(TM_NOTICES, false, RepoWrite::None, "US-TMC-019").since(CAPABILITIES_PROTOCOL),
     ],
     capabilities: &[
         CAP_TM_KEPT_TEMPS,
