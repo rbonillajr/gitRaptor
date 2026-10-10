@@ -212,6 +212,10 @@ pub struct Decision {
     /// `appliedEffect = allow`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Reason>,
+    /// The `hook-prior` snapshot the daemon took inside this call (capability
+    /// `guard.prior-snapshot`). Absent when none was due or the connection did not ask for it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prior_snapshot: Option<crate::timemachine::HookPriorSnapshot>,
 }
 
 /// The hook a dispatcher serves.

@@ -459,6 +459,33 @@ pub struct SnapshotParams {
     pub surface: Option<Surface>,
 }
 
+/// The `hook-prior` snapshot `guard.evaluate` took (capability `guard.prior-snapshot`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "outcome", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum HookPriorSnapshot {
+    /// The ref in the store and the `complete` row exist before this answer.
+    Complete {
+        #[serde(rename = "snapshotId")]
+        snapshot_id: String,
+        reused: bool,
+    },
+    /// No point was recorded as `hook-prior` for this request.
+    Failed { cause: HookPriorFailure },
+}
+
+/// Why no `hook-prior` snapshot was taken.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum HookPriorFailure {
+    TimeLimit,
+    NoSpace,
+    QuotaExceeded,
+    Discarded,
+    NoWorktree,
+    Unavailable,
+    Internal,
+}
+
 /// `timemachine.undo` parameters (US-TMC-002, 010, 011). At most one of
 /// `operation_id`, `since` and `agent`; none undoes the last operation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -1331,5 +1358,33 @@ mod confirmation_token_tests {
             serde_json::to_value(&undo).unwrap()["confirmation"],
             serde_json::json!(TOKEN)
         );
+    }
+}
+
+#[cfg(test)]
+mod hook_prior_wire_tests {
+    use super::*;
+
+    #[test]
+    fn hook_prior_snapshot_wire_shape() {
+        let done = HookPriorSnapshot::Complete {
+            snapshot_id: "s1".into(),
+            reused: false,
+        };
+        let json = serde_json::to_value(&done).expect("serialize");
+        assert_eq!(
+            json,
+            serde_json::json!({"outcome": "complete", "snapshotId": "s1", "reused": false})
+        );
+        let failed = HookPriorSnapshot::Failed {
+            cause: HookPriorFailure::QuotaExceeded,
+        };
+        let json = serde_json::to_value(&failed).expect("serialize");
+        assert_eq!(
+            json,
+            serde_json::json!({"outcome": "failed", "cause": "quota-exceeded"})
+        );
+        let back: HookPriorSnapshot = serde_json::from_value(json).expect("round trip");
+        assert_eq!(back, failed);
     }
 }
