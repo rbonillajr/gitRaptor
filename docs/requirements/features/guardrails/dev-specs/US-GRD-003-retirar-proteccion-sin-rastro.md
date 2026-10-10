@@ -72,7 +72,7 @@ Cada fila es una **Decisión del orquestador (2026-10-08), validada por el Arqui
 | **E5 · Instalación huérfana: retirarla o adoptarla** (manifiesto mostrado antes, constantes regeneradas al adoptar, sin confirmar la rama base) | Segunda entrega de US-GRD-003, tras la detección `instalacion-huerfana` de US-GRD-004 |
 | ~~**E6 · Registro `protection-state`** de instalar y desinstalar en el registro de decisiones (ADR-GRD-006)~~ **Cerrado por el PR #201 (US-GRD-004)**: instalar, desinstalar y reparar quedan como transición esperada en el registro; además siguen en la auditoría permanente | — |
 | Mostrar la acción pendiente (anuncio con la ventana) en la TUI; hoy el anuncio es la entrada `reserved.audit` de todos los clientes, y la CLI la muestra en el `status` | Cockpit (US-CKP) |
-| Exponer en `audit.list` los resultados `applied`, `cancelled`, `failed` y `expired` (hoy solo en la tabla permanente; `AuditOutcome` cambiaría de forma) | Historia del contrato de auditoría |
+| ~~Exponer en `audit.list` los resultados `applied`, `cancelled`, `failed` y `expired`~~ **Cerrado por `fix/audit-list-all-outcomes` (M-01 y L-01 de #209)**: capacidad `audit.outcomes` en `audit.list` y en `reserved.audit`; ninguna fila durable queda oculta para quien la tiene | — |
 | Ctrl-C que llama a `guard.cancel` (necesita un manejador de señales) | Declarado (D8) |
 | Daemon que se cierra si cambia la identidad de su propio ejecutable (riesgo D10 de DS-US-GRD-001) y ADR-GRD-001 Validación 9 (`binario-no-valido`) | Segunda entrega de US-GRD-003 |
 | Linux en máquina real y Windows (sin canal) | **Pendiente: etapa de validación multiplataforma** |
