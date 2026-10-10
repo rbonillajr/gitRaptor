@@ -16,12 +16,12 @@ use crate::timemachine::oplog::{Channel, NoticeKind, OperationKind, Oplog};
 /// received, marks each one delivered on `channel` and returns them, oldest first. The caller
 /// holds the oplog's lock for the whole call, so two clients never both receive one.
 ///
-/// Delivery is at least once: a notice whose mark cannot be written is still returned, and
-/// `logger` records only its id and the kind of error, never a path.
+/// Delivery is at least once: a notice whose mark cannot be written, or whose operation cannot be
+/// read, is still returned, and `logger` records only its id and the kind of error, never a path.
 ///
 /// # Errors
 ///
-/// The oplog cannot be read.
+/// The pending notices cannot be read.
 pub fn take_interruptions(
     oplog: &mut Oplog,
     worktree: &Path,
@@ -38,8 +38,19 @@ pub fn take_interruptions(
         .collect();
     let mut taken = Vec::with_capacity(pending.len());
     for notice in pending {
+        // An operation that cannot be read must not lose this notice nor those already marked:
+        // it goes out without its kind, and the CLI shows the generic message.
         let operation = match notice.operation_id.as_deref() {
-            Some(id) => oplog.operation(id)?,
+            Some(id) => oplog.operation(id).unwrap_or_else(|e| {
+                logger.warn(
+                    "tm_notice_operation_unreadable",
+                    &[
+                        ("notice", Field::id(&notice.notice_id)),
+                        ("error", Field::Text(error_kind(&e))),
+                    ],
+                );
+                None
+            }),
             None => None,
         };
         if let Err(e) = oplog.mark_notice_delivered(&notice.notice_id, channel, now_ms) {
