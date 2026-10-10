@@ -7,7 +7,9 @@ use std::path::Path;
 
 use rustix::fs::{AtFlags, FileType, Mode, OFlags};
 
-use super::{FileId, GuardWriteError, NewFile, Result, is_temporary, temporary_name};
+use super::{
+    FileId, GuardWriteError, NewFile, Result, is_file_temporary, is_temporary, temporary_name,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Kind {
@@ -190,6 +192,61 @@ pub(super) fn replace_files(common: &Path, expected: FileId, files: &[NewFile<'_
         rustix::fs::fsync(&dir).map_err(|e| GuardWriteError::Io(e.into()))?;
     }
     rustix::fs::fsync(&folder).map_err(|e| GuardWriteError::Io(e.into()))?;
+    Ok(())
+}
+
+pub(super) fn remove_file_temporaries(
+    common: &Path,
+    expected: FileId,
+    listed: &[&str],
+) -> Result<()> {
+    let root = open_dir(common)?;
+    let folder = match open_subdir(&root, super::FOLDER) {
+        Ok(dir) => dir,
+        Err(GuardWriteError::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(e),
+    };
+    let stat = rustix::fs::fstat(&folder).map_err(|e| GuardWriteError::Io(e.into()))?;
+    if id(&stat) != expected {
+        return Err(GuardWriteError::Changed("the guardrails folder"));
+    }
+    for path in listed {
+        let (dir, name) = match path.split_once('/') {
+            None => (folder.try_clone().map_err(GuardWriteError::Io)?, *path),
+            Some((sub, name)) => match open_subdir(&folder, sub) {
+                Ok(dir) => (dir, name),
+                Err(GuardWriteError::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => {
+                    continue;
+                }
+                Err(e) => return Err(e),
+            },
+        };
+        let mut removed = false;
+        let entries =
+            rustix::fs::Dir::read_from(&dir).map_err(|e| GuardWriteError::Io(e.into()))?;
+        for entry in entries {
+            let entry = entry.map_err(|e| GuardWriteError::Io(e.into()))?;
+            let Ok(candidate) = entry.file_name().to_str() else {
+                continue;
+            };
+            if !is_file_temporary(name, candidate) {
+                continue;
+            }
+            // `unlinkat` without `REMOVEDIR` never follows a link nor removes a folder, so a
+            // swap between this check and the removal cannot reach anything but the entry itself.
+            match rustix::fs::statat(&dir, candidate, AtFlags::SYMLINK_NOFOLLOW) {
+                Ok(stat) if FileType::from_raw_mode(stat.st_mode) == FileType::RegularFile => {
+                    unlink(&dir, candidate)?;
+                    removed = true;
+                }
+                Ok(_) | Err(rustix::io::Errno::NOENT) => {}
+                Err(e) => return Err(GuardWriteError::Io(e.into())),
+            }
+        }
+        if removed {
+            rustix::fs::fsync(&dir).map_err(|e| GuardWriteError::Io(e.into()))?;
+        }
+    }
     Ok(())
 }
 
