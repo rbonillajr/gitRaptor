@@ -1,0 +1,276 @@
+{
+  "source": {
+    "kind": "brief",
+    "ref": "docs/dev-briefs/td-grd-001-dispatcher-template-3.md"
+  },
+  "criteria": [
+    {
+      "id": "TD001-TAG",
+      "statement": "Un agente no puede subir a un tag (git push origin HEAD:refs/tags/x) un commit que toca una ruta prohibida: se deniega, el mensaje nombra la ruta y el tag no llega al remoto; el mismo push de un commit limpio pasa",
+      "verify": "cargo test -p gitraptor-cli --test guard_td_grd_001_reach an_agent_cannot_push_a_forbidden_path_to_a_tag -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_td_grd_001_reach.rs",
+        "apps/cli/tests/td_grd_001_machine/mod.rs"
+      ]
+    },
+    {
+      "id": "TD001-NOTES",
+      "statement": "Un agente no puede subir a una ref de notes (refs/notes/x) un commit que toca una ruta prohibida; un commit limpio pasa",
+      "verify": "cargo test -p gitraptor-cli --test guard_td_grd_001_reach an_agent_cannot_push_a_forbidden_path_to_notes -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_td_grd_001_reach.rs",
+        "apps/cli/tests/td_grd_001_machine/mod.rs"
+      ]
+    },
+    {
+      "id": "TD001-OTHER",
+      "statement": "Un agente no puede subir a otra ref no gobernada (refs/remotes/mirror/smuggled) un commit que toca una ruta prohibida; un commit limpio pasa",
+      "verify": "cargo test -p gitraptor-cli --test guard_td_grd_001_reach an_agent_cannot_push_a_forbidden_path_to_another_ungoverned_ref -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_td_grd_001_reach.rs",
+        "apps/cli/tests/td_grd_001_machine/mod.rs"
+      ]
+    },
+    {
+      "id": "TD001-NORAPTOR",
+      "statement": "Con la plantilla 3 y sin el binario raptor, un push que solo lleva un tag pasa con el aviso de protección inactiva, y un push a una rama falla cerrado como hoy",
+      "verify": "cargo test -p gitraptor-cli --test guard_td_grd_001_reach without_raptor_only_tags_go_ahead_with_a_warning -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_td_grd_001_reach.rs",
+        "apps/cli/tests/td_grd_001_machine/mod.rs"
+      ]
+    },
+    {
+      "id": "TD001-DOWN-NORULE",
+      "statement": "Con la plantilla 3, el daemon caído y un suelo sin reglas forbiddenPaths, el push de una persona a un tag pasa (aunque toque secrets/), el tag llega al remoto y la salida lleva la nota de modo degradado",
+      "verify": "cargo test -p gitraptor-cli --test guard_td_grd_001_reach with_the_daemon_down_a_tag_push_without_path_rules_goes_ahead -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_td_grd_001_reach.rs",
+        "apps/cli/tests/td_grd_001_machine/mod.rs"
+      ]
+    },
+    {
+      "id": "TD001-DOWN-AGENT",
+      "statement": "Con la plantilla 3, el daemon caído y una ruta prohibida a los agentes, el push a un tag de un commit que la toca se deniega con un mensaje que nombra la ruta y dice cómo seguir (arrancar GitRaptor y repetir el push); un commit limpio pasa",
+      "verify": "cargo test -p gitraptor-cli --test guard_td_grd_001_reach with_the_daemon_down_a_path_forbidden_to_agents_on_a_tag_is_denied_with_how_to_continue -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_td_grd_001_reach.rs",
+        "apps/cli/tests/td_grd_001_machine/mod.rs"
+      ]
+    },
+    {
+      "id": "TD001-DEGRADED",
+      "statement": "Con la plantilla 3 y en modo degradado (daemon parado), una regla forbiddenPaths everyone del suelo deniega el push de la persona a un tag de un commit con ruta prohibida; un commit limpio pasa",
+      "verify": "cargo test -p gitraptor-cli --test guard_td_grd_001_reach in_degraded_mode_an_everyone_rule_denies_a_forbidden_path_to_a_tag -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_td_grd_001_reach.rs",
+        "apps/cli/tests/td_grd_001_machine/mod.rs"
+      ]
+    },
+    {
+      "id": "TD001-EVAL",
+      "statement": "El daemon con guard.policies deniega con policy.forbidden-path el push de un commit con ruta prohibida a refs/tags, refs/notes y refs/remotes del remoto, y permite el de un commit limpio",
+      "verify": "cargo test -p gitraptor-core --test td_grd_001_evaluate forbidden_paths_apply_to_every_pushed_ref -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/td_grd_001_evaluate.rs"
+      ]
+    },
+    {
+      "id": "TD001-BRANCH",
+      "statement": "En un mismo push, la rama protegida se sigue evaluando en refs/heads/main y no se aplica a refs/tags/main ni a refs/notes/main, donde solo se aplica la regla de rutas prohibidas",
+      "verify": "cargo test -p gitraptor-core --test td_grd_001_evaluate protected_branch_stays_on_branches_and_forbidden_paths_reach_tags_and_notes -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/td_grd_001_evaluate.rs"
+      ]
+    },
+    {
+      "id": "TD001-BULK",
+      "statement": "Coste fail-closed declarado: con forbiddenPaths agents, un push de 257 tags nuevos da deny unverifiable al agente y allow a la persona; un tag anotado a un commit limpio pasa y un tag a un árbol da deny unverifiable al agente",
+      "verify": "cargo test -p gitraptor-core --test td_grd_001_evaluate ungoverned_refs_fail_closed_only_when_a_path_rule_governs_the_actor -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/td_grd_001_evaluate.rs"
+      ]
+    },
+    {
+      "id": "TD001-NOCAP",
+      "statement": "Sin la capacidad guard.policies el daemon no recibe las líneas no gobernadas (push_scope(3,false) deja solo las gobernadas) y el suelo everyone sí se les aplica (push_scope(3,true) las conserva); con plantilla 1 o 2 solo van las gobernadas",
+      "verify": "cargo test -p gitraptor-core --test td_grd_001_client capability_and_template_decide_which_pushed_refs_are_sent -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/td_grd_001_client.rs"
+      ]
+    },
+    {
+      "id": "TD001-TEMPLATES",
+      "statement": "El cliente del hook acepta las plantillas 1, 2 y 3 y rechaza la 0 y la 4",
+      "verify": "cargo test -p gitraptor-core --test td_grd_001_client the_hook_accepts_templates_1_2_and_3 -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/td_grd_001_client.rs"
+      ]
+    },
+    {
+      "id": "TD001-SIGNALS",
+      "statement": "Un push que solo lleva refs no gobernadas, ante una señal (repo que no coincide o daemon caído), solo se deniega si existe una regla de rutas prohibidas en el suelo; sin regla, pasa",
+      "verify": "cargo test -p gitraptor-core --test td_grd_001_client an_ungoverned_push_signal_blocks_only_with_an_applicable_rule -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/td_grd_001_client.rs"
+      ]
+    },
+    {
+      "id": "TD001-HEALTH",
+      "statement": "Con una subida pendiente en el diario, cada mezcla de dispatchers viejos y nuevos con la conf vieja está activa con TemplateOutdated; la conf nueva solo es válida con todos los dispatchers nuevos (si no, dispatcher-altered); dos hashes de builds distintos por camino se aceptan",
+      "verify": "cargo test -p gitraptor-core --test td_grd_001_upgrade_health a_pending_upgrade_is_active_at_every_mix_and_the_new_conf_needs_new_dispatchers -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/td_grd_001_upgrade_health.rs"
+      ]
+    },
+    {
+      "id": "TD001-LISTED",
+      "statement": "Journal::listed devuelve la unión sin duplicados de los archivos confirmados y los de la subida pendiente, primero los confirmados",
+      "verify": "cargo test -p gitraptor-core --test td_grd_001_upgrade_health listed_covers_the_files_of_a_pending_upgrade -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/td_grd_001_upgrade_health.rs"
+      ]
+    },
+    {
+      "id": "TD001-TEMP-GIT",
+      "statement": "GuardWriter::remove_file_temporaries borra solo los temporales <archivo>.gitraptor.tmp-<16 hex> de archivos listados, regulares y sin seguir enlaces, y falla con Changed si la carpeta no es la del diario",
+      "verify": "cargo test -p gitraptor-git --test td_grd_001_file_temporaries remove_file_temporaries_removes_only_temporaries_of_listed_files -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/git/tests/td_grd_001_file_temporaries.rs"
+      ]
+    },
+    {
+      "id": "TD001-KEEP",
+      "statement": "Una instalación de plantilla 1 o 2 sigue funcionando sin reinstalar: HooksOnly con TemplateOutdated, el mínimo se cumple y el push a un tag se comporta como hoy",
+      "verify": "cargo test -p gitraptor-cli --test guard_td_grd_001_upgrade repo_intact_templates_1_and_2_keep_working_until_reinstalled -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_td_grd_001_upgrade.rs",
+        "apps/cli/tests/td_grd_001_machine/mod.rs"
+      ]
+    },
+    {
+      "id": "TD001-UP1",
+      "statement": "raptor guard install sube una instalación de plantilla 1 a la 3 sin pantalla de reparación: dispatch.conf dice 3, están los cinco dispatchers, sin TemplateOutdated, y el push de una ruta prohibida a un tag queda denegado",
+      "verify": "cargo test -p gitraptor-cli --test guard_td_grd_001_upgrade repo_intact_a_template_1_install_is_upgraded_to_3 -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_td_grd_001_upgrade.rs",
+        "apps/cli/tests/td_grd_001_machine/mod.rs"
+      ]
+    },
+    {
+      "id": "TD001-UP2",
+      "statement": "raptor guard install sube una instalación de plantilla 2 a la 3 sin pantalla de reparación, y el push de una ruta prohibida a un tag queda denegado",
+      "verify": "cargo test -p gitraptor-cli --test guard_td_grd_001_upgrade repo_intact_a_template_2_install_is_upgraded_to_3 -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_td_grd_001_upgrade.rs",
+        "apps/cli/tests/td_grd_001_machine/mod.rs"
+      ]
+    },
+    {
+      "id": "TD001-CUT2",
+      "statement": "Una subida 2→3 cortada en cada uno de sus 12 puntos deja un dispatcher que funciona (HooksOnly, mínimo aplicado, push limpio a rama pasa, sin mensajes de hooks alterados) y la siguiente raptor guard install la completa a la plantilla 3",
+      "verify": "cargo test -p gitraptor-cli --test guard_td_grd_001_upgrade repo_intact_an_upgrade_from_2_cut_at_any_point_keeps_a_working_dispatcher -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_td_grd_001_upgrade.rs",
+        "apps/cli/tests/td_grd_001_machine/mod.rs"
+      ]
+    },
+    {
+      "id": "TD001-CUT1",
+      "statement": "Una subida 1→3 cortada en cada uno de sus 12 puntos deja un dispatcher que funciona y la siguiente raptor guard install la completa a la plantilla 3",
+      "verify": "cargo test -p gitraptor-cli --test guard_td_grd_001_upgrade repo_intact_an_upgrade_from_1_cut_at_any_point_keeps_a_working_dispatcher -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_td_grd_001_upgrade.rs",
+        "apps/cli/tests/td_grd_001_machine/mod.rs"
+      ]
+    },
+    {
+      "id": "TD001-UNINSTALL",
+      "statement": "Una desinstalación tras una subida interrumpida (después de escribir los dispatchers nuevos) deja el repo idéntico al prístino según uninstalled_exceptions",
+      "verify": "cargo test -p gitraptor-cli --test guard_td_grd_001_upgrade repo_intact_an_uninstall_after_an_interrupted_upgrade_leaves_no_trace -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_td_grd_001_upgrade.rs",
+        "apps/cli/tests/td_grd_001_machine/mod.rs"
+      ]
+    },
+    {
+      "id": "TD001-TEMP-E2E",
+      "statement": "Un temporal que deja una escritura matada en hooks/ lo borra la siguiente raptor guard install, y la desinstalación deja el repo prístino",
+      "verify": "cargo test -p gitraptor-cli --test guard_td_grd_001_upgrade repo_intact_a_temporary_of_a_killed_write_is_cleaned_by_the_next_install -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_td_grd_001_upgrade.rs",
+        "apps/cli/tests/td_grd_001_machine/mod.rs"
+      ]
+    },
+    {
+      "id": "TD001-FOOTPRINT",
+      "statement": "Tras subir de la plantilla 2 a la 3, la huella del repo frente al prístino solo cambia en la clave, la carpeta gitraptor/ y el perfil (diario), según install_exceptions",
+      "verify": "cargo test -p gitraptor-cli --test guard_td_grd_001_upgrade repo_intact_an_upgrade_changes_only_the_dispatchers_and_the_journal -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_td_grd_001_upgrade.rs",
+        "apps/cli/tests/td_grd_001_machine/mod.rs"
+      ]
+    }
+  ],
+  "constraints": {
+    "deny_paths": [
+      "docs/architecture/decisions/ADR-GRD-008-factor-autenticacion-fuera-de-banda.md",
+      "docs/ARTIFACTS.md",
+      "crates/git/src/tm_write/**"
+    ],
+    "allow_dependency_changes": false,
+    "cargo_lock": "Sin cambios: el brief no añade ninguna dependencia"
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-cli",
+      "gitraptor-core",
+      "gitraptor-policy",
+      "gitraptor-git",
+      "gitraptor-api"
+    ]
+  },
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 600000,
+    "suiteTimeoutMs": 1800000
+  }
+}
