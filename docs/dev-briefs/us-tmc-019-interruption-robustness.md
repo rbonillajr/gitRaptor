@@ -246,6 +246,7 @@ Además, sin ser criterios: los tests unitarios de `chaos.rs`, `notices_tests.rs
 - Aviso de un lock propio conservado por identidad desconocida (riesgo residual de ADR-TMC-003): añadirlo con el TD correspondiente.
 - `raptor status` como superficie del aviso: añadirlo si hace falta tras el dogfooding.
 - Corregir la guía ADR-GRP-016 sobre `.since`: un PR de docs aparte.
+- L-01 de `/security-review` (Low): marcar el aviso entregado solo cuando el cliente resuelve a la persona, no a un agente. Hoy lo consume el primer cliente del worktree.
 
 ## Riesgos
 
