@@ -3,11 +3,11 @@ mod messages;
 mod server;
 mod snapshot;
 mod status;
+mod stdout;
 
 use std::process::ExitCode;
 
 use rmcp::ServiceExt;
-use rmcp::transport::stdio;
 
 /// `raptor-mcp`: the MCP server Claude Code launches over stdio, one per
 /// session (ADR-MCP-001 § 1). stdout carries only the protocol; stderr only
@@ -26,9 +26,11 @@ fn main() -> ExitCode {
         }
     };
     let code = runtime.block_on(async {
+        // The writes of the transport never wait (see `stdout`): an answer cannot be cut half way.
+        let (writer, drain) = stdout::queued(tokio::io::stdout());
         let service =
             match server::Raptor::new(messages::Lang::from_env(|key| std::env::var(key).ok()))
-                .serve(stdio())
+                .serve((tokio::io::stdin(), writer))
                 .await
             {
                 Ok(service) => service,
@@ -38,13 +40,16 @@ fn main() -> ExitCode {
                 }
             };
         // Ends when Claude Code closes stdin.
-        match service.waiting().await {
+        let code = match service.waiting().await {
             Ok(_) => ExitCode::SUCCESS,
             Err(_) => {
                 eprintln!("raptor-mcp: transport-failed");
                 ExitCode::FAILURE
             }
-        }
+        };
+        // What is queued still goes out; a reader that stopped reading does not keep us here.
+        drain.finish(std::time::Duration::from_secs(1)).await;
+        code
     });
     // A call still running past its time limit must not keep the process
     // alive once Claude Code is gone.
