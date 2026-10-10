@@ -567,9 +567,9 @@ fn full_disk() -> FreeSpaceFloor {
 }
 
 // The manual floor reads the volume with `statvfs`; outside Unix the probe reports plenty on
-// purpose (the store's own write fails as no space), so there is no floor to cross there. The
-// floor logic itself runs on every OS below, with the injected `Scripted` probe.
-#[cfg(unix)]
+// purpose (the store's own write fails as no space, XP-37 (a)), so there is no floor to cross
+// there and the capture goes through. The floor logic itself runs on every OS below, with the
+// injected `Scripted` probe.
 #[test]
 fn with_the_disk_at_the_floor_a_later_guaranteed_prior_completes() {
     let d = daemon();
@@ -578,17 +578,23 @@ fn with_the_disk_at_the_floor_a_later_guaranteed_prior_completes() {
     let before = d.refs();
     assert_eq!(before.len(), 1);
 
-    let refused = manual::capture(&d.deps(Some(full_disk())), &ask(&d.f.repo, "s1"), T0);
-    assert!(
-        matches!(refused, Err(ManualError::NoSpace)),
-        "a manual capture with the disk at the floor must be refused, got {refused:?}"
-    );
-    assert_eq!(d.refs(), before, "nothing captured and nothing deleted");
+    let manual = manual::capture(&d.deps(Some(full_disk())), &ask(&d.f.repo, "s1"), T0);
+    let taken = if cfg!(unix) {
+        assert!(
+            matches!(manual, Err(ManualError::NoSpace)),
+            "a manual capture with the disk at the floor must be refused, got {manual:?}"
+        );
+        assert_eq!(d.refs(), before, "nothing captured and nothing deleted");
+        0
+    } else {
+        assert!(manual.is_ok(), "no floor outside Unix, got {manual:?}");
+        d.refs().len() - before.len()
+    };
 
     // A guaranteed prior is not subject to the manual floor: it completes.
     let later = d.prior();
     let after = d.refs();
-    assert_eq!(after.len(), 2);
+    assert_eq!(after.len(), 2 + taken);
     assert!(after.iter().any(|r| r.ends_with(&later)));
     assert!(after.iter().any(|r| r.ends_with(&existing)));
 }
