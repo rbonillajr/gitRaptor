@@ -237,3 +237,13 @@ Decisión del orquestador (2026-10-08). Origen: la prueba a mano de Rene con la 
 - **Causa**: la tabla del § 1 decía "No aplica (named pipe)" y el código dejaba la carpeta de ejecución en `None`. Desde XP-01 el arranque del daemon y el nombre del pipe (`\\.\pipe\gitraptor-<SID>-<fnv(carpeta de ejecución)>`, TS-GRP-004 § 8) dependen de esa carpeta. Las pruebas pasaban porque usaban `GITRAPTOR_PROFILE_DIR` (solo en debug), que sí define `run/`.
 - **Decisión**: en Windows la carpeta de ejecución es la de estado, `%LOCALAPPDATA%\<app>\state`, igual que en macOS. No crea carpeta nueva: ya es exclusiva, se crea con la DACL protegida y se verifica al arrancar (Enmienda TD-GRP-001). El pipe sigue protegido por su propia DACL (solo el SID del usuario); la carpeta solo siembra el nombre.
 - **Validación añadida**: un test sin variable de perfil comprueba que la resolución real da carpeta de ejecución en todos los SO; el job `test-installers` de Windows ejecuta el binario release (sin `GITRAPTOR_PROFILE_DIR`, con `LOCALAPPDATA` temporal) y falla si responde "not supported".
+
+## Enmienda (2026-10-09, US-GRP-005)
+
+Derivada de la Dev Spec de US-GRP-005. **Decisión del orquestador (2026-10-09), validada por el Arquitecto y el PO.** El `status` sigue en `accepted`.
+
+| Cambio | Dónde |
+|---|---|
+| **Perfil perdido con el motor en marcha**: en cada latido el daemon compara la identidad del índice global (dispositivo e inodo; en Windows, volumen e índice de archivo) con la del archivo que abrió. Si ya no existe o es otro, espera a que no haya escrituras protegidas en curso ni en cola y se para con causa `profile-lost` y salida 0. El siguiente cliente arranca un daemon que crea el perfil por el camino del primer arranque: id de instancia nuevo, sin repos y con la verificación de permisos de SEC-06. Con el autoarranque, la salida 0 no se relanza | § 4 (Integridad) |
+| **Windows** (⚠️ **ASSUMPTION**): SQLite abre sus archivos sin permitir el borrado, así que la carpeta de datos no se puede borrar con el motor en marcha y la pérdida se trata en el siguiente arranque. Pendiente: etapa de validación multiplataforma | § 4 |
+| **Validación 5 ampliada**: borrar `data/` o la raíz del perfil con el motor en marcha lo para con `profile-lost`; el siguiente arranque funciona con la lista de repos vacía | Validación 5 |
