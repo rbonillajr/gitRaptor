@@ -9,6 +9,7 @@ use super::{GuardLogReply, GuardReply, GuardRequest, HealthReport};
 
 use gitraptor_api::guard::{GuardUninstallResult, PendingKind, UninstallRefusal};
 
+use crate::channel::audit_view::audit_entry;
 use crate::guardrails::install::{GuardCtx, InstallError};
 use crate::guardrails::log::LogEntry;
 use crate::guardrails::pending::{self, Entry, Refused, Requester};
@@ -354,11 +355,19 @@ impl Daemon {
             client: requester_text(who),
             chain: requester_text(action.requester),
         };
-        if self.profile.append_audit(&row).is_err() {
-            self.logger.error(
+        match self.profile.append_audit(&row) {
+            // Whoever holds `audit.outcomes` reads it as it happens (the bus drops it for
+            // the rest).
+            Ok(id) => {
+                if let Some(entry) = audit_entry(id, &row) {
+                    self.bus
+                        .publish(gitraptor_api::event::RESERVED_AUDIT, entry, None, |_| {});
+                }
+            }
+            Err(_) => self.logger.error(
                 "audit_write_failed",
                 &[("op", Field::Text("guard.uninstall"))],
-            );
+            ),
         }
     }
 }
@@ -554,5 +563,17 @@ impl Daemon {
                 );
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RISK_ACCEPTED;
+    use crate::channel::audit_view::RISK_ACCEPTED_PREFIX;
+
+    /// The audit view reads the risk text by its prefix: the text the daemon writes keeps it.
+    #[test]
+    fn the_accepted_risk_keeps_the_prefix_the_audit_view_reads() {
+        assert!(RISK_ACCEPTED.starts_with(RISK_ACCEPTED_PREFIX));
     }
 }

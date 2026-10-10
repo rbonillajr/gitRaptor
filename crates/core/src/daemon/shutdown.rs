@@ -216,6 +216,8 @@ pub(crate) enum Control {
     AuditList {
         after_id: i64,
         limit: u32,
+        /// Only the outcomes that need no `audit.outcomes` capability.
+        legacy_only: bool,
         reply: SyncSender<Option<Vec<(i64, AuditRow)>>>,
     },
     RepoAdd(
@@ -355,12 +357,18 @@ impl ShutdownHandle {
     }
 
     #[cfg_attr(not(unix), allow(dead_code))]
-    pub(crate) fn audit_list(&self, after_id: i64, limit: u32) -> Option<Vec<(i64, AuditRow)>> {
+    pub(crate) fn audit_list(
+        &self,
+        after_id: i64,
+        limit: u32,
+        legacy_only: bool,
+    ) -> Option<Vec<(i64, AuditRow)>> {
         let (reply, rx) = sync_channel(1);
         self.tx
             .send(Control::AuditList {
                 after_id,
                 limit,
+                legacy_only,
                 reply,
             })
             .ok()?;
@@ -710,6 +718,6 @@ mod tests {
         drop(rx);
         assert!(!handle.request(StopCause::Signal("INT")));
         // Without a loop, the audit is never reported as written.
-        assert_eq!(handle.audit_list(0, 1), None);
+        assert_eq!(handle.audit_list(0, 1, false), None);
     }
 }

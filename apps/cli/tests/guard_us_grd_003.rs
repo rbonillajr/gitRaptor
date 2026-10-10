@@ -8,9 +8,14 @@
 
 mod guard_machine;
 
+use gitraptor_api::capability::CAPABILITIES_PROTOCOL;
 use gitraptor_api::guard::{Permission, ProtectionState};
+use gitraptor_api::messages::{AuditEntry, AuditListResult, AuditOutcome, ClientKind};
+use gitraptor_api::{PROTOCOL_VERSION, methods};
+use gitraptor_core::client::Client;
 use gitraptor_core::profile::Profile;
 use guard_machine::{Machine, text, uninstalled_exceptions};
+use serde_json::json;
 
 #[test]
 fn fake_agent_entry() {
@@ -77,6 +82,25 @@ mod repo_intact {
     fn e1_uninstall_restores_the_exact_state() {
         let m = Machine::new();
         round_trip(&m);
+        // M-01 of #209 · `audit.list` shows the applied uninstall to a client with
+        // `audit.outcomes`, and does not show it to one without the capability.
+        let listed = |protocol| -> Vec<AuditEntry> {
+            let mut client = Client::connect(&m.dirs(), ClientKind::Cli, protocol).unwrap();
+            let list: AuditListResult = client.call(methods::AUDIT_LIST, json!({})).unwrap();
+            list.entries
+        };
+        let seen = listed(PROTOCOL_VERSION);
+        let applied: Vec<_> = seen
+            .iter()
+            .filter(|e| e.outcome == AuditOutcome::Applied)
+            .collect();
+        assert_eq!(applied.len(), 1, "{seen:?}");
+        assert!(applied[0].client_partial && applied[0].reason.is_none());
+        assert!(
+            listed(CAPABILITIES_PROTOCOL - 1)
+                .iter()
+                .all(|e| !e.outcome.needs_capability())
+        );
         // E6 · The applied uninstall stays in the audit, with the risk it accepted.
         assert!(uninstall_audit(&m).contains(&"applied".to_owned()));
     }

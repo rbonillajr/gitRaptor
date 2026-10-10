@@ -48,6 +48,8 @@ pub struct Outbox {
     without_discovery: std::sync::atomic::AtomicBool,
     /// Without `guard.protection` (see [`Outbox::set_without_protection`]).
     without_protection: std::sync::atomic::AtomicBool,
+    /// Without `audit.outcomes` (see [`Outbox::set_without_audit_outcomes`]).
+    without_audit_outcomes: std::sync::atomic::AtomicBool,
 }
 
 #[derive(Debug, Default)]
@@ -71,6 +73,7 @@ impl Outbox {
             without_tiers: std::sync::atomic::AtomicBool::new(true),
             without_discovery: std::sync::atomic::AtomicBool::new(true),
             without_protection: std::sync::atomic::AtomicBool::new(true),
+            without_audit_outcomes: std::sync::atomic::AtomicBool::new(true),
         })
     }
 
@@ -107,6 +110,13 @@ impl Outbox {
     /// reaches it.
     pub fn set_without_protection(&self, without: bool) {
         self.without_protection
+            .store(without, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// The connection lacks `audit.outcomes`: `reserved.audit` entries that end an announced
+    /// action never reach it (nor `raptor-mcp`, which gets no audit at all).
+    pub fn set_without_audit_outcomes(&self, without: bool) {
+        self.without_audit_outcomes
             .store(without, std::sync::atomic::Ordering::Relaxed);
     }
 
@@ -173,6 +183,19 @@ impl Outbox {
             return self
                 .without_protection
                 .load(std::sync::atomic::Ordering::Relaxed);
+        }
+        if event.kind == gitraptor_api::event::RESERVED_AUDIT {
+            return self
+                .without_audit_outcomes
+                .load(std::sync::atomic::Ordering::Relaxed)
+                && event
+                    .data
+                    .get("outcome")
+                    .and_then(|o| {
+                        serde_json::from_value::<gitraptor_api::messages::AuditOutcome>(o.clone())
+                            .ok()
+                    })
+                    .is_some_and(gitraptor_api::messages::AuditOutcome::needs_capability);
         }
         if event.kind == gitraptor_api::event::REPO_DISCOVERED {
             return self
@@ -861,5 +884,62 @@ mod tests {
         assert!(!shaped.data.to_string().contains("Ana"));
         outbox.set_without_authorship(false);
         assert_eq!(outbox.shape(&event).data, data);
+    }
+
+    fn audit_entry(id: i64, outcome: gitraptor_api::messages::AuditOutcome) -> impl Serialize {
+        use gitraptor_api::messages::{AuditEntry, ClientIdentity};
+        AuditEntry {
+            id,
+            at_ms: 1,
+            operation: "guard.uninstall".into(),
+            repo_id: None,
+            outcome,
+            reason: None,
+            client: ClientIdentity {
+                pid: 1,
+                start_us: 1,
+                exe: None,
+                agent_ancestor: false,
+                daemon_descendant: false,
+                controlling_terminal: false,
+                chain_truncated: false,
+            },
+            client_partial: outcome.needs_capability(),
+        }
+    }
+
+    /// M-01 of #209: the end of an announced action reaches only a connection with
+    /// `audit.outcomes`, live and in the replay; the other outcomes reach everyone.
+    #[test]
+    fn the_end_of_an_announced_action_reaches_only_who_holds_the_capability() {
+        use gitraptor_api::messages::AuditOutcome::*;
+        let bus = bus(16);
+        let kinds = [
+            Accepted,
+            Applied,
+            Rejected,
+            Cancelled,
+            Failed,
+            NotImplemented,
+            Expired,
+        ];
+        // Half before the subscription (replay), half after (live).
+        for (i, o) in kinds.iter().take(3).enumerate() {
+            bus.publish(RESERVED_AUDIT, audit_entry(i as i64, *o), None, |_| {});
+        }
+        let without = Outbox::new(64);
+        let with = Outbox::new(64);
+        with.set_without_audit_outcomes(false);
+        for (id, out) in [(1, &without), (2, &with)] {
+            assert_eq!(
+                bus.subscribe(out, id, Some(1), Some("run-1"), false),
+                Subscribed::From(1)
+            );
+        }
+        for (i, o) in kinds.iter().enumerate().skip(3) {
+            bus.publish(RESERVED_AUDIT, audit_entry(i as i64, *o), None, |_| {});
+        }
+        assert_eq!(seqs(&drain(&without)), [1, 3, 6]);
+        assert_eq!(seqs(&drain(&with)), [1, 2, 3, 4, 5, 6, 7]);
     }
 }

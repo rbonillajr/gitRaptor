@@ -1066,6 +1066,27 @@ pub enum AuditOutcome {
     Rejected,
     /// Authorized, but its story has not implemented it yet.
     NotImplemented,
+    /// An announced `guard.uninstall` ran at the end of its window (ADR-GRD-007 § 2). Only
+    /// with `audit.outcomes`.
+    Applied,
+    /// The announced action was cancelled inside its window. Only with `audit.outcomes`.
+    Cancelled,
+    /// The announced action was due but could not be completed. Only with `audit.outcomes`.
+    Failed,
+    /// The window of the announced action closed without applying it. Only with
+    /// `audit.outcomes`.
+    Expired,
+}
+
+impl AuditOutcome {
+    /// The outcomes that close an announced action: a connection without `audit.outcomes`
+    /// cannot read them.
+    pub const fn needs_capability(self) -> bool {
+        matches!(
+            self,
+            Self::Applied | Self::Cancelled | Self::Failed | Self::Expired
+        )
+    }
 }
 
 /// Why the daemon refused a reserved command.
@@ -1123,8 +1144,15 @@ pub struct AuditEntry {
     pub operation: String,
     pub repo_id: Option<String>,
     pub outcome: AuditOutcome,
+    /// The refusal reason. The end of an announced action carries none: the outcome says
+    /// what happened.
     pub reason: Option<RefusalReason>,
     pub client: ClientIdentity,
+    /// The audit kept only the process (`pid` and `start_us`) of the client, as for the end
+    /// of an announced action: the other fields of `client` are not known, not false. Only
+    /// with `audit.outcomes`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub client_partial: bool,
 }
 
 /// `data` of a `RESERVED_REFUSED` error.
