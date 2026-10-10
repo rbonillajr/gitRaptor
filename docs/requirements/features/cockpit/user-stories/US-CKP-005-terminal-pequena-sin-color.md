@@ -58,7 +58,7 @@ Entonces se reduce primero el grafo, después el detalle, y la lista y las alert
 
 Dado `NO_COLOR` definido o la opción `--ascii`
 Cuando el desarrollador mira la lista
-Entonces cada estado se distingue por su símbolo o su equivalente ASCII y por su texto, nunca solo por color
+Entonces cada estado se distingue por su símbolo o su equivalente ASCII, explicado en la ayuda, nunca solo por color
 
 **Escenario: Idioma del usuario**
 
@@ -74,9 +74,12 @@ Entonces la TUI muestra las teclas disponibles en el panel actual, y cada acció
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto (Dev Spec)._
+- El aviso de tamaño mínimo conserva el tamaño actual y añade "Amplía la terminal a 80×24 como mínimo". El reparto por prioridad ya existe en `layout()` y se prueba ahí; alertas y grafo los cablean US-CKP-008 y US-CKP-022.
+- En ASCII, todo texto del catálogo que pinta la vista se pliega con `Glyphs::fold` (un único punto de paso, `Say`). La ayuda `?` se filtra por el panel actual y explica los símbolos; la barra de teclas explica los estados en pantalla cuando cabe.
+- En Windows, el idioma del sistema es el de la interfaz del usuario: el escenario 4 queda pendiente allí (etapa de validación multiplataforma) y la historia, `partially-implemented` hasta entonces.
+- Detalle, decisiones D1 a D10 y plan: [DS-US-CKP-005](../dev-specs/US-CKP-005-terminal-pequena-sin-color.md).
 
 ## Diseño y Dev Spec
 
 - **Diseño:** DSYS-GRP-001 (tokens, símbolos, contenido); ADR-GRP-004 § 3 (teclado primero).
-- **Dev Spec:** pendiente. Pendiente: etapa de validación multiplataforma (terminales de Linux y Windows).
+- **Dev Spec:** [DS-US-CKP-005](../dev-specs/US-CKP-005-terminal-pequena-sin-color.md). Pendiente: etapa de validación multiplataforma (terminales de Linux y Windows).
