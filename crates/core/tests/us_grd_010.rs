@@ -44,7 +44,7 @@ impl Setup {
         git(repo.path(), &["add", "."]);
         git(repo.path(), &["commit", "-q", "-m", "a"]);
         let blob = git(repo.path(), &["rev-parse", "main:.gitraptor/settings.json"]);
-        let common = repo.path().join(".git").canonicalize().unwrap();
+        let common = gitraptor_git::paths::canonicalize(&repo.path().join(".git")).unwrap();
         let profile = TempProfile::new();
         std::fs::create_dir_all(profile.dirs().config).unwrap();
         Self {
@@ -269,7 +269,7 @@ fn a_local_hardening_does_not_reach_another_clone() {
             root: tempfile::tempdir().unwrap(),
         },
         repo: parent,
-        common: Path::new(&second_path).join(".git").canonicalize().unwrap(),
+        common: gitraptor_git::paths::canonicalize(&Path::new(&second_path).join(".git")).unwrap(),
         blob: first.blob.clone(),
     };
     // One profile for both clones: only the `repo_id` tells them apart.

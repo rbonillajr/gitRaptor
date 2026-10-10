@@ -31,7 +31,7 @@ impl Repo {
         std::fs::write(path.join("a.txt"), "a\n").unwrap();
         git(path, &["add", "."]);
         git(path, &["commit", "-q", "-m", "base"]);
-        let common = path.join(".git").canonicalize().unwrap();
+        let common = gitraptor_git::paths::canonicalize(&path.join(".git")).unwrap();
         let common = common.to_string_lossy().into_owned();
         let registry = GuardRegistry::default();
         registry.set(
@@ -287,7 +287,7 @@ fn a_shallow_clone_is_judged_like_any_other() {
         git(&dest, &["rev-parse", "--is-shallow-repository"]),
         "true"
     );
-    let common = dest.join(".git").canonicalize().unwrap();
+    let common = gitraptor_git::paths::canonicalize(&dest.join(".git")).unwrap();
     let common = common.to_string_lossy().into_owned();
     let registry = GuardRegistry::default();
     registry.set(

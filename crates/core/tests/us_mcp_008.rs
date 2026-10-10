@@ -509,7 +509,7 @@ fn daemon() -> Daemon {
     let dirs = ProfileDirs::under_root(&f.profile);
     let repos = Arc::new(TmRepos::new(dirs.clone()));
     let (oplog, _) = Oplog::open(&dirs, REPO_ID, 1).unwrap();
-    let common = f.repo.join(".git").canonicalize().unwrap();
+    let common = gitraptor_git::paths::canonicalize(&f.repo.join(".git")).unwrap();
     repos.insert(REPO_ID, &common, oplog);
     let oplog = repos.oplog(REPO_ID).unwrap();
     let (store, _) = SnapshotStore::open_or_create(&dirs, REPO_ID).unwrap();
@@ -566,6 +566,10 @@ fn full_disk() -> FreeSpaceFloor {
     }
 }
 
+// The manual floor reads the volume with `statvfs`; outside Unix the probe reports plenty on
+// purpose (the store's own write fails as no space), so there is no floor to cross there. The
+// floor logic itself runs on every OS below, with the injected `Scripted` probe.
+#[cfg(unix)]
 #[test]
 fn with_the_disk_at_the_floor_a_later_guaranteed_prior_completes() {
     let d = daemon();

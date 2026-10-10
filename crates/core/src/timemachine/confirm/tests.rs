@@ -79,6 +79,22 @@ impl Plan {
     }
 }
 
+/// A confirmation that offers, with the rule of the business forced to "foreign work may be
+/// confirmed": on Windows the real rule (`FOREIGN_WORK_CONFIRMABLE`) refuses it (BR-TMC-AUTH-001),
+/// and these tests are about the challenge mechanics, so they run the same on every OS. The real
+/// rule of each OS is checked by `the_platform_rule_decides_what_the_gate_offers`.
+fn offering<'a>(
+    book: &'a ChallengeBook,
+    connection: u64,
+    pid: u32,
+    start_us: u64,
+    token: Option<&'a str>,
+    eligibility: &'a dyn Fn() -> Option<RefusalReason>,
+) -> Confirmation<'a> {
+    Confirmation::offered(book, connection, pid, start_us, token, eligibility)
+        .with_rule_allows(true)
+}
+
 fn eligible() -> Option<RefusalReason> {
     None
 }
@@ -86,7 +102,7 @@ fn eligible() -> Option<RefusalReason> {
 /// Asks the gate for a challenge of `plan` and returns its token.
 fn issue(book: &ChallengeBook, plan: &Plan, now: Instant) -> String {
     let elig = eligible;
-    let c = Confirmation::offered(book, CONNECTION, PID, START, None, &elig);
+    let c = offering(book, CONNECTION, PID, START, None, &elig);
     assert_eq!(
         c.gate_at(Err(ConfirmationRequired), &plan.facts(), now),
         Err(ConfirmationRequired)
@@ -120,7 +136,7 @@ fn an_eligible_caller_gets_a_challenge_bound_to_the_plan() {
     let book = ChallengeBook::default();
     let plan = Plan::undo();
     let elig = eligible;
-    let c = Confirmation::offered(&book, CONNECTION, PID, START, None, &elig);
+    let c = offering(&book, CONNECTION, PID, START, None, &elig);
     assert!(c.is_offered());
 
     let r = c.gate_at(Err(ConfirmationRequired), &plan.facts(), Instant::now());
@@ -143,7 +159,7 @@ fn an_ineligible_caller_gets_why_and_no_challenge() {
     let plan = Plan::undo();
     let now = Instant::now();
     let elig = || Some(RefusalReason::NoControllingTerminal);
-    let c = Confirmation::offered(&book, CONNECTION, PID, START, None, &elig);
+    let c = offering(&book, CONNECTION, PID, START, None, &elig);
 
     let r = c.gate_at(Err(ConfirmationRequired), &plan.facts(), now);
 
@@ -158,7 +174,7 @@ fn an_ineligible_caller_gets_why_and_no_challenge() {
     // Nothing is alive in the book: any token is invalid.
     let ok = eligible;
     let token = "0123456789abcdef0123456789abcdef";
-    let redeemer = Confirmation::offered(&book, CONNECTION, PID, START, Some(token), &ok);
+    let redeemer = offering(&book, CONNECTION, PID, START, Some(token), &ok);
     assert_eq!(
         redeemer.gate_at(Err(ConfirmationRequired), &plan.facts(), now),
         Err(ChallengeInvalid)
@@ -173,12 +189,12 @@ fn a_redeemed_challenge_confirms_once() {
     let token = issue(&book, &plan, now);
     let elig = eligible;
 
-    let first = Confirmation::offered(&book, CONNECTION, PID, START, Some(&token), &elig);
+    let first = offering(&book, CONNECTION, PID, START, Some(&token), &elig);
     assert_eq!(
         first.gate_at(Err(ConfirmationRequired), &plan.facts(), now),
         Ok(true)
     );
-    let again = Confirmation::offered(&book, CONNECTION, PID, START, Some(&token), &elig);
+    let again = offering(&book, CONNECTION, PID, START, Some(&token), &elig);
     assert_eq!(
         again.gate_at(Err(ConfirmationRequired), &plan.facts(), now),
         Err(ChallengeInvalid)
@@ -196,7 +212,7 @@ fn a_presented_token_must_match_the_current_plan() {
     let token = issue(&book, &plan, now);
     let mut moved = plan.clone();
     moved.undone_id = Some("op-2".into());
-    let c = Confirmation::offered(&book, CONNECTION, PID, START, Some(&token), &elig);
+    let c = offering(&book, CONNECTION, PID, START, Some(&token), &elig);
     assert_eq!(
         c.gate_at(Err(ConfirmationRequired), &moved.facts(), now),
         Err(ChallengeInvalid)
@@ -204,7 +220,7 @@ fn a_presented_token_must_match_the_current_plan() {
 
     // The base rule no longer asks for a confirmation: the token still has to match.
     let token = issue(&book, &plan, now);
-    let c = Confirmation::offered(&book, CONNECTION, PID, START, Some(&token), &elig);
+    let c = offering(&book, CONNECTION, PID, START, Some(&token), &elig);
     assert_eq!(
         c.gate_at(Ok(()), &moved.facts(), now),
         Err(ChallengeInvalid)
@@ -213,7 +229,7 @@ fn a_presented_token_must_match_the_current_plan() {
     // Same plan, base now ok (the agent's work is gone): the token is spent and the answer is
     // that nothing needed confirming.
     let token = issue(&book, &plan, now);
-    let c = Confirmation::offered(&book, CONNECTION, PID, START, Some(&token), &elig);
+    let c = offering(&book, CONNECTION, PID, START, Some(&token), &elig);
     assert_eq!(c.gate_at(Ok(()), &plan.facts(), now), Ok(false));
 }
 
@@ -225,14 +241,14 @@ fn another_actor_wins_over_the_token() {
     let elig = eligible;
     let token = issue(&book, &plan, now);
 
-    let c = Confirmation::offered(&book, CONNECTION, PID, START, Some(&token), &elig);
+    let c = offering(&book, CONNECTION, PID, START, Some(&token), &elig);
     assert_eq!(
         c.gate_at(Err(OtherActor), &plan.facts(), now),
         Err(OtherActor)
     );
 
     // And the token was consumed.
-    let c = Confirmation::offered(&book, CONNECTION, PID, START, Some(&token), &elig);
+    let c = offering(&book, CONNECTION, PID, START, Some(&token), &elig);
     assert_eq!(
         c.gate_at(Err(ConfirmationRequired), &plan.facts(), now),
         Err(ChallengeInvalid)
@@ -247,7 +263,7 @@ fn an_expired_challenge_is_invalid() {
     let token = issue(&book, &plan, now);
     let elig = eligible;
 
-    let c = Confirmation::offered(&book, CONNECTION, PID, START, Some(&token), &elig);
+    let c = offering(&book, CONNECTION, PID, START, Some(&token), &elig);
     let later = now + CHALLENGE_TTL + Duration::from_secs(1);
 
     assert_eq!(
@@ -264,7 +280,7 @@ fn the_recheck_on_redeem_refuses_a_caller_that_became_ineligible() {
     let token = issue(&book, &plan, now);
     let elig = || Some(RefusalReason::AgentAncestry);
 
-    let c = Confirmation::offered(&book, CONNECTION, PID, START, Some(&token), &elig);
+    let c = offering(&book, CONNECTION, PID, START, Some(&token), &elig);
 
     assert_eq!(
         c.gate_at(Err(ConfirmationRequired), &plan.facts(), now),
@@ -281,7 +297,7 @@ fn eligibility_is_not_checked_when_nothing_needs_confirming() {
         calls.set(calls.get() + 1);
         None
     };
-    let c = Confirmation::offered(&book, CONNECTION, PID, START, None, &elig);
+    let c = offering(&book, CONNECTION, PID, START, None, &elig);
 
     assert_eq!(c.gate_at(Ok(()), &plan.facts(), Instant::now()), Ok(false));
     assert_eq!(
@@ -376,7 +392,7 @@ fn owners_shown_are_agents_once_and_capped() {
     let mut plan = Plan::undo();
     plan.owners = vec![Requester::Unattributed, agent("1:1"), agent("1:1")];
     let elig = eligible;
-    let c = Confirmation::offered(&book, CONNECTION, PID, START, None, &elig);
+    let c = offering(&book, CONNECTION, PID, START, None, &elig);
     let _ = c.gate_at(Err(ConfirmationRequired), &plan.facts(), Instant::now());
     assert_eq!(
         c.take_offer().expect("an offer").owners,
@@ -388,7 +404,7 @@ fn owners_shown_are_agents_once_and_capped() {
     plan.owners = (0..MAX_CONFIRM_OWNERS + 5)
         .map(|i| agent(&format!("{i}:1")))
         .collect();
-    let c = Confirmation::offered(&book, CONNECTION, PID, START, None, &elig);
+    let c = offering(&book, CONNECTION, PID, START, None, &elig);
     let _ = c.gate_at(Err(ConfirmationRequired), &plan.facts(), Instant::now());
     assert_eq!(
         c.take_offer().expect("an offer").owners.len(),
@@ -401,6 +417,27 @@ fn the_rule_matches_the_platform() {
     assert_eq!(FOREIGN_WORK_CONFIRMABLE, cfg!(unix));
 }
 
+/// The rule as built, not forced: Unix offers a challenge, Windows says `confirmation-unavailable`
+/// without evaluating the eligibility (BR-TMC-AUTH-001, TQ-14).
+#[test]
+fn the_platform_rule_decides_what_the_gate_offers() {
+    let book = ChallengeBook::default();
+    let plan = Plan::undo();
+    let elig = eligible;
+    let c = Confirmation::offered(&book, CONNECTION, PID, START, None, &elig);
+
+    let r = c.gate_at(Err(ConfirmationRequired), &plan.facts(), Instant::now());
+
+    let has_challenge = c.take_offer().is_some_and(|o| o.challenge.is_some());
+    if cfg!(unix) {
+        assert_eq!(r, Err(ConfirmationRequired));
+        assert!(has_challenge);
+    } else {
+        assert_eq!(r, Err(ConfirmationUnavailable));
+        assert!(!has_challenge);
+    }
+}
+
 #[test]
 fn the_rule_forbids_confirming_foreign_work_where_it_is_not_offered() {
     let book = ChallengeBook::default();
@@ -411,8 +448,7 @@ fn the_rule_forbids_confirming_foreign_work_where_it_is_not_offered() {
         None
     };
     let now = Instant::now();
-    let c =
-        Confirmation::offered(&book, CONNECTION, PID, START, None, &elig).with_rule_allows(false);
+    let c = offering(&book, CONNECTION, PID, START, None, &elig).with_rule_allows(false);
 
     let r = c.gate_at(Err(ConfirmationRequired), &plan.facts(), now);
 
@@ -427,7 +463,7 @@ fn the_rule_forbids_confirming_foreign_work_where_it_is_not_offered() {
         "no challenge: {offered:?}"
     );
     // Nothing is alive in the book either.
-    let probe = Confirmation::offered(
+    let probe = offering(
         &book,
         CONNECTION,
         PID,
@@ -440,8 +476,7 @@ fn the_rule_forbids_confirming_foreign_work_where_it_is_not_offered() {
         Err(ChallengeInvalid)
     );
     // Where nothing needs confirming the rule does not matter.
-    let c =
-        Confirmation::offered(&book, CONNECTION, PID, START, None, &elig).with_rule_allows(false);
+    let c = offering(&book, CONNECTION, PID, START, None, &elig).with_rule_allows(false);
     assert_eq!(c.gate_at(Ok(()), &plan.facts(), now), Ok(false));
     assert_eq!(
         c.gate_at(Err(OtherActor), &plan.facts(), now),
@@ -457,14 +492,13 @@ fn a_token_where_the_rule_forbids_is_invalid() {
     let token = issue(&book, &plan, now);
     let elig = eligible;
 
-    let c = Confirmation::offered(&book, CONNECTION, PID, START, Some(&token), &elig)
-        .with_rule_allows(false);
+    let c = offering(&book, CONNECTION, PID, START, Some(&token), &elig).with_rule_allows(false);
     assert_eq!(
         c.gate_at(Err(ConfirmationRequired), &plan.facts(), now),
         Err(ChallengeInvalid)
     );
     // It was consumed all the same.
-    let c = Confirmation::offered(&book, CONNECTION, PID, START, Some(&token), &elig);
+    let c = offering(&book, CONNECTION, PID, START, Some(&token), &elig);
     assert_eq!(
         c.gate_at(Err(ConfirmationRequired), &plan.facts(), now),
         Err(ChallengeInvalid)
