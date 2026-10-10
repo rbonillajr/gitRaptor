@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-09
 domain: GRP
 epic: E-001
 feature: mcp
@@ -105,4 +105,4 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica (respuesta de herramienta; mensajes según la guía de contenido del design system, DSYS-GRP-001).
-- **Dev Spec:** pendiente (Arquitecto, tras ADR-MCP-001).
+- **Dev Spec:** [DS-US-MCP-006](../dev-specs/US-MCP-006-dev-spec.md) (2026-10-09).
