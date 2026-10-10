@@ -23,6 +23,7 @@ use gitraptor_api::guard::{
 };
 use gitraptor_api::methods;
 use gitraptor_api::rpc::code;
+use gitraptor_api::timemachine::{HookPriorFailure, HookPriorSnapshot};
 use gitraptor_core::client::ClientError;
 use gitraptor_core::guardrails::hook::{self, Degraded, HookArgs, HookEnv};
 
@@ -212,11 +213,34 @@ pub fn hook(args: &[OsString]) -> ExitCode {
         for line in decision_lines(decision) {
             eprintln!("{line}");
         }
+        // A prior that was not saved does not stop the operation (it is Guardrails' call to
+        // deny it); the warning is the only trace, and a saved one is silent.
+        if let Some(HookPriorSnapshot::Failed { cause }) = &decision.prior_snapshot {
+            eprintln!(
+                "{}",
+                t(
+                    "hookprior.failed",
+                    &[("cause", &t(hook_prior_cause(*cause), &[]))]
+                )
+            );
+        }
     }
     if outcome.allowed() {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
+    }
+}
+
+fn hook_prior_cause(cause: HookPriorFailure) -> &'static str {
+    match cause {
+        HookPriorFailure::TimeLimit => "hookprior.cause.time-limit",
+        HookPriorFailure::NoSpace => "hookprior.cause.no-space",
+        HookPriorFailure::QuotaExceeded => "hookprior.cause.quota-exceeded",
+        HookPriorFailure::Discarded => "hookprior.cause.discarded",
+        HookPriorFailure::NoWorktree => "hookprior.cause.no-worktree",
+        HookPriorFailure::Unavailable => "hookprior.cause.unavailable",
+        HookPriorFailure::Internal => "hookprior.cause.internal",
     }
 }
 
