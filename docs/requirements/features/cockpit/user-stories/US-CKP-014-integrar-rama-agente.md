@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-09
 feature: cockpit
 related:
   context:
@@ -40,7 +40,7 @@ BR-CKP-WF-002 · BR-CKP-ELIG-002 · BR-CKP-ELIG-001 (columna merge) · BR-CKP-CO
 
 ## Dependencias
 
-- **Historias**: US-CKP-001; US-TMC-001 (snapshot previo) y US-TMC-002 (Deshacer); US-GRP-016 (base pendiente publicada).
+- **Historias**: US-CKP-001; US-TMC-001 (snapshot previo) y US-TMC-002 (Deshacer); US-GRP-016 (base pendiente publicada); US-TMC-019 (el Deshacer o la restauración desde la TUI deben entregar los avisos pendientes de `timemachine.notices` del worktree; deuda anotada el 2026-10-09).
 - **Técnicas**: TS-CKP-002 (catálogo y ejecutor), TS-CKP-003 (capa `cockpit` de Guardrails), TS-TMC-004 (operación protegida y reto ligado al plan).
 - **Contrato que fija**: el Deshacer desde la TUI (lo reutiliza US-CKP-021).
 

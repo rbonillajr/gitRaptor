@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-09
 domain: GRP
 epic: E-001
 feature: mcp
@@ -46,7 +46,7 @@ BR-MCP-ELIG-005 (parte: `undo` de la última operación propia; redo y restaurar
 
 ## Dependencias
 
-- **Historias**: US-MCP-007 (requisito previo de toda escritura), US-MCP-009 (operaciones propias que deshacer). De la Time Machine: US-TMC-002 (undo y pila por worktree), US-TMC-012 (solape), US-TMC-013 (permisos del solicitante; espera esta feature para el canal MCP).
+- **Historias**: US-MCP-007 (requisito previo de toda escritura), US-MCP-009 (operaciones propias que deshacer). De la Time Machine: US-TMC-002 (undo y pila por worktree), US-TMC-012 (solape), US-TMC-013 (permisos del solicitante; espera esta feature para el canal MCP); US-TMC-019 (un undo por MCP debe entregar los avisos pendientes de `timemachine.notices` del worktree del agente, con forma acotada y reconocidos en una segunda llamada, según ADR-MCP-001; deuda anotada el 2026-10-09).
 - **Relación (Fase 2)**: US-TMC-021 (políticas de Guardrails que restringen el undo). No es requisito previo: en el MVP el `undo` no pasa por Guardrails (D-18, BR-MCP-001 v0.3). Mientras tanto, por MCP se rechaza el undo que movería la rama base confirmada o una ref protegida (BR-MCP-ELIG-005, S-04; D-26).
 - **Externas**: ADR-MCP-001 (DEP-MCP-1, no existe): bloqueo de arquitectura. El `undo` no es una operación del catálogo de ADR-CKP-002: lo gobierna la Time Machine (ADR-TMC-005).
 
