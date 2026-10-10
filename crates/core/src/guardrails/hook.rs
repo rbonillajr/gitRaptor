@@ -18,7 +18,7 @@ use gitraptor_api::{PROTOCOL_VERSION, methods};
 use gitraptor_policy::guard::fastpath;
 use gitraptor_policy::guard::input::{self, MAX_LINE_BYTES};
 
-use super::constants::TEMPLATE_VERSION;
+use super::constants::{EVERY_PUSHED_REF, TEMPLATE_VERSION};
 use super::evaluate;
 use super::journal::{Snapshot, snapshot_path};
 use crate::client::{Client, ClientError};
@@ -43,7 +43,8 @@ impl HookArgs {
     pub fn parse(args: &[OsString]) -> Option<Self> {
         let text = |i: usize| args.get(i)?.to_str().map(str::to_owned);
         let template: u32 = text(0)?.parse().ok()?;
-        // The current template and the previous one (ADR-GRD-001 § 8).
+        // The current template and every earlier one: an install is not reinstalled to keep
+        // working (ADR-GRD-001 § 8).
         if template == 0 || template > TEMPLATE_VERSION {
             return None;
         }
@@ -155,6 +156,13 @@ pub fn run(args: &HookArgs, env: &HookEnv, input: &[u8]) -> HookOutcome {
             };
         }
         Hook::PrePush => match push(git_arg(0), git_arg(1), input) {
+            // Templates 1 and 2 never evaluate what is not governed: no daemon is asked.
+            Ok(Some(op)) if args.template < EVERY_PUSHED_REF => {
+                match push_scope(op, args.template, false) {
+                    Some(op) => op,
+                    None => return HookOutcome::allow(),
+                }
+            }
             Ok(Some(op)) => op,
             Ok(None) => return HookOutcome::allow(),
             Err(rule) => return HookOutcome::deny(rule),
@@ -167,7 +175,11 @@ pub fn run(args: &HookArgs, env: &HookEnv, input: &[u8]) -> HookOutcome {
     };
     // M-02, SEC-GRD-19: the transaction must be in the repo of the dispatcher.
     if !same_repo(&args.common, env) {
-        return HookOutcome::deny(Rule::RepoMismatch);
+        return if only_ungoverned(&op) {
+            ungoverned_alone(args, &op, Signal::RepoMismatch)
+        } else {
+            HookOutcome::deny(Rule::RepoMismatch)
+        };
     }
     decide(args, op)
 }
@@ -342,16 +354,17 @@ fn orphan_head(env: &HookEnv) -> Option<OrphanHead> {
 }
 
 /// The updates of a `pre-push` one evaluation sees. Every update stays only when the dispatcher
-/// is of template `EVERY_PUSHED_REF` or later **and** `scope_all` holds (the daemon granted
+/// is of template [`EVERY_PUSHED_REF`] or later **and** `scope_all` holds (the daemon granted
 /// `guard.policies`, or the client itself evaluates the rules for everyone of the floor);
 /// otherwise only the governed ones, as templates 1 and 2 have it. `None` when no update is
 /// left. Any other operation is returned unchanged.
-pub fn push_scope(op: Operation, _template: u32, _scope_all: bool) -> Option<Operation> {
+pub fn push_scope(op: Operation, template: u32, scope_all: bool) -> Option<Operation> {
     match op {
         Operation::Push { remote, updates } => {
+            let every = template >= EVERY_PUSHED_REF && scope_all;
             let updates: Vec<PushUpdate> = updates
                 .into_iter()
-                .filter(|u| fastpath::is_governed(&u.remote_ref))
+                .filter(|u| every || fastpath::is_governed(&u.remote_ref))
                 .collect();
             (!updates.is_empty()).then_some(Operation::Push { remote, updates })
         }
@@ -359,14 +372,34 @@ pub fn push_scope(op: Operation, _template: u32, _scope_all: bool) -> Option<Ope
     }
 }
 
-/// Normalizes a `pre-push`. `Ok(None)` when no governed remote ref is updated.
+/// A push whose every remote ref is not governed (a tag, a note…).
+fn only_ungoverned(op: &Operation) -> bool {
+    matches!(op, Operation::Push { updates, .. }
+        if !updates.is_empty() && updates.iter().all(|u| !fastpath::is_governed(&u.remote_ref)))
+}
+
+/// The updates of a push that are not governed; `None` for any other operation or when none is.
+fn ungoverned_of(op: &Operation) -> Option<Operation> {
+    let Operation::Push { remote, updates } = op else {
+        return None;
+    };
+    let updates: Vec<PushUpdate> = updates
+        .iter()
+        .filter(|u| !fastpath::is_governed(&u.remote_ref))
+        .cloned()
+        .collect();
+    (!updates.is_empty()).then(|| Operation::Push {
+        remote: remote.clone(),
+        updates,
+    })
+}
+
+/// Normalizes a `pre-push`: every update is kept (a line that does not parse is rejected);
+/// which ones are evaluated is [`push_scope`]'s. `Ok(None)` when there are no lines.
 fn push(remote: Option<&str>, url: Option<&str>, input: &[u8]) -> Result<Option<Operation>, Rule> {
     let mut updates = Vec::new();
     for line in input.split(|b| *b == b'\n').filter(|l| !l.is_empty()) {
         let raw = input::parse_push_update(line).map_err(|_| Rule::InputRejected)?;
-        if !fastpath::is_governed(&raw.remote_ref) {
-            continue;
-        }
         updates.push(PushUpdate {
             local_ref: raw.local_ref,
             local: raw.local,
@@ -593,43 +626,49 @@ fn read_regular(path: &Path, max: u64) -> Option<Vec<u8>> {
 }
 
 /// Asks the daemon; without an authentic daemon of this instance, degraded mode.
-fn decide(args: &HookArgs, op: Operation) -> HookOutcome {
-    let params = EvaluateParams {
-        repo_id: args.repo.clone(),
-        common_dir: args.common.to_string_lossy().into_owned(),
-        hook: args.hook,
-        operation: op,
-        authorship: None,
-    };
-    match ask_daemon(args, &params) {
-        Asked::Decision(decision, policies_granted) => {
-            let outcome = HookOutcome::decided(decision);
-            // A daemon that does not know `guard.policies` (a version apart) must not leave less
-            // than degraded mode does: the rules for everyone of the floor still apply.
-            let governed = matches!(
-                params.operation,
-                Operation::RefTransaction { .. } | Operation::Push { .. }
-            );
-            if outcome.allowed() && governed && !policies_granted {
-                return floor_rules_for_everyone(args, &params.operation).unwrap_or(outcome);
-            }
-            outcome
+fn decide(args: &HookArgs, full: Operation) -> HookOutcome {
+    let asked = ask_daemon(args, &full);
+    let (decision, policies_granted) = match asked {
+        Asked::Decision(decision, granted) => (Some(decision), granted),
+        Asked::Nothing(granted) => (None, granted),
+        Asked::NotAuthentic if only_ungoverned(&full) => {
+            return ungoverned_alone(args, &full, Signal::NotAuthentic);
         }
-        Asked::NotAuthentic => HookOutcome::deny(Rule::ChannelNotAuthentic),
-        Asked::Failed => HookOutcome::deny(Rule::InternalError),
-        Asked::Degraded(cause) => degraded(args, &params.operation, cause),
+        Asked::Failed if only_ungoverned(&full) => {
+            return ungoverned_alone(args, &full, Signal::Failed);
+        }
+        Asked::NotAuthentic => return HookOutcome::deny(Rule::ChannelNotAuthentic),
+        Asked::Failed => return HookOutcome::deny(Rule::InternalError),
+        Asked::Degraded(cause) => return degraded(args, &full, cause),
+    };
+    let outcome = decision.map_or_else(HookOutcome::allow, HookOutcome::decided);
+    // A daemon that does not know `guard.policies` (a version apart) must not leave less
+    // than degraded mode does: the rules for everyone of the floor still apply, to every
+    // pushed ref from template 3 on.
+    let governed = matches!(
+        full,
+        Operation::RefTransaction { .. } | Operation::Push { .. }
+    );
+    if outcome.allowed() && governed && !policies_granted {
+        return push_scope(full, args.template, true)
+            .and_then(|op| floor_rules_for_everyone(args, &op))
+            .unwrap_or(outcome);
     }
+    outcome
 }
 
 enum Asked {
     /// The decision, and whether the daemon granted `guard.policies`.
     Decision(Decision, bool),
+    /// Nothing is left to ask once the daemon's capability is known (an all-ungoverned push to a
+    /// daemon without `guard.policies`).
+    Nothing(bool),
     NotAuthentic,
     Failed,
     Degraded(Degraded),
 }
 
-fn ask_daemon(args: &HookArgs, params: &EvaluateParams) -> Asked {
+fn ask_daemon(args: &HookArgs, full: &Operation) -> Asked {
     let mut client = match connect(args) {
         Ok(client) => client,
         Err(Unusable::NotAuthentic) => return Asked::NotAuthentic,
@@ -641,7 +680,18 @@ fn ask_daemon(args: &HookArgs, params: &EvaluateParams) -> Asked {
         .capabilities
         .as_ref()
         .is_some_and(|served| served.iter().any(|c| c == methods::CAP_GUARD_POLICIES.name));
-    match client.call::<_, Decision>(methods::GUARD_EVALUATE, params) {
+    // The daemon receives what it can evaluate: every ref only with `guard.policies`.
+    let Some(operation) = push_scope(full.clone(), args.template, granted) else {
+        return Asked::Nothing(granted);
+    };
+    let params = EvaluateParams {
+        repo_id: args.repo.clone(),
+        common_dir: args.common.to_string_lossy().into_owned(),
+        hook: args.hook,
+        operation,
+        authorship: None,
+    };
+    match client.call::<_, Decision>(methods::GUARD_EVALUATE, &params) {
         Ok(decision) => Asked::Decision(decision, granted),
         Err(_) => Asked::Failed,
     }
@@ -729,32 +779,102 @@ fn same_executable(pid: u32) -> Identity {
     }
 }
 
+/// Why the client decides a push of only ungoverned refs alone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Signal {
+    NotAuthentic,
+    Failed,
+    RepoMismatch,
+}
+
+/// A push of refs Guardrails does not govern only, decided without a usable daemon: it goes
+/// ahead unless a forbidden-path rule of the floor could govern the actor and the commits break
+/// it or cannot be checked. A person with no rule is never blocked by a signal (ADR-GRD-003).
+fn ungoverned_alone(args: &HookArgs, op: &Operation, signal: Signal) -> HookOutcome {
+    // Without a readable floor there is no way to know a rule exists: the push goes ahead.
+    let Some(reader) = evaluate::open(&args.common) else {
+        return HookOutcome::allow();
+    };
+    if super::policies::floor(&reader).paths.is_empty() {
+        return HookOutcome::allow();
+    }
+    // The commits of the push are not reliably in the repo of the dispatcher.
+    if signal == Signal::RepoMismatch {
+        return HookOutcome::deny(Rule::RepoMismatch);
+    }
+    let mut eval = ungoverned_evaluation(args, &reader, op);
+    if eval.effect == Effect::Allow {
+        return HookOutcome::allow();
+    }
+    eval.reasons.push(Reason {
+        rule: match signal {
+            Signal::NotAuthentic => Rule::ChannelNotAuthentic,
+            _ => Rule::InternalError,
+        },
+        level: Level::System,
+        cause: None,
+        params: Vec::new(),
+    });
+    HookOutcome::decided(evaluate::decision(eval))
+}
+
+/// The forbidden paths of the floor, for whoever moves the refs, against an operation that
+/// carries only ungoverned refs: the actor cannot be told apart, so a rule for agents counts.
+/// `policies_of` applies nothing else to such refs. Allow when the floor has no path rule.
+fn ungoverned_evaluation(
+    args: &HookArgs,
+    reader: &gitraptor_git::RepoReader,
+    op: &Operation,
+) -> gitraptor_policy::guard::Evaluation {
+    let rules = super::policies::floor(reader);
+    if rules.paths.is_empty() {
+        return gitraptor_policy::guard::Evaluation::allow();
+    }
+    let commit = evaluate::CommitContext {
+        policies: rules.every_rule(),
+        ..evaluate::CommitContext::default()
+    };
+    evaluate::evaluate_commit(reader, &args.common, op, Vec::new(), commit)
+}
+
 /// Degraded mode (ADR-GRD-003 § 4): the same function, the minimum forced and the base branch
-/// union {`main`, main branch, last confirmed base}. Never less strict than the daemon.
-fn degraded(args: &HookArgs, op: &Operation, cause: Degraded) -> HookOutcome {
+/// union {`main`, main branch, last confirmed base}. Never less strict than the daemon. The
+/// ungoverned refs of a push (template 3 on) get every forbidden-path rule of the floor.
+fn degraded(args: &HookArgs, full: &Operation, cause: Degraded) -> HookOutcome {
     let Some(reader) = evaluate::open(&args.common) else {
         return HookOutcome::deny(Rule::InternalError);
     };
-    let mut bases = evaluate::default_bases(&reader);
-    if let Some(snapshot) = read_snapshot(&args.state, &args.repo)
-        && snapshot.common_dir == args.common.to_string_lossy()
-    {
-        for b in snapshot
-            .confirmed_base
-            .into_iter()
-            .chain(snapshot.protected_bases)
+    let mut eval = gitraptor_policy::guard::Evaluation::allow();
+    if let Some(op) = push_scope(full.clone(), args.template, false) {
+        let mut bases = evaluate::default_bases(&reader);
+        if let Some(snapshot) = read_snapshot(&args.state, &args.repo)
+            && snapshot.common_dir == args.common.to_string_lossy()
         {
-            if !bases.contains(&b) {
-                bases.push(b);
+            for b in snapshot
+                .confirmed_base
+                .into_iter()
+                .chain(snapshot.protected_bases)
+            {
+                if !bases.contains(&b) {
+                    bases.push(b);
+                }
             }
         }
+        // The rules for everyone of the floor still apply without the daemon (D11).
+        let commit = evaluate::CommitContext {
+            policies: super::policies::degraded(&reader),
+            ..evaluate::CommitContext::default()
+        };
+        eval = evaluate::evaluate_commit(&reader, &args.common, &op, bases, commit);
     }
-    // The rules for everyone of the floor still apply without the daemon (D11).
-    let commit = evaluate::CommitContext {
-        policies: super::policies::degraded(&reader),
-        ..evaluate::CommitContext::default()
-    };
-    let mut eval = evaluate::evaluate_commit(&reader, &args.common, op, bases, commit);
+    if args.template >= EVERY_PUSHED_REF
+        && let Some(op) = ungoverned_of(full)
+    {
+        let other = ungoverned_evaluation(args, &reader, &op);
+        for reason in other.reasons {
+            eval.add(other.effect, reason);
+        }
+    }
     if eval.effect != Effect::Allow {
         eval.reasons.push(Reason {
             rule: Rule::Degraded,

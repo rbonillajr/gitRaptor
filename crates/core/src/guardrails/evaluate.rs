@@ -44,6 +44,10 @@ pub fn facts(reader: &RepoReader, op: &Operation) -> Facts {
         push: updates
             .iter()
             .map(|u| {
+                // `push_update` does not look at a ref Guardrails does not govern: no ancestry.
+                if !gitraptor_policy::guard::refs::is_governed(&u.remote_ref) {
+                    return None;
+                }
                 let (Some(local), Some(remote)) = (u.local.oid(), u.remote.oid()) else {
                     return None;
                 };
