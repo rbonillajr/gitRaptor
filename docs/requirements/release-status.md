@@ -10,11 +10,11 @@
 
 | Estado | Fichas |
 |---|---|
-| Implementado (`implemented`) | 40 |
+| Implementado (`implemented`) | 41 |
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 19 |
 | Listo (`ready`) | 4 |
-| Borrador (`draft`) | 78 |
+| Borrador (`draft`) | 77 |
 | Bloqueado (`blocked`) | 1 |
 | **Total** | **145** |
 
@@ -26,7 +26,7 @@
 | [guardrails](#guardrails) | 7 | 0 | 6 | 1 | 10 | 0 | 24 |
 | [mcp](#mcp) | 5 | 0 | 2 | 0 | 13 | 0 | 20 |
 | [motor-local](#motor-local) | 12 | 2 | 8 | 3 | 15 | 0 | 40 |
-| [time-machine](#time-machine) | 10 | 1 | 1 | 0 | 16 | 0 | 28 |
+| [time-machine](#time-machine) | 11 | 1 | 1 | 0 | 15 | 0 | 28 |
 
 ### cockpit
 
@@ -175,7 +175,7 @@
 
 ### time-machine
 
-28 fichas: 10 implementado, 1 hecho, 1 implementado en parte, 16 borrador.
+28 fichas: 11 implementado, 1 hecho, 1 implementado en parte, 15 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -189,6 +189,7 @@
 | [US-TMC-006](features/time-machine/user-stories/US-TMC-006-timeline-que-cuando-quien.md) | El desarrollador sabe qué cambió en su repo, cuándo y quién lo hizo | Implementado (`implemented`) | #198 | — |
 | [US-TMC-009](features/time-machine/user-stories/US-TMC-009-restaurar-punto-timeline.md) | El desarrollador devuelve su worktree a cualquier punto del timeline | Implementado (`implemented`) | #212, #219 | — |
 | [US-TMC-013](features/time-machine/user-stories/US-TMC-013-permisos-solicitante.md) | Un agente no puede deshacer trabajo ajeno, aunque lance la CLI desde su propia shell | Implementado (`implemented`) | #219 | — |
+| [US-TMC-019](features/time-machine/user-stories/US-TMC-019-robustez-interrupcion.md) | El repo sigue recuperable aunque GitRaptor muera a mitad de un snapshot o de un undo | Implementado (`implemented`) | #247 | — |
 | [SPIKE-TMC-001](features/time-machine/technical-stories/SPIKE-TMC-001-repo-mediano-overhead.md) | Repo mediano de referencia y viabilidad del snapshot en menos de 200 ms | Hecho (`done`) | — | — |
 | [INF-TMC-001](features/time-machine/technical-stories/INF-TMC-001-arnes-caos-recuperable.md) | Arnés de caos y de garantías de los snapshots en los tres SO | Implementado en parte (`partially-implemented`) | — | — |
 | [US-TMC-003](features/time-machine/user-stories/US-TMC-003-redo.md) | El desarrollador rehace lo que deshizo por error | Borrador (`draft`) | — | — |
@@ -203,7 +204,6 @@
 | [US-TMC-016](features/time-machine/user-stories/US-TMC-016-retencion-por-defecto.md) | Los snapshots no llenan el disco y nunca se pierde el último punto antes de una operación destructiva | Borrador (`draft`) | — | — |
 | [US-TMC-017](features/time-machine/user-stories/US-TMC-017-retencion-configurable.md) | El desarrollador ajusta para sí cuánto tiempo se conservan los snapshots | Borrador (`draft`) | — | — |
 | [US-TMC-018](features/time-machine/user-stories/US-TMC-018-garantias-snapshots.md) | Los snapshots no se publican, no se pierden con el mantenimiento de Git y ningún agente los altera | Borrador (`draft`) | — | — |
-| [US-TMC-019](features/time-machine/user-stories/US-TMC-019-robustez-interrupcion.md) | El repo sigue recuperable aunque GitRaptor muera a mitad de un snapshot o de un undo | Borrador (`draft`) | — | — |
 | [US-TMC-020](features/time-machine/user-stories/US-TMC-020-overhead-snapshot.md) | El desarrollador y sus agentes no notan el coste de los snapshots | Borrador (`draft`) | — | — |
 | [US-TMC-021](features/time-machine/user-stories/US-TMC-021-politica-guardrails-undo.md) | Las políticas del repo pueden restringir quién deshace, nunca ampliarlo | Borrador (`draft`) | — | — |
 | [US-TMC-022](features/time-machine/user-stories/US-TMC-022-tope-disco.md) | La Time Machine nunca pasa del tope de disco que fijé | Borrador (`draft`) | — | — |
@@ -240,7 +240,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2
 
-110 fichas: 21 implementado, 3 hecho, 13 implementado en parte, 4 listo, 68 borrador, 1 bloqueado.
+110 fichas: 22 implementado, 3 hecho, 13 implementado en parte, 4 listo, 67 borrador, 1 bloqueado.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -265,6 +265,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-TMC-006](features/time-machine/user-stories/US-TMC-006-timeline-que-cuando-quien.md) | El desarrollador sabe qué cambió en su repo, cuándo y quién lo hizo | Implementado (`implemented`) | #198 | — |
 | [US-TMC-009](features/time-machine/user-stories/US-TMC-009-restaurar-punto-timeline.md) | El desarrollador devuelve su worktree a cualquier punto del timeline | Implementado (`implemented`) | #212, #219 | — |
 | [US-TMC-013](features/time-machine/user-stories/US-TMC-013-permisos-solicitante.md) | Un agente no puede deshacer trabajo ajeno, aunque lance la CLI desde su propia shell | Implementado (`implemented`) | #219 | — |
+| [US-TMC-019](features/time-machine/user-stories/US-TMC-019-robustez-interrupcion.md) | El repo sigue recuperable aunque GitRaptor muera a mitad de un snapshot o de un undo | Implementado (`implemented`) | #247 | — |
 | [SPIKE-TMC-001](features/time-machine/technical-stories/SPIKE-TMC-001-repo-mediano-overhead.md) | Repo mediano de referencia y viabilidad del snapshot en menos de 200 ms | Hecho (`done`) | — | — |
 | [TS-GRP-001](features/motor-local/technical-stories/TS-GRP-001-almacen-perfil.md) | Almacén de datos del motor en el perfil | Hecho (`done`) | — | — |
 | [TS-GRP-002](features/motor-local/technical-stories/TS-GRP-002-lectura-git.md) | Capa de lectura de Git sin escrituras | Hecho (`done`) | — | — |
@@ -350,7 +351,6 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-TMC-015](features/time-machine/user-stories/US-TMC-015-operacion-git-en-curso.md) | El desarrollador no rompe un rebase o un merge a medias al deshacer o restaurar | Borrador (`draft`) | — | — |
 | [US-TMC-016](features/time-machine/user-stories/US-TMC-016-retencion-por-defecto.md) | Los snapshots no llenan el disco y nunca se pierde el último punto antes de una operación destructiva | Borrador (`draft`) | — | — |
 | [US-TMC-018](features/time-machine/user-stories/US-TMC-018-garantias-snapshots.md) | Los snapshots no se publican, no se pierden con el mantenimiento de Git y ningún agente los altera | Borrador (`draft`) | — | — |
-| [US-TMC-019](features/time-machine/user-stories/US-TMC-019-robustez-interrupcion.md) | El repo sigue recuperable aunque GitRaptor muera a mitad de un snapshot o de un undo | Borrador (`draft`) | — | — |
 | [US-TMC-020](features/time-machine/user-stories/US-TMC-020-overhead-snapshot.md) | El desarrollador y sus agentes no notan el coste de los snapshots | Borrador (`draft`) | — | — |
 | [US-TMC-022](features/time-machine/user-stories/US-TMC-022-tope-disco.md) | La Time Machine nunca pasa del tope de disco que fijé | Borrador (`draft`) | — | — |
 | [US-CKP-023](features/cockpit/user-stories/US-CKP-023-cola-confirmacion.md) | El desarrollador aprueba o rechaza desde la TUI las acciones que un agente deja en espera | Bloqueado (`blocked`) | — | — |

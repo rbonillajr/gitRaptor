@@ -8,7 +8,7 @@ domain: GRP
 priority: critical
 complexity: medium
 created: 2026-10-03
-updated: 2026-10-08
+updated: 2026-10-09
 related:
   adrs: [ADR-TMC-001, ADR-TMC-002, ADR-TMC-003, ADR-TMC-005, ADR-TMC-007, ADR-GRP-009]
   stories: [US-TMC-001, US-TMC-002, US-TMC-009, US-TMC-016, US-TMC-018, US-TMC-019, INF-GRP-001, TS-TMC-001, TS-TMC-003]
@@ -68,7 +68,7 @@ Implementado en: PR #189 (primer corte, [DS-INF-TMC-001](../dev-specs/INF-TMC-00
 
 - Canario de SEC-TMC-02 sobre las escrituras internas.
 - Casos de seguridad SEC-TMC-04, 09, 11, 12 y 14 (escritura concurrente durante el intercambio, disco lleno, almacén u oplog editados fuera del daemon, rutas hostiles y refs con opciones) como escenarios del arnés. Hoy, en parte, en `tm_apply` y `tm_store_safety`, en proceso.
-- Puntos de la purga (ADR-TMC-007; la purga no está construida) y de la restauración a un punto del timeline (US-TMC-009).
+- Puntos de la purga (ADR-TMC-007; la purga no está construida). La restauración a un punto del timeline (US-TMC-009) y las capturas de observación y de hook (puntos `capture:pending` y `capture:ref`) ya se cortan en `apps/cli/tests/tm_interruption.rs` (US-TMC-019, PR #247).
 - Sensibilidad (defecto sembrado) e informe de cobertura como artefacto del CI.
 - Windows: *Pendiente: etapa de validación multiplataforma* (XP-33).
 - Verificación manual con 10 worktrees en la máquina de dogfooding.
