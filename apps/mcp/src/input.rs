@@ -120,12 +120,14 @@ fn checked(buf: &mut Vec<u8>) -> Frame {
     Frame::Message
 }
 
-/// Writes one whole line under the lock, so the server's replies and the
-/// refusals never interleave on stdout.
+/// Writes one whole line as a single write, so it reaches the shared queue of stdout
+/// (`crate::stdout`) in one piece and never interleaves with the server's replies.
 pub async fn write_line<W: AsyncWrite + Unpin>(out: &Mutex<W>, line: &[u8]) -> io::Result<()> {
+    let mut framed = Vec::with_capacity(line.len() + 1);
+    framed.extend_from_slice(line);
+    framed.push(b'\n');
     let mut out = out.lock().await;
-    out.write_all(line).await?;
-    out.write_all(b"\n").await?;
+    out.write_all(&framed).await?;
     out.flush().await
 }
 
@@ -150,27 +152,6 @@ where
                 server.flush().await?;
             }
         }
-    }
-}
-
-/// Copies the server's output to `out` line by line (rmcp writes one message
-/// per line), until the server closes it.
-pub async fn pump_output<R, W>(server: R, out: &Mutex<W>) -> io::Result<()>
-where
-    R: AsyncBufRead + Unpin,
-    W: AsyncWrite + Unpin,
-{
-    let mut server = server;
-    let mut line = Vec::new();
-    loop {
-        line.clear();
-        if server.read_until(b'\n', &mut line).await? == 0 {
-            return Ok(());
-        }
-        if line.last() == Some(&b'\n') {
-            line.pop();
-        }
-        write_line(out, &line).await?;
     }
 }
 
