@@ -24,10 +24,7 @@
       }
     }
   ],
-  "known_gap": "US-MCP-005 seguimiento: tope de entrada 1 MiB / profundidad 32 (ADR-MCP-001 §6)",
   "expect": {
-    "protocol_error": {
-      "code": -32600
-    }
+    "invalid_request": {}
   }
 }
