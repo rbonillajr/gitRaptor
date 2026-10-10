@@ -8,11 +8,11 @@ domain: GRP
 priority: high
 complexity: medium
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-09
 related:
   adrs: [ADR-CKP-002, ADR-GRD-002, ADR-GRD-003, ADR-GRD-006, ADR-GRD-007]
   stories: [US-CKP-014, US-CKP-015, US-CKP-017, US-CKP-018, US-CKP-019, TS-CKP-002, US-GRD-001, US-GRD-005, US-GRD-016, INF-GRD-001]
-  specs: []
+  specs: [DS-TS-CKP-003]
 ado:
   id: null
   url: null
@@ -29,7 +29,7 @@ tags: [cockpit, guardrails, capa-cockpit, decision, registro, hooks-git, br-07, 
 **Quiero** que el daemon evalúe cada plan del ejecutor con la capa de la petición y ligue esa decisión al `git` que lanza
 **Para** que Guardrails gobierne también lo que los hooks no impiden, como el merge y el borrado de un worktree (ADR-GRD-002), con una entrada de registro por operación (DEP-CKP-10, ADR-CKP-002 § 4)
 
-> Dev Spec: `dev-specs/TS-CKP-003-capa-cockpit-guardrails.md` | Pendiente
+> Dev Spec: [`dev-specs/TS-CKP-003-capa-cockpit-guardrails.md`](../dev-specs/TS-CKP-003-capa-cockpit-guardrails.md) — `DS-TS-CKP-003` (status: draft; validada por Arquitecto y PO el 2026-10-09)
 >
 > **Depende de**: US-GRD-001 (función de decisión, cliente del hook y canal autenticado de ADR-GRD-003), US-GRD-005 (registro de ADR-GRD-006), INF-GRD-001 (fixtures de hooks) y TS-CKP-002 (plan, huella, capa fijada por el daemon y registro de hijos con su barrera de arranque). Las enmiendas de ADR-GRD-003 § 1 y § 4 a § 6 y de ADR-GRD-006 § 1 y § 6 están aplicadas (2026-10-04, Cockpit, incluido el endurecimiento H-01, M-03 y DEP-MCP-5). Coordina con US-GRD-016 la capa `mcp`. **ADRs**: ADR-CKP-002 § 3 y § 4, ADR-GRD-003 § 1 y § 4 a § 6, ADR-GRD-006 § 1 y § 6. **Seguridad**: H-01 y M-03 de la revisión de ADR-CKP-002; SEC-03. **Habilita**: las operaciones gobernadas de BR-07 (BR-CKP-AUTH-001, WF-002) y las herramientas de escritura de F-001-05 (DEP-MCP-3, DEP-MCP-5).
 
