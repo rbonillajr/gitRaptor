@@ -171,6 +171,14 @@ fn policies_of(
     budget: &mut glob::Budget,
 ) {
     if !refs::is_governed(refname) {
+        // A ref Guardrails does not govern (a tag, a note) still uploads commits: only the
+        // forbidden paths reach it. The minimum, the protected branches and the protected
+        // configuration stay with the governed refs.
+        if !ctx.policies.is_empty()
+            && let Some(touched) = touched
+        {
+            policies::forbidden_paths(out, touched, ctx.actor, &ctx.policies, budget);
+        }
         return;
     }
     // A product rule: it holds whatever the configuration says, even with no policies at all.
