@@ -11,6 +11,9 @@ use std::path::{Path, PathBuf};
 /// keeps working unchanged and gets them when it is installed again.
 pub const TEMPLATE_VERSION: u32 = 2;
 
+/// The first template whose `pre-push` dispatcher hands over every pushed ref.
+pub const EVERY_PUSHED_REF: u32 = 3;
+
 /// The constants file, next to `hooks/`.
 pub const DISPATCH_CONF: &str = "dispatch.conf";
 
