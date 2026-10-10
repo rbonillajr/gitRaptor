@@ -6,8 +6,9 @@
 //! to a blocking thread, slow on Windows under load) the answer was sometimes dropped half way
 //! and the client heard nothing (#233). A write that is always ready cannot be cut half way.
 //!
-//! Order is kept (one queue, one task) and the queue is bounded in bytes: a client that stops
-//! reading gets its connection closed instead of this process growing without limit (NFR-02).
+//! Order is kept (one queue, one task) and the queue is bounded in bytes: for a client that stops
+//! reading, writes fail past the bound (rmcp then drops those answers and keeps serving) instead
+//! of this process growing without limit (NFR-02).
 
 use std::io;
 use std::pin::Pin;
