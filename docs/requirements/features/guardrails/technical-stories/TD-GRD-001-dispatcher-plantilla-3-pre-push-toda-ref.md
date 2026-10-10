@@ -29,11 +29,11 @@ tags: [guardrails, deuda-tecnica, dispatcher, plantilla-3, pre-push, rutas-prohi
 **Quiero** que el `pre-push` evalúe todas las refs que se empujan, también las no gobernadas (tags, notes y otras refs)
 **Para** cerrar el residuo declarado de DS-US-GRD-008: `git push origin <commit>:refs/tags/x` sube un commit que toca una ruta prohibida (política `forbiddenPaths`) sin evaluación
 
-> Dev Spec: dev-specs/TD-GRD-001-dispatcher-plantilla-3-pre-push-toda-ref.md | Pendiente
+> Brief de implementación: [td-grd-001-dispatcher-template-3.md](../../../../dev-briefs/td-grd-001-dispatcher-template-3.md) (hace de Dev Spec)
 
 **Origen.** Nota bloqueante del Arquitecto en la validación de DS-US-GRD-008 (2026-10-08, B1). El coordinador la resolvió como **residuo declarado** en `policy-reach`, solo para ese PR, porque el cierre cambia la instalación y queda fuera de la rama de US-GRD-008. Esta ficha es el pendiente con dueño que el Arquitecto exigió para aceptarlo.
 
-**Hoy.** La vía rápida del dispatcher `sh` de `pre-push` sale sin llamar al cliente cuando todas las refs remotas son no gobernadas (`skippable_push` y `is_governed`, en `crates/policy/src/guard/fastpath.rs`), y el cliente (`push()`, en `crates/core/src/guardrails/hook.rs`) descarta esas líneas. Un push solo a tags u otras refs no gobernadas no se evalúa nunca.
+**Hoy.** La vía rápida del dispatcher nativo (`apps/cli/src/bin/raptor-hook.rs`, Enmienda 2026-10-05 de ADR-GRD-001) de `pre-push` sale sin llamar al cliente cuando todas las refs remotas son no gobernadas (`skippable_push` y `is_governed`, en `crates/policy/src/guard/fastpath.rs`), y el cliente (`push()`, en `crates/core/src/guardrails/hook.rs`) descarta esas líneas. Un push solo a tags u otras refs no gobernadas no se evalúa nunca.
 
 **Por qué no es un cambio local.** La vía rápida vive en el dispatcher instalado en cada repo. Cambiarla exige una plantilla 3 del dispatcher (`TEMPLATE_VERSION`, ADR-GRD-001 § 2) y su ruta de actualización en sitio (S8 de DS-US-GRD-018 § 11, transaccional por NFR-12). El cliente además debe saber cuándo enviar las líneas no gobernadas: solo cuando el daemon concede la capacidad `guard.policies`, para que un daemon sin ella no cambie de comportamiento.
 
@@ -45,6 +45,9 @@ tags: [guardrails, deuda-tecnica, dispatcher, plantilla-3, pre-push, rutas-prohi
 - **Enviar** desde el cliente las líneas no gobernadas al daemon solo cuando este conceda la capacidad `guard.policies`; sin ella, mantener el comportamiento actual.
 - **Aplicar** la regla de rutas prohibidas a toda ref empujada, y la regla de rama protegida solo a las ramas.
 - **Retirar** de la lista pública de residuos de `policy-reach` el push solo a tags u otras refs no gobernadas, y actualizar los límites de lo que el hook no ve.
+- **Corregir** el defecto latente de la subida 1→2 que daba una alerta falsa `dispatcher-altered`: la actualización en el sitio no republicaba la referencia de integridad que usa el monitor (M1 del brief).
+- **Corregir** la subida interrumpida que se leía como protección inactiva, porque el diario guardaba los hashes nuevos antes de escribir los archivos: ahora la actualización queda como pendiente y la siguiente instalación la completa (M2 del brief).
+- **Limpiar** los temporales que deja una escritura matada entre escribir el temporal y hacer el `rename` (`<archivo>.gitraptor.tmp-<hex>`), solo los de archivos listados en el diario y dentro de la carpeta de Guardrails, al actualizar, reparar y desinstalar (M4 del brief).
 - **Fuera de alcance**: otros residuos de `policy-reach` (objetos sueltos, `stash`, `update-ref` a mano de refs remotas, cambios en el servidor, `reftable`, `send-pack` directo), nuevas reglas de política y la evaluación de refs no gobernadas para reglas distintas de rutas prohibidas.
 
 ### Plan de Verificación
