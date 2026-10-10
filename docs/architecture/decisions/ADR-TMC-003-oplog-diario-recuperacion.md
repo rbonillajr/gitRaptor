@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-08
+updated: 2026-10-09
 date: 2026-10-03
 domain: GRP
 feature: time-machine
@@ -180,3 +180,18 @@ Aplicada desde la [Dev Spec de US-TMC-004](../../requirements/features/time-mach
 - **Migración 3 del oplog**: reconstruye `snapshots` y recrea los triggers append-only (UPDATE y DELETE siguen fallando). Copia previa con la API de backup, `verify_chain` después; una rotura nueva restaura la copia y cierra la Time Machine de ese repo con error tipado; una migración que falla se deshace entera. Un binario anterior ve `SchemaTooNew` y no pierde datos.
 - **Cadena**: `FORMAT = 3`, global. Toda fila nueva se hashea con el formato 3 (para `snapshot` añade las cinco columnas); las filas de los formatos 1 y 2 conservan su `SELECT` y verifican igual.
 - **Cuota contada en el oplog**: las ventanas y los techos cuentan toda fila `manual`, también las `discarded`, y la purga no devuelve cupo de 24 h (ADR-MCP-001, Enmienda (2026-10-08, US-MCP-008)).
+
+## Enmienda (2026-10-09, US-TMC-019)
+
+**Decisión del orquestador (2026-10-09), validada por Arquitecto y PO**; plan aprobado por el coordinador. Origen: el [Brief de US-TMC-019](../../dev-briefs/us-tmc-019-interruption-robustness.md), D2 a D5. No cambia el esquema del oplog ni su cadena: no hay migración nueva. El `status` sigue en `accepted`.
+
+| Cambio | Dónde |
+|---|---|
+| **Entrega del aviso**: el aviso pendiente de § 6.5 se entrega con el método `timemachine.notices`, solo en el canal completo (no se ofrece por MCP). Pasa por la puerta del `.git` de la Time Machine (`tm_scope_for`, #226). Solo lo recibe un cliente que pasa esa puerta para el worktree del aviso: nunca otro worktree, otro repo ni una carpeta que el repo no registra | § 6.5 |
+| **Una sola vez, al menos una vez**: se lee y se marca entregado en la misma sección crítica del lock del oplog, así que dos clientes no reciben el mismo aviso. Si marcarlo falla, el aviso se devuelve igualmente (se registra solo su id y el error, sin rutas). La entrega es por aviso: un aviso de repo entero (ámbito sin worktrees) lo recibe el primer cliente de cualquier worktree | § 6.5 |
+| **Superficies en este corte**: `raptor undo`, `raptor restore` y `raptor timeline` lo muestran por stderr, también con `--json`. El timeline sigue mostrando la operación `interrupted`. TUI, MCP y el stream en vivo quedan diferidos; el undo por MCP (US-MCP-012) y el Deshacer de la TUI (US-CKP-014) deben entregarlo | § 6.5 |
+| **Fallo detectado e informado en la respuesta**: § 6.5 cubre las interrupciones que encuentra la recuperación al arrancar. Una interrupción que el aplicador detecta y comunica al solicitante en la propia respuesta (`undo.interrupted`, `restore.interrupted`) no genera aviso pendiente | § 3, § 6.5 |
+| **Avisos de purga**: no se entregan por este método; su entrega inicia la gracia de 24 h y es de US-TMC-016 (ADR-TMC-007 § 4.2) | § 6.6 |
+| **Puntos de caos de la captura**: las capturas que no son el previo garantizado (observación y hook) tienen sus puntos `capture:pending` y `capture:ref` (INF-TMC-001), y un corte en cualquiera de ellos no deja un punto restaurable | § 3, § 6.1 |
+
+**Validación añadida**: `apps/cli/tests/tm_interruption.rs` mata el daemon con `SIGKILL` en cada punto y comprueba con la huella de INF-GRP-001 que el repo queda intacto o recuperable, que el aviso llega una vez y solo al worktree que pasa la puerta, y que un arranque limpio no da aviso.
