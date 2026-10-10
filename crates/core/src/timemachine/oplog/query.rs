@@ -9,9 +9,9 @@
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use super::model::{
-    CompleteInfo, HookPriorMeta, JournalEntry, ManualMeta, Notice, NoticeKind, OperationKind, OperationRecord,
-    OperationState, OperationView, Requester, Scope, SnapshotLevel, SnapshotRecord, SnapshotState,
-    SnapshotView, Target,
+    CompleteInfo, HookPriorMeta, JournalEntry, ManualMeta, Notice, NoticeKind, OperationKind,
+    OperationRecord, OperationState, OperationView, Requester, Scope, SnapshotLevel,
+    SnapshotRecord, SnapshotState, SnapshotView, Target,
 };
 use super::recovery::SnapshotRefs;
 use super::{Channel, Oplog};

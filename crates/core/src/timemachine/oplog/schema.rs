@@ -143,7 +143,8 @@ CREATE TRIGGER snapshots_no_update BEFORE UPDATE ON snapshots
     BEGIN SELECT RAISE(ABORT, 'the oplog is append-only'); END;
 CREATE TRIGGER snapshots_no_delete BEFORE DELETE ON snapshots
     BEGIN SELECT RAISE(ABORT, 'the oplog is append-only'); END;
-",    r"-- migration: hook-prior requester
+",
+    r"-- migration: hook-prior requester
 -- A `hook-prior` row also carries who asked for it, its worktree and the `hook` channel (the
 -- requester's quota bucket is read from them), and its own partial indexes. The table is
 -- rebuilt with the same columns in the same order, so the hash of every row written before

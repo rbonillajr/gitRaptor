@@ -24,7 +24,9 @@ use gitraptor_git::tm_write::store::{
 };
 use gitraptor_git::{Oid, ReadError, ReaderOptions, RepoReader};
 
+use super::hook_prior::Booked;
 use super::oplog::{SnapshotRefs, TM_DIR, repo_dir};
+use crate::guardrails::second_line::GitProcess;
 use crate::profile::{ProfileDirs, ProfileError, fsperm};
 
 pub use capture::{
@@ -138,6 +140,79 @@ pub struct SnapshotStore {
     /// Manual snapshots in flight and the lock under which their quota is counted and their
     /// attempt recorded. Apart from `writer`: a guaranteed prior never waits for it.
     manual: ManualState,
+    /// The recording lock of hook priors and the commands that already have theirs.
+    hook_prior: HookPriorState,
+}
+
+/// Most `git` commands whose hook prior is remembered per store: the oldest is forgotten first.
+const HOOK_PRIOR_BOOK: usize = 256;
+
+/// What hook priors share in one store: their own recording lock (apart from the manual one and
+/// from the writer, so a hook never waits for an agent's manual snapshot) and the book of what
+/// each `git` command already got. Lost on a restart: the quota is durable in the oplog.
+#[derive(Default)]
+pub(crate) struct HookPriorState {
+    inner: Mutex<HookPriorInner>,
+    released: Condvar,
+}
+
+#[derive(Default)]
+struct HookPriorInner {
+    recording: bool,
+    book: std::collections::VecDeque<(GitProcess, Booked)>,
+}
+
+/// The recording lock of hook priors. Dropped (also on panic), the next one goes in.
+pub(crate) struct HookRecording<'a>(&'a HookPriorState);
+
+impl Drop for HookRecording<'_> {
+    fn drop(&mut self) {
+        let mut inner = self.0.inner.lock().unwrap_or_else(|p| p.into_inner());
+        inner.recording = false;
+        self.0.released.notify_one();
+    }
+}
+
+impl HookPriorState {
+    /// What `git` already got, if it was seen.
+    pub(crate) fn booked(&self, git: GitProcess) -> Option<Booked> {
+        let inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+        inner
+            .book
+            .iter()
+            .find(|(g, _)| *g == git)
+            .map(|(_, b)| b.clone())
+    }
+
+    /// Remembers what `git` got; the book is a FIFO of [`HOOK_PRIOR_BOOK`] commands.
+    pub(crate) fn remember(&self, git: GitProcess, booked: Booked) {
+        let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+        if inner.book.len() >= HOOK_PRIOR_BOOK {
+            inner.book.pop_front();
+        }
+        inner.book.push_back((git, booked));
+    }
+
+    /// Takes the recording lock, waiting for it at most until `deadline`. It is tried before the
+    /// clock is looked at, so a free lock is never refused for a deadline already past.
+    pub(crate) fn lock_recording(&self, deadline: Instant) -> Option<HookRecording<'_>> {
+        let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+        loop {
+            if !inner.recording {
+                inner.recording = true;
+                return Some(HookRecording(self));
+            }
+            let left = deadline.checked_duration_since(Instant::now())?;
+            if left.is_zero() {
+                return None;
+            }
+            inner = self
+                .released
+                .wait_timeout(inner, left)
+                .unwrap_or_else(|p| p.into_inner())
+                .0;
+        }
+    }
 }
 
 /// The state manual snapshots share in one store (one per repo): the sessions with a capture in
@@ -364,7 +439,13 @@ impl SnapshotStore {
             priors_waiting: AtomicUsize::new(0),
             seed_limits: SeedLimits::default(),
             manual: ManualState::default(),
+            hook_prior: HookPriorState::default(),
         }
+    }
+
+    /// The state hook priors share in this store.
+    pub(crate) fn hook_prior(&self) -> &HookPriorState {
+        &self.hook_prior
     }
 
     /// The state manual snapshots share in this store.
