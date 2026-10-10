@@ -2,7 +2,7 @@
 title: Pendientes de la etapa de validación multiplataforma
 status: expanded
 generated: 2026-10-05
-updated: 2026-10-08
+updated: 2026-10-09
 generator: orquestador
 domain: GRP
 tags: [xplat, validacion-multiplataforma, linux, windows, contenedor, vm, lima, utm, ssh, repo-intact, strace]
@@ -65,10 +65,10 @@ Las rutas cortas de la columna Origen van bajo `docs/requirements/features/`. La
 | XP-36 | Windows | NFR-01, US-TMC-002, US-TMC-004, ADR-CKP-003 | `raptor undo` y TUI con el binario release: ruta del worktree sin prefijo verbatim en todos los sitios del cliente, router del observador con separador `\`, TUI que no sale en silencio | Máquina Windows | **parcial** (2026-10-08: undo recupera `archivo.txt` en la máquina real; ver "Undo y TUI en Windows"). Falta Windows 11 con Windows Terminal, la fuente de la consola clásica (glifos de caja) y la causa exacta de la salida instantánea que vio Rene (no se reprodujo) |
 | XP-37 | Linux y Windows | US-MCP-008, DS-US-MCP-008 (T003, T009) | Snapshot manual (`snapshot` del MCP), validado solo en macOS. Falta: (a) la sonda manual de espacio libre: `VolumeProbe` devuelve `u64::MAX` en Windows, así que el suelo manual S2 no se aplica allí (`crates/core/src/timemachine/manual.rs`); (b) la identidad del worktree `(dev, inode)` vía `folder_id` en Windows; (c) el e2e `apps/cli/tests/mcp_snapshot.rs`, cuyo fixture es solo Unix | Contenedor + Máquina Windows | pendiente |
 | XP-39 | Linux y Windows | US-MCP-004, DS-US-MCP-004 (T003, T004) | `status` completo del MCP, validado solo en macOS. Falta: (a) el cwd de un worktree borrado en Linux (`/proc/<pid>/cwd` con el sufijo `(deleted)`, D9); (b) la comprobación del dueño del repo (`owned_by_me`) y la raíz en la carpeta personal con rutas reales de Windows (hoy `owned_by_me` es `None` y no hay canal, XP-01); (c) `mcp_status_full.rs`, cuyo fixture es solo Unix | Contenedor + Máquina Windows | pendiente |
-| XP-38 | Linux y Windows | US-TMC-009, NFR-01 | `raptor restore` y el id del punto en `raptor timeline`: `us_tmc_009` (canal, con `cfg` macOS y Linux) en Linux; en Windows, `restore_process` (e2e), la recreación de un worktree sin checkout y el texto de `confirmation-required` propio de Windows. `us_tmc_009_review` también es macOS y Linux; `us_tmc_009_permissions` ya corre en los tres SO | Contenedor + CI; máquina Windows | **pendiente** (macOS verificado el 2026-10-08) |
+| XP-38 | Linux y Windows | US-TMC-009, NFR-01 | `raptor restore` y el id del punto en `raptor timeline`: `us_tmc_009` (canal, con `cfg` macOS y Linux) en Linux; en Windows, `restore_process` (e2e), la recreación de un worktree sin checkout y el texto de `confirmation-required` propio de Windows. `us_tmc_009_review` también es macOS y Linux; `us_tmc_009_permissions` ya corre en los tres SO | Contenedor + CI; máquina Windows | **falla** en Windows real (2026-10-09, cuarta ronda): `us_grd_010` (7), `us_grd_012_config_guard` (1) y `us_grd_012_config_bypass` (10) fallan por `\\?\` en el test (#230); `guard_us_grd_012` no tiene tests en Windows (`cfg(unix)`). Linux pendiente |
 | XP-40 | Linux y Windows | US-GRD-010, US-GRD-012 | La configuración por niveles y su protección frente a agentes: `guard_us_grd_012` (E2E, solo Unix) en Linux; en Windows, el lector del nivel local (`settings.local.json`, enlaces y junctions de la carpeta del repo) y la E2E de US-GRD-012. `us_grd_010` y `us_grd_012_config_guard` (canal) corren en los tres SO | Contenedor + CI; máquina Windows | **pendiente** (macOS verificado el 2026-10-08) |
-| XP-41 | Linux y Windows | US-TMC-013 | Confirmación interactiva de undo y restore sobre trabajo de un agente, validada solo en macOS. Falta: (a) Linux: `raptor undo`/`raptor restore` en una pty real (`script -qec`) confirman y, sin terminal, se rechazan; (b) Windows real: `undo` y `restore` (también con `--json`) sobre trabajo de un agente se rechazan con `confirmation-unavailable`, sin preguntar y sin reto (BR-TMC-AUTH-001); (c) los tests de proceso y de integración, hoy con `cfg` macOS/Linux y `debug_assertions` | Contenedor + Máquina Windows | pendiente |
-| XP-42 | Linux y Windows | INF-MCP-001, DS-INF-MCP-001 | El corpus de seguridad del MCP, validado solo en macOS. Falta: (a) el nivel `engine` en Windows (canal por named pipe, comandos reservados desde una consola, agente simulado); (b) la ruta UNC como cwd; (c) la primera ejecución verde del nivel `engine` en Ubuntu | CI + Máquina Windows | **pendiente** |
+| XP-41 | Linux y Windows | US-TMC-013 | Confirmación interactiva de undo y restore sobre trabajo de un agente, validada solo en macOS. Falta: (a) Linux: `raptor undo`/`raptor restore` en una pty real (`script -qec`) confirman y, sin terminal, se rechazan; (b) Windows real: `undo` y `restore` (también con `--json`) sobre trabajo de un agente se rechazan con `confirmation-unavailable`, sin preguntar y sin reto (BR-TMC-AUTH-001); (c) los tests de proceso y de integración, hoy con `cfg` macOS/Linux y `debug_assertions` | Contenedor + Máquina Windows | **parcial** (2026-10-09, cuarta ronda): (b) en la suite de Windows, `ckp_windows_foreign_work` 6/6 y `executor::tests` 5/5 pasan (#220); falla `timemachine::confirm::tests` (9 tests sin acotar a Unix, #229). (c) `us_tmc_013` y `us_tmc_013_process` no tienen tests en Windows (`cfg`). El rechazo con `confirmation-unavailable` desde el binario real sigue sin probar a mano. Linux pendiente |
+| XP-42 | Linux y Windows | INF-MCP-001, DS-INF-MCP-001 | El corpus de seguridad del MCP, validado solo en macOS. Falta: (a) el nivel `engine` en Windows (canal por named pipe, comandos reservados desde una consola, agente simulado); (b) la ruta UNC como cwd; (c) la primera ejecución verde del nivel `engine` en Ubuntu | CI + Máquina Windows | **parcial** (2026-10-09, cuarta ronda): el nivel `server` pasa en Windows real (43/43 rechazados, 17 `pending`, 3 `known gap`; una de tres ejecuciones con `jsonrpc-wrong-shape` intermitente, #233). El nivel `engine` sigue como `pending: XP-42`: (a), (b) y (c) pendientes |
 
 ## Contenedor Linux: resultados del 2026-10-05
 
@@ -341,6 +341,57 @@ Rene lo encontró a mano con el binario release de `main` (`cargo install --path
 - **Límite conocido**: si los tres pasos ocurren en menos de ~1 s, la captura continua (quieto `Q` = 1 s) no llega a ver el archivo; es el límite aceptado para M1 en macOS también (US-TMC-013).
 - **Fuera de alcance, anotado**: (a) la consola clásica de Windows PowerShell 5 con su fuente por defecto pinta los bordes de la TUI como cuadrados (la fuente no tiene los glifos de caja): `--ascii` o Windows Terminal; (b) `watch::ten_worktrees_commit_at_once_without_losing_events` falla a veces en Windows con `Permission denied` al escribir un objeto (otro proceso, probablemente el antivirus, tiene el archivo): flaky de la máquina, no de este cambio; (c) un cliente por SSH sigue viendo "unexpected end of file" frente a un daemon del escritorio (hallazgo (a) de XP-34).
 - **Efecto secundario en la máquina**: para probar con el binario nuevo hubo que parar el daemon que dejó la instalación de Rene (`raptor daemon stop`); el siguiente comando `raptor` arranca uno nuevo con el binario instalado.
+
+### Cuarta ronda (2026-10-09)
+
+Lo mergeado el 08–09 oct (#211 a #227) sobre `main` en `41a7c7e`, en la máquina real (Windows 10 Pro 19045, `C:\src\winround`). Sin `--skip`. La carga se bajó a `CARGO_BUILD_JOBS=1` y `--test-threads=2`, y la suite se corrió por paquete (`cargo test -p <crate> --no-fail-fast`), porque la máquina (8 GB) se cayó a mitad de la primera tanda de dirigidos y hubo que reconectarla; esa tanda se repitió entera. Tras el reinicio hubo artefactos corruptos de `target` (`LNK1143`, `LNK1207`: rlib y PDB a medias); se borraron los de `gitraptor-core`, `gitraptor-cli` y `us_tmc_013_process` y se recompiló (fallo de entorno, no de código). #225 (`raptor-mcp` `input_cap`) seguía abierto, así que **no se probó**.
+
+**Tests dirigidos**
+
+| Test | Pasan | Fallan | Notas |
+|---|---|---|---|
+| `gitraptor-core --test ckp_windows_foreign_work` (#220) | 6 | 0 | |
+| `gitraptor-core --lib executor::tests` (#220) | 5 | 0 | |
+| `gitraptor-core --test us_tmc_013` (#219) | 0 | 0 | `0 tests`: el archivo es `cfg` macOS/Linux; en Windows solo corren los unitarios de `confirm::tests` (ver abajo) |
+| `gitraptor-cli --test us_tmc_013_process` (#219) | 0 | 0 | `0 tests`: `cfg(any(macos, linux))` (XP-41 (c)) |
+| `gitraptor-core --test observe_untrusted_git` (#223) | 7 | 0 | |
+| `gitraptor-cli --test mcp_security_corpus` (#224) | 4 | 0 | 2 de 3 ejecuciones: **43/43 casos `server` rechazados**, 17 `pending`, 3 `known gap`. La tercera (con `--test-threads=2`): 42/43, `jsonrpc-wrong-shape: harness panicked` (intermitente, #233). El nivel `engine` no corre en Windows: sus casos van como `pending: XP-42` |
+| `gitraptor-mcp --test input_cap` (#225) | — | — | no ejecutado: #225 sin mergear |
+| `gitraptor-core --test us_grd_010` (#217) | 0 | 7 | `the repo opens` (#230) |
+| `gitraptor-core --test us_grd_012_config_guard` (#217) | 1 | 1 | `InternalError` en vez de `ConfigProtected` (#230) |
+| `gitraptor-core --test us_grd_012_config_bypass` (#217) | 0 | 10 | mismo origen (#230) |
+| `gitraptor-cli --test guard_us_grd_012` (#217) | 0 | 0 | `0 tests`: `cfg(unix)` por diseño |
+
+**Suite completa por paquete** (1384 pasan, 35 fallan, 6 ignorados; la ronda anterior, tercera, en `dba9607`: 802 / 0 / 2).
+
+| Paquete | Pasan | Fallan | Ignorados |
+|---|---|---|---|
+| `gitraptor-core` | 587 | 33 | 3 |
+| `gitraptor-git` | 142 | 2 | 1 |
+| `gitraptor-cli` | 208 | 0 | 0 |
+| `gitraptor-api` | 105 | 0 | 0 |
+| `gitraptor-policy` | 135 | 0 | 1 |
+| `gitraptor-testkit` | 87 | 0 | 1 |
+| `gitraptor-mcp` | 41 | 0 | 0 |
+| `gitraptor-winsys` | 41 | 0 | 0 |
+| `gitraptor-theme` | 35 | 0 | 0 |
+| `gitraptor-macsys` | 3 | 0 | 0 |
+
+**Fallos y clasificación**. (a) regresión de un PR de esta tanda (todos son de los **tests**, que no están acotados a Windows; ninguno es un fallo del producto verificado), (b) ya conocido, (c) del entorno. No se arregló código: cada (a) tiene su issue.
+
+| Fallos | Clase | PR | Causa | Issue |
+|---|---|---|---|---|
+| 9 de `timemachine::confirm::tests` (`an_eligible_caller_gets_a_challenge_bound_to_the_plan`, `a_redeemed_challenge_confirms_once`, …) | (a) | #219 | Dan por hecho un solicitante elegible; en Windows el trabajo ajeno es `confirmation-unavailable` por diseño (`FOREIGN_WORK_CONFIRMABLE = cfg!(unix)`): `left: Err(ConfirmationUnavailable)` | #229 |
+| 7 de `us_grd_010`, 1 de `us_grd_012_config_guard`, 10 de `us_grd_012_config_bypass` | (a) | #217 | Los tests abren el repo con `.git` canonicalizado con `std::fs::canonicalize` (`\\?\C:\…`), que el motor rechaza (misma regla que XP-36). Causa probable, sin parche probado | #230 |
+| `us_mcp_008_timeline::timeline_shows_a_manual_snapshot_…`, `us_mcp_008::with_the_disk_at_the_floor_…`, `channel::mcp_status::tests::a_worktree_rooted_at_home_is_unavailable` | (a) | #213, #216 | Forma de ruta distinta; la captura manual con el disco al suelo se acepta; `trusted_link: true` donde se esperaba `false` | #231 |
+| `tm_write_recreate::a_removed_worktree_is_recreated_where_it_was`, `a_worktrees_folder_that_is_a_link_is_refused` | (a) | #211 | Forma de la ruta en `gitdir:`; el test usa una orden de enlaces de Unix en `cmd` (`Invalid switch - "worktrees"`) | #232 |
+| `mcp_security_corpus`, caso `jsonrpc-wrong-shape` | (a), intermitente | #224 | `harness panicked` 1 de 3 ejecuciones, no reproducido a demanda | #233 |
+| 3 de `watch::worktree::tests` (`a_slow_trickle_never_makes_a_folder_hot`, `a_folder_becomes_hot_once_…`, `a_cooled_folder_counts_from_zero_…`) | (b) | — | Ya conocido (`watch::worktree`); el módulo no lo tocó esta tanda salvo calibraciones de umbral anteriores | — |
+| `LNK1143` / `LNK1207` en `gitraptor-cli` y `gitraptor-core` | (c) | — | Artefactos de `target` corruptos por la caída de la máquina; se borraron y compilan | — |
+
+No se observaron `observe_tiers` ni `BrokenPipe` al listar en esta ronda. `repo_intact` no se corrió (fuera de esta tanda).
+
+**Fuera de alcance** (los prueba Rene a mano en PowerShell): `repo add`, `guard install` y la confirmación con reto.
 
 ## Mantenimiento del índice
 
