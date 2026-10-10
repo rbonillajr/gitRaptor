@@ -79,6 +79,11 @@ fn remove_rest(
             .map_err(|e| UninstallError::Failed(format!("folder: {e}")))?,
     };
     if let Some(expected) = expected {
+        // What a killed upgrade left next to a listed file goes first: the folder only goes
+        // when it is empty.
+        writer
+            .remove_file_temporaries(common, expected, &listed)
+            .map_err(|e| UninstallError::Failed(format!("folder: {e}")))?;
         writer
             .remove_folder(common, &listed, expected)
             .map_err(|e| UninstallError::Failed(format!("folder: {e}")))?;

@@ -67,7 +67,8 @@ pub struct Prior {
 pub struct Upgrade {
     /// The template being installed.
     pub template: u32,
-    /// The files of that template and their hashes.
+    /// The files of that template and their hashes. A path appears once per build that started
+    /// the upgrade (an interrupted upgrade resumed by another `raptor` keeps the earlier hashes).
     pub files: Vec<FileHash>,
 }
 
@@ -119,8 +120,17 @@ impl Journal {
             .filter(|j| j.version == Self::VERSION)
     }
 
+    /// Every file the install may have written: the confirmed ones, then those of a pending
+    /// upgrade, each path once. The only ones an uninstall or a rollback ever removes.
     pub fn listed(&self) -> Vec<&str> {
-        self.files.iter().map(|f| f.path.as_str()).collect()
+        let mut out: Vec<&str> = Vec::new();
+        let pending = self.upgrade.iter().flat_map(|u| u.files.iter());
+        for f in self.files.iter().chain(pending) {
+            if !out.contains(&f.path.as_str()) {
+                out.push(f.path.as_str());
+            }
+        }
+        out
     }
 }
 

@@ -9,7 +9,7 @@ use gitraptor_git::guard_write::FOLDER;
 use super::constants::{MANIFEST, TEMPLATE_VERSION};
 use super::health::{Health, Key, check_with, fingerprint};
 use super::install::sha256;
-use super::journal::{FileHash, Journal, Prior, Stage};
+use super::journal::{FileHash, Journal, Prior, Stage, Upgrade};
 
 const DISPATCHER: &[u8] = b"#!/bin/sh\nexit 0\n";
 
@@ -114,6 +114,32 @@ fn the_detector_tells_each_cause() {
     assert_eq!(cause(&i.check()), Some(LossCause::DispatcherAltered));
     std::fs::remove_dir_all(i.path("hooks")).unwrap();
     assert_eq!(cause(&i.check()), Some(LossCause::FolderMissing));
+}
+
+#[test]
+fn a_new_conf_needs_every_dispatcher_of_the_upgrade_to_be_new() {
+    let mut i = install();
+    let new_conf: &[u8] = b"template\t3\n";
+    let new_dispatcher: &[u8] = b"#!/bin/sh\nexit 3\n";
+    let hash = |path: &str, bytes: &[u8]| FileHash {
+        path: path.into(),
+        sha256: sha256(bytes),
+    };
+    i.journal.upgrade = Some(Upgrade {
+        template: 3,
+        files: vec![
+            hash("hooks/pre-push", new_dispatcher),
+            hash("dispatch.conf", new_conf),
+        ],
+    });
+    // The constants of the new template with a dispatcher still of the old one: broken.
+    std::fs::write(i.path("dispatch.conf"), new_conf).unwrap();
+    assert_eq!(cause(&i.check()), Some(LossCause::DispatcherAltered));
+    // With the new dispatcher too, it is active and tells the upgrade is not confirmed.
+    std::fs::write(i.path("hooks/pre-push"), new_dispatcher).unwrap();
+    let h = i.check();
+    assert_eq!(h.hooks.status, HooksStatus::Active, "{h:?}");
+    assert!(h.diagnostics.contains(&Diagnostic::TemplateOutdated));
 }
 
 #[test]
