@@ -2,12 +2,12 @@
 mode: bulk
 status: expanded
 generated: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-09
 generator: architect
 domain: GRP
 feature: time-machine
-total_artifacts: 6
-expanded: 6
+total_artifacts: 7
+expanded: 7
 approved: 0
 related:
   context: [CTX-TMC-001]
@@ -19,7 +19,7 @@ related:
 
 > Índice. Cada historia vive en su archivo dentro de [`technical-stories/`](./technical-stories/), con status `draft` y pendientes de Dev Spec (columna Status = `Dev Spec Pending`): la Dev Spec de TS e INF se genera con `/aadd-devspec <id>`. El SPIKE no tiene Dev Spec: lleva un Research Brief.
 >
-> **Criterio de inclusión (Enabler Decision Gate)**: solo trabajo técnico **sin historia de usuario dueña única y sin resultado observable**. Lo observable ya está en US-TMC-001..021. Hay **6 enablers para 21 historias**. El trabajo de una sola historia vive en sus `Requisitos Técnicos` y en su Dev Spec: banco de overhead (US-TMC-020), cadencia de captura (US-TMC-004), comando para hooks (US-TMC-005), confirmación y regla base (US-TMC-013), solape (US-TMC-012), precondiciones de Git (US-TMC-015), aviso de ya empujado (US-TMC-014), purga (US-TMC-016), clave de retención (US-TMC-017), política de Guardrails (US-TMC-021), aviso de recuperación (US-TMC-019).
+> **Criterio de inclusión (Enabler Decision Gate)**: solo trabajo técnico **sin historia de usuario dueña única y sin resultado observable**. Lo observable ya está en US-TMC-001..021. Hay **6 enablers y 1 deuda técnica (TD-TMC-001) para 21 historias**. El trabajo de una sola historia vive en sus `Requisitos Técnicos` y en su Dev Spec: banco de overhead (US-TMC-020), cadencia de captura (US-TMC-004), comando para hooks (US-TMC-005), confirmación y regla base (US-TMC-013), solape (US-TMC-012), precondiciones de Git (US-TMC-015), aviso de ya empujado (US-TMC-014), purga (US-TMC-016), clave de retención (US-TMC-017), política de Guardrails (US-TMC-021), aviso de recuperación (US-TMC-019).
 >
 > **Reutilizado de motor-local, sin enabler nuevo**: perfil y almacén (TS-GRP-001), lectura de Git (TS-GRP-002), daemon (TS-GRP-003), canal y controles de comandos reservados (TS-GRP-004), arnés "repo intacto" (INF-GRP-001), banco de frescura (INF-GRP-002).
 
@@ -33,6 +33,7 @@ related:
 | [TS-TMC-003](./technical-stories/TS-TMC-003-escritura-aplicador.md) | TS | Capa de escritura acotada y aplicador de estados | Escrituras internas sin hooks ni filtros, con locks, intercambio atómico y rutas seguras | ADR-TMC-002 | US-TMC-002, 003, 009, 010, 011, 014, 015, 019 | TS-GRP-002, TS-TMC-001, TS-TMC-002 | High | implemented (PR #45, #171, #172) |
 | [TS-TMC-004](./technical-stories/TS-TMC-004-operacion-protegida-solicitante.md) | TS | Operación protegida y resolución del solicitante en el canal | Único camino de escritura con snapshot previo; solicitante resuelto en el daemon | ADR-TMC-004, ADR-TMC-005 | US-TMC-001, 002, 003, 005, 009, 010, 011, 013 | TS-GRP-004, TS-TMC-001, TS-TMC-002 | High | implemented (PR #40) |
 | [INF-TMC-001](./technical-stories/INF-TMC-001-arnes-caos-recuperable.md) | INF | Arnés de caos y de garantías de los snapshots en los tres SO | Gate de CI de NFR-12, D-TMC-11 y casos hostiles de seguridad | ADR-TMC-001, ADR-TMC-002, ADR-TMC-003, ADR-TMC-005, ADR-TMC-007 | US-TMC-001, 002, 009, 016, 018, 019 | INF-GRP-001, TS-TMC-001, TS-TMC-003 | Medium | partially-implemented (PR #189); [Dev Spec](./dev-specs/INF-TMC-001-arnes-caos-recuperable.md) |
+| [TD-TMC-001](./technical-stories/TD-TMC-001-previo-hook-plazo-y-cupo-sin-atribuir.md) | TD | Previo de hook: plazo real, cupo barato y cubo «sin atribuir» acotado | Cierra los Medium/Low de la revisión de US-TMC-005 antes de que US-GRD-017 convierta `failed` en denegación | ADR-TMC-004, ADR-TMC-006, ADR-TMC-005 | US-TMC-005, US-GRD-017 | TS-TMC-001, TS-TMC-004 | Medium | draft, Dev Spec Pending (deuda, 2026-10-09) |
 
 ## Ruta de ejecución sugerida (DAG)
 
