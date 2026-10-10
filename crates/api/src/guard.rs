@@ -454,8 +454,8 @@ pub enum NotPreventable {
     /// only the rules for everyone apply (US-GRD-008). The same holds for the protection of the
     /// Guardrails configuration.
     PolicyActor,
-    /// A forbidden path is checked in the commits that reach a branch or are pushed to one: not
-    /// in a push to tags, in a commit nobody moves to a branch, nor in what is not committed
+    /// A forbidden path is checked in the commits that reach a branch or are pushed to any ref:
+    /// not in a commit nobody moves to a branch or pushes, nor in what is not committed
     /// (US-GRD-008).
     PolicyReach,
     /// The rules of the team are read from the copy of the main branch the repo holds of the
