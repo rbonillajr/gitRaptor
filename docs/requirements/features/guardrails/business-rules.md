@@ -4,7 +4,7 @@ title: "Reglas de Negocio — Guardrails"
 type: business-rules
 status: draft
 created: 2026-10-03
-updated: 2026-10-06
+updated: 2026-10-09
 domain: GRP
 epic: E-001
 feature: guardrails
@@ -56,7 +56,7 @@ tags:
 
 **Feature**: Guardrails (F-001-04)
 **Enlace a contexto**: [`context.md`](./context.md) (CTX-GRD-001)
-**Última actualización**: 2026-10-06 (BR-AUTH-005, política de autoría de los commits, por D6 del BRD y Q-GRD-34; después, aclaración del punto 4 por decisión del PO). Antes, 2026-10-04 (Q-GRD-28 a Q-GRD-31, resultados de SPIKE-GRD-001 en macOS; antes, Q-GRD-17 a Q-GRD-27 y sus aplicaciones derivadas: Q-GRD-12 en la versión del worktree, confirmación inicial y configuración antes de confirmar, unión de la rama base por historia; ver Changelog). Antes, 2026-10-03 (versión inicial)
+**Última actualización**: 2026-10-09 (Q-GRD-36 a Q-GRD-42, revisión de las Dev Specs DS-US-GRD-007 y DS-US-GRD-011; ver Changelog). Antes, 2026-10-06 (BR-AUTH-005, política de autoría de los commits, por D6 del BRD y Q-GRD-34; después, aclaración del punto 4 por decisión del PO). Antes, 2026-10-04 (Q-GRD-28 a Q-GRD-31, resultados de SPIKE-GRD-001 en macOS; antes, Q-GRD-17 a Q-GRD-27 y sus aplicaciones derivadas: Q-GRD-12 en la versión del worktree, confirmación inicial y configuración antes de confirmar, unión de la rama base por historia; ver Changelog). Antes, 2026-10-03 (versión inicial)
 
 ---
 
@@ -155,15 +155,25 @@ orden de restricción: denegar > pedir confirmación > permitir
 ```
 
 > **Supuesto confirmado** (S-GRD-9, Rene Bonilla, 2026-10-04): mientras el modo "pedir confirmación" (BRD BR-13, Should) no esté disponible, una operación con "pedir confirmación" se trata como **denegar** (fail-safe).
+>
+> **Decisión del orquestador (2026-10-09), validada por el PO y el Arquitecto** (Q-GRD-36; pendiente de confirmación de Rene Bonilla): esa denegación es una denegación verificada: entra en el registro y cuenta en el KPI (BR-CONS-004). El motivo dice que la operación requiere confirmación humana y que la confirmación aún no está disponible.
+
+> **Decisión del orquestador (2026-10-09), validada por el PO y el Arquitecto** (Q-GRD-37): qué cuenta como cada operación. **Commit**: todo commit nuevo que llega a una rama, también por `cherry-pick`, `revert`, `am` o plumbing; no los commits de un rebase (permiso rebase) ni los que crea un merge o un pull (permiso merge). El commit que cierra una fusión con `git commit` cuenta como commit **y** merge, porque la resolución de conflictos es contenido nuevo. **Push** incluye el push forzado y el borrado de una rama remota: el forzado necesita además force-push permitido, y el borrado, borrar rama. **Borrar rama** incluye renombrar una rama, porque el nombre viejo desaparece.
+
+> **Decisión del orquestador (2026-10-09), validada por el PO y el Arquitecto** (Q-GRD-38): con Git directo, un merge denegado deja **la rama sin mover**, pero el working tree puede quedar con la fusión a medias; el motivo dice cómo volver al estado anterior. Merge sigue publicado como no impedible con Git directo (BR-EDGE-003) y la promesa completa la verifica la capa MCP.
 
 **Ejemplos**:
 - Configuración del equipo: force-push = denegar → un agente intenta un force-push → denegado.
+- Configuración del equipo: commit = denegar → un agente hace `cherry-pick` de un commit a su rama → denegado (Q-GRD-37).
+- Configuración del equipo: push = permitir y force-push = denegar → un agente hace push forzado → denegado (Q-GRD-37).
+- Configuración del equipo: borrar rama = denegar → un agente renombra la rama "feat-x" → denegado (Q-GRD-37).
+- Mientras no existe la cola: borrar rama = pedir confirmación → un agente borra "feat-x" → denegado; cuenta en el KPI (Q-GRD-36).
 - Configuración del equipo: borrar worktree = pedir confirmación → un agente intenta borrar un worktree → la operación queda en la cola (BR-WF-001).
 - Configuración del equipo: commit = permitir y sin políticas → un agente hace commit → permitido.
 
 **Cómo se verifica**: para cada operación del catálogo y cada uno de los tres permisos, lanzar la operación como agente y comprobar el resultado (ejecutada, en cola o rechazada) en las dos capas.
 
-**Referencias**: BRD BR-11, BR-12, BR-13; contexto § 2.
+**Referencias**: BRD BR-11, BR-12, BR-13; contexto § 2; S-GRD-9; Q-GRD-36, Q-GRD-37, Q-GRD-38.
 
 ---
 
@@ -334,6 +344,8 @@ Acción si los hooks dejan de estar activos sin que el desarrollador los desinst
 
 Un diagnóstico no es un estado: no cambia qué capas están activas. Desaparece cuando el desarrollador confirma.
 
+> **Decisión del orquestador (2026-10-09), validada por el PO y el Arquitecto** (Q-GRD-41): un suelo del equipo ilegible o parcial en la rama principal **no** se muestra como relajación pendiente, porque no se puede confirmar. El estado lo muestra como configuración del equipo ilegible o parcial (BR-EDGE-004), sin acción para confirmar, y sigue rigiendo el suelo confirmado. El estado lista además, por repo y por worktree, cada nivel de la configuración que no se puede leer o se lee solo en parte (Q-GRD-42).
+
 **Aviso de pérdida** (ADR-GRD-005 § 5; US-GRD-004): cuando los hooks dejan de estar activos sin que el desarrollador los desinstale desde Guardrails, el aviso dice la causa y la acción sugerida (`raptor guard install`, que es un comando reservado y nunca se ejecuta solo). Para no saturar al desarrollador, el aviso de una misma causa en un repo se repite como máximo cada **10 minutos** (⚠️ **ASSUMPTION** de ADR-GRD-005 § 5, L-01, a confirmar con el uso); la primera transición siempre avisa y siempre se registra. Si no hay ningún cliente abierto, el aviso queda pendiente: el estado de protección lo muestra al abrir la CLI o la TUI.
 
 **Criticidad**: Media
@@ -349,7 +361,7 @@ Un diagnóstico no es un estado: no cambia qué capas están activas. Desaparece
 
 **Cómo se verifica**: un repo en cada uno de los cuatro estados; cada transición de la lista; retirar los hooks por fuera de Guardrails y comprobar el cambio de estado y el aviso; un repo sin configuración en Solo MCP aplica el conjunto mínimo; cada diagnóstico aparece con su acción y desaparece al confirmar, sin cambiar el estado.
 
-**Referencias**: BRD BR-12; NFR-02; BR-AUTH-001 (motor-local); BR-EDGE-001; Q-GRD-4, Q-GRD-15, Q-GRD-21, Q-GRD-23, Q-GRD-25; dependencia con F-001-02 y F-001-05.
+**Referencias**: BRD BR-12; NFR-02; BR-AUTH-001 (motor-local); BR-EDGE-001; Q-GRD-4, Q-GRD-15, Q-GRD-21, Q-GRD-23, Q-GRD-25, Q-GRD-41, Q-GRD-42; dependencia con F-001-02 y F-001-05.
 
 ---
 
@@ -669,6 +681,8 @@ Constraint: la rama base que usa el motor es siempre la misma que usa Guardrails
 
 > **Decisión** (Q-GRD-27, Rene Bonilla, 2026-10-04; revisión de arquitectura de Guardrails): el KPI "acciones peligrosas bloqueadas" cuenta las operaciones **denegadas, rechazadas y caducadas verificadas por GitRaptor**. Las entradas anotadas en **modo degradado**, cuando GitRaptor no pudo verificarlas, se muestran **aparte** y **no entran en el KPI por defecto**; el desarrollador puede incluirlas de forma explícita.
 
+> **Decisiones del orquestador (2026-10-09), validadas por el PO y el Arquitecto**: mientras no exista la cola, una operación con "pedir confirmación" se anota y cuenta como **denegada** (Q-GRD-36, pendiente de confirmación de Rene Bonilla). El aviso de una configuración ilegible o parcial **no** es una decisión: no se anota ni cuenta; la denegación que produce el mínimo forzado sí (Q-GRD-42).
+
 **Aplicabilidad**: Cada decisión de denegar o pedir confirmación, y cada excepción consciente.
 
 **Criticidad**: Media
@@ -689,7 +703,7 @@ Constraint: las entradas anotadas en modo degradado se muestran aparte y solo cu
 
 **Cómo se verifica**: tras cada escenario de denegación, petición y excepción, existe su entrada con todos los campos; el repo no contiene el registro; el recuento por defecto excluye las entradas anotadas en modo degradado y las muestra aparte.
 
-**Referencias**: BRD § 9, BR-24 (exportar: Fase 3); Q21 de motor-local; Q-GRD-10; S-GRD-5 (confirmado por Q-GRD-10); Q-GRD-27 (KPI verificado).
+**Referencias**: BRD § 9, BR-24 (exportar: Fase 3); Q21 de motor-local; Q-GRD-10; S-GRD-5 (confirmado por Q-GRD-10); Q-GRD-27 (KPI verificado); Q-GRD-36, Q-GRD-42.
 
 ---
 
@@ -889,9 +903,11 @@ Acción al expirar: se descarta
 
 > **Lo que se deniega de más** (Q-GRD-31; decisión del orquestador, 2026-10-04, validada por Arquitecto/PO): la lista publicada tiene además un apartado con los falsos positivos aceptados hacia el lado seguro: un push fast-forward desde un clon superficial se deniega como force-push, y en repos reftable una rama que solo difiere de la base en mayúsculas se deniega por ambigüedad. El motivo de la denegación lo explica, sin instrucciones para saltarse la protección.
 
+> **Alcance de los permisos con Git directo** (Q-GRD-38 y Q-GRD-39; decisiones del orquestador, 2026-10-09, validadas por el PO y el Arquitecto): la lista publicada tiene un apartado con los permisos que la capa de hooks no evalúa: `reset --hard`, borrar worktree, crear un worktree sin rama nueva, un push que solo lleva tags y un commit con `--no-verify` en `HEAD` separado. Merge sigue en la lista de lo no impedible: un merge denegado deja la rama sin mover, pero el working tree puede quedar con la fusión a medias, y el motivo dice cómo volver al estado anterior. Todas estas operaciones las verifica la capa MCP (BR-CONS-002).
+
 **Cómo se verifica**: la lista de operaciones no cubiertas, y la de lo que se deniega de más, está publicada y coincide con lo que se observa en pruebas con Git crudo en cada formato de refs.
 
-**Referencias**: BRD BR-12, § 10 (riesgo "los agentes usan Git crudo"); Q-GRD-8, Q-GRD-28, Q-GRD-31; riesgo R-GRD-1; SPIKE-GRD-001.
+**Referencias**: BRD BR-12, § 10 (riesgo "los agentes usan Git crudo"); Q-GRD-8, Q-GRD-28, Q-GRD-31, Q-GRD-38, Q-GRD-39; riesgo R-GRD-1; SPIKE-GRD-001.
 
 ---
 
@@ -905,6 +921,12 @@ Acción al expirar: se descarta
 
 > **Decisión** (Q-GRD-26, Rene Bonilla, 2026-10-04; D12): una **clave desconocida** dentro de los permisos o de las políticas (por ejemplo, una errata) deja ese nivel como **parcial**: se aplica lo legible, se **fuerza el conjunto mínimo aunque el equipo lo hubiera desactivado** y se avisa. **Una errata nunca relaja.**
 
+> **Decisión del PO (2026-10-09), pendiente de confirmación de Rene Bonilla** (Q-GRD-40; precisa Q-GRD-26): fuerzan el conjunto mínimo los niveles del **equipo** ilegibles o parciales: el suelo de la rama principal, el suelo confirmado en vigor y la versión commiteada en el worktree de la operación. Un nivel **personal** parcial no lo fuerza: aplica lo legible, pierde lo que no se pudo leer y avisa, igual que un nivel personal ilegible solo pierde sus endurecimientos. Un nivel personal nunca relaja (Q-GRD-14), así que su errata no puede relajar.
+
+> **Decisión del orquestador (2026-10-09), validada por el PO y el Arquitecto** (Q-GRD-41): un suelo del equipo ilegible o parcial en la rama principal no es una relajación pendiente de confirmar. Sigue rigiendo el suelo confirmado, con el mínimo forzado, y lo legible del suelo nuevo solo endurece (BR-WF-002).
+
+> **Decisión del orquestador (2026-10-09), validada por el PO y el Arquitecto** (Q-GRD-42): el aviso lo recibe quien opera, agente o persona, en la salida de la operación y sin cambiar su resultado, al hacer commit, push o rebase y en cualquier operación que se deniegue. El desarrollador lo ve siempre en el estado de protección, por repo y por worktree (BR-WF-002). El aviso no entra en el registro ni cuenta en el KPI (BR-CONS-004).
+
 **Dependencia abierta con el Motor local**: BR-CONS-007 (motor-local) tiene como supuesto ignorar un nivel ilegible para los valores del motor (rama base, umbral de inactividad). Para esos valores no hay riesgo de relajar nada, pero la misma configuración se trata distinto según quién la lea. Queda para el Arquitecto, o para una revisión de motor-local, alinear los dos comportamientos. Este requerimiento no cambia motor-local.
 
 **Frecuencia esperada**: baja (un nivel personal mal editado, o una configuración del equipo commiteada con errores o con marcas de conflicto). Por Q-GRD-17, una edición o un conflicto sin commitear en la configuración del equipo no la vuelven ilegible: rige la última versión commiteada.
@@ -915,10 +937,11 @@ Acción al expirar: se descarta
 - Se commitea la configuración del equipo con marcas de conflicto de un merge → aviso; force-push sigue denegado por el conjunto mínimo.
 - Un merge deja la configuración del equipo en conflicto en el working tree, sin commitear → no hay aviso de ilegible: rige la última versión commiteada (Q-GRD-17).
 - La configuración del equipo, con el conjunto mínimo desactivado y confirmado, añade una política con un nombre mal escrito → el nivel queda parcial: aviso, el resto de lo legible aplica y force-push vuelve a estar denegado por el mínimo hasta que se corrija la errata (Q-GRD-26).
+- Con el conjunto mínimo desactivado y confirmado, el perfil de la persona escribe mal un permiso → el perfil queda parcial: aviso, lo legible del perfil aplica y el mínimo sigue desactivado (Q-GRD-40).
 
 **Cómo se verifica**: cada nivel ilegible por separado, incluida la versión commiteada en el worktree de la operación: hay aviso y ninguna operación del conjunto mínimo pasa; un nivel con una clave desconocida en permisos o políticas queda parcial, avisa, aplica lo legible y fuerza el mínimo aunque estuviera desactivado.
 
-**Referencias**: contexto § 6 (fail-safe); BR-CONS-007 (motor-local); Q-GRD-12, Q-GRD-17, Q-GRD-26; riesgo R-GRD-8.
+**Referencias**: contexto § 6 (fail-safe); BR-CONS-007 (motor-local); Q-GRD-12, Q-GRD-17, Q-GRD-26, Q-GRD-40, Q-GRD-41, Q-GRD-42; riesgo R-GRD-8.
 
 ---
 
@@ -1006,3 +1029,4 @@ Cada regla debe reflejarse en al menos un escenario Gherkin de su historia. Cada
 | 1.10 | 2026-10-04 | PO (AADD); decisión del orquestador validada por Arquitecto/PO | Resultados de SPIKE-GRD-001 en macOS. Q-GRD-28: BR-EDGE-001 añade la excepción del renombrado de la rama base en repos reftable y BR-EDGE-003 sus ejemplos (también el efecto parcial con el formato habitual). Q-GRD-29: BR-CONS-005 con criterio semántico en la entrada de la clave de hooks. Q-GRD-31: apartado "lo que se deniega de más" en BR-EDGE-003. Q-GRD-30 solo cambia el RNF de context.md. Sin reglas nuevas. |
 | 1.11 | 2026-10-06 | PO (AADD); decisión del orquestador (2026-10-06), validada por el PO | D6 del BRD (decisión de Rene Bonilla, 2026-10-06), registrada como Q-GRD-34: nueva **BR-AUTH-005**, política de autoría de los commits (modelo por defecto persona autora + agente como trailer `Co-Authored-By`; valores `agents-commit` por defecto, `human-author` con bloquear o avisar, `flexible`). Solo aplica a commits ejecutados por un agente detectado o registrado; orden de restricción; entradas de autoría en el registro sin contar en el KPI salvo las denegaciones; presentación y pista `inferred` en US-GRD-019. 24 reglas (18 críticas). |
 | 1.12 | 2026-10-06 | PO (AADD); decisión del PO (2026-10-06) | BR-AUTH-005, aclaración del punto 4 (pendiente de DS-US-GRD-018, D12): el autor y el committer se muestran uniendo por oid con la autoría declarada del evento y no se copian en la entrada; una denegación muestra "autor no disponible: el commit no llegó a crearse"; restricción para una futura retención de los eventos (no más corta que la del registro). Sin reglas nuevas. |
+| 1.13 | 2026-10-09 | PO (AADD); decisiones del orquestador (2026-10-09), validadas por el PO y el Arquitecto, y Q-GRD-40 del PO | Revisión de las Dev Specs DS-US-GRD-007 y DS-US-GRD-011. BR-VAL-002: "pedir confirmación" cuenta en el KPI como denegación (Q-GRD-36, pendiente de Rene Bonilla), qué cuenta como cada operación (Q-GRD-37) y el merge con Git directo protege solo la rama (Q-GRD-38). BR-EDGE-003: apartado "alcance de los permisos con Git directo" (Q-GRD-38, Q-GRD-39). BR-EDGE-004: solo los niveles del equipo ilegibles o parciales fuerzan el mínimo (Q-GRD-40, precisa Q-GRD-26, pendiente de Rene Bonilla), un suelo roto no es relajación pendiente (Q-GRD-41) y dónde avisa (Q-GRD-42). BR-WF-002 y BR-CONS-004 recogen Q-GRD-41 y Q-GRD-42. Sin reglas nuevas: 24 reglas. |
