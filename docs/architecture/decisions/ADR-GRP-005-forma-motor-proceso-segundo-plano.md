@@ -343,3 +343,12 @@ Decisión del orquestador (2026-10-06), validada por el Arquitecto. Detalle en [
 | **Auditoría**: la cadena guarda la sesión de Windows de cada proceso y marca el host de la consola | § 6.7 |
 | **Riesgo residual añadido, mayor que en Unix**: un proceso del mismo usuario puede elegir padre (`PROC_THREAD_ATTRIBUTE_PARENT_PROCESS`, M-01) y heredar así la consola y la ascendencia limpia de la PowerShell del desarrollador; en Unix no hay una primitiva equivalente. Lo cierra la opción B (TS-GRP-007). Como en Unix, también pasan un intermediario del SO que abre una consola nueva, visible u oculta, en la sesión del usuario (tarea programada con `/IT`, `explorer.exe`, `wt.exe new-tab`, WMI) y la inyección de entrada en la consola del desarrollador. Todo queda en la tabla de vectores de ADR-GRD-007 § 2 | § 6, riesgo residual |
 | **Pendiente**: Windows 11 con Windows Terminal como terminal por defecto (traspaso desde `conhost`) puede quedar rechazado por la regla del creador (fail-closed); se valida en una máquina con Windows 11 | § 6.3 |
+
+## Enmienda (2026-10-09, US-GRP-005)
+
+Derivada de la Dev Spec de US-GRP-005. **Decisión del orquestador (2026-10-09), validada por el Arquitecto y el PO.** El `status` sigue en `accepted`.
+
+| Cambio | Dónde |
+|---|---|
+| **Cerrojo de instancia comprobado en el latido**: antes de comprobar el canal, el daemon verifica que el archivo del cerrojo sigue siendo el que tomó. Si ya no está, lo vuelve a tomar; si lo tiene otro proceso, se para sin escribir en los almacenes ni en el perfil | § 2 |
+| **Riesgo residual (NFR-01)**: entre el borrado de la carpeta de estado y el siguiente latido (60 s como mucho) puede haber dos instancias, y el cerrojo de escritura por repo solo es de proceso, así que las dos podrían escribir con la Time Machine en el mismo repo | § 2, riesgo residual |

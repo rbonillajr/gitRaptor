@@ -268,3 +268,16 @@ Derivada de la [Dev Spec de US-GRP-003](../../requirements/features/motor-local/
 | Cambio | Dónde | Fuente |
 |---|---|---|
 | **Causa de fin nueva: "worktree retirado"** (`worktree-removed`): termina toda sesión abierta, detectada o registrada, de un worktree que Git ya no registra; al arrancar o despertar, sin hora de fin. No se aplica mientras el repo entero está "no disponible" ni mientras solo falta la carpeta. Solo afirma que el worktree no está, no que el proceso terminara ni que se retirara el registro. En el contrato, tras la capacidad `sessions.worktree-removed`; sin ella falta `end_cause` | § 1 (Sesión), § 6 | BR-EDGE-001, BR-WF-001; ADR-GRP-010 § 6 |
+
+## Enmienda (2026-10-09, US-GRP-005)
+
+Derivada de la Dev Spec de US-GRP-005. **Decisión del orquestador (2026-10-09), validada por el Arquitecto y el PO.** No cambia el modelo de eventos, sesiones ni atribución: fija cómo se registra el hueco del arranque, qué recupera su reconciliación y cómo se consultan los huecos. El `status` sigue en `accepted`.
+
+| Cambio | Dónde |
+|---|---|
+| **Hueco del arranque en una transacción**: el hueco (abierto y cerrado al arrancar), los eventos de su reconciliación y el estado conocido nuevo se escriben juntos, antes de observar el repo y del primer latido. Si el lote falla, o el repo no se puede leer, el repo no se observa en esa ejecución y su "observado hasta" no se mueve | § 5 |
+| **Rama movida durante el hueco**: un evento por entrada del reflog solo si la cadena es continua desde la punta guardada hasta la actual (el `new` de cada entrada es el `old` de la siguiente, dentro del tope de 64). Si no, un solo `branch-update` de la punta vieja a la nueva. Un fast-forward de N commits es un evento. Una rama creada en el hueco es un `branch-create` con su punta. Lo encontrado es el estado neto: no se reconstruyen estados intermedios sin rastro, `push`, `reset` que no mueven rama ni commits con `HEAD` separado | § 5 |
+| **Hora de los eventos del hueco**: la del fin del hueco. Se desvía de la Enmienda (2026-10-07), que da la hora del reflog a los eventos de un despertar: la escribe el propio `git` y un reloj desviado podría situarla fuera del hueco. Los filtros por periodo tratan estos eventos como del intervalo del hueco | § 4, § 5 |
+| **Almacén corrupto**: un hueco `store-corrupt` desde la fecha de alta del repo sustituye a "observado desde", con el estado conocido nuevo como base | § 5 |
+| **Perfil perdido**: no se registra hueco, porque no queda almacén; "observado desde" queda diferido (US-TMC-007, US-GRP-015). Lo anterior a volver a añadir el repo no tiene eventos y, por tanto, no tiene agente | § 5 |
+| **Consulta de huecos**: el método `events.gaps` (módulo `events`, no reservado, fuera del MCP) lista los huecos de un repo con su causa y `during_session`, que solo se calcula para las causas de parada o caída del daemon (SEC-13). El cliente que pidió una parada sigue en la auditoría (`audit.list`) | § 6 |
