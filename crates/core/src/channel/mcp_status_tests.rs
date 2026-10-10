@@ -17,6 +17,8 @@ use gitraptor_api::{Untrusted, UntrustedName};
 
 use super::*;
 
+/// The std form on purpose: on Windows it is the verbatim `\\?\C:\…` one, and the product must
+/// compare it with the drive form it keeps (#231).
 fn canonical(path: &Path) -> PathBuf {
     std::fs::canonicalize(path).unwrap()
 }

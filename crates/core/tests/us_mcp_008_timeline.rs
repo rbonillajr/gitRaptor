@@ -127,7 +127,10 @@ fn engine_of(roots: &[(&str, &str)], events: Vec<GitEventView>) -> EngineSide {
 }
 
 fn root_of(path: &Path) -> String {
-    path.canonicalize().unwrap().to_string_lossy().into_owned()
+    gitraptor_git::paths::canonicalize(path)
+        .unwrap()
+        .to_string_lossy()
+        .into_owned()
 }
 
 #[test]

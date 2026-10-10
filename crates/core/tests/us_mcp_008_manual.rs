@@ -331,10 +331,7 @@ fn the_label_never_reaches_a_ref_path_or_log() {
 #[test]
 fn the_undo_stack_ignores_manual_snapshots() {
     let env = env();
-    let root = env
-        .f
-        .repo
-        .canonicalize()
+    let root = gitraptor_git::paths::canonicalize(&env.f.repo)
         .unwrap()
         .to_string_lossy()
         .into_owned();
