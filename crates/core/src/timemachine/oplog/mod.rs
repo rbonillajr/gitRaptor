@@ -44,8 +44,8 @@ use crate::profile::{ProfileDirs, ProfileError, Result, fsperm, sqlite};
 use chain::{Hash, RowKind};
 
 pub use model::{
-    BreakCause, ChainBreak, Channel, CompleteInfo, Exclusion, JournalEntry, ManualMeta,
-    NewOperation, NewSnapshot, Notice, NoticeKind, OpRef, OperationKind, OperationRecord,
+    BreakCause, ChainBreak, Channel, CompleteInfo, Exclusion, HookPriorMeta, JournalEntry,
+    ManualMeta, NewOperation, NewSnapshot, Notice, NoticeKind, OpRef, OperationKind, OperationRecord,
     OperationState, OperationView, Requester, RequesterOrigin, Scope, SnapshotLevel,
     SnapshotRecord, SnapshotState, SnapshotView, Target,
 };
@@ -409,6 +409,63 @@ impl Oplog {
                         session,
                         meta.worktree_key,
                         meta.channel.as_str()
+                    ],
+                )
+            })?;
+            batch.journal(
+                &Entry {
+                    entry: "snapshot-state",
+                    subject_id: Some(&id),
+                    state: Some(SnapshotState::Pending.as_str()),
+                    ..Entry::default()
+                },
+                now_ms,
+            )?;
+            Ok(id)
+        })
+    }
+
+    /// Records a `hook-prior` snapshot whose capture is starting, in state `pending`, with who
+    /// asked for it. Every row of the attempt is marked with `meta.requested_ms`. An
+    /// unattributed requester is allowed (it has no session); the snapshot must be of level
+    /// `hook-prior`, anything else fails without writing.
+    pub fn begin_hook_prior_snapshot(
+        &mut self,
+        new: &NewSnapshot,
+        meta: &HookPriorMeta,
+    ) -> Result<String> {
+        if new.level != SnapshotLevel::HookPrior {
+            return Err(ProfileError::InvalidWrite(
+                "begin_hook_prior_snapshot takes a hook-prior snapshot".into(),
+            ));
+        }
+        let worktrees = to_json(&new.worktrees)?;
+        let requester = to_json(&meta.requester)?;
+        let session = meta.requester.session_id();
+        let now_ms = meta.requested_ms;
+        self.write(|batch| {
+            let id = sqlite::new_uuid(&batch.tx)?;
+            let store_ref = [SNAPSHOT_REF_PREFIX, &id].concat();
+            batch.append(RowKind::Snapshot, |tx, seq| {
+                tx.execute(
+                    "INSERT INTO snapshots (snapshot_id, seq, level, worktrees, store_ref,
+                         engine_mark, cause_operation, cause_event_seq, recorded_ms,
+                         requester, requester_session, worktree_key, channel)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                    params![
+                        id,
+                        seq,
+                        new.level.as_str(),
+                        worktrees,
+                        store_ref,
+                        new.engine_mark,
+                        new.cause_operation,
+                        new.cause_event_seq,
+                        now_ms,
+                        requester,
+                        session,
+                        meta.worktree_key,
+                        Channel::Hook.as_str()
                     ],
                 )
             })?;
