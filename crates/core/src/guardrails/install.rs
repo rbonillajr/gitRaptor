@@ -394,7 +394,7 @@ pub fn plan(ctx: &GuardCtx<'_>, repo_id: &str, common: &Path, store: &RepoStore)
     }
 }
 
-pub(crate) fn sha256(bytes: &[u8]) -> String {
+pub fn sha256(bytes: &[u8]) -> String {
     Sha256::digest(bytes)
         .iter()
         .map(|b| format!("{b:02x}"))
@@ -576,6 +576,7 @@ pub fn install(
         chained,
         confirms_base: confirms_base.clone(),
         protected_bases: protected_bases.clone(),
+        upgrade: None,
     };
     let save = |store: &mut RepoStore, j: &Journal| {
         store

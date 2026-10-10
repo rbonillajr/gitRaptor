@@ -65,6 +65,7 @@ fn install() -> Install {
         chained: Vec::new(),
         confirms_base: Some("main".into()),
         protected_bases: vec!["main".into()],
+        upgrade: None,
     };
     Install {
         _tmp: tmp,

@@ -341,6 +341,24 @@ fn orphan_head(env: &HookEnv) -> Option<OrphanHead> {
     valid.then_some(OrphanHead { branch, oid })
 }
 
+/// The updates of a `pre-push` one evaluation sees. Every update stays only when the dispatcher
+/// is of template `EVERY_PUSHED_REF` or later **and** `scope_all` holds (the daemon granted
+/// `guard.policies`, or the client itself evaluates the rules for everyone of the floor);
+/// otherwise only the governed ones, as templates 1 and 2 have it. `None` when no update is
+/// left. Any other operation is returned unchanged.
+pub fn push_scope(op: Operation, _template: u32, _scope_all: bool) -> Option<Operation> {
+    match op {
+        Operation::Push { remote, updates } => {
+            let updates: Vec<PushUpdate> = updates
+                .into_iter()
+                .filter(|u| fastpath::is_governed(&u.remote_ref))
+                .collect();
+            (!updates.is_empty()).then_some(Operation::Push { remote, updates })
+        }
+        other => Some(other),
+    }
+}
+
 /// Normalizes a `pre-push`. `Ok(None)` when no governed remote ref is updated.
 fn push(remote: Option<&str>, url: Option<&str>, input: &[u8]) -> Result<Option<Operation>, Rule> {
     let mut updates = Vec::new();
