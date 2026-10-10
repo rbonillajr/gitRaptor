@@ -19,7 +19,7 @@ use sha2::{Digest, Sha256};
 use super::constants::{Constants, DISPATCH_CONF, MANIFEST, STUB_FILE, TEMPLATE_VERSION};
 use super::evaluate;
 use super::health;
-use super::journal::{FileHash, Journal, Prior, Snapshot, Stage, snapshot_path};
+use super::journal::{FileHash, Journal, Prior, Snapshot, Stage, Upgrade, snapshot_path};
 use super::prior::{self as prior_hooks, ChainImpossible};
 use super::registry::{GuardEntry, GuardRegistry};
 use crate::profile::{GuardKeys, ProfileDirs, RepoStore};
@@ -268,8 +268,8 @@ pub fn plan(ctx: &GuardCtx<'_>, repo_id: &str, common: &Path, store: &RepoStore)
             blockers.push(b);
         }
     };
-    let recorded = journal(&store.guard_keys().unwrap_or_default()).map(|j| j.template);
-    let upgrade = status.state == ProtectionState::HooksOnly && outdated(common, recorded);
+    let recorded = journal(&store.guard_keys().unwrap_or_default());
+    let upgrade = status.state == ProtectionState::HooksOnly && outdated(common, recorded.as_ref());
     // An install of ours that stopped being active: installing again repairs it (US-GRD-004).
     let stale = stale_install(store, &status);
     if status.state == ProtectionState::HooksOnly && !upgrade {
@@ -532,7 +532,7 @@ pub fn install(
         return Err(InstallError::Rejected(blockers));
     }
     if plan.blockers.is_empty() && plan.status.state == ProtectionState::HooksOnly {
-        return upgrade(ctx, repo_id, common, store, now_ms);
+        return upgrade(ctx, repo_id, common, store, registry, now_ms);
     }
     if plan.blockers.is_empty()
         && let Some((journal, cause)) = stale_install(store, &plan.status)
@@ -709,8 +709,10 @@ fn repair(
     // Before any write: the journal lists every file that may exist afterwards, the ones of the
     // old install that the new folder does not have included (removed below, only if untouched).
     let old_files = std::mem::take(&mut journal.files);
+    let pending = journal.upgrade.take().map(|u| u.files).unwrap_or_default();
     let leftovers: Vec<FileHash> = old_files
         .into_iter()
+        .chain(pending)
         .filter(|f| !folder_files.paths.contains(&f.path))
         .collect();
     journal.files = folder_files.hashes();
@@ -731,6 +733,10 @@ fn repair(
     if common.join(FOLDER).is_dir()
         && let Some(folder) = journal.folder
     {
+        // What a killed write left next to a listed file, before the files are written again.
+        writer
+            .remove_file_temporaries(common, folder.into(), &journal.listed())
+            .map_err(|e| InstallError::Failed(format!("repair temporaries: {e}")))?;
         writer
             .replace_files(common, folder.into(), &files)
             .map_err(|e| InstallError::Failed(format!("repair: {e}")))?;
@@ -787,11 +793,11 @@ fn repair(
     Ok(status(repo_id, common, store))
 }
 
-/// Whether the confirmed install in place is of an older template: the journal or its
-/// `dispatch.conf` names one, or a dispatcher of the current template is missing (ADR-GRD-001
-/// § 8, DS-US-GRD-018 D6).
-fn outdated(common: &Path, recorded: Option<u32>) -> bool {
-    if recorded.is_some_and(|t| t < TEMPLATE_VERSION) {
+/// Whether the confirmed install in place is of an older template or has an upgrade that was
+/// not confirmed: the journal or its `dispatch.conf` names an older template, or a dispatcher of
+/// the current template is missing (ADR-GRD-001 § 8, DS-US-GRD-018 D6).
+fn outdated(common: &Path, journal: Option<&Journal>) -> bool {
+    if journal.is_some_and(|j| j.upgrade.is_some() || j.template < TEMPLATE_VERSION) {
         return true;
     }
     let folder = common.join(FOLDER);
@@ -811,19 +817,39 @@ fn outdated(common: &Path, recorded: Option<u32>) -> bool {
         })
 }
 
-/// Upgrades a confirmed install of an older template in place (ADR-GRD-001 § 8): every file of
-/// the current template is replaced atomically inside the folder the journal recorded, so the
-/// repo is never without a working dispatcher, and the key is not touched. The chained prior
-/// hooks and their folder are the journal's. The journal lists the new files before the writes;
-/// an interrupted upgrade leaves a working mix that the next `raptor guard install` completes
-/// (it is idempotent).
+/// Points the protection watch at `journal` (the integrity reference of the checks).
+fn rewatch(registry: &GuardRegistry, repo_id: &str, journal: &Journal) {
+    registry.protection().watch(
+        repo_id,
+        super::protection::Watched {
+            common: std::path::PathBuf::from(&journal.common_dir),
+            journal: journal.clone(),
+        },
+    );
+}
+
+/// Upgrades a confirmed install of an older template in place (ADR-GRD-001 § 8), as a state
+/// machine whose every step leaves dispatchers that work:
+///
+/// 1. the journal keeps the confirmed hashes and adds the new ones as a pending upgrade;
+/// 2. the executables are replaced one by one (a new binary reads the constants of the old
+///    template and behaves as it did);
+/// 3. each one is read back and must be the new one;
+/// 4. only then `dispatch.conf` is replaced: the one atomic `rename` that changes behaviour, so
+///    constants of the new template never meet a binary that rejects them;
+/// 5. the manifest, a read-only check of the key, and the journal confirmed in the new template.
+///
+/// The key is never touched. An interrupted upgrade is completed by the next `raptor guard
+/// install` (every step is idempotent).
 fn upgrade(
     ctx: &GuardCtx<'_>,
     repo_id: &str,
     common: &Path,
     store: &mut RepoStore,
+    registry: &GuardRegistry,
     now_ms: i64,
 ) -> Result<GuardStatus, InstallError> {
+    use super::cut::{When, trip};
     let keys = store.guard_keys().unwrap_or_default();
     let mut journal = journal(&keys)
         .filter(|j| j.stage == Stage::Confirmed)
@@ -833,25 +859,82 @@ fn upgrade(
         .ok_or_else(|| InstallError::Failed("journal without the folder".into()))?;
     let folder_files = Folder::build(ctx, repo_id, common, &journal.prior, &journal.chained)?;
     let hooks_dir = common.join(FOLDER).join("hooks");
-    // Before any write: the journal lists every file that may exist afterwards.
-    journal.files = folder_files.hashes();
-    journal.at_ms = now_ms;
-    journal.raptor = ctx.raptor.to_string_lossy().into_owned();
+    let writer = GuardWriter::new(ctx.git, ctx.invoker);
     let save = |store: &mut RepoStore, j: &Journal| {
         store
             .set_guard_keys(Some(Some(&j.to_json())), None, None, None)
             .map_err(|e| InstallError::Failed(format!("journal: {e:?}")))
     };
+    // Before any write: the journal lists every file that may exist afterwards. The confirmed
+    // hashes stay the reference until the last step.
+    trip("upgrade-journal", When::Before);
+    let mut pending = journal.upgrade.take().map(|u| u.files).unwrap_or_default();
+    for hash in folder_files.hashes() {
+        if !pending.contains(&hash) {
+            pending.push(hash);
+        }
+    }
+    journal.upgrade = Some(Upgrade {
+        template: TEMPLATE_VERSION,
+        files: pending,
+    });
+    journal.at_ms = now_ms;
     save(store, &journal)?;
-    // `dispatch.conf` and the manifest last: until then the old template's constants rule.
-    let mut files = folder_files.files();
-    files.sort_by_key(|f| !f.executable);
-    GuardWriter::new(ctx.git, ctx.invoker)
-        .replace_files(common, folder.into(), &files)
-        .map_err(|e| InstallError::Failed(format!("upgrade: {e}")))?;
-    journal.template = TEMPLATE_VERSION;
-    save(store, &journal)?;
+    rewatch(registry, repo_id, &journal);
+    trip("upgrade-journal", When::After);
+    writer
+        .remove_file_temporaries(common, folder.into(), &journal.listed())
+        .map_err(|e| InstallError::Failed(format!("upgrade temporaries: {e}")))?;
+    let files = folder_files.files();
+    let executables: Vec<NewFile<'_>> = files.iter().copied().filter(|f| f.executable).collect();
+    let replace = |files: &[NewFile<'_>]| {
+        writer
+            .replace_files(common, folder.into(), files)
+            .map_err(|e| InstallError::Failed(format!("upgrade: {e}")))
+    };
+    let (first, others) = executables.split_at(executables.len().min(1));
+    trip("upgrade-first-dispatcher", When::Before);
+    replace(first)?;
+    trip("upgrade-first-dispatcher", When::After);
+    trip("upgrade-other-dispatchers", When::Before);
+    replace(others)?;
+    trip("upgrade-other-dispatchers", When::After);
+    // The constants of the new template are written only if every dispatcher is the new one: an
+    // old binary reading them would deny every push and chain nothing.
+    for (hook, expected) in folder_files
+        .hashes()
+        .iter()
+        .filter(|h| h.path.starts_with("hooks/"))
+        .map(|h| (&h.path, &h.sha256))
+    {
+        let current = health::read_regular(&common.join(FOLDER).join(hook))
+            .ok()
+            .flatten();
+        if !current.is_some_and(|bytes| sha256(&bytes) == *expected) {
+            return Err(InstallError::Failed(format!(
+                "upgrade: {hook} is not the new dispatcher"
+            )));
+        }
+    }
+    let pick = |path: &str| -> Vec<NewFile<'_>> {
+        files.iter().copied().filter(|f| f.path == path).collect()
+    };
+    trip("upgrade-conf", When::Before);
+    replace(&pick(DISPATCH_CONF))?;
+    trip("upgrade-conf", When::After);
+    trip("upgrade-manifest", When::Before);
+    replace(&pick(MANIFEST))?;
+    trip("upgrade-manifest", When::After);
     verify(ctx, common, &hooks_dir).map_err(InstallError::Failed)?;
+    trip("upgrade-commit", When::Before);
+    journal.files = folder_files.hashes();
+    journal.template = TEMPLATE_VERSION;
+    journal.raptor = ctx.raptor.to_string_lossy().into_owned();
+    journal.upgrade = None;
+    journal.at_ms = now_ms;
+    save(store, &journal)?;
+    rewatch(registry, repo_id, &journal);
+    trip("upgrade-commit", When::After);
     Ok(status(repo_id, common, store))
 }
 

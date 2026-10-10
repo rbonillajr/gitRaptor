@@ -14,9 +14,9 @@ use std::path::{Path, PathBuf};
 use gitraptor_api::guard::{Diagnostic, HooksLayer, HooksStatus, LossCause};
 use gitraptor_git::guard_write::FOLDER;
 
-use super::constants::{MANIFEST, TEMPLATE_VERSION};
+use super::constants::{DISPATCH_CONF, MANIFEST, TEMPLATE_VERSION};
 use super::install::sha256;
-use super::journal::Journal;
+use super::journal::{FileHash, Journal};
 
 /// What a check found: the layer and the diagnostics that do not change the state.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -128,7 +128,7 @@ pub fn check_with(common: &Path, journal: Option<&Journal>, key: Key) -> Health 
     if !Path::new(&journal.raptor).exists() {
         return lost(LossCause::BinaryMissing, diagnostics);
     }
-    if journal.template < TEMPLATE_VERSION {
+    if journal.template < TEMPLATE_VERSION || journal.upgrade.is_some() {
         diagnostics.push(Diagnostic::TemplateOutdated);
     }
     if journal.confirms_base.is_none() {
@@ -161,15 +161,32 @@ fn orphaned(common: &Path, key: &Key) -> HooksStatus {
 
 /// H3: the first thing that is not what the journal recorded. The manifest is excluded: it is
 /// not the integrity reference and editing it changes nothing (ADR-GRD-001 Validación 9).
+///
+/// While an upgrade is pending (ADR-GRD-001 § 8) a file may hold the confirmed hash or one of the
+/// upgrade's. The constants of the new template are valid only with every dispatcher of the new
+/// template: `dispatch.conf` that matches only a pending hash needs every `hooks/*` of the
+/// upgrade to match a pending hash too, or an old binary would read constants it rejects.
 fn integrity(common: &Path, journal: &Journal) -> Option<LossCause> {
     let folder = common.join(FOLDER);
     if !hooks_folder(common).is_dir() {
         return Some(LossCause::FolderMissing);
     }
+    let pending: &[FileHash] = journal.upgrade.as_ref().map_or(&[], |u| &u.files);
+    let accepted = |path: &str| -> Vec<&str> {
+        journal
+            .files
+            .iter()
+            .chain(pending)
+            .filter(|f| f.path == path)
+            .map(|f| f.sha256.as_str())
+            .collect()
+    };
     let mut altered = false;
     let mut not_executable = false;
-    for file in journal.files.iter().filter(|f| f.path != MANIFEST) {
-        if Path::new(&file.path)
+    // The hash found for each path that was read, for the coherence rule.
+    let mut found: Vec<(&str, String)> = Vec::new();
+    for path in journal.listed().into_iter().filter(|p| *p != MANIFEST) {
+        if Path::new(path)
             .components()
             .any(|c| !matches!(c, std::path::Component::Normal(_)))
         {
@@ -177,26 +194,43 @@ fn integrity(common: &Path, journal: &Journal) -> Option<LossCause> {
             altered = true;
             continue;
         }
-        let path = folder.join(&file.path);
-        let Ok(meta) = std::fs::symlink_metadata(&path) else {
-            return Some(LossCause::DispatcherMissing);
+        let file = folder.join(path);
+        let Ok(meta) = std::fs::symlink_metadata(&file) else {
+            if journal.files.iter().any(|f| f.path == path) {
+                return Some(LossCause::DispatcherMissing);
+            }
+            // Only the upgrade lists it: not written yet.
+            continue;
         };
         if !meta.is_file() {
             altered = true;
             continue;
         }
-        match read_regular(&path) {
-            Ok(Some(bytes)) if sha256(&bytes) == file.sha256 => {}
-            Ok(_) => altered = true,
+        match read_regular(&file) {
+            Ok(Some(bytes)) => {
+                let hash = sha256(&bytes);
+                if accepted(path).contains(&hash.as_str()) {
+                    found.push((path, hash));
+                } else {
+                    altered = true;
+                }
+            }
+            Ok(None) => altered = true,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                return Some(LossCause::DispatcherMissing);
+                if journal.files.iter().any(|f| f.path == path) {
+                    return Some(LossCause::DispatcherMissing);
+                }
+                continue;
             }
             // A link swapped in after the check above, or anything else that cannot be read.
             Err(_) => altered = true,
         }
-        if file.path.starts_with("hooks/") && !executable(&meta) {
+        if path.starts_with("hooks/") && !executable(&meta) {
             not_executable = true;
         }
+    }
+    if !altered && !coherent(journal, pending, &found) {
+        altered = true;
     }
     if altered {
         Some(LossCause::DispatcherAltered)
@@ -205,6 +239,33 @@ fn integrity(common: &Path, journal: &Journal) -> Option<LossCause> {
     } else {
         None
     }
+}
+
+/// The coherence rule of a pending upgrade: `dispatch.conf` of the new template (it matches a
+/// pending hash and not the confirmed one) with every dispatcher of the upgrade already new.
+fn coherent(journal: &Journal, pending: &[FileHash], found: &[(&str, String)]) -> bool {
+    let hash_of = |path: &str| {
+        found
+            .iter()
+            .find(|(p, _)| *p == path)
+            .map(|(_, h)| h.as_str())
+    };
+    let Some(conf) = hash_of(DISPATCH_CONF) else {
+        return true;
+    };
+    let is_new =
+        |path: &str, hash: &str| pending.iter().any(|f| f.path == path && f.sha256 == hash);
+    let is_old = journal
+        .files
+        .iter()
+        .any(|f| f.path == DISPATCH_CONF && f.sha256 == conf);
+    if is_old || !is_new(DISPATCH_CONF, conf) {
+        return true;
+    }
+    pending
+        .iter()
+        .filter(|f| f.path.starts_with("hooks/"))
+        .all(|f| hash_of(&f.path).is_some_and(|h| is_new(&f.path, h)))
 }
 
 /// Git skips a hook without the execute permission. Windows has no such bit (its check, the
@@ -235,7 +296,7 @@ pub fn fingerprint(common: &Path, journal: &Journal) -> u64 {
         hooks_folder(common),
         PathBuf::from(&journal.raptor),
     ];
-    paths.extend(journal.files.iter().map(|f| folder.join(&f.path)));
+    paths.extend(journal.listed().into_iter().map(|p| folder.join(p)));
     for p in paths {
         p.hash(&mut h);
         match std::fs::symlink_metadata(&p) {
