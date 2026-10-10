@@ -1391,7 +1391,10 @@ fn a_break_that_was_there_before_migrating_does_not_stop_the_migration() {
     let verify = |_: &Connection| -> Result<Vec<ChainBreak>> { Ok(vec![old.clone()]) };
     let opened = open_guarded(&path, &dirs.quarantine_dir(), &verify).unwrap();
     drop(opened);
-    assert_eq!(schema_version(&path), 3);
+    assert_eq!(
+        schema_version(&path),
+        super::schema::OPLOG_MIGRATIONS.len() as i64
+    );
     assert!(!copy_of(&path).exists(), "no copy is left behind");
 }
 

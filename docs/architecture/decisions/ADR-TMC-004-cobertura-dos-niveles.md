@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-08
+updated: 2026-10-09
 date: 2026-10-03
 domain: GRP
 feature: time-machine
@@ -161,3 +161,15 @@ Aplicada desde la [Dev Spec de US-TMC-004](../../requirements/features/time-mach
 - **Validación de la etiqueta (corrige la Validación añadida de la Enmienda (2026-10-05, MCP))**: la prueba "una etiqueta con U+202E sale escapada en el timeline" no se sostiene, porque U+202E es un control bidi y la etiqueta se **rechaza** (`invalid-text`). La prueba equivalente usa una etiqueta con un selector de variación (U+FE0F) o U+034F, que la validación admite y que el escape sustituye al mostrarla. La validación del daemon manda (`check_snapshot_label`): 1 a 64 caracteres, longitud en bytes (≤ 256) comprobada antes de recorrer caracteres, sin controles ni caracteres invisibles o de uso privado, sin espacios al principio o al final.
 - **Suelo de espacio de la captura manual**: suelo de SEC-TMC-12 más una reserva para el previo garantizado, máx(1 GB, tamaño estimado del worktree) (⚠️ **ASSUMPTION**); se comprueba bajo el cerrojo manual justo antes de capturar y cruzarlo a mitad de captura la aborta (`discarded`, nada borrado). Un previo garantizado posterior nunca espera al cerrojo manual.
 - **Prioridad**: una captura manual cede ante un previo y termina dentro de `DEFAULT_PRIOR_DEADLINE`; usa el tope de 50 MB por archivo y los hilos de observación (§ 2).
+
+## Enmienda (2026-10-09, US-TMC-005)
+
+**Decisión del orquestador (2026-10-04), validada por el Arquitecto y el PO**, aprobada por el coordinador con condiciones (Brief [`docs/dev-briefs/us-tmc-005-pre-hook-snapshot.md`](../../dev-briefs/us-tmc-005-pre-hook-snapshot.md)). El `status` sigue en `accepted`.
+
+- **El comando de la CLI del § 3 es `raptor hook`**: el daemon toma el `previo_hook` dentro de `guard.evaluate`, en la misma llamada que decide (ADR-GRD-003 § 7), y responde `Decision.priorSnapshot` = `complete` o `failed`, solo a una conexión con la capacidad `guard.prior-snapshot`. No hay otro método para pedirlo; `timemachine.snapshot` queda declarado y sin implementar.
+- **Cuándo**: solo con `appliedEffect = allow`, fuera del ejecutor, y en hooks de momento A: `pre-rebase` y `reference-transaction` `prepared` con un borrado de `refs/heads/*`. Nunca en `pre-push`, commits, consultas ni movimientos de rama sin borrado, porque llegan después de reescribir el working tree y el punto mezclaría estados. Un snapshot por comando de Git (el `git` más cercano).
+- **Origen**: el worktree y el repo los resuelve el daemon (registro y cwd del proceso del hook), con la misma puerta del `.git` que el resto de la Time Machine (#223 I-03); nunca una ruta que mande el hook.
+- **Tiempo máximo**: 5 s desde que el daemon lo atiende, por debajo del tiempo de llamada del cliente (10 s). Si se agota, `failed` y ninguna fila `complete`. El objetivo de ADR-TMC-006 (p95 < 200 ms) se mide en release.
+- **Cupo (SEC-TMC-12)**, ⚠️ ASSUMPTION: por solicitante y worktree, 10 por minuto y 120 en 24 h; 300 por worktree y 1.000 por repo en 24 h. Los cupos por worktree y por repo solo cuentan, y solo se aplican, a los agentes (Q-GRD-37): "sin atribuir" solo gasta su cupo propio. Cuenta cada intento y nunca borra un punto. No consume la reserva del previo garantizado.
+- **Con `failed`** (US-TMC-005): el hook avisa y deja pasar. La denegación `snapshot-failed` es de US-GRD-017.
+- **Escenario 1 de US-TMC-005**: un `checkout` con Git crudo no tiene hook previo (ADR-GRD-002), así que el escenario se verifica con el borrado de una rama y con un rebase. `checkout -f`, `restore` y `reset --hard` siguen en el nivel de observación.

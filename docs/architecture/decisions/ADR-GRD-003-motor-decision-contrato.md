@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
-updated: 2026-10-06
+updated: 2026-10-09
 deciders: [Rene Bonilla]
 domain: GRP
 feature: guardrails
@@ -348,3 +348,13 @@ Origen: [DS-TS-CKP-003](../../requirements/features/cockpit/dev-specs/TS-CKP-003
 | **Transición distinta del hijo directo** | Se evalúa de nuevo con la capa y el actor del plan y con **todas las reglas** (nunca las capacidades de la conexión del hook), y **no crea entrada propia**: se acumula con la decisión del plan y la entrada única del plan lleva el máximo. Si la ejecución falla por ella, la respuesta lleva esa decisión con el mismo `decision_id` que la entrada | § 6 y Enmienda (2026-10-04, Cockpit) |
 | **Solo el padre directo hereda** | Se confirma el "padre directo": un `git` interno de un hijo registrado o un `exec git` desde un hook es un nieto (evaluación nueva, capa `hooks`, actor del plan, entrada propia si corresponde). El daemon reconoce un `git` solo por el nombre del ejecutable, así que heredar por cadena de procesos `git` violaría H-01 y H-02 | § 4 |
 | **Repos sin la capa de hooks** | El ejecutor evalúa igual, como una instalación huérfana, y sin confirmación inicial protege la unión {`main`, rama principal, rama base leída} (Q-GRD-21, BR-CONS-003). Merge y borrar worktree no tienen otra protección. Que el estado de protección refleje esta cobertura es un pendiente de US-GRD-004 (BR-WF-002) | § 4 |
+
+## Enmienda (2026-10-09, US-TMC-005)
+
+Contrato del snapshot previo pedido desde los hooks (ADR-TMC-004, Enmienda 2026-10-09). **Decisión del orquestador (2026-10-04), validada por Arquitecto/PO.** El `status` sigue en `accepted`.
+
+| Cambio | Resolución | Dónde |
+|---|---|---|
+| **Campo `Decision.priorSnapshot`** | `complete` o `failed` (con causa y si se reutilizó el del mismo `git`). Lo pone el daemon después de decidir y antes de escribir la entrada del registro, solo con `appliedEffect = allow`, fuera del ejecutor, en `pre-rebase` y en un `reference-transaction` `prepared` que borra `refs/heads/*`. Sin el campo, no se tomó | § 3, § 7 |
+| **Capacidad `guard.prior-snapshot`** | Un cliente sin ella no recibe el campo y el daemon no toma el snapshot. El cliente de `crates/core` la pide siempre | § 4 |
+| **Con `failed`** | En US-TMC-005 el hook avisa y deja pasar. US-GRD-017 convierte `failed` en `deny` con `snapshot-failed` en ese mismo punto | § 7 |
