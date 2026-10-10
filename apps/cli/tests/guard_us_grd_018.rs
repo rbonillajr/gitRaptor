@@ -13,7 +13,7 @@ use std::process::{Command, Output, Stdio};
 use std::time::{Duration, Instant};
 
 use gitraptor_core::daemon::running_pid;
-use gitraptor_core::guardrails::TEMPLATE_VERSION;
+use gitraptor_core::guardrails::constants::TEMPLATE_VERSION;
 use gitraptor_core::profile::ProfileDirs;
 use gitraptor_testkit::Fixture;
 use gitraptor_testkit::fixture::{copy_executable, git_from_path};
