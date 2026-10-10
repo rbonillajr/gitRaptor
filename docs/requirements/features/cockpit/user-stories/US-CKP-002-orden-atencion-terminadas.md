@@ -54,7 +54,7 @@ Entonces el orden es: principal, "feat-pagos", "feat-login"
 Dado "claude-4" Terminado en "feat-old" el lunes a las 9:00 y ninguna sesión posterior en ese worktree
 Cuando son las 9:00 del martes
 Entonces la sesión de "claude-4" deja de verse por defecto
-  Y la fila conserva "último agente: claude-4 (terminó hace 24 h)"
+  Y la fila conserva "último agente: claude-4 (terminó hace 1 d)" (en: "last agent: claude-4 (ended 1 d ago)")
   Y con el filtro "ver terminadas" vuelve a verse
 
 **Escenario: Una sesión nueva desplaza a la terminada y no la reactiva**
@@ -66,9 +66,18 @@ Entonces la fila muestra una sesión nueva Activa
 
 **Escenario: Un worktree compartido muestra todas sus sesiones**
 
-Dado "feat-pagos" con "claude-1" Terminado y "claude-2" Inactivo
+Dado "feat-pagos" con "claude-1" Activo, "claude-2" Inactivo y "claude-3" Terminado
+  Y "claude-3" terminó después de que empezaran las otras dos
 Cuando el desarrollador mira su fila
-Entonces la fila se marca "compartido" y muestra las dos sesiones
+Entonces la fila se marca "compartido" y muestra las tres sesiones
+
+**Escenario: Una sesión presente y una Terminada no hacen compartido el worktree**
+
+Dado "feat-pagos" con "claude-1" Inactivo y "claude-2" Terminado hace 1 hora
+  Y "claude-2" terminó después de que empezara "claude-1"
+Cuando el desarrollador mira su fila
+Entonces la fila muestra las dos sesiones
+  Y no se marca "compartido"
 
 **Escenario: Con más de ocho agentes el color se repite, pero el nombre no**
 
@@ -78,9 +87,12 @@ Entonces "claude-9" comparte color con "claude-1" y su fila muestra su nombre y 
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto (Dev Spec)._
+- Sin cambios en el contrato: la TUI ordena y oculta con lo que ya publica `SessionView` (`started_utc_ms`, `ended_utc_ms`, `end_cause`, `state_since_utc_ms`). Las reglas están en la Dev Spec (D1 a D13).
+- El orden y la ventana de 24 h son funciones puras de la vista. El color de cada agente es un hueco estable en el estado de la interfaz.
+- "Compartido" son dos o más sesiones presentes. Hasta que US-GRP-011 publique la marca, lo calcula una sola función provisional de la TUI (excepción temporal a BR-CKP-CALC-001).
+- La subida por ⚡, por ⛔ y por hueco depende de US-CKP-006, US-CKP-019 y US-GRP-005. Se implementa después de US-CKP-005 y US-CKP-003.
 
 ## Diseño y Dev Spec
 
 - **Diseño:** DSYS-GRP-001 (paleta `agent.1..8`, símbolos ● ◐ ○ con fallback ASCII).
-- **Dev Spec:** pendiente.
+- **Dev Spec:** [DS-US-CKP-002](../dev-specs/US-CKP-002-orden-atencion-terminadas.md).
