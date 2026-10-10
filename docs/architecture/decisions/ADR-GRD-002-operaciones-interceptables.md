@@ -234,4 +234,12 @@ Fila **Commit** del § 1 para la política de autoría (BR-AUTH-005; [DS-US-GRD-
 
 ## Nota (2026-10-08, US-GRD-008): rutas prohibidas y ramas protegidas
 
-La fila **Commit** del § 1 gana la evaluación de las rutas prohibidas en `reference-transaction` `prepared`: el daemon lee las rutas del rango `viejo..nuevo` cuando hay una regla de rutas aplicable al actor (ADR-GRD-003, Enmienda (2026-10-08, US-GRD-008)). `pre-push` evalúa también las rutas del rango que sube y la rama protegida remota. Un push solo a refs no gobernadas (por ejemplo, solo tags) sigue fuera: el dispatcher sale sin evaluar, se publica como `policy-reach` y su cierre es [TD-GRD-001](../../requirements/features/guardrails/technical-stories/TD-GRD-001-dispatcher-plantilla-3-pre-push-toda-ref.md). No cambia la matriz ni el momento de ninguna fila. **Decisión del orquestador (2026-10-08), validada por el Arquitecto.** El `status` sigue en `accepted`.
+La fila **Commit** del § 1 gana la evaluación de las rutas prohibidas en `reference-transaction` `prepared`: el daemon lee las rutas del rango `viejo..nuevo` cuando hay una regla de rutas aplicable al actor (ADR-GRD-003, Enmienda (2026-10-08, US-GRD-008)). `pre-push` evalúa también las rutas del rango que sube y la rama protegida remota. Un push solo a refs no gobernadas (por ejemplo, solo tags) quedó fuera en esta nota y lo cerró [TD-GRD-001](../../requirements/features/guardrails/technical-stories/TD-GRD-001-dispatcher-plantilla-3-pre-push-toda-ref.md) (Enmienda 2026-10-09, abajo). No cambia la matriz ni el momento de ninguna fila. **Decisión del orquestador (2026-10-08), validada por el Arquitecto.** El `status` sigue en `accepted`.
+
+## Enmienda (2026-10-09, TD-GRD-001)
+
+Fila **Push** del § 1 y vía rápida del § 4 ([brief de TD-GRD-001](../../dev-briefs/td-grd-001-dispatcher-template-3.md), § 4.1, § 4.4 y § 4.5). **Decisión del orquestador (2026-10-09), validada por el Arquitecto.** El `status` sigue en `accepted`.
+
+- **Vía rápida de `pre-push`**: la salida sin contactar con el daemon cuando todas las refs remotas son no gobernadas **solo vale con las plantillas 1 y 2** del dispatcher (ADR-GRD-001, Enmienda 2026-10-09). Con la plantilla 3 el dispatcher entrega al cliente toda ref empujada. La vía rápida de `reference-transaction` no cambia.
+- **Regla por tipo de ref en `pre-push`**: la regla de **rutas prohibidas** se aplica a toda ref empujada, también las no gobernadas (`refs/tags/*`, `refs/notes/*` y demás). El mínimo, la rama protegida (solo `refs/heads/*`) y la configuración protegida siguen aplicándose solo a las refs gobernadas.
+- La nota de la Enmienda (2026-10-08, US-GRD-008), que dejaba el push solo a refs no gobernadas como residuo, queda **cerrada**.
