@@ -163,6 +163,12 @@ fn protected_branch_stays_on_branches_and_forbidden_paths_reach_tags_and_notes()
         remote_ref: "refs/heads/main".into(),
         remote: RefValue::Oid(base),
     };
+    // The branch alone gives one `ProtectedBranch` reason per level that protects it.
+    let alone = count(
+        &serve(&r, vec![branch.clone()], true, true),
+        Rule::ProtectedBranch,
+    );
+    assert!(alone >= 1, "the branch alone is not protected");
     let d = serve(
         &r,
         vec![
@@ -174,7 +180,8 @@ fn protected_branch_stays_on_branches_and_forbidden_paths_reach_tags_and_notes()
         true,
     );
     assert_eq!(d.applied_effect, Effect::Deny, "{d:?}");
-    assert_eq!(count(&d, Rule::ProtectedBranch), 1, "{d:?}");
+    // The tag and the note add no `ProtectedBranch` reason.
+    assert_eq!(count(&d, Rule::ProtectedBranch), alone, "{d:?}");
     assert!(count(&d, Rule::ForbiddenPath) >= 1, "{d:?}");
 }
 
