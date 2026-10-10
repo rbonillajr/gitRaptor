@@ -69,7 +69,7 @@ Esta Dev Spec resume los § 3, § 4, § 6 y § 10 del Brief aprobado ([`inf-mcp-
 
 ## ⚠️ Gaps y violaciones de la constitución
 
-Ninguno bloqueante. Abiertos: el tope de entrada de `raptor-mcp` (1 MiB y 32 niveles) no se aplica todavía y el corpus lo registra como `known_gap` (dueña US-MCP-005). El nivel `engine` en Windows y la primera ejecución verde en Ubuntu siguen en XP-42.
+Ninguno bloqueante. Abiertos: el único `known_gap` es `jsonrpc-resources-list`; el tope de entrada de `raptor-mcp` (1 MiB y 32 niveles) ya se aplica (PR #225) y sus casos exigen rechazo. El nivel `engine` en Windows y la primera ejecución verde en Ubuntu siguen en XP-42.
 
 ---
 
