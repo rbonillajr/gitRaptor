@@ -4,7 +4,7 @@ title: "Reglas de Negocio — Guardrails"
 type: business-rules
 status: draft
 created: 2026-10-03
-updated: 2026-10-06
+updated: 2026-10-09
 domain: GRP
 epic: E-001
 feature: guardrails
@@ -56,7 +56,7 @@ tags:
 
 **Feature**: Guardrails (F-001-04)
 **Enlace a contexto**: [`context.md`](./context.md) (CTX-GRD-001)
-**Última actualización**: 2026-10-06 (BR-AUTH-005, política de autoría de los commits, por D6 del BRD y Q-GRD-34; después, aclaración del punto 4 por decisión del PO). Antes, 2026-10-04 (Q-GRD-28 a Q-GRD-31, resultados de SPIKE-GRD-001 en macOS; antes, Q-GRD-17 a Q-GRD-27 y sus aplicaciones derivadas: Q-GRD-12 en la versión del worktree, confirmación inicial y configuración antes de confirmar, unión de la rama base por historia; ver Changelog). Antes, 2026-10-03 (versión inicial)
+**Última actualización**: 2026-10-09 (BR-EDGE-005: alcance, límites declarados y decisiones Q-GRD-36 a Q-GRD-38 de la revisión de DS-US-GRD-017). Antes, 2026-10-06 (BR-AUTH-005, política de autoría de los commits, por D6 del BRD y Q-GRD-34; después, aclaración del punto 4 por decisión del PO). Antes, 2026-10-04 (Q-GRD-28 a Q-GRD-31, resultados de SPIKE-GRD-001 en macOS; antes, Q-GRD-17 a Q-GRD-27 y sus aplicaciones derivadas: Q-GRD-12 en la versión del worktree, confirmación inicial y configuración antes de confirmar, unión de la rama base por historia; ver Changelog). Antes, 2026-10-03 (versión inicial)
 
 ---
 
@@ -932,12 +932,27 @@ Acción al expirar: se descarta
 
 **Criticidad**: Alta
 
+**Alcance**: el rebase (también `pull --rebase`) y el borrado de una rama local, que son las operaciones destructivas con aviso previo que GitRaptor puede interceptar. `reset --hard` por MCP entra cuando exista F-001-05.
+
 **Ejemplos**:
-- `reset --hard` permitido por la configuración, snapshot imposible → denegado, motivo "no se pudo guardar un punto de recuperación".
+- Borrar la rama "feat-x", con commits que no están en ninguna otra rama, está permitido por la configuración y el snapshot es imposible → denegado; "feat-x" sigue existiendo y el motivo dice "no se pudo guardar un punto de recuperación" y por qué (por ejemplo, se agotó el plazo para guardarlo).
+- Rebase permitido de "feat-y", snapshot imposible → denegado; "feat-y" conserva sus commits.
+- GitRaptor no está en marcha (modo degradado) y un proceso borra "feat-x" → denegado; el motivo dice "arranca GitRaptor y repite la operación".
 
-**Cómo se verifica**: simular el fallo del snapshot y comprobar que la operación no se ejecuta.
+> **Decisión** (Q-GRD-36, orquestador 2026-10-09, validada por PO; abierta a veto de Rene): **en modo degradado, el rebase y el borrado de una rama local se deniegan**, porque sin GitRaptor en marcha no hay punto de recuperación posible. El motivo dice "arranca GitRaptor y repite la operación". En modo degradado no hay excepción consciente (BR-AUTH-003): el recurso es arrancar GitRaptor. El modo degradado nunca es menos estricto que el normal.
 
-**Referencias**: NFR-01; dependencia con F-001-03; Q-GRD-11; riesgo R-GRD-9.
+> **Decisión** (Q-GRD-37, orquestador 2026-10-09, validada por PO; abierta a veto de Rene), **cupos del snapshot previo**: los cupos globales del snapshot previo (por worktree y por repo, US-TMC-005) **solo cuentan las peticiones de los agentes** detectados o registrados. Las de la persona ("sin atribuir") cuentan solo en su cupo propio por solicitante. Así un agente que crea y borra ramas en bucle agota su cupo y el de los demás agentes, pero nunca deja a la persona sin poder hacer rebase o borrar ramas durante 24 h. Se descartan las otras dos opciones: dejar pasar sin snapshot a la persona cuando se agota un cupo global rompe NFR-01 justo cuando hay actividad anómala, y aceptar el riesgo deja a la persona sin recurso antes de US-GRD-006. Riesgo residual: un agente no detectado cuenta como persona (R-GRD-2) y puede agotar el cupo propio de la persona; con US-GRD-006 la persona tiene la excepción consciente. Enmienda la cuenta de cupos de US-TMC-005 (lo enruta el Arquitecto).
+
+> **Decisión** (Q-GRD-38, orquestador 2026-10-09, validada por PO; abierta a veto de Rene), **repo protegido retirado de la observación**: se acepta que se denieguen su rebase y el borrado de ramas (fail-safe, Q-GRD-11), con un motivo que dice que el repo ya no está observado y cómo volver a observarlo. Además, retirar de la observación un repo que tiene la protección instalada **avisa antes** de qué queda bloqueado y de las dos salidas: volver a observarlo o desinstalar la protección (Q-GRD-19). No se exige desinstalar antes de retirar. El aviso es alcance de la historia de retirar un repo (US-GRP-001, motor-local); lo enruta el orquestador.
+
+**Límites declarados**:
+- **Remoto**: el force-push y el borrado de una rama remota quedan fuera, porque la Time Machine no guarda el remoto. Se reabre cuando lo guarde; complementa US-TMC-014. El force-push ya lo deniega el mínimo seguro (Q-GRD-5).
+- **Sin aviso previo**: `reset --hard` y `checkout` con Git crudo, y mover una rama hacia atrás sin borrarla (`branch -f`), no tienen un aviso previo que interceptar (BR-EDGE-003). Los cubre la observación continua de la Time Machine.
+- **Archivo nuevo sin ignorar que tarda más de 5 s en guardarse**: el plazo del snapshot vence y la operación se deniega. No hay tope de tamaño; el motivo da una pista neutra.
+
+**Cómo se verifica**: simular el fallo del snapshot y comprobar que la operación no se ejecuta, en el borrado de rama y en el rebase; con GitRaptor parado, comprobar la denegación y el motivo de modo degradado; agotar los cupos globales con un agente y comprobar que la persona sigue obteniendo su snapshot.
+
+**Referencias**: NFR-01; dependencia con F-001-03 (US-TMC-005, US-TMC-014); Q-GRD-5, Q-GRD-11, Q-GRD-36, Q-GRD-37, Q-GRD-38; BR-EDGE-003, BR-AUTH-003; riesgos R-GRD-2, R-GRD-9; US-GRD-017.
 
 ---
 
@@ -1006,3 +1021,4 @@ Cada regla debe reflejarse en al menos un escenario Gherkin de su historia. Cada
 | 1.10 | 2026-10-04 | PO (AADD); decisión del orquestador validada por Arquitecto/PO | Resultados de SPIKE-GRD-001 en macOS. Q-GRD-28: BR-EDGE-001 añade la excepción del renombrado de la rama base en repos reftable y BR-EDGE-003 sus ejemplos (también el efecto parcial con el formato habitual). Q-GRD-29: BR-CONS-005 con criterio semántico en la entrada de la clave de hooks. Q-GRD-31: apartado "lo que se deniega de más" en BR-EDGE-003. Q-GRD-30 solo cambia el RNF de context.md. Sin reglas nuevas. |
 | 1.11 | 2026-10-06 | PO (AADD); decisión del orquestador (2026-10-06), validada por el PO | D6 del BRD (decisión de Rene Bonilla, 2026-10-06), registrada como Q-GRD-34: nueva **BR-AUTH-005**, política de autoría de los commits (modelo por defecto persona autora + agente como trailer `Co-Authored-By`; valores `agents-commit` por defecto, `human-author` con bloquear o avisar, `flexible`). Solo aplica a commits ejecutados por un agente detectado o registrado; orden de restricción; entradas de autoría en el registro sin contar en el KPI salvo las denegaciones; presentación y pista `inferred` en US-GRD-019. 24 reglas (18 críticas). |
 | 1.12 | 2026-10-06 | PO (AADD); decisión del PO (2026-10-06) | BR-AUTH-005, aclaración del punto 4 (pendiente de DS-US-GRD-018, D12): el autor y el committer se muestran uniendo por oid con la autoría declarada del evento y no se copian en la entrada; una denegación muestra "autor no disponible: el commit no llegó a crearse"; restricción para una futura retención de los eventos (no más corta que la del registro). Sin reglas nuevas. |
+| 1.13 | 2026-10-09 | PO (AADD); decisiones del orquestador (2026-10-09), validadas por el PO, abiertas a veto de Rene Bonilla | BR-EDGE-005 por la revisión de DS-US-GRD-017: el ejemplo pasa a ser el borrado de "feat-x" (más rebase y modo degradado); alcance (rebase y borrado de rama local; `reset --hard` por MCP con F-001-05); límites declarados (remoto, `reset --hard`/`checkout`/`branch -f` sin aviso previo, archivo nuevo sin ignorar que tarda más de 5 s). Q-GRD-36: en modo degradado se deniegan. Q-GRD-37: los cupos globales del snapshot previo solo cuentan agentes (G3). Q-GRD-38: repo protegido retirado de la observación, se deniega y retirar avisa antes (N3). Sin reglas nuevas. |
