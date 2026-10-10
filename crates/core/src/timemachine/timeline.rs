@@ -171,22 +171,28 @@ impl OplogRead {
 struct Points<'a> {
     all: &'a [SnapshotView],
     by_id: HashMap<String, usize>,
-    /// Per worktree key: `(engine_mark, seq, index)` ascending, of the points with a mark.
-    by_key: HashMap<String, Vec<(i64, i64, usize)>>,
+    /// Per worktree key: `(engine_mark, rank, seq, index)` ascending, of the points with a mark.
+    /// With the same mark a prior (rank 1) comes after an observation or a manual point
+    /// (rank 0): it is the same picture and the stronger promise, so it is the one picked.
+    by_key: HashMap<String, Vec<(i64, u8, i64, usize)>>,
 }
 
 impl<'a> Points<'a> {
     fn new(all: &'a [SnapshotView]) -> Self {
         let mut by_id = HashMap::new();
-        let mut by_key: HashMap<String, Vec<(i64, i64, usize)>> = HashMap::new();
+        let mut by_key: HashMap<String, Vec<(i64, u8, i64, usize)>> = HashMap::new();
         for (i, s) in all.iter().enumerate() {
             by_id.entry(s.record.snapshot_id.clone()).or_insert(i);
             if let Some(mark) = s.record.engine_mark {
+                let rank = u8::from(matches!(
+                    s.record.level,
+                    SnapshotLevel::GuaranteedPrior | SnapshotLevel::HookPrior
+                ));
                 for key in &s.record.worktrees {
                     by_key
                         .entry(key.clone())
                         .or_default()
-                        .push((mark, s.record.seq, i));
+                        .push((mark, rank, s.record.seq, i));
                 }
             }
         }
@@ -204,11 +210,11 @@ impl<'a> Points<'a> {
     /// of the engine (the rule of the undo's target, without `store.verify`, D9).
     fn before_event(&self, key: &str, seq: i64, floor: i64) -> Option<&SnapshotView> {
         let list = self.by_key.get(key)?;
-        let end = list.partition_point(|(mark, _, _)| *mark < seq);
+        let end = list.partition_point(|(mark, _, _, _)| *mark < seq);
         list[..end]
             .iter()
             .rev()
-            .map(|(_, _, i)| &self.all[*i])
+            .map(|(_, _, _, i)| &self.all[*i])
             .find(|s| s.record.seq >= floor)
     }
 }
@@ -1759,7 +1765,7 @@ mod tests {
     fn the_point_before_an_event_is_the_latest_one_of_its_generation() {
         let mut w = world();
         let early = w.snapshot(SnapshotLevel::Observation, 5, None, 10);
-        let late = w.snapshot(SnapshotLevel::HookPrior, 9, None, 20);
+        let late = w.snapshot(SnapshotLevel::GuaranteedPrior, 9, None, 20);
         let after = w.snapshot(SnapshotLevel::Observation, 20, None, 30);
         let read = OplogRead::read(&w.log, &w.refs, &query());
         let points = Points::new(read.points.as_deref().unwrap());
@@ -1772,6 +1778,21 @@ mod tests {
         // A floor past the points leaves none.
         assert_eq!(id(points.before_event(KEY, 21, i64::MAX)), None);
         assert_eq!(id(points.get(&early)), Some(early));
+    }
+
+    #[test]
+    fn with_the_same_mark_a_prior_wins_over_a_later_observation() {
+        let mut w = world();
+        let prior = w.snapshot(SnapshotLevel::GuaranteedPrior, 9, None, 10);
+        // Recorded after the prior, with the same mark: the same picture.
+        let observed = w.snapshot(SnapshotLevel::Observation, 9, None, 20);
+        let read = OplogRead::read(&w.log, &w.refs, &query());
+        let points = Points::new(read.points.as_deref().unwrap());
+        let picked = points
+            .before_event(KEY, 10, 0)
+            .map(|s| s.record.snapshot_id.clone());
+        assert_eq!(picked, Some(prior));
+        assert_ne!(picked, Some(observed));
     }
 
     #[test]
