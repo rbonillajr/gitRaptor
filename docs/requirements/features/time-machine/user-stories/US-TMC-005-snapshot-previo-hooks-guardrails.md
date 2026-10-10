@@ -2,7 +2,7 @@
 id: US-TMC-005
 title: "El borrado de ramas y el rebase con Git crudo tienen punto previo cuando el repo usa los hooks de Guardrails"
 type: us
-status: draft
+status: implemented
 priority: medium
 created: 2026-10-03
 updated: 2026-10-09
@@ -91,3 +91,10 @@ Entonces la Time Machine no guarda ningún punto por esa consulta
 - **Historias**: US-TMC-004; US-GRD-001 (Guardrails: instala los hooks que llaman al snapshot `previo_hook`).
 - **Externas**: ninguna. Desbloqueada el 2026-10-04 por decisión de Rene Bonilla, 2026-10-04: los hooks de Guardrails están definidos en ADR-GRD-001 (aceptado) y los instala US-GRD-001, así que el bloqueo por F-001-04 pasa a ser dependencia de historia. Antes se bloqueaba en cruz con US-GRD-017, que ahora depende de esta historia. La Time Machine no instala hooks (Q22).
 - **Transversal**: transversal (lo define el Arquitecto): verificación en repos temporales, nunca en un repo real; mismo comportamiento en Windows, macOS y Linux; mensajes en inglés y español.
+
+## Estado de la implementación (2026-10-09)
+
+Implementado en: PR #248.
+
+- **Hecho:** escenarios 1 (borrado de rama), rebase, 3 y 4 como tests en repos y perfiles temporales (`apps/cli/tests/us_tmc_005_hook.rs`), más disparadores, plazo, cupo, sin recursión, puerta del `.git` y migración (`crates/core/tests/us_tmc_005.rs`, `crates/core/tests/us_tmc_005_unattributed.rs`, `crates/core/src/timemachine/oplog/hook_prior_migration_tests.rs`). El escenario 2 ya lo cumplía US-TMC-004. Certificado con reservas (contrato `docs/dev-briefs/us-tmc-005-pre-hook-snapshot.contract.json`).
+- **Pendiente:** [TD-TMC-001](../technical-stories/TD-TMC-001-previo-hook-plazo-y-cupo-sin-atribuir.md) (plazo sobre la espera del escritor, precheck del cupo, cubo "sin atribuir"), antes o dentro de US-GRD-017. Linux y Windows solo por CI.
