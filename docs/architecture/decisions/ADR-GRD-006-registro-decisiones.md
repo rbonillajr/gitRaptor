@@ -214,3 +214,13 @@ Los eventos no caducan, así que se cumple la restricción de BR-AUTH-005: la re
 ## Nota (2026-10-08, US-GRD-012): aviso `config.relax-ignored`
 
 Una operación de un agente puede dejar, además de su entrada de decisión, un aviso (`kind: notice`) con regla `config.relax-ignored` y el mismo `decision_id`. Lleva el nivel (worktree, perfil o local), nunca valores; la clave de agregación incluye el `kind`, no cuenta en `blocked` y no llega al cliente del hook. Ver la Enmienda (2026-10-08, US-GRD-010 y US-GRD-012) de ADR-GRD-003.
+
+## Enmienda (2026-10-09, TS-CKP-003)
+
+Origen: [DS-TS-CKP-003](../../requirements/features/cockpit/dev-specs/TS-CKP-003-capa-cockpit-guardrails.md), D8, D9 y D11. **Decisión del orquestador (2026-10-09), validada por Arquitecto y PO.** No cambia la ubicación, la retención, la auditoría ni el KPI. El `status` sigue en `accepted`.
+
+| Cambio | Dónde |
+|---|---|
+| Sustituye la fila "`layer` hoy siempre es `hooks`" de la Enmienda (2026-10-07, US-GRD-005): las entradas del ejecutor llevan `layer = mcp` o `cockpit`. El `CHECK` de la columna ya admite esos valores, así que no hay migración. La capa entra en la clave de agregación, también en la fila `rate-limited` | § 1, § 2 |
+| Un plan del ejecutor deja también `notice` si corrió permitido con avisos. `config.relax-ignored` no aplica al ejecutor; un `git` nieto sí lo emite, porque no es el ejecutor | § 1, Enmienda Cockpit |
+| Capacidad `guard.log-layers`: con ella, la consulta devuelve la capa real; sin ella, el listado omite las entradas que no son `hooks` y el resumen las cuenta igual. `raptor guard log` puede ocultar `hooks` en la tabla compacta y muestra siempre la capa en la salida detallada y en JSON. El filtro por capa del § 6 es un pendiente de US-GRD-005 (a más tardar cuando cierre US-GRD-016) | § 6 |
