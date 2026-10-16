@@ -233,18 +233,13 @@ jobs:
           SCOPE: ${{ github.event_name == 'pull_request' && needs.changes.outputs.test_scope || 'full' }}
           PROJECTS: ${{ needs.changes.outputs.test_projects }}
         run: bash tools/ci/cargo-test-selection.sh
-      # Windows: TS-GRP-002 rejects every Git candidate on Windows (fail-closed until the ACE
-      # check exists) and the canary uses /bin/sh scripts, so the tests cannot pass there yet.
-      # Pendiente: etapa de validación multiplataforma. The step never fails the job on Windows;
-      # fmt and clippy stay blocking everywhere. Runs after the gate even when it failed, so a
-      # failing suite does not hide the other tests' results.
+      # Blocking on every OS. `--no-fail-fast` runs every test binary even after one fails, so a
+      # red run lists all the failures. A test that cannot pass on an OS carries
+      # `#[cfg_attr(windows, ignore = "issue #N: …")]`, never a global `--skip`. Runs after the
+      # gate even when it failed, so a failing suite does not hide the other tests' results.
       - id: test
         if: ${{ !cancelled() && steps.fmt.outcome == 'success' && steps.clippy.outcome == 'success' }}
         run: cargo test ${{ steps.select.outputs.args || '--workspace' }} --no-fail-fast -- --skip repo_intact
-        continue-on-error: ${{ matrix.os == 'windows-latest' }}
-      - name: Pending on Windows
-        if: steps.test.outcome == 'failure'
-        run: "echo '::warning::cargo test failed on Windows. Pendiente: etapa de validación multiplataforma'"
       # Blocking on Windows too: the only crate with `unsafe` and the requester
       # resolution on real processes (ADR-GRP-005, Enmienda 2026-10-05).
       - name: Windows processes and requester (blocking)
