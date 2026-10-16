@@ -215,6 +215,130 @@ fn repo(f: &Fixture, name: &str, branch: &str) -> PathBuf {
     dir.canonicalize().unwrap()
 }
 
+/// The text on the screen after replaying what the TUI painted. ratatui repaints only the
+/// cells that changed, so a word already on screen (the `n` of `feat-notas` after a `no`)
+/// is not sent again and never appears whole in the byte stream: a wait for it must look at
+/// the screen, not at the bytes. Only what those waits need is modeled: cursor positioning,
+/// printable text, and the erasures; colors and every other sequence are dropped.
+struct Screen {
+    rows: Vec<Vec<char>>,
+    row: usize,
+    col: usize,
+    /// Bytes of an escape sequence cut by the end of a read.
+    pending: String,
+}
+
+impl Screen {
+    const ROWS: usize = 30;
+    const COLS: usize = 100;
+
+    fn new() -> Self {
+        Self {
+            rows: vec![vec![' '; Self::COLS]; Self::ROWS],
+            row: 0,
+            col: 0,
+            pending: String::new(),
+        }
+    }
+
+    fn put(&mut self, c: char) {
+        if self.row < Self::ROWS && self.col < Self::COLS {
+            self.rows[self.row][self.col] = c;
+        }
+        self.col += 1;
+    }
+
+    fn feed(&mut self, bytes: &str) {
+        let input = std::mem::take(&mut self.pending) + bytes;
+        let mut chars = input.chars().peekable();
+        while let Some(c) = chars.next() {
+            match c {
+                '\u{1b}' => {
+                    let mut seq = String::from(c);
+                    let Some(&kind) = chars.peek() else {
+                        self.pending = seq;
+                        return;
+                    };
+                    match kind {
+                        '[' => {
+                            seq.extend(chars.next());
+                            loop {
+                                let Some(b) = chars.next() else {
+                                    self.pending = seq;
+                                    return;
+                                };
+                                seq.push(b);
+                                if ('@'..='~').contains(&b) {
+                                    break;
+                                }
+                            }
+                            self.csi(&seq[2..]);
+                        }
+                        // OSC: up to BEL or ST (`ESC \`).
+                        ']' => {
+                            seq.extend(chars.next());
+                            loop {
+                                let Some(b) = chars.next() else {
+                                    self.pending = seq;
+                                    return;
+                                };
+                                seq.push(b);
+                                if b == '\u{7}' || seq.ends_with("\u{1b}\\") {
+                                    break;
+                                }
+                            }
+                        }
+                        _ => {
+                            chars.next();
+                        }
+                    }
+                }
+                '\r' => self.col = 0,
+                '\n' => self.row += 1,
+                c if !c.is_control() => self.put(c),
+                _ => {}
+            }
+        }
+    }
+
+    fn csi(&mut self, seq: &str) {
+        let (params, last) = seq.split_at(seq.len() - 1);
+        let nums: Vec<usize> = params.split(';').map(|n| n.parse().unwrap_or(0)).collect();
+        let n = |i: usize| nums.get(i).copied().filter(|v| *v > 0).unwrap_or(1);
+        match last {
+            "H" | "f" => {
+                self.row = n(0) - 1;
+                self.col = n(1) - 1;
+            }
+            "J" if nums[0] == 2 => self.rows.iter_mut().for_each(|r| r.fill(' ')),
+            "K" if self.row < Self::ROWS => {
+                let from = if nums[0] == 0 { self.col } else { 0 };
+                let to = if nums[0] == 1 {
+                    self.col + 1
+                } else {
+                    Self::COLS
+                };
+                for c in from.min(Self::COLS)..to.min(Self::COLS) {
+                    self.rows[self.row][c] = ' ';
+                }
+            }
+            "X" if self.row < Self::ROWS => {
+                for c in self.col..(self.col + n(0)).min(Self::COLS) {
+                    self.rows[self.row][c] = ' ';
+                }
+            }
+            "C" => self.col += n(0),
+            _ => {}
+        }
+    }
+
+    fn contains(&self, what: &str) -> bool {
+        self.rows
+            .iter()
+            .any(|r| r.iter().collect::<String>().contains(what))
+    }
+}
+
 /// The TUI under a pty: what it paints, read on a thread, and its keyboard.
 struct Pty {
     child: Child,
@@ -222,6 +346,7 @@ struct Pty {
     rx: Receiver<Vec<u8>>,
     reader: Option<std::thread::JoinHandle<()>>,
     seen: String,
+    screen: Screen,
 }
 
 impl Pty {
@@ -243,19 +368,24 @@ impl Pty {
             rx,
             reader: Some(reader),
             seen: String::new(),
+            screen: Screen::new(),
         }
     }
 
-    /// Waits until `what` was painted `count` times in total.
+    /// Waits until `what` was painted `count` times in total; a single one is also met by it
+    /// being on the screen, though it was painted in pieces.
     fn wait(&mut self, what: &str, count: usize) {
         let deadline = Instant::now() + DEADLINE;
-        while self.seen.matches(what).count() < count {
+        while self.seen.matches(what).count() < count && !(count == 1 && self.screen.contains(what))
+        {
             let left = deadline.saturating_duration_since(Instant::now());
             let bytes = self
                 .rx
                 .recv_timeout(left)
                 .unwrap_or_else(|_| panic!("waiting for {what:?} x{count}: {:?}", self.seen));
-            self.seen.push_str(&String::from_utf8_lossy(&bytes));
+            let bytes = String::from_utf8_lossy(&bytes);
+            self.screen.feed(&bytes);
+            self.seen.push_str(&bytes);
         }
     }
 
@@ -287,6 +417,21 @@ fn text(out: &Output) -> String {
         String::from_utf8_lossy(&out.stderr),
     ]
     .concat()
+}
+
+/// The failure under load: a repaint sent `feat-` and `otas` and left the `n` that was already on
+/// screen, so the whole word was never in the bytes.
+#[test]
+fn the_screen_joins_what_a_repaint_painted_in_pieces() {
+    let mut screen = Screen::new();
+    screen.feed("\u{1b}[5;6H\u{1b}[1mn\u{1b}[22m");
+    screen.feed("\u{1b}[5;1Hfeat-\u{1b}[38;5;246m\u{1b}[5;7Hotas");
+    assert!(screen.contains("feat-notas"));
+    // A sequence cut by the end of a read is finished by the next one.
+    let mut cut = Screen::new();
+    cut.feed("\u{1b}[2;1Hab\u{1b}[2;");
+    cut.feed("4Hcd");
+    assert!(cut.contains("ab cd"));
 }
 
 /// Escenario: Responder "s" observa el repo y lo muestra. In English the key is `y`, in
