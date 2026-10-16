@@ -4,7 +4,7 @@
 
 > **Archivo generado, no editar a mano.** Sale del frontmatter (`status`) y de la sección "Estado de la implementación" de cada ficha (US, TS, INF, SPIKE y TD) de `docs/requirements/features/`. Para cambiar un estado, edita la ficha y regenera con `node tools/status/release-status.mjs`. El CI (docs-lint) falla si este archivo no coincide con lo que genera el script.
 
-Última actualización de una ficha: 2026-10-09.
+Última actualización de una ficha: 2026-10-16.
 
 ## Totales por estado
 
@@ -14,7 +14,7 @@
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 19 |
 | Listo (`ready`) | 4 |
-| Borrador (`draft`) | 77 |
+| Borrador (`draft`) | 76 |
 | Bloqueado (`blocked`) | 1 |
 | **Total** | **146** |
 
@@ -23,7 +23,7 @@
 | Feature | Implementado | Hecho | Implementado en parte | Listo | Borrador | Bloqueado | Total |
 |---|---|---|---|---|---|---|---|
 | [cockpit](#cockpit) | 6 | 0 | 2 | 0 | 24 | 1 | 33 |
-| [guardrails](#guardrails) | 7 | 0 | 6 | 1 | 10 | 0 | 24 |
+| [guardrails](#guardrails) | 8 | 0 | 6 | 1 | 9 | 0 | 24 |
 | [mcp](#mcp) | 5 | 0 | 2 | 0 | 13 | 0 | 20 |
 | [motor-local](#motor-local) | 12 | 2 | 8 | 3 | 15 | 0 | 40 |
 | [time-machine](#time-machine) | 12 | 1 | 1 | 0 | 15 | 0 | 29 |
@@ -70,11 +70,12 @@
 
 ### guardrails
 
-24 fichas: 7 implementado, 6 implementado en parte, 1 listo, 10 borrador.
+24 fichas: 8 implementado, 6 implementado en parte, 1 listo, 9 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
 | [INF-GRD-001](features/guardrails/technical-stories/INF-GRD-001-arnes-hooks.md) | Arnés de la capa de hooks: repos con hooks previos, huella, interrupción y matriz de CI | Implementado (`implemented`) | #65, #121, #116 | — |
+| [TD-GRD-001](features/guardrails/technical-stories/TD-GRD-001-dispatcher-plantilla-3-pre-push-toda-ref.md) | Dispatcher plantilla 3: evaluar el pre-push de toda ref empujada (tags, notes y demás refs no gobernadas) | Implementado (`implemented`) | — | — |
 | [TS-GRD-001](features/guardrails/technical-stories/TS-GRD-001-configuracion-commiteada.md) | Lectura commiteada de la configuración del equipo y de la rama principal | Implementado (`implemented`) | #27 | — |
 | [US-GRD-001](features/guardrails/user-stories/US-GRD-001-proteger-repo-force-push-bloqueado.md) | Un agente que intenta hacer force-push en un repo protegido queda bloqueado | Implementado (`implemented`) | #116, #121 | — |
 | [US-GRD-002](features/guardrails/user-stories/US-GRD-002-hooks-previos-respetados.md) | Los hooks que el repo ya tenía siguen funcionando al protegerlo | Implementado (`implemented`) | #193 | — |
@@ -88,7 +89,6 @@
 | [US-GRD-010](features/guardrails/user-stories/US-GRD-010-endurecer-sin-relajar.md) | El desarrollador endurece las reglas en su máquina sin poder relajar las del equipo | Implementado en parte (`partially-implemented`) | #217 | — |
 | [US-GRD-018](features/guardrails/user-stories/US-GRD-018-autoria-commits-persona-y-agente.md) | Cada commit entra a nombre de la persona y deja constancia del agente que lo hizo, con la exigencia que fija el equipo | Implementado en parte (`partially-implemented`) | #137, #141, #150, #152, #153, #154 | 3 |
 | [SPIKE-GRD-002](features/guardrails/technical-stories/SPIKE-GRD-002-factor-so-daemon.md) | Factor de autenticación del SO invocado desde el daemon en los tres SO | Listo (`ready`) | — | — |
-| [TD-GRD-001](features/guardrails/technical-stories/TD-GRD-001-dispatcher-plantilla-3-pre-push-toda-ref.md) | Dispatcher plantilla 3: evaluar el pre-push de toda ref empujada (tags, notes y demás refs no gobernadas) | Borrador (`draft`) | — | — |
 | [US-GRD-006](features/guardrails/user-stories/US-GRD-006-excepcion-consciente.md) | El desarrollador hace a conciencia una operación prohibida y queda constancia | Borrador (`draft`) | — | — |
 | [US-GRD-007](features/guardrails/user-stories/US-GRD-007-permisos-por-operacion.md) | El equipo decide qué operaciones de Git se permiten, se deniegan o piden confirmación | Borrador (`draft`) | — | — |
 | [US-GRD-009](features/guardrails/user-stories/US-GRD-009-tamano-diff-formato-commit.md) | Los agentes entregan commits pequeños y con el formato que exige el equipo | Borrador (`draft`) | — | — |

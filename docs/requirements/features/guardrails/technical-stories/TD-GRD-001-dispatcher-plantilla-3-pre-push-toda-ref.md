@@ -2,13 +2,13 @@
 id: TD-GRD-001
 title: "Dispatcher plantilla 3: evaluar el pre-push de toda ref empujada (tags, notes y demás refs no gobernadas)"
 type: td
-status: draft
+status: implemented
 feature: guardrails
 domain: GRP
 priority: high
 complexity: high
 created: 2026-10-08
-updated: 2026-10-08
+updated: 2026-10-16
 related:
   adrs: [ADR-GRD-001, ADR-GRD-002]
   stories: [US-GRD-008]
@@ -64,3 +64,5 @@ tags: [guardrails, deuda-tecnica, dispatcher, plantilla-3, pre-push, rutas-prohi
 #### Verificación Manual / Sandbox
 
 - En un repo temporal con la plantilla 2 instalada, reproducir `git push origin <commit>:refs/tags/x` con un commit que toque una ruta prohibida: sube sin evaluar. Reinstalar y repetirlo: queda denegado.
+
+Implementado en: PR #249.
