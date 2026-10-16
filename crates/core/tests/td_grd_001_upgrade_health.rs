@@ -42,6 +42,12 @@ fn upgrading(old_files: &[&str], new_files: &[&str]) -> Upgrading {
     std::fs::create_dir_all(folder.join("hooks")).unwrap();
     let raptor = tmp.path().join("raptor");
     std::fs::write(&raptor, b"bin").unwrap();
+    // The dispatchers start it: a regular file with the execute bit (H4).
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&raptor, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
     let journal = Journal {
         version: Journal::VERSION,
         stage: Stage::Confirmed,
