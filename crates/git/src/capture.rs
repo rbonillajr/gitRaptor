@@ -433,7 +433,8 @@ impl RepoReader {
     /// History the store cannot copy: a shallow or partial clone.
     pub fn history_gaps(&self) -> Vec<HistoryGap> {
         let mut gaps = Vec::new();
-        if self.repo.is_shallow() {
+        // An unreadable shallow file is treated as a gap: the store must not claim full history.
+        if self.repo.is_shallow().unwrap_or(true) {
             gaps.push(HistoryGap::Shallow);
         }
         let config = self.repo.config_snapshot();
