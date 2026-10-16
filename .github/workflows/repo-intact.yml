@@ -240,7 +240,7 @@ jobs:
       # failing suite does not hide the other tests' results.
       - id: test
         if: ${{ !cancelled() && steps.fmt.outcome == 'success' && steps.clippy.outcome == 'success' }}
-        run: cargo test ${{ steps.select.outputs.args || '--workspace' }} -- --skip repo_intact
+        run: cargo test ${{ steps.select.outputs.args || '--workspace' }} --no-fail-fast -- --skip repo_intact
         continue-on-error: ${{ matrix.os == 'windows-latest' }}
       - name: Pending on Windows
         if: steps.test.outcome == 'failure'
