@@ -42,6 +42,23 @@ pub type Key = Result<Option<String>, ()>;
 /// MB): a file over it is not what the journal recorded.
 const MAX_FILE: u64 = 32 * 1024 * 1024;
 
+/// Whether `path` is a regular file the dispatchers can start: a folder or a file without the
+/// execute bit (on Unix) is as lost as a missing binary.
+fn is_runnable(path: &Path) -> bool {
+    let Ok(meta) = std::fs::metadata(path) else {
+        return false;
+    };
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        meta.is_file() && meta.permissions().mode() & 0o111 != 0
+    }
+    #[cfg(not(unix))]
+    {
+        meta.is_file()
+    }
+}
+
 /// Reads a regular file for the integrity check, the way a file somebody else can swap may be
 /// read: never through a link, never blocking on a pipe (a FIFO put where a dispatcher was would
 /// freeze the loop), never more than [`MAX_FILE`]. `Ok(None)`: not a regular file, or too big.
@@ -125,7 +142,7 @@ pub fn check_with(common: &Path, journal: Option<&Journal>, key: Key) -> Health 
         return lost(cause, diagnostics);
     }
     // H4, reduced: the `raptor` the dispatchers start.
-    if !Path::new(&journal.raptor).exists() {
+    if !is_runnable(Path::new(&journal.raptor)) {
         return lost(LossCause::BinaryMissing, diagnostics);
     }
     if journal.template < TEMPLATE_VERSION || journal.upgrade.is_some() {

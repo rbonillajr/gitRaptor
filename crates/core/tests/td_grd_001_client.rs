@@ -218,3 +218,21 @@ fn degraded_mode_scopes_ungoverned_refs_by_template() {
     let out = run(&args(&ours, 2), &env_of(&ours.dir), &tag_push(&ours));
     assert!(out.allowed(), "template 2 is as before: {out:?}");
 }
+
+/// CR-M1 (condition O-2): without a readable floor no rule can be shown to exist, so a push of
+/// ungoverned refs only goes ahead; a governed ref is still denied.
+#[test]
+fn an_unreadable_repo_lets_an_ungoverned_push_through_without_the_daemon() {
+    let ours = repo(AGENT_PATHS);
+    // The dispatcher's repo is the transaction's, but git cannot open it.
+    std::fs::remove_file(ours.common.join("HEAD")).unwrap();
+    let broken = args(&ours, 3);
+    let out = run(&broken, &env_of(&ours.dir), &tag_push(&ours));
+    assert!(out.allowed(), "no readable floor, no rule: {out:?}");
+    assert_eq!(out.degraded, Some(Degraded::DaemonUnreachable), "{out:?}");
+
+    let branch = format!("HEAD {} refs/heads/main {ZERO}\n", ours.bad).into_bytes();
+    let out = run(&broken, &env_of(&ours.dir), &branch);
+    assert!(!out.allowed(), "a governed ref stays denied: {out:?}");
+    assert!(rules_of(&out).contains(&Rule::InternalError), "{out:?}");
+}
