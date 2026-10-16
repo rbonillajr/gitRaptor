@@ -67,11 +67,15 @@ struct FakeAgent {
 }
 
 impl FakeAgent {
-    /// Runs `command` in its shell and waits for it; whether it succeeded.
-    fn run(&mut self, command: &str) -> bool {
+    /// Starts `command` without waiting for it.
+    fn send(&mut self, command: &str) {
         let stdin = self.stdin.as_mut().unwrap();
         writeln!(stdin, "{command}").unwrap();
         stdin.flush().unwrap();
+    }
+
+    /// Waits for the command `send` started; whether it succeeded.
+    fn wait_done(&mut self) -> bool {
         let mut line = String::new();
         loop {
             line.clear();
@@ -129,6 +133,23 @@ impl Machine {
         std::fs::write(
             &hook,
             "#!/bin/sh\n[ \"$1\" = committed ] && sleep 0.5\nexit 0\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+        // The held one (`held_commit`): `git` stays alive until the test lets it go, not for
+        // a time, so the engine's sample sees it however long the machine takes to get to it.
+        // The loop is only a bound, so a dead test does not leave a `git` behind.
+        let held = outside.path().join("held-hooks");
+        std::fs::create_dir(&held).unwrap();
+        let hook = held.join("reference-transaction");
+        std::fs::write(
+            &hook,
+            format!(
+                "#!/bin/sh\nif [ \"$1\" = committed ]; then\n  : > '{0}/reached'\n  n=0\n  \
+                 while [ ! -e '{0}/release' ] && [ $n -lt 1200 ]; do sleep 0.05; n=$((n+1)); done\nfi\n\
+                 exit 0\n",
+                held.display()
+            ),
         )
         .unwrap();
         std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
@@ -306,6 +327,47 @@ impl Machine {
         self.event_when(|_| true)
     }
 
+    /// `command` (a `git commit`, with `-c core.hooksPath=<hooks>` where `hooks` is the second
+    /// argument of the closure) run by `agent`, held between the update of the ref and the end
+    /// of `git` until the engine has recorded the commit. The engine samples the live `git`s
+    /// when it sees the ref change and stores the event after sampling, so an event in the
+    /// history means the sample already took place: letting `git` go earlier would make the
+    /// attribution depend on how fast this machine gets to the sample.
+    fn held_commit(&self, agent: &mut FakeAgent, command: impl Fn(&Path) -> String) -> bool {
+        let held = self.outside.path().join("held-hooks");
+        agent.send(&command(&held));
+        let start = Instant::now();
+        while !held.join("reached").exists() {
+            assert!(
+                start.elapsed() < DEADLINE,
+                "the commit never reached its hook"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        loop {
+            let page: Value = self
+                .client()
+                .call(
+                    methods::EVENTS_HISTORY,
+                    json!({ "repo_id": self.repo_id() }),
+                )
+                .unwrap();
+            let recorded = page["events"]
+                .as_array()
+                .is_some_and(|es| es.iter().any(|e| e["details"]["new_commit"].is_string()));
+            if recorded {
+                break;
+            }
+            assert!(
+                start.elapsed() < DEADLINE,
+                "the engine never recorded the commit"
+            );
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        std::fs::write(held.join("release"), "").unwrap();
+        agent.wait_done()
+    }
+
     /// Waits until the engine has a detected Claude Code session in the
     /// worktree (`raptor status --json`).
     fn claude_session_detected(&self) {
@@ -423,8 +485,7 @@ fn a_detected_agent_commit_shows_when_where_which_files_and_who() {
     let m = Machine::observed();
     let mut claude = m.launch_claude();
     m.claude_session_detected();
-    let hooks = m.outside.path().join("slow-hooks");
-    assert!(claude.run(&format!(
+    assert!(m.held_commit(&mut claude, |hooks| format!(
         "printf 'x\\n' > feature.rs && git add feature.rs && \
          git -c core.hooksPath={} commit -q -m feature",
         hooks.display()
