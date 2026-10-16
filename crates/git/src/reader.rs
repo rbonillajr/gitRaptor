@@ -363,7 +363,11 @@ impl RepoReader {
                 .base()
                 .map_err(|e| ReadError::Unavailable(format!("worktree: {e}")))?;
             out.push(LinkedWorktree {
-                id: proxy.id().to_str_lossy().into_owned(),
+                id: proxy
+                    .id()
+                    .map_err(|e| ReadError::Unavailable(format!("worktree id: {e}")))?
+                    .to_str_lossy()
+                    .into_owned(),
                 git_dir: proxy.git_dir().to_owned(),
                 locked: proxy.is_locked(),
                 path,
@@ -484,7 +488,7 @@ impl RepoReader {
     pub fn merge_base(&self, a: &RefName, b: &RefName) -> Result<Option<String>, ReadError> {
         let (a, b) = (self.require_commit(a)?, self.require_commit(b)?);
         match self.repo.merge_base(a, b) {
-            Ok(id) => Ok(Some(id.to_string())),
+            Ok(id) => Ok(id.map(|id| id.to_string())),
             Err(e) if e.to_string().contains("No merge base") => Ok(None),
             Err(e) => Err(ReadError::Unavailable(format!("merge-base: {e}"))),
         }

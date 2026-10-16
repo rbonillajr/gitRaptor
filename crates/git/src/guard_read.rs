@@ -48,7 +48,11 @@ impl RepoReader {
     /// `info/grafts`; the commit-graph is not used, so a forged one cannot fake the parents.
     pub fn push_ancestry(&self, remote: &str, local: &str) -> Result<Ancestry, ReadError> {
         let (remote, local) = (object_id(remote)?, object_id(local)?);
-        if self.repo.is_shallow() {
+        let shallow = self
+            .repo
+            .is_shallow()
+            .map_err(|e| ReadError::Unavailable(format!("shallow: {e}")))?;
+        if shallow {
             return Ok(Ancestry::Shallow);
         }
         match self.repo.try_find_object(remote) {
