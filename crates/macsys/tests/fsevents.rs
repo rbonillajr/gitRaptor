@@ -46,6 +46,24 @@ fn wait_for(rx: &Receiver<Seen>, mut pred: impl FnMut(&Path, u32) -> bool) -> bo
     false
 }
 
+/// Writes `names` under `root` while no stream under test runs, and returns once fseventsd has
+/// them in its history. The kernel hands events to fseventsd asynchronously, so a stream started
+/// right after the write can replay a history that does not have them yet (a race of the test
+/// that showed under load, not of the product). A witness stream, started at "now" and flushed
+/// after it has seen the last write, is the signal that they are recorded.
+fn write_in_the_gap(root: &Path, names: &[&str]) {
+    let (witness, rx) = start(root, &[], SINCE_NOW);
+    for n in names {
+        fs::write(root.join(n), b"x").unwrap();
+    }
+    let mut left: Vec<&str> = names.to_vec();
+    assert!(wait_for(&rx, |p, _| {
+        left.retain(|n| !p.ends_with(n));
+        left.is_empty()
+    }));
+    witness.flush_sync();
+}
+
 #[test]
 fn a_write_outside_the_excluded_folder_is_seen_and_one_inside_is_not() {
     let tmp = tempfile::tempdir().unwrap();
@@ -111,12 +129,16 @@ fn a_stream_started_from_the_last_id_replays_what_the_old_one_missed() {
     assert!(wait_for(&rx, |p, _| p.ends_with("before")));
     old.flush_sync();
     let from = old.last_event_id();
-    // The gap: written while no stream of ours is running.
     drop(old);
-    fs::write(root.join("during-the-gap"), b"x").unwrap();
+    write_in_the_gap(&root, &["during-the-gap"]);
     let (new, rx) = start(&root, &[], from);
-    assert!(wait_for(&rx, |p, _| p.ends_with("during-the-gap")));
-    assert!(wait_for(&rx, |_, f| f & flag::HISTORY_DONE != 0));
+    // One pass: the replayed row and `HISTORY_DONE` may arrive in either order.
+    let (mut replayed, mut done) = (false, false);
+    assert!(wait_for(&rx, |p, f| {
+        replayed |= p.ends_with("during-the-gap");
+        done |= f & flag::HISTORY_DONE != 0;
+        replayed && done
+    }));
     drop(new);
 }
 
@@ -159,8 +181,7 @@ fn exclusions_also_filter_the_replayed_history() {
     old.flush_sync();
     let from = old.last_event_id();
     drop(old);
-    fs::write(root.join("target/in-excluded"), b"x").unwrap();
-    fs::write(root.join("outside"), b"x").unwrap();
+    write_in_the_gap(&root, &["target/in-excluded", "outside"]);
     let (_new, rx) = start(&root, &[root.join("target")], from);
     let (mut outside, mut excluded) = (false, false);
     assert!(wait_for(&rx, |p, f| {
