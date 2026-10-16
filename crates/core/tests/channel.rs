@@ -450,12 +450,27 @@ fn slow_client_and_connection_flood_do_not_starve_the_others() {
 
     // 100 more connections; past the limit they are told so and closed.
     let flood: Vec<Raw> = (0..100).map(|_| Raw::open(&r.socket())).collect();
-    std::thread::sleep(Duration::from_millis(100));
 
-    let mut received = 0;
+    let mut received = 0usize;
     let mut slow_messages = None;
     let payload = "x".repeat(2048);
-    for i in 0..3000 {
+    // The good client "reads as a real one would": it never falls more than this many events
+    // behind. The outbox holds 1024, so a good client that the OS leaves unscheduled for a
+    // while under load is not mistaken for a slow one; only the client that never reads is.
+    const MAX_BEHIND: usize = 512;
+    let drain = |good: &mut Client, received: &mut usize, wait: Duration| {
+        while let Some(note) = good.next_notification(wait).unwrap() {
+            if note.params["event"]["timings"]["t_published"].is_u64() {
+                *received += 1;
+            }
+        }
+    };
+    for i in 0..3000usize {
+        let give_up = Instant::now() + Duration::from_secs(10);
+        while i - received >= MAX_BEHIND {
+            assert!(Instant::now() < give_up, "the good client lost events");
+            drain(&mut good, &mut received, Duration::from_millis(50));
+        }
         r.bus.publish(
             "git.event",
             json!({"n": i, "pad": payload}),
@@ -470,12 +485,7 @@ fn slow_client_and_connection_flood_do_not_starve_the_others() {
             slow_messages = Some(std::iter::from_fn(|| slow.recv()).collect::<Vec<_>>());
         }
         if i % 10 == 0 {
-            // Drain the good client as a real one would.
-            while let Some(note) = good.next_notification(Duration::from_millis(1)).unwrap() {
-                if note.params["event"]["timings"]["t_published"].is_u64() {
-                    received += 1;
-                }
-            }
+            drain(&mut good, &mut received, Duration::from_millis(1));
         }
     }
     let start = Instant::now();
@@ -494,17 +504,14 @@ fn slow_client_and_connection_flood_do_not_starve_the_others() {
     let last = slow_messages.last().expect("the slow client got nothing");
     assert_eq!(last["method"], methods::NOTIFY_RESYNC, "{last}");
     assert_eq!(last["params"]["reason"], "slow-consumer");
-    let limited = flood
-        .into_iter()
-        .filter_map(|mut raw| {
-            // A socket the daemon already closed refuses new options.
-            let _ = raw
-                .stream
-                .set_read_timeout(Some(Duration::from_millis(200)));
-            raw.recv()
-        })
-        .filter(|m| m["error"]["code"] == code::LIMIT_REACHED)
-        .count();
+    // The last connections are past the limit and were told so; the first ones, inside it, are
+    // silent. Wait for the signal on the last one instead of a fixed pause for all of them.
+    let mut last = flood.into_iter().next_back().unwrap();
+    let _ = last.stream.set_read_timeout(Some(Duration::from_secs(10)));
+    let limited = usize::from(
+        last.recv()
+            .is_some_and(|m| m["error"]["code"] == code::LIMIT_REACHED),
+    );
     assert!(limited > 0, "the connection limit never applied");
     let pong: String = good.call(methods::PING, json!({})).unwrap();
     assert_eq!(pong, "pong");
