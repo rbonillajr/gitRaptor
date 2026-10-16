@@ -149,6 +149,23 @@ fn a_missing_raptor_is_a_loss() {
     assert_eq!(cause(&i.check()), Some(LossCause::BinaryMissing));
 }
 
+#[test]
+fn a_raptor_that_is_a_folder_is_a_loss() {
+    let i = install();
+    std::fs::remove_file(&i.journal.raptor).unwrap();
+    std::fs::create_dir(&i.journal.raptor).unwrap();
+    assert_eq!(cause(&i.check()), Some(LossCause::BinaryMissing));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_raptor_without_the_execute_bit_is_a_loss() {
+    use std::os::unix::fs::PermissionsExt;
+    let i = install();
+    std::fs::set_permissions(&i.journal.raptor, std::fs::Permissions::from_mode(0o644)).unwrap();
+    assert_eq!(cause(&i.check()), Some(LossCause::BinaryMissing));
+}
+
 #[cfg(unix)]
 #[test]
 fn a_dispatcher_without_the_execute_bit_is_a_loss() {

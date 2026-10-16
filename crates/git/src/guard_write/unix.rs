@@ -236,8 +236,7 @@ pub(super) fn remove_file_temporaries(
             // swap between this check and the removal cannot reach anything but the entry itself.
             match rustix::fs::statat(&dir, candidate, AtFlags::SYMLINK_NOFOLLOW) {
                 Ok(stat) if FileType::from_raw_mode(stat.st_mode) == FileType::RegularFile => {
-                    unlink(&dir, candidate)?;
-                    removed = true;
+                    removed |= unlink_temporary(&dir, candidate)?;
                 }
                 Ok(_) | Err(rustix::io::Errno::NOENT) => {}
                 Err(e) => return Err(GuardWriteError::Io(e.into())),
@@ -295,6 +294,18 @@ pub(super) fn remove_folder(
     Ok(())
 }
 
+/// Removes the temporary `name`; `true` when it was removed. A folder swapped in after the type
+/// check is refused (EISDIR, or EPERM on some systems): that entry is not ours, so it stays.
+fn unlink_temporary(dir: impl AsFd, name: &str) -> Result<bool> {
+    match rustix::fs::unlinkat(dir, name, AtFlags::empty()) {
+        Ok(()) => Ok(true),
+        Err(rustix::io::Errno::NOENT | rustix::io::Errno::ISDIR | rustix::io::Errno::PERM) => {
+            Ok(false)
+        }
+        Err(e) => Err(GuardWriteError::Io(e.into())),
+    }
+}
+
 fn unlink(dir: impl AsFd, name: &str) -> Result<()> {
     match rustix::fs::unlinkat(dir, name, AtFlags::empty()) {
         Ok(()) | Err(rustix::io::Errno::NOENT) => Ok(()),
@@ -322,4 +333,21 @@ pub(super) fn temporaries(common: &Path) -> Result<Vec<String>> {
         }
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_folder_in_place_of_a_temporary_stays_and_is_no_error() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir(tmp.path().join("a.gitraptor.tmp-0123456789abcdef")).unwrap();
+        std::fs::write(tmp.path().join("file"), "x").unwrap();
+        let dir = open_dir(tmp.path()).unwrap();
+        assert!(!unlink_temporary(&dir, "a.gitraptor.tmp-0123456789abcdef").unwrap());
+        assert!(tmp.path().join("a.gitraptor.tmp-0123456789abcdef").is_dir());
+        assert!(unlink_temporary(&dir, "file").unwrap());
+        assert!(!unlink_temporary(&dir, "file").unwrap());
+    }
 }

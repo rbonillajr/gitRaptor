@@ -650,9 +650,7 @@ fn decide(args: &HookArgs, full: Operation) -> HookOutcome {
         Operation::RefTransaction { .. } | Operation::Push { .. }
     );
     if outcome.allowed() && governed && !policies_granted {
-        return push_scope(full, args.template, true)
-            .and_then(|op| floor_rules_for_everyone(args, &op))
-            .unwrap_or(outcome);
+        return floor_rules_for_everyone(args, &full).unwrap_or(outcome);
     }
     outcome
 }
@@ -700,13 +698,27 @@ fn ask_daemon(args: &HookArgs, full: &Operation) -> Asked {
 /// The rules for everyone of the floor, evaluated here (US-GRD-008, D11): what degraded mode
 /// applies without the daemon and what a daemon that does not grant `guard.policies` leaves out.
 /// `Some` only when they deny.
-fn floor_rules_for_everyone(args: &HookArgs, op: &Operation) -> Option<HookOutcome> {
+fn floor_rules_for_everyone(args: &HookArgs, full: &Operation) -> Option<HookOutcome> {
     let reader = evaluate::open(&args.common)?;
-    let commit = evaluate::CommitContext {
-        policies: super::policies::degraded(&reader),
-        ..evaluate::CommitContext::default()
-    };
-    let eval = evaluate::evaluate_commit(&reader, &args.common, op, Vec::new(), commit);
+    let floor = super::policies::floor(&reader);
+    let mut eval = gitraptor_policy::guard::Evaluation::allow();
+    // The governed refs get the rules for everyone; the ungoverned ones of a push (template 3
+    // on) get every forbidden-path rule, as in degraded mode: the actor cannot be told apart.
+    if let Some(op) = push_scope(full.clone(), args.template, false) {
+        let commit = evaluate::CommitContext {
+            policies: floor.everyone_only(),
+            ..evaluate::CommitContext::default()
+        };
+        eval = evaluate::evaluate_commit(&reader, &args.common, &op, Vec::new(), commit);
+    }
+    if args.template >= EVERY_PUSHED_REF
+        && let Some(op) = ungoverned_of(full)
+    {
+        let other = ungoverned_evaluation(args, &reader, &floor, &op);
+        for reason in other.reasons {
+            eval.add(other.effect, reason);
+        }
+    }
     (eval.effect != Effect::Allow).then(|| HookOutcome {
         decision: Some(evaluate::decision(eval)),
         degraded: None,
@@ -795,14 +807,15 @@ fn ungoverned_alone(args: &HookArgs, op: &Operation, signal: Signal) -> HookOutc
     let Some(reader) = evaluate::open(&args.common) else {
         return HookOutcome::allow();
     };
-    if super::policies::floor(&reader).paths.is_empty() {
+    let floor = super::policies::floor(&reader);
+    if floor.paths.is_empty() {
         return HookOutcome::allow();
     }
     // The commits of the push are not reliably in the repo of the dispatcher.
     if signal == Signal::RepoMismatch {
         return HookOutcome::deny(Rule::RepoMismatch);
     }
-    let mut eval = ungoverned_evaluation(args, &reader, op);
+    let mut eval = ungoverned_evaluation(args, &reader, &floor, op);
     if eval.effect == Effect::Allow {
         return HookOutcome::allow();
     }
@@ -824,9 +837,9 @@ fn ungoverned_alone(args: &HookArgs, op: &Operation, signal: Signal) -> HookOutc
 fn ungoverned_evaluation(
     args: &HookArgs,
     reader: &gitraptor_git::RepoReader,
+    rules: &gitraptor_policy::guard::policies::Policies,
     op: &Operation,
 ) -> gitraptor_policy::guard::Evaluation {
-    let rules = super::policies::floor(reader);
     if rules.paths.is_empty() {
         return gitraptor_policy::guard::Evaluation::allow();
     }
@@ -842,8 +855,19 @@ fn ungoverned_evaluation(
 /// ungoverned refs of a push (template 3 on) get every forbidden-path rule of the floor.
 fn degraded(args: &HookArgs, full: &Operation, cause: Degraded) -> HookOutcome {
     let Some(reader) = evaluate::open(&args.common) else {
-        return HookOutcome::deny(Rule::InternalError);
+        // Without a readable floor no rule can be shown to exist: a push of ungoverned refs
+        // only goes ahead (condition O-2); anything governed is denied.
+        let outcome = if args.template >= EVERY_PUSHED_REF && only_ungoverned(full) {
+            HookOutcome::allow()
+        } else {
+            HookOutcome::deny(Rule::InternalError)
+        };
+        return HookOutcome {
+            degraded: Some(cause),
+            ..outcome
+        };
     };
+    let floor = super::policies::floor(&reader);
     let mut eval = gitraptor_policy::guard::Evaluation::allow();
     if let Some(op) = push_scope(full.clone(), args.template, false) {
         let mut bases = evaluate::default_bases(&reader);
@@ -862,7 +886,7 @@ fn degraded(args: &HookArgs, full: &Operation, cause: Degraded) -> HookOutcome {
         }
         // The rules for everyone of the floor still apply without the daemon (D11).
         let commit = evaluate::CommitContext {
-            policies: super::policies::degraded(&reader),
+            policies: floor.everyone_only(),
             ..evaluate::CommitContext::default()
         };
         eval = evaluate::evaluate_commit(&reader, &args.common, &op, bases, commit);
@@ -870,7 +894,7 @@ fn degraded(args: &HookArgs, full: &Operation, cause: Degraded) -> HookOutcome {
     if args.template >= EVERY_PUSHED_REF
         && let Some(op) = ungoverned_of(full)
     {
-        let other = ungoverned_evaluation(args, &reader, &op);
+        let other = ungoverned_evaluation(args, &reader, &floor, &op);
         for reason in other.reasons {
             eval.add(other.effect, reason);
         }
@@ -946,5 +970,64 @@ mod tests {
         ] {
             assert!(HookArgs::parse(&argv(bad)).is_none(), "{bad:?}");
         }
+    }
+
+    /// SEC-M-02: a daemon without `guard.policies` leaves the governed refs with the rules for
+    /// everyone and the ungoverned ones with every forbidden-path rule of the floor.
+    #[test]
+    fn without_guard_policies_ungoverned_refs_get_every_path_rule() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().canonicalize().unwrap();
+        let git = |args: &[&str]| {
+            let out = std::process::Command::new("git")
+                .args(["-c", "user.name=t", "-c", "user.email=t@example.com"])
+                .args(args)
+                .current_dir(&dir)
+                .output()
+                .unwrap();
+            assert!(out.status.success(), "{args:?}: {out:?}");
+            String::from_utf8(out.stdout).unwrap().trim().to_owned()
+        };
+        git(&["init", "-q", "-b", "main"]);
+        std::fs::create_dir_all(dir.join(".gitraptor")).unwrap();
+        std::fs::write(
+            dir.join(".gitraptor/settings.json"),
+            r#"{"policies":{"forbiddenPaths":{"patterns":["secrets/"]}}}"#,
+        )
+        .unwrap();
+        git(&["add", "."]);
+        git(&["commit", "-q", "-m", "base"]);
+        std::fs::create_dir_all(dir.join("secrets")).unwrap();
+        std::fs::write(dir.join("secrets/new.txt"), "key\n").unwrap();
+        git(&["add", "."]);
+        git(&["commit", "-q", "-m", "bad"]);
+        let bad = git(&["rev-parse", "HEAD"]);
+        let args = HookArgs {
+            template: TEMPLATE_VERSION,
+            hook: Hook::PrePush,
+            repo: "abc-123".into(),
+            common: dir.join(".git").canonicalize().unwrap(),
+            channel: dir.join("run"),
+            instance: "inst".into(),
+            state: dir.join("state"),
+            prior: String::new(),
+            git_args: Vec::new(),
+        };
+        let push_to = |remote_ref: &str| Operation::Push {
+            remote: Untrusted::new("origin"),
+            updates: vec![PushUpdate {
+                local_ref: Some("HEAD".into()),
+                local: RefValue::Oid(bad.clone()),
+                remote_ref: remote_ref.to_owned(),
+                remote: RefValue::Zero,
+            }],
+        };
+        let tag = floor_rules_for_everyone(&args, &push_to("refs/tags/x"));
+        assert!(
+            tag.is_some_and(|o| !o.allowed()),
+            "an agent rule reaches a tag"
+        );
+        let branch = floor_rules_for_everyone(&args, &push_to("refs/heads/topic"));
+        assert!(branch.is_none(), "a rule for agents is not for everyone");
     }
 }

@@ -33,12 +33,6 @@ pub fn floor(reader: &RepoReader) -> Policies {
     }])
 }
 
-/// What a client that cannot tell the actor evaluates in degraded mode (D11): the floor alone,
-/// and only its rules for everyone.
-pub fn degraded(reader: &RepoReader) -> Policies {
-    floor(reader).everyone_only()
-}
-
 /// What each update of an agent's movement does to the protected configuration (BR-AUTH-004),
 /// aligned with the updates of the operation. Read once per governed update, whatever the rules
 /// say; empty for the person.
