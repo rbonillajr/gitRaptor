@@ -11,7 +11,9 @@ use std::path::{Path, PathBuf};
 use common::git;
 use gitraptor_api::Untrusted;
 use gitraptor_api::guard::{Hook, Operation, PushUpdate, RefValue, Rule};
-use gitraptor_core::guardrails::hook::{Degraded, HookArgs, HookEnv, HookOutcome, push_scope, run};
+use gitraptor_core::guardrails::hook::{
+    Degraded, HookArgs, HookEnv, HookOutcome, floor_rules_for_everyone, push_scope, run,
+};
 
 const ZERO: &str = "0000000000000000000000000000000000000000";
 
@@ -235,4 +237,28 @@ fn an_unreadable_repo_lets_an_ungoverned_push_through_without_the_daemon() {
     let out = run(&broken, &env_of(&ours.dir), &branch);
     assert!(!out.allowed(), "a governed ref stays denied: {out:?}");
     assert!(rules_of(&out).contains(&Rule::InternalError), "{out:?}");
+}
+
+/// SEC-M-02: a daemon without `guard.policies` leaves the governed refs with the rules for
+/// everyone and the ungoverned ones with every forbidden-path rule of the floor.
+#[test]
+fn without_guard_policies_ungoverned_refs_get_every_path_rule() {
+    let ours = repo(AGENT_PATHS);
+    let args = args(&ours, 3);
+    let push_to = |remote_ref: &str| Operation::Push {
+        remote: Untrusted::new("origin"),
+        updates: vec![PushUpdate {
+            local_ref: Some("HEAD".into()),
+            local: RefValue::Oid(ours.bad.clone()),
+            remote_ref: remote_ref.to_owned(),
+            remote: RefValue::Zero,
+        }],
+    };
+    let tag = floor_rules_for_everyone(&args, &push_to("refs/tags/x"));
+    assert!(
+        tag.is_some_and(|o| !o.allowed()),
+        "an agent rule reaches a tag"
+    );
+    let branch = floor_rules_for_everyone(&args, &push_to("refs/heads/topic"));
+    assert!(branch.is_none(), "a rule for agents is not for everyone");
 }
