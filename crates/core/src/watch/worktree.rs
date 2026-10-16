@@ -741,6 +741,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "issue #250: the tests use a Unix path that the Windows hot prefix does not match"
+    )]
     fn a_folder_becomes_hot_once_its_events_reach_the_threshold_in_the_window() {
         let (p, told) = counted();
         let path = Path::new("/w/target/debug/a");
@@ -760,6 +764,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "issue #250: the tests use a Unix path that the Windows hot prefix does not match"
+    )]
     fn a_slow_trickle_never_makes_a_folder_hot() {
         let (p, told) = counted();
         let path = Path::new("/w/target/debug/a");
@@ -792,6 +800,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "issue #250: the tests use a Unix path that the Windows hot prefix does not match"
+    )]
     fn a_cooled_folder_counts_from_zero_and_can_become_hot_again() {
         let (p, told) = counted();
         let path = Path::new("/w/target/debug/a");
