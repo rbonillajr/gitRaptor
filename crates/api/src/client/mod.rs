@@ -24,7 +24,7 @@ use crate::rpc::{ErrorObject, Notification, ServerMessage};
 #[cfg(any(unix, windows))]
 use {
     crate::clock::monotonic_ns,
-    crate::framing::{FrameError, MAX_MESSAGE_BYTES, read_frame},
+    crate::framing::{FrameError, MAX_MESSAGE_BYTES, read_frame_resumable},
     crate::messages::{Hello, NoParams, ReplaceParams},
     crate::methods,
     crate::rpc::{Id, Request, code},
@@ -188,6 +188,12 @@ pub struct Client {
     /// [`monotonic_ns`] reading taken when their frame was read.
     notifications: VecDeque<(u64, Notification)>,
     hello: HelloResult,
+    /// The part of a frame read before a timeout, kept for the next read: dropping it would
+    /// leave the stream in the middle of a line.
+    #[cfg(any(unix, windows))]
+    partial: Vec<u8>,
+    #[cfg(any(unix, windows))]
+    partial_too_large: bool,
 }
 
 /// A message from the daemon with the moment it was read
@@ -278,7 +284,11 @@ impl Client {
 
     #[cfg(any(unix, windows))]
     fn open_at(runtime: &Path) -> Result<Self, ClientError> {
-        let stream = transport::connect(runtime)?;
+        Self::over(transport::connect(runtime)?)
+    }
+
+    #[cfg(any(unix, windows))]
+    fn over(stream: transport::Stream) -> Result<Self, ClientError> {
         let reader = BufReader::new(stream.try_clone()?);
         Ok(Self {
             stream,
@@ -296,6 +306,8 @@ impl Client {
                 requester: None,
                 capabilities: None,
             },
+            partial: Vec::new(),
+            partial_too_large: false,
         })
     }
 
@@ -432,9 +444,14 @@ impl Client {
     #[cfg(any(unix, windows))]
     fn read_frame(&mut self, timeout: Option<Duration>) -> Result<Option<Vec<u8>>, ClientError> {
         self.reader.get_ref().set_read_timeout(timeout)?;
-        let mut buf = Vec::new();
-        match read_frame(&mut self.reader, &mut buf, MAX_MESSAGE_BYTES) {
-            Ok(true) => Ok(Some(buf)),
+        // A timeout can fall in the middle of a frame: what was read stays in `partial`.
+        match read_frame_resumable(
+            &mut self.reader,
+            &mut self.partial,
+            &mut self.partial_too_large,
+            MAX_MESSAGE_BYTES,
+        ) {
+            Ok(true) => Ok(Some(std::mem::take(&mut self.partial))),
             Ok(false) => Ok(None),
             Err(FrameError::TooLarge) => Err(ClientError::Protocol("message too large")),
             Err(FrameError::Io(err)) => Err(ClientError::Io(err)),
@@ -679,5 +696,38 @@ fn replace(
         Ok(())
     } else {
         Err(ClientError::Incompatible(data.clone()))
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::io::Write;
+    use std::os::unix::net::UnixStream;
+
+    use super::*;
+
+    /// A notification split across two writes with a read timeout in between (a loaded machine
+    /// or a big frame) is delivered whole, and the next one is not read from its middle.
+    #[test]
+    fn a_read_timeout_inside_a_frame_does_not_corrupt_the_stream() {
+        let (ours, mut daemon) = UnixStream::pair().unwrap();
+        let mut client = Client::over(ours).unwrap();
+        let note = r#"{"jsonrpc":"2.0","method":"events.notify","params":{"n":1}}"#;
+        let (head, tail) = note.split_at(20);
+        daemon.write_all(head.as_bytes()).unwrap();
+        // Waits out the timeout with the line unfinished.
+        let early = client.next_notification(Duration::from_millis(50)).unwrap();
+        assert!(early.is_none());
+        daemon.write_all(tail.as_bytes()).unwrap();
+        daemon.write_all(b"\n").unwrap();
+        daemon.write_all(note.as_bytes()).unwrap();
+        daemon.write_all(b"\n").unwrap();
+        for _ in 0..2 {
+            let n = client
+                .next_notification(Duration::from_secs(10))
+                .unwrap()
+                .expect("a notification");
+            assert_eq!(n.method, "events.notify");
+        }
     }
 }

@@ -26,13 +26,28 @@ pub enum FrameError {
 /// Reads one line into `buf` (cleared first), without the trailing newline.
 /// Returns `Ok(false)` at end of stream. Never buffers more than
 /// `max + 1` bytes of one line: an oversized line is drained and refused.
+///
+/// An I/O error (a read timeout, say) loses the part of the line already read: use
+/// [`read_frame_resumable`] where a timeout is not the end of the connection.
 pub fn read_frame<R: BufRead>(
     reader: &mut R,
     buf: &mut Vec<u8>,
     max: usize,
 ) -> Result<bool, FrameError> {
     buf.clear();
-    let mut too_large = false;
+    read_frame_resumable(reader, buf, &mut false, max)
+}
+
+/// [`read_frame`] that can be called again after an I/O error without losing the line: `buf`
+/// and `too_large` are not reset on entry, so they carry what was read of an unfinished line
+/// across a read timeout. The caller starts with an empty `buf` and `false`, and `buf` is
+/// the line only when this returns `Ok(true)`; `too_large` is reset when a line ends.
+pub fn read_frame_resumable<R: BufRead>(
+    reader: &mut R,
+    buf: &mut Vec<u8>,
+    too_large: &mut bool,
+    max: usize,
+) -> Result<bool, FrameError> {
     loop {
         let available = match reader.fill_buf() {
             Ok(bytes) => bytes,
@@ -40,7 +55,7 @@ pub fn read_frame<R: BufRead>(
             Err(err) => return Err(FrameError::Io(err)),
         };
         if available.is_empty() {
-            if too_large {
+            if std::mem::take(too_large) {
                 return Err(FrameError::TooLarge);
             }
             return Ok(!buf.is_empty());
@@ -49,9 +64,9 @@ pub fn read_frame<R: BufRead>(
             Some(i) => (&available[..i], Some(i + 1)),
             None => (available, None),
         };
-        if !too_large {
+        if !*too_large {
             if buf.len() + chunk.len() > max {
-                too_large = true;
+                *too_large = true;
                 buf.clear();
             } else {
                 buf.extend_from_slice(chunk);
@@ -60,7 +75,7 @@ pub fn read_frame<R: BufRead>(
         let consumed = done.unwrap_or(available.len());
         reader.consume(consumed);
         if done.is_some() {
-            return if too_large {
+            return if std::mem::take(too_large) {
                 Err(FrameError::TooLarge)
             } else {
                 Ok(true)
@@ -161,6 +176,42 @@ mod tests {
         assert!(read_frame(&mut reader, &mut buf, 10).unwrap());
         assert_eq!(buf, b"[]");
         assert!(!read_frame(&mut reader, &mut buf, 10).unwrap());
+    }
+
+    /// A reader that hands out its chunks one by one and times out between them, as a socket
+    /// with a read timeout does when a frame is split.
+    struct Choppy {
+        chunks: std::collections::VecDeque<Option<&'static [u8]>>,
+        current: &'static [u8],
+    }
+
+    impl io::Read for Choppy {
+        fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
+            if self.current.is_empty() {
+                match self.chunks.pop_front() {
+                    Some(Some(chunk)) => self.current = chunk,
+                    Some(None) => return Err(io::ErrorKind::WouldBlock.into()),
+                    None => return Ok(0),
+                }
+            }
+            let n = out.len().min(self.current.len());
+            out[..n].copy_from_slice(&self.current[..n]);
+            self.current = &self.current[n..];
+            Ok(n)
+        }
+    }
+
+    #[test]
+    fn a_timeout_in_the_middle_of_a_line_does_not_lose_what_was_read() {
+        let mut reader = io::BufReader::new(Choppy {
+            chunks: [Some(&br#"{"a":"#[..]), None, Some(&b"1}\n"[..])].into(),
+            current: &[],
+        });
+        let (mut buf, mut too_large) = (Vec::new(), false);
+        let first = read_frame_resumable(&mut reader, &mut buf, &mut too_large, 64);
+        assert!(matches!(first, Err(FrameError::Io(e)) if e.kind() == io::ErrorKind::WouldBlock));
+        assert!(read_frame_resumable(&mut reader, &mut buf, &mut too_large, 64).unwrap());
+        assert_eq!(buf, br#"{"a":1}"#);
     }
 
     #[test]
