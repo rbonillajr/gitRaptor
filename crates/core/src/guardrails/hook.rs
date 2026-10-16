@@ -698,7 +698,8 @@ fn ask_daemon(args: &HookArgs, full: &Operation) -> Asked {
 /// The rules for everyone of the floor, evaluated here (US-GRD-008, D11): what degraded mode
 /// applies without the daemon and what a daemon that does not grant `guard.policies` leaves out.
 /// `Some` only when they deny.
-fn floor_rules_for_everyone(args: &HookArgs, full: &Operation) -> Option<HookOutcome> {
+#[doc(hidden)]
+pub fn floor_rules_for_everyone(args: &HookArgs, full: &Operation) -> Option<HookOutcome> {
     let reader = evaluate::open(&args.common)?;
     let floor = super::policies::floor(&reader);
     let mut eval = gitraptor_policy::guard::Evaluation::allow();
@@ -970,64 +971,5 @@ mod tests {
         ] {
             assert!(HookArgs::parse(&argv(bad)).is_none(), "{bad:?}");
         }
-    }
-
-    /// SEC-M-02: a daemon without `guard.policies` leaves the governed refs with the rules for
-    /// everyone and the ungoverned ones with every forbidden-path rule of the floor.
-    #[test]
-    fn without_guard_policies_ungoverned_refs_get_every_path_rule() {
-        let tmp = tempfile::tempdir().unwrap();
-        let dir = tmp.path().canonicalize().unwrap();
-        let git = |args: &[&str]| {
-            let out = std::process::Command::new("git")
-                .args(["-c", "user.name=t", "-c", "user.email=t@example.com"])
-                .args(args)
-                .current_dir(&dir)
-                .output()
-                .unwrap();
-            assert!(out.status.success(), "{args:?}: {out:?}");
-            String::from_utf8(out.stdout).unwrap().trim().to_owned()
-        };
-        git(&["init", "-q", "-b", "main"]);
-        std::fs::create_dir_all(dir.join(".gitraptor")).unwrap();
-        std::fs::write(
-            dir.join(".gitraptor/settings.json"),
-            r#"{"policies":{"forbiddenPaths":{"patterns":["secrets/"]}}}"#,
-        )
-        .unwrap();
-        git(&["add", "."]);
-        git(&["commit", "-q", "-m", "base"]);
-        std::fs::create_dir_all(dir.join("secrets")).unwrap();
-        std::fs::write(dir.join("secrets/new.txt"), "key\n").unwrap();
-        git(&["add", "."]);
-        git(&["commit", "-q", "-m", "bad"]);
-        let bad = git(&["rev-parse", "HEAD"]);
-        let args = HookArgs {
-            template: TEMPLATE_VERSION,
-            hook: Hook::PrePush,
-            repo: "abc-123".into(),
-            common: dir.join(".git").canonicalize().unwrap(),
-            channel: dir.join("run"),
-            instance: "inst".into(),
-            state: dir.join("state"),
-            prior: String::new(),
-            git_args: Vec::new(),
-        };
-        let push_to = |remote_ref: &str| Operation::Push {
-            remote: Untrusted::new("origin"),
-            updates: vec![PushUpdate {
-                local_ref: Some("HEAD".into()),
-                local: RefValue::Oid(bad.clone()),
-                remote_ref: remote_ref.to_owned(),
-                remote: RefValue::Zero,
-            }],
-        };
-        let tag = floor_rules_for_everyone(&args, &push_to("refs/tags/x"));
-        assert!(
-            tag.is_some_and(|o| !o.allowed()),
-            "an agent rule reaches a tag"
-        );
-        let branch = floor_rules_for_everyone(&args, &push_to("refs/heads/topic"));
-        assert!(branch.is_none(), "a rule for agents is not for everyone");
     }
 }
