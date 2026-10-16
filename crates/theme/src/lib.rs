@@ -318,3 +318,11 @@ pub(crate) fn relative_luminance(Rgb(r, g, b): Rgb) -> f64 {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod tmp_break {
+    #[test]
+    fn tmp_break_windows_blocks() {
+        assert!(false, "temporary: proves the Windows test step blocks");
+    }
+}
