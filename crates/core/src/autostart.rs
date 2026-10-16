@@ -836,6 +836,19 @@ mod tests {
         )
         .unwrap();
         std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o755)).unwrap();
+        // The first run of a new executable can take seconds on a loaded macOS (the system
+        // checks it before letting it run; 0.5 s measured on an idle one, against 0.15 s the
+        // next time), and `run_tool` gives up on its tool after `TOOL_TIMEOUT`. Run it once
+        // here, without a limit, so the runs the test is about meet an already checked tool.
+        assert!(
+            std::process::Command::new(&tool)
+                .arg("warm-up")
+                .status()
+                .unwrap()
+                .code()
+                .is_some()
+        );
+        std::fs::remove_file(&log).unwrap();
         tool
     }
 
