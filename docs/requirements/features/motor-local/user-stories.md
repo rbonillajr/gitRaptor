@@ -68,6 +68,7 @@ blocked: []
 | [US-GRP-020](./user-stories/US-GRP-020-carpetas-codigo-repos-descubiertos.md) | El desarrollador ve los repos que aparecen en sus carpetas de código sin tener que añadirlos uno a uno | Desarrollador quiere declarar sus carpetas de código y que se le propongan los repos del primer nivel, sin observarlos | implemented (PR #170 (ajustes en #153 y #178)) |
 | [US-GRP-021](./user-stories/US-GRP-021-raptor-clone.md) | El desarrollador clona un repo con raptor clone y decide en el momento si GitRaptor lo observa | Desarrollador quiere `raptor clone <url>` con la pregunta de observar al terminar, "no" por defecto | expanded |
 | [US-GRP-022](./user-stories/US-GRP-022-aceptar-descartar-repo-descubierto.md) | El desarrollador decide qué repos descubiertos se observan y los que descarta no vuelven a aparecer | Desarrollador quiere aceptar o descartar repos descubiertos; solo el humano decide y el descarte persiste | implemented (PR #170) |
+| [US-GRP-023](./user-stories/US-GRP-023-status-resume-sin-seguimiento.md) | El desarrollador ve en raptor status sus cambios importantes primero y los archivos sin seguimiento resumidos por carpeta | Desarrollador quiere los archivos sin rastrear resumidos por carpeta a partir de 11 y el detalle con `--verbose` (dogfooding, 2026-10-17) | expanded |
 
 ---
 

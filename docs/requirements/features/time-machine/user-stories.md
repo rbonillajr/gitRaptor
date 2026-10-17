@@ -70,6 +70,7 @@ deferred:
 | [US-TMC-020](./user-stories/US-TMC-020-overhead-snapshot.md) | El desarrollador y sus agentes no notan el coste de los snapshots | Desarrollador quiere overhead < 200 ms por snapshot (NFR-04) | 001, 004 | Spike (a): repo mediano (D-TMC-21) | expanded |
 | [US-TMC-021](./user-stories/US-TMC-021-politica-guardrails-undo.md) | Las políticas del repo pueden restringir quién deshace, nunca ampliarlo | Desarrollador quiere que Guardrails endurezca los permisos del undo sin poder relajarlos | 013 | Fuera del MVP (Fase 2): Guardrails sin política sobre el undo | expanded |
 | [US-TMC-022](./user-stories/US-TMC-022-tope-disco.md) | La Time Machine nunca pasa del tope de disco que fijé | Desarrollador quiere un tope de disco con aviso y purga de lo más antiguo no protegido (RES-09) | 016 | — | expanded |
+| [US-TMC-023](./user-stories/US-TMC-023-timeline-legible-restaurar-id-corto.md) | El desarrollador lee el timeline de un vistazo y restaura un punto con el id corto que ve en la misma línea | Desarrollador quiere el timeline en una línea por evento, por día, con resúmenes e id corto para `raptor restore` (dogfooding, 2026-10-17) | 006, 009 | — | expanded |
 
 ### Orden de ejecución sugerido (capas del DAG, solo dependencias internas)
 
