@@ -7,12 +7,14 @@ use std::path::Path;
 
 use gitraptor_api::AgentKind;
 use gitraptor_api::guard::{
-    CommitStage, ConfigSource, ConfigStatus, Decision, Effect, EvaluateParams, ExceptionState,
-    Level, Operation, Reason, Rule,
+    AuthorshipFacts, CommitStage, ConfigSource, ConfigStatus, Decision, Effect, EvaluateParams,
+    ExceptionState, Level, LogLayer, Operation, Reason, Rule,
 };
 use gitraptor_git::{Ancestry, ReaderOptions, RefName, RepoReader};
 use gitraptor_policy::guard::authorship::Effective;
-use gitraptor_policy::guard::policies::Policies;
+use gitraptor_policy::guard::glob::{Kind, Pattern};
+use gitraptor_policy::guard::plan::Preset;
+use gitraptor_policy::guard::policies::{Policies, Rules, Scope};
 use gitraptor_policy::guard::{self as policy, Context, Evaluation, Facts, FastForward};
 use gitraptor_policy::layers::IgnoredRelaxation;
 use gitraptor_policy::team::{DEFAULT_BRANCH, resolve_main_branch};
@@ -111,19 +113,42 @@ pub fn evaluate_commit(
     bases: Vec<String>,
     commit: CommitContext,
 ) -> Evaluation {
+    evaluate_preset(reader, common, op, bases, commit, None, LogLayer::Hooks)
+}
+
+/// [`evaluate_commit`] with the facts a plan already holds (its prepared paths) and the layer
+/// that asks. A preset applies to the single update of a transaction.
+fn evaluate_preset(
+    reader: &RepoReader,
+    common: &Path,
+    op: &Operation,
+    bases: Vec<String>,
+    commit: CommitContext,
+    preset: Option<&Preset>,
+    layer: LogLayer,
+) -> Evaluation {
     let ctx = Context {
         bases,
         fold_case: reader.ignores_case() || folds_case(common),
         actor: commit.actor,
         authorship: commit.authorship,
         policies: commit.policies,
+        layer,
     };
     let mut facts = facts(reader, op);
     facts.authorship = commit.facts;
     // The commits of the movement are read for the forbidden paths only when a rule governs the
     // actor; the protected configuration has its own read, for every agent's movement.
-    facts.touched = super::policies::touched(reader, op, &ctx.policies, ctx.actor);
-    facts.config_touched = super::policies::config_touched(reader, op, ctx.actor);
+    facts.touched = match preset.and_then(|p| p.touched.clone()) {
+        Some(touched) => vec![Some(touched)],
+        None => super::policies::touched(reader, op, &ctx.policies, ctx.actor),
+    };
+    facts.config_touched = match preset.and_then(|p| p.config_touched.clone()) {
+        // The person is never governed by the configuration rule: nothing to preload.
+        Some(touched) if ctx.actor.is_some() => vec![Some(touched)],
+        Some(_) => Vec::new(),
+        None => super::policies::config_touched(reader, op, ctx.actor),
+    };
     policy::evaluate(op, &facts, &ctx)
 }
 
@@ -186,7 +211,7 @@ pub fn system_deny(rule: Rule) -> Decision {
 
 /// Lexical checks of what a hook client sends: refs follow `check-ref-format`, values are
 /// object ids or symbolic targets.
-fn valid(params: &EvaluateParams) -> bool {
+pub(crate) fn valid(params: &EvaluateParams) -> bool {
     use gitraptor_api::guard::RefValue;
     let value = |v: &RefValue| match v {
         RefValue::Zero => true,
@@ -282,7 +307,7 @@ pub fn serve_logged(
     (served.decision, served.authorship_policy)
 }
 
-fn plain(decision: Decision) -> Served {
+pub(crate) fn plain(decision: Decision) -> Served {
     Served {
         decision,
         authorship_policy: None,
@@ -290,61 +315,230 @@ fn plain(decision: Decision) -> Served {
     }
 }
 
+/// Which rules a decision applies.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RuleSet {
+    /// The authorship rules of a commit (`guard.authorship`).
+    pub authorship: bool,
+    /// The protected branches and forbidden paths of a movement (`guard.policies`).
+    pub policies: bool,
+    /// The second line does not evaluate this commit (§ 5.3).
+    pub second_line_skip: bool,
+}
+
+impl RuleSet {
+    /// What the hook's connection asked for: a hook sees exactly what it saw before.
+    pub fn from_caller(caller: &Caller) -> Self {
+        Self {
+            authorship: caller.authorship,
+            policies: caller.policies,
+            second_line_skip: caller.second_line_skip,
+        }
+    }
+
+    /// Every rule: a plan of the executor, and a transition its child was not registered for.
+    pub fn all() -> Self {
+        Self {
+            authorship: true,
+            policies: true,
+            second_line_skip: false,
+        }
+    }
+}
+
+/// One decision, as `guard.evaluate` and the executor's plans ask for it.
+#[derive(Debug, Clone)]
+pub struct DecideInput<'a> {
+    /// The repo's common directory, absolute.
+    pub common_dir: &'a Path,
+    /// The repo id the asker names; only the registry's entry with the same `common_dir` counts.
+    pub repo_id: &'a str,
+    pub actor: Option<AgentKind>,
+    /// The worktree of the operation: its own level of the configuration is read from it.
+    pub worktree: Option<&'a Path>,
+    /// The layer that asks; it never changes the decision.
+    pub layer: LogLayer,
+    pub rules: RuleSet,
+    /// The facts of a commit message, for a commit.
+    pub authorship: Option<&'a AuthorshipFacts>,
+    /// For the executor: a repo the registry does not know protects, for everyone, the union of
+    /// `main`, its main branch and these bases while nothing is confirmed. `None` for a hook.
+    pub unregistered_bases: Option<&'a [String]>,
+}
+
 /// [`serve_logged`], and what the levels that only harden tried to relax (for the decision log).
 pub fn serve_audited(registry: &GuardRegistry, params: &EvaluateParams, caller: &Caller) -> Served {
     if !valid(params) {
         return plain(system_deny(Rule::InputRejected));
     }
-    let entry = registry
-        .get(&params.repo_id)
-        .filter(|e| e.common_dir == params.common_dir);
-    let Some(reader) = open(Path::new(&params.common_dir)) else {
+    let input = DecideInput {
+        common_dir: Path::new(&params.common_dir),
+        repo_id: &params.repo_id,
+        actor: caller.actor,
+        worktree: caller.cwd.as_deref(),
+        layer: LogLayer::Hooks,
+        rules: RuleSet::from_caller(caller),
+        authorship: params.authorship.as_ref(),
+        unregistered_bases: None,
+    };
+    decide_op(registry, &input, &params.operation, None)
+}
+
+/// The decision of `operation` (ADR-GRD-003 § 1 to § 4): the one function the hooks and the
+/// executor's plans share.
+pub fn decide(registry: &GuardRegistry, input: &DecideInput<'_>, operation: &Operation) -> Served {
+    decide_op(registry, input, operation, None)
+}
+
+/// The decision of a plan: every operation decided with its preloaded facts, combined as the
+/// maximum with the reasons of that maximum (BR-CALC-001). The warnings travel only when the
+/// result allows. `preset` is aligned with `ops` (missing entries preload nothing).
+pub fn decide_all(
+    registry: &GuardRegistry,
+    input: &DecideInput<'_>,
+    ops: &[Operation],
+    preset: &[Preset],
+) -> Served {
+    let mut total = Evaluation::allow();
+    let mut notices = Vec::new();
+    let mut authorship_policy = None;
+    let mut ignored = Vec::new();
+    for (i, op) in ops.iter().enumerate() {
+        let (evaluation, policy, relaxed) = evaluate_op(registry, input, op, preset.get(i));
+        let Some(evaluation) = evaluation else {
+            return plain(system_deny(Rule::InternalError));
+        };
+        notices.extend(evaluation.notices.iter().cloned());
+        for reason in evaluation.reasons {
+            total.add(evaluation.effect, reason);
+        }
+        if evaluation.effect != Effect::Allow && total.effect == Effect::Allow {
+            total.effect = evaluation.effect;
+        }
+        authorship_policy = authorship_policy.or(policy);
+        ignored.extend(relaxed);
+    }
+    total.notices = notices;
+    let mut out = decision(total);
+    if !input.rules.authorship {
+        out.notices.clear();
+    }
+    Served {
+        decision: out,
+        authorship_policy,
+        ignored,
+    }
+}
+
+fn decide_op(
+    registry: &GuardRegistry,
+    input: &DecideInput<'_>,
+    operation: &Operation,
+    preset: Option<&Preset>,
+) -> Served {
+    let (evaluation, applied, ignored) = evaluate_op(registry, input, operation, preset);
+    let Some(evaluation) = evaluation else {
         return plain(system_deny(Rule::InternalError));
     };
-    let common = Path::new(&params.common_dir);
+    let mut out = decision(evaluation);
+    if !input.rules.authorship {
+        out.notices.clear();
+    }
+    Served {
+        decision: out,
+        authorship_policy: applied,
+        ignored,
+    }
+}
+
+/// The protected branches a repo unknown to the registry has for the executor (D12): the
+/// union of bases, for everyone, at the level of the minimum.
+fn unregistered_rules(bases: &[String]) -> Option<Rules> {
+    let patterns: Vec<Pattern> = bases
+        .iter()
+        .filter_map(|b| Pattern::new(b, Kind::Branch).ok())
+        .collect();
+    (!patterns.is_empty()).then_some(Rules {
+        level: Level::Minimum,
+        scope: Scope::Everyone,
+        patterns,
+    })
+}
+
+/// The evaluation of one operation, or `None` when the repo cannot be read.
+fn evaluate_op(
+    registry: &GuardRegistry,
+    input: &DecideInput<'_>,
+    operation: &Operation,
+    preset: Option<&Preset>,
+) -> (
+    Option<Evaluation>,
+    Option<&'static str>,
+    Vec<IgnoredRelaxation>,
+) {
+    let common_text = input.common_dir.to_string_lossy();
+    let entry = registry
+        .get(input.repo_id)
+        .filter(|e| e.common_dir == common_text);
+    let Some(reader) = open(input.common_dir) else {
+        return (None, None, Vec::new());
+    };
+    let common = input.common_dir;
     // The local level is keyed by the registry's id, found through its `common_dir`: never by
     // the client's text alone.
-    let repo_id = entry.is_some().then_some(params.repo_id.as_str());
-    let (bases, confirmed) = match entry {
+    let repo_id = entry.is_some().then_some(input.repo_id);
+    let registered = entry.is_some();
+    let (mut bases, confirmed) = match entry {
         Some(e) => (e.bases, e.confirmed),
         None => (default_bases(&reader), None),
     };
+    // D12: the executor protects the union while the repo has no confirmation of its own.
+    let extra_rules = match input.unregistered_bases {
+        Some(extra) if !registered => {
+            for base in extra {
+                if !bases.contains(base) {
+                    bases.push(base.clone());
+                }
+            }
+            unregistered_rules(&bases)
+        }
+        _ => None,
+    };
     let mut ignored = Vec::new();
-    let commit = match &params.operation {
+    let worktree_reader = || {
+        input
+            .worktree
+            .and_then(|cwd| super::authorship::worktree_reader(cwd, common))
+    };
+    let commit = match operation {
         Operation::Commit {
             stage: CommitStage::SecondLine,
-        } if caller.second_line_skip => CommitContext::default(),
-        Operation::Commit { .. } if caller.authorship => {
-            let worktree = caller
-                .cwd
-                .as_deref()
-                .and_then(|cwd| super::authorship::worktree_reader(cwd, common));
+        } if input.rules.second_line_skip => CommitContext::default(),
+        Operation::Commit { .. } if input.rules.authorship => {
+            let worktree = worktree_reader();
             CommitContext {
-                actor: caller.actor,
+                actor: input.actor,
                 authorship: super::authorship::policy_for(
                     worktree.as_ref().unwrap_or(&reader),
                     confirmed.as_ref(),
                     registry.profile().as_ref(),
                     repo_id,
                 ),
-                facts: params.authorship.clone(),
+                facts: input.authorship.cloned(),
                 policies: Policies::default(),
             }
         }
-        Operation::RefTransaction { .. } | Operation::Push { .. } if caller.policies => {
-            let worktree = caller
-                .cwd
-                .as_deref()
-                .and_then(|cwd| super::authorship::worktree_reader(cwd, common));
+        Operation::RefTransaction { .. } | Operation::Push { .. } if input.rules.policies => {
+            let worktree = worktree_reader();
             // One read of every level: the rules and the ignored relaxations come from it.
-            let policies = match super::layers::load(
+            let mut policies = match super::layers::load(
                 worktree.as_ref().unwrap_or(&reader),
                 confirmed.as_ref(),
                 registry.profile().as_ref(),
                 repo_id,
             ) {
                 Ok(layers) => {
-                    if caller.actor.is_some() {
+                    if input.actor.is_some() {
                         ignored = layers.ignored();
                     }
                     layers.policies()
@@ -352,8 +546,11 @@ pub fn serve_audited(registry: &GuardRegistry, params: &EvaluateParams, caller: 
                 // Never "no rules": an agent's movement cannot be judged (SEC-GRD-17).
                 Err(_) => Policies::unreadable(),
             };
+            if let Some(rules) = extra_rules {
+                policies.branches.push(rules);
+            }
             CommitContext {
-                actor: caller.actor,
+                actor: input.actor,
                 policies,
                 ..CommitContext::default()
             }
@@ -362,19 +559,14 @@ pub fn serve_audited(registry: &GuardRegistry, params: &EvaluateParams, caller: 
     };
     let applied =
         (commit.actor.is_some() && commit.facts.is_some()).then(|| commit.authorship.policy.mode());
-    let mut out = decision(evaluate_commit(
+    let evaluation = evaluate_preset(
         &reader,
         common,
-        &params.operation,
+        operation,
         bases,
         commit,
-    ));
-    if !caller.authorship {
-        out.notices.clear();
-    }
-    Served {
-        decision: out,
-        authorship_policy: applied,
-        ignored,
-    }
+        preset,
+        input.layer,
+    );
+    (Some(evaluation), applied, ignored)
 }

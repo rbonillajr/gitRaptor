@@ -25,8 +25,11 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use gitraptor_policy::guard::plan::Expected;
+
 use super::peer::ProcInfo;
 use super::requester::Who;
+use crate::executor::PlanBinding;
 
 #[derive(Debug, Clone)]
 struct Mark {
@@ -37,7 +40,10 @@ struct Mark {
     /// A process group only matches processes started after it, so a
     /// reused group id of an older process never matches.
     opened_us: u64,
-    children: Vec<(u32, u64)>,
+    /// The allowed plan of a governed operation.
+    binding: Option<Arc<PlanBinding>>,
+    /// Each child by `(pid, start)`, with the transitions it was registered with.
+    children: Vec<(u32, u64, Arc<[Expected]>)>,
     groups: Vec<u32>,
 }
 
@@ -46,6 +52,17 @@ struct Mark {
 pub struct MarkedBy {
     pub operation_id: String,
     pub who: Who,
+}
+
+/// A direct child of the executor, with the plan it belongs to.
+#[derive(Debug, Clone)]
+pub struct ChildLink {
+    pub operation_id: String,
+    pub who: Who,
+    /// The allowed plan, when the operation is governed.
+    pub binding: Option<Arc<PlanBinding>>,
+    /// The transitions this child was registered with.
+    pub transitions: Arc<[Expected]>,
 }
 
 /// The marks of the operations running now. Shared by the protected
@@ -78,12 +95,20 @@ impl ExecutorMarks {
         self.marks.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    /// Opens the marks of an operation; they last until the guard drops.
-    pub fn open(self: &Arc<Self>, operation_id: &str, who: &Who, opened_us: u64) -> MarkGuard {
+    /// Opens the marks of an operation, bound to its allowed plan when it is governed; they last
+    /// until the guard drops.
+    pub fn open(
+        self: &Arc<Self>,
+        operation_id: &str,
+        who: &Who,
+        opened_us: u64,
+        binding: Option<Arc<PlanBinding>>,
+    ) -> MarkGuard {
         self.lock().push(Mark {
             operation_id: operation_id.to_owned(),
             who: who.clone(),
             opened_us,
+            binding,
             children: Vec::new(),
             groups: Vec::new(),
         });
@@ -93,14 +118,22 @@ impl ExecutorMarks {
         }
     }
 
-    /// Marks a child the operation started.
-    pub fn add_child(&self, operation_id: &str, pid: u32, start_us: u64, pgid: u32) {
+    /// Marks a child the operation started, with the transitions it is expected to make, in the
+    /// same critical section: a hook that waited for the start barrier finds both at once.
+    pub fn add_child(
+        &self,
+        operation_id: &str,
+        pid: u32,
+        start_us: u64,
+        pgid: u32,
+        transitions: Arc<[Expected]>,
+    ) {
         if let Some(m) = self
             .lock()
             .iter_mut()
             .find(|m| m.operation_id == operation_id)
         {
-            m.children.push((pid, start_us));
+            m.children.push((pid, start_us, transitions));
             if pgid > 1 && !m.groups.contains(&pgid) {
                 m.groups.push(pgid);
             }
@@ -112,13 +145,30 @@ impl ExecutorMarks {
         self.lock()
             .iter()
             .find(|m| {
-                m.children.contains(&(info.pid, info.start_us))
+                m.children
+                    .iter()
+                    .any(|(pid, start, _)| (*pid, *start) == (info.pid, info.start_us))
                     || (m.groups.contains(&info.pgid) && info.start_us >= m.opened_us)
             })
             .map(|m| MarkedBy {
                 operation_id: m.operation_id.clone(),
                 who: m.who.clone(),
             })
+    }
+
+    /// The direct child `(pid, start_us)` of a running operation; never a grandchild.
+    pub fn child_link(&self, pid: u32, start_us: u64) -> Option<ChildLink> {
+        self.lock().iter().find_map(|m| {
+            m.children
+                .iter()
+                .find(|(p, s, _)| (*p, *s) == (pid, start_us))
+                .map(|(_, _, transitions)| ChildLink {
+                    operation_id: m.operation_id.clone(),
+                    who: m.who.clone(),
+                    binding: m.binding.clone(),
+                    transitions: Arc::clone(transitions),
+                })
+        })
     }
 
     pub fn is_empty(&self) -> bool {
@@ -165,6 +215,10 @@ impl Drop for MarkGuard {
 }
 
 #[cfg(test)]
+#[path = "marks_transitions_tests.rs"]
+mod transitions_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -197,8 +251,8 @@ mod tests {
     fn children_and_their_group_are_marked_until_the_operation_closes() {
         let marks = Arc::new(ExecutorMarks::default());
         let who = Who::unattributed();
-        let guard = marks.open("op-1", &who, 1_000);
-        marks.add_child("op-1", 50, 1_100, 50);
+        let guard = marks.open("op-1", &who, 1_000, None);
+        marks.add_child("op-1", 50, 1_100, 50, Arc::from(Vec::new()));
         assert_eq!(
             marks.lookup(&proc(50, 1_100, 50)).unwrap().operation_id,
             "op-1"

@@ -336,6 +336,7 @@ impl ProtectedBackend for Backend {
             warnings: self.warnings.lock().unwrap().clone(),
             affected: Affected::Nobody,
             other_session: false,
+            governed: None,
         })
     }
     fn step(&self, plan: &StepPlan<'_>) -> Result<Box<dyn ProtectedStep>, StepError> {

@@ -105,12 +105,26 @@ pub fn run_git(
     cmd: UserGitCommand,
     cancel: &CancelToken,
 ) -> std::io::Result<GitRun> {
+    run_git_with(ctx, cmd, cancel, &[])
+}
+
+/// [`run_git`] for a `git` that also makes `transitions` of its own besides the plan's (the
+/// abort of an atomic rebase moving the branch back): registered with its identity.
+pub fn run_git_with(
+    ctx: &mut StepCtx<'_>,
+    cmd: UserGitCommand,
+    cancel: &CancelToken,
+    transitions: &[gitraptor_policy::guard::plan::Expected],
+) -> std::io::Result<GitRun> {
     let mut collector = None;
-    let mut marked = ctx.spawn_with(|| {
-        let (child, out) = cmd.spawn()?;
-        collector = Some(out);
-        Ok(child)
-    })?;
+    let mut marked = ctx.spawn_with_transitions(
+        || {
+            let (child, out) = cmd.spawn()?;
+            collector = Some(out);
+            Ok(child)
+        },
+        transitions,
+    )?;
     let mut signalled = None;
     let status = loop {
         if let Some(status) = marked.child.try_wait()? {

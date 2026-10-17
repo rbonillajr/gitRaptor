@@ -30,20 +30,17 @@ pub fn resolve(
     }
 }
 
-/// [`resolve`] for the decision log (US-GRD-005): the agent, and whether the client runs under
-/// an operation of the executor, whose plan logs instead of the hook (ADR-GRD-006, Enmienda
-/// Cockpit).
+/// [`resolve`] for the decision log (US-GRD-005): the agent, and how the client relates to the
+/// executor. Only a direct child of an operation inherits its plan's entry; a grandchild logs
+/// its own (H-01).
 pub fn resolve_logged(
     peer: AcceptedPeer,
     checks: &Checks<'_>,
     marks: Option<&ExecutorMarks>,
-) -> (Option<AgentKind>, bool) {
-    let Ok(resolution) = requester::resolve(peer, checks, marks) else {
-        return (None, false);
-    };
-    let agent = match resolution.who.actor {
-        Actor::Agent { kind, .. } => Some(kind),
-        Actor::Unattributed => None,
-    };
-    (agent, resolution.executor_operation.is_some())
+) -> (Option<AgentKind>, super::link::Link) {
+    let agent = resolve(peer, checks, marks);
+    let link = marks.map_or(super::link::Link::None, |m| {
+        super::link::classify(peer, checks, m)
+    });
+    (agent, link)
 }

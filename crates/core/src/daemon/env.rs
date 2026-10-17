@@ -161,6 +161,11 @@ pub(crate) fn clock_skew_file() -> Option<PathBuf> {
     }
 }
 
+/// Debug-build test hook: with `GITRAPTOR_TEST_EXECUTOR_ARMS=1` (and `GITRAPTOR_PROFILE_DIR`) the
+/// daemon arms the test arms of the governed operations (`executor::ops`). Ignored in a build
+/// without `debug_assertions`.
+pub const TEST_EXECUTOR_ARMS_ENV: &str = "GITRAPTOR_TEST_EXECUTOR_ARMS";
+
 /// Debug-build test hook: with `GITRAPTOR_TEST_TM_NO_FREE_SPACE_FLOOR=1` the
 /// continuous capture does not check the free-space floor of SEC-TMC-12, so
 /// an end-to-end test of the binary does not depend on the runner's disk

@@ -828,6 +828,7 @@ pub fn undo_last(
         target: Target::Undo(target_ref),
         warnings: planned.warnings.clone(),
         engine_mark,
+        binding: None,
     };
     let mut step = UndoStep {
         store,
