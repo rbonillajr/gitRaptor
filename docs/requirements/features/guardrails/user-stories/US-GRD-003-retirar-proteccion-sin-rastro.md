@@ -5,7 +5,7 @@ type: us
 status: partially-implemented
 priority: high
 created: 2026-10-04
-updated: 2026-10-08
+updated: 2026-10-17
 feature: guardrails
 related:
   context:
@@ -107,4 +107,4 @@ Entonces cada cambio queda registrado con qué se hizo, en qué repo, cuándo y 
 
 ## Estado de la implementación (2026-10-08)
 
-Implementado en: PR #193 (parcial): E1 a E4 y la ventana cancelable de D5. E6 (entradas `protection-state` en el registro de decisiones) lo cierra el PR #201 (US-GRD-004). **Falta**: E5 (instalación huérfana: retirar o adoptar; US-GRD-004 ya la detecta y la muestra como `orphaned`). Dev Spec: [DS-US-GRD-003](../dev-specs/US-GRD-003-retirar-proteccion-sin-rastro.md).
+Implementado en: PR #193 (parcial): E1 a E4 y la ventana cancelable de D5. E6 (entradas `protection-state` en el registro de decisiones) lo cierra el PR #201 (US-GRD-004). E5, la parte de **retirar**, la cierra el PR #264 (2026-10-17): `raptor guard uninstall` retira una carpeta huérfana que se reconoce como de Guardrails y termina una desinstalación cuya limpieza se detuvo tras la clave. Ese PR también corrige el fallo de actualizar y desinstalar instalaciones antiguas cuando cambia la identidad de la carpeta. **Falta**: E5, la parte de **adoptar** una huérfana. Dev Spec: [DS-US-GRD-003](../dev-specs/US-GRD-003-retirar-proteccion-sin-rastro.md).
