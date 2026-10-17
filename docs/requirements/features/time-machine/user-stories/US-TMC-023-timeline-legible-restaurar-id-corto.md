@@ -2,7 +2,7 @@
 id: US-TMC-023
 title: "El desarrollador lee el timeline de un vistazo y restaura un punto con el id corto que ve en la misma línea"
 type: us
-status: draft
+status: implemented
 priority: high
 created: 2026-10-17
 updated: 2026-10-17
@@ -175,3 +175,5 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 - **Historias**: US-TMC-006 (contenido del timeline), US-TMC-009 (restaurar), US-TMC-007 (filtros; esta historia no la bloquea ni la requiere).
 - **Externas**: el Cockpit (F-001-02) mantiene su "Sin agente" con leyenda; alinear su texto con "tú u otro" queda fuera de esta historia.
 - **Transversal**: transversal (lo define el Arquitecto): verificación en repos temporales, nunca en un repo real; mismo comportamiento en Windows, macOS y Linux; mensajes en inglés y español.
+
+Implementado en: PR #265.
