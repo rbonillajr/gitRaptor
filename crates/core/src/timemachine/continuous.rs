@@ -671,8 +671,12 @@ pub fn branch_tips(common_dir: &Path) -> BTreeMap<String, String> {
 /// worktree then moves without an entry in that worktree's `HEAD` reflog, which is what the
 /// engine's calm compares, so `settle` does not wait for it. An anchor taken before the engine
 /// persists that move would leave it outside the operation's echo, as raw Git on top of the
-/// worktree's stack. A branch is waited for when it is checked out in one of `worktrees` and
-/// points elsewhere than in `before`; the wait ends when that worktree has an event past
+/// worktree's stack. The same goes for a branch the operation created, deleted or moved
+/// without it being checked out anywhere (a restore recreating the branches of its scope): its
+/// event would otherwise land after the anchor and be taken for raw Git, so the next undo took
+/// back that event instead of the operation (NFR-01). A branch is waited for when it points
+/// elsewhere than in `before` (or exists in only one of the two); the wait ends when the
+/// worktree that has it checked out, or any of `worktrees` if none does, has an event past
 /// `since` naming the branch. Past the limit it returns anyway: the anchor is then taken as
 /// before.
 pub fn await_moved_branches(
@@ -686,20 +690,20 @@ pub fn await_moved_branches(
         return;
     };
     let after = branch_tips(&common);
-    let mut pending: Vec<(&PathBuf, String)> = worktrees
+    let checked_out: Vec<(&PathBuf, String)> = worktrees
         .iter()
-        .filter_map(|root| {
-            let branch = super::undo::head_branch(&common, root)?;
-            (before.get(&branch) != after.get(&branch)).then_some((root, branch))
-        })
+        .filter_map(|root| Some((root, super::undo::head_branch(&common, root)?)))
         .collect();
+    let mut pending = branches_to_await(before, &after, &checked_out, worktrees);
     let end = Instant::now() + ANCHOR_SETTLE_LIMIT;
     while !pending.is_empty() {
-        pending.retain(|(root, branch)| {
-            !deps.engine.raw_events(repo_id, root).is_some_and(|events| {
-                events
-                    .iter()
-                    .any(|e| e.seq > since && e.branch.as_deref() == Some(branch.as_str()))
+        pending.retain(|(roots, branch)| {
+            !roots.iter().any(|root| {
+                deps.engine.raw_events(repo_id, root).is_some_and(|events| {
+                    events
+                        .iter()
+                        .any(|e| e.seq > since && e.branch.as_deref() == Some(branch.as_str()))
+                })
             })
         });
         if pending.is_empty() || Instant::now() + ECHO_POLL > end {
@@ -707,6 +711,42 @@ pub fn await_moved_branches(
         }
         std::thread::sleep(ECHO_POLL);
     }
+}
+
+/// Each branch an operation changed (`before` against `after`, so one created or deleted counts),
+/// with the worktrees whose events can name it: the ones that have it checked out, or, if none
+/// does, all of `worktrees`.
+fn branches_to_await<'a>(
+    before: &'a BTreeMap<String, String>,
+    after: &'a BTreeMap<String, String>,
+    checked_out: &[(&'a PathBuf, String)],
+    worktrees: &'a [PathBuf],
+) -> Vec<(Vec<&'a PathBuf>, &'a String)> {
+    let mut changed: Vec<&String> = before
+        .keys()
+        .chain(after.keys())
+        .filter(|b| before.get(*b) != after.get(*b))
+        .collect();
+    changed.sort();
+    changed.dedup();
+    changed
+        .into_iter()
+        .map(|branch| {
+            let holders: Vec<&PathBuf> = checked_out
+                .iter()
+                .filter(|(_, held)| held == branch)
+                .map(|(root, _)| *root)
+                .collect();
+            (
+                if holders.is_empty() {
+                    worktrees.iter().collect()
+                } else {
+                    holders
+                },
+                branch,
+            )
+        })
+        .collect()
 }
 
 /// How often [`await_moved_branches`] reads the engine again while waiting.
@@ -789,5 +829,31 @@ mod tests {
         let mut p = pending(now);
         p.event = Some(3);
         assert_eq!(p.due(&config), now);
+    }
+
+    /// NFR-01: the branches a restore recreates are checked out nowhere, and their events must
+    /// still be waited for before the anchor, or they land after it as raw Git and the next
+    /// undo takes back that event instead of the restore.
+    #[test]
+    fn a_branch_checked_out_nowhere_is_awaited_whether_created_deleted_or_moved() {
+        let map = |pairs: &[(&str, &str)]| -> BTreeMap<String, String> {
+            pairs
+                .iter()
+                .map(|(b, c)| ((*b).to_owned(), (*c).to_owned()))
+                .collect()
+        };
+        let before = map(&[("main", "1"), ("moved", "1"), ("gone", "1"), ("same", "1")]);
+        let after = map(&[("main", "2"), ("moved", "2"), ("new", "2"), ("same", "1")]);
+        let worktrees = vec![PathBuf::from("/wt/main"), PathBuf::from("/wt/other")];
+        let checked_out = [(&worktrees[0], "main".to_owned())];
+        let pending = branches_to_await(&before, &after, &checked_out, &worktrees);
+        let names: Vec<&str> = pending.iter().map(|(_, b)| b.as_str()).collect();
+        assert_eq!(names, ["gone", "main", "moved", "new"]);
+        let roots = |branch: &str| pending.iter().find(|(_, b)| *b == branch).unwrap().0.len();
+        // The checked-out one is looked for in its own worktree; the others, anywhere.
+        assert_eq!(roots("main"), 1);
+        for branch in ["gone", "moved", "new"] {
+            assert_eq!(roots(branch), 2, "{branch}");
+        }
     }
 }

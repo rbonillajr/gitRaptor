@@ -300,12 +300,18 @@ impl Running {
                 }),
             )
             .unwrap();
-        let out: Value = c
-            .call(
-                methods::OPERATION_RUN,
-                json!({ "plan_id": plan.plan_id, "accepted_warnings": plan.warnings }),
-            )
-            .unwrap();
+        let out: Value = match c.call(
+            methods::OPERATION_RUN,
+            json!({ "plan_id": plan.plan_id, "accepted_warnings": plan.warnings }),
+        ) {
+            Ok(out) => out,
+            Err(ClientError::Rpc(e)) => {
+                let id = e.data.as_ref().and_then(|d| d["operation_id"].as_str());
+                let view = id.map(|id| self.op(id));
+                panic!("the operation failed: {e:?}\n{view:#?}")
+            }
+            Err(e) => panic!("{e:?}"),
+        };
         serde_json::from_value(out).unwrap()
     }
 
