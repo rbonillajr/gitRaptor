@@ -72,6 +72,7 @@ fn install() -> Install {
         confirms_base: Some("main".into()),
         protected_bases: vec!["main".into()],
         upgrade: None,
+        orphan: false,
     };
     Install {
         _tmp: tmp,

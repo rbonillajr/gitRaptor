@@ -13,7 +13,7 @@ use crate::channel::audit_view::audit_entry;
 use crate::guardrails::install::{GuardCtx, InstallError};
 use crate::guardrails::log::LogEntry;
 use crate::guardrails::pending::{self, Entry, Refused, Requester};
-use crate::guardrails::uninstall::{self as guard_uninstall, UninstallError};
+use crate::guardrails::uninstall::{self as guard_uninstall, Origin, UninstallError};
 use crate::guardrails::{GuardRegistry, install as guard_install};
 use crate::profile::{AuditRow, Profile, RepoState, RepoStore};
 
@@ -24,6 +24,18 @@ const RISK_ACCEPTED: &str = "risk-accepted: ADR-GRD-007 § 2 (2026-10-04); uncov
 
 fn requester_text(r: Requester) -> String {
     serde_json::json!({ "pid": r.pid, "start_us": r.start_us }).to_string()
+}
+
+/// Where a failed install or uninstall leaves the repo: the step, and its key read again.
+fn failed(
+    ctx: &GuardCtx<'_>,
+    common: &std::path::Path,
+    step: gitraptor_api::guard::GuardStep,
+) -> gitraptor_api::guard::GuardFailedData {
+    gitraptor_api::guard::GuardFailedData {
+        step,
+        protection: guard_install::protection_after(ctx, common),
+    }
 }
 
 impl Daemon {
@@ -91,9 +103,14 @@ impl Daemon {
                 GuardReply::Status(Box::new(guard_install::decline(repo_id, common, store)))
             }
             GuardRequest::Install { repair } => {
+                let moved = guard_install::folder_moved(&ctx, common, store);
                 match guard_install::install(&ctx, repo_id, common, store, &self.guard, now, repair)
                 {
                     Ok(status) => {
+                        if moved {
+                            self.logger
+                                .info("guard_folder_reanchored", &[("repo", Field::id(repo_id))]);
+                        }
                         self.logger
                             .info("guard_installed", &[("repo", Field::id(repo_id))]);
                         GuardReply::Status(Box::new(status))
@@ -108,26 +125,39 @@ impl Daemon {
                         );
                         GuardReply::Rejected(blockers)
                     }
-                    Err(InstallError::Failed(why)) => {
-                        // Only which step failed, from a closed list: the text carries paths.
-                        let step = ["folder acl", "folder", "key", "journal", "stub", "config"]
-                            .into_iter()
-                            .find(|s| why.starts_with(s))
-                            .unwrap_or("other");
+                    Err(InstallError::Failed(failure)) => {
+                        // Only which step failed, from a closed list: the detail carries paths.
                         self.logger.error(
                             "guard_install_failed",
-                            &[("repo", Field::id(repo_id)), ("step", step.into())],
+                            &[
+                                ("repo", Field::id(repo_id)),
+                                ("step", failure.step.as_str().into()),
+                            ],
                         );
-                        GuardReply::Failed
+                        GuardReply::StepFailed(failed(&ctx, common, failure.step))
                     }
                 }
             }
-            GuardRequest::UninstallRequest(requester) => {
+            GuardRequest::UninstallRequest {
+                requester,
+                recovery,
+            } => {
                 let status = guard_install::status(repo_id, common, store);
                 // An install of ours that stopped being active can be removed too: otherwise
-                // the developer would be stuck with a folder and a journal they cannot clear.
+                // the developer would be stuck with a folder and a journal they cannot clear. So
+                // can an uninstall whose cleanup stopped, and a folder recognized as Guardrails'
+                // that this profile does not know (BR-CONS-005, retirar).
+                // Only a client that can show it (`guard.recovery`) is offered the rest.
+                let target = guard_uninstall::target(&ctx, common, store).filter(|_| recovery);
                 let removable = status.state == gitraptor_api::guard::ProtectionState::HooksOnly
-                    || guard_install::stale_install(store, &status).is_some();
+                    || guard_install::stale_install(store, &status).is_some()
+                    || target
+                        .as_ref()
+                        .is_some_and(|t| matches!(t.origin, Origin::Resumed | Origin::Orphan));
+                let restores = target
+                    .as_ref()
+                    .and_then(guard_uninstall::Target::restores_hooks_path)
+                    .map(str::to_owned);
                 if !removable {
                     GuardReply::UninstallRefused(UninstallRefusal::NotInstalled.into())
                 } else {
@@ -141,11 +171,18 @@ impl Daemon {
                     );
                     match announced {
                         Ok(action) => {
+                            // What the announcement shows is what the uninstall applies.
+                            self.guard.pending().note_restores(
+                                repo_id,
+                                &action.action_id,
+                                restores.clone(),
+                            );
                             self.logger
                                 .info("guard_uninstall_announced", &[("repo", Field::id(repo_id))]);
                             GuardReply::Uninstall(Box::new(GuardUninstallResult {
                                 status: with_pending(status),
                                 pending: Some(action),
+                                restores_hooks_path: restores.map(gitraptor_api::Untrusted::new),
                             }))
                         }
                         Err(reason) => GuardReply::UninstallRefused(reason.into()),
@@ -155,6 +192,7 @@ impl Daemon {
             GuardRequest::UninstallApply {
                 action_id,
                 requester,
+                recovery,
             } => {
                 let due = self
                     .guard
@@ -163,27 +201,48 @@ impl Daemon {
                 match due {
                     Err(refused) => GuardReply::UninstallRefused(refused),
                     Ok(action) => {
-                        match guard_uninstall::uninstall(&ctx, repo_id, common, store, &self.guard)
-                        {
+                        let moved = guard_install::folder_moved(&ctx, common, store);
+                        let announced = guard_uninstall::Announced {
+                            recovery,
+                            restores: action.restores.as_deref(),
+                        };
+                        match guard_uninstall::apply(
+                            &ctx,
+                            repo_id,
+                            common,
+                            store,
+                            &self.guard,
+                            Some(announced),
+                        ) {
                             Ok(status) => {
+                                if moved {
+                                    self.logger.info(
+                                        "guard_folder_reanchored",
+                                        &[("repo", Field::id(repo_id))],
+                                    );
+                                }
                                 self.logger
                                     .info("guard_uninstalled", &[("repo", Field::id(repo_id))]);
                                 audit = Some((action, "applied", requester));
                                 GuardReply::Uninstall(Box::new(GuardUninstallResult {
                                     status,
                                     pending: None,
+                                    restores_hooks_path: None,
                                 }))
                             }
                             Err(UninstallError::NotInstalled) => {
                                 GuardReply::UninstallRefused(UninstallRefusal::NotInstalled.into())
                             }
-                            Err(UninstallError::Failed(_)) => {
+                            Err(UninstallError::Failed(failure)) => {
                                 self.logger.error(
                                     "guard_uninstall_failed",
-                                    &[("repo", Field::id(repo_id))],
+                                    &[
+                                        ("repo", Field::id(repo_id)),
+                                        ("step", failure.step.as_str().into()),
+                                    ],
                                 );
                                 audit = Some((action, "failed", requester));
-                                GuardReply::Failed
+                                GuardReply::StepFailed(failed(&ctx, common, failure.step))
                             }
                         }
                     }
@@ -436,6 +495,14 @@ pub(super) fn recover_guardrails(
             }
             guard_install::Recovery::UninstallCompleted => {
                 logger.info("guard_uninstall_recovered", &[("repo", Field::id(repo_id))]);
+            }
+            guard_install::Recovery::UninstallCleanupPending(step) => {
+                // The key is back and a folder is left: the status says so, and
+                // `raptor guard uninstall` finishes it.
+                logger.error(
+                    "guard_uninstall_cleanup_pending",
+                    &[("repo", Field::id(repo_id)), ("step", step.as_str().into())],
+                );
             }
             guard_install::Recovery::UninstallKept => {
                 // `no completada`: the protection stays, and the developer is told on status.
