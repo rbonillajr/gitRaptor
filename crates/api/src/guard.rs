@@ -81,6 +81,10 @@ pub enum Rule {
     /// ignored. Only in decision-log notices, never in a decision sent to a hook.
     #[serde(rename = "config.relax-ignored")]
     RelaxIgnored,
+    /// An allowed destructive operation whose prior snapshot failed (US-GRD-017, BR-EDGE-005).
+    /// Only with `guard.snapshot-required`; without it the daemon sends `system.internal-error`.
+    #[serde(rename = "system.snapshot-failed")]
+    SnapshotFailed,
 }
 
 /// Why a rule matched (ADR-GRD-003 § 3 and its 2026-10-04 amendment).
@@ -113,6 +117,20 @@ pub enum Cause {
     /// The commits of the movement could not be read within the bounds, or a name could not be
     /// compared: nothing can be said, so it is denied (US-GRD-008, D5).
     Unverifiable,
+    /// `system.snapshot-failed` (US-GRD-017): the prior snapshot ran out of time.
+    SnapshotTimeLimit,
+    /// `system.snapshot-failed`: not enough disk space for the prior snapshot.
+    SnapshotNoSpace,
+    /// `system.snapshot-failed`: too many prior snapshots in the window.
+    SnapshotQuotaExceeded,
+    /// `system.snapshot-failed`: the repo changed while the prior snapshot was saved.
+    SnapshotDiscarded,
+    /// `system.snapshot-failed`: no working tree to save.
+    SnapshotNoWorktree,
+    /// `system.snapshot-failed`: no Time Machine for this repo, or no daemon (degraded mode).
+    SnapshotUnavailable,
+    /// `system.snapshot-failed`: an internal error of the Time Machine.
+    SnapshotInternal,
 }
 
 /// Kind of a labelled parameter.
