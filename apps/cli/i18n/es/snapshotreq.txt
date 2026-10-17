@@ -4,8 +4,19 @@
 # rellena por nombre, nunca concatenando. Toda clave existe también en ../en/snapshotreq.txt.
 # Ningún texto menciona cómo saltarse ni quitar la protección (ADR-GRD-003 § 3).
 
-# La plantilla fija: el porqué es una de las claves `cause.*` y la salida una de las `hint.*`.
-snapshotreq.deny = GitRaptor: la operación no se ejecuta porque no se pudo guardar antes un punto de recuperación: {cause}. Qué hacer: {hint}.
+# La plantilla fija, dos líneas: qué no se ejecutó (una de las claves `deny.*`) y por qué (una de
+# las `cause.*`), y luego `next` con la salida (una de las `hint.*`), que nombra esa misma operación.
+snapshotreq.deny = GitRaptor: {what}: no se pudo guardar antes un punto de recuperación ({cause}).
+snapshotreq.next = Para seguir: {hint}.
+snapshotreq.deny.branch-delete = no se borró la rama {branch}
+snapshotreq.deny.rebase = no se ejecutó el rebase de {branch}
+snapshotreq.deny.rebase-unnamed = no se ejecutó el rebase
+snapshotreq.deny.other = no se ejecutó la operación
+# La operación que hay que repetir, dentro de las pistas de una causa que no sea `unavailable`.
+snapshotreq.again.push = vuelve a hacer el push
+snapshotreq.again.branch-delete = vuelve a borrar la rama
+snapshotreq.again.rebase = vuelve a lanzar el rebase
+snapshotreq.again.other = vuelve a ejecutar el comando de Git
 snapshotreq.cause.time-limit = se agotó el plazo para guardarlo
 snapshotreq.cause.no-space = no hay espacio en disco suficiente para guardarlo
 snapshotreq.cause.quota-exceeded = se guardaron demasiados puntos de recuperación en poco tiempo
@@ -15,12 +26,15 @@ snapshotreq.cause.unavailable = GitRaptor no está en marcha o ya no observa est
 snapshotreq.cause.internal = error interno al guardarlo
 # `unavailable` sirve igual al modo degradado y al repositorio que ya no se observa.
 snapshotreq.hint.unavailable = {start}; {unobserved}
-snapshotreq.hint.start = arranca GitRaptor y repite la operación
-snapshotreq.hint.unobserved = si ya está en marcha, vuelve a observarlo con raptor repo add
-snapshotreq.hint.large-file = guardar archivos muy grandes puede tardar más; repite la operación en un momento
-snapshotreq.hint.no-space = libera espacio en disco y repite la operación
-snapshotreq.hint.retry = espera un momento y repite la operación
-snapshotreq.hint.no-worktree = repite la operación desde un árbol de trabajo del repositorio
+snapshotreq.hint.start.push = arranca GitRaptor (`raptor daemon status` lo arranca) y vuelve a hacer el push
+snapshotreq.hint.start.branch-delete = arranca GitRaptor (`raptor daemon status` lo arranca) y vuelve a borrar la rama
+snapshotreq.hint.start.rebase = arranca GitRaptor (`raptor daemon status` lo arranca) y vuelve a lanzar el rebase
+snapshotreq.hint.start.other = arranca GitRaptor (`raptor daemon status` lo arranca) y vuelve a ejecutar el comando de Git
+snapshotreq.hint.unobserved = si ya está en marcha, vuelve a observar el repo con raptor repo add
+snapshotreq.hint.large-file = guardar archivos muy grandes puede tardar más; {again} en un momento
+snapshotreq.hint.no-space = libera espacio en disco y {again}
+snapshotreq.hint.retry = espera un momento y {again}
+snapshotreq.hint.no-worktree = {again} desde un árbol de trabajo del repositorio
 
 # `raptor guard log`: el nombre de la regla.
 snapshotreq.log.rule = sin punto de recuperación

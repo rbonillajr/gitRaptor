@@ -25,6 +25,9 @@ pub(crate) struct Cmd {
     /// Does not start the engine.
     #[arg(long)]
     resources: bool,
+    /// List every untracked file instead of summarizing them by folder.
+    #[arg(long)]
+    verbose: bool,
 }
 
 impl Cmd {
@@ -32,14 +35,14 @@ impl Cmd {
         if self.resources {
             status_resources(self.json)
         } else {
-            status(self.json)
+            status(self.json, self.verbose)
         }
     }
 }
 
 /// `raptor status`: every observed repo and its worktrees (US-GRP-001).
 /// Read-only; starts the engine on demand.
-fn status(json: bool) -> ExitCode {
+fn status(json: bool, verbose: bool) -> ExitCode {
     const CMD: &str = "raptor status";
     let mut client = match engine(CMD) {
         Ok(client) => client,
@@ -87,7 +90,7 @@ fn status(json: bool) -> ExitCode {
     } else {
         print!(
             "{}",
-            status::text(&snapshot, &sessions, false, crate::i18n::Tr::current())
+            status::text(&snapshot, &sessions, verbose, crate::i18n::Tr::current())
         );
     }
     ExitCode::SUCCESS
