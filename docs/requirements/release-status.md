@@ -4,7 +4,7 @@
 
 > **Archivo generado, no editar a mano.** Sale del frontmatter (`status`) y de la sección "Estado de la implementación" de cada ficha (US, TS, INF, SPIKE y TD) de `docs/requirements/features/`. Para cambiar un estado, edita la ficha y regenera con `node tools/status/release-status.mjs`. El CI (docs-lint) falla si este archivo no coincide con lo que genera el script.
 
-Última actualización de una ficha: 2026-10-16.
+Última actualización de una ficha: 2026-10-17.
 
 ## Totales por estado
 
@@ -12,9 +12,9 @@
 |---|---|
 | Implementado (`implemented`) | 43 |
 | Hecho (`done`) | 3 |
-| Implementado en parte (`partially-implemented`) | 19 |
+| Implementado en parte (`partially-implemented`) | 20 |
 | Listo (`ready`) | 4 |
-| Borrador (`draft`) | 76 |
+| Borrador (`draft`) | 75 |
 | Bloqueado (`blocked`) | 1 |
 | **Total** | **146** |
 
@@ -23,7 +23,7 @@
 | Feature | Implementado | Hecho | Implementado en parte | Listo | Borrador | Bloqueado | Total |
 |---|---|---|---|---|---|---|---|
 | [cockpit](#cockpit) | 6 | 0 | 2 | 0 | 24 | 1 | 33 |
-| [guardrails](#guardrails) | 8 | 0 | 6 | 1 | 9 | 0 | 24 |
+| [guardrails](#guardrails) | 8 | 0 | 7 | 1 | 8 | 0 | 24 |
 | [mcp](#mcp) | 5 | 0 | 2 | 0 | 13 | 0 | 20 |
 | [motor-local](#motor-local) | 12 | 2 | 8 | 3 | 15 | 0 | 40 |
 | [time-machine](#time-machine) | 12 | 1 | 1 | 0 | 15 | 0 | 29 |
@@ -70,7 +70,7 @@
 
 ### guardrails
 
-24 fichas: 8 implementado, 6 implementado en parte, 1 listo, 9 borrador.
+24 fichas: 8 implementado, 7 implementado en parte, 1 listo, 8 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -87,6 +87,7 @@
 | [US-GRD-004](features/guardrails/user-stories/US-GRD-004-aviso-proteccion-inactiva.md) | El desarrollador se entera de que la protección de un repo dejó de estar activa | Implementado en parte (`partially-implemented`) | #201 | — |
 | [US-GRD-005](features/guardrails/user-stories/US-GRD-005-registro-de-bloqueos.md) | El desarrollador cuenta las acciones peligrosas que Guardrails bloqueó en cada repo | Implementado en parte (`partially-implemented`) | #154, #168 | 3 |
 | [US-GRD-010](features/guardrails/user-stories/US-GRD-010-endurecer-sin-relajar.md) | El desarrollador endurece las reglas en su máquina sin poder relajar las del equipo | Implementado en parte (`partially-implemented`) | #217 | — |
+| [US-GRD-017](features/guardrails/user-stories/US-GRD-017-sin-snapshot-no-se-ejecuta.md) | Una operación destructiva permitida no se ejecuta sin un punto de recuperación | Implementado en parte (`partially-implemented`) | #260 | — |
 | [US-GRD-018](features/guardrails/user-stories/US-GRD-018-autoria-commits-persona-y-agente.md) | Cada commit entra a nombre de la persona y deja constancia del agente que lo hizo, con la exigencia que fija el equipo | Implementado en parte (`partially-implemented`) | #137, #141, #150, #152, #153, #154 | 3 |
 | [SPIKE-GRD-002](features/guardrails/technical-stories/SPIKE-GRD-002-factor-so-daemon.md) | Factor de autenticación del SO invocado desde el daemon en los tres SO | Listo (`ready`) | — | — |
 | [US-GRD-006](features/guardrails/user-stories/US-GRD-006-excepcion-consciente.md) | El desarrollador hace a conciencia una operación prohibida y queda constancia | Borrador (`draft`) | — | — |
@@ -97,7 +98,6 @@
 | [US-GRD-014](features/guardrails/user-stories/US-GRD-014-rama-base-del-equipo.md) | El equipo fija la rama base del repo y Guardrails la protege | Borrador (`draft`) | — | — |
 | [US-GRD-015](features/guardrails/user-stories/US-GRD-015-cola-de-confirmacion.md) | El desarrollador aprueba o rechaza las acciones de riesgo que un agente deja en espera | Borrador (`draft`) | — | — |
 | [US-GRD-016](features/guardrails/user-stories/US-GRD-016-misma-decision-por-mcp.md) | Un agente que usa las herramientas MCP recibe la misma decisión que con Git directo | Borrador (`draft`) | — | — |
-| [US-GRD-017](features/guardrails/user-stories/US-GRD-017-sin-snapshot-no-se-ejecuta.md) | Una operación destructiva permitida no se ejecuta sin un punto de recuperación | Borrador (`draft`) | — | — |
 
 ### mcp
 
@@ -241,7 +241,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2
 
-111 fichas: 23 implementado, 3 hecho, 13 implementado en parte, 4 listo, 67 borrador, 1 bloqueado.
+111 fichas: 23 implementado, 3 hecho, 14 implementado en parte, 4 listo, 66 borrador, 1 bloqueado.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -282,6 +282,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-GRD-004](features/guardrails/user-stories/US-GRD-004-aviso-proteccion-inactiva.md) | El desarrollador se entera de que la protección de un repo dejó de estar activa | Implementado en parte (`partially-implemented`) | #201 | — |
 | [US-GRD-005](features/guardrails/user-stories/US-GRD-005-registro-de-bloqueos.md) | El desarrollador cuenta las acciones peligrosas que Guardrails bloqueó en cada repo | Implementado en parte (`partially-implemented`) | #154, #168 | 3 |
 | [US-GRD-010](features/guardrails/user-stories/US-GRD-010-endurecer-sin-relajar.md) | El desarrollador endurece las reglas en su máquina sin poder relajar las del equipo | Implementado en parte (`partially-implemented`) | #217 | — |
+| [US-GRD-017](features/guardrails/user-stories/US-GRD-017-sin-snapshot-no-se-ejecuta.md) | Una operación destructiva permitida no se ejecuta sin un punto de recuperación | Implementado en parte (`partially-implemented`) | #260 | — |
 | [US-GRD-018](features/guardrails/user-stories/US-GRD-018-autoria-commits-persona-y-agente.md) | Cada commit entra a nombre de la persona y deja constancia del agente que lo hizo, con la exigencia que fija el equipo | Implementado en parte (`partially-implemented`) | #137, #141, #150, #152, #153, #154 | 3 |
 | [US-MCP-004](features/mcp/user-stories/US-MCP-004-status-completo-y-no-disponible.md) | Un agente sabe por MCP quién más trabaja en su repo, contra qué base y con qué protección | Implementado en parte (`partially-implemented`) | — | — |
 | [SPIKE-GRD-002](features/guardrails/technical-stories/SPIKE-GRD-002-factor-so-daemon.md) | Factor de autenticación del SO invocado desde el daemon en los tres SO | Listo (`ready`) | — | — |
@@ -321,7 +322,6 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-GRD-014](features/guardrails/user-stories/US-GRD-014-rama-base-del-equipo.md) | El equipo fija la rama base del repo y Guardrails la protege | Borrador (`draft`) | — | — |
 | [US-GRD-015](features/guardrails/user-stories/US-GRD-015-cola-de-confirmacion.md) | El desarrollador aprueba o rechaza las acciones de riesgo que un agente deja en espera | Borrador (`draft`) | — | — |
 | [US-GRD-016](features/guardrails/user-stories/US-GRD-016-misma-decision-por-mcp.md) | Un agente que usa las herramientas MCP recibe la misma decisión que con Git directo | Borrador (`draft`) | — | — |
-| [US-GRD-017](features/guardrails/user-stories/US-GRD-017-sin-snapshot-no-se-ejecuta.md) | Una operación destructiva permitida no se ejecuta sin un punto de recuperación | Borrador (`draft`) | — | — |
 | [US-GRP-003](features/motor-local/user-stories/US-GRP-003-estados-especiales-no-disponible.md) | El desarrollador sabe qué worktree está en un estado especial o ya no existe | Borrador (`draft`) | — | — |
 | [US-GRP-005](features/motor-local/user-stories/US-GRP-005-hueco-sin-atribuir.md) | El desarrollador distingue lo que el motor no vio ocurrir | Borrador (`draft`) | — | — |
 | [US-GRP-006](features/motor-local/user-stories/US-GRP-006-retirar-y-volver-a-anadir.md) | El desarrollador recupera el historial de un repo que retiró y volvió a añadir | Borrador (`draft`) | — | — |
@@ -429,6 +429,12 @@ El desarrollador cuenta las acciones peligrosas que Guardrails bloqueó en cada 
 ### [US-GRD-010](features/guardrails/user-stories/US-GRD-010-endurecer-sin-relajar.md) — #217
 
 El desarrollador endurece las reglas en su máquina sin poder relajar las del equipo
+
+- *La ficha no lista los pendientes en "Estado de la implementación".*
+
+### [US-GRD-017](features/guardrails/user-stories/US-GRD-017-sin-snapshot-no-se-ejecuta.md) — #260
+
+Una operación destructiva permitida no se ejecuta sin un punto de recuperación
 
 - *La ficha no lista los pendientes en "Estado de la implementación".*
 

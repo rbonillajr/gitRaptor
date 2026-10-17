@@ -2,9 +2,9 @@
 id: DS-US-GRD-017
 title: "Dev Spec — US-GRD-017: sin punto de recuperación, la operación destructiva no se ejecuta"
 type: dev-spec
-status: draft
+status: partially-implemented
 created: 2026-10-09
-updated: 2026-10-16
+updated: 2026-10-17
 story: US-GRD-017
 feature: guardrails
 domain: GRP
@@ -55,6 +55,8 @@ tags: [guardrails, time-machine, snapshot, nfr-01, br-edge-005, modo-degradado]
 ---
 
 # DS-US-GRD-017 · Sin punto de recuperación, la operación destructiva no se ejecuta
+
+> Implementado en: PR #260 (parcial: el escenario de la excepción es de US-GRD-006, G2).
 
 ## Contexto rápido
 

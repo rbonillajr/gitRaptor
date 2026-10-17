@@ -2,10 +2,10 @@
 id: US-GRD-017
 title: "Una operación destructiva permitida no se ejecuta sin un punto de recuperación"
 type: us
-status: draft
+status: partially-implemented
 priority: high
 created: 2026-10-04
-updated: 2026-10-09
+updated: 2026-10-17
 feature: guardrails
 related:
   context:
@@ -98,3 +98,11 @@ Entonces la operación se ejecuta y la excepción queda en el registro
 
 - **Diseño:** no aplica.
 - **Dev Spec:** [DS-US-GRD-017](../dev-specs/US-GRD-017-sin-snapshot-no-se-ejecuta.md) (status `draft`).
+
+## Estado de la implementación (2026-10-17)
+
+Implementado en: PR #260. Dev Spec: [DS-US-GRD-017](../dev-specs/US-GRD-017-sin-snapshot-no-se-ejecuta.md).
+
+Parcial. Los escenarios 1, 2 (los dos ejemplos) y 3 están cubiertos por `apps/cli/tests/us_grd_017_hook.rs`, y el contrato con clientes viejos por `crates/core/tests/us_grd_017.rs`. Verificado en macOS. Linux lo cubre el CI de ubuntu, y Windows es **Pendiente: etapa de validación multiplataforma** (XP-44).
+
+Falta el escenario de la excepción consciente: lo cierra US-GRD-006 (G2), que ya tiene el punto de enganche (D5). Deuda relacionada: [TD-TMC-001](../../time-machine/technical-stories/TD-TMC-001-previo-hook-plazo-y-cupo-sin-atribuir.md), porque ahora un previo lento o un cupo lleno deniega. Q-GRD-36, 37 y 38 siguen abiertas al veto de Rene.
