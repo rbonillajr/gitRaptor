@@ -671,13 +671,9 @@ pub fn branch_tips(common_dir: &Path) -> BTreeMap<String, String> {
 /// worktree then moves without an entry in that worktree's `HEAD` reflog, which is what the
 /// engine's calm compares, so `settle` does not wait for it. An anchor taken before the engine
 /// persists that move would leave it outside the operation's echo, as raw Git on top of the
-/// worktree's stack. The same goes for a branch the operation created, deleted or moved
-/// without it being checked out anywhere (a restore recreating the branches of its scope): its
-/// event would otherwise land after the anchor and be taken for raw Git, so the next undo took
-/// back that event instead of the operation (NFR-01). A branch is waited for when it points
-/// elsewhere than in `before` (or exists in only one of the two); the wait ends when the
-/// worktree that has it checked out, or any of `worktrees` if none does, has an event past
-/// `since` naming the branch. Past the limit it returns anyway: the anchor is then taken as
+/// worktree's stack. A branch is waited for when it is checked out in one of `worktrees` and
+/// points elsewhere than in `before`; the wait ends when that worktree has an event past
+/// `since` naming the branch and the repo's mark covers it. Past the limit it returns anyway: the anchor is then taken as
 /// before.
 pub fn await_moved_branches(
     deps: &CaptureDeps,
@@ -690,63 +686,59 @@ pub fn await_moved_branches(
         return;
     };
     let after = branch_tips(&common);
-    let checked_out: Vec<(&PathBuf, String)> = worktrees
+    let pending: Vec<(&PathBuf, String)> = worktrees
         .iter()
-        .filter_map(|root| Some((root, super::undo::head_branch(&common, root)?)))
+        .filter_map(|root| {
+            let branch = super::undo::head_branch(&common, root)?;
+            (before.get(&branch) != after.get(&branch)).then_some((root, branch))
+        })
         .collect();
-    let mut pending = branches_to_await(before, &after, &checked_out, worktrees);
-    let end = Instant::now() + ANCHOR_SETTLE_LIMIT;
-    while !pending.is_empty() {
-        pending.retain(|(roots, branch)| {
-            !roots.iter().any(|root| {
-                deps.engine.raw_events(repo_id, root).is_some_and(|events| {
-                    events
-                        .iter()
-                        .any(|e| e.seq > since && e.branch.as_deref() == Some(branch.as_str()))
-                })
-            })
+    wait_for_branch_events(
+        deps.engine.as_ref(),
+        repo_id,
+        pending,
+        since,
+        Instant::now() + ANCHOR_SETTLE_LIMIT,
+    );
+}
+
+/// The wait of [`await_moved_branches`]: until every `(worktree, branch)` has an event past
+/// `since` and the repo's mark covers the newest of them, or `end`.
+///
+/// The mark matters: the engine writes a batch of events and only then publishes its mark, so
+/// for a moment the events are readable while the mark is still behind them. An anchor taken
+/// then gets a mark below the event, which falls outside the operation's echo and is taken for
+/// raw Git: the next undo took that event back instead of the operation (NFR-01).
+fn wait_for_branch_events(
+    engine: &dyn EngineLink,
+    repo_id: &str,
+    mut pending: Vec<(&PathBuf, String)>,
+    since: i64,
+    end: Instant,
+) {
+    let mut newest = since;
+    loop {
+        pending.retain(|(root, branch)| {
+            let seen = engine.raw_events(repo_id, root).and_then(|events| {
+                events
+                    .iter()
+                    .filter(|e| e.seq > since && e.branch.as_deref() == Some(branch.as_str()))
+                    .map(|e| e.seq)
+                    .max()
+            });
+            if let Some(seq) = seen {
+                newest = newest.max(seq);
+            }
+            seen.is_none()
         });
-        if pending.is_empty() || Instant::now() + ECHO_POLL > end {
+        if pending.is_empty() && engine.mark(repo_id) >= newest {
+            return;
+        }
+        if Instant::now() + ECHO_POLL > end {
             return;
         }
         std::thread::sleep(ECHO_POLL);
     }
-}
-
-/// Each branch an operation changed (`before` against `after`, so one created or deleted counts),
-/// with the worktrees whose events can name it: the ones that have it checked out, or, if none
-/// does, all of `worktrees`.
-fn branches_to_await<'a>(
-    before: &'a BTreeMap<String, String>,
-    after: &'a BTreeMap<String, String>,
-    checked_out: &[(&'a PathBuf, String)],
-    worktrees: &'a [PathBuf],
-) -> Vec<(Vec<&'a PathBuf>, &'a String)> {
-    let mut changed: Vec<&String> = before
-        .keys()
-        .chain(after.keys())
-        .filter(|b| before.get(*b) != after.get(*b))
-        .collect();
-    changed.sort();
-    changed.dedup();
-    changed
-        .into_iter()
-        .map(|branch| {
-            let holders: Vec<&PathBuf> = checked_out
-                .iter()
-                .filter(|(_, held)| held == branch)
-                .map(|(root, _)| *root)
-                .collect();
-            (
-                if holders.is_empty() {
-                    worktrees.iter().collect()
-                } else {
-                    holders
-                },
-                branch,
-            )
-        })
-        .collect()
 }
 
 /// How often [`await_moved_branches`] reads the engine again while waiting.
@@ -831,29 +823,85 @@ mod tests {
         assert_eq!(p.due(&config), now);
     }
 
-    /// NFR-01: the branches a restore recreates are checked out nowhere, and their events must
-    /// still be waited for before the anchor, or they land after it as raw Git and the next
-    /// undo takes back that event instead of the restore.
-    #[test]
-    fn a_branch_checked_out_nowhere_is_awaited_whether_created_deleted_or_moved() {
-        let map = |pairs: &[(&str, &str)]| -> BTreeMap<String, String> {
-            pairs
-                .iter()
-                .map(|(b, c)| ((*b).to_owned(), (*c).to_owned()))
-                .collect()
-        };
-        let before = map(&[("main", "1"), ("moved", "1"), ("gone", "1"), ("same", "1")]);
-        let after = map(&[("main", "2"), ("moved", "2"), ("new", "2"), ("same", "1")]);
-        let worktrees = vec![PathBuf::from("/wt/main"), PathBuf::from("/wt/other")];
-        let checked_out = [(&worktrees[0], "main".to_owned())];
-        let pending = branches_to_await(&before, &after, &checked_out, &worktrees);
-        let names: Vec<&str> = pending.iter().map(|(_, b)| b.as_str()).collect();
-        assert_eq!(names, ["gone", "main", "moved", "new"]);
-        let roots = |branch: &str| pending.iter().find(|(_, b)| *b == branch).unwrap().0.len();
-        // The checked-out one is looked for in its own worktree; the others, anywhere.
-        assert_eq!(roots("main"), 1);
-        for branch in ["gone", "moved", "new"] {
-            assert_eq!(roots(branch), 2, "{branch}");
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use super::super::engine::RawGitEvent;
+    use super::super::oplog::Requester;
+
+    /// An engine whose events are readable at once but whose mark catches up only after
+    /// `lag` reads of it: the window between a batch written and its mark published.
+    struct LaggingMark {
+        events: Vec<RawGitEvent>,
+        mark: i64,
+        lag: usize,
+        reads: AtomicUsize,
+    }
+
+    impl EngineLink for LaggingMark {
+        fn mark(&self, _: &str) -> i64 {
+            let reads = self.reads.fetch_add(1, Ordering::SeqCst);
+            if reads >= self.lag {
+                self.events.iter().map(|e| e.seq).max().unwrap_or(0)
+            } else {
+                self.mark
+            }
         }
+        fn settle(&self, _: &str, _: &[PathBuf], _: Duration) -> Option<i64> {
+            None
+        }
+        fn raw_events(&self, _: &str, _: &Path) -> Option<Vec<RawGitEvent>> {
+            Some(self.events.clone())
+        }
+        fn generation_floor(&self, _: &str) -> i64 {
+            0
+        }
+        fn activity(&self, _: &str) -> u64 {
+            0
+        }
+    }
+
+    /// NFR-01: seeing the branch's event is not enough: the anchor takes the repo's mark, and
+    /// an event above it is raw Git on top of the stack.
+    #[test]
+    fn the_wait_ends_only_when_the_mark_covers_the_branch_event() {
+        let engine = LaggingMark {
+            events: vec![RawGitEvent {
+                seq: 3,
+                kind: gitraptor_api::messages::GitEventKind::BranchUpdate,
+                branch: Some("feat-login".into()),
+                actor: Requester::Unattributed,
+            }],
+            mark: 2,
+            lag: 5,
+            reads: AtomicUsize::new(0),
+        };
+        let root = PathBuf::from("/wt");
+        wait_for_branch_events(
+            &engine,
+            "repo",
+            vec![(&root, "feat-login".to_owned())],
+            2,
+            Instant::now() + Duration::from_secs(10),
+        );
+        assert!(
+            engine.reads.load(Ordering::SeqCst) > 5,
+            "returned while the mark was still below the event"
+        );
+        // Without the branch's event the wait gives up at the limit, mark or not.
+        let none = LaggingMark {
+            events: Vec::new(),
+            mark: 2,
+            lag: 0,
+            reads: AtomicUsize::new(0),
+        };
+        let start = Instant::now();
+        wait_for_branch_events(
+            &none,
+            "repo",
+            vec![(&root, "feat-login".to_owned())],
+            2,
+            start + Duration::from_millis(50),
+        );
+        assert!(start.elapsed() < Duration::from_secs(5));
     }
 }
