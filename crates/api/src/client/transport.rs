@@ -142,15 +142,10 @@ fn connect_checked(runtime: &Path, server_uid: u32) -> io::Result<Stream> {
         )
     })?;
     let path = socket_path(runtime);
-    // Only the connect is retried: nothing has been sent yet, so a retry cannot repeat a request.
     let stream = if path.as_os_str().len() > MAX_SOCKET_PATH {
-        retry_connect(CONNECT_DEADLINE, &mut std::thread::sleep, || {
-            in_dir(runtime, || UnixStream::connect(SOCKET_FILE))
-        })?
+        in_dir(runtime, || UnixStream::connect(SOCKET_FILE))?
     } else {
-        retry_connect(CONNECT_DEADLINE, &mut std::thread::sleep, || {
-            UnixStream::connect(&path)
-        })?
+        UnixStream::connect(&path)?
     };
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
@@ -165,49 +160,6 @@ fn connect_checked(runtime: &Path, server_uid: u32) -> io::Result<Stream> {
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     let _ = server_uid;
     Ok(stream)
-}
-
-/// How long a client keeps retrying a `connect()` the kernel answered with "try again".
-#[cfg(unix)]
-const CONNECT_DEADLINE: std::time::Duration = std::time::Duration::from_secs(2);
-
-/// First pause between connect attempts; it doubles up to [`CONNECT_MAX_PAUSE`].
-#[cfg(unix)]
-const CONNECT_FIRST_PAUSE: std::time::Duration = std::time::Duration::from_millis(1);
-
-/// Longest pause between connect attempts.
-#[cfg(unix)]
-const CONNECT_MAX_PAUSE: std::time::Duration = std::time::Duration::from_millis(50);
-
-/// Runs `connect`, trying again with a short growing pause while it fails with `EAGAIN`
-/// (`WouldBlock`: on Linux a Unix socket whose accept backlog is full) or `EINTR`, until
-/// `deadline` has gone by in pauses; then the last error is returned. Any other error
-/// returns at once. `pause` is how the wait happens (tests play it). Only for a connect:
-/// nothing has been sent on the socket yet, so a retry never repeats a request.
-#[cfg(unix)]
-fn retry_connect<T>(
-    deadline: std::time::Duration,
-    pause: &mut dyn FnMut(std::time::Duration),
-    mut connect: impl FnMut() -> io::Result<T>,
-) -> io::Result<T> {
-    let mut waited = std::time::Duration::ZERO;
-    let mut next = CONNECT_FIRST_PAUSE;
-    loop {
-        match connect() {
-            Err(err)
-                if matches!(
-                    err.kind(),
-                    io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted
-                ) && waited < deadline =>
-            {
-                let step = next.min(deadline - waited);
-                pause(step);
-                waited += step;
-                next = (next * 2).min(CONNECT_MAX_PAUSE);
-            }
-            other => return other,
-        }
-    }
 }
 
 /// FNV-1a, 64 bits: a stable fingerprint of the runtime folder for the pipe
@@ -305,57 +257,5 @@ mod tests {
             pipe_name("S-1-5-21-1-2-3-1001", Path::new(r"C:\Users\a\other\run"))
         );
         assert!(a.len() < 256);
-    }
-
-    #[cfg(unix)]
-    mod retry {
-        use super::super::*;
-        use std::cell::Cell;
-        use std::time::Duration;
-
-        fn again() -> io::Error {
-            io::Error::from(io::ErrorKind::WouldBlock)
-        }
-
-        #[test]
-        fn eagain_and_eintr_are_retried_until_the_connect_works() {
-            let calls = Cell::new(0);
-            let mut pauses = Vec::new();
-            let got = retry_connect(Duration::from_secs(2), &mut |d| pauses.push(d), || {
-                calls.set(calls.get() + 1);
-                match calls.get() {
-                    1 | 2 => Err(again()),
-                    3 => Err(io::Error::from(io::ErrorKind::Interrupted)),
-                    _ => Ok(7),
-                }
-            });
-            assert_eq!(got.unwrap(), 7);
-            assert_eq!(calls.get(), 4);
-            assert_eq!(pauses.len(), 3);
-            assert!(pauses.windows(2).all(|w| w[0] <= w[1]), "{pauses:?}");
-        }
-
-        #[test]
-        fn another_error_is_not_retried() {
-            let calls = Cell::new(0);
-            let got: io::Result<()> =
-                retry_connect(Duration::from_secs(2), &mut |_| panic!("paused"), || {
-                    calls.set(calls.get() + 1);
-                    Err(io::Error::from(io::ErrorKind::ConnectionRefused))
-                });
-            assert_eq!(got.unwrap_err().kind(), io::ErrorKind::ConnectionRefused);
-            assert_eq!(calls.get(), 1);
-        }
-
-        #[test]
-        fn the_deadline_ends_the_retries_with_the_last_error() {
-            let mut waited = Duration::ZERO;
-            let got: io::Result<()> =
-                retry_connect(Duration::from_millis(200), &mut |d| waited += d, || {
-                    Err(again())
-                });
-            assert_eq!(got.unwrap_err().kind(), io::ErrorKind::WouldBlock);
-            assert_eq!(waited, Duration::from_millis(200));
-        }
     }
 }
