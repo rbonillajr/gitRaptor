@@ -50,7 +50,6 @@ fn main() -> ExitCode {
                 Ok(service) => service,
                 Err(_) => {
                     // rmcp may have answered a malformed `initialize`.
-                    drain.finish(std::time::Duration::from_secs(1)).await;
                     eprintln!("raptor-mcp: handshake-failed");
                     // The transport is gone with `serve`, and the error answer is still queued.
                     drain.finish(std::time::Duration::from_secs(1)).await;
