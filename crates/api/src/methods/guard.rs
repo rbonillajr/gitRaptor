@@ -70,6 +70,11 @@ pub const CAP_GUARD_CONFIG_PROTECTION: Capability = Capability::new("guard.confi
 /// daemon takes no snapshot for it.
 pub const CAP_GUARD_PRIOR_SNAPSHOT: Capability = Capability::new("guard.prior-snapshot");
 
+/// `system.snapshot-failed` and its causes in decisions and in `guard.log` (US-GRD-017). A
+/// connection without it receives the same denial as `system.internal-error`, without cause and
+/// without `priorSnapshot`.
+pub const CAP_GUARD_SNAPSHOT_REQUIRED: Capability = Capability::new("guard.snapshot-required");
+
 pub(super) const GROUP: Group = Group {
     // None is offered to `raptor-mcp` (BR-AUTH-004): it neither installs nor
     // evaluates. A connection of protocol 5 or 6 sees none.
@@ -96,6 +101,7 @@ pub(super) const GROUP: Group = Group {
         CAP_GUARD_PENDING_ACTION,
         CAP_GUARD_PROTECTION,
         CAP_GUARD_PRIOR_SNAPSHOT,
+        CAP_GUARD_SNAPSHOT_REQUIRED,
     ],
     error_block: Some(BLOCK),
     errors: &[GUARD_UNINSTALL_REFUSED],
