@@ -13,13 +13,14 @@ pub mod config;
 pub mod fastpath;
 pub mod glob;
 pub mod input;
+pub mod plan;
 pub mod policies;
 pub mod refs;
 
 use gitraptor_api::AgentKind;
 use gitraptor_api::guard::{
-    AuthorshipFacts, Cause, Effect, Level, NotPreventable, Operation, Param, ParamKind, PushUpdate,
-    Reason, RefBackend, RefUpdate, Rule,
+    AuthorshipFacts, Cause, Effect, Level, LogLayer, NotPreventable, Operation, Param, ParamKind,
+    PushUpdate, Reason, RefBackend, RefUpdate, Rule,
 };
 
 /// What the client proved about a `pre-push` update whose local and remote
@@ -66,6 +67,8 @@ pub struct Context {
     pub authorship: authorship::Effective,
     /// The protected branches and forbidden paths in force (US-GRD-008).
     pub policies: policies::Policies,
+    /// The layer that asks; it never changes the decision, only where it is recorded.
+    pub layer: LogLayer,
 }
 
 /// The effect and every rule that produces it (BR-CALC-001).
