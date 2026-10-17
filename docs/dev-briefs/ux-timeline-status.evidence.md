@@ -1,0 +1,9 @@
+# Evidencia — ux-timeline-status (US-TMC-023, US-GRP-023, US-GRD-020)
+
+- **Certificación:** `NOT CERTIFIED / bloqueada` por **X6** (el contrato certificado no es el que firmó la aprobación). Causa: dos `deliver-contract amend-test` aprobados por el coordinador (2026-10-17) cambiaron el hash del contrato después de la aprobación. Los 23 criterios dan PASS (`deliver-certify`); no se parcheó el gate.
+- **Integridad de pruebas:** no comprobada: la capa runtime de la corrida usó `cargo nextest run --workspace` y no el adaptador, así que no registró informe (P3).
+- **Línea base:** B1 salió en rojo dos veces por pruebas ajenas inestables bajo carga (guard_ts_ckp_003, guard_td_grd_001_upgrade, us_tmc_005_hook) que pasan solas; se midió con `NEXTEST_TEST_THREADS=4`.
+- **Suite completa tras la implementación:** `NEXTEST_TEST_THREADS=4 node tools/test/nextest-junit.mjs` → 2266 pasan, 13 omitidas. `cargo clippy --all-targets -- -D warnings` y `cargo fmt --all --check` en verde.
+- **Revisión:** lentes correctness, testing, security, architecture (sin Critical/High). `/security-review` (security-expert): APROBADO, 0 Critical/High/Medium. Conformidad: una cláusula bajo el escalón 2 (código de salida 2 con prefijo ambiguo), corregida y probada (`restore_process`).
+- **Pendiente (Low/Medium, al PR):** candidatos de prefijo ambiguo siempre como `Finished` y origen `Reconciled` si el evento no está en la página; doble mapeo de `Ambiguous` en `conn.rs`; `status.rs` aún usa `t()` global en la cabecera del repo; `Tr::t` duplica `i18n::t`; sustitución secuencial de placeholders (`x{cause}`); carga de historial innecesaria con un solo punto; falta test de control chars en carpetas de `status` y en rama/agente del timeline compacto; agrupación de resúmenes por nombre corto de worktree.
+- **Windows/Linux:** sin verificar desde este Mac; `us_grd_020_hook_stderr` es solo Unix.
