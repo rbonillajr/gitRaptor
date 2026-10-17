@@ -193,3 +193,39 @@ fn commit_paths_are_literal() {
         assert!(staged.lines().any(|l| l == other), "{other}: {staged}");
     }
 }
+
+/// A global `core.hooksPath` (the user's own `~/.gitconfig`, here a temporary HOME) runs under
+/// the executor's `git`, not neutralized: its `pre-commit` reads the staged diff and rejects the
+/// marker; without the marker the commit goes in.
+#[cfg(unix)]
+#[test]
+fn a_global_hooks_path_runs_under_the_executor() {
+    let f = Fixture::with_commit();
+    let hooks = f.root().join("global-hooks");
+    std::fs::create_dir_all(&hooks).unwrap();
+    common::script(
+        &hooks.join("pre-commit"),
+        "if git diff --cached | grep -q 'FORBIDDEN-BY-LINTER'; then\n  echo 'lint: marker' >&2\n  exit 1\nfi\nexit 0\n",
+    );
+    let config = f.home.join(".gitconfig");
+    let mut text = std::fs::read_to_string(&config).unwrap_or_default();
+    text.push_str(&format!("[core]\n\thooksPath = {}\n", hooks.display()));
+    std::fs::write(&config, text).unwrap();
+    let head = || f.git(&["rev-parse", "HEAD"]).trim().to_owned();
+
+    let tip = head();
+    f.write("lint.txt", "FORBIDDEN-BY-LINTER\n");
+    f.git(&["add", "lint.txt"]);
+    let (ok, stderr) = run(command(&f, &UserOp::CommitStaged, Some("marked")));
+    assert!(!ok, "the global hook did not reject the marker");
+    assert!(stderr.contains("lint: marker"), "{stderr}");
+    assert_eq!(head(), tip, "the branch moved");
+
+    f.git(&["reset", "-q"]);
+    std::fs::remove_file(f.repo.join("lint.txt")).unwrap();
+    f.write("clean.txt", "clean\n");
+    f.git(&["add", "clean.txt"]);
+    let (ok, stderr) = run(command(&f, &UserOp::CommitStaged, Some("clean")));
+    assert!(ok, "{stderr}");
+    assert_ne!(head(), tip, "the clean commit did not go in");
+}
