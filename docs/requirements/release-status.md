@@ -10,23 +10,23 @@
 
 | Estado | Fichas |
 |---|---|
-| Implementado (`implemented`) | 44 |
+| Implementado (`implemented`) | 47 |
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 20 |
 | Listo (`ready`) | 4 |
 | Borrador (`draft`) | 74 |
 | Bloqueado (`blocked`) | 1 |
-| **Total** | **146** |
+| **Total** | **149** |
 
 ## Por feature
 
 | Feature | Implementado | Hecho | Implementado en parte | Listo | Borrador | Bloqueado | Total |
 |---|---|---|---|---|---|---|---|
 | [cockpit](#cockpit) | 7 | 0 | 2 | 0 | 23 | 1 | 33 |
-| [guardrails](#guardrails) | 8 | 0 | 7 | 1 | 8 | 0 | 24 |
+| [guardrails](#guardrails) | 9 | 0 | 7 | 1 | 8 | 0 | 25 |
 | [mcp](#mcp) | 5 | 0 | 2 | 0 | 13 | 0 | 20 |
-| [motor-local](#motor-local) | 12 | 2 | 8 | 3 | 15 | 0 | 40 |
-| [time-machine](#time-machine) | 12 | 1 | 1 | 0 | 15 | 0 | 29 |
+| [motor-local](#motor-local) | 13 | 2 | 8 | 3 | 15 | 0 | 41 |
+| [time-machine](#time-machine) | 13 | 1 | 1 | 0 | 15 | 0 | 30 |
 
 ### cockpit
 
@@ -70,7 +70,7 @@
 
 ### guardrails
 
-24 fichas: 8 implementado, 7 implementado en parte, 1 listo, 8 borrador.
+25 fichas: 9 implementado, 7 implementado en parte, 1 listo, 8 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -82,6 +82,7 @@
 | [US-GRD-008](features/guardrails/user-stories/US-GRD-008-ramas-protegidas-rutas-prohibidas.md) | Ningún agente cambia una rama protegida ni toca una ruta prohibida | Implementado (`implemented`) | #197 | — |
 | [US-GRD-012](features/guardrails/user-stories/US-GRD-012-agente-no-relaja-configuracion.md) | Un agente no puede relajar las reglas del equipo cambiando su configuración | Implementado (`implemented`) | #217 | — |
 | [US-GRD-019](features/guardrails/user-stories/US-GRD-019-quien-ejecuto-y-a-nombre-de-quien.md) | El desarrollador ve quién ejecutó cada commit y a nombre de quién entró cuando no coinciden | Implementado (`implemented`) | #144, #147, #151, #175 | — |
+| [US-GRD-020](features/guardrails/user-stories/US-GRD-020-mensajes-guard-status-deny-sin-daemon.md) | El desarrollador entiende si su repo está protegido y qué repetir cuando una operación se deniega sin el servicio | Implementado (`implemented`) | — | — |
 | [SPIKE-GRD-001](features/guardrails/technical-stories/SPIKE-GRD-001-interceptabilidad-hooks.md) | Interceptabilidad, coexistencia y coste de la capa de hooks en los tres SO | Implementado en parte (`partially-implemented`) | #22, #25, #121 | 2 |
 | [US-GRD-003](features/guardrails/user-stories/US-GRD-003-retirar-proteccion-sin-rastro.md) | El desarrollador retira la protección y el repo queda exactamente como estaba | Implementado en parte (`partially-implemented`) | #193, #201, #264 | — |
 | [US-GRD-004](features/guardrails/user-stories/US-GRD-004-aviso-proteccion-inactiva.md) | El desarrollador se entera de que la protección de un repo dejó de estar activa | Implementado en parte (`partially-implemented`) | #201 | — |
@@ -128,7 +129,7 @@
 
 ### motor-local
 
-40 fichas: 12 implementado, 2 hecho, 8 implementado en parte, 3 listo, 15 borrador.
+41 fichas: 13 implementado, 2 hecho, 8 implementado en parte, 3 listo, 15 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -144,6 +145,7 @@
 | [US-GRP-017](features/motor-local/user-stories/US-GRP-017-consumo-recursos-status.md) | El desarrollador ve cuánto consume GitRaptor en su máquina | Implementado (`implemented`) | #93, #173 | — |
 | [US-GRP-020](features/motor-local/user-stories/US-GRP-020-carpetas-codigo-repos-descubiertos.md) | El desarrollador ve los repos que aparecen en sus carpetas de código sin tener que añadirlos uno a uno | Implementado (`implemented`) | #170, #153, #178 | — |
 | [US-GRP-022](features/motor-local/user-stories/US-GRP-022-aceptar-descartar-repo-descubierto.md) | El desarrollador decide qué repos descubiertos se observan y los que descarta no vuelven a aparecer | Implementado (`implemented`) | #170 | — |
+| [US-GRP-023](features/motor-local/user-stories/US-GRP-023-status-resume-sin-seguimiento.md) | El desarrollador ve en raptor status sus cambios importantes primero y los archivos sin seguimiento resumidos por carpeta | Implementado (`implemented`) | — | — |
 | [TS-GRP-001](features/motor-local/technical-stories/TS-GRP-001-almacen-perfil.md) | Almacén de datos del motor en el perfil | Hecho (`done`) | — | — |
 | [TS-GRP-002](features/motor-local/technical-stories/TS-GRP-002-lectura-git.md) | Capa de lectura de Git sin escrituras | Hecho (`done`) | — | — |
 | [INF-GRP-001](features/motor-local/technical-stories/INF-GRP-001-arnes-repo-intacto.md) | Arnés de verificación "repo intacto" en los tres SO | Implementado en parte (`partially-implemented`) | #30, #34, #68, #97, #109, #113, #163 | 3 |
@@ -175,7 +177,7 @@
 
 ### time-machine
 
-29 fichas: 12 implementado, 1 hecho, 1 implementado en parte, 15 borrador.
+30 fichas: 13 implementado, 1 hecho, 1 implementado en parte, 15 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -191,6 +193,7 @@
 | [US-TMC-009](features/time-machine/user-stories/US-TMC-009-restaurar-punto-timeline.md) | El desarrollador devuelve su worktree a cualquier punto del timeline | Implementado (`implemented`) | #212, #219 | — |
 | [US-TMC-013](features/time-machine/user-stories/US-TMC-013-permisos-solicitante.md) | Un agente no puede deshacer trabajo ajeno, aunque lance la CLI desde su propia shell | Implementado (`implemented`) | #219 | — |
 | [US-TMC-019](features/time-machine/user-stories/US-TMC-019-robustez-interrupcion.md) | El repo sigue recuperable aunque GitRaptor muera a mitad de un snapshot o de un undo | Implementado (`implemented`) | #247 | — |
+| [US-TMC-023](features/time-machine/user-stories/US-TMC-023-timeline-legible-restaurar-id-corto.md) | El desarrollador lee el timeline de un vistazo y restaura un punto con el id corto que ve en la misma línea | Implementado (`implemented`) | — | — |
 | [SPIKE-TMC-001](features/time-machine/technical-stories/SPIKE-TMC-001-repo-mediano-overhead.md) | Repo mediano de referencia y viabilidad del snapshot en menos de 200 ms | Hecho (`done`) | — | — |
 | [INF-TMC-001](features/time-machine/technical-stories/INF-TMC-001-arnes-caos-recuperable.md) | Arnés de caos y de garantías de los snapshots en los tres SO | Implementado en parte (`partially-implemented`) | — | — |
 | [TD-TMC-001](features/time-machine/technical-stories/TD-TMC-001-previo-hook-plazo-y-cupo-sin-atribuir.md) | Previo de hook: plazo real, cupo barato y cubo «sin atribuir» acotado, antes de que un fallo deniegue (US-GRD-017) | Borrador (`draft`) | — | — |
@@ -380,7 +383,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### Sin hito
 
-9 fichas sin hito asignado.
+12 fichas sin hito asignado.
 
 ## Implementadas en parte: lo que falta
 

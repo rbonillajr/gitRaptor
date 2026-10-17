@@ -2,7 +2,7 @@
 id: US-GRP-023
 title: "El desarrollador ve en raptor status sus cambios importantes primero y los archivos sin seguimiento resumidos por carpeta"
 type: us
-status: draft
+status: implemented
 priority: medium
 created: 2026-10-17
 updated: 2026-10-17
@@ -128,3 +128,5 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 
 - **Historias**: US-GRP-001 y US-GRP-002.
 - **Transversal**: transversal (lo define el Arquitecto): verificación en repos temporales, nunca en un repo real salvo la lectura de la certificación; mismo comportamiento en Windows, macOS y Linux; mensajes en inglés y español.
+
+Implementado en: PR #265.

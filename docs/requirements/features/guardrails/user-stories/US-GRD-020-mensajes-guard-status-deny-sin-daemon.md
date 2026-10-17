@@ -2,7 +2,7 @@
 id: US-GRD-020
 title: "El desarrollador entiende si su repo está protegido y qué repetir cuando una operación se deniega sin el servicio"
 type: us
-status: draft
+status: implemented
 priority: medium
 created: 2026-10-17
 updated: 2026-10-17
@@ -151,3 +151,5 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 - **Historias**: US-GRD-017 (denegación sin punto previo, PR #260), US-GRD-001 (force-push), US-TMC-005 (punto previo de los hooks).
 - **Externas**: W77 cambia en otra rama los mensajes de `raptor guard install` y `raptor guard uninstall`; esta historia no los toca. Conviene mergear una antes de la otra porque las dos editan los mismos catálogos de mensajes.
 - **Transversal**: transversal (lo define el Arquitecto): verificación en repos temporales, nunca en un repo real; mismo comportamiento en Windows, macOS y Linux; mensajes en inglés y español.
+
+Implementado en: PR #265.
