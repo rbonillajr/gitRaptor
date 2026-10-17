@@ -39,6 +39,8 @@ mod snapshot_required_tests;
 #[cfg(test)]
 mod status_text_tests;
 
+use snapshot_required::DeniedOp;
+
 /// Longest parameter shown to the agent, in characters (M-05).
 const MAX_PARAM_CHARS: usize = 120;
 
@@ -62,8 +64,9 @@ fn find(params: &[Param], kind: ParamKind) -> String {
         .unwrap_or_else(|| "«»".into())
 }
 
-/// The fixed template of one reason.
-fn reason_text(reason: &Reason) -> String {
+/// The fixed template of one reason; `denied` names the operation in the texts that say what to
+/// repeat.
+fn reason_text(reason: &Reason, denied: &DeniedOp) -> String {
     let p = &reason.params;
     match (reason.rule, reason.cause) {
         (Rule::MinimumForcePush, Some(Cause::ShallowHistory)) => t(
@@ -114,11 +117,9 @@ fn reason_text(reason: &Reason) -> String {
         (Rule::RepoMismatch, _) => t("guard.deny.repo-mismatch", &[]),
         (Rule::InputRejected, _) => t("guard.deny.input", &[]),
         (Rule::InternalError, _) => t("guard.deny.internal", &[]),
-        (Rule::SnapshotFailed, _) => snapshot_required::reason_text(
-            reason,
-            snapshot_required::DeniedOp::Other,
-            Tr::current(),
-        ),
+        (Rule::SnapshotFailed, _) => {
+            snapshot_required::reason_text(reason, denied.clone(), Tr::current())
+        }
         (Rule::AuthorshipTrailerRequired, cause) => t(
             if cause == Some(Cause::MessageUnreadable) {
                 "guard.reason.authorship-message-unreadable"
@@ -181,12 +182,26 @@ fn notice_text(notice: &Reason) -> Option<String> {
 }
 
 /// The lines a decision prints on standard error: its reasons when it does not go ahead, its
-/// warnings when it does.
-pub fn decision_lines(decision: &Decision) -> Vec<String> {
+/// warnings when it does. A missing recovery point already says what did not run and how to go
+/// on: the degraded-mode reason that comes with it is not written.
+fn decision_lines(decision: &Decision, denied: &DeniedOp) -> Vec<String> {
     if decision.applied_effect == Effect::Allow {
         return decision.notices.iter().filter_map(notice_text).collect();
     }
-    decision.reasons.iter().map(reason_text).collect()
+    let snapshot_failed = has_snapshot_failed(decision);
+    decision
+        .reasons
+        .iter()
+        .filter(|r| !(snapshot_failed && r.rule == Rule::Degraded))
+        .map(|r| reason_text(r, denied))
+        .collect()
+}
+
+fn has_snapshot_failed(decision: &Decision) -> bool {
+    decision
+        .reasons
+        .iter()
+        .any(|r| r.rule == Rule::SnapshotFailed)
 }
 
 /// `raptor hook <constants> -- <git args>`: never prompts, never starts the daemon.
@@ -210,6 +225,8 @@ pub fn hook(args: &[OsString]) -> ExitCode {
         cwd: std::env::current_dir().unwrap_or_default(),
     };
     let outcome = hook::run(&args, &env, &input);
+    // Only the words of the messages depend on it: the decision is the outcome's.
+    let denied = snapshot_required::denied_op(args.hook, &args.git_args, &input);
     if let Some(cause) = outcome.degraded
         && outcome.allowed()
     {
@@ -224,7 +241,7 @@ pub fn hook(args: &[OsString]) -> ExitCode {
         eprintln!("{}", t("guard.notice.authorship-unavailable", &[]));
     }
     if let Some(decision) = &outcome.decision {
-        for line in decision_lines(decision) {
+        for line in decision_lines(decision, &denied) {
             eprintln!("{line}");
         }
         // "It goes ahead" is only true when the operation goes ahead: a failed prior normally
@@ -245,8 +262,13 @@ pub fn hook(args: &[OsString]) -> ExitCode {
         ExitCode::SUCCESS
     } else {
         // Denied without the daemon: say how to go on (the person is told from the agent there).
-        if outcome.degraded.is_some() {
-            eprintln!("{}", t("guard.degraded.retry", &[]));
+        // A missing recovery point already carries its own hint for the operation.
+        let own_hint = outcome.decision.as_ref().is_some_and(has_snapshot_failed);
+        if outcome.degraded.is_some() && !own_hint {
+            eprintln!(
+                "{}",
+                t(&format!("guardstate.retry.{}", denied.key_suffix()), &[])
+            );
         }
         ExitCode::FAILURE
     }
@@ -445,46 +467,52 @@ fn ask(question: &str) -> Answer {
     }
 }
 
-fn status_lines(status: &GuardStatus, tr: Tr) -> Vec<String> {
-    let _ = tr;
-    let mut out = vec![match status.state {
-        ProtectionState::Unprotected => t("guard.state.unprotected", &[]),
-        ProtectionState::HooksOnly => t("guard.state.hooks-only", &[]),
-    }];
-    if status.state == ProtectionState::HooksOnly {
-        out.push(if status.base_confirmed {
-            t(
-                "guard.status.base-confirmed",
-                &[("bases", &names(&status.protected_bases))],
-            )
-        } else {
-            t(
-                "guard.status.base-unconfirmed",
-                &[("bases", &names(&status.protected_bases))],
-            )
-        });
+/// The first line of `raptor guard status`: whether the repo is protected and by which base
+/// branch. Installed hooks that are not active (another tool moved Git's hooks, a lost or altered
+/// dispatcher) never read as protected; a daemon that predates the hook layer is trusted with its
+/// state.
+fn state_line(status: &GuardStatus, tr: Tr) -> String {
+    if status.state == ProtectionState::Unprotected {
+        return tr.t("guard.state.unprotected", &[]);
     }
-    out.extend(protection_lines(status));
+    if status
+        .hooks
+        .as_ref()
+        .is_some_and(|h| h.status != HooksStatus::Active)
+    {
+        return tr.t("guardstate.partial", &[]);
+    }
+    let bases = names(&status.protected_bases);
+    if status.base_confirmed {
+        tr.t("guardstate.protected", &[("base", &bases)])
+    } else {
+        tr.t("guardstate.protected-unconfirmed", &[("bases", &bases)])
+    }
+}
+
+fn status_lines(status: &GuardStatus, tr: Tr) -> Vec<String> {
+    let mut out = vec![state_line(status, tr)];
+    out.extend(protection_lines(status, tr));
     // Granted but unprotected reads as a contradiction: the permission only
     // matters once there is a protection to apply.
     let unprotected = status.state == ProtectionState::Unprotected;
     match status.permission {
-        Permission::NotAsked => out.push(t("guard.permission.not-asked", &[])),
+        Permission::NotAsked => out.push(tr.t("guard.permission.not-asked", &[])),
         Permission::Granted if unprotected => {}
-        Permission::Granted => out.push(t("guard.permission.granted", &[])),
-        Permission::Denied => out.push(t("guard.permission.denied", &[])),
+        Permission::Granted => out.push(tr.t("guard.permission.granted", &[])),
+        Permission::Denied => out.push(tr.t("guard.permission.denied", &[])),
     }
     for b in &status.last_refusal {
         out.push(format!("  - {}", blocker_text(*b)));
     }
     if let Some(pending) = &status.pending {
-        out.push(t(
+        out.push(tr.t(
             "guard.status.pending",
             &[("seconds", &seconds_left(pending.applies_at_ms))],
         ));
     }
     for file in &status.misnamed_settings {
-        out.push(t(
+        out.push(tr.t(
             "guard.status.misnamed-settings",
             &[("file", &file.sanitized())],
         ));
@@ -494,14 +522,14 @@ fn status_lines(status: &GuardStatus, tr: Tr) -> Vec<String> {
 
 /// What `guard.status` says about the hook layer, the diagnostics and the safe minimum
 /// (US-GRD-004); nothing when the daemon predates `guard.protection`.
-fn protection_lines(status: &GuardStatus) -> Vec<String> {
-    let mut out = notice_lines(status);
+fn protection_lines(status: &GuardStatus, tr: Tr) -> Vec<String> {
+    let mut out = notices(status, tr);
     if let Some(min) = &status.minimum_set
         && min.status == MinimumSetStatus::Active
         && status.hooks.is_some()
     {
         // Nothing is denied until the hooks are installed: say what install will do.
-        out.push(t(
+        out.push(tr.t(
             if status.state == ProtectionState::Unprotected {
                 "guard.status.minimum-on-install"
             } else {
@@ -512,8 +540,8 @@ fn protection_lines(status: &GuardStatus) -> Vec<String> {
     }
     if status.hooks.is_some() {
         // The agent protection of the configuration is part of the minimum: no setting turns it off.
-        out.push(t("guard.status.config-protected", &[]));
-        out.push(t("guard.status.not-checked", &[]));
+        out.push(tr.t("guard.status.config-protected", &[]));
+        out.push(tr.t("guard.status.not-checked", &[]));
     }
     out
 }
@@ -522,29 +550,36 @@ fn protection_lines(status: &GuardStatus) -> Vec<String> {
 /// active, its record was lost, its hooks are of an older template, or Git's configuration
 /// could not be read (US-GRD-004). Empty when there is nothing: `raptor status` shows only this.
 pub fn notice_lines(status: &GuardStatus) -> Vec<String> {
+    notices(status, Tr::current())
+}
+
+/// [`notice_lines`] in the language `tr`.
+fn notices(status: &GuardStatus, tr: Tr) -> Vec<String> {
     let mut out = Vec::new();
     match &status.hooks {
         Some(hooks) if hooks.status == HooksStatus::Inactive => {
-            let cause = hooks.cause.map_or_else(String::new, cause_text);
+            let cause = hooks
+                .cause
+                .map_or_else(String::new, |c| cause_text_in(c, tr));
             out.push(match &hooks.worktree {
-                Some(worktree) => t(
+                Some(worktree) => tr.t(
                     "guard.status.lost-worktree",
                     &[("cause", &cause), ("worktree", &param(worktree))],
                 ),
-                None => t("guard.status.lost", &[("cause", &cause)]),
+                None => tr.t("guard.status.lost", &[("cause", &cause)]),
             });
         }
         Some(hooks) if hooks.status == HooksStatus::Orphaned => {
-            out.push(t("guard.status.orphaned", &[]));
+            out.push(tr.t("guard.status.orphaned", &[]));
         }
         _ => {}
     }
     for d in &status.diagnostics {
         match d {
-            Diagnostic::TemplateOutdated => out.push(t("guard.status.template-outdated", &[])),
-            Diagnostic::ConfigUnreadable => out.push(t("guard.status.config-unreadable", &[])),
-            Diagnostic::LeftoverFolder => out.push(t("guard.status.leftover-folder", &[])),
-            // Said by the base branch line.
+            Diagnostic::TemplateOutdated => out.push(tr.t("guard.status.template-outdated", &[])),
+            Diagnostic::ConfigUnreadable => out.push(tr.t("guard.status.config-unreadable", &[])),
+            Diagnostic::LeftoverFolder => out.push(tr.t("guard.status.leftover-folder", &[])),
+            // Said by the state line.
             Diagnostic::BaseUnconfirmed => {}
         }
     }
@@ -553,7 +588,12 @@ pub fn notice_lines(status: &GuardStatus) -> Vec<String> {
 
 /// The text of a cause of loss.
 pub fn cause_text(cause: LossCause) -> String {
-    t(
+    cause_text_in(cause, Tr::current())
+}
+
+/// [`cause_text`] in the language `tr`.
+fn cause_text_in(cause: LossCause, tr: Tr) -> String {
+    tr.t(
         match cause {
             LossCause::HookspathChanged => "guard.cause.hookspath-changed",
             LossCause::RepoMoved => "guard.cause.repo-moved",
@@ -1303,7 +1343,7 @@ mod tests {
             cause: Some(Cause::Unverifiable),
             params: Vec::new(),
         };
-        let text = reason_text(&unverifiable);
+        let text = reason_text(&unverifiable, &DeniedOp::Other);
         assert_eq!(text, t("guard.reason.policy-unverifiable", &[]));
         assert_ne!(text, t("guard.reason.config-protected", &[("path", &"")]));
         assert!(has_key("guard.reason.policy-unverifiable"));

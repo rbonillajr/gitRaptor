@@ -1,0 +1,15 @@
+# User-facing messages of `raptor`, English (NFR-10, ADR-GRP-003): the first line of
+# `raptor guard status` and how to go on after a denial without the service.
+# One `key = text` per line. Placeholders are `{name}`; the code fills them
+# by name, never by concatenating. Every key exists in ../es/guardstate.txt too.
+
+# The first line of `raptor guard status` once the protection is installed.
+guardstate.protected = state: protected, base branch {base}
+guardstate.protected-unconfirmed = state: protected, base branch not confirmed (protected meanwhile: {bases})
+guardstate.partial = state: partly protected: the hooks are not active (details below)
+
+# A denial without the service: the hint names the operation that was denied.
+guardstate.retry.push = To go on: start GitRaptor (`raptor daemon status` starts it) and push again. With the service running, a person's operation is told apart from an agent's.
+guardstate.retry.branch-delete = To go on: start GitRaptor (`raptor daemon status` starts it) and delete the branch again. With the service running, a person's operation is told apart from an agent's.
+guardstate.retry.rebase = To go on: start GitRaptor (`raptor daemon status` starts it) and run the rebase again. With the service running, a person's operation is told apart from an agent's.
+guardstate.retry.other = To go on: start GitRaptor (`raptor daemon status` starts it) and run the Git command again. With the service running, a person's operation is told apart from an agent's.

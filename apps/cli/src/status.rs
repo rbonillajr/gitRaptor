@@ -87,14 +87,14 @@ pub fn repo_at(snapshot: &Snapshot, path: &Path) -> Option<String> {
 /// The text output, one line per repo, worktree, session and listed
 /// change. A worktree without sessions shows none.
 pub fn text(snapshot: &Snapshot, sessions: &SessionsInfo, verbose: bool, tr: Tr) -> String {
-    let _ = (verbose, tr);
     let mut out = String::new();
     if snapshot.repos.is_empty() {
-        let _ = writeln!(out, "{}", t("status.none", &[]));
+        let _ = writeln!(out, "{}", tr.t("status.none", &[]));
     }
     if sessions.available == Some(false) && !snapshot.repos.is_empty() {
-        let _ = writeln!(out, "{}", t("sessions.unavailable", &[]));
+        let _ = writeln!(out, "{}", tr.t("sessions.unavailable", &[]));
     }
+    let mut summarized = false;
     for repo in &snapshot.repos {
         let folder = sanitize(&repo_folder(repo));
         let key = match repo.state {
@@ -102,29 +102,32 @@ pub fn text(snapshot: &Snapshot, sessions: &SessionsInfo, verbose: bool, tr: Tr)
             RepoStateView::Unavailable => "status.repo-unavailable",
         };
         let _ = writeln!(out, "{}", t(key, &[("path", &folder)]));
-        let _ = writeln!(out, "  {}", base_text(&repo.base));
+        let _ = writeln!(out, "  {}", base_text(&repo.base, tr));
         if let Some(status) = sessions.protection.get(&repo.repo_id) {
             for line in crate::guard::notice_lines(status) {
                 let _ = writeln!(out, "  {line}");
             }
         }
         if let Some(kept) = &repo.kept_temps {
-            kept_temps_text(&mut out, kept);
+            kept_temps_text(&mut out, kept, tr);
         }
         let base = base_name(&repo.base);
         for w in &repo.worktrees {
-            worktree_text(&mut out, w, &base);
+            summarized |= worktree_text(&mut out, w, &base, verbose, tr);
             for s in sessions.of(&repo.repo_id, w) {
                 let _ = writeln!(out, "    {}", crate::sessions::line(s));
             }
         }
+    }
+    if summarized {
+        let _ = write!(out, "\n{}\n", tr.t("status.hint.verbose", &[]));
     }
     out
 }
 
 /// Temporary files the sweep after a crash kept (DS-TS-TMC-003, Enmienda T2): `raptor undo` is
 /// offered only while the interrupted operation is still the last one.
-fn kept_temps_text(out: &mut String, kept: &KeptTempsView) {
+fn kept_temps_text(out: &mut String, kept: &KeptTempsView, tr: Tr) {
     let count = kept.count.to_string();
     let operation = sanitize(&kept.operation_id);
     let key = if kept.undo_next {
@@ -135,14 +138,14 @@ fn kept_temps_text(out: &mut String, kept: &KeptTempsView) {
     let _ = writeln!(
         out,
         "  {}",
-        t(key, &[("count", &count), ("operation", &operation)])
+        tr.t(key, &[("count", &count), ("operation", &operation)])
     );
     if kept.foreign > 0 {
         let foreign = kept.foreign.to_string();
         let _ = writeln!(
             out,
             "    {}",
-            t("status.kept-temps-foreign", &[("foreign", &foreign)])
+            tr.t("status.kept-temps-foreign", &[("foreign", &foreign)])
         );
     }
 }
@@ -159,26 +162,26 @@ fn base_name(base: &BaseBranchView) -> String {
         .unwrap_or_default()
 }
 
-fn base_text(base: &BaseBranchView) -> String {
+fn base_text(base: &BaseBranchView, tr: Tr) -> String {
     let name = base_name(base);
     match base.status {
-        BaseStatusView::Confirmed => t("status.base", &[("name", &name)]),
-        BaseStatusView::Unconfirmed => t("status.base-unconfirmed", &[("name", &name)]),
-        BaseStatusView::Invalid => t("status.base-invalid", &[]),
+        BaseStatusView::Confirmed => tr.t("status.base", &[("name", &name)]),
+        BaseStatusView::Unconfirmed => tr.t("status.base-unconfirmed", &[("name", &name)]),
+        BaseStatusView::Invalid => tr.t("status.base-invalid", &[]),
     }
 }
 
-fn divergence_text(divergence: &DivergenceView, base: &str) -> String {
+fn divergence_text(divergence: &DivergenceView, base: &str, tr: Tr) -> String {
     let count = |c: &CommitCountView| {
         if c.exact {
             c.count.to_string()
         } else {
-            t("status.at-least", &[("count", &c.count)])
+            tr.t("status.at-least", &[("count", &c.count)])
         }
     };
     match divergence {
         // The base name last: it is repo text and must not fill the others.
-        DivergenceView::Counted { ahead, behind } => t(
+        DivergenceView::Counted { ahead, behind } => tr.t(
             "status.divergence",
             &[
                 ("ahead", &count(ahead)),
@@ -186,20 +189,28 @@ fn divergence_text(divergence: &DivergenceView, base: &str) -> String {
                 ("base", &base),
             ],
         ),
-        DivergenceView::BaseMissing => t("status.no-divergence-base-missing", &[("base", &base)]),
-        DivergenceView::NoBase => t("status.no-divergence-no-base", &[]),
-        DivergenceView::NoCommits => t("status.no-divergence-no-commits", &[]),
-        DivergenceView::Unreadable => t("status.no-divergence-unreadable", &[]),
+        DivergenceView::BaseMissing => {
+            tr.t("status.no-divergence-base-missing", &[("base", &base)])
+        }
+        DivergenceView::NoBase => tr.t("status.no-divergence-no-base", &[]),
+        DivergenceView::NoCommits => tr.t("status.no-divergence-no-commits", &[]),
+        DivergenceView::Unreadable => tr.t("status.no-divergence-unreadable", &[]),
     }
 }
 
-fn worktree_text(out: &mut String, w: &WorktreeView, base: &str) {
+/// Untracked files a worktree lists one by one; above this the text summarizes them by folder.
+pub(crate) const UNTRACKED_LIST_LIMIT: usize = 10;
+/// Folders named in the summary line; the rest add up in "others".
+const SUMMARY_FOLDERS: usize = 5;
+
+/// Prints a worktree; returns whether its untracked files were summarized.
+fn worktree_text(out: &mut String, w: &WorktreeView, base: &str, verbose: bool, tr: Tr) -> bool {
     let key = if w.main {
         "status.worktree-main"
     } else {
         "status.worktree-linked"
     };
-    let _ = writeln!(out, "  {}", t(key, &[("path", &w.path.sanitized())]));
+    let _ = writeln!(out, "  {}", tr.t(key, &[("path", &w.path.sanitized())]));
     match &w.status {
         WorktreeStatus::Unavailable { reason } => {
             let key = match reason {
@@ -207,7 +218,8 @@ fn worktree_text(out: &mut String, w: &WorktreeView, base: &str) {
                 UnavailableReason::Untrusted => "status.wt-untrusted",
                 UnavailableReason::Unreadable => "status.wt-unreadable",
             };
-            let _ = writeln!(out, "    {}", t(key, &[]));
+            let _ = writeln!(out, "    {}", tr.t(key, &[]));
+            false
         }
         WorktreeStatus::Ready {
             head,
@@ -215,36 +227,112 @@ fn worktree_text(out: &mut String, w: &WorktreeView, base: &str) {
             changes,
             divergence,
         } => {
-            let _ = writeln!(out, "    {}", head_text(head));
-            let _ = writeln!(out, "    {}", divergence_text(divergence, base));
+            let _ = writeln!(out, "    {}", head_text(head, tr));
+            let _ = writeln!(out, "    {}", divergence_text(divergence, base, tr));
             if counts.is_clean() {
-                let _ = writeln!(out, "    {}", t("status.clean", &[]));
-                return;
+                let _ = writeln!(out, "    {}", tr.t("status.clean", &[]));
+                return false;
             }
-            let _ = writeln!(out, "    {}", counts_text(counts));
-            for c in changes {
-                let _ = writeln!(out, "      {}", change_text(c));
+            let _ = writeln!(out, "    {}", counts_text(counts, tr));
+            // Staged first, then not staged, then untracked; the engine's order within each.
+            let mut ordered: Vec<&FileChangeView> = changes.iter().collect();
+            ordered.sort_by_key(|c| match c.area {
+                ChangeAreaView::Staged => 0,
+                ChangeAreaView::Unstaged => 1,
+                ChangeAreaView::Untracked => 2,
+            });
+            let sent_untracked = changes
+                .iter()
+                .filter(|c| c.area == ChangeAreaView::Untracked)
+                .count();
+            let summarize = !verbose
+                && sent_untracked > 0
+                && usize::try_from(counts.untracked).map_or(true, |n| n > UNTRACKED_LIST_LIMIT);
+            let mut more = counts.total().saturating_sub(changes.len() as u64);
+            for c in ordered {
+                if summarize && c.area == ChangeAreaView::Untracked {
+                    continue;
+                }
+                let _ = writeln!(out, "      {}", change_text(c, tr));
             }
-            let more = counts.total().saturating_sub(changes.len() as u64);
+            if summarize {
+                let unlisted = u64::from(counts.untracked).saturating_sub(sent_untracked as u64);
+                let paths = changes
+                    .iter()
+                    .filter(|c| c.area == ChangeAreaView::Untracked)
+                    .map(|c| c.path.raw());
+                let _ = writeln!(
+                    out,
+                    "      {}",
+                    summary_text(u64::from(counts.untracked), paths, unlisted, tr)
+                );
+                // The unlisted untracked files are told in the summary line, not twice.
+                more = more.saturating_sub(unlisted);
+            }
             if changes.is_empty() {
-                let _ = writeln!(out, "      {}", t("status.lists-dropped", &[]));
+                let _ = writeln!(out, "      {}", tr.t("status.lists-dropped", &[]));
             } else if more > 0 {
-                let _ = writeln!(out, "      {}", t("status.truncated", &[("more", &more)]));
+                let _ = writeln!(
+                    out,
+                    "      {}",
+                    tr.t("status.truncated", &[("more", &more)])
+                );
             }
+            summarize
         }
     }
 }
 
-fn head_text(head: &HeadView) -> String {
+/// "N untracked: dir/ n, ..." from the untracked paths the engine sent: the first path component
+/// is the folder, ordered by count then name. `unlisted` is what the engine did not send.
+fn summary_text<'a>(
+    total: u64,
+    paths: impl Iterator<Item = &'a str>,
+    unlisted: u64,
+    tr: Tr,
+) -> String {
+    let mut by_folder: std::collections::BTreeMap<Option<&str>, u64> =
+        std::collections::BTreeMap::new();
+    for path in paths {
+        let folder = path.split_once('/').map(|(first, _)| first);
+        *by_folder.entry(folder).or_default() += 1;
+    }
+    let mut folders: Vec<(Option<&str>, u64)> = by_folder.into_iter().collect();
+    // Stable sort over a name-ordered map: ties stay by name; the root sorts first among equals.
+    folders.sort_by_key(|f| std::cmp::Reverse(f.1));
+    let mut parts: Vec<String> = Vec::new();
+    for (folder, n) in folders.iter().take(SUMMARY_FOLDERS) {
+        parts.push(match folder {
+            Some(name) => tr.t(
+                "status.untracked-folder",
+                &[("name", &sanitize(name)), ("count", n)],
+            ),
+            None => tr.t("status.untracked-root", &[("count", n)]),
+        });
+    }
+    let others: u64 = folders.iter().skip(SUMMARY_FOLDERS).map(|f| f.1).sum();
+    if others > 0 {
+        parts.push(tr.t("status.untracked-others", &[("count", &others)]));
+    }
+    if unlisted > 0 {
+        parts.push(tr.t("status.untracked-unlisted", &[("count", &unlisted)]));
+    }
+    tr.t(
+        "status.untracked-summary",
+        &[("total", &total), ("folders", &parts.join(", "))],
+    )
+}
+
+fn head_text(head: &HeadView, tr: Tr) -> String {
     match head {
-        HeadView::Branch { name } => t("status.branch", &[("name", &name.sanitized())]),
-        HeadView::Unborn { name } => t("status.unborn", &[("name", &name.sanitized())]),
-        HeadView::Detached => t("status.detached", &[]),
+        HeadView::Branch { name } => tr.t("status.branch", &[("name", &name.sanitized())]),
+        HeadView::Unborn { name } => tr.t("status.unborn", &[("name", &name.sanitized())]),
+        HeadView::Detached => tr.t("status.detached", &[]),
     }
 }
 
-fn counts_text(counts: &ChangeCounts) -> String {
-    t(
+fn counts_text(counts: &ChangeCounts, tr: Tr) -> String {
+    tr.t(
         "status.changes",
         &[
             ("total", &counts.total()),
@@ -255,16 +343,16 @@ fn counts_text(counts: &ChangeCounts) -> String {
     )
 }
 
-fn change_text(c: &FileChangeView) -> String {
+fn change_text(c: &FileChangeView, tr: Tr) -> String {
     let path = c.path.sanitized();
-    let kind = t(&format!("kind.{}", wire(&c.kind)), &[]);
+    let kind = tr.t(&format!("kind.{}", wire(&c.kind)), &[]);
     match c.area {
-        ChangeAreaView::Staged => t("status.change-staged", &[("kind", &kind), ("path", &path)]),
-        ChangeAreaView::Unstaged => t(
+        ChangeAreaView::Staged => tr.t("status.change-staged", &[("kind", &kind), ("path", &path)]),
+        ChangeAreaView::Unstaged => tr.t(
             "status.change-unstaged",
             &[("kind", &kind), ("path", &path)],
         ),
-        ChangeAreaView::Untracked => t("status.change-untracked", &[("path", &path)]),
+        ChangeAreaView::Untracked => tr.t("status.change-untracked", &[("path", &path)]),
     }
 }
 
@@ -677,7 +765,7 @@ mod tests {
             },
         };
         assert_eq!(
-            divergence_text(&d, "{ahead}"),
+            divergence_text(&d, "{ahead}", Tr::current()),
             "1 ahead and 2 behind {ahead}"
         );
     }

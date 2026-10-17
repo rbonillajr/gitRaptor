@@ -1,0 +1,15 @@
+# Mensajes de `raptor` para el usuario, en español (NFR-10, ADR-GRP-003): la primera línea de
+# `raptor guard status` y cómo seguir tras una denegación sin el servicio.
+# Una línea `clave = texto`. Los marcadores son `{nombre}`; el código los
+# rellena por nombre, nunca concatenando. Toda clave existe también en ../en/guardstate.txt.
+
+# La primera línea de `raptor guard status` con la protección instalada.
+guardstate.protected = estado: protegido, rama base {base}
+guardstate.protected-unconfirmed = estado: protegido, rama base sin confirmar (mientras tanto se protegen: {bases})
+guardstate.partial = estado: protección incompleta: los hooks no están activos (detalle abajo)
+
+# Una denegación sin el servicio: la pista nombra la operación denegada.
+guardstate.retry.push = Para seguir: arranca GitRaptor (`raptor daemon status` lo arranca) y vuelve a hacer el push. Con el servicio en marcha, la operación de una persona se distingue de la de un agente.
+guardstate.retry.branch-delete = Para seguir: arranca GitRaptor (`raptor daemon status` lo arranca) y vuelve a borrar la rama. Con el servicio en marcha, la operación de una persona se distingue de la de un agente.
+guardstate.retry.rebase = Para seguir: arranca GitRaptor (`raptor daemon status` lo arranca) y vuelve a lanzar el rebase. Con el servicio en marcha, la operación de una persona se distingue de la de un agente.
+guardstate.retry.other = Para seguir: arranca GitRaptor (`raptor daemon status` lo arranca) y vuelve a ejecutar el comando de Git. Con el servicio en marcha, la operación de una persona se distingue de la de un agente.
