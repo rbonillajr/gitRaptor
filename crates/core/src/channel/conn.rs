@@ -906,12 +906,18 @@ impl Connection<'_> {
                     // The prior snapshot goes before the log: a later change (US-GRD-017) can
                     // turn a failed one into a denial that the log records.
                     decision.prior_snapshot = self.hook_prior(&p, &decision);
+                    // Before the log and the claims: both see the denial of an allowed
+                    // destructive operation whose prior failed (BR-EDGE-005).
+                    crate::guardrails::snapshot_required::enforce(&mut decision);
                     self.log_decision(&p, &decision, &caller, policy, &served.ignored);
                     self.hook_claims(&p, &caller, &decision);
                     // After logging: the log keeps the product's own rule names, and the
                     // protection applies the same for a client that does not know them.
                     if !self.has(methods::CAP_GUARD_CONFIG_PROTECTION.name) {
                         crate::guardrails::config_guard::legacy_decision(&mut decision);
+                    }
+                    if !self.has(methods::CAP_GUARD_SNAPSHOT_REQUIRED.name) {
+                        crate::guardrails::snapshot_required::legacy_decision(&mut decision);
                     }
                     decision
                 });
@@ -1063,6 +1069,11 @@ impl Connection<'_> {
             .get(&params.repo_id)
             .filter(|e| e.common_dir == params.common_dir)
             .ok_or(Failure::Unavailable)?;
+        // A protected repo the Time Machine no longer observes has no point to go back to: that
+        // is `unavailable` (observe it again), not a folder problem.
+        if !deps.repos.contains(&params.repo_id) {
+            return Err(Failure::Unavailable);
+        }
         let cwd = process_cwd(self.peer.pid)
             .and_then(|p| gitraptor_git::paths::canonicalize(&p).ok())
             .ok_or(Failure::NoWorktree)?;
@@ -1518,6 +1529,10 @@ impl Connection<'_> {
                 // The denials of the configuration read as a path.
                 if legacy {
                     crate::guardrails::config_guard::legacy_log(&mut log);
+                }
+                // A failed prior reads as an internal error, still a denial.
+                if !self.has(methods::CAP_GUARD_SNAPSHOT_REQUIRED.name) {
+                    crate::guardrails::snapshot_required::legacy_log(&mut log);
                 }
                 Ok(log)
             }

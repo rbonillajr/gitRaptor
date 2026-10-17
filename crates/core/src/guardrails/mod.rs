@@ -27,6 +27,9 @@ pub mod prior;
 pub mod protection;
 pub mod registry;
 pub mod second_line;
+pub mod snapshot_required;
+#[cfg(test)]
+mod snapshot_required_tests;
 pub mod uninstall;
 
 pub use registry::{GuardEntry, GuardRegistry};

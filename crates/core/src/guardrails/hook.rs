@@ -21,7 +21,9 @@ use gitraptor_policy::guard::input::{self, MAX_LINE_BYTES};
 use super::constants::{EVERY_PUSHED_REF, TEMPLATE_VERSION};
 use super::evaluate;
 use super::journal::{Snapshot, snapshot_path};
+use super::snapshot_required::{self, Granted};
 use crate::client::{Client, ClientError};
+use crate::timemachine::hook_prior::wants_prior;
 
 /// The constants a dispatcher passes, in this order, after `raptor hook`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -628,8 +630,13 @@ fn read_regular(path: &Path, max: u64) -> Option<Vec<u8>> {
 /// Asks the daemon; without an authentic daemon of this instance, degraded mode.
 fn decide(args: &HookArgs, full: Operation) -> HookOutcome {
     let asked = ask_daemon(args, &full);
-    let (decision, policies_granted) = match asked {
-        Asked::Decision(decision, granted) => (Some(decision), granted),
+    let (decision, granted) = match asked {
+        Asked::Decision(mut decision, granted) => {
+            // A daemon that does not convert a failed prior (a version apart) must not leave
+            // less than degraded mode does (BR-EDGE-005).
+            snapshot_required::client_fallback(&full, &mut decision, granted);
+            (Some(decision), granted)
+        }
         Asked::Nothing(granted) => (None, granted),
         Asked::NotAuthentic if only_ungoverned(&full) => {
             return ungoverned_alone(args, &full, Signal::NotAuthentic);
@@ -649,18 +656,18 @@ fn decide(args: &HookArgs, full: Operation) -> HookOutcome {
         full,
         Operation::RefTransaction { .. } | Operation::Push { .. }
     );
-    if outcome.allowed() && governed && !policies_granted {
+    if outcome.allowed() && governed && !granted.policies {
         return floor_rules_for_everyone(args, &full).unwrap_or(outcome);
     }
     outcome
 }
 
 enum Asked {
-    /// The decision, and whether the daemon granted `guard.policies`.
-    Decision(Decision, bool),
+    /// The decision, and what the daemon granted.
+    Decision(Decision, Granted),
     /// Nothing is left to ask once the daemon's capability is known (an all-ungoverned push to a
     /// daemon without `guard.policies`).
-    Nothing(bool),
+    Nothing(Granted),
     NotAuthentic,
     Failed,
     Degraded(Degraded),
@@ -673,13 +680,20 @@ fn ask_daemon(args: &HookArgs, full: &Operation) -> Asked {
         Err(Unusable::Failed) => return Asked::Failed,
         Err(Unusable::Degraded(cause)) => return Asked::Degraded(cause),
     };
-    let granted = client
-        .hello()
-        .capabilities
-        .as_ref()
-        .is_some_and(|served| served.iter().any(|c| c == methods::CAP_GUARD_POLICIES.name));
+    let served = |cap: &str| {
+        client
+            .hello()
+            .capabilities
+            .as_ref()
+            .is_some_and(|served| served.iter().any(|c| c == cap))
+    };
+    let granted = Granted {
+        policies: served(methods::CAP_GUARD_POLICIES.name),
+        prior_snapshot: served(methods::CAP_GUARD_PRIOR_SNAPSHOT.name),
+        snapshot_required: served(methods::CAP_GUARD_SNAPSHOT_REQUIRED.name),
+    };
     // The daemon receives what it can evaluate: every ref only with `guard.policies`.
-    let Some(operation) = push_scope(full.clone(), args.template, granted) else {
+    let Some(operation) = push_scope(full.clone(), args.template, granted.policies) else {
         return Asked::Nothing(granted);
     };
     let params = EvaluateParams {
@@ -899,6 +913,12 @@ fn degraded(args: &HookArgs, full: &Operation, cause: Degraded) -> HookOutcome {
         for reason in other.reasons {
             eval.add(other.effect, reason);
         }
+    }
+    // Without the daemon there is no prior snapshot: what wants one is denied, before the
+    // degraded reason below so the denial carries both (BR-EDGE-005).
+    if eval.effect == Effect::Allow && wants_prior(full) {
+        eval.reasons.push(snapshot_required::degraded_reason());
+        eval.effect = Effect::Deny;
     }
     if eval.effect != Effect::Allow {
         eval.reasons.push(Reason {
