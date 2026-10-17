@@ -130,7 +130,7 @@ impl Fixture {
     fn as_agent(&self, argv: &[&str]) -> Output {
         let agent = self.tmp.path().join(FAKE_AGENT);
         if !agent.exists() {
-            std::fs::copy(std::env::current_exe().unwrap(), &agent).unwrap();
+            gitraptor_testkit::fixture::clone_binary(&std::env::current_exe().unwrap(), &agent);
         }
         Command::new(&agent)
             .args([

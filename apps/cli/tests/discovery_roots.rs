@@ -173,7 +173,7 @@ impl Machine {
     fn agent(&self, args: &[&str]) -> Output {
         let agent = self.f.root.join(FAKE_AGENT);
         if !agent.exists() {
-            std::fs::copy(std::env::current_exe().unwrap(), &agent).unwrap();
+            gitraptor_testkit::fixture::clone_binary(&std::env::current_exe().unwrap(), &agent);
         }
         let mut argv = vec!["/usr/bin/script", "-q", "/dev/null", RAPTOR];
         argv.extend_from_slice(args);

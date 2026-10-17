@@ -210,7 +210,7 @@ impl Machine {
     fn install_claude(&self) -> PathBuf {
         let agent = self.outside.path().join("bin").join(FAKE_AGENT);
         if !agent.exists() {
-            std::fs::copy(std::env::current_exe().unwrap(), &agent).unwrap();
+            gitraptor_testkit::fixture::clone_binary(&std::env::current_exe().unwrap(), &agent);
         }
         agent
     }

@@ -466,7 +466,7 @@ impl Machine {
         let me = std::env::current_exe().unwrap();
         let agent = self.tmp.path().join(name);
         if !agent.exists() {
-            std::fs::copy(&me, &agent).unwrap();
+            gitraptor_testkit::fixture::clone_binary(&me, &agent);
         }
         Command::new(agent)
             .args([
