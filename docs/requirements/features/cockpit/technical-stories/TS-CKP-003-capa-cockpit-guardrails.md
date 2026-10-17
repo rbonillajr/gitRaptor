@@ -67,7 +67,7 @@ tags: [cockpit, guardrails, capa-cockpit, decision, registro, hooks-git, br-07, 
 
 ## Estado de la implementación (2026-10-17)
 
-Implementado en: PR #PRNUM.
+Implementado en: PR #261.
 
 Notas (fuera del alcance de esta ficha o sin bloquearla):
 - Ningún brazo gobernado real queda armado: cada historia dueña (US-CKP-014 a 018, US-MCP-009 a 019) arma el suyo sobre este motor. Los brazos de prueba solo existen en depuración (`debug_assertions`, `GITRAPTOR_TEST_EXECUTOR_ARMS=1` y `GITRAPTOR_PROFILE_DIR`).

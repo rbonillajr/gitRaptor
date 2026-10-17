@@ -36,7 +36,7 @@
 |---|---|---|---|---|
 | [INF-CKP-001](features/cockpit/technical-stories/INF-CKP-001-esqueleto-tui.md) | Esqueleto de la TUI: cliente del canal, bucle TEA, saneado único y gate de 100 ms | Implementado (`implemented`) | #100, #139, #174, #153 | — |
 | [TS-CKP-002](features/cockpit/technical-stories/TS-CKP-002-catalogo-ejecutor.md) | Catálogo de operaciones de usuario y ejecutor del daemon en dos fases | Implementado (`implemented`) | #73 | — |
-| [TS-CKP-003](features/cockpit/technical-stories/TS-CKP-003-capa-cockpit-guardrails.md) | Capa cockpit en la decisión de Guardrails, ligada al git del ejecutor y registrada una sola vez | Implementado (`implemented`) | — | — |
+| [TS-CKP-003](features/cockpit/technical-stories/TS-CKP-003-capa-cockpit-guardrails.md) | Capa cockpit en la decisión de Guardrails, ligada al git del ejecutor y registrada una sola vez | Implementado (`implemented`) | #261 | — |
 | [TS-CKP-004](features/cockpit/technical-stories/TS-CKP-004-tokens-semanticos-simbolos.md) | Tokens semánticos y símbolos con fallback en el tema de la TUI | Implementado (`implemented`) | #50, #115 | — |
 | [TS-CKP-005](features/cockpit/technical-stories/TS-CKP-005-biblioteca-componentes-tui.md) | Biblioteca de componentes TUI v0: los 10 widgets del design system, con snapshots y galería | Implementado (`implemented`) | #111, #115 | — |
 | [US-CKP-001](features/cockpit/user-stories/US-CKP-001-flota-en-vivo.md) | El desarrollador ve en vivo qué agente trabaja en cada worktree de un repo | Implementado (`implemented`) | #118, #126, #129, #130, #131, #136, #175 | — |
@@ -246,7 +246,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
 | [TS-CKP-002](features/cockpit/technical-stories/TS-CKP-002-catalogo-ejecutor.md) | Catálogo de operaciones de usuario y ejecutor del daemon en dos fases | Implementado (`implemented`) | #73 | — |
-| [TS-CKP-003](features/cockpit/technical-stories/TS-CKP-003-capa-cockpit-guardrails.md) | Capa cockpit en la decisión de Guardrails, ligada al git del ejecutor y registrada una sola vez | Implementado (`implemented`) | — | — |
+| [TS-CKP-003](features/cockpit/technical-stories/TS-CKP-003-capa-cockpit-guardrails.md) | Capa cockpit en la decisión de Guardrails, ligada al git del ejecutor y registrada una sola vez | Implementado (`implemented`) | #261 | — |
 | [TS-CKP-004](features/cockpit/technical-stories/TS-CKP-004-tokens-semanticos-simbolos.md) | Tokens semánticos y símbolos con fallback en el tema de la TUI | Implementado (`implemented`) | #50, #115 | — |
 | [TS-CKP-005](features/cockpit/technical-stories/TS-CKP-005-biblioteca-componentes-tui.md) | Biblioteca de componentes TUI v0: los 10 widgets del design system, con snapshots y galería | Implementado (`implemented`) | #111, #115 | — |
 | [TS-GRD-001](features/guardrails/technical-stories/TS-GRD-001-configuracion-commiteada.md) | Lectura commiteada de la configuración del equipo y de la rama principal | Implementado (`implemented`) | #27 | — |

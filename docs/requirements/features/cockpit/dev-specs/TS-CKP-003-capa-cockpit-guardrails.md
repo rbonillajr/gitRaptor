@@ -830,4 +830,4 @@ Corre `/security-review --scope devspec docs/requirements/features/cockpit/dev-s
 | G6 | `hook_claims` (S4) se sigue llamando con la decisión heredada, igual que hoy para cualquier hook; los hijos del ejecutor se atribuyen por el oplog, así que no cambia nada visible | Ninguna | — |
 | G7 | La prueba de abort cuenta las evaluaciones en `link.rs`; a nivel de proceso solo se ve el desenlace y la ausencia de entrada | Ninguna | — |
 
-Implementado en: PR #PRNUM.
+Implementado en: PR #261.
