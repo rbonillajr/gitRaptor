@@ -2,9 +2,9 @@
 id: DS-TS-CKP-003
 title: "Dev Spec — TS-CKP-003: capa cockpit en la decisión de Guardrails, ligada al git del ejecutor"
 type: dev-spec
-status: draft
+status: implemented
 created: 2026-10-09
-updated: 2026-10-16
+updated: 2026-10-17
 story: TS-CKP-003
 feature: cockpit
 domain: GRP
@@ -829,3 +829,5 @@ Corre `/security-review --scope devspec docs/requirements/features/cockpit/dev-s
 | G4 | Si `git worktree add -b` crea la rama en un subproceso `git branch`, ese `git` es nieto (D5): se evalúa otra vez con capa `hooks`, permite y no deja entrada. `a_worktree_add_with_a_new_branch_leaves_no_second_entry` lo comprueba se haga o no en un subproceso | Ninguna | — |
 | G6 | `hook_claims` (S4) se sigue llamando con la decisión heredada, igual que hoy para cualquier hook; los hijos del ejecutor se atribuyen por el oplog, así que no cambia nada visible | Ninguna | — |
 | G7 | La prueba de abort cuenta las evaluaciones en `link.rs`; a nivel de proceso solo se ve el desenlace y la ausencia de entrada | Ninguna | — |
+
+Implementado en: PR #PRNUM.

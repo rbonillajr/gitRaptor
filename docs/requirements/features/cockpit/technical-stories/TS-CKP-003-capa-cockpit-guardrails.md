@@ -2,13 +2,13 @@
 id: TS-CKP-003
 title: "Capa cockpit en la decisión de Guardrails, ligada al git del ejecutor y registrada una sola vez"
 type: ts
-status: draft
+status: implemented
 feature: cockpit
 domain: GRP
 priority: high
 complexity: medium
 created: 2026-10-04
-updated: 2026-10-09
+updated: 2026-10-17
 related:
   adrs: [ADR-CKP-002, ADR-GRD-002, ADR-GRD-003, ADR-GRD-006, ADR-GRD-007]
   stories: [US-CKP-014, US-CKP-015, US-CKP-017, US-CKP-018, US-CKP-019, TS-CKP-002, US-GRD-001, US-GRD-005, US-GRD-016, INF-GRD-001]
@@ -64,3 +64,14 @@ tags: [cockpit, guardrails, capa-cockpit, decision, registro, hooks-git, br-07, 
 
 - En un repo temporal con Guardrails instalado, lanzar desde un cliente de prueba un merge permitido y un borrado denegado, y revisar el registro de decisiones por el canal.
 - Identidad del hijo en Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
+
+## Estado de la implementación (2026-10-17)
+
+Implementado en: PR #PRNUM.
+
+Notas (fuera del alcance de esta ficha o sin bloquearla):
+- Ningún brazo gobernado real queda armado: cada historia dueña (US-CKP-014 a 018, US-MCP-009 a 019) arma el suyo sobre este motor. Los brazos de prueba solo existen en depuración (`debug_assertions`, `GITRAPTOR_TEST_EXECUTOR_ARMS=1` y `GITRAPTOR_PROFILE_DIR`).
+- Las neutralizaciones del ejecutor llegan a los hooks del usuario: enmienda de ADR-CKP-002 del 2026-10-17 (sin `diff.external`, `protocol.allow=never` solo en un *partial clone*, `:(literal)` por ruta).
+- Latencia contra NFR-GRD-04 (< 100 ms p95): no medida como p95 en esta entrega. La prueba de interbloqueo responde con el cerrojo tomado dentro de su plazo; el gate de p95 sigue siendo el runner en reposo de INF-GRD-001.
+- Un `core.hooksPath` global previo no se prueba de punta a punta con el daemon (lee la configuración global de la cuenta); lo cubren `guardrails::prior` y `crates/git/tests/user_ops_hooks_env.rs`.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma* (XP-18 y XP-19 en [`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
