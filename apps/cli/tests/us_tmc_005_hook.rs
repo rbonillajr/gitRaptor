@@ -375,24 +375,34 @@ fn scenario_1_rebase_entry_shows_hook_prior() {
     assert!(entry.protection.snapshot_id.is_some());
 }
 
-/// Escenario 3: the prior snapshot fails (its deadline is over at once). The operation goes
-/// ahead with a notice, and it never shows as protected by a prior snapshot.
+/// Escenario 3: the prior snapshot fails (its deadline is over at once). Since US-GRD-017 the
+/// operation does not go ahead without it: the rebase is denied, `feat-y` keeps its tip, the
+/// "goes ahead" notice is not printed and no prior snapshot is recorded as complete.
 #[test]
 fn scenario_3_failed_prior_is_not_shown_as_prior() {
     let m = Machine::new(&[(DEADLINE_ENV, "0")]);
     let repo_id = m.repo_id();
-    let out = m.ok(m.agent("rebase -q main feat-y"));
+    let tip = |m: &Machine| {
+        let out =
+            m.f.git_command(&m.f.repo, &["rev-parse", "feat-y"])
+                .output()
+                .unwrap();
+        String::from_utf8_lossy(&out.stdout).trim().to_owned()
+    };
+    let before = tip(&m);
+    let out = m.agent("rebase -q main feat-y");
+    assert!(!out.status.success(), "the rebase ran: {}", text(&out));
     assert!(
-        text(&out).contains(FAILED_NOTICE),
-        "the hook did not say the prior failed: {}",
+        text(&out).contains("it ran out of time to save it"),
+        "not denied for the prior snapshot: {}",
         text(&out)
     );
-    let entry = m.entry(GitEventKind::Rebase);
-    assert_ne!(
-        entry.protection.level,
-        ProtectionLevel::HookPrior,
-        "{entry:#?}"
+    assert!(
+        !text(&out).contains(FAILED_NOTICE),
+        "a denial must not say the operation goes ahead: {}",
+        text(&out)
     );
+    assert_eq!(tip(&m), before, "feat-y moved");
     let rows = m.hook_prior_rows(&repo_id);
     assert!(
         rows.iter().all(|s| s.state != SnapshotState::Complete),
@@ -426,10 +436,11 @@ fn scenario_4_read_only_queries_take_no_point() {
 
 /// TMC005-UNTRUSTED (#226): the hook runs in a folder whose `.git` names a worktree of the
 /// protected repo without being it (the repo does not register it). The daemon resolves the
-/// worktree itself and refuses it: no point is taken, and the operation still goes ahead (the
-/// hook does not break). Control: the same deletion from the repo itself takes exactly one.
+/// worktree itself and refuses it: no point is taken, and since US-GRD-017 the deletion is
+/// denied (`no-worktree`), so `feat-x` stays. Control: the same deletion from the repo itself
+/// takes exactly one.
 #[test]
-fn untrusted_worktree_hook_takes_no_point_and_the_operation_proceeds() {
+fn untrusted_worktree_hook_takes_no_point_and_the_operation_is_denied() {
     let m = Machine::new(&[]);
     let repo_id = m.repo_id();
     let wt = m.f.root.join("wt-a");
@@ -443,28 +454,24 @@ fn untrusted_worktree_hook_takes_no_point_and_the_operation_proceeds() {
     )
     .unwrap();
 
-    m.ok(m.agent_in(&posing, "branch -D feat-x"));
-    let mut gone =
-        m.f.git_command(&m.f.repo, &["rev-parse", "--verify", "-q", "feat-x"]);
+    let out = m.agent_in(&posing, "branch -D feat-x");
+    assert!(!out.status.success(), "the deletion ran: {}", text(&out));
     assert!(
-        !gone.output().unwrap().status.success(),
-        "feat-x still exists"
+        text(&out).contains("is not a working tree of the observed repository"),
+        "not denied for its worktree: {}",
+        text(&out)
     );
+    assert!(!text(&out).contains(FAILED_NOTICE), "{}", text(&out));
+    let mut kept =
+        m.f.git_command(&m.f.repo, &["rev-parse", "--verify", "-q", "feat-x"]);
+    assert!(kept.output().unwrap().status.success(), "feat-x is gone");
 
     m.ok(m.agent("branch -D feat-z"));
     let rows = m.hook_prior_rows(&repo_id);
+    // The untrusted folder took none: only the deletion from the repo did.
     assert_eq!(
         rows.len(),
         1,
         "only the deletion from the repo takes a point: {rows:#?}"
-    );
-    let store = SnapshotStore::open_existing(&m.dirs(), &repo_id)
-        .unwrap()
-        .unwrap();
-    let meta = store.meta(&rows[0].record.snapshot_id).unwrap();
-    assert!(
-        !meta.branches.values().any(|tip| *tip == m.feat_x_tip),
-        "the point is from before the untrusted deletion: {:?}",
-        meta.branches
     );
 }

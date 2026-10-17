@@ -92,14 +92,17 @@ fn repo_intact_evaluation_never_waits_and_fails_closed() {
     assert_eq!(decision.reasons[0].cause, Some(Cause::Delete));
     assert!(!decision.decision_id.is_empty());
 
-    // A feature branch deletion is allowed.
+    // A feature branch deletion is allowed by the rules, but this daemon has no Time Machine:
+    // without a prior snapshot it does not run (US-GRD-017, NFR-01).
     let decision: Decision = client
         .call(
             methods::GUARD_EVALUATE,
             params(&common_dir, "refs/heads/feat"),
         )
         .unwrap();
-    assert_eq!(decision.applied_effect, Effect::Allow);
+    assert_eq!(decision.applied_effect, Effect::Deny);
+    assert_eq!(decision.reasons[0].rule, Rule::SnapshotFailed);
+    assert_eq!(decision.reasons[0].cause, Some(Cause::SnapshotUnavailable));
 
     // Input it cannot validate is denied, never allowed (SEC-GRD-07).
     let decision: Decision = client
