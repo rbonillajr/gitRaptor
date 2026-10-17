@@ -56,8 +56,7 @@ pub const SESSION_VARS: &[&str] = &[
 const NEUTRALIZING: &[&str] = &[
     "core.fsmonitor=false",
     "core.pager=cat",
-    "diff.external=",
-    "protocol.allow=never",
+    // An empty `credential.helper` resets the list of helpers: Git runs none.
     "credential.helper=",
     "submodule.recurse=false",
     "core.useReplaceRefs=false",
@@ -71,6 +70,22 @@ const NEUTRALIZING: &[&str] = &[
     "trace2.eventTarget=",
     "trace2.perfTarget=",
 ];
+
+/// Placed before a user operation of a partial clone only: Git would otherwise fetch missing
+/// objects from the promisor remote on its own. Not set elsewhere, because `-c` options reach the
+/// user's hooks (`GIT_CONFIG_PARAMETERS`) and a hook's own `git push` or `fetch` must behave as
+/// under raw Git; none of the catalog's operations uses a transport.
+const PARTIAL_CLONE_NO_NETWORK: &str = "protocol.allow=never";
+
+/// Whether the repo of `git_dir` is a partial clone, read with the isolated reader (only the
+/// repo's own configuration). A repo that cannot be read counts as one (fail closed: no network).
+fn partial_clone(git_dir: &Path) -> bool {
+    let options = crate::ReaderOptions {
+        ignore_ambient_config: true,
+        ..crate::ReaderOptions::default()
+    };
+    crate::RepoReader::open(git_dir, &options).map_or(true, |r| r.is_partial_clone())
+}
 
 /// The closed list of user operations.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -161,7 +176,9 @@ impl UserOp {
                     return Err("no paths".into());
                 }
                 let mut w = vec![s("commit"), s("-F"), s("-"), s("--")];
-                w.extend(paths.iter().map(|p| s(p)));
+                // Literal per path: no glob or other magic, without a variable that would also
+                // reach the user's hooks.
+                w.extend(paths.iter().map(|p| s(&format!(":(literal){p}"))));
                 w
             }
             Self::WorktreeAdd {
@@ -482,6 +499,10 @@ impl UserGitCommand {
             argv.push("-c".into());
             argv.push((*opt).into());
         }
+        if partial_clone(&target.git_dir) {
+            argv.push("-c".into());
+            argv.push(PARTIAL_CLONE_NO_NETWORK.into());
+        }
         argv.push("-c".into());
         argv.push(format!("core.editor={editor}").into());
         argv.push("-c".into());
@@ -503,7 +524,6 @@ impl UserGitCommand {
             ("GIT_TERMINAL_PROMPT".into(), "0".into()),
             ("GIT_PAGER".into(), "cat".into()),
             ("GIT_NO_REPLACE_OBJECTS".into(), "1".into()),
-            ("GIT_LITERAL_PATHSPECS".into(), "1".into()),
         ];
         if let Some(home) = home {
             env.push(("HOME".into(), home.into()));
@@ -672,6 +692,7 @@ mod tests {
             for needle in [
                 format!("--git-dir={}", abs("/w/repo/.git").display()),
                 format!("--work-tree={}", abs("/w/repo").display()),
+                // The repo of these tests cannot be read: counted as a partial clone.
                 "protocol.allow=never".into(),
                 "core.useReplaceRefs=false".into(),
                 format!("core.editor={editor}"),
@@ -710,8 +731,13 @@ mod tests {
         .unwrap();
         let argv = cmd.argv();
         assert!(!argv.iter().any(|a| a.contains("rm -rf")));
-        assert!(argv.ends_with(&["-F".into(), "-".into(), "--".into(), ":(glob)**".into()]));
-        assert!(cmd.env_names().contains(&"GIT_LITERAL_PATHSPECS".into()));
+        assert!(argv.ends_with(&[
+            "-F".into(),
+            "-".into(),
+            "--".into(),
+            ":(literal):(glob)**".into()
+        ]));
+        assert!(!cmd.env_names().contains(&"GIT_LITERAL_PATHSPECS".into()));
         assert!(build(UserOp::CommitStaged, None).is_err());
         assert!(build(UserOp::RebaseAbort, Some("x")).is_err());
         // Short ref names never update a ref.
@@ -720,6 +746,34 @@ mod tests {
             old: oid(),
         };
         assert!(build(short, None).is_err());
+    }
+
+    /// Nothing neutralizing is a program Git would try to run with an empty value, and the
+    /// transport is only closed for a partial clone (`PARTIAL_CLONE_NO_NETWORK`).
+    #[test]
+    fn neutralizing_names_no_empty_program_and_no_transport() {
+        const PROGRAMS: &[&str] = &[
+            "diff.external",
+            "core.pager",
+            "core.editor",
+            "sequence.editor",
+            "core.sshcommand",
+            "core.askpass",
+            "core.fsmonitor",
+            "gpg.program",
+            "merge.tool",
+            "diff.tool",
+        ];
+        for opt in NEUTRALIZING {
+            let (key, value) = opt.split_once('=').unwrap();
+            let key = key.to_ascii_lowercase();
+            assert!(
+                !(PROGRAMS.contains(&key.as_str()) && value.is_empty()),
+                "{opt}"
+            );
+            assert_ne!(key, "diff.external", "{opt}");
+            assert_ne!(key, "protocol.allow", "{opt}");
+        }
     }
 
     #[test]
