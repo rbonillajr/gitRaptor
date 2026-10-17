@@ -208,6 +208,20 @@ impl RepoReader {
         }
     }
 
+    /// Whether the repo is a partial clone: `extensions.partialClone` is set or a remote is a
+    /// promisor (`remote.<name>.promisor = true`). Only its own configuration as opened.
+    pub fn is_partial_clone(&self) -> bool {
+        let config = self.repo.config_snapshot();
+        if config.string("extensions.partialClone").is_some() {
+            return true;
+        }
+        self.repo.remote_names().iter().any(|name| {
+            config
+                .boolean(format!("remote.{name}.promisor").as_str())
+                .unwrap_or(false)
+        })
+    }
+
     /// `core.ignoreCase`: the file system of the repo does not distinguish case, so branch
     /// names are folded before comparing them (SEC-GRD-18).
     pub fn ignores_case(&self) -> bool {
