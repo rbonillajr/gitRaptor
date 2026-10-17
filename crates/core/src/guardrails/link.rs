@@ -203,7 +203,16 @@ pub fn serve_child(
     cwd: Option<&Path>,
 ) -> Served {
     if !evaluate::valid(params) {
-        return evaluate::plain(evaluate::system_deny(Rule::InputRejected));
+        let refused = evaluate::system_deny(Rule::InputRejected);
+        // The plan closes with this denial too (D6): its child's `git` fails because of it.
+        if let Some(binding) = &child.binding {
+            let mut late = binding
+                .late
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            accumulate(&mut late, &refused);
+        }
+        return evaluate::plain(refused);
     }
     let common = Path::new(&params.common_dir);
     let facts = evaluate::open(common)
@@ -238,3 +247,7 @@ pub fn serve_child(
 #[cfg(test)]
 #[path = "link_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "link_late_tests.rs"]
+mod late_tests;

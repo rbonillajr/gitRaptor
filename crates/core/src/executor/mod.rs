@@ -1032,9 +1032,10 @@ impl Executor {
                 .clone()
                 .filter(|d| d.applied_effect != gitraptor_api::guard::Effect::Allow)
         });
+        // Closed while the binding is still held: a live plan is never evicted as dropped.
+        self.close(&plan, PlanClose::Ran(close));
         drop(binding);
         drop(req);
-        self.close(&plan, PlanClose::Ran(close));
         if ran.is_err()
             && let Some(late) = late
         {
