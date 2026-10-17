@@ -14,7 +14,7 @@ Rama de trabajo: `fix/flaky-tests-under-load` (6 commits sobre origin/main b9a28
 1. `git fetch && git rebase origin/main` (si #252 ya mergeó no hay conflicto).
 2. Verificar: `scratchpad/suite.sh` hacía `cargo test --workspace --no-fail-fast -- --skip repo_intact --skip a_stop_without_a_controlling_terminal` con 30 bucles de CPU, 3 veces; la corrida 1 salió en verde (exit 0), la 2 y 3 no terminaron (interrumpidas). Repetir 2 corridas más SIN cambiar de rama durante la prueba. Cuidado: no hacer `git checkout` mientras corre.
 3. `cargo fmt --all --check` y `cargo clippy --all-targets -- -D warnings` (clippy ya estaba verde antes del último rebase).
-4. Esperar el informe del revisor Opus (agente lanzado sobre el diff de `crates/api` y `channel.rs`; si se perdió, relanzar `nassa-dev-rust:rust-code-reviewer` con modelo opus) y aplicar hallazgos.
+4. Revisor Opus: APPROVED WITH COMMENTS; su hallazgo Low (test de flood) ya aplicado en el último commit. Pendiente solo decidir si una línea truncada al EOF debe ser `Ok(false)` (observación, opcional).
 5. Push `git push -u origin fix/flaky-tests-under-load`, PR con el cuerpo ya redactado en el scratchpad (`pr2.md`; reemplazar RESULTADO_SUITE) y `gh pr merge <n> --auto --rebase`. Resumen del cuerpo: tabla test/causa/arreglo/antes→después; carrera de producto del cliente; honestidad: channel, timeline_process y autostart NO reproducidos en local.
 6. Reportar al coordinador con `orca orchestration send --type worker_done`.
 
