@@ -71,17 +71,21 @@ use crate::timemachine::confirm::Confirmation;
 use crate::timemachine::manual::{self, ManualError, QuotaHit};
 use crate::timemachine::oplog::Requester;
 use crate::timemachine::oplog::{AbsentStore, SnapshotRefs};
+use crate::timemachine::oplog::{OperationFilter, SnapshotFilter};
 use crate::timemachine::protected::scope::{
     operation_in, require_attributed, scope_for, snapshot_in,
 };
 use crate::timemachine::protected::{
     ProtectedError, RepoHandle, ScopeError, failure_text, registered_worktrees, worktree_key,
 };
-use crate::timemachine::restore::{RestoreDone, RestoreError, restore_to};
+use crate::timemachine::restore::{
+    CandidateContext, RestoreDone, RestoreError, resolve_point_prefix_with, restore_to,
+};
 use crate::timemachine::timeline::{
     AgentFilter, EngineSide, FILES_BUDGET, OplogRead, PathsCache, PathsSource, SessionActors,
     TimelineQuery, build_timeline_from, fill_files,
 };
+use crate::timemachine::undo::TmRepoHandle;
 use crate::timemachine::undo::{RawSide, UndoDone, UndoEnv, UndoError, tm_scope_for, undo_last};
 
 /// Longest audit page.
@@ -2780,6 +2784,9 @@ fn restore_error(e: RestoreError, confirm: &Confirmation<'_>) -> ErrorObject {
             ErrorObject::new(code::OPERATION_FAILED, "the restore was interrupted")
                 .with_data(serde_json::json!({ "operation_id": operation_id }))
         }
+        RestoreError::Ambiguous(data) => {
+            ErrorObject::new(code::INVALID_PARAMS, "ambiguous prefix").with_data(data)
+        }
         RestoreError::Internal(_) => ErrorObject::new(code::INTERNAL, "time machine unavailable"),
     }
 }
@@ -3460,8 +3467,12 @@ impl Connection<'_> {
         let named = self.named_worktree(p.worktree.as_deref())?;
         let r = self.resolve()?;
         require_attributed(channel, r.who.is_agent()).map_err(scope_refused)?;
+        // A prefix is resolved below, inside the scoped repo; a full id is checked here first.
+        let full_id =
+            gitraptor_api::timemachine::check_oplog_id("snapshot_id", &p.snapshot_id).is_ok();
         // An id of another repo is "not found", like an unknown one.
-        if let Some(Ok(repo)) = self.repo_for(channel, named.as_deref())
+        if full_id
+            && let Some(Ok(repo)) = self.repo_for(channel, named.as_deref())
             && snapshot_in(&repo, &p.snapshot_id).is_none()
         {
             return Err(not_found_id());
@@ -3472,6 +3483,11 @@ impl Connection<'_> {
         };
         let repo = tm_scope_for(tm.backend.as_ref(), false, named.as_deref(), None)
             .map_err(scope_refused)?;
+        let snapshot_id = if full_id {
+            p.snapshot_id.clone()
+        } else {
+            self.point_for_prefix(&repo, &p.snapshot_id)?
+        };
         let env = UndoEnv {
             marks: &self.ctx.marks,
             procs: self.ctx.procs.as_ref(),
@@ -3490,7 +3506,7 @@ impl Connection<'_> {
         );
         let done = restore_to(
             &repo,
-            &p.snapshot_id,
+            &snapshot_id,
             &r.who,
             oplog_channel(channel),
             &confirm,
@@ -3499,6 +3515,45 @@ impl Connection<'_> {
         .map_err(|e| restore_error(e, &confirm))?;
         serde_json::to_value(restore_result(done, self.requester_view(&r, channel)))
             .map_err(|_| ErrorObject::new(code::INTERNAL, "serialization"))
+    }
+
+    /// The one point of the scoped repo an id prefix names. Only this repo's points are read, so
+    /// neither a match nor a candidate can be an id of another repo.
+    fn point_for_prefix(&self, repo: &TmRepoHandle, text: &str) -> Result<String, ErrorObject> {
+        let (points, operations) = {
+            let oplog = repo.repo.oplog.lock().unwrap_or_else(|e| e.into_inner());
+            let points = oplog
+                .snapshots(&SnapshotFilter::default())
+                .map_err(|_| ErrorObject::new(code::INTERNAL, "time machine unavailable"))?;
+            (
+                points,
+                oplog
+                    .operations(&OperationFilter::default())
+                    .unwrap_or_default(),
+            )
+        };
+        let events = self
+            .ctx
+            .control
+            .event_history(EventsHistoryParams {
+                repo_id: repo.repo.repo_id.clone(),
+                worktree: None,
+                after_seq: None,
+                limit: Some(MAX_HISTORY_PAGE),
+            })
+            .unwrap_or_default();
+        let ctx = CandidateContext {
+            operations: &operations,
+            events: &events,
+            utc_offset_s: gitraptor_git::local_utc_offset_s(),
+        };
+        resolve_point_prefix_with(&points, text, &ctx).map_err(|e| match e {
+            RestoreError::Ambiguous(data) => {
+                ErrorObject::new(code::INVALID_PARAMS, "ambiguous prefix").with_data(data)
+            }
+            RestoreError::NotFound => not_found_id(),
+            _ => ErrorObject::new(code::INTERNAL, "time machine unavailable"),
+        })
     }
 
     /// `timemachine.timeline` (US-TMC-006): the whole repo's operations and Git events, oldest
@@ -3639,6 +3694,15 @@ impl Connection<'_> {
                 PathsCache::shared(),
                 FILES_BUDGET,
             );
+        }
+        if p.short_ids {
+            let all = {
+                let oplog = repo.repo.oplog.lock().unwrap_or_else(|e| e.into_inner());
+                oplog
+                    .snapshots(&SnapshotFilter::default())
+                    .unwrap_or_default()
+            };
+            crate::timemachine::timeline::set_short_ids(&mut result, &all);
         }
         // The manual points exist only for a connection that declared it understands them.
         if !self.has(methods::CAP_TM_TIMELINE_MANUAL.name) {

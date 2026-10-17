@@ -237,6 +237,50 @@ fn protection(point: Option<&SnapshotView>) -> Protection {
     }
 }
 
+/// The shortest id length a client may print: the ids of the repo are UUIDs and these many
+/// characters keep the first group readable.
+const MIN_SHORT_ID: usize = 8;
+
+/// Sets `short_id_len` on every entry that has a point: how many leading characters tell its id
+/// apart from every point of the repo (at least 8, and never ending in the `-` of the UUID).
+pub fn set_short_ids(result: &mut TimelineResult, all: &[SnapshotView]) {
+    let mut ids: Vec<&str> = all.iter().map(|s| s.record.snapshot_id.as_str()).collect();
+    ids.sort_unstable();
+    for entry in &mut result.entries {
+        if let Some(id) = &entry.protection.snapshot_id {
+            entry.short_id_len = Some(short_id_len(&ids, id));
+        }
+    }
+}
+
+/// `ids` sorted: the longest prefix `id` shares with another id sits next to it, so only its
+/// two neighbours are compared.
+fn short_id_len(ids: &[&str], id: &str) -> u8 {
+    let at = ids.partition_point(|other| *other < id);
+    let common = |other: &str| {
+        id.bytes()
+            .zip(other.bytes())
+            .take_while(|(a, b)| a == b)
+            .count()
+    };
+    let before = at.checked_sub(1).and_then(|i| ids.get(i));
+    // `at` may point at `id` itself: the neighbour is the one after it.
+    let after = ids
+        .get(at..)
+        .and_then(|rest| rest.iter().find(|other| **other != id));
+    let longest = [before, after]
+        .into_iter()
+        .flatten()
+        .map(|other| common(other))
+        .max()
+        .unwrap_or(0);
+    let mut len = (longest + 1).max(MIN_SHORT_ID).min(id.len());
+    if len.checked_sub(1).and_then(|i| id.as_bytes().get(i)) == Some(&b'-') && len < id.len() {
+        len += 1;
+    }
+    u8::try_from(len).unwrap_or(u8::MAX)
+}
+
 /// A requester as it was recorded: by its name. The kind is not kept with it (G4).
 pub(crate) fn recorded_actor(requester: &Requester) -> Actor {
     match requester {
@@ -356,6 +400,7 @@ pub fn build_timeline_from(
                 }
                 let point = op.prior_snapshot.as_deref().and_then(|id| points.get(id));
                 let entry = TimelineEntry {
+                    short_id_len: None,
                     id: format!("operation:{}", r.operation_id),
                     origin: EntryOrigin::Operation {
                         operation_id: r.operation_id.clone(),
@@ -418,6 +463,7 @@ pub fn build_timeline_from(
                 continue;
             }
             let entry = TimelineEntry {
+                short_id_len: None,
                 id: format!("manual:{}", r.snapshot_id),
                 origin: EntryOrigin::ManualSnapshot {
                     snapshot_id: r.snapshot_id.clone(),
@@ -474,6 +520,7 @@ pub fn build_timeline_from(
                     .get(root)
                     .and_then(|key| points.before_event(key, ev.seq, floor));
                 let entry = TimelineEntry {
+                    short_id_len: None,
                     id: format!("event:{}", ev.seq),
                     origin: EntryOrigin::GitEvent {
                         seq: ev.seq,

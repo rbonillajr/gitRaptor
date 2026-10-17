@@ -28,12 +28,16 @@ use gitraptor_api::timemachine::{HookPriorFailure, HookPriorSnapshot};
 use gitraptor_core::client::ClientError;
 use gitraptor_core::guardrails::hook::{self, Degraded, HookArgs, HookEnv};
 
-use crate::i18n::t;
+use crate::i18n::{Tr, t};
 use crate::{command_path, engine, error_text, refusal_text, repo_error, shown};
 
+#[cfg(test)]
+mod deny_text_tests;
 mod snapshot_required;
 #[cfg(test)]
 mod snapshot_required_tests;
+#[cfg(test)]
+mod status_text_tests;
 
 /// Longest parameter shown to the agent, in characters (M-05).
 const MAX_PARAM_CHARS: usize = 120;
@@ -110,7 +114,11 @@ fn reason_text(reason: &Reason) -> String {
         (Rule::RepoMismatch, _) => t("guard.deny.repo-mismatch", &[]),
         (Rule::InputRejected, _) => t("guard.deny.input", &[]),
         (Rule::InternalError, _) => t("guard.deny.internal", &[]),
-        (Rule::SnapshotFailed, _) => snapshot_required::reason_text(reason),
+        (Rule::SnapshotFailed, _) => snapshot_required::reason_text(
+            reason,
+            snapshot_required::DeniedOp::Other,
+            Tr::current(),
+        ),
         (Rule::AuthorshipTrailerRequired, cause) => t(
             if cause == Some(Cause::MessageUnreadable) {
                 "guard.reason.authorship-message-unreadable"
@@ -437,7 +445,8 @@ fn ask(question: &str) -> Answer {
     }
 }
 
-fn status_lines(status: &GuardStatus) -> Vec<String> {
+fn status_lines(status: &GuardStatus, tr: Tr) -> Vec<String> {
+    let _ = tr;
     let mut out = vec![match status.state {
         ProtectionState::Unprotected => t("guard.state.unprotected", &[]),
         ProtectionState::HooksOnly => t("guard.state.hooks-only", &[]),
@@ -697,7 +706,7 @@ pub fn install(path: Option<PathBuf>, yes: bool) -> ExitCode {
                         &[("path", &shown(&path))]
                     )
                 );
-                for line in status_lines(&status) {
+                for line in status_lines(&status, Tr::current()) {
                     println!("{line}");
                 }
                 ExitCode::SUCCESS
@@ -724,7 +733,7 @@ pub fn status(path: Option<PathBuf>, json: bool) -> ExitCode {
             ExitCode::SUCCESS
         }
         Ok(status) => {
-            for line in status_lines(&status) {
+            for line in status_lines(&status, Tr::current()) {
                 println!("{line}");
             }
             // Where to see what was blocked (US-GRD-005, D1): only from an engine that has it.
@@ -923,7 +932,7 @@ pub fn uninstall(path: Option<PathBuf>, yes: bool) -> ExitCode {
         match client.call::<_, GuardUninstallResult>(methods::GUARD_UNINSTALL, &apply) {
             Ok(result) => {
                 println!("{}", t("guard.uninstall.done", &[("path", &shown(&path))]));
-                for line in status_lines(&result.status) {
+                for line in status_lines(&result.status, Tr::current()) {
                     println!("{line}");
                 }
                 return ExitCode::SUCCESS;
@@ -1473,7 +1482,7 @@ mod tests {
             diagnostics: Vec::new(),
             minimum_set: None,
         };
-        let lines = status_lines(&status);
+        let lines = status_lines(&status, Tr::current());
         let last = lines.last().unwrap();
         assert!(last.contains(".gitraptor/config"), "{last}");
         assert!(last.contains("settings.json"), "{last}");
@@ -1484,7 +1493,7 @@ mod tests {
             ..status
         };
         assert!(
-            !status_lines(&clean)
+            !status_lines(&clean, Tr::current())
                 .iter()
                 .any(|l| l.contains("settings.json"))
         );
@@ -1514,10 +1523,10 @@ mod tests {
 
     #[test]
     fn status_of_an_unprotected_repo_does_not_claim_anything_is_denied() {
-        let lines = status_lines(&bare_status(
-            ProtectionState::Unprotected,
-            Permission::Granted,
-        ))
+        let lines = status_lines(
+            &bare_status(ProtectionState::Unprotected, Permission::Granted),
+            Tr::current(),
+        )
         .join("\n");
         assert!(
             lines.contains(&t("guard.status.minimum-on-install", &[])),
@@ -1540,10 +1549,10 @@ mod tests {
             );
         }
         // Not asked / denied still say so.
-        let asked = status_lines(&bare_status(
-            ProtectionState::Unprotected,
-            Permission::NotAsked,
-        ));
+        let asked = status_lines(
+            &bare_status(ProtectionState::Unprotected, Permission::NotAsked),
+            Tr::current(),
+        );
         assert!(asked.contains(&t("guard.permission.not-asked", &[])));
     }
 
@@ -1571,10 +1580,10 @@ mod tests {
 
     #[test]
     fn status_of_a_protected_repo_keeps_the_minimum_and_the_permission() {
-        let lines = status_lines(&bare_status(
-            ProtectionState::HooksOnly,
-            Permission::Granted,
-        ))
+        let lines = status_lines(
+            &bare_status(ProtectionState::HooksOnly, Permission::Granted),
+            Tr::current(),
+        )
         .join("\n");
         assert!(
             lines.contains(&t("guard.status.minimum-active", &[])),

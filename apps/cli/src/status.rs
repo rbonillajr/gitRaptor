@@ -17,7 +17,7 @@ use gitraptor_api::messages::{
 use gitraptor_api::timemachine::KeptTempsView;
 use serde::Serialize;
 
-use crate::i18n::t;
+use crate::i18n::{Tr, t};
 use crate::sessions::{SessionJson, session_json};
 
 /// The agent sessions `raptor status` shows (US-GRP-007): the present ones
@@ -86,7 +86,8 @@ pub fn repo_at(snapshot: &Snapshot, path: &Path) -> Option<String> {
 
 /// The text output, one line per repo, worktree, session and listed
 /// change. A worktree without sessions shows none.
-pub fn text(snapshot: &Snapshot, sessions: &SessionsInfo) -> String {
+pub fn text(snapshot: &Snapshot, sessions: &SessionsInfo, verbose: bool, tr: Tr) -> String {
+    let _ = (verbose, tr);
     let mut out = String::new();
     if snapshot.repos.is_empty() {
         let _ = writeln!(out, "{}", t("status.none", &[]));
@@ -445,6 +446,10 @@ fn worktree_json(w: &WorktreeView) -> WorktreeJson {
 }
 
 #[cfg(test)]
+#[path = "status_summary_tests.rs"]
+mod summary_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use gitraptor_api::messages::{ChangeKindView, DaemonView, EngineStateView, EngineView};
@@ -567,7 +572,7 @@ mod tests {
             "ab-01".into(),
             status(HooksLayer::lost(LossCause::FolderMissing)),
         );
-        let out = text(&snapshot(), &info);
+        let out = text(&snapshot(), &info, false, Tr::current());
         assert!(out.contains("no longer active"), "{out}");
         assert!(out.contains("raptor guard install"), "{out}");
         let mut info = SessionsInfo::default();
@@ -575,12 +580,12 @@ mod tests {
             "ab-01".into(),
             status(HooksLayer::of(gitraptor_api::guard::HooksStatus::Active)),
         );
-        assert!(!text(&snapshot(), &info).contains("no longer active"));
+        assert!(!text(&snapshot(), &info, false, Tr::current()).contains("no longer active"));
     }
 
     #[test]
     fn text_lists_every_worktree_sanitized() {
-        let out = text(&snapshot(), &SessionsInfo::default());
+        let out = text(&snapshot(), &SessionsInfo::default(), false, Tr::current());
         assert!(out.contains("/w/demo"), "{out}");
         assert!(
             out.contains("feat-login") && out.contains("login.txt"),
@@ -591,7 +596,7 @@ mod tests {
 
     #[test]
     fn text_shows_the_base_branch_and_each_ahead_behind() {
-        let out = text(&snapshot(), &SessionsInfo::default());
+        let out = text(&snapshot(), &SessionsInfo::default(), false, Tr::current());
         assert!(out.contains("main (unconfirmed)"), "{out}");
         assert!(out.contains("0 ahead and 0 behind main"), "{out}");
         assert!(
@@ -603,7 +608,7 @@ mod tests {
         if let WorktreeStatus::Ready { divergence, .. } = &mut s.repos[0].worktrees[1].status {
             *divergence = DivergenceView::BaseMissing;
         }
-        let out = text(&s, &SessionsInfo::default());
+        let out = text(&s, &SessionsInfo::default(), false, Tr::current());
         assert!(out.contains("base branch: main\n"), "{out}");
         assert!(
             out.contains("base branch \"main\" does not exist in the repo"),
@@ -622,11 +627,11 @@ mod tests {
 
     #[test]
     fn kept_temporary_files_get_a_line_with_the_way_back() {
-        let out = text(&snapshot(), &SessionsInfo::default());
+        let out = text(&snapshot(), &SessionsInfo::default(), false, Tr::current());
         assert!(!out.contains("temporary files"), "{out}");
         let mut s = snapshot();
         s.repos[0].kept_temps = Some(kept(2, 0, true));
-        let out = text(&s, &SessionsInfo::default());
+        let out = text(&s, &SessionsInfo::default(), false, Tr::current());
         assert!(
             out.contains(
                 "2 Time Machine temporary files kept after operation op-1 was interrupted: \
@@ -637,7 +642,7 @@ mod tests {
         assert!(!out.contains("not GitRaptor's copies"), "{out}");
         // Someone else's files, and a later operation: no undo offered, a warning instead.
         s.repos[0].kept_temps = Some(kept(3, 1, false));
-        let out = text(&s, &SessionsInfo::default());
+        let out = text(&s, &SessionsInfo::default(), false, Tr::current());
         assert!(out.contains("later operations ran"), "{out}");
         assert!(!out.contains("raptor undo"), "{out}");
         assert!(

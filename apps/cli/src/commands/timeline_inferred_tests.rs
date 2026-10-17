@@ -1,11 +1,27 @@
 //! Contract tests of the inferred hint in `raptor timeline`: the same text as
 //! `raptor events`, in English and Spanish.
 
-use gitraptor_api::messages::{InferredAgent, TrailerCheck};
-use gitraptor_api::timemachine::{Attribution, Protection};
+use gitraptor_api::messages::{GitEventKind, InferredAgent, TrailerCheck};
+use gitraptor_api::timemachine::{
+    Attribution, ChangedFiles, EntryOrigin, Protection, ProtectionLevel, TimelineEntry,
+    TimelineResult,
+};
 use gitraptor_api::untrusted::Untrusted;
+use gitraptor_api::{Actor, AgentKind};
 
-use super::*;
+use super::compact::{CompactOpts, LocalDay, render_compact};
+use crate::events;
+use crate::i18n::{Tr, t};
+
+/// The detailed text (`--verbose`), where the inferred hint is spelled out.
+fn render(result: &TimelineResult, _filtered: bool) -> String {
+    let opts = CompactOpts {
+        verbose: true,
+        today: LocalDay(0),
+        window_applied: false,
+    };
+    render_compact(result, &opts, Tr::current())
+}
 
 fn untrusted(text: &str) -> Untrusted {
     serde_json::from_value(serde_json::json!({ "untrusted": text })).unwrap()
@@ -21,6 +37,7 @@ fn hint(trailer: Option<TrailerCheck>) -> InferredAgent {
 
 fn entry(seq: i64, actor: Actor, inferred: Option<InferredAgent>) -> TimelineEntry {
     TimelineEntry {
+        short_id_len: None,
         id: format!("event:{seq}"),
         origin: EntryOrigin::GitEvent {
             seq,
@@ -102,13 +119,13 @@ fn an_inferred_entry_reads_like_raptor_events_in_en_and_es() {
             &result(vec![entry(1, Actor::Unattributed, Some(hint.clone()))], true),
             false,
         );
-        assert!(shown.contains(&format!("({want})")), "{shown}");
+        assert!(shown.contains(&want), "{shown}");
         // A stored hint shows even when the engine cannot detect agents now.
         let shown = render(
             &result(vec![entry(1, Actor::Unattributed, Some(hint))], false),
             false,
         );
-        assert!(shown.contains(&format!("({want})")), "{shown}");
+        assert!(shown.contains(&want), "{shown}");
         assert!(
             !shown.contains(&t("timeline.actor-unavailable", &[])),
             "{shown}"
@@ -129,11 +146,12 @@ fn an_inferred_entry_reads_like_raptor_events_in_en_and_es() {
     assert!(!shown.contains("20:2000"), "{shown}");
 }
 
-/// A contradicted hint, or one of a `human-author` repo, is never stored:
-/// that entry reads "no agent", next to one that has its hint.
+/// A contradicted hint, or one of a `human-author` repo, is never stored: that entry reads
+/// "you or other", next to one that has its hint.
 #[test]
-fn an_entry_without_hint_reads_no_agent() {
-    let no_agent = format!("({})", t("events.no_agent", &[]));
+fn an_entry_without_hint_reads_you_or_other() {
+    let you_or_other = t("timeline.actor.you-or-other", &[]);
+    let inferred = expected(Some("events.inferred_confirmed"));
     let shown = render(
         &result(
             vec![
@@ -144,18 +162,15 @@ fn an_entry_without_hint_reads_no_agent() {
         ),
         false,
     );
-    assert_eq!(
-        shown.matches(&no_agent).count(),
-        1,
-        "only the entry without hint reads no agent: {shown}"
+    let rows: Vec<&str> = shown.lines().filter(|l| l.starts_with("  ")).collect();
+    assert_eq!(rows.len(), 2, "{shown}");
+    assert!(rows[0].contains(&you_or_other) && !rows[0].contains(&inferred), "{shown}");
+    assert!(rows[1].contains(&inferred) && !rows[1].contains(&you_or_other), "{shown}");
+    // The plain view never claims more than "you or other" for either.
+    let compact = render_compact(
+        &result(vec![entry(2, Actor::Unattributed, Some(hint(None)))], true),
+        &CompactOpts { verbose: false, today: LocalDay(0), window_applied: false },
+        Tr::current(),
     );
-    assert_eq!(
-        shown
-            .matches(&format!("({})", expected(Some("events.inferred_confirmed"))))
-            .count(),
-        1,
-        "{shown}"
-    );
-    let first = shown.lines().next().unwrap_or_default();
-    assert!(first.contains(&no_agent), "{shown}");
+    assert!(compact.contains(&you_or_other), "{compact}");
 }

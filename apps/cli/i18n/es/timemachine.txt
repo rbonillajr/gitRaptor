@@ -39,7 +39,6 @@ undo.reason.unsupported = el undo todavía no está soportado aquí; nada cambi�
 undo.reason.git-unavailable = el motor no encontró un Git utilizable; nada cambió
 
 # raptor timeline (US-TMC-006).
-timeline.line = {time}  {worktree}  {what}  ({actor})  [{protection}]
 timeline.empty = aún no hay actividad
 timeline.no-match = ninguna entrada coincide con los filtros
 timeline.incomplete = timeline incompleto: no se pudo leer {sources}
@@ -66,16 +65,41 @@ timeline.acted.event = evento {seq}
 timeline.acted.snapshot = snapshot {id}
 timeline.files = archivos ({total}): {paths}
 timeline.files-more = +{count} más
-timeline.files-none = archivos: ninguno
-timeline.files-unavailable = archivos: no disponible
 timeline.files-first-parent = respecto al primer padre
 timeline.not-in-worktree = no estás dentro de un worktree de Git
 timeline.not-observed = {worktree} no está en un repo que GitRaptor observe; añádelo con raptor repo add
 timeline.invalid-params = los filtros no son válidos (--since es una duración como 2h, hasta 30 días; --limit va de 1 a 200)
 timeline.restart-engine = el motor en marcha es anterior a este raptor y no puede mostrar el timeline: reinícialo con `raptor daemon stop`
 
+# raptor timeline, compact view (US-TMC-023).
+timeline.header.window = Últimas 24 h de {repo}: {entries}
+timeline.header.window-summarized = Últimas 24 h de {repo}: {entries}, {summarized} de ellas resumidas (--verbose las muestra todas)
+timeline.header.all = Timeline de {repo}: {entries}
+timeline.header.all-summarized = Timeline de {repo}: {entries}, {summarized} de ellas resumidas (--verbose las muestra todas)
+timeline.entries.one = 1 entrada
+timeline.entries.many = {count} entradas
+timeline.day.today = {date} (hoy)
+timeline.day.yesterday = {date} (ayer)
+timeline.level.short.prior = previo
+timeline.level.short.observation = observado
+timeline.level.short.manual = manual
+timeline.level.short.none = ninguno
+timeline.action.restore = restore {id}
+timeline.action.none = -
+timeline.summary.branch = 1 rama creada y borrada: {first}
+timeline.summary.branches = {count} ramas creadas y borradas: {first}, +{more}
+timeline.summary.resets = {what} (x{count})
+timeline.actor.several = varios
+timeline.actor.you-or-other = tú u otro
+timeline.legend.you-or-other = tú u otro: no se detectó ningún agente; puede ser tuyo o de otra herramienta
+timeline.hint.restore = restaura un punto con raptor restore <id>; basta un prefijo único de 6 caracteres o más
+timeline.window-empty = no hay actividad en las últimas 24 h; amplía la ventana con --since, por ejemplo --since 7d
+restore.ambiguous = {prefix} coincide con {total} puntos de restauración: {candidates}; escribe más caracteres; nada cambió
+restore.candidate = {id} ({time}, {worktree}, {what})
+restore.candidates-more = +{more} más
+restore.too-short = escribe al menos 6 caracteres del id que muestra raptor timeline
+
 # raptor restore (US-TMC-009).
-timeline.point = punto de restauración: raptor restore {id}
 restore.done = restaurado {worktree} al punto {id}
 restore.saved = el estado justo antes de esta restauración queda guardado como {snapshot}; raptor undo lo recupera
 restore.recreated = se recreó el worktree {worktree} (sin checkout)
