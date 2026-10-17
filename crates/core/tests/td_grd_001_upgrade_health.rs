@@ -78,6 +78,7 @@ fn upgrading(old_files: &[&str], new_files: &[&str]) -> Upgrading {
                 .map(|p| hash(p, &content(p, "3")))
                 .collect(),
         }),
+        orphan: false,
     };
     Upgrading {
         _tmp: tmp,

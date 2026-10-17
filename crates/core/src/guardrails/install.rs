@@ -6,8 +6,9 @@ use std::path::{Path, PathBuf};
 
 use gitraptor_api::Untrusted;
 use gitraptor_api::guard::{
-    GuardPlan, GuardStatus, Hook, HooksPathLevel, HooksStatus, InstallBlocker, LossCause,
-    MinimumSet, MinimumSetStatus, Permission, PriorHooks, ProtectionState, RefBackend, RepairPlan,
+    Diagnostic, GuardPlan, GuardStatus, GuardStep, Hook, HooksPathLevel, HooksStatus,
+    InstallBlocker, LossCause, MinimumSet, MinimumSetStatus, Permission, PriorHooks,
+    ProtectionState, RefBackend, RepairPlan,
 };
 use gitraptor_git::cli::GitCli;
 use gitraptor_git::guard_write::{FOLDER, GuardWriteError, GuardWriter, NewFile};
@@ -35,7 +36,7 @@ pub struct GuardCtx<'a> {
 }
 
 impl GuardCtx<'_> {
-    fn stub(&self) -> Option<PathBuf> {
+    pub(super) fn stub(&self) -> Option<PathBuf> {
         Some(self.raptor.parent()?.join(STUB_FILE))
     }
 }
@@ -45,8 +46,30 @@ impl GuardCtx<'_> {
 pub enum InstallError {
     /// A check failed before writing anything; recorded as the last refusal.
     Rejected(Vec<InstallBlocker>),
-    /// A step failed; everything written was reverted.
-    Failed(String),
+    /// A step failed: a fresh install was reverted; an upgrade or a repair left the protection as
+    /// it was (ADR-GRD-001 § 4 and § 8).
+    Failed(Failure),
+}
+
+/// The step that failed, from a closed list, and what went wrong there. Only the step reaches
+/// the log and the client: the detail carries paths and is for debugging.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Failure {
+    pub step: GuardStep,
+    pub detail: String,
+}
+
+impl std::fmt::Display for Failure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.step.as_str(), self.detail)
+    }
+}
+
+fn fail(step: GuardStep, detail: impl std::fmt::Display) -> InstallError {
+    InstallError::Failed(Failure {
+        step,
+        detail: detail.to_string(),
+    })
 }
 
 fn permission(keys: &GuardKeys) -> Permission {
@@ -77,6 +100,14 @@ pub fn status(repo_id: &str, common: &Path, store: &RepoStore) -> GuardStatus {
     let journal = journal(&keys).filter(|j| j.stage == Stage::Confirmed);
     let health = health::check(common, journal.as_ref());
     let journal = journal.filter(|_| health.hooks.status == HooksStatus::Active);
+    let mut diagnostics = health.diagnostics;
+    // No protection, and a folder is left: an uninstall whose cleanup stopped after the key, or a
+    // folder this profile does not know. `raptor guard uninstall` removes what Guardrails wrote.
+    if health.hooks.status == HooksStatus::NotInstalled
+        && std::fs::symlink_metadata(common.join(FOLDER)).is_ok_and(|m| m.is_dir())
+    {
+        diagnostics.push(Diagnostic::LeftoverFolder);
+    }
     let storage = reader
         .as_ref()
         .map_or(RefStorage::Files, |r| r.ref_storage());
@@ -106,7 +137,7 @@ pub fn status(repo_id: &str, common: &Path, store: &RepoStore) -> GuardStatus {
         // The daemon loop adds the pending action it holds (US-GRD-003).
         pending: None,
         hooks: Some(health.hooks),
-        diagnostics: health.diagnostics,
+        diagnostics,
         minimum_set: Some(MinimumSet {
             status: MinimumSetStatus::Active,
         }),
@@ -461,8 +492,7 @@ impl Folder {
         let stub_path = ctx
             .stub()
             .ok_or_else(|| InstallError::Rejected(vec![InstallBlocker::DispatcherMissing]))?;
-        let stub =
-            std::fs::read(&stub_path).map_err(|e| InstallError::Failed(format!("stub: {e}")))?;
+        let stub = std::fs::read(&stub_path).map_err(|e| fail(GuardStep::Stub, e))?;
         let hooks_dir = common.join(FOLDER).join("hooks");
         let mut paths: Vec<String> = dispatcher_names(chained)
             .iter()
@@ -547,7 +577,7 @@ pub fn install(
         return Err(InstallError::Rejected(plan.blockers));
     }
     // The plan found them; read once more from the same place for the journal.
-    let trees = worktrees(ctx, common).map_err(InstallError::Failed)?;
+    let trees = worktrees(ctx, common).map_err(|e| fail(GuardStep::Worktrees, e))?;
     let writer = GuardWriter::new(ctx.git, ctx.invoker);
     let found = prior_hooks::detect(&writer, common, &trees)
         .map_err(|_| InstallError::Rejected(vec![InstallBlocker::ChainImpossible]))?;
@@ -577,20 +607,21 @@ pub fn install(
         confirms_base: confirms_base.clone(),
         protected_bases: protected_bases.clone(),
         upgrade: None,
+        orphan: false,
     };
     let save = |store: &mut RepoStore, j: &Journal| {
         store
             .set_guard_keys(Some(Some(&j.to_json())), None, None, None)
-            .map_err(|e| InstallError::Failed(format!("journal: {e:?}")))
+            .map_err(|e| fail(GuardStep::Journal, format!("{e:?}")))
     };
     // Before any write: the journal says what may exist.
     save(store, &journal)?;
     let files = folder_files.files();
     let paths = &folder_files.paths;
-    let revert = |store: &mut RepoStore, why: String| -> InstallError {
+    let revert = |store: &mut RepoStore, step: GuardStep, why: String| -> InstallError {
         let listed: Vec<&str> = paths.iter().map(String::as_str).collect();
         rollback(&writer, common, &hooks_dir, &listed, store);
-        InstallError::Failed(why)
+        fail(step, why)
     };
     let folder = match writer.write_folder(common, &files) {
         Ok(id) => id,
@@ -598,38 +629,52 @@ pub fn install(
             let _ = store.set_guard_keys(Some(None), None, None, None);
             return Err(InstallError::Rejected(vec![InstallBlocker::OrphanFolder]));
         }
-        Err(e) => return Err(revert(store, format!("folder: {e}"))),
+        Err(e) => return Err(revert(store, GuardStep::Folder, e.to_string())),
     };
     // Windows (M-07): no ACE of write for `Everyone`, `Users` or `Authenticated Users` over the
     // folder the dispatchers live in, checked on what was written, not on what was meant.
     #[cfg(windows)]
     if let Err(e) = gitraptor_winsys::acl::verify_private_dir(&common.join(FOLDER)) {
-        return Err(revert(store, format!("folder acl: {e:?}")));
+        return Err(revert(store, GuardStep::FolderAcl, format!("{e:?}")));
     }
     // What was verified is the folder this install wrote, not another one put in its place.
     #[cfg(windows)]
     if !matches!(writer.folder_id(common), Ok(Some(id)) if id == folder) {
-        return Err(revert(store, "folder changed after it was written".into()));
+        return Err(revert(
+            store,
+            GuardStep::FolderIdentity,
+            "folder changed after it was written".into(),
+        ));
     }
     journal.folder = Some(folder.into());
     save(store, &journal)?;
     // The commit point.
     if let Err(e) = writer.set_hooks_path(common, &hooks_dir) {
-        return Err(revert(store, format!("key: {e}")));
+        return Err(revert(store, GuardStep::Key, e.to_string()));
     }
     match writer.config_id(common) {
         Ok(Some(id)) => journal.config = Some(id.into()),
-        Ok(None) | Err(_) => return Err(revert(store, "config is not a regular file".into())),
+        Ok(None) | Err(_) => {
+            return Err(revert(
+                store,
+                GuardStep::Config,
+                "config is not a regular file".into(),
+            ));
+        }
     }
     // Past the commit point, any failure is undone here, not left to the next start.
     if save(store, &journal).is_err() {
-        return Err(revert(store, "journal after the key".into()));
+        return Err(revert(
+            store,
+            GuardStep::Journal,
+            "journal after the key".into(),
+        ));
     }
     if let Err(why) = verify(ctx, common, &hooks_dir) {
-        return Err(revert(store, why));
+        return Err(revert(store, GuardStep::Verify, why));
     }
     if let Err(why) = confirm(ctx, repo_id, store, registry, journal) {
-        return Err(revert(store, why));
+        return Err(revert(store, GuardStep::Confirm, why));
     }
     Ok(status(repo_id, common, store))
 }
@@ -685,7 +730,7 @@ fn repair(
     let writer = GuardWriter::new(ctx.git, ctx.invoker);
     let key_changed = cause == LossCause::HookspathChanged;
     if key_changed {
-        let trees = worktrees(ctx, common).map_err(InstallError::Failed)?;
+        let trees = worktrees(ctx, common).map_err(|e| fail(GuardStep::Worktrees, e))?;
         let found = prior_hooks::detect(&writer, common, &trees)
             .map_err(|_| InstallError::Rejected(vec![InstallBlocker::ChainImpossible]))?;
         journal.prior = Prior {
@@ -700,7 +745,7 @@ fn repair(
     let save = |store: &mut RepoStore, j: &Journal| {
         store
             .set_guard_keys(Some(Some(&j.to_json())), None, None, None)
-            .map_err(|e| InstallError::Failed(format!("journal: {e:?}")))
+            .map_err(|e| fail(GuardStep::Journal, format!("{e:?}")))
     };
     // A file of the new folder that already exists and is not ours is never replaced.
     if repair_conflicts(common, &journal, &folder_files.paths) {
@@ -736,17 +781,17 @@ fn repair(
         // What a killed write left next to a listed file, before the files are written again.
         writer
             .remove_file_temporaries(common, folder.into(), &journal.listed())
-            .map_err(|e| InstallError::Failed(format!("repair temporaries: {e}")))?;
+            .map_err(|e| fail(GuardStep::Temporaries, e))?;
         writer
             .replace_files(common, folder.into(), &files)
-            .map_err(|e| InstallError::Failed(format!("repair: {e}")))?;
+            .map_err(|e| fail(GuardStep::Dispatchers, e))?;
     } else {
         match writer.write_folder(common, &files) {
             Ok(id) => journal.folder = Some(id.into()),
             Err(GuardWriteError::Exists) => {
                 return Err(InstallError::Rejected(vec![InstallBlocker::OrphanFolder]));
             }
-            Err(e) => return Err(InstallError::Failed(format!("repair folder: {e}"))),
+            Err(e) => return Err(fail(GuardStep::Folder, e)),
         }
         save(store, &journal)?;
     }
@@ -767,7 +812,7 @@ fn repair(
     {
         writer
             .remove_folder(common, &removable, folder.into())
-            .map_err(|e| InstallError::Failed(format!("repair leftovers: {e}")))?;
+            .map_err(|e| fail(GuardStep::Leftovers, e))?;
         journal
             .files
             .retain(|f| !removable.contains(&f.path.as_str()));
@@ -778,19 +823,125 @@ fn repair(
         trip("repair-key", When::Before);
         writer
             .set_hooks_path(common, &hooks_dir)
-            .map_err(|e| InstallError::Failed(format!("repair key: {e}")))?;
+            .map_err(|e| fail(GuardStep::Key, e))?;
         trip("repair-key", When::After);
     }
     match writer.config_id(common) {
         Ok(Some(id)) => journal.config = Some(id.into()),
         Ok(None) | Err(_) => {
-            return Err(InstallError::Failed("config is not a regular file".into()));
+            return Err(fail(GuardStep::Config, "config is not a regular file"));
         }
     }
     save(store, &journal)?;
-    verify(ctx, common, &hooks_dir).map_err(InstallError::Failed)?;
-    confirm(ctx, repo_id, store, registry, journal).map_err(InstallError::Failed)?;
+    verify(ctx, common, &hooks_dir).map_err(|e| fail(GuardStep::Verify, e))?;
+    confirm(ctx, repo_id, store, registry, journal).map_err(|e| fail(GuardStep::Confirm, e))?;
     Ok(status(repo_id, common, store))
+}
+
+/// The hashes the journal accepts for `path`: the confirmed one and those of a pending upgrade.
+pub(super) fn accepts(journal: &Journal, path: &str, bytes: &[u8]) -> bool {
+    let pending = journal.upgrade.iter().flat_map(|u| u.files.iter());
+    let hash = sha256(bytes);
+    journal
+        .files
+        .iter()
+        .chain(pending)
+        .any(|f| f.path == path && f.sha256 == hash)
+}
+
+/// Where `gitraptor/` stands against the identity the journal recorded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Anchor {
+    /// The recorded folder (or the journal recorded none and the folder is there).
+    Same(gitraptor_git::guard_write::FileId),
+    /// Another identity, and the folder is accepted as this install's: the journal must follow.
+    Moved(gitraptor_git::guard_write::FileId),
+    /// No folder.
+    Absent,
+}
+
+/// The identity of `gitraptor/` is a check for each operation, not a property of the install
+/// (ADR-GRD-001 § 4, amended 2026-10-17): a reboot renumbers the device of a volume (macOS
+/// assigns `st_dev` when it mounts it) and restoring a copy changes the inode, with nothing lost
+/// (ADR-GRD-005 § 1). When the folder, read through one descriptor that never follows a link, is
+/// not the recorded one, it is accepted as this install's only by its content: with `strict`
+/// (an upgrade, which writes into it) every file of the journal must be there with a hash the
+/// journal accepts; without it (an uninstall, which removes only the files whose hash the
+/// journal accepts) a real folder is enough. The inode is never the proof: a deleted one is
+/// reused.
+pub(super) fn reanchor(
+    writer: &GuardWriter<'_>,
+    common: &Path,
+    journal: &Journal,
+    strict: bool,
+) -> Result<Anchor, Failure> {
+    let failure = |detail: String| Failure {
+        step: GuardStep::FolderIdentity,
+        detail,
+    };
+    let listed: Vec<&str> = journal.files.iter().map(|f| f.path.as_str()).collect();
+    let Some(read) = writer
+        .read_folder(common, &listed)
+        .map_err(|e| failure(e.to_string()))?
+    else {
+        return Ok(Anchor::Absent);
+    };
+    match journal.folder {
+        Some(recorded) if gitraptor_git::guard_write::FileId::from(recorded) == read.id => {
+            return Ok(Anchor::Same(read.id));
+        }
+        None => return Ok(Anchor::Same(read.id)),
+        Some(_) => {}
+    }
+    // The manifest is not the integrity reference: editing it changes nothing (ADR-GRD-001
+    // Validación 9), so it proves nothing either way.
+    let proven = read
+        .files
+        .iter()
+        .filter(|(path, _)| path != MANIFEST)
+        .all(|(path, bytes)| {
+            bytes
+                .as_deref()
+                .is_some_and(|bytes| accepts(journal, path, bytes))
+        });
+    // An empty list proves nothing.
+    if strict && (!proven || read.files.is_empty()) {
+        return Err(failure(
+            "the folder is not the recorded one and its files differ".into(),
+        ));
+    }
+    Ok(Anchor::Moved(read.id))
+}
+
+/// Whether the hooks still run after a failure, read again from the repo's `core.hooksPath`:
+/// never deduced from the step that failed.
+pub fn protection_after(
+    ctx: &GuardCtx<'_>,
+    common: &Path,
+) -> gitraptor_api::guard::ProtectionAfter {
+    let ours = common.join(FOLDER).join("hooks");
+    let in_place = GuardWriter::new(ctx.git, ctx.invoker)
+        .local_hooks_path(common)
+        .ok()
+        .flatten()
+        .is_some_and(|v| Path::new(&v) == ours);
+    if in_place {
+        gitraptor_api::guard::ProtectionAfter::InPlace
+    } else {
+        gitraptor_api::guard::ProtectionAfter::Absent
+    }
+}
+
+/// Whether `gitraptor/` is not the folder the journal recorded (a reboot that renumbered the
+/// volume, a restored copy): an install or an uninstall that succeeds then followed it, and the
+/// daemon logs it.
+pub fn folder_moved(ctx: &GuardCtx<'_>, common: &Path, store: &RepoStore) -> bool {
+    let recorded = journal(&store.guard_keys().unwrap_or_default()).and_then(|j| j.folder);
+    let now = GuardWriter::new(ctx.git, ctx.invoker)
+        .folder_id(common)
+        .ok()
+        .flatten();
+    matches!((recorded, now), (Some(r), Some(n)) if gitraptor_git::guard_write::FileId::from(r) != n)
 }
 
 /// Whether the confirmed install in place is of an older template or has an upgrade that was
@@ -853,17 +1004,26 @@ fn upgrade(
     let keys = store.guard_keys().unwrap_or_default();
     let mut journal = journal(&keys)
         .filter(|j| j.stage == Stage::Confirmed)
-        .ok_or_else(|| InstallError::Failed("no confirmed journal".into()))?;
-    let folder = journal
-        .folder
-        .ok_or_else(|| InstallError::Failed("journal without the folder".into()))?;
+        .ok_or_else(|| fail(GuardStep::Journal, "no confirmed journal"))?;
     let folder_files = Folder::build(ctx, repo_id, common, &journal.prior, &journal.chained)?;
     let hooks_dir = common.join(FOLDER).join("hooks");
     let writer = GuardWriter::new(ctx.git, ctx.invoker);
+    // The folder as it is now, when its identity changed and every file proves it is this install
+    // (a reboot that renumbered the volume, a restored copy).
+    let folder = match reanchor(&writer, common, &journal, true).map_err(InstallError::Failed)? {
+        Anchor::Same(id) => id,
+        Anchor::Moved(id) => {
+            journal.folder = Some(id.into());
+            id
+        }
+        Anchor::Absent => {
+            return Err(fail(GuardStep::FolderIdentity, "the folder is gone"));
+        }
+    };
     let save = |store: &mut RepoStore, j: &Journal| {
         store
             .set_guard_keys(Some(Some(&j.to_json())), None, None, None)
-            .map_err(|e| InstallError::Failed(format!("journal: {e:?}")))
+            .map_err(|e| fail(GuardStep::Journal, format!("{e:?}")))
     };
     // Before any write: the journal lists every file that may exist afterwards. The confirmed
     // hashes stay the reference until the last step.
@@ -883,14 +1043,14 @@ fn upgrade(
     rewatch(registry, repo_id, &journal);
     trip("upgrade-journal", When::After);
     writer
-        .remove_file_temporaries(common, folder.into(), &journal.listed())
-        .map_err(|e| InstallError::Failed(format!("upgrade temporaries: {e}")))?;
+        .remove_file_temporaries(common, folder, &journal.listed())
+        .map_err(|e| fail(GuardStep::Temporaries, e))?;
     let files = folder_files.files();
     let executables: Vec<NewFile<'_>> = files.iter().copied().filter(|f| f.executable).collect();
     let replace = |files: &[NewFile<'_>]| {
         writer
-            .replace_files(common, folder.into(), files)
-            .map_err(|e| InstallError::Failed(format!("upgrade: {e}")))
+            .replace_files(common, folder, files)
+            .map_err(|e| fail(GuardStep::Dispatchers, e))
     };
     let (first, others) = executables.split_at(executables.len().min(1));
     trip("upgrade-first-dispatcher", When::Before);
@@ -911,9 +1071,10 @@ fn upgrade(
             .ok()
             .flatten();
         if !current.is_some_and(|bytes| sha256(&bytes) == *expected) {
-            return Err(InstallError::Failed(format!(
-                "upgrade: {hook} is not the new dispatcher"
-            )));
+            return Err(fail(
+                GuardStep::Dispatchers,
+                format!("{hook} is not the new dispatcher"),
+            ));
         }
     }
     let pick = |path: &str| -> Vec<NewFile<'_>> {
@@ -925,7 +1086,7 @@ fn upgrade(
     trip("upgrade-manifest", When::Before);
     replace(&pick(MANIFEST))?;
     trip("upgrade-manifest", When::After);
-    verify(ctx, common, &hooks_dir).map_err(InstallError::Failed)?;
+    verify(ctx, common, &hooks_dir).map_err(|e| fail(GuardStep::Verify, e))?;
     trip("upgrade-commit", When::Before);
     journal.files = folder_files.hashes();
     journal.template = TEMPLATE_VERSION;
@@ -1107,6 +1268,9 @@ pub enum Recovery {
     UninstallCompleted,
     /// An uninstall stopped before the key: the protection is complete and stays.
     UninstallKept,
+    /// An uninstall put the key back and its cleanup failed again at this step: nothing
+    /// protects the repo, a folder is left, and `raptor guard uninstall` finishes it.
+    UninstallCleanupPending(GuardStep),
 }
 
 /// Startup: an install left in `installing` is completed or undone (ADR-GRD-001 § 4,
@@ -1131,6 +1295,9 @@ pub fn recover(
         return match super::uninstall::recover(ctx, repo_id, common, store, registry, journal) {
             super::uninstall::Recovered::Completed => Recovery::UninstallCompleted,
             super::uninstall::Recovered::Kept => Recovery::UninstallKept,
+            super::uninstall::Recovered::CleanupPending(step) => {
+                Recovery::UninstallCleanupPending(step)
+            }
         };
     }
     let writer = GuardWriter::new(ctx.git, ctx.invoker);

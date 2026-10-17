@@ -1424,10 +1424,14 @@ impl Connection<'_> {
             },
             methods::GUARD_DECLINE => GuardRequest::Decline,
             methods::GUARD_UNINSTALL => match confirm {
-                None => GuardRequest::UninstallRequest(requester),
+                None => GuardRequest::UninstallRequest {
+                    requester,
+                    recovery: self.has(methods::CAP_GUARD_RECOVERY.name),
+                },
                 Some(action_id) => GuardRequest::UninstallApply {
                     action_id,
                     requester,
+                    recovery: self.has(methods::CAP_GUARD_RECOVERY.name),
                 },
             },
             methods::GUARD_CANCEL => GuardRequest::Cancel(requester),
@@ -1445,6 +1449,9 @@ impl Connection<'_> {
                 }
                 GuardReply::Uninstall(mut result) => {
                     self.guard_shape_status(&mut result.status);
+                    if !self.has(methods::CAP_GUARD_RECOVERY.name) {
+                        result.restores_hooks_path = None;
+                    }
                     serde_json::to_value(*result)
                 }
                 GuardReply::NotObserved => return Err(rejected(RepoRejection::NotObserved)),
@@ -1466,6 +1473,12 @@ impl Connection<'_> {
                 }
                 GuardReply::Failed => {
                     return Err(ErrorObject::new(code::INTERNAL, "guardrails unavailable"));
+                }
+                GuardReply::StepFailed(data) => {
+                    return Err(guard_failed(
+                        self.has(methods::CAP_GUARD_RECOVERY.name),
+                        data,
+                    ));
                 }
             };
         value.map_err(|_| ErrorObject::new(code::INTERNAL, "encode"))
@@ -1503,6 +1516,12 @@ impl Connection<'_> {
             status.hooks = None;
             status.diagnostics.clear();
             status.minimum_set = None;
+        }
+        // A diagnostic an older client cannot read.
+        if !self.has(methods::CAP_GUARD_RECOVERY.name) {
+            status
+                .diagnostics
+                .retain(|d| *d != gitraptor_api::guard::Diagnostic::LeftoverFolder);
         }
         status.last_refusal = self.guard_blockers(std::mem::take(&mut status.last_refusal));
     }
@@ -2539,6 +2558,17 @@ impl Connection<'_> {
             self.ctx.bus.publish(RESERVED_AUDIT, entry, None, |_| {});
         }
         Ok(())
+    }
+}
+
+/// A step of `guard.install` or `guard.uninstall` failed: `guard-failed` with the step and where
+/// the repo stands for a connection with `guard.recovery`, the `INTERNAL` it always was for any
+/// other (ADR-GRP-016).
+fn guard_failed(recovery: bool, data: gitraptor_api::guard::GuardFailedData) -> ErrorObject {
+    if recovery {
+        ErrorObject::new(methods::GUARD_FAILED.code, "guardrails step failed").with_data(data)
+    } else {
+        ErrorObject::new(code::INTERNAL, "guardrails unavailable")
     }
 }
 
@@ -3829,6 +3859,26 @@ fn hook_prior_cause(cause: gitraptor_api::timemachine::HookPriorFailure) -> &'st
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ADR-GRP-016: a new code of a method that existed is a change of shape. A client without
+    // `guard.recovery` keeps receiving the `INTERNAL` it always did, with no data.
+    #[test]
+    fn a_failed_step_is_internal_without_the_recovery_capability() {
+        use gitraptor_api::guard::{GuardFailedData, GuardStep, ProtectionAfter};
+        let data = GuardFailedData {
+            step: GuardStep::FolderIdentity,
+            protection: ProtectionAfter::InPlace,
+        };
+        let old = guard_failed(false, data.clone());
+        assert_eq!(old.code, code::INTERNAL);
+        assert!(old.data.is_none());
+        let new = guard_failed(true, data.clone());
+        assert_eq!(new.code, methods::GUARD_FAILED.code);
+        assert_eq!(
+            serde_json::from_value::<GuardFailedData>(new.data.unwrap()).unwrap(),
+            data
+        );
+    }
 
     #[test]
     fn enum_texts_match_the_wire_form() {

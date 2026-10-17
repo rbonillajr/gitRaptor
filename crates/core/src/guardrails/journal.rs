@@ -104,6 +104,11 @@ pub struct Journal {
     /// An upgrade in progress; `None` once it is confirmed (or never started).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub upgrade: Option<Upgrade>,
+    /// Written by the uninstall of a folder this profile did not know (an orphan, US-GRD-003):
+    /// it lists only the files recognized as Guardrails', and an uninstall cut before the key
+    /// leaves the orphan as it was instead of adopting it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub orphan: bool,
 }
 
 impl Journal {

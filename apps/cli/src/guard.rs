@@ -14,12 +14,13 @@ use std::process::ExitCode;
 use gitraptor_api::AgentKind;
 use gitraptor_api::Untrusted;
 use gitraptor_api::guard::{
-    Cause, CommitStage, Decision, Diagnostic, Effect, GuardLogEntry, GuardLogParams,
-    GuardLogResult, GuardPlan, GuardRejectedData, GuardRepoParams, GuardStatus,
+    Cause, CommitStage, Decision, Diagnostic, Effect, GuardFailedData, GuardLogEntry,
+    GuardLogParams, GuardLogResult, GuardPlan, GuardRejectedData, GuardRepoParams, GuardStatus,
     GuardUninstallParams, GuardUninstallRefusedData, GuardUninstallResult, HooksPathLevel,
     HooksStatus, InstallBlocker, Level, LogDetail, LogKind, LoggedOperation, LoggedReason,
     LoggedRef, LossCause, MAX_LOG_PAGE, MinimumSetStatus, NotPreventable, Param, ParamKind,
-    Permission, ProtectionState, Reason, RefBackend, RefChange, Rule, UninstallRefusal,
+    Permission, ProtectionAfter, ProtectionState, Reason, RefBackend, RefChange, Rule,
+    UninstallRefusal,
 };
 use gitraptor_api::methods;
 use gitraptor_api::rpc::code;
@@ -533,6 +534,7 @@ pub fn notice_lines(status: &GuardStatus) -> Vec<String> {
         match d {
             Diagnostic::TemplateOutdated => out.push(t("guard.status.template-outdated", &[])),
             Diagnostic::ConfigUnreadable => out.push(t("guard.status.config-unreadable", &[])),
+            Diagnostic::LeftoverFolder => out.push(t("guard.status.leftover-folder", &[])),
             // Said by the base branch line.
             Diagnostic::BaseUnconfirmed => {}
         }
@@ -576,8 +578,32 @@ fn rejected_text(err: &gitraptor_api::rpc::ErrorObject) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// What a failed step means for the developer and what to do, by the command and where the
+/// repo stands after it (never only "internal error").
+fn failed_text(command: &str, data: &GuardFailedData) -> String {
+    let uninstall = command.ends_with("uninstall");
+    let key = match (uninstall, data.protection) {
+        (false, ProtectionAfter::InPlace) => "guard.failed.install-kept",
+        (false, ProtectionAfter::Absent) => "guard.failed.install-none",
+        (true, ProtectionAfter::InPlace) => "guard.failed.uninstall-kept",
+        (true, ProtectionAfter::Absent) => "guard.failed.uninstall-pending",
+    };
+    let step = t(&format!("guard.step.{}", data.step.as_str()), &[]);
+    t(key, &[("step", &step)])
+}
+
 fn guard_error(command: &str, path: &std::path::Path, err: ClientError) -> ExitCode {
     match err {
+        ClientError::Rpc(err) if err.code == methods::GUARD_FAILED.code => {
+            match err
+                .data
+                .and_then(|d| serde_json::from_value::<GuardFailedData>(d).ok())
+            {
+                Some(data) => eprintln!("{command}: {}", failed_text(command, &data)),
+                None => eprintln!("{command}: {}", t("error.guard-failed", &[])),
+            }
+            ExitCode::FAILURE
+        }
         ClientError::Rpc(err) if err.code == code::RESERVED_REFUSED => {
             eprintln!("{command}: {}", refusal_text(&err, "guard.refused-agent"));
             ExitCode::FAILURE
@@ -776,7 +802,15 @@ pub fn uninstall(path: Option<PathBuf>, yes: bool) -> ExitCode {
         .hooks
         .as_ref()
         .is_some_and(|h| h.status == HooksStatus::Inactive);
-    if status.state != ProtectionState::HooksOnly && !inactive {
+    // So can a folder left without an active protection: an uninstall whose cleanup stopped,
+    // or a folder this profile does not know (the daemon decides whether it is recognizably
+    // GitRaptor's).
+    let left = status
+        .hooks
+        .as_ref()
+        .is_some_and(|h| h.status == HooksStatus::Orphaned)
+        || status.diagnostics.contains(&Diagnostic::LeftoverFolder);
+    if status.state != ProtectionState::HooksOnly && !inactive && !left {
         eprintln!("{CMD}: {}", t("guard.uninstall.not-installed", &[]));
         return ExitCode::FAILURE;
     }
@@ -786,8 +820,12 @@ pub fn uninstall(path: Option<PathBuf>, yes: bool) -> ExitCode {
     println!(
         "{}",
         t(
-            "guard.uninstall.what",
-            &[("dir", &"gitraptor/hooks".to_owned())]
+            if left {
+                "guard.uninstall.what-left"
+            } else {
+                "guard.uninstall.what"
+            },
+            &[("dir", &"gitraptor".to_owned())]
         )
     );
     println!("{}", t("guard.uninstall.after", &[]));
@@ -810,7 +848,12 @@ pub fn uninstall(path: Option<PathBuf>, yes: bool) -> ExitCode {
     let refused = |err: ClientError| match &err {
         ClientError::Rpc(e) if uninstall_refusal(e).is_some() => {
             let data = uninstall_refusal(e).expect("checked");
-            eprintln!("{CMD}: {}", uninstall_refusal_text(data.reason));
+            // A folder is left but nothing in it is recognizably GitRaptor's: say how to get out.
+            if left && data.reason == UninstallRefusal::NotInstalled {
+                eprintln!("{CMD}: {}", t("guard.uninstall.nothing-recognized", &[]));
+            } else {
+                eprintln!("{CMD}: {}", uninstall_refusal_text(data.reason));
+            }
             ExitCode::FAILURE
         }
         _ => guard_error(CMD, &path, err),
@@ -823,8 +866,19 @@ pub fn uninstall(path: Option<PathBuf>, yes: bool) -> ExitCode {
     {
         Ok(GuardUninstallResult {
             pending: Some(pending),
+            restores_hooks_path,
             ..
-        }) => pending,
+        }) => {
+            // Read from the repo (the manifest of a folder this profile does not know): shown
+            // before the window, so it can be cancelled.
+            if let Some(value) = restores_hooks_path {
+                println!(
+                    "{}",
+                    t("guard.uninstall.restores", &[("value", &param(&value))])
+                );
+            }
+            pending
+        }
         Ok(_) => {
             eprintln!("{CMD}: {}", t("guard.uninstall.failed", &[]));
             return ExitCode::FAILURE;
@@ -1316,6 +1370,52 @@ mod tests {
             "guard.status.misnamed-settings",
         ] {
             assert!(has_key(key), "{key}");
+        }
+    }
+
+    // Every step a failure can name has a text in both languages, and every combination of
+    // command and protection says what to do with a GitRaptor command, never only "internal".
+    #[test]
+    fn every_failed_step_says_what_to_do_in_both_languages() {
+        use gitraptor_api::guard::GuardStep;
+        for step in GuardStep::ALL {
+            assert!(
+                has_key(&format!("guard.step.{}", step.as_str())),
+                "{step:?}"
+            );
+        }
+        for key in [
+            "guard.failed.install-none",
+            "guard.failed.install-kept",
+            "guard.failed.uninstall-kept",
+            "guard.failed.uninstall-pending",
+            "guard.status.leftover-folder",
+            "guard.uninstall.what-left",
+            "guard.uninstall.restores",
+            "error.guard-failed",
+        ] {
+            assert!(has_key(key), "{key}");
+        }
+        for spanish in [false, true] {
+            for key in [
+                "guard.failed.install-none",
+                "guard.failed.install-kept",
+                "guard.failed.uninstall-kept",
+                "guard.failed.uninstall-pending",
+            ] {
+                let text = crate::i18n::text_in(spanish, key).unwrap();
+                assert!(text.contains("{step}"), "{key}");
+                assert!(text.contains("`raptor guard "), "{key}: {text}");
+                assert!(!text.contains("internal"), "{key}: {text}");
+            }
+        }
+        for step in GuardStep::ALL {
+            for protection in [ProtectionAfter::InPlace, ProtectionAfter::Absent] {
+                for command in ["raptor guard install", "raptor guard uninstall"] {
+                    let text = failed_text(command, &GuardFailedData { step, protection });
+                    assert!(!text.contains("guard.step."), "{text}");
+                }
+            }
         }
     }
 

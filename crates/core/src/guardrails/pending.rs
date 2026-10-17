@@ -41,6 +41,9 @@ pub struct Entry {
     pub requester: Requester,
     pub applies_at_ms: i64,
     pub window_ms: u64,
+    /// What the announcement showed would be written back as `core.hooksPath` (the removal of an
+    /// orphan, read from its manifest): applied only if it is still what the repo says.
+    pub restores: Option<String>,
 }
 
 impl Entry {
@@ -121,10 +124,22 @@ impl PendingActions {
             requester,
             applies_at_ms: now_ms + window_ms as i64,
             window_ms,
+            restores: None,
         };
         let view = entry.view();
         self.by_repo.insert(repo_id.to_owned(), entry);
         Ok(view)
+    }
+
+    /// Records what the announcement of `action_id` showed it restores.
+    pub fn note_restores(&mut self, repo_id: &str, action_id: &str, restores: Option<String>) {
+        if let Some(entry) = self
+            .by_repo
+            .get_mut(repo_id)
+            .filter(|e| e.action_id == action_id)
+        {
+            entry.restores = restores;
+        }
     }
 
     /// The action to apply now: the same announcement, the same requester, the window closed

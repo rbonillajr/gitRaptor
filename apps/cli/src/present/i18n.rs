@@ -710,6 +710,11 @@ const MODULE_ERRORS: &[(&str, &str, &str)] = &[
         "la protección no se retiró",
     ),
     (
+        "guard-failed",
+        "a step of the protection failed: run the same raptor guard command again",
+        "falló un paso de la protección: vuelve a ejecutar el mismo comando raptor guard",
+    ),
+    (
         "root-rejected",
         "that folder cannot be a code folder",
         "esa carpeta no puede ser una carpeta de código",

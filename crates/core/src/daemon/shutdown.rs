@@ -79,12 +79,17 @@ pub(crate) enum GuardRequest {
         repair: bool,
     },
     Decline,
-    /// Announces the uninstall and opens its window (US-GRD-003, D5).
-    UninstallRequest(crate::guardrails::pending::Requester),
+    /// Announces the uninstall and opens its window (US-GRD-003, D5). `recovery`: the
+    /// connection has `guard.recovery` (an orphan or an unfinished uninstall can be removed).
+    UninstallRequest {
+        requester: crate::guardrails::pending::Requester,
+        recovery: bool,
+    },
     /// Applies the announced uninstall once its window closed.
     UninstallApply {
         action_id: String,
         requester: crate::guardrails::pending::Requester,
+        recovery: bool,
     },
     /// Cancels the action waiting in the repo.
     Cancel(crate::guardrails::pending::Requester),
@@ -100,8 +105,10 @@ pub(crate) enum GuardReply {
     NotObserved,
     /// The install was refused before writing anything.
     Rejected(Vec<InstallBlocker>),
-    /// A step failed and was reverted, or the profile is unavailable.
+    /// The profile or the repo is unavailable.
     Failed,
+    /// A step of an install or an uninstall failed: which one, and where it leaves the repo.
+    StepFailed(gitraptor_api::guard::GuardFailedData),
     /// The uninstall was announced, or applied (US-GRD-003).
     Uninstall(Box<gitraptor_api::guard::GuardUninstallResult>),
     /// `guard.uninstall` or `guard.cancel` did nothing.
