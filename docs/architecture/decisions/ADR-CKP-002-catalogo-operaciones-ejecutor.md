@@ -5,7 +5,7 @@ type: adr
 status: accepted
 accepted: 2026-10-04
 created: 2026-10-04
-updated: 2026-10-08
+updated: 2026-10-17
 date: 2026-10-04
 domain: GRP
 feature: cockpit
@@ -279,7 +279,7 @@ sequenceDiagram
 - ✅ Varias TUIs no se pisan: cerrojo, cola, `planId` por conexión y huella.
 - ⚠️ **Un hook lento** (p. ej. tests en `pre-merge-commit`) retiene el cerrojo del repo y el resto de operaciones esperan. **Mitigación**: el estado "en cola" se ve, existe Cancelar y la capa `mcp` tiene tiempo máximo.
 - ⚠️ **Los hooks interactivos fallan** desde el ejecutor (R-CKP-5). **Mitigación**: el fallo se ve con la salida de Git y la operación se recupera; el usuario puede repetirla desde su terminal.
-- ⚠️ **Desviaciones declaradas de NFR-07**: `gc.auto` y `maintenance.auto` desactivados; `rebase.updateRefs`, autosquash y autostash desactivados; editores rechazados; sin `post-merge` en el avance rápido sin worktree; `submodule.recurse=false`; `core.useReplaceRefs=false` y repos con `info/grafts` rechazados; y el repo siempre explícito con `--git-dir` y `--work-tree`.
+- ⚠️ **Desviaciones declaradas de NFR-07**: `gc.auto` y `maintenance.auto` desactivados; `rebase.updateRefs`, autosquash y autostash desactivados; editores rechazados; sin `post-merge` en el avance rápido sin worktree; `submodule.recurse=false`; `core.useReplaceRefs=false` y repos con `info/grafts` rechazados; el repo siempre explícito con `--git-dir` y `--work-tree`; en un *partial clone*, los hooks bajo el ejecutor no tienen red; y `credential.helper` vacío en los hooks bajo el ejecutor (un push por https desde un hook falla al autenticar).
 - ⚠️ **El rebase diverge entre superficies**: el Cockpit deja el conflicto detenido y el MCP lo aborta. Es consciente (Q-MCP-6) y lo fija la capa.
 - ⚠️ **Un agente que abre la TUI** recibe capa `mcp`: no puede integrar, descartar, cancelar ni ver la salida de Git (M-03).
 - ⚠️ **En Windows**, el "sin atribuir" no puede integrar ni descartar trabajo de un agente desde el Cockpit (TQ-14), y sin controles equivalentes no hay capa `cockpit`. Pendiente: etapa de validación multiplataforma.
@@ -445,3 +445,13 @@ Origen: [DS-TS-CKP-003](../../requirements/features/cockpit/dev-specs/TS-CKP-003
   - `OperationsWiring::production()` usa el motor de decisión real (`GuardrailsEngine`), que el daemon conecta al registro y al log al montar el canal. Sin esa conexión, deniega con `system.internal-error`. Cada historia dueña arma su operación gobernada con una línea.
   - Capacidad `operation.guardrails`: la denegación viaja tipada (`decision_id`, `effect`, `applied_effect`, `reasons`) en `prepare` y en el rechazo `-32014`. Por MCP, la misma forma, sin campos de excepción, sin `configStatus`/`configRef` y con la plantilla que nunca nombra una vía de excepción (BR-AUTH-004). No sube `PROTOCOL_VERSION`.
   - Brazos de prueba solo en builds de depuración, con `GITRAPTOR_TEST_EXECUTOR_ARMS=1` y `GITRAPTOR_PROFILE_DIR`, dentro de la operación protegida. No son la lógica de producto de esas operaciones.
+
+## Enmienda (2026-10-17, TS-CKP-003): las neutralizaciones del ejecutor llegan a los hooks
+
+Origen: TS-CKP-003 (H-01, regresión de INF-GRD-001). **Decisión del orquestador (2026-10-17), validada por Arquitecto, aprobada por el coordinador.**
+
+- **Hallazgo**: Git exporta los `-c` y las `GIT_*` del ejecutor (`crates/git/src/user_ops.rs`, `NEUTRALIZING`) a todos sus hijos (`GIT_CONFIG_PARAMETERS`), así que los hooks del usuario los heredan. `diff.external=` hacía morir el `git diff --cached` de un linter del usuario (el valor vacío no lo desactiva: Git intenta ejecutar ""), y `protocol.allow=never` impedía que un hook del usuario llegara a un remoto.
+- **§ 6 queda así**: se retiran `diff.external` (ninguna operación del catálogo usa diff externo) y `GIT_LITERAL_PATHSPECS` (sustituido por `:(literal)` en cada ruta de `commit -- <rutas>`). `protocol.allow=never` solo se pone en un *partial clone* (`extensions.partialClone` o `remote.*.promisor`), para que el ejecutor nunca haga *lazy fetch* (M-02); en los demás repos el ejecutor tampoco usa red, porque ninguna operación del catálogo la necesita.
+- **Heredadas por los hooks**: `core.fsmonitor`, `core.pager`, `color.ui`, `trace2.*`, `gc.auto`, `maintenance.auto`, `credential.helper=`, `core.useReplaceRefs=false`/`GIT_NO_REPLACE_OBJECTS`, `submodule.recurse=false` y `rebase.*` son desviaciones declaradas de NFR-07 (lista de Consecuencias ampliada con los dos casos de arriba).
+- **Descartadas**: quitar las variables en el despachador (lógica en el camino de los hooks, y el `git` del hook seguiría con el entorno mínimo); reescribir los criterios (dejaría sin efecto la regresión de INF-GRD-001); una vía que Git no herede (no existe: `-c`, `--config-env`, `GIT_CONFIG_COUNT/*` y `GIT_CONFIG_GLOBAL` son entorno).
+- **Verificación**: tests en `crates/git` (la lista no contiene `diff.external` ni `protocol.allow`; un *partial clone* sí lleva `protocol.allow=never` y no hace red; `:(literal)` con `*`, `:` y `[` no expande) y los criterios CKP003-CHAIN y CKP003-NIETO.
