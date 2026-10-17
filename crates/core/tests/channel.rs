@@ -505,14 +505,13 @@ fn slow_client_and_connection_flood_do_not_starve_the_others() {
     assert_eq!(last["method"], methods::NOTIFY_RESYNC, "{last}");
     assert_eq!(last["params"]["reason"], "slow-consumer");
     // The last connections are past the limit and were told so; the first ones, inside it, are
-    // silent. Wait for the signal on the last one instead of a fixed pause for all of them.
-    let mut last = flood.into_iter().next_back().unwrap();
-    let _ = last.stream.set_read_timeout(Some(Duration::from_secs(10)));
-    let limited = usize::from(
-        last.recv()
-            .is_some_and(|m| m["error"]["code"] == code::LIMIT_REACHED),
-    );
-    assert!(limited > 0, "the connection limit never applied");
+    // silent and end at the handshake timeout. Wait for the signal, newest first, stopping at
+    // the first refusal.
+    let limited = flood.into_iter().rev().any(|mut raw| {
+        raw.recv()
+            .is_some_and(|m| m["error"]["code"] == code::LIMIT_REACHED)
+    });
+    assert!(limited, "the connection limit never applied");
     let pong: String = good.call(methods::PING, json!({})).unwrap();
     assert_eq!(pong, "pong");
 }
