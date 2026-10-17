@@ -273,7 +273,9 @@ fn the_dogfooding_blocks_are_logged() {
         &["guard", "status", m.f.repo.to_str().unwrap()],
         "en_US.UTF-8",
     );
-    assert!(text(&out).contains("hooks"), "{}", text(&out));
+    let status = text(&out);
+    assert!(status.contains("state: protected"), "{status}");
+    assert!(!status.contains("hooks only"), "{status}");
 
     let secret = "feat: secret-subject-q7Zr";
     let out = m.commit_with(true, &format!("{secret}\n"), "commit -q");

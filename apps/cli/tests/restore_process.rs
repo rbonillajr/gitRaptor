@@ -350,7 +350,6 @@ fn exact_state(fx: &Fixture, worktrees: &[&Path]) -> ExactState {
 
 /// Message fragments of `apps/cli/i18n/{en,es}/timemachine.txt` that the
 /// subcommand must produce.
-const EN_POINT: &str = "raptor restore ";
 const EN_DONE: &str = "restored ";
 const EN_UNDO_HINT: &str = "raptor undo";
 const EN_CONFIRMATION: [&str; 2] = ["belongs to an agent", "ask the agent to restore it itself"];
@@ -384,10 +383,12 @@ fn raptor_restore_returns_to_a_timeline_point_and_undo_takes_it_back() {
     let timeline = m.raptor(&m.worktree.join("src"), &["timeline"], "en_US.UTF-8");
     assert!(timeline.status.success(), "{}", text(&timeline.stderr));
     let shown = text(&timeline.stdout);
+    // The compact timeline shows the first 8 characters of the id on the line of the event.
+    let short = &point[..8];
     assert!(
         shown
             .lines()
-            .any(|l| l.contains(&format!("{EN_POINT}{point}"))),
+            .any(|l| l.trim_end().ends_with(&format!("restore {short}"))),
         "{shown}"
     );
 
