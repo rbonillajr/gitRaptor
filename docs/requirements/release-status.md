@@ -10,11 +10,11 @@
 
 | Estado | Fichas |
 |---|---|
-| Implementado (`implemented`) | 43 |
+| Implementado (`implemented`) | 44 |
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 20 |
 | Listo (`ready`) | 4 |
-| Borrador (`draft`) | 75 |
+| Borrador (`draft`) | 74 |
 | Bloqueado (`blocked`) | 1 |
 | **Total** | **146** |
 
@@ -22,7 +22,7 @@
 
 | Feature | Implementado | Hecho | Implementado en parte | Listo | Borrador | Bloqueado | Total |
 |---|---|---|---|---|---|---|---|
-| [cockpit](#cockpit) | 6 | 0 | 2 | 0 | 24 | 1 | 33 |
+| [cockpit](#cockpit) | 7 | 0 | 2 | 0 | 23 | 1 | 33 |
 | [guardrails](#guardrails) | 8 | 0 | 7 | 1 | 8 | 0 | 24 |
 | [mcp](#mcp) | 5 | 0 | 2 | 0 | 13 | 0 | 20 |
 | [motor-local](#motor-local) | 12 | 2 | 8 | 3 | 15 | 0 | 40 |
@@ -30,12 +30,13 @@
 
 ### cockpit
 
-33 fichas: 6 implementado, 2 implementado en parte, 24 borrador, 1 bloqueado.
+33 fichas: 7 implementado, 2 implementado en parte, 23 borrador, 1 bloqueado.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
 | [INF-CKP-001](features/cockpit/technical-stories/INF-CKP-001-esqueleto-tui.md) | Esqueleto de la TUI: cliente del canal, bucle TEA, saneado único y gate de 100 ms | Implementado (`implemented`) | #100, #139, #174, #153 | — |
 | [TS-CKP-002](features/cockpit/technical-stories/TS-CKP-002-catalogo-ejecutor.md) | Catálogo de operaciones de usuario y ejecutor del daemon en dos fases | Implementado (`implemented`) | #73 | — |
+| [TS-CKP-003](features/cockpit/technical-stories/TS-CKP-003-capa-cockpit-guardrails.md) | Capa cockpit en la decisión de Guardrails, ligada al git del ejecutor y registrada una sola vez | Implementado (`implemented`) | — | — |
 | [TS-CKP-004](features/cockpit/technical-stories/TS-CKP-004-tokens-semanticos-simbolos.md) | Tokens semánticos y símbolos con fallback en el tema de la TUI | Implementado (`implemented`) | #50, #115 | — |
 | [TS-CKP-005](features/cockpit/technical-stories/TS-CKP-005-biblioteca-componentes-tui.md) | Biblioteca de componentes TUI v0: los 10 widgets del design system, con snapshots y galería | Implementado (`implemented`) | #111, #115 | — |
 | [US-CKP-001](features/cockpit/user-stories/US-CKP-001-flota-en-vivo.md) | El desarrollador ve en vivo qué agente trabaja en cada worktree de un repo | Implementado (`implemented`) | #118, #126, #129, #130, #131, #136, #175 | — |
@@ -44,7 +45,6 @@
 | [US-CKP-025](features/cockpit/user-stories/US-CKP-025-tui-repo-no-observado.md) | La TUI ofrece observar el repo en el que se abre y, fuera de un repo, lleva a los ya observados | Implementado en parte (`partially-implemented`) | #165, #170 | 2 |
 | [SPIKE-CKP-001](features/cockpit/technical-stories/SPIKE-CKP-001-prediccion-5s.md) | Predicción de conflictos en ≤ 5 s p95 sin escribir en el repo: merge en memoria frente a almacén en el perfil | Borrador (`draft`) | — | — |
 | [TS-CKP-001](features/cockpit/technical-stories/TS-CKP-001-predictor-conflictos.md) | Predictor de conflictos en el daemon: solape y conflicto previsto publicados para todos los clientes | Borrador (`draft`) | — | — |
-| [TS-CKP-003](features/cockpit/technical-stories/TS-CKP-003-capa-cockpit-guardrails.md) | Capa cockpit en la decisión de Guardrails, ligada al git del ejecutor y registrada una sola vez | Borrador (`draft`) | — | — |
 | [US-CKP-002](features/cockpit/user-stories/US-CKP-002-orden-atencion-terminadas.md) | La lista pone primero lo que pide atención y no se llena de sesiones viejas | Borrador (`draft`) | — | — |
 | [US-CKP-003](features/cockpit/user-stories/US-CKP-003-estados-motor-conexion.md) | La TUI dice en qué estado está el motor y qué hacer en cada caso | Borrador (`draft`) | — | — |
 | [US-CKP-004](features/cockpit/user-stories/US-CKP-004-selector-repo-preferencias.md) | El desarrollador cambia de repo y la TUI recuerda cómo la dejó | Borrador (`draft`) | — | — |
@@ -241,11 +241,12 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2
 
-111 fichas: 23 implementado, 3 hecho, 14 implementado en parte, 4 listo, 66 borrador, 1 bloqueado.
+111 fichas: 24 implementado, 3 hecho, 14 implementado en parte, 4 listo, 65 borrador, 1 bloqueado.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
 | [TS-CKP-002](features/cockpit/technical-stories/TS-CKP-002-catalogo-ejecutor.md) | Catálogo de operaciones de usuario y ejecutor del daemon en dos fases | Implementado (`implemented`) | #73 | — |
+| [TS-CKP-003](features/cockpit/technical-stories/TS-CKP-003-capa-cockpit-guardrails.md) | Capa cockpit en la decisión de Guardrails, ligada al git del ejecutor y registrada una sola vez | Implementado (`implemented`) | — | — |
 | [TS-CKP-004](features/cockpit/technical-stories/TS-CKP-004-tokens-semanticos-simbolos.md) | Tokens semánticos y símbolos con fallback en el tema de la TUI | Implementado (`implemented`) | #50, #115 | — |
 | [TS-CKP-005](features/cockpit/technical-stories/TS-CKP-005-biblioteca-componentes-tui.md) | Biblioteca de componentes TUI v0: los 10 widgets del design system, con snapshots y galería | Implementado (`implemented`) | #111, #115 | — |
 | [TS-GRD-001](features/guardrails/technical-stories/TS-GRD-001-configuracion-commiteada.md) | Lectura commiteada de la configuración del equipo y de la rama principal | Implementado (`implemented`) | #27 | — |
@@ -292,7 +293,6 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [SPIKE-CKP-001](features/cockpit/technical-stories/SPIKE-CKP-001-prediccion-5s.md) | Predicción de conflictos en ≤ 5 s p95 sin escribir en el repo: merge en memoria frente a almacén en el perfil | Borrador (`draft`) | — | — |
 | [TD-TMC-001](features/time-machine/technical-stories/TD-TMC-001-previo-hook-plazo-y-cupo-sin-atribuir.md) | Previo de hook: plazo real, cupo barato y cubo «sin atribuir» acotado, antes de que un fallo deniegue (US-GRD-017) | Borrador (`draft`) | — | — |
 | [TS-CKP-001](features/cockpit/technical-stories/TS-CKP-001-predictor-conflictos.md) | Predictor de conflictos en el daemon: solape y conflicto previsto publicados para todos los clientes | Borrador (`draft`) | — | — |
-| [TS-CKP-003](features/cockpit/technical-stories/TS-CKP-003-capa-cockpit-guardrails.md) | Capa cockpit en la decisión de Guardrails, ligada al git del ejecutor y registrada una sola vez | Borrador (`draft`) | — | — |
 | [US-CKP-002](features/cockpit/user-stories/US-CKP-002-orden-atencion-terminadas.md) | La lista pone primero lo que pide atención y no se llena de sesiones viejas | Borrador (`draft`) | — | — |
 | [US-CKP-003](features/cockpit/user-stories/US-CKP-003-estados-motor-conexion.md) | La TUI dice en qué estado está el motor y qué hacer en cada caso | Borrador (`draft`) | — | — |
 | [US-CKP-004](features/cockpit/user-stories/US-CKP-004-selector-repo-preferencias.md) | El desarrollador cambia de repo y la TUI recuerda cómo la dejó | Borrador (`draft`) | — | — |
