@@ -51,6 +51,7 @@ fn assert_tag_push_denied(m: &Td, bad: &str, why: &str) {
 // Ficha: an install of template 1 or 2 keeps working without reinstalling.
 #[test]
 fn repo_intact_templates_1_and_2_keep_working_until_reinstalled() {
+    let _serial = serial();
     for template in [1, 2] {
         let m = Td::new(Some(AGENT_PATHS), true);
         let bad = m.commit_on("bad", FORBIDDEN);
@@ -111,11 +112,13 @@ fn upgrade_from(from: u32) {
 
 #[test]
 fn repo_intact_a_template_1_install_is_upgraded_to_3() {
+    let _serial = serial();
     upgrade_from(1);
 }
 
 #[test]
 fn repo_intact_a_template_2_install_is_upgraded_to_3() {
+    let _serial = serial();
     upgrade_from(2);
 }
 
@@ -201,15 +204,18 @@ fn machine_from(from: u32) -> (Td, String) {
     (m, bad)
 }
 
-/// The sweeps start one process per cut point: one at a time, so that the other tests of this
-/// binary do not starve on a small runner (an install that waits more than the client's call
-/// budget fails with `EAGAIN`).
-static SWEEPS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+/// Every machine of this binary starts a daemon and many `git`/hook processes: they run one test
+/// at a time, so that a small runner does not starve an install past the client's call budget
+/// (it fails with `EAGAIN`). The suites of the other files keep running in parallel.
+static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn serial() -> std::sync::MutexGuard<'static, ()> {
+    ONE_AT_A_TIME
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
 
 fn sweep(from: u32) {
-    let _one_at_a_time = SWEEPS
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
     // The uncut run passes every declared point, and only those, in order.
     let (m, _) = machine_from(from);
     let trace = m.f.root.join("cut-trace");
@@ -244,11 +250,13 @@ fn sweep(from: u32) {
 // completes the upgrade.
 #[test]
 fn repo_intact_an_upgrade_from_2_cut_at_any_point_keeps_a_working_dispatcher() {
+    let _serial = serial();
     sweep(2);
 }
 
 #[test]
 fn repo_intact_an_upgrade_from_1_cut_at_any_point_keeps_a_working_dispatcher() {
+    let _serial = serial();
     sweep(1);
 }
 
@@ -256,6 +264,7 @@ fn repo_intact_an_upgrade_from_1_cut_at_any_point_keeps_a_working_dispatcher() {
 // it: no `pre-commit` or `commit-msg` is left behind.
 #[test]
 fn repo_intact_an_uninstall_after_an_interrupted_upgrade_leaves_no_trace() {
+    let _serial = serial();
     let m = Td::new(Some(AGENT_PATHS), false);
     let exceptions = uninstalled_exceptions();
     let before = m.f.snapshot(&exceptions);
@@ -290,6 +299,7 @@ fn repo_intact_an_uninstall_after_an_interrupted_upgrade_leaves_no_trace() {
 // next install and by the uninstall.
 #[test]
 fn repo_intact_a_temporary_of_a_killed_write_is_cleaned_by_the_next_install() {
+    let _serial = serial();
     let m = Td::new(Some(AGENT_PATHS), false);
     let exceptions = uninstalled_exceptions();
     let before = m.f.snapshot(&exceptions);
@@ -326,6 +336,7 @@ fn repo_intact_a_temporary_of_a_killed_write_is_cleaned_by_the_next_install() {
 // journal), and nothing else of the machine.
 #[test]
 fn repo_intact_an_upgrade_changes_only_the_dispatchers_and_the_journal() {
+    let _serial = serial();
     let m = Td::new(Some(AGENT_PATHS), false);
     // `downgrade_to` stops the daemon and the next `protect` starts it again: its channel
     // socket under `profile/run` is runtime state, not footprint of the install.
