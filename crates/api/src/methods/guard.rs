@@ -45,6 +45,15 @@ const BLOCK: i64 = FIRST_ERROR_BLOCK - 2 * ERROR_BLOCK_LEN;
 /// [`crate::guard::GuardUninstallRefusedData`].
 pub const GUARD_UNINSTALL_REFUSED: ErrorSpec = ErrorSpec::new(BLOCK, "guard-uninstall-refused");
 
+/// `guard.install` or `guard.uninstall` stopped at a step: `data` is
+/// [`crate::guard::GuardFailedData`]. Only with `guard.recovery`; without it, `INTERNAL`.
+pub const GUARD_FAILED: ErrorSpec = ErrorSpec::new(BLOCK - 1, "guard-failed");
+
+/// Getting out of an install that failed or an uninstall left half way: the `guard-failed`
+/// error, the `leftover-folder` diagnostic, `GuardUninstallResult.restores_hooks_path`, and
+/// `guard.uninstall` over a folder this profile does not know or an unfinished uninstall.
+pub const CAP_GUARD_RECOVERY: Capability = Capability::new("guard.recovery");
+
 /// Commit authorship (US-GRD-018, D11): `EvaluateParams.authorship`, the `commit` operation,
 /// the `pre-commit` and `commit-msg` hooks and `Decision.notices`. The hook client sends them
 /// only when the daemon granted it; a daemon without it evaluates as before.
@@ -107,8 +116,9 @@ pub(super) const GROUP: Group = Group {
         CAP_GUARD_PRIOR_SNAPSHOT,
         CAP_GUARD_SNAPSHOT_REQUIRED,
         CAP_GUARD_LOG_LAYERS,
+        CAP_GUARD_RECOVERY,
     ],
     error_block: Some(BLOCK),
-    errors: &[GUARD_UNINSTALL_REFUSED],
+    errors: &[GUARD_UNINSTALL_REFUSED, GUARD_FAILED],
     ..Group::new("guard")
 };
