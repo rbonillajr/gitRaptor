@@ -504,3 +504,17 @@ fn raptor_restore_explains_rejections_in_english_and_spanish() {
         assert!(changes.is_empty(), "{what}: {changes:#?}");
     }
 }
+
+/// A prefix under 6 characters is a usage error: exit code 2, its own text,
+/// and the repo is left as it was.
+#[test]
+fn raptor_restore_with_a_too_short_prefix_exits_2_and_changes_nothing() {
+    let m = machine();
+    let before = m.fx.fingerprint();
+    let out = m.raptor(&m.worktree, &["restore", "abcde"], "en_US.UTF-8");
+    assert_eq!(out.status.code(), Some(2), "{}", text(&out.stderr));
+    let stderr = text(&out.stderr);
+    assert!(stderr.contains("type at least 6 characters"), "{stderr}");
+    let changes = diff(&before, &m.fx.fingerprint());
+    assert!(changes.is_empty(), "{changes:#?}");
+}

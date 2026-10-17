@@ -83,8 +83,14 @@ impl Cmd {
                 }
             }
             Err(err) => {
+                // A malformed, too-short or ambiguous id is a usage error.
+                let usage = matches!(&err, ClientError::Rpc(e) if e.code == code::INVALID_PARAMS);
                 eprintln!("{CMD}: {}", failure_text(err, &worktree, &self.snapshot_id));
-                ExitCode::FAILURE
+                if usage {
+                    ExitCode::from(2)
+                } else {
+                    ExitCode::FAILURE
+                }
             }
         }
     }
