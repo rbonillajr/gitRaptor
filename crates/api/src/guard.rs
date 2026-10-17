@@ -566,6 +566,11 @@ pub struct GuardUninstallResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pending: Option<PendingAction>,
     pub status: GuardStatus,
+    /// Removing a folder this profile does not know (an orphan): the local `core.hooksPath` its
+    /// manifest says the repo had, which the uninstall writes back. Shown before the window, as
+    /// read from the repo. Only with `guard.recovery`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub restores_hooks_path: Option<Untrusted>,
 }
 
 /// Why `guard.uninstall` or `guard.cancel` did nothing (`data` of `GUARD_UNINSTALL_REFUSED`).
@@ -755,6 +760,104 @@ pub enum Diagnostic {
     /// Git's configuration could not be read: the check could not tell, and says so instead of
     /// reporting a loss.
     ConfigUnreadable,
+    /// No active protection, but a `gitraptor/` folder is left in the repo (an uninstall whose
+    /// cleanup stopped after the key went back, or a folder this profile does not know).
+    /// `raptor guard uninstall` removes what GitRaptor wrote in it. Only with `guard.recovery`.
+    LeftoverFolder,
+}
+
+/// The step of an install, upgrade, repair or uninstall that failed: a closed list, the only
+/// thing the daemon's log and the client learn about the failure (its detail carries paths).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum GuardStep {
+    /// The native dispatcher next to `raptor` could not be read.
+    Stub,
+    /// The journal in the profile could not be read or written.
+    Journal,
+    /// The worktrees of the repo could not be listed.
+    Worktrees,
+    /// `gitraptor/` could not be written or removed.
+    Folder,
+    /// Windows: the permissions of `gitraptor/` are not private.
+    FolderAcl,
+    /// `gitraptor/` is not a folder, or not the one the journal recorded and its files do not
+    /// prove it is.
+    FolderIdentity,
+    /// What an interrupted write left in `gitraptor/` could not be removed.
+    Temporaries,
+    /// The dispatchers or the constants could not be replaced (upgrade or repair).
+    Dispatchers,
+    /// The dispatchers an older install had and the new one does not could not be removed.
+    Leftovers,
+    /// `core.hooksPath` could not be written or restored.
+    Key,
+    /// The repo's `config` is not a regular file.
+    Config,
+    /// A worktree does not see the key after it was written.
+    Verify,
+    /// The install could not be confirmed in the profile.
+    Confirm,
+    /// The profile could not record that the uninstall finished.
+    Clear,
+}
+
+impl GuardStep {
+    pub const ALL: [Self; 14] = [
+        Self::Stub,
+        Self::Journal,
+        Self::Worktrees,
+        Self::Folder,
+        Self::FolderAcl,
+        Self::FolderIdentity,
+        Self::Temporaries,
+        Self::Dispatchers,
+        Self::Leftovers,
+        Self::Key,
+        Self::Config,
+        Self::Verify,
+        Self::Confirm,
+        Self::Clear,
+    ];
+
+    /// The kebab-case name, the one the log writes.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Stub => "stub",
+            Self::Journal => "journal",
+            Self::Worktrees => "worktrees",
+            Self::Folder => "folder",
+            Self::FolderAcl => "folder-acl",
+            Self::FolderIdentity => "folder-identity",
+            Self::Temporaries => "temporaries",
+            Self::Dispatchers => "dispatchers",
+            Self::Leftovers => "leftovers",
+            Self::Key => "key",
+            Self::Config => "config",
+            Self::Verify => "verify",
+            Self::Confirm => "confirm",
+            Self::Clear => "clear",
+        }
+    }
+}
+
+/// Whether the hooks still run after a failure, read again from the repo's `core.hooksPath`
+/// once the failure happened (never deduced from the step).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum ProtectionAfter {
+    /// The key is Guardrails' own: the hooks run as before the command.
+    InPlace,
+    /// The key is not Guardrails': no hook of GitRaptor runs in the repo.
+    Absent,
+}
+
+/// `data` of a `guard-failed` error: which step failed and where that leaves the repo.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GuardFailedData {
+    pub step: GuardStep,
+    pub protection: ProtectionAfter,
 }
 
 /// Whether the safe minimum applies (ADR-GRD-005 § 3).
