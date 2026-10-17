@@ -91,6 +91,20 @@ test("an inline `mod tests` maps to the parent file, and the deepest existing pr
   assert.equal(unitTestFile("/c/src/lib.rs", "x", () => false), "/c/src/lib.rs");
 });
 
+test("a test module declared with #[path] maps to the file the attribute names", () => {
+  const files = {
+    "/c/src/a/link.rs": '//! x\n#[cfg(test)]\n#[path = "link_tests.rs"]\nmod tests;\n',
+    "/c/src/a/link_tests.rs": "use super::*;\n",
+    "/c/src/a/marks.rs": '#[cfg(test)] #[path = "marks_x.rs"] mod other;\n#[cfg(test)]\nmod tests {}\n',
+  };
+  const exists = (p) => p in files;
+  const read = (p) => files[p] ?? "";
+  assert.equal(unitTestFile("/c/src/lib.rs", "a::link::tests::x", exists, read), "/c/src/a/link_tests.rs");
+  // Another module's #[path], or a #[path] to a missing file, leaves the test in the parent file.
+  assert.equal(unitTestFile("/c/src/lib.rs", "a::marks::tests::x", exists, read), "/c/src/a/marks.rs");
+  assert.equal(unitTestFile("/c/src/lib.rs", "a::marks::other::x", exists, read), "/c/src/a/marks.rs");
+});
+
 test("benches and binaries map to their src_path", () => {
   const { root, metadata } = fixture();
   const { xml } = rewriteJunit(JUNIT, buildIndex(metadata), root);
