@@ -125,7 +125,13 @@ jobs:
           # `repo_intact_min`: the `repo_intact` tests the gate must execute on that OS (passed plus
           # failed). Fewer fails the gate, so a filter that matches nothing, or a suite that stops
           # matching it, never passes green. Raise it when a suite lands; lower it only on purpose.
+          - os: ubuntu-latest
+            exec_audit: strace
+            repo_intact_min: 97
           # macOS: the trap gate is blocking; eslogger runs in `deep-exec-audit-macos`.
+          - os: macos-latest
+            exec_audit: auto
+            repo_intact_min: 104
           # Windows: trap gate only; ETW is pending (Dev Spec § 6).
           - os: windows-latest
             exec_audit: auto
