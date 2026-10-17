@@ -10,7 +10,7 @@
 
 | Estado | Fichas |
 |---|---|
-| Implementado (`implemented`) | 42 |
+| Implementado (`implemented`) | 43 |
 | Hecho (`done`) | 3 |
 | Implementado en parte (`partially-implemented`) | 19 |
 | Listo (`ready`) | 4 |
