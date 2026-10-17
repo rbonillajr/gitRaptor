@@ -1,0 +1,548 @@
+{
+  "schema": "nassa.certification.v1",
+  "certifiedAt": "2026-10-17T12:06:43.637Z",
+  "dir": "/Users/rbonilla/orca/workspaces/gitRaptor/ckp003",
+  "contract_sha256": "7499b04eed01cd681ab672c433ce77f381c5b2875eec69b620679394f36fa784",
+  "source": {
+    "kind": "devspec",
+    "ref": "docs/requirements/features/cockpit/dev-specs/TS-CKP-003-capa-cockpit-guardrails.md"
+  },
+  "verdict": "NOT CERTIFIED",
+  "status": "bloqueada",
+  "reservations": [
+    {
+      "why": "baseline-roja-explicada",
+      "note": "la suite base estaba en rojo y se dio por explicada con el informe `target/nextest/ci/junit-paths.xml`, cuya ruta controla el agente y que solo ata a la corrida su mtime"
+    },
+    {
+      "why": "integridad-sin-verificar",
+      "note": "integridad de pruebas: NO COMPROBADA — no hay informe registrado: falta el de la suite tras implementar (P3)"
+    },
+    {
+      "why": "test-enmendado",
+      "note": "criterio CKP003-LOCK: `crates/core/tests/ts_ckp_003_deadlock.rs` — El cliente hook recibía la raíz del perfil sin /profile (línea 314); el daemon usa ProfileDirs::under_root(root/profile) (tests/common/mod.rs:25), así que nunca conectaba. Solo se añade .join(\"profile\"). · aprobó coordinador (orquestador Orca, 2026-10-17) · 2026-10-17T11:23:28.560Z",
+      "test": "crates/core/tests/ts_ckp_003_deadlock.rs",
+      "hashBefore": "fe197b9b2a352a3e97be901a8ae5aac8adf22b92f4d56da6466de01fa274ae94",
+      "hashAfter": "7374030e4df546cf08c6e9c8d378bc11b860fbfff07964e71b50acdb06a70cfa",
+      "diff": [
+        "-         root: tp.root.path().to_owned(),",
+        "+         root: tp.root.path().join(\"profile\"),"
+      ]
+    },
+    {
+      "why": "test-enmendado",
+      "note": "criterio CKP003-CHAIN: `apps/cli/tests/guard_ts_ckp_003_chaining.rs` — PriorHooks::Global no se puede probar de punta a punta: el daemon que arranca el CLI toma HOME de la base de usuarios (client.rs clean_env) y raptor guard install lee la config global de la cuenta, no la del home temporal (precedente guard_us_grd_003.rs:138). Se excluye Global del bucle; lo cubren guardrails::prior y un test de user_ops con core.hooksPath global. · aprobó coordinador (orquestador Orca, 2026-10-17) · 2026-10-17T11:33:55.990Z",
+      "test": "apps/cli/tests/guard_ts_ckp_003_chaining.rs",
+      "hashBefore": "20e7955d6840a69865bc8a8ee4927ca3174d9c08bce84f0d52596cfa2a46fa86",
+      "hashAfter": "2aaa005e4fbb4aef85d5706597055d55d65de5c5488296ec8021fec003faf3d2",
+      "diff": [
+        "- //! (`PriorHooks::ALL`: none, own, husky, lefthook, pre-commit, global `core.hooksPath`) the",
+        "+ //! (`PriorHooks::ALL` but the global `core.hooksPath`: none, own, husky, lefthook, pre-commit) the",
+        "-     for prior in PriorHooks::ALL {",
+        "+     // A global `core.hooksPath` is not tested end to end: the daemon the CLI starts takes `HOME`",
+        "+     // from the user database, so `raptor guard install` reads the account's global configuration,",
+        "+     // not the temporary home's (same limit as guard_us_grd_003.rs, E4). `guardrails::prior` and",
+        "+     // the `user_ops` test with a global `core.hooksPath` cover it.",
+        "+     for prior in PriorHooks::ALL",
+        "+         .into_iter()",
+        "+         .filter(|p| *p != PriorHooks::Global)",
+        "+     {"
+      ]
+    },
+    {
+      "why": "tester-no-separado",
+      "path": "crates/core/tests/ts_ckp_003_deadlock.rs",
+      "writers": [
+        "el bucle principal"
+      ],
+      "note": "`crates/core/tests/ts_ckp_003_deadlock.rs` es un test de criterio y lo escribió `el bucle principal`, no el `criterion-tester`"
+    }
+  ],
+  "totals": {
+    "total": 23,
+    "passed": 23,
+    "failed": 0,
+    "notRun": 0
+  },
+  "integrity": {
+    "status": "NO COMPROBADA",
+    "note": "no hay informe registrado: falta el de la suite tras implementar (P3)",
+    "findings": []
+  },
+  "phases": {
+    "ok": true,
+    "missing": [],
+    "at": "2026-10-17T11:47:00.101Z",
+    "note": "las tres capas constan pasadas · último gate 2026-10-17T11:47:00.101Z. Acredita que corrieron, no CONTRA QUÉ árbol"
+  },
+  "blockers": [
+    {
+      "rule": "X6",
+      "msg": "el contrato no es el que firmó la aprobación: lo que se certifica no es lo que la persona aprobó"
+    }
+  ],
+  "hops": [
+    {
+      "hop": "design",
+      "declared": {
+        "agent": "main-loop",
+        "model": "opus"
+      },
+      "actual": []
+    },
+    {
+      "hop": "critic",
+      "declared": {
+        "agent": "nassa-core:plan-critic",
+        "model": "opus"
+      },
+      "actual": [
+        {
+          "agent": "nassa-core:plan-critic",
+          "model": "opus"
+        },
+        {
+          "agent": "nassa-core:plan-critic",
+          "model": "opus"
+        },
+        {
+          "agent": "nassa-core:plan-critic",
+          "model": "opus"
+        }
+      ]
+    },
+    {
+      "hop": "tester",
+      "declared": {
+        "agent": "nassa-core:criterion-tester",
+        "model": "sonnet"
+      },
+      "actual": [
+        {
+          "agent": "nassa-core:criterion-tester",
+          "model": "sonnet"
+        }
+      ]
+    },
+    {
+      "hop": "build",
+      "declared": {
+        "agent": "nassa-dev-rust:rust-expert",
+        "model": "opus"
+      },
+      "actual": [
+        {
+          "agent": "nassa-dev-rust:rust-expert",
+          "model": "opus"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-expert",
+          "model": "opus"
+        }
+      ]
+    },
+    {
+      "hop": "review",
+      "declared": {
+        "agent": "nassa-dev-rust:rust-code-reviewer",
+        "model": "opus"
+      },
+      "actual": [
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "sonnet"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "sonnet"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "opus"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "sonnet"
+        }
+      ]
+    },
+    {
+      "hop": "conformance",
+      "declared": {
+        "agent": "nassa-dev-rust:rust-code-reviewer",
+        "model": "sonnet"
+      },
+      "actual": [
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "sonnet"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "sonnet"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "opus"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "sonnet"
+        }
+      ]
+    }
+  ],
+  "lenses": {
+    "rigor": "alto",
+    "planned": [
+      "correctness",
+      "testing",
+      "security",
+      "architecture"
+    ],
+    "models": {
+      "correctness": "sonnet",
+      "testing": "sonnet",
+      "security": "review",
+      "architecture": "review"
+    },
+    "ran": [
+      {
+        "lens": "correctness",
+        "model": "sonnet"
+      },
+      {
+        "lens": "testing",
+        "model": "sonnet"
+      },
+      {
+        "lens": "security",
+        "model": "opus"
+      },
+      {
+        "lens": "architecture",
+        "model": "opus"
+      },
+      {
+        "lens": "security",
+        "model": "opus"
+      }
+    ],
+    "missing": [],
+    "ignored": [
+      {
+        "lens": "security",
+        "why": "sin model"
+      }
+    ]
+  },
+  "rigor": "alto",
+  "approvals": [
+    {
+      "source": "approval",
+      "by": "human",
+      "kind": "plan",
+      "sha": "707273886823c6a72d876905c9a616d5c10f922732d0fc3188ee114a09af7a46:7366fe99bcc7b2c6de87df61c34b675439e8631d00617fae1555b2dda5714d5f:e8a0df0180a825813318b8f5d66b0b4ede6115a2553522563dc90a24b830c754",
+      "at": "2026-10-17T10:00:04.221Z"
+    },
+    {
+      "source": "critic",
+      "kind": "plan",
+      "rounds": 4,
+      "lastVerdict": "APROBABLE",
+      "lastBlocking": 0,
+      "at": "2026-10-17T04:11:59.395Z"
+    }
+  ],
+  "warnings": [
+    {
+      "why": "fuera-del-plan",
+      "paths": [
+        "apps/cli/i18n/en/guard.txt",
+        "apps/cli/i18n/es/guard.txt",
+        "apps/cli/src/guard.rs",
+        "crates/core/src/client.rs",
+        "crates/core/src/daemon/env.rs",
+        "crates/core/src/daemon/mod.rs",
+        "crates/core/src/daemon/serve.rs",
+        "crates/core/src/executor/git.rs",
+        "crates/core/src/executor/ops/test_arms.rs",
+        "crates/core/src/guardrails/actor.rs",
+        "crates/core/src/profile/guard_log.rs",
+        "crates/core/src/timemachine/protected/backend.rs",
+        "crates/core/src/timemachine/protected/tests.rs",
+        "crates/core/src/timemachine/restore.rs",
+        "crates/core/src/timemachine/undo.rs",
+        "crates/git/src/guard_read.rs",
+        "crates/git/src/user_ops.rs",
+        "crates/git/tests/user_ops_hooks_env.rs",
+        "docs/architecture/decisions/ADR-CKP-002-catalogo-operaciones-ejecutor.md",
+        "tools/test/nextest-junit.mjs",
+        "tools/test/nextest-junit.test.mjs"
+      ],
+      "note": "21 fichero(s) fuera del plan aprobado: apps/cli/i18n/en/guard.txt, apps/cli/i18n/es/guard.txt, apps/cli/src/guard.rs, crates/core/src/client.rs, crates/core/src/daemon/env.rs … +16"
+    }
+  ],
+  "outsidePlan": [
+    "apps/cli/i18n/en/guard.txt",
+    "apps/cli/i18n/es/guard.txt",
+    "apps/cli/src/guard.rs",
+    "crates/core/src/client.rs",
+    "crates/core/src/daemon/env.rs",
+    "crates/core/src/daemon/mod.rs",
+    "crates/core/src/daemon/serve.rs",
+    "crates/core/src/executor/git.rs",
+    "crates/core/src/executor/ops/test_arms.rs",
+    "crates/core/src/guardrails/actor.rs",
+    "crates/core/src/profile/guard_log.rs",
+    "crates/core/src/timemachine/protected/backend.rs",
+    "crates/core/src/timemachine/protected/tests.rs",
+    "crates/core/src/timemachine/restore.rs",
+    "crates/core/src/timemachine/undo.rs",
+    "crates/git/src/guard_read.rs",
+    "crates/git/src/user_ops.rs",
+    "crates/git/tests/user_ops_hooks_env.rs",
+    "docs/architecture/decisions/ADR-CKP-002-catalogo-operaciones-ejecutor.md",
+    "tools/test/nextest-junit.mjs",
+    "tools/test/nextest-junit.test.mjs"
+  ],
+  "replans": [
+    "re-plan 1: docs/requirements/features/cockpit/dev-specs/TS-CKP-003-capa-cockpit-guardrails.md"
+  ],
+  "planChain": {
+    "base": "707273886823c6a72d876905c9a616d5c10f922732d0fc3188ee114a09af7a46",
+    "replans": 1
+  },
+  "criteria": [
+    {
+      "id": "CKP003-REG",
+      "statement": "Registro único (§9.4): un merge permitido sin regla no deja entrada; un discard-worktree de rama protegida (appliesTo everyone) deja una sola denial con capa cockpit; un commit de agente con aviso deja una sola notice aunque pregunten pre-commit, commit-msg y reference-transaction",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_ts_ckp_003 a_plan_leaves_at_most_one_entry -- --exact --test-threads=2",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 17624
+    },
+    {
+      "id": "CKP003-PRE",
+      "statement": "Antes de efectos: un plan denegado deja la huella del repo igual, ningún snapshot nuevo en la línea de tiempo y ninguna intención en el oplog",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_ts_ckp_003 a_denied_plan_changes_nothing_and_takes_no_snapshot -- --exact --test-threads=2",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 2163
+    },
+    {
+      "id": "CKP003-MERGE",
+      "statement": "Lo no impedible: un merge a una base protegida (everyone) lo deniega el ejecutor con -32014 y guardrails.reasons[0].rule = policy.protected-branch",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_ts_ckp_003 a_merge_into_a_protected_base_is_denied_by_the_executor -- --exact --test-threads=2",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 2069
+    },
+    {
+      "id": "CKP003-NOHOOKS",
+      "statement": "D12: en un repo sin raptor guard install el ejecutor evalúa igual; un merge-into-base a main termina en -32014 con policy.protected-branch (unión {main, rama principal, rama base}) y deja una denial con capa cockpit",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_ts_ckp_003 a_repo_without_hooks_is_still_governed_by_the_executor -- --exact --test-threads=2",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 1523
+    },
+    {
+      "id": "CKP003-NIETO",
+      "statement": "Ligadura (nieto, H-01): el pre-commit del usuario lanza git push --force durante un commit de raptor-fake-agent; se deniega por el mínimo y deja su propia entrada con capa hooks y actor claude-code",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_ts_ckp_003 a_grandchild_git_is_evaluated_with_the_plan_requester -- --exact --test-threads=2",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 3523
+    },
+    {
+      "id": "CKP003-DISTINTA",
+      "statement": "Ligadura (transición distinta, D6): el pre-commit añade al índice una ruta prohibida; la rama no se mueve, queda una sola denial con la capa del plan y la respuesta lleva guardrails con el mismo decision_id",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_ts_ckp_003 a_transition_other_than_the_registered_one_is_evaluated_again -- --exact --test-threads=2",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 3398
+    },
+    {
+      "id": "CKP003-WTADD",
+      "statement": "Ligadura (git interno): create-worktree con rama nueva no deja ninguna entrada y termina done",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_ts_ckp_003 a_worktree_add_with_a_new_branch_leaves_no_second_entry -- --exact --test-threads=2",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 2591
+    },
+    {
+      "id": "CKP003-LINK",
+      "statement": "classify (D5): un exec git desde un hook y un git bajo un hijo registrado que no es él son nietos; un pid reutilizado del daemon no es padre (⛔8.1)",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-core --lib guardrails::link::tests::",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 8420
+    },
+    {
+      "id": "CKP003-ABORT",
+      "statement": "Abort del rebase atómico: desenlace conflict-reverted, la rama en su punta previa y ninguna entrada",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_ts_ckp_003 an_atomic_rebase_that_conflicts_is_evaluated_once -- --exact --test-threads=2",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 2973
+    },
+    {
+      "id": "CKP003-ABORT-U",
+      "statement": "El hijo del abort (RestoreTo) casa y reutiliza la decisión del plan sin llamar a decide",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-core --lib guardrails::link::tests::the_abort_child_reuses_the_plan_decision",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 140
+    },
+    {
+      "id": "CKP003-LOCK",
+      "statement": "Sin interbloqueo: un hook bajo el ejecutor recibe respuesta de guard.evaluate mientras el repo está bloqueado, dentro de 10 s",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-core --test ts_ckp_003_deadlock a_hook_under_the_executor_is_answered_while_the_repo_is_locked",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 7704
+    },
+    {
+      "id": "CKP003-D15",
+      "statement": "Invariante D15: un rebase-onto-base y un discard-worktree permitidos, cuyo hook anuncia guard.prior-snapshot y recibe allow, no producen ningún snapshot hook-prior para el hijo del ejecutor (ninguna fila hook-prior en el oplog); el ejecutor tiene su propio snapshot previo",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-core --test ts_ckp_003_deadlock the_executor_child_never_asks_for_a_hook_prior",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 536
+    },
+    {
+      "id": "CKP003-MCP",
+      "statement": "Capa fijada por el daemon (M-03): raptor-fake-agent lanza un cliente de tipo TUI; el commit con una ruta prohibida se deniega y la entrada lleva capa mcp",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_ts_ckp_003 an_agent_plan_from_the_tui_is_evaluated_and_logged_as_mcp -- --exact --test-threads=2",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 2394
+    },
+    {
+      "id": "CKP003-CHAIN",
+      "statement": "Regresión INF-GRD-001 con el ejecutor como padre: para cada PriorHooks::ALL el commit del brazo de prueba con el marcador rechazado falla igual que con Git crudo, y sin él entra",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_ts_ckp_003_chaining chained_prior_hooks_behave_the_same_under_the_executor -- --test-threads=2",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 16375
+    },
+    {
+      "id": "CKP003-CAP-OP",
+      "statement": "Capacidad operation.guardrails en las dos direcciones, en el canal: con ella PrepareResult y data de -32014 llevan guardrails (GuardrailsDenial con el decision_id de la entrada); sin ella, la forma de hoy (decision deny y reason guardrails-denied, sin campo guardrails)",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-core --test ts_ckp_003_capabilities operation_guardrails_only_with_its_capability",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 2218
+    },
+    {
+      "id": "CKP003-CAP-LOG",
+      "statement": "Capacidad guard.log-layers en las dos direcciones: con ella las entradas llevan su capa; sin ella el listado omite las que no son hooks y el resumen las cuenta",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-core --test ts_ckp_003_log_layers log_layers_only_with_its_capability",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 2176
+    },
+    {
+      "id": "CKP003-MCPPROJ",
+      "statement": "D10 (ajuste del PO): la proyección MCP no lleva mensajes, contenido, configStatus, configRef ni campos de excepción, y los params son de tipo rama, ruta o tamaño",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-api --lib catalog::denial_tests::the_mcp_projection_carries_no_message_content_or_config_text",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 4798
+    },
+    {
+      "id": "CKP003-ENGINE",
+      "statement": "Motor del plan (D8, D16, S-GRD-9, D2): ask se aplica como deny; un motor sin attach deniega con razón; un plan en marcha nunca se expulsa (1 024 ligaduras vivas → system.internal-error; una vista previa expulsada que denegó deja su denial); respuesta y entrada comparten decision_id; el commit evalúa su rama con el centinela old→old",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-core --lib guardrails::plan_gate::tests::",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 1451
+    },
+    {
+      "id": "CKP003-MSG",
+      "statement": "SEC-05: el mensaje de commit no llega al registro ni a la huella",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-core --lib guardrails::plan_gate::tests::the_commit_message_never_reaches_the_log_or_the_fingerprint",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 142
+    },
+    {
+      "id": "CKP003-ARMS",
+      "statement": "D13/D14: production() cablea el motor y ningún brazo gobernado real; los brazos de prueba quedan inertes sin GITRAPTOR_TEST_EXECUTOR_ARMS=1 y GITRAPTOR_PROFILE_DIR a la vez",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-core --lib executor::ops::arms_tests::",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 130
+    },
+    {
+      "id": "CKP003-RELEASE",
+      "statement": "Condición del coordinador (seguridad): GITRAPTOR_TEST_EXECUTOR_ARMS nunca arma brazos de prueba en un binario sin debug_assertions: test_arms_requested(false, env) es falso con las dos variables, y en un build --release (sin debug_assertions) production_from con GITRAPTOR_TEST_EXECUTOR_ARMS=1 y GITRAPTOR_PROFILE_DIR no arma ningún brazo",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-core --lib executor::ops::arms_tests::the_variable_is_ignored_without_debug_assertions && env -u CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS CARGO_BUILD_JOBS=3 cargo test --release -p gitraptor-core --lib executor::ops::arms_tests::a_release_build_never_arms_the_test_arms",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 16460
+    },
+    {
+      "id": "CKP003-PLAN",
+      "statement": "T002: normalize sigue la tabla D2 y nunca deja registered vacío; matches es igualdad estricta (en la duda, no casa); la capa nunca cambia la decisión (propiedad)",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-policy --lib guard::plan::tests::",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 4028
+    },
+    {
+      "id": "CKP003-MARKS",
+      "statement": "T006 ⛔6.1: las transiciones de un hijo son visibles en cuanto cae la barrera de arranque (se registran con su identidad en la misma sección crítica)",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-core --lib channel::marks::transitions_tests::",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 126
+    }
+  ]
+}
