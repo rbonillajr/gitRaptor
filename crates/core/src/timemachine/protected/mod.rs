@@ -27,12 +27,14 @@ use gitraptor_api::timemachine::PriorFailure;
 use crate::channel::marks::ExecutorMarks;
 use crate::channel::peer::ProcSource;
 use crate::channel::requester::Who;
+use crate::executor::PlanBinding;
 use crate::profile::ProfileDirs;
 use crate::timemachine::chaos;
 use crate::timemachine::oplog::{
     Channel, NewOperation, OperationKind, OperationTransition, Oplog, Scope, Target,
 };
 use crate::timemachine::store::{CaptureError, CaptureRequest, SnapshotStore, WorktreeScope};
+use gitraptor_policy::guard::plan::Expected;
 
 pub use backend::{
     DaemonBackend, OperationCatalog, OperationsWiring, SnapshotterLayer, TimeMachineBackend,
@@ -251,6 +253,8 @@ pub struct MarkedChild {
 /// What a step may do besides its own work.
 pub struct StepCtx<'a> {
     operation_id: &'a str,
+    /// The transitions of the plan every child is registered with.
+    registered: Arc<[Expected]>,
     prior_snapshot_id: &'a str,
     who: &'a Who,
     channel: Channel,
@@ -322,13 +326,41 @@ impl StepCtx<'_> {
         &mut self,
         launch: impl FnOnce() -> std::io::Result<Child>,
     ) -> std::io::Result<MarkedChild> {
+        let transitions = Arc::clone(&self.registered);
+        self.spawn_registered(launch, transitions)
+    }
+
+    /// [`Self::spawn_with`] for a child that makes its own transitions besides the plan's (the
+    /// abort of an atomic rebase moves the branch back): it inherits the plan's decision for
+    /// those too.
+    pub fn spawn_with_transitions(
+        &mut self,
+        launch: impl FnOnce() -> std::io::Result<Child>,
+        transitions: &[Expected],
+    ) -> std::io::Result<MarkedChild> {
+        let all: Vec<Expected> = self.registered.iter().chain(transitions).cloned().collect();
+        self.spawn_registered(launch, Arc::from(all))
+    }
+
+    /// The child is marked with its identity and its transitions in one critical section, before
+    /// the start barrier drops: a hook that waited for it finds both.
+    fn spawn_registered(
+        &mut self,
+        launch: impl FnOnce() -> std::io::Result<Child>,
+        transitions: Arc<[Expected]>,
+    ) -> std::io::Result<MarkedChild> {
         let pending = self.marks.begin_spawn();
         let mut child = launch()?;
         let pid = child.id();
         let start_us = match self.procs.read(pid) {
             Ok(info) => {
-                self.marks
-                    .add_child(self.operation_id, pid, info.start_us, info.pgid);
+                self.marks.add_child(
+                    self.operation_id,
+                    pid,
+                    info.start_us,
+                    info.pgid,
+                    transitions,
+                );
                 info.start_us
             }
             Err(_) => {
@@ -377,6 +409,9 @@ pub struct ProtectedRequest {
     pub target: Target,
     pub warnings: Vec<String>,
     pub engine_mark: i64,
+    /// The allowed plan of a governed operation: its children inherit its decision while they
+    /// make its registered transitions.
+    pub binding: Option<Arc<PlanBinding>>,
 }
 
 impl ProtectedRequest {
@@ -422,6 +457,7 @@ impl ProtectedRequest {
             target: Target::None,
             warnings: Vec::new(),
             engine_mark,
+            binding: None,
         })
     }
 }
@@ -572,9 +608,15 @@ impl ProtectedOperation<'_> {
             &operation_id,
             &req.who,
             crate::channel::peer::proc_clock_us(),
+            req.binding.clone(),
         );
+        let registered: Arc<[Expected]> = req
+            .binding
+            .as_ref()
+            .map_or_else(|| Arc::from(Vec::new()), |b| Arc::clone(&b.registered));
         let mut ctx = StepCtx {
             operation_id: &operation_id,
+            registered,
             prior_snapshot_id: &prior.snapshot_id,
             who: &req.who,
             channel: req.channel,

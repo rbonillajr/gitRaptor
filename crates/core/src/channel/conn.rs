@@ -884,8 +884,7 @@ impl Connection<'_> {
             methods::GUARD_EVALUATE => {
                 let result = request.params::<EvaluateParams>().map(|p| {
                     let caller = self.guard_caller(&p);
-                    let served =
-                        crate::guardrails::evaluate::serve_audited(&self.ctx.guard, &p, &caller);
+                    let served = self.guard_served(&p, &caller);
                     let policy = served.authorship_policy;
                     let mut decision = served.decision;
                     // One decision per operation (ADR-GRD-003 § 6): the second line of the
@@ -1171,6 +1170,24 @@ impl Connection<'_> {
         }
     }
 
+    /// The decision of `guard.evaluate` by who the hook's `git` belongs to: a direct child of a
+    /// governed plan inherits it (or is decided again with the plan, D6); anyone else, a
+    /// grandchild included, is decided as any hook (H-01). Never takes a repo's lock.
+    fn guard_served(
+        &self,
+        params: &EvaluateParams,
+        caller: &crate::guardrails::evaluate::Caller,
+    ) -> crate::guardrails::evaluate::Served {
+        use crate::guardrails::link::{self, Link};
+        if let Link::Child(child) = link::classify(self.peer, &self.ctx.checks(), &self.ctx.marks)
+            && child.binding.is_some()
+        {
+            let cwd = caller.cwd.clone().or_else(|| process_cwd(self.peer.pid));
+            return link::serve_child(&self.ctx.guard, params, &child, cwd.as_deref());
+        }
+        crate::guardrails::evaluate::serve_audited(&self.ctx.guard, params, caller)
+    }
+
     /// Hands the decision log entry of a decision to the loop, never waiting (US-GRD-005):
     /// over the in-flight cap the occurrence is only counted (D4).
     fn log_decision(
@@ -1208,8 +1225,10 @@ impl Connection<'_> {
         };
         let branch = reader.head().ok().and_then(|head| head.branch);
         let checks = self.ctx.checks();
-        let (actor, under_executor) =
+        let (actor, link) =
             crate::guardrails::actor::resolve_logged(self.peer, &checks, Some(&self.ctx.marks));
+        // The direct child's decision is its plan's, logged once by the plan (D6, D8).
+        let under_executor = matches!(link, crate::guardrails::link::Link::Child(_));
         let (at_ms, utc_offset_s) = crate::watch::wall_now();
         let ctx = log::LogContext {
             actor,
@@ -1525,6 +1544,12 @@ impl Connection<'_> {
                 if !self.has(methods::CAP_GUARD_PROTECTION.name) {
                     log.entries
                         .retain(|e| e.kind != gitraptor_api::guard::LogKind::ProtectionState);
+                }
+                // Without `guard.log-layers` only the hooks' entries are listed; the summary
+                // counts them all.
+                if !self.has(methods::CAP_GUARD_LOG_LAYERS.name) {
+                    log.entries
+                        .retain(|e| e.layer == gitraptor_api::guard::LogLayer::Hooks);
                 }
                 // The denials of the configuration read as a path.
                 if legacy {
@@ -2546,8 +2571,12 @@ fn write_route(name: &str) -> Option<WriteRoute> {
 fn exec_error(e: ExecError) -> ErrorObject {
     match e {
         ExecError::Rejected(reason) => {
-            ErrorObject::new(code::OPERATION_REJECTED, "operation rejected")
-                .with_data(RejectedData { reason })
+            ErrorObject::new(code::OPERATION_REJECTED, "operation rejected").with_data(
+                RejectedData {
+                    reason,
+                    guardrails: None,
+                },
+            )
         }
         ExecError::NotImplemented(story) => {
             ErrorObject::new(code::NOT_IMPLEMENTED, "not implemented yet")
@@ -2574,6 +2603,15 @@ fn exec_error(e: ExecError) -> ErrorObject {
                 .with_data(serde_json::json!({ "operation_id": operation_id }))
         }
         ExecError::Capture(why) => capture_error(why),
+        // The decision itself only travels with `operation.guardrails` (`Conn::exec_refusal`).
+        ExecError::GuardrailsDenied(_) => {
+            ErrorObject::new(code::OPERATION_REJECTED, "operation rejected").with_data(
+                RejectedData {
+                    reason: catalog::RejectReason::GuardrailsDenied,
+                    guardrails: None,
+                },
+            )
+        }
     }
 }
 
@@ -2581,8 +2619,10 @@ fn exec_error(e: ExecError) -> ErrorObject {
 fn capture_error(why: ManualError) -> ErrorObject {
     use catalog::RejectReason as R;
     let rejected = |reason| {
-        ErrorObject::new(code::OPERATION_REJECTED, "operation rejected")
-            .with_data(RejectedData { reason })
+        ErrorObject::new(code::OPERATION_REJECTED, "operation rejected").with_data(RejectedData {
+            reason,
+            guardrails: None,
+        })
     };
     match why {
         ManualError::Quota(hit) => quota_error(&hit, now_ms()),
@@ -3127,6 +3167,10 @@ impl Connection<'_> {
             challenge: prepared.challenge,
             expires_in_ms: prepared.expires_in_ms,
             diagnostics: prepared.diagnostics,
+            // `for_mcp` keeps only what describes the agent's own operation.
+            guardrails: prepared
+                .denial
+                .filter(|_| self.has(methods::CAP_OPERATION_GUARDRAILS.name)),
         };
         let value = if self.is_mcp() {
             serde_json::to_value(result.for_mcp())
@@ -3134,6 +3178,27 @@ impl Connection<'_> {
             serde_json::to_value(result)
         };
         value.map_err(|_| ErrorObject::new(code::INTERNAL, "serialization"))
+    }
+
+    /// [`exec_error`], with the Guardrails denial for a connection with `operation.guardrails`
+    /// (over MCP, its projection: no pattern, example, remote or oid).
+    fn exec_refusal(&self, e: ExecError) -> ErrorObject {
+        if let ExecError::GuardrailsDenied(Some(denial)) = &e
+            && self.has(methods::CAP_OPERATION_GUARDRAILS.name)
+        {
+            let denial = if self.is_mcp() {
+                denial.for_mcp()
+            } else {
+                (**denial).clone()
+            };
+            return ErrorObject::new(code::OPERATION_REJECTED, "operation rejected").with_data(
+                RejectedData {
+                    reason: catalog::RejectReason::GuardrailsDenied,
+                    guardrails: Some(denial),
+                },
+            );
+        }
+        exec_error(e)
     }
 
     /// `operation.run`: executes a plan of this connection as a protected
@@ -3213,7 +3278,7 @@ impl Connection<'_> {
                 },
                 &env,
             )
-            .map_err(exec_error)?;
+            .map_err(|e| self.exec_refusal(e))?;
         let done = match done {
             crate::executor::RunDone::Protected(done) => done,
             crate::executor::RunDone::Captured(c) => {

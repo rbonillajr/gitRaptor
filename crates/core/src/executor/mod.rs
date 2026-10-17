@@ -46,8 +46,10 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 pub use facts::{RepoFacts, check_common};
-pub use gate::{GateDecision, GateRequest, GuardrailsGate, NoGuardrails, PlanClose};
-pub use git::{CancelToken, GitRun, Interrupt, TimeLimit, run_git};
+pub use gate::{
+    GateDecision, GateRequest, GuardrailsGate, NoGuardrails, PlanBinding, PlanClose, Verdict,
+};
+pub use git::{CancelToken, GitRun, Interrupt, TimeLimit, run_git, run_git_with};
 pub use new_path::{NewPathError, check_new_worktree_path};
 
 use crate::channel::marks::ExecutorMarks;
@@ -86,6 +88,9 @@ pub struct OpPlan {
     pub affected: Affected,
     /// Another agent session is present in the worktree (Q-MCP-21).
     pub other_session: bool,
+    /// What a governed operation does, as Guardrails evaluates it; `None` for the others.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub governed: Option<gitraptor_policy::guard::plan::PlanShape>,
 }
 
 /// Why the operation's story refused or could not plan.
@@ -133,6 +138,19 @@ pub enum ExecError {
     Protected(ProtectedError),
     /// A manual snapshot was not taken (it leaves no point, and deletes none).
     Capture(ManualError),
+    /// Guardrails denied the plan (`guardrails-denied`), with the decision when an engine took
+    /// one: the channel shows it only to a connection with `operation.guardrails`.
+    GuardrailsDenied(Option<Box<gitraptor_api::catalog::GuardrailsDenial>>),
+}
+
+/// The contract's view of a denial: the decision that counted, shared with its log entry.
+fn denial_of(d: &gitraptor_api::guard::Decision) -> gitraptor_api::catalog::GuardrailsDenial {
+    gitraptor_api::catalog::GuardrailsDenial {
+        decision_id: d.decision_id.clone(),
+        effect: d.effect,
+        applied_effect: d.applied_effect,
+        reasons: d.reasons.clone(),
+    }
 }
 
 impl From<RejectReason> for ExecError {
@@ -250,6 +268,10 @@ struct StoredPlan {
     challenge: bool,
     session_env: SessionEnv,
     created: Instant,
+    plan_id: String,
+    /// What the plan does as Guardrails evaluates it; part of the fingerprint, so the plan made
+    /// again under the lock has the same one when the fingerprint matches.
+    shape: Option<gitraptor_policy::guard::plan::PlanShape>,
 }
 
 impl StoredPlan {
@@ -260,6 +282,11 @@ impl StoredPlan {
             layer: self.layer,
             actor: self.who.actor.clone(),
             fingerprint: hex(&self.fingerprint),
+            plan_id: self.plan_id.clone(),
+            common_dir: self.repo.common_dir.clone(),
+            worktree: self.repo.worktree.clone(),
+            branch: self.facts.head_branch.clone(),
+            shape: self.shape.clone(),
         })
     }
 }
@@ -275,6 +302,8 @@ pub struct Prepared {
     pub challenge: Option<String>,
     pub expires_in_ms: u64,
     pub diagnostics: Vec<Diagnostic>,
+    /// Why Guardrails denied the plan, when an engine decided.
+    pub denial: Option<gitraptor_api::catalog::GuardrailsDenial>,
 }
 
 /// What prepare needs from the channel.
@@ -596,17 +625,28 @@ impl Executor {
             challenge: challenge.is_some(),
             session_env,
             created: Instant::now(),
+            plan_id: plan_id.clone(),
+            shape: op_plan.governed,
         };
-        let decision = match stored.gate_request() {
-            None => DecisionView::NotGoverned,
-            Some(req) => match self.gate.evaluate(&req) {
-                GateDecision::Allow => DecisionView::Allow,
-                GateDecision::Deny => DecisionView::Deny,
-                GateDecision::NotEvaluated => DecisionView::NotEvaluated,
-            },
+        // The preview: no binding is kept, the decision that counts is taken again at run.
+        let (decision, denial) = match stored.gate_request() {
+            None => (DecisionView::NotGoverned, None),
+            Some(req) => {
+                let verdict = self.gate.evaluate_detailed(&req);
+                let denial = verdict
+                    .decision
+                    .as_ref()
+                    .filter(|_| verdict.view == GateDecision::Deny)
+                    .map(denial_of);
+                let view = match verdict.view {
+                    GateDecision::Allow => DecisionView::Allow,
+                    GateDecision::Deny => DecisionView::Deny,
+                    GateDecision::NotEvaluated => DecisionView::NotEvaluated,
+                };
+                (view, denial)
+            }
         };
         lock(&self.plans).insert(plan_id.clone(), stored);
-        let _ = op_plan;
         Ok(Prepared {
             plan_id,
             fingerprint: hex(&fp),
@@ -622,6 +662,7 @@ impl Executor {
                     subject: Untrusted::new(d.var),
                 })
                 .collect(),
+            denial,
         })
     }
 
@@ -871,13 +912,21 @@ impl Executor {
             return refuse(&plan, RejectReason::StateChanged);
         }
 
-        // The decision that counts, before any effect (BR-CKP-WF-002).
-        if let Some(req) = plan.gate_request()
-            && self.gate.evaluate(&req) != GateDecision::Allow
-        {
-            self.close(&plan, PlanClose::Denied);
-            return Err(RejectReason::GuardrailsDenied.into());
-        }
+        // The decision that counts, before any effect (BR-CKP-WF-002). Its binding is what the
+        // children of the step inherit.
+        let binding = match plan.gate_request() {
+            None => None,
+            Some(req) => {
+                let verdict = self.gate.evaluate_detailed(&req);
+                if verdict.view != GateDecision::Allow {
+                    self.close(&plan, PlanClose::Denied);
+                    return Err(ExecError::GuardrailsDenied(
+                        verdict.decision.as_ref().map(|d| Box::new(denial_of(d))),
+                    ));
+                }
+                verdict.binding
+            }
+        };
 
         let cancel = CancelToken::default();
         let step_plan = StepPlan {
@@ -932,6 +981,7 @@ impl Executor {
             None => return refuse(&plan, RejectReason::GitBusy),
         };
         req.confirmed = plan.challenge;
+        req.binding = binding.clone();
         req.warnings = plan.warnings.iter().map(|w| format!("{w:?}")).collect();
         let protected = ProtectedOperation {
             oplog: &plan.repo.oplog,
@@ -973,7 +1023,25 @@ impl Executor {
             gitraptor_api::event::OPERATION_FINISHED,
             event(None, outcome, Some(close)),
         );
+        // D6: a direct child that left the registered transitions and was denied. The plan's
+        // entry carries that decision, and so does the answer when the run failed.
+        let late = binding.as_ref().and_then(|b| {
+            b.late
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clone()
+                .filter(|d| d.applied_effect != gitraptor_api::guard::Effect::Allow)
+        });
+        drop(binding);
+        drop(req);
         self.close(&plan, PlanClose::Ran(close));
+        if ran.is_err()
+            && let Some(late) = late
+        {
+            return Err(ExecError::GuardrailsDenied(Some(Box::new(denial_of(
+                &late,
+            )))));
+        }
         let done = ran.map_err(ExecError::Protected)?;
         let git_output = if plan.layer == Layer::Cockpit {
             done.output.git_output.clone()
@@ -1198,6 +1266,11 @@ mod tests {
             layer: Layer::Cockpit,
             actor: Actor::Unattributed,
             fingerprint: String::new(),
+            plan_id: String::new(),
+            common_dir: std::path::PathBuf::new(),
+            worktree: std::path::PathBuf::new(),
+            branch: None,
+            shape: None,
         };
         assert_eq!(NoGuardrails.evaluate(&req), GateDecision::NotEvaluated);
     }

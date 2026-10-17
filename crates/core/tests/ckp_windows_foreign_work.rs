@@ -112,6 +112,7 @@ impl ProtectedBackend for Backend {
             warnings: Vec::new(),
             affected: self.affected.clone(),
             other_session: false,
+            governed: None,
         })
     }
     fn step(&self, _plan: &StepPlan<'_>) -> Result<Box<dyn ProtectedStep>, StepError> {

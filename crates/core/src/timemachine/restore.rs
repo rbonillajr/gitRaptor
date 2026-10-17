@@ -691,6 +691,7 @@ pub fn restore_to(
             })
             .collect(),
         engine_mark,
+        binding: None,
     };
     let mut step = UndoStep {
         store,

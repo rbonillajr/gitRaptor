@@ -80,6 +80,7 @@ impl OperationCatalog for Catalog {
             warnings: Vec::new(),
             affected: Affected::Nobody,
             other_session: false,
+            governed: None,
         })
     }
 

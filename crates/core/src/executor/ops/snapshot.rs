@@ -16,6 +16,7 @@ pub(super) fn plan_op(facts: &RepoFacts) -> Result<OpPlan, PlanError> {
         warnings: Vec::new(),
         affected: Affected::Nobody,
         other_session: false,
+        governed: None,
     })
 }
 

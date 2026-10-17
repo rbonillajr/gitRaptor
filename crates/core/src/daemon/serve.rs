@@ -71,6 +71,28 @@ impl Daemon {
             return;
         };
         let protected = self.protected_wiring();
+        // The production engine decides with the channel's registry and writes the single entry
+        // of each plan through the same capped road as the hooks' entries, never waiting.
+        if let Some(ops) = &self.config.operations {
+            let registry = Arc::clone(&self.guard);
+            let handle = self.handle.clone();
+            ops.gate.attach(
+                &self.guard,
+                Arc::new(move |entry| {
+                    let sink = registry.log();
+                    if !sink.try_reserve() {
+                        sink.overflow(&entry);
+                        return false;
+                    }
+                    if handle.guard_record(entry) {
+                        true
+                    } else {
+                        sink.release();
+                        false
+                    }
+                }),
+            );
+        }
         // The executor's book when one is wired, so "one live challenge per connection" holds
         // for the whole daemon.
         let challenges = protected

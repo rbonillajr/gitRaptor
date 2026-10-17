@@ -42,6 +42,10 @@ pub trait OperationCatalog: Send + Sync {
     ) -> Result<OpPlan, PlanError>;
     /// The step that runs a plan whose fingerprint was just checked.
     fn step(&self, plan: &StepPlan<'_>) -> Result<Box<dyn ProtectedStep>, StepError>;
+    /// The operations this catalog serves, when it says (the production one does).
+    fn armed(&self) -> &[OperationId] {
+        &[]
+    }
 }
 
 /// A layer over the production snapshotter. Tests inject faults with it

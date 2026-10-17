@@ -109,7 +109,7 @@ impl RepoStore {
                     code(&entry.effect),
                     code(&entry.applied_effect),
                     json(&entry.reasons),
-                    code(&LogLayer::Hooks),
+                    code(&entry.layer),
                     entry.decision_id,
                     code(&LogOrigin::Daemon),
                     entry.authorship.as_ref().map(json),
@@ -157,7 +157,7 @@ impl RepoStore {
             .conn
             .prepare(
                 "SELECT at_ms, utc_offset_s, last_ms, count, worktree, branch, actor, operation,
-                     kind, detail, effect, applied_effect, reasons, decision_id, authorship
+                     kind, detail, effect, applied_effect, reasons, decision_id, authorship, layer
                  FROM guardrails_decisions
                  WHERE last_ms >= ?1 AND (?3 = 0 OR NOT EXISTS (SELECT 1 FROM json_each(reasons) WHERE json_extract(value, '$.rule') = 'config.relax-ignored'))
                  ORDER BY last_ms DESC, id DESC LIMIT ?2",
@@ -248,7 +248,7 @@ fn add_over_cap(
                     code(&row.effect),
                     code(&row.applied_effect),
                     json(&row.reason.iter().collect::<Vec<_>>()),
-                    code(&LogLayer::Hooks),
+                    code(&row.layer),
                     code(&LogOrigin::Daemon),
                     key,
                 ],
@@ -274,7 +274,7 @@ fn entry_row(row: &Row<'_>) -> rusqlite::Result<GuardLogEntry> {
         effect: from_code(&row.get::<_, String>(10)?)?,
         applied_effect: from_code(&row.get::<_, String>(11)?)?,
         reasons: from_json(&row.get::<_, String>(12)?)?,
-        layer: LogLayer::Hooks,
+        layer: from_code::<LogLayer>(&row.get::<_, String>(15)?)?,
         origin: LogOrigin::Daemon,
         decision_id: row.get(13)?,
         authorship: text(14)?.as_deref().map(from_json).transpose()?,

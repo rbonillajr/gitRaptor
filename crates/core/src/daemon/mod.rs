@@ -70,7 +70,8 @@ use crate::watch::Observer;
 pub use discovery::{DISCOVERY_HOME_ENV, DISCOVERY_POLL_ENV, DiscoveryConfig};
 pub(crate) use discovery::{DiscoveryError, DiscoveryRequest, prepare_root};
 pub use env::{
-    AGENT_EXECUTABLES_ENV, CLOCK_SKEW_FILE_ENV, DaemonEnv, TEST_GIT_ENV, TM_NO_FREE_SPACE_FLOOR_ENV,
+    AGENT_EXECUTABLES_ENV, CLOCK_SKEW_FILE_ENV, DaemonEnv, TEST_EXECUTOR_ARMS_ENV, TEST_GIT_ENV,
+    TM_NO_FREE_SPACE_FLOOR_ENV,
 };
 use guard::recover_guardrails;
 pub use lock::{InstanceLock, LOCK_FILE, running_pid, wait_until_released};

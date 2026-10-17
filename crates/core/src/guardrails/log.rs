@@ -15,8 +15,9 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicI64, AtomicUsize, Ordering};
 
 use gitraptor_api::guard::{
-    CommitStage, Decision, Effect, EvaluateParams, LogKind, LoggedAuthorship, LoggedOperation,
-    LoggedReason, LoggedRef, Operation, ParamKind, Reason, RefChange, RefValue, Rule,
+    CommitStage, Decision, Effect, EvaluateParams, LogKind, LogLayer, LoggedAuthorship,
+    LoggedOperation, LoggedReason, LoggedRef, Operation, ParamKind, Reason, RefChange, RefValue,
+    Rule,
 };
 use gitraptor_api::{AgentKind, Untrusted};
 
@@ -32,7 +33,8 @@ pub const PURGE_EVERY_MS: i64 = 24 * 60 * 60 * 1000;
 pub struct LogContext {
     /// The agent behind the hook client; `None` = unattributed.
     pub actor: Option<AgentKind>,
-    /// The hook client runs under an operation of the executor: its plan logs, not the hook.
+    /// The hook client is a direct child of an executor's operation: its plan logs, not the hook.
+    /// A grandchild is not (H-01): it logs its own entry.
     pub under_executor: bool,
     /// Canonical worktree (the hook client's working directory).
     pub worktree: Option<String>,
@@ -62,6 +64,9 @@ pub struct LogEntry {
     pub reasons: Vec<LoggedReason>,
     pub decision_id: String,
     pub authorship: Option<LoggedAuthorship>,
+    /// The layer that took the decision: `hooks` for every entry a hook asks for, the plan's
+    /// layer (`mcp`, `cockpit`) for the single entry of an executor's plan.
+    pub layer: LogLayer,
 }
 
 impl LogEntry {
@@ -76,6 +81,7 @@ impl LogEntry {
             &self.kind,
             &self.reasons,
             &self.authorship,
+            &self.layer,
         ))
         .unwrap_or_default()
     }
@@ -94,6 +100,7 @@ impl LogEntry {
             first_ms: self.at_ms,
             last_ms: self.at_ms,
             utc_offset_s: self.utc_offset_s,
+            layer: self.layer,
         }
     }
 }
@@ -111,12 +118,19 @@ pub struct OverflowRow {
     pub first_ms: i64,
     pub last_ms: i64,
     pub utc_offset_s: i32,
+    pub layer: LogLayer,
 }
 
 impl OverflowRow {
     pub fn agg_key(&self) -> String {
-        serde_json::to_string(&("rate-limited", &self.kind, &self.operation, &self.reason))
-            .unwrap_or_default()
+        serde_json::to_string(&(
+            "rate-limited",
+            &self.kind,
+            &self.operation,
+            &self.reason,
+            &self.layer,
+        ))
+        .unwrap_or_default()
     }
 }
 
@@ -167,6 +181,7 @@ pub fn protection_entry(
         reasons: Vec::new(),
         decision_id: super::evaluate::decision_id(),
         authorship: None,
+        layer: LogLayer::Hooks,
     }
 }
 
@@ -212,6 +227,7 @@ pub fn entry(params: &EvaluateParams, decision: &Decision, ctx: &LogContext) -> 
             .collect(),
         decision_id: decision.decision_id.clone(),
         authorship,
+        layer: LogLayer::Hooks,
     })
 }
 

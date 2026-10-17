@@ -622,8 +622,8 @@ mod tests {
         t.add(74, 73, "/usr/local/bin/raptor", 740, true, 10);
         let marks = Arc::new(ExecutorMarks::default());
         let requester = Who::claude(&t.procs[&25]);
-        let _guard = marks.open("op-9", &requester, 720);
-        marks.add_child("op-9", 73, 730, 73);
+        let _guard = marks.open("op-9", &requester, 720, None);
+        marks.add_child("op-9", 73, 730, 73, Arc::from(Vec::new()));
         let r = run(&t, 74, 740, Some(&marks));
         assert_eq!(r.who, requester);
         assert_eq!(r.via, ResolvedVia::Executor);
@@ -774,8 +774,8 @@ mod tests {
         t.add(73, 20, "C:/Program Files/Git/cmd/git.exe", 730, false, 0);
         let marks = Arc::new(ExecutorMarks::default());
         let requester = Who::claude(&t.procs[&25]);
-        let _guard = marks.open("op-9", &requester, 720);
-        marks.add_child("op-9", 73, 730, 0);
+        let _guard = marks.open("op-9", &requester, 720, None);
+        marks.add_child("op-9", 73, 730, 0, Arc::from(Vec::new()));
         let r = resolve_on(&t, 73, 730, Some(&marks), false).unwrap();
         assert_eq!(r.who, requester);
         assert_eq!(r.via, ResolvedVia::Executor);

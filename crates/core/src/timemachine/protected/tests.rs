@@ -130,6 +130,7 @@ fn request() -> ProtectedRequest {
         target: Target::None,
         warnings: vec![],
         engine_mark: 7,
+        binding: None,
     }
 }
 
