@@ -39,6 +39,24 @@ pub mod transport;
 #[cfg(any(unix, windows))]
 pub const CALL_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// How long a call to a method that writes to a repo waits for its answer: an install or a
+/// restore runs Git and syncs files, and on a loaded machine takes longer than a read.
+#[cfg(any(unix, windows))]
+pub const WRITE_CALL_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// The time `method` is given to answer.
+#[cfg(any(unix, windows))]
+fn call_timeout(method: &str) -> Duration {
+    let writes = crate::methods::METHODS
+        .iter()
+        .any(|m| m.name == method && m.writes != crate::methods::RepoWrite::None);
+    if writes {
+        WRITE_CALL_TIMEOUT
+    } else {
+        CALL_TIMEOUT
+    }
+}
+
 /// Why the channel cannot run on this platform: there is no transport with
 /// access control for it (neither a Unix socket nor a Windows named pipe).
 /// Never a channel without access control (fail-closed).
@@ -386,7 +404,7 @@ impl Client {
         let id = self.next_id;
         self.next_id += 1;
         self.send_line(&Request::new(id, method, params))?;
-        let deadline = Instant::now() + CALL_TIMEOUT;
+        let deadline = Instant::now() + call_timeout(method);
         loop {
             let remaining = deadline.saturating_duration_since(Instant::now());
             if remaining.is_zero() {
@@ -721,6 +739,15 @@ mod tests {
     use std::os::unix::net::UnixStream;
 
     use super::*;
+
+    #[test]
+    fn a_method_that_writes_to_a_repo_is_given_longer_than_a_read() {
+        use crate::methods::{GUARD_INSTALL, GUARD_STATUS, TM_RESTORE};
+        assert_eq!(call_timeout(GUARD_INSTALL), WRITE_CALL_TIMEOUT);
+        assert_eq!(call_timeout(TM_RESTORE), WRITE_CALL_TIMEOUT);
+        assert_eq!(call_timeout(GUARD_STATUS), CALL_TIMEOUT);
+        assert_eq!(call_timeout("not.a.method"), CALL_TIMEOUT);
+    }
 
     #[test]
     fn a_read_timeout_is_reported_as_a_timeout_not_as_eagain() {
