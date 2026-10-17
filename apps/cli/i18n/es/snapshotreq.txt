@@ -1,0 +1,26 @@
+# Mensajes de `raptor` para el usuario, en español (NFR-10, ADR-GRP-003): una operación destructiva
+# que no se ejecuta porque no se pudo guardar antes su punto de recuperación (`system.snapshot-failed`).
+# Una línea `clave = texto`. Los marcadores son `{nombre}`; el código los
+# rellena por nombre, nunca concatenando. Toda clave existe también en ../en/snapshotreq.txt.
+# Ningún texto menciona cómo saltarse ni quitar la protección (ADR-GRD-003 § 3).
+
+# La plantilla fija: el porqué es una de las claves `cause.*` y la salida una de las `hint.*`.
+snapshotreq.deny = GitRaptor: la operación no se ejecuta porque no se pudo guardar antes un punto de recuperación: {cause}. Qué hacer: {hint}.
+snapshotreq.cause.time-limit = se agotó el plazo para guardarlo
+snapshotreq.cause.no-space = no hay espacio en disco suficiente para guardarlo
+snapshotreq.cause.quota-exceeded = se guardaron demasiados puntos de recuperación en poco tiempo
+snapshotreq.cause.discarded = el repositorio cambió mientras se guardaba
+snapshotreq.cause.no-worktree = esta carpeta no es un árbol de trabajo del repositorio observado
+snapshotreq.cause.unavailable = GitRaptor no está en marcha o ya no observa este repositorio
+snapshotreq.cause.internal = error interno al guardarlo
+# `unavailable` sirve igual al modo degradado y al repositorio que ya no se observa.
+snapshotreq.hint.unavailable = {start}; {unobserved}
+snapshotreq.hint.start = arranca GitRaptor y repite la operación
+snapshotreq.hint.unobserved = si ya está en marcha, vuelve a observarlo con raptor repo add
+snapshotreq.hint.large-file = guardar archivos muy grandes puede tardar más; repite la operación en un momento
+snapshotreq.hint.no-space = libera espacio en disco y repite la operación
+snapshotreq.hint.retry = espera un momento y repite la operación
+snapshotreq.hint.no-worktree = repite la operación desde un árbol de trabajo del repositorio
+
+# `raptor guard log`: el nombre de la regla.
+snapshotreq.log.rule = sin punto de recuperación

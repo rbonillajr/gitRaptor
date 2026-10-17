@@ -1,0 +1,26 @@
+# User-facing messages of `raptor`, English (NFR-10, ADR-GRP-003): a destructive operation that
+# does not run because its recovery point could not be saved first (`system.snapshot-failed`).
+# One `key = text` per line. Placeholders are `{name}`; the code fills them
+# by name, never by concatenating. Every key exists in ../es/snapshotreq.txt too.
+# No text says how to skip or lift the protection (ADR-GRD-003 § 3).
+
+# The fixed template: the why is one of the `cause.*` keys and the way out one of the `hint.*`.
+snapshotreq.deny = GitRaptor: the operation did not run because a recovery point could not be saved first: {cause}. What to do: {hint}.
+snapshotreq.cause.time-limit = it ran out of time to save it
+snapshotreq.cause.no-space = not enough disk space to save it
+snapshotreq.cause.quota-exceeded = too many recovery points were saved in a short time
+snapshotreq.cause.discarded = the repository changed while it was saved
+snapshotreq.cause.no-worktree = this folder is not a working tree of the observed repository
+snapshotreq.cause.unavailable = GitRaptor is not running or no longer observes this repository
+snapshotreq.cause.internal = internal error while saving it
+# `unavailable` serves degraded mode and a repository that is no longer observed alike.
+snapshotreq.hint.unavailable = {start}; {unobserved}
+snapshotreq.hint.start = start GitRaptor and repeat the operation
+snapshotreq.hint.unobserved = if it is already running, observe it again with raptor repo add
+snapshotreq.hint.large-file = saving very large files can take longer; repeat the operation in a moment
+snapshotreq.hint.no-space = free some disk space and repeat the operation
+snapshotreq.hint.retry = wait a moment and repeat the operation
+snapshotreq.hint.no-worktree = repeat the operation from a working tree of the repository
+
+# `raptor guard log`: the rule's name.
+snapshotreq.log.rule = no recovery point

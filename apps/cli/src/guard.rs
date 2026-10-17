@@ -30,6 +30,10 @@ use gitraptor_core::guardrails::hook::{self, Degraded, HookArgs, HookEnv};
 use crate::i18n::t;
 use crate::{command_path, engine, error_text, refusal_text, repo_error, shown};
 
+mod snapshot_required;
+#[cfg(test)]
+mod snapshot_required_tests;
+
 /// Longest parameter shown to the agent, in characters (M-05).
 const MAX_PARAM_CHARS: usize = 120;
 
@@ -105,6 +109,7 @@ fn reason_text(reason: &Reason) -> String {
         (Rule::RepoMismatch, _) => t("guard.deny.repo-mismatch", &[]),
         (Rule::InputRejected, _) => t("guard.deny.input", &[]),
         (Rule::InternalError, _) => t("guard.deny.internal", &[]),
+        (Rule::SnapshotFailed, _) => snapshot_required::reason_text(reason),
         (Rule::AuthorshipTrailerRequired, cause) => t(
             if cause == Some(Cause::MessageUnreadable) {
                 "guard.reason.authorship-message-unreadable"
@@ -213,9 +218,11 @@ pub fn hook(args: &[OsString]) -> ExitCode {
         for line in decision_lines(decision) {
             eprintln!("{line}");
         }
-        // A prior that was not saved does not stop the operation (it is Guardrails' call to
-        // deny it); the warning is the only trace, and a saved one is silent.
-        if let Some(HookPriorSnapshot::Failed { cause }) = &decision.prior_snapshot {
+        // "It goes ahead" is only true when the operation goes ahead: a failed prior normally
+        // denies (`system.snapshot-failed`, already explained above), and a saved one is silent.
+        if let Some(HookPriorSnapshot::Failed { cause }) = &decision.prior_snapshot
+            && decision.applied_effect == Effect::Allow
+        {
             eprintln!(
                 "{}",
                 t(
@@ -934,6 +941,7 @@ fn log_rule_text(reason: &LoggedReason) -> String {
         | Rule::RepoMismatch
         | Rule::InputRejected
         | Rule::InternalError => "guard.log.rule.system",
+        Rule::SnapshotFailed => snapshot_required::log_rule_key(),
     };
     let level = match reason.level {
         Level::Minimum => t("guard.log.level-minimum", &[]),
