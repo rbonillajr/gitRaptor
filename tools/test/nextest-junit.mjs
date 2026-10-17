@@ -46,16 +46,38 @@ export function buildIndex(metadata) {
  * `a/b/tests.rs`, `a/b/tests/mod.rs`, `a/b.rs`, `a/b/mod.rs`, `a.rs`, `a/mod.rs` y cae en la raíz del
  * crate; un `mod tests {}` en línea vive en el archivo padre, por eso se baja prefijo a prefijo.
  */
-export function unitTestFile(rootFile, testName, exists = existsSync) {
+export function unitTestFile(rootFile, testName, exists = existsSync, read = readSource) {
   const modules = testName.split("::").slice(0, -1);
   const base = dirname(rootFile);
   for (let n = modules.length; n > 0; n--) {
     const stem = join(base, ...modules.slice(0, n));
     for (const candidate of [`${stem}.rs`, join(stem, "mod.rs")]) {
-      if (exists(candidate)) return candidate;
+      if (exists(candidate)) return pathModule(candidate, modules[n], exists, read) ?? candidate;
     }
   }
   return rootFile;
+}
+
+function readSource(file) {
+  try {
+    return readFileSync(file, "utf8");
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * El archivo de un submódulo que `file` declara con `#[path = "…"] mod <name>;` (por ejemplo
+ * `#[cfg(test)] #[path = "link_tests.rs"] mod tests;`), relativo a la carpeta de `file`, o null.
+ */
+export function pathModule(file, name, exists = existsSync, read = readSource) {
+  if (!name) return null;
+  const decl = new RegExp(`((?:#\\[[^\\]]*\\]\\s*)+)(?:pub(?:\\([^)]*\\))?\\s+)?mod\\s+${name}\\s*;`);
+  const attrs = decl.exec(read(file))?.[1];
+  const path = attrs && /#\[\s*path\s*=\s*"([^"]+)"\s*\]/.exec(attrs)?.[1];
+  if (!path) return null;
+  const target = join(dirname(file), path);
+  return exists(target) ? target : null;
 }
 
 /** Archivo fuente de un test, o null si el binario no se conoce. */
