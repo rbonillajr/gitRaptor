@@ -48,8 +48,23 @@ fn an_inactive_protection_can_still_be_removed() {
     assert_eq!(hooks(&m)["cause"], "dispatcher-altered");
     let out = m.uninstall(&m.f.repo);
     assert!(out.status.success(), "{}", text(&out));
-    assert!(!m.common().join("gitraptor/hooks/pre-push").exists());
+    // The altered hook is not GitRaptor's any more: it stays (NFR-01; ADR-GRD-001, Enmienda
+    // 2026-10-17), the rest goes, and the status says a folder is left.
+    assert_eq!(
+        std::fs::read_to_string(m.common().join("gitraptor/hooks/pre-push")).unwrap(),
+        HOOK
+    );
+    assert!(!m.common().join("gitraptor/hooks/pre-rebase").exists());
+    assert!(!m.common().join("gitraptor/dispatch.conf").exists());
     assert_eq!(hooks(&m)["status"], "not-installed");
+    assert!(
+        m.status_json(&m.f.repo)["diagnostics"]
+            .as_array()
+            .unwrap()
+            .contains(&"leftover-folder".into()),
+        "{}",
+        m.status_json(&m.f.repo)
+    );
     assert!(
         !m.git(&m.f.repo, &["config", "core.hooksPath"])
             .status
