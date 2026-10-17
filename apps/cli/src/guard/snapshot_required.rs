@@ -4,13 +4,23 @@
 
 use gitraptor_api::guard::{Cause, Reason};
 
-use crate::i18n::t;
+use crate::i18n::{Tr, t};
+
+/// The operation a missing recovery point denied.
+#[allow(dead_code)]
+pub(super) enum DeniedOp {
+    BranchDelete { branch: Option<String> },
+    Rebase { branch: Option<String> },
+    Push,
+    Other,
+}
 
 /// The fixed template of a `system.snapshot-failed` reason, with its cause and hint.
 ///
 /// A reason without a snapshot cause (never sent by the daemon) reads as an internal failure: the
 /// operation still did not run, and the text says so.
-pub(super) fn reason_text(reason: &Reason) -> String {
+pub(super) fn reason_text(reason: &Reason, denied: DeniedOp, tr: Tr) -> String {
+    let _ = (denied, tr);
     let (cause, hint) = match reason.cause {
         Some(Cause::SnapshotTimeLimit) => (
             "snapshotreq.cause.time-limit",

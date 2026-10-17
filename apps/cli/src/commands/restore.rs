@@ -8,22 +8,28 @@ use std::process::ExitCode;
 
 use gitraptor_api::methods;
 use gitraptor_api::rpc::code;
-use gitraptor_api::timemachine::{NotRestoredReason, RestoreResult, TmConfirmData, TmRejectReason};
+use gitraptor_api::timemachine::{
+    AmbiguousData, NotRestoredReason, RestoreResult, TmConfirmData, TmRejectReason,
+};
 use gitraptor_api::untrusted::sanitize;
 use gitraptor_core::client::ClientError;
 use serde_json::json;
 
 use super::Global;
-use crate::i18n::t;
+use super::timeline::compact::{short_id, what, worktree_name};
+use crate::i18n::{Tr, t};
 use crate::undo::confirm;
 use crate::{engine, error_text, shown, undo};
 
 const CMD: &str = "raptor restore";
 
+/// The fewest characters of an id the engine accepts.
+const MIN_PREFIX: usize = gitraptor_api::timemachine::MIN_ID_PREFIX;
+
 /// Return the worktree you are in to a point of the timeline; the state right before is saved.
 #[derive(clap::Args)]
 pub(crate) struct Cmd {
-    /// The id of the point, as `raptor timeline` shows it.
+    /// The id of the point, as `raptor timeline` shows it: the whole id or a unique prefix of 6 or more characters.
     snapshot_id: String,
     /// Print JSON instead of text.
     #[arg(long)]
@@ -170,7 +176,14 @@ fn failure_text(err: ClientError, worktree: &Path, id: &str) -> String {
             t("restore.not-found", &[("id", &sanitize(id))])
         }
         ClientError::Rpc(err) if err.code == code::INVALID_PARAMS => {
-            t("restore.invalid-id", &[])
+            let ambiguous = err
+                .data
+                .and_then(|d| serde_json::from_value::<AmbiguousData>(d).ok());
+            match ambiguous {
+                Some(data) => ambiguous_text(id, &data, Tr::current()),
+                None if id.chars().count() < MIN_PREFIX => t("restore.too-short", &[]),
+                None => t("restore.invalid-id", &[]),
+            }
         }
         ClientError::Rpc(err) if err.code == code::SCOPE_REFUSED => {
             t("restore.not-observed", &[("worktree", &shown(worktree))])
@@ -223,6 +236,59 @@ fn reason_key(reason: TmRejectReason) -> &'static str {
         TmRejectReason::GitUnavailable => "restore.reason.git-unavailable",
     }
 }
+
+/// The message of an ambiguous prefix (without the `raptor restore: ` lead): the candidates
+/// with their short id, time, worktree and what happened, and how many more there are.
+fn ambiguous_text(prefix: &str, data: &AmbiguousData, tr: Tr) -> String {
+    let ids: Vec<&str> = data.candidates.iter().map(|c| c.snapshot_id.as_str()).collect();
+    // Long enough to tell the listed candidates apart, and never under the 8 of the timeline.
+    let unique = ids
+        .iter()
+        .map(|id| {
+            ids.iter()
+                .filter(|other| *other != id)
+                .map(|other| id.bytes().zip(other.bytes()).take_while(|(a, b)| a == b).count())
+                .max()
+                .unwrap_or(0)
+                + 1
+        })
+        .max()
+        .unwrap_or(0);
+    let len = u8::try_from(unique).unwrap_or(u8::MAX);
+    let mut items: Vec<String> = data
+        .candidates
+        .iter()
+        .map(|c| {
+            let time = crate::events::local_time(c.occurred_utc_ms, c.utc_offset_s);
+            let worktrees: Vec<String> = c.worktrees.iter().map(|w| w.sanitized()).collect();
+            tr.t(
+                "restore.candidate",
+                &[
+                    ("id", &short_id(&sanitize(&c.snapshot_id), len)),
+                    ("time", &time.chars().take(16).collect::<String>()),
+                    ("worktree", &worktree_name(&worktrees.join(", "))),
+                    ("what", &what(&c.origin, tr)),
+                ],
+            )
+        })
+        .collect();
+    let more = (data.total as usize).saturating_sub(data.candidates.len());
+    if more > 0 {
+        items.push(tr.t("restore.candidates-more", &[("more", &more)]));
+    }
+    tr.t(
+        "restore.ambiguous",
+        &[
+            ("prefix", &sanitize(prefix)),
+            ("total", &data.total),
+            ("candidates", &items.join(", ")),
+        ],
+    )
+}
+
+#[cfg(test)]
+#[path = "restore_prefix_tests.rs"]
+mod prefix_tests;
 
 #[cfg(test)]
 mod tests {

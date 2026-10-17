@@ -170,6 +170,7 @@ fn a_git_event_entry_carries_its_inferred_hint() {
 #[test]
 fn without_inferred_removes_every_hint() {
     let entry = |id: &str, trailer: TrailerCheck| TimelineEntry {
+        short_id_len: None,
         id: id.into(),
         origin: EntryOrigin::GitEvent {
             seq: 1,

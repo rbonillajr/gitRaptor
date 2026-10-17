@@ -85,7 +85,10 @@ fn status(json: bool) -> ExitCode {
             Err(_) => return ExitCode::FAILURE,
         }
     } else {
-        print!("{}", status::text(&snapshot, &sessions));
+        print!(
+            "{}",
+            status::text(&snapshot, &sessions, false, crate::i18n::Tr::current())
+        );
     }
     ExitCode::SUCCESS
 }

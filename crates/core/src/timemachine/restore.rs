@@ -31,7 +31,12 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use gitraptor_api::catalog::MAX_QUEUED_PER_REPO;
-use gitraptor_api::timemachine::{PriorFailure, TmRejectReason};
+use gitraptor_api::messages::{GitEventKind, GitEventView};
+use gitraptor_api::timemachine::{
+    AmbiguousCandidate, AmbiguousData, EntryOrigin, PriorFailure, TimelineChannel,
+    TimelineOperationKind, TimelineOperationState, TmRejectReason, check_oplog_id_prefix,
+};
+use gitraptor_api::{Untrusted, UntrustedName};
 use gitraptor_git::tm_write::WriteContext;
 use gitraptor_git::{ReaderOptions, RepoReader};
 
@@ -123,8 +128,120 @@ pub enum RestoreError {
         operation_id: String,
         message: String,
     },
+    /// The id prefix matches several points: nothing ran and nothing was recorded.
+    Ambiguous(AmbiguousData),
     /// The oplog or the write layer could not be used: nothing ran.
     Internal(String),
+}
+
+/// At most this many candidates travel with an ambiguous prefix.
+const MAX_CANDIDATES: usize = 5;
+
+/// What names a candidate point beyond its own record: the operations and Git events of the
+/// repo. Empty, a candidate falls back to what its record alone says.
+#[derive(Default, Clone, Copy)]
+pub struct CandidateContext<'a> {
+    pub operations: &'a [OperationView],
+    pub events: &'a [GitEventView],
+    /// The local UTC offset the candidates' times are shown at.
+    pub utc_offset_s: i32,
+}
+
+/// The id of the one point `text` (6 to 36 characters of a UUID prefix) names among `points`,
+/// which must be the points of one repo.
+///
+/// # Errors
+///
+/// [`RestoreError::Ambiguous`] when several match, [`RestoreError::NotFound`] when none does or
+/// when `text` is not a prefix worth looking up (too short, or not part of a UUID): the same
+/// answer as an unknown id, so a short guess learns nothing.
+pub fn resolve_point_prefix(points: &[SnapshotView], text: &str) -> Result<String, RestoreError> {
+    resolve_point_prefix_with(points, text, &CandidateContext::default())
+}
+
+/// [`resolve_point_prefix`] with the context that tells a candidate's story.
+///
+/// # Errors
+///
+/// As [`resolve_point_prefix`].
+pub fn resolve_point_prefix_with(
+    points: &[SnapshotView],
+    text: &str,
+    ctx: &CandidateContext<'_>,
+) -> Result<String, RestoreError> {
+    if check_oplog_id_prefix("snapshot_id", text).is_err() {
+        return Err(RestoreError::NotFound);
+    }
+    let mut matches: Vec<&SnapshotView> = points
+        .iter()
+        .filter(|p| p.record.snapshot_id.starts_with(text))
+        .collect();
+    match matches.as_slice() {
+        [] => Err(RestoreError::NotFound),
+        [one] => Ok(one.record.snapshot_id.clone()),
+        _ => {
+            // Newest first: the candidate the developer most likely means.
+            matches.sort_by_key(|p| std::cmp::Reverse((p.record.recorded_ms, p.record.seq)));
+            Err(RestoreError::Ambiguous(AmbiguousData {
+                total: u32::try_from(matches.len()).unwrap_or(u32::MAX),
+                candidates: matches
+                    .into_iter()
+                    .take(MAX_CANDIDATES)
+                    .map(|p| candidate(p, ctx))
+                    .collect(),
+            }))
+        }
+    }
+}
+
+fn candidate(point: &SnapshotView, ctx: &CandidateContext<'_>) -> AmbiguousCandidate {
+    let record = &point.record;
+    let id = record.snapshot_id.as_str();
+    let origin = if let Some(op) = ctx
+        .operations
+        .iter()
+        .find(|o| o.prior_snapshot.as_deref() == Some(id))
+    {
+        EntryOrigin::Operation {
+            operation_id: op.record.operation_id.clone(),
+            kind: match op.record.kind {
+                OperationKind::Protected => TimelineOperationKind::Protected,
+                OperationKind::Undo => TimelineOperationKind::Undo,
+                OperationKind::Redo => TimelineOperationKind::Redo,
+                OperationKind::Restore => TimelineOperationKind::Restore,
+            },
+            subtype: op.record.subtype.clone().map(Untrusted::new),
+            state: TimelineOperationState::Finished,
+            acted_on: Vec::new(),
+        }
+    } else if let Some(manual) = &record.manual {
+        EntryOrigin::ManualSnapshot {
+            snapshot_id: id.to_owned(),
+            label: UntrustedName::new(manual.label.clone()),
+            channel: match manual.channel {
+                Channel::Cli => TimelineChannel::Cli,
+                Channel::Tui => TimelineChannel::Tui,
+                Channel::Mcp => TimelineChannel::Mcp,
+                Channel::Hook => TimelineChannel::Hook,
+            },
+        }
+    } else {
+        let event = record
+            .cause_event_seq
+            .and_then(|seq| ctx.events.iter().find(|e| e.seq == seq));
+        EntryOrigin::GitEvent {
+            seq: event.map_or(0, |e| e.seq),
+            kind: event.map_or(GitEventKind::Reconciled, |e| e.kind),
+            branch: event.and_then(|e| e.details.branch.clone()),
+        }
+    };
+    AmbiguousCandidate {
+        snapshot_id: id.to_owned(),
+        origin,
+        worktrees: record.worktrees.iter().map(Untrusted::new).collect(),
+        occurred_utc_ms: record.recorded_ms,
+        utc_offset_s: ctx.utc_offset_s,
+    }
 }
 
 /// The base permission rule over every actor whose work

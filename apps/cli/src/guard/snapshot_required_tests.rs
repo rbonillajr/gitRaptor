@@ -9,7 +9,8 @@ use std::path::PathBuf;
 
 use gitraptor_api::guard::{Cause, Level, Reason, Rule};
 
-use super::snapshot_required::{log_rule_key, reason_text};
+use super::snapshot_required::{DeniedOp, log_rule_key, reason_text};
+use crate::i18n::Tr;
 
 const CAUSES: [Cause; 7] = [
     Cause::SnapshotTimeLimit,
@@ -63,7 +64,7 @@ fn every_cause_has_a_hint() {
     // The text of each cause, in the language of the process: never empty, never a bare key.
     let mut texts = Vec::new();
     for cause in CAUSES {
-        let text = reason_text(&reason(cause));
+        let text = reason_text(&reason(cause), DeniedOp::Other, Tr::current());
         assert!(!text.trim().is_empty(), "{cause:?}");
         assert!(
             !text.contains("snapshotreq."),
@@ -91,7 +92,10 @@ fn every_cause_has_a_hint() {
         let entries = catalog(lang, "snapshotreq.txt");
         for key in [
             "snapshotreq.deny",
-            "snapshotreq.hint.start",
+            "snapshotreq.hint.start.push",
+            "snapshotreq.hint.start.branch-delete",
+            "snapshotreq.hint.start.rebase",
+            "snapshotreq.hint.start.other",
             "snapshotreq.hint.unobserved",
             "snapshotreq.hint.large-file",
             "snapshotreq.hint.no-space",
@@ -115,8 +119,8 @@ fn every_cause_has_a_hint() {
         );
     }
     assert!(
-        value(&es, "snapshotreq.hint.start")
-            .is_some_and(|t| t.contains("arranca GitRaptor y repite la operación"))
+        value(&es, "snapshotreq.hint.start.other")
+            .is_some_and(|t| t.contains("vuelve a ejecutar el comando de Git"))
     );
 }
 
@@ -154,7 +158,7 @@ fn messages_never_mention_the_exception() {
     }
     // What the agent reads, for every cause, in the language of the process.
     for cause in CAUSES {
-        let lower = reason_text(&reason(cause)).to_lowercase();
+        let lower = reason_text(&reason(cause), DeniedOp::Other, Tr::current()).to_lowercase();
         for word in FORBIDDEN {
             assert!(
                 !lower.contains(word),

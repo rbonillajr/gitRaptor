@@ -12,6 +12,7 @@ use crate::timemachine::{
 
 fn git_event_entry(inferred: Option<InferredAgent>) -> TimelineEntry {
     TimelineEntry {
+        short_id_len: None,
         id: "event:42".into(),
         origin: EntryOrigin::GitEvent {
             seq: 42,

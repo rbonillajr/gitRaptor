@@ -65,6 +65,37 @@ pub fn t(key: &str, args: &[(&str, &dyn std::fmt::Display)]) -> String {
     text
 }
 
+/// A language chosen by the caller, so a renderer can be tested in English and Spanish in one
+/// process.
+#[derive(Clone, Copy)]
+pub struct Tr {
+    pub spanish: bool,
+}
+
+impl Tr {
+    /// The language of this process.
+    pub fn current() -> Self {
+        Self { spanish: spanish() }
+    }
+
+    /// The message `key` in this language, with its placeholders filled.
+    pub fn t(self, key: &str, args: &[(&str, &dyn std::fmt::Display)]) -> String {
+        // Parsed once per language: a renderer asks for many messages.
+        static EN_MAP: OnceLock<HashMap<&'static str, &'static str>> = OnceLock::new();
+        static ES_MAP: OnceLock<HashMap<&'static str, &'static str>> = OnceLock::new();
+        let map = if self.spanish {
+            ES_MAP.get_or_init(|| parse(ES))
+        } else {
+            EN_MAP.get_or_init(|| parse(EN))
+        };
+        let mut text = map.get(key).copied().unwrap_or(key).to_owned();
+        for (name, value) in args {
+            text = text.replace(&format!("{{{name}}}"), &value.to_string());
+        }
+        text
+    }
+}
+
 /// Both catalogs have `key` (tests of the callers).
 #[cfg(test)]
 pub fn has_key(key: &str) -> bool {

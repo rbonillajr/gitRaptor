@@ -45,9 +45,11 @@ const CLAUDE: &str = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>";
 
 /// The wording the story fixes (Spanish), as the hook writes it.
 const WHY_TIME_LIMIT: &str = "se agotó el plazo para guardarlo";
-const HINT_START: &str = "arranca GitRaptor y repite la operación";
+const HINT_DELETE: &str = "vuelve a borrar la rama";
+const HINT_REBASE: &str = "vuelve a lanzar el rebase";
 const NOT_RUNNING: &str = "GitRaptor no está en marcha";
-/// `degraded`'s own reason (`guard.degraded`, Spanish).
+/// `degraded`'s own reason (`guard.degraded`, Spanish): the denial of a missing prior point no
+/// longer carries it (US-GRD-020).
 const DEGRADED: &str = "sin conexión con el servicio";
 /// The US-TMC-005 warning that lets the operation through (`hookprior.failed`, Spanish): after
 /// US-GRD-017 it may only appear when the operation was allowed.
@@ -442,8 +444,8 @@ fn scenario_2_time_limit_denies_branch_delete_and_keeps_feat_x() {
 }
 
 /// Escenario 2, ejemplo "GitRaptor parado" (D2, guard 5.1): without the daemon an allowed
-/// branch deletion and an allowed rebase are denied, with both reasons (the snapshot one and the
-/// degraded one) and "start GitRaptor and repeat the operation".
+/// branch deletion and an allowed rebase are denied, with the snapshot reason only and "start GitRaptor and
+/// repeat that operation".
 #[test]
 fn scenario_2_degraded_mode_denies_branch_delete_and_rebase() {
     let m = Machine::new(&[]);
@@ -458,8 +460,8 @@ fn scenario_2_degraded_mode_denies_branch_delete_and_rebase() {
         shown.contains(NOT_RUNNING),
         "snapshot-failed reason: {shown}"
     );
-    assert!(shown.contains(HINT_START), "hint: {shown}");
-    assert!(shown.contains(DEGRADED), "system.degraded reason: {shown}");
+    assert!(shown.contains(HINT_DELETE), "hint: {shown}");
+    assert!(!shown.contains(DEGRADED), "system.degraded reason: {shown}");
     assert_eq!(m.branch("feat-x").as_deref(), Some(feat_x.as_str()));
 
     let out = m.agent("rebase -q main feat-y");
@@ -469,8 +471,8 @@ fn scenario_2_degraded_mode_denies_branch_delete_and_rebase() {
         shown.contains(NOT_RUNNING),
         "snapshot-failed reason: {shown}"
     );
-    assert!(shown.contains(HINT_START), "hint: {shown}");
-    assert!(shown.contains(DEGRADED), "system.degraded reason: {shown}");
+    assert!(shown.contains(HINT_REBASE), "hint: {shown}");
+    assert!(!shown.contains(DEGRADED), "system.degraded reason: {shown}");
     assert_eq!(m.branch("feat-y").as_deref(), Some(feat_y.as_str()));
     assert_eq!(m.own_commits("feat-y"), 2);
 }

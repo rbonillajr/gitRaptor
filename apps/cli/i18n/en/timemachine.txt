@@ -39,7 +39,6 @@ undo.reason.unsupported = undo is not supported here yet; nothing changed
 undo.reason.git-unavailable = the engine found no usable Git; nothing changed
 
 # raptor timeline (US-TMC-006).
-timeline.line = {time}  {worktree}  {what}  ({actor})  [{protection}]
 timeline.empty = no activity yet
 timeline.no-match = no entries match the filters
 timeline.incomplete = timeline incomplete: could not read {sources}
@@ -66,16 +65,41 @@ timeline.acted.event = event {seq}
 timeline.acted.snapshot = snapshot {id}
 timeline.files = files ({total}): {paths}
 timeline.files-more = +{count} more
-timeline.files-none = files: none
-timeline.files-unavailable = files: not available
 timeline.files-first-parent = against the first parent
 timeline.not-in-worktree = not inside a Git worktree
 timeline.not-observed = {worktree} is not in a repo GitRaptor observes; add it with raptor repo add
 timeline.invalid-params = the filters are not valid (--since is a duration such as 2h up to 30 days, --limit is 1 to 200)
 timeline.restart-engine = the running engine is older than this raptor and cannot show the timeline: restart it with `raptor daemon stop`
 
+# raptor timeline, compact view (US-TMC-023).
+timeline.header.window = Last 24 h of {repo}: {entries}
+timeline.header.window-summarized = Last 24 h of {repo}: {entries}, {summarized} of them summarized (--verbose shows them all)
+timeline.header.all = Timeline of {repo}: {entries}
+timeline.header.all-summarized = Timeline of {repo}: {entries}, {summarized} of them summarized (--verbose shows them all)
+timeline.entries.one = 1 entry
+timeline.entries.many = {count} entries
+timeline.day.today = {date} (today)
+timeline.day.yesterday = {date} (yesterday)
+timeline.level.short.prior = prior
+timeline.level.short.observation = observed
+timeline.level.short.manual = manual
+timeline.level.short.none = none
+timeline.action.restore = restore {id}
+timeline.action.none = -
+timeline.summary.branch = 1 branch created and deleted: {first}
+timeline.summary.branches = {count} branches created and deleted: {first}, +{more}
+timeline.summary.resets = {what} (x{count})
+timeline.actor.several = several
+timeline.actor.you-or-other = you or other
+timeline.legend.you-or-other = you or other: no agent was detected; it may be you or another tool
+timeline.hint.restore = restore a point with raptor restore <id>; a unique prefix of 6 or more characters is enough
+timeline.window-empty = no activity in the last 24 h; widen it with --since, such as --since 7d
+restore.ambiguous = {prefix} matches {total} restore points: {candidates}; type more characters; nothing changed
+restore.candidate = {id} ({time}, {worktree}, {what})
+restore.candidates-more = +{more} more
+restore.too-short = type at least 6 characters of the id that raptor timeline shows
+
 # raptor restore (US-TMC-009).
-timeline.point = restore point: raptor restore {id}
 restore.done = restored {worktree} to point {id}
 restore.saved = the state right before this restore is saved as {snapshot}; raptor undo takes it back
 restore.recreated = recreated the worktree {worktree} (without checkout)

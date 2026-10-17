@@ -562,6 +562,10 @@ pub struct TimelineParams {
     /// 1 to [`TIMELINE_MAX_LIMIT`]; [`TIMELINE_DEFAULT_LIMIT`] without it.
     #[serde(default)]
     pub limit: Option<u32>,
+    /// Ask for `TimelineEntry::short_id_len`. Absent, not `false`, when unused: a daemon that
+    /// predates the field refuses unknown fields.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub short_ids: bool,
 }
 
 /// A source the timeline reads that could not be read: never reported as
@@ -610,6 +614,32 @@ pub struct TimelineEntry {
     pub attribution: Attribution,
     pub protection: Protection,
     pub files: ChangedFiles,
+    /// How many leading characters of the point's id tell it apart from every other point of the
+    /// repo (at least 8, never ending in `-`). Only when the request asked for it and the entry
+    /// has a point.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub short_id_len: Option<u8>,
+}
+
+/// A restore point an ambiguous prefix matches.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AmbiguousCandidate {
+    pub snapshot_id: String,
+    pub origin: EntryOrigin,
+    pub worktrees: Vec<Untrusted>,
+    pub occurred_utc_ms: i64,
+    pub utc_offset_s: i32,
+}
+
+/// The `data` of the `INVALID_PARAMS` a restore answers when its prefix matches several points.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AmbiguousData {
+    /// At most 5.
+    pub candidates: Vec<AmbiguousCandidate>,
+    /// How many points match.
+    pub total: u32,
 }
 
 /// What an entry is.
@@ -806,6 +836,24 @@ pub fn check_oplog_id(field: &'static str, text: &str) -> Result<(), Invalid> {
     }
 }
 
+/// The fewest characters of an id a restore accepts: fewer would let a caller enumerate ids.
+pub const MIN_ID_PREFIX: usize = 6;
+
+/// A prefix of an oplog id: [`MIN_ID_PREFIX`] to 36 characters of `[0-9a-f-]`, the dashes only
+/// where a UUID has them.
+pub fn check_oplog_id_prefix(field: &'static str, text: &str) -> Result<(), Invalid> {
+    let ok = (MIN_ID_PREFIX..=36).contains(&text.len())
+        && text.bytes().enumerate().all(|(i, b)| match i {
+            8 | 13 | 18 | 23 => b == b'-',
+            _ => matches!(b, b'0'..=b'9' | b'a'..=b'f'),
+        });
+    if ok {
+        Ok(())
+    } else {
+        Err(Invalid::new(field, "invalid identifier"))
+    }
+}
+
 /// A catalog operation name: `[a-z][a-z0-9-]{0,63}`.
 pub fn check_operation_name(text: &str) -> Result<(), Invalid> {
     let ok = !text.is_empty()
@@ -869,7 +917,7 @@ impl RedoParams {
 
 impl RestoreParams {
     pub fn validate(&self) -> Result<(), Invalid> {
-        check_oplog_id("snapshot_id", &self.snapshot_id)?;
+        check_oplog_id_prefix("snapshot_id", &self.snapshot_id)?;
         check_confirmation(self.confirmation.as_ref().map(ConfirmationToken::as_str))
     }
 }
@@ -1082,6 +1130,7 @@ mod tests {
         run.args = Map::from_iter([("k".into(), Value::String("x".repeat(MAX_ARGS_BYTES)))]);
         assert_eq!(run.validate().unwrap_err().field, "args");
         let timeline = TimelineParams {
+            short_ids: false,
             worktree: None,
             only_worktree: None,
             since: None,
@@ -1107,6 +1156,7 @@ mod tests {
 
     fn entry(origin: EntryOrigin, actor: Actor, attribution: Attribution) -> TimelineEntry {
         TimelineEntry {
+            short_id_len: None,
             id: "event:7".into(),
             origin,
             occurred_utc_ms: 1,
@@ -1227,6 +1277,7 @@ mod tests {
     #[test]
     fn only_worktree_is_absent_from_the_wire_when_unused() {
         let none = TimelineParams {
+            short_ids: false,
             worktree: Some("/r".into()),
             only_worktree: None,
             since: None,
@@ -1236,6 +1287,7 @@ mod tests {
         let wire = serde_json::to_value(&none).unwrap();
         assert!(wire.get("only_worktree").is_none(), "{wire}");
         let some = TimelineParams {
+            short_ids: false,
             only_worktree: Some("/r/wt".into()),
             ..none
         };
