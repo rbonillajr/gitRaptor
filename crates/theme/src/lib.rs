@@ -323,6 +323,6 @@ mod tests;
 mod tmp_break {
     #[test]
     fn tmp_break_windows_blocks() {
-        assert!(false, "temporary: proves the Windows test step blocks");
+        assert_eq!(std::env::consts::OS.len(), 0, "temporary: proves the Windows test step blocks");
     }
 }
