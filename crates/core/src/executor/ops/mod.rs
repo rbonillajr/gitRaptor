@@ -89,6 +89,7 @@ impl OperationsWiring {
         let engine = crate::guardrails::plan_gate::GuardrailsEngine::default();
         let gate: Arc<dyn GuardrailsGate> = Arc::new(engine);
         let requested = Self::test_arms_requested(cfg!(debug_assertions), env);
+        #[cfg_attr(not(debug_assertions), allow(unused_mut))]
         let mut arms: Vec<OperationId> = ARMS.to_vec();
         #[cfg(debug_assertions)]
         let test = requested.then(|| {
