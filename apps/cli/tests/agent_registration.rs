@@ -237,7 +237,7 @@ impl Machine {
     fn launch(&self, exe: &str, worktree: &Path) -> FakeAgent {
         let agent = self.outside.path().join("bin").join(exe);
         if !agent.exists() {
-            std::fs::copy(std::env::current_exe().unwrap(), &agent).unwrap();
+            gitraptor_testkit::fixture::clone_binary(&std::env::current_exe().unwrap(), &agent);
         }
         let mode = if exe == FAKE_CLAUDE {
             "attached"

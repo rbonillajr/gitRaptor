@@ -272,7 +272,7 @@ impl Machine {
     pub fn as_agent(&self, args: &[&str]) -> Output {
         let agent = self.agent_dir.path().join(FAKE_AGENT);
         if !agent.exists() {
-            std::fs::copy(std::env::current_exe().unwrap(), &agent).unwrap();
+            gitraptor_testkit::fixture::clone_binary(&std::env::current_exe().unwrap(), &agent);
         }
         let args: Vec<OsString> = args.iter().map(OsString::from).collect();
         let argv: Vec<String> = script_argv(&args)

@@ -114,7 +114,7 @@ impl Fixture {
         let mut cmd = if under_agent {
             let agent = self.tmp.path().join(FAKE_AGENT);
             if !agent.exists() {
-                std::fs::copy(&me, &agent).unwrap();
+                gitraptor_testkit::fixture::clone_binary(&me, &agent);
             }
             let mut cmd = Command::new(agent);
             cmd.args([

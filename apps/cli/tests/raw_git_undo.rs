@@ -184,7 +184,7 @@ impl Machine {
     /// The developer launches Claude Code in the worktree.
     fn launch_claude(&self) -> FakeClaude {
         let agent = self.outside.path().join("bin").join(FAKE_AGENT);
-        std::fs::copy(std::env::current_exe().unwrap(), &agent).unwrap();
+        gitraptor_testkit::fixture::clone_binary(&std::env::current_exe().unwrap(), &agent);
         let mut child = Command::new(agent)
             .args([
                 "fake_claude_entry",

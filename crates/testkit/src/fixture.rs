@@ -307,6 +307,28 @@ impl Fixture {
     }
 }
 
+/// Puts a copy of the executable `from` at `to`, to run it under another name (a simulated agent).
+///
+/// On Unix the copy is made by `/bin/cp`, a process of its own. `fs::copy` leaves the new file
+/// open for writing in this process for a moment, and a `fork` by another test thread in that
+/// moment inherits the descriptor: the `exec` of the copy then fails with `Text file busy`
+/// (ETXTBSY, seen in CI on Linux). The writer being another process, no `fork` of ours can hold
+/// it, and `cp` has exited when this returns. (A hard link would avoid the write too, but the
+/// copy would then be the same file as the test binary, and the detector tells agents by file.)
+pub fn clone_binary(from: &Path, to: &Path) {
+    #[cfg(unix)]
+    {
+        let status = std::process::Command::new("/bin/cp")
+            .arg(from)
+            .arg(to)
+            .status()
+            .unwrap();
+        assert!(status.success(), "cp {from:?} {to:?}: {status}");
+    }
+    #[cfg(not(unix))]
+    std::fs::copy(from, to).unwrap();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
