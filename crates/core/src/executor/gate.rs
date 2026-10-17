@@ -1,9 +1,10 @@
 //! The executor's side of Guardrails (ADR-CKP-002 § 4, DEP-CKP-10).
 //!
-//! The decision engine and its record are TS-CKP-003's: until then the executor talks to them
-//! through [`GuardrailsGate`]. Production has [`NoGuardrails`], which evaluates nothing and is
-//! fail-closed: a governed operation is refused at run (`guardrails-denied`), never let through
-//! as "allowed". "Ask for confirmation" counts as deny until the queue exists (S-GRD-9).
+//! The executor talks to the decision engine and its record through [`GuardrailsGate`].
+//! Production wires the Guardrails engine (`guardrails::plan_gate`); [`NoGuardrails`] is the
+//! fail-closed gate for wirings without one: a governed operation is refused at run
+//! (`guardrails-denied`), never let through as "allowed". "Ask for confirmation" counts as deny
+//! until the queue exists.
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -108,7 +109,7 @@ pub trait GuardrailsGate: Send + Sync {
     }
 }
 
-/// Production until TS-CKP-003: evaluates nothing, records nothing, lets nothing governed run.
+/// Evaluates nothing, records nothing, lets nothing governed run.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct NoGuardrails;
 
