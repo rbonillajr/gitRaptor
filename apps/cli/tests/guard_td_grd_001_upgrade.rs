@@ -201,7 +201,15 @@ fn machine_from(from: u32) -> (Td, String) {
     (m, bad)
 }
 
+/// The sweeps start one process per cut point: one at a time, so that the other tests of this
+/// binary do not starve on a small runner (an install that waits more than the client's call
+/// budget fails with `EAGAIN`).
+static SWEEPS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 fn sweep(from: u32) {
+    let _one_at_a_time = SWEEPS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     // The uncut run passes every declared point, and only those, in order.
     let (m, _) = machine_from(from);
     let trace = m.f.root.join("cut-trace");
