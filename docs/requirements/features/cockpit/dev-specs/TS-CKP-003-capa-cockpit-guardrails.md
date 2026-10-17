@@ -4,7 +4,7 @@ title: "Dev Spec — TS-CKP-003: capa cockpit en la decisión de Guardrails, lig
 type: dev-spec
 status: draft
 created: 2026-10-09
-updated: 2026-10-09
+updated: 2026-10-16
 story: TS-CKP-003
 feature: cockpit
 domain: GRP
@@ -141,6 +141,7 @@ Todas son **Decisión del orquestador (2026-10-09), validada por Arquitecto**; D
 - **D13. Cableado de producción.** `OperationsWiring::production()` pone `GuardrailsEngine`; el daemon le da el registro y el sumidero del log al montar el canal (`attach`). Antes de eso, el motor deniega con `system.internal-error`. `armed_without_guardrails` solo filtra si la puerta no decide (`NoGuardrails`). Esta TS no arma brazos reales: con ella, cada historia dueña arma el suyo con una línea en `ops/mod.rs`. Desbloquea US-CKP-012 a 024 y US-MCP-009 a 019. Descartada: dejar el cableado a cada historia, que repartiría el mismo cambio en ocho PRs.
 - **D14. Brazos de prueba solo en depuración.** `executor/ops/test_arms.rs` (`#[cfg(debug_assertions)]`) arma `commit`, `merge-into-base` (avance rápido), `create-worktree` (con rama nueva), `discard-worktree` (borra el worktree y su rama) y `rebase-onto-base` atómico con su abort, solo si el daemon arranca con `GITRAPTOR_TEST_EXECUTOR_ARMS=1` **y** `GITRAPTOR_PROFILE_DIR` (`CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true` activa `debug_assertions` también en release). Corren dentro de la operación protegida, con snapshot previo. Sirven para las pruebas de proceso con `raptor-hook` real. No son la lógica de producto de esas operaciones: el `discard-worktree` de prueba no lleva la confirmación que nombra lo no recuperable (R-CKP-6). Descartada: esperar a la primera historia, que dejaría sin probar la regresión de INF-GRD-001 y la ligadura con el hook real.
 - **D15. `previo_hook`.** No existe en main: hay el nivel `hook-prior` en el almacén y la línea de tiempo, pero ningún camino de `guard.evaluate` pide ese snapshot (US-GRD-017 no implementada). Queda como invariante con test: un hijo del ejecutor nunca produce un snapshot `hook-prior`. Descartada: implementarlo aquí.
+  - **Actualización (2026-10-16, preparación de `/implement`)**: desde #248 (US-TMC-005) `guard.evaluate` sí toma el `hook-prior` (`conn.rs::hook_prior`, con `guard.prior-snapshot`, `wants_prior` y `allow`) y ya lo salta cuando el cliente resuelve con `executor_operation`. Esta TS no cambia ese camino ni su orden respecto al registro (US-GRD-017 lo toca en paralelo); el test del invariante usa `rebase-onto-base` y `discard-worktree`, con un hook que anuncia `guard.prior-snapshot` y recibe `allow` (hallazgo PC-2 del crítico).
 - **D16. Cerrado ante fallos con razón.** Una operación gobernada sin `PlanShape`, un repo ilegible o un motor sin `attach` dan `deny` con `system.internal-error`, y dejan su `denial`. Descartada: `NotEvaluated`, que no lleva razón para el banner. `NotEvaluated` sigue siendo de `NoGuardrails`.
 - **D17. Hechos del commit.** El mensaje se convierte en `AuthorshipFacts` con `guardrails::plan_gate::commit_facts` (las mismas `MessageOptions` que `hook.rs`). El texto nunca entra en la forma, la huella ni el registro. Las rutas son las preparadas. Si un hook del usuario cambia el índice o el mensaje, la transición deja de casar y aplica D6.
 - **D18. Rutas del rebase.** Se leen los commits de la punta que no están en `onto`, ocultando solo `onto` (`Hide::OldOnly`, sin segunda pasada). Es más estricto que el hook: sin segunda pasada, un commit ya aplicado aguas arriba (mismo patch-id, que el rebase descartaría) puede denegar. Descartada: ocultar las otras ramas locales, que dejaría pasar una ruta prohibida en un commit que también está en otra rama.
@@ -364,7 +365,7 @@ graph LR
 - **Depende:** T002
 - **Refs:** D3, D17, D18; DS-US-GRD-008 § 3
 - **Aceptación:** `cargo test -p gitraptor-core guardrails::evaluate` y `cargo test -p gitraptor-core --test guard_evaluate`
-- **Guard ⛔4.1:** `cargo test -p gitraptor-cli --test guard_us_grd_008 --test guard_us_grd_018` sin cambios
+- **Guard ⛔4.1:** `cargo test -p gitraptor-cli --test guard_us_grd_008 --test guard_us_grd_018` sin cambios. No tienen criterio propio en el contrato de `/implement` porque ya pasan antes de implementar (la regla B3 de la línea base pararía la ejecución); los cubre `suite.command` en P3, y están en `deny_paths`
 
 ### T005 — Crear el motor del plan detrás de `GuardrailsGate`
 
@@ -408,7 +409,7 @@ graph LR
 - **Depende:** T002, T005
 - **Refs:** D7; ADR-CKP-002 § 4 (barrera I-02); ADR-GRD-003, Enmienda Cockpit
 - **Aceptación:** `cargo test -p gitraptor-core channel::marks timemachine::protected`
-- **Guard ⛔6.1:** `marks::tests::transitions_are_visible_once_the_barrier_drops`
+- **Guard ⛔6.1:** `marks::transitions_tests::transitions_are_visible_once_the_barrier_drops` (en `crates/core/src/channel/marks_transitions_tests.rs`)
 
 ### T007 — Llevar el veredicto y la ligadura por el ejecutor
 
@@ -494,7 +495,7 @@ graph LR
 - **Depende:** T005, T007
 - **Refs:** D13, D14; ADR-CKP-002, Enmienda US-MCP-008; guía de extensión, "Añadir una operación del catálogo"
 - **Aceptación:** `cargo test -p gitraptor-core executor::ops`
-- **Guard:** `ops::tests::production_wires_the_engine_and_no_real_governed_arm` y `ops::tests::test_arms_are_inert_without_the_variable` (sin una de las dos variables, ningún brazo de prueba queda armado)
+- **Guard:** `ops::arms_tests::production_wires_the_engine_and_no_real_governed_arm` y `ops::arms_tests::test_arms_are_inert_without_the_variable` (en `crates/core/src/executor/ops/arms_tests.rs`) (sin una de las dos variables, ningún brazo de prueba queda armado)
 
 ### T011 — Verificar, medir y documentar
 
@@ -549,6 +550,8 @@ apps/cli/
 ├── src/guard.rs                   ← MODIFY  (T009)
 ├── i18n/{en,es}/guard.txt         ← MODIFY  (T009)
 └── tests/guard_ts_ckp_003{,_chaining}.rs ← CREATE (T001)
+crates/core/tests/ts_ckp_003_{deadlock,log_layers,capabilities}.rs ← CREATE (pruebas del contrato)
+*_tests.rs junto a su módulo         ← CREATE (pruebas del contrato: policy guard/plan_tests, api catalog_denial_tests, core guardrails/{plan_gate,link}_tests, channel/marks_transitions_tests, executor/ops/arms_tests)
 ```
 
 `← CREATE`: fichero nuevo. `← MODIFY`: fichero existente. Ningún archivo de la tabla de la guía de extensión cambia salvo `conn.rs`, cuyo `match` sigue siendo compartido: los brazos nuevos van junto a los de `guard.` y `operation.`.
@@ -763,12 +766,14 @@ Un test por criterio de la ficha (archivo `apps/cli/tests/guard_ts_ckp_003.rs` s
 - [ ] **Sin interbloqueo**: `crates/core/tests/ts_ckp_003_deadlock.rs` `a_hook_under_the_executor_is_answered_while_the_repo_is_locked`: un paso de prueba mantiene el cerrojo mientras un cliente doble (este binario reejecutado) pide `guard.evaluate` como hijo marcado; la respuesta llega con el cerrojo tomado, dentro de un `recv_timeout` de 10 s. La latencia se anota contra NFR-GRD-04.
 - [ ] **Capa fijada por el daemon**: `an_agent_plan_from_the_tui_is_evaluated_and_logged_as_mcp`: `raptor-fake-agent` lanza un cliente de tipo TUI; el `commit` con una ruta prohibida (`agents`) se deniega y la entrada lleva capa `mcp`.
 - [ ] **Regresión de hooks (INF-GRD-001 con el ejecutor como padre)**: `apps/cli/tests/guard_ts_ckp_003_chaining.rs` `chained_prior_hooks_behave_the_same_under_the_executor`: para cada `PriorHooks::ALL`, el `commit` del brazo de prueba con el marcador que rechaza el linter falla igual que con Git crudo (`commit_with_marker_rejected`) y el que no lo lleva entra.
-- [ ] Invariante D15: `crates/core/tests/ts_ckp_003_deadlock.rs` `the_executor_child_never_asks_for_a_hook_prior`: ninguna fila `hook-prior` en el oplog tras una operación con hooks.
-- [ ] Capacidades en las dos direcciones: `crates/api/src/catalog.rs` `tests::guardrails_denial_only_with_its_capability` y `crates/core/tests/guard_log.rs` `log_layers_only_with_its_capability`.
+- [ ] Invariante D15: `crates/core/tests/ts_ckp_003_deadlock.rs` `the_executor_child_never_asks_for_a_hook_prior`: un `rebase-onto-base` y un `discard-worktree` permitidos, con un hook que anuncia `guard.prior-snapshot`, no dejan ninguna fila `hook-prior` en el oplog.
+- [ ] Capacidades en las dos direcciones, en el canal: `crates/core/tests/ts_ckp_003_capabilities.rs` `operation_guardrails_only_with_its_capability` y `crates/core/tests/ts_ckp_003_log_layers.rs` `log_layers_only_with_its_capability`.
 - [ ] S-GRD-9: `plan_gate::tests::ask_is_applied_as_deny`.
 - [ ] D8: `plan_gate::tests::a_running_plan_is_never_evicted` (con 1 024 ligaduras vivas, la vista previa deniega con `system.internal-error`; una vista previa expulsada que denegó deja su `denial`).
-- [ ] D10 (ajuste del PO): `crates/api/src/catalog.rs` `tests::the_mcp_projection_carries_no_message_content_or_config_text`: la proyección MCP no lleva mensajes, contenido, `configStatus`, `configRef` ni campos de excepción, y los `params` son de tipo rama, ruta o tamaño.
-- [ ] D14: `ops::tests::test_arms_are_inert_without_the_variable`.
+- [ ] D10 (ajuste del PO): `crates/api/src/catalog_denial_tests.rs` `catalog::denial_tests::the_mcp_projection_carries_no_message_content_or_config_text`: la proyección MCP no lleva mensajes, contenido, `configStatus`, `configRef` ni campos de excepción, y los `params` son de tipo rama, base o ruta (`ParamKind` no tiene una clase de tamaño: queda para la historia que la añada).
+- [ ] D14: `ops::arms_tests::test_arms_are_inert_without_the_variable`.
+- [ ] D14, condición del coordinador (2026-10-16): `ops::arms_tests::the_variable_is_ignored_without_debug_assertions`: `OperationsWiring::test_arms_requested(false, env)` es falso aunque estén las dos variables; `production_from` le pasa `cfg!(debug_assertions)`, así que un binario release nunca arma los brazos de prueba. Y `ops::arms_tests::a_release_build_never_arms_the_test_arms` (`#[cfg(not(debug_assertions))]`, se corre con `cargo test --release`) comprueba que `production_from` con las dos variables no arma ningún brazo en un build sin `debug_assertions`.
+- [ ] D12: `a_repo_without_hooks_is_still_governed_by_the_executor`: en un repo sin `raptor guard install`, un `merge-into-base` a `main` termina en `-32014` con `policy.protected-branch` y deja una `denial` con capa `cockpit` (hallazgo PC-5 del crítico).
 - [ ] El mensaje de commit no sale del plan: `plan_gate::tests::the_commit_message_never_reaches_the_log_or_the_fingerprint`.
 
 ### 9.5 Plataformas
@@ -789,7 +794,7 @@ Un test por criterio de la ficha (archivo `apps/cli/tests/guard_ts_ckp_003.rs` s
 - **Cerrado ante fallos**: sin forma, sin `attach` o sin lectura → `deny` con razón (D16). `NoGuardrails` sigue cerrado.
 - **SEC-05 y M-06**: el mensaje de commit solo entra como `AuthorshipFacts`; ningún argv, oid ni mensaje en el registro.
 - **SEC-12**: los parámetros de las razones son `Untrusted`; los clientes los sanean al pintar.
-- **Brazos de prueba**: compilados solo con `debug_assertions` y armados solo con `GITRAPTOR_TEST_EXECUTOR_ARMS=1` más `GITRAPTOR_PROFILE_DIR`; `ops::tests::test_arms_are_inert_without_the_variable` lo fija.
+- **Brazos de prueba**: compilados solo con `debug_assertions` y armados solo con `GITRAPTOR_TEST_EXECUTOR_ARMS=1` más `GITRAPTOR_PROFILE_DIR`; `ops::arms_tests::test_arms_are_inert_without_the_variable` lo fija.
 - **Mensaje al agente (D10)**: nunca menciona `raptor guard exec` ni otra vía de excepción ni sugiere editar la configuración (BR-AUTH-004, Q-GRD-7).
 - **Sin interbloqueo**: `guard.evaluate` nunca toma el cerrojo del repo ni espera al bucle.
 
