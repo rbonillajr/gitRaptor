@@ -368,3 +368,18 @@ Sobre la Enmienda (2026-10-08, US-GRD-008). **Decisión del orquestador (2026-10
 - Con la plantilla 3, `pre-push` también deniega por señales de ataque (§ 4) un push que solo lleva refs no gobernadas, **condicionado a que exista una regla de rutas prohibidas aplicable** que no se pueda verificar. Sin regla aplicable, el push pasa: una persona sin reglas nunca queda bloqueada.
 - Sin daemon, a esas refs se les aplican **todas** las reglas de rutas del suelo (también las `agents`), porque el actor no se puede verificar. Las refs gobernadas siguen con el modo degradado de la Enmienda (2026-10-08, US-GRD-008), sin cambios.
 - **Residuos declarados**: R-A (suelo ilegible sin daemon: pasa), R-B (sin `raptor` o si falla: pasa con aviso, sin evaluar), R-C (sin daemon no rigen las reglas del perfil ni del nivel local) y R-D (coste: sin daemon, la persona que sube a un tag un commit con una ruta prohibida a los agentes queda bloqueada hasta que arranca el servicio).
+
+## Enmienda (2026-10-16, US-GRD-017)
+
+Sin punto de recuperación, la operación destructiva permitida no se ejecuta (BR-EDGE-005, NFR-01). **Decisión del orquestador (2026-10-09), validada por Arquitecto y PO** ([DS-US-GRD-017](../../requirements/features/guardrails/dev-specs/US-GRD-017-sin-snapshot-no-se-ejecuta.md)); aprobada por el coordinador el 2026-10-16. Las decisiones Q-GRD-36, 37 y 38 siguen abiertas al veto de Rene. El `status` sigue en `accepted`.
+
+| Cambio | Resolución | Dónde |
+|---|---|---|
+| **Regla `system.snapshot-failed`** | Nivel `system`. Siete causas en `Reason.cause`: `snapshot-time-limit`, `snapshot-no-space`, `snapshot-quota-exceeded`, `snapshot-discarded`, `snapshot-no-worktree`, `snapshot-unavailable`, `snapshot-internal`. Sin códigos de error nuevos | § 3 |
+| **Capacidad `guard.snapshot-required`** | A una conexión sin ella la misma denegación le llega como `system.internal-error`, sin causa y sin `priorSnapshot`, en `guard.evaluate` y en `guard.log`; nunca como permiso | § 4 |
+| **Conversión en el daemon** | En `guard.evaluate`, después del previo de US-TMC-005 y antes del registro y de los claims: `failed` con `appliedEffect = allow` pasa a `effect = deny`; conserva `decisionId` y `configStatus`. Con la excepción aplicada, `appliedEffect` sigue `allow` y la razón queda | § 6, § 7 |
+| **Modo degradado** | El cliente del hook sin daemon (o con otra instancia) deniega el rebase y el borrado de una rama local que el resto de reglas permite, con `system.snapshot-failed` (`snapshot-unavailable`) y `system.degraded`; sin excepción. Frente a un daemon sin la capacidad, el cliente convierte él o deniega | § 4 |
+| **Repo no observado** | Un repo protegido que la Time Machine ya no observa responde `unavailable` y se deniega, con la pista de volver a observarlo (`raptor repo add`) | § 7 |
+| **Riesgo residual (seguridad L-01, L-02)** | Una excepción aplicada por otra regla cubre también el previo fallido (D5): la operación corre sin punto de recuperación y la razón queda en la decisión (US-GRD-006 lo dirá en el registro). Un cliente del hook anterior a US-TMC-005 (sin `guard.prior-snapshot`) frente a un daemon nuevo no recibe previo ni denegación (N5 de la Dev Spec); hoy no ocurre porque hook y daemon son el mismo binario | § 7 |
+| **Textos** | Plantilla fija `snapshotreq.deny` con una pista por causa; ninguna menciona la excepción ni cómo quitar la protección. `guard.deny.internal` añade, en condicional, que se refresque la protección con `raptor guard install` | § 3 (M-05) |
+
