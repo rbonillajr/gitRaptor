@@ -311,7 +311,7 @@ fn start() -> Running {
                 oplog: Arc::clone(&oplog),
             }),
         },
-        root: tp.root.path().to_owned(),
+        root: tp.root.path().join("profile"),
         oids: Oids { main, feat },
         out_dir: tp.root.path().join("answers"),
         lock_prefix: tp.root.path().display().to_string(),
