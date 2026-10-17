@@ -300,12 +300,21 @@ impl Running {
                 }),
             )
             .unwrap();
-        let out: Value = c
-            .call(
-                methods::OPERATION_RUN,
-                json!({ "plan_id": plan.plan_id, "accepted_warnings": plan.warnings }),
-            )
-            .unwrap();
+        let out: Value = match c.call(
+            methods::OPERATION_RUN,
+            json!({ "plan_id": plan.plan_id, "accepted_warnings": plan.warnings }),
+        ) {
+            Ok(out) => out,
+            Err(ClientError::Rpc(e)) => {
+                let id = e.data.as_ref().and_then(|d| d["operation_id"].as_str());
+                let view = id.map(|id| self.op(id));
+                panic!(
+                    "the operation failed: {e:?}\n{view:#?}\n{}",
+                    self.timeline_dump()
+                )
+            }
+            Err(e) => panic!("{e:?}"),
+        };
         serde_json::from_value(out).unwrap()
     }
 
@@ -345,6 +354,35 @@ impl Running {
 
     fn op(&self, id: &str) -> OperationView {
         self.oplog.lock().unwrap().operation(id).unwrap().unwrap()
+    }
+
+    /// Operations (with the engine mark each was taken at) and the engine's events, in order, for
+    /// a failure message: a stack that picks the wrong "last" needs both to be understood.
+    fn timeline_dump(&self) -> String {
+        let mut out = String::from("operations (seq, mark, kind, state, id):\n");
+        let log = self.oplog.lock().unwrap();
+        for op in log.operations(&Default::default()).unwrap_or_default() {
+            out += &format!(
+                "  {} {} {:?} {:?} {}\n",
+                op.record.seq,
+                op.record.engine_mark,
+                op.record.kind,
+                op.state,
+                op.record.operation_id
+            );
+        }
+        drop(log);
+        let page: Result<Value, _> =
+            connect(&self.tp).call(methods::EVENTS_HISTORY, json!({ "repo_id": self.repo_id }));
+        out += "events (seq, kind, branch):\n";
+        for e in page
+            .ok()
+            .and_then(|p| p["events"].as_array().cloned())
+            .unwrap_or_default()
+        {
+            out += &format!("  {} {} {}\n", e["seq"], e["kind"], e["details"]["branch"]);
+        }
+        out
     }
 
     fn operation_count(&self) -> usize {
@@ -811,7 +849,13 @@ fn a_restore_can_be_undone_back_to_the_exact_prior_state() {
 
     let undo = r.undo_ok(&wt);
 
-    assert_eq!(undo.undone_operation_id, restore.operation_id);
+    assert_eq!(
+        undo.undone_operation_id,
+        restore.operation_id,
+        "restore {}\n{}",
+        restore.operation_id,
+        r.timeline_dump()
+    );
     assert_eq!(undo.target_snapshot_id, restore.prior_snapshot_id);
     assert_eq!(state(&r.fx, &wt), s_state);
     // The refs of the scope are back too: feat-login-v2 is gone again.
