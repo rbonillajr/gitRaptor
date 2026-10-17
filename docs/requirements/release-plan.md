@@ -155,7 +155,7 @@ Estados: **I** = implemented, **P** = partially-implemented, **Pend** = draft, r
 | US-CKP-023 | Cola de confirmación en la TUI | Should | Pend (blocked) | US-GRD-015 |
 | TS-CKP-002, TS-CKP-004, TS-CKP-005 | Catálogo y ejecutor; tokens; widgets | Must | I | — |
 | SPIKE-CKP-001, TS-CKP-001 | Predicción en ≤ 5 s; predictor en el daemon | Must | Pend | — |
-| TS-CKP-003 | Capa del Cockpit en la decisión de Guardrails | Must | Pend | — |
+| TS-CKP-003 | Capa del Cockpit en la decisión de Guardrails | Must | I | — |
 
 **Guardrails** (18 US y 2 enablers)
 
