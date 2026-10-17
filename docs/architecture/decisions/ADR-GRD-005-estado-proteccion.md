@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-17
 deciders: [Rene Bonilla]
 domain: GRP
 feature: guardrails
@@ -52,7 +52,7 @@ La capa está **activa** solo si se cumplen todas estas condiciones:
 |---|---|---|
 | H1 | Hay una instalación `confirmada` en el diario del perfil (ADR-GRD-001 § 4) | `no-instalada` o, si hay evidencia en el repo sin entrada en el diario, `instalacion-huerfana` (abajo) |
 | H2 | El valor **efectivo** de `core.hooksPath` en **cada** worktree es la ruta absoluta de `<git-common-dir>/gitraptor/hooks` | `hookspath-cambiado` (con el worktree) o `repo-movido` |
-| H3 | El hash de cada dispatcher coincide con **la referencia de integridad del diario** (no la del manifiesto), y el `dev/inode` de la carpeta es el guardado | `dispatcher-alterado` o `carpeta-ausente` |
+| H3 | El hash de cada dispatcher coincide con **la referencia de integridad del diario** (no la del manifiesto). El `dev/inode` de la carpeta no es una señal de pérdida (Enmienda 2026-10-17): copiar o restaurar el repo, o un reinicio que renumera el volumen, lo cambian sin que se pierda nada | `dispatcher-alterado` o `carpeta-ausente` |
 | H4 | La ruta estable del binario resuelve a un destino con firma válida o con la huella fijada (ADR-GRD-001 § 8) | `binario-ausente` o `binario-no-valido` |
 
 - **Instalación huérfana** (J5): el perfil se borró, pero el repo conserva la clave apuntando a `gitraptor/hooks` y un manifiesto. **La detección y el estado `instalacion-huerfana` son de US-GRD-004; adoptar o retirar, de US-GRD-003.**
@@ -189,3 +189,11 @@ Derivada de las Enmiendas de ADR-GRD-001 (E-01-2) y ADR-GRD-002 (E-02-4). **Deci
 | `hook-previo-no-encadenado` cubre la ventana del conjunto mínimo de dispatchers | § 1 | ADR-GRD-001 § 2 |
 | La regeneración de dispatchers se serializa con H3 | § 4 | ADR-GRD-001 § 2 |
 | Pendiente en otro frente: que el observador (ADR-GRP-010) vigile las refs en `reftable/` | — | Tabla de [non-functional-guardrails.md](../non-functional-guardrails.md) |
+
+## Enmienda (2026-10-17, identidad de la carpeta y carpeta residual)
+
+**Decisión del orquestador (2026-10-17), validada por el Arquitecto.** El `status` sigue en `accepted`.
+
+- **H3**: el `dev/inode` de la carpeta deja de ser condición de salud. Ya lo era en el código (`health.rs`). La identidad se comprueba en cada operación que escribe o borra, y el diario la adopta solo cuando el contenido lo prueba (ADR-GRD-001, Enmienda 2026-10-17).
+- **`instalacion-huerfana` (J5) no se amplía**: sigue significando clave nuestra más manifiesto. Si no hay instalación confirmada, la clave no es la nuestra y queda una carpeta `gitraptor/` (una desinstalación cuya limpieza se detuvo tras la clave, o una carpeta que el perfil no conoce), el estado es `not-installed` con el diagnóstico nuevo **`leftover-folder`**. Así no se exagera la protección: con la clave fuera, nada protege el repo. Solo lo reciben las conexiones con `guard.recovery`.
+- **Retirar una huérfana** ya está disponible con `raptor guard uninstall`. Restaura el valor previo del manifiesto solo si era de nivel local y representable, y lo muestra antes de la ventana. **Adoptar** sigue pendiente (US-GRD-003).
