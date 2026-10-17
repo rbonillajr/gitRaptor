@@ -1064,6 +1064,16 @@ pub fn log_entry_lines(e: &GuardLogEntry) -> Vec<String> {
         "  {}",
         t("guard.log.actor", &[("actor", &agent_text(e.actor))])
     ));
+    // The hooks are the usual layer: only the executor's own entries say which one decided.
+    match e.layer {
+        gitraptor_api::guard::LogLayer::Hooks => {}
+        gitraptor_api::guard::LogLayer::Mcp => {
+            out.push(format!("  {}", t("guard.log.layer-mcp", &[])));
+        }
+        gitraptor_api::guard::LogLayer::Cockpit => {
+            out.push(format!("  {}", t("guard.log.layer-cockpit", &[])));
+        }
+    }
     if e.worktree.is_some() || e.branch.is_some() {
         let unknown = || t("guard.log.unknown", &[]);
         out.push(format!(

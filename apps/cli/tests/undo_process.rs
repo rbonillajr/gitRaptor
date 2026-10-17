@@ -79,6 +79,7 @@ impl OperationCatalog for ResetHard {
             warnings: Vec::new(),
             affected: Affected::Nobody,
             other_session: false,
+            governed: None,
         })
     }
 
