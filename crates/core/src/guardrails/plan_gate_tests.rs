@@ -40,7 +40,8 @@ fn repo(parent: &Path) -> PathBuf {
         "[core]\n\trepositoryformatversion = 0\n\tbare = false\n",
     )
     .unwrap();
-    git.canonicalize().unwrap()
+    // The drive form on Windows, as the daemon's repos have it: the reader refuses `\\?\` paths.
+    gitraptor_git::paths::canonicalize(&git).unwrap()
 }
 
 struct Rig {
