@@ -294,6 +294,147 @@ pub(super) fn remove_folder(
     Ok(())
 }
 
+/// The content of `name` in `dir` when it is a regular file no larger than `MAX_READ`, opened
+/// without following a link; `None` otherwise.
+fn read_regular(dir: impl AsFd, name: &str) -> Result<Option<Vec<u8>>> {
+    Ok(read_regular_id(dir, name)?.map(|(_, bytes)| bytes))
+}
+
+/// [`read_regular`], with the identity of the file that was read.
+fn read_regular_id(dir: impl AsFd, name: &str) -> Result<Option<(FileId, Vec<u8>)>> {
+    use std::io::Read;
+    let fd = match rustix::fs::openat(
+        dir,
+        name,
+        OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::NONBLOCK | OFlags::CLOEXEC,
+        Mode::empty(),
+    ) {
+        Ok(fd) => fd,
+        Err(rustix::io::Errno::NOENT | rustix::io::Errno::LOOP | rustix::io::Errno::NOTDIR) => {
+            return Ok(None);
+        }
+        Err(e) => return Err(GuardWriteError::Io(e.into())),
+    };
+    let stat = rustix::fs::fstat(&fd).map_err(|e| GuardWriteError::Io(e.into()))?;
+    #[allow(clippy::unnecessary_cast)]
+    if FileType::from_raw_mode(stat.st_mode) != FileType::RegularFile
+        || stat.st_size as u64 > super::MAX_READ
+    {
+        return Ok(None);
+    }
+    let mut bytes = Vec::new();
+    std::fs::File::from(fd)
+        .take(super::MAX_READ + 1)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > super::MAX_READ {
+        return Ok(None);
+    }
+    Ok(Some((id(&stat), bytes)))
+}
+
+/// The folder (as a descriptor) and the descriptor of the directory a listed path lives in.
+fn parent_of<'p>(folder: &OwnedFd, path: &'p str) -> Result<Option<(OwnedFd, &'p str)>> {
+    match path.split_once('/') {
+        None => Ok(Some((
+            folder.try_clone().map_err(GuardWriteError::Io)?,
+            path,
+        ))),
+        Some((sub, name)) => match open_subdir(folder, sub) {
+            Ok(dir) => Ok(Some((dir, name))),
+            Err(GuardWriteError::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(GuardWriteError::Changed(_)) => Ok(None),
+            Err(e) => Err(e),
+        },
+    }
+}
+
+pub(super) fn read_folder(common: &Path, listed: &[&str]) -> Result<Option<super::FolderRead>> {
+    let root = open_dir(common)?;
+    let folder = match open_subdir(&root, super::FOLDER) {
+        Ok(dir) => dir,
+        Err(GuardWriteError::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(None);
+        }
+        Err(e) => return Err(e),
+    };
+    let stat = rustix::fs::fstat(&folder).map_err(|e| GuardWriteError::Io(e.into()))?;
+    let mut files = Vec::new();
+    for path in listed {
+        let bytes = match parent_of(&folder, path)? {
+            Some((dir, name)) => read_regular(&dir, name)?,
+            None => None,
+        };
+        files.push(((*path).to_owned(), bytes));
+    }
+    Ok(Some(super::FolderRead {
+        id: id(&stat),
+        files,
+    }))
+}
+
+pub(super) fn remove_recognized(
+    common: &Path,
+    listed: &[&str],
+    expected: FileId,
+    accept: &dyn Fn(&str, &[u8]) -> bool,
+) -> Result<Vec<String>> {
+    let root = open_dir(common)?;
+    let folder = match open_subdir(&root, super::FOLDER) {
+        Ok(dir) => dir,
+        Err(GuardWriteError::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(Vec::new());
+        }
+        Err(e) => return Err(e),
+    };
+    let stat = rustix::fs::fstat(&folder).map_err(|e| GuardWriteError::Io(e.into()))?;
+    if id(&stat) != expected {
+        return Err(GuardWriteError::Changed("the guardrails folder"));
+    }
+    let mut kept = Vec::new();
+    let mut subs = Vec::new();
+    for path in listed {
+        if let Some((sub, _)) = path.split_once('/')
+            && !subs.contains(&sub)
+        {
+            subs.push(sub);
+        }
+        let Some((dir, name)) = parent_of(&folder, path)? else {
+            // Its folder is absent, or a link or not a folder: that one stays.
+            if let Some((sub, _)) = path.split_once('/')
+                && rustix::fs::statat(&folder, sub, AtFlags::SYMLINK_NOFOLLOW).is_ok()
+            {
+                kept.push((*path).to_owned());
+            }
+            continue;
+        };
+        match read_regular_id(&dir, name)? {
+            Some((read, bytes)) if accept(path, &bytes) => {
+                // The entry removed is the file that was read and recognized, not one renamed
+                // into its place since (`unlinkat` never follows a link).
+                match rustix::fs::statat(&dir, name, AtFlags::SYMLINK_NOFOLLOW) {
+                    Ok(now) if id(&now) == read => unlink(&dir, name)?,
+                    Err(rustix::io::Errno::NOENT) => {}
+                    _ => kept.push((*path).to_owned()),
+                }
+            }
+            Some(_) => kept.push((*path).to_owned()),
+            // Absent, or something that is not a regular file: only the absent is not kept.
+            None => match rustix::fs::statat(&dir, name, AtFlags::SYMLINK_NOFOLLOW) {
+                Err(rustix::io::Errno::NOENT) => {}
+                _ => kept.push((*path).to_owned()),
+            },
+        }
+    }
+    for sub in subs {
+        rmdir_if_empty(&folder, sub)?;
+    }
+    rustix::fs::fsync(&folder).map_err(|e| GuardWriteError::Io(e.into()))?;
+    drop(folder);
+    rmdir_if_empty(&root, super::FOLDER)?;
+    rustix::fs::fsync(&root).map_err(|e| GuardWriteError::Io(e.into()))?;
+    Ok(kept)
+}
+
 /// Removes the temporary `name`; `true` when it was removed. A folder swapped in after the type
 /// check is refused (EISDIR, or EPERM on some systems): that entry is not ours, so it stays.
 fn unlink_temporary(dir: impl AsFd, name: &str) -> Result<bool> {

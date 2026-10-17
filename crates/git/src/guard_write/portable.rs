@@ -246,6 +246,108 @@ pub(super) fn remove_folder(
     Ok(())
 }
 
+/// The content of `path` when it is a regular file (not a link) no larger than `MAX_READ`.
+fn read_regular(path: &Path) -> Result<Option<Vec<u8>>> {
+    match std::fs::symlink_metadata(path) {
+        Ok(m) if m.is_file() && m.len() <= super::MAX_READ => {}
+        Ok(_) => return Ok(None),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e.into()),
+    }
+    match std::fs::read(path) {
+        Ok(bytes) if bytes.len() as u64 <= super::MAX_READ => Ok(Some(bytes)),
+        Ok(_) => Ok(None),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e.into()),
+    }
+}
+
+/// The folder of `gitraptor/` a listed path lives in, when it is a folder and not a link.
+fn listed_parent_ok(root: &Path, path: &str) -> Result<bool> {
+    match path.split_once('/') {
+        None => Ok(true),
+        Some((sub, _)) => Ok(matches!(not_link(&root.join(sub)), Ok(Some(m)) if m.is_dir())),
+    }
+}
+
+pub(super) fn read_folder(common: &Path, listed: &[&str]) -> Result<Option<super::FolderRead>> {
+    not_link(common)?;
+    let root = common.join(super::FOLDER);
+    match not_link(&root)? {
+        None => return Ok(None),
+        Some(m) if !m.is_dir() => return Err(GuardWriteError::Changed("the guardrails folder")),
+        Some(_) => {}
+    }
+    let id = id_of(&root)?;
+    let mut files = Vec::new();
+    for path in listed {
+        let bytes = if listed_parent_ok(&root, path)? {
+            read_regular(&root.join(path))?
+        } else {
+            None
+        };
+        files.push(((*path).to_owned(), bytes));
+    }
+    Ok(Some(super::FolderRead { id, files }))
+}
+
+pub(super) fn remove_recognized(
+    common: &Path,
+    listed: &[&str],
+    expected: FileId,
+    accept: &dyn Fn(&str, &[u8]) -> bool,
+) -> Result<Vec<String>> {
+    not_link(common)?;
+    let root = common.join(super::FOLDER);
+    match not_link(&root)? {
+        None => return Ok(Vec::new()),
+        Some(m) if !m.is_dir() => return Err(GuardWriteError::Changed("the guardrails folder")),
+        Some(_) => {}
+    }
+    if id_of(&root)? != expected {
+        return Err(GuardWriteError::Changed("the guardrails folder"));
+    }
+    let mut kept = Vec::new();
+    let mut subs = Vec::new();
+    for path in listed {
+        if let Some((sub, _)) = path.split_once('/')
+            && !subs.contains(&sub)
+        {
+            subs.push(sub);
+        }
+        if !listed_parent_ok(&root, path)? {
+            if std::fs::symlink_metadata(root.join(path)).is_ok() {
+                kept.push((*path).to_owned());
+            }
+            continue;
+        }
+        let file = root.join(path);
+        match read_regular(&file)? {
+            Some(bytes) if accept(path, &bytes) => match std::fs::remove_file(&file) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(e.into()),
+            },
+            Some(_) => kept.push((*path).to_owned()),
+            None => {
+                if std::fs::symlink_metadata(&file).is_ok() {
+                    kept.push((*path).to_owned());
+                }
+            }
+        }
+    }
+    // Without descriptors, the folder could have been swapped while it was read: what is left
+    // of it goes only if it is still the one that was checked.
+    if id_of(&root)? != expected {
+        return Err(GuardWriteError::Changed("the guardrails folder"));
+    }
+    for sub in subs {
+        let _ = std::fs::remove_dir(root.join(sub));
+    }
+    let _ = std::fs::remove_dir(&root);
+    Ok(kept)
+}
+
 pub(super) fn temporaries(common: &Path) -> Result<Vec<String>> {
     let mut out = Vec::new();
     for entry in std::fs::read_dir(common)? {
