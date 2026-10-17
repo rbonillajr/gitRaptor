@@ -70,6 +70,7 @@ blocked:
 | [US-GRD-017](./user-stories/US-GRD-017-sin-snapshot-no-se-ejecuta.md) | Una operación destructiva permitida no se ejecuta sin un punto de recuperación | Desarrollador quiere que sin snapshot previo la operación se deniegue | partially-implemented (PR #260) |
 | [US-GRD-018](./user-stories/US-GRD-018-autoria-commits-persona-y-agente.md) | Cada commit entra a nombre de la persona y deja constancia del agente que lo hizo, con la exigencia que fija el equipo | Desarrollador quiere la política de autoría por repo: `agents-commit` por defecto, `human-author` o `flexible` (BR-26, D6) | partially-implemented (PR #137, #141, #150 (ajustes en #152 y #153); D12 en el registro con #154) |
 | [US-GRD-019](./user-stories/US-GRD-019-quien-ejecuto-y-a-nombre-de-quien.md) | El desarrollador ve quién ejecutó cada commit y a nombre de quién entró cuando no coinciden | Desarrollador quiere ver en `raptor events` agente, persona y worktree, y la pista inferida contrastada con el trailer | implemented (PR #144, #147, #151, #175) |
+| [US-GRD-020](./user-stories/US-GRD-020-mensajes-guard-status-deny-sin-daemon.md) | El desarrollador entiende si su repo está protegido y qué repetir cuando una operación se deniega sin el servicio | Desarrollador quiere "protegido, rama base main" en `raptor guard status` y una denegación sin servicio que nombre la operación real (dogfooding, 2026-10-17) | expanded |
 
 ---
 
