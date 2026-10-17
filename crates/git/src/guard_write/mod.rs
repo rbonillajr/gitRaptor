@@ -111,6 +111,17 @@ pub struct HooksPathEntry {
     pub value: String,
 }
 
+/// The largest file [`GuardWriter::read_folder`] reads: the native dispatcher is well under it.
+pub const MAX_READ: u64 = 64 * 1024 * 1024;
+
+/// `gitraptor/` as [`GuardWriter::read_folder`] found it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FolderRead {
+    pub id: FileId,
+    /// Each listed path, in order, with its content when it is a regular file.
+    pub files: Vec<(String, Option<Vec<u8>>)>,
+}
+
 /// The typed operations of the layer.
 pub struct GuardWriter<'a> {
     git: &'a SystemGit,
@@ -304,6 +315,36 @@ impl<'a> GuardWriter<'a> {
             check_relative(path)?;
         }
         fs::remove_folder(common, FOLDER, listed, Some(expected))
+    }
+
+    /// Reads `gitraptor/` through one descriptor (never following a link): its identity and the
+    /// content of each listed file, `None` for one that is absent or not a regular file (a link
+    /// included) or larger than [`MAX_READ`]. `Ok(None)` when the folder is absent; `Changed`
+    /// when it is a link or not a folder. What decides whether a folder whose identity changed
+    /// is still the install the journal recorded (ADR-GRD-001 § 4).
+    pub fn read_folder(&self, common: &Path, listed: &[&str]) -> Result<Option<FolderRead>> {
+        for path in listed {
+            check_relative(path)?;
+        }
+        fs::read_folder(common, listed)
+    }
+
+    /// Removes the listed files of `gitraptor/` whose content `accept` recognizes as written by
+    /// Guardrails, then its sub-folders and the folder if they are empty. A file it does not
+    /// recognize, a link or anything that is not a regular file stays, and the folder with it
+    /// (NFR-01: never someone else's hook). The folder must still be `expected`. Returns the
+    /// listed paths that stayed.
+    pub fn remove_recognized(
+        &self,
+        common: &Path,
+        listed: &[&str],
+        expected: FileId,
+        accept: &dyn Fn(&str, &[u8]) -> bool,
+    ) -> Result<Vec<String>> {
+        for path in listed {
+            check_relative(path)?;
+        }
+        fs::remove_recognized(common, listed, expected, accept)
     }
 
     /// Removes what `replace_files` leaves when it is killed between writing a temporary and
