@@ -1,5 +1,5 @@
 //! TS-CKP-003, regression of INF-GRD-001 with the executor as parent: for every prior hook setup
-//! (`PriorHooks::ALL`: none, own, husky, lefthook, pre-commit, global `core.hooksPath`) the
+//! (`PriorHooks::ALL` but the global `core.hooksPath`: none, own, husky, lefthook, pre-commit) the
 //! `commit` of the debug test arm, run by the simulated agent, behaves as raw Git does with the
 //! linter's marker: it fails the same, and without the marker it goes in. The real `raptor` daemon
 //! with `GITRAPTOR_TEST_EXECUTOR_ARMS=1` over a temporary profile (NFR-01), the real `raptor-hook`
@@ -223,7 +223,14 @@ impl Drop for Machine {
 /// under the executor exactly as it does under raw Git, and a commit without it goes in.
 #[test]
 fn chained_prior_hooks_behave_the_same_under_the_executor() {
-    for prior in PriorHooks::ALL {
+    // A global `core.hooksPath` is not tested end to end: the daemon the CLI starts takes `HOME`
+    // from the user database, so `raptor guard install` reads the account's global configuration,
+    // not the temporary home's (same limit as guard_us_grd_003.rs, E4). `guardrails::prior` and
+    // the `user_ops` test with a global `core.hooksPath` cover it.
+    for prior in PriorHooks::ALL
+        .into_iter()
+        .filter(|p| *p != PriorHooks::Global)
+    {
         let f = Fixture::with_prior_hooks(&git_from_path(), prior);
         // Raw Git, before Guardrails: the linter's verdict for this setup.
         let raw_rejected = f.commit_with_marker_rejected(&f.repo);
