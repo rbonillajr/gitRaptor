@@ -464,7 +464,10 @@ fn a_registered_agent_commit_is_shown_as_registered() {
     let event = m.commit("codex.txt", "by codex");
     assert_eq!(event["actor"]["name"]["untrusted"], "Codex", "{event:#}");
 
-    let shown = m.timeline("en_US.UTF-8", &[]);
+    // The compact view names the agent alone; the origin and the files are `--verbose`.
+    let compact = m.timeline("en_US.UTF-8", &[]);
+    assert!(compact.contains("Codex"), "{compact}");
+    let shown = m.timeline("en_US.UTF-8", &["--verbose"]);
     assert!(shown.contains("Codex"), "{shown}");
     assert!(shown.contains("registered"), "{shown}");
     assert!(shown.contains("codex.txt"), "{shown}");
@@ -493,7 +496,11 @@ fn a_detected_agent_commit_shows_when_where_which_files_and_who() {
     let event = m.event_when(|e| e["actor"]["kind"] == "claude-code");
     assert_eq!(event["actor"]["origin"], "detected", "{event:#}");
 
-    let shown = m.timeline("en_US.UTF-8", &[]);
+    let compact = m.timeline("en_US.UTF-8", &[]);
+    assert!(compact.contains("Claude Code"), "{compact}");
+    assert!(compact.contains("feat-login"), "{compact}");
+    assert!(has_clock(&compact), "{compact}");
+    let shown = m.timeline("en_US.UTF-8", &["--verbose"]);
     // Who.
     assert!(shown.contains("Claude Code"), "{shown}");
     assert!(shown.contains("detected"), "{shown}");
@@ -522,13 +529,23 @@ fn unattributed_changes_say_no_agent_in_es_and_en() {
     assert_eq!(event["actor"]["actor"], "unattributed", "{event:#}");
 
     let en = m.timeline("en_US.UTF-8", &[]);
-    assert!(en.contains("no agent"), "{en}");
-    assert!(en.contains("mine.txt"), "{en}");
+    assert!(en.contains("you or other"), "{en}");
     let es = m.timeline("es_ES.UTF-8", &[]);
-    assert!(es.contains("sin agente"), "{es}");
-    for shown in [&en, &es] {
+    assert!(es.contains("tú u otro"), "{es}");
+    let en_verbose = m.timeline("en_US.UTF-8", &["--verbose"]);
+    assert!(en_verbose.contains("mine.txt"), "{en_verbose}");
+    for shown in [&en, &es, &en_verbose] {
         let lower = shown.to_lowercase();
         assert!(!lower.contains("human"), "{shown}");
+        assert!(!lower.contains("humano"), "{shown}");
+        assert!(
+            !lower.contains("no agent (") && !lower.contains("(no agent)"),
+            "{shown}"
+        );
+    }
+    for shown in [&en, &es] {
+        let lower = shown.to_lowercase();
+        assert!(!lower.contains("sin agente"), "{shown}");
     }
     // The wire and `--json` say `unattributed`.
     let timeline = m.timeline_json(&[]);
@@ -601,7 +618,7 @@ fn paths_with_control_characters_are_printed_sanitized() {
     let name = "evil\u{1b}[31mred\nforged line.txt";
     let event = m.commit(name, "hostile path");
 
-    let shown = m.timeline("en_US.UTF-8", &[]);
+    let shown = m.timeline("en_US.UTF-8", &["--verbose"]);
     assert!(!shown.contains('\u{1b}'), "{shown:?}");
     assert!(!shown.contains("red\nforged"), "{shown:?}");
     assert!(shown.contains('\u{FFFD}'), "{shown:?}");
@@ -630,12 +647,17 @@ fn no_commit_message_or_content_reaches_the_cli_output() {
     let raw = m.timeline("en_US.UTF-8", &["--json"]);
     let shown_en = m.timeline("en_US.UTF-8", &[]);
     let shown_es = m.timeline("es_ES.UTF-8", &[]);
-    for output in [&raw, &shown_en, &shown_es] {
+    let verbose_en = m.timeline("en_US.UTF-8", &["--verbose"]);
+    let verbose_es = m.timeline("es_ES.UTF-8", &["--verbose"]);
+    for output in [&raw, &shown_en, &shown_es, &verbose_en, &verbose_es] {
         assert!(!output.contains(SENTINEL_MESSAGE), "{output}");
         assert!(!output.contains(SENTINEL_CONTENT), "{output}");
-        // Not vacuous: the commit is in it, with its path.
+    }
+    // Not vacuous: the commit is in it, with its path (the compact view shows no files).
+    for output in [&raw, &verbose_en, &verbose_es] {
         assert!(output.contains("private.txt"), "{output}");
     }
+    assert!(shown_en.contains("commit on"), "{shown_en}");
     let timeline = m.timeline_json(&[]);
     let entry = entry_of(&timeline, event["seq"].as_i64().unwrap());
     assert_eq!(
