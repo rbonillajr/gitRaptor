@@ -1,0 +1,162 @@
+{
+  "source": {
+    "kind": "devspec",
+    "ref": "docs/requirements/features/guardrails/dev-specs/US-GRD-017-sin-snapshot-no-se-ejecuta.md"
+  },
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "criteria": [
+    {
+      "id": "GRD017-E1E2",
+      "statement": "US-GRD-017 escenarios 1 y 2 (plazo) con el control D1: con previo, el borrado de feat-x se ejecuta y sus 3 commits se recuperan del punto previo; con el previo vencido (plazo 0), el borrado no se ejecuta, el motivo dice que se agotó el plazo para guardarlo y feat-x conserva sus commits, y el stderr del hook no trae el aviso «sigue adelante» de hookprior.failed; commit, crear rama, fast-forward y push siguen pasando con plazo 0",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test us_grd_017_hook -- --test-threads=4 scenario_1_ scenario_2_time_limit_ non_destructive_",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/us_grd_017_hook.rs"
+      ]
+    },
+    {
+      "id": "GRD017-DEGRADED",
+      "statement": "D2 (Q-GRD-36): sin daemon, el borrado de una rama local y el rebase permitidos se deniegan con system.snapshot-failed (snapshot-unavailable) y system.degraded, y el motivo dice «arranca GitRaptor y repite la operación»",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test us_grd_017_hook -- --test-threads=4 scenario_2_degraded_",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/us_grd_017_hook.rs"
+      ]
+    },
+    {
+      "id": "GRD017-LOG",
+      "statement": "D9: la denegación por previo fallido entra en raptor guard log como denial con la regla system.snapshot-failed y su causa, y el agente no deja claims de la operación que no ocurrió (D7)",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test us_grd_017_hook -- --test-threads=4 scenario_2_denial_reaches_",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/us_grd_017_hook.rs"
+      ]
+    },
+    {
+      "id": "GRD017-E3",
+      "statement": "US-GRD-017 escenario 3 (D10): un rebase de feat-y sin previo no se ejecuta, feat-y conserva sus 2 commits y, con --autostash, el working tree queda igual que antes",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test us_grd_017_hook -- --test-threads=4 scenario_3_",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/us_grd_017_hook.rs"
+      ]
+    },
+    {
+      "id": "GRD017-UNOBSERVED",
+      "statement": "D4 (Q-GRD-38): en un repo protegido que la Time Machine ya no observa, el borrado permitido se deniega y el motivo dice cómo volver a observarlo (raptor repo add)",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test us_grd_017_hook -- --test-threads=4 unobserved_repo_",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/us_grd_017_hook.rs"
+      ]
+    },
+    {
+      "id": "GRD017-LEGACY",
+      "statement": "D6: una conexión con guard.prior-snapshot y sin guard.snapshot-required recibe la misma denegación como system.internal-error, sin causa y sin priorSnapshot, nunca un permiso; guard.log le muestra la entrada igual; el texto de system.internal-error dice, en en y es, que se refresque la protección con raptor guard install y se repita la operación",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-core --test us_grd_017 -- --test-threads=4 legacy_ && CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --bin raptor guard::snapshot_required_tests::internal_error_ -- --test-threads=4",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grd_017.rs",
+        "apps/cli/src/guard/snapshot_required_tests.rs"
+      ]
+    },
+    {
+      "id": "GRD017-REUSE",
+      "statement": "D7: una segunda evaluación del mismo git que reutiliza un previo failed deniega igual",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-core --test us_grd_017 -- --test-threads=4 reused_failure_",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grd_017.rs"
+      ]
+    },
+    {
+      "id": "GRD017-CONVERSION",
+      "statement": "Conversión pura (D4, D5, D6, D11, D2): toda causa de failed con allow deniega con system.snapshot-failed y su causa, conservando decisionId y configStatus; con la excepción aplicada appliedEffect sigue allow; complete, sin campo o un deny previo no cambian; el mapeo legacy nunca da allow; client_fallback según las cuatro combinaciones de capacidades; degraded_reason lleva snapshot-unavailable",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-core --lib guardrails::snapshot_required_tests -- --test-threads=4",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/guardrails/snapshot_required_tests.rs"
+      ]
+    },
+    {
+      "id": "GRD017-TEXTS",
+      "statement": "D8: cada causa tiene su pista en en y es, la plantilla snapshotreq.deny dice por qué, raptor guard log nombra la regla, y ningún texto de snapshotreq.* menciona la excepción, raptor guard exec ni cómo quitar la protección; guard.install.unavailable incluye borrar ramas entre lo que queda bloqueado si GitRaptor falta",
+      "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --bin raptor guard::snapshot_required_tests -- --test-threads=4",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/src/guard/snapshot_required_tests.rs"
+      ]
+    }
+  ],
+  "constraints": {
+    "deny_paths": [
+      "apps/cli/tests/us_grd_017_hook.rs",
+      "crates/core/tests/us_grd_017.rs",
+      "crates/core/src/guardrails/snapshot_required_tests.rs",
+      "apps/cli/src/guard/snapshot_required_tests.rs",
+      "crates/api/src/lib.rs",
+      "crates/api/src/rpc.rs",
+      "crates/api/src/methods/mod.rs",
+      "apps/cli/src/main.rs",
+      "crates/core/src/daemon/repos.rs",
+      "crates/core/src/profile/guard_log.rs",
+      "docs/ARTIFACTS.md",
+      "docs/architecture/decisions/ADR-GRD-008*",
+      "crates/core/src/timemachine/hook_prior.rs",
+      "crates/core/src/timemachine/oplog/query.rs"
+    ],
+    "allow_dependency_changes": false,
+    "cargo_lock": "Sin dependencias nuevas: Cargo.lock no debe cambiar salvo para resolver un rebase"
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-api",
+      "gitraptor-core",
+      "gitraptor-cli"
+    ]
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 600000,
+    "suiteTimeoutMs": 2400000
+  },
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "opus"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "opus"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  }
+}

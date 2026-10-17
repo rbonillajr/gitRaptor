@@ -4,7 +4,7 @@ title: "Dev Spec — US-GRD-017: sin punto de recuperación, la operación destr
 type: dev-spec
 status: draft
 created: 2026-10-09
-updated: 2026-10-09
+updated: 2026-10-16
 story: US-GRD-017
 feature: guardrails
 domain: GRP
@@ -47,8 +47,8 @@ lineage:
 constitution_gates: []
 validation:
   must_read_resolved: true
-  gaps_blocking: 1
-  ready_to_implement: false
+  gaps_blocking: 0
+  ready_to_implement: true
   gaps_release: 1
   ready_to_release: false
 tags: [guardrails, time-machine, snapshot, nfr-01, br-edge-005, modo-degradado]
@@ -60,9 +60,9 @@ tags: [guardrails, time-machine, snapshot, nfr-01, br-edge-005, modo-degradado]
 
 Al terminar, un rebase o un borrado de rama local con Git crudo que las reglas permiten solo se ejecuta si la Time Machine guardó antes su punto de recuperación; si no pudo, la operación no se ejecuta, la rama y el working tree quedan como estaban y el motivo lo dice. Hoy no es así: con US-TMC-005 el hook avisa del fallo y deja pasar (D11 de su Brief), y sin daemon no hay punto y nada lo impide.
 
-Para eso: una conversión en el daemon, entre el snapshot `previo_hook` y el registro de decisiones, que cambia un `failed` por una denegación con la regla `system.snapshot-failed`; la misma denegación en el cliente del hook cuando no hay daemon (modo degradado) o el daemon es de otra versión; los mensajes; y, si US-TMC-005 no lo trae, que los cupos globales del previo solo cuenten a los agentes (Q-GRD-37). Las decisiones de negocio son de [BR-EDGE-005](../business-rules.md) (Q-GRD-11); aquí no se reabren.
+Para eso: una conversión en el daemon, entre el snapshot `previo_hook` y el registro de decisiones, que cambia un `failed` por una denegación con la regla `system.snapshot-failed`; la misma denegación en el cliente del hook cuando no hay daemon (modo degradado) o el daemon es de otra versión; los mensajes; y que los cupos globales del previo solo se apliquen a los agentes (Q-GRD-37). Las decisiones de negocio son de [BR-EDGE-005](../business-rules.md) (Q-GRD-11); aquí no se reabren.
 
-**Dependencia dura**: esta Dev Spec es implementable **solo cuando US-TMC-005 esté mergeada**. Todo lo que se marca "lo crea US-TMC-005" vive hoy solo en su Brief aprobado (`docs/dev-briefs/us-tmc-005-pre-hook-snapshot.md`, rama `feat/US-TMC-005-pre-hook-snapshot`, sin PR ni commits): `Decision.priorSnapshot`, los tipos `HookPriorSnapshot` y `HookPriorFailure`, la capacidad `guard.prior-snapshot`, `timemachine::hook_prior::wants_prior`, `Connection::hook_prior`, el plazo `HOOK_PRIOR_DEADLINE` y su override de pruebas. Por eso el Brief no está en `must_read`: se leen la historia US-TMC-005 y ADR-TMC-004, y el Brief en su rama.
+**Dependencia dura (cumplida el 2026-10-16)**: US-TMC-005 está en `main` (#248; N18). Lo que se marca "lo crea US-TMC-005" ya existe en el código: `Decision.priorSnapshot`, los tipos `HookPriorSnapshot` y `HookPriorFailure`, la capacidad `guard.prior-snapshot`, `timemachine::hook_prior::wants_prior`, `Connection::hook_prior`, el plazo `HOOK_PRIOR_DEADLINE` y su override de pruebas (`crates/core/src/timemachine/hook_prior.rs`, `crates/api/src/timemachine.rs`, `crates/core/src/channel/conn.rs`).
 
 | Término | Qué es aquí |
 |---|---|
@@ -117,7 +117,7 @@ P1 a P5 (D1 a D5) y D13: **Decisión del orquestador (2026-10-09), validada por 
 | D10 (e) | **Atomicidad**: un deny en `prepared` aborta la transacción (también `branch -D a b`); un deny en `pre-rebase` impide el rebase y Git reaplica el autostash. NFR-01 sin código propio. Cita: medición con Git 2.50.1 en N15 |
 | D11 | **Daemon sin la capacidad**: con `guard.prior-snapshot` el cliente convierte él; sin ninguna, deniega el alcance D1 con `snapshot-unavailable` (residuo: también el `git` del ejecutor). Cita: ADR-GRP-016 § 1, M-05 de DS-US-GRD-008 |
 | D12 | **Coste**: solo la conversión en memoria y `wants_prior` (pura); sin lecturas ni llamadas nuevas. Cita: ADR-GRD-002 § 5, US-TMC-005 D5 |
-| D13 | **Cupos globales solo para agentes**: los cupos por worktree y por repo de § Valores numéricos solo cuentan y solo se aplican a agentes detectados o registrados; la persona y "sin atribuir" solo gastan su cupo por solicitante. Sin migración nueva. Vive en US-TMC-005 si aún está en curso; si no, T008. Cita: Q-GRD-37 (opción b), US-TMC-005 D6, R-GRD-2; porqué e implementabilidad en N16 |
+| D13 | **Cupos globales solo para agentes**: los cupos por worktree y por repo de § Valores numéricos solo cuentan y solo se aplican a agentes detectados o registrados; la persona y "sin atribuir" solo gastan su cupo por solicitante. Sin migración nueva. **Ya en `main`** (US-TMC-005): las consultas globales filtran agentes y `capture_in_store` vacía las ventanas globales a quien no tiene sesión; lo prueba `crates/core/tests/us_tmc_005_unattributed.rs::unattributed_requests_neither_spend_nor_meet_the_agents_ceilings`. T008 no tiene código (N18). Cita: Q-GRD-37 (opción b), US-TMC-005 D6, R-GRD-2; porqué e implementabilidad en N16 |
 
 ---
 
@@ -125,7 +125,6 @@ P1 a P5 (D1 a D5) y D13: **Decisión del orquestador (2026-10-09), validada por 
 
 | ID | Qué falta | Severidad | Alcance | Acción | Owner |
 |----|-----------|-----------|---------|--------|-------|
-| G1 | US-TMC-005 no está mergeada. Su rama `feat/US-TMC-005-pre-hook-snapshot` no tiene commits sobre `main` (`e9dfa23b`), y todo lo que esta Dev Spec consume (`Decision.priorSnapshot`, `HookPriorSnapshot`, `HookPriorFailure`, `guard.prior-snapshot`, `wants_prior`, `Connection::hook_prior`, override de plazo) solo existe en su Brief | Bloqueante | todo el spec | Mergear US-TMC-005; al mergear, confirmar contra su código los valores de § Valores numéricos (plazo y cupos) y quitar su ⚠️ **ASSUMPTION**; después quitar esta fila y poner `ready_to_implement: true` | Orquestador |
 | G2 | El escenario de la excepción ("con GitRaptor en marcha", el último de la historia) no tiene mecanismo: US-GRD-006 está en `draft` y `ExceptionState::Applied` no lo produce nadie (`crates/api/src/guard.rs:166`). La historia la marca como dependencia blanda del mismo hito | Bloquea liberación | T007 | Liberar US-GRD-017 como `partially-implemented`; el e2e de ese escenario va en la Dev Spec de US-GRD-006, que cumple el punto de enganche D5 | Orquestador / US-GRD-006 |
 
 Lo que no bloquea va en [Notas del autor](#notas-del-autor).
@@ -194,7 +193,7 @@ El paso que decide es el 6: está **antes** de `log_decision` y de `hook_claims`
 
 ## 🚀 Plan de implementación
 
-> Se ejecuta en orden topológico (`Depende:`), **después de mergear US-TMC-005 (G1)**. Una casilla se marca cuando su `Aceptación` está verificada. Las rutas son relativas a la raíz del repo.
+> Se ejecuta en orden topológico (`Depende:`) (US-TMC-005 ya está en `main`, N18). Una casilla se marca cuando su `Aceptación` está verificada. Las rutas son relativas a la raíz del repo.
 
 ### El trabajo de un vistazo
 
@@ -208,12 +207,12 @@ Tres frentes y un cierre: pruebas en rojo (T001), contrato y conversión (T002 a
 | T004 | Enganchar la conversión en guard.evaluate y guard.log | T001, T003 | `crates/core/src/channel` |
 | T005 | Denegar en el cliente del hook sin daemon o con un daemon viejo | T001, T003 | `crates/core/src/guardrails` |
 | T006 | Mostrar el motivo y limitar el aviso de US-TMC-005 | T002 | `apps/cli` |
-| T007 | Verificar y documentar | T001, T004, T005, T006, T008 | `docs` |
-| T008 | Contar los cupos globales del previo solo para agentes (si US-TMC-005 no lo trae) | — | `crates/core/src/timemachine` |
+| T007 | Verificar y documentar | T001, T004, T005, T006 | `docs` |
+| T008 | ~~Aplicar los cupos globales del previo solo a agentes~~: ya en `main`, sin código (N18) | — | — |
 
 ### En qué orden
 
-Una cadena corta con dos ramas paralelas tras la conversión (daemon y cliente), los mensajes en paralelo desde el contrato y T008 independiente.
+Una cadena corta con dos ramas paralelas tras la conversión (daemon y cliente), los mensajes en paralelo desde el contrato (T008 ya está en `main`).
 
 ```mermaid
 graph LR
@@ -227,7 +226,6 @@ graph LR
     T004 --> T007
     T005 --> T007
     T006 --> T007
-    T008 --> T007
 ```
 
 ### T001 — Escribir las pruebas en rojo por escenario
@@ -297,7 +295,8 @@ graph LR
 1. Llamar a `snapshot_required::enforce(&mut decision)` después de `decision.prior_snapshot = self.hook_prior(..)` y antes de `self.log_decision(..)`.
    1.1 ⛔4.1 Si va después de `log_decision` o de `hook_claims`, el registro guarda un permiso y un agente deja claims de una operación que no ocurrió.
 2. Tras `hook_claims`, junto al `config_guard::legacy_decision` que ya existe: si la conexión no tiene `guard.snapshot-required`, `snapshot_required::legacy_decision(&mut decision)`.
-3. En `guard_log` (`conn.rs:1363`), el mismo criterio con `legacy_log`.
+3. En `guard_log` (`conn.rs:1494`), el mismo criterio con `legacy_log`.
+4. En `Connection::take_hook_prior`, repartir las causas (N20): un repo que la Time Machine no observa (no está en su backend, o `tm_scope_for` no lo encuentra) → `HookPriorFailure::Unavailable`; una carpeta que no es un worktree del repo observado → `NoWorktree`. Guard: `us_grd_017_hook::unobserved_repo_denies_and_says_how_to_observe_it`.
 
 - **Depende:** T001, T003
 - **Refs:** D7, D9
@@ -326,19 +325,21 @@ graph LR
 
 **Ubicación.**
 - `apps/cli/src/guard/snapshot_required.rs` (**CREATE**)
+- `apps/cli/src/guard/snapshot_required_tests.rs` (**CREATE**, tests del contrato, R4)
 - `apps/cli/src/guard.rs` (**MODIFY**: `mod snapshot_required;`, un brazo en `reason_text`, un brazo en `log_rule_text`, la condición del aviso de US-TMC-005)
 - `apps/cli/i18n/en/snapshotreq.txt` (**CREATE**)
 - `apps/cli/i18n/es/snapshotreq.txt` (**CREATE**)
 - `apps/cli/i18n/en/guard.txt`, `apps/cli/i18n/es/guard.txt` (**MODIFY**, solo `guard.install.unavailable`)
 
 **Reglas**
-- Claves solo del grupo `snapshotreq.` en su archivo: `snapshotreq.deny`, `snapshotreq.cause.*` (una por causa, con la redacción de la historia: "se agotó el plazo para guardarlo"; "GitRaptor no está en marcha"; "el repositorio ya no está observado") y `snapshotreq.hint.*` (`start`: "arranca GitRaptor y repite la operación"; `unobserved`: "vuelve a observarlo con raptor repo add y repite la operación"; `large-file`, `no-space`, `retry`, `no-worktree`), más `snapshotreq.log.rule`.
+- Claves solo del grupo `snapshotreq.` en su archivo: `snapshotreq.deny`, `snapshotreq.cause.*` (una por causa, con la redacción de la historia: "se agotó el plazo para guardarlo"; para `unavailable`, un único texto que sirve al modo degradado y al repo no observado (N20): "GitRaptor no está en marcha o ya no observa este repositorio") y `snapshotreq.hint.*` (`unavailable`: "arranca GitRaptor y repite la operación; si ya está en marcha, vuelve a observarlo con raptor repo add"; `large-file`, `no-space`, `retry`, `no-worktree`), más `snapshotreq.log.rule`.
 - `guard.install.unavailable` añade "borrar ramas" a lo que queda bloqueado si GitRaptor falta o falla: con D2 es verdad, y la explicación del permiso (BR-AUTH-002) no puede quedarse corta.
+- `guard.deny.internal` (en/es) añade, en condicional: "si se repite, refresca la protección con `raptor guard install` y repite la operación" (N22). El `Msg::Internal` fijo de `apps/cli/src/bin/raptor-hook.rs` (sin `raptor` o con `raptor` fallando) no cambia.
 - Ningún texto menciona la excepción, `raptor guard exec` ni cómo quitar la protección (ADR-GRD-003 § 3, M-05).
 
 - **Depende:** T002
 - **Refs:** D3, D4, D8; extender-sin-archivos-compartidos.md § Añadir un mensaje
-- **Aceptación:** `cargo test -p gitraptor-cli guard::snapshot_required` (incluye `messages_never_mention_the_exception` y `every_cause_has_a_hint`)
+- **Aceptación:** `cargo test -p gitraptor-cli --bin raptor guard::snapshot_required_tests` (incluye `messages_never_mention_the_exception`, `every_cause_has_a_hint` e `install_unavailable_mentions_branch_deletion`); el aviso `hookprior.failed` no sale con la denegación (`scenario_2_time_limit_denies_branch_delete_and_keeps_feat_x`)
 
 ### T007 — Verificar y documentar
 
@@ -354,31 +355,17 @@ graph LR
 **Reglas**
 - No se declara verificado lo que no se corrió: Windows y Linux quedan pendientes; `release-status.md` se regenera con `node tools/status/release-status.mjs`.
 
-- **Depende:** T001, T004, T005, T006, T008
+- **Depende:** T001, T004, T005, T006
 - **Refs:** G2; § 9.5
 - **Aceptación:** `cargo test --workspace` y `cargo clippy --workspace --all-targets -- -D warnings`
 
-### T008 — Contar los cupos globales del previo solo para agentes (si US-TMC-005 no lo trae)
+### T008 — Aplicar los cupos globales del previo solo a agentes (ya en `main`)
 
-**Objetivo.** Q-GRD-37 (D13). **Primero se comprueba si US-TMC-005 se mergeó con ello**: si su `hook_prior::quota` ya salta las ventanas globales para "sin atribuir" y sus consultas filtran por agente, esta tarea solo escribe los tests de abajo (que deben pasar sin tocar código) y no modifica nada de la Time Machine.
-
-**Ubicación.**
-- `crates/core/src/timemachine/hook_prior.rs` (**MODIFY**, solo si US-TMC-005 no lo trae)
-- `crates/core/src/timemachine/oplog/query.rs` (**MODIFY**, `hook_prior_quota_input`, ídem)
-- `crates/core/tests/us_grd_017_quota.rs` (**CREATE**)
-
-**Pasos**
-1. En `Oplog::hook_prior_quota_input`, añadir `AND requester_session IS NOT NULL` a las consultas `worktree_ms` y `repo_ms`; con `session = None`, devolver esas dos listas vacías.
-   1.1 ⛔8.1 No filtrar parseando el JSON de `requester`: `requester_session` ya lo dice y usa los índices parciales de la migración 4.
-2. En `hook_prior::quota`, aplicar las ventanas globales solo si el solicitante es un agente; la ventana por solicitante no cambia (los "sin atribuir" comparten un cubo por worktree, `requester_session IS NULL`).
-   2.1 ⛔8.2 Nunca quitar la ventana por solicitante a "sin atribuir": sin ella, un agente no detectado tendría previos ilimitados.
-3. Si un test de US-TMC-005 llenaba las ventanas globales con peticiones "sin atribuir", adaptarlo a agentes en este mismo PR.
+**Objetivo.** Q-GRD-37 (D13). Comprobado el 2026-10-16 (N18): US-TMC-005 lo trajo. `Oplog::hook_prior_quota_input` filtra `requester_session IS NOT NULL` en las ventanas globales y `hook_prior::capture_in_store` vacía `worktree_ms` y `repo_ms` cuando el solicitante no tiene sesión, antes de `quota`. Esta tarea no cambia código ni añade pruebas: la garantía la fija `crates/core/tests/us_tmc_005_unattributed.rs::unattributed_requests_neither_spend_nor_meet_the_agents_ceilings` (un agente llena la ventana del worktree; el siguiente agente choca con ella y "sin atribuir" obtiene su previo).
 
 - **Depende:** —
 - **Refs:** D13; Q-GRD-37; US-TMC-005 D6
-- **Aceptación:** `cargo test -p gitraptor-core --test us_grd_017_quota`
-- **Guard ⛔8.1:** `us_grd_017_quota::global_windows_count_only_agent_rows`
-- **Guard ⛔8.2:** `us_grd_017_quota::unattributed_keeps_its_own_window`
+- **Aceptación:** `cargo test -p gitraptor-core --test us_tmc_005_unattributed` (existente, sin cambios)
 
 ---
 
@@ -398,12 +385,11 @@ graph LR
 │   │   ├── mod.rs                                ← MODIFY  dos líneas mod
 │   │   └── hook.rs                               ← MODIFY  degradado y daemon viejo (D2, D11)
 │   └── channel/conn.rs                           ← MODIFY  brazo GUARD_EVALUATE y guard_log (D7)
-│   └── timemachine/{hook_prior.rs, oplog/query.rs} ← MODIFY  solo si US-TMC-005 no trae D13 (T008)
 ├── crates/core/tests/us_grd_017.rs               ← CREATE
-├── crates/core/tests/us_grd_017_quota.rs         ← CREATE  T008
 ├── apps/cli/
 │   ├── src/guard.rs                              ← MODIFY  dos brazos y la condición del aviso
 │   ├── src/guard/snapshot_required.rs            ← CREATE  textos de la regla y pistas
+│   ├── src/guard/snapshot_required_tests.rs      ← CREATE  tests del contrato (R4)
 │   ├── i18n/{en,es}/snapshotreq.txt              ← CREATE  grupo snapshotreq.
 │   ├── i18n/{en,es}/guard.txt                    ← MODIFY  guard.install.unavailable
 │   └── tests/us_grd_017_hook.rs                  ← CREATE
@@ -412,15 +398,14 @@ graph LR
 
 `← CREATE`: fichero nuevo. `← MODIFY`: fichero existente.
 
-**Slices disjuntos** (sin archivos en común; `conn.rs` y `apps/cli/src/guard.rs` también los toca US-TMC-005, por eso G1 va primero):
+**Slices disjuntos** (sin archivos en común; `conn.rs` y `apps/cli/src/guard.rs` también los tocó US-TMC-005, ya en `main`):
 
 | Slice | Archivos | Tareas |
 |---|---|---|
 | S1 contrato | `crates/api/src/guard.rs`, `crates/api/src/methods/guard.rs` | T002 |
 | S2 núcleo | `crates/core/src/guardrails/{snapshot_required.rs, snapshot_required_tests.rs, mod.rs, hook.rs}`, `crates/core/src/channel/conn.rs` | T003, T004, T005 |
 | S3 CLI | `apps/cli/src/guard.rs`, `apps/cli/src/guard/snapshot_required.rs`, `apps/cli/i18n/{en,es}/{snapshotreq,guard}.txt` | T006 |
-| S4 cupos (condicional) | `crates/core/src/timemachine/hook_prior.rs`, `crates/core/src/timemachine/oplog/query.rs`, `crates/core/tests/us_grd_017_quota.rs` | T008 |
-| Tests | `apps/cli/tests/us_grd_017_hook.rs`, `crates/core/tests/us_grd_017.rs` (no se editan durante la ejecución, R4) | T001 |
+| Tests | `apps/cli/tests/us_grd_017_hook.rs`, `crates/core/tests/us_grd_017.rs`, `crates/core/src/guardrails/snapshot_required_tests.rs`, `apps/cli/src/guard/snapshot_required_tests.rs` (no se editan durante la ejecución, R4) | T001 |
 | Docs | los de T007 | T007 |
 
 ---
@@ -534,7 +519,7 @@ _No aplica — esta entrega no lee configuración: el alcance es fijo (D1) y no 
 | Plazo del previo | 5 s | US-TMC-005 D5 (`HOOK_PRIOR_DEADLINE`) |
 | Espera máxima del cliente del hook | 10 s | `CALL_TIMEOUT`, `crates/api/src/client/mod.rs:40` |
 | Plazo en las pruebas | 0 ms | `GITRAPTOR_TEST_TM_HOOK_PRIOR_DEADLINE_MS`, solo debug (US-TMC-005 D15) |
-| Cupos del previo | 10/min y 120/24 h por solicitante y worktree; 300/24 h por worktree y 1.000/24 h por repo **solo para agentes** | US-TMC-005 D6 (⚠️ **ASSUMPTION** en los valores); Q-GRD-37 en a quién cuentan (D13) |
+| Cupos del previo | 10/min y 120/24 h por solicitante y worktree; 300/24 h por worktree y 1.000/24 h por repo **solo para agentes** | US-TMC-005 D6 (valores confirmados en `hook_prior.rs`, 2026-10-16); Q-GRD-37 en a quién cuentan (D13) |
 | Objetivo de coste del previo | p95 < 200 ms | ADR-TMC-006 § 2 |
 
 ---
@@ -552,7 +537,7 @@ _No aplica — no hay tabla, columna ni migración: `guardrails_decisions.reason
 | Tipo | Cantidad | Tareas dueñas | Herramientas | Cuándo |
 |------|---------:|-------------|---------|------|
 | Unit | 9 | T003, T006 | `cargo test` | PR gate |
-| Integration (canal y oplog) | 6 | T004, T008 | `cargo test`, daemon en proceso, oplog temporal | PR gate |
+| Integration (canal) | 3 | T004 | `cargo test`, daemon en proceso, oplog temporal | PR gate |
 | E2E | 7 | T001, T005 | `cargo test`, Git y daemon reales | PR gate (macOS local, ubuntu CI) |
 
 ### 9.2 Umbrales de cobertura
@@ -577,10 +562,9 @@ _No aplica — no hay tabla, columna ni migración: `guardrails_decisions.reason
 | E3: rebase de "feat-y" sin previo no se ejecuta y "feat-y" conserva sus 2 commits; con `--autostash` el working tree queda igual (D10) | `scenario_3_failed_prior_denies_rebase_and_feat_y_keeps_its_commits` | ídem |
 | D4 (Q-GRD-38): repo protegido retirado de la observación → deny, el motivo dice cómo volver a observarlo | `unobserved_repo_denies_and_says_how_to_observe_it` | ídem |
 | D1: control positivo con plazo 0: commit, crear rama, fast-forward y push siguen pasando | `non_destructive_operations_are_not_denied` | `apps/cli/tests/us_grd_017_hook.rs` |
-| D13 (⛔8.1): las ventanas globales solo cuentan filas de agentes | `global_windows_count_only_agent_rows` | `crates/core/tests/us_grd_017_quota.rs` |
-| D13: con los cupos globales llenos por un agente, la persona obtiene su previo | `person_gets_her_prior_after_an_agent_fills_the_global_windows` | ídem |
-| D13 (⛔8.2): "sin atribuir" conserva su ventana por solicitante | `unattributed_keeps_its_own_window` | ídem |
+| D13: con la ventana global llena por agentes, "sin atribuir" obtiene su previo (ya en `main`) | `unattributed_requests_neither_spend_nor_meet_the_agents_ceilings` | `crates/core/tests/us_tmc_005_unattributed.rs` (existente) |
 | D6: conexión sin `guard.snapshot-required` recibe `internal-error` sin `priorSnapshot` | `legacy_connection_reads_internal_error` | `crates/core/tests/us_grd_017.rs` |
+| N22: el texto de `system.internal-error` dice cómo refrescar la protección (en/es) | `internal_error_says_how_to_refresh_the_protection` | `apps/cli/src/guard/snapshot_required_tests.rs` |
 | D6: `guard.log` sin la capacidad | `legacy_guard_log_reads_internal_error` | ídem |
 | D7: la reutilización de un `failed` deniega también | `reused_failure_denies_again` | ídem |
 | D4: cada causa deniega (tabla de `HookPriorFailure`) | `every_failure_cause_denies` | `crates/core/src/guardrails/snapshot_required_tests.rs` |
@@ -590,8 +574,10 @@ _No aplica — no hay tabla, columna ni migración: `guardrails_decisions.reason
 | ⛔3.2 | `legacy_decision_stays_a_denial_without_prior_field` | ídem |
 | D11: las cuatro combinaciones de capacidades | `client_fallback_by_granted_capabilities` | ídem |
 | D2: `degraded_reason` lleva `snapshot-unavailable` | `degraded_reason_is_snapshot_unavailable` | ídem |
-| D8: pista por causa en en/es | `every_cause_has_a_hint` | `apps/cli/src/guard/snapshot_required.rs` |
+| D8: pista por causa en en/es | `every_cause_has_a_hint` | `apps/cli/src/guard/snapshot_required_tests.rs` |
 | D8: ningún texto menciona la excepción | `messages_never_mention_the_exception` | ídem |
+| D8: con la denegación no sale el aviso «sigue adelante» de `hookprior.failed` | `scenario_2_time_limit_denies_branch_delete_and_keeps_feat_x` | `apps/cli/tests/us_grd_017_hook.rs` |
+| T006: `guard.install.unavailable` incluye borrar ramas | `install_unavailable_mentions_branch_deletion` | `apps/cli/src/guard/snapshot_required_tests.rs` |
 
 ### 9.4 Comportamientos críticos verificados
 
@@ -627,7 +613,7 @@ _No aplica — no hay tabla, columna ni migración: `guardrails_decisions.reason
 - El mapeo de compatibilidad nunca produce `allow` (`legacy_decision_stays_a_denial_without_prior_field`).
 - Ningún texto de `snapshotreq.*` menciona la excepción ni cómo quitar la protección (`messages_never_mention_the_exception`).
 - El daemon no lee nada nuevo del cliente: `EvaluateParams` no cambia.
-- Un agente no puede dejar a la persona sin previo agotando los cupos globales (`person_gets_her_prior_after_an_agent_fills_the_global_windows`, Q-GRD-37).
+- Un agente no puede dejar a la persona sin previo agotando los cupos globales (`us_tmc_005_unattributed::unattributed_requests_neither_spend_nor_meet_the_agents_ceilings`, Q-GRD-37).
 
 Corre `/security-review --scope devspec docs/requirements/features/guardrails/dev-specs/US-GRD-017-sin-snapshot-no-se-ejecuta.md` antes de mezclar.
 
@@ -639,7 +625,7 @@ Corre `/security-review --scope devspec docs/requirements/features/guardrails/de
 
 | Ítem / no-objetivo | Historia que lo cubre | Gate (cómo se verifica) |
 |----------------|--------------------|-------------------------|
-| Tomar el previo, su plazo y su motor | US-TMC-005 | Esta entrega solo toca en `crates/core/src/timemachine/` la cuenta de cupos de T008, y solo si US-TMC-005 no la trae (diff del PR) |
+| Tomar el previo, su plazo y su motor | US-TMC-005 | Esta entrega no toca `crates/core/src/timemachine/` (diff del PR) |
 | Avisar antes de retirar de la observación un repo protegido (Q-GRD-38) | US-GRP-001 (motor-local), traspaso N3 | `crates/core/src/daemon/repos.rs` no cambia (diff del PR) |
 | Previo en force-push o borrado remoto | Cuando la Time Machine guarde el remoto | `wants_prior` no cambia (diff del PR) |
 | Tope de 50 MB o previo parcial | — (descartado, D3) | `HOOK_PRIOR_DEADLINE` y el escritor no cambian (diff del PR) |
@@ -660,7 +646,7 @@ Corre `/security-review --scope devspec docs/requirements/features/guardrails/de
 | N4 | **Traspaso a US-GRD-006**: poner `exception = applied` en `serve_audited` cuando un token válido cubre la transición, también si las reglas permiten; y escribir la entrada `kind = exception` con las razones que lleva la decisión, `system.snapshot-failed` incluida. **La entrada y `raptor guard log` dicen además, en lenguaje de negocio, que la operación se ejecutó sin punto de recuperación** (por ejemplo, "se ejecutó sin punto de recuperación: se agotó el plazo para guardarlo"), no solo el código de la regla. Con eso el escenario de la excepción no toca este código. | Llevarlo a la Dev Spec de US-GRD-006 | Arquitecto |
 | N5 | Residuo: un cliente del hook sin `guard.prior-snapshot` (anterior a US-TMC-005) frente a un daemon nuevo no recibe previo ni denegación, porque US-TMC-005 D4 solo toma el previo con la capacidad. Solo ocurre con un daemon más nuevo que el binario instalado (desarrollo). | Opcional: que el daemon tome el previo en toda evaluación de la capa `hooks` y deniegue como `internal-error` sin capacidad (cambia US-TMC-005 D4) | Orquestador |
 | N6 | El Brief de US-TMC-005 (D11) dice "convierte `failed` en `system_deny(Rule::SnapshotFailed)`". Se usa `enforce` en su lugar (⛔3.1), porque `system_deny` cambia el `decisionId`, borra `configStatus` y pierde la causa. | Ninguna | — |
-| N7 | ⚠️ **ASSUMPTION**: para un repo que la Time Machine no observa (retirado en caliente), US-TMC-005 responde `unavailable` y no `time-limit`. Si responde `time-limit` se deniega igual (D4), pero la pista sería la equivocada. | Verificarlo con `unobserved_repo_denies_and_says_how_to_observe_it` | Implementador |
+| N7 | Verificado (2026-10-16): para un repo retirado de la observación, US-TMC-005 responde hoy `no-worktree`, no `unavailable`. T004 paso 4 lo reparte (N20) | Ninguna | — |
 | N8 | Medido con Git 2.50.1: `pull --rebase --autostash` hace el `fetch` antes del `pre-rebase`; tras el deny, `origin/*` ya está actualizado. No destruye nada. | Ninguna | — |
 | N9 | Porqué de D1. La conversión no tiene lista propia: solo actúa donde el daemon tomó el previo, y el cliente usa la misma `wants_prior`, así daemon y degradado no divergen. El force-push llega a ejecutarse con la excepción o con el mínimo relajado por el equipo y confirmado por el humano (Q-GRD-21); como el borrado remoto, pasa sin previo porque la Time Machine no guarda el remoto (se reabre cuando lo guarde; US-TMC-014). El retroceso sin borrado (`branch -f`, `update-ref`, un renombrado que no borra ninguna `refs/heads/*` a la vista del hook) llega al hook después de reescribir, igual que `checkout` y `reset --hard`: lo cubre la observación (US-TMC-004) | Ninguna | — |
 | N10 | Porqué de D2. Hoy `fn degraded` (`crates/core/src/guardrails/hook.rs:716`) solo añade `system.degraded` si `effect != allow`; convertir antes de ese bloque hace que la denegación lleve las dos razones. En degradado no hay entrada porque el spool está diferido (ADR-GRD-006 § 5); cuando exista, su entrada queda fuera del KPI por defecto (`spool-unverified`, Q-GRD-27): las dos cosas son coherentes | Ninguna | — |
@@ -671,3 +657,8 @@ Corre `/security-review --scope devspec docs/requirements/features/guardrails/de
 | N15 | Medición de D10 (Git 2.50.1, macOS): un deny en `reference-transaction` `prepared` sale con `fatal: ref updates aborted by hook` (128) y la rama sigue; `git branch -D a b` es una sola transacción, así que las dos siguen. En `pre-rebase` con `--autostash`, el autostash y `rebase-merge/` ya existen antes del hook; al rechazar, Git imprime "Applied autostash" y borra `rebase-merge/` | Ninguna | — |
 | N16 | Implementabilidad de D13. En la fila `hook-prior` de US-TMC-005, `requester` es el JSON de `Requester` (como `begin_manual_snapshot`, `crates/core/src/timemachine/oplog/mod.rs:384`) y `requester_session` es `Requester::session_id()`, que solo existe para `Requester::Agent` (`oplog/model.rs:167`); el `CHECK` de la migración 4 lo deja en `NULL` para "sin atribuir". Por tanto, "agente" equivale a `requester_session IS NOT NULL`. Las dos consultas globales añaden ese predicado sobre los índices parciales `(worktree_key, recorded_ms)` y `(recorded_ms)` de la migración 4; el filtro residual recorre filas de 24 h acotadas por los cupos. Residuo: un agente no detectado cuenta como persona (R-GRD-2) | Ninguna | — |
 | N17 | Tamaño: la DS tiene ≈670 líneas, frente a ≤560. El exceso viene de la dependencia de una historia sin mergear (lo que "lo crea US-TMC-005" se declara aquí para que el implementador no lo invente), de la tabla de pruebas por escenario y decisión, y de las notas N9 a N16, que dejan cada decisión en una línea con su cita. Partirla separaría la conversión del cliente degradado, que comparten la misma función | Ninguna | — |
+| N18 | G1 cerrado (2026-10-16), fila retirada de § Gaps: US-TMC-005 está en `main` (#248). Verificado contra su código: `HOOK_PRIOR_DEADLINE` = 5 s, `DEADLINE_ENV`, `wants_prior`, `Connection::hook_prior`, `HookPriorSnapshot`/`HookPriorFailure` (siete causas), `CAP_GUARD_PRIOR_SNAPSHOT` y los cupos 10/120/300/1.000 (`crates/core/src/timemachine/hook_prior.rs`). D13 también está en `main`: las consultas globales filtran agentes y `capture_in_store` vacía las ventanas globales a quien no tiene sesión (`crates/core/tests/us_tmc_005_unattributed.rs::unattributed_requests_neither_spend_nor_meet_the_agents_ceilings`), así que T008 no tiene código | Ninguna | — |
+| N19 | Supuesto (2026-10-16, crítico PC-4): el cambio de `Asked::Decision` y la llamada a `client_fallback` en `decide` (T005 paso 2) solo tienen prueba unitaria (`client_fallback_by_granted_capabilities`); un e2e exigiría un daemon de otra versión. Queda sin prueba de extremo a extremo y se declara en el PR | Ninguna | — |
+| N20 | Supuesto (2026-10-16, criterion-tester): tras `raptor repo retire`, US-TMC-005 responde hoy `no-worktree` (falla `tm_scope_for` en `Connection::take_hook_prior`), no `unavailable` (N7). T004 hace que un repo que la Time Machine no observa responda `unavailable`, y `no-worktree` quede para una carpeta que no es un worktree del repo. Como `reason_text` recibe solo la razón, `snapshot-unavailable` tiene un único texto para degradado y no observado: causa «GitRaptor no está en marcha o ya no observa este repositorio» y pista «arranca GitRaptor y repite la operación; si ya está en marcha, vuelve a observarlo con raptor repo add». Reversible | Ninguna | — |
+| N21 | Cobertura declarada (criterion-tester): `reused_failure_denies_again` prueba que dos evaluaciones del mismo `git` deniegan, con un daemon en proceso sin motor (causa `unavailable`), no el camino de `HookPriorBook`; los claims de D7 no tienen test propio (⛔4.1 lo cubre la entrada del registro); `legacy_guard_log_reads_internal_error` prueba `legacy_log` sobre un `GuardLogResult` armado. Se declara en el PR | Ninguna | — |
+| N22 | Ajuste del coordinador (2026-10-16) a la aprobación: con un cliente sin `guard.snapshot-required` la denegación es correcta (fail-closed), pero quien tiene hooks de una instalación antigua no puede quedarse bloqueado sin saber por qué. Como el cliente viejo imprime la plantilla de su propio binario, lo que esta entrega puede cambiar es `guard.deny.internal` del binario nuevo, que lo cubre desde el próximo desfase de versiones. El remedio es el que el producto ya da a unos hooks desactualizados (`guard.status.template-outdated`): `raptor guard install` . `guard.deny.internal` es el texto genérico de fallo cerrado: lo usan todos los `Rule::InternalError` (`crates/core/src/guardrails/hook.rs`, `evaluate.rs`) y `Rule::RelaxIgnored` en la CLI; en esos caminos la pista es inocua aunque no sea la causa, y no choca con D8 (refrescar no quita la protección). Crítico PC-7 | Ninguna | — |
