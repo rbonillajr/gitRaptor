@@ -75,6 +75,10 @@ pub const CAP_GUARD_PRIOR_SNAPSHOT: Capability = Capability::new("guard.prior-sn
 /// without `priorSnapshot`.
 pub const CAP_GUARD_SNAPSHOT_REQUIRED: Capability = Capability::new("guard.snapshot-required");
 
+/// `GuardLogEntry.layer` with its real value (`hooks`, `mcp`, `cockpit`). Without it the list
+/// leaves out the entries that are not `hooks`; the summary counts them all.
+pub const CAP_GUARD_LOG_LAYERS: Capability = Capability::new("guard.log-layers");
+
 pub(super) const GROUP: Group = Group {
     // None is offered to `raptor-mcp` (BR-AUTH-004): it neither installs nor
     // evaluates. A connection of protocol 5 or 6 sees none.
@@ -102,6 +106,7 @@ pub(super) const GROUP: Group = Group {
         CAP_GUARD_PROTECTION,
         CAP_GUARD_PRIOR_SNAPSHOT,
         CAP_GUARD_SNAPSHOT_REQUIRED,
+        CAP_GUARD_LOG_LAYERS,
     ],
     error_block: Some(BLOCK),
     errors: &[GUARD_UNINSTALL_REFUSED],
