@@ -392,7 +392,10 @@ impl Client {
             if remaining.is_zero() {
                 return Err(ClientError::Io(io::ErrorKind::TimedOut.into()));
             }
-            let Some(bytes) = self.read_frame(Some(remaining))? else {
+            let frame = self
+                .read_frame(Some(remaining))
+                .map_err(read_timeout_as_such)?;
+            let Some(bytes) = frame else {
                 return Err(ClientError::Io(io::ErrorKind::UnexpectedEof.into()));
             };
             let recv_ns = monotonic_ns();
@@ -699,12 +702,39 @@ fn replace(
     }
 }
 
+/// A read that outlives the socket's read timeout fails with `WouldBlock` (EAGAIN on Linux:
+/// "Resource temporarily unavailable"), which hides what happened: the daemon did not answer
+/// in time. Said as a timeout, so the message and any retry decision see the real cause.
+#[cfg(any(unix, windows))]
+fn read_timeout_as_such(err: ClientError) -> ClientError {
+    match err {
+        ClientError::Io(io_err) if io_err.kind() == io::ErrorKind::WouldBlock => {
+            ClientError::Io(io::ErrorKind::TimedOut.into())
+        }
+        other => other,
+    }
+}
+
 #[cfg(all(test, unix))]
 mod tests {
     use std::io::Write;
     use std::os::unix::net::UnixStream;
 
     use super::*;
+
+    #[test]
+    fn a_read_timeout_is_reported_as_a_timeout_not_as_eagain() {
+        let eagain = ClientError::Io(io::ErrorKind::WouldBlock.into());
+        match read_timeout_as_such(eagain) {
+            ClientError::Io(err) => assert_eq!(err.kind(), io::ErrorKind::TimedOut),
+            other => panic!("{other:?}"),
+        }
+        let eof = ClientError::Io(io::ErrorKind::UnexpectedEof.into());
+        assert!(matches!(
+            read_timeout_as_such(eof),
+            ClientError::Io(e) if e.kind() == io::ErrorKind::UnexpectedEof
+        ));
+    }
 
     /// A notification split across two writes with a read timeout in between (a loaded machine
     /// or a big frame) is delivered whole, and the next one is not read from its middle.
