@@ -835,6 +835,9 @@ pub struct PrepareResult {
     pub challenge: Option<String>,
     pub expires_in_ms: u64,
     pub diagnostics: Vec<Diagnostic>,
+    /// The Guardrails denial of the plan, only for a connection with `operation.guardrails`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guardrails: Option<GuardrailsDenial>,
 }
 
 /// `operation.prepare` result over MCP: codes and typed fields only.
@@ -848,6 +851,21 @@ pub struct McpPrepareResult {
     pub warnings: Vec<WarningCode>,
     pub decision: DecisionView,
     pub expires_in_ms: u64,
+    /// The Guardrails denial, without message, content or exception (only with
+    /// `operation.guardrails`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guardrails: Option<GuardrailsDenial>,
+}
+
+/// Why Guardrails denied a governed plan: the decision that counted, shared with its log entry.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct GuardrailsDenial {
+    pub decision_id: String,
+    pub effect: crate::guard::Effect,
+    /// Never `allow`.
+    pub applied_effect: crate::guard::Effect,
+    pub reasons: Vec<crate::guard::Reason>,
 }
 
 impl PrepareResult {
@@ -860,6 +878,38 @@ impl PrepareResult {
             warnings: self.warnings.clone(),
             decision: self.decision,
             expires_in_ms: self.expires_in_ms,
+            guardrails: self.guardrails.as_ref().map(GuardrailsDenial::for_mcp),
+        }
+    }
+}
+
+impl GuardrailsDenial {
+    /// What an agent sees over MCP: the parameters that describe its own operation (a branch, a
+    /// base, a path) and nothing else: no pattern, example, remote or oid.
+    pub fn for_mcp(&self) -> Self {
+        use crate::guard::ParamKind;
+        Self {
+            decision_id: self.decision_id.clone(),
+            effect: self.effect,
+            applied_effect: self.applied_effect,
+            reasons: self
+                .reasons
+                .iter()
+                .map(|r| crate::guard::Reason {
+                    params: r
+                        .params
+                        .iter()
+                        .filter(|p| {
+                            matches!(
+                                p.kind,
+                                ParamKind::Branch | ParamKind::Base | ParamKind::Path
+                            )
+                        })
+                        .cloned()
+                        .collect(),
+                    ..r.clone()
+                })
+                .collect(),
         }
     }
 }
@@ -981,6 +1031,9 @@ pub struct SnapshotRunResult {
 #[serde(deny_unknown_fields)]
 pub struct RejectedData {
     pub reason: RejectReason,
+    /// The Guardrails denial, only with `operation.guardrails` and `guardrails-denied`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guardrails: Option<GuardrailsDenial>,
 }
 
 /// Data of the `operation.queued`, `operation.started` and
@@ -1000,6 +1053,10 @@ pub struct OperationEventData {
     #[serde(default)]
     pub outcome: Option<OperationOutcome>,
 }
+
+#[cfg(test)]
+#[path = "catalog_denial_tests.rs"]
+mod denial_tests;
 
 #[cfg(test)]
 mod tests {

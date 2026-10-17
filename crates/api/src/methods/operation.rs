@@ -28,6 +28,10 @@ pub const OPERATION_CANCEL: &str = "operation.cancel";
 /// `SnapshotRunResult`). Without it the call stays `NOT_IMPLEMENTED`.
 pub const CAP_OPERATION_SNAPSHOT: Capability = Capability::new("operation.snapshot");
 
+/// `guardrails: GuardrailsDenial` in `operation.prepare` (full and MCP) and in the `data` of a
+/// `guardrails-denied` rejection. Without it the denial keeps today's shape.
+pub const CAP_OPERATION_GUARDRAILS: Capability = Capability::new("operation.guardrails");
+
 /// The module's error block (ADR-GRP-016).
 const BLOCK: i64 = FIRST_ERROR_BLOCK - 3 * ERROR_BLOCK_LEN;
 
@@ -46,7 +50,7 @@ pub(super) const GROUP: Group = Group {
         // descendant of the daemon never has; not offered to `raptor-mcp`.
         method(OPERATION_CANCEL, false, false),
     ],
-    capabilities: &[CAP_OPERATION_SNAPSHOT],
+    capabilities: &[CAP_OPERATION_SNAPSHOT, CAP_OPERATION_GUARDRAILS],
     error_block: Some(BLOCK),
     errors: &[OPERATION_SNAPSHOT_QUOTA, OPERATION_SNAPSHOT_TIME_LIMIT],
     ..Group::new("operation")

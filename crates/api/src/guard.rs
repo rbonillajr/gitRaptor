@@ -811,11 +811,14 @@ pub enum LogDetail {
     RateLimited,
 }
 
-/// Layer that took the decision. Until the MCP and the Cockpit decide, only `hooks`.
+/// Layer that took the decision. Entries other than `hooks` are listed only to a connection
+/// with `guard.log-layers`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum LogLayer {
     Hooks,
+    Mcp,
+    Cockpit,
 }
 
 /// Who wrote the entry. Until the degraded-mode spool, only the daemon.
