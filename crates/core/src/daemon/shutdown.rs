@@ -93,6 +93,11 @@ pub(crate) enum GuardRequest {
     },
     /// Cancels the action waiting in the repo.
     Cancel(crate::guardrails::pending::Requester),
+    /// `guard.confirm` (US-GRD-014): the plan, the fingerprint accepted, or the window applied.
+    Confirm {
+        step: crate::guardrails::confirm::Step,
+        requester: crate::guardrails::pending::Requester,
+    },
 }
 
 /// What the loop answers to a [`GuardRequest`].
@@ -111,8 +116,10 @@ pub(crate) enum GuardReply {
     StepFailed(gitraptor_api::guard::GuardFailedData),
     /// The uninstall was announced, or applied (US-GRD-003).
     Uninstall(Box<gitraptor_api::guard::GuardUninstallResult>),
-    /// `guard.uninstall` or `guard.cancel` did nothing.
+    /// `guard.uninstall`, `guard.cancel` or the window of `guard.confirm` did nothing.
     UninstallRefused(crate::guardrails::pending::Refused),
+    /// The answer of `guard.confirm` (US-GRD-014).
+    Confirm(Box<gitraptor_api::guard::GuardConfirmResult>),
 }
 
 /// What the loop answers to a `guard.log` (US-GRD-005).

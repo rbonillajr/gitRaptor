@@ -941,7 +941,8 @@ impl Connection<'_> {
             | methods::GUARD_INSTALL
             | methods::GUARD_DECLINE
             | methods::GUARD_UNINSTALL
-            | methods::GUARD_CANCEL => {
+            | methods::GUARD_CANCEL
+            | methods::GUARD_CONFIRM => {
                 let result = self.guard(spec, request);
                 self.reply(&request.id, result);
             }
@@ -1437,16 +1438,38 @@ impl Connection<'_> {
         spec: &MethodSpec,
         request: &Request,
     ) -> Result<serde_json::Value, ErrorObject> {
-        use gitraptor_api::guard::{GuardUninstallParams, GuardUninstallRefusedData};
+        use crate::guardrails::confirm::Step;
+        use gitraptor_api::guard::{
+            GuardConfirmParams, GuardConfirmResult, GuardUninstallParams, GuardUninstallRefusedData,
+        };
+        let mut step = Step::Plan;
         let (path, confirm) = if spec.name == methods::GUARD_UNINSTALL {
             let params: GuardUninstallParams = request.params()?;
             (params.path, params.confirm)
+        } else if spec.name == methods::GUARD_CONFIRM {
+            let params: GuardConfirmParams = request.params()?;
+            step = match (params.accept, params.confirm) {
+                (None, None) => Step::Plan,
+                (Some(fingerprint), None) => Step::Accept(fingerprint),
+                (None, Some(action_id)) => Step::Apply(action_id),
+                (Some(_), Some(_)) => {
+                    return Err(ErrorObject::new(
+                        code::INVALID_PARAMS,
+                        "accept and confirm are exclusive",
+                    ));
+                }
+            };
+            (params.path, None)
         } else {
             let params: GuardRepoParams = request.params()?;
             (params.path, None)
         };
         let path = validate::client_path(&path).map_err(invalid)?;
-        if spec.reserved {
+        if spec.name == methods::GUARD_CONFIRM && step == Step::Plan {
+            // Showing the plan has no effect: only a refusal is audited, so nothing reads as
+            // confirmed before the developer says yes.
+            self.reserved_quiet(spec)?;
+        } else if spec.reserved {
             self.reserved(spec, None)?;
         }
         let common_dir = crate::observe::locate(&path).map_err(rejected)?;
@@ -1472,8 +1495,10 @@ impl Connection<'_> {
                 },
             },
             methods::GUARD_CANCEL => GuardRequest::Cancel(requester),
+            methods::GUARD_CONFIRM => GuardRequest::Confirm { step, requester },
             _ => GuardRequest::Status,
         };
+        let confirming = spec.name == methods::GUARD_CONFIRM;
         let value =
             match self.ctx.control.guard(common_dir, kind) {
                 GuardReply::Plan(mut plan) => {
@@ -1490,6 +1515,10 @@ impl Connection<'_> {
                         result.restores_hooks_path = None;
                     }
                     serde_json::to_value(*result)
+                }
+                GuardReply::Confirm(result) => serde_json::to_value(*result),
+                GuardReply::NotObserved if confirming => {
+                    serde_json::to_value(GuardConfirmResult::NotObserved)
                 }
                 GuardReply::NotObserved => return Err(rejected(RepoRejection::NotObserved)),
                 GuardReply::Rejected(blockers) => {
@@ -1548,6 +1577,14 @@ impl Connection<'_> {
     fn guard_shape_status(&self, status: &mut gitraptor_api::guard::GuardStatus) {
         if !self.has(methods::CAP_GUARD_PENDING_ACTION.name) {
             status.pending = None;
+        }
+        // The team confirmation: an older client could not decode it, and the MCP layer never
+        // gets the hint to confirm.
+        if !self.has(methods::CAP_GUARD_TEAM_CONFIRMATION.name) {
+            crate::guardrails::team_status::legacy_status(status);
+        }
+        if self.is_mcp() {
+            status.confirm = None;
         }
         if !self.has(methods::CAP_GUARD_PROTECTION.name) {
             status.hooks = None;
@@ -1789,6 +1826,11 @@ impl Connection<'_> {
             mcp_status::default_status(&fresh, w, &context, own_session.as_deref(), now_ms());
         if shared.engine.state == EngineStateView::WaitingForGit {
             repo_part.engine = Some(methods::McpEngineState::WaitingForGit);
+        }
+        if !self.has(methods::CAP_GUARD_TEAM_CONFIRMATION.name) {
+            repo_part
+                .diagnostics
+                .retain(|d| !crate::guardrails::team_status::is_new_diagnostic(*d));
         }
         status.here = here;
         if let Some(changes) = status.here.as_mut().and_then(|h| h.changes.as_mut()) {
@@ -2580,6 +2622,19 @@ impl Connection<'_> {
                 ErrorObject::new(code::NOT_IMPLEMENTED, "not implemented yet")
                     .with_data(serde_json::json!({ "implemented_by": story })),
             );
+        }
+        Ok(())
+    }
+
+    /// [`Self::reserved`] for a call without effect: the same refusal, audited, but an accepted
+    /// call leaves no audit row.
+    fn reserved_quiet(&self, spec: &MethodSpec) -> Result<(), ErrorObject> {
+        let refused = self.profile == ConnectionProfile::Mcp
+            || check_reserved(self.peer, &self.ctx.checks())
+                .refused
+                .is_some();
+        if refused {
+            return self.reserved(spec, None);
         }
         Ok(())
     }
@@ -3940,6 +3995,7 @@ fn outcome_text(outcome: AuditOutcome) -> &'static str {
         AuditOutcome::Cancelled => "cancelled",
         AuditOutcome::Failed => "failed",
         AuditOutcome::Expired => "expired",
+        AuditOutcome::Changed => "changed",
     }
 }
 
@@ -4067,6 +4123,7 @@ mod tests {
             AuditOutcome::Cancelled,
             AuditOutcome::Failed,
             AuditOutcome::Expired,
+            AuditOutcome::Changed,
         ] {
             assert_eq!(enum_text(&outcome), outcome_text(outcome));
         }

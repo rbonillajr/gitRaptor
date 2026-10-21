@@ -44,6 +44,9 @@ pub struct Entry {
     /// What the announcement showed would be written back as `core.hooksPath` (the removal of an
     /// orphan, read from its manifest): applied only if it is still what the repo says.
     pub restores: Option<String>,
+    /// What the confirmation of the team baseline showed (its fingerprint): applied only if the
+    /// team level still gives the same one.
+    pub fingerprint: Option<String>,
 }
 
 impl Entry {
@@ -125,6 +128,7 @@ impl PendingActions {
             applies_at_ms: now_ms + window_ms as i64,
             window_ms,
             restores: None,
+            fingerprint: None,
         };
         let view = entry.view();
         self.by_repo.insert(repo_id.to_owned(), entry);
@@ -139,6 +143,17 @@ impl PendingActions {
             .filter(|e| e.action_id == action_id)
         {
             entry.restores = restores;
+        }
+    }
+
+    /// Records the fingerprint of the plan the announcement of `action_id` showed.
+    pub fn note_fingerprint(&mut self, repo_id: &str, action_id: &str, fingerprint: String) {
+        if let Some(entry) = self
+            .by_repo
+            .get_mut(repo_id)
+            .filter(|e| e.action_id == action_id)
+        {
+            entry.fingerprint = Some(fingerprint);
         }
     }
 
