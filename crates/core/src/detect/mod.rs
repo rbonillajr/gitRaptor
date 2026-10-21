@@ -44,7 +44,7 @@ use crate::profile::EndCause;
 use crate::watch::ObserverHooks;
 
 pub use hook::{HookClaims, RefMove};
-pub use procs::{ProcEntry, ProcLister, SystemProcLister, detection_supported};
+pub use procs::{GitCall, ProcEntry, ProcLister, SystemProcLister, detection_supported, git_call};
 
 /// Longest ancestry walked.
 const MAX_DEPTH: usize = 64;

@@ -69,6 +69,61 @@ pub trait EngineLink: Send + Sync {
     /// A counter of the repo's file activity as the engine published it: a capture that sees it
     /// move gives way (US-TMC-004).
     fn activity(&self, repo_id: &str) -> u64;
+    /// [`EngineLink::settle`] without counting what `ex` names: the `git` that is waiting for this
+    /// very answer and its own hook call. The default ignores `ex` (doubles without processes).
+    fn settle_excluding(
+        &self,
+        repo_id: &str,
+        worktrees: &[PathBuf],
+        limit: Duration,
+        ex: &CalmExclusions<'_>,
+    ) -> Option<i64> {
+        let _ = ex;
+        self.settle(repo_id, worktrees, limit)
+    }
+    /// A hook call in flight on `worktree`: no calm there until the guard drops, except for the
+    /// `settle` that names its token. The default is inert (doubles).
+    fn hook_begin(&self, repo_id: &str, worktree: &Path) -> HookInFlight {
+        let _ = (repo_id, worktree);
+        HookInFlight::inert()
+    }
+}
+
+/// What a `settle` does not count as a `git` in its way.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CalmExclusions<'a> {
+    /// The `git` ancestors of the hook's client: the command waiting for this answer.
+    pub pids: &'a [u32],
+    /// The hook call this `settle` answers.
+    pub own_hook: Option<HookToken>,
+}
+
+/// Names one hook call in flight.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct HookToken(u64);
+
+/// A hook call in flight, counted until it drops.
+#[derive(Debug)]
+pub struct HookInFlight {
+    token: HookToken,
+}
+
+impl HookInFlight {
+    /// A guard that counts nothing.
+    pub fn inert() -> Self {
+        Self {
+            token: HookToken(0),
+        }
+    }
+
+    pub fn token(&self) -> HookToken {
+        self.token
+    }
+}
+
+impl Drop for HookInFlight {
+    // Stub: nothing is counted yet, so nothing is given back.
+    fn drop(&mut self) {}
 }
 
 #[derive(Debug, Default)]
@@ -257,6 +312,32 @@ impl RepoMarks {
         (on_disk == p.branches).then(|| p.seq.max(mark.seq.load(Ordering::Acquire)))
     }
 
+    /// The user's processes: with them, no worktree is calm while a `git` runs in it.
+    // Stub: processes are not read yet.
+    pub fn set_procs(&self, _procs: Arc<dyn crate::detect::ProcLister>) {}
+
+    /// Where a `settle` blocked by a running `git` says so.
+    // Stub: nothing is logged yet.
+    pub fn set_logger(&self, _logger: crate::daemon::Logger) {}
+
+    /// [`RepoMarks::settle`] without counting what `ex` names.
+    // Stub: the exclusions are ignored.
+    pub fn settle_excluding(
+        &self,
+        repo_id: &str,
+        worktrees: &[PathBuf],
+        limit: Duration,
+        _ex: &CalmExclusions<'_>,
+    ) -> Option<i64> {
+        self.settle(repo_id, worktrees, limit)
+    }
+
+    /// A hook call in flight on `worktree`, counted until the guard drops.
+    // Stub: the guard counts nothing.
+    pub fn hook_begin(&self, _repo_id: &str, _worktree: &Path) -> HookInFlight {
+        HookInFlight::inert()
+    }
+
     /// Waits until every worktree is calm and the repo's refs are those the engine persisted, up
     /// to `limit`; the mark then. The refs are checked once per poll, for the whole repo.
     pub fn settle(&self, repo_id: &str, worktrees: &[PathBuf], limit: Duration) -> Option<i64> {
@@ -421,6 +502,14 @@ pub fn generation_floor(dirs: &ProfileDirs, repo_id: &str, generation: &str, opl
     let _ = written;
     next
 }
+
+#[cfg(test)]
+#[path = "calm_git_alive_tests.rs"]
+pub(crate) mod calm_git_alive_tests;
+
+#[cfg(test)]
+#[path = "calm_exclusions_tests.rs"]
+mod calm_exclusions_tests;
 
 #[cfg(test)]
 mod tests {
