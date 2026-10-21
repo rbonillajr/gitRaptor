@@ -2,10 +2,10 @@
 id: US-GRD-007
 title: "El equipo decide qué operaciones de Git se permiten, se deniegan o piden confirmación"
 type: us
-status: draft
+status: partially-implemented
 priority: high
 created: 2026-10-04
-updated: 2026-10-09
+updated: 2026-10-21
 feature: guardrails
 related:
   context:
@@ -70,11 +70,14 @@ Dado el repo "demo" protegido con push en "permitir" y ninguna política aplicab
 Cuando un proceso hace push de "feat-x" con Git directo
 Entonces el push se ejecuta
 
-**Escenario: "Pedir confirmación" se deniega mientras no exista la cola**
+**Escenario: "Pedir confirmación" se deniega a los agentes mientras no exista la cola**
 
 Dado el repo "demo" con borrar rama en "pedir confirmación" y sin el modo de confirmación disponible
-Cuando un proceso borra la rama "feat-x"
+Cuando un agente borra la rama "feat-x"
 Entonces la operación no se ejecuta y el motivo indica que requiere confirmación humana
+  Y si el desarrollador borra "feat-x" directamente, la operación se ejecuta con un aviso de que pide confirmación humana
+
+> Enmienda del 2026-10-21 por Q-GRD-46 (Rene Bonilla, 2026-10-17): sin cola, "pedir confirmación" solo deniega a los agentes; la acción directa del desarrollador es la confirmación. Si GitRaptor no puede demostrar quién actúa (no está corriendo), se deniega a todos. Ver DS-US-GRD-007 D19.
 
 **Escenario: El desarrollador instala la protección y después confirma una configuración del equipo que desactiva el mínimo seguro**
 
@@ -107,3 +110,9 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 
 - **Diseño:** no aplica.
 - **Dev Spec:** [`dev-specs/US-GRD-007-permisos-por-operacion.md`](../dev-specs/US-GRD-007-permisos-por-operacion.md) — `DS-US-GRD-007` (status: draft).
+
+## Estado de la implementación
+
+- **Implementado en: PR #PRNUM** (PR-A, 2026-10-21): escenarios 1 (salvo las filas que pasan a US-GRD-016), 2, 3 (enmendado por Q-GRD-46) y 6.
+- **Pendiente (PR-B)**: escenarios 4 y 5, que necesitan `raptor guard confirm` de US-GRD-014.
+- **Pendiente**: Linux y Windows reales (etapa de validación multiplataforma; Linux lo cubre el CI de ubuntu).

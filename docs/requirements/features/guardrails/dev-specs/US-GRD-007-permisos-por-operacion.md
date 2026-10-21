@@ -4,7 +4,7 @@ title: "Dev Spec — US-GRD-007: permisos por operación (permitir, pedir confir
 type: dev-spec
 status: draft
 created: 2026-10-09
-updated: 2026-10-20
+updated: 2026-10-21
 story: US-GRD-007
 feature: guardrails
 domain: GRP
@@ -211,7 +211,7 @@ Además (`crates/core/tests/us_grd_007.rs`, `crates/policy/tests/us_grd_007_perm
 | `disableSafeMinimum` solo desde el suelo confirmado y legible; sin confirmar, en el worktree o en un nivel personal, no apaga nada | `us_grd_007::disable_safe_minimum_only_from_the_confirmed_readable_floor` |
 | `minimum_set` es `disabled-by-team` con un `Confirmed` que lo desactiva; `active` en otro caso | `us_grd_007::minimum_set_status_follows_the_confirmed_floor` |
 | Una razón por nivel del máximo (suelo + perfil; `SafeMinimum` sin razón de permiso) | `us_grd_007::reasons_name_every_level_of_the_maximum` |
-| Capacidad en las dos direcciones; sin ella, `guard.log` quita las entradas `permission.*` y las sigue contando | `us_grd_007::permissions_capability_both_ways` |
+| Capacidad en las dos direcciones; sin ella, `guard.log` quita las entradas `permission.*` y las sigue contando, y el cliente (`hook.rs`) aplica los permisos del equipo con `ask` denegado a todos | `us_grd_007::permissions_capability_both_ways` |
 | Clasificación no demostrable → `unverifiable` solo si el permiso no es `allow` | `us_grd_007::an_unclassifiable_transaction_is_denied_only_when_it_matters` |
 | `ask` × actor (agente, persona, no demostrado) → `applied_effect`, `ask-unavailable` y entrada `denial`; `allow`/`deny` no dependen del actor | `us_grd_007::ask_depends_on_the_actor` |
 | Coste de D14 (2 000 ramas, `merge` en `deny`, commit corriente) | `us_grd_007::permissions_cost` (release, `#[ignore]` fuera de la medición) |
@@ -264,7 +264,7 @@ Las de producto son **Decisión del orquestador (2026-10-09), validada por Arqui
 | ADR-GRD-003 § 4 | Degradado: aplica los permisos de suelo y worktree solo para endurecer, con el clasificador sobre la ascendencia del propio cliente (D12). La garantía no cambia |
 | ADR-GRD-002 § 1 | Fila Merge: la segunda línea deniega el movimiento de la rama con `merge` en `deny`/`ask` (B, sigue no impedible). Fila Rebase: la segunda línea evalúa `rebase`. Fila Crear worktree con rama nueva: se reconoce por la cadena (`worktree add`). Fila Push: un push solo a refs no gobernadas no evalúa `push` (D9) |
 
-**Preguntas abiertas**: **para Rene, en el PR**: confirmar Q-GRD-39 (`ask` del agente cuenta en el KPI mientras no exista la cola). Si la rechaza, se reabren D3, el criterio GRD007-LOG y `permission_denials_reach_the_decision_log`.
+**Preguntas abiertas**: **para Rene, en el PR**: ninguna. Q-GRD-39 (`ask` del agente cuenta en el KPI mientras no exista la cola) fue **ratificada por Rene Bonilla el 2026-10-20**.
 
 ## Anexo de forma (perfil `backend-service`)
 
@@ -491,4 +491,22 @@ Ningún hueco bloquea la implementación de PR-A. Sin constitución en la cascad
 
 ## 10. Estado de la implementación
 
-_Pendiente: se rellena al cerrar PR-A (medición de D14) y PR-B._
+**PR-A (2026-10-21, PR #PRNUM)**: T001 a T008 hechos; los 20 criterios del contrato `docs/dev-briefs/us-grd-007-operation-permissions.contract.json` en verde. PR-B (T010, T011) sigue pendiente de US-GRD-014.
+
+Desviaciones y decisiones tomadas al implementar (Decisión del orquestador, 2026-10-21; revisadas por las lentes de arquitectura y seguridad):
+
+- **D14, cadena de `git`**: el daemon la lee en `guard_caller` siempre que la conexión tiene `guard.permissions` y la transacción crea o mueve una rama, no solo cuando algún permiso no es `allow`: esos permisos se conocen después de la carga única (D11). Como mucho 4 procesos, sin guardar el argv. Los commits nuevos siguen leyéndose solo cuando hacen falta, con dos pasadas.
+- **D19, actor no verificado**: el daemon distingue tres casos al resolver el actor (`actor::resolve_for_ask`): agente, persona (el actor se resolvió y no es un agente) y **no demostrado** (no se pudo verificar el proceso), que se deniega como agente.
+- **Nivel de equipo ilegible con la capacidad**: se aplica `team_only` (mínimo forzado y lo que se pueda leer del suelo y del worktree, solo para endurecer), igual que el modo degradado (D10, D12). Un `deny` del suelo que no se puede leer no se puede aplicar.
+- **`team.rs`**: un worktree cuya configuración es el mismo blob que la del suelo (la rama principal) no cuenta como otro nivel; la razón se nombra como suelo.
+- **Mensajes**: el aviso de D19 (d) viaja en `notices` con la regla `permission.<operación>`.
+- **Prueba enmendada** (aprobada en su turno por el coordinador): en `crates/policy/tests/us_grd_007_permissions.rs`, los ayudantes `only()` y `all_allow()` declaran `disableSafeMinimum`, coherente con `ctx.minimum = false` (D4).
+
+Residuos declarados (no bloquean PR-A):
+
+- **`fetch` en la cadena**: un `fetch` en cualquier punto de la cadena anula la clasificación `commit`/`merge` también para commits locales (`git fetch . <sha>:refs/heads/x` tras un `commit-tree`). Se deniega de menos solo con un agente que encadena plumbing a propósito; se cierra junto con el MCP (US-GRD-016) o en una TD.
+- **Renombrar una rama local con `commit` en `deny`**: el renombrado (`branch -m`) puede contar los commits de la rama vieja como frescos y denegarse como `commit` (se deniega de más; sin test que lo confirme).
+- **`pre-commit` con fallo de llamada a un daemon auténtico**: deja pasar; lo frena la segunda línea en `reference-transaction`.
+- **Agente no detectado** = persona (R-GRD-2); **agentes registrados sin proceso detectado**: US-GRP-009.
+- **Medición de D14** (`permissions_cost`, 2 000 ramas, release): **no se hizo** en PR-A; queda pendiente.
+- Linux y Windows reales: etapa de validación multiplataforma (Linux lo cubre el CI de ubuntu).
