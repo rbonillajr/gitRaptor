@@ -64,6 +64,9 @@ struct FakeConnector {
     /// No engine is running: the first connection starts one, and the start ends when the
     /// test sends on this.
     start: Option<Receiver<()>>,
+    /// Time a connection after the first takes to be made, so a test can see the
+    /// `Reconnecting` state it goes through.
+    reconnect_delay: Duration,
 }
 
 impl Connector for FakeConnector {
@@ -76,6 +79,9 @@ impl Connector for FakeConnector {
     }
 
     fn connect(&mut self) -> Result<Box<dyn Link>, LinkError> {
+        if self.daemon.connects.load(Ordering::SeqCst) > 0 {
+            std::thread::sleep(self.reconnect_delay);
+        }
         let Some(rx) = self.streams.lock().unwrap().pop_front() else {
             return Err(LinkError::EngineUnavailable);
         };
@@ -246,6 +252,15 @@ impl Harness {
 
     /// A TUI whose first connection starts the engine and waits on `start`.
     fn starting(connections: usize, start: Option<Receiver<()>>) -> Self {
+        Self::build(connections, start, Duration::ZERO)
+    }
+
+    /// A TUI whose reconnections take `delay` to be made.
+    fn slow_to_reconnect(connections: usize, delay: Duration) -> Self {
+        Self::build(connections, None, delay)
+    }
+
+    fn build(connections: usize, start: Option<Receiver<()>>, reconnect_delay: Duration) -> Self {
         let daemon = Arc::new(Daemon::default());
         let mut senders = Vec::new();
         let mut receivers = VecDeque::new();
@@ -268,6 +283,7 @@ impl Harness {
             daemon: Arc::clone(&daemon),
             streams: Arc::new(Mutex::new(receivers)),
             start,
+            reconnect_delay,
         };
         let channel = client::spawn(connector, Some("/w".into()), engine);
         app.attach(channel.cmds.clone());
@@ -592,4 +608,125 @@ fn ctrl_z_without_job_control_only_says_so() {
     let text = screen(&h.app);
     assert!(text.contains("live"), "{text}");
     assert!(!h.app.model.ui.quit);
+}
+
+/// Steps the TUI until `done`, for at most `secs` seconds; says whether it was met.
+fn wait_within(h: &mut Harness, secs: u64, done: impl Fn(&Harness) -> bool) -> bool {
+    let start = Instant::now();
+    while !done(h) {
+        if start.elapsed() > Duration::from_secs(secs) {
+            return false;
+        }
+        h.app.step(Duration::from_millis(10)).unwrap();
+    }
+    true
+}
+
+/// The daemon drops this connection for reading too slowly: `events.resync` and it closes it.
+fn drop_slow_consumer(h: &mut Harness, stream: usize) -> Instant {
+    h.streams[stream]
+        .send(frame(
+            methods::NOTIFY_RESYNC,
+            gitraptor_api::messages::ResyncNotification {
+                reason: ResyncReason::SlowConsumer,
+            },
+        ))
+        .unwrap();
+    let (dead, _) = channel();
+    h.streams[stream] = dead;
+    Instant::now()
+}
+
+/// CKP003-LAG (D6): after `events.resync` for a slow client the header says why until it is live
+/// again, the replica converges on the new snapshot, `event_frame(1)` applies once and its
+/// repetition does not. (That `engine.resync` is back to `None` is read off the header: the
+/// field does not exist yet.)
+#[test]
+fn a_slow_consumer_resync_says_why_and_converges_on_the_new_snapshot() {
+    let why = "the view fell behind the engine";
+    let mut h = Harness::new(2);
+    h.live();
+    h.streams[0].send(event_frame(1)).unwrap();
+    h.drive("one event", |m| Harness::applied(m) == 1);
+    let worktrees = |m: &Model| {
+        m.engine
+            .repo
+            .as_ref()
+            .and_then(|r| r.data.as_ref())
+            .map(|d| d.worktrees.len())
+    };
+    assert_eq!(worktrees(&h.app.model), Some(WORKTREES));
+
+    drop_slow_consumer(&mut h, 0);
+    assert!(
+        wait_within(&mut h, 10, |h| screen(&h.app).contains(why)),
+        "the header never says why:\n{}",
+        screen(&h.app)
+    );
+    assert_ne!(h.app.model.conn, ConnState::Live);
+
+    let daemon = Arc::clone(&h.daemon);
+    h.drive("live again", move |m| {
+        daemon.connects.load(Ordering::SeqCst) == 2
+            && m.conn == ConnState::Live
+            && m.engine.all_synced()
+    });
+    // The new snapshot replaced the replica (`repo_snapshot()` has no worktrees)...
+    assert_eq!(worktrees(&h.app.model), Some(0));
+    // ...and the reason is gone with the arrival at live.
+    h.app.draw().unwrap();
+    assert!(!screen(&h.app).contains(why), "{}", screen(&h.app));
+    // The event after the snapshot applies once; its repetition does not.
+    h.streams[1].send(event_frame(1)).unwrap();
+    h.streams[1].send(event_frame(1)).unwrap();
+    h.streams[1].send(event_frame(2)).unwrap();
+    h.drive("the events after the snapshot", |m| {
+        Harness::applied(m) >= 2
+    });
+    assert_eq!(Harness::applied(&h.app.model), 2, "the repetition applied");
+    assert_eq!(worktrees(&h.app.model), Some(WORKTREES));
+}
+
+/// CKP003-BACKOFF (D6): two drops in a row for a slow client reconnect with a growing wait (the
+/// first not before `backoff(1)` from the close) and the header goes through
+/// `Reconnecting { attempt: 1 }` and then `Reconnecting { attempt: 2 }`.
+#[test]
+fn a_slow_consumer_reconnects_with_a_growing_backoff() {
+    let mut h = Harness::slow_to_reconnect(3, Duration::from_millis(200));
+    h.live();
+
+    let closed = drop_slow_consumer(&mut h, 0);
+    assert!(
+        wait_within(&mut h, 10, |h| h.app.model.conn
+            == ConnState::Reconnecting { attempt: 1 }),
+        "no Reconnecting attempt 1: {:?}",
+        h.app.model.conn
+    );
+    let daemon = Arc::clone(&h.daemon);
+    assert!(wait_within(&mut h, 10, |h| {
+        daemon.connects.load(Ordering::SeqCst) == 2 && h.app.model.conn == ConnState::Live
+    }));
+    assert!(
+        closed.elapsed() >= client::backoff(1),
+        "reconnected {:?} after the close",
+        closed.elapsed()
+    );
+    h.live();
+
+    let closed = drop_slow_consumer(&mut h, 1);
+    assert!(
+        wait_within(&mut h, 10, |h| h.app.model.conn
+            == ConnState::Reconnecting { attempt: 2 }),
+        "the second drop in a row did not wait longer: {:?}",
+        h.app.model.conn
+    );
+    let daemon = Arc::clone(&h.daemon);
+    assert!(wait_within(&mut h, 10, |h| {
+        daemon.connects.load(Ordering::SeqCst) == 3 && h.app.model.conn == ConnState::Live
+    }));
+    assert!(
+        closed.elapsed() >= client::backoff(2),
+        "reconnected {:?} after the close",
+        closed.elapsed()
+    );
 }
