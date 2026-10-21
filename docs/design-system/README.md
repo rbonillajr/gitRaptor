@@ -282,3 +282,14 @@ Detección del fondo en Linux y en Windows (consola y Windows Terminal; en Windo
 - **Snapshots de la pantalla**: la flota se fija en 80×24 y 120×40, en terminal oscura y clara (`apps/cli/src/tui/snapshots/fleet_*`). El texto es el mismo en las dos y solo cambian los colores.
 
 Detección de la locale y de la profundidad en Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
+
+## Enmienda (2026-10-21, US-CKP-005)
+
+**Decisión del orquestador (2026-10-09), validada por Arquitecto y PO**, al cerrar la accesibilidad de la TUI ([Dev Spec de US-CKP-005](../requirements/features/cockpit/dev-specs/US-CKP-005-terminal-pequena-sin-color.md), D3 a D7). No cambia la paleta ni los tokens.
+
+| Cambio | Componente o sección |
+|---|---|
+| **Plegado a ASCII**: todo texto del catálogo que pinta la vista pasa por `Say` y `Glyphs::fold`, cuya tabla coincide con el juego ASCII estructural (`·` → `\|`, `…` → `...`, `↑`/`↓` → `+`/`-`, `–` → `-`, `×` → `x`, `→` → `->`). Se pliegan glifos, no letras: `á`, `ñ`, `¿` y `¡` se conservan | Catálogo, § 5 |
+| **Leyenda de estados**: cada símbolo con su significado, en el grupo "Símbolos" de la ayuda `?` (todos) y al final de la barra de teclas (solo los estados que hay en pantalla, entradas enteras, si caben). Amplía F4 de US-CKP-001 | KeyHints, § 2.2 |
+| **`? ayuda` en el hueco fijo de la barra** (antes `q salir`); `q salir` pasa a ser la primera pista. En ASCII, la barra muestra la tecla alternativa (`k`, `j`) en lugar de las flechas | KeyHints |
+| **"No disponible" es `–`** (ASCII `-`) también en `RequesterUnknown` y `Engine(None)`; la raya `—` desaparece | Catálogo |

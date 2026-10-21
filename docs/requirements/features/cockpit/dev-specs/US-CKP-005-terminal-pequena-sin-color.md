@@ -2,9 +2,9 @@
 id: DS-US-CKP-005
 title: "Dev Spec — US-CKP-005: la TUI en una terminal pequeña, sin color, en ASCII, en tu idioma y con ayuda de teclado"
 type: dev-spec
-status: draft
+status: partially-implemented
 created: 2026-10-09
-updated: 2026-10-09
+updated: 2026-10-21
 story: US-CKP-005
 feature: cockpit
 domain: GRP
@@ -655,3 +655,12 @@ Corre `/security-review --scope devspec docs/requirements/features/cockpit/dev-s
 | G4 | La ayuda llena justo el cuerpo de 80×24 en el peor caso (selector o pregunta). Si un panel futuro añade teclas, el widget corta el último grupo y la línea de cierre sigue visible | Revisar al añadir acciones (US-CKP-014 y siguientes) | Arquitecto |
 | G5 | BR-CKP-EDGE-005 ordena "lista > alertas > grafo > detalle" y a la vez dice "el grafo colapsa primero". ADR-CKP-003 § 7 lo desempata: por debajo de 120 columnas el detalle deja de ser región y se abre a pantalla completa bajo demanda, y el grafo es la primera región que colapsa. El código ya lo hace (`layout.rs:55-101`) | Ninguna (D2) | — |
 | G6 | El baseline y la certificación se miden con `cargo`, no con `nx` (regla del 2026-10-07: `nx` desactiva `sccache`) | Ninguna | — |
+
+## Estado de la implementación (2026-10-21)
+
+Implementado en: PR #PR_N. Hecho: T001 a T006 (T007 es este cierre). Los criterios congelados son de integración (`apps/cli/tests/tui_screens.rs`, `tui_accessibility.rs` y `tui_boundaries.rs`); las pruebas unitarias de módulo las escribió el implementador.
+
+- **Enmiendas a pruebas de criterio** (aprobadas por la persona, 2026-10-21): `tui_screens.rs` (la barra ASCII muestra `k`/`j`, no `Up`/`Down`; la ayuda de la flota no lista `↑ k`, porque el título de la flota lleva `↑↓` de ahead/behind) y `tui_accessibility.rs` (Esc seguido de `?` sin pausa es Alt-`?`; el test espera a que la TUI quede quieta entre teclas).
+- **Desviaciones**: `view::tests` sigue privado y `help.rs` usa un reexport `#[cfg(test)]`; la historia de galería de la ayuda pasa a 70×24; `observe_prompt`, `discovered_prompt` y `picker` son `pub(crate)` y reciben `Say`.
+- **Guarda de ratón**: `apps/cli/tests/tui_no_mouse.rs` (archivo aparte, porque `tui_boundaries.rs` está congelado).
+- **Pendiente**: Linux y Windows (XP-21) y el idioma de la interfaz de Windows (G1). El plegado también alcanza a los datos que el catálogo intercala (G3): un `–` en una ruta se ve `-` en ASCII.

@@ -2,10 +2,10 @@
 id: US-CKP-005
 title: "La TUI se puede usar en una terminal pequeña, sin color o en ASCII"
 type: us
-status: draft
+status: partially-implemented
 priority: medium
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-21
 feature: cockpit
 related:
   context:
@@ -83,3 +83,13 @@ Entonces la TUI muestra las teclas disponibles en el panel actual, y cada acció
 
 - **Diseño:** DSYS-GRP-001 (tokens, símbolos, contenido); ADR-GRP-004 § 3 (teclado primero).
 - **Dev Spec:** [DS-US-CKP-005](../dev-specs/US-CKP-005-terminal-pequena-sin-color.md). Pendiente: etapa de validación multiplataforma (terminales de Linux y Windows).
+
+## Estado de la implementación (2026-10-21)
+
+Implementado en: PR #PR_N ([DS-US-CKP-005](../dev-specs/US-CKP-005-terminal-pequena-sin-color.md)).
+
+Verificado en macOS: aviso de tamaño mínimo con la acción y ampliar sin reiniciar, plegado a ASCII de todo texto del catálogo (`Say` y `Glyphs::fold`), pantalla sin color con cada estado leído por símbolo y texto, leyenda de estados en la barra y en la ayuda, ayuda `?` por panel (con `?` y Esc), idioma por `--lang`/locale, y pruebas de proceso con el `raptor` real bajo `script`.
+
+Estado: implementación parcial. Pendiente:
+- Escenario 4 en Windows (idioma de la interfaz del usuario, sin `LANG`): *Pendiente: etapa de validación multiplataforma*; dueño: esta historia (G1).
+- Linux y Windows en terminales reales: *Pendiente: etapa de validación multiplataforma* (XP-21; [`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
