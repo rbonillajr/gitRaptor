@@ -157,19 +157,21 @@ impl PendingActions {
         }
     }
 
-    /// The action to apply now: the same announcement, the same requester, the window closed
+    /// The action to apply now: the same announcement of the same kind, the same requester, the window closed
     /// and not expired. It leaves the list when taken.
     pub fn take_due(
         &mut self,
         repo_id: &str,
         action_id: &str,
+        kind: PendingKind,
         requester: Requester,
         now_ms: i64,
     ) -> Result<Entry, Refused> {
+        // An announcement of another kind is not this one: it stays where it is.
         let Some(entry) = self
             .by_repo
             .get(repo_id)
-            .filter(|e| e.action_id == action_id && !e.expired(now_ms))
+            .filter(|e| e.action_id == action_id && e.kind == kind && !e.expired(now_ms))
         else {
             return Err(UninstallRefusal::NoPending.into());
         };
@@ -233,29 +235,63 @@ mod tests {
     fn only_the_requester_applies_it_once_the_window_closed() {
         let mut p = PendingActions::default();
         let id = open(&mut p, 1_000);
-        let early = p.take_due("r", &id, ME, 5_000).unwrap_err();
+        let early = p
+            .take_due("r", &id, PendingKind::Uninstall, ME, 5_000)
+            .unwrap_err();
         assert_eq!(early.reason, UninstallRefusal::WindowOpen);
         assert_eq!(early.remaining_ms, Some(6_000));
         let other = Requester { pid: 11, ..ME };
         assert_eq!(
-            p.take_due("r", &id, other, 11_000).unwrap_err().reason,
+            p.take_due("r", &id, PendingKind::Uninstall, other, 11_000)
+                .unwrap_err()
+                .reason,
             UninstallRefusal::NotTheRequester
         );
         // A pid reused by another process is another requester.
         let reused = Requester { start_us: 2, ..ME };
         assert_eq!(
-            p.take_due("r", &id, reused, 11_000).unwrap_err().reason,
+            p.take_due("r", &id, PendingKind::Uninstall, reused, 11_000)
+                .unwrap_err()
+                .reason,
             UninstallRefusal::NotTheRequester
         );
         assert_eq!(
-            p.take_due("r", "other-id", ME, 11_000).unwrap_err().reason,
+            p.take_due("r", "other-id", PendingKind::Uninstall, ME, 11_000)
+                .unwrap_err()
+                .reason,
             UninstallRefusal::NoPending
         );
-        assert!(p.take_due("r", &id, ME, 11_000).is_ok());
+        assert!(
+            p.take_due("r", &id, PendingKind::Uninstall, ME, 11_000)
+                .is_ok()
+        );
         // Taken: applying twice does nothing.
         assert_eq!(
-            p.take_due("r", &id, ME, 11_000).unwrap_err().reason,
+            p.take_due("r", &id, PendingKind::Uninstall, ME, 11_000)
+                .unwrap_err()
+                .reason,
             UninstallRefusal::NoPending
+        );
+    }
+
+    #[test]
+    fn an_announcement_of_another_kind_is_neither_applied_nor_dropped() {
+        let mut p = PendingActions::default();
+        let id = open(&mut p, 0);
+        assert_eq!(
+            p.take_due("r", &id, PendingKind::ConfirmTeam, ME, 20_000)
+                .unwrap_err()
+                .reason,
+            UninstallRefusal::NoPending
+        );
+        // Still there, and still the uninstall's.
+        assert_eq!(
+            p.get("r", 20_000).map(|a| a.action),
+            Some(PendingKind::Uninstall)
+        );
+        assert!(
+            p.take_due("r", &id, PendingKind::Uninstall, ME, 20_000)
+                .is_ok()
         );
     }
 
@@ -271,7 +307,9 @@ mod tests {
         assert!(p.cancel("r", 1).is_some());
         assert!(p.get("r", 1).is_none());
         assert_eq!(
-            p.take_due("r", &id, ME, 20_000).unwrap_err().reason,
+            p.take_due("r", &id, PendingKind::Uninstall, ME, 20_000)
+                .unwrap_err()
+                .reason,
             UninstallRefusal::NoPending
         );
     }
@@ -283,7 +321,9 @@ mod tests {
         let late = 10_000 + GRACE.as_millis() as i64 + 1;
         assert!(p.get("r", late).is_none());
         assert_eq!(
-            p.take_due("r", &id, ME, late).unwrap_err().reason,
+            p.take_due("r", &id, PendingKind::Uninstall, ME, late)
+                .unwrap_err()
+                .reason,
             UninstallRefusal::NoPending
         );
         let swept = p.sweep_expired(late);
