@@ -17,7 +17,7 @@ use std::time::Instant;
 use gitraptor_api::UntrustedName;
 use gitraptor_api::clock;
 use gitraptor_api::messages::{GitEventDetails, GitEventKind};
-use gitraptor_git::{ReaderOptions, RepoReader};
+use gitraptor_git::{ReaderOptions, ReflogEntry, RepoReader};
 
 use super::{
     GapMark, Marks, ObservedBatch, RawEvent, RepoAccess, RepoMsg, Shared, WtMsg, wall_now,
@@ -319,9 +319,62 @@ fn kind_of(message: &str) -> GitEventKind {
     }
 }
 
+/// How much of a reflog `classify_inner` trusts for a moved branch.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    /// A live window: whatever entries the reflog gives since the old tip.
+    Live,
+    /// A gap: one event per entry only when the entries chain from the stored tip
+    /// to the current one.
+    Strict,
+}
+
+/// What the engine found between two views across an observation gap.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct GapClassification {
+    pub events: Vec<RawEvent>,
+    /// Moved branches without a continuous reflog chain: one `branch-update` each.
+    pub collapsed: u32,
+}
+
+/// Whether `entries` (newest first, already trimmed to end at `tip`) form one
+/// unbroken chain from `before` to `tip`. `git reflog delete` and
+/// `--expire-unreachable` can remove entries from the middle, and
+/// `reflog_since` returns the newest ones when it does not find `before`.
+fn is_continuous_chain(entries: &[ReflogEntry], before: &str, tip: &str) -> bool {
+    let (Some(newest), Some(oldest)) = (entries.first(), entries.last()) else {
+        return false;
+    };
+    newest.new == tip && oldest.old == before && entries.windows(2).all(|w| w[1].new == w[0].old)
+}
+
 /// The Git events between two views of a repo (D5, D6). `common` is read
 /// for the reflogs of the refs that moved.
 pub fn classify(common: &Path, old: &RefsView, new: &RefsView, now: (i64, i32)) -> Vec<RawEvent> {
+    classify_inner(common, old, new, now, Mode::Live).events
+}
+
+/// The Git events between the last known view and the current one after a
+/// gap. A moved branch gives one event per reflog entry only when the chain
+/// is continuous; otherwise one `branch-update` from the old tip to the new
+/// one, and `collapsed` counts it.
+pub fn classify_gap(
+    common: &Path,
+    before: &RefsView,
+    now_view: &RefsView,
+    now: (i64, i32),
+) -> GapClassification {
+    classify_inner(common, before, now_view, now, Mode::Strict)
+}
+
+fn classify_inner(
+    common: &Path,
+    old: &RefsView,
+    new: &RefsView,
+    now: (i64, i32),
+    mode: Mode,
+) -> GapClassification {
+    let mut collapsed = 0u32;
     let reader = RepoReader::open(common, &ReaderOptions::default()).ok();
     let mut events = Vec::new();
     let mut push = |place: Option<EventPlace>, kind, mut details: GitEventDetails| {
@@ -434,6 +487,10 @@ pub fn classify(common: &Path, old: &RefsView, new: &RefsView, now: (i64, i32)) 
                     entries.drain(..i);
                 }
                 let place = new.place(name, Some(tip));
+                if mode == Mode::Strict && !is_continuous_chain(&entries, before, tip) {
+                    entries.clear();
+                    collapsed += 1;
+                }
                 if entries.is_empty() {
                     push(
                         place,
@@ -525,7 +582,7 @@ pub fn classify(common: &Path, old: &RefsView, new: &RefsView, now: (i64, i32)) 
             },
         );
     }
-    events
+    GapClassification { events, collapsed }
 }
 
 /// What a repo task starts from.

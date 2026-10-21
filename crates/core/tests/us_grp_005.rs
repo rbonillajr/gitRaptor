@@ -325,7 +325,10 @@ fn a_corrupt_store_records_a_store_corrupt_gap_from_the_add_date() {
         .add_repo(&canonical(&fx.repo.join(".git")), None, 5_000)
         .unwrap();
     drop(profile.open_store(&entry.repo_id).unwrap());
-    let store_path = tp.dirs().repos_dir().join(format!("{}.sqlite", entry.repo_id));
+    let store_path = tp
+        .dirs()
+        .repos_dir()
+        .join(format!("{}.sqlite", entry.repo_id));
     drop(profile);
     std::fs::write(&store_path, vec![0xA5u8; 8192]).unwrap();
 
@@ -395,7 +398,14 @@ fn an_unreadable_repo_is_not_observed_and_keeps_its_mark() {
     });
     first.stop();
     let before = mark(&tp.dirs(), &a.repo_id).unwrap_or(before);
-    let gaps_before = tp.open().open_store(&a.repo_id).unwrap().0.gaps().unwrap().len();
+    let gaps_before = tp
+        .open()
+        .open_store(&a.repo_id)
+        .unwrap()
+        .0
+        .gaps()
+        .unwrap()
+        .len();
 
     let moved = fx.root.join("repo-moved");
     std::fs::rename(&fx.repo, &moved).unwrap();
@@ -420,7 +430,14 @@ fn an_unreadable_repo_is_not_observed_and_keeps_its_mark() {
     live.stop();
 
     assert_eq!(mark(&tp.dirs(), &a.repo_id), Some(before), "mark is kept");
-    let gaps_after = tp.open().open_store(&a.repo_id).unwrap().0.gaps().unwrap().len();
+    let gaps_after = tp
+        .open()
+        .open_store(&a.repo_id)
+        .unwrap()
+        .0
+        .gaps()
+        .unwrap()
+        .len();
     assert_eq!(gaps_after, gaps_before, "no gap is written for it");
 }
 
@@ -450,14 +467,12 @@ fn events_gaps_rejects_an_invalid_or_unknown_repo() {
     assert_eq!(rpc(invalid).0, code::INVALID_PARAMS);
 
     let unknown_id = "0123456789abcdef0123456789abcdef";
-    let expected = rpc(
-        c.call::<_, Value>(methods::EVENTS_HISTORY, json!({"repo_id": unknown_id}))
-            .unwrap_err(),
-    );
-    let got = rpc(
-        c.call::<_, Value>(GAPS, json!({"repo_id": unknown_id}))
-            .unwrap_err(),
-    );
+    let expected = rpc(c
+        .call::<_, Value>(methods::EVENTS_HISTORY, json!({"repo_id": unknown_id}))
+        .unwrap_err());
+    let got = rpc(c
+        .call::<_, Value>(GAPS, json!({"repo_id": unknown_id}))
+        .unwrap_err());
     assert_ne!(got.0, code::METHOD_NOT_FOUND, "{got:?}");
     assert_eq!(got, expected);
 }

@@ -31,7 +31,7 @@ use gitraptor_api::messages::{GitEventDetails, GitEventKind};
 use crate::observe::{RepoRead, UncommittedPaths, WorktreeRead};
 use crate::profile::GapCause;
 
-pub use repo::{EventPlace, RefsReadError, RefsView, classify};
+pub use repo::{EventPlace, GapClassification, RefsReadError, RefsView, classify, classify_gap};
 pub use sweep::Print;
 pub use watchers::WatchBackend;
 use watchers::Watchers;
