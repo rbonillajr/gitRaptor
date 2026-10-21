@@ -107,7 +107,11 @@ impl RefsView {
         }
         for w in reader.worktrees().map_err(|_| RefsReadError::Listing)? {
             let root = observe::canonical(&w.path);
-            if linked_is_trusted(common, &w.id, &root) {
+            // Registered is not trusted: a registered worktree whose folder is gone has no
+            // `.git` link to check, but Git still lists it, so it stays in the view (its
+            // task reads it `missing`). Dropping it would read as a removal.
+            let missing = std::fs::symlink_metadata(&root).is_err();
+            if missing || linked_is_trusted(common, &w.id, &root) {
                 let git_dir = common.join("worktrees").join(&w.id);
                 let refs = worktree_refs(common, (&root, &git_dir), false, Some(w.id));
                 view.worktrees.insert(root, refs);

@@ -18,8 +18,9 @@ use std::time::{Duration, Instant};
 use common::TempProfile;
 use gitraptor_api::event::{REPO_OBSERVATION, SESSION_STATE};
 use gitraptor_api::messages::{
-    ClientKind, EventNotification, RepoObservationData, RepoStateView, SessionStateView,
-    SessionView, SessionsListResult, UnavailableReason, WorktreeStatus,
+    ClientKind, EventNotification, EventsHistoryResult, GitEventKind, RepoObservationData,
+    RepoStateView, SessionStateView, SessionView, SessionsListResult, UnavailableReason,
+    WorktreeStatus,
 };
 use gitraptor_api::scope::{Scope, ScopeSnapshot};
 use gitraptor_api::{PROTOCOL_VERSION, methods};
@@ -292,6 +293,44 @@ fn a_missing_folder_keeps_its_session() {
                     }
         })
     });
+    // The repo task reads the repo again (a backup poll and a commit that wakes its window):
+    // Git still lists the worktree, so this read must not take it for a removed one. Wait for
+    // the commit's event: it is the proof that the repo task's batch was processed.
+    assert!(r.handle.tier_test(TierTestOp::PollNow));
+    fx.git(&[
+        "commit",
+        "--allow-empty",
+        "-q",
+        "-m",
+        "after the folder went",
+    ]);
+    let start = Instant::now();
+    loop {
+        let history: EventsHistoryResult = r
+            .client()
+            .call(
+                methods::EVENTS_HISTORY,
+                json!({"repo_id": r.repo_id, "limit": 500}),
+            )
+            .unwrap();
+        if history
+            .events
+            .iter()
+            .any(|e| e.kind == GitEventKind::Commit)
+        {
+            assert!(
+                !history
+                    .events
+                    .iter()
+                    .any(|e| e.kind == GitEventKind::WorktreeDelete),
+                "a missing folder is not a removed worktree"
+            );
+            break;
+        }
+        assert!(start.elapsed() < DEADLINE, "the commit was never recorded");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(r.is_open(), "a missing folder never ends a session");
     // A later batch of the same repo has been processed: nothing ended.
     let root = canonical(&fx.repo);
     std::fs::write(root.join("later.txt"), "x\n").unwrap();
