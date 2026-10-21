@@ -143,7 +143,7 @@ Notificación `events.event` con `{ subscription, event }`. El evento lleva:
 
 - `seq` es único en el daemon y estrictamente creciente. Vuelve a empezar en cada arranque, y por eso existe `run_id`.
 - Los eventos de cambio llevan siempre `timings`, en nanosegundos del reloj monótono común (`gitraptor_api::clock::monotonic_ns`, ADR-GRP-011 § 3). El cliente añade `t_client_recv` con el mismo reloj.
-- Tipos propios del motor (sin `timings`): `engine.state`, el primer evento de cada ejecución y cada transición de BR-WF-002; `daemon.stopping`; `reserved.audit`; y `repo.observation` `{repo_id, observed, state, path}` al añadir o retirar un repo (US-GRP-001).
+- Tipos propios del motor (sin `timings`): `engine.state`, el primer evento de cada ejecución y cada transición de BR-WF-002; `daemon.stopping`; `reserved.audit`; y `repo.observation` `{repo_id, observed, state, path}` al añadir o retirar un repo (US-GRP-001) y también al pasar a `unavailable` (el repo ya no se puede abrir) y al volver, con `observed: true` (US-GRP-003).
 - `operation.queued` `{repo_id, operation, layer, position}`, `operation.started` `{…, operation_id}` y `operation.finished` `{…, operation_id?, outcome}` (TS-CKP-002, Q-CKP-19). Sin argumentos ni salida de Git.
 - `worktree.state` (US-GRP-001, de cambio): `{repo_id, worktrees}` con todos los worktrees del repo reconciliado.
 - A `raptor-mcp` solo le llegan `engine.state` y `daemon.stopping` (allowlist, SEC-12); el resto lleva rutas o auditoría.
@@ -185,7 +185,11 @@ La operación `snapshot` del catálogo guarda un punto de recuperación a petici
            "changes":[{"path":{"untrusted":"login.txt"},"area":"unstaged","kind":"modified"}]}}
 ```
 
-- `head`: `branch {name}`, `unborn {name}` (rama sin commits) o `detached`. `status` también puede ser `{"state":"unavailable","reason":"missing"|"untrusted"|"unreadable"}`; la semántica de los estados especiales es de US-GRP-003.
+- `head`: `branch {name}`, `unborn {name}` (rama sin commits) o `detached`. `status` también puede ser `{"state":"unavailable","reason":"missing"|"untrusted"|"unreadable"}`; los estados especiales los publica US-GRP-003 (abajo).
+- Con la capacidad `observation.special-states` (US-GRP-003, ADR-GRP-016) el worktree añade `operation` (`rebase`, `merge`, `cherry-pick`, `revert`, `am` o `bisect`; ausente sin operación a medias) y `unmerged_paths` (rutas con etapa de índice mayor que 0, contadas sobre el status completo; ausente si es 0). Sin la capacidad el cable es el de antes. El motor solo lee los marcadores: nunca completa, continúa ni aborta la operación.
+- Un repo cuyo directorio Git no se puede abrir se publica `unavailable` (en `RepoView.state` y `repo.observation`), nunca como si hubiera perdido sus worktrees; al volver, un hueco `periodic-reconciliation` cubre lo ocurrido mientras tanto. Un worktree que Git aún registra pero sin carpeta es `unavailable { missing }`.
+- Con la capacidad `sessions.worktree-removed`, una sesión de un worktree que Git ya no registra termina con `end_cause: "worktree-removed"`; sin ella, llega `ended` sin `end_cause`. Nunca termina por `missing` ni por un repo `unavailable`.
+- Garantía de frescura: se publica con el recomputo que lo descubre; un repo movido o borrado sin evento, ≤ 30 s activo y ≤ 120 s dormido (fuera de NFR-04).
 - Limpio = todos los `counts` a cero. `changes` está ordenado y acotado a 200 rutas y 32 KiB por worktree. Si un mensaje pasa de 768 KiB, se vacían las listas y se conservan los conteos.
 - Lo recalcula una reconciliación completa al añadir el repo y al arrancar el motor, y después el observador de US-GRP-002 en cada cambio.
 
