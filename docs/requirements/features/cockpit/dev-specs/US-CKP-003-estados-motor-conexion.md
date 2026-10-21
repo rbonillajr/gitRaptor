@@ -63,7 +63,7 @@ Al terminar, quien abre `raptor` ve en el cuerpo de la TUI un panel con qué pas
 |---|---|
 | Panel de estado | Widget nuevo `StatePanel` que ocupa la región de la lista: título y un mensaje "qué pasó → qué hacer" con su comando |
 | Nivel (`tier`) | Cómo observa el motor un repo: `active`, `waking` (se pinta "reconciliando") o `dormant` (TS-GRP-006) |
-| Cliente lento | El daemon vacía la cola de una conexión que no lee a tiempo, le manda `events.resync` y la cierra (`crates/core/src/channel/bus.rs:200-213`) |
+| Cliente lento | El daemon vacía la cola de una conexión que no lee a tiempo, le manda `events.resync` y la cierra (`crates/core/src/channel/bus.rs:270-290`) |
 
 Las decisiones están incorporadas en las reglas de cada tarea.
 
@@ -450,7 +450,7 @@ Variantes nuevas de `Text` (bloque `// Engine and connection states`) y textos q
 | `WorktreeUnavailable(Untrusted)` (cambia) | "unavailable: " + el texto actual | "no disponible: " + el texto actual |
 | `WorktreeUnavailable(Unreadable)` (cambia) | unavailable: unreadable now | no disponible: ilegible ahora |
 
-Los textos de PO para el título y el mensaje se leen juntos: "Motor no disponible: no se pudo arrancar → arráncalo con `raptor daemon`". Los de Incompatible, Rechazado y Sin canal siguen el mismo formato. **Decisión del orquestador (2026-10-09), validada por PO, con ajuste**: Incompatible nombra las versiones y pide actualizar los dos; el título de Rechazado dice quién rechaza. La acción de Sin canal (`raptor status`) funciona sin canal, porque sin motor lee el perfil del disco (`apps/cli/src/commands/status.rs:95-103`).
+Los textos de PO para el título y el mensaje se leen juntos: "Motor no disponible: no se pudo arrancar → arráncalo con `raptor daemon`". Los de Incompatible, Rechazado y Sin canal siguen el mismo formato. **Decisión del orquestador (2026-10-09), validada por PO, con ajuste**: Incompatible nombra las versiones y pide actualizar los dos; el título de Rechazado dice quién rechaza. La acción de Sin canal (`raptor status`) funciona sin canal, porque sin motor lee el perfil del disco (`apps/cli/src/commands/status.rs:100-103`).
 
 `Text::Resync(reason)` y `Text::Conn(Resyncing)` no cambian: se pintan por primera vez.
 
@@ -464,7 +464,7 @@ _Sin métodos, eventos ni capacidades nuevos._ La TUI consume lo que el daemon y
 |---|---|---|
 | `GlobalSnapshot.engine.state` y el evento `engine.state` | Estado inicial (`EngineState::initial`) y transiciones `FirstRepoAdded`/`LastRepoRetired` (`crates/core/src/daemon/repos.rs:138,305`) | Paneles Esperando Git y Sin repos |
 | `RepoSummaryView.tier` y el evento `repo.tier` (ámbito global, capacidad `observation.tiers`) | `crates/core/src/daemon/tiers.rs:333,347,368` | Aviso de la cabecera |
-| `events.resync` con `slow-consumer` (de la conexión) | `crates/core/src/channel/bus.rs:200-213` | `EngineMsg::Lagged` |
+| `events.resync` con `slow-consumer` (de la conexión) | `crates/core/src/channel/bus.rs:270-290` | `EngineMsg::Lagged` |
 | `scope.resync` con su motivo | Canal (TS-GRP-004) | Motivo en la cabecera, como hoy rehace la instantánea |
 | `DivergenceView::BaseMissing` y `BaseBranchView.name` | US-GRP-012 | "no calculable" y el título con la base |
 | `WorktreeStatus::Unavailable { reason }` | US-GRP-001 | "no disponible: …" |
