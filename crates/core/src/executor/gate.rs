@@ -4,7 +4,7 @@
 //! Production wires the Guardrails engine (`guardrails::plan_gate`); [`NoGuardrails`] is the
 //! fail-closed gate for wirings without one: a governed operation is refused at run
 //! (`guardrails-denied`), never let through as "allowed". "Ask for confirmation" counts as deny
-//! until the queue exists.
+//! until the queue exists: the gate answers `Ask` so the executor can give it its own reason.
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -64,6 +64,9 @@ pub struct PlanBinding {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GateDecision {
     Allow,
+    /// The rule asks for the developer's confirmation. Without the queue it is
+    /// applied as deny: the plan never runs.
+    Ask,
     Deny,
     /// No decision engine: never read as "allow".
     NotEvaluated,
@@ -74,6 +77,9 @@ pub enum GateDecision {
 pub enum PlanClose {
     /// The decision that counts denied it.
     Denied,
+    /// The decision that counts asked for confirmation and there is no queue:
+    /// applied as deny (effect `ask`, applied effect `deny`).
+    AskedWithoutQueue,
     /// Refused before the decision (state changed, warnings, ...).
     Rejected,
     /// Expired, or dropped with its connection.
