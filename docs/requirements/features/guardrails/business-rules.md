@@ -4,7 +4,7 @@ title: "Reglas de Negocio — Guardrails"
 type: business-rules
 status: draft
 created: 2026-10-03
-updated: 2026-10-09
+updated: 2026-10-21
 domain: GRP
 epic: E-001
 feature: guardrails
@@ -56,7 +56,7 @@ tags:
 
 **Feature**: Guardrails (F-001-04)
 **Enlace a contexto**: [`context.md`](./context.md) (CTX-GRD-001)
-**Última actualización**: 2026-10-09 (Q-GRD-39 a Q-GRD-45, revisión de las Dev Specs DS-US-GRD-007 y DS-US-GRD-011; antes, BR-EDGE-005: alcance, límites declarados y decisiones Q-GRD-36 a Q-GRD-38 de la revisión de DS-US-GRD-017). Antes, 2026-10-06 (BR-AUTH-005, política de autoría de los commits, por D6 del BRD y Q-GRD-34; después, aclaración del punto 4 por decisión del PO). Antes, 2026-10-04 (Q-GRD-28 a Q-GRD-31, resultados de SPIKE-GRD-001 en macOS; antes, Q-GRD-17 a Q-GRD-27 y sus aplicaciones derivadas: Q-GRD-12 en la versión del worktree, confirmación inicial y configuración antes de confirmar, unión de la rama base por historia; ver Changelog). Antes, 2026-10-03 (versión inicial)
+**Última actualización**: 2026-10-21 (Q-GRD-48, Q-GRD-49 y Q-GRD-51, revisión de la Dev Spec DS-US-GRD-009; Q-GRD-47 y Q-GRD-50, revisión de la Dev Spec DS-US-GRD-006). Antes, 2026-10-09 (Q-GRD-39 a Q-GRD-45, revisión de las Dev Specs DS-US-GRD-007 y DS-US-GRD-011; antes, BR-EDGE-005: alcance, límites declarados y decisiones Q-GRD-36 a Q-GRD-38 de la revisión de DS-US-GRD-017). Antes, 2026-10-06 (BR-AUTH-005, política de autoría de los commits, por D6 del BRD y Q-GRD-34; después, aclaración del punto 4 por decisión del PO). Antes, 2026-10-04 (Q-GRD-28 a Q-GRD-31, resultados de SPIKE-GRD-001 en macOS; antes, Q-GRD-17 a Q-GRD-27 y sus aplicaciones derivadas: Q-GRD-12 en la versión del worktree, confirmación inicial y configuración antes de confirmar, unión de la rama base por historia; ver Changelog). Antes, 2026-10-03 (versión inicial)
 
 ---
 
@@ -192,7 +192,9 @@ orden de restricción: denegar > pedir confirmación > permitir
 | **Formato de commit** | Un commit cuyo mensaje no cumple el formato fijado. El MVP ofrece al menos Conventional Commits (confirmado por Rene Bonilla, 2026-10-04) | "arreglos varios" con Conventional Commits exigido → denegado, con un ejemplo válido |
 | **Ruta prohibida** | Un commit que modifica, crea o borra una ruta prohibida | Ruta prohibida `secrets/`; un commit que toca `secrets/api.txt` → denegado |
 
-**Nota (Q-GRD-35)**: las ramas protegidas y las rutas prohibidas aplican por defecto solo a los agentes detectados o registrados (`appliesTo: agents`); la persona en su terminal pasa mientras no exista la excepción consciente (BR-AUTH-003). Con `appliesTo: everyone`, opt-in, bloquean también a la persona, sin excepción en el MVP. Si se incumplen varias reglas, el motivo las nombra todas (BR-CALC-001). Crear, mover o borrar una rama que casa con un patrón protegido cuenta como cambiarla.
+**Nota (Q-GRD-35, enmendada por Q-GRD-50)**: las ramas protegidas y las rutas prohibidas aplican por defecto solo a los agentes detectados o registrados (`appliesTo: agents`); la persona en su terminal pasa. Con `appliesTo: everyone`, opt-in, bloquean también a la persona, que puede saltarlas con la excepción consciente (BR-AUTH-003) en una operación concreta de las que la excepción admite en el MVP: push, borrar una rama local y rebase no interactivo (Q-GRD-47). Un commit en una rama `everyone` no tiene excepción en el MVP. Si se incumplen varias reglas, el motivo las nombra todas (BR-CALC-001). Crear, mover o borrar una rama que casa con un patrón protegido cuenta como cambiarla.
+
+**Nota (Q-GRD-48, Q-GRD-49)**: el límite de tamaño de diff y el formato de commit también aplican por defecto solo a los agentes (`appliesTo: agents`), y con `everyone` se le exigen también a la persona. Como en la nota anterior, con `everyone` el commit directo de la persona que los incumple no tiene excepción en el MVP. El rebase no interactivo que reescribe esos commits sí la tiene (Q-GRD-47, DS-US-GRD-006 D5). Se evalúan en todo commit nuevo que llega a una rama. En una fusión solo cuenta el formato. No incumplen el formato los mensajes que escribe Git: `Merge …` en un commit de fusión, `Revert "…"` / `Reapply "…"` de `git revert`, y `fixup!` / `squash!` / `amend!` delante de una primera línea que cumple.
 
 **Aplicabilidad**: Toda operación gobernada a la que la política se refiere.
 
@@ -389,7 +391,7 @@ Un diagnóstico no es un estado: no cambia qué capas están activas. Desaparece
 | Editar la configuración para relajar | ✅ | ❌ | Confirmación que un agente no pueda dar, con el factor de autenticación del sistema operativo (Q-GRD-19) |
 | Aprobar o rechazar una petición de la cola | ✅ | ❌ | Ni la suya ni la de otro agente. Aprobar exige el factor de autenticación del sistema operativo (Q-GRD-19) |
 | Instalar o desinstalar la protección de hooks | ✅ | ❌ | Con permiso explícito (BR-AUTH-002). Desinstalar: anuncio, ventana para cancelar y auditoría (Q-GRD-19) |
-| Usar una excepción consciente para saltarse una regla (Q-GRD-1), incluida la aprobación explícita en una superficie de GitRaptor (Q-GRD-24) | ✅ | ❌ | Una operación concreta; queda registrada. Anuncio, ventana para cancelar y auditoría (Q-GRD-19, Q-GRD-24) |
+| Usar una excepción consciente para saltarse una regla (Q-GRD-1), incluida la aprobación explícita en una superficie de GitRaptor (Q-GRD-24) | ✅ | ❌ | Una operación concreta, de las admitidas en el MVP (push, borrar una rama local, rebase no interactivo; Q-GRD-47); queda registrada. Anuncio, ventana para cancelar y auditoría (Q-GRD-19, Q-GRD-24) |
 | Confirmar en su máquina una relajación de la configuración del equipo o un cambio de rama base, y la confirmación inicial de ambas al instalar la protección o de forma explícita (Q-GRD-21, Q-GRD-23) | ✅ | ❌ | Por máquina. Mismo mecanismo que las demás acciones reservadas del MVP, con qué cambia y de dónde viene a la vista (Q-GRD-22) |
 | Realizar operaciones gobernadas | ✅ (ver BR-AUTH-003) | ✅ | Sujetas a la decisión (BR-CALC-001) |
 
@@ -439,6 +441,8 @@ Un diagnóstico no es un estado: no cambia qué capas están activas. Desaparece
 >
 > **Decisión** (Q-GRD-24, Rene Bonilla, 2026-10-04; D10; refina Q-GRD-1): **toda** excepción consciente, incluida la aprobación explícita en el Cockpit u otra superficie de GitRaptor, pasa por el mismo **anuncio, ventana para cancelar y auditoría** de Q-GRD-19 (BR-AUTH-001). Cancelada dentro de la ventana, la operación no se ejecuta y la cancelación queda registrada.
 >
+> **Decisión del orquestador (2026-10-21), validada por Arquitecto y PO** (Q-GRD-47 y Q-GRD-50): en el MVP la excepción consciente cubre el push, el borrado de una rama local y el rebase no interactivo. Cualquier otra operación (commit, merge, crear un worktree, pull) se rechaza antes de anunciarse, sin ejecutar nada, y el motivo dice qué operaciones admite; integrar en una rama protegida es del Cockpit (Q-GRD-1, US-CKP-019). La excepción salta también las ramas protegidas y las rutas prohibidas con `appliesTo: everyone` (enmienda Q-GRD-35). Nunca salta las señales de integridad de GitRaptor (modo degradado, canal no auténtico, entrada rechazada) ni existe en modo degradado.
+>
 > **Decisión** (Q-GRD-2, Rene Bonilla, 2026-10-03): en el MVP todos los agentes comparten la misma configuración; permisos por agente en una fase posterior.
 
 **Aplicabilidad**: Cada evaluación de una operación gobernada.
@@ -457,10 +461,12 @@ Salvo: excepción consciente del humano, para una operación concreta, registrad
 - Un agente sin registrar ("sin atribuir") hace force-push → denegado: no se distingue del humano.
 - El desarrollador necesita hacer ese force-push → usa la excepción consciente → se anuncia, deja pasar la ventana sin cancelar → se ejecuta y queda registrado (Q-GRD-24).
 - El desarrollador aprueba en el Cockpit un merge a la rama base → la misma ventana; si la cancela, el merge no se ejecuta (Q-GRD-24).
+- El desarrollador pide la excepción consciente para un commit con el commit denegado → se rechaza sin anunciarse, nada se ejecuta y el motivo dice que la excepción admite push, borrar una rama local y rebase (Q-GRD-47).
+- `release/*` protegida con `appliesTo: everyone` → el push de la persona a `release/1.0` se deniega; con la excepción consciente se anuncia, pasa la ventana, se ejecuta y queda registrado con la regla saltada (Q-GRD-50).
 
 **Cómo se verifica**: la misma operación como "agente X" y como "sin atribuir" recibe la misma decisión; la excepción consciente solo funciona fuera del canal del agente; toda excepción, también la aprobada en el Cockpit, se anuncia, se puede cancelar y queda auditada.
 
-**Referencias**: Q34, Q35 de motor-local; Q-GRD-1, Q-GRD-2, Q-GRD-19, Q-GRD-24; riesgo R-GRD-2.
+**Referencias**: Q34, Q35 de motor-local; Q-GRD-1, Q-GRD-2, Q-GRD-19, Q-GRD-24, Q-GRD-47, Q-GRD-50; riesgo R-GRD-2.
 
 ---
 
@@ -572,6 +578,8 @@ efectivo = el más restrictivo entre (equipo, personal)
            para listas (ramas protegidas, rutas prohibidas): unión de equipo y personales
            para el límite de diff y el plazo de la cola: el menor
            para el formato de commit: el del equipo si lo define; si no, el personal (S-GRD-2)
+             equipo = el de la rama principal si lo fija; si no, el del worktree (Q-GRD-51)
+             un solo formato: no se juntan el del equipo y el personal
 Constraint: efectivo nunca es menos restrictivo que el del equipo
 ```
 
@@ -702,6 +710,7 @@ Constraint: las entradas anotadas en modo degradado se muestran aparte y solo cu
 - Petición de borrar worktree que caduca → entrada con estado final "caducada".
 - Contar las acciones bloqueadas de la semana en `gitRaptor` → suma de denegadas, rechazadas y caducadas verificadas.
 - Esta semana `gitRaptor` tiene 3 denegaciones verificadas y 2 anotadas en modo degradado → el KPI es 3; las 2 aparecen aparte; si el desarrollador las incluye, 5.
+- El desarrollador pide una excepción para un force-push y la cancela durante la ventana, con el comando de cancelar o con Ctrl-C → entrada `exception-cancelled` con quién canceló; no cuenta en el KPI. Si la canceló un agente, la entrada lo dice.
 
 **Cómo se verifica**: tras cada escenario de denegación, petición y excepción, existe su entrada con todos los campos; el repo no contiene el registro; el recuento por defecto excluye las entradas anotadas en modo degradado y las muestra aparte.
 
@@ -1048,3 +1057,5 @@ Cada regla debe reflejarse en al menos un escenario Gherkin de su historia. Cada
 | 1.12 | 2026-10-06 | PO (AADD); decisión del PO (2026-10-06) | BR-AUTH-005, aclaración del punto 4 (pendiente de DS-US-GRD-018, D12): el autor y el committer se muestran uniendo por oid con la autoría declarada del evento y no se copian en la entrada; una denegación muestra "autor no disponible: el commit no llegó a crearse"; restricción para una futura retención de los eventos (no más corta que la del registro). Sin reglas nuevas. |
 | 1.13 | 2026-10-09 | PO (AADD); decisiones del orquestador (2026-10-09), validadas por el PO, abiertas a veto de Rene Bonilla | BR-EDGE-005 por la revisión de DS-US-GRD-017: el ejemplo pasa a ser el borrado de "feat-x" (más rebase y modo degradado); alcance (rebase y borrado de rama local; `reset --hard` por MCP con F-001-05); límites declarados (remoto, `reset --hard`/`checkout`/`branch -f` sin aviso previo, archivo nuevo sin ignorar que tarda más de 5 s). Q-GRD-36: en modo degradado se deniegan. Q-GRD-37: los cupos globales del snapshot previo solo cuentan agentes (G3). Q-GRD-38: repo protegido retirado de la observación, se deniega y retirar avisa antes (N3). Sin reglas nuevas. |
 | 1.14 | 2026-10-09 | PO (AADD); decisiones del orquestador (2026-10-09), validadas por el PO y el Arquitecto, y Q-GRD-43 del PO | Revisión de las Dev Specs DS-US-GRD-007 y DS-US-GRD-011. BR-VAL-002: "pedir confirmación" cuenta en el KPI como denegación (Q-GRD-39, pendiente de Rene Bonilla), qué cuenta como cada operación (Q-GRD-40) y el merge con Git directo protege solo la rama (Q-GRD-41). BR-EDGE-003: apartado "alcance de los permisos con Git directo" (Q-GRD-41, Q-GRD-42). BR-EDGE-004: solo los niveles del equipo ilegibles o parciales fuerzan el mínimo (Q-GRD-43, precisa Q-GRD-26, pendiente de Rene Bonilla), un suelo roto no es relajación pendiente (Q-GRD-44) y dónde avisa (Q-GRD-45). BR-WF-002 y BR-CONS-004 recogen Q-GRD-44 y Q-GRD-45. Sin reglas nuevas: 24 reglas. |
+| 1.15 | 2026-10-21 | PO (AADD); decisiones del orquestador (2026-10-21), validadas por el PO (Q-GRD-48 y Q-GRD-49, también por el Arquitecto) | Revisión de la Dev Spec DS-US-GRD-009: nota de BR-VAL-003 (el límite de diff y el formato de commit aplican por defecto a los agentes, Q-GRD-48; mensajes que escribe Git, Q-GRD-49) y regla de BR-CONS-001 (un solo formato, el del primer nivel que lo fije, Q-GRD-51). Sin reglas nuevas. |
+| 1.16 | 2026-10-21 | PO (AADD); decisiones del orquestador (2026-10-21), validadas por Arquitecto y PO | Revisión de la Dev Spec DS-US-GRD-006. Q-GRD-47: la excepción consciente cubre en el MVP push, borrado de rama local y rebase no interactivo (BR-AUTH-003, BR-AUTH-001). Q-GRD-50: salta también las ramas protegidas y las rutas prohibidas con `appliesTo: everyone`; enmienda la nota de Q-GRD-35 (BR-VAL-003). BR-CONS-004: la cancelación (también con Ctrl-C) registra quién canceló. |
