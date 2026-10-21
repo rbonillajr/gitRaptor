@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "brief",
+    "ref": "docs/dev-briefs/tm-prior-point-binding.md"
+  },
+  "criteria": [
+    {
+      "id": "C1",
+      "statement": "Rebase con observación tardía: con HookPrior(m0), Obs(m0) anterior, evento 1, Obs(m1) a mitad de operación y evento 2, el punto previo de los eventos 1 y 2 es el previo del hook; sin previo es Obs(m0), nunca la foto a mitad de rebase",
+      "verify": "cargo test -p gitraptor-core --lib timemachine::prior_point::tests::rebase_ 2>&1 | grep -q 'test result: ok. 2 passed'",
+      "layer": "runtime",
+      "tests": ["crates/core/src/timemachine/prior_point_tests.rs"]
+    },
+    {
+      "id": "C2",
+      "statement": "Restore con evento Git tardío: con GuaranteedPrior(m2) y un ancla Obs(m2) registrada después, el punto previo del evento 3 es el previo garantizado, no el ancla; con el ancla en m3, el evento 4 elige el ancla",
+      "verify": "cargo test -p gitraptor-core --lib timemachine::prior_point::tests::restore_ 2>&1 | grep -q 'test result: ok. 2 passed'",
+      "layer": "runtime",
+      "tests": ["crates/core/src/timemachine/prior_point_tests.rs"]
+    },
+    {
+      "id": "C3",
+      "statement": "Borrado de rama con previo: una observación registrada después del previo y antes de que el motor persista el BranchDelete, con la misma marca o con la marca subida por otro worktree, nunca gana al previo para ese evento",
+      "verify": "cargo test -p gitraptor-core --lib timemachine::prior_point::tests::branch_deletion_ 2>&1 | grep -q 'test result: ok. 2 passed'",
+      "layer": "runtime",
+      "tests": ["crates/core/src/timemachine/prior_point_tests.rs"]
+    },
+    {
+      "id": "C4",
+      "statement": "Operaciones de dos worktrees intercaladas: cada previo se liga solo a los eventos de su propio worktree y los eventos del otro no cierran su ventana",
+      "verify": "cargo test -p gitraptor-core --lib timemachine::prior_point::tests::interleaved_ 2>&1 | grep -q 'test result: ok. 2 passed'",
+      "layer": "runtime",
+      "tests": ["crates/core/src/timemachine/prior_point_tests.rs"]
+    },
+    {
+      "id": "C5",
+      "statement": "Controles negativos: un punto limpio registrado con marca igual o posterior al primer evento del comando es el previo del evento siguiente, y nunca se elige un punto bajo el suelo de generación ni con marca igual o posterior al evento; un previo bajo el suelo no ensombrece puntos de la generación actual",
+      "verify": "cargo test -p gitraptor-core --lib timemachine::prior_point::tests::control_ 2>&1 | grep -q 'test result: ok. 3 passed'",
+      "layer": "runtime",
+      "tests": ["crates/core/src/timemachine/prior_point_tests.rs"]
+    },
+    {
+      "id": "C6",
+      "statement": "El timeline (Points::with_events) y el undo (raw_candidates) eligen el mismo punto previo para el mismo evento con una sola función y sobre el mismo conjunto sin filtrar (sombra con todos los puntos, disponibilidad filtrada sobre el resultado); un previo no disponible sigue ensombreciendo y gana un punto anterior o ninguno (TargetUnavailable); el undo nunca apunta a una observación a mitad de operación; y el undo de Git crudo toma su propio previo garantizado antes de restaurar",
+      "verify": "cargo test -p gitraptor-core --lib timemachine::timeline::prior_point_wiring:: 2>&1 | grep -q 'test result: ok. 3 passed' && cargo test -p gitraptor-core --test tm_prior_point_undo -- --exact raw_git_undo_takes_its_own_guaranteed_prior_before_restoring 2>&1 | grep -q 'test result: ok. 1 passed'",
+      "layer": "runtime",
+      "tests": ["crates/core/src/timemachine/timeline_prior_point_tests.rs", "crates/core/tests/tm_prior_point_undo.rs"]
+    },
+    {
+      "id": "C7",
+      "statement": "Una observación tomada a mitad de un rebase con conflicto registra mid_operation Some(true) en su CompleteInfo, una de un worktree limpio Some(false), y una fila complete sin el campo se lee como None, en repos temporales; mid_operation es verdadero si hay una operación en curso al inicio o al final de la captura (función combinadora probada como unidad)",
+      "verify": "cargo test -p gitraptor-core --test tm_prior_point_condition 2>&1 | grep -q 'test result: ok. 3 passed' && cargo test -p gitraptor-core --lib timemachine::prior_point::tests::mid_operation_ 2>&1 | grep -q 'test result: ok. 1 passed'",
+      "layer": "runtime",
+      "tests": ["crates/core/tests/tm_prior_point_condition.rs", "crates/core/src/timemachine/prior_point_tests.rs"]
+    }
+  ],
+  "constraints": {
+    "deny_paths": [
+      "Cargo.toml",
+      "Cargo.lock",
+      "crates/core/Cargo.toml",
+      "crates/api/",
+      "crates/git/",
+      "crates/policy/",
+      "crates/theme/",
+      "crates/macsys/",
+      "crates/winsys/",
+      "apps/",
+      "crates/core/src/timemachine/oplog/schema.rs",
+      "docs/ARTIFACTS.md"
+    ],
+    "allow_dependency_changes": false
+  },
+  "scope": {
+    "projects": ["gitraptor-core"]
+  },
+  "suite": { "command": "node tools/test/nextest-junit.mjs" },
+  "layers": {
+    "runtime": {
+      "commands": [{ "id": "suite", "cmd": "node tools/test/nextest-junit.mjs" }],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 600000,
+    "suiteTimeoutMs": 2400000
+  },
+  "hops": {
+    "design": { "agent": "nassa-dev-rust:rust-architect", "model": "opus" },
+    "critic": { "agent": "nassa-core:plan-critic", "model": "opus" },
+    "tester": { "agent": "nassa-core:criterion-tester", "model": "opus" },
+    "build": { "agent": "nassa-dev-rust:rust-expert", "model": "opus" },
+    "review": { "agent": "nassa-dev-rust:rust-code-reviewer", "model": "opus" },
+    "conformance": { "agent": "nassa-dev-rust:rust-code-reviewer", "model": "sonnet" }
+  }
+}
