@@ -128,7 +128,7 @@
     },
     {
       "id": "GRD007-ASK-NODAEMON",
-      "statement": "D19: sin daemon (degradado) y con un daemon sin guard.permissions, ask deniega también a la persona con ask-unavailable",
+      "statement": "D19: en modo degradado (sin daemon), ask deniega también a la persona con ask-unavailable",
       "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_007 -- --test-threads=4 ask_without_the_daemon_denies_everyone",
       "layer": "runtime",
       "tests": [
@@ -173,7 +173,7 @@
     },
     {
       "id": "GRD007-CORE-RULES",
-      "statement": "D2, D6, D10, D19: una razón por nivel del máximo (SafeMinimum sin razón de permiso); capacidad guard.permissions en las dos direcciones con el filtro de guard.log; unverifiable solo si el permiso no es allow; ask según el actor (agente deny, persona allow, no demostrado deny)",
+      "statement": "D2, D6, D10, D19: una razón por nivel del máximo (SafeMinimum sin razón de permiso); capacidad guard.permissions en las dos direcciones con el filtro de guard.log, y sin la capacidad el cliente aplica los permisos del equipo con ask denegado a todos; unverifiable solo si el permiso no es allow; ask según el actor (agente deny, persona allow, no demostrado deny)",
       "verify": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-core --test us_grd_007 -- --test-threads=4 reasons_name_every_level_of_the_maximum permissions_capability_both_ways an_unclassifiable_transaction_is_denied_only_when_it_matters ask_depends_on_the_actor",
       "layer": "runtime",
       "tests": [
