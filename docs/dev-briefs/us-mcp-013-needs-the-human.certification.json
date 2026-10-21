@@ -1,0 +1,457 @@
+{
+  "schema": "nassa.certification.v1",
+  "certifiedAt": "2026-10-21T12:57:14.740Z",
+  "dir": "/Users/rbonilla/orca/workspaces/gitRaptor/mcp013",
+  "contract_sha256": "a862a6b3aec69095bf9809f0799a036f057e2bb27684b893b40e448839c7bff1",
+  "source": {
+    "kind": "devspec",
+    "ref": "docs/requirements/features/mcp/dev-specs/US-MCP-013-dev-spec.md"
+  },
+  "verdict": "NOT CERTIFIED",
+  "status": "bloqueada",
+  "reservations": [
+    {
+      "why": "integridad-sin-verificar",
+      "note": "integridad de pruebas: NO COMPROBADA — no hay informe registrado: falta el de la suite tras implementar (P3)"
+    }
+  ],
+  "totals": {
+    "total": 17,
+    "passed": 17,
+    "failed": 0,
+    "notRun": 0
+  },
+  "integrity": {
+    "status": "NO COMPROBADA",
+    "note": "no hay informe registrado: falta el de la suite tras implementar (P3)",
+    "findings": []
+  },
+  "phases": {
+    "ok": true,
+    "missing": [],
+    "at": "2026-10-21T12:50:19.697Z",
+    "note": "las tres capas constan pasadas · último gate 2026-10-21T12:50:19.697Z. Acredita que corrieron, no CONTRA QUÉ árbol"
+  },
+  "blockers": [
+    {
+      "rule": "X6",
+      "msg": "las pruebas de criterio no son las que firmó la aprobación y las enmiendas del contrato no lo explican (deshacerlas, fichero a fichero, no devuelve las pruebas firmadas): el examen cambió después de firmarse"
+    }
+  ],
+  "hops": [
+    {
+      "hop": "design",
+      "declared": {
+        "agent": "main-loop",
+        "model": "sonnet"
+      },
+      "actual": []
+    },
+    {
+      "hop": "critic",
+      "declared": {
+        "agent": "nassa-core:plan-critic",
+        "model": "opus"
+      },
+      "actual": [
+        {
+          "agent": "nassa-core:plan-critic",
+          "model": "opus"
+        }
+      ]
+    },
+    {
+      "hop": "tester",
+      "declared": {
+        "agent": "nassa-core:criterion-tester",
+        "model": "sonnet"
+      },
+      "actual": [
+        {
+          "agent": "nassa-core:criterion-tester",
+          "model": "sonnet"
+        }
+      ]
+    },
+    {
+      "hop": "build",
+      "declared": {
+        "agent": "nassa-dev-rust:rust-expert",
+        "model": "sonnet"
+      },
+      "actual": [
+        {
+          "agent": "nassa-dev-rust:rust-expert",
+          "model": "sonnet"
+        }
+      ]
+    },
+    {
+      "hop": "review",
+      "declared": {
+        "agent": "nassa-dev-rust:rust-code-reviewer",
+        "model": "opus"
+      },
+      "actual": [
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "sonnet"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "sonnet"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "opus"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "opus"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "sonnet"
+        }
+      ]
+    },
+    {
+      "hop": "conformance",
+      "declared": {
+        "agent": "nassa-dev-rust:rust-code-reviewer",
+        "model": "sonnet"
+      },
+      "actual": [
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "sonnet"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "sonnet"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "opus"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "opus"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "sonnet"
+        }
+      ]
+    }
+  ],
+  "lenses": {
+    "rigor": "alto",
+    "planned": [
+      "correctness",
+      "testing",
+      "security",
+      "architecture"
+    ],
+    "models": {
+      "correctness": "sonnet",
+      "testing": "sonnet",
+      "security": "review",
+      "architecture": "review"
+    },
+    "ran": [
+      {
+        "lens": "correctness",
+        "model": "sonnet"
+      },
+      {
+        "lens": "testing",
+        "model": "sonnet"
+      },
+      {
+        "lens": "security",
+        "model": "opus"
+      },
+      {
+        "lens": "architecture",
+        "model": "opus"
+      }
+    ],
+    "missing": [],
+    "ignored": [
+      {
+        "lens": "correctness",
+        "why": "sin model"
+      },
+      {
+        "lens": "testing",
+        "why": "sin model"
+      },
+      {
+        "lens": "security",
+        "why": "sin model"
+      },
+      {
+        "lens": "architecture",
+        "why": "sin model"
+      }
+    ]
+  },
+  "rigor": "alto",
+  "approvals": [
+    {
+      "source": "approval",
+      "by": "human",
+      "kind": "plan",
+      "sha": "ec098250ace332436ac9f1e133fe4bf1f2fe654d1eba97eeb2168394c5bbcfb3:a862a6b3aec69095bf9809f0799a036f057e2bb27684b893b40e448839c7bff1:fa583d140797ce88ce400826b0235add0336876597b614647877d6ec3b729f0f",
+      "at": "2026-10-21T03:43:44.990Z"
+    },
+    {
+      "source": "approval",
+      "by": "human",
+      "kind": "plan",
+      "sha": "ec098250ace332436ac9f1e133fe4bf1f2fe654d1eba97eeb2168394c5bbcfb3:a862a6b3aec69095bf9809f0799a036f057e2bb27684b893b40e448839c7bff1:fa583d140797ce88ce400826b0235add0336876597b614647877d6ec3b729f0f",
+      "at": "2026-10-21T11:23:04.143Z"
+    },
+    {
+      "source": "critic",
+      "kind": "plan",
+      "rounds": 2,
+      "lastVerdict": "APROBABLE",
+      "lastBlocking": 0,
+      "at": "2026-10-21T03:39:03.082Z"
+    }
+  ],
+  "warnings": [
+    {
+      "why": "fuera-del-plan",
+      "paths": [
+        "apps/mcp/src/engine.rs",
+        "apps/mcp/src/messages.rs",
+        "apps/mcp/tests/no_elicitation.rs",
+        "crates/api/src/catalog.rs",
+        "crates/api/src/mcp_view.rs",
+        "crates/core/src/executor/gate.rs",
+        "crates/core/src/executor/mod.rs",
+        "crates/core/src/guardrails/plan_gate.rs",
+        "docs/architecture/decisions/ADR-CKP-002-catalogo-operaciones-ejecutor.md",
+        "docs/architecture/decisions/ADR-GRD-006-registro-decisiones.md",
+        "docs/architecture/decisions/ADR-GRP-016-extension-registro-capacidades.md",
+        "docs/architecture/decisions/ADR-MCP-001-servidor-mcp-cliente-daemon.md",
+        "docs/architecture/design/api-contract-ipc.md",
+        "docs/requirements/backlog.md",
+        "docs/requirements/features/cockpit/technical-stories/TS-CKP-003-capa-cockpit-guardrails.md",
+        "docs/requirements/features/guardrails/business-rules.md",
+        "docs/requirements/features/mcp/business-rules.md",
+        "docs/requirements/features/mcp/user-stories/US-MCP-009-safe-commit.md",
+        "docs/requirements/features/mcp/user-stories/US-MCP-013-confirmacion-sin-cola.md",
+        "docs/requirements/release-plan.md",
+        "docs/requirements/release-status.md"
+      ],
+      "note": "21 fichero(s) fuera del plan aprobado: apps/mcp/src/engine.rs, apps/mcp/src/messages.rs, apps/mcp/tests/no_elicitation.rs, crates/api/src/catalog.rs, crates/api/src/mcp_view.rs … +16"
+    }
+  ],
+  "outsidePlan": [
+    "apps/mcp/src/engine.rs",
+    "apps/mcp/src/messages.rs",
+    "apps/mcp/tests/no_elicitation.rs",
+    "crates/api/src/catalog.rs",
+    "crates/api/src/mcp_view.rs",
+    "crates/core/src/executor/gate.rs",
+    "crates/core/src/executor/mod.rs",
+    "crates/core/src/guardrails/plan_gate.rs",
+    "docs/architecture/decisions/ADR-CKP-002-catalogo-operaciones-ejecutor.md",
+    "docs/architecture/decisions/ADR-GRD-006-registro-decisiones.md",
+    "docs/architecture/decisions/ADR-GRP-016-extension-registro-capacidades.md",
+    "docs/architecture/decisions/ADR-MCP-001-servidor-mcp-cliente-daemon.md",
+    "docs/architecture/design/api-contract-ipc.md",
+    "docs/requirements/backlog.md",
+    "docs/requirements/features/cockpit/technical-stories/TS-CKP-003-capa-cockpit-guardrails.md",
+    "docs/requirements/features/guardrails/business-rules.md",
+    "docs/requirements/features/mcp/business-rules.md",
+    "docs/requirements/features/mcp/user-stories/US-MCP-009-safe-commit.md",
+    "docs/requirements/features/mcp/user-stories/US-MCP-013-confirmacion-sin-cola.md",
+    "docs/requirements/release-plan.md",
+    "docs/requirements/release-status.md"
+  ],
+  "replans": [
+    "re-plan 1: docs/requirements/features/mcp/dev-specs/US-MCP-013-dev-spec.md",
+    "re-plan 2: docs/requirements/features/mcp/dev-specs/US-MCP-013-dev-spec.md"
+  ],
+  "planChain": {
+    "base": "ec098250ace332436ac9f1e133fe4bf1f2fe654d1eba97eeb2168394c5bbcfb3",
+    "replans": 2
+  },
+  "criteria": [
+    {
+      "id": "MCP013-WIRE-REASON",
+      "statement": "El motivo guardrails-confirmation-required serializa con ese nombre en el cable, distinto de confirmation-required (el desafío del Cockpit); y el código de herramienta confirmation-required existe en McpToolError con kebab-case",
+      "command": "cargo test -p gitraptor-api --test us_mcp_013_wire guardrails_confirmation_required_is_its_own_wire_reason -- --exact",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 4513
+    },
+    {
+      "id": "MCP013-TEXT-STORY",
+      "statement": "El rechazo confirmation-required dice en es 'requiere confirmación del desarrollador' y 'la decisión es suya', y en en 'the decision is theirs', con los textos literales de la Dev Spec",
+      "command": "cargo test -p gitraptor-mcp --bin raptor-mcp -- --list 2>/dev/null | grep -q 'messages::confirmation_tests::the_confirmation_refusal_says_what_the_story_says: test' && cargo test -p gitraptor-mcp --bin raptor-mcp messages::confirmation_tests::the_confirmation_refusal_says_what_the_story_says -- --exact",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 2443
+    },
+    {
+      "id": "MCP013-TEXT-BUDGET",
+      "statement": "El rechazo confirmation-required no lleva params y cabe en 80 tokens en en y en es",
+      "command": "cargo test -p gitraptor-mcp --bin raptor-mcp -- --list 2>/dev/null | grep -q 'messages::confirmation_tests::the_confirmation_refusal_has_no_params_and_fits_its_budget: test' && cargo test -p gitraptor-mcp --bin raptor-mcp messages::confirmation_tests::the_confirmation_refusal_has_no_params_and_fits_its_budget -- --exact",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 253
+    },
+    {
+      "id": "MCP013-EXEC-REFUSED",
+      "statement": "Con un gate que responde Ask, run rechaza con guardrails-confirmation-required antes de cualquier efecto: backend.step 0 veces, snapshot previo 0 veces y oplog en last_seq()==0",
+      "command": "cargo test -p gitraptor-core --test us_mcp_013 an_ask_is_refused_with_its_own_reason_before_any_effect -- --exact",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 15771
+    },
+    {
+      "id": "MCP013-EXEC-CLOSE-ONCE",
+      "statement": "Con Ask el plan se cierra una sola vez: cierres == [(Mcp, Commit, AskedWithoutQueue)]",
+      "command": "cargo test -p gitraptor-core --test us_mcp_013 an_ask_closes_the_plan_once_with_the_mcp_layer -- --exact",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 183
+    },
+    {
+      "id": "MCP013-EXEC-RETRY",
+      "statement": "Reintentar un plan con Ask da el mismo rechazo y no cambia nada (sin paso, sin previo, oplog intacto)",
+      "command": "cargo test -p gitraptor-core --test us_mcp_013 retrying_an_ask_gets_the_same_refusal_and_changes_nothing -- --exact",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 143
+    },
+    {
+      "id": "MCP013-EXEC-PREVIEW",
+      "statement": "La vista previa de prepare con Ask muestra decision deny (el efecto aplicado)",
+      "command": "cargo test -p gitraptor-core --test us_mcp_013 the_preview_of_an_ask_is_the_applied_deny -- --exact",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 157
+    },
+    {
+      "id": "MCP013-EXEC-ONE-EVALUATE",
+      "statement": "El gate se consulta exactamente una vez en run (una sola evaluación bajo el cerrojo, sin segunda pregunta)",
+      "command": "cargo test -p gitraptor-core --test us_mcp_013 the_gate_is_asked_once_at_run -- --exact",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 144
+    },
+    {
+      "id": "MCP013-EXEC-DENY-KEPT",
+      "statement": "Deny y NotEvaluated siguen en guardrails-denied con PlanClose::Denied, sin cambios",
+      "command": "cargo test -p gitraptor-core --test us_mcp_013 a_deny_and_no_engine_keep_guardrails_denied -- --exact",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 195
+    },
+    {
+      "id": "MCP013-ENGINE-ASK",
+      "statement": "raptor-mcp traduce el rechazo del canal guardrails-confirmation-required a confirmation-required sin params",
+      "command": "cargo test -p gitraptor-mcp --bin raptor-mcp -- --list 2>/dev/null | grep -q 'engine::confirmation_tests::a_guardrails_ask_is_confirmation_required_without_params: test' && cargo test -p gitraptor-mcp --bin raptor-mcp engine::confirmation_tests::a_guardrails_ask_is_confirmation_required_without_params -- --exact",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 473
+    },
+    {
+      "id": "MCP013-ENGINE-DENY",
+      "statement": "guardrails-denied nunca se traduce a confirmation-required (sigue internal)",
+      "command": "cargo test -p gitraptor-mcp --bin raptor-mcp -- --list 2>/dev/null | grep -q 'engine::confirmation_tests::a_guardrails_deny_is_never_confirmation_required: test' && cargo test -p gitraptor-mcp --bin raptor-mcp engine::confirmation_tests::a_guardrails_deny_is_never_confirmation_required -- --exact",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 333
+    },
+    {
+      "id": "MCP013-ENGINE-UNDECODABLE",
+      "statement": "Un data.reason que este binario no decodifica sigue dando el rechazo genérico internal, sin params",
+      "command": "cargo test -p gitraptor-mcp --bin raptor-mcp -- --list 2>/dev/null | grep -q 'engine::confirmation_tests::an_undecodable_reason_stays_a_generic_refusal: test' && cargo test -p gitraptor-mcp --bin raptor-mcp engine::confirmation_tests::an_undecodable_reason_stays_a_generic_refusal -- --exact",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 287
+    },
+    {
+      "id": "MCP013-GATE-VIEW",
+      "statement": "El gate real devuelve Ask cuando la decisión tiene efecto ask y efecto aplicado deny (D7); Allow solo con ambos allow; deny y los demás casos siguen en Deny",
+      "command": "cargo test -p gitraptor-core --lib -- --list 2>/dev/null | grep -q 'guardrails::plan_gate::ask_tests::a_decision_that_asks_and_is_applied_as_deny_is_viewed_as_ask: test' && cargo test -p gitraptor-core --lib guardrails::plan_gate::ask_tests::a_decision_that_asks_and_is_applied_as_deny_is_viewed_as_ask -- --exact",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 6313
+    },
+    {
+      "id": "MCP013-DOC-IPC",
+      "statement": "api-contract-ipc.md lista guardrails-confirmation-required entre los data.reason de -32014",
+      "command": "grep -q 'guardrails-confirmation-required' docs/architecture/design/api-contract-ipc.md",
+      "layer": "static",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 39
+    },
+    {
+      "id": "MCP013-DOC-ADR-CKP",
+      "statement": "ADR-CKP-002 § 4 documenta GateDecision::Ask y PlanClose::AskedWithoutQueue",
+      "command": "grep -q 'AskedWithoutQueue' docs/architecture/decisions/ADR-CKP-002-catalogo-operaciones-ejecutor.md",
+      "layer": "static",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 39
+    },
+    {
+      "id": "MCP013-DOC-ADR-MCP",
+      "statement": "ADR-MCP-001 lleva la 'Enmienda (2026-10-09, US-MCP-013)' (confirmation-required sin params y las guardas contra la elicitation)",
+      "command": "grep -q 'Enmienda (2026-10-09, US-MCP-013)' docs/architecture/decisions/ADR-MCP-001-servidor-mcp-cliente-daemon.md",
+      "layer": "static",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 39
+    },
+    {
+      "id": "MCP013-DOC-STATUS",
+      "statement": "US-MCP-013 queda partially-implemented con la línea 'Implementado en: PR'",
+      "command": "grep -q '^status: partially-implemented' docs/requirements/features/mcp/user-stories/US-MCP-013-confirmacion-sin-cola.md && grep -q 'Implementado en: PR' docs/requirements/features/mcp/user-stories/US-MCP-013-confirmacion-sin-cola.md",
+      "layer": "static",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 46
+    }
+  ]
+}

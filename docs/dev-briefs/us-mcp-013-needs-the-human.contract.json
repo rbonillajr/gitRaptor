@@ -1,0 +1,215 @@
+{
+  "source": {
+    "kind": "devspec",
+    "ref": "docs/requirements/features/mcp/dev-specs/US-MCP-013-dev-spec.md"
+  },
+  "criteria": [
+    {
+      "id": "MCP013-WIRE-REASON",
+      "statement": "El motivo guardrails-confirmation-required serializa con ese nombre en el cable, distinto de confirmation-required (el desafío del Cockpit); y el código de herramienta confirmation-required existe en McpToolError con kebab-case",
+      "verify": "cargo test -p gitraptor-api --test us_mcp_013_wire guardrails_confirmation_required_is_its_own_wire_reason -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/api/tests/us_mcp_013_wire.rs"
+      ]
+    },
+    {
+      "id": "MCP013-TEXT-STORY",
+      "statement": "El rechazo confirmation-required dice en es 'requiere confirmación del desarrollador' y 'la decisión es suya', y en en 'the decision is theirs', con los textos literales de la Dev Spec",
+      "verify": "cargo test -p gitraptor-mcp --bin raptor-mcp -- --list 2>/dev/null | grep -q 'messages::confirmation_tests::the_confirmation_refusal_says_what_the_story_says: test' && cargo test -p gitraptor-mcp --bin raptor-mcp messages::confirmation_tests::the_confirmation_refusal_says_what_the_story_says -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/mcp/src/messages_confirmation_tests.rs"
+      ]
+    },
+    {
+      "id": "MCP013-TEXT-BUDGET",
+      "statement": "El rechazo confirmation-required no lleva params y cabe en 80 tokens en en y en es",
+      "verify": "cargo test -p gitraptor-mcp --bin raptor-mcp -- --list 2>/dev/null | grep -q 'messages::confirmation_tests::the_confirmation_refusal_has_no_params_and_fits_its_budget: test' && cargo test -p gitraptor-mcp --bin raptor-mcp messages::confirmation_tests::the_confirmation_refusal_has_no_params_and_fits_its_budget -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/mcp/src/messages_confirmation_tests.rs"
+      ]
+    },
+    {
+      "id": "MCP013-EXEC-REFUSED",
+      "statement": "Con un gate que responde Ask, run rechaza con guardrails-confirmation-required antes de cualquier efecto: backend.step 0 veces, snapshot previo 0 veces y oplog en last_seq()==0",
+      "verify": "cargo test -p gitraptor-core --test us_mcp_013 an_ask_is_refused_with_its_own_reason_before_any_effect -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_mcp_013.rs"
+      ]
+    },
+    {
+      "id": "MCP013-EXEC-CLOSE-ONCE",
+      "statement": "Con Ask el plan se cierra una sola vez: cierres == [(Mcp, Commit, AskedWithoutQueue)]",
+      "verify": "cargo test -p gitraptor-core --test us_mcp_013 an_ask_closes_the_plan_once_with_the_mcp_layer -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_mcp_013.rs"
+      ]
+    },
+    {
+      "id": "MCP013-EXEC-RETRY",
+      "statement": "Reintentar un plan con Ask da el mismo rechazo y no cambia nada (sin paso, sin previo, oplog intacto)",
+      "verify": "cargo test -p gitraptor-core --test us_mcp_013 retrying_an_ask_gets_the_same_refusal_and_changes_nothing -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_mcp_013.rs"
+      ]
+    },
+    {
+      "id": "MCP013-EXEC-PREVIEW",
+      "statement": "La vista previa de prepare con Ask muestra decision deny (el efecto aplicado)",
+      "verify": "cargo test -p gitraptor-core --test us_mcp_013 the_preview_of_an_ask_is_the_applied_deny -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_mcp_013.rs"
+      ]
+    },
+    {
+      "id": "MCP013-EXEC-ONE-EVALUATE",
+      "statement": "El gate se consulta exactamente una vez en run (una sola evaluación bajo el cerrojo, sin segunda pregunta)",
+      "verify": "cargo test -p gitraptor-core --test us_mcp_013 the_gate_is_asked_once_at_run -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_mcp_013.rs"
+      ]
+    },
+    {
+      "id": "MCP013-EXEC-DENY-KEPT",
+      "statement": "Deny y NotEvaluated siguen en guardrails-denied con PlanClose::Denied, sin cambios",
+      "verify": "cargo test -p gitraptor-core --test us_mcp_013 a_deny_and_no_engine_keep_guardrails_denied -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_mcp_013.rs"
+      ]
+    },
+    {
+      "id": "MCP013-ENGINE-ASK",
+      "statement": "raptor-mcp traduce el rechazo del canal guardrails-confirmation-required a confirmation-required sin params",
+      "verify": "cargo test -p gitraptor-mcp --bin raptor-mcp -- --list 2>/dev/null | grep -q 'engine::confirmation_tests::a_guardrails_ask_is_confirmation_required_without_params: test' && cargo test -p gitraptor-mcp --bin raptor-mcp engine::confirmation_tests::a_guardrails_ask_is_confirmation_required_without_params -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/mcp/src/engine_confirmation_tests.rs"
+      ]
+    },
+    {
+      "id": "MCP013-ENGINE-DENY",
+      "statement": "guardrails-denied nunca se traduce a confirmation-required (sigue internal)",
+      "verify": "cargo test -p gitraptor-mcp --bin raptor-mcp -- --list 2>/dev/null | grep -q 'engine::confirmation_tests::a_guardrails_deny_is_never_confirmation_required: test' && cargo test -p gitraptor-mcp --bin raptor-mcp engine::confirmation_tests::a_guardrails_deny_is_never_confirmation_required -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/mcp/src/engine_confirmation_tests.rs"
+      ]
+    },
+    {
+      "id": "MCP013-ENGINE-UNDECODABLE",
+      "statement": "Un data.reason que este binario no decodifica sigue dando el rechazo genérico internal, sin params",
+      "verify": "cargo test -p gitraptor-mcp --bin raptor-mcp -- --list 2>/dev/null | grep -q 'engine::confirmation_tests::an_undecodable_reason_stays_a_generic_refusal: test' && cargo test -p gitraptor-mcp --bin raptor-mcp engine::confirmation_tests::an_undecodable_reason_stays_a_generic_refusal -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/mcp/src/engine_confirmation_tests.rs"
+      ]
+    },
+    {
+      "id": "MCP013-GATE-VIEW",
+      "statement": "El gate real devuelve Ask cuando la decisión tiene efecto ask y efecto aplicado deny (D7); Allow solo con ambos allow; deny y los demás casos siguen en Deny",
+      "verify": "cargo test -p gitraptor-core --lib -- --list 2>/dev/null | grep -q 'guardrails::plan_gate::ask_tests::a_decision_that_asks_and_is_applied_as_deny_is_viewed_as_ask: test' && cargo test -p gitraptor-core --lib guardrails::plan_gate::ask_tests::a_decision_that_asks_and_is_applied_as_deny_is_viewed_as_ask -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/src/guardrails/plan_gate_ask_tests.rs"
+      ]
+    },
+    {
+      "id": "MCP013-DOC-IPC",
+      "statement": "api-contract-ipc.md lista guardrails-confirmation-required entre los data.reason de -32014",
+      "verify": "grep -q 'guardrails-confirmation-required' docs/architecture/design/api-contract-ipc.md",
+      "layer": "static"
+    },
+    {
+      "id": "MCP013-DOC-ADR-CKP",
+      "statement": "ADR-CKP-002 § 4 documenta GateDecision::Ask y PlanClose::AskedWithoutQueue",
+      "verify": "grep -q 'AskedWithoutQueue' docs/architecture/decisions/ADR-CKP-002-catalogo-operaciones-ejecutor.md",
+      "layer": "static"
+    },
+    {
+      "id": "MCP013-DOC-ADR-MCP",
+      "statement": "ADR-MCP-001 lleva la 'Enmienda (2026-10-09, US-MCP-013)' (confirmation-required sin params y las guardas contra la elicitation)",
+      "verify": "grep -q 'Enmienda (2026-10-09, US-MCP-013)' docs/architecture/decisions/ADR-MCP-001-servidor-mcp-cliente-daemon.md",
+      "layer": "static"
+    },
+    {
+      "id": "MCP013-DOC-STATUS",
+      "statement": "US-MCP-013 queda partially-implemented con la línea 'Implementado en: PR'",
+      "verify": "grep -q '^status: partially-implemented' docs/requirements/features/mcp/user-stories/US-MCP-013-confirmacion-sin-cola.md && grep -q 'Implementado en: PR' docs/requirements/features/mcp/user-stories/US-MCP-013-confirmacion-sin-cola.md",
+      "layer": "static"
+    }
+  ],
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "Cargo.lock",
+      "apps/mcp/Cargo.toml",
+      "crates/policy/**",
+      "crates/core/src/executor/ops/**",
+      "apps/mcp/src/server.rs",
+      "crates/core/src/guardrails/evaluate.rs",
+      "crates/core/src/guardrails/log.rs",
+      "crates/core/src/guardrails/registry.rs"
+    ],
+    "allow_dependency_changes": false
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-api",
+      "gitraptor-core",
+      "gitraptor-mcp"
+    ]
+  },
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "sonnet"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "sonnet"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  },
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 600000,
+    "suiteTimeoutMs": 1800000
+  }
+}
