@@ -152,6 +152,32 @@ fn s3_scope(event: &RawEvent) -> S3Scope {
     }
 }
 
+/// What `detect_repo` ends: the sessions of removed worktrees, and, only when the repo was read,
+/// those whose process died while it was not observed. An unreadable repo says nothing about
+/// either: its sessions stay open (an ended session never comes back).
+fn start_changes(
+    repo_id: &str,
+    removed: &[String],
+    dead: Vec<String>,
+    repo_was_read: bool,
+) -> Vec<SessionChange> {
+    let ended = |session_id: String, cause| SessionChange::Ended {
+        repo_id: repo_id.to_owned(),
+        session_id,
+        at_ms: None,
+        cause,
+    };
+    removed
+        .iter()
+        .map(|id| ended(id.clone(), EndCause::WorktreeRemoved))
+        .chain(
+            dead.into_iter()
+                .filter(|id| repo_was_read && !removed.contains(id))
+                .map(|id| ended(id, EndCause::EndedDuringGap)),
+        )
+        .collect()
+}
+
 /// The fields of the `s3_evidence` log line: integers, fixed texts and the
 /// filtered repo id, never a path, a name, a pid or an argv (SEC-04).
 fn s3_log_fields(
@@ -288,21 +314,7 @@ impl Daemon {
                 detector.register(registered(repo_id, &s, state, Some(last)));
             }
         }
-        let ended = |session_id: String, cause| SessionChange::Ended {
-            repo_id: repo_id.to_owned(),
-            session_id,
-            at_ms: None,
-            cause,
-        };
-        let changes = removed
-            .iter()
-            .map(|id| ended(id.clone(), EndCause::WorktreeRemoved))
-            .chain(
-                dead.into_iter()
-                    .filter(|id| !removed.contains(id))
-                    .map(|id| ended(id, EndCause::EndedDuringGap)),
-            )
-            .collect();
+        let changes = start_changes(repo_id, &removed, dead, read.is_some());
         self.sessions_changed(changes);
     }
 
@@ -1118,5 +1130,37 @@ mod tests {
         assert_eq!(inferred_agent(Some(REGISTRATION_EVIDENCE), true), None);
         assert_eq!(inferred_agent(None, true), None);
         assert_eq!(inferred_agent(Some("not json"), true), None);
+    }
+}
+
+#[cfg(test)]
+mod start_changes_tests {
+    use super::*;
+
+    fn causes(changes: &[SessionChange]) -> Vec<(String, EndCause)> {
+        changes
+            .iter()
+            .filter_map(|c| match c {
+                SessionChange::Ended {
+                    session_id, cause, ..
+                } => Some((session_id.clone(), *cause)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn an_unreadable_repo_ends_no_session_at_start() {
+        let dead = vec!["1:1".to_owned(), "2:2".to_owned()];
+        assert!(start_changes("r", &[], dead.clone(), false).is_empty());
+        // A read repo ends the dead ones as a gap, and a removed worktree wins over it.
+        let got = causes(&start_changes("r", &["2:2".to_owned()], dead, true));
+        assert_eq!(
+            got,
+            [
+                ("2:2".to_owned(), EndCause::WorktreeRemoved),
+                ("1:1".to_owned(), EndCause::EndedDuringGap)
+            ]
+        );
     }
 }
