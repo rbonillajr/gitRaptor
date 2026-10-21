@@ -575,6 +575,7 @@ pub(super) fn run(
     repo_id: String,
     common: PathBuf,
     start: Start,
+    unready: Vec<PathBuf>,
     rx: Receiver<RepoMsg>,
 ) {
     let config = shared.config;
@@ -596,7 +597,7 @@ pub(super) fn run(
         last_event_ms: wall_now().0,
         next_poll: Instant::now() + config.backup_poll,
         heads_deferred: false,
-        unready: Vec::new(),
+        unready,
     };
     let len = config.window.saturating_sub(config.timer_slack);
     loop {

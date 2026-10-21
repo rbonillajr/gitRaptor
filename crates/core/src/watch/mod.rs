@@ -997,11 +997,18 @@ impl Observer {
             let git_dir = worktree_git_dir(&common, w);
             heads.extend(self.shared.start_worktree(repo_id, w.clone(), git_dir));
         }
+        // The worktrees of the view that did not start (`git worktree add` half-way) are read
+        // again by the task until they do.
+        let unready: Vec<PathBuf> = worktrees
+            .iter()
+            .filter(|w| !w.view.status.is_watchable())
+            .map(|w| PathBuf::from(w.view.path.raw()))
+            .collect();
         let shared = Arc::clone(&self.shared);
         let repo_id = repo_id.to_owned();
         let _ = std::thread::Builder::new()
             .name("raptor-watch-repo".into())
-            .spawn(move || repo::run(shared, repo_id, common, start, rx));
+            .spawn(move || repo::run(shared, repo_id, common, start, unready, rx));
         WatchStart { head_logs, heads }
     }
 
@@ -1226,12 +1233,23 @@ impl Observer {
             let git_dir = worktree_git_dir(&common, w);
             heads.extend(self.shared.start_worktree(repo_id, w.clone(), git_dir));
         }
+        let unready: Vec<PathBuf> = asleep
+            .refs
+            .iter()
+            .flat_map(|refs| refs.worktrees.keys())
+            .filter(|root| {
+                !ready
+                    .iter()
+                    .any(|w| Path::new(w.view.path.raw()) == root.as_path())
+            })
+            .cloned()
+            .collect();
         let shared = Arc::clone(&self.shared);
         let id = repo_id.to_owned();
         let start = repo::start_from(asleep.refs);
         let _ = std::thread::Builder::new()
             .name("raptor-watch-repo".into())
-            .spawn(move || repo::run(shared, id, common, start, rx));
+            .spawn(move || repo::run(shared, id, common, start, unready, rx));
         if let Some(hooks) = &self.shared.hooks {
             for w in &ready {
                 hooks.worktree_changed(repo_id, Path::new(w.view.path.raw()));
