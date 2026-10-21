@@ -352,9 +352,12 @@ mod cuts {
         (m, before, config)
     }
 
+    /// Points of [`STEPS`]: before and after each one.
+    const POINTS: usize = STEPS.len() * 2;
+
+    /// The uncut run passes every declared point, and only those.
     #[test]
-    fn repo_intact_an_uninstall_cut_at_any_point_is_complete_or_undone() {
-        // The uncut run passes every declared point, and only those.
+    fn repo_intact_an_uninstall_passes_every_declared_point_in_order() {
         let (m, _, _) = protected_machine();
         let trace = m.f.root.join("cut-trace");
         m.extra_env
@@ -369,25 +372,57 @@ mod cuts {
             .collect();
         let declared: Vec<String> = points(STEPS, &[]).iter().map(ToString::to_string).collect();
         assert_eq!(reached, declared);
-        drop(m);
+    }
 
-        let mut broken = Vec::new();
-        for point in points(STEPS, &[]) {
-            let (m, before, config) = protected_machine();
-            m.extra_env
-                .borrow_mut()
-                .push((ENV_CUT, point.to_string().into()));
-            let out = m.uninstall(&m.f.repo);
-            assert!(!out.status.success(), "{point}: {}", text(&out));
-            m.extra_env.borrow_mut().clear();
-            // The daemon died at the point; the next start recovers before serving.
-            let out = m.raptor(&["daemon", "status"]);
-            assert!(out.status.success(), "{point}: {}", text(&out));
-            if let Some(why) = classify(&m, &before, &config, &point) {
-                broken.push(why);
-            }
+    /// The daemon dies at the `n`th declared point: the repo ends complete or undone.
+    fn cut_at(n: usize) {
+        let point = points(STEPS, &[])
+            .into_iter()
+            .nth(n)
+            .unwrap_or_else(|| panic!("no point {n}: the steps declare {POINTS}"));
+        let (m, before, config) = protected_machine();
+        m.extra_env
+            .borrow_mut()
+            .push((ENV_CUT, point.to_string().into()));
+        let out = m.uninstall(&m.f.repo);
+        assert!(!out.status.success(), "{point}: {}", text(&out));
+        m.extra_env.borrow_mut().clear();
+        // The daemon died at the point; the next start recovers before serving.
+        let out = m.raptor(&["daemon", "status"]);
+        assert!(out.status.success(), "{point}: {}", text(&out));
+        if let Some(why) = classify(&m, &before, &config, &point) {
+            panic!("{why}");
         }
-        assert!(broken.is_empty(), "{broken:#?}");
+    }
+
+    // One test per point: a single sweep took over 80 s and was killed by the 240 s limit of a
+    // loaded machine.
+    macro_rules! cut_tests {
+        ($($name:ident => $n:literal),+ $(,)?) => {
+            $(
+                #[test]
+                fn $name() {
+                    cut_at($n);
+                }
+            )+
+        };
+    }
+
+    cut_tests!(
+        repo_intact_an_uninstall_cut_at_point_0_is_complete_or_undone => 0,
+        repo_intact_an_uninstall_cut_at_point_1_is_complete_or_undone => 1,
+        repo_intact_an_uninstall_cut_at_point_2_is_complete_or_undone => 2,
+        repo_intact_an_uninstall_cut_at_point_3_is_complete_or_undone => 3,
+        repo_intact_an_uninstall_cut_at_point_4_is_complete_or_undone => 4,
+        repo_intact_an_uninstall_cut_at_point_5_is_complete_or_undone => 5,
+        repo_intact_an_uninstall_cut_at_point_6_is_complete_or_undone => 6,
+        repo_intact_an_uninstall_cut_at_point_7_is_complete_or_undone => 7,
+    );
+
+    /// The tests above cover every declared point, no more and no fewer.
+    #[test]
+    fn the_per_point_tests_cover_every_declared_point() {
+        assert_eq!(POINTS, 8, "add or remove a `cut_at_point_N` test");
     }
 
     /// `None` when the repo is in one of the two allowed end states.
