@@ -31,6 +31,7 @@ use gitraptor_core::guardrails::hook::{self, Degraded, HookArgs, HookEnv};
 use crate::i18n::{Tr, t};
 use crate::{command_path, engine, error_text, refusal_text, repo_error, shown};
 
+mod confirm;
 #[cfg(test)]
 mod deny_text_tests;
 mod snapshot_required;
@@ -39,6 +40,7 @@ mod snapshot_required_tests;
 #[cfg(test)]
 mod status_text_tests;
 
+pub use confirm::confirm;
 use snapshot_required::DeniedOp;
 
 /// Longest parameter shown to the agent, in characters (M-05).
@@ -578,6 +580,9 @@ fn status_lines(status: &GuardStatus, tr: Tr) -> Vec<String> {
             "guard.status.pending",
             &[("seconds", &seconds_left(pending.applies_at_ms))],
         ));
+    }
+    if status.confirm.is_some() {
+        out.push(tr.t("guard.status.confirm", &[]));
     }
     for file in &status.misnamed_settings {
         out.push(tr.t(

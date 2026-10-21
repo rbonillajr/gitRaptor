@@ -1,4 +1,4 @@
-//! `raptor guard`: the Guardrails hook layer (US-GRD-001, US-GRD-003).
+//! `raptor guard`: the Guardrails hook layer (US-GRD-001, US-GRD-003, US-GRD-014).
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -38,6 +38,13 @@ enum GuardAction {
         /// The repo's Git directory or any of its worktrees; defaults to the current folder.
         path: Option<PathBuf>,
     },
+    /// Confirm the base branch and the settings the team fixes on the main branch (reserved to
+    /// the developer). Shows the plan first; when it relaxes, it applies after a window in which
+    /// anyone can cancel it.
+    Confirm {
+        /// The repo's Git directory or any of its worktrees; defaults to the current folder.
+        path: Option<PathBuf>,
+    },
     /// Show the protection status of a repo.
     Status {
         /// The repo's Git directory or any of its worktrees; defaults to the current folder.
@@ -68,6 +75,7 @@ impl Cmd {
             GuardAction::Install { path, yes } => guard::install(path, yes),
             GuardAction::Uninstall { path, yes } => guard::uninstall(path, yes),
             GuardAction::Cancel { path } => guard::cancel(path),
+            GuardAction::Confirm { path } => guard::confirm(path),
             GuardAction::Status { path, json } => guard::status(path, json),
             GuardAction::Log {
                 path,
