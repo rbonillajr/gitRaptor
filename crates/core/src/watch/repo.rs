@@ -565,6 +565,9 @@ struct Task {
     /// A `HEAD` reflog grew alone in the last flush: its window was
     /// extended once.
     heads_deferred: bool,
+    /// Worktrees the view has that were not `Ready` when they were read (`git worktree add` was
+    /// half-way): they are read again with each view until they are, so their task starts.
+    unready: Vec<PathBuf>,
 }
 
 pub(super) fn run(
@@ -593,6 +596,7 @@ pub(super) fn run(
         last_event_ms: wall_now().0,
         next_poll: Instant::now() + config.backup_poll,
         heads_deferred: false,
+        unready: Vec::new(),
     };
     let len = config.window.saturating_sub(config.timer_slack);
     loop {
@@ -769,12 +773,26 @@ impl Task {
         };
         // Worktrees added and removed: their tasks and watches follow.
         let mut created = Vec::new();
+        let mut unready = Vec::new();
         for (root, w) in &new.worktrees {
-            if !self.view.worktrees.contains_key(root) {
+            let is_new = !self.view.worktrees.contains_key(root);
+            if is_new || self.unready.contains(root) {
                 let read = observe::read_worktree(&self.common, root, w.main, w.admin.as_deref());
-                created.push((read, w.admin.clone()));
+                let ready = matches!(
+                    read.view.status,
+                    gitraptor_api::messages::WorktreeStatus::Ready { .. }
+                );
+                if !ready {
+                    unready.push(root.clone());
+                }
+                // A new one is always sent (its view says what is wrong); one read again only
+                // once it became ready.
+                if is_new || ready {
+                    created.push((read, w.admin.clone()));
+                }
             }
         }
+        self.unready = unready;
         let gone: Vec<PathBuf> = self
             .view
             .worktrees
