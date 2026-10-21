@@ -66,9 +66,19 @@ struct FakeClaude {
 impl FakeClaude {
     /// Runs `command` in its shell and waits for it.
     fn run(&mut self, command: &str) {
+        self.send(command);
+        self.done(command);
+    }
+
+    /// Sends `command` to its shell without waiting for it.
+    fn send(&mut self, command: &str) {
         let stdin = self.stdin.as_mut().unwrap();
         writeln!(stdin, "{command}").unwrap();
         stdin.flush().unwrap();
+    }
+
+    /// Waits for the command sent last to end.
+    fn done(&mut self, command: &str) {
         let mut line = String::new();
         loop {
             line.clear();
@@ -125,7 +135,17 @@ impl Machine {
         let hooks = outside.path().join("slow-hooks");
         std::fs::create_dir(&hooks).unwrap();
         let post_commit = hooks.join("post-commit");
-        std::fs::write(&post_commit, "#!/bin/sh\nsleep 1\n").unwrap();
+        // Held until the test saw the engine record the commit (the file below), not for a fixed
+        // time: the engine has to sample the agent's `git` while it runs, and under load a
+        // fixed second could pass first.
+        std::fs::write(
+            &post_commit,
+            format!(
+                "#!/bin/sh\nn=0\nwhile [ ! -e '{}' ] && [ $n -lt 1200 ]; do sleep 0.05; n=$((n+1)); done\n",
+                outside.path().join("release-hooks").display()
+            ),
+        )
+        .unwrap();
         std::fs::set_permissions(&post_commit, std::fs::Permissions::from_mode(0o755)).unwrap();
         Self { f, outside }
     }
@@ -145,6 +165,16 @@ impl Machine {
 
     fn slow_hooks(&self) -> PathBuf {
         self.outside.path().join("slow-hooks")
+    }
+
+    /// Runs `command` (a commit with the held hooks) as the agent, keeping its `git` alive until
+    /// the engine recorded the commit in `wt`, and returns that event.
+    fn held_commit(&self, claude: &mut FakeClaude, command: &str, wt: &Path) -> GitEventView {
+        claude.send(command);
+        let e = self.event(GitEventKind::Commit, wt);
+        std::fs::write(self.outside.path().join("release-hooks"), "").unwrap();
+        claude.done(command);
+        e
     }
 
     fn env(&self) -> Vec<(&'static str, OsString)> {
@@ -461,12 +491,15 @@ fn agent_commit_shows_both() {
     let (m, wt) = observed();
     let mut claude = m.launch_claude(&wt);
     m.sessions_when(&wt, |s| s.len() == 1);
-    claude.run(&format!(
-        "printf 'x\\n' >> login.txt && git -c 'user.name=Ana Pérez' -c user.email=ana@example.com \
+    let e = m.held_commit(
+        &mut claude,
+        &format!(
+            "printf 'x\\n' >> login.txt && git -c 'user.name=Ana Pérez' -c user.email=ana@example.com \
          -c core.hooksPath={} commit -qam '{SECRET}' -m '{TRAILER}'",
-        m.slow_hooks().display()
-    ));
-    let e = m.event(GitEventKind::Commit, &wt);
+            m.slow_hooks().display()
+        ),
+        &wt,
+    );
     assert_eq!(e.actor, claude_code_detected(), "{e:#?}");
     let a = e.authorship.as_ref().expect("authorship");
     assert_eq!(a.author.name.raw(), "Ana Pérez");
@@ -641,12 +674,15 @@ fn an_agent_commit_without_trailer_shows_the_difference() {
     let (m, wt) = observed();
     let mut claude = m.launch_claude(&wt);
     m.sessions_when(&wt, |s| s.len() == 1);
-    claude.run(&format!(
-        "printf 'y\\n' >> login.txt && git -c 'user.name=Ana Pérez' -c user.email=ana@example.com \
+    let e = m.held_commit(
+        &mut claude,
+        &format!(
+            "printf 'y\\n' >> login.txt && git -c 'user.name=Ana Pérez' -c user.email=ana@example.com \
          -c core.hooksPath={} commit -qam '{SECRET}'",
-        m.slow_hooks().display()
-    ));
-    let e = m.event(GitEventKind::Commit, &wt);
+            m.slow_hooks().display()
+        ),
+        &wt,
+    );
     assert_eq!(e.actor, claude_code_detected(), "{e:#?}");
     let name = wt_name(&wt);
     let en = m.events_text("en_US.UTF-8");
