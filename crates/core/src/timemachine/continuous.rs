@@ -98,6 +98,10 @@ pub struct CaptureDeps {
     /// Free space the capture leaves to the user (SEC-TMC-12: max(5 GB, 5 %)); `None` in tests
     /// that do not check it.
     pub free_space_floor: Option<FreeSpaceFloor>,
+    /// Tests only: runs in [`observe`] between the engine's mark and the first read of the
+    /// worktrees, to inject a `git` there. Honored only in debug builds.
+    #[doc(hidden)]
+    pub after_mark: Option<Arc<dyn Fn() + Send + Sync>>,
 }
 
 /// The free space under which the continuous capture stops (SEC-TMC-12): the larger of `bytes`
@@ -554,6 +558,11 @@ pub fn observe(
         .engine
         .settle(repo_id, worktrees, settle)
         .ok_or(Failure::NotCalm)?;
+    if cfg!(debug_assertions)
+        && let Some(hook) = &deps.after_mark
+    {
+        hook();
+    }
     let at_start: Vec<Option<GitState>> = worktrees.iter().map(|w| GitState::read(w)).collect();
     if at_start.iter().flatten().any(GitState::locked) {
         return Err(Failure::Busy);
@@ -725,6 +734,10 @@ fn failure_kind(e: &CaptureError) -> &'static str {
         CaptureError::Io(_) => "io",
     }
 }
+
+#[cfg(test)]
+#[path = "capture_mark_tests.rs"]
+mod capture_mark_tests;
 
 #[cfg(test)]
 mod tests {

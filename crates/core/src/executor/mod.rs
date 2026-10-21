@@ -328,6 +328,9 @@ pub struct RunEnv<'a> {
     /// (US-TMC-004); `None`: a `git` the engine has not persisted yet is
     /// still in the way.
     pub engine_mark: &'a (dyn Fn(&str, &[std::path::PathBuf]) -> Option<i64> + Sync),
+    /// The engine, to confirm at the guaranteed prior's validity point that the intent's mark still
+    /// holds; `None` (doubles): the prior is not guarded.
+    pub engine: Option<std::sync::Arc<dyn crate::timemachine::engine::EngineLink>>,
     /// After the step ran: takes the anchor of the state it left, with the
     /// operation as cause (US-TMC-004).
     pub after_step: &'a (dyn Fn(&str, &[std::path::PathBuf], &str) + Sync),
@@ -1135,6 +1138,10 @@ impl ProtectedStep for ExecStep<'_> {
         out
     }
 }
+
+#[cfg(test)]
+#[path = "prior_mark_tests.rs"]
+mod prior_mark_tests;
 
 #[cfg(test)]
 mod tests {

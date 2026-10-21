@@ -3428,6 +3428,9 @@ impl Connection<'_> {
             stopping: &self.ctx.stopping,
             prior_deadline: wiring.prior_deadline,
             engine_mark: &engine_mark,
+            engine: tm_engine
+                .as_ref()
+                .map(|deps| std::sync::Arc::clone(&deps.engine)),
             after_step: &after_step,
             publish: &publish,
             capture: &|ask: &manual::ManualAsk| match &tm_engine {

@@ -265,6 +265,7 @@ impl Rig {
             stopping: &self.stopping,
             prior_deadline: Duration::from_secs(10),
             engine_mark: &engine_mark,
+            engine: None,
             after_step: &after_step,
             publish: &publish,
             capture: &capture,
