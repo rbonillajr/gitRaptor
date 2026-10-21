@@ -1,5 +1,6 @@
-//! `raptor events` output, text and JSON (US-GRP-002): the latest Git
-//! events of the observed repos, with their time and actor. A one-off query;
+//! `raptor events` output, text and JSON (US-GRP-002, US-GRP-005): the latest
+//! Git events of the observed repos, with their time and actor, and the
+//! observation gaps among them. A one-off query;
 //! the live view belongs to the Cockpit (F-001-02).
 //!
 //! Every text that comes from the engine is untrusted (SEC-12): the text
@@ -8,38 +9,112 @@
 use std::fmt::Write as _;
 
 use gitraptor_api::messages::{GitEventKind, GitEventView, InferredAgent, TrailerCheck};
+use gitraptor_api::methods::GapView;
 use gitraptor_api::{Actor, UntrustedName};
 use serde_json::{Value, json};
 
-use crate::i18n::t;
+use crate::i18n::{Tr, t};
 use crate::status::wire;
 
-/// The text output, one line per event, oldest first.
-pub fn text(events: &[GitEventView]) -> String {
+fn event_line(e: &GitEventView) -> String {
+    let worktree = e.worktree.sanitized();
+    let worktree = if e.details.worktree_inferred {
+        t("events.inferred", &[("worktree", &worktree)])
+    } else {
+        worktree
+    };
+    t(
+        "events.line",
+        &[
+            ("time", &local_time(e.observed_utc_ms, e.utc_offset_s)),
+            ("worktree", &worktree),
+            ("event", &describe(e)),
+            ("actor", &actor_of(e)),
+        ],
+    )
+}
+
+/// A gap of one repo, as `raptor events` lists it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GapEntry {
+    pub repo_id: String,
+    pub gap: GapView,
+}
+
+/// One line of `raptor events`: a Git event or a gap.
+#[derive(Debug, Clone, Copy)]
+pub enum Entry<'a> {
+    Event(&'a GitEventView),
+    Gap(&'a GapEntry),
+}
+
+impl Entry<'_> {
+    /// Events by their time; a gap by its end (its start while it is open),
+    /// before the events it found, which carry that same time.
+    fn order(&self) -> (i64, u8, i64) {
+        match self {
+            Entry::Event(e) => (e.observed_utc_ms, 1, e.seq),
+            Entry::Gap(g) => (g.gap.ended_utc_ms.unwrap_or(g.gap.started_utc_ms), 0, 0),
+        }
+    }
+}
+
+/// Events and gaps in one list, oldest first.
+pub fn interleave<'a>(events: &'a [GitEventView], gaps: &'a [GapEntry]) -> Vec<Entry<'a>> {
+    let mut all: Vec<Entry<'a>> = events
+        .iter()
+        .map(Entry::Event)
+        .chain(gaps.iter().map(Entry::Gap))
+        .collect();
+    all.sort_by_key(Entry::order);
+    all
+}
+
+/// The text output with the gaps in between. `offset_s` is the local offset
+/// the gap times are shown at: a gap carries only UTC.
+pub fn text_with_gaps(entries: &[Entry<'_>], offset_s: i32) -> String {
     let mut out = String::new();
-    if events.is_empty() {
+    if entries.is_empty() {
         let _ = writeln!(out, "{}", t("events.none", &[]));
     }
-    for e in events {
-        let worktree = e.worktree.sanitized();
-        let worktree = if e.details.worktree_inferred {
-            t("events.inferred", &[("worktree", &worktree)])
-        } else {
-            worktree
+    for entry in entries {
+        let line = match entry {
+            Entry::Event(e) => event_line(e),
+            Entry::Gap(g) => gap_line(&g.gap, offset_s, Tr::current()),
         };
-        let _ = writeln!(
-            out,
-            "{}",
-            t(
-                "events.line",
-                &[
-                    ("time", &local_time(e.observed_utc_ms, e.utc_offset_s)),
-                    ("worktree", &worktree),
-                    ("event", &describe(e)),
-                    ("actor", &actor_of(e)),
-                ],
+        let _ = writeln!(out, "{line}");
+    }
+    out
+}
+
+/// "-- observation gap (engine stopped), 12:00 → 13:00 · unattributed". What
+/// the gap found is the net state, never the full history, and is never
+/// attributed to an agent (BR-CONS-003).
+fn gap_line(gap: &GapView, offset_s: i32, tr: Tr) -> String {
+    let cause = tr.t(&format!("gap.cause.{}", wire(&gap.cause)), &[]);
+    let start = local_time(gap.started_utc_ms, offset_s);
+    let mut out = match gap.ended_utc_ms {
+        Some(end) => {
+            let end = local_time(end, offset_s);
+            // The time alone when both ends fall on the same local day.
+            let (from, to) = if start[..10] == end[..10] {
+                (start[11..16].to_owned(), end[11..16].to_owned())
+            } else {
+                (start[..16].to_owned(), end[..16].to_owned())
+            };
+            tr.t(
+                "events.gap_line",
+                &[("cause", &cause), ("from", &from), ("to", &to)],
             )
-        );
+        }
+        None => tr.t(
+            "events.gap_open",
+            &[("cause", &cause), ("from", &start[11..16].to_owned())],
+        ),
+    };
+    if gap.during_session {
+        out.push_str(" · ");
+        out.push_str(&tr.t("events.gap_during_session", &[]));
     }
     out
 }
@@ -165,53 +240,65 @@ pub fn actor_name(actor: &Actor) -> String {
     }
 }
 
-/// The JSON output: a stable, flat shape with plain strings.
-pub fn json(events: &[GitEventView]) -> Value {
-    let plain = |u: &Option<UntrustedName>| u.as_ref().map(|u| u.raw().to_owned());
+/// The JSON output, a stable, flat shape with plain strings, with the gaps in between: a gap is
+/// `{"kind":"gap", ...}`, its `cause` the wire text, never translated.
+pub fn json_with_gaps(entries: &[Entry<'_>]) -> Value {
     Value::Array(
-        events
+        entries
             .iter()
-            .map(|e| {
-                let mut entry = json!({
-                    "repo_id": e.repo_id,
-                    "seq": e.seq,
-                    "worktree": e.worktree.raw(),
-                    "worktree_inferred": e.details.worktree_inferred,
-                    "kind": e.kind.as_str(),
-                    "actor": match &e.actor {
-                        Actor::Unattributed => json!("unattributed"),
-                        other => serde_json::to_value(other).unwrap_or(Value::Null),
-                    },
-                    "observed_utc_ms": e.observed_utc_ms,
-                    "utc_offset_s": e.utc_offset_s,
-                    "branch": plain(&e.details.branch),
-                    "from": plain(&e.details.from),
-                    "old_commit": e.details.old_commit,
-                    "new_commit": e.details.new_commit,
-                    "gap_id": e.gap_id,
-                    "inferred": e.inferred,
-                });
-                // Who it went in under, apart from who ran it (US-GRD-019);
-                // absent for events stored before it was recorded.
-                if let Some(a) = &e.authorship {
-                    let who = |name: &gitraptor_api::Untrusted,
-                               email: &gitraptor_api::Untrusted| {
-                        json!({"name": name.raw(), "email": email.raw()})
-                    };
-                    entry["authorship"] = json!({
-                        "author": who(&a.author.name, &a.author.email),
-                        "committer": who(&a.committer.name, &a.committer.email),
-                        "coauthors": a.coauthors.iter().map(|c| {
-                            let mut co = who(&c.name, &c.email);
-                            co["agent"] = c.agent.map_or(Value::Null, |k| json!(wire(&k)));
-                            co
-                        }).collect::<Vec<_>>(),
-                    });
-                }
-                entry
+            .map(|entry| match entry {
+                Entry::Event(e) => event_json(e),
+                Entry::Gap(g) => json!({
+                    "kind": "gap",
+                    "repo_id": g.repo_id,
+                    "gap_id": g.gap.gap_id,
+                    "cause": wire(&g.gap.cause),
+                    "started_utc_ms": g.gap.started_utc_ms,
+                    "ended_utc_ms": g.gap.ended_utc_ms,
+                    "during_session": g.gap.during_session,
+                    "actor": "unattributed",
+                }),
             })
             .collect(),
     )
+}
+
+fn event_json(e: &GitEventView) -> Value {
+    let plain = |u: &Option<UntrustedName>| u.as_ref().map(|u| u.raw().to_owned());
+    let mut entry = json!({
+        "repo_id": e.repo_id,
+        "seq": e.seq,
+        "worktree": e.worktree.raw(),
+        "worktree_inferred": e.details.worktree_inferred,
+        "kind": e.kind.as_str(),
+        "actor": match &e.actor {
+            Actor::Unattributed => json!("unattributed"),
+            other => serde_json::to_value(other).unwrap_or(Value::Null),
+        },
+        "observed_utc_ms": e.observed_utc_ms,
+        "utc_offset_s": e.utc_offset_s,
+        "branch": plain(&e.details.branch),
+        "from": plain(&e.details.from),
+        "old_commit": e.details.old_commit,
+        "new_commit": e.details.new_commit,
+        "gap_id": e.gap_id,
+        "inferred": e.inferred,
+    });
+    // Who it went in under, apart from who ran it (US-GRD-019); absent for
+    // events stored before it was recorded.
+    if let Some(a) = &e.authorship {
+        let who = |name: &gitraptor_api::Untrusted, email: &gitraptor_api::Untrusted| json!({"name": name.raw(), "email": email.raw()});
+        entry["authorship"] = json!({
+            "author": who(&a.author.name, &a.author.email),
+            "committer": who(&a.committer.name, &a.committer.email),
+            "coauthors": a.coauthors.iter().map(|c| {
+                let mut co = who(&c.name, &c.email);
+                co["agent"] = c.agent.map_or(Value::Null, |k| json!(wire(&k)));
+                co
+            }).collect::<Vec<_>>(),
+        });
+    }
+    entry
 }
 
 /// `YYYY-MM-DD HH:MM:SS` at the event's own offset.
@@ -240,6 +327,14 @@ pub fn local_time(utc_ms: i64, offset_s: i32) -> String {
 mod tests {
     use super::*;
     use gitraptor_api::messages::GitEventDetails;
+
+    fn text(events: &[GitEventView]) -> String {
+        text_with_gaps(&interleave(events, &[]), 0)
+    }
+
+    fn json(events: &[GitEventView]) -> Value {
+        json_with_gaps(&interleave(events, &[]))
+    }
 
     fn event(kind: GitEventKind, inferred: bool) -> GitEventView {
         GitEventView {
@@ -375,5 +470,132 @@ mod tests {
             "claude-code"
         );
         assert_eq!(value[0]["actor"], "unattributed");
+    }
+
+    fn gap(cause: gitraptor_api::methods::GapCauseView, from: i64, to: Option<i64>) -> GapEntry {
+        GapEntry {
+            repo_id: "r".into(),
+            gap: GapView {
+                gap_id: "g-1".into(),
+                started_utc_ms: from,
+                ended_utc_ms: to,
+                cause,
+                during_session: false,
+            },
+        }
+    }
+
+    const EN: Tr = Tr { spanish: false };
+    const ES: Tr = Tr { spanish: true };
+    const NOON: i64 = 1_791_201_600_000; // 2026-10-05 12:00:00 UTC
+    const HOUR: i64 = 3_600_000;
+
+    #[test]
+    fn a_gap_reads_as_an_unattributed_observation_gap_in_en_and_es() {
+        use gitraptor_api::methods::GapCauseView as C;
+        let g = gap(C::DaemonStopped, NOON, Some(NOON + HOUR));
+        let line = gap_line(&g.gap, 0, EN);
+        assert_eq!(
+            line,
+            "-- observation gap (engine stopped), 12:00 → 13:00 · unattributed"
+        );
+        let es = gap_line(&g.gap, 0, ES);
+        assert_eq!(
+            es,
+            "-- hueco de observación (motor detenido), 12:00 → 13:00 · sin atribuir"
+        );
+        // Every cause has a text in both languages, and none says "caída".
+        for c in [
+            C::MachineOff,
+            C::DaemonDown,
+            C::DaemonDownDuringSession,
+            C::DaemonStopped,
+            C::RepoRetired,
+            C::GitUnavailable,
+            C::ProfileLost,
+            C::StoreCorrupt,
+            C::WatcherOverflow,
+            C::StreamRecreated,
+            C::PeriodicReconciliation,
+            C::Dormant,
+        ] {
+            let key = format!("gap.cause.{}", wire(&c));
+            for tr in [EN, ES] {
+                let shown = tr.t(&key, &[]);
+                assert!(!shown.starts_with("gap.cause."), "{key}");
+                assert!(!shown.to_lowercase().contains("caída"), "{key}");
+            }
+        }
+        assert_eq!(ES.t("gap.cause.daemon-down", &[]), "motor detenido");
+    }
+
+    #[test]
+    fn an_open_gap_reads_still_open() {
+        use gitraptor_api::methods::GapCauseView as C;
+        let g = gap(C::DaemonDown, NOON, None);
+        assert_eq!(
+            gap_line(&g.gap, 0, EN),
+            "-- observation gap (engine stopped), since 12:00 (still open) · unattributed"
+        );
+    }
+
+    #[test]
+    fn a_gap_sorts_before_the_events_it_found() {
+        use gitraptor_api::methods::GapCauseView as C;
+        let end = NOON + HOUR;
+        let mut found = event(GitEventKind::Commit, false);
+        found.observed_utc_ms = end;
+        let mut earlier = event(GitEventKind::Push, false);
+        earlier.observed_utc_ms = NOON - HOUR;
+        let events = [found, earlier];
+        let gaps = [gap(C::DaemonStopped, NOON, Some(end))];
+        let entries = interleave(&events, &gaps);
+        let kinds: Vec<&str> = entries
+            .iter()
+            .map(|e| match e {
+                Entry::Event(e) => e.kind.as_str(),
+                Entry::Gap(_) => "gap",
+            })
+            .collect();
+        assert_eq!(kinds, ["push", "gap", "commit"]);
+        let out = text_with_gaps(&entries, 0);
+        assert_eq!(out.lines().count(), 3, "{out}");
+    }
+
+    #[test]
+    fn a_gap_during_a_session_says_so() {
+        use gitraptor_api::methods::GapCauseView as C;
+        let mut g = gap(C::DaemonDownDuringSession, NOON, Some(NOON + HOUR));
+        g.gap.during_session = true;
+        assert_eq!(
+            gap_line(&g.gap, 0, EN),
+            "-- observation gap (engine stopped), 12:00 → 13:00 · unattributed · \
+             an agent session was active"
+        );
+    }
+
+    #[test]
+    fn a_gap_in_json_is_an_unattributed_gap_entry() {
+        use gitraptor_api::methods::GapCauseView as C;
+        let g = gap(C::DaemonDownDuringSession, NOON, Some(NOON + HOUR));
+        let value = json_with_gaps(&[Entry::Gap(&g)]);
+        assert_eq!(
+            value[0],
+            json!({
+                "kind": "gap",
+                "repo_id": "r",
+                "gap_id": "g-1",
+                "cause": "daemon-down-during-session",
+                "started_utc_ms": NOON,
+                "ended_utc_ms": NOON + HOUR,
+                "during_session": false,
+                "actor": "unattributed",
+            })
+        );
+        let open = gap(C::DaemonDown, NOON, None);
+        assert_eq!(
+            json_with_gaps(&[Entry::Gap(&open)])[0]["ended_utc_ms"],
+            Value::Null
+        );
     }
 }

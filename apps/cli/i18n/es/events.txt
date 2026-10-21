@@ -36,3 +36,21 @@ event.push = push a {branch}
 event.reconciled = reconciliación: cambios encontrados tras un hueco (no es un comando de Git)
 event.reset = reset en {branch} sin moverla
 event.reset-detached = reset con HEAD separado
+
+events.gaps-restart-engine = el motor en marcha es anterior a este raptor y no puede listar los huecos de observación: reinícialo con `raptor daemon stop`
+events.gap_line = -- hueco de observación ({cause}), {from} → {to} · sin atribuir
+events.gap_open = -- hueco de observación ({cause}), desde las {from} (abierto) · sin atribuir
+events.gap_during_session = había una sesión de agente activa
+
+gap.cause.machine-off = equipo apagado
+gap.cause.daemon-down = motor detenido
+gap.cause.daemon-down-during-session = motor detenido
+gap.cause.daemon-stopped = motor detenido
+gap.cause.repo-retired = repo retirado
+gap.cause.git-unavailable = Git no disponible
+gap.cause.profile-lost = perfil perdido
+gap.cause.store-corrupt = almacén dañado
+gap.cause.watcher-overflow = el vigilante de cambios se desbordó
+gap.cause.stream-recreated = flujo de cambios recreado
+gap.cause.periodic-reconciliation = revisión periódica
+gap.cause.dormant = repo inactivo

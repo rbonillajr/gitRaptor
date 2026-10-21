@@ -3,7 +3,7 @@
 use std::process::ExitCode;
 
 use gitraptor_api::messages::{EventsHistoryParams, EventsHistoryResult, GitEventView};
-use gitraptor_api::methods;
+use gitraptor_api::methods::{self, EventsGapsParams, EventsGapsResult};
 use gitraptor_api::untrusted::sanitize;
 
 use super::Global;
@@ -91,13 +91,66 @@ fn events_command(json: bool, limit: u32, all: bool) -> ExitCode {
         all.len().saturating_sub(limit as usize)
     };
     let all = &all[skip..];
+    let gaps = match gaps_of(&mut client, &snapshot.repos, all, all_pages) {
+        Ok(gaps) => gaps,
+        Err(code) => return code,
+    };
+    let entries = events::interleave(all, &gaps);
     if json {
-        match serde_json::to_string_pretty(&events::json(all)) {
+        match serde_json::to_string_pretty(&events::json_with_gaps(&entries)) {
             Ok(text) => println!("{text}"),
             Err(_) => return ExitCode::FAILURE,
         }
     } else {
-        print!("{}", events::text(all));
+        // A gap carries only UTC: it is shown at the offset of the events, as the
+        // Guardrails log does for its unlogged periods.
+        let offset_s = all.first().map_or(0, |e| e.utc_offset_s);
+        print!("{}", events::text_with_gaps(&entries, offset_s));
     }
     ExitCode::SUCCESS
+}
+
+/// The gaps of every repo from the oldest event shown of that repo, so each one
+/// sits among the events around it. With `--all`, every gap; for a repo with no
+/// event shown, the latest ones. An engine that does not offer `events.gaps` is
+/// said once and the events still show.
+fn gaps_of(
+    client: &mut gitraptor_core::client::Client,
+    repos: &[gitraptor_api::messages::RepoView],
+    shown: &[GitEventView],
+    all_pages: bool,
+) -> Result<Vec<events::GapEntry>, ExitCode> {
+    const CMD: &str = "raptor events";
+    let mut gaps = Vec::new();
+    if !offers(client, methods::EVENTS_GAPS) {
+        eprintln!("{CMD}: {}", t("events.gaps-restart-engine", &[]));
+        return Ok(gaps);
+    }
+    for repo in repos {
+        let since_utc_ms = if all_pages {
+            Some(0)
+        } else {
+            shown
+                .iter()
+                .filter(|e| e.repo_id == repo.repo_id)
+                .map(|e| e.observed_utc_ms)
+                .min()
+        };
+        let params = EventsGapsParams {
+            repo_id: repo.repo_id.clone(),
+            since_utc_ms,
+            limit: None,
+        };
+        match client.call::<_, EventsGapsResult>(methods::EVENTS_GAPS, &params) {
+            Ok(page) => gaps.extend(page.gaps.into_iter().map(|gap| events::GapEntry {
+                repo_id: repo.repo_id.clone(),
+                gap,
+            })),
+            Err(err) => {
+                eprintln!("{CMD}: {}", sanitize(&err.to_string()));
+                return Err(ExitCode::FAILURE);
+            }
+        }
+    }
+    Ok(gaps)
 }
