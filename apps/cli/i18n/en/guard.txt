@@ -231,6 +231,7 @@ guard.confirm.source = Team settings from {reference} at commit {commit}
 guard.confirm.source-none = The main branch has no copy to read team settings from
 guard.confirm.base = Base branch: {from} -> {to}
 guard.confirm.base-same = Base branch: {to} (unchanged)
+guard.confirm.unguarded = - {branch} stops being protected as a base branch
 guard.confirm.relaxations = Relaxations ({count})
 guard.confirm.relaxation = - {key}: {before} -> {after}
 guard.confirm.question = Confirm the base branch {to}? [y/N]

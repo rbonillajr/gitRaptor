@@ -76,6 +76,12 @@ pub fn view(plan: &ConfirmPlan) -> ConfirmPlanView {
         base: BaseChangeView {
             from: plan.base.from.as_ref().map(|b| name(b.as_str())),
             to: name(plan.base.to.as_str()),
+            unguarded: plan
+                .base
+                .unguarded
+                .iter()
+                .map(|b| name(b.as_str()))
+                .collect(),
         },
         relaxations: plan
             .relaxations

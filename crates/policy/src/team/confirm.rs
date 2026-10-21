@@ -63,6 +63,9 @@ pub struct Relaxation {
 pub struct BaseChange {
     pub from: Option<RefName>,
     pub to: RefName,
+    /// Branches guarded today (`guarded_base_branches()`) that stop being guarded once the
+    /// plan applies: confirming them away waits for the window too.
+    pub unguarded: Vec<RefName>,
 }
 
 /// What the developer saw: source ref and commit, floor blob, resolved base and what was
@@ -110,9 +113,10 @@ pub struct ConfirmPlan {
 
 impl ConfirmPlan {
     /// The confirmation waits for the cancellable window (D4): the base differs from the
-    /// reference, or something relaxes. A missing confirmed floor always waits.
+    /// reference, a branch guarded today stops being guarded, or something relaxes. A missing confirmed floor always waits.
     pub fn needs_window(&self) -> bool {
         self.base.from.as_ref() != Some(&self.base.to)
+            || !self.base.unguarded.is_empty()
             || !self.relaxations.is_empty()
             || self.reference_missing
     }
@@ -208,6 +212,32 @@ fn authorship_value(policy: Policy) -> Vec<String> {
     vec![mode.to_owned()]
 }
 
+/// The keys of the closed list that explain why `op` relaxed: a `deny` or `ask` list that lost
+/// it, an `allow` list that gained it, or the safe minimum turned off (force-push only).
+/// `Err(Unshowable)` when none does: the plan would hide part of the change (fail-closed).
+fn explain(
+    op: Operation,
+    minimum_off: bool,
+    before: &[(RelaxedKey, Vec<Operation>)],
+    after: &[(RelaxedKey, Vec<Operation>)],
+) -> Result<Vec<RelaxedKey>, Unshowable> {
+    let mut keys = Vec::new();
+    for ((key, b), (_, a)) in before.iter().zip(after) {
+        let changed = if *key == RelaxedKey::PermissionsAllow {
+            a.contains(&op) && !b.contains(&op)
+        } else {
+            b.contains(&op) && !a.contains(&op)
+        };
+        if changed {
+            keys.push(*key);
+        }
+    }
+    if keys.is_empty() && !(op == Operation::ForcePush && minimum_off) {
+        return Err(Unshowable);
+    }
+    Ok(keys)
+}
+
 /// Every key of the closed list in which `after` is less restrictive than `before`, in key
 /// order. `Err(Unshowable)` when an effective permission relaxes and no key of the list
 /// explains it (fail-closed).
@@ -236,21 +266,7 @@ pub fn relaxations(
         if ea.permission(op) >= eb.permission(op) {
             continue;
         }
-        let mut explained = op == Operation::ForcePush && minimum_off;
-        for ((key, b), (_, a)) in lb.iter().zip(&la) {
-            let changed = if *key == RelaxedKey::PermissionsAllow {
-                a.contains(&op) && !b.contains(&op)
-            } else {
-                b.contains(&op) && !a.contains(&op)
-            };
-            if changed {
-                keys.insert(*key);
-                explained = true;
-            }
-        }
-        if !explained {
-            return Err(Unshowable);
-        }
+        keys.extend(explain(op, minimum_off, &lb, &la)?);
     }
 
     let mut out = Vec::new();
@@ -316,9 +332,14 @@ fn push_field(out: &mut String, field: Option<&str>) {
 fn fingerprint(
     config: &TeamConfig,
     resolved: &RefName,
+    unguarded: &[RefName],
     previous: Option<&Confirmed>,
 ) -> Fingerprint {
     let mut out = String::from("v1;");
+    push_field(&mut out, Some(&unguarded.len().to_string()));
+    for b in unguarded {
+        push_field(&mut out, Some(b.as_str()));
+    }
     let copy = config.main_branch.copy.as_ref();
     push_field(&mut out, copy.map(|c| c.reference.as_str()));
     push_field(&mut out, copy.map(|c| c.commit.as_str()));
@@ -385,16 +406,29 @@ pub fn plan(config: &TeamConfig, confirmed: Option<&Confirmed>) -> Result<Confir
     );
     let relaxations = relaxations(before, FloorView::of(&config.floor))
         .map_err(|_| Refusal::UnshowableRelaxation)?;
-    if confirmed.is_some() && !missing && from == to && (identical || relaxations.is_empty()) {
+    // Once applied only the confirmed base is guarded: whatever else is guarded today stops.
+    let unguarded: Vec<RefName> = config
+        .guarded_base_branches()
+        .iter()
+        .filter(|b| **b != to)
+        .cloned()
+        .collect();
+    if confirmed.is_some()
+        && !missing
+        && from == to
+        && unguarded.is_empty()
+        && (identical || relaxations.is_empty())
+    {
         return Err(Refusal::NothingToConfirm);
     }
     Ok(ConfirmPlan {
         source: config.main_branch.copy.clone(),
         floor_blob: config.floor.blob.clone(),
-        fingerprint: fingerprint(config, &to, confirmed),
+        fingerprint: fingerprint(config, &to, &unguarded, confirmed),
         base: BaseChange {
             from: Some(from),
             to,
+            unguarded,
         },
         relaxations,
         reference_missing: missing,
@@ -431,6 +465,38 @@ mod tests {
         let off = settings(r#"{"permissions":{"deny":["push"],"disableSafeMinimum":true}}"#);
         assert!(relaxes(view(&only_push), view(&off)));
         assert!(!relaxes(view(&only_push), view(&deny_fp)));
+    }
+
+    /// Fail-closed: a relaxed permission no key of the closed list explains is unshowable. With
+    /// today's settings model every effective relaxation is a list change or the minimum, so the
+    /// branch is reached only through these inputs.
+    #[test]
+    fn an_unexplained_relaxation_is_unshowable() {
+        let lists = |ops: Vec<Operation>| {
+            vec![
+                (RelaxedKey::PermissionsAllow, Vec::new()),
+                (RelaxedKey::PermissionsAsk, Vec::new()),
+                (RelaxedKey::PermissionsDeny, ops),
+            ]
+        };
+        let same = lists(vec![Operation::Push]);
+        assert_eq!(
+            explain(Operation::Push, false, &same, &same),
+            Err(Unshowable)
+        );
+        assert_eq!(
+            explain(Operation::Merge, true, &same, &same),
+            Err(Unshowable)
+        );
+        // The minimum explains force-push alone.
+        assert_eq!(
+            explain(Operation::ForcePush, true, &same, &same),
+            Ok(vec![])
+        );
+        assert_eq!(
+            explain(Operation::Push, false, &same, &lists(Vec::new())),
+            Ok(vec![RelaxedKey::PermissionsDeny])
+        );
     }
 
     #[test]

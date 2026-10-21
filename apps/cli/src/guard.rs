@@ -33,6 +33,8 @@ use crate::{command_path, engine, error_text, refusal_text, repo_error, shown};
 
 mod confirm;
 #[cfg(test)]
+mod confirm_tests;
+#[cfg(test)]
 mod deny_text_tests;
 mod snapshot_required;
 #[cfg(test)]
