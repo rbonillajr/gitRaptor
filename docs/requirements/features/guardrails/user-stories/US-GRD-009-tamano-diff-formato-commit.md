@@ -14,6 +14,7 @@ related:
     - BR-GRD-001
   stories:
     - US-GRD-008
+    - US-MCP-009
 tags:
   - guardrails
   - politicas
@@ -96,6 +97,17 @@ Ejemplos:
 | revierte un commit con el mensaje que propone Git | se ejecuta |
 | hace un commit de corrección (fixup) de un commit con formato | se ejecuta |
 | hace un commit normal con el mensaje "Merge stuff" | no se ejecuta |
+
+**Escenario: Por MCP, el mensaje fuera de formato se deniega con el mismo motivo que por el hook** (de US-MCP-009)
+
+Dado el repo "shop" en la allowlist del MCP con la convención de commit del equipo "tipo(ámbito): descripción"
+Cuando "claude-1" pide `safe_commit` con el mensaje "arreglos"
+Entonces el commit se rechaza con la regla de la convención y la acción
+  Y el código de regla es el mismo que daría la capa de hooks para ese commit
+  Y la decisión queda registrada una sola vez con capa "mcp"
+  Y el worktree no cambia
+
+_Escenario movido desde US-MCP-009 (DS-US-MCP-009 D14): Decisión del orquestador (2026-10-21), validada por PO. Se prueba cuando existan esta historia y US-MCP-009._
 
 ## Requisitos Técnicos
 

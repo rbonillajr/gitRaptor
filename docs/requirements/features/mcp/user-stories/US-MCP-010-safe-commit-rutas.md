@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-21
 domain: GRP
 epic: E-001
 feature: mcp
@@ -43,7 +43,7 @@ BR-MCP-VAL-001 (rutas relativas, literales, con tope) · BR-MCP-EDGE-010 (sin se
 
 ## Dependencias
 
-- **Historias**: US-MCP-009, US-MCP-011 (va antes: las dos tocan los parámetros de `safe_commit`, D-11). De motor-local: US-GRP-011 (sesiones de un worktree compartido).
+- **Historias**: US-MCP-009 (fija el contrato de parámetros de `safe_commit`; va antes). Con US-MCP-011 no hay orden: las dos van después de US-MCP-009 (D-11, v1.4). De motor-local: US-GRP-011 (sesiones de un worktree compartido).
 - **Externas**: ADR-MCP-001 (DEP-MCP-1, no existe) y ADR-CKP-002 (**propuesto**; la validación de pathspec literal llega vía ADR-CKP-002, DEP-MCP-2): bloqueos de arquitectura. Tope de rutas por llamada: S-MCP-1.
 - **Transversal**: el corpus de seguridad (traversal, UNC, inyección de argumentos) verifica esta historia; el comportamiento con rutas UNC y enlaces en Windows y Linux queda para la etapa de validación multiplataforma.
 
@@ -108,4 +108,4 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica.
-- **Dev Spec:** pendiente (Arquitecto, tras ADR-MCP-001 y ADR-CKP-002).
+- **Dev Spec:** [DS-US-MCP-010](../dev-specs/US-MCP-010-dev-spec.md) (validada por Arquitecto y PO el 2026-10-21).

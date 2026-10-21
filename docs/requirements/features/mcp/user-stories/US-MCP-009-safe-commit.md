@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-04
-updated: 2026-10-08
+updated: 2026-10-21
 domain: GRP
 epic: E-001
 feature: mcp
@@ -56,10 +56,12 @@ BR-MCP-WF-001 (flujo de una escritura) · BR-MCP-ELIG-002 (`safe_commit`: nunca 
 - **Dueña de la operación del catálogo**: esta historia es dueña de `commit` y fija en su Dev Spec el flujo de escritura que reutilizan US-MCP-008, 018 y 019.
 - **Externas**: ADR-MCP-001 (DEP-MCP-1, no existe). ADR-CKP-002 (**propuesto**, en docs/arch-cockpit): `safe_commit` → operación `commit` del catálogo; el ejecutor respeta hooks y config del usuario. DEP-MCP-2 y DEP-MCP-5 (correspondencia herramienta → operación normalizada) se resuelven vía ADR-CKP-002. ADR-MCP-001 y ADR-CKP-002 son bloqueos de arquitectura.
 - **Límites por solicitante** (S-03 completo, **condición de entrada dura**): cupo de rate limit compartido entre las conexiones del mismo solicitante y ≤ 8 conexiones por solicitante. US-MCP-008 solo cubre la cuota durable del snapshot; el resto pasa a esta historia (Enmienda (2026-10-08, US-MCP-008) de ADR-MCP-001) y es criterio de salida de M4 (v0.1.0).
-- **Flujo heredado**: hereda de US-MCP-008 el cubo de escrituras, el mapeo de errores y la resolución del ámbito. No hereda la llamada única: `safe_commit` necesita una segunda llamada para reconocer avisos (BR-MCP-WF-001; D-3 de `user-stories.md`).
+- **Flujo heredado**: hereda de US-MCP-008 el cubo de escrituras, el mapeo de errores y la resolución del ámbito. `commit` no tiene avisos en `catalogVersion` 1, así que `safe_commit` se resuelve en una sola llamada; el parámetro `acknowledge` llega cuando `commit` tenga avisos (BR-MCP-WF-001; D-3 de `user-stories.md`, v1.4).
 - **Escritura rechazada por Guardrails** (D5 de DS-US-MCP-013): `raptor-mcp` nunca rechaza por ningún campo de la vista previa (ni `decision` ni `warnings`); pasa `acknowledge` como `accepted_warnings` y decide `run`, para que la decisión quede registrada.
 - **Desbloquea**: US-GRD-016 (Guardrails), junto con US-MCP-002 y US-MCP-003.
-- **Transversal**: ⚠️ **ASSUMPTION**: tiempo máximo de una escritura en la capa `mcp` de 300 s (supuesto de ADR-CKP-002, S-MCP-1); al vencer, la respuesta declara el estado y el id de la operación.
+- **Transversal**: tiempo máximo de una escritura en la capa `mcp` de 300 s (ADR-CKP-002, S-MCP-1). `safe_commit` espera su desenlace hasta ese tope más la cola del cerrojo y el snapshot previo, y no responde `running` hasta que exista US-MCP-017 (DS-US-MCP-009 D2). Si la conexión se corta, la respuesta es `outcome-unknown` sin id, con la acción de revisar `status` o `raptor timeline`.
+- **Liberación** (DS-US-MCP-009 G2, G3 y G4): se libera junto con US-MCP-010 (rutas) y US-MCP-011 (`expect_worktree`, que esta historia reserva por nombre y rechaza hasta entonces), y con US-MCP-007 (confused deputy) implementada. No son `blocked_by`: las tareas de esta historia se pueden construir hoy.
+- **Convención de formato**: el ejemplo de la convención "tipo(ámbito): descripción" por MCP es de US-GRD-009 (escenario de paridad por MCP). Decisión del orquestador (2026-10-21), validada por PO.
 
 ## Criterios de Aceptación
 
@@ -75,9 +77,9 @@ Entonces existe un snapshot previo de "shop-feat-a" anterior al commit
 
 **Escenario: Guardrails deniega con el mismo motivo que daría el hook**
 
-Dado el repo "shop" con la convención de commit del equipo "tipo(ámbito): descripción"
-Cuando "claude-1" pide `safe_commit` con el mensaje "arreglos"
-Entonces el commit se rechaza con la regla de la convención y la acción
+Dado el repo "shop" con la política de autoría "agents-commit", que exige el trailer del agente
+Cuando "claude-1" pide `safe_commit` con un mensaje válido sin el trailer "Co-Authored-By: Claude"
+Entonces el commit se rechaza con la regla "agents-commit" y la acción
   Y el motivo es el mismo que daría la capa de hooks para ese commit
   Y la decisión queda registrada una sola vez con capa "mcp"
   Y el worktree no cambia
@@ -140,6 +142,10 @@ Entonces recibe el mismo rechazo con el mismo motivo
 
 **Criterio de certificación**: el servidor nunca pide confirmación al cliente del agente (sin elicitation; BR-MCP-WF-004).
 
+**Criterio de certificación**: "el mismo motivo que daría el hook" significa el mismo código de regla; el texto legible compartido con el hook queda diferido (DS-US-MCP-009 D11).
+
+**Criterio de certificación**: si el cliente corta o pasa a segundo plano la llamada antes de que termine, el commit termina igualmente y figura en el timeline (BR-MCP-TIME-002). ⚠️ **ASSUMPTION**: el tope real de Claude Code para una llamada no está verificado.
+
 ## Requisitos Técnicos
 
 _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
@@ -147,4 +153,4 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica.
-- **Dev Spec:** pendiente (Arquitecto, tras ADR-MCP-001 y ADR-CKP-002).
+- **Dev Spec:** [DS-US-MCP-009](../dev-specs/US-MCP-009-dev-spec.md) (validada por Arquitecto y PO el 2026-10-21).
