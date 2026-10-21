@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-21
 domain: GRP
 epic: E-001
 feature: mcp
@@ -44,7 +44,7 @@ BR-MCP-VAL-005 (parte: `expect_worktree` solo estrecha) · BR-MCP-EDGE-006 (suba
 
 - **Historias**: US-MCP-009. De la Time Machine: US-TMC-015 (operación de Git en curso).
 - **Externas**: ADR-MCP-001 (DEP-MCP-1, no existe): `expect_worktree`. ADR-CKP-002 (**propuesto**; DEP-MCP-2 vía ADR-CKP-002): las precondiciones de operación en curso y HEAD separado son del ejecutor y se revalidan antes de ejecutar (Q-MCP-30). Bloqueos de arquitectura.
-- **Relación**: `safe_rebase` (US-MCP-018) y `create_worktree` (US-MCP-019) reutilizan `expect_worktree` y estas precondiciones. US-MCP-010 va después de esta (las dos tocan los parámetros de `safe_commit`).
+- **Relación**: `safe_rebase` (US-MCP-018) y `create_worktree` (US-MCP-019) reutilizan `expect_worktree` y estas precondiciones. US-MCP-009 reserva ya el parámetro `expect_worktree` de `safe_commit` y lo rechaza como `invalid-params` hasta que esta historia lo active (DS-US-MCP-009 D13); con US-MCP-010 no hay orden (D-11, v1.4).
 
 ## Criterios de Aceptación
 
