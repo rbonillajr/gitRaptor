@@ -34,6 +34,18 @@ use crate::profile::GapCause;
 pub use repo::{
     EventPlace, GapClassification, RefsReadError, RefsView, WorktreeRefs, classify, classify_gap,
 };
+
+/// The repo's local branches, `name → commit`, as the refs view and the engine's calm read them.
+///
+/// # Errors
+///
+/// [`RefsReadError::Listing`] when the listing fails.
+// Stub: the shared reading is not wired yet.
+pub fn read_local_branches(
+    _reader: &gitraptor_git::RepoReader,
+) -> Result<std::collections::BTreeMap<String, String>, RefsReadError> {
+    Ok(std::collections::BTreeMap::new())
+}
 pub use sweep::Print;
 pub use watchers::WatchBackend;
 use watchers::Watchers;

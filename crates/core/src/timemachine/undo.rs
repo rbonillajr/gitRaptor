@@ -271,7 +271,7 @@ pub(crate) fn external_events(
 
 /// [`external_events`] over what the oplog already answered: it reads nothing, so a caller that
 /// asks for many worktrees reads the oplog once and holds its lock only for that.
-pub(crate) fn external_events_in(
+pub fn external_events_in(
     ops: &[OperationView],
     snaps: &[SnapshotView],
     raw: &RawSide,

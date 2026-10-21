@@ -90,6 +90,19 @@ impl RepoMarks {
         self.get(repo_id).seq.fetch_max(seq, Ordering::AcqRel);
     }
 
+    /// The engine persisted a batch up to `seq`, read with these local branches of the repo whose
+    /// common directory is `common_dir`.
+    // Stub: the refs barrier is not wired yet; only the mark moves.
+    pub fn set_persisted(
+        &self,
+        repo_id: &str,
+        seq: i64,
+        _common_dir: &Path,
+        _branches: std::collections::BTreeMap<String, String>,
+    ) {
+        self.set_seq(repo_id, seq);
+    }
+
     pub fn seq(&self, repo_id: &str) -> i64 {
         self.get(repo_id).seq.load(Ordering::Acquire)
     }
