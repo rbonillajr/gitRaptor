@@ -18,15 +18,31 @@ use crate::channel::authz::{AcceptedPeer, Checks};
 use crate::channel::marks::ExecutorMarks;
 use crate::channel::requester;
 
+use super::evaluate::AskedBy;
+
 /// The agent behind the hook client, or `None` for "unattributed".
 pub fn resolve(
     peer: AcceptedPeer,
     checks: &Checks<'_>,
     marks: Option<&ExecutorMarks>,
 ) -> Option<AgentKind> {
-    match requester::resolve(peer, checks, marks).ok()?.who.actor {
-        Actor::Agent { kind, .. } => Some(kind),
-        Actor::Unattributed => None,
+    resolve_for_ask(peer, checks, marks).0
+}
+
+/// [`resolve`], and who an `ask` is applied to: the agent, the person (the walk proved the
+/// client unattributed) or nobody proved (the walk could not verify the client: an unreadable
+/// process, a changed identity, an unvouched ancestry). Only a proved person passes an `ask`.
+pub fn resolve_for_ask(
+    peer: AcceptedPeer,
+    checks: &Checks<'_>,
+    marks: Option<&ExecutorMarks>,
+) -> (Option<AgentKind>, AskedBy) {
+    match requester::resolve(peer, checks, marks) {
+        Ok(r) => match r.who.actor {
+            Actor::Agent { kind, .. } => (Some(kind), AskedBy::Agent),
+            Actor::Unattributed => (None, AskedBy::Person),
+        },
+        Err(_) => (None, AskedBy::Unproved),
     }
 }
 

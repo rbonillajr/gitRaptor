@@ -339,6 +339,10 @@ pub struct Caller {
     /// The `git` processes above the client, nearest first, for a `reference-transaction`;
     /// `None` when they were not read (nothing is proved: an unknown chain).
     pub chain: Option<Chain>,
+    /// Who an `ask` is applied to, as the daemon resolved it: an actor it could not verify is
+    /// [`AskedBy::Unproved`], never the person. `None` when the channel did not resolve it (a
+    /// caller built in-process): [`AskedBy::of`] the `actor` given.
+    pub asked_by: Option<AskedBy>,
 }
 
 /// [`serve`] for a caller the channel resolved.
@@ -448,13 +452,21 @@ pub fn serve_audited(registry: &GuardRegistry, params: &EvaluateParams, caller: 
         unregistered_bases: None,
     };
     let chain = caller.chain.clone().unwrap_or_default();
-    decide_op(registry, &input, &params.operation, None, &chain)
+    let asked_by = caller.asked_by.unwrap_or_else(|| AskedBy::of(caller.actor));
+    decide_op(registry, &input, &params.operation, None, &chain, asked_by)
 }
 
 /// The decision of `operation` (ADR-GRD-003 § 1 to § 4): the one function the hooks and the
 /// executor's plans share.
 pub fn decide(registry: &GuardRegistry, input: &DecideInput<'_>, operation: &Operation) -> Served {
-    decide_op(registry, input, operation, None, &Chain::default())
+    decide_op(
+        registry,
+        input,
+        operation,
+        None,
+        &Chain::default(),
+        AskedBy::of(input.actor),
+    )
 }
 
 /// The decision of a plan: every operation decided with its preloaded facts, combined as the
@@ -504,6 +516,7 @@ fn decide_op(
     operation: &Operation,
     preset: Option<&Preset>,
     chain: &Chain,
+    asked_by: AskedBy,
 ) -> Served {
     let (evaluation, applied, ignored) = evaluate_op(registry, input, operation, preset, chain);
     let Some(evaluation) = evaluation else {
@@ -511,7 +524,7 @@ fn decide_op(
     };
     // With the permissions the daemon resolved the actor: an `ask` depends on it (Q-GRD-46).
     let mut out = if input.rules.permissions {
-        decision_for(evaluation, AskedBy::of(input.actor))
+        decision_for(evaluation, asked_by)
     } else {
         decision(evaluation)
     };
@@ -638,13 +651,15 @@ fn evaluate_op(
         commit.policies = rules;
     }
     if permissions {
-        // A team level that cannot be read adds nothing to the minimum, which stays active.
-        if let Some(Ok(layers)) = &layers {
-            let effective = layers.permissions();
-            commit.classified =
-                super::permissions::classified(&reader, operation, &effective, || chain.clone());
-            commit.permissions = Some(effective);
-        }
+        // A team level the full read cannot load falls back to what the hook client would
+        // apply on its own: never less than the minimum plus the readable floor.
+        let effective = match &layers {
+            Some(Ok(layers)) => layers.permissions(),
+            _ => super::permissions::team_only(&reader, input.worktree),
+        };
+        commit.classified =
+            super::permissions::classified(&reader, operation, &effective, || chain.clone());
+        commit.permissions = Some(effective);
     }
     let applied =
         (commit.actor.is_some() && commit.facts.is_some()).then(|| commit.authorship.policy.mode());
