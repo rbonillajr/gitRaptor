@@ -275,18 +275,21 @@ pub(super) fn cause_view(cause: GapCause) -> GapCauseView {
 /// Whether an agent session was present when the engine stopped (SEC-13).
 /// Only the causes that stop the engine can say so; the observer's own gaps
 /// are never "during a session". A session counts when it started before the
-/// gap and did not end before it: its end, or without one the time of its
-/// last `session-*` event (a session with neither is still open), is not earlier than the
-/// start of the gap.
+/// gap and did not end before it: its end, or the time of a last `session-end`
+/// event, is not earlier than the start of the gap. A session with no end whose last
+/// event is `session-start` (or any other) is still open (P6: a stop command with an
+/// active session is a gap during a session).
 pub(super) fn during_session(gap: &Gap, sessions: &[SessionWithState]) -> bool {
     match gap.cause {
         GapCause::DaemonDownDuringSession => true,
         GapCause::DaemonDown | GapCause::DaemonStopped => sessions.iter().any(|(session, last)| {
-            // No end and no `session-*` event after its start: it is still open.
-            let last_seen = session
-                .ended_ms
-                .or_else(|| last.as_ref().map(|(_, ms)| *ms))
-                .unwrap_or(i64::MAX);
+            // Without an end, a session is still open unless its last event
+            // is `session-end`: `session-start` alone says it was running.
+            let last_seen = match (session.ended_ms, last) {
+                (Some(end), _) => end,
+                (None, Some((kind, ms))) if kind == "session-end" => *ms,
+                (None, _) => i64::MAX,
+            };
             session.started_ms < gap.started_ms && last_seen >= gap.started_ms
         }),
         _ => false,
@@ -619,6 +622,13 @@ mod tests {
             &gap(GapCause::DaemonDown, 100),
             &unknown_end
         ));
+    }
+
+    #[test]
+    fn an_open_session_marks_a_stop_during_the_gap() {
+        let open = [(session(5, None), Some(("session-start".to_owned(), 5)))];
+        assert!(during_session(&gap(GapCause::DaemonStopped, 100), &open));
+        assert!(during_session(&gap(GapCause::DaemonDown, 100), &open));
     }
 
     #[test]
