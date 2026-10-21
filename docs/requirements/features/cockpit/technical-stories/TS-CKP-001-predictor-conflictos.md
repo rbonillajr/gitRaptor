@@ -77,7 +77,7 @@ tags: [cockpit, prediccion-conflictos, merge-en-seco, solape, daemon, nfr-01, se
 
 ## Estado de la implementación (2026-10-21)
 
-Implementado en: PR #<pendiente> (en parte, PR-A: T001 a T005 y T011 de DS-TS-CKP-001, más la excepción G9 de `static_check.rs`).
+Implementado en: PR #275 (en parte, PR-A: T001 a T005 y T011 de DS-TS-CKP-001, más la excepción G9 de `static_check.rs`).
 
 - **Hecho:** las rutas sin commitear de cada worktree se retienen en memoria y llegan al predictor (`worktree_recomputed`, `repo_tier_changed`). El módulo `predict` del daemon calcula los pares, el trabajo propio y el solape, con los estados, la caché por triple y la cola coalescente. El merge en seco en memoria (`gitraptor_git::dry_merge`) usa `gix_merge::commit` sin drivers, filtros ni atributos, con extractores de conflictos y de hunks y la marca `has_merge_rule` (D14). El corpus R-SYN se compara contra `git merge-tree`.
 - **Falta:** T006, el proceso trabajador, y T007, el pool `utility`, bloqueados por G5 (TS-GRP-005 sin implementar). T009, la publicación, bloqueada por G2 (forma del contrato). T010 (salvo G9), T012 y T013 van por arrastre, igual que ejecutar a mano R-REAL (`real_git_corpus`, que aún no está escrito). Mientras falten T006 y T007, el módulo encola los merges en seco pero ninguno se ejecuta, y no se publica nada.
