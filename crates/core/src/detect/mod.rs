@@ -657,6 +657,25 @@ impl Detector {
         self.inner.lock().registered.remove(session_id);
     }
 
+    /// Stops following the sessions of a worktree Git no longer registers, detected and
+    /// registered, and returns their ids in start order. It does not emit a change: the caller
+    /// ends them with the cause that applies.
+    pub fn end_worktree(&self, repo_id: &str, worktree: &Path) -> Vec<String> {
+        let mut st = self.inner.lock();
+        let mut ended: Vec<(i64, String)> = Vec::new();
+        let mut take = |live: &Live| {
+            let here = live.repo_id == repo_id && live.worktree == worktree;
+            if here {
+                ended.push((live.started_ms, live.session_id.clone()));
+            }
+            !here
+        };
+        st.live.retain(|_, l| take(l));
+        st.registered.retain(|_, r| take(&r.live));
+        ended.sort();
+        ended.into_iter().map(|(_, id)| id).collect()
+    }
+
     /// Stops detecting in a repo. Its sessions are not closed: when it is
     /// added again, [`Detector::watch_repo`] reconciles them.
     pub fn forget_repo(&self, repo_id: &str) {
@@ -913,6 +932,11 @@ impl Inner {
         }
         // Appeared: a Claude Code process in an observed worktree.
         let place = |st: &State, pid: u32| -> Option<(String, PathBuf)> {
+            // A folder that no longer exists places nothing: its path would fall into the
+            // parent worktree and start a session there.
+            if self.procs.cwd_gone(pid) {
+                return None;
+            }
             let cwd = self.procs.cwd(pid)?;
             st.repos
                 .iter()
