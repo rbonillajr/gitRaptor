@@ -2,13 +2,13 @@
 id: SPIKE-CKP-001
 title: "Predicción de conflictos en ≤ 5 s p95 sin escribir en el repo: merge en memoria frente a almacén en el perfil"
 type: spike
-status: draft
+status: partially-implemented
 feature: cockpit
 domain: GRP
 priority: critical
 complexity: medium
 created: 2026-10-04
-updated: 2026-10-09
+updated: 2026-10-20
 related:
   adrs: [ADR-CKP-001, ADR-GRP-009, ADR-GRP-006, ADR-GRP-011, ADR-TMC-001]
   stories: [US-CKP-006, INF-GRP-001, INF-GRP-002]
@@ -92,3 +92,23 @@ Las opciones son **(a)** merge en memoria con `gix` (`merge_trees` sobre una ins
 ### Time-box
 
 ⚠️ **ASSUMPTION**: 1,5 semanas en macOS para las dos opciones. Linux y Windows: **Pendiente: etapa de validación multiplataforma**, con el mismo procedimiento del README del prototipo.
+
+## Resultado (2026-10-20)
+
+**Decisión del orquestador (2026-10-20), validada por Arquitecto.** Entregable: [Research Brief de SPIKE-CKP-001](../research/SPIKE-CKP-001-resultados.md), con la evidencia en `spikes/conflict-prediction/results/indicative-2026-10-20/`.
+
+- **Mecanismo**: opción (a), `gix_merge::commit` con plataformas propias, en un **proceso trabajador** (el propio binario). Salida S4 con A2-W → rama R-A2W de [DS-TS-CKP-001](../dev-specs/TS-CKP-001-predictor-conflictos.md). La opción (b) cae por el criterio de repo intacto: Git refresca el mtime de objetos del repo a través de los alternates en 2.38, 2.50 y 2.56.
+- **Frescura**: el recálculo tras un commit tarda 96 ms de p95 frente a 5 s; el objetivo pasa a gate en INF-GRP-002.
+- **Fidelidad**: 100 % y 0 falsos negativos en el corpus sintético y en la demo del BRD § 13; 93,4 % en `git/git`, con 3 pares con falso negativo. El PO corrige el umbral (ADR-CKP-001, Enmienda 2026-10-20, E4).
+- **Cotas**: dentro del proceso no se pueden acotar el tiempo ni la memoria; el trabajador los corta a 2 s y a 512 MiB.
+- **Sin prefiltro.**
+- Aplicado en [ADR-CKP-001](../../../../architecture/decisions/ADR-CKP-001-prediccion-conflictos-merge-en-seco.md) y [ADR-GRP-009](../../../../architecture/decisions/ADR-GRP-009-frontera-solo-lectura-git.md), Enmiendas (2026-10-20, SPIKE-CKP-001).
+
+## Estado de la implementación (2026-10-20)
+
+Implementado en: PR #<pendiente>.
+
+Estado: implementación parcial. Pendiente:
+- Fase (b) con la máquina en reposo (`measure.sh`): confirma las cifras y mide el p95 del motor con la ráfaga del predictor (E9).
+- Auditoría de `exec` con el tracer del kernel, si hay permisos.
+- Linux y Windows: *Pendiente: etapa de validación multiplataforma*.

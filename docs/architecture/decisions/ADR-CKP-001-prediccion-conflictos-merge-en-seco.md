@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
-updated: 2026-10-09
+updated: 2026-10-20
 deciders: [Orquestador (delegación de Rene Bonilla, 2026-10-04)]
 domain: GRP
 feature: cockpit
@@ -21,6 +21,8 @@ tags: [cockpit, prediccion-conflictos, merge-en-seco, gitoxide, gix-merge, merge
 **Decisión del orquestador (2026-10-04), validada por Arquitecto, PO y security-expert** (pasada de endurecimiento del 2026-10-04: ver "Revisión de seguridad (2026-10-04)"). Se acepta con el **mecanismo condicionado a SPIKE-CKP-001**, igual que ADR-GRD-001 y ADR-GRD-002 se aceptaron antes de que SPIKE-GRD-001 los enmendara: quedan decididos los invariantes (nunca escribir en el repo ni ejecutar programas del usuario, dos niveles, estados con antigüedad, límites declarados, publicación por el motor) y el orden de preferencia de los mecanismos; SPIKE-CKP-001 elige entre ellos con los criterios de salida de M-02, M-06 y L-04 (§ 1 y § 5) y enmienda este ADR con sus resultados en macOS. La Dev Spec de TS-CKP-001 no se escribe antes. Linux y Windows: Pendiente: etapa de validación multiplataforma.
 
 > **Nota (2026-10-09)**: decisión del orquestador, validada por Arquitecto. La Dev Spec de TS-CKP-001 existe como **borrador condicionado** ([DS-TS-CKP-001](../../requirements/features/cockpit/dev-specs/TS-CKP-001-predictor-conflictos.md), `ready_to_implement: false`), con una rama por salida del SPIKE; no se implementa antes de sus resultados. El [plan de SPIKE-CKP-001](../../requirements/features/cockpit/research/SPIKE-CKP-001-plan.md) (§ 1) corrige hechos de este ADR que se aplicarán con la enmienda del SPIKE: la versión actual es `gix` 0.89.0 / `gix-merge` 0.22.0; `gix-merge` no tiene bandera de interrupción (§ 1 y § 5); `merge_trees` de alto nivel lee drivers, filtros y atributos del repo, así que la opción (a) se construye con `gix_merge::tree` directo; y `merge-tree --stdin` llegó en Git 2.39, no en 2.42 (§ 11).
+
+> **Nota (2026-10-20)**: SPIKE-CKP-001 está resuelto. El mecanismo es la opción (a) en un **proceso trabajador**. Donde el cuerpo de este ADR diga otra cosa, manda la [Enmienda (2026-10-20, SPIKE-CKP-001)](#enmienda-2026-10-20-spike-ckp-001), al final.
 
 ## Contexto
 
@@ -232,3 +234,79 @@ Decisión del orquestador (2026-10-05), validada por Arquitecto. Origen: DEP-MCP
 
 - **Consulta para el perfil `mcp`** (§ 8): `check_conflicts` lee la predicción publicada con una **consulta** del canal filtrada al repo del llamante, no con el stream (a `raptor-mcp` solo le llegan `engine.state` y `daemon.stopping`). Devuelve pares, nivel, archivos y rangos de líneas (nunca contenido), estado y antigüedad, "calculando" o "pendiente" y los límites declarados. Por defecto, los pares del worktree del llamante; con opción, todo el repo. 50 pares por página.
 - La consulta la añade al contrato de `crates/api` la historia dueña (US-MCP-016), sobre lo que publique TS-CKP-001. No se calcula nada por petición.
+
+## Enmienda (2026-10-20, SPIKE-CKP-001)
+
+**Decisión del orquestador (2026-10-20), validada por Arquitecto**; umbral de fidelidad y límites declarados, **decisiones del PO (2026-10-20)**. Origen: [Research Brief de SPIKE-CKP-001](../../requirements/features/cockpit/research/SPIKE-CKP-001-resultados.md) (fase (a), indicativa, macOS), sobre el [plan](../../requirements/features/cockpit/research/SPIKE-CKP-001-plan.md). Cierra el condicionamiento del mecanismo. El cuerpo de arriba se conserva como registro; **donde choque con esta enmienda, manda la enmienda**. El `status` sigue en `accepted`. Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
+
+### E1. Mecanismo y dónde corre (§ 1, § 5, § 10)
+
+- **Salida S4 del plan con A2-W**. Opción (a) en su forma A2: `gix_merge::commit` con plataformas propias (lista de drivers vacía, pila de atributos vacía, pipeline de filtros sin drivers, `diff::blob::Platform` igual), sobre una instancia `with_object_memory()` abierta como `RepoReader` con `ignore_replacements = true`. Pasa los criterios eliminatorios 1 a 4 (repo intacto con mtime, cero ejecución, sin descargas, mismos objetos y cero atributos) en 24 combinaciones y 3 corridas.
+- **Corre en un proceso trabajador**: el propio binario (`raptor`, subcomando oculto `predict-worker`), de vida larga, uno por daemon, lanzado por ruta absoluta con argv fijo y sin shell desde `crates/core::predict::worker`. El daemon lo mata y relanza al vencer el plazo o al pasar la cota de memoria. Motivo (E10): dentro del proceso no hay punto de corte. El merge de texto de un blob es cuadrático y no accede a objetos (un blob denso de 8 MB tarda 36 s; uno de 2 MB ya pasa de 2 s), y un par con 10.000 archivos en conflicto llega a 882 MB con todas las cotas previas. Con el trabajador, el par se corta a los 2,0 s o por RSS.
+- **(b) queda eliminada** por el criterio 1: Git refresca el mtime y el ctime de objetos sueltos del repo a través de los alternates en 2.38.5, 2.50.1 y 2.56.0. **(c)** sigue rechazada. **A1** (`merge_trees`/`merge_commits` de alto nivel) solo sirvió de control: ejecuta el driver del repo.
+- **Sin prefiltro** (§ 3, H6 refutada): da un falso negativo (renombrado de directorio) y en la flota cuesta más de lo que ahorra (191 ms de p95 frente a 100 ms). Todo par cuya triple cambió va al merge en seco.
+- § 10: el lanzamiento del trabajador vive fuera de `crates/git`; `crates/git` sigue sin `Command::new` para el merge en seco. Aplicado en ADR-GRP-009 como [Enmienda (2026-10-20, SPIKE-CKP-001)](./ADR-GRP-009-frontera-solo-lectura-git.md#enmienda-2026-10-20-spike-ckp-001).
+
+### E2. Correcciones al cuerpo (F1, F3, F4, F10 del plan y § 9 del Brief)
+
+| # | Dónde | Dice | Corrección |
+|---|---|---|---|
+| F1 | Contexto, Referencias | `gix` 0.88.0 / `gix-merge` 0.21.0 | Versión mínima **`gix` 0.89.0 / `gix-merge` 0.22.0** (en `main`, PR #251). 0.88 y 0.89 dan el mismo conjunto de conflictos y los mismos hunks en el corpus (H9 refutada); se mantiene 0.89 porque el extractor usa el árbol fusionado, que 0.88 puede perder (F2) |
+| F3 | § 1 (a), § 5, Consecuencias | "bandera de interrupción" y temporizador de `merge_trees` | No existe interrupción cooperativa en `gix-merge`. Un plazo en el acceso a objetos tampoco corta el merge de texto. El tiempo y la memoria los impone el daemon sobre el trabajador (E1) |
+| F4 | § 1 (a) | `merge_trees` con drivers vacíos | `merge_trees`, `merge_commits`, `merge_resource_cache` y `tree_merge_options` leen drivers, atributos y filtros del repo: prohibidos por comprobación estática. Se usa `gix_merge::commit` con plataformas propias |
+| F10 | § 1 (b), § 11 | `--stdin` en 2.42, `--merge-base` en 2.40 | `--stdin` en 2.39, `--merge-base` en 2.40, `--no-lazy-fetch` en 2.45. Solo afecta a (b), eliminada |
+| Brief § 9.1 | Contexto (supuesto de `freshen`) | ⚠️ **ASSUMPTION** | **Confirmado** en ejecución en las tres versiones (por eso cae (b)) |
+| Brief § 9.2 | § 1 (b) | `--no-lazy-fetch` como opción de `merge-tree` | Es una opción **global** de `git` (`git --no-lazy-fetch merge-tree …`) |
+| Brief § 9.3 | § 1 (b) | Riesgo de descarga perezosa con (b) | Con un almacén en el perfil no hay descarga (no es *promisor*). Sin efecto: (b) cae por E1 |
+| Brief § 9.4 | § 7 | — | `gix-merge` no poda las fuentes de renombrado irrelevantes como `merge-ort`: con muchos renombrados agota el límite y da falsos positivos de modificado/borrado. Se compensa con el escalado (E4) |
+| Brief § 9.5 | § 7 | — | Diferencia del merge de texto de `gix-merge`: inserciones distintas en el mismo punto que `gix` fusiona y Git marca como conflicto (3 pares de `git/git`). Candidata a *issue* aguas arriba |
+| Brief § 9.6 | § 1 (a) | — | Los conflictos sin etapa (F2) y los renombrados de directorio no salen al aplicar los conflictos al índice del árbol fusionado: el extractor los añade aparte |
+| Brief § 9.7 y § 9.8 | § 5 | Tope de blob y `rewrites.limit` como cotas | El merge de texto de un blob es cuadrático también en Git, y la memoria crece unos 88 KB por archivo en conflicto. Las cotas previas siguen dentro del trabajador porque cortan antes y sin relanzar, pero no garantizan el plazo |
+| G7 de la Dev Spec | § 6 | `pendiente`: base o operación en curso | Añade `pendiente (repo dormido)` (ADR-GRP-010, Enmienda 2026-10-07) y `pendiente (ahorro de energía)` (ADR-GRP-015 § 2) |
+
+### E3. Cifras (§ 1, § 3, § 5; Brief § 8, fase (a))
+
+| Concepto | Valor |
+|---|---|
+| Plazo por par | 2 s de reloj de pared, temporizador del daemon sobre el trabajador |
+| Memoria por trabajo | Umbral de muerte de **512 MiB** de RSS del trabajador, vigilado cada 20 ms (puede pasarse ~130 MiB antes de morir). Un trabajo normal usa 42 MiB. El trabajador se cierra sin trabajo, en ahorro de energía y en repo dormido, para no contar en la huella en reposo (RES-02) |
+| Tope de blob | 8 MiB, leído de la cabecera antes de cargar; por encima, binario sin hunks |
+| Bytes escritos en la memoria de objetos | 64 MiB por trabajo |
+| `rewrites.limit` | 1.000; **escalado a 100.000** en un segundo trabajo con su propio plazo, solo si el primero da conflictos de modificado/borrado o renombrado. Si el segundo se corta, vale el resultado del primero (límite declarado 2) |
+| Marcadores | `marker_size` = 32; `marker_size_multiplier` en su valor por defecto para que los de una base virtual sean más largos (⚠️ **ASSUMPTION**, lo verifica la Dev Spec, T011) |
+| Unión de hunks | Bloques separados por ≤ 3 líneas en los dos lados se publican unidos |
+| Concurrencia | 1 trabajo (un trabajador); hilo de clase `utility` en el daemon |
+| Tope de rutas sin commitear por worktree | 10.000 (cota de memoria; el coste es despreciable) |
+| Topes de archivos y hunks por par | 200 y 50, ⚠️ **ASSUMPTION** (no medidos) |
+| Medido | Recálculo tras un commit (10 pares): **96 ms de p95**; 55 pares iniciales: 719 ms de p95; 4-19 ms por par con deltas de 1 a 100 archivos, ~150-190 ms con 1.000 |
+| Objetivo de 5 s (S-CKP-1) | **Pasa a gate** en INF-GRP-002 (Validación 5) |
+| p95 del motor con ráfaga (E9) | **No medido**: lo mide la fase (b) del SPIKE y, como gate, el escenario de INF-GRP-002 de TS-CKP-001. Si hay regresión, se revisan la concurrencia y la clase del trabajador, no el mecanismo |
+
+### E4. Fidelidad y KPI (§ 7, Validación 4; decisiones del PO, 2026-10-20)
+
+- **Medido**: R-SYN (31 casos) y la demo del BRD § 13, 100 % de paridad y 0 falsos negativos. `git/git` (1.989 pares de merges reales): 84,4 % con `rewrites.limit` 1.000 y **93,4 %** con el escalado; 3 pares con falso negativo (1,4 % de los pares con conflicto real) y 9 con falso positivo. Hunks: 85 % de rangos idénticos y 96,5 % con la unión de bloques.
+- **Umbral corregido**: en `git/git`, paridad ≥ 90 % y falsos negativos ≤ 2 % de los pares con conflicto real; en R-SYN y la demo, 100 % y 0 falsos negativos. Los falsos positivos no son eliminatorios. **Ninguna versión de `gix` puede empeorar la línea base** (93,4 %, 3 pares con falso negativo).
+- **El KPI del 70 % no cambia.** La medición (US-CKP-010) añade un diagnóstico que separa los conflictos no detectados en "había commits de los dos lados y no hubo ⚡" y "no había nada commiteado".
+- **Visibilidad de un falso negativo**: el solape ⚠ cubre el trabajo propio de cada lado, **commiteado y sin commitear** (§ 3). Un archivo que modifican los dos lados sin ⚡ aparece como ⚠.
+
+### E5. Límites declarados nuevos (§ 7; Brief § 4.4)
+
+| # | Límite | Cómo se declara (PO, 2026-10-20) |
+|---|---|---|
+| 1 | Se ignoran los atributos de merge (`merge=union`, `-merge`, drivers), por L-04. Un archivo con `merge=union` puede salir como ⚡ aunque Git lo fusione | **En el archivo del ⚡**, con una marca cuando el `.gitattributes` del árbol de alguna de las dos puntas le da una regla `merge` propia. Ese `.gitattributes` se lee **como dato para marcar**, nunca se pasa a la plataforma del merge: no relaja L-04 (§ 1 (a), pila de atributos vacía en el merge) |
+| 2 | Renombrados que `merge-ort` encuentra por relevancia y `gix-merge` no dentro del límite: salen como modificado/borrado (falso positivo) | Solo en el texto de la vista |
+| 3 | Inserciones distintas en el mismo punto: `gix-merge` puede darlas por fusionadas (falso negativo, 1,4 % de los pares con conflicto en `git/git`) | Solo en el texto: "sin ⚡ no garantiza un merge limpio" |
+| 4 | Los hunks cercanos (≤ 3 líneas) se publican unidos: un bloque puede abarcar líneas sin conflicto | Solo en el texto |
+
+### E6. Enmiendas de la tabla "Enmiendas que implica cada opción"
+
+- **Se aplican las de la columna (a)**, ya aplicadas el 2026-10-04, más la condicionada de **ADR-GRP-009 Validación 5** para el proceso trabajador: aplicada el 2026-10-20 ([enmienda](./ADR-GRP-009-frontera-solo-lectura-git.md#enmienda-2026-10-20-spike-ckp-001)).
+- **Quedan descartadas todas las de la columna (b)**: la fila de `merge-tree` permitida en el almacén del perfil y la del refresco por alternates (ADR-GRP-009 § 2), `merge-tree` en la allowlist y el entorno ampliado (§ 3), su módulo de invocación (Validación 5), el *partial clone* con captura de red como requisito de (b) (Validación 7) y la carpeta del almacén de trabajo `<datos>/ckp/<id-repo>/` (ADR-GRP-006 § 4). El texto condicionado de ADR-GRP-009 (Enmienda 2026-10-04, Cockpit) no rige.
+- **BRD NFR-07**: con (a) en el trabajador, la predicción no usa el Git CLI; reformular la justificación de 2.38 sigue **pendiente, dueño: PO** (§ 11).
+- **TS-GRP-004 / `api-contract-ipc.md`**: la forma del contrato sigue pendiente (dueño: worker del canal); tiene que poder llevar la marca del límite 1 por archivo.
+
+### E7. Validación
+
+- Validación 2: con el trabajador, el único proceso hijo del predictor es el propio binario por ruta absoluta; el trabajador no lanza ninguno.
+- Validación 4: con el umbral de E4. El corpus R-SYN es gate de PR; `git/git` se reejecuta a mano al subir `gix`.
+- Validación 9: el blob de 100 MB se corta por cabecera sin relanzar; 10.000 archivos en conflicto matan el trabajador por memoria; un blob denso lo mata a los 2 s. El daemon sigue respondiendo en los tres casos.
