@@ -58,7 +58,7 @@ Cada fila es una **Decisión del orquestador (2026-10-08), validada por el Arqui
 | BR-AUTH-001 · Un agente no puede desinstalar (rechazo del comando reservado) | `…::an_agent_cannot_uninstall` |
 | E3 / NFR-12 · Desinstalación interrumpida: con la clave restaurada se completa al arrancar (huella idéntica); sin restaurar, la protección sigue | `…::recovery::*` |
 | NFR-01 · Una instalación deshecha al arrancar con la clave nuestra devuelve el `core.hooksPath` local previo (husky), huella idéntica (hallazgo High de la revisión) | `…::recovery::repo_intact_an_install_undone_at_startup_restores_the_prior_local_key` |
-| NFR-12 · Barrido: corte en cada punto de la transacción inversa → completo o idéntico byte a byte | `…::cuts::repo_intact_an_uninstall_cut_at_any_point_is_complete_or_undone` (corre en el `cargo test` normal: los tests de la CLI compilan el núcleo con `chaos`) |
+| NFR-12 · Barrido: corte en cada punto de la transacción inversa → completo o idéntico byte a byte | `…::cuts::repo_intact_an_uninstall_cut_at_point_{0..7}_is_complete_or_undone` (un test por punto, más `…::cuts::repo_intact_an_uninstall_passes_every_declared_point_in_order`; corre en el `cargo test` normal: los tests de la CLI compilan el núcleo con `chaos`) |
 | Ventana: solo el solicitante, solo tras cerrarse, una por repo, caducidad | `crates/core` `guardrails::pending::tests::*` |
 | Valores de la clave que acepta la capa de escritura | `crates/git` `invoke::tests::the_guard_key_takes_only_the_values_it_may` |
 | Contrato: métodos de protocolo 9, escritores declarados | `crates/api` `methods::tests::only_protected_paths_write`, `tests/legacy_protocols.rs` |

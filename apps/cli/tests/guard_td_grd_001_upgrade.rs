@@ -215,8 +215,8 @@ fn serial() -> std::sync::MutexGuard<'static, ()> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-fn sweep(from: u32) {
-    // The uncut run passes every declared point, and only those, in order.
+/// The uncut run passes every declared point, and only those, in order.
+fn trace_of(from: u32) {
     let (m, _) = machine_from(from);
     let trace = m.f.root.join("cut-trace");
     m.with_env(ENV_TRACE, trace.clone());
@@ -229,35 +229,88 @@ fn sweep(from: u32) {
         .collect();
     let declared: Vec<String> = points(STEPS, &[]).iter().map(ToString::to_string).collect();
     assert_eq!(reached, declared);
-    drop(m);
+}
 
-    let mut broken = Vec::new();
-    for point in points(STEPS, &[]) {
-        let (m, bad) = machine_from(from);
-        m.with_env(ENV_CUT, point.to_string());
-        let out = m.protect(&m.repo());
-        assert!(!out.status.success(), "{point}: {}", text(&out));
-        m.clear_env();
-        // The daemon died at the point; this start serves again.
-        let out = m.raptor(&["daemon", "status"]);
-        assert!(out.status.success(), "{point}: {}", text(&out));
-        broken.extend(after_the_cut(&m, from, &point, &bad));
-    }
+/// The daemon dies at the `n`th declared point; what must hold after it.
+fn cut_at(from: u32, n: usize) {
+    let point = points(STEPS, &[])
+        .into_iter()
+        .nth(n)
+        .unwrap_or_else(|| panic!("no point {n}: the steps declare {POINTS}"));
+    let (m, bad) = machine_from(from);
+    m.with_env(ENV_CUT, point.to_string());
+    let out = m.protect(&m.repo());
+    assert!(!out.status.success(), "{point}: {}", text(&out));
+    m.clear_env();
+    // The daemon died at the point; this start serves again.
+    let out = m.raptor(&["daemon", "status"]);
+    assert!(out.status.success(), "{point}: {}", text(&out));
+    let broken = after_the_cut(&m, from, &point, &bad);
     assert!(broken.is_empty(), "{broken:#?}");
 }
 
+/// Points of [`STEPS`]: before and after each one.
+const POINTS: usize = STEPS.len() * 2;
+
 // NFR-12: a cut at any of the 12 points leaves a dispatcher that works, and the next install
-// completes the upgrade.
-#[test]
-fn repo_intact_an_upgrade_from_2_cut_at_any_point_keeps_a_working_dispatcher() {
-    let _serial = serial();
-    sweep(2);
+// completes the upgrade. One test per point (and per starting template) so that each one is
+// seconds long: a single sweep of all of them took over 80 s and was killed by the 240 s limit
+// of a loaded machine.
+macro_rules! cut_tests {
+    ($from:literal, $trace:ident, $($name:ident => $n:literal),+ $(,)?) => {
+        #[test]
+        fn $trace() {
+            let _serial = serial();
+            trace_of($from);
+        }
+        $(
+            #[test]
+            fn $name() {
+                let _serial = serial();
+                cut_at($from, $n);
+            }
+        )+
+    };
 }
 
+cut_tests!(
+    2,
+    repo_intact_an_upgrade_from_2_passes_every_declared_point_in_order,
+    repo_intact_an_upgrade_from_2_cut_at_point_00 => 0,
+    repo_intact_an_upgrade_from_2_cut_at_point_01 => 1,
+    repo_intact_an_upgrade_from_2_cut_at_point_02 => 2,
+    repo_intact_an_upgrade_from_2_cut_at_point_03 => 3,
+    repo_intact_an_upgrade_from_2_cut_at_point_04 => 4,
+    repo_intact_an_upgrade_from_2_cut_at_point_05 => 5,
+    repo_intact_an_upgrade_from_2_cut_at_point_06 => 6,
+    repo_intact_an_upgrade_from_2_cut_at_point_07 => 7,
+    repo_intact_an_upgrade_from_2_cut_at_point_08 => 8,
+    repo_intact_an_upgrade_from_2_cut_at_point_09 => 9,
+    repo_intact_an_upgrade_from_2_cut_at_point_10 => 10,
+    repo_intact_an_upgrade_from_2_cut_at_point_11 => 11,
+);
+
+cut_tests!(
+    1,
+    repo_intact_an_upgrade_from_1_passes_every_declared_point_in_order,
+    repo_intact_an_upgrade_from_1_cut_at_point_00 => 0,
+    repo_intact_an_upgrade_from_1_cut_at_point_01 => 1,
+    repo_intact_an_upgrade_from_1_cut_at_point_02 => 2,
+    repo_intact_an_upgrade_from_1_cut_at_point_03 => 3,
+    repo_intact_an_upgrade_from_1_cut_at_point_04 => 4,
+    repo_intact_an_upgrade_from_1_cut_at_point_05 => 5,
+    repo_intact_an_upgrade_from_1_cut_at_point_06 => 6,
+    repo_intact_an_upgrade_from_1_cut_at_point_07 => 7,
+    repo_intact_an_upgrade_from_1_cut_at_point_08 => 8,
+    repo_intact_an_upgrade_from_1_cut_at_point_09 => 9,
+    repo_intact_an_upgrade_from_1_cut_at_point_10 => 10,
+    repo_intact_an_upgrade_from_1_cut_at_point_11 => 11,
+);
+
+/// The tests above cover every declared point, no more and no fewer.
 #[test]
-fn repo_intact_an_upgrade_from_1_cut_at_any_point_keeps_a_working_dispatcher() {
-    let _serial = serial();
-    sweep(1);
+fn the_per_point_tests_cover_every_declared_point() {
+    assert_eq!(POINTS, 12, "add or remove a `cut_at_point_NN` test");
 }
 
 // NFR-01: what an interrupted upgrade wrote is in the journal, so the uninstall removes all of
