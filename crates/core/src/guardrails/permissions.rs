@@ -8,7 +8,7 @@
 
 use std::path::Path;
 
-use gitraptor_api::guard::{GuardLogResult, Operation, RefValue, Rule};
+use gitraptor_api::guard::{GuardLogResult, NotPreventable, Operation, RefValue, Rule};
 use gitraptor_git::{Hide, PathLimits, RefName, RepoReader};
 use gitraptor_policy::guard::git_command::{self, GitCommand};
 use gitraptor_policy::guard::permissions::{self as policy, Chain, Classified, Fresh, LineKind};
@@ -116,12 +116,27 @@ pub fn is_permission(rule: Rule) -> bool {
 }
 
 /// A `guard.log` page for a connection without `guard.permissions` (D10): the permission reasons
-/// are left out, and an entry left without reasons is not listed. The summary still counts them.
+/// are left out, and an entry whose reasons were all permission rules is not listed. An entry
+/// that never had reasons (a protection change, for one) stays. The summary still counts them.
 pub fn legacy_log(log: &mut GuardLogResult) {
-    for entry in &mut log.entries {
+    log.entries.retain_mut(|entry| {
+        let had_reasons = !entry.reasons.is_empty();
         entry.reasons.retain(|r| !is_permission(r.rule));
-    }
-    log.entries.retain(|e| !e.reasons.is_empty());
+        !had_reasons || !entry.reasons.is_empty()
+    });
+}
+
+/// A transaction that creates or moves a branch: what its permissions classify by the `git`
+/// processes above the hook (a deletion is `branch-delete` whatever runs it).
+pub fn moves_a_branch(op: &Operation) -> bool {
+    matches!(op, Operation::RefTransaction { updates, .. }
+        if updates.iter().any(|u| u.refname.starts_with("refs/heads/") && !u.new.is_zero()))
+}
+
+/// The limits a connection without `guard.permissions` can read (D10): the reach of the
+/// permissions is left out.
+pub fn legacy_not_preventable(limits: &mut Vec<NotPreventable>) {
+    limits.retain(|n| *n != NotPreventable::PermissionReach);
 }
 
 /// The operations a strict permission could need a fact for.

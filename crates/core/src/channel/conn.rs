@@ -1136,14 +1136,21 @@ impl Connection<'_> {
                 ))
         {
             let checks = self.ctx.checks();
+            let (actor, asked_by) = crate::guardrails::actor::resolve_for_ask(
+                self.peer,
+                &checks,
+                Some(&self.ctx.marks),
+            );
             return crate::guardrails::evaluate::Caller {
-                actor: crate::guardrails::actor::resolve(self.peer, &checks, Some(&self.ctx.marks)),
+                actor,
+                asked_by: Some(asked_by),
                 cwd: process_cwd(self.peer.pid),
                 authorship,
                 policies,
                 permissions,
-                chain: (permissions && moves_a_branch(&params.operation))
-                    .then(|| crate::guardrails::permissions::git_chain(self.peer, &checks)),
+                chain: (permissions
+                    && crate::guardrails::permissions::moves_a_branch(&params.operation))
+                .then(|| crate::guardrails::permissions::git_chain(self.peer, &checks)),
                 ..Default::default()
             };
         }
@@ -1161,7 +1168,8 @@ impl Connection<'_> {
         use crate::guardrails::second_line;
         use gitraptor_api::guard::{CommitStage, Operation};
         let checks = self.ctx.checks();
-        let actor = crate::guardrails::actor::resolve(self.peer, &checks, Some(&self.ctx.marks));
+        let (actor, asked_by) =
+            crate::guardrails::actor::resolve_for_ask(self.peer, &checks, Some(&self.ctx.marks));
         // The `git` behind the hook only matters for an agent's commit.
         let git = actor.and_then(|_| second_line::nearest_git(self.peer, &checks));
         let second_line_skip = match params.operation {
@@ -1185,6 +1193,7 @@ impl Connection<'_> {
             policies: false,
             permissions,
             chain: None,
+            asked_by: Some(asked_by),
         }
     }
 
@@ -1543,9 +1552,7 @@ impl Connection<'_> {
         }
         status.last_refusal = self.guard_blockers(std::mem::take(&mut status.last_refusal));
         if !self.has(methods::CAP_GUARD_PERMISSIONS.name) {
-            status
-                .not_preventable
-                .retain(|n| *n != gitraptor_api::guard::NotPreventable::PermissionReach);
+            crate::guardrails::permissions::legacy_not_preventable(&mut status.not_preventable);
         }
     }
 
@@ -1559,8 +1566,7 @@ impl Connection<'_> {
         }
         plan.blockers = self.guard_blockers(std::mem::take(&mut plan.blockers));
         if !self.has(methods::CAP_GUARD_PERMISSIONS.name) {
-            plan.not_preventable
-                .retain(|n| *n != gitraptor_api::guard::NotPreventable::PermissionReach);
+            crate::guardrails::permissions::legacy_not_preventable(&mut plan.not_preventable);
         }
         self.guard_shape_status(&mut plan.status);
     }
@@ -2595,13 +2601,6 @@ impl Connection<'_> {
 /// A step of `guard.install` or `guard.uninstall` failed: `guard-failed` with the step and where
 /// the repo stands for a connection with `guard.recovery`, the `INTERNAL` it always was for any
 /// other (ADR-GRP-016).
-/// A transaction that creates or moves a branch: what its permissions classify by the `git`
-/// processes above the hook (a deletion is `branch-delete` whatever runs it).
-fn moves_a_branch(op: &gitraptor_api::guard::Operation) -> bool {
-    matches!(op, gitraptor_api::guard::Operation::RefTransaction { updates, .. }
-        if updates.iter().any(|u| u.refname.starts_with("refs/heads/") && !u.new.is_zero()))
-}
-
 fn guard_failed(recovery: bool, data: gitraptor_api::guard::GuardFailedData) -> ErrorObject {
     if recovery {
         ErrorObject::new(methods::GUARD_FAILED.code, "guardrails step failed").with_data(data)

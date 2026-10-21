@@ -120,7 +120,7 @@ impl RepoReader {
             unverifiable: true,
             ..NewCommitPaths::default()
         };
-        let Some(commits) = self.new_commits(old, new, updated, hide, limits)? else {
+        let Some(commits) = self.walk_fresh(old, new, updated, hide, limits)? else {
             return Ok(unverifiable);
         };
         let mut reader = Reader {
@@ -153,7 +153,7 @@ impl RepoReader {
         hide: Hide,
         limits: &PathLimits,
     ) -> Result<NewCommits, ReadError> {
-        let Some(commits) = self.new_commits(old, new, updated, hide, limits)? else {
+        let Some(commits) = self.walk_fresh(old, new, updated, hide, limits)? else {
             return Ok(NewCommits {
                 unverifiable: true,
                 ..NewCommits::default()
@@ -168,7 +168,7 @@ impl RepoReader {
 
     /// The new commits of `old → new` with their parents, newest first; `None` when a bound is
     /// reached or something cannot be read (the caller reports it as unverifiable).
-    fn new_commits(
+    fn walk_fresh(
         &self,
         old: Option<&str>,
         new: &str,
