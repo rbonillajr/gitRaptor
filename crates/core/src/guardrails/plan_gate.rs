@@ -145,11 +145,13 @@ fn rebase_preset(common: &Path, branch: &str, old_tip: &str, onto: &str) -> Opti
     })
 }
 
-/// What the executor sees of a decision: `ask` is applied as `deny` until the confirmation queue
-/// exists.
+/// What the executor sees of a decision. `ask` is applied as `deny` until the confirmation queue
+/// exists, but the executor still tells the two apart: it refuses an `ask` with its own reason.
 fn view_of(decision: &Decision) -> GateDecision {
     if decision.effect == Effect::Allow && decision.applied_effect == Effect::Allow {
         GateDecision::Allow
+    } else if decision.effect == Effect::Ask && decision.applied_effect == Effect::Deny {
+        GateDecision::Ask
     } else {
         GateDecision::Deny
     }
@@ -426,3 +428,7 @@ pub fn commit_facts(common: &Path, message: &str) -> AuthorshipFacts {
 #[cfg(test)]
 #[path = "plan_gate_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "plan_gate_ask_tests.rs"]
+mod ask_tests;

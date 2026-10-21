@@ -640,7 +640,8 @@ impl Executor {
                     .map(denial_of);
                 let view = match verdict.view {
                     GateDecision::Allow => DecisionView::Allow,
-                    GateDecision::Deny => DecisionView::Deny,
+                    // Applied as deny until the queue exists: the preview shows what runs.
+                    GateDecision::Ask | GateDecision::Deny => DecisionView::Deny,
                     GateDecision::NotEvaluated => DecisionView::NotEvaluated,
                 };
                 (view, denial)
@@ -918,13 +919,19 @@ impl Executor {
             None => None,
             Some(req) => {
                 let verdict = self.gate.evaluate_detailed(&req);
-                if verdict.view != GateDecision::Allow {
-                    self.close(&plan, PlanClose::Denied);
-                    return Err(ExecError::GuardrailsDenied(
-                        verdict.decision.as_ref().map(|d| Box::new(denial_of(d))),
-                    ));
+                match verdict.view {
+                    GateDecision::Allow => verdict.binding,
+                    GateDecision::Ask => {
+                        self.close(&plan, PlanClose::AskedWithoutQueue);
+                        return Err(RejectReason::GuardrailsConfirmationRequired.into());
+                    }
+                    GateDecision::Deny | GateDecision::NotEvaluated => {
+                        self.close(&plan, PlanClose::Denied);
+                        return Err(ExecError::GuardrailsDenied(
+                            verdict.decision.as_ref().map(|d| Box::new(denial_of(d))),
+                        ));
+                    }
                 }
-                verdict.binding
             }
         };
 
