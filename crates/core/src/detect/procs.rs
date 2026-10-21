@@ -42,6 +42,13 @@ pub trait ProcLister: Send + Sync {
     }
     /// Working folder of `pid`, without symbolic links.
     fn cwd(&self, pid: u32) -> Option<PathBuf>;
+    /// Whether the working folder of `pid` no longer exists. The detector does not place such a
+    /// process: its folder is gone, and by components its path would fall into the parent
+    /// worktree. The default asks the path; a platform whose path survives the deletion with a
+    /// marker (Linux) overrides it.
+    fn cwd_gone(&self, pid: u32) -> bool {
+        self.cwd(pid).is_some_and(|c| !c.is_dir())
+    }
     /// Whether the `git` `pid` redirects its target (`-C`, `--git-dir`,
     /// `--work-tree` or `GIT_DIR`, `GIT_WORK_TREE`, `GIT_COMMON_DIR` in its
     /// environment). `None` when its arguments or environment cannot be
@@ -306,6 +313,17 @@ impl ProcLister for SystemProcLister {
 
     fn cwd(&self, pid: u32) -> Option<PathBuf> {
         crate::channel::peer::process_cwd(pid)
+    }
+
+    /// The kernel keeps the link of a deleted folder: it either has no links left
+    /// (`nlink == 0`) or reads back as `<path> (deleted)`, which must not be taken as a path.
+    fn cwd_gone(&self, pid: u32) -> bool {
+        use std::os::unix::ffi::OsStrExt;
+        use std::os::unix::fs::MetadataExt;
+        let link = format!("/proc/{pid}/cwd");
+        std::fs::metadata(&link).is_ok_and(|m| m.nlink() == 0)
+            || std::fs::read_link(&link)
+                .is_ok_and(|p| p.as_os_str().as_bytes().ends_with(b" (deleted)"))
     }
 
     fn git_redirect(&self, pid: u32) -> Option<bool> {

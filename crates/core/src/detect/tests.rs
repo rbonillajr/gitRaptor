@@ -1,5 +1,6 @@
 //! Rules of the detector over a synthetic process table and a fake clock.
 
+use std::collections::HashSet;
 use std::sync::atomic::AtomicI64;
 
 use super::*;
@@ -18,6 +19,8 @@ struct Table {
     exe_reads: Mutex<Vec<(u32, u64)>>,
     /// What `git_redirect` answers per pid; `Some(false)` when absent.
     redirects: Mutex<HashMap<u32, Option<bool>>>,
+    /// Pids whose working folder was deleted (`cwd_gone`).
+    gone_cwds: Mutex<HashSet<u32>>,
 }
 
 impl Table {
@@ -36,6 +39,11 @@ impl Table {
     /// Whether the `git` `pid` redirects its target; `None`: unreadable.
     fn redirect(&self, pid: u32, redirect: Option<bool>) {
         self.redirects.lock().unwrap().insert(pid, redirect);
+    }
+
+    /// The working folder of `pid` was deleted.
+    fn delete_cwd(&self, pid: u32) {
+        self.gone_cwds.lock().unwrap().insert(pid);
     }
 
     fn kill(&self, pid: u32) {
@@ -70,6 +78,9 @@ impl ProcLister for Arc<Table> {
     }
     fn cwd(&self, pid: u32) -> Option<PathBuf> {
         self.cwds.lock().unwrap().get(&pid).cloned()
+    }
+    fn cwd_gone(&self, pid: u32) -> bool {
+        self.gone_cwds.lock().unwrap().contains(&pid)
     }
     fn git_redirect(&self, pid: u32) -> Option<bool> {
         self.redirects
@@ -265,6 +276,9 @@ fn a_pid_reused_before_its_path_is_read_lends_no_path() {
         }
         fn cwd(&self, pid: u32) -> Option<PathBuf> {
             self.0.cwd(pid)
+        }
+        fn cwd_gone(&self, pid: u32) -> bool {
+            self.0.cwd_gone(pid)
         }
     }
     let table = Arc::new(Table::default());
@@ -983,4 +997,75 @@ fn s4_is_not_read_without_a_move_or_a_session() {
         rig.evidence_moved("/wt/feat-login", 1_000),
         S3Outcome::Hook(_)
     ));
+}
+
+// ------------------------------------------------- Worktrees that go away
+
+/// A worktree Git no longer registers: the detector stops following every session in it,
+/// detected and registered, and leaves the others and the ending to its caller.
+#[test]
+fn ending_a_worktree_stops_its_detected_and_registered_sessions() {
+    let rig = Rig::new();
+    rig.claude(20, 2_000, "/wt/feat-login");
+    assert_eq!(started(&rig.scan()).len(), 1);
+    codex(
+        &rig,
+        "reg:1:0",
+        "/wt/feat-login",
+        SessionStateView::Active,
+        None,
+    );
+    codex(&rig, "reg:2:0", "/r", SessionStateView::Active, None);
+    // The caller has the repo's new worktree list in before it ends the sessions.
+    rig.detector.set_worktrees(
+        "r",
+        vec![PathBuf::from("/r"), PathBuf::from("/r/.claude/worktrees/x")],
+    );
+    let ended = rig.detector.end_worktree("r", Path::new("/wt/feat-login"));
+    assert_eq!(ended, ["20:2000", "reg:1:0"]);
+    // No change was emitted, and the live process no longer starts a session there.
+    assert!(rig.scan().is_empty());
+    assert!(
+        rig.detector
+            .end_worktree("r", Path::new("/wt/feat-login"))
+            .is_empty()
+    );
+    // The registered session of another worktree is still followed.
+    assert!(
+        rig.detector
+            .registration_evidence("r", Path::new("/r"))
+            .is_some()
+    );
+}
+
+/// D6: the kernel reads a deleted folder back as `<path> (deleted)`; by components that is a
+/// child of the parent worktree, where it must not start a session.
+#[test]
+fn a_process_whose_folder_is_gone_is_not_a_new_session() {
+    let rig = Rig::new();
+    rig.claude(20, 2_000, "/r/.claude/worktrees/x (deleted)");
+    rig.table.delete_cwd(20);
+    assert!(started(&rig.scan()).is_empty());
+    // The same path with a folder that exists is a session of the main worktree.
+    rig.claude(21, 2_000, "/r/.claude/worktrees/x (deleted)");
+    assert_eq!(
+        started(&rig.scan()),
+        [("21:2000".to_owned(), PathBuf::from("/r"))]
+    );
+}
+
+/// D5, D6: a session that is already live is not closed because its folder is gone: only its
+/// process ending, or its worktree being removed from Git, ends it.
+#[test]
+fn a_live_session_whose_folder_is_gone_is_not_ended() {
+    let rig = Rig::new();
+    rig.claude(20, 2_000, "/r/.claude/worktrees/x");
+    assert_eq!(started(&rig.scan()).len(), 1);
+    rig.table.delete_cwd(20);
+    assert!(rig.scan().is_empty());
+    assert!(
+        rig.detector
+            .single_session("r", Path::new("/r/.claude/worktrees/x"))
+            .is_some()
+    );
 }
