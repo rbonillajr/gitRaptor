@@ -417,6 +417,29 @@ impl Daemon {
                 },
             });
         }
+        // The branch tips moved for every worktree of the repo, not only the ones this batch
+        // read: a later start compares them with the repo as it is then.
+        if let Some(refs) = &batch.refs {
+            let written: Vec<PathBuf> = ops
+                .iter()
+                .filter_map(|op| match op {
+                    WriteOp::SetLastKnownState { worktree, .. } => Some(worktree.clone()),
+                    _ => None,
+                })
+                .collect();
+            for path in known.iter().filter(|p| !written.contains(p)) {
+                if let Ok(Some(state)) = store.last_known_state(path) {
+                    ops.push(WriteOp::SetLastKnownState {
+                        worktree: path.clone(),
+                        state: KnownState {
+                            refs: refs.clone(),
+                            updated_ms: now,
+                            ..state
+                        },
+                    });
+                }
+            }
+        }
         // An event's worktree must exist in the store. A worktree of the batch that is not `Ready`
         // yet (`git worktree add` is half-way) got no upsert above, so it is not "listed" for
         // this purpose: without one the store refuses the event and the whole batch is lost.
