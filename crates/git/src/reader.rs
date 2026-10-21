@@ -186,6 +186,32 @@ impl RepoReader {
         Ok(Self { repo })
     }
 
+    /// Open the repository at `path` for one in-memory dry merge: the permissions of
+    /// [`Self::open`] with the system config and attributes off on every platform (finding them
+    /// may run `git`), untrusted repositories refused and replacement objects ignored.
+    pub(crate) fn open_for_dry_merge(path: &Path) -> Result<Self, ReadError> {
+        crate::paths::validate(path)?;
+        let mut permissions = permissions(false);
+        permissions.config.system = false;
+        permissions.attributes.system = false;
+        let open = gix::open::Options::default()
+            .permissions(permissions)
+            .bail_if_untrusted(true);
+        let mut repo = gix::open_opts(path, open).map_err(|e| {
+            let message = e.to_string();
+            if message.contains("is considered unsafe") {
+                ReadError::Untrusted(message)
+            } else if !looks_like_a_repository(path) {
+                ReadError::NotARepository(message)
+            } else {
+                ReadError::Unavailable(message)
+            }
+        })?;
+        neutralize_programs(&mut repo)?;
+        repo.objects.ignore_replacements = true;
+        Ok(Self { repo })
+    }
+
     /// The repository has no main working tree.
     pub fn is_bare(&self) -> bool {
         self.repo.is_bare()
@@ -492,6 +518,29 @@ impl RepoReader {
             Err(e) if e.to_string().contains("No merge base") => Ok(None),
             Err(e) => Err(ReadError::Unavailable(format!("merge-base: {e}"))),
         }
+    }
+
+    /// Every merge-base of two commits given as hex ids, in byte order without repeats; empty
+    /// when they share no history. Several bases mean a criss-cross history, which the dry merge
+    /// turns into a virtual base.
+    ///
+    /// # Errors
+    /// [`ReadError::InvalidInput`] for an id that is not hex, [`ReadError::Unavailable`] when a
+    /// commit cannot be read.
+    pub fn merge_bases(&self, a: &str, b: &str) -> Result<Vec<String>, ReadError> {
+        let parse = |hex: &str| {
+            gix::ObjectId::from_hex(hex.as_bytes())
+                .map_err(|_| ReadError::InvalidInput(format!("not a commit id: {hex:?}")))
+        };
+        let (a, b) = (parse(a)?, parse(b)?);
+        let bases = self
+            .repo
+            .merge_bases_many(a, &[b])
+            .map_err(|e| ReadError::Unavailable(format!("merge-base: {e}")))?;
+        let mut bases: Vec<String> = bases.into_iter().map(|id| id.to_string()).collect();
+        bases.sort();
+        bases.dedup();
+        Ok(bases)
     }
 
     /// Commits only in `a` (ahead) and only in `b` (behind), each walk bounded by `limit`.

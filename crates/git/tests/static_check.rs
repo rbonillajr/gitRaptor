@@ -86,6 +86,12 @@ mod repo_intact_tm {
     fn gix_writes_only_in_store_writer() {
         let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
         let store = src.join("tm_write").join("store");
+        // The dry merge writes its merged blobs and trees only into a per-job object memory
+        // (ADR-CKP-001 § 1 (a)): `dry_merge/memory.rs` may forward `write_buf` and
+        // `write_stream` to it, and only while it really opens one. Every other pattern
+        // still applies to that file.
+        let dry_merge = src.join("dry_merge").join("memory.rs");
+        const DRY_MERGE_ALLOWED: &[&str] = &["write_buf", "write_stream"];
         let mut files = Vec::new();
         rust_files(&src, &mut files);
         let mut offenders = Vec::new();
@@ -96,8 +102,13 @@ mod repo_intact_tm {
                 continue;
             }
             let text = std::fs::read_to_string(&file).unwrap();
+            let allowed: &[&str] = if file == dry_merge && text.contains(".with_object_memory()") {
+                DRY_MERGE_ALLOWED
+            } else {
+                &[]
+            };
             for p in GIX_WRITE_PATTERNS {
-                if text.contains(p) {
+                if text.contains(p) && !allowed.contains(p) {
                     offenders.push(format!("{}: {p}", file.display()));
                 }
             }

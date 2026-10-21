@@ -8,7 +8,8 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-gix.workspace = true
+# In-memory dry merge of the conflict predictor (`dry_merge`), with platforms built here.
+gix = { workspace = true, features = ["merge"] }
 gix-pack.workspace = true
 # NFC/NFD collisions of a tree to restore (SEC-TMC-04); already in the lock through gix.
 unicode-normalization = "0.1.25"
