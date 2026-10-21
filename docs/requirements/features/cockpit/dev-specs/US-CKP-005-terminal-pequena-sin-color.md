@@ -350,6 +350,8 @@ Tests de `update.rs` (`help_*`):
 
 > **Nota técnica.** Al envolver líneas, el aviso de 70×20 se parte: compara contra el texto de la pantalla con cada línea recortada y unidas por un espacio. Los snapshots `fleet_*`, `observe_prompt_*`, `discovered_prompt_*` y `repo_picker_80x24` cambian solo en la barra (`q salir` a la izquierda, la leyenda de estados si cabe y `? ayuda` a la derecha). Acéptalos tras comprobar que no cambia nada más.
 
+> **Contrato de `/implement` (2026-10-21).** Los casos de `a11y_tests.rs` son pruebas unitarias del experto, que las escribe libremente. Sus duplicados de integración están en `apps/cli/tests/tui_screens.rs`, escritos por el criterion-tester con la API pública (`Model::new`, `tui::update::update`, `tui::view::view`, sin los `pub(crate)` de `view::tests`); esos son los criterios congelados y el experto no los edita.
+
 - **Depende:** T003, T004
 - **Refs:** D1, D3, D4, D5, D6; US-CKP-005, escenarios 1, 3, 4 y 5; DSYS-GRP-001 § 1 ("Teclado primero", "Respeta la terminal") y § 6
 - **Aceptación:** `cargo test -p gitraptor-cli --lib tui::view`, y los tests rojos de T001 en verde
@@ -424,6 +426,7 @@ apps/cli/
 │           ├── layout.rs                ← MODIFY  solo tests (T006)
 │           └── snapshots/               ← MODIFY  Help de la galería (T004)
 └── tests/
+    ├── tui_screens.rs                   ← CREATE  criterios congelados de pantalla, solo API pública (criterion-tester; el experto no lo edita)
     ├── tui_accessibility.rs             ← CREATE  pty (T001)
     └── tui_boundaries.rs                ← MODIFY  ratón y Say (T001)
 ```
