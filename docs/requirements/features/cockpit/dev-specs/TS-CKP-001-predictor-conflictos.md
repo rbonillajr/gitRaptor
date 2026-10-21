@@ -2,9 +2,9 @@
 id: DS-TS-CKP-001
 title: "Dev Spec — Predictor de conflictos en el daemon: solape y conflicto previsto por par"
 type: dev-spec
-status: draft
+status: partially-implemented
 created: 2026-10-09
-updated: 2026-10-20
+updated: 2026-10-21
 story: TS-CKP-001
 feature: cockpit
 domain: GRP
@@ -61,6 +61,8 @@ tags: [cockpit, prediccion-conflictos, merge-en-seco, solape, daemon, proceso-tr
 
 # DS-TS-CKP-001 · Predictor de conflictos en el daemon
 
+Implementado en parte en: PR #<pendiente> (T001 a T005, T011 y la excepción G9 de T010). Faltan T006, T007, T009, T010, T012 y T013 (G2, G5).
+
 ## Contexto rápido
 
 Al terminar, la TUI, `raptor conflicts` y `check_conflicts` del MCP leen del motor, para cada par de worktrees y para cada worktree contra la rama base, qué archivos se tocan a la vez (⚠ solape) y qué archivos chocarían al integrar, con los rangos de líneas (⚡ conflicto previsto). Cada par llega con su estado y su hora de cálculo, y el repo del usuario queda intacto. Hoy no pueden: `attention.conflicts` se publica como no disponible (`crates/api/src/scope.rs:110`) y el motor no tiene módulo de predicción.
@@ -108,6 +110,10 @@ Las ramas R-A2, R-B y R-SOLAPE quedan descartadas y se borraron con sus tareas (
 - **D12**: el plazo y la cota de memoria los impone el daemon sobre el trabajador; dentro del trabajador siguen las cotas previas (tope de blob por cabecera, tope de bytes escritos), que cortan antes y sin relanzar (T006, T007).
 - **D13**: fidelidad con el umbral corregido del PO (§ Valores numéricos, `FIDELITY_THRESHOLD`): el corpus fijo R-SYN es gate de PR; el corpus real de `git/git` se ejecuta a mano al subir `gix` y no puede empeorar la línea base (T011).
 - **D14**: el archivo de un ⚡ lleva una marca cuando tiene una regla `merge=` propia en el `.gitattributes` del árbol de alguna de las dos puntas (decisión del PO, límite declarado 1). Se lee como dato para marcar, nunca para el merge (L-04 intacta, T005).
+
+**Decisión del orquestador (2026-10-21)**, tomada por el worker de TS-CKP-001 al ejecutar `/implement`, dentro de lo que la spec ya prevé (D3, D9, `blocked_tasks`):
+
+- **D15**: entrega en dos PR. El PR-A construye T001 a T005 y T011, más la excepción G9 de T010 (limitada a `write_buf`/`write_stream`, y solo si `dry_merge/memory.rs` abre una memoria de objetos). El PR-B, cuando se cierren G2 y G5, construye T006, T007, T009, T010, T012 y T013. Brief: `docs/dev-briefs/ts-ckp-001-conflict-predictor.md`.
 
 **Decisiones del Arquitecto como autor de la Dev Spec (2026-10-09), aceptadas por el orquestador al revisar el borrador (2026-10-09):**
 

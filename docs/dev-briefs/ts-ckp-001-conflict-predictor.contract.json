@@ -1,0 +1,319 @@
+{
+  "source": {
+    "kind": "brief",
+    "ref": "docs/dev-briefs/ts-ckp-001-conflict-predictor.md"
+  },
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs -p gitraptor-git -p gitraptor-core -p gitraptor-testkit -p gitraptor-mcp"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs -p gitraptor-git -p gitraptor-core -p gitraptor-testkit -p gitraptor-mcp"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "criteria": [
+    {
+      "id": "CKP001-UNC-FULL",
+      "statement": "T001: read_worktree retiene en `uncommitted` todas las rutas sin commitear (modificadas, preparadas y sin seguimiento) sin repetir, también por encima de MAX_WORKTREE_CHANGES, con partial=false",
+      "verify": "cargo test -p gitraptor-core --test ts_ckp_001_uncommitted full:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/ts_ckp_001_uncommitted.rs"
+      ]
+    },
+    {
+      "id": "CKP001-UNC-CAP",
+      "statement": "T001: UncommittedPaths::from_paths con más rutas que el tope guarda las primeras en orden de bytes y marca partial=true; MAX_UNCOMMITTED_FOR_OVERLAP vale 10.000",
+      "verify": "cargo test -p gitraptor-core --test ts_ckp_001_uncommitted cap:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/ts_ckp_001_uncommitted.rs"
+      ]
+    },
+    {
+      "id": "CKP001-UNC-HOOK",
+      "statement": "T001: el observador llama a worktree_recomputed con el conjunto completo al cerrar el recomputo de un worktree, y FanoutHooks reenvía worktree_recomputed y repo_tier_changed a cada hook",
+      "verify": "cargo test -p gitraptor-core --test ts_ckp_001_uncommitted hooks:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/ts_ckp_001_uncommitted.rs"
+      ]
+    },
+    {
+      "id": "CKP001-PAIRS",
+      "statement": "T002: pairs::plan forma cada worktree con trabajo propio contra la base (salvo el que tiene sacada la base) y cada pareja de worktrees con trabajo propio; un worktree sin trabajo propio no forma pares",
+      "verify": "cargo test -p gitraptor-core --test ts_ckp_001_pairs pairs:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/ts_ckp_001_pairs.rs"
+      ]
+    },
+    {
+      "id": "CKP001-OLDBASE",
+      "statement": "T002 guard 2.1: un worktree sobre una base más vieja no solapa por los commits que la base hizo después (el trabajo propio sale de merge-base..punta)",
+      "verify": "cargo test -p gitraptor-core --test ts_ckp_001_pairs old_base:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/ts_ckp_001_pairs.rs"
+      ]
+    },
+    {
+      "id": "CKP001-OVERLAP",
+      "statement": "T002: el solape W–base y W1–W2 es la intersección del trabajo propio (commiteado y sin commitear), y una entrada partial da un solape partial, nunca uno vacío",
+      "verify": "cargo test -p gitraptor-core --test ts_ckp_001_pairs overlap:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/ts_ckp_001_pairs.rs"
+      ]
+    },
+    {
+      "id": "CKP001-BASE-STATES",
+      "statement": "T002: base Unconfirmed deja los pares contra la base en Pending(BaseUnconfirmed) y los pares entre worktrees siguen; base Invalid o rama base sin ref da NotComputable(BaseMissing)",
+      "verify": "cargo test -p gitraptor-core --test ts_ckp_001_pairs base_states:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/ts_ckp_001_pairs.rs"
+      ]
+    },
+    {
+      "id": "CKP001-STALE",
+      "statement": "T003 guard 3.1: un resultado cuya triple ya cambió se descarta (complete devuelve false) y el par nunca queda Current con entradas viejas",
+      "verify": "cargo test -p gitraptor-core --test ts_ckp_001_state stale:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/ts_ckp_001_state.rs"
+      ]
+    },
+    {
+      "id": "CKP001-CACHE",
+      "statement": "T003: una triple igual a la de la caché no encola nada; una triple distinta encola el par y lo pasa a Recalculating si tenía resultado; un cambio solo de rutas sin commitear recalcula el solape sin encolar",
+      "verify": "cargo test -p gitraptor-core --test ts_ckp_001_state cache:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/ts_ckp_001_state.rs"
+      ]
+    },
+    {
+      "id": "CKP001-QUEUE",
+      "statement": "T003: PairQueue guarda como mucho un trabajo por par (el nuevo sustituye al anterior) y saca por prioridad ChangedVsBase, PresentSession, Rest, por orden de llegada dentro de cada una",
+      "verify": "cargo test -p gitraptor-core --test ts_ckp_001_state queue:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/ts_ckp_001_state.rs"
+      ]
+    },
+    {
+      "id": "CKP001-OPINPROG",
+      "statement": "T003: un worktree con operación en curso deja sus pares en Pending(OperationInProgress) sin encolar nada",
+      "verify": "cargo test -p gitraptor-core --test ts_ckp_001_state op_in_progress:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/ts_ckp_001_state.rs"
+      ]
+    },
+    {
+      "id": "CKP001-DORMANT",
+      "statement": "T003/D4: suspend(Dormant) deja cada par Pending(Dormant) con su último resultado y su hora; al volver a aplicar un plan se recalculan todos como en el cálculo inicial",
+      "verify": "cargo test -p gitraptor-core --test ts_ckp_001_state dormant:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/ts_ckp_001_state.rs"
+      ]
+    },
+    {
+      "id": "CKP001-MODULE",
+      "statement": "T003: el módulo predict está registrado con una línea en MODULES",
+      "verify": "grep -qE '\\(\"predict\", predict::start\\)' crates/core/src/daemon/modules/mod.rs",
+      "layer": "static"
+    },
+    {
+      "id": "CKP001-MERGE-BASES",
+      "statement": "T002: RepoReader::merge_bases(a, b) con ids hex devuelve todas las merge-bases (dos en una historia cruzada), una en una historia simple y ninguna sin historia común",
+      "verify": "cargo test -p gitraptor-git --test ts_ckp_001_merge_bases merge_bases:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/git/tests/ts_ckp_001_merge_bases.rs"
+      ]
+    },
+    {
+      "id": "CKP001-HUNK-MARKER",
+      "statement": "T004 guard 4.1: una línea que imita un marcador más corto o más largo que marker_size (32) es contenido, no un bloque",
+      "verify": "cargo test -p gitraptor-git --test ts_ckp_001_hunks marker:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/git/tests/ts_ckp_001_hunks.rs"
+      ]
+    },
+    {
+      "id": "CKP001-HUNK-JOIN",
+      "statement": "T004 guard 4.2: dos bloques separados por 3 líneas o menos en los dos lados se publican como uno; separados por 4, como dos",
+      "verify": "cargo test -p gitraptor-git --test ts_ckp_001_hunks join:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/git/tests/ts_ckp_001_hunks.rs"
+      ]
+    },
+    {
+      "id": "CKP001-HUNK-SIDES",
+      "statement": "T004: los rangos (inicio en 1 y longitud) están en las coordenadas de cada lado aunque las partes resueltas vengan del otro lado, y pasado max_hunks_per_file se corta y se marca truncado",
+      "verify": "cargo test -p gitraptor-git --test ts_ckp_001_hunks sides:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/git/tests/ts_ckp_001_hunks.rs"
+      ]
+    },
+    {
+      "id": "CKP001-DIRRENAME",
+      "statement": "T004 guard 4.3: un archivo movido por un renombrado de directorio y un conflicto directorio/archivo sin etapa en el índice aparecen en la lista de conflictos",
+      "verify": "cargo test -p gitraptor-git --test ts_ckp_001_dry_merge dir_rename:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/git/tests/ts_ckp_001_dry_merge.rs"
+      ]
+    },
+    {
+      "id": "CKP001-KINDS",
+      "statement": "T004: cada archivo en conflicto lleva su ConflictKind (Content, AddAdd, ModifyDelete, Rename, DirectoryFile), has_kind_needing_escalation es cierto solo con ModifyDelete o Rename, y pasado max_files se corta con truncated",
+      "verify": "cargo test -p gitraptor-git --test ts_ckp_001_dry_merge kinds:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/git/tests/ts_ckp_001_dry_merge.rs"
+      ]
+    },
+    {
+      "id": "CKP001-NODRIVER",
+      "statement": "T005 guard 5.1: con merge.<x>.driver configurado y .gitattributes merge=<x> en disco, índice y árbol, ningún driver se ejecuta (el marcador del canario no aparece) y el conflicto se informa",
+      "verify": "cargo test -p gitraptor-git --test ts_ckp_001_dry_merge no_driver:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/git/tests/ts_ckp_001_dry_merge.rs"
+      ]
+    },
+    {
+      "id": "CKP001-BLOBCAP",
+      "statement": "T005 guard 5.2: un blob por encima de max_blob_bytes (tamaño leído de la cabecera) deja el archivo como Binary sin hunks y sin error; uno por debajo da sus hunks",
+      "verify": "cargo test -p gitraptor-git --test ts_ckp_001_dry_merge blob_cap:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/git/tests/ts_ckp_001_dry_merge.rs"
+      ]
+    },
+    {
+      "id": "CKP001-MERGERULE",
+      "statement": "T005 guard 5.3: una regla merge= en el .gitattributes del árbol de cualquiera de las dos puntas marca has_merge_rule; un .gitattributes solo en el disco o el índice no marca, y la regla no resuelve el conflicto",
+      "verify": "cargo test -p gitraptor-git --test ts_ckp_001_dry_merge merge_rule:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/git/tests/ts_ckp_001_dry_merge.rs"
+      ]
+    },
+    {
+      "id": "CKP001-ERRORS",
+      "statement": "T005: un objeto ausente da DryMergeError::MissingObject, un repo superficial sin la merge-base da Shallow y un max_written_bytes pequeño da LimitExceeded",
+      "verify": "cargo test -p gitraptor-git --test ts_ckp_001_dry_merge errors:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/git/tests/ts_ckp_001_dry_merge.rs"
+      ]
+    },
+    {
+      "id": "CKP001-VIRTUAL",
+      "statement": "T005: con dos merge-bases el resultado usa MergeBaseUsed::Virtual con las dos, y los marcadores de la base virtual no cuentan como bloques",
+      "verify": "cargo test -p gitraptor-git --test ts_ckp_001_dry_merge virtual_base:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/git/tests/ts_ckp_001_dry_merge.rs"
+      ]
+    },
+    {
+      "id": "CKP001-INTACT",
+      "statement": "T005/NFR-01: merge_in_memory deja el repo observado intacto (huella de gitraptor_testkit con mtime de packs, objetos sueltos y directorios de objects/)",
+      "verify": "cargo test -p gitraptor-git --test ts_ckp_001_dry_merge repo_intact:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/git/tests/ts_ckp_001_dry_merge.rs"
+      ]
+    },
+    {
+      "id": "CKP001-NO-HIGHLEVEL",
+      "statement": "T005/L-04: crates/git/src/dry_merge no llama a merge_trees, merge_commits, merge_resource_cache, tree_merge_options ni Repository::attributes*",
+      "verify": "test -f crates/git/src/dry_merge/memory.rs && ! grep -rqE 'merge_trees|merge_commits|merge_resource_cache|tree_merge_options|\\.attributes(_only)?\\(' crates/git/src/dry_merge",
+      "layer": "static"
+    },
+    {
+      "id": "CKP001-G9",
+      "statement": "G9: la excepción de gix_writes_only_in_store_writer cubre solo crates/git/src/dry_merge/memory.rs y solo si contiene with_object_memory",
+      "verify": "grep -q 'with_object_memory' crates/git/src/dry_merge/memory.rs && grep -q 'dry_merge/memory.rs' crates/git/tests/static_check.rs && grep -q 'with_object_memory' crates/git/tests/static_check.rs",
+      "layer": "static"
+    },
+    {
+      "id": "CKP001-FIDELITY",
+      "statement": "T011: sobre el corpus R-SYN (31 casos con la demo del BRD § 13 y un caso de historia cruzada), los archivos en conflicto coinciden al 100 % con git merge-tree en un clon temporal, los rangos de hunks son idénticos y la demo no tiene falsos negativos",
+      "verify": "cargo test -p gitraptor-git --test dry_merge_fidelity r_syn:: 2>&1 | tee /dev/stderr | grep -qE 'test result: ok\\. [1-9][0-9]* passed'",
+      "layer": "runtime",
+      "tests": [
+        "crates/git/tests/dry_merge_fidelity.rs"
+      ]
+    },
+    {
+      "id": "CKP001-STATUS",
+      "statement": "PC-6: TS-CKP-001 queda partially-implemented en su ficha y en el índice de release-status.md (docs-lint comprueba en CI que el archivo coincide con el generador)",
+      "verify": "grep -q '^status: partially-implemented' docs/requirements/features/cockpit/technical-stories/TS-CKP-001-predictor-conflictos.md && grep -E 'TS-CKP-001' docs/requirements/release-status.md | grep -q 'partially-implemented'",
+      "layer": "static"
+    }
+  ],
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "docs/architecture/decisions/ADR-GRD-008*",
+      "crates/api/**",
+      "apps/mcp/**",
+      "apps/cli/src/tui/**"
+    ],
+    "allow_dependency_changes": true
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-git",
+      "gitraptor-core",
+      "gitraptor-testkit"
+    ]
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 900000,
+    "suiteTimeoutMs": 2400000
+  },
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "opus"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "opus"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  }
+}
