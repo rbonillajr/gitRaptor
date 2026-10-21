@@ -1,0 +1,115 @@
+{
+  "source": {
+    "kind": "devspec",
+    "ref": "docs/requirements/features/cockpit/dev-specs/US-CKP-005-terminal-pequena-sin-color.md"
+  },
+  "suite": { "command": "node tools/test/nextest-junit.mjs" },
+  "layers": {
+    "runtime": {
+      "commands": [{ "id": "suite", "cmd": "node tools/test/nextest-junit.mjs" }],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "criteria": [
+    {
+      "id": "CKP005-SIZE",
+      "statement": "Escenario 1 (D1): bajo 80x24 la TUI pinta solo el aviso con la accion (es: 'Amplía la terminal a 80×24 como mínimo.'; en: 'Resize it to at least 80×24.') y, al llegar Msg::Resize a 80x24, el mismo Model pinta la flota sin reiniciar",
+      "verify": "cargo test -p gitraptor-cli --test tui_screens too_small_then_resized_without_restart",
+      "layer": "runtime",
+      "tests": ["apps/cli/tests/tui_screens.rs"]
+    },
+    {
+      "id": "CKP005-NOCOLOR",
+      "statement": "Escenario 3 (D4): con ColorMode::NoColor ninguna celda lleva color y cada estado (activo, inactivo, sin agente, no disponible) se lee por su simbolo y su texto, en Unicode y en ASCII",
+      "verify": "cargo test -p gitraptor-cli --test tui_screens every_state_reads_without_color",
+      "layer": "runtime",
+      "tests": ["apps/cli/tests/tui_screens.rs"]
+    },
+    {
+      "id": "CKP005-ASCII",
+      "statement": "Escenario 5 (D3, D6): en ASCII ninguna pantalla (flota, selector, pregunta, repo descubierto, ayuda, aviso de tamano, cabecera con ObserveFailed) pinta un glifo Unicode: todo caracter es ASCII, una letra o ¿/¡, en en y es",
+      "verify": "cargo test -p gitraptor-cli --test tui_screens ascii_screens_paint_only_ascii",
+      "layer": "runtime",
+      "tests": ["apps/cli/tests/tui_screens.rs"]
+    },
+    {
+      "id": "CKP005-LANG",
+      "statement": "Escenario 4: la pantalla habla un solo idioma: es contiene Flota, salir y ayuda y no Fleet, quit ni help; en, al reves",
+      "verify": "cargo test -p gitraptor-cli --test tui_screens the_screen_speaks_the_language",
+      "layer": "runtime",
+      "tests": ["apps/cli/tests/tui_screens.rs"]
+    },
+    {
+      "id": "CKP005-HELP",
+      "statement": "Escenario 5 (D5): '?' abre y cierra la ayuda, Esc la cierra, 'q' sale con la ayuda abierta y 'r' da tecla desconocida con la ayuda abierta",
+      "verify": "cargo test -p gitraptor-cli --test tui_screens question_mark_opens_and_closes_the_help",
+      "layer": "runtime",
+      "tests": ["apps/cli/tests/tui_screens.rs"]
+    },
+    {
+      "id": "CKP005-HELPKEYS",
+      "statement": "Escenario 5 (D5): la ayuda muestra las teclas del panel actual: en la flota 'Siempre' con q, r, Ctrl-Z y ?; en el selector ↑ k, ↓ j y Enter; en la pregunta s y y n; y una leyenda de simbolos",
+      "verify": "cargo test -p gitraptor-cli --test tui_screens question_mark_shows_the_keys_of_the_panel",
+      "layer": "runtime",
+      "tests": ["apps/cli/tests/tui_screens.rs"]
+    },
+    {
+      "id": "CKP005-LEGEND",
+      "statement": "Escenario 3 (D4): con filas activa e inactiva la barra termina con '● agente activo' y '◐ agente inactivo' (ASCII '* agente activo', '~ agente inactivo'); sin filas inactivas no aparece ◐",
+      "verify": "cargo test -p gitraptor-cli --test tui_screens the_bar_explains_the_states_on_screen",
+      "layer": "runtime",
+      "tests": ["apps/cli/tests/tui_screens.rs"]
+    },
+    {
+      "id": "CKP005-ASCIIKEYS",
+      "statement": "D3/D5: en ASCII la barra del selector etiqueta las flechas Up/Down y muestra la tecla alternativa (k, j), y '? ayuda' ocupa el hueco fijo de la derecha",
+      "verify": "cargo test -p gitraptor-cli --test tui_screens the_ascii_bar_never_shows_arrow_glyphs",
+      "layer": "runtime",
+      "tests": ["apps/cli/tests/tui_screens.rs"]
+    },
+    {
+      "id": "CKP005-SAY",
+      "statement": "D3 (ADR-CKP-003): en la parte no test de tui/view.rs '.render(' aparece una sola vez (dentro de impl Say) y en tui/help.rs ninguna",
+      "verify": "cargo test -p gitraptor-cli --test tui_boundaries the_view_translates_only_through_say",
+      "layer": "runtime",
+      "tests": ["apps/cli/tests/tui_boundaries.rs"]
+    },
+    {
+      "id": "CKP005-PTY-HELP",
+      "statement": "Escenario 5 contra el raptor real bajo script (macOS, debug): '?' pinta 'Siempre', Esc y '?' lo pintan otra vez y '?','?' lo pintan una tercera",
+      "verify": "cargo test -p gitraptor-cli --test tui_accessibility question_mark_opens_and_closes_the_help",
+      "layer": "runtime",
+      "tests": ["apps/cli/tests/tui_accessibility.rs"]
+    },
+    {
+      "id": "CKP005-PTY-ASCII",
+      "statement": "Escenario 5 contra el raptor real: con --ascii (en y es, 100x30) todo caracter de la salida es ASCII, una letra o ¿/¡",
+      "verify": "cargo test -p gitraptor-cli --test tui_accessibility ascii_paints_only_ascii",
+      "layer": "runtime",
+      "tests": ["apps/cli/tests/tui_accessibility.rs"]
+    }
+  ],
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "crates/**",
+      "apps/mcp/**",
+      "apps/cli/src/main.rs",
+      "Cargo.lock",
+      "Cargo.toml",
+      "apps/cli/Cargo.toml",
+      "apps/cli/tests/tui_unobserved_repo.rs"
+    ],
+    "allow_dependency_changes": false
+  },
+  "scope": { "projects": ["gitraptor-cli"] },
+  "budget": { "maxRounds": 3, "verifyTimeoutMs": 900000, "suiteTimeoutMs": 2700000 },
+  "hops": {
+    "design": { "agent": "main-loop", "model": "sonnet" },
+    "critic": { "agent": "nassa-core:plan-critic", "model": "opus" },
+    "tester": { "agent": "nassa-core:criterion-tester", "model": "sonnet" },
+    "build": { "agent": "nassa-dev-rust:rust-expert", "model": "sonnet" },
+    "review": { "agent": "nassa-dev-rust:rust-code-reviewer", "model": "opus" },
+    "conformance": { "agent": "nassa-dev-rust:rust-code-reviewer", "model": "sonnet" }
+  }
+}

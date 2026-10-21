@@ -170,3 +170,46 @@ fn the_model_and_the_view_never_hold_untrusted_text() {
         );
     }
 }
+
+/// The source before its first `#[cfg(test)]`, without comments.
+fn production(path: &Path) -> String {
+    let text = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("{} cannot be read: {e}", path.display()))
+        .replace("\r\n", "\n");
+    let text = match text.find("#[cfg(test)]") {
+        Some(i) => &text[..i],
+        None => &text[..],
+    };
+    text.lines()
+        .filter(|l| !l.trim_start().starts_with("//"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// US-CKP-005 (D3, ADR-CKP-003): every text of the view reaches the screen through `Say`
+/// (which folds it to ASCII when the symbol set asks): `.render(` appears once in the
+/// production part of `view.rs`, inside `impl Say`, and never in `help.rs`.
+#[test]
+fn the_view_translates_only_through_say() {
+    let tui = Path::new(SRC).join("tui");
+    let view = production(&tui.join("view.rs"));
+    let calls: Vec<usize> = view.match_indices(".render(").map(|(i, _)| i).collect();
+    assert_eq!(
+        calls.len(),
+        1,
+        "`.render(` must appear exactly once in view.rs (inside `impl Say`), found {}",
+        calls.len()
+    );
+    let say = view
+        .find("impl Say")
+        .expect("view.rs has no `impl Say` (the single point of translation)");
+    assert!(
+        calls[0] > say,
+        "the only `.render(` of view.rs is outside `impl Say`"
+    );
+    let help = production(&tui.join("help.rs"));
+    assert!(
+        !help.contains(".render("),
+        "help.rs translates by itself: it must go through Say"
+    );
+}
