@@ -15,6 +15,22 @@ pub const GRACE: Duration = Duration::from_secs(60);
 /// Debug builds only: another window for the end-to-end suites.
 pub const WINDOW_ENV: &str = "GITRAPTOR_TEST_GUARD_WINDOW_MS";
 
+/// Debug builds only: another grace for the end-to-end suites (how soon an unapplied
+/// announcement expires).
+pub const GRACE_ENV: &str = "GITRAPTOR_TEST_GUARD_GRACE_MS";
+
+/// The grace of this daemon.
+pub fn grace() -> Duration {
+    if cfg!(debug_assertions)
+        && let Some(ms) = std::env::var(GRACE_ENV)
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+    {
+        return Duration::from_millis(ms);
+    }
+    GRACE
+}
+
 /// The window of this daemon.
 pub fn window() -> Duration {
     if cfg!(debug_assertions)
@@ -51,7 +67,7 @@ pub struct Entry {
 
 impl Entry {
     fn expired(&self, now_ms: i64) -> bool {
-        now_ms > self.applies_at_ms + GRACE.as_millis() as i64
+        now_ms > self.applies_at_ms + grace().as_millis() as i64
     }
 
     pub fn view(&self) -> PendingAction {
