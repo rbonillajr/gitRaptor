@@ -220,7 +220,7 @@ graph TD
     ev --> sa["seed_activity: last_activity_in_gap"]
 ```
 
-El hueco llega al almacén antes de servir, así que `mcp.status` y el log de Guardrails lo ven sin cambios; `guard_log` ya descarta el duplicado por `from_ms` (`daemon/guard.rs:520-530`).
+El hueco llega al almacén antes de servir, así que `mcp.status` y el log de Guardrails lo ven sin cambios; `guard_log` ya descarta el duplicado por `from_ms` (`daemon/guard.rs:589-606`).
 
 ---
 
@@ -292,7 +292,7 @@ graph LR
   3. `a_stop_command_during_a_session_marks_the_gap`: el 2 con la sesión registrada; `during_session = true`.
   4. `a_reflog_that_does_not_reach_the_old_tip_collapses_into_one_branch_update`: 2 commits y `git reflog expire --expire=now --all`; un `branch-update` de la punta vieja a la nueva y ningún `commit`.
   5. `a_corrupt_store_records_a_store_corrupt_gap_from_the_add_date`: el almacén sobrescrito con basura; un hueco `store-corrupt` desde el `added_ms` del repo, ningún evento, y el `last_known_state` del worktree principal escrito.
-  6. `an_unreadable_repo_is_not_observed_and_keeps_its_mark`: la carpeta del repo renombrada antes del rearranque; el repo sale `unavailable`, no hay hueco nuevo y `observed_until` no cambia tras dos latidos (con un latido de 50 ms y la línea `daemon.log` del segundo latido como señal).
+  6. `an_unreadable_repo_is_not_observed_and_keeps_its_mark`: la carpeta del repo renombrada antes del rearranque; el repo sale `unavailable`, no hay hueco nuevo y `observed_until` no cambia tras dos latidos (con un latido corto; la señal de espera es un segundo repo legible en el mismo perfil cuyo `observed_until` avanza dos veces, con tope de 10 s: el latido no escribe línea de log cuando todo va bien, `persist_observed_until` solo escribe `observed_until_failed`; después se comprueba que el del repo ilegible no cambió).
   7. `the_gap_reconciliation_writes_nothing_in_the_repo`: el rearranque del test 1 dentro de `gitraptor_testkit::check(…, &Exceptions::none(), …).assert_intact()`.
   8. `events_gaps_rejects_an_invalid_or_unknown_repo`: `-32602` con un id no hexadecimal; el rechazo de `repo_command_error` con un id válido sin repo.
 - `us_grp_005_profile_loss.rs` (latido de 50 ms):
@@ -316,7 +316,7 @@ graph LR
 - `crates/core/tests/gap_classify.rs` (**CREATE**)
 
 **Reglas**
-- Mueve el cuerpo de `classify` (`watch/repo.rs:300`) a una función privada con un modo `Live` o `Strict`; `classify` usa `Live` y `classify_gap`, `Strict`.
+- Mueve el cuerpo de `classify` (`classify`, `watch/repo.rs:324`) a una función privada con un modo `Live` o `Strict`; `classify` usa `Live` y `classify_gap`, `Strict`.
 - ⛔3.1 Con `Strict`, una rama movida da un evento por entrada solo si, tras recortar a la punta actual, la más antigua tiene `old == punta guardada`, la más nueva `new == punta actual` y cada par consecutivo enlaza (`new` de una = `old` de la siguiente). Si no, un `branch-update` y `collapsed += 1`. `reflog_since` devuelve las 64 más nuevas si no encuentra la punta (`crates/git/src/reader.rs:243`), y `git reflog delete` deja huecos en medio.
 - Tests en `gap_classify.rs`, con la vista anterior leída con `RefsView::read` antes de cambiar un repo temporal: `a_continuous_chain_gives_one_event_per_reflog_entry`, `a_chain_that_does_not_reach_the_old_tip_collapses`, `a_chain_with_a_missing_middle_entry_collapses` (`git reflog delete refs/heads/feat-login@{1}`), `more_than_64_entries_collapse` (70 commits), `a_branch_created_in_the_gap_is_one_branch_create_with_its_tip`, `a_deleted_branch_is_one_branch_delete`.
 
@@ -332,15 +332,15 @@ graph LR
 **Ubicación.**
 - `crates/core/src/daemon/gaps.rs` (**CREATE**)
 - `crates/core/src/daemon/mod.rs` (**MODIFY**): `mod gaps;` y la llamada en `start`
-- `crates/core/src/daemon/guard.rs` (**MODIFY**): solo el comentario de `guard.rs:515`
+- `crates/core/src/daemon/guard.rs` (**MODIFY**): solo el comentario de `guard.rs:589-590`
 
 **Pasos**
 1. Escribe en `gaps.rs` `startup_plan`, `prior_view`, `cause_view` y `record_gap` con las firmas de § Firmas del stack y las reglas D2, D5, D6 y D7.
    1.1 ⛔4.1 El orden del lote es `OpenGap`, `CloseGap`, `read.store_ops(...)`, los `AppendEvent`, `SetObservedUntil`. Un evento cuyo worktree aún no está en el almacén rompe la clave foránea.
    1.2 Cada `AppendEvent` lleva `session_id`, `evidence` y `authorship` en `None` y `gap_id: Some(id)`, con `id = format!("{}-{}", cause.as_str(), run_id())`, como `daemon/repos.rs:417`.
-2. En `Daemon::start` (`daemon/mod.rs:540-546`), cuando `startup_plan` da `Some`, llama a `record_gap` en lugar de `persist_read`, antes de calcular el `state` del repo.
+2. En `Daemon::start` (`daemon/mod.rs:555` (la llamada a `persist_read`)), cuando `startup_plan` da `Some`, llama a `record_gap` en lugar de `persist_read`, antes de calcular el `state` del repo.
    2.1 ⛔4.2 Con `read` en `None`, o si `record_gap` devuelve `false`: añade el repo a `report.unavailable`, quita su almacén de `stores` y su lectura de `reads`, y no lo observes (D1, D8). Así el latido no mueve su "observado hasta", y `persist_read` no borra la base del siguiente intento.
-3. Cambia el comentario de `guard.rs:515`: el hueco de este arranque ya está en el almacén al servir; el bloque solo cubre el intervalo y descarta el duplicado. La lógica no cambia.
+3. Cambia el comentario de `daemon/guard.rs:589-590` («its gap reaches the store only with the observer's next batch»), no otro: el hueco de este arranque ya está en el almacén al servir; el bloque solo cubre el intervalo y descarta el duplicado. La lógica no cambia.
 4. Escribe el log `startup_gap` o `startup_gap_failed` (§ Contrato de API).
 5. Tests en `mod tests` de `gaps.rs`: `the_prior_view_takes_refs_from_the_latest_known_state_and_remotes_from_now`, `gone_worktrees_are_not_in_the_prior_view`, `without_known_state_there_is_no_prior_view`, `a_recovered_store_plans_a_store_corrupt_gap_from_the_add_date`, `the_gap_starts_at_observed_until_then_known_state_then_add_date`, `a_reconciled_event_only_where_no_git_event_explains_the_change`, `every_gap_cause_has_a_view`, `a_failed_gap_write_leaves_the_repo_unobserved` (almacén de solo lectura).
 
@@ -363,7 +363,7 @@ graph LR
 
 **Reglas**
 - `gaps_page`: SQL parametrizado; con `since_ms`, `WHERE ended_ms IS NULL OR ended_ms >= ?1 ORDER BY started_ms, gap_id LIMIT ?2`; sin él, los `limit` más recientes en orden ascendente.
-- `conn.rs` valida con `valid_repo_id`, limita con `limit.unwrap_or(MAX_GAPS_PAGE).clamp(1, MAX_GAPS_PAGE)` y mapea errores con `repo_command_error`, como `events_history` (`conn.rs:2071`). El brazo del bucle llama a `wake_for_request` antes de responder.
+- `conn.rs` valida con `valid_repo_id`, limita con `limit.unwrap_or(MAX_GAPS_PAGE).clamp(1, MAX_GAPS_PAGE)` y mapea errores con `repo_command_error`, como `events_history` (`events_history`, `conn.rs:2327`). El brazo del bucle llama a `wake_for_request` antes de responder.
 - `during_session` (D9): `false` fuera de `daemon-down`, `daemon-down-during-session` y `daemon-stopped`; verdadero con `daemon-down-during-session`, o si una sesión empezó antes del inicio del hueco y su fin (o, sin fin, la hora de su último evento `session-*`) no es anterior a ese inicio. Tests: `during_session_covers_a_session_present_at_the_gap_start`, `a_session_ended_in_an_earlier_gap_does_not_mark_a_later_one`, `an_observer_gap_is_never_during_session`.
 - `cause_view` es un `match` sin brazo `_`.
 
