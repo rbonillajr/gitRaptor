@@ -588,11 +588,19 @@ impl Connection<'_> {
         self.profile == ConnectionProfile::Full && self.has(methods::CAP_AUDIT_OUTCOMES.name)
     }
 
+    /// Whether the connection reads the `changed` outcome of a confirmation of the team
+    /// baseline: it needs `guard.team-confirmation` on top of `audit.outcomes`.
+    fn team_confirm_outcomes(&self) -> bool {
+        self.audit_outcomes() && self.has(methods::CAP_GUARD_TEAM_CONFIRMATION.name)
+    }
+
     /// What the connection's capabilities change in what it is sent.
     fn apply_capabilities(&self) {
         // Nor the end of an announced action in `reserved.audit` without `audit.outcomes`.
         self.outbox
             .set_without_audit_outcomes(!self.audit_outcomes());
+        self.outbox
+            .set_without_changed_outcome(!self.team_confirm_outcomes());
         // A connection without it cannot read Git events of kind `reset`
         // (protocol 8, US-TMC-004).
         self.outbox
@@ -2449,6 +2457,11 @@ impl Connection<'_> {
             for (id, row) in rows {
                 after = id;
                 match audit_view::audit_entry(id, &row) {
+                    // An outcome an older client cannot decode is left out, like the outcomes
+                    // of a client without `audit.outcomes`.
+                    Some(entry)
+                        if entry.outcome == gitraptor_api::messages::AuditOutcome::Changed
+                            && !self.team_confirm_outcomes() => {}
                     Some(entry) => entries.push(entry),
                     None => self
                         .ctx

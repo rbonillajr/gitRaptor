@@ -54,6 +54,8 @@ pub struct Outbox {
     without_protection: std::sync::atomic::AtomicBool,
     /// Without `audit.outcomes` (see [`Outbox::set_without_audit_outcomes`]).
     without_audit_outcomes: std::sync::atomic::AtomicBool,
+    /// Without `guard.team-confirmation` (see [`Outbox::set_without_changed_outcome`]).
+    without_changed_outcome: std::sync::atomic::AtomicBool,
 }
 
 #[derive(Debug, Default)]
@@ -80,6 +82,7 @@ impl Outbox {
             without_discovery: std::sync::atomic::AtomicBool::new(true),
             without_protection: std::sync::atomic::AtomicBool::new(true),
             without_audit_outcomes: std::sync::atomic::AtomicBool::new(true),
+            without_changed_outcome: std::sync::atomic::AtomicBool::new(true),
         })
     }
 
@@ -137,6 +140,14 @@ impl Outbox {
     /// action never reach it (nor `raptor-mcp`, which gets no audit at all).
     pub fn set_without_audit_outcomes(&self, without: bool) {
         self.without_audit_outcomes
+            .store(without, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// The connection lacks `guard.team-confirmation`: a `reserved.audit` entry with the
+    /// `changed` outcome (a confirmation of the team baseline not applied) never reaches it, even
+    /// with `audit.outcomes`: a client older than that outcome could not decode it.
+    pub fn set_without_changed_outcome(&self, without: bool) {
+        self.without_changed_outcome
             .store(without, std::sync::atomic::Ordering::Relaxed);
     }
 
@@ -238,17 +249,16 @@ impl Outbox {
                 .load(std::sync::atomic::Ordering::Relaxed);
         }
         if event.kind == gitraptor_api::event::RESERVED_AUDIT {
-            return self
-                .without_audit_outcomes
-                .load(std::sync::atomic::Ordering::Relaxed)
-                && event
-                    .data
-                    .get("outcome")
-                    .and_then(|o| {
-                        serde_json::from_value::<gitraptor_api::messages::AuditOutcome>(o.clone())
-                            .ok()
-                    })
-                    .is_some_and(gitraptor_api::messages::AuditOutcome::needs_capability);
+            use gitraptor_api::messages::AuditOutcome;
+            let outcome = event
+                .data
+                .get("outcome")
+                .and_then(|o| serde_json::from_value::<AuditOutcome>(o.clone()).ok());
+            let relaxed = std::sync::atomic::Ordering::Relaxed;
+            return (self.without_audit_outcomes.load(relaxed)
+                && outcome.is_some_and(AuditOutcome::needs_capability))
+                || (self.without_changed_outcome.load(relaxed)
+                    && outcome == Some(AuditOutcome::Changed));
         }
         if event.kind == gitraptor_api::event::REPO_DISCOVERED {
             return self
@@ -1058,5 +1068,30 @@ mod tests {
         }
         assert_eq!(seqs(&drain(&without)), [1, 3, 6]);
         assert_eq!(seqs(&drain(&with)), [1, 2, 3, 4, 5, 6, 7]);
+    }
+
+    /// `changed` reaches only a connection with `audit.outcomes` and `guard.team-confirmation`.
+    #[test]
+    fn the_changed_outcome_needs_the_team_confirmation_too() {
+        use gitraptor_api::messages::AuditOutcome::*;
+        let bus = bus(16);
+        let legacy = Outbox::new(64);
+        let outcomes_only = Outbox::new(64);
+        outcomes_only.set_without_audit_outcomes(false);
+        let both = Outbox::new(64);
+        both.set_without_audit_outcomes(false);
+        both.set_without_changed_outcome(false);
+        for (id, out) in [(1, &legacy), (2, &outcomes_only), (3, &both)] {
+            assert_eq!(
+                bus.subscribe(out, id, Some(1), Some("run-1"), false),
+                Subscribed::From(1)
+            );
+        }
+        for (i, o) in [Accepted, Changed, Applied].iter().enumerate() {
+            bus.publish(RESERVED_AUDIT, audit_entry(i as i64, *o), None, |_| {});
+        }
+        assert_eq!(seqs(&drain(&legacy)), [1]);
+        assert_eq!(seqs(&drain(&outcomes_only)), [1, 3]);
+        assert_eq!(seqs(&drain(&both)), [1, 2, 3]);
     }
 }
