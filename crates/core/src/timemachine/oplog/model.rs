@@ -337,6 +337,11 @@ pub struct CompleteInfo {
     pub unique_size_bytes: u64,
     /// Paths left out (size, submodules) with the reason.
     pub exclusions: Vec<Exclusion>,
+    /// Whether an operation was in progress in one of its worktrees when the capture started
+    /// or at its validity point: such a photo is never the point before a raw event (a prior
+    /// is). `None` on rows recorded before the field existed, read as "not mid-operation".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mid_operation: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
