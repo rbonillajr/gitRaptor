@@ -16,6 +16,10 @@
 //!
 //! TRADEOFF: a foreign git event on the same worktree can close the prior's window before its
 //! own command's first event; upgrade with per-event process identity.
+//!
+//! TRADEOFF: event kinds do not tell a finished rebase from an aborted one, so a hooked rebase
+//! stopped on a conflict and aborted is undone to its prior, not to the half-resolved photo
+//! (which stays a point of its own); without a prior, a mid-rebase photo stays eligible.
 
 use super::oplog::{SnapshotLevel, SnapshotView};
 
@@ -55,9 +59,9 @@ impl PointFacts {
 /// The indexes of `points` eligible as the point before the event `seq`, best first: the
 /// greatest `(mark, seq)` first. `event_seqs` are the raw event seqs of the same key, ascending.
 ///
-/// Eligible: `mark < seq`, `seq >= floor`, not a mid-operation observation (a prior never is
-/// excluded for it) and not shadowed by any prior of `points`, available or not. Availability
-/// is left to the caller.
+/// Eligible: `mark < seq`, `seq >= floor` and not shadowed by any prior of `points`, available
+/// or not. A mid-operation photo stays eligible unless it belongs to a prior's command (the
+/// state before a `merge --abort` is the half-done merge). Availability is left to the caller.
 pub(crate) fn before_event(
     points: &[PointFacts],
     event_seqs: &[i64],
@@ -73,20 +77,39 @@ pub(crate) fn before_event(
             (p.seq, event_seqs.get(at).copied())
         })
         .collect();
+    // The prior's command runs until its first event, and on while the worktree stays
+    // mid-operation after it: it ends at the first clean point the prior does not shadow by
+    // mark (another prior, or a point not mid-operation whose mark reaches that event),
+    // available or not. `None` is "not ended yet".
+    let windows: Vec<(i64, Option<i64>, Option<i64>)> = windows
+        .into_iter()
+        .map(|(p_seq, first)| {
+            let end = first.and_then(|f| {
+                points
+                    .iter()
+                    .filter(|r| r.seq > p_seq && (r.prior || (!r.mid_operation && r.mark >= f)))
+                    .map(|r| r.seq)
+                    .min()
+            });
+            (p_seq, first, end)
+        })
+        .collect();
     let shadowed = |q: &PointFacts| {
-        windows.iter().any(|(p_seq, first)| {
+        windows.iter().any(|(p_seq, first, end)| {
             // A prior of an older generation has marks of another numbering: it does not
             // shadow the current one.
             let other_generation = *p_seq < floor && q.seq >= floor;
-            q.seq > *p_seq && first.is_none_or(|f| q.mark < f) && !other_generation
+            // A mid-operation photo before the command ended is the command's (a prior never
+            // is one).
+            let in_command = first.is_none_or(|f| q.mark < f)
+                || (q.mid_operation && !q.prior && end.is_none_or(|e| q.seq < e));
+            q.seq > *p_seq && in_command && !other_generation
         })
     };
     let mut eligible: Vec<usize> = points
         .iter()
         .enumerate()
-        .filter(|(_, q)| {
-            q.mark < seq && q.seq >= floor && (q.prior || !q.mid_operation) && !shadowed(q)
-        })
+        .filter(|(_, q)| q.mark < seq && q.seq >= floor && !shadowed(q))
         .map(|(i, _)| i)
         .collect();
     eligible.sort_by_key(|i| std::cmp::Reverse((points[*i].mark, points[*i].seq)));

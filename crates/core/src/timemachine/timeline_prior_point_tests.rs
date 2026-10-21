@@ -60,20 +60,40 @@ fn timeline_and_undo_pick_the_same_point_for_an_event() {
 }
 
 #[test]
-fn undo_never_targets_a_mid_operation_observation() {
+fn undo_never_targets_a_mid_operation_observation_that_follows_a_prior() {
     let all = [
         view("clean", 1, SnapshotLevel::Observation, 10, Some(false)),
-        view("mid", 2, SnapshotLevel::Observation, 11, Some(true)),
+        view("prior", 2, SnapshotLevel::HookPrior, 10, Some(false)),
+        view("mid", 3, SnapshotLevel::Observation, 11, Some(true)),
     ];
     let ev = events(&[11, 12]);
     let undo = raw_candidates(&all, KEY, &ev[KEY], 12, 0);
-    assert_eq!(undo, vec!["clean".to_owned()]);
+    assert_eq!(undo, vec!["prior".to_owned(), "clean".to_owned()]);
     let points = Points::with_events(&all, &ev);
     assert_eq!(
         points
             .before_event(KEY, 12, 0)
             .map(|s| s.record.snapshot_id.as_str()),
-        Some("clean")
+        Some("prior")
+    );
+}
+
+#[test]
+fn timeline_and_undo_pick_the_half_done_merge_photo_for_a_merge_abort() {
+    // C8 through the wiring: no prior, the merge stops (11), the half-done photo, the abort (13).
+    let all = [
+        view("clean", 1, SnapshotLevel::Observation, 10, Some(false)),
+        view("mid", 2, SnapshotLevel::Observation, 12, Some(true)),
+    ];
+    let ev = events(&[11, 13]);
+    let undo = raw_candidates(&all, KEY, &ev[KEY], 13, 0);
+    assert_eq!(undo, vec!["mid".to_owned(), "clean".to_owned()]);
+    let points = Points::with_events(&all, &ev);
+    assert_eq!(
+        points
+            .before_event(KEY, 13, 0)
+            .map(|s| s.record.snapshot_id.as_str()),
+        Some("mid")
     );
 }
 

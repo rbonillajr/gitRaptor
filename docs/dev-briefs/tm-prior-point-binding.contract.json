@@ -7,7 +7,7 @@
   "criteria": [
     {
       "id": "C1",
-      "statement": "Rebase con observación tardía: con HookPrior(m0), Obs(m0) anterior, evento 1, Obs(m1) a mitad de operación y evento 2, el punto previo de los eventos 1 y 2 es el previo del hook; sin previo es Obs(m0), nunca la foto a mitad de rebase",
+      "statement": "Rebase con observación tardía: con HookPrior(m0), Obs(m0) anterior, evento 1, Obs(m1) a mitad de operación y evento 2, el punto previo de los eventos 1 y 2 es el previo del hook, nunca la foto a mitad de rebase; sin previo la foto a mitad sigue siendo elegible (limitación declarada)",
       "verify": "cargo test -p gitraptor-core --lib timemachine::prior_point::tests::rebase_ 2>&1 | grep -q 'test result: ok. 2 passed'",
       "layer": "runtime",
       "tests": ["crates/core/src/timemachine/prior_point_tests.rs"]
@@ -42,8 +42,8 @@
     },
     {
       "id": "C6",
-      "statement": "El timeline (Points::with_events) y el undo (raw_candidates) eligen el mismo punto previo para el mismo evento con una sola función y sobre el mismo conjunto sin filtrar (sombra con todos los puntos, disponibilidad filtrada sobre el resultado); un previo no disponible sigue ensombreciendo y gana un punto anterior o ninguno (TargetUnavailable); el undo nunca apunta a una observación a mitad de operación; y el undo de Git crudo toma su propio previo garantizado antes de restaurar",
-      "verify": "cargo test -p gitraptor-core --lib timemachine::timeline::prior_point_wiring:: 2>&1 | grep -q 'test result: ok. 3 passed' && cargo test -p gitraptor-core --test tm_prior_point_undo -- --exact raw_git_undo_takes_its_own_guaranteed_prior_before_restoring 2>&1 | grep -q 'test result: ok. 1 passed'",
+      "statement": "El timeline (Points::with_events) y el undo (raw_candidates) eligen el mismo punto previo para el mismo evento con una sola función y sobre el mismo conjunto sin filtrar (sombra con todos los puntos, disponibilidad filtrada sobre el resultado); un previo no disponible sigue ensombreciendo y gana un punto anterior o ninguno (TargetUnavailable); el undo nunca apunta a una observación a mitad de operación ensombrecida por (b); y el undo de Git crudo toma su propio previo garantizado antes de restaurar",
+      "verify": "cargo test -p gitraptor-core --lib timemachine::timeline::prior_point_wiring:: 2>&1 | grep -q 'test result: ok. 4 passed' && cargo test -p gitraptor-core --test tm_prior_point_undo -- --exact raw_git_undo_takes_its_own_guaranteed_prior_before_restoring 2>&1 | grep -q 'test result: ok. 1 passed'",
       "layer": "runtime",
       "tests": ["crates/core/src/timemachine/timeline_prior_point_tests.rs", "crates/core/tests/tm_prior_point_undo.rs"]
     },
@@ -53,6 +53,13 @@
       "verify": "cargo test -p gitraptor-core --test tm_prior_point_condition 2>&1 | grep -q 'test result: ok. 3 passed' && cargo test -p gitraptor-core --lib timemachine::prior_point::tests::mid_operation_ 2>&1 | grep -q 'test result: ok. 1 passed'",
       "layer": "runtime",
       "tests": ["crates/core/tests/tm_prior_point_condition.rs", "crates/core/src/timemachine/prior_point_tests.rs"]
+    },
+    {
+      "id": "C8",
+      "statement": "Una foto a mitad de operación solo se excluye cuando sigue a un previo sin un punto limpio en medio: el undo de un merge --abort vuelve a la foto del merge a medias (sin previo, o con un previo anterior y un punto limpio en medio), y un rebase con hook abortado tras una resolución parcial vuelve al previo",
+      "verify": "cargo test -p gitraptor-core --lib timemachine::prior_point::tests::abort_ 2>&1 | grep -q 'test result: ok. 4 passed' && cargo test -p gitraptor-cli --test tm_chaos -- --exact hostile_half_done_merge_rejects_until_aborted 2>&1 | grep -q 'test result: ok. 1 passed'",
+      "layer": "runtime",
+      "tests": ["crates/core/src/timemachine/prior_point_tests.rs", "apps/cli/tests/tm_chaos.rs"]
     }
   ],
   "constraints": {

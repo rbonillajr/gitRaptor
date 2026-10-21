@@ -1,4 +1,4 @@
-//! C1–C5 of `docs/dev-briefs/tm-prior-point-binding.md`: the one rule that picks the point
+//! C1–C5, C7 and C8 of `docs/dev-briefs/tm-prior-point-binding.md`: the one rule that picks the point
 //! before a raw Git event. Points and events are built by hand, in record order (`seq`).
 
 use super::*;
@@ -46,16 +46,17 @@ fn rebase_with_a_late_mid_operation_observation_picks_the_hook_prior() {
 }
 
 #[test]
-fn rebase_without_a_prior_skips_the_mid_operation_observation() {
+fn rebase_without_a_prior_keeps_the_mid_operation_observation_eligible() {
+    // Declared limitation (TRADEOFF, D2 b / D3): without a prior the mid-operation photo is
+    // eligible like any other point.
     let points = [obs(1, 10), mid(2, 11)];
     let events = [11, 12];
-    for seq in events {
-        assert_eq!(
-            before_event(&points, &events, seq, 0),
-            vec![0],
-            "event {seq}"
-        );
-    }
+    assert_eq!(
+        before_event(&points, &events, 12, 0),
+        vec![1, 0],
+        "event 12"
+    );
+    assert_eq!(before_event(&points, &events, 11, 0), vec![0], "event 11");
 }
 
 // C2 — restore with a late Git event.
@@ -149,6 +150,43 @@ fn control_a_prior_below_the_floor_casts_no_shadow_on_the_current_generation() {
     let points = [prior(1, 900), obs(2, 6)];
     let events = [7];
     assert_eq!(before_event(&points, &events, 7, 2), vec![1]);
+}
+
+// C8 — aborted merge (D2 b / D3 amendment).
+
+#[test]
+fn abort_of_a_merge_without_a_prior_picks_the_half_done_merge_photo() {
+    // Clean Obs(m10), the merge stops (event 11), the half-done photo Mid(m12), the abort (13).
+    let points = [obs(1, 10), mid(2, 12)];
+    let events = [11, 13];
+    assert_eq!(before_event(&points, &events, 13, 0), vec![1, 0]);
+}
+
+#[test]
+fn abort_of_a_merge_after_an_older_prior_and_a_clean_point_picks_the_half_done_merge_photo() {
+    // Prior(m5) and its event 6; a clean Obs(m10) between the prior and the half-done photo.
+    let points = [prior(1, 5), obs(2, 10), mid(3, 12)];
+    let events = [6, 11, 13];
+    assert_eq!(before_event(&points, &events, 13, 0), vec![2, 1, 0]);
+}
+
+#[test]
+fn abort_of_a_hooked_rebase_after_a_partial_resolution_picks_the_prior() {
+    // HookPrior(m10); the rebase stops (event 11); two mid-operation photos with no clean point
+    // after the prior; the abort (12) goes back to the prior.
+    let points = [prior(1, 10), mid(2, 11), mid(3, 11)];
+    let events = [11, 12];
+    assert_eq!(before_event(&points, &events, 12, 0), vec![0]);
+}
+
+#[test]
+fn abort_of_a_hooked_rebase_with_a_late_clean_observation_still_picks_the_prior() {
+    // HookPrior(m10); a clean Obs recorded after it with a stale mark (10 < f_P = 11), so the
+    // prior shadows it under (a) and it is not a clean point between; a mid-rebase photo; the
+    // rebase events 11 and 12. The prior wins, never the late observation nor the photo.
+    let points = [prior(1, 10), obs(2, 10), mid(3, 11)];
+    let events = [11, 12];
+    assert_eq!(before_event(&points, &events, 12, 0), vec![0]);
 }
 
 // C7 — the condition recorded by a capture (D3).
