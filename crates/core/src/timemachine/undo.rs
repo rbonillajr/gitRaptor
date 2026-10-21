@@ -331,36 +331,46 @@ pub(crate) fn external_events_in(
         .collect()
 }
 
-/// The state before a raw Git event (ADR-TMC-003 § 4): the latest snapshot
-/// of the worktree, of the current generation, whose mark is before the
-/// event, still a point of the timeline and intact in the store.
+/// The candidate targets of a raw Git event, best first (ADR-TMC-003 § 4): the points of
+/// `wt_key` the one rule picks, over every point of the key (an unavailable prior still
+/// shadows), then only those still available and not tampered.
+pub(super) fn raw_candidates(
+    snaps: &[super::oplog::SnapshotView],
+    wt_key: &str,
+    event_seqs: &[i64],
+    seq: i64,
+    floor: i64,
+) -> Vec<String> {
+    use super::prior_point::{PointFacts, before_event};
+    let (views, facts): (Vec<_>, Vec<_>) = snaps
+        .iter()
+        .filter(|s| s.record.worktrees.iter().any(|w| w == wt_key))
+        .filter_map(|s| PointFacts::of(s).map(|f| (s, f)))
+        .unzip();
+    before_event(&facts, event_seqs, seq, floor)
+        .into_iter()
+        .map(|i| views[i])
+        .filter(|s| s.state.is_available() && !s.tampered)
+        .map(|s| s.record.snapshot_id.clone())
+        .collect()
+}
+
+/// The state before a raw Git event (ADR-TMC-003 § 4): the first of
+/// [`raw_candidates`] intact in the store.
 fn raw_target(
     oplog: &Oplog,
     store: Option<&SnapshotStore>,
     wt_key: &str,
+    event_seqs: &[i64],
     seq: i64,
     floor: i64,
 ) -> Option<String> {
     use super::oplog::SnapshotFilter;
-    let mut candidates: Vec<_> = oplog
-        .snapshots(&SnapshotFilter::default())
-        .ok()?
-        .into_iter()
-        .filter(|s| {
-            s.record.seq >= floor
-                && s.record.worktrees.iter().any(|w| w == wt_key)
-                && s.record.engine_mark.is_some_and(|m| m < seq)
-                && s.state.is_available()
-                && !s.tampered
-        })
-        .collect();
-    candidates.sort_by_key(|s| (s.record.engine_mark, s.record.seq));
+    let snaps = oplog.snapshots(&SnapshotFilter::default()).ok()?;
     let store = store?;
-    candidates
+    raw_candidates(&snaps, wt_key, event_seqs, seq, floor)
         .into_iter()
-        .rev()
-        .find(|s| store.verify(&s.record.snapshot_id).is_ok())
-        .map(|s| s.record.snapshot_id)
+        .find(|id| store.verify(id).is_ok())
 }
 
 /// Steps 4–6 of ADR-TMC-005 § 4 (set, target, base rule). A refusal
@@ -424,9 +434,12 @@ fn plan(
                     .map(|b| format!("refs/heads/{b}"))
                     .collect(),
             };
-            let target = raw_target(oplog, store, &wt_key, *seq, raw.floor).ok_or_else(|| {
-                reject(TmRejectReason::TargetUnavailable, &scope, vec![op.clone()])
-            })?;
+            let mut event_seqs: Vec<i64> = raw.events.iter().map(|e| e.seq).collect();
+            event_seqs.sort_unstable();
+            let target = raw_target(oplog, store, &wt_key, &event_seqs, *seq, raw.floor)
+                .ok_or_else(|| {
+                    reject(TmRejectReason::TargetUnavailable, &scope, vec![op.clone()])
+                })?;
             let undone = Undone {
                 op: op.clone(),
                 id: format!("git-event-{seq}"),

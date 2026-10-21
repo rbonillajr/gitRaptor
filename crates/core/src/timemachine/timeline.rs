@@ -30,6 +30,7 @@ use super::oplog::{
     OperationView, Oplog, Requester, RequesterOrigin, SnapshotFilter, SnapshotLevel, SnapshotRefs,
     SnapshotView, Target,
 };
+use super::prior_point::{self, PointFacts};
 use super::undo::{RawSide, external_events_in};
 
 /// Total time a request may spend reading the paths of its entries (DS-US-TMC-006 D2, D10).
@@ -166,56 +167,92 @@ impl OplogRead {
     }
 }
 
-/// The offerable points, indexed: by id and, by worktree key, in the order the "before an event"
-/// rule picks from.
+/// Every point of the repo, indexed by id and, by worktree key, with the facts and the raw
+/// event seqs the "before an event" rule reads (ADR-TMC-003 § 4). Only the offerable ones are
+/// ever returned; every point still casts its shadow.
 struct Points<'a> {
     all: &'a [SnapshotView],
     by_id: HashMap<String, usize>,
-    /// Per worktree key: `(engine_mark, rank, seq, index)` ascending, of the points with a mark.
-    /// With the same mark a prior (rank 1) comes after an observation or a manual point
-    /// (rank 0): it is the same picture and the stronger promise, so it is the one picked.
-    by_key: HashMap<String, Vec<(i64, u8, i64, usize)>>,
+    by_key: HashMap<String, KeyPoints>,
+    /// The ids that may be returned; `None` is all of them.
+    offerable: Option<HashSet<String>>,
+}
+
+/// The points of one worktree key that have a mark, and the raw event seqs of the key.
+#[derive(Default)]
+struct KeyPoints {
+    facts: Vec<PointFacts>,
+    /// Index in `all` of each of `facts`.
+    index: Vec<usize>,
+    /// Ascending.
+    events: Vec<i64>,
 }
 
 impl<'a> Points<'a> {
-    fn new(all: &'a [SnapshotView]) -> Self {
+    /// `all` are every snapshot of the repo; `events` maps a snapshot key to its raw event
+    /// seqs.
+    fn with_events(all: &'a [SnapshotView], events: &HashMap<String, Vec<i64>>) -> Self {
         let mut by_id = HashMap::new();
-        let mut by_key: HashMap<String, Vec<(i64, u8, i64, usize)>> = HashMap::new();
+        let mut by_key: HashMap<String, KeyPoints> = HashMap::new();
         for (i, s) in all.iter().enumerate() {
             by_id.entry(s.record.snapshot_id.clone()).or_insert(i);
-            if let Some(mark) = s.record.engine_mark {
-                let rank = u8::from(matches!(
-                    s.record.level,
-                    SnapshotLevel::GuaranteedPrior | SnapshotLevel::HookPrior
-                ));
+            if let Some(facts) = PointFacts::of(s) {
                 for key in &s.record.worktrees {
-                    by_key
-                        .entry(key.clone())
-                        .or_default()
-                        .push((mark, rank, s.record.seq, i));
+                    let entry = by_key.entry(key.clone()).or_default();
+                    entry.facts.push(facts);
+                    entry.index.push(i);
                 }
             }
         }
-        for list in by_key.values_mut() {
-            list.sort();
+        for (key, entry) in &mut by_key {
+            if let Some(seqs) = events.get(key) {
+                entry.events.clone_from(seqs);
+                entry.events.sort_unstable();
+            }
         }
-        Self { all, by_id, by_key }
+        Self {
+            all,
+            by_id,
+            by_key,
+            offerable: None,
+        }
+    }
+
+    /// Restricts the winners to the offerable `points`: every point still casts its shadow.
+    fn offerable(self, points: &[SnapshotView]) -> Self {
+        Self {
+            offerable: Some(
+                points
+                    .iter()
+                    .map(|s| s.record.snapshot_id.clone())
+                    .collect(),
+            ),
+            ..self
+        }
+    }
+
+    fn is_offerable(&self, s: &SnapshotView) -> bool {
+        self.offerable
+            .as_ref()
+            .is_none_or(|ids| ids.contains(&s.record.snapshot_id))
     }
 
     fn get(&self, id: &str) -> Option<&SnapshotView> {
-        self.by_id.get(id).map(|i| &self.all[*i])
+        self.by_id
+            .get(id)
+            .map(|i| &self.all[*i])
+            .filter(|s| self.is_offerable(s))
     }
 
-    /// The latest point of the worktree `key` before the event `seq`, in the current generation
-    /// of the engine (the rule of the undo's target, without `store.verify`, D9).
+    /// The point of the worktree `key` before the event `seq`, in the current generation of the
+    /// engine: the best of the one rule that is available, intact and offerable (the undo's
+    /// target, without `store.verify`).
     fn before_event(&self, key: &str, seq: i64, floor: i64) -> Option<&SnapshotView> {
         let list = self.by_key.get(key)?;
-        let end = list.partition_point(|(mark, _, _, _)| *mark < seq);
-        list[..end]
-            .iter()
-            .rev()
-            .map(|(_, _, _, i)| &self.all[*i])
-            .find(|s| s.record.seq >= floor)
+        prior_point::before_event(&list.facts, &list.events, seq, floor)
+            .into_iter()
+            .map(|i| &self.all[list.index[i]])
+            .find(|s| s.state.is_available() && !s.tampered && self.is_offerable(s))
     }
 }
 
@@ -358,13 +395,11 @@ pub fn build_timeline_from(
     now: (i64, i32),
 ) -> TimelineResult {
     let mut unavailable = Vec::new();
-    let points = match &read.points {
-        Some(all) => Points::new(all),
-        None => {
-            unavailable.push(TimelineSource::Operations);
-            Points::new(&[])
-        }
-    };
+    let offerable = read.points.as_deref().unwrap_or_else(|| {
+        unavailable.push(TimelineSource::Operations);
+        &[]
+    });
+    let points = Points::with_events(&read.all_snapshots, &event_seqs(engine)).offerable(offerable);
     let mut entries: Vec<(Order, TimelineEntry)> = Vec::new();
 
     // A full page of events leaves older ones unseen: the operations older than the oldest event
@@ -578,6 +613,20 @@ pub fn without_inferred(result: &mut TimelineResult) {
     }
 }
 
+/// The raw event seqs of each snapshot key, for the "before an event" rule; none without the
+/// engine.
+fn event_seqs(engine: Option<&EngineSide>) -> HashMap<String, Vec<i64>> {
+    let mut seqs: HashMap<String, Vec<i64>> = HashMap::new();
+    for (root, raw) in engine.map(|e| &e.raw).into_iter().flatten() {
+        if let Some(key) = engine.and_then(|e| e.snapshot_keys.get(root)) {
+            seqs.entry(key.clone())
+                .or_default()
+                .extend(raw.events.iter().map(|e| e.seq));
+        }
+    }
+    seqs
+}
+
 /// The events each worktree root has that an operation of GitRaptor caused. A worktree whose raw
 /// events could not be read has none marked: its events show.
 fn echoes(read: &OplogRead, engine: &EngineSide) -> HashMap<String, HashSet<i64>> {
@@ -777,6 +826,10 @@ fn fill_files_with(
 #[cfg(test)]
 #[path = "timeline_inferred_tests.rs"]
 mod inferred_tests;
+
+#[cfg(test)]
+#[path = "timeline_prior_point_tests.rs"]
+mod prior_point_wiring;
 
 #[cfg(test)]
 mod tests {
@@ -1815,7 +1868,10 @@ mod tests {
         let late = w.snapshot(SnapshotLevel::GuaranteedPrior, 9, None, 20);
         let after = w.snapshot(SnapshotLevel::Observation, 20, None, 30);
         let read = OplogRead::read(&w.log, &w.refs, &query());
-        let points = Points::new(read.points.as_deref().unwrap());
+        // The prior's command reaches the engine at event 10: `after` is not in its shadow.
+        let events = HashMap::from([(KEY.to_owned(), vec![7, 10, 21])]);
+        let points = Points::with_events(&read.all_snapshots, &events)
+            .offerable(read.points.as_deref().unwrap());
         let id = |p: Option<&SnapshotView>| p.map(|s| s.record.snapshot_id.clone());
         assert_eq!(id(points.before_event(KEY, 7, 0)), Some(early.clone()));
         assert_eq!(id(points.before_event(KEY, 10, 0)), Some(late.clone()));
@@ -1834,7 +1890,9 @@ mod tests {
         // Recorded after the prior, with the same mark: the same picture.
         let observed = w.snapshot(SnapshotLevel::Observation, 9, None, 20);
         let read = OplogRead::read(&w.log, &w.refs, &query());
-        let points = Points::new(read.points.as_deref().unwrap());
+        let events = HashMap::from([(KEY.to_owned(), vec![10])]);
+        let points = Points::with_events(&read.all_snapshots, &events)
+            .offerable(read.points.as_deref().unwrap());
         let picked = points
             .before_event(KEY, 10, 0)
             .map(|s| s.record.snapshot_id.clone());

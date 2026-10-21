@@ -29,11 +29,11 @@ use gitraptor_git::{
 
 use super::meta::{ConflictEntry, META_FORMAT, Meta, MetaWorktree, RegisteredWorktree};
 use super::{CaptureError, OBSERVATION_MAX_FILE_BYTES, SnapshotStore, StageTimings, now_ms};
-use crate::timemachine::chaos;
 use crate::timemachine::oplog::{
     CompleteInfo, Exclusion, HookPriorMeta, ManualMeta, NewSnapshot, Oplog, SnapshotLevel,
     SnapshotState,
 };
+use crate::timemachine::{chaos, prior_point};
 
 /// The attempt a row is written for before the worktree is read: who asked for a `manual` or a
 /// `hook-prior` snapshot.
@@ -527,10 +527,14 @@ impl SnapshotStore {
             .collect();
 
         let mut anchor_time = Duration::ZERO;
+        // Kept to read again, at the validity point, whether an operation is in progress.
+        let mut readers = Vec::with_capacity(req.worktrees.len());
+        let mut in_progress_at_start = false;
         for (i, scope) in req.worktrees.iter().enumerate() {
             let prev = state.worktrees.remove(&scope.key);
             let mut anchor_lap = Duration::ZERO;
             let reader = crate::observe::open_registered_in(&req.common_dir, &listed, &scope.path)?;
+            in_progress_at_start |= reader.in_progress().is_some();
             let work = self.detect(
                 &handle,
                 &reader,
@@ -544,6 +548,7 @@ impl SnapshotStore {
             )?;
             anchor_time += anchor_lap;
             works.push(work);
+            readers.push(reader);
             if yield_now() {
                 return Err(CaptureError::Yielded);
             }
@@ -707,6 +712,9 @@ impl SnapshotStore {
         if req.still_valid.as_ref().is_some_and(|g| !(g.0)()) {
             return Err(CaptureError::Discarded);
         }
+        let in_progress_at_end = readers.iter().any(|r| r.in_progress().is_some());
+        drop(readers);
+        let mid_operation = prior_point::mid_operation(in_progress_at_start, in_progress_at_end);
         // The flush of the `pending` row is the full barrier of ADR-TMC-001 § 4: the oplog runs
         // with `fullfsync` (macOS) and `synchronous=FULL`, and that flush empties the drive
         // cache, so every object synced above is on stable storage before the ref exists. No
@@ -720,8 +728,17 @@ impl SnapshotStore {
                 commit,
                 unique_bytes,
                 &exclusions,
+                mid_operation,
             )?,
-            None => record(oplog, &handle, req, commit, unique_bytes, &exclusions)?,
+            None => record(
+                oplog,
+                &handle,
+                req,
+                commit,
+                unique_bytes,
+                &exclusions,
+                mid_operation,
+            )?,
         };
         timings.ref_oplog = laps.lap();
 
@@ -1442,6 +1459,7 @@ fn validate(req: &CaptureRequest) -> Result<(), CaptureError> {
 
 /// The validity point of a manual capture, whose `pending` row exists already: the ref, then
 /// `complete`. A failure leaves the row to the caller, which marks it `discarded`.
+#[allow(clippy::too_many_arguments)]
 fn finish_manual(
     oplog: &Mutex<Oplog>,
     handle: &StoreHandle,
@@ -1450,6 +1468,7 @@ fn finish_manual(
     commit: Oid,
     unique_bytes: u64,
     exclusions: &[Exclusion],
+    mid_operation: bool,
 ) -> Result<String, CaptureError> {
     let mut log = oplog.lock().unwrap_or_else(|p| p.into_inner());
     handle.create_ref(id, commit)?;
@@ -1458,6 +1477,7 @@ fn finish_manual(
         &CompleteInfo {
             unique_size_bytes: unique_bytes,
             exclusions: exclusions.to_vec(),
+            mid_operation: Some(mid_operation),
         },
         now_ms,
     )?;
@@ -1474,6 +1494,7 @@ fn record(
     commit: Oid,
     unique_bytes: u64,
     exclusions: &[Exclusion],
+    mid_operation: bool,
 ) -> Result<String, CaptureError> {
     let mut log = oplog.lock().unwrap_or_else(|p| p.into_inner());
     let id = log.begin_snapshot(
@@ -1506,6 +1527,7 @@ fn record(
         &CompleteInfo {
             unique_size_bytes: unique_bytes,
             exclusions: exclusions.to_vec(),
+            mid_operation: Some(mid_operation),
         },
         now_ms(),
     )?;
