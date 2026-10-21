@@ -175,6 +175,7 @@ Mensajes (`guard.txt`, plantillas fijas; los parámetros van etiquetados y sanea
 | `guard.log.rule.permission` | permiso de {operation} |
 | `guard.np.permission-reach` | los permisos por operación no se aplican con Git directo a reset --hard, a borrar un worktree, a crear un worktree sin rama nueva ni a un push solo a tags; merge solo se frena en la rama. Un commit con --no-verify en HEAD separado no se evalúa al hacerlo, sino cuando llega a una rama, salvo si se sube directamente con push o se usa como base de un rebase |
 | `guard.status.minimum-disabled` | mínimo seguro: desactivado por la configuración del equipo que confirmaste en esta máquina. |
+| `guard.notice.permission-ask-developer` (D19 d) | GitRaptor: en este repo {operation} pide confirmación humana; se ejecuta porque la haces tú. — en: «GitRaptor: in this repo {operation} asks for human confirmation; it runs because you are doing it.» |
 
 Con `ask` en lugar de `deny` se usa `permission-ask` (o `permission-merge`, para merge). El inglés va en `apps/cli/i18n/en/guard.txt` con las mismas claves.
 
@@ -196,7 +197,7 @@ Repos, remotos, perfiles y daemons temporales (NFR-01). Git, `raptor` y `raptor-
 | 2 · `push` en `allow` sin políticas: se ejecuta | `allow_lets_push_through` | A |
 | 3 · `branch-delete` en `ask`, **agente**: no se ejecuta y el motivo dice "requiere confirmación humana" | `ask_is_denied_as_requiring_human_confirmation` | A |
 | D19 · `branch-delete` en `ask`, **persona**: se ejecuta con el aviso de D19 (d); `guard log` no la cuenta como denegación | `ask_lets_the_developer_through` | A |
-| D19 · Degradado (sin daemon) y daemon sin `guard.permissions`: `ask` deniega también a la persona con `ask-unavailable` | `ask_without_the_daemon_denies_everyone` | A |
+| D19 · Degradado (sin daemon): `ask` deniega también a la persona con `ask-unavailable`. El caso «daemon sin `guard.permissions`» se prueba en `us_grd_007::permissions_capability_both_ways` (no hay forma de lanzar el daemon real sin una capacidad) | `ask_without_the_daemon_denies_everyone` | A |
 | 6 · Endurecer en `feat-x` sin commitear no cambia nada; tras commitear, el push se deniega sin reinstalar | `a_hardening_applies_when_committed_not_when_edited` | A |
 | Cada denegación (también `ask` del agente) está en `raptor guard log` con `permission.*`, su nivel y su causa, y cuenta en el KPI | `permission_denials_reach_the_decision_log` | A |
 | Degradado: el `deny` del suelo y del worktree aplica; `allow` y `disableSafeMinimum` del suelo no; el mínimo sigue | `degraded_mode_applies_the_team_permissions_only_to_harden` | A |
@@ -263,7 +264,7 @@ Las de producto son **Decisión del orquestador (2026-10-09), validada por Arqui
 | ADR-GRD-003 § 4 | Degradado: aplica los permisos de suelo y worktree solo para endurecer, con el clasificador sobre la ascendencia del propio cliente (D12). La garantía no cambia |
 | ADR-GRD-002 § 1 | Fila Merge: la segunda línea deniega el movimiento de la rama con `merge` en `deny`/`ask` (B, sigue no impedible). Fila Rebase: la segunda línea evalúa `rebase`. Fila Crear worktree con rama nueva: se reconoce por la cadena (`worktree add`). Fila Push: un push solo a refs no gobernadas no evalúa `push` (D9) |
 
-**Preguntas abiertas**: **para Rene, en el PR**: confirmar Q-GRD-39 (`ask` cuenta en el KPI mientras no exista la cola).
+**Preguntas abiertas**: **para Rene, en el PR**: confirmar Q-GRD-39 (`ask` del agente cuenta en el KPI mientras no exista la cola). Si la rechaza, se reabren D3, el criterio GRD007-LOG y `permission_denials_reach_the_decision_log`.
 
 ## Anexo de forma (perfil `backend-service`)
 
@@ -432,7 +433,7 @@ Ningún hueco bloquea la implementación de PR-A. Sin constitución en la cascad
 
 ### T008 — Estado, mensajes y lista "no se puede impedir"
 
-**Objetivo.** `minimum_set` `disabled-by-team`, `permission-reach`, plantillas en/es del § 5 y brazos de `reason_text`.
+**Objetivo.** `minimum_set` `disabled-by-team`, `permission-reach`, plantillas en/es del § 5, brazos de `reason_text` y el brazo del aviso `guard.notice.permission-ask-developer` (junto a `guard.notice.authorship-human-author` en `apps/cli/src/guard.rs`).
 
 **Ubicación.**
 - `crates/core/src/guardrails/install.rs`, `crates/policy/src/guard/mod.rs` (**MODIFY**)
@@ -450,7 +451,7 @@ Ningún hueco bloquea la implementación de PR-A. Sin constitución en la cascad
 **Objetivo.** Suite completa en verde, medición de D14 en § 10, estado de la historia, `backlog.md` y `release-status.md`.
 
 **Ubicación.**
-- `docs/requirements/features/guardrails/user-stories/US-GRD-007-permisos-por-operacion.md`, `docs/requirements/backlog.md`, `docs/requirements/release-status.md` (**MODIFY**)
+- `docs/requirements/features/guardrails/user-stories/US-GRD-007-permisos-por-operacion.md` (**MODIFY**: estado y enmienda del escenario 3 según Q-GRD-46: el agente se deniega y la persona pasa con aviso, citando Q-GRD-46), `docs/requirements/backlog.md`, `docs/requirements/release-status.md` (**MODIFY**)
 - Este archivo (**MODIFY**, § 10)
 
 **Reglas**
