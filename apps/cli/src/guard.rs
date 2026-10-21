@@ -159,9 +159,8 @@ fn reason_text(reason: &Reason, denied: &DeniedOp) -> String {
         // A relaxation notice is never a denial reason; if one is rendered as such, say only
         // that the operation could not be verified.
         (Rule::RelaxIgnored, _) => t("guard.deny.internal", &[]),
-        // Placeholder until the permission templates land: the generic text.
         (
-            Rule::PermissionCommit
+            rule @ (Rule::PermissionCommit
             | Rule::PermissionPush
             | Rule::PermissionForcePush
             | Rule::PermissionResetHard
@@ -169,9 +168,56 @@ fn reason_text(reason: &Reason, denied: &DeniedOp) -> String {
             | Rule::PermissionRebase
             | Rule::PermissionMerge
             | Rule::PermissionWorktreeAdd
-            | Rule::PermissionWorktreeRemove,
-            _,
-        ) => t("guard.deny.internal", &[]),
+            | Rule::PermissionWorktreeRemove),
+            cause,
+        ) => match operation_key(rule) {
+            Some(op) => permission_text(reason, op, cause),
+            None => t("guard.deny.internal", &[]),
+        },
+    }
+}
+
+/// The `guard.op.*` key of a permission rule; `None` for any other rule.
+fn operation_key(rule: Rule) -> Option<&'static str> {
+    Some(match rule {
+        Rule::PermissionCommit => "guard.op.commit",
+        Rule::PermissionPush => "guard.op.push",
+        Rule::PermissionForcePush => "guard.op.force-push",
+        Rule::PermissionResetHard => "guard.op.reset-hard",
+        Rule::PermissionBranchDelete => "guard.op.branch-delete",
+        Rule::PermissionRebase => "guard.op.rebase",
+        Rule::PermissionMerge => "guard.op.merge",
+        Rule::PermissionWorktreeAdd => "guard.op.worktree-add",
+        Rule::PermissionWorktreeRemove => "guard.op.worktree-remove",
+        _ => return None,
+    })
+}
+
+/// The template of a permission reason: what cannot be proved, a merge that only protects the
+/// branch, an `ask` that cannot be confirmed, or a plain `deny`. None says how to change it.
+fn permission_text(reason: &Reason, op: &str, cause: Option<Cause>) -> String {
+    let operation = t(op, &[]);
+    let level = level_text(reason.level);
+    match cause {
+        Some(Cause::Unverifiable) => t(
+            "guard.reason.permission-unverifiable",
+            &[("operation", &operation), ("level", &level)],
+        ),
+        _ if reason.rule == Rule::PermissionMerge => t(
+            "guard.reason.permission-merge",
+            &[
+                ("level", &level),
+                ("branch", &find(&reason.params, ParamKind::Branch)),
+            ],
+        ),
+        Some(Cause::AskUnavailable) => t(
+            "guard.reason.permission-ask",
+            &[("operation", &operation), ("level", &level)],
+        ),
+        _ => t(
+            "guard.reason.permission-deny",
+            &[("operation", &operation), ("level", &level)],
+        ),
     }
 }
 
@@ -190,8 +236,16 @@ fn level_text(level: Level) -> String {
 
 /// The fixed template of one warning (US-GRD-018, D3).
 fn notice_text(notice: &Reason) -> Option<String> {
-    (notice.rule == Rule::AuthorshipHumanAuthor)
-        .then(|| t("guard.notice.authorship-human-author", &[]))
+    if notice.rule == Rule::AuthorshipHumanAuthor {
+        return Some(t("guard.notice.authorship-human-author", &[]));
+    }
+    // An `ask` the person runs (it is not confirmed, the person is doing it).
+    operation_key(notice.rule).map(|op| {
+        t(
+            "guard.notice.permission-ask-developer",
+            &[("operation", &t(op, &[]))],
+        )
+    })
 }
 
 /// The lines a decision prints on standard error: its reasons when it does not go ahead, its
@@ -311,8 +365,7 @@ fn not_preventable_text(n: NotPreventable) -> String {
             NotPreventable::PolicyActor => "guard.np.policy-actor",
             NotPreventable::PolicyReach => "guard.np.policy-reach",
             NotPreventable::PolicyFloor => "guard.np.policy-floor",
-            // Placeholder until its own template lands.
-            NotPreventable::PermissionReach => "guard.np.policy-reach",
+            NotPreventable::PermissionReach => "guard.np.permission-reach",
         },
         &[],
     )
@@ -552,6 +605,13 @@ fn protection_lines(status: &GuardStatus, tr: Tr) -> Vec<String> {
             },
             &[],
         ));
+    }
+    if status
+        .minimum_set
+        .as_ref()
+        .is_some_and(|m| m.status == MinimumSetStatus::DisabledByTeam)
+    {
+        out.push(tr.t("guard.status.minimum-disabled", &[]));
     }
     if status.hooks.is_some() {
         // The agent protection of the configuration is part of the minimum: no setting turns it off.
@@ -1060,7 +1120,6 @@ fn log_rule_text(reason: &LoggedReason) -> String {
         | Rule::InputRejected
         | Rule::InternalError => "guard.log.rule.system",
         Rule::SnapshotFailed => snapshot_required::log_rule_key(),
-        // Placeholder until the permission template lands.
         Rule::PermissionCommit
         | Rule::PermissionPush
         | Rule::PermissionForcePush
@@ -1069,16 +1128,17 @@ fn log_rule_text(reason: &LoggedReason) -> String {
         | Rule::PermissionRebase
         | Rule::PermissionMerge
         | Rule::PermissionWorktreeAdd
-        | Rule::PermissionWorktreeRemove => "guard.log.rule.system",
+        | Rule::PermissionWorktreeRemove => "guard.log.rule.permission",
     };
     let level = match reason.level {
         Level::Minimum => t("guard.log.level-minimum", &[]),
         other => level_text(other),
     };
-    t(
-        "guard.log.rule",
-        &[("rule", &t(rule, &[])), ("level", &level)],
-    )
+    let rule = match operation_key(reason.rule) {
+        Some(op) => t(rule, &[("operation", &t(op, &[]))]),
+        None => t(rule, &[]),
+    };
+    t("guard.log.rule", &[("rule", &rule), ("level", &level)])
 }
 
 fn change_text(r: &LoggedRef) -> String {
