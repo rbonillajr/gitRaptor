@@ -25,6 +25,8 @@ use gitraptor_testkit::fixture::git_from_path;
 
 const RAPTOR: &str = env!("CARGO_BIN_EXE_raptor");
 const DEADLINE: Duration = Duration::from_secs(30);
+/// How long the TUI must paint nothing for a key to count as handled.
+const QUIET: Duration = Duration::from_millis(400);
 const LEAVE_ALT: &str = "\u{1b}[?1049l";
 /// The pty of `script` starts with no size, and the TUI would paint nothing: give it one
 /// first, then become `raptor` with the arguments after it.
@@ -306,6 +308,19 @@ impl Pty {
         }
     }
 
+    /// Waits until the TUI is quiet (nothing painted for a moment, deadline-bounded) so the
+    /// next key reaches the loop as its own event: an Esc followed at once by `?` is the
+    /// terminal's Alt-`?`, and two keys read together paint one frame.
+    fn settle(&mut self) {
+        let deadline = Instant::now() + DEADLINE;
+        while let Ok(bytes) = self.rx.recv_timeout(QUIET) {
+            let bytes = String::from_utf8_lossy(&bytes);
+            self.screen.feed(&bytes);
+            self.seen.push_str(&bytes);
+            assert!(Instant::now() < deadline, "the TUI never went quiet");
+        }
+    }
+
     fn key(&mut self, bytes: &[u8]) {
         self.stdin.write_all(bytes).unwrap();
         self.stdin.flush().unwrap();
@@ -347,11 +362,15 @@ fn question_mark_opens_and_closes_the_help() {
     tui.key(b"?");
     tui.wait("Siempre", 1);
     // Esc closes it (so `?` opens it again: a second painting).
+    tui.settle();
     tui.key(b"\x1b");
+    tui.settle();
     tui.key(b"?");
     tui.wait("Siempre", 2);
     // `?` closes it and `?` opens it again: a third one.
+    tui.settle();
     tui.key(b"?");
+    tui.settle();
     tui.key(b"?");
     tui.wait("Siempre", 3);
     tui.quit();
