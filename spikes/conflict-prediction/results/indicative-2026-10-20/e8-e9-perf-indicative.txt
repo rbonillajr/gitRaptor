@@ -1,0 +1,49 @@
+# E8/E9 indicative — 2026-10-21T04:34:52Z — Apple M5, 10 cores, 32 GB
+# load at start: 5.44 6.81 6.70
+# scenario=pairs engine=a2 jobs=1 prefilter=false load_start=5.44 6.81 6.70
+pair delta-1-a delta-1-b	n=200	p50=4.263	p95=5.385	p99=9.328	max=10.104	ms
+pair delta-10-a delta-10-b	n=200	p50=5.173	p95=5.596	p99=6.978	max=7.098	ms
+pair delta-100-a delta-100-b	n=200	p50=15.869	p95=19.387	p99=28.501	max=39.359	ms
+pair delta-1000-a delta-1000-b	n=200	p50=154.734	p95=187.756	p99=228.228	max=244.124	ms
+# load_end=4.54 6.43 6.56
+# scenario=recompute engine=a2 jobs=1 prefilter=false load_start=4.54 6.43 6.56
+recompute-after-commit	n=200	p50=73.754	p95=99.771	p99=152.609	max=153.871	ms
+pairs_computed=2000 cpu_s=15.80 cpu_pct_of_busy=103 maxrss_mb=42 child_rss_mb=0 wall_s=28.4 load_end=4.02 6.11 6.44
+# load_end=4.02 6.11 6.44
+# scenario=pairs engine=a2w jobs=1 prefilter=false load_start=4.02 6.11 6.44
+pair delta-1-a delta-1-b	n=200	p50=4.276	p95=4.579	p99=4.770	max=4.934	ms
+pair delta-10-a delta-10-b	n=200	p50=5.213	p95=5.615	p99=5.957	max=5.986	ms
+pair delta-100-a delta-100-b	n=200	p50=15.952	p95=17.625	p99=18.896	max=21.436	ms
+pair delta-1000-a delta-1000-b	n=200	p50=147.945	p95=166.040	p99=178.668	max=184.505	ms
+# load_end=5.22 6.15 6.44
+# scenario=recompute engine=a2w jobs=1 prefilter=false load_start=5.22 6.15 6.44
+recompute-after-commit	n=200	p50=85.324	p95=95.687	p99=103.085	max=126.783	ms
+pairs_computed=2000 cpu_s=0.18 cpu_pct_of_busy=1 maxrss_mb=4 child_rss_mb=42 wall_s=28.1 load_end=6.37 6.40 6.52
+# load_end=6.37 6.40 6.52
+# scenario=recompute engine=a2 jobs=1 prefilter=true load_start=6.37 6.40 6.52
+recompute-after-commit	n=200	p50=148.775	p95=191.136	p99=234.462	max=269.133	ms
+pairs_computed=1800 cpu_s=30.18 cpu_pct_of_busy=99 maxrss_mb=42 child_rss_mb=0 wall_s=42.0 load_end=5.25 6.08 6.40
+# load_end=5.25 6.08 6.40
+# scenario=recompute engine=a2 jobs=2 prefilter=false load_start=5.25 6.08 6.40
+recompute-after-commit	n=200	p50=80.058	p95=103.985	p99=146.903	max=161.186	ms
+pairs_computed=2000 cpu_s=31.61 cpu_pct_of_busy=192 maxrss_mb=47 child_rss_mb=0 wall_s=27.4 load_end=5.10 5.96 6.34
+# load_end=5.10 5.96 6.34
+# scenario=initial engine=a2 jobs=1 prefilter=false load_start=5.10 5.96 6.34
+initial-55-pairs	n=50	p50=703.138	p95=814.400	p99=1068.544	max=1068.544	ms
+# load_end=5.26 5.86 6.28
+# scenario=initial engine=a2w jobs=1 prefilter=false load_start=5.26 5.86 6.28
+initial-55-pairs	n=50	p50=663.992	p95=719.372	p99=1275.507	max=1275.507	ms
+# load_end=5.96 6.00 6.31
+# scenario=burst engine=a2 jobs=1 prefilter=false load_start=5.96 6.00 6.31
+burst-published-age	n=188	p50=139.407	p95=280.629	p99=339.980	max=368.382	ms
+events=188 coalesced=0 rounds=186 max_queue_depth=2 busy_pct=22 cpu_pct_avg_of_one_core=20.8 maxrss_mb=42 child_rss_mb=0 wall_s=120
+# load_end=3.84 5.17 5.94
+# scenario=burst engine=a2w jobs=1 prefilter=false load_start=3.84 5.17 5.94
+burst-published-age	n=188	p50=139.153	p95=285.370	p99=393.904	max=401.868	ms
+events=188 coalesced=0 rounds=183 max_queue_depth=2 busy_pct=21 cpu_pct_avg_of_one_core=0.5 maxrss_mb=5 child_rss_mb=42 wall_s=120
+# load_end=3.49 4.69 5.65
+# scenario=overlap engine=a2 jobs=1 prefilter=false load_start=3.49 4.69 5.65
+overlap-round burst_files=10000	n=200	p50=0.020	p95=0.022	p99=0.028	max=0.028	ms
+intersections_found=2 approx_memory_kb=545
+# load_end=3.49 4.69 5.65
+# load at end: 3.49 4.69 5.65

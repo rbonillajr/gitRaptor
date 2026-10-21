@@ -1,0 +1,300 @@
+== run=1 fleet=full engine=a2 git=- scenario=initial
+cmd_exit=0 entries=70399 changes=0
+== run=1 fleet=full engine=a2 git=- scenario=after-commit
+cmd_exit=0 entries=70405 changes=0
+== run=1 fleet=full engine=a2 git=- scenario=base-moved
+cmd_exit=0 entries=70412 changes=0
+== run=1 fleet=full engine=a2 git=- scenario=already-merged
+cmd_exit=0 entries=70421 changes=0
+== run=1 fleet=full engine=a2w git=- scenario=initial
+cmd_exit=0 entries=70421 changes=0
+== run=1 fleet=full engine=a2w git=- scenario=after-commit
+cmd_exit=0 entries=70424 changes=0
+== run=1 fleet=full engine=a2w git=- scenario=base-moved
+cmd_exit=0 entries=70427 changes=0
+== run=1 fleet=full engine=a2w git=- scenario=already-merged
+cmd_exit=0 entries=70436 changes=0
+== run=1 fleet=full engine=b git=2.38.5 scenario=initial
+cmd_exit=0 entries=70436 changes=2
+  [repo] repo/.git/objects/1c/5330238fccb070b6abbbb39f07d7955f9bb106: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/4c/c0121fb0058344fe74738de31dbb8fc72c344b: modified ([Mtime, Ctime])
+== run=1 fleet=full engine=b git=2.38.5 scenario=after-commit
+cmd_exit=0 entries=70441 changes=0
+== run=1 fleet=full engine=b git=2.38.5 scenario=base-moved
+cmd_exit=0 entries=70444 changes=0
+== run=1 fleet=full engine=b git=2.38.5 scenario=already-merged
+cmd_exit=0 entries=70451 changes=0
+== run=1 fleet=full engine=b git=2.56.0 scenario=initial
+cmd_exit=0 entries=70451 changes=3
+  [repo] repo/.git/objects/1c/5330238fccb070b6abbbb39f07d7955f9bb106: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/4c/c0121fb0058344fe74738de31dbb8fc72c344b: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/84/a1d993eb185d8eff9c58796584453932e1c433: modified ([Mtime, Ctime])
+== run=1 fleet=full engine=b git=2.56.0 scenario=after-commit
+cmd_exit=0 entries=70456 changes=0
+== run=1 fleet=full engine=b git=2.56.0 scenario=base-moved
+cmd_exit=0 entries=70459 changes=0
+== run=1 fleet=full engine=b git=2.56.0 scenario=already-merged
+cmd_exit=0 entries=70466 changes=0
+== run=1 fleet=full engine=b git=2.50.1-apple scenario=initial
+cmd_exit=0 entries=70466 changes=4
+  [repo] repo/.git/objects/1c/5330238fccb070b6abbbb39f07d7955f9bb106: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/4c/c0121fb0058344fe74738de31dbb8fc72c344b: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/84/a1d993eb185d8eff9c58796584453932e1c433: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/a6/1e4065462927ca73744440141bf619546dd2c2: modified ([Mtime, Ctime])
+== run=1 fleet=full engine=b git=2.50.1-apple scenario=after-commit
+cmd_exit=0 entries=70470 changes=1
+  [repo] repo/.git/objects/dd/e27b70c789b08091c4b1a757950771ae6acd39: modified ([Mtime, Ctime])
+== run=1 fleet=full engine=b git=2.50.1-apple scenario=base-moved
+cmd_exit=0 entries=70474 changes=0
+== run=1 fleet=full engine=b git=2.50.1-apple scenario=already-merged
+cmd_exit=0 entries=70482 changes=0
+== run=1 fleet=shared engine=a2 git=- scenario=initial
+cmd_exit=0 entries=70409 changes=0
+== run=1 fleet=shared engine=a2 git=- scenario=after-commit
+cmd_exit=0 entries=70415 changes=0
+== run=1 fleet=shared engine=a2 git=- scenario=base-moved
+cmd_exit=0 entries=70422 changes=0
+== run=1 fleet=shared engine=a2 git=- scenario=already-merged
+cmd_exit=0 entries=70431 changes=0
+== run=1 fleet=shared engine=a2w git=- scenario=initial
+cmd_exit=0 entries=70431 changes=0
+== run=1 fleet=shared engine=a2w git=- scenario=after-commit
+cmd_exit=0 entries=70434 changes=0
+== run=1 fleet=shared engine=a2w git=- scenario=base-moved
+cmd_exit=0 entries=70437 changes=0
+== run=1 fleet=shared engine=a2w git=- scenario=already-merged
+cmd_exit=0 entries=70446 changes=0
+== run=1 fleet=shared engine=b git=2.38.5 scenario=initial
+cmd_exit=0 entries=70446 changes=2
+  [repo] repo/.git/objects/1c/5330238fccb070b6abbbb39f07d7955f9bb106: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/4c/c0121fb0058344fe74738de31dbb8fc72c344b: modified ([Mtime, Ctime])
+== run=1 fleet=shared engine=b git=2.38.5 scenario=after-commit
+cmd_exit=0 entries=70451 changes=0
+== run=1 fleet=shared engine=b git=2.38.5 scenario=base-moved
+cmd_exit=0 entries=70454 changes=0
+== run=1 fleet=shared engine=b git=2.38.5 scenario=already-merged
+cmd_exit=0 entries=70461 changes=0
+== run=1 fleet=shared engine=b git=2.56.0 scenario=initial
+cmd_exit=0 entries=70461 changes=3
+  [repo] repo/.git/objects/1c/5330238fccb070b6abbbb39f07d7955f9bb106: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/4c/c0121fb0058344fe74738de31dbb8fc72c344b: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/84/a1d993eb185d8eff9c58796584453932e1c433: modified ([Mtime, Ctime])
+== run=1 fleet=shared engine=b git=2.56.0 scenario=after-commit
+cmd_exit=0 entries=70466 changes=0
+== run=1 fleet=shared engine=b git=2.56.0 scenario=base-moved
+cmd_exit=0 entries=70469 changes=0
+== run=1 fleet=shared engine=b git=2.56.0 scenario=already-merged
+cmd_exit=0 entries=70476 changes=0
+== run=1 fleet=shared engine=b git=2.50.1-apple scenario=initial
+cmd_exit=0 entries=70476 changes=4
+  [repo] repo/.git/objects/1c/5330238fccb070b6abbbb39f07d7955f9bb106: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/4c/c0121fb0058344fe74738de31dbb8fc72c344b: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/84/a1d993eb185d8eff9c58796584453932e1c433: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/a6/1e4065462927ca73744440141bf619546dd2c2: modified ([Mtime, Ctime])
+== run=1 fleet=shared engine=b git=2.50.1-apple scenario=after-commit
+cmd_exit=0 entries=70480 changes=1
+  [repo] repo/.git/objects/dd/e27b70c789b08091c4b1a757950771ae6acd39: modified ([Mtime, Ctime])
+== run=1 fleet=shared engine=b git=2.50.1-apple scenario=base-moved
+cmd_exit=0 entries=70484 changes=0
+== run=1 fleet=shared engine=b git=2.50.1-apple scenario=already-merged
+cmd_exit=0 entries=70492 changes=0
+== run=2 fleet=full engine=a2 git=- scenario=initial
+cmd_exit=0 entries=70399 changes=0
+== run=2 fleet=full engine=a2 git=- scenario=after-commit
+cmd_exit=0 entries=70405 changes=0
+== run=2 fleet=full engine=a2 git=- scenario=base-moved
+cmd_exit=0 entries=70412 changes=0
+== run=2 fleet=full engine=a2 git=- scenario=already-merged
+cmd_exit=0 entries=70421 changes=0
+== run=2 fleet=full engine=a2w git=- scenario=initial
+cmd_exit=0 entries=70421 changes=0
+== run=2 fleet=full engine=a2w git=- scenario=after-commit
+cmd_exit=0 entries=70424 changes=0
+== run=2 fleet=full engine=a2w git=- scenario=base-moved
+cmd_exit=0 entries=70427 changes=0
+== run=2 fleet=full engine=a2w git=- scenario=already-merged
+cmd_exit=0 entries=70436 changes=0
+== run=2 fleet=full engine=b git=2.38.5 scenario=initial
+cmd_exit=0 entries=70436 changes=2
+  [repo] repo/.git/objects/1c/5330238fccb070b6abbbb39f07d7955f9bb106: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/4c/c0121fb0058344fe74738de31dbb8fc72c344b: modified ([Mtime, Ctime])
+== run=2 fleet=full engine=b git=2.38.5 scenario=after-commit
+cmd_exit=0 entries=70441 changes=0
+== run=2 fleet=full engine=b git=2.38.5 scenario=base-moved
+cmd_exit=0 entries=70444 changes=0
+== run=2 fleet=full engine=b git=2.38.5 scenario=already-merged
+cmd_exit=0 entries=70451 changes=0
+== run=2 fleet=full engine=b git=2.56.0 scenario=initial
+cmd_exit=0 entries=70451 changes=3
+  [repo] repo/.git/objects/1c/5330238fccb070b6abbbb39f07d7955f9bb106: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/4c/c0121fb0058344fe74738de31dbb8fc72c344b: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/84/a1d993eb185d8eff9c58796584453932e1c433: modified ([Mtime, Ctime])
+== run=2 fleet=full engine=b git=2.56.0 scenario=after-commit
+cmd_exit=0 entries=70456 changes=0
+== run=2 fleet=full engine=b git=2.56.0 scenario=base-moved
+cmd_exit=0 entries=70459 changes=0
+== run=2 fleet=full engine=b git=2.56.0 scenario=already-merged
+cmd_exit=0 entries=70466 changes=0
+== run=2 fleet=full engine=b git=2.50.1-apple scenario=initial
+cmd_exit=0 entries=70466 changes=4
+  [repo] repo/.git/objects/1c/5330238fccb070b6abbbb39f07d7955f9bb106: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/4c/c0121fb0058344fe74738de31dbb8fc72c344b: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/84/a1d993eb185d8eff9c58796584453932e1c433: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/a6/1e4065462927ca73744440141bf619546dd2c2: modified ([Mtime, Ctime])
+== run=2 fleet=full engine=b git=2.50.1-apple scenario=after-commit
+cmd_exit=0 entries=70470 changes=1
+  [repo] repo/.git/objects/dd/e27b70c789b08091c4b1a757950771ae6acd39: modified ([Mtime, Ctime])
+== run=2 fleet=full engine=b git=2.50.1-apple scenario=base-moved
+cmd_exit=0 entries=70474 changes=0
+== run=2 fleet=full engine=b git=2.50.1-apple scenario=already-merged
+cmd_exit=0 entries=70482 changes=0
+== run=2 fleet=shared engine=a2 git=- scenario=initial
+cmd_exit=0 entries=70409 changes=0
+== run=2 fleet=shared engine=a2 git=- scenario=after-commit
+cmd_exit=0 entries=70415 changes=0
+== run=2 fleet=shared engine=a2 git=- scenario=base-moved
+cmd_exit=0 entries=70422 changes=0
+== run=2 fleet=shared engine=a2 git=- scenario=already-merged
+cmd_exit=0 entries=70431 changes=0
+== run=2 fleet=shared engine=a2w git=- scenario=initial
+cmd_exit=0 entries=70431 changes=0
+== run=2 fleet=shared engine=a2w git=- scenario=after-commit
+cmd_exit=0 entries=70434 changes=0
+== run=2 fleet=shared engine=a2w git=- scenario=base-moved
+cmd_exit=0 entries=70437 changes=0
+== run=2 fleet=shared engine=a2w git=- scenario=already-merged
+cmd_exit=0 entries=70446 changes=0
+== run=2 fleet=shared engine=b git=2.38.5 scenario=initial
+cmd_exit=0 entries=70446 changes=2
+  [repo] repo/.git/objects/1c/5330238fccb070b6abbbb39f07d7955f9bb106: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/4c/c0121fb0058344fe74738de31dbb8fc72c344b: modified ([Mtime, Ctime])
+== run=2 fleet=shared engine=b git=2.38.5 scenario=after-commit
+cmd_exit=0 entries=70451 changes=0
+== run=2 fleet=shared engine=b git=2.38.5 scenario=base-moved
+cmd_exit=0 entries=70454 changes=0
+== run=2 fleet=shared engine=b git=2.38.5 scenario=already-merged
+cmd_exit=0 entries=70461 changes=0
+== run=2 fleet=shared engine=b git=2.56.0 scenario=initial
+cmd_exit=0 entries=70461 changes=3
+  [repo] repo/.git/objects/1c/5330238fccb070b6abbbb39f07d7955f9bb106: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/4c/c0121fb0058344fe74738de31dbb8fc72c344b: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/84/a1d993eb185d8eff9c58796584453932e1c433: modified ([Mtime, Ctime])
+== run=2 fleet=shared engine=b git=2.56.0 scenario=after-commit
+cmd_exit=0 entries=70466 changes=0
+== run=2 fleet=shared engine=b git=2.56.0 scenario=base-moved
+cmd_exit=0 entries=70469 changes=0
+== run=2 fleet=shared engine=b git=2.56.0 scenario=already-merged
+cmd_exit=0 entries=70476 changes=0
+== run=2 fleet=shared engine=b git=2.50.1-apple scenario=initial
+cmd_exit=0 entries=70476 changes=4
+  [repo] repo/.git/objects/1c/5330238fccb070b6abbbb39f07d7955f9bb106: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/4c/c0121fb0058344fe74738de31dbb8fc72c344b: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/84/a1d993eb185d8eff9c58796584453932e1c433: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/a6/1e4065462927ca73744440141bf619546dd2c2: modified ([Mtime, Ctime])
+== run=2 fleet=shared engine=b git=2.50.1-apple scenario=after-commit
+cmd_exit=0 entries=70480 changes=1
+  [repo] repo/.git/objects/dd/e27b70c789b08091c4b1a757950771ae6acd39: modified ([Mtime, Ctime])
+== run=2 fleet=shared engine=b git=2.50.1-apple scenario=base-moved
+cmd_exit=0 entries=70484 changes=0
+== run=2 fleet=shared engine=b git=2.50.1-apple scenario=already-merged
+cmd_exit=0 entries=70492 changes=0
+== run=3 fleet=full engine=a2 git=- scenario=initial
+cmd_exit=0 entries=70399 changes=0
+== run=3 fleet=full engine=a2 git=- scenario=after-commit
+cmd_exit=0 entries=70405 changes=0
+== run=3 fleet=full engine=a2 git=- scenario=base-moved
+cmd_exit=0 entries=70412 changes=0
+== run=3 fleet=full engine=a2 git=- scenario=already-merged
+cmd_exit=0 entries=70421 changes=0
+== run=3 fleet=full engine=a2w git=- scenario=initial
+cmd_exit=0 entries=70421 changes=0
+== run=3 fleet=full engine=a2w git=- scenario=after-commit
+cmd_exit=0 entries=70424 changes=0
+== run=3 fleet=full engine=a2w git=- scenario=base-moved
+cmd_exit=0 entries=70427 changes=0
+== run=3 fleet=full engine=a2w git=- scenario=already-merged
+cmd_exit=0 entries=70436 changes=0
+== run=3 fleet=full engine=b git=2.38.5 scenario=initial
+cmd_exit=0 entries=70436 changes=2
+  [repo] repo/.git/objects/1c/5330238fccb070b6abbbb39f07d7955f9bb106: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/4c/c0121fb0058344fe74738de31dbb8fc72c344b: modified ([Mtime, Ctime])
+== run=3 fleet=full engine=b git=2.38.5 scenario=after-commit
+cmd_exit=0 entries=70441 changes=0
+== run=3 fleet=full engine=b git=2.38.5 scenario=base-moved
+cmd_exit=0 entries=70444 changes=0
+== run=3 fleet=full engine=b git=2.38.5 scenario=already-merged
+cmd_exit=0 entries=70451 changes=0
+== run=3 fleet=full engine=b git=2.56.0 scenario=initial
+cmd_exit=0 entries=70451 changes=3
+  [repo] repo/.git/objects/1c/5330238fccb070b6abbbb39f07d7955f9bb106: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/4c/c0121fb0058344fe74738de31dbb8fc72c344b: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/84/a1d993eb185d8eff9c58796584453932e1c433: modified ([Mtime, Ctime])
+== run=3 fleet=full engine=b git=2.56.0 scenario=after-commit
+cmd_exit=0 entries=70456 changes=0
+== run=3 fleet=full engine=b git=2.56.0 scenario=base-moved
+cmd_exit=0 entries=70459 changes=0
+== run=3 fleet=full engine=b git=2.56.0 scenario=already-merged
+cmd_exit=0 entries=70466 changes=0
+== run=3 fleet=full engine=b git=2.50.1-apple scenario=initial
+cmd_exit=0 entries=70466 changes=4
+  [repo] repo/.git/objects/1c/5330238fccb070b6abbbb39f07d7955f9bb106: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/4c/c0121fb0058344fe74738de31dbb8fc72c344b: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/84/a1d993eb185d8eff9c58796584453932e1c433: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/a6/1e4065462927ca73744440141bf619546dd2c2: modified ([Mtime, Ctime])
+== run=3 fleet=full engine=b git=2.50.1-apple scenario=after-commit
+cmd_exit=0 entries=70470 changes=1
+  [repo] repo/.git/objects/dd/e27b70c789b08091c4b1a757950771ae6acd39: modified ([Mtime, Ctime])
+== run=3 fleet=full engine=b git=2.50.1-apple scenario=base-moved
+cmd_exit=0 entries=70474 changes=0
+== run=3 fleet=full engine=b git=2.50.1-apple scenario=already-merged
+cmd_exit=0 entries=70482 changes=0
+== run=3 fleet=shared engine=a2 git=- scenario=initial
+cmd_exit=0 entries=70409 changes=0
+== run=3 fleet=shared engine=a2 git=- scenario=after-commit
+cmd_exit=0 entries=70415 changes=0
+== run=3 fleet=shared engine=a2 git=- scenario=base-moved
+cmd_exit=0 entries=70422 changes=0
+== run=3 fleet=shared engine=a2 git=- scenario=already-merged
+cmd_exit=0 entries=70431 changes=0
+== run=3 fleet=shared engine=a2w git=- scenario=initial
+cmd_exit=0 entries=70431 changes=0
+== run=3 fleet=shared engine=a2w git=- scenario=after-commit
+cmd_exit=0 entries=70434 changes=0
+== run=3 fleet=shared engine=a2w git=- scenario=base-moved
+cmd_exit=0 entries=70437 changes=0
+== run=3 fleet=shared engine=a2w git=- scenario=already-merged
+cmd_exit=0 entries=70446 changes=0
+== run=3 fleet=shared engine=b git=2.38.5 scenario=initial
+cmd_exit=0 entries=70446 changes=2
+  [repo] repo/.git/objects/1c/5330238fccb070b6abbbb39f07d7955f9bb106: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/4c/c0121fb0058344fe74738de31dbb8fc72c344b: modified ([Mtime, Ctime])
+== run=3 fleet=shared engine=b git=2.38.5 scenario=after-commit
+cmd_exit=0 entries=70451 changes=0
+== run=3 fleet=shared engine=b git=2.38.5 scenario=base-moved
+cmd_exit=0 entries=70454 changes=0
+== run=3 fleet=shared engine=b git=2.38.5 scenario=already-merged
+cmd_exit=0 entries=70461 changes=0
+== run=3 fleet=shared engine=b git=2.56.0 scenario=initial
+cmd_exit=0 entries=70461 changes=3
+  [repo] repo/.git/objects/1c/5330238fccb070b6abbbb39f07d7955f9bb106: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/4c/c0121fb0058344fe74738de31dbb8fc72c344b: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/84/a1d993eb185d8eff9c58796584453932e1c433: modified ([Mtime, Ctime])
+== run=3 fleet=shared engine=b git=2.56.0 scenario=after-commit
+cmd_exit=0 entries=70466 changes=0
+== run=3 fleet=shared engine=b git=2.56.0 scenario=base-moved
+cmd_exit=0 entries=70469 changes=0
+== run=3 fleet=shared engine=b git=2.56.0 scenario=already-merged
+cmd_exit=0 entries=70476 changes=0
+== run=3 fleet=shared engine=b git=2.50.1-apple scenario=initial
+cmd_exit=0 entries=70476 changes=4
+  [repo] repo/.git/objects/1c/5330238fccb070b6abbbb39f07d7955f9bb106: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/4c/c0121fb0058344fe74738de31dbb8fc72c344b: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/84/a1d993eb185d8eff9c58796584453932e1c433: modified ([Mtime, Ctime])
+  [repo] repo/.git/objects/a6/1e4065462927ca73744440141bf619546dd2c2: modified ([Mtime, Ctime])
+== run=3 fleet=shared engine=b git=2.50.1-apple scenario=after-commit
+cmd_exit=0 entries=70480 changes=1
+  [repo] repo/.git/objects/dd/e27b70c789b08091c4b1a757950771ae6acd39: modified ([Mtime, Ctime])
+== run=3 fleet=shared engine=b git=2.50.1-apple scenario=base-moved
+cmd_exit=0 entries=70484 changes=0
+== run=3 fleet=shared engine=b git=2.50.1-apple scenario=already-merged
+cmd_exit=0 entries=70492 changes=0

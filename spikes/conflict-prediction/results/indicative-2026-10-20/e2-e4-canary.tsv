@@ -1,0 +1,27 @@
+exp	case	engine	git	result	conflicts	markers	intact_changes	error
+E2	conflict	a1	-	ok 	 	merge-driver	1	
+E2	clean	a1	-	ok 	 	merge-driver	1	
+E2	conflict	a2	-	ok 	a.txt 		0	
+E2	clean	a2	-	ok 	 		0	
+E2	conflict	a2w	-	ok 	a.txt 		0	
+E2	clean	a2w	-	ok 	 		0	
+E2	conflict	b	2.38.5	ok 	a.txt 		0	
+E2	clean	b	2.38.5	ok 	 		0	
+E2	conflict	b	2.56.0	ok 	a.txt 		0	
+E2	clean	b	2.56.0	ok 	 		0	
+E2	conflict	b	2.50.1-apple	ok 	a.txt 		0	
+E2	clean	b	2.50.1-apple	ok 	 		0	
+E4	replace-and-grafts(useReplaceRefs=unset)	a2	-	ok 	a.txt 		0	
+E4	replace-and-grafts(useReplaceRefs=unset)	a2w	-	ok 	a.txt 		0	
+E4	replace-and-grafts(useReplaceRefs=true)	a2	-	ok 	a.txt 		0	
+E4	replace-and-grafts(useReplaceRefs=true)	a2w	-	ok 	a.txt 		0	
+E4	replace-and-grafts(useReplaceRefs=false)	a2	-	ok 	a.txt 		0	
+E4	replace-and-grafts(useReplaceRefs=false)	a2w	-	ok 	a.txt 		0	
+E4	replace-and-grafts	b	2.38.5	ok 	a.txt 		0	
+E4	replace-and-grafts	b	2.56.0	ok 	a.txt 		0	
+E4	replace-and-grafts	b	2.50.1-apple	ok 	a.txt 		0	
+E3	partial-clone	a2	-	err 	 		0	Failed to convert resource to mergeable form  Caused by:     0: An object with id 90006c272dd8ec96b6a3129a9fca4e8703ec31
+E3	partial-clone	a2w	-	err 	 		0	Failed to convert resource to mergeable form  Caused by:     0: An object with id 90006c272dd8ec96b6a3129a9fca4e8703ec31
+E3	partial-clone	b	2.38.5	err 	 		0	merge-tree exit 128: fatal: unable to read blob object 27c856ddbd8f60b01804378ad79f90fd86395f56
+E3	partial-clone	b	2.56.0	err 	 		0	merge-tree exit 128: fatal: unable to read blob object 27c856ddbd8f60b01804378ad79f90fd86395f56
+E3	partial-clone	b	2.50.1-apple	err 	 		0	merge-tree exit 128: fatal: unable to read blob object 27c856ddbd8f60b01804378ad79f90fd86395f56

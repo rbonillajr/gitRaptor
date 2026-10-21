@@ -1,0 +1,7 @@
+# E10 — single-blob text merge time vs size (dense: ours changes every 2nd line, theirs every 3rd). load 3.86 4.66 5.61
+# lines	bytes	A2 ms	git merge-tree 2.56.0 s
+2000	95890	7.434	0.01
+5000	241390	35.649	0.05
+10000	483890	111.114	0.18
+20000	978890	429.407	0.62
+40000	1968890	1678.967	2.37

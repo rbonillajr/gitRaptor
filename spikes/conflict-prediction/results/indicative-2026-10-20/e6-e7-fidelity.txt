@@ -1,0 +1,168 @@
+# E6/E7 — 2026-10-21T04:20:08Z — load 6.00 5.50 5.48
+
+## corpus=syn (30 pairs) reference=git 2.38.5
+pairs=30 errors=0 valid=30 with_conflict_either=20 parity=20/20 (100.0%)
+false_negative_pairs=0 false_positive_pairs=0
+hunks: files=12 same_ranges=12 (100.0%)
+prefilter: skipped=4/30 (13.3%) false_negatives=1
+  prefilter FN: ('dir-rename/ours', 'dir-rename/theirs') ['e/new.txt']
+engine ms: p50=1.5 p95=2.2 p99=2.9 max=2.9
+
+## corpus=syn (30 pairs) reference=git 2.56.0
+pairs=30 errors=0 valid=30 with_conflict_either=20 parity=20/20 (100.0%)
+false_negative_pairs=0 false_positive_pairs=0
+hunks: files=12 same_ranges=12 (100.0%)
+prefilter: skipped=4/30 (13.3%) false_negatives=1
+  prefilter FN: ('dir-rename/ours', 'dir-rename/theirs') ['e/new.txt']
+engine ms: p50=1.5 p95=2.2 p99=2.9 max=2.9
+
+## corpus=syn (30 pairs) reference=git 2.50.1-apple
+pairs=30 errors=0 valid=30 with_conflict_either=20 parity=20/20 (100.0%)
+false_negative_pairs=0 false_positive_pairs=0
+hunks: files=12 same_ranges=12 (100.0%)
+prefilter: skipped=4/30 (13.3%) false_negatives=1
+  prefilter FN: ('dir-rename/ours', 'dir-rename/theirs') ['e/new.txt']
+engine ms: p50=1.5 p95=2.2 p99=2.9 max=2.9
+
+## corpus=real (2000 pairs) reference=git 2.38.5
+pairs=1989 errors=0 valid=1989 with_conflict_either=244 parity=206/244 (84.4%)
+false_negative_pairs=3 false_positive_pairs=27
+missed files by case: {'': 7}
+extra files by engine kind: {'content': 2, 'modify-delete': 41}
+hunks: files=287 same_ranges=244 (85.0%)
+prefilter: skipped=753/1989 (37.9%) false_negatives=0
+engine ms: p50=18.1 p95=131.5 p99=341.9 max=447.9
+  diff:  ('8b5873a1f228fe0e568f13c864fcdd69a866aa95', '08b6afb2a2dbf762e3d9fa7abd78090b9afbd1a8') engine= ['object-file.c', 'odb.h'] ref= ['object-file.c'] {'object-file.c': 'content', 'odb.h': 'content'}
+  diff:  ('b15384c06f77bc2d34d0d3623a8a58218313a561', '08b6afb2a2dbf762e3d9fa7abd78090b9afbd1a8') engine= ['object-file.c', 'odb.h'] ref= ['object-file.c'] {'object-file.c': 'content', 'odb.h': 'content'}
+  diff:  ('bd5c2827b27812eff5766af9fb56b0ea2437f3f5', 'ffe8005b9d8e0cf1b5d5d796ca4da76fbe219011') engine= [] ref= ['ci/run-build-and-tests.sh'] {}
+  diff:  ('18396dc97d3e6b2f36772103b88c8855b703ea6b', 'f64c50e76827f39c843102bc603817648a38a48c') engine= ['contrib/coccinelle/strbuf.cocci'] ref= ['tools/coccinelle/strbuf.cocci'] {'contrib/coccinelle/strbuf.cocci': 'modify-delete'}
+  diff:  ('b3722b381e7052225a87c5061ed5bb5952920d83', '5ae594f30be8a89a9e345e4e5e454f4b92156da1') engine= ['Documentation/git-update-ref.txt'] ref= [] {'Documentation/git-update-ref.txt': 'modify-delete'}
+  diff:  ('88ad76ca8920153e4ae3d56b14926d97271ffc0d', 'fdd21ba116551efb07e784f138d090917b7e70ad') engine= ['Documentation/gitcredentials.txt'] ref= [] {'Documentation/gitcredentials.txt': 'modify-delete'}
+  diff:  ('2ab0f47bd34cba61570d2059ad1ad889a007b658', 'ac7096723b6a42c177ffb2fbe1c4f4c5dc59e752') engine= ['Documentation/config.txt'] ref= [] {'Documentation/config.txt': 'modify-delete'}
+  diff:  ('b168cbdc203994e46a3c8e958081d65ed97fbfcf', '741f36c7d9c87648cc4ecb68eb9156fa50769e56') engine= ['Documentation/git-clone.txt'] ref= [] {'Documentation/git-clone.txt': 'modify-delete'}
+  diff:  ('f9f50d6348e130ba5edeadfb507a50956784af2d', 'bcb20dda833dc71a729af50bdfb86c5d252307b1') engine= ['Documentation/gitk.txt'] ref= [] {'Documentation/gitk.txt': 'modify-delete'}
+  diff:  ('8d3abe9f8af706baafedba4283114f94a0cda4a1', 'fdd21ba116551efb07e784f138d090917b7e70ad') engine= ['Documentation/gitcredentials.txt'] ref= [] {'Documentation/gitcredentials.txt': 'modify-delete'}
+  diff:  ('f4f7605fd76a784c1cb5186b5fdee34e2c21324e', 'dd52a29b78d80e425be660f3b443a42e0374a7d1') engine= ['bulk-checkin.c', 'odb.h'] ref= ['bulk-checkin.c', 'odb.c', 'odb.h'] {'bulk-checkin.c': 'modify-delete', 'odb.h': 'content'}
+  diff:  ('821f583da6d30a84249f75f33501504d597bc16b', 'ce1661f9da70ea2ffcb54f7b544410fad26e965d') engine= [] ref= ['odb.h'] {}
+  diff:  ('1c385d1bf8a5ec4e1b5d165a594f37a4bbdc3bdd', 'ac7096723b6a42c177ffb2fbe1c4f4c5dc59e752') engine= ['Documentation/config.txt'] ref= [] {'Documentation/config.txt': 'modify-delete'}
+  diff:  ('f2457a6f4ba4ae8078fa7559f6292786a287f696', '7ef77ec0054b3b4ef3cfee6ef97c43c01965be88') engine= ['Makefile', 'po/glossary/Makefile'] ref= ['Makefile'] {'Makefile': 'content', 'po/glossary/Makefile': 'modify-delete'}
+  diff:  ('c64ec662d061f2d496f8e9738b5a71d3d148e95e', 'bcb20dda833dc71a729af50bdfb86c5d252307b1') engine= ['Documentation/gitk.txt'] ref= [] {'Documentation/gitk.txt': 'modify-delete'}
+  diff:  ('9d6e319ec5190a0f5e19d8c7b7a73a4439042df6', '741f36c7d9c87648cc4ecb68eb9156fa50769e56') engine= ['Documentation/git-clone.txt'] ref= [] {'Documentation/git-clone.txt': 'modify-delete'}
+  diff:  ('dc87d078b4cc52296112b156811d2aae3d81f280', 'cca758d324acb0c4b8fd64e9d8792b3ee251ff76') engine= ['Documentation/git-fast-import.txt'] ref= [] {'Documentation/git-fast-import.txt': 'modify-delete'}
+  diff:  ('3f2a94875d2f41fe4758a439f68d8b73cfb19d0f', '2d3f3f01270a47bed15db774b577b22a9c9c8d9e') engine= ['gitk'] ref= [] {'gitk': 'modify-delete'}
+  diff:  ('ac5fd295819b0c4b4e743f522de76c482e7e7e3c', 'ad7780b38fae2fb915404a59b0c904da8ed154a6') engine= ['Documentation/git-pack-refs.txt'] ref= [] {'Documentation/git-pack-refs.txt': 'modify-delete'}
+  diff:  ('a7d1716fa648f6557ea9c91e0f04bae2e8738e6a', 'a437f5bc93330a70b42a230e52f3bd036ca1b1da') engine= ['git-gui.sh'] ref= [] {'git-gui.sh': 'modify-delete'}
+  diff:  ('27fbab4898620183e608865beffd960139c04d58', 'a1ccd2512072cf52835050f4c97a4fba9f0ec8f9') engine= ['git-gui.sh'] ref= [] {'git-gui.sh': 'modify-delete'}
+  diff:  ('4e7e3b792e6973e09de6ddc191b86bbc245c53dd', '67a128b91e25978a15f9f7e194d81b441d603652') engine= ['gitk'] ref= [] {'gitk': 'modify-delete'}
+  diff:  ('664d4fa692cb8637a7c9297c94abf0de8593e585', '8e3070aa5e331be45d4d03e3be41f84494fce129') engine= ['gitk'] ref= [] {'gitk': 'modify-delete'}
+  diff:  ('a819a3da85655031a23abae0f75d0910697fb92c', 'a7fa5b2f0ccb567a5a6afedece113f207902fa6f') engine= [] ref= ['meson.build'] {}
+  diff:  ('09977c5f501bc0438dfaa99690491c849895f476', 'ee8edb7156bdb2b13420d59b66bb51edb88cbe83') engine= ['Documentation/mergetools/vimdiff.txt'] ref= [] {'Documentation/mergetools/vimdiff.txt': 'modify-delete'}
+  diff:  ('2a4f95969a41089936070026b5a5ee5275ca43ad', 'ee434e18077a406205e00d4027c51816bb621fad') engine= ['Documentation/git-pack-refs.txt'] ref= [] {'Documentation/git-pack-refs.txt': 'modify-delete'}
+  diff:  ('f50df872a45c4a1010dc5378055b1be0e844add1', 'c1cf918d3adbe832fdaf278a23151502be255bb2') engine= ['Documentation/git-fsck.txt', 'worktree.c'] ref= ['worktree.c'] {'Documentation/git-fsck.txt': 'modify-delete', 'worktree.c': 'content'}
+  diff:  ('87a0bdbf0f72b7561f3cd50636eee33dcb7dbcc3', '83b278ef74b7eed02a4c7046c830eea19bbd10f9') engine= ['Documentation/git-clone.txt'] ref= [] {'Documentation/git-clone.txt': 'modify-delete'}
+  diff:  ('3334de6494363af27393f468c2e7f32f02654f47', 'c268e3285d4eafeec048d98672faa43f21857990') engine= ['Documentation/BreakingChanges.txt'] ref= [] {'Documentation/BreakingChanges.txt': 'modify-delete'}
+  diff:  ('9d8cce051add2eb82cb0be97a58201c1d3fe0c1b', '89be7d2774f81f3d8663999975a6ab64d46bf42e') engine= ['Documentation/git-refs.txt'] ref= [] {'Documentation/git-refs.txt': 'modify-delete'}
+  diff:  ('a8a5bb1f7813ceb42199ef2bcf9d925da007f047', 'c2d96bc42cfc358178078d8c2c65d550671d3ed0') engine= ['Documentation/git-commit.txt', 'Documentation/git-rebase.txt'] ref= [] {'Documentation/git-commit.txt': 'modify-delete', 'Documentation/git-rebase.txt': 'modify-delete'}
+  diff:  ('0fbe93b36c05bbf4156c157f27998938ce312265', '3eeed876a909c45695f2f3a3edd4141be331a3be') engine= ['Documentation/config/http.txt'] ref= [] {'Documentation/config/http.txt': 'modify-delete'}
+  diff:  ('ee8020ff40dd3b9b472b482bfa7b6674747800cc', '45761988ac01b99f9a81ad6ec884bef3c2d8e402') engine= ['Documentation/config/merge.txt', 'Documentation/gitattributes.txt'] ref= [] {'Documentation/config/merge.txt': 'modify-delete', 'Documentation/gitattributes.txt': 'modify-delete'}
+  diff:  ('55b5ba87f1ce7ef5c9f891392a7271bfc4d62d2b', '832f56f06a5910b2f41a2e0dd8b382b6c709de07') engine= ['Documentation/git-config.txt', 'Documentation/git.txt'] ref= [] {'Documentation/git-config.txt': 'modify-delete', 'Documentation/git.txt': 'modify-delete'}
+  diff:  ('345aaf3976a6abc491026c8a465b5e8ccbc8da5a', '3295c3539896750f742a56de0c4ac965f8d96303') engine= ['Documentation/rev-list-options.txt'] ref= [] {'Documentation/rev-list-options.txt': 'modify-delete'}
+  diff:  ('0cc13007e5d50b096c95047680ace56749c18789', '337855629f59a3f435dabef900e22202ce8e00e1') engine= ['Documentation/git-clone.txt'] ref= [] {'Documentation/git-clone.txt': 'modify-delete'}
+  diff:  ('e2067b49ecaef9b7f51a17ce251f9207f72ef52d', 'dd98f54f30606a2afc05892bbd0185648311963e') engine= ['Documentation/config.txt', 'Documentation/config/diff.txt', 'Documentation/git-commit.txt', 'Documentation/git-gc.txt', 'Documentation/git-notes.txt', 'Documentation/git-show-index.txt', 'Documentation/gitrepository-layout.txt', 'meson.build'] ref= ['Documentation/config.adoc', 'Documentation/config/diff.adoc', 'meson.build'] {'Documentation/config.txt': 'modify-delete', 'Documentation/config/diff.txt': 'modify-delete', 'Documentation/git-commit.txt': 'modify-delete', 'Documentation/git-gc.txt': 'modify-delete', 'Documentation/git-notes.txt': 'modify-delete', 'Documentation/git-show-index.txt': 'modify-delete', 'Documentation/gitrepository-layout.txt': 'modify-delete', 'meson.build': 'content'}
+  diff:  ('f1a384425d5ce07db8f44bf173076620f89a1f4f', 'c18400c6bb04f4e8875c1930db72ddd9b94649ca') engine= ['Makefile', 'gitk'] ref= ['Makefile'] {'Makefile': 'content', 'gitk': 'modify-delete'}
+
+## corpus=real (2000 pairs) reference=git 2.56.0
+pairs=1989 errors=0 valid=1989 with_conflict_either=244 parity=206/244 (84.4%)
+false_negative_pairs=3 false_positive_pairs=27
+missed files by case: {'': 7}
+extra files by engine kind: {'content': 2, 'modify-delete': 41}
+hunks: files=287 same_ranges=244 (85.0%)
+prefilter: skipped=753/1989 (37.9%) false_negatives=0
+engine ms: p50=18.1 p95=131.5 p99=341.9 max=447.9
+  diff:  ('8b5873a1f228fe0e568f13c864fcdd69a866aa95', '08b6afb2a2dbf762e3d9fa7abd78090b9afbd1a8') engine= ['object-file.c', 'odb.h'] ref= ['object-file.c'] {'object-file.c': 'content', 'odb.h': 'content'}
+  diff:  ('b15384c06f77bc2d34d0d3623a8a58218313a561', '08b6afb2a2dbf762e3d9fa7abd78090b9afbd1a8') engine= ['object-file.c', 'odb.h'] ref= ['object-file.c'] {'object-file.c': 'content', 'odb.h': 'content'}
+  diff:  ('bd5c2827b27812eff5766af9fb56b0ea2437f3f5', 'ffe8005b9d8e0cf1b5d5d796ca4da76fbe219011') engine= [] ref= ['ci/run-build-and-tests.sh'] {}
+  diff:  ('18396dc97d3e6b2f36772103b88c8855b703ea6b', 'f64c50e76827f39c843102bc603817648a38a48c') engine= ['contrib/coccinelle/strbuf.cocci'] ref= ['tools/coccinelle/strbuf.cocci'] {'contrib/coccinelle/strbuf.cocci': 'modify-delete'}
+  diff:  ('b3722b381e7052225a87c5061ed5bb5952920d83', '5ae594f30be8a89a9e345e4e5e454f4b92156da1') engine= ['Documentation/git-update-ref.txt'] ref= [] {'Documentation/git-update-ref.txt': 'modify-delete'}
+  diff:  ('88ad76ca8920153e4ae3d56b14926d97271ffc0d', 'fdd21ba116551efb07e784f138d090917b7e70ad') engine= ['Documentation/gitcredentials.txt'] ref= [] {'Documentation/gitcredentials.txt': 'modify-delete'}
+  diff:  ('2ab0f47bd34cba61570d2059ad1ad889a007b658', 'ac7096723b6a42c177ffb2fbe1c4f4c5dc59e752') engine= ['Documentation/config.txt'] ref= [] {'Documentation/config.txt': 'modify-delete'}
+  diff:  ('b168cbdc203994e46a3c8e958081d65ed97fbfcf', '741f36c7d9c87648cc4ecb68eb9156fa50769e56') engine= ['Documentation/git-clone.txt'] ref= [] {'Documentation/git-clone.txt': 'modify-delete'}
+  diff:  ('f9f50d6348e130ba5edeadfb507a50956784af2d', 'bcb20dda833dc71a729af50bdfb86c5d252307b1') engine= ['Documentation/gitk.txt'] ref= [] {'Documentation/gitk.txt': 'modify-delete'}
+  diff:  ('8d3abe9f8af706baafedba4283114f94a0cda4a1', 'fdd21ba116551efb07e784f138d090917b7e70ad') engine= ['Documentation/gitcredentials.txt'] ref= [] {'Documentation/gitcredentials.txt': 'modify-delete'}
+  diff:  ('f4f7605fd76a784c1cb5186b5fdee34e2c21324e', 'dd52a29b78d80e425be660f3b443a42e0374a7d1') engine= ['bulk-checkin.c', 'odb.h'] ref= ['bulk-checkin.c', 'odb.c', 'odb.h'] {'bulk-checkin.c': 'modify-delete', 'odb.h': 'content'}
+  diff:  ('821f583da6d30a84249f75f33501504d597bc16b', 'ce1661f9da70ea2ffcb54f7b544410fad26e965d') engine= [] ref= ['odb.h'] {}
+  diff:  ('1c385d1bf8a5ec4e1b5d165a594f37a4bbdc3bdd', 'ac7096723b6a42c177ffb2fbe1c4f4c5dc59e752') engine= ['Documentation/config.txt'] ref= [] {'Documentation/config.txt': 'modify-delete'}
+  diff:  ('f2457a6f4ba4ae8078fa7559f6292786a287f696', '7ef77ec0054b3b4ef3cfee6ef97c43c01965be88') engine= ['Makefile', 'po/glossary/Makefile'] ref= ['Makefile'] {'Makefile': 'content', 'po/glossary/Makefile': 'modify-delete'}
+  diff:  ('c64ec662d061f2d496f8e9738b5a71d3d148e95e', 'bcb20dda833dc71a729af50bdfb86c5d252307b1') engine= ['Documentation/gitk.txt'] ref= [] {'Documentation/gitk.txt': 'modify-delete'}
+  diff:  ('9d6e319ec5190a0f5e19d8c7b7a73a4439042df6', '741f36c7d9c87648cc4ecb68eb9156fa50769e56') engine= ['Documentation/git-clone.txt'] ref= [] {'Documentation/git-clone.txt': 'modify-delete'}
+  diff:  ('dc87d078b4cc52296112b156811d2aae3d81f280', 'cca758d324acb0c4b8fd64e9d8792b3ee251ff76') engine= ['Documentation/git-fast-import.txt'] ref= [] {'Documentation/git-fast-import.txt': 'modify-delete'}
+  diff:  ('3f2a94875d2f41fe4758a439f68d8b73cfb19d0f', '2d3f3f01270a47bed15db774b577b22a9c9c8d9e') engine= ['gitk'] ref= [] {'gitk': 'modify-delete'}
+  diff:  ('ac5fd295819b0c4b4e743f522de76c482e7e7e3c', 'ad7780b38fae2fb915404a59b0c904da8ed154a6') engine= ['Documentation/git-pack-refs.txt'] ref= [] {'Documentation/git-pack-refs.txt': 'modify-delete'}
+  diff:  ('a7d1716fa648f6557ea9c91e0f04bae2e8738e6a', 'a437f5bc93330a70b42a230e52f3bd036ca1b1da') engine= ['git-gui.sh'] ref= [] {'git-gui.sh': 'modify-delete'}
+  diff:  ('27fbab4898620183e608865beffd960139c04d58', 'a1ccd2512072cf52835050f4c97a4fba9f0ec8f9') engine= ['git-gui.sh'] ref= [] {'git-gui.sh': 'modify-delete'}
+  diff:  ('4e7e3b792e6973e09de6ddc191b86bbc245c53dd', '67a128b91e25978a15f9f7e194d81b441d603652') engine= ['gitk'] ref= [] {'gitk': 'modify-delete'}
+  diff:  ('664d4fa692cb8637a7c9297c94abf0de8593e585', '8e3070aa5e331be45d4d03e3be41f84494fce129') engine= ['gitk'] ref= [] {'gitk': 'modify-delete'}
+  diff:  ('a819a3da85655031a23abae0f75d0910697fb92c', 'a7fa5b2f0ccb567a5a6afedece113f207902fa6f') engine= [] ref= ['meson.build'] {}
+  diff:  ('09977c5f501bc0438dfaa99690491c849895f476', 'ee8edb7156bdb2b13420d59b66bb51edb88cbe83') engine= ['Documentation/mergetools/vimdiff.txt'] ref= [] {'Documentation/mergetools/vimdiff.txt': 'modify-delete'}
+  diff:  ('2a4f95969a41089936070026b5a5ee5275ca43ad', 'ee434e18077a406205e00d4027c51816bb621fad') engine= ['Documentation/git-pack-refs.txt'] ref= [] {'Documentation/git-pack-refs.txt': 'modify-delete'}
+  diff:  ('f50df872a45c4a1010dc5378055b1be0e844add1', 'c1cf918d3adbe832fdaf278a23151502be255bb2') engine= ['Documentation/git-fsck.txt', 'worktree.c'] ref= ['worktree.c'] {'Documentation/git-fsck.txt': 'modify-delete', 'worktree.c': 'content'}
+  diff:  ('87a0bdbf0f72b7561f3cd50636eee33dcb7dbcc3', '83b278ef74b7eed02a4c7046c830eea19bbd10f9') engine= ['Documentation/git-clone.txt'] ref= [] {'Documentation/git-clone.txt': 'modify-delete'}
+  diff:  ('3334de6494363af27393f468c2e7f32f02654f47', 'c268e3285d4eafeec048d98672faa43f21857990') engine= ['Documentation/BreakingChanges.txt'] ref= [] {'Documentation/BreakingChanges.txt': 'modify-delete'}
+  diff:  ('9d8cce051add2eb82cb0be97a58201c1d3fe0c1b', '89be7d2774f81f3d8663999975a6ab64d46bf42e') engine= ['Documentation/git-refs.txt'] ref= [] {'Documentation/git-refs.txt': 'modify-delete'}
+  diff:  ('a8a5bb1f7813ceb42199ef2bcf9d925da007f047', 'c2d96bc42cfc358178078d8c2c65d550671d3ed0') engine= ['Documentation/git-commit.txt', 'Documentation/git-rebase.txt'] ref= [] {'Documentation/git-commit.txt': 'modify-delete', 'Documentation/git-rebase.txt': 'modify-delete'}
+  diff:  ('0fbe93b36c05bbf4156c157f27998938ce312265', '3eeed876a909c45695f2f3a3edd4141be331a3be') engine= ['Documentation/config/http.txt'] ref= [] {'Documentation/config/http.txt': 'modify-delete'}
+  diff:  ('ee8020ff40dd3b9b472b482bfa7b6674747800cc', '45761988ac01b99f9a81ad6ec884bef3c2d8e402') engine= ['Documentation/config/merge.txt', 'Documentation/gitattributes.txt'] ref= [] {'Documentation/config/merge.txt': 'modify-delete', 'Documentation/gitattributes.txt': 'modify-delete'}
+  diff:  ('55b5ba87f1ce7ef5c9f891392a7271bfc4d62d2b', '832f56f06a5910b2f41a2e0dd8b382b6c709de07') engine= ['Documentation/git-config.txt', 'Documentation/git.txt'] ref= [] {'Documentation/git-config.txt': 'modify-delete', 'Documentation/git.txt': 'modify-delete'}
+  diff:  ('345aaf3976a6abc491026c8a465b5e8ccbc8da5a', '3295c3539896750f742a56de0c4ac965f8d96303') engine= ['Documentation/rev-list-options.txt'] ref= [] {'Documentation/rev-list-options.txt': 'modify-delete'}
+  diff:  ('0cc13007e5d50b096c95047680ace56749c18789', '337855629f59a3f435dabef900e22202ce8e00e1') engine= ['Documentation/git-clone.txt'] ref= [] {'Documentation/git-clone.txt': 'modify-delete'}
+  diff:  ('e2067b49ecaef9b7f51a17ce251f9207f72ef52d', 'dd98f54f30606a2afc05892bbd0185648311963e') engine= ['Documentation/config.txt', 'Documentation/config/diff.txt', 'Documentation/git-commit.txt', 'Documentation/git-gc.txt', 'Documentation/git-notes.txt', 'Documentation/git-show-index.txt', 'Documentation/gitrepository-layout.txt', 'meson.build'] ref= ['Documentation/config.adoc', 'Documentation/config/diff.adoc', 'meson.build'] {'Documentation/config.txt': 'modify-delete', 'Documentation/config/diff.txt': 'modify-delete', 'Documentation/git-commit.txt': 'modify-delete', 'Documentation/git-gc.txt': 'modify-delete', 'Documentation/git-notes.txt': 'modify-delete', 'Documentation/git-show-index.txt': 'modify-delete', 'Documentation/gitrepository-layout.txt': 'modify-delete', 'meson.build': 'content'}
+  diff:  ('f1a384425d5ce07db8f44bf173076620f89a1f4f', 'c18400c6bb04f4e8875c1930db72ddd9b94649ca') engine= ['Makefile', 'gitk'] ref= ['Makefile'] {'Makefile': 'content', 'gitk': 'modify-delete'}
+
+## corpus=real (2000 pairs) reference=git 2.50.1-apple
+pairs=1989 errors=0 valid=1989 with_conflict_either=244 parity=206/244 (84.4%)
+false_negative_pairs=3 false_positive_pairs=27
+missed files by case: {'': 7}
+extra files by engine kind: {'content': 2, 'modify-delete': 41}
+hunks: files=287 same_ranges=244 (85.0%)
+prefilter: skipped=753/1989 (37.9%) false_negatives=0
+engine ms: p50=18.1 p95=131.5 p99=341.9 max=447.9
+  diff:  ('8b5873a1f228fe0e568f13c864fcdd69a866aa95', '08b6afb2a2dbf762e3d9fa7abd78090b9afbd1a8') engine= ['object-file.c', 'odb.h'] ref= ['object-file.c'] {'object-file.c': 'content', 'odb.h': 'content'}
+  diff:  ('b15384c06f77bc2d34d0d3623a8a58218313a561', '08b6afb2a2dbf762e3d9fa7abd78090b9afbd1a8') engine= ['object-file.c', 'odb.h'] ref= ['object-file.c'] {'object-file.c': 'content', 'odb.h': 'content'}
+  diff:  ('bd5c2827b27812eff5766af9fb56b0ea2437f3f5', 'ffe8005b9d8e0cf1b5d5d796ca4da76fbe219011') engine= [] ref= ['ci/run-build-and-tests.sh'] {}
+  diff:  ('18396dc97d3e6b2f36772103b88c8855b703ea6b', 'f64c50e76827f39c843102bc603817648a38a48c') engine= ['contrib/coccinelle/strbuf.cocci'] ref= ['tools/coccinelle/strbuf.cocci'] {'contrib/coccinelle/strbuf.cocci': 'modify-delete'}
+  diff:  ('b3722b381e7052225a87c5061ed5bb5952920d83', '5ae594f30be8a89a9e345e4e5e454f4b92156da1') engine= ['Documentation/git-update-ref.txt'] ref= [] {'Documentation/git-update-ref.txt': 'modify-delete'}
+  diff:  ('88ad76ca8920153e4ae3d56b14926d97271ffc0d', 'fdd21ba116551efb07e784f138d090917b7e70ad') engine= ['Documentation/gitcredentials.txt'] ref= [] {'Documentation/gitcredentials.txt': 'modify-delete'}
+  diff:  ('2ab0f47bd34cba61570d2059ad1ad889a007b658', 'ac7096723b6a42c177ffb2fbe1c4f4c5dc59e752') engine= ['Documentation/config.txt'] ref= [] {'Documentation/config.txt': 'modify-delete'}
+  diff:  ('b168cbdc203994e46a3c8e958081d65ed97fbfcf', '741f36c7d9c87648cc4ecb68eb9156fa50769e56') engine= ['Documentation/git-clone.txt'] ref= [] {'Documentation/git-clone.txt': 'modify-delete'}
+  diff:  ('f9f50d6348e130ba5edeadfb507a50956784af2d', 'bcb20dda833dc71a729af50bdfb86c5d252307b1') engine= ['Documentation/gitk.txt'] ref= [] {'Documentation/gitk.txt': 'modify-delete'}
+  diff:  ('8d3abe9f8af706baafedba4283114f94a0cda4a1', 'fdd21ba116551efb07e784f138d090917b7e70ad') engine= ['Documentation/gitcredentials.txt'] ref= [] {'Documentation/gitcredentials.txt': 'modify-delete'}
+  diff:  ('f4f7605fd76a784c1cb5186b5fdee34e2c21324e', 'dd52a29b78d80e425be660f3b443a42e0374a7d1') engine= ['bulk-checkin.c', 'odb.h'] ref= ['bulk-checkin.c', 'odb.c', 'odb.h'] {'bulk-checkin.c': 'modify-delete', 'odb.h': 'content'}
+  diff:  ('821f583da6d30a84249f75f33501504d597bc16b', 'ce1661f9da70ea2ffcb54f7b544410fad26e965d') engine= [] ref= ['odb.h'] {}
+  diff:  ('1c385d1bf8a5ec4e1b5d165a594f37a4bbdc3bdd', 'ac7096723b6a42c177ffb2fbe1c4f4c5dc59e752') engine= ['Documentation/config.txt'] ref= [] {'Documentation/config.txt': 'modify-delete'}
+  diff:  ('f2457a6f4ba4ae8078fa7559f6292786a287f696', '7ef77ec0054b3b4ef3cfee6ef97c43c01965be88') engine= ['Makefile', 'po/glossary/Makefile'] ref= ['Makefile'] {'Makefile': 'content', 'po/glossary/Makefile': 'modify-delete'}
+  diff:  ('c64ec662d061f2d496f8e9738b5a71d3d148e95e', 'bcb20dda833dc71a729af50bdfb86c5d252307b1') engine= ['Documentation/gitk.txt'] ref= [] {'Documentation/gitk.txt': 'modify-delete'}
+  diff:  ('9d6e319ec5190a0f5e19d8c7b7a73a4439042df6', '741f36c7d9c87648cc4ecb68eb9156fa50769e56') engine= ['Documentation/git-clone.txt'] ref= [] {'Documentation/git-clone.txt': 'modify-delete'}
+  diff:  ('dc87d078b4cc52296112b156811d2aae3d81f280', 'cca758d324acb0c4b8fd64e9d8792b3ee251ff76') engine= ['Documentation/git-fast-import.txt'] ref= [] {'Documentation/git-fast-import.txt': 'modify-delete'}
+  diff:  ('3f2a94875d2f41fe4758a439f68d8b73cfb19d0f', '2d3f3f01270a47bed15db774b577b22a9c9c8d9e') engine= ['gitk'] ref= [] {'gitk': 'modify-delete'}
+  diff:  ('ac5fd295819b0c4b4e743f522de76c482e7e7e3c', 'ad7780b38fae2fb915404a59b0c904da8ed154a6') engine= ['Documentation/git-pack-refs.txt'] ref= [] {'Documentation/git-pack-refs.txt': 'modify-delete'}
+  diff:  ('a7d1716fa648f6557ea9c91e0f04bae2e8738e6a', 'a437f5bc93330a70b42a230e52f3bd036ca1b1da') engine= ['git-gui.sh'] ref= [] {'git-gui.sh': 'modify-delete'}
+  diff:  ('27fbab4898620183e608865beffd960139c04d58', 'a1ccd2512072cf52835050f4c97a4fba9f0ec8f9') engine= ['git-gui.sh'] ref= [] {'git-gui.sh': 'modify-delete'}
+  diff:  ('4e7e3b792e6973e09de6ddc191b86bbc245c53dd', '67a128b91e25978a15f9f7e194d81b441d603652') engine= ['gitk'] ref= [] {'gitk': 'modify-delete'}
+  diff:  ('664d4fa692cb8637a7c9297c94abf0de8593e585', '8e3070aa5e331be45d4d03e3be41f84494fce129') engine= ['gitk'] ref= [] {'gitk': 'modify-delete'}
+  diff:  ('a819a3da85655031a23abae0f75d0910697fb92c', 'a7fa5b2f0ccb567a5a6afedece113f207902fa6f') engine= [] ref= ['meson.build'] {}
+  diff:  ('09977c5f501bc0438dfaa99690491c849895f476', 'ee8edb7156bdb2b13420d59b66bb51edb88cbe83') engine= ['Documentation/mergetools/vimdiff.txt'] ref= [] {'Documentation/mergetools/vimdiff.txt': 'modify-delete'}
+  diff:  ('2a4f95969a41089936070026b5a5ee5275ca43ad', 'ee434e18077a406205e00d4027c51816bb621fad') engine= ['Documentation/git-pack-refs.txt'] ref= [] {'Documentation/git-pack-refs.txt': 'modify-delete'}
+  diff:  ('f50df872a45c4a1010dc5378055b1be0e844add1', 'c1cf918d3adbe832fdaf278a23151502be255bb2') engine= ['Documentation/git-fsck.txt', 'worktree.c'] ref= ['worktree.c'] {'Documentation/git-fsck.txt': 'modify-delete', 'worktree.c': 'content'}
+  diff:  ('87a0bdbf0f72b7561f3cd50636eee33dcb7dbcc3', '83b278ef74b7eed02a4c7046c830eea19bbd10f9') engine= ['Documentation/git-clone.txt'] ref= [] {'Documentation/git-clone.txt': 'modify-delete'}
+  diff:  ('3334de6494363af27393f468c2e7f32f02654f47', 'c268e3285d4eafeec048d98672faa43f21857990') engine= ['Documentation/BreakingChanges.txt'] ref= [] {'Documentation/BreakingChanges.txt': 'modify-delete'}
+  diff:  ('9d8cce051add2eb82cb0be97a58201c1d3fe0c1b', '89be7d2774f81f3d8663999975a6ab64d46bf42e') engine= ['Documentation/git-refs.txt'] ref= [] {'Documentation/git-refs.txt': 'modify-delete'}
+  diff:  ('a8a5bb1f7813ceb42199ef2bcf9d925da007f047', 'c2d96bc42cfc358178078d8c2c65d550671d3ed0') engine= ['Documentation/git-commit.txt', 'Documentation/git-rebase.txt'] ref= [] {'Documentation/git-commit.txt': 'modify-delete', 'Documentation/git-rebase.txt': 'modify-delete'}
+  diff:  ('0fbe93b36c05bbf4156c157f27998938ce312265', '3eeed876a909c45695f2f3a3edd4141be331a3be') engine= ['Documentation/config/http.txt'] ref= [] {'Documentation/config/http.txt': 'modify-delete'}
+  diff:  ('ee8020ff40dd3b9b472b482bfa7b6674747800cc', '45761988ac01b99f9a81ad6ec884bef3c2d8e402') engine= ['Documentation/config/merge.txt', 'Documentation/gitattributes.txt'] ref= [] {'Documentation/config/merge.txt': 'modify-delete', 'Documentation/gitattributes.txt': 'modify-delete'}
+  diff:  ('55b5ba87f1ce7ef5c9f891392a7271bfc4d62d2b', '832f56f06a5910b2f41a2e0dd8b382b6c709de07') engine= ['Documentation/git-config.txt', 'Documentation/git.txt'] ref= [] {'Documentation/git-config.txt': 'modify-delete', 'Documentation/git.txt': 'modify-delete'}
+  diff:  ('345aaf3976a6abc491026c8a465b5e8ccbc8da5a', '3295c3539896750f742a56de0c4ac965f8d96303') engine= ['Documentation/rev-list-options.txt'] ref= [] {'Documentation/rev-list-options.txt': 'modify-delete'}
+  diff:  ('0cc13007e5d50b096c95047680ace56749c18789', '337855629f59a3f435dabef900e22202ce8e00e1') engine= ['Documentation/git-clone.txt'] ref= [] {'Documentation/git-clone.txt': 'modify-delete'}
+  diff:  ('e2067b49ecaef9b7f51a17ce251f9207f72ef52d', 'dd98f54f30606a2afc05892bbd0185648311963e') engine= ['Documentation/config.txt', 'Documentation/config/diff.txt', 'Documentation/git-commit.txt', 'Documentation/git-gc.txt', 'Documentation/git-notes.txt', 'Documentation/git-show-index.txt', 'Documentation/gitrepository-layout.txt', 'meson.build'] ref= ['Documentation/config.adoc', 'Documentation/config/diff.adoc', 'meson.build'] {'Documentation/config.txt': 'modify-delete', 'Documentation/config/diff.txt': 'modify-delete', 'Documentation/git-commit.txt': 'modify-delete', 'Documentation/git-gc.txt': 'modify-delete', 'Documentation/git-notes.txt': 'modify-delete', 'Documentation/git-show-index.txt': 'modify-delete', 'Documentation/gitrepository-layout.txt': 'modify-delete', 'meson.build': 'content'}
+  diff:  ('f1a384425d5ce07db8f44bf173076620f89a1f4f', 'c18400c6bb04f4e8875c1930db72ddd9b94649ca') engine= ['Makefile', 'gitk'] ref= ['Makefile'] {'Makefile': 'content', 'gitk': 'modify-delete'}
+
+## E7 mimic-markers with marker size 7: hunks=[["mimic.txt",[[1,0,1,0],[13,13,13,13]]]] (size 32: [["mimic.txt",[[13,13,13,13]]]])
