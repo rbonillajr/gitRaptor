@@ -19,7 +19,9 @@ use gitraptor_api::clock;
 use gitraptor_api::messages::{GitEventDetails, GitEventKind};
 use gitraptor_git::{ReaderOptions, RepoReader};
 
-use super::{GapMark, Marks, ObservedBatch, RawEvent, RepoMsg, Shared, WtMsg, wall_now};
+use super::{
+    GapMark, Marks, ObservedBatch, RawEvent, RepoAccess, RepoMsg, Shared, WtMsg, wall_now,
+};
 use crate::observe::{self, linked_is_trusted};
 use crate::profile::GapCause;
 
@@ -57,6 +59,16 @@ pub struct RefsView {
     pub worktrees: BTreeMap<PathBuf, WorktreeRefs>,
 }
 
+/// Why the view could not be read: the repo does not open, or a listing failed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RefsReadError {
+    /// `RepoReader::open` failed: the repo is moved, deleted, unmounted or unreadable.
+    Unopenable,
+    /// The repo opened but a listing failed (a concurrent `git worktree add` can leave
+    /// `worktrees()` half-written for an instant): worth a retry, not a verdict.
+    Listing,
+}
+
 impl RefsView {
     /// Size of each worktree's `HEAD` reflog.
     pub fn head_logs(&self) -> Vec<(PathBuf, u64)> {
@@ -66,16 +78,24 @@ impl RefsView {
             .collect()
     }
 
-    /// Reads the view; what cannot be read is left out.
-    pub fn read(common: &Path) -> Self {
+    /// Reads the view. It never returns a partial one: a repo that does not open is
+    /// `Unopenable`, and a failed listing is `Listing`, so the caller can tell "no
+    /// worktrees" from "cannot read".
+    pub fn read(common: &Path) -> Result<Self, RefsReadError> {
         let mut view = Self::default();
         let Ok(reader) = RepoReader::open(common, &ReaderOptions::default()) else {
-            return view;
+            return Err(RefsReadError::Unopenable);
         };
-        for b in reader.local_branches().unwrap_or_default() {
+        for b in reader
+            .local_branches()
+            .map_err(|_| RefsReadError::Listing)?
+        {
             view.branches.insert(b.name, b.commit);
         }
-        for b in reader.remote_branches().unwrap_or_default() {
+        for b in reader
+            .remote_branches()
+            .map_err(|_| RefsReadError::Listing)?
+        {
             view.remotes.insert(b.name, b.commit);
         }
         if !reader.is_bare()
@@ -85,7 +105,7 @@ impl RefsView {
             let refs = worktree_refs(common, (&root, common), true, None);
             view.worktrees.insert(root.clone(), refs);
         }
-        for w in reader.worktrees().unwrap_or_default() {
+        for w in reader.worktrees().map_err(|_| RefsReadError::Listing)? {
             let root = observe::canonical(&w.path);
             if linked_is_trusted(common, &w.id, &root) {
                 let git_dir = common.join("worktrees").join(&w.id);
@@ -93,7 +113,7 @@ impl RefsView {
                 view.worktrees.insert(root, refs);
             }
         }
-        view
+        Ok(view)
     }
 
     /// Where a branch's event happened (D6): the worktree that has it in
@@ -504,11 +524,32 @@ pub fn classify(common: &Path, old: &RefsView, new: &RefsView, now: (i64, i32)) 
     events
 }
 
+/// What a repo task starts from.
+pub(super) enum Start {
+    /// The refs view read at the start: the base events are classified from.
+    Known(RefsView),
+    /// The repo was readable but its view was not: the first good view is the base.
+    Pending,
+    /// The repo could not be read at all: it starts lost, and the first good view is the base.
+    Lost,
+}
+
+type ReadFn = fn(&Path) -> Result<RefsView, RefsReadError>;
+
 struct Task {
     shared: Arc<Shared>,
     repo_id: String,
     common: PathBuf,
     view: RefsView,
+    /// `view` was read by this task (or handed over by it): events are classified from it.
+    /// Without a base, the first good view becomes it and no event is classified from it.
+    has_base: bool,
+    /// Since when (wall ms) the repo does not open. A lost repo publishes nothing else.
+    lost: Option<i64>,
+    /// Start of an overflow gap whose read failed with a listing error: the next good read
+    /// closes it.
+    pending_gap: Option<i64>,
+    read: ReadFn,
     window: Option<(Instant, u64, bool)>,
     last_event_ms: i64,
     next_poll: Instant,
@@ -521,15 +562,24 @@ pub(super) fn run(
     shared: Arc<Shared>,
     repo_id: String,
     common: PathBuf,
-    view: RefsView,
+    start: Start,
     rx: Receiver<RepoMsg>,
 ) {
     let config = shared.config;
+    let (view, has_base, lost) = match start {
+        Start::Known(view) => (view, true, None),
+        Start::Pending => (RefsView::default(), false, None),
+        Start::Lost => (RefsView::default(), false, Some(wall_now().0)),
+    };
     let mut task = Task {
         shared,
         repo_id,
         common,
         view,
+        has_base,
+        lost,
+        pending_gap: None,
+        read: RefsView::read,
         window: None,
         last_event_ms: wall_now().0,
         next_poll: Instant::now() + config.backup_poll,
@@ -563,6 +613,7 @@ pub(super) fn run(
                 let _ = done.send(task.view.clone());
                 return;
             }
+            Ok(RepoMsg::PollNow) => task.next_poll = Instant::now(),
             Ok(RepoMsg::Stop) | Err(RecvTimeoutError::Disconnected) => return,
             Err(RecvTimeoutError::Timeout) => {}
         }
@@ -582,17 +633,13 @@ pub(super) fn run(
 impl Task {
     fn flush(&mut self, t_recv: u64, overflow: bool) {
         let t_flush = clock::monotonic_ns();
-        let new = RefsView::read(&self.common);
         let started = self.last_event_ms;
-        self.apply(
-            new,
-            Marks {
-                t_recv,
-                t_flush,
-                t_computed: 0,
-            },
-            overflow.then_some(started),
-        );
+        let marks = Marks {
+            t_recv,
+            t_flush,
+            t_computed: 0,
+        };
+        self.take_read(marks, overflow.then_some(started), |_, _| {});
     }
 
     /// Backup poll: refs, `HEAD`s, indexes and markers, compared with what
@@ -600,37 +647,117 @@ impl Task {
     /// event is reconciled by its own task.
     fn poll(&mut self) {
         let t_flush = clock::monotonic_ns();
-        let new = RefsView::read(&self.common);
-        let moved: Vec<PathBuf> = new
-            .worktrees
-            .iter()
-            .filter(|(root, w)| {
-                self.view
-                    .worktrees
-                    .get(*root)
-                    .is_some_and(|old| old.fingerprint != w.fingerprint)
-            })
-            .map(|(root, _)| root.clone())
-            .collect();
-        for wt in self.shared.worktrees_of(&self.repo_id) {
-            if moved.contains(&wt.root) {
-                let _ = wt.tx.send(WtMsg::Reconcile(t_flush));
+        let marks = Marks {
+            t_recv: t_flush,
+            t_flush,
+            t_computed: 0,
+        };
+        self.take_read(marks, None, |task, new| {
+            let moved: Vec<PathBuf> = new
+                .worktrees
+                .iter()
+                .filter(|(root, w)| {
+                    task.view
+                        .worktrees
+                        .get(*root)
+                        .is_some_and(|old| old.fingerprint != w.fingerprint)
+                })
+                .map(|(root, _)| root.clone())
+                .collect();
+            for wt in task.shared.worktrees_of(&task.repo_id) {
+                if moved.contains(&wt.root) {
+                    let _ = wt.tx.send(WtMsg::Reconcile(t_flush));
+                }
             }
-        }
-        self.apply(
-            new,
-            Marks {
-                t_recv: t_flush,
-                t_flush,
-                t_computed: 0,
-            },
-            None,
-        );
+        });
     }
 
-    fn apply(&mut self, new: RefsView, mut marks: Marks, overflow_from: Option<i64>) {
+    /// Reads the view and hands it to `apply`. A repo that does not open is never read as an
+    /// empty one: no `gone` and no event come out of it, the task is marked lost and the
+    /// daemon told once. A failed listing drops the window; the next poll retries.
+    fn take_read(
+        &mut self,
+        marks: Marks,
+        overflow_from: Option<i64>,
+        before: impl FnOnce(&Self, &RefsView),
+    ) {
+        let new = match (self.read)(&self.common) {
+            Ok(new) => new,
+            Err(RefsReadError::Unopenable) => {
+                self.pending_gap = self.pending_gap.or(overflow_from);
+                self.lose();
+                return;
+            }
+            Err(RefsReadError::Listing) => {
+                self.pending_gap = self.pending_gap.or(overflow_from);
+                return;
+            }
+        };
+        let overflow_from = self.pending_gap.take().or(overflow_from);
+        // With no base view the first good one is the base: nothing is classified from it.
+        if !self.has_base && self.lost.is_none() {
+            self.view = new;
+            self.has_base = true;
+            return;
+        }
+        before(self, &new);
+        let regained = self.lost.take();
+        if regained.is_some() {
+            self.rewatch(&new);
+        }
+        self.apply(new, marks, overflow_from, regained);
+    }
+
+    /// The repo does not open: tells the daemon the first time.
+    fn lose(&mut self) {
+        if self.lost.is_some() {
+            return;
+        }
+        self.lost = Some(wall_now().0);
+        let t = clock::monotonic_ns();
+        self.shared.send(ObservedBatch {
+            repo_id: self.repo_id.clone(),
+            worktrees: Vec::new(),
+            gone: Vec::new(),
+            events: Vec::new(),
+            gap: None,
+            refs: None,
+            head_logs: Vec::new(),
+            heads: Vec::new(),
+            marks: Marks {
+                t_recv: t,
+                t_flush: t,
+                t_computed: t,
+            },
+            access: RepoAccess::Lost,
+        });
+    }
+
+    /// The repo opens again: its watches were on a location that may have changed under
+    /// them, so they are registered anew (the common directory and every worktree root).
+    fn rewatch(&self, new: &RefsView) {
+        let mut roots: Vec<PathBuf> = new.worktrees.keys().cloned().collect();
+        if !roots.iter().any(|r| self.common.starts_with(r)) {
+            roots.push(self.common.clone());
+        }
+        self.shared.rewatch(&roots);
+    }
+
+    /// `regained` is when the repo was lost, if this view is the first one since: the batch
+    /// closes that time as a gap even if nothing changed.
+    fn apply(
+        &mut self,
+        new: RefsView,
+        mut marks: Marks,
+        overflow_from: Option<i64>,
+        regained: Option<i64>,
+    ) {
         let now = wall_now();
-        let events = classify(&self.common, &self.view, &new, now);
+        let events = if self.has_base {
+            classify(&self.common, &self.view, &new, now)
+        } else {
+            Vec::new()
+        };
         // Worktrees added and removed: their tasks and watches follow.
         let mut created = Vec::new();
         for (root, w) in &new.worktrees {
@@ -668,11 +795,19 @@ impl Task {
             .map(|(n, c)| format!("{n} {c}"))
             .collect();
         tips.sort();
-        let gap = overflow_from.map(|started_ms| GapMark {
-            cause: GapCause::WatcherOverflow,
-            started_ms,
-            ended_ms: now.0,
-        });
+        let gap = match (regained, overflow_from) {
+            (Some(lost_ms), overflow) => Some(GapMark {
+                cause: GapCause::PeriodicReconciliation,
+                started_ms: overflow.map_or(lost_ms, |o| o.min(lost_ms)),
+                ended_ms: now.0,
+            }),
+            (None, Some(started_ms)) => Some(GapMark {
+                cause: GapCause::WatcherOverflow,
+                started_ms,
+                ended_ms: now.0,
+            }),
+            (None, None) => None,
+        };
         // A `HEAD` reflog that grew without an event (a detached commit, a
         // checkout of the same branch) still tells the Time Machine the
         // engine saw it.
@@ -698,6 +833,7 @@ impl Task {
         let send = others || heads_changed;
         let head_logs = new.head_logs();
         self.view = new;
+        self.has_base = true;
         // Their tasks stop before the batch that says they are gone, so no
         // read of theirs can follow it and bring them back.
         for root in &gone {
@@ -714,10 +850,15 @@ impl Task {
                 head_logs,
                 heads: Vec::new(),
                 marks,
+                access: if regained.is_some() {
+                    RepoAccess::Regained
+                } else {
+                    RepoAccess::Unchanged
+                },
             });
         }
         for wt in self.shared.worktrees_of(&self.repo_id) {
-            if moved.contains(&wt.root) {
+            if regained.is_some() || moved.contains(&wt.root) {
                 let _ = wt.tx.send(WtMsg::Reconcile(marks.t_recv));
             }
         }
@@ -740,6 +881,150 @@ impl Task {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::watch::{Observer, WatchConfig};
+    use std::cell::RefCell;
+    use std::collections::VecDeque;
+    use std::sync::Mutex;
+
+    thread_local! {
+        /// What the next reads of the task under test answer (one test per thread).
+        static READS: RefCell<VecDeque<Result<RefsView, RefsReadError>>> =
+            const { RefCell::new(VecDeque::new()) };
+    }
+
+    fn scripted(_: &Path) -> Result<RefsView, RefsReadError> {
+        READS.with(|r| {
+            r.borrow_mut()
+                .pop_front()
+                .unwrap_or(Err(RefsReadError::Listing))
+        })
+    }
+
+    fn view(roots: &[&str]) -> RefsView {
+        let mut view = RefsView::default();
+        for (i, root) in roots.iter().enumerate() {
+            view.worktrees
+                .insert((*root).into(), wt(i == 0, Some("main"), "c1", None));
+        }
+        view
+    }
+
+    /// A task reading from `READS`, and the batches it sends.
+    fn task(
+        start: Start,
+        reads: Vec<Result<RefsView, RefsReadError>>,
+    ) -> (Task, Arc<Mutex<Vec<ObservedBatch>>>) {
+        let batches = Arc::new(Mutex::new(Vec::new()));
+        let sink = Arc::clone(&batches);
+        let observer = Observer::start(
+            WatchConfig::default(),
+            Arc::new(move |b| sink.lock().unwrap().push(b)),
+        );
+        READS.with(|r| *r.borrow_mut() = reads.into());
+        let (view, has_base, lost) = match start {
+            Start::Known(v) => (v, true, None),
+            Start::Pending => (RefsView::default(), false, None),
+            Start::Lost => (RefsView::default(), false, Some(0)),
+        };
+        let task = Task {
+            shared: Arc::clone(&observer.shared),
+            repo_id: "r".into(),
+            common: PathBuf::from("/nonexistent/raptor-repo.git"),
+            view,
+            has_base,
+            lost,
+            pending_gap: None,
+            read: scripted,
+            window: None,
+            last_event_ms: 0,
+            next_poll: Instant::now(),
+            heads_deferred: false,
+        };
+        // The observer owns the watcher the task rewatches through: keep it alive.
+        std::mem::forget(observer);
+        (task, batches)
+    }
+
+    #[test]
+    fn an_unopenable_repo_is_lost_not_emptied() {
+        let good = view(&["/w/main", "/w/feat"]);
+        let (mut task, batches) = task(
+            Start::Known(good.clone()),
+            vec![
+                Err(RefsReadError::Unopenable),
+                Err(RefsReadError::Unopenable),
+                Ok(good.clone()),
+            ],
+        );
+        task.poll();
+        {
+            let sent = batches.lock().unwrap();
+            assert_eq!(sent.len(), 1);
+            assert_eq!(sent[0].access, RepoAccess::Lost);
+            assert!(
+                sent[0].gone.is_empty()
+                    && sent[0].events.is_empty()
+                    && sent[0].worktrees.is_empty()
+            );
+        }
+        assert_eq!(task.view, good, "the last good view is kept");
+        // Still lost: nothing more is said.
+        task.poll();
+        assert_eq!(batches.lock().unwrap().len(), 1);
+        // It opens again: one batch with the gap, and nothing is a create or a delete.
+        task.poll();
+        let sent = batches.lock().unwrap();
+        assert_eq!(sent.len(), 2);
+        assert_eq!(sent[1].access, RepoAccess::Regained);
+        assert!(sent[1].gone.is_empty() && sent[1].events.is_empty());
+        let gap = sent[1].gap.expect("the loss is a gap");
+        assert_eq!(gap.cause, GapCause::PeriodicReconciliation);
+        assert!(gap.started_ms <= gap.ended_ms);
+        assert!(task.lost.is_none());
+    }
+
+    #[test]
+    fn a_failed_listing_is_retried_without_losing_the_repo() {
+        let good = view(&["/w/main"]);
+        let mut next = good.clone();
+        next.branches.insert("feat".into(), "c2".into());
+        let (mut task, batches) = task(
+            Start::Known(good),
+            vec![Err(RefsReadError::Listing), Ok(next.clone())],
+        );
+        task.poll();
+        assert!(batches.lock().unwrap().is_empty());
+        assert!(task.lost.is_none());
+        task.poll();
+        let sent = batches.lock().unwrap();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].access, RepoAccess::Unchanged);
+        assert!(sent[0].gone.is_empty());
+        assert_eq!(task.view, next);
+    }
+
+    #[test]
+    fn a_task_started_lost_takes_its_first_view_as_base() {
+        let (mut task, batches) = task(
+            Start::Lost,
+            vec![
+                Err(RefsReadError::Unopenable),
+                Ok(view(&["/w/main", "/w/feat"])),
+            ],
+        );
+        // Started lost: the daemon already knows, so it says nothing more.
+        task.poll();
+        assert!(batches.lock().unwrap().is_empty());
+        task.poll();
+        let sent = batches.lock().unwrap();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].access, RepoAccess::Regained);
+        // Compared with an empty view every worktree would be a `worktree-create`.
+        assert!(sent[0].events.is_empty(), "{:?}", sent[0].events);
+        // Their tasks start now, from the reads this batch carries.
+        assert_eq!(sent[0].worktrees.len(), 2);
+        assert!(task.has_base);
+    }
 
     #[test]
     fn reflog_messages_name_the_event() {

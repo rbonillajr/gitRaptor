@@ -23,7 +23,7 @@ use super::{RepoAddRequest, RepoCommandError};
 
 use crate::observe::{self, RepoRead};
 use crate::profile::{AddOutcome, GapCause, KnownState, NewEvent, RepoState, Timestamp, WriteOp};
-use crate::watch::{ObservedBatch, Observer, WatchConfig};
+use crate::watch::{ObservedBatch, Observer, RepoAccess, WatchConfig};
 
 impl Daemon {
     /// Adds a repo the channel located and read (US-GRP-001): registers it
@@ -118,7 +118,7 @@ impl Daemon {
         };
         if state == RepoStateView::Observed {
             self.link_marks(&repo_id);
-            self.observe(&repo_id, &request.common_dir, &request.read);
+            self.observe(&repo_id, &request.common_dir, Some(&request.read));
         }
         let t_persisted = clock::monotonic_ns();
         let mut worktrees = request.read.views();
@@ -309,7 +309,15 @@ impl Daemon {
 
     /// Starts observing a repo, creating the observer on first use. Its
     /// batches come back to this loop as [`Control::Observed`].
-    pub(super) fn observe(&mut self, repo_id: &str, common_dir: &std::path::Path, read: &RepoRead) {
+    ///
+    /// `read` is `None` when the repo could not be read at startup: its task starts lost
+    /// and watches nothing else until the repo opens again.
+    pub(super) fn observe(
+        &mut self,
+        repo_id: &str,
+        common_dir: &std::path::Path,
+        read: Option<&RepoRead>,
+    ) {
         let mut hooks = vec![self.detector_hooks()];
         hooks.push(Arc::new(super::tiers::WakeHooks(self.handle.clone())));
         hooks.extend(self.modules.observer_hooks());
@@ -334,7 +342,13 @@ impl Daemon {
                 roots,
             )
         });
-        let start = observer.watch_repo(repo_id, common_dir, read);
+        let start = match read {
+            Some(read) => observer.watch_repo(repo_id, common_dir, read),
+            None => {
+                observer.watch_lost_repo(repo_id, common_dir);
+                crate::watch::WatchStart::default()
+            }
+        };
         self.resources.set_observation(observer.usage_source());
         self.resources.set_backend(observer.backend());
         self.note_activity(repo_id);
@@ -349,6 +363,15 @@ impl Daemon {
     pub(super) fn observed(&mut self, batch: ObservedBatch) {
         if !self.stores.iter().any(|(id, _)| *id == batch.repo_id) {
             return;
+        }
+        match batch.access {
+            // Nothing to persist or publish but the state: the repo task read nothing.
+            RepoAccess::Lost => {
+                self.set_repo_state(&batch.repo_id, RepoStateView::Unavailable);
+                return;
+            }
+            RepoAccess::Regained => self.set_repo_state(&batch.repo_id, RepoStateView::Observed),
+            RepoAccess::Unchanged => {}
         }
         self.note_activity(&batch.repo_id);
         // S3 (US-GRP-007): the session each event points to, if any.

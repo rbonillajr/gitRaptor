@@ -210,6 +210,8 @@ pub enum TierTestOp {
     Overflow,
     /// The threshold check runs now.
     CheckTiers,
+    /// The backup poll of every repo task is due now (no waiting for its 30 s).
+    PollNow,
 }
 
 /// A request to the daemon loop.

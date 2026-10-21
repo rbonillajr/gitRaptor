@@ -409,6 +409,7 @@ impl Task {
                 head_logs: Vec::new(),
                 heads: vec![(self.root.clone(), head)],
                 marks,
+                access: super::RepoAccess::Unchanged,
             },
         );
     }

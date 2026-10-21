@@ -12,7 +12,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 use gitraptor_api::event::REPO_TIER;
-use gitraptor_api::messages::{RepoTier, RepoTierData};
+use gitraptor_api::messages::{RepoStateView, RepoTier, RepoTierData};
 
 use super::{Daemon, Field, ShutdownHandle, profile_error_kind, repo_base};
 use crate::observe;
@@ -250,6 +250,11 @@ impl Daemon {
                 }
             }
             super::TierTestOp::CheckTiers => self.check_tiers(),
+            super::TierTestOp::PollNow => {
+                if let Some(observer) = &self.observer {
+                    observer.simulate_poll();
+                }
+            }
         }
     }
 
@@ -335,6 +340,7 @@ impl Daemon {
         let Ok(read) = observe::reconcile(&entry.canonical_path, &base) else {
             self.logger
                 .warn("repo_wake_unreadable", &[("repo", Field::id(repo_id))]);
+            self.set_repo_state(repo_id, RepoStateView::Unavailable);
             self.fail_wake(repo_id);
             return;
         };
@@ -342,6 +348,7 @@ impl Daemon {
             return;
         };
         let start = observer.wake_repo(repo_id, &read, cause);
+        self.set_repo_state(repo_id, RepoStateView::Observed);
         self.marks.set_head_logs(repo_id, &start.head_logs);
         self.marks.set_heads(repo_id, &start.heads);
         self.publish_tier(repo_id, RepoTier::Active, None);
