@@ -544,7 +544,11 @@ impl TeamLoader {
         if hardening_floor && let Some(s) = floor.settings() {
             hardeners.push((SourceKind::Floor, s));
         }
-        if let Some(s) = worktree.settings() {
+        // A worktree on the main branch holds the floor's own document: it is not one more level
+        // (the floor is always part of the combination, effective or hardening).
+        if let Some(s) = worktree.settings()
+            && (worktree.blob.is_none() || worktree.blob != floor.blob)
+        {
             hardeners.push((SourceKind::Worktree, s));
         }
         let permissions = combine(

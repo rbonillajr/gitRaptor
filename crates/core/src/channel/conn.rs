@@ -1117,25 +1117,37 @@ impl Connection<'_> {
     /// resolved only for a commit, the one operation whose rules read them.
     fn guard_caller(&self, params: &EvaluateParams) -> crate::guardrails::evaluate::Caller {
         let authorship = self.has(methods::CAP_GUARD_AUTHORSHIP.name);
+        // US-GRD-007: the actor and the worktree of every governed operation, for the
+        // permissions and an `ask` that depends on who acts.
+        let permissions = self.has(methods::CAP_GUARD_PERMISSIONS.name);
+        let movement = matches!(
+            params.operation,
+            gitraptor_api::guard::Operation::RefTransaction { .. }
+                | gitraptor_api::guard::Operation::Push { .. }
+        );
         // US-GRD-008: the actor of a branch movement or a push, for the rules that tell an agent
         // from the person. Resolved only for a connection that asked for it.
-        if self.has(methods::CAP_GUARD_POLICIES.name)
-            && matches!(
-                params.operation,
-                gitraptor_api::guard::Operation::RefTransaction { .. }
-                    | gitraptor_api::guard::Operation::Push { .. }
-            )
+        let policies = self.has(methods::CAP_GUARD_POLICIES.name) && movement;
+        if policies
+            || (permissions
+                && !matches!(
+                    params.operation,
+                    gitraptor_api::guard::Operation::Commit { .. }
+                ))
         {
             let checks = self.ctx.checks();
             return crate::guardrails::evaluate::Caller {
                 actor: crate::guardrails::actor::resolve(self.peer, &checks, Some(&self.ctx.marks)),
                 cwd: process_cwd(self.peer.pid),
                 authorship,
-                policies: true,
+                policies,
+                permissions,
+                chain: (permissions && moves_a_branch(&params.operation))
+                    .then(|| crate::guardrails::permissions::git_chain(self.peer, &checks)),
                 ..Default::default()
             };
         }
-        if !authorship
+        if !(authorship || permissions)
             || !matches!(
                 params.operation,
                 gitraptor_api::guard::Operation::Commit { .. }
@@ -1171,6 +1183,8 @@ impl Connection<'_> {
             git,
             second_line_skip,
             policies: false,
+            permissions,
+            chain: None,
         }
     }
 
@@ -1528,6 +1542,11 @@ impl Connection<'_> {
                 .retain(|d| *d != gitraptor_api::guard::Diagnostic::LeftoverFolder);
         }
         status.last_refusal = self.guard_blockers(std::mem::take(&mut status.last_refusal));
+        if !self.has(methods::CAP_GUARD_PERMISSIONS.name) {
+            status
+                .not_preventable
+                .retain(|n| *n != gitraptor_api::guard::NotPreventable::PermissionReach);
+        }
     }
 
     /// The fields of `guard.plan` a connection has the capability for.
@@ -1539,6 +1558,10 @@ impl Connection<'_> {
             plan.repair = None;
         }
         plan.blockers = self.guard_blockers(std::mem::take(&mut plan.blockers));
+        if !self.has(methods::CAP_GUARD_PERMISSIONS.name) {
+            plan.not_preventable
+                .retain(|n| *n != gitraptor_api::guard::NotPreventable::PermissionReach);
+        }
         self.guard_shape_status(&mut plan.status);
     }
 
@@ -1581,6 +1604,10 @@ impl Connection<'_> {
                 // A failed prior reads as an internal error, still a denial.
                 if !self.has(methods::CAP_GUARD_SNAPSHOT_REQUIRED.name) {
                     crate::guardrails::snapshot_required::legacy_log(&mut log);
+                }
+                // The permissions per operation are left out; the summary still counts them.
+                if !self.has(methods::CAP_GUARD_PERMISSIONS.name) {
+                    crate::guardrails::permissions::legacy_log(&mut log);
                 }
                 Ok(log)
             }
@@ -2568,6 +2595,13 @@ impl Connection<'_> {
 /// A step of `guard.install` or `guard.uninstall` failed: `guard-failed` with the step and where
 /// the repo stands for a connection with `guard.recovery`, the `INTERNAL` it always was for any
 /// other (ADR-GRP-016).
+/// A transaction that creates or moves a branch: what its permissions classify by the `git`
+/// processes above the hook (a deletion is `branch-delete` whatever runs it).
+fn moves_a_branch(op: &gitraptor_api::guard::Operation) -> bool {
+    matches!(op, gitraptor_api::guard::Operation::RefTransaction { updates, .. }
+        if updates.iter().any(|u| u.refname.starts_with("refs/heads/") && !u.new.is_zero()))
+}
+
 fn guard_failed(recovery: bool, data: gitraptor_api::guard::GuardFailedData) -> ErrorObject {
     if recovery {
         ErrorObject::new(methods::GUARD_FAILED.code, "guardrails step failed").with_data(data)

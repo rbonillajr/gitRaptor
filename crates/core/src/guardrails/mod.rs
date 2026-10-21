@@ -23,6 +23,7 @@ pub mod layers;
 pub mod link;
 pub mod log;
 pub mod pending;
+pub mod permissions;
 pub mod plan_gate;
 pub mod policies;
 pub mod prior;

@@ -142,7 +142,7 @@ pub fn run(args: &HookArgs, env: &HookEnv, input: &[u8]) -> HookOutcome {
                     if !same_repo(&args.common, env) {
                         return HookOutcome::deny(Rule::RepoMismatch);
                     }
-                    decide(args, op)
+                    decide(args, env, op)
                 }
                 Ok(None) => HookOutcome::allow(),
                 Err(rule) => return HookOutcome::deny(rule),
@@ -183,7 +183,7 @@ pub fn run(args: &HookArgs, env: &HookEnv, input: &[u8]) -> HookOutcome {
             HookOutcome::deny(Rule::RepoMismatch)
         };
     }
-    decide(args, op)
+    decide(args, env, op)
 }
 
 /// The canonical common directory of the transaction: `GIT_DIR` or the repo of the cwd.
@@ -425,26 +425,63 @@ fn push(remote: Option<&str>, url: Option<&str>, input: &[u8]) -> Result<Option<
     }))
 }
 
-/// `pre-commit` and `commit-msg` (US-GRD-018, D6, D11): only the commit authorship policy
-/// governs a commit, and only an authentic daemon of this instance that grants
-/// `guard.authorship` evaluates it. Without one the commit goes ahead as before: in degraded
-/// mode the actor is "unattributed", so no authorship rule applies (D3, BR-EDGE-004).
+/// `pre-commit` and `commit-msg` (US-GRD-018, D6, D11; US-GRD-007, D5, D10, D12): the commit
+/// authorship policy and, at `pre-commit`, the permission of `commit`. An authentic daemon of
+/// this instance evaluates what it grants (`guard.authorship`, `guard.permissions`). Without
+/// one, or when it does not grant `guard.permissions`, this client applies the team's
+/// permissions itself, only to harden; in degraded mode the actor is "unattributed", so no
+/// authorship rule applies (D3, BR-EDGE-004).
 fn commit(args: &HookArgs, env: &HookEnv) -> HookOutcome {
     if !same_repo(&args.common, env) {
         return HookOutcome::deny(Rule::RepoMismatch);
     }
+    let pre_commit = args.hook == Hook::PreCommit;
     let mut client = match connect(args) {
         Ok(client) => client,
         Err(Unusable::NotAuthentic) => return HookOutcome::deny(Rule::ChannelNotAuthentic),
-        // Degraded: unattributed, nothing to decide. The `reference-transaction` of the same
-        // commit already says the layer is degraded.
+        // Degraded: the team's permissions still apply to `pre-commit`. A commit that goes ahead
+        // says nothing here: the `reference-transaction` of the same commit says the layer is
+        // degraded.
+        Err(Unusable::Degraded(cause)) if pre_commit => {
+            let outcome = degraded(
+                args,
+                env,
+                &Operation::Commit {
+                    stage: CommitStage::PreCommit,
+                },
+                cause,
+            );
+            return if outcome.allowed() {
+                HookOutcome::allow()
+            } else {
+                outcome
+            };
+        }
         Err(_) => return HookOutcome::allow(),
     };
-    let granted = client.hello().capabilities.as_ref().is_some_and(|served| {
-        served
-            .iter()
-            .any(|c| c == methods::CAP_GUARD_AUTHORSHIP.name)
-    });
+    let served = |cap: &str| {
+        client
+            .hello()
+            .capabilities
+            .as_ref()
+            .is_some_and(|served| served.iter().any(|c| c == cap))
+    };
+    let authorship = served(methods::CAP_GUARD_AUTHORSHIP.name);
+    let permissions = served(methods::CAP_GUARD_PERMISSIONS.name);
+    // A daemon that does not know the permissions must not leave less than degraded mode.
+    if pre_commit
+        && !permissions
+        && let Some(outcome) = team_permissions(
+            args,
+            env,
+            &Operation::Commit {
+                stage: CommitStage::PreCommit,
+            },
+        )
+    {
+        return outcome;
+    }
+    let granted = authorship || (pre_commit && permissions);
     if !granted {
         return HookOutcome {
             authorship_unavailable: true,
@@ -628,16 +665,17 @@ fn read_regular(path: &Path, max: u64) -> Option<Vec<u8>> {
 }
 
 /// Asks the daemon; without an authentic daemon of this instance, degraded mode.
-fn decide(args: &HookArgs, full: Operation) -> HookOutcome {
+fn decide(args: &HookArgs, env: &HookEnv, full: Operation) -> HookOutcome {
     let asked = ask_daemon(args, &full);
-    let (decision, granted) = match asked {
-        Asked::Decision(mut decision, granted) => {
+    let (decision, granted, permissions) = match asked {
+        Asked::Decision(mut decision, granted, permissions) => {
             // A daemon that does not convert a failed prior (a version apart) must not leave
             // less than degraded mode does (BR-EDGE-005).
             snapshot_required::client_fallback(&full, &mut decision, granted);
-            (Some(decision), granted)
+            (Some(decision), granted, permissions)
         }
-        Asked::Nothing(granted) => (None, granted),
+        // Only refs Guardrails does not govern: no permission reaches them.
+        Asked::Nothing(granted) => (None, granted, true),
         Asked::NotAuthentic if only_ungoverned(&full) => {
             return ungoverned_alone(args, &full, Signal::NotAuthentic);
         }
@@ -646,7 +684,7 @@ fn decide(args: &HookArgs, full: Operation) -> HookOutcome {
         }
         Asked::NotAuthentic => return HookOutcome::deny(Rule::ChannelNotAuthentic),
         Asked::Failed => return HookOutcome::deny(Rule::InternalError),
-        Asked::Degraded(cause) => return degraded(args, &full, cause),
+        Asked::Degraded(cause) => return degraded(args, env, &full, cause),
     };
     let outcome = decision.map_or_else(HookOutcome::allow, HookOutcome::decided);
     // A daemon that does not know `guard.policies` (a version apart) must not leave less
@@ -656,15 +694,57 @@ fn decide(args: &HookArgs, full: Operation) -> HookOutcome {
         full,
         Operation::RefTransaction { .. } | Operation::Push { .. }
     );
-    if outcome.allowed() && governed && !granted.policies {
-        return floor_rules_for_everyone(args, &full).unwrap_or(outcome);
+    if outcome.allowed()
+        && governed
+        && !granted.policies
+        && let Some(denied) = floor_rules_for_everyone(args, &full)
+    {
+        return denied;
+    }
+    // Nor one that does not know the permissions (D10).
+    if outcome.allowed()
+        && !permissions
+        && let Some(denied) = team_permissions(args, env, &full)
+    {
+        return denied;
     }
     outcome
 }
 
+/// The team's permissions applied by this client (D10, D12): the floor and the worktree of its
+/// working directory, only to harden, with the minimum forced and the operation classified by
+/// its own ancestry. Nobody proved who acts, so an `ask` is denied to everyone (Q-GRD-46).
+/// `Some` only when they deny.
+fn team_permissions(args: &HookArgs, env: &HookEnv, full: &Operation) -> Option<HookOutcome> {
+    let reader = evaluate::open(&args.common)?;
+    let op = push_scope(full.clone(), args.template, false)?;
+    let commit = client_permissions(&reader, env, &op);
+    let eval = evaluate::evaluate_commit(&reader, &args.common, &op, Vec::new(), commit);
+    (eval.effect != Effect::Allow).then(|| HookOutcome::decided(evaluate::decision(eval)))
+}
+
+/// The permissions part of the context a client evaluates `op` with.
+fn client_permissions(
+    reader: &gitraptor_git::RepoReader,
+    env: &HookEnv,
+    op: &Operation,
+) -> evaluate::CommitContext {
+    let permissions = super::permissions::team_only(reader, Some(&env.cwd));
+    evaluate::CommitContext {
+        classified: super::permissions::classified(
+            reader,
+            op,
+            &permissions,
+            super::permissions::own_chain,
+        ),
+        permissions: Some(permissions),
+        ..evaluate::CommitContext::default()
+    }
+}
+
 enum Asked {
-    /// The decision, and what the daemon granted.
-    Decision(Decision, Granted),
+    /// The decision, what the daemon granted and whether it granted `guard.permissions`.
+    Decision(Decision, Granted, bool),
     /// Nothing is left to ask once the daemon's capability is known (an all-ungoverned push to a
     /// daemon without `guard.policies`).
     Nothing(Granted),
@@ -703,8 +783,9 @@ fn ask_daemon(args: &HookArgs, full: &Operation) -> Asked {
         operation,
         authorship: None,
     };
+    let permissions = served(methods::CAP_GUARD_PERMISSIONS.name);
     match client.call::<_, Decision>(methods::GUARD_EVALUATE, &params) {
-        Ok(decision) => Asked::Decision(decision, granted),
+        Ok(decision) => Asked::Decision(decision, granted, permissions),
         Err(_) => Asked::Failed,
     }
 }
@@ -866,9 +947,10 @@ fn ungoverned_evaluation(
 }
 
 /// Degraded mode (ADR-GRD-003 § 4): the same function, the minimum forced and the base branch
-/// union {`main`, main branch, last confirmed base}. Never less strict than the daemon. The
-/// ungoverned refs of a push (template 3 on) get every forbidden-path rule of the floor.
-fn degraded(args: &HookArgs, full: &Operation, cause: Degraded) -> HookOutcome {
+/// union {`main`, main branch, last confirmed base}, and the team's permissions only to harden
+/// (D12). Never less strict than the daemon. The ungoverned refs of a push (template 3 on) get
+/// every forbidden-path rule of the floor.
+fn degraded(args: &HookArgs, env: &HookEnv, full: &Operation, cause: Degraded) -> HookOutcome {
     let Some(reader) = evaluate::open(&args.common) else {
         // Without a readable floor no rule can be shown to exist: a push of ungoverned refs
         // only goes ahead (condition O-2); anything governed is denied.
@@ -902,7 +984,7 @@ fn degraded(args: &HookArgs, full: &Operation, cause: Degraded) -> HookOutcome {
         // The rules for everyone of the floor still apply without the daemon (D11).
         let commit = evaluate::CommitContext {
             policies: floor.everyone_only(),
-            ..evaluate::CommitContext::default()
+            ..client_permissions(&reader, env, &op)
         };
         eval = evaluate::evaluate_commit(&reader, &args.common, &op, bases, commit);
     }
