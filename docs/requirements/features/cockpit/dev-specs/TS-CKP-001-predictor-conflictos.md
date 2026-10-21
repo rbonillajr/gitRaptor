@@ -210,9 +210,9 @@ sequenceDiagram
     P->>Q: encola los pares cuya triple cambió (T003)
     Q->>L: el de mayor prioridad (T007)
     L->>M: merge(triple, topes) (T007)
-    M->>T: trabajo por stdin; plazo de 2 s y RSS vigilada (T006)
+    M->>T: trabajo por stdin, con plazo de 2 s y RSS vigilada (T006)
     T-->>M: DryMergeOutcome, o muerto por límite
-    M-->>L: resultado; escalado de renombrados si toca (T006)
+    M-->>L: resultado, con escalado de renombrados si toca (T006)
     L->>P: resultado, descartado si la triple ya cambió (T003)
     P->>C: par actual o no calculable, con su hora (T009)
 ```
