@@ -14,12 +14,14 @@
 //! [`tm_write::store`], the Time Machine store writer, which can only open a validated store in
 //! the profile (ADR-TMC-002 § 1), and [`guard_write`], the Guardrails write layer, which only
 //! touches `core.hooksPath` in the common `config` and the files of `<common>/gitraptor/`
-//! (ADR-GRD-001 § 7).
+//! (ADR-GRD-001 § 7). [`dry_merge`] writes the objects of a merge only into an in-memory object
+//! store that lives for one job and is dropped after it.
 
 mod capture;
 mod changed_paths;
 pub mod cli;
 mod committed;
+pub mod dry_merge;
 mod guard_paths;
 mod guard_read;
 pub mod guard_write;
