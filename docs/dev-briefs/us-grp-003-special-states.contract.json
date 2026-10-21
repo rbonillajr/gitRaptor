@@ -1,0 +1,252 @@
+{
+  "source": {
+    "kind": "devspec",
+    "ref": "docs/requirements/features/motor-local/dev-specs/US-GRP-003-dev-spec.md"
+  },
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "criteria": [
+    {
+      "id": "STATES-REBASE",
+      "statement": "US-GRP-003 esc. 1: un rebase detenido por conflicto se publica con operation=rebase y sus rutas sin fusionar, y la lectura lo deja tal cual (assert_intact y marcador rebase-merge/)",
+      "verify": "cargo test -p gitraptor-core --test us_grp_003_states a_stopped_rebase_is_reported_and_left_as_is -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_003_states.rs"
+      ]
+    },
+    {
+      "id": "STATES-MERGE",
+      "statement": "US-GRP-003 esc. 1: un merge con conflictos publica operation=merge y unmerged_paths, una vez por ruta",
+      "verify": "cargo test -p gitraptor-core --test us_grp_003_states a_conflicted_merge_reports_its_unmerged_paths -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_003_states.rs"
+      ]
+    },
+    {
+      "id": "STATES-DETACHED",
+      "statement": "US-GRP-003 esc. 1: un HEAD separado se publica sin operación",
+      "verify": "cargo test -p gitraptor-core --test us_grp_003_states a_detached_head_is_reported_without_an_operation -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_003_states.rs"
+      ]
+    },
+    {
+      "id": "STATES-UNMERGED",
+      "statement": "US-GRP-003 esc. 1: rutas sin fusionar sin operación en curso (stash pop con conflicto) se cuentan en unmerged_paths",
+      "verify": "cargo test -p gitraptor-core --test us_grp_003_states unmerged_paths_without_an_operation -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_003_states.rs"
+      ]
+    },
+    {
+      "id": "STATES-KINDS",
+      "statement": "US-GRP-003 esc. 1: cherry-pick y bisect a medias publican su tipo y no se tocan",
+      "verify": "cargo test -p gitraptor-core --test us_grp_003_states cherry_pick_and_bisect_have_their_kind -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_003_states.rs"
+      ]
+    },
+    {
+      "id": "STATES-LIVE",
+      "statement": "US-GRP-003 esc. 1: el observador publica entrar y salir de un merge en vivo",
+      "verify": "cargo test -p gitraptor-core --test us_grp_003_states the_observer_publishes_entering_and_leaving_a_merge -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_003_states.rs"
+      ]
+    },
+    {
+      "id": "WIRE-API",
+      "statement": "ADR-GRP-016: operation y unmerged_paths solo aparecen en el cable cuando hay valor y without_special_states los quita; ida y vuelta con deny_unknown_fields",
+      "verify": "cargo test -p gitraptor-api --test special_states",
+      "layer": "runtime",
+      "tests": [
+        "crates/api/tests/special_states.rs"
+      ]
+    },
+    {
+      "id": "WIRE-OLD",
+      "statement": "Sin la capacidad observation.special-states el worktree no lleva operation ni unmerged_paths (cable de hoy)",
+      "verify": "cargo test -p gitraptor-core --test us_grp_003_daemon without_the_capability_the_worktree_has_no_operation -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_003_daemon.rs"
+      ]
+    },
+    {
+      "id": "DAEMON-MISSING",
+      "statement": "US-GRP-003 esc. 2: carpeta de worktree borrada figura unavailable{missing} y los otros 9 siguen publicando cambios",
+      "verify": "cargo test -p gitraptor-core --test us_grp_003_daemon a_deleted_worktree_folder_is_missing_and_nine_keep_changing -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_003_daemon.rs"
+      ]
+    },
+    {
+      "id": "DAEMON-REMOVED",
+      "statement": "US-GRP-003 esc. 5: un worktree retirado de Git sale de la lista y los otros 9 siguen",
+      "verify": "cargo test -p gitraptor-core --test us_grp_003_daemon a_removed_worktree_leaves_the_list_and_nine_keep_changing -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_003_daemon.rs"
+      ]
+    },
+    {
+      "id": "DAEMON-HISTORY",
+      "statement": "US-GRP-003 esc. 5: el retiro queda en events.history como worktree-delete",
+      "verify": "cargo test -p gitraptor-core --test us_grp_003_daemon a_removed_worktree_is_recorded_in_the_history -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_003_daemon.rs"
+      ]
+    },
+    {
+      "id": "REPO-MOVED",
+      "statement": "US-GRP-003 esc. 4: un repo movido pasa a repo.observation unavailable tras un sondeo forzado (PollNow) y el otro repo sigue observándose",
+      "verify": "cargo test -p gitraptor-core --test us_grp_003_daemon a_moved_repo_is_unavailable_and_the_other_keeps_going -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_003_daemon.rs"
+      ]
+    },
+    {
+      "id": "REPO-NOFAKE",
+      "statement": "Bug de la DS (D4): con un repo de al menos un worktree enlazado movido y devuelto (sondeo forzado con TierTestOp::PollNow, esperando repo.observation unavailable y luego observed), events.history del repo no trae worktree-delete ni worktree-create falsos",
+      "verify": "cargo test -p gitraptor-core --test us_grp_003_daemon a_lost_repo_emits_no_worktree_events -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_003_daemon.rs"
+      ]
+    },
+    {
+      "id": "REPO-BACK",
+      "statement": "US-GRP-003 esc. 4: un repo que vuelve (PollNow) se publica observed de nuevo, con hueco periodic-reconciliation, y un cambio posterior se publica",
+      "verify": "cargo test -p gitraptor-core --test us_grp_003_daemon a_repo_moved_back_is_observed_again -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_003_daemon.rs"
+      ]
+    },
+    {
+      "id": "SESS-REMOVED",
+      "statement": "US-GRP-003 esc. 3: la sesión de un agente registrado termina con worktree-removed cuando Git retira su worktree",
+      "verify": "cargo test -p gitraptor-core --test us_grp_003_sessions a_registered_agent_ends_when_its_worktree_is_removed -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_003_sessions.rs"
+      ]
+    },
+    {
+      "id": "SESS-MISSING",
+      "statement": "Una carpeta sin worktree retirado conserva su sesión (nunca termina por missing)",
+      "verify": "cargo test -p gitraptor-core --test us_grp_003_sessions a_missing_folder_keeps_its_session -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_003_sessions.rs"
+      ]
+    },
+    {
+      "id": "SESS-LOST",
+      "statement": "Con un repo movido y devuelto (esperando repo.observation unavailable y luego observed tras PollNow) ninguna sesión termina y al volver siguen abiertas",
+      "verify": "cargo test -p gitraptor-core --test us_grp_003_sessions a_lost_repo_ends_no_sessions -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_003_sessions.rs"
+      ]
+    },
+    {
+      "id": "SESS-STOPPED",
+      "statement": "Un worktree retirado con el daemon parado termina su sesión al arrancar, sin ended_utc_ms",
+      "verify": "cargo test -p gitraptor-core --test us_grp_003_sessions a_session_of_a_worktree_removed_while_stopped_ends_at_start -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_003_sessions.rs"
+      ]
+    },
+    {
+      "id": "SESS-OLDCLIENT",
+      "statement": "Sin sessions.worktree-removed la sesión llega ended sin end_cause, nunca como process-gone",
+      "verify": "cargo test -p gitraptor-core --test us_grp_003_sessions an_old_client_sees_the_session_ended_without_a_cause -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_003_sessions.rs"
+      ]
+    },
+    {
+      "id": "STORE-MIGRATION",
+      "statement": "La migración de sessions conserva todas las filas y attribution_records, foreign_key_check vacío, y acepta worktree-removed",
+      "verify": "cargo test -p gitraptor-core --test us_grp_003_store the_migration_keeps_every_session_and_accepts_worktree_removed -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_003_store.rs"
+      ]
+    }
+  ],
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "docs/architecture/decisions/ADR-GRD-008*",
+      "crates/core/tests/us_grp_003_states.rs",
+      "crates/core/tests/us_grp_003_daemon.rs",
+      "crates/core/tests/us_grp_003_sessions.rs",
+      "crates/core/tests/us_grp_003_store.rs",
+      "crates/api/tests/special_states.rs"
+    ],
+    "allow_dependency_changes": false
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-api",
+      "gitraptor-core",
+      "gitraptor-cli"
+    ]
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 900000,
+    "suiteTimeoutMs": 2400000
+  },
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "sonnet"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "sonnet"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  }
+}
