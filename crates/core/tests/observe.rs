@@ -283,6 +283,7 @@ mod activity {
                 head_commit: None,
                 fingerprint: None,
                 in_progress: false,
+                uncommitted: Default::default(),
             }],
             gone: Vec::new(),
             events: Vec::new(),

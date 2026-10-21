@@ -28,7 +28,7 @@ use std::time::{Duration, Instant};
 
 use gitraptor_api::messages::{GitEventDetails, GitEventKind};
 
-use crate::observe::{RepoRead, WorktreeRead};
+use crate::observe::{RepoRead, UncommittedPaths, WorktreeRead};
 use crate::profile::GapCause;
 
 pub use repo::{EventPlace, RefsReadError, RefsView, classify};
@@ -251,6 +251,11 @@ pub trait ObserverHooks: Send + Sync {
     /// sentinel or the sweep task; the daemon reconciles the repo and calls
     /// [`Observer::wake_repo`].
     fn repo_wake(&self, _repo_id: &str, _cause: WakeCause) {}
+    /// A worktree was read again and its read handed over: `paths` is every uncommitted path it
+    /// has now (the conflict predictor's overlap). Shared, never copied per caller.
+    fn worktree_recomputed(&self, _repo_id: &str, _root: &Path, _paths: &UncommittedPaths) {}
+    /// The repo went dormant or became active again.
+    fn repo_tier_changed(&self, _repo_id: &str, _tier: Tier) {}
 }
 
 /// Several hooks, called in order.
@@ -278,6 +283,18 @@ impl ObserverHooks for FanoutHooks {
     fn repo_wake(&self, repo_id: &str, cause: WakeCause) {
         for h in &self.0 {
             h.repo_wake(repo_id, cause);
+        }
+    }
+
+    fn worktree_recomputed(&self, repo_id: &str, root: &Path, paths: &UncommittedPaths) {
+        for h in &self.0 {
+            h.worktree_recomputed(repo_id, root, paths);
+        }
+    }
+
+    fn repo_tier_changed(&self, repo_id: &str, tier: Tier) {
+        for h in &self.0 {
+            h.repo_tier_changed(repo_id, tier);
         }
     }
 }
@@ -460,7 +477,27 @@ pub(crate) struct Shared {
 
 impl Shared {
     fn send(&self, batch: ObservedBatch) {
+        self.deliver(batch);
+    }
+
+    /// Hands a batch to the sink, then tells the hooks the uncommitted paths of every worktree
+    /// it carries: the one place a recompute reaches the predictor.
+    fn deliver(&self, batch: ObservedBatch) {
+        let recomputed: Vec<(PathBuf, UncommittedPaths)> = match &self.hooks {
+            Some(_) => batch
+                .worktrees
+                .iter()
+                .map(|w| (PathBuf::from(w.view.path.raw()), w.uncommitted.clone()))
+                .collect(),
+            None => Vec::new(),
+        };
+        let repo_id = batch.repo_id.clone();
         (self.sink)(batch);
+        if let Some(hooks) = &self.hooks {
+            for (root, paths) in &recomputed {
+                hooks.worktree_recomputed(&repo_id, root, paths);
+            }
+        }
     }
 
     /// Sends the batch of a worktree task only while the worktree is still
@@ -473,7 +510,7 @@ impl Shared {
             .get(&batch.repo_id)
             .is_some_and(|r| r.worktrees.iter().any(|w| w.root == root));
         if followed {
-            (self.sink)(batch);
+            self.deliver(batch);
         }
     }
 
@@ -1129,7 +1166,16 @@ impl Observer {
             }
             return Err(SleepRefused::Busy);
         }
+        drop(repos);
+        self.tier_changed(repo_id, Tier::Dormant);
         Ok(())
+    }
+
+    /// Tells the hooks the repo changed tier: the one place they hear it.
+    fn tier_changed(&self, repo_id: &str, tier: Tier) {
+        if let Some(hooks) = &self.shared.hooks {
+            hooks.repo_tier_changed(repo_id, tier);
+        }
     }
 
     /// Wakes a dormant or waking repo from the reconciliation `read` of its
@@ -1255,6 +1301,7 @@ impl Observer {
                 hooks.worktree_changed(repo_id, Path::new(w.view.path.raw()));
             }
         }
+        self.tier_changed(repo_id, Tier::Active);
         WatchStart { head_logs, heads }
     }
 
