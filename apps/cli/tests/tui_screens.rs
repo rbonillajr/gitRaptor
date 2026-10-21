@@ -442,7 +442,9 @@ fn question_mark_shows_the_keys_of_the_panel() {
     for token in ["Siempre", "Ctrl-Z", "q", "r", "?", "Esc"] {
         assert!(fleet.contains(token), "{token}\n{fleet}");
     }
-    assert!(!fleet.contains('↑'), "{fleet}");
+    // The fleet title and its columns keep their own `↑↓` (ahead/behind): what the fleet help
+    // must not list is the picker's keys.
+    assert!(!fleet.contains("↑ k"), "{fleet}");
     assert!(!fleet.contains("Enter"), "{fleet}");
 
     let pick = open(picker(Lang::Es));
@@ -512,7 +514,8 @@ fn the_bar_explains_the_states_on_screen() {
     }
 }
 
-/// D3/D5: the ASCII bar labels the arrows and gives `? ayuda` its fixed place.
+/// D3/D5: the ASCII bar shows the alternative keys (`k`, `j`) instead of the arrows and gives
+/// `? ayuda` its fixed place (`Up`/`Down` are the labels of the help, not of the bar).
 #[test]
 fn the_ascii_bar_never_shows_arrow_glyphs() {
     let model = with_theme(picker(Lang::Es), ColorMode::NoColor, SymbolSet::Ascii);
@@ -521,7 +524,6 @@ fn the_ascii_bar_never_shows_arrow_glyphs() {
     for glyph in ['↑', '↓'] {
         assert!(!bar.contains(glyph), "{bar}");
     }
-    assert!(bar.contains("Up") && bar.contains("Down"), "{bar}");
     assert!(bar.contains("k ") || bar.contains(" k"), "{bar}");
     assert!(bar.contains('j'), "{bar}");
     assert!(bar.trim_end().ends_with("? ayuda"), "{bar}");
