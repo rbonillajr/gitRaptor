@@ -7,9 +7,12 @@ use gitraptor_git::SystemGit;
 use super::{Daemon, DaemonConfig, Field, Logger, now_ms, raptor_path};
 use super::{GuardLogReply, GuardReply, GuardRequest, HealthReport};
 
-use gitraptor_api::guard::{GuardUninstallResult, PendingKind, UninstallRefusal};
+use gitraptor_api::guard::{
+    GuardConfirmResult, GuardUninstallResult, PendingKind, UninstallRefusal,
+};
 
 use crate::channel::audit_view::audit_entry;
+use crate::guardrails::confirm::{self as guard_confirm, Step};
 use crate::guardrails::install::{GuardCtx, InstallError};
 use crate::guardrails::log::LogEntry;
 use crate::guardrails::pending::{self, Entry, Refused, Requester};
@@ -81,6 +84,8 @@ impl Daemon {
         };
         // An audit row to write once the store is released: (action, outcome, requester).
         let mut audit: Option<(Entry, &'static str, Requester)> = None;
+        // The end of a confirmation without a window: (outcome, fingerprint, requester).
+        let mut confirm_audit: Option<(&'static str, String, Requester)> = None;
         // What Guardrails itself changes is an expected transition (US-GRD-004).
         let own = matches!(
             request,
@@ -248,6 +253,116 @@ impl Daemon {
                     }
                 }
             }
+            GuardRequest::Confirm { step, requester } => {
+                let dirs = &self.config.dirs;
+                let registry = &self.guard;
+                let reply = |r: GuardConfirmResult| GuardReply::Confirm(Box::new(r));
+                match step {
+                    Step::Plan => reply(match guard_confirm::current(common, store) {
+                        Ok((plan, fingerprint)) => GuardConfirmResult::Plan {
+                            plan: guard_confirm::view(&plan),
+                            fingerprint,
+                        },
+                        Err(refused) => refused,
+                    }),
+                    Step::Accept(seen) => match guard_confirm::current(common, store) {
+                        Ok((plan, now)) if now == seen && !plan.needs_window() => {
+                            match guard_confirm::apply(dirs, repo_id, store, registry, &plan) {
+                                Ok(_) => {
+                                    self.logger.info(
+                                        "guard_team_confirmed",
+                                        &[("repo", Field::id(repo_id))],
+                                    );
+                                    confirm_audit = Some(("applied", now, requester));
+                                    reply(GuardConfirmResult::Applied {
+                                        plan: guard_confirm::view(&plan),
+                                    })
+                                }
+                                Err(_) => GuardReply::Failed,
+                            }
+                        }
+                        Ok((plan, now)) if now == seen => {
+                            let announced = registry.pending().announce(
+                                repo_id,
+                                PendingKind::ConfirmTeam,
+                                requester,
+                                now_ms(),
+                                pending::window(),
+                                pending::new_action_id(),
+                            );
+                            match announced {
+                                Ok(action) => {
+                                    registry.pending().note_fingerprint(
+                                        repo_id,
+                                        &action.action_id,
+                                        now,
+                                    );
+                                    self.logger.info(
+                                        "guard_team_confirm_announced",
+                                        &[("repo", Field::id(repo_id))],
+                                    );
+                                    reply(GuardConfirmResult::Pending {
+                                        plan: guard_confirm::view(&plan),
+                                        action,
+                                    })
+                                }
+                                Err(reason) => GuardReply::UninstallRefused(reason.into()),
+                            }
+                        }
+                        // Anything else than the plan the developer saw: nothing is written.
+                        _ => {
+                            confirm_audit = Some(("changed", seen, requester));
+                            reply(GuardConfirmResult::ChangedDuringWindow)
+                        }
+                    },
+                    Step::Apply(action_id) => {
+                        let due = registry
+                            .pending()
+                            .take_due(repo_id, &action_id, requester, now)
+                            .and_then(|e| {
+                                if e.kind == PendingKind::ConfirmTeam {
+                                    Ok(e)
+                                } else {
+                                    Err(Refused::from(UninstallRefusal::NoPending))
+                                }
+                            });
+                        match due {
+                            Err(refused) => GuardReply::UninstallRefused(refused),
+                            Ok(action) => {
+                                // Compared again before writing (D5): the team level or another
+                                // client's confirmation may have moved during the window.
+                                let seen = action.fingerprint.clone().unwrap_or_default();
+                                match guard_confirm::current(common, store) {
+                                    Ok((plan, now_fp)) if now_fp == seen => {
+                                        match guard_confirm::apply(
+                                            dirs, repo_id, store, registry, &plan,
+                                        ) {
+                                            Ok(_) => {
+                                                self.logger.info(
+                                                    "guard_team_confirmed",
+                                                    &[("repo", Field::id(repo_id))],
+                                                );
+                                                audit = Some((action, "applied", requester));
+                                                reply(GuardConfirmResult::Applied {
+                                                    plan: guard_confirm::view(&plan),
+                                                })
+                                            }
+                                            Err(_) => {
+                                                audit = Some((action, "failed", requester));
+                                                GuardReply::Failed
+                                            }
+                                        }
+                                    }
+                                    _ => {
+                                        audit = Some((action, "changed", requester));
+                                        reply(GuardConfirmResult::ChangedDuringWindow)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             GuardRequest::Cancel(requester) => {
                 let cancelled = self.guard.pending().cancel(repo_id, now);
                 match cancelled {
@@ -267,6 +382,16 @@ impl Daemon {
         };
         if let Some((action, outcome, requester)) = audit {
             self.audit_pending(&entry.repo_id, &action, outcome, requester, now);
+        }
+        if let Some((outcome, fingerprint, requester)) = confirm_audit {
+            self.audit_reserved(
+                &entry.repo_id,
+                gitraptor_api::methods::GUARD_CONFIRM,
+                &format!("fingerprint {fingerprint}"),
+                outcome,
+                (requester, requester),
+                now,
+            );
         }
         self.protection_after(&entry.repo_id, &reply, own.then_some(before));
         reply
@@ -405,14 +530,43 @@ impl Daemon {
         who: Requester,
         now: i64,
     ) {
+        let operation = match action.kind {
+            PendingKind::Uninstall => gitraptor_api::methods::GUARD_UNINSTALL,
+            PendingKind::ConfirmTeam => gitraptor_api::methods::GUARD_CONFIRM,
+        };
+        let mut detail = format!("action {}", action.action_id);
+        if let Some(fingerprint) = &action.fingerprint {
+            detail.push_str(&format!("; fingerprint {fingerprint}"));
+        }
+        self.audit_reserved(
+            repo_id,
+            operation,
+            &detail,
+            outcome,
+            (who, action.requester),
+            now,
+        );
+    }
+
+    /// One audit row of the end of a reserved action that relaxes: `who` ended it and `by`
+    /// asked for it. Never counted as a blocked action.
+    fn audit_reserved(
+        &mut self,
+        repo_id: &str,
+        operation: &'static str,
+        detail: &str,
+        outcome: &'static str,
+        (who, by): (Requester, Requester),
+        now: i64,
+    ) {
         let row = AuditRow {
             at_ms: now,
-            operation: gitraptor_api::methods::GUARD_UNINSTALL.to_owned(),
+            operation: operation.to_owned(),
             repo_id: Some(repo_id.to_owned()),
             outcome: outcome.to_owned(),
-            reason: Some(format!("{RISK_ACCEPTED}; action {}", action.action_id)),
+            reason: Some(format!("{RISK_ACCEPTED}; {detail}")),
             client: requester_text(who),
-            chain: requester_text(action.requester),
+            chain: requester_text(by),
         };
         match self.profile.append_audit(&row) {
             // Whoever holds `audit.outcomes` reads it as it happens (the bus drops it for
@@ -423,10 +577,9 @@ impl Daemon {
                         .publish(gitraptor_api::event::RESERVED_AUDIT, entry, None, |_| {});
                 }
             }
-            Err(_) => self.logger.error(
-                "audit_write_failed",
-                &[("op", Field::Text("guard.uninstall"))],
-            ),
+            Err(_) => self
+                .logger
+                .error("audit_write_failed", &[("op", Field::Text(operation))]),
         }
     }
 }

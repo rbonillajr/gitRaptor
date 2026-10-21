@@ -113,3 +113,27 @@ pub fn protected(
         },
     }
 }
+
+/// The diagnostics that came with the team confirmation.
+pub fn is_new_diagnostic(d: Diagnostic) -> bool {
+    matches!(
+        d,
+        Diagnostic::BaseChangePending
+            | Diagnostic::BaseChangePendingInvalid
+            | Diagnostic::FloorRelaxPending
+    )
+}
+
+/// The status a connection without `guard.team-confirmation` reads: no new diagnostic, no
+/// hint, and no pending action it could not decode.
+pub fn legacy_status(status: &mut gitraptor_api::guard::GuardStatus) {
+    status.diagnostics.retain(|d| !is_new_diagnostic(*d));
+    status.confirm = None;
+    if status
+        .pending
+        .as_ref()
+        .is_some_and(|p| p.action == gitraptor_api::guard::PendingKind::ConfirmTeam)
+    {
+        status.pending = None;
+    }
+}

@@ -10,6 +10,7 @@
 pub mod actor;
 pub mod authorship;
 pub mod config_guard;
+pub mod confirm;
 pub mod constants;
 pub mod cut;
 pub mod evaluate;

@@ -10,7 +10,7 @@
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 
-use gitraptor_api::guard::{HooksStatus, ProtectionState};
+use gitraptor_api::guard::{Diagnostic, HooksStatus, ProtectionState};
 use gitraptor_api::mcp_view::{
     MCP_CURSOR_PLACEHOLDER, MCP_GAP_WINDOW, MCP_MAX_CURSORS, MCP_MAX_GAPS, MCP_MAX_SESSIONS,
     MCP_PATHS_PAGE, MCP_WORKTREES_PAGE,
@@ -311,6 +311,18 @@ pub(crate) fn default_status(
         base: McpBase {
             name: repo.base.name.clone(),
             state: match repo.base.status {
+                // A change waits for the developer: only over a confirmed base (the engine's
+                // `unconfirmed` and `invalid` rule).
+                BaseStatusView::Confirmed
+                    if ctx.guard.diagnostics.iter().any(|d| {
+                        matches!(
+                            d,
+                            Diagnostic::BaseChangePending | Diagnostic::BaseChangePendingInvalid
+                        )
+                    }) =>
+                {
+                    McpBaseState::Pending
+                }
                 BaseStatusView::Confirmed => McpBaseState::Confirmed,
                 BaseStatusView::Unconfirmed => McpBaseState::Unconfirmed,
                 BaseStatusView::Invalid => McpBaseState::Invalid,

@@ -1139,6 +1139,9 @@ pub enum AuditOutcome {
     /// The window of the announced action closed without applying it. Only with
     /// `audit.outcomes`.
     Expired,
+    /// The confirmation of the team baseline was not applied: what it would confirm changed
+    /// after the plan was shown (US-GRD-014). Only with `audit.outcomes`.
+    Changed,
 }
 
 impl AuditOutcome {
@@ -1147,7 +1150,7 @@ impl AuditOutcome {
     pub const fn needs_capability(self) -> bool {
         matches!(
             self,
-            Self::Applied | Self::Cancelled | Self::Failed | Self::Expired
+            Self::Applied | Self::Cancelled | Self::Failed | Self::Expired | Self::Changed
         )
     }
 }
