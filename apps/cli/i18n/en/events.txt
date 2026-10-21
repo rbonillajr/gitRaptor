@@ -36,3 +36,21 @@ event.push = push to {branch}
 event.reconciled = reconciliation: changes found after a gap (not a Git command)
 event.reset = reset on {branch} without moving it
 event.reset-detached = reset with HEAD detached
+
+events.gaps-restart-engine = the running engine is older than this raptor and cannot list observation gaps: restart it with `raptor daemon stop`
+events.gap_line = -- observation gap ({cause}), {from} → {to} · unattributed
+events.gap_open = -- observation gap ({cause}), since {from} (still open) · unattributed
+events.gap_during_session = an agent session was active
+
+gap.cause.machine-off = machine off
+gap.cause.daemon-down = engine stopped
+gap.cause.daemon-down-during-session = engine stopped
+gap.cause.daemon-stopped = engine stopped
+gap.cause.repo-retired = repo retired
+gap.cause.git-unavailable = Git unavailable
+gap.cause.profile-lost = profile lost
+gap.cause.store-corrupt = store damaged
+gap.cause.watcher-overflow = change watcher overflowed
+gap.cause.stream-recreated = change stream recreated
+gap.cause.periodic-reconciliation = periodic check
+gap.cause.dormant = repo was dormant
