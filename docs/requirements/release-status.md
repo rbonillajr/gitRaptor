@@ -4,7 +4,7 @@
 
 > **Archivo generado, no editar a mano.** Sale del frontmatter (`status`) y de la sección "Estado de la implementación" de cada ficha (US, TS, INF, SPIKE y TD) de `docs/requirements/features/`. Para cambiar un estado, edita la ficha y regenera con `node tools/status/release-status.mjs`. El CI (docs-lint) falla si este archivo no coincide con lo que genera el script.
 
-Última actualización de una ficha: 2026-10-20.
+Última actualización de una ficha: 2026-10-21.
 
 ## Totales por estado
 
@@ -12,9 +12,9 @@
 |---|---|
 | Implementado (`implemented`) | 47 |
 | Hecho (`done`) | 3 |
-| Implementado en parte (`partially-implemented`) | 21 |
+| Implementado en parte (`partially-implemented`) | 22 |
 | Listo (`ready`) | 4 |
-| Borrador (`draft`) | 73 |
+| Borrador (`draft`) | 72 |
 | Bloqueado (`blocked`) | 1 |
 | **Total** | **149** |
 
@@ -24,7 +24,7 @@
 |---|---|---|---|---|---|---|---|
 | [cockpit](#cockpit) | 7 | 0 | 3 | 0 | 22 | 1 | 33 |
 | [guardrails](#guardrails) | 9 | 0 | 7 | 1 | 8 | 0 | 25 |
-| [mcp](#mcp) | 5 | 0 | 2 | 0 | 13 | 0 | 20 |
+| [mcp](#mcp) | 5 | 0 | 3 | 0 | 12 | 0 | 20 |
 | [motor-local](#motor-local) | 13 | 2 | 8 | 3 | 15 | 0 | 41 |
 | [time-machine](#time-machine) | 13 | 1 | 1 | 0 | 15 | 0 | 30 |
 
@@ -102,7 +102,7 @@
 
 ### mcp
 
-20 fichas: 5 implementado, 2 implementado en parte, 13 borrador.
+20 fichas: 5 implementado, 3 implementado en parte, 12 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -113,13 +113,13 @@
 | [US-MCP-008](features/mcp/user-stories/US-MCP-008-snapshot-manual.md) | Un agente guarda por MCP un punto de recuperación antes de un cambio arriesgado | Implementado (`implemented`) | #213 | — |
 | [INF-MCP-001](features/mcp/technical-stories/INF-MCP-001-corpus-seguridad-mcp.md) | Corpus de seguridad del MCP como suite de CI que bloquea el merge | Implementado en parte (`partially-implemented`) | — | — |
 | [US-MCP-004](features/mcp/user-stories/US-MCP-004-status-completo-y-no-disponible.md) | Un agente sabe por MCP quién más trabaja en su repo, contra qué base y con qué protección | Implementado en parte (`partially-implemented`) | — | — |
+| [US-MCP-013](features/mcp/user-stories/US-MCP-013-confirmacion-sin-cola.md) | Un agente sabe que una acción necesita al desarrollador y a quién acudir | Implementado en parte (`partially-implemented`) | — | — |
 | [US-MCP-006](features/mcp/user-stories/US-MCP-006-registrar-agente.md) | Un agente sin soporte completo se declara por MCP y su trabajo queda a su nombre | Borrador (`draft`) | — | — |
 | [US-MCP-007](features/mcp/user-stories/US-MCP-007-confused-deputy.md) | Un hook lanzado por una escritura de un agente no puede usar los poderes del desarrollador | Borrador (`draft`) | — | — |
 | [US-MCP-009](features/mcp/user-stories/US-MCP-009-safe-commit.md) | Un agente commitea por MCP con las reglas del repo y con un punto de recuperación previo | Borrador (`draft`) | — | — |
 | [US-MCP-010](features/mcp/user-stories/US-MCP-010-safe-commit-rutas.md) | Un agente commitea solo los archivos que nombra y nunca fuera de su worktree | Borrador (`draft`) | — | — |
 | [US-MCP-011](features/mcp/user-stories/US-MCP-011-escritura-en-el-worktree-correcto.md) | La escritura de un agente cae en el worktree que espera, o no ocurre | Borrador (`draft`) | — | — |
 | [US-MCP-012](features/mcp/user-stories/US-MCP-012-undo-de-lo-propio.md) | Un agente deshace por MCP su última operación sin tocar el trabajo de otros | Borrador (`draft`) | — | — |
-| [US-MCP-013](features/mcp/user-stories/US-MCP-013-confirmacion-sin-cola.md) | Un agente sabe que una acción necesita al desarrollador y a quién acudir | Borrador (`draft`) | — | — |
 | [US-MCP-014](features/mcp/user-stories/US-MCP-014-confirmacion-pendiente-en-cola.md) | La acción de riesgo de un agente queda en espera del desarrollador sin bloquear al agente | Borrador (`draft`) | — | — |
 | [US-MCP-015](features/mcp/user-stories/US-MCP-015-medicion-del-mcp.md) | El desarrollador mide cuánto paró y cuánto recuperó el MCP | Borrador (`draft`) | — | — |
 | [US-MCP-016](features/mcp/user-stories/US-MCP-016-check-conflicts.md) | Un agente sabe con quién va a chocar antes de que choque | Borrador (`draft`) | — | — |
@@ -244,7 +244,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2
 
-111 fichas: 24 implementado, 3 hecho, 15 implementado en parte, 4 listo, 64 borrador, 1 bloqueado.
+111 fichas: 24 implementado, 3 hecho, 16 implementado en parte, 4 listo, 63 borrador, 1 bloqueado.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -290,6 +290,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-GRD-017](features/guardrails/user-stories/US-GRD-017-sin-snapshot-no-se-ejecuta.md) | Una operación destructiva permitida no se ejecuta sin un punto de recuperación | Implementado en parte (`partially-implemented`) | #260 | — |
 | [US-GRD-018](features/guardrails/user-stories/US-GRD-018-autoria-commits-persona-y-agente.md) | Cada commit entra a nombre de la persona y deja constancia del agente que lo hizo, con la exigencia que fija el equipo | Implementado en parte (`partially-implemented`) | #137, #141, #150, #152, #153, #154 | 3 |
 | [US-MCP-004](features/mcp/user-stories/US-MCP-004-status-completo-y-no-disponible.md) | Un agente sabe por MCP quién más trabaja en su repo, contra qué base y con qué protección | Implementado en parte (`partially-implemented`) | — | — |
+| [US-MCP-013](features/mcp/user-stories/US-MCP-013-confirmacion-sin-cola.md) | Un agente sabe que una acción necesita al desarrollador y a quién acudir | Implementado en parte (`partially-implemented`) | — | — |
 | [SPIKE-GRD-002](features/guardrails/technical-stories/SPIKE-GRD-002-factor-so-daemon.md) | Factor de autenticación del SO invocado desde el daemon en los tres SO | Listo (`ready`) | — | — |
 | [TD-GRP-002](features/motor-local/technical-stories/TD-GRP-002-motor-bajo-rafaga.md) | Frescura y memoria del motor bajo una ráfaga de archivos | Listo (`ready`) | — | — |
 | [TD-GRP-003](features/motor-local/technical-stories/TD-GRP-003-nfr04-maquina-referencia.md) | Presupuesto de NFR-04 sin gate automático: medirlo en una máquina de referencia | Listo (`ready`) | — | — |
@@ -339,7 +340,6 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-MCP-010](features/mcp/user-stories/US-MCP-010-safe-commit-rutas.md) | Un agente commitea solo los archivos que nombra y nunca fuera de su worktree | Borrador (`draft`) | — | — |
 | [US-MCP-011](features/mcp/user-stories/US-MCP-011-escritura-en-el-worktree-correcto.md) | La escritura de un agente cae en el worktree que espera, o no ocurre | Borrador (`draft`) | — | — |
 | [US-MCP-012](features/mcp/user-stories/US-MCP-012-undo-de-lo-propio.md) | Un agente deshace por MCP su última operación sin tocar el trabajo de otros | Borrador (`draft`) | — | — |
-| [US-MCP-013](features/mcp/user-stories/US-MCP-013-confirmacion-sin-cola.md) | Un agente sabe que una acción necesita al desarrollador y a quién acudir | Borrador (`draft`) | — | — |
 | [US-MCP-014](features/mcp/user-stories/US-MCP-014-confirmacion-pendiente-en-cola.md) | La acción de riesgo de un agente queda en espera del desarrollador sin bloquear al agente | Borrador (`draft`) | — | — |
 | [US-MCP-015](features/mcp/user-stories/US-MCP-015-medicion-del-mcp.md) | El desarrollador mide cuánto paró y cuánto recuperó el MCP | Borrador (`draft`) | — | — |
 | [US-MCP-016](features/mcp/user-stories/US-MCP-016-check-conflicts.md) | Un agente sabe con quién va a chocar antes de que choque | Borrador (`draft`) | — | — |
@@ -466,6 +466,12 @@ Corpus de seguridad del MCP como suite de CI que bloquea el merge
 ### [US-MCP-004](features/mcp/user-stories/US-MCP-004-status-completo-y-no-disponible.md)
 
 Un agente sabe por MCP quién más trabaja en su repo, contra qué base y con qué protección
+
+- *La ficha no lista los pendientes en "Estado de la implementación".*
+
+### [US-MCP-013](features/mcp/user-stories/US-MCP-013-confirmacion-sin-cola.md)
+
+Un agente sabe que una acción necesita al desarrollador y a quién acudir
 
 - *La ficha no lista los pendientes en "Estado de la implementación".*
 

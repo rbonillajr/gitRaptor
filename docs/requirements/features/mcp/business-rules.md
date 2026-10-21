@@ -435,7 +435,7 @@ siguientes escrituras en el worktree → rechazo por precondición (BR-MCP-ELIG-
 
 ### BR-MCP-WF-004: "Pedir confirmación" sin cola
 
-**Descripción**: si Guardrails responde "pedir confirmación", mientras no exista la cola se trata como denegar con el motivo "requiere confirmación del desarrollador" y la acción (hacerlo desde el Cockpit). Cuando exista la cola, la herramienta devuelve "pendiente" con un id de petición y no bloquea esperando. Nunca se usa la elicitation de MCP como confirmación: la responde el cliente del agente.
+**Descripción**: si Guardrails responde "pedir confirmación", mientras no exista la cola se trata como denegar con el motivo "requiere confirmación del desarrollador" y la acción (avisar al desarrollador; cuando exista la cola, decidir desde el Cockpit). Cuando exista la cola, la herramienta devuelve "pendiente" con un id de petición y no bloquea esperando. Nunca se usa la elicitation de MCP como confirmación: la responde el cliente del agente.
 
 **Criticidad**: Media
 
@@ -447,7 +447,7 @@ IF decisión = pedir confirmación:
 nunca elicitation como confirmación
 ```
 
-**Ejemplo**: `safe_rebase` sobre una rama protegida con regla "confirmar" → "requiere confirmación del desarrollador; hazlo desde raptor".
+**Ejemplo**: `safe_rebase` sobre una rama protegida con regla "confirmar" → "requiere confirmación del desarrollador; avísale, la decisión es suya".
 
 **Fuentes**: Q-MCP-12; D-TMC-23; DEP-MCP-7.
 

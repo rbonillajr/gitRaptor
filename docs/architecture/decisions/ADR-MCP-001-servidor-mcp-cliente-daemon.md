@@ -416,3 +416,12 @@ Decisión del orquestador (2026-10-09), validada por Arquitecto y aprobada por e
 
 - § 9 MCP01 y SEC-MCP-08: la verificación usa un escáner propio de canarios. Prueba que no se filtra lo plantado ni una forma de token conocida. No prueba la ausencia de secretos no plantados; eso queda para la revisión por release (SEC-MCP-12, gitleaks diferido).
 - § 6, entrada ≤ 1 MiB y profundidad 32: `raptor-mcp` no la aplica todavía. Las cifras no cambian. El corpus lo registra como `known_gap` (dueña US-MCP-005), que no es riesgo aceptado, y lo cierra una historia de `apps/mcp` antes de M4.
+
+## Enmienda (2026-10-09, US-MCP-013)
+
+Decisión del orquestador (2026-10-09), validada por Arquitecto y PO. Origen: [DS-US-MCP-013](../../requirements/features/mcp/dev-specs/US-MCP-013-dev-spec.md), D2, D4, D5 y D6.
+
+- § 5, "Pedir confirmación": el código `confirmation-required` va **sin `params`** y sale de traducir el motivo del canal `guardrails-confirmation-required` (distinto de `confirmation-required` del canal, que es el desafío del Cockpit). La acción dice que la decisión es del desarrollador, no dónde darla (`commit` no tiene marca de Cockpit).
+- § 4.3: `raptor-mcp` **nunca rechaza por ningún campo de la vista previa** (ni `decision` ni `warnings`): pasa `acknowledge` como `accepted_warnings` y decide `run`. Sin `run`, el plan caduca como `Dropped` y la decisión no queda registrada.
+- § 4.3, **prerrequisito bloqueante de US-MCP-018** (`safe_rebase`, la primera herramienta con avisos): hoy `run` devuelve el rechazo por avisos antes que la denegación de Guardrails, al revés de lo que pide § 4.3 ("una denegación de Guardrails se devuelve antes que `warnings-not-acknowledged`"). US-MCP-018 lo corrige antes de emitir avisos.
+- § 1: `apps/mcp/tests/no_elicitation.rs` fija que `raptor-mcp` se compila sin la feature `elicitation` de `rmcp` (features resueltas con `cargo metadata`), que su código no contiene `ElicitRequest`, `create_elicitation` ni `.elicit(`, y que una sesión real nunca recibe una petición del servidor.

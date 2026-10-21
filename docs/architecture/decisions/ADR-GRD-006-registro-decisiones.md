@@ -199,7 +199,7 @@ Aplicada desde [DS-US-GRD-005](../../requirements/features/guardrails/dev-specs/
 | La conexión **no espera**: entrega la entrada al loop antes de responder al hook. Pasado un tope de **1 024 en vuelo**, la ocurrencia no se encola y se suma a un contador compartido que el loop escribe como fila `rate-limited` | § 2 | Un aluvión no retrasa al loop ni al hook, y el KPI no pierde ocurrencias |
 | Purga al primer latido del daemon y luego cada 24 h | § 3 | El arranque no espera a la purga. La consulta filtra por fecha igualmente |
 | La consulta informa los **periodos con el motor parado** (huecos del almacén y el hueco del arranque en curso): sin spool, lo bloqueado entonces no está anotado y no se muestra un 0 silencioso | § 5, § 6 | Ajuste del coordinador (2026-10-07) |
-| `layer` hoy siempre es `hooks` | § 1 | El MCP no evalúa decisiones de Guardrails (`raptor-mcp` no tiene `guard.evaluate`) |
+| Hasta TS-CKP-003, `layer` es `hooks`; con el gate real, también la capa del plan del ejecutor (`mcp`, `cockpit`) | § 1 | `raptor-mcp` no evalúa decisiones (no tiene `guard.evaluate`): las evalúa el ejecutor del daemon |
 | La consulta es el método **`guard.log`** (protocolo 9, no reservado, **no** ofrecido a `raptor-mcp`) y `raptor guard log`. `raptor guard status` añade el recuento de 7 días | § 6 | Decisión del PO: el MCP no expone el registro |
 
 **Diferido, con dueño en la Dev Spec**:

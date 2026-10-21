@@ -156,6 +156,8 @@ orden de restricción: denegar > pedir confirmación > permitir
 
 > **Supuesto confirmado** (S-GRD-9, Rene Bonilla, 2026-10-04): mientras el modo "pedir confirmación" (BRD BR-13, Should) no esté disponible, una operación con "pedir confirmación" se trata como **denegar** (fail-safe).
 >
+> **Enmienda (Q-GRD-46, Rene Bonilla, 2026-10-17)**: sin cola, "pedir confirmación" deniega solo a los agentes (detectados o registrados), que reciben `confirmation-required` y deben pedírselo al desarrollador. El desarrollador que actúa directamente pasa, porque su acción es la confirmación. Residuo: un agente no detectado cuenta como persona (R-GRD-2).
+>
 > **Decisión del orquestador (2026-10-09), validada por el PO y el Arquitecto** (Q-GRD-39; pendiente de confirmación de Rene Bonilla): esa denegación es una denegación verificada: entra en el registro y cuenta en el KPI (BR-CONS-004). El motivo dice que la operación requiere confirmación humana y que la confirmación aún no está disponible.
 
 > **Decisión del orquestador (2026-10-09), validada por el PO y el Arquitecto** (Q-GRD-40): qué cuenta como cada operación. **Commit**: todo commit nuevo que llega a una rama, también por `cherry-pick`, `revert`, `am` o plumbing; no los commits de un rebase (permiso rebase) ni los que crea un merge o un pull (permiso merge). El commit que cierra una fusión con `git commit` cuenta como commit **y** merge, porque la resolución de conflictos es contenido nuevo. **Push** incluye el push forzado y el borrado de una rama remota: el forzado necesita además force-push permitido, y el borrado, borrar rama. **Borrar rama** incluye renombrar una rama, porque el nombre viejo desaparece.
