@@ -247,26 +247,91 @@ impl Daemon {
             .unwrap_or_default();
         let common = crate::observe::canonical(common_dir);
         let dead = detector.watch_repo(repo_id, &common, worktrees, open);
+        // Sessions of a worktree Git no longer registers (it was removed while the engine was
+        // not observing): they end with that cause, not as "ended during a gap", and a
+        // registered one is not followed again. Only with a repo that was read: an unreadable
+        // repo says nothing about its worktrees. A worktree that is there but missing keeps
+        // its sessions.
+        let mut removed: Vec<String> = Vec::new();
+        if let Some(read) = read {
+            let present: Vec<&str> = read.worktrees.iter().map(|w| w.view.path.raw()).collect();
+            let mut absent: Vec<PathBuf> = Vec::new();
+            for (s, _) in store.sessions_with_state().unwrap_or_default() {
+                if s.end_cause.is_none()
+                    && !present.iter().any(|p| Path::new(p) == s.worktree)
+                    && !absent.contains(&s.worktree)
+                {
+                    absent.push(s.worktree);
+                }
+            }
+            for worktree in &absent {
+                removed.extend(detector.end_worktree(repo_id, worktree));
+            }
+            for (s, _) in store.sessions_with_state().unwrap_or_default() {
+                if s.end_cause.is_none() && absent.contains(&s.worktree) {
+                    removed.push(s.session_id);
+                }
+            }
+            removed.sort();
+            removed.dedup();
+        }
         // Registered sessions continue: present until withdrawn (Q41). Their
         // latest activity is at most when the engine last observed.
         let observed_until = store.observed_until().ok().flatten();
         for (s, state) in store.sessions_with_state().unwrap_or_default() {
-            if s.end_cause.is_none() && s.initial_origin == Origin::Registered {
+            if s.end_cause.is_none()
+                && s.initial_origin == Origin::Registered
+                && !removed.contains(&s.session_id)
+            {
                 let (state, since) = state_of(&s, state.as_ref());
                 let last = observed_until.map_or(since, |o| o.max(since));
                 detector.register(registered(repo_id, &s, state, Some(last)));
             }
         }
-        let changes = dead
-            .into_iter()
-            .map(|session_id| SessionChange::Ended {
-                repo_id: repo_id.to_owned(),
-                session_id,
-                at_ms: None,
-                cause: EndCause::EndedDuringGap,
-            })
+        let ended = |session_id: String, cause| SessionChange::Ended {
+            repo_id: repo_id.to_owned(),
+            session_id,
+            at_ms: None,
+            cause,
+        };
+        let changes = removed
+            .iter()
+            .map(|id| ended(id.clone(), EndCause::WorktreeRemoved))
+            .chain(
+                dead.into_iter()
+                    .filter(|id| !removed.contains(id))
+                    .map(|id| ended(id, EndCause::EndedDuringGap)),
+            )
             .collect();
         self.sessions_changed(changes);
+    }
+
+    /// Ends the sessions of the worktrees a batch says Git no longer registers. Never for a
+    /// batch of a lost repo (it carries no `gone`, and says nothing about worktrees) and never
+    /// for a worktree that is only `missing`: the folder can come back, and an ended session
+    /// never does.
+    pub(super) fn end_absent_worktrees(&mut self, batch: &ObservedBatch) {
+        if batch.access == crate::watch::RepoAccess::Lost || batch.gone.is_empty() {
+            return;
+        }
+        let Some(detector) = &self.detector else {
+            return;
+        };
+        let now = now_ms();
+        let changes: Vec<SessionChange> = batch
+            .gone
+            .iter()
+            .flat_map(|root| detector.end_worktree(&batch.repo_id, root))
+            .map(|session_id| SessionChange::Ended {
+                repo_id: batch.repo_id.clone(),
+                session_id,
+                at_ms: Some(now),
+                cause: EndCause::WorktreeRemoved,
+            })
+            .collect();
+        if !changes.is_empty() {
+            self.sessions_changed(changes);
+        }
     }
 
     /// Persists what the detector saw, then publishes it.
@@ -992,6 +1057,7 @@ fn session_view(
             EndCause::ProcessGone => SessionEndCauseView::ProcessGone,
             EndCause::EndedDuringGap => SessionEndCauseView::EndedDuringGap,
             EndCause::RegistrationWithdrawn => SessionEndCauseView::RegistrationWithdrawn,
+            EndCause::WorktreeRemoved => SessionEndCauseView::WorktreeRemoved,
         }),
     }
 }

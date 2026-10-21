@@ -46,6 +46,8 @@ pub struct Outbox {
     without_tiers: std::sync::atomic::AtomicBool,
     /// Without `observation.special-states` (see [`Outbox::set_without_special_states`]).
     without_special_states: std::sync::atomic::AtomicBool,
+    /// Without `sessions.worktree-removed` (see [`Outbox::set_without_worktree_removed`]).
+    without_worktree_removed: std::sync::atomic::AtomicBool,
     /// Without `discovery.events` (see [`Outbox::set_without_discovery`]).
     without_discovery: std::sync::atomic::AtomicBool,
     /// Without `guard.protection` (see [`Outbox::set_without_protection`]).
@@ -74,6 +76,7 @@ impl Outbox {
             without_authorship: std::sync::atomic::AtomicBool::new(true),
             without_tiers: std::sync::atomic::AtomicBool::new(true),
             without_special_states: std::sync::atomic::AtomicBool::new(true),
+            without_worktree_removed: std::sync::atomic::AtomicBool::new(true),
             without_discovery: std::sync::atomic::AtomicBool::new(true),
             without_protection: std::sync::atomic::AtomicBool::new(true),
             without_audit_outcomes: std::sync::atomic::AtomicBool::new(true),
@@ -106,6 +109,13 @@ impl Outbox {
     /// the operation in progress nor the unmerged paths, which it cannot read.
     pub fn set_without_special_states(&self, without: bool) {
         self.without_special_states
+            .store(without, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// The connection lacks `sessions.worktree-removed`: `session.state` reaches it ended
+    /// without a cause when that is the cause.
+    pub fn set_without_worktree_removed(&self, without: bool) {
+        self.without_worktree_removed
             .store(without, std::sync::atomic::Ordering::Relaxed);
     }
 
@@ -143,6 +153,9 @@ impl Outbox {
         if event.kind == gitraptor_api::event::GIT_EVENT {
             return self.shape_git_event(event);
         }
+        if event.kind == gitraptor_api::event::SESSION_STATE {
+            return self.shape_session(event);
+        }
         let without_activity = self
             .without_activity
             .load(std::sync::atomic::Ordering::Relaxed);
@@ -167,6 +180,27 @@ impl Outbox {
         }
         let mut event = event.clone();
         event.data = serde_json::to_value(data).unwrap_or(serde_json::Value::Null);
+        std::borrow::Cow::Owned(event)
+    }
+
+    fn shape_session<'e>(&self, event: &'e Event) -> std::borrow::Cow<'e, Event> {
+        if !self
+            .without_worktree_removed
+            .load(std::sync::atomic::Ordering::Relaxed)
+        {
+            return std::borrow::Cow::Borrowed(event);
+        }
+        let Ok(mut view) =
+            serde_json::from_value::<gitraptor_api::messages::SessionView>(event.data.clone())
+        else {
+            return std::borrow::Cow::Borrowed(event);
+        };
+        if view.end_cause != Some(gitraptor_api::messages::SessionEndCauseView::WorktreeRemoved) {
+            return std::borrow::Cow::Borrowed(event);
+        }
+        view.without_worktree_removed();
+        let mut event = event.clone();
+        event.data = serde_json::to_value(view).unwrap_or(serde_json::Value::Null);
         std::borrow::Cow::Owned(event)
     }
 

@@ -48,6 +48,7 @@ text_enum!(
         ProcessGone => "process-gone",
         EndedDuringGap => "ended-during-gap",
         RegistrationWithdrawn => "registration-withdrawn",
+        WorktreeRemoved => "worktree-removed",
     }
 );
 text_enum!(

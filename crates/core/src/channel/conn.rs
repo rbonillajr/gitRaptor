@@ -607,6 +607,9 @@ impl Connection<'_> {
         // Nor the operation and unmerged paths without `observation.special-states`.
         self.outbox
             .set_without_special_states(!self.has(methods::CAP_OBSERVATION_SPECIAL_STATES.name));
+        // Nor the cause `worktree-removed` without `sessions.worktree-removed`.
+        self.outbox
+            .set_without_worktree_removed(!self.has(methods::CAP_SESSIONS_WORKTREE_REMOVED.name));
         // Nor the discovered repos without `discovery.events`, and never to
         // `raptor-mcp` (US-GRP-020, SEC-MCP-01).
         self.outbox.set_without_discovery(
@@ -2370,12 +2373,17 @@ impl Connection<'_> {
         self.ctx
             .control
             .sessions_list(params)
-            .map(
-                |(detection_available, sessions)| gitraptor_api::messages::SessionsListResult {
+            .map(|(detection_available, mut sessions)| {
+                if !self.has(methods::CAP_SESSIONS_WORKTREE_REMOVED.name) {
+                    sessions
+                        .iter_mut()
+                        .for_each(gitraptor_api::messages::SessionView::without_worktree_removed);
+                }
+                gitraptor_api::messages::SessionsListResult {
                     detection_available,
                     sessions,
-                },
-            )
+                }
+            })
             .map_err(repo_command_error)
     }
 

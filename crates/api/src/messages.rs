@@ -740,6 +740,20 @@ pub enum SessionEndCauseView {
     EndedDuringGap,
     /// Its explicit registration was withdrawn (US-GRP-009).
     RegistrationWithdrawn,
+    /// Git no longer registers its worktree (BR-EDGE-001). Only with
+    /// `sessions.worktree-removed`.
+    WorktreeRemoved,
+}
+
+impl SessionView {
+    /// The session in the shapes of a connection without `sessions.worktree-removed`: it
+    /// arrives ended without a cause. The cause is dropped, never replaced by another one:
+    /// `process-gone` and `registration-withdrawn` claim something that did not happen.
+    pub fn without_worktree_removed(&mut self) {
+        if self.end_cause == Some(SessionEndCauseView::WorktreeRemoved) {
+            self.end_cause = None;
+        }
+    }
 }
 
 /// One agent session, as `session.state` and `sessions.list` show it
