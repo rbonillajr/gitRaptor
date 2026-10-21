@@ -574,6 +574,8 @@ fn the_layer_never_changes_the_decision() {
                         authorship: authorship::Effective::default(),
                         policies: policies::Policies::default(),
                         layer,
+                        minimum: true,
+                        permissions: None,
                     };
                     evaluate(operation, &facts, &ctx)
                 };
