@@ -75,13 +75,15 @@ pub(super) fn plan_lines(repo: &str, plan: &ConfirmPlanView) -> Vec<String> {
     out
 }
 
-/// What an answer without effect says, and its exit code.
-fn outcome(result: &GuardConfirmResult) -> ExitCode {
+/// What an answer without effect says, and its exit code. Once the developer said yes,
+/// "nothing to confirm" means this command confirmed nothing (another client did): a failure.
+fn outcome(result: &GuardConfirmResult, accepted: bool) -> ExitCode {
     let key = match result {
-        GuardConfirmResult::NothingToConfirm => {
+        GuardConfirmResult::NothingToConfirm if !accepted => {
             println!("{}", t("guard.confirm.nothing", &[]));
             return ExitCode::SUCCESS;
         }
+        GuardConfirmResult::NothingToConfirm => "guard.confirm.changed",
         GuardConfirmResult::BaseInvalid => "guard.confirm.base-invalid",
         GuardConfirmResult::FloorUnreadable => "guard.confirm.floor-unreadable",
         GuardConfirmResult::UnshowableRelaxation => "guard.confirm.unshowable",
@@ -170,7 +172,7 @@ pub fn confirm(path: Option<PathBuf>) -> ExitCode {
     let (plan, fingerprint) =
         match client.call::<_, GuardConfirmResult>(methods::GUARD_CONFIRM, &ask_plan) {
             Ok(GuardConfirmResult::Plan { plan, fingerprint }) => (plan, fingerprint),
-            Ok(other) => return outcome(&other),
+            Ok(other) => return outcome(&other, false),
             Err(err) => return error(&path, err),
         };
     for line in plan_lines(&shown(&path), &plan) {
@@ -205,7 +207,7 @@ pub fn confirm(path: Option<PathBuf>) -> ExitCode {
     let pending = match client.call::<_, GuardConfirmResult>(methods::GUARD_CONFIRM, &accept) {
         Ok(GuardConfirmResult::Applied { plan }) => return done(&path, &plan),
         Ok(GuardConfirmResult::Pending { action, .. }) => action,
-        Ok(other) => return outcome(&other),
+        Ok(other) => return outcome(&other, true),
         Err(err) => return error(&path, err),
     };
     println!(
@@ -232,7 +234,7 @@ pub fn confirm(path: Option<PathBuf>) -> ExitCode {
     loop {
         match client.call::<_, GuardConfirmResult>(methods::GUARD_CONFIRM, &apply) {
             Ok(GuardConfirmResult::Applied { plan }) => return done(&path, &plan),
-            Ok(other) => return outcome(&other),
+            Ok(other) => return outcome(&other, true),
             // The daemon's clock decides: wait what it says is left.
             Err(ClientError::Rpc(e))
                 if uninstall_refusal(&e)

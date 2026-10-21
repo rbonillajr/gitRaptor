@@ -199,10 +199,13 @@ impl Daemon {
                 requester,
                 recovery,
             } => {
-                let due = self
-                    .guard
-                    .pending()
-                    .take_due(repo_id, &action_id, requester, now);
+                let due = self.guard.pending().take_due(
+                    repo_id,
+                    &action_id,
+                    PendingKind::Uninstall,
+                    requester,
+                    now,
+                );
                 match due {
                     Err(refused) => GuardReply::UninstallRefused(refused),
                     Ok(action) => {
@@ -278,7 +281,10 @@ impl Daemon {
                                         plan: guard_confirm::view(&plan),
                                     })
                                 }
-                                Err(_) => GuardReply::Failed,
+                                Err(_) => {
+                                    confirm_audit = Some(("failed", now, requester));
+                                    GuardReply::Failed
+                                }
                             }
                         }
                         Ok((plan, now)) if now == seen => {
@@ -309,23 +315,23 @@ impl Daemon {
                                 Err(reason) => GuardReply::UninstallRefused(reason.into()),
                             }
                         }
-                        // Anything else than the plan the developer saw: nothing is written.
-                        _ => {
-                            confirm_audit = Some(("changed", seen, requester));
+                        // Another plan than the one the developer saw: nothing is written.
+                        Ok((_, now)) => {
+                            confirm_audit = Some(("changed", now, requester));
                             reply(GuardConfirmResult::ChangedDuringWindow)
                         }
+                        // Nothing to confirm any more (another client confirmed it) or not
+                        // confirmable: the answer says why, and nothing ended to audit.
+                        Err(refused) => reply(guard_confirm::refusal(refused)),
                     },
                     Step::Apply(action_id) => {
-                        let due = registry
-                            .pending()
-                            .take_due(repo_id, &action_id, requester, now)
-                            .and_then(|e| {
-                                if e.kind == PendingKind::ConfirmTeam {
-                                    Ok(e)
-                                } else {
-                                    Err(Refused::from(UninstallRefusal::NoPending))
-                                }
-                            });
+                        let due = registry.pending().take_due(
+                            repo_id,
+                            &action_id,
+                            PendingKind::ConfirmTeam,
+                            requester,
+                            now,
+                        );
                         match due {
                             Err(refused) => GuardReply::UninstallRefused(refused),
                             Ok(action) => {
@@ -353,9 +359,19 @@ impl Daemon {
                                             }
                                         }
                                     }
-                                    _ => {
+                                    Ok((_, now_fp)) => {
+                                        let mut action = action;
+                                        // The audit records what the team level gives now.
+                                        action.fingerprint = Some(now_fp);
                                         audit = Some((action, "changed", requester));
                                         reply(GuardConfirmResult::ChangedDuringWindow)
+                                    }
+                                    // Due but no longer confirmable: the announcement ends
+                                    // without effect (`failed`, never `changed`), and the
+                                    // answer says why.
+                                    Err(refused) => {
+                                        audit = Some((action, "failed", requester));
+                                        reply(guard_confirm::refusal(refused))
                                     }
                                 }
                             }
