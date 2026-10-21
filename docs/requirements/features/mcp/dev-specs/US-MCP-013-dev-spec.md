@@ -55,7 +55,7 @@ tags: [mcp, pedir-confirmacion, guardrails, ejecutor, ola-3]
 
 # DS-US-MCP-013 · Rechazo por MCP de una escritura que requiere confirmación
 
-Implementado en: PR #<n> (pendiente de número).
+Implementado en: PR #267.
 
 ## Contexto rápido
 
