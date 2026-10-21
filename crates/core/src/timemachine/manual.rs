@@ -11,8 +11,8 @@
 use std::cell::Cell;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use gitraptor_api::catalog::check_snapshot_label;
@@ -20,7 +20,7 @@ use gitraptor_api::methods::QuotaWindow;
 use gitraptor_git::ReadError;
 
 use super::continuous::{CaptureDeps, FreeSpaceFloor};
-use super::engine::GitState;
+use super::engine::{GitState, confirm_mark};
 use super::oplog::{Channel, ManualMeta, Oplog, Requester, SnapshotLevel};
 use super::protected::{registered_worktrees, worktree_key};
 use super::store::{
@@ -373,6 +373,7 @@ pub fn capture_in_store(
         now_ms,
         deadline,
         &in_flight,
+        None,
     )
 }
 
@@ -388,6 +389,7 @@ fn capture_guarded(
     now_ms: i64,
     deadline: Instant,
     _in_flight: &InFlight<'_>,
+    confirm: Option<ValidityGuard>,
 ) -> Result<ManualCaptured, ManualError> {
     let Some(session) = ask.requester.session_id() else {
         return Err(invalid("requester"));
@@ -447,6 +449,7 @@ fn capture_guarded(
             Instant::now() < deadline
                 && GitState::read(&guarded) == at_start
                 && !operation_in_progress(&common, &guarded)
+                && confirm.as_ref().is_none_or(|c| (c.0)())
         }))),
         give_way: None,
     };
@@ -600,6 +603,13 @@ pub fn capture(
         now_ms,
         deadline,
         &in_flight,
+        // The mark holds at the validity point, or the capture is discarded.
+        Some(confirm_mark(
+            Arc::clone(&deps.engine),
+            &ask.repo_id,
+            std::slice::from_ref(&ask.worktree),
+            mark,
+        )),
     )
 }
 

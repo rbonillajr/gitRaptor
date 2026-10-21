@@ -7,8 +7,8 @@
 //! engine moves its mark right after every answer, so every confirmation sees another mark.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use gitraptor_api::catalog::{
@@ -32,9 +32,8 @@ use crate::timemachine::oplog::Oplog;
 use crate::timemachine::protected::scope::McpAllowlist;
 use crate::timemachine::protected::{
     ProtectedBackend, ProtectedStep, RepoHandle, ScopeError, StepCtx, StepError, StepOutput,
-    StepScope, StoreSnapshotter,
+    StepScope, StoreSnapshotter, TmRepos,
 };
-use crate::timemachine::store::SnapshotStore;
 
 const REPO: &str = "0a1b2c3d-0000-4000-8000-0000000000bb";
 
@@ -160,16 +159,18 @@ fn a_guaranteed_prior_whose_mark_moved_refuses_with_git_busy() {
     let status = f.git(&["status", "--porcelain"]);
     let dirs = ProfileDirs::under_root(&f.profile);
     let (oplog, _) = Oplog::open(&dirs, REPO, 1).unwrap();
-    let oplog = Arc::new(Mutex::new(oplog));
-    let (store, _) = SnapshotStore::open_or_create(&dirs, REPO).unwrap();
     let common = gitraptor_git::paths::canonicalize(&f.repo.join(".git")).unwrap();
+    // The repo's oplog and store as the daemon opens them.
+    let repos = TmRepos::new(dirs.clone());
+    repos.insert(REPO, &common, oplog);
+    let (oplog, store) = repos.repo(REPO).unwrap();
     let repo = RepoHandle {
         repo_id: REPO.into(),
         worktree: f.repo.clone(),
         common_dir: common.clone(),
         oplog: Arc::clone(&oplog),
         snapshotter: Arc::new(StoreSnapshotter {
-            store: Arc::new(store),
+            store: store.unwrap(),
             oplog: Arc::clone(&oplog),
             profile: dirs.clone(),
             common_dir: common.clone(),

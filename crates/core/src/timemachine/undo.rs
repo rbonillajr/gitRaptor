@@ -861,6 +861,7 @@ pub fn undo_last(
         procs: env.procs,
         stopping: env.stopping,
         deadline: env.prior_deadline,
+        prior_valid: None,
     };
     let tips_before = env
         .engine

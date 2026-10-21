@@ -33,7 +33,9 @@ use crate::timemachine::chaos;
 use crate::timemachine::oplog::{
     Channel, NewOperation, OperationKind, OperationTransition, Oplog, Scope, Target,
 };
-use crate::timemachine::store::{CaptureError, CaptureRequest, SnapshotStore, WorktreeScope};
+use crate::timemachine::store::{
+    CaptureError, CaptureRequest, SnapshotStore, ValidityGuard, WorktreeScope,
+};
 use gitraptor_policy::guard::plan::Expected;
 
 pub use backend::{
@@ -55,7 +57,23 @@ pub struct PriorRequest {
     /// Every worktree of the operation's scope.
     pub worktrees: Vec<PathBuf>,
     pub engine_mark: Option<i64>,
+    /// Checked at the capture's validity point with the rest of its guard: the intent's mark
+    /// still holds. `None`: no engine to confirm it with (doubles).
+    pub still_valid: Option<PriorGuard>,
 }
+
+/// The guard of a prior, so a request that carries one can still be printed.
+#[derive(Clone)]
+pub struct PriorGuard(pub ValidityGuard);
+
+impl std::fmt::Debug for PriorGuard {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("PriorGuard")
+    }
+}
+
+/// Detail of a prior aborted because the intent's mark did not hold at its validity point.
+const PRIOR_DISCARDED: &str = "the intent's mark moved before the prior was read";
 
 /// A completed prior snapshot.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -69,6 +87,8 @@ pub struct PriorSnapshot {
 pub enum PriorError {
     NoSpace,
     StoreUnavailable,
+    /// The intent's mark did not hold at the validity point: nothing was kept.
+    Discarded,
     Failed(String),
 }
 
@@ -100,6 +120,7 @@ impl From<CaptureError> for PriorError {
             CaptureError::Store(StoreError::Untrusted(_) | StoreError::Corrupt(_)) => {
                 Self::StoreUnavailable
             }
+            CaptureError::Discarded => Self::Discarded,
             other => Self::Failed(other.to_string()),
         }
     }
@@ -138,7 +159,7 @@ impl PriorSnapshotter for StoreSnapshotter {
             cause_operation: Some(req.operation_id.clone()),
             cause_event_seq: None,
             include_credentials: crate::profile::settings::include_credential_files(&self.profile),
-            still_valid: None,
+            still_valid: req.still_valid.as_ref().map(|g| g.0.clone()),
             give_way: None,
         };
         let out = self.store.capture(&self.oplog, &capture)?;
@@ -489,6 +510,14 @@ pub enum ProtectedError {
     },
 }
 
+impl ProtectedError {
+    /// Whether the prior was discarded because the intent's mark did not hold: worth taking the
+    /// mark again, the repo was not touched.
+    pub fn prior_discarded(&self) -> bool {
+        matches!(self, Self::Prior { detail: Some(d), .. } if d == PRIOR_DISCARDED)
+    }
+}
+
 /// Runs protected operations on one repo.
 pub struct ProtectedOperation<'a> {
     pub oplog: &'a Arc<Mutex<Oplog>>,
@@ -498,6 +527,8 @@ pub struct ProtectedOperation<'a> {
     /// Set when the daemon starts stopping.
     pub stopping: &'a AtomicBool,
     pub deadline: Duration,
+    /// The intent's mark confirmed at the prior's validity point; `None` when there is no engine.
+    pub prior_valid: Option<ValidityGuard>,
 }
 
 impl ProtectedOperation<'_> {
@@ -551,6 +582,7 @@ impl ProtectedOperation<'_> {
             repo: req.worktree_paths.first().cloned().unwrap_or_default(),
             worktrees: req.worktree_paths.clone(),
             engine_mark: Some(req.engine_mark),
+            still_valid: self.prior_valid.clone().map(PriorGuard),
         };
         let (tx, rx) = mpsc::sync_channel(1);
         let snapshotter = Arc::clone(&self.snapshotter);
@@ -567,6 +599,12 @@ impl ProtectedOperation<'_> {
             Ok(Err(PriorError::NoSpace)) => return Err(abort(PriorFailure::NoSpace, None)),
             Ok(Err(PriorError::StoreUnavailable)) => {
                 return Err(abort(PriorFailure::StoreUnavailable, None));
+            }
+            Ok(Err(PriorError::Discarded)) => {
+                return Err(abort(
+                    PriorFailure::CaptureFailed,
+                    Some(PRIOR_DISCARDED.to_owned()),
+                ));
             }
             Ok(Err(PriorError::Failed(d))) => {
                 return Err(abort(PriorFailure::CaptureFailed, Some(d)));

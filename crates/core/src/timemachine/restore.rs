@@ -828,6 +828,7 @@ pub fn restore_to(
         procs: env.procs,
         stopping: env.stopping,
         deadline: env.prior_deadline,
+        prior_valid: None,
     };
     let ran = protected.run(&req, &mut step);
     // The state the restore left, while the repo is still held: its echo in

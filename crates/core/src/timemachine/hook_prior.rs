@@ -8,8 +8,8 @@
 //! ever deleted to make room.
 
 use std::path::PathBuf;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use gitraptor_api::guard::Operation;
@@ -17,7 +17,7 @@ use gitraptor_api::methods::QuotaWindow;
 use gitraptor_git::ReadError;
 
 use super::continuous::CaptureDeps;
-use super::engine::GitState;
+use super::engine::{GitState, confirm_mark};
 use super::manual::{
     DAY_MS, MINUTE_MS, ManualFloor, QuotaHit, QuotaInput, VolumeProbe, cached_reserve, folder_id,
     resolve_worktree,
@@ -257,15 +257,26 @@ pub fn capture_in_store(
         floor,
         now_ms,
         deadline,
+        None,
+        false,
     );
+    remember(store, ask, &result);
+    result
+}
+
+/// Keeps the result for the `git` command, so its next hook gets the same answer.
+fn remember(
+    store: &SnapshotStore,
+    ask: &HookPriorAsk,
+    result: &Result<HookPriorTaken, HookPriorError>,
+) {
     if let Some(git) = ask.git {
-        let booked: Booked = match &result {
+        let booked: Booked = match result {
             Ok(taken) => Ok((taken.snapshot_id.clone(), taken.worktree.clone())),
             Err(e) => Err(e.into()),
         };
         store.hook_prior().remember(git, booked);
     }
-    result
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -279,6 +290,8 @@ fn record_one(
     floor: Option<&ManualFloor<'_>>,
     now_ms: i64,
     deadline: Instant,
+    confirm: Option<ValidityGuard>,
+    retry: bool,
 ) -> Result<HookPriorTaken, HookPriorError> {
     let Verified { root, key, id } = verified;
     let registered = registered_worktrees(&ask.common_dir).unwrap_or_default();
@@ -295,7 +308,8 @@ fn record_one(
     if folder_id(&root) != id {
         return Err(HookPriorError::Discarded);
     }
-    {
+    // A retry of a discarded attempt is the same request: its quota was checked on the first.
+    if !retry {
         let session = ask.requester.session_id();
         let log = oplog.lock().unwrap_or_else(|p| p.into_inner());
         let mut input = log
@@ -330,7 +344,9 @@ fn record_one(
         // Evaluated once, right before the validity point: whatever arrives late is discarded,
         // so a `complete` row never follows an answer of `failed`.
         still_valid: Some(ValidityGuard(std::sync::Arc::new(move || {
-            Instant::now() < deadline && GitState::read(&guarded) == at_start
+            Instant::now() < deadline
+                && GitState::read(&guarded) == at_start
+                && confirm.as_ref().is_none_or(|c| (c.0)())
         }))),
         give_way: None,
     };
@@ -391,9 +407,9 @@ pub fn capture(
     // The gate before anything reads the folder (the wait for calm, the estimate of its size).
     let Verified { root, key, .. } = verify(ask)?;
     let left = deadline.saturating_duration_since(Instant::now());
-    let Some(mark) = deps
-        .engine
-        .settle(&ask.repo_id, std::slice::from_ref(&ask.worktree), left)
+    let Some(mut mark) =
+        deps.engine
+            .settle(&ask.repo_id, std::slice::from_ref(&ask.worktree), left)
     else {
         return Err(book(&store, ask, HookPriorError::TimeLimit));
     };
@@ -403,16 +419,47 @@ pub fn capture(
         reserve_bytes: cached_reserve(&store, &key, &root, deadline),
         probe: &probe,
     });
-    capture_in_store(
-        &store,
-        &oplog,
-        ask,
-        Some(mark),
-        include_credential_files(&deps.profile),
-        floor.as_ref(),
-        now_ms,
-        deadline,
-    )
+    // The mark must hold at the validity point. A discard is tried again with a new mark while
+    // there is time: the denial comes from the deadline, never from one discard.
+    let mut retry = false;
+    let result = loop {
+        let verified = verify(ask)?;
+        let confirm = confirm_mark(
+            Arc::clone(&deps.engine),
+            &ask.repo_id,
+            std::slice::from_ref(&ask.worktree),
+            mark,
+        );
+        let attempt = record_one(
+            &store,
+            verified,
+            &oplog,
+            ask,
+            Some(mark),
+            include_credential_files(&deps.profile),
+            floor.as_ref(),
+            now_ms,
+            deadline,
+            Some(confirm),
+            retry,
+        );
+        match attempt {
+            Err(HookPriorError::Discarded) if Instant::now() < deadline => {
+                retry = true;
+                let left = deadline.saturating_duration_since(Instant::now());
+                match deps
+                    .engine
+                    .settle(&ask.repo_id, std::slice::from_ref(&ask.worktree), left)
+                {
+                    Some(next) => mark = next,
+                    None => break Err(HookPriorError::TimeLimit),
+                }
+            }
+            other => break other,
+        }
+    };
+    remember(&store, ask, &result);
+    result
 }
 
 /// Keeps a failure for the `git` command, so its next hook does not try again.

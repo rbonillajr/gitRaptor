@@ -25,7 +25,7 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use super::engine::{EngineLink, GitState, SETTLE};
+use super::engine::{EngineLink, GitState, SETTLE, confirm_mark};
 use super::oplog::SnapshotLevel;
 use super::protected::{TmRepos, registered_worktrees, worktree_key};
 use super::store::{CaptureError, CaptureOutcome, CaptureRequest, ValidityGuard, WorktreeScope};
@@ -424,7 +424,17 @@ fn run(config: CaptureConfig, deps: CaptureDeps, rx: Receiver<Signal>) {
             }
             let attempt = capture_one(&deps, &key.0, &key.1, p.event, p.give_way(&config));
             if !p.after(attempt, Instant::now(), &config) {
-                if p.retries > MAX_RETRIES {
+                if p.retries > MAX_RETRIES && attempt == Attempt::Discarded {
+                    // Every try was discarded: the repo's mark kept moving (another worktree's
+                    // events). No point is better than one sealed with a mark it does not hold.
+                    deps.logger.warn(
+                        "tm_capture_failed",
+                        &[
+                            ("repo", Field::id(&key.0)),
+                            ("kind", "discarded-exhausted".into()),
+                        ],
+                    );
+                } else if p.retries > MAX_RETRIES {
                     deps.logger
                         .warn("tm_capture_gave_up", &[("repo", Field::id(&key.0))]);
                 }
@@ -440,6 +450,8 @@ enum Attempt {
     Done,
     /// Not consistent or not calm yet: try again shortly.
     Again,
+    /// Discarded at the validity point (the mark did not hold): tried again as [`Attempt::Again`].
+    Discarded,
     /// Gave way to new activity of the repo: try again once it is quiet. Never counts as a
     /// failure, so sustained activity never makes the capture give up.
     GaveWay,
@@ -460,7 +472,7 @@ impl Pending {
                 self.retry_at = Some(now + config.quiet);
                 true
             }
-            Attempt::Again => {
+            Attempt::Again | Attempt::Discarded => {
                 self.retries += 1;
                 self.retry_at = Some(now + SETTLE);
                 self.retries <= MAX_RETRIES
@@ -491,7 +503,7 @@ fn capture_one(
         Ok(_) => Attempt::Done,
         Err(Failure::NotCalm | Failure::Busy) => Attempt::Again,
         Err(Failure::Capture(CaptureError::Yielded)) => Attempt::GaveWay,
-        Err(Failure::Capture(CaptureError::Discarded)) => Attempt::Again,
+        Err(Failure::Capture(CaptureError::Discarded)) => Attempt::Discarded,
         Err(Failure::Unavailable) => Attempt::Done,
         Err(Failure::NoSpace) => {
             deps.logger.warn(
@@ -585,6 +597,10 @@ pub fn observe(
     let activity = deps.engine.activity(repo_id);
     let engine = Arc::clone(&deps.engine);
     let repo = repo_id.to_owned();
+    // The mark is confirmed at the validity point: a `git` between the mark and the read moved
+    // it or broke the calm, and the capture is discarded rather than sealed with a mark before
+    // its content.
+    let confirmed = confirm_mark(Arc::clone(&deps.engine), repo_id, worktrees, mark);
     let req = CaptureRequest {
         level: SnapshotLevel::Observation,
         common_dir: common,
@@ -598,6 +614,7 @@ pub fn observe(
                 .iter()
                 .map(|w| GitState::read(w))
                 .eq(at_start.iter().cloned())
+                && (confirmed.0)()
         }))),
         give_way: give_way
             .then(|| ValidityGuard(Arc::new(move || engine.activity(&repo) != activity))),

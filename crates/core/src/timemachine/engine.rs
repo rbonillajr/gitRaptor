@@ -278,14 +278,20 @@ impl RepoMarks {
 /// The check that a capture sealed with `mark` still holds at its validity point: the engine is
 /// calm now and its mark has not moved, so no event happened between the mark and the read. One
 /// poll, never a wait.
-// Stub: the confirmation is not wired yet; every mark holds.
+///
+/// With the calm by state and by refs, `settle` answering the same mark means: every `git` that
+/// ended is persisted and nothing was persisted since the mark. Whatever the capture read between
+/// the two then is the state the mark covers.
 pub fn confirm_mark(
-    _engine: Arc<dyn EngineLink>,
-    _repo_id: &str,
-    _worktrees: &[PathBuf],
-    _mark: i64,
+    engine: Arc<dyn EngineLink>,
+    repo_id: &str,
+    worktrees: &[PathBuf],
+    mark: i64,
 ) -> ValidityGuard {
-    ValidityGuard(Arc::new(|| true))
+    let (repo_id, worktrees) = (repo_id.to_owned(), worktrees.to_vec());
+    ValidityGuard(Arc::new(move || {
+        engine.settle(&repo_id, &worktrees, Duration::ZERO) == Some(mark)
+    }))
 }
 
 /// The Git directory of a worktree: `.git` itself, or the one its `.git` file names. Links are
