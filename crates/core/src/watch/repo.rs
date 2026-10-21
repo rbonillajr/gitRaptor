@@ -538,6 +538,11 @@ pub(super) enum Start {
     Lost,
 }
 
+/// What a task woken from `refs` starts from: its slept view, or no base at all.
+pub(super) fn start_from(refs: Option<RefsView>) -> Start {
+    refs.map_or(Start::Pending, Start::Known)
+}
+
 type ReadFn = fn(&Path) -> Result<RefsView, RefsReadError>;
 
 struct Task {
@@ -614,7 +619,7 @@ pub(super) fn run(
                         task.flush(t_recv, overflow);
                     }
                 }
-                let _ = done.send(task.view.clone());
+                let _ = done.send(task.has_base.then(|| task.view.clone()));
                 return;
             }
             Ok(RepoMsg::PollNow) => task.next_poll = Instant::now(),
@@ -947,6 +952,58 @@ mod tests {
         // The observer owns the watcher the task rewatches through: keep it alive.
         std::mem::forget(observer);
         (task, batches)
+    }
+
+    /// A task that never had a base view hands none over when it sleeps, and the wake starts
+    /// from "no base": its first good view is the base, so nothing is classified from empty.
+    #[test]
+    fn a_task_without_a_base_sleeps_and_wakes_without_one() {
+        assert!(matches!(start_from(None), Start::Pending));
+        assert!(matches!(
+            start_from(Some(view(&["/w/main"]))),
+            Start::Known(v) if v.worktrees.len() == 1
+        ));
+        let (mut task, _batches) = task(Start::Lost, vec![]);
+        let (tx, rx) = std::sync::mpsc::channel();
+        let (done, ack) = std::sync::mpsc::channel();
+        tx.send(RepoMsg::Sleep(done)).unwrap();
+        let shared = Arc::clone(&task.shared);
+        task.read = scripted;
+        // Run the real loop: it answers `Sleep` and ends.
+        let handle = std::thread::spawn(move || {
+            run(
+                shared,
+                "r".into(),
+                PathBuf::from("/nonexistent/raptor-repo.git"),
+                Start::Lost,
+                rx,
+            );
+        });
+        assert_eq!(
+            ack.recv_timeout(std::time::Duration::from_secs(10))
+                .unwrap(),
+            None
+        );
+        handle.join().unwrap();
+        // With a base it hands the view over.
+        let (tx, rx) = std::sync::mpsc::channel();
+        let (done, ack) = std::sync::mpsc::channel();
+        tx.send(RepoMsg::Sleep(done)).unwrap();
+        let shared = Arc::clone(&task.shared);
+        let handle = std::thread::spawn(move || {
+            run(
+                shared,
+                "r".into(),
+                PathBuf::from("/nonexistent/raptor-repo.git"),
+                Start::Known(view(&["/w/main"])),
+                rx,
+            );
+        });
+        let got = ack
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .unwrap();
+        assert_eq!(got.map(|v| v.worktrees.len()), Some(1));
+        handle.join().unwrap();
     }
 
     #[test]

@@ -314,7 +314,8 @@ pub(crate) enum RepoMsg {
     Paths(u64),
     Rescan(u64),
     /// Flush the window, answer with the view and end (going dormant).
-    Sleep(Sender<RefsView>),
+    /// The answer is the task's base view, `None` if it never had one.
+    Sleep(Sender<Option<RefsView>>),
     /// Test hook: the backup poll is due now.
     PollNow,
     Stop,
@@ -396,7 +397,9 @@ impl RepoEntry {
 struct Asleep {
     /// The refs view of its last batch: the "processed up to" mark the wake
     /// classifies from, so commits made while dormant are one event each.
-    refs: RefsView,
+    /// `None`: the task had no base view when it slept, so the wake takes the first good one as
+    /// its base instead of classifying from an empty view.
+    refs: Option<RefsView>,
     /// Root of each worktree: where the sentinel applies the ignore filter.
     roots: Vec<PathBuf>,
     /// Private Git directory of each worktree, for the sweep.
@@ -1073,7 +1076,7 @@ impl Observer {
             .collect();
         let flushed = slept.len() == acks.len();
         let (done, ack) = channel();
-        let refs = if repo_tx.send(RepoMsg::Sleep(done)).is_ok() {
+        let answered = if repo_tx.send(RepoMsg::Sleep(done)).is_ok() {
             ack.recv_timeout(wait).ok()
         } else {
             None
@@ -1085,13 +1088,13 @@ impl Observer {
         let roots: Vec<PathBuf> = repo.worktrees.drain(..).map(|w| w.root).collect();
         let git_dirs: Vec<PathBuf> = worktrees.iter().map(|w| w.git_dir.clone()).collect();
         let now = wall_now().0;
-        let busy = refs.is_none() || !flushed;
+        let busy = answered.is_none() || !flushed;
         // A task that did not answer may have lost its window: the refs are
         // read now and the repo wakes at once, with a gap that covers it.
-        let refs = match refs.filter(|_| flushed) {
-            Some(refs) => refs,
-            // Unreadable now: an empty view (the wake's own read decides what it can say).
-            None => RefsView::read(&repo.common).unwrap_or_default(),
+        let refs = match answered.filter(|_| flushed) {
+            Some(view) => view,
+            // Unreadable now: no base, never an empty view.
+            None => RefsView::read(&repo.common).ok(),
         };
         repo.asleep = Some(Asleep {
             refs,
@@ -1213,7 +1216,11 @@ impl Observer {
             .cloned()
             .collect();
         self.shared.unwatch(&gone);
-        let head_logs = asleep.refs.head_logs();
+        let head_logs = asleep
+            .refs
+            .as_ref()
+            .map(RefsView::head_logs)
+            .unwrap_or_default();
         let mut heads = Vec::new();
         for w in &ready {
             let git_dir = worktree_git_dir(&common, w);
@@ -1221,10 +1228,10 @@ impl Observer {
         }
         let shared = Arc::clone(&self.shared);
         let id = repo_id.to_owned();
-        let refs = asleep.refs;
+        let start = repo::start_from(asleep.refs);
         let _ = std::thread::Builder::new()
             .name("raptor-watch-repo".into())
-            .spawn(move || repo::run(shared, id, common, repo::Start::Known(refs), rx));
+            .spawn(move || repo::run(shared, id, common, start, rx));
         if let Some(hooks) = &self.shared.hooks {
             for w in &ready {
                 hooks.worktree_changed(repo_id, Path::new(w.view.path.raw()));
