@@ -73,9 +73,28 @@ pub struct KeyHintsModel {
     pub hints: Vec<KeyHint>,
     /// Always shown, at the right end, whatever the width.
     pub help: KeyHint,
-    /// What the ○ of a row without an agent means (US-CKP-001), muted after the hints when
-    /// some row has no agent and it fits whole.
-    pub legend: Option<SafeText>,
+    /// What the state symbols on screen mean, muted after the hints, one entry after the
+    /// other. An entry is painted only when it fits whole; the first that does not fit cuts
+    /// the rest. Empty: no legend.
+    pub legend: Vec<LegendRow>,
+}
+
+/// A state symbol and its meaning in words: a state is never told by color or symbol alone.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LegendRow {
+    pub symbol: SymbolToken,
+    pub color: ColorToken,
+    pub label: SafeText,
+}
+
+impl LegendRow {
+    pub fn new(symbol: SymbolToken, color: ColorToken, label: SafeText) -> Self {
+        Self {
+            symbol,
+            color,
+            label,
+        }
+    }
 }
 
 impl Component for KeyHintsModel {
@@ -112,13 +131,21 @@ impl Component for KeyHintsModel {
                 return;
             }
         }
-        if let Some(legend) = &self.legend {
-            let glyph = styles.symbol(SymbolToken::AgentDone);
-            let gap = if self.hints.is_empty() { 0 } else { 3 };
-            if gap + u16::from(glyph.width) + 1 + width(legend.as_str()) <= pen.remaining() {
-                let muted = styles.fg(ColorToken::TextMuted);
-                pen.gap(gap).symbol(glyph, muted).gap(1).safe(legend, muted);
+        let muted = styles.fg(ColorToken::TextMuted);
+        for (i, row) in self.legend.iter().enumerate() {
+            let glyph = styles.symbol(row.symbol);
+            let gap = if i == 0 && self.hints.is_empty() {
+                0
+            } else {
+                3
+            };
+            if gap + u16::from(glyph.width) + 1 + width(row.label.as_str()) > pen.remaining() {
+                break;
             }
+            pen.gap(gap)
+                .symbol(glyph, styles.fg(row.color))
+                .gap(1)
+                .safe(&row.label, muted);
         }
     }
 
@@ -131,6 +158,8 @@ impl Component for KeyHintsModel {
 pub struct HelpGroup {
     pub title: SafeText,
     pub hints: Vec<KeyHint>,
+    /// State symbols with their meaning, after the hints.
+    pub legend: Vec<LegendRow>,
 }
 
 /// The `?` overlay: every action of the keymap, by group.
@@ -144,17 +173,27 @@ pub struct HelpModel {
 }
 
 impl HelpModel {
-    fn key_column(&self) -> u16 {
-        self.groups
+    /// The widest key or symbol: the label column starts after it.
+    fn key_column(&self, styles: &Styles) -> u16 {
+        let keys = self
+            .groups
             .iter()
             .flat_map(|g| &g.hints)
-            .map(|h| width(h.keys.as_str()))
-            .max()
-            .unwrap_or(0)
+            .map(|h| width(h.keys.as_str()));
+        let symbols = self
+            .groups
+            .iter()
+            .flat_map(|g| &g.legend)
+            .map(|r| u16::from(styles.symbol(r.symbol).width));
+        keys.chain(symbols).max().unwrap_or(0)
     }
 
     fn rows(&self) -> u16 {
-        let entries: usize = self.groups.iter().map(|g| g.hints.len() + 2).sum();
+        let entries: usize = self
+            .groups
+            .iter()
+            .map(|g| g.hints.len() + g.legend.len() + 2)
+            .sum();
         u16::try_from(entries).unwrap_or(u16::MAX) + u16::from(self.note.is_some()) * 2 + 1
     }
 }
@@ -169,7 +208,7 @@ impl Component for HelpModel {
             inner.width.saturating_sub(2),
             inner.height,
         );
-        let keys = self.key_column();
+        let keys = self.key_column(styles);
         let mut y = inner.y;
         let bottom = inner.bottom().saturating_sub(1);
         let heading = styles
@@ -207,6 +246,18 @@ impl Component for HelpModel {
                         .safe(reason, label)
                         .text(g.paren[1], label);
                 }
+                y += 1;
+            }
+            for row in &group.legend {
+                if y >= bottom {
+                    break 'groups;
+                }
+                let mut pen = Pen::new(buf, inner, y, styles);
+                pen.gap(2);
+                let start = pen.x;
+                pen.symbol(styles.symbol(row.symbol), styles.fg(row.color))
+                    .to(start + keys + 2);
+                pen.safe(&row.label, styles.fg(ColorToken::TextDefault));
                 y += 1;
             }
             y += 1;

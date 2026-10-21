@@ -230,9 +230,13 @@ pub enum Text<'a> {
     Invalid(InvalidReason),
     /// Why the engine asked for a new snapshot (`events.resync`).
     Resync(ResyncReason),
+    /// The terminal is below the minimum: its size, what to do and the minimum (from the
+    /// layout, never written in the catalog).
     TooSmall {
         width: u16,
         height: u16,
+        min_width: u16,
+        min_height: u16,
     },
     NeedsTerminal,
     /// The cockpit closed within moments of opening, by a key it received (typed ahead, or
@@ -240,6 +244,53 @@ pub enum Text<'a> {
     ClosedEarly(&'a str),
     /// The terminal input failed and the cockpit left.
     InputLost,
+    // Accessibility and help (terminal size, ASCII, `?`).
+    /// The hint of the key that opens the help.
+    KeyHelp,
+    /// The hint of the key that closes it.
+    KeyClose,
+    HelpTitle,
+    HelpPanel(HelpPanel),
+    HelpAlways,
+    HelpSymbols,
+    /// What a state symbol means.
+    Legend(Legend),
+    /// A key that exists on Unix only.
+    UnixOnly,
+}
+
+/// The panel the help describes: what receives the keys.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HelpPanel {
+    Fleet,
+    Picker,
+    Question,
+}
+
+impl HelpPanel {
+    pub const ALL: [Self; 3] = [Self::Fleet, Self::Picker, Self::Question];
+}
+
+/// A state symbol and what it means.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Legend {
+    Active,
+    Idle,
+    Done,
+    Warning,
+    Conflict,
+    Blocked,
+}
+
+impl Legend {
+    pub const ALL: [Self; 6] = [
+        Self::Active,
+        Self::Idle,
+        Self::Done,
+        Self::Warning,
+        Self::Conflict,
+        Self::Blocked,
+    ];
 }
 
 impl Text<'_> {
@@ -326,8 +377,8 @@ fn en(text: Text<'_>) -> String {
         }
         Text::WorktreeUnavailable(UnavailableReason::Unreadable) => "unreadable now".into(),
         Text::NotAvailable => "not available".into(),
-        Text::RequesterUnknown => "—".into(),
-        Text::Engine(None) => "engine —".into(),
+        Text::RequesterUnknown => "–".into(),
+        Text::Engine(None) => "engine –".into(),
         Text::Engine(Some(EngineStateView::WaitingForGit)) => "engine waiting for Git".into(),
         Text::Engine(Some(EngineStateView::NoRepos)) => "engine without repos".into(),
         Text::Engine(Some(EngineStateView::Observing)) => "engine observing".into(),
@@ -441,9 +492,14 @@ fn en(text: Text<'_>) -> String {
             ResyncReason::ScopeClosed => "the repo stopped being observed",
         }
         .into(),
-        Text::TooSmall { width, height } => {
-            format!("Terminal too small ({width}×{height}): at least 80×24 is needed.")
-        }
+        Text::TooSmall {
+            width,
+            height,
+            min_width,
+            min_height,
+        } => format!(
+            "Terminal too small ({width}×{height}). Resize it to at least {min_width}×{min_height}."
+        ),
         Text::NeedsTerminal => {
             "the cockpit needs a terminal; for plain output use `raptor status`".into()
         }
@@ -453,6 +509,22 @@ fn en(text: Text<'_>) -> String {
         Text::InputLost => {
             "the cockpit closed: it can no longer read the terminal's input; for plain output use `raptor status`".into()
         }
+        // Accessibility and help (terminal size, ASCII, `?`).
+        Text::KeyHelp => "help".into(),
+        Text::KeyClose => "close".into(),
+        Text::HelpTitle => "Keys".into(),
+        Text::HelpPanel(HelpPanel::Fleet) => "In the fleet".into(),
+        Text::HelpPanel(HelpPanel::Picker) => "Choosing a repo".into(),
+        Text::HelpPanel(HelpPanel::Question) => "In the question".into(),
+        Text::HelpAlways => "Always".into(),
+        Text::HelpSymbols => "Symbols".into(),
+        Text::Legend(Legend::Active) => "active agent".into(),
+        Text::Legend(Legend::Idle) => "idle agent".into(),
+        Text::Legend(Legend::Done) => "no agent or session ended".into(),
+        Text::Legend(Legend::Warning) => "warning: the text beside it says why".into(),
+        Text::Legend(Legend::Conflict) => "predicted conflict".into(),
+        Text::Legend(Legend::Blocked) => "blocked by policy".into(),
+        Text::UnixOnly => "Unix only".into(),
     }
 }
 
@@ -531,8 +603,8 @@ fn es(text: Text<'_>) -> String {
         }
         Text::WorktreeUnavailable(UnavailableReason::Unreadable) => "ilegible ahora".into(),
         Text::NotAvailable => "no disponible".into(),
-        Text::RequesterUnknown => "—".into(),
-        Text::Engine(None) => "motor —".into(),
+        Text::RequesterUnknown => "–".into(),
+        Text::Engine(None) => "motor –".into(),
         Text::Engine(Some(EngineStateView::WaitingForGit)) => "motor esperando Git".into(),
         Text::Engine(Some(EngineStateView::NoRepos)) => "motor sin repos".into(),
         Text::Engine(Some(EngineStateView::Observing)) => "motor observando".into(),
@@ -648,9 +720,14 @@ fn es(text: Text<'_>) -> String {
             ResyncReason::ScopeClosed => "el repo dejó de observarse",
         }
         .into(),
-        Text::TooSmall { width, height } => {
-            format!("Terminal demasiado pequeña ({width}×{height}): hacen falta al menos 80×24.")
-        }
+        Text::TooSmall {
+            width,
+            height,
+            min_width,
+            min_height,
+        } => format!(
+            "Terminal demasiado pequeña ({width}×{height}). Amplía la terminal a {min_width}×{min_height} como mínimo."
+        ),
         Text::NeedsTerminal => {
             "el cockpit necesita una terminal; para salida de texto usa `raptor status`".into()
         }
@@ -660,6 +737,22 @@ fn es(text: Text<'_>) -> String {
         Text::InputLost => {
             "el cockpit se cerró: ya no puede leer la entrada de la terminal; para salida de texto usa `raptor status`".into()
         }
+        // Accessibility and help (terminal size, ASCII, `?`).
+        Text::KeyHelp => "ayuda".into(),
+        Text::KeyClose => "cerrar".into(),
+        Text::HelpTitle => "Teclas".into(),
+        Text::HelpPanel(HelpPanel::Fleet) => "En la flota".into(),
+        Text::HelpPanel(HelpPanel::Picker) => "Al elegir repo".into(),
+        Text::HelpPanel(HelpPanel::Question) => "En la pregunta".into(),
+        Text::HelpAlways => "Siempre".into(),
+        Text::HelpSymbols => "Símbolos".into(),
+        Text::Legend(Legend::Active) => "agente activo".into(),
+        Text::Legend(Legend::Idle) => "agente inactivo".into(),
+        Text::Legend(Legend::Done) => "sin agente o sesión terminada".into(),
+        Text::Legend(Legend::Warning) => "aviso: el texto de al lado dice por qué".into(),
+        Text::Legend(Legend::Conflict) => "conflicto previsto".into(),
+        Text::Legend(Legend::Blocked) => "bloqueado por política".into(),
+        Text::UnixOnly => "solo en Unix".into(),
     }
 }
 
@@ -788,6 +881,308 @@ fn es_error(code: ErrorCode) -> &'static str {
     }
 }
 
+/// One sample of every message of the catalog, for the tests that walk it whole (every
+/// language, the ASCII fold).
+#[cfg(test)]
+pub(crate) fn every_text() -> Vec<Text<'static>> {
+    static NAME: OnceLock<SafeText> = OnceLock::new();
+    let name = NAME.get_or_init(|| SafeText::text("sample"));
+    let mut texts = vec![
+        Text::Title,
+        Text::Repo(name),
+        Text::NoRepo,
+        Text::FleetTitle {
+            base: Some(name),
+            fetched: Fetched::Ago(5_000),
+        },
+        Text::FleetTitle {
+            base: Some(name),
+            fetched: Fetched::Never,
+        },
+        Text::FleetTitle {
+            base: Some(name),
+            fetched: Fetched::NotAvailable,
+        },
+        Text::FleetTitle {
+            base: None,
+            fetched: Fetched::Never,
+        },
+        Text::PickTitle,
+        Text::PickPrompt,
+        Text::Ago(0),
+        Text::Ago(5_000),
+        Text::Ago(120_000),
+        Text::Ago(7_200_000),
+        Text::Ago(172_800_000),
+        Text::FleetEmpty,
+        Text::FleetWaiting,
+        Text::FleetNoRepo,
+        Text::ColAgent,
+        Text::ColBranch,
+        Text::ColFiles,
+        Text::ColSync,
+        Text::ColActivity,
+        Text::NoAgent { worktree: "feat-a" },
+        Text::NoAgentLegend,
+        Text::Temporary,
+        Text::AgentNotAvailable,
+        Text::ClaudeCode,
+        Text::OtherAgent,
+        Text::AgentInWorktree {
+            agent: "Claude Code",
+            worktree: "feat-a",
+        },
+        Text::AgentAndMore {
+            name: "Claude Code",
+            more: 2,
+        },
+        Text::LastCommit {
+            merge: false,
+            author: "Ana",
+            agents: "",
+            ran_by: None,
+            inferred: None,
+        },
+        Text::LastCommit {
+            merge: true,
+            author: "Ana",
+            agents: "Claude Code",
+            ran_by: None,
+            inferred: None,
+        },
+        Text::LastCommit {
+            merge: false,
+            author: "Ana",
+            agents: "",
+            ran_by: Some("Claude Code"),
+            inferred: None,
+        },
+        Text::LastCommit {
+            merge: false,
+            author: "Ana",
+            agents: "Claude Code",
+            ran_by: Some("Claude Code"),
+            inferred: None,
+        },
+        Text::LastCommit {
+            merge: false,
+            author: "Ana",
+            agents: "",
+            ran_by: None,
+            inferred: Some("Claude Code"),
+        },
+        Text::NoBranch(Some("abc1234")),
+        Text::NoBranch(None),
+        Text::NoBase,
+        Text::BaseMissing,
+        Text::NoCommits,
+        Text::Unreadable,
+        Text::NotAvailable,
+        Text::RequesterUnknown,
+        Text::Engine(None),
+        Text::Stale,
+        Text::ActingAsYourself,
+        Text::ProtectionLost(None),
+        Text::ProtectionOrphaned,
+        Text::ActingAsAgent(Some(name)),
+        Text::ActingAsAgent(None),
+        Text::Unverified,
+        Text::KeyQuit,
+        Text::KeyRetry,
+        Text::KeyUp,
+        Text::KeyDown,
+        Text::KeyOpen,
+        Text::KeySuspend,
+        Text::KeyObserve,
+        Text::KeyNo,
+        Text::KeyLater,
+        Text::ObserveTitle,
+        Text::ObserveWhy,
+        Text::ObserveQuestion,
+        Text::DiscoveredTitle,
+        Text::DiscoveredWhy(name),
+        Text::DiscoveredQuestion(name),
+        Text::Observing(name),
+        Text::ModuleError("mcp-unavailable"),
+        Text::ModuleError("unknown-module-error"),
+        Text::UnknownError(-39_999),
+        Text::TooSmall {
+            width: 70,
+            height: 20,
+            min_width: 80,
+            min_height: 24,
+        },
+        Text::NeedsTerminal,
+        Text::ClosedEarly("q"),
+        Text::InputLost,
+        Text::KeyHelp,
+        Text::KeyClose,
+        Text::HelpTitle,
+        Text::HelpAlways,
+        Text::HelpSymbols,
+        Text::UnixOnly,
+    ];
+    for reason in [
+        UnavailableReason::Missing,
+        UnavailableReason::Untrusted,
+        UnavailableReason::Unreadable,
+    ] {
+        texts.push(Text::WorktreeUnavailable(reason));
+    }
+    for state in [
+        EngineStateView::WaitingForGit,
+        EngineStateView::NoRepos,
+        EngineStateView::Observing,
+    ] {
+        texts.push(Text::Engine(Some(state)));
+    }
+    for cause in [
+        LossCause::HookspathChanged,
+        LossCause::RepoMoved,
+        LossCause::FolderMissing,
+        LossCause::DispatcherMissing,
+        LossCause::DispatcherAltered,
+        LossCause::DispatcherNotExecutable,
+        LossCause::BinaryMissing,
+    ] {
+        texts.push(Text::ProtectionLost(Some(cause)));
+    }
+    let failures = [
+        ObserveFailure::NotARepo,
+        ObserveFailure::NotTrusted,
+        ObserveFailure::Unreadable,
+        ObserveFailure::Refused,
+        ObserveFailure::Disconnected,
+        ObserveFailure::Unknown,
+    ];
+    for reason in failures {
+        texts.push(Text::ObserveFailed {
+            name,
+            path: name,
+            reason,
+        });
+        texts.push(Text::Notice(Notice::ObserveFailed(reason)));
+        texts.push(Text::Notice(Notice::DiscoveryFailed(reason)));
+    }
+    for notice in [
+        Notice::UnknownKey,
+        Notice::AlreadyLive,
+        Notice::Retrying,
+        Notice::Starting,
+        Notice::SuspendUnsupported,
+    ] {
+        texts.push(Text::Notice(notice));
+    }
+    for state in [
+        ConnState::Connecting,
+        ConnState::Starting,
+        ConnState::Syncing,
+        ConnState::Live,
+        ConnState::Resyncing,
+        ConnState::Reconnecting { attempt: 3 },
+        ConnState::EngineUnavailable,
+        ConnState::Incompatible,
+        ConnState::Rejected,
+        ConnState::Unsupported,
+    ] {
+        texts.push(Text::Conn(state));
+    }
+    texts.extend(ErrorCode::ALL.map(Text::EngineError));
+    texts.extend(ScopeRefusal::ALL.map(Text::ScopeRefused));
+    texts.extend(InvalidReason::ALL.map(Text::Invalid));
+    texts.extend(ResyncReason::ALL.map(Text::Resync));
+    texts.extend(Legend::ALL.map(Text::Legend));
+    texts.extend(HelpPanel::ALL.map(Text::HelpPanel));
+    for text in &texts {
+        sampled(text);
+    }
+    texts
+}
+
+/// Every variant, with no wildcard: a new variant does not compile until `every_text` has
+/// a sample of it and this arm lists it.
+#[cfg(test)]
+fn sampled(text: &Text<'_>) {
+    match text {
+        Text::Title
+        | Text::Repo(_)
+        | Text::NoRepo
+        | Text::FleetTitle { .. }
+        | Text::PickTitle
+        | Text::PickPrompt
+        | Text::Ago(_)
+        | Text::FleetEmpty
+        | Text::FleetWaiting
+        | Text::FleetNoRepo
+        | Text::ColAgent
+        | Text::ColBranch
+        | Text::ColFiles
+        | Text::ColSync
+        | Text::ColActivity
+        | Text::NoAgent { .. }
+        | Text::NoAgentLegend
+        | Text::Temporary
+        | Text::AgentNotAvailable
+        | Text::ClaudeCode
+        | Text::OtherAgent
+        | Text::AgentInWorktree { .. }
+        | Text::AgentAndMore { .. }
+        | Text::LastCommit { .. }
+        | Text::NoBranch(_)
+        | Text::NoBase
+        | Text::BaseMissing
+        | Text::NoCommits
+        | Text::Unreadable
+        | Text::WorktreeUnavailable(_)
+        | Text::NotAvailable
+        | Text::RequesterUnknown
+        | Text::Engine(_)
+        | Text::Conn(_)
+        | Text::Stale
+        | Text::ActingAsYourself
+        | Text::ProtectionLost(_)
+        | Text::ProtectionOrphaned
+        | Text::ActingAsAgent(_)
+        | Text::Unverified
+        | Text::Notice(_)
+        | Text::KeyQuit
+        | Text::KeyRetry
+        | Text::KeyUp
+        | Text::KeyDown
+        | Text::KeyOpen
+        | Text::KeySuspend
+        | Text::KeyObserve
+        | Text::KeyNo
+        | Text::KeyLater
+        | Text::ObserveTitle
+        | Text::ObserveWhy
+        | Text::ObserveQuestion
+        | Text::DiscoveredTitle
+        | Text::DiscoveredWhy(_)
+        | Text::DiscoveredQuestion(_)
+        | Text::Observing(_)
+        | Text::ObserveFailed { .. }
+        | Text::EngineError(_)
+        | Text::ModuleError(_)
+        | Text::UnknownError(_)
+        | Text::ScopeRefused(_)
+        | Text::Invalid(_)
+        | Text::Resync(_)
+        | Text::TooSmall { .. }
+        | Text::NeedsTerminal
+        | Text::ClosedEarly(_)
+        | Text::InputLost
+        | Text::KeyHelp
+        | Text::KeyClose
+        | Text::HelpTitle
+        | Text::HelpPanel(_)
+        | Text::HelpAlways
+        | Text::HelpSymbols
+        | Text::Legend(_)
+        | Text::UnixOnly => {}
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -895,5 +1290,38 @@ mod tests {
             assert!(!en.is_empty() && !es.is_empty());
             assert_ne!(en, es, "{state:?}");
         }
+    }
+
+    /// Every message, in both languages: not empty and with no placeholder left unfilled.
+    #[test]
+    fn every_text_has_both_languages() {
+        for text in every_text() {
+            for lang in [Lang::En, Lang::Es] {
+                let out = text.render(lang);
+                assert!(!out.is_empty(), "{text:?} is empty in {lang:?}");
+                assert!(
+                    !out.contains(['{', '}']),
+                    "{text:?} leaves a placeholder in {lang:?}: {out}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_too_small_text_names_the_action_and_the_minimum() {
+        let text = Text::TooSmall {
+            width: 70,
+            height: 20,
+            min_width: 80,
+            min_height: 24,
+        };
+        assert_eq!(
+            text.render(Lang::En),
+            "Terminal too small (70×20). Resize it to at least 80×24."
+        );
+        assert_eq!(
+            text.render(Lang::Es),
+            "Terminal demasiado pequeña (70×20). Amplía la terminal a 80×24 como mínimo."
+        );
     }
 }

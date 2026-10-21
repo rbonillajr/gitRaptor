@@ -25,7 +25,7 @@ expression: snap
 ┃                                                                              ┃
 ┃                                                                              ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
- r retry  ↑ up  ↓ down  Enter open                                       q quit
+ q quit  r retry  ↑ up  ↓ down  Enter open                               ? help
 === styles ===
 0:0-0 bg=#3a3a3a
 0:1-16 bg=#3a3a3a BOLD
@@ -98,7 +98,8 @@ expression: snap
 21:79-79 fg=#ffe066
 22:0-79 fg=#ffe066
 23:1-1 fg=#2dc2ad BOLD
-23:10-10 fg=#2dc2ad BOLD
-23:16-16 fg=#2dc2ad BOLD
-23:24-28 fg=#2dc2ad BOLD
+23:9-9 fg=#2dc2ad BOLD
+23:18-18 fg=#2dc2ad BOLD
+23:24-24 fg=#2dc2ad BOLD
+23:32-36 fg=#2dc2ad BOLD
 23:73-73 fg=#2dc2ad BOLD

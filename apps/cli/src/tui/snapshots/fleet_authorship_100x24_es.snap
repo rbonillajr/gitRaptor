@@ -25,7 +25,7 @@ expression: snap
 ┃                                                                                                  ┃
 ┃                                                                                                  ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
- r reintentar   ○ sin agente: cambios tuyos o de otra herramienta                           q salir
+ q salir  r reintentar   ○ sin agente: cambios tuyos o de otra herramienta                  ? ayuda
 === styles ===
 0:0-0 bg=#3a3a3a
 0:1-4 bg=#3a3a3a BOLD
@@ -125,6 +125,7 @@ expression: snap
 21:99-99 fg=#ffe066
 22:0-99 fg=#ffe066
 23:1-1 fg=#2dc2ad BOLD
-23:16-16 fg=#949494
-23:18-64 fg=#949494
+23:10-10 fg=#2dc2ad BOLD
+23:25-25 fg=#949494
+23:27-73 fg=#949494
 23:92-92 fg=#2dc2ad BOLD

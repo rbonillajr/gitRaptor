@@ -25,7 +25,7 @@ expression: snap
 ┃                                                                              ┃
 ┃ ¿Observar notes?                                                             ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
- r reintentar  s observar  n no  Esc luego                              q salir
+ q salir  r reintentar  s observar  n no  Esc luego                     ? ayuda
 === styles ===
 0:0-0 bg=#3a3a3a
 0:1-4 bg=#3a3a3a BOLD
@@ -113,7 +113,8 @@ expression: snap
 21:79-79 fg=#ffe066
 22:0-79 fg=#ffe066
 23:1-1 fg=#2dc2ad BOLD
-23:15-15 fg=#2dc2ad BOLD
-23:27-27 fg=#2dc2ad BOLD
-23:33-35 fg=#2dc2ad BOLD
+23:10-10 fg=#2dc2ad BOLD
+23:24-24 fg=#2dc2ad BOLD
+23:36-36 fg=#2dc2ad BOLD
+23:42-44 fg=#2dc2ad BOLD
 23:72-72 fg=#2dc2ad BOLD

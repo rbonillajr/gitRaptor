@@ -4,6 +4,7 @@
 //! Gallery data is English only: the gallery is a hidden developer tool, not a user surface
 //! (decision validated by the PO, 2026-10-05).
 
+use gitraptor_theme::{ColorToken, SymbolToken};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
@@ -17,7 +18,7 @@ use crate::tui::widgets::confirm::{Choice, ConfirmModel};
 use crate::tui::widgets::conflict_alert::{AgentRef, ConflictAlertModel, Prediction};
 use crate::tui::widgets::diff_view::{DiffBody, DiffLine, DiffLineKind, DiffModel};
 use crate::tui::widgets::graph_lanes::{Base, GraphModel, LaneModel, LaneOwner};
-use crate::tui::widgets::key_hints::{HelpGroup, HelpModel, KeyHint, KeyHintsModel};
+use crate::tui::widgets::key_hints::{HelpGroup, HelpModel, KeyHint, KeyHintsModel, LegendRow};
 use crate::tui::widgets::layout::{BodyPlan, Connection, StatusBarModel, TooSmallModel, layout};
 use crate::tui::widgets::notification::{ToastKind, ToastModel, ToastStackModel};
 use crate::tui::widgets::policy_banner::{PolicyBannerModel, PolicyKind};
@@ -656,8 +657,38 @@ fn hints(list: Vec<KeyHint>) -> KeyHintsModel {
     KeyHintsModel {
         hints: list,
         help: hint("?", "help"),
-        legend: None,
+        legend: Vec::new(),
     }
+}
+
+fn legend_row(symbol: SymbolToken, color: ColorToken, label: &'static str) -> LegendRow {
+    LegendRow::new(symbol, color, t(label))
+}
+
+fn hints_legend(area: Rect, buf: &mut Buffer, s: &Styles) {
+    let mut model = hints(vec![
+        hint("q", "quit"),
+        hint("j/k", "move"),
+        hint("Enter", "open"),
+    ]);
+    model.legend = vec![
+        legend_row(
+            SymbolToken::AgentActive,
+            ColorToken::AgentStateActive,
+            "active agent",
+        ),
+        legend_row(
+            SymbolToken::AgentIdle,
+            ColorToken::AgentStateIdle,
+            "idle agent",
+        ),
+        legend_row(
+            SymbolToken::Warning,
+            ColorToken::StatusWarning,
+            "warning: the text beside it says why",
+        ),
+    ];
+    model.render(area, buf, s);
 }
 
 fn hints_bar(area: Rect, buf: &mut Buffer, s: &Styles) {
@@ -704,6 +735,7 @@ fn help(area: Rect, buf: &mut Buffer, s: &Styles) {
                     hint("Tab", "next panel"),
                     hint("Enter", "open"),
                 ],
+                legend: vec![],
             },
             HelpGroup {
                 title: t("Act"),
@@ -712,6 +744,33 @@ fn help(area: Rect, buf: &mut Buffer, s: &Styles) {
                     hint("r", "rebase onto base"),
                     hint("x", "discard worktree").disabled(t("not in --plain")),
                     hint("u", "undo"),
+                ],
+                legend: vec![],
+            },
+            HelpGroup {
+                title: t("Symbols"),
+                hints: vec![],
+                legend: vec![
+                    legend_row(
+                        SymbolToken::AgentActive,
+                        ColorToken::AgentStateActive,
+                        "active agent",
+                    ),
+                    legend_row(
+                        SymbolToken::AgentIdle,
+                        ColorToken::AgentStateIdle,
+                        "idle agent",
+                    ),
+                    legend_row(
+                        SymbolToken::AgentDone,
+                        ColorToken::AgentStateDone,
+                        "no agent or session ended",
+                    ),
+                    legend_row(
+                        SymbolToken::Warning,
+                        ColorToken::StatusWarning,
+                        "warning: the text beside it says why",
+                    ),
                 ],
             },
         ],
@@ -878,6 +937,7 @@ pub fn stories() -> Vec<Story> {
         story!("KeyHints", "bar", 80, 1, hints_bar),
         story!("KeyHints", "narrow", 80, 1, hints_narrow),
         story!("KeyHints", "disabled action", 80, 1, hints_disabled),
-        story!("KeyHints", "help overlay", 70, 16, help),
+        story!("KeyHints", "with state legend", 80, 1, hints_legend),
+        story!("KeyHints", "help overlay", 70, 24, help),
     ]
 }
