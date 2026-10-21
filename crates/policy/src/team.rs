@@ -20,6 +20,8 @@ use crate::settings::document::{Parsed, SourceStatus, parse_document};
 use crate::settings::model::{Level, Operation, Settings};
 use crate::settings::strict::MAX_BYTES;
 
+pub mod confirm;
+
 /// Path of the team settings in a commit.
 pub const SETTINGS_PATH: [&str; 2] = [".gitraptor", "settings.json"];
 
@@ -209,14 +211,6 @@ pub struct EffectivePermissions {
 impl EffectivePermissions {
     pub fn permission(&self, op: Operation) -> Permission {
         self.operations[&op].permission
-    }
-
-    /// `true` if `self` is less restrictive than `other` anywhere (D7).
-    fn relaxes(&self, other: &Self) -> bool {
-        (!self.safe_minimum_active && other.safe_minimum_active)
-            || Operation::ALL
-                .iter()
-                .any(|op| self.permission(*op) < other.permission(*op))
     }
 }
 
@@ -520,14 +514,11 @@ impl TeamLoader {
                         None
                     }
                     Some(Some(c)) => {
-                        let as_floor = |s: &TeamSource| {
-                            combine(
-                                s.settings().map(|x| (s.kind, x)),
-                                s.status() == SourceStatus::Readable,
-                                &[],
-                            )
-                        };
-                        if as_floor(&floor).relaxes(&as_floor(&c)) {
+                        // The criterion the plan of `guard confirm` shows (one function).
+                        if confirm::relaxes(
+                            confirm::FloorView::of(&c),
+                            confirm::FloorView::of(&floor),
+                        ) {
                             diagnostics.push(team(Code::FloorRelaxPending));
                             hardening_floor = true;
                             confirmed_floor = Some(c);
@@ -752,19 +743,6 @@ mod tests {
         };
         let p = combine(Some((SourceKind::Floor, &s)), true, &[]);
         assert_eq!(p.permission(Operation::Rebase), Permission::Ask);
-    }
-
-    #[test]
-    fn relaxation_compares_effective_decisions() {
-        let deny_fp = settings(r#"{"permissions":{"deny":["force-push","push"]}}"#);
-        let only_push = settings(r#"{"permissions":{"deny":["push"]}}"#);
-        let floor = |s: &Settings| combine(Some((SourceKind::Floor, s)), true, &[]);
-        // Dropping a deny the minimum already covers is not a relaxation.
-        assert!(!floor(&only_push).relaxes(&floor(&deny_fp)));
-        assert!(floor(&Settings::default()).relaxes(&floor(&only_push)));
-        let off = settings(r#"{"permissions":{"deny":["push"],"disableSafeMinimum":true}}"#);
-        assert!(floor(&off).relaxes(&floor(&only_push)));
-        assert!(!floor(&deny_fp).relaxes(&floor(&only_push)));
     }
 
     #[test]
