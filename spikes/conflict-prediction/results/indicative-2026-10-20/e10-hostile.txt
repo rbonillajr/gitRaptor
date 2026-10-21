@@ -1,0 +1,57 @@
+# E10 — 2026-10-21T04:34:06Z — samples=5
+## A2 without bounds (control)
+# scenario=hostile engine=a2 jobs=1 prefilter=false load_start=6.85 7.24 6.84
+hostile big-blob/ours big-blob/theirs	n=5	p50=909.559	p95=1179.281	p99=1179.281	max=1179.281	ms	outcomes={"ok:1": 5}	peak_rss_mb=2184	restarts=0
+hostile many/ours many/theirs	n=5	p50=1872.183	p95=2093.543	p99=2093.543	max=2093.543	ms	outcomes={"ok:10000": 5}	peak_rss_mb=2614	restarts=0
+hostile deep/ours deep/theirs	n=5	p50=6.330	p95=6.511	p99=6.511	max=6.511	ms	outcomes={"ok:1": 5}	peak_rss_mb=2614	restarts=0
+hostile renames/ours renames/theirs	n=5	p50=92.591	p95=95.630	p99=95.630	max=95.630	ms	outcomes={"ok:5000": 5}	peak_rss_mb=2614	restarts=0
+hostile dense/ours dense/theirs	n=5	p50=32854.190	p95=35348.610	p99=35348.610	max=35348.610	ms	outcomes={"ok:1": 5}	peak_rss_mb=2614	restarts=0
+# load_end=6.02 6.32 6.49
+## A2 prior bounds: blob cap 8 MiB (header), rename-limit 1000, 64 MiB written
+# scenario=hostile engine=a2 jobs=1 prefilter=false load_start=6.02 6.32 6.49
+hostile big-blob/ours big-blob/theirs	n=5	p50=0.061	p95=0.401	p99=0.401	max=0.401	ms	outcomes={"ckp-limit: blob c49f7c3042a3fac49ffae9b68b7bfaeba85c0f21 has 108888895 bytes (cap 8388608)": 5}	peak_rss_mb=5	restarts=0
+hostile many/ours many/theirs	n=5	p50=2094.845	p95=2157.233	p99=2157.233	max=2157.233	ms	outcomes={"ok:10000": 5}	peak_rss_mb=882	restarts=0
+hostile deep/ours deep/theirs	n=5	p50=8.620	p95=12.602	p99=12.602	max=12.602	ms	outcomes={"ok:1": 5}	peak_rss_mb=882	restarts=0
+hostile renames/ours renames/theirs	n=5	p50=97.174	p95=99.565	p99=99.565	max=99.565	ms	outcomes={"ok:5000": 5}	peak_rss_mb=882	restarts=0
+hostile dense/ours dense/theirs	n=5	p50=0.090	p95=2.704	p99=2.704	max=2.704	ms	outcomes={"ckp-limit: blob 85ae3091016c9366a15c88f80cd3c07bfa806394 has 8473890 bytes (cap 8388608)": 5}	peak_rss_mb=882	restarts=0
+# load_end=5.71 6.25 6.46
+## A2 prior bounds + fail-fast
+# scenario=hostile engine=a2 jobs=1 prefilter=false load_start=5.71 6.25 6.46
+hostile big-blob/ours big-blob/theirs	n=5	p50=0.068	p95=0.397	p99=0.397	max=0.397	ms	outcomes={"ckp-limit: blob c49f7c3042a3fac49ffae9b68b7bfaeba85c0f21 has 108888895 bytes (cap 8388608)": 5}	peak_rss_mb=5	restarts=0
+hostile many/ours many/theirs	n=5	p50=53.751	p95=88.892	p99=88.892	max=88.892	ms	outcomes={"ok:1": 5}	peak_rss_mb=437	restarts=0
+hostile deep/ours deep/theirs	n=5	p50=6.578	p95=7.703	p99=7.703	max=7.703	ms	outcomes={"ok:1": 5}	peak_rss_mb=438	restarts=0
+hostile renames/ours renames/theirs	n=5	p50=5.992	p95=6.342	p99=6.342	max=6.342	ms	outcomes={"ok:1": 5}	peak_rss_mb=440	restarts=0
+hostile dense/ours dense/theirs	n=5	p50=0.066	p95=0.095	p99=0.095	max=0.095	ms	outcomes={"ckp-limit: blob 85ae3091016c9366a15c88f80cd3c07bfa806394 has 8473890 bytes (cap 8388608)": 5}	peak_rss_mb=440	restarts=0
+# load_end=5.71 6.25 6.46
+## A2 deadline 2 s on object access, no other bound
+# scenario=hostile engine=a2 jobs=1 prefilter=false load_start=5.71 6.25 6.46
+hostile big-blob/ours big-blob/theirs	n=5	p50=952.887	p95=1152.551	p99=1152.551	max=1152.551	ms	outcomes={"ok:1": 5}	peak_rss_mb=2172	restarts=0
+hostile many/ours many/theirs	n=5	p50=2018.249	p95=2023.194	p99=2023.194	max=2023.194	ms	outcomes={"ok:10000": 5}	peak_rss_mb=2595	restarts=0
+hostile deep/ours deep/theirs	n=5	p50=8.126	p95=12.871	p99=12.871	max=12.871	ms	outcomes={"ok:1": 5}	peak_rss_mb=2595	restarts=0
+hostile renames/ours renames/theirs	n=5	p50=100.612	p95=115.752	p99=115.752	max=115.752	ms	outcomes={"ok:5000": 5}	peak_rss_mb=2595	restarts=0
+hostile dense/ours dense/theirs	n=5	p50=35718.186	p95=36762.803	p99=36762.803	max=36762.803	ms	outcomes={"ckp-limit: deadline of 2s passed\" }": 5}	peak_rss_mb=2595	restarts=0
+# load_end=4.14 5.49 6.10
+## A2 prior bounds + deadline 2 s
+# scenario=hostile engine=a2 jobs=1 prefilter=false load_start=4.14 5.49 6.10
+hostile big-blob/ours big-blob/theirs	n=5	p50=0.068	p95=0.785	p99=0.785	max=0.785	ms	outcomes={"ckp-limit: blob c49f7c3042a3fac49ffae9b68b7bfaeba85c0f21 has 108888895 bytes (cap 8388608)": 5}	peak_rss_mb=5	restarts=0
+hostile many/ours many/theirs	n=5	p50=1895.381	p95=2003.937	p99=2003.937	max=2003.937	ms	outcomes={"ok:10000": 5}	peak_rss_mb=883	restarts=0
+hostile deep/ours deep/theirs	n=5	p50=9.450	p95=10.971	p99=10.971	max=10.971	ms	outcomes={"ok:1": 5}	peak_rss_mb=883	restarts=0
+hostile renames/ours renames/theirs	n=5	p50=101.508	p95=108.419	p99=108.419	max=108.419	ms	outcomes={"ok:5000": 5}	peak_rss_mb=883	restarts=0
+hostile dense/ours dense/theirs	n=5	p50=0.055	p95=0.507	p99=0.507	max=0.507	ms	outcomes={"ckp-limit: blob 85ae3091016c9366a15c88f80cd3c07bfa806394 has 8473890 bytes (cap 8388608)": 5}	peak_rss_mb=883	restarts=0
+# load_end=3.66 5.34 6.04
+## A2-W timer 2 s, RSS cap 512 MiB, no other bound
+# scenario=hostile engine=a2w jobs=1 prefilter=false load_start=3.66 5.34 6.04
+hostile big-blob/ours big-blob/theirs	n=5	p50=113.771	p95=120.523	p99=120.523	max=120.523	ms	outcomes={"worker-killed: rss": 5}	peak_rss_mb=550	restarts=5
+hostile many/ours many/theirs	n=5	p50=113.875	p95=125.030	p99=125.030	max=125.030	ms	outcomes={"worker-killed: rss": 5}	peak_rss_mb=646	restarts=5
+hostile deep/ours deep/theirs	n=5	p50=6.409	p95=16.967	p99=16.967	max=16.967	ms	outcomes={"ok:1": 5}	peak_rss_mb=0	restarts=0
+hostile renames/ours renames/theirs	n=5	p50=93.791	p95=102.803	p99=102.803	max=102.803	ms	outcomes={"ok:5000": 5}	peak_rss_mb=21	restarts=0
+hostile dense/ours dense/theirs	n=5	p50=2015.863	p95=2031.227	p99=2031.227	max=2031.227	ms	outcomes={"worker-killed: timeout": 5}	peak_rss_mb=103	restarts=5
+# load_end=4.29 5.42 6.07
+## A2-W timer 2 s, RSS cap 512 MiB, prior bounds
+# scenario=hostile engine=a2w jobs=1 prefilter=false load_start=4.29 5.42 6.07
+hostile big-blob/ours big-blob/theirs	n=5	p50=0.209	p95=5.218	p99=5.218	max=5.218	ms	outcomes={"ckp-limit: blob c49f7c3042a3fac49ffae9b68b7bfaeba85c0f21 has 108888895 bytes (cap 8388608)": 5}	peak_rss_mb=0	restarts=0
+hostile many/ours many/theirs	n=5	p50=118.972	p95=138.215	p99=138.215	max=138.215	ms	outcomes={"worker-killed: rss": 5}	peak_rss_mb=646	restarts=5
+hostile deep/ours deep/theirs	n=5	p50=7.928	p95=12.762	p99=12.762	max=12.762	ms	outcomes={"ok:1": 5}	peak_rss_mb=0	restarts=0
+hostile renames/ours renames/theirs	n=5	p50=92.815	p95=99.478	p99=99.478	max=99.478	ms	outcomes={"ok:5000": 5}	peak_rss_mb=22	restarts=0
+hostile dense/ours dense/theirs	n=5	p50=0.121	p95=9.389	p99=9.389	max=9.389	ms	outcomes={"ckp-limit: blob 85ae3091016c9366a15c88f80cd3c07bfa806394 has 8473890 bytes (cap 8388608)": 5}	peak_rss_mb=0	restarts=0
+# load_end=4.29 5.42 6.07

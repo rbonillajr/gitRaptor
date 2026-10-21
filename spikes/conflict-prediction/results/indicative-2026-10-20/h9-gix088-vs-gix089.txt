@@ -1,0 +1,6 @@
+pairs=1989 errors=0 valid=1989 with_conflict_either=241 parity=241/241 (100.0%)
+false_negative_pairs=0 false_positive_pairs=0
+hunks: files=289 same_ranges=289 (100.0%)
+hunks joined when the gap is <= 3 lines: same=289 (100.0%)
+hunks joined when the gap is <= 10 lines: same=289 (100.0%)
+engine ms: p50=17.1 p95=115.5 p99=320.1 max=401.0

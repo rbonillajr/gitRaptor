@@ -1,0 +1,34 @@
+# E6 R-REAL — rename limit 100000 (all pairs)
+pairs=1989 errors=0 valid=1989 with_conflict_either=226 parity=211/226 (93.4%)
+false_negative_pairs=3 false_positive_pairs=9
+missed files by case: {'-': 4}
+extra files by engine kind: {'content': 2, 'modify-delete': 9}
+hunks: files=288 same_ranges=245 (85.1%)
+engine ms: p50=24.3 p95=326.0 p99=1196.1 max=10067.2
+  diff:  ('8b5873a1f228fe0e568f13c864fcdd69a866aa95', '08b6afb2a2dbf762e3d9fa7abd78090b9afbd1a8') engine= ['object-file.c', 'odb.h'] ref= ['object-file.c'] {'object-file.c': 'content', 'odb.h': 'content'}
+  diff:  ('b15384c06f77bc2d34d0d3623a8a58218313a561', '08b6afb2a2dbf762e3d9fa7abd78090b9afbd1a8') engine= ['object-file.c', 'odb.h'] ref= ['object-file.c'] {'object-file.c': 'content', 'odb.h': 'content'}
+
+# E6 R-REAL — escalation: rename limit 1000, and 100000 only for the pairs with modify/delete or rename conflicts
+pairs=1989 errors=0 valid=1989 with_conflict_either=226 parity=211/226 (93.4%)
+false_negative_pairs=3 false_positive_pairs=9
+missed files by case: {'-': 4}
+extra files by engine kind: {'content': 2, 'modify-delete': 9}
+hunks: files=288 same_ranges=245 (85.1%)
+hunks joined when the gap is <= 3 lines: same=278 (96.5%)
+hunks joined when the gap is <= 10 lines: same=281 (97.6%)
+engine ms: p50=18.3 p95=151.7 p99=727.1 max=1726.2
+  diff:  ('8b5873a1f228fe0e568f13c864fcdd69a866aa95', '08b6afb2a2dbf762e3d9fa7abd78090b9afbd1a8') engine= ['object-file.c', 'odb.h'] ref= ['object-file.c'] {'object-file.c': 'content', 'odb.h': 'content'}
+  diff:  ('b15384c06f77bc2d34d0d3623a8a58218313a561', '08b6afb2a2dbf762e3d9fa7abd78090b9afbd1a8') engine= ['object-file.c', 'odb.h'] ref= ['object-file.c'] {'object-file.c': 'content', 'odb.h': 'content'}
+  diff:  ('bd5c2827b27812eff5766af9fb56b0ea2437f3f5', 'ffe8005b9d8e0cf1b5d5d796ca4da76fbe219011') engine= [] ref= ['ci/run-build-and-tests.sh'] {}
+  diff:  ('b3722b381e7052225a87c5061ed5bb5952920d83', '5ae594f30be8a89a9e345e4e5e454f4b92156da1') engine= ['Documentation/git-update-ref.txt'] ref= [] {'Documentation/git-update-ref.txt': 'modify-delete'}
+  diff:  ('f9f50d6348e130ba5edeadfb507a50956784af2d', 'bcb20dda833dc71a729af50bdfb86c5d252307b1') engine= ['Documentation/gitk.txt'] ref= [] {'Documentation/gitk.txt': 'modify-delete'}
+  diff:  ('8d3abe9f8af706baafedba4283114f94a0cda4a1', 'fdd21ba116551efb07e784f138d090917b7e70ad') engine= ['Documentation/gitcredentials.txt'] ref= [] {'Documentation/gitcredentials.txt': 'modify-delete'}
+  diff:  ('f4f7605fd76a784c1cb5186b5fdee34e2c21324e', 'dd52a29b78d80e425be660f3b443a42e0374a7d1') engine= ['bulk-checkin.c', 'odb.h'] ref= ['bulk-checkin.c', 'odb.c', 'odb.h'] {'bulk-checkin.c': 'modify-delete', 'odb.h': 'content'}
+  diff:  ('821f583da6d30a84249f75f33501504d597bc16b', 'ce1661f9da70ea2ffcb54f7b544410fad26e965d') engine= [] ref= ['odb.h'] {}
+  diff:  ('1c385d1bf8a5ec4e1b5d165a594f37a4bbdc3bdd', 'ac7096723b6a42c177ffb2fbe1c4f4c5dc59e752') engine= ['Documentation/config.txt'] ref= [] {'Documentation/config.txt': 'modify-delete'}
+  diff:  ('c64ec662d061f2d496f8e9738b5a71d3d148e95e', 'bcb20dda833dc71a729af50bdfb86c5d252307b1') engine= ['Documentation/gitk.txt'] ref= [] {'Documentation/gitk.txt': 'modify-delete'}
+  diff:  ('dc87d078b4cc52296112b156811d2aae3d81f280', 'cca758d324acb0c4b8fd64e9d8792b3ee251ff76') engine= ['Documentation/git-fast-import.txt'] ref= [] {'Documentation/git-fast-import.txt': 'modify-delete'}
+  diff:  ('ac5fd295819b0c4b4e743f522de76c482e7e7e3c', 'ad7780b38fae2fb915404a59b0c904da8ed154a6') engine= ['Documentation/git-pack-refs.txt'] ref= [] {'Documentation/git-pack-refs.txt': 'modify-delete'}
+  diff:  ('a819a3da85655031a23abae0f75d0910697fb92c', 'a7fa5b2f0ccb567a5a6afedece113f207902fa6f') engine= [] ref= ['meson.build'] {}
+  diff:  ('09977c5f501bc0438dfaa99690491c849895f476', 'ee8edb7156bdb2b13420d59b66bb51edb88cbe83') engine= ['Documentation/mergetools/vimdiff.txt'] ref= [] {'Documentation/mergetools/vimdiff.txt': 'modify-delete'}
+  diff:  ('2a4f95969a41089936070026b5a5ee5275ca43ad', 'ee434e18077a406205e00d4027c51816bb621fad') engine= ['Documentation/git-pack-refs.txt'] ref= [] {'Documentation/git-pack-refs.txt': 'modify-delete'}

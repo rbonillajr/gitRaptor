@@ -1,0 +1,5 @@
+
+## P4: git merge (working tree) vs merge-tree, 100 pairs of R-REAL
+pairs=99 errors=0 valid=99 with_conflict_either=99 parity=99/99 (100.0%)
+false_negative_pairs=0 false_positive_pairs=0
+engine ms: p50=0.0 p95=0.0 p99=0.0 max=0.0
