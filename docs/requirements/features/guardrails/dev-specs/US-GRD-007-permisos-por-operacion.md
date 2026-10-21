@@ -4,7 +4,7 @@ title: "Dev Spec — US-GRD-007: permisos por operación (permitir, pedir confir
 type: dev-spec
 status: draft
 created: 2026-10-09
-updated: 2026-10-09
+updated: 2026-10-20
 story: US-GRD-007
 feature: guardrails
 domain: GRP
@@ -76,7 +76,7 @@ Cada fila es una **Decisión del orquestador (2026-10-09), validada por el Arqui
 |---|---|
 | D1 | **Regla por operación** (BR-CALC-001). El contrato gana una regla por operación del catálogo: `permission.commit`, `permission.push`, `permission.force-push`, `permission.reset-hard`, `permission.branch-delete`, `permission.rebase`, `permission.merge`, `permission.worktree-add` y `permission.worktree-remove`. Son nueve, aunque los hooks solo produzcan siete (§ 3): así US-GRD-016 las reutiliza sin tocar el enum. Una regla por operación, y no una sola con parámetro, porque el registro guarda las razones **sin parámetros** (`LoggedReason`), y sin el código no se sabría qué permiso denegó |
 | D2 | **Una razón por nivel que produce el máximo**. `OperationRule.sources` ya lista las fuentes del máximo. Cada fuente da una razón con su `Level`: `Floor` (también `ConfirmedFloor`), `Worktree`, `Profile` o `Local`. `RuleSource::SafeMinimum` **no** da razón de permiso: el mínimo ya produce `minimum.force-push` con su causa. Un force-push denegado por el mínimo y por el equipo nombra las dos. El mensaje nombra la operación y el nivel con las plantillas de nivel que ya existen: `floor` → "configuración del equipo", `worktree` → "configuración del equipo en esta rama". Params: `branch` (nombre corto) y `remote` cuando aplican |
-| D3 | **`ask` se aplica como `deny` con `ask-unavailable`** (S-GRD-9). `decision()` ya aplica `ask` como `deny`, pero no lo explica. Ahora, cuando `effect = ask`, cada razón de ese efecto lleva `cause: ask-unavailable` y la plantilla dice "requiere confirmación humana y la confirmación aún no está disponible". Va como **causa** de la razón que produce el `ask`, no como razón `system` aparte: el máximo lo produce el permiso. Enmienda de ADR-GRD-003 § 3 (§ 9). **(PO, Q-GRD-39)** En el registro es una entrada `denial` y cuenta en el KPI, porque el efecto aplicado es `deny` (pendiente de que Rene lo confirme en el PR) |
+| D3 | **`ask` se aplica como `deny` con `ask-unavailable`** (S-GRD-9). `decision()` ya aplica `ask` como `deny`, pero no lo explica. Ahora, cuando `effect = ask`, cada razón de ese efecto lleva `cause: ask-unavailable` y la plantilla dice "requiere confirmación humana y la confirmación aún no está disponible". Va como **causa** de la razón que produce el `ask`, no como razón `system` aparte: el máximo lo produce el permiso. Enmienda de ADR-GRD-003 § 3 (§ 9). **(PO, Q-GRD-39)** En el registro es una entrada `denial` y cuenta en el KPI, porque el efecto aplicado es `deny` (pendiente de que Rene lo confirme en el PR). **Enmendada por D19**: solo para un agente; la persona pasa |
 | D4 | **`disableSafeMinimum` real.** `Context` gana `minimum: bool`, que es `EffectivePermissions.safe_minimum_active`, y `ctx.minimum = false` apaga entero el bloque del mínimo: `minimum.force-push` y `minimum.base-branch-delete`, también el alias y el renombrado sobre la base. Lo que fuerza el mínimo ya lo decide `TeamLoader::load`: suelo confirmado y `Readable`. US-GRD-011 añade el resto de fuentes que lo fuerzan. Con `ctx.minimum = false`, el force-push se rige por `permission.force-push`. Valor por defecto: `true`. Siempre `true` en degradado y sin la capacidad de D10 |
 | D5 | **Dónde se decide cada operación** (tabla del § 3). Sin hooks nuevos ni plantilla nueva. **Pre-hooks (momento A)**: `pre-commit` decide `commit`; `pre-push` decide `push`, `force-push` y el borrado remoto (`push` + `branch-delete`); `pre-rebase` decide `rebase`, también en `pull --rebase`. **`reference-transaction` `prepared`**: decide `branch-delete` local, `worktree-add` (crear con rama nueva) y la **segunda línea** de `commit`, `rebase` y `merge`, que cubre `--no-verify`. La segunda línea la clasifica el daemon (D6) dentro de la misma evaluación `RefTransaction`, sin una llamada aparte ni hechos nuevos del cliente. `commit-msg` no evalúa permisos (ya lo hizo `pre-commit`) |
 | D6 | **Clasificar una transacción** (función pura `guard::permissions::classify`, tabla del § 3.1). Usa tres hechos que lee el daemon: la línea (borrado, creación o actualización de `refs/heads/*`); la **cadena de `git`** (los `git` antecesores consecutivos del cliente, como mucho 4, cada uno verificado por `(pid, inicio)` y con su línea de órdenes leída **solo para clasificar**, nunca guardada ni enviada, como en DS-US-GRD-018 § 5.3); y los **commits nuevos** del movimiento (cuántos y cuántos con 2 o más padres), con el lector de dos pasadas de DS-US-GRD-008 D5. Lo que no se puede probar (línea de órdenes ilegible, identidad cambiada, tope superado) y haría falta para un permiso distinto de `allow` se deniega con causa `unverifiable`. Nunca se permite por no poder clasificar |
@@ -91,6 +91,7 @@ Cada fila es una **Decisión del orquestador (2026-10-09), validada por el Arqui
 | D15 | **Relajación y confirmación: se reutiliza US-GRD-014, sin comando nuevo.** Confirmar es `raptor guard confirm` (`guard.confirm`, `PendingKind::ConfirmTeam`), que define `DS-US-GRD-014`. Su `ConfirmPlan` (D3 de 014) ya lista `permissions.allow`, `ask`, `deny` y `disableSafeMinimum` en la lista cerrada de relajaciones. Su ventana, el anuncio, la cancelación y el rechazo al agente (`check_reserved`, `RESERVED_REFUSED`, auditado) son los de su D2 y D10. El diagnóstico `floor-relax-pending` y la pista `guard-confirm` del estado son su D8. **US-GRD-007 no define contrato de confirmación**: solo verifica, con sus escenarios 4 y 5, que tras confirmar los permisos y `disableSafeMinimum` rigen |
 | D16 | **Orden de implementación y dos PR.** **PR-A** (D1 a D14): escenarios 1, 2, 3 y 6 de la historia. No depende de US-GRD-014: un `deny` del suelo sin confirmar ya endurece (Q-GRD-23), y `disableSafeMinimum` se prueba en `crates/core` con un `Confirmed` construido en el test. **PR-B**: escenarios 4 y 5 de extremo a extremo con `raptor guard confirm`. Depende de US-GRD-014 en `main`. PR-A puede ir en paralelo con US-GRD-014 (comparten solo D11). US-GRD-011 va después de PR-A (DS-US-GRD-011, D10) |
 | D17 | **Registro** (US-GRD-005, BR-CONS-004). Toda denegación de permiso entra por `log_decision` con sus reglas `permission.*`, su nivel y su causa. `raptor guard log` las muestra con los textos `guard.log.rule.permission` y `guard.op.*`. No cambia el contrato del registro |
+| D19 | **Decisión del orquestador (2026-10-20), validada por el Arquitecto** — aplica Q-GRD-46 (Rene, 2026-10-17): sin cola, **`ask` deniega solo al agente**. (a) `policy::guard::evaluate` sigue sin mirar el actor para los permisos: da `Effect::Ask` con sus razones `permission.*` (regla pura; contrato de DS-US-MCP-013 D7, que lee `effect`). (b) El actor se aplica al pasar a `Decision`, con tres casos: **agente** (`ctx.actor = Some(_)`, resuelto por el daemon) → `applied_effect = deny`, cada razón del `ask` con `cause: ask-unavailable`, entrada `denial`, cuenta en el KPI (D3 sin cambios); **persona** (el daemon resolvió el actor y es `None`) → `applied_effect = allow`, `effect` sigue `ask`, no es entrada `denial` ni cuenta en el KPI; **no demostrado** (el cliente decide solo: degradado D12 y daemon sin la capacidad D10) → como agente, para todos (fail-closed: ADR-GRD-003 § 4 permite denegar más, nunca menos). La función actual `evaluate::decision(eval)` queda como el caso "no demostrado" (la usa el cliente en `hook.rs`); el daemon (`serve_audited`) usa una variante que recibe el actor. Se descarta que el cliente resuelva el actor con su ascendencia: duplicaría `actor.rs` en el cliente para dejar pasar más en el camino sin daemon. (c) Si el ejecutor MCP llega a evaluar por esta vía, cuenta siempre como agente, sea cual sea su ascendencia: `raptor mcp` solo lo lanza un agente (lo cablea DS-US-MCP-013). (d) **Aviso a la persona** (validado por el PO): cuando pasa un `ask`, la decisión lleva un aviso (`notices`, que solo viajan con `allow`) y el hook escribe por stderr una línea fija `guard.notice.permission-ask-developer`: «GitRaptor: en este repo {operation} pide confirmación humana; se ejecuta porque la haces tú.» Sin aviso, la persona creería que el `ask` no se aplica |
 | D18 | **Estado.** `minimum_set.status = disabled-by-team` cuando el suelo en vigor es el confirmado, es legible y desactiva el mínimo. US-GRD-011 añade a esa condición "y ninguna fuente lo fuerza". La variante ya existe en el contrato. El texto (`guard.status.minimum-disabled`) no dice cómo volver a activarlo ni cómo desactivarlo. `not_preventable` gana `permission-reach` (solo con la capacidad) |
 
 ## 2. Forma (archivos que se tocan)
@@ -179,7 +180,7 @@ Con `ask` en lugar de `deny` se usa `permission-ask` (o `permission-merge`, para
 
 ## 6. Criterios de aceptación verificables
 
-Repos, remotos, perfiles y daemons temporales (NFR-01). Git, `raptor` y `raptor-hook` reales. El agente es `raptor-fake-agent` (patrón de `apps/cli/tests/guard_us_grd_008.rs`), y los permisos aplican igual a la persona (Q-GRD-1), así que cada fila se prueba con los dos. Suite nueva `apps/cli/tests/guard_us_grd_007.rs` (se niega a correr sin *debug assertions*). Los commits del agente llevan el trailer de `agents-commit`, para que solo los permisos puedan denegar.
+Repos, remotos, perfiles y daemons temporales (NFR-01). Git, `raptor` y `raptor-hook` reales. El agente es `raptor-fake-agent` (patrón de `apps/cli/tests/guard_us_grd_008.rs`), y los permisos aplican igual a la persona (Q-GRD-1), así que cada fila `deny`/`allow` se prueba con los dos. `ask` distingue el actor (D19): el escenario 3 se prueba con el agente y la persona tiene su fila. Suite nueva `apps/cli/tests/guard_us_grd_007.rs` (se niega a correr sin *debug assertions*). Los commits del agente llevan el trailer de `agents-commit`, para que solo los permisos puedan denegar.
 
 | Escenario / criterio | Test | PR |
 |---|---|---|
@@ -193,14 +194,16 @@ Repos, remotos, perfiles y daemons temporales (NFR-01). Git, `raptor` y `raptor-
 | D9 · `commit` en `deny` y `merge` en `allow`: un commit `--no-verify` con `HEAD` separado no llega a `feat-x` por `merge --ff-only`, `branch -f`, `reset --soft` ni `switch -C` (motivo `permission.commit`) | `a_detached_commit_cannot_reach_a_branch_unevaluated` | A |
 | D9 · Con `commit` en `deny`, un fast-forward a una rama local que ya existe y un `pull` de commits del remoto pasan (sin falsos positivos) | `a_fast_forward_of_existing_commits_is_not_a_commit` | A |
 | 2 · `push` en `allow` sin políticas: se ejecuta | `allow_lets_push_through` | A |
-| 3 · `branch-delete` en `ask`: no se ejecuta y el motivo dice "requiere confirmación humana" | `ask_is_denied_as_requiring_human_confirmation` | A |
+| 3 · `branch-delete` en `ask`, **agente**: no se ejecuta y el motivo dice "requiere confirmación humana" | `ask_is_denied_as_requiring_human_confirmation` | A |
+| D19 · `branch-delete` en `ask`, **persona**: se ejecuta con el aviso de D19 (d); `guard log` no la cuenta como denegación | `ask_lets_the_developer_through` | A |
+| D19 · Degradado (sin daemon) y daemon sin `guard.permissions`: `ask` deniega también a la persona con `ask-unavailable` | `ask_without_the_daemon_denies_everyone` | A |
 | 6 · Endurecer en `feat-x` sin commitear no cambia nada; tras commitear, el push se deniega sin reinstalar | `a_hardening_applies_when_committed_not_when_edited` | A |
-| Cada denegación (también `ask`) está en `raptor guard log` con `permission.*`, su nivel y su causa, y cuenta en el KPI | `permission_denials_reach_the_decision_log` | A |
+| Cada denegación (también `ask` del agente) está en `raptor guard log` con `permission.*`, su nivel y su causa, y cuenta en el KPI | `permission_denials_reach_the_decision_log` | A |
 | Degradado: el `deny` del suelo y del worktree aplica; `allow` y `disableSafeMinimum` del suelo no; el mínimo sigue | `degraded_mode_applies_the_team_permissions_only_to_harden` | A |
 | 4 · Instalar y confirmar después una configuración que desactiva el mínimo y permite force-push: anuncio, ventana, y al cerrarse el force-push de `feat-x` se ejecuta; el estado dice `disabled-by-team` | `confirming_a_floor_that_disables_the_minimum_lets_force_push_through` | B |
 | 5 · Llega a la rama principal un cambio que permite force-push: sigue denegado, el estado muestra `floor-relax-pending` con la acción, un agente no confirma (rechazado y registrado) y tras confirmar el force-push se ejecuta | `a_team_relaxation_waits_for_the_developer` | B |
 
-Además (`crates/core/tests/us_grd_007.rs` y unitarias):
+Además (`crates/core/tests/us_grd_007.rs`, `crates/policy/tests/us_grd_007_permissions.rs`, `crates/git/tests/fresh_commits.rs`; las unitarias dentro de los módulos son libres):
 
 | Comportamiento | Test |
 |---|---|
@@ -209,10 +212,11 @@ Además (`crates/core/tests/us_grd_007.rs` y unitarias):
 | Una razón por nivel del máximo (suelo + perfil; `SafeMinimum` sin razón de permiso) | `us_grd_007::reasons_name_every_level_of_the_maximum` |
 | Capacidad en las dos direcciones; sin ella, `guard.log` quita las entradas `permission.*` y las sigue contando | `us_grd_007::permissions_capability_both_ways` |
 | Clasificación no demostrable → `unverifiable` solo si el permiso no es `allow` | `us_grd_007::an_unclassifiable_transaction_is_denied_only_when_it_matters` |
+| `ask` × actor (agente, persona, no demostrado) → `applied_effect`, `ask-unavailable` y entrada `denial`; `allow`/`deny` no dependen del actor | `us_grd_007::ask_depends_on_the_actor` |
 | Coste de D14 (2 000 ramas, `merge` en `deny`, commit corriente) | `us_grd_007::permissions_cost` (release, `#[ignore]` fuera de la medición) |
-| Tabla del § 3.1, precedencia y lista de exclusión | `crates/policy` · `guard::permissions::tests::*` |
-| Línea de órdenes: subcomando y acción seguros, opciones globales, alias, no UTF-8 | `crates/policy` · `guard::git_command::tests::*`; los de `authorship::subcommand` siguen verdes |
-| Permisos en la función pura: cada operación × `allow`/`ask`/`deny`, `ctx.minimum` apagado, todas las razones juntas | `crates/policy` · `guard::tests::permissions_in_the_function::*` |
+| Tabla del § 3.1, precedencia y lista de exclusión | `crates/policy/tests/us_grd_007_permissions.rs` · `classify_*` (API pública `guard::permissions`) |
+| Línea de órdenes: subcomando y acción seguros, opciones globales, alias, no UTF-8 | `crates/policy/tests/us_grd_007_permissions.rs` · `git_command_*` (API pública `guard::git_command`); los de `authorship::subcommand` siguen verdes |
+| Permisos en la función pura: cada operación × `allow`/`ask`/`deny`, `ctx.minimum` apagado, todas las razones juntas | `crates/policy/tests/us_grd_007_permissions.rs` · `evaluate_*` (API pública `guard::evaluate`) |
 | Commits nuevos: commit, fusión, amend, fast-forward a un commit existente, creación, topes | `crates/git/tests/fresh_commits.rs` |
 
 ## 7. Orden de implementación
@@ -223,12 +227,13 @@ Ver § Plan de implementación: PR-A = T001 a T009; PR-B = T010 y T011, después
 
 **Lo que no se puede impedir** (lista publicada, `NotPreventable`, textos `guard.np.*`): `reset-hard`, `merge` (solo se protege la rama, D8), `remove-worktree`, `create-worktree` sin rama nueva y, nuevo, `permission-reach` (D9). Los saltos voluntarios no cambian (`voluntary-skips`): `-c core.hooksPath`, `GIT_CONFIG_*`, `send-pack` y editar refs a mano saltan también los permisos.
 
-**Otros residuos declarados**: sin el binario `raptor` rige el *fallback* (D13); un commit que solo alcanza un tag cuenta como fresco (§ 3.1); un commit separado puede salir con `push` (rige `push`) o entrar como base de un `rebase` (D9); con `commit` distinto de `allow`, un fast-forward de commits de otra rama paga la segunda pasada (D14); en degradado no hay niveles personales; los commits que trae un `fetch` a una ref local (`fetch origin main:main`) no cuentan como `commit`.
+**Otros residuos declarados**: sin el binario `raptor` rige el *fallback* (D13); un commit que solo alcanza un tag cuenta como fresco (§ 3.1); un commit separado puede salir con `push` (rige `push`) o entrar como base de un `rebase` (D9); con `commit` distinto de `allow`, un fast-forward de commits de otra rama paga la segunda pasada (D14); en degradado no hay niveles personales; los commits que trae un `fetch` a una ref local (`fetch origin main:main`) no cuentan como `commit`; con `ask`, un agente no detectado cuenta como persona y pasa (R-GRD-2, D19); en degradado y con un daemon sin la capacidad, `ask` deniega también a la persona (D19).
 
 | Pendiente | Dueño |
 |---|---|
 | Las mismas decisiones por MCP: `reset --hard`, merge, borrar worktree, crear worktree sin rama | US-GRD-016 (BR-CONS-002) |
 | Cola de confirmación real (`ask` que espera, BR-WF-001) | US-GRD-015 |
+| Agentes registrados no detectados (`actor.rs` solo detecta por ascendencia): con `ask` pasan como persona hasta que exista el registro | US-GRP-009 |
 | Comando de confirmación, ventana, diagnóstico de relajación pendiente | US-GRD-014 (D15) |
 | `configStatus` real y aviso de configuración ilegible | US-GRD-011 |
 | Push solo a tags | [TD-GRD-001](../technical-stories/TD-GRD-001-dispatcher-plantilla-3-pre-push-toda-ref.md) |
@@ -242,7 +247,8 @@ Las de producto son **Decisión del orquestador (2026-10-09), validada por Arqui
 
 | Decisión | Q-GRD | Nota |
 |---|---|---|
-| D3 · `ask` cuenta en el KPI como denegación verificada | Q-GRD-39 | Pendiente de que Rene lo confirme en el PR |
+| D3 · `ask` cuenta en el KPI como denegación verificada | Q-GRD-39 | Pendiente de que Rene lo confirme en el PR. Desde D19, solo el `ask` del agente |
+| D19 · `ask` deniega solo al agente | Q-GRD-46 | Decidida por Rene (2026-10-17). Aviso a la persona (D19 d), validado por el PO. Q-GRD-46 acota Q-GRD-39: solo el `ask` del agente cuenta en el KPI |
 | D7 · Qué cuenta como cada operación | Q-GRD-40 | — |
 | D8 · Merge con Git directo protege solo la rama; la fila "merge" pasa a US-GRD-016 | Q-GRD-41 | — |
 | D9 · Alcance de los permisos con Git directo (`permission-reach`) | Q-GRD-42 | Precisión del PO: el commit separado que llega a una rama por fast-forward, `branch -f`, `reset` o `switch -C` se **cierra** (commits frescos → `commit`). Quedan declarados `push` directo y base de `rebase` |
@@ -252,7 +258,8 @@ Las de producto son **Decisión del orquestador (2026-10-09), validada por Arqui
 | ADR | Enmienda |
 |---|---|
 | ADR-GRD-003 § 3 | `ask-unavailable` viaja como **causa** de las razones que producen `ask`, no como razón `system` (D3). Reglas `permission.<operación>` (D1) |
-| ADR-GRD-003 § 1 | La **identidad de la operación** (cadena de `git`) clasifica la operación del catálogo en `reference-transaction`; el actor sigue sin entrar en los permisos (D6) |
+| ADR-GRD-003 § 1 | La **identidad de la operación** (cadena de `git`) clasifica la operación del catálogo en `reference-transaction`; el actor sigue sin entrar en los permisos (D6). **Enmendada por D19**: el actor no entra en la función pura, pero decide el efecto aplicado de un `ask` |
+| ADR-GRD-003 § 3 / § 4 | S-GRD-9 sin cola: `ask` se aplica como `deny` solo para el agente; la persona pasa con `effect = ask`. Cuando el actor no se puede demostrar (degradado, daemon sin la capacidad), `deny` para todos (D19, Q-GRD-46) |
 | ADR-GRD-003 § 4 | Degradado: aplica los permisos de suelo y worktree solo para endurecer, con el clasificador sobre la ascendencia del propio cliente (D12). La garantía no cambia |
 | ADR-GRD-002 § 1 | Fila Merge: la segunda línea deniega el movimiento de la rama con `merge` en `deny`/`ask` (B, sigue no impedible). Fila Rebase: la segunda línea evalúa `rebase`. Fila Crear worktree con rama nueva: se reconoce por la cadena (`worktree add`). Fila Push: un push solo a refs no gobernadas no evalúa `push` (D9) |
 
