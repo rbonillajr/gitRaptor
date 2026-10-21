@@ -23,6 +23,7 @@
 //! - [`freshness`]: statistics and gates of the freshness and footprint bench (INF-GRP-002).
 //! - [`mcp_corpus`]: declarative MCP attack corpus: case model, judge, scanners and KPI report.
 //! - [`sibling`]: binaries of another workspace package, next to the binary under test.
+//! - [`syn_corpus`]: the R-SYN corpus of SPIKE-CKP-001, for the fidelity of the dry merge.
 
 #[cfg(unix)]
 pub mod canary;
@@ -39,6 +40,7 @@ pub mod interceptability;
 pub mod mcp_corpus;
 pub mod repogen;
 pub mod sibling;
+pub mod syn_corpus;
 
 pub use control::{Mode, Report, Scenario, Step, check};
 pub use exceptions::{Exception, Exceptions};
