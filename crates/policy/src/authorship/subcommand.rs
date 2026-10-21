@@ -5,86 +5,20 @@
 
 use std::ffi::OsStr;
 
+use crate::guard::git_command::{self, GitCommand};
+
 /// Subcommands whose commits keep the original author and trailers (D9): not evaluated.
 pub const KEEPS_ORIGINAL: [&str; 4] = ["rebase", "cherry-pick", "revert", "am"];
-
-/// Global options of `git` (before the subcommand) that take the next argument.
-const WITH_VALUE: [&str; 7] = [
-    "-C",
-    "-c",
-    "--git-dir",
-    "--work-tree",
-    "--namespace",
-    "--config-env",
-    "--attr-source",
-];
-
-/// Global options of `git` without a value.
-const FLAGS: [&str; 14] = [
-    "-p",
-    "--paginate",
-    "-P",
-    "--no-pager",
-    "--no-replace-objects",
-    "--no-lazy-fetch",
-    "--bare",
-    "--literal-pathspecs",
-    "--no-literal-pathspecs",
-    "--glob-pathspecs",
-    "--noglob-pathspecs",
-    "--icase-pathspecs",
-    "--no-optional-locks",
-    "--no-advice",
-];
-
-/// Global options of `git` written `--name=value`.
-const WITH_EQUALS: [&str; 7] = [
-    "--git-dir=",
-    "--work-tree=",
-    "--namespace=",
-    "--exec-path=",
-    "--config-env=",
-    "--attr-source=",
-    "--super-prefix=",
-];
 
 /// Whether the second line evaluates the commit made under a `git` with this command line
 /// (`argv`, program name first). `None` (unreadable), an empty one, an unknown global option,
 /// an alias or any other subcommand: evaluated. Only a subcommand of [`KEEPS_ORIGINAL`] read
 /// with certainty is not.
 pub fn second_line_evaluates(argv: Option<&[impl AsRef<OsStr>]>) -> bool {
-    let Some(argv) = argv else {
-        return true;
-    };
-    // The program must be `git` itself: an empty or odd `argv[0]` could shift what follows.
-    let program = argv.first().map(|a| std::path::Path::new(a.as_ref()));
-    if !program
-        .and_then(std::path::Path::file_name)
-        .is_some_and(|n| n == "git" || n == "git.exe")
-    {
-        return true;
-    }
-    let mut args = argv.iter().skip(1).map(|a| a.as_ref().to_str());
-    while let Some(arg) = args.next() {
-        // A non-UTF-8 argument before the subcommand is not one Git knows: evaluate.
-        let Some(arg) = arg else {
-            return true;
-        };
-        if WITH_VALUE.contains(&arg) {
-            if args.next().is_none() {
-                return true;
-            }
-            continue;
-        }
-        if FLAGS.contains(&arg) || WITH_EQUALS.iter().any(|p| arg.starts_with(p)) {
-            continue;
-        }
-        if arg.starts_with('-') {
-            return true;
-        }
-        return !KEEPS_ORIGINAL.contains(&arg);
-    }
-    true
+    !matches!(
+        git_command::parse(argv),
+        GitCommand::Certain(sub, _) if KEEPS_ORIGINAL.contains(&sub)
+    )
 }
 
 #[cfg(test)]

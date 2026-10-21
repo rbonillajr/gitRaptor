@@ -43,6 +43,7 @@ pub fn facts(reader: &RepoReader, op: &Operation) -> Facts {
         authorship: None,
         touched: Vec::new(),
         config_touched: Vec::new(),
+        classified: Vec::new(),
         push: updates
             .iter()
             .map(|u| {
@@ -134,6 +135,8 @@ fn evaluate_preset(
         authorship: commit.authorship,
         policies: commit.policies,
         layer,
+        minimum: true,
+        permissions: None,
     };
     let mut facts = facts(reader, op);
     facts.authorship = commit.facts;

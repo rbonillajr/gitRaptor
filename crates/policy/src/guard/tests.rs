@@ -18,6 +18,8 @@ fn ctx() -> Context {
         authorship: authorship::Effective::default(),
         policies: policies::Policies::default(),
         layer: gitraptor_api::guard::LogLayer::Hooks,
+        minimum: true,
+        permissions: None,
     }
 }
 

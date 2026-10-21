@@ -159,6 +159,19 @@ fn reason_text(reason: &Reason, denied: &DeniedOp) -> String {
         // A relaxation notice is never a denial reason; if one is rendered as such, say only
         // that the operation could not be verified.
         (Rule::RelaxIgnored, _) => t("guard.deny.internal", &[]),
+        // Placeholder until the permission templates land: the generic text.
+        (
+            Rule::PermissionCommit
+            | Rule::PermissionPush
+            | Rule::PermissionForcePush
+            | Rule::PermissionResetHard
+            | Rule::PermissionBranchDelete
+            | Rule::PermissionRebase
+            | Rule::PermissionMerge
+            | Rule::PermissionWorktreeAdd
+            | Rule::PermissionWorktreeRemove,
+            _,
+        ) => t("guard.deny.internal", &[]),
     }
 }
 
@@ -298,6 +311,8 @@ fn not_preventable_text(n: NotPreventable) -> String {
             NotPreventable::PolicyActor => "guard.np.policy-actor",
             NotPreventable::PolicyReach => "guard.np.policy-reach",
             NotPreventable::PolicyFloor => "guard.np.policy-floor",
+            // Placeholder until its own template lands.
+            NotPreventable::PermissionReach => "guard.np.policy-reach",
         },
         &[],
     )
@@ -1045,6 +1060,16 @@ fn log_rule_text(reason: &LoggedReason) -> String {
         | Rule::InputRejected
         | Rule::InternalError => "guard.log.rule.system",
         Rule::SnapshotFailed => snapshot_required::log_rule_key(),
+        // Placeholder until the permission template lands.
+        Rule::PermissionCommit
+        | Rule::PermissionPush
+        | Rule::PermissionForcePush
+        | Rule::PermissionResetHard
+        | Rule::PermissionBranchDelete
+        | Rule::PermissionRebase
+        | Rule::PermissionMerge
+        | Rule::PermissionWorktreeAdd
+        | Rule::PermissionWorktreeRemove => "guard.log.rule.system",
     };
     let level = match reason.level {
         Level::Minimum => t("guard.log.level-minimum", &[]),
