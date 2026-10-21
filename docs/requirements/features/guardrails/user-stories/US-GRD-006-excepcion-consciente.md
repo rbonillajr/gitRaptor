@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-21
 feature: guardrails
 related:
   context:
@@ -34,7 +34,7 @@ tags:
 
 ## Reglas cubiertas
 
-BR-AUTH-003 (misma decisión para "agente X" y "sin atribuir"; excepción consciente) · BR-AUTH-001 (un agente no usa la excepción; anuncio, ventana para cancelar y auditoría, Q-GRD-19 y Q-GRD-24) · BR-CONS-004 (la excepción queda registrada) — ver [business-rules.md](../business-rules.md)
+BR-AUTH-003 (misma decisión para "agente X" y "sin atribuir"; excepción consciente) · BR-AUTH-001 (un agente no usa la excepción; anuncio, ventana para cancelar y auditoría, Q-GRD-19 y Q-GRD-24) · BR-CONS-004 (la excepción queda registrada) · BR-VAL-003 (la excepción salta también las ramas protegidas y las rutas prohibidas con `appliesTo: everyone`, Q-GRD-50) · alcance de la excepción en el MVP: push, borrar una rama local y rebase no interactivo (Q-GRD-47) — ver [business-rules.md](../business-rules.md)
 
 ## Dependencias
 
@@ -84,18 +84,25 @@ Cuando "codex" intenta usar la excepción consciente desde su canal
 Entonces la excepción se rechaza, la operación no se ejecuta
   Y el intento queda en el registro
 
+**Escenario: La excepción no cubre una operación fuera de su alcance**
+
+Dado el repo "demo" protegido, donde hacer commit está denegado
+Cuando el desarrollador pide la excepción consciente para un commit
+Entonces la excepción se rechaza sin anunciarse y nada se ejecuta
+  Y el motivo dice qué operaciones admite la excepción
+
 ## Requisitos Técnicos
 
 - **Gobierno**: ADR-GRD-003 § 1 (el actor no cambia la decisión) y § 4 (actor desde el `git` más cercano: detectado, registrado o "sin atribuir"); ADR-GRD-007 § 1 a § 3 (la excepción es un comando reservado que relaja, con un token de un solo uso).
 - **R-GRD-3** (un agente no puede dar la confirmación humana): controles de ADR-GRP-005 § 6 en el daemon; los vectores no detectables quedan aceptados por acción hasta el factor fuera de banda (ADR-GRD-007 § 2). No hay excepción desde el MCP (el canal rechaza el método), desde un agente (`exception-rejected` en el registro y en la auditoría) ni en modo degradado (ADR-GRD-007 § 1 y § 3).
 - **Anuncio y ventana antes del token** (D5 (Q-GRD-19) y D10 (Q-GRD-24)): toda excepción, también la aprobación explícita en el Cockpit, se anuncia en todos los clientes y espera una ventana cancelable; solo al cerrarse sin cancelación se emite el token. Cancelada, no se emite token, la operación no se ejecuta y la cancelación queda en el registro con el `kind` `exception-cancelled` y en la auditoría (ADR-GRD-007 § 1 y § 3, paso 3; ADR-GRD-006 § 1).
 - **Token**: de ≥ 128 bits; el daemon guarda solo su hash, ligado a la transición exacta, al `git` hijo directo del `raptor` solicitante y a un TTL que rige hasta la primera presentación. Una transición distinta no queda cubierta (ADR-GRD-007 § 3; ADR-GRD-003 § 6).
-- **Crates**: `apps/cli` (`raptor guard exec` y normalización del argv con el traductor de los hooks), `crates/core` módulo `guardrails` (autorización, emisión y consumo del token), `crates/api` (método reservado) y `crates/policy` (la misma evaluación para cualquier actor).
+- **Crates**: `apps/cli` (`raptor guard exec`: anuncio, ventana y lanzamiento del `git` hijo), `crates/core` módulo `guardrails` (normalización del argv con el traductor de los hooks, autorización, emisión y consumo del token; DS-US-GRD-006 D3), `crates/api` (método reservado) y `crates/policy` (la misma evaluación para cualquier actor).
 - **Enablers**: la suite de token de INF-GRD-001 **bloquea el merge**. SPIKE-GRD-001 no bloquea, pero aporta los casos de normalización del argv y el criterio humano o agente en Windows, que ADR-GRD-007 § 2 marca como ⚠️ **ASSUMPTION**. TS-GRD-001 no aplica.
 - **NFR, SEC y verificación**: NFR-GRD-06; SEC-GRD-04, 05 y 06. ADR-GRD-003 Validación 5 y 8; ADR-GRD-006 Validación 8; ADR-GRD-007 Validación 1 a 10 y 12.
 - **Enmiendas en motor-local**: ADR-GRP-005 § 6 con SEC-03 (la excepción como comando reservado con D5 (Q-GRD-19)) y ADR-GRP-013 § 1 (auditoría de cada uso). Las filas "detectado" y "registrado" del esquema dependen de US-GRP-007 y US-GRP-009.
 
 ## Diseño y Dev Spec
 
-- **Diseño:** no aplica (la forma de confirmar es del Cockpit y la CLI).
-- **Dev Spec:** pendiente (`/aadd-devspec US-GRD-006`).
+- **Diseño:** no aplica. Esta historia es de CLI y daemon (`raptor guard exec`); la excepción y el anuncio en la TUI son del Cockpit (US-CKP-019).
+- **Dev Spec:** [DS-US-GRD-006](../dev-specs/US-GRD-006-excepcion-consciente.md) (2026-10-21, status `draft`; decisiones del orquestador validadas por el Arquitecto). Dos PR: PR-A (contrato y piezas puras) y PR-B (daemon, plantilla 4 del dispatcher, `raptor guard exec` y suites e2e, con la suite de token de INF-GRD-001). Cierra también el escenario de la excepción de US-GRD-017. Q-GRD-47 (alcance: push, borrar una rama local y rebase) y Q-GRD-50 (salta también las políticas `everyone`) quedan decididas: decisión del orquestador (2026-10-21), validada por Arquitecto y PO.
