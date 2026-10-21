@@ -1,0 +1,296 @@
+{
+  "source": {
+    "kind": "devspec",
+    "ref": "docs/requirements/features/guardrails/dev-specs/US-GRD-014-rama-base-del-equipo.md"
+  },
+  "criteria": [
+    {
+      "id": "GRD014-E1-UNION",
+      "statement": "Escenario 1: sin confirmar, borrar develop y main se deniega con el motivo de la rama base; el estado dice base-unconfirmed con la acción guard-confirm; tras raptor guard confirm (y su ventana), solo develop está protegida y borrar main recibe la decisión de una rama no protegida",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_014 -- --list 2>/dev/null | grep -q '^unconfirmed_team_base_guards_the_union_until_confirmed: test' && cargo test -p gitraptor-cli --test guard_us_grd_014 unconfirmed_team_base_guards_the_union_until_confirmed -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_014.rs"
+      ]
+    },
+    {
+      "id": "GRD014-E1-LOST",
+      "statement": "Escenario 1, riesgo real (D7, D12): perfil perdido con los hooks instalados y sin adoptar, borrar develop y borrar main se deniegan",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_014 -- --list 2>/dev/null | grep -q '^a_lost_profile_still_guards_the_team_base_and_main: test' && cargo test -p gitraptor-cli --test guard_us_grd_014 a_lost_profile_still_guards_the_team_base_and_main -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_014.rs"
+      ]
+    },
+    {
+      "id": "GRD014-E2-MAIN",
+      "statement": "Escenario 2: sin rama base del equipo, borrar main se deniega, el estado no ofrece confirmar nada y raptor guard confirm responde que no hay nada que confirmar sin escribir",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_014 -- --list 2>/dev/null | grep -q '^without_a_team_base_main_is_guarded: test' && cargo test -p gitraptor-cli --test guard_us_grd_014 without_a_team_base_main_is_guarded -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_014.rs"
+      ]
+    },
+    {
+      "id": "GRD014-E3-PERSONAL",
+      "statement": "Escenario 3: con develop en el equipo y release en la configuración local personal, borrar release recibe la decisión de una rama no protegida y la rama base efectiva (estado) sigue siendo develop",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_014 -- --list 2>/dev/null | grep -q '^a_personal_base_branch_changes_nothing: test' && cargo test -p gitraptor-cli --test guard_us_grd_014 a_personal_base_branch_changes_nothing -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_014.rs"
+      ]
+    },
+    {
+      "id": "GRD014-E4-WORKTREES",
+      "statement": "Escenario 4: con develop confirmada desde la rama principal, borrar develop desde feat-a y desde feat-b se deniega nombrando develop; borrar release desde feat-b recibe la decisión de una rama no protegida",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_014 -- --list 2>/dev/null | grep -q '^every_worktree_guards_the_main_branch_base: test' && cargo test -p gitraptor-cli --test guard_us_grd_014 every_worktree_guards_the_main_branch_base -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_014.rs"
+      ]
+    },
+    {
+      "id": "GRD014-E5-NEWMACHINE",
+      "statement": "Escenario 5: perfil vacío y repo recién clonado con develop; tras añadir, instalar y confirmar, borrar develop se deniega desde la primera operación",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_014 -- --list 2>/dev/null | grep -q '^a_new_machine_guards_the_team_base_from_the_first_operation: test' && cargo test -p gitraptor-cli --test guard_us_grd_014 a_new_machine_guards_the_team_base_from_the_first_operation -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_014.rs"
+      ]
+    },
+    {
+      "id": "GRD014-E6-PENDING",
+      "statement": "Escenario 6: con main confirmada, llega a la rama principal develop; borrar main y develop se deniegan, el estado dice base-change-pending con la acción; tras confirmar, solo develop",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_014 -- --list 2>/dev/null | grep -q '^a_base_change_waits_for_the_developer: test' && cargo test -p gitraptor-cli --test guard_us_grd_014 a_base_change_waits_for_the_developer -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_014.rs"
+      ]
+    },
+    {
+      "id": "GRD014-E6-AGENT",
+      "statement": "Escenario 6: un agente que intenta raptor guard confirm recibe el rechazo de acción reservada, no se confirma nada y el intento queda en el registro de comandos reservados",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_014 -- --list 2>/dev/null | grep -q '^an_agent_cannot_confirm_and_is_logged: test' && cargo test -p gitraptor-cli --test guard_us_grd_014 an_agent_cannot_confirm_and_is_logged -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_014.rs"
+      ]
+    },
+    {
+      "id": "GRD014-PLAN-FIRST",
+      "statement": "D2: el primer paso de guard confirm muestra el plan; sin aceptarlo (respuesta no o vacía), nada se escribe ni se anuncia (sin pending, confirmada intacta, sin entrada applied)",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_014 -- --list 2>/dev/null | grep -q '^the_plan_comes_before_any_effect: test' && cargo test -p gitraptor-cli --test guard_us_grd_014 the_plan_comes_before_any_effect -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_014.rs"
+      ]
+    },
+    {
+      "id": "GRD014-WINDOW-FIRST",
+      "statement": "D4: la primera confirmación de develop (referencia main) abre la ventana; si se cancela, no se confirma nada y la auditoría registra cancelled",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_014 -- --list 2>/dev/null | grep -q '^confirming_a_base_other_than_main_waits_for_the_window: test' && cargo test -p gitraptor-cli --test guard_us_grd_014 confirming_a_base_other_than_main_waits_for_the_window -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_014.rs"
+      ]
+    },
+    {
+      "id": "GRD014-RELAX-FLOOR",
+      "statement": "D3/D4: un suelo que desactiva el mínimo seguro muestra la relajación en el plan (Relajaciones (N) con N>0) y espera la ventana",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_014 -- --list 2>/dev/null | grep -q '^a_relaxing_floor_is_shown_and_waits: test' && cargo test -p gitraptor-cli --test guard_us_grd_014 a_relaxing_floor_is_shown_and_waits -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_014.rs"
+      ]
+    },
+    {
+      "id": "GRD014-FP-CHANGED",
+      "statement": "D5: si la rama principal cambia el suelo entre el plan y la aplicación, la confirmación termina en changed-during-window sin escribir lo confirmado",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_014 -- --list 2>/dev/null | grep -q '^a_floor_changed_during_the_window_is_not_confirmed: test' && cargo test -p gitraptor-cli --test guard_us_grd_014 a_floor_changed_during_the_window_is_not_confirmed -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_014.rs"
+      ]
+    },
+    {
+      "id": "GRD014-FP-CONCURRENT",
+      "statement": "D5: si otro cliente confirma entre el plan aceptado y la aplicación, la segunda aplicación termina en changed-during-window sin escribir (la huella incluye lo confirmado antes)",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_014 -- --list 2>/dev/null | grep -q '^a_concurrent_confirmation_is_detected: test' && cargo test -p gitraptor-cli --test guard_us_grd_014 a_concurrent_confirmation_is_detected -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_014.rs"
+      ]
+    },
+    {
+      "id": "GRD014-INVALID",
+      "statement": "D4/D8: una baseBranch inválida no se confirma (base-invalid) y el estado no ofrece la acción guard-confirm",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_014 -- --list 2>/dev/null | grep -q '^an_invalid_team_base_cannot_be_confirmed: test' && cargo test -p gitraptor-cli --test guard_us_grd_014 an_invalid_team_base_cannot_be_confirmed -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_014.rs"
+      ]
+    },
+    {
+      "id": "GRD014-UNREADABLE",
+      "statement": "D4: con el suelo ilegible o parcial, guard confirm responde floor-unreadable sin escribir",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_014 -- --list 2>/dev/null | grep -q '^an_unreadable_floor_cannot_be_confirmed: test' && cargo test -p gitraptor-cli --test guard_us_grd_014 an_unreadable_floor_cannot_be_confirmed -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_014.rs"
+      ]
+    },
+    {
+      "id": "GRD014-MCP-ONLY",
+      "statement": "D11: un repo observado sin hooks (Solo MCP) puede confirmar su rama base; uno no observado recibe not-observed",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_014 -- --list 2>/dev/null | grep -q '^a_mcp_only_repo_can_confirm_its_base: test' && cargo test -p gitraptor-cli --test guard_us_grd_014 a_mcp_only_repo_can_confirm_its_base -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_014.rs"
+      ]
+    },
+    {
+      "id": "GRD014-RESTART",
+      "statement": "D8: tras confirmar y reiniciar el daemon, el estado y la foto de los hooks conservan la rama base confirmada",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_014 -- --list 2>/dev/null | grep -q '^the_confirmed_base_survives_a_daemon_restart: test' && cargo test -p gitraptor-cli --test guard_us_grd_014 the_confirmed_base_survives_a_daemon_restart -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_014.rs"
+      ]
+    },
+    {
+      "id": "GRD014-POL-KEYS",
+      "statement": "D3: el plan puro reporta, con antes y después, cada clave de la lista cerrada que relaja (permissions allow/ask/deny/disableSafeMinimum, policies.protectedBranches, policies.forbiddenPaths, policies.commitAuthorship); engine.baseBranch va aparte, como cambio de base (from → to), no entre las Relajaciones (N) (§ 3)",
+      "verify": "cargo test -p gitraptor-policy --test us_grd_014_confirm -- --list 2>/dev/null | grep -q '^every_closed_list_key_is_shown_when_it_relaxes: test' && cargo test -p gitraptor-policy --test us_grd_014_confirm every_closed_list_key_is_shown_when_it_relaxes -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/policy/tests/us_grd_014_confirm.rs"
+      ]
+    },
+    {
+      "id": "GRD014-POL-PROTECTED",
+      "statement": "D3: quitar un patrón de policies.protectedBranches del suelo es una relajación y el cargador da floor-relax-pending (misma función que el plan)",
+      "verify": "cargo test -p gitraptor-policy --test us_grd_014_confirm -- --list 2>/dev/null | grep -q '^removing_a_protected_branch_pattern_is_floor_relax_pending: test' && cargo test -p gitraptor-policy --test us_grd_014_confirm removing_a_protected_branch_pattern_is_floor_relax_pending -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/policy/tests/us_grd_014_confirm.rs"
+      ]
+    },
+    {
+      "id": "GRD014-POL-HARDEN",
+      "statement": "D3/D4: un suelo que solo endurece y la misma rama base que la referencia da nothing-to-confirm, sin ventana",
+      "verify": "cargo test -p gitraptor-policy --test us_grd_014_confirm -- --list 2>/dev/null | grep -q '^a_floor_that_only_hardens_needs_no_confirmation: test' && cargo test -p gitraptor-policy --test us_grd_014_confirm a_floor_that_only_hardens_needs_no_confirmation -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/policy/tests/us_grd_014_confirm.rs"
+      ]
+    },
+    {
+      "id": "GRD014-POL-WINDOW",
+      "statement": "D4: sin confirmación la referencia es main con suelo Absent; una rama base distinta de la referencia lleva ventana aunque no haya relajaciones",
+      "verify": "cargo test -p gitraptor-policy --test us_grd_014_confirm -- --list 2>/dev/null | grep -q '^a_base_other_than_the_reference_needs_the_window: test' && cargo test -p gitraptor-policy --test us_grd_014_confirm a_base_other_than_the_reference_needs_the_window -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/policy/tests/us_grd_014_confirm.rs"
+      ]
+    },
+    {
+      "id": "GRD014-POL-REFUSALS",
+      "statement": "D4: baseBranch inválida da base-invalid y un suelo ignorado o parcial da floor-unreadable",
+      "verify": "cargo test -p gitraptor-policy --test us_grd_014_confirm -- --list 2>/dev/null | grep -q '^invalid_base_and_unreadable_floor_are_refused: test' && cargo test -p gitraptor-policy --test us_grd_014_confirm invalid_base_and_unreadable_floor_are_refused -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/policy/tests/us_grd_014_confirm.rs"
+      ]
+    },
+    {
+      "id": "GRD014-POL-FINGERPRINT",
+      "statement": "D5: la huella cambia si cambia el commit de origen, el blob del suelo, la rama base resuelta o lo confirmado antes, y es estable si nada cambia",
+      "verify": "cargo test -p gitraptor-policy --test us_grd_014_confirm -- --list 2>/dev/null | grep -q '^the_fingerprint_covers_source_floor_base_and_previous: test' && cargo test -p gitraptor-policy --test us_grd_014_confirm the_fingerprint_covers_source_floor_base_and_previous -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/policy/tests/us_grd_014_confirm.rs"
+      ]
+    },
+    {
+      "id": "GRD014-CAP",
+      "statement": "D8: con guard.team-confirmation el estado lleva los diagnósticos nuevos, confirm y PendingKind::ConfirmTeam; sin ella, la vista de hoy (sin esos campos ni variantes)",
+      "verify": "cargo test -p gitraptor-core --test us_grd_014_capability -- --list 2>/dev/null | grep -q '^team_confirmation_capability_both_ways: test' && cargo test -p gitraptor-core --test us_grd_014_capability team_confirmation_capability_both_ways -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grd_014_capability.rs"
+      ]
+    },
+    {
+      "id": "GRD014-MCP-PENDING",
+      "statement": "D9: tras un cambio real de baseBranch que llega a la rama principal de un repo protegido con main confirmada, mcp.status declara la base pending con el nombre de la confirmada, sin la pista confirm",
+      "verify": "cargo test -p gitraptor-core --test us_grd_014_mcp_pending -- --list 2>/dev/null | grep -q '^a_pending_base_is_declared: test' && cargo test -p gitraptor-core --test us_grd_014_mcp_pending a_pending_base_is_declared -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grd_014_mcp_pending.rs"
+      ]
+    }
+  ],
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "Cargo.lock",
+      "**/Cargo.toml",
+      "docs/architecture/decisions/ADR-GRD-008*"
+    ],
+    "allow_dependency_changes": false
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-policy",
+      "gitraptor-api",
+      "gitraptor-core",
+      "gitraptor-cli",
+      "gitraptor-mcp"
+    ]
+  },
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "opus"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "opus"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "opus"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    }
+  },
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 600000,
+    "suiteTimeoutMs": 1800000
+  }
+}
