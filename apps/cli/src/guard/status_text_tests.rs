@@ -30,6 +30,7 @@ fn status(base_confirmed: bool, bases: &[&str], hooks: HooksLayer) -> GuardStatu
         minimum_set: Some(MinimumSet {
             status: MinimumSetStatus::Active,
         }),
+        confirm: None,
     }
 }
 

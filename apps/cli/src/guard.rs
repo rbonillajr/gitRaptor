@@ -654,6 +654,15 @@ fn notices(status: &GuardStatus, tr: Tr) -> Vec<String> {
             Diagnostic::TemplateOutdated => out.push(tr.t("guard.status.template-outdated", &[])),
             Diagnostic::ConfigUnreadable => out.push(tr.t("guard.status.config-unreadable", &[])),
             Diagnostic::LeftoverFolder => out.push(tr.t("guard.status.leftover-folder", &[])),
+            Diagnostic::BaseChangePending => {
+                out.push(tr.t("guard.status.base-change-pending", &[]));
+            }
+            Diagnostic::BaseChangePendingInvalid => {
+                out.push(tr.t("guard.status.base-change-pending-invalid", &[]));
+            }
+            Diagnostic::FloorRelaxPending => {
+                out.push(tr.t("guard.status.floor-relax-pending", &[]));
+            }
             // Said by the state line.
             Diagnostic::BaseUnconfirmed => {}
         }
@@ -1606,6 +1615,7 @@ mod tests {
             hooks: None,
             diagnostics: Vec::new(),
             minimum_set: None,
+            confirm: None,
         };
         let lines = status_lines(&status, Tr::current());
         let last = lines.last().unwrap();
@@ -1643,6 +1653,7 @@ mod tests {
             minimum_set: Some(gitraptor_api::guard::MinimumSet {
                 status: MinimumSetStatus::Active,
             }),
+            confirm: None,
         }
     }
 

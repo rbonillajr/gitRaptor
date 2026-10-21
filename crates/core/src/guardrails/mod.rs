@@ -33,6 +33,7 @@ pub mod second_line;
 pub mod snapshot_required;
 #[cfg(test)]
 mod snapshot_required_tests;
+pub mod team_status;
 pub mod uninstall;
 
 pub use registry::{GuardEntry, GuardRegistry};

@@ -75,6 +75,7 @@ fn guard(state: ProtectionState) -> GuardStatus {
         hooks: None,
         diagnostics: Vec::new(),
         minimum_set: None,
+        confirm: None,
     }
 }
 

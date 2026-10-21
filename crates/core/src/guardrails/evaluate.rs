@@ -577,21 +577,9 @@ fn evaluate_op(
     // the client's text alone.
     let repo_id = entry.is_some().then_some(input.repo_id);
     let registered = entry.is_some();
-    let (mut bases, confirmed) = match entry {
-        Some(e) => (e.bases, e.confirmed),
-        None => (default_bases(&reader), None),
-    };
-    // D12: the executor protects the union while the repo has no confirmation of its own.
-    let extra_rules = match input.unregistered_bases {
-        Some(extra) if !registered => {
-            for base in extra {
-                if !bases.contains(base) {
-                    bases.push(base.clone());
-                }
-            }
-            unregistered_rules(&bases)
-        }
-        _ => None,
+    let (recorded, confirmed) = match entry {
+        Some(e) => (Some(e.bases), e.confirmed),
+        None => (None, None),
     };
     let second_line_skipped = matches!(
         operation,
@@ -607,9 +595,10 @@ fn evaluate_op(
         Operation::RefTransaction { .. } | Operation::Push { .. }
     ) && input.rules.policies;
     let permissions = input.rules.permissions && !second_line_skipped;
-    // One read of every level for the whole evaluation: the permissions, the minimum, the rules,
-    // the authorship policy and the ignored relaxations all come from it.
-    let layers = (authorship || policies || permissions).then(|| {
+    // One read of every level for the whole evaluation: the bases of a protected repo, the
+    // permissions, the minimum, the rules, the authorship policy and the ignored relaxations
+    // all come from it.
+    let layers = (registered || authorship || policies || permissions).then(|| {
         let worktree = input
             .worktree
             .and_then(|cwd| super::authorship::worktree_reader(cwd, common));
@@ -620,6 +609,30 @@ fn evaluate_op(
             repo_id,
         )
     });
+    // A protected repo guards the bases of the team level (ADR-GRD-004 § 3), or the fail-safe
+    // union when it cannot be read; an unknown one, `main` and its main branch.
+    let mut bases = match &recorded {
+        Some(recorded) => {
+            let team = match &layers {
+                Some(Ok(layers)) => Some(&layers.team),
+                _ => None,
+            };
+            super::team_status::guarded_bases(team, Some(&reader), confirmed.as_ref(), recorded)
+        }
+        None => default_bases(&reader),
+    };
+    // D12: the executor protects the union while the repo has no confirmation of its own.
+    let extra_rules = match input.unregistered_bases {
+        Some(extra) if !registered => {
+            for base in extra {
+                if !bases.contains(base) {
+                    bases.push(base.clone());
+                }
+            }
+            unregistered_rules(&bases)
+        }
+        _ => None,
+    };
     let mut ignored = Vec::new();
     let mut commit = CommitContext {
         // The rules that tell an agent from the person; an `ask` reads the actor apart.

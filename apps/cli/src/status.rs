@@ -683,6 +683,7 @@ mod tests {
             hooks: Some(hooks),
             diagnostics: Vec::new(),
             minimum_set: None,
+            confirm: None,
         };
         let mut info = SessionsInfo::default();
         info.protection.insert(
