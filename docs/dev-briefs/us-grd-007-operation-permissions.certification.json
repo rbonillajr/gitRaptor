@@ -1,0 +1,494 @@
+{
+  "schema": "nassa.certification.v1",
+  "certifiedAt": "2026-10-21T13:59:58.268Z",
+  "dir": "/Users/rbonilla/orca/workspaces/gitRaptor/grd007",
+  "contract_sha256": "d4819b9950c79338a774e9400d8318f677c4d96f6f02c1a7c4ccc79d34d7b1ad",
+  "source": {
+    "kind": "devspec",
+    "ref": "docs/requirements/features/guardrails/dev-specs/US-GRD-007-permisos-por-operacion.md"
+  },
+  "verdict": "CERTIFIED WITH RESERVATIONS",
+  "status": "con-reservas",
+  "reservations": [
+    {
+      "why": "integridad-sin-verificar",
+      "note": "integridad de pruebas: NO COMPROBADA — no hay informe registrado: falta el de la suite tras implementar (P3)"
+    },
+    {
+      "why": "test-enmendado",
+      "note": "criterio GRD007-POLICY: `crates/policy/tests/us_grd_007_permissions.rs` — D4: ctx.minimum is safe_minimum_active; only()/all_allow() built permissions with the minimum on while ctx() turns it off, an input that never occurs, so force-push x ask/allow collapsed to SafeMinimum deny. The floor now disables the minimum, consistent with ctx.minimum=false. · aprobó coordinator (orca terminal turn) (turno de la persona 38bddf0d, comprobado) · 2026-10-21T12:45:47.656Z · el contenido final NO es el que se propuso al pedirla",
+      "test": "crates/policy/tests/us_grd_007_permissions.rs",
+      "hashBefore": "a625bff136c7e021382c05a6aab6b8ccfe804fe6d7dd75a94748107117160099",
+      "hashAfter": "c7f4d2f8f74ec83616b94699418de73c2929d4623acc48e88268cb91e86716c9",
+      "diff": [
+        "- use std::ffi::OsString;",
+        "- ",
+        "+ // `ctx()` runs with the minimum off, which D4 derives from a readable floor that disables it.",
+        "-     perms(\"{}\")",
+        "+     perms(r#\"{\"permissions\":{\"disableSafeMinimum\":true}}\"#)",
+        "+ // Building a non-UTF-8 argument is platform specific; Unix covers the parser's behaviour.",
+        "+ #[cfg(unix)]",
+        "+     use std::ffi::OsString;",
+        "-     perms(&format!(r#\"{{\"permissions\":{{\"{permission}\":[\"{op}\"]}}}}\"#))",
+        "+     perms(&format!(",
+        "+         r#\"{{\"permissions\":{{\"disableSafeMinimum\":true,\"{permission}\":[\"{op}\"]}}}}\"#",
+        "+     ))"
+      ]
+    },
+    {
+      "why": "test-enmendado",
+      "note": "criterio GRD007-POLICY: `crates/policy/tests/us_grd_007_permissions.rs` — Windows: the non-UTF-8 argv test uses std::os::unix::ffi::OsStringExt without cfg(unix), so the test target does not compile on x86_64-pc-windows-msvc (cross clippy E0433/E0599). Gate that test with #[cfg(unix)] (as authorship::subcommand does) and move the OsString import into it; no assertion changes. · aprobó coordinator (orca terminal turn) (turno de la persona 3cd497d2, comprobado) · 2026-10-21T13:58:41.739Z",
+      "test": "crates/policy/tests/us_grd_007_permissions.rs",
+      "hashBefore": "3b2a6c300bac8649b2956b7ab66f25b87c73a50bcf6cead30fb4e1a79a9e164c",
+      "hashAfter": "c7f4d2f8f74ec83616b94699418de73c2929d4623acc48e88268cb91e86716c9",
+      "diff": [
+        "- use std::ffi::OsString;",
+        "- ",
+        "+ // Building a non-UTF-8 argument is platform specific; Unix covers the parser's behaviour.",
+        "+ #[cfg(unix)]",
+        "+     use std::ffi::OsString;"
+      ]
+    },
+    {
+      "why": "revision-tras-arreglo-sin-correr",
+      "note": "hubo escrituras tras empezar la revisión (ronda de arreglo) y ninguna lente volvió a revisar después"
+    }
+  ],
+  "totals": {
+    "total": 20,
+    "passed": 20,
+    "failed": 0,
+    "notRun": 0
+  },
+  "integrity": {
+    "status": "NO COMPROBADA",
+    "note": "no hay informe registrado: falta el de la suite tras implementar (P3)",
+    "findings": []
+  },
+  "phases": {
+    "ok": true,
+    "missing": [],
+    "at": "2026-10-21T13:38:47.862Z",
+    "note": "las tres capas constan pasadas · último gate 2026-10-21T13:38:47.862Z. Acredita que corrieron, no CONTRA QUÉ árbol"
+  },
+  "hops": [
+    {
+      "hop": "design",
+      "declared": {
+        "agent": "main-loop",
+        "model": "opus"
+      },
+      "actual": []
+    },
+    {
+      "hop": "critic",
+      "declared": {
+        "agent": "nassa-core:plan-critic",
+        "model": "opus"
+      },
+      "actual": [
+        {
+          "agent": "nassa-core:plan-critic",
+          "model": "opus"
+        }
+      ]
+    },
+    {
+      "hop": "tester",
+      "declared": {
+        "agent": "nassa-core:criterion-tester",
+        "model": "sonnet"
+      },
+      "actual": []
+    },
+    {
+      "hop": "build",
+      "declared": {
+        "agent": "nassa-dev-rust:rust-expert",
+        "model": "opus"
+      },
+      "actual": [
+        {
+          "agent": "nassa-dev-rust:rust-expert",
+          "model": "opus"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-expert",
+          "model": "opus"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-expert",
+          "model": "opus"
+        }
+      ]
+    },
+    {
+      "hop": "review",
+      "declared": {
+        "agent": "nassa-dev-rust:rust-code-reviewer",
+        "model": "opus"
+      },
+      "actual": [
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "opus"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "sonnet"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "sonnet"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "opus"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "opus"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "sonnet"
+        }
+      ]
+    },
+    {
+      "hop": "conformance",
+      "declared": {
+        "agent": "nassa-dev-rust:rust-code-reviewer",
+        "model": "sonnet"
+      },
+      "actual": [
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "opus"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "sonnet"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "sonnet"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "opus"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "opus"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "sonnet"
+        }
+      ]
+    }
+  ],
+  "lenses": {
+    "rigor": "alto",
+    "planned": [
+      "correctness",
+      "testing",
+      "security",
+      "architecture"
+    ],
+    "models": {
+      "correctness": "sonnet",
+      "testing": "sonnet",
+      "security": "review",
+      "architecture": "review"
+    },
+    "ran": [
+      {
+        "lens": "security",
+        "model": "opus"
+      },
+      {
+        "lens": "correctness",
+        "model": "sonnet"
+      },
+      {
+        "lens": "testing",
+        "model": "sonnet"
+      },
+      {
+        "lens": "architecture",
+        "model": "opus"
+      },
+      {
+        "lens": "security",
+        "model": "opus"
+      }
+    ],
+    "missing": [],
+    "ignored": [
+      {
+        "lens": "security",
+        "why": "sin model"
+      },
+      {
+        "lens": "correctness",
+        "why": "sin model"
+      },
+      {
+        "lens": "testing",
+        "why": "sin model"
+      },
+      {
+        "lens": "architecture",
+        "why": "sin model"
+      },
+      {
+        "lens": "security",
+        "why": "sin model"
+      }
+    ],
+    "fixWithoutReview": true
+  },
+  "rigor": "alto",
+  "approvals": [
+    {
+      "source": "approval",
+      "by": "human",
+      "kind": "plan",
+      "sha": "ca45bd5debd155e369e8304629fe1c9d504b8b2739d34f659e5e7d964039f080:d4819b9950c79338a774e9400d8318f677c4d96f6f02c1a7c4ccc79d34d7b1ad:c23bfb06bfc6f610274d6547b210b97c01a481e44b46476865aef6a62b181581",
+      "at": "2026-10-21T11:22:55.756Z"
+    },
+    {
+      "source": "critic",
+      "kind": "plan",
+      "rounds": 2,
+      "lastVerdict": "APROBABLE",
+      "lastBlocking": 0,
+      "at": "2026-10-21T03:35:17.671Z"
+    }
+  ],
+  "warnings": [
+    {
+      "why": "fuera-del-plan",
+      "paths": [
+        "docs/requirements/features/guardrails/business-rules.md",
+        "docs/requirements/features/guardrails/context.md"
+      ],
+      "note": "2 fichero(s) fuera del plan aprobado: docs/requirements/features/guardrails/business-rules.md, docs/requirements/features/guardrails/context.md"
+    }
+  ],
+  "outsidePlan": [
+    "docs/requirements/features/guardrails/business-rules.md",
+    "docs/requirements/features/guardrails/context.md"
+  ],
+  "replans": [
+    "re-plan 1: [redacted]-specs/US-GRD-007-permisos-por-operacion.md"
+  ],
+  "planChain": {
+    "base": "ca45bd5debd155e369e8304629fe1c9d504b8b2739d34f659e5e7d964039f080",
+    "replans": 1
+  },
+  "criteria": [
+    {
+      "id": "GRD007-DENY-COMMIT",
+      "statement": "Escenario 1 (commit): con commit en deny en la configuración del equipo, ni git commit, ni commit --no-verify, ni commit-tree + update-ref mueven la rama, con el agente y con la persona; el motivo nombra el permiso y «configuración del equipo»",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_007 -- --test-threads=4 deny_commit_blocks_commit_and_its_second_line",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 7478
+    },
+    {
+      "id": "GRD007-DENY-PUSH",
+      "statement": "Escenario 1 (push): con push en deny, el push no llega al remoto, con el agente y con la persona",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_007 -- --test-threads=4 deny_push_blocks_push",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 2599
+    },
+    {
+      "id": "GRD007-DENY-FORCE",
+      "statement": "Escenario 1 (force-push): con force-push en deny, el push forzado no se ejecuta y el motivo nombra el permiso y el nivel (y el mínimo, si está activo)",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_007 -- --test-threads=4 deny_force_push_names_the_permission_and_the_team",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 2874
+    },
+    {
+      "id": "GRD007-DENY-BRDEL",
+      "statement": "Escenario 1 (borrar rama): con branch-delete en deny, branch -D, update-ref -d, branch -m y el borrado remoto no se ejecutan",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_007 -- --test-threads=4 deny_branch_delete_blocks_local_and_remote",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 3334
+    },
+    {
+      "id": "GRD007-DENY-REBASE",
+      "statement": "Escenario 1 (rebase): con rebase en deny, rebase, pull --rebase y rebase --no-verify no mueven la rama",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_007 -- --test-threads=4 deny_rebase_blocks_rebase_and_pull_rebase",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 4166
+    },
+    {
+      "id": "GRD007-DENY-WT",
+      "statement": "Escenario 1 (crear worktree): con worktree-add en deny, worktree add -b no crea nada; sin rama nueva pasa (declarado, D9)",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_007 -- --test-threads=4 deny_worktree_add_blocks_a_worktree_with_a_new_branch",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 2520
+    },
+    {
+      "id": "GRD007-MERGE",
+      "statement": "D8: con merge en deny, la rama no se mueve, el motivo dice cómo volver y git merge --abort / git reset --merge dejan el working tree recuperable",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_007 -- --test-threads=4 merge_deny_keeps_the_branch_and_leaves_a_recoverable_tree",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 3013
+    },
+    {
+      "id": "GRD007-DETACHED",
+      "statement": "D9: con commit en deny y merge en allow, un commit --no-verify en HEAD separado no llega a feat-x por merge --ff-only, branch -f, reset --soft ni switch -C (motivo permission.commit)",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_007 -- --test-threads=4 a_detached_commit_cannot_reach_a_branch_unevaluated",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 5527
+    },
+    {
+      "id": "GRD007-FF",
+      "statement": "D9: con commit en deny, un fast-forward a una rama local que ya existe y un pull de commits del remoto pasan, mientras un commit nuevo se deniega",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_007 -- --test-threads=4 a_fast_forward_of_existing_commits_is_not_a_commit",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 3988
+    },
+    {
+      "id": "GRD007-ALLOW",
+      "statement": "Escenario 2: con push en allow y sin políticas, el push de feat-x se ejecuta, mientras otra operación restringida en la misma configuración se deniega",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_007 -- --test-threads=4 allow_lets_push_through",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 3131
+    },
+    {
+      "id": "GRD007-ASK-AGENT",
+      "statement": "Escenario 3 (Q-GRD-46, D19): con branch-delete en ask, el agente no borra feat-x y el motivo dice que requiere confirmación humana (ask-unavailable)",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_007 -- --test-threads=4 ask_is_denied_as_requiring_human_confirmation",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 2295
+    },
+    {
+      "id": "GRD007-ASK-DEV",
+      "statement": "D19: con branch-delete en ask, la persona borra feat-x con el aviso de D19 (d) y guard log no lo cuenta como denegación; el agente sí se deniega",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_007 -- --test-threads=4 ask_lets_the_developer_through",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 2476
+    },
+    {
+      "id": "GRD007-ASK-NODAEMON",
+      "statement": "D19: en modo degradado (sin daemon), ask deniega también a la persona con ask-unavailable",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_007 -- --test-threads=4 ask_without_the_daemon_denies_everyone",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 3128
+    },
+    {
+      "id": "GRD007-HARDEN",
+      "statement": "Escenario 6: endurecer push en feat-x sin commitear no cambia nada; tras commitear, el push desde feat-x se deniega sin reinstalar",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_007 -- --test-threads=4 a_hardening_applies_when_committed_not_when_edited",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 3241
+    },
+    {
+      "id": "GRD007-LOG",
+      "statement": "D17: cada denegación de permiso (también el ask del agente) está en raptor guard log con permission.*, su nivel y su causa, y cuenta en el KPI",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_007 -- --test-threads=4 permission_denials_reach_the_decision_log",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 3146
+    },
+    {
+      "id": "GRD007-DEGRADED",
+      "statement": "D12: en degradado aplica el deny del suelo y del worktree; el allow y disableSafeMinimum del suelo no; el mínimo sigue",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-cli --test guard_us_grd_007 -- --test-threads=4 degraded_mode_applies_the_team_permissions_only_to_harden",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 3736
+    },
+    {
+      "id": "GRD007-CORE-MIN",
+      "statement": "D4/D18: disableSafeMinimum solo apaga el mínimo desde el suelo confirmado y legible, y minimum_set es disabled-by-team solo entonces",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-core --test us_grd_007 -- --test-threads=4 disable_safe_minimum_only_from_the_confirmed_readable_floor minimum_set_status_follows_the_confirmed_floor",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 3286
+    },
+    {
+      "id": "GRD007-CORE-RULES",
+      "statement": "D2, D6, D10, D19: una razón por nivel del máximo (SafeMinimum sin razón de permiso); capacidad guard.permissions en las dos direcciones con el filtro de guard.log, y sin la capacidad el cliente aplica los permisos del equipo con ask denegado a todos; unverifiable solo si el permiso no es allow; ask según el actor (agente deny, persona allow, no demostrado deny)",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-core --test us_grd_007 -- --test-threads=4 reasons_name_every_level_of_the_maximum permissions_capability_both_ways an_unclassifiable_transaction_is_denied_only_when_it_matters ask_depends_on_the_actor",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 714
+    },
+    {
+      "id": "GRD007-POLICY",
+      "statement": "D1–D7: tabla del clasificador del § 3.1 con su precedencia y exclusiones, la línea de órdenes de git (subcomando y acción seguros o Unknown) y los permisos en la función pura (cada operación × allow/ask/deny, ctx.minimum apagado)",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-policy --test us_grd_007_permissions",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 2728
+    },
+    {
+      "id": "GRD007-FRESH",
+      "statement": "D6/D14: RepoReader::fresh_commits cuenta commits nuevos y fusiones (commit, fusión, amend, fast-forward a un commit existente, creación) y es fail-closed ante los topes",
+      "command": "CARGO_BUILD_JOBS=3 cargo test -p gitraptor-git --test fresh_commits",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 1382
+    }
+  ]
+}
