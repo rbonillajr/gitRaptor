@@ -2,7 +2,7 @@
 id: DS-US-GRD-007
 title: "Dev Spec — US-GRD-007: permisos por operación (permitir, pedir confirmación, denegar)"
 type: dev-spec
-status: draft
+status: implemented
 created: 2026-10-09
 updated: 2026-10-21
 story: US-GRD-007
@@ -55,7 +55,7 @@ validation:
   must_read_resolved: true
   gaps_blocking: 0
   ready_to_implement: true
-  gaps_release: 1
+  gaps_release: 0
   ready_to_release: false
 tags: [guardrails, permisos, br-val-002, ask-unavailable, disable-safe-minimum, minimo-seguro, capacidades, segunda-linea]
 ---
@@ -302,11 +302,7 @@ _No aplica — no se crea almacén ni columna: el registro guarda las razones si
 
 ## Gaps y violaciones de la constitución
 
-Ningún hueco bloquea la implementación de PR-A. Sin constitución en la cascada: se aplican `AGENTS.md` y los ADRs citados. Las decisiones de producto pendientes del PO (§ 9) no impiden implementar.
-
-| Id | Hueco | Severidad | Alcance |
-|---|---|---|---|
-| G1 | Los escenarios 4 y 5 necesitan `raptor guard confirm` de US-GRD-014, que aún no está en `main` | Bloquea liberación | T010, T011 |
+_No gaps. Ready to implement._ Sin constitución en la cascada: se aplican `AGENTS.md` y los ADRs citados. Las decisiones de producto pendientes del PO (§ 9) no impiden implementar. G1 (los escenarios 4 y 5 esperaban `raptor guard confirm` de US-GRD-014) se cerró el 2026-10-21: US-GRD-014 entró en `main` (#277) y PR-B los verifica.
 
 ## Plan de implementación
 
@@ -491,7 +487,7 @@ Ningún hueco bloquea la implementación de PR-A. Sin constitución en la cascad
 
 ## 10. Estado de la implementación
 
-**PR-A (2026-10-21, PR #268)**: T001 a T008 hechos; los 20 criterios del contrato `docs/dev-briefs/us-grd-007-operation-permissions.contract.json` en verde. PR-B (T010, T011) sigue pendiente de US-GRD-014.
+**PR-A (2026-10-21, PR #268)**: T001 a T008 hechos; los 20 criterios del contrato `docs/dev-briefs/us-grd-007-operation-permissions.contract.json` en verde. PR-B (T010, T011) en PR #TBD (2026-10-21): los escenarios 4 y 5 pasan con `main` (US-GRD-014, #277), sin código de producción; solo los tests e2e y el cierre de la ficha.
 
 Desviaciones y decisiones tomadas al implementar (Decisión del orquestador, 2026-10-21; revisadas por las lentes de arquitectura y seguridad):
 
