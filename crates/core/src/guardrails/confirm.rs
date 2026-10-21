@@ -90,7 +90,8 @@ pub fn view(plan: &ConfirmPlan) -> ConfirmPlanView {
     }
 }
 
-fn refusal(r: Refusal) -> GuardConfirmResult {
+/// The answer of a refused plan.
+pub fn refusal(r: Refusal) -> GuardConfirmResult {
     match r {
         Refusal::NothingToConfirm => GuardConfirmResult::NothingToConfirm,
         Refusal::BaseInvalid => GuardConfirmResult::BaseInvalid,
@@ -100,19 +101,20 @@ fn refusal(r: Refusal) -> GuardConfirmResult {
 }
 
 /// The plan of confirming what the main branch of the repo at `common` resolves now, against
-/// what `store` confirmed, with its wire fingerprint; or the answer that refuses it. A team
-/// level that cannot be read is `floor-unreadable`: nothing is confirmed blind.
-pub fn current(
-    common: &Path,
-    store: &RepoStore,
-) -> Result<(ConfirmPlan, String), GuardConfirmResult> {
+/// what `store` confirmed, with its wire fingerprint.
+///
+/// # Errors
+///
+/// The [`Refusal`] of the plan; a team level that cannot be read is
+/// [`Refusal::FloorUnreadable`]: nothing is confirmed blind.
+pub fn current(common: &Path, store: &RepoStore) -> Result<(ConfirmPlan, String), Refusal> {
     let confirmed = store
         .confirmed_team_baseline()
-        .map_err(|_| GuardConfirmResult::FloorUnreadable)?;
-    let reader = evaluate::open(common).ok_or(GuardConfirmResult::FloorUnreadable)?;
+        .map_err(|_| Refusal::FloorUnreadable)?;
+    let reader = evaluate::open(common).ok_or(Refusal::FloorUnreadable)?;
     let team = super::team_status::read(&reader, confirmed.as_ref())
-        .map_err(|_| GuardConfirmResult::FloorUnreadable)?;
-    let plan = confirm::plan(&team, confirmed.as_ref()).map_err(refusal)?;
+        .map_err(|_| Refusal::FloorUnreadable)?;
+    let plan = confirm::plan(&team, confirmed.as_ref())?;
     let fingerprint = wire(&plan.fingerprint);
     Ok((plan, fingerprint))
 }

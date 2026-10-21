@@ -263,7 +263,7 @@ impl Daemon {
                             plan: guard_confirm::view(&plan),
                             fingerprint,
                         },
-                        Err(refused) => refused,
+                        Err(refused) => guard_confirm::refusal(refused),
                     }),
                     Step::Accept(seen) => match guard_confirm::current(common, store) {
                         Ok((plan, now)) if now == seen && !plan.needs_window() => {
