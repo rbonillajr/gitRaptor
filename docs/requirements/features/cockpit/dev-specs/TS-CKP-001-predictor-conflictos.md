@@ -4,7 +4,7 @@ title: "Dev Spec — Predictor de conflictos en el daemon: solape y conflicto pr
 type: dev-spec
 status: draft
 created: 2026-10-09
-updated: 2026-10-09
+updated: 2026-10-20
 story: TS-CKP-001
 feature: cockpit
 domain: GRP
@@ -22,8 +22,12 @@ related:
   contracts: [../../../../architecture/design/api-contract-ipc.md]
 must_read:
   - ../technical-stories/TS-CKP-001-predictor-conflictos.md
+  - ../research/SPIKE-CKP-001-resultados.md
   - ../research/SPIKE-CKP-001-plan.md
   - ../research/SPIKE-CKP-001-anexo-estado-del-arte.md
+  - ../../../../../spikes/conflict-prediction/src/a2.rs
+  - ../../../../../spikes/conflict-prediction/src/hunks.rs
+  - ../../../../../spikes/conflict-prediction/src/worker.rs
   - ../../../../architecture/decisions/ADR-CKP-001-prediccion-conflictos-merge-en-seco.md
   - ../../../../architecture/decisions/ADR-GRP-009-frontera-solo-lectura-git.md
   - ../../../../architecture/decisions/ADR-GRP-010-observacion-cambios-worktrees.md
@@ -47,11 +51,12 @@ lineage:
 constitution_gates: []
 validation:
   must_read_resolved: true
-  gaps_blocking: 5
-  ready_to_implement: false
+  gaps_blocking: 2
+  ready_to_implement: true
+  blocked_tasks: [T006, T007, T009, T010, T012, T013]
   gaps_release: 0
   ready_to_release: true
-tags: [cockpit, prediccion-conflictos, merge-en-seco, solape, daemon, borrador-condicionado, spike-ckp-001, nfr-01, sec-09, sec-12, m-02, m-06, l-04]
+tags: [cockpit, prediccion-conflictos, merge-en-seco, solape, daemon, proceso-trabajador, r-a2w, spike-ckp-001, nfr-01, sec-09, sec-12, m-02, m-06, l-04]
 ---
 
 # DS-TS-CKP-001 · Predictor de conflictos en el daemon
@@ -64,12 +69,12 @@ Para eso, la entrega monta cuatro piezas:
 
 - el conjunto de rutas sin commitear de cada worktree, retenido en memoria;
 - el módulo `predict` de `crates/core`, con los pares, el solape, los estados, la caché y la cola;
-- el merge en seco de `crates/git`, con el mecanismo que elija SPIKE-CKP-001;
+- el merge en seco de `crates/git` (`gix_merge::commit` con plataformas propias), ejecutado en un proceso trabajador;
 - la publicación por el canal.
 
-Las decisiones son de ADR-CKP-001 § 1 a § 8 y § 10; aquí no se reabren.
+Las decisiones son de ADR-CKP-001 § 1 a § 8 y § 10, con su Enmienda (2026-10-20, SPIKE-CKP-001); aquí no se reabren.
 
-**Esto es un borrador condicionado.** El mecanismo, dónde corre y las cifras los fija [SPIKE-CKP-001](../research/SPIKE-CKP-001-plan.md) (G1). Por eso el plan tiene una rama por cada salida del SPIKE, y nada se implementa antes de sus resultados.
+**Rama R-A2W.** [SPIKE-CKP-001](../research/SPIKE-CKP-001-resultados.md) salió por S4 con A2-W (Brief § 7): A2 pasa los eliminatorios, B cae en el 1 (refresca el mtime de objetos del repo) y las cotas de tiempo y memoria solo se cumplen fuera del proceso del daemon. Las cifras son las de la fase (a), indicativa; la fase (b) las confirma sin cambiar la rama salvo regresión del p95 del motor (E9).
 
 | Término | Qué es aquí |
 |---|---|
@@ -79,33 +84,39 @@ Las decisiones son de ADR-CKP-001 § 1 a § 8 y § 10; aquí no se reabren.
 | Conflicto previsto (⚡) | Merge en seco de lo commiteado: archivos en conflicto, su tipo y los hunks como rangos de líneas |
 | Merge en seco | Merge de dos commits cuyo resultado nunca se escribe en el repo |
 | Triple | Punta A, punta B y merge-base: la clave de la caché de un par |
-| A2, A2-W, B | Alternativas del plan del SPIKE (§ 2): merge en memoria en el daemon, el mismo en un proceso trabajador, y `merge-tree` en un almacén del perfil |
-| S1…S6 | Salidas del árbol de decisión del plan del SPIKE (§ 5) |
+| Trabajador | Proceso hijo de vida larga del daemon: el propio binario con el subcomando oculto `predict-worker`, que ejecuta el merge en seco y al que el daemon mata y relanza si un par pasa del plazo o de la cota de memoria |
+| Escalado de renombrados | Segundo merge del mismo par con `rewrites_limit` alto, solo si el primero da conflictos de modificado/borrado o de renombrado |
 
-### Ramas de decisión
+### Rama de decisión
 
-| Rama | Salida del SPIKE | Mecanismo | Dónde corre | Tareas propias |
-|---|---|---|---|---|
-| **R-A2** | S1, o S4 si las cotas pasan en el proceso | `gix_merge::tree` con plataforma de blobs sin drivers, pila de atributos vacía y objetos en memoria | Pool `utility` del daemon | T005 |
-| **R-A2W** | S2, o S4 si las cotas solo pasan fuera | El de R-A2 | Proceso trabajador: el propio binario, con límites de CPU y memoria | T005, T006 |
-| **R-B** | S3 o S3b | `git merge-tree --write-tree` con `--git-dir` en un almacén *bare* del perfil con `alternates` | Un `git` por par (2.38) o por lote (`--stdin`, ≥ 2.39) | T008 |
-| **R-SOLAPE** | S6 | Ninguno: el ⚡ se publica "no disponible" hasta un ADR nuevo | — | Ninguna; borra T004 a T008, T011 y T012 |
+| Rama | Salida del SPIKE | Mecanismo | Dónde corre |
+|---|---|---|---|
+| **R-A2W** | S4 con A2-W (Brief § 7) | `gix_merge::commit` con plataforma de blobs sin drivers, pila de atributos vacía, pipeline sin filtros y objetos en memoria | Proceso trabajador (T006), con plazo y vigilancia de memoria impuestos por el daemon |
 
-S5 (ninguna cumple los 5 s) no elige rama: deja el escenario de T012 como aviso y lleva el objetivo al PO (Q-CKP-6). Al cerrar G1, el orquestador borra las tareas de las ramas descartadas y sus aristas en `Depende:`.
+Las ramas R-A2, R-B y R-SOLAPE quedan descartadas y se borraron con sus tareas (T008) y sus aristas.
 
 **Decisiones del orquestador (2026-10-09), validadas por Arquitecto:**
 
-- **D1**: la Dev Spec existe como borrador condicionado (`status: draft`, `ready_to_implement: false`), con G1 como hueco bloqueante del spec entero. Es compatible con el propósito de la regla de ADR-CKP-001 ("no se escribe antes"): no implementar sobre un mecanismo sin medir.
-- **D2**: una rama por salida del SPIKE (tabla de arriba). Las tareas comunes no cambian de rama a rama.
+- **D1**: la Dev Spec existe como borrador condicionado (`status: draft`, `ready_to_implement: false`), con G1 como hueco bloqueante del spec entero. Es compatible con el propósito de la regla de ADR-CKP-001 ("no se escribe antes"): no implementar sobre un mecanismo sin medir. *(Cerrado el 2026-10-20 con G1.)*
+- **D2**: una rama por salida del SPIKE. Las tareas comunes no cambian de rama a rama. *(Resuelto el 2026-10-20: queda R-A2W.)*
+
+**Decisión del orquestador (2026-10-20), validada por Arquitecto** (cierre de G1 con el [Brief de SPIKE-CKP-001](../research/SPIKE-CKP-001-resultados.md), D-SPK-1 a D-SPK-7, y las decisiones del PO del 2026-10-20):
+
+- **D9**: rama R-A2W. G1, G3 y G4 cerrados. El spec pasa a `ready_to_implement: true` con `blocked_tasks` = las tareas que dependen de G2 y G5 (regla D3).
+- **D10**: sin prefiltro (H6 refutada: un falso negativo por renombrado de directorio y más coste que ahorro). T003 no lo tiene.
+- **D11**: extractor de conflictos, unión de bloques ≤ 3 líneas, `marker_size` 32 y escalado de `rewrites_limit`, como en el prototipo del SPIKE (T004, T005).
+- **D12**: el plazo y la cota de memoria los impone el daemon sobre el trabajador; dentro del trabajador siguen las cotas previas (tope de blob por cabecera, tope de bytes escritos), que cortan antes y sin relanzar (T006, T007).
+- **D13**: fidelidad con el umbral corregido del PO (§ Valores numéricos, `FIDELITY_THRESHOLD`): el corpus fijo R-SYN es gate de PR; el corpus real de `git/git` se ejecuta a mano al subir `gix` y no puede empeorar la línea base (T011).
+- **D14**: el archivo de un ⚡ lleva una marca cuando tiene una regla `merge=` propia en el `.gitattributes` del árbol de alguna de las dos puntas (decisión del PO, límite declarado 1). Se lee como dato para marcar, nunca para el merge (L-04 intacta, T005).
 
 **Decisiones del Arquitecto como autor de la Dev Spec (2026-10-09), aceptadas por el orquestador al revisar el borrador (2026-10-09):**
 
 - **D3**: ninguna tarea arranca antes del SPIKE; no hay `blocked_tasks`. Las tareas que no dependen del mecanismo (T001 a T003) toman sus cifras del SPIKE (E11: tope de rutas y memoria del solape), y sin el contrato (G2) no publican nada que se pueda probar de punta a punta. Al cerrar G1, el spec pasa a `ready_to_implement: true` con `blocked_tasks` igual al cierre de G2.
 - **D4**: **repo dormido** (ADR-GRP-010, Enmienda 2026-10-07, N1: "sin estado residente"). El predictor suelta la caché y los conjuntos de rutas del repo y publica sus pares `pendiente (repo dormido)`, con el último resultado y su hora. Al despertar, recalcula como en el cálculo inicial.
 - **D5**: **ahorro de energía** (ADR-GRP-015 § 2, decisión de Rene del 2026-10-05: "pausar el predictor"). Se pausan los dos niveles. Los pares quedan `pendiente (ahorro de energía)`, con el último resultado y su hora. Al volver a corriente se recalculan los pares cuya triple cambió.
-- **D6**: la subida de `gix` a ≥ 0.89.0 va en un PR `chore/` propio antes de T005 (G3). La feature `merge` se pide solo en la dependencia de `crates/git`.
-- **D7**: los hunks se publican en las coordenadas de cada lado (ADR-CKP-001 § 3). Se calculan desde el blob fusionado con marcadores y un diff de alineación con cada lado. El método final y su fidelidad los fija E7 (G1).
-- **D8**: el pool ve un solo puerto, `DryMerger`, con una implementación por rama. Así T003 y T007 no cambian entre R-A2, R-A2W y R-B.
+- **D6**: la subida de `gix` a ≥ 0.89.0 va en un PR `chore/` propio antes de T005 (G3). La feature `merge` se pide solo en la dependencia de `crates/git`. *(La subida está en `main`, PR #251; la feature `merge` la añade T005.)*
+- **D7**: los hunks se publican en las coordenadas de cada lado (ADR-CKP-001 § 3). Se calculan desde el blob fusionado con marcadores y un diff de alineación con cada lado. *(E7: 85 % de rangos idénticos a `merge-ort`, 96,5 % con la unión de D11.)*
+- **D8**: el pool ve un solo puerto, `DryMerger`. En R-A2W, `WorkerMerger` lo implementa en el daemon y `InProcessMerger` corre dentro del trabajador; los tests de `crates/core` pueden usar `InProcessMerger` directamente.
 
 ---
 
@@ -136,17 +147,17 @@ S5 (ninguna cumple los 5 s) no elige rama: deja el escenario de T012 como aviso 
 
 | ID | Qué falta | Severidad | Alcance | Acción | Owner |
 |----|-----------|-----------|---------|--------|-------|
-| G1 | Resultados de SPIKE-CKP-001: salida S1 a S6 (rama), dónde corre el merge, tope de rutas sin commitear por worktree, topes de archivos y hunks, tope de tamaño de blob, `rewrites.limit`, `marker_size_multiplier`, concurrencia, tiempo y memoria por par, si el prefiltro se mantiene, umbral de fidelidad y método de los rangos por lado (E7). Hoy todo es ⚠️ ASSUMPTION (`SPIKE-CKP-001-plan.md` § 7) | Bloqueante | todo el spec | Ejecutar el SPIKE; enmendar ADR-CKP-001 con los resultados; actualizar este spec: borrar las ramas descartadas, fijar § Valores numéricos y pasar a `ready_to_implement: true` | Orquestador (SPIKE) y Arquitecto |
-| G2 | Forma del estado y del evento de predicción en el contrato: tipos, nombres de campos, consulta bajo demanda, evento de lote y capacidad. ADR-CKP-001 § 8 la deja "pendiente, dueño: worker del canal"; `api-contract-ipc.md:210` declara `repo.attention` sin emisor | Bloqueante | T009 | Fijar la forma en `api-contract-ipc.md` y en la Dev Spec de TS-GRP-004, con la consulta del perfil `mcp` de US-MCP-016 (ADR-CKP-001, Enmienda 2026-10-05) | Worker del canal (TS-GRP-004) |
-| G3 | `gix` está en 0.88 sin la feature `merge` (`Cargo.toml:27`), y `gix-pack` 0.75 está fijado a esa versión (`Cargo.toml:30`). R-A2 y R-A2W necesitan `gix` ≥ 0.89.0 (F2: pérdida silenciosa de datos en 0.88) | Bloqueante | T005 | PR `chore/` que sube `gix` y `gix-pack` en el workspace, con la suite completa, `repo_intact` y los bancos de la Time Machine en verde. Añadir `merge` solo en `crates/git/Cargo.toml` | Orquestador |
-| G4 | Enmiendas de ADR-GRP-009 que dependen de la rama, sin aplicar (ADR-GRP-009:224 y ADR-CKP-001, tabla de enmiendas). R-A2W: el lanzador del trabajador entra en la lista de la Validación 5, fuera de `crates/git`. R-B: `merge-tree` en la allowlist del § 3, un módulo de invocación nuevo y el almacén de trabajo de ADR-GRP-006 § 4 | Bloqueante | T006, T008 | Aplicar la enmienda de la rama elegida al cerrar G1 | Orquestador, con security-expert |
-| G5 | TS-GRP-005 (`WorkClass::Utility` y `PowerSource`) está en `ready`, sin implementar. TS-CKP-001 no la lista en `related.stories` | Bloqueante | T007 | Implementar TS-GRP-005 antes de T007 y añadirla a las dependencias de TS-CKP-001 | Orquestador |
+| G1 | ~~Resultados de SPIKE-CKP-001~~. **Cerrado (2026-10-20)** por el [Brief](../research/SPIKE-CKP-001-resultados.md) (§ 7 y § 8): S4 con A2-W → R-A2W, sin prefiltro, cifras en § Valores numéricos, método de rangos de E7 con unión de bloques, umbral de fidelidad corregido por el PO. ADR-CKP-001 enmendado (Enmienda 2026-10-20) | — | — | — | — |
+| G2 | Forma del estado y del evento de predicción en el contrato: tipos, nombres de campos, consulta bajo demanda, evento de lote y capacidad. ADR-CKP-001 § 8 la deja "pendiente, dueño: worker del canal"; `api-contract-ipc.md:213` declara `repo.attention` sin emisor. Tiene que poder llevar la marca de regla de merge propia (D14) | Bloqueante | T009 (y T010, T012, T013 por arrastre) | Fijar la forma en `api-contract-ipc.md` y en la Dev Spec de TS-GRP-004, con la consulta del perfil `mcp` de US-MCP-016 (ADR-CKP-001, Enmienda 2026-10-05) | Worker del canal (TS-GRP-004) |
+| G3 | ~~`gix` ≥ 0.89.0 en el workspace~~. **Cerrado (2026-10-20)**: `gix` 0.89 y `gix-pack` 0.76 están en `main` (PR #251). La feature `merge` solo en `crates/git/Cargo.toml` la añade T005 | — | — | — | — |
+| G4 | ~~Enmienda de ADR-GRP-009 Validación 5 para R-A2W~~. **Cerrado (2026-10-20)**: aplicada como [Enmienda (2026-10-20, SPIKE-CKP-001) de ADR-GRP-009](../../../../architecture/decisions/ADR-GRP-009-frontera-solo-lectura-git.md): el lanzador del trabajador del predictor (`crates/core::predict::worker`) es el único módulo autorizado fuera de `crates/git` para lanzar el propio binario, con argv fijo y sin shell. Las enmiendas de R-B quedan descartadas | — | — | — | — |
+| G5 | TS-GRP-005 (`WorkClass::Utility` y `PowerSource`) está en `ready`, sin implementar. TS-CKP-001 no la lista en `related.stories` | Bloqueante | T007 (y T006, T010, T012, T013 por arrastre) | Implementar TS-GRP-005 antes de T007 y añadirla a las dependencias de TS-CKP-001 | Orquestador |
 
 ---
 
 ## 🔭 La forma
 
-Cuando esto termine, el daemon tiene un módulo `predict` que escucha al observador, mantiene los pares de cada repo activo, calcula el solape en el acto y encola el merge en seco en un pool de prioridad baja detrás de un puerto con una implementación por rama.
+Cuando esto termine, el daemon tiene un módulo `predict` que escucha al observador, mantiene los pares de cada repo activo, calcula el solape en el acto y encola el merge en seco en un pool de prioridad baja, que lo envía a un proceso trabajador detrás del puerto `DryMerger`.
 
 ```mermaid
 classDiagram
@@ -157,7 +168,7 @@ classDiagram
     class DryMerger:::nuevo { <<nuevo T007>> }
     class InProcessMerger:::nuevo { <<nuevo T007>> }
     class WorkerMerger:::nuevo { <<nuevo T006>> }
-    class StoreMerger:::nuevo { <<nuevo T008>> }
+    class PredictWorker:::nuevo { <<nuevo T006, proceso hijo>> }
     class DryMergeOutcome:::nuevo { <<nuevo T004>> }
     class UncommittedPaths:::nuevo { <<nuevo T001>> }
     class ObserverHooks:::modificado { <<modificado T001>> }
@@ -168,7 +179,8 @@ classDiagram
     PredictPool --> DryMerger : un solo puerto
     InProcessMerger ..|> DryMerger
     WorkerMerger ..|> DryMerger
-    StoreMerger ..|> DryMerger
+    WorkerMerger --> PredictWorker : stdin/stdout, plazo 2 s, RSS cada 20 ms
+    PredictWorker --> InProcessMerger : ejecuta
     DryMerger ..> DryMergeOutcome : devuelve
     ObserverHooks --> Predictor : recomputo y nivel
     Predictor --> UncommittedPaths : lee, no persiste
@@ -178,9 +190,9 @@ classDiagram
     classDef existente fill:#f1f5f9,stroke:#94a3b8,color:#334155
 ```
 
-🟩 nuevo · 🟨 modificado · ⬜ existente. Tras G1 sobrevive una sola implementación de `DryMerger` (dos en R-A2W, porque `WorkerMerger` ejecuta la misma función que `InProcessMerger`).
+🟩 nuevo · 🟨 modificado · ⬜ existente. El daemon usa `WorkerMerger`; `InProcessMerger` corre dentro del trabajador y en los tests.
 
-**Cómo fluye** un commit en un worktree, con R-A2:
+**Cómo fluye** un commit en un worktree:
 
 ```mermaid
 sequenceDiagram
@@ -189,20 +201,23 @@ sequenceDiagram
     participant P as Predictor
     participant Q as PairQueue
     participant L as PredictPool
-    participant M as DryMerger
+    participant M as WorkerMerger
+    participant T as trabajador (proceso hijo)
     participant C as canal (contrato de G2)
     W->>P: git_event y worktree_recomputed (T001)
     P->>P: triples de los pares del worktree, solape en el acto (T002)
     P->>C: pares afectados en recalculando, solape actual (T009)
     P->>Q: encola los pares cuya triple cambió (T003)
     Q->>L: el de mayor prioridad (T007)
-    L->>M: merge(triple, topes), plazo de 2 s (T007)
-    M-->>L: DryMergeOutcome o DryMergeError
+    L->>M: merge(triple, topes) (T007)
+    M->>T: trabajo por stdin; plazo de 2 s y RSS vigilada (T006)
+    T-->>M: DryMergeOutcome, o muerto por límite
+    M-->>L: resultado; escalado de renombrados si toca (T006)
     L->>P: resultado, descartado si la triple ya cambió (T003)
     P->>C: par actual o no calculable, con su hora (T009)
 ```
 
-El paso 9 es el único que cambia un contrato publicado, y su forma es G2. El paso 8 decide que un resultado viejo no se publique nunca como `actual`.
+El paso 12 es el único que cambia un contrato publicado, y su forma es G2. El paso 11 decide que un resultado viejo no se publique nunca como `actual`.
 
 **Dónde acaba el dato:**
 
@@ -222,31 +237,30 @@ Los tres consumidores leen el mismo resultado del motor (BR-CKP-CONS-001). T009 
 
 ## 🚀 Plan de implementación
 
-> Se ejecuta en orden topológico (`Depende:`), solo con las tareas de la rama que elija G1. Rutas relativas a la raíz del repo.
+> Se ejecuta en orden topológico (`Depende:`). Rutas relativas a la raíz del repo. T008 (rama R-B) se borró al cerrar G1; la numeración no se rehace.
 
 ### El trabajo de un vistazo
 
-Tres frentes y un cierre: el predictor común (T001 a T003, T009), el merge en seco de la rama elegida (T004 a T008) y las verificaciones (T010 a T012), con T013 al final.
+Tres frentes y un cierre: el predictor común (T001 a T003, T009), el merge en seco y su trabajador (T004 a T007) y las verificaciones (T010 a T012), con T013 al final. Bloqueadas: T007 por G5; T009 por G2; T006, T010, T012 y T013 por arrastre.
 
-| # | Tarea | Depende | Aterriza en | Rama |
-|---|---|---|---|---|
-| T001 | Retener las rutas sin commitear y avisar al predictor del recomputo y del nivel | — | `crates/core/src/{observe.rs,watch}` | todas |
-| T002 | Crear el módulo de predicción con los pares, el trabajo propio y el solape | T001 | `crates/core/src/predict`, `crates/git/src/reader.rs` | todas |
-| T003 | Crear los estados, la caché por triple y la cola coalescente, y registrar el módulo del daemon | T002 | `crates/core/src/predict`, `daemon/modules` | todas |
-| T004 | Crear los tipos del merge en seco y el extractor de hunks | — | `crates/git/src/dry_merge` | A2 · A2W · B |
-| T005 | Implementar el merge en seco en memoria con `gix_merge::tree` | T004 | `crates/git/src/dry_merge/memory.rs` | A2 · A2W |
-| T006 | Implementar el proceso trabajador del predictor | T005, T007 | `crates/core/src/predict/worker`, `apps/cli/src/commands` | A2W |
-| T007 | Montar el pool `utility` con los topes por par y la pausa por ahorro de energía | T003, T005, T008 | `crates/core/src/predict/pool.rs` | A2 · A2W · B |
-| T008 | Implementar el merge en seco con `merge-tree` en el almacén del perfil | T004 | `crates/git/src/dry_merge/store.rs` | B |
-| T009 | Publicar el estado y el evento de predicción | T003 | `crates/api/src`, `crates/core/src/channel` | todas |
-| T010 | Añadir la suite "predicción" de INF-GRP-001 y las comprobaciones estáticas | T007, T009 | `crates/{core,git}/tests`, `crates/testkit` | todas |
-| T011 | Crear el corpus fijo de fidelidad | T005, T008 | `crates/git/tests` | A2 · A2W · B |
-| T012 | Añadir el escenario "commit hasta predicción publicada" a INF-GRP-002 | T007, T009 | `apps/cli/benches` | A2 · A2W · B |
-| T013 | Cerrar la historia y la documentación | T010, T011, T012 | `docs` | todas |
+| # | Tarea | Depende | Aterriza en |
+|---|---|---|---|
+| T001 | Retener las rutas sin commitear y avisar al predictor del recomputo y del nivel | — | `crates/core/src/{observe.rs,watch}` |
+| T002 | Crear el módulo de predicción con los pares, el trabajo propio y el solape | T001 | `crates/core/src/predict`, `crates/git/src/reader.rs` |
+| T003 | Crear los estados, la caché por triple y la cola coalescente, y registrar el módulo del daemon | T002 | `crates/core/src/predict`, `daemon/modules` |
+| T004 | Crear los tipos del merge en seco, el extractor de conflictos y el de hunks | — | `crates/git/src/dry_merge` |
+| T005 | Implementar el merge en seco en memoria con `gix_merge::commit` | T004 | `crates/git/src/dry_merge/memory.rs` |
+| T006 | Implementar el proceso trabajador del predictor | T005, T007 | `crates/core/src/predict/worker`, `apps/cli/src/commands` |
+| T007 | Montar el pool `utility` con los topes por par y la pausa por ahorro de energía | T003, T005 | `crates/core/src/predict/pool.rs` |
+| T009 | Publicar el estado y el evento de predicción | T003 | `crates/api/src`, `crates/core/src/channel` |
+| T010 | Añadir la suite "predicción" de INF-GRP-001 y las comprobaciones estáticas | T006, T009 | `crates/{core,git}/tests`, `crates/testkit` |
+| T011 | Crear el corpus fijo de fidelidad | T005 | `crates/git/tests` |
+| T012 | Añadir el escenario "commit hasta predicción publicada" a INF-GRP-002 | T006, T009 | `apps/cli/benches` |
+| T013 | Cerrar la historia y la documentación | T010, T011, T012 | `docs` |
 
 ### En qué orden
 
-Dos frentes paralelos (el predictor en `crates/core` y el merge en seco en `crates/git`) que se juntan en el pool. Las aristas hacia T005 y T008 son alternativas: al cerrar G1 se borra la de la rama descartada. En R-SOLAPE, T010 depende solo de T009.
+Dos frentes paralelos (el predictor en `crates/core` y el merge en seco en `crates/git`) que se juntan en el pool y el trabajador.
 
 ```mermaid
 graph LR
@@ -255,16 +269,13 @@ graph LR
     T003 --> T007
     T003 --> T009
     T004 --> T005
-    T004 --> T008
     T005 --> T006
     T007 --> T006
     T005 --> T007
-    T008 --> T007
-    T007 --> T010
+    T006 --> T010
     T009 --> T010
     T005 --> T011
-    T008 --> T011
-    T007 --> T012
+    T006 --> T012
     T009 --> T012
     T010 --> T013
     T011 --> T013
@@ -311,7 +322,7 @@ graph LR
 - Un `ChangedPaths` con `total` mayor que su `max` da un solape `partial`, nunca uno vacío.
 - `RepoReader::merge_bases(a, b)` recibe ids hex y devuelve todas las merge-bases, para que el merge en seco construya la base virtual.
 
-> **Nota técnica.** `changed_paths` compara árboles sin detectar renombrados, así que un renombrado aparece con su ruta de origen y su ruta de destino. El prefiltro de T003 no tiene que añadir los orígenes aparte. `merge_base` existente (`reader.rs:484`) recibe `RefName` y devuelve una sola base.
+> **Nota técnica.** `changed_paths` compara árboles sin detectar renombrados, así que un renombrado aparece con su ruta de origen y su ruta de destino, y el solape lo ve por las dos. `merge_base` existente (`reader.rs:484`) recibe `RefName` y devuelve una sola base. El solape cubre también lo **commiteado** de los dos lados: un archivo que modifican los dos lados sin ⚡ (límite declarado 3 de ADR-CKP-001) sigue visible como ⚠.
 
 - **Depende:** T001
 - **Refs:** ADR-CKP-001 § 2 y § 3; BR-CKP-WF-005, BR-CKP-EDGE-001
@@ -325,7 +336,6 @@ graph LR
 **Ubicación.**
 - `crates/core/src/predict/state.rs` (**CREATE**)
 - `crates/core/src/predict/queue.rs` (**CREATE**)
-- `crates/core/src/predict/prefilter.rs` (**CREATE**)
 - `crates/core/src/daemon/modules/predict.rs` (**CREATE**)
 - `crates/core/src/daemon/modules/mod.rs` (**MODIFY**)
 
@@ -336,84 +346,113 @@ graph LR
 3. Cola coalescente: como mucho un trabajo pendiente por par; uno nuevo sustituye al anterior.
 4. Prioridad: (1) los pares contra la base del worktree que cambió; (2) sus pares con worktrees con sesión presente; (3) el resto. En el cálculo inicial, primero los pares con sesión presente.
 5. Operación en curso en un worktree (rebase o merge a medias) → sus pares `pendiente (operación en curso)`, sin encolar.
-6. Prefiltro, si G1 lo mantiene: rutas commiteadas de cada lado desde la merge-base del par, ampliadas con sus directorios padre. Sin intersección, el par es `actual` sin conflicto y sin ejecutar el merge.
+6. Sin prefiltro (D10): todo par cuya triple cambió va al merge en seco.
 7. `repo_tier_changed(Dormant)` → D4. `repo_retired` → se borran los pares del repo.
 8. Registrar el módulo con una línea en `MODULES`.
 
 - **Depende:** T002
-- **Refs:** ADR-CKP-001 § 4, § 5 y § 6; ADR-GRP-010 N1; D4
+- **Refs:** ADR-CKP-001 § 4, § 5 y § 6, y Enmienda 2026-10-20 (sin prefiltro); ADR-GRP-010 N1; D4, D10
 - **Aceptación:** `cargo test -p gitraptor-core --lib predict::state` y `cargo test -p gitraptor-core --lib predict::queue`
 - **Guard ⛔3.1:** `predict::state::tests::a_result_of_stale_inputs_is_never_current`
 
-### T004 — Crear los tipos del merge en seco y el extractor de hunks
+### T004 — Crear los tipos del merge en seco, el extractor de conflictos y el de hunks
 
-**Objetivo.** El resultado tipado del merge en seco y los rangos de líneas por lado. La ejecución del merge queda en T005 y T008.
+**Objetivo.** El resultado tipado del merge en seco: la lista de archivos en conflicto con su tipo y los rangos de líneas por lado. La ejecución del merge queda en T005.
 
 **Ubicación.**
 - `crates/git/src/dry_merge/mod.rs` (**CREATE**)
+- `crates/git/src/dry_merge/conflicts.rs` (**CREATE**)
 - `crates/git/src/dry_merge/hunks.rs` (**CREATE**)
 - `crates/git/src/lib.rs` (**MODIFY**)
 
-**Reglas**
+**Reglas — extractor de conflictos** (Brief § 2 y § 9.6; `spikes/conflict-prediction/src/a2.rs`)
+- La lista de archivos sale de aplicar los conflictos del `Outcome` a un índice construido **en memoria** desde el árbol fusionado, nunca al índice del repo.
+- Se añaden aparte los conflictos que no dejan etapa en ese índice (F2: un directorio ocupa el lugar del archivo) y los archivos movidos por un renombrado de directorio (`merge.directoryRenames=conflict`, el valor por defecto de `merge-ort`). Sin esto, la paridad en R-SYN baja del 100 % al 90 %.
+- Cada archivo lleva su `ConflictKind`. `has_kind_needing_escalation()` dice si hay alguno `ModifyDelete` o `Rename` (lo usa el escalado de T006).
+
+**Reglas — extractor de hunks**
 - Las entradas son ids de commit hex ya resueltos, nunca nombres de ref.
 - Los rangos son números de línea (inicio en 1 y longitud) en la versión de cada lado, nunca contenido (NFR-03, D7).
+- Un marcador solo cuenta con la longitud exacta `marker_size` (32) y al principio de línea. Los marcadores más largos de una base virtual son contenido.
+- **Unión de bloques** (D11, Brief § 4.3): dos bloques de conflicto separados por ≤ `HUNK_JOIN_GAP` líneas (3) en **los dos** lados se publican como uno solo, como hace Git (`XDL_MERGE_ZEALOUS_ALNUM`). Un bloque publicado puede abarcar líneas que no están en conflicto (límite declarado 4).
 - Un archivo binario, un submódulo o un blob por encima de `max_blob_bytes` dan el archivo sin hunks.
-- Pasados `max_files` archivos o `max_hunks_per_file` hunks, se corta y se marca `truncated` o `hunks_truncated`.
-- Un marcador solo cuenta con la longitud ampliada exacta (`7 + 2 × marker_size_multiplier`) y al principio de línea.
+- Pasados `max_files` archivos o `max_hunks_per_file` hunks (después de la unión), se corta y se marca `truncated` o `hunks_truncated`.
 
-> **Nota técnica.** `gix-merge` no expone los hunks: el blob con marcadores queda en `ContentMerge::merged_blob_id` (anexo, A2). Los números de línea del blob fusionado no son los de cada lado, porque las partes resueltas solas pueden venir del otro lado. D7 los alinea con un diff contra cada lado.
+> **Nota técnica.** `gix-merge` no expone los hunks: el blob con marcadores queda en `ContentMerge::merged_blob_id` (anexo, A2). Los números de línea del blob fusionado no son los de cada lado, porque las partes resueltas solas pueden venir del otro lado. D7 los alinea con un diff contra cada lado; es el método de `spikes/conflict-prediction/src/hunks.rs`, que dio el 96,5 % de rangos idénticos a `merge-ort` con la unión.
 
 - **Depende:** —
-- **Refs:** ADR-CKP-001 § 3; plan del SPIKE F6, H7 y E7; D7
-- **Aceptación:** `cargo test -p gitraptor-git --lib dry_merge::hunks`
+- **Refs:** ADR-CKP-001 § 3 y Enmienda 2026-10-20; Brief § 2, § 4.3 y § 9.6; D7, D11
+- **Aceptación:** `cargo test -p gitraptor-git --lib dry_merge::conflicts` y `cargo test -p gitraptor-git --lib dry_merge::hunks`
 - **Guard ⛔4.1:** `dry_merge::hunks::tests::a_line_that_mimics_a_short_marker_is_content`
+- **Guard ⛔4.2:** `dry_merge::hunks::tests::blocks_three_lines_apart_are_joined`
+- **Guard ⛔4.3:** `dry_merge::conflicts::tests::a_directory_rename_conflict_is_listed`
 
-### T005 — Implementar el merge en seco en memoria con `gix_merge::tree`
+### T005 — Implementar el merge en seco en memoria con `gix_merge::commit`
 
-**Objetivo.** R-A2 y R-A2W: `merge_in_memory` calcula el conflicto previsto de una triple sin escribir nada en disco y sin lanzar procesos.
+**Objetivo.** `merge_in_memory` calcula el conflicto previsto de una triple sin escribir nada en disco y sin lanzar procesos. Corre dentro del trabajador de T006.
 
 **Ubicación.**
 - `crates/git/src/dry_merge/memory.rs` (**CREATE**)
-- `crates/git/Cargo.toml` (**MODIFY**)
+- `crates/git/src/dry_merge/merge_attr.rs` (**CREATE**)
+- `crates/git/Cargo.toml` (**MODIFY**: feature `merge` de `gix` solo aquí)
 
 **Reglas**
-- Abrir con `RepoReader::open` (permisos de `reader.rs:639`, `bail_if_untrusted`, `ignore_replacements = true`) y una instancia `with_object_memory()` por trabajo, que se descarta al terminar.
-- Llamar a `gix_merge::tree(...)` con `blob::Platform::new(<pipeline sin drivers>, <modo>, <pila de atributos vacía>, Vec::new(), opts)`.
-- Fijar `rewrites.limit`, `marker_size_multiplier` y `max_blob_bytes` desde `DryMergeLimits`. Nunca se leen de la configuración del repo; el umbral de similitud sí.
-- Leer el tamaño de cada blob de su cabecera antes de cargarlo. Por encima del tope, el archivo es binario.
+- Abrir con `RepoReader::open` (permisos de `reader.rs:639`, `bail_if_untrusted`, `config.system = false`, `attributes.system = false`, `ignore_replacements = true`) y una instancia `with_object_memory()` por trabajo, que se descarta al terminar.
+- Llamar a `gix_merge::commit(...)` (merge-base, virtual si hay varias) con `blob::Platform::new(<pipeline sin drivers>, ToGit, <pila de atributos vacía>, Vec::new(), …)` y un `diff::blob::Platform` igual.
+- Fijar desde `DryMergeLimits` `rewrites_limit`, `marker_size` (32), `max_blob_bytes` y `max_written_bytes`. Nunca se leen de la configuración del repo; el umbral de similitud sí. `marker_size_multiplier` se deja en su valor por defecto, para que los marcadores de una base virtual sean más largos que 32 y el extractor de T004 no los cuente.
+- **Todo acceso a objetos pasa por un envoltorio** con dos cotas previas (Brief § 2 y § 6), que cortan sin matar el trabajador:
+  - el tamaño de cada blob se lee de su cabecera antes de cargarlo; por encima de `max_blob_bytes`, el archivo es binario (sin hunks);
+  - los bytes escritos en la memoria de objetos del trabajo no pasan de `max_written_bytes`; si se pasan → `DryMergeError::LimitExceeded`.
 - Objeto ausente (*partial clone*) → `DryMergeError::MissingObject`, sin red. Repo superficial sin la merge-base → `DryMergeError::Shallow`.
-- Prohibido llamar a `merge_trees`, `merge_commits` o `merge_resource_cache` (los barre T010).
+- **Marca de regla de merge propia** (D14, límite declarado 1): para cada archivo en conflicto, `merge_attr.rs` busca el atributo `merge` en los `.gitattributes` del **árbol de cada punta** (el del directorio del archivo y los de sus padres), leídos como blobs con el mismo envoltorio y analizados con una búsqueda de `gix-attributes` propia. Si alguna punta le da un valor distinto de "sin definir" (`merge=<x>`, `-merge`, `merge`), el archivo lleva `has_merge_rule = true`. Esa búsqueda **nunca** se pasa a la plataforma del merge (L-04), no lee el disco, el índice, `info/attributes` ni `core.attributesFile`, y no cuenta como conflicto.
+- Prohibido llamar a `merge_trees`, `merge_commits`, `merge_resource_cache`, `tree_merge_options` o `Repository::attributes*` (los barre T010).
 
-> **Nota técnica.** `Repository::merge_trees` construye su propia caché de recursos, que lee `merge.<x>.driver`, `.gitattributes` del índice o del árbol de `HEAD` y monta filtros que lanzan procesos (anexo, A3; plan F4). `gix-merge` no tiene interrupción cooperativa (F3): el plazo de 2 s lo impone T007 o el trabajador de T006, según G1.
+> **Nota técnica.** `Repository::merge_trees` construye su propia caché de recursos, que lee `merge.<x>.driver`, `.gitattributes` del índice o del árbol de `HEAD` y monta filtros que lanzan procesos (anexo, A3; plan F4). `gix-merge` no tiene interrupción cooperativa (F3), y el merge de texto de un solo blob no accede a objetos, así que un plazo dentro del proceso no lo corta (Brief § 6: 36 s con un blob de 8 MB). El plazo y la memoria los impone el daemon sobre el trabajador (T006). La forma de referencia es `spikes/conflict-prediction/src/a2.rs`, sin el plazo por acceso (P6), que no sirve.
 
 - **Depende:** T004
-- **Refs:** ADR-CKP-001 § 1 (a); ADR-GRP-009, Enmienda 2026-10-04 (merge en memoria); L-04, M-02, M-06; G3
-- **Aceptación:** `cargo test -p gitraptor-git --lib dry_merge::memory`
+- **Refs:** ADR-CKP-001 § 1 (a) y Enmienda 2026-10-20; ADR-GRP-009, Enmienda 2026-10-04 (merge en memoria); L-04, M-02, M-06; D11, D12, D14
+- **Aceptación:** `cargo test -p gitraptor-git --lib dry_merge::memory` y `cargo test -p gitraptor-git --lib dry_merge::merge_attr`
 - **Guard ⛔5.1:** `dry_merge::memory::tests::a_merge_attribute_runs_no_driver`
+- **Guard ⛔5.2:** `dry_merge::memory::tests::a_blob_over_the_cap_is_binary_without_loading`
+- **Guard ⛔5.3:** `dry_merge::merge_attr::tests::a_union_rule_in_either_tip_marks_the_file`
 
 ### T006 — Implementar el proceso trabajador del predictor
 
-**Objetivo.** R-A2W: el merge en seco corre en un proceso hijo de vida larga, el propio binario, que el daemon mata y relanza si un par pasa del plazo o de la cota de memoria.
+**Objetivo.** El merge en seco corre en un proceso hijo de vida larga, el propio binario, que el daemon mata y relanza si un par pasa del plazo o de la cota de memoria. `WorkerMerger` implementa `DryMerger` en el daemon.
 
 **Ubicación.**
-- `crates/core/src/predict/worker/mod.rs` (**CREATE**)
-- `crates/core/src/predict/worker/serve.rs` (**CREATE**)
+- `crates/core/src/predict/worker/mod.rs` (**CREATE**: lanzador y `WorkerMerger`, el único lanzamiento de procesos de `predict`)
+- `crates/core/src/predict/worker/serve.rs` (**CREATE**: bucle del lado hijo)
 - `apps/cli/src/commands/predict_worker.rs` (**CREATE**)
 - `apps/cli/src/commands/mod.rs` (**MODIFY**)
 
-**Reglas**
-- Argv fijo: la ruta del ejecutable que resolvió el daemon al arrancar y el subcomando oculto `predict-worker`. Sin shell. Entorno con la allowlist de ADR-GRP-009 § 3.
-- Tramas con prefijo de longitud por stdin/stdout, con un tope por trama (`MAX_WORKER_FRAME`). El daemon trata la respuesta como no confiable: valida tamaños y tipos antes de usarla.
-- El primer intercambio compara la versión del binario. Si no coincide, el trabajador se relanza.
-- El trabajador fija su clase `utility` y sus límites al arrancar, antes de leer el primer trabajo. EOF en stdin → sale.
-- El daemon mata el trabajador al vencer el plazo por par o al superar la cota de memoria. El par queda `no calculable (límite excedido)`, sin reintento hasta que cambie su triple.
-- El trabajador no abre el perfil, ni el canal, ni el cerrojo del daemon (ADR-GRP-005: el daemon es el único escritor del perfil).
+**Reglas — lanzamiento** (ADR-GRP-009, Enmienda 2026-10-20)
+- Argv fijo: la ruta absoluta del ejecutable que resolvió el daemon al arrancar (`current_exe`, una vez) y el subcomando oculto `predict-worker`. Sin shell. Entorno construido desde cero (`env_clear`) con solo `HOME`, `PATH` sin entradas relativas y las variables de sistema imprescindibles del SO; ninguna `GIT_*`, `DYLD_*` ni `LD_*`. cwd fijo fuera de cualquier repo.
+- Un solo trabajador por daemon (`PREDICT_CONCURRENCY` = 1). Se lanza con el primer trabajo y se cierra (EOF en stdin) cuando el predictor queda sin trabajo durante `WORKER_IDLE_EXIT`, y al pausar por D4 o D5, para que su memoria no cuente en reposo.
 
-> **Nota técnica.** En macOS `RLIMIT_AS` es un alias de `RLIMIT_RSS`, y XNU no lo impone (⚠️ **ASSUMPTION**, lo confirma E10). Por eso la cota de memoria de R-A2W la impone el daemon midiendo la memoria residente del hijo, además de `RLIMIT_AS` en Linux.
+**Reglas — protocolo**
+- Tramas con prefijo de longitud por stdin/stdout, con un tope por trama (`MAX_WORKER_FRAME`). El daemon trata la respuesta como no confiable: valida tamaños, tipos y que las rutas y rangos cumplen los topes de `DryMergeLimits` antes de usarla.
+- El primer intercambio compara la versión del binario. Si no coincide, el trabajador se relanza.
+- El trabajador fija su clase `utility` al arrancar, antes de leer el primer trabajo. EOF en stdin → sale. No abre el perfil, ni el canal, ni el cerrojo del daemon (ADR-GRP-005: el daemon es el único escritor del perfil), y no lanza ningún proceso.
+
+**Reglas — cotas** (D12, Brief § 6)
+- **Plazo**: un temporizador del daemon de `PAIR_DEADLINE` (2 s, reloj de pared) por trabajo. Vencido → mata el trabajador (SIGKILL; en Windows, `TerminateProcess`), espera su salida y lo relanza con el siguiente trabajo.
+- **Memoria**: el daemon lee la memoria residente del hijo cada `WORKER_RSS_POLL` (20 ms): `proc_pidinfo` en macOS y `/proc/<pid>/statm` en Linux, más `RLIMIT_AS` en Linux. Por encima de `JOB_MEMORY_CAP` → lo mata y relanza. Con 20 ms de muestreo puede pasarse hasta unos 130 MiB antes de morir (Brief § 6).
+- **Sin `RLIMIT_CPU` como cota por par**: en un proceso de vida larga es acumulativo y acabaría matando un trabajador sano. El tiempo por par lo da el temporizador.
+- Par cortado por plazo o memoria → `no calculable (límite excedido)`, sin reintento hasta que cambie su triple. Un `DryMergeError::LimitExceeded` del propio trabajador (tope de bytes escritos) da el mismo estado sin relanzar.
+
+**Reglas — escalado de renombrados** (D11, D-SPK-4)
+- Primer trabajo con `rewrites_limit` = `REWRITES_LIMIT` (1.000). Si su resultado tiene algún archivo `ModifyDelete` o `Rename`, se envía un segundo trabajo del mismo par con `REWRITES_LIMIT_ESCALATED` (100.000), con su propio plazo de 2 s.
+- Si el segundo trabajo termina, se publica su resultado. Si lo corta un límite, se publica el **del primero**, como `actual`, con el límite declarado 2 (renombrados no detectados); nunca `no calculable`.
+
+> **Nota técnica.** En macOS `RLIMIT_AS`/`RLIMIT_RSS` no se imponen (confirmado por E10), por eso la vigilancia desde el padre. Windows: un *Job Object* da el tope de memoria y de CPU (pendiente de la etapa multiplataforma). Referencia: `spikes/conflict-prediction/src/worker.rs`, que usa JSON por líneas; aquí las tramas llevan prefijo de longitud.
 
 - **Depende:** T005, T007
-- **Refs:** ADR-CKP-001 § 1 y § 5; ADR-GRP-009 Validación 5 (G4); ADR-GRP-015 § 1
+- **Refs:** ADR-CKP-001 § 1 y § 5, y Enmienda 2026-10-20; ADR-GRP-009, Enmienda 2026-10-20 (Validación 5); ADR-GRP-015 § 1 y § 3; D12
 - **Aceptación:** `cargo test -p gitraptor-core --test predict_worker`
+- **Guard ⛔6.1:** `predict_worker::a_pair_over_the_deadline_kills_and_relaunches_the_worker`
+- **Guard ⛔6.2:** `predict_worker::a_worker_over_the_memory_cap_is_killed`
+- **Guard ⛔6.3:** `predict_worker::a_cut_escalation_publishes_the_first_result`
 
 ### T007 — Montar el pool `utility` con los topes por par y la pausa por ahorro de energía
 
@@ -424,31 +463,15 @@ graph LR
 - `crates/core/src/predict/merger.rs` (**CREATE**)
 
 **Reglas**
-- Hilos con `WorkClass::Utility` de TS-GRP-005 (G5), separados del observador y del recomputo. Concurrencia `PREDICT_CONCURRENCY`, o 1 con 4 núcleos o menos.
-- `InProcessMerger` (R-A2 y dentro del trabajador de R-A2W) llama a `merge_in_memory`. `StoreMerger` (R-B) llama a `merge_in_store`. Solo se compila la de la rama elegida.
-- Plazo por par `PAIR_DEADLINE`. Superado, o con la memoria por encima de `JOB_MEMORY_CAP` → `no calculable (límite excedido)`, sin reintento hasta que cambie la triple.
-- `PowerSource` en ahorro → D5: no se saca nada de la cola. El cambio se aplica en ≤ 60 s.
+- Un hilo con `WorkClass::Utility` de TS-GRP-005 (G5), separado del observador y del recomputo, que saca de la cola de uno en uno (`PREDICT_CONCURRENCY` = 1).
+- `InProcessMerger` llama a `merge_in_memory`; lo usan el trabajador (T006) y los tests. En el daemon, el pool recibe `WorkerMerger` (T006).
+- Los estados por plazo o memoria superados los produce `WorkerMerger` (T006): `no calculable (límite excedido)`, sin reintento hasta que cambie la triple.
+- `PowerSource` en ahorro → D5: no se saca nada de la cola y se cierra el trabajador. El cambio se aplica en ≤ 60 s.
 
-- **Depende:** T003, T005, T008
-- **Refs:** ADR-CKP-001 § 5; ADR-GRP-015 § 1 y § 2; D5, D8; G5
+- **Depende:** T003, T005
+- **Refs:** ADR-CKP-001 § 5 y Enmienda 2026-10-20; ADR-GRP-015 § 1 y § 2; D5, D8; G5
 - **Aceptación:** `cargo test -p gitraptor-core --lib predict::pool`
 - **Guard ⛔7.1:** `predict::pool::tests::power_saving_computes_no_pair`
-
-### T008 — Implementar el merge en seco con `merge-tree` en el almacén del perfil
-
-**Objetivo.** R-B: `merge_in_store` ejecuta `git merge-tree --write-tree` sobre un almacén de trabajo *bare* del perfil, con `alternates` hacia el repo, y lee del almacén los blobs en conflicto.
-
-**Ubicación.** `crates/git/src/dry_merge/store.rs` (**CREATE**)
-
-**Reglas**
-- Argv fijo de ADR-CKP-001 § 1 (b): `--git-dir=<almacén> -c protocol.allow=never -c credential.helper= -c submodule.recurse=false -c core.useReplaceRefs=false merge-tree --write-tree -z --name-only --messages`, más `--no-lazy-fetch` con Git ≥ 2.45.
-- Con Git ≥ 2.39, un proceso por lote con `--stdin`. Con 2.38, uno por par.
-- `HEAD` del almacén sin nacer. Configuración global y de sistema aisladas. Entorno con la allowlist del § 3.
-- El almacén vive en `<datos>/ckp/<id-repo>/` con 0700/0600, y se vacía tras cada lote.
-
-- **Depende:** T004
-- **Refs:** ADR-CKP-001 § 1 (b) y tabla de enmiendas; ADR-GRP-009:224 (G4)
-- **Aceptación:** `cargo test -p gitraptor-git --lib dry_merge::store`
 
 ### T009 — Publicar el estado y el evento de predicción
 
@@ -462,8 +485,7 @@ graph LR
 
 **Reglas**
 - Rutas y nombres de rama van como texto no confiable (`Untrusted`, `UntrustedName`). Nunca contenido de archivos.
-- Los límites declarados (§ 7 de ADR-CKP-001) son datos con un código cada uno, no texto libre.
-- R-SOLAPE: el ⚡ de cada par se publica no disponible, con su motivo.
+- Los límites declarados (§ 7 de ADR-CKP-001 y Enmienda 2026-10-20) son datos con un código cada uno, no texto libre. Por archivo del ⚡, solo la marca `has_merge_rule` (límite 1, D14); los límites 2, 3 y 4 van a nivel de vista, sin marca por archivo (decisión del PO, 2026-10-20). El texto "sin ⚡ no garantiza un merge limpio" (límite 3) es de los clientes.
 - La forma nueva va detrás de una capacidad (ADR-GRP-016). En el mismo PR se adaptan la CLI, la TUI y `raptor-mcp`.
 - `<los tipos, nombres de campos, consulta y evento de lote que fije G2>`
 
@@ -484,28 +506,31 @@ graph LR
 **Reglas**
 - Los tests de la suite van dentro de un `mod repo_intact`, el filtro del gate de CI (`repo-intact.yml:183`).
 - Repo intacto: 10 worktrees, los 55 pares, recálculos por commit y por movimiento de la base, `gc` concurrente del usuario. Cero diferencias en la huella, con el mtime de packs, objetos sueltos y directorios de `objects/`.
-- Canario ampliado: `merge.<x>.driver`, `.gitattributes` con `merge=<x>` en el disco, en el índice y en el árbol, `refs/replace/*` e `info/grafts`. El marcador nunca aparece. Con R-A2, la auditoría de `exec` ve 0 procesos del predictor.
+- Canario ampliado: `merge.<x>.driver`, `.gitattributes` con `merge=<x>` en el disco, en el índice y en el árbol, `refs/replace/*` e `info/grafts`. El marcador nunca aparece. El único proceso hijo del predictor es el trabajador (el propio binario, por ruta absoluta); el trabajador no lanza ninguno (trampa de `PATH` como en el SPIKE; auditoría de `exec` donde haya permisos).
 - *Partial clone* con remoto *promisor* local: `no calculable (objeto ausente)`, 0 conexiones.
-- Comprobaciones estáticas: `predict` no importa `tm_write`, `guard_write`, `user_ops` ni `invoke`; `merge_trees`, `merge_commits` y `merge_resource_cache` no aparecen en `crates/git/src`; `dry_merge/memory.rs` entra en la excepción de `gix_writes_only_in_store_writer` solo si contiene `with_object_memory`.
-- R-A2W: el único lanzamiento de procesos bajo `predict/` está en `predict/worker/mod.rs`. R-B: `dry_merge/store.rs` entra en `AUTHORIZED`.
+- Hostiles (M-06): blob de 100 MB cortado por cabecera sin relanzar; 10.000 archivos en conflicto → trabajador muerto por memoria y par `no calculable (límite excedido)`; blob denso de 2 MB → muerto por plazo a los 2 s. El daemon sigue respondiendo en los tres.
+- Comprobaciones estáticas: `predict` no importa `tm_write`, `guard_write`, `user_ops` ni `invoke`; `merge_trees`, `merge_commits`, `merge_resource_cache`, `tree_merge_options` y `Repository::attributes*` no aparecen en `crates/git/src/dry_merge`; `dry_merge/memory.rs` entra en la excepción de `gix_writes_only_in_store_writer` solo si contiene `with_object_memory`.
+- El único `Command::new` bajo `crates/core/src/predict/` está en `predict/worker/mod.rs`, y su programa es `current_exe` (ADR-GRP-009, Enmienda 2026-10-20). `apps/cli/src/commands/predict_worker.rs` no tiene `Command::new`.
 
-- **Depende:** T007, T009
-- **Refs:** ADR-CKP-001, Validación 1 a 3, 9 y 10; ADR-GRP-009 Validación 5 y 7
+- **Depende:** T006, T009
+- **Refs:** ADR-CKP-001, Validación 1 a 3, 9 y 10; ADR-GRP-009 Validación 5 y 7, y Enmienda 2026-10-20
 - **Aceptación:** `cargo test --workspace -- repo_intact` y `cargo test -p gitraptor-core --test predict_boundary`
 
 ### T011 — Crear el corpus fijo de fidelidad
 
-**Objetivo.** El corpus sintético del SPIKE (R-SYN, con la demo del BRD § 13) como test que se repite al subir `gix`.
+**Objetivo.** El corpus sintético del SPIKE (R-SYN, 31 casos con la demo del BRD § 13) como test de PR que se repite al subir `gix`, y el corpus real de `git/git` como comprobación a mano al subir `gix`.
 
-**Ubicación.** `crates/git/tests/dry_merge_fidelity.rs` (**CREATE**)
+**Ubicación.**
+- `crates/git/tests/dry_merge_fidelity.rs` (**CREATE**)
+- `crates/testkit/src/syn_corpus.rs` (**CREATE**: generador de R-SYN, portado de `spikes/conflict-prediction/suites/lib/mk-syn.sh`)
 
 **Reglas**
-- La referencia es `git merge-tree --write-tree --name-only -z` en un clon temporal desechable, nunca en el repo observado.
-- Paridad ≥ `FIDELITY_THRESHOLD`, medida sobre los pares con conflicto en alguno de los dos motores. 0 falsos negativos en la demo del BRD § 13.
-- Con el prefiltro activo, 0 falsos negativos en todo el corpus.
+- La referencia es `git merge-tree --write-tree --name-only -z` en un clon temporal desechable, con configuración aislada, `merge.renameLimit=1000` y `conflict-marker-size=32`, nunca en el repo observado.
+- **R-SYN (gate de PR)**: paridad del 100 % sobre los pares con conflicto en alguno de los dos motores, rangos de hunks idénticos y 0 falsos negativos en la demo del BRD § 13. Incluye un caso de historia cruzada en el que las dos bases chocan en el mismo archivo, para verificar los marcadores de la base virtual (⚠️ **ASSUMPTION** de `marker_size_multiplier`, § Valores numéricos).
+- **R-REAL (a mano, al subir `gix`)**: test `#[ignore]` `real_git_corpus` que lee la ruta de un clon de `git/git` de `GITRAPTOR_FIDELITY_GIT_REPO` y reejecuta sus últimos 2.000 merges de dos padres. Falla si la paridad baja de 93,4 % o si los pares con falso negativo pasan de 3 (línea base del Brief, que ninguna versión puede empeorar), y en cualquier caso por debajo del umbral del PO (90 % y ≤ 2 % de falsos negativos). Los falsos positivos se informan y no fallan.
 
-- **Depende:** T005, T008
-- **Refs:** ADR-CKP-001, Validación 4; Q-CKP-25
+- **Depende:** T005
+- **Refs:** ADR-CKP-001, Validación 4, y Enmienda 2026-10-20; Brief § 4; decisión del PO (2026-10-20); Q-CKP-25; D13
 - **Aceptación:** `cargo test -p gitraptor-git --test dry_merge_fidelity`
 
 ### T012 — Añadir el escenario "commit hasta predicción publicada" a INF-GRP-002
@@ -516,9 +541,10 @@ graph LR
 
 **Reglas**
 - Escenario con `ENGINE_BENCH_ROOT` y `repogen::generate`, como los existentes. ≥ 200 muestras, descartando las 10 primeras (ADR-GRP-011 § 4).
-- `FRESHNESS_TARGET` es aviso hasta que G1 confirme la cifra; después, gate (S-CKP-1). El p95 del motor (`ENGINE_P95`) es gate desde el principio.
+- `FRESHNESS_TARGET` es **gate** (Brief § 8, fila 6: 96 ms de p95 medidos frente a 5 s). El p95 del motor (`ENGINE_P95`) es gate desde el principio, medido solo y durante una ráfaga del predictor (E9, que el SPIKE dejó para su fase (b)).
+- La huella del daemon (RES-02) se mide en reposo con el trabajador cerrado (`WORKER_IDLE_EXIT`); durante la ráfaga se informa la RSS del daemon más la del trabajador.
 
-- **Depende:** T007, T009
+- **Depende:** T006, T009
 - **Refs:** ADR-CKP-001, Validación 5; ADR-GRP-011
 - **Aceptación:** `cargo bench -p gitraptor-cli --bench engine -- prediction`
 
@@ -546,13 +572,14 @@ graph LR
 ```text
 crates/
 ├── git/                                   # ADR-GRP-009: única capa que toca repos
-│   ├── Cargo.toml                         ← MODIFY  feature `merge` de gix (R-A2, R-A2W)
+│   ├── Cargo.toml                         ← MODIFY  feature `merge` de gix
 │   ├── src/lib.rs                         ← MODIFY  `pub mod dry_merge;`
 │   ├── src/reader.rs                      ← MODIFY  merge_bases por ids
 │   ├── src/dry_merge/mod.rs               ← CREATE  tipos
+│   ├── src/dry_merge/conflicts.rs         ← CREATE  extractor de conflictos
 │   ├── src/dry_merge/hunks.rs             ← CREATE
-│   ├── src/dry_merge/memory.rs            ← CREATE  R-A2 · R-A2W
-│   ├── src/dry_merge/store.rs             ← CREATE  R-B
+│   ├── src/dry_merge/memory.rs            ← CREATE
+│   ├── src/dry_merge/merge_attr.rs        ← CREATE  marca de regla de merge propia (D14)
 │   └── tests/
 │       ├── static_check.rs                ← MODIFY
 │       └── dry_merge_fidelity.rs          ← CREATE
@@ -562,21 +589,22 @@ crates/
 │   ├── src/watch/mod.rs                   ← MODIFY  puntos nuevos de ObserverHooks
 │   ├── src/daemon/modules/mod.rs          ← MODIFY  una línea en MODULES
 │   ├── src/daemon/modules/predict.rs      ← CREATE
-│   ├── src/predict/                       ← CREATE  mod, pairs, overlap, state, queue, prefilter, pool, merger
-│   ├── src/predict/worker/                ← CREATE  R-A2W
+│   ├── src/predict/                       ← CREATE  mod, pairs, overlap, state, queue, pool, merger
+│   ├── src/predict/worker/                ← CREATE  lanzador, WorkerMerger y bucle del hijo
 │   ├── src/channel/conn.rs                ← MODIFY  G2
 │   └── tests/
 │       ├── predict_repo_intact.rs         ← CREATE
 │       ├── predict_boundary.rs            ← CREATE
 │       ├── predict_publish.rs             ← CREATE
-│       └── predict_worker.rs              ← CREATE  R-A2W
+│       └── predict_worker.rs              ← CREATE
 ├── api/src/prediction.rs                  ← CREATE  G2
 ├── api/src/methods/prediction.rs          ← CREATE  G2
 ├── api/src/methods/mod.rs                 ← MODIFY
-└── testkit/src/canary.rs                  ← MODIFY
+├── testkit/src/canary.rs                  ← MODIFY
+└── testkit/src/syn_corpus.rs              ← CREATE  R-SYN (T011)
 apps/cli/
-├── src/commands/predict_worker.rs         ← CREATE  R-A2W
-├── src/commands/mod.rs                    ← MODIFY  R-A2W
+├── src/commands/predict_worker.rs         ← CREATE  subcomando oculto
+├── src/commands/mod.rs                    ← MODIFY
 └── benches/engine.rs                      ← MODIFY
 ```
 
@@ -592,8 +620,8 @@ apps/cli/
 // crates/git/src/dry_merge/mod.rs
 pub struct DryMergeInput { pub ours: String, pub theirs: String }        // ids hex resueltos
 pub struct DryMergeLimits {
-    pub max_blob_bytes: u64, pub rewrites_limit: usize, pub max_files: usize,
-    pub max_hunks_per_file: usize, pub marker_size_multiplier: u8,
+    pub max_blob_bytes: u64, pub max_written_bytes: u64, pub rewrites_limit: usize,
+    pub max_files: usize, pub max_hunks_per_file: usize, pub marker_size: u8, pub hunk_join_gap: u32,
 }
 pub enum MergeBaseUsed { Single(String), Virtual { bases: Vec<String> }, None }
 pub enum ConflictKind { Content, AddAdd, ModifyDelete, Rename, DirectoryFile, Binary, Submodule }
@@ -601,9 +629,13 @@ pub struct LineRange { pub start: u32, pub len: u32 }                    // 1-ba
 pub struct ConflictFile {
     pub path: String, pub kind: ConflictKind,
     pub ours: Vec<LineRange>, pub theirs: Vec<LineRange>, pub hunks_truncated: bool,
+    pub has_merge_rule: bool,                                            // D14, límite declarado 1
 }
-pub struct DryMergeOutcome { pub merge_base: MergeBaseUsed, pub files: Vec<ConflictFile>, pub truncated: bool }
-pub enum DryMergeError { MissingObject, Shallow, TooLarge, Unavailable(String) }
+pub struct DryMergeOutcome {
+    pub merge_base: MergeBaseUsed, pub files: Vec<ConflictFile>, pub truncated: bool,
+    pub rewrites_escalated: bool,                                        // segundo trabajo de T006 aplicado
+}
+pub enum DryMergeError { MissingObject, Shallow, TooLarge, LimitExceeded, Unavailable(String) }
 
 // crates/core/src/observe.rs
 pub struct UncommittedPaths { pub paths: Arc<BTreeSet<String>>, pub partial: bool }
@@ -626,12 +658,11 @@ pub struct Predictor { /* pares y caché por repo activo; implementa DaemonModul
 pub struct PairQueue { /* un trabajo pendiente por PairKey, con su prioridad y su generación */ }
 
 // crates/core/src/predict/pool.rs
-pub struct PredictPool { /* hilos WorkClass::Utility que sacan de PairQueue y llaman a DryMerger */ }
+pub struct PredictPool { /* un hilo WorkClass::Utility que saca de PairQueue y llama a DryMerger */ }
 
-// crates/core/src/predict/merger.rs y predict/worker/mod.rs: una implementación de DryMerger por rama
-pub struct InProcessMerger;                                              // R-A2 (y dentro del trabajador)
-pub struct WorkerMerger { /* hijo, temporizador, vigilancia de memoria */ }  // R-A2W
-pub struct StoreMerger { /* ruta del almacén de trabajo del perfil */ }      // R-B
+// crates/core/src/predict/merger.rs y predict/worker/mod.rs
+pub struct InProcessMerger;                                              // dentro del trabajador y en tests
+pub struct WorkerMerger { /* hijo, temporizador, vigilancia de RSS, escalado */ }  // el del daemon
 ```
 
 ### Ciclos de vida (DI)
@@ -642,8 +673,7 @@ pub struct StoreMerger { /* ruta del almacén de trabajo del perfil */ }      //
 | Pares y caché de un repo | Mientras el repo está activo o despertando | D4: un repo dormido no tiene estado residente |
 | `UncommittedPaths` | Hasta el siguiente recomputo del worktree, compartido con `Arc` | ADR-GRP-010 § 4: en memoria, sin persistir |
 | Instancia `with_object_memory()` | Un trabajo | ADR-CKP-001 § 1 (a): se descarta al terminar |
-| Proceso trabajador (R-A2W) | Vida larga, relanzado tras un límite o un cambio de versión | ADR-CKP-001 § 1 |
-| Almacén de trabajo (R-B) | Un lote | ADR-CKP-001 § 1 (b): se vacía tras cada lote |
+| Proceso trabajador | Vida larga mientras haya trabajo; relanzado tras un límite o un cambio de versión; cerrado tras `WORKER_IDLE_EXIT` sin trabajo, en repo dormido sin pares activos y en ahorro de energía | ADR-CKP-001 § 1 y Enmienda 2026-10-20; ADR-GRP-015 |
 
 ### Firmas del stack
 
@@ -653,11 +683,9 @@ impl RepoReader {
     pub fn merge_bases(&self, a: &str, b: &str) -> Result<Vec<String>, ReadError>;
 }
 pub fn merge_in_memory(repo: &Path, input: &DryMergeInput, limits: &DryMergeLimits)
-    -> Result<DryMergeOutcome, DryMergeError>;                            // R-A2, R-A2W
-pub fn merge_in_store(store: &Path, repo: &Path, batch: &[DryMergeInput], limits: &DryMergeLimits)
-    -> Vec<Result<DryMergeOutcome, DryMergeError>>;                       // R-B
+    -> Result<DryMergeOutcome, DryMergeError>;                            // corre dentro del trabajador
 pub fn hunk_ranges(merged: &[u8], ours: &[u8], theirs: &[u8], limits: &DryMergeLimits)
-    -> (Vec<LineRange>, Vec<LineRange>, bool);
+    -> (Vec<LineRange>, Vec<LineRange>, bool);                            // con la unión de bloques
 
 // crates/core
 pub trait ObserverHooks: Send + Sync {
@@ -675,7 +703,7 @@ pub trait DryMerger: Send + Sync {
 
 ## Contrato de API
 
-_Sin métodos ni campos definidos aquí._ La forma de la publicación es G2 (T009). Lo que el contrato tiene que poder decir, por par: nivel (⚠ y ⚡), estado y motivo de § Forma del error, hora de cálculo en UTC, archivos con su tipo, rangos por lado, `partial` y `truncated`, y los límites declarados como códigos.
+_Sin métodos ni campos definidos aquí._ La forma de la publicación es G2 (T009). Lo que el contrato tiene que poder decir, por par: nivel (⚠ y ⚡), estado y motivo de § Forma del error, hora de cálculo en UTC, archivos con su tipo, rangos por lado y la marca `has_merge_rule`, `partial` y `truncated`, y los límites declarados como códigos.
 
 ### Forma del error y del cuerpo de respuesta
 
@@ -686,7 +714,8 @@ No hay respuestas de error nuevas en el canal. Los errores del merge en seco ter
 | Base `Invalid` o rama base sin ref | `no calculable` | `base-missing` |
 | `DryMergeError::MissingObject` | `no calculable` | `missing-object` |
 | `DryMergeError::Shallow` | `no calculable` | `shallow` |
-| Plazo o memoria superados; trabajador muerto | `no calculable` | `limit-exceeded` |
+| Plazo o memoria superados (trabajador muerto), o `DryMergeError::LimitExceeded` | `no calculable` | `limit-exceeded` |
+| Escalado de renombrados cortado por un límite | `actual`, con el resultado del primer trabajo | — (límite declarado 2) |
 | `DryMergeError::Unavailable` | `no calculable` | `error` (el texto no se publica) |
 | Base `Unconfirmed` | `pendiente` | `base-unconfirmed` |
 | Operación en curso en el worktree | `pendiente` | `operation-in-progress` |
@@ -704,29 +733,34 @@ _No aplica — los topes son constantes de GitRaptor. Un repo no puede cambiarlo
 | Concepto | Valor | Fuente |
 |---------|-------|--------|
 | Pares con 10 worktrees | 55 (10 contra la base, 45 entre worktrees) | ADR-CKP-001 § 2 |
-| `PAIR_DEADLINE` | 2 s | ADR-CKP-001 § 5 |
-| `PREDICT_CONCURRENCY` | 2 trabajos (1 con ≤ 4 núcleos), ⚠️ **ASSUMPTION** | ADR-CKP-001 § 5; G1 (E9) |
-| `JOB_MEMORY_CAP` | 256 MB por trabajo, ⚠️ **ASSUMPTION** | Plan del SPIKE, H8; G1 (E9, E10) |
-| `MAX_UNCOMMITTED_FOR_OVERLAP` | 10.000 rutas por worktree, ⚠️ **ASSUMPTION** | ADR-CKP-001 § 3; G1 (E11) |
-| `max_files` | 200 por par, ⚠️ **ASSUMPTION** | ADR-CKP-001 § 3; G1 |
-| `max_hunks_per_file` | 50, ⚠️ **ASSUMPTION** | ADR-CKP-001 § 3; G1 |
-| `max_blob_bytes` | sin cifra: la fija el SPIKE | ADR-CKP-001 § 1 (a); G1 (E10) |
-| `rewrites_limit` | sin cifra: la fija el SPIKE | ADR-CKP-001 § 7; G1 (E10) |
-| `marker_size_multiplier` | sin cifra: la fija el SPIKE | ADR-CKP-001 § 1 (a); G1 (E7) |
-| `MAX_WORKER_FRAME` | sin cifra: la fija el SPIKE (R-A2W) | G1 (E10) |
-| `FIDELITY_THRESHOLD` | 95 %, ⚠️ **ASSUMPTION** | SPIKE-CKP-001, H3; G1 (E6) |
-| `FRESHNESS_TARGET` | ≤ 5 s p95, de fin del commit a predicción publicada, ⚠️ **ASSUMPTION** S-CKP-1 | ADR-CKP-001 § 5; G1 (E8) |
-| `ENGINE_P95` | ≤ 300 ms p95 | ADR-GRP-011 |
+| `PAIR_DEADLINE` | 2 s de reloj de pared por trabajo, impuesto por el daemon sobre el trabajador | ADR-CKP-001 § 5; Brief § 6 y § 8 (3a) |
+| `PREDICT_CONCURRENCY` | 1 trabajo (un trabajador) | Brief § 5 y § 8 (3h): los 10 pares de un commit en 96 ms de p95 y los 55 iniciales en 719 ms, en serie |
+| `JOB_MEMORY_CAP` | 512 MiB de RSS del trabajador (umbral de muerte, no presupuesto); puede pasarse ~130 MiB antes de morir | Brief § 6 y § 8 (3b); un trabajo normal usa 42 MiB |
+| `WORKER_RSS_POLL` | 20 ms | Brief § 2 y § 6 |
+| `WORKER_IDLE_EXIT` | 60 s sin trabajo, ⚠️ **ASSUMPTION** | ADR-GRP-015 (huella en reposo); no medido |
+| `MAX_UNCOMMITTED_FOR_OVERLAP` | 10.000 rutas por worktree (cota de memoria: ~545 KB; el coste es despreciable) | Brief § 5.1 y § 8 (3i) |
+| `max_files` | 200 por par, ⚠️ **ASSUMPTION** (el SPIKE no lo midió) | ADR-CKP-001 § 3; Brief § 8 (3k) |
+| `max_hunks_per_file` | 50, ⚠️ **ASSUMPTION** (el SPIKE no lo midió) | ADR-CKP-001 § 3; Brief § 8 (3k) |
+| `max_blob_bytes` | 8 MiB, leído de la cabecera antes de cargar | Brief § 6 y § 8 (3c) |
+| `max_written_bytes` | 64 MiB escritos en la memoria de objetos por trabajo | Brief § 6 y § 8 (3d) |
+| `REWRITES_LIMIT` / `REWRITES_LIMIT_ESCALATED` | 1.000; 100.000 solo para pares con conflictos de modificado/borrado o renombrado, en un segundo trabajo con su propio plazo | Brief § 4.2 y § 8 (3e): p95 152 ms, p99 727 ms por par |
+| `marker_size` | 32 | Brief § 4.3 y § 8 (3f) |
+| `marker_size_multiplier` | valor por defecto de `gix-merge` (no 0), ⚠️ **ASSUMPTION**: los marcadores de una base virtual deben ser más largos que 32; lo verifica el caso de historia cruzada de T011 | Ajuste del Arquitecto al Brief § 8 (3f) |
+| `HUNK_JOIN_GAP` | 3 líneas en los dos lados | Brief § 4.3 y § 8 (3g) |
+| `MAX_WORKER_FRAME` | 4 MiB, ⚠️ **ASSUMPTION**: 200 archivos con rutas de hasta 4 KiB y 50 rangos por lado caben en ~1 MiB | Derivado de `max_files` y `max_hunks_per_file`; no medido |
+| `FIDELITY_THRESHOLD` | R-SYN y demo del BRD § 13: 100 % y 0 falsos negativos (gate de PR). `git/git`: paridad ≥ 90 % y falsos negativos ≤ 2 % de los pares con conflicto real, sin empeorar la línea base (93,4 %, 3 pares con falso negativo). Los falsos positivos no son eliminatorios | Decisión del PO (2026-10-20); Brief § 4 |
+| `FRESHNESS_TARGET` | ≤ 5 s p95, de fin del commit a predicción publicada (gate; medido: 96 ms de p95, fase (a)) | ADR-CKP-001 § 5; Brief § 5 y § 8 (6) |
+| `ENGINE_P95` | ≤ 300 ms p95, solo y con ráfaga del predictor | ADR-GRP-011; E9 pendiente de la fase (b) del SPIKE |
 | Cambio de fuente de energía aplicado | ≤ 60 s | ADR-GRP-015 § 2 |
-| Versión mínima de `gix` | 0.89.0 | Plan del SPIKE, F2; G3 |
+| Versión mínima de `gix` | 0.89.0 (en `main`, PR #251) | Brief § 4.6 y § 8 (7) |
+
+Las cifras medidas son de la fase (a) del SPIKE, con la máquina cargada. Si la fase (b) cambia alguna, se actualiza esta tabla; la rama solo cambia si E9 muestra una regresión del p95 del motor.
 
 ---
 
 ## Modelo de datos
 
-_No aplica en R-A2, R-A2W ni R-SOLAPE — el predictor no persiste nada. El registro del KPI es de US-CKP-010._
-
-Solo en R-B: un repo *bare* de trabajo por repo observado en `<datos>/ckp/<id-repo>/`, con `objects/info/alternates` hacia el directorio de objetos común del repo, permisos 0700/0600, vaciado tras cada lote, fuera de las copias de seguridad y con cuota (ADR-CKP-001, tabla de enmiendas, ADR-GRP-006 § 4; G4).
+_No aplica — el predictor no persiste nada y el trabajador no escribe en disco. El registro del KPI es de US-CKP-010._
 
 ---
 
@@ -736,17 +770,18 @@ Solo en R-B: un repo *bare* de trabajo por repo observado en `<datos>/ckp/<id-re
 
 | Tipo | Cantidad | Tareas dueñas | Herramientas | Cuándo |
 |------|---------:|-------------|---------|------|
-| Unit | 14 | T001, T002, T003, T004, T005, T007, T008 | `cargo test` | PR gate |
-| Integration | 3 | T006, T009, T011 | `cargo test`, repos temporales de `gitraptor_testkit` | PR gate |
-| Security | 2 | T010 | `cargo test -- repo_intact`, canario, auditoría de `exec` | PR gate (`repo-intact.yml`) |
-| Performance | 1 | T012 | `cargo bench`, banco de INF-GRP-002 | aviso hasta G1, gate después |
+| Unit | 15 | T001, T002, T003, T004, T005, T007 | `cargo test` | PR gate |
+| Integration | 3 | T006, T009, T011 | `cargo test`, repos temporales de `gitraptor_testkit` | PR gate (R-REAL de T011: a mano, `#[ignore]`) |
+| Security | 2 | T010 | `cargo test -- repo_intact`, canario, trampa de `PATH`, hostiles | PR gate (`repo-intact.yml`) |
+| Performance | 1 | T012 | `cargo bench`, banco de INF-GRP-002 | gate |
 
 ### 9.2 Umbrales de cobertura
 
 | Capa | Línea | Rama | Mutación | Camino crítico 100% |
 |-------|-----:|-------:|---------:|:------------------:|
 | `crates/core/src/predict` | — | — | — | ✅ estados, descarte de entradas viejas, pausa, dormido |
-| `crates/git/src/dry_merge` | — | — | — | ✅ cero drivers, objeto ausente, tope de blob, marcadores |
+| `crates/git/src/dry_merge` | — | — | — | ✅ cero drivers, objeto ausente, tope de blob, marcadores, unión de bloques, conflictos sin etapa |
+| `crates/core/src/predict/worker` | — | — | — | ✅ muerte por plazo y por memoria, relanzamiento, escalado cortado, respuesta inválida |
 
 ### 9.3 Datos de prueba
 
@@ -761,8 +796,8 @@ Solo en R-B: un repo *bare* de trabajo por repo observado en `<datos>/ckp/<id-re
 - [ ] *Partial clone*: `no calculable (objeto ausente)` sin red (T005, T010)
 - [ ] Un resultado de entradas viejas nunca es `actual` (T003)
 - [ ] Base no confirmada: pares contra la base `pendiente`, entre worktrees siguen (T002)
-- [ ] Un repo hostil da `no calculable` o `truncado` dentro del plazo (T007, T010)
-- [ ] 0 falsos negativos en la demo del BRD § 13 (T011)
+- [ ] Un repo hostil da `no calculable` o `truncado` dentro del plazo, con el trabajador muerto y relanzado y el daemon respondiendo (T006, T010)
+- [ ] 0 falsos negativos en la demo del BRD § 13 y 100 % en R-SYN (T011)
 - [ ] Ninguna publicación lleva contenido de archivos (T009)
 
 ### 9.5 Plataformas
@@ -770,8 +805,8 @@ Solo en R-B: un repo *bare* de trabajo por repo observado en `<datos>/ckp/<id-re
 | Plataforma | Cómo se verifica | Pendiente |
 |---|---|---|
 | macOS | CI `repo-intact.yml` (macOS) y máquina de dogfooding | — |
-| Linux | CI `ubuntu-latest` | Clase `utility` (nice 5) y `RLIMIT_AS` en R-A2W |
-| Windows | — | Pendiente: etapa de validación multiplataforma (`xplat-pendientes.md`): prioridad del hilo, `config.system = false` (F9) y auditoría de `exec` |
+| Linux | CI `ubuntu-latest` | Clase `utility` (nice 5), RSS del trabajador por `/proc/<pid>/statm` y `RLIMIT_AS` |
+| Windows | — | Pendiente: etapa de validación multiplataforma (`xplat-pendientes.md`): prioridad del hilo, `config.system = false` (F9), *Job Object* para el trabajador y auditoría de `exec` |
 
 ---
 
@@ -780,12 +815,12 @@ Solo en R-B: un repo *bare* de trabajo por repo observado en `<datos>/ckp/<id-re
 - **Repo intacto (NFR-01):** la suite de T010 bloquea el merge de esta historia.
 - **Cero ejecución (SEC-09, L-04):** sin drivers, sin filtros, pila de atributos vacía (ni disco, ni índice, ni árbol), sin `refs/replace` ni grafts. `merge_trees`, `merge_commits` y `merge_resource_cache` prohibidos por comprobación estática.
 - **Sin red (M-02):** un objeto ausente nunca se descarga.
-- **Cotas (M-06):** plazo por par, tope de blob por cabecera, `rewrites.limit` propio, topes de archivos y hunks; en R-A2W, el trabajador muere al superarlos.
+- **Cotas (M-06):** plazo de 2 s y RSS de 512 MiB impuestos por el daemon (el trabajador muere y se relanza); dentro, tope de blob por cabecera, tope de bytes escritos, `rewrites_limit` propio con escalado acotado, y topes de archivos y hunks.
 - **Texto no confiable (SEC-12):** rutas y ramas salen como `Untrusted`; el saneado con las categorías de L-03 es de los clientes. El texto de un error del merge no se publica.
 - **Sin contenido (NFR-03):** solo rutas y rangos de líneas.
 - **Fronteras:** `predict` no importa ninguna capa de escritura (ADR-GRP-009, Validación 5, punto 3).
-- **R-A2W:** argv fijo, sin shell, entorno por allowlist, tramas con tope, respuesta del hijo validada antes de usarse, sin acceso al perfil.
-- **R-B:** almacén 0700/0600 vaciado tras cada lote; opciones fijas de ADR-CKP-001 § 1 (b).
+- **Trabajador (ADR-GRP-009, Enmienda 2026-10-20):** el propio binario por ruta absoluta, argv fijo, sin shell, entorno construido desde cero sin `GIT_*`, tramas con tope, respuesta del hijo validada antes de usarse, sin acceso al perfil y sin lanzar procesos.
+- **Marca de regla de merge (D14):** los `.gitattributes` del árbol se leen como dato para marcar; nunca llegan a la plataforma del merge (L-04).
 
 Corre `/security-review --scope devspec docs/requirements/features/cockpit/dev-specs/TS-CKP-001-predictor-conflictos.md` antes de mezclar.
 
@@ -797,7 +832,7 @@ Corre `/security-review --scope devspec docs/requirements/features/cockpit/dev-s
 
 | Ítem / no-objetivo | Historia que lo cubre | Gate (cómo se verifica) |
 |----------------|--------------------|-------------------------|
-| Registro del KPI de detección (Q-CKP-21) | US-CKP-010 | `predict` no escribe en el perfil: no importa `crates/core/src/profile` (`predict_boundary.rs`) |
+| Registro del KPI de detección (Q-CKP-21), con el diagnóstico del PO (2026-10-20) que separa los conflictos no detectados en "había commits de los dos lados y no hubo ⚡" y "no había nada commiteado" | US-CKP-010 | `predict` no escribe en el perfil: no importa `crates/core/src/profile` (`predict_boundary.rs`) |
 | Presentación del ⚡, ConflictAlert y el toast | US-CKP-006, US-CKP-007, US-CKP-008, US-CKP-009 | Sin cambios en `apps/cli/src/tui` |
 | `raptor conflicts` | US-CKP-011 | Sin subcomando `conflicts` en `apps/cli/src/commands` |
 | `check_conflicts` y la consulta del perfil `mcp` | US-MCP-016 | Sin cambios en `apps/mcp` |
@@ -811,7 +846,8 @@ Corre `/security-review --scope devspec docs/requirements/features/cockpit/dev-s
 | ID | Nota | Acción | Owner |
 |----|------|--------|-------|
 | G6 | ADR-GRP-009 (Enmienda 2026-10-04, Cockpit) pide "pila de atributos sin `.gitattributes` del disco", que es más laxo que L-04. Este spec sigue a ADR-CKP-001 § 1: ni disco, ni índice, ni árbol (la ruta por defecto de `gix` lee el índice o el árbol de `HEAD`, anexo A3) | Corregir el texto de ADR-GRP-009 | Orquestador |
-| G7 | D4 y D5 añaden dos motivos de `pendiente` que ADR-CKP-001 § 6 no tiene, porque los niveles (ADR-GRP-010, 2026-10-07) y la pausa (ADR-GRP-015) son posteriores | Incluirlos en la enmienda de ADR-CKP-001 con los resultados del SPIKE | Orquestador |
-| G8 | El texto de NFR-07 en el BRD depende de la rama (ADR-CKP-001 § 11) | Reformularlo si gana R-A2 o R-A2W | PO |
+| G7 | D4 y D5 añaden dos motivos de `pendiente` que ADR-CKP-001 § 6 no tiene, porque los niveles (ADR-GRP-010, 2026-10-07) y la pausa (ADR-GRP-015) son posteriores | **Hecho (2026-10-20)**: incluidos en la Enmienda (2026-10-20) de ADR-CKP-001 | — |
+| G8 | El texto de NFR-07 en el BRD depende de la rama (ADR-CKP-001 § 11). Ganó R-A2W: la predicción no usa el Git CLI | Reformular la justificación de Git 2.38 | PO |
+| G11 | La fase (b) del SPIKE (máquina en reposo) no ha corrido: confirma las cifras y mide E9 (p95 del motor con ráfaga) | Si cambia una cifra, actualizar § Valores numéricos; si E9 muestra regresión, revisar `PREDICT_CONCURRENCY` y la clase del trabajador antes que la rama. T012 mide E9 como gate en cualquier caso | Orquestador |
 | G9 | `static_check.rs:64` prohíbe `write_buf` fuera de `tm_write/store`: `dry_merge/memory.rs` necesita la excepción de T010, condicionada a `with_object_memory` | Ninguna (T010) | — |
 | G10 | Solo se verificará en macOS y Linux; Windows sigue la etapa de validación multiplataforma | Etapa de validación | Rene |

@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-03
 created: 2026-10-03
-updated: 2026-10-05
+updated: 2026-10-20
 deciders: [Rene Bonilla]
 domain: GRP
 feature: motor-local
@@ -292,3 +292,30 @@ En la Windows real se acepta `C:\Program Files\Git\cmd\git.exe`. Se rechazan:
 - una carpeta superior con `FILE_DELETE_CHILD` para `Everyone`;
 - un propietario `Users`;
 - un *junction* en la cadena.
+
+## Enmienda (2026-10-20, SPIKE-CKP-001)
+
+**Decisión del orquestador (2026-10-20), validada por Arquitecto.** Origen: el [Research Brief de SPIKE-CKP-001](../../requirements/features/cockpit/research/SPIKE-CKP-001-resultados.md) (§ 6 y § 7) y la [Enmienda (2026-10-20) de ADR-CKP-001](./ADR-CKP-001-prediccion-conflictos-merge-en-seco.md#enmienda-2026-10-20-spike-ckp-001). Aplica la enmienda **condicionada** de la Validación 5 que ADR-CKP-001 dejó escrita para el caso en que las cotas de M-06 no se demostraran dentro del proceso: el SPIKE mostró que no se pueden (un merge de texto de un solo blob no tiene punto de corte, y la memoria del merge no la controla ninguna cota previa), así que el merge en seco corre en un proceso trabajador. **No cambia la frontera de solo lectura del motor ni su criterio binario**: el trabajador no escribe en el repo ni ejecuta programas configurados por el usuario. El `status` sigue en `accepted`. Linux y Windows: **Pendiente: etapa de validación multiplataforma**.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| Nuevo módulo autorizado a lanzar procesos fuera de `crates/git`: el lanzador del trabajador del predictor | Validación 5 | ADR-CKP-001, Enmienda 2026-10-20 (E1); Brief § 6 |
+| La condición "el módulo de merge en seco usa siempre la instancia en memoria" se mantiene y rige **dentro del trabajador** | Validación 5, punto 3 | ADR-CKP-001 § 1 (a) |
+| Lo condicionado a la opción (b) en la Enmienda (2026-10-04, Cockpit) **queda descartado**: `merge-tree --write-tree` sigue prohibido en el motor, sin excepción en el perfil | § 2, § 3, Validación 5 y 7 | Brief § 3.1: (b) refresca el mtime de objetos del repo |
+
+### Validación 5 ampliada: el trabajador del predictor
+
+Se añade a la lista **fuera de `crates/git`** (punto 2 de la Validación 5 de la Enmienda 2026-10-04, Cockpit):
+
+- el **lanzador del trabajador del predictor**, `crates/core::predict::worker`, es el **único módulo autorizado a lanzar el trabajador** y no lanza nada más. Condiciones:
+  - **Programa**: el propio binario de GitRaptor, por la ruta absoluta que el daemon resolvió una vez al arrancar. Nunca `git`, nunca un nombre buscado en el `PATH`, nunca una ruta que venga del repo, de la configuración o del canal.
+  - **Argv fijo**: ese ejecutable y el subcomando oculto `predict-worker`, sin más argumentos. **Sin shell**. En Windows, `CREATE_NO_WINDOW`.
+  - **Entorno construido desde cero**, como el del § 3: solo `HOME`, `PATH` sin entradas relativas y las variables de sistema imprescindibles por SO. Ninguna `GIT_*`, `DYLD_*` ni `LD_*`. cwd fijo fuera de cualquier repo.
+  - **Entradas tipadas** por stdin, en tramas con tope de tamaño: la ruta de un repo observado (nunca una ruta libre del canal) e ids de commit ya resueltos. La respuesta del hijo es **no confiable**: el daemon valida tamaños, tipos y topes antes de usarla.
+  - **Cotas impuestas desde fuera**: el daemon mata el trabajador al vencer el plazo por par o al pasar su cota de memoria residente, y lo relanza.
+- **El trabajador**, a su vez, **no lanza ningún proceso**: abre el repo con los permisos de `RepoReader` (sin binario `git`, sin configuración ni atributos de sistema), no abre el perfil, el canal ni el cerrojo del daemon, y solo escribe objetos en su memoria (`with_object_memory`), como fija la Enmienda (2026-10-04, Cockpit) para el módulo de merge en seco.
+- **Comprobación estática**: el único `Command::new` bajo `crates/core/src/predict/` está en `predict/worker/mod.rs` y su programa es el ejecutable propio; el subcomando `predict-worker` de `apps/cli` no tiene `Command::new`; `crates/git/src/dry_merge` no llama a `merge_trees`, `merge_commits`, `merge_resource_cache`, `tree_merge_options` ni `Repository::attributes*`.
+
+### Validación 7: canario con el trabajador
+
+Igual que en la Enmienda (2026-10-04, Cockpit), con un cambio: el único proceso hijo del predictor es el trabajador (el propio binario), y el trabajador no lanza ninguno. Lo comprueba una trampa de `PATH` que caza cualquier programa lanzado por nombre, y la auditoría dinámica de `exec` donde haya permisos. El *partial clone* con objetos ausentes sigue dando "no calculable" con 0 conexiones.
