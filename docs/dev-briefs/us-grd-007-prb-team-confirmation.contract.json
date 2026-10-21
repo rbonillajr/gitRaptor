@@ -1,0 +1,88 @@
+{
+  "source": {
+    "kind": "devspec",
+    "ref": "docs/requirements/features/guardrails/dev-specs/US-GRD-007-permisos-por-operacion.md"
+  },
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "criteria": [
+    {
+      "id": "GRD007-E4-DISABLE-MINIMUM",
+      "statement": "Escenario 4: el repo cuya configuración del equipo en la rama principal desactiva el mínimo seguro y permite force-push; el desarrollador instala y luego confirma con raptor guard confirm: el plan anuncia la relajación (disableSafeMinimum) y abre una ventana cancelable; al cerrarse sin cancelar, un force-push de feat-x se ejecuta y el estado dice minimum_set disabled-by-team",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_007 -- --list 2>/dev/null | grep -q '^confirming_a_floor_that_disables_the_minimum_lets_force_push_through: test' && cargo test -p gitraptor-cli --test guard_us_grd_007 confirming_a_floor_that_disables_the_minimum_lets_force_push_through -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_007.rs"
+      ]
+    },
+    {
+      "id": "GRD007-E5-RELAX-WAITS",
+      "statement": "Escenario 5: con force-push denegado en el suelo confirmado, llega a la rama principal un cambio que lo permite: el force-push de feat-x sigue denegado, el estado muestra floor-relax-pending con la acción guard-confirm, un agente que intenta confirmar recibe el rechazo reservado y queda en el registro, y tras la confirmación del desarrollador el siguiente force-push de feat-x se ejecuta",
+      "verify": "cargo test -p gitraptor-cli --test guard_us_grd_007 -- --list 2>/dev/null | grep -q '^a_team_relaxation_waits_for_the_developer: test' && cargo test -p gitraptor-cli --test guard_us_grd_007 a_team_relaxation_waits_for_the_developer -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/guard_us_grd_007.rs"
+      ]
+    }
+  ],
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "Cargo.lock",
+      "**/Cargo.toml",
+      "docs/architecture/decisions/ADR-GRD-008*"
+    ],
+    "allow_dependency_changes": false
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-cli",
+      "gitraptor-core",
+      "gitraptor-policy",
+      "gitraptor-api"
+    ]
+  },
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "opus"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "opus"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "opus"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    }
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 600000,
+    "suiteTimeoutMs": 1800000
+  }
+}
