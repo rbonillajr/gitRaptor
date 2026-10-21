@@ -155,6 +155,13 @@ fn s3_scope(event: &RawEvent) -> S3Scope {
 /// What `detect_repo` ends: the sessions of removed worktrees, and, only when the repo was read,
 /// those whose process died while it was not observed. An unreadable repo says nothing about
 /// either: its sessions stay open (an ended session never comes back).
+/// Whether two worktree paths name the same folder: equal, or both canonical to one path (the
+/// store may keep a symlinked form such as `/var` for `/private/var`). A folder that cannot be
+/// canonicalized is only equal to itself.
+fn same_folder(a: &Path, b: &Path) -> bool {
+    a == b || matches!((a.canonicalize(), b.canonicalize()), (Ok(x), Ok(y)) if x == y)
+}
+
 fn start_changes(
     repo_id: &str,
     removed: &[String],
@@ -284,7 +291,9 @@ impl Daemon {
             let mut absent: Vec<PathBuf> = Vec::new();
             for (s, _) in store.sessions_with_state().unwrap_or_default() {
                 if s.end_cause.is_none()
-                    && !present.iter().any(|p| Path::new(p) == s.worktree)
+                    && !present
+                        .iter()
+                        .any(|p| same_folder(Path::new(p), &s.worktree))
                     && !absent.contains(&s.worktree)
                 {
                     absent.push(s.worktree);
