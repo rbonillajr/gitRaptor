@@ -422,3 +422,7 @@ fn book(store: &SnapshotStore, ask: &HookPriorAsk, error: HookPriorError) -> Hoo
     }
     error
 }
+
+#[cfg(test)]
+#[path = "hook_prior_mark_tests.rs"]
+mod hook_prior_mark_tests;

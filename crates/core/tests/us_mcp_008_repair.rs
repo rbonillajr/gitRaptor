@@ -122,6 +122,7 @@ fn daemon(gate: bool) -> Daemon {
         logger: Logger::open(&dirs.state, LogLimits::default()).unwrap(),
         layer: None,
         free_space_floor: None,
+        after_mark: None,
     };
     Daemon {
         f,

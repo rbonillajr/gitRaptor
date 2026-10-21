@@ -531,6 +531,7 @@ impl Daemon {
             logger: Logger::open(&self.dirs.state, LogLimits::default()).unwrap(),
             layer: None,
             free_space_floor: floor,
+            after_mark: None,
         }
     }
 

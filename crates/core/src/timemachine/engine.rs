@@ -34,6 +34,7 @@ use gitraptor_api::messages::GitEventKind;
 use gitraptor_git::{ReaderOptions, RepoReader};
 
 use super::oplog::{Oplog, Requester};
+use super::store::ValidityGuard;
 use crate::profile::{ProfileDirs, fsperm};
 
 /// Quiet time of a repo's Git directory: the fallback calm of a worktree without a `HEAD`
@@ -237,16 +238,22 @@ impl RepoMarks {
     /// whose refs cannot be read is not calm.
     fn refs_calm(&self, repo_id: &str) -> Option<i64> {
         let mark = self.get(repo_id);
-        // The branches are compared and the mark read under the lock the writer publishes both
-        // with, so the mark returned covers the batch whose branches matched.
-        let persisted = mark.persisted.lock().unwrap_or_else(|e| e.into_inner());
-        let Some(p) = persisted.as_ref() else {
+        let common_dir = {
+            let persisted = mark.persisted.lock().unwrap_or_else(|e| e.into_inner());
+            persisted.as_ref().map(|p| p.common_dir.clone())
+        };
+        let Some(common_dir) = common_dir else {
             return self
                 .quiet(repo_id)
                 .then(|| mark.seq.load(Ordering::Acquire));
         };
-        let reader = RepoReader::open(&p.common_dir, &ReaderOptions::default()).ok()?;
+        // The disk is read without the lock, so a slow listing never holds up the writer. The
+        // branches are then compared and the mark read under the lock the writer publishes both
+        // with, so the mark returned covers the batch whose branches matched.
+        let reader = RepoReader::open(&common_dir, &ReaderOptions::default()).ok()?;
         let on_disk = crate::watch::read_local_branches(&reader).ok()?;
+        let persisted = mark.persisted.lock().unwrap_or_else(|e| e.into_inner());
+        let p = persisted.as_ref()?;
         (on_disk == p.branches).then(|| p.seq.max(mark.seq.load(Ordering::Acquire)))
     }
 
@@ -266,6 +273,19 @@ impl RepoMarks {
             std::thread::sleep(CALM_POLL);
         }
     }
+}
+
+/// The check that a capture sealed with `mark` still holds at its validity point: the engine is
+/// calm now and its mark has not moved, so no event happened between the mark and the read. One
+/// poll, never a wait.
+// Stub: the confirmation is not wired yet; every mark holds.
+pub fn confirm_mark(
+    _engine: Arc<dyn EngineLink>,
+    _repo_id: &str,
+    _worktrees: &[PathBuf],
+    _mark: i64,
+) -> ValidityGuard {
+    ValidityGuard(Arc::new(|| true))
 }
 
 /// The Git directory of a worktree: `.git` itself, or the one its `.git` file names. Links are

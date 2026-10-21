@@ -747,6 +747,7 @@ impl Daemon {
             layer: tm.layer.clone().filter(|_| cfg!(debug_assertions)),
             free_space_floor: (!(tm.no_free_space_floor && cfg!(debug_assertions)))
                 .then(crate::timemachine::continuous::FreeSpaceFloor::default),
+            after_mark: None,
         }
     }
 
