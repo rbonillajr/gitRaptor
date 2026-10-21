@@ -170,7 +170,7 @@ impl Scenario {
             self.fx.git_in(&self.wt, &["add", "."]);
             self.fx
                 .git_in(&self.wt, &["commit", "-q", "-m", &format!("c{n}")]);
-            ids.push(self.fx.git_in(&self.wt, &["rev-parse", "HEAD"]));
+            ids.push(self.fx.git_in(&self.wt, &["rev-parse", "HEAD"]).trim().to_owned());
         }
         self.fx.git(&["branch", "hotfix"]);
         (ids.remove(0), ids.remove(0))
@@ -294,7 +294,7 @@ fn a_stop_command_during_a_session_marks_the_gap() {
 #[test]
 fn a_reflog_that_does_not_reach_the_old_tip_collapses_into_one_branch_update() {
     let s = scenario(false);
-    let old = s.fx.git_in(&s.wt, &["rev-parse", "HEAD"]);
+    let old = s.fx.git_in(&s.wt, &["rev-parse", "HEAD"]).trim().to_owned();
     let (_, c2) = s.change();
     s.fx.git(&["reflog", "expire", "--expire=now", "--all"]);
     let live = s.restart();
