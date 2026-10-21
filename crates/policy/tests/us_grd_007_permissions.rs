@@ -2,8 +2,6 @@
 //! precedence and exclusions, the safe reading of a `git` command line, and the permissions in
 //! `guard::evaluate`. Public API only; no I/O.
 
-use std::ffi::OsString;
-
 use gitraptor_api::Untrusted;
 use gitraptor_api::guard::{
     Cause, CommitStage, Effect, Level, LogLayer, Operation as GuardOp, PushUpdate, RefUpdate,
@@ -103,8 +101,11 @@ fn git_command_is_unknown_when_it_cannot_be_proved() {
     assert_eq!(certain(&["git", "worktree"]), None);
 }
 
+// Building a non-UTF-8 argument is platform specific; Unix covers the parser's behaviour.
+#[cfg(unix)]
 #[test]
 fn git_command_is_unknown_for_a_non_utf8_argument_before_the_subcommand() {
+    use std::ffi::OsString;
     use std::os::unix::ffi::OsStringExt;
     let argv: Vec<OsString> = vec![
         "git".into(),
