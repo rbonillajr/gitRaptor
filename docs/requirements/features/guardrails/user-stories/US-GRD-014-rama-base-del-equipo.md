@@ -101,7 +101,7 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 
 ## Estado de la implementación
 
-Implementado en: PR #TBD (2026-10-21). Cubre los seis escenarios con `raptor guard confirm [<ruta>]` (plan, huella y ventana; DS-US-GRD-014 D1 a D12), más el riesgo real del escenario 1 (perfil perdido con los hooks instalados, sin adoptar).
+Implementado en: PR #277 (2026-10-21). Cubre los seis escenarios con `raptor guard confirm [<ruta>]` (plan, huella y ventana; DS-US-GRD-014 D1 a D12), más el riesgo real del escenario 1 (perfil perdido con los hooks instalados, sin adoptar).
 
 - **Pendiente**: la variante del escenario 1 con adopción la verifica US-GRD-003 E5; la prueba de integración con el motor, US-GRP-016.
 - **Pendiente**: Linux y Windows reales (*Pendiente: etapa de validación multiplataforma*); las suites de extremo a extremo son solo Unix.
