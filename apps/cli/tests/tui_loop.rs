@@ -186,6 +186,8 @@ fn worktree_event(scope_seq: u64) -> Event {
             last_activity_utc_ms: None,
             last_activity_in_gap: false,
             detached_at: None,
+            operation: None,
+            unmerged_paths: 0,
             path: Untrusted::new(format!("/w/agent-{i}")),
             main: i == 0,
             admin_name: Some(UntrustedName::new(format!("agent-{i}"))),

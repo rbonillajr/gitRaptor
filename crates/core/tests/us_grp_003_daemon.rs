@@ -289,7 +289,10 @@ fn a_removed_worktree_is_recorded_in_the_history() {
         if found {
             return;
         }
-        assert!(start.elapsed() < DEADLINE, "no worktree-delete in the history");
+        assert!(
+            start.elapsed() < DEADLINE,
+            "no worktree-delete in the history"
+        );
         std::thread::sleep(Duration::from_millis(20));
     }
 }
@@ -339,9 +342,8 @@ fn a_lost_repo_emits_no_worktree_events() {
     r.poll_until_observation(&mut c, 0, RepoStateView::Observed, &mut seen);
 
     let fake = |kind: &str| {
-        seen.iter().any(|e| {
-            e["kind"] == "git.event" && e["data"]["kind"] == kind
-        })
+        seen.iter()
+            .any(|e| e["kind"] == "git.event" && e["data"]["kind"] == kind)
     };
     assert!(!fake("worktree-delete"), "live: {seen:#?}");
     assert!(!fake("worktree-create"), "live: {seen:#?}");
@@ -355,7 +357,10 @@ fn a_lost_repo_emits_no_worktree_events() {
             "{e:#?}"
         );
     }
-    assert_eq!(r.wait_repo(0, |v| v.worktrees.len() == 2).worktrees.len(), 2);
+    assert_eq!(
+        r.wait_repo(0, |v| v.worktrees.len() == 2).worktrees.len(),
+        2
+    );
 }
 
 #[test]
@@ -379,8 +384,9 @@ fn a_repo_moved_back_is_observed_again() {
     let (store, _) = r.tp.open().open_store(&id).unwrap();
     let gaps = store.gaps().unwrap();
     assert!(
-        gaps.iter().any(|g| g.cause == GapCause::PeriodicReconciliation
-            && g.ended_ms.is_some_and(|ended| ended >= lost_at)),
+        gaps.iter()
+            .any(|g| g.cause == GapCause::PeriodicReconciliation
+                && g.ended_ms.is_some_and(|ended| ended >= lost_at)),
         "no periodic-reconciliation gap closed after the loss: {gaps:#?}"
     );
 }
@@ -435,7 +441,11 @@ fn snapshot_worktrees(c: &mut Raw, repo_id: &str) -> Vec<Vec<Value>> {
     let by_scope = &scope["result"]["repo"]["worktrees"];
     [repo_add, by_scope]
         .iter()
-        .map(|w| w.as_array().unwrap_or_else(|| panic!("{engine} {scope}")).clone())
+        .map(|w| {
+            w.as_array()
+                .unwrap_or_else(|| panic!("{engine} {scope}"))
+                .clone()
+        })
         .collect()
 }
 
@@ -457,7 +467,10 @@ fn without_the_capability_the_worktree_has_no_operation() {
         fx.write(name, "main\n");
     }
     fx.git(&["commit", "-q", "-am", "main"]);
-    let out = fx.git_command(&fx.repo, &["merge", "topic"]).output().unwrap();
+    let out = fx
+        .git_command(&fx.repo, &["merge", "topic"])
+        .output()
+        .unwrap();
     assert!(!out.status.success());
     let marker = fx.repo.join(".git/MERGE_HEAD");
 

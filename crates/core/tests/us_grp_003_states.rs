@@ -84,7 +84,10 @@ fn a_stopped_rebase_is_reported_and_left_as_is() {
 
     assert_eq!(w.operation, Some(OperationKindView::Rebase));
     assert_eq!(w.unmerged_paths, 2);
-    assert!(git_dir(&f, "rebase-merge").is_dir(), "the rebase was touched");
+    assert!(
+        git_dir(&f, "rebase-merge").is_dir(),
+        "the rebase was touched"
+    );
     assert!(f.git(&["status"]).contains("rebase in progress"));
 }
 
@@ -97,7 +100,10 @@ fn a_conflicted_merge_reports_its_unmerged_paths() {
     let w = observed("STATES-MERGE", &f);
 
     assert_eq!(w.operation, Some(OperationKindView::Merge));
-    assert_eq!(w.unmerged_paths, 2, "once per path, not once per index stage");
+    assert_eq!(
+        w.unmerged_paths, 2,
+        "once per path, not once per index stage"
+    );
     let mut paths = conflicted_paths(&w);
     paths.sort();
     assert_eq!(paths, ["a.txt", "b.txt"]);
@@ -154,7 +160,10 @@ fn cherry_pick_and_bisect_have_their_kind() {
     assert_eq!(w.operation, Some(OperationKindView::CherryPick));
     assert_eq!(w.unmerged_paths, 2);
     assert!(git_dir(&f, "CHERRY_PICK_HEAD").is_file());
-    assert!(f.git(&["status"]).contains("You are currently cherry-picking"));
+    assert!(
+        f.git(&["status"])
+            .contains("You are currently cherry-picking")
+    );
 
     let g = conflicting();
     g.git(&["bisect", "start"]);

@@ -59,6 +59,8 @@ fn snapshot_with(counts: ChangeCounts, changes: Vec<FileChangeView>) -> Snapshot
                 last_activity_utc_ms: None,
                 last_activity_in_gap: false,
                 detached_at: None,
+                operation: None,
+                unmerged_paths: 0,
                 path: Untrusted::new(ROOT),
                 main: true,
                 admin_name: None,

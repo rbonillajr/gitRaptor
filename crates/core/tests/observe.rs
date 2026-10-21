@@ -206,6 +206,8 @@ mod activity {
             last_activity_utc_ms: last,
             last_activity_in_gap: false,
             detached_at: None,
+            operation: None,
+            unmerged_paths: 0,
         }
     }
 

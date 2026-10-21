@@ -52,7 +52,12 @@ struct Running {
     repo_id: String,
 }
 
-fn launch(tp: &TempProfile) -> (ShutdownHandle, JoinHandle<gitraptor_core::daemon::StopReport>) {
+fn launch(
+    tp: &TempProfile,
+) -> (
+    ShutdownHandle,
+    JoinHandle<gitraptor_core::daemon::StopReport>,
+) {
     let env = DaemonEnv::from_vars(std::env::vars_os());
     let config = DaemonConfig {
         dirs: tp.dirs(),
@@ -246,7 +251,10 @@ fn a_registered_agent_ends_when_its_worktree_is_removed() {
     let start = Instant::now();
     let ended = loop {
         assert!(start.elapsed() < DEADLINE, "no session.state with ended");
-        let Some(n) = watcher.next_notification(Duration::from_millis(200)).unwrap() else {
+        let Some(n) = watcher
+            .next_notification(Duration::from_millis(200))
+            .unwrap()
+        else {
             continue;
         };
         if n.method != methods::NOTIFY_EVENT {
@@ -259,7 +267,10 @@ fn a_registered_agent_ends_when_its_worktree_is_removed() {
     };
     assert_eq!(ended["session_id"], json!(open.session_id));
     assert_eq!(ended["end_cause"], "worktree-removed", "{ended}");
-    assert!(ended["ended_utc_ms"].is_i64(), "a live end has its time: {ended}");
+    assert!(
+        ended["ended_utc_ms"].is_i64(),
+        "a live end has its time: {ended}"
+    );
     let listed = r.sessions(&mut r.client());
     assert_eq!(cause(&listed[0]), "worktree-removed");
 }
@@ -310,7 +321,10 @@ fn a_lost_repo_ends_no_sessions() {
 
     std::fs::rename(&moved, &fx.repo).unwrap();
     r.poll_until(&mut c, RepoStateView::Observed);
-    assert!(r.is_open(), "the session is still open when the repo is back");
+    assert!(
+        r.is_open(),
+        "the session is still open when the repo is back"
+    );
 }
 
 #[test]

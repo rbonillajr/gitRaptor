@@ -134,7 +134,7 @@ pub struct EngineView {
 #[serde(rename_all = "kebab-case")]
 pub enum RepoStateView {
     Observed,
-    /// In the profile but its store could not be opened.
+    /// In the profile but its store or its Git directory cannot be opened now.
     Unavailable,
 }
 
@@ -209,6 +209,14 @@ impl RepoView {
             w.last_activity_utc_ms = None;
             w.last_activity_in_gap = false;
             w.detached_at = None;
+        }
+    }
+
+    /// The repo in the shapes of a connection without
+    /// `observation.special-states`.
+    pub fn without_special_states(&mut self) {
+        for w in &mut self.worktrees {
+            w.without_special_states();
         }
     }
 }
@@ -372,13 +380,46 @@ pub struct WorktreeView {
     /// `scope.activity`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detached_at: Option<String>,
+    /// The operation in progress, if any. Absent without one, and for a
+    /// connection without `observation.special-states`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation: Option<OperationKindView>,
+    /// Paths with unresolved conflicts (index stage above 0), counted on the
+    /// full status. Absent (zero) for a connection without
+    /// `observation.special-states`.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub unmerged_paths: u32,
+}
+
+/// A Git operation left half-way in a worktree, from its marker files
+/// (BR-EDGE-002).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum OperationKindView {
+    Rebase,
+    Merge,
+    CherryPick,
+    Revert,
+    Am,
+    Bisect,
 }
 
 fn is_false(b: &bool) -> bool {
     !*b
 }
 
+fn is_zero(n: &u32) -> bool {
+    *n == 0
+}
+
 impl WorktreeView {
+    /// The worktree in the shapes of a connection without
+    /// `observation.special-states`.
+    pub fn without_special_states(&mut self) {
+        self.operation = None;
+        self.unmerged_paths = 0;
+    }
+
     /// The listed changes are fewer than the counted ones.
     pub fn changes_truncated(&self) -> bool {
         match &self.status {
@@ -443,6 +484,14 @@ impl WorktreeStateData {
             w.last_activity_utc_ms = None;
             w.last_activity_in_gap = false;
             w.detached_at = None;
+        }
+    }
+
+    /// The data in the shapes of a connection without
+    /// `observation.special-states`.
+    pub fn without_special_states(&mut self) {
+        for w in &mut self.worktrees {
+            w.without_special_states();
         }
     }
 }
@@ -1201,6 +1250,8 @@ mod tests {
                 last_activity_utc_ms: None,
                 last_activity_in_gap: true,
                 detached_at: Some("39e852f".into()),
+                operation: None,
+                unmerged_paths: 0,
             }],
             fetched_utc_ms: None,
         };
