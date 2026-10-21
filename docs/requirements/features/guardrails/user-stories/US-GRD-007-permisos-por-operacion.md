@@ -2,7 +2,7 @@
 id: US-GRD-007
 title: "El equipo decide qué operaciones de Git se permiten, se deniegan o piden confirmación"
 type: us
-status: partially-implemented
+status: implemented
 priority: high
 created: 2026-10-04
 updated: 2026-10-21
@@ -109,11 +109,11 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica.
-- **Dev Spec:** [`dev-specs/US-GRD-007-permisos-por-operacion.md`](../dev-specs/US-GRD-007-permisos-por-operacion.md) — `DS-US-GRD-007` (status: draft).
+- **Dev Spec:** [`dev-specs/US-GRD-007-permisos-por-operacion.md`](../dev-specs/US-GRD-007-permisos-por-operacion.md) — `DS-US-GRD-007` (status: implemented).
 
 ## Estado de la implementación
 
 Implementado en: PR #268 (PR-A, 2026-10-21). Cubre los escenarios 1 (salvo las filas que pasan a US-GRD-016), 2, 3 (enmendado por Q-GRD-46) y 6.
 
-- **Pendiente (PR-B)**: escenarios 4 y 5, que necesitan `raptor guard confirm` de US-GRD-014.
+Implementado en: PR #TBD (PR-B, 2026-10-21). Escenarios 4 y 5 de extremo a extremo con `raptor guard confirm` de US-GRD-014 (#277): `confirming_a_floor_that_disables_the_minimum_lets_force_push_through` y `a_team_relaxation_waits_for_the_developer` en `apps/cli/tests/guard_us_grd_007.rs`. No hizo falta código de producción: US-GRD-014 y PR-A ya daban el comportamiento.
 - **Pendiente**: Linux y Windows reales (etapa de validación multiplataforma; Linux lo cubre el CI de ubuntu).
