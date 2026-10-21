@@ -1,0 +1,496 @@
+{
+  "schema": "nassa.certification.v1",
+  "certifiedAt": "2026-10-21T19:00:06.257Z",
+  "dir": "/Users/rbonilla/orca/workspaces/gitRaptor/ckp002",
+  "contract_sha256": "588089e802c8840786b9cadef9ce4c802d230661a86426eca13e15d2dcc1f355",
+  "source": {
+    "kind": "devspec",
+    "ref": "docs/requirements/features/cockpit/dev-specs/US-CKP-005-terminal-pequena-sin-color.md"
+  },
+  "verdict": "CERTIFIED WITH RESERVATIONS",
+  "status": "con-reservas",
+  "reservations": [
+    {
+      "why": "baseline-roja",
+      "note": "Esta corrida arrancó con la suite base en ROJO. Todo resultado de la capa runtime es ININTERPRETABLE: no se puede distinguir una regresión introducida aquí de un fallo que ya existía. · admitió la persona (turno acec1001, comprobado)"
+    },
+    {
+      "why": "integridad-sin-verificar",
+      "note": "integridad de pruebas: NO COMPROBADA — no hay informe registrado: falta el de la suite tras implementar (P3)"
+    },
+    {
+      "why": "test-enmendado",
+      "note": "criterio CKP005-SIZE: `apps/cli/tests/tui_screens.rs` — Two assertions contradict the validated plan: the ASCII bar shows the alternative keys k/j (D3), Up/Down are the help labels; and the fleet help must not list the picker keys, but the whole 80x24 screen keeps the fleet title's ahead/behind arrows · aprobó rene (turno de la persona 19ee6075, comprobado) · 2026-10-21T18:41:32.453Z",
+      "test": "apps/cli/tests/tui_screens.rs",
+      "hashBefore": "6960c81783bc76d3a6c7e853b8d939100dd4b14bfdd050248a3204164124e056",
+      "hashAfter": "d05738665c84b9c952c0e0daf19a69476748d769bb625cb9f0cd5a680c8a0708",
+      "diff": [
+        "-     assert!(!fleet.contains('↑'), \"{fleet}\");",
+        "+     // The fleet title and its columns keep their own `↑↓` (ahead/behind): what the fleet help",
+        "+     // must not list is the picker's keys.",
+        "+     assert!(!fleet.contains(\"↑ k\"), \"{fleet}\");",
+        "- /// D3/D5: the ASCII bar labels the arrows and gives `? ayuda` its fixed place.",
+        "+ /// D3/D5: the ASCII bar shows the alternative keys (`k`, `j`) instead of the arrows and gives",
+        "+ /// `? ayuda` its fixed place (`Up`/`Down` are the labels of the help, not of the bar).",
+        "-     assert!(bar.contains(\"Up\") && bar.contains(\"Down\"), \"{bar}\");"
+      ]
+    },
+    {
+      "why": "test-enmendado",
+      "note": "criterio CKP005-PTY-HELP: `apps/cli/tests/tui_accessibility.rs` — Esc then ? written back to back is the terminal's Alt-? and two keys read together paint one frame; the test now waits for the TUI to go quiet between keys · aprobó rene (turno de la persona b17ca7f9, comprobado) · 2026-10-21T18:40:39.001Z",
+      "test": "apps/cli/tests/tui_accessibility.rs",
+      "hashBefore": "62f99bd719673acad4fa9f0eb2606bfb4aec1058fd4e84abd10abe2425373e9a",
+      "hashAfter": "ccc2f9a47ea8bd6d633078ffa5324f2063dc3d3654b39fa13b674d4946ff9923",
+      "diff": [
+        "+ /// How long the TUI must paint nothing for a key to count as handled.",
+        "+ const QUIET: Duration = Duration::from_millis(400);",
+        "+     /// Waits until the TUI is quiet (nothing painted for a moment, deadline-bounded) so the",
+        "+     /// next key reaches the loop as its own event: an Esc followed at once by `?` is the",
+        "+     /// terminal's Alt-`?`, and two keys read together paint one frame.",
+        "+     fn settle(&mut self) {",
+        "+         let deadline = Instant::now() + DEADLINE;",
+        "+         while let Ok(bytes) = self.rx.recv_timeout(QUIET) {",
+        "+             let bytes = String::from_utf8_lossy(&bytes);",
+        "+             self.screen.feed(&bytes);",
+        "+             self.seen.push_str(&bytes);",
+        "+             assert!(Instant::now() < deadline, \"the TUI never went quiet\");",
+        "+         }",
+        "+     }",
+        "+ ",
+        "+     tui.settle();",
+        "+     tui.settle();",
+        "+     tui.settle();",
+        "+     tui.settle();"
+      ]
+    }
+  ],
+  "totals": {
+    "total": 11,
+    "passed": 11,
+    "failed": 0,
+    "notRun": 0
+  },
+  "baselineAdmission": {
+    "acceptedRed": true,
+    "acceptedAt": "2026-10-21T17:51:49.047Z",
+    "suite": "node tools/test/nextest-junit.mjs",
+    "target": {
+      "ref": "origin/main",
+      "mergeBase": "3cb912f5e88e370b58b224d230e927da6e73387f",
+      "status": "red",
+      "failing": [
+        "gitraptor-cli::continuous_observation::a_client_starts_the_engine_through_launchd",
+        "gitraptor-cli::continuous_observation::enable_registers_this_binary_with_launchd",
+        "gitraptor-cli::continuous_observation::observation_resumes_by_itself_when_the_engine_starts_again",
+        "gitraptor-cli::continuous_observation::repo_intact_enable_and_disable_change_only_the_plist",
+        "gitraptor-cli::continuous_observation::status_shows_the_autostart_and_disable_keeps_the_engine_running",
+        "gitraptor-cli::guard_td_grd_001_upgrade::repo_intact_an_upgrade_from_2_cut_at_any_point_keeps_a_working_dispatcher",
+        "gitraptor-cli::guard_td_grd_001_upgrade::repo_intact_an_upgrade_from_1_cut_at_any_point_keeps_a_working_dispatcher",
+        "gitraptor-cli::mcp_allowlist::a_looping_agent_hits_its_connection_limit",
+        "gitraptor-cli::mcp_allowlist::a_refusal_says_what_happened_and_what_to_do_in_spanish",
+        "gitraptor-cli::mcp_allowlist::an_engine_that_cannot_start_gives_the_action",
+        "gitraptor-cli::mcp_allowlist::observing_a_repo_does_not_enable_it",
+        "gitraptor-cli::mcp_allowlist::outside_an_observed_repo_no_data_is_returned",
+        "gitraptor-cli::mcp_allowlist::hostile_repo_text_arrives_bounded_marked_and_without_secrets",
+        "gitraptor-cli::mcp_allowlist::retiring_the_repo_takes_it_out_of_the_allowlist",
+        "gitraptor-cli::mcp_allowlist::the_engine_starts_with_the_first_call",
+        "gitraptor-cli::mcp_allowlist::status_from_a_subfolder_names_the_repo_and_the_worktree",
+        "gitraptor-cli::mcp_allowlist::the_scope_is_the_servers_real_folder",
+        "gitraptor-cli::mcp_install::a_binary_in_a_temporary_folder_is_refused",
+        "gitraptor-cli::mcp_install::a_foreign_gitraptor_is_never_overwritten",
+        "gitraptor-cli::mcp_install::a_group_writable_claude_is_not_trusted",
+        "gitraptor-cli::mcp_install::an_unknown_claude_answer_changes_nothing",
+        "gitraptor-cli::mcp_install::install_registers_gitraptor_in_the_user_scope",
+        "gitraptor-cli::mcp_install::installing_twice_changes_nothing",
+        "gitraptor-cli::mcp_install::our_path_with_extra_args_is_foreign",
+        "gitraptor-cli::mcp_install::uninstall_removes_only_gitraptor",
+        "gitraptor-cli::mcp_install::unsupported_agents_are_refused",
+        "gitraptor-cli::mcp_install::without_claude_the_exact_command_is_shown",
+        "gitraptor-cli::mcp_security_corpus::an_undeclared_field_in_a_real_refusal_breaks_the_allowlist",
+        "gitraptor-cli::mcp_security_corpus::an_injected_pass_of_a_traversal_case_fails_the_suite",
+        "gitraptor-cli::mcp_security_corpus::the_corpus_is_fully_rejected",
+        "gitraptor-cli::mcp_snapshot::a_label_over_the_limit_is_invalid_text",
+        "gitraptor-cli::mcp_snapshot::a_label_with_control_characters_is_invalid_text",
+        "gitraptor-cli::mcp_snapshot::a_looping_agent_gets_the_real_wait_and_keeps_its_snapshots",
+        "gitraptor-cli::mcp_snapshot::an_empty_label_is_invalid_text",
+        "gitraptor-cli::mcp_snapshot::an_unattributed_client_cannot_snapshot",
+        "gitraptor-cli::mcp_snapshot::snapshot_with_a_label_is_in_the_timeline_with_actor_and_mcp_channel",
+        "gitraptor-cli::mcp_snapshot::snapshot_with_detached_head_is_allowed",
+        "gitraptor-cli::mcp_snapshot::snapshot_with_a_rebase_in_progress_is_refused_and_creates_nothing",
+        "gitraptor-cli::tm_chaos::hostile_half_done_merge_rejects_until_aborted",
+        "gitraptor-cli::us_tmc_005_hook::scenario_1_rebase_entry_shows_hook_prior"
+      ]
+    },
+    "work": {
+      "failing": [
+        "gitraptor-cli::tui_boundaries::the_view_translates_only_through_say",
+        "gitraptor-cli::tui_accessibility::ascii_paints_only_ascii",
+        "gitraptor-cli::tui_accessibility::question_mark_opens_and_closes_the_help",
+        "gitraptor-cli::tui_screens::ascii_screens_paint_only_ascii",
+        "gitraptor-cli::tui_screens::every_state_reads_without_color",
+        "gitraptor-cli::tui_screens::question_mark_opens_and_closes_the_help",
+        "gitraptor-cli::tui_screens::the_ascii_bar_never_shows_arrow_glyphs",
+        "gitraptor-cli::tui_screens::question_mark_shows_the_keys_of_the_panel",
+        "gitraptor-cli::tui_screens::the_screen_speaks_the_language",
+        "gitraptor-cli::tui_screens::the_bar_explains_the_states_on_screen",
+        "gitraptor-cli::tui_screens::too_small_then_resized_without_restart",
+        "gitraptor-cli::guard_td_grd_001_upgrade::repo_intact_an_upgrade_from_1_cut_at_any_point_keeps_a_working_dispatcher",
+        "gitraptor-cli::guard_td_grd_001_upgrade::repo_intact_an_upgrade_from_2_cut_at_any_point_keeps_a_working_dispatcher",
+        "gitraptor-cli::us_tmc_005_hook::scenario_1_rebase_entry_shows_hook_prior"
+      ]
+    },
+    "note": "Esta corrida arrancó con la suite base en ROJO. Todo resultado de la capa runtime es ININTERPRETABLE: no se puede distinguir una regresión introducida aquí de un fallo que ya existía.",
+    "approval": {
+      "approvedTurn": "acec1001-4bd5-47ad-9798-922f16335e53",
+      "requestedAt": "2026-10-21T16:54:03.565Z",
+      "slug": "us-ckp-005-small-terminal",
+      "contract": "588089e802c8840786b9cadef9ce4c802d230661a86426eca13e15d2dcc1f355",
+      "textSha": "3699729fc954012d8ec5adc4d777ef7691e9ce2bfde604e88b2d31182102f74b",
+      "transcriptPath": "/Users/rbonilla/.claude/projects/-Users-rbonilla-orca-workspaces-gitRaptor-ckp002/28467049-0510-4990-9b84-9c203dbe2ced.jsonl",
+      "transcriptRoot": "/Users/rbonilla/.claude/projects"
+    }
+  },
+  "integrity": {
+    "status": "NO COMPROBADA",
+    "note": "no hay informe registrado: falta el de la suite tras implementar (P3)",
+    "findings": []
+  },
+  "phases": {
+    "ok": true,
+    "missing": [],
+    "at": "2026-10-21T18:50:42.432Z",
+    "note": "las tres capas constan pasadas · último gate 2026-10-21T18:50:42.432Z. Acredita que corrieron, no CONTRA QUÉ árbol"
+  },
+  "hops": [
+    {
+      "hop": "design",
+      "declared": {
+        "agent": "main-loop",
+        "model": "sonnet"
+      },
+      "actual": []
+    },
+    {
+      "hop": "critic",
+      "declared": {
+        "agent": "nassa-core:plan-critic",
+        "model": "opus"
+      },
+      "actual": []
+    },
+    {
+      "hop": "tester",
+      "declared": {
+        "agent": "nassa-core:criterion-tester",
+        "model": "sonnet"
+      },
+      "actual": []
+    },
+    {
+      "hop": "build",
+      "declared": {
+        "agent": "nassa-dev-rust:rust-expert",
+        "model": "sonnet"
+      },
+      "actual": [
+        {
+          "agent": "nassa-dev-rust:rust-expert",
+          "model": "sonnet"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-expert",
+          "model": "sonnet"
+        }
+      ]
+    },
+    {
+      "hop": "review",
+      "declared": {
+        "agent": "nassa-dev-rust:rust-code-reviewer",
+        "model": "opus"
+      },
+      "actual": [
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "sonnet"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "sonnet"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "sonnet"
+        }
+      ]
+    },
+    {
+      "hop": "conformance",
+      "declared": {
+        "agent": "nassa-dev-rust:rust-code-reviewer",
+        "model": "sonnet"
+      },
+      "actual": [
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "sonnet"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "sonnet"
+        },
+        {
+          "agent": "nassa-dev-rust:rust-code-reviewer",
+          "model": "sonnet"
+        }
+      ]
+    }
+  ],
+  "lenses": {
+    "rigor": "alto",
+    "planned": [
+      "correctness",
+      "testing"
+    ],
+    "models": {
+      "correctness": "sonnet",
+      "testing": "sonnet"
+    },
+    "ran": [
+      {
+        "lens": "correctness",
+        "model": "sonnet"
+      },
+      {
+        "lens": "testing",
+        "model": "sonnet"
+      }
+    ],
+    "missing": []
+  },
+  "rigor": "alto",
+  "approvals": [
+    {
+      "source": "approval",
+      "by": "human",
+      "kind": "plan",
+      "sha": "093b55bb20c3e3537996c08dc2a5c60c46655c1f7c68bc7040fcb67fb063204e:588089e802c8840786b9cadef9ce4c802d230661a86426eca13e15d2dcc1f355:20b8dd362f8f1e8a869b612c1db2b34280e103c865a769319cac8111c1c02f07",
+      "at": "2026-10-21T16:09:56.085Z"
+    },
+    {
+      "source": "critic",
+      "kind": "plan",
+      "rounds": 1,
+      "lastVerdict": "APROBABLE",
+      "lastBlocking": 0,
+      "at": "2026-10-21T15:52:12.982Z"
+    }
+  ],
+  "warnings": [
+    {
+      "why": "fuera-del-plan",
+      "paths": [
+        "apps/cli/src/model.rs",
+        "apps/cli/src/present/i18n.rs",
+        "apps/cli/src/tui/gallery/mod.rs",
+        "apps/cli/src/tui/gallery/stories.rs",
+        "apps/cli/src/tui/help.rs",
+        "apps/cli/src/tui/keymap.rs",
+        "apps/cli/src/tui/mod.rs",
+        "apps/cli/src/tui/snapshots/discovered_prompt_80x24_en.snap",
+        "apps/cli/src/tui/snapshots/discovered_prompt_80x24_es.snap",
+        "apps/cli/src/tui/snapshots/fleet_120x40_dark.snap",
+        "apps/cli/src/tui/snapshots/fleet_120x40_light.snap",
+        "apps/cli/src/tui/snapshots/fleet_80x24_dark.snap",
+        "apps/cli/src/tui/snapshots/fleet_80x24_light.snap",
+        "apps/cli/src/tui/snapshots/fleet_authorship_100x24_en.snap",
+        "apps/cli/src/tui/snapshots/fleet_authorship_100x24_es.snap",
+        "apps/cli/src/tui/snapshots/fleet_ellipsis_80x24_en.snap",
+        "apps/cli/src/tui/snapshots/fleet_ellipsis_80x24_es.snap",
+        "apps/cli/src/tui/snapshots/fleet_no_agent_100x24_en.snap",
+        "apps/cli/src/tui/snapshots/fleet_no_agent_100x24_es.snap",
+        "apps/cli/src/tui/snapshots/fleet_states_100x30_ascii.snap",
+        "apps/cli/src/tui/snapshots/fleet_states_100x30_unicode.snap",
+        "apps/cli/src/tui/snapshots/help_fleet_80x24_en.snap",
+        "apps/cli/src/tui/snapshots/help_fleet_80x24_es.snap",
+        "apps/cli/src/tui/snapshots/help_picker_80x24_es.snap",
+        "apps/cli/src/tui/snapshots/help_question_80x24_es.snap",
+        "apps/cli/src/tui/snapshots/observe_prompt_80x24_en.snap",
+        "apps/cli/src/tui/snapshots/observe_prompt_80x24_es.snap",
+        "apps/cli/src/tui/snapshots/repo_picker_80x24.snap",
+        "apps/cli/src/tui/snapshots/too_small_70x20_en.snap",
+        "apps/cli/src/tui/snapshots/too_small_70x20_es.snap",
+        "apps/cli/src/tui/style.rs",
+        "apps/cli/src/tui/update.rs",
+        "apps/cli/src/tui/view.rs",
+        "apps/cli/src/tui/view/a11y_tests.rs",
+        "apps/cli/src/tui/widgets/key_hints.rs",
+        "apps/cli/src/tui/widgets/layout.rs",
+        "apps/cli/src/tui/widgets/snapshots/keyhints__help_overlay.snap",
+        "apps/cli/src/tui/widgets/snapshots/keyhints__with_state_legend.snap",
+        "apps/cli/src/tui/widgets/tests.rs"
+      ],
+      "note": "39 fichero(s) fuera del plan aprobado: apps/cli/src/model.rs, apps/cli/src/present/i18n.rs, apps/cli/src/tui/gallery/mod.rs, apps/cli/src/tui/gallery/stories.rs, apps/cli/src/tui/help.rs … +34"
+    }
+  ],
+  "outsidePlan": [
+    "apps/cli/src/model.rs",
+    "apps/cli/src/present/i18n.rs",
+    "apps/cli/src/tui/gallery/mod.rs",
+    "apps/cli/src/tui/gallery/stories.rs",
+    "apps/cli/src/tui/help.rs",
+    "apps/cli/src/tui/keymap.rs",
+    "apps/cli/src/tui/mod.rs",
+    "apps/cli/src/tui/snapshots/discovered_prompt_80x24_en.snap",
+    "apps/cli/src/tui/snapshots/discovered_prompt_80x24_es.snap",
+    "apps/cli/src/tui/snapshots/fleet_120x40_dark.snap",
+    "apps/cli/src/tui/snapshots/fleet_120x40_light.snap",
+    "apps/cli/src/tui/snapshots/fleet_80x24_dark.snap",
+    "apps/cli/src/tui/snapshots/fleet_80x24_light.snap",
+    "apps/cli/src/tui/snapshots/fleet_authorship_100x24_en.snap",
+    "apps/cli/src/tui/snapshots/fleet_authorship_100x24_es.snap",
+    "apps/cli/src/tui/snapshots/fleet_ellipsis_80x24_en.snap",
+    "apps/cli/src/tui/snapshots/fleet_ellipsis_80x24_es.snap",
+    "apps/cli/src/tui/snapshots/fleet_no_agent_100x24_en.snap",
+    "apps/cli/src/tui/snapshots/fleet_no_agent_100x24_es.snap",
+    "apps/cli/src/tui/snapshots/fleet_states_100x30_ascii.snap",
+    "apps/cli/src/tui/snapshots/fleet_states_100x30_unicode.snap",
+    "apps/cli/src/tui/snapshots/help_fleet_80x24_en.snap",
+    "apps/cli/src/tui/snapshots/help_fleet_80x24_es.snap",
+    "apps/cli/src/tui/snapshots/help_picker_80x24_es.snap",
+    "apps/cli/src/tui/snapshots/help_question_80x24_es.snap",
+    "apps/cli/src/tui/snapshots/observe_prompt_80x24_en.snap",
+    "apps/cli/src/tui/snapshots/observe_prompt_80x24_es.snap",
+    "apps/cli/src/tui/snapshots/repo_picker_80x24.snap",
+    "apps/cli/src/tui/snapshots/too_small_70x20_en.snap",
+    "apps/cli/src/tui/snapshots/too_small_70x20_es.snap",
+    "apps/cli/src/tui/style.rs",
+    "apps/cli/src/tui/update.rs",
+    "apps/cli/src/tui/view.rs",
+    "apps/cli/src/tui/view/a11y_tests.rs",
+    "apps/cli/src/tui/widgets/key_hints.rs",
+    "apps/cli/src/tui/widgets/layout.rs",
+    "apps/cli/src/tui/widgets/snapshots/keyhints__help_overlay.snap",
+    "apps/cli/src/tui/widgets/snapshots/keyhints__with_state_legend.snap",
+    "apps/cli/src/tui/widgets/tests.rs"
+  ],
+  "replans": [
+    "re-plan 1: docs/requirements/features/cockpit/dev-specs/US-CKP-005-terminal-pequena-sin-color.md"
+  ],
+  "planChain": {
+    "base": "093b55bb20c3e3537996c08dc2a5c60c46655c1f7c68bc7040fcb67fb063204e",
+    "replans": 1
+  },
+  "criteria": [
+    {
+      "id": "CKP005-SIZE",
+      "statement": "Escenario 1 (D1): bajo 80x24 la TUI pinta solo el aviso con la accion (es: 'Amplía la terminal a 80×24 como mínimo.'; en: 'Resize it to at least 80×24.') y, al llegar Msg::Resize a 80x24, el mismo Model pinta la flota sin reiniciar",
+      "command": "cargo test -p gitraptor-cli --test tui_screens too_small_then_resized_without_restart",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 6560
+    },
+    {
+      "id": "CKP005-NOCOLOR",
+      "statement": "Escenario 3 (D4): con ColorMode::NoColor ninguna celda lleva color y cada estado (activo, inactivo, sin agente, no disponible) se lee por su simbolo y su texto, en Unicode y en ASCII",
+      "command": "cargo test -p gitraptor-cli --test tui_screens every_state_reads_without_color",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 314
+    },
+    {
+      "id": "CKP005-ASCII",
+      "statement": "Escenario 5 (D3, D6): en ASCII ninguna pantalla (flota, selector, pregunta, repo descubierto, ayuda, aviso de tamano, cabecera con ObserveFailed) pinta un glifo Unicode: todo caracter es ASCII, una letra o ¿/¡, en en y es",
+      "command": "cargo test -p gitraptor-cli --test tui_screens ascii_screens_paint_only_ascii",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 171
+    },
+    {
+      "id": "CKP005-LANG",
+      "statement": "Escenario 4: la pantalla habla un solo idioma: es contiene Flota, salir y ayuda y no Fleet, quit ni help; en, al reves",
+      "command": "cargo test -p gitraptor-cli --test tui_screens the_screen_speaks_the_language",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 154
+    },
+    {
+      "id": "CKP005-HELP",
+      "statement": "Escenario 5 (D5): '?' abre y cierra la ayuda, Esc la cierra, 'q' sale con la ayuda abierta y 'r' da tecla desconocida con la ayuda abierta",
+      "command": "cargo test -p gitraptor-cli --test tui_screens question_mark_opens_and_closes_the_help",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 164
+    },
+    {
+      "id": "CKP005-HELPKEYS",
+      "statement": "Escenario 5 (D5): la ayuda muestra las teclas del panel actual: en la flota 'Siempre' con q, r, Ctrl-Z y ?; en el selector ↑ k, ↓ j y Enter; en la pregunta s y y n; y una leyenda de simbolos",
+      "command": "cargo test -p gitraptor-cli --test tui_screens question_mark_shows_the_keys_of_the_panel",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 155
+    },
+    {
+      "id": "CKP005-LEGEND",
+      "statement": "Escenario 3 (D4): con filas activa e inactiva la barra termina con '● agente activo' y '◐ agente inactivo' (ASCII '* agente activo', '~ agente inactivo'); sin filas inactivas no aparece ◐",
+      "command": "cargo test -p gitraptor-cli --test tui_screens the_bar_explains_the_states_on_screen",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 171
+    },
+    {
+      "id": "CKP005-ASCIIKEYS",
+      "statement": "D3/D5: en ASCII la barra del selector etiqueta las flechas Up/Down y muestra la tecla alternativa (k, j), y '? ayuda' ocupa el hueco fijo de la derecha",
+      "command": "cargo test -p gitraptor-cli --test tui_screens the_ascii_bar_never_shows_arrow_glyphs",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 156
+    },
+    {
+      "id": "CKP005-SAY",
+      "statement": "D3 (ADR-CKP-003): en la parte no test de tui/view.rs '.render(' aparece una sola vez (dentro de impl Say) y en tui/help.rs ninguna",
+      "command": "cargo test -p gitraptor-cli --test tui_boundaries the_view_translates_only_through_say",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 486
+    },
+    {
+      "id": "CKP005-PTY-HELP",
+      "statement": "Escenario 5 contra el raptor real bajo script (macOS, debug): '?' pinta 'Siempre', Esc y '?' lo pintan otra vez y '?','?' lo pintan una tercera",
+      "command": "cargo test -p gitraptor-cli --test tui_accessibility question_mark_opens_and_closes_the_help",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 3876
+    },
+    {
+      "id": "CKP005-PTY-ASCII",
+      "statement": "Escenario 5 contra el raptor real: con --ascii (en y es, 100x30) todo caracter de la salida es ASCII, una letra o ¿/¡",
+      "command": "cargo test -p gitraptor-cli --test tui_accessibility ascii_paints_only_ascii",
+      "layer": "runtime",
+      "exit": 0,
+      "status": "PASS",
+      "reason": "",
+      "durationMs": 2209
+    }
+  ]
+}

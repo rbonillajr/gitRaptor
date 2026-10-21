@@ -146,7 +146,7 @@ Decisiones (orquestador, 2026-10-06):
 Pendiente de esta enmienda:
 
 - La etiqueta `external` / `externo` (worktree fuera de las rutas habituales) y el panel de detalle de `enter` (ruta, desde cuándo, qué significa) son de US-CKP-002.
-- El catálogo une agente y worktree con un `·` literal (`AgentInWorktree`, `NoAgent`). En el juego ASCII no se sustituye.
+- El catálogo une agente y worktree con un `·` literal (`AgentInWorktree`, `NoAgent`). En el juego ASCII no se sustituye. **Cerrado** por DS-US-CKP-005 (T003): `Say` pliega a ASCII todo texto del catálogo, y el `·` se ve `|`. El F1 ("Sin agente" para una fila con solo una Terminada) lo sustituye DS-US-CKP-002 D10.
 - Token propio `symbol.agent.none` en `packages/design-tokens`.
 - Sin asignación automática del dueño: si algún día se ofrece "asignar a un agente", lo confirma el humano.
 - Solo se verificó en macOS. La detección de la carpeta temporal en Windows (`%TEMP%`, rutas `\\?\`) y en Linux queda para la validación en máquinas reales.

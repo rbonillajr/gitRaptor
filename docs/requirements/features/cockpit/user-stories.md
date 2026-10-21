@@ -46,7 +46,7 @@ blocked:
 | [US-CKP-002](./user-stories/US-CKP-002-orden-atencion-terminadas.md) | La lista pone primero lo que pide atención y no se llena de sesiones viejas | 1 | Must | DEP-CKP-4, TS-CKP-005 | expanded |
 | [US-CKP-003](./user-stories/US-CKP-003-estados-motor-conexion.md) | La TUI dice en qué estado está el motor y qué hacer en cada caso | 1 | Must | DEP-CKP-12 (solo el autoarranque), TS-CKP-005 | expanded |
 | [US-CKP-004](./user-stories/US-CKP-004-selector-repo-preferencias.md) | El desarrollador cambia de repo y la TUI recuerda cómo la dejó | 2 | Should | DEP-CKP-11, TS-CKP-005 | expanded |
-| [US-CKP-005](./user-stories/US-CKP-005-terminal-pequena-sin-color.md) | La TUI se puede usar en una terminal pequeña, sin color o en ASCII | 1 | Must | TS-CKP-004, TS-CKP-005 | expanded |
+| [US-CKP-005](./user-stories/US-CKP-005-terminal-pequena-sin-color.md) | La TUI se puede usar en una terminal pequeña, sin color o en ASCII | 1 | Must | TS-CKP-004, TS-CKP-005 | partially-implemented (PR #PR_N); Pendiente: etapa de validación multiplataforma |
 | [US-CKP-006](./user-stories/US-CKP-006-conflictos-previstos.md) | El desarrollador ve qué agentes van a chocar antes de hacer merge | 2 | Must | SPIKE-CKP-001 → TS-CKP-001, TS-CKP-005 | expanded |
 | [US-CKP-007](./user-stories/US-CKP-007-frescura-prediccion.md) | Una predicción vieja nunca se presenta como actual | 3 | Must | TS-CKP-001, TS-CKP-005 | expanded |
 | [US-CKP-008](./user-stories/US-CKP-008-alerta-conflicto-nuevo.md) | El desarrollador se entera en la TUI cuando aparece un conflicto previsto nuevo | 3 | Must | TS-CKP-001, TS-CKP-005 | expanded |
