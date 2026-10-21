@@ -1,0 +1,42 @@
+[package]
+name = "conflict-prediction"
+version = "0.0.0"
+edition = "2024"
+publish = false
+license = "FSL-1.1-ALv2"
+description = "SPIKE-CKP-001: isolated prototype of the dry-run merge predictor (not product code)"
+
+# Standalone workspace: this prototype is NOT a member of the GitRaptor workspace.
+[workspace]
+
+[[bin]]
+name = "ckp-spike"
+path = "src/main.rs"
+
+[features]
+default = []
+# Set only by gix088/Cargo.toml (the same sources against gix 0.88, H9).
+gix088 = []
+
+[dependencies]
+gix = { version = "=0.89.0", default-features = false, features = ["sha1", "merge", "revision", "max-performance-safe"] }
+gix-merge = "=0.22.0"
+gix-diff = { version = "=0.69.0", default-features = false, features = ["blob"] }
+gix-filter = "=0.36.0"
+gix-worktree = { version = "=0.58.0", default-features = false, features = ["attributes"] }
+gix-attributes = "=0.37.0"
+gix-glob = "=0.29.0"
+gix-index = "=0.57.0"
+gix-object = "=0.66.0"
+gix-hash = { version = "=0.28.0", features = ["sha1"] }
+gix-command = "=0.12.0"
+gix-revwalk = "=0.37.0"
+gix-revision = { version = "=0.51.0", default-features = false, features = ["merge_base"] }
+gix-error = "=0.5.1"
+gix-validate = "=0.13.0"
+libc = "0.2"
+serde_json = "1"
+gitraptor-testkit = { path = "../../crates/testkit" }
+
+[profile.release]
+debug = 1
