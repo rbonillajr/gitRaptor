@@ -2,11 +2,11 @@
 id: DS-US-GRP-003
 title: "Dev Spec — Estados especiales de Git y worktrees o repos que ya no están"
 type: dev-spec
-status: draft
+status: implemented
 feature: motor-local
 domain: GRP
 created: 2026-10-09
-updated: 2026-10-09
+updated: 2026-10-21
 story: US-GRP-003
 scope: backend
 frontend_surface: false
@@ -682,3 +682,5 @@ Corre `/security-review --scope devspec docs/requirements/features/motor-local/d
 | N2 | Hay que comprobar en T009 que `gix` da un solo `Conflict` por ruta y que el diff árbol-índice no la repite en `staged`; si la repite, se cuenta `unstaged` (T002, paso 3) | Lo fija `a_conflicted_merge_reports_its_unmerged_paths` | rust-expert |
 | N3 | `RefsView` omite un worktree enlazado que no pasa `linked_is_trusted` y `reconcile` lo lista como `untrusted`: inconsistencia previa, no cambia aquí | Ninguna | — |
 | N4 | Un Claude Code vivo con su carpeta borrada sigue como sesión presente mientras Git registre el worktree (D5, D6): es el precio de no terminar sesiones por `missing` | Ninguna | — |
+
+Implementado en: PR #274.

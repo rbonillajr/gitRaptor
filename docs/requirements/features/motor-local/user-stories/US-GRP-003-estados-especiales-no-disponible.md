@@ -2,10 +2,10 @@
 id: US-GRP-003
 title: "El desarrollador sabe qué worktree está en un estado especial o ya no existe"
 type: us
-status: draft
+status: implemented
 priority: high
 created: 2026-10-03
-updated: 2026-10-09
+updated: 2026-10-21
 feature: motor-local
 related:
   context:
@@ -84,3 +84,5 @@ Entonces "feat-login" deja de figurar en el estado
   Y el historial de eventos muestra su retiro
 
 > **Enmienda (2026-10-09, PO, desde DS-US-GRP-003)**: "borrar" se separa en dos casos. Si desaparece la carpeta y Git aún registra el worktree, figura como no disponible. Si se retira de Git (`git worktree remove` o `prune`), deja de figurar y queda su evento de retiro; solo entonces terminan sus sesiones.
+
+Implementado en: PR #274 (SIN CERTIFICAR: la línea base de la suite estaba inestable por carga de otros workers; US-GRP-005 va en otra corrida).
