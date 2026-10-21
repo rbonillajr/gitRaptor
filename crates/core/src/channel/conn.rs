@@ -604,6 +604,9 @@ impl Connection<'_> {
         // Nor the observation tiers without `observation.tiers` (TS-GRP-006).
         self.outbox
             .set_without_tiers(!self.has(methods::CAP_OBSERVATION_TIERS.name));
+        // Nor the operation and unmerged paths without `observation.special-states`.
+        self.outbox
+            .set_without_special_states(!self.has(methods::CAP_OBSERVATION_SPECIAL_STATES.name));
         // Nor the discovered repos without `discovery.events`, and never to
         // `raptor-mcp` (US-GRP-020, SEC-MCP-01).
         self.outbox.set_without_discovery(
@@ -1324,6 +1327,10 @@ impl Connection<'_> {
                 if !self.has(methods::CAP_OBSERVATION_TIERS.name) {
                     result.repo.without_tier();
                 }
+                shape_special_states(
+                    self.has(methods::CAP_OBSERVATION_SPECIAL_STATES.name),
+                    std::slice::from_mut(&mut result.repo),
+                );
                 self.kept_temps(std::slice::from_mut(&mut result.repo));
                 result
             })
@@ -2085,6 +2092,10 @@ impl Connection<'_> {
                         .iter_mut()
                         .for_each(gitraptor_api::messages::RepoView::without_tier);
                 }
+                shape_special_states(
+                    self.has(methods::CAP_OBSERVATION_SPECIAL_STATES.name),
+                    &mut snapshot.repos,
+                );
                 self.kept_temps(&mut snapshot.repos);
                 // The ahead/behind as of now (US-GRP-012, D5).
                 crate::observe::refresh_divergence(
@@ -2185,6 +2196,10 @@ impl Connection<'_> {
                 if !self.has(methods::CAP_OBSERVATION_TIERS.name) {
                     repo.without_tier();
                 }
+                shape_special_states(
+                    self.has(methods::CAP_OBSERVATION_SPECIAL_STATES.name),
+                    std::slice::from_mut(&mut repo),
+                );
                 self.kept_temps(std::slice::from_mut(&mut repo));
                 if serde_json::to_vec(&repo).map_or(0, |v| v.len()) > CHANGE_LIST_BUDGET {
                     crate::observe::without_change_lists(&mut repo.worktrees);
@@ -3953,9 +3968,66 @@ fn hook_prior_cause(cause: gitraptor_api::timemachine::HookPriorFailure) -> &'st
     }
 }
 
+/// The repos of a snapshot in the shapes of a connection that did not accept
+/// `observation.special-states`: `repo.add`, `engine.snapshot` and `scope.snapshot` all go
+/// through here.
+fn shape_special_states(accepted: bool, repos: &mut [gitraptor_api::messages::RepoView]) {
+    if !accepted {
+        repos
+            .iter_mut()
+            .for_each(gitraptor_api::messages::RepoView::without_special_states);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_snapshot_drops_the_special_states_without_the_capability() {
+        use gitraptor_api::messages::{
+            BaseBranchView, BaseStatusView, ChangeCounts, DivergenceView, HeadView,
+            OperationKindView, RepoStateView, RepoView, WorktreeStatus, WorktreeView,
+        };
+        let repo = || RepoView {
+            repo_id: "r1".into(),
+            state: RepoStateView::Observed,
+            path: gitraptor_api::Untrusted::new("/r/.git"),
+            base: BaseBranchView {
+                name: None,
+                status: BaseStatusView::Unconfirmed,
+            },
+            worktrees: vec![WorktreeView {
+                path: gitraptor_api::Untrusted::new("/r"),
+                main: true,
+                admin_name: None,
+                status: WorktreeStatus::Ready {
+                    head: HeadView::Detached,
+                    counts: ChangeCounts::default(),
+                    changes: Vec::new(),
+                    divergence: DivergenceView::NoCommits,
+                },
+                last_activity_utc_ms: None,
+                last_activity_in_gap: false,
+                detached_at: None,
+                operation: Some(OperationKindView::Merge),
+                unmerged_paths: 2,
+            }],
+            fetched_utc_ms: None,
+            tier: None,
+            checked_utc_ms: None,
+            kept_temps: None,
+        };
+        let mut old = [repo(), repo()];
+        shape_special_states(false, &mut old);
+        for r in &old {
+            assert_eq!(r.worktrees[0].operation, None);
+            assert_eq!(r.worktrees[0].unmerged_paths, 0);
+        }
+        let mut new = [repo()];
+        shape_special_states(true, &mut new);
+        assert_eq!(new[0], repo());
+    }
 
     // ADR-GRP-016: a new code of a method that existed is a change of shape. A client without
     // `guard.recovery` keeps receiving the `INTERNAL` it always did, with no data.
