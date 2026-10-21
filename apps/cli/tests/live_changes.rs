@@ -153,6 +153,27 @@ impl Machine {
         }
     }
 
+    /// Waits until the engine observes the repo: its worktrees are in `status --json`, so the
+    /// first view the repo task compares against was read (a fixed sleep made a worktree that
+    /// `git` added meanwhile part of that view, and never a `worktree-create`).
+    fn settled(&self) {
+        let start = Instant::now();
+        loop {
+            let status = self.status();
+            let ready = status["repos"][0]["worktrees"]
+                .as_array()
+                .is_some_and(|w| !w.is_empty() && w.iter().all(|w| w["clean"] != Value::Null));
+            if ready {
+                return;
+            }
+            assert!(
+                start.elapsed() < Duration::from_secs(10),
+                "the engine did not observe the repo: {status}"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
     /// The worktree at `path` in `status --json`, once `ok` holds on it.
     fn worktree_when(&self, path: &Path, ok: impl Fn(&Value) -> bool) -> Value {
         let start = Instant::now();
@@ -233,7 +254,7 @@ fn demo(linked: bool) -> (Machine, PathBuf) {
 fn observed(linked: bool) -> (Machine, PathBuf) {
     let (m, wt) = demo(linked);
     m.add();
-    std::thread::sleep(Duration::from_millis(300));
+    m.settled();
     (m, wt)
 }
 
