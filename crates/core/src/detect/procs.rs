@@ -57,6 +57,30 @@ pub trait ProcLister: Send + Sync {
         let _ = pid;
         None
     }
+    /// [`git_call`] of the `git` `pid`; `None` when its arguments cannot be read.
+    fn git_call(&self, pid: u32) -> Option<GitCall> {
+        let _ = pid;
+        None
+    }
+}
+
+/// What the engine's calm reads of a running `git`'s command line: its subcommand, sanitized
+/// (only `[a-z0-9-]`, at most 32 bytes), and whether it is a long-lived helper that never changes
+/// a worktree (`fsmonitor--daemon`, `cat-file --batch*`). Nothing else of the arguments leaves
+/// the reader (SEC-04).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GitCall {
+    pub subcommand: String,
+    pub long_lived: bool,
+}
+
+/// [`GitCall`] of a `git` with these arguments (after the program name).
+// Stub: nothing is classified yet.
+pub fn git_call(_args: &[OsString]) -> GitCall {
+    GitCall {
+        subcommand: String::new(),
+        long_lived: false,
+    }
 }
 
 /// Whether a `git` with these arguments (after the program name) and these

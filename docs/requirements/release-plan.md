@@ -396,6 +396,7 @@ Ninguna se ha tomado en su nombre. Hasta que decida, el plan aplica la recomenda
 | 9 | `CHANGELOG`, notas de versión, `SECURITY.md` (política de divulgación) y matriz de soporte (versiones mínimas de SO y degradaciones) | v0.1.0 | Orquestador |
 | 10 | Gate de i18n en/es (NFR-10): ningún workflow lo comprueba (⚠️ **ASSUMPTION** del PO) | M2, si se quiere como criterio | Arquitecto |
 | 11 | No hay `architecture-constitution.md` en el repo; el Arquitecto usó AGENTS.md y los ADR-GRP como restricciones | — | Arquitecto (`/aadd-architect --init-constitution`) |
+| 12 | ⚠️ **RIESGO NFR-01 abierto (Windows)**: sin `cwd` de otro proceso, la calma de la Time Machine no ve un `git` en curso sin hooks (D15 del brief `docs/dev-briefs/tm-restore-calm-mark.md`). Un `reset --hard` en pleno vuelo puede quedar en un punto con marca anterior: el undo restauraría sin el trabajo. Lo mitiga, solo en parte, la regla de "llamada de hook en vuelo" (D17). Se cierra cuando D15 tenga una sonda en Windows validada en máquina real | M3 (criterios 4 y 5) | Arquitecto |
 
 **Estados obsoletos detectados** (limpieza fuera del alcance de este PR):
 

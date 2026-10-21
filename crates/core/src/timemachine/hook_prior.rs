@@ -17,7 +17,7 @@ use gitraptor_api::methods::QuotaWindow;
 use gitraptor_git::ReadError;
 
 use super::continuous::CaptureDeps;
-use super::engine::{GitState, confirm_mark};
+use super::engine::{CalmExclusions, GitState, confirm_mark};
 use super::manual::{
     DAY_MS, MINUTE_MS, ManualFloor, QuotaHit, QuotaInput, VolumeProbe, cached_reserve, folder_id,
     resolve_worktree,
@@ -462,6 +462,20 @@ pub fn capture(
     result
 }
 
+/// [`capture`] for a hook whose `git` is alive in the worktree: the calm does not count what
+/// `ex` names (the `git` ancestors of the hook's client and this hook call). With the chain
+/// unknown, `ex` names nothing and the prior waits for a calm that cannot come: `TimeLimit`.
+// Stub: the exclusions are not passed on yet.
+pub fn capture_excluding(
+    deps: &CaptureDeps,
+    ask: &HookPriorAsk,
+    _ex: &CalmExclusions<'_>,
+    now_ms: i64,
+    deadline: Instant,
+) -> Result<HookPriorTaken, HookPriorError> {
+    capture(deps, ask, now_ms, deadline)
+}
+
 /// Keeps a failure for the `git` command, so its next hook does not try again.
 fn book(store: &SnapshotStore, ask: &HookPriorAsk, error: HookPriorError) -> HookPriorError {
     if let Some(git) = ask.git {
@@ -473,3 +487,7 @@ fn book(store: &SnapshotStore, ask: &HookPriorAsk, error: HookPriorError) -> Hoo
 #[cfg(test)]
 #[path = "hook_prior_mark_tests.rs"]
 mod hook_prior_mark_tests;
+
+#[cfg(test)]
+#[path = "hook_prior_live_git_tests.rs"]
+mod hook_prior_live_git_tests;

@@ -43,6 +43,48 @@ Cada una es una «Decisión del orquestador (2026-10-04), validada por Arquitect
 - **D13. Compatibilidad con #272 (`prior_point.rs`).** `before_event` y su sombreado por `mid_operation` asumen que una marca vieja solo aparece dentro de la ventana de comando de un prior. D9 elimina las Observation con marca vieja fuera de esa ventana sin tocar el contrato de `PointFacts`. La regla vale en main y tras #272. #272 **sí** toca `store/capture.rs`; por eso D9 no lo edita: `confirm_mark` vive en `engine.rs` y entra solo por `still_valid`. Los demás archivos de este slice (`continuous.rs`, `manual.rs`, `hook_prior.rs`, `protected/mod.rs`, `executor/mod.rs`) no los toca #272.
 - **D14. Hook de depuración para W85.** `CaptureDeps.after_mark: Option<Arc<dyn Fn() + Send + Sync>>`, `#[doc(hidden)]`, se ejecuta en `observe` entre `settle` y `GitState::read` y solo en `cfg!(debug_assertions)`, con el mismo patrón que `CaptureDeps.layer` (`continuous.rs:97`, `TmCapture.layer`). Es lo que inyecta el `reset --hard` de forma determinista. En release se ignora.
 
+### Caso 3: un `git` que sigue vivo ya cambió el contenido, pero aún no su reflog (pérdida de datos)
+
+`raw_git_undo` pasa 8 de 10. El objetivo del undo es la Observation seq 4, con marca 1 y contenido posterior al reset; el Reset es el evento 2.
+
+**Hipótesis del experto descartada.** Los `head_logs` no adelantan al evento:
+- El `Reset` sale de la misma lectura que el tamaño (`watch/repo.rs:376-400`): `head_log_tail(before, w.head_log_len)` sobre la misma `new`.
+- El lote "solo reflog" se difiere solo si `!others` (L823-833), y un reset al mismo commit siempre trae su línea `reset:` → evento → `others`.
+- El arranque y el despertar publican los `head_logs` de la vista base de la propia tarea (`watch/mod.rs:988-1005`, `1219`; `daemon/repos.rs:360`, `tiers.rs:357`): no hay nada por delante de la base.
+- Una línea a medio escribir es teórica: git añade la línea con un solo `write`. Aun así se cierra (D16).
+
+**Causa probada: la calma ve el reflog, y `reset --hard` lo escribe el último.**
+1. `git reset` hace primero `reset_index` (árbol de trabajo + índice, con `index.lock` solo mientras escribe el índice).
+2. Después `reset_refs`: una transacción para `ORIG_HEAD` y luego otra para `HEAD`, que añade la línea `reset:` al reflog de `HEAD`. Cada una dispara el hook `reference-transaction committed`.
+3. El hook del test duerme 0,5 s en `committed` (`apps/cli/tests/raw_git_undo.rs:132-136`). Duerme primero en la transacción de `ORIG_HEAD`, con el contenido ya revertido y el reflog de `HEAD` aún sin tocar.
+4. Durante ese hueco, `RepoMarks::calm` (`engine.rs`) da calma: el reflog en disco es igual al publicado, no hay `index.lock`, `HEAD` y las ramas no cambian (D1). `settle` da 1.
+5. `GitState` en `at_start` y en la validez es el mismo (el índice ya se escribió antes), y `confirm_mark(1)` también da calma con `seq` 1 (D9).
+6. Resultado: Observation con marca 1 y contenido sin WORK. La suposición del doc de `engine.rs` ("todo `git` que cambia el estado escribe el reflog", y así lo cubre la calma) solo vale para un `git` **terminado**. Un `git` en curso ya puede haber cambiado el contenido sin haber escrito su reflog. Sin el hook, el hueco es el tramo entre `reset_index` y `reset_refs`, que la carga ensancha.
+
+Cada una es una «Decisión del orquestador (2026-10-04), validada por Arquitecto». nassa-architect validó D15-D16 «con ajustes»; los ajustes se recogen en D17-D23.
+
+- **D15. No hay calma mientras viva un `git` en el ámbito.** `RepoMarks` recibe un `Arc<dyn detect::procs::ProcLister>`, que ya existe, ya tiene 2 implementaciones (`SystemProcLister` y la tabla sintética de los tests de `detect`) y ya lee `exe` y `cwd`.
+  - `calm(repo, wt)` es `false` si hay un proceso con `exe` cuyo nombre es `git`/`git.exe` y cuyo `cwd` está bajo la raíz canónica del worktree o bajo su directorio Git.
+  - Quedan fuera los hijos directos del daemon (`ppid == std::process::id()`): sus `git` de escritura corren bajo el lock del repo, fuera de cualquier `settle` del mismo repo.
+  - Falla cerrado: un `git` con `cwd` ilegible cuenta como dentro del ámbito, y `list_bare() == None` es "no en calma". Excepción declarada: en una plataforma donde `ProcLister::cwd` no está soportado, D15 queda inactivo y se registra `tm_calm_probe_unsupported` una vez.
+  - Sin lister (dobles y tests), la regla de hoy.
+  - Una sola lista de procesos por sondeo de `settle`, compartida entre los worktrees. D9 hereda D15 sin cambios: `confirm_mark` llama a `settle(ZERO)`.
+- **D16. Solo se publican líneas completas del reflog.** `head_log_len` (`watch/repo.rs:223`) y el `head_log_len` de `engine.rs` pasan a ser el desplazamiento tras el último `\n`, no el tamaño del archivo. Una línea a medio escribir mantiene la calma en falso solo hasta que se completa: el crecimiento sin evento (checkout de la misma rama, commit detached) sigue llegando a la calma, porque cada línea completa se publica aunque no genere evento (L816-860).
+- **Trade-off aceptado (D15):** un `git` largo y de solo lectura en el worktree (`git log` con paginador, `git commit` con el editor abierto) bloquea la calma mientras vive. Las capturas se aplazan y las operaciones TM devuelven `repo-busy` pasado el límite. Se prefiere eso a sellar contenido de un `git` en curso con una marca anterior. `gc --auto` entra en el mismo trade-off.
+- **D17. Interbloqueo con `hook_prior` (bloqueante): exclusiones explícitas.** `hook_prior.rs:412`/`452` llama a `settle` mientras el `git` que disparó el hook sigue vivo; con solo D15, se bloquearía hasta `TimeLimit`.
+  - `settle` y `calm` reciben `CalmExclusions { pids, own_hook }`. `pids` son los ancestros `git` del cliente del hook, ya calculados en `guardrails/evaluate.rs:339` (`EvalRequest.chain`). Si `chain` es `None` (cadena desconocida), no se excluye nada: falla cerrado → `TimeLimit` → denegación de US-GRD-017.
+  - Exclusiones vacías para todo lo demás.
+- **D18. Llamadas de hook en vuelo (complemento barato, válido en Windows).** `RepoMarks` lleva un contador de llamadas de hook en vuelo por worktree: `hook_begin(repo, wt)` devuelve un guard RAII, y el daemon lo toma al recibir la llamada del hook y lo suelta al responder. `calm(wt)` es `false` mientras haya alguna, salvo la `own_hook` del propio `settle` (D17).
+- **D19. D15 se mantiene.** Cubre el hueco sin hooks: un `git` sin hooks entre `reset_index` y `reset_refs`, que bajo carga no dura microsegundos garantizados.
+- **D20. `git -C <wt>` desde otro `cwd`.** Un `git` cuyo `cwd` cae fuera del ámbito cuenta igualmente si `git_redirects(args, env)` (`detect/procs.rs:66`) da `true` o no se puede evaluar (argv o env ilegibles). Falla cerrado: un `-C` o un `GIT_DIR` puede apuntar al ámbito.
+- **D21. Coste: primero lo barato.** El orden es reflog, `HEAD`, `index.lock`, ramas (D1), hooks en vuelo (D18), y solo si todo dice calma, procesos.
+  - `list_bare()` da el nombre sin `exe`; `exe`, `cwd` y argv se leen solo para los candidatos `git`.
+  - Se mide el p95 de una pasada en macOS con unos 800 procesos (C27). Si pasa de 5 ms, se cachea la lista como mucho 1 sondeo por repo.
+- **D22. `git` de larga vida excluidos por argv ya.** Quedan fuera `git fsmonitor--daemon` y `git cat-file --batch*` (`--batch`, `--batch-check`, `--batch-command`). `git credential-cache--daemon` se ejecuta como `git-credential-cache--daemon`, con otro nombre de `exe`, así que el filtro por nombre no lo cuenta; un test lo fija. El paginador, el editor y `gc --auto` quedan como trade-off aceptado.
+- **D23. Observabilidad e inanición declarada.** Un `git status` en bucle (IDE, prompt de shell) puede impedir la calma por D15 hasta el límite. Es un límite declarado. Cada vez que un `settle` agota su límite por D15, se registra `tm_calm_blocked_by_git` con `pid` y subcomando (`argv[1]` saneado), nunca el argv completo, como mucho una vez por `settle`.
+- **Nietos del daemon.** Solo se excluyen los hijos directos (`ppid == daemon`). Los nietos (hooks y subprocesos de un `git` del propio daemon) no; esos `git` corren bajo el lock del repo, que serializa las operaciones TM del mismo repo, y un `settle` concurrente de la captura continua solo se aplaza.
+- **⚠️ RIESGO NFR-01 abierto (Windows).** Sin `cwd` de otro proceso, D15 queda inactivo (se registra `tm_calm_probe_unsupported`). D18 cubre los `git` con hooks de GitRaptor, pero no un `reset --hard` sin hooks en pleno vuelo. Está registrado en `docs/requirements/release-plan.md` (Huecos, fila 12), no solo como "Pendiente".
+
 ## Topología
 
 Slice 1 (tracer, criterios: C1, C2, C3, C3b):
@@ -69,6 +111,20 @@ Slice 3, caso 2 (criterios: C10-C18; depende de D5 del slice 1):
 - `crates/core/src/timemachine/hook_prior_mark_tests.rs` (nuevo; `#[path]` en `hook_prior.rs`): C18.
 - `crates/core/src/executor/prior_mark_tests.rs` (nuevo; `#[path]` en `executor/mod.rs`): C14.
 
+Slice 4, caso 3 (criterios: C19-C22):
+- `crates/core/src/timemachine/engine.rs`: `RepoMarks::set_procs`, el paso de procesos en `settle`/`calm`, la longitud por líneas completas y el doc del módulo corregido ("terminado").
+- `crates/core/src/watch/repo.rs`: `head_log_len` por líneas completas (L223).
+- `crates/core/src/daemon/mod.rs` (o donde se construyen las `RepoMarks` del daemon): `set_procs(Arc::new(SystemProcLister))`.
+- `crates/core/src/timemachine/calm_git_alive_tests.rs` (nuevo; `#[path]` en `engine.rs`): C19, C20, C21.
+- `crates/core/tests/tm_calm_reset_in_hook.rs` (nuevo, `#![cfg(unix)]`): C22.
+- `crates/core/src/timemachine/engine.rs` (en serie): `CalmExclusions`, `settle_excluding`, `hook_begin`, el orden barato de D21, los filtros de D22 y el log de D23.
+- `crates/core/src/timemachine/engine.rs` `EngineLink`: `settle_excluding` y `hook_begin`; `crates/core/src/daemon/tm.rs`: su implementación.
+- `crates/core/src/timemachine/hook_prior.rs` (L412, L452): `settle_excluding` con `chain` + `own_hook`.
+- `crates/core/src/daemon/guard.rs`: `hook_begin` al recibir la llamada del hook, el guard vive hasta la respuesta.
+- `crates/core/src/timemachine/calm_exclusions_tests.rs` (nuevo; `#[path]` en `engine.rs`): C23-C26, C28, C29.
+- `crates/core/src/timemachine/hook_prior_live_git_tests.rs` (nuevo; `#[path]` en `hook_prior.rs`): C24.
+- `crates/core/tests/tm_calm_probe_cost.rs` (nuevo, `#[ignore]`): C27.
+
 ## Contratos
 
 - `pub fn read_local_branches(reader: &RepoReader) -> Result<BTreeMap<String, String>, RefsReadError>` en `gitraptor_core::watch`. `RefsReadError` pasa a ser `pub` en `watch`.
@@ -81,6 +137,11 @@ Slice 3, caso 2 (criterios: C10-C18; depende de D5 del slice 1):
 - `EngineLink`, el wire y los códigos `repo-busy`/`git-busy`: sin cambios.
 - `pub fn confirm_mark(engine: Arc<dyn EngineLink>, repo_id: &str, worktrees: &[PathBuf], mark: i64) -> ValidityGuard` en `timemachine::engine` (`ValidityGuard` se importa de `store::capture`, sin editar ese archivo): `true` solo si `engine.settle(repo_id, worktrees, Duration::ZERO) == Some(mark)`. No bloquea: un solo sondeo.
 - `ProtectedRequest` añade el campo `engine: Option<Arc<dyn EngineLink>>`, o recibe el guard ya construido; lo decide `rust-expert` siguiendo `protected/mod.rs:57`. Sin engine (dobles), no hay guard, como hoy.
+- `pub fn set_procs(&self, procs: Arc<dyn crate::detect::procs::ProcLister>)` en `RepoMarks`: se guarda una vez, y sin llamarla la calma no mira procesos.
+- `pub struct CalmExclusions<'a> { pub pids: &'a [u32], pub own_hook: Option<HookToken> }` (`Default` = vacío) y `pub struct HookToken(u64)`, en `timemachine::engine`.
+- `fn settle_excluding(&self, repo_id: &str, worktrees: &[PathBuf], limit: Duration, ex: &CalmExclusions<'_>) -> Option<i64>` en `EngineLink` y `RepoMarks`. `settle(..)` = `settle_excluding(.., &CalmExclusions::default())`.
+- `fn hook_begin(&self, repo_id: &str, worktree: &Path) -> HookInFlight` en `EngineLink` y `RepoMarks`. `HookInFlight` es RAII: `token()` da el `HookToken` y `Drop` descuenta.
+- `RepoMarks::settle`/`calm`: mismas firmas. `calm` añade la condición de D15. La longitud del reflog que se compara y la que se publica son las de líneas completas (D16).
 
 ## Criterios (tests; repos temporales con `HOME`/`GIT_CONFIG_GLOBAL` aislados, sin `sleep`)
 
@@ -107,6 +168,19 @@ Slice 3, caso 2 (criterios: C10-C18; depende de D5 del slice 1):
 - C17 `a_failed_anchor_leaves_the_echo_with_its_operation`: `anchor` agota sus 3 intentos (con `after_mark` moviendo la `seq` cada vez). `external_events_in` atribuye los eventos (marca de la op, siguiente captura] a la operación y ninguno queda con `caused_by = None`.
 - C18 `a_hook_prior_denies_by_deadline_not_by_one_discard`: un único descarte seguido de calma da `Ok` del prior. Descartes sostenidos dan `TimeLimit` → denegación US-GRD-017, solo al vencer el plazo.
 - C15 (e2e) `apps/cli/tests/raw_git_undo.rs::an_agent_recovers_its_work_after_a_raw_reset_hard` sin cambios: 50 de 50 bajo carga, en main y tras rebasar sobre #272.
+- C19 `a_worktree_with_a_git_still_running_is_not_calm`: `ProcLister` sintético con un `git` cuyo `cwd` está en el worktree; los `head_logs`, el `HEAD` y las ramas publicados coinciden con el disco. `settle(ZERO) == None`. Se quita el proceso de la tabla y da `Some`. Variantes: `cwd` ilegible → `None`; `ppid` = daemon → `Some`; `git` en otro repo → `Some`. En rojo.
+- C20 `confirm_mark_rejects_a_capture_while_a_git_is_alive`: con `after_mark` (D14) se mete el `git` vivo en la tabla sintética entre la marca y la lectura, y `observe` da `Discarded`. En rojo.
+- C21 `a_half_written_reflog_line_is_not_published`: un reflog cuya última línea no tiene `\n`. `RefsView::read` publica el desplazamiento de la última línea completa y no emite evento. Al completar la línea, `Reset` y la longitud entera. En rojo.
+- C22 `a_capture_during_a_reset_paused_in_its_hook_is_not_taken`: repo real, `git reset --hard` con un hook `reference-transaction` que en `committed` escribe un marcador y se bloquea leyendo un FIFO (sin `sleep`). El test espera el marcador; ahí el contenido ya está revertido y `RepoMarks` con `SystemProcLister` da `settle(ZERO) == None` y `observe` da `NotCalm`. Se libera el FIFO, `git` termina y se publica el lote. Después, `Some(m)` con `m` ≥ la `seq` del Reset. En rojo.
+- C21 cubre D16 completo: la línea parcial no se publica hasta su `\n`, y una línea completa sin evento (`checkout` de la misma rama) llega a la calma sin `Reset`.
+- C23 `excluded_pids_and_own_hook_do_not_block_their_own_settle`: tabla sintética con `git` pid 42 en el ámbito más un hook en vuelo. Con `pids = [42]` y `own_hook` = ese token: `Some`. Sin exclusiones: `None`. Con otro hook en vuelo: `None` (D18).
+- C24 `a_hook_prior_with_its_live_git_in_scope_seals_with_a_mark` (bloqueante): `hook_prior` con el `git` cliente vivo en el ámbito y `chain` = sus ancestros sella con marca, sin `TimeLimit`. Con `chain = None`: `TimeLimit` → denegación.
+- C25 `a_git_dash_c_from_another_cwd_counts_in_scope`: `cwd` fuera y argv `-C <wt>` → `None`; argv ilegible → `None`; argv sin redirección → `Some`.
+- C26 `long_lived_git_daemons_do_not_block_the_calm`, con un caso por proceso: `fsmonitor_daemon_is_excluded`, `cat_file_batch_is_excluded`, `credential_cache_daemon_is_not_named_git` (sus `exe` reales en la tabla sintética).
+- C27 `#[ignore] one_calm_pass_with_800_processes_is_cheap`: p95 de una pasada con `SystemProcLister` en macOS, en release. Imprime el valor; si pasa de 5 ms, se activa el caché de D21.
+- C28 `the_process_probe_runs_only_when_cheap_checks_say_calm`: un `ProcLister` contador con `index.lock` presente → 0 llamadas a `list_bare`.
+- C29 `a_settle_blocked_by_git_logs_pid_and_subcommand_only`: logger de captura. `tm_calm_blocked_by_git` sale una vez con `pid` y `status`, sin el resto del argv.
+- C15 (e2e) `raw_git_undo`: 50 de 50 bajo carga (macOS: el test es `cfg(target_os = "macos")`).
 
 ## Convenciones observadas
 
@@ -140,6 +214,9 @@ Slice 3, caso 2 (criterios: C10-C18; depende de D5 del slice 1):
 
 5. Marca confirmada (caso 2): la marca de una captura vale solo si en su punto de validez el motor sigue en calma con la misma `seq`. Si no, la captura se descarta (las capturas reintentan; el prior rechaza con `git-busy`). Así ninguna captura guarda contenido posterior a un evento con una marca anterior a ese evento.
 
+6. Git en curso (caso 3): la calma exige además que no viva ningún `git` en el ámbito (lista de procesos del usuario; los hijos del daemon quedan fuera; si no se puede leer, falla cerrado). La razón: un `git` cambia el contenido antes de escribir su reflog (`reset --hard`: índice → `ORIG_HEAD` → `HEAD`). Límite declarado: un `git` largo de solo lectura aplaza capturas y operaciones. En una plataforma sin `cwd` de procesos, D15 queda inactivo (Windows pendiente). Se corrige la frase de ADR-TMC-004 § 2 "todo `git` terminado…": la calma por reflog solo cubre `git` terminados.
+7. Reflog: se publican solo líneas completas (D16).
+
 ADR-TMC-004 § 2: se añade "y las ramas locales" a la fila de Calma por estado. ADR-TMC-004, fila Consistencia: "la marca se confirma en el punto de validez (calma + `seq` sin moverse); si no, descarte". Se cita la compatibilidad con la regla del punto previo de #272.
 
 ## Decisiones abiertas
@@ -147,6 +224,9 @@ ADR-TMC-004 § 2: se añade "y las ramas locales" a la fila de Calma por estado.
 Ninguna. No hay cambio de contrato público ni de datos.
 
 ## Not Built (deferred)
+
+- Excluir de D15 los `git` de solo lectura (`log`, `show`, `diff`, `status`… por argv): cuando el bloqueo por paginador o editor se vea en uso real. Hoy cuenta cualquier `git`.
+- D15 en Windows (`cwd` de otro proceso): cuando se valide en máquina real. Hasta entonces queda inactivo y se registra, D18 lo mitiga y el hueco es un ⚠️ RIESGO NFR-01 abierto (release-plan, Huecos, fila 12).
 
 - Barrera por worktree (solo las ramas de su ámbito): cuando C6 muestre `repo-busy` con la cadencia real de los agentes.
 - Retirar `await_moved_branches`: cuando C4 y us_tmc_009 lleven 2 semanas en verde. Su falso positivo (cualquier evento ajeno posterior con el mismo nombre de rama) no puede sobrevivir a la retirada, ni copiado ni en un sustituto.
@@ -158,3 +238,5 @@ Ninguna. No hay cambio de contrato público ni de datos.
 - `pub fn set_persisted(&self, _repo_id: &str, seq: i64, _common_dir: &Path, _branches: BTreeMap<String, String>) { self.set_seq(_repo_id, seq) }` en `RepoMarks`.
 - `pub fn confirm_mark(_engine: Arc<dyn EngineLink>, _repo_id: &str, _worktrees: &[PathBuf], _mark: i64) -> ValidityGuard { ValidityGuard(Arc::new(|| true)) }` en `engine.rs`. Con este stub C10, C11, C13 y C14 compilan y fallan.
 - Hook de depuración `CaptureDeps.after_mark: Option<Arc<dyn Fn() + Send + Sync>>` (D14). Se añade con `None` en todos los constructores y se llama en `observe` tras `settle`, solo en debug. Es necesario para que compilen C10, C11 y C17.
+- `pub fn set_procs(&self, _procs: Arc<dyn crate::detect::procs::ProcLister>) {}` en `RepoMarks` (stub vacío: C19, C20 y C22 compilan y fallan). Si los tests de integración necesitan el módulo `detect::procs` y no es `pub`, se exporta `ProcLister`, `ProcEntry` y `SystemProcLister`. C21 no necesita stub.
+- `CalmExclusions`, `HookToken` y `HookInFlight` con sus campos. `settle_excluding` delega en `settle` ignorando `ex`. `hook_begin` devuelve un `HookInFlight` inerte. Así C23, C24 y C26 compilan y fallan.
