@@ -50,6 +50,10 @@ pub const AUTOSTART_REGKEY_ENV: &str = "GITRAPTOR_AUTOSTART_REGKEY";
 /// Debug-build test hook: the executable used instead of `launchctl` or
 /// `systemctl`. Release builds do not even read it (SEC-06).
 pub const SERVICE_TOOL_ENV: &str = "GITRAPTOR_TEST_SERVICE_TOOL";
+/// Debug-build test hook: milliseconds to wait for one call of the service tool. The simulated
+/// tool boots a whole test binary, which can take longer than [`TOOL_TIMEOUT`] on a loaded
+/// machine. Release builds do not even read it (SEC-06).
+pub const SERVICE_TOOL_TIMEOUT_ENV: &str = "GITRAPTOR_TEST_SERVICE_TOOL_TIMEOUT_MS";
 
 /// Longest wait for one call of the service tool.
 #[cfg(unix)]
@@ -446,7 +450,10 @@ impl Autostart {
         let Ok(mut child) = child else {
             return false;
         };
-        let deadline = std::time::Instant::now() + TOOL_TIMEOUT;
+        let timeout = debug_var(SERVICE_TOOL_TIMEOUT_ENV)
+            .and_then(|v| v.to_str()?.parse::<u64>().ok())
+            .map_or(TOOL_TIMEOUT, Duration::from_millis);
+        let deadline = std::time::Instant::now() + timeout;
         loop {
             match child.try_wait() {
                 Ok(Some(status)) => return status.success(),

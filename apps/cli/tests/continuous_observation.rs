@@ -28,7 +28,7 @@ use gitraptor_api::messages::{
     ClientKind, EventsHistoryResult, GitEventKind, GitEventView, Snapshot,
 };
 use gitraptor_api::{Actor, AgentKind, AgentOrigin, UntrustedName, methods};
-use gitraptor_core::autostart::{AUTOSTART_DIR_ENV, SERVICE_TOOL_ENV};
+use gitraptor_core::autostart::{AUTOSTART_DIR_ENV, SERVICE_TOOL_ENV, SERVICE_TOOL_TIMEOUT_ENV};
 use gitraptor_core::client::Client;
 use gitraptor_core::daemon::running_pid;
 use gitraptor_core::profile::ProfileDirs;
@@ -310,6 +310,9 @@ impl Machine {
                 self.f.home.join("Library/LaunchAgents").into_os_string(),
             ),
             (SERVICE_TOOL_ENV, self.launchctl().into_os_string()),
+            // The simulated launchctl boots this test binary: allow it more than the production
+            // 5 s on a loaded machine (under it the client fell back to `bootstrap`).
+            (SERVICE_TOOL_TIMEOUT_ENV, "60000".into()),
             ("PATH", "/usr/bin:/bin".into()),
             ("LANG", "en_US.UTF-8".into()),
         ]
