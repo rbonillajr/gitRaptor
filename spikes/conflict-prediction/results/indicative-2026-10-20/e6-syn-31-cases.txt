@@ -1,0 +1,67 @@
+# E6/E7 R-SYN with the 31 cases of mk-syn.sh (adds f2-rename-conflict to the run in e6-e7-fidelity.txt) — load 3.48 4.19 5.16
+## reference git 2.38.5
+pairs=31 errors=0 valid=31 with_conflict_either=21 parity=21/21 (100.0%)
+false_negative_pairs=0 false_positive_pairs=0
+hunks: files=13 same_ranges=13 (100.0%)
+hunks joined when the gap is <= 3 lines: same=13 (100.0%)
+hunks joined when the gap is <= 10 lines: same=13 (100.0%)
+prefilter: skipped=4/31 (12.9%) false_negatives=1
+  prefilter FN: ('dir-rename/ours', 'dir-rename/theirs') ['e/new.txt']
+engine ms: p50=0.9 p95=3.0 p99=5.9 max=5.9
+## reference git 2.56.0
+pairs=31 errors=0 valid=31 with_conflict_either=21 parity=21/21 (100.0%)
+false_negative_pairs=0 false_positive_pairs=0
+hunks: files=13 same_ranges=13 (100.0%)
+hunks joined when the gap is <= 3 lines: same=13 (100.0%)
+hunks joined when the gap is <= 10 lines: same=13 (100.0%)
+prefilter: skipped=4/31 (12.9%) false_negatives=1
+  prefilter FN: ('dir-rename/ours', 'dir-rename/theirs') ['e/new.txt']
+engine ms: p50=0.9 p95=3.0 p99=5.9 max=5.9
+## reference git 2.50.1-apple
+pairs=31 errors=0 valid=31 with_conflict_either=21 parity=21/21 (100.0%)
+false_negative_pairs=0 false_positive_pairs=0
+hunks: files=13 same_ranges=13 (100.0%)
+hunks joined when the gap is <= 3 lines: same=13 (100.0%)
+hunks joined when the gap is <= 10 lines: same=13 (100.0%)
+prefilter: skipped=4/31 (12.9%) false_negatives=1
+  prefilter FN: ('dir-rename/ours', 'dir-rename/theirs') ['e/new.txt']
+engine ms: p50=0.9 p95=3.0 p99=5.9 max=5.9
+## gix 0.88 vs 0.89
+pairs=31 errors=0 valid=31 with_conflict_either=21 parity=21/21 (100.0%)
+false_negative_pairs=0 false_positive_pairs=0
+hunks: files=13 same_ranges=13 (100.0%)
+hunks joined when the gap is <= 3 lines: same=13 (100.0%)
+hunks joined when the gap is <= 10 lines: same=13 (100.0%)
+engine ms: p50=0.7 p95=1.5 p99=5.9 max=5.9
+## per case (a2 | reference 2.56.0)
+same-line	f.rs	f.rs
+adjacent-lines	f.rs	f.rs
+overlap-clean		
+add-add	new.txt	new.txt
+add-add-same		
+modify-delete	md.txt	md.txt
+rename-modify		
+rename-rename	old.txt|ours-name.txt|theirs-name.txt	old.txt|ours-name.txt|theirs-name.txt
+rename-modify-conflict	renamed.txt	renamed.txt
+dir-rename	e/new.txt	e/new.txt
+dir-file	x~ours	x~2388d0d807ee4511d25b42ff06bdd2bff5c60f01
+binary	bin.dat	bin.dat
+submodule	sub	sub
+lfs-pointer	big.bin	big.bin
+crlf	crlf.txt	crlf.txt
+union-attr	u.txt	u.txt
+nomerge-attr		
+f2-dir-renames	a/b	a/b~b58e4495228599d093ec9d4a5ec0f693d0b82c76
+f2-rename-conflict	a/b/1	a/b/1
+mimic-markers	mimic.txt	mimic.txt
+multi-hunk	h.txt	h.txt
+symlink	link	link
+mode-content		
+criss-cross	cc.txt	cc.txt
+criss-cross-clean	cc.txt	cc.txt
+demo-1-2	src/cart.rs	src/cart.rs
+demo-1-3		
+demo-1-4		
+demo-2-3		
+demo-2-4		
+demo-3-4		
