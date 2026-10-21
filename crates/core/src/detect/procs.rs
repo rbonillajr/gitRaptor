@@ -384,6 +384,24 @@ mod tests {
             .current_dir(dir.path())
             .spawn()
             .unwrap();
+        // `spawn` returns once the fork happened, not once the child exec'd: until
+        // then `/proc/<pid>/exe` still names this test binary. Wait for the exec.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        loop {
+            let bare = SystemProcLister.list_bare().unwrap();
+            let exe = bare
+                .iter()
+                .find(|e| e.pid == child.id())
+                .and_then(|e| SystemProcLister.exe(e));
+            if exe.is_some_and(|p| p.ends_with("sleep")) {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the child never exec'd"
+            );
+            std::thread::yield_now();
+        }
         let table = SystemProcLister.list().unwrap();
         let bare = SystemProcLister.list_bare().unwrap();
         let cwd = SystemProcLister.cwd(child.id());
