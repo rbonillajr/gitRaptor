@@ -356,28 +356,42 @@ fn question_mark_shows_the_keys_of_the_panel() {
     for token in ["s y", "n", "Esc", "aviso"] {
         assert!(question.contains(token), "{token}\n{question}");
     }
-    snapshot(
-        "help_fleet_80x24_es",
-        &with_help(shop_model(Lang::Es)),
-        80,
-        24,
-    );
-    snapshot(
-        "help_picker_80x24_es",
-        &with_help(choosing(Lang::Es)),
-        80,
-        24,
-    );
-    snapshot(
-        "help_question_80x24_es",
-        &with_help(asking(Lang::Es)),
-        80,
-        24,
-    );
-    snapshot(
-        "help_fleet_80x24_en",
-        &with_help(shop_model(Lang::En)),
-        80,
-        24,
-    );
+    // The snapshots pin the Unix wording of the always group: on Windows `Ctrl-Z` is shown
+    // disabled ("solo en Unix"), which `ctrl_z_is_disabled_off_unix` checks instead.
+    #[cfg(unix)]
+    {
+        snapshot(
+            "help_fleet_80x24_es",
+            &with_help(shop_model(Lang::Es)),
+            80,
+            24,
+        );
+        snapshot(
+            "help_picker_80x24_es",
+            &with_help(choosing(Lang::Es)),
+            80,
+            24,
+        );
+        snapshot(
+            "help_question_80x24_es",
+            &with_help(asking(Lang::Es)),
+            80,
+            24,
+        );
+        snapshot(
+            "help_fleet_80x24_en",
+            &with_help(shop_model(Lang::En)),
+            80,
+            24,
+        );
+    }
+}
+
+/// Off Unix there is no suspend: the help says so instead of listing a key that does nothing.
+#[cfg(windows)]
+#[test]
+fn ctrl_z_is_disabled_off_unix() {
+    let help = screen(&with_help(shop_model(Lang::Es)), 80, 24);
+    assert!(help.contains("Ctrl-Z"), "{help}");
+    assert!(help.contains("solo en Unix"), "{help}");
 }
