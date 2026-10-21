@@ -79,6 +79,7 @@ Cada cosa nueva se **declara en un archivo propio de su módulo** y se **registr
   - Ningún bloque se solapa con otro, y todos empiezan en un múltiplo de 20 por debajo de `-33000`.
   - No hay códigos ni nombres repetidos, ni en los módulos ni en la lista congelada.
   - El test de arquitectura falla si `rpc.rs` declara un código nuevo.
+- **Nota (2026-10-09, US-MCP-013)**: ⚠️ **ASSUMPTION** (convención ratificada por el precedente de `confirmation-unavailable`): un valor nuevo de `data.reason` bajo un código congelado es aditivo y no necesita capacidad; todo cliente del repo decodifica `RejectedData` con caída a genérico.
 
 ### 4. i18n por feature (enmienda a ADR-CKP-003 § 10)
 

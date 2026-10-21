@@ -33,7 +33,7 @@ ado:
   id: null
   url: null
 covers: [BR-MCP-WF-001, BR-MCP-ELIG-002, BR-MCP-VAL-003, BR-MCP-AUTH-001, BR-MCP-CONS-002, BR-MCP-TIME-002]
-blocked_by: []
+blocked_by: [US-GRD-007]
 tags: [mcp, safe-commit, escritura, guardrails, operacion-protegida, ola-3]
 ---
 
@@ -57,6 +57,7 @@ BR-MCP-WF-001 (flujo de una escritura) · BR-MCP-ELIG-002 (`safe_commit`: nunca 
 - **Externas**: ADR-MCP-001 (DEP-MCP-1, no existe). ADR-CKP-002 (**propuesto**, en docs/arch-cockpit): `safe_commit` → operación `commit` del catálogo; el ejecutor respeta hooks y config del usuario. DEP-MCP-2 y DEP-MCP-5 (correspondencia herramienta → operación normalizada) se resuelven vía ADR-CKP-002. ADR-MCP-001 y ADR-CKP-002 son bloqueos de arquitectura.
 - **Límites por solicitante** (S-03 completo, **condición de entrada dura**): cupo de rate limit compartido entre las conexiones del mismo solicitante y ≤ 8 conexiones por solicitante. US-MCP-008 solo cubre la cuota durable del snapshot; el resto pasa a esta historia (Enmienda (2026-10-08, US-MCP-008) de ADR-MCP-001) y es criterio de salida de M4 (v0.1.0).
 - **Flujo heredado**: hereda de US-MCP-008 el cubo de escrituras, el mapeo de errores y la resolución del ámbito. No hereda la llamada única: `safe_commit` necesita una segunda llamada para reconocer avisos (BR-MCP-WF-001; D-3 de `user-stories.md`).
+- **Escritura rechazada por Guardrails** (D5 de DS-US-MCP-013): `raptor-mcp` nunca rechaza por ningún campo de la vista previa (ni `decision` ni `warnings`); pasa `acknowledge` como `accepted_warnings` y decide `run`, para que la decisión quede registrada.
 - **Desbloquea**: US-GRD-016 (Guardrails), junto con US-MCP-002 y US-MCP-003.
 - **Transversal**: ⚠️ **ASSUMPTION**: tiempo máximo de una escritura en la capa `mcp` de 300 s (supuesto de ADR-CKP-002, S-MCP-1); al vencer, la respuesta declara el estado y el id de la operación.
 
@@ -119,6 +120,25 @@ Dado un `safe_commit` de "claude-1" ya iniciado
 Cuando el usuario interrumpe a Claude Code y el cliente cancela la llamada
 Entonces la operación termina igualmente
   Y el commit figura en el timeline con actor "claude-1"
+
+**Escenario: Una escritura que requiere confirmación se rechaza con la acción** (heredado de US-MCP-013)
+
+Dado el repo "shop" cuya configuración del equipo fija "commit" en "pedir confirmación"
+  Y la cola de confirmación no disponible
+Cuando "claude-1" pide `safe_commit` de "src/a.rs"
+Entonces la petición se rechaza con el motivo "requiere confirmación del desarrollador"
+  Y la acción indica que la decisión es del desarrollador
+  Y el worktree no cambia
+  Y la decisión queda registrada una sola vez con capa "mcp"
+
+**Escenario: Reintentar no cambia la decisión** (heredado de US-MCP-013)
+
+Dado "claude-1" recibió "requiere confirmación del desarrollador" para un `safe_commit` de "src/a.rs"
+Cuando repite la misma petición
+Entonces recibe el mismo rechazo con el mismo motivo
+  Y el worktree sigue sin cambios
+
+**Criterio de certificación**: el servidor nunca pide confirmación al cliente del agente (sin elicitation; BR-MCP-WF-004).
 
 ## Requisitos Técnicos
 

@@ -6,7 +6,7 @@ status: draft
 feature: mcp
 domain: MCP
 created: 2026-10-09
-updated: 2026-10-09
+updated: 2026-10-21
 story: US-MCP-013
 scope: backend
 frontend_surface: false
@@ -54,6 +54,8 @@ tags: [mcp, pedir-confirmacion, guardrails, ejecutor, ola-3]
 ---
 
 # DS-US-MCP-013 · Rechazo por MCP de una escritura que requiere confirmación
+
+Implementado en: PR #<n> (pendiente de número).
 
 ## Contexto rápido
 
@@ -103,6 +105,14 @@ Los escenarios de la historia usan `safe_commit` en un repo cuyo equipo fija `co
 | ID | Qué falta | Severidad | Alcance | Acción | Owner |
 |----|-----------|-----------|---------|--------|-------|
 | G7 | Ningún camino de producción produce `Ask` hasta US-GRD-007 y TS-CKP-003: el cableado sigue con `NoGuardrails` (`crates/core/src/executor/ops/mod.rs`) y `policy::guard::evaluate` no aplica los permisos del equipo (G3). El código se construye y se prueba con un gate doble, pero la historia no entrega valor al agente hasta entonces | Bloquea liberación | — | Liberar US-MCP-013 junto con US-MCP-009, cuando sus dos escenarios heredados pasen de extremo a extremo (D1) | PO |
+
+### Enmienda de preparación (2026-10-20) — TS-CKP-003 ya está en `main`
+
+Decisión del orquestador (2026-10-20): TS-CKP-003 está `implemented` (PR #261) y el gate real (`GuardrailsEngine`, `crates/core/src/guardrails/plan_gate.rs`) ya está cableado en `executor/ops/mod.rs`; su `view_of` convierte `ask` en `GateDecision::Deny`, así que sin este cambio nadie produce `Ask` (hallazgo PC-1 del crítico). Por D7, que ya exige "el gate devuelve `Ask` si y solo si `effect == ask` y `appliedEffect == deny`", ese cambio pasa a esta entrega como **T002b**, y vence a las premisas del cuerpo que dicen lo contrario (G7, "En producción es `NoGuardrails`", "Sin cambios: `crates/core/src/guardrails/`", "La entrada del registro la escribe el gate real de TS-CKP-003", la fila de TS-CKP-003 de § Fuera de alcance y la enmienda de TS-CKP-003 de T005, que queda como una nota breve en una historia ya cerrada):
+
+- **T002b** (`crates/core/src/guardrails/plan_gate.rs`, **MODIFY**; `crates/core/src/guardrails/plan_gate_ask_tests.rs`, **CREATE**): `view_of` devuelve `GateDecision::Ask` cuando `effect == Ask` y `applied_effect == Deny`; `Allow` solo con ambos en `Allow`; el resto, `Deny`. `record_close` no cambia: escribe la entrada desde la decisión final (efecto `ask`, aplicado `deny`) y `AskedWithoutQueue` cierra como un plan que no corrió. Una línea `#[cfg(test)] #[path = "plan_gate_ask_tests.rs"] mod ask_tests;` en `plan_gate.rs`. Prueba: `a_decision_that_asks_and_is_applied_as_deny_is_viewed_as_ask`, y las otras tres combinaciones siguen igual. No toca `crates/policy` ni `evaluate.rs`: producir el `ask` desde el permiso del equipo sigue siendo de US-GRD-007 (W79). Si W79 edita `plan_gate.rs`, el segundo en entrar integra.
+- Sigue pendiente, y se anota en el PR: la prueba de extremo a extremo con un `ask` real (US-GRD-007 y US-MCP-009).
+- El ejecutor se lee tal como está hoy: `run` usa `evaluate_detailed` una sola vez (ver `docs/dev-briefs/us-mcp-013-needs-the-human.prep.md`).
 
 Todas las tareas son construibles hoy. Las decisiones D1 a D7 están validadas con ajustes (§ Decisiones validadas); las enmiendas de documentos son la tarea T005.
 
@@ -350,6 +360,8 @@ apps/mcp/src/messages_confirmation_tests.rs   ← CREATE
 crates/core/src/executor/gate.rs              ← MODIFY  GateDecision::Ask, PlanClose::AskedWithoutQueue
 crates/core/src/executor/mod.rs               ← MODIFY  vista previa y decisión de run
 crates/core/tests/us_mcp_013.rs               ← CREATE
+crates/core/src/guardrails/plan_gate.rs       ← MODIFY  view_of (T002b, depende de T002: necesita GateDecision::Ask)
+crates/core/src/guardrails/plan_gate_ask_tests.rs ← CREATE
 # Tramo C — raptor-mcp (T003)
 apps/mcp/src/engine.rs                        ← MODIFY  rejected_refusal
 apps/mcp/src/engine_confirmation_tests.rs     ← CREATE
