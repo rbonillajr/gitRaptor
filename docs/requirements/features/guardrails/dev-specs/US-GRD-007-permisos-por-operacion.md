@@ -487,7 +487,7 @@ _No gaps. Ready to implement._ Sin constitución en la cascada: se aplican `AGEN
 
 ## 10. Estado de la implementación
 
-**PR-A (2026-10-21, PR #268)**: T001 a T008 hechos; los 20 criterios del contrato `docs/dev-briefs/us-grd-007-operation-permissions.contract.json` en verde. PR-B (T010, T011) en PR #TBD (2026-10-21): los escenarios 4 y 5 pasan con `main` (US-GRD-014, #277), sin código de producción; solo los tests e2e y el cierre de la ficha.
+**PR-A (2026-10-21, PR #268)**: T001 a T008 hechos; los 20 criterios del contrato `docs/dev-briefs/us-grd-007-operation-permissions.contract.json` en verde. PR-B (T010, T011) en PR #278 (2026-10-21): los escenarios 4 y 5 pasan con `main` (US-GRD-014, #277), sin código de producción; solo los tests e2e y el cierre de la ficha.
 
 Desviaciones y decisiones tomadas al implementar (Decisión del orquestador, 2026-10-21; revisadas por las lentes de arquitectura y seguridad):
 
