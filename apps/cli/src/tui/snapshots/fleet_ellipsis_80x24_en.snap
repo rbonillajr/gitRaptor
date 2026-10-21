@@ -25,4 +25,4 @@ expression: "screen.join(\"\\n\")"
 ┃                                                                              ┃
 ┃                                                                              ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
- r retry   ○ no agent: changes by you or another tool                    q quit
+ q quit  r retry   ○ no agent: changes by you or another tool            ? help

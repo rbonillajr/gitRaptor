@@ -52,6 +52,7 @@ impl Model {
                 asked: false,
                 here: None,
                 discovered: std::collections::VecDeque::new(),
+                help: false,
                 seen: std::collections::BTreeSet::new(),
             },
             conn: ConnState::Connecting,
@@ -93,6 +94,8 @@ pub struct Ui {
     /// Every discovered path of this run, asked, answered or left for later: it is not queued
     /// twice. A restart asks again about what was left pending, because the engine lists it.
     pub seen: std::collections::BTreeSet<std::path::PathBuf>,
+    /// The `?` help is open over the body. Not kept between runs.
+    pub help: bool,
 }
 
 /// The fewest rows with room for the discovery panel under the fleet.

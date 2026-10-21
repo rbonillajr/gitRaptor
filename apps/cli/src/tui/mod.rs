@@ -2,6 +2,7 @@
 
 pub mod app;
 pub mod gallery;
+pub mod help;
 pub mod input;
 pub mod keymap;
 pub mod metrics;

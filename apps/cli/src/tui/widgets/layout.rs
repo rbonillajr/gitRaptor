@@ -293,4 +293,74 @@ mod tests {
         assert_eq!(graph.x, r.list.right());
         assert_eq!(detail.y, graph.bottom());
     }
+
+    /// The reference sizes with the whole plan: the list first, then the alerts, then the
+    /// graph, and the detail only when there is a column for it.
+    #[test]
+    fn the_body_goes_by_priority_at_the_reference_sizes() {
+        let plan = BodyPlan {
+            alerts: 8,
+            graph: true,
+            detail: true,
+        };
+        let r = layout(Rect::new(0, 0, 80, 24), plan).unwrap();
+        assert!(r.list.height >= LIST_MIN);
+        assert!(r.alerts.is_some());
+        assert!(r.graph.is_none() && r.detail.is_none());
+        let r = layout(Rect::new(0, 0, 100, 30), plan).unwrap();
+        assert!(r.list.height >= LIST_MIN);
+        assert!(r.alerts.is_some() && r.graph.is_some());
+        assert!(r.detail.is_none());
+        let r = layout(Rect::new(0, 0, 120, 40), plan).unwrap();
+        assert!(r.list.height >= LIST_MIN);
+        assert!(r.alerts.is_some() && r.graph.is_some() && r.detail.is_some());
+    }
+
+    /// Whatever the size and the plan, the list and the alerts are there, the detail only
+    /// comes with room for it (and with the graph that was asked), and the regions fit the
+    /// area without overlapping.
+    #[test]
+    fn the_list_and_the_alerts_are_always_there() {
+        for width in MIN_WIDTH..=200 {
+            for height in MIN_HEIGHT..=60 {
+                let area = Rect::new(0, 0, width, height);
+                for alerts in [0, 1, 8] {
+                    for (graph, detail) in
+                        [(false, false), (true, false), (false, true), (true, true)]
+                    {
+                        let plan = BodyPlan {
+                            alerts,
+                            graph,
+                            detail,
+                        };
+                        let at = format!("{width}x{height} {plan:?}");
+                        let r = layout(area, plan).unwrap_or_else(|| panic!("{at}: no layout"));
+                        assert!(r.list.height >= LIST_MIN, "{at}: list {:?}", r.list);
+                        assert_eq!(r.alerts.is_some(), alerts > 0, "{at}");
+                        if let Some(detail) = r.detail {
+                            assert!(width >= WIDE, "{at}: detail {detail:?}");
+                            assert!(r.graph.is_some() || !graph, "{at}: the graph was dropped");
+                        }
+                        let regions: Vec<Rect> = [
+                            Some(r.header),
+                            Some(r.list),
+                            r.alerts,
+                            r.graph,
+                            r.detail,
+                            Some(r.hints),
+                        ]
+                        .into_iter()
+                        .flatten()
+                        .collect();
+                        for (i, a) in regions.iter().enumerate() {
+                            assert_eq!(area.intersection(*a), *a, "{at}: {a:?} leaves the area");
+                            for b in &regions[i + 1..] {
+                                assert!(!a.intersects(*b), "{at}: {a:?} overlaps {b:?}");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

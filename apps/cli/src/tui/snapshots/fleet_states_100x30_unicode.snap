@@ -1,0 +1,128 @@
+---
+source: apps/cli/src/tui/view/a11y_tests.rs
+expression: snap
+---
+ shop · ✔ live · engine observing · acting as you                                        ⚡ –  ⛔ –
+┏━ › Fleet · ↑↓ vs main (local copy, fetch age not available) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃     Agent                  Branch                                Files ↑↓          Activity      ┃
+┃  ○  No agent · shop        main                                  ~0    ↑0 ↓0       not available ┃
+┃  ●  claude-1 · feat-pagos  feat-pagos                            ~2    ↑3 ↓1       not available ┃
+┃  ○  No agent · feat-docs   feat-docs                             ~0    ↑1 ↓0       not available ┃
+┃  ◐  claude-2 · feat-idle   feat-idle                             ~0    ↑0 ↓0       not available ┃
+┃  ⚠  No agent · feat-gone   folder missing                                                        ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┃                                                                                                  ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ q quit  r retry   ○ no agent: changes by you or another tool   ● active agent               ? help
+=== styles ===
+0:0-4 BOLD
+0:5-7 BOLD | DIM
+0:8-32 BOLD
+0:33-35 BOLD | DIM
+0:36-89 BOLD
+0:91-95 BOLD
+0:97-99 BOLD
+1:0-99 BOLD | REVERSED
+2:0-0 BOLD | REVERSED
+2:6-10 BOLD | DIM
+2:29-34 BOLD | DIM
+2:67-71 BOLD | DIM
+2:73-74 BOLD | DIM
+2:85-92 BOLD | DIM
+2:99-99 BOLD | REVERSED
+3:0-0 BOLD | REVERSED
+3:3-3 DIM
+3:6-20 DIM
+3:29-32 DIM
+3:67-68 DIM
+3:73-77 DIM
+3:85-97 DIM
+3:99-99 BOLD | REVERSED
+4:0-0 BOLD | REVERSED
+4:6-26 BOLD
+4:85-97 DIM
+4:99-99 BOLD | REVERSED
+5:0-0 BOLD | REVERSED
+5:3-3 DIM
+5:6-25 DIM
+5:29-37 DIM
+5:67-68 DIM
+5:73-77 DIM
+5:85-97 DIM
+5:99-99 BOLD | REVERSED
+6:0-0 BOLD | REVERSED
+6:3-3 DIM
+6:6-25 BOLD
+6:67-68 DIM
+6:85-97 DIM
+6:99-99 BOLD | REVERSED
+7:0-0 BOLD | REVERSED
+7:3-4 BOLD
+7:6-25 BOLD
+7:29-42 BOLD
+7:99-99 BOLD | REVERSED
+8:0-0 BOLD | REVERSED
+8:99-99 BOLD | REVERSED
+9:0-0 BOLD | REVERSED
+9:99-99 BOLD | REVERSED
+10:0-0 BOLD | REVERSED
+10:99-99 BOLD | REVERSED
+11:0-0 BOLD | REVERSED
+11:99-99 BOLD | REVERSED
+12:0-0 BOLD | REVERSED
+12:99-99 BOLD | REVERSED
+13:0-0 BOLD | REVERSED
+13:99-99 BOLD | REVERSED
+14:0-0 BOLD | REVERSED
+14:99-99 BOLD | REVERSED
+15:0-0 BOLD | REVERSED
+15:99-99 BOLD | REVERSED
+16:0-0 BOLD | REVERSED
+16:99-99 BOLD | REVERSED
+17:0-0 BOLD | REVERSED
+17:99-99 BOLD | REVERSED
+18:0-0 BOLD | REVERSED
+18:99-99 BOLD | REVERSED
+19:0-0 BOLD | REVERSED
+19:99-99 BOLD | REVERSED
+20:0-0 BOLD | REVERSED
+20:99-99 BOLD | REVERSED
+21:0-0 BOLD | REVERSED
+21:99-99 BOLD | REVERSED
+22:0-0 BOLD | REVERSED
+22:99-99 BOLD | REVERSED
+23:0-0 BOLD | REVERSED
+23:99-99 BOLD | REVERSED
+24:0-0 BOLD | REVERSED
+24:99-99 BOLD | REVERSED
+25:0-0 BOLD | REVERSED
+25:99-99 BOLD | REVERSED
+26:0-0 BOLD | REVERSED
+26:99-99 BOLD | REVERSED
+27:0-0 BOLD | REVERSED
+27:99-99 BOLD | REVERSED
+28:0-99 BOLD | REVERSED
+29:1-1 BOLD
+29:9-9 BOLD
+29:19-19 DIM
+29:21-60 DIM
+29:66-77 DIM
+29:93-93 BOLD

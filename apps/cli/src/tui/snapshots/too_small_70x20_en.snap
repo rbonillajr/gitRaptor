@@ -1,0 +1,27 @@
+---
+source: apps/cli/src/tui/view/a11y_tests.rs
+expression: snap
+---
+
+
+
+
+
+
+
+
+     ⚠  Terminal too small (70×20). Resize it to at least 80×24.
+
+                                q quit
+
+
+
+
+
+
+
+
+
+=== styles ===
+8:5-6 fg=#d29922
+10:32-32 fg=#2dc2ad BOLD

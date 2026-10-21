@@ -65,6 +65,25 @@ pub fn update(model: &mut Model, msg: Msg) -> Vec<Cmd> {
 /// Every key changes something visible (feedback < 100 ms, § 3).
 fn on_action(model: &mut Model, action: Option<Action>) -> Vec<Cmd> {
     model.dirty = true;
+    // The help takes the keys before any question: Esc closes it, it does not dismiss the
+    // discovered repo behind it.
+    if model.ui.help {
+        match action {
+            Some(Action::Help | Action::Later) => {
+                model.ui.help = false;
+                return Vec::new();
+            }
+            // Leaving works from anywhere.
+            Some(Action::Quit | Action::Suspend) => {}
+            _ => {
+                model.ui.notice = Some(Notice::UnknownKey);
+                return Vec::new();
+            }
+        }
+    } else if action == Some(Action::Help) {
+        model.ui.help = true;
+        return Vec::new();
+    }
     if model.discovery_prompt().is_some() {
         match action {
             Some(Action::Yes) => return answer_discovered(model, true),
@@ -117,8 +136,8 @@ fn on_action(model: &mut Model, action: Option<Action>) -> Vec<Cmd> {
             Vec::new()
         }
         Some(action @ (Action::Up | Action::Down | Action::Open)) => on_pick(model, action),
-        // No question on screen.
-        Some(Action::Yes | Action::No | Action::Later) | None => {
+        // No question on screen (`Help` was handled above).
+        Some(Action::Yes | Action::No | Action::Later | Action::Help) | None => {
             model.ui.notice = Some(Notice::UnknownKey);
             Vec::new()
         }
@@ -1333,5 +1352,57 @@ mod tests {
             m.ui.notice,
             Some(Notice::ObserveFailed(ObserveFailure::Disconnected))
         );
+    }
+
+    fn char_key(m: &mut Model, c: char) -> Vec<Cmd> {
+        press(m, KeyCode::Char(c))
+    }
+
+    #[test]
+    fn help_question_mark_opens_and_closes() {
+        let mut m = model();
+        assert!(char_key(&mut m, '?').is_empty());
+        assert!(m.ui.help);
+        assert!(char_key(&mut m, '?').is_empty());
+        assert!(!m.ui.help);
+    }
+
+    #[test]
+    fn help_esc_closes() {
+        let mut m = model();
+        char_key(&mut m, '?');
+        assert!(press(&mut m, KeyCode::Esc).is_empty());
+        assert!(!m.ui.help);
+    }
+
+    #[test]
+    fn help_q_quits_with_the_help_open() {
+        let mut m = model();
+        char_key(&mut m, '?');
+        assert_eq!(char_key(&mut m, 'q'), vec![Cmd::Quit]);
+        assert!(m.ui.quit);
+    }
+
+    /// Nothing else acts behind the help: the key says it has no action, and the help stays.
+    #[test]
+    fn help_other_keys_say_unknown_and_keep_it_open() {
+        let mut m = model();
+        char_key(&mut m, '?');
+        assert!(char_key(&mut m, 'r').is_empty());
+        assert_eq!(m.ui.notice, Some(Notice::UnknownKey));
+        assert!(m.ui.help);
+    }
+
+    /// Esc is "later" for a discovered repo, but with the help open it closes the help and
+    /// the repo stays asked.
+    #[test]
+    fn help_esc_closes_the_help_before_the_discovered_question() {
+        let mut m = discovering(&["a", "b"]);
+        char_key(&mut m, '?');
+        assert!(m.ui.help);
+        assert!(press(&mut m, KeyCode::Esc).is_empty());
+        assert!(!m.ui.help);
+        assert_eq!(front(&m).as_deref(), Some("a"));
+        assert_eq!(m.ui.discovered.len(), 2);
     }
 }

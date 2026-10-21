@@ -6,6 +6,8 @@
 //! [`Glyphs`], with an ASCII set picked by the same [`SymbolSet`] (DSYS-GRP-001, 2026-10-05
 //! amendment of TS-CKP-005).
 
+use std::borrow::Cow;
+
 use gitraptor_theme::{Ansi16, Attrs, Color, ColorToken, Glyph, SymbolSet, SymbolToken, Theme};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -48,7 +50,26 @@ pub struct Glyphs {
     /// Around a button and around a reason.
     pub button: [&'static str; 2],
     pub paren: [&'static str; 2],
+    /// What the catalog's text writes in Unicode and this set cannot draw, and its fallback
+    /// (empty in the Unicode set). Letters are not here: only glyphs fold.
+    pub fold: &'static [(char, &'static str)],
 }
+
+/// The fallbacks of the glyphs a catalog text carries. They agree with the fields of
+/// [`ASCII_GLYPHS`] (a test checks it).
+const ASCII_FOLD: &[(char, &str)] = &[
+    ('·', "|"),
+    ('…', "..."),
+    ('↑', "+"),
+    ('↓', "-"),
+    ('–', "-"),
+    ('—', "-"),
+    ('↔', "<->"),
+    ('•', "-"),
+    ('›', ">"),
+    ('×', "x"),
+    ('→', "->"),
+];
 
 pub const UNICODE_GLYPHS: Glyphs = Glyphs {
     border: ["─", "│", "┌", "┐", "└", "┘"],
@@ -72,6 +93,7 @@ pub const UNICODE_GLYPHS: Glyphs = Glyphs {
     versus: "↔",
     button: ["[", "]"],
     paren: ["(", ")"],
+    fold: &[],
 };
 
 pub const ASCII_GLYPHS: Glyphs = Glyphs {
@@ -96,7 +118,26 @@ pub const ASCII_GLYPHS: Glyphs = Glyphs {
     versus: "<->",
     button: ["[", "]"],
     paren: ["(", ")"],
+    fold: ASCII_FOLD,
 };
+
+impl Glyphs {
+    /// `text` with every glyph of the fold table replaced by its fallback; the rest, letters
+    /// included, stays as it is. Borrowed when there is nothing to replace.
+    pub fn fold<'a>(&self, text: &'a str) -> Cow<'a, str> {
+        if self.fold.is_empty() || text.is_ascii() {
+            return Cow::Borrowed(text);
+        }
+        let mut out = String::with_capacity(text.len());
+        for c in text.chars() {
+            match self.fold.iter().find(|(glyph, _)| *glyph == c) {
+                Some((_, fallback)) => out.push_str(fallback),
+                None => out.push(c),
+            }
+        }
+        Cow::Owned(out)
+    }
+}
 
 /// The active theme mapped to ratatui. Cheap to copy; every widget borrows one.
 #[derive(Debug, Clone, Copy)]
@@ -575,5 +616,78 @@ mod tests {
                 .add_modifier
                 .contains(Modifier::BOLD | Modifier::REVERSED)
         );
+    }
+
+    #[test]
+    fn the_ascii_fold_matches_the_ascii_glyphs() {
+        let (u, a) = (&UNICODE_GLYPHS, &ASCII_GLYPHS);
+        let pairs = [
+            (u.separator, a.separator),
+            (u.ellipsis, a.ellipsis),
+            (u.ahead, a.ahead),
+            (u.behind, a.behind),
+            (u.unknown, a.unknown),
+            (u.versus, a.versus),
+            (u.bullet, a.bullet),
+            (u.focus, a.focus),
+        ];
+        for (unicode, ascii) in pairs {
+            assert_eq!(a.fold(unicode), ascii, "{unicode:?}");
+        }
+    }
+
+    #[test]
+    fn every_catalog_text_folds_to_ascii() {
+        use crate::present::i18n::{Lang, every_text};
+        for text in every_text() {
+            for lang in [Lang::En, Lang::Es] {
+                let out = text.render(lang);
+                let folded = ASCII_GLYPHS.fold(&out);
+                if let Some(c) = folded
+                    .chars()
+                    .find(|c| !(c.is_ascii() || c.is_alphabetic() || matches!(c, '¿' | '¡')))
+                {
+                    panic!("{text:?} in {lang:?} keeps {c:?}: {folded}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_unicode_set_folds_nothing() {
+        for s in ["Flota · ↑↓ …", "plain", "¿Observar?"] {
+            let folded = UNICODE_GLYPHS.fold(s);
+            assert!(matches!(folded, Cow::Borrowed(_)));
+            assert_eq!(folded, s);
+        }
+    }
+
+    #[test]
+    fn letters_and_inverted_marks_are_not_folded() {
+        assert_eq!(
+            ASCII_GLYPHS.fold("¿Amplía la señal? ·"),
+            "¿Amplía la señal? |"
+        );
+    }
+
+    #[test]
+    fn the_state_symbols_differ_in_both_sets() {
+        let tokens = [
+            SymbolToken::AgentActive,
+            SymbolToken::AgentIdle,
+            SymbolToken::AgentDone,
+            SymbolToken::Warning,
+            SymbolToken::Conflict,
+            SymbolToken::Blocked,
+        ];
+        for set in [SymbolSet::Unicode, SymbolSet::Ascii] {
+            let s = styles(ColorMode::NoColor, set);
+            let texts: Vec<&str> = tokens.iter().map(|t| s.symbol(*t).text).collect();
+            for (i, a) in texts.iter().enumerate() {
+                for b in &texts[i + 1..] {
+                    assert_ne!(a, b, "{set:?}: {texts:?}");
+                }
+            }
+        }
     }
 }

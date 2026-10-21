@@ -41,7 +41,7 @@ expression: snap
 ┃                                                                                                                      ┃
 ┃                                                                                                                      ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
- r retry   ○ no agent: changes by you or another tool                                                            q quit
+ q quit  r retry   ○ no agent: changes by you or another tool   ● active agent                                   ? help
 === styles (light) ===
 0:0-0 bg=#f0f0f0
 0:1-4 bg=#f0f0f0 BOLD
@@ -157,6 +157,9 @@ expression: snap
 37:119-119 fg=#8a5a00
 38:0-119 fg=#8a5a00
 39:1-1 fg=#0f7d70 BOLD
-39:11-11 fg=#6b6b6b
-39:13-52 fg=#6b6b6b
+39:9-9 fg=#0f7d70 BOLD
+39:19-19 fg=#6b6b6b
+39:21-60 fg=#6b6b6b
+39:64-64 fg=#1a7f37
+39:66-77 fg=#6b6b6b
 39:113-113 fg=#0f7d70 BOLD

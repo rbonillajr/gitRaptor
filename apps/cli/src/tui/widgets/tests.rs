@@ -227,6 +227,72 @@ fn key_hints_keep_help_whatever_the_width() {
     );
 }
 
+/// A symbol of the bar's legend is never painted without its whole meaning: whatever the
+/// width, every symbol on the line is followed by its full text.
+#[test]
+fn the_state_legend_paints_only_whole_entries() {
+    use crate::model::SafeText;
+    use crate::tui::widgets::Component;
+    use crate::tui::widgets::key_hints::{KeyHint, KeyHintsModel, LegendRow};
+    use gitraptor_theme::{ColorToken, SymbolToken};
+    use ratatui::layout::Rect;
+
+    let t = SafeText::text;
+    let entries = [
+        (
+            SymbolToken::AgentActive,
+            ColorToken::AgentStateActive,
+            "active agent",
+        ),
+        (
+            SymbolToken::AgentIdle,
+            ColorToken::AgentStateIdle,
+            "idle agent",
+        ),
+        (
+            SymbolToken::Warning,
+            ColorToken::StatusWarning,
+            "warning: the text beside it says why",
+        ),
+    ];
+    let model = KeyHintsModel {
+        hints: vec![KeyHint::new(t("q"), t("quit"))],
+        help: KeyHint::new(t("?"), t("help")),
+        legend: entries
+            .iter()
+            .map(|(symbol, color, label)| LegendRow::new(*symbol, *color, t(label)))
+            .collect(),
+    };
+    let mut widest = 0;
+    for symbols in [SymbolSet::Unicode, SymbolSet::Ascii] {
+        let styles = with_symbols(Mode::NoColor, symbols);
+        for width in 20..=100u16 {
+            let area = Rect::new(0, 0, width, 1);
+            let mut buf = Buffer::empty(area);
+            model.render(area, &mut buf, &styles);
+            let line = buffer_text(&buf).join("");
+            let mut painted = 0;
+            for (symbol, _, label) in &entries {
+                let glyph = styles.symbol(*symbol).text;
+                // The text follows the symbol, after the blanks of its declared width.
+                let Some(at) = line.find(glyph) else {
+                    continue;
+                };
+                assert!(
+                    line[at + glyph.len()..].trim_start().starts_with(label),
+                    "{width} columns, {symbols:?}: {glyph} without its text: {line}"
+                );
+                painted += 1;
+            }
+            widest = widest.max(painted);
+            if width == 80 {
+                assert!(painted == 2, "80 columns: {line}");
+            }
+        }
+    }
+    assert_eq!(widest, 3, "at some width the three entries fit");
+}
+
 #[test]
 fn the_header_always_shows_the_alert_counts() {
     for state in [

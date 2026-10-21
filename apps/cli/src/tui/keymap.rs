@@ -1,6 +1,7 @@
 //! The single table action ↔ keys (ADR-CKP-003 § 10). It feeds the input,
 //! the key hints and the help at once, so they cannot diverge.
 
+use gitraptor_theme::SymbolSet;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::present::i18n::Text;
@@ -24,6 +25,8 @@ pub enum Action {
     No,
     /// Leave the question for later: nothing is decided (`Esc`).
     Later,
+    /// Open or close the key help.
+    Help,
 }
 
 /// A key as the table names it.
@@ -38,14 +41,17 @@ pub enum Key {
 }
 
 impl Key {
-    pub fn label(self) -> String {
-        match self {
-            Self::Char(c) => c.to_string(),
-            Self::Ctrl(c) => format!("Ctrl-{}", c.to_ascii_uppercase()),
-            Self::Up => "↑".into(),
-            Self::Down => "↓".into(),
-            Self::Enter => "Enter".into(),
-            Self::Esc => "Esc".into(),
+    /// The arrows have a word in the ASCII set: the terminal may not draw them.
+    pub fn label(self, set: SymbolSet) -> String {
+        match (self, set) {
+            (Self::Char(c), _) => c.to_string(),
+            (Self::Ctrl(c), _) => format!("Ctrl-{}", c.to_ascii_uppercase()),
+            (Self::Up, SymbolSet::Unicode) => "↑".into(),
+            (Self::Down, SymbolSet::Unicode) => "↓".into(),
+            (Self::Up, SymbolSet::Ascii) => "Up".into(),
+            (Self::Down, SymbolSet::Ascii) => "Down".into(),
+            (Self::Enter, _) => "Enter".into(),
+            (Self::Esc, _) => "Esc".into(),
         }
     }
 
@@ -117,12 +123,23 @@ pub const BINDINGS: &[Binding] = &[
         keys: &[Key::Esc],
         hint: Text::KeyLater,
     },
+    Binding {
+        action: Action::Help,
+        keys: &[Key::Char('?')],
+        hint: Text::KeyHelp,
+    },
 ];
 
 impl Action {
-    /// Not in the key hints: the terminal convention every shell user already knows.
+    /// Not in the key hints: the terminal convention every shell user already knows
+    /// (`Ctrl-Z`), and the help, which has its own place in the bar.
     pub fn is_hinted(self) -> bool {
-        !matches!(self, Self::Quit | Self::Suspend)
+        !matches!(self, Self::Suspend | Self::Help)
+    }
+
+    /// Works in every panel: the help lists it under "Always".
+    pub fn is_global(self) -> bool {
+        matches!(self, Self::Quit | Self::Retry | Self::Suspend | Self::Help)
     }
 
     /// Moves within a list: hinted only while there is one to move in.
@@ -180,7 +197,18 @@ mod tests {
             action(&key(KeyCode::Char('n'), KeyModifiers::NONE)),
             Some(Action::No)
         );
-        assert_eq!(Key::Ctrl('c').label(), "Ctrl-C");
+        assert_eq!(Key::Ctrl('c').label(SymbolSet::Unicode), "Ctrl-C");
+        assert_eq!(Key::Up.label(SymbolSet::Unicode), "↑");
+        assert_eq!(Key::Up.label(SymbolSet::Ascii), "Up");
+        assert_eq!(Key::Down.label(SymbolSet::Ascii), "Down");
+        assert_eq!(Key::Char('k').label(SymbolSet::Ascii), "k");
+        // `?` arrives the same with or without the shift mark each terminal sends.
+        for modifiers in [KeyModifiers::NONE, KeyModifiers::SHIFT] {
+            assert_eq!(
+                action(&key(KeyCode::Char('?'), modifiers)),
+                Some(Action::Help)
+            );
+        }
         assert_eq!(
             action(&key(KeyCode::Down, KeyModifiers::NONE)),
             Some(Action::Down)
@@ -198,5 +226,43 @@ mod tests {
             Some(Action::Suspend)
         );
         assert_eq!(action(&key(KeyCode::Char('z'), KeyModifiers::NONE)), None);
+    }
+
+    /// No mouse: every action is reachable by a key.
+    #[test]
+    fn every_action_has_a_key() {
+        let actions = [
+            Action::Quit,
+            Action::Retry,
+            Action::Up,
+            Action::Down,
+            Action::Open,
+            Action::Suspend,
+            Action::Yes,
+            Action::No,
+            Action::Later,
+            Action::Help,
+        ];
+        for action in actions {
+            // No wildcard: a new action does not compile until it is listed here.
+            match action {
+                Action::Quit
+                | Action::Retry
+                | Action::Up
+                | Action::Down
+                | Action::Open
+                | Action::Suspend
+                | Action::Yes
+                | Action::No
+                | Action::Later
+                | Action::Help => {}
+            }
+            let binding = BINDINGS.iter().find(|b| b.action == action);
+            assert!(
+                binding.is_some_and(|b| !b.keys.is_empty()),
+                "{action:?} has no key"
+            );
+        }
+        assert_eq!(actions.len(), BINDINGS.len());
     }
 }

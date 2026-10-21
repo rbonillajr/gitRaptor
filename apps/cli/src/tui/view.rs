@@ -11,19 +11,22 @@
 use gitraptor_api::AgentKind;
 use gitraptor_api::guard::HooksStatus;
 use gitraptor_api::messages::{DivergenceView, SessionStateView};
+use gitraptor_theme::SymbolSet;
 use ratatui::Frame;
 
 use crate::model::{
     ConnState, Head, LastCommit, Model, Notice, Pick, RepoView, Requester, SafeText, SessionRow,
     WorktreeRow, WorktreeState,
 };
-use crate::present::i18n::{Fetched, Lang, Text};
+use crate::present::i18n::{Fetched, Lang, Legend, Text};
+use crate::tui::help;
 use crate::tui::keymap::{Action, BINDINGS, Key};
-use crate::tui::style::{Styles, follow};
+use crate::tui::style::{Glyphs, Styles, fill, follow, modal_area};
+use crate::tui::widgets::Component;
 use crate::tui::widgets::agent_list::{
     AgentColumns, AgentListModel, AgentRowModel, AgentState, Branch, CommitLine, Sync,
 };
-use crate::tui::widgets::key_hints::{KeyHint, KeyHintsModel};
+use crate::tui::widgets::key_hints::{KeyHint, KeyHintsModel, LegendRow};
 use crate::tui::widgets::layout::{self, BodyPlan, Connection, StatusBarModel, TooSmallModel};
 use crate::tui::widgets::observe_prompt::ObservePromptModel;
 use crate::tui::widgets::repo_picker::{RepoChoiceModel, RepoPickerModel};
@@ -34,41 +37,67 @@ use ratatui::layout::Rect;
 pub const MIN_WIDTH: u16 = layout::MIN_WIDTH;
 pub const MIN_HEIGHT: u16 = layout::MIN_HEIGHT;
 
+/// The translation context of the view: language and symbol set. Every text of the catalog
+/// reaches the screen through it, folded to ASCII when the set is ASCII; nothing else in
+/// this module calls `Text::render`.
+#[derive(Clone, Copy)]
+pub(crate) struct Say {
+    pub lang: Lang,
+    pub glyphs: &'static Glyphs,
+    pub set: SymbolSet,
+}
+
+impl Say {
+    pub(crate) fn new(model: &Model, styles: &Styles) -> Self {
+        Self {
+            lang: model.ui.lang,
+            glyphs: styles.glyphs,
+            set: model.ui.theme.symbol_set(),
+        }
+    }
+
+    pub(crate) fn text(self, text: Text<'_>) -> String {
+        self.glyphs.fold(&text.render(self.lang)).into_owned()
+    }
+
+    pub(crate) fn safe(self, text: Text<'_>) -> SafeText {
+        SafeText::text(&self.text(text))
+    }
+}
+
 pub fn view(model: &Model, frame: &mut Frame) {
     let area = frame.area();
     let styles = Styles::new(model.ui.theme);
-    let lang = model.ui.lang;
+    let say = Say::new(model, &styles);
     let Some(regions) = layout::layout(area, BodyPlan::default()) else {
         let small = TooSmallModel {
-            message: catalog(
-                Text::TooSmall {
-                    width: area.width,
-                    height: area.height,
-                },
-                lang,
-            ),
-            quit: hint(Action::Quit, lang)
-                .unwrap_or_else(|| KeyHint::new(SafeText::text("q"), catalog(Text::KeyQuit, lang))),
+            message: say.safe(Text::TooSmall {
+                width: area.width,
+                height: area.height,
+                min_width: layout::MIN_WIDTH,
+                min_height: layout::MIN_HEIGHT,
+            }),
+            quit: hint(Action::Quit, say)
+                .unwrap_or_else(|| KeyHint::new(SafeText::text("q"), say.safe(Text::KeyQuit))),
         };
         frame.render_widget(themed(&small, &styles), area);
         return;
     };
     frame.render_widget(themed(&status_bar(model, &styles), &styles), regions.header);
-    let mut hints = key_hints(model);
-    if let Some(prompt) = observe_prompt(model) {
+    let mut hints = key_hints(model, say);
+    if let Some(prompt) = observe_prompt(model, say) {
         frame.render_widget(themed(&prompt, &styles), regions.list);
+        paint_help(model, say, &styles, frame, regions.header, regions.hints);
         frame.render_widget(themed(&hints, &styles), regions.hints);
         return;
     }
-    match picker(model, regions.list.height) {
+    match picker(model, say, regions.list.height) {
         Some(picker) => frame.render_widget(themed(&picker, &styles), regions.list),
         None => {
             let fleet = fleet(model, &styles);
-            if fleet.rows.iter().any(|r| r.state == AgentState::NoAgent) {
-                hints.legend = Some(catalog(Text::NoAgentLegend, lang));
-            }
+            hints.legend = state_legend(&fleet, say);
             // A discovered repo is asked under the fleet, which stays where it is.
-            match discovered_prompt(model) {
+            match discovered_prompt(model, say) {
                 Some(prompt) => {
                     let panel = DISCOVERED_PANEL_HEIGHT.min(regions.list.height);
                     let (above, below) = split_bottom(regions.list, panel);
@@ -79,11 +108,61 @@ pub fn view(model: &Model, frame: &mut Frame) {
             }
         }
     }
+    paint_help(model, say, &styles, frame, regions.header, regions.hints);
     frame.render_widget(themed(&hints, &styles), regions.hints);
 }
 
-fn catalog(text: Text<'_>, lang: Lang) -> SafeText {
-    SafeText::text(&text.render(lang))
+/// The `?` help over the body (between the header and the key bar), which both stay visible.
+/// It clears its rectangle first, so what is under it does not show through.
+fn paint_help(
+    model: &Model,
+    say: Say,
+    styles: &Styles,
+    frame: &mut Frame,
+    header: Rect,
+    bar: Rect,
+) {
+    if !model.ui.help {
+        return;
+    }
+    let top = header.bottom();
+    let body = Rect::new(header.x, top, header.width, bar.y.saturating_sub(top));
+    let help = help::help(model, say);
+    let rows = help.height(body.width);
+    let area = modal_area(body, help::HELP_WIDTH, rows);
+    fill(frame.buffer_mut(), area, styles);
+    frame.render_widget(themed(&help, styles), area);
+}
+
+/// What the symbols of the rows on screen mean, one entry per state and in a fixed order:
+/// no agent (the words of the dogfooding amendment), a session ended when no row has no
+/// agent, active, idle and warning. Empty when no row carries any of them.
+fn state_legend(fleet: &AgentListModel, say: Say) -> Vec<LegendRow> {
+    let has = |state: AgentState| fleet.rows.iter().any(|r| r.state == state);
+    let mut legend = Vec::new();
+    if has(AgentState::NoAgent) {
+        let mut row = help::legend_row(Legend::Done, say);
+        row.label = say.safe(Text::NoAgentLegend);
+        legend.push(row);
+    }
+    // Rows of the same hollow symbol: the shorter legend is enough when no row has no agent.
+    if has(AgentState::Done) && !has(AgentState::NoAgent) {
+        legend.push(help::legend_row(Legend::Done, say));
+    }
+    if has(AgentState::Active) {
+        legend.push(help::legend_row(Legend::Active, say));
+    }
+    if has(AgentState::Idle) {
+        legend.push(help::legend_row(Legend::Idle, say));
+    }
+    let warns = fleet
+        .rows
+        .iter()
+        .any(|r| r.commit.as_ref().is_some_and(|c| c.warning));
+    if has(AgentState::Unavailable) || warns {
+        legend.push(help::legend_row(Legend::Warning, say));
+    }
+    legend
 }
 
 /// The selected repo when its snapshot arrived.
@@ -94,7 +173,7 @@ fn repo(model: &Model) -> Option<&RepoView> {
 /// The header: repo, connection (with the engine state, staleness and the answer to the last
 /// key), requester and the ⚡/⛔ counts the engine publishes.
 pub fn status_bar(model: &Model, styles: &Styles) -> StatusBarModel {
-    let lang = model.ui.lang;
+    let say = Say::new(model, styles);
     let repo = repo(model);
     let connection = match model.conn {
         ConnState::Live => Connection::Live,
@@ -109,24 +188,23 @@ pub fn status_bar(model: &Model, styles: &Styles) -> StatusBarModel {
         | ConnState::Unsupported => Connection::Unavailable,
     };
     let engine = model.engine.global.data.as_ref().map(|g| g.engine);
-    let mut label = vec![Text::Conn(model.conn).render(lang)];
+    let mut label = vec![say.text(Text::Conn(model.conn))];
     if model.conn == ConnState::Live {
-        label.push(Text::Engine(engine).render(lang));
+        label.push(say.text(Text::Engine(engine)));
     }
     let stale = model.engine.global.stale || model.engine.repo.as_ref().is_some_and(|r| r.stale);
     if stale {
-        label.push(Text::Stale.render(lang));
+        label.push(say.text(Text::Stale));
     }
     match (model.ui.notice, &model.ui.here) {
-        (Some(Notice::ObserveFailed(reason)), Some(here)) => label.push(
-            Text::ObserveFailed {
+        (Some(Notice::ObserveFailed(reason)), Some(here)) => {
+            label.push(say.text(Text::ObserveFailed {
                 name: &here.name,
                 path: &here.path,
                 reason,
-            }
-            .render(lang),
-        ),
-        (Some(notice), _) => label.push(Text::Notice(notice).render(lang)),
+            }))
+        }
+        (Some(notice), _) => label.push(say.text(Text::Notice(notice))),
         (None, _) => {}
     }
     let requester = match &model.engine.requester {
@@ -148,7 +226,7 @@ pub fn status_bar(model: &Model, styles: &Styles) -> StatusBarModel {
     StatusBarModel {
         repo: match repo {
             Some(r) => r.name.clone(),
-            None => catalog(Text::NoRepo, lang),
+            None => say.safe(Text::NoRepo),
         },
         connection,
         connection_label: SafeText::text(&label.join(styles.glyphs.separator)),
@@ -161,8 +239,8 @@ pub fn status_bar(model: &Model, styles: &Styles) -> StatusBarModel {
                 HooksStatus::Orphaned => Some(Text::ProtectionOrphaned),
                 HooksStatus::Active | HooksStatus::NotInstalled => None,
             })
-            .map(|text| catalog(text, lang)),
-        requester: catalog(requester, lang),
+            .map(|text| say.safe(text)),
+        requester: say.safe(requester),
         conflicts: attention.and_then(|a| a.conflicts),
         blocked: attention.and_then(|a| a.denials),
     }
@@ -171,7 +249,7 @@ pub fn status_bar(model: &Model, styles: &Styles) -> StatusBarModel {
 /// The fleet of the selected repo (US-CKP-001): one row per worktree, the main one first and
 /// the rest in the order the engine published them (the order by attention is US-CKP-002's).
 pub fn fleet(model: &Model, styles: &Styles) -> AgentListModel {
-    let lang = model.ui.lang;
+    let say = Say::new(model, styles);
     let repo = repo(model);
     let rows = repo.map(|r| rows(r, model, styles)).unwrap_or_default();
     let empty = match (&model.engine.repo, repo) {
@@ -189,44 +267,40 @@ pub fn fleet(model: &Model, styles: &Styles) -> AgentListModel {
         None => Fetched::NotAvailable,
     };
     AgentListModel {
-        title: catalog(
-            Text::FleetTitle {
-                base: repo.and_then(|r| r.base.as_ref()),
-                fetched,
-            },
-            lang,
-        ),
+        title: say.safe(Text::FleetTitle {
+            base: repo.and_then(|r| r.base.as_ref()),
+            fetched,
+        }),
         columns: AgentColumns {
-            agent: catalog(Text::ColAgent, lang),
-            branch: catalog(Text::ColBranch, lang),
-            changes: catalog(Text::ColFiles, lang),
-            sync: catalog(Text::ColSync, lang),
-            activity: catalog(Text::ColActivity, lang),
+            agent: say.safe(Text::ColAgent),
+            branch: say.safe(Text::ColBranch),
+            changes: say.safe(Text::ColFiles),
+            sync: say.safe(Text::ColSync),
+            activity: say.safe(Text::ColActivity),
         },
         rows,
         selected: None,
         offset: 0,
         focused: true,
-        empty: catalog(empty, lang),
+        empty: say.safe(empty),
     }
 }
 
 /// "Observe this repo? [y/N]" while it is asked, and "Observing notes…" once answered yes
 /// (US-CKP-025).
-pub fn observe_prompt(model: &Model) -> Option<ObservePromptModel> {
+pub(crate) fn observe_prompt(model: &Model, say: Say) -> Option<ObservePromptModel> {
     let here = model.ui.here.as_ref()?;
-    let lang = model.ui.lang;
     let question = match model.ui.pick {
         Pick::Asking => Text::ObserveQuestion,
         Pick::Observing => Text::Observing(&here.name),
         _ => return None,
     };
     Some(ObservePromptModel {
-        title: catalog(Text::ObserveTitle, lang),
-        why: catalog(Text::ObserveWhy, lang),
+        title: say.safe(Text::ObserveTitle),
+        why: say.safe(Text::ObserveWhy),
         name: here.name.clone(),
         path: here.path.clone(),
-        question: catalog(question, lang),
+        question: say.safe(question),
     })
 }
 
@@ -245,31 +319,29 @@ fn split_bottom(area: Rect, bottom: u16) -> (Rect, Rect) {
 
 /// "Discovered repo: Observe notes?" for the developer, when nothing else is being asked
 /// (US-GRP-020).
-pub fn discovered_prompt(model: &Model) -> Option<ObservePromptModel> {
+pub(crate) fn discovered_prompt(model: &Model, say: Say) -> Option<ObservePromptModel> {
     let found = model.discovery_prompt()?;
-    let lang = model.ui.lang;
     Some(ObservePromptModel {
-        title: catalog(Text::DiscoveredTitle, lang),
-        why: catalog(Text::DiscoveredWhy(&found.root), lang),
+        title: say.safe(Text::DiscoveredTitle),
+        why: say.safe(Text::DiscoveredWhy(&found.root)),
         name: found.name.clone(),
         path: found.shown.clone(),
-        question: catalog(Text::DiscoveredQuestion(&found.name), lang),
+        question: say.safe(Text::DiscoveredQuestion(&found.name)),
     })
 }
 
 /// The observed repos to choose from, while the developer chooses one.
-pub fn picker(model: &Model, height: u16) -> Option<RepoPickerModel> {
+pub(crate) fn picker(model: &Model, say: Say, height: u16) -> Option<RepoPickerModel> {
     let Pick::Choosing { selected } = model.ui.pick else {
         return None;
     };
-    let lang = model.ui.lang;
     let repos = model.engine.global.data.as_ref()?.repos.as_slice();
     let selected = selected.min(repos.len().saturating_sub(1));
     // Borders and the prompt line.
     let visible = usize::from(height.saturating_sub(4)).max(1);
     Some(RepoPickerModel {
-        title: catalog(Text::PickTitle, lang),
-        prompt: catalog(Text::PickPrompt, lang),
+        title: say.safe(Text::PickTitle),
+        prompt: say.safe(Text::PickPrompt),
         repos: repos
             .iter()
             .map(|r| RepoChoiceModel {
@@ -283,7 +355,7 @@ pub fn picker(model: &Model, height: u16) -> Option<RepoPickerModel> {
 }
 
 fn rows(repo: &RepoView, model: &Model, styles: &Styles) -> Vec<AgentRowModel> {
-    let lang = model.ui.lang;
+    let say = Say::new(model, styles);
     let ordered = repo
         .worktrees
         .iter()
@@ -292,12 +364,12 @@ fn rows(repo: &RepoView, model: &Model, styles: &Styles) -> Vec<AgentRowModel> {
     let mut agents = 0;
     ordered
         .map(|w| {
-            let mut row = row(repo, w, agents, lang, styles);
+            let mut row = row(repo, w, agents, say, styles);
             // With `scope.activity` the engine seeds what the store knows (ADR-GRP-013 § 6), so
             // an absent value is "nothing yet", painted as the set's unknown glyph.
             if model.engine.activity {
                 row.activity = match w.last_activity_ms {
-                    Some(at) => catalog(Text::Ago(model.now_ms.saturating_sub(at)), lang),
+                    Some(at) => say.safe(Text::Ago(model.now_ms.saturating_sub(at))),
                     None => SafeText::text(styles.glyphs.unknown),
                 };
             }
@@ -327,38 +399,34 @@ fn present<'r>(repo: &'r RepoView, worktree: &WorktreeRow) -> Vec<&'r SessionRow
     sessions
 }
 
-fn agent_name(session: &SessionRow, lang: Lang) -> String {
+fn agent_name(session: &SessionRow, say: Say) -> String {
     match (&session.name, session.kind) {
         (Some(name), _) => name.as_str().to_owned(),
-        (None, AgentKind::ClaudeCode) => Text::ClaudeCode.render(lang),
-        (None, AgentKind::Other) => Text::OtherAgent.render(lang),
+        (None, kind) => kind_name(kind, say),
     }
 }
 
-fn kind_name(kind: AgentKind, lang: Lang) -> String {
+fn kind_name(kind: AgentKind, say: Say) -> String {
     match kind {
-        AgentKind::ClaudeCode => Text::ClaudeCode.render(lang),
-        AgentKind::Other => Text::OtherAgent.render(lang),
+        AgentKind::ClaudeCode => say.text(Text::ClaudeCode),
+        AgentKind::Other => say.text(Text::OtherAgent),
     }
 }
 
 /// "commit by Ana with Claude Code" under the row (US-CKP-026): who it went in under and with
 /// which agents; the warning leads when an agent ran it without its trailer.
-fn commit_line(commit: &LastCommit, lang: Lang) -> CommitLine {
-    let agents: Vec<String> = commit.agents.iter().map(|k| kind_name(*k, lang)).collect();
-    let ran_by = commit.ran_by.map(|k| kind_name(k, lang));
-    let inferred = commit.inferred.map(|k| kind_name(k, lang));
+fn commit_line(commit: &LastCommit, say: Say) -> CommitLine {
+    let agents: Vec<String> = commit.agents.iter().map(|k| kind_name(*k, say)).collect();
+    let ran_by = commit.ran_by.map(|k| kind_name(k, say));
+    let inferred = commit.inferred.map(|k| kind_name(k, say));
     CommitLine {
-        text: catalog(
-            Text::LastCommit {
-                merge: commit.merge,
-                author: commit.author.as_str(),
-                agents: &agents.join(", "),
-                ran_by: ran_by.as_deref(),
-                inferred: inferred.as_deref(),
-            },
-            lang,
-        ),
+        text: say.safe(Text::LastCommit {
+            merge: commit.merge,
+            author: commit.author.as_str(),
+            agents: &agents.join(", "),
+            ran_by: ran_by.as_deref(),
+            inferred: inferred.as_deref(),
+        }),
         warning: commit.ran_by.is_some() && commit.agents.is_empty(),
     }
 }
@@ -367,20 +435,19 @@ fn row(
     repo: &RepoView,
     worktree: &WorktreeRow,
     color_index: usize,
-    lang: Lang,
+    say: Say,
     styles: &Styles,
 ) -> AgentRowModel {
     let sessions = present(repo, worktree);
     let (name, state) = match (repo.detection, sessions.first()) {
         (Some(true), Some(first)) => {
-            let name = Text::AgentInWorktree {
-                agent: &agent_name(first, lang),
+            let name = say.text(Text::AgentInWorktree {
+                agent: &agent_name(first, say),
                 worktree: worktree.name.as_str(),
-            }
-            .render(lang);
+            });
             let name = match sessions.len() - 1 {
                 0 => name,
-                more => Text::AgentAndMore { name: &name, more }.render(lang),
+                more => say.text(Text::AgentAndMore { name: &name, more }),
             };
             let state = match first.state {
                 SessionStateView::Active => AgentState::Active,
@@ -389,16 +456,13 @@ fn row(
             (SafeText::name(&name), state)
         }
         (Some(true), None) => (
-            catalog(
-                Text::NoAgent {
-                    worktree: worktree.name.as_str(),
-                },
-                lang,
-            ),
+            say.safe(Text::NoAgent {
+                worktree: worktree.name.as_str(),
+            }),
             AgentState::NoAgent,
         ),
         // Detection unknown or not available on this system: never "no agent".
-        _ => (catalog(Text::AgentNotAvailable, lang), AgentState::Unknown),
+        _ => (say.safe(Text::AgentNotAvailable), AgentState::Unknown),
     };
     let g = styles.glyphs;
     let mut row = AgentRowModel {
@@ -409,18 +473,18 @@ fn row(
         branch: Branch::Named(SafeText::default()),
         changes: 0,
         sync: Sync::Unknown(SafeText::default()),
-        activity: catalog(Text::NotAvailable, lang),
-        tag: worktree.temporary.then(|| catalog(Text::Temporary, lang)),
+        activity: say.safe(Text::NotAvailable),
+        tag: worktree.temporary.then(|| say.safe(Text::Temporary)),
         // Published by the predictor and Guardrails (US-CKP-006, TS-GRD); not before.
         conflict: false,
         blocked: false,
         operation: None,
-        commit: repo.last_commit(worktree.key).map(|c| commit_line(c, lang)),
+        commit: repo.last_commit(worktree.key).map(|c| commit_line(c, say)),
     };
     match &worktree.state {
         WorktreeState::Unavailable(reason) => {
             row.state = AgentState::Unavailable;
-            row.state_label = catalog(Text::WorktreeUnavailable(*reason), lang);
+            row.state_label = say.safe(Text::WorktreeUnavailable(*reason));
         }
         WorktreeState::Ready {
             head,
@@ -429,10 +493,9 @@ fn row(
         } => {
             row.branch = match head {
                 Head::Branch(name) | Head::Unborn(name) => Branch::Named(name.clone()),
-                Head::Detached(commit) => Branch::Detached(catalog(
-                    Text::NoBranch(commit.as_ref().map(SafeText::as_str)),
-                    lang,
-                )),
+                Head::Detached(commit) => Branch::Detached(
+                    say.safe(Text::NoBranch(commit.as_ref().map(SafeText::as_str))),
+                ),
             };
             row.changes = u32::try_from(*changes).unwrap_or(u32::MAX);
             row.sync = match divergence {
@@ -453,51 +516,55 @@ fn row(
                         side(g.behind, behind)
                     )))
                 }
-                DivergenceView::BaseMissing => Sync::Unknown(catalog(Text::BaseMissing, lang)),
-                DivergenceView::NoBase => Sync::Unknown(catalog(Text::NoBase, lang)),
-                DivergenceView::NoCommits => Sync::Unknown(catalog(Text::NoCommits, lang)),
-                DivergenceView::Unreadable => Sync::Unknown(catalog(Text::Unreadable, lang)),
+                DivergenceView::BaseMissing => Sync::Unknown(say.safe(Text::BaseMissing)),
+                DivergenceView::NoBase => Sync::Unknown(say.safe(Text::NoBase)),
+                DivergenceView::NoCommits => Sync::Unknown(say.safe(Text::NoCommits)),
+                DivergenceView::Unreadable => Sync::Unknown(say.safe(Text::Unreadable)),
             };
         }
     }
     row
 }
 
-/// The key hints, from the single keymap table: quit is the hint always shown, and the list
-/// keys only while there is a list to move in.
-fn key_hints(model: &Model) -> KeyHintsModel {
-    let lang = model.ui.lang;
-    let list = matches!(model.ui.pick, Pick::Choosing { .. });
-    let discovering = model.discovery_prompt().is_some();
-    let asking = model.ui.pick == Pick::Asking || discovering;
+/// The key bar: what the panel on screen accepts (the same list the help shows), quit first,
+/// and `?` in the fixed place at the right.
+fn key_hints(model: &Model, say: Say) -> KeyHintsModel {
     KeyHintsModel {
-        hints: BINDINGS
-            .iter()
+        hints: help::available(model)
             .filter(|b| b.action.is_hinted())
-            .filter(|b| list || !b.action.is_list())
-            .filter(|b| asking || !b.action.is_answer())
-            // Later is only for the discovered repo: the folder's question has no later.
-            .filter(|b| discovering || b.action != Action::Later)
-            .filter_map(|b| hint(b.action, lang))
+            .filter_map(|b| hint(b.action, say))
             .collect(),
-        help: hint(Action::Quit, lang)
-            .unwrap_or_else(|| KeyHint::new(SafeText::text("q"), catalog(Text::KeyQuit, lang))),
-        legend: None,
+        help: hint(Action::Help, say)
+            .unwrap_or_else(|| KeyHint::new(SafeText::text("?"), say.safe(Text::KeyHelp))),
+        legend: Vec::new(),
     }
 }
 
-fn hint(action: Action, lang: Lang) -> Option<KeyHint> {
+fn hint(action: Action, say: Say) -> Option<KeyHint> {
     let binding = BINDINGS.iter().find(|b| b.action == action)?;
     // "[s/N]" in Spanish: the yes key shown is the one of the language.
-    let key = match (action, lang) {
+    let key = match (action, say.lang) {
         (Action::Yes, Lang::Es) => binding.keys.iter().find(|k| **k == Key::Char('s'))?,
+        // The arrows have a word in ASCII, but the next key is the one to show there.
+        _ if say.set == SymbolSet::Ascii => binding
+            .keys
+            .iter()
+            .find(|k| !matches!(k, Key::Up | Key::Down))
+            .or(binding.keys.first())?,
         _ => binding.keys.first()?,
     };
     Some(KeyHint::new(
-        SafeText::text(&key.label()),
-        catalog(binding.hint, lang),
+        SafeText::text(&key.label(say.set)),
+        say.safe(binding.hint),
     ))
 }
+
+#[cfg(test)]
+mod a11y_tests;
+
+// The screens the help tests of `tui::help` build on.
+#[cfg(test)]
+pub(crate) use tests::{asking, discovering, outside, shop_model};
 
 #[cfg(test)]
 mod tests {
@@ -523,21 +590,21 @@ mod tests {
     use ratatui::buffer::Buffer;
     use unicode_width::UnicodeWidthStr;
 
-    fn render(model: &Model, width: u16, height: u16) -> Buffer {
+    pub(crate) fn render(model: &Model, width: u16, height: u16) -> Buffer {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
         terminal.draw(|f| view(model, f)).unwrap();
         terminal.backend().buffer().clone()
     }
 
-    fn lines(buffer: &Buffer) -> Vec<String> {
+    pub(crate) fn lines(buffer: &Buffer) -> Vec<String> {
         buffer_text(buffer)
     }
 
-    fn screen(model: &Model, width: u16, height: u16) -> String {
+    pub(crate) fn screen(model: &Model, width: u16, height: u16) -> String {
         lines(&render(model, width, height)).join("\n")
     }
 
-    fn engine(msg: EngineMsg) -> Msg {
+    pub(crate) fn engine(msg: EngineMsg) -> Msg {
         Msg::Engine(Stamped {
             recv_ns: 0,
             decoded_ns: 0,
@@ -545,7 +612,7 @@ mod tests {
         })
     }
 
-    fn ready(branch: &str, changes: u32, ahead: u64, behind: u64) -> WorktreeStatus {
+    pub(crate) fn ready(branch: &str, changes: u32, ahead: u64, behind: u64) -> WorktreeStatus {
         WorktreeStatus::Ready {
             head: HeadView::Branch {
                 name: UntrustedName::new(branch),
@@ -569,7 +636,7 @@ mod tests {
         }
     }
 
-    fn worktree(path: &str, main: bool, status: WorktreeStatus) -> WorktreeView {
+    pub(crate) fn worktree(path: &str, main: bool, status: WorktreeStatus) -> WorktreeView {
         WorktreeView {
             last_activity_utc_ms: None,
             last_activity_in_gap: false,
@@ -585,7 +652,7 @@ mod tests {
 
     /// The repo "shop" of the story: main, feat-pagos with claude-1 Active, 2 files, ↑3 ↓1, and
     /// feat-docs without an agent.
-    fn shop() -> Vec<WorktreeView> {
+    pub(crate) fn shop() -> Vec<WorktreeView> {
         vec![
             worktree("/w/shop/feat-pagos", false, ready("feat-pagos", 2, 3, 1)),
             worktree("/w/shop", true, ready("main", 0, 0, 0)),
@@ -593,7 +660,12 @@ mod tests {
         ]
     }
 
-    fn session(id: &str, worktree: &str, name: &str, state: SessionStateView) -> SessionView {
+    pub(crate) fn session(
+        id: &str,
+        worktree: &str,
+        name: &str,
+        state: SessionStateView,
+    ) -> SessionView {
         SessionView {
             repo_id: "r1".into(),
             session_id: id.into(),
@@ -612,7 +684,7 @@ mod tests {
         }
     }
 
-    fn model_with(
+    pub(crate) fn model_with(
         lang: Lang,
         worktrees: Vec<WorktreeView>,
         sessions: Option<Vec<SessionView>>,
@@ -674,7 +746,7 @@ mod tests {
         model
     }
 
-    fn shop_model(lang: Lang) -> Model {
+    pub(crate) fn shop_model(lang: Lang) -> Model {
         model_with(
             lang,
             shop(),
@@ -1152,7 +1224,7 @@ mod tests {
         }
     }
 
-    fn outside(lang: Lang, repos: &[&str]) -> Model {
+    pub(crate) fn outside(lang: Lang, repos: &[&str]) -> Model {
         let mut model = shop_model(lang);
         model.engine.repo = None;
         model.engine.global.data.as_mut().unwrap().repos = repos
@@ -1166,7 +1238,7 @@ mod tests {
         model
     }
 
-    fn key(code: ratatui::crossterm::event::KeyCode) -> Msg {
+    pub(crate) fn key(code: ratatui::crossterm::event::KeyCode) -> Msg {
         Msg::Key(ratatui::crossterm::event::KeyEvent::new(
             code,
             ratatui::crossterm::event::KeyModifiers::NONE,
@@ -1434,7 +1506,7 @@ mod tests {
         let all = screen.join("\n");
         assert!(all.contains("` o commit by Ana with Claude Code"), "{all}");
         assert!(
-            all.contains("` o [!] commit by Ana · run by Claude Code · no trailer"),
+            all.contains("` o [!] commit by Ana | run by Claude Code | no trailer"),
             "{all}"
         );
     }
@@ -1510,7 +1582,7 @@ mod tests {
     }
 
     /// "notes" not observed, asked as the developer (US-CKP-025), with "shop" observed.
-    fn asking(lang: Lang) -> Model {
+    pub(crate) fn asking(lang: Lang) -> Model {
         let mut model = outside(lang, &["shop"]);
         model.engine.requester = Some(Requester::Unattributed {
             layer: gitraptor_api::catalog::Layer::Cockpit,
@@ -1581,7 +1653,7 @@ mod tests {
     }
 
     /// A repo found in a code folder, asked as the developer, with the fleet of "shop" open.
-    fn discovering(lang: Lang) -> Model {
+    pub(crate) fn discovering(lang: Lang) -> Model {
         let mut model = shop_model(lang);
         model.engine.requester = Some(Requester::Unattributed {
             layer: gitraptor_api::catalog::Layer::Cockpit,
