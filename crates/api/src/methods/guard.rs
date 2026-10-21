@@ -44,7 +44,7 @@ pub const CAP_GUARD_PENDING_ACTION: Capability = Capability::new("guard.pending-
 // Two blocks after `FIRST_ERROR_BLOCK` (ADR-GRP-016 § 3; discovery has the first).
 const BLOCK: i64 = FIRST_ERROR_BLOCK - 2 * ERROR_BLOCK_LEN;
 
-/// `guard.uninstall` or `guard.cancel` did nothing: `data` is
+/// `guard.uninstall`, `guard.cancel` or the window of `guard.confirm` did nothing: `data` is
 /// [`crate::guard::GuardUninstallRefusedData`].
 pub const GUARD_UNINSTALL_REFUSED: ErrorSpec = ErrorSpec::new(BLOCK, "guard-uninstall-refused");
 

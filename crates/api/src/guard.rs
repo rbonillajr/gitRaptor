@@ -613,7 +613,8 @@ pub struct GuardUninstallResult {
     pub restores_hooks_path: Option<Untrusted>,
 }
 
-/// Why `guard.uninstall` or `guard.cancel` did nothing (`data` of `GUARD_UNINSTALL_REFUSED`).
+/// Why `guard.uninstall`, `guard.cancel` or the window of `guard.confirm` did nothing (`data`
+/// of `GUARD_UNINSTALL_REFUSED`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum UninstallRefusal {
@@ -668,7 +669,9 @@ pub struct GuardConfirmParams {
     pub confirm: Option<String>,
 }
 
-/// `guard.confirm` result: an answer, never a JSON-RPC error (the refusal to an agent apart).
+/// `guard.confirm` result: an answer, never a JSON-RPC error, except `GUARD_UNINSTALL_REFUSED`
+/// for the window (already pending, still open, gone, someone else's) and `RESERVED_REFUSED` for
+/// an agent.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case", tag = "result")]
 pub enum GuardConfirmResult {
