@@ -890,3 +890,368 @@ fn degraded_mode_applies_the_team_permissions_only_to_harden() {
         assert_eq!(m.remote_rev("refs/heads/side").unwrap(), remote_side);
     }
 }
+
+// ---- PR-B (T010): escenarios 4 y 5 with `raptor guard confirm` of US-GRD-014 (D15). ----
+
+/// The question of `raptor guard confirm` (US-GRD-014 D2).
+const CONFIRM_QUESTION: &str = "[y/N]";
+/// The text of US-GRD-014 D10 an agent gets from a reserved command.
+const ONLY_DEVELOPER: &str = "only the developer can change the protection";
+/// A floor that disables the safe minimum and allows force-push.
+const DISABLE_MINIMUM: &str =
+    r#"{"permissions":{"allow":["force-push"],"disableSafeMinimum":true}}"#;
+
+/// `feat-x` rewritten after it was pushed, so pushing it needs a force.
+fn diverged_feat_x(f: &Fixture) {
+    f.git(&["switch", "-q", "feat-x"]);
+    f.git(&[
+        "commit",
+        "-q",
+        "--allow-empty",
+        "--amend",
+        "-m",
+        "feat-x rewritten",
+    ]);
+    f.git(&["switch", "-q", "main"]);
+}
+
+/// A command running in the developer's terminal (a pty through `script`), read as it writes.
+struct Terminal {
+    child: std::process::Child,
+    stdin: Option<std::process::ChildStdin>,
+    rx: std::sync::mpsc::Receiver<Vec<u8>>,
+    reader: Option<std::thread::JoinHandle<()>>,
+    seen: Vec<u8>,
+}
+
+impl Terminal {
+    fn seen(&self) -> String {
+        String::from_utf8_lossy(&self.seen).into_owned()
+    }
+
+    /// Waits until the terminal shows `marker` (the explicit signal).
+    fn wait_for(&mut self, marker: &str) {
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while !self.seen().contains(marker) {
+            let left = deadline.saturating_duration_since(Instant::now());
+            match self.rx.recv_timeout(left) {
+                Ok(chunk) => self.seen.extend(chunk),
+                Err(_) => panic!("no {marker:?} on the terminal: {}", self.seen()),
+            }
+        }
+    }
+
+    fn type_line(&mut self, line: &str) {
+        use std::io::Write;
+        let stdin = self.stdin.as_mut().unwrap();
+        stdin.write_all(line.as_bytes()).unwrap();
+        stdin.flush().unwrap();
+    }
+
+    fn finish(mut self) -> Output {
+        use std::io::Read;
+        let status = self.child.wait().unwrap();
+        drop(self.stdin.take());
+        if let Some(r) = self.reader.take() {
+            r.join().unwrap();
+        }
+        self.seen.extend(self.rx.try_iter().flatten());
+        let mut stderr = Vec::new();
+        if let Some(mut e) = self.child.stderr.take() {
+            let _ = e.read_to_end(&mut stderr);
+        }
+        Output {
+            status,
+            stdout: self.seen,
+            stderr,
+        }
+    }
+}
+
+/// The variable of the daemon's cancellable window (debug builds only, US-GRD-014).
+const WINDOW_ENV: &str = "GITRAPTOR_TEST_GUARD_WINDOW_MS";
+
+impl Machine {
+    /// Restarts the daemon with a cancellable window of `window_ms`, so the window of `raptor
+    /// guard confirm` closes in the test's time. Waits on the daemon's pid file.
+    fn restart_with_window(&self, window_ms: u64) {
+        self.stop();
+        let out = Command::new(RAPTOR)
+            .args(["daemon", "status"])
+            .env_clear()
+            .envs(self.env())
+            .env(WINDOW_ENV, window_ms.to_string())
+            .current_dir(&self.f.root)
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{}", text(&out));
+        let start = Instant::now();
+        while running_pid(&self.dirs().state).unwrap().is_none() {
+            assert!(
+                start.elapsed() < Duration::from_secs(10),
+                "daemon did not start: {}",
+                text(&out)
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
+    /// Starts `raptor <args>` in the developer's terminal.
+    fn developer_spawn(&self, args: &[&str]) -> Terminal {
+        use std::io::Read;
+        let mut child = developer_command(args)
+            .env_clear()
+            .envs(self.env())
+            .current_dir(&self.f.root)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let stdin = child.stdin.take();
+        let mut stdout = child.stdout.take().unwrap();
+        let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
+        let reader = std::thread::spawn(move || {
+            let mut buf = [0u8; 4096];
+            while let Ok(n) = stdout.read(&mut buf) {
+                if n == 0 || tx.send(buf[..n].to_vec()).is_err() {
+                    break;
+                }
+            }
+        });
+        Terminal {
+            child,
+            stdin,
+            rx,
+            reader: Some(reader),
+            seen: Vec::new(),
+        }
+    }
+
+    /// `raptor guard confirm` of "demo" from the developer's terminal, answering yes once the
+    /// plan asks; returns the terminal after the window closed.
+    fn confirm_yes(&self) -> Output {
+        let mut run = self.developer_spawn(&["guard", "confirm", self.f.repo.to_str().unwrap()]);
+        run.wait_for(CONFIRM_QUESTION);
+        run.type_line("y\n");
+        let out = run.finish();
+        assert!(out.status.success(), "{}", text(&out));
+        out
+    }
+
+    /// `raptor guard confirm` of "demo" in a terminal, as a child of the simulated agent.
+    fn agent_confirm(&self) -> Output {
+        let quote = |s: &str| format!("'{}'", s.replace('\'', r"'\''"));
+        let cmd = [RAPTOR, "guard", "confirm", self.f.repo.to_str().unwrap()]
+            .iter()
+            .map(|a| quote(a))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let line = if cfg!(target_os = "macos") {
+            format!("/usr/bin/script -q /dev/null {cmd}")
+        } else {
+            format!("script -q -e -c {} /dev/null", quote(&cmd))
+        };
+        self.agent_sh(&line)
+    }
+
+    /// The `guard.status` JSON of "demo" (no terminal).
+    fn status_json(&self) -> Value {
+        let out = Command::new(RAPTOR)
+            .args(["guard", "status", "--json", self.f.repo.to_str().unwrap()])
+            .env_clear()
+            .envs(self.env())
+            .current_dir(&self.f.root)
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{}", text(&out));
+        serde_json::from_slice(&out.stdout).unwrap()
+    }
+
+    /// The status JSON once `ready` holds (the daemon re-reads the team level on a ref change;
+    /// the signal is the status itself).
+    fn status_when(&self, ready: impl Fn(&Value) -> bool) -> Value {
+        let deadline = Instant::now() + Duration::from_secs(20);
+        loop {
+            let status = self.status_json();
+            if ready(&status) {
+                return status;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "status never got ready: {status:#}"
+            );
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+
+    /// Rows of `guard.confirm` in the audit of reserved commands, in order. Stops the daemon.
+    fn confirm_audit(&self) -> Vec<gitraptor_core::profile::AuditRow> {
+        self.stop();
+        let (profile, _) = gitraptor_core::profile::Profile::open(self.dirs()).unwrap();
+        profile
+            .audit(0, 1000)
+            .unwrap()
+            .into_iter()
+            .filter(|(_, row)| row.operation == "guard.confirm")
+            .map(|(_, row)| row)
+            .collect()
+    }
+
+    /// A force-push of `feat-x` from "demo" (on `main`) by the developer.
+    fn force_push_feat_x(&self) -> Output {
+        self.human("push -q --force origin feat-x")
+    }
+}
+
+fn has_diagnostic(status: &Value, code: &str) -> bool {
+    status["diagnostics"]
+        .as_array()
+        .is_some_and(|d| d.iter().any(|x| x == code))
+}
+
+/// The `N` of the first `Relaxations (N)` on the terminal.
+fn relaxations_shown(seen: &str) -> Option<u32> {
+    let rest = &seen[seen.find("Relaxations (")? + "Relaxations (".len()..];
+    rest[..rest.find(')')?].trim().parse().ok()
+}
+
+/// GRD007-E4-DISABLE-MINIMUM · US-GRD-007 escenario 4: the team configuration on the main branch
+/// disables the safe minimum and allows force-push; the developer installs and then confirms it
+/// with `raptor guard confirm`. The plan announces the relaxation (`disableSafeMinimum`), a
+/// cancellable window opens, and once it closes without a cancellation a force-push of `feat-x`
+/// runs and the status says `minimum_set: disabled-by-team`.
+#[test]
+fn confirming_a_floor_that_disables_the_minimum_lets_force_push_through() {
+    let m = Machine::build(DISABLE_MINIMUM, diverged_feat_x);
+    let window = Duration::from_millis(3000);
+    m.restart_with_window(window.as_millis() as u64);
+    let remote_before = m.remote_rev("refs/heads/feat-x").unwrap();
+    let local = m.rev("feat-x");
+    assert_ne!(local, remote_before);
+
+    // Installed, not confirmed: the relaxation does not apply yet.
+    m.denied(&m.force_push_feat_x());
+    assert_eq!(m.remote_rev("refs/heads/feat-x").unwrap(), remote_before);
+
+    let mut run = m.developer_spawn(&["guard", "confirm", m.f.repo.to_str().unwrap()]);
+    run.wait_for(CONFIRM_QUESTION);
+    // The relaxation is announced in the plan, before the question.
+    let plan = run.seen();
+    let n = relaxations_shown(&plan).unwrap_or_else(|| panic!("no Relaxations (N): {plan}"));
+    assert!(n > 0, "{plan}");
+    assert!(plan.contains("disableSafeMinimum"), "{plan}");
+    run.type_line("y\n");
+    // A window that can be cancelled opens.
+    run.wait_for("Ctrl-C");
+    let opened = Instant::now();
+    // It closes without a cancellation and the confirmation applies, not before the window.
+    let out = run.finish();
+    assert!(out.status.success(), "{}", text(&out));
+    let waited = opened.elapsed();
+    assert!(
+        waited >= window,
+        "the window was skipped: {waited:?} < {window:?}"
+    );
+
+    m.ok(m.force_push_feat_x());
+    assert_eq!(m.remote_rev("refs/heads/feat-x").unwrap(), local);
+    let status = m.status_json();
+    assert_eq!(
+        status["minimum_set"]["status"], "disabled-by-team",
+        "{status:#}"
+    );
+    let outcomes: Vec<String> = m.confirm_audit().into_iter().map(|r| r.outcome).collect();
+    // The client's calls are `accepted`; the window ends `applied`, never `cancelled`.
+    assert_eq!(
+        outcomes.last().map(String::as_str),
+        Some("applied"),
+        "{outcomes:?}"
+    );
+    assert!(
+        outcomes.iter().all(|o| o == "accepted" || o == "applied"),
+        "{outcomes:?}"
+    );
+}
+
+/// GRD007-E5-RELAX-WAITS · US-GRD-007 escenario 5: with force-push denied in the confirmed team
+/// configuration, a change that allows it reaches the main branch. A force-push of `feat-x`
+/// still does not run, the status shows `floor-relax-pending` with the action `guard-confirm`, an
+/// agent that tries to confirm is refused and its attempt is in the audit, and after the
+/// developer's confirmation the next force-push of `feat-x` runs.
+#[test]
+fn a_team_relaxation_waits_for_the_developer() {
+    let m = Machine::build(
+        r#"{"permissions":{"deny":["force-push"]}}"#,
+        diverged_feat_x,
+    );
+    m.restart_with_window(300);
+    // The developer confirms the team configuration (the install leaves the floor
+    // `base-unconfirmed`); afterwards nothing waits for a confirmation.
+    let status = m.status_json();
+    assert!(has_diagnostic(&status, "base-unconfirmed"), "{status:#}");
+    m.confirm_yes();
+    let status = m.status_json();
+    assert!(status.get("confirm").is_none(), "{status:#}");
+    let remote_before = m.remote_rev("refs/heads/feat-x").unwrap();
+    let local = m.rev("feat-x");
+    assert_ne!(local, remote_before);
+
+    // A change of the team configuration that allows force-push reaches the main branch.
+    m.ok(m.commit(
+        false,
+        &[(".gitraptor/settings.json", DISABLE_MINIMUM)],
+        "commit -q",
+    ));
+    m.ok(m.human("push -q origin main"));
+    let status = m.status_when(|s| has_diagnostic(s, "floor-relax-pending"));
+
+    // The force-push of feat-x still does not run, for the agent and for the person.
+    for agent in [true, false] {
+        let out = m.by(agent, "push -q --force origin feat-x");
+        m.denied(&out);
+        assert_eq!(m.remote_rev("refs/heads/feat-x").unwrap(), remote_before);
+    }
+    // The status shows the pending relaxation with the action to confirm it.
+    assert_eq!(status["confirm"]["action"], "guard-confirm", "{status:#}");
+
+    // The audit before the agent's attempt (reading it stops the daemon).
+    let before = m.confirm_audit().len();
+    m.restart_with_window(300);
+    m.status_when(|s| has_diagnostic(s, "floor-relax-pending"));
+
+    // An agent that tries to confirm it is refused.
+    let out = m.agent_confirm();
+    assert!(!out.status.success(), "{}", text(&out));
+    assert!(text(&out).contains(ONLY_DEVELOPER), "{}", text(&out));
+    let status = m.status_json();
+    assert!(has_diagnostic(&status, "floor-relax-pending"), "{status:#}");
+    m.denied(&m.force_push_feat_x());
+    assert_eq!(m.remote_rev("refs/heads/feat-x").unwrap(), remote_before);
+
+    // After the developer's confirmation the next force-push of feat-x runs.
+    m.confirm_yes();
+    m.ok(m.force_push_feat_x());
+    assert_eq!(m.remote_rev("refs/heads/feat-x").unwrap(), local);
+
+    // The agent's attempt is in the audit, next to the developer's confirmation.
+    let rows = m.confirm_audit();
+    let after = &rows[before..];
+    // Exactly the agent's `rejected`, then the developer's confirmation ending `applied` (its
+    // calls are `accepted`); nothing `cancelled`.
+    let outcomes: Vec<&str> = after
+        .iter()
+        .map(|r| r.outcome.as_str())
+        .filter(|o| *o != "accepted")
+        .collect();
+    assert_eq!(outcomes, ["rejected", "applied"], "{after:?}");
+    assert_eq!(after[0].outcome, "rejected", "{after:?}");
+    let rejected = &after[0];
+    assert!(rejected.chain.contains(FAKE_AGENT), "{rejected:?}");
+    assert!(
+        rejected.reason.as_deref().is_some_and(|r| !r.is_empty()),
+        "{rejected:?}"
+    );
+}
