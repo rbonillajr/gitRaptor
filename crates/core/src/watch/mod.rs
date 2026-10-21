@@ -40,11 +40,15 @@ pub use repo::{
 /// # Errors
 ///
 /// [`RefsReadError::Listing`] when the listing fails.
-// Stub: the shared reading is not wired yet.
 pub fn read_local_branches(
-    _reader: &gitraptor_git::RepoReader,
+    reader: &gitraptor_git::RepoReader,
 ) -> Result<std::collections::BTreeMap<String, String>, RefsReadError> {
-    Ok(std::collections::BTreeMap::new())
+    Ok(reader
+        .local_branches()
+        .map_err(|_| RefsReadError::Listing)?
+        .into_iter()
+        .map(|b| (b.name, b.commit))
+        .collect())
 }
 pub use sweep::Print;
 pub use watchers::WatchBackend;
@@ -216,6 +220,9 @@ pub struct ObservedBatch {
     /// `HEAD` of each worktree as its task read it before computing the
     /// batch (US-TMC-004, calm by state: its events are persisted with it).
     pub heads: Vec<(PathBuf, Vec<u8>)>,
+    /// The local branches the repo task read for this batch, when it read them: once
+    /// persisted, the Time Machine's calm compares them with the refs on disk.
+    pub branches: Option<std::collections::BTreeMap<String, String>>,
     pub marks: Marks,
     /// Whether the repo opened, was lost or came back (`Lost` never has `gone`).
     pub access: RepoAccess,
@@ -241,6 +248,8 @@ impl ObservedBatch {
 pub struct WatchStart {
     pub head_logs: Vec<(PathBuf, u64)>,
     pub heads: Vec<(PathBuf, Vec<u8>)>,
+    /// The local branches of the view the repo task starts from, if it has one.
+    pub branches: Option<std::collections::BTreeMap<String, String>>,
 }
 
 /// Where batches go: the daemon loop.
@@ -1040,6 +1049,10 @@ impl Observer {
             repo::Start::Known(refs) => refs.head_logs(),
             _ => Vec::new(),
         };
+        let branches = match &start {
+            repo::Start::Known(refs) => Some(refs.branches.clone()),
+            _ => None,
+        };
         let mut heads = Vec::new();
         for w in worktrees {
             if !w.view.status.is_watchable() {
@@ -1060,7 +1073,11 @@ impl Observer {
         let _ = std::thread::Builder::new()
             .name("raptor-watch-repo".into())
             .spawn(move || repo::run(shared, repo_id, common, start, unready, rx));
-        WatchStart { head_logs, heads }
+        WatchStart {
+            head_logs,
+            heads,
+            branches,
+        }
     }
 
     /// Stops observing a repo: its watches close and its tasks end. A batch
@@ -1251,6 +1268,7 @@ impl Observer {
             refs: None,
             head_logs: Vec::new(),
             heads: Vec::new(),
+            branches: None,
             marks: Marks {
                 t_recv: t,
                 t_flush: t,
@@ -1288,6 +1306,9 @@ impl Observer {
             .as_ref()
             .map(RefsView::head_logs)
             .unwrap_or_default();
+        // The view it slept with: the batch that classifies what moved while dormant publishes the
+        // branches on disk, and the calm waits for it.
+        let branches = asleep.refs.as_ref().map(|r| r.branches.clone());
         let mut heads = Vec::new();
         for w in &ready {
             let git_dir = worktree_git_dir(&common, w);
@@ -1316,7 +1337,11 @@ impl Observer {
             }
         }
         self.tier_changed(repo_id, Tier::Active);
-        WatchStart { head_logs, heads }
+        WatchStart {
+            head_logs,
+            heads,
+            branches,
+        }
     }
 
     /// A wake the daemon could not complete (its store or its read failed):

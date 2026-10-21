@@ -24,6 +24,25 @@ Cada una es una «Decisión del orquestador (2026-10-04), validada por Arquitect
 - **D7. Despertar antes de esperar.** `DaemonEngine::settle` envía `ShutdownHandle::wake(repo_id, WakeCause::Sentinel)` antes de sondear. Hoy el restore y el undo solo despiertan el repo en `raw_events` (`daemon/mod.rs:830-839`), que va *después* de `settle`, y el ejecutor no lo despierta.
 - **D8. `await_moved_branches` se mantiene sin cambios en este fix.** Se retira aparte (ver Not Built).
 
+### Caso 2 (W85): una captura sellada con una marca anterior a su contenido (pérdida de datos)
+
+`apps/cli/tests/raw_git_undo.rs::an_agent_recovers_its_work_after_a_raw_reset_hard` falla 8 de 8 bajo carga. El reset es el evento 2, pero la Observation seq 4 tiene marca 1 y contenido *posterior* al reset. El undo elige el último punto con marca < 2, que es la seq 4, y restaura sin el trabajo del agente.
+
+- `continuous.rs:observe` toma la marca en `settle` (L553-556) y **después** lee `at_start = GitState::read` (L557). Un `git reset --hard` que termina entre los dos pasos ya está en `at_start`.
+- El guard `still_valid` (L587-591) solo compara `at_start` con el punto de validez (`store/capture.rs:707`), así que no ve nada.
+- La lectura del contenido (`capture.rs:capture_locked`, detección L513+) llega aún más tarde: tras la cola del almacén (`prior_waiting` o el lock), y la marca ya está fijada en `CaptureRequest.engine_mark` (L584).
+- El mismo patrón está en `manual.rs:446`/`575` y en `hook_prior.rs:332`/`396`. El prior garantizado (`protected/mod.rs:137-141`) lleva la marca de la intención y no tiene ningún guard (`still_valid: None`).
+
+Cada una es una «Decisión del orquestador (2026-10-04), validada por Arquitecto». nassa-architect las validó «con ajustes»; los ajustes ya están incorporados.
+
+- **D9. Se confirma la marca en el punto de validez.** Toda captura sellada con una marca de `settle` lleva en `still_valid` un AND con `engine::confirm_mark` (definida en `timemachine/engine.rs`; entra **solo** por el closure de `still_valid`, sin tocar `store/capture.rs`), que exige `engine.settle(repo, worktrees, ZERO) == Some(mark)`. Con D1-D5 eso significa: calma ahora (reflog, `HEAD`, índice y ramas) y la `seq` no se movió. Si además el `GitState` es igual desde `at_start` hasta la validez, el contenido leído entre medias es exactamente el estado que la marca cubre. Un evento que se persiste entre la marca y la lectura mueve la `seq`; uno que aún no se ha persistido rompe la calma. En los dos casos, `Discarded`.
+- **D10. Se descarta, no se re-marca.** Re-marcar con la `seq` nueva exigiría probar que el contenido ya incluye ese evento, y el guard no compara ramas. Descartar falla cerrado. La captura continua reintenta (`Attempt::Again`) y el ancla reintenta 3 veces (`anchor`). Un ancla que falla no puede dejar el eco de su operación como Git crudo: `external_events_in` cae a la siguiente captura o a `i64::MAX` (C17).
+- **Trade-off aceptado (D10, inanición):** la `seq` es de todo el repo, así que la actividad de un worktree hermano descarta las capturas de este. `Discarded` → `Attempt::Again` cada `SETTLE` (150 ms) hasta `MAX_RETRIES` = 50; el tope de 6×M de `give_way` no aplica. Al agotarse se registra `tm_capture_failed kind=discarded-exhausted`. Se prefiere perder cobertura a sellar una marca falsa. C16 mide que con actividad sostenida en el hermano sigue saliendo al menos una Observation en un tiempo acotado.
+- **D11. Alcance: todas las capturas que llevan marca de `settle`.** Son `observe` (continua y ancla), `manual::capture` y `hook_prior`. La regla es una sola función, sin copias. `hook_prior` (`hook_prior.rs:361`, que hoy convierte `Discarded` en error al primer intento) reintenta mientras quede plazo. Al vencer, `TimeLimit` → denegación de US-GRD-017 (falla cerrado). La denegación sale por plazo, nunca por un único descarte (C18).
+- **D12. El prior garantizado también confirma.** `ProtectedOperation` le pasa `still_valid = confirm_mark(intent mark)`. Si sale `Discarded`, el ejecutor vuelve a tomar la marca de intención y repite el prior hasta 3 veces. Después rechaza por la vía existente de "marca de intención sin calma" (`executor/mod.rs:988 refuse(&plan, RejectReason::GitBusy)`), no por `Refusal::GitBusy{lock}`. El paso no corre: nada cambia y el agente reintenta.
+- **D13. Compatibilidad con #272 (`prior_point.rs`).** `before_event` y su sombreado por `mid_operation` asumen que una marca vieja solo aparece dentro de la ventana de comando de un prior. D9 elimina las Observation con marca vieja fuera de esa ventana sin tocar el contrato de `PointFacts`. La regla vale en main y tras #272. #272 **sí** toca `store/capture.rs`; por eso D9 no lo edita: `confirm_mark` vive en `engine.rs` y entra solo por `still_valid`. Los demás archivos de este slice (`continuous.rs`, `manual.rs`, `hook_prior.rs`, `protected/mod.rs`, `executor/mod.rs`) no los toca #272.
+- **D14. Hook de depuración para W85.** `CaptureDeps.after_mark: Option<Arc<dyn Fn() + Send + Sync>>`, `#[doc(hidden)]`, se ejecuta en `observe` entre `settle` y `GitState::read` y solo en `cfg!(debug_assertions)`, con el mismo patrón que `CaptureDeps.layer` (`continuous.rs:97`, `TmCapture.layer`). Es lo que inyecta el `reset --hard` de forma determinista. En release se ignora.
+
 ## Topología
 
 Slice 1 (tracer, criterios: C1, C2, C3, C3b):
@@ -41,6 +60,15 @@ Slice 2 (criterios: C4, C6, C7, C9):
 - `crates/core/tests/tm_calm_dormant.rs` (nuevo): C7.
 - `docs/architecture/decisions/ADR-TMC-003-…md`: enmienda. `ADR-TMC-004-…md`: una línea en la fila "Calma por estado".
 
+Slice 3, caso 2 (criterios: C10-C18; depende de D5 del slice 1):
+- `crates/core/src/timemachine/engine.rs`: `pub fn confirm_mark`. Es el mismo archivo del slice 1, así que va en serie después de él.
+- `crates/core/src/timemachine/continuous.rs`: el AND en `still_valid` de `observe` (L587), `CaptureDeps.after_mark` (D14) y el log `discarded-exhausted` en el agotamiento de `Pending::after`.
+- `crates/core/src/timemachine/manual.rs` (L446) y `hook_prior.rs` (L332, más el reintento por plazo en L361).
+- `crates/core/src/timemachine/protected/mod.rs` (L137-141) y `executor/mod.rs` (L986-989: reintento ×3 y `refuse(GitBusy)`).
+- `crates/core/src/timemachine/capture_mark_tests.rs` (nuevo; `#[cfg(test)] #[path]` en `continuous.rs`): C10-C13, C16, C17.
+- `crates/core/src/timemachine/hook_prior_mark_tests.rs` (nuevo; `#[path]` en `hook_prior.rs`): C18.
+- `crates/core/src/executor/prior_mark_tests.rs` (nuevo; `#[path]` en `executor/mod.rs`): C14.
+
 ## Contratos
 
 - `pub fn read_local_branches(reader: &RepoReader) -> Result<BTreeMap<String, String>, RefsReadError>` en `gitraptor_core::watch`. `RefsReadError` pasa a ser `pub` en `watch`.
@@ -51,6 +79,8 @@ Slice 2 (criterios: C4, C6, C7, C9):
 - `RepoMarks::remove(repo_id)`: borra también `persisted` y `common_dir` (sale con la entrada entera del mapa; un test lo fija).
 - `ObservedBatch.branches: Option<BTreeMap<String, String>>`, `WatchStart.branches: Option<BTreeMap<String, String>>`: campos nuevos, con `None` por defecto.
 - `EngineLink`, el wire y los códigos `repo-busy`/`git-busy`: sin cambios.
+- `pub fn confirm_mark(engine: Arc<dyn EngineLink>, repo_id: &str, worktrees: &[PathBuf], mark: i64) -> ValidityGuard` en `timemachine::engine` (`ValidityGuard` se importa de `store::capture`, sin editar ese archivo): `true` solo si `engine.settle(repo_id, worktrees, Duration::ZERO) == Some(mark)`. No bloquea: un solo sondeo.
+- `ProtectedRequest` añade el campo `engine: Option<Arc<dyn EngineLink>>`, o recibe el guard ya construido; lo decide `rust-expert` siguiendo `protected/mod.rs:57`. Sin engine (dobles), no hay guard, como hoy.
 
 ## Criterios (tests; repos temporales con `HOME`/`GIT_CONFIG_GLOBAL` aislados, sin `sleep`)
 
@@ -66,6 +96,17 @@ Slice 2 (criterios: C4, C6, C7, C9):
 - C7 `a_tm_operation_wakes_a_dormant_repo_before_settling`: con el fixture de tiers del daemon, se duerme el repo, se mueve una rama mientras duerme y se lanza un undo. Debe salir `Ok`, no `repo-busy`.
 - C8 `a_corrupt_loose_ref_reads_the_same_in_the_view_and_the_calm`: basura en `refs/heads/roto`. `RefsView::read` y `refs_calm` dan el mismo resultado (los dos `Err` → no en calma).
 - C9 `#[ignore] settle_is_cheap_when_idle`: p95 de `settle` en reposo menor de 5 ms en release. Se mide también con unas 5000 ramas e imprime los números; no es un gate de debug.
+
+- C10 `an_event_persisted_between_mark_and_read_discards_the_observation`: `EngineLink` falso. Su primer `settle` devuelve `Some(1)` y, en el mismo callback, ejecuta `git reset --hard` en el repo temporal y sube la `seq` a 2 (es el orden inyectado: evento persistido entre la marca y la lectura). Se afirma que `observe` da `Err(Capture(Discarded))` y que no queda ninguna Observation `Complete` con marca 1. En rojo.
+- C11 `an_event_not_yet_persisted_between_mark_and_read_discards_the_observation`: igual que C10, pero la `seq` sigue en 1 y el reflog en disco ya no coincide, así que `settle(ZERO) == None`: `Discarded`. En rojo.
+- C12 `a_calm_unmoved_mark_still_captures`: sin inyección, `Ok` con marca 1 (guarda de regresión).
+- C13 `manual_and_hook_prior_captures_confirm_their_mark`: la inyección de C10 sobre `manual::capture` y `hook_prior` da `Discarded`. En rojo.
+- C14 `a_guaranteed_prior_whose_mark_moved_refuses_with_git_busy`: el ejecutor con un engine falso que mueve la `seq` entre la intención y el prior da `RejectReason::GitBusy`, el paso no corre y el repo queda intacto. En rojo.
+- C10/C11 inyectan el reset con `CaptureDeps.after_mark` (D14), no desde el `settle` falso.
+- C16 `sibling_activity_still_lets_an_observation_through_within_a_bound`: un `RepoMarks` real. Un hilo sube la `seq` del repo (worktree hermano) cada K ms durante una ráfaga acotada y después para. La captura continua de A da al menos una Observation `Complete` antes de `MAX_RETRIES`×`SETTLE`. Con ráfaga sin fin, el log `discarded-exhausted` sale exactamente una vez. Usa barreras o canales, sin `sleep` de espera.
+- C17 `a_failed_anchor_leaves_the_echo_with_its_operation`: `anchor` agota sus 3 intentos (con `after_mark` moviendo la `seq` cada vez). `external_events_in` atribuye los eventos (marca de la op, siguiente captura] a la operación y ninguno queda con `caused_by = None`.
+- C18 `a_hook_prior_denies_by_deadline_not_by_one_discard`: un único descarte seguido de calma da `Ok` del prior. Descartes sostenidos dan `TimeLimit` → denegación US-GRD-017, solo al vencer el plazo.
+- C15 (e2e) `apps/cli/tests/raw_git_undo.rs::an_agent_recovers_its_work_after_a_raw_reset_hard` sin cambios: 50 de 50 bajo carga, en main y tras rebasar sobre #272.
 
 ## Convenciones observadas
 
@@ -97,7 +138,9 @@ Slice 2 (criterios: C4, C6, C7, C9):
 3. Falla cerrado si el repo no se lee.
 4. Límite declarado: la barrera es por repo. Con otro worktree moviendo ramas cada menos de X_min ms (medido en C6, se anota el valor), el `settle` puede agotar 2 s y dar `repo-busy`.
 
-ADR-TMC-004 § 2: se añade "y las ramas locales" a la fila de Calma por estado.
+5. Marca confirmada (caso 2): la marca de una captura vale solo si en su punto de validez el motor sigue en calma con la misma `seq`. Si no, la captura se descarta (las capturas reintentan; el prior rechaza con `git-busy`). Así ninguna captura guarda contenido posterior a un evento con una marca anterior a ese evento.
+
+ADR-TMC-004 § 2: se añade "y las ramas locales" a la fila de Calma por estado. ADR-TMC-004, fila Consistencia: "la marca se confirma en el punto de validez (calma + `seq` sin moverse); si no, descarte". Se cita la compatibilidad con la regla del punto previo de #272.
 
 ## Decisiones abiertas
 
@@ -113,3 +156,5 @@ Ninguna. No hay cambio de contrato público ni de datos.
 
 - `pub fn read_local_branches(reader: &RepoReader) -> Result<BTreeMap<String, String>, RefsReadError> { Ok(BTreeMap::new()) }` en `watch/mod.rs`, con `RefsReadError` como `pub`.
 - `pub fn set_persisted(&self, _repo_id: &str, seq: i64, _common_dir: &Path, _branches: BTreeMap<String, String>) { self.set_seq(_repo_id, seq) }` en `RepoMarks`.
+- `pub fn confirm_mark(_engine: Arc<dyn EngineLink>, _repo_id: &str, _worktrees: &[PathBuf], _mark: i64) -> ValidityGuard { ValidityGuard(Arc::new(|| true)) }` en `engine.rs`. Con este stub C10, C11, C13 y C14 compilan y fallan.
+- Hook de depuración `CaptureDeps.after_mark: Option<Arc<dyn Fn() + Send + Sync>>` (D14). Se añade con `None` en todos los constructores y se llama en `observe` tras `settle`, solo en debug. Es necesario para que compilen C10, C11 y C17.

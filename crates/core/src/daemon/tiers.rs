@@ -349,6 +349,11 @@ impl Daemon {
         };
         let start = observer.wake_repo(repo_id, &read, cause);
         self.set_repo_state(repo_id, RepoStateView::Observed);
+        if let Some(branches) = start.branches {
+            let seq = self.marks.seq(repo_id);
+            self.marks
+                .set_persisted(repo_id, seq, &entry.canonical_path, branches);
+        }
         self.marks.set_head_logs(repo_id, &start.head_logs);
         self.marks.set_heads(repo_id, &start.heads);
         self.publish_tier(repo_id, RepoTier::Active, None);

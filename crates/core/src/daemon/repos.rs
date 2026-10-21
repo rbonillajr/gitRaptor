@@ -352,6 +352,11 @@ impl Daemon {
         self.resources.set_observation(observer.usage_source());
         self.resources.set_backend(observer.backend());
         self.note_activity(repo_id);
+        if let Some(branches) = start.branches {
+            let seq = self.marks.seq(repo_id);
+            let common = crate::observe::canonical(common_dir);
+            self.marks.set_persisted(repo_id, seq, &common, branches);
+        }
         self.marks.set_head_logs(repo_id, &start.head_logs);
         self.marks.set_heads(repo_id, &start.heads);
         self.detect_repo(repo_id, common_dir, read);
@@ -378,6 +383,14 @@ impl Daemon {
         let attributed = self.attribute(&batch);
         // US-GRD-019: who the commit went in under, and the hint checked against it.
         let (declared, attributed) = self.declared_authorship(&batch, attributed);
+        // Where the calm reads the refs: the common directory the daemon registered, never one
+        // derived from the repo's content. Without it the branches are not published, so the
+        // calm keeps comparing the previous ones and fails closed.
+        let common = batch
+            .branches
+            .as_ref()
+            .and_then(|_| self.profile.repo(&batch.repo_id).ok().flatten())
+            .map(|entry| entry.canonical_path);
         let Some((_, store)) = self.stores.iter_mut().find(|(id, _)| *id == batch.repo_id) else {
             return;
         };
@@ -532,8 +545,19 @@ impl Daemon {
         let seqs = match store.write_batch(&ops) {
             Ok(result) => {
                 // The mark first, then what the engine read: once a worktree's
-                // `HEAD` reflog matches, its mark already covers it (US-TMC-004).
-                self.marks.set_seq(&batch.repo_id, store.last_seq());
+                // `HEAD` reflog matches, its mark already covers it (US-TMC-004). The mark and
+                // the branches the batch read go together, in one critical section.
+                match (batch.branches.clone(), &common) {
+                    (Some(branches), Some(common)) => {
+                        self.marks.set_persisted(
+                            &batch.repo_id,
+                            store.last_seq(),
+                            common,
+                            branches,
+                        );
+                    }
+                    _ => self.marks.set_seq(&batch.repo_id, store.last_seq()),
+                }
                 self.marks.set_head_logs(&batch.repo_id, &batch.head_logs);
                 self.marks.set_heads(&batch.repo_id, &batch.heads);
                 result.seqs

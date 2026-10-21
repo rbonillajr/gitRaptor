@@ -82,16 +82,13 @@ impl RefsView {
     /// `Unopenable`, and a failed listing is `Listing`, so the caller can tell "no
     /// worktrees" from "cannot read".
     pub fn read(common: &Path) -> Result<Self, RefsReadError> {
-        let mut view = Self::default();
         let Ok(reader) = RepoReader::open(common, &ReaderOptions::default()) else {
             return Err(RefsReadError::Unopenable);
         };
-        for b in reader
-            .local_branches()
-            .map_err(|_| RefsReadError::Listing)?
-        {
-            view.branches.insert(b.name, b.commit);
-        }
+        let mut view = Self {
+            branches: super::read_local_branches(&reader)?,
+            ..Self::default()
+        };
         for b in reader
             .remote_branches()
             .map_err(|_| RefsReadError::Listing)?
@@ -795,6 +792,7 @@ impl Task {
             refs: None,
             head_logs: Vec::new(),
             heads: Vec::new(),
+            branches: None,
             marks: Marks {
                 t_recv: t,
                 t_flush: t,
@@ -934,6 +932,7 @@ impl Task {
                 refs: Some(tips.join("\n")),
                 head_logs,
                 heads: Vec::new(),
+                branches: Some(self.view.branches.clone()),
                 marks,
                 access: if regained.is_some() {
                     RepoAccess::Regained
