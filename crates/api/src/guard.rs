@@ -85,6 +85,36 @@ pub enum Rule {
     /// Only with `guard.snapshot-required`; without it the daemon sends `system.internal-error`.
     #[serde(rename = "system.snapshot-failed")]
     SnapshotFailed,
+    /// The permission of `commit` (BR-VAL-002, US-GRD-007). Each `permission.*` rule names the
+    /// operation of the catalog whose permission (`ask` or `deny`) produces the effect. Only with
+    /// `guard.permissions`.
+    #[serde(rename = "permission.commit")]
+    PermissionCommit,
+    /// The permission of `push`.
+    #[serde(rename = "permission.push")]
+    PermissionPush,
+    /// The permission of `force-push`.
+    #[serde(rename = "permission.force-push")]
+    PermissionForcePush,
+    /// The permission of `reset-hard`: not produced by the hook layer, reserved for the MCP one.
+    #[serde(rename = "permission.reset-hard")]
+    PermissionResetHard,
+    /// The permission of `branch-delete`.
+    #[serde(rename = "permission.branch-delete")]
+    PermissionBranchDelete,
+    /// The permission of `rebase`.
+    #[serde(rename = "permission.rebase")]
+    PermissionRebase,
+    /// The permission of `merge`.
+    #[serde(rename = "permission.merge")]
+    PermissionMerge,
+    /// The permission of `worktree-add`.
+    #[serde(rename = "permission.worktree-add")]
+    PermissionWorktreeAdd,
+    /// The permission of `worktree-remove`: not produced by the hook layer, reserved for the MCP
+    /// one.
+    #[serde(rename = "permission.worktree-remove")]
+    PermissionWorktreeRemove,
 }
 
 /// Why a rule matched (ADR-GRD-003 § 3 and its 2026-10-04 amendment).
@@ -131,6 +161,9 @@ pub enum Cause {
     SnapshotUnavailable,
     /// `system.snapshot-failed`: an internal error of the Time Machine.
     SnapshotInternal,
+    /// A `permission.*` rule with `ask`: it needs a human confirmation that is not available, so
+    /// it is applied as `deny` (US-GRD-007). Only with `guard.permissions`.
+    AskUnavailable,
 }
 
 /// Kind of a labelled parameter.
@@ -347,7 +380,7 @@ pub enum Operation {
         branch: Option<Untrusted>,
     },
     /// A commit (also `--amend` and a merge commit), only sent when the daemon granted
-    /// `guard.authorship` (US-GRD-018, D11).
+    /// `guard.authorship` or `guard.permissions`.
     Commit { stage: CommitStage },
 }
 
@@ -484,6 +517,10 @@ pub enum NotPreventable {
     /// remote, which an agent can rewrite by hand; the high-water mark that closes it waits for
     /// the confirmation command (US-GRD-008).
     PolicyFloor,
+    /// The permissions per operation are not applied with Git directly to `reset --hard`, to
+    /// removing a worktree, to creating one without a new branch nor to a push of tags only;
+    /// `merge` only stops at the branch (US-GRD-007). Only with `guard.permissions`.
+    PermissionReach,
 }
 
 /// Refs backend of the repo (`extensions.refStorage`).
@@ -1106,6 +1143,38 @@ mod tests {
             r#"{"rule":"minimum.force-push","level":"minimum","cause":"shallow-history","params":[{"kind":"branch","value":{"untrusted":"feat-x"}}]}"#
         );
         assert_eq!(serde_json::from_str::<Reason>(&json).unwrap(), reason);
+    }
+
+    #[test]
+    fn permission_codes_round_trip_in_kebab_case() {
+        let rules = [
+            (Rule::PermissionCommit, "permission.commit"),
+            (Rule::PermissionPush, "permission.push"),
+            (Rule::PermissionForcePush, "permission.force-push"),
+            (Rule::PermissionResetHard, "permission.reset-hard"),
+            (Rule::PermissionBranchDelete, "permission.branch-delete"),
+            (Rule::PermissionRebase, "permission.rebase"),
+            (Rule::PermissionMerge, "permission.merge"),
+            (Rule::PermissionWorktreeAdd, "permission.worktree-add"),
+            (Rule::PermissionWorktreeRemove, "permission.worktree-remove"),
+        ];
+        for (rule, code) in rules {
+            let json = serde_json::to_string(&rule).unwrap();
+            assert_eq!(json, format!("\"{code}\""));
+            assert_eq!(serde_json::from_str::<Rule>(&json).unwrap(), rule);
+        }
+        let json = serde_json::to_string(&Cause::AskUnavailable).unwrap();
+        assert_eq!(json, "\"ask-unavailable\"");
+        assert_eq!(
+            serde_json::from_str::<Cause>(&json).unwrap(),
+            Cause::AskUnavailable
+        );
+        let json = serde_json::to_string(&NotPreventable::PermissionReach).unwrap();
+        assert_eq!(json, "\"permission-reach\"");
+        assert_eq!(
+            serde_json::from_str::<NotPreventable>(&json).unwrap(),
+            NotPreventable::PermissionReach
+        );
     }
 
     #[test]
