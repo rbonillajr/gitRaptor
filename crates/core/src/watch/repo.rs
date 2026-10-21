@@ -967,6 +967,7 @@ mod tests {
             last_event_ms: 0,
             next_poll: Instant::now(),
             heads_deferred: false,
+            unready: Vec::new(),
         };
         // The observer owns the watcher the task rewatches through: keep it alive.
         std::mem::forget(observer);
@@ -995,6 +996,7 @@ mod tests {
                 "r".into(),
                 PathBuf::from("/nonexistent/raptor-repo.git"),
                 Start::Lost,
+                Vec::new(),
                 rx,
             );
         });
@@ -1015,6 +1017,7 @@ mod tests {
                 "r".into(),
                 PathBuf::from("/nonexistent/raptor-repo.git"),
                 Start::Known(view(&["/w/main"])),
+                Vec::new(),
                 rx,
             );
         });
@@ -1081,6 +1084,31 @@ mod tests {
         assert_eq!(sent[0].access, RepoAccess::Unchanged);
         assert!(sent[0].gone.is_empty());
         assert_eq!(task.view, next);
+    }
+
+    /// A worktree that appears while `git worktree add` is half-way cannot be read: it is sent
+    /// once (its view says what is wrong), kept as unready and read again with each view, without
+    /// another batch while it still is not ready.
+    #[test]
+    fn a_worktree_that_is_not_ready_is_read_again_until_it_is() {
+        let before = view(&["/w/main"]);
+        let after = view(&["/w/main", "/w/half"]);
+        let (mut task, batches) = task(
+            Start::Known(before),
+            vec![Ok(after.clone()), Ok(after.clone()), Ok(after)],
+        );
+        task.poll();
+        assert_eq!(task.unready, vec![PathBuf::from("/w/half")]);
+        {
+            let sent = batches.lock().unwrap();
+            assert_eq!(sent.len(), 1);
+            assert_eq!(sent[0].worktrees.len(), 1);
+        }
+        // Still not ready: read again, nothing new to send.
+        task.poll();
+        task.poll();
+        assert_eq!(task.unready, vec![PathBuf::from("/w/half")]);
+        assert_eq!(batches.lock().unwrap().len(), 1);
     }
 
     #[test]
