@@ -174,3 +174,11 @@ Aplicada desde la [Dev Spec de US-TMC-004](../../requirements/features/time-mach
 - **Con `failed`** (US-TMC-005): el hook avisa y deja pasar. La denegación `snapshot-failed` es de US-GRD-017.
 - **Con `failed`, se deniega (US-GRD-017, 2026-10-16)**: una operación del alcance anterior que las reglas permiten no se ejecuta sin el previo; el daemon la deniega con `system.snapshot-failed` y su causa, y el cliente del hook sin daemon también (modo degradado, Q-GRD-36). El aviso «sigue adelante» de US-TMC-005 solo sale con la excepción aplicada (ADR-GRD-003, Enmienda US-GRD-017).
 - **Escenario 1 de US-TMC-005**: un `checkout` con Git crudo no tiene hook previo (ADR-GRD-002), así que el escenario se verifica con el borrado de una rama y con un rebase. `checkout -f`, `restore` y `reset --hard` siguen en el nivel de observación.
+
+## Enmienda (2026-10-21, fix/tm-prior-point-binding)
+
+**Decisión del orquestador (2026-10-04), validada por Arquitecto** (Brief [`docs/dev-briefs/tm-prior-point-binding.md`](../../dev-briefs/tm-prior-point-binding.md), D3 y D4). Sin migración. El `status` sigue en `accepted`.
+
+| Cambio | Dónde | Fuente |
+|---|---|---|
+| **La captura registra `mid_operation`**: toda captura completa guarda si había una operación de Git en curso en alguno de sus worktrees al empezar o en el punto de validez (el mismo lector registrado de la puerta del `.git`, #223 I-03). Una observación o un punto manual a mitad de operación sigue en el timeline como punto propio, pero ya no es un punto "antes de un evento" ni destino del undo de Git crudo. El previo (`previo_hook`, `previo_garantizado`) nunca se excluye por ello (ADR-TMC-003, Enmienda 2026-10-21) | § 1, § 2 | D3, D4 |
