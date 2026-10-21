@@ -119,6 +119,6 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 - **Diseño:** no aplica (respuesta de herramienta; mensajes según la guía de contenido del design system, DSYS-GRP-001).
 - **Dev Spec:** [DS-US-MCP-004](../dev-specs/US-MCP-004-dev-spec.md).
 
-Implementado en: PR #216 y PR #TBD (US-GRD-014, 2026-10-21: G1, el motor emite la base "pendiente de confirmar" cuando la rama principal trae un cambio de rama base sin confirmar; `crates/core/tests/us_grd_014_mcp_pending.rs`).
+Implementado en: PR #216 y PR #277 (US-GRD-014, 2026-10-21: G1, el motor emite la base "pendiente de confirmar" cuando la rama principal trae un cambio de rama base sin confirmar; `crates/core/tests/us_grd_014_mcp_pending.rs`).
 
 **Falta**: Linux y Windows: *Pendiente: etapa de validación multiplataforma* (XP-39). En un repo sin hooks no hay diagnósticos del estado de protección, así que `pending` no aparece hasta US-GRP-016 (DS-US-GRD-014 § 8).

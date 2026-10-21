@@ -60,6 +60,8 @@ tags: [guardrails, rama-base, confirmacion, suelo, comando-reservado, base-uncon
 
 # Dev Spec — US-GRD-014: el equipo fija la rama base y Guardrails la protege
 
+Implementado en: PR #277 (2026-10-21).
+
 ## Contexto rápido
 
 Cuando esto esté hecho, el desarrollador confirma en su máquina, con un comando reservado, la rama base (y el resto del suelo) que el equipo fija en la rama principal. Desde entonces Guardrails protege esa rama en todos los worktrees. Mientras un cambio espera, protege también la nueva. El estado de protección y el `status` del MCP dicen qué espera confirmación y cómo confirmarlo. Hoy nada de eso es posible: la rama base solo se confirma al instalar (`main`, en un repo sin configuración del equipo).
