@@ -88,6 +88,13 @@ pub const CAP_GUARD_SNAPSHOT_REQUIRED: Capability = Capability::new("guard.snaps
 /// leaves out the entries that are not `hooks`; the summary counts them all.
 pub const CAP_GUARD_LOG_LAYERS: Capability = Capability::new("guard.log-layers");
 
+/// Permissions per operation (US-GRD-007): the `permission.*` rules, the `ask-unavailable` cause,
+/// `NotPreventable::PermissionReach`, the `commit` operation at `pre-commit`, and a daemon that
+/// applies the permissions and the safe minimum the team sets. Without it a daemon evaluates as
+/// before and `guard.log` leaves out the entries with `permission.*` reasons (the summary still
+/// counts them).
+pub const CAP_GUARD_PERMISSIONS: Capability = Capability::new("guard.permissions");
+
 pub(super) const GROUP: Group = Group {
     // None is offered to `raptor-mcp` (BR-AUTH-004): it neither installs nor
     // evaluates. A connection of protocol 5 or 6 sees none.
@@ -117,6 +124,7 @@ pub(super) const GROUP: Group = Group {
         CAP_GUARD_SNAPSHOT_REQUIRED,
         CAP_GUARD_LOG_LAYERS,
         CAP_GUARD_RECOVERY,
+        CAP_GUARD_PERMISSIONS,
     ],
     error_block: Some(BLOCK),
     errors: &[GUARD_UNINSTALL_REFUSED, GUARD_FAILED],
