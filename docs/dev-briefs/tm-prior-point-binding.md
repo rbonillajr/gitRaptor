@@ -19,7 +19,10 @@ Todas las D: «Decisión del orquestador (2026-10-04), validada por Arquitecto»
   - Un previo perdido sigue ensombreciendo. Si no queda nadie, gana un punto más antiguo o `TargetUnavailable`.
 - **D2. Enlace por ventana de eventos del worktree, no por proceso.**
   - **Ventana:** para cada previo `P` (`HookPrior` o `GuaranteedPrior`) de la clave `k`, `f_P` es el primer evento crudo de `k` con `seq > P.mark` (∞ si no hay).
-  - **Sombra:** un punto `Q` de `k` queda **ensombrecido por `P`** si `Q.seq > P.seq` y `Q.mark < f_P`. Se registró después del previo, pero antes de que el motor persistiera el primer evento de ese comando, así que su foto puede contener ya el efecto del comando con una marca atrasada. Un punto ensombrecido nunca es "antes de un evento".
+  - **Sombra (enmienda 2026-10-21, regresión de `tm_chaos::hostile_half_done_merge_rejects_until_aborted`):** un punto `Q` de `k` queda **ensombrecido por `P`** si `Q.seq > P.seq` y se cumple (a) o (b).
+    - **(a) Marca atrasada:** `Q.mark < f_P`. Se registró después del previo, pero antes de que el motor persistiera el primer evento de ese comando, así que su foto puede contener ya el efecto del comando con una marca atrasada.
+    - **(b) Tramo a mitad de operación tras el previo:** `Q.mid_operation` y no existe ningún punto limpio `R` de `k` con `P.seq < R.seq < Q.seq`. "Limpio" es un previo, o un punto con `mid_operation != Some(true)` que `P` no ensombrece por (a) (`R.mark >= f_P`). `R` puede estar o no disponible, como en D1.
+    - Un punto ensombrecido nunca es "antes de un evento".
   - **Alcance:** se aplica a todos los niveles, también a un previo posterior, y por clave: los eventos de otro worktree no mueven `f_P`.
   - **`floor` (ajuste 2):** decide quién puede ganar, no quién proyecta sombra. Un previo de la generación actual proyecta sombra aunque no sea disponible.
   - **Desviación consciente del ajuste 2:** un previo con `seq < floor` no ensombrece puntos con `seq >= floor`.
@@ -27,17 +30,19 @@ Todas las D: «Decisión del orquestador (2026-10-04), validada por Arquitecto»
     - Así ensombrecería todo lo posterior, y cada cambio de generación dejaría el undo en `TargetUnavailable`.
     - Entre puntos bajo `floor` sí ensombrece, aunque ninguno de ellos puede ganar.
 - **D3. Observación a mitad de operación.** Toda captura completa guarda `mid_operation = en curso al inicio || en curso al final` (`RepoReader::in_progress` en alguno de sus worktrees, antes de leer y otra vez en el punto de validez).
-  - **Exclusión:** una observación o un punto manual con `Some(true)` nunca es "antes de un evento".
+  - **Exclusión (enmienda 2026-10-21):** ya no es incondicional. Una foto a mitad de operación solo queda fuera por la sombra (b) de D2: cuando sigue a un previo sin ningún punto limpio en medio.
+    - **Caso hook:** es el del rebase con hook, donde el comando que dejó la operación a medias es el del previo.
+    - **Sin previo, o con un punto limpio en medio:** la foto a mitad sigue siendo elegible. Es el "antes" correcto de un `merge --abort` (`Reset`), porque guarda las resoluciones parciales. `tm_chaos::hostile_half_done_merge_rejects_until_aborted` restaura `stopped`, como antes del fix.
   - **Previos:** un previo nunca se excluye por `mid_operation` (D9 de US-TMC-005 sigue vigente). Lo toma con `rebase-merge/` ya presente (`--autostash`) y es la foto anterior por construcción.
   - Las fotos siguen en el timeline como puntos propios.
   - **Combinación:** la hace `prior_point::mid_operation(at_start, at_end)`.
   - **Qué se prueba:** una operación que empieza durante la captura ya la descarta casi siempre la guarda `GitState` (HEAD o índice cambian). Por eso, el caso "en curso solo al final" se prueba sobre la función, no de extremo a extremo.
 - **D4. Sin migración.** `mid_operation` va en `CompleteInfo` (JSON del `detail` de la entrada `complete` del journal, que ya está encadenada). Usa `#[serde(default, skip_serializing_if = "Option::is_none")]` y es `Option<bool>`. `None` (filas anteriores al fix) cuenta como "no a mitad de operación", que es el comportamiento de hoy. No hay `OPLOG_MIGRATIONS` nuevo y los hashes no cambian.
-- **D5. Orden.** Entre los elegibles (`mark < seq`, `seq >= floor`, sin sombra y sin `mid_operation`), gana el mayor `(mark, seq)`. Con la misma marca, un previo registrado después de una observación gana por `seq`: es el caso de D10, que sigue cubierto.
-- **D6. Fallar cerrado = más antiguo, nunca a mitad.** Si hay duda, se elige un punto anterior. Restaurar de más siempre se recupera (el undo toma su propio previo garantizado, NFR-01), mientras que una foto a mitad de operación o posterior al evento pierde el estado previo. Ver `TRADEOFF` en Not Built.
+- **D5. Orden.** Entre los elegibles (`mark < seq`, `seq >= floor`, sin sombra (a) ni (b)), gana el mayor `(mark, seq)`. Con la misma marca, un previo registrado después de una observación gana por `seq`: es el caso de D10, que sigue cubierto.
+- **D6. Fallar cerrado = más antiguo.** Nunca se elige una foto a mitad del comando de un previo, ni una con la marca atrasada, salvo el caso sin previo declarado en Not Built (`TRADEOFF`). Si hay duda, se elige un punto anterior. Restaurar de más siempre se recupera (el undo toma su propio previo garantizado, NFR-01), mientras que una foto a mitad de operación o posterior al evento pierde el estado previo. Ver `TRADEOFF` en Not Built.
 - **D7. Documentación.**
   - **ADR-TMC-003 § 4:** se enmienda la fila "Git crudo en la pila" con el destino de D1, D2, D3 y D5. Se documenta `mid_operation` como parte del esquema del `detail` de la entrada `complete`. Se registra como límite abierto de NFR-01 el bug de pila de us_tmc_009 (`external_events_in` liga el eco solo por la marca del ancla; PR #256).
-  - **ADR-TMC-004:** se añade una fila a su tabla de enmiendas: la captura registra `mid_operation`, y una observación a mitad de operación ya no es un punto "antes de un evento".
+  - **ADR-TMC-004:** se añade una fila a su tabla de enmiendas: la captura registra `mid_operation`, y una observación a mitad de operación que sigue a un previo sin un punto limpio en medio ya no es un punto "antes de un evento" (D2 b).
   - **`us-tmc-005-pre-hook-snapshot.md`:** D10 se marca **sustituida** por `tm-prior-point-binding` D1/D5. Se anota en D9 que sigue vigente: un previo nunca se descarta por `mid_operation`.
 
 **Cierra el bug de us_tmc_009 (`a_restore_can_be_undone_back_to_the_exact_prior_state`)? No.** Ese fallo está en la **pila**: el evento tardío 3 cae fuera del eco del restore (`external_events_in`, el ancla con una marca anterior a la del evento), y `last_operation` es `GitEvent(3)`. Este fix no cambia el eco. Solo arregla el **estado** al que lleva ese undo: con D2, el ancla queda ensombrecida por el previo garantizado del restore, y deshacer el evento 3 restaura el estado exacto anterior al restore, no el ancla. La aserción `undone_operation_id == restore.operation_id` puede seguir fallando.
@@ -68,7 +73,7 @@ Los tests C1 a C5 están en `prior_point_tests.rs`; los de C6, en `timeline_prio
 
 - **C1 — rebase con observación tardía.** Situación: `HookPrior(m0)`, `Obs(m0)` anterior, evento 1, `Obs(m1)` con `mid_operation` y evento 2. Para los eventos 1 y 2 se elige el previo. Sin previo, se elige `Obs(m0)`.
   - `rebase_with_a_late_mid_operation_observation_picks_the_hook_prior`
-  - `rebase_without_a_prior_skips_the_mid_operation_observation`
+  - ~~`rebase_without_a_prior_skips_the_mid_operation_observation`~~ queda **sustituido** por la enmienda de D3: sin previo, la foto a mitad es elegible y el test fallaría. Lo reemplaza `rebase_without_a_prior_keeps_the_mid_operation_observation_eligible`: con los mismos puntos, el evento 12 elige `mid(2,11)` y el 11 elige `obs(1,10)`. Es una limitación declarada (`TRADEOFF`).
 - **C2 — restore con evento Git tardío.** Situación: `GuaranteedPrior(m2)`, ancla `Obs(m2)` posterior y evento 3. Se elige el previo, no el ancla. Control: con el ancla en `m3`, el evento 4 elige el ancla.
   - `restore_with_a_late_git_event_picks_the_guaranteed_prior_not_the_anchor`
   - `restore_anchor_whose_mark_covers_the_event_is_picked_after_it`
@@ -82,9 +87,10 @@ Los tests C1 a C5 están en `prior_point_tests.rs`; los de C6, en `timeline_prio
   - `control_a_clean_point_after_the_command_is_picked_for_the_next_event`
   - `control_points_below_the_floor_or_not_before_the_event_are_never_picked`
   - *(nuevo)* `control_a_prior_below_the_floor_casts_no_shadow_on_the_current_generation`: D2, desviación del ajuste 2.
-- **C6 — timeline y undo eligen lo mismo**, y el undo nunca apunta a una observación a mitad de operación.
+- **C6 — timeline y undo eligen lo mismo**, y el undo nunca apunta a una observación a mitad de operación ensombrecida por (b).
   - `timeline_and_undo_pick_the_same_point_for_an_event`
-  - `undo_never_targets_a_mid_operation_observation`
+  - ~~`undo_never_targets_a_mid_operation_observation`~~ queda **sustituido**: no tiene previo, así que ahora elegiría `mid`. Lo reemplaza `undo_never_targets_a_mid_operation_observation_that_follows_a_prior`, con los mismos puntos más un `HookPrior(m10)` entre `clean` y `mid`: el timeline y el undo eligen el previo.
+  - *(nuevo)* `timeline_and_undo_pick_the_half_done_merge_photo_for_a_merge_abort`
   - *(nuevo)* `an_unavailable_prior_still_shadows_and_an_older_point_or_none_wins`: un previo no disponible y una observación ensombrecida. El timeline y el undo dan el punto anterior, y sin él, `None` / `TargetUnavailable`.
   - *(nuevo, en `tests/tm_prior_point_undo.rs`)* `raw_git_undo_takes_its_own_guaranteed_prior_before_restoring`: es la premisa de D6. Usa un daemon en proceso como `tests/us_tmc_004.rs`. Tras un `reset --hard` crudo y el undo, el oplog tiene la operación de undo con su `GuaranteedPrior` completo, registrado antes de aplicar. En Windows se ignora como los undos de us_tmc_004 (TQ-14).
 - **C7 — la captura registra `mid_operation`.** Una observación a mitad de un rebase con conflicto registra `Some(true)` y una de un worktree limpio, `Some(false)`. Una fila sin el campo se lee como `None`.
@@ -92,6 +98,11 @@ Los tests C1 a C5 están en `prior_point_tests.rs`; los de C6, en `timeline_prio
   - `an_observation_of_a_clean_worktree_records_clean`
   - `a_complete_row_without_the_field_reads_as_unrecorded`
   - *(nuevo, en `prior_point_tests.rs`)* `mid_operation_is_true_if_in_progress_at_start_or_at_end`: prueba la combinación de D3 como unidad. "En curso solo al final" no es reproducible de forma determinista de extremo a extremo.
+- **C8 — merge abortado (enmienda D2 b / D3).** El undo de un `merge --abort` vuelve a la foto del merge a medias, con o sin previos anteriores. El rebase con hook abortado vuelve al previo (`TRADEOFF`). Evidencia de extremo a extremo: `apps/cli/tests/tm_chaos.rs::hostile_half_done_merge_rejects_until_aborted`.
+  - `abort_of_a_merge_without_a_prior_picks_the_half_done_merge_photo`: `obs(1,10)`, `mid(2,12)` y eventos `[11, 13]`; el evento 13 elige `mid`.
+  - `abort_of_a_merge_after_an_older_prior_and_a_clean_point_picks_the_half_done_merge_photo`: `prior(1,5)`, `obs(2,10)`, `mid(3,12)` y eventos `[6, 11, 13]`; el evento 13 elige `mid`.
+  - `abort_of_a_hooked_rebase_after_a_partial_resolution_picks_the_prior`: `prior(1,10)`, `mid(2,11)`, `mid(3,11)` y eventos `[11, 12]`; el evento 12 elige el previo.
+  - *(nuevo)* `abort_of_a_hooked_rebase_with_a_late_clean_observation_still_picks_the_prior`: `prior(1,10)`, `obs(2,10)` (limpia pero ensombrecida por (a)), `mid(3,11)` y eventos `[11, 12]`. `obs` no cuenta como `R`, así que el evento 12 elige el previo.
 
 ## Convenciones observadas
 
@@ -169,5 +180,11 @@ Ninguna. Todo lo de arriba es reversible con un revert y no hay migración.
 - **Eco tardío del restore en la pila (us_tmc_009):** cuando un volcado de CI confirme la causa.
 - **Aviso al restaurar a mano una foto `mid_operation`:** cuando el PO lo pida (US de UX del timeline).
 - **Comando sin eventos** (rebase sin cambios, borrado rechazado). Sus observaciones posteriores quedan ensombrecidas hasta el primer evento del worktree, y ese evento elige el previo (más antiguo). `// TRADEOFF: stale-but-recoverable prior for the first event after a no-op hooked command; upgrade with per-event process identity.`
+- **Tipo de evento en la regla** (enmienda D2 b), con dos casos:
+  - **Rebase sin hook previo:** la foto a mitad sigue siendo elegible para el evento final, como hoy. US-TMC-005 instala el hook que lo cubre.
+  - **Rebase con hook, parado en conflicto, resuelto en parte y abortado:** el undo del abort vuelve al previo anterior al rebase, no a las resoluciones parciales. Se recupera: la foto sigue como punto propio y el undo toma su propio previo garantizado.
+  - El tipo no lo arreglaría: `rebase (abort)` y `rebase (finish)` son los dos `Rebase` para `watch::repo::kind_of`.
+  - Se añadirá cuando el motor distinga fin y abandono de una operación.
+  - `// TRADEOFF: a mid-operation photo is excluded only right after a prior; an unhooked rebase may still pick it, and an aborted hooked rebase goes back to its prior; upgrade when engine events tell completion from abort.`
 - **`git` ajeno en la misma clave** (riesgo residual de C4): si un `git` que no es el del previo emite un evento en esa clave entre la marca del previo y el primer evento del comando del previo, ese evento fija `f_P` antes de tiempo. Los puntos posteriores a ese evento dejan de estar ensombrecidos y pueden contener ya el efecto del comando del previo. `// TRADEOFF: a foreign git event on the same worktree can close the prior's window before its own command's first event; upgrade with per-event process identity.`
 - **`security-expert`:** no aplica. No hay `unsafe`, procesos nuevos ni rutas nuevas; la lectura de `in_progress` ya pasa por la puerta del worktree registrado.
