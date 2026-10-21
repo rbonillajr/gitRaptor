@@ -106,7 +106,7 @@ Las opciones son **(a)** merge en memoria con `gix` (`merge_trees` sobre una ins
 
 ## Estado de la implementación (2026-10-20)
 
-Implementado en: PR #<pendiente>.
+Implementado en: PR #266.
 
 Estado: implementación parcial. Pendiente:
 - Fase (b) con la máquina en reposo (`measure.sh`): confirma las cifras y mide el p95 del motor con la ráfaga del predictor (E9).
