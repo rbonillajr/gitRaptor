@@ -249,4 +249,30 @@ CREATE TABLE guardrails_decisions (
 CREATE INDEX guardrails_decisions_by_last ON guardrails_decisions(last_ms);
 CREATE INDEX guardrails_decisions_by_key ON guardrails_decisions(agg_key, last_ms);
 ",
+    r"
+-- US-GRP-003: a session ends with `worktree-removed` when Git no longer registers its
+-- worktree. SQLite cannot alter a CHECK: the table is rebuilt with the same rows, like the
+-- gap causes before. The migration runs with foreign keys off and is checked before commit;
+-- `events` and `attribution_records` reference `sessions` by name and keep doing so.
+CREATE TABLE sessions_v2 (
+    session_id     TEXT PRIMARY KEY,
+    worktree_id    INTEGER NOT NULL REFERENCES worktrees(id),
+    agent_kind     TEXT NOT NULL CHECK (agent_kind IN ('claude-code', 'other')),
+    agent_name     TEXT,
+    initial_origin TEXT NOT NULL CHECK (initial_origin IN ('detected', 'registered')),
+    detection_key  TEXT,
+    started_ms     INTEGER NOT NULL,
+    ended_ms       INTEGER,
+    end_cause      TEXT CHECK (end_cause IN
+                       ('process-gone', 'ended-during-gap', 'registration-withdrawn',
+                        'worktree-removed'))
+) STRICT;
+INSERT INTO sessions_v2
+    SELECT session_id, worktree_id, agent_kind, agent_name, initial_origin, detection_key,
+           started_ms, ended_ms, end_cause
+    FROM sessions;
+DROP TABLE sessions;
+ALTER TABLE sessions_v2 RENAME TO sessions;
+CREATE INDEX sessions_by_worktree ON sessions(worktree_id);
+",
 ];

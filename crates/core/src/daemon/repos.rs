@@ -543,6 +543,7 @@ impl Daemon {
         if views_changed {
             self.publish_observed_views(&batch, timings);
         }
+        self.end_absent_worktrees(&batch);
         // Only persisted events are published: they have their sequence.
         for (((event, seq), session), declared) in
             batch.events.iter().zip(seqs).zip(&attributed).zip(declared)
