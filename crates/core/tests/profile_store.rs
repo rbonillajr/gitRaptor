@@ -279,7 +279,7 @@ fn newer_schema_is_rejected_and_file_untouched() {
             found, supported, ..
         } => {
             assert_eq!(*found, 99);
-            assert_eq!(*supported, 4);
+            assert_eq!(*supported, 5);
         }
         other => panic!("unexpected {other}"),
     }
