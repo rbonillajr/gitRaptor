@@ -195,3 +195,29 @@ Aplicada desde la [Dev Spec de US-TMC-004](../../requirements/features/time-mach
 | **Puntos de caos de la captura**: las capturas que no son el previo garantizado (observación y hook) tienen sus puntos `capture:pending` y `capture:ref` (INF-TMC-001), y un corte en cualquiera de ellos no deja un punto restaurable | § 3, § 6.1 |
 
 **Validación añadida**: `apps/cli/tests/tm_interruption.rs` mata el daemon con `SIGKILL` en cada punto y comprueba con la huella de INF-GRP-001 que el repo queda intacto o recuperable, que el aviso llega una vez y solo al worktree que pasa la puerta, y que un arranque limpio no da aviso.
+
+## Enmienda (2026-10-21, fix/tm-prior-point-binding)
+
+**Decisión del orquestador (2026-10-04), validada por Arquitecto** (ajustes 1 a 7 del 2026-10-21). Origen: el [Brief de tm-prior-point-binding](../../dev-briefs/tm-prior-point-binding.md), D1 a D6. No cambia el esquema del oplog ni su cadena: no hay migración nueva y los hashes no cambian. El `status` sigue en `accepted`.
+
+| Cambio | Dónde |
+|---|---|
+| **Git crudo en la pila, destino** (sustituye el destino de la enmienda de US-TMC-004): una sola regla (`prior_point::before_event`) elige el punto "antes de un evento" para el timeline y para el undo. Recibe **todos** los puntos con marca del worktree, también los no disponibles o alterados. Entre los elegibles gana el mayor `(marca, seq)`; la disponibilidad (`disponible` y no alterado, y luego `store.verify` en el undo) se filtra después, sobre el resultado. Si no queda ninguno, gana un punto más antiguo o `target-unavailable` | § 4 |
+| **Elegible**: marca anterior al evento, de la generación actual (`seq >= suelo`), sin sombra y sin `mid_operation`. **Sombra**: para cada previo `P` (`hook-prior`, `guaranteed-prior`), `f_P` es el primer evento crudo del mismo worktree con `seq > marca de P` (∞ si no hay). Un punto `Q` posterior a `P` con `marca de Q < f_P` queda ensombrecido: su foto puede llevar ya el efecto del comando con una marca atrasada. Un previo no disponible sigue ensombreciendo. Un previo de una generación anterior no ensombrece a la actual (sus marcas son de otra numeración) | § 4 |
+| **Fallar cerrado = más antiguo**: ante la duda se elige un punto anterior. Restaurar de más se recupera (el undo toma antes su propio previo garantizado, NFR-01); una foto a mitad de operación o posterior al evento pierde el estado previo | § 4 |
+| **`mid_operation` en el `detail` de la entrada `complete`**: toda captura registra si había una operación de Git en curso (rebase, merge, cherry-pick, etc.) en alguno de sus worktrees al empezar o en el punto de validez. Una observación o un punto manual con `true` nunca es "antes de un evento"; un previo nunca se excluye por ello | § 2, § 4 |
+
+**Esquema completo del `detail` de la entrada `complete`** (JSON, dentro de la cadena del journal):
+
+| Campo | Tipo | Significado |
+|---|---|---|
+| `unique_size_bytes` | entero | Bytes nuevos que la captura añadió al almacén |
+| `exclusions` | lista de `{ path, reason }` | Rutas que quedaron fuera (tamaño, submódulos, huecos del historial) con su motivo |
+| `mid_operation` | booleano, opcional | Operación de Git en curso al inicio o al final de la captura. Ausente en las filas anteriores a esta enmienda, y se lee como `false` (el comportamiento de antes): tratarla como sucia dejaría el undo de los eventos viejos en `target-unavailable` |
+
+**Límites abiertos de NFR-01**:
+
+- **Eco tardío de un restore en la pila** (us_tmc_009, `a_restore_can_be_undone_back_to_the_exact_prior_state`): `external_events_in` liga el eco de una operación solo por la marca de su ancla, así que un evento que el motor persiste después del ancla queda como Git crudo y es la última operación de la pila. Esta enmienda no cambia el eco: solo hace que deshacer ese evento lleve al estado exacto anterior al restore (el ancla queda ensombrecida por su previo garantizado). Se corrige en otra rama, con un volcado de CI como prueba ([PR #256](https://github.com/rbonillajr/gitRaptor/pull/256)).
+- **Enlace por ventana, no por proceso**: los eventos del motor no guardan el `git` que los produjo. Un comando con gancho que no emite eventos deja sus observaciones posteriores ensombrecidas hasta el primer evento del worktree (gana el previo, más antiguo), y un `git` ajeno en el mismo worktree puede cerrar antes de tiempo la ventana de un previo. Se mejora cuando el motor guarde `(pid, start_us)` por evento.
+
+**Validación añadida**: `prior_point_tests.rs` (C1 a C5), `timeline_prior_point_tests.rs` (timeline y undo eligen lo mismo), `tests/tm_prior_point_undo.rs` (el undo de Git crudo toma su previo garantizado antes de restaurar) y `tests/tm_prior_point_condition.rs` (`mid_operation` a mitad de un rebase, en un worktree limpio y en una fila sin el campo).

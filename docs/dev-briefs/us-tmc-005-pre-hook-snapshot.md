@@ -171,8 +171,11 @@ Usa `ManualFloor`: el suelo de SEC-TMC-12 más la reserva del previo garantizado
 - A diferencia de la captura manual, **no** se rechaza `operation_in_progress`: un `rebase --autostash` ya tiene `rebase-merge/` en `pre-rebase`, y rechazarlo daría `failed` en todos.
 - Tampoco se rechaza un `index.lock` ajeno: el índice en disco es el anterior, y la guarda de D5 descarta la captura si cambia.
 - Se mantiene la verificación del worktree: `resolve_worktree`, `open_registered_worktree(common_dir, root)` (#223 I-03) y `expecting_root`. El `git` del hook está detenido esperando la respuesta, así que su estado es estable por construcción.
+- **Nota (2026-10-21, [`tm-prior-point-binding`](tm-prior-point-binding.md) D3):** sigue vigente. La captura registra ahora `mid_operation` y una observación a mitad de operación ya no es un punto "antes de un evento", pero un previo nunca se descarta por `mid_operation`: es la foto anterior por construcción.
 
 ### D10. Desempate en el timeline
+
+> **Sustituida (2026-10-21)** por [`tm-prior-point-binding`](tm-prior-point-binding.md) D1 y D5: el punto previo lo elige una sola regla (`prior_point::before_event`) para el timeline y el undo, y el orden por rango desaparece. El caso de esta decisión sigue cubierto: con la misma marca, un previo registrado después de una observación gana por `seq`, y además la ensombrece. `Points::new` ya no existe.
 
 En `Points::new`, se ordena por `(engine_mark, rango, seq)`, con rango 0 para la observación y la captura manual y rango 1 para `GuaranteedPrior` y `HookPrior`. Con la misma marca, gana el previo: es la misma foto y la promesa más fuerte. Esto toca `timeline.rs` (de la Time Machine).
 
