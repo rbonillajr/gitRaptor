@@ -156,9 +156,9 @@ orden de restricción: denegar > pedir confirmación > permitir
 
 > **Supuesto confirmado** (S-GRD-9, Rene Bonilla, 2026-10-04): mientras el modo "pedir confirmación" (BRD BR-13, Should) no esté disponible, una operación con "pedir confirmación" se trata como **denegar** (fail-safe).
 >
-> **Enmienda (Q-GRD-46, Rene Bonilla, 2026-10-17)**: sin cola, "pedir confirmación" deniega solo a los agentes (detectados o registrados), que reciben `confirmation-required` y deben pedírselo al desarrollador. El desarrollador que actúa directamente pasa, porque su acción es la confirmación. Residuo: un agente no detectado cuenta como persona (R-GRD-2).
+> **Enmienda (Q-GRD-46, Rene Bonilla, 2026-10-17)**: sin cola, "pedir confirmación" deniega solo a los agentes (detectados o registrados), que reciben `confirmation-required` y deben pedírselo al desarrollador. El desarrollador que actúa directamente pasa, con un aviso, porque su acción es la confirmación; su paso no es una denegación ni cuenta en el KPI. Si no se puede demostrar quién actúa (GitRaptor no está corriendo, no ofrece la capacidad o no pudo verificar el proceso), se deniega a todos. Residuo: un agente no detectado cuenta como persona (R-GRD-2); los agentes registrados sin proceso detectado, cuando exista US-GRP-009. Detalle en DS-US-GRD-007 D19.
 >
-> **Decisión del orquestador (2026-10-09), validada por el PO y el Arquitecto** (Q-GRD-39; pendiente de confirmación de Rene Bonilla): esa denegación es una denegación verificada: entra en el registro y cuenta en el KPI (BR-CONS-004). El motivo dice que la operación requiere confirmación humana y que la confirmación aún no está disponible.
+> **Decisión del orquestador (2026-10-09), validada por el PO y el Arquitecto** (Q-GRD-39; **ratificada por Rene Bonilla el 2026-10-20**): esa denegación es una denegación verificada: entra en el registro y cuenta en el KPI (BR-CONS-004). El motivo dice que la operación requiere confirmación humana y que la confirmación aún no está disponible.
 
 > **Decisión del orquestador (2026-10-09), validada por el PO y el Arquitecto** (Q-GRD-40): qué cuenta como cada operación. **Commit**: todo commit nuevo que llega a una rama, también por `cherry-pick`, `revert`, `am` o plumbing; no los commits de un rebase (permiso rebase) ni los que crea un merge o un pull (permiso merge). El commit que cierra una fusión con `git commit` cuenta como commit **y** merge, porque la resolución de conflictos es contenido nuevo. **Push** incluye el push forzado y el borrado de una rama remota: el forzado necesita además force-push permitido, y el borrado, borrar rama. **Borrar rama** incluye renombrar una rama, porque el nombre viejo desaparece.
 
@@ -683,7 +683,7 @@ Constraint: la rama base que usa el motor es siempre la misma que usa Guardrails
 
 > **Decisión** (Q-GRD-27, Rene Bonilla, 2026-10-04; revisión de arquitectura de Guardrails): el KPI "acciones peligrosas bloqueadas" cuenta las operaciones **denegadas, rechazadas y caducadas verificadas por GitRaptor**. Las entradas anotadas en **modo degradado**, cuando GitRaptor no pudo verificarlas, se muestran **aparte** y **no entran en el KPI por defecto**; el desarrollador puede incluirlas de forma explícita.
 
-> **Decisiones del orquestador (2026-10-09), validadas por el PO y el Arquitecto**: mientras no exista la cola, una operación con "pedir confirmación" se anota y cuenta como **denegada** (Q-GRD-39, pendiente de confirmación de Rene Bonilla). El aviso de una configuración ilegible o parcial **no** es una decisión: no se anota ni cuenta; la denegación que produce el mínimo forzado sí (Q-GRD-45).
+> **Decisiones del orquestador (2026-10-09), validadas por el PO y el Arquitecto**: mientras no exista la cola, una operación con "pedir confirmación" se anota y cuenta como **denegada** (Q-GRD-39, ratificada por Rene Bonilla el 2026-10-20; desde Q-GRD-46, solo la de un agente). El aviso de una configuración ilegible o parcial **no** es una decisión: no se anota ni cuenta; la denegación que produce el mínimo forzado sí (Q-GRD-45).
 
 **Aplicabilidad**: Cada decisión de denegar o pedir confirmación, y cada excepción consciente.
 
