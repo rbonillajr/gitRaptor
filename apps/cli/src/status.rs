@@ -11,8 +11,8 @@ use std::path::Path;
 use gitraptor_api::Untrusted;
 use gitraptor_api::messages::{
     BaseBranchView, BaseStatusView, ChangeAreaView, ChangeCounts, CommitCountView, DivergenceView,
-    FileChangeView, HeadView, RepoStateView, RepoView, SessionStateView, SessionView, Snapshot,
-    UnavailableReason, WorktreeStatus, WorktreeView,
+    FileChangeView, HeadView, OperationKindView, RepoStateView, RepoView, SessionStateView,
+    SessionView, Snapshot, UnavailableReason, WorktreeStatus, WorktreeView,
 };
 use gitraptor_api::timemachine::KeptTempsView;
 use serde::Serialize;
@@ -228,6 +228,21 @@ fn worktree_text(out: &mut String, w: &WorktreeView, base: &str, verbose: bool, 
             divergence,
         } => {
             let _ = writeln!(out, "    {}", head_text(head, tr));
+            if let Some(op) = w.operation {
+                let key = match op {
+                    OperationKindView::Rebase => "status.operation-rebase",
+                    OperationKindView::Merge => "status.operation-merge",
+                    OperationKindView::CherryPick => "status.operation-cherry-pick",
+                    OperationKindView::Revert => "status.operation-revert",
+                    OperationKindView::Am => "status.operation-am",
+                    OperationKindView::Bisect => "status.operation-bisect",
+                };
+                let _ = writeln!(out, "    {}", tr.t(key, &[]));
+            }
+            if w.unmerged_paths > 0 {
+                let line = tr.t("status.unmerged", &[("count", &w.unmerged_paths)]);
+                let _ = writeln!(out, "    {line}");
+            }
             let _ = writeln!(out, "    {}", divergence_text(divergence, base, tr));
             if counts.is_clean() {
                 let _ = writeln!(out, "    {}", tr.t("status.clean", &[]));
@@ -408,6 +423,16 @@ struct WorktreeJson {
     sessions: Vec<SessionJson>,
     /// More than one present session (BR-CONS-004): two agents share it.
     shared: bool,
+    /// The operation left half-way (`rebase`, `merge`, `cherry-pick`, `revert`, `am`, `bisect`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    operation: Option<String>,
+    /// Paths with unresolved conflicts; absent when there are none.
+    #[serde(skip_serializing_if = "is_zero")]
+    unmerged_paths: u32,
+}
+
+fn is_zero(n: &u32) -> bool {
+    *n == 0
 }
 
 #[derive(Serialize)]
@@ -500,6 +525,8 @@ fn worktree_json(w: &WorktreeView) -> WorktreeJson {
         ahead_behind: None,
         sessions: Vec::new(),
         shared: false,
+        operation: w.operation.as_ref().map(wire),
+        unmerged_paths: w.unmerged_paths,
     };
     match &w.status {
         WorktreeStatus::Unavailable { reason } => out.unavailable_reason = Some(wire(reason)),
@@ -671,6 +698,63 @@ mod tests {
             status(HooksLayer::of(gitraptor_api::guard::HooksStatus::Active)),
         );
         assert!(!text(&snapshot(), &info, false, Tr::current()).contains("no longer active"));
+    }
+
+    fn conflicted(operation: Option<OperationKindView>, unmerged_paths: u32) -> Snapshot {
+        let mut s = snapshot();
+        let w = &mut s.repos[0].worktrees[1];
+        w.operation = operation;
+        w.unmerged_paths = unmerged_paths;
+        s
+    }
+
+    #[test]
+    fn a_rebase_with_unmerged_paths_reads_in_en_and_es() {
+        let s = conflicted(Some(OperationKindView::Rebase), 2);
+        let en = text(&s, &SessionsInfo::default(), false, Tr { spanish: false });
+        assert!(en.contains("rebase in progress"), "{en}");
+        assert!(en.contains("2 unmerged paths"), "{en}");
+        let es = text(&s, &SessionsInfo::default(), false, Tr { spanish: true });
+        assert!(es.contains("rebase en curso"), "{es}");
+        assert!(es.contains("2 rutas sin fusionar"), "{es}");
+        let plain = text(
+            &snapshot(),
+            &SessionsInfo::default(),
+            false,
+            Tr { spanish: false },
+        );
+        assert!(
+            !plain.contains("in progress") && !plain.contains("unmerged"),
+            "{plain}"
+        );
+        for kind in [
+            OperationKindView::Merge,
+            OperationKindView::CherryPick,
+            OperationKindView::Revert,
+            OperationKindView::Am,
+            OperationKindView::Bisect,
+        ] {
+            let s = conflicted(Some(kind), 0);
+            for spanish in [false, true] {
+                let out = text(&s, &SessionsInfo::default(), false, Tr { spanish });
+                assert!(!out.contains("status.operation"), "{out}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_json_carries_operation_and_unmerged_paths() {
+        let s = conflicted(Some(OperationKindView::CherryPick), 3);
+        let v = serde_json::to_value(json(&s, &SessionsInfo::default())).unwrap();
+        let w = &v["repos"][0]["worktrees"][1];
+        assert_eq!(w["operation"], "cherry-pick", "{w}");
+        assert_eq!(w["unmerged_paths"], 3, "{w}");
+        let v = serde_json::to_value(json(&snapshot(), &SessionsInfo::default())).unwrap();
+        let w = &v["repos"][0]["worktrees"][1];
+        assert!(
+            w.get("operation").is_none() && w.get("unmerged_paths").is_none(),
+            "{w}"
+        );
     }
 
     #[test]
