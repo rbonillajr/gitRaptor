@@ -86,7 +86,7 @@ Esta historia entrega el camino genérico "Guardrails pide confirmación → `co
 
 ## Estado de la implementación
 
-Implementado en: PR #TBD
+Implementado en: PR #267
 
 - **Hecho:** el motivo `guardrails-confirmation-required` del canal, el código `confirmation-required` de la herramienta con sus textos en/es, el ejecutor que rechaza `Ask` antes de cualquier efecto y cierra el plan una vez, la vista `Ask` del gate real y las guardas contra la elicitation.
 - **Pendiente:** la aceptación de extremo a extremo con un `ask` real (US-GRD-007 produce el `ask` desde el permiso del equipo; US-MCP-009 aporta `safe_commit`).
