@@ -13,6 +13,7 @@ use gitraptor_api::messages::{
     EventsHistoryParams, GitEventView, RegistrationRegisterResult, RegistrationRejection,
     RegistrationWithdrawResult, RepoAddResult, RepoRetireResult,
 };
+use gitraptor_api::methods::{EventsGapsParams, GapView};
 
 use crate::observe::RepoRead;
 use crate::profile::AuditRow;
@@ -320,6 +321,12 @@ pub(crate) enum Control {
     EventHistory {
         params: EventsHistoryParams,
         reply: SyncSender<Result<Vec<GitEventView>, RepoCommandError>>,
+    },
+    /// One page of a repo's observation gaps (US-GRP-005).
+    #[cfg_attr(not(unix), allow(dead_code))]
+    GapHistory {
+        params: EventsGapsParams,
+        reply: SyncSender<Result<Vec<GapView>, RepoCommandError>>,
     },
     /// The raw Git events of a worktree, for the Time Machine's undo
     /// stack (US-TMC-004).
@@ -655,6 +662,23 @@ impl ShutdownHandle {
         let (reply, rx) = sync_channel(1);
         self.tx
             .send(Control::EventHistory { params, reply })
+            .map_err(|_| RepoCommandError::Internal)?;
+        rx.recv_timeout(AUDIT_TIMEOUT)
+            .map_err(|_| RepoCommandError::Internal)?
+    }
+}
+
+impl ShutdownHandle {
+    /// Reads one page of a repo's observation gaps through the loop, which
+    /// owns the stores (US-GRP-005).
+    #[cfg_attr(not(unix), allow(dead_code))]
+    pub(crate) fn gap_history(
+        &self,
+        params: EventsGapsParams,
+    ) -> Result<Vec<GapView>, RepoCommandError> {
+        let (reply, rx) = sync_channel(1);
+        self.tx
+            .send(Control::GapHistory { params, reply })
             .map_err(|_| RepoCommandError::Internal)?;
         rx.recv_timeout(AUDIT_TIMEOUT)
             .map_err(|_| RepoCommandError::Internal)?

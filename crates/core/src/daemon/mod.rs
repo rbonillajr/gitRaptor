@@ -22,6 +22,7 @@ mod authorship;
 mod availability;
 mod discovery;
 mod env;
+mod gaps;
 mod guard;
 mod lock;
 mod log;
@@ -524,11 +525,60 @@ impl Daemon {
         // (ADR-GRP-010 § 6), one thread per repo; the start does not count
         // for NFR-04.
         let entries = profile.repos()?;
-        let reads = if state == EngineState::Observing {
+        let mut reads = if state == EngineState::Observing {
             reconcile_all(&entries, &stores)
         } else {
             Vec::new()
         };
+        // Record the gap of this start, with what changed in it, before any repo is observed
+        // (US-GRP-005). A repo that cannot be read, or whose gap cannot be written, is not
+        // observed in this run: its "observed until" stays where it was.
+        let mut recorded = Vec::new();
+        let mut skipped = Vec::new();
+        for entry in &entries {
+            if entry.state != RepoState::Observed {
+                continue;
+            }
+            let Some(startup) = report.repos.iter().find(|r| r.repo_id == entry.repo_id) else {
+                continue;
+            };
+            let Some((_, store)) = stores.iter_mut().find(|(id, _)| *id == entry.repo_id) else {
+                continue;
+            };
+            let Some(plan) = gaps::startup_plan(
+                store,
+                startup.pending_gap.as_ref(),
+                &startup.store,
+                entry.added_ms,
+            ) else {
+                continue;
+            };
+            let read = reads
+                .iter()
+                .find(|(id, _)| *id == entry.repo_id)
+                .and_then(|(_, read)| read.as_ref());
+            match read {
+                Some(read) if gaps::record_gap(store, read, &plan, &logger, &entry.repo_id) => {
+                    recorded.push(entry.repo_id.clone());
+                }
+                Some(_) => skipped.push(entry.repo_id.clone()),
+                None => {
+                    logger.error(
+                        "startup_gap_failed",
+                        &[
+                            ("repo", Field::id(&entry.repo_id)),
+                            ("kind", "unreadable".into()),
+                        ],
+                    );
+                    skipped.push(entry.repo_id.clone());
+                }
+            }
+        }
+        for id in &skipped {
+            report.unavailable.push(id.clone());
+            stores.retain(|(store_id, _)| store_id != id);
+        }
+        reads.retain(|(id, _)| !skipped.contains(id));
         let mut repo_views = Vec::new();
         let mut divergence = BTreeMap::new();
         for entry in entries {
@@ -549,8 +599,9 @@ impl Daemon {
                 .iter()
                 .find(|(id, _)| *id == entry.repo_id)
                 .and_then(|(_, read)| read.as_ref());
-            if let (Some(read), Some((_, store))) =
-                (read, stores.iter_mut().find(|(id, _)| *id == entry.repo_id))
+            if !recorded.contains(&entry.repo_id)
+                && let (Some(read), Some((_, store))) =
+                    (read, stores.iter_mut().find(|(id, _)| *id == entry.repo_id))
             {
                 persist_read(store, read, &logger, &entry.repo_id);
             }
@@ -796,6 +847,10 @@ impl Daemon {
                 Ok(Control::EventHistory { params, reply }) => {
                     self.wake_for_request(&params.repo_id);
                     let _ = reply.send(self.event_history(&params));
+                }
+                Ok(Control::GapHistory { params, reply }) => {
+                    self.wake_for_request(&params.repo_id);
+                    let _ = reply.send(self.gap_history(&params));
                 }
                 Ok(Control::Guard {
                     common_dir,

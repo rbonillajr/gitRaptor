@@ -755,8 +755,8 @@ impl Daemon {
         else {
             return GuardLogReply::Failed;
         };
-        // The interval before this start is known now, while its gap reaches the store only
-        // with the observer's next batch: report it from the startup report.
+        // The gap of this start is already in the store when the daemon serves, so the block
+        // below only covers the interval and skips the duplicate by its `from_ms`.
         let pending = self
             .report
             .repos
