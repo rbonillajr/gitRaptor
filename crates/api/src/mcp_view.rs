@@ -103,10 +103,13 @@ pub enum McpToolError {
     WorktreeUntrusted,
     /// The cursor is not valid for this session.
     InvalidCursor,
+    /// Guardrails asks for the developer's confirmation; the decision is the
+    /// developer's. No params.
+    ConfirmationRequired,
 }
 
 impl McpToolError {
-    pub const ALL: [Self; 20] = [
+    pub const ALL: [Self; 21] = [
         Self::RepoNotEnabled,
         Self::NotInObservedWorktree,
         Self::RepoUnavailable,
@@ -127,6 +130,7 @@ impl McpToolError {
         Self::RepoOtherOwner,
         Self::WorktreeUntrusted,
         Self::InvalidCursor,
+        Self::ConfirmationRequired,
     ];
 
     pub const fn as_str(self) -> &'static str {
@@ -151,6 +155,7 @@ impl McpToolError {
             Self::RepoOtherOwner => "repo-other-owner",
             Self::WorktreeUntrusted => "worktree-untrusted",
             Self::InvalidCursor => "invalid-cursor",
+            Self::ConfirmationRequired => "confirmation-required",
         }
     }
 }
@@ -758,7 +763,8 @@ mod tests {
             | McpToolError::WorktreeMissing
             | McpToolError::RepoOtherOwner
             | McpToolError::WorktreeUntrusted
-            | McpToolError::InvalidCursor => McpToolError::ALL.contains(&c),
+            | McpToolError::InvalidCursor
+            | McpToolError::ConfirmationRequired => McpToolError::ALL.contains(&c),
         };
         assert!(McpToolError::ALL.into_iter().all(listed));
         for s in [
