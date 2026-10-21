@@ -9,7 +9,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{AgentKind, Untrusted};
+use crate::{AgentKind, Untrusted, UntrustedName};
 
 /// Effect of a decision, ordered by restriction: `deny > ask > allow`.
 #[derive(
@@ -583,6 +583,9 @@ pub struct PendingAction {
 pub enum PendingKind {
     /// Remove the hook layer (US-GRD-003).
     Uninstall,
+    /// Confirm the team baseline of the main branch (US-GRD-014). Only with
+    /// `guard.team-confirmation`: an older client could not decode it.
+    ConfirmTeam,
 }
 
 /// `guard.uninstall` parameters. Without `confirm`, announces the uninstall and opens the
@@ -634,6 +637,143 @@ pub struct GuardUninstallRefusedData {
     /// With `window-open`: how long until it closes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub remaining_ms: Option<u64>,
+}
+
+/// What waits for the developer's confirmation (`GuardStatus.confirm`): the client puts the
+/// text of the command. Absent with nothing to confirm and with an invalid team base.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ConfirmHint {
+    pub action: ConfirmAction,
+}
+
+/// The action that confirms (a closed code).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum ConfirmAction {
+    /// `guard.confirm` (`raptor guard confirm`).
+    GuardConfirm,
+}
+
+/// `guard.confirm` parameters. With `path` alone, the plan (nothing is written or announced);
+/// with `accept`, the fingerprint of the plan the developer saw; with `confirm`, the
+/// `action_id` of the window once it closed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GuardConfirmParams {
+    pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accept: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confirm: Option<String>,
+}
+
+/// `guard.confirm` result: an answer, never a JSON-RPC error (the refusal to an agent apart).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case", tag = "result")]
+pub enum GuardConfirmResult {
+    /// The plan and its fingerprint: nothing was written or announced.
+    Plan {
+        plan: ConfirmPlanView,
+        fingerprint: String,
+    },
+    /// Confirmed.
+    Applied { plan: ConfirmPlanView },
+    /// It relaxes: the window opened (announced in `GuardStatus.pending`).
+    Pending {
+        plan: ConfirmPlanView,
+        action: PendingAction,
+    },
+    /// What the main branch resolves already is the confirmed baseline, or only hardens it.
+    NothingToConfirm,
+    /// The team's `engine.baseBranch` is not a valid branch name: the team has to fix it.
+    BaseInvalid,
+    /// The team settings are ignored or partial.
+    FloorUnreadable,
+    /// The team settings relax something the plan cannot show.
+    UnshowableRelaxation,
+    /// The team baseline or the confirmation changed after the plan was shown: nothing written.
+    ChangedDuringWindow,
+    /// The repo is not observed by this profile.
+    NotObserved,
+}
+
+/// The plan of a confirmation, as shown to the developer.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ConfirmPlanView {
+    /// The copy of the main branch the team settings were read from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<ConfirmSourceView>,
+    pub base: BaseChangeView,
+    /// Each relaxation, rule by rule.
+    pub relaxations: Vec<RelaxationView>,
+    /// The confirmation waits for the cancellable window: the base changes or something
+    /// relaxes.
+    pub relaxes: bool,
+}
+
+/// Where the team settings of a plan come from.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ConfirmSourceView {
+    pub reference: UntrustedName,
+    pub commit: String,
+    /// The blob of `.gitraptor/settings.json`; `None` with no team settings.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub floor_blob: Option<String>,
+}
+
+/// The base branch before (confirmed, or `main` with nothing confirmed) and after.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BaseChangeView {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<UntrustedName>,
+    pub to: UntrustedName,
+}
+
+/// One key that relaxes, with its value before and after (the repo's text).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RelaxationView {
+    pub key: RelaxedKey,
+    pub before: Vec<Untrusted>,
+    pub after: Vec<Untrusted>,
+}
+
+/// The closed list of keys a plan shows as relaxations (the key path in the settings).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+pub enum RelaxedKey {
+    #[serde(rename = "permissions.allow")]
+    PermissionsAllow,
+    #[serde(rename = "permissions.ask")]
+    PermissionsAsk,
+    #[serde(rename = "permissions.deny")]
+    PermissionsDeny,
+    #[serde(rename = "permissions.disableSafeMinimum")]
+    DisableSafeMinimum,
+    #[serde(rename = "policies.protectedBranches")]
+    ProtectedBranches,
+    #[serde(rename = "policies.forbiddenPaths")]
+    ForbiddenPaths,
+    #[serde(rename = "policies.commitAuthorship")]
+    CommitAuthorship,
+}
+
+impl RelaxedKey {
+    /// The key path, as the settings document writes it.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::PermissionsAllow => "permissions.allow",
+            Self::PermissionsAsk => "permissions.ask",
+            Self::PermissionsDeny => "permissions.deny",
+            Self::DisableSafeMinimum => "permissions.disableSafeMinimum",
+            Self::ProtectedBranches => "policies.protectedBranches",
+            Self::ForbiddenPaths => "policies.forbiddenPaths",
+            Self::CommitAuthorship => "policies.commitAuthorship",
+        }
+    }
 }
 
 /// `guard.plan` result: everything the explanation needs (BR-AUTH-002).
@@ -719,6 +859,10 @@ pub struct GuardStatus {
     /// The safe minimum (BR-EDGE-001). Only with `guard.protection`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub minimum_set: Option<MinimumSet>,
+    /// Something waits for the developer's confirmation (US-GRD-014). Only with
+    /// `guard.team-confirmation`, never for `raptor-mcp`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confirm: Option<ConfirmHint>,
 }
 
 /// State of the hook layer of a repo (ADR-GRD-005 § 3).
@@ -801,6 +945,15 @@ pub enum Diagnostic {
     /// cleanup stopped after the key went back, or a folder this profile does not know).
     /// `raptor guard uninstall` removes what GitRaptor wrote in it. Only with `guard.recovery`.
     LeftoverFolder,
+    /// A base branch different from the confirmed one reached the main branch: both are
+    /// protected until the developer confirms it. Only with `guard.team-confirmation`.
+    BaseChangePending,
+    /// The main branch declares an invalid base branch over a confirmed one: the team has to fix
+    /// it. Only with `guard.team-confirmation`.
+    BaseChangePendingInvalid,
+    /// The team settings relax the confirmed ones: they only harden until the developer
+    /// confirms them. Only with `guard.team-confirmation`.
+    FloorRelaxPending,
 }
 
 /// The step of an install, upgrade, repair or uninstall that failed: a closed list, the only

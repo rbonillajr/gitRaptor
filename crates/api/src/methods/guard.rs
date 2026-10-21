@@ -27,6 +27,9 @@ pub const GUARD_UNINSTALL: &str = "guard.uninstall";
 /// Cancels the reserved action waiting in a repo (not reserved: it only keeps the protection).
 /// Never for `raptor-mcp`.
 pub const GUARD_CANCEL: &str = "guard.cancel";
+/// Confirms the team baseline of the main branch (US-GRD-014; reserved). Plan first, then the
+/// fingerprint the developer accepted and, when it relaxes, the window. Writes only the profile.
+pub const GUARD_CONFIRM: &str = "guard.confirm";
 
 /// `GuardPlan.prior` and the `chain-impossible` blocker (US-GRD-002). Without it the daemon
 /// leaves the field out and says `prior-hooks` instead.
@@ -95,6 +98,12 @@ pub const CAP_GUARD_LOG_LAYERS: Capability = Capability::new("guard.log-layers")
 /// counts them).
 pub const CAP_GUARD_PERMISSIONS: Capability = Capability::new("guard.permissions");
 
+/// The confirmation of the team baseline (US-GRD-014): the `base-change-pending`,
+/// `base-change-pending-invalid` and `floor-relax-pending` diagnostics, `GuardStatus.confirm`
+/// and `PendingKind::ConfirmTeam` in `GuardStatus.pending`. A connection without it gets the
+/// view of before. `raptor-mcp` may take it for the diagnostics, never `confirm`.
+pub const CAP_GUARD_TEAM_CONFIRMATION: Capability = Capability::new("guard.team-confirmation");
+
 pub(super) const GROUP: Group = Group {
     // None is offered to `raptor-mcp` (BR-AUTH-004): it neither installs nor
     // evaluates. A connection of protocol 5 or 6 sees none.
@@ -111,6 +120,7 @@ pub(super) const GROUP: Group = Group {
             .writes(RepoWrite::Guardrails)
             .since(CAPABILITIES_PROTOCOL),
         method(GUARD_CANCEL, false, false).since(CAPABILITIES_PROTOCOL),
+        method(GUARD_CONFIRM, true, false).since(CAPABILITIES_PROTOCOL),
     ],
     capabilities: &[
         CAP_GUARD_AUTHORSHIP,
@@ -125,6 +135,7 @@ pub(super) const GROUP: Group = Group {
         CAP_GUARD_LOG_LAYERS,
         CAP_GUARD_RECOVERY,
         CAP_GUARD_PERMISSIONS,
+        CAP_GUARD_TEAM_CONFIRMATION,
     ],
     error_block: Some(BLOCK),
     errors: &[GUARD_UNINSTALL_REFUSED, GUARD_FAILED],
