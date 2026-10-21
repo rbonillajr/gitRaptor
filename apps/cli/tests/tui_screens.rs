@@ -95,6 +95,8 @@ fn worktree(path: &str, main: bool, status: WorktreeStatus) -> WorktreeView {
         main,
         admin_name: None,
         status,
+        operation: None,
+        unmerged_paths: 0,
     }
 }
 
