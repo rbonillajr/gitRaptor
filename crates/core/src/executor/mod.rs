@@ -64,6 +64,10 @@ use crate::timemachine::protected::{
     StepOutput, StepScope,
 };
 
+/// Times the guaranteed prior is taken again when the intent's mark did not hold at its validity
+/// point, before the operation is refused as `git-busy`.
+const PRIOR_TRIES: u32 = 3;
+
 /// Whose work an operation affects (ADR-CKP-002 § 3), from the engine's events. Without a clear
 /// attribution it counts as another actor's.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -986,22 +990,45 @@ impl Executor {
         // The intent's mark, with every `git` that already ended in the
         // scope persisted by the engine: a raw `git` just before is never
         // taken for this operation's echo (US-TMC-004).
-        req.engine_mark = match (env.engine_mark)(&plan.repo.repo_id, &req.worktree_paths) {
-            Some(mark) => mark,
-            None => return refuse(&plan, RejectReason::GitBusy),
-        };
         req.confirmed = plan.challenge;
         req.binding = binding.clone();
         req.warnings = plan.warnings.iter().map(|w| format!("{w:?}")).collect();
-        let protected = ProtectedOperation {
-            oplog: &plan.repo.oplog,
-            snapshotter: Arc::clone(&plan.repo.snapshotter),
-            marks: env.marks,
-            procs: env.procs,
-            stopping: env.stopping,
-            deadline: env.prior_deadline,
+        // The prior confirms that mark at its validity point: an event the engine persisted, or
+        // a `git` it has not persisted yet, in between discards it. The mark is then taken again,
+        // up to `PRIOR_TRIES` times, and past them the step does not run (`git-busy`).
+        let mut tries = 0;
+        let ran = loop {
+            req.engine_mark = match (env.engine_mark)(&plan.repo.repo_id, &req.worktree_paths) {
+                Some(mark) => mark,
+                None => return refuse(&plan, RejectReason::GitBusy),
+            };
+            let protected = ProtectedOperation {
+                oplog: &plan.repo.oplog,
+                snapshotter: Arc::clone(&plan.repo.snapshotter),
+                marks: env.marks,
+                procs: env.procs,
+                stopping: env.stopping,
+                deadline: env.prior_deadline,
+                prior_valid: env.engine.as_ref().map(|engine| {
+                    crate::timemachine::engine::confirm_mark(
+                        Arc::clone(engine),
+                        &plan.repo.repo_id,
+                        &req.worktree_paths,
+                        req.engine_mark,
+                    )
+                }),
+            };
+            let ran = protected.run(&req, &mut step);
+            match &ran {
+                Err(e) if e.prior_discarded() => {
+                    tries += 1;
+                    if tries >= PRIOR_TRIES {
+                        return refuse(&plan, RejectReason::GitBusy);
+                    }
+                }
+                _ => break ran,
+            }
         };
-        let ran = protected.run(&req, &mut step);
         // The state the step left, while the repo is still held.
         if let Ok(o) = &ran {
             (env.after_step)(&plan.repo.repo_id, &req.worktree_paths, &o.operation_id);

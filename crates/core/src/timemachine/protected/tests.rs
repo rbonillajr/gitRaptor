@@ -156,6 +156,7 @@ fn run_with(
         procs: &SystemProcs,
         stopping,
         deadline,
+        prior_valid: None,
     }
     .run(&request(), step)
 }
@@ -427,6 +428,7 @@ fn children_of_the_step_are_marked() {
         procs: &SystemProcs,
         stopping: &f.stopping,
         deadline: DEFAULT_PRIOR_DEADLINE,
+        prior_valid: None,
     }
     .run(&req, &mut step)
     .unwrap();
