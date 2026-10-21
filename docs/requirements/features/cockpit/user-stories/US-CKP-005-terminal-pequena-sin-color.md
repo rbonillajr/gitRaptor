@@ -86,7 +86,7 @@ Entonces la TUI muestra las teclas disponibles en el panel actual, y cada acció
 
 ## Estado de la implementación (2026-10-21)
 
-Implementado en: PR #PR_N ([DS-US-CKP-005](../dev-specs/US-CKP-005-terminal-pequena-sin-color.md)).
+Implementado en: PR #273 ([DS-US-CKP-005](../dev-specs/US-CKP-005-terminal-pequena-sin-color.md)).
 
 Verificado en macOS: aviso de tamaño mínimo con la acción y ampliar sin reiniciar, plegado a ASCII de todo texto del catálogo (`Say` y `Glyphs::fold`), pantalla sin color con cada estado leído por símbolo y texto, leyenda de estados en la barra y en la ayuda, ayuda `?` por panel (con `?` y Esc), idioma por `--lang`/locale, y pruebas de proceso con el `raptor` real bajo `script`.
 

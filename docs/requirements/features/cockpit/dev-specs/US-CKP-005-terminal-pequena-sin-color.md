@@ -658,7 +658,7 @@ Corre `/security-review --scope devspec docs/requirements/features/cockpit/dev-s
 
 ## Estado de la implementación (2026-10-21)
 
-Implementado en: PR #PR_N. Hecho: T001 a T006 (T007 es este cierre). Los criterios congelados son de integración (`apps/cli/tests/tui_screens.rs`, `tui_accessibility.rs` y `tui_boundaries.rs`); las pruebas unitarias de módulo las escribió el implementador.
+Implementado en: PR #273. Hecho: T001 a T006 (T007 es este cierre). Los criterios congelados son de integración (`apps/cli/tests/tui_screens.rs`, `tui_accessibility.rs` y `tui_boundaries.rs`); las pruebas unitarias de módulo las escribió el implementador.
 
 - **Enmiendas a pruebas de criterio** (aprobadas por la persona, 2026-10-21): `tui_screens.rs` (la barra ASCII muestra `k`/`j`, no `Up`/`Down`; la ayuda de la flota no lista `↑ k`, porque el título de la flota lleva `↑↓` de ahead/behind) y `tui_accessibility.rs` (Esc seguido de `?` sin pausa es Alt-`?`; el test espera a que la TUI quede quieta entre teclas).
 - **Desviaciones**: `view::tests` sigue privado y `help.rs` usa un reexport `#[cfg(test)]`; la historia de galería de la ayuda pasa a 70×24; `observe_prompt`, `discovered_prompt` y `picker` son `pub(crate)` y reciben `Say`.
