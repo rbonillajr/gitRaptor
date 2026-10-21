@@ -86,6 +86,20 @@ pub struct NewCommitPaths {
     pub commits: usize,
 }
 
+/// How many commits an update brings (the facts the permission classifier reads).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct NewCommits {
+    /// New commits found.
+    pub commits: usize,
+    /// New commits with two or more parents.
+    pub merges: usize,
+    /// Some bound was reached or something could not be read: nothing can be said.
+    pub unverifiable: bool,
+}
+
+/// A commit of the walk and its parents.
+type WalkedCommit = (gix::ObjectId, Vec<gix::ObjectId>);
+
 /// Why the read stopped.
 struct Stop;
 
@@ -102,51 +116,13 @@ impl RepoReader {
         hide: Hide,
         limits: &PathLimits,
     ) -> Result<NewCommitPaths, ReadError> {
-        let id = |hex: &str| {
-            gix::ObjectId::from_hex(hex.as_bytes())
-                .map_err(|_| ReadError::InvalidInput("invalid object id".into()))
-        };
-        let new = id(new)?;
-        let mut hidden: Vec<gix::ObjectId> = Vec::new();
-        if let Some(old) = old {
-            hidden.push(id(old)?);
-        }
         let unverifiable = NewCommitPaths {
             unverifiable: true,
             ..NewCommitPaths::default()
         };
-        // An annotated tag (a push to a ref that is not a branch) is read as the commit it
-        // peels to; any other object is not something to read: it cannot be verified.
-        let new = match self.repo.try_find_object(new) {
-            Ok(Some(object)) if object.kind == gix::object::Kind::Commit => new,
-            Ok(Some(object)) if object.kind == gix::object::Kind::Tag => {
-                match object.peel_to_kind(gix::object::Kind::Commit) {
-                    Ok(commit) => commit.id,
-                    Err(_) => return Ok(unverifiable),
-                }
-            }
-            Ok(_) | Err(_) => return Ok(unverifiable),
+        let Some(commits) = self.new_commits(old, new, updated, hide, limits)? else {
+            return Ok(unverifiable);
         };
-        if hide != Hide::OldOnly {
-            hidden.extend(self.hidden_tips(updated, hide, limits.tips)?);
-        }
-        let walk = self
-            .repo
-            .rev_walk([new])
-            .with_hidden(hidden)
-            .use_commit_graph(false)
-            .all()
-            .map_err(|e| ReadError::Unavailable(format!("rev-walk: {e}")))?;
-        let mut commits = Vec::new();
-        for (n, info) in walk.enumerate() {
-            let Ok(info) = info else {
-                return Ok(unverifiable);
-            };
-            if n >= limits.visited || commits.len() >= limits.commits {
-                return Ok(unverifiable);
-            }
-            commits.push((info.id, info.parent_ids.to_vec()));
-        }
         let mut reader = Reader {
             repo: &self.repo,
             limits,
@@ -163,6 +139,85 @@ impl RepoReader {
             unverifiable: false,
             commits: commits.len(),
         })
+    }
+
+    /// How many commits the update `old → new` brings and how many of them have two or more
+    /// parents, without reading trees. The same walk, bounds and hiding as
+    /// [`Self::fresh_commit_paths`]; past the `commits` or `visited` bound, or with an object
+    /// that cannot be read, the answer is `unverifiable`, never "nothing new".
+    pub fn fresh_commits(
+        &self,
+        old: Option<&str>,
+        new: &str,
+        updated: &[&str],
+        hide: Hide,
+        limits: &PathLimits,
+    ) -> Result<NewCommits, ReadError> {
+        let Some(commits) = self.new_commits(old, new, updated, hide, limits)? else {
+            return Ok(NewCommits {
+                unverifiable: true,
+                ..NewCommits::default()
+            });
+        };
+        Ok(NewCommits {
+            commits: commits.len(),
+            merges: commits.iter().filter(|(_, p)| p.len() >= 2).count(),
+            unverifiable: false,
+        })
+    }
+
+    /// The new commits of `old → new` with their parents, newest first; `None` when a bound is
+    /// reached or something cannot be read (the caller reports it as unverifiable).
+    fn new_commits(
+        &self,
+        old: Option<&str>,
+        new: &str,
+        updated: &[&str],
+        hide: Hide,
+        limits: &PathLimits,
+    ) -> Result<Option<Vec<WalkedCommit>>, ReadError> {
+        let id = |hex: &str| {
+            gix::ObjectId::from_hex(hex.as_bytes())
+                .map_err(|_| ReadError::InvalidInput("invalid object id".into()))
+        };
+        let new = id(new)?;
+        let mut hidden: Vec<gix::ObjectId> = Vec::new();
+        if let Some(old) = old {
+            hidden.push(id(old)?);
+        }
+        // An annotated tag (a push to a ref that is not a branch) is read as the commit it
+        // peels to; any other object is not something to read: it cannot be verified.
+        let new = match self.repo.try_find_object(new) {
+            Ok(Some(object)) if object.kind == gix::object::Kind::Commit => new,
+            Ok(Some(object)) if object.kind == gix::object::Kind::Tag => {
+                match object.peel_to_kind(gix::object::Kind::Commit) {
+                    Ok(commit) => commit.id,
+                    Err(_) => return Ok(None),
+                }
+            }
+            Ok(_) | Err(_) => return Ok(None),
+        };
+        if hide != Hide::OldOnly {
+            hidden.extend(self.hidden_tips(updated, hide, limits.tips)?);
+        }
+        let walk = self
+            .repo
+            .rev_walk([new])
+            .with_hidden(hidden)
+            .use_commit_graph(false)
+            .all()
+            .map_err(|e| ReadError::Unavailable(format!("rev-walk: {e}")))?;
+        let mut commits = Vec::new();
+        for (n, info) in walk.enumerate() {
+            let Ok(info) = info else {
+                return Ok(None);
+            };
+            if n >= limits.visited || commits.len() >= limits.commits {
+                return Ok(None);
+            }
+            commits.push((info.id, info.parent_ids.to_vec()));
+        }
+        Ok(Some(commits))
     }
 
     /// The entries of the root tree of `commit` (an annotated tag is read as the commit it
