@@ -227,24 +227,7 @@ fn snapshot_refusal(err: &ClientError) -> ToolRefusal {
                 .clone()
                 .and_then(|d| serde_json::from_value::<RejectedData>(d).ok())
                 .map(|d| d.reason);
-            match reason {
-                Some(RejectReason::UnattributedWithoutCockpit) => McpToolError::Unattributed.into(),
-                Some(RejectReason::OperationInProgress) => {
-                    with(McpToolError::OperationInProgress, json!({"kind": "git"}))
-                }
-                Some(RejectReason::WriteInProgress) => {
-                    with(McpToolError::OperationInProgress, json!({"kind": "write"}))
-                }
-                Some(RejectReason::GitBusy) => McpToolError::GitBusy.into(),
-                Some(
-                    RejectReason::StateChanged
-                    | RejectReason::PlanUnknown
-                    | RejectReason::WarningsMismatch
-                    | RejectReason::RepoIdentityChanged,
-                ) => McpToolError::StateChanged.into(),
-                Some(RejectReason::DaemonStopping) => McpToolError::EngineUnavailable.into(),
-                _ => McpToolError::Internal.into(),
-            }
+            rejected_refusal(reason)
         }
         c if c == OPERATION_SNAPSHOT_QUOTA.code => ToolRefusal {
             code: McpToolError::QuotaExceeded,
@@ -259,6 +242,35 @@ fn snapshot_refusal(err: &ClientError) -> ToolRefusal {
         ),
         c if c == code::INVALID_PARAMS => McpToolError::InvalidText.into(),
         _ => refusal(err).into(),
+    }
+}
+
+/// The tool refusal for a plan the daemon rejected: the write table every write tool shares.
+fn rejected_refusal(reason: Option<RejectReason>) -> ToolRefusal {
+    let with = |code, params| ToolRefusal {
+        code,
+        params: Some(params),
+    };
+    match reason {
+        Some(RejectReason::UnattributedWithoutCockpit) => McpToolError::Unattributed.into(),
+        Some(RejectReason::OperationInProgress) => {
+            with(McpToolError::OperationInProgress, json!({"kind": "git"}))
+        }
+        Some(RejectReason::WriteInProgress) => {
+            with(McpToolError::OperationInProgress, json!({"kind": "write"}))
+        }
+        Some(RejectReason::GitBusy) => McpToolError::GitBusy.into(),
+        Some(RejectReason::GuardrailsConfirmationRequired) => {
+            McpToolError::ConfirmationRequired.into()
+        }
+        Some(
+            RejectReason::StateChanged
+            | RejectReason::PlanUnknown
+            | RejectReason::WarningsMismatch
+            | RejectReason::RepoIdentityChanged,
+        ) => McpToolError::StateChanged.into(),
+        Some(RejectReason::DaemonStopping) => McpToolError::EngineUnavailable.into(),
+        _ => McpToolError::Internal.into(),
     }
 }
 
@@ -347,3 +359,7 @@ mod tests {
 #[cfg(test)]
 #[path = "engine_status_tests.rs"]
 mod status_tests;
+
+#[cfg(test)]
+#[path = "engine_confirmation_tests.rs"]
+mod confirmation_tests;

@@ -1001,6 +1001,10 @@ pub enum RejectReason {
     /// The repo or worktree identity changed (M-05).
     RepoIdentityChanged,
     GuardrailsDenied,
+    /// The decision that counts asks for the developer's confirmation. Without the
+    /// confirmation queue it is applied as deny, and nothing ran. Additive: an
+    /// older client shows a generic rejection.
+    GuardrailsConfirmationRequired,
     /// The new path of a worktree is refused (H-02).
     NewPathRefused,
     /// Too many requests wait for this repo.

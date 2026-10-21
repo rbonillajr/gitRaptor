@@ -320,6 +320,14 @@ fn texts(code: McpToolError, lang: Lang, params: Option<&Value>) -> (&'static st
             "El cursor no es válido para esta sesión.",
             "Llama a status sin cursor y usa los que devuelve.",
         ),
+        (E::ConfirmationRequired, Lang::En) => (
+            "This action requires the developer's confirmation.",
+            "Tell the developer: the decision is theirs. Retrying gets the same answer.",
+        ),
+        (E::ConfirmationRequired, Lang::Es) => (
+            "Esta acción requiere confirmación del desarrollador.",
+            "Avisa al desarrollador: la decisión es suya. Reintentar da la misma respuesta.",
+        ),
     };
     (message, action.to_owned())
 }
@@ -336,6 +344,10 @@ fn wait_action(es: bool, wait: Option<u64>) -> String {
 #[cfg(test)]
 #[path = "messages_snapshot_tests.rs"]
 mod snapshot_tests;
+
+#[cfg(test)]
+#[path = "messages_confirmation_tests.rs"]
+mod confirmation_tests;
 
 #[cfg(test)]
 mod tests {
