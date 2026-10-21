@@ -44,6 +44,8 @@ pub struct Outbox {
     without_authorship: std::sync::atomic::AtomicBool,
     /// Without `observation.tiers` (see [`Outbox::set_without_tiers`]).
     without_tiers: std::sync::atomic::AtomicBool,
+    /// Without `observation.special-states` (see [`Outbox::set_without_special_states`]).
+    without_special_states: std::sync::atomic::AtomicBool,
     /// Without `discovery.events` (see [`Outbox::set_without_discovery`]).
     without_discovery: std::sync::atomic::AtomicBool,
     /// Without `guard.protection` (see [`Outbox::set_without_protection`]).
@@ -71,6 +73,7 @@ impl Outbox {
             without_activity: std::sync::atomic::AtomicBool::new(true),
             without_authorship: std::sync::atomic::AtomicBool::new(true),
             without_tiers: std::sync::atomic::AtomicBool::new(true),
+            without_special_states: std::sync::atomic::AtomicBool::new(true),
             without_discovery: std::sync::atomic::AtomicBool::new(true),
             without_protection: std::sync::atomic::AtomicBool::new(true),
             without_audit_outcomes: std::sync::atomic::AtomicBool::new(true),
@@ -96,6 +99,13 @@ impl Outbox {
     /// never reaches it.
     pub fn set_without_tiers(&self, without: bool) {
         self.without_tiers
+            .store(without, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// The connection lacks `observation.special-states`: `worktree.state` reaches it without
+    /// the operation in progress nor the unmerged paths, which it cannot read.
+    pub fn set_without_special_states(&self, without: bool) {
+        self.without_special_states
             .store(without, std::sync::atomic::Ordering::Relaxed);
     }
 
@@ -133,9 +143,13 @@ impl Outbox {
         if event.kind == gitraptor_api::event::GIT_EVENT {
             return self.shape_git_event(event);
         }
-        if !self
+        let without_activity = self
             .without_activity
-            .load(std::sync::atomic::Ordering::Relaxed)
+            .load(std::sync::atomic::Ordering::Relaxed);
+        let without_special_states = self
+            .without_special_states
+            .load(std::sync::atomic::Ordering::Relaxed);
+        if !(without_activity || without_special_states)
             || event.kind != gitraptor_api::event::WORKTREE_STATE
         {
             return std::borrow::Cow::Borrowed(event);
@@ -145,7 +159,12 @@ impl Outbox {
         ) else {
             return std::borrow::Cow::Borrowed(event);
         };
-        data.without_activity();
+        if without_activity {
+            data.without_activity();
+        }
+        if without_special_states {
+            data.without_special_states();
+        }
         let mut event = event.clone();
         event.data = serde_json::to_value(data).unwrap_or(serde_json::Value::Null);
         std::borrow::Cow::Owned(event)
@@ -707,6 +726,70 @@ mod tests {
                 _ => None,
             })
             .collect()
+    }
+
+    /// `observation.special-states`: a connection without it gets `worktree.state` without the
+    /// operation and the unmerged paths, and one with it gets them; neither filter hides the
+    /// other.
+    #[test]
+    fn worktree_state_without_special_states_has_no_operation() {
+        use gitraptor_api::event::{Event, WORKTREE_STATE};
+        use gitraptor_api::messages::{
+            ChangeCounts, DivergenceView, HeadView, OperationKindView, WorktreeStateData,
+            WorktreeStatus, WorktreeView,
+        };
+        let data = WorktreeStateData {
+            repo_id: "r1".into(),
+            worktrees: vec![WorktreeView {
+                path: gitraptor_api::Untrusted::new("/w"),
+                main: false,
+                admin_name: None,
+                status: WorktreeStatus::Ready {
+                    head: HeadView::Detached,
+                    counts: ChangeCounts::default(),
+                    changes: Vec::new(),
+                    divergence: DivergenceView::NoCommits,
+                },
+                last_activity_utc_ms: None,
+                last_activity_in_gap: false,
+                detached_at: Some("abc".into()),
+                operation: Some(OperationKindView::Rebase),
+                unmerged_paths: 2,
+            }],
+            fetched_utc_ms: None,
+        };
+        let event = Event {
+            seq: 1,
+            kind: WORKTREE_STATE.to_owned(),
+            version: 1,
+            wall_ms: 0,
+            timings: None,
+            data: serde_json::to_value(data).unwrap(),
+        };
+        let worktree = |out: &Outbox, event: &Event| out.shape(event).data["worktrees"][0].clone();
+
+        let out = Outbox::new(8);
+        let w = worktree(&out, &event);
+        assert!(
+            w.get("operation").is_none() && w.get("unmerged_paths").is_none(),
+            "{w}"
+        );
+        // Without the activity filter either, only the special states are gone.
+        out.set_without_activity(false);
+        let w = worktree(&out, &event);
+        assert!(
+            w.get("operation").is_none() && w.get("unmerged_paths").is_none(),
+            "{w}"
+        );
+        assert_eq!(w["detached_at"], "abc", "{w}");
+
+        // Accepting the capability keeps them, and the activity filter does not hide them.
+        out.set_without_special_states(false);
+        out.set_without_activity(true);
+        let w = worktree(&out, &event);
+        assert_eq!(w["operation"], "rebase", "{w}");
+        assert_eq!(w["unmerged_paths"], 2, "{w}");
+        assert!(w.get("detached_at").is_none(), "{w}");
     }
 
     /// DEP-CKP-6: snapshot at N, subscribe from N + 1, nothing lost or
