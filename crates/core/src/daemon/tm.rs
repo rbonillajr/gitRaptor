@@ -48,6 +48,9 @@ impl EngineLink for DaemonEngine {
     }
 
     fn settle(&self, repo_id: &str, worktrees: &[PathBuf], limit: Duration) -> Option<i64> {
+        // A dormant repo persists nothing until it wakes, so its refs would never match: wake it
+        // first (a no-op for an active one) and wait for its first batch within the limit.
+        self.handle.wake(repo_id, crate::watch::WakeCause::Sentinel);
         self.marks.settle(repo_id, worktrees, limit)
     }
 

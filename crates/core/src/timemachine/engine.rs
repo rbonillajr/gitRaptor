@@ -12,16 +12,26 @@
 //!   so the `HEAD` it read for its last persisted batch must be the one on disk too. Without a
 //!   reflog (`core.logAllRefUpdates=false`),
 //!   the fallback is time: no change in the repo's Git directory for [`SETTLE`].
+//! - **Calm, by refs**: the reflog is not enough. `git` appends to the `HEAD` reflog before it
+//!   renames the ref, and `branch -D` or the applier's `update-ref` do not write it at all. So the
+//!   repo is also calm only if its local branches, read from the common directory the daemon
+//!   registered, are those of the last batch the engine persisted with branches. The check is
+//!   per repo: another worktree's commits delay this one's calm. A repo whose refs cannot be read
+//!   is not calm; a repo whose engine never published branches falls back to time.
+//! - **Memory order**: the writer publishes a batch's mark and branches in one critical section,
+//!   and the reader compares the branches and reads the mark in that same section, so branches
+//!   that match batch N come with a mark of at least N's.
 //! - **Raw events** of a worktree, with the actor the engine attributed them to. Engine data is
 //!   read through the daemon, never copied (ADR-TMC-003).
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use gitraptor_api::messages::GitEventKind;
+use gitraptor_git::{ReaderOptions, RepoReader};
 
 use super::oplog::{Oplog, Requester};
 use crate::profile::{ProfileDirs, fsperm};
@@ -70,6 +80,19 @@ struct RepoMark {
     head_logs: Mutex<HashMap<PathBuf, u64>>,
     /// Each worktree's `HEAD` as its task read it for the last persisted batch.
     heads: Mutex<HashMap<PathBuf, Vec<u8>>>,
+    /// The last batch that carried the repo's local branches; `None` until the engine publishes
+    /// one. Its sequence lives here with the branches so a reader that sees them sees it too.
+    persisted: Mutex<Option<Persisted>>,
+}
+
+/// A persisted batch as the refs barrier compares it.
+#[derive(Debug)]
+struct Persisted {
+    seq: i64,
+    /// The common directory the daemon registered: the refs are read there, never through a
+    /// worktree's `.git`.
+    common_dir: PathBuf,
+    branches: BTreeMap<String, String>,
 }
 
 /// Marks and Git directory activity per repo. The daemon loop sets marks and reflog sizes after
@@ -91,16 +114,23 @@ impl RepoMarks {
     }
 
     /// The engine persisted a batch up to `seq`, read with these local branches of the repo whose
-    /// common directory is `common_dir`.
-    // Stub: the refs barrier is not wired yet; only the mark moves.
+    /// common directory is `common_dir`. The mark and the branches are published in one critical
+    /// section: a calm that sees these branches returns a mark of at least `seq`.
     pub fn set_persisted(
         &self,
         repo_id: &str,
         seq: i64,
-        _common_dir: &Path,
-        _branches: std::collections::BTreeMap<String, String>,
+        common_dir: &Path,
+        branches: BTreeMap<String, String>,
     ) {
-        self.set_seq(repo_id, seq);
+        let mark = self.get(repo_id);
+        let mut persisted = mark.persisted.lock().unwrap_or_else(|e| e.into_inner());
+        mark.seq.fetch_max(seq, Ordering::AcqRel);
+        *persisted = Some(Persisted {
+            seq,
+            common_dir: common_dir.to_path_buf(),
+            branches,
+        });
     }
 
     pub fn seq(&self, repo_id: &str) -> i64 {
@@ -187,26 +217,48 @@ impl RepoMarks {
             return false;
         }
         let on_disk = head_log_len(&git_dir);
-        // A repo never touched is quiet: on Windows the clock counts from this process's first
-        // reading, so "long ago" cannot be told from the time alone (XP-02).
-        let quiet = || {
-            let touched = self.touched(repo_id);
-            let settle_ns = u64::try_from(SETTLE.as_nanos()).unwrap_or(u64::MAX);
-            touched == 0
-                || gitraptor_api::clock::monotonic_ns().saturating_sub(touched) >= settle_ns
-        };
         match self.head_log(repo_id, worktree) {
             Some(persisted) if on_disk > 0 => persisted == on_disk,
-            _ => quiet(),
+            _ => self.quiet(repo_id),
         }
     }
 
-    /// Waits until every worktree is calm, up to `limit`; the mark then.
+    /// No change in the repo's Git directory for [`SETTLE`]. A repo never touched is quiet: on
+    /// Windows the clock counts from this process's first reading, so "long ago" cannot be told
+    /// from the time alone (XP-02).
+    fn quiet(&self, repo_id: &str) -> bool {
+        let touched = self.touched(repo_id);
+        let settle_ns = u64::try_from(SETTLE.as_nanos()).unwrap_or(u64::MAX);
+        touched == 0 || gitraptor_api::clock::monotonic_ns().saturating_sub(touched) >= settle_ns
+    }
+
+    /// The repo's refs barrier: the mark, if the local branches on disk are those of the last
+    /// persisted batch (see the module docs). Without a published batch, the time rule. A repo
+    /// whose refs cannot be read is not calm.
+    fn refs_calm(&self, repo_id: &str) -> Option<i64> {
+        let mark = self.get(repo_id);
+        // The branches are compared and the mark read under the lock the writer publishes both
+        // with, so the mark returned covers the batch whose branches matched.
+        let persisted = mark.persisted.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(p) = persisted.as_ref() else {
+            return self
+                .quiet(repo_id)
+                .then(|| mark.seq.load(Ordering::Acquire));
+        };
+        let reader = RepoReader::open(&p.common_dir, &ReaderOptions::default()).ok()?;
+        let on_disk = crate::watch::read_local_branches(&reader).ok()?;
+        (on_disk == p.branches).then(|| p.seq.max(mark.seq.load(Ordering::Acquire)))
+    }
+
+    /// Waits until every worktree is calm and the repo's refs are those the engine persisted, up
+    /// to `limit`; the mark then. The refs are checked once per poll, for the whole repo.
     pub fn settle(&self, repo_id: &str, worktrees: &[PathBuf], limit: Duration) -> Option<i64> {
         let end = Instant::now() + limit;
         loop {
-            if worktrees.iter().all(|w| self.calm(repo_id, w)) {
-                return Some(self.seq(repo_id));
+            if worktrees.iter().all(|w| self.calm(repo_id, w))
+                && let Some(seq) = self.refs_calm(repo_id)
+            {
+                return Some(seq);
             }
             if Instant::now() + CALM_POLL > end {
                 return None;
