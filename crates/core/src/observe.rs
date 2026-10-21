@@ -18,10 +18,13 @@ use std::sync::Mutex;
 use gitraptor_api::messages::{
     BaseBranchView, BaseStatusView, ChangeAreaView, ChangeCounts, ChangeKindView, CommitCountView,
     DivergenceView, FileChangeView, HeadView, MAX_DIVERGENCE_WALK, MAX_WORKTREE_CHANGE_BYTES,
-    MAX_WORKTREE_CHANGES, RepoRejection, RepoView, UnavailableReason, WorktreeStatus, WorktreeView,
+    MAX_WORKTREE_CHANGES, OperationKindView, RepoRejection, RepoView, UnavailableReason,
+    WorktreeStatus, WorktreeView,
 };
 use gitraptor_api::{Untrusted, UntrustedName};
-use gitraptor_git::{ChangeKind, Count, ReadError, ReaderOptions, RefName, RepoReader, Status};
+use gitraptor_git::{
+    ChangeKind, Count, InProgress, ReadError, ReaderOptions, RefName, RepoReader, Status,
+};
 use gitraptor_policy::team::{BaseBranch, BaseStatus, Confirmed, DEFAULT_BRANCH};
 use sha2::{Digest, Sha256};
 
@@ -672,7 +675,7 @@ pub fn read_worktree(
     main: bool,
     admin_name: Option<&str>,
 ) -> WorktreeRead {
-    let view = |status, detached_at| WorktreeView {
+    let view = |status, detached_at, operation, unmerged_paths| WorktreeView {
         path: Untrusted::from_os(path.as_os_str()),
         main,
         admin_name: admin_name.map(UntrustedName::new),
@@ -680,29 +683,33 @@ pub fn read_worktree(
         last_activity_utc_ms: None,
         last_activity_in_gap: false,
         detached_at,
+        operation,
+        unmerged_paths,
     };
-    let read = || -> Result<(HeadView, Option<String>, Status, bool), ReadError> {
-        let reader = open_worktree(common_dir, path, main, admin_name)?;
-        // A `git` creates its operation state before it detaches `HEAD` and reattaches `HEAD`
-        // before it removes the state: read the state on both sides, or an operation that ends
-        // during the status reads as a plain detached `HEAD`.
-        let started = reader.in_progress().is_some();
-        let head = reader.head()?;
-        let status = reader.status()?;
-        let in_progress = started || reader.in_progress().is_some();
-        let name = || UntrustedName::new(head.branch.clone().unwrap_or_default());
-        let head_view = if head.detached {
-            HeadView::Detached
-        } else if head.unborn {
-            HeadView::Unborn { name: name() }
-        } else {
-            HeadView::Branch { name: name() }
+    let read =
+        || -> Result<(HeadView, Option<String>, Status, Option<OperationKindView>), ReadError> {
+            let reader = open_worktree(common_dir, path, main, admin_name)?;
+            // A `git` creates its operation state before it detaches `HEAD` and reattaches `HEAD`
+            // before it removes the state: read the state on both sides, or an operation that ends
+            // during the status reads as a plain detached `HEAD`.
+            let started = reader.in_progress();
+            let head = reader.head()?;
+            let status = reader.status()?;
+            let operation = reader.in_progress().or(started).map(operation_kind);
+            let name = || UntrustedName::new(head.branch.clone().unwrap_or_default());
+            let head_view = if head.detached {
+                HeadView::Detached
+            } else if head.unborn {
+                HeadView::Unborn { name: name() }
+            } else {
+                HeadView::Branch { name: name() }
+            };
+            Ok((head_view, head.commit, status, operation))
         };
-        Ok((head_view, head.commit, status, in_progress))
-    };
     match read() {
-        Ok((head, head_commit, status, in_progress)) => {
+        Ok((head, head_commit, status, operation)) => {
             let (counts, changes) = changes(&status);
+            let unmerged_paths = unmerged_paths(&status);
             let detached_at = match head {
                 HeadView::Detached => head_commit.clone(),
                 _ => None,
@@ -718,9 +725,11 @@ pub fn read_worktree(
                         divergence: DivergenceView::Unreadable,
                     },
                     detached_at,
+                    operation,
+                    unmerged_paths,
                 ),
                 head_commit,
-                in_progress,
+                in_progress: operation.is_some(),
             }
         }
         Err(err) => WorktreeRead {
@@ -733,6 +742,8 @@ pub fn read_worktree(
                     },
                 },
                 None,
+                None,
+                0,
             ),
             head_commit: None,
             fingerprint: None,
@@ -787,6 +798,31 @@ fn changes(status: &Status) -> (ChangeCounts, Vec<FileChangeView>) {
         .collect();
     all.sort_by(|a, b| (a.path.raw(), a.area).cmp(&(b.path.raw(), b.area)));
     (counts, all)
+}
+
+/// Paths with unresolved conflicts, counted on the full status (not the bounded list).
+fn unmerged_paths(status: &Status) -> u32 {
+    let n = status
+        .unstaged
+        .iter()
+        .filter(|c| c.kind == ChangeKind::Conflicted)
+        .count();
+    u32::try_from(n).unwrap_or(u32::MAX)
+}
+
+/// The published kind of an operation. No catch-all arm: a new `InProgress` variant must
+/// decide its value here instead of being published under another operation's name.
+fn operation_kind(p: InProgress) -> OperationKindView {
+    match p {
+        InProgress::Rebase | InProgress::RebaseInteractive | InProgress::ApplyMailboxRebase => {
+            OperationKindView::Rebase
+        }
+        InProgress::Merge => OperationKindView::Merge,
+        InProgress::CherryPick | InProgress::CherryPickSequence => OperationKindView::CherryPick,
+        InProgress::Revert | InProgress::RevertSequence => OperationKindView::Revert,
+        InProgress::ApplyMailbox => OperationKindView::Am,
+        InProgress::Bisect => OperationKindView::Bisect,
+    }
 }
 
 /// The first changes that fit both per-worktree bounds.
@@ -847,6 +883,29 @@ mod tests {
             path: Untrusted::new(path),
             area: ChangeAreaView::Unstaged,
             kind: ChangeKindView::Modified,
+        }
+    }
+
+    #[test]
+    fn every_operation_has_its_kind() {
+        let all = [
+            (InProgress::ApplyMailbox, OperationKindView::Am),
+            (InProgress::ApplyMailboxRebase, OperationKindView::Rebase),
+            (InProgress::Bisect, OperationKindView::Bisect),
+            (InProgress::CherryPick, OperationKindView::CherryPick),
+            (
+                InProgress::CherryPickSequence,
+                OperationKindView::CherryPick,
+            ),
+            (InProgress::Merge, OperationKindView::Merge),
+            (InProgress::Rebase, OperationKindView::Rebase),
+            (InProgress::RebaseInteractive, OperationKindView::Rebase),
+            (InProgress::Revert, OperationKindView::Revert),
+            (InProgress::RevertSequence, OperationKindView::Revert),
+        ];
+        assert_eq!(all.len(), 10);
+        for (p, kind) in all {
+            assert_eq!(operation_kind(p), kind, "{p:?}");
         }
     }
 

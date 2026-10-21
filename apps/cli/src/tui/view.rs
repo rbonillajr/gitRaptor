@@ -574,6 +574,8 @@ mod tests {
             last_activity_utc_ms: None,
             last_activity_in_gap: false,
             detached_at: None,
+            operation: None,
+            unmerged_paths: 0,
             path: Untrusted::new(path),
             main,
             admin_name: None,

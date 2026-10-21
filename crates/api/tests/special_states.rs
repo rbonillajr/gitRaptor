@@ -110,7 +110,11 @@ fn without_special_states_drops_both_fields() {
     let mut data = state(worktree(Some(OperationKindView::Rebase), 2));
     data.without_special_states();
     assert_eq!(data, state(worktree(None, 0)));
-    assert!(json_of(&data)["worktrees"][0].get("unmerged_paths").is_none());
+    assert!(
+        json_of(&data)["worktrees"][0]
+            .get("unmerged_paths")
+            .is_none()
+    );
 
     let mut r = repo(worktree(Some(OperationKindView::Bisect), 1));
     r.without_special_states();

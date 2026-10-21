@@ -9,7 +9,12 @@ use crate::capability::Capability;
 /// without it never sees them.
 pub const CAP_OBSERVATION_TIERS: Capability = Capability::new("observation.tiers");
 
+/// `WorktreeView::operation` and `WorktreeView::unmerged_paths`. A connection
+/// without it never sees them.
+pub const CAP_OBSERVATION_SPECIAL_STATES: Capability =
+    Capability::new("observation.special-states");
+
 pub(super) const GROUP: Group = Group {
-    capabilities: &[CAP_OBSERVATION_TIERS],
+    capabilities: &[CAP_OBSERVATION_TIERS, CAP_OBSERVATION_SPECIAL_STATES],
     ..Group::new("observation")
 };
