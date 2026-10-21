@@ -111,9 +111,24 @@ pub fn status(repo_id: &str, common: &Path, store: &RepoStore) -> GuardStatus {
     let storage = reader
         .as_ref()
         .map_or(RefStorage::Files, |r| r.ref_storage());
-    let (bases, confirmed) = match &journal {
-        Some(j) => (j.protected_bases.clone(), j.confirms_base.is_some()),
-        None => (Vec::new(), false),
+    // What is confirmed comes from the store, never from the install journal (an immutable
+    // record): the confirmation of the team baseline moves it after the install.
+    let baseline = store.confirmed_team_baseline().ok().flatten();
+    let team = reader
+        .as_ref()
+        .and_then(|r| super::team_status::read(r, baseline.as_ref()).ok());
+    let (bases, confirmed, confirm) = match &journal {
+        Some(j) => {
+            let view = super::team_status::protected(
+                team.as_ref(),
+                reader.as_ref(),
+                baseline.as_ref(),
+                &j.protected_bases,
+            );
+            diagnostics.extend(view.diagnostics);
+            (view.bases, baseline.is_some(), view.confirm)
+        }
+        None => (Vec::new(), false, None),
     };
     let permission = permission(&keys);
     GuardStatus {
@@ -139,14 +154,12 @@ pub fn status(repo_id: &str, common: &Path, store: &RepoStore) -> GuardStatus {
         hooks: Some(health.hooks),
         diagnostics,
         minimum_set: Some(match &reader {
-            Some(reader) => minimum_set(
-                reader,
-                store.confirmed_team_baseline().ok().flatten().as_ref(),
-            ),
+            Some(reader) => minimum_set(reader, baseline.as_ref()),
             None => MinimumSet {
                 status: MinimumSetStatus::Active,
             },
         }),
+        confirm,
     }
 }
 
@@ -1169,6 +1182,8 @@ fn confirm(
             confirmed.as_ref(),
         )
         .map_err(|e| format!("confirm: {e:?}"))?;
+    // What the store holds now (an earlier confirmation of the team baseline is kept).
+    let confirmed = store.confirmed_team_baseline().ok().flatten().or(confirmed);
     publish(ctx.dirs, repo_id, &journal, registry, confirmed);
     Ok(())
 }
@@ -1188,6 +1203,9 @@ pub fn publish(
             journal: journal.clone(),
         },
     );
+    let confirmed_base = confirmed
+        .as_ref()
+        .map(|c| c.base_branch.as_str().to_owned());
     registry.set(
         repo_id,
         GuardEntry {
@@ -1201,7 +1219,7 @@ pub fn publish(
         &Snapshot {
             repo_id: repo_id.to_owned(),
             common_dir: journal.common_dir.clone(),
-            confirmed_base: journal.confirms_base.clone(),
+            confirmed_base,
             protected_bases: journal.protected_bases.clone(),
         },
     );

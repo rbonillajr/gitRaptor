@@ -148,9 +148,8 @@ pub fn check_with(common: &Path, journal: Option<&Journal>, key: Key) -> Health 
     if journal.template < TEMPLATE_VERSION || journal.upgrade.is_some() {
         diagnostics.push(Diagnostic::TemplateOutdated);
     }
-    if journal.confirms_base.is_none() {
-        diagnostics.push(Diagnostic::BaseUnconfirmed);
-    }
+    // The base branch diagnostics come from the team level and the store, not from the
+    // journal (`install::status`).
     Health {
         hooks: HooksLayer::of(HooksStatus::Active),
         diagnostics,

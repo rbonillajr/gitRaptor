@@ -968,6 +968,15 @@ fn degraded(args: &HookArgs, env: &HookEnv, full: &Operation, cause: Degraded) -
     let mut eval = gitraptor_policy::guard::Evaluation::allow();
     if let Some(op) = push_scope(full.clone(), args.template, false) {
         let mut bases = evaluate::default_bases(&reader);
+        // The team base too, as if nothing were confirmed: never less strict than the daemon,
+        // even with the profile lost. A team level that cannot be read adds nothing.
+        if let Ok(team) = super::team_status::read(&reader, None) {
+            for b in team.guarded_base_branches() {
+                if !bases.iter().any(|x| x == b.as_str()) {
+                    bases.push(b.as_str().to_owned());
+                }
+            }
+        }
         if let Some(snapshot) = read_snapshot(&args.state, &args.repo)
             && snapshot.common_dir == args.common.to_string_lossy()
         {
