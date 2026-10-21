@@ -87,7 +87,7 @@
 | [US-GRD-003](features/guardrails/user-stories/US-GRD-003-retirar-proteccion-sin-rastro.md) | El desarrollador retira la protección y el repo queda exactamente como estaba | Implementado en parte (`partially-implemented`) | #193, #201, #264 | — |
 | [US-GRD-004](features/guardrails/user-stories/US-GRD-004-aviso-proteccion-inactiva.md) | El desarrollador se entera de que la protección de un repo dejó de estar activa | Implementado en parte (`partially-implemented`) | #201 | — |
 | [US-GRD-005](features/guardrails/user-stories/US-GRD-005-registro-de-bloqueos.md) | El desarrollador cuenta las acciones peligrosas que Guardrails bloqueó en cada repo | Implementado en parte (`partially-implemented`) | #154, #168 | 3 |
-| [US-GRD-007](features/guardrails/user-stories/US-GRD-007-permisos-por-operacion.md) | El equipo decide qué operaciones de Git se permiten, se deniegan o piden confirmación | Implementado en parte (`partially-implemented`) | — | — |
+| [US-GRD-007](features/guardrails/user-stories/US-GRD-007-permisos-por-operacion.md) | El equipo decide qué operaciones de Git se permiten, se deniegan o piden confirmación | Implementado en parte (`partially-implemented`) | #268 | — |
 | [US-GRD-010](features/guardrails/user-stories/US-GRD-010-endurecer-sin-relajar.md) | El desarrollador endurece las reglas en su máquina sin poder relajar las del equipo | Implementado en parte (`partially-implemented`) | #217 | — |
 | [US-GRD-017](features/guardrails/user-stories/US-GRD-017-sin-snapshot-no-se-ejecuta.md) | Una operación destructiva permitida no se ejecuta sin un punto de recuperación | Implementado en parte (`partially-implemented`) | #260 | — |
 | [US-GRD-018](features/guardrails/user-stories/US-GRD-018-autoria-commits-persona-y-agente.md) | Cada commit entra a nombre de la persona y deja constancia del agente que lo hizo, con la exigencia que fija el equipo | Implementado en parte (`partially-implemented`) | #137, #141, #150, #152, #153, #154 | 3 |
@@ -286,7 +286,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-GRD-003](features/guardrails/user-stories/US-GRD-003-retirar-proteccion-sin-rastro.md) | El desarrollador retira la protección y el repo queda exactamente como estaba | Implementado en parte (`partially-implemented`) | #193, #201, #264 | — |
 | [US-GRD-004](features/guardrails/user-stories/US-GRD-004-aviso-proteccion-inactiva.md) | El desarrollador se entera de que la protección de un repo dejó de estar activa | Implementado en parte (`partially-implemented`) | #201 | — |
 | [US-GRD-005](features/guardrails/user-stories/US-GRD-005-registro-de-bloqueos.md) | El desarrollador cuenta las acciones peligrosas que Guardrails bloqueó en cada repo | Implementado en parte (`partially-implemented`) | #154, #168 | 3 |
-| [US-GRD-007](features/guardrails/user-stories/US-GRD-007-permisos-por-operacion.md) | El equipo decide qué operaciones de Git se permiten, se deniegan o piden confirmación | Implementado en parte (`partially-implemented`) | — | — |
+| [US-GRD-007](features/guardrails/user-stories/US-GRD-007-permisos-por-operacion.md) | El equipo decide qué operaciones de Git se permiten, se deniegan o piden confirmación | Implementado en parte (`partially-implemented`) | #268 | — |
 | [US-GRD-010](features/guardrails/user-stories/US-GRD-010-endurecer-sin-relajar.md) | El desarrollador endurece las reglas en su máquina sin poder relajar las del equipo | Implementado en parte (`partially-implemented`) | #217 | — |
 | [US-GRD-017](features/guardrails/user-stories/US-GRD-017-sin-snapshot-no-se-ejecuta.md) | Una operación destructiva permitida no se ejecuta sin un punto de recuperación | Implementado en parte (`partially-implemented`) | #260 | — |
 | [US-GRD-018](features/guardrails/user-stories/US-GRD-018-autoria-commits-persona-y-agente.md) | Cada commit entra a nombre de la persona y deja constancia del agente que lo hizo, con la exigencia que fija el equipo | Implementado en parte (`partially-implemented`) | #137, #141, #150, #152, #153, #154 | 3 |
@@ -437,7 +437,7 @@ El desarrollador cuenta las acciones peligrosas que Guardrails bloqueó en cada 
 - Entradas `request` y `exception*` (US-GRD-015 y US-GRD-006) y `protection-state` (US-GRD-003).
 - Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../architecture/xplat-pendientes.md)).
 
-### [US-GRD-007](features/guardrails/user-stories/US-GRD-007-permisos-por-operacion.md)
+### [US-GRD-007](features/guardrails/user-stories/US-GRD-007-permisos-por-operacion.md) — #268
 
 El equipo decide qué operaciones de Git se permiten, se deniegan o piden confirmación
 
@@ -547,7 +547,3 @@ Canal local de clientes y contrato de mensajes
 Arnés de caos y de garantías de los snapshots en los tres SO
 
 - *La ficha no lista los pendientes en "Estado de la implementación".*
-
-## Avisos
-
-- features/guardrails/user-stories/US-GRD-007-permisos-por-operacion.md: la sección "Estado de la implementación" no tiene la línea "Implementado en:"

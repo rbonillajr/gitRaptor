@@ -491,7 +491,7 @@ Ningún hueco bloquea la implementación de PR-A. Sin constitución en la cascad
 
 ## 10. Estado de la implementación
 
-**PR-A (2026-10-21, PR #PRNUM)**: T001 a T008 hechos; los 20 criterios del contrato `docs/dev-briefs/us-grd-007-operation-permissions.contract.json` en verde. PR-B (T010, T011) sigue pendiente de US-GRD-014.
+**PR-A (2026-10-21, PR #268)**: T001 a T008 hechos; los 20 criterios del contrato `docs/dev-briefs/us-grd-007-operation-permissions.contract.json` en verde. PR-B (T010, T011) sigue pendiente de US-GRD-014.
 
 Desviaciones y decisiones tomadas al implementar (Decisión del orquestador, 2026-10-21; revisadas por las lentes de arquitectura y seguridad):
 

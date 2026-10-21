@@ -113,6 +113,7 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 
 ## Estado de la implementación
 
-- **Implementado en: PR #PRNUM** (PR-A, 2026-10-21): escenarios 1 (salvo las filas que pasan a US-GRD-016), 2, 3 (enmendado por Q-GRD-46) y 6.
+Implementado en: PR #268 (PR-A, 2026-10-21). Cubre los escenarios 1 (salvo las filas que pasan a US-GRD-016), 2, 3 (enmendado por Q-GRD-46) y 6.
+
 - **Pendiente (PR-B)**: escenarios 4 y 5, que necesitan `raptor guard confirm` de US-GRD-014.
 - **Pendiente**: Linux y Windows reales (etapa de validación multiplataforma; Linux lo cubre el CI de ubuntu).
