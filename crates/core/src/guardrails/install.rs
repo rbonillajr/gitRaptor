@@ -138,9 +138,34 @@ pub fn status(repo_id: &str, common: &Path, store: &RepoStore) -> GuardStatus {
         pending: None,
         hooks: Some(health.hooks),
         diagnostics,
-        minimum_set: Some(MinimumSet {
-            status: MinimumSetStatus::Active,
+        minimum_set: Some(match &reader {
+            Some(reader) => minimum_set(
+                reader,
+                store.confirmed_team_baseline().ok().flatten().as_ref(),
+            ),
+            None => MinimumSet {
+                status: MinimumSetStatus::Active,
+            },
         }),
+    }
+}
+
+/// Whether the safe minimum applies (D18): `disabled-by-team` only when the floor in force is
+/// the one the developer confirmed, it reads whole and it disables the minimum. Anything that
+/// cannot be read leaves it active.
+pub fn minimum_set(
+    reader: &RepoReader,
+    confirmed: Option<&gitraptor_policy::team::Confirmed>,
+) -> MinimumSet {
+    let active = super::layers::LOADER
+        .load(reader, confirmed)
+        .map_or(true, |team| team.permissions.safe_minimum_active);
+    MinimumSet {
+        status: if active {
+            MinimumSetStatus::Active
+        } else {
+            MinimumSetStatus::DisabledByTeam
+        },
     }
 }
 

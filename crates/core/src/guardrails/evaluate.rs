@@ -7,17 +7,18 @@ use std::path::Path;
 
 use gitraptor_api::AgentKind;
 use gitraptor_api::guard::{
-    AuthorshipFacts, CommitStage, ConfigSource, ConfigStatus, Decision, Effect, EvaluateParams,
-    ExceptionState, Level, LogLayer, Operation, Reason, Rule,
+    AuthorshipFacts, Cause, CommitStage, ConfigSource, ConfigStatus, Decision, Effect,
+    EvaluateParams, ExceptionState, Level, LogLayer, Operation, Reason, Rule,
 };
 use gitraptor_git::{Ancestry, ReaderOptions, RefName, RepoReader};
 use gitraptor_policy::guard::authorship::Effective;
 use gitraptor_policy::guard::glob::{Kind, Pattern};
+use gitraptor_policy::guard::permissions::{Chain, Classified};
 use gitraptor_policy::guard::plan::Preset;
 use gitraptor_policy::guard::policies::{Policies, Rules, Scope};
 use gitraptor_policy::guard::{self as policy, Context, Evaluation, Facts, FastForward};
 use gitraptor_policy::layers::IgnoredRelaxation;
-use gitraptor_policy::team::{DEFAULT_BRANCH, resolve_main_branch};
+use gitraptor_policy::team::{DEFAULT_BRANCH, EffectivePermissions, resolve_main_branch};
 
 use super::registry::GuardRegistry;
 
@@ -93,6 +94,11 @@ pub struct CommitContext {
     pub facts: Option<gitraptor_api::guard::AuthorshipFacts>,
     /// The protected branches and forbidden paths in force (US-GRD-008).
     pub policies: Policies,
+    /// The permissions per operation in force (US-GRD-007); `None` evaluates none of them. The
+    /// safe minimum is active unless these say otherwise.
+    pub permissions: Option<EffectivePermissions>,
+    /// What each line of a `reference-transaction` is in the catalog, aligned with its updates.
+    pub classified: Vec<Classified>,
 }
 
 /// Evaluates with the repo's own facts and case folding: `core.ignoreCase` or a file system
@@ -135,11 +141,15 @@ fn evaluate_preset(
         authorship: commit.authorship,
         policies: commit.policies,
         layer,
-        minimum: true,
-        permissions: None,
+        minimum: commit
+            .permissions
+            .as_ref()
+            .is_none_or(|p| p.safe_minimum_active),
+        permissions: commit.permissions,
     };
     let mut facts = facts(reader, op);
     facts.authorship = commit.facts;
+    facts.classified = commit.classified;
     // The commits of the movement are read for the forbidden paths only when a rule governs the
     // actor; the protected configuration has its own read, for every agent's movement.
     facts.touched = match preset.and_then(|p| p.touched.clone()) {
@@ -168,13 +178,55 @@ pub fn decision_id() -> String {
     buf.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// The contract's decision for an evaluation (ADR-GRD-003 § 3). Without the queue, `ask` is
-/// applied as `deny` (S-GRD-9).
+/// Who an `ask` is applied to (Q-GRD-46): there is no queue to confirm it yet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AskedBy {
+    /// The daemon resolved an agent: the `ask` is applied as `deny`.
+    Agent,
+    /// The daemon resolved the person: the operation goes ahead with a notice.
+    Person,
+    /// Nobody proved who acts (the hook client deciding alone): as an agent, for everyone.
+    Unproved,
+}
+
+impl AskedBy {
+    /// The daemon's resolution of the actor.
+    pub fn of(actor: Option<AgentKind>) -> Self {
+        match actor {
+            Some(_) => Self::Agent,
+            None => Self::Person,
+        }
+    }
+}
+
+/// The contract's decision for an evaluation (ADR-GRD-003 § 3) when nobody proved who acts:
+/// `ask` is applied as `deny` (S-GRD-9) and each of its reasons says confirmation is not
+/// available.
 pub fn decision(eval: Evaluation) -> Decision {
-    let applied_effect = match eval.effect {
-        Effect::Ask => Effect::Deny,
-        other => other,
+    decision_for(eval, AskedBy::Unproved)
+}
+
+/// [`decision`] with the actor the daemon resolved: an agent's `ask` is denied with
+/// `ask-unavailable`; the person's goes ahead (`effect` stays `ask`) with every reason of the
+/// `ask` as a notice.
+pub fn decision_for(mut eval: Evaluation, asked_by: AskedBy) -> Decision {
+    let applied_effect = match (eval.effect, asked_by) {
+        (Effect::Ask, AskedBy::Person) => Effect::Allow,
+        (Effect::Ask, _) => Effect::Deny,
+        (other, _) => other,
     };
+    if eval.effect == Effect::Ask {
+        if applied_effect == Effect::Allow {
+            for reason in eval.reasons.clone() {
+                eval.notice(reason);
+            }
+        } else {
+            // Every reason kept produces the `ask` (BR-CALC-001).
+            for reason in &mut eval.reasons {
+                reason.cause = Some(Cause::AskUnavailable);
+            }
+        }
+    }
     // A warning only travels with a commit that goes ahead (D3).
     let notices = if applied_effect == Effect::Allow {
         eval.notices
@@ -281,6 +333,12 @@ pub struct Caller {
     /// The second line does not evaluate this commit: the same `git` already had its decision,
     /// or it is certainly a rebase, cherry-pick, revert or am (§ 5.3).
     pub second_line_skip: bool,
+    /// The connection was granted `guard.permissions`: the actor of every governed operation is
+    /// resolved, the permissions per operation apply and an `ask` depends on the actor.
+    pub permissions: bool,
+    /// The `git` processes above the client, nearest first, for a `reference-transaction`;
+    /// `None` when they were not read (nothing is proved: an unknown chain).
+    pub chain: Option<Chain>,
 }
 
 /// [`serve`] for a caller the channel resolved.
@@ -327,6 +385,8 @@ pub struct RuleSet {
     pub policies: bool,
     /// The second line does not evaluate this commit (§ 5.3).
     pub second_line_skip: bool,
+    /// The permissions per operation (`guard.permissions`).
+    pub permissions: bool,
 }
 
 impl RuleSet {
@@ -336,15 +396,18 @@ impl RuleSet {
             authorship: caller.authorship,
             policies: caller.policies,
             second_line_skip: caller.second_line_skip,
+            permissions: caller.permissions,
         }
     }
 
-    /// Every rule: a plan of the executor, and a transition its child was not registered for.
+    /// Every rule a plan of the executor applies, and a transition its child was not registered
+    /// for. The permissions per operation reach the executor with its own story (US-GRD-016).
     pub fn all() -> Self {
         Self {
             authorship: true,
             policies: true,
             second_line_skip: false,
+            permissions: false,
         }
     }
 }
@@ -384,13 +447,14 @@ pub fn serve_audited(registry: &GuardRegistry, params: &EvaluateParams, caller: 
         authorship: params.authorship.as_ref(),
         unregistered_bases: None,
     };
-    decide_op(registry, &input, &params.operation, None)
+    let chain = caller.chain.clone().unwrap_or_default();
+    decide_op(registry, &input, &params.operation, None, &chain)
 }
 
 /// The decision of `operation` (ADR-GRD-003 § 1 to § 4): the one function the hooks and the
 /// executor's plans share.
 pub fn decide(registry: &GuardRegistry, input: &DecideInput<'_>, operation: &Operation) -> Served {
-    decide_op(registry, input, operation, None)
+    decide_op(registry, input, operation, None, &Chain::default())
 }
 
 /// The decision of a plan: every operation decided with its preloaded facts, combined as the
@@ -407,7 +471,8 @@ pub fn decide_all(
     let mut authorship_policy = None;
     let mut ignored = Vec::new();
     for (i, op) in ops.iter().enumerate() {
-        let (evaluation, policy, relaxed) = evaluate_op(registry, input, op, preset.get(i));
+        let (evaluation, policy, relaxed) =
+            evaluate_op(registry, input, op, preset.get(i), &Chain::default());
         let Some(evaluation) = evaluation else {
             return plain(system_deny(Rule::InternalError));
         };
@@ -438,14 +503,21 @@ fn decide_op(
     input: &DecideInput<'_>,
     operation: &Operation,
     preset: Option<&Preset>,
+    chain: &Chain,
 ) -> Served {
-    let (evaluation, applied, ignored) = evaluate_op(registry, input, operation, preset);
+    let (evaluation, applied, ignored) = evaluate_op(registry, input, operation, preset, chain);
     let Some(evaluation) = evaluation else {
         return plain(system_deny(Rule::InternalError));
     };
-    let mut out = decision(evaluation);
+    // With the permissions the daemon resolved the actor: an `ask` depends on it (Q-GRD-46).
+    let mut out = if input.rules.permissions {
+        decision_for(evaluation, AskedBy::of(input.actor))
+    } else {
+        decision(evaluation)
+    };
     if !input.rules.authorship {
-        out.notices.clear();
+        out.notices
+            .retain(|n| super::permissions::is_permission(n.rule));
     }
     Served {
         decision: out,
@@ -474,6 +546,7 @@ fn evaluate_op(
     input: &DecideInput<'_>,
     operation: &Operation,
     preset: Option<&Preset>,
+    chain: &Chain,
 ) -> (
     Option<Evaluation>,
     Option<&'static str>,
@@ -507,59 +580,72 @@ fn evaluate_op(
         }
         _ => None,
     };
-    let mut ignored = Vec::new();
-    let worktree_reader = || {
-        input
-            .worktree
-            .and_then(|cwd| super::authorship::worktree_reader(cwd, common))
-    };
-    let commit = match operation {
+    let second_line_skipped = matches!(
+        operation,
         Operation::Commit {
-            stage: CommitStage::SecondLine,
-        } if input.rules.second_line_skip => CommitContext::default(),
-        Operation::Commit { .. } if input.rules.authorship => {
-            let worktree = worktree_reader();
-            CommitContext {
-                actor: input.actor,
-                authorship: super::authorship::policy_for(
-                    worktree.as_ref().unwrap_or(&reader),
-                    confirmed.as_ref(),
-                    registry.profile().as_ref(),
-                    repo_id,
-                ),
-                facts: input.authorship.cloned(),
-                policies: Policies::default(),
-            }
+            stage: CommitStage::SecondLine
         }
-        Operation::RefTransaction { .. } | Operation::Push { .. } if input.rules.policies => {
-            let worktree = worktree_reader();
-            // One read of every level: the rules and the ignored relaxations come from it.
-            let mut policies = match super::layers::load(
-                worktree.as_ref().unwrap_or(&reader),
-                confirmed.as_ref(),
-                registry.profile().as_ref(),
-                repo_id,
-            ) {
-                Ok(layers) => {
-                    if input.actor.is_some() {
-                        ignored = layers.ignored();
-                    }
-                    layers.policies()
-                }
-                // Never "no rules": an agent's movement cannot be judged (SEC-GRD-17).
-                Err(_) => Policies::unreadable(),
-            };
-            if let Some(rules) = extra_rules {
-                policies.branches.push(rules);
-            }
-            CommitContext {
-                actor: input.actor,
-                policies,
-                ..CommitContext::default()
-            }
-        }
-        _ => CommitContext::default(),
+    ) && input.rules.second_line_skip;
+    let authorship = matches!(operation, Operation::Commit { .. })
+        && input.rules.authorship
+        && !second_line_skipped;
+    let policies = matches!(
+        operation,
+        Operation::RefTransaction { .. } | Operation::Push { .. }
+    ) && input.rules.policies;
+    let permissions = input.rules.permissions && !second_line_skipped;
+    // One read of every level for the whole evaluation: the permissions, the minimum, the rules,
+    // the authorship policy and the ignored relaxations all come from it.
+    let layers = (authorship || policies || permissions).then(|| {
+        let worktree = input
+            .worktree
+            .and_then(|cwd| super::authorship::worktree_reader(cwd, common));
+        super::layers::load(
+            worktree.as_ref().unwrap_or(&reader),
+            confirmed.as_ref(),
+            registry.profile().as_ref(),
+            repo_id,
+        )
+    });
+    let mut ignored = Vec::new();
+    let mut commit = CommitContext {
+        // The rules that tell an agent from the person; an `ask` reads the actor apart.
+        actor: (authorship || policies).then_some(input.actor).flatten(),
+        ..CommitContext::default()
     };
+    if authorship {
+        // What cannot be read leaves `agents-commit`, never less.
+        commit.authorship = match &layers {
+            Some(Ok(layers)) => layers.authorship(),
+            _ => Effective::default(),
+        };
+        commit.facts = input.authorship.cloned();
+    }
+    if policies {
+        let mut rules = match &layers {
+            Some(Ok(layers)) => {
+                if input.actor.is_some() {
+                    ignored = layers.ignored();
+                }
+                layers.policies()
+            }
+            // Never "no rules": an agent's movement cannot be judged (SEC-GRD-17).
+            _ => Policies::unreadable(),
+        };
+        if let Some(rules_of) = extra_rules {
+            rules.branches.push(rules_of);
+        }
+        commit.policies = rules;
+    }
+    if permissions {
+        // A team level that cannot be read adds nothing to the minimum, which stays active.
+        if let Some(Ok(layers)) = &layers {
+            let effective = layers.permissions();
+            commit.classified =
+                super::permissions::classified(&reader, operation, &effective, || chain.clone());
+            commit.permissions = Some(effective);
+        }
+    }
     let applied =
         (commit.actor.is_some() && commit.facts.is_some()).then(|| commit.authorship.policy.mode());
     let evaluation = evaluate_preset(
