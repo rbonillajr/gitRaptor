@@ -31,7 +31,7 @@ use gitraptor_api::messages::{GitEventDetails, GitEventKind};
 use crate::observe::{RepoRead, WorktreeRead};
 use crate::profile::GapCause;
 
-pub use repo::{EventPlace, RefsView, classify};
+pub use repo::{EventPlace, RefsReadError, RefsView, classify};
 pub use sweep::Print;
 pub use watchers::WatchBackend;
 use watchers::Watchers;
@@ -169,6 +169,18 @@ pub struct GapMark {
     pub ended_ms: i64,
 }
 
+/// Whether the repo task could open the repo for this batch.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum RepoAccess {
+    /// Nothing changed about whether the repo opens.
+    #[default]
+    Unchanged,
+    /// The repo cannot be opened now; the batch carries nothing else.
+    Lost,
+    /// The repo opens again after having been lost.
+    Regained,
+}
+
 /// What one task observed in one window: for the daemon loop to persist
 /// and publish.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -191,6 +203,8 @@ pub struct ObservedBatch {
     /// batch (US-TMC-004, calm by state: its events are persisted with it).
     pub heads: Vec<(PathBuf, Vec<u8>)>,
     pub marks: Marks,
+    /// Whether the repo opened, was lost or came back (`Lost` never has `gone`).
+    pub access: RepoAccess,
 }
 
 impl ObservedBatch {
@@ -301,6 +315,8 @@ pub(crate) enum RepoMsg {
     Rescan(u64),
     /// Flush the window, answer with the view and end (going dormant).
     Sleep(Sender<RefsView>),
+    /// Test hook: the backup poll is due now.
+    PollNow,
     Stop,
 }
 
@@ -751,6 +767,13 @@ impl Shared {
         }
     }
 
+    /// Drops and adds the watches again: a repo that was moved away and back keeps no usable
+    /// watch on its old location. `false` if any failed.
+    fn rewatch(&self, roots: &[PathBuf]) -> bool {
+        self.unwatch(roots);
+        self.watch(roots)
+    }
+
     fn unwatch(&self, roots: &[PathBuf]) {
         let mut guard = self.watchers.lock().unwrap_or_else(|e| e.into_inner());
         #[cfg(target_os = "macos")]
@@ -907,6 +930,23 @@ impl Observer {
     /// Returns what its tasks start from (empty if the repo was already
     /// watched).
     pub fn watch_repo(&self, repo_id: &str, common_dir: &Path, read: &RepoRead) -> WatchStart {
+        self.watch_repo_from(repo_id, common_dir, Some(read))
+    }
+
+    /// Starts observing a repo whose common directory could not be read at
+    /// all (moved, deleted, unmounted): its task starts lost, with no base
+    /// view, and the first good read becomes that base (no event is
+    /// classified from it).
+    pub fn watch_lost_repo(&self, repo_id: &str, common_dir: &Path) {
+        let _ = self.watch_repo_from(repo_id, common_dir, None);
+    }
+
+    fn watch_repo_from(
+        &self,
+        repo_id: &str,
+        common_dir: &Path,
+        read: Option<&RepoRead>,
+    ) -> WatchStart {
         let common = crate::observe::canonical(common_dir);
         let (tx, rx) = channel();
         {
@@ -928,18 +968,26 @@ impl Observer {
         }
         // The common directory has a watch of its own unless a worktree
         // root already holds it (the main worktree's `.git`).
-        let roots: Vec<PathBuf> = read
-            .worktrees
+        let worktrees = read.map_or(&[][..], |r| r.worktrees.as_slice());
+        let roots: Vec<PathBuf> = worktrees
             .iter()
             .map(|w| PathBuf::from(w.view.path.raw()))
             .collect();
         if !roots.iter().any(|r| common.starts_with(r)) {
             self.shared.watch(std::slice::from_ref(&common));
         }
-        let refs = RefsView::read(&common);
-        let head_logs = refs.head_logs();
+        // No base view without a read: the first good one the task takes is the base.
+        let start = match (read, RefsView::read(&common)) {
+            (None, _) => repo::Start::Lost,
+            (Some(_), Ok(refs)) => repo::Start::Known(refs),
+            (Some(_), Err(_)) => repo::Start::Pending,
+        };
+        let head_logs = match &start {
+            repo::Start::Known(refs) => refs.head_logs(),
+            _ => Vec::new(),
+        };
         let mut heads = Vec::new();
-        for w in &read.worktrees {
+        for w in worktrees {
             if !w.view.status.is_watchable() {
                 continue;
             }
@@ -950,7 +998,7 @@ impl Observer {
         let repo_id = repo_id.to_owned();
         let _ = std::thread::Builder::new()
             .name("raptor-watch-repo".into())
-            .spawn(move || repo::run(shared, repo_id, common, refs, rx));
+            .spawn(move || repo::run(shared, repo_id, common, start, rx));
         WatchStart { head_logs, heads }
     }
 
@@ -1042,7 +1090,8 @@ impl Observer {
         // read now and the repo wakes at once, with a gap that covers it.
         let refs = match refs.filter(|_| flushed) {
             Some(refs) => refs,
-            None => RefsView::read(&repo.common),
+            // Unreadable now: an empty view (the wake's own read decides what it can say).
+            None => RefsView::read(&repo.common).unwrap_or_default(),
         };
         repo.asleep = Some(Asleep {
             refs,
@@ -1137,6 +1186,7 @@ impl Observer {
                 t_flush: t,
                 t_computed: t,
             },
+            access: RepoAccess::Unchanged,
         });
         // The repo task starts from the view it slept with and flushes at
         // once: what moved while dormant is classified now.
@@ -1174,7 +1224,7 @@ impl Observer {
         let refs = asleep.refs;
         let _ = std::thread::Builder::new()
             .name("raptor-watch-repo".into())
-            .spawn(move || repo::run(shared, id, common, refs, rx));
+            .spawn(move || repo::run(shared, id, common, repo::Start::Known(refs), rx));
         if let Some(hooks) = &self.shared.hooks {
             for w in &ready {
                 hooks.worktree_changed(repo_id, Path::new(w.view.path.raw()));
@@ -1285,6 +1335,17 @@ impl Observer {
     pub fn simulate_overflow(&self) {
         self.shared
             .route(gitraptor_api::clock::monotonic_ns(), Vec::new(), true);
+    }
+
+    /// Test hook: the backup poll of every repo task is due now, instead of in 30 s. Honored
+    /// by the tasks that are running; the daemon only calls it in debug builds
+    /// (`TierTestOp::PollNow`).
+    #[doc(hidden)]
+    pub fn simulate_poll(&self) {
+        let repos = self.shared.repos.read().unwrap_or_else(|e| e.into_inner());
+        for repo in repos.values() {
+            let _ = repo.tx.send(RepoMsg::PollNow);
+        }
     }
 
     /// The folders the stream of `root` leaves out (ADR-GRP-010, Enmienda 2026-10-08). Always

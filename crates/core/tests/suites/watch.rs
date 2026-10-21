@@ -510,7 +510,7 @@ fn events_while_git_finishes(f: &Fixture, wt: &Path, branch: &str, args: &[&str]
     use std::os::unix::fs::PermissionsExt;
 
     let common = observe::locate(&f.repo).unwrap();
-    let old = RefsView::read(&common);
+    let old = RefsView::read(&common).expect("the repo reads");
     let paused = f.root.join("paused");
     let go = f.root.join("go");
     let hook = common.join("hooks/reference-transaction");
@@ -540,7 +540,7 @@ fn events_while_git_finishes(f: &Fixture, wt: &Path, branch: &str, args: &[&str]
             );
             std::thread::sleep(Duration::from_millis(10));
         }
-        let new = RefsView::read(&common);
+        let new = RefsView::read(&common).expect("the repo reads");
         let in_progress = &new.worktrees[wt];
         // The race itself: the branch moved, the operation is not over.
         assert_eq!(in_progress.branch, None, "{in_progress:?}");
@@ -653,11 +653,11 @@ fn a_commit_after_the_view_is_named_once_by_the_next_window() {
         f.git_in(&wt, &["add", file]);
         f.git_in(&wt, &["commit", "-q", "-m", file]);
     };
-    let first = RefsView::read(&common);
+    let first = RefsView::read(&common).expect("the repo reads");
     commit("a.txt");
-    let second = RefsView::read(&common);
+    let second = RefsView::read(&common).expect("the repo reads");
     commit("b.txt");
-    let third = RefsView::read(&common);
+    let third = RefsView::read(&common).expect("the repo reads");
     let named: Vec<_> = [(&first, &second), (&second, &third)]
         .iter()
         .flat_map(|(old, new)| classify(&common, old, new, (0, 0)))

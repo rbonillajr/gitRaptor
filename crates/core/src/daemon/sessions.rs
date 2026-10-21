@@ -213,7 +213,12 @@ impl Daemon {
 
     /// Starts detecting in a repo and closes, as ended during a gap, the
     /// sessions whose process died while the repo was not observed.
-    pub(super) fn detect_repo(&mut self, repo_id: &str, common_dir: &Path, read: &RepoRead) {
+    pub(super) fn detect_repo(
+        &mut self,
+        repo_id: &str,
+        common_dir: &Path,
+        read: Option<&RepoRead>,
+    ) {
         let Some(detector) = &self.detector else {
             return;
         };
@@ -233,10 +238,13 @@ impl Daemon {
             })
             .collect();
         let worktrees = read
-            .worktrees
-            .iter()
-            .map(|w| PathBuf::from(w.view.path.raw()))
-            .collect();
+            .map(|r| {
+                r.worktrees
+                    .iter()
+                    .map(|w| PathBuf::from(w.view.path.raw()))
+                    .collect()
+            })
+            .unwrap_or_default();
         let common = crate::observe::canonical(common_dir);
         let dead = detector.watch_repo(repo_id, &common, worktrees, open);
         // Registered sessions continue: present until withdrawn (Q41). Their

@@ -19,6 +19,7 @@
 //! engine store cannot be opened still recovers its oplog (Q26).
 
 mod authorship;
+mod availability;
 mod discovery;
 mod env;
 mod guard;
@@ -531,7 +532,13 @@ impl Daemon {
         let mut repo_views = Vec::new();
         let mut divergence = BTreeMap::new();
         for entry in entries {
-            let state = if report.unavailable.contains(&entry.repo_id) {
+            // A repo whose directory did not read (moved, deleted, unmounted) is not "observed
+            // with no worktrees": it is unavailable until its task reads it again.
+            let unreadable = entry.state == RepoState::Observed
+                && reads
+                    .iter()
+                    .any(|(id, read)| *id == entry.repo_id && read.is_none());
+            let state = if report.unavailable.contains(&entry.repo_id) || unreadable {
                 RepoStateView::Unavailable
             } else if entry.state == RepoState::Observed {
                 RepoStateView::Observed
@@ -641,11 +648,11 @@ impl Daemon {
         // reads once more when its watch runs, so nothing in between is
         // lost (ADR-GRP-010 § 6).
         for (repo_id, read) in &reads {
-            let (Some(read), Some(entry)) = (read, daemon.profile.repo(repo_id).ok().flatten())
-            else {
+            let Some(entry) = daemon.profile.repo(repo_id).ok().flatten() else {
                 continue;
             };
-            daemon.observe(repo_id, &entry.canonical_path, read);
+            // A repo that cannot be read is still watched, from a task that starts lost.
+            daemon.observe(repo_id, &entry.canonical_path, read.as_ref());
         }
         daemon.seed_tiers();
         // Logged once everything runs: observing, detecting sessions

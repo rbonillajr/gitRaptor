@@ -291,6 +291,7 @@ mod activity {
             head_logs: Vec::new(),
             heads: Vec::new(),
             marks: Marks::default(),
+            access: gitraptor_core::watch::RepoAccess::default(),
         }
     }
 
