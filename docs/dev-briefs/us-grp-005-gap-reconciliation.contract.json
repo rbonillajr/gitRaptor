@@ -1,0 +1,195 @@
+{
+  "source": {
+    "kind": "devspec",
+    "ref": "docs/requirements/features/motor-local/dev-specs/US-GRP-005-dev-spec.md"
+  },
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "criteria": [
+    {
+      "id": "GAP-RECONCILE",
+      "statement": "US-GRP-005 esc. 1: tras un hueco con sesión registrada, los 2 commits de una cadena continua y el branch-create de hotfix salen sin atribuir (sin sesión) con el mismo gap_id, events.gaps lo lista daemon-down-during-session y last_activity_in_gap es true",
+      "verify": "cargo test -p gitraptor-core --test us_grp_005 the_commits_of_a_gap_are_reconciled_unattributed -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_005.rs"
+      ]
+    },
+    {
+      "id": "GAP-LISTED",
+      "statement": "US-GRP-005 esc. 2: una parada por comando sin cambios deja un hueco daemon-stopped con started<=ended y sin eventos con su gap_id",
+      "verify": "cargo test -p gitraptor-core --test us_grp_005 the_gap_is_listed_in_the_repo_history -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_005.rs"
+      ]
+    },
+    {
+      "id": "GAP-STOP-SESSION",
+      "statement": "Una parada por comando con sesión registrada marca during_session=true en el hueco",
+      "verify": "cargo test -p gitraptor-core --test us_grp_005 a_stop_command_during_a_session_marks_the_gap -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_005.rs"
+      ]
+    },
+    {
+      "id": "GAP-COLLAPSE",
+      "statement": "Un reflog que no llega a la punta vieja se reduce a un branch-update (de la punta vieja a la nueva) y ningún commit; nunca una lista parcial",
+      "verify": "cargo test -p gitraptor-core --test us_grp_005 a_reflog_that_does_not_reach_the_old_tip_collapses_into_one_branch_update -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_005.rs"
+      ]
+    },
+    {
+      "id": "GAP-CORRUPT",
+      "statement": "Un almacén corrupto abre un hueco store-corrupt desde added_ms, sin eventos, y escribe el último estado conocido",
+      "verify": "cargo test -p gitraptor-core --test us_grp_005 a_corrupt_store_records_a_store_corrupt_gap_from_the_add_date -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_005.rs"
+      ]
+    },
+    {
+      "id": "GAP-UNREADABLE",
+      "statement": "Un repo ilegible al rearrancar sale unavailable, no escribe hueco y su observed_until no se mueve mientras el observed_until de un segundo repo legible avanza dos veces (D8, D1)",
+      "verify": "cargo test -p gitraptor-core --test us_grp_005 an_unreadable_repo_is_not_observed_and_keeps_its_mark -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_005.rs"
+      ]
+    },
+    {
+      "id": "GAP-INTACT",
+      "statement": "La reconciliación del hueco no escribe nada en el repo observado (assert_intact, BR-CONS-001)",
+      "verify": "cargo test -p gitraptor-core --test us_grp_005 the_gap_reconciliation_writes_nothing_in_the_repo -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_005.rs"
+      ]
+    },
+    {
+      "id": "GAP-API-ERRORS",
+      "statement": "events.gaps rechaza con -32602 un id inválido y con repo_command_error un id válido sin repo",
+      "verify": "cargo test -p gitraptor-core --test us_grp_005 events_gaps_rejects_an_invalid_or_unknown_repo -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_005.rs"
+      ]
+    },
+    {
+      "id": "CLS-CHAIN",
+      "statement": "classify_gap da un evento por entrada del reflog solo con la cadena continua",
+      "verify": "cargo test -p gitraptor-core --test gap_classify a_continuous_chain_gives_one_event_per_reflog_entry -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/gap_classify.rs"
+      ]
+    },
+    {
+      "id": "CLS-NOTIP",
+      "statement": "Si la cadena no llega a la punta guardada, un solo branch-update",
+      "verify": "cargo test -p gitraptor-core --test gap_classify a_chain_that_does_not_reach_the_old_tip_collapses -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/gap_classify.rs"
+      ]
+    },
+    {
+      "id": "CLS-MIDDLE",
+      "statement": "Una entrada del medio borrada (git reflog delete) rompe la continuidad y colapsa (guard ⛔3.1)",
+      "verify": "cargo test -p gitraptor-core --test gap_classify a_chain_with_a_missing_middle_entry_collapses -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/gap_classify.rs"
+      ]
+    },
+    {
+      "id": "CLS-64",
+      "statement": "Más de 64 entradas colapsan",
+      "verify": "cargo test -p gitraptor-core --test gap_classify more_than_64_entries_collapse -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/gap_classify.rs"
+      ]
+    },
+    {
+      "id": "CLS-CREATE",
+      "statement": "Una rama creada en el hueco es un branch-create con su punta",
+      "verify": "cargo test -p gitraptor-core --test gap_classify a_branch_created_in_the_gap_is_one_branch_create_with_its_tip -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/gap_classify.rs"
+      ]
+    },
+    {
+      "id": "CLS-DELETE",
+      "statement": "Una rama borrada en el hueco es un branch-delete",
+      "verify": "cargo test -p gitraptor-core --test gap_classify a_deleted_branch_is_one_branch_delete -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/gap_classify.rs"
+      ]
+    }
+  ],
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "docs/architecture/decisions/ADR-GRD-008*",
+      "crates/core/tests/us_grp_005.rs",
+      "crates/core/tests/gap_classify.rs"
+    ],
+    "allow_dependency_changes": false
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-api",
+      "gitraptor-core",
+      "gitraptor-cli"
+    ]
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 900000,
+    "suiteTimeoutMs": 2400000
+  },
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "sonnet"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "sonnet"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  }
+}
