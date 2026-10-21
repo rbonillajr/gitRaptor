@@ -9,6 +9,7 @@ pub mod discovery;
 pub mod executor;
 pub mod guardrails;
 pub mod observe;
+pub mod predict;
 pub mod profile;
 pub mod repo_lock;
 pub mod resources;
