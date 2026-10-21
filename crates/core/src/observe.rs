@@ -11,9 +11,9 @@
 //! `engine.snapshot` ([`refresh_divergence`]), with the base branch as it is
 //! then and the `HEAD` commits of the last reconciliation.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use gitraptor_api::messages::{
     BaseBranchView, BaseStatusView, ChangeAreaView, ChangeCounts, ChangeKindView, CommitCountView,
@@ -137,6 +137,38 @@ pub struct WorktreeRead {
     /// An operation (rebase, merge…) is in progress: `HEAD` may be detached
     /// without the developer having switched branch.
     pub in_progress: bool,
+    /// Every uncommitted path, before the published list is cut: what the conflict predictor
+    /// overlaps. Empty when the worktree could not be read.
+    pub uncommitted: UncommittedPaths,
+}
+
+/// Most uncommitted paths of one worktree the predictor keeps for the overlap.
+pub const MAX_UNCOMMITTED_FOR_OVERLAP: usize = 10_000;
+
+/// The uncommitted paths of one worktree, every area, each once. Shared with `Arc` so a
+/// recompute hands it to every pair without copying it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct UncommittedPaths {
+    pub paths: Arc<BTreeSet<String>>,
+    /// More than the cap: only the first paths in byte order are kept.
+    pub partial: bool,
+}
+
+impl UncommittedPaths {
+    /// The first `max` distinct paths in byte order; `partial` when there were more.
+    pub fn from_paths(paths: impl IntoIterator<Item = String>, max: usize) -> Self {
+        let set: BTreeSet<String> = paths.into_iter().collect();
+        let partial = set.len() > max;
+        let set = if partial {
+            set.into_iter().take(max).collect()
+        } else {
+            set
+        };
+        Self {
+            paths: Arc::new(set),
+            partial,
+        }
+    }
 }
 
 impl WorktreeRead {
@@ -710,6 +742,10 @@ pub fn read_worktree(
         Ok((head, head_commit, status, operation)) => {
             let (counts, changes) = changes(&status);
             let unmerged_paths = unmerged_paths(&status);
+            let uncommitted = UncommittedPaths::from_paths(
+                changes.iter().map(|c| c.path.raw().to_owned()),
+                MAX_UNCOMMITTED_FOR_OVERLAP,
+            );
             let detached_at = match head {
                 HeadView::Detached => head_commit.clone(),
                 _ => None,
@@ -730,6 +766,7 @@ pub fn read_worktree(
                 ),
                 head_commit,
                 in_progress: operation.is_some(),
+                uncommitted,
             }
         }
         Err(err) => WorktreeRead {
@@ -748,6 +785,7 @@ pub fn read_worktree(
             head_commit: None,
             fingerprint: None,
             in_progress: false,
+            uncommitted: UncommittedPaths::default(),
         },
     }
 }
