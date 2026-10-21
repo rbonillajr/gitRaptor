@@ -230,7 +230,7 @@ graph LR
 **Ubicación.**
 - `crates/api/src/messages.rs` (**MODIFY**): `OperationKindView`, los dos campos de `WorktreeView`, `without_special_states` en `WorktreeView`, `RepoView` y `WorktreeStateData`, y el doc comment de `RepoStateView::Unavailable`
 - `crates/api/src/methods/observation.rs` (**MODIFY**): `CAP_OBSERVATION_SPECIAL_STATES` en `GROUP.capabilities`
-- `crates/api/src/special_states_tests.rs` (**CREATE**), enlazado desde `messages.rs` con `#[cfg(test)] #[path = "special_states_tests.rs"] mod special_states_tests;` (patrón de `timemachine_inferred_tests.rs`)
+- `crates/api/tests/special_states.rs` (**CREATE**): prueba de integración del cable; el experto no crea un módulo de pruebas en `src/` ni lo enlaza desde `messages.rs` (un módulo sin enlazar compilaría a cero pruebas y su criterio pasaría vacío, B3)
 - Literales de `WorktreeView` que pida el compilador (`operation: None, unmerged_paths: 0`): `crates/core/src/observe.rs`, `crates/core/tests/observe.rs`, `crates/core/src/channel/mcp_status_tests.rs`, `crates/core/src/channel/mcp_status_more_tests.rs`, `apps/cli/src/tui/view.rs`, `apps/cli/tests/tui_loop.rs`, `apps/cli/src/status.rs` (**MODIFY**)
 
 **Reglas**
@@ -241,7 +241,7 @@ graph LR
 
 - **Depende:** —
 - **Refs:** ADR-GRP-016; `extender-sin-archivos-compartidos.md` § Añadir una capacidad; D1, D2
-- **Aceptación:** `cargo test -p gitraptor-api --lib special_states_tests` en verde
+- **Aceptación:** `cargo test -p gitraptor-api --test special_states` en verde
 
 ### T002 — Leer la operación en curso y contar las rutas sin fusionar
 
@@ -269,7 +269,7 @@ graph LR
 
 **Ubicación.**
 - `crates/core/src/channel/bus.rs` (**MODIFY**): flag `without_special_states` en `Outbox`, `true` por defecto, aplicado en `shape` a `worktree.state`
-- `crates/core/src/channel/conn.rs` (**MODIFY**): `set_without_special_states(!self.has(…))` junto a `set_without_activity` (≈ línea 586), y `without_special_states()` en los tres sitios donde hoy se quita la actividad: `repo.add` (≈ línea 1123), `engine.snapshot` (≈ línea 1842) y `scope.snapshot` (≈ línea 1945)
+- `crates/core/src/channel/conn.rs` (**MODIFY**): `set_without_special_states(!self.has(…))` junto a `set_without_activity` (≈ línea 603), y `without_special_states()` en los tres sitios donde hoy se quita la actividad: `repo.add` (≈ línea 1322), `engine.snapshot` (≈ línea 2080) y `scope.snapshot` (≈ línea 2183)
 
 **Reglas**
 - `shape` aplica los dos filtros al mismo `WorktreeStateData` cuando faltan las dos capacidades; ninguno pisa al otro.
@@ -294,7 +294,7 @@ graph LR
 
 - **Depende:** T001
 - **Refs:** US-GRP-003, escenario 1
-- **Aceptación:** `cargo test -p gitraptor-cli --bin raptor status::tests` en verde
+- **Aceptación:** `cargo test -p gitraptor-cli --bin raptor status::tests` en verde. Esta salida no tiene criterio propio en el contrato de la corrida: la cubren los tests en línea de `status.rs` (módulo `tests`) dentro de la suite completa que corre `nextest-junit.mjs`
 
 ### T005 — Hacer que el observador falle cerrado cuando no puede abrir el repo
 
@@ -304,6 +304,7 @@ graph LR
 - `crates/core/src/watch/repo.rs` (**MODIFY**): `RefsView::read -> Result<Self, RefsReadError>`, estado `lost` de la tarea, `flush` y `poll`
 - `crates/core/src/watch/mod.rs` (**MODIFY**): `RepoAccess`, `ObservedBatch.access`, las llamadas de las líneas ≈ 939 y ≈ 1045, y el registro de vigilancias al recuperar el repo
 - `crates/core/src/watch/worktree.rs` (**MODIFY**): `access: RepoAccess::Unchanged` en `send`
+- `crates/core/src/daemon/shutdown.rs` (**MODIFY**): variante `TierTestOp::PollNow` (gancho de test, solo debug) y `crates/core/src/daemon/tiers.rs` (**MODIFY**): su rama en `tier_test`, que llama a `Observer::simulate_poll` (`watch/mod.rs`, con `watch/repo.rs`: adelanta el `next_poll` de cada tarea de repo). Lo usan los tests de T009 y T010
 - `crates/core/tests/observe.rs` (**MODIFY**): `access` en el helper `batch`
 
 **Pasos**
@@ -337,8 +338,8 @@ graph LR
 - `set_repo_state` publica `repo.observation { repo_id, observed: true, state, path }` solo si el estado cambia, y en su `apply` actualiza el `state` del repo en el snapshot del bus.
 - Un repo `unavailable` conserva sus worktrees como los publiquen sus tareas (lo normal: `missing`).
 - Log: `repo_unavailable` y `repo_available` con `Field::id` del repo y nada más (SEC-04).
-- Un repo ilegible al arrancar se vigila igual, con una tarea de repo que arranca `lost` (T005, ⛔5.2). Cómo `observe()` llega a `watch_repo` sin `RepoRead` lo resuelve el implementador dentro de `watch/mod.rs` (Tramo B).
-- El MCP ya falla cerrado con un repo `unavailable` (`conn.rs:2776`, `mcp_status.rs:108`): no cambia.
+- Un repo ilegible al arrancar se vigila igual, con una tarea de repo que arranca `lost` (T005, ⛔5.2). `observe()` (`daemon/repos.rs:312`, hoy con `&RepoRead`) pasa a recibir `Option<&RepoRead>`; con `None`, `watch_repo` arranca la tarea del repo en `lost`, sin vista base (decisión de la corrida, 2026-10-21).
+- El MCP ya falla cerrado con un repo `unavailable` (`conn.rs:3067`, `mcp_status.rs:108`): no cambia.
 
 - **Depende:** T005
 - **Refs:** BR-EDGE-001; ADR-GRP-010, Enmienda (2026-10-07), N3 y N4; D4
@@ -399,7 +400,7 @@ graph LR
 
 **Reglas**
 - Los tests de § 9.3, con sus datos. Cada uno espera la notificación o el lote que prueba el hecho, con 10 s de techo, sin `sleep` fijo.
-- Los tests de repo movido y devuelto no pueden esperar al sondeo de 30 s: arranca el daemon de test con un `backup_poll` corto. ⚠️ **ASSUMPTION**: la configuración del daemon de test expone `WatchConfig`; si no, añade un gancho de test `poll_now` en el observador, como `simulate_overflow`.
+- Los tests de repo movido y devuelto no pueden esperar al sondeo de 30 s, y `DaemonConfig` no expone `WatchConfig` (`daemon/mod.rs`, `daemon/repos.rs` lo construye con `..WatchConfig::default()`). Decisión del orquestador (2026-10-21), validada por el plan-critic: una variante nueva `TierTestOp::PollNow` (`daemon/shutdown.rs`, solo debug como las demás), que `daemon/tiers.rs::tier_test` entrega a un `Observer::simulate_poll(&self)` que despierta el sondeo de respaldo de cada tarea de repo; los tests llaman `handle.tier_test(TierTestOp::PollNow)` como `daemon_tiers.rs:592` con `Overflow`. Un test de repo movido primero espera `repo.observation { unavailable }` y, tras devolverlo, `observed`; solo entonces comprueba que `events.history` no trae `worktree-delete` ni `worktree-create`, porque sin esa espera el test pasaría aunque el sondeo nunca corriera.
 - `a_repo_moved_back_is_observed_again` comprueba además que un cambio de archivo posterior se publica.
 - Cada test que observa un estado especial lo envuelve en `check(…).assert_intact()` y comprueba después que el marcador sigue (`rebase-merge/`, `MERGE_HEAD`, `CHERRY_PICK_HEAD`, `BISECT_LOG`) y que `git status` del test lo sigue diciendo.
 
@@ -431,7 +432,7 @@ graph LR
 **Objetivo.** El contrato IPC dice lo que se construyó y la historia queda `implemented` con su PR.
 
 **Ubicación.**
-- `docs/architecture/design/api-contract-ipc.md` (**MODIFY**): la frase de la línea 143 (`repo.observation` también publica el paso a `unavailable` y la vuelta, con `observed: true`) y § Estado de un worktree (las dos capacidades, los seis valores, `unmerged_paths`, `worktree-removed`)
+- `docs/architecture/design/api-contract-ipc.md` (**MODIFY**): la frase de la línea 146 (`repo.observation` también publica el paso a `unavailable` y la vuelta, con `observed: true`) y § Estado de un worktree (las dos capacidades, los seis valores, `unmerged_paths`, `worktree-removed`)
 - `docs/requirements/features/motor-local/user-stories/US-GRP-003-estados-especiales-no-disponible.md` (**MODIFY**)
 - `docs/requirements/features/motor-local/user-stories.md` (**MODIFY**)
 - `docs/requirements/features/motor-local/dev-specs/US-GRP-003-dev-spec.md` (**MODIFY**)
@@ -450,8 +451,8 @@ graph LR
 
 ## Estructura de ficheros
 
-Tramo A (T001-T004): `crates/api/src/{messages.rs, methods/observation.rs, special_states_tests.rs}`, `crates/core/src/observe.rs`, `crates/core/src/channel/{bus.rs, conn.rs}`, `apps/cli/src/status.rs`, `apps/cli/i18n/{en,es}/status.txt` y los literales de T001.
-Tramo B (T005-T006): `crates/core/src/watch/{repo.rs, mod.rs, worktree.rs}`, `crates/core/src/daemon/{availability.rs, repos.rs, tiers.rs, mod.rs}`.
+Tramo A (T001-T004): `crates/api/src/{messages.rs, methods/observation.rs, ../tests/special_states.rs}`, `crates/core/src/observe.rs`, `crates/core/src/channel/{bus.rs, conn.rs}`, `apps/cli/src/status.rs`, `apps/cli/i18n/{en,es}/status.txt` y los literales de T001.
+Tramo B (T005-T006): `crates/core/src/watch/{repo.rs, mod.rs, worktree.rs}`, `crates/core/src/daemon/{availability.rs, repos.rs, tiers.rs, mod.rs, shutdown.rs}`.
 Tramo C (T007): `crates/core/src/detect/{mod.rs, procs.rs, tests.rs}`.
 Sin tramo propio: T008 edita archivos de A (`messages.rs`, `bus.rs`, `conn.rs`) y de B (`daemon/repos.rs`). No se puede repartir; corre después de T003 y T006. T009 a T011 crean archivos nuevos o tocan `docs/`.
 
