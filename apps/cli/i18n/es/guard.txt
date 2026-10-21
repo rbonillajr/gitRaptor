@@ -231,6 +231,7 @@ guard.confirm.source = Configuración del equipo de {reference} en el commit {co
 guard.confirm.source-none = La rama principal no tiene copia de la que leer la configuración del equipo
 guard.confirm.base = Rama base: {from} -> {to}
 guard.confirm.base-same = Rama base: {to} (sin cambios)
+guard.confirm.unguarded = - {branch} deja de estar protegida como rama base
 guard.confirm.relaxations = Relajaciones ({count})
 guard.confirm.relaxation = - {key}: {before} -> {after}
 guard.confirm.question = ¿Confirmas la rama base {to}? [s/N]

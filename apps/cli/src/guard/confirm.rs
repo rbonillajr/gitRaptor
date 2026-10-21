@@ -55,6 +55,12 @@ pub(super) fn plan_lines(repo: &str, plan: &ConfirmPlanView) -> Vec<String> {
         Some(from) if from != to => t("guard.confirm.base", &[("from", &from), ("to", &to)]),
         _ => t("guard.confirm.base-same", &[("to", &to)]),
     });
+    for branch in &plan.base.unguarded {
+        out.push(format!(
+            "  {}",
+            t("guard.confirm.unguarded", &[("branch", &name(branch))])
+        ));
+    }
     out.push(t(
         "guard.confirm.relaxations",
         &[("count", &plan.relaxations.len().to_string())],

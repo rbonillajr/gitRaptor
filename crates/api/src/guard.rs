@@ -734,6 +734,9 @@ pub struct BaseChangeView {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub from: Option<UntrustedName>,
     pub to: UntrustedName,
+    /// Branches protected today that stop being protected once confirmed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unguarded: Vec<UntrustedName>,
 }
 
 /// One key that relaxes, with its value before and after (the repo's text).
