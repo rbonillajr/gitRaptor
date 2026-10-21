@@ -507,16 +507,33 @@ impl RepoStore {
             "SELECT gap_id, started_ms, ended_ms, cause, requested_by FROM gaps
              ORDER BY started_ms, gap_id",
             [],
-            |row| {
-                Ok(Gap {
-                    gap_id: row.get(0)?,
-                    started_ms: row.get(1)?,
-                    ended_ms: row.get(2)?,
-                    cause: GapCause::parse(&row.get::<_, String>(3)?)?,
-                    requested_by: row.get(4)?,
-                })
-            },
+            gap_from_row,
         )
+    }
+
+    /// One page of the gaps, oldest first. With `since_ms`: those still open
+    /// or ended at or after it, the oldest `limit` of them. Without it: the
+    /// latest `limit`.
+    pub fn gaps_page(&self, since_ms: Option<i64>, limit: u32) -> Result<Vec<Gap>> {
+        match since_ms {
+            Some(since) => self.collect(
+                "SELECT gap_id, started_ms, ended_ms, cause, requested_by FROM gaps
+                 WHERE ended_ms IS NULL OR ended_ms >= ?1
+                 ORDER BY started_ms, gap_id LIMIT ?2",
+                params![since, limit],
+                gap_from_row,
+            ),
+            None => {
+                let mut gaps = self.collect(
+                    "SELECT gap_id, started_ms, ended_ms, cause, requested_by FROM gaps
+                     ORDER BY started_ms DESC, gap_id DESC LIMIT ?1",
+                    params![limit],
+                    gap_from_row,
+                )?;
+                gaps.reverse();
+                Ok(gaps)
+            }
+        }
     }
 
     pub fn last_known_state(&self, worktree: &Path) -> Result<Option<KnownState>> {
@@ -553,6 +570,14 @@ impl RepoStore {
         Ok(value.and_then(|v| v.parse().ok()))
     }
 
+    /// Makes every later write fail, to test the callers that must survive it.
+    #[cfg(test)]
+    pub(crate) fn make_read_only(&self) {
+        self.conn
+            .pragma_update(None, "query_only", true)
+            .expect("set query_only");
+    }
+
     /// Next sequence the store will assign.
     pub fn next_seq(&self) -> i64 {
         self.next_seq
@@ -568,6 +593,16 @@ impl RepoStore {
         let rows = stmt.query_map(params, map)?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
+}
+
+fn gap_from_row(row: &Row<'_>) -> rusqlite::Result<Gap> {
+    Ok(Gap {
+        gap_id: row.get(0)?,
+        started_ms: row.get(1)?,
+        ended_ms: row.get(2)?,
+        cause: GapCause::parse(&row.get::<_, String>(3)?)?,
+        requested_by: row.get(4)?,
+    })
 }
 
 fn apply(
@@ -792,4 +827,56 @@ fn event_from_row(row: &Row<'_>) -> rusqlite::Result<Event> {
         gap_id: row.get(8)?,
         authorship: row.get(9)?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn gap_ops(id: &str, from: i64, to: Option<i64>) -> Vec<WriteOp> {
+        let mut ops = vec![WriteOp::OpenGap {
+            gap_id: id.into(),
+            started_ms: from,
+            cause: GapCause::DaemonDown,
+            requested_by: None,
+        }];
+        if let Some(ended_ms) = to {
+            ops.push(WriteOp::CloseGap {
+                gap_id: id.into(),
+                ended_ms,
+            });
+        }
+        ops
+    }
+
+    #[test]
+    fn gaps_page_filters_by_end_and_keeps_the_latest_without_a_since() {
+        let fx =
+            gitraptor_testkit::Fixture::with_commit(&gitraptor_testkit::fixture::git_from_path());
+        let root = tempfile::tempdir().unwrap();
+        let (mut profile, _) = crate::profile::Profile::open(
+            crate::profile::ProfileDirs::under_root(root.path().join("profile")),
+        )
+        .unwrap();
+        let (entry, _) = profile.add_repo(&fx.repo.join(".git"), None, 1).unwrap();
+        let (mut store, _) = profile.open_store(&entry.repo_id).unwrap();
+        for (id, from, to) in [
+            ("a", 10, Some(20)),
+            ("b", 30, Some(40)),
+            ("c", 50, None),
+            ("d", 60, Some(70)),
+        ] {
+            store.write_batch(&gap_ops(id, from, to)).unwrap();
+        }
+        let ids = |gaps: Vec<Gap>| gaps.into_iter().map(|g| g.gap_id).collect::<Vec<_>>();
+        assert_eq!(
+            ids(store.gaps_page(None, 10).unwrap()),
+            ["a", "b", "c", "d"]
+        );
+        assert_eq!(ids(store.gaps_page(None, 2).unwrap()), ["c", "d"]);
+        // Ended before `since` is out; an open one stays.
+        assert_eq!(ids(store.gaps_page(Some(40), 10).unwrap()), ["b", "c", "d"]);
+        assert_eq!(ids(store.gaps_page(Some(41), 10).unwrap()), ["c", "d"]);
+        assert_eq!(ids(store.gaps_page(Some(0), 2).unwrap()), ["a", "b"]);
+    }
 }

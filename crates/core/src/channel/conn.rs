@@ -840,6 +840,10 @@ impl Connection<'_> {
                 let result = request.params().and_then(|p| self.events_history(p));
                 self.reply(&request.id, result);
             }
+            methods::EVENTS_GAPS => {
+                let result = request.params().and_then(|p| self.events_gaps(p));
+                self.reply(&request.id, result);
+            }
             methods::SESSIONS_LIST => {
                 let result = request.params().and_then(|p| self.sessions_list(p));
                 self.reply(&request.id, result);
@@ -2408,6 +2412,23 @@ impl Connection<'_> {
                 }
                 EventsHistoryResult { events }
             })
+            .map_err(repo_command_error)
+    }
+
+    /// `events.gaps` (US-GRP-005): one page of the observation gaps of a repo.
+    fn events_gaps(
+        &self,
+        mut params: methods::EventsGapsParams,
+    ) -> Result<methods::EventsGapsResult, ErrorObject> {
+        if !valid_repo_id(&params.repo_id) {
+            return Err(ErrorObject::new(code::INVALID_PARAMS, "invalid repo_id"));
+        }
+        let max = methods::MAX_GAPS_PAGE;
+        params.limit = Some(params.limit.unwrap_or(max).clamp(1, max));
+        self.ctx
+            .control
+            .gap_history(params)
+            .map(|gaps| methods::EventsGapsResult { gaps })
             .map_err(repo_command_error)
     }
 

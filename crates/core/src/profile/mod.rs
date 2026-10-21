@@ -31,7 +31,8 @@ pub use index::{
 pub use repo_key::{NormalizedPath, normalize_common_dir, validate_input_path};
 pub use store::{
     Agent, AgentKind, AttributionRecord, Author, BatchResult, EndCause, Event, Gap, GapCause,
-    KnownState, NewEvent, Origin, RecordKind, RepoStore, Session, Timestamp, Worktree, WriteOp,
+    KnownState, NewEvent, Origin, RecordKind, RepoStore, Session, SessionWithState, Timestamp,
+    Worktree, WriteOp,
 };
 
 use index::Index;
