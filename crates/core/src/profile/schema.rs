@@ -109,6 +109,46 @@ CREATE TRIGGER reserved_audit_no_update BEFORE UPDATE ON reserved_audit
 CREATE TRIGGER reserved_audit_no_delete BEFORE DELETE ON reserved_audit
     BEGIN SELECT RAISE(ABORT, 'the audit is append-only'); END;
 ",
+    r"
+-- US-GRD-014 D10: the audit admits the end of a confirmation of the team baseline
+-- (`guard.confirm`: applied, cancelled, failed, expired, changed). The same rebuild as the
+-- previous migration: every row copied in order with its id and verified before the old table
+-- goes; a failed verification aborts the transaction and leaves the profile untouched.
+CREATE TABLE reserved_audit_next (
+    id        INTEGER PRIMARY KEY,
+    at_ms     INTEGER NOT NULL,
+    operation TEXT NOT NULL,
+    repo_id   TEXT,
+    outcome   TEXT NOT NULL CHECK (outcome IN ('accepted', 'rejected', 'not-implemented',
+                  'applied', 'cancelled', 'failed', 'expired', 'changed')),
+    reason    TEXT,
+    client    TEXT NOT NULL,
+    chain     TEXT NOT NULL,
+    CHECK (outcome IN ('accepted', 'rejected', 'not-implemented')
+           OR (operation = 'guard.uninstall' AND outcome <> 'changed')
+           OR operation = 'guard.confirm')
+) STRICT;
+INSERT INTO reserved_audit_next (id, at_ms, operation, repo_id, outcome, reason, client, chain)
+    SELECT id, at_ms, operation, repo_id, outcome, reason, client, chain
+    FROM reserved_audit ORDER BY id;
+CREATE TEMP TABLE reserved_audit_copy_check (lost INTEGER NOT NULL CHECK (lost = 0)) STRICT;
+INSERT INTO reserved_audit_copy_check (lost)
+    SELECT (SELECT count(*) FROM reserved_audit) - (SELECT count(*) FROM reserved_audit_next)
+    UNION ALL
+    SELECT count(*) FROM (
+        SELECT id, at_ms, operation, repo_id, outcome, reason, client, chain FROM reserved_audit
+        EXCEPT
+        SELECT id, at_ms, operation, repo_id, outcome, reason, client, chain
+        FROM reserved_audit_next
+    );
+DROP TABLE temp.reserved_audit_copy_check;
+DROP TABLE reserved_audit;
+ALTER TABLE reserved_audit_next RENAME TO reserved_audit;
+CREATE TRIGGER reserved_audit_no_update BEFORE UPDATE ON reserved_audit
+    BEGIN SELECT RAISE(ABORT, 'the audit is append-only'); END;
+CREATE TRIGGER reserved_audit_no_delete BEFORE DELETE ON reserved_audit
+    BEGIN SELECT RAISE(ABORT, 'the audit is append-only'); END;
+",
 ];
 
 /// Migrations of each per-repo store (`data/repos/<repo_id>.sqlite`), with
