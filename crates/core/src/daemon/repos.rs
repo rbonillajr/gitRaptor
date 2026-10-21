@@ -417,24 +417,38 @@ impl Daemon {
                 },
             });
         }
-        // An event's worktree must exist in the store.
-        for event in &batch.events {
-            let listed = batch
-                .worktrees
-                .iter()
-                .any(|r| r.view.path.raw() == event.worktree.to_string_lossy());
-            if !listed
-                && !known.contains(&event.worktree)
-                && !ops.iter().any(|op| {
-                    matches!(op, WriteOp::UpsertWorktree { path, .. } if *path == event.worktree)
-                })
-            {
-                ops.push(WriteOp::UpsertWorktree {
-                    path: event.worktree.clone(),
-                    admin_name: None,
-                    seen_ms: now,
-                });
-            }
+        // An event's worktree must exist in the store. A worktree of the batch that is not `Ready`
+        // yet (`git worktree add` is half-way) got no upsert above, so it is not "listed" for
+        // this purpose: without one the store refuses the event and the whole batch is lost.
+        let upserted: Vec<&std::path::Path> = ops
+            .iter()
+            .filter_map(|op| match op {
+                WriteOp::UpsertWorktree { path, .. } => Some(path.as_path()),
+                _ => None,
+            })
+            .collect();
+        let pending: Vec<(PathBuf, Option<String>)> = batch
+            .worktrees
+            .iter()
+            .map(|r| {
+                (
+                    PathBuf::from(r.view.path.raw()),
+                    r.view.admin_name.as_ref().map(|n| n.raw().to_owned()),
+                )
+            })
+            .collect();
+        let missing = event_worktrees_to_upsert(
+            batch.events.iter().map(|e| e.worktree.as_path()),
+            &known,
+            &upserted,
+            &pending,
+        );
+        for (path, admin_name) in missing {
+            ops.push(WriteOp::UpsertWorktree {
+                path,
+                admin_name,
+                seen_ms: now,
+            });
         }
         let gap_id = batch.gap.map(|gap| {
             let id = format!("{}-{}", gap.cause.as_str(), run_id());
@@ -714,5 +728,60 @@ impl Daemon {
             .into_iter()
             .filter_map(|e| git_event_view(&params.repo_id, store, e))
             .collect())
+    }
+}
+
+/// The worktrees an event names that the store does not have yet: not known, not upserted by the
+/// batch, once each. `pending` are the batch's worktrees with their admin name, to keep it.
+fn event_worktrees_to_upsert<'a>(
+    events: impl Iterator<Item = &'a std::path::Path>,
+    known: &[PathBuf],
+    upserted: &[&std::path::Path],
+    pending: &[(PathBuf, Option<String>)],
+) -> Vec<(PathBuf, Option<String>)> {
+    let mut missing: Vec<(PathBuf, Option<String>)> = Vec::new();
+    for path in events {
+        if known.iter().any(|k| k == path)
+            || upserted.contains(&path)
+            || missing.iter().any(|(m, _)| m == path)
+        {
+            continue;
+        }
+        let admin = pending
+            .iter()
+            .find(|(p, _)| p == path)
+            .and_then(|(_, admin)| admin.clone());
+        missing.push((path.to_path_buf(), admin));
+    }
+    missing
+}
+
+#[cfg(test)]
+mod event_worktree_tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn a_listed_worktree_that_is_not_ready_is_still_upserted_for_its_event() {
+        let wt = PathBuf::from("/r/wt");
+        let pending = vec![(wt.clone(), Some("wt".to_owned()))];
+        let missing = event_worktrees_to_upsert([wt.as_path()].into_iter(), &[], &[], &pending);
+        assert_eq!(missing, vec![(wt, Some("wt".to_owned()))]);
+    }
+
+    #[test]
+    fn known_or_already_upserted_worktrees_are_not_upserted_again() {
+        let (a, b) = (PathBuf::from("/r/a"), PathBuf::from("/r/b"));
+        let events = [a.as_path(), b.as_path(), b.as_path()];
+        let missing = event_worktrees_to_upsert(
+            events.into_iter(),
+            std::slice::from_ref(&a),
+            &[Path::new("/r/b")],
+            &[],
+        );
+        assert!(missing.is_empty(), "{missing:?}");
+        let other = [Path::new("/r/c"), Path::new("/r/c")];
+        let missing = event_worktrees_to_upsert(other.into_iter(), &[], &[], &[]);
+        assert_eq!(missing, vec![(PathBuf::from("/r/c"), None)]);
     }
 }
