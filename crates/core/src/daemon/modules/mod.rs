@@ -10,6 +10,7 @@
 
 mod discovery;
 mod guard_health;
+mod predict;
 mod tm_capture;
 
 use std::path::{Path, PathBuf};
@@ -50,6 +51,7 @@ const MODULES: &[(&str, Start)] = &[
     ("tm-capture", tm_capture::start),
     ("discovery", discovery::start),
     ("guard-health", guard_health::start),
+    ("predict", predict::start),
 ];
 
 /// The running modules, in the order of [`MODULES`].
@@ -174,6 +176,9 @@ mod tests {
     #[test]
     fn the_registered_modules() {
         let names: Vec<_> = MODULES.iter().map(|(name, _)| *name).collect();
-        assert_eq!(names, ["tm-capture", "discovery", "guard-health"]);
+        assert_eq!(
+            names,
+            ["tm-capture", "discovery", "guard-health", "predict"]
+        );
     }
 }
