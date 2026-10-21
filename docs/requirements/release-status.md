@@ -10,11 +10,11 @@
 
 | Estado | Fichas |
 |---|---|
-| Implementado (`implemented`) | 48 |
+| Implementado (`implemented`) | 50 |
 | Hecho (`done`) | 3 |
-| Implementado en parte (`partially-implemented`) | 24 |
+| Implementado en parte (`partially-implemented`) | 23 |
 | Listo (`ready`) | 4 |
-| Borrador (`draft`) | 69 |
+| Borrador (`draft`) | 68 |
 | Bloqueado (`blocked`) | 1 |
 | **Total** | **149** |
 
@@ -23,8 +23,8 @@
 | Feature | Implementado | Hecho | Implementado en parte | Listo | Borrador | Bloqueado | Total |
 |---|---|---|---|---|---|---|---|
 | [cockpit](#cockpit) | 7 | 0 | 4 | 0 | 21 | 1 | 33 |
-| [guardrails](#guardrails) | 9 | 0 | 8 | 1 | 7 | 0 | 25 |
-| [mcp](#mcp) | 5 | 0 | 3 | 0 | 12 | 0 | 20 |
+| [guardrails](#guardrails) | 10 | 0 | 8 | 1 | 6 | 0 | 25 |
+| [mcp](#mcp) | 6 | 0 | 2 | 0 | 12 | 0 | 20 |
 | [motor-local](#motor-local) | 14 | 2 | 8 | 3 | 14 | 0 | 41 |
 | [time-machine](#time-machine) | 13 | 1 | 1 | 0 | 15 | 0 | 30 |
 
@@ -70,7 +70,7 @@
 
 ### guardrails
 
-25 fichas: 9 implementado, 8 implementado en parte, 1 listo, 7 borrador.
+25 fichas: 10 implementado, 8 implementado en parte, 1 listo, 6 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -81,6 +81,7 @@
 | [US-GRD-002](features/guardrails/user-stories/US-GRD-002-hooks-previos-respetados.md) | Los hooks que el repo ya tenía siguen funcionando al protegerlo | Implementado (`implemented`) | #193 | — |
 | [US-GRD-008](features/guardrails/user-stories/US-GRD-008-ramas-protegidas-rutas-prohibidas.md) | Ningún agente cambia una rama protegida ni toca una ruta prohibida | Implementado (`implemented`) | #197 | — |
 | [US-GRD-012](features/guardrails/user-stories/US-GRD-012-agente-no-relaja-configuracion.md) | Un agente no puede relajar las reglas del equipo cambiando su configuración | Implementado (`implemented`) | #217 | — |
+| [US-GRD-014](features/guardrails/user-stories/US-GRD-014-rama-base-del-equipo.md) | El equipo fija la rama base del repo y Guardrails la protege | Implementado (`implemented`) | — | — |
 | [US-GRD-019](features/guardrails/user-stories/US-GRD-019-quien-ejecuto-y-a-nombre-de-quien.md) | El desarrollador ve quién ejecutó cada commit y a nombre de quién entró cuando no coinciden | Implementado (`implemented`) | #144, #147, #151, #175 | — |
 | [US-GRD-020](features/guardrails/user-stories/US-GRD-020-mensajes-guard-status-deny-sin-daemon.md) | El desarrollador entiende si su repo está protegido y qué repetir cuando una operación se deniega sin el servicio | Implementado (`implemented`) | — | — |
 | [SPIKE-GRD-001](features/guardrails/technical-stories/SPIKE-GRD-001-interceptabilidad-hooks.md) | Interceptabilidad, coexistencia y coste de la capa de hooks en los tres SO | Implementado en parte (`partially-implemented`) | #22, #25, #121 | 2 |
@@ -96,23 +97,22 @@
 | [US-GRD-009](features/guardrails/user-stories/US-GRD-009-tamano-diff-formato-commit.md) | Los agentes entregan commits pequeños y con el formato que exige el equipo | Borrador (`draft`) | — | — |
 | [US-GRD-011](features/guardrails/user-stories/US-GRD-011-configuracion-ilegible.md) | Una configuración rota no deja pasar las operaciones peligrosas | Borrador (`draft`) | — | — |
 | [US-GRD-013](features/guardrails/user-stories/US-GRD-013-comando-edicion-configuracion.md) | El desarrollador cambia la configuración con un comando sin perder lo que editó a mano | Borrador (`draft`) | — | — |
-| [US-GRD-014](features/guardrails/user-stories/US-GRD-014-rama-base-del-equipo.md) | El equipo fija la rama base del repo y Guardrails la protege | Borrador (`draft`) | — | — |
 | [US-GRD-015](features/guardrails/user-stories/US-GRD-015-cola-de-confirmacion.md) | El desarrollador aprueba o rechaza las acciones de riesgo que un agente deja en espera | Borrador (`draft`) | — | — |
 | [US-GRD-016](features/guardrails/user-stories/US-GRD-016-misma-decision-por-mcp.md) | Un agente que usa las herramientas MCP recibe la misma decisión que con Git directo | Borrador (`draft`) | — | — |
 
 ### mcp
 
-20 fichas: 5 implementado, 3 implementado en parte, 12 borrador.
+20 fichas: 6 implementado, 2 implementado en parte, 12 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
 | [US-MCP-001](features/mcp/user-stories/US-MCP-001-instalar-en-claude-code.md) | El desarrollador conecta Claude Code a GitRaptor con un solo comando y lo retira igual de fácil | Implementado (`implemented`) | #70 | — |
 | [US-MCP-002](features/mcp/user-stories/US-MCP-002-habilitar-repo-allowlist.md) | El desarrollador decide qué repos pueden usar los agentes por el MCP | Implementado (`implemented`) | #140, #159 | — |
 | [US-MCP-003](features/mcp/user-stories/US-MCP-003-status-del-repo-del-agente.md) | Un agente consulta por MCP el estado del repo en el que trabaja, y de ningún otro | Implementado (`implemented`) | #140, #159, #153 | — |
+| [US-MCP-004](features/mcp/user-stories/US-MCP-004-status-completo-y-no-disponible.md) | Un agente sabe por MCP quién más trabaja en su repo, contra qué base y con qué protección | Implementado (`implemented`) | — | — |
 | [US-MCP-005](features/mcp/user-stories/US-MCP-005-respuestas-acotadas-y-seguras.md) | Un agente recibe respuestas acotadas que no pueden darle órdenes ni filtrar secretos | Implementado (`implemented`) | #157, #159 | — |
 | [US-MCP-008](features/mcp/user-stories/US-MCP-008-snapshot-manual.md) | Un agente guarda por MCP un punto de recuperación antes de un cambio arriesgado | Implementado (`implemented`) | #213 | — |
 | [INF-MCP-001](features/mcp/technical-stories/INF-MCP-001-corpus-seguridad-mcp.md) | Corpus de seguridad del MCP como suite de CI que bloquea el merge | Implementado en parte (`partially-implemented`) | — | — |
-| [US-MCP-004](features/mcp/user-stories/US-MCP-004-status-completo-y-no-disponible.md) | Un agente sabe por MCP quién más trabaja en su repo, contra qué base y con qué protección | Implementado en parte (`partially-implemented`) | — | — |
 | [US-MCP-013](features/mcp/user-stories/US-MCP-013-confirmacion-sin-cola.md) | Un agente sabe que una acción necesita al desarrollador y a quién acudir | Implementado en parte (`partially-implemented`) | #267 | — |
 | [US-MCP-006](features/mcp/user-stories/US-MCP-006-registrar-agente.md) | Un agente sin soporte completo se declara por MCP y su trabajo queda a su nombre | Borrador (`draft`) | — | — |
 | [US-MCP-007](features/mcp/user-stories/US-MCP-007-confused-deputy.md) | Un hook lanzado por una escritura de un agente no puede usar los poderes del desarrollador | Borrador (`draft`) | — | — |
@@ -244,7 +244,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2
 
-111 fichas: 25 implementado, 3 hecho, 18 implementado en parte, 4 listo, 60 borrador, 1 bloqueado.
+111 fichas: 27 implementado, 3 hecho, 17 implementado en parte, 4 listo, 59 borrador, 1 bloqueado.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -262,10 +262,12 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-GRD-002](features/guardrails/user-stories/US-GRD-002-hooks-previos-respetados.md) | Los hooks que el repo ya tenía siguen funcionando al protegerlo | Implementado (`implemented`) | #193 | — |
 | [US-GRD-008](features/guardrails/user-stories/US-GRD-008-ramas-protegidas-rutas-prohibidas.md) | Ningún agente cambia una rama protegida ni toca una ruta prohibida | Implementado (`implemented`) | #197 | — |
 | [US-GRD-012](features/guardrails/user-stories/US-GRD-012-agente-no-relaja-configuracion.md) | Un agente no puede relajar las reglas del equipo cambiando su configuración | Implementado (`implemented`) | #217 | — |
+| [US-GRD-014](features/guardrails/user-stories/US-GRD-014-rama-base-del-equipo.md) | El equipo fija la rama base del repo y Guardrails la protege | Implementado (`implemented`) | — | — |
 | [US-GRD-019](features/guardrails/user-stories/US-GRD-019-quien-ejecuto-y-a-nombre-de-quien.md) | El desarrollador ve quién ejecutó cada commit y a nombre de quién entró cuando no coinciden | Implementado (`implemented`) | #144, #147, #151, #175 | — |
 | [US-GRP-003](features/motor-local/user-stories/US-GRP-003-estados-especiales-no-disponible.md) | El desarrollador sabe qué worktree está en un estado especial o ya no existe | Implementado (`implemented`) | — | — |
 | [US-GRP-020](features/motor-local/user-stories/US-GRP-020-carpetas-codigo-repos-descubiertos.md) | El desarrollador ve los repos que aparecen en sus carpetas de código sin tener que añadirlos uno a uno | Implementado (`implemented`) | #170, #153, #178 | — |
 | [US-GRP-022](features/motor-local/user-stories/US-GRP-022-aceptar-descartar-repo-descubierto.md) | El desarrollador decide qué repos descubiertos se observan y los que descarta no vuelven a aparecer | Implementado (`implemented`) | #170 | — |
+| [US-MCP-004](features/mcp/user-stories/US-MCP-004-status-completo-y-no-disponible.md) | Un agente sabe por MCP quién más trabaja en su repo, contra qué base y con qué protección | Implementado (`implemented`) | — | — |
 | [US-MCP-005](features/mcp/user-stories/US-MCP-005-respuestas-acotadas-y-seguras.md) | Un agente recibe respuestas acotadas que no pueden darle órdenes ni filtrar secretos | Implementado (`implemented`) | #157, #159 | — |
 | [US-MCP-008](features/mcp/user-stories/US-MCP-008-snapshot-manual.md) | Un agente guarda por MCP un punto de recuperación antes de un cambio arriesgado | Implementado (`implemented`) | #213 | — |
 | [US-TMC-005](features/time-machine/user-stories/US-TMC-005-snapshot-previo-hooks-guardrails.md) | El borrado de ramas y el rebase con Git crudo tienen punto previo cuando el repo usa los hooks de Guardrails | Implementado (`implemented`) | #248 | — |
@@ -292,7 +294,6 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-GRD-010](features/guardrails/user-stories/US-GRD-010-endurecer-sin-relajar.md) | El desarrollador endurece las reglas en su máquina sin poder relajar las del equipo | Implementado en parte (`partially-implemented`) | #217 | — |
 | [US-GRD-017](features/guardrails/user-stories/US-GRD-017-sin-snapshot-no-se-ejecuta.md) | Una operación destructiva permitida no se ejecuta sin un punto de recuperación | Implementado en parte (`partially-implemented`) | #260 | — |
 | [US-GRD-018](features/guardrails/user-stories/US-GRD-018-autoria-commits-persona-y-agente.md) | Cada commit entra a nombre de la persona y deja constancia del agente que lo hizo, con la exigencia que fija el equipo | Implementado en parte (`partially-implemented`) | #137, #141, #150, #152, #153, #154 | 3 |
-| [US-MCP-004](features/mcp/user-stories/US-MCP-004-status-completo-y-no-disponible.md) | Un agente sabe por MCP quién más trabaja en su repo, contra qué base y con qué protección | Implementado en parte (`partially-implemented`) | — | — |
 | [US-MCP-013](features/mcp/user-stories/US-MCP-013-confirmacion-sin-cola.md) | Un agente sabe que una acción necesita al desarrollador y a quién acudir | Implementado en parte (`partially-implemented`) | #267 | — |
 | [SPIKE-GRD-002](features/guardrails/technical-stories/SPIKE-GRD-002-factor-so-daemon.md) | Factor de autenticación del SO invocado desde el daemon en los tres SO | Listo (`ready`) | — | — |
 | [TD-GRP-002](features/motor-local/technical-stories/TD-GRP-002-motor-bajo-rafaga.md) | Frescura y memoria del motor bajo una ráfaga de archivos | Listo (`ready`) | — | — |
@@ -324,7 +325,6 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-GRD-009](features/guardrails/user-stories/US-GRD-009-tamano-diff-formato-commit.md) | Los agentes entregan commits pequeños y con el formato que exige el equipo | Borrador (`draft`) | — | — |
 | [US-GRD-011](features/guardrails/user-stories/US-GRD-011-configuracion-ilegible.md) | Una configuración rota no deja pasar las operaciones peligrosas | Borrador (`draft`) | — | — |
 | [US-GRD-013](features/guardrails/user-stories/US-GRD-013-comando-edicion-configuracion.md) | El desarrollador cambia la configuración con un comando sin perder lo que editó a mano | Borrador (`draft`) | — | — |
-| [US-GRD-014](features/guardrails/user-stories/US-GRD-014-rama-base-del-equipo.md) | El equipo fija la rama base del repo y Guardrails la protege | Borrador (`draft`) | — | — |
 | [US-GRD-015](features/guardrails/user-stories/US-GRD-015-cola-de-confirmacion.md) | El desarrollador aprueba o rechaza las acciones de riesgo que un agente deja en espera | Borrador (`draft`) | — | — |
 | [US-GRD-016](features/guardrails/user-stories/US-GRD-016-misma-decision-por-mcp.md) | Un agente que usa las herramientas MCP recibe la misma decisión que con Git directo | Borrador (`draft`) | — | — |
 | [US-GRP-005](features/motor-local/user-stories/US-GRP-005-hueco-sin-atribuir.md) | El desarrollador distingue lo que el motor no vio ocurrir | Borrador (`draft`) | — | — |
@@ -473,12 +473,6 @@ Cada commit entra a nombre de la persona y deja constancia del agente que lo hiz
 ### [INF-MCP-001](features/mcp/technical-stories/INF-MCP-001-corpus-seguridad-mcp.md)
 
 Corpus de seguridad del MCP como suite de CI que bloquea el merge
-
-- *La ficha no lista los pendientes en "Estado de la implementación".*
-
-### [US-MCP-004](features/mcp/user-stories/US-MCP-004-status-completo-y-no-disponible.md)
-
-Un agente sabe por MCP quién más trabaja en su repo, contra qué base y con qué protección
 
 - *La ficha no lista los pendientes en "Estado de la implementación".*
 

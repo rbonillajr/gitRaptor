@@ -2,9 +2,9 @@
 id: DS-US-GRD-014
 title: "Dev Spec — US-GRD-014: el equipo fija la rama base y Guardrails la protege"
 type: dev-spec
-status: draft
+status: implemented
 created: 2026-10-09
-updated: 2026-10-09
+updated: 2026-10-21
 story: US-GRD-014
 feature: guardrails
 domain: GRP

@@ -2,10 +2,10 @@
 id: US-MCP-004
 title: "Un agente sabe por MCP quién más trabaja en su repo, contra qué base y con qué protección"
 type: us
-status: partially-implemented
+status: implemented
 priority: high
 created: 2026-10-04
-updated: 2026-10-08
+updated: 2026-10-21
 domain: GRP
 epic: E-001
 feature: mcp
@@ -119,6 +119,6 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 - **Diseño:** no aplica (respuesta de herramienta; mensajes según la guía de contenido del design system, DSYS-GRP-001).
 - **Dev Spec:** [DS-US-MCP-004](../dev-specs/US-MCP-004-dev-spec.md).
 
-Implementado en: PR #216.
+Implementado en: PR #216 y PR #TBD (US-GRD-014, 2026-10-21: G1, el motor emite la base "pendiente de confirmar" cuando la rama principal trae un cambio de rama base sin confirmar; `crates/core/tests/us_grd_014_mcp_pending.rs`).
 
-**Falta**: la base "pendiente de confirmar" existe en el contrato y se prueba ahí, pero el motor no la emite hasta US-GRD-014 (G1 de la Dev Spec). Linux y Windows: *Pendiente: etapa de validación multiplataforma* (XP-39).
+**Falta**: Linux y Windows: *Pendiente: etapa de validación multiplataforma* (XP-39). En un repo sin hooks no hay diagnósticos del estado de protección, así que `pending` no aparece hasta US-GRP-016 (DS-US-GRD-014 § 8).

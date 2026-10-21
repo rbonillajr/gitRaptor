@@ -2,10 +2,10 @@
 id: US-GRD-014
 title: "El equipo fija la rama base del repo y Guardrails la protege"
 type: us
-status: draft
+status: implemented
 priority: medium
 created: 2026-10-04
-updated: 2026-10-09
+updated: 2026-10-21
 feature: guardrails
 related:
   context:
@@ -98,3 +98,10 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 
 - **Diseño:** no aplica.
 - **Dev Spec:** [DS-US-GRD-014](../dev-specs/US-GRD-014-rama-base-del-equipo.md) (2026-10-09; decisiones del orquestador validadas por el Arquitecto y el PO).
+
+## Estado de la implementación
+
+Implementado en: PR #TBD (2026-10-21). Cubre los seis escenarios con `raptor guard confirm [<ruta>]` (plan, huella y ventana; DS-US-GRD-014 D1 a D12), más el riesgo real del escenario 1 (perfil perdido con los hooks instalados, sin adoptar).
+
+- **Pendiente**: la variante del escenario 1 con adopción la verifica US-GRD-003 E5; la prueba de integración con el motor, US-GRP-016.
+- **Pendiente**: Linux y Windows reales (*Pendiente: etapa de validación multiplataforma*); las suites de extremo a extremo son solo Unix.
