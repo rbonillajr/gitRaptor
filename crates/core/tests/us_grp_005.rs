@@ -170,7 +170,12 @@ impl Scenario {
             self.fx.git_in(&self.wt, &["add", "."]);
             self.fx
                 .git_in(&self.wt, &["commit", "-q", "-m", &format!("c{n}")]);
-            ids.push(self.fx.git_in(&self.wt, &["rev-parse", "HEAD"]).trim().to_owned());
+            ids.push(
+                self.fx
+                    .git_in(&self.wt, &["rev-parse", "HEAD"])
+                    .trim()
+                    .to_owned(),
+            );
         }
         self.fx.git(&["branch", "hotfix"]);
         (ids.remove(0), ids.remove(0))
