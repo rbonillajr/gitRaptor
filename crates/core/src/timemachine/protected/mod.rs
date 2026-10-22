@@ -499,6 +499,9 @@ pub enum ProtectedError {
         reason: PriorFailure,
         operation_id: Option<String>,
         detail: Option<String>,
+        /// The intent's mark did not hold at the prior's validity point: worth taking the mark
+        /// again, the repo was not touched.
+        discarded: bool,
     },
     /// The oplog could not record the intent: nothing ran.
     Oplog(String),
@@ -514,7 +517,13 @@ impl ProtectedError {
     /// Whether the prior was discarded because the intent's mark did not hold: worth taking the
     /// mark again, the repo was not touched.
     pub fn prior_discarded(&self) -> bool {
-        matches!(self, Self::Prior { detail: Some(d), .. } if d == PRIOR_DISCARDED)
+        matches!(
+            self,
+            Self::Prior {
+                discarded: true,
+                ..
+            }
+        )
     }
 }
 
@@ -555,7 +564,7 @@ impl ProtectedOperation<'_> {
             .record_operation(&new, now_ms())
             .map_err(|e| ProtectedError::Oplog(e.to_string()))?;
         chaos::crash_point(chaos::OPERATION_INTENT);
-        let abort = |reason: PriorFailure, detail: Option<String>| {
+        let abort_as = |reason: PriorFailure, detail: Option<String>, discarded: bool| {
             let text = match &detail {
                 Some(d) => format!("{}: {d}", failure_text(reason)),
                 None => failure_text(reason).to_owned(),
@@ -569,8 +578,10 @@ impl ProtectedOperation<'_> {
                 reason,
                 operation_id: Some(operation_id.clone()),
                 detail,
+                discarded,
             }
         };
+        let abort = |reason: PriorFailure, detail: Option<String>| abort_as(reason, detail, false);
         if self.stopping.load(Ordering::SeqCst) {
             return Err(abort(PriorFailure::DaemonStopping, None));
         }
@@ -601,9 +612,10 @@ impl ProtectedOperation<'_> {
                 return Err(abort(PriorFailure::StoreUnavailable, None));
             }
             Ok(Err(PriorError::Discarded)) => {
-                return Err(abort(
+                return Err(abort_as(
                     PriorFailure::CaptureFailed,
                     Some(PRIOR_DISCARDED.to_owned()),
+                    true,
                 ));
             }
             Ok(Err(PriorError::Failed(d))) => {

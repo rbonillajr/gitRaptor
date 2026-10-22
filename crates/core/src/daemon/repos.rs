@@ -386,11 +386,15 @@ impl Daemon {
         // Where the calm reads the refs: the common directory the daemon registered, never one
         // derived from the repo's content. Without it the branches are not published, so the
         // calm keeps comparing the previous ones and fails closed.
-        let common = batch
-            .branches
-            .as_ref()
-            .and_then(|_| self.profile.repo(&batch.repo_id).ok().flatten())
-            .map(|entry| entry.canonical_path);
+        let common = batch.branches.as_ref().and_then(|_| {
+            self.marks.common_dir(&batch.repo_id).or_else(|| {
+                self.profile
+                    .repo(&batch.repo_id)
+                    .ok()
+                    .flatten()
+                    .map(|entry| entry.canonical_path)
+            })
+        });
         let Some((_, store)) = self.stores.iter_mut().find(|(id, _)| *id == batch.repo_id) else {
             return;
         };

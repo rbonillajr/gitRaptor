@@ -73,9 +73,9 @@ impl EngineLink for Gated {
         1
     }
     fn settle(&self, _repo_id: &str, _worktrees: &[PathBuf], limit: Duration) -> Option<i64> {
-        // A zero limit is the capture confirming its mark at the validity point: a probe, not
-        // the wait this double holds.
-        if limit.is_zero() {
+        // The capture confirming its mark at the validity point: a probe, not the wait this
+        // double holds.
+        if limit == gitraptor_core::timemachine::engine::CONFIRM_WINDOW {
             return Some(1);
         }
         self.settles.fetch_add(1, Ordering::SeqCst);

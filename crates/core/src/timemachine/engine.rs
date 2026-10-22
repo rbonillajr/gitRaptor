@@ -36,7 +36,7 @@ use gitraptor_git::{ReaderOptions, RepoReader};
 use super::oplog::{Oplog, Requester};
 use super::store::ValidityGuard;
 use crate::daemon::{Field, Logger};
-use crate::detect::{GitCall, ProcLister};
+use crate::detect::ProcLister;
 use crate::profile::{ProfileDirs, fsperm};
 
 /// Quiet time of a repo's Git directory: the fallback calm of a worktree without a `HEAD`
@@ -47,6 +47,11 @@ pub const SETTLE: Duration = Duration::from_millis(150);
 /// wait of a `settle` (`ANCHOR_SETTLE_LIMIT`). Past it, it is logged and the other checks
 /// (reflog, refs, hook calls in flight) decide.
 const UNREADABLE_GRACE: Duration = Duration::from_secs(2);
+
+/// How long a capture's confirmation may wait for the engine to be calm again at its mark. A
+/// momentary not-calm that has nothing to do with the content (a `git` elsewhere caught while it
+/// starts, a time-rule blip) then does not discard the capture; a mark that moved still does.
+pub const CONFIRM_WINDOW: Duration = Duration::from_millis(250);
 
 /// How often the calm is checked again while waiting.
 const CALM_POLL: Duration = Duration::from_millis(10);
@@ -197,12 +202,11 @@ pub struct RepoMarks {
     probe: Mutex<ProbeCache>,
 }
 
-/// The process probe's memory, by `(pid, start_us)`: an identity that survives pid reuse. Kept
-/// only for processes still in the table.
+/// The process probe's memory, by `(pid, start_us)`: an identity that survives pid reuse (but not
+/// `exec`, so what a process is gets read on every pass, never kept here). Kept only for
+/// processes still in the table.
 #[derive(Debug, Default)]
 struct ProbeCache {
-    /// `None`: not a `git`; `Some(call)`: a `git`, with its command line if it could be read.
-    calls: HashMap<(u32, u64), Option<Option<GitCall>>>,
     /// When a live `git` was first found unreadable.
     unreadable: HashMap<(u32, u64), Instant>,
     /// Unreadable ones already logged.
@@ -211,7 +215,6 @@ struct ProbeCache {
 
 impl ProbeCache {
     fn prune(&mut self, alive: &std::collections::HashSet<(u32, u64)>) {
-        self.calls.retain(|k, _| alive.contains(k));
         self.unreadable.retain(|k, _| alive.contains(k));
         self.logged.retain(|k| alive.contains(k));
     }
@@ -255,6 +258,14 @@ impl RepoMarks {
             common_dir: common_dir.to_path_buf(),
             branches,
         });
+    }
+
+    /// The common directory the daemon registered for the repo, from its last batch with
+    /// branches; `None` before the first one.
+    pub fn common_dir(&self, repo_id: &str) -> Option<PathBuf> {
+        let mark = self.get(repo_id);
+        let persisted = mark.persisted.lock().unwrap_or_else(|e| e.into_inner());
+        persisted.as_ref().map(|p| p.common_dir.clone())
     }
 
     pub fn seq(&self, repo_id: &str) -> i64 {
@@ -448,7 +459,7 @@ impl RepoMarks {
             }
             return None;
         }
-        let Some(table) = procs.list_bare() else {
+        let Some(table) = procs.list_git() else {
             return Some(GitBlocker {
                 pid: 0,
                 subcommand: "unlisted".to_owned(),
@@ -478,27 +489,21 @@ impl RepoMarks {
                 continue;
             }
             let key = (entry.pid, entry.start_us);
-            let call = match probe.calls.get(&key) {
-                Some(known) => known.clone(),
-                None => {
-                    // Gone, or its pid names another process now.
-                    let Some(exe) = procs.exe(&entry) else {
-                        continue;
-                    };
-                    let known = matches!(
-                        exe.file_name().and_then(|n| n.to_str()),
-                        Some("git" | "git.exe")
-                    )
-                    .then(|| procs.git_call(entry.pid));
-                    probe.calls.insert(key, known.clone());
-                    known
-                }
-            };
-            // Not a `git`, or a long-lived helper that never changes a worktree.
-            let Some(call) = call else {
+            // Read on every pass, never remembered: `exec` keeps the identity, so a shell that
+            // was not a `git` at one pass may be one at the next. Gone, or its pid names another
+            // process now: it does not count.
+            let Some(exe) = procs.exe(&entry) else {
                 continue;
             };
-            if call.as_ref().is_some_and(|c| c.long_lived) {
+            if !matches!(
+                exe.file_name().and_then(|n| n.to_str()),
+                Some("git" | "git.exe")
+            ) {
+                continue;
+            }
+            // A long-lived helper, or a read-only subcommand, never changes a worktree.
+            let call = procs.git_call(entry.pid);
+            if call.as_ref().is_some_and(|c| c.long_lived || c.read_only) {
                 continue;
             }
             let verdict = match procs.cwd(entry.pid) {
@@ -627,13 +632,16 @@ impl RepoMarks {
     }
 }
 
-/// The check that a capture sealed with `mark` still holds at its validity point: the engine is
-/// calm now and its mark has not moved, so no event happened between the mark and the read. One
-/// poll, never a wait.
+/// The check that a capture sealed with `mark` still holds at its validity point: within
+/// [`CONFIRM_WINDOW`] after the read, the engine is calm at the same mark. The first calm poll
+/// decides: the same mark holds; another one (an event persisted since the mark) discards.
+/// Never calm in the window discards too.
 ///
-/// With the calm by state and by refs, `settle` answering the same mark means: every `git` that
-/// ended is persisted and nothing was persisted since the mark. Whatever the capture read between
-/// the two then is the state the mark covers.
+/// With the calm by state, by refs and by processes, `settle` answering the same mark at a poll
+/// after the read means: no `git` is alive then, every `git` that ended is persisted, and nothing
+/// was persisted since the mark. A `git` that changed the content during the read is either still
+/// alive at that poll (not calm), or ended: its reflog line is then persisted (the mark moved) or
+/// not yet (not calm). So whatever the capture read is the state the mark covers.
 pub fn confirm_mark(
     engine: Arc<dyn EngineLink>,
     repo_id: &str,
@@ -659,7 +667,7 @@ pub fn confirm_mark_excluding(
             pids: &pids,
             own_hook,
         };
-        engine.settle_excluding(&repo_id, &worktrees, Duration::ZERO, &ex) == Some(mark)
+        engine.settle_excluding(&repo_id, &worktrees, CONFIRM_WINDOW, &ex) == Some(mark)
     }))
 }
 
@@ -800,6 +808,14 @@ mod calm_exclusions_tests;
 #[cfg(test)]
 #[path = "calm_redirect_tests.rs"]
 mod calm_redirect_tests;
+
+#[cfg(test)]
+#[path = "calm_probe_fix_tests.rs"]
+mod calm_probe_fix_tests;
+
+#[cfg(test)]
+#[path = "confirm_window_tests.rs"]
+mod confirm_window_tests;
 
 #[cfg(test)]
 mod tests {

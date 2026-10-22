@@ -26,7 +26,7 @@ const REPO: &str = "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0";
 const T0: i64 = 1_728_000_000_000;
 
 /// `RepoMarks` whose `settle` moves the mark after answering, `bumps` times (`-1`: always). A
-/// `settle` with a limit is a wait for the mark; one with `ZERO` is a confirmation. The wait number
+/// `settle` for the mark is a wait; one over `CONFIRM_WINDOW` is a confirmation. The wait number
 /// `expire_at` (`0`: never) answers `None`, as a `settle` whose remaining time ran out.
 struct Moving {
     marks: Arc<RepoMarks>,
@@ -41,7 +41,7 @@ impl EngineLink for Moving {
         self.marks.seq(repo_id)
     }
     fn settle(&self, repo_id: &str, worktrees: &[PathBuf], limit: Duration) -> Option<i64> {
-        if limit.is_zero() {
+        if limit == crate::timemachine::engine::CONFIRM_WINDOW {
             self.confirmations.fetch_add(1, Ordering::SeqCst);
         } else {
             let wait = self.waits.fetch_add(1, Ordering::SeqCst) + 1;

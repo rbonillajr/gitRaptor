@@ -232,7 +232,21 @@ pub struct ProcBrief {
     pub ppid: u32,
     /// Start time, microseconds since the epoch (the `pbi_start_tv*` of `proc_pidinfo`).
     pub start_us: u64,
+    /// The kernel's short name of its executable (`p_comm`: the file name, at most 16 bytes,
+    /// NUL-padded), which `exec` updates. A hint to pick candidates, never an identity.
+    pub comm: [u8; COMM_LEN],
 }
+
+impl ProcBrief {
+    /// Whether its short name is `name` (compared up to the first NUL).
+    pub fn named(&self, name: &str) -> bool {
+        let end = self.comm.iter().position(|b| *b == 0).unwrap_or(COMM_LEN);
+        &self.comm[..end] == name.as_bytes()
+    }
+}
+
+/// `MAXCOMLEN + 1`: the size of `p_comm`.
+pub const COMM_LEN: usize = 17;
 
 /// `sizeof(struct kinfo_proc)`, the same on arm64 and x86_64 (both LP64).
 pub(crate) const KINFO_PROC_SIZE: usize = 648;
@@ -244,6 +258,8 @@ const START_USEC: usize = 8;
 const STAT: usize = 36;
 const PID: usize = 40;
 const PPID: usize = 560;
+/// `kp_proc.p_comm`.
+const COMM: usize = 243;
 /// `p_stat` of a zombie: it ended and waits for its parent, so it is not listed.
 const SZOMB: u8 = 5;
 
@@ -296,6 +312,7 @@ pub fn parse_kinfo(table: &[u8]) -> Option<Vec<ProcBrief>> {
                 pid: u32::try_from(i32_at(r, PID)?).ok()?,
                 ppid: u32::try_from(i32_at(r, PPID)?).ok()?,
                 start_us: sec.saturating_mul(1_000_000).saturating_add(usec),
+                comm: r.get(COMM..COMM + COMM_LEN)?.try_into().ok()?,
             })
         })
         .collect()
@@ -362,6 +379,9 @@ mod tests {
         r[STAT] = stat;
         r[PID..PID + 4].copy_from_slice(&pid.to_ne_bytes());
         r[PPID..PPID + 4].copy_from_slice(&ppid.to_ne_bytes());
+        if pid == 44 {
+            r[COMM..COMM + 3].copy_from_slice(b"git");
+        }
         r
     }
 
@@ -376,12 +396,14 @@ mod tests {
                 ProcBrief {
                     pid: 42,
                     ppid: 1,
-                    start_us: 1_700_000_000_250_000
+                    start_us: 1_700_000_000_250_000,
+                    comm: [0; COMM_LEN],
                 },
                 ProcBrief {
                     pid: 44,
                     ppid: 42,
-                    start_us: 1_700_000_002_000_007
+                    start_us: 1_700_000_002_000_007,
+                    comm: *b"git\0\0\0\0\0\0\0\0\0\0\0\0\0\0",
                 },
             ]
         );
@@ -415,6 +437,8 @@ mod tests {
         child.wait().unwrap();
         let me = table.iter().find(|p| p.pid == std::process::id()).unwrap();
         let kid = table.iter().find(|p| p.pid == child.id()).unwrap();
+        // The short name is read from the right offset.
+        assert!(kid.named("sleep"), "{kid:?}");
         assert_eq!(kid.ppid, std::process::id());
         assert!(me.start_us <= kid.start_us);
         // Within a minute of now: the start is read from the right offset.

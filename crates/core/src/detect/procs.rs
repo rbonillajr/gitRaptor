@@ -35,6 +35,12 @@ pub trait ProcLister: Send + Sync {
     fn list_bare(&self) -> Option<Vec<ProcEntry>> {
         self.list()
     }
+    /// The processes that may be a `git`: a superset of them, each still to be checked with
+    /// [`exe`](Self::exe). The default is the whole table; a platform whose table names each
+    /// process's executable (macOS: `p_comm`, updated by `exec`) keeps only those named `git`.
+    fn list_git(&self) -> Option<Vec<ProcEntry>> {
+        self.list_bare()
+    }
     /// Executable path of `entry`, only while `(pid, start_us)` is still that process: `None`
     /// when it ended or its pid now names another one.
     fn exe(&self, entry: &ProcEntry) -> Option<PathBuf> {
@@ -73,6 +79,20 @@ pub trait ProcLister: Send + Sync {
     }
 }
 
+/// A path from the bytes of an argument: as they are on Unix; on Windows, where an argument is
+/// UTF-16 and only its UTF-8 form can be split safely, through a lossy conversion.
+fn path_from_bytes(bytes: &[u8]) -> PathBuf {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt as _;
+        PathBuf::from(OsStr::from_bytes(bytes))
+    }
+    #[cfg(not(unix))]
+    {
+        PathBuf::from(String::from_utf8_lossy(bytes).into_owned())
+    }
+}
+
 /// The environment variables that move a `git`'s target.
 pub const GIT_TARGET_ENV: [&str; 3] = ["GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR"];
 
@@ -97,11 +117,7 @@ pub fn git_redirect_into(
             // The subcommand: what follows is its own.
             break;
         }
-        let value_of = |prefix: &[u8]| {
-            bytes
-                .strip_prefix(prefix)
-                .map(|v| PathBuf::from(OsStr::new(&String::from_utf8_lossy(v).into_owned())))
-        };
+        let value_of = |prefix: &[u8]| bytes.strip_prefix(prefix).map(path_from_bytes);
         match bytes {
             b"-C" => {
                 if let Some(dir) = rest.next().filter(|d| !d.is_empty()) {
@@ -146,6 +162,39 @@ pub fn git_redirect_into(
 pub struct GitCall {
     pub subcommand: String,
     pub long_lived: bool,
+    /// A subcommand that never writes a worktree or a ref (`log`, `show`, `diff`, `blame`…): a
+    /// pager or a long read does not hold the engine's calm. One that only reads the index may
+    /// refresh it, under `index.lock`, which the calm checks on its own.
+    pub read_only: bool,
+}
+
+/// Subcommands that never write a worktree or a ref, whatever their options. `config` is
+/// read-only only in its reading forms ([`config_reads`]).
+const READ_ONLY_SUBCOMMANDS: &[&str] = &[
+    "log",
+    "show",
+    "diff",
+    "blame",
+    "grep",
+    "ls-files",
+    "ls-tree",
+    "rev-parse",
+    "rev-list",
+    "cat-file",
+    "shortlog",
+    "describe",
+    "for-each-ref",
+    "help",
+    "version",
+];
+
+/// Whether `git config` with these arguments (after `config`) only reads: the `get` and `list`
+/// subcommands, or the `--get*`/`--list`/`-l` options.
+fn config_reads(after: &[&str]) -> bool {
+    matches!(after.first(), Some(&("get" | "list")))
+        || after
+            .iter()
+            .any(|a| a.starts_with("--get") || *a == "--list" || *a == "-l")
 }
 
 /// Global options of `git` whose value is the next argument.
@@ -184,6 +233,11 @@ pub fn git_call(args: &[OsString]) -> GitCall {
         Some("cat-file") => after.iter().any(|a| a.starts_with("--batch")),
         _ => false,
     };
+    let read_only = match subcommand {
+        Some("config") => config_reads(&after),
+        Some(s) => READ_ONLY_SUBCOMMANDS.contains(&s),
+        None => false,
+    };
     let clean: String = subcommand
         .unwrap_or_default()
         .chars()
@@ -197,6 +251,7 @@ pub fn git_call(args: &[OsString]) -> GitCall {
             clean
         },
         long_lived,
+        read_only,
     }
 }
 
@@ -409,11 +464,24 @@ mod mac {
     /// One `sysctl` for the whole table; one `proc_pidinfo` per process when it cannot be read
     /// or does not pass [`sane`]: a failure costs CPU, it never blinds the detector.
     pub(super) fn table() -> Option<Vec<ProcEntry>> {
+        table_where(|_| true)
+    }
+
+    /// The processes whose short name is `git` (`p_comm`, which `exec` updates). Without the
+    /// kernel's table, every process: the caller checks each one's executable.
+    pub(super) fn git_table() -> Option<Vec<ProcEntry>> {
+        table_where(|p| p.named("git"))
+    }
+
+    fn table_where(
+        keep: impl Fn(&gitraptor_macsys::process::ProcBrief) -> bool,
+    ) -> Option<Vec<ProcEntry>> {
         let uid = crate::channel::peer::current_uid();
         if let Some(table) = gitraptor_macsys::process::user_processes(uid).filter(|t| sane(t)) {
             return Some(
                 table
                     .into_iter()
+                    .filter(|p| keep(p))
                     .map(|p| ProcEntry {
                         pid: p.pid,
                         ppid: p.ppid,
@@ -462,6 +530,10 @@ impl ProcLister for SystemProcLister {
 
     fn list_bare(&self) -> Option<Vec<ProcEntry>> {
         mac::table()
+    }
+
+    fn list_git(&self) -> Option<Vec<ProcEntry>> {
+        mac::git_table()
     }
 
     fn exe(&self, entry: &ProcEntry) -> Option<PathBuf> {
