@@ -2,9 +2,9 @@
 id: DS-US-CKP-003
 title: "Dev Spec — US-CKP-003: la TUI dice en qué estado está el motor y qué hacer"
 type: dev-spec
-status: draft
+status: implemented
 created: 2026-10-09
-updated: 2026-10-09
+updated: 2026-10-21
 story: US-CKP-003
 feature: cockpit
 domain: GRP
@@ -178,6 +178,7 @@ flowchart LR
 
 **Ubicación.**
 - `apps/cli/tests/tui_engine_states.rs` (**CREATE**)
+- `apps/cli/tests/tui_state_screens.rs` (**CREATE**)
 - `apps/cli/tests/tui_loop.rs` (**MODIFY**)
 
 **Reglas**
@@ -208,6 +209,8 @@ flowchart LR
 - `apps/cli/src/client/mod.rs` (**MODIFY**)
 - `apps/cli/src/present/ingest.rs` (**MODIFY**)
 - `apps/cli/src/tui/update.rs` (**MODIFY**)
+- `apps/cli/src/tui/view.rs` (**MODIFY**) solo el literal de `RepoChoice` de su módulo de pruebas (campo `tier` nuevo)
+- `apps/cli/tests/tui_screens.rs` (**MODIFY**) solo el literal de `RepoChoice` (campo `tier` nuevo)
 
 **Reglas**
 - `decode`: `methods::NOTIFY_RESYNC` (`events.resync`, `ResyncNotification`) pasa a `EngineMsg::Lagged { reason }`. Lo demás sigue igual.
@@ -332,17 +335,19 @@ apps/cli/
 │           └── snapshots/               ← CREATE  state_panel__*, agentlist__sync_not_computable               (T003)
 └── tests/
     ├── tui_engine_states.rs             ← CREATE  escenarios 1–4, 6, 7 y el test de acciones                   (T001)
-    └── tui_loop.rs                      ← MODIFY  cliente lento                                                (T001)
+    ├── tui_loop.rs                      ← MODIFY  cliente lento                                                (T001)
+    ├── tui_state_screens.rs             ← CREATE  pantallas por la API pública, sin literales de RepoChoice    (T001)
+    └── tui_screens.rs                   ← MODIFY  solo el literal de RepoChoice, con `tier`                    (T002)
 ```
 
 **Rebanadas disjuntas** (un experto por rebanada; ningún archivo está en dos):
 
 | Rebanada | Tareas | Archivos | Puede correr en paralelo con |
 |---|---|---|---|
-| A · tests | T001 | `tests/tui_engine_states.rs`, `tests/tui_loop.rs` | B, C, D |
-| B · réplica | T002 | `model.rs`, `client/mod.rs`, `present/ingest.rs`, `tui/update.rs` | A, C |
+| A · tests | T001 | `tests/tui_engine_states.rs`, `tests/tui_state_screens.rs`, `tests/tui_loop.rs` | B, C, D |
+| B · réplica | T002 | `model.rs`, `client/mod.rs`, `present/ingest.rs`, `tui/update.rs`, el literal de `RepoChoice` en `tui/view.rs` (módulo de pruebas) y en `tests/tui_screens.rs` | A, C |
 | C · biblioteca | T003 | `tui/widgets/{state_panel,mod,agent_list}.rs`, `tui/widgets/snapshots/` | A, B |
-| D · vista | T004 | `tui/{engine_state,mod,view}.rs`, `present/i18n.rs`, `tui/snapshots/` | A (empieza cuando B y C están en la rama) |
+| D · vista | T004 | `tui/{engine_state,mod}.rs`, `tui/view.rs` (parte de la rama que ya tiene el literal de `RepoChoice` de B), `present/i18n.rs`, `tui/snapshots/` | A (empieza cuando B y C están en la rama) |
 | E · cierre | T005 | `docs/…` | — |
 
 ---
@@ -565,3 +570,15 @@ Revisión de `security-expert`: no hace falta. No hay `unsafe`, FFI, procesos, s
 | G3 | Solo se verifica en macOS (`script`, `lsof`). La lógica de `engine_state` es pura y corre en los tres sistemas. Linux y Windows siguen XP-21 | Etapa de validación multiplataforma | Rene |
 | G4 | "Reconciliando" no tiene test de proceso: provocar un despertar en un test necesita dormir un repo. Lo cubren los unitarios de `update` y `engine_state`, y la publicación de `repo.tier` está probada en `crates/core` | Ninguna | — |
 | G5 | Pista del explorador que resultó falsa: el resync por cliente lento no llega a `update.rs::on_resync`. Llega como `events.resync` de la conexión y `decode` lo descarta (D6) | Corregido en T002 | — |
+
+---
+
+## Estado de la implementación (2026-10-21)
+
+Implementado en: PR #PRN. T001 a T005 hechas; los criterios de aceptación pasan en macOS (`tui_state_screens`, `tui_loop`, `tui_engine_states`, los unitarios y los snapshots en en/es, Unicode y ASCII). Linux y Windows: *Pendiente: etapa de validación multiplataforma*.
+
+Ajustes frente a lo escrito (decisión del orquestador, 2026-10-21):
+- T002 también arregla el literal de `RepoChoice` (campo `tier` nuevo) en el módulo de pruebas de `view.rs` y en `tests/tui_screens.rs`.
+- La galería de widgets (`tui/gallery`) gana el componente "State panel" y la historia "sync not computable", porque los snapshots de la biblioteca salen de ella.
+- Una caída del enlace con un comando en vuelo, después de `events.resync`, conserva la racha del backoff (`End::dropped`).
+- Los criterios de la guarda del escenario 1 y de `no_action_targets_a_row` no son criterios del contrato: ya pasaban antes del cambio.
