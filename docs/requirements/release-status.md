@@ -12,9 +12,9 @@
 |---|---|
 | Implementado (`implemented`) | 52 |
 | Hecho (`done`) | 3 |
-| Implementado en parte (`partially-implemented`) | 23 |
+| Implementado en parte (`partially-implemented`) | 24 |
 | Listo (`ready`) | 4 |
-| Borrador (`draft`) | 66 |
+| Borrador (`draft`) | 65 |
 | Bloqueado (`blocked`) | 1 |
 | **Total** | **149** |
 
@@ -244,7 +244,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2
 
-111 fichas: 29 implementado, 3 hecho, 17 implementado en parte, 4 listo, 57 borrador, 1 bloqueado.
+111 fichas: 29 implementado, 3 hecho, 18 implementado en parte, 4 listo, 56 borrador, 1 bloqueado.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
