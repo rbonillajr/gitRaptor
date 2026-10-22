@@ -207,6 +207,7 @@ const GIT_OPTIONS_WITH_VALUE: &[&str] = &[
     "--exec-path",
     "--config-env",
     "--super-prefix",
+    "--attr-source",
 ];
 
 /// [`GitCall`] of a `git` with these arguments (after the program name). The subcommand is the
@@ -233,11 +234,16 @@ pub fn git_call(args: &[OsString]) -> GitCall {
         Some("cat-file") => after.iter().any(|a| a.starts_with("--batch")),
         _ => false,
     };
-    let read_only = match subcommand {
-        Some("config") => config_reads(&after),
-        Some(s) => READ_ONLY_SUBCOMMANDS.contains(&s),
-        None => false,
-    };
+    // `--output` makes a reading subcommand write a file.
+    let writes_output = after
+        .iter()
+        .any(|a| *a == "--output" || a.starts_with("--output="));
+    let read_only = !writes_output
+        && match subcommand {
+            Some("config") => config_reads(&after),
+            Some(s) => READ_ONLY_SUBCOMMANDS.contains(&s),
+            None => false,
+        };
     let clean: String = subcommand
         .unwrap_or_default()
         .chars()

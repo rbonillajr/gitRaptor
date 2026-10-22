@@ -70,6 +70,16 @@ impl EngineLink for DaemonEngine {
         self.marks.hook_begin(repo_id, worktree)
     }
 
+    fn confirm(
+        &self,
+        repo_id: &str,
+        worktrees: &[PathBuf],
+        mark: i64,
+        ex: &CalmExclusions<'_>,
+    ) -> bool {
+        self.marks.confirm(repo_id, worktrees, mark, ex)
+    }
+
     fn raw_events(&self, repo_id: &str, worktree: &Path) -> Option<Vec<RawGitEvent>> {
         self.handle.raw_events(repo_id, worktree)
     }

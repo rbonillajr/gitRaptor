@@ -53,6 +53,12 @@ const UNREADABLE_GRACE: Duration = Duration::from_secs(2);
 /// starts, a time-rule blip) then does not discard the capture; a mark that moved still does.
 pub const CONFIRM_WINDOW: Duration = Duration::from_millis(250);
 
+/// How long a wait reuses a running `git` it found, before it reads the process table again.
+/// Only a blocker is reused, never its absence: it can delay a calm by this much, never grant
+/// one. While a `git` runs, every poll of every waiting capture would otherwise read the whole
+/// table.
+const PROBE_BACKOFF: Duration = Duration::from_millis(50);
+
 /// How often the calm is checked again while waiting.
 const CALM_POLL: Duration = Duration::from_millis(10);
 
@@ -98,6 +104,18 @@ pub trait EngineLink: Send + Sync {
     fn hook_begin(&self, repo_id: &str, worktree: &Path) -> HookInFlight {
         let _ = (repo_id, worktree);
         HookInFlight::inert()
+    }
+    /// Whether a capture sealed with `mark` holds at its validity point ([`confirm_mark`]). The
+    /// default asks [`EngineLink::settle_excluding`] over [`CONFIRM_WINDOW`] (doubles without
+    /// processes); the daemon's engine also discards on a `git` known to work in the repo.
+    fn confirm(
+        &self,
+        repo_id: &str,
+        worktrees: &[PathBuf],
+        mark: i64,
+        ex: &CalmExclusions<'_>,
+    ) -> bool {
+        self.settle_excluding(repo_id, worktrees, CONFIRM_WINDOW, ex) == Some(mark)
     }
 }
 
@@ -158,6 +176,9 @@ impl Drop for HookInFlight {
 struct GitBlocker {
     pid: u32,
     subcommand: String,
+    /// Known to work in this repo: its folder is in the scope, or its redirection resolves into
+    /// the repo. `false`: it counts only because it could not be read.
+    known: bool,
 }
 
 #[derive(Debug, Default)]
@@ -463,6 +484,7 @@ impl RepoMarks {
             return Some(GitBlocker {
                 pid: 0,
                 subcommand: "unlisted".to_owned(),
+                known: false,
             });
         };
         let me = std::process::id();
@@ -519,6 +541,7 @@ impl RepoMarks {
                 Some(_) => procs.git_redirect_into(entry.pid, &in_repo),
                 None => None,
             };
+            let known = verdict == Some(true);
             let counts = match verdict {
                 Some(counts) => counts,
                 // Unreadable: it exited, or it is alive and the reader cannot see it.
@@ -543,10 +566,16 @@ impl RepoMarks {
                     }
                 }
             };
-            if counts && found.is_none() {
+            // A known one wins over one that counts only because it could not be read.
+            if counts
+                && found
+                    .as_ref()
+                    .is_none_or(|f: &GitBlocker| !f.known && known)
+            {
                 found = Some(GitBlocker {
                     pid: entry.pid,
                     subcommand: call.map_or_else(|| "unknown".to_owned(), |c| c.subcommand),
+                    known,
                 });
             }
         }
@@ -592,15 +621,28 @@ impl RepoMarks {
     ) -> Option<i64> {
         let end = Instant::now() + limit;
         let scope: Vec<&Path> = worktrees.iter().map(PathBuf::as_path).collect();
+        let mut last: Option<(Instant, GitBlocker)> = None;
         loop {
             let mut blocked = None;
             if worktrees.iter().all(|w| self.files_calm(repo_id, w))
                 && let Some(seq) = self.refs_calm(repo_id)
                 && !self.hook_in_flight(repo_id, &scope, ex.own_hook)
             {
-                match self.git_blocker(repo_id, &scope, ex.pids) {
+                let found = match &last {
+                    Some((at, b)) if at.elapsed() < PROBE_BACKOFF => Some(b.clone()),
+                    _ => self.git_blocker(repo_id, &scope, ex.pids),
+                };
+                match found {
                     None => return Some(seq),
-                    Some(b) => blocked = Some(b),
+                    Some(b) => {
+                        if last
+                            .as_ref()
+                            .is_none_or(|(at, _)| at.elapsed() >= PROBE_BACKOFF)
+                        {
+                            last = Some((Instant::now(), b.clone()));
+                        }
+                        blocked = Some(b);
+                    }
                 }
             }
             if Instant::now() + CALM_POLL > end {
@@ -625,6 +667,42 @@ impl RepoMarks {
         }
     }
 
+    /// Whether a capture sealed with `mark` holds (see [`confirm_mark`]): within
+    /// [`CONFIRM_WINDOW`], the first calm poll gives the same mark. A `git` known to work in this
+    /// repo, seen at any poll that looks at processes, discards at once, even if it is gone by the
+    /// end of the window: it may have changed files without leaving a reflog line, a ref or an
+    /// index behind (`git apply`). Only a not-calm of unknown cause (a `git` that could not be
+    /// read, a time-rule blip) is waited out.
+    pub fn confirm(
+        &self,
+        repo_id: &str,
+        worktrees: &[PathBuf],
+        mark: i64,
+        ex: &CalmExclusions<'_>,
+    ) -> bool {
+        let end = Instant::now() + CONFIRM_WINDOW;
+        let scope: Vec<&Path> = worktrees.iter().map(PathBuf::as_path).collect();
+        let mut last: Option<Instant> = None;
+        loop {
+            if worktrees.iter().all(|w| self.files_calm(repo_id, w))
+                && let Some(seq) = self.refs_calm(repo_id)
+                && !self.hook_in_flight(repo_id, &scope, ex.own_hook)
+                // An unknown blocker seen just now is still waited out without reading again.
+                && last.is_none_or(|at| at.elapsed() >= PROBE_BACKOFF)
+            {
+                match self.git_blocker(repo_id, &scope, ex.pids) {
+                    None => return seq == mark,
+                    Some(b) if b.known => return false,
+                    Some(_) => last = Some(Instant::now()),
+                }
+            }
+            if Instant::now() + CALM_POLL > end {
+                return false;
+            }
+            std::thread::sleep(CALM_POLL);
+        }
+    }
+
     /// Waits until every worktree is calm and the repo's refs are those the engine persisted, up
     /// to `limit`; the mark then. The refs are checked once per poll, for the whole repo.
     pub fn settle(&self, repo_id: &str, worktrees: &[PathBuf], limit: Duration) -> Option<i64> {
@@ -635,13 +713,15 @@ impl RepoMarks {
 /// The check that a capture sealed with `mark` still holds at its validity point: within
 /// [`CONFIRM_WINDOW`] after the read, the engine is calm at the same mark. The first calm poll
 /// decides: the same mark holds; another one (an event persisted since the mark) discards.
-/// Never calm in the window discards too.
+/// Never calm in the window discards too, and so does a `git` known to work in the repo (its
+/// folder in the worktree, or a redirection resolved into it) seen at any poll.
 ///
-/// With the calm by state, by refs and by processes, `settle` answering the same mark at a poll
-/// after the read means: no `git` is alive then, every `git` that ended is persisted, and nothing
-/// was persisted since the mark. A `git` that changed the content during the read is either still
-/// alive at that poll (not calm), or ended: its reflog line is then persisted (the mark moved) or
-/// not yet (not calm). So whatever the capture read is the state the mark covers.
+/// Why it holds: a `git` that changed the content during the read is, at the end of the read,
+/// either alive or ended. Alive and readable, it is known in the repo and discards at the first
+/// poll that sees it, even if it exits within the window (a `git apply` leaves no reflog line,
+/// ref or index to tell). Ended, its reflog line is persisted (the mark moved) or not yet (not
+/// calm). Only a `git` whose scope cannot be read is waited out, the same exposure as the grace
+/// of the calm for an unreadable `git`.
 pub fn confirm_mark(
     engine: Arc<dyn EngineLink>,
     repo_id: &str,
@@ -667,7 +747,7 @@ pub fn confirm_mark_excluding(
             pids: &pids,
             own_hook,
         };
-        engine.settle_excluding(&repo_id, &worktrees, CONFIRM_WINDOW, &ex) == Some(mark)
+        engine.confirm(&repo_id, &worktrees, mark, &ex)
     }))
 }
 
@@ -816,6 +896,10 @@ mod calm_probe_fix_tests;
 #[cfg(test)]
 #[path = "confirm_window_tests.rs"]
 mod confirm_window_tests;
+
+#[cfg(test)]
+#[path = "confirm_known_git_tests.rs"]
+mod confirm_known_git_tests;
 
 #[cfg(test)]
 mod tests {
