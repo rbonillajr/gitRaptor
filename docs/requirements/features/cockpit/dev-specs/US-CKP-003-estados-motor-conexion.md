@@ -575,7 +575,7 @@ Revisión de `security-expert`: no hace falta. No hay `unsafe`, FFI, procesos, s
 
 ## Estado de la implementación (2026-10-21)
 
-Implementado en: PR #PRN. T001 a T005 hechas; los criterios de aceptación pasan en macOS (`tui_state_screens`, `tui_loop`, `tui_engine_states`, los unitarios y los snapshots en en/es, Unicode y ASCII). Linux y Windows: *Pendiente: etapa de validación multiplataforma*.
+Implementado en: PR #282. T001 a T005 hechas; los criterios de aceptación pasan en macOS (`tui_state_screens`, `tui_loop`, `tui_engine_states`, los unitarios y los snapshots en en/es, Unicode y ASCII). Linux y Windows: *Pendiente: etapa de validación multiplataforma*.
 
 Ajustes frente a lo escrito (decisión del orquestador, 2026-10-21):
 - T002 también arregla el literal de `RepoChoice` (campo `tier` nuevo) en el módulo de pruebas de `view.rs` y en `tests/tui_screens.rs`.
