@@ -905,6 +905,10 @@ impl Connection<'_> {
             // must not wait for anything (ADR-GRD-003, Enmienda Cockpit).
             methods::GUARD_EVALUATE => {
                 let result = request.params::<EvaluateParams>().map(|p| {
+                    // A hook call in flight until its answer: the `git` waiting for it may have
+                    // changed files without writing its reflog yet, so no other calm of the
+                    // worktree is taken meanwhile (only this call's own hook prior).
+                    let in_flight = self.hook_in_flight(&p);
                     let caller = self.guard_caller(&p);
                     let served = self.guard_served(&p, &caller);
                     let policy = served.authorship_policy;
@@ -926,7 +930,13 @@ impl Connection<'_> {
                     // and the actor is read while the hook client is alive (US-GRD-005, D3).
                     // The prior snapshot goes before the log: a later change (US-GRD-017) can
                     // turn a failed one into a denial that the log records.
-                    decision.prior_snapshot = self.hook_prior(&p, &decision);
+                    decision.prior_snapshot = self.hook_prior(
+                        &p,
+                        &decision,
+                        in_flight
+                            .as_ref()
+                            .map(crate::timemachine::engine::HookInFlight::token),
+                    );
                     // Before the log and the claims: both see the denial of an allowed
                     // destructive operation whose prior failed (BR-EDGE-005).
                     crate::guardrails::snapshot_required::enforce(&mut decision);
@@ -940,6 +950,7 @@ impl Connection<'_> {
                     if !self.has(methods::CAP_GUARD_SNAPSHOT_REQUIRED.name) {
                         crate::guardrails::snapshot_required::legacy_decision(&mut decision);
                     }
+                    drop(in_flight);
                     decision
                 });
                 self.reply(&request.id, result);
@@ -1018,6 +1029,7 @@ impl Connection<'_> {
         &self,
         params: &EvaluateParams,
         decision: &gitraptor_api::guard::Decision,
+        hook: Option<crate::timemachine::engine::HookToken>,
     ) -> Option<gitraptor_api::timemachine::HookPriorSnapshot> {
         use crate::timemachine::hook_prior;
         use gitraptor_api::guard::Effect;
@@ -1040,7 +1052,7 @@ impl Connection<'_> {
         let requester = resolution.map_or(Requester::Unattributed, |r| r.who.requester);
         let git = crate::guardrails::second_line::nearest_git(self.peer, &checks);
         let started = Instant::now();
-        let taken = self.take_hook_prior(params, requester, git, started);
+        let taken = self.take_hook_prior(params, requester, git, started, hook);
         let (outcome, cause, reused) = match &taken {
             Ok(t) => ("complete", "none", t.reused),
             Err(cause) => ("failed", hook_prior_cause(*cause), false),
@@ -1073,6 +1085,7 @@ impl Connection<'_> {
         requester: Requester,
         git: Option<crate::guardrails::second_line::GitProcess>,
         started: Instant,
+        hook: Option<crate::timemachine::engine::HookToken>,
     ) -> Result<
         crate::timemachine::hook_prior::HookPriorTaken,
         gitraptor_api::timemachine::HookPriorFailure,
@@ -1112,9 +1125,18 @@ impl Connection<'_> {
             requester,
             git,
         };
-        hook_prior::capture(
+        // The calm leaves out the `git` commands waiting for this hook and this call itself; with
+        // the chain unknown, nothing is left out and the prior ends at its deadline.
+        let chain =
+            crate::guardrails::permissions::git_ancestor_pids(self.peer, &self.ctx.checks());
+        let ex = crate::timemachine::engine::CalmExclusions {
+            pids: chain.as_deref().unwrap_or_default(),
+            own_hook: hook,
+        };
+        hook_prior::capture_excluding(
             deps,
             &ask,
+            &ex,
             manual::wall_now_ms(),
             started + hook_prior::deadline(),
         )
@@ -1130,6 +1152,18 @@ impl Connection<'_> {
             HookPriorError::Unavailable => Failure::Unavailable,
             HookPriorError::Capture(_) => Failure::Internal,
         })
+    }
+
+    /// The hook call in flight on the worktree the hook runs in, when the Time Machine observes
+    /// its repo: dropped with the answer.
+    fn hook_in_flight(
+        &self,
+        params: &EvaluateParams,
+    ) -> Option<crate::timemachine::engine::HookInFlight> {
+        let deps = self.ctx.tm_engine.as_ref()?;
+        let cwd =
+            process_cwd(self.peer.pid).and_then(|p| gitraptor_git::paths::canonicalize(&p).ok())?;
+        Some(deps.engine.hook_begin(&params.repo_id, &cwd))
     }
 
     /// What the daemon knows of a hook client (US-GRD-018): the actor and the worktree are

@@ -12,7 +12,9 @@ use super::shutdown::ShutdownHandle;
 use super::{Daemon, sessions};
 use crate::profile::RepoStore;
 use crate::timemachine::continuous::{CaptureConfig, CaptureLayer};
-use crate::timemachine::engine::{EngineLink, RawGitEvent, RepoMarks, generation_floor};
+use crate::timemachine::engine::{
+    CalmExclusions, EngineLink, HookInFlight, RawGitEvent, RepoMarks, generation_floor,
+};
 use crate::timemachine::oplog::{Requester, RequesterOrigin};
 
 /// The continuous capture of the daemon: its cadence and, in tests, a fault layer.
@@ -48,10 +50,24 @@ impl EngineLink for DaemonEngine {
     }
 
     fn settle(&self, repo_id: &str, worktrees: &[PathBuf], limit: Duration) -> Option<i64> {
+        self.settle_excluding(repo_id, worktrees, limit, &CalmExclusions::default())
+    }
+
+    fn settle_excluding(
+        &self,
+        repo_id: &str,
+        worktrees: &[PathBuf],
+        limit: Duration,
+        ex: &CalmExclusions<'_>,
+    ) -> Option<i64> {
         // A dormant repo persists nothing until it wakes, so its refs would never match: wake it
         // first (a no-op for an active one) and wait for its first batch within the limit.
         self.handle.wake(repo_id, crate::watch::WakeCause::Sentinel);
-        self.marks.settle(repo_id, worktrees, limit)
+        self.marks.settle_excluding(repo_id, worktrees, limit, ex)
+    }
+
+    fn hook_begin(&self, repo_id: &str, worktree: &Path) -> HookInFlight {
+        self.marks.hook_begin(repo_id, worktree)
     }
 
     fn raw_events(&self, repo_id: &str, worktree: &Path) -> Option<Vec<RawGitEvent>> {

@@ -31,6 +31,7 @@ use gitraptor_api::messages::{GitEventDetails, GitEventKind};
 use crate::observe::{RepoRead, UncommittedPaths, WorktreeRead};
 use crate::profile::GapCause;
 
+pub(crate) use repo::head_log_len;
 pub use repo::{
     EventPlace, GapClassification, RefsReadError, RefsView, WorktreeRefs, classify, classify_gap,
 };

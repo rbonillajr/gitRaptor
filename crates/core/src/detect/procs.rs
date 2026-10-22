@@ -9,7 +9,7 @@
 //! in its arguments). The agent's own command line is never read.
 
 use std::ffi::{OsStr, OsString};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// One process of the user, as the kernel reports it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57,11 +57,85 @@ pub trait ProcLister: Send + Sync {
         let _ = pid;
         None
     }
+    /// Whether the `git` `pid` redirects its target into a repo `in_repo` accepts: its `-C`,
+    /// `--git-dir`, `--work-tree`, `GIT_DIR`, `GIT_WORK_TREE` and `GIT_COMMON_DIR` resolved as
+    /// `git` would ([`git_redirect_into`]). `None` when its arguments, environment or folder
+    /// cannot be read. Only this boolean leaves the reader (SEC-04). The default answers whether
+    /// it redirects at all, the most a reader without the targets can say.
+    fn git_redirect_into(&self, pid: u32, in_repo: &dyn Fn(&Path) -> bool) -> Option<bool> {
+        let _ = in_repo;
+        self.git_redirect(pid)
+    }
     /// [`git_call`] of the `git` `pid`; `None` when its arguments cannot be read.
     fn git_call(&self, pid: u32) -> Option<GitCall> {
         let _ = pid;
         None
     }
+}
+
+/// The environment variables that move a `git`'s target.
+pub const GIT_TARGET_ENV: [&str; 3] = ["GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR"];
+
+/// Whether a `git` with these arguments (after the program name), these `GIT_*` variables and
+/// this working folder redirects its target into a repo `in_repo` accepts. Resolved as `git`
+/// does: each `-C` in order from `cwd`, then `--git-dir`, `--work-tree` and [`GIT_TARGET_ENV`]
+/// from that folder; each target made canonical, and one that does not exist does not count.
+/// `in_repo` gets canonical paths only.
+pub fn git_redirect_into(
+    args: &[OsString],
+    env: &[(OsString, OsString)],
+    cwd: &Path,
+    in_repo: &dyn Fn(&Path) -> bool,
+) -> bool {
+    let mut here = cwd.to_path_buf();
+    let mut moved = false;
+    let mut targets: Vec<PathBuf> = Vec::new();
+    let mut rest = args.iter();
+    while let Some(arg) = rest.next() {
+        let bytes = arg.as_encoded_bytes();
+        if !bytes.starts_with(b"-") {
+            // The subcommand: what follows is its own.
+            break;
+        }
+        let value_of = |prefix: &[u8]| {
+            bytes
+                .strip_prefix(prefix)
+                .map(|v| PathBuf::from(OsStr::new(&String::from_utf8_lossy(v).into_owned())))
+        };
+        match bytes {
+            b"-C" => {
+                if let Some(dir) = rest.next().filter(|d| !d.is_empty()) {
+                    here = here.join(dir);
+                    moved = true;
+                }
+            }
+            b"--git-dir" | b"--work-tree" => targets.extend(rest.next().map(PathBuf::from)),
+            _ if bytes.starts_with(b"--git-dir=") => targets.extend(value_of(b"--git-dir=")),
+            _ if bytes.starts_with(b"--work-tree=") => targets.extend(value_of(b"--work-tree=")),
+            _ => {
+                if arg
+                    .to_str()
+                    .is_some_and(|a| GIT_OPTIONS_WITH_VALUE.contains(&a))
+                {
+                    rest.next();
+                }
+            }
+        }
+    }
+    targets.extend(
+        env.iter()
+            .filter(|(name, value)| {
+                !value.is_empty() && name.to_str().is_some_and(|n| GIT_TARGET_ENV.contains(&n))
+            })
+            .map(|(_, value)| PathBuf::from(value)),
+    );
+    if moved {
+        // `-C` alone moves where `git` looks for its repo.
+        targets.push(PathBuf::new());
+    }
+    targets
+        .iter()
+        .any(|t| gitraptor_git::paths::canonicalize(&here.join(t)).is_ok_and(|p| in_repo(&p)))
 }
 
 /// What the engine's calm reads of a running `git`'s command line: its subcommand, sanitized
@@ -74,13 +148,110 @@ pub struct GitCall {
     pub long_lived: bool,
 }
 
-/// [`GitCall`] of a `git` with these arguments (after the program name).
-// Stub: nothing is classified yet.
-pub fn git_call(_args: &[OsString]) -> GitCall {
-    GitCall {
-        subcommand: String::new(),
-        long_lived: false,
+/// Global options of `git` whose value is the next argument.
+const GIT_OPTIONS_WITH_VALUE: &[&str] = &[
+    "-c",
+    "-C",
+    "--git-dir",
+    "--work-tree",
+    "--namespace",
+    "--exec-path",
+    "--config-env",
+    "--super-prefix",
+];
+
+/// [`GitCall`] of a `git` with these arguments (after the program name). The subcommand is the
+/// first argument after the global options; an argument that is not plain text, or none, is
+/// `unknown`, and an unknown one is never long-lived.
+pub fn git_call(args: &[OsString]) -> GitCall {
+    let mut rest = args.iter();
+    let mut subcommand = None;
+    while let Some(arg) = rest.next() {
+        let Some(text) = arg.to_str() else {
+            break;
+        };
+        if !text.starts_with('-') {
+            subcommand = Some(text);
+            break;
+        }
+        if GIT_OPTIONS_WITH_VALUE.contains(&text) {
+            rest.next();
+        }
     }
+    let after: Vec<&str> = rest.filter_map(|a| a.to_str()).collect();
+    let long_lived = match subcommand {
+        Some("fsmonitor--daemon") => true,
+        Some("cat-file") => after.iter().any(|a| a.starts_with("--batch")),
+        _ => false,
+    };
+    let clean: String = subcommand
+        .unwrap_or_default()
+        .chars()
+        .filter(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == '-')
+        .take(32)
+        .collect();
+    GitCall {
+        subcommand: if clean.is_empty() {
+            "unknown".to_owned()
+        } else {
+            clean
+        },
+        long_lived,
+    }
+}
+
+/// Linux: the [`GIT_TARGET_ENV`] variables of `pid` with their values, from
+/// `/proc/<pid>/environ`; every other variable is skipped unread. `None` when it cannot be read
+/// or exceeds [`PROC_TEXT_CAP`].
+#[cfg(target_os = "linux")]
+fn linux_git_env(pid: u32) -> Option<Vec<(OsString, OsString)>> {
+    use std::io::Read as _;
+    use std::os::unix::ffi::OsStrExt as _;
+    let file = std::fs::File::open(format!("/proc/{pid}/environ")).ok()?;
+    let mut buf = Vec::new();
+    file.take(PROC_TEXT_CAP + 1).read_to_end(&mut buf).ok()?;
+    if u64::try_from(buf.len()).ok()? > PROC_TEXT_CAP {
+        return None;
+    }
+    Some(
+        buf.split(|b| *b == 0)
+            .filter_map(|kv| {
+                let eq = kv.iter().position(|b| *b == b'=')?;
+                let (name, value) = (&kv[..eq], &kv[eq + 1..]);
+                GIT_TARGET_ENV
+                    .iter()
+                    .any(|n| n.as_bytes() == name)
+                    .then(|| {
+                        (
+                            OsStr::from_bytes(name).to_os_string(),
+                            OsStr::from_bytes(value).to_os_string(),
+                        )
+                    })
+            })
+            .collect(),
+    )
+}
+
+/// Linux: the arguments of `pid` after the program name, from `/proc/<pid>/cmdline`; `None`
+/// when it cannot be read, is empty or exceeds [`PROC_TEXT_CAP`].
+#[cfg(target_os = "linux")]
+fn linux_args(pid: u32) -> Option<Vec<OsString>> {
+    use std::io::Read as _;
+    use std::os::unix::ffi::OsStrExt as _;
+    let file = std::fs::File::open(format!("/proc/{pid}/cmdline")).ok()?;
+    let mut buf = Vec::new();
+    file.take(PROC_TEXT_CAP + 1).read_to_end(&mut buf).ok()?;
+    if buf.is_empty() || u64::try_from(buf.len()).ok()? > PROC_TEXT_CAP {
+        return None;
+    }
+    Some(
+        buf.strip_suffix(b"\0")
+            .unwrap_or(&buf[..])
+            .split(|b| *b == 0)
+            .skip(1)
+            .map(|a| OsStr::from_bytes(a).to_os_string())
+            .collect(),
+    )
 }
 
 /// Whether a `git` with these arguments (after the program name) and these
@@ -304,6 +475,22 @@ impl ProcLister for SystemProcLister {
     fn git_redirect(&self, pid: u32) -> Option<bool> {
         gitraptor_macsys::process::process_git_redirect(pid)
     }
+
+    fn git_call(&self, pid: u32) -> Option<GitCall> {
+        let args = gitraptor_macsys::process::process_args(pid)?;
+        Some(git_call(args.get(1..).unwrap_or_default()))
+    }
+
+    fn git_redirect_into(&self, pid: u32, in_repo: &dyn Fn(&Path) -> bool) -> Option<bool> {
+        let (args, env) = gitraptor_macsys::process::process_git_target(pid, &GIT_TARGET_ENV)?;
+        let cwd = crate::channel::peer::process_cwd(pid)?;
+        Some(git_redirect_into(
+            args.get(1..).unwrap_or_default(),
+            &env,
+            &cwd,
+            in_repo,
+        ))
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -352,6 +539,17 @@ impl ProcLister for SystemProcLister {
 
     fn git_redirect(&self, pid: u32) -> Option<bool> {
         linux_git_redirect(pid)
+    }
+
+    fn git_call(&self, pid: u32) -> Option<GitCall> {
+        Some(git_call(&linux_args(pid)?))
+    }
+
+    fn git_redirect_into(&self, pid: u32, in_repo: &dyn Fn(&Path) -> bool) -> Option<bool> {
+        let args = linux_args(pid)?;
+        let env = linux_git_env(pid)?;
+        let cwd = crate::channel::peer::process_cwd(pid)?;
+        Some(git_redirect_into(&args, &env, &cwd, in_repo))
     }
 }
 

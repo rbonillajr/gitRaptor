@@ -690,6 +690,12 @@ impl Daemon {
             #[cfg(any(unix, windows))]
             server: None,
         };
+        // No calm while a `git` of the user runs in the worktree (its reflog comes last); a wait
+        // that runs out because of one says so in the log.
+        daemon
+            .marks
+            .set_procs(Arc::new(crate::detect::SystemProcLister));
+        daemon.marks.set_logger(daemon.logger.clone());
         let repo_ids: Vec<String> = daemon.stores.iter().map(|(id, _)| id.clone()).collect();
         for repo_id in &repo_ids {
             daemon.link_marks(repo_id);

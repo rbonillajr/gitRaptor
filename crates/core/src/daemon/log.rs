@@ -70,6 +70,9 @@ pub enum Field {
     Id(String),
     /// Source location of a panic: only `[A-Za-z0-9_./-]`.
     Location(String),
+    /// A short word read from another process (a `git` subcommand): only `[a-z0-9-]`, at most
+    /// 32 characters. Build it with [`Field::word`].
+    Word(String),
 }
 
 impl Field {
@@ -83,6 +86,21 @@ impl Field {
             value.to_owned()
         } else {
             "invalid-id".into()
+        })
+    }
+
+    /// A word from outside: only `[a-z0-9-]` is kept, at most 32 characters; nothing left is
+    /// `unknown`.
+    pub fn word(value: &str) -> Self {
+        let kept: String = value
+            .chars()
+            .filter(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == '-')
+            .take(32)
+            .collect();
+        Self::Word(if kept.is_empty() {
+            "unknown".into()
+        } else {
+            kept
         })
     }
 
@@ -110,7 +128,7 @@ impl Field {
             Self::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
             Self::Text(t) => out.push_str(t),
             Self::Version(v) => out.push_str(&v.to_string()),
-            Self::Id(s) | Self::Location(s) => out.push_str(s),
+            Self::Id(s) | Self::Location(s) | Self::Word(s) => out.push_str(s),
         }
     }
 }
