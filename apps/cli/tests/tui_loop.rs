@@ -79,10 +79,10 @@ impl Connector for FakeConnector {
     }
 
     fn connect(&mut self) -> Result<Box<dyn Link>, LinkError> {
-        if self.daemon.connects.load(Ordering::SeqCst) > 0 {
-            if let Some(gate) = &self.reconnect_gate {
-                let _ = gate.recv();
-            }
+        if self.daemon.connects.load(Ordering::SeqCst) > 0
+            && let Some(gate) = &self.reconnect_gate
+        {
+            let _ = gate.recv();
         }
         let Some(rx) = self.streams.lock().unwrap().pop_front() else {
             return Err(LinkError::EngineUnavailable);
