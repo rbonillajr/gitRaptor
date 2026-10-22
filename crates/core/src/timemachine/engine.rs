@@ -26,8 +26,8 @@
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use gitraptor_api::messages::GitEventKind;
@@ -35,11 +35,18 @@ use gitraptor_git::{ReaderOptions, RepoReader};
 
 use super::oplog::{Oplog, Requester};
 use super::store::ValidityGuard;
+use crate::daemon::{Field, Logger};
+use crate::detect::{GitCall, ProcLister};
 use crate::profile::{ProfileDirs, fsperm};
 
 /// Quiet time of a repo's Git directory: the fallback calm of a worktree without a `HEAD`
 /// reflog (two windows of the observer, ADR-GRP-011 § 2).
 pub const SETTLE: Duration = Duration::from_millis(150);
+
+/// How long a live `git` whose command line or folder cannot be read holds the calm: the longest
+/// wait of a `settle` (`ANCHOR_SETTLE_LIMIT`). Past it, it is logged and the other checks
+/// (reflog, refs, hook calls in flight) decide.
+const UNREADABLE_GRACE: Duration = Duration::from_secs(2);
 
 /// How often the calm is checked again while waiting.
 const CALM_POLL: Duration = Duration::from_millis(10);
@@ -106,6 +113,14 @@ pub struct HookToken(u64);
 #[derive(Debug)]
 pub struct HookInFlight {
     token: HookToken,
+    registry: Option<Arc<Mutex<HashMap<u64, HookCall>>>>,
+}
+
+/// Where a hook call in flight runs.
+#[derive(Debug)]
+struct HookCall {
+    repo_id: String,
+    worktree: PathBuf,
 }
 
 impl HookInFlight {
@@ -113,6 +128,7 @@ impl HookInFlight {
     pub fn inert() -> Self {
         Self {
             token: HookToken(0),
+            registry: None,
         }
     }
 
@@ -122,8 +138,21 @@ impl HookInFlight {
 }
 
 impl Drop for HookInFlight {
-    // Stub: nothing is counted yet, so nothing is given back.
-    fn drop(&mut self) {}
+    fn drop(&mut self) {
+        if let Some(registry) = &self.registry {
+            registry
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(&self.token.0);
+        }
+    }
+}
+
+/// A running `git` that holds the calm: its pid and its subcommand, sanitized.
+#[derive(Debug, Clone)]
+struct GitBlocker {
+    pid: u32,
+    subcommand: String,
 }
 
 #[derive(Debug, Default)]
@@ -153,9 +182,48 @@ struct Persisted {
 
 /// Marks and Git directory activity per repo. The daemon loop sets marks and reflog sizes after
 /// each batch it persists (mark first); the observer's router reports the activity.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct RepoMarks {
     repos: Mutex<HashMap<String, Arc<RepoMark>>>,
+    /// The user's processes; without them the calm does not look at running `git`s.
+    procs: OnceLock<Arc<dyn ProcLister>>,
+    logger: OnceLock<Logger>,
+    /// `tm_calm_probe_unsupported` was logged.
+    unsupported_logged: AtomicBool,
+    /// Hook calls in flight, by token.
+    hooks: Arc<Mutex<HashMap<u64, HookCall>>>,
+    next_hook: AtomicU64,
+    /// What the process probe already knows, by process identity.
+    probe: Mutex<ProbeCache>,
+}
+
+/// The process probe's memory, by `(pid, start_us)`: an identity that survives pid reuse. Kept
+/// only for processes still in the table.
+#[derive(Debug, Default)]
+struct ProbeCache {
+    /// `None`: not a `git`; `Some(call)`: a `git`, with its command line if it could be read.
+    calls: HashMap<(u32, u64), Option<Option<GitCall>>>,
+    /// When a live `git` was first found unreadable.
+    unreadable: HashMap<(u32, u64), Instant>,
+    /// Unreadable ones already logged.
+    logged: std::collections::HashSet<(u32, u64)>,
+}
+
+impl ProbeCache {
+    fn prune(&mut self, alive: &std::collections::HashSet<(u32, u64)>) {
+        self.calls.retain(|k, _| alive.contains(k));
+        self.unreadable.retain(|k, _| alive.contains(k));
+        self.logged.retain(|k| alive.contains(k));
+    }
+}
+
+impl std::fmt::Debug for RepoMarks {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RepoMarks")
+            .field("repos", &self.repos)
+            .field("procs", &self.procs.get().is_some())
+            .finish_non_exhaustive()
+    }
 }
 
 impl RepoMarks {
@@ -258,6 +326,14 @@ impl RepoMarks {
 
     /// Whether `worktree` is calm now (see the module docs).
     pub fn calm(&self, repo_id: &str, worktree: &Path) -> bool {
+        let one = std::slice::from_ref(&worktree);
+        self.files_calm(repo_id, worktree)
+            && !self.hook_in_flight(repo_id, one, None)
+            && self.git_blocker(repo_id, one, &[]).is_none()
+    }
+
+    /// The cheap part of the calm, read from the worktree's Git files only.
+    fn files_calm(&self, repo_id: &str, worktree: &Path) -> bool {
         let Some(git_dir) = git_dir_of(worktree) else {
             // Gone or unreadable: nothing of it can be captured anyway.
             return true;
@@ -312,47 +388,242 @@ impl RepoMarks {
         (on_disk == p.branches).then(|| p.seq.max(mark.seq.load(Ordering::Acquire)))
     }
 
-    /// The user's processes: with them, no worktree is calm while a `git` runs in it.
-    // Stub: processes are not read yet.
-    pub fn set_procs(&self, _procs: Arc<dyn crate::detect::ProcLister>) {}
+    /// The user's processes: with them, no worktree is calm while a `git` runs in it. Set once;
+    /// a later call is ignored.
+    pub fn set_procs(&self, procs: Arc<dyn ProcLister>) {
+        let _ = self.procs.set(procs);
+    }
 
-    /// Where a `settle` blocked by a running `git` says so.
-    // Stub: nothing is logged yet.
-    pub fn set_logger(&self, _logger: crate::daemon::Logger) {}
+    /// Where a `settle` blocked by a running `git` says so. Set once.
+    pub fn set_logger(&self, logger: Logger) {
+        let _ = self.logger.set(logger);
+    }
 
-    /// [`RepoMarks::settle`] without counting what `ex` names.
-    // Stub: the exclusions are ignored.
+    /// A hook call in flight on `worktree`, counted until the guard drops.
+    pub fn hook_begin(&self, repo_id: &str, worktree: &Path) -> HookInFlight {
+        let token = self.next_hook.fetch_add(1, Ordering::AcqRel) + 1;
+        self.hooks.lock().unwrap_or_else(|e| e.into_inner()).insert(
+            token,
+            HookCall {
+                repo_id: repo_id.to_owned(),
+                worktree: worktree.to_path_buf(),
+            },
+        );
+        HookInFlight {
+            token: HookToken(token),
+            registry: Some(Arc::clone(&self.hooks)),
+        }
+    }
+
+    /// Whether a hook call other than `own` is in flight in one of `worktrees`.
+    fn hook_in_flight(&self, repo_id: &str, worktrees: &[&Path], own: Option<HookToken>) -> bool {
+        let hooks = self.hooks.lock().unwrap_or_else(|e| e.into_inner());
+        hooks.iter().any(|(token, call)| {
+            own != Some(HookToken(*token))
+                && call.repo_id == repo_id
+                && worktrees
+                    .iter()
+                    .any(|w| call.worktree.starts_with(w) || w.starts_with(&call.worktree))
+        })
+    }
+
+    /// The first `git` running in one of `worktrees`, leaving out the daemon's own children,
+    /// `excluded` and the long-lived helpers. A `git` counts by its folder, or, working
+    /// elsewhere, by a redirection (`-C`, `--git-dir`, `GIT_DIR`…) that resolves into this repo.
+    /// One the reader cannot read counts while it is alive, for [`UNREADABLE_GRACE`] at most, and
+    /// is then logged once and left to the other checks; one that exited does not count. A
+    /// process table that cannot be read fails closed. `None` without a lister.
+    fn git_blocker(
+        &self,
+        repo_id: &str,
+        worktrees: &[&Path],
+        excluded: &[u32],
+    ) -> Option<GitBlocker> {
+        let procs = self.procs.get()?;
+        if !crate::detect::detection_supported() {
+            if !self.unsupported_logged.swap(true, Ordering::AcqRel)
+                && let Some(logger) = self.logger.get()
+            {
+                logger.warn("tm_calm_probe_unsupported", &[("repo", Field::id(repo_id))]);
+            }
+            return None;
+        }
+        let Some(table) = procs.list_bare() else {
+            return Some(GitBlocker {
+                pid: 0,
+                subcommand: "unlisted".to_owned(),
+            });
+        };
+        let me = std::process::id();
+        let scopes: Vec<(&Path, Option<PathBuf>)> =
+            worktrees.iter().map(|w| (*w, git_dir_of(w))).collect();
+        // Where this repo is, for a redirection: its common directory and every registered
+        // worktree root. Read only if a `git` elsewhere redirects.
+        let repo_paths = std::cell::OnceCell::new();
+        let in_repo = |target: &Path| {
+            let (common, roots) = repo_paths.get_or_init(|| self.repo_paths(repo_id, worktrees));
+            common
+                .as_ref()
+                .is_some_and(|c: &PathBuf| target.starts_with(c))
+                || roots.iter().any(|r: &PathBuf| target.starts_with(r))
+        };
+        let mut probe = self.probe.lock().unwrap_or_else(|e| e.into_inner());
+        let alive: std::collections::HashSet<(u32, u64)> =
+            table.iter().map(|e| (e.pid, e.start_us)).collect();
+        probe.prune(&alive);
+        let now = Instant::now();
+        let mut found = None;
+        for entry in table {
+            if entry.ppid == me || excluded.contains(&entry.pid) {
+                continue;
+            }
+            let key = (entry.pid, entry.start_us);
+            let call = match probe.calls.get(&key) {
+                Some(known) => known.clone(),
+                None => {
+                    // Gone, or its pid names another process now.
+                    let Some(exe) = procs.exe(&entry) else {
+                        continue;
+                    };
+                    let known = matches!(
+                        exe.file_name().and_then(|n| n.to_str()),
+                        Some("git" | "git.exe")
+                    )
+                    .then(|| procs.git_call(entry.pid));
+                    probe.calls.insert(key, known.clone());
+                    known
+                }
+            };
+            // Not a `git`, or a long-lived helper that never changes a worktree.
+            let Some(call) = call else {
+                continue;
+            };
+            if call.as_ref().is_some_and(|c| c.long_lived) {
+                continue;
+            }
+            let verdict = match procs.cwd(entry.pid) {
+                Some(cwd)
+                    if scopes.iter().any(|(w, g)| {
+                        cwd.starts_with(w) || g.as_ref().is_some_and(|g| cwd.starts_with(g))
+                    }) =>
+                {
+                    Some(true)
+                }
+                // Read on every pass: only `git`s working elsewhere get here, and a reader may
+                // answer differently while the process lives (one of the tests' tables does).
+                Some(_) => procs.git_redirect_into(entry.pid, &in_repo),
+                None => None,
+            };
+            let counts = match verdict {
+                Some(counts) => counts,
+                // Unreadable: it exited, or it is alive and the reader cannot see it.
+                None if procs.exe(&entry).is_none() => false,
+                None => {
+                    let since = *probe.unreadable.entry(key).or_insert(now);
+                    if now.duration_since(since) < UNREADABLE_GRACE {
+                        true
+                    } else {
+                        if probe.logged.insert(key)
+                            && let Some(logger) = self.logger.get()
+                        {
+                            logger.warn(
+                                "tm_calm_probe_unreadable",
+                                &[
+                                    ("repo", Field::id(repo_id)),
+                                    ("pid", Field::Int(i64::from(entry.pid))),
+                                ],
+                            );
+                        }
+                        false
+                    }
+                }
+            };
+            if counts && found.is_none() {
+                found = Some(GitBlocker {
+                    pid: entry.pid,
+                    subcommand: call.map_or_else(|| "unknown".to_owned(), |c| c.subcommand),
+                });
+            }
+        }
+        found
+    }
+
+    /// The repo's common directory (the one the daemon registered, else the first worktree's)
+    /// and the roots of its registered worktrees plus `worktrees`, all canonical.
+    fn repo_paths(&self, repo_id: &str, worktrees: &[&Path]) -> (Option<PathBuf>, Vec<PathBuf>) {
+        let registered = {
+            let mark = self.get(repo_id);
+            let persisted = mark.persisted.lock().unwrap_or_else(|e| e.into_inner());
+            persisted.as_ref().map(|p| p.common_dir.clone())
+        };
+        let common = registered
+            .or_else(|| {
+                worktrees
+                    .first()
+                    .and_then(|w| crate::observe::locate(w).ok())
+            })
+            .and_then(|c| gitraptor_git::paths::canonicalize(&c).ok());
+        let mut roots: Vec<PathBuf> = worktrees.iter().map(|w| w.to_path_buf()).collect();
+        if let Some(common) = &common {
+            roots.extend(
+                crate::observe::registered_worktrees(common)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|(root, _)| root),
+            );
+        }
+        (common, roots)
+    }
+
+    /// [`RepoMarks::settle`] without counting what `ex` names. Each poll checks, cheapest first:
+    /// each worktree's Git files, the repo's refs, the hook calls in flight and, only if all of
+    /// them say calm, one read of the process table for every worktree.
     pub fn settle_excluding(
         &self,
         repo_id: &str,
         worktrees: &[PathBuf],
         limit: Duration,
-        _ex: &CalmExclusions<'_>,
+        ex: &CalmExclusions<'_>,
     ) -> Option<i64> {
-        self.settle(repo_id, worktrees, limit)
-    }
-
-    /// A hook call in flight on `worktree`, counted until the guard drops.
-    // Stub: the guard counts nothing.
-    pub fn hook_begin(&self, _repo_id: &str, _worktree: &Path) -> HookInFlight {
-        HookInFlight::inert()
+        let end = Instant::now() + limit;
+        let scope: Vec<&Path> = worktrees.iter().map(PathBuf::as_path).collect();
+        loop {
+            let mut blocked = None;
+            if worktrees.iter().all(|w| self.files_calm(repo_id, w))
+                && let Some(seq) = self.refs_calm(repo_id)
+                && !self.hook_in_flight(repo_id, &scope, ex.own_hook)
+            {
+                match self.git_blocker(repo_id, &scope, ex.pids) {
+                    None => return Some(seq),
+                    Some(b) => blocked = Some(b),
+                }
+            }
+            if Instant::now() + CALM_POLL > end {
+                // A wait that ran out because of a running `git`: once per `settle`, with the pid
+                // and the subcommand only. A single poll (`ZERO`, a confirmation) waits for
+                // nothing and says nothing.
+                if !limit.is_zero()
+                    && let (Some(b), Some(logger)) = (blocked, self.logger.get())
+                {
+                    logger.warn(
+                        "tm_calm_blocked_by_git",
+                        &[
+                            ("repo", Field::id(repo_id)),
+                            ("pid", Field::Int(i64::from(b.pid))),
+                            ("subcommand", Field::word(&b.subcommand)),
+                        ],
+                    );
+                }
+                return None;
+            }
+            std::thread::sleep(CALM_POLL);
+        }
     }
 
     /// Waits until every worktree is calm and the repo's refs are those the engine persisted, up
     /// to `limit`; the mark then. The refs are checked once per poll, for the whole repo.
     pub fn settle(&self, repo_id: &str, worktrees: &[PathBuf], limit: Duration) -> Option<i64> {
-        let end = Instant::now() + limit;
-        loop {
-            if worktrees.iter().all(|w| self.calm(repo_id, w))
-                && let Some(seq) = self.refs_calm(repo_id)
-            {
-                return Some(seq);
-            }
-            if Instant::now() + CALM_POLL > end {
-                return None;
-            }
-            std::thread::sleep(CALM_POLL);
-        }
+        self.settle_excluding(repo_id, worktrees, limit, &CalmExclusions::default())
     }
 }
 
@@ -369,9 +640,26 @@ pub fn confirm_mark(
     worktrees: &[PathBuf],
     mark: i64,
 ) -> ValidityGuard {
+    confirm_mark_excluding(engine, repo_id, worktrees, mark, &CalmExclusions::default())
+}
+
+/// [`confirm_mark`] for a capture whose `settle` left out `ex`: its confirmation leaves out the
+/// same.
+pub fn confirm_mark_excluding(
+    engine: Arc<dyn EngineLink>,
+    repo_id: &str,
+    worktrees: &[PathBuf],
+    mark: i64,
+    ex: &CalmExclusions<'_>,
+) -> ValidityGuard {
     let (repo_id, worktrees) = (repo_id.to_owned(), worktrees.to_vec());
+    let (pids, own_hook) = (ex.pids.to_vec(), ex.own_hook);
     ValidityGuard(Arc::new(move || {
-        engine.settle(&repo_id, &worktrees, Duration::ZERO) == Some(mark)
+        let ex = CalmExclusions {
+            pids: &pids,
+            own_hook,
+        };
+        engine.settle_excluding(&repo_id, &worktrees, Duration::ZERO, &ex) == Some(mark)
     }))
 }
 
@@ -391,11 +679,9 @@ pub fn git_dir_of(worktree: &Path) -> Option<PathBuf> {
     Some(worktree.join(dir))
 }
 
+/// The `HEAD` reflog up to its last complete line, as the engine publishes it.
 fn head_log_len(git_dir: &Path) -> u64 {
-    std::fs::symlink_metadata(git_dir.join("logs").join("HEAD"))
-        .ok()
-        .filter(std::fs::Metadata::is_file)
-        .map_or(0, |m| m.len())
+    crate::watch::head_log_len(git_dir)
 }
 
 /// Whether a `git` holds the index of a worktree.
@@ -510,6 +796,10 @@ pub(crate) mod calm_git_alive_tests;
 #[cfg(test)]
 #[path = "calm_exclusions_tests.rs"]
 mod calm_exclusions_tests;
+
+#[cfg(test)]
+#[path = "calm_redirect_tests.rs"]
+mod calm_redirect_tests;
 
 #[cfg(test)]
 mod tests {

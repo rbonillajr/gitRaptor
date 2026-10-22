@@ -76,14 +76,20 @@ Cada una es una «Decisión del orquestador (2026-10-04), validada por Arquitect
   - Exclusiones vacías para todo lo demás.
 - **D18. Llamadas de hook en vuelo (complemento barato, válido en Windows).** `RepoMarks` lleva un contador de llamadas de hook en vuelo por worktree: `hook_begin(repo, wt)` devuelve un guard RAII, y el daemon lo toma al recibir la llamada del hook y lo suelta al responder. `calm(wt)` es `false` mientras haya alguna, salvo la `own_hook` del propio `settle` (D17).
 - **D19. D15 se mantiene.** Cubre el hueco sin hooks: un `git` sin hooks entre `reset_index` y `reset_refs`, que bajo carga no dura microsegundos garantizados.
-- **D20. `git -C <wt>` desde otro `cwd`.** Un `git` cuyo `cwd` cae fuera del ámbito cuenta igualmente si `git_redirects(args, env)` (`detect/procs.rs:66`) da `true` o no se puede evaluar (argv o env ilegibles). Falla cerrado: un `-C` o un `GIT_DIR` puede apuntar al ámbito.
+- **D20. `git -C <wt>` desde otro `cwd` (reescrita).** «Decisión del orquestador (2026-10-04), validada por Arquitecto» (opción a; la versión anterior contaba cualquier redirección, adonde apuntara, y dejaba sin calma todo repo mientras corriera en la máquina un `git` con `-C` o `GIT_DIR`, por ejemplo los subprocesos de un `push`).
+  - Un `git` cuyo `cwd` cae fuera del ámbito cuenta solo si su destino se resuelve **dentro de este repo**: el directorio común, un gitdir de `.git/worktrees/*` o la raíz de un worktree registrado. El lector devuelve solo sí o no (SEC-04): `ProcLister::git_redirect_into(pid, in_repo)`.
+  - Se resuelve como `git`: cada `-C` en orden desde el `cwd` del proceso; después `--git-dir`, `--work-tree`, `GIT_DIR`, `GIT_WORK_TREE` y `GIT_COMMON_DIR`; las rutas relativas, desde el `cwd` efectivo; se canonicaliza y se compara por prefijo. Una ruta que no existe no cuenta.
+  - Ilegible se separa en dos: el proceso terminó (su identidad `(pid, inicio)` ya no está) → no cuenta; sigue vivo pero su línea de órdenes, su entorno o su carpeta no se leen → cuenta.
+  - Un `git` ilegible cuenta durante la ventana de gracia de `settle` (2 s, el límite de `ANCHOR_SETTLE_LIMIT`). Después deja de contar, se registra `tm_calm_probe_unreadable` una vez con su `pid`, y deciden D1 y D18. Es un ⚠️ RIESGO NFR-01 abierto (release-plan, Huecos, fila 12).
+  - Lo que se sabe de un proceso (si es un `git` y su subcomando) se cachea por `(pid, inicio)` y se descarta cuando sale de la tabla. El veredicto de redirección se lee en cada pasada: solo llega ahí un `git` de fuera del ámbito, y lo exige un test de contrato (C25) cuya tabla cambia la respuesta para el mismo proceso.
+  - Se mantiene el orden de D21.
 - **D21. Coste: primero lo barato.** El orden es reflog, `HEAD`, `index.lock`, ramas (D1), hooks en vuelo (D18), y solo si todo dice calma, procesos.
   - `list_bare()` da el nombre sin `exe`; `exe`, `cwd` y argv se leen solo para los candidatos `git`.
   - Se mide el p95 de una pasada en macOS con unos 800 procesos (C27). Si pasa de 5 ms, se cachea la lista como mucho 1 sondeo por repo.
 - **D22. `git` de larga vida excluidos por argv ya.** Quedan fuera `git fsmonitor--daemon` y `git cat-file --batch*` (`--batch`, `--batch-check`, `--batch-command`). `git credential-cache--daemon` se ejecuta como `git-credential-cache--daemon`, con otro nombre de `exe`, así que el filtro por nombre no lo cuenta; un test lo fija. El paginador, el editor y `gc --auto` quedan como trade-off aceptado.
 - **D23. Observabilidad e inanición declarada.** Un `git status` en bucle (IDE, prompt de shell) puede impedir la calma por D15 hasta el límite. Es un límite declarado. Cada vez que un `settle` agota su límite por D15, se registra `tm_calm_blocked_by_git` con `pid` y subcomando (`argv[1]` saneado), nunca el argv completo, como mucho una vez por `settle`.
 - **Nietos del daemon.** Solo se excluyen los hijos directos (`ppid == daemon`). Los nietos (hooks y subprocesos de un `git` del propio daemon) no; esos `git` corren bajo el lock del repo, que serializa las operaciones TM del mismo repo, y un `settle` concurrente de la captura continua solo se aplaza.
-- **⚠️ RIESGO NFR-01 abierto (Windows).** Sin `cwd` de otro proceso, D15 queda inactivo (se registra `tm_calm_probe_unsupported`). D18 cubre los `git` con hooks de GitRaptor, pero no un `reset --hard` sin hooks en pleno vuelo. Está registrado en `docs/requirements/release-plan.md` (Huecos, fila 12), no solo como "Pendiente".
+- **⚠️ RIESGO NFR-01 abierto (Windows).** El código lee el `cwd` de otro proceso por el PEB (`detect/procs.rs`, `win::cwd`), así que D15 queda activo en Windows, **sin validar en máquina real**. `tm_calm_probe_unsupported` queda para una plataforma sin lista de procesos. Si la lectura del PEB falla, D18 cubre los `git` con hooks de GitRaptor, pero no un `reset --hard` sin hooks en pleno vuelo. Está registrado en `docs/requirements/release-plan.md` (Huecos, fila 12), no solo como "Pendiente".
 
 ## Topología
 
@@ -203,6 +209,9 @@ Slice 4, caso 3 (criterios: C19-C22):
 - Coste: una apertura más un listado por sondeo de 10 ms solo mientras espera; la comparación es de `BTreeMap`. Presupuesto en C9.
 - Plataformas: misma lógica en Linux, macOS y Windows. CI en ubuntu; macOS y Windows quedan pendientes en máquina real.
 - Seguridad: no hay rutas nuevas desde el contenido del repo y los nombres de rama solo se comparan. Va a `security-expert` (NFR-01).
+- «Decisión del orquestador (2026-10-04)»: D22 y D23 leen la línea de órdenes de un `git` con `ProcLister::git_call(pid) -> Option<GitCall>`, donde `GitCall { subcommand, long_lived }`. Del lector solo salen el subcomando saneado (`[a-z0-9-]`, 32 bytes como mucho) y un booleano; nunca el resto de argumentos (SEC-04). `None` (argv ilegible) cuenta como `git` corriente.
+- «Decisión del orquestador (2026-10-04)»: el log de D23 sale por `RepoMarks::set_logger(Logger)`, que el daemon llama una vez junto con `set_procs`.
+- «Decisión del orquestador (2026-10-04)»: las exclusiones de D17 entran por `hook_prior::capture_excluding(deps, ask, ex, now_ms, deadline)`; `capture` es `capture_excluding` con exclusiones vacías y `HookPriorAsk` no cambia. `channel/conn.rs` llama a `capture_excluding` con la cadena del cliente y el token del hook en vuelo.
 
 ### Enmienda ADR-TMC-003 § 4 (esquema)
 
@@ -214,8 +223,9 @@ Slice 4, caso 3 (criterios: C19-C22):
 
 5. Marca confirmada (caso 2): la marca de una captura vale solo si en su punto de validez el motor sigue en calma con la misma `seq`. Si no, la captura se descarta (las capturas reintentan; el prior rechaza con `git-busy`). Así ninguna captura guarda contenido posterior a un evento con una marca anterior a ese evento.
 
-6. Git en curso (caso 3): la calma exige además que no viva ningún `git` en el ámbito (lista de procesos del usuario; los hijos del daemon quedan fuera; si no se puede leer, falla cerrado). La razón: un `git` cambia el contenido antes de escribir su reflog (`reset --hard`: índice → `ORIG_HEAD` → `HEAD`). Límite declarado: un `git` largo de solo lectura aplaza capturas y operaciones. En una plataforma sin `cwd` de procesos, D15 queda inactivo (Windows pendiente). Se corrige la frase de ADR-TMC-004 § 2 "todo `git` terminado…": la calma por reflog solo cubre `git` terminados.
+6. Git en curso (caso 3): la calma exige además que no viva ningún `git` en el ámbito (lista de procesos del usuario; los hijos del daemon quedan fuera; si no se puede leer, falla cerrado). La razón: un `git` cambia el contenido antes de escribir su reflog (`reset --hard`: índice → `ORIG_HEAD` → `HEAD`). Límite declarado: un `git` largo de solo lectura aplaza capturas y operaciones. En Windows D15 está activo por el PEB, sin validar en máquina real. Se corrige la frase de ADR-TMC-004 § 2 "todo `git` terminado…": la calma por reflog solo cubre `git` terminados.
 7. Reflog: se publican solo líneas completas (D16).
+8. Redirección (D20): un `git` de fuera del ámbito cuenta solo si su destino resuelto cae dentro del repo; uno ilegible cuenta durante la ventana de gracia (2 s) y después se registra.
 
 ADR-TMC-004 § 2: se añade "y las ramas locales" a la fila de Calma por estado. ADR-TMC-004, fila Consistencia: "la marca se confirma en el punto de validez (calma + `seq` sin moverse); si no, descarte". Se cita la compatibilidad con la regla del punto previo de #272.
 
@@ -226,7 +236,7 @@ Ninguna. No hay cambio de contrato público ni de datos.
 ## Not Built (deferred)
 
 - Excluir de D15 los `git` de solo lectura (`log`, `show`, `diff`, `status`… por argv): cuando el bloqueo por paginador o editor se vea en uso real. Hoy cuenta cualquier `git`.
-- D15 en Windows (`cwd` de otro proceso): cuando se valide en máquina real. Hasta entonces queda inactivo y se registra, D18 lo mitiga y el hueco es un ⚠️ RIESGO NFR-01 abierto (release-plan, Huecos, fila 12).
+- Validar D15 en Windows (`cwd` de otro proceso por el PEB) en máquina real. Hasta entonces el código lo deja activo sin validar, D18 lo mitiga y el hueco es un ⚠️ RIESGO NFR-01 abierto (release-plan, Huecos, fila 12).
 
 - Barrera por worktree (solo las ramas de su ámbito): cuando C6 muestre `repo-busy` con la cadencia real de los agentes.
 - Retirar `await_moved_branches`: cuando C4 y us_tmc_009 lleven 2 semanas en verde. Su falso positivo (cualquier evento ajeno posterior con el mismo nombre de rama) no puede sobrevivir a la retirada, ni copiado ni en un sustituto.

@@ -46,6 +46,43 @@ pub fn process_git_redirect(pid: u32) -> Option<bool> {
     }
 }
 
+/// The arguments of a process (program name first) and some of its environment variables, by
+/// name and value.
+pub type ArgsAndEnv = (Vec<OsString>, Vec<(OsString, OsString)>);
+
+/// The arguments (program name first) of `pid` and the values of the environment variables
+/// named in `names`, to resolve where a `git` points. Every other variable is skipped unread
+/// into the result. `None` when the area cannot be read. macOS only; elsewhere always `None`.
+pub fn process_git_target(pid: u32, names: &[&str]) -> Option<ArgsAndEnv> {
+    #[cfg(target_os = "macos")]
+    {
+        parse_procargs2_git_target(&crate::ffi_procargs::procargs2(pid)?, names)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (pid, names);
+        None
+    }
+}
+
+/// [`process_git_target`] over a `KERN_PROCARGS2` area: its arguments, and of the strings that
+/// follow them only the `name=value` ones whose name is in `names`. Anything malformed is `None`.
+pub fn parse_procargs2_git_target(area: &[u8], names: &[&str]) -> Option<ArgsAndEnv> {
+    let (args, env) = split_procargs2(area)?;
+    let wanted = env
+        .split(|b| *b == 0)
+        .filter_map(|kv| {
+            let eq = kv.iter().position(|b| *b == b'=')?;
+            let (name, value) = (&kv[..eq], &kv[eq + 1..]);
+            names
+                .iter()
+                .any(|n| n.as_bytes() == name)
+                .then(|| (os(name), os(value)))
+        })
+        .collect();
+    Some((args.into_iter().map(os).collect(), wanted))
+}
+
 /// [`process_git_redirect`] over a `KERN_PROCARGS2` area: [`git_redirects`] over the argv (after
 /// `argv[0]`) and every non-empty string that follows it, the environment and the loader's own
 /// `key=value` strings alike. Anything malformed is `None`.

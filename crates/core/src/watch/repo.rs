@@ -217,11 +217,39 @@ fn worktree_refs(
 
 /// Size of a worktree's `HEAD` reflog, without following links; 0 if
 /// there is none.
-fn head_log_len(git_dir: &Path) -> u64 {
-    std::fs::symlink_metadata(git_dir.join("logs").join("HEAD"))
+/// Length of a worktree's `HEAD` reflog up to its last complete line: a line `git` is still
+/// writing is not published, so it names no event and no calm until its `\n` is there. Only
+/// the tail is read, backwards, from the end of the file.
+pub(crate) fn head_log_len(git_dir: &Path) -> u64 {
+    use std::io::{Read, Seek, SeekFrom};
+    const CHUNK: u64 = 4096;
+    let path = git_dir.join("logs").join("HEAD");
+    let Some(len) = std::fs::symlink_metadata(&path)
         .ok()
         .filter(std::fs::Metadata::is_file)
-        .map_or(0, |m| m.len())
+        .map(|m| m.len())
+    else {
+        return 0;
+    };
+    let Ok(mut file) = std::fs::File::open(&path) else {
+        return 0;
+    };
+    let mut end = len;
+    let mut buf = Vec::new();
+    while end > 0 {
+        let start = end.saturating_sub(CHUNK);
+        buf.clear();
+        if file.seek(SeekFrom::Start(start)).is_err()
+            || (&mut file).take(end - start).read_to_end(&mut buf).is_err()
+        {
+            return 0;
+        }
+        if let Some(i) = buf.iter().rposition(|b| *b == b'\n') {
+            return start + i as u64 + 1;
+        }
+        end = start;
+    }
+    0
 }
 
 /// The entries appended to a worktree's `HEAD` reflog from byte `from` on,

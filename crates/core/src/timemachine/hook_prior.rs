@@ -17,7 +17,7 @@ use gitraptor_api::methods::QuotaWindow;
 use gitraptor_git::ReadError;
 
 use super::continuous::CaptureDeps;
-use super::engine::{CalmExclusions, GitState, confirm_mark};
+use super::engine::{CalmExclusions, GitState, confirm_mark_excluding};
 use super::manual::{
     DAY_MS, MINUTE_MS, ManualFloor, QuotaHit, QuotaInput, VolumeProbe, cached_reserve, folder_id,
     resolve_worktree,
@@ -396,6 +396,19 @@ pub fn capture(
     now_ms: i64,
     deadline: Instant,
 ) -> Result<HookPriorTaken, HookPriorError> {
+    capture_excluding(deps, ask, &CalmExclusions::default(), now_ms, deadline)
+}
+
+/// [`capture`] for a hook whose `git` is alive in the worktree: the calm does not count what
+/// `ex` names (the `git` ancestors of the hook's client and this hook call). With the chain
+/// unknown, `ex` names nothing and the prior waits for a calm that cannot come: `TimeLimit`.
+pub fn capture_excluding(
+    deps: &CaptureDeps,
+    ask: &HookPriorAsk,
+    ex: &CalmExclusions<'_>,
+    now_ms: i64,
+    deadline: Instant,
+) -> Result<HookPriorTaken, HookPriorError> {
     let (oplog, store) = deps
         .repos
         .repo(&ask.repo_id)
@@ -409,7 +422,7 @@ pub fn capture(
     let left = deadline.saturating_duration_since(Instant::now());
     let Some(mut mark) =
         deps.engine
-            .settle(&ask.repo_id, std::slice::from_ref(&ask.worktree), left)
+            .settle_excluding(&ask.repo_id, std::slice::from_ref(&ask.worktree), left, ex)
     else {
         return Err(book(&store, ask, HookPriorError::TimeLimit));
     };
@@ -424,11 +437,12 @@ pub fn capture(
     let mut retry = false;
     let result = loop {
         let verified = verify(ask)?;
-        let confirm = confirm_mark(
+        let confirm = confirm_mark_excluding(
             Arc::clone(&deps.engine),
             &ask.repo_id,
             std::slice::from_ref(&ask.worktree),
             mark,
+            ex,
         );
         let attempt = record_one(
             &store,
@@ -447,10 +461,12 @@ pub fn capture(
             Err(HookPriorError::Discarded) if Instant::now() < deadline => {
                 retry = true;
                 let left = deadline.saturating_duration_since(Instant::now());
-                match deps
-                    .engine
-                    .settle(&ask.repo_id, std::slice::from_ref(&ask.worktree), left)
-                {
+                match deps.engine.settle_excluding(
+                    &ask.repo_id,
+                    std::slice::from_ref(&ask.worktree),
+                    left,
+                    ex,
+                ) {
                     Some(next) => mark = next,
                     None => break Err(HookPriorError::TimeLimit),
                 }
@@ -460,20 +476,6 @@ pub fn capture(
     };
     remember(&store, ask, &result);
     result
-}
-
-/// [`capture`] for a hook whose `git` is alive in the worktree: the calm does not count what
-/// `ex` names (the `git` ancestors of the hook's client and this hook call). With the chain
-/// unknown, `ex` names nothing and the prior waits for a calm that cannot come: `TimeLimit`.
-// Stub: the exclusions are not passed on yet.
-pub fn capture_excluding(
-    deps: &CaptureDeps,
-    ask: &HookPriorAsk,
-    _ex: &CalmExclusions<'_>,
-    now_ms: i64,
-    deadline: Instant,
-) -> Result<HookPriorTaken, HookPriorError> {
-    capture(deps, ask, now_ms, deadline)
 }
 
 /// Keeps a failure for the `git` command, so its next hook does not try again.

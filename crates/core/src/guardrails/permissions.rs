@@ -30,6 +30,35 @@ fn is_git(info: &crate::channel::peer::ProcInfo) -> bool {
     name == "git" || name == "git.exe"
 }
 
+/// The pids of the consecutive `git` ancestors of the hook client `peer`, nearest first: the
+/// `git` commands waiting for its answer, which the engine's calm must not wait for. `None` when
+/// the chain cannot be told (the client is not the process that connected, or it is longer than
+/// the bound): nothing is then left out of the calm.
+pub fn git_ancestor_pids(peer: AcceptedPeer, checks: &Checks<'_>) -> Option<Vec<u32>> {
+    let mut current = checks.procs.read(peer.pid).ok()?;
+    if current.start_us != peer.start_us || current.uid != checks.uid {
+        return None;
+    }
+    let mut pids = Vec::new();
+    for _ in 0..MAX_DEPTH + MAX_CHAIN {
+        let Some(next) = parent(&current, checks) else {
+            break;
+        };
+        current = next;
+        if !is_git(&current) {
+            if pids.is_empty() {
+                continue;
+            }
+            return Some(pids);
+        }
+        if pids.len() == MAX_CHAIN {
+            return None;
+        }
+        pids.push(current.pid);
+    }
+    (!pids.is_empty()).then_some(pids)
+}
+
 /// The consecutive `git` ancestors of the hook client `peer`, nearest first (at most
 /// [`MAX_CHAIN`]). A command line counts only if the process is still the same one after it
 /// was read; a chain longer than the bound ends with [`GitCommand::Unknown`]. An empty chain
