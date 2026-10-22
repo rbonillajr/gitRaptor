@@ -1,0 +1,187 @@
+{
+  "source": {
+    "kind": "devspec",
+    "ref": "docs/requirements/features/cockpit/dev-specs/US-CKP-002-orden-atencion-terminadas.md"
+  },
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "criteria": [
+    {
+      "id": "CKP002-ORDER",
+      "statement": "D1: la flota va principal, Activo, Inactivo, Terminado visible y sin agente, con desempate fijo por nombre de carpeta, en en y es; un cambio de actividad no mueve filas del mismo grupo",
+      "verify": "cargo test -p gitraptor-cli --test tui_fleet_order the_fleet_goes_main_active_inactive_ended_no_agent",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_fleet_order.rs"
+      ]
+    },
+    {
+      "id": "CKP002-ENDED",
+      "statement": "D5/D10/D11: una sesion terminada se ve 'terminó hace 2 h' (en: 'ended 2 h ago') con el nombre tenue y 'Terminado' ordenando; a las 24 h exactas se oculta y la fila dice 'último agente: claude-4 (terminó hace 1 d)' (en 'last agent: claude-4 (ended 1 d ago)'); la tecla f la vuelve a mostrar",
+      "verify": "cargo test -p gitraptor-cli --test tui_fleet_order an_ended_session_shows_when_it_ended_then_its_last_agent",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_fleet_order.rs"
+      ]
+    },
+    {
+      "id": "CKP002-UNOBSERVED",
+      "statement": "D6: sin ended_utc_ms y con end_cause ended-during-gap, a las 2 h la fila dice 'terminó sin observar; detectado hace 2 h' (en 'ended unobserved; detected 2 h ago') y a las 24 h 'último agente: claude-4 (terminó sin observar; detectado hace 1 d)'; con otro motivo y sin hora, 'hora de fin no disponible'",
+      "verify": "cargo test -p gitraptor-cli --test tui_fleet_order a_session_ended_unobserved_says_so",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_fleet_order.rs"
+      ]
+    },
+    {
+      "id": "CKP002-REPLACE",
+      "statement": "Escenario 3: una sesion nueva en el worktree sustituye a la terminada (la terminada deja de verse)",
+      "verify": "cargo test -p gitraptor-cli --test tui_fleet_order a_new_session_replaces_the_ended_one",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_fleet_order.rs"
+      ]
+    },
+    {
+      "id": "CKP002-SHARED",
+      "statement": "D8/D9 escenario 4: con dos sesiones presentes y una terminada solapada la fila dice 'compartido con' (en 'shared with') y nombra las tres",
+      "verify": "cargo test -p gitraptor-cli --test tui_fleet_order a_shared_worktree_shows_all_its_sessions",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_fleet_order.rs"
+      ]
+    },
+    {
+      "id": "CKP002-NOTSHARED",
+      "statement": "D8 escenario 5: una presente y una terminada se enseñan las dos pero la fila no dice 'compartido'",
+      "verify": "cargo test -p gitraptor-cli --test tui_fleet_order a_present_and_an_ended_session_are_not_shared",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_fleet_order.rs"
+      ]
+    },
+    {
+      "id": "CKP002-NINE",
+      "statement": "D4: con nueve agentes presentes cuyas sesiones empezaron en un orden distinto del de las filas (orden de carpeta), el color sale del orden de inicio, no de la posicion de la fila; el noveno por inicio repite el color del primero y conserva su nombre y su simbolo",
+      "verify": "cargo test -p gitraptor-cli --test tui_fleet_order nine_agents_the_ninth_shares_the_first_color_and_keeps_its_name",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_fleet_order.rs"
+      ]
+    },
+    {
+      "id": "CKP002-LAGGED",
+      "statement": "D4: tras un Lagged, una conexion caida y una instantanea nueva con su lista, en la que la sesion mas antigua ya termino, cada agente presente conserva su color de antes (el color posicional de hoy se desplazaria)",
+      "verify": "cargo test -p gitraptor-cli --test tui_fleet_order each_agent_keeps_its_color_after_lagged_and_a_reconnection",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_fleet_order.rs"
+      ]
+    },
+    {
+      "id": "CKP002-FAILEDLIST",
+      "statement": "D4: tras una instantanea nueva y un session.state suelto sin lista, el resto de las sesiones conserva su color cuando la lista llega despues, aunque la lista de despues traiga la sesion mas antigua ya terminada",
+      "verify": "cargo test -p gitraptor-cli --test tui_fleet_order a_failed_sessions_list_never_frees_a_color",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_fleet_order.rs"
+      ]
+    },
+    {
+      "id": "CKP002-HINT",
+      "statement": "D7: la pista 'f show ended (3)' / 'f ver terminadas (3)' cuenta las ocultas, 'f hide ended' con el filtro activo, ninguna pista sin ocultas, y f sale en la ayuda ? en el grupo de la flota",
+      "verify": "cargo test -p gitraptor-cli --test tui_fleet_order the_show_ended_hint_counts_what_is_hidden",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_fleet_order.rs"
+      ]
+    },
+    {
+      "id": "CKP002-PTY-ORDER",
+      "statement": "Escenario 1 contra el raptor real: la fila de pagos (con agente) va antes que la de docs aunque alfabeticamente seria al reves",
+      "verify": "cargo test -p gitraptor-cli --test live_fleet rows_go_by_what_asks_for_attention",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/live_fleet.rs"
+      ]
+    },
+    {
+      "id": "CKP002-PTY-ENDED",
+      "statement": "Escenarios 2 y 3 contra el raptor real: tras withdraw la fila dice '○ claude-1 · pagos' con 'ended' y otro register la deja '● claude-1 · pagos' sin 'ended'",
+      "verify": "cargo test -p gitraptor-cli --test live_fleet an_ended_session_stays_until_a_new_one_replaces_it",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/live_fleet.rs"
+      ]
+    },
+    {
+      "id": "CKP002-PTY-SHARED",
+      "statement": "Escenarios 4 y 5 contra el raptor real: con claude-1 y claude-2 en pagos la fila dice 'shared with'; tras retirar claude-1 lo nombra con 'ended' y ya no dice 'shared with'",
+      "verify": "cargo test -p gitraptor-cli --test live_fleet a_shared_worktree_shows_all_its_sessions",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/live_fleet.rs"
+      ]
+    }
+  ],
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "crates/**",
+      "apps/mcp/**",
+      "apps/cli/src/main.rs",
+      "Cargo.lock",
+      "Cargo.toml",
+      "apps/cli/Cargo.toml"
+    ],
+    "allow_dependency_changes": false
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-cli"
+    ]
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 900000,
+    "suiteTimeoutMs": 2700000
+  },
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "sonnet"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "sonnet"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  }
+}

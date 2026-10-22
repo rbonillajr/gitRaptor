@@ -223,8 +223,10 @@ flowchart LR
 - `apps/cli/src/model/agent_colors_tests.rs` (**CREATE**)
 - `apps/cli/src/tui/view_order_tests.rs` (**CREATE**)
 - `apps/cli/tests/live_fleet.rs` (**MODIFY**)
+- `apps/cli/tests/tui_fleet_order.rs` (**CREATE**)
 
 **Reglas**
+- `tui_fleet_order.rs` lleva los criterios del contrato de `/implement` que se miran por la pantalla (los mismos nombres que los de `view_order_tests.rs`): usa solo la API pública (`Model`, `update`, `view`, `buffer_text`) como `tests/tui_screens.rs`, así compila antes de que existan los tipos nuevos y falla por aserción. Lo escribe el criterion-tester en rojo antes del build. Los `*_tests.rs` de abajo los escribe el experto junto con T003 a T006, y como la fila de atención (conflicto previsto o denegación) no se puede producir por la API pública, el caso de atención de `main_first_then_attention_…` solo existe ahí.
 - Los tests van en archivos propios, enganchados con `#[cfg(test)] #[path = "…_tests.rs"] mod tests;` (o `mod order_tests;` en `view.rs`). Ningún archivo de producción figura como test en el contrato de `/implement`.
 - Las horas son fijas en el modelo (`now_ms`, `started_utc_ms`, `ended_utc_ms`): nunca el reloj del sistema ni `sleep`.
 - `fleet_order_tests.rs`:
@@ -247,7 +249,7 @@ flowchart LR
 - `view_order_tests.rs`, en en y es salvo donde se diga. Alimentan el modelo con mensajes por `update`:
   - `the_fleet_goes_main_active_inactive_ended_no_agent`;
   - `an_ended_session_shows_when_it_ended_then_its_last_agent` (escenario 2: "terminó hace 2 h", y a las 24 h "último agente: claude-4 (terminó hace 1 d)" / "last agent: claude-4 (ended 1 d ago)"; con `f`, vuelve a verse);
-  - `a_session_ended_unobserved_says_so` ("último agente: claude-4 (terminó sin observar; detectado hace 2 h)" / "last agent: claude-4 (ended unobserved; detected 2 h ago)");
+  - `a_session_ended_unobserved_says_so` (sin `ended_utc_ms` y con `ended-during-gap`, a las 2 h la fila sigue visible y dice "terminó sin observar; detectado hace 2 h" / "ended unobserved; detected 2 h ago"; a las 24 h, "último agente: claude-4 (terminó sin observar; detectado hace 1 d)" / "last agent: claude-4 (ended unobserved; detected 1 d ago)"; sin hora y con otro motivo, "hora de fin no disponible" / "end time not available");
   - `a_new_session_replaces_the_ended_one` (escenario 3);
   - `a_shared_worktree_shows_all_its_sessions` (escenario 4: `claude-1` Activo, `claude-2` Inactivo y `claude-3` Terminado; la fila dice "compartido con" y nombra a los tres);
   - `a_present_and_an_ended_session_are_not_shared` (escenario 5: enseña las dos y no dice "compartido");
@@ -304,7 +306,7 @@ flowchart LR
 - `apps/cli/src/tui/update.rs` (**MODIFY**)
 - `apps/cli/src/tui/keymap.rs` (**MODIFY**)
 - `apps/cli/src/present/i18n.rs` (**MODIFY**)
-- el archivo del test `no_action_targets_a_row` de DS-US-CKP-003 (**MODIFY**)
+- `apps/cli/tests/tui_engine_states.rs` (**MODIFY**), el test `no_action_targets_a_row` de DS-US-CKP-003
 
 **Pasos**
 1. `AgentColors::open(repo_id)`: si el registro es de otro repo, lo vacía y apunta el nuevo `repo_id`. Con el mismo repo no hace nada.
@@ -439,6 +441,8 @@ apps/cli/src/
         ├── tests.rs                 ← MODIFY
         └── snapshots/               ← CREATE  agentlist__shared_sessions, agentlist__last_agent
 apps/cli/tests/live_fleet.rs         ← MODIFY  tres escenarios con el daemon real
+apps/cli/tests/tui_engine_states.rs   ← MODIFY  no_action_targets_a_row clasifica ShowEnded (T004)
+apps/cli/tests/tui_fleet_order.rs     ← CREATE  criterios de pantalla por la API pública (T002)
 ```
 
 ---
@@ -640,4 +644,4 @@ _No aplica — no hay llamadas nuevas al daemon._ La única respuesta nueva al u
 | G3 | Esta entrega cambia el aspecto de DS-US-CKP-001 § 7, F1: una fila con solo una Terminada deja de decir "Sin agente" durante 24 h (D10). Los snapshots `fleet_*` existentes pueden cambiar de orden | T006 los revisa y T007 enmienda § 7 | Implementador |
 | G5 | Solo se verificará en macOS. Linux y Windows siguen la etapa de validación multiplataforma | Etapa de validación | Rene |
 | G6 | Los escenarios 4 y 5 de la historia llevan una precondición más que el texto pedido ("terminó después de que empezaran las otras"). Sin ella, por BR-CKP-TIME-002, la Terminada no se vería y la fila no enseñaría todas sus sesiones | Ninguna | — |
-| G7 | La tarea T004 modifica el test `no_action_targets_a_row`, que crea DS-US-CKP-003. Su ruta exacta la fija esa entrega | Buscarlo por nombre al implementar | Implementador |
+| G7 | La tarea T004 modifica el test `no_action_targets_a_row`, que crea DS-US-CKP-003, en `apps/cli/tests/tui_engine_states.rs` | Clasificar `ShowEnded` | Implementador |
