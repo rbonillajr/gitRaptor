@@ -942,6 +942,25 @@ impl Daemon {
             server.shutdown();
         }
         self.resources.stop();
+        // Save the last known state of every repo before "observed until" moves past it: a
+        // change whose live batch the loop did not write yet would otherwise be found again,
+        // as a `reconciled` event, by the next start. Only the loop writes the stores, so the
+        // observer threads cannot compete with this; a crash skips it, and the next start
+        // records what it finds as a gap.
+        if self.state == EngineState::Observing
+            && let Ok(entries) = self.profile.repos()
+        {
+            for (repo_id, read) in reconcile_all(&entries, &self.stores) {
+                match (read, self.stores.iter_mut().find(|(id, _)| *id == repo_id)) {
+                    (Some(read), Some((_, store))) => {
+                        persist_read(store, &read, &self.logger, &repo_id);
+                    }
+                    _ => self
+                        .logger
+                        .warn("stop_state_unread", &[("repo", Field::id(&repo_id))]),
+                }
+            }
+        }
         let stopped_ms = now_ms();
         let marks_ok = self.persist_observed_until(stopped_ms);
         let recorded = marks_ok
