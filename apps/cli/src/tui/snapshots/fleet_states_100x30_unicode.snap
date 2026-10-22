@@ -9,7 +9,7 @@ expression: snap
 ┃  ●  claude-1 · feat-pagos  feat-pagos                            ~2    ↑3 ↓1       not available ┃
 ┃  ○  No agent · feat-docs   feat-docs                             ~0    ↑1 ↓0       not available ┃
 ┃  ◐  claude-2 · feat-idle   feat-idle                             ~0    ↑0 ↓0       not available ┃
-┃  ⚠  No agent · feat-gone   folder missing                                                        ┃
+┃  ⚠  No agent · feat-gone   unavailable: folder missing                                           ┃
 ┃                                                                                                  ┃
 ┃                                                                                                  ┃
 ┃                                                                                                  ┃
@@ -77,7 +77,7 @@ expression: snap
 7:0-0 BOLD | REVERSED
 7:3-4 BOLD
 7:6-25 BOLD
-7:29-42 BOLD
+7:29-55 BOLD
 7:99-99 BOLD | REVERSED
 8:0-0 BOLD | REVERSED
 8:99-99 BOLD | REVERSED

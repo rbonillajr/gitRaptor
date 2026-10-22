@@ -225,6 +225,7 @@ fn picker(lang: Lang) -> Model {
             repo_id: format!("id-{name}"),
             name: SafeText::name(name),
             path: SafeText::text(&format!("/w/{name}/.git")),
+            tier: None,
         })
         .collect();
     update(&mut model, Msg::Conn(ConnEvent::Unlocated));

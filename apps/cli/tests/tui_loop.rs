@@ -64,9 +64,9 @@ struct FakeConnector {
     /// No engine is running: the first connection starts one, and the start ends when the
     /// test sends on this.
     start: Option<Receiver<()>>,
-    /// Time a connection after the first takes to be made, so a test can see the
-    /// `Reconnecting` state it goes through.
-    reconnect_delay: Duration,
+    /// A connection after the first is made only when the test sends on this, so a test can
+    /// see the `Reconnecting` state it goes through.
+    reconnect_gate: Option<Receiver<()>>,
 }
 
 impl Connector for FakeConnector {
@@ -80,7 +80,9 @@ impl Connector for FakeConnector {
 
     fn connect(&mut self) -> Result<Box<dyn Link>, LinkError> {
         if self.daemon.connects.load(Ordering::SeqCst) > 0 {
-            std::thread::sleep(self.reconnect_delay);
+            if let Some(gate) = &self.reconnect_gate {
+                let _ = gate.recv();
+            }
         }
         let Some(rx) = self.streams.lock().unwrap().pop_front() else {
             return Err(LinkError::EngineUnavailable);
@@ -242,6 +244,8 @@ struct Harness {
     /// One sender per connection, in order.
     streams: Vec<Sender<Vec<u8>>>,
     channel: Option<client::ClientThread>,
+    /// Lets a gated reconnection through (`Harness::gated`).
+    gate: Option<Sender<()>>,
 }
 
 impl Harness {
@@ -252,15 +256,25 @@ impl Harness {
 
     /// A TUI whose first connection starts the engine and waits on `start`.
     fn starting(connections: usize, start: Option<Receiver<()>>) -> Self {
-        Self::build(connections, start, Duration::ZERO)
+        Self::build(connections, start, false)
     }
 
-    /// A TUI whose reconnections take `delay` to be made.
-    fn slow_to_reconnect(connections: usize, delay: Duration) -> Self {
-        Self::build(connections, None, delay)
+    /// A TUI whose reconnections wait for `Harness::open_gate`.
+    fn gated(connections: usize) -> Self {
+        Self::build(connections, None, true)
     }
 
-    fn build(connections: usize, start: Option<Receiver<()>>, reconnect_delay: Duration) -> Self {
+    fn open_gate(&self) {
+        self.gate.as_ref().unwrap().send(()).unwrap();
+    }
+
+    fn build(connections: usize, start: Option<Receiver<()>>, gated: bool) -> Self {
+        let (gate, reconnect_gate) = if gated {
+            let (tx, rx) = channel();
+            (Some(tx), Some(rx))
+        } else {
+            (None, None)
+        };
         let daemon = Arc::new(Daemon::default());
         let mut senders = Vec::new();
         let mut receivers = VecDeque::new();
@@ -283,7 +297,7 @@ impl Harness {
             daemon: Arc::clone(&daemon),
             streams: Arc::new(Mutex::new(receivers)),
             start,
-            reconnect_delay,
+            reconnect_gate,
         };
         let channel = client::spawn(connector, Some("/w".into()), engine);
         app.attach(channel.cmds.clone());
@@ -293,6 +307,7 @@ impl Harness {
             daemon,
             streams: senders,
             channel: Some(channel),
+            gate,
         }
     }
 
@@ -692,7 +707,7 @@ fn a_slow_consumer_resync_says_why_and_converges_on_the_new_snapshot() {
 /// `Reconnecting { attempt: 1 }` and then `Reconnecting { attempt: 2 }`.
 #[test]
 fn a_slow_consumer_reconnects_with_a_growing_backoff() {
-    let mut h = Harness::slow_to_reconnect(3, Duration::from_millis(200));
+    let mut h = Harness::gated(3);
     h.live();
 
     let closed = drop_slow_consumer(&mut h, 0);
@@ -702,6 +717,7 @@ fn a_slow_consumer_reconnects_with_a_growing_backoff() {
         "no Reconnecting attempt 1: {:?}",
         h.app.model.conn
     );
+    h.open_gate();
     let daemon = Arc::clone(&h.daemon);
     assert!(wait_within(&mut h, 10, |h| {
         daemon.connects.load(Ordering::SeqCst) == 2 && h.app.model.conn == ConnState::Live
@@ -720,6 +736,7 @@ fn a_slow_consumer_reconnects_with_a_growing_backoff() {
         "the second drop in a row did not wait longer: {:?}",
         h.app.model.conn
     );
+    h.open_gate();
     let daemon = Arc::clone(&h.daemon);
     assert!(wait_within(&mut h, 10, |h| {
         daemon.connects.load(Ordering::SeqCst) == 3 && h.app.model.conn == ConnState::Live

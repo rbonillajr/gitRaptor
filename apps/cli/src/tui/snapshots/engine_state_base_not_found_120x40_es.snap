@@ -1,0 +1,44 @@
+---
+source: apps/cli/src/tui/engine_state.rs
+expression: "screen(&with_missing_base(lang), 120, 40)"
+---
+ shop · ✔ en vivo · motor observando · actúas como tú                                                        ⚡ –  ⛔ –
+┏━ › Flota · ↑↓ no calculable: develop no encontrada ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃     Agente                  Rama                                                   Arch. ↑↓            Actividad     ┃
+┃  ○  Sin agente · shop       main                                                   ~0    no calculable no disponible ┃
+┃  ●  claude-1 · feat-pagos   feat-pagos                                             ~2    no calculable no disponible ┃
+┃  ○  Sin agente · feat-docs  feat-docs                                              ~0    no calculable no disponible ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┃                                                                                                                      ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ q salir  r reintentar   ○ sin agente: cambios tuyos o de otra herramienta   ● agente activo                    ? ayuda

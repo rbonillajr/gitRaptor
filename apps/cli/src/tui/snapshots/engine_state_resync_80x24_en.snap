@@ -1,0 +1,28 @@
+---
+source: apps/cli/src/tui/engine_state.rs
+expression: "screen(&model, 80, 24)"
+---
+ shop · ⚠  resyncing · the view fell behind the engine · acting as … ⚡ –  ⛔ –
+┏━ › Fleet · ↑↓ vs main (local copy, fetch age not available) ━━━━━━━━━━━━━━━━━┓
+┃     Agent                  Branch            Files ↑↓          Activity      ┃
+┃  ○  No agent · shop        main              ~0    ↑0 ↓0       not available ┃
+┃  ●  claude-1 · feat-pagos  feat-pagos        ~2    ↑3 ↓1       not available ┃
+┃  ○  No agent · feat-docs   feat-docs         ~0    ↑1 ↓0       not available ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ q quit  r retry   ○ no agent: changes by you or another tool            ? help

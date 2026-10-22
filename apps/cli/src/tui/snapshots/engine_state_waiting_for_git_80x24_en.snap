@@ -1,0 +1,28 @@
+---
+source: apps/cli/src/tui/engine_state.rs
+expression: "screen(&model, 80, 24)"
+---
+ no repo selected · ✔ live · engine waiting for Git · acting as you  ⚡ –  ⛔ –
+┌─ ⚠  Waiting for Git ─────────────────────────────────────────────────────────┐
+│ Git 2.38 or later not found → install or update it; the engine starts on its │
+│ own once it finds it.                                                        │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+ q quit  r retry                                                         ? help

@@ -19,6 +19,7 @@ use crate::model::{
     WorktreeRow, WorktreeState,
 };
 use crate::present::i18n::{Fetched, Lang, Legend, Text};
+use crate::tui::engine_state::{self, HeaderNotice};
 use crate::tui::help;
 use crate::tui::keymap::{Action, BINDINGS, Key};
 use crate::tui::style::{Glyphs, Styles, fill, follow, modal_area};
@@ -85,6 +86,13 @@ pub fn view(model: &Model, frame: &mut Frame) {
     };
     frame.render_widget(themed(&status_bar(model, &styles), &styles), regions.header);
     let mut hints = key_hints(model, say);
+    // Without an engine, or while it waits for Git, nothing else on the body is true.
+    if let Some(panel) = engine_state::blocking_panel(model) {
+        frame.render_widget(themed(&panel, &styles), regions.list);
+        paint_help(model, say, &styles, frame, regions.header, regions.hints);
+        frame.render_widget(themed(&hints, &styles), regions.hints);
+        return;
+    }
     if let Some(prompt) = observe_prompt(model, say) {
         frame.render_widget(themed(&prompt, &styles), regions.list);
         paint_help(model, say, &styles, frame, regions.header, regions.hints);
@@ -95,16 +103,24 @@ pub fn view(model: &Model, frame: &mut Frame) {
         Some(picker) => frame.render_widget(themed(&picker, &styles), regions.list),
         None => {
             let fleet = fleet(model, &styles);
-            hints.legend = state_legend(&fleet, say);
+            // With no repos the panel takes the fleet's place, and there are no rows to explain.
+            let no_repos = engine_state::fleet_panel(model);
+            if no_repos.is_none() {
+                hints.legend = state_legend(&fleet, say);
+            }
+            let paint_body = |frame: &mut Frame, area: Rect| match &no_repos {
+                Some(panel) => frame.render_widget(themed(panel, &styles), area),
+                None => frame.render_widget(themed(&fleet, &styles), area),
+            };
             // A discovered repo is asked under the fleet, which stays where it is.
             match discovered_prompt(model, say) {
                 Some(prompt) => {
                     let panel = DISCOVERED_PANEL_HEIGHT.min(regions.list.height);
                     let (above, below) = split_bottom(regions.list, panel);
-                    frame.render_widget(themed(&fleet, &styles), above);
+                    paint_body(frame, above);
                     frame.render_widget(themed(&prompt, &styles), below);
                 }
-                None => frame.render_widget(themed(&fleet, &styles), regions.list),
+                None => paint_body(frame, regions.list),
             }
         }
     }
@@ -175,7 +191,7 @@ fn repo(model: &Model) -> Option<&RepoView> {
 pub fn status_bar(model: &Model, styles: &Styles) -> StatusBarModel {
     let say = Say::new(model, styles);
     let repo = repo(model);
-    let connection = match model.conn {
+    let mut connection = match model.conn {
         ConnState::Live => Connection::Live,
         ConnState::Connecting
         | ConnState::Starting
@@ -188,10 +204,29 @@ pub fn status_bar(model: &Model, styles: &Styles) -> StatusBarModel {
         | ConnState::Unsupported => Connection::Unavailable,
     };
     let engine = model.engine.global.data.as_ref().map(|g| g.engine);
-    let mut label = vec![say.text(Text::Conn(model.conn))];
-    if model.conn == ConnState::Live {
-        label.push(say.text(Text::Engine(engine)));
-    }
+    let mut label = match engine_state::header_notice(model) {
+        // A tier notice stands where "live · engine …" would be.
+        Some(notice @ (HeaderNotice::Reconciling | HeaderNotice::Dormant)) => {
+            connection = Connection::Reconnecting;
+            vec![say.text(match notice {
+                HeaderNotice::Dormant => Text::Dormant,
+                _ => Text::Reconciling,
+            })]
+        }
+        Some(HeaderNotice::Resync(reason)) => {
+            connection = Connection::Reconnecting;
+            let mut label = vec![say.text(Text::Conn(model.conn))];
+            label.extend(reason.map(|r| say.text(Text::Resync(r))));
+            label
+        }
+        None => {
+            let mut label = vec![say.text(Text::Conn(model.conn))];
+            if model.conn == ConnState::Live {
+                label.push(say.text(Text::Engine(engine)));
+            }
+            label
+        }
+    };
     let stale = model.engine.global.stale || model.engine.repo.as_ref().is_some_and(|r| r.stale);
     if stale {
         label.push(say.text(Text::Stale));
@@ -267,10 +302,14 @@ pub fn fleet(model: &Model, styles: &Styles) -> AgentListModel {
         None => Fetched::NotAvailable,
     };
     AgentListModel {
-        title: say.safe(Text::FleetTitle {
-            base: repo.and_then(|r| r.base.as_ref()),
-            fetched,
-        }),
+        title: match repo.and_then(engine_state::base_not_found) {
+            // The base the engine published does not exist: no count is made against another.
+            Some(base) => say.safe(Text::FleetTitleBaseNotFound { base }),
+            None => say.safe(Text::FleetTitle {
+                base: repo.and_then(|r| r.base.as_ref()),
+                fetched,
+            }),
+        },
         columns: AgentColumns {
             agent: say.safe(Text::ColAgent),
             branch: say.safe(Text::ColBranch),
@@ -1043,7 +1082,10 @@ mod tests {
             Some(Vec::new()),
         );
         let screen = lines(&render(&model, 100, 30));
-        assert!(row(&screen, "folder missing").contains('⚠'), "{screen:#?}");
+        assert!(
+            row(&screen, "unavailable: folder missing").contains('⚠'),
+            "{screen:#?}"
+        );
     }
 
     #[test]
@@ -1071,7 +1113,10 @@ mod tests {
             30,
         ));
         assert!(row(&screen, " a ").contains("↑10000+ ↓2"), "{screen:#?}");
-        assert!(row(&screen, " b ").contains("base absent"), "{screen:#?}");
+        assert!(
+            row(&screen, " b ").contains("not computable"),
+            "{screen:#?}"
+        );
     }
 
     #[test]
@@ -1233,6 +1278,7 @@ mod tests {
                 repo_id: format!("id-{name}"),
                 name: SafeText::name(name),
                 path: SafeText::text(&format!("/w/{name}/.git")),
+                tier: None,
             })
             .collect();
         model

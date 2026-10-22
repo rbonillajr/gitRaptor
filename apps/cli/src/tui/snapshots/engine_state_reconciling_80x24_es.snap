@@ -1,0 +1,28 @@
+---
+source: apps/cli/src/tui/engine_state.rs
+expression: "screen(&model, 80, 24)"
+---
+ shop · ⚠  reconciliando: datos provisionales · actúas como tú       ⚡ –  ⛔ –
+┏━ › Flota · ↑↓ respecto a main (copia local, antigüedad no disponible) ━━━━━━━┓
+┃     Agente                  Rama             Arch. ↑↓          Actividad     ┃
+┃  ○  Sin agente · shop       main             ~0    ↑0 ↓0       no disponible ┃
+┃  ●  claude-1 · feat-pagos   feat-pagos       ~2    ↑3 ↓1       no disponible ┃
+┃  ○  Sin agente · feat-docs  feat-docs        ~0    ↑1 ↓0       no disponible ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┃                                                                              ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ q salir  r reintentar                                                  ? ayuda

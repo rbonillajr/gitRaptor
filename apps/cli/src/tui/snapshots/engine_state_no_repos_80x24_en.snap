@@ -1,0 +1,28 @@
+---
+source: apps/cli/src/tui/engine_state.rs
+expression: "screen(&model, 80, 24)"
+---
+ no repo selected · ✔ live · engine without repos · acting as you    ⚡ –  ⛔ –
+┌─ ℹ  No repos observed ───────────────────────────────────────────────────────┐
+│ Add the first one → `raptor repo add <path>`                                 │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+ q quit  r retry                                                         ? help

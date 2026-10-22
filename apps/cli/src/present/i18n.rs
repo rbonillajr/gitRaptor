@@ -257,6 +257,30 @@ pub enum Text<'a> {
     Legend(Legend),
     /// A key that exists on Unix only.
     UnixOnly,
+    // Engine and connection states
+    EngineUnavailableTitle,
+    EngineUnavailableMessage,
+    IncompatibleTitle,
+    IncompatibleMessage,
+    RejectedTitle,
+    RejectedMessage,
+    UnsupportedTitle,
+    UnsupportedMessage,
+    WaitingForGitTitle,
+    /// `min` is the minimum Git version, as text.
+    WaitingForGitMessage {
+        min: &'a str,
+    },
+    NoReposTitle,
+    NoReposMessage,
+    /// The header while the selected repo is being reconciled.
+    Reconciling,
+    /// The header while the selected repo is dormant.
+    Dormant,
+    /// The fleet title when the published base branch does not exist.
+    FleetTitleBaseNotFound {
+        base: &'a SafeText,
+    },
 }
 
 /// The panel the help describes: what receives the keys.
@@ -368,14 +392,16 @@ fn en(text: Text<'_>) -> String {
         Text::NoBranch(Some(commit)) => format!("{commit} (no branch)"),
         Text::NoBranch(None) => "(no branch)".into(),
         Text::NoBase => "no base".into(),
-        Text::BaseMissing => "base absent".into(),
+        Text::BaseMissing => "not computable".into(),
         Text::NoCommits => "no commits".into(),
         Text::Unreadable => "unreadable".into(),
-        Text::WorktreeUnavailable(UnavailableReason::Missing) => "folder missing".into(),
+        Text::WorktreeUnavailable(UnavailableReason::Missing) => "unavailable: folder missing".into(),
         Text::WorktreeUnavailable(UnavailableReason::Untrusted) => {
-            "not trusted by Git (safe.directory)".into()
+            "unavailable: not trusted by Git (safe.directory)".into()
         }
-        Text::WorktreeUnavailable(UnavailableReason::Unreadable) => "unreadable now".into(),
+        Text::WorktreeUnavailable(UnavailableReason::Unreadable) => {
+            "unavailable: unreadable now".into()
+        }
         Text::NotAvailable => "not available".into(),
         Text::RequesterUnknown => "–".into(),
         Text::Engine(None) => "engine –".into(),
@@ -525,6 +551,34 @@ fn en(text: Text<'_>) -> String {
         Text::Legend(Legend::Conflict) => "predicted conflict".into(),
         Text::Legend(Legend::Blocked) => "blocked by policy".into(),
         Text::UnixOnly => "Unix only".into(),
+        // Engine and connection states.
+        Text::EngineUnavailableTitle => "Engine unavailable".into(),
+        Text::EngineUnavailableMessage => {
+            "It could not start → start it with `raptor daemon`, or at every login with `raptor daemon enable`.".into()
+        }
+        Text::IncompatibleTitle => "Incompatible engine".into(),
+        Text::IncompatibleMessage => {
+            "This raptor and the running engine are on incompatible versions → update both to the same version.".into()
+        }
+        Text::RejectedTitle => "Engine channel refused".into(),
+        Text::RejectedMessage => {
+            "The GitRaptor runtime folder is not private → check that only your user can open it.".into()
+        }
+        Text::UnsupportedTitle => "No engine channel".into(),
+        Text::UnsupportedMessage => {
+            "This platform has no engine channel yet → use `raptor status`.".into()
+        }
+        Text::WaitingForGitTitle => "Waiting for Git".into(),
+        Text::WaitingForGitMessage { min } => format!(
+            "Git {min} or later not found → install or update it; the engine starts on its own once it finds it."
+        ),
+        Text::NoReposTitle => "No repos observed".into(),
+        Text::NoReposMessage => "Add the first one → `raptor repo add <path>`".into(),
+        Text::Reconciling => "reconciling: provisional data".into(),
+        Text::Dormant => "asleep: data may lag".into(),
+        Text::FleetTitleBaseNotFound { base } => {
+            format!("Fleet · ↑↓ not computable: {base} not found")
+        }
     }
 }
 
@@ -594,14 +648,18 @@ fn es(text: Text<'_>) -> String {
         Text::NoBranch(Some(commit)) => format!("{commit} (sin rama)"),
         Text::NoBranch(None) => "(sin rama)".into(),
         Text::NoBase => "sin base".into(),
-        Text::BaseMissing => "falta base".into(),
+        Text::BaseMissing => "no calculable".into(),
         Text::NoCommits => "sin commits".into(),
         Text::Unreadable => "ilegible".into(),
-        Text::WorktreeUnavailable(UnavailableReason::Missing) => "falta la carpeta".into(),
-        Text::WorktreeUnavailable(UnavailableReason::Untrusted) => {
-            "Git no confía en él (safe.directory)".into()
+        Text::WorktreeUnavailable(UnavailableReason::Missing) => {
+            "no disponible: falta la carpeta".into()
         }
-        Text::WorktreeUnavailable(UnavailableReason::Unreadable) => "ilegible ahora".into(),
+        Text::WorktreeUnavailable(UnavailableReason::Untrusted) => {
+            "no disponible: Git no confía en él (safe.directory)".into()
+        }
+        Text::WorktreeUnavailable(UnavailableReason::Unreadable) => {
+            "no disponible: ilegible ahora".into()
+        }
         Text::NotAvailable => "no disponible".into(),
         Text::RequesterUnknown => "–".into(),
         Text::Engine(None) => "motor –".into(),
@@ -753,6 +811,34 @@ fn es(text: Text<'_>) -> String {
         Text::Legend(Legend::Conflict) => "conflicto previsto".into(),
         Text::Legend(Legend::Blocked) => "bloqueado por política".into(),
         Text::UnixOnly => "solo en Unix".into(),
+        // Engine and connection states.
+        Text::EngineUnavailableTitle => "Motor no disponible".into(),
+        Text::EngineUnavailableMessage => {
+            "No se pudo arrancar → arráncalo con `raptor daemon`, o en cada inicio de sesión con `raptor daemon enable`.".into()
+        }
+        Text::IncompatibleTitle => "Motor incompatible".into(),
+        Text::IncompatibleMessage => {
+            "Este raptor y el motor en marcha tienen versiones incompatibles → actualiza los dos a la misma versión.".into()
+        }
+        Text::RejectedTitle => "El motor rechazó el canal".into(),
+        Text::RejectedMessage => {
+            "La carpeta de ejecución de GitRaptor no es privada → comprueba que solo tu usuario puede abrirla.".into()
+        }
+        Text::UnsupportedTitle => "Sin canal con el motor".into(),
+        Text::UnsupportedMessage => {
+            "Esta plataforma aún no tiene canal con el motor → usa `raptor status`.".into()
+        }
+        Text::WaitingForGitTitle => "Esperando Git".into(),
+        Text::WaitingForGitMessage { min } => format!(
+            "Falta Git {min} o superior → instálalo o actualízalo; el motor empieza solo al detectarlo."
+        ),
+        Text::NoReposTitle => "Sin repos observados".into(),
+        Text::NoReposMessage => "Añade el primero → `raptor repo add <ruta>`".into(),
+        Text::Reconciling => "reconciliando: datos provisionales".into(),
+        Text::Dormant => "dormido: datos con retraso".into(),
+        Text::FleetTitleBaseNotFound { base } => {
+            format!("Flota · ↑↓ no calculable: {base} no encontrada")
+        }
     }
 }
 
@@ -1021,6 +1107,22 @@ pub(crate) fn every_text() -> Vec<Text<'static>> {
         Text::HelpAlways,
         Text::HelpSymbols,
         Text::UnixOnly,
+        // Engine and connection states
+        Text::EngineUnavailableTitle,
+        Text::EngineUnavailableMessage,
+        Text::IncompatibleTitle,
+        Text::IncompatibleMessage,
+        Text::RejectedTitle,
+        Text::RejectedMessage,
+        Text::UnsupportedTitle,
+        Text::UnsupportedMessage,
+        Text::WaitingForGitTitle,
+        Text::WaitingForGitMessage { min: "2.38" },
+        Text::NoReposTitle,
+        Text::NoReposMessage,
+        Text::Reconciling,
+        Text::Dormant,
+        Text::FleetTitleBaseNotFound { base: name },
     ];
     for reason in [
         UnavailableReason::Missing,
@@ -1179,7 +1281,23 @@ fn sampled(text: &Text<'_>) {
         | Text::HelpAlways
         | Text::HelpSymbols
         | Text::Legend(_)
-        | Text::UnixOnly => {}
+        | Text::UnixOnly
+        // Engine and connection states
+        | Text::EngineUnavailableTitle
+        | Text::EngineUnavailableMessage
+        | Text::IncompatibleTitle
+        | Text::IncompatibleMessage
+        | Text::RejectedTitle
+        | Text::RejectedMessage
+        | Text::UnsupportedTitle
+        | Text::UnsupportedMessage
+        | Text::WaitingForGitTitle
+        | Text::WaitingForGitMessage { .. }
+        | Text::NoReposTitle
+        | Text::NoReposMessage
+        | Text::Reconciling
+        | Text::Dormant
+        | Text::FleetTitleBaseNotFound { .. } => {}
     }
 }
 
@@ -1289,6 +1407,29 @@ mod tests {
             let es = Text::Conn(state).render(Lang::Es);
             assert!(!en.is_empty() && !es.is_empty());
             assert_ne!(en, es, "{state:?}");
+        }
+        // The panels and notices of the states that keep the engine out of reach.
+        let texts = [
+            Text::EngineUnavailableTitle,
+            Text::EngineUnavailableMessage,
+            Text::IncompatibleTitle,
+            Text::IncompatibleMessage,
+            Text::RejectedTitle,
+            Text::RejectedMessage,
+            Text::UnsupportedTitle,
+            Text::UnsupportedMessage,
+            Text::WaitingForGitTitle,
+            Text::WaitingForGitMessage { min: "2.38" },
+            Text::NoReposTitle,
+            Text::NoReposMessage,
+            Text::Reconciling,
+            Text::Dormant,
+        ];
+        for text in texts {
+            let en = text.render(Lang::En);
+            let es = text.render(Lang::Es);
+            assert!(!en.is_empty() && !es.is_empty(), "{text:?}");
+            assert_ne!(en, es, "{text:?}");
         }
     }
 

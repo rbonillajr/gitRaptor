@@ -22,6 +22,7 @@ use crate::tui::widgets::key_hints::{HelpGroup, HelpModel, KeyHint, KeyHintsMode
 use crate::tui::widgets::layout::{BodyPlan, Connection, StatusBarModel, TooSmallModel, layout};
 use crate::tui::widgets::notification::{ToastKind, ToastModel, ToastStackModel};
 use crate::tui::widgets::policy_banner::{PolicyBannerModel, PolicyKind};
+use crate::tui::widgets::state_panel::{PanelTone, StatePanelModel};
 use crate::tui::widgets::timeline::{TimelineEntry, TimelineModel, TimelineNotice};
 
 /// One component in one state, at the size it is shown and pinned.
@@ -199,6 +200,16 @@ fn agents_no_agent(area: Rect, buf: &mut Buffer, s: &Styles) {
     agent_list(vec![main, a, b], Some(1), true).render(area, buf, s);
 }
 
+/// The ahead/behind column holds the longest reason a row can give.
+fn agents_sync_not_computable(area: Rect, buf: &mut Buffer, s: &Styles) {
+    let mut a = row(0, "claude-1", AgentState::Active, "feat/parser");
+    a.sync = Sync::Unknown(t("not computable"));
+    let b = row(1, "claude-2", AgentState::Idle, "feat/lexer");
+    let mut c = row(2, "claude-3", AgentState::Idle, "feat/emit");
+    c.sync = Sync::Unknown(t("not computable"));
+    agent_list(vec![a, b, c], Some(0), true).render(area, buf, s);
+}
+
 fn agents_empty(area: Rect, buf: &mut Buffer, s: &Styles) {
     agent_list(Vec::new(), None, true).render(area, buf, s);
 }
@@ -206,6 +217,43 @@ fn agents_empty(area: Rect, buf: &mut Buffer, s: &Styles) {
 fn agents_unfocused(area: Rect, buf: &mut Buffer, s: &Styles) {
     let mut m = agent_list(mixed_rows(), Some(3), false);
     m.offset = crate::tui::style::follow(0, 3, 3);
+    m.render(area, buf, s);
+}
+
+// --- StatePanel ----------------------------------------------------------------------------
+
+fn state_panel(tone: PanelTone, title: &str, message: &str) -> StatePanelModel {
+    StatePanelModel {
+        tone,
+        title: t(title),
+        message: t(message),
+    }
+}
+
+fn panel_info(area: Rect, buf: &mut Buffer, s: &Styles) {
+    let m = state_panel(
+        PanelTone::Info,
+        "No repos observed",
+        "Add the first one \u{2192} `raptor repo add <path>`",
+    );
+    m.render(area, buf, s);
+}
+
+fn panel_warning(area: Rect, buf: &mut Buffer, s: &Styles) {
+    let m = state_panel(
+        PanelTone::Warning,
+        "Waiting for Git",
+        "Git 2.38 or later not found \u{2192} install or update it; the engine starts on its own once it finds it.",
+    );
+    m.render(area, buf, s);
+}
+
+fn panel_error(area: Rect, buf: &mut Buffer, s: &Styles) {
+    let m = state_panel(
+        PanelTone::Error,
+        "Engine unavailable",
+        "It could not start \u{2192} start it with `raptor daemon`, or at every login with `raptor daemon enable`.",
+    );
     m.render(area, buf, s);
 }
 
@@ -882,6 +930,13 @@ pub fn stories() -> Vec<Story> {
         ),
         story!("AgentList", "unavailable", 80, 5, agents_unavailable),
         story!("AgentList", "empty", 80, 4, agents_empty),
+        story!(
+            "AgentList",
+            "sync not computable",
+            80,
+            6,
+            agents_sync_not_computable
+        ),
         story!("AgentList", "unfocused, scrolled", 80, 6, agents_unfocused),
         story!("GraphLanes", "three agents", 60, 6, graph_three),
         story!("GraphLanes", "collapsed lanes", 60, 6, graph_collapsed),
@@ -939,5 +994,8 @@ pub fn stories() -> Vec<Story> {
         story!("KeyHints", "disabled action", 80, 1, hints_disabled),
         story!("KeyHints", "with state legend", 80, 1, hints_legend),
         story!("KeyHints", "help overlay", 70, 24, help),
+        story!("State panel", "info", 60, 4, panel_info),
+        story!("State panel", "warning", 60, 5, panel_warning),
+        story!("State panel", "error", 60, 5, panel_error),
     ]
 }

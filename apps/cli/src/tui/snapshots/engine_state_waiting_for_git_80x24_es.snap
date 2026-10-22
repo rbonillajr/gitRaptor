@@ -1,0 +1,28 @@
+---
+source: apps/cli/src/tui/engine_state.rs
+expression: "screen(&model, 80, 24)"
+---
+ sin repo seleccionado · ✔ en vivo · motor esperando Git · actúas c… ⚡ –  ⛔ –
+┌─ ⚠  Esperando Git ───────────────────────────────────────────────────────────┐
+│ Falta Git 2.38 o superior → instálalo o actualízalo; el motor empieza solo   │
+│ al detectarlo.                                                               │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+ q salir  r reintentar                                                  ? ayuda

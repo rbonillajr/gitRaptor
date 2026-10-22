@@ -28,6 +28,7 @@ pub mod notification;
 pub mod observe_prompt;
 pub mod policy_banner;
 pub mod repo_picker;
+pub mod state_panel;
 pub mod timeline;
 
 #[cfg(test)]
