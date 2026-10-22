@@ -828,6 +828,12 @@ impl Daemon {
                 }
                 Ok(Control::Wake { repo_id, cause }) => {
                     self.wake_repo(&repo_id, cause);
+                    // A Time Machine wait (or a client) asks for the repo: its task reads it now,
+                    // so a change whose file events are late (a busy `fseventsd`) still reaches
+                    // the engine within the wait, not at the 30 s backup poll.
+                    if let Some(observer) = &self.observer {
+                        observer.poll_repo(&repo_id);
+                    }
                     if self.stores.iter().any(|(id, _)| *id == repo_id) {
                         self.note_activity(&repo_id);
                     }

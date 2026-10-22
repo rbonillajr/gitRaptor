@@ -462,9 +462,11 @@ impl RepoMarks {
     /// The first `git` running in one of `worktrees`, leaving out the daemon's own children,
     /// `excluded` and the long-lived helpers. A `git` counts by its folder, or, working
     /// elsewhere, by a redirection (`-C`, `--git-dir`, `GIT_DIR`…) that resolves into this repo.
-    /// One the reader cannot read counts while it is alive, for [`UNREADABLE_GRACE`] at most, and
-    /// is then logged once and left to the other checks; one that exited does not count. A
-    /// process table that cannot be read fails closed. `None` without a lister.
+    /// One whose arguments cannot be read counts only if its folder is in this repo (another
+    /// worktree, the common directory), while it is alive, for [`UNREADABLE_GRACE`] at most, and
+    /// is then logged once and left to the other checks. One whose folder cannot be read, or is in
+    /// another repo, never blocks; one that exited does not count. A process table that cannot be
+    /// read fails closed. `None` without a lister.
     fn git_blocker(
         &self,
         repo_id: &str,
@@ -538,8 +540,17 @@ impl RepoMarks {
                 }
                 // Read on every pass: only `git`s working elsewhere get here, and a reader may
                 // answer differently while the process lives (one of the tests' tables does).
-                Some(_) => procs.git_redirect_into(entry.pid, &in_repo),
-                None => None,
+                // Unreadable arguments count only from a folder in this repo (another of its
+                // worktrees, its common directory): from there a `-C` or `GIT_DIR` may point
+                // here. From another repo, it never blocks.
+                Some(cwd) => match procs.git_redirect_into(entry.pid, &in_repo) {
+                    None if !in_repo(&cwd) => Some(false),
+                    other => other,
+                },
+                // A folder that cannot be read never blocks: a `git` that is in the worktree is
+                // seen there by its folder, and an unknown one is left to the reflog, the refs and
+                // the hook calls in flight.
+                None => Some(false),
             };
             let known = verdict == Some(true);
             let counts = match verdict {
@@ -900,6 +911,10 @@ mod confirm_window_tests;
 #[cfg(test)]
 #[path = "confirm_known_git_tests.rs"]
 mod confirm_known_git_tests;
+
+#[cfg(test)]
+#[path = "calm_unreadable_scope_tests.rs"]
+mod calm_unreadable_scope_tests;
 
 #[cfg(test)]
 mod tests {

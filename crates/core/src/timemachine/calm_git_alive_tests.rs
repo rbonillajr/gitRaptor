@@ -211,7 +211,11 @@ fn a_worktree_with_a_git_still_running_is_not_calm() {
     r.procs.kill(4243);
 
     r.procs.add(4244, 1, GIT, None, &["status"]);
-    assert_eq!(r.settle_now(), None, "a git whose folder cannot be read");
+    assert_eq!(
+        r.settle_now(),
+        Some(1),
+        "a git whose folder cannot be read never blocks"
+    );
     r.procs.kill(4244);
 
     r.procs
