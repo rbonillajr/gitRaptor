@@ -2,10 +2,10 @@
 id: US-CKP-003
 title: "La TUI dice en qué estado está el motor y qué hacer en cada caso"
 type: us
-status: draft
+status: implemented
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-21
 feature: cockpit
 related:
   context:
@@ -100,3 +100,13 @@ Entonces el ahead/behind de cada fila dice "no calculable: develop no encontrada
 
 - **Diseño:** DSYS-GRP-001 (estados vacíos y avisos); ADR-GRP-004 § 3 (errores accionables, vacíos útiles).
 - **Dev Spec:** [DS-US-CKP-003](../dev-specs/US-CKP-003-estados-motor-conexion.md).
+
+## Estado de la implementación (2026-10-21)
+
+Implementado en: PR #PRN ([DS-US-CKP-003](../dev-specs/US-CKP-003-estados-motor-conexion.md)).
+
+Verificado en macOS: panel de estado para motor no disponible, incompatible, rechazado y sin canal, con la acción (`raptor daemon`, `raptor status`); Esperando Git (gana a Sin repos y nunca pregunta por el repo de la carpeta); guía `raptor repo add <ruta>` sin repos; cabecera con "reconciliando", "dormido" y el motivo del resync (también el del cliente lento, con backoff creciente); fila "no disponible: …" sin acciones; "no calculable" con la base publicada. Pruebas de pantalla en en/es, sin color y en ASCII, el bucle con daemon falso y pruebas de proceso con el `raptor` real bajo `script`.
+
+Diferido, con dueño en la Dev Spec: versión de Git rechazada y que el motor empiece solo al aparecer Git (US-GRP-014), observación degradada por worktree, hueco de observación en la fila (US-CKP-002), acciones de fila desactivadas con motivo (US-CKP-012) y el nivel de cada repo en el selector (US-CKP-025).
+
+Linux y Windows: *Pendiente: etapa de validación multiplataforma* (XP-21; [`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).

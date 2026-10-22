@@ -1,0 +1,187 @@
+{
+  "source": {
+    "kind": "devspec",
+    "ref": "docs/requirements/features/cockpit/dev-specs/US-CKP-003-estados-motor-conexion.md"
+  },
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "criteria": [
+    {
+      "id": "CKP003-CONN",
+      "statement": "D2/D4: con ConnState EngineUnavailable, Incompatible, Rejected o Unsupported el cuerpo es un panel de error con su titulo y su accion (p. ej. 'Engine unavailable' y `raptor daemon`) que sustituye a la flota aunque haya datos viejos, en en y es; las demas conexiones no producen panel",
+      "verify": "cargo test -p gitraptor-cli --test tui_state_screens a_connection_without_an_engine_replaces_the_fleet_with_a_panel",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_state_screens.rs"
+      ]
+    },
+    {
+      "id": "CKP003-GIT",
+      "statement": "D2/D3: con el motor Esperando Git el cuerpo dice 'Waiting for Git' y 2.38 (es: 'Esperando Git'), gana a 'Sin repos' y la TUI nunca pregunta por observar el repo de la carpeta",
+      "verify": "cargo test -p gitraptor-cli --test tui_state_screens waiting_for_git_wins_over_no_repos_and_never_asks_to_observe",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_state_screens.rs"
+      ]
+    },
+    {
+      "id": "CKP003-NOREPOS",
+      "statement": "Escenario 4: sin repos observados el panel Info 'No repos observed' trae la guia con `raptor repo add <path>` (es: `raptor repo add <ruta>`) en el sitio de la flota",
+      "verify": "cargo test -p gitraptor-cli --test tui_state_screens no_repos_shows_how_to_add_the_first",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_state_screens.rs"
+      ]
+    },
+    {
+      "id": "CKP003-HEADER",
+      "statement": "D5/D6: la cabecera dice 'reconciling: provisional data' con tier waking, 'asleep: data may lag' con tier dormant y el motivo del resync mientras dura (tambien durante la reconexion), y vuelve a 'live' al llegar a En vivo",
+      "verify": "cargo test -p gitraptor-cli --test tui_state_screens the_header_says_reconciling_dormant_or_why_it_resyncs",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_state_screens.rs"
+      ]
+    },
+    {
+      "id": "CKP003-ROW",
+      "statement": "D7: la fila de un worktree no disponible dice 'unavailable: folder missing' (es: 'no disponible: falta la carpeta') con aviso y la TUI no ofrece ninguna accion por fila",
+      "verify": "cargo test -p gitraptor-cli --test tui_state_screens an_unavailable_worktree_says_not_available",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_state_screens.rs"
+      ]
+    },
+    {
+      "id": "CKP003-BASE",
+      "statement": "D8: con la rama base ausente la celda dice 'not computable' (nunca '–'), el titulo 'Fleet · ↑↓ not computable: develop not found' con la base publicada, y ningun recuento contra otra rama",
+      "verify": "cargo test -p gitraptor-cli --test tui_state_screens a_missing_base_names_the_published_base_and_never_counts",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_state_screens.rs"
+      ]
+    },
+    {
+      "id": "CKP003-LAG",
+      "statement": "D6: tras events.resync por cliente lento la cabecera dice 'the view fell behind the engine' hasta volver a live, la replica converge en la instantanea nueva, event_frame(1) aplica una vez y su repeticion no, y engine.resync vuelve a None",
+      "verify": "cargo test -p gitraptor-cli --test tui_loop a_slow_consumer_resync_says_why_and_converges_on_the_new_snapshot",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_loop.rs"
+      ]
+    },
+    {
+      "id": "CKP003-BACKOFF",
+      "statement": "D6: dos caidas seguidas por cliente lento reconectan con backoff creciente (la primera no antes de backoff(1) desde el cierre) y la cabecera pasa por Reconnecting attempt 1 y luego 2",
+      "verify": "cargo test -p gitraptor-cli --test tui_loop a_slow_consumer_reconnects_with_a_growing_backoff",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_loop.rs"
+      ]
+    },
+    {
+      "id": "CKP003-PTY-UNAVAILABLE",
+      "statement": "Escenario 2 contra el raptor real (macOS, debug): sin poder arrancar el motor la TUI dice 'Engine unavailable' y `raptor daemon`, no lanza Git (la trampa no salta) y no abre nada del perfil (lsof) ni crea datos",
+      "verify": "cargo test -p gitraptor-cli --test tui_engine_states when_the_engine_cannot_start_the_tui_says_how_and_observes_nothing",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_engine_states.rs"
+      ]
+    },
+    {
+      "id": "CKP003-PTY-GIT",
+      "statement": "Escenario 3 contra el raptor real: sin Git y sin repos la pantalla dice 'Waiting for Git' y 2.38 (es 'Esperando Git') y no la guia 'raptor repo add'",
+      "verify": "cargo test -p gitraptor-cli --test tui_engine_states without_git_and_without_repos_it_waits_for_git_not_the_first_repo_guide",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_engine_states.rs"
+      ]
+    },
+    {
+      "id": "CKP003-PTY-NOREPOS",
+      "statement": "Escenario 4 contra el raptor real: con Git y sin repos la pantalla trae 'raptor repo add <path>' (es '<ruta>')",
+      "verify": "cargo test -p gitraptor-cli --test tui_engine_states without_repos_it_shows_how_to_add_the_first",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_engine_states.rs"
+      ]
+    },
+    {
+      "id": "CKP003-PTY-DELETED",
+      "statement": "Escenario 6 contra el raptor real: con la carpeta de un worktree borrada la fila dice 'unavailable: folder missing' y la TUI no ofrece accion por fila",
+      "verify": "cargo test -p gitraptor-cli --test tui_engine_states a_deleted_worktree_says_not_available_and_offers_no_action",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_engine_states.rs"
+      ]
+    },
+    {
+      "id": "CKP003-PTY-ROWS",
+      "statement": "Escenario 7 contra el raptor real: con la base ausente cada fila dice 'not computable' y el titulo 'not computable: main not found' sin nombrar trunk ni origin",
+      "verify": "cargo test -p gitraptor-cli --test tui_engine_states a_missing_base_branch_is_not_computable_and_no_other_is_used",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/tui_engine_states.rs"
+      ]
+    }
+  ],
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "crates/**",
+      "apps/mcp/**",
+      "apps/cli/src/main.rs",
+      "Cargo.lock",
+      "Cargo.toml",
+      "apps/cli/Cargo.toml"
+    ],
+    "allow_dependency_changes": false
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-cli"
+    ]
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 900000,
+    "suiteTimeoutMs": 2700000
+  },
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "sonnet"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "sonnet"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  }
+}
