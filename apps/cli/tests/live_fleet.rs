@@ -485,3 +485,85 @@ fn untrusted_text_is_painted_inert() {
     );
     assert_eq!(tui.app.model.conn, ConnState::Live);
 }
+
+// ------------------------------------------------------------ US-CKP-002
+
+/// The row of the worktree on `branch` and the line under it (its sessions line).
+fn block(screen: &[String], branch: &str) -> String {
+    match screen
+        .iter()
+        .position(|l| l.split_whitespace().any(|w| w == branch))
+    {
+        Some(at) => screen[at..(at + 2).min(screen.len())].join("\n"),
+        None => String::new(),
+    }
+}
+
+fn in_block(screen: &[String], branch: &str, parts: &[&str]) -> bool {
+    let b = block(screen, branch);
+    !b.is_empty() && parts.iter().all(|p| b.contains(p))
+}
+
+/// Escenario 1: la fila de `pagos`, con agente, va antes que la de `docs`, aunque
+/// alfabéticamente sería al revés.
+#[test]
+fn rows_go_by_what_asks_for_attention() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let shop = Shop::new();
+    shop.observed();
+    let mut tui = Tui::open(shop.dirs(), &shop.f.repo);
+    let screen = tui.until("claude-1 in feat-pagos and feat-docs without agent", |s| {
+        live(s) && has(s, "feat-pagos", &["claude-1"]) && has(s, "feat-docs", &["No agent"])
+    });
+    let rows = rows(&screen);
+    let at = |branch: &str| {
+        rows.iter()
+            .position(|r| r.split_whitespace().any(|w| w == branch))
+            .unwrap_or_else(|| panic!("no row for {branch}: {rows:#?}"))
+    };
+    assert_eq!(at("main"), 0, "{rows:#?}");
+    assert!(at("feat-pagos") < at("feat-docs"), "{rows:#?}");
+}
+
+/// Escenarios 2 y 3: una sesión terminada se queda en la fila hasta que otra la sustituye.
+#[test]
+fn an_ended_session_stays_until_a_new_one_replaces_it() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let shop = Shop::new();
+    shop.observed();
+    let pagos = shop.pagos.to_str().unwrap().to_owned();
+    let mut tui = Tui::open(shop.dirs(), &shop.f.repo);
+    tui.until("claude-1 Active in feat-pagos", |s| {
+        live(s) && has(s, "feat-pagos", &["●", "claude-1 · wt-pagos"])
+    });
+    shop.developer(&["agent", "withdraw", "claude-1", "--worktree", &pagos]);
+    let screen = tui.until("claude-1 ended in feat-pagos", |s| {
+        has(s, "feat-pagos", &["○", "claude-1 · wt-pagos"]) && in_block(s, "feat-pagos", &["ended"])
+    });
+    assert!(!has(&screen, "feat-pagos", &["●"]), "{screen:#?}");
+    // The same agent registered again opens a new session: an ended one is never reopened.
+    shop.developer(&["agent", "register", "claude-1", "--worktree", &pagos]);
+    let screen = tui.until("a new claude-1 session Active, without the ended one", |s| {
+        has(s, "feat-pagos", &["●", "claude-1 · wt-pagos"])
+    });
+    assert!(!in_block(&screen, "feat-pagos", &["ended"]), "{screen:#?}");
+}
+
+/// Escenarios 4 y 5: dos sesiones presentes son compartido; una presente y una terminada, no.
+#[test]
+fn a_shared_worktree_shows_all_its_sessions() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let shop = Shop::new();
+    shop.observed();
+    let pagos = shop.pagos.to_str().unwrap().to_owned();
+    let mut tui = Tui::open(shop.dirs(), &shop.f.repo);
+    shop.developer(&["agent", "register", "claude-2", "--worktree", &pagos]);
+    tui.until("feat-pagos shared by claude-1 and claude-2", |s| {
+        live(s) && in_block(s, "feat-pagos", &["shared with", "claude-1", "claude-2"])
+    });
+    shop.developer(&["agent", "withdraw", "claude-1", "--worktree", &pagos]);
+    let screen = tui.until("claude-1 ended, still named", |s| {
+        in_block(s, "feat-pagos", &["claude-1", "claude-2", "ended"])
+    });
+    assert!(!in_block(&screen, "feat-pagos", &["shared with"]), "{screen:#?}");
+}
