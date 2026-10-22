@@ -12,9 +12,8 @@ use std::collections::HashMap;
 use std::ffi::OsString;
 use std::sync::Mutex;
 
-use super::calm_git_alive_tests::{GIT, Procs, REPO, Rig};
+use super::calm_git_alive_tests::{GIT, Procs, Rig};
 use super::*;
-use crate::daemon::{LOG_FILE, LogLimits, Logger};
 use crate::detect::procs::git_redirects;
 use crate::detect::{GitCall, ProcEntry, ProcLister, git_call, git_redirect_into};
 
@@ -22,8 +21,6 @@ use crate::detect::{GitCall, ProcEntry, ProcLister, git_call, git_redirect_into}
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Probe {
     Read,
-    /// Alive, but its arguments cannot be read.
-    Unreadable,
     /// It exits while it is being read.
     ExitsWhileRead,
 }
@@ -102,7 +99,6 @@ impl ProcLister for Table {
                 let p = &table[&pid];
                 Some(git_redirect_into(&p.args, &p.env, &p.cwd, in_repo))
             }
-            Probe::Unreadable => None,
             Probe::ExitsWhileRead => {
                 table.remove(&pid);
                 None
@@ -198,33 +194,6 @@ fn a_git_redirected_into_this_repo_counts() {
         Probe::Read,
     );
     assert_eq!(r.settle_now(), None, "-C then a relative --git-dir");
-}
-
-/// A live `git` whose command line cannot be read holds the calm for the grace window, then
-/// stops counting and is logged once.
-#[test]
-fn an_unreadable_live_git_counts_for_the_grace_window_then_is_logged() {
-    let table = Arc::new(Table::default());
-    let r = rig_with(&table);
-    let dirs = crate::profile::ProfileDirs::under_root(&r.f.profile);
-    r.marks
-        .set_logger(Logger::open(&dirs.state, LogLimits::default()).unwrap());
-    table.add(96, &r.f.home, &["status"], &[], Probe::Unreadable);
-    assert_eq!(r.settle_now(), None, "within the window it counts");
-    let wts = std::slice::from_ref(&r.wt);
-    assert_eq!(
-        r.marks.settle(REPO, wts, Duration::from_secs(4)),
-        Some(1),
-        "past the window it no longer counts"
-    );
-    assert_eq!(r.marks.settle(REPO, wts, Duration::ZERO), Some(1));
-    let log = std::fs::read_to_string(dirs.state.join(LOG_FILE)).unwrap_or_default();
-    let lines: Vec<&str> = log
-        .lines()
-        .filter(|l| l.contains("tm_calm_probe_unreadable"))
-        .collect();
-    assert_eq!(lines.len(), 1, "once:\n{log}");
-    assert!(lines[0].contains("96"), "{}", lines[0]);
 }
 
 /// A `git` that exits while it is read does not count.

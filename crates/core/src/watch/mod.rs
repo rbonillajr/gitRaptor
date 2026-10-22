@@ -1449,6 +1449,16 @@ impl Observer {
             .route(gitraptor_api::clock::monotonic_ns(), Vec::new(), true);
     }
 
+    /// The repo task of `repo_id` reads the repo now (its backup poll is due), without waiting
+    /// for a file event: the Time Machine asks it when it waits for a calm, so a change whose
+    /// file events are late still reaches the engine. A no-op for a repo not watched.
+    pub fn poll_repo(&self, repo_id: &str) {
+        let repos = self.shared.repos.read().unwrap_or_else(|e| e.into_inner());
+        if let Some(repo) = repos.get(repo_id) {
+            let _ = repo.tx.send(RepoMsg::PollNow);
+        }
+    }
+
     /// Test hook: the backup poll of every repo task is due now, instead of in 30 s. Honored
     /// by the tasks that are running; the daemon only calls it in debug builds
     /// (`TierTestOp::PollNow`).

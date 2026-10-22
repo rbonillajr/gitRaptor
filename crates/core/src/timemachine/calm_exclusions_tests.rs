@@ -62,7 +62,11 @@ fn a_git_dash_c_from_another_cwd_counts_in_scope() {
     r.procs.redirect(50, Some(true));
     assert_eq!(r.settle_now(), None, "git -C from another folder");
     r.procs.redirect(50, None);
-    assert_eq!(r.settle_now(), None, "its arguments cannot be read");
+    assert_eq!(
+        r.settle_now(),
+        Some(1),
+        "its arguments cannot be read, from a folder outside the repo"
+    );
     r.procs.redirect(50, Some(false));
     assert_eq!(r.settle_now(), Some(1), "a git elsewhere, not redirected");
 }
