@@ -103,7 +103,7 @@ Entonces el ahead/behind de cada fila dice "no calculable: develop no encontrada
 
 ## Estado de la implementación (2026-10-21)
 
-Implementado en: PR #PRN ([DS-US-CKP-003](../dev-specs/US-CKP-003-estados-motor-conexion.md)).
+Implementado en: PR #282 ([DS-US-CKP-003](../dev-specs/US-CKP-003-estados-motor-conexion.md)).
 
 Verificado en macOS: panel de estado para motor no disponible, incompatible, rechazado y sin canal, con la acción (`raptor daemon`, `raptor status`); Esperando Git (gana a Sin repos y nunca pregunta por el repo de la carpeta); guía `raptor repo add <ruta>` sin repos; cabecera con "reconciliando", "dormido" y el motivo del resync (también el del cliente lento, con backoff creciente); fila "no disponible: …" sin acciones; "no calculable" con la base publicada. Pruebas de pantalla en en/es, sin color y en ASCII, el bucle con daemon falso y pruebas de proceso con el `raptor` real bajo `script`.
 
