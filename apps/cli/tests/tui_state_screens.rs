@@ -396,12 +396,13 @@ fn no_repos_shows_how_to_add_the_first() {
 /// lasts, also during the reconnection; arriving at live clears it.
 #[test]
 fn the_header_says_reconciling_dormant_or_why_it_resyncs() {
-    for (lang, reconciling, dormant, restarted, live) in [
+    for (lang, reconciling, dormant, restarted, replay, live) in [
         (
             Lang::En,
             "reconciling: provisional data",
             "asleep: data may lag",
             "the engine restarted",
+            "the engine no longer has the missed events",
             "engine observing",
         ),
         (
@@ -409,6 +410,7 @@ fn the_header_says_reconciling_dormant_or_why_it_resyncs() {
             "reconciliando: datos provisionales",
             "dormido: datos con retraso",
             "el motor se reinició",
+            "el motor ya no tiene los eventos perdidos",
             "motor observando",
         ),
     ] {
@@ -472,7 +474,9 @@ fn the_header_says_reconciling_dormant_or_why_it_resyncs() {
             "{lang:?} the reason is gone\n{header}"
         );
 
-        // A resync that ends at the new snapshot (no reconnection) clears it too.
+        // A resync that ends at the new snapshot (no reconnection) clears it too. The repo scope
+        // follows its own stream, so it has its snapshot as well.
+        update(&mut model, repo_msg("main", Vec::new()));
         update(
             &mut model,
             engine(EngineMsg::Resync {
@@ -480,13 +484,15 @@ fn the_header_says_reconciling_dormant_or_why_it_resyncs() {
                 reason: ResyncReason::ReplayUnavailable,
             }),
         );
+        let header = flat(&model, 120, 30);
+        assert!(header.contains(replay), "{lang:?} resyncing\n{header}");
         update(
             &mut model,
             global_msg(0, EngineStateView::Observing, Some(Some(RepoTier::Active))),
         );
         assert_eq!(model.conn, ConnState::Live);
         let header = flat(&model, 120, 30);
-        assert!(!header.contains(restarted), "{lang:?}\n{header}");
+        assert!(!header.contains(replay), "{lang:?}\n{header}");
         assert!(header.contains(live), "{lang:?}\n{header}");
     }
 }

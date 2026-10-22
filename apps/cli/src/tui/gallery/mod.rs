@@ -308,6 +308,7 @@ mod tests {
             "ConfirmPrompt",
             "Notification",
             "KeyHints",
+            "State panel",
         ] {
             assert!(names.contains(&component), "{component} missing");
         }
@@ -325,7 +326,7 @@ mod tests {
         };
         paint(cursor, &all, area, &mut buf);
         let text = buffer_text(&buf).join("\n");
-        assert!(text.contains("ConflictAlert (7/11)"), "{text}");
+        assert!(text.contains("ConflictAlert (7/12)"), "{text}");
         assert!(text.contains("mode ascii"));
         assert!(text.contains("[c] Conflict predicted"));
         assert!(text.contains("q quit"));

@@ -6,11 +6,12 @@
 use gitraptor_api::discovery::RepoDiscoveredData;
 use gitraptor_api::event::{
     ENGINE_STATE, GIT_EVENT, GUARD_PROTECTION_LOST, GUARD_PROTECTION_RESTORED, REPO_DISCOVERED,
-    SESSION_STATE, WORKTREE_STATE,
+    REPO_TIER, SESSION_STATE, WORKTREE_STATE,
 };
 use gitraptor_api::guard::{HooksStatus, ProtectionLostData};
 use gitraptor_api::messages::{
-    EngineView, GitEventView, ResyncReason, SessionView, SessionsListResult, WorktreeStateData,
+    EngineStateView, EngineView, GitEventView, RepoTierData, ResyncReason, SessionView,
+    SessionsListResult, WorktreeStateData,
 };
 use gitraptor_api::scope::{Scope, ScopeSnapshot};
 use ratatui::crossterm::event::KeyEventKind;
@@ -203,7 +204,14 @@ fn on_unobserved(model: &mut Model, candidate: Candidate) -> Vec<Cmd> {
             layer: Layer::Cockpit
         })
     );
-    if !developer || model.ui.asked {
+    // Without Git the engine observes nothing: the first-repo question would lead nowhere.
+    let waiting_for_git = model
+        .engine
+        .global
+        .data
+        .as_ref()
+        .is_some_and(|g| g.engine == EngineStateView::WaitingForGit);
+    if !developer || model.ui.asked || waiting_for_git {
         return on_unlocated(model);
     }
     // A reconnection while the question is on screen keeps it.
@@ -302,6 +310,9 @@ fn on_conn(model: &mut Model, event: ConnEvent) -> Vec<Cmd> {
             {
                 model.ui.notice = None;
             }
+            if state == ConnState::Live {
+                model.engine.resync = None;
+            }
             model.conn = state;
         }
     }
@@ -320,6 +331,17 @@ fn on_engine(model: &mut Model, msg: EngineMsg) -> Vec<Cmd> {
             event,
         } => on_event(model, &scope, scope_seq, &event),
         EngineMsg::Resync { scope, reason } => on_resync(model, scope, reason),
+        // The daemon closes this connection right after: the reconnection redoes every snapshot,
+        // so nothing is asked of the link.
+        EngineMsg::Lagged { reason } => {
+            model.engine.resync = Some(reason);
+            model.engine.mark_all_stale();
+            if model.conn == ConnState::Live {
+                model.conn = ConnState::Resyncing;
+            }
+            model.dirty = true;
+            Vec::new()
+        }
         EngineMsg::Sessions { repo_id, result } => {
             on_sessions(model, &repo_id, &result);
             Vec::new()
@@ -385,6 +407,7 @@ fn on_snapshot(model: &mut Model, snapshot: ScopeSnapshot) {
     }
     if model.conn == ConnState::Resyncing && model.engine.all_synced() {
         model.conn = ConnState::Live;
+        model.engine.resync = None;
     }
 }
 
@@ -446,7 +469,15 @@ fn apply(model: &mut Model, scope: &Scope, event: &gitraptor_api::Event) {
             }
             let replica = &mut model.engine.global;
             replica.applied += 1;
-            if event.kind == ENGINE_STATE
+            if event.kind == REPO_TIER
+                && let (Some(data), Ok(tier)) = (
+                    replica.data.as_mut(),
+                    serde_json::from_value::<RepoTierData>(event.data.clone()),
+                )
+                && let Some(choice) = data.repos.iter_mut().find(|r| r.repo_id == tier.repo_id)
+            {
+                choice.tier = Some(tier.tier);
+            } else if event.kind == ENGINE_STATE
                 && let (Some(data), Ok(view)) = (
                     replica.data.as_mut(),
                     serde_json::from_value::<EngineView>(event.data.clone()),
@@ -502,6 +533,7 @@ fn on_resync(model: &mut Model, scope: Scope, reason: ResyncReason) -> Vec<Cmd> 
         }
         return Vec::new();
     }
+    model.engine.resync = Some(reason);
     start_resync(model, scope, true)
 }
 
@@ -524,12 +556,13 @@ fn start_resync(model: &mut Model, scope: Scope, resubscribe: bool) -> Vec<Cmd> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::RepoChoice;
     use crate::model::{Size, Stamped};
     use crate::present::i18n::Lang;
     use gitraptor_api::Untrusted;
     use gitraptor_api::event::Event;
     use gitraptor_api::messages::{
-        BaseBranchView, BaseStatusView, DaemonView, EngineStateView, RepoStateView, RepoView,
+        BaseBranchView, BaseStatusView, DaemonView, RepoStateView, RepoTier, RepoView,
         SessionStateView,
     };
     use gitraptor_api::scope::{AutostartView, GlobalSnapshot, RepoSnapshot};
@@ -1404,5 +1437,112 @@ mod tests {
         assert!(!m.ui.help);
         assert_eq!(front(&m).as_deref(), Some("a"));
         assert_eq!(m.ui.discovered.len(), 2);
+    }
+
+    fn lagged() -> Msg {
+        engine(EngineMsg::Lagged {
+            reason: ResyncReason::SlowConsumer,
+        })
+    }
+
+    #[test]
+    fn engine_states_a_slow_consumer_keeps_its_reason_until_live() {
+        let mut m = model();
+        update(&mut m, global_snapshot(3, EngineStateView::Observing));
+        assert!(update(&mut m, lagged()).is_empty());
+        assert_eq!(m.engine.resync, Some(ResyncReason::SlowConsumer));
+        assert_eq!(m.conn, ConnState::Resyncing);
+        assert!(m.engine.global.stale);
+        // The reconnection goes through the connecting states: the reason stays.
+        for state in [
+            ConnState::Reconnecting { attempt: 1 },
+            ConnState::Starting,
+            ConnState::Syncing,
+        ] {
+            update(&mut m, Msg::Conn(ConnEvent::State(state)));
+            assert_eq!(m.engine.resync, Some(ResyncReason::SlowConsumer));
+        }
+        update(&mut m, Msg::Conn(ConnEvent::State(ConnState::Live)));
+        assert_eq!(m.engine.resync, None);
+    }
+
+    #[test]
+    fn engine_states_a_daemon_resync_keeps_its_reason() {
+        let mut m = model();
+        update(&mut m, global_snapshot(3, EngineStateView::Observing));
+        update(
+            &mut m,
+            engine(EngineMsg::Resync {
+                scope: Scope::Global,
+                reason: ResyncReason::ReplayUnavailable,
+            }),
+        );
+        assert_eq!(m.engine.resync, Some(ResyncReason::ReplayUnavailable));
+        assert_eq!(m.conn, ConnState::Resyncing);
+        // The new snapshot brings it back to live and clears the reason.
+        update(&mut m, global_snapshot(9, EngineStateView::Observing));
+        assert_eq!(m.conn, ConnState::Live);
+        assert_eq!(m.engine.resync, None);
+    }
+
+    #[test]
+    fn engine_states_a_gap_has_no_reason() {
+        let mut m = model();
+        update(&mut m, global_snapshot(3, EngineStateView::Observing));
+        update(&mut m, engine_state(5, EngineStateView::Observing));
+        assert_eq!(m.conn, ConnState::Resyncing);
+        assert_eq!(m.engine.resync, None);
+    }
+
+    #[test]
+    fn engine_states_the_tier_follows_the_global_stream() {
+        let mut m = model();
+        update(&mut m, global_snapshot(3, EngineStateView::Observing));
+        let choice = RepoChoice {
+            repo_id: "r1".into(),
+            name: SafeText::name("shop"),
+            path: SafeText::text("/w/shop/.git"),
+            tier: None,
+        };
+        m.engine.global.data.as_mut().unwrap().repos = vec![choice];
+        let tier = |seq: u64, repo_id: &str, tier: RepoTier| {
+            engine(EngineMsg::Event {
+                scope: Scope::Global,
+                scope_seq: seq,
+                event: Box::new(Event {
+                    seq: 100 + seq,
+                    kind: REPO_TIER.into(),
+                    version: 1,
+                    wall_ms: 0,
+                    timings: None,
+                    data: json!({"repo_id": repo_id, "tier": tier}),
+                }),
+            })
+        };
+        let current = |m: &Model| m.engine.global.data.as_ref().unwrap().repos[0].tier;
+        update(&mut m, tier(4, "r1", RepoTier::Waking));
+        assert_eq!(current(&m), Some(RepoTier::Waking));
+        // A repo the replica does not list changes nothing, and still counts as applied.
+        update(&mut m, tier(5, "other", RepoTier::Dormant));
+        assert_eq!(current(&m), Some(RepoTier::Waking));
+        assert_eq!(m.engine.global.applied, 2);
+        update(&mut m, tier(6, "r1", RepoTier::Active));
+        assert_eq!(current(&m), Some(RepoTier::Active));
+    }
+
+    #[test]
+    fn engine_states_waiting_for_git_never_asks_to_observe() {
+        let mut m = model();
+        m.engine.requester = developer();
+        update(&mut m, global_snapshot(3, EngineStateView::WaitingForGit));
+        assert!(update(&mut m, Msg::Conn(ConnEvent::Unobserved(notes()))).is_empty());
+        assert_eq!(m.ui.pick, Pick::None);
+        assert_eq!(m.ui.here, None);
+        // With Git the same folder is asked.
+        let mut m = model();
+        m.engine.requester = developer();
+        update(&mut m, global_snapshot(3, EngineStateView::NoRepos));
+        update(&mut m, Msg::Conn(ConnEvent::Unobserved(notes())));
+        assert_eq!(m.ui.pick, Pick::Asking);
     }
 }

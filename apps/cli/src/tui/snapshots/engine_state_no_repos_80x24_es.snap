@@ -1,0 +1,28 @@
+---
+source: apps/cli/src/tui/engine_state.rs
+expression: "screen(&model, 80, 24)"
+---
+ sin repo seleccionado · ✔ en vivo · motor sin repos · actúas como … ⚡ –  ⛔ –
+┌─ ℹ  Sin repos observados ────────────────────────────────────────────────────┐
+│ Añade el primero → `raptor repo add <ruta>`                                  │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+ q salir  r reintentar                                                  ? ayuda

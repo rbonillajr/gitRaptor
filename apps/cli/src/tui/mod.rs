@@ -1,6 +1,7 @@
 //! The Cockpit TUI (ADR-CKP-003): TEA loop, view, keys and terminal.
 
 pub mod app;
+pub mod engine_state;
 pub mod gallery;
 pub mod help;
 pub mod input;

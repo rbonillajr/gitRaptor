@@ -115,7 +115,7 @@ impl Machine {
 
     fn engine_pid(&self) -> Option<u32> {
         let dirs = ProfileDirs::under_root(&self.f.profile);
-        running_pid(&dirs.state).ok().flatten().map(|p| p as u32)
+        running_pid(&dirs.state).ok().flatten()
     }
 }
 
@@ -604,7 +604,9 @@ fn a_missing_base_branch_is_not_computable_and_no_other_is_used() {
     assert_eq!(rows.len(), 2, "{screen:#?}");
     for row in rows {
         assert!(row.contains("not computable"), "{row}");
-        for glyph in ['↑', '↓', '–'] {
+        // The activity column paints `–` for a worktree with no activity: only the ↑↓ cell
+        // must carry no count (a dash there would not say "not computable" either).
+        for glyph in ['↑', '↓'] {
             assert!(!row.contains(glyph), "{row}");
         }
     }

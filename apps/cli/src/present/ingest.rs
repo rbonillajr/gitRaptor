@@ -28,6 +28,7 @@ pub fn global(snapshot: &GlobalSnapshot) -> GlobalView {
                 repo_id: r.repo_id.clone(),
                 name: SafeText::name(&repo_name(r.path.raw())),
                 path: SafeText::from_untrusted(&r.path),
+                tier: r.tier,
             })
             .collect(),
         attention: snapshot

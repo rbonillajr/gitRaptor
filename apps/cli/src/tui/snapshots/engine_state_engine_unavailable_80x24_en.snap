@@ -1,0 +1,28 @@
+---
+source: apps/cli/src/tui/engine_state.rs
+expression: "screen(&model, 80, 24)"
+---
+ shop · ✖ engine unavailable: run `raptor daemon` · acting as you    ⚡ –  ⛔ –
+┌─ ✖ Engine unavailable ───────────────────────────────────────────────────────┐
+│ It could not start → start it with `raptor daemon`, or at every login with   │
+│ `raptor daemon enable`.                                                      │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+ q quit  r retry                                                         ? help

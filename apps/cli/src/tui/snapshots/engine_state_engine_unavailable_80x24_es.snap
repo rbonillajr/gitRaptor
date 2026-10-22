@@ -1,0 +1,28 @@
+---
+source: apps/cli/src/tui/engine_state.rs
+expression: "screen(&model, 80, 24)"
+---
+ shop · ✖ motor no disponible: ejecuta `raptor daemon` · actúas com… ⚡ –  ⛔ –
+┌─ ✖ Motor no disponible ──────────────────────────────────────────────────────┐
+│ No se pudo arrancar → arráncalo con `raptor daemon`, o en cada inicio de     │
+│ sesión con `raptor daemon enable`.                                           │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+ q salir  r reintentar                                                  ? ayuda

@@ -6,7 +6,7 @@ use gitraptor_api::AgentKind;
 use gitraptor_api::catalog::Layer;
 use gitraptor_api::event::Event;
 use gitraptor_api::messages::{
-    DivergenceView, EngineStateView, GitEventView, ResyncReason, SessionStateView,
+    DivergenceView, EngineStateView, GitEventView, RepoTier, ResyncReason, SessionStateView,
     SessionsListResult, UnavailableReason,
 };
 use gitraptor_api::scope::{AutostartView, Scope, ScopeSnapshot};
@@ -209,6 +209,9 @@ pub struct EngineReplica {
     /// The engine publishes the last activity and fetch (`scope.activity`); without it they
     /// are "not available", never "never".
     pub activity: bool,
+    /// Why the running resync started, as the engine said it; `None` for a gap the client
+    /// found, or when nothing is being resynced. Cleared on reaching `Live`.
+    pub resync: Option<ResyncReason>,
 }
 
 impl EngineReplica {
@@ -275,6 +278,8 @@ pub struct RepoChoice {
     pub repo_id: String,
     pub name: SafeText,
     pub path: SafeText,
+    /// The repo's observation tier (`observation.tiers`); `None` while not published.
+    pub tier: Option<RepoTier>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -502,6 +507,11 @@ pub enum EngineMsg {
     },
     Resync {
         scope: Scope,
+        reason: ResyncReason,
+    },
+    /// The daemon dropped this connection for reading too slowly (`events.resync`); it
+    /// closes it right after.
+    Lagged {
         reason: ResyncReason,
     },
     /// The sessions of a repo, asked right after its snapshot and subscription.

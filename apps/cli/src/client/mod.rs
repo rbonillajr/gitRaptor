@@ -23,7 +23,7 @@ use gitraptor_api::discovery::{CandidatesResult, PathParams};
 use gitraptor_api::guard::{GuardRepoParams, GuardStatus};
 use gitraptor_api::messages::{
     EventsHistoryParams, EventsHistoryResult, MAX_HISTORY_PAGE, RepoAddParams, RepoAddResult,
-    RepoRejectedData, RepoRejection, SessionsListParams, SessionsListResult,
+    RepoRejectedData, RepoRejection, ResyncNotification, SessionsListParams, SessionsListResult,
 };
 use gitraptor_api::methods;
 use gitraptor_api::rpc::{Notification, ServerMessage, code};
@@ -187,7 +187,21 @@ pub fn backoff(attempt: u32) -> Duration {
 /// How a session ended.
 enum End {
     Reconnect,
+    /// The daemon dropped this connection for reading too slowly: the streak of drops goes on.
+    Lagged,
     Shutdown,
+}
+
+impl End {
+    /// The link closed: a daemon that had said `events.resync` keeps the streak, whatever
+    /// command was in flight when the link went down.
+    fn dropped(lagged: bool) -> Self {
+        if lagged {
+            Self::Lagged
+        } else {
+            Self::Reconnect
+        }
+    }
 }
 
 fn run(
@@ -218,6 +232,9 @@ fn run(
                     attempt = 0;
                     None
                 }
+                // A client that cannot keep up must not reconnect at once every time: the streak
+                // keeps growing the wait.
+                Ok(End::Lagged) => None,
             },
             Err(err) => Some(err),
         };
@@ -325,6 +342,8 @@ fn session(
             Err(_) => return Ok(End::Reconnect),
         }
     }
+    // The daemon said `events.resync` and is about to close this connection.
+    let mut lagged = false;
     loop {
         while let Ok(cmd) = cmds.try_recv() {
             match cmd {
@@ -332,13 +351,13 @@ fn session(
                 LinkCmd::Reconnect => return Ok(End::Reconnect),
                 LinkCmd::Resync { scope, resubscribe } => {
                     if sync(link, &scope, resubscribe, out)?.is_err() {
-                        return Ok(End::Reconnect);
+                        return Ok(End::dropped(lagged));
                     }
                 }
                 LinkCmd::Open { repo_id } => {
                     *chosen = Some(repo_id.clone());
                     if sync(link, &Scope::Repo { repo_id }, true, out)?.is_err() {
-                        return Ok(End::Reconnect);
+                        return Ok(End::dropped(lagged));
                     }
                 }
                 LinkCmd::Accept { path } => match observe(link, &path) {
@@ -350,7 +369,7 @@ fn session(
                     Err(Refusal::Link(_)) => {
                         let failure = ObserveFailure::Disconnected;
                         out.send(Msg::Conn(ConnEvent::DiscoveryFailed(failure)))?;
-                        return Ok(End::Reconnect);
+                        return Ok(End::dropped(lagged));
                     }
                 },
                 LinkCmd::Dismiss { path } => {
@@ -366,7 +385,7 @@ fn session(
                         Err(Refusal::Link(_)) => {
                             let failure = ObserveFailure::Disconnected;
                             out.send(Msg::Conn(ConnEvent::DiscoveryFailed(failure)))?;
-                            return Ok(End::Reconnect);
+                            return Ok(End::dropped(lagged));
                         }
                     }
                 }
@@ -374,7 +393,7 @@ fn session(
                     Ok(repo_id) => {
                         *chosen = Some(repo_id.clone());
                         if sync(link, &Scope::Repo { repo_id }, true, out)?.is_err() {
-                            return Ok(End::Reconnect);
+                            return Ok(End::dropped(lagged));
                         }
                     }
                     Err(Refusal::Engine { code, data }) => {
@@ -384,7 +403,7 @@ fn session(
                     Err(Refusal::Link(_)) => {
                         let failure = ObserveFailure::Disconnected;
                         out.send(Msg::Conn(ConnEvent::ObserveFailed(failure)))?;
-                        return Ok(End::Reconnect);
+                        return Ok(End::dropped(lagged));
                     }
                 },
             }
@@ -393,9 +412,11 @@ fn session(
             Ok(None) => {}
             Ok(Some(incoming)) => {
                 if let Some(msg) = decode(incoming) {
+                    lagged |= matches!(msg.msg, EngineMsg::Lagged { .. });
                     out.send(Msg::Engine(msg))?;
                 }
             }
+            Err(_) if lagged => return Ok(End::Lagged),
             Err(_) => return Ok(End::Reconnect),
         }
     }
@@ -692,6 +713,10 @@ pub fn decode(incoming: Incoming) -> Option<Stamped<EngineMsg>> {
                 reason: n.reason,
             }
         }
+        methods::NOTIFY_RESYNC => {
+            let n: ResyncNotification = serde_json::from_value(notification.params).ok()?;
+            EngineMsg::Lagged { reason: n.reason }
+        }
         _ => return None,
     };
     Some(Stamped {
@@ -704,6 +729,12 @@ pub fn decode(incoming: Incoming) -> Option<Stamped<EngineMsg>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_link_closed_after_the_resync_notice_keeps_the_streak() {
+        assert!(matches!(End::dropped(true), End::Lagged));
+        assert!(matches!(End::dropped(false), End::Reconnect));
+    }
 
     #[test]
     fn backoff_grows_to_five_seconds() {

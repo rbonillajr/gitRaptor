@@ -110,6 +110,9 @@ const NAME_MAX: u16 = 26;
 const BRANCH_MIN: u16 = 12;
 const CHANGES: u16 = 6;
 const SYNC: u16 = 12;
+/// The ahead/behind column grows up to `SYNC_MAX` to fit "not computable", as long as the
+/// branch keeps `BRANCH_MIN`.
+const SYNC_MAX: u16 = 15;
 /// The activity column grows the same way up to `ACTIVITY_MAX` ("not available").
 const ACTIVITY: u16 = 11;
 const ACTIVITY_MAX: u16 = 14;
@@ -126,10 +129,10 @@ struct Cols {
 }
 
 impl Cols {
-    /// `widest` holds the widest name and the widest activity text of all the rows (not only
+    /// `widest` holds the widest name, activity and ahead/behind text of all the rows (not only
     /// the visible ones, so the columns do not jump while scrolling); `flags` whether any row
     /// has a ⚡ or ⛔ to show, the only case their columns take room.
-    fn new(inner: u16, styles: &Styles, widest: (u16, u16), flags: bool) -> Self {
+    fn new(inner: u16, styles: &Styles, widest: (u16, u16, u16), flags: bool) -> Self {
         let flags = if flags {
             u16::from(styles.symbol(SymbolToken::Conflict).width)
                 + 1
@@ -164,6 +167,13 @@ impl Cols {
             SYNC
         } else {
             0
+        };
+        // Wider than `SYNC` only when the branch still keeps its minimum.
+        let wanted_sync = (widest.2 + 1).clamp(SYNC, SYNC_MAX);
+        let sync = if sync > 0 && inner >= base + NAME + wanted_sync + activity + BRANCH_MIN {
+            wanted_sync
+        } else {
+            sync
         };
         let room = inner.saturating_sub(base + sync + activity + BRANCH_MIN);
         let name = (widest.0 + 1).clamp(NAME, NAME_MAX).min(room.max(NAME));
@@ -312,10 +322,18 @@ impl Component for AgentListModel {
         if inner.height == 0 {
             return;
         }
-        let widest = self.rows.iter().fold((0, 0), |(n, a), r| {
+        let g = styles.glyphs;
+        let widest = self.rows.iter().fold((0, 0, 0), |(n, a, s), r| {
+            let sync = match &r.sync {
+                Sync::Known { ahead, behind } => {
+                    width(&format!("{}{ahead} {}{behind}", g.ahead, g.behind))
+                }
+                Sync::Unknown(reason) => width(reason.as_str()),
+            };
             (
                 n.max(width(r.name.as_str())),
                 a.max(width(r.activity.as_str())),
+                s.max(sync),
             )
         });
         let flags = self.rows.iter().any(|r| r.conflict || r.blocked);
