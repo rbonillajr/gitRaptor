@@ -367,7 +367,7 @@ graph LR
 - Progreso (D2 c): si la petición trae `_meta.progressToken`, `raptor-mcp` manda `notifications/progress` con ese token cada `MCP_PROGRESS_INTERVAL` mientras espera `run`, con `progress` = segundos transcurridos y sin `total` ni `message` (sin texto del repo). Sin token, nada.
 - Cancelación (`notifications/cancelled`) y paso a segundo plano: la operación sigue en el daemon (BR-MCP-TIME-002); la respuesta tardía se descarta. Un reintento mientras sigue corriendo recibe `operation-in-progress` con `kind: "write"` (S-11, T006).
 - Tabla de motivos → códigos de § Forma del error. `GuardrailsDenied` con la denegación tipada → `policy-denied` con `params {rules, decision_id}` (≤ 4 reglas, D11).
-- Descripción constante en inglés (§ Contrato de API), ≤ 150 tokens con su esquema (RES-MCP-01).
+- Descripción constante en inglés (§ Contrato de API), ≤ 250 tokens con su esquema (RES-MCP-01, excepción de las herramientas de escritura: Decisión del orquestador (2026-10-27), validada por Arquitecto; el texto literal mide 729 B ≈ 243 tokens y RES-MCP-04 no deja recortar sus declaraciones de seguridad).
 - La respuesta es `McpCommitView`, pasada por `for_mcp`, recortada hasta `MCP_COMMIT_TOKENS` por parte y siempre dentro de 24 KiB.
 
 - **Depende:** T002
@@ -812,7 +812,7 @@ _No aplica — no se añade configuración: las cifras son constantes del contra
 | Rutas en la respuesta | ≤ 200, con `paths_total` y `truncated` | ADR-MCP-001 § 6 |
 | Presupuesto de la respuesta | ≤ 800 tokens por parte; ≤ 24 KiB tras el escape | ⚠️ **ASSUMPTION** (D4), RES-MCP-02 como referencia; ADR-MCP-001 § 6 |
 | Rechazo | ≤ 80 tokens en en y en es | RES-MCP-03 |
-| Descripción y esquema de la herramienta | ≤ 150 tokens | RES-MCP-01 |
+| Descripción y esquema de la herramienta | ≤ 250 tokens (`MCP_WRITE_TOOL_TOKENS`) | RES-MCP-01, excepción de escritura (2026-10-27) |
 | Espera en la cola del cerrojo, capa `mcp` | ≤ 60 s (`MCP_QUEUE_WAIT`), después `queue-full` | ⚠️ **ASSUMPTION** (D2 a) |
 | Plazo del snapshot previo | 10 s (`DEFAULT_PRIOR_DEADLINE`) | `crates/core/src/timemachine/protected/mod.rs:47` |
 | Tope de una operación de capa `mcp` | 300.000 ms (`MCP_TIME_LIMIT_MS`) | ADR-CKP-002 § 6; ADR-MCP-001 § 6 |
