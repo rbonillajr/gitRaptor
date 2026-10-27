@@ -1,0 +1,33 @@
+{
+  "id": "safe-commit-path-windows-stream",
+  "title": "A Windows alternate data stream path is refused as invalid",
+  "threats": [
+    "MCP05",
+    "SEC-MCP-05",
+    "BR-MCP-VAL-001"
+  ],
+  "tier": "server",
+  "platforms": [
+    "windows"
+  ],
+  "pending": "XP-46",
+  "send": [
+    {
+      "call": "safe_commit",
+      "arguments": {
+        "message": "fix: a",
+        "paths": [
+          "a.txt:x"
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "invalid-path",
+      "params": [
+        "path"
+      ]
+    }
+  }
+}

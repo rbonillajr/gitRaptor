@@ -1,0 +1,33 @@
+{
+  "id": "safe-commit-path-windows-trailing-space",
+  "title": "A Windows path component ending in a space is refused as invalid",
+  "threats": [
+    "MCP05",
+    "SEC-MCP-05",
+    "BR-MCP-VAL-001"
+  ],
+  "tier": "server",
+  "platforms": [
+    "windows"
+  ],
+  "pending": "XP-46",
+  "send": [
+    {
+      "call": "safe_commit",
+      "arguments": {
+        "message": "fix: a",
+        "paths": [
+          "src/a "
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "invalid-path",
+      "params": [
+        "path"
+      ]
+    }
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "id": "safe-commit-path-nul",
+  "title": "A path with a NUL is refused as invalid",
+  "threats": [
+    "MCP05",
+    "SEC-MCP-05",
+    "BR-MCP-VAL-001"
+  ],
+  "tier": "server",
+  "platforms": [
+    "macos",
+    "linux",
+    "windows"
+  ],
+  "send": [
+    {
+      "call": "safe_commit",
+      "arguments": {
+        "message": "fix: a",
+        "paths": [
+          "src/a\u0000.rs"
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "invalid-path",
+      "params": [
+        "path"
+      ]
+    }
+  }
+}

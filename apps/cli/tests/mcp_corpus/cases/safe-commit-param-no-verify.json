@@ -1,0 +1,31 @@
+{
+  "id": "safe-commit-param-no-verify",
+  "title": "A no_verify parameter on safe_commit is malformed and never echoed",
+  "threats": [
+    "MCP02",
+    "SEC-MCP-02",
+    "BR-MCP-VAL-005"
+  ],
+  "tier": "server",
+  "platforms": [
+    "macos",
+    "linux",
+    "windows"
+  ],
+  "send": [
+    {
+      "call": "safe_commit",
+      "arguments": {
+        "message": "fix: a",
+        "no_verify": true
+      }
+    }
+  ],
+  "expect": {
+    "protocol_error": {
+      "code": -32602,
+      "message": "invalid-params",
+      "field": "no_verify"
+    }
+  }
+}
