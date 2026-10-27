@@ -51,7 +51,7 @@ impl AgentColors {
             }
             let slot = (0..)
                 .find(|i| !self.slots.values().any(|used| used == i))
-                .unwrap_or(0);
+                .expect("an unbounded range always has a free slot");
             self.slots.insert(s.session_id.clone(), slot);
         }
     }

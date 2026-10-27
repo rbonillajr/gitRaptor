@@ -148,7 +148,7 @@ Estados: **I** = implemented, **P** = partially-implemented, **Pend** = draft, r
 | US-CKP-026 | Autoría del último commit | Should | I | — |
 | US-CKP-025 | TUI en un repo no observado | Should | P | Falta el escenario 6 y los niveles |
 | US-CKP-003 | Estado del motor y de la conexión en la TUI | Must | I | — |
-| US-CKP-002, US-CKP-005 | Prioriza lo que pide atención; terminal pequeña o ASCII | Must | Pend | — |
+| US-CKP-002, US-CKP-005 | Prioriza lo que pide atención; terminal pequeña o ASCII | Must | P | US-CKP-002: falta la subida por hueco, conflicto y denegación |
 | US-CKP-006, US-CKP-007, US-CKP-008, US-CKP-009, US-CKP-010 | Predicción de conflictos: choque, vigencia, aviso, base sin confirmar y KPI | Must | Pend | SPIKE-CKP-001 → TS-CKP-001 |
 | US-CKP-012, US-CKP-014, US-CKP-015, US-CKP-016, US-CKP-017, US-CKP-018, US-CKP-024 | Revisar, integrar, poner al día, choque detenido, descartar, crear worktree, integrar con seguridad | Must | Pend | TS-CKP-003 |
 | US-CKP-019, US-CKP-020, US-CKP-021, US-CKP-022 | Por qué frena Guardrails; confirmar un plan sobre trabajo ajeno; historial; grafo | Must | Pend | — |
