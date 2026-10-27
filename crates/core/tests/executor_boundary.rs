@@ -96,7 +96,10 @@ mod repo_intact {
         let inside: Vec<String> = git
             .iter()
             .filter(|f| {
+                // `user_ops_add_tests.rs`: the `cfg(test)` module of `user_ops` that proves Git
+                // refuses `add` beyond a symbolic link; it builds the command it tests.
                 !f.ends_with("user_ops.rs")
+                    && !f.ends_with("user_ops_add_tests.rs")
                     && !f.ends_with("lib.rs")
                     && std::fs::read_to_string(f)
                         .unwrap()

@@ -11,6 +11,7 @@ mod test_arms;
 use std::sync::Arc;
 
 pub use commit::CommitEnv;
+pub(crate) use commit::take_refused_path;
 
 use gitraptor_api::catalog::{OperationArgs, OperationId, entry};
 

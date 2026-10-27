@@ -76,7 +76,8 @@ use crate::timemachine::protected::scope::{
     operation_in, require_attributed, scope_for, snapshot_in,
 };
 use crate::timemachine::protected::{
-    ProtectedError, RepoHandle, ScopeError, failure_text, registered_worktrees, worktree_key,
+    ProtectedError, RepoHandle, ScopeError, StepFailure, failure_text, registered_worktrees,
+    worktree_key,
 };
 use crate::timemachine::restore::{
     CandidateContext, RestoreDone, RestoreError, resolve_point_prefix_with, restore_to,
@@ -221,6 +222,7 @@ pub(crate) fn accept(ctx: &Arc<ServerCtx>, stream: Stream) {
                 )),
                 mcp_last: std::sync::Mutex::new(None),
                 mcp_cursors: std::sync::Mutex::new(super::mcp_status::McpCursors::default()),
+                slot: None,
             };
             conn.serve(reader_stream);
             if let Some(wiring) = &thread_ctx.protected {
@@ -314,7 +316,7 @@ pub(crate) fn close_all(ctx: &ServerCtx, grace: Duration) {
 }
 
 /// Token bucket (SEC-08).
-struct Bucket {
+pub(super) struct Bucket {
     tokens: f64,
     rate: f64,
     burst: f64,
@@ -322,7 +324,7 @@ struct Bucket {
 }
 
 impl Bucket {
-    fn new(rate_per_sec: u32, burst: u32) -> Self {
+    pub(super) fn new(rate_per_sec: u32, burst: u32) -> Self {
         Self {
             tokens: f64::from(burst),
             rate: f64::from(rate_per_sec),
@@ -331,24 +333,34 @@ impl Bucket {
         }
     }
 
-    fn per_minute(rate_per_min: u32, burst: u32) -> Self {
+    pub(super) fn per_minute(rate_per_min: u32, burst: u32) -> Self {
         Self {
             rate: f64::from(rate_per_min) / 60.0,
             ..Self::new(0, burst)
         }
     }
 
-    fn take(&mut self) -> bool {
+    fn refill(&mut self) {
         let now = Instant::now();
         let elapsed = now.duration_since(self.last).as_secs_f64();
         self.last = now;
         self.tokens = (self.tokens + elapsed * self.rate).min(self.burst);
+    }
+
+    pub(super) fn take(&mut self) -> bool {
+        self.refill();
         if self.tokens >= 1.0 {
             self.tokens -= 1.0;
             true
         } else {
             false
         }
+    }
+
+    /// Whether the bucket holds its whole burst again.
+    pub(super) fn is_full(&mut self) -> bool {
+        self.refill();
+        self.tokens >= self.burst
     }
 }
 
@@ -393,6 +405,9 @@ struct Connection<'a> {
     /// The cursors this connection was given by `mcp.status`: opaque handles into this table,
     /// valid for no other connection.
     mcp_cursors: std::sync::Mutex<super::mcp_status::McpCursors>,
+    /// The requester slot claimed when `hello` ended (S-03): `None` for the developer and the
+    /// hook client. Its key is the one the connection counts for until it closes.
+    slot: Option<super::limits::Slot>,
 }
 
 /// What a handled request leads to.
@@ -535,6 +550,10 @@ impl Connection<'_> {
             .filter(|c| self.ctx.config.capabilities.contains(c))
             .collect();
         self.apply_capabilities();
+        if let Some(refused) = self.claim_slot(hello.client) {
+            self.send(Response::err(Some(request.id.clone()), refused));
+            return After::Close;
+        }
         // N5: who the daemon sees, for the Cockpit's "you act as". Only for
         // `cli` clients of protocol 6 on a full connection: the hook client
         // connects often and does not need the process walk.
@@ -568,6 +587,52 @@ impl Connection<'_> {
         self.reply(&request.id, Ok(result));
         self.phase = Phase::Ready;
         After::Continue
+    }
+
+    /// S-03: the requester slot of this connection, claimed once at the end of `hello` with the
+    /// requester `resolve` gives now; the answer that refuses it at the cap.
+    fn claim_slot(&mut self, client: ClientKind) -> Option<ErrorObject> {
+        let installed = || {
+            let exe = self.info.as_ref().and_then(|i| i.exe.as_deref());
+            let launch = &self.ctx.launch;
+            exe.and_then(file_id).is_some_and(|caller| {
+                launch.file == Some(caller) || file_id(&launch.path) == Some(caller)
+            })
+        };
+        let hook_client = super::limits::is_hook_client(
+            self.profile,
+            client,
+            client == ClientKind::Other && installed(),
+        );
+        let resolution = if hook_client {
+            None
+        } else {
+            self.resolve().ok()
+        };
+        let key = super::limits::key_of(resolution.as_ref(), hook_client, || {
+            check_reserved(self.peer, &self.ctx.checks())
+                .refused
+                .is_none()
+        })?;
+        match self.ctx.requester_limits.claim(key) {
+            Ok(slot) => {
+                self.slot = Some(slot);
+                None
+            }
+            Err(super::limits::Full) => {
+                self.ctx.logger.warn(
+                    "client_rejected",
+                    &[("reason", "requester-connections".into())],
+                );
+                Some(
+                    ErrorObject::new(
+                        code::LIMIT_REACHED,
+                        "too many connections of this requester",
+                    )
+                    .with_data(serde_json::json!({ "reason": "requester-connections" })),
+                )
+            }
+        }
     }
 
     /// Whether the connection understands the shape `capability` names.
@@ -732,18 +797,27 @@ impl Connection<'_> {
             return After::Continue;
         }
         // An agent in a loop hits its connection's read limit before any
-        // check of its scope (US-MCP-005). The daemon counts per connection;
-        // per requester arrives with the first MCP writes (S-03).
-        if self.is_mcp()
-            && !reserved_like
-            && write_route(spec.name).is_none()
-            && !self.mcp_read_bucket.take()
-        {
-            self.reply::<()>(
-                &request.id,
-                Err(ErrorObject::new(code::RATE_LIMITED, "rate limited")),
-            );
-            return After::Continue;
+        // check of its scope (US-MCP-005), then its requester's, shared by all
+        // its connections (S-03). A write spends the requester's write budget
+        // here; the connection's own is spent when the write is prepared.
+        if self.is_mcp() && !reserved_like {
+            let write = write_route(spec.name).is_some();
+            let limits = &self.ctx.requester_limits;
+            let allowed = (write || self.mcp_read_bucket.take())
+                && self.slot.as_ref().is_none_or(|slot| {
+                    if write {
+                        limits.take_write(slot.key())
+                    } else {
+                        limits.take_read(slot.key())
+                    }
+                });
+            if !allowed {
+                self.reply::<()>(
+                    &request.id,
+                    Err(ErrorObject::new(code::RATE_LIMITED, "rate limited")),
+                );
+                return After::Continue;
+            }
         }
         // Every method that may modify a repo is served by one route, and
         // the only route that runs anything is the protected operation.
@@ -2812,8 +2886,10 @@ fn exec_error(e: ExecError) -> ErrorObject {
             ErrorObject::new(code::INTERNAL, "oplog unavailable")
         }
         ExecError::Protected(ProtectedError::Step { operation_id, .. }) => {
-            ErrorObject::new(code::OPERATION_FAILED, "the operation failed")
-                .with_data(serde_json::json!({ "operation_id": operation_id }))
+            operation_failed(methods::OperationFailedData {
+                operation_id,
+                failure: None,
+            })
         }
         ExecError::Capture(why) => capture_error(why),
         // The decision itself only travels with `operation.guardrails` (`Conn::exec_refusal`).
@@ -2825,6 +2901,60 @@ fn exec_error(e: ExecError) -> ErrorObject {
                 },
             )
         }
+    }
+}
+
+fn operation_failed(data: methods::OperationFailedData) -> ErrorObject {
+    ErrorObject::new(code::OPERATION_FAILED, "the operation failed").with_data(data)
+}
+
+/// How a failed step left the worktree, as the contract says it.
+fn failure_view(failure: StepFailure) -> methods::StepFailureView {
+    match failure {
+        StepFailure::Changed => methods::StepFailureView::Changed,
+        StepFailure::Unchanged => methods::StepFailureView::Unchanged,
+        StepFailure::TimeLimit => methods::StepFailureView::TimeLimit,
+    }
+}
+
+/// `data` of an `OPERATION_REJECTED` that names the path it refused (`operation.commit` only).
+#[derive(serde::Serialize)]
+struct RejectedPathData {
+    #[serde(flatten)]
+    rejected: RejectedData,
+    /// Repo text, never instructions; the client marks it untrusted.
+    path: String,
+}
+
+/// The executor's refusal of a commit plan, with the path it refused when it named one.
+fn commit_rejected(e: ExecError, path: Option<String>) -> ErrorObject {
+    match (e, path) {
+        (ExecError::Rejected(reason), Some(path)) => {
+            ErrorObject::new(code::OPERATION_REJECTED, "operation rejected").with_data(
+                RejectedPathData {
+                    rejected: RejectedData {
+                        reason,
+                        guardrails: None,
+                    },
+                    path,
+                },
+            )
+        }
+        (e, _) => exec_error(e),
+    }
+}
+
+/// The commit a step made, as the run result carries it.
+fn commit_done(new: crate::timemachine::protected::NewCommit) -> catalog::CommitDone {
+    catalog::CommitDone {
+        oid: new.oid,
+        paths: new
+            .paths
+            .into_iter()
+            .take(catalog::MAX_REPORTED_COMMIT_PATHS)
+            .map(Untrusted::new)
+            .collect(),
+        paths_total: u32::try_from(new.total).unwrap_or(u32::MAX),
     }
 }
 
@@ -3303,13 +3433,19 @@ impl Connection<'_> {
         })
     }
 
-    /// What a `snapshot` request passes before anything of the repo is read: the quota as the
-    /// oplog stands (so a looping agent gets the real wait, before the write bucket answers a
-    /// bare rate limit), then the connection's write budget. The capture counts again under its
-    /// lock; this is the early answer.
-    fn snapshot_admission(&self, r: &Resolution, repo: &RepoHandle) -> Result<(), ErrorObject> {
-        if let (Requester::Agent { session_id, .. }, Some(deps)) =
-            (&r.who.requester, &self.ctx.tm_engine)
+    /// What a catalog write passes before anything of the repo is read: for `snapshot`, the
+    /// quota as the oplog stands (so a looping agent gets the real wait, before the write bucket
+    /// answers a bare rate limit); then, over MCP, the connection's write budget, for every
+    /// write. The capture counts again under its lock; this is the early answer.
+    fn write_admission(
+        &self,
+        r: &Resolution,
+        repo: &RepoHandle,
+        op: catalog::OperationId,
+    ) -> Result<(), ErrorObject> {
+        if op == catalog::OperationId::Snapshot
+            && let (Requester::Agent { session_id, .. }, Some(deps)) =
+                (&r.who.requester, &self.ctx.tm_engine)
             && let Some((oplog, Some(store))) = deps.repos.repo(&repo.repo_id)
             && let Ok((_, key)) = manual::resolve_worktree(&repo.worktree)
         {
@@ -3335,22 +3471,28 @@ impl Connection<'_> {
         p.validate().map_err(tm_invalid)?;
         let channel = self.request_channel(p.surface)?;
         let named = self.named_worktree(p.worktree.as_deref())?;
-        let snapshot = p.operation == catalog::OperationId::Snapshot;
-        if snapshot && !self.has(methods::CAP_OPERATION_SNAPSHOT.name) {
+        // Each of these operations exists only for a connection that accepted its shapes.
+        let gated = match p.operation {
+            catalog::OperationId::Snapshot => Some((methods::CAP_OPERATION_SNAPSHOT, "US-MCP-008")),
+            catalog::OperationId::Commit => Some((methods::CAP_OPERATION_COMMIT, "US-MCP-009")),
+            _ => None,
+        };
+        if let Some((capability, story)) = gated
+            && !self.has(capability.name)
+        {
             return Err(
                 ErrorObject::new(code::NOT_IMPLEMENTED, "not implemented yet")
-                    .with_data(serde_json::json!({ "implemented_by": "US-MCP-008" })),
+                    .with_data(serde_json::json!({ "implemented_by": story })),
             );
         }
+        let commit = p.operation == catalog::OperationId::Commit;
         let r = self.resolve()?;
         let wiring = self.wiring()?;
         let layer = self.layer(&r);
         let repo = self
             .repo_for(channel, named.as_deref())
             .expect("wiring checked above")?;
-        if snapshot {
-            self.snapshot_admission(&r, &repo)?;
-        }
+        self.write_admission(&r, &repo, p.operation)?;
         let refusal = super::requester::confirmation_refusal(
             self.peer,
             &self.ctx.checks(),
@@ -3370,7 +3512,14 @@ impl Connection<'_> {
                     confirm_refusal: refusal,
                 },
             )
-            .map_err(exec_error)?;
+            .map_err(|e| {
+                // Taken on every refused commit, so no path outlives its plan on this thread.
+                let path = commit
+                    .then(crate::executor::ops::take_refused_path)
+                    .flatten()
+                    .filter(|_| self.has(methods::CAP_OPERATION_COMMIT.name));
+                commit_rejected(e, path)
+            })?;
         let result = PrepareResult {
             plan_id: prepared.plan_id,
             catalog_version: catalog::CATALOG_VERSION,
@@ -3413,6 +3562,19 @@ impl Connection<'_> {
                     guardrails: Some(denial),
                 },
             );
+        }
+        // How the step left the worktree, only for a connection that knows commits.
+        if let ExecError::Protected(ProtectedError::Step {
+            operation_id,
+            failure,
+            ..
+        }) = &e
+            && self.has(methods::CAP_OPERATION_COMMIT.name)
+        {
+            return operation_failed(methods::OperationFailedData {
+                operation_id: operation_id.clone(),
+                failure: Some(failure_view(*failure)),
+            });
         }
         exec_error(e)
     }
@@ -3541,7 +3703,12 @@ impl Connection<'_> {
             outcome: done.result,
             layer: done.layer,
             git_output: done.git_output.map(Untrusted::new),
-            commit: None,
+            commit: done
+                .outcome
+                .output
+                .new_commit
+                .filter(|_| self.has(methods::CAP_OPERATION_COMMIT.name))
+                .map(commit_done),
         };
         let value = if self.is_mcp() {
             serde_json::to_value(result.for_mcp())

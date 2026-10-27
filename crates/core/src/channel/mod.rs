@@ -13,6 +13,8 @@ pub mod authz;
 pub mod bus;
 #[cfg(any(unix, windows))]
 mod conn;
+#[cfg(any(unix, windows))]
+mod limits;
 pub mod marks;
 #[cfg(any(unix, windows))]
 mod mcp_scope;

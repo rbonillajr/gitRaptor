@@ -37,6 +37,18 @@ fn rejected(r: RejectReason) -> PlanError {
     PlanError::Rejected(r)
 }
 
+std::thread_local! {
+    /// The path the last commit plan of this thread refused. `PlanError` is `Copy` and
+    /// `ExecError::Rejected` carries the reason alone, so the path travels beside them to the
+    /// channel, which plans on the connection's own thread and takes it right after the refusal.
+    static REFUSED_PATH: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+}
+
+/// The path the last commit plan on this thread refused, once: repo text, untrusted.
+pub(crate) fn take_refused_path() -> Option<String> {
+    REFUSED_PATH.with(|p| p.borrow_mut().take())
+}
+
 /// The plan: refused before the intent without a usable Git (or on Windows until it can launch
 /// user operations); otherwise the selection, read from the worktree, in the fingerprint.
 pub(super) fn plan_op(
@@ -45,6 +57,7 @@ pub(super) fn plan_op(
     repo: &RepoHandle,
     facts: &RepoFacts,
 ) -> Result<OpPlan, PlanError> {
+    REFUSED_PATH.with(|p| p.borrow_mut().take());
     if cfg!(windows) || env.is_none() {
         return Err(rejected(RejectReason::GitUnavailable));
     }
@@ -62,7 +75,10 @@ pub(super) fn plan_op(
     let reader = RepoReader::open(&facts.root, &ReaderOptions::default())
         .map_err(|_| rejected(RejectReason::RepoIdentityChanged))?;
     let view = WorktreeView::read(&facts.root, reader).map_err(rejected)?;
-    let selection = select(a, &view).map_err(|(r, _)| rejected(r))?;
+    let selection = select(a, &view).map_err(|(r, path)| {
+        REFUSED_PATH.with(|p| *p.borrow_mut() = path);
+        rejected(r)
+    })?;
     // Guardrails judges what will be committed: everything staged, or the named paths.
     let paths = if selection.all_staged {
         view.staged.clone()
