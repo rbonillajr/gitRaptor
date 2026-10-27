@@ -1,0 +1,419 @@
+{
+  "source": {
+    "kind": "brief",
+    "ref": "docs/dev-briefs/us-mcp-009-010-safe-commit.md"
+  },
+  "criteria": [
+    {
+      "id": "MCP009-API-WIRE",
+      "statement": "El contrato de commit en crates/api: check_commit_message (required, too-long antes de recorrer caracteres, invalid-chars con \\n y \\t permitidos y \\r solo en \\r\\n), las formas de commit que van y vuelven por el cable, MCP_COMMIT_CALL_LIMIT = suma de sus partes nombradas y McpToolError cerrado en kebab-case",
+      "verify": "cargo test -p gitraptor-api --test us_mcp_009_wire",
+      "layer": "runtime",
+      "tests": [
+        "crates/api/tests/us_mcp_009_wire.rs"
+      ]
+    },
+    {
+      "id": "MCP010-API-PATHS",
+      "statement": "check_commit_path/check_commit_paths clasifican la tabla de § Contrato de API de DS-010: invalid (absoluta, UNC, unidad, \\, controles, bidi, '-' inicial, no canónica), outside (.., .git y sus alias en todas las plataformas), too-many (257) antes de mirar ninguna",
+      "verify": "cargo test -p gitraptor-api --test us_mcp_010_paths",
+      "layer": "runtime",
+      "tests": [
+        "crates/api/tests/us_mcp_010_paths.rs"
+      ]
+    },
+    {
+      "id": "MCP010-G21",
+      "statement": "⛔2.1 ':(glob)**' y ':!x' pasan la forma léxica: son nombres literales",
+      "verify": "cargo test -p gitraptor-api --test us_mcp_010_paths -- --list 2>/dev/null | grep -q '^pathspec_magic_is_a_literal_name_for_the_lexical_check: test$' && cargo test -p gitraptor-api --test us_mcp_010_paths pathspec_magic_is_a_literal_name_for_the_lexical_check -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/api/tests/us_mcp_010_paths.rs"
+      ]
+    },
+    {
+      "id": "MCP010-G22",
+      "statement": "⛔2.2 los alias de .git (mayúsculas, GIT~1, punto o espacio final, sufijo ':', ignorables de HFS+ incluidos U+206A..U+206F) son 'outside' en todas las plataformas",
+      "verify": "cargo test -p gitraptor-api --test us_mcp_010_paths -- --list 2>/dev/null | grep -q '^dot_git_aliases_are_outside_on_every_platform: test$' && cargo test -p gitraptor-api --test us_mcp_010_paths dot_git_aliases_are_outside_on_every_platform -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/api/tests/us_mcp_010_paths.rs"
+      ]
+    },
+    {
+      "id": "MCP009-CORE",
+      "statement": "El brazo commit de producción planea y corre como operación protegida gobernada: rutas con seguimiento o todo lo preparado, punta releída bajo el cerrojo con oid y rutas del commit (también rama sin nacer), rechazos antes de cualquier efecto (HEAD separado, rebase en curso, sin git), previo que no se puede tomar deja la rama y nombra la operación, registro con agente y canal mcp",
+      "verify": "cargo test -p gitraptor-core --test us_mcp_009",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_mcp_009.rs"
+      ]
+    },
+    {
+      "id": "MCP009-G32",
+      "statement": "⛔3.2 un commit afecta solo al trabajo propio del solicitante (Affected::Agent del solicitante, fijado por el ejecutor)",
+      "verify": "cargo test -p gitraptor-core --test us_mcp_009 -- --list 2>/dev/null | grep -q '^a_commit_affects_only_the_requesters_own_work: test$' && cargo test -p gitraptor-core --test us_mcp_009 a_commit_affects_only_the_requesters_own_work -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_mcp_009.rs"
+      ]
+    },
+    {
+      "id": "MCP009-G33",
+      "statement": "⛔3.3 un .git reescrito tras prepare no commitea nada en ninguno de los dos repos (git_dir de la puerta del registro, brazo de producción)",
+      "verify": "cargo test -p gitraptor-core --test us_mcp_009 -- --list 2>/dev/null | grep -q '^a_dot_git_rewritten_after_prepare_commits_nothing_in_either_repo: test$' && cargo test -p gitraptor-core --test us_mcp_009 a_dot_git_rewritten_after_prepare_commits_nothing_in_either_repo -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_mcp_009.rs"
+      ]
+    },
+    {
+      "id": "MCP009-G34",
+      "statement": "⛔3.4 un hook que imprime una línea de éxito no hace que el commit entre: decide la punta, no la salida de git",
+      "verify": "cargo test -p gitraptor-core --test us_mcp_009 -- --list 2>/dev/null | grep -q '^a_hook_that_prints_a_success_line_does_not_make_a_commit_land: test$' && cargo test -p gitraptor-core --test us_mcp_009 a_hook_that_prints_a_success_line_does_not_make_a_commit_land -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_mcp_009.rs"
+      ]
+    },
+    {
+      "id": "MCP009-FAIL",
+      "statement": "Fallos tipados del paso: hook que rechaza = failed-unchanged; hook sobre el tiempo = time-limit con id y rama igual; time-limit tras entrar el commit = éxito con su oid; espera en cola sobre su tope = queue-full sin efectos; constantes del plazo iguales a las del daemon; una conexión caída no detiene un commit en curso",
+      "verify": "cargo test -p gitraptor-core --test us_mcp_009_failures",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_mcp_009_failures.rs"
+      ]
+    },
+    {
+      "id": "MCP009-G61",
+      "statement": "⛔6.1 una segunda escritura del mismo agente en el mismo repo se rechaza con write-in-progress sin encolarse",
+      "verify": "cargo test -p gitraptor-core --test us_mcp_009_failures -- --list 2>/dev/null | grep -q '^a_second_write_of_the_same_agent_is_refused_without_queueing: test$' && cargo test -p gitraptor-core --test us_mcp_009_failures a_second_write_of_the_same_agent_is_refused_without_queueing -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_mcp_009_failures.rs"
+      ]
+    },
+    {
+      "id": "MCP009-LIMITS",
+      "statement": "S-03: la 9.ª conexión del mismo agente se rechaza (requester-connections), sus conexiones comparten el cubo de escrituras, la CLI lanzada por el agente y los descendientes del ejecutor cuentan en su clave, el desarrollador y el cliente del hook no toman plaza, y una conexión cerrada libera la suya",
+      "verify": "cargo test -p gitraptor-core --test us_mcp_009_limits",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_mcp_009_limits.rs"
+      ]
+    },
+    {
+      "id": "MCP009-CHANNEL",
+      "statement": "El canal sirve commit solo con CAP_OPERATION_COMMIT: sin ella, prepare de commit responde NOT_IMPLEMENTED con implemented_by US-MCP-009; con ella, el resultado de run lleva commit (oid, rutas) y los fallos llevan failure",
+      "verify": "cargo test -p gitraptor-core --test us_mcp_009_channel",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_mcp_009_channel.rs"
+      ]
+    },
+    {
+      "id": "MCP009-G41",
+      "statement": "⛔4.1 un commit pedido por MCP gasta el cubo de escrituras de la conexión (20/min, ráfaga 5)",
+      "verify": "cargo test -p gitraptor-core --test us_mcp_009_channel -- --list 2>/dev/null | grep -q '^a_commit_spends_the_connections_write_bucket: test$' && cargo test -p gitraptor-core --test us_mcp_009_channel a_commit_spends_the_connections_write_bucket -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_mcp_009_channel.rs"
+      ]
+    },
+    {
+      "id": "MCP009-PERM",
+      "statement": "La decisión que cuenta de un commit aplica el permiso de US-GRD-007: commit en ask se ve como ask, en deny se deniega con permission.commit, y los hooks bajo un safe_commit reutilizan la decisión ligada y dejan una sola entrada",
+      "verify": "cargo test -p gitraptor-core --test us_mcp_009_permission",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_mcp_009_permission.rs"
+      ]
+    },
+    {
+      "id": "MCP009-POLICY",
+      "statement": "normalize de PlanShape::Commit evalúa commit-msg, la transición de la rama y pre-commit, en ese orden, con sus preset alineados por índice",
+      "verify": "cargo test -p gitraptor-policy --lib -- --list 2>/dev/null | grep -q '^guard::plan::commit_tests::a_commit_plan_evaluates_commit_msg_branch_and_pre_commit_in_order: test$' && cargo test -p gitraptor-policy --lib guard::plan::commit_tests::",
+      "layer": "runtime",
+      "tests": [
+        "crates/policy/src/guard/plan_commit_tests.rs"
+      ]
+    },
+    {
+      "id": "MCP009-MCP",
+      "statement": "La herramienta safe_commit de raptor-mcp: catálogo con status, snapshot y safe_commit; parámetros desconocidos y reservados = invalid-params; un mensaje no válido nunca llega al motor; los rechazos del motor se traducen a los códigos de la herramienta; progreso solo con progressToken; cada rechazo cabe en su presupuesto en en y es; una lista larga de rutas se recorta; los textos en es dicen lo que dice la historia",
+      "verify": "cargo test -p gitraptor-mcp --bin raptor-mcp -- --list 2>/dev/null | grep -q '^safe_commit::tests::the_catalog_has_status_snapshot_and_safe_commit: test$' && cargo test -p gitraptor-mcp --bin raptor-mcp safe_commit::tests::",
+      "layer": "runtime",
+      "tests": [
+        "apps/mcp/src/safe_commit_tests.rs"
+      ]
+    },
+    {
+      "id": "MCP010-MCP-PATHS",
+      "statement": "raptor-mcp rechaza una ruta mala sin llamar al motor; 257 rutas = too-many-paths con max 256; la ruta rechazada viaja como untrusted; los textos en es de las rutas dicen lo que dice la historia",
+      "verify": "cargo test -p gitraptor-mcp --bin raptor-mcp -- --list 2>/dev/null | grep -q '^safe_commit_paths::tests::a_bad_path_never_reaches_the_engine: test$' && cargo test -p gitraptor-mcp --bin raptor-mcp safe_commit_paths::tests::",
+      "layer": "runtime",
+      "tests": [
+        "apps/mcp/src/safe_commit_paths_tests.rs"
+      ]
+    },
+    {
+      "id": "MCP009-E2E",
+      "statement": "Los escenarios de US-MCP-009 por proceso real (daemon, raptor-mcp, raptor-hook, agente simulado, git): commit con previo y hooks, respuesta sin mensaje, --only, autoría denegada como el hook, decisión ligada con una entrada, mensajes no válidos, nada que commitear, cancelación y desconexión que terminan el commit, reintento = operation-in-progress, ask = requiere confirmación, sin peticiones del servidor, cliente que corta antes (macOS)",
+      "verify": "cargo test -p gitraptor-cli --test mcp_safe_commit",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/mcp_safe_commit.rs"
+      ]
+    },
+    {
+      "id": "MCP010-E2E",
+      "statement": "Los escenarios de US-MCP-010 por proceso real: ruta fuera rechaza la llamada entera, rutas no válidas nunca llegan a git, enlace que sale, demasiadas rutas, magia de pathspec = no encontrada, archivo nuevo solo nombrado, ignorado nunca, worktree compartido exige rutas, la TUI del desarrollador no lo vuelve compartido (macOS)",
+      "verify": "cargo test -p gitraptor-cli --test mcp_safe_commit_paths",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/mcp_safe_commit_paths.rs"
+      ]
+    },
+    {
+      "id": "MCP010-CORE",
+      "statement": "El daemon contrasta cada ruta con el worktree: padre enlace, repo anidado = outside; enlace interno se commitea como enlace; enlace .gitmodules, carpeta = invalid; borrado con seguimiento se commitea; enlace cambiado entre prepare y run = state-changed; NFD casa con NFC si git precompone; reglas de .git iguales a tree_path; ignorados de info/exclude y del usuario",
+      "verify": "cargo test -p gitraptor-core --test us_mcp_010",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_mcp_010.rs"
+      ]
+    },
+    {
+      "id": "MCP010-G41",
+      "statement": "⛔4.1 una ruta con otras mayúsculas no se encuentra (sin plegado)",
+      "verify": "cargo test -p gitraptor-core --test us_mcp_010 -- --list 2>/dev/null | grep -q '^a_path_with_other_case_is_not_found: test$' && cargo test -p gitraptor-core --test us_mcp_010 a_path_with_other_case_is_not_found -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_mcp_010.rs"
+      ]
+    },
+    {
+      "id": "MCP010-G42",
+      "statement": "⛔4.2 un .git apuntado a otro repo tras prepare no commitea nada",
+      "verify": "cargo test -p gitraptor-core --test us_mcp_010 -- --list 2>/dev/null | grep -q '^a_dot_git_pointed_at_another_repo_after_prepare_commits_nothing: test$' && cargo test -p gitraptor-core --test us_mcp_010 a_dot_git_pointed_at_another_repo_after_prepare_commits_nothing -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_mcp_010.rs"
+      ]
+    },
+    {
+      "id": "MCP010-G43",
+      "statement": "⛔4.3 una entrada skip-worktree o fuera del sparse checkout es invalid y no commitea su borrado",
+      "verify": "cargo test -p gitraptor-core --test us_mcp_010 -- --list 2>/dev/null | grep -q '^a_skip_worktree_or_sparse_entry_is_invalid_and_commits_no_deletion: test$' && cargo test -p gitraptor-core --test us_mcp_010 a_skip_worktree_or_sparse_entry_is_invalid_and_commits_no_deletion -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_mcp_010.rs"
+      ]
+    },
+    {
+      "id": "MCP010-UNTRACKED",
+      "statement": "Un archivo nuevo entra solo nombrado (también en una carpeta nueva); un commit rechazado, por tiempo o cancelado deja el índice como estaba",
+      "verify": "cargo test -p gitraptor-core --test us_mcp_010_untracked",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_mcp_010_untracked.rs"
+      ]
+    },
+    {
+      "id": "MCP010-G52",
+      "statement": "⛔5.2 un commit rechazado conserva lo que estaba preparado antes (rm --cached solo de add_first)",
+      "verify": "cargo test -p gitraptor-core --test us_mcp_010_untracked -- --list 2>/dev/null | grep -q '^a_rejected_commit_keeps_what_was_staged_before: test$' && cargo test -p gitraptor-core --test us_mcp_010_untracked a_rejected_commit_keeps_what_was_staged_before -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_mcp_010_untracked.rs"
+      ]
+    },
+    {
+      "id": "MCP010-G53",
+      "statement": "⛔5.3 un index.lock huérfano tras un time-limit da failed-changed y el lock no se borra",
+      "verify": "cargo test -p gitraptor-core --test us_mcp_010_untracked -- --list 2>/dev/null | grep -q '^an_orphan_index_lock_after_a_time_limit_is_failed_changed: test$' && cargo test -p gitraptor-core --test us_mcp_010_untracked an_orphan_index_lock_after_a_time_limit_is_failed_changed -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_mcp_010_untracked.rs"
+      ]
+    },
+    {
+      "id": "MCP010-GIT",
+      "statement": "UserOp::AddPaths nunca fuerza (sin -f, -A, -u; pathspec :(literal) tras --) y git rechaza un add más allá de un enlace simbólico",
+      "verify": "cargo test -p gitraptor-git --lib -- --list 2>/dev/null | grep -q '^user_ops::add_tests::add_paths_never_forces: test$' && cargo test -p gitraptor-git --lib user_ops::add_tests::",
+      "layer": "runtime",
+      "tests": [
+        "crates/git/src/user_ops_add_tests.rs"
+      ]
+    },
+    {
+      "id": "MCP010-SHARED",
+      "statement": "Con otra sesión viva de agente, todo lo preparado se rechaza con la acción; con rutas, commitea solo esas; la sesión del desarrollador no cuenta; commit nunca lleva el aviso active-session",
+      "verify": "cargo test -p gitraptor-core --test us_mcp_010_shared",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_mcp_010_shared.rs"
+      ]
+    },
+    {
+      "id": "MCP010-G61",
+      "statement": "⛔6.1 una presencia ilegible cuenta como worktree compartido",
+      "verify": "cargo test -p gitraptor-core --test us_mcp_010_shared -- --list 2>/dev/null | grep -q '^an_unreadable_presence_counts_as_shared: test$' && cargo test -p gitraptor-core --test us_mcp_010_shared an_unreadable_presence_counts_as_shared -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_mcp_010_shared.rs"
+      ]
+    },
+    {
+      "id": "MCP010-G62",
+      "statement": "⛔6.2 la sesión sin fin de un agente cuyo proceso murió no bloquea todo lo preparado",
+      "verify": "cargo test -p gitraptor-core --test us_mcp_010_shared -- --list 2>/dev/null | grep -q '^a_crashed_agents_session_does_not_block_all_staged: test$' && cargo test -p gitraptor-core --test us_mcp_010_shared a_crashed_agents_session_does_not_block_all_staged -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_mcp_010_shared.rs"
+      ]
+    },
+    {
+      "id": "CORPUS",
+      "statement": "El corpus de INF-MCP-001 con los casos safe-commit-* de DS-009 T009 y safe-commit-path-* de DS-010 T007 es válido, único y se rechaza al 100 %",
+      "verify": "cargo test -p gitraptor-cli --test mcp_security_corpus",
+      "layer": "runtime",
+      "tests": [
+        "apps/cli/tests/mcp_corpus/cases/safe-commit-message-bidi.json",
+        "apps/cli/tests/mcp_corpus/cases/safe-commit-message-empty.json",
+        "apps/cli/tests/mcp_corpus/cases/safe-commit-message-nul.json",
+        "apps/cli/tests/mcp_corpus/cases/safe-commit-message-too-long.json",
+        "apps/cli/tests/mcp_corpus/cases/safe-commit-param-acknowledge.json",
+        "apps/cli/tests/mcp_corpus/cases/safe-commit-param-amend.json",
+        "apps/cli/tests/mcp_corpus/cases/safe-commit-param-expect-worktree.json",
+        "apps/cli/tests/mcp_corpus/cases/safe-commit-param-no-verify.json",
+        "apps/cli/tests/mcp_corpus/cases/safe-commit-param-repo.json",
+        "apps/cli/tests/mcp_corpus/cases/safe-commit-path-absolute.json",
+        "apps/cli/tests/mcp_corpus/cases/safe-commit-path-bidi.json",
+        "apps/cli/tests/mcp_corpus/cases/safe-commit-path-dot-git-hfs.json",
+        "apps/cli/tests/mcp_corpus/cases/safe-commit-path-dot-git-short.json",
+        "apps/cli/tests/mcp_corpus/cases/safe-commit-path-dot-git-trailing.json",
+        "apps/cli/tests/mcp_corpus/cases/safe-commit-path-dot-git.json",
+        "apps/cli/tests/mcp_corpus/cases/safe-commit-path-drive.json",
+        "apps/cli/tests/mcp_corpus/cases/safe-commit-path-nul.json",
+        "apps/cli/tests/mcp_corpus/cases/safe-commit-path-option.json",
+        "apps/cli/tests/mcp_corpus/cases/safe-commit-path-too-many.json",
+        "apps/cli/tests/mcp_corpus/cases/safe-commit-path-traversal.json",
+        "apps/cli/tests/mcp_corpus/cases/safe-commit-path-unc.json",
+        "apps/cli/tests/mcp_corpus/cases/safe-commit-path-windows-reserved.json",
+        "apps/cli/tests/mcp_corpus/cases/safe-commit-path-windows-stream.json",
+        "apps/cli/tests/mcp_corpus/cases/safe-commit-path-windows-trailing-dot.json",
+        "apps/cli/tests/mcp_corpus/cases/safe-commit-path-windows-trailing-space.json",
+        "apps/cli/tests/mcp_corpus/cases/safe-commit-unattributed.json"
+      ]
+    },
+    {
+      "id": "DOC-ADR-MCP",
+      "statement": "ADR-MCP-001 lleva las Enmiendas (2026-10-21, US-MCP-009) y (2026-10-21, US-MCP-010)",
+      "verify": "grep -q 'Enmienda (2026-10-21, US-MCP-009)' docs/architecture/decisions/ADR-MCP-001-servidor-mcp-cliente-daemon.md && grep -q 'Enmienda (2026-10-21, US-MCP-010)' docs/architecture/decisions/ADR-MCP-001-servidor-mcp-cliente-daemon.md",
+      "layer": "static"
+    },
+    {
+      "id": "DOC-ADR-CKP",
+      "statement": "ADR-CKP-002 lleva la Enmienda (2026-10-21, US-MCP-009) de § 3",
+      "verify": "grep -q 'Enmienda (2026-10-21, US-MCP-009)' docs/architecture/decisions/ADR-CKP-002-catalogo-operaciones-ejecutor.md",
+      "layer": "static"
+    },
+    {
+      "id": "DOC-BR",
+      "statement": "business-rules.md recoge S-11 (una segunda escritura del mismo agente se rechaza sin encolarse) y el desarrollador que no cuenta como sesión presente",
+      "verify": "grep -q 'sin encolarse' docs/requirements/features/mcp/business-rules.md && grep -q 'el desarrollador no cuenta' docs/requirements/features/mcp/business-rules.md",
+      "layer": "static"
+    },
+    {
+      "id": "DOC-IPC",
+      "statement": "api-contract-ipc.md documenta operation.commit, requester-connections y shared-worktree-needs-paths",
+      "verify": "grep -q 'operation.commit' docs/architecture/design/api-contract-ipc.md && grep -q 'requester-connections' docs/architecture/design/api-contract-ipc.md && grep -q 'shared-worktree-needs-paths' docs/architecture/design/api-contract-ipc.md",
+      "layer": "static"
+    },
+    {
+      "id": "DOC-XPLAT",
+      "statement": "xplat-pendientes.md tiene las filas XP-45 y XP-46",
+      "verify": "grep -q 'XP-45' docs/architecture/xplat-pendientes.md && grep -q 'XP-46' docs/architecture/xplat-pendientes.md",
+      "layer": "static"
+    },
+    {
+      "id": "DOC-RELEASE",
+      "statement": "release-plan.md dice que US-MCP-009 se libera junto con US-MCP-010 y US-MCP-011",
+      "verify": "grep -q 'US-MCP-009 se libera junto con US-MCP-010 y US-MCP-011' docs/requirements/release-plan.md",
+      "layer": "static"
+    },
+    {
+      "id": "DOC-STATUS",
+      "statement": "US-MCP-009 y US-MCP-010 quedan partially-implemented con la línea 'Implementado en: PR'",
+      "verify": "grep -q '^status: partially-implemented' docs/requirements/features/mcp/user-stories/US-MCP-009-safe-commit.md && grep -q 'Implementado en: PR' docs/requirements/features/mcp/user-stories/US-MCP-009-safe-commit.md && grep -q '^status: partially-implemented' docs/requirements/features/mcp/user-stories/US-MCP-010-safe-commit-rutas.md && grep -q 'Implementado en: PR' docs/requirements/features/mcp/user-stories/US-MCP-010-safe-commit-rutas.md",
+      "layer": "static"
+    }
+  ],
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "Cargo.lock",
+      "**/Cargo.toml",
+      "docs/architecture/decisions/ADR-GRD-008*"
+    ],
+    "allow_dependency_changes": false
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-api",
+      "gitraptor-core",
+      "gitraptor-policy",
+      "gitraptor-git",
+      "gitraptor-testkit",
+      "gitraptor-mcp",
+      "gitraptor-cli"
+    ]
+  },
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "opus"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "opus"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  },
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 900000,
+    "suiteTimeoutMs": 2700000
+  }
+}
