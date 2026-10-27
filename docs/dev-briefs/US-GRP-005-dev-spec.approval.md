@@ -11,8 +11,8 @@ Todo lo que viene del plan, del contrato o del crítico va dentro de bloques de 
 
 - Tipo: `plan`
 - Excepción del crítico: no
-- Generada: `2026-10-21T21:27:22.183Z`
-- Sha de aprobación: `05233cd42e3e906997b334d345ee88cd7482f6a63b4df7115d9630f41e25d126:91b0e00c84c2115e6c046e21b403522f32c35b0027cc754d7b2eede450cb7391:e280b1fdd10df8644ce6aec99dc4b443cbf6bbd3b9581ca48481c3e48705a4f8`
+- Generada: `2026-10-27T19:47:18.973Z`
+- Sha de aprobación: `b502d0b806359358786f332899f7911c347cd18b237bfc12eab08bba2b925636:2401da780436602726ad88352cd8cb4a4767d983edaf381ecaefdb52c262cafd:e5441502eaf4fecd171a428a075c01685218a49d922cda8021c9bc5e6e8307c6`
 
 ## Plan (contexto, no se firma)
 
@@ -24,21 +24,21 @@ docs/requirements/features/motor-local/dev-specs/US-GRP-005-dev-spec.md
 ```
 <<<FIN-DATOS-NO-CONFIABLES 62e70be99063>>>
 
-planSha: `05233cd42e3e906997b334d345ee88cd7482f6a63b4df7115d9630f41e25d126` (base de la cadena de re-planes)
+planSha: `b502d0b806359358786f332899f7911c347cd18b237bfc12eab08bba2b925636` (base de la cadena de re-planes)
 
 Contenido:
 
-<<<DATOS-NO-CONFIABLES 312bf7ce5c96>>>
+<<<DATOS-NO-CONFIABLES 93987cbb9806>>>
 ````text
 ---
 id: DS-US-GRP-005
 title: "Dev Spec — Huecos de observación: registro al arrancar, consulta y perfil perdido en marcha"
 type: dev-spec
-status: draft
+status: partially-implemented
 feature: motor-local
 domain: GRP
 created: 2026-10-09
-updated: 2026-10-09
+updated: 2026-10-21
 story: US-GRP-005
 scope: backend
 frontend_surface: false
@@ -152,7 +152,7 @@ Todas: **Decisión del orquestador (2026-10-09), validada por Arquitecto y PO**;
 | D2 | La vista anterior sale del último estado conocido: ramas de `KnownState.refs`, `commit` de cada worktree de `KnownState.head`; `remotes` y `head_log_len` se copian de la vista actual (sin `push` ni `reset` inventados) | Con ajuste (Arquitecto): `refs` de la fila con el `updated_ms` más reciente; solo worktrees no marcados como borrados |
 | D3 | `classify_gap`: una rama movida da un evento por entrada solo con la cadena continua; si no, un `branch-update` de la punta vieja a la nueva | Con ajuste (Arquitecto): la continuidad se comprueba en cada par consecutivo; `git reflog delete` y `--expire-unreachable` quitan entradas del medio |
 | D4 | Los eventos del hueco llevan la hora del fin del hueco. Orden: alfabético entre ramas, el del reflog dentro de una | Con ajuste (Arquitecto): se desvía de la Enmienda (2026-10-07) de ADR-GRP-013, que da a los eventos de un despertar la hora del reflog; un reloj desviado podría sacarla del hueco. Riesgo para US-TMC-007: sus filtros por periodo tratan estos eventos como del intervalo del hueco |
-| D5 | Un `reconciled` por worktree cuya huella cambió, o cuyo `HEAD` cambió sin evento clasificado en él (US-GRP-002 D10) | Aprobada tal cual |
+| D5 | Un `reconciled` por worktree cuya huella cambió, o cuyo `HEAD` cambió sin evento clasificado en él (US-GRP-002 D10) | Aprobada tal cual. Añadido en la implementación (Decisión del orquestador, 2026-10-22, validada por el Arquitecto): una parada controlada relee los repos y guarda el último estado conocido antes de escribir "observado hasta" (`Daemon::stop`), para que el `reconciled` del siguiente arranque cubra solo lo que nadie vio (un crash o un `kill` lo conservan); sin esto, una escritura propia de la Time Machine justo antes de parar se reconciliaba como ajena y `raptor undo` la rechazaba con `raw-git-not-covered` |
 | D6 | Los eventos del hueco no pasan por S3, registro ni pista: sin sesión, `evidence` ni `authorship` (BR-EDGE-005) | Aprobada tal cual |
 | D7 | Inicio del hueco: "observado hasta"; si falta, el `updated_ms` más reciente; si falta, el `added_ms` del repo. Un almacén recuperado (`StoreOpen::Recovered`) abre un hueco `store-corrupt` desde `added_ms`, sin eventos | Con ajuste (Arquitecto): ese lote lleva también los `store_ops`, para que la observación en vivo tenga base |
 | D8 | Si el lote no se escribe, el repo queda `unavailable` esa ejecución: no se observa y su almacén sale de `stores` | Aprobada; cierra N4 de la versión anterior (el latido ya no mueve la marca de un repo no observado) |
@@ -333,6 +333,7 @@ graph LR
   11. `a_repo_added_again_after_the_loss_has_no_agent_before_it`: tras el 10, `repo.add` de "demo" por el canal (como `crates/core/tests/channel.rs`): el snapshot muestra su `HEAD` actual, `events.history` no tiene `commit` y `sessions.list` está vacía.
   12. `another_instance_holding_the_lock_stops_this_daemon_without_writing`: se borra `state/daemon.lock` y el test toma `InstanceLock::acquire(&dirs.state)`; el hilo termina con `StopCause::InstanceLost` y los archivos de `data/` (`files_under`, contenido y tamaño) no cambian.
   13. `an_insecure_recreated_folder_is_refused_by_the_next_start` (`#[cfg(unix)]`): `data/` a 0755 y se borra `data/index.sqlite`; el hilo termina con `StopCause::ProfileLost` y el siguiente `Daemon::start` falla con `ProfileError::InsecureDir`.
+  14. `a_lost_profile_defers_the_stop_while_a_protected_write_runs` (D12, ⛔6.2): el test toma `gitraptor_core::repo_lock::try_lock(id)`, borra `data/`, espera la línea `profile_reset_deferred`, suelta el guard y espera el `join` con `ProfileLost`. Ningún test del archivo retiene un `repo_lock` más allá de su aserción (`busy()` es del proceso).
 
 - **Depende:** T001
 - **Refs:** US-GRP-005, los tres escenarios; ADR-GRP-013, Validación 9 y 13; ADR-GRP-006, Validación 5
@@ -412,6 +413,7 @@ graph LR
 - `crates/core/src/daemon/mod.rs` (**MODIFY**): `mod profile_loss;`, la llamada en el latido y que `stop` no escriba con `InstanceLost`
 - `crates/core/src/daemon/shutdown.rs` (**MODIFY**): `StopCause::ProfileLost` y `StopCause::InstanceLost`
 - `crates/core/src/daemon/lock.rs` (**MODIFY**): `InstanceLock::intact`
+- `crates/core/src/repo_lock.rs` (**MODIFY**): `pub fn busy() -> usize`, slots ocupados o con cola del registro global del proceso (Decisión del orquestador, 2026-10-27)
 - `crates/core/src/profile/mod.rs` (**MODIFY**): identidad del índice al abrir y `Profile::probe`
 - `crates/core/src/profile/fsperm.rs` (**MODIFY**): `file_identity` y `handle_identity`
 
@@ -421,17 +423,17 @@ graph LR
 3. Escribe `InstanceLock::intact`: compara `handle_identity(&self.file)` con `file_identity(&self.path)`; `NotFound` da `Ok(false)`.
 4. Añade `StopCause::ProfileLost` (`as_str` `profile-lost`) y `StopCause::InstanceLost` (`instance-lost`); los dos dan `StopCauseCode::Signal` en `code()`, así que el cable de `daemon.stopping` no cambia.
 5. Escribe `check_profile` en `profile_loss.rs`.
-   5.1 ⛔6.1 Primero el cerrojo (D11): si no está intacto, crea las carpetas privadas hasta `state/` como `Daemon::start` y vuelve a tomarlo; con `AlreadyRunning` u otro error, `Stop(InstanceLost)`. Con `InstanceLost`, `stop` no escribe en almacenes ni en el perfil: ese perfil puede ser ya de otra instancia.
+   5.1 ⛔6.1 Primero el cerrojo (D11): si no está intacto, crea las carpetas privadas hasta `state/` como `Daemon::start` y vuelve a tomarlo; con `AlreadyRunning` u otro error, `Stop(InstanceLost)`. Con `InstanceLost`, `stop` no escribe en almacenes ni en el perfil (la única escritura admitida es la línea `daemon_stopped` de `daemon.log`): ese perfil puede ser ya de otra instancia.
    5.2 Después el perfil (D10): `Intact` sigue; `Unknown` escribe `profile_probe_failed` y sigue; `Lost` sigue al paso 5.3.
-   5.3 ⛔6.2 Con escrituras protegidas en curso o en cola (Time Machine o ejecutor), escribe `profile_reset_deferred` y sigue; el siguiente latido vuelve a mirar. Si no hay, `Stop(ProfileLost)`.
-6. En el latido de `Daemon::run` (`daemon/mod.rs:829-835`), antes de `persist_observed_until` y de `check_channel`: `if let ProfileCheck::Stop(cause) = self.check_profile() { return self.stop(cause); }`.
-7. Test en `mod tests` de `profile_loss.rs`: `pending_protected_writes_defer_the_stop`.
+   5.3 ⛔6.2 Con escrituras protegidas en curso o en cola (Time Machine o ejecutor; `repo_lock::busy() > 0`), escribe `profile_reset_deferred` y sigue; el siguiente latido vuelve a mirar. Si no hay, `Stop(ProfileLost)`.
+6. En el latido de `Daemon::run` (`crates/core/src/daemon/mod.rs:913-918`), antes de `persist_observed_until` y de `check_channel`: `if let ProfileCheck::Stop(cause) = self.check_profile() { return self.stop(cause); }`.
+7. Tests en `mod tests` de `profile_loss.rs`: `pending_protected_writes_defer_the_stop` y `an_unknown_probe_result_logs_and_continues` (inyecta el resultado del probe).
 
 > **Nota técnica.** En Unix, borrar `data/` desvincula los archivos que SQLite tiene abiertos: las escrituras siguen sin error y se pierden. Por eso se comparan identidades. `raptor daemon` sale con 0 cuando `run` termina, y el gestor de servicios no relanza una salida 0 (`autostart.rs:67`).
 
 - **Depende:** T005
 - **Refs:** ADR-GRP-006 § 4 y Enmienda (2026-10-09, US-GRP-005); ADR-GRP-005 § 2, § 3 y Enmienda (2026-10-09, US-GRP-005)
-- **Aceptación:** tests 9 a 13 de `us_grp_005_profile_loss`; `cargo test -p gitraptor-core --lib daemon::profile_loss::tests`; `--test daemon_lifecycle` sin regresión
+- **Aceptación:** tests 9 a 14 de `us_grp_005_profile_loss`; `cargo test -p gitraptor-core --lib daemon::profile_loss::tests`; `--test daemon_lifecycle` sin regresión
 - **Guard ⛔6.1:** `cargo test -p gitraptor-core --test us_grp_005_profile_loss another_instance_holding_the_lock_stops_this_daemon_without_writing -- --exact`
 - **Guard ⛔6.2:** `cargo test -p gitraptor-core --lib daemon::profile_loss::tests::pending_protected_writes_defer_the_stop -- --exact`
 
@@ -468,7 +470,7 @@ graph LR
 
 **Reglas**
 - PR-A: fila de `events.gaps` en § Métodos de `api-contract-ipc.md`, forma de `GapView`, y en § Pendiente que `gap.recorded` y `attention.gaps` siguen sin emisor.
-- PR-B: la siguiente fila libre de `xplat-pendientes.md` (hoy XP-43) con lo de § 9.5; la historia y el índice pasan a implementada con los dos PR. Si algo falla o no se pudo verificar, dilo en el PR (AGENTS.md).
+- PR-B: la siguiente fila libre de `xplat-pendientes.md` (hoy XP-45) con lo de § 9.5; la historia y el índice pasan a implementada con los dos PR. Si algo falla o no se pudo verificar, dilo en el PR (AGENTS.md).
 
 - **Depende:** T006, T007
 - **Refs:** AGENTS.md § Reglas de calidad; ADR-GRP-016
@@ -496,6 +498,7 @@ crates/core/
 ├── src/channel/conn.rs                         ← MODIFY  Tramo B (T005)
 ├── src/daemon/profile_loss.rs                  ← CREATE  Tramo B (T006)
 ├── src/daemon/lock.rs                          ← MODIFY  Tramo B (T006)
+├── src/repo_lock.rs                            ← MODIFY  Tramo B (T006)
 ├── src/profile/mod.rs                          ← MODIFY  Tramo B (T006)
 ├── src/profile/fsperm.rs                       ← MODIFY  Tramo B (T006)
 ├── tests/us_grp_005.rs                         ← CREATE  Tramo D (T002)
@@ -773,130 +776,83 @@ Corre `/security-review --scope devspec docs/requirements/features/motor-local/d
 | N2 | Tras un despertar por red de seguridad, los eventos del reflog llegan en un lote sin hueco (`watch/mod.rs:1083-1144`) y pasan por S3 y el registro. Riesgo bajo: un repo con sesión presente no duerme | Revisar con TS-GRP-006 | Arquitecto |
 | N3 | `RepoView` no lista ramas sin worktree: `hotfix` se comprueba por su `branch-create` | Ninguna | — |
 | N4 | D4 da a los eventos del hueco la hora de su fin: los filtros por periodo de US-TMC-007 deben tratarlos como del intervalo del hueco | Avisar al arquitecto de US-TMC-007 | Orquestador |
-| N5 | Pistas sin verificar: (a) la API que dice si hay escrituras protegidas en curso o en cola sin cambiar la visibilidad de `TmRepos::lock_key`; (b) que `winsys::file_id::of_path` no siga enlaces; (c) que `raptor-mcp` también arranque el daemon bajo demanda | Comprobarlas al empezar T006; si (a) o (b) fallan, BLOQUEO | Implementador |
+| N5 | (a) Resuelta (2026-10-27): no había API; se añade `repo_lock::busy()` (cuenta todo el proceso: en producción hay un daemon por proceso). (b) Verificada: `winsys::file_id::of_path` no sigue enlaces y existe `of_file`. (c) Sin verificar: que `raptor-mcp` arranque el daemon bajo demanda | (c) solo se anota en el PR | Implementador |
 | N6 | `StopCause::ProfileLost` e `InstanceLost` viajan como `signal` en `daemon.stopping`; una variante nueva de `StopCauseCode` sería un cambio de forma (ADR-GRP-016) | Ninguna | — |
+
+Implementado en: PR #280 (PR-A: T001-T005, T007). Falta PR-B (T006 y el resto de T008).
 ````
-<<<FIN-DATOS-NO-CONFIABLES 312bf7ce5c96>>>
+<<<FIN-DATOS-NO-CONFIABLES 93987cbb9806>>>
 
 ## Contrato
 
 Fichero:
 
-<<<DATOS-NO-CONFIABLES ee7622dbadc1>>>
+<<<DATOS-NO-CONFIABLES f86f4ecd8fbb>>>
 ```text
-docs/dev-briefs/us-grp-005-gap-reconciliation.contract.json
+docs/dev-briefs/us-grp-005-profile-loss.contract.json
 ```
-<<<FIN-DATOS-NO-CONFIABLES ee7622dbadc1>>>
+<<<FIN-DATOS-NO-CONFIABLES f86f4ecd8fbb>>>
 
-contractSha: `91b0e00c84c2115e6c046e21b403522f32c35b0027cc754d7b2eede450cb7391`
+contractSha: `2401da780436602726ad88352cd8cb4a4767d983edaf381ecaefdb52c262cafd`
 
 Criterios (id, statement, verify, tests):
 
-<<<DATOS-NO-CONFIABLES f0ea35467e27>>>
+<<<DATOS-NO-CONFIABLES 189e560f98f2>>>
 ```text
-[1] id: GAP-RECONCILE
-statement: US-GRP-005 esc. 1: tras un hueco con sesión registrada, los 2 commits de una cadena continua y el branch-create de hotfix salen sin atribuir (sin sesión) con el mismo gap_id, events.gaps lo lista daemon-down-during-session y last_activity_in_gap es true
-verify: cargo test -p gitraptor-core --test us_grp_005 the_commits_of_a_gap_are_reconciled_unattributed -- --exact
+[1] id: LOSS-WHOLE
+statement: T006 test 9 (P5, unix): borrar la raíz entera del perfil para el motor con StopCause::ProfileLost y el siguiente Daemon::start arranca en NoRepos con otro instance_id y data/ en 0700
+verify: cargo test -p gitraptor-core --test us_grp_005_profile_loss deleting_the_whole_profile_stops_the_engine_and_the_next_start_works -- --exact
 tests:
-  - crates/core/tests/us_grp_005.rs
+  - crates/core/tests/us_grp_005_profile_loss.rs
 
-[2] id: GAP-LISTED
-statement: US-GRP-005 esc. 2: una parada por comando sin cambios deja un hueco daemon-stopped con started<=ended y sin eventos con su gap_id
-verify: cargo test -p gitraptor-core --test us_grp_005 the_gap_is_listed_in_the_repo_history -- --exact
+[2] id: LOSS-DATA
+statement: T006 test 10: borrar solo data/ para el motor con ProfileLost y el siguiente arranque funciona (en Windows se omite si remove_dir_all falla)
+verify: cargo test -p gitraptor-core --test us_grp_005_profile_loss deleting_the_profile_data_stops_the_engine_and_the_next_start_works -- --exact
 tests:
-  - crates/core/tests/us_grp_005.rs
+  - crates/core/tests/us_grp_005_profile_loss.rs
 
-[3] id: GAP-STOP-SESSION
-statement: Una parada por comando con sesión registrada marca during_session=true en el hueco
-verify: cargo test -p gitraptor-core --test us_grp_005 a_stop_command_during_a_session_marks_the_gap -- --exact
+[3] id: LOSS-READD
+statement: T006 test 11 (D14): tras la pérdida, repo.add de un repo por el canal muestra su HEAD actual, events.history sin commit y sessions.list vacía
+verify: cargo test -p gitraptor-core --test us_grp_005_profile_loss a_repo_added_again_after_the_loss_has_no_agent_before_it -- --exact
 tests:
-  - crates/core/tests/us_grp_005.rs
+  - crates/core/tests/us_grp_005_profile_loss.rs
 
-[4] id: GAP-COLLAPSE
-statement: Un reflog que no llega a la punta vieja se reduce a un branch-update (de la punta vieja a la nueva) y ningún commit; nunca una lista parcial
-verify: cargo test -p gitraptor-core --test us_grp_005 a_reflog_that_does_not_reach_the_old_tip_collapses_into_one_branch_update -- --exact
+[4] id: LOCK-LOST
+statement: T006 test 12 (D11, NFR-01): si otra instancia toma el cerrojo tras borrar state/daemon.lock, el motor termina con StopCause::InstanceLost sin cambiar ningún archivo de data/
+verify: cargo test -p gitraptor-core --test us_grp_005_profile_loss another_instance_holding_the_lock_stops_this_daemon_without_writing -- --exact
 tests:
-  - crates/core/tests/us_grp_005.rs
+  - crates/core/tests/us_grp_005_profile_loss.rs
 
-[5] id: GAP-CORRUPT
-statement: Un almacén corrupto abre un hueco store-corrupt desde added_ms, sin eventos, y escribe el último estado conocido
-verify: cargo test -p gitraptor-core --test us_grp_005 a_corrupt_store_records_a_store_corrupt_gap_from_the_add_date -- --exact
+[5] id: LOSS-INSECURE
+statement: T006 test 13 (D13, SEC-06, unix): con data/ a 0755 y sin index.sqlite el motor para con ProfileLost y el siguiente Daemon::start falla con ProfileError::InsecureDir
+verify: cargo test -p gitraptor-core --test us_grp_005_profile_loss an_insecure_recreated_folder_is_refused_by_the_next_start -- --exact
 tests:
-  - crates/core/tests/us_grp_005.rs
+  - crates/core/tests/us_grp_005_profile_loss.rs
 
-[6] id: GAP-UNREADABLE
-statement: Un repo ilegible al rearrancar sale unavailable, no escribe hueco y su observed_until no se mueve mientras el observed_until de un segundo repo legible avanza dos veces (D8, D1)
-verify: cargo test -p gitraptor-core --test us_grp_005 an_unreadable_repo_is_not_observed_and_keeps_its_mark -- --exact
+[6] id: LOSS-DEFER
+statement: T006 test 14 (D12, NFR-01): con el perfil perdido y una escritura protegida en curso (repo_lock tomado) el motor no se para y escribe profile_reset_deferred; al soltarla termina con ProfileLost
+verify: cargo test -p gitraptor-core --test us_grp_005_profile_loss a_lost_profile_defers_the_stop_while_a_protected_write_runs -- --exact
 tests:
-  - crates/core/tests/us_grp_005.rs
-
-[7] id: GAP-INTACT
-statement: La reconciliación del hueco no escribe nada en el repo observado (assert_intact, BR-CONS-001)
-verify: cargo test -p gitraptor-core --test us_grp_005 the_gap_reconciliation_writes_nothing_in_the_repo -- --exact
-tests:
-  - crates/core/tests/us_grp_005.rs
-
-[8] id: GAP-API-ERRORS
-statement: events.gaps rechaza con -32602 un id inválido y con repo_command_error un id válido sin repo
-verify: cargo test -p gitraptor-core --test us_grp_005 events_gaps_rejects_an_invalid_or_unknown_repo -- --exact
-tests:
-  - crates/core/tests/us_grp_005.rs
-
-[9] id: CLS-CHAIN
-statement: classify_gap da un evento por entrada del reflog solo con la cadena continua
-verify: cargo test -p gitraptor-core --test gap_classify a_continuous_chain_gives_one_event_per_reflog_entry -- --exact
-tests:
-  - crates/core/tests/gap_classify.rs
-
-[10] id: CLS-NOTIP
-statement: Si la cadena no llega a la punta guardada, un solo branch-update
-verify: cargo test -p gitraptor-core --test gap_classify a_chain_that_does_not_reach_the_old_tip_collapses -- --exact
-tests:
-  - crates/core/tests/gap_classify.rs
-
-[11] id: CLS-MIDDLE
-statement: Una entrada del medio borrada (git reflog delete) rompe la continuidad y colapsa (guard ⛔3.1)
-verify: cargo test -p gitraptor-core --test gap_classify a_chain_with_a_missing_middle_entry_collapses -- --exact
-tests:
-  - crates/core/tests/gap_classify.rs
-
-[12] id: CLS-64
-statement: Más de 64 entradas colapsan
-verify: cargo test -p gitraptor-core --test gap_classify more_than_64_entries_collapse -- --exact
-tests:
-  - crates/core/tests/gap_classify.rs
-
-[13] id: CLS-CREATE
-statement: Una rama creada en el hueco es un branch-create con su punta
-verify: cargo test -p gitraptor-core --test gap_classify a_branch_created_in_the_gap_is_one_branch_create_with_its_tip -- --exact
-tests:
-  - crates/core/tests/gap_classify.rs
-
-[14] id: CLS-DELETE
-statement: Una rama borrada en el hueco es un branch-delete
-verify: cargo test -p gitraptor-core --test gap_classify a_deleted_branch_is_one_branch_delete -- --exact
-tests:
-  - crates/core/tests/gap_classify.rs
+  - crates/core/tests/us_grp_005_profile_loss.rs
 ```
-<<<FIN-DATOS-NO-CONFIABLES f0ea35467e27>>>
+<<<FIN-DATOS-NO-CONFIABLES 189e560f98f2>>>
 
 ## Tests de criterio
 
-testsSha: `e280b1fdd10df8644ce6aec99dc4b443cbf6bbd3b9581ca48481c3e48705a4f8`
+testsSha: `e5441502eaf4fecd171a428a075c01685218a49d922cda8021c9bc5e6e8307c6`
 
 Cada prueba declarada con el sha256 de su contenido (`ausente` si el fichero no existe):
 
-<<<DATOS-NO-CONFIABLES 12447664f44f>>>
+<<<DATOS-NO-CONFIABLES e9711fd5df8a>>>
 ```text
-b93fa34c1b5269d7cc7c4cb783d08c6502f6e41947667792665ab33ec83b7e98  crates/core/tests/gap_classify.rs
-d4fa0854a33bde0da5d45b4abb505501b5deaedf63c1dcfd8b99d88613b86619  crates/core/tests/us_grp_005.rs
+9d3cc2f92e7751aee988583562cdbc8de1156a2595e19a4247b84c631821037c  crates/core/tests/us_grp_005_profile_loss.rs
 ```
-<<<FIN-DATOS-NO-CONFIABLES 12447664f44f>>>
+<<<FIN-DATOS-NO-CONFIABLES e9711fd5df8a>>>
 
 ## Crítico
 
 - Rondas (plan): 2
-  - ronda 1: AJUSTES · 1 bloqueante(s) · siguiente: otra-ronda
+  - ronda 1: AJUSTES · 3 bloqueante(s) · siguiente: otra-ronda
   - ronda 2: APROBABLE · 0 bloqueante(s) · siguiente: aprobar
 - Último veredicto: APROBABLE
 - Excepción: no
@@ -907,9 +863,9 @@ Ninguno: el crítico dio el plan por aprobable.
 
 ## Firmas
 
-- planSha (contexto, no firmado): `05233cd42e3e906997b334d345ee88cd7482f6a63b4df7115d9630f41e25d126`
-- contractSha: `91b0e00c84c2115e6c046e21b403522f32c35b0027cc754d7b2eede450cb7391`
-- testsSha: `e280b1fdd10df8644ce6aec99dc4b443cbf6bbd3b9581ca48481c3e48705a4f8`
-- approvalSha: `05233cd42e3e906997b334d345ee88cd7482f6a63b4df7115d9630f41e25d126:91b0e00c84c2115e6c046e21b403522f32c35b0027cc754d7b2eede450cb7391:e280b1fdd10df8644ce6aec99dc4b443cbf6bbd3b9581ca48481c3e48705a4f8`
+- planSha (contexto, no firmado): `b502d0b806359358786f332899f7911c347cd18b237bfc12eab08bba2b925636`
+- contractSha: `2401da780436602726ad88352cd8cb4a4767d983edaf381ecaefdb52c262cafd`
+- testsSha: `e5441502eaf4fecd171a428a075c01685218a49d922cda8021c9bc5e6e8307c6`
+- approvalSha: `b502d0b806359358786f332899f7911c347cd18b237bfc12eab08bba2b925636:2401da780436602726ad88352cd8cb4a4767d983edaf381ecaefdb52c262cafd:e5441502eaf4fecd171a428a075c01685218a49d922cda8021c9bc5e6e8307c6`
 
 Para aprobar en la fábrica: `factory-control approve --run <id> --package <pkg> --sha <approvalSha>`; para devolverlo, `adjust` con `--notes`. Atendido, lo aprueba la persona con sus palabras.

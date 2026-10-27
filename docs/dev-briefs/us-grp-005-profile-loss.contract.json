@@ -1,0 +1,122 @@
+{
+  "source": {
+    "kind": "devspec",
+    "ref": "docs/requirements/features/motor-local/dev-specs/US-GRP-005-dev-spec.md"
+  },
+  "suite": {
+    "command": "node tools/test/nextest-junit.mjs"
+  },
+  "layers": {
+    "runtime": {
+      "commands": [
+        {
+          "id": "suite",
+          "cmd": "node tools/test/nextest-junit.mjs"
+        }
+      ],
+      "report": "target/nextest/ci/junit-paths.xml"
+    }
+  },
+  "criteria": [
+    {
+      "id": "LOSS-WHOLE",
+      "statement": "T006 test 9 (P5, unix): borrar la raíz entera del perfil para el motor con StopCause::ProfileLost y el siguiente Daemon::start arranca en NoRepos con otro instance_id y data/ en 0700",
+      "verify": "cargo test -p gitraptor-core --test us_grp_005_profile_loss deleting_the_whole_profile_stops_the_engine_and_the_next_start_works -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_005_profile_loss.rs"
+      ]
+    },
+    {
+      "id": "LOSS-DATA",
+      "statement": "T006 test 10: borrar solo data/ para el motor con ProfileLost y el siguiente arranque funciona (en Windows se omite si remove_dir_all falla)",
+      "verify": "cargo test -p gitraptor-core --test us_grp_005_profile_loss deleting_the_profile_data_stops_the_engine_and_the_next_start_works -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_005_profile_loss.rs"
+      ]
+    },
+    {
+      "id": "LOSS-READD",
+      "statement": "T006 test 11 (D14): tras la pérdida, repo.add de un repo por el canal muestra su HEAD actual, events.history sin commit y sessions.list vacía",
+      "verify": "cargo test -p gitraptor-core --test us_grp_005_profile_loss a_repo_added_again_after_the_loss_has_no_agent_before_it -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_005_profile_loss.rs"
+      ]
+    },
+    {
+      "id": "LOCK-LOST",
+      "statement": "T006 test 12 (D11, NFR-01): si otra instancia toma el cerrojo tras borrar state/daemon.lock, el motor termina con StopCause::InstanceLost sin cambiar ningún archivo de data/",
+      "verify": "cargo test -p gitraptor-core --test us_grp_005_profile_loss another_instance_holding_the_lock_stops_this_daemon_without_writing -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_005_profile_loss.rs"
+      ]
+    },
+    {
+      "id": "LOSS-INSECURE",
+      "statement": "T006 test 13 (D13, SEC-06, unix): con data/ a 0755 y sin index.sqlite el motor para con ProfileLost y el siguiente Daemon::start falla con ProfileError::InsecureDir",
+      "verify": "cargo test -p gitraptor-core --test us_grp_005_profile_loss an_insecure_recreated_folder_is_refused_by_the_next_start -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_005_profile_loss.rs"
+      ]
+    },
+    {
+      "id": "LOSS-DEFER",
+      "statement": "T006 test 14 (D12, NFR-01): con el perfil perdido y una escritura protegida en curso (repo_lock tomado) el motor no se para y escribe profile_reset_deferred; al soltarla termina con ProfileLost",
+      "verify": "cargo test -p gitraptor-core --test us_grp_005_profile_loss a_lost_profile_defers_the_stop_while_a_protected_write_runs -- --exact",
+      "layer": "runtime",
+      "tests": [
+        "crates/core/tests/us_grp_005_profile_loss.rs"
+      ]
+    }
+  ],
+  "constraints": {
+    "deny_paths": [
+      "docs/ARTIFACTS.md",
+      "docs/architecture/decisions/ADR-GRD-008*",
+      "crates/core/tests/us_grp_005.rs",
+      "crates/core/tests/gap_classify.rs",
+      "crates/core/tests/us_grp_005_profile_loss.rs"
+    ],
+    "allow_dependency_changes": false
+  },
+  "scope": {
+    "projects": [
+      "gitraptor-core"
+    ]
+  },
+  "budget": {
+    "maxRounds": 3,
+    "verifyTimeoutMs": 900000,
+    "suiteTimeoutMs": 2400000
+  },
+  "hops": {
+    "design": {
+      "agent": "main-loop",
+      "model": "sonnet"
+    },
+    "critic": {
+      "agent": "nassa-core:plan-critic",
+      "model": "opus"
+    },
+    "tester": {
+      "agent": "nassa-core:criterion-tester",
+      "model": "sonnet"
+    },
+    "build": {
+      "agent": "nassa-dev-rust:rust-expert",
+      "model": "sonnet"
+    },
+    "review": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "opus"
+    },
+    "conformance": {
+      "agent": "nassa-dev-rust:rust-code-reviewer",
+      "model": "sonnet"
+    }
+  }
+}
