@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-27
 domain: GRP
 epic: E-001
 feature: mcp
@@ -20,6 +20,7 @@ related:
   stories:
     - US-MCP-003
     - US-MCP-005
+  specs: [DS-US-MCP-016]
 ado:
   id: null
   url: null
@@ -43,8 +44,8 @@ BR-MCP-CALC-004 (contenido de `check_conflicts`: lo publicado por el motor; por 
 ## Dependencias
 
 - **Historias**: US-MCP-003 (ámbito y allowlist), US-MCP-005 (respuestas acotadas). No depende de ninguna escritura: se puede adelantar en cuanto se levante DEP-MCP-6.
-- **Habilitador**: TS-CKP-001, predictor de conflictos que publica la predicción (DEP-CKP-1; propuesta, rama docs/arch-cockpit).
-- **Externas**: ADR-CKP-001 (**propuesto**: mecanismo de la predicción). DEP-MCP-6 (predicción publicada en la interfaz del motor). ADR-MCP-001 (DEP-MCP-1, no existe). Todos son bloqueos de arquitectura.
+- **Habilitador**: TS-CKP-001, predictor de conflictos que publica la predicción (DEP-CKP-1). El PR-A está en `main` (PR #275); la publicación (T009, con la forma fijada en DS-TS-CKP-001 § Contrato de API) llega con el PR-B.
+- **Externas** (actualizado el 2026-10-27): ADR-CKP-001 y ADR-MCP-001 están `accepted`, y DEP-MCP-6 está aplicada (ADR-MCP-001 § 11; Enmienda 2026-10-05, MCP, de ADR-CKP-001). Solo queda el bloqueo técnico de T009 de TS-CKP-001.
 
 ## Criterios de Aceptación
 
@@ -83,9 +84,16 @@ Entonces la respuesta incluye ese límite tal como lo publicó el motor
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección)._
+Resumen de [DS-US-MCP-016](../dev-specs/US-MCP-016-dev-spec.md):
+
+- Método `mcp.conflicts` del perfil `mcp` (patrón de `mcp.status`), acotado al repo y al worktree del llamante; lee el estado publicado por el predictor (T009 de TS-CKP-001) y no calcula nada. La forma de la predicción es la de [DS-TS-CKP-001 § Contrato de API](../../cockpit/dev-specs/TS-CKP-001-predictor-conflictos.md#contrato-de-api).
+- Herramienta `check_conflicts {scope?, cursor?}` en `apps/mcp/src/conflicts.rs`: por defecto los pares del worktree del llamante; `repo`, todos. Sin worktree identificable: todo el repo con `reason: caller-worktree-unknown` (P6).
+- Respuesta con ⚡ primero (archivos y rangos `[start, len]` por lado), luego ⚠; `age_s` calculada por el daemon; `calculating`/`pending` con su `reason`, sin `level` ni pares inventados; `limits` como códigos.
+- Páginas de hasta 50 pares con objetivo de 800 tokens y tope de 23 KiB (`fit_conflicts`); cursor opaco por conexión en `McpCursors`, sin MAC (DS-US-MCP-004 D4). Rate limit de lecturas existente.
+- Nunca contenido ni diff; rutas y nombres como texto no confiable con el saneado de `for_mcp` (NFR-02, SEC-12, MCP03/MCP06/MCP10).
+- Bloqueada por T009 del PR-B de TS-CKP-001 (que espera a G5).
 
 ## Diseño y Dev Spec
 
 - **Diseño:** no aplica.
-- **Dev Spec:** pendiente (Arquitecto, tras ADR-MCP-001, ADR-CKP-001 y DEP-MCP-6).
+- **Dev Spec:** [DS-US-MCP-016](../dev-specs/US-MCP-016-dev-spec.md).
