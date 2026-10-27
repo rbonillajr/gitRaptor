@@ -49,6 +49,17 @@ impl InstanceLock {
         &self.path
     }
 
+    /// Whether `daemon.lock` at its path is still the file this lock holds. A missing file is
+    /// `Ok(false)`: deleting it frees the name for another instance.
+    pub fn intact(&self) -> io::Result<bool> {
+        use crate::profile::fsperm::{file_identity, handle_identity};
+        match file_identity(&self.path) {
+            Ok(on_disk) => Ok(on_disk == handle_identity(&self.file)?),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(false),
+            Err(err) => Err(err),
+        }
+    }
+
     /// Clears the PID (so a later `stop` never signals a reused PID) and
     /// releases the lock.
     pub fn release(self) -> io::Result<()> {

@@ -164,6 +164,10 @@ pub enum StopCause {
     /// the client and this daemon's protocol: the next start only counts it
     /// as an attributed stop if it really speaks a newer protocol.
     Replace { requested_by: String, protocol: u32 },
+    /// The profile on disk is no longer the one this daemon opened (deleted).
+    ProfileLost,
+    /// Another instance holds the lock of this profile; this daemon writes nothing more.
+    InstanceLost,
 }
 
 impl StopCause {
@@ -173,6 +177,8 @@ impl StopCause {
             Self::Signal(_) => "signal",
             Self::StopCommand { .. } => "stop-command",
             Self::Replace { .. } => "replace",
+            Self::ProfileLost => "profile-lost",
+            Self::InstanceLost => "instance-lost",
         }
     }
 
@@ -180,7 +186,8 @@ impl StopCause {
     pub fn code(&self) -> gitraptor_api::messages::StopCauseCode {
         use gitraptor_api::messages::StopCauseCode;
         match self {
-            Self::Signal(_) => StopCauseCode::Signal,
+            // No new wire code: both travel as a signal.
+            Self::Signal(_) | Self::ProfileLost | Self::InstanceLost => StopCauseCode::Signal,
             Self::StopCommand { .. } => StopCauseCode::StopCommand,
             Self::Replace { .. } => StopCauseCode::Replace,
         }
@@ -203,6 +210,7 @@ impl StopCause {
             Self::StopCommand { requested_by } | Self::Replace { requested_by, .. } => {
                 requested_by.clone()
             }
+            Self::ProfileLost | Self::InstanceLost => ["engine:", self.as_str()].concat(),
         }
     }
 }
