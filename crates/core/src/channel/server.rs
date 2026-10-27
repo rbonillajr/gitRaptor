@@ -105,6 +105,8 @@ pub(crate) struct ServerCtx {
     pub commit_decisions: crate::guardrails::second_line::Decided,
     /// The claims of the hooks for the detector (S4, DS-US-GRP-007 § 7).
     pub hook_claims: Arc<crate::detect::HookClaims>,
+    /// Connections and budgets per requester (S-03), shared by every connection.
+    pub requester_limits: Arc<super::limits::RequesterLimits>,
 }
 
 impl ServerCtx {
@@ -231,6 +233,7 @@ impl Server {
             mcp_repos: args.mcp_repos,
             commit_decisions: Default::default(),
             hook_claims: args.hook_claims,
+            requester_limits: Arc::default(),
         });
         Self::listen(ctx, bound.listener)
     }

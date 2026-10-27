@@ -42,7 +42,9 @@ mod repo_intact {
                 .unwrap()
                 .to_string_lossy()
                 .into_owned();
-            if AUTHORIZED.contains(&name.as_str()) {
+            // `user_ops_add_tests.rs`: a `cfg(test)` module that runs real Git to prove it
+            // refuses `add` beyond a symbolic link; it never ships.
+            if AUTHORIZED.contains(&name.as_str()) || name == "user_ops_add_tests.rs" {
                 continue;
             }
             let text = std::fs::read_to_string(&file).unwrap();
