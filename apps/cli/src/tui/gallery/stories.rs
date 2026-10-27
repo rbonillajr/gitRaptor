@@ -191,6 +191,18 @@ fn agents_shared(area: Rect, buf: &mut Buffer, s: &Styles) {
     agent_list(vec![a, b], Some(0), true).render(area, buf, s);
 }
 
+/// A worktree whose only session ended more than a day ago: the row reads "No agent" and the
+/// line under it names the last agent.
+fn agents_last_agent(area: Rect, buf: &mut Buffer, s: &Styles) {
+    let mut a = row(0, "No agent - wt-old", AgentState::NoAgent, "feat/old");
+    a.sessions = Some(SessionLine {
+        lead: t("last agent: claude-4 (ended 1 d ago)"),
+        marks: Vec::new(),
+    });
+    let b = row(1, "claude-1 docs", AgentState::Idle, "feat/docs");
+    agent_list(vec![a, b], Some(0), true).render(area, buf, s);
+}
+
 fn agents_unavailable(area: Rect, buf: &mut Buffer, s: &Styles) {
     let a = row(0, "claude-1", AgentState::Active, "feat/parser");
     let b = row(1, "claude-2", AgentState::Unavailable, "feat/lexer");
@@ -955,6 +967,7 @@ pub fn stories() -> Vec<Story> {
         ),
         story!("AgentList", "unavailable", 80, 5, agents_unavailable),
         story!("AgentList", "shared worktree", 80, 6, agents_shared),
+        story!("AgentList", "last agent", 80, 6, agents_last_agent),
         story!("AgentList", "empty", 80, 4, agents_empty),
         story!(
             "AgentList",

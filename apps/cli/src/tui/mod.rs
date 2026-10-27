@@ -15,3 +15,6 @@ pub mod view;
 pub mod widgets;
 
 pub use term::run;
+
+#[cfg(test)]
+mod view_order_tests;
