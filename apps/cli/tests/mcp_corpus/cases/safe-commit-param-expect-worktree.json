@@ -1,0 +1,31 @@
+{
+  "id": "safe-commit-param-expect-worktree",
+  "title": "A expect_worktree parameter on safe_commit is malformed and never echoed",
+  "threats": [
+    "MCP02",
+    "SEC-MCP-02",
+    "BR-MCP-VAL-005"
+  ],
+  "tier": "server",
+  "platforms": [
+    "macos",
+    "linux",
+    "windows"
+  ],
+  "send": [
+    {
+      "call": "safe_commit",
+      "arguments": {
+        "message": "fix: a",
+        "expect_worktree": "../other-repo"
+      }
+    }
+  ],
+  "expect": {
+    "protocol_error": {
+      "code": -32602,
+      "message": "invalid-params",
+      "field": "expect_worktree"
+    }
+  }
+}

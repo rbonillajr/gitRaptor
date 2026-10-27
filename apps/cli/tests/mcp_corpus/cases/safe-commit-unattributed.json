@@ -1,0 +1,33 @@
+{
+  "id": "safe-commit-unattributed",
+  "title": "A safe_commit from an unattributed client is refused",
+  "threats": [
+    "MCP02",
+    "SEC-MCP-02"
+  ],
+  "tier": "engine",
+  "platforms": [
+    "macos",
+    "linux"
+  ],
+  "pending": "XP-42",
+  "setup": {
+    "repo": "enabled"
+  },
+  "session": {
+    "cwd": "repo"
+  },
+  "send": [
+    {
+      "call": "safe_commit",
+      "arguments": {
+        "message": "fix: probe"
+      }
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "unattributed"
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "id": "safe-commit-message-bidi",
+  "title": "A commit message with a bidi override is refused as invalid text",
+  "threats": [
+    "MCP05",
+    "SEC-MCP-05",
+    "BR-MCP-VAL-005"
+  ],
+  "tier": "server",
+  "platforms": [
+    "macos",
+    "linux",
+    "windows"
+  ],
+  "send": [
+    {
+      "call": "safe_commit",
+      "arguments": {
+        "message": "‮abc"
+      }
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "invalid-text",
+      "params": [
+        "field",
+        "reason",
+        "max_bytes"
+      ]
+    }
+  }
+}

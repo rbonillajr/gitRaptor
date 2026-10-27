@@ -1,0 +1,33 @@
+{
+  "id": "safe-commit-path-windows-reserved",
+  "title": "A Windows reserved device name is refused as invalid",
+  "threats": [
+    "MCP05",
+    "SEC-MCP-05",
+    "BR-MCP-VAL-001"
+  ],
+  "tier": "server",
+  "platforms": [
+    "windows"
+  ],
+  "pending": "XP-46",
+  "send": [
+    {
+      "call": "safe_commit",
+      "arguments": {
+        "message": "fix: a",
+        "paths": [
+          "src/NUL.txt"
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "invalid-path",
+      "params": [
+        "path"
+      ]
+    }
+  }
+}

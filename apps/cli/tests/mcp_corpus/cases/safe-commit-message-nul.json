@@ -1,0 +1,33 @@
+{
+  "id": "safe-commit-message-nul",
+  "title": "A commit message with a NUL is refused as invalid text",
+  "threats": [
+    "MCP05",
+    "SEC-MCP-05",
+    "BR-MCP-VAL-005"
+  ],
+  "tier": "server",
+  "platforms": [
+    "macos",
+    "linux",
+    "windows"
+  ],
+  "send": [
+    {
+      "call": "safe_commit",
+      "arguments": {
+        "message": "a\u0000b"
+      }
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "invalid-text",
+      "params": [
+        "field",
+        "reason",
+        "max_bytes"
+      ]
+    }
+  }
+}
