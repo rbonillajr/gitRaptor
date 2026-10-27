@@ -24,6 +24,47 @@ pub fn set_restrictive_umask() {
     }
 }
 
+/// `(device, inode)` of the file at `path`, without following a link there. On Windows, the
+/// volume serial number and the file index.
+pub(crate) fn file_identity(path: &Path) -> io::Result<(u64, u64)> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let meta = fs::symlink_metadata(path)?;
+        Ok((meta.dev(), meta.ino()))
+    }
+    #[cfg(windows)]
+    {
+        let (volume, index) = gitraptor_winsys::file_id::of_path(path)?;
+        Ok((u64::from(volume), index))
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = path;
+        Err(io::Error::from(io::ErrorKind::Unsupported))
+    }
+}
+
+/// Same identity as [`file_identity`], of an already open file.
+pub(crate) fn handle_identity(file: &File) -> io::Result<(u64, u64)> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let meta = file.metadata()?;
+        Ok((meta.dev(), meta.ino()))
+    }
+    #[cfg(windows)]
+    {
+        let (volume, index) = gitraptor_winsys::file_id::of_file(file)?;
+        Ok((u64::from(volume), index))
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = file;
+        Err(io::Error::from(io::ErrorKind::Unsupported))
+    }
+}
+
 /// Creates `path` (and any missing ancestors) with mode 0700, or verifies it
 /// if it already exists.
 pub fn ensure_private_dir(path: &Path) -> Result<()> {

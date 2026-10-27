@@ -74,6 +74,16 @@ pub fn try_lock(repo_id: &str) -> Option<RepoGuard> {
     })
 }
 
+/// How many repos of this process are held or have a request waiting. The whole process shares
+/// one registry, so in production this is the daemon's count.
+pub fn busy() -> usize {
+    registry()
+        .slots
+        .values()
+        .filter(|slot| slot.held || !slot.queue.is_empty())
+        .count()
+}
+
 /// Why [`lock_queued`] gave up.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum QueueError {

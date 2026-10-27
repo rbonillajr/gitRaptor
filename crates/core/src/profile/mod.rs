@@ -68,6 +68,19 @@ pub enum StoreOpen {
 pub struct Profile {
     dirs: ProfileDirs,
     index: Index,
+    /// Identity of the index file when it was opened; `None` if it could not be read.
+    index_identity: Option<(u64, u64)>,
+}
+
+/// Whether the profile on disk is still the one this process opened.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProfileProbe {
+    /// The index file is the one opened.
+    Intact,
+    /// The index file is gone or is another file: what the open handles write goes nowhere.
+    Lost,
+    /// It could not be told (an I/O error other than a missing file).
+    Unknown,
 }
 
 impl Profile {
@@ -92,7 +105,30 @@ impl Profile {
         report.created = opened.fresh;
         report.quarantined_index = opened.quarantined;
         let index = Index::from_conn(opened.conn)?;
-        Ok((Self { dirs, index }, report))
+        let index_identity = fsperm::file_identity(&dirs.data.join(INDEX_FILE)).ok();
+        Ok((
+            Self {
+                dirs,
+                index,
+                index_identity,
+            },
+            report,
+        ))
+    }
+
+    /// Compares the index file on disk with the one opened. On Unix, deleting the folder
+    /// unlinks the open files: writes keep succeeding and are lost, so only the identity
+    /// shows it.
+    pub fn probe(&self) -> ProfileProbe {
+        let Some(opened) = self.index_identity else {
+            return ProfileProbe::Unknown;
+        };
+        match fsperm::file_identity(&self.dirs.data.join(INDEX_FILE)) {
+            Ok(now) if now == opened => ProfileProbe::Intact,
+            Ok(_) => ProfileProbe::Lost,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => ProfileProbe::Lost,
+            Err(_) => ProfileProbe::Unknown,
+        }
     }
 
     pub fn dirs(&self) -> &ProfileDirs {

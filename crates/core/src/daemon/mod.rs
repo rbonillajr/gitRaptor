@@ -28,6 +28,7 @@ mod lock;
 mod log;
 mod mcp;
 mod modules;
+mod profile_loss;
 mod repos;
 mod serve;
 mod sessions;
@@ -911,6 +912,9 @@ impl Daemon {
                         self.check_tiers();
                     }
                     if next_beat <= Instant::now() {
+                        if let profile_loss::ProfileCheck::Stop(cause) = self.check_profile() {
+                            return self.stop(cause);
+                        }
                         self.persist_observed_until(now_ms());
                         self.guard_log_maintenance(now_ms());
                         self.check_channel();
@@ -960,7 +964,10 @@ impl Daemon {
         // as a `reconciled` event, by the next start. Only the loop writes the stores, so the
         // observer threads cannot compete with this; a crash skips it, and the next start
         // records what it finds as a gap.
-        if self.state == EngineState::Observing
+        // A daemon that lost its lock writes nothing: the profile may be another instance's.
+        let writes = cause != StopCause::InstanceLost;
+        if writes
+            && self.state == EngineState::Observing
             && let Ok(entries) = self.profile.repos()
         {
             for (repo_id, read) in reconcile_all(&entries, &self.stores) {
@@ -975,8 +982,8 @@ impl Daemon {
             }
         }
         let stopped_ms = now_ms();
-        let marks_ok = self.persist_observed_until(stopped_ms);
-        let recorded = marks_ok
+        let recorded = writes
+            && self.persist_observed_until(stopped_ms)
             && match self.profile.mark_daemon_stopped(
                 stopped_ms,
                 &cause.stored(),
@@ -1017,8 +1024,15 @@ impl Daemon {
         // An operation still running keeps its own handle until it ends.
         tm.clear();
         drop(tm);
-        drop(stores);
-        drop(profile);
+        if writes {
+            drop(stores);
+            drop(profile);
+        } else {
+            // Closing a SQLite connection checkpoints its WAL into the file: a write. The
+            // process ends right after an instance loss, which closes them without one.
+            std::mem::forget(stores);
+            std::mem::forget(profile);
+        }
         if lock.release().is_err() {
             // Closing the file below releases it anyway.
         }
