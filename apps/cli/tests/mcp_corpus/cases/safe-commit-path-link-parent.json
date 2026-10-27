@@ -1,0 +1,56 @@
+{
+  "id": "safe-commit-path-link-parent",
+  "title": "A path under a folder link to another repo is refused as outside the worktree",
+  "threats": [
+    "MCP05",
+    "SEC-MCP-05",
+    "BR-MCP-VAL-001"
+  ],
+  "tier": "engine",
+  "platforms": [
+    "macos",
+    "linux"
+  ],
+  "pending": "XP-42",
+  "setup": {
+    "repo": "enabled",
+    "files": [
+      {
+        "at": "other_repo/secret.txt",
+        "state": "untracked"
+      }
+    ],
+    "symlinks": [
+      {
+        "at": "repo/escape",
+        "to": "other_repo"
+      }
+    ]
+  },
+  "session": {
+    "cwd": "repo",
+    "parent": "agent"
+  },
+  "send": [
+    {
+      "call": "safe_commit",
+      "arguments": {
+        "message": "fix: a",
+        "paths": [
+          "escape/secret.txt"
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "path-outside-worktree",
+      "params": [
+        "path"
+      ]
+    }
+  },
+  "forbidden": [
+    "{other_repo}"
+  ]
+}

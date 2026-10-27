@@ -1,0 +1,55 @@
+{
+  "id": "safe-commit-path-dot-git-swap",
+  "title": "A worktree whose .git now points at another repo commits nothing there",
+  "threats": [
+    "MCP05",
+    "SEC-MCP-05",
+    "SEC-MCP-02"
+  ],
+  "tier": "engine",
+  "platforms": [
+    "macos",
+    "linux"
+  ],
+  "pending": "XP-42",
+  "setup": {
+    "repo": "enabled",
+    "other_repo": "observed",
+    "worktrees": [
+      {
+        "name": "a",
+        "branch": "feat-a"
+      }
+    ],
+    "files": [
+      {
+        "at": "wt-a/src/a.rs",
+        "state": "modified"
+      }
+    ],
+    "dot_git_to": "wt-a"
+  },
+  "session": {
+    "cwd": "wt-a",
+    "parent": "agent"
+  },
+  "send": [
+    {
+      "call": "safe_commit",
+      "arguments": {
+        "message": "fix: a",
+        "paths": [
+          "src/a.rs"
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "worktree-untrusted"
+    }
+  },
+  "forbidden": [
+    "{other_repo}"
+  ]
+}

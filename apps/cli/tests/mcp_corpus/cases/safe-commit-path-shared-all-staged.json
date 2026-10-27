@@ -1,0 +1,41 @@
+{
+  "id": "safe-commit-path-shared-all-staged",
+  "title": "All staged never takes a new file the agent did not name",
+  "threats": [
+    "MCP05",
+    "SEC-MCP-05",
+    "BR-MCP-EDGE-010"
+  ],
+  "tier": "engine",
+  "platforms": [
+    "macos",
+    "linux"
+  ],
+  "pending": "XP-42",
+  "setup": {
+    "repo": "enabled",
+    "files": [
+      {
+        "at": "repo/src/new.rs",
+        "state": "untracked"
+      }
+    ]
+  },
+  "session": {
+    "cwd": "repo",
+    "parent": "agent"
+  },
+  "send": [
+    {
+      "call": "safe_commit",
+      "arguments": {
+        "message": "fix: a"
+      }
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "nothing-to-commit"
+    }
+  }
+}

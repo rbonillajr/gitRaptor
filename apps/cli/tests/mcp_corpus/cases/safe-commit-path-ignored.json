@@ -1,0 +1,47 @@
+{
+  "id": "safe-commit-path-ignored",
+  "title": "An ignored secret named by the agent is refused and never added",
+  "threats": [
+    "MCP05",
+    "SEC-MCP-05",
+    "BR-MCP-VAL-001"
+  ],
+  "tier": "engine",
+  "platforms": [
+    "macos",
+    "linux"
+  ],
+  "pending": "XP-42",
+  "setup": {
+    "repo": "enabled",
+    "files": [
+      {
+        "at": "repo/.env",
+        "state": "ignored"
+      }
+    ]
+  },
+  "session": {
+    "cwd": "repo",
+    "parent": "agent"
+  },
+  "send": [
+    {
+      "call": "safe_commit",
+      "arguments": {
+        "message": "fix: a",
+        "paths": [
+          ".env"
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "path-ignored",
+      "params": [
+        "path"
+      ]
+    }
+  }
+}
