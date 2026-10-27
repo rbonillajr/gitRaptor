@@ -471,3 +471,12 @@ Origen: [DS-US-CKP-014](../../requirements/features/cockpit/dev-specs/US-CKP-014
 - **Si se hace el *spawn* suspendido**, irá en un crate con `unsafe` confinado, como `crates/macsys` (ADR-GRP-002, Enmienda 2026-10-05). ADR-GRP-001 no lo prohíbe: § 4 ya admitía "una excepción auditada o un crate auditado". Se aplaza por coste y beneficio.
 - **Pendientes**: la barrera con *spawn* suspendido deja de ser un pendiente bloqueante y queda como mejora con los disparadores (a), (b) y (c).
 - **Verificación**: tests (i) a (iv) de DS-US-CKP-014 § 9.4.
+
+## Enmienda (2026-10-21, US-MCP-009)
+
+De § 3, trabajo afectado de `commit`. Origen: [DS-US-MCP-009](../../requirements/features/mcp/dev-specs/US-MCP-009-dev-spec.md), D5. **Decisión del orquestador (2026-10-21), validada por Arquitecto y PO.**
+
+- **Trabajo afectado de `commit`**: el del solicitante en su worktree y, si el worktree es compartido, solo las rutas nombradas ([DS-US-MCP-010](../../requirements/features/mcp/dev-specs/US-MCP-010-dev-spec.md) D10). Lo fija el ejecutor, no la atribución por archivo desde los eventos del motor, que no existe (Q7).
+- **Invierte para `commit`** la regla conservadora "sin atribución clara o con atribución mixta, cuenta como otro actor". Las demás operaciones del catálogo la conservan.
+- **`foreign-work` sale del contrato de `commit`**: `permission` nunca lo devuelve para `commit`, y `not-own-work` no tiene caso que lo produzca.
+- **Riesgo residual declarado**: "todo lo preparado" se lleva también lo que el desarrollador preparó en ese worktree. El snapshot previo lo recupera.

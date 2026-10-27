@@ -6,7 +6,7 @@ status: draft
 feature: mcp
 domain: MCP
 created: 2026-10-21
-updated: 2026-10-21
+updated: 2026-10-27
 story: US-MCP-009
 scope: backend
 frontend_surface: false
@@ -1010,3 +1010,11 @@ Cada decisión es **Decisión del orquestador (2026-10-21)**, validada por quien
 - Reutiliza: `gitraptor_git::user_ops::{UserOp::CommitPaths, UserOp::CommitStaged, UserGitCommand, RepoTarget, rejecting_editor}`; `crate::executor::git::{run_git, CancelToken, Interrupt}`; `gitraptor_git::RepoReader::{status, resolve_ref}`; `gitraptor_git::committed` (rutas de un commit); `crate::guardrails::plan_gate::commit_facts`; `gitraptor_policy::guard::plan::PlanShape::Commit`; `crate::timemachine::protected::{ProtectedOperation, StepOutput, StepError, DEFAULT_PRIOR_DEADLINE}`; `gitraptor_api::catalog::{CommitArgs, check_literal_relative, is_forbidden_char, MAX_COMMIT_MESSAGE_BYTES, MAX_COMMIT_PATHS, MCP_TIME_LIMIT_MS}`; `apps/mcp/src/engine.rs:rejected_refusal`; `apps/mcp/src/server.rs:respond`; `crates/core/src/channel/conn.rs:Bucket`.
 - Genera: ninguno.
 - Crea nuevo: `ops/commit.rs`, `ops/commit_paths.rs`, `channel/limits.rs`, `apps/mcp/src/safe_commit.rs`. Búsquedas sin resultado: `code-search.mjs "commit arm"`, `"requester bucket"`, `"connections per requester"` y `grep -rn "per_requester\|RequesterLimits"` en `crates/` y `apps/`.
+
+---
+
+## Estado de la implementación (2026-10-27)
+
+- **Hecho** (PR #PENDIENTE, preparación [`us-mcp-009-010-safe-commit`](../../../../dev-briefs/us-mcp-009-010-safe-commit.md)): T001 a T011. Contrato de `commit` en `crates/api` (capacidad `operation.commit`, `CommitDone`, `OperationFailedData.failure`, motivos nuevos), brazo de producción y paso protegido con fallos tipados, S-11 y plazo de cola, límites por solicitante (S-03), permiso de `commit` en el plan, herramienta `safe_commit` y casos del corpus. Enmiendas aplicadas: ADR-MCP-001 y ADR-CKP-002 (2026-10-21, US-MCP-009), BR-MCP v0.5, plan de releases, guía de extensión y contrato del canal.
+- **Abierto, bloquea liberación**: G3 (US-MCP-007 en `main`) y G4 (US-MCP-011): US-MCP-009 se libera junto con US-MCP-010 y US-MCP-011. G2 se cierra con DS-US-MCP-010 en el mismo PR.
+- **Sin verificar**: Linux y Windows, en la etapa de validación multiplataforma (XP-45).

@@ -114,6 +114,7 @@ Para que el ejecutor sirva una operación nueva (`snapshot` fue la primera, US-M
 1. Crea `crates/core/src/executor/ops/<op>.rs` con su brazo: la parte propia de la operación (`plan_op`) y lo que ejecuta.
 2. Añade **una línea** en `ops/mod.rs`, en el orden de `OperationId`, para cablear ese brazo en `OperationsWiring::production()`.
 3. Una operación **gobernada** (con decisión de Guardrails) no se cablea con `NoGuardrails`: `production()` rechaza al construirse un brazo gobernado mientras la puerta sea `NoGuardrails`. Una no gobernada, como `snapshot`, declara `governed == None`.
+4. El trabajo afectado de una operación que no sabe quién la pide lo fija el ejecutor, no el brazo ni el cliente: en `commit`, el del solicitante en su worktree y, si es compartido, solo las rutas nombradas (ADR-CKP-002, Enmienda (2026-10-21, US-MCP-009)).
 
 ## Añadir un módulo del daemon
 

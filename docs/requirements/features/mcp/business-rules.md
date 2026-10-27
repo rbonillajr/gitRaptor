@@ -4,7 +4,7 @@ title: "Reglas de Negocio — Servidor MCP"
 type: business-rules
 status: draft
 created: 2026-10-04
-updated: 2026-10-08
+updated: 2026-10-27
 domain: GRP
 epic: E-001
 feature: mcp
@@ -75,6 +75,8 @@ IF número de rutas > tope → rechazo "demasiadas rutas"
 
 **Ejemplo**: `safe_commit` con `["src/app.rs", "../otro-repo/secreto"]` → rechazo de toda la llamada: "ruta fuera del worktree: ../otro-repo/secreto". Con `[":(glob)**"]` → se busca el archivo literal `:(glob)**`, que no existe → "ruta no encontrada".
 
+**Precisión (v0.5, DS-US-MCP-010 D2, D8 y D13)**: se nombran **archivos, no carpetas ni submódulos** (tampoco entradas `skip-worktree`): una carpeta, un gitlink o una entrada así es "ruta no válida". Las rutas son **relativas a la raíz del worktree, nunca al cwd** del agente. El tope real es de **256 rutas** por llamada (la 257.ª da "demasiadas rutas"), cada una de hasta 4.096 bytes. La forma es la misma en todas las plataformas: `\` y una unidad (`C:`) se rechazan también en macOS y Linux, igual que un `-` inicial, componentes vacíos o `.` y la barra final. Todo alias de `.git` (`.GIT`, `GIT~1`, `.git.`, `.git `, ignorables de HFS+ como U+206A) cuenta como "ruta fuera del worktree" en todas las plataformas; si el alias lleva además un carácter de control, bidi o de anchura cero (`.g` + U+200C + `it`), se rechaza antes como "ruta no válida".
+
 **Fuentes**: Q-MCP-5, Q-MCP-7 (estrechada por la enmienda 0.2); SEC-02, SEC-11; BRD BR-16 (CVEs de `mcp-server-git`); ADR-CKP-002 (propuesto; hallazgo de seguridad H-02).
 
 ### BR-MCP-VAL-002: Nombres de rama y refs
@@ -107,6 +109,8 @@ mensaje se entrega al ejecutor fuera de argv
 ```
 
 **Ejemplo**: repo con Conventional Commits y mensaje "arreglos" → denegado por Guardrails: "el mensaje no cumple la convención del repo: tipo(ámbito): descripción". Repo sin convención → "arreglos" se acepta.
+
+**Precisión (v0.5, DS-US-MCP-009 D6)**: tope de 16 KiB (16.384 bytes); no vacío tras quitar blancos; se permiten `\n` y `\t`, y `\r` solo dentro de `\r\n`. Los caracteres bidi y de anchura cero son "texto no válido" (`invalid-text`), como los de control. Tres motivos bajo `invalid-text`: obligatorio, demasiado largo y texto no válido; se comprueban en `raptor-mcp` y otra vez en el daemon.
 
 **Fuentes**: Q-MCP-5; BRD BR-11; NFR-02.
 
@@ -393,6 +397,8 @@ IF el plan trae avisos AND la llamada no los reconoce exactamente
    → rechazo sin efectos "avisos sin reconocer" + lista + acción "repite la llamada reconociéndolos"
 las confirmaciones que son controles (trabajo ajeno, excepción) nunca se reconocen: rechazo
 ```
+
+**S-11 (v0.5, DS-US-MCP-009 D8)**: una segunda escritura del mismo agente en el mismo repo, mientras la primera sigue en curso, se rechaza sin encolarse, antes del cerrojo, con "tu escritura anterior sigue en curso" (`operation-in-progress`, `kind: write`) y la acción "espera y revisa status; no repitas el commit". Encolarla crearía un commit duplicado si el agente reintenta.
 
 **Ejemplo**: `safe_commit` en un repo en la allowlist, por claude-1, mensaje válido → Guardrails permite → snapshot → commit → "commit 9f8e7d6 en shop-feat-a; deshacer con undo".
 
@@ -719,6 +725,8 @@ IF herramienta = snapshot AND fallo de transporte → `outcome-unknown` sin id: 
 
 **Excepción de `snapshot` (v0.4)**: el id del punto no existe hasta grabarlo, así que la respuesta no es "con estado + id". `outcome-unknown` sin id solo se da en `snapshot` y por fallo de transporte; la acción que se ofrece es revisar `raptor timeline`. Cuando exista US-MCP-017 la excepción desaparece.
 
+**Excepción de `safe_commit` (v0.5, DS-US-MCP-009 D2)**: la llamada espera el desenlace y no vuelve con estado e id. Su tiempo máximo es la suma de la espera en la cola del cerrojo (60 s; después "demasiadas llamadas"), el snapshot previo (10 s), el tope de la operación con capa `mcp` (300 s) y un margen (10 s): 380 s. Cancelar o pasar la llamada a segundo plano no detiene el commit. Ante un **reintento** mientras sigue en curso: "tu escritura anterior sigue en curso", con la acción "espera y revisa status o pide al desarrollador `raptor timeline`; no repitas el commit" (BR-MCP-WF-001, S-11). Ante un **corte** de transporte o del cliente: `outcome-unknown` sin id, "no se sabe si el commit se hizo", con la acción "revisa status o pide al desarrollador `raptor timeline` antes de reintentar". Si Claude Code corta antes por su propio tiempo máximo, el commit termina y queda en el timeline. Cuando exista US-MCP-017, vuelve a la regla general (estado + id a los 30 s).
+
 **Nota (N1)**: antes decía "20 vivos por worktree"; manda ADR-MCP-001 § 6: 20 por (solicitante, worktree) en una ventana móvil de 24 h.
 
 **Ejemplo**: un agente en bucle pide 200 snapshots en un minuto → los que pasan del límite se rechazan con el tiempo de espera.
@@ -786,6 +794,8 @@ primera llamada a herramienta AND daemon no corre → arrancarlo (entorno limpio
 **Descripción**: con más de una sesión en el worktree: `safe_commit` solo acepta rutas explícitas; `safe_rebase` se bloquea si hay otra sesión presente; `undo` se detiene ante solape con otro actor.
 
 **Criticidad**: Alta
+
+**Precisión (v0.5, DS-US-MCP-010 D10)**: "sesión" es la de **otro agente, viva**: sin fin y con su proceso existente o, si no tiene identidad de proceso, vista en los últimos 600 s; el desarrollador no cuenta, ni la TUI. Una presencia ilegible cuenta como compartido. Con otra sesión viva, `safe_commit` sin rutas ("todo lo preparado") se rechaza con "hay otra sesión de agente en este worktree" y la acción "indica tus rutas: el worktree es compartido"; con rutas nombradas, se commitean.
 
 **Ejemplo**: claude-1 y claude-3 en `shop-feat-a` → `safe_rebase` de claude-1: "claude-3 sigue trabajando en este worktree".
 
@@ -872,6 +882,8 @@ revalidar justo antes de ejecutar (ejecutor, DEP-MCP-2)
 
 **Criticidad**: Media
 
+**Precisión (v0.5, DS-US-MCP-010 D8)**: un archivo nuevo se nombra uno a uno; una carpeta no lo añade (nombrar una carpeta es "ruta no válida"). Si el commit no entra, los archivos nuevos añadidos para él vuelven a quedar sin seguimiento.
+
 **Ejemplo**: `safe_commit` con `[".env"]` ignorado → "la ruta .env está ignorada por Git; no se añade".
 
 **Fuentes**: Q-MCP-27.
@@ -925,3 +937,4 @@ Cada regla tendrá al menos un escenario Gherkin, incluido uno negativo, en su h
 | 0.2 | 2026-10-04 | PO (AADD) | Enmienda mínima, fuente ADR-CKP-002 (propuesto; hallazgo de seguridad H-02). BR-MCP-VAL-001 y BR-MCP-ELIG-004: `create_worktree` no acepta ruta por MCP, solo la plantilla del desarrollador (estrecha Q-MCP-7). BR-MCP-ELIG-001: la decisión de Guardrails para `snapshot` queda "Pendiente" (sin operación normalizada; ADR-CKP-002 Pendientes). Sin reglas nuevas: siguen 48. Decisión del orquestador (2026-10-04), validada por Arquitecto/PO. |
 | 0.3 | 2026-10-05 | PO (AADD) | Enmienda por ADR-MCP-001, decisión del orquestador (2026-10-05), validada por Arquitecto/PO. BR-MCP-ELIG-001: `snapshot` no gobernada (no está en BR-VAL-002) y `undo` sin decisión de Guardrails en el MVP (US-TMC-021, Fase 2). BR-MCP-WF-001: avisos del plan reconocidos en una segunda llamada, sin efectos si faltan. BR-MCP-EDGE-007: el aviso de upstream divergente se reconoce y la respuesta final vuelve a avisar. BR-MCP-TIME-001: cifras de ADR-MCP-001 § 6 y consulta del resultado por id de operación. BR-MCP-ELIG-005: cupo de 20 snapshots por solicitante y worktree en 24 h, con la cuota llena se rechaza sin borrar nada, y un `undo` por MCP que movería la base o una ref protegida se rechaza (S-04). BR-MCP-WF-001: orden alineado con ADR-MCP-001 (ámbito → allowlist → disponible → solicitante → … → Guardrails → avisos). Sin reglas nuevas: siguen 48. |
 | 0.4 | 2026-10-08 | PO (AADD) | Enmienda por DS-US-MCP-008, decisión del orquestador (2026-10-08), validada por Arquitecto/PO. BR-MCP-TIME-001: excepción de `snapshot` (sin id; `time-limit` si el daemon agota su tiempo; `outcome-unknown` sin id solo por fallo de transporte, con la acción "revisa `raptor timeline`") y cifras alineadas con ADR-MCP-001 (N1: 20 en 24 h por (solicitante, worktree), techos de 60 por worktree y 200 por repo). BR-MCP-VAL-004: el rechazo "texto no válido" es el código `invalid-text` y cubre también el texto vacío. Sin reglas nuevas: siguen 48. |
+| 0.5 | 2026-10-27 | PO (AADD) | Enmienda por DS-US-MCP-009 y DS-US-MCP-010, decisión del orquestador (2026-10-21), validada por Arquitecto/PO. BR-MCP-TIME-001: excepción de `safe_commit` (espera el desenlace, 380 s como suma de constantes; acción ante un reintento o un corte). BR-MCP-VAL-003: 16 KiB, `\t` permitido, bidi y anchura cero son "texto no válido". BR-MCP-WF-001: S-11, una segunda escritura del mismo agente se rechaza sin encolarse. BR-MCP-VAL-001: archivos, no carpetas ni submódulos; relativas a la raíz del worktree, nunca al cwd; tope real de 256; `\` y unidad rechazados en todas las plataformas; alias de `.git`. BR-MCP-EDGE-003: sesión = de otro agente, viva; el desarrollador no cuenta; ilegible = compartido. BR-MCP-EDGE-010: un archivo nuevo se nombra uno a uno; una carpeta no lo añade. Sin reglas nuevas: siguen 48. |

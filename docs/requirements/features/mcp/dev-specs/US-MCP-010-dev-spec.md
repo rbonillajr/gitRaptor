@@ -6,7 +6,7 @@ status: draft
 feature: mcp
 domain: MCP
 created: 2026-10-21
-updated: 2026-10-21
+updated: 2026-10-27
 story: US-MCP-010
 scope: backend
 frontend_surface: false
@@ -576,14 +576,16 @@ Sin llamadas nuevas: cambia el contenido aceptado de `args.paths` de `operation.
 
 | Ruta (ejemplo) | Dónde se rechaza | Motivo del canal | `code` de la herramienta | Mensaje (es) |
 |---|---|---|---|---|
-| `/etc/passwd`, `\\servidor\compartido\a.rs`, `C:x`, `a\b`, `-f`, `a//b`, `./a`, `a/`, con controles | `raptor-mcp` y daemon, forma léxica | `path-invalid` | `invalid-path` | "Ruta no válida: {path}." |
-| `../otro-repo/secreto`, `a/../../x`, `.git/config`, `sub/.GIT/hooks/x`, `.git./x`, `.git /x`, `GIT~1/config`, `.g\u{200C}it/x` | ídem | `path-outside-worktree` | `path-outside-worktree` | "Ruta fuera del worktree: {path}." |
+| `/etc/passwd`, `\\servidor\compartido\a.rs`, `C:x`, `a\b`, `-f`, `a//b`, `./a`, `a/`, con controles (también `.g\u{200C}it/x`) | `raptor-mcp` y daemon, forma léxica | `path-invalid` | `invalid-path` | "Ruta no válida: {path}." |
+| `../otro-repo/secreto`, `a/../../x`, `.git/config`, `sub/.GIT/hooks/x`, `.git./x`, `.git /x`, `GIT~1/config`, `.g\u{206A}it/x` | ídem | `path-outside-worktree` | `path-outside-worktree` | "Ruta fuera del worktree: {path}." |
 | 257 rutas | ídem | `INVALID_PARAMS` (`paths`, `too-many`) | `too-many-paths` | "Demasiadas rutas: como mucho 256." |
 | Enlace que sale del worktree, padre enlace, dentro de una carpeta con `.git` propio | daemon | `path-outside-worktree` | `path-outside-worktree` | ídem |
 | Una carpeta, un gitlink, una entrada `skip-worktree`, un enlace llamado `.gitmodules` | daemon | `path-invalid` | `invalid-path` | "Ruta no válida: {path}. Nombra archivos, no carpetas." |
 | `:(glob)**` que no existe, `SRC/A.rs` frente a `src/a.rs` | daemon | `path-not-found` | `path-not-found` | "Ruta no encontrada: {path}." |
 | `.env` ignorado, sin seguimiento | daemon | `path-ignored` | `path-ignored` | "La ruta {path} está ignorada por Git; no se añade." |
 | "Todo lo preparado" con otra sesión viva de agente | daemon | `shared-worktree-needs-paths` | `other-session-present` | "Hay otra sesión de agente en este worktree." · acción "Indica tus rutas: el worktree es compartido." |
+
+`.g\u{200C}it/x` es `path-invalid` y no "fuera": el paso 2.2 (`is_forbidden_char`, que incluye U+200C) corre antes que el 2.4 (alias de `.git`); los ignorables de HFS+ que `is_forbidden_char` no cubre (U+206A a U+206F) sí dan `path-outside-worktree` (crítica PC-7, 2026-10-27).
 
 Las acciones de los cuatro primeros: "Nombra archivos del worktree, relativos a su raíz, con su nombre exacto."
 
@@ -803,3 +805,12 @@ Cada decisión es **Decisión del orquestador (2026-10-21)**, validada por quien
 - Reutiliza: `gitraptor_api::catalog::{is_forbidden_char, MAX_COMMIT_PATHS, MAX_PATH_BYTES}`; las reglas de `gitraptor_git::tm_write::tree_path::{is_dotgit, HFS_IGNORABLE, fold}`; `unicode-normalization` (ya en `crates/git/Cargo.toml`); `gitraptor_git::RepoReader::{status, is_ignored}`; `gitraptor_git::capture::CaptureReader::untracked` (si hace falta, nota de T004); `crate::observe::open_registered_worktree` vía `DaemonBackend::facts`; `crate::profile::Store::sessions_for_worktree`; `crate::channel::peer::ProcSource` para la vida de una sesión; el rig de `crates/core/tests/tm_untrusted_git.rs:Pair`; `gitraptor_testkit::{fingerprint, canary, mcp_corpus}`.
 - Genera: ninguno.
 - Crea nuevo: `crates/api/src/commit_paths.rs`, `apps/mcp/src/safe_commit_paths.rs`, `UserOp::AddPaths` y `UserOp::UnstagePaths`, `gitraptor_git::paths::precomposed`. Búsquedas sin resultado: `grep -n "AddPaths\|\"add\"" crates/git/src/user_ops.rs` (la lista cerrada no tiene `add`); `grep -rn "gix_validate\|gix::validate::path" crates` (solo `refname.rs` usa `gix::validate::reference`).
+
+---
+
+## Estado de la implementación (2026-10-27)
+
+- **Hecho** (PR #PENDIENTE, junto con DS-US-MCP-009): T001 a T008. Forma léxica compartida en `crates/api/src/commit_paths.rs`, validación en `raptor-mcp`, contraste con el worktree en el daemon (también bajo el cerrojo), archivos nuevos nombrados con vuelta atrás si el commit no entra, worktree compartido y corpus de rutas. Enmiendas aplicadas: ADR-MCP-001 (2026-10-21, US-MCP-010), BR-MCP v0.5 (VAL-001, EDGE-003, EDGE-010) y contrato del canal.
+- **Corrección de § Contrato de API** (crítica PC-7, aprobada): `.g\u{200C}it/x` es `path-invalid`, no `path-outside-worktree`, porque el paso 2.2 de T002 corre antes que el 2.4.
+- **Abierto, bloquea liberación en Windows**: G1, en la etapa de validación multiplataforma (XP-46); macOS y Linux no esperan. Las tres historias (US-MCP-009, US-MCP-010, US-MCP-011) se liberan juntas (D14).
+- **Sin verificar**: Linux (XP-46 a) y Windows (XP-46 b).

@@ -2,10 +2,10 @@
 id: US-MCP-009
 title: "Un agente commitea por MCP con las reglas del repo y con un punto de recuperación previo"
 type: us
-status: draft
+status: partially-implemented
 priority: high
 created: 2026-10-04
-updated: 2026-10-21
+updated: 2026-10-27
 domain: GRP
 epic: E-001
 feature: mcp
@@ -154,3 +154,9 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 
 - **Diseño:** no aplica.
 - **Dev Spec:** [DS-US-MCP-009](../dev-specs/US-MCP-009-dev-spec.md) (validada por Arquitecto y PO el 2026-10-21).
+
+## Estado de la implementación (2026-10-27)
+
+Implementado en: PR #PENDIENTE ([DS-US-MCP-009](../dev-specs/US-MCP-009-dev-spec.md), junto con US-MCP-010).
+
+Queda abierto, y bloquea la liberación: US-MCP-007 en `main` (G3) y US-MCP-011 (G4); US-MCP-009 se libera junto con US-MCP-010 y US-MCP-011. Linux y Windows sin verificar (XP-45).

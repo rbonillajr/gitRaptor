@@ -12,9 +12,9 @@
 |---|---|
 | Implementado (`implemented`) | 52 |
 | Hecho (`done`) | 3 |
-| Implementado en parte (`partially-implemented`) | 25 |
+| Implementado en parte (`partially-implemented`) | 27 |
 | Listo (`ready`) | 4 |
-| Borrador (`draft`) | 65 |
+| Borrador (`draft`) | 63 |
 | Bloqueado (`blocked`) | 1 |
 | **Total** | **150** |
 
@@ -24,7 +24,7 @@
 |---|---|---|---|---|---|---|---|
 | [cockpit](#cockpit) | 8 | 0 | 6 | 0 | 18 | 1 | 33 |
 | [guardrails](#guardrails) | 11 | 0 | 7 | 1 | 6 | 0 | 25 |
-| [mcp](#mcp) | 6 | 0 | 2 | 0 | 12 | 0 | 20 |
+| [mcp](#mcp) | 6 | 0 | 4 | 0 | 10 | 0 | 20 |
 | [motor-local](#motor-local) | 14 | 2 | 9 | 3 | 13 | 0 | 41 |
 | [time-machine](#time-machine) | 13 | 1 | 1 | 0 | 16 | 0 | 31 |
 
@@ -102,7 +102,7 @@
 
 ### mcp
 
-20 fichas: 6 implementado, 2 implementado en parte, 12 borrador.
+20 fichas: 6 implementado, 4 implementado en parte, 10 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -113,11 +113,11 @@
 | [US-MCP-005](features/mcp/user-stories/US-MCP-005-respuestas-acotadas-y-seguras.md) | Un agente recibe respuestas acotadas que no pueden darle órdenes ni filtrar secretos | Implementado (`implemented`) | #157, #159 | — |
 | [US-MCP-008](features/mcp/user-stories/US-MCP-008-snapshot-manual.md) | Un agente guarda por MCP un punto de recuperación antes de un cambio arriesgado | Implementado (`implemented`) | #213 | — |
 | [INF-MCP-001](features/mcp/technical-stories/INF-MCP-001-corpus-seguridad-mcp.md) | Corpus de seguridad del MCP como suite de CI que bloquea el merge | Implementado en parte (`partially-implemented`) | — | — |
+| [US-MCP-009](features/mcp/user-stories/US-MCP-009-safe-commit.md) | Un agente commitea por MCP con las reglas del repo y con un punto de recuperación previo | Implementado en parte (`partially-implemented`) | — | — |
+| [US-MCP-010](features/mcp/user-stories/US-MCP-010-safe-commit-rutas.md) | Un agente commitea solo los archivos que nombra y nunca fuera de su worktree | Implementado en parte (`partially-implemented`) | — | — |
 | [US-MCP-013](features/mcp/user-stories/US-MCP-013-confirmacion-sin-cola.md) | Un agente sabe que una acción necesita al desarrollador y a quién acudir | Implementado en parte (`partially-implemented`) | #267 | — |
 | [US-MCP-006](features/mcp/user-stories/US-MCP-006-registrar-agente.md) | Un agente sin soporte completo se declara por MCP y su trabajo queda a su nombre | Borrador (`draft`) | — | — |
 | [US-MCP-007](features/mcp/user-stories/US-MCP-007-confused-deputy.md) | Un hook lanzado por una escritura de un agente no puede usar los poderes del desarrollador | Borrador (`draft`) | — | — |
-| [US-MCP-009](features/mcp/user-stories/US-MCP-009-safe-commit.md) | Un agente commitea por MCP con las reglas del repo y con un punto de recuperación previo | Borrador (`draft`) | — | — |
-| [US-MCP-010](features/mcp/user-stories/US-MCP-010-safe-commit-rutas.md) | Un agente commitea solo los archivos que nombra y nunca fuera de su worktree | Borrador (`draft`) | — | — |
 | [US-MCP-011](features/mcp/user-stories/US-MCP-011-escritura-en-el-worktree-correcto.md) | La escritura de un agente cae en el worktree que espera, o no ocurre | Borrador (`draft`) | — | — |
 | [US-MCP-012](features/mcp/user-stories/US-MCP-012-undo-de-lo-propio.md) | Un agente deshace por MCP su última operación sin tocar el trabajo de otros | Borrador (`draft`) | — | — |
 | [US-MCP-014](features/mcp/user-stories/US-MCP-014-confirmacion-pendiente-en-cola.md) | La acción de riesgo de un agente queda en espera del desarrollador sin bloquear al agente | Borrador (`draft`) | — | — |
@@ -245,7 +245,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2
 
-112 fichas: 29 implementado, 3 hecho, 19 implementado en parte, 4 listo, 56 borrador, 1 bloqueado.
+112 fichas: 29 implementado, 3 hecho, 21 implementado en parte, 4 listo, 54 borrador, 1 bloqueado.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -299,6 +299,8 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-GRD-017](features/guardrails/user-stories/US-GRD-017-sin-snapshot-no-se-ejecuta.md) | Una operación destructiva permitida no se ejecuta sin un punto de recuperación | Implementado en parte (`partially-implemented`) | #260 | — |
 | [US-GRD-018](features/guardrails/user-stories/US-GRD-018-autoria-commits-persona-y-agente.md) | Cada commit entra a nombre de la persona y deja constancia del agente que lo hizo, con la exigencia que fija el equipo | Implementado en parte (`partially-implemented`) | #137, #141, #150, #152, #153, #154 | 3 |
 | [US-GRP-005](features/motor-local/user-stories/US-GRP-005-hueco-sin-atribuir.md) | El desarrollador distingue lo que el motor no vio ocurrir | Implementado en parte (`partially-implemented`) | — | — |
+| [US-MCP-009](features/mcp/user-stories/US-MCP-009-safe-commit.md) | Un agente commitea por MCP con las reglas del repo y con un punto de recuperación previo | Implementado en parte (`partially-implemented`) | — | — |
+| [US-MCP-010](features/mcp/user-stories/US-MCP-010-safe-commit-rutas.md) | Un agente commitea solo los archivos que nombra y nunca fuera de su worktree | Implementado en parte (`partially-implemented`) | — | — |
 | [US-MCP-013](features/mcp/user-stories/US-MCP-013-confirmacion-sin-cola.md) | Un agente sabe que una acción necesita al desarrollador y a quién acudir | Implementado en parte (`partially-implemented`) | #267 | — |
 | [SPIKE-GRD-002](features/guardrails/technical-stories/SPIKE-GRD-002-factor-so-daemon.md) | Factor de autenticación del SO invocado desde el daemon en los tres SO | Listo (`ready`) | — | — |
 | [TD-GRP-002](features/motor-local/technical-stories/TD-GRP-002-motor-bajo-rafaga.md) | Frescura y memoria del motor bajo una ráfaga de archivos | Listo (`ready`) | — | — |
@@ -337,8 +339,6 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-GRP-016](features/motor-local/user-stories/US-GRP-016-rama-base-configuracion-equipo.md) | La rama base la define la configuración del equipo | Borrador (`draft`) | — | — |
 | [US-MCP-006](features/mcp/user-stories/US-MCP-006-registrar-agente.md) | Un agente sin soporte completo se declara por MCP y su trabajo queda a su nombre | Borrador (`draft`) | — | — |
 | [US-MCP-007](features/mcp/user-stories/US-MCP-007-confused-deputy.md) | Un hook lanzado por una escritura de un agente no puede usar los poderes del desarrollador | Borrador (`draft`) | — | — |
-| [US-MCP-009](features/mcp/user-stories/US-MCP-009-safe-commit.md) | Un agente commitea por MCP con las reglas del repo y con un punto de recuperación previo | Borrador (`draft`) | — | — |
-| [US-MCP-010](features/mcp/user-stories/US-MCP-010-safe-commit-rutas.md) | Un agente commitea solo los archivos que nombra y nunca fuera de su worktree | Borrador (`draft`) | — | — |
 | [US-MCP-011](features/mcp/user-stories/US-MCP-011-escritura-en-el-worktree-correcto.md) | La escritura de un agente cae en el worktree que espera, o no ocurre | Borrador (`draft`) | — | — |
 | [US-MCP-012](features/mcp/user-stories/US-MCP-012-undo-de-lo-propio.md) | Un agente deshace por MCP su última operación sin tocar el trabajo de otros | Borrador (`draft`) | — | — |
 | [US-MCP-014](features/mcp/user-stories/US-MCP-014-confirmacion-pendiente-en-cola.md) | La acción de riesgo de un agente queda en espera del desarrollador sin bloquear al agente | Borrador (`draft`) | — | — |
@@ -481,6 +481,18 @@ Cada commit entra a nombre de la persona y deja constancia del agente que lo hiz
 ### [INF-MCP-001](features/mcp/technical-stories/INF-MCP-001-corpus-seguridad-mcp.md)
 
 Corpus de seguridad del MCP como suite de CI que bloquea el merge
+
+- *La ficha no lista los pendientes en "Estado de la implementación".*
+
+### [US-MCP-009](features/mcp/user-stories/US-MCP-009-safe-commit.md)
+
+Un agente commitea por MCP con las reglas del repo y con un punto de recuperación previo
+
+- *La ficha no lista los pendientes en "Estado de la implementación".*
+
+### [US-MCP-010](features/mcp/user-stories/US-MCP-010-safe-commit-rutas.md)
+
+Un agente commitea solo los archivos que nombra y nunca fuera de su worktree
 
 - *La ficha no lista los pendientes en "Estado de la implementación".*
 
