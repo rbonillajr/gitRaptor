@@ -301,6 +301,7 @@ graph LR
   11. `a_repo_added_again_after_the_loss_has_no_agent_before_it`: tras el 10, `repo.add` de "demo" por el canal (como `crates/core/tests/channel.rs`): el snapshot muestra su `HEAD` actual, `events.history` no tiene `commit` y `sessions.list` está vacía.
   12. `another_instance_holding_the_lock_stops_this_daemon_without_writing`: se borra `state/daemon.lock` y el test toma `InstanceLock::acquire(&dirs.state)`; el hilo termina con `StopCause::InstanceLost` y los archivos de `data/` (`files_under`, contenido y tamaño) no cambian.
   13. `an_insecure_recreated_folder_is_refused_by_the_next_start` (`#[cfg(unix)]`): `data/` a 0755 y se borra `data/index.sqlite`; el hilo termina con `StopCause::ProfileLost` y el siguiente `Daemon::start` falla con `ProfileError::InsecureDir`.
+  14. `a_lost_profile_defers_the_stop_while_a_protected_write_runs` (D12, ⛔6.2): el test toma `gitraptor_core::repo_lock::try_lock(id)`, borra `data/`, espera la línea `profile_reset_deferred`, suelta el guard y espera el `join` con `ProfileLost`. Ningún test del archivo retiene un `repo_lock` más allá de su aserción (`busy()` es del proceso).
 
 - **Depende:** T001
 - **Refs:** US-GRP-005, los tres escenarios; ADR-GRP-013, Validación 9 y 13; ADR-GRP-006, Validación 5
@@ -380,6 +381,7 @@ graph LR
 - `crates/core/src/daemon/mod.rs` (**MODIFY**): `mod profile_loss;`, la llamada en el latido y que `stop` no escriba con `InstanceLost`
 - `crates/core/src/daemon/shutdown.rs` (**MODIFY**): `StopCause::ProfileLost` y `StopCause::InstanceLost`
 - `crates/core/src/daemon/lock.rs` (**MODIFY**): `InstanceLock::intact`
+- `crates/core/src/repo_lock.rs` (**MODIFY**): `pub fn busy() -> usize`, slots ocupados o con cola del registro global del proceso (Decisión del orquestador, 2026-10-27)
 - `crates/core/src/profile/mod.rs` (**MODIFY**): identidad del índice al abrir y `Profile::probe`
 - `crates/core/src/profile/fsperm.rs` (**MODIFY**): `file_identity` y `handle_identity`
 
@@ -389,17 +391,17 @@ graph LR
 3. Escribe `InstanceLock::intact`: compara `handle_identity(&self.file)` con `file_identity(&self.path)`; `NotFound` da `Ok(false)`.
 4. Añade `StopCause::ProfileLost` (`as_str` `profile-lost`) y `StopCause::InstanceLost` (`instance-lost`); los dos dan `StopCauseCode::Signal` en `code()`, así que el cable de `daemon.stopping` no cambia.
 5. Escribe `check_profile` en `profile_loss.rs`.
-   5.1 ⛔6.1 Primero el cerrojo (D11): si no está intacto, crea las carpetas privadas hasta `state/` como `Daemon::start` y vuelve a tomarlo; con `AlreadyRunning` u otro error, `Stop(InstanceLost)`. Con `InstanceLost`, `stop` no escribe en almacenes ni en el perfil: ese perfil puede ser ya de otra instancia.
+   5.1 ⛔6.1 Primero el cerrojo (D11): si no está intacto, crea las carpetas privadas hasta `state/` como `Daemon::start` y vuelve a tomarlo; con `AlreadyRunning` u otro error, `Stop(InstanceLost)`. Con `InstanceLost`, `stop` no escribe en almacenes ni en el perfil (la única escritura admitida es la línea `daemon_stopped` de `daemon.log`): ese perfil puede ser ya de otra instancia.
    5.2 Después el perfil (D10): `Intact` sigue; `Unknown` escribe `profile_probe_failed` y sigue; `Lost` sigue al paso 5.3.
-   5.3 ⛔6.2 Con escrituras protegidas en curso o en cola (Time Machine o ejecutor), escribe `profile_reset_deferred` y sigue; el siguiente latido vuelve a mirar. Si no hay, `Stop(ProfileLost)`.
-6. En el latido de `Daemon::run` (`daemon/mod.rs:829-835`), antes de `persist_observed_until` y de `check_channel`: `if let ProfileCheck::Stop(cause) = self.check_profile() { return self.stop(cause); }`.
-7. Test en `mod tests` de `profile_loss.rs`: `pending_protected_writes_defer_the_stop`.
+   5.3 ⛔6.2 Con escrituras protegidas en curso o en cola (Time Machine o ejecutor; `repo_lock::busy() > 0`), escribe `profile_reset_deferred` y sigue; el siguiente latido vuelve a mirar. Si no hay, `Stop(ProfileLost)`.
+6. En el latido de `Daemon::run` (`crates/core/src/daemon/mod.rs:913-918`), antes de `persist_observed_until` y de `check_channel`: `if let ProfileCheck::Stop(cause) = self.check_profile() { return self.stop(cause); }`.
+7. Tests en `mod tests` de `profile_loss.rs`: `pending_protected_writes_defer_the_stop` y `an_unknown_probe_result_logs_and_continues` (inyecta el resultado del probe).
 
 > **Nota técnica.** En Unix, borrar `data/` desvincula los archivos que SQLite tiene abiertos: las escrituras siguen sin error y se pierden. Por eso se comparan identidades. `raptor daemon` sale con 0 cuando `run` termina, y el gestor de servicios no relanza una salida 0 (`autostart.rs:67`).
 
 - **Depende:** T005
 - **Refs:** ADR-GRP-006 § 4 y Enmienda (2026-10-09, US-GRP-005); ADR-GRP-005 § 2, § 3 y Enmienda (2026-10-09, US-GRP-005)
-- **Aceptación:** tests 9 a 13 de `us_grp_005_profile_loss`; `cargo test -p gitraptor-core --lib daemon::profile_loss::tests`; `--test daemon_lifecycle` sin regresión
+- **Aceptación:** tests 9 a 14 de `us_grp_005_profile_loss`; `cargo test -p gitraptor-core --lib daemon::profile_loss::tests`; `--test daemon_lifecycle` sin regresión
 - **Guard ⛔6.1:** `cargo test -p gitraptor-core --test us_grp_005_profile_loss another_instance_holding_the_lock_stops_this_daemon_without_writing -- --exact`
 - **Guard ⛔6.2:** `cargo test -p gitraptor-core --lib daemon::profile_loss::tests::pending_protected_writes_defer_the_stop -- --exact`
 
@@ -436,7 +438,7 @@ graph LR
 
 **Reglas**
 - PR-A: fila de `events.gaps` en § Métodos de `api-contract-ipc.md`, forma de `GapView`, y en § Pendiente que `gap.recorded` y `attention.gaps` siguen sin emisor.
-- PR-B: la siguiente fila libre de `xplat-pendientes.md` (hoy XP-43) con lo de § 9.5; la historia y el índice pasan a implementada con los dos PR. Si algo falla o no se pudo verificar, dilo en el PR (AGENTS.md).
+- PR-B: la siguiente fila libre de `xplat-pendientes.md` (hoy XP-45) con lo de § 9.5; la historia y el índice pasan a implementada con los dos PR. Si algo falla o no se pudo verificar, dilo en el PR (AGENTS.md).
 
 - **Depende:** T006, T007
 - **Refs:** AGENTS.md § Reglas de calidad; ADR-GRP-016
@@ -464,6 +466,7 @@ crates/core/
 ├── src/channel/conn.rs                         ← MODIFY  Tramo B (T005)
 ├── src/daemon/profile_loss.rs                  ← CREATE  Tramo B (T006)
 ├── src/daemon/lock.rs                          ← MODIFY  Tramo B (T006)
+├── src/repo_lock.rs                            ← MODIFY  Tramo B (T006)
 ├── src/profile/mod.rs                          ← MODIFY  Tramo B (T006)
 ├── src/profile/fsperm.rs                       ← MODIFY  Tramo B (T006)
 ├── tests/us_grp_005.rs                         ← CREATE  Tramo D (T002)
@@ -741,7 +744,7 @@ Corre `/security-review --scope devspec docs/requirements/features/motor-local/d
 | N2 | Tras un despertar por red de seguridad, los eventos del reflog llegan en un lote sin hueco (`watch/mod.rs:1083-1144`) y pasan por S3 y el registro. Riesgo bajo: un repo con sesión presente no duerme | Revisar con TS-GRP-006 | Arquitecto |
 | N3 | `RepoView` no lista ramas sin worktree: `hotfix` se comprueba por su `branch-create` | Ninguna | — |
 | N4 | D4 da a los eventos del hueco la hora de su fin: los filtros por periodo de US-TMC-007 deben tratarlos como del intervalo del hueco | Avisar al arquitecto de US-TMC-007 | Orquestador |
-| N5 | Pistas sin verificar: (a) la API que dice si hay escrituras protegidas en curso o en cola sin cambiar la visibilidad de `TmRepos::lock_key`; (b) que `winsys::file_id::of_path` no siga enlaces; (c) que `raptor-mcp` también arranque el daemon bajo demanda | Comprobarlas al empezar T006; si (a) o (b) fallan, BLOQUEO | Implementador |
+| N5 | (a) Resuelta (2026-10-27): no había API; se añade `repo_lock::busy()` (cuenta todo el proceso: en producción hay un daemon por proceso). (b) Verificada: `winsys::file_id::of_path` no sigue enlaces y existe `of_file`. (c) Sin verificar: que `raptor-mcp` arranque el daemon bajo demanda | (c) solo se anota en el PR | Implementador |
 | N6 | `StopCause::ProfileLost` e `InstanceLost` viajan como `signal` en `daemon.stopping`; una variante nueva de `StopCauseCode` sería un cambio de forma (ADR-GRP-016) | Ninguna | — |
 
 Implementado en: PR #280 (PR-A: T001-T005, T007). Falta PR-B (T006 y el resto de T008).
