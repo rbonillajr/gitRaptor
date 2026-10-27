@@ -218,13 +218,7 @@ fn fleet(
     now_ms: i64,
     height: u16,
 ) -> Model {
-    let mut model = Model::new(
-        lang,
-        Size {
-            width: 140,
-            height,
-        },
-    );
+    let mut model = Model::new(lang, Size { width: 140, height });
     pinned(&mut model, mode);
     model.conn = ConnState::Live;
     model.engine.requester = Some(Requester::Unattributed {
@@ -269,7 +263,11 @@ fn row_at(lines: &[String], branch: &str) -> Option<usize> {
 fn block(model: &Model, branch: &str) -> String {
     let lines = screen(model);
     let i = row_at(&lines, branch).unwrap_or_else(|| panic!("no row for {branch}:\n{lines:#?}"));
-    format!("{}\n{}", lines[i], lines.get(i + 1).map_or("", |l| l.as_str()))
+    format!(
+        "{}\n{}",
+        lines[i],
+        lines.get(i + 1).map_or("", |l| l.as_str())
+    )
 }
 
 /// The foreground of the first cell of `word`, searched cell by cell on the painted buffer.
@@ -280,7 +278,9 @@ fn fg_of(model: &Model, word: &str) -> Color {
     let n = word.chars().count() as u16;
     for y in 0..buf.area.height {
         for x in 0..width.saturating_sub(n) {
-            let s: String = (0..n).map(|d| buf[(x + d, y)].symbol().to_string()).collect();
+            let s: String = (0..n)
+                .map(|d| buf[(x + d, y)].symbol().to_string())
+                .collect();
             if s == word {
                 return buf[(x, y)].fg;
             }
@@ -312,14 +312,21 @@ fn order_sessions() -> Vec<SessionView> {
 #[test]
 fn the_fleet_goes_main_active_inactive_ended_no_agent() {
     for lang in [Lang::En, Lang::Es] {
-        let mut model = fleet(lang, ColorMode::NoColor, ORDER_TREES, order_sessions(), MON9, 30);
+        let mut model = fleet(
+            lang,
+            ColorMode::NoColor,
+            ORDER_TREES,
+            order_sessions(),
+            MON9,
+            30,
+        );
         let order = |model: &Model| -> Vec<String> {
             let lines = screen(model);
             let mut rows: Vec<(usize, &str)> = ORDER_TREES
                 .iter()
                 .map(|(_, b)| {
-                    let at = row_at(&lines, b)
-                        .unwrap_or_else(|| panic!("no row for {b}:\n{lines:#?}"));
+                    let at =
+                        row_at(&lines, b).unwrap_or_else(|| panic!("no row for {b}:\n{lines:#?}"));
                     (at, *b)
                 })
                 .collect();
@@ -356,7 +363,12 @@ fn an_ended_session_shows_when_it_ended_then_its_last_agent() {
         ]
     };
     let cases = [
-        (Lang::En, "ended 2 h ago", "No agent", "last agent: claude-4 (ended 1 d ago)"),
+        (
+            Lang::En,
+            "ended 2 h ago",
+            "No agent",
+            "last agent: claude-4 (ended 1 d ago)",
+        ),
         (
             Lang::Es,
             "terminó hace 2 h",
@@ -365,13 +377,23 @@ fn an_ended_session_shows_when_it_ended_then_its_last_agent() {
         ),
     ];
     for (lang, two_hours, none, last) in cases {
-        let mut model = fleet(lang, ColorMode::NoColor, OLD_TREES, sessions(), end + 2 * H, 30);
+        let mut model = fleet(
+            lang,
+            ColorMode::NoColor,
+            OLD_TREES,
+            sessions(),
+            end + 2 * H,
+            30,
+        );
         let old = block(&model, "feat-old");
         assert!(old.contains("claude-4 · wt-old"), "{lang:?}: {old}");
         assert!(old.contains(two_hours), "{lang:?}: {old}");
         // 24 h minus 1 ms: still visible.
         tick(&mut model, end + DAY - 1);
-        assert!(block(&model, "feat-old").contains("claude-4 · wt-old"), "{lang:?}");
+        assert!(
+            block(&model, "feat-old").contains("claude-4 · wt-old"),
+            "{lang:?}"
+        );
         // 24 h exactly: hidden, the row says who was the last agent and how long ago.
         tick(&mut model, end + DAY);
         let old = block(&model, "feat-old");
@@ -382,7 +404,15 @@ fn an_ended_session_shows_when_it_ended_then_its_last_agent() {
         press(&mut model, 'f');
         let old = block(&model, "feat-old");
         assert!(old.contains("claude-4 · wt-old"), "{lang:?}: {old}");
-        assert!(old.contains(&last.replace("last agent: claude-4 (", "").replace("último agente: claude-4 (", "").replace(')', "")), "{lang:?}: {old}");
+        assert!(
+            old.contains(
+                &last
+                    .replace("last agent: claude-4 (", "")
+                    .replace("último agente: claude-4 (", "")
+                    .replace(')', "")
+            ),
+            "{lang:?}: {old}"
+        );
     }
     // The name of an ended session is dim: not the color of a present agent.
     let model = fleet(
@@ -467,11 +497,21 @@ fn a_new_session_replaces_the_ended_one() {
             lang,
             ColorMode::NoColor,
             OLD_TREES,
-            vec![ended("s4", "claude-4", "wt-old", MON9 - 5 * H, MON9 - 2 * H)],
+            vec![ended(
+                "s4",
+                "claude-4",
+                "wt-old",
+                MON9 - 5 * H,
+                MON9 - 2 * H,
+            )],
             MON9,
             30,
         );
-        assert!(text(&model).contains(two_hours), "{lang:?}\n{}", text(&model));
+        assert!(
+            text(&model).contains(two_hours),
+            "{lang:?}\n{}",
+            text(&model)
+        );
         // The same agent works again: a new session, started after the end.
         let again = active("s5", "claude-4", "wt-old", MON9 - H);
         update(&mut model, session_event(2, &again));
@@ -497,7 +537,14 @@ fn a_shared_worktree_shows_all_its_sessions() {
         ended("s3", "claude-3", "wt-pagos", MON9 - 3 * H, MON9 - H),
     ];
     for (lang, shared) in [(Lang::En, "shared with"), (Lang::Es, "compartido con")] {
-        let model = fleet(lang, ColorMode::NoColor, PAGOS_TREES, sessions.clone(), MON9, 30);
+        let model = fleet(
+            lang,
+            ColorMode::NoColor,
+            PAGOS_TREES,
+            sessions.clone(),
+            MON9,
+            30,
+        );
         let pagos = block(&model, "feat-pagos");
         assert!(pagos.contains(shared), "{lang:?}: {pagos}");
         for agent in ["claude-1", "claude-2", "claude-3"] {
@@ -519,7 +566,14 @@ fn a_present_and_an_ended_session_are_not_shared() {
         (Lang::En, "shared", "ended 1 h ago"),
         (Lang::Es, "compartido", "terminó hace 1 h"),
     ] {
-        let model = fleet(lang, ColorMode::NoColor, PAGOS_TREES, sessions.clone(), MON9, 30);
+        let model = fleet(
+            lang,
+            ColorMode::NoColor,
+            PAGOS_TREES,
+            sessions.clone(),
+            MON9,
+            30,
+        );
         let pagos = block(&model, "feat-pagos");
         assert!(pagos.contains("claude-1"), "{lang:?}: {pagos}");
         assert!(pagos.contains("claude-2"), "{lang:?}: {pagos}");
@@ -546,7 +600,9 @@ const NINE_FOLDERS: [(&str, u8); 9] = [
 
 fn nine_trees() -> Vec<Tree> {
     let mut trees: Vec<Tree> = vec![("", "main")];
-    let branches = ["br-1", "br-2", "br-3", "br-4", "br-9", "br-5", "br-6", "br-7", "br-8"];
+    let branches = [
+        "br-1", "br-2", "br-3", "br-4", "br-9", "br-5", "br-6", "br-7", "br-8",
+    ];
     for ((folder, _), branch) in NINE_FOLDERS.iter().zip(branches) {
         trees.push((folder, branch));
     }
@@ -637,7 +693,14 @@ fn colors(model: &Model) -> Vec<Color> {
 
 #[test]
 fn each_agent_keeps_its_color_after_lagged_and_a_reconnection() {
-    let mut model = fleet(Lang::En, ColorMode::TrueColor, THREE, three_sessions(), MON9, 30);
+    let mut model = fleet(
+        Lang::En,
+        ColorMode::TrueColor,
+        THREE,
+        three_sessions(),
+        MON9,
+        30,
+    );
     let before = colors(&model);
     assert_ne!(before[0], before[1]);
     assert_ne!(fg_of(&model, "claude-1"), before[0]);
@@ -729,7 +792,14 @@ fn fleet_group(model: &Model, title: &str, next: &str) -> Vec<String> {
 #[test]
 fn the_show_ended_hint_counts_what_is_hidden() {
     let cases = [
-        (Lang::En, "f show ended (3)", "f hide ended", "show ended", "In the fleet", "Always"),
+        (
+            Lang::En,
+            "f show ended (3)",
+            "f hide ended",
+            "show ended",
+            "In the fleet",
+            "Always",
+        ),
         (
             Lang::Es,
             "f ver terminadas (3)",
@@ -740,7 +810,14 @@ fn the_show_ended_hint_counts_what_is_hidden() {
         ),
     ];
     for (lang, show, hide, label, group, next) in cases {
-        let mut model = fleet(lang, ColorMode::NoColor, HINT_TREES, hidden_sessions(), MON9, 30);
+        let mut model = fleet(
+            lang,
+            ColorMode::NoColor,
+            HINT_TREES,
+            hidden_sessions(),
+            MON9,
+            30,
+        );
         assert!(text(&model).contains(show), "{lang:?}\n{}", text(&model));
         // The filter on: no longer hidden, the hint offers to hide them again.
         press(&mut model, 'f');
