@@ -1,0 +1,28 @@
+---
+source: apps/cli/src/tui/view_order_tests.rs
+expression: screen(&model)
+---
+ shop | [ok] live | engine observing | acting as you         [c] -  [blocked] -
+#= > Fleet | +- vs main (local copy, fetch age not available) =================#
+#      Agent              Branch               Files +-          Activity      #
+#  o   No agent | shop    main                 ~0    +0 -0       not available #
+#  *   claude-1 | d-act   br-d                 ~0    +0 -0       not available #
+#  *   claude-2 | m-act   br-m                 ~0    +0 -0       not available #
+#  ~   claude-3 | c-idle  br-idle              ~0    +0 -0       not available #
+#  o   claude-4 | b-done  br-done              ~0    +0 -0       not available #
+#      ` ended 2 h ago                                                         #
+#  o   No agent | a-none  br-none              ~0    +0 -0       not available #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#==============================================================================#
+ q quit  r retry   o no agent: changes by you or another tool            ? help

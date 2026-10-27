@@ -1,0 +1,28 @@
+---
+source: apps/cli/src/tui/view_order_tests.rs
+expression: text
+---
+ shop | [ok] en vivo | motor observando | actúas como tú     [c] -  [blocked] -
+#= > Flota | +- respecto a main (copia local, antigüedad no disponible) =======#
+#      Agente                  Rama            Arch. +-          Actividad     #
+#  o   Sin agente | shop       main            ~0    +0 -0       no disponible #
+#  *   claude-1 | wt-pagos +2  feat-pagos      ~0    +0 -0       no disponible #
+#      ` compartido con ~ claude-2, o claude-3 (terminó hace 1 h)              #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#                                                                              #
+#==============================================================================#
+ q salir  r reintentar                                                  ? ayuda
