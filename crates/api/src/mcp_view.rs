@@ -222,6 +222,24 @@ pub const MCP_BASE_TOKENS: usize = 250;
 /// description and `inputSchema` (RES-MCP-01).
 pub const MCP_TOOL_TOKENS: usize = 150;
 
+/// Most estimated tokens of a write tool of [`MCP_WRITE_TOOLS`] as the model reads it: an
+/// exception to RES-MCP-01, because its description carries the security statements of
+/// RES-MCP-04, which are never cut.
+pub const MCP_WRITE_TOOL_TOKENS: usize = 250;
+
+/// The write tools that take [`MCP_WRITE_TOOL_TOKENS`]; any other tool keeps
+/// [`MCP_TOOL_TOKENS`].
+pub const MCP_WRITE_TOOLS: &[&str] = &["safe_commit"];
+
+/// The budget of one tool as the model reads it, by its name.
+pub fn tool_token_budget(name: &str) -> usize {
+    if MCP_WRITE_TOOLS.contains(&name) {
+        MCP_WRITE_TOOL_TOKENS
+    } else {
+        MCP_TOOL_TOKENS
+    }
+}
+
 /// Most estimated tokens of one tool's compact `outputSchema` (RES-MCP-01).
 pub const MCP_OUTPUT_SCHEMA_TOKENS: usize = 400;
 
@@ -390,7 +408,7 @@ pub fn catalog_overruns(initialize: &Value, tools: &[Value]) -> Vec<String> {
             .map(|o| o.to_string());
         let read = read.to_string();
         let what = format!("tool `{name}` (name, description, inputSchema)");
-        overruns.extend(check_token_budget(RULE, &what, &read, MCP_TOOL_TOKENS).err());
+        overruns.extend(check_token_budget(RULE, &what, &read, tool_token_budget(name)).err());
         if let Some(output) = output {
             let what = format!("the outputSchema of `{name}`");
             overruns
@@ -770,6 +788,23 @@ mod tests {
         let overruns = catalog_overruns(&init, &many);
         assert_eq!(overruns.len(), 1, "{overruns:#?}");
         assert!(overruns[0].starts_with("RES-MCP-01: the whole catalog"));
+    }
+
+    /// RES-MCP-01: only the allowlisted write tools take the larger budget.
+    #[test]
+    fn only_allowlisted_write_tools_take_the_larger_budget() {
+        let init = json!({"instructions": "short"});
+        let sized = |name: &str, tokens: usize| {
+            json!({"name": name, "inputSchema": {"type": "object"},
+                   "description": "x".repeat(tokens * MCP_BYTES_PER_TOKEN)})
+        };
+        let between = MCP_TOOL_TOKENS + (MCP_WRITE_TOOL_TOKENS - MCP_TOOL_TOKENS) / 2;
+        assert!(catalog_overruns(&init, &[sized("safe_commit", between)]).is_empty());
+        let other = catalog_overruns(&init, &[sized("snapshot", between)]);
+        assert_eq!(other.len(), 1, "{other:#?}");
+        let over = catalog_overruns(&init, &[sized("safe_commit", MCP_WRITE_TOOL_TOKENS)]);
+        assert_eq!(over.len(), 1, "{over:#?}");
+        assert!(over[0].contains(&format!("budget of {MCP_WRITE_TOOL_TOKENS} tokens")));
     }
 
     fn status(main: bool) -> McpStatus {

@@ -1,6 +1,8 @@
 mod engine;
 mod input;
 mod messages;
+mod safe_commit;
+mod safe_commit_paths;
 mod server;
 mod snapshot;
 mod status;

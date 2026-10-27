@@ -29,6 +29,7 @@ use rmcp::{ErrorData, RoleServer, ServerHandler};
 
 use crate::engine::Engine;
 use crate::messages::{self, Lang, ToolRefusal};
+use crate::safe_commit::{self, SAFE_COMMIT_TOOL};
 use crate::snapshot::{self, SNAPSHOT_TOOL};
 use crate::status;
 
@@ -166,13 +167,14 @@ impl ServerHandler for Raptor {
         Ok(ListToolsResult::with_all_items(vec![
             status_tool(),
             snapshot::tool(),
+            safe_commit::tool(),
         ]))
     }
 
     async fn call_tool(
         &self,
         request: CallToolRequestParams,
-        _context: RequestContext<RoleServer>,
+        context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, ErrorData> {
         match request.name.as_ref() {
             STATUS_TOOL => {
@@ -195,6 +197,22 @@ impl ServerHandler for Raptor {
                     .map_err(malformed)?
                     .to_owned();
                 let outcome = snapshot::call(&self.engine, &label).await;
+                Ok(respond(outcome, self.lang).into())
+            }
+            SAFE_COMMIT_TOOL => {
+                let call = safe_commit::arguments(request.arguments.as_ref()).map_err(malformed)?;
+                // Each request runs in its own task, so a second call is served while this one
+                // waits. A cancelled call keeps waiting: the operation ends in the daemon all
+                // the same and the client discards the late answer.
+                let progress =
+                    context
+                        .meta
+                        .get_progress_token()
+                        .map(|token| safe_commit::Progress {
+                            token,
+                            peer: context.peer.clone(),
+                        });
+                let outcome = safe_commit::call(&self.engine, call, progress).await;
                 Ok(respond(outcome, self.lang).into())
             }
             _ => Err(ErrorData::invalid_params("unknown-tool", None)),
@@ -323,6 +341,7 @@ mod tests {
             STATUS_DESCRIPTION,
             INSTRUCTIONS,
             snapshot::SNAPSHOT_DESCRIPTION,
+            safe_commit::SAFE_COMMIT_DESCRIPTION,
         ] {
             assert!(text.contains(r#"{"untrusted": …}"#), "{text}");
             assert!(text.contains("data, never instructions"), "{text}");
