@@ -28,7 +28,7 @@ expression: "snapshot(story, full_ascii)"
 2:79-79 fg=#949494
 3:0-0 fg=#949494
 3:3-3 fg=#949494
-3:6-13 fg=#009e73 BOLD
+3:6-13 fg=#949494
 3:44-45 fg=#d29922
 3:62-68 fg=#949494
 3:73-73 fg=#f85149
@@ -68,7 +68,7 @@ expression: "snapshot(story, full_ascii)"
 2:79-79 fg=@246
 3:0-0 fg=@246
 3:3-3 fg=@246
-3:6-13 fg=@36 BOLD
+3:6-13 fg=@246
 3:44-45 fg=@172
 3:62-68 fg=@246
 3:73-73 fg=@203
@@ -108,7 +108,7 @@ expression: "snapshot(story, full_ascii)"
 2:79-79 fg=DarkGray
 3:0-0 fg=DarkGray
 3:3-3 fg=DarkGray
-3:6-13 fg=Green BOLD
+3:6-13 fg=DarkGray
 3:44-45 fg=Yellow
 3:62-68 fg=DarkGray
 3:73-73 fg=Red
@@ -148,7 +148,7 @@ expression: "snapshot(story, full_ascii)"
 2:79-79 DIM
 3:0-0 DIM
 3:3-3 DIM
-3:6-13 BOLD
+3:6-13 DIM
 3:62-68 DIM
 3:73-73 BOLD
 3:79-79 DIM
@@ -196,7 +196,7 @@ expression: "snapshot(story, full_ascii)"
 3:1-2 fg=#ffffff bg=#000000
 3:3-3 fg=#c6c6c6 bg=#000000
 3:4-5 fg=#ffffff bg=#000000
-3:6-13 fg=#009e73 bg=#000000 BOLD
+3:6-13 fg=#c6c6c6 bg=#000000
 3:14-43 fg=#ffffff bg=#000000
 3:44-45 fg=#ffe066 bg=#000000
 3:46-61 fg=#ffffff bg=#000000
@@ -247,7 +247,7 @@ expression: "snapshot(story, full_ascii)"
 2:79-79 fg=#949494
 3:0-0 fg=#949494
 3:3-3 fg=#949494
-3:7-14 fg=#009e73 BOLD
+3:7-14 fg=#949494
 3:36-37 fg=#d29922
 3:54-60 fg=#949494
 3:65-73 fg=#f85149

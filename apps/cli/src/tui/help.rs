@@ -7,6 +7,7 @@ use gitraptor_theme::{ColorToken, SymbolToken};
 
 use crate::model::{Model, Pick, SafeText};
 use crate::present::i18n::{HelpPanel, Lang, Legend, Text};
+use crate::tui::fleet_order;
 use crate::tui::keymap::{Action, BINDINGS, Binding, Key};
 use crate::tui::view::Say;
 use crate::tui::widgets::key_hints::{HelpGroup, HelpModel, KeyHint, LegendRow};
@@ -38,6 +39,24 @@ pub fn available(model: &Model) -> impl Iterator<Item = &'static Binding> + '_ {
         .filter(move |b| list || !b.action.is_list())
         .filter(move |b| asking || !b.action.is_answer())
         .filter(move |b| discovering || b.action != Action::Later)
+        .filter(move |b| b.action != Action::ShowEnded || context(model) == HelpPanel::Fleet)
+}
+
+/// The text of a binding's hint: the `f` one counts the worktrees that hide an ended session,
+/// and says "hide" while the filter is on.
+pub(crate) fn hint_text(model: &Model, binding: &Binding) -> Text<'static> {
+    match binding.action {
+        Action::ShowEnded if model.ui.show_ended => Text::KeyHideEnded,
+        Action::ShowEnded => Text::KeyShowEnded(
+            model
+                .engine
+                .repo
+                .as_ref()
+                .and_then(|r| r.data.as_ref())
+                .map_or(0, |r| fleet_order::hidden_count(r, model.now_ms)),
+        ),
+        _ => binding.hint,
+    }
 }
 
 /// The symbol, the color and the words of a state.
@@ -58,7 +77,7 @@ pub(crate) fn legend_row(legend: Legend, say: Say) -> LegendRow {
 pub(crate) fn help(model: &Model, say: Say) -> HelpModel {
     let (global, local): (Vec<_>, Vec<_>) = available(model).partition(|b| b.action.is_global());
     let entries = |bindings: Vec<&'static Binding>| -> Vec<KeyHint> {
-        bindings.into_iter().map(|b| entry(b, say)).collect()
+        bindings.into_iter().map(|b| entry(model, b, say)).collect()
     };
     let mut groups = Vec::new();
     if !local.is_empty() {
@@ -90,13 +109,16 @@ pub(crate) fn help(model: &Model, say: Say) -> HelpModel {
 }
 
 /// One action with all its keys, separated by a space (in Spanish `s` goes before `y`).
-fn entry(binding: &Binding, say: Say) -> KeyHint {
+fn entry(model: &Model, binding: &Binding, say: Say) -> KeyHint {
     let mut keys: Vec<Key> = binding.keys.to_vec();
     if binding.action == Action::Yes && say.lang == Lang::Es {
         keys.sort_by_key(|k| *k != Key::Char('s'));
     }
     let labels: Vec<String> = keys.iter().map(|k| k.label(say.set)).collect();
-    let hint = KeyHint::new(SafeText::text(&labels.join(" ")), say.safe(binding.hint));
+    let hint = KeyHint::new(
+        SafeText::text(&labels.join(" ")),
+        say.safe(hint_text(model, binding)),
+    );
     // Job control exists only on Unix: the help says so instead of hiding the key.
     if binding.action == Action::Suspend && !cfg!(unix) {
         hint.disabled(say.safe(Text::UnixOnly))

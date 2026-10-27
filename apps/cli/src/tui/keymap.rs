@@ -27,6 +27,8 @@ pub enum Action {
     Later,
     /// Open or close the key help.
     Help,
+    /// Also show the ended session of every worktree, or stop showing them.
+    ShowEnded,
 }
 
 /// A key as the table names it.
@@ -127,6 +129,11 @@ pub const BINDINGS: &[Binding] = &[
         action: Action::Help,
         keys: &[Key::Char('?')],
         hint: Text::KeyHelp,
+    },
+    Binding {
+        action: Action::ShowEnded,
+        keys: &[Key::Char('f')],
+        hint: Text::KeyShowEnded(0),
     },
 ];
 
@@ -242,6 +249,7 @@ mod tests {
             Action::No,
             Action::Later,
             Action::Help,
+            Action::ShowEnded,
         ];
         for action in actions {
             // No wildcard: a new action does not compile until it is listed here.
@@ -255,7 +263,8 @@ mod tests {
                 | Action::Yes
                 | Action::No
                 | Action::Later
-                | Action::Help => {}
+                | Action::Help
+                | Action::ShowEnded => {}
             }
             let binding = BINDINGS.iter().find(|b| b.action == action);
             assert!(

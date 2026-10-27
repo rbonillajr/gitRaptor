@@ -8,10 +8,10 @@ expression: snap
 ┃  ○  No agent · shop           main                                  ~0    ↑0 ↓0       –          ┃
 ┃  ●  Claude Code · feat-pagos  feat-pagos                            ~2    ↑3 ↓1       2 min ago  ┃
 ┃     └ • commit by Ana with Claude Code                                                           ┃
-┃  ○  No agent · feat-docs      feat-docs                             ~0    ↑1 ↓0       –          ┃
-┃     └ • commit by Ana                                                                            ┃
 ┃  ○  No agent · feat-api       feat-api                              ~0    ↑1 ↓0       –          ┃
 ┃     └ • ⚠  commit by Ana · run by Claude Code · no trailer                                       ┃
+┃  ○  No agent · feat-docs      feat-docs                             ~0    ↑1 ↓0       –          ┃
+┃     └ • commit by Ana                                                                            ┃
 ┃                                                                                                  ┃
 ┃                                                                                                  ┃
 ┃                                                                                                  ┃
@@ -74,8 +74,8 @@ expression: snap
 5:99-99 fg=#ffe066
 6:0-0 fg=#ffe066
 6:3-3 fg=#949494
-6:6-25 fg=#949494
-6:32-40 fg=#949494
+6:6-24 fg=#949494
+6:32-39 fg=#949494
 6:70-71 fg=#949494
 6:76-80 fg=#949494
 6:88-88 fg=#949494
@@ -83,12 +83,13 @@ expression: snap
 7:0-0 fg=#ffe066
 7:6-6 fg=#949494
 7:8-8 fg=#949494
-7:10-22 fg=#949494
+7:10-11 fg=#d29922
+7:13-59 fg=#949494
 7:99-99 fg=#ffe066
 8:0-0 fg=#ffe066
 8:3-3 fg=#949494
-8:6-24 fg=#949494
-8:32-39 fg=#949494
+8:6-25 fg=#949494
+8:32-40 fg=#949494
 8:70-71 fg=#949494
 8:76-80 fg=#949494
 8:88-88 fg=#949494
@@ -96,8 +97,7 @@ expression: snap
 9:0-0 fg=#ffe066
 9:6-6 fg=#949494
 9:8-8 fg=#949494
-9:10-11 fg=#d29922
-9:13-59 fg=#949494
+9:10-22 fg=#949494
 9:99-99 fg=#ffe066
 10:0-0 fg=#ffe066
 10:99-99 fg=#ffe066

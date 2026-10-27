@@ -43,7 +43,7 @@ expression: "snapshot(story, full_ascii)"
 3:79-79 fg=#ffe066
 4:0-0 fg=#ffe066
 4:3-3 fg=#949494
-4:6-13 fg=#009e73 BOLD
+4:6-13 fg=#949494
 4:44-45 fg=#d29922
 4:62-68 fg=#949494
 4:73-73 fg=#f85149
@@ -90,7 +90,7 @@ expression: "snapshot(story, full_ascii)"
 3:79-79 fg=@221
 4:0-0 fg=@221
 4:3-3 fg=@246
-4:6-13 fg=@36 BOLD
+4:6-13 fg=@246
 4:44-45 fg=@172
 4:62-68 fg=@246
 4:73-73 fg=@203
@@ -137,7 +137,7 @@ expression: "snapshot(story, full_ascii)"
 3:79-79 fg=LightYellow
 4:0-0 fg=LightYellow
 4:3-3 fg=DarkGray
-4:6-13 fg=Green BOLD
+4:6-13 fg=DarkGray
 4:44-45 fg=Yellow
 4:62-68 fg=DarkGray
 4:73-73 fg=Red
@@ -177,7 +177,7 @@ expression: "snapshot(story, full_ascii)"
 3:79-79 BOLD | REVERSED
 4:0-0 BOLD | REVERSED
 4:3-3 DIM
-4:6-13 BOLD
+4:6-13 DIM
 4:62-68 DIM
 4:73-73 BOLD
 4:79-79 BOLD | REVERSED
@@ -234,7 +234,7 @@ expression: "snapshot(story, full_ascii)"
 4:1-2 fg=#ffffff bg=#000000
 4:3-3 fg=#c6c6c6 bg=#000000
 4:4-5 fg=#ffffff bg=#000000
-4:6-13 fg=#009e73 bg=#000000 BOLD
+4:6-13 fg=#c6c6c6 bg=#000000
 4:14-43 fg=#ffffff bg=#000000
 4:44-45 fg=#ffe066 bg=#000000
 4:46-61 fg=#ffffff bg=#000000
@@ -300,7 +300,7 @@ expression: "snapshot(story, full_ascii)"
 3:79-79 fg=#ffe066
 4:0-0 fg=#ffe066
 4:3-3 fg=#949494
-4:7-14 fg=#009e73 BOLD
+4:7-14 fg=#949494
 4:36-37 fg=#d29922
 4:54-60 fg=#949494
 4:65-73 fg=#f85149
@@ -347,7 +347,7 @@ expression: "snapshot(story, full_ascii)"
 3:79-79 fg=@221
 4:0-0 fg=@221
 4:3-3 fg=@246
-4:7-14 fg=@36 BOLD
+4:7-14 fg=@246
 4:36-37 fg=@172
 4:54-60 fg=@246
 4:65-73 fg=@203
@@ -394,7 +394,7 @@ expression: "snapshot(story, full_ascii)"
 3:79-79 fg=LightYellow
 4:0-0 fg=LightYellow
 4:3-3 fg=DarkGray
-4:7-14 fg=Green BOLD
+4:7-14 fg=DarkGray
 4:36-37 fg=Yellow
 4:54-60 fg=DarkGray
 4:65-73 fg=Red
@@ -434,7 +434,7 @@ expression: "snapshot(story, full_ascii)"
 3:79-79 BOLD | REVERSED
 4:0-0 BOLD | REVERSED
 4:3-3 DIM
-4:7-14 BOLD
+4:7-14 DIM
 4:54-60 DIM
 4:65-73 BOLD
 4:79-79 BOLD | REVERSED
@@ -491,7 +491,7 @@ expression: "snapshot(story, full_ascii)"
 4:1-2 fg=#ffffff bg=#000000
 4:3-3 fg=#c6c6c6 bg=#000000
 4:4-6 fg=#ffffff bg=#000000
-4:7-14 fg=#009e73 bg=#000000 BOLD
+4:7-14 fg=#c6c6c6 bg=#000000
 4:15-35 fg=#ffffff bg=#000000
 4:36-37 fg=#ffe066 bg=#000000
 4:38-53 fg=#ffffff bg=#000000

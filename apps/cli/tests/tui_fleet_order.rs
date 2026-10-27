@@ -517,7 +517,7 @@ fn a_new_session_replaces_the_ended_one() {
         update(&mut model, session_event(2, &again));
         tick(&mut model, MON9 + 1_000);
         let old = block(&model, "feat-old");
-        assert!(old.contains("● claude-4 · wt-old"), "{lang:?}: {old}");
+        assert!(old.contains("●  claude-4 · wt-old"), "{lang:?}: {old}");
         let all = text(&model);
         assert!(!all.contains(two_hours), "{lang:?}\n{all}");
         assert!(!all.contains(last), "{lang:?}\n{all}");
@@ -637,7 +637,7 @@ fn nine_agents_the_ninth_shares_the_first_color_and_keeps_its_name() {
     assert_ne!(fg_of(&model, "claude-1"), fg_of(&model, "claude-2"));
     // Its name and its state symbol are on its row.
     let ninth = block(&model, "br-9");
-    assert!(ninth.contains("● claude-9"), "{ninth}");
+    assert!(ninth.contains("●  claude-9"), "{ninth}");
 }
 
 // ----------------------------------------------------------- CKP002-LAGGED

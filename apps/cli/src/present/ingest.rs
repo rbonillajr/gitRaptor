@@ -219,6 +219,9 @@ pub fn session(view: &SessionView) -> SessionRow {
         name,
         state: view.state,
         state_since_ms: view.state_since_utc_ms,
+        started_ms: view.started_utc_ms,
+        ended_ms: view.ended_utc_ms,
+        end_cause: view.end_cause,
     }
 }
 

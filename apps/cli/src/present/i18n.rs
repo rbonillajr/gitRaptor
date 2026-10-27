@@ -11,6 +11,7 @@ use gitraptor_api::rpc::{ErrorCode, InvalidReason, ScopeRefusal};
 
 use crate::model::{ConnState, Notice, ObserveFailure};
 use crate::present::SafeText;
+use crate::tui::fleet_order::EndKind;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Lang {
@@ -281,6 +282,24 @@ pub enum Text<'a> {
     FleetTitleBaseNotFound {
         base: &'a SafeText,
     },
+    // Fleet order and ended sessions
+    /// The lead of the sessions line of a shared worktree.
+    Shared,
+    /// When a session ended, with its age in milliseconds.
+    Ended(EndKind, i64),
+    /// An ended session on the sessions line: its name and its [`Text::Ended`].
+    AgentEnded {
+        agent: &'a str,
+        end: &'a str,
+    },
+    /// A row without an agent after the ended session left the window.
+    LastAgent {
+        agent: &'a str,
+        end: &'a str,
+    },
+    /// The `f` hint, with how many worktrees hide an ended session.
+    KeyShowEnded(usize),
+    KeyHideEnded,
 }
 
 /// The panel the help describes: what receives the keys.
@@ -576,6 +595,17 @@ fn en(text: Text<'_>) -> String {
         Text::NoReposMessage => "Add the first one → `raptor repo add <path>`".into(),
         Text::Reconciling => "reconciling: provisional data".into(),
         Text::Dormant => "asleep: data may lag".into(),
+        // Fleet order and ended sessions.
+        Text::Shared => "shared with".into(),
+        Text::Ended(EndKind::Published, ms) => format!("ended {}", en(Text::Ago(ms))),
+        Text::Ended(EndKind::Unobserved, ms) => {
+            format!("ended unobserved; detected {}", en(Text::Ago(ms)))
+        }
+        Text::Ended(EndKind::NotAvailable, _) => "end time not available".into(),
+        Text::AgentEnded { agent, end } => format!("{agent} ({end})"),
+        Text::LastAgent { agent, end } => format!("last agent: {agent} ({end})"),
+        Text::KeyShowEnded(n) => format!("show ended ({n})"),
+        Text::KeyHideEnded => "hide ended".into(),
         Text::FleetTitleBaseNotFound { base } => {
             format!("Fleet · ↑↓ not computable: {base} not found")
         }
@@ -836,6 +866,17 @@ fn es(text: Text<'_>) -> String {
         Text::NoReposMessage => "Añade el primero → `raptor repo add <ruta>`".into(),
         Text::Reconciling => "reconciliando: datos provisionales".into(),
         Text::Dormant => "dormido: datos con retraso".into(),
+        // Fleet order and ended sessions.
+        Text::Shared => "compartido con".into(),
+        Text::Ended(EndKind::Published, ms) => format!("terminó {}", es(Text::Ago(ms))),
+        Text::Ended(EndKind::Unobserved, ms) => {
+            format!("terminó sin observar; detectado {}", es(Text::Ago(ms)))
+        }
+        Text::Ended(EndKind::NotAvailable, _) => "hora de fin no disponible".into(),
+        Text::AgentEnded { agent, end } => format!("{agent} ({end})"),
+        Text::LastAgent { agent, end } => format!("último agente: {agent} ({end})"),
+        Text::KeyShowEnded(n) => format!("ver terminadas ({n})"),
+        Text::KeyHideEnded => "ocultar terminadas".into(),
         Text::FleetTitleBaseNotFound { base } => {
             format!("Flota · ↑↓ no calculable: {base} no encontrada")
         }
@@ -1123,6 +1164,21 @@ pub(crate) fn every_text() -> Vec<Text<'static>> {
         Text::Reconciling,
         Text::Dormant,
         Text::FleetTitleBaseNotFound { base: name },
+        // Fleet order and ended sessions
+        Text::Shared,
+        Text::Ended(EndKind::Published, 7_200_000),
+        Text::Ended(EndKind::Unobserved, 7_200_000),
+        Text::Ended(EndKind::NotAvailable, 0),
+        Text::AgentEnded {
+            agent: "claude-1",
+            end: "ended 2 h ago",
+        },
+        Text::LastAgent {
+            agent: "claude-1",
+            end: "ended 1 d ago",
+        },
+        Text::KeyShowEnded(3),
+        Text::KeyHideEnded,
     ];
     for reason in [
         UnavailableReason::Missing,
@@ -1297,7 +1353,14 @@ fn sampled(text: &Text<'_>) {
         | Text::NoReposMessage
         | Text::Reconciling
         | Text::Dormant
-        | Text::FleetTitleBaseNotFound { .. } => {}
+        | Text::FleetTitleBaseNotFound { .. }
+        // Fleet order and ended sessions
+        | Text::Shared
+        | Text::Ended(..)
+        | Text::AgentEnded { .. }
+        | Text::LastAgent { .. }
+        | Text::KeyShowEnded(_)
+        | Text::KeyHideEnded => {}
     }
 }
 

@@ -20,12 +20,14 @@ use crate::model::{
 };
 use crate::present::i18n::{Fetched, Lang, Legend, Text};
 use crate::tui::engine_state::{self, HeaderNotice};
+use crate::tui::fleet_order::{self, Group, Shown};
 use crate::tui::help;
 use crate::tui::keymap::{Action, BINDINGS, Key};
 use crate::tui::style::{Glyphs, Styles, fill, follow, modal_area};
 use crate::tui::widgets::Component;
 use crate::tui::widgets::agent_list::{
-    AgentColumns, AgentListModel, AgentRowModel, AgentState, Branch, CommitLine, Sync,
+    AgentColumns, AgentListModel, AgentRowModel, AgentState, Branch, CommitLine, SessionLine,
+    SessionMark, Sync,
 };
 use crate::tui::widgets::key_hints::{KeyHint, KeyHintsModel, LegendRow};
 use crate::tui::widgets::layout::{self, BodyPlan, Connection, StatusBarModel, TooSmallModel};
@@ -78,7 +80,7 @@ pub fn view(model: &Model, frame: &mut Frame) {
                 min_width: layout::MIN_WIDTH,
                 min_height: layout::MIN_HEIGHT,
             }),
-            quit: hint(Action::Quit, say)
+            quit: hint(model, Action::Quit, say)
                 .unwrap_or_else(|| KeyHint::new(SafeText::text("q"), say.safe(Text::KeyQuit))),
         };
         frame.render_widget(themed(&small, &styles), area);
@@ -395,15 +397,13 @@ pub(crate) fn picker(model: &Model, say: Say, height: u16) -> Option<RepoPickerM
 
 fn rows(repo: &RepoView, model: &Model, styles: &Styles) -> Vec<AgentRowModel> {
     let say = Say::new(model, styles);
-    let ordered = repo
+    let mut rows: Vec<(Group, &WorktreeRow, AgentRowModel)> = repo
         .worktrees
         .iter()
-        .filter(|w| w.main)
-        .chain(repo.worktrees.iter().filter(|w| !w.main));
-    let mut agents = 0;
-    ordered
         .map(|w| {
-            let mut row = row(repo, w, agents, say, styles);
+            let shown =
+                fleet_order::shown(&repo.sessions, w.key, model.now_ms, model.ui.show_ended);
+            let mut row = row(repo, w, &shown, model, say, styles);
             // With `scope.activity` the engine seeds what the store knows (ADR-GRP-013 § 6), so
             // an absent value is "nothing yet", painted as the set's unknown glyph.
             if model.engine.activity {
@@ -412,30 +412,19 @@ fn rows(repo: &RepoView, model: &Model, styles: &Styles) -> Vec<AgentRowModel> {
                     None => SafeText::text(styles.glyphs.unknown),
                 };
             }
-            if matches!(row.state, AgentState::Active | AgentState::Idle) {
-                agents += 1;
-            }
-            row
+            // A system that does not detect sessions has no lead: "not available" goes with
+            // the rows without an agent.
+            let lead = shown
+                .sessions
+                .first()
+                .filter(|_| repo.detection == Some(true))
+                .map(|s| s.state);
+            let group = fleet_order::group(w.main, row.conflict || row.blocked, lead);
+            (group, w, row)
         })
-        .collect()
-}
-
-/// The present sessions of a worktree, the one to show first: Active, then Inactive, then the
-/// latest state change, then the id (a fixed order, Arquitecto 2026-10-06).
-fn present<'r>(repo: &'r RepoView, worktree: &WorktreeRow) -> Vec<&'r SessionRow> {
-    let mut sessions: Vec<&SessionRow> = repo
-        .sessions
-        .iter()
-        .filter(|s| s.worktree == worktree.key && s.state != SessionStateView::Ended)
         .collect();
-    sessions.sort_by(|a, b| {
-        let rank = |s: &SessionRow| u8::from(s.state != SessionStateView::Active);
-        rank(a)
-            .cmp(&rank(b))
-            .then(b.state_since_ms.cmp(&a.state_since_ms))
-            .then(a.session_id.cmp(&b.session_id))
-    });
-    sessions
+    rows.sort_by(|a, b| fleet_order::order_key(a.0, a.1).cmp(&fleet_order::order_key(b.0, b.1)));
+    rows.into_iter().map(|(_, _, row)| row).collect()
 }
 
 fn agent_name(session: &SessionRow, say: Say) -> String {
@@ -470,14 +459,69 @@ fn commit_line(commit: &LastCommit, say: Say) -> CommitLine {
     }
 }
 
+/// "ended 2 h ago", from what the engine published or detected.
+fn ended_text(session: &SessionRow, model: &Model, say: Say) -> Option<String> {
+    let end = fleet_order::ended_at(session)?;
+    Some(say.text(Text::Ended(
+        end.kind,
+        model.now_ms.saturating_sub(end.at_ms),
+    )))
+}
+
+/// The line under a row with several sessions, or with only an ended one: who else is there.
+fn sessions_line(shown: &Shown<'_>, model: &Model, say: Say) -> Option<SessionLine> {
+    let sessions = &shown.sessions;
+    if sessions.len() > 1 {
+        let marks = sessions[1..]
+            .iter()
+            .map(|s| {
+                let agent = agent_name(s, say);
+                match ended_text(s, model, say) {
+                    Some(end) => SessionMark {
+                        state: AgentState::Done,
+                        color_index: None,
+                        text: say.safe(Text::AgentEnded {
+                            agent: &agent,
+                            end: &end,
+                        }),
+                    },
+                    None => SessionMark {
+                        state: match s.state {
+                            SessionStateView::Active => AgentState::Active,
+                            _ => AgentState::Idle,
+                        },
+                        color_index: Some(model.ui.colors.index(&s.session_id).unwrap_or(0)),
+                        text: SafeText::name(&agent),
+                    },
+                }
+            })
+            .collect();
+        let lead = if fleet_order::is_shared(shown) {
+            say.safe(Text::Shared)
+        } else {
+            SafeText::default()
+        };
+        return Some(SessionLine { lead, marks });
+    }
+    let only = sessions.first()?;
+    let end = ended_text(only, model, say)?;
+    Some(SessionLine {
+        lead: SafeText::text(&end),
+        marks: Vec::new(),
+    })
+}
+
 fn row(
     repo: &RepoView,
     worktree: &WorktreeRow,
-    color_index: usize,
+    shown: &Shown<'_>,
+    model: &Model,
     say: Say,
     styles: &Styles,
 ) -> AgentRowModel {
-    let sessions = present(repo, worktree);
+    let sessions = &shown.sessions;
+    let mut color_index = 0;
+    let mut line = None;
     let (name, state) = match (repo.detection, sessions.first()) {
         (Some(true), Some(first)) => {
             let name = say.text(Text::AgentInWorktree {
@@ -490,16 +534,31 @@ fn row(
             };
             let state = match first.state {
                 SessionStateView::Active => AgentState::Active,
-                _ => AgentState::Idle,
+                SessionStateView::Inactive => AgentState::Idle,
+                SessionStateView::Ended => AgentState::Done,
             };
+            color_index = model.ui.colors.index(&first.session_id).unwrap_or(0);
+            line = sessions_line(shown, model, say);
             (SafeText::name(&name), state)
         }
-        (Some(true), None) => (
-            say.safe(Text::NoAgent {
-                worktree: worktree.name.as_str(),
-            }),
-            AgentState::NoAgent,
-        ),
+        (Some(true), None) => {
+            line = shown.last_agent.and_then(|last| {
+                let end = ended_text(last, model, say)?;
+                Some(SessionLine {
+                    lead: say.safe(Text::LastAgent {
+                        agent: &agent_name(last, say),
+                        end: &end,
+                    }),
+                    marks: Vec::new(),
+                })
+            });
+            (
+                say.safe(Text::NoAgent {
+                    worktree: worktree.name.as_str(),
+                }),
+                AgentState::NoAgent,
+            )
+        }
         // Detection unknown or not available on this system: never "no agent".
         _ => (say.safe(Text::AgentNotAvailable), AgentState::Unknown),
     };
@@ -519,6 +578,7 @@ fn row(
         blocked: false,
         operation: None,
         commit: repo.last_commit(worktree.key).map(|c| commit_line(c, say)),
+        sessions: line,
     };
     match &worktree.state {
         WorktreeState::Unavailable(reason) => {
@@ -571,15 +631,23 @@ fn key_hints(model: &Model, say: Say) -> KeyHintsModel {
     KeyHintsModel {
         hints: help::available(model)
             .filter(|b| b.action.is_hinted())
-            .filter_map(|b| hint(b.action, say))
+            .filter(|b| b.action != Action::ShowEnded || show_ended_hint(model))
+            .filter_map(|b| hint(model, b.action, say))
             .collect(),
-        help: hint(Action::Help, say)
+        help: hint(model, Action::Help, say)
             .unwrap_or_else(|| KeyHint::new(SafeText::text("?"), say.safe(Text::KeyHelp))),
         legend: Vec::new(),
     }
 }
 
-fn hint(action: Action, say: Say) -> Option<KeyHint> {
+/// The `f` hint shows in the bar only when it would change the screen: an ended session is
+/// hidden somewhere, or the filter is on.
+fn show_ended_hint(model: &Model) -> bool {
+    model.ui.show_ended
+        || repo(model).is_some_and(|r| fleet_order::hidden_count(r, model.now_ms) > 0)
+}
+
+fn hint(model: &Model, action: Action, say: Say) -> Option<KeyHint> {
     let binding = BINDINGS.iter().find(|b| b.action == action)?;
     // "[s/N]" in Spanish: the yes key shown is the one of the language.
     let key = match (action, say.lang) {
@@ -594,7 +662,7 @@ fn hint(action: Action, say: Say) -> Option<KeyHint> {
     };
     Some(KeyHint::new(
         SafeText::text(&key.label(say.set)),
-        say.safe(binding.hint),
+        say.safe(help::hint_text(model, binding)),
     ))
 }
 
