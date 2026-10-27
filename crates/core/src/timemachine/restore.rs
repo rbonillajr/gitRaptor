@@ -877,6 +877,7 @@ pub fn restore_to(
         Err(ProtectedError::Step {
             operation_id,
             message,
+            ..
         }) => match step.result {
             Some(Err(ApplyError::Rejected(refusals))) => Err(RestoreError::Rejected {
                 reason: refusals

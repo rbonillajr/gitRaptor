@@ -906,6 +906,7 @@ pub fn undo_last(
         Err(ProtectedError::Step {
             operation_id,
             message,
+            ..
         }) => match step.result {
             Some(Err(ApplyError::Rejected(refusals))) => Err(UndoError::Rejected {
                 reason: refusals

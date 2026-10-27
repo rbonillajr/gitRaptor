@@ -86,6 +86,7 @@ impl ProtectedStep for Recorded {
             changed_refs: Vec::new(),
             outcome: None,
             git_output: None,
+            new_commit: None,
         })
     }
 }

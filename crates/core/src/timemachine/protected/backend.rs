@@ -46,6 +46,14 @@ pub trait OperationCatalog: Send + Sync {
     fn armed(&self) -> &[OperationId] {
         &[]
     }
+    /// This catalog with the system Git of `commit`; `None` when it has no `commit` arm.
+    fn with_commit_env(
+        &self,
+        env: crate::executor::ops::CommitEnv,
+    ) -> Option<Arc<dyn OperationCatalog>> {
+        let _ = env;
+        None
+    }
 }
 
 /// A layer over the production snapshotter. Tests inject faults with it
@@ -295,7 +303,16 @@ pub struct DaemonBackend {
     repos: Arc<TmRepos>,
     wiring: OperationsWiring,
     allowlist: Arc<McpRepos>,
+    /// Who else is in a worktree; `None`: unknown, so every worktree counts as shared.
+    presence: Option<Presence>,
 }
+
+/// Live session ids of other agents in the worktree at a canonical root; `None` when unreadable.
+pub type Presence = Arc<dyn Fn(&Path) -> Option<Vec<String>> + Send + Sync>;
+
+/// How long a session without a process identity counts as alive after the detector last saw
+/// it (its start or its latest `session-*` event).
+pub const PRESENCE_TTL: Duration = Duration::from_secs(600);
 
 impl DaemonBackend {
     pub fn new(repos: Arc<TmRepos>, wiring: OperationsWiring, allowlist: Arc<McpRepos>) -> Self {
@@ -303,8 +320,76 @@ impl DaemonBackend {
             repos,
             wiring,
             allowlist,
+            presence: None,
         }
     }
+
+    /// The sessions of other agents in a worktree, for the shared-worktree rule of `commit`.
+    #[must_use]
+    pub fn with_presence(mut self, presence: Presence) -> Self {
+        self.presence = Some(presence);
+        self
+    }
+}
+
+/// The presence the daemon reads from its profile: the open agent sessions of the worktree in
+/// the store of the observed repo that registers it, alive by [`PRESENCE_TTL`]. The detector
+/// keeps no process identity for its sessions, so their life is when it last saw them.
+pub fn profile_presence(dirs: ProfileDirs, repos: Arc<TmRepos>) -> Presence {
+    Arc::new(move |worktree: &Path| {
+        let commons: Vec<(String, PathBuf)> = repos
+            .lock()
+            .iter()
+            .map(|r| (r.repo_id.clone(), r.common_dir.clone()))
+            .collect();
+        let (repo_id, _) = commons.into_iter().find(|(_, common)| {
+            observe::registered_worktrees(common)
+                .is_ok_and(|list| list.iter().any(|(root, _)| root == worktree))
+        })?;
+        let db = dirs.repos_dir().join(format!("{repo_id}.sqlite"));
+        live_in_store(&db, worktree, crate::daemon::now_ms())
+    })
+}
+
+/// Open sessions of `worktree` in the repo database at `db` seen within [`PRESENCE_TTL`] of
+/// `now_ms`. Read only; `None` when it cannot be read.
+fn live_in_store(db: &Path, worktree: &Path, now_ms: i64) -> Option<Vec<String>> {
+    use rusqlite::{Connection, OpenFlags};
+    if !db.is_file() {
+        return None;
+    }
+    let conn = Connection::open_with_flags(
+        db,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .ok()?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT s.session_id, s.started_ms,
+                 (SELECT MAX(e.observed_utc_ms) FROM events e WHERE e.session_id = s.session_id)
+             FROM sessions s JOIN worktrees w ON w.id = s.worktree_id
+             WHERE w.canonical_path = ?1 AND s.end_cause IS NULL",
+        )
+        .ok()?;
+    let ttl = i64::try_from(PRESENCE_TTL.as_millis()).unwrap_or(i64::MAX);
+    let rows = stmt
+        .query_map([worktree.to_str()?], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, Option<i64>>(2)?,
+            ))
+        })
+        .ok()?;
+    let mut live = Vec::new();
+    for row in rows {
+        let (id, started, seen) = row.ok()?;
+        let last = seen.map_or(started, |s| s.max(started));
+        if now_ms.saturating_sub(last) <= ttl {
+            live.push(id);
+        }
+    }
+    Some(live)
 }
 
 impl ProtectedBackend for DaemonBackend {
@@ -354,6 +439,14 @@ impl ProtectedBackend for DaemonBackend {
 
     fn allowlist(&self) -> &dyn McpAllowlist {
         self.allowlist.as_ref()
+    }
+
+    /// Fails closed: an unknown or unreadable presence is a shared worktree.
+    fn live_sessions(&self, repo: &RepoHandle) -> Result<Vec<String>, RejectReason> {
+        self.presence
+            .as_ref()
+            .and_then(|presence| presence(&repo.worktree))
+            .ok_or(RejectReason::SharedWorktreeNeedsPaths)
     }
 }
 
@@ -433,5 +526,63 @@ mod tests {
         // The applier's key (`apply/mod.rs`): the opened store's path.
         assert_eq!(before, store.path().display().to_string());
         assert_eq!(repos.lock_key(repo_id), before);
+    }
+
+    /// A repo database with the tables the presence reads: an open session seen a minute ago,
+    /// an ended one, an open one not seen for longer than the TTL (its agent died), and one of
+    /// another worktree.
+    fn sessions_db(dir: &Path, now: i64) -> PathBuf {
+        let db = dir.join("r.sqlite");
+        let conn = rusqlite::Connection::open(&db).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE worktrees (id INTEGER PRIMARY KEY, canonical_path TEXT);
+             CREATE TABLE sessions (session_id TEXT, worktree_id INTEGER, started_ms INTEGER,
+                 end_cause TEXT);
+             CREATE TABLE events (session_id TEXT, observed_utc_ms INTEGER);
+             INSERT INTO worktrees VALUES (1, '/w/a'), (2, '/w/b');",
+        )
+        .unwrap();
+        let old = now - 2 * i64::try_from(PRESENCE_TTL.as_millis()).unwrap();
+        for (id, wt, started, end) in [
+            ("live", 1, old, None),
+            ("ended", 1, now, Some("process-gone")),
+            ("stale", 1, old, None),
+            ("elsewhere", 2, now, None),
+        ] {
+            conn.execute(
+                "INSERT INTO sessions VALUES (?1, ?2, ?3, ?4)",
+                rusqlite::params![id, wt, started, end],
+            )
+            .unwrap();
+        }
+        conn.execute(
+            "INSERT INTO events VALUES ('live', ?1), ('stale', ?2)",
+            rusqlite::params![now - 60_000, old],
+        )
+        .unwrap();
+        db
+    }
+
+    #[test]
+    fn the_profile_presence_counts_only_open_sessions_seen_within_the_ttl() {
+        let tmp = tempfile::tempdir().unwrap();
+        let now = 10_000_000_000;
+        let db = sessions_db(tmp.path(), now);
+        assert_eq!(
+            live_in_store(&db, Path::new("/w/a"), now),
+            Some(vec!["live".to_owned()]),
+            "an ended session and one not seen within the TTL do not count"
+        );
+        assert_eq!(live_in_store(&db, Path::new("/w/c"), now), Some(Vec::new()));
+    }
+
+    #[test]
+    fn an_unreadable_presence_is_none() {
+        let tmp = tempfile::tempdir().unwrap();
+        let missing = tmp.path().join("missing.sqlite");
+        assert_eq!(live_in_store(&missing, Path::new("/w/a"), 0), None);
+        let bad = tmp.path().join("bad.sqlite");
+        std::fs::write(&bad, b"not a database").unwrap();
+        assert_eq!(live_in_store(&bad, Path::new("/w/a"), 0), None);
     }
 }

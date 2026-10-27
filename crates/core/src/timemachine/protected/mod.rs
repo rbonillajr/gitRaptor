@@ -217,18 +217,58 @@ pub struct StepOutput {
     pub outcome: Option<gitraptor_api::catalog::OperationOutcome>,
     /// Git's output, sanitized by the client; only layer `cockpit` gets it.
     pub git_output: Option<String>,
+    /// The commit the step made, read under the repo's lock (`commit` only).
+    pub new_commit: Option<NewCommit>,
+}
+
+/// The commit a step made, read under the repo's lock. Paths are repo text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewCommit {
+    /// Full hex of the new commit.
+    pub oid: String,
+    /// Its paths against its parent (or the empty tree), at most the reported maximum.
+    pub paths: Vec<String>,
+    /// Every path of the commit, before the cut.
+    pub total: usize,
+}
+
+/// How a failed step left the repo.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum StepFailure {
+    /// It may have changed something: the prior undoes it.
+    #[default]
+    Changed,
+    /// Nothing changed (the branch tip did not move and the index is as it was).
+    Unchanged,
+    /// The time limit interrupted it before anything changed.
+    TimeLimit,
 }
 
 /// Why a step failed or refused to start.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StepError {
     pub message: String,
+    pub failure: StepFailure,
 }
 
 impl StepError {
+    /// A failure that may have changed the repo.
     pub fn new(message: impl Into<String>) -> Self {
         Self {
             message: message.into(),
+            failure: StepFailure::Changed,
+        }
+    }
+
+    /// A failure that left the repo as it was: `stop` is `Unchanged` or `TimeLimit`.
+    pub fn unchanged(stop: StepFailure) -> Self {
+        let message = match stop {
+            StepFailure::TimeLimit => "the time limit stopped it before it changed anything",
+            _ => "it did not change anything",
+        };
+        Self {
+            message: message.to_owned(),
+            failure: stop,
         }
     }
 }
@@ -510,6 +550,8 @@ pub enum ProtectedError {
     Step {
         operation_id: String,
         message: String,
+        /// How the step left the repo.
+        failure: StepFailure,
     },
 }
 
@@ -711,10 +753,12 @@ impl ProtectedOperation<'_> {
             (Ok(_), Err(e)) => Err(ProtectedError::Step {
                 operation_id,
                 message: format!("oplog: {e}"),
+                failure: StepFailure::Changed,
             }),
             (Err(e), _) => Err(ProtectedError::Step {
                 operation_id,
                 message: e.message,
+                failure: e.failure,
             }),
         }
     }

@@ -483,12 +483,37 @@ pub fn decide_all(
     let mut authorship_policy = None;
     let mut ignored = Vec::new();
     for (i, op) in ops.iter().enumerate() {
+        // The `pre-commit` stage of a commit plan applies the permission of `commit`, as the
+        // hook's `pre-commit` does: the decision that counts is the plan's, and the hooks under
+        // it reuse the bound decision without evaluating again.
+        let commit_permission = input.rules.authorship
+            && matches!(
+                op,
+                Operation::Commit {
+                    stage: CommitStage::PreCommit
+                }
+            );
+        let staged;
+        let input = if commit_permission && !input.rules.permissions {
+            staged = DecideInput {
+                rules: RuleSet {
+                    permissions: true,
+                    ..input.rules
+                },
+                ..input.clone()
+            };
+            &staged
+        } else {
+            input
+        };
         let (evaluation, policy, relaxed) =
             evaluate_op(registry, input, op, preset.get(i), &Chain::default());
         let Some(evaluation) = evaluation else {
             return plain(system_deny(Rule::InternalError));
         };
         notices.extend(evaluation.notices.iter().cloned());
+        // `add` keeps one copy of a reason: a rule both stages raise (the authorship of
+        // `human-author`) is named once.
         for reason in evaluation.reasons {
             total.add(evaluation.effect, reason);
         }

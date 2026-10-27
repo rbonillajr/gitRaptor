@@ -30,14 +30,21 @@ fn armed(vars: &[(&str, &str)]) -> Vec<OperationId> {
 
 #[test]
 fn production_wires_the_engine_and_no_real_governed_arm() {
+    // A governed arm (`commit`) is served only because the real engine decides.
     for op in ARMS {
-        assert!(entry(*op).governed.is_none(), "{op:?} is governed");
+        assert!(
+            entry(*op).governed.is_none() || *op == OperationId::Commit,
+            "{op:?} is governed"
+        );
     }
     let wiring = OperationsWiring::production_from(&env(&[]));
     // The real engine decides; `NoGuardrails` does not.
     assert!(wiring.gate.decides());
     assert!(!NoGuardrails.decides());
-    assert_eq!(wiring.catalog_armed(), [OperationId::Snapshot]);
+    assert_eq!(
+        wiring.catalog_armed(),
+        [OperationId::Commit, OperationId::Snapshot]
+    );
 }
 
 #[test]
@@ -51,7 +58,11 @@ fn test_arms_are_inert_without_the_variable() {
         vec![arms, ("GITRAPTOR_PROFILE_DIR", "")],
         vec![("GITRAPTOR_TEST_EXECUTOR_ARMS", "0"), profile],
     ] {
-        assert_eq!(armed(&vars), [OperationId::Snapshot], "{vars:?}");
+        assert_eq!(
+            armed(&vars),
+            [OperationId::Commit, OperationId::Snapshot],
+            "{vars:?}"
+        );
     }
 }
 

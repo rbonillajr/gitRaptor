@@ -24,7 +24,6 @@ use crate::timemachine::protected::{
 
 /// The operations the test arms serve.
 pub(super) const TEST_ARMS: &[OperationId] = &[
-    OperationId::Commit,
     OperationId::MergeIntoBase,
     OperationId::CreateWorktree,
     OperationId::DiscardWorktree,
@@ -122,27 +121,6 @@ pub(super) fn plan_op(
             branch: full(&branch()?),
             tip: head()?,
         },
-        (OperationId::Commit, OperationArgs::Commit(a)) => {
-            let paths = match &a.paths {
-                Some(paths) => paths.clone(),
-                None => reader(&facts.root)?
-                    .status()
-                    .map_err(|_| rejected())?
-                    .staged
-                    .into_iter()
-                    .map(|c| c.path)
-                    .collect(),
-            };
-            PlanShape::Commit {
-                branch: full(&branch()?),
-                old: head()?,
-                paths,
-                authorship: crate::guardrails::plan_gate::commit_facts(
-                    &repo.common_dir,
-                    &a.message,
-                ),
-            }
-        }
         _ => return Err(PlanError::NotImplemented),
     };
     Ok(plan(shape))
@@ -338,21 +316,6 @@ impl ProtectedStep for TestStep {
                     old: oid(tip)?,
                 };
                 if !launch.run(ctx, &delete, None, None, &[])? {
-                    return failed();
-                }
-            }
-            (PlanShape::Commit { .. }, OperationArgs::Commit(a)) => {
-                let op = match &a.paths {
-                    Some(paths) => UserOp::CommitPaths {
-                        paths: paths.clone(),
-                    },
-                    None => UserOp::CommitStaged,
-                };
-                let in_worktree = Launch {
-                    git_dir: worktree_git_dir(&wt),
-                    ..launch
-                };
-                if !in_worktree.run(ctx, &op, Some(&wt), Some(&a.message), &[])? {
                     return failed();
                 }
             }
