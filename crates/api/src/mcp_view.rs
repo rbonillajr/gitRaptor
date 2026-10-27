@@ -19,7 +19,7 @@ use serde_json::Value;
 use crate::Actor;
 use crate::catalog::SnapshotRunResult;
 use crate::methods::{McpHere, McpPage, McpRepo, McpStatus, McpStatusAction};
-use crate::untrusted::{UntrustedName, sanitize};
+use crate::untrusted::{Untrusted, UntrustedName, sanitize};
 
 /// Most bytes of each part of a tool result (structured and text), measured
 /// after escaping (§ 6).
@@ -60,7 +60,7 @@ pub const MCP_WRITE_TIME_LIMIT: Duration = Duration::from_secs(30);
 
 /// Why a tool call gives no data: stable codes, in English. Adding one is
 /// compatible; removing or changing one is a major change of the contract.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum McpToolError {
     /// The repo is observed but the developer did not enable it.
@@ -106,10 +106,34 @@ pub enum McpToolError {
     /// Guardrails asks for the developer's confirmation; the decision is the
     /// developer's. No params.
     ConfirmationRequired,
+    /// HEAD is detached: a commit needs a branch.
+    DetachedHead,
+    /// Nothing staged, or no change in the named paths.
+    NothingToCommit,
+    /// A named path is not in the worktree; `params.path` is untrusted.
+    PathNotFound,
+    /// A repo rule denied the commit: `params.rules` and `params.decision_id`.
+    PolicyDenied,
+    /// The prior snapshot failed and nothing ran: `params.operation_id`.
+    Aborted,
+    /// Git did not commit and nothing changed: `params.operation_id`, `params.reason`.
+    FailedUnchanged,
+    /// The operation failed and left changes: `params.operation_id`.
+    FailedChanged,
+    /// A path is not valid; `params.path` is untrusted.
+    InvalidPath,
+    /// A path leaves the worktree; `params.path` is untrusted.
+    PathOutsideWorktree,
+    /// More paths than allowed: `params.max`.
+    TooManyPaths,
+    /// A path is ignored by Git and is never added; `params.path` is untrusted.
+    PathIgnored,
+    /// Another agent session is in the worktree: name the paths.
+    OtherSessionPresent,
 }
 
 impl McpToolError {
-    pub const ALL: [Self; 21] = [
+    pub const ALL: [Self; 33] = [
         Self::RepoNotEnabled,
         Self::NotInObservedWorktree,
         Self::RepoUnavailable,
@@ -131,6 +155,18 @@ impl McpToolError {
         Self::WorktreeUntrusted,
         Self::InvalidCursor,
         Self::ConfirmationRequired,
+        Self::DetachedHead,
+        Self::NothingToCommit,
+        Self::PathNotFound,
+        Self::PolicyDenied,
+        Self::Aborted,
+        Self::FailedUnchanged,
+        Self::FailedChanged,
+        Self::InvalidPath,
+        Self::PathOutsideWorktree,
+        Self::TooManyPaths,
+        Self::PathIgnored,
+        Self::OtherSessionPresent,
     ];
 
     pub const fn as_str(self) -> &'static str {
@@ -156,6 +192,18 @@ impl McpToolError {
             Self::WorktreeUntrusted => "worktree-untrusted",
             Self::InvalidCursor => "invalid-cursor",
             Self::ConfirmationRequired => "confirmation-required",
+            Self::DetachedHead => "detached-head",
+            Self::NothingToCommit => "nothing-to-commit",
+            Self::PathNotFound => "path-not-found",
+            Self::PolicyDenied => "policy-denied",
+            Self::Aborted => "aborted",
+            Self::FailedUnchanged => "failed-unchanged",
+            Self::FailedChanged => "failed-changed",
+            Self::InvalidPath => "invalid-path",
+            Self::PathOutsideWorktree => "path-outside-worktree",
+            Self::TooManyPaths => "too-many-paths",
+            Self::PathIgnored => "path-ignored",
+            Self::OtherSessionPresent => "other-session-present",
         }
     }
 }
@@ -197,6 +245,41 @@ pub const MCP_PATHS_PAGE: usize = 32;
 
 /// Present sessions listed per worktree.
 pub const MCP_MAX_SESSIONS: usize = 8;
+
+/// Longest wait of a `safe_commit` in the repo's write queue, then `queue-full`
+/// (⚠️ ASSUMPTION).
+pub const MCP_QUEUE_WAIT: Duration = Duration::from_secs(60);
+/// Bound of the prior snapshot of a protected operation; equal to the daemon's
+/// `DEFAULT_PRIOR_DEADLINE`.
+pub const PRIOR_DEADLINE_BOUND: Duration = Duration::from_secs(10);
+/// Longest run of an operation with layer `mcp`; equal to [`MCP_TIME_LIMIT_MS`].
+///
+/// [`MCP_TIME_LIMIT_MS`]: crate::catalog::MCP_TIME_LIMIT_MS
+pub const MCP_TIME_LIMIT: Duration = Duration::from_millis(crate::catalog::MCP_TIME_LIMIT_MS);
+/// Slack of the `safe_commit` call over the daemon's own bounds (⚠️ ASSUMPTION).
+pub const MCP_COMMIT_MARGIN: Duration = Duration::from_secs(10);
+/// Longest `safe_commit` call: the queue, the prior snapshot, the operation and the margin. Past
+/// it the outcome is unknown.
+pub const MCP_COMMIT_CALL_LIMIT: Duration = MCP_QUEUE_WAIT
+    .saturating_add(PRIOR_DEADLINE_BOUND)
+    .saturating_add(MCP_TIME_LIMIT)
+    .saturating_add(MCP_COMMIT_MARGIN);
+/// Interval of the progress notifications of a long call, only with a `progressToken`.
+pub const MCP_PROGRESS_INTERVAL: Duration = Duration::from_secs(5);
+/// Most estimated tokens of each part of a `safe_commit` result, as a status page.
+pub const MCP_COMMIT_TOKENS: usize = 800;
+
+/// Tool answer of `safe_commit`: the allowlist of its fields (SEC-12). Never the message.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct McpCommitView {
+    pub worktree: UntrustedName,
+    pub oid: String,
+    pub paths: Vec<Untrusted>,
+    pub paths_total: u32,
+    pub truncated: bool,
+    pub operation_id: String,
+}
 
 /// Gaps listed, the most recent ones, and the window they must touch.
 pub const MCP_MAX_GAPS: usize = 3;
@@ -764,7 +847,19 @@ mod tests {
             | McpToolError::RepoOtherOwner
             | McpToolError::WorktreeUntrusted
             | McpToolError::InvalidCursor
-            | McpToolError::ConfirmationRequired => McpToolError::ALL.contains(&c),
+            | McpToolError::ConfirmationRequired
+            | McpToolError::DetachedHead
+            | McpToolError::NothingToCommit
+            | McpToolError::PathNotFound
+            | McpToolError::PolicyDenied
+            | McpToolError::Aborted
+            | McpToolError::FailedUnchanged
+            | McpToolError::FailedChanged
+            | McpToolError::InvalidPath
+            | McpToolError::PathOutsideWorktree
+            | McpToolError::TooManyPaths
+            | McpToolError::PathIgnored
+            | McpToolError::OtherSessionPresent => McpToolError::ALL.contains(&c),
         };
         assert!(McpToolError::ALL.into_iter().all(listed));
         for s in [

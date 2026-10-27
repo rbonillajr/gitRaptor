@@ -3541,6 +3541,7 @@ impl Connection<'_> {
             outcome: done.result,
             layer: done.layer,
             git_output: done.git_output.map(Untrusted::new),
+            commit: None,
         };
         let value = if self.is_mcp() {
             serde_json::to_value(result.for_mcp())

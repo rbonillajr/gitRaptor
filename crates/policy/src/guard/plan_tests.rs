@@ -200,9 +200,12 @@ fn a_commit_is_the_commit_plus_the_old_to_old_sentinel_with_the_prepared_paths()
                 stage: CommitStage::CommitMsg
             },
             tx(FEAT, oid(A), oid(A)),
+            Operation::Commit {
+                stage: CommitStage::PreCommit
+            },
         ]
     );
-    assert_eq!(n.preset.len(), 2);
+    assert_eq!(n.preset.len(), 3);
     assert_eq!(
         n.preset[1].touched,
         Some(policies::Touched {

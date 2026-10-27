@@ -328,6 +328,22 @@ fn texts(code: McpToolError, lang: Lang, params: Option<&Value>) -> (&'static st
             "Esta acción requiere confirmación del desarrollador.",
             "Avisa al desarrollador: la decisión es suya. Reintentar da la misma respuesta.",
         ),
+        // The texts of `safe_commit` (DS-US-MCP-009 T005, DS-US-MCP-010 T003) replace this arm.
+        (
+            E::DetachedHead
+            | E::NothingToCommit
+            | E::PathNotFound
+            | E::PolicyDenied
+            | E::Aborted
+            | E::FailedUnchanged
+            | E::FailedChanged
+            | E::InvalidPath
+            | E::PathOutsideWorktree
+            | E::TooManyPaths
+            | E::PathIgnored
+            | E::OtherSessionPresent,
+            lang,
+        ) => return texts(E::Internal, lang, params),
     };
     (message, action.to_owned())
 }
