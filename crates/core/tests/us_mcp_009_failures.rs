@@ -18,7 +18,7 @@ use gitraptor_api::mcp_view::{MCP_TIME_LIMIT, PRIOR_DEADLINE_BOUND};
 use gitraptor_api::timemachine::{RequestChannel, ResolvedVia};
 use gitraptor_api::{Actor, actor};
 use gitraptor_core::channel::marks::ExecutorMarks;
-use gitraptor_core::channel::peer::{ProcError, ProcInfo, ProcSource};
+use gitraptor_core::channel::peer::SystemProcs;
 use gitraptor_core::channel::requester::{Resolution, Who};
 use gitraptor_core::executor::ops::CommitEnv;
 use gitraptor_core::executor::{
@@ -85,17 +85,6 @@ impl ProtectedBackend for Backend {
     }
 }
 
-struct NoProcs;
-
-impl ProcSource for NoProcs {
-    fn read(&self, _pid: u32) -> Result<ProcInfo, ProcError> {
-        Err(ProcError::Gone)
-    }
-    fn foreign_to(&self, _pid: u32, _uid: u32) -> Option<bool> {
-        None
-    }
-}
-
 struct Rig {
     fx: Fixture,
     _profile: tempfile::TempDir,
@@ -113,6 +102,7 @@ impl Rig {
     /// `mcp_limit`: the time limit of layer `mcp`, shortened for the tests that hit it.
     fn new(mcp_limit: Duration) -> Self {
         let fx = Fixture::with_commit(&gitraptor_testkit::fixture::git_from_path());
+        fx.git(&["checkout", "-q", "-b", "feat/x"]);
         let profile = tempfile::tempdir().unwrap();
         let dirs = ProfileDirs::under_root(profile.path().join("profile"));
         let (oplog, _) = Oplog::open(&dirs, REPO, 1).unwrap();
@@ -175,7 +165,10 @@ impl Rig {
     /// Prepares a `commit` of `paths` on `connection`; the plan id.
     fn prepare(&self, connection: u64, paths: &[&str]) -> String {
         let mut args = Map::new();
-        args.insert("message".into(), json!("fix: a"));
+        args.insert(
+            "message".into(),
+            json!("fix: a\n\nCo-Authored-By: Claude <noreply@anthropic.com>"),
+        );
         args.insert("paths".into(), json!(paths));
         let params = PrepareParams {
             operation: OperationId::Commit,
@@ -225,7 +218,7 @@ impl Rig {
         };
         let env = RunEnv {
             marks: &self.marks,
-            procs: &NoProcs,
+            procs: &SystemProcs,
             stopping: &self.stopping,
             prior_deadline: Duration::from_secs(10),
             engine_mark: &engine_mark,

@@ -15,7 +15,7 @@ use gitraptor_api::catalog::{
 use gitraptor_api::timemachine::{PriorFailure, RequestChannel, ResolvedVia};
 use gitraptor_api::{Actor, actor};
 use gitraptor_core::channel::marks::ExecutorMarks;
-use gitraptor_core::channel::peer::{ProcError, ProcInfo, ProcSource};
+use gitraptor_core::channel::peer::SystemProcs;
 use gitraptor_core::channel::requester::{Resolution, Who};
 use gitraptor_core::executor::ops::CommitEnv;
 use gitraptor_core::executor::{
@@ -96,17 +96,6 @@ impl ProtectedBackend for Spy {
             .unwrap()
             .push(plan.op_plan.affected.clone());
         self.inner.step(plan)
-    }
-}
-
-struct NoProcs;
-
-impl ProcSource for NoProcs {
-    fn read(&self, _pid: u32) -> Result<ProcInfo, ProcError> {
-        Err(ProcError::Gone)
-    }
-    fn foreign_to(&self, _pid: u32, _uid: u32) -> Option<bool> {
-        None
     }
 }
 
@@ -201,7 +190,12 @@ impl Rig {
     /// Prepares a `commit` over MCP; the plan id.
     fn prepare(&self, message: &str, paths: Option<&[&str]>) -> Result<String, ExecError> {
         let mut args = Map::new();
-        args.insert("message".into(), json!(message));
+        args.insert(
+            "message".into(),
+            json!(format!(
+                "{message}\n\nCo-Authored-By: Claude <noreply@anthropic.com>"
+            )),
+        );
         if let Some(paths) = paths {
             args.insert("paths".into(), json!(paths));
         }
@@ -250,7 +244,7 @@ impl Rig {
         let publish = |_kind: &str, _data| {};
         let env = RunEnv {
             marks: &self.marks,
-            procs: &NoProcs,
+            procs: &SystemProcs,
             stopping: &self.stopping,
             prior_deadline: Duration::from_secs(10),
             engine_mark: &engine_mark,
@@ -311,9 +305,15 @@ impl Rig {
     }
 }
 
+fn feature_fixture() -> Fixture {
+    let fx = Fixture::with_commit(&gitraptor_testkit::fixture::git_from_path());
+    fx.git(&["checkout", "-q", "-b", "work-x"]);
+    fx
+}
+
 fn rig() -> Rig {
     Rig::new(
-        Fixture::with_commit(&gitraptor_testkit::fixture::git_from_path()),
+        feature_fixture(),
         Opts {
             git: true,
             no_space: false,
@@ -408,6 +408,7 @@ fn the_new_commit_paths_come_from_the_commit_not_the_request() {
 #[test]
 fn a_first_commit_on_an_unborn_branch_reports_its_paths() {
     let fx = Fixture::new(&gitraptor_testkit::fixture::git_from_path());
+    fx.git(&["symbolic-ref", "HEAD", "refs/heads/feat/new"]);
     fx.write("first.txt", "one\n");
     fx.git(&["add", "first.txt"]);
     let rig = Rig::new(
@@ -498,7 +499,7 @@ fn a_rebase_in_progress_is_refused_before_any_effect() {
 #[test]
 fn without_git_commit_is_refused_before_the_intent() {
     let rig = Rig::new(
-        Fixture::with_commit(&gitraptor_testkit::fixture::git_from_path()),
+        feature_fixture(),
         Opts {
             git: false,
             no_space: false,
@@ -646,7 +647,7 @@ fn a_hook_that_prints_a_success_line_does_not_make_a_commit_land() {
 #[test]
 fn a_prior_that_cannot_be_taken_leaves_the_branch_and_names_the_operation() {
     let rig = Rig::new(
-        Fixture::with_commit(&gitraptor_testkit::fixture::git_from_path()),
+        feature_fixture(),
         Opts {
             git: true,
             no_space: true,
