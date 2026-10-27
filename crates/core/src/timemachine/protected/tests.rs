@@ -367,6 +367,7 @@ fn a_failed_step_is_interrupted_with_its_prior_snapshot() {
     let ProtectedError::Step {
         operation_id,
         message,
+        ..
     } = err
     else {
         panic!("{err:?}")

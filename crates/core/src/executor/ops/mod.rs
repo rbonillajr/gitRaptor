@@ -2,11 +2,15 @@
 //! of [`OperationId`]. Only the arms that exist are served; every other operation answers "not
 //! implemented" with its story.
 
+mod commit;
+mod commit_paths;
 mod snapshot;
 #[cfg(debug_assertions)]
 mod test_arms;
 
 use std::sync::Arc;
+
+pub use commit::CommitEnv;
 
 use gitraptor_api::catalog::{OperationArgs, OperationId, entry};
 
@@ -19,11 +23,14 @@ use crate::timemachine::protected::{
 };
 
 /// The operations this build serves.
-const ARMS: &[OperationId] = &[OperationId::Snapshot];
+const ARMS: &[OperationId] = &[OperationId::Commit, OperationId::Snapshot];
 
-/// Without state: dispatches by operation.
+/// Dispatches by operation; holds only what the daemon read once at start.
+#[derive(Clone)]
 pub struct ProductionCatalog {
     armed: Vec<OperationId>,
+    /// The system Git and `HOME` of `commit`; `None`: `commit` is `git-unavailable`.
+    commit_env: Option<CommitEnv>,
     /// The debug test arms, when the daemon was started for them (D14).
     #[cfg(debug_assertions)]
     test_arms: Option<test_arms::TestArms>,
@@ -49,8 +56,8 @@ impl OperationCatalog for ProductionCatalog {
         if !self.armed.contains(&operation) {
             return Err(PlanError::NotImplemented);
         }
-        let _ = (args, repo);
         match operation {
+            OperationId::Commit => commit::plan_op(self.commit_env.as_ref(), args, repo, facts),
             OperationId::Snapshot => snapshot::plan_op(facts),
             #[cfg(debug_assertions)]
             _ if self.test_arms.is_some() => test_arms::plan_op(operation, args, repo, facts),
@@ -59,6 +66,9 @@ impl OperationCatalog for ProductionCatalog {
     }
 
     fn step(&self, plan: &StepPlan<'_>) -> Result<Box<dyn ProtectedStep>, StepError> {
+        if plan.operation == OperationId::Commit && self.armed.contains(&plan.operation) {
+            return commit::step(self.commit_env.as_ref(), plan);
+        }
         #[cfg(debug_assertions)]
         if let Some(arms) = &self.test_arms
             && self.armed.contains(&plan.operation)
@@ -72,6 +82,13 @@ impl OperationCatalog for ProductionCatalog {
 
     fn armed(&self) -> &[OperationId] {
         &self.armed
+    }
+
+    fn with_commit_env(&self, env: CommitEnv) -> Option<Arc<dyn OperationCatalog>> {
+        Some(Arc::new(Self {
+            commit_env: Some(env),
+            ..self.clone()
+        }))
     }
 }
 
@@ -107,6 +124,7 @@ impl OperationsWiring {
         Self {
             catalog: Arc::new(ProductionCatalog {
                 armed,
+                commit_env: None,
                 #[cfg(debug_assertions)]
                 test_arms: test,
             }),
@@ -128,6 +146,16 @@ impl OperationsWiring {
             && env("GITRAPTOR_PROFILE_DIR").is_some_and(|p| !p.is_empty())
     }
 
+    /// The system Git and `HOME` the `commit` arm launches with. A catalog that is not the
+    /// production one is left as it is.
+    #[must_use]
+    pub fn with_commit_env(mut self, env: CommitEnv) -> Self {
+        if let Some(catalog) = self.catalog.with_commit_env(env) {
+            self.catalog = catalog;
+        }
+        self
+    }
+
     /// The operations the catalog serves.
     pub fn catalog_armed(&self) -> &[OperationId] {
         self.catalog.armed()
@@ -144,8 +172,12 @@ mod tests {
 
     #[test]
     fn production_wiring_has_no_governed_arm_without_guardrails() {
+        // Every governed arm of `ARMS` leaves the filter when the gate never decides.
+        let without = armed_without_guardrails(ARMS);
         for op in ARMS {
-            assert!(entry(*op).governed.is_none(), "{op:?} is governed");
+            if entry(*op).governed.is_some() {
+                assert!(!without.contains(op), "{op:?} is served without Guardrails");
+            }
         }
         // A governed operation is dropped from the arms, never served without a gate.
         let armed = armed_without_guardrails(&[OperationId::Snapshot, OperationId::MergeIntoBase]);

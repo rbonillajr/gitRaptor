@@ -61,7 +61,7 @@ use crate::timemachine::oplog::Channel;
 use crate::timemachine::protected::{
     Binding, ChallengeBook, ChallengeError, ProtectedBackend, ProtectedError, ProtectedOperation,
     ProtectedOutcome, ProtectedRequest, ProtectedStep, RepoHandle, ScopeError, StepCtx, StepError,
-    StepOutput, StepScope,
+    StepFailure, StepOutput, StepScope,
 };
 
 /// Times the guaranteed prior is taken again when the intent's mark did not hold at its validity
@@ -389,6 +389,22 @@ pub struct Executed {
 #[derive(Debug, Clone)]
 struct RunningOp {
     cancel: CancelToken,
+    /// The agent session of a write of layer `mcp` (S-11); `None` for the others.
+    session_id: Option<String>,
+    repo_id: String,
+}
+
+/// A write of layer `mcp` in flight from before the queue to its end: a second one of the same
+/// agent in the same repo is refused while it is held (S-11).
+struct InFlight {
+    running: Arc<Mutex<HashMap<String, RunningOp>>>,
+    key: String,
+}
+
+impl Drop for InFlight {
+    fn drop(&mut self) {
+        lock(&self.running).remove(&self.key);
+    }
 }
 
 /// The executor of the daemon: plans, running operations and the confirmation challenges.
@@ -511,13 +527,39 @@ impl Executor {
     ) -> Result<(RepoFacts, OpPlan, bool, [u8; 32]), ExecError> {
         let facts = backend.facts(repo)?;
         check_common(op, &facts)?;
-        let op_plan = match backend.plan_op(op, args, repo, &facts) {
+        let own_session = match &who.requester {
+            crate::timemachine::oplog::Requester::Agent { session_id, .. } => Some(session_id),
+            crate::timemachine::oplog::Requester::Unattributed => None,
+        };
+        // "Everything staged" takes what others staged too: with another live agent session in
+        // the worktree, or a presence that cannot be read, the paths must be named.
+        if op == OperationId::Commit
+            && layer == Layer::Mcp
+            && matches!(args, OperationArgs::Commit(a) if a.paths.is_none())
+        {
+            let shared = match backend.live_sessions(repo) {
+                Ok(sessions) => sessions.iter().any(|s| Some(s) != own_session),
+                Err(_) => true,
+            };
+            if shared {
+                return Err(RejectReason::SharedWorktreeNeedsPaths.into());
+            }
+        }
+        let mut op_plan = match backend.plan_op(op, args, repo, &facts) {
             Ok(p) => p,
             Err(PlanError::NotImplemented) => {
                 return Err(ExecError::NotImplemented(entry(op).owner));
             }
             Err(PlanError::Rejected(r)) => return Err(r.into()),
         };
+        // The work a commit takes is the requester's own, in its worktree.
+        if op == OperationId::Commit
+            && let Some(session_id) = own_session
+        {
+            op_plan.affected = Affected::Agent {
+                session_id: session_id.clone(),
+            };
+        }
         if op_plan.other_session && layer == Layer::Mcp && op == OperationId::RebaseOntoBase {
             return Err(RejectReason::OtherSessionPresent.into());
         }
@@ -577,7 +619,11 @@ impl Executor {
             &session_env,
         )?;
         let mut warnings = op_plan.warnings.clone();
-        if op_plan.other_session && !warnings.contains(&WarningCode::ActiveSession) {
+        // `commit` never carries a warning: a shared worktree is the rule of named paths.
+        if op_plan.other_session
+            && op != OperationId::Commit
+            && !warnings.contains(&WarningCode::ActiveSession)
+        {
             warnings.push(WarningCode::ActiveSession);
         }
         if confirm && !warnings.contains(&WarningCode::OtherActorsWork) {
@@ -852,6 +898,33 @@ impl Executor {
             }
         }
 
+        // S-11: before the queue, so a retry never waits for the first and commits twice.
+        let _in_flight = match (plan.layer, plan.who.requester.session_id()) {
+            (Layer::Mcp, Some(session)) => {
+                let mut running = lock(&self.running);
+                if running.values().any(|r| {
+                    r.session_id.as_deref() == Some(session) && r.repo_id == plan.repo.repo_id
+                }) {
+                    drop(running);
+                    return refuse(&plan, RejectReason::WriteInProgress);
+                }
+                let key = format!("plan:{}", plan.plan_id);
+                running.insert(
+                    key.clone(),
+                    RunningOp {
+                        cancel: CancelToken::default(),
+                        session_id: Some(session.to_owned()),
+                        repo_id: plan.repo.repo_id.clone(),
+                    },
+                );
+                Some(InFlight {
+                    running: Arc::clone(&self.running),
+                    key,
+                })
+            }
+            _ => None,
+        };
+
         // The repo's write lock, in arrival order (Q-CKP-19).
         let event =
             |position: Option<u32>, operation_id: Option<String>, outcome| OperationEventData {
@@ -864,7 +937,14 @@ impl Executor {
             };
         let key = backend.write_lock_key(&plan.repo);
         let stopping = || env.stopping.load(std::sync::atomic::Ordering::SeqCst);
-        let guard = match repo_lock::lock_queued(&key, MAX_QUEUED_PER_REPO, &stopping, |ahead| {
+        // Layer `mcp` waits a bounded time: past it the request is `queue-full`, without effects.
+        let entered = Instant::now();
+        let give_up = || {
+            stopping()
+                || (plan.layer == Layer::Mcp
+                    && entered.elapsed() >= gitraptor_api::mcp_view::MCP_QUEUE_WAIT)
+        };
+        let guard = match repo_lock::lock_queued(&key, MAX_QUEUED_PER_REPO, &give_up, |ahead| {
             (env.publish)(
                 gitraptor_api::event::OPERATION_QUEUED,
                 event(Some(ahead), None, None),
@@ -872,7 +952,10 @@ impl Executor {
         }) {
             Ok(g) => g,
             Err(QueueError::Full) => return refuse(&plan, RejectReason::QueueFull),
-            Err(QueueError::Cancelled) => return refuse(&plan, RejectReason::DaemonStopping),
+            Err(QueueError::Cancelled) if stopping() => {
+                return refuse(&plan, RejectReason::DaemonStopping);
+            }
+            Err(QueueError::Cancelled) => return refuse(&plan, RejectReason::QueueFull),
         };
 
         // Under the lock: the requester again, the plan again, identity and fingerprint.
@@ -1047,11 +1130,18 @@ impl Executor {
             Err(ProtectedError::Prior { operation_id, .. }) => {
                 (operation_id.clone(), OperationOutcome::Aborted)
             }
-            Err(ProtectedError::Step { operation_id, .. }) => (
+            Err(ProtectedError::Step {
+                operation_id,
+                failure,
+                ..
+            }) => (
                 Some(operation_id.clone()),
-                match cancel.reason() {
-                    Some(Interrupt::Cancelled) => OperationOutcome::Cancelled,
-                    _ => OperationOutcome::FailedChanged,
+                match (cancel.reason(), failure) {
+                    (Some(Interrupt::Cancelled), _) => OperationOutcome::Cancelled,
+                    (_, StepFailure::Unchanged | StepFailure::TimeLimit) => {
+                        OperationOutcome::FailedUnchanged
+                    }
+                    (_, StepFailure::Changed) => OperationOutcome::FailedChanged,
                 },
             ),
             Err(ProtectedError::Oplog(_)) => (None, OperationOutcome::FailedUnchanged),
@@ -1154,6 +1244,8 @@ impl ProtectedStep for ExecStep<'_> {
             id.clone(),
             RunningOp {
                 cancel: self.cancel.clone(),
+                session_id: None,
+                repo_id: String::new(),
             },
         );
         (self.started)(&id);

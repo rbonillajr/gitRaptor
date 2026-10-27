@@ -66,6 +66,39 @@ pub fn canonicalize(path: &Path) -> std::io::Result<PathBuf> {
     Ok(drive_form(&canonical).unwrap_or(canonical))
 }
 
+/// NFC form, as Git stores names with `core.precomposeUnicode`.
+pub fn precomposed(path: &str) -> String {
+    use unicode_normalization::UnicodeNormalization;
+    path.nfc().collect()
+}
+
+/// What the commit of an agent needs from the repo's configuration and index besides the
+/// reader's views (`safe_commit`): read with gitoxide, never written.
+impl crate::RepoReader {
+    /// `core.precomposeUnicode`: Git stores names in NFC and compares them so.
+    pub fn precompose_unicode(&self) -> bool {
+        self.repo
+            .config_snapshot()
+            .boolean("core.precomposeUnicode")
+            .unwrap_or(false)
+    }
+
+    /// Index entries marked `assume-unchanged`: Git does not look at their file.
+    pub fn assume_unchanged_paths(&self) -> Result<Vec<String>, ReadError> {
+        use gix::bstr::ByteSlice;
+        let index = self
+            .repo
+            .index_or_empty()
+            .map_err(|e| ReadError::Unavailable(format!("index: {e}")))?;
+        Ok(index
+            .entries()
+            .iter()
+            .filter(|e| e.flags.contains(gix::index::entry::Flags::ASSUME_VALID))
+            .map(|e| e.path(&index).to_str_lossy().into_owned())
+            .collect())
+    }
+}
+
 /// `\\?\C:\…` as `C:\…`, when both name the same file and the drive form validates.
 fn drive_form(path: &Path) -> Option<PathBuf> {
     let rest = path.to_str()?.strip_prefix(r"\\?\")?;

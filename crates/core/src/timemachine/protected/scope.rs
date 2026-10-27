@@ -150,6 +150,12 @@ pub trait ProtectedBackend: Send + Sync {
     ) -> Result<OpPlan, PlanError>;
     /// The step that runs a plan whose fingerprint was just checked.
     fn step(&self, plan: &StepPlan<'_>) -> Result<Box<dyn ProtectedStep>, StepError>;
+    /// Live sessions of other agents in the request's worktree. The default (nobody) is for
+    /// test doubles only; the daemon's backend reads its profile.
+    fn live_sessions(&self, repo: &RepoHandle) -> Result<Vec<String>, RejectReason> {
+        let _ = repo;
+        Ok(Vec::new())
+    }
 }
 
 /// The repo for a request: over MCP from the caller's working folder and

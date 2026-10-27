@@ -129,6 +129,14 @@ pub enum UserOp {
         name: RefName,
         old: Oid,
     },
+    /// `add -- :(literal)<p>…`; never `-f`, `-A` nor `-u`, so Git refuses an ignored path.
+    AddPaths {
+        paths: Vec<String>,
+    },
+    /// `rm --cached --quiet --ignore-unmatch -- :(literal)<p>…`: back out what `AddPaths` added.
+    UnstagePaths {
+        paths: Vec<String>,
+    },
 }
 
 impl UserOp {
@@ -140,6 +148,16 @@ impl UserOp {
             } else {
                 Err("a ref update needs the full refs/heads/ name".into())
             }
+        };
+        // Literal per path, after `--`: no glob or other magic, without a variable that would
+        // also reach the user's hooks.
+        let literal = |head: &[&str], paths: &[String]| -> Result<Vec<OsString>, String> {
+            if paths.is_empty() {
+                return Err("no paths".into());
+            }
+            let mut w: Vec<OsString> = head.iter().map(|t| s(t)).collect();
+            w.extend(paths.iter().map(|p| s(&format!(":(literal){p}"))));
+            Ok(w)
         };
         let absolute = |p: &Path| -> Result<OsString, String> {
             if p.is_absolute() {
@@ -171,16 +189,12 @@ impl UserOp {
             ],
             Self::RebaseAbort => vec![s("rebase"), s("--abort")],
             Self::CommitStaged => vec![s("commit"), s("-F"), s("-")],
-            Self::CommitPaths { paths } => {
-                if paths.is_empty() {
-                    return Err("no paths".into());
-                }
-                let mut w = vec![s("commit"), s("-F"), s("-"), s("--")];
-                // Literal per path: no glob or other magic, without a variable that would also
-                // reach the user's hooks.
-                w.extend(paths.iter().map(|p| s(&format!(":(literal){p}"))));
-                w
-            }
+            Self::CommitPaths { paths } => literal(&["commit", "-F", "-", "--"], paths)?,
+            Self::AddPaths { paths } => literal(&["add", "--"], paths)?,
+            Self::UnstagePaths { paths } => literal(
+                &["rm", "--cached", "--quiet", "--ignore-unmatch", "--"],
+                paths,
+            )?,
             Self::WorktreeAdd {
                 branch,
                 path,
@@ -601,6 +615,10 @@ impl UserGitCommand {
         Ok((child, collector))
     }
 }
+
+#[cfg(test)]
+#[path = "user_ops_add_tests.rs"]
+mod add_tests;
 
 #[cfg(test)]
 mod tests {
