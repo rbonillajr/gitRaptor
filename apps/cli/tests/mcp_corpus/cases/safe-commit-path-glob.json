@@ -1,0 +1,47 @@
+{
+  "id": "safe-commit-path-glob",
+  "title": "A glob pathspec is a literal name that does not exist",
+  "threats": [
+    "MCP05",
+    "SEC-MCP-05",
+    "BR-MCP-VAL-001"
+  ],
+  "tier": "engine",
+  "platforms": [
+    "macos",
+    "linux"
+  ],
+  "pending": "XP-42",
+  "setup": {
+    "repo": "enabled",
+    "files": [
+      {
+        "at": "repo/src/a.rs",
+        "state": "modified"
+      }
+    ]
+  },
+  "session": {
+    "cwd": "repo",
+    "parent": "agent"
+  },
+  "send": [
+    {
+      "call": "safe_commit",
+      "arguments": {
+        "message": "fix: a",
+        "paths": [
+          ":(glob)**"
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "path-not-found",
+      "params": [
+        "path"
+      ]
+    }
+  }
+}

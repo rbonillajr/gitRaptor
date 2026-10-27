@@ -1,0 +1,46 @@
+{
+  "id": "safe-commit-path-nfd",
+  "title": "An NFD name resolves to its NFC entry, not to a second one",
+  "threats": [
+    "MCP05",
+    "SEC-MCP-05",
+    "BR-MCP-VAL-001"
+  ],
+  "tier": "engine",
+  "platforms": [
+    "macos"
+  ],
+  "pending": "XP-42",
+  "setup": {
+    "repo": "enabled",
+    "files": [
+      {
+        "at": "repo/café.txt",
+        "state": "skip-worktree"
+      }
+    ]
+  },
+  "session": {
+    "cwd": "repo",
+    "parent": "agent"
+  },
+  "send": [
+    {
+      "call": "safe_commit",
+      "arguments": {
+        "message": "fix: a",
+        "paths": [
+          "café.txt"
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "invalid-path",
+      "params": [
+        "path"
+      ]
+    }
+  }
+}

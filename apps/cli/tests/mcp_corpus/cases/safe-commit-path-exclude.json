@@ -1,0 +1,51 @@
+{
+  "id": "safe-commit-path-exclude",
+  "title": "An exclude pathspec is a literal name that does not exist",
+  "threats": [
+    "MCP05",
+    "SEC-MCP-05",
+    "BR-MCP-VAL-001"
+  ],
+  "tier": "engine",
+  "platforms": [
+    "macos",
+    "linux"
+  ],
+  "pending": "XP-42",
+  "setup": {
+    "repo": "enabled",
+    "files": [
+      {
+        "at": "repo/src/a.rs",
+        "state": "modified"
+      },
+      {
+        "at": "repo/src/b.rs",
+        "state": "staged"
+      }
+    ]
+  },
+  "session": {
+    "cwd": "repo",
+    "parent": "agent"
+  },
+  "send": [
+    {
+      "call": "safe_commit",
+      "arguments": {
+        "message": "fix: a",
+        "paths": [
+          ":!src"
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "path-not-found",
+      "params": [
+        "path"
+      ]
+    }
+  }
+}

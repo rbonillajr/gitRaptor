@@ -1,0 +1,47 @@
+{
+  "id": "safe-commit-path-case",
+  "title": "A path in other case is not folded onto the tracked entry",
+  "threats": [
+    "MCP05",
+    "SEC-MCP-05",
+    "BR-MCP-VAL-001"
+  ],
+  "tier": "engine",
+  "platforms": [
+    "macos",
+    "linux"
+  ],
+  "pending": "XP-42",
+  "setup": {
+    "repo": "enabled",
+    "files": [
+      {
+        "at": "repo/src/a.rs",
+        "state": "modified"
+      }
+    ]
+  },
+  "session": {
+    "cwd": "repo",
+    "parent": "agent"
+  },
+  "send": [
+    {
+      "call": "safe_commit",
+      "arguments": {
+        "message": "fix: a",
+        "paths": [
+          "SRC/A.rs"
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "refusal": {
+      "code": "path-not-found",
+      "params": [
+        "path"
+      ]
+    }
+  }
+}

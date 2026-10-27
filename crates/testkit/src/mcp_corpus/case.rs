@@ -122,6 +122,28 @@ pub struct Link {
     pub to: Location,
 }
 
+/// What Git sees of a planted file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileState {
+    /// Committed, then changed on disk.
+    Modified,
+    /// On disk only.
+    Untracked,
+    /// On disk and listed in the `.gitignore` of its worktree.
+    Ignored,
+    /// Added to the index, never committed.
+    Staged,
+    /// Committed, marked `skip-worktree` and gone from the disk.
+    SkipWorktree,
+}
+
+/// A file to plant, inside a worktree of `repo` or `other_repo`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct File {
+    pub at: Location,
+    pub state: FileState,
+}
+
 /// The machine a case needs.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Setup {
@@ -130,6 +152,9 @@ pub struct Setup {
     pub worktrees: Vec<Worktree>,
     pub symlinks: Vec<Link>,
     pub dirs: Vec<Location>,
+    pub files: Vec<File>,
+    /// The worktree whose `.git` is rewritten to point at `other_repo` once the daemon knows it.
+    pub dot_git_to: Option<String>,
     pub path_trap: bool,
 }
 
@@ -398,6 +423,8 @@ fn parse_setup(value: &Value) -> Result<Setup, CaseError> {
             "worktrees",
             "symlinks",
             "dirs",
+            "files",
+            "dot_git_to",
             "path_trap",
         ],
         "setup",
@@ -470,6 +497,59 @@ fn parse_setup(value: &Value) -> Result<Setup, CaseError> {
                 });
             }
             out.dirs.push(dir);
+        }
+    }
+    if let Some(list) = setup.get("files") {
+        for item in array(list, "setup.files")? {
+            let entry = object(item, "setup.files")?;
+            check_keys(entry, &["at", "state"], "setup.files")?;
+            let at = text(required(entry, "at")?, "setup.files.at")?;
+            let at = parse_location(at, &out.worktrees, "setup.files.at")?;
+            // A file hangs from a worktree root, so Git can be run there to plant its state.
+            if at.rel.is_empty()
+                || !matches!(
+                    at.anchor,
+                    Anchor::Repo | Anchor::OtherRepo | Anchor::Worktree(_)
+                )
+            {
+                return Err(CaseError::Location {
+                    field: "setup.files.at".to_owned(),
+                    why: "must name a file inside repo, other_repo or a worktree".to_owned(),
+                });
+            }
+            let state = match text(required(entry, "state")?, "setup.files.state")? {
+                "modified" => FileState::Modified,
+                "untracked" => FileState::Untracked,
+                "ignored" => FileState::Ignored,
+                "staged" => FileState::Staged,
+                "skip-worktree" => FileState::SkipWorktree,
+                _ => {
+                    return Err(invalid(
+                        "setup.files.state",
+                        "must be modified, untracked, ignored, staged or skip-worktree",
+                    ));
+                }
+            };
+            out.files.push(File { at, state });
+        }
+    }
+    if let Some(tree) = setup.get("dot_git_to") {
+        let tree = parse_location(
+            text(tree, "setup.dot_git_to")?,
+            &out.worktrees,
+            "setup.dot_git_to",
+        )?;
+        match tree {
+            Location {
+                anchor: Anchor::Worktree(name),
+                rel,
+            } if rel.is_empty() => out.dot_git_to = Some(name),
+            _ => {
+                return Err(CaseError::Location {
+                    field: "setup.dot_git_to".to_owned(),
+                    why: "must name a worktree declared in setup.worktrees".to_owned(),
+                });
+            }
         }
     }
     if let Some(flag) = setup.get("path_trap") {

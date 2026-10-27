@@ -15,7 +15,9 @@ use gitraptor_core::profile::ProfileDirs;
 use gitraptor_testkit::Fixture;
 use gitraptor_testkit::exceptions::{Exception, Exceptions};
 use gitraptor_testkit::fixture::{copy_executable, git_from_path};
-use gitraptor_testkit::mcp_corpus::case::{CANARY_NAMES, Parent, RepoState, Roots};
+use gitraptor_testkit::mcp_corpus::case::{
+    CANARY_NAMES, File, FileState, Location, Parent, RepoState, Roots,
+};
 use gitraptor_testkit::mcp_corpus::{Case, Secrets, Tier};
 use serde_json::Value;
 
@@ -150,6 +152,9 @@ impl Machine {
         if case.tier == Tier::Engine {
             machine.register(case);
         }
+        if let Some(tree) = &case.setup.dot_git_to {
+            machine.swap_dot_git(tree);
+        }
         if case.session.parent == Parent::Agent {
             let agent = machine.f.root.join(FAKE_AGENT);
             let exe = std::env::current_exe()
@@ -215,6 +220,9 @@ impl Machine {
             std::fs::create_dir_all(&path)
                 .unwrap_or_else(|e| panic!("cannot create {}: {e}", path.display()));
         }
+        for file in &case.setup.files {
+            self.plant(file, &roots);
+        }
         for link in &case.setup.symlinks {
             let at = link.at.resolve(&roots);
             let to = link.to.resolve(&roots);
@@ -227,6 +235,69 @@ impl Machine {
         if self.path_trap {
             self.arm_trap();
         }
+    }
+
+    /// One file of `setup.files`, in the state Git must see, from the root of its worktree.
+    fn plant(&self, file: &File, roots: &Roots) {
+        let top = Location {
+            anchor: file.at.anchor.clone(),
+            rel: Vec::new(),
+        }
+        .resolve(roots);
+        let path = file.at.resolve(roots);
+        let rel = file.at.rel.join("/");
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)
+                .unwrap_or_else(|e| panic!("cannot create {}: {e}", parent.display()));
+        }
+        let write = |content: &str| {
+            std::fs::write(&path, content)
+                .unwrap_or_else(|e| panic!("cannot write {}: {e}", path.display()));
+        };
+        let commit = || {
+            write("committed\n");
+            self.f.git_in(&top, &["add", "--", &rel]);
+            self.f
+                .git_in(&top, &["commit", "-q", "-m", "corpus: plant a file"]);
+        };
+        match file.state {
+            FileState::Modified => {
+                commit();
+                write("modified\n");
+            }
+            FileState::Untracked => write("untracked\n"),
+            // A file already planted (the `.env` canary) keeps its content.
+            FileState::Ignored => {
+                if !path.exists() {
+                    write("ignored\n");
+                }
+                let ignore = top.join(".gitignore");
+                let mut lines = std::fs::read_to_string(&ignore).unwrap_or_default();
+                lines.push_str(&format!("/{rel}\n"));
+                std::fs::write(&ignore, lines)
+                    .unwrap_or_else(|e| panic!("cannot write {}: {e}", ignore.display()));
+            }
+            FileState::Staged => {
+                write("staged\n");
+                self.f.git_in(&top, &["add", "--", &rel]);
+            }
+            FileState::SkipWorktree => {
+                commit();
+                self.f
+                    .git_in(&top, &["update-index", "--skip-worktree", "--", &rel]);
+                std::fs::remove_file(&path)
+                    .unwrap_or_else(|e| panic!("cannot remove {}: {e}", path.display()));
+            }
+        }
+    }
+
+    /// Rewrites the `.git` file of `wt-<tree>` to point at `other_repo`, after the daemon knows
+    /// the worktree.
+    fn swap_dot_git(&self, tree: &str) {
+        let dot_git = self.f.root.join(format!("wt-{tree}")).join(".git");
+        let to = self.f.other_repo.join(".git");
+        std::fs::write(&dot_git, format!("gitdir: {}\n", to.display()))
+            .unwrap_or_else(|e| panic!("cannot rewrite {}: {e}", dot_git.display()));
     }
 
     /// `<root>/trap-bin/{git,raptor,raptor-mcp,sh}`: each one leaves a file in `<root>/trap-fired`
