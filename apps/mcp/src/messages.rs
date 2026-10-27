@@ -2,7 +2,11 @@
 //! NFR-10): one fixed template per stable code. Codes, tool names and tool
 //! descriptions stay in English.
 
-use gitraptor_api::mcp_view::{MCP_RETRY_AFTER_S, McpToolError};
+use gitraptor_api::catalog::{MAX_COMMIT_MESSAGE_BYTES, MAX_COMMIT_PATHS};
+use gitraptor_api::mcp_view::{
+    MAX_MCP_PATH_BYTES, MCP_REFUSAL_TOKENS, MCP_RETRY_AFTER_S, McpToolError, estimated_tokens,
+    for_mcp,
+};
 use serde_json::{Value, json};
 
 /// The language of the messages, from `raptor-mcp`'s environment.
@@ -59,14 +63,67 @@ pub fn refusal(r: impl Into<ToolRefusal>, lang: Lang) -> Value {
     if let Some(params) = tool_params(code, params.as_ref()) {
         body["params"] = params;
     }
+    if code == McpToolError::PolicyDenied {
+        fit_denial(&mut body);
+    }
     body
+}
+
+/// A denial within RES-MCP-03: the message already names the first rule, so the decision's id
+/// goes first, then the last rules, until the body fits.
+fn fit_denial(body: &mut Value) {
+    let over = |body: &Value| estimated_tokens(&body.to_string()) > MCP_REFUSAL_TOKENS;
+    if over(body)
+        && let Some(params) = body.get_mut("params").and_then(Value::as_object_mut)
+    {
+        params.remove("decision_id");
+    }
+    while over(body) {
+        let Some(rules) = body
+            .pointer_mut("/params/rules")
+            .and_then(Value::as_array_mut)
+            .filter(|rules| rules.len() > 1)
+        else {
+            return;
+        };
+        rules.pop();
+    }
 }
 
 /// The `params` the tool gives for a code: only typed fields, rebuilt from what the engine
 /// layer handed over, never forwarded as they came.
 fn tool_params(code: McpToolError, params: Option<&Value>) -> Option<Value> {
     let field = |key: &str| params.and_then(|p| p.get(key)).filter(|v| !v.is_null());
+    let operation_id = || {
+        field("operation_id")
+            .filter(|v| v.is_string())
+            .map(|id| json!({"operation_id": id}))
+    };
     match code {
+        McpToolError::InvalidText if is_message(params) => Some(json!({
+            "field": "message",
+            "reason": message_reason(params),
+            "max_bytes": MAX_COMMIT_MESSAGE_BYTES,
+        })),
+        McpToolError::PathNotFound
+        | McpToolError::InvalidPath
+        | McpToolError::PathOutsideWorktree
+        | McpToolError::PathIgnored => {
+            untrusted_path(params).map(|path| json!({"path": {"untrusted": path}}))
+        }
+        McpToolError::TooManyPaths => Some(json!({"max": MAX_COMMIT_PATHS})),
+        McpToolError::PolicyDenied => {
+            let rules: Vec<&str> = denied_rules(params).collect();
+            let decision = field("decision_id").filter(|v| v.is_string())?;
+            Some(json!({"rules": rules, "decision_id": decision}))
+        }
+        McpToolError::FailedUnchanged if field("reason").is_some() => field("reason")
+            .and_then(Value::as_str)
+            .map(|reason| json!({"reason": reason})),
+        McpToolError::Aborted
+        | McpToolError::TimeLimit
+        | McpToolError::FailedUnchanged
+        | McpToolError::FailedChanged => operation_id(),
         McpToolError::RateLimited => Some(
             json!({"retry_after_s": field("retry_after_s").and_then(Value::as_u64).unwrap_or(MCP_RETRY_AFTER_S)}),
         ),
@@ -91,6 +148,56 @@ fn tool_params(code: McpToolError, params: Option<&Value>) -> Option<Value> {
     }
 }
 
+/// Whether an `invalid-text` is about a commit message (otherwise, a snapshot's label).
+fn is_message(params: Option<&Value>) -> bool {
+    params.and_then(|p| p.get("field")).and_then(Value::as_str) == Some("message")
+}
+
+/// The `reason` of a refused commit message, one of the three the template knows.
+fn message_reason(params: Option<&Value>) -> &'static str {
+    match params.and_then(|p| p.get("reason")).and_then(Value::as_str) {
+        Some("required") => "required",
+        Some("too-long") => "too-long",
+        _ => "invalid-chars",
+    }
+}
+
+/// The refused path, escaped as every untrusted text of an answer and cut at its bound.
+fn untrusted_path(params: Option<&Value>) -> Option<String> {
+    let path = params?.get("path")?.get("untrusted")?.as_str()?;
+    let mut value = json!({"untrusted": path});
+    for_mcp(&mut value);
+    let mut text = value["untrusted"].as_str()?.to_owned();
+    let mut end = text.len().min(MAX_MCP_PATH_BYTES);
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    text.truncate(end);
+    Some(text)
+}
+
+/// The rule codes of a denial: the policy's own names, never repo text.
+fn denied_rules(params: Option<&Value>) -> impl Iterator<Item = &str> {
+    params
+        .and_then(|p| p.get("rules"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .filter(|rule| {
+            rule.len() <= 64
+                && rule
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b"-._".contains(&b))
+        })
+        .take(4)
+}
+
+/// A template with a fixed message.
+fn owned((message, action): (&str, String)) -> (String, String) {
+    (message.to_owned(), action)
+}
+
 /// "HH:MM UTC" of an instant in ms since the epoch, with no date library.
 fn release_utc(ms: i64) -> String {
     let secs_of_day = ms.div_euclid(1000).rem_euclid(86_400);
@@ -101,7 +208,7 @@ fn release_utc(ms: i64) -> String {
     )
 }
 
-fn texts(code: McpToolError, lang: Lang, params: Option<&Value>) -> (&'static str, String) {
+fn texts(code: McpToolError, lang: Lang, params: Option<&Value>) -> (String, String) {
     use McpToolError as E;
     let field = |key: &str| params.and_then(|p| p.get(key)).filter(|v| !v.is_null());
     let (message, action) = match (code, lang) {
@@ -148,7 +255,7 @@ fn texts(code: McpToolError, lang: Lang, params: Option<&Value>) -> (&'static st
             let wait = field("retry_after_s")
                 .and_then(Value::as_u64)
                 .unwrap_or(MCP_RETRY_AFTER_S);
-            return match lang {
+            return owned(match lang {
                 Lang::En => (
                     "Too many calls on this connection.",
                     format!("Wait {wait} s and retry."),
@@ -157,11 +264,11 @@ fn texts(code: McpToolError, lang: Lang, params: Option<&Value>) -> (&'static st
                     "Demasiadas llamadas en esta conexión.",
                     format!("Espera {wait} s y reintenta."),
                 ),
-            };
+            });
         }
         // A snapshot that ran past the daemon's budget saved nothing.
         (E::TimeLimit, lang) if field("saved").is_some() => {
-            return match lang {
+            return owned(match lang {
                 Lang::En => (
                     "The snapshot did not finish in time; nothing was saved.",
                     "Retry later.".to_owned(),
@@ -170,8 +277,17 @@ fn texts(code: McpToolError, lang: Lang, params: Option<&Value>) -> (&'static st
                     "El snapshot no terminó a tiempo; no se guardó nada.",
                     "Reintenta más tarde.".to_owned(),
                 ),
-            };
+            });
         }
+        // A commit whose hook ran past the operation's limit.
+        (E::TimeLimit, Lang::En) if field("operation_id").is_some() => (
+            "The hook ran past the time limit; nothing was committed.",
+            "Ask the developer to check the slow hook.",
+        ),
+        (E::TimeLimit, Lang::Es) if field("operation_id").is_some() => (
+            "El hook superó el tiempo máximo; no se hizo el commit.",
+            "Pide al desarrollador que revise el hook lento.",
+        ),
         (E::TimeLimit, Lang::En) => ("GitRaptor did not answer in time.", "Retry later."),
         (E::TimeLimit, Lang::Es) => ("GitRaptor no respondió a tiempo.", "Reintenta más tarde."),
         (E::ResultTooLarge, Lang::En) => (
@@ -197,7 +313,20 @@ fn texts(code: McpToolError, lang: Lang, params: Option<&Value>) -> (&'static st
         ),
         (E::OperationInProgress, lang) => {
             let write = field("kind").and_then(Value::as_str) == Some("write");
-            return match (lang, write) {
+            let snapshot = field("tool").and_then(Value::as_str) == Some("snapshot");
+            return owned(match (lang, write) {
+                (Lang::En, true) if !snapshot => (
+                    "Your previous write is still in progress.",
+                    "Wait and check status or ask the developer for raptor timeline; do not \
+repeat the commit."
+                        .to_owned(),
+                ),
+                (Lang::Es, true) if !snapshot => (
+                    "Tu escritura anterior sigue en curso.",
+                    "Espera y revisa status o pide al desarrollador raptor timeline; no repitas \
+el commit."
+                        .to_owned(),
+                ),
                 (Lang::En, false) => (
                     "A Git operation is in progress in this worktree.",
                     "Finish or abort the Git operation and retry.".to_owned(),
@@ -214,7 +343,7 @@ fn texts(code: McpToolError, lang: Lang, params: Option<&Value>) -> (&'static st
                     "Hay una operación en curso: tu snapshot anterior aún no terminó.",
                     "Espera su respuesta antes de pedir otro.".to_owned(),
                 ),
-            };
+            });
         }
         (E::GitBusy, Lang::En) => ("Git is busy in this worktree.", "Retry when Git finishes."),
         (E::GitBusy, Lang::Es) => (
@@ -228,7 +357,7 @@ fn texts(code: McpToolError, lang: Lang, params: Option<&Value>) -> (&'static st
                 .and_then(Value::as_i64)
                 .map(release_utc);
             let es = lang == Lang::Es;
-            return match window {
+            return owned(match window {
                 "disk" => (
                     if es {
                         "No queda espacio para más snapshots."
@@ -262,7 +391,28 @@ fn texts(code: McpToolError, lang: Lang, params: Option<&Value>) -> (&'static st
                         None => wait_action(es, wait),
                     },
                 ),
-            };
+            });
+        }
+        (E::InvalidText, lang) if is_message(params) => {
+            let reason = message_reason(params);
+            return owned(match lang {
+                Lang::En => (
+                    match reason {
+                        "required" => "Commit message: the message is required.",
+                        "too-long" => "Commit message: message too long.",
+                        _ => "Commit message: invalid text.",
+                    },
+                    "Write a message of up to 16 KiB without control characters.".to_owned(),
+                ),
+                Lang::Es => (
+                    match reason {
+                        "required" => "Mensaje de commit: el mensaje es obligatorio.",
+                        "too-long" => "Mensaje de commit: mensaje demasiado largo.",
+                        _ => "Mensaje de commit: texto no válido.",
+                    },
+                    "Escribe un mensaje de hasta 16 KiB sin caracteres de control.".to_owned(),
+                ),
+            });
         }
         (E::InvalidText, Lang::En) => (
             "Label: invalid text.",
@@ -280,13 +430,21 @@ fn texts(code: McpToolError, lang: Lang, params: Option<&Value>) -> (&'static st
             "El worktree cambió durante el snapshot; no se guardó nada.",
             "Reintenta.",
         ),
-        (E::OutcomeUnknown, Lang::En) => (
+        (E::OutcomeUnknown, Lang::En) if field("tool").is_some() => (
             "It is not known whether the snapshot was saved.",
             "Check `raptor timeline` before retrying.",
         ),
-        (E::OutcomeUnknown, Lang::Es) => (
+        (E::OutcomeUnknown, Lang::Es) if field("tool").is_some() => (
             "No se sabe si el snapshot se guardó.",
             "Revisa `raptor timeline` antes de reintentar.",
+        ),
+        (E::OutcomeUnknown, Lang::En) => (
+            "It is not known whether the commit was made.",
+            "Check status or ask the developer for raptor timeline before retrying.",
+        ),
+        (E::OutcomeUnknown, Lang::Es) => (
+            "No se sabe si el commit se hizo.",
+            "Revisa status o pide al desarrollador raptor timeline antes de reintentar.",
         ),
         (E::WorktreeMissing, Lang::En) => (
             "The worktree of this session no longer exists.",
@@ -328,24 +486,137 @@ fn texts(code: McpToolError, lang: Lang, params: Option<&Value>) -> (&'static st
             "Esta acción requiere confirmación del desarrollador.",
             "Avisa al desarrollador: la decisión es suya. Reintentar da la misma respuesta.",
         ),
-        // The texts of `safe_commit` (DS-US-MCP-009 T005, DS-US-MCP-010 T003) replace this arm.
-        (
-            E::DetachedHead
-            | E::NothingToCommit
-            | E::PathNotFound
-            | E::PolicyDenied
-            | E::Aborted
-            | E::FailedUnchanged
-            | E::FailedChanged
-            | E::InvalidPath
-            | E::PathOutsideWorktree
-            | E::TooManyPaths
-            | E::PathIgnored
-            | E::OtherSessionPresent,
-            lang,
-        ) => return texts(E::Internal, lang, params),
+        (E::NothingToCommit, Lang::En) => {
+            ("Nothing to commit.", "Change or stage files and retry.")
+        }
+        (E::NothingToCommit, Lang::Es) => (
+            "Nada que commitear.",
+            "Modifica o prepara archivos y reintenta.",
+        ),
+        (E::DetachedHead, Lang::En) => ("HEAD is detached.", "Create or switch to a branch."),
+        (E::DetachedHead, Lang::Es) => ("HEAD separado.", "Crea una rama o cámbiate a una."),
+        (E::PolicyDenied, lang) => {
+            let rule = denied_rules(params).next();
+            let es = lang == Lang::Es;
+            let message = match (rule, es) {
+                (Some(rule), false) => {
+                    format!("A repo rule denied the commit: {rule}.")
+                }
+                (Some(rule), true) => {
+                    format!("Guardrails denegó el commit por una regla del repo: {rule}.")
+                }
+                (None, false) => "A repo rule denied the commit.".to_owned(),
+                (None, true) => "Guardrails denegó el commit por una regla del repo.".to_owned(),
+            };
+            let action = if es {
+                "Cumple la regla o pide al desarrollador que la cambie."
+            } else {
+                "Follow the rule or ask the developer to change it."
+            };
+            return (message, action.to_owned());
+        }
+        (E::Aborted, Lang::En) => (
+            "The prior snapshot could not be taken; nothing was committed.",
+            "Ask the developer to free up space or check GitRaptor, and retry.",
+        ),
+        (E::Aborted, Lang::Es) => (
+            "No se pudo tomar el snapshot previo; no se hizo el commit.",
+            "Pide al desarrollador que libere espacio o revise GitRaptor, y reintenta.",
+        ),
+        (E::FailedUnchanged, Lang::En) if field("reason").is_some() => (
+            "No commit was made: the state of the worktree does not allow it.",
+            "Ask the developer to check the worktree.",
+        ),
+        (E::FailedUnchanged, Lang::Es) if field("reason").is_some() => (
+            "No se hizo el commit: el estado del worktree no lo permite.",
+            "Pide al desarrollador que revise el worktree.",
+        ),
+        (E::FailedUnchanged, Lang::En) => (
+            "Git did not commit: a hook refused it or failed.",
+            "The hook's output is not returned over MCP: fix what it asks and retry.",
+        ),
+        (E::FailedUnchanged, Lang::Es) => (
+            "Git no hizo el commit: un hook lo rechazó o falló.",
+            "La salida del hook no se devuelve por MCP: corrige lo que pide y reintenta.",
+        ),
+        (E::FailedChanged, Lang::En) => (
+            "The operation failed and left changes.",
+            "Ask the developer to check it; raptor undo can undo it.",
+        ),
+        (E::FailedChanged, Lang::Es) => (
+            "La operación falló y dejó cambios.",
+            "Pide al desarrollador que lo revise; puede deshacerlo con raptor undo.",
+        ),
+        (E::OtherSessionPresent, Lang::En) => (
+            "Another agent session is in this worktree.",
+            "Name your paths: the worktree is shared.",
+        ),
+        (E::OtherSessionPresent, Lang::Es) => (
+            "Hay otra sesión de agente en este worktree.",
+            "Indica tus rutas: el worktree es compartido.",
+        ),
+        (E::TooManyPaths, lang) => {
+            return match lang {
+                Lang::En => (
+                    format!("Too many paths: at most {MAX_COMMIT_PATHS}."),
+                    NAME_FILES_EN.to_owned(),
+                ),
+                Lang::Es => (
+                    format!("Demasiadas rutas: como mucho {MAX_COMMIT_PATHS}."),
+                    NAME_FILES_ES.to_owned(),
+                ),
+            };
+        }
+        (E::PathNotFound | E::InvalidPath | E::PathOutsideWorktree | E::PathIgnored, lang) => {
+            return path_texts(code, lang, untrusted_path(params).as_deref());
+        }
     };
-    (message, action.to_owned())
+    (message.to_owned(), action.to_owned())
+}
+
+const NAME_FILES_EN: &str =
+    "Name files of the worktree, relative to its root, by their exact name.";
+const NAME_FILES_ES: &str =
+    "Nombra archivos del worktree, relativos a su raíz, con su nombre exacto.";
+
+/// The texts of a refused path, which the message names as data.
+fn path_texts(code: McpToolError, lang: Lang, path: Option<&str>) -> (String, String) {
+    use McpToolError as E;
+    let es = lang == Lang::Es;
+    let named = |text: &str| match path {
+        Some(path) => format!("{text}: {path}."),
+        None => format!("{text}."),
+    };
+    match code {
+        E::PathNotFound if es => (
+            named("Ruta no encontrada"),
+            "Nombra archivos del worktree con su nombre exacto, relativos a su raíz.".to_owned(),
+        ),
+        E::PathNotFound => (
+            named("Path not found"),
+            "Name files of the worktree by their exact name, relative to its root.".to_owned(),
+        ),
+        E::PathIgnored => {
+            let path = path.unwrap_or("?");
+            if es {
+                (
+                    format!("La ruta {path} está ignorada por Git; no se añade."),
+                    "Nombra solo archivos que Git no ignore.".to_owned(),
+                )
+            } else {
+                (
+                    format!("The path {path} is ignored by Git; it is not added."),
+                    "Name only files Git does not ignore.".to_owned(),
+                )
+            }
+        }
+        E::PathOutsideWorktree if es => {
+            (named("Ruta fuera del worktree"), NAME_FILES_ES.to_owned())
+        }
+        E::PathOutsideWorktree => (named("Path outside the worktree"), NAME_FILES_EN.to_owned()),
+        _ if es => (named("Ruta no válida"), NAME_FILES_ES.to_owned()),
+        _ => (named("Invalid path"), NAME_FILES_EN.to_owned()),
+    }
 }
 
 fn wait_action(es: bool, wait: Option<u64>) -> String {
@@ -398,7 +669,7 @@ mod tests {
         assert!(es(McpToolError::Unattributed).contains("usa register_agent"));
         let busy = ToolRefusal {
             code: McpToolError::OperationInProgress,
-            params: Some(json!({"kind": "write"})),
+            params: Some(json!({"kind": "write", "tool": "snapshot"})),
         };
         let body = refusal(&busy, Lang::Es);
         assert!(

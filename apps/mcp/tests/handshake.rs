@@ -107,7 +107,10 @@ fn completes_the_mcp_handshake_over_stdio_and_exits_when_stdin_closes() {
         .iter()
         .map(|t| t["name"].clone())
         .collect();
-    assert_eq!(names, [json!("status"), json!("snapshot")]);
+    assert_eq!(
+        names,
+        [json!("status"), json!("snapshot"), json!("safe_commit")]
+    );
     assert_eq!(
         s.tools["result"]["tools"][0]["inputSchema"]["properties"],
         json!({"cursor": {"type": "string"}})
@@ -287,7 +290,7 @@ fn the_catalog_is_fixed_and_declares_repo_text_as_data() {
     assert_eq!(responses[0]["result"], responses[1]["result"]);
     assert_eq!(responses[1]["result"], responses[2]["result"]);
     let tools = responses[0]["result"]["tools"].as_array().unwrap();
-    assert_eq!(tools.len(), 2);
+    assert_eq!(tools.len(), 3);
     for tool in tools {
         let description = tool["description"].as_str().unwrap();
         assert!(description.contains(r#"{"untrusted": …}"#), "{description}");

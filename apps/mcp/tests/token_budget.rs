@@ -10,7 +10,9 @@
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, Stdio};
 
-use gitraptor_api::mcp_view::{catalog_overruns, estimated_tokens};
+use gitraptor_api::mcp_view::{
+    MCP_TOOL_TOKENS, MCP_WRITE_TOOL_TOKENS, MCP_WRITE_TOOLS, catalog_overruns, estimated_tokens,
+};
 use serde_json::{Value, json};
 
 const MCP: &str = env!("CARGO_BIN_EXE_raptor-mcp");
@@ -78,5 +80,27 @@ fn the_catalog_fits_its_token_budget() {
         }
         let overruns = catalog_overruns(&initialize, &tools);
         assert!(overruns.is_empty(), "{lang}: {overruns:#?}");
+        // Only the allowlisted write tools take the larger budget (RES-MCP-04 statements are
+        // never cut); every other tool keeps RES-MCP-01's.
+        for tool in &tools {
+            let name = tool["name"].as_str().unwrap();
+            let mut read = tool.clone();
+            read.as_object_mut().unwrap().remove("outputSchema");
+            let budget = if MCP_WRITE_TOOLS.contains(&name) {
+                MCP_WRITE_TOOL_TOKENS
+            } else {
+                MCP_TOOL_TOKENS
+            };
+            let tokens = estimated_tokens(&read.to_string());
+            assert!(
+                tokens <= budget,
+                "{lang}: tool {name} ~{tokens} tokens over {budget}"
+            );
+        }
+        assert_eq!(
+            MCP_WRITE_TOOLS,
+            ["safe_commit"],
+            "the allowlist grows only by decision"
+        );
     }
 }

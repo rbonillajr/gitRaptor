@@ -10,11 +10,13 @@ use std::sync::{Mutex, TryLockError};
 use std::time::{Duration, Instant};
 
 use gitraptor_api::catalog::{
-    McpPrepareResult, OperationId, PrepareParams, RejectReason, RejectedData, RunParams,
-    SnapshotRunResult,
+    GuardrailsDenial, MAX_COMMIT_MESSAGE_BYTES, MAX_COMMIT_PATHS, McpPrepareResult, OperationId,
+    PrepareParams, RejectReason, RunParams, SnapshotRunResult, WarningCode,
 };
-use gitraptor_api::mcp_view::{MCP_WRITE_RETRY_AFTER_S, MCP_WRITE_TIME_LIMIT, McpToolError};
-use gitraptor_api::messages::ClientKind;
+use gitraptor_api::mcp_view::{
+    MCP_COMMIT_CALL_LIMIT, MCP_WRITE_RETRY_AFTER_S, MCP_WRITE_TIME_LIMIT, McpToolError,
+};
+use gitraptor_api::messages::{ClientKind, RepoStateView};
 use gitraptor_api::methods::{
     self, MCP_UNAVAILABLE, McpStatus, McpStatusParams, McpUnavailable, McpUnavailableData,
     OPERATION_SNAPSHOT_QUOTA, OPERATION_SNAPSHOT_TIME_LIMIT,
@@ -22,9 +24,15 @@ use gitraptor_api::methods::{
 use gitraptor_api::rpc::{Id, Request, ScopeRefusal, ScopeRefusedData, ServerMessage, code};
 use gitraptor_core::client::{Client, ClientError, ClientOptions, ensure_daemon};
 use gitraptor_core::profile::ProfileDirs;
-use serde_json::json;
+use serde::de::DeserializeOwned;
+use serde_json::{Value, json};
 
 use crate::messages::ToolRefusal;
+use crate::safe_commit::{CommitCall, CommitOutcome};
+use crate::safe_commit_paths::path_params;
+
+/// Most rule codes a `policy-denied` names.
+const MAX_DENIED_RULES: usize = 4;
 
 /// The id of the `operation.run` request. The client library's own calls wait at most 10 s,
 /// less than a snapshot may take, so this one is sent and awaited here; its id lies far from
@@ -40,6 +48,24 @@ pub struct Engine {
     /// Whether the last snapshot call sent its `operation.run`: past that point a failure of
     /// the transport leaves the outcome unknown.
     run_sent: AtomicBool,
+    /// Whether a write call holds the connection now.
+    writing: AtomicBool,
+}
+
+/// Marks a write as holding the connection until it is dropped.
+struct Writing<'a>(&'a AtomicBool);
+
+impl<'a> Writing<'a> {
+    fn start(flag: &'a AtomicBool) -> Self {
+        flag.store(true, Ordering::Relaxed);
+        Self(flag)
+    }
+}
+
+impl Drop for Writing<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Relaxed);
+    }
 }
 
 impl std::fmt::Debug for Engine {
@@ -82,29 +108,98 @@ impl Engine {
             Err(TryLockError::Poisoned(e)) => e.into_inner(),
             Err(TryLockError::WouldBlock) => return Err(self.late().into()),
         };
+        let _writing = Writing::start(&self.writing);
         self.run_sent.store(false, Ordering::Relaxed);
         let reused = slot.is_some();
-        let plan = match call_prepare(&mut slot, label) {
+        let args = serde_json::Map::from_iter([("label".to_owned(), json!(label))]);
+        let plan = match call_prepare(&mut slot, OperationId::Snapshot, args.clone()) {
             Err(ClientError::Io(_) | ClientError::Protocol(_)) if reused => {
-                call_prepare(&mut slot, label)
+                call_prepare(&mut slot, OperationId::Snapshot, args)
             }
             other => other,
         };
         self.connected.store(slot.is_some(), Ordering::Relaxed);
-        let plan = plan.map_err(|err| snapshot_refusal(&err))?;
+        let plan = plan.map_err(|err| of_snapshot(snapshot_refusal(&err)))?;
         let Some(client) = slot.as_mut() else {
             return Err(McpToolError::Internal.into());
         };
         self.run_sent.store(true, Ordering::Relaxed);
         let budget = MCP_WRITE_TIME_LIMIT.saturating_sub(started.elapsed());
-        let result = call_run(client, plan, budget);
+        let result = call_run(client, plan.plan_id, plan.warnings, budget);
         if matches!(result, Err(ClientError::Io(_) | ClientError::Protocol(_))) {
             *slot = None;
         }
         self.connected.store(slot.is_some(), Ordering::Relaxed);
-        result.map_err(|err| match err {
+        result.map_err(|err| {
+            of_snapshot(match err {
+                ClientError::Io(_) | ClientError::Protocol(_) => {
+                    McpToolError::OutcomeUnknown.into()
+                }
+                other => snapshot_refusal(&other),
+            })
+        })
+    }
+
+    /// `safe_commit`: the session's worktree from `mcp.status`, then `operation.prepare` and
+    /// `operation.run` of a `commit` in the same connection, under the same lock as
+    /// [`Engine::status`]. A second write while one holds the connection is
+    /// `operation-in-progress` (`write`) at once. A connection that breaks before `run` is sent
+    /// opens again and repeats `prepare` only; `run` is never sent twice, and a transport that
+    /// fails after it, or [`MCP_COMMIT_CALL_LIMIT`] passing, is `outcome-unknown`. The preview's
+    /// decision and warnings are not looked at: the decision that counts is the one in `run`.
+    pub fn commit(&self, call: &CommitCall) -> Result<CommitOutcome, ToolRefusal> {
+        let started = Instant::now();
+        let mut slot = match self.client.try_lock() {
+            Ok(slot) => slot,
+            Err(TryLockError::Poisoned(e)) => e.into_inner(),
+            Err(TryLockError::WouldBlock) if self.writing.load(Ordering::Relaxed) => {
+                return Err(write_in_progress());
+            }
+            Err(TryLockError::WouldBlock) => return Err(self.late().into()),
+        };
+        let _writing = Writing::start(&self.writing);
+        self.run_sent.store(false, Ordering::Relaxed);
+        let reused = slot.is_some();
+        let status = match call_status(&mut slot, None) {
+            Err(ClientError::Io(_) | ClientError::Protocol(_)) if reused => {
+                call_status(&mut slot, None)
+            }
+            other => other,
+        };
+        self.connected.store(slot.is_some(), Ordering::Relaxed);
+        let status = status.map_err(|err| commit_refusal(&err))?;
+        if status.repo_state == RepoStateView::Unavailable {
+            return Err(McpToolError::RepoUnavailable.into());
+        }
+        let mut args = serde_json::Map::from_iter([("message".to_owned(), json!(call.message))]);
+        if let Some(paths) = &call.paths {
+            args.insert("paths".to_owned(), json!(paths));
+        }
+        let plan = match call_prepare(&mut slot, OperationId::Commit, args.clone()) {
+            Err(ClientError::Io(_) | ClientError::Protocol(_)) => {
+                call_prepare(&mut slot, OperationId::Commit, args)
+            }
+            other => other,
+        };
+        self.connected.store(slot.is_some(), Ordering::Relaxed);
+        let plan = plan.map_err(|err| commit_refusal(&err))?;
+        let Some(client) = slot.as_mut() else {
+            return Err(McpToolError::Internal.into());
+        };
+        self.run_sent.store(true, Ordering::Relaxed);
+        let budget = MCP_COMMIT_CALL_LIMIT.saturating_sub(started.elapsed());
+        let result = call_run(client, plan.plan_id, Vec::new(), budget);
+        if matches!(result, Err(ClientError::Io(_) | ClientError::Protocol(_))) {
+            *slot = None;
+        }
+        self.connected.store(slot.is_some(), Ordering::Relaxed);
+        let run = result.map_err(|err| match err {
             ClientError::Io(_) | ClientError::Protocol(_) => McpToolError::OutcomeUnknown.into(),
-            other => snapshot_refusal(&other),
+            other => commit_refusal(&other),
+        })?;
+        Ok(CommitOutcome {
+            run,
+            worktree: status.worktree,
         })
     }
 
@@ -156,12 +251,16 @@ fn connected(slot: &mut Option<Client>) -> Result<&mut Client, ClientError> {
     slot.as_mut().ok_or(ClientError::NotRunning)
 }
 
-/// One `operation.prepare` of a `snapshot`; a connection that breaks is dropped.
-fn call_prepare(slot: &mut Option<Client>, label: &str) -> Result<McpPrepareResult, ClientError> {
+/// One `operation.prepare`; a connection that breaks is dropped.
+fn call_prepare(
+    slot: &mut Option<Client>,
+    operation: OperationId,
+    args: serde_json::Map<String, Value>,
+) -> Result<McpPrepareResult, ClientError> {
     let params = PrepareParams {
-        operation: OperationId::Snapshot,
+        operation,
         worktree: None,
-        args: serde_json::Map::from_iter([("label".to_owned(), json!(label))]),
+        args,
         surface: None,
         session_env: Vec::new(),
     };
@@ -174,14 +273,15 @@ fn call_prepare(slot: &mut Option<Client>, label: &str) -> Result<McpPrepareResu
 }
 
 /// `operation.run` of a prepared plan, answered within `budget`.
-fn call_run(
+fn call_run<T: DeserializeOwned>(
     client: &mut Client,
-    plan: McpPrepareResult,
+    plan_id: String,
+    accepted_warnings: Vec<WarningCode>,
     budget: Duration,
-) -> Result<SnapshotRunResult, ClientError> {
+) -> Result<T, ClientError> {
     let params = RunParams {
-        plan_id: plan.plan_id,
-        accepted_warnings: plan.warnings,
+        plan_id,
+        accepted_warnings,
         confirmation: None,
     };
     let request = Request::new(RUN_REQUEST_ID, methods::OPERATION_RUN, params);
@@ -222,12 +322,7 @@ fn snapshot_refusal(err: &ClientError) -> ToolRefusal {
     };
     match e.code {
         c if c == code::OPERATION_REJECTED => {
-            let reason = e
-                .data
-                .clone()
-                .and_then(|d| serde_json::from_value::<RejectedData>(d).ok())
-                .map(|d| d.reason);
-            rejected_refusal(reason)
+            rejected_refusal(rejected_reason(e.data.as_ref()), None)
         }
         c if c == OPERATION_SNAPSHOT_QUOTA.code => ToolRefusal {
             code: McpToolError::QuotaExceeded,
@@ -245,8 +340,115 @@ fn snapshot_refusal(err: &ClientError) -> ToolRefusal {
     }
 }
 
+/// A snapshot's own texts where a code is shared with `safe_commit`: the hint stays out of the
+/// answer's `params`.
+fn of_snapshot(mut refusal: ToolRefusal) -> ToolRefusal {
+    if matches!(
+        refusal.code,
+        McpToolError::OperationInProgress | McpToolError::OutcomeUnknown
+    ) {
+        let mut params = refusal.params.take().unwrap_or_else(|| json!({}));
+        params["tool"] = "snapshot".into();
+        refusal.params = Some(params);
+    }
+    refusal
+}
+
+fn write_in_progress() -> ToolRefusal {
+    ToolRefusal {
+        code: McpToolError::OperationInProgress,
+        params: Some(json!({"kind": "write"})),
+    }
+}
+
+/// The `reason` of `OPERATION_REJECTED` data, read field by field: a field this binary does
+/// not know does not hide the reason.
+fn rejected_reason(data: Option<&Value>) -> Option<RejectReason> {
+    data.and_then(|d| d.get("reason"))
+        .and_then(|r| serde_json::from_value(r.clone()).ok())
+}
+
+/// The refusal of a `safe_commit` call that reached the daemon, with the typed `params` its
+/// template needs. The rule codes of a denial are the policy's own names, at most
+/// [`MAX_DENIED_RULES`]; a path is repo text and travels as untrusted.
+pub(crate) fn commit_refusal(err: &ClientError) -> ToolRefusal {
+    let ClientError::Rpc(e) = err else {
+        return refusal(err).into();
+    };
+    let with = |code, params| ToolRefusal {
+        code,
+        params: Some(params),
+    };
+    let field = |key: &str| e.data.as_ref().and_then(|d| d.get(key));
+    let text = |key: &str| field(key).and_then(Value::as_str);
+    match e.code {
+        c if c == code::OPERATION_REJECTED => {
+            let reason = rejected_reason(e.data.as_ref());
+            if reason == Some(RejectReason::GuardrailsDenied) {
+                return denied(field("guardrails"));
+            }
+            rejected_refusal(reason, text("path"))
+        }
+        c if c == code::PRIOR_SNAPSHOT_FAILED => with(
+            McpToolError::Aborted,
+            json!({"operation_id": text("operation_id")}),
+        ),
+        c if c == code::OPERATION_FAILED => {
+            let code = match text("failure") {
+                Some("time-limit") => McpToolError::TimeLimit,
+                Some("unchanged") => McpToolError::FailedUnchanged,
+                _ => McpToolError::FailedChanged,
+            };
+            with(code, json!({"operation_id": text("operation_id")}))
+        }
+        c if c == code::RATE_LIMITED || c == code::LIMIT_REACHED => with(
+            McpToolError::RateLimited,
+            json!({"retry_after_s": MCP_WRITE_RETRY_AFTER_S}),
+        ),
+        // A client that spoke to the daemon directly could reach these; this tool checks
+        // both first.
+        c if c == code::INVALID_PARAMS => match (text("field"), text("reason")) {
+            (Some("paths"), Some("too-many")) => {
+                with(McpToolError::TooManyPaths, json!({"max": MAX_COMMIT_PATHS}))
+            }
+            (Some("paths"), _) => McpToolError::InvalidPath.into(),
+            (Some("message"), reason) => with(
+                McpToolError::InvalidText,
+                json!({
+                    "field": "message",
+                    "reason": reason.unwrap_or("invalid-chars"),
+                    "max_bytes": MAX_COMMIT_MESSAGE_BYTES,
+                }),
+            ),
+            _ => McpToolError::Internal.into(),
+        },
+        _ => refusal(err).into(),
+    }
+}
+
+/// `policy-denied` with the rules that denied and the decision's id.
+fn denied(denial: Option<&Value>) -> ToolRefusal {
+    let Some(denial) =
+        denial.and_then(|d| serde_json::from_value::<GuardrailsDenial>(d.clone()).ok())
+    else {
+        return McpToolError::PolicyDenied.into();
+    };
+    let mut rules: Vec<Value> = Vec::new();
+    for reason in &denial.reasons {
+        let rule = serde_json::to_value(reason.rule).unwrap_or(Value::Null);
+        if rule.is_string() && !rules.contains(&rule) && rules.len() < MAX_DENIED_RULES {
+            rules.push(rule);
+        }
+    }
+    ToolRefusal {
+        code: McpToolError::PolicyDenied,
+        params: Some(json!({"rules": rules, "decision_id": denial.decision_id})),
+    }
+}
+
 /// The tool refusal for a plan the daemon rejected: the write table every write tool shares.
-fn rejected_refusal(reason: Option<RejectReason>) -> ToolRefusal {
+/// `path` is the path the daemon refused, when it names one.
+fn rejected_refusal(reason: Option<RejectReason>, path: Option<&str>) -> ToolRefusal {
     let with = |code, params| ToolRefusal {
         code,
         params: Some(params),
@@ -256,9 +458,7 @@ fn rejected_refusal(reason: Option<RejectReason>) -> ToolRefusal {
         Some(RejectReason::OperationInProgress) => {
             with(McpToolError::OperationInProgress, json!({"kind": "git"}))
         }
-        Some(RejectReason::WriteInProgress) => {
-            with(McpToolError::OperationInProgress, json!({"kind": "write"}))
-        }
+        Some(RejectReason::WriteInProgress) => write_in_progress(),
         Some(RejectReason::GitBusy) => McpToolError::GitBusy.into(),
         Some(RejectReason::GuardrailsConfirmationRequired) => {
             McpToolError::ConfirmationRequired.into()
@@ -269,7 +469,39 @@ fn rejected_refusal(reason: Option<RejectReason>) -> ToolRefusal {
             | RejectReason::WarningsMismatch
             | RejectReason::RepoIdentityChanged,
         ) => McpToolError::StateChanged.into(),
-        Some(RejectReason::DaemonStopping) => McpToolError::EngineUnavailable.into(),
+        Some(RejectReason::DaemonStopping | RejectReason::GitUnavailable) => {
+            McpToolError::EngineUnavailable.into()
+        }
+        Some(RejectReason::ExecutorDescendant) => McpToolError::IdentityUnverified.into(),
+        Some(RejectReason::DetachedHead) => McpToolError::DetachedHead.into(),
+        Some(RejectReason::NothingToCommit) => McpToolError::NothingToCommit.into(),
+        Some(
+            reason @ (RejectReason::WorktreeLocked
+            | RejectReason::BranchCheckedOutElsewhere
+            | RejectReason::Grafts),
+        ) => with(
+            McpToolError::FailedUnchanged,
+            json!({"reason": serde_json::to_value(reason).unwrap_or(Value::Null)}),
+        ),
+        Some(RejectReason::QueueFull) => with(
+            McpToolError::RateLimited,
+            json!({"retry_after_s": MCP_WRITE_RETRY_AFTER_S}),
+        ),
+        Some(RejectReason::SharedWorktreeNeedsPaths) => McpToolError::OtherSessionPresent.into(),
+        Some(
+            reason @ (RejectReason::PathNotFound
+            | RejectReason::PathInvalid
+            | RejectReason::PathOutsideWorktree
+            | RejectReason::PathIgnored),
+        ) => ToolRefusal {
+            code: match reason {
+                RejectReason::PathNotFound => McpToolError::PathNotFound,
+                RejectReason::PathInvalid => McpToolError::InvalidPath,
+                RejectReason::PathIgnored => McpToolError::PathIgnored,
+                _ => McpToolError::PathOutsideWorktree,
+            },
+            params: path.map(path_params),
+        },
         _ => McpToolError::Internal.into(),
     }
 }
