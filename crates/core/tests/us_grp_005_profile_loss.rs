@@ -20,11 +20,15 @@ use gitraptor_api::methods;
 use gitraptor_api::scope::{Scope, ScopeSnapshot};
 use gitraptor_core::channel::{AgentMatcher, ChannelConfig};
 use gitraptor_core::client::Client;
+#[cfg(unix)]
+use gitraptor_core::daemon::DaemonError;
 use gitraptor_core::daemon::{
-    Daemon, DaemonConfig, DaemonEnv, DaemonError, EngineState, InstanceLock, LogLimits,
-    ShutdownHandle, StopCause, StopReport,
+    Daemon, DaemonConfig, DaemonEnv, EngineState, InstanceLock, LogLimits, ShutdownHandle,
+    StopCause, StopReport,
 };
-use gitraptor_core::profile::{ProfileDirs, ProfileError};
+use gitraptor_core::profile::ProfileDirs;
+#[cfg(unix)]
+use gitraptor_core::profile::ProfileError;
 use serde_json::json;
 
 const DEADLINE: Duration = Duration::from_secs(10);
