@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-27
 feature: cockpit
 related:
   context:
@@ -16,6 +16,8 @@ related:
     - US-GRP-016
     - US-CKP-001
     - US-GRD-014
+  specs:
+    - DS-US-CKP-006
 tags:
   - cockpit
   - prediccion-conflictos
@@ -81,9 +83,16 @@ Entonces no aparece ningún par entre "feat-nuevo" y otro worktree
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto (Dev Spec). Mecanismo: ADR-CKP-001._
+Detalle en [DS-US-CKP-006](../dev-specs/US-CKP-006-conflictos-previstos.md). La forma del contrato es la de [DS-TS-CKP-001 § Contrato de API](../dev-specs/TS-CKP-001-predictor-conflictos.md#contrato-de-api); mecanismo en ADR-CKP-001.
+
+- La TUI consume la predicción publicada con la capacidad `prediction.pairs`: `RepoView.prediction` de la instantánea y el evento `prediction.changed` del ámbito repo. No calcula ni inventa pares (P7).
+- El detalle de los pares ⚡ y ⚠ se pide con `prediction.list` (≤ 50 `pair_ids`) y solo se muestra si su `rev` es el del resumen (A2).
+- Una fila con un ⚡ conocido (`current` o `recalculating`) lleva el símbolo y sube a la zona de atención (DS-US-CKP-002 D2).
+- Panel de conflictos (ConflictAlert): ⚡ con archivo y rangos de líneas por lado y la marca de regla de merge; ⚠ con los archivos en común; los lados con el nombre de su fila o de la rama base (P5), unidos por `↔` (`<->` en ASCII).
+- Línea de límites siempre visible al pie y el texto completo de los 8 límites con `?` (P3), con textos en/es en un catálogo propio.
+- Los escenarios 1 y 5 se apoyan en las pruebas de TS-CKP-001 (T010, T011, `repo_intact`) y en la prueba de punta a punta `apps/cli/tests/tui_conflicts.rs`.
 
 ## Diseño y Dev Spec
 
 - **Diseño:** DSYS-GRP-001 (ConflictAlert, símbolos ⚡ ⚠).
-- **Dev Spec:** pendiente (tras SPIKE-CKP-001).
+- **Dev Spec:** [DS-US-CKP-006](../dev-specs/US-CKP-006-conflictos-previstos.md) (`draft`; bloqueada por T009 y el PR-B de TS-CKP-001).
