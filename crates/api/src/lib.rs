@@ -16,6 +16,7 @@ pub mod catalog;
 #[cfg(feature = "client")]
 pub mod client;
 pub mod clock;
+pub mod commit_paths;
 pub mod discovery;
 pub mod event;
 pub mod framing;

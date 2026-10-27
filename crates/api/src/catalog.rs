@@ -15,6 +15,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+use crate::commit_paths::check_commit_paths;
 use crate::timemachine::{Invalid, RequesterView, Surface};
 use crate::{Untrusted, UntrustedName};
 
@@ -38,6 +39,8 @@ pub const MAX_COMMIT_MESSAGE_BYTES: usize = 16 * 1024;
 pub const MAX_COMMIT_PATHS: usize = 256;
 /// Longest literal path of a commit, in bytes.
 pub const MAX_PATH_BYTES: usize = 4096;
+/// Most paths of a commit reported in its result (ADR-MCP-001 § 6).
+pub const MAX_REPORTED_COMMIT_PATHS: usize = 200;
 /// Longest snapshot label, in characters.
 pub const MAX_LABEL_CHARS: usize = 64;
 /// Longest snapshot label, in bytes: checked before the characters are walked, so
@@ -339,15 +342,8 @@ impl OperationArgs {
                 Ok(())
             }
             Self::Commit(a) => {
-                if a.message.trim().is_empty() {
-                    return Err(Invalid::new("message", "required"));
-                }
-                if a.message.len() > MAX_COMMIT_MESSAGE_BYTES {
-                    return Err(Invalid::new("message", "too long"));
-                }
-                if a.message.contains('\0') {
-                    return Err(Invalid::new("message", "contains NUL"));
-                }
+                check_commit_message(&a.message)
+                    .map_err(|problem| Invalid::new("message", problem.as_str()))?;
                 if let Some(paths) = &a.paths {
                     if paths.is_empty() {
                         return Err(Invalid::new(
@@ -355,12 +351,8 @@ impl OperationArgs {
                             "empty: omit it to commit what is staged",
                         ));
                     }
-                    if paths.len() > MAX_COMMIT_PATHS {
-                        return Err(Invalid::new("paths", "too many"));
-                    }
-                    for p in paths {
-                        check_literal_relative(p)?;
-                    }
+                    check_commit_paths(paths)
+                        .map_err(|(_, refusal)| Invalid::new("paths", refusal.as_str()))?;
                 }
                 Ok(())
             }
@@ -552,22 +544,45 @@ fn check_absolute(field: &'static str, p: &str) -> Result<(), Invalid> {
     Ok(())
 }
 
-/// A commit path: relative to the worktree, taken literally (never a
-/// pathspec magic nor an option), without `..` or `.git`.
-fn check_literal_relative(p: &str) -> Result<(), Invalid> {
-    let bad = |why| Invalid::new("paths", why);
-    if p.is_empty() || p.len() > MAX_PATH_BYTES || p.contains('\0') {
-        return Err(bad("invalid path"));
+/// Why a commit message is refused (BR-MCP-VAL-003).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum MessageProblem {
+    /// Empty or blank.
+    Required,
+    /// Over [`MAX_COMMIT_MESSAGE_BYTES`] bytes.
+    TooLong,
+    /// A [`is_forbidden_char`] other than `\n` and `\t`, or a `\r` outside `\r\n`.
+    InvalidChars,
+}
+
+impl MessageProblem {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Required => "required",
+            Self::TooLong => "too-long",
+            Self::InvalidChars => "invalid-chars",
+        }
     }
-    if p.starts_with('/') || p.starts_with('\\') || p.starts_with('-') {
-        return Err(bad("must be relative to the worktree"));
+}
+
+/// BR-MCP-VAL-003. Bytes are checked before characters are walked.
+pub fn check_commit_message(message: &str) -> Result<(), MessageProblem> {
+    if message.trim().is_empty() {
+        return Err(MessageProblem::Required);
     }
-    if p.chars().any(is_forbidden_char) {
-        return Err(bad("contains control characters"));
+    if message.len() > MAX_COMMIT_MESSAGE_BYTES {
+        return Err(MessageProblem::TooLong);
     }
-    for part in p.split(['/', '\\']) {
-        if part == ".." || part.eq_ignore_ascii_case(".git") {
-            return Err(bad("must stay inside the worktree"));
+    let mut chars = message.chars().peekable();
+    while let Some(c) = chars.next() {
+        let ok = match c {
+            '\n' | '\t' => true,
+            '\r' => chars.peek() == Some(&'\n'),
+            c => !is_forbidden_char(c),
+        };
+        if !ok {
+            return Err(MessageProblem::InvalidChars);
         }
     }
     Ok(())
@@ -1014,6 +1029,37 @@ pub enum RejectReason {
     /// The same requester's previous manual snapshot has not finished. Only a
     /// connection with `operation.snapshot` receives it.
     WriteInProgress,
+    /// Nothing staged, or no change in the named paths. Only with `operation.commit`.
+    NothingToCommit,
+    /// A named path is in neither the index nor HEAD (nor the untracked files). Only with
+    /// `operation.commit`.
+    PathNotFound,
+    /// No usable system Git for user operations, or a platform that cannot launch them yet.
+    /// Only with `operation.commit`.
+    GitUnavailable,
+    /// A directory, a gitlink, a skip-worktree entry, a special-name symlink, or a lexical
+    /// refusal. Only with `operation.commit`.
+    PathInvalid,
+    /// A named path leaves the worktree (a link, a parent link, a nested repo, `.git`). Only
+    /// with `operation.commit`.
+    PathOutsideWorktree,
+    /// A named untracked path is ignored by Git; it is never added. Only with `operation.commit`.
+    PathIgnored,
+    /// "All staged" while another agent session is live in the worktree. Only with
+    /// `operation.commit`.
+    SharedWorktreeNeedsPaths,
+}
+
+/// The commit an executed `commit` plan made (only with `operation.commit`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CommitDone {
+    /// Full hex of the new commit.
+    pub oid: String,
+    /// The commit against its parent (or the empty tree), at most
+    /// [`MAX_REPORTED_COMMIT_PATHS`].
+    pub paths: Vec<Untrusted>,
+    pub paths_total: u32,
 }
 
 /// `operation.run` result of a `snapshot` plan (only with `operation.snapshot`).

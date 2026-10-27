@@ -237,13 +237,18 @@ pub fn normalize(shape: &PlanShape) -> Normalized {
         } => Normalized {
             // The new oid does not exist yet: the branch is evaluated with the sentinel
             // `old -> old` (the protected branch acts on the name, the paths are preloaded).
+            // `pre-commit` goes last: the gate's log entry takes the first evaluated operation,
+            // which must stay `commit-msg`.
             evaluated: vec![
                 Operation::Commit {
                     stage: CommitStage::CommitMsg,
                 },
                 tx(branch, oid(old), oid(old)),
+                Operation::Commit {
+                    stage: CommitStage::PreCommit,
+                },
             ],
-            preset: vec![Preset::default(), prepared(paths)],
+            preset: vec![Preset::default(), prepared(paths), Preset::default()],
             registered: vec![
                 Expected::CommitStages {
                     authorship: authorship.clone(),
@@ -344,3 +349,7 @@ pub fn matches(
 #[cfg(test)]
 #[path = "plan_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "plan_commit_tests.rs"]
+mod commit_tests;

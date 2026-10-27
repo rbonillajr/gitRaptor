@@ -10,7 +10,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::actor::Actor;
-use crate::catalog::{Layer, OperationOutcome};
+use crate::catalog::{CommitDone, Layer, OperationOutcome};
 use crate::messages::RefusalReason;
 use crate::{Untrusted, UntrustedName};
 
@@ -161,6 +161,9 @@ pub struct OperationRunResult {
     /// Git's output, untrusted and capped; only for layer `cockpit` (M-03).
     #[serde(default)]
     pub git_output: Option<Untrusted>,
+    /// The commit a `commit` plan made; only with `operation.commit`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<CommitDone>,
 }
 
 /// `operation.run` result for an MCP connection: structured fields only, no
@@ -173,6 +176,9 @@ pub struct McpOperationRunResult {
     pub actor: Actor,
     pub changed_refs: Vec<Untrusted>,
     pub outcome: OperationOutcome,
+    /// The commit a `commit` plan made; only with `operation.commit`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<CommitDone>,
 }
 
 impl OperationRunResult {
@@ -188,6 +194,7 @@ impl OperationRunResult {
                 .map(|r| r.mcp_name())
                 .collect(),
             outcome: self.outcome,
+            commit: self.commit.clone(),
         }
     }
 }
@@ -1320,6 +1327,7 @@ mod tests {
             outcome: OperationOutcome::Done,
             layer: Layer::Mcp,
             git_output: Some(Untrusted::new("hook said hi")),
+            commit: None,
         };
         let shown = result.changed_refs[0].sanitized();
         assert!(!shown.contains('\u{1b}') && !shown.contains('\u{7}'));

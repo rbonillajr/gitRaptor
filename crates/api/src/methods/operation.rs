@@ -32,6 +32,11 @@ pub const CAP_OPERATION_SNAPSHOT: Capability = Capability::new("operation.snapsh
 /// `guardrails-denied` rejection. Without it the denial keeps today's shape.
 pub const CAP_OPERATION_GUARDRAILS: Capability = Capability::new("operation.guardrails");
 
+/// `operation.prepare` and `operation.run` accept the `commit` operation and the shapes that come
+/// with it (its reject reasons, `commit` in the run result, `failure` in [`OperationFailedData`]).
+/// Without it the call stays `NOT_IMPLEMENTED`.
+pub const CAP_OPERATION_COMMIT: Capability = Capability::new("operation.commit");
+
 /// The module's error block (ADR-GRP-016).
 const BLOCK: i64 = FIRST_ERROR_BLOCK - 3 * ERROR_BLOCK_LEN;
 
@@ -50,7 +55,11 @@ pub(super) const GROUP: Group = Group {
         // descendant of the daemon never has; not offered to `raptor-mcp`.
         method(OPERATION_CANCEL, false, false),
     ],
-    capabilities: &[CAP_OPERATION_SNAPSHOT, CAP_OPERATION_GUARDRAILS],
+    capabilities: &[
+        CAP_OPERATION_SNAPSHOT,
+        CAP_OPERATION_GUARDRAILS,
+        CAP_OPERATION_COMMIT,
+    ],
     error_block: Some(BLOCK),
     errors: &[OPERATION_SNAPSHOT_QUOTA, OPERATION_SNAPSHOT_TIME_LIMIT],
     ..Group::new("operation")
@@ -76,4 +85,24 @@ pub struct SnapshotQuotaData {
     pub retry_after_s: Option<u64>,
     /// When the oldest entry leaves the window (ms since the epoch); absent for `disk`.
     pub release_utc_ms: Option<i64>,
+}
+
+/// How a step that failed left the worktree.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum StepFailureView {
+    /// The step may have changed the worktree or its refs.
+    Changed,
+    /// The step changed nothing (a hook refused the commit).
+    Unchanged,
+    /// The step ran out of its time limit; nothing was committed.
+    TimeLimit,
+}
+
+/// `data` of `OPERATION_FAILED`. `failure` only with `operation.commit`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct OperationFailedData {
+    pub operation_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure: Option<StepFailureView>,
 }
