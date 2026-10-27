@@ -11,7 +11,7 @@ Todo lo que viene del plan, del contrato o del crítico va dentro de bloques de 
 
 - Tipo: `plan`
 - Excepción del crítico: no
-- Generada: `2026-10-22T02:10:18.943Z`
+- Generada: `2026-10-27T19:43:54.389Z`
 - Sha de aprobación: `32e4dd02b7c7c3b83acd593eb15f86858ca7da93502406dba5a2b7ac57321b73:252d99f141f46af66e2ae029a96b6641dc016f5fba274715178ee77eff7e11aa:be5127383f76ffa98c3c66d4214b936ebd11d939080474e27b5a08a26e20bc8f`
 
 ## Plan (contexto, no se firma)
@@ -791,9 +791,8 @@ e1ac33f0a881e5951f21f69ffbb7dc0f4a10fad8c26073efc6f7897081018bd9  apps/cli/tests
 
 ## Crítico
 
-- Rondas (plan): 2
-  - ronda 1: AJUSTES · 1 bloqueante(s) · siguiente: otra-ronda
-  - ronda 2: APROBABLE · 0 bloqueante(s) · siguiente: aprobar
+- Rondas (plan): 1
+  - ronda 1: APROBABLE · 0 bloqueante(s) · siguiente: aprobar
 - Último veredicto: APROBABLE
 - Excepción: no
 

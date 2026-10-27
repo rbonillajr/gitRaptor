@@ -543,9 +543,10 @@ fn an_ended_session_stays_until_a_new_one_replaces_it() {
     assert!(!has(&screen, "feat-pagos", &["●"]), "{screen:#?}");
     // The same agent registered again opens a new session: an ended one is never reopened.
     shop.developer(&["agent", "register", "claude-1", "--worktree", &pagos]);
-    let screen = tui.until("a new claude-1 session Active, without the ended one", |s| {
-        has(s, "feat-pagos", &["●", "claude-1 · wt-pagos"])
-    });
+    let screen = tui.until(
+        "a new claude-1 session Active, without the ended one",
+        |s| has(s, "feat-pagos", &["●", "claude-1 · wt-pagos"]),
+    );
     assert!(!in_block(&screen, "feat-pagos", &["ended"]), "{screen:#?}");
 }
 
@@ -565,5 +566,8 @@ fn a_shared_worktree_shows_all_its_sessions() {
     let screen = tui.until("claude-1 ended, still named", |s| {
         in_block(s, "feat-pagos", &["claude-1", "claude-2", "ended"])
     });
-    assert!(!in_block(&screen, "feat-pagos", &["shared with"]), "{screen:#?}");
+    assert!(
+        !in_block(&screen, "feat-pagos", &["shared with"]),
+        "{screen:#?}"
+    );
 }

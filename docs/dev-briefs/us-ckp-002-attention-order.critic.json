@@ -1,1 +1,1 @@
-{"schema":"nassa.plan-critic.v1","round":2,"planSha":"","contractSha":"","verdict":"APROBABLE","findings":[{"id":"PC-2","kind":"test","blocking":false,"evidence":"docs/dev-briefs/us-ckp-002-attention-order.contract.json:86","ask":"En LAGGED y FAILEDLIST, la fila de la sesion mas antigua debe ir antes que la de otro agente presente para que el color posicional falle (el tester ya probo ambos en rojo: los colores se intercambian hoy).","toHuman":false}]}
+{"schema":"nassa.plan-critic.v1","round":1,"planSha":"","contractSha":"","verdict":"APROBABLE","findings":[]}
