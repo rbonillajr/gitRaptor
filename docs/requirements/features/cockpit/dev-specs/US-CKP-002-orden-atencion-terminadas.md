@@ -2,9 +2,9 @@
 id: DS-US-CKP-002
 title: "Dev Spec — US-CKP-002: la flota ordenada por atención, con las sesiones terminadas"
 type: dev-spec
-status: draft
+status: partially-implemented
 created: 2026-10-09
-updated: 2026-10-09
+updated: 2026-10-27
 story: US-CKP-002
 feature: cockpit
 domain: GRP
@@ -645,3 +645,7 @@ _No aplica — no hay llamadas nuevas al daemon._ La única respuesta nueva al u
 | G5 | Solo se verificará en macOS. Linux y Windows siguen la etapa de validación multiplataforma | Etapa de validación | Rene |
 | G6 | Los escenarios 4 y 5 de la historia llevan una precondición más que el texto pedido ("terminó después de que empezaran las otras"). Sin ella, por BR-CKP-TIME-002, la Terminada no se vería y la fila no enseñaría todas sus sesiones | Ninguna | — |
 | G7 | La tarea T004 modifica el test `no_action_targets_a_row`, que crea DS-US-CKP-003, en `apps/cli/tests/tui_engine_states.rs` | Clasificar `ShowEnded` | Implementador |
+
+## Estado de la implementación (2026-10-27)
+
+Implementado en: PR #PRNUM (T001, T003 a T007). La corrida de `/implement` se abortó en la línea base (B1: la capa estática salía roja por los tests del contrato sin formatear y la suite agotó el tiempo en frío) y la historia sigue **sin certificar**. Dos aserciones de `tests/tui_fleet_order.rs` (`CKP002-REPLACE` y `CKP002-NINE`) esperaban un espacio tras el símbolo de estado y la columna pinta dos: se corrigieron a dos espacios. El grupo "atención" no tiene alcance todavía (D12).

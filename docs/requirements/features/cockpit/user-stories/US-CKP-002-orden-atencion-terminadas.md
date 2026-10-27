@@ -2,10 +2,10 @@
 id: US-CKP-002
 title: "La lista pone primero lo que pide atención y no se llena de sesiones viejas"
 type: us
-status: draft
+status: partially-implemented
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-27
 feature: cockpit
 related:
   context:
@@ -91,6 +91,16 @@ Entonces "claude-9" comparte color con "claude-1" y su fila muestra su nombre y 
 - El orden y la ventana de 24 h son funciones puras de la vista. El color de cada agente es un hueco estable en el estado de la interfaz.
 - "Compartido" son dos o más sesiones presentes. Hasta que US-GRP-011 publique la marca, lo calcula una sola función provisional de la TUI (excepción temporal a BR-CKP-CALC-001).
 - La subida por ⚡, por ⛔ y por hueco depende de US-CKP-006, US-CKP-019 y US-GRP-005. Se implementa después de US-CKP-005 y US-CKP-003.
+
+## Estado de la implementación (2026-10-27)
+
+Implementado en: PR #PRNUM ([DS-US-CKP-002](../dev-specs/US-CKP-002-orden-atencion-terminadas.md)).
+
+Verificado en macOS: la flota va en el orden de D1 (principal, Activo, Inactivo, Terminado, sin agente) con la línea de sesiones de un worktree compartido; la última sesión terminada se ve hasta 24 h ("terminó hace …", "sin observar" si terminó en un hueco) y la sustituye una sesión nueva; el color de cada agente es estable ante el cliente lento, la reconexión y una lista fallida (el noveno comparte el color del primero y conserva su nombre); la tecla `f` alterna "ver terminadas" con su recuento en la barra y en la ayuda `?`. Pruebas de pantalla y snapshots en en/es, sin color y en ASCII, y pruebas de proceso con el `raptor` real bajo `script`.
+
+Pendiente, con dueño: subir la fila por hueco de observación (US-GRP-005), por conflicto previsto (US-CKP-006) y por denegación de Guardrails (US-CKP-019); hoy el grupo "atención" existe en el orden pero ninguna fila lo alcanza. La marca "compartido" del motor (US-GRP-011).
+
+Linux y Windows: *Pendiente: etapa de validación multiplataforma* (XP-21; [`xplat-pendientes.md`](../../../../architecture/xplat-pendientes.md)).
 
 ## Diseño y Dev Spec
 

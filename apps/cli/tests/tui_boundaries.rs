@@ -159,7 +159,11 @@ fn the_model_and_the_view_never_hold_untrusted_text() {
         let in_ingest = file
             .components()
             .any(|c| c.as_os_str() == "present" || c.as_os_str() == "client");
-        if in_ingest {
+        // A `*_tests.rs` file is a `#[cfg(test)]` module: it builds engine fixtures, never ships.
+        let test_only = file
+            .file_name()
+            .is_some_and(|n| n.to_string_lossy().ends_with("_tests.rs"));
+        if in_ingest || test_only {
             continue;
         }
         let code = code(&file);
