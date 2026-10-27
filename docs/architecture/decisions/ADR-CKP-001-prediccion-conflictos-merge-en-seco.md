@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-04
 date: 2026-10-04
 created: 2026-10-04
-updated: 2026-10-20
+updated: 2026-10-27
 deciders: [Orquestador (delegación de Rene Bonilla, 2026-10-04)]
 domain: GRP
 feature: cockpit
@@ -310,3 +310,12 @@ Decisión del orquestador (2026-10-05), validada por Arquitecto. Origen: DEP-MCP
 - Validación 2: con el trabajador, el único proceso hijo del predictor es el propio binario por ruta absoluta; el trabajador no lanza ninguno.
 - Validación 4: con el umbral de E4. El corpus R-SYN es gate de PR; `git/git` se reejecuta a mano al subir `gix`.
 - Validación 9: el blob de 100 MB se corta por cabecera sin relanzar; 10.000 archivos en conflicto matan el trabajador por memoria; un blob denso lo mata a los 2 s. El daemon sigue respondiendo en los tres casos.
+
+## Enmienda (2026-10-27, G2)
+
+Decisión del orquestador (2026-10-27), validada por Arquitecto (A1 y A2), que cierra G2 de DS-TS-CKP-001.
+
+- **Dueño de la forma**: pasa de TS-GRP-004 a TS-CKP-001. La forma está en [DS-TS-CKP-001 § Contrato de API](../../requirements/features/cockpit/dev-specs/TS-CKP-001-predictor-conflictos.md#contrato-de-api) y la implementa T009.
+- **Corrige** el último punto de § 8 ("pendiente, dueño: worker del canal") y el punto de TS-GRP-004 en E6.
+- **Forma, en resumen**: capacidad `prediction.pairs` con `RepoView.prediction` (resumen por par con `pair_id` determinista, `rev`, estado, motivo y `level` solo en `current`/`recalculating`) y el evento de repo `prediction.changed`; método `prediction.list` para el detalle (rangos, `has_merge_rule`), con páginas de 50 pares o 512 KiB.
+- `attention.conflicts` cuenta los ⚡ conocidos y queda no disponible mientras haya pares `calculating` sin ninguno; un par contra la base cuya punta cambió vuelve a `calculating`.
