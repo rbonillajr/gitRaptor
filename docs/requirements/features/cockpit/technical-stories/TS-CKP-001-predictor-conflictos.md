@@ -8,7 +8,7 @@ domain: GRP
 priority: critical
 complexity: high
 created: 2026-10-04
-updated: 2026-10-21
+updated: 2026-10-27
 related:
   adrs: [ADR-CKP-001, ADR-GRP-005, ADR-GRP-009, ADR-GRP-010, ADR-GRP-011, ADR-GRP-013]
   stories: [US-CKP-006, US-CKP-007, US-CKP-008, US-CKP-009, US-CKP-011, SPIKE-CKP-001, TS-GRP-002, TS-GRP-003, TS-GRP-004, TS-GRP-005, INF-GRP-001, INF-GRP-002, TS-GRD-001]
@@ -31,7 +31,7 @@ tags: [cockpit, prediccion-conflictos, merge-en-seco, solape, daemon, nfr-01, se
 
 > Dev Spec: [`dev-specs/TS-CKP-001-predictor-conflictos.md`](../dev-specs/TS-CKP-001-predictor-conflictos.md) | Borrador condicionado a SPIKE-CKP-001 (2026-10-09): una rama por salida del SPIKE, `ready_to_implement: false` hasta sus resultados
 >
-> **Depende de**: SPIKE-CKP-001 (mecanismo y cifras; bloquea la implementación y elige la rama de la Dev Spec), TS-GRP-002 (capa de lectura donde vive el merge en seco), TS-GRP-003 (daemon que aloja el pool), TS-GRP-005 (clase de trabajo `utility` y fuente de energía para el pool; añadida el 2026-10-09, DS-TS-CKP-001 G5) y TS-GRP-004 (instantánea y stream; la forma del estado y del evento de predicción es **pendiente, dueño: worker del canal (TS-GRP-004)**). Los pares contra la base usan la rama base confirmada (TS-GRD-001, US-GRD-014, US-GRP-016); sin ella se publican "pendiente". **ADRs**: ADR-CKP-001 § 1 a § 8 y § 10, que la Dev Spec sigue punto por punto; ADR-GRP-010 § 4 (rutas sin commitear en memoria); ADR-GRP-011 (presupuesto del motor que la predicción no consume). **Seguridad**: SEC-09, SEC-12, NFR-03. **Habilita**: BR-06 (BR-CKP-CALC-002, CALC-003, WF-005, WF-007, EDGE-001), `raptor conflicts` (Q-CKP-20) y `check_conflicts` de F-001-05.
+> **Depende de**: SPIKE-CKP-001 (mecanismo y cifras; bloquea la implementación y elige la rama de la Dev Spec), TS-GRP-002 (capa de lectura donde vive el merge en seco), TS-GRP-003 (daemon que aloja el pool), TS-GRP-005 (clase de trabajo `utility` y fuente de energía para el pool; añadida el 2026-10-09, DS-TS-CKP-001 G5) y TS-GRP-004 (instantánea y stream; la forma del estado y del evento de predicción quedó fijada en [DS-TS-CKP-001 § Contrato de API](../dev-specs/TS-CKP-001-predictor-conflictos.md#contrato-de-api) (2026-10-27)). Los pares contra la base usan la rama base confirmada (TS-GRD-001, US-GRD-014, US-GRP-016); sin ella se publican "pendiente". **ADRs**: ADR-CKP-001 § 1 a § 8 y § 10, que la Dev Spec sigue punto por punto; ADR-GRP-010 § 4 (rutas sin commitear en memoria); ADR-GRP-011 (presupuesto del motor que la predicción no consume). **Seguridad**: SEC-09, SEC-12, NFR-03. **Habilita**: BR-06 (BR-CKP-CALC-002, CALC-003, WF-005, WF-007, EDGE-001), `raptor conflicts` (Q-CKP-20) y `check_conflicts` de F-001-05.
 
 ### Alcance Técnico
 

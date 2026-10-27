@@ -4,7 +4,7 @@ title: "Dev Spec — Predictor de conflictos en el daemon: solape y conflicto pr
 type: dev-spec
 status: partially-implemented
 created: 2026-10-09
-updated: 2026-10-21
+updated: 2026-10-27
 story: TS-CKP-001
 feature: cockpit
 domain: GRP
@@ -51,7 +51,7 @@ lineage:
 constitution_gates: []
 validation:
   must_read_resolved: true
-  gaps_blocking: 2
+  gaps_blocking: 1
   ready_to_implement: true
   blocked_tasks: [T006, T007, T009, T010, T012, T013]
   gaps_release: 0
@@ -61,7 +61,7 @@ tags: [cockpit, prediccion-conflictos, merge-en-seco, solape, daemon, proceso-tr
 
 # DS-TS-CKP-001 · Predictor de conflictos en el daemon
 
-Implementado en parte en: PR #275 (T001 a T005, T011 y la excepción G9 de T010). Faltan T006, T007, T009, T010, T012 y T013 (G2, G5).
+Implementado en parte en: PR #275 (T001 a T005, T011 y la excepción G9 de T010). Faltan T006, T007, T009, T010, T012 y T013 (G5; G2 cerrado el 2026-10-27).
 
 ## Contexto rápido
 
@@ -115,6 +115,14 @@ Las ramas R-A2, R-B y R-SOLAPE quedan descartadas y se borraron con sus tareas (
 
 - **D15**: entrega en dos PR. El PR-A construye T001 a T005 y T011, más la excepción G9 de T010 (limitada a `write_buf`/`write_stream`, y solo si `dry_merge/memory.rs` abre una memoria de objetos). El PR-B, cuando se cierren G2 y G5, construye T006, T007, T009, T010, T012 y T013. Brief: `docs/dev-briefs/ts-ckp-001-conflict-predictor.md`.
 
+**Decisión del orquestador (2026-10-27), validada por Arquitecto** (A1 y A2 del cierre de G2):
+
+- **D16**: la forma de la publicación de la predicción se fija en esta Dev Spec, [§ Contrato de API](#contrato-de-api), y la implementa T009 (A1). El dueño de la forma pasa de TS-GRP-004 a TS-CKP-001. DS-US-CKP-006, 007 y 008 y DS-US-MCP-016 solo la referencian. La forma es la de A2: capacidad `prediction.pairs`, método `prediction.list`, evento `prediction.changed`, `RepoView.prediction`, `pair_id` determinista, `level` solo en `current` y `recalculating`, `attention.conflicts` híbrido y la regla de la base movida en `RepoPairs::apply`. G2 queda cerrado; `blocked_tasks` no cambia (T009 va en el PR-B, con G5).
+
+**Decisión del Arquitecto como autor de la Dev Spec (2026-10-27)**, huecos que A2 no cubre:
+
+- **D17**: `prediction.changed` lleva también `repo_id` en `data`, porque un evento de ámbito repo se enruta por él (`scope_of`, `crates/api/src/event.rs:93`). El valor `none` de `level` y de `merge_base` se escribe en Rust como `PairLevel::Clean` y `MergeBaseKind::Absent` con `#[serde(rename = "none")]`, para no chocar con `Option::None`; el cable es el de A2. El test de aptitud del marco usa 55 pares (10 worktrees, § Valores numéricos), porque el motor no tiene un tope de worktrees.
+
 **Decisiones del Arquitecto como autor de la Dev Spec (2026-10-09), aceptadas por el orquestador al revisar el borrador (2026-10-09):**
 
 - **D3**: ninguna tarea arranca antes del SPIKE; no hay `blocked_tasks`. Las tareas que no dependen del mecanismo (T001 a T003) toman sus cifras del SPIKE (E11: tope de rutas y memoria del solape), y sin el contrato (G2) no publican nada que se pueda probar de punta a punta. Al cerrar G1, el spec pasa a `ready_to_implement: true` con `blocked_tasks` igual al cierre de G2.
@@ -154,7 +162,7 @@ Las ramas R-A2, R-B y R-SOLAPE quedan descartadas y se borraron con sus tareas (
 | ID | Qué falta | Severidad | Alcance | Acción | Owner |
 |----|-----------|-----------|---------|--------|-------|
 | G1 | ~~Resultados de SPIKE-CKP-001~~. **Cerrado (2026-10-20)** por el [Brief](../research/SPIKE-CKP-001-resultados.md) (§ 7 y § 8): S4 con A2-W → R-A2W, sin prefiltro, cifras en § Valores numéricos, método de rangos de E7 con unión de bloques, umbral de fidelidad corregido por el PO. ADR-CKP-001 enmendado (Enmienda 2026-10-20) | — | — | — | — |
-| G2 | Forma del estado y del evento de predicción en el contrato: tipos, nombres de campos, consulta bajo demanda, evento de lote y capacidad. ADR-CKP-001 § 8 la deja "pendiente, dueño: worker del canal"; `api-contract-ipc.md:213` declara `repo.attention` sin emisor. Tiene que poder llevar la marca de regla de merge propia (D14) | Bloqueante | T009 (y T010, T012, T013 por arrastre) | Fijar la forma en `api-contract-ipc.md` y en la Dev Spec de TS-GRP-004, con la consulta del perfil `mcp` de US-MCP-016 (ADR-CKP-001, Enmienda 2026-10-05) | Worker del canal (TS-GRP-004) |
+| G2 | ~~Forma del estado y del evento de predicción en el contrato: tipos, nombres de campos, consulta bajo demanda, evento de lote y capacidad~~. **Cerrado (2026-10-27)** por D16: la forma está en [§ Contrato de API](#contrato-de-api) y la implementa T009. El dueño pasa a TS-CKP-001 ([Enmienda (2026-10-27, G2) de ADR-CKP-001](../../../../architecture/decisions/ADR-CKP-001-prediccion-conflictos-merge-en-seco.md)). Lleva la marca `has_merge_rule` (D14). La consulta del perfil `mcp` (`mcp.conflicts`) la añade US-MCP-016 sobre este estado | — | — | — | — |
 | G3 | ~~`gix` ≥ 0.89.0 en el workspace~~. **Cerrado (2026-10-20)**: `gix` 0.89 y `gix-pack` 0.76 están en `main` (PR #251). La feature `merge` solo en `crates/git/Cargo.toml` la añade T005 | — | — | — | — |
 | G4 | ~~Enmienda de ADR-GRP-009 Validación 5 para R-A2W~~. **Cerrado (2026-10-20)**: aplicada como [Enmienda (2026-10-20, SPIKE-CKP-001) de ADR-GRP-009](../../../../architecture/decisions/ADR-GRP-009-frontera-solo-lectura-git.md): el lanzador del trabajador del predictor (`crates/core::predict::worker`) es el único módulo autorizado fuera de `crates/git` para lanzar el propio binario, con argv fijo y sin shell. Las enmiendas de R-B quedan descartadas | — | — | — | — |
 | G5 | TS-GRP-005 (`WorkClass::Utility` y `PowerSource`) está en `ready`, sin implementar. TS-CKP-001 no la lista en `related.stories` | Bloqueante | T007 (y T006, T010, T012, T013 por arrastre) | Implementar TS-GRP-005 antes de T007 y añadirla a las dependencias de TS-CKP-001 | Orquestador |
@@ -209,7 +217,7 @@ sequenceDiagram
     participant L as PredictPool
     participant M as WorkerMerger
     participant T as trabajador (proceso hijo)
-    participant C as canal (contrato de G2)
+    participant C as canal (§ Contrato de API)
     W->>P: git_event y worktree_recomputed (T001)
     P->>P: triples de los pares del worktree, solape en el acto (T002)
     P->>C: pares afectados en recalculando, solape actual (T009)
@@ -223,7 +231,7 @@ sequenceDiagram
     P->>C: par actual o no calculable, con su hora (T009)
 ```
 
-El paso 12 es el único que cambia un contrato publicado, y su forma es G2. El paso 11 decide que un resultado viejo no se publique nunca como `actual`.
+El paso 12 es el único que cambia un contrato publicado, y su forma está en § Contrato de API (D16). El paso 11 decide que un resultado viejo no se publique nunca como `actual`.
 
 **Dónde acaba el dato:**
 
@@ -247,7 +255,7 @@ Los tres consumidores leen el mismo resultado del motor (BR-CKP-CONS-001). T009 
 
 ### El trabajo de un vistazo
 
-Tres frentes y un cierre: el predictor común (T001 a T003, T009), el merge en seco y su trabajador (T004 a T007) y las verificaciones (T010 a T012), con T013 al final. Bloqueadas: T007 por G5; T009 por G2; T006, T010, T012 y T013 por arrastre.
+Tres frentes y un cierre: el predictor común (T001 a T003, T009), el merge en seco y su trabajador (T004 a T007) y las verificaciones (T010 a T012), con T013 al final. Bloqueadas: T007 por G5; T006, T009, T010, T012 y T013 van con ella en el PR-B (D15). G2 se cerró el 2026-10-27 (D16).
 
 | # | Tarea | Depende | Aterriza en |
 |---|---|---|---|
@@ -481,7 +489,7 @@ graph LR
 
 ### T009 — Publicar el estado y el evento de predicción
 
-**Objetivo.** Espera a G2. Cada par se publica con su nivel, estado, motivo, hora de cálculo y límites declarados como datos, en la instantánea y en el stream, y `attention.conflicts` pasa a contar los ⚡. Lleva los campos que fije G2.
+**Objetivo.** Cada par se publica con su nivel, estado, motivo, hora de cálculo y límites declarados como datos, en la instantánea y en el stream, y `attention.conflicts` pasa a contar los ⚡. La forma es la de [§ Contrato de API](#contrato-de-api) (D16).
 
 **Ubicación.**
 - `crates/api/src/prediction.rs` (**CREATE**)
@@ -493,11 +501,31 @@ graph LR
 - Rutas y nombres de rama van como texto no confiable (`Untrusted`, `UntrustedName`). Nunca contenido de archivos.
 - Los límites declarados (§ 7 de ADR-CKP-001 y Enmienda 2026-10-20) son datos con un código cada uno, no texto libre. Por archivo del ⚡, solo la marca `has_merge_rule` (límite 1, D14); los límites 2, 3 y 4 van a nivel de vista, sin marca por archivo (decisión del PO, 2026-10-20). El texto "sin ⚡ no garantiza un merge limpio" (límite 3) es de los clientes.
 - La forma nueva va detrás de una capacidad (ADR-GRP-016). En el mismo PR se adaptan la CLI, la TUI y `raptor-mcp`.
-- `<los tipos, nombres de campos, consulta y evento de lote que fije G2>`
+- **Forma.** Los tipos de `crates/api/src/prediction.rs`, la capacidad `prediction.pairs`, el método `prediction.list` y el evento `prediction.changed` son los de § Contrato de API, sin campos añadidos. El módulo `crates/api/src/methods/prediction.rs` declara la capacidad y el método en su propio archivo (ADR-GRP-016). `RepoView.prediction` y `prediction.changed` solo salen hacia una conexión que negoció `prediction.pairs`.
+- **Base movida** (ajuste de `RepoPairs::apply`, `crates/core/src/predict/state.rs:56`): un par contra la base (`PairSide::Base`) cuya `tip_b` cambió pasa a `Calculating`, no a `Recalculating`: pierde `level`, deja de publicar el resultado anterior y deja de contar en `attention.conflicts`. La caché por triple se conserva (si la triple vuelve, el resultado se reutiliza). Los pares entre worktrees y el cambio de `tip_a` siguen el `queued_state` de hoy (`state.rs:23`): `Recalculating` si había resultado.
+- **`attention.conflicts`.** `counted n` con n = pares con `level: conflict` en `current` o `recalculating`, si n > 0; `counted 0` solo si ningún par está `calculating`; `unavailable {reason: not-published}` si n = 0 y hay algún par `calculating`. `repo.attention` se emite solo cuando el valor cambia. El comentario de `UnavailableCause::NotPublished` (`crates/api/src/scope.rs:137`) se reescribe para cubrir "aún sin calcular" (solo texto; el nombre de cable no cambia).
+- **Tope del marco.** `RepoView.prediction` cabe en `MAX_MESSAGE_BYTES` (1 MiB, `crates/api/src/framing.rs:13`) junto con el resto del `RepoView`: los pares que no caben se cortan, `pairs_truncated: true`, y el cliente pide el resto con `prediction.list`. `prediction.changed` se trocea en varios lotes si no cabe en uno.
+- **`pair_id`** = hex de un hash estable (sin sal por ejecución) de `PairKey` (`repo_id`, raíz `a`, lado `b`). `prediction.list` rechaza un `pair_id` mal formado y más de 50.
+- **Lectura interna compartida.** `prediction.list` se sirve con una función `pub(crate) fn predict_read(repo_id, worktree: Option<&Path>) -> Vec<PairDetail>`, fuera del brazo de `conn.rs`, con los pares de un repo en el mismo orden que la página. `mcp.conflicts` la reutiliza sin cambiar su forma (Decisión del orquestador (2026-10-27), validada por Arquitecto; cierra G2 de DS-US-MCP-016).
+- `mcp.conflicts` no es de esta tarea: lo añade US-MCP-016 (DS-US-MCP-016) sobre el mismo estado del predictor.
 
 - **Depende:** T003
-- **Refs:** ADR-CKP-001 § 6 a § 8; BR-CKP-CALC-002, CALC-003, CONS-001; G2
-- **Aceptación:** `cargo test -p gitraptor-core --test predict_publish` + los campos de G2
+- **Refs:** ADR-CKP-001 § 6 a § 8 y Enmienda (2026-10-27, G2); BR-CKP-CALC-002, CALC-003, CONS-001; D16
+- **Aceptación:** `cargo test -p gitraptor-core --test predict_publish` y `cargo test -p gitraptor-api prediction`. Tests con nombre:
+  - `predict_publish::snapshot_and_event_carry_same_pair_and_rev`
+  - `predict_publish::base_move_turns_base_pair_calculating_and_drops_level`
+  - `predict_publish::worktree_tip_move_keeps_recalculating_with_last_level`
+  - `predict_publish::base_move_back_reuses_cached_triple`
+  - `predict_publish::attention_counts_known_conflicts_and_is_unavailable_while_calculating`
+  - `predict_publish::repo_attention_emitted_only_on_change`
+  - `predict_publish::pair_id_survives_daemon_restart`
+  - `predict_publish::no_file_content_in_any_publication`
+  - `prediction::tests::level_absent_outside_current_and_recalculating`
+  - `prediction::tests::wire_names_are_kebab_case` (estados, motivos, `LimitCode`, `kind`)
+  - `prediction::tests::snapshot_fits_one_mib_at_worst_case` (aptitud: 55 pares, raíces `Untrusted` de 4 KiB de caracteres que se escapan en JSON; `pairs_truncated: true` y el marco ≤ 1 MiB)
+  - `prediction::tests::list_page_caps_at_50_pairs_or_512_kib`
+  - `prediction::tests::list_rejects_malformed_or_more_than_50_pair_ids`
+  - `prediction::tests::capability_off_leaves_wire_unchanged`
 
 ### T010 — Añadir la suite "predicción" de INF-GRP-001 y las comprobaciones estáticas
 
@@ -597,14 +625,14 @@ crates/
 │   ├── src/daemon/modules/predict.rs      ← CREATE
 │   ├── src/predict/                       ← CREATE  mod, pairs, overlap, state, queue, pool, merger
 │   ├── src/predict/worker/                ← CREATE  lanzador, WorkerMerger y bucle del hijo
-│   ├── src/channel/conn.rs                ← MODIFY  G2
+│   ├── src/channel/conn.rs                ← MODIFY  T009
 │   └── tests/
 │       ├── predict_repo_intact.rs         ← CREATE
 │       ├── predict_boundary.rs            ← CREATE
 │       ├── predict_publish.rs             ← CREATE
 │       └── predict_worker.rs              ← CREATE
-├── api/src/prediction.rs                  ← CREATE  G2
-├── api/src/methods/prediction.rs          ← CREATE  G2
+├── api/src/prediction.rs                  ← CREATE  T009
+├── api/src/methods/prediction.rs          ← CREATE  T009
 ├── api/src/methods/mod.rs                 ← MODIFY
 ├── testkit/src/canary.rs                  ← MODIFY
 └── testkit/src/syn_corpus.rs              ← CREATE  R-SYN (T011)
@@ -709,7 +737,131 @@ pub trait DryMerger: Send + Sync {
 
 ## Contrato de API
 
-_Sin métodos ni campos definidos aquí._ La forma de la publicación es G2 (T009). Lo que el contrato tiene que poder decir, por par: nivel (⚠ y ⚡), estado y motivo de § Forma del error, hora de cálculo en UTC, archivos con su tipo, rangos por lado y la marca `has_merge_rule`, `partial` y `truncated`, y los límites declarados como códigos.
+Forma de la publicación de la predicción (D16, A2). La implementa T009; DS-US-CKP-006, 007 y 008 y DS-US-MCP-016 la referencian aquí. Rutas como `Untrusted` (SEC-12, NFR-03), límites como códigos y nunca contenido de archivos.
+
+| Pieza | Nombre | Dónde | Sin negociar |
+|---|---|---|---|
+| Capacidad | `prediction.pairs` | `crates/api/src/methods/prediction.rs` (**CREATE**): `pub const CAP_PREDICTION_PAIRS: Capability = Capability::new("prediction.pairs")` | Sin `RepoView.prediction` ni `prediction.changed`; el cable no cambia |
+| Método | `prediction.list` | mismo archivo; se descubre en `hello.methods`, sin capacidad | — |
+| Evento (ámbito repo) | `prediction.changed` | mismo archivo: `pub const PREDICTION_CHANGED: &str = "prediction.changed"` | No se emite |
+| Campo de la instantánea | `RepoView.prediction: Option<PredictionSummary>` | `crates/api/src/messages.rs:143` (**MODIFY**, `skip_serializing_if = "Option::is_none"`) | Ausente |
+| Atención | `AttentionView.conflicts` | `crates/api/src/scope.rs:104`, sin cambio de forma | Igual: es el mismo campo |
+
+**Tipos** (`crates/api/src/prediction.rs`, **CREATE**). Todos `Serialize, Deserialize, JsonSchema`; los enums con `rename_all = "kebab-case"`.
+
+```rust
+pub struct PredictionSummary {          // RepoView.prediction
+    pub limits: Vec<LimitCode>,         // siempre los 8
+    pub pairs: Vec<PairSummary>,
+    pub pairs_truncated: bool,          // no cupo en el marco: el resto, con prediction.list
+}
+
+pub struct PairSummary {
+    pub pair_id: String,                // hex de un hash estable de PairKey, sin sal
+    pub rev: u64,                       // scope_seq del evento que cambió el par por última vez
+    pub a: PairSideView,
+    pub b: PairSideView,
+    pub state: PairStateView,
+    pub reason: Option<PairReason>,     // solo en pending y not-computable
+    pub level: Option<PairLevel>,       // solo en current y recalculating; se omite en los demás
+    pub computed_at_utc_ms: Option<i64>,
+    pub overlap_files: u32,
+    pub overlap_partial: bool,
+    pub conflict_files: u32,
+    pub conflict_truncated: bool,
+}   // los Option, con skip_serializing_if = "Option::is_none"
+
+pub enum PairSideView { Worktree { root: Untrusted }, Base {} }   // sin nombres: los deriva el cliente
+pub enum PairStateView { Calculating, Current, Recalculating, Pending, NotComputable }
+pub enum PairReason {
+    BaseUnconfirmed, OperationInProgress, PowerSaving, Dormant,      // pending
+    BaseMissing, MissingObject, Shallow, LimitExceeded, Error,       // not-computable
+}
+pub enum PairLevel { #[serde(rename = "none")] Clean, Overlap, Conflict }
+pub enum LimitCode {
+    OverlapIncludesUncommitted, ConflictCommittedOnly, NoMergeDriversOrAttributes, RenameLimit,
+    InsertionsMayMerge, JoinedHunks, PairIgnoresBaseMoves, LocalOnly,
+}
+
+pub struct PairDetail {                 // prediction.list; mismo rev que su PairSummary
+    #[serde(flatten)] pub summary: PairSummary,
+    pub overlap: Vec<Untrusted>,        // ≤ 200 (max_files)
+    pub conflict: Option<ConflictView>,
+}
+pub struct ConflictView {
+    pub merge_base: MergeBaseKind,      // single | virtual | none
+    pub files: Vec<ConflictFileView>,
+    pub truncated: bool,
+    pub rewrites_escalated: bool,
+}
+pub enum MergeBaseKind { Single, Virtual, #[serde(rename = "none")] Absent }
+pub struct ConflictFileView {
+    pub path: Untrusted,
+    pub kind: ConflictKindView,         // content | add-add | modify-delete | rename | directory-file | binary | submodule
+    pub ours: Vec<LineRange>,
+    pub theirs: Vec<LineRange>,
+    pub hunks_truncated: bool,
+    pub has_merge_rule: bool,           // límite 1, D14; única marca por archivo
+}
+pub struct LineRange { pub start: u32, pub len: u32 }
+
+pub struct ListPredictionParams {       // prediction.list
+    pub repo_id: String,
+    pub worktree: Option<String>,       // raíz: los pares que la incluyen
+    pub pair_ids: Option<Vec<String>>,  // ≤ 50, formato validado
+    pub cursor: Option<String>,
+}
+pub struct PredictionPage { pub limits: Vec<LimitCode>, pub pairs: Vec<PairDetail>, pub next_cursor: Option<String> }
+pub struct PredictionChanged {          // data de prediction.changed (version 1)
+    pub repo_id: String,                // lo exige scope_of (crates/api/src/event.rs:93) en un evento de repo
+    pub pairs: Vec<PairSummary>,
+    pub removed: Vec<String>,           // pair_ids
+}
+```
+
+`PairDetail` usa `flatten`, que no admite `deny_unknown_fields`: el resto de tipos sí lo llevan. Correspondencia con el motor: `PairStateView` y `PairReason` salen de `PairState`, `PendingReason` y `NotComputableReason` (`crates/core/src/predict/mod.rs:47-75`), uno a uno.
+
+**`prediction.changed`**: un lote por plan aplicado o por resultado completado.
+
+```json
+{"subscription": 3, "scope": {"scope": "repo", "repo_id": "r1"}, "scope_seq": 812,
+ "event": {"seq": 40211, "kind": "prediction.changed", "version": 1, "wall_ms": 1793091605000,
+  "data": {"repo_id": "r1",
+   "pairs": [{"pair_id": "9f2c41d07ab3e815", "rev": 812,
+     "a": {"worktree": {"root": "/w/claude-1"}}, "b": {"base": {}},
+     "state": "calculating", "overlap_files": 2, "overlap_partial": false,
+     "conflict_files": 0, "conflict_truncated": false}],
+   "removed": ["04be77a1c9d2f630"]}}}
+```
+
+Es la notificación `scope.event` de hoy (`ScopeEventNotification`, `crates/api/src/scope.rs:193`); el `rev` de cada par del lote es el `scope_seq` de esa notificación.
+
+**`prediction.list`**:
+
+```json
+→ {"repo_id": "r1", "pair_ids": ["5a10e3c2f9b84d77"]}
+← {"limits": ["overlap-includes-uncommitted", "conflict-committed-only", "no-merge-drivers-or-attributes",
+     "rename-limit", "insertions-may-merge", "joined-hunks", "pair-ignores-base-moves", "local-only"],
+   "pairs": [{"pair_id": "5a10e3c2f9b84d77", "rev": 809,
+     "a": {"worktree": {"root": "/w/claude-1"}}, "b": {"worktree": {"root": "/w/claude-2"}},
+     "state": "current", "level": "conflict", "computed_at_utc_ms": 1793091600000,
+     "overlap_files": 1, "overlap_partial": false, "conflict_files": 1, "conflict_truncated": false,
+     "overlap": ["src/api.rs"],
+     "conflict": {"merge_base": "single", "truncated": false, "rewrites_escalated": false,
+       "files": [{"path": "src/api.rs", "kind": "content", "ours": [{"start": 40, "len": 6}],
+         "theirs": [{"start": 41, "len": 3}], "hunks_truncated": false, "has_merge_rule": false}]}}]}
+```
+
+**Reglas del contrato**
+
+- **`rev` y coherencia.** `rev` = `scope_seq` del evento que cambió el par por última vez; la instantánea y el evento llevan el mismo `rev` para el mismo par. El cliente muestra un detalle solo si su `rev` es igual al del resumen que tiene; si es mayor, espera el evento (ya viene en camino); si es menor, lo descarta.
+- **`pair_id` determinista.** Hex de un hash estable de (`repo_id`, raíz `a`, lado `b`), sin sal por ejecución: sobrevive a un reinicio del daemon y a `scope.resync`. `prediction.list` rechaza un `pair_id` mal formado y más de 50 con `ErrorCode::InvalidParams` (-32602, `crates/api/src/rpc.rs:26`).
+- **Tope del marco.** `RepoView` con `prediction` cabe en `MAX_MESSAGE_BYTES` (1 MiB, `crates/api/src/framing.rs:13`). Si no cabe, se cortan pares, `pairs_truncated: true`, y el resto se pide a `prediction.list`. Un `prediction.changed` que no cabe se trocea en varios lotes.
+- **Página de `prediction.list`.** Hasta 50 pares o 512 KiB serializados, lo que llegue antes; `next_cursor` si quedan. Un par que no cabe solo en la página se recorta en `overlap` (`overlap_partial: true`) y en `conflict.files` (`truncated: true`). Nunca contenido.
+- **`level`.** Solo en `current` y `recalculating` (en `recalculating`, el del último resultado). En `calculating`, `pending` y `not-computable` se omite: no se afirma un "sin conflicto" no calculado.
+- **Base movida.** Un par contra la base cuya `tip_b` cambió pasa a `calculating` (pierde `level`); los demás cambios de triple dan `recalculating` (T009).
+- **`attention.conflicts` híbrido.** `counted n` si hay al menos un ⚡ conocido (`level: conflict` en `current` o `recalculating`); `counted 0` solo si ningún par está `calculating`; `unavailable {reason: not-published}` si el conteo es 0 y hay pares `calculating`. `repo.attention` se emite cuando cambia.
+- **Límites.** Los 8 `LimitCode` van siempre en `limits`. El texto lo ponen los clientes (i18n en/es), incluido "sin ⚡ el merge aún puede tener conflictos" (`insertions-may-merge`).
 
 ### Forma del error y del cuerpo de respuesta
 
@@ -728,7 +880,7 @@ No hay respuestas de error nuevas en el canal. Los errores del merge en seco ter
 | Ahorro de energía (D5) | `pendiente` | `power-saving` |
 | Repo dormido (D4) | `pendiente` | `dormant` |
 
-`DryMergeError::TooLarge` no llega al par: el archivo pasa a binario. Los nombres de los motivos los fija G2.
+`DryMergeError::TooLarge` no llega al par: el archivo pasa a binario. Los nombres de cable de los motivos están fijados en [§ Contrato de API](#contrato-de-api) (`PairReason`).
 
 ### Forma de la configuración
 
