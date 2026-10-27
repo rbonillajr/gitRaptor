@@ -6,7 +6,7 @@ status: accepted
 accepted: 2026-10-05
 date: 2026-10-05
 created: 2026-10-05
-updated: 2026-10-08
+updated: 2026-10-27
 deciders: [Orquestador (delegación de Rene Bonilla, 2026-10-04)]
 domain: MCP
 feature: mcp
@@ -425,3 +425,26 @@ Decisión del orquestador (2026-10-09), validada por Arquitecto y PO. Origen: [D
 - § 4.3: `raptor-mcp` **nunca rechaza por ningún campo de la vista previa** (ni `decision` ni `warnings`): pasa `acknowledge` como `accepted_warnings` y decide `run`. Sin `run`, el plan caduca como `Dropped` y la decisión no queda registrada.
 - § 4.3, **prerrequisito bloqueante de US-MCP-018** (`safe_rebase`, la primera herramienta con avisos): hoy `run` devuelve el rechazo por avisos antes que la denegación de Guardrails, al revés de lo que pide § 4.3 ("una denegación de Guardrails se devuelve antes que `warnings-not-acknowledged`"). US-MCP-018 lo corrige antes de emitir avisos.
 - § 1: `apps/mcp/tests/no_elicitation.rs` fija que `raptor-mcp` se compila sin la feature `elicitation` de `rmcp` (features resueltas con `cargo metadata`), que su código no contiene `ElicitRequest`, `create_elicitation` ni `.elicit(`, y que una sesión real nunca recibe una petición del servidor.
+
+## Enmienda (2026-10-21, US-MCP-009)
+
+Decisión del orquestador (2026-10-21), validada por Arquitecto y PO. Origen: [DS-US-MCP-009](../../requirements/features/mcp/dev-specs/US-MCP-009-dev-spec.md), D1, D2, D9, D12 y D13; la primera escritura gobernada por MCP (`safe_commit`).
+
+- **§ 5, `running` (D2 d)**: `safe_commit` espera el desenlace y no devuelve `running`. Cancelar o pasar a segundo plano no detiene la operación; un reintento recibe `operation-in-progress` (`kind: "write"`) con la acción de revisar `status` o `raptor timeline`; un corte de transporte da `outcome-unknown` sin id con esa misma acción. Con `progressToken`, `notifications/progress` cada 5 s. **Disparador**: con US-MCP-017 en `main`, vuelve a `running` con id a los 30 s.
+- **§ 6, fila "Tiempo de una llamada de escritura" (D2 a)**: excepción de `safe_commit`. Su plazo es la suma de constantes nombradas: espera máxima en la cola del cerrojo (60 s, `MCP_QUEUE_WAIT`; después `queue-full`), plazo del snapshot previo (10 s), tope de capa `mcp` (300 s) y margen (10 s): 380 s (`MCP_COMMIT_CALL_LIMIT`).
+- **§ 6, rutas de entrada (N2)**: el código fija ≤ 256 rutas por llamada (`MAX_COMMIT_PATHS`), no las 500 de la tabla. Manda el código: un límite de § 6 solo puede endurecerse. La 257.ª da `too-many-paths` (Enmienda (2026-10-21, US-MCP-010)).
+- **§ 6, S-03 cerrado (D9)**: cubos por solicitante con los valores de la conexión, compartidos entre sus conexiones; clave por sesión del agente, también para la CLI que lanza el agente y para los descendientes del ejecutor (con la clave del solicitante del plan); una clave compartida para los "sin atribuir" que no pasan los controles 1 a 3. ≤ 8 conexiones por solicitante; la plaza se asigna **al terminar el `hello`**, no al conectar, y la 9.ª recibe `LIMIT_REACHED` `{reason: "requester-connections"}` y cierre. Antes del saludo rige la cota previa: plazo de 2 s para el `hello` y tope global de 32 conexiones más 2 de terminal. No cuentan la persona ni el cliente del hook. Cierra la condición de entrada de la Enmienda (2026-10-08, US-MCP-008).
+- **Validación 8, reescrita para `safe_commit`**: una llamada con un hook lento espera el desenlace (no devuelve `running`); cancelar o cerrar stdin a mitad no la interrumpe; el commit aparece en el timeline.
+- **§ 7, invariante de `MCP_TOOL_TIMEOUT`**: "el de § 6 es siempre menor" pasa a ⚠️ **ASSUMPTION** sin verificar para `safe_commit` (380 s). Consecuencia: si Claude Code corta antes, el commit termina y queda en el timeline; el agente recibe el corte de su cliente y la acción de revisar `status` o `raptor timeline` antes de reintentar.
+- **§ 5, códigos (D12)**: entran en el contrato `nothing-to-commit` y `path-not-found`; `detached-head`, `policy-denied` (con ≤ 4 códigos de regla y `decision_id`), `failed-unchanged`, `failed-changed` y `aborted`, ya nombrados en sus familias, se emiten por primera vez. Mapeo de los motivos del canal: `worktree-locked`, `branch-checked-out-elsewhere` y `grafts` → `failed-unchanged` con `reason`; `queue-full` y `LIMIT_REACHED` → `rate-limited`; `executor-descendant` → `identity-unverified`; `git-unavailable` y `daemon-stopping` → `engine-unavailable`; `write-in-progress` → `operation-in-progress` con `kind: "write"`.
+- **§ 4.2, `expect_worktree` (D13)**: el nombre queda reservado para US-MCP-011; hasta entonces es `invalid-params`.
+- **§ 4.3, `acknowledge` (D1)**: fuera del esquema de `safe_commit` en `catalogVersion` 1, porque `commit` no tiene avisos. Se añade, con la subida menor, cuando `commit` gane un aviso.
+
+## Enmienda (2026-10-21, US-MCP-010)
+
+Decisión del orquestador (2026-10-21), validada por Arquitecto y PO. Origen: [DS-US-MCP-010](../../requirements/features/mcp/dev-specs/US-MCP-010-dev-spec.md), D2, D3, D10 y D13.
+
+- **§ 4.3, worktree compartido (D10 b)**: la frase "otra sesión presente y trabajo ajeno ya son precondición o control y se rechazan" admite en `commit` las rutas nombradas. Con otra sesión viva de agente en el worktree, "todo lo preparado" se rechaza con `shared-worktree-needs-paths` (`other-session-present` en la herramienta) y las rutas nombradas sí se commitean. La sesión del desarrollador o de la TUI no cuenta; una presencia ilegible cuenta como compartido. `commit` sigue sin avisos.
+- **§ 4.2, rutas**: relativas a la raíz del worktree, nunca al cwd del agente (D13); forma canónica y la misma en todas las plataformas (D2).
+- **§ 5, códigos nuevos (D3)**: `invalid-path`, `path-outside-worktree`, `too-many-paths`, `path-ignored` y `other-session-present`, que § 5 ya nombraba y ahora se emite. Una ruta mala rechaza toda la llamada y vuelve como `{"untrusted": …}` en `params.path`.
+- **§ 9, MCP05**: la mitigación de rutas apunta a § Modelo de amenazas de [DS-US-MCP-010](../../requirements/features/mcp/dev-specs/US-MCP-010-dev-spec.md#modelo-de-amenazas).

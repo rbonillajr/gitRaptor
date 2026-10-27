@@ -6,7 +6,7 @@ status: draft
 domain: GRP
 feature: motor-local
 created: 2026-10-04
-updated: 2026-10-06
+updated: 2026-10-27
 related:
   adrs: [ADR-GRP-005, ADR-GRP-016, ADR-GRP-011, ADR-GRP-013, ADR-CKP-002, ADR-CKP-003, ADR-TMC-004]
   stories: [TS-GRP-004, US-GRP-001, US-GRP-012, TS-TMC-004, TS-CKP-002, INF-CKP-001]
@@ -59,6 +59,7 @@ Una conexión de protocolo 9 recibe también `capabilities`: los nombres de toda
 | `connection.requester` | protocolo 6 | `hello.requester` |
 | `events.git-reset` | protocolo 8 | Eventos Git de tipo `reset` en el stream y en `events.history` |
 | `operation.snapshot` | — (US-MCP-008) | La operación `snapshot` del catálogo, el rechazo `write-in-progress`, los errores `-33060` y `-33061` y el resultado `SnapshotRunResult` de `operation.run` (ver [Snapshot manual](#snapshot-manual-us-mcp-008)). Sin ella, la llamada sigue en `-32004` |
+| `operation.commit` | — (US-MCP-009 y US-MCP-010) | La operación `commit` del catálogo, los rechazos de `-32014` propios de `commit` (incluido `data.path`), `OperationFailedData.failure` en `-32011`, `data.reason = requester-connections` en `-32006` y `commit` (`CommitDone`) en el resultado de `operation.run` (ver [Commit](#commit-us-mcp-009-y-us-mcp-010)). Sin ella, `commit` sigue en `-32004` con `implemented_by: "US-MCP-009"` |
 | `timemachine.timeline-manual` | — (US-MCP-008) | `timemachine.timeline` sirve entradas `manual-snapshot` y el nivel de protección `manual`; sin la capacidad se filtran |
 | `timemachine.timeline-inferred` | — (TS-GRP-008) | `timemachine.timeline` lleva `inferred` (`{kind, session_id, trailer}`, la pista de ADR-GRP-012) en las entradas de eventos de Git sin agente; sin la capacidad el campo no se envía |
 | `audit.outcomes` | — (M-01 y L-01 de #209) | `audit.list` y `reserved.audit` llevan también el fin de una acción anunciada: resultados `applied`, `cancelled`, `failed` y `expired` (sin `reason`), con `client_partial: true` porque la auditoría solo guarda el proceso (`pid`, `start_us`) de quien la pidió; el resto de `client` no está registrado y va neutro. Sin la capacidad esas filas no se envían y la salida es la de antes. Nunca llega a `raptor-mcp` |
@@ -118,15 +119,15 @@ Un cliente presenta cada error por su `code` y su `data`, nunca por `message`, q
 | `-32003` | Comando reservado rechazado; `data.reason`: `agent-ancestry`, `session-leader-agent`, `daemon-descendant`, `no-controlling-terminal`, `identity-unverified`, `not-available-to-mcp` o `unsupported`. En la auditoría, además, `worktree-mismatch` y `agent-mismatch` (rechazos de `registration.register`, que no es reservado) |
 | `-32004` | Declarado, pero sin implementar todavía |
 | `-32005` | Rate limit (100/s, ráfaga de 200). La conexión sigue abierta |
-| `-32006` | Límite de conexiones o de suscripciones |
+| `-32006` | Límite de conexiones o de suscripciones. Con la capacidad `operation.commit`, `data.reason = requester-connections`: el solicitante ya tiene 8 conexiones tras el `hello` (S-03); la conexión se cierra |
 | `-32007` | No se puede continuar la suscripción: hay que tomar una instantánea nueva |
 | `-32008` | Falló el snapshot previo: la operación no se ejecutó y el repo no cambió; `data`: `{reason, operation_id?}` |
 | `-32009` | No existe para este llamante (un id de otro repo responde igual que uno desconocido) |
 | `-32010` | Ámbito rechazado (sin carpeta de trabajo legible, fuera de un repo observado o fuera de la allowlist MCP) |
-| `-32011` | La operación empezó tras su snapshot previo y falló: queda `interrupted` y se puede deshacer |
+| `-32011` | La operación empezó tras su snapshot previo y falló: queda `interrupted` y se puede deshacer. `data` es `OperationFailedData {operation_id, failure?}`; `failure` (`changed`, `unchanged` o `time-limit`, decidido por la punta releída) solo con la capacidad `operation.commit` |
 | `-32012` | La identidad del llamante cambió desde que se aceptó la conexión |
 | `-32013` | Repo rechazado por lo que nombra (no por quién lo pide); `data.reason`: `not-a-repo`, `untrusted`, `unreadable`, `unknown-repo` o, desde el protocolo 7 y solo en `guard.*`, `not-observed`. (Hasta 2026-10-05 este documento lo listaba por error como `-32008`) |
-| `-32014` | Plan del catálogo rechazado antes de ejecutar nada, sin apunte en el oplog (TS-CKP-002). `data.reason`: `state-changed`, `plan-unknown`, `not-available-for-layer`, `unattributed-without-cockpit`, `executor-descendant`, `warnings-mismatch`, `confirmation-required`, `challenge-invalid`, `foreign-work`, `confirmation-unavailable` (trabajo de otro actor en Windows, donde aún no se ofrece la confirmación: BR-CKP-AUTH-003, TQ-14; aditivo: un cliente anterior no lo reconoce y lo presenta como un rechazo genérico), `other-session-present`, `operation-in-progress`, `detached-head`, `git-busy`, `worktree-locked`, `branch-checked-out-elsewhere`, `grafts`, `repo-identity-changed`, `guardrails-denied`, `guardrails-confirmation-required` (la decisión que cuenta pide la confirmación del desarrollador y no hay cola, así que se aplica como denegar; aditivo: un cliente anterior no lo reconoce y lo presenta como un rechazo genérico), `new-path-refused`, `queue-full`, `daemon-stopping` o, solo con la capacidad `operation.snapshot`, `write-in-progress` (el mismo solicitante tiene un snapshot manual sin terminar) |
+| `-32014` | Plan del catálogo rechazado antes de ejecutar nada, sin apunte en el oplog (TS-CKP-002). `data.reason`: `state-changed`, `plan-unknown`, `not-available-for-layer`, `unattributed-without-cockpit`, `executor-descendant`, `warnings-mismatch`, `confirmation-required`, `challenge-invalid`, `foreign-work`, `confirmation-unavailable` (trabajo de otro actor en Windows, donde aún no se ofrece la confirmación: BR-CKP-AUTH-003, TQ-14; aditivo: un cliente anterior no lo reconoce y lo presenta como un rechazo genérico), `other-session-present`, `operation-in-progress`, `detached-head`, `git-busy`, `worktree-locked`, `branch-checked-out-elsewhere`, `grafts`, `repo-identity-changed`, `guardrails-denied`, `guardrails-confirmation-required` (la decisión que cuenta pide la confirmación del desarrollador y no hay cola, así que se aplica como denegar; aditivo: un cliente anterior no lo reconoce y lo presenta como un rechazo genérico), `new-path-refused`, `queue-full`, `daemon-stopping` o, solo con la capacidad `operation.snapshot`, `write-in-progress` (el mismo solicitante tiene un snapshot manual sin terminar) o, solo con la capacidad `operation.commit`, `nothing-to-commit`, `path-not-found`, `git-unavailable` (sin `git` del sistema, o en Windows hasta XP-19), `write-in-progress` (otra escritura del mismo solicitante en el mismo repo sigue en curso; se rechaza sin encolarse, S-11), `path-invalid`, `path-outside-worktree`, `path-ignored` y `shared-worktree-needs-paths` (otra sesión viva de agente en el worktree y ninguna ruta nombrada). Los de ruta llevan `data.path` (texto no confiable, la primera ruta rechazada) |
 | `-32015` | Registro de agente o su retiro rechazado (US-GRP-009). `data.reason`: `not-a-worktree`, `repo-not-observed`, `worktree-mismatch`, `agent-mismatch`, `no-working-folder` o `not-registered` |
 | `-32016` | Protocolo 7 (US-GRD-001): no se instaló la capa de hooks; `data.blockers`: `prior-hooks`, `worktree-config`, `include-defines-hooks-path`, `include-if-onbranch`, `not-representable`, `orphan-folder`, `already-installed`, `dispatcher-missing`, `bare` o `platform-unsupported` |
 | `-33060` | `OPERATION_SNAPSHOT_QUOTA` (`snapshot-quota-exceeded`, US-MCP-008): una ventana de la cuota del snapshot manual está llena. `data` es `SnapshotQuotaData {window, retry_after_s?, release_utc_ms?}`; `window`: `minute`, `day`, `worktree-day`, `repo-day` o `disk`. Los dos últimos campos faltan con `disk`. Solo con la capacidad `operation.snapshot` |
@@ -176,6 +177,14 @@ La operación `snapshot` del catálogo guarda un punto de recuperación a petici
 - Rechazos: `-32014` con `data.reason = write-in-progress` si el mismo solicitante tiene otro snapshot manual sin terminar; `-33060` con `SnapshotQuotaData` si una ventana de la cuota está llena; `-33061` si se agota el presupuesto de tiempo.
 - `timemachine.timeline`, con la capacidad `timemachine.timeline-manual`, añade entradas `manual-snapshot` `{snapshot_id, label, channel}` (`EntryOrigin::ManualSnapshot`; `label` es texto no confiable y `channel`, `cli`, `tui`, `mcp` o `hook`) y el nivel de protección `manual`. Una conexión sin la capacidad no recibe ni una ni otro.
 - `timemachine.timeline`, con la capacidad `timemachine.timeline-inferred` (TS-GRP-008), añade a la entrada de un evento de Git **sin agente** el campo opcional `inferred`, con la misma forma que `GitEventView.inferred` de `engine.events` (US-GRD-019): `kind`, `session_id` y `trailer` (`confirmed` o `unconfirmed`). Es una pista, nunca cambia el actor. No aparece si la pista está `contradicted` o si el evento se observó con `human-author`. Una conexión sin la capacidad no recibe el campo.
+
+## Commit (US-MCP-009 y US-MCP-010)
+
+La operación `commit` del catálogo es gobernada (Guardrails, con la etapa `pre-commit` evaluada en el plan) y corre dentro de la operación protegida. Solo la ve una conexión con la capacidad `operation.commit`.
+
+- `operation.prepare {operation: "commit", args: {message, paths?}}`. `message`: 1 a 16.384 bytes, sin caracteres de control salvo `\n` y `\t`. `paths`: hasta 256 archivos relativos a la raíz del worktree, literales; 257 o más dan `-32602` (`paths`, `too-many`). Sin `paths`, se commitea lo preparado.
+- `operation.run` de un plan `commit` devuelve `OperationRunResult` (o `McpOperationRunResult` en MCP) con el campo aditivo `commit`: `CommitDone {oid, paths, paths_total}`. `oid` es el hex completo; `paths` son las rutas del commit frente a su padre (o frente al árbol vacío en el primer commit), como mucho 200, texto no confiable, incluidas las que añadió un hook.
+- Rechazos y fallos: `-32014` con los motivos de `commit` (tabla de errores); `-32008` si falla el snapshot previo; `-32011` con `failure` si el paso falla; `-32006` con `requester-connections` en el `hello`.
 
 ## Estado de un worktree (US-GRP-001)
 

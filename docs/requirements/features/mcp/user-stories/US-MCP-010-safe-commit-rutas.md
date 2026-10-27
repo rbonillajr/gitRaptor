@@ -2,10 +2,10 @@
 id: US-MCP-010
 title: "Un agente commitea solo los archivos que nombra y nunca fuera de su worktree"
 type: us
-status: draft
+status: partially-implemented
 priority: high
 created: 2026-10-04
-updated: 2026-10-21
+updated: 2026-10-27
 domain: GRP
 epic: E-001
 feature: mcp
@@ -109,3 +109,9 @@ _Pendiente — lo completa el Arquitecto en Fase 2 (el PO no llena esta sección
 
 - **Diseño:** no aplica.
 - **Dev Spec:** [DS-US-MCP-010](../dev-specs/US-MCP-010-dev-spec.md) (validada por Arquitecto y PO el 2026-10-21).
+
+## Estado de la implementación (2026-10-27)
+
+Implementado en: PR #PENDIENTE ([DS-US-MCP-010](../dev-specs/US-MCP-010-dev-spec.md), junto con US-MCP-009).
+
+Queda abierto: los casos de rutas que solo existen en Windows (G1) y Linux, en la etapa de validación multiplataforma (XP-46); bloquean liberar en Windows. Se libera junto con US-MCP-009 y US-MCP-011.
