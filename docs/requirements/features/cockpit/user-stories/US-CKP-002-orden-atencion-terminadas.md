@@ -94,7 +94,7 @@ Entonces "claude-9" comparte color con "claude-1" y su fila muestra su nombre y 
 
 ## Estado de la implementación (2026-10-27)
 
-Implementado en: PR #PRNUM ([DS-US-CKP-002](../dev-specs/US-CKP-002-orden-atencion-terminadas.md)).
+Implementado en: PR #284 ([DS-US-CKP-002](../dev-specs/US-CKP-002-orden-atencion-terminadas.md)).
 
 Verificado en macOS: la flota va en el orden de D1 (principal, Activo, Inactivo, Terminado, sin agente) con la línea de sesiones de un worktree compartido; la última sesión terminada se ve hasta 24 h ("terminó hace …", "sin observar" si terminó en un hueco) y la sustituye una sesión nueva; el color de cada agente es estable ante el cliente lento, la reconexión y una lista fallida (el noveno comparte el color del primero y conserva su nombre); la tecla `f` alterna "ver terminadas" con su recuento en la barra y en la ayuda `?`. Pruebas de pantalla y snapshots en en/es, sin color y en ASCII, y pruebas de proceso con el `raptor` real bajo `script`.
 
