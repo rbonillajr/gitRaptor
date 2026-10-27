@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: high
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-27
 feature: cockpit
 related:
   context:
@@ -14,6 +14,8 @@ related:
     - BR-CKP-001
   stories:
     - US-CKP-006
+  specs:
+    - DS-US-CKP-007
 tags:
   - cockpit
   - prediccion-conflictos
@@ -68,9 +70,16 @@ Entonces el par muestra "hace 3 min" junto al resultado
 
 ## Requisitos Técnicos
 
-_Pendiente — lo completa el Arquitecto (Dev Spec)._
+Resumen de la [Dev Spec DS-US-CKP-007](../dev-specs/US-CKP-007-frescura-prediccion.md):
+
+- La TUI deriva la antigüedad de `computed_at_utc_ms` en el `Msg::Tick` de 1 Hz, sin pedir nada al daemon; si sale negativa vale 0. Formatos "hace N s/min/h/d" con cadenas enteras en el catálogo propio `freshness` (en/es).
+- Cada `state` del contrato ([DS-TS-CKP-001 § Contrato de API](../dev-specs/TS-CKP-001-predictor-conflictos.md#contrato-de-api)) se mapea al `Prediction` de `ConflictAlert`, que gana la variante `Pending`.
+- `recalculating` dice "desactualizado · hace N · recalculando", también sin ⚡ ni ⚠. `calculating` se agrega en "Calculando N de M pares". `pending` y `not-computable` se agrupan por motivo y nunca dicen "sin conflictos".
+- "Sin conflictos previstos · hace N" solo con todos los pares `current` y sin ⚡ ni ⚠.
+- El motor garantiza qué pares se recalculan, los 5 s p95 (S-CKP-1) y la base movida (TS-CKP-001: T003, T012 y T009). La DS añade las pruebas de la TUI con eventos `prediction.changed` simulados.
+- Bloqueada por el PR-B de TS-CKP-001 (T009) y por DS-US-CKP-006.
 
 ## Diseño y Dev Spec
 
 - **Diseño:** DSYS-GRP-001.
-- **Dev Spec:** pendiente (tras SPIKE-CKP-001).
+- **Dev Spec:** [DS-US-CKP-007](../dev-specs/US-CKP-007-frescura-prediccion.md).
