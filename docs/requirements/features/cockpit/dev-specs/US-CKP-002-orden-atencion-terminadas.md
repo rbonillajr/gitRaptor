@@ -648,4 +648,4 @@ _No aplica — no hay llamadas nuevas al daemon._ La única respuesta nueva al u
 
 ## Estado de la implementación (2026-10-27)
 
-Implementado en: PR #PRNUM (T001, T003 a T007). La corrida de `/implement` se abortó en la línea base (B1: la capa estática salía roja por los tests del contrato sin formatear y la suite agotó el tiempo en frío) y la historia sigue **sin certificar**. Dos aserciones de `tests/tui_fleet_order.rs` (`CKP002-REPLACE` y `CKP002-NINE`) esperaban un espacio tras el símbolo de estado y la columna pinta dos: se corrigieron a dos espacios. El grupo "atención" no tiene alcance todavía (D12).
+Implementado en: PR #284 (T001, T003 a T007). La corrida de `/implement` se abortó en la línea base (B1: la capa estática salía roja por los tests del contrato sin formatear y la suite agotó el tiempo en frío) y la historia sigue **sin certificar**. Dos aserciones de `tests/tui_fleet_order.rs` (`CKP002-REPLACE` y `CKP002-NINE`) esperaban un espacio tras el símbolo de estado y la columna pinta dos: se corrigieron a dos espacios. El grupo "atención" no tiene alcance todavía (D12).
