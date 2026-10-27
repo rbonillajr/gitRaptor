@@ -106,7 +106,7 @@ expression: "snapshot(story, full_ascii)"
 4:119-119 fg=#ffe066
 5:0-0 fg=#ffe066
 5:3-3 fg=#949494
-5:6-13 fg=#009e73 BOLD
+5:6-13 fg=#949494
 5:41-42 fg=#d29922
 5:59-59 fg=#f85149
 5:65-66 fg=#ffe066
@@ -320,7 +320,7 @@ expression: "snapshot(story, full_ascii)"
 4:119-119 fg=@221
 5:0-0 fg=@221
 5:3-3 fg=@246
-5:6-13 fg=@36 BOLD
+5:6-13 fg=@246
 5:41-42 fg=@172
 5:59-59 fg=@203
 5:65-66 fg=@221
@@ -534,7 +534,7 @@ expression: "snapshot(story, full_ascii)"
 4:119-119 fg=LightYellow
 5:0-0 fg=LightYellow
 5:3-3 fg=DarkGray
-5:6-13 fg=Green BOLD
+5:6-13 fg=DarkGray
 5:41-42 fg=Yellow
 5:59-59 fg=Red
 5:65-66 fg=LightYellow
@@ -725,7 +725,7 @@ expression: "snapshot(story, full_ascii)"
 4:119-119 BOLD | REVERSED
 5:0-0 BOLD | REVERSED
 5:3-3 DIM
-5:6-13 BOLD
+5:6-13 DIM
 5:59-59 BOLD
 5:65-66 BOLD | REVERSED
 5:83-90 BOLD
@@ -946,7 +946,7 @@ expression: "snapshot(story, full_ascii)"
 5:1-2 fg=#ffffff bg=#000000
 5:3-3 fg=#c6c6c6 bg=#000000
 5:4-5 fg=#ffffff bg=#000000
-5:6-13 fg=#009e73 bg=#000000 BOLD
+5:6-13 fg=#c6c6c6 bg=#000000
 5:14-40 fg=#ffffff bg=#000000
 5:41-42 fg=#ffe066 bg=#000000
 5:43-58 fg=#ffffff bg=#000000
@@ -1294,7 +1294,7 @@ expression: "snapshot(story, full_ascii)"
 4:119-119 fg=#ffe066
 5:0-0 fg=#ffe066
 5:3-3 fg=#949494
-5:7-14 fg=#009e73 BOLD
+5:7-14 fg=#949494
 5:33-34 fg=#d29922
 5:51-59 fg=#f85149
 5:65-66 fg=#ffe066
@@ -1507,7 +1507,7 @@ expression: "snapshot(story, full_ascii)"
 4:119-119 fg=@221
 5:0-0 fg=@221
 5:3-3 fg=@246
-5:7-14 fg=@36 BOLD
+5:7-14 fg=@246
 5:33-34 fg=@172
 5:51-59 fg=@203
 5:65-66 fg=@221
@@ -1720,7 +1720,7 @@ expression: "snapshot(story, full_ascii)"
 4:119-119 fg=LightYellow
 5:0-0 fg=LightYellow
 5:3-3 fg=DarkGray
-5:7-14 fg=Green BOLD
+5:7-14 fg=DarkGray
 5:33-34 fg=Yellow
 5:51-59 fg=Red
 5:65-66 fg=LightYellow
@@ -1908,7 +1908,7 @@ expression: "snapshot(story, full_ascii)"
 4:119-119 BOLD | REVERSED
 5:0-0 BOLD | REVERSED
 5:3-3 DIM
-5:7-14 BOLD
+5:7-14 DIM
 5:51-59 BOLD
 5:65-66 BOLD | REVERSED
 5:83-90 BOLD
@@ -2128,7 +2128,7 @@ expression: "snapshot(story, full_ascii)"
 5:1-2 fg=#ffffff bg=#000000
 5:3-3 fg=#c6c6c6 bg=#000000
 5:4-6 fg=#ffffff bg=#000000
-5:7-14 fg=#009e73 bg=#000000 BOLD
+5:7-14 fg=#c6c6c6 bg=#000000
 5:15-32 fg=#ffffff bg=#000000
 5:33-34 fg=#ffe066 bg=#000000
 5:35-50 fg=#ffffff bg=#000000

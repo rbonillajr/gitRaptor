@@ -12,7 +12,8 @@ use crate::model::SafeText;
 use crate::tui::style::{Styles, modal_area};
 use crate::tui::widgets::Component;
 use crate::tui::widgets::agent_list::{
-    AgentColumns, AgentListModel, AgentRowModel, AgentState, Branch, Operation, Sync,
+    AgentColumns, AgentListModel, AgentRowModel, AgentState, Branch, Operation, SessionLine,
+    SessionMark, Sync,
 };
 use crate::tui::widgets::confirm::{Choice, ConfirmModel};
 use crate::tui::widgets::conflict_alert::{AgentRef, ConflictAlertModel, Prediction};
@@ -99,6 +100,7 @@ fn row(i: usize, name: &'static str, state: AgentState, branch: &'static str) ->
         blocked: false,
         operation: None,
         commit: None,
+        sessions: None,
     }
 }
 
@@ -163,6 +165,29 @@ fn agents_operation(area: Rect, buf: &mut Buffer, s: &Styles) {
         cancel: hint("c", "cancel"),
     });
     let b = row(1, "claude-2", AgentState::Idle, "feat/lexer");
+    agent_list(vec![a, b], Some(0), true).render(area, buf, s);
+}
+
+/// A worktree with three sessions: the line under the row names the others, the ended one
+/// without a color.
+fn agents_shared(area: Rect, buf: &mut Buffer, s: &Styles) {
+    let mut a = row(0, "claude-1 pagos +2", AgentState::Active, "feat/pagos");
+    a.sessions = Some(SessionLine {
+        lead: t("shared with"),
+        marks: vec![
+            SessionMark {
+                state: AgentState::Idle,
+                color_index: Some(1),
+                text: t("claude-2"),
+            },
+            SessionMark {
+                state: AgentState::Done,
+                color_index: None,
+                text: t("claude-3 (ended 2 h ago)"),
+            },
+        ],
+    });
+    let b = row(2, "claude-4 docs", AgentState::Idle, "feat/docs");
     agent_list(vec![a, b], Some(0), true).render(area, buf, s);
 }
 
@@ -929,6 +954,7 @@ pub fn stories() -> Vec<Story> {
             agents_operation
         ),
         story!("AgentList", "unavailable", 80, 5, agents_unavailable),
+        story!("AgentList", "shared worktree", 80, 6, agents_shared),
         story!("AgentList", "empty", 80, 4, agents_empty),
         story!(
             "AgentList",

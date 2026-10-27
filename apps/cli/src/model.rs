@@ -6,8 +6,8 @@ use gitraptor_api::AgentKind;
 use gitraptor_api::catalog::Layer;
 use gitraptor_api::event::Event;
 use gitraptor_api::messages::{
-    DivergenceView, EngineStateView, GitEventView, RepoTier, ResyncReason, SessionStateView,
-    SessionsListResult, UnavailableReason,
+    DivergenceView, EngineStateView, GitEventView, RepoTier, ResyncReason, SessionEndCauseView,
+    SessionStateView, SessionsListResult, UnavailableReason,
 };
 use gitraptor_api::scope::{AutostartView, Scope, ScopeSnapshot};
 use gitraptor_theme::Theme;
@@ -16,7 +16,10 @@ use ratatui::crossterm::event::KeyEvent;
 use crate::client::sequence::SeqTrack;
 use crate::present::i18n::Lang;
 
+mod agent_colors;
+
 pub use crate::present::SafeText;
+pub use agent_colors::AgentColors;
 
 /// The whole state of the TUI. Only the main thread owns it.
 #[derive(Debug, Clone)]
@@ -53,6 +56,8 @@ impl Model {
                 here: None,
                 discovered: std::collections::VecDeque::new(),
                 help: false,
+                show_ended: false,
+                colors: AgentColors::default(),
                 seen: std::collections::BTreeSet::new(),
             },
             conn: ConnState::Connecting,
@@ -96,6 +101,10 @@ pub struct Ui {
     pub seen: std::collections::BTreeSet<std::path::PathBuf>,
     /// The `?` help is open over the body. Not kept between runs.
     pub help: bool,
+    /// Also show the ended session of every worktree (`f`). Not kept between runs.
+    pub show_ended: bool,
+    /// Stable color slots of the present sessions.
+    pub colors: AgentColors,
 }
 
 /// The fewest rows with room for the discovery panel under the fleet.
@@ -427,6 +436,12 @@ pub struct SessionRow {
     pub state: SessionStateView,
     /// Orders two views of the same session: the later one wins.
     pub state_since_ms: i64,
+    /// `started_utc_ms`: orders the sessions of a worktree and finds the one after an end.
+    pub started_ms: i64,
+    /// `ended_utc_ms`; `None` while present and when the engine has no end time.
+    pub ended_ms: Option<i64>,
+    /// `end_cause`: only `EndedDuringGap` makes an end "unobserved".
+    pub end_cause: Option<SessionEndCauseView>,
 }
 
 /// Who the daemon sees on this connection, sanitized.

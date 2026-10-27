@@ -51,7 +51,8 @@ pub struct Operation {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentRowModel {
-    /// 0-based position: picks `agent.n`, reused from the ninth agent on (BR-CKP-EDGE-006).
+    /// Stable slot of `AgentColors`: picks `agent.n`, reused from the ninth agent on
+    /// (BR-CKP-EDGE-006).
     pub color_index: usize,
     pub name: SafeText,
     pub state: AgentState,
@@ -69,6 +70,26 @@ pub struct AgentRowModel {
     /// The last commit of the worktree with its authorship, on a muted line under the row
     /// (US-CKP-026).
     pub commit: Option<CommitLine>,
+    /// The other sessions of the worktree, or when the last one ended, on a muted line under
+    /// the row.
+    pub sessions: Option<SessionLine>,
+}
+
+/// The line of sessions under a row: "└ shared with ◐ claude-2, ○ claude-3 (ended 2 h ago)".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionLine {
+    /// The text that leads the line; empty when only the marks follow.
+    pub lead: SafeText,
+    pub marks: Vec<SessionMark>,
+}
+
+/// One session on a [`SessionLine`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionMark {
+    pub state: AgentState,
+    /// Slot of `AgentColors`; `None` paints the text muted (an ended session has no color).
+    pub color_index: Option<usize>,
+    pub text: SafeText,
 }
 
 /// The line under a row: "└ • commit by Ana with Claude Code".
@@ -219,7 +240,10 @@ impl AgentRowModel {
         }
         pen.to(start + cols.state);
         let muted = styles.fg(ColorToken::TextMuted).patch(row);
-        let name = if matches!(self.state, AgentState::NoAgent | AgentState::Unknown) {
+        let name = if matches!(
+            self.state,
+            AgentState::NoAgent | AgentState::Unknown | AgentState::Done
+        ) {
             muted
         } else {
             styles
@@ -366,14 +390,14 @@ impl Component for AgentListModel {
         // The rows win: the commit lines only show when every visible row keeps its own line
         // with them (US-CKP-026, PO 2026-10-07).
         let shown = self.rows.len().saturating_sub(self.offset);
-        let lines = shown
-            + self
-                .rows
-                .iter()
-                .skip(self.offset)
-                .filter(|r| r.commit.is_some())
-                .count();
-        let sublines = lines <= visible;
+        let count = |f: fn(&AgentRowModel) -> bool| {
+            self.rows.iter().skip(self.offset).filter(|r| f(r)).count()
+        };
+        let with_sessions = count(|r| r.sessions.is_some());
+        let with_commit = count(|r| r.commit.is_some());
+        // The session lines come before the commit lines: each level shows only if it fits.
+        let session_lines = shown + with_sessions <= visible;
+        let commit_lines = shown + with_sessions + with_commit <= visible;
         let mut y = inner.y + 1;
         let bottom = inner.y + inner.height;
         for (i, row) in self.rows.iter().enumerate().skip(self.offset) {
@@ -398,7 +422,12 @@ impl Component for AgentListModel {
                 styles,
             );
             y += 1;
-            if let Some(commit) = row.commit.as_ref().filter(|_| sublines) {
+            if let Some(sessions) = row.sessions.as_ref().filter(|_| session_lines) {
+                let line = Rect::new(inner.x, y, inner.width, 1);
+                paint_sessions(&mut Pen::new(buf, line, y, styles), cols, sessions, styles);
+                y += 1;
+            }
+            if let Some(commit) = row.commit.as_ref().filter(|_| commit_lines) {
                 let line = Rect::new(inner.x, y, inner.width, 1);
                 paint_commit(&mut Pen::new(buf, line, y, styles), cols, commit, styles);
                 y += 1;
@@ -425,4 +454,28 @@ fn paint_commit(pen: &mut Pen<'_>, cols: Cols, commit: &CommitLine, styles: &Sty
         .gap(1);
     }
     pen.safe(&commit.text, muted);
+}
+
+/// The sessions line, under the name column like the commit line: the lead muted, then each
+/// session with its state symbol (the color never goes alone) and its text, apart by `, `.
+fn paint_sessions(pen: &mut Pen<'_>, cols: Cols, line: &SessionLine, styles: &Styles) {
+    let g = styles.glyphs;
+    let muted = styles.fg(ColorToken::TextMuted);
+    pen.gap(MARK + cols.state).text(g.lane_last, muted).gap(1);
+    pen.safe(&line.lead, muted);
+    for (i, mark) in line.marks.iter().enumerate() {
+        if i > 0 {
+            pen.text(", ", muted);
+        } else if !line.lead.as_str().is_empty() {
+            pen.gap(1);
+        }
+        let (symbol, token) = match mark.state {
+            AgentState::Active => (SymbolToken::AgentActive, ColorToken::AgentStateActive),
+            AgentState::Idle => (SymbolToken::AgentIdle, ColorToken::AgentStateIdle),
+            _ => (SymbolToken::AgentDone, ColorToken::AgentStateDone),
+        };
+        pen.symbol(styles.symbol(symbol), styles.fg(token)).gap(1);
+        let text = mark.color_index.map_or(muted, |i| styles.agent(i));
+        pen.safe(&mark.text, text);
+    }
 }

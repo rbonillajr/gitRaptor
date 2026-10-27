@@ -7,8 +7,8 @@ expression: snap
 #      Agent                  Branch                               Files +-          Activity      #
 #  o   No agent | shop        main                                 ~0    +0 -0       not available #
 #  *   claude-1 | feat-pagos  feat-pagos                           ~2    +3 -1       not available #
-#  o   No agent | feat-docs   feat-docs                            ~0    +1 -0       not available #
 #  ~   claude-2 | feat-idle   feat-idle                            ~0    +0 -0       not available #
+#  o   No agent | feat-docs   feat-docs                            ~0    +1 -0       not available #
 #  [!] No agent | feat-gone   unavailable: folder missing                                          #
 #                                                                                                  #
 #                                                                                                  #
@@ -60,16 +60,16 @@ expression: snap
 4:99-99 BOLD | REVERSED
 5:0-0 BOLD | REVERSED
 5:3-3 DIM
-5:7-26 DIM
-5:30-38 DIM
+5:7-26 BOLD
 5:67-68 DIM
-5:73-77 DIM
 5:85-97 DIM
 5:99-99 BOLD | REVERSED
 6:0-0 BOLD | REVERSED
 6:3-3 DIM
-6:7-26 BOLD
+6:7-26 DIM
+6:30-38 DIM
 6:67-68 DIM
+6:73-77 DIM
 6:85-97 DIM
 6:99-99 BOLD | REVERSED
 7:0-0 BOLD | REVERSED

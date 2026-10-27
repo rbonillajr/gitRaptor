@@ -2,6 +2,7 @@
 
 pub mod app;
 pub mod engine_state;
+pub mod fleet_order;
 pub mod gallery;
 pub mod help;
 pub mod input;

@@ -10,8 +10,8 @@ use gitraptor_api::event::{
 };
 use gitraptor_api::guard::{HooksStatus, ProtectionLostData};
 use gitraptor_api::messages::{
-    EngineStateView, EngineView, GitEventView, RepoTierData, ResyncReason, SessionView,
-    SessionsListResult, WorktreeStateData,
+    EngineStateView, EngineView, GitEventView, RepoTierData, ResyncReason, SessionStateView,
+    SessionView, SessionsListResult, WorktreeStateData,
 };
 use gitraptor_api::scope::{Scope, ScopeSnapshot};
 use ratatui::crossterm::event::KeyEventKind;
@@ -54,8 +54,14 @@ pub fn update(model: &mut Model, msg: Msg) -> Vec<Cmd> {
         // The ages of the fleet move with the clock.
         Msg::Tick { now_ms } => {
             model.now_ms = now_ms;
-            if model.engine.activity && model.engine.repo.as_ref().is_some_and(|r| r.data.is_some())
-            {
+            // Activity ages and the "ended … ago" of an ended session move with the clock.
+            let repo = model.engine.repo.as_ref().and_then(|r| r.data.as_ref());
+            if repo.is_some_and(|r| {
+                model.engine.activity
+                    || r.sessions
+                        .iter()
+                        .any(|s| s.state == SessionStateView::Ended)
+            }) {
                 model.dirty = true;
             }
             Vec::new()
@@ -137,8 +143,13 @@ fn on_action(model: &mut Model, action: Option<Action>) -> Vec<Cmd> {
             Vec::new()
         }
         Some(action @ (Action::Up | Action::Down | Action::Open)) => on_pick(model, action),
+        Some(Action::ShowEnded) if model.ui.pick == Pick::None => {
+            model.ui.show_ended = !model.ui.show_ended;
+            Vec::new()
+        }
         // No question on screen (`Help` was handled above).
-        Some(Action::Yes | Action::No | Action::Later | Action::Help) | None => {
+        Some(Action::Yes | Action::No | Action::Later | Action::Help | Action::ShowEnded)
+        | None => {
             model.ui.notice = Some(Notice::UnknownKey);
             Vec::new()
         }
@@ -375,13 +386,21 @@ fn on_history(model: &mut Model, repo_id: &str, events: &[GitEventView]) {
 /// The sessions listed right after the repo's snapshot, merged with what the stream already
 /// applied (the same upsert: neither order regresses a session).
 fn on_sessions(model: &mut Model, repo_id: &str, result: &SessionsListResult) {
-    let Some(data) = selected(model, repo_id).and_then(|r| r.data.as_mut()) else {
+    // Fields, not `selected`: the colors register is borrowed next to the repo's data.
+    let Some(data) = (model.engine.repo.as_mut())
+        .filter(|r| r.data.as_ref().is_some_and(|d| d.repo_id == repo_id))
+        .and_then(|r| r.data.as_mut())
+    else {
         return;
     };
     data.detection = Some(result.detection_available);
     for view in &result.sessions {
         data.upsert(ingest::session(view));
     }
+    model
+        .ui
+        .colors
+        .sync(&data.sessions, result.detection_available);
     model.dirty = true;
 }
 
@@ -396,6 +415,9 @@ fn on_snapshot(model: &mut Model, snapshot: ScopeSnapshot) {
         ScopeSnapshot::Repo(repo) => {
             let replica = model.engine.repo.get_or_insert_with(ScopeReplica::default);
             replica.data = Some(ingest::repo(&repo));
+            // Only the repo changes the register: a snapshot empties the sessions, which is no
+            // reason to free their colors.
+            model.ui.colors.open(&repo.repo.repo_id);
             // The repo that was being observed is shown: the question is over.
             if matches!(model.ui.pick, Pick::Asking | Pick::Observing) {
                 model.ui.asked = true;
@@ -505,6 +527,7 @@ fn apply(model: &mut Model, scope: &Scope, event: &gitraptor_api::Event) {
                 && view.repo_id == data.repo_id
             {
                 data.upsert(ingest::session(&view));
+                model.ui.colors.sync(&data.sessions, false);
             } else if (event.kind == GUARD_PROTECTION_LOST
                 || event.kind == GUARD_PROTECTION_RESTORED)
                 && let Ok(lost) = serde_json::from_value::<ProtectionLostData>(event.data.clone())

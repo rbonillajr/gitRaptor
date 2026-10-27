@@ -629,7 +629,9 @@ fn no_action_targets_a_row() {
             | Action::Yes
             | Action::No
             | Action::Later
-            | Action::Help => false,
+            | Action::Help
+            // Filters the whole list, no row.
+            | Action::ShowEnded => false,
         }
     }
     for action in [
@@ -643,6 +645,7 @@ fn no_action_targets_a_row() {
         Action::No,
         Action::Later,
         Action::Help,
+        Action::ShowEnded,
     ] {
         assert!(!targets_a_row(action), "{action:?}");
     }

@@ -84,7 +84,7 @@ expression: "snapshot(story, full_ascii)"
 4:99-99 fg=#ffe066
 5:0-0 fg=#ffe066
 5:3-3 fg=#949494
-5:6-13 fg=#009e73 BOLD
+5:6-13 fg=#949494
 5:64-65 fg=#d29922
 5:82-88 fg=#949494
 5:93-93 fg=#f85149
@@ -220,7 +220,7 @@ expression: "snapshot(story, full_ascii)"
 4:99-99 fg=@221
 5:0-0 fg=@221
 5:3-3 fg=@246
-5:6-13 fg=@36 BOLD
+5:6-13 fg=@246
 5:64-65 fg=@172
 5:82-88 fg=@246
 5:93-93 fg=@203
@@ -356,7 +356,7 @@ expression: "snapshot(story, full_ascii)"
 4:99-99 fg=LightYellow
 5:0-0 fg=LightYellow
 5:3-3 fg=DarkGray
-5:6-13 fg=Green BOLD
+5:6-13 fg=DarkGray
 5:64-65 fg=Yellow
 5:82-88 fg=DarkGray
 5:93-93 fg=Red
@@ -476,7 +476,7 @@ expression: "snapshot(story, full_ascii)"
 4:99-99 BOLD | REVERSED
 5:0-0 BOLD | REVERSED
 5:3-3 DIM
-5:6-13 BOLD
+5:6-13 DIM
 5:82-88 DIM
 5:93-93 BOLD
 5:99-99 BOLD | REVERSED
@@ -611,7 +611,7 @@ expression: "snapshot(story, full_ascii)"
 5:1-2 fg=#ffffff bg=#000000
 5:3-3 fg=#c6c6c6 bg=#000000
 5:4-5 fg=#ffffff bg=#000000
-5:6-13 fg=#009e73 bg=#000000 BOLD
+5:6-13 fg=#c6c6c6 bg=#000000
 5:14-63 fg=#ffffff bg=#000000
 5:64-65 fg=#ffe066 bg=#000000
 5:66-81 fg=#ffffff bg=#000000
@@ -832,7 +832,7 @@ expression: "snapshot(story, full_ascii)"
 4:99-99 fg=#ffe066
 5:0-0 fg=#ffe066
 5:3-3 fg=#949494
-5:7-14 fg=#009e73 BOLD
+5:7-14 fg=#949494
 5:56-57 fg=#d29922
 5:74-80 fg=#949494
 5:85-93 fg=#f85149
@@ -967,7 +967,7 @@ expression: "snapshot(story, full_ascii)"
 4:99-99 fg=@221
 5:0-0 fg=@221
 5:3-3 fg=@246
-5:7-14 fg=@36 BOLD
+5:7-14 fg=@246
 5:56-57 fg=@172
 5:74-80 fg=@246
 5:85-93 fg=@203
@@ -1102,7 +1102,7 @@ expression: "snapshot(story, full_ascii)"
 4:99-99 fg=LightYellow
 5:0-0 fg=LightYellow
 5:3-3 fg=DarkGray
-5:7-14 fg=Green BOLD
+5:7-14 fg=DarkGray
 5:56-57 fg=Yellow
 5:74-80 fg=DarkGray
 5:85-93 fg=Red
@@ -1219,7 +1219,7 @@ expression: "snapshot(story, full_ascii)"
 4:99-99 BOLD | REVERSED
 5:0-0 BOLD | REVERSED
 5:3-3 DIM
-5:7-14 BOLD
+5:7-14 DIM
 5:74-80 DIM
 5:85-93 BOLD
 5:99-99 BOLD | REVERSED
@@ -1353,7 +1353,7 @@ expression: "snapshot(story, full_ascii)"
 5:1-2 fg=#ffffff bg=#000000
 5:3-3 fg=#c6c6c6 bg=#000000
 5:4-6 fg=#ffffff bg=#000000
-5:7-14 fg=#009e73 bg=#000000 BOLD
+5:7-14 fg=#c6c6c6 bg=#000000
 5:15-55 fg=#ffffff bg=#000000
 5:56-57 fg=#ffe066 bg=#000000
 5:58-73 fg=#ffffff bg=#000000
