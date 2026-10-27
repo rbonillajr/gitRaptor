@@ -2,10 +2,10 @@
 id: US-GRP-005
 title: "El desarrollador distingue lo que el motor no vio ocurrir"
 type: us
-status: partially-implemented
+status: implemented
 priority: high
 created: 2026-10-03
-updated: 2026-10-21
+updated: 2026-10-27
 feature: motor-local
 related:
   context:
@@ -66,4 +66,4 @@ Cuando el desarrollador vuelve a añadir "demo"
 Entonces el estado refleja el estado actual de "demo"
   Y los commits anteriores a volver a añadirlo no tienen ningún agente atribuido
 
-Implementado en: PR #280 (PR-A, 2026-10-21; SIN CERTIFICAR: la línea base de la suite estaba inestable por carga de otros workers). Cubre los escenarios 1 y 2 (hueco del arranque, reconciliación sin atribuir, `events.gaps`, `raptor events`). Falta PR-B (escenario 3: perfil perdido en marcha, cerrojo de instancia, T006).
+Implementado en: PR #280 (PR-A, 2026-10-21; SIN CERTIFICAR: la línea base de la suite estaba inestable por carga de otros workers). Cubre los escenarios 1 y 2 (hueco del arranque, reconciliación sin atribuir, `events.gaps`, `raptor events`). Escenario 3 (perfil perdido en marcha, cerrojo de instancia, T006) en PR #285 (PR-B, 2026-10-27; SIN CERTIFICAR: la fase de pruebas agotó el tiempo con la máquina cargada; la suite completa se corrió a mano: 2754/2755, una inestable ajena). Implementado en: PR #280 y PR #285.

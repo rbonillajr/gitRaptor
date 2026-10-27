@@ -10,9 +10,9 @@
 
 | Estado | Fichas |
 |---|---|
-| Implementado (`implemented`) | 52 |
+| Implementado (`implemented`) | 53 |
 | Hecho (`done`) | 3 |
-| Implementado en parte (`partially-implemented`) | 27 |
+| Implementado en parte (`partially-implemented`) | 26 |
 | Listo (`ready`) | 4 |
 | Borrador (`draft`) | 63 |
 | Bloqueado (`blocked`) | 1 |
@@ -25,7 +25,7 @@
 | [cockpit](#cockpit) | 8 | 0 | 6 | 0 | 18 | 1 | 33 |
 | [guardrails](#guardrails) | 11 | 0 | 7 | 1 | 6 | 0 | 25 |
 | [mcp](#mcp) | 6 | 0 | 4 | 0 | 10 | 0 | 20 |
-| [motor-local](#motor-local) | 14 | 2 | 9 | 3 | 13 | 0 | 41 |
+| [motor-local](#motor-local) | 15 | 2 | 8 | 3 | 13 | 0 | 41 |
 | [time-machine](#time-machine) | 13 | 1 | 1 | 0 | 16 | 0 | 31 |
 
 ### cockpit
@@ -129,7 +129,7 @@
 
 ### motor-local
 
-41 fichas: 14 implementado, 2 hecho, 9 implementado en parte, 3 listo, 13 borrador.
+41 fichas: 15 implementado, 2 hecho, 8 implementado en parte, 3 listo, 13 borrador.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -140,6 +140,7 @@
 | [US-GRP-002](features/motor-local/user-stories/US-GRP-002-cambios-eventos-en-vivo.md) | El desarrollador ve los cambios y eventos de Git de sus worktrees casi al instante | Implementado (`implemented`) | #57, #75 | — |
 | [US-GRP-003](features/motor-local/user-stories/US-GRP-003-estados-especiales-no-disponible.md) | El desarrollador sabe qué worktree está en un estado especial o ya no existe | Implementado (`implemented`) | — | — |
 | [US-GRP-004](features/motor-local/user-stories/US-GRP-004-observacion-continua.md) | El desarrollador encuentra lo ocurrido aunque no tuviera GitRaptor abierto | Implementado (`implemented`) | #112 | — |
+| [US-GRP-005](features/motor-local/user-stories/US-GRP-005-hueco-sin-atribuir.md) | El desarrollador distingue lo que el motor no vio ocurrir | Implementado (`implemented`) | — | — |
 | [US-GRP-007](features/motor-local/user-stories/US-GRP-007-sesiones-claude-code.md) | El desarrollador sabe qué sesión de Claude Code trabaja en cada worktree y si sigue activa | Implementado (`implemented`) | #80, #119, #124, #155, #169, #228 | — |
 | [US-GRP-009](features/motor-local/user-stories/US-GRP-009-registro-explicito-agente.md) | El desarrollador o el agente declaran qué agente trabaja en un worktree | Implementado (`implemented`) | #106 | — |
 | [US-GRP-012](features/motor-local/user-stories/US-GRP-012-rama-base-main.md) | El desarrollador ve el ahead/behind de cada worktree contra la rama base del repo | Implementado (`implemented`) | #55 | — |
@@ -157,7 +158,6 @@
 | [SPIKE-GRP-002](features/motor-local/technical-stories/SPIKE-GRP-002-viabilidad-observador.md) | Viabilidad del observador de cambios a escala en los tres SO | Implementado en parte (`partially-implemented`) | #17, #23 | 2 |
 | [TD-GRP-001](features/motor-local/technical-stories/TD-GRP-001-acl-windows.md) | Verificación de ACL en Windows: git.exe (SEC-10) y perfil (SEC-06) | Implementado en parte (`partially-implemented`) | #72 | 2 |
 | [TS-GRP-004](features/motor-local/technical-stories/TS-GRP-004-canal-clientes.md) | Canal local de clientes y contrato de mensajes | Implementado en parte (`partially-implemented`) | #36, #87, #123, #133, #158 | 3 |
-| [US-GRP-005](features/motor-local/user-stories/US-GRP-005-hueco-sin-atribuir.md) | El desarrollador distingue lo que el motor no vio ocurrir | Implementado en parte (`partially-implemented`) | — | — |
 | [TD-GRP-002](features/motor-local/technical-stories/TD-GRP-002-motor-bajo-rafaga.md) | Frescura y memoria del motor bajo una ráfaga de archivos | Listo (`ready`) | — | — |
 | [TD-GRP-003](features/motor-local/technical-stories/TD-GRP-003-nfr04-maquina-referencia.md) | Presupuesto de NFR-04 sin gate automático: medirlo en una máquina de referencia | Listo (`ready`) | — | — |
 | [TS-GRP-005](features/motor-local/technical-stories/TS-GRP-005-clases-trabajo-ahorro-energia.md) | Clases de trabajo del daemon y mecanismo de ahorro de energía | Listo (`ready`) | — | — |
@@ -245,7 +245,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 
 ### M2
 
-112 fichas: 29 implementado, 3 hecho, 21 implementado en parte, 4 listo, 54 borrador, 1 bloqueado.
+112 fichas: 30 implementado, 3 hecho, 20 implementado en parte, 4 listo, 54 borrador, 1 bloqueado.
 
 | Id | Título | Estado | Implementado en | Pendientes |
 |---|---|---|---|---|
@@ -268,6 +268,7 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-GRD-014](features/guardrails/user-stories/US-GRD-014-rama-base-del-equipo.md) | El equipo fija la rama base del repo y Guardrails la protege | Implementado (`implemented`) | #277 | — |
 | [US-GRD-019](features/guardrails/user-stories/US-GRD-019-quien-ejecuto-y-a-nombre-de-quien.md) | El desarrollador ve quién ejecutó cada commit y a nombre de quién entró cuando no coinciden | Implementado (`implemented`) | #144, #147, #151, #175 | — |
 | [US-GRP-003](features/motor-local/user-stories/US-GRP-003-estados-especiales-no-disponible.md) | El desarrollador sabe qué worktree está en un estado especial o ya no existe | Implementado (`implemented`) | — | — |
+| [US-GRP-005](features/motor-local/user-stories/US-GRP-005-hueco-sin-atribuir.md) | El desarrollador distingue lo que el motor no vio ocurrir | Implementado (`implemented`) | — | — |
 | [US-GRP-020](features/motor-local/user-stories/US-GRP-020-carpetas-codigo-repos-descubiertos.md) | El desarrollador ve los repos que aparecen en sus carpetas de código sin tener que añadirlos uno a uno | Implementado (`implemented`) | #170, #153, #178 | — |
 | [US-GRP-022](features/motor-local/user-stories/US-GRP-022-aceptar-descartar-repo-descubierto.md) | El desarrollador decide qué repos descubiertos se observan y los que descarta no vuelven a aparecer | Implementado (`implemented`) | #170 | — |
 | [US-MCP-004](features/mcp/user-stories/US-MCP-004-status-completo-y-no-disponible.md) | Un agente sabe por MCP quién más trabaja en su repo, contra qué base y con qué protección | Implementado (`implemented`) | — | — |
@@ -298,7 +299,6 @@ Hitos según [`release-plan.md`](release-plan.md) y el campo `milestone` de las 
 | [US-GRD-010](features/guardrails/user-stories/US-GRD-010-endurecer-sin-relajar.md) | El desarrollador endurece las reglas en su máquina sin poder relajar las del equipo | Implementado en parte (`partially-implemented`) | #217 | — |
 | [US-GRD-017](features/guardrails/user-stories/US-GRD-017-sin-snapshot-no-se-ejecuta.md) | Una operación destructiva permitida no se ejecuta sin un punto de recuperación | Implementado en parte (`partially-implemented`) | #260 | — |
 | [US-GRD-018](features/guardrails/user-stories/US-GRD-018-autoria-commits-persona-y-agente.md) | Cada commit entra a nombre de la persona y deja constancia del agente que lo hizo, con la exigencia que fija el equipo | Implementado en parte (`partially-implemented`) | #137, #141, #150, #152, #153, #154 | 3 |
-| [US-GRP-005](features/motor-local/user-stories/US-GRP-005-hueco-sin-atribuir.md) | El desarrollador distingue lo que el motor no vio ocurrir | Implementado en parte (`partially-implemented`) | — | — |
 | [US-MCP-009](features/mcp/user-stories/US-MCP-009-safe-commit.md) | Un agente commitea por MCP con las reglas del repo y con un punto de recuperación previo | Implementado en parte (`partially-implemented`) | #289 | — |
 | [US-MCP-010](features/mcp/user-stories/US-MCP-010-safe-commit-rutas.md) | Un agente commitea solo los archivos que nombra y nunca fuera de su worktree | Implementado en parte (`partially-implemented`) | #289 | — |
 | [US-MCP-013](features/mcp/user-stories/US-MCP-013-confirmacion-sin-cola.md) | Un agente sabe que una acción necesita al desarrollador y a quién acudir | Implementado en parte (`partially-implemented`) | #267 | — |
@@ -562,12 +562,6 @@ Canal local de clientes y contrato de mensajes
 - N8 a N11 de ADR-CKP-003 § 4 (Should).
 - Retención de la auditoría de comandos reservados.
 - Linux y Windows: *Pendiente: etapa de validación multiplataforma* ([`xplat-pendientes.md`](../architecture/xplat-pendientes.md)).
-
-### [US-GRP-005](features/motor-local/user-stories/US-GRP-005-hueco-sin-atribuir.md)
-
-El desarrollador distingue lo que el motor no vio ocurrir
-
-- *La ficha no lista los pendientes en "Estado de la implementación".*
 
 ### [INF-TMC-001](features/time-machine/technical-stories/INF-TMC-001-arnes-caos-recuperable.md)
 

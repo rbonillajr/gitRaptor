@@ -2,11 +2,11 @@
 id: DS-US-GRP-005
 title: "Dev Spec — Huecos de observación: registro al arrancar, consulta y perfil perdido en marcha"
 type: dev-spec
-status: partially-implemented
+status: implemented
 feature: motor-local
 domain: GRP
 created: 2026-10-09
-updated: 2026-10-21
+updated: 2026-10-27
 story: US-GRP-005
 scope: backend
 frontend_surface: false
@@ -747,4 +747,4 @@ Corre `/security-review --scope devspec docs/requirements/features/motor-local/d
 | N5 | (a) Resuelta (2026-10-27): no había API; se añade `repo_lock::busy()` (cuenta todo el proceso: en producción hay un daemon por proceso). (b) Verificada: `winsys::file_id::of_path` no sigue enlaces y existe `of_file`. (c) Sin verificar: que `raptor-mcp` arranque el daemon bajo demanda | (c) solo se anota en el PR | Implementador |
 | N6 | `StopCause::ProfileLost` e `InstanceLost` viajan como `signal` en `daemon.stopping`; una variante nueva de `StopCauseCode` sería un cambio de forma (ADR-GRP-016) | Ninguna | — |
 
-Implementado en: PR #280 (PR-A: T001-T005, T007). Falta PR-B (T006 y el resto de T008).
+Implementado en: PR #280 (PR-A: T001-T005, T007) y PR #285 (PR-B: T006 y el resto de T008).
