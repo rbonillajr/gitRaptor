@@ -325,7 +325,7 @@ fn a_commit_with_the_capability_returns_the_commit_in_the_run_result() {
     let before = r.commits();
     let answer = r.as_agent(
         "commit",
-        json!({"message": "feat: add x", "paths": ["x.txt"]}),
+        json!({"message": "feat: add x\n\nCo-Authored-By: Claude <noreply@anthropic.com>", "paths": ["x.txt"]}),
     );
 
     assert_eq!(answer["stage"], "run", "{answer}");
@@ -352,7 +352,7 @@ fn a_failing_step_returns_operation_failed_with_failure_unchanged() {
     let before = r.commits();
     let answer = r.as_agent(
         "commit",
-        json!({"message": "feat: add x", "paths": ["x.txt"]}),
+        json!({"message": "feat: add x\n\nCo-Authored-By: Claude <noreply@anthropic.com>", "paths": ["x.txt"]}),
     );
 
     assert_eq!(answer["stage"], "run", "{answer}");

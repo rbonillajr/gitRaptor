@@ -26,7 +26,7 @@ use gitraptor_api::catalog::{Layer, OperationId, PrepareParams, RejectReason, Ru
 use gitraptor_api::timemachine::{RequestChannel, ResolvedVia};
 use gitraptor_api::{Actor, actor};
 use gitraptor_core::channel::marks::ExecutorMarks;
-use gitraptor_core::channel::peer::{ProcError, ProcInfo, ProcSource};
+use gitraptor_core::channel::peer::SystemProcs;
 use gitraptor_core::channel::requester::{Resolution, Who};
 use gitraptor_core::executor::ops::CommitEnv;
 use gitraptor_core::executor::{
@@ -61,17 +61,6 @@ fn system_git() -> SystemGit {
     ) {
         gitraptor_git::resolve::Resolution::Found { git, .. } => git,
         other => panic!("no Git: {other:?}"),
-    }
-}
-
-struct NoProcs;
-
-impl ProcSource for NoProcs {
-    fn read(&self, _pid: u32) -> Result<ProcInfo, ProcError> {
-        Err(ProcError::Gone)
-    }
-    fn foreign_to(&self, _pid: u32, _uid: u32) -> Option<bool> {
-        None
     }
 }
 
@@ -166,7 +155,10 @@ impl Rig {
 
     fn try_prepared(&self, paths: Option<&[&str]>) -> Result<Prepared, ExecError> {
         let mut args = Map::new();
-        args.insert("message".into(), json!("feat: a change"));
+        args.insert(
+            "message".into(),
+            json!("feat: a change\n\nCo-Authored-By: Claude <noreply@anthropic.com>"),
+        );
         if let Some(paths) = paths {
             args.insert("paths".into(), Value::from(paths.to_vec()));
         }
@@ -218,7 +210,7 @@ impl Rig {
         let publish = |_kind: &str, _data| {};
         let env = RunEnv {
             marks: &self.marks,
-            procs: &NoProcs,
+            procs: &SystemProcs,
             stopping: &self.stopping,
             prior_deadline: Duration::from_secs(30),
             engine_mark: &engine_mark,
