@@ -47,8 +47,18 @@ fn program_files_git_is_accepted_and_resolves() {
         shim_paths: vec![],
         toolchain_gits: vec![],
     };
+    // The launcher is accepted, and the engine runs the real binary it starts (ADR-GRP-009
+    // § 4, amendment 2026-10-28), checked the same way.
+    let exec_path = Command::new(&canonical)
+        .arg("--exec-path")
+        .output()
+        .unwrap();
+    let exec_path = PathBuf::from(String::from_utf8(exec_path.stdout).unwrap().trim());
+    let mingw = exec_path.parent().unwrap().parent().unwrap();
+    let real = mingw.join("bin").join("git.exe");
+    let real = check_executable(&real).expect("the real git is accepted");
     match resolve::resolve(&config, &Invoker::default()) {
-        Resolution::Found { git, .. } => assert_eq!(git.path, canonical),
+        Resolution::Found { git, .. } => assert_eq!(git.path, real),
         other => panic!("not found: {other:?}"),
     }
 }

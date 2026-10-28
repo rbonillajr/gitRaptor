@@ -74,6 +74,9 @@ const MAX_OUTPUT_BYTES: u64 = 64 * 1024 * 1024;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Subcommand {
     Version,
+    /// `--exec-path`: where this Git keeps its programs (resolution of the Git for Windows
+    /// launcher, ADR-GRP-009 § 4).
+    ExecPath,
     RevParse,
     ForEachRef,
     WorktreeList,
@@ -87,6 +90,7 @@ impl Subcommand {
     fn words(self) -> &'static [&'static str] {
         match self {
             Self::Version => &["version"],
+            Self::ExecPath => &["--exec-path"],
             Self::RevParse => &["rev-parse"],
             Self::ForEachRef => &["for-each-ref"],
             Self::WorktreeList => &["worktree", "list"],
