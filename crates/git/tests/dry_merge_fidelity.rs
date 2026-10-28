@@ -53,10 +53,9 @@ impl Reference {
             .env("PATH", "/usr/bin:/bin")
             .env("HOME", cwd)
             .env("GIT_CONFIG_NOSYSTEM", "1")
-            .env(
-                "GIT_CONFIG_GLOBAL",
-                if cfg!(unix) { "/dev/null" } else { "NUL" },
-            );
+            // Git for Windows maps `/dev/null` itself and fails on `NUL` ("unable to access
+            // 'NUL'", Git 2.56.0.windows.1).
+            .env("GIT_CONFIG_GLOBAL", "/dev/null");
         c
     }
 
