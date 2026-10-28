@@ -5,7 +5,7 @@ type: us
 status: draft
 priority: medium
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-28
 feature: cockpit
 related:
   context:
@@ -80,4 +80,4 @@ _Pendiente — lo completa el Arquitecto (Dev Spec)._
 ## Diseño y Dev Spec
 
 - **Diseño:** DSYS-GRP-001 (paleta por carril).
-- **Dev Spec:** [DS-US-CKP-022](../dev-specs/US-CKP-022-grafo-carriles.md) (status: draft). La ventana de 50 commits es supuesto (S-CKP-2); la afina diseño (Q-CKP-51).
+- **Dev Spec:** [DS-US-CKP-022](../dev-specs/US-CKP-022-grafo-carriles.md) (approved). La ventana de 50 commits es supuesto (S-CKP-2); la afina diseño (Q-CKP-51).
